@@ -1,90 +1,10 @@
 import { Context } from '@deepseek-ai/cordis'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
-import Storage from '@deepseek-ai/dsh-storage'
-import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
-import type { VerifiedWebhookDelivery, WebhookRule } from '@deepseek-ai/dsh-webhook'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
+import { MemoryMediaPool } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 import LsyEventBus, { LSY_EVENT_KIND, type Config } from '../src/index.ts'
-import type { LsyEventInput, LsyNote } from '../src/types.ts'
-
-const HOUR = 3_600_000
-
-interface FakeRuntime {
-  rules: WebhookRule[]
-  deliveries: VerifiedWebhookDelivery[]
-  register(rule: WebhookRule): () => Promise<void>
-  dispatch(delivery: VerifiedWebhookDelivery): void
-}
-
-function fakeRuntime(): FakeRuntime {
-  const runtime: FakeRuntime = {
-    rules: [],
-    deliveries: [],
-    register(rule) {
-      runtime.rules.push(rule)
-      return async () => { runtime.rules.splice(runtime.rules.indexOf(rule), 1) }
-    },
-    dispatch(delivery) { runtime.deliveries.push(delivery) },
-  }
-  return runtime
-}
-
-const baseConfig: Config = {
-  subscriptions: [
-    { id: 'releases', sources: ['github'], kinds: ['github.release'], subjects: [], action: 'notify', coalesceMs: 60_000, maxPerHour: 2 },
-  ],
-  suppress: { actors: ['dsh-bot'], markers: ['Dsh-Agent:'] },
-  retainEvents: 100,
-  retainBatches: 100,
-  maxTextChars: 2000,
-  notifySessionResult: true,
-  maxNoteEvents: 10,
-}
-
-const contexts: Context[] = []
-
-function withConfig(base: Config, overrides: Partial<Config>): Config {
-  return Object.assign({}, base, overrides)
-}
-
-async function harness(options: { config?: Config; pool?: MemoryMediaPool; notifier?: boolean; runtime?: FakeRuntime | false } = {}) {
-  const ctx = new Context()
-  contexts.push(ctx)
-  await ctx.plugin(Timer)
-  await ctx.plugin(Storage)
-  const pool = options.pool ?? new MemoryMediaPool()
-  const backend = new MemoryStorageBackend(pool)
-  ctx.effect(() => ctx.storage.backend.register('fixture', backend))
-  ctx.effect(() => async () => { await backend.close() })
-  const facility = new DomainFacility(ctx, { backend: 'fixture' })
-  ctx.effect(() => {
-    const unmount = ctx.storage.mount('domain', facility)
-    ctx.provide('storageDomain', facility)
-    return async () => { await facility.closeAll(); unmount() }
-  })
-  const notes: LsyNote[] = []
-  if (options.notifier !== false) {
-    ctx.provide('lsyNotifier', { send: async (note: LsyNote) => { notes.push(note) } })
-  }
-  const runtime = options.runtime === false ? fakeRuntime() : options.runtime ?? fakeRuntime()
-  if (options.runtime !== false) ctx.provide('webhookRuntime', runtime as never)
-  await ctx.plugin(LsyEventBus, options.config ?? baseConfig)
-  await vi.advanceTimersByTimeAsync(0)
-  return { ctx, bus: ctx.lsyEventBus, notes, runtime, pool }
-}
-
-function release(n: number, overrides: Partial<LsyEventInput> = {}): LsyEventInput {
-  return {
-    source: 'github',
-    kind: 'github.release',
-    key: `octo/repo:release:${n}`,
-    subject: 'octo/repo',
-    title: `v${n}.0.0`,
-    url: `https://github.com/octo/repo/releases/v${n}.0.0`,
-    ...overrides,
-  }
-}
+import type { LsyNote } from '../src/types.ts'
+import { HOUR, baseConfig, disposeAll, fakeRuntime, harness, release, sessionConfig, withConfig } from './harness.ts'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -92,7 +12,7 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
-  await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose()))
+  await disposeAll()
   vi.useRealTimers()
 })
 
@@ -219,27 +139,6 @@ describe('LsyEventBus batching', () => {
     await bus.publish(release(3, { kind: 'github.commit' }))
     expect(bus.events().map(event => event.key)).toEqual(['octo/repo:release:2', 'octo/repo:release:3'])
   })
-})
-
-const sessionConfig: Config = withConfig(baseConfig, {
-  webUrl: 'https://dsh.example/',
-  subscriptions: [{
-    id: 'triage',
-    sources: [],
-    kinds: ['github.*'],
-    subjects: [],
-    action: 'session',
-    coalesceMs: 1_000,
-    maxPerHour: 10,
-    session: {
-      workspacePath: '/work/space',
-      agentPreset: 'unattended',
-      permissionPreset: 'danger-full-access',
-      instructions: 'Triage these events.',
-      maxPromptEvents: 20,
-      maxTextChars: 500,
-    },
-  }],
 })
 
 describe('LsyEventBus session actuator', () => {

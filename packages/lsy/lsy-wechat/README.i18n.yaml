@@ -1,0 +1,49 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/lsy-wechat/README.md
+/:
+  en: 0a0397e271fed657
+  zh: 0ea0b9b7bff90d5a
+/deepseek-ai-dsh-lsy-wechat:
+  en: be581b779da68193
+  zh: 484e94bd2fbe3cd0
+/deepseek-ai-dsh-lsy-wechat/summary:
+  en: b296a735ab295cfb
+  zh: fb1acb3d0e400845
+/deepseek-ai-dsh-lsy-wechat/table-of-contents:
+  en: b563e4ec4727d0de
+  zh: bd4ef01ceedb8324
+/deepseek-ai-dsh-lsy-wechat/use-this-package:
+  en: 69b5a731280c0022
+  zh: 3a914cd34120da77
+/deepseek-ai-dsh-lsy-wechat/use-this-package/when-to-choose-it:
+  en: 831e47681cfb8c50
+  zh: 9d998c62874aeea6
+/deepseek-ai-dsh-lsy-wechat/use-this-package/minimal-configuration:
+  en: aa66be0e67871573
+  zh: 06ba574be9daee42
+/deepseek-ai-dsh-lsy-wechat/understand-the-implementation:
+  en: 095410f207d2e6f7
+  zh: f9b627a9845c8fb0
+/deepseek-ai-dsh-lsy-wechat/further-exploration:
+  en: 83884c0df0e5bbe8
+  zh: 3e5295fc26d74540
+/deepseek-ai-dsh-lsy-wechat/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-lsy-wechat/model-experience/chat-session:
+  en: a19f429aab1a23b3
+  zh: 55b1ba7f2ba3363e
+/deepseek-ai-dsh-lsy-wechat/model-experience/chat-session/what-the-model-sees:
+  en: 151ffb04a08f56b2
+  zh: d5b9f0e3bf6515c1
+/deepseek-ai-dsh-lsy-wechat/model-experience/chat-session/token-effect:
+  en: 3f04e57a79fe0c5d
+  zh: 0547c0d05fd344b6
+/deepseek-ai-dsh-lsy-wechat/model-experience/chat-session/kv-cache-effect:
+  en: 799452efb569ad8c
+  zh: ded6c9d49d309ded
+/deepseek-ai-dsh-lsy-wechat/known-limitations-and-deferred-work:
+  en: 3b439e897e90ad2c
+  zh: 7706a9d8076fa9f8

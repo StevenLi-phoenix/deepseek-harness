@@ -1,64 +1,10 @@
 import { Context } from '@deepseek-ai/cordis'
-import Timer from '@deepseek-ai/cordis-plugin-timer'
 import type { LsyEventInput } from '@deepseek-ai/dsh-lsy-event-bus'
-import Storage from '@deepseek-ai/dsh-storage'
-import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
-import GithubSensor, { type Config } from '../src/index.ts'
+import { MemoryMediaPool } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
+import GithubSensor from '../src/index.ts'
 import { FakeGitHub, commit, release, thread } from './fake-github.ts'
-
-const REL = '/repos/octo/repo/releases?per_page=20'
-const TAGS = '/repos/octo/repo/tags?per_page=20'
-const COMMITS = '/repos/octo/repo/commits?per_page=20&sha=main'
-const NOTIFICATIONS = '/notifications?per_page=50'
-
-const baseConfig: Config = {
-  intervalMs: 60_000,
-  apiBase: 'https://api.github.test',
-  tokenEnv: 'LSY_GITHUB_TOKEN',
-  notificationsTokenEnv: 'LSY_GITHUB_NOTIFICATIONS_TOKEN',
-  notifications: false,
-  repos: [{ repo: 'octo/repo', watch: ['releases'] }],
-  timeoutMs: 10_000,
-  maxTextChars: 2000,
-  perPage: 20,
-  maxSeenPerStream: 200,
-}
-
-const contexts: Context[] = []
-
-async function harness(gh: FakeGitHub, options: {
-  config?: Partial<Config>
-  pool?: MemoryMediaPool
-  tokens?: Record<string, string>
-  fetch?: typeof fetch
-} = {}) {
-  vi.stubGlobal('fetch', options.fetch ?? gh.fetch)
-  const ctx = new Context()
-  contexts.push(ctx)
-  await ctx.plugin(Timer)
-  await ctx.plugin(Storage)
-  const pool = options.pool ?? new MemoryMediaPool()
-  const backend = new MemoryStorageBackend(pool)
-  ctx.effect(() => ctx.storage.backend.register('fixture', backend))
-  ctx.effect(() => async () => { await backend.close() })
-  const facility = new DomainFacility(ctx, { backend: 'fixture' })
-  ctx.effect(() => {
-    const unmount = ctx.storage.mount('domain', facility)
-    ctx.provide('storageDomain', facility)
-    return async () => { await facility.closeAll(); unmount() }
-  })
-  const tokens = options.tokens ?? { LSY_GITHUB_TOKEN: 'repo-token' }
-  ctx.provide('credentials', {
-    resolve: async (ref: string) => tokens[ref] === undefined ? undefined : { value: tokens[ref], source: 'env' },
-  } as never)
-  const published: LsyEventInput[] = []
-  ctx.provide('lsyEventBus', { publish: async (event: LsyEventInput) => { published.push(event); return 'accepted' } } as never)
-  await ctx.plugin(GithubSensor, Object.assign({}, baseConfig, options.config))
-  await vi.advanceTimersByTimeAsync(0)
-  return { ctx, published, pool }
-}
+import { COMMITS, NOTIFICATIONS, REL, TAGS, baseConfig, disposeAll, harness } from './harness.ts'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -66,7 +12,7 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
-  await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose()))
+  await disposeAll()
   vi.unstubAllGlobals()
   vi.useRealTimers()
 })
@@ -179,7 +125,7 @@ describe('GithubSensor notifications', () => {
     const gh = new FakeGitHub()
     const headers = { 'x-poll-interval': '120' }
     gh.set(NOTIFICATIONS, [thread('1', '2026-10-21T00:00:00Z')], { headers })
-    const { published } = await harness(gh, {
+    const { ctx, published } = await harness(gh, {
       config: { notifications: true, repos: [] },
       tokens: { LSY_GITHUB_NOTIFICATIONS_TOKEN: 'notif-token' },
     })
@@ -194,6 +140,8 @@ describe('GithubSensor notifications', () => {
     expect(requests).toHaveLength(2)
     expect(requests[1]!.headers['if-modified-since']).toBeDefined()
     expect(published.map(event => event.key)).toEqual(['notification:2:2026-10-21T00:01:00Z'])
+    expect(ctx.lsyGithubSensor.pollStatus('notifications')).toEqual({ at: Date.now(), ok: true })
+    expect(ctx.lsyGithubSensor.pollStatus('repo:gone/repo:releases')).toBeUndefined()
   })
 
   it('skips notifications without a notifications token', async () => {

@@ -3,44 +3,53 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/lsy/lsy-github-sensor/README.md
 /:
-  en: f79e57d02e03b8e4
-  zh: ffab2eebc02d8d3d
+  en: 50fc7c9bfda23a76
+  zh: f49408785849e9f1
 /deepseek-ai-dsh-lsy-github-sensor:
   en: 86f5dea0d42555f4
   zh: c7f25cbd7bf1c15d
 /deepseek-ai-dsh-lsy-github-sensor/summary:
-  en: 9bfcd53d6f9f7699
-  zh: c804e0a8426a67c4
+  en: 6d1cf3c6d3471f78
+  zh: 2bf9fecc18c1b720
 /deepseek-ai-dsh-lsy-github-sensor/table-of-contents:
-  en: d152484eb41ac6b4
-  zh: 5ea16c73684ce99f
+  en: b563e4ec4727d0de
+  zh: bd4ef01ceedb8324
 /deepseek-ai-dsh-lsy-github-sensor/use-this-package:
-  en: 13ae104f0f013170
-  zh: 6bf4ce558e055444
+  en: dcd2f923ef418947
+  zh: 6ad656a37221fbc8
 /deepseek-ai-dsh-lsy-github-sensor/use-this-package/when-to-choose-it:
   en: 053815536c3d5b85
   zh: 67e5804457c1c9fa
 /deepseek-ai-dsh-lsy-github-sensor/use-this-package/minimal-configuration:
-  en: 38fa6fe3ad46018a
-  zh: cc520c27a7928b24
+  en: e84088f2acd56e34
+  zh: bb1f0f0940a6bafb
+/deepseek-ai-dsh-lsy-github-sensor/use-this-package/run-time-watches:
+  en: de8b4f9e8df2c91d
+  zh: d6e06882c6a6f4f9
 /deepseek-ai-dsh-lsy-github-sensor/use-this-package/events:
   en: c8ce8252cd04c5f0
   zh: d502d9d0cfaecf2b
 /deepseek-ai-dsh-lsy-github-sensor/understand-the-implementation:
-  en: ad72d360f6068e47
-  zh: 2e1d819e058708a3
+  en: 286117ed84de29b3
+  zh: f50263dada7d2894
 /deepseek-ai-dsh-lsy-github-sensor/further-exploration:
-  en: 297be61deba3cf8e
-  zh: 6d706c63f2a7bd4f
+  en: e065d9ec6846e471
+  zh: d990956aafcc0c96
 /deepseek-ai-dsh-lsy-github-sensor/model-experience:
-  en: d7a3a0750935c8b4
-  zh: ab415b9852c27cce
-/deepseek-ai-dsh-lsy-github-sensor/model-experience/kv-cache-effect:
-  en: 3843987e8567d57e
-  zh: 37b03bf50c979f85
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-lsy-github-sensor/model-experience/event-data-in-session-prompts:
+  en: 8dc9ce4dbe9f1d11
+  zh: 462c31889fc4ae16
+/deepseek-ai-dsh-lsy-github-sensor/model-experience/event-data-in-session-prompts/what-the-model-sees:
+  en: 3bfc12c6ecc24735
+  zh: 29f9f446fda32a88
+/deepseek-ai-dsh-lsy-github-sensor/model-experience/event-data-in-session-prompts/token-effect:
+  en: b5524e406da4862b
+  zh: 1dfaa0fc882e5cde
+/deepseek-ai-dsh-lsy-github-sensor/model-experience/event-data-in-session-prompts/kv-cache-effect:
+  en: cba369e25c091d39
+  zh: d84edd031e96dc5d
 /deepseek-ai-dsh-lsy-github-sensor/known-limitations-and-deferred-work:
-  en: 0dee7a0bf3aaf86f
-  zh: 9fd322c4b0aae49c
-/deepseek-ai-dsh-lsy-github-sensor/dev-note:
-  en: 55da995ee7927aa6
-  zh: 723cfc228268b3e5
+  en: f313fbc4f2e90b8f
+  zh: fee54d44219efb35

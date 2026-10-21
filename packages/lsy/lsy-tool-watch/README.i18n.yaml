@@ -1,0 +1,64 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/lsy-tool-watch/README.md
+/:
+  en: 70446637f284cc89
+  zh: bed4988159403f2e
+/deepseek-ai-dsh-lsy-tool-watch:
+  en: 7037ac9b9d0e9b80
+  zh: d0e4822bde926eb5
+/deepseek-ai-dsh-lsy-tool-watch/summary:
+  en: 4bcc78619ed64341
+  zh: 0a7f52bb92e36176
+/deepseek-ai-dsh-lsy-tool-watch/table-of-contents:
+  en: b563e4ec4727d0de
+  zh: bd4ef01ceedb8324
+/deepseek-ai-dsh-lsy-tool-watch/use-this-package:
+  en: d55afbf666f91943
+  zh: 4f9dbda1c90c9a0d
+/deepseek-ai-dsh-lsy-tool-watch/use-this-package/when-to-choose-it:
+  en: 35ffa1433358d402
+  zh: 64c46b7657f14198
+/deepseek-ai-dsh-lsy-tool-watch/use-this-package/the-three-tools:
+  en: 680baafd2f11b3de
+  zh: 488e3de234b697b1
+/deepseek-ai-dsh-lsy-tool-watch/use-this-package/minimal-configuration:
+  en: f573c0ab21f5575f
+  zh: eb947915712297d7
+/deepseek-ai-dsh-lsy-tool-watch/understand-the-implementation:
+  en: 2e9f72932ad0b65c
+  zh: 795602e525001f6e
+/deepseek-ai-dsh-lsy-tool-watch/further-exploration:
+  en: 58d671c0ec576975
+  zh: 4fdf9eb22da053f7
+/deepseek-ai-dsh-lsy-tool-watch/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-lsy-tool-watch/model-experience/watch-tools:
+  en: 2a3109cf295926dc
+  zh: 4826031807384547
+/deepseek-ai-dsh-lsy-tool-watch/model-experience/watch-tools/what-the-model-sees:
+  en: ac89e4ef53daed1e
+  zh: aebe0a1acdcc536b
+/deepseek-ai-dsh-lsy-tool-watch/model-experience/watch-tools/token-effect:
+  en: 70fb9094859d0804
+  zh: 8007268cd139b078
+/deepseek-ai-dsh-lsy-tool-watch/model-experience/watch-tools/kv-cache-effect:
+  en: 74de09fc53ab9f0e
+  zh: bfce33c8d15d4991
+/deepseek-ai-dsh-lsy-tool-watch/model-experience/watch-results:
+  en: 34ced99408c541c4
+  zh: 4a6a094ac3376d8d
+/deepseek-ai-dsh-lsy-tool-watch/model-experience/watch-results/what-the-model-sees:
+  en: b28188b1a569a465
+  zh: 19cebf949d86143f
+/deepseek-ai-dsh-lsy-tool-watch/model-experience/watch-results/token-effect:
+  en: 593ecc6626d8dc6f
+  zh: 0587b54dd3234e67
+/deepseek-ai-dsh-lsy-tool-watch/model-experience/watch-results/kv-cache-effect:
+  en: 2fbf2175168e8244
+  zh: fdc53d49bb7c3bca
+/deepseek-ai-dsh-lsy-tool-watch/known-limitations-and-deferred-work:
+  en: 2882837620240d74
+  zh: dfc0f91c24a8fee8

@@ -39,6 +39,25 @@ const threadSchema = z.object({
   repository: z.object({ full_name: z.string(), html_url: z.string() }),
 })
 
+const repositorySchema = z.object({
+  full_name: z.string(),
+  private: z.boolean(),
+  default_branch: z.string(),
+})
+
+/** One repository as `GET /repos/{owner}/{name}` returns it. */
+export type Repository = z.infer<typeof repositorySchema>
+
+/**
+ * Parse a repository response.
+ * @param body - decoded JSON body.
+ * @returns the repository fields the sensor reads, or undefined for a malformed body.
+ */
+export function parseRepository(body: unknown): Repository | undefined {
+  const parsed = repositorySchema.safeParse(body)
+  return parsed.success ? parsed.data : undefined
+}
+
 /** One published release. */
 export type Release = z.infer<typeof releaseSchema>
 /** One tag. */

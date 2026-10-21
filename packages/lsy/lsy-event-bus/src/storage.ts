@@ -1,4 +1,4 @@
-/** Durable bus state: every published event, pending subscription work, and dispatched batches. */
+/** Durable bus state: every published event, pending subscription work, dispatched batches, and run-time subscriptions. */
 import { z } from 'zod'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 
@@ -37,6 +37,32 @@ const batchRecordSchema = z.object({
   error: z.string().optional(),
   sessionId: z.string().optional(),
   outcome: z.string().optional(),
+  /** True when the Session's final answer was the silent reply, so no result message was sent. */
+  silent: z.boolean().optional(),
+}).strict()
+
+const sessionActionSchema = z.object({
+  workspacePath: z.string().min(1),
+  agentPreset: z.string().min(1),
+  permissionPreset: z.string().min(1),
+  instructions: z.string().min(1),
+  titlePrefix: z.string().optional(),
+  maxPromptEvents: z.number().int().min(1),
+  maxTextChars: z.number().int().min(1),
+}).strict()
+
+const subscriptionRecordSchema = z.object({
+  id: z.string().min(1),
+  sources: z.array(z.string()),
+  kinds: z.array(z.string()),
+  subjects: z.array(z.string()),
+  action: z.enum(['notify', 'session']),
+  coalesceMs: z.number().int().min(0),
+  maxPerHour: z.number().int().min(1),
+  session: sessionActionSchema.optional(),
+  createdAt: z.number(),
+  /** Session whose agent created the subscription. */
+  createdBy: z.string().optional(),
 }).strict()
 
 /** One published, non-duplicate event and what the bus decided about it. */
@@ -45,6 +71,8 @@ export type LsyEventRecord = z.infer<typeof eventRecordSchema>
 export type PendingRecord = z.infer<typeof pendingRecordSchema>
 /** One batch handed to an actuator. */
 export type BatchRecord = z.infer<typeof batchRecordSchema>
+/** One subscription created at run time, keyed by its id. */
+export type SubscriptionRecord = z.infer<typeof subscriptionRecordSchema>
 
 /** Bus storage; malformed rows reject opening the domain. */
 export const busDomain = defineDomain({
@@ -54,5 +82,6 @@ export const busDomain = defineDomain({
     events: domainTable<string, LsyEventRecord>(eventRecordSchema),
     pending: domainTable<string, PendingRecord>(pendingRecordSchema),
     batches: domainTable<string, BatchRecord>(batchRecordSchema),
+    subscriptions: domainTable<string, SubscriptionRecord>(subscriptionRecordSchema),
   },
 })

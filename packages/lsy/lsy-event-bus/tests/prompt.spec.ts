@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { batchTitle, buildSessionRequest, formatBatchNote, formatResultNote } from '../src/prompt.ts'
+import { LSY_SILENT_REPLY, batchTitle, buildSessionRequest, formatBatchNote, formatReminderNote, formatResultNote, isSilentReply, reminderLabel } from '../src/prompt.ts'
 import type { BatchEvent, SessionAction } from '../src/types.ts'
 
 const action: SessionAction = {
@@ -73,5 +73,58 @@ describe('formatResultNote', () => {
     expect(note.title).toBe('⚠️ t (error)')
     expect(note.body).toBe('(no assistant text)')
     expect(note.url).toBeUndefined()
+  })
+})
+
+describe('isSilentReply', () => {
+  it('matches only the exact silent token after trimming', () => {
+    expect(isSilentReply(LSY_SILENT_REPLY)).toBe(true)
+    expect(isSilentReply(` ${LSY_SILENT_REPLY}\n`)).toBe(true)
+    expect(isSilentReply('NO_REPLY.')).toBe(false)
+    expect(isSilentReply('no_reply')).toBe(false)
+    expect(isSilentReply(undefined)).toBe(false)
+  })
+})
+
+describe('reminderLabel', () => {
+  it('reads the first line of a one-shot reminder prompt', () => {
+    expect(reminderLabel('[SCHEDULE REMINDER]\nreminder_prompt_json: "Check CI\\nthen report"')).toBe('Check CI')
+  })
+
+  it('reads the first reminder of a batch and counts the rest', () => {
+    const batch = `reminders_json: ${JSON.stringify([{ reminder_prompt: 'A' }, { reminder_prompt: 'B' }, { reminder_prompt: 'C' }])}`
+    expect(reminderLabel(batch)).toBe('A (+2)')
+    expect(reminderLabel(`reminders_json: ${JSON.stringify([{ reminder_prompt: 'Only' }])}`)).toBe('Only')
+  })
+
+  it('bounds long prompts', () => {
+    const label = reminderLabel(`reminder_prompt_json: ${JSON.stringify('x'.repeat(200))}`)!
+    expect(label).toHaveLength(80)
+    expect(label.endsWith('…')).toBe(true)
+  })
+
+  it.each([
+    ['no text', undefined],
+    ['unrelated text', 'hello'],
+    ['malformed JSON', 'reminder_prompt_json: {oops'],
+    ['a non-string prompt', 'reminder_prompt_json: 42'],
+    ['a blank prompt', 'reminder_prompt_json: "   "'],
+    ['an empty batch', 'reminders_json: []'],
+    ['a batch without prompts', 'reminders_json: [{"schedule_id":"a"}]'],
+    ['a batch that is not a list', 'reminders_json: {"reminder_prompt":"a"}'],
+  ])('returns undefined for %s', (_label, text) => {
+    expect(reminderLabel(text)).toBeUndefined()
+  })
+})
+
+describe('formatReminderNote', () => {
+  it('titles a completed reminder turn with the alarm clock', () => {
+    expect(formatReminderNote({ label: 'Check CI', outcome: 'completed', text: ' Green. ', url: 'https://dsh.example/' }))
+      .toEqual({ title: '⏰ Check CI', body: 'Green.', url: 'https://dsh.example/' })
+  })
+
+  it('marks other outcomes and tolerates missing text', () => {
+    expect(formatReminderNote({ label: 'Check CI', outcome: 'cancelled', text: undefined, url: undefined }))
+      .toEqual({ title: '⚠️ ⏰ Check CI (cancelled)', body: '(no assistant text)' })
   })
 })

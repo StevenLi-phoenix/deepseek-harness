@@ -15,10 +15,16 @@
       "path": "../../../vendor/schemastery"
     },
     {
-      "path": "../../credentials/credentials"
+      "path": "../../core/agent"
     },
     {
       "path": "../lsy-event-bus"
+    },
+    {
+      "path": "../lsy-github-sensor"
+    },
+    {
+      "path": "../../core/tools"
     }
   ]
 }

@@ -1,4 +1,4 @@
-/** Durable event bus: dedupe, loop suppression, subscriptions, coalescing, rate limits, and dispatch. */
+/** Durable event bus: dedupe, loop suppression, config and run-time subscriptions, coalescing, rate limits, dispatch, and reports. */
 
 import { randomUUID } from 'node:crypto'
 import { Context, Service } from '@deepseek-ai/cordis'
@@ -9,12 +9,17 @@ import type { VerifiedWebhookDelivery, WebhookDeliveryId, WebhookRule, WebhookRu
 import z from '@deepseek-ai/schemastery'
 import { z as zod } from 'zod'
 import { matchesSubscription, suppressionReason } from './match.ts'
-import { batchTitle, buildSessionRequest, clip, formatBatchNote, formatResultNote } from './prompt.ts'
-import { busDomain, type BatchRecord, type LsyEventRecord } from './storage.ts'
-import type { BatchEvent, LsyDeliveryEvent, LsyEventInput, LsyNotifier, PublishOutcome, SessionAction, Subscription, SuppressConfig } from './types.ts'
+import { LSY_SILENT_REPLY, batchTitle, buildSessionRequest, clip, formatBatchNote, formatReminderNote, formatResultNote, isSilentReply, reminderLabel } from './prompt.ts'
+import { busDomain, type BatchRecord, type LsyEventRecord, type SubscriptionRecord } from './storage.ts'
+import type {
+  BatchEvent, BatchSummary, LsyDeliveryEvent, LsyEventInput, LsyNotifier, PublishOutcome, SessionAction, Subscription,
+  SubscriptionMeta, SubscriptionOrigin, SubscriptionView, SuppressConfig, UnsubscribeOutcome,
+} from './types.ts'
+import { LsySubscriptionError, subscriptionProblem } from './validate.ts'
 
 export * from './match.ts'
 export * from './prompt.ts'
+export * from './validate.ts'
 export type * from './storage.ts'
 export type * from './types.ts'
 
@@ -42,7 +47,7 @@ const MAX_TITLE_CHARS = 300
 
 /** Bus configuration. */
 export interface Config {
-  /** User-authored routing rules; only these can start actuators. */
+  /** Routing rules owned by the configuration; `subscribe()` adds more at run time. */
   subscriptions: Subscription[]
   /** Loop suppression for events the agent itself caused. */
   suppress: SuppressConfig
@@ -54,6 +59,8 @@ export interface Config {
   maxTextChars: number
   /** Send the final assistant text of each bus-started Session to the notifier. */
   notifySessionResult: boolean
+  /** Send the final assistant text of each unattended Host-schedule reminder turn to the notifier. */
+  reportScheduledTurns: boolean
   /** Events listed in one notify message before the remainder is counted. */
   maxNoteEvents: number
   /** Web UI link attached to Session result messages. */
@@ -94,6 +101,7 @@ export const Config: z<Config> = z.object({
   retainBatches: z.natural().min(1).default(1000),
   maxTextChars: z.natural().min(1).default(4000),
   notifySessionResult: z.boolean().default(true),
+  reportScheduledTurns: z.boolean().default(true),
   maxNoteEvents: z.natural().min(1).default(10),
   webUrl: z.string(),
 })
@@ -122,6 +130,12 @@ interface TrackedSession {
   text: string | undefined
 }
 
+/** A Session running a turn started by a Host-schedule reminder. */
+interface TrackedReminder {
+  label: string
+  text: string | undefined
+}
+
 /** A batch persisted by a flush and waiting for its actuator. */
 interface FlushedBatch {
   batch: BatchRecord
@@ -133,17 +147,68 @@ interface FlushedBatch {
 function assertConfig(config: Config): void {
   const ids = new Set<string>()
   for (const subscription of config.subscriptions) {
-    if (subscription.id.trim() === '') throw new Error('lsy-event-bus: subscription id must be non-empty')
+    const problem = subscriptionProblem(subscription)
+    if (problem !== undefined) throw new Error(`lsy-event-bus: ${problem}`)
     if (ids.has(subscription.id)) throw new Error(`lsy-event-bus: duplicate subscription id "${subscription.id}"`)
     ids.add(subscription.id)
-    if (subscription.action !== 'session') continue
-    const session = subscription.session
-    if (session === undefined || typeof session.workspacePath !== 'string' || !session.workspacePath.startsWith('/')) {
-      throw new Error(`lsy-event-bus: session subscription "${subscription.id}" needs an absolute session.workspacePath`)
-    }
-    if (typeof session.instructions !== 'string' || session.instructions.trim() === '') {
-      throw new Error(`lsy-event-bus: session subscription "${subscription.id}" needs session.instructions`)
-    }
+  }
+}
+
+/** Copy a validated subscription into its stored row; a `notify` row keeps no Session settings. */
+function toRecord(subscription: Subscription, meta: SubscriptionMeta, createdAt: number): SubscriptionRecord {
+  const session = subscription.action === 'session' ? subscription.session : undefined
+  return {
+    id: subscription.id,
+    sources: [...subscription.sources],
+    kinds: [...subscription.kinds],
+    subjects: [...subscription.subjects],
+    action: subscription.action,
+    coalesceMs: subscription.coalesceMs,
+    maxPerHour: subscription.maxPerHour,
+    ...(session === undefined ? {} : { session: toSessionAction(session) }),
+    createdAt,
+    ...(meta.createdBy === undefined ? {} : { createdBy: meta.createdBy }),
+  }
+}
+
+/** Copy Session settings, omitting an absent title prefix. */
+function toSessionAction(session: SubscriptionRecord['session'] & {}): SessionAction {
+  return {
+    workspacePath: session.workspacePath,
+    agentPreset: session.agentPreset,
+    permissionPreset: session.permissionPreset,
+    instructions: session.instructions,
+    maxPromptEvents: session.maxPromptEvents,
+    maxTextChars: session.maxTextChars,
+    ...(session.titlePrefix === undefined ? {} : { titlePrefix: session.titlePrefix }),
+  }
+}
+
+/** The routing fields of a stored run-time subscription. */
+function toSubscription(record: SubscriptionRecord): Subscription {
+  return {
+    id: record.id,
+    sources: record.sources,
+    kinds: record.kinds,
+    subjects: record.subjects,
+    action: record.action,
+    coalesceMs: record.coalesceMs,
+    maxPerHour: record.maxPerHour,
+    ...(record.session === undefined ? {} : { session: toSessionAction(record.session) }),
+  }
+}
+
+/** The outcome fields of one stored batch. */
+function summarize(batch: BatchRecord): BatchSummary {
+  return {
+    id: batch.id,
+    createdAt: batch.createdAt,
+    eventCount: batch.eventIds.length,
+    status: batch.status,
+    ...(batch.error === undefined ? {} : { error: batch.error }),
+    ...(batch.sessionId === undefined ? {} : { sessionId: batch.sessionId }),
+    ...(batch.outcome === undefined ? {} : { outcome: batch.outcome }),
+    ...(batch.silent === undefined ? {} : { silent: batch.silent }),
   }
 }
 
@@ -195,9 +260,10 @@ function errorText(error: unknown): string {
 }
 
 /**
- * Durable event bus. Sensors publish; user-authored subscriptions decide which
- * events reach which actuator; the bus owns dedupe, loop suppression,
- * coalescing, and rate limits so actuators never see raw sensor traffic.
+ * Durable event bus. Sensors publish; subscriptions from the configuration or
+ * created at run time decide which events reach which actuator; the bus owns
+ * dedupe, loop suppression, coalescing, and rate limits so actuators never
+ * see raw sensor traffic.
  */
 export class LsyEventBus extends Service {
   static inject = ['timer', 'storageDomain']
@@ -205,9 +271,10 @@ export class LsyEventBus extends Service {
 
   private readonly ready: Promise<Domain<typeof busDomain>>
   private domain: Domain<typeof busDomain> | undefined
-  private readonly subscriptions: ReadonlyMap<string, Subscription>
+  private readonly configSubscriptions: ReadonlyMap<string, Subscription>
   private readonly flushTimers = new Map<string, { at: number; dispose: () => void }>()
   private readonly tracked = new Map<string, TrackedSession>()
+  private readonly reminders = new Map<string, TrackedReminder>()
   private readonly inflight = new Set<Promise<void>>()
   private chain: Promise<unknown> = Promise.resolve()
   private stopping = false
@@ -219,7 +286,7 @@ export class LsyEventBus extends Service {
   constructor(ctx: Context, private readonly config: Config) {
     super(ctx, 'lsyEventBus')
     assertConfig(config)
-    this.subscriptions = new Map(config.subscriptions.map(subscription => [subscription.id, subscription]))
+    this.configSubscriptions = new Map(config.subscriptions.map(subscription => [subscription.id, subscription]))
     this.ready = ctx.storageDomain.open(busDomain)
 
     ctx.effect(async () => {
@@ -271,7 +338,7 @@ export class LsyEventBus extends Service {
       const now = Date.now()
       const reason = suppressionReason(this.config.suppress, input)
       const matching = reason === undefined
-        ? this.config.subscriptions.filter(subscription => matchesSubscription(subscription, input))
+        ? this.allSubscriptions().filter(subscription => matchesSubscription(subscription, input))
         : []
       const matched = matching.map(subscription => subscription.id)
       const outcome = reason !== undefined ? 'suppressed' : matched.length === 0 ? 'unmatched' : 'accepted'
@@ -326,6 +393,115 @@ export class LsyEventBus extends Service {
     return this.domain?.table('pending').size ?? 0
   }
 
+  /**
+   * Add a routing rule at run time. It is stored durably and survives restarts.
+   * @param subscription - rule; validated like a configuration row.
+   * @param meta - provenance, e.g. the creating Session.
+   * @returns the stored subscription with its (empty) status.
+   * @throws {LsySubscriptionError} `invalid_subscription` for a rule the bus cannot route, or `duplicate_id`
+   * for an id the configuration or another stored subscription already uses.
+   */
+  async subscribe(subscription: Subscription, meta: SubscriptionMeta = {}): Promise<SubscriptionView> {
+    const problem = subscriptionProblem(subscription)
+    if (problem !== undefined) throw new LsySubscriptionError('invalid_subscription', `lsy-event-bus: ${problem}`)
+    return this.serialize(async () => {
+      const domain = await this.ready
+      const table = domain.table('subscriptions')
+      if (this.configSubscriptions.has(subscription.id) || table.get(subscription.id) !== undefined) {
+        const owner = this.configSubscriptions.has(subscription.id) ? 'the bus configuration' : 'another subscription'
+        throw new LsySubscriptionError('duplicate_id', `lsy-event-bus: subscription id "${subscription.id}" is already used by ${owner}`)
+      }
+      const record = toRecord(subscription, meta, Date.now())
+      await table.put(record.id, record)
+      this.ctx.logger.info(`lsy-event-bus: subscribed ${record.id} (${record.action}; kinds [${record.kinds.join(', ')}]; subjects [${record.subjects.join(', ')}])${record.createdBy === undefined ? '' : ` for Session ${record.createdBy}`}`)
+      const [view] = this.views([record])
+      /* v8 ignore next -- views() maps each record to one view. */
+      if (view === undefined) throw new Error(`lsy-event-bus: no view for ${record.id}`)
+      return view
+    })
+  }
+
+  /**
+   * Remove a run-time subscription, its pending events, and its flush timer.
+   * Batches already created stay in the history.
+   * @param id - subscription id.
+   * @returns `removed`, `not_found`, or `config_owned` for an id the configuration owns.
+   */
+  async unsubscribe(id: string): Promise<UnsubscribeOutcome> {
+    if (this.configSubscriptions.has(id)) return 'config_owned'
+    return this.serialize(async () => {
+      const domain = await this.ready
+      if (!await domain.table('subscriptions').delete(id)) return 'not_found'
+      this.flushTimers.get(id)?.dispose()
+      this.flushTimers.delete(id)
+      const pending = domain.table('pending')
+      let dropped = 0
+      for (const [key, row] of [...pending.entries()]) {
+        if (row.subscription !== id) continue
+        await pending.delete(key)
+        dropped += 1
+      }
+      this.ctx.logger.info(`lsy-event-bus: unsubscribed ${id}; dropped ${dropped} pending event(s)`)
+      return 'removed'
+    })
+  }
+
+  /**
+   * Every subscription, configuration first and then run-time ones by creation time, with live status.
+   * @returns snapshot; before the storage domain opens, only configuration rows with empty status.
+   */
+  listSubscriptions(): SubscriptionView[] {
+    return this.views(this.storedSubscriptions(), true)
+  }
+
+  /** Stored run-time subscriptions, oldest first. */
+  private storedSubscriptions(): SubscriptionRecord[] {
+    return rowsOf(this.domain?.table('subscriptions')).sort((a, b) => a.createdAt - b.createdAt)
+  }
+
+  /** Configuration and run-time subscriptions, in matching order. */
+  private allSubscriptions(): Subscription[] {
+    return [...this.config.subscriptions, ...this.storedSubscriptions().map(toSubscription)]
+  }
+
+  /** One subscription by id from either origin. */
+  private subscriptionById(id: string): Subscription | undefined {
+    const configured = this.configSubscriptions.get(id)
+    if (configured !== undefined) return configured
+    const stored = this.domain?.table('subscriptions').get(id)
+    return stored === undefined ? undefined : toSubscription(stored)
+  }
+
+  /** Attach origin and status to stored rows, optionally preceded by the configuration rows. */
+  private views(records: readonly SubscriptionRecord[], withConfig = false): SubscriptionView[] {
+    const now = Date.now()
+    const pending = new Map<string, number>()
+    for (const row of rowsOf(this.domain?.table('pending'))) pending.set(row.subscription, (pending.get(row.subscription) ?? 0) + 1)
+    const batches = new Map<string, BatchRecord[]>()
+    for (const batch of this.batches()) batches.set(batch.subscription, [...batches.get(batch.subscription) ?? [], batch])
+    const view = (subscription: Subscription, origin: SubscriptionOrigin, record?: SubscriptionRecord): SubscriptionView => {
+      const history = batches.get(subscription.id) ?? []
+      const last = history.at(-1)
+      const timer = this.flushTimers.get(subscription.id)
+      return {
+        ...subscription,
+        origin,
+        ...(record === undefined ? {} : { createdAt: record.createdAt }),
+        ...(record?.createdBy === undefined ? {} : { createdBy: record.createdBy }),
+        status: {
+          pending: pending.get(subscription.id) ?? 0,
+          batchesLastHour: history.filter(batch => batch.createdAt > now - HOUR_MS).length,
+          ...(timer === undefined ? {} : { nextFlushAt: timer.at }),
+          ...(last === undefined ? {} : { lastBatch: summarize(last) }),
+        },
+      }
+    }
+    return [
+      ...(withConfig ? this.config.subscriptions.map(subscription => view(subscription, 'config')) : []),
+      ...records.map(record => view(toSubscription(record), 'agent', record)),
+    ]
+  }
+
   /** Run storage work one at a time; rejections reach the caller without breaking the chain. */
   private serialize<T>(work: () => Promise<T>): Promise<T> {
     const result = this.chain.then(work)
@@ -361,7 +537,7 @@ export class LsyEventBus extends Service {
       const domain = await this.ready
       const pending = domain.table('pending')
       for (const [key, row] of [...pending.entries()]) {
-        const subscription = this.subscriptions.get(row.subscription)
+        const subscription = this.subscriptionById(row.subscription)
         if (subscription === undefined) {
           this.ctx.logger.info(`lsy-event-bus: dropping pending ${row.eventId} of removed subscription ${row.subscription}`)
           await pending.delete(key)
@@ -380,8 +556,8 @@ export class LsyEventBus extends Service {
 
   /** Persist the next batch, or re-arm the flush when the hourly limit is reached. */
   private async persistBatch(subscriptionId: string): Promise<FlushedBatch | undefined> {
-    const subscription = this.subscriptions.get(subscriptionId)
-    /* v8 ignore next -- a flush queued behind teardown or for a subscription removed by a reload. */
+    const subscription = this.subscriptionById(subscriptionId)
+    /* v8 ignore next -- a flush queued behind teardown or behind the unsubscribe() that removed its subscription. */
     if (subscription === undefined || this.stopping) return undefined
     const domain = await this.ready
     const pending = domain.table('pending')
@@ -465,7 +641,7 @@ export class LsyEventBus extends Service {
   }
 
   /** Merge fields into one stored batch; a pruned batch is ignored. */
-  private markBatch(id: string, patch: Partial<Pick<BatchRecord, 'status' | 'error' | 'sessionId' | 'outcome'>>): Promise<void> {
+  private markBatch(id: string, patch: Partial<Pick<BatchRecord, 'status' | 'error' | 'sessionId' | 'outcome' | 'silent'>>): Promise<void> {
     return this.serialize(async () => {
       const domain = await this.ready
       const batches = domain.table('batches')
@@ -477,7 +653,7 @@ export class LsyEventBus extends Service {
 
   /** Webhook rule body: rebuild the Session request from the subscription that produced the delivery. */
   private sessionRequest(delivery: Readonly<VerifiedWebhookDelivery<typeof LSY_EVENT_KIND>>): WebhookSessionRequest | null {
-    const subscription = this.subscriptions.get(delivery.source)
+    const subscription = this.subscriptionById(delivery.source)
     if (subscription?.action !== 'session' || subscription.session === undefined) return null
     const parsed = deliveryEventSchema.safeParse(delivery.event)
     if (!parsed.success) {
@@ -487,11 +663,17 @@ export class LsyEventBus extends Service {
     return buildSessionRequest(subscription.id, subscription.session, parsed.data.events)
   }
 
-  /** Follow bus-started Sessions to their first turn end and report the outcome. */
+  /** Follow bus-started Sessions and unattended reminder turns to their turn end and report the outcome. */
   private observeSession(session: Session, event: SessionEvent): void {
     switch (event.type) {
       case 'user/message': {
         const source = event.data.source
+        // `schedule` is declared by the Host schedule service, which this package does not import.
+        const kind: string = source.kind
+        if (kind === 'schedule') {
+          this.trackReminder(session.id, messageText(event.data.content))
+          return
+        }
         if (source.kind !== 'webhook' || source.provider !== LSY_EVENT_KIND || this.tracked.has(session.id)) return
         const batch = this.domain?.table('batches').get(source.deliveryId)
         this.tracked.set(session.id, {
@@ -505,17 +687,28 @@ export class LsyEventBus extends Service {
       }
       case 'assistant/message': {
         const tracked = this.tracked.get(session.id)
-        const text = tracked === undefined ? undefined : messageText(event.data.message.content)
-        if (tracked !== undefined && text !== undefined) tracked.text = text
+        const reminder = this.reminders.get(session.id)
+        if (tracked === undefined && reminder === undefined) return
+        const text = messageText(event.data.message.content)
+        if (text === undefined) return
+        if (tracked !== undefined) tracked.text = text
+        if (reminder !== undefined) reminder.text = text
         return
       }
       case 'turn/end': {
         const tracked = this.tracked.get(session.id)
-        if (tracked === undefined) return
+        const reminder = this.reminders.get(session.id)
         this.tracked.delete(session.id)
+        this.reminders.delete(session.id)
         const outcome = event.data.reason.kind
-        this.ctx.logger.info(`lsy-event-bus: Session ${session.id} of ${tracked.batchId} ended its first turn: ${outcome}`)
-        this.track(this.reportResult(tracked, outcome))
+        // The first-turn result of a bus-started Session already carries a reminder that joined that turn.
+        if (tracked !== undefined) {
+          this.ctx.logger.info(`lsy-event-bus: Session ${session.id} of ${tracked.batchId} ended its first turn: ${outcome}`)
+          this.track(this.reportResult(tracked, outcome))
+        } else if (reminder !== undefined) {
+          this.ctx.logger.info(`lsy-event-bus: reminder turn of Session ${session.id} ended: ${outcome}`)
+          this.track(this.reportReminder(session.id, reminder, outcome))
+        }
         return
       }
       default:
@@ -523,9 +716,32 @@ export class LsyEventBus extends Service {
     }
   }
 
-  /** Record the Session outcome and send it to the notifier. */
+  /** Start following a reminder turn unless reports are off, the bus already follows the Session, or the notifier relays it itself. */
+  private trackReminder(sessionId: string, text: string | undefined): void {
+    if (!this.config.reportScheduledTurns || this.tracked.has(sessionId) || this.reminders.has(sessionId)) return
+    if (this.ctx.get('lsyNotifier')?.ownsSession?.(sessionId) === true) return
+    this.reminders.set(sessionId, { label: reminderLabel(text) ?? `Session ${sessionId}`, text: undefined })
+  }
+
+  /** Send a reminder turn's final answer to the notifier unless it is the silent reply. */
+  private async reportReminder(sessionId: string, reminder: TrackedReminder, outcome: string): Promise<void> {
+    if (isSilentReply(reminder.text)) {
+      this.ctx.logger.info(`lsy-event-bus: reminder turn of Session ${sessionId} answered ${LSY_SILENT_REPLY}; nothing sent`)
+      return
+    }
+    const notifier = this.ctx.get('lsyNotifier')
+    if (notifier === undefined) return
+    await notifier.send(formatReminderNote({ label: reminder.label, outcome, text: reminder.text, url: this.config.webUrl }))
+  }
+
+  /** Record the Session outcome and send it to the notifier unless it is the silent reply. */
   private async reportResult(tracked: TrackedSession, outcome: string): Promise<void> {
-    await this.markBatch(tracked.batchId, { status: 'completed', outcome })
+    const silent = isSilentReply(tracked.text)
+    await this.markBatch(tracked.batchId, { status: 'completed', outcome, ...(silent ? { silent } : {}) })
+    if (silent) {
+      this.ctx.logger.info(`lsy-event-bus: Session of ${tracked.batchId} answered ${LSY_SILENT_REPLY}; nothing sent`)
+      return
+    }
     if (!this.config.notifySessionResult) return
     const notifier = this.ctx.get('lsyNotifier')
     if (notifier === undefined) return

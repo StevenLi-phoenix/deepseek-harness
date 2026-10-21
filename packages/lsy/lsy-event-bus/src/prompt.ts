@@ -4,8 +4,20 @@ import type { BatchEvent, LsyNote, SessionAction } from './types.ts'
 
 /** Session titles are bounded by the Session title service. */
 const MAX_TITLE_CHARS = 120
-/** Telegram rejects messages above 4096 characters; keep room for the title and link. */
+/** Keep one notification to a phone-sized message; leave room for the title and link. */
 const MAX_NOTE_BODY_CHARS = 3500
+
+/** Final answer an agent gives when an event or reminder turn needs no message to the owner. */
+export const LSY_SILENT_REPLY = 'NO_REPLY'
+
+/**
+ * Whether a turn's final answer asks for no message to the owner.
+ * @param text - final assistant text, if any.
+ * @returns true when the trimmed text is exactly {@link LSY_SILENT_REPLY}.
+ */
+export function isSilentReply(text: string | undefined): boolean {
+  return text?.trim() === LSY_SILENT_REPLY
+}
 
 /**
  * Keep the first `limit` characters and mark the cut.
@@ -103,6 +115,74 @@ export interface SessionResult {
  */
 export function formatResultNote(result: SessionResult): LsyNote {
   const title = result.outcome === 'completed' ? `✅ ${result.title}` : `⚠️ ${result.title} (${result.outcome})`
+  const text = result.text?.trim()
+  return {
+    title,
+    body: text ? clip(text, MAX_NOTE_BODY_CHARS) : '(no assistant text)',
+    ...(result.url === undefined ? {} : { url: result.url }),
+  }
+}
+
+/** Reminder labels are the identifying part of a notification title. */
+const MAX_REMINDER_LABEL_CHARS = 80
+
+/** Parse the JSON payload of a `<name>: <json>` line, or undefined when absent or malformed. */
+function jsonLine(text: string, name: string): unknown {
+  const prefix = `${name}: `
+  const line = text.split('\n').find(candidate => candidate.startsWith(prefix))
+  if (line === undefined) return undefined
+  try {
+    return JSON.parse(line.slice(prefix.length)) as unknown
+  } catch {
+    return undefined
+  }
+}
+
+/** First non-blank line of a prompt, bounded for a title. */
+function promptLabel(prompt: unknown): string | undefined {
+  if (typeof prompt !== 'string') return undefined
+  const first = prompt.trim().split('\n', 1).join('').trim()
+  return first === '' ? undefined : clampLabel(first, MAX_REMINDER_LABEL_CHARS)
+}
+
+/**
+ * Name the reminder behind a Host schedule message, read from the canonical
+ * JSON fields of its framing (`reminder_prompt_json` for one reminder,
+ * `reminders_json` for a recurring batch).
+ * @param text - text of the schedule `user/message`.
+ * @returns first line of the (first) reminder prompt, `(+N)` for more, or undefined when unrecognized.
+ */
+export function reminderLabel(text: string | undefined): string | undefined {
+  if (text === undefined) return undefined
+  const single = jsonLine(text, 'reminder_prompt_json')
+  if (single !== undefined) return promptLabel(single)
+  const batch = jsonLine(text, 'reminders_json')
+  if (!Array.isArray(batch) || batch.length === 0) return undefined
+  const first: unknown = batch[0]
+  const label = promptLabel(typeof first === 'object' && first !== null && 'reminder_prompt' in first ? first.reminder_prompt : undefined)
+  if (label === undefined) return undefined
+  return batch.length > 1 ? `${label} (+${batch.length - 1})` : label
+}
+
+/** Facts reported when an unattended reminder turn ends. */
+export interface ReminderResult {
+  /** Reminder or Session label. */
+  label: string
+  /** `TurnEndReason.kind`. */
+  outcome: string
+  /** Text of the last assistant message, if any. */
+  text: string | undefined
+  /** Web UI link. */
+  url: string | undefined
+}
+
+/**
+ * Render a reminder turn result as one message.
+ * @param result - label, outcome, and final assistant text.
+ * @returns message for the notifier.
+ */
+export function formatReminderNote(result: ReminderResult): LsyNote {
+  const title = result.outcome === 'completed' ? `⏰ ${result.label}` : `⚠️ ⏰ ${result.label} (${result.outcome})`
   const text = result.text?.trim()
   return {
     title,
