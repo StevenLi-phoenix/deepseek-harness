@@ -7,6 +7,8 @@ Deployment files for running this fork as an always-on, event-driven agent servi
 | Path | Contents |
 |---|---|
 | [`CHANGELOG.md`](CHANGELOG.md) | Fork-local changes (Keep a Changelog) |
+| [`profiles/event/`](profiles/event/) | Event profile: `package.json` (bundles) and `cordis.patch.yml` (composition layer, code-owned) |
+| [`profiles/event/home.patch.example.yml`](profiles/event/home.patch.example.yml) | Routing layer template for `$DSH_HOME/cordis.patch.yml` (deployment-owned) |
 | [`../packages/lsy/UPSTREAM.md`](../packages/lsy/UPSTREAM.md) | Upstream baseline, copied packages, touched upstream files, upgrade procedure |
 
 ## Checks for the lsy group
@@ -20,3 +22,16 @@ pnpm exec tsx scripts/run-oxlint.ts packages/lsy
 pnpm run constraints && pnpm run verify-product-use && pnpm run verify-tsconfig-paths
 pnpm run verify-translation-pairing packages/lsy/README.md packages/lsy/*/README.md
 ```
+
+## Run the event profile from source
+
+```sh
+export DSH_HOME=/path/to/test-home            # never the live ~/.dsh
+mkdir -p "$DSH_HOME/profiles/event"
+cp lsy/profiles/event/package.json lsy/profiles/event/cordis.patch.yml "$DSH_HOME/profiles/event/"
+cp lsy/profiles/event/home.patch.example.yml "$DSH_HOME/cordis.patch.yml"   # then edit
+pnpm dsh event --dump-config | less            # composed tree, with the layer that set each row
+pnpm dsh event --port 3092 --no-open           # Web UI + sensors + bus
+```
+
+Relative module rows in `$DSH_HOME/cordis.patch.yml` (e.g. `name: ./my-rule.mjs`) resolve against `$DSH_HOME`.
