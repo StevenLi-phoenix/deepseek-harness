@@ -25,6 +25,7 @@ Let GitHub activity and local process health wake an agent or ping your phone wi
 | Package | Role |
 |---|---|
 | [`fork-event-bus/`](fork-event-bus/README.md) | Dedupe, loop suppression, subscriptions, coalescing, rate limits, notify and Session dispatch |
+| [`fork-github-sensor/`](fork-github-sensor/README.md) | Polls GitHub releases, tags, commits, and notifications with conditional requests |
 | [`fork-telegram/`](fork-telegram/README.md) | Telegram notifier providing `ctx.forkNotifier` |
 
 -----

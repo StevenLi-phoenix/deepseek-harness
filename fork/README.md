@@ -14,7 +14,8 @@ Deployment files for running this fork as an always-on, event-driven agent servi
 ```sh
 pnpm exec vitest run packages/fork
 pnpm exec vitest run packages/fork --coverage --coverage.include='packages/fork/*/src/**/*.ts'
-pnpm exec tsc -b packages/fork/fork-event-bus packages/fork/fork-telegram
+pnpm exec tsc -b packages/fork/fork-event-bus packages/fork/fork-telegram packages/fork/fork-github-sensor
+pnpm exec tsc -p tsconfig.host.json --noEmit   # also type-checks tests
 pnpm exec tsx scripts/run-oxlint.ts packages/fork
 pnpm run constraints && pnpm run verify-product-use && pnpm run verify-tsconfig-paths
 pnpm run verify-translation-pairing packages/fork/README.md packages/fork/*/README.md
