@@ -6,4 +6,5 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 
 ### Added
 - `@deepseek-ai/dsh-lsy-event-bus`: durable event bus with dedupe, loop suppression (agent actors and output markers), user-authored subscriptions, coalescing windows, rolling hourly rate limits, notify dispatch through `ctx.lsyNotifier`, Session dispatch through the webhook runtime (`lsy-event` kind), and first-turn result reports.
+- `@deepseek-ai/dsh-lsy-telegram`: Telegram Bot API notifier providing `ctx.lsyNotifier`; plain-text messages clipped to 4096 characters, token resolved per send from a credential reference, one retry on short `retry_after`, errors never contain the token.
 - `packages/lsy/UPSTREAM.md` ledger and this `lsy/` deployment directory.
