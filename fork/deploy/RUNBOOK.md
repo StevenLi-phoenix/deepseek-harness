@@ -8,7 +8,7 @@ Every `sudo` line is meant to be run by hand, one at a time. The agent in this s
 
 | Path | Owner | Contents |
 |---|---|---|
-| `/Users/Shared/fork-dsh/<sha>/` | owner, 755 | Installed build (≈1.6 GB); `dsh-runtime` can read, not write |
+| `/Users/Shared/fork-dsh/<sha>/` | owner, 755 | Installed build (≈1.6 GB) plus `fork/` (profile and `setup-profile.sh`); `dsh-runtime` can read, not write |
 | `/Users/Shared/fork-dsh/current` | owner | Symlink to the active build |
 | `/Users/Shared/fork-dsh/routing.patch.yml` | owner, 644 | Routing layer: subscriptions, repositories, chat id |
 | `/Users/dsh-runtime/.dsh/` | dsh-runtime, 700 | `DSH_HOME`: profile, sessions, storages, `.env` secrets |
@@ -57,7 +57,7 @@ fork/deploy/upgrade.sh          # builds, tests, packs, installs, points current
 sudo -u dsh-runtime mkdir -p /Users/dsh-runtime/.dsh /Users/dsh-runtime/work /Users/dsh-runtime/Library/Logs/dsh-events
 sudo -u dsh-runtime chmod 700 /Users/dsh-runtime/.dsh
 sudo -u dsh-runtime ln -s /Users/Shared/fork-dsh/routing.patch.yml /Users/dsh-runtime/.dsh/cordis.patch.yml
-sudo -u dsh-runtime /Users/owner/Codes/deepseek-harness/fork/deploy/setup-profile.sh /Users/dsh-runtime/.dsh /Users/Shared/fork-dsh/current
+sudo -u dsh-runtime /Users/Shared/fork-dsh/current/fork/deploy/setup-profile.sh /Users/dsh-runtime/.dsh /Users/Shared/fork-dsh/current
 ```
 
 ## 5. Secrets (typed in your terminal, never pasted into a chat)

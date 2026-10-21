@@ -19,13 +19,20 @@ if [ ! -d "$DIST/dsh" ]; then
   pnpm run release:pack --family vendor --out "$DIST/vendor"
   pnpm run release:pack --family dsh --out "$DIST/dsh"
 fi
-[ -d "$PREFIX" ] || "$ROOT/fork/deploy/install-app.sh" "$DIST" "$PREFIX"
+if [ ! -d "$PREFIX" ]; then
+  "$ROOT/fork/deploy/install-app.sh" "$DIST" "$PREFIX"
+  # Ship the profile and its setup script with the build, so the service user (who cannot
+  # read the operator's home) sets up exactly the composition this build was tested with.
+  mkdir -p "$PREFIX/fork/deploy" "$PREFIX/fork/profiles"
+  cp "$ROOT/fork/deploy/setup-profile.sh" "$PREFIX/fork/deploy/"
+  cp -R "$ROOT/fork/profiles/event" "$PREFIX/fork/profiles/"
+fi
 ln -sfn "$PREFIX" "$APPS/current"
 echo "upgrade: $APPS/current -> $PREFIX"
 cat <<NEXT
 
 Finish the switch (privileged; run one at a time):
-  sudo -u dsh-runtime $ROOT/fork/deploy/setup-profile.sh /Users/dsh-runtime/.dsh $APPS/current
+  sudo -u dsh-runtime $APPS/current/fork/deploy/setup-profile.sh /Users/dsh-runtime/.dsh $APPS/current
   sudo launchctl kickstart -k system/app.lishuyu.dsh-events
 Roll back: ln -sfn $APPS/<previous sha> $APPS/current, then the kickstart line.
 NEXT
