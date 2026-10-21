@@ -2183,6 +2183,209 @@ export interface LspLocalServerConfig {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsp-stdio -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-event-bus -->
+<a id="deepseek-aidsh-fork-event-bus"></a>
+
+## `@deepseek-ai/dsh-fork-event-bus`
+
+- `inject`: `timer` · `storageDomain`
+- `source`: [`packages/fork/fork-event-bus/src/index.ts:49`](../packages/fork/fork-event-bus/src/index.ts)
+
+```ts config-catalog
+/** Bus configuration. */
+export interface Config {
+  /** Routing rules owned by the configuration; `subscribe()` adds more at run time. */
+  subscriptions: Subscription[]
+  /** Loop suppression for events the agent itself caused. */
+  suppress: SuppressConfig
+  /** Settled events kept for dedupe and inspection; the oldest are pruned first. */
+  retainEvents: number
+  /** Batches kept for rate limiting and inspection; the oldest are pruned first. */
+  retainBatches: number
+  /** Maximum stored characters of each event's untrusted text. */
+  maxTextChars: number
+  /** Send the final assistant text of each bus-started Session to the notifier. */
+  notifySessionResult: boolean
+  /** Send the final assistant text of each unattended Host-schedule reminder turn to the notifier. */
+  reportScheduledTurns: boolean
+  /** Events listed in one notify message before the remainder is counted. */
+  maxNoteEvents: number
+  /** Web UI link attached to Session result messages. */
+  webUrl?: string
+}
+
+/** One routing rule, from the bus configuration or created at run time through `ForkEventBus.subscribe()`. */
+export interface Subscription {
+  /** Stable id; also the webhook delivery source and the notification label. */
+  id: string
+  /** Source globs; empty matches every source. */
+  sources: string[]
+  /** Kind globs; empty matches every kind. */
+  kinds: string[]
+  /** Subject globs; empty matches every subject. */
+  subjects: string[]
+  /** `notify` sends a message; `session` starts an agent Session. */
+  action: 'notify' | 'session'
+  /** Window after the first pending event during which later events join the same batch. */
+  coalesceMs: number
+  /** Maximum batches per rolling hour; later batches wait for the window to free up. */
+  maxPerHour: number
+  /** Required when `action` is `session`. */
+  session?: SessionAction
+}
+
+/** Loop suppression: events the agent itself caused must not trigger it again. */
+export interface SuppressConfig {
+  /** Origin identities of the agent (e.g. its GitHub login), compared case-insensitively. */
+  actors: string[]
+  /** Substrings the agent writes into its own output (e.g. a commit trailer). */
+  markers: string[]
+}
+
+/** How a `session` subscription turns one batch into a new agent Session. */
+export interface SessionAction {
+  /** Absolute Workspace directory the Session runs in. */
+  workspacePath: string
+  /** Agent preset id, e.g. `standard` or a deployment-defined `unattended`. */
+  agentPreset: string
+  /** Permission preset id, e.g. `danger-full-access` for unattended runs. */
+  permissionPreset: string
+  /** Trusted task text placed before the untrusted event data. */
+  instructions: string
+  /** Session title prefix; defaults to the subscription id. */
+  titlePrefix?: string
+  /** Maximum events embedded in the prompt; the rest are counted. */
+  maxPromptEvents: number
+  /** Maximum characters of each event's untrusted text in the prompt. */
+  maxTextChars: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-event-bus -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-github-sensor -->
+<a id="deepseek-aidsh-fork-github-sensor"></a>
+
+## `@deepseek-ai/dsh-fork-github-sensor`
+
+- `inject`: `timer` · `storageDomain` · `credentials` · `forkEventBus`
+- `source`: [`packages/fork/fork-github-sensor/src/index.ts:90`](../packages/fork/fork-github-sensor/src/index.ts)
+
+```ts config-catalog
+/** Sensor configuration. */
+export interface Config {
+  /** Poll period in milliseconds. */
+  intervalMs: number
+  /** REST API origin. */
+  apiBase: string
+  /** Credential reference for repository reads (a fine-grained read-only token). */
+  tokenEnv: string
+  /** Credential reference for `/notifications` (a classic token with the `notifications` scope). */
+  notificationsTokenEnv: string
+  /** Poll the authenticated user's notification threads when the notifications token resolves. */
+  notifications: boolean
+  /** Repositories watched by configuration; `GithubSensor.watch()` adds more at run time. */
+  repos: RepoWatch[]
+  /** Per-request deadline in milliseconds. */
+  timeoutMs: number
+  /** Characters of release notes and commit messages kept in events. */
+  maxTextChars: number
+  /** `per_page` of repository list requests; more new items than this between polls are missed. */
+  perPage: number
+  /** Seen ids remembered per stream. */
+  maxSeenPerStream: number
+}
+
+/** One watched repository. */
+export interface RepoWatch {
+  /** `owner/name`. */
+  repo: string
+  /** Streams to poll, published in this order within one tick. */
+  watch: RepoStream[]
+  /** Branch for `commits`; the default branch when unset. */
+  branch?: string
+}
+
+/** Per-repository streams. */
+export type RepoStream = 'releases' | 'commits' | 'tags'
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-github-sensor -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-watch -->
+<a id="deepseek-aidsh-fork-tool-watch"></a>
+
+## `@deepseek-ai/dsh-fork-tool-watch`
+
+- `inject`: `tools`
+- `source`: [`packages/fork/fork-tool-watch/src/index.ts:28`](../packages/fork/fork-tool-watch/src/index.ts)
+
+```ts config-catalog
+/** Defaults applied to watches the model creates. */
+export interface Config {
+  /** Absolute Workspace of Sessions that `session` watches start, unless the call names one. */
+  defaultWorkspacePath: string
+  /** Agent preset of those Sessions. */
+  defaultAgentPreset: string
+  /** Permission preset of those Sessions. */
+  defaultPermissionPreset: string
+  /** Seconds after the first new event during which later events join the same batch. */
+  defaultCoalesceSeconds: number
+  /** Batches per rolling hour of a `notify` watch. */
+  defaultNotifyMaxPerHour: number
+  /** Batches per rolling hour of a `session` watch. */
+  defaultSessionMaxPerHour: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-watch -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-wechat -->
+<a id="deepseek-aidsh-fork-wechat"></a>
+
+## `@deepseek-ai/dsh-fork-wechat`
+
+- `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
+- `source`: [`packages/fork/fork-wechat/src/index.ts:39`](../packages/fork/fork-wechat/src/index.ts)
+
+```ts config-catalog
+/** Channel configuration. */
+export interface Config {
+  /** Account file written by the login command; defaults to `<DSH_HOME>/fork-wechat/account.json`. */
+  accountFile?: string
+  /** Chat Session settings. */
+  chat: ChatConfig
+  /** Code points per WeChat message; longer texts are split. */
+  maxMessageChars: number
+  /** Messages one text may be split into; the last is cut beyond that. */
+  maxReplyParts: number
+  /** Messages the bot may send per owner message. */
+  repliesPerToken: number
+  /** How long an owner message keeps its reply window open, in milliseconds. */
+  contextTtlMs: number
+  /** Undelivered texts kept for the next window; the oldest are dropped first. */
+  outboxLimit: number
+  /** Account file re-check period while no usable account exists, in milliseconds. */
+  accountPollMs: number
+  /** Long-poll deadline until the server suggests another, in milliseconds. */
+  longPollTimeoutMs: number
+  /** Deadline of one send, in milliseconds. */
+  requestTimeoutMs: number
+}
+
+/** How the owner's chat Session is created. */
+export interface ChatConfig {
+  /** Absolute directory the chat Session works in; created when missing. */
+  workspacePath: string
+  /** Agent preset of the chat Session. */
+  agentPreset: string
+  /** Permission preset applied when the chat Session is created. */
+  permissionPreset: string
+  /** Session title. */
+  title: string
+  /** IANA time zone sent with every prompt and used for digest timestamps. */
+  timeZone: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-wechat -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-mcp-client -->
 <a id="deepseek-aidsh-mcp-client"></a>
 
