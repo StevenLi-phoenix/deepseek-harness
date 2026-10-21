@@ -2,27 +2,42 @@
 
 Runs the fork as a second dsh instance — the event service — under a dedicated, non-admin macOS user `dsh-runtime`, on `127.0.0.1:3081`, started by a LaunchDaemon. The interactive instance (`app.lishuyu.dsh`, `~/.dsh`, port 3080) is untouched.
 
-Every `sudo` line is meant to be run by hand, one at a time. The agent in this service runs without approval prompts (`danger-full-access`), so the account boundary below is the isolation: it must hold before the first event arrives.
+You do this once. After that you talk to the agent on WeChat: it creates its own watches (`watch_create`) and reminders (`schedule_create`), and every event result, reminder result, and chat reply comes back to WeChat. No YAML to write.
+
+Every `sudo` line is meant to be run by hand, one at a time. The agent runs without approval prompts (`danger-full-access`), so the account boundary below is the isolation: it must hold before the first event arrives.
 
 ## Layout
 
 | Path | Owner | Contents |
 |---|---|---|
-| `/Users/Shared/lsy-dsh/<sha>/` | lishuyu, 755 | Installed build (≈1.6 GB) plus `lsy/` (profile and `setup-profile.sh`); `dsh-runtime` can read, not write |
+| `/Users/Shared/lsy-dsh/<sha>/` | lishuyu, 755 | Installed build (≈1.6 GB) plus `lsy/` (profile, `setup-profile.sh`, `wechat-login.mjs`); `dsh-runtime` can read, not write |
 | `/Users/Shared/lsy-dsh/current` | lishuyu | Symlink to the active build |
-| `/Users/Shared/lsy-dsh/routing.patch.yml` | lishuyu, 644 | Routing layer: subscriptions, repositories, chat id |
-| `/Users/dsh-runtime/.dsh/` | dsh-runtime, 700 | `DSH_HOME`: profile, sessions, storages, `.env` secrets |
-| `/Users/dsh-runtime/.dsh/cordis.patch.yml` | dsh-runtime | Symlink to `routing.patch.yml` |
-| `/Users/dsh-runtime/work/` | dsh-runtime | Workspaces for event Sessions |
+| `/Users/dsh-runtime/.dsh/` | dsh-runtime, 700 | `DSH_HOME`: profile, Sessions, storages (watches, subscriptions, cursors), `.env` secrets |
+| `/Users/dsh-runtime/.dsh/lsy-wechat/account.json` | dsh-runtime, 600 | WeChat bot binding written by `wechat-login.mjs` |
+| `/Users/dsh-runtime/work/` | dsh-runtime | Workspace of the WeChat chat Session and of watch-started Sessions |
 | `/Users/dsh-runtime/Library/Logs/dsh-events/` | dsh-runtime | `stdout.log`, `stderr.log` |
 | `/Library/LaunchDaemons/app.lishuyu.dsh-events.plist` | root:wheel 644 | Service definition (from `app.lishuyu.dsh-events.plist`) |
 
-## 0. Decide how to handle `/Volumes/MiniSSD`
+## 0. Close `/Volumes/MiniSSD`
 
-`diskutil info /Volumes/MiniSSD` reports `Owners: Disabled` (mounted `noowners`): every local user acts as the owner of every file there, so `dsh-runtime` could read and write kaorou data, backups, and other projects. Pick one before step 3:
+`diskutil info /Volumes/MiniSSD` reports `Owners: Disabled` (mounted `noowners`): every local user acts as the owner of every file there, so `dsh-runtime` could read and write kaorou data, backups, and other projects. Turn ownership on and give the volume back to `lishuyu`.
 
-- **A — enable ownership (recommended).** Stop kaorou, then `sudo diskutil enableOwnership /Volumes/MiniSSD`, then `sudo chown -R lishuyu:staff /Volumes/MiniSSD`, then start kaorou. Files written while ownership was off are stored as `_unknown` (99), which is why the `chown` is required. Guest SMB clients of the `MiniSSD` share lose write access afterwards.
-- **B — accept the exposure** and rely on the agent instructions only.
+Do it while kaorou has no burn or upload in flight (check its panel): stopping the daemon kills in-flight `ffmpeg`, and between `enableOwnership` and the end of the `chown` kaorou cannot write files that are still owned by `_unknown`. The `chown` walks every file on the volume (the `node_modules` trees are large), so expect minutes.
+
+```sh
+launchctl bootout gui/$(id -u)/app.lishuyu.kaorou.daemon
+launchctl bootout gui/$(id -u)/app.lishuyu.kaorou.api
+sudo diskutil enableOwnership /Volumes/MiniSSD
+sudo chown lishuyu:staff /Volumes/MiniSSD
+sudo find /Volumes/MiniSSD -mindepth 1 -maxdepth 1 ! -name .fseventsd ! -name .Spotlight-V100 -exec chown -R lishuyu:staff {} +
+chmod 700 /Volumes/MiniSSD
+launchctl bootstrap gui/$(id -u) /Users/lishuyu/Library/LaunchAgents/app.lishuyu.kaorou.api.plist
+launchctl bootstrap gui/$(id -u) /Users/lishuyu/Library/LaunchAgents/app.lishuyu.kaorou.daemon.plist
+```
+
+- Files written while ownership was off are stored as `_unknown` (99); that is why the `chown` is needed. `.fseventsd` and `.Spotlight-V100` belong to the system services and are left alone.
+- `chmod 700` closes the volume to every other local account. Guest SMB clients of the `MiniSSD` share lose access; logging in to the share as `lishuyu` keeps working.
+- Check: `diskutil info /Volumes/MiniSSD | grep Owners` → `Enabled`; `ls -ld /Volumes/MiniSSD` → `drwx------  lishuyu  staff`; kaorou panel shows the daemon back.
 
 ## 1. Close the home directory
 
@@ -46,23 +61,22 @@ sudo dscl . create /Users/dsh-runtime IsHidden 1
 
 ```sh
 mkdir -p /Users/Shared/lsy-dsh && chmod 755 /Users/Shared/lsy-dsh
-cp lsy/profiles/event/home.patch.example.yml /Users/Shared/lsy-dsh/routing.patch.yml   # then edit the routing
-chmod 644 /Users/Shared/lsy-dsh/routing.patch.yml
-lsy/deploy/upgrade.sh          # builds, tests, packs, installs, points current at it
+cd /Volumes/MiniSSD/deepseek-harness && lsy/deploy/upgrade.sh    # builds, tests, packs, installs, points current at it
 ```
+
+`upgrade.sh` refuses a dirty checkout and takes a few minutes. It ends by printing the commands of step 4 and step 7.
 
 ## 4. Prepare the service home
 
 ```sh
 sudo -u dsh-runtime mkdir -p /Users/dsh-runtime/.dsh /Users/dsh-runtime/work /Users/dsh-runtime/Library/Logs/dsh-events
 sudo -u dsh-runtime chmod 700 /Users/dsh-runtime/.dsh
-sudo -u dsh-runtime ln -s /Users/Shared/lsy-dsh/routing.patch.yml /Users/dsh-runtime/.dsh/cordis.patch.yml
 sudo -u dsh-runtime /Users/Shared/lsy-dsh/current/lsy/deploy/setup-profile.sh /Users/dsh-runtime/.dsh /Users/Shared/lsy-dsh/current
 ```
 
 ## 5. Secrets (typed in your terminal, never pasted into a chat)
 
-Use keys that belong to this service only: a separate DeepSeek key, a fine-grained **read-only** GitHub token, a classic token with **only** the `notifications` scope, and the Telegram bot token.
+Use keys that belong to this service only: a separate DeepSeek key, a fine-grained **read-only** GitHub token (public repositories, plus any private ones you want watched), and optionally a classic token with **only** the `notifications` scope for your GitHub notification threads.
 
 ```sh
 sudo -u dsh-runtime sh -c 'umask 077; cat >> /Users/dsh-runtime/.dsh/.env'
@@ -70,36 +84,59 @@ sudo -u dsh-runtime sh -c 'umask 077; cat >> /Users/dsh-runtime/.dsh/.env'
 # DEEPSEEK_API_KEY=...
 # LSY_GITHUB_TOKEN=...
 # LSY_GITHUB_NOTIFICATIONS_TOKEN=...
-# LSY_TELEGRAM_BOT_TOKEN=...
 ```
 
 Everything in this file is readable by the agent (it runs as `dsh-runtime`); that is why each token must be scoped so that a leak costs little.
 
-## 6. Start the service
+## 6. Bind WeChat
+
+Scan a QR code with the phone's WeChat to bind a ClawBot to this service. The binding is written to `/Users/dsh-runtime/.dsh/lsy-wechat/account.json` (600); the token is never printed.
 
 ```sh
-sudo cp lsy/deploy/app.lishuyu.dsh-events.plist /Library/LaunchDaemons/
+sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node /Users/Shared/lsy-dsh/current/lsy/deploy/wechat-login.mjs
+```
+
+- If WeChat shows a number, type it into the terminal.
+- WeChat lets a bot write to you only within about 24 hours of your last message to it, and only about 10 messages per message you send. Messages that do not fit wait in an outbox and arrive as a digest the next time you write anything. If you expect alerts, send the bot a word once a day.
+- Re-binding later (for example after `bot token is stale` in the log) is the same command; the running service picks up the new file without a restart.
+
+## 7. Start the service
+
+```sh
+sudo cp /Volumes/MiniSSD/deepseek-harness/lsy/deploy/app.lishuyu.dsh-events.plist /Library/LaunchDaemons/
 sudo chown root:wheel /Library/LaunchDaemons/app.lishuyu.dsh-events.plist
 sudo chmod 644 /Library/LaunchDaemons/app.lishuyu.dsh-events.plist
 sudo launchctl bootstrap system /Library/LaunchDaemons/app.lishuyu.dsh-events.plist
 ```
 
-## 7. Verify
+## 8. Verify
 
 ```sh
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3081/               # 401 = up
-sudo tail -n 30 /Users/dsh-runtime/Library/Logs/dsh-events/stdout.log         # sensor and bus lines
+sudo tail -n 30 /Users/dsh-runtime/Library/Logs/dsh-events/stdout.log         # sensor, bus, and wechat lines
 sudo -u dsh-runtime cat /Users/lishuyu/.env                                    # must fail: Permission denied
 sudo -u dsh-runtime ls /Users/lishuyu/.ssh                                     # must fail: Permission denied
+sudo -u dsh-runtime ls /Volumes/MiniSSD                                        # must fail: Permission denied
 sudo -u dsh-runtime touch /Users/Shared/lsy-dsh/current/x                     # must fail: Permission denied
-sudo -u dsh-runtime touch /Volumes/MiniSSD/x                                   # must fail after step 0 option A
 ```
 
-Logs written before the console logger loads (the first second) are not printed; storage under `/Users/dsh-runtime/.dsh/storages/lsy_*.json` shows sensor cursors and bus events.
+Then write to the bot on WeChat, e.g. `你好，你能做什么？`. The reply comes from the agent in a long-lived chat Session (`/new` starts a fresh one).
 
-## 8. Web access (optional)
+Logs written before the console logger loads (the first second) are not printed; storage under `/Users/dsh-runtime/.dsh/storages/lsy_*.json` shows watches, subscriptions, sensor cursors, and the WeChat outbox.
 
-The first-login URL is printed to stdout: `sudo grep -o 'http://127.0.0.1:3081/?token=[^ ]*' /Users/dsh-runtime/Library/Logs/dsh-events/stdout.log | tail -1`. To reach it from other tailnet devices, publish a Tailscale Service the same way as `svc:dsh`, approve it in the admin console, and keep the plist's `--trusted-host` in sync:
+## 9. Tell the agent what to watch
+
+Say it in WeChat; the agent sets it up with its tools and confirms:
+
+- `盯一下 deepseek-ai/deepseek-harness 的 release 和 tag，有新的就告诉我` → a `notify` watch.
+- `deepseek-ai/deepseek-harness 出新 release 时，读一下更新说明，看会不会影响我 fork 里的 packages/lsy，告诉我结论` → a `session` watch: each release starts an agent run, and its answer comes to WeChat.
+- `我的 GitHub 通知有新的就推给我` → a notifications watch (needs `LSY_GITHUB_NOTIFICATIONS_TOKEN`).
+- `每天早上 9 点看一下 kaorou 队列有没有卡住的任务，没问题就别打扰我` → a reminder; quiet runs answer `NO_REPLY` and send nothing.
+- `列一下你现在在盯什么` / `把 xxx 那个删掉` → `watch_list` / `watch_delete`; reminders use `schedule_list` / `schedule_delete`.
+
+## 10. Web access (optional)
+
+The first-login URL is printed to stdout: `sudo grep -o 'http://127.0.0.1:3081/?token=[^ ]*' /Users/dsh-runtime/Library/Logs/dsh-events/stdout.log | tail -1`. To reach it from other tailnet devices (and to make the links in result messages work), publish a Tailscale Service the same way as `svc:dsh`, approve it in the admin console, and keep the plist's `--trusted-host` in sync:
 
 ```sh
 /Applications/Tailscale.app/Contents/MacOS/Tailscale serve --service=svc:dsh-events --https=443 http://127.0.0.1:3081
@@ -110,8 +147,9 @@ The first-login URL is printed to stdout: `sudo grep -o 'http://127.0.0.1:3081/?
 
 | Task | Command |
 |---|---|
-| Change routing | edit `/Users/Shared/lsy-dsh/routing.patch.yml`, then `sudo launchctl kickstart -k system/app.lishuyu.dsh-events` |
+| Change what is watched | Ask the agent on WeChat |
 | Upgrade | `lsy/deploy/upgrade.sh`, then the two commands it prints |
-| Roll back | `ln -sfn /Users/Shared/lsy-dsh/<old sha> /Users/Shared/lsy-dsh/current`, then kickstart |
+| Roll back | `ln -sfn /Users/Shared/lsy-dsh/<old sha> /Users/Shared/lsy-dsh/current`, then `sudo launchctl kickstart -k system/app.lishuyu.dsh-events` |
+| Re-bind WeChat | Step 6 again; no restart needed |
 | Stop | `sudo launchctl bootout system/app.lishuyu.dsh-events` |
 | Status | `sudo launchctl print system/app.lishuyu.dsh-events \| grep -E 'state\|pid'` |

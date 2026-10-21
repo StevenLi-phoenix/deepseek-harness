@@ -1,16 +1,17 @@
 # lsy — event-driven agent service (fork-local)
 
-Deployment files for running this fork as an always-on, event-driven agent service on a Mac mini: sensors poll GitHub and local processes, the bus decides what matters, and an unattended agent or a phone notification handles it. Code lives in [`packages/lsy/`](../packages/lsy/README.md); this directory holds the profile, service definitions, and runbooks.
+English | [中文](README.zh.md)
+
+Deployment files for running this fork as an always-on, event-driven agent service on a Mac mini: the owner talks to the agent on WeChat, the agent creates its own watches and reminders, sensors poll GitHub, the bus decides what matters, and an unattended agent run or a WeChat message handles it. Code lives in [`packages/lsy/`](../packages/lsy/README.md); this directory holds the profile, service definitions, and runbooks.
 
 ## Layout
 
 | Path | Contents |
 |---|---|
 | [`CHANGELOG.md`](CHANGELOG.md) | Fork-local changes (Keep a Changelog) |
-| [`profiles/event/`](profiles/event/) | Event profile: `package.json` (bundles) and `cordis.patch.yml` (composition layer, code-owned) |
-| [`profiles/event/home.patch.example.yml`](profiles/event/home.patch.example.yml) | Routing layer template for `$DSH_HOME/cordis.patch.yml` (deployment-owned) |
-| [`deploy/RUNBOOK.md`](deploy/RUNBOOK.md) | Isolated deployment on the Mac mini: `dsh-runtime` user, LaunchDaemon, secrets, verification |
-| [`deploy/`](deploy/) | `install-app.sh`, `setup-profile.sh`, `upgrade.sh`, LaunchDaemon template |
+| [`profiles/event/`](profiles/event/) | Event profile: `package.json` (bundles) and `cordis.patch.yml` (composition, code-owned; routing state lives in storage and is managed by the agent's tools) |
+| [`deploy/RUNBOOK.md`](deploy/RUNBOOK.md) | Isolated deployment on the Mac mini: `dsh-runtime` user, LaunchDaemon, secrets, WeChat binding, verification |
+| [`deploy/`](deploy/) | `install-app.sh`, `setup-profile.sh`, `upgrade.sh`, `wechat-login.mjs`, LaunchDaemon template |
 | [`../packages/lsy/UPSTREAM.md`](../packages/lsy/UPSTREAM.md) | Upstream baseline, copied packages, touched upstream files, upgrade procedure |
 
 ## Checks for the lsy group
@@ -18,11 +19,13 @@ Deployment files for running this fork as an always-on, event-driven agent servi
 ```sh
 pnpm exec vitest run packages/lsy
 pnpm exec vitest run packages/lsy --coverage --coverage.include='packages/lsy/*/src/**/*.ts'
-pnpm exec tsc -b packages/lsy/lsy-event-bus packages/lsy/lsy-telegram packages/lsy/lsy-github-sensor
+pnpm exec tsc -b packages/lsy/lsy-event-bus packages/lsy/lsy-github-sensor packages/lsy/lsy-tool-watch packages/lsy/lsy-wechat
 pnpm exec tsc -p tsconfig.host.json --noEmit   # also type-checks tests
-pnpm exec tsx scripts/run-oxlint.ts packages/lsy
+pnpm exec tsx scripts/run-oxlint.ts packages/lsy lsy/deploy
 pnpm run constraints && pnpm run verify-product-use && pnpm run verify-tsconfig-paths
-pnpm run verify-translation-pairing packages/lsy/README.md packages/lsy/*/README.md
+pnpm run verify-translation-pairing packages/lsy/README.md packages/lsy/*/README.md lsy/README.md docs/subsystems/lsy.md
+pnpm run verify-package-readme-model-experience && pnpm run verify-package-readme-summaries
+pnpm run verify-config-catalog && pnpm run verify-cordis-catalog && pnpm run verify-md-links
 ```
 
 ## Run the event profile from source
@@ -31,9 +34,8 @@ pnpm run verify-translation-pairing packages/lsy/README.md packages/lsy/*/README
 export DSH_HOME=/path/to/test-home            # never the live ~/.dsh
 mkdir -p "$DSH_HOME/profiles/event"
 cp lsy/profiles/event/package.json lsy/profiles/event/cordis.patch.yml "$DSH_HOME/profiles/event/"
-cp lsy/profiles/event/home.patch.example.yml "$DSH_HOME/cordis.patch.yml"   # then edit
 pnpm dsh event --dump-config | less            # composed tree, with the layer that set each row
-pnpm dsh event --port 3092 --no-open           # Web UI + sensors + bus
+pnpm dsh event --port 3092 --no-open           # Web UI + sensors + bus + WeChat channel
 ```
 
-Relative module rows in `$DSH_HOME/cordis.patch.yml` (e.g. `name: ./my-rule.mjs`) resolve against `$DSH_HOME`.
+Without `$DSH_HOME/lsy-wechat/account.json` the WeChat channel idles and queues notifications. Watches are created from a Session with the `unattended` preset (`watch_create`); a `$DSH_HOME/cordis.patch.yml` can still override any row for experiments.

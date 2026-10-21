@@ -1,11 +1,13 @@
 # lsy event profile — composition layer (code-owned).
 #
-# Mounts the Web composition plus the event-driven agent service. Deployment-owned
-# routing (subscriptions, repositories, chat id) belongs in $DSH_HOME/cordis.patch.yml,
-# which replaces these rows' config by id; see home.patch.example.yml.
+# Mounts the Web composition plus the event-driven agent service. Nothing here needs editing
+# per deployment: what to watch is created at run time by the agent itself (watch_create,
+# schedule_create), and the owner reaches the agent over WeChat.
 #
 # Secrets are read per use from the instance credential store or $DSH_HOME/.env:
-#   DEEPSEEK_API_KEY, LSY_GITHUB_TOKEN, LSY_GITHUB_NOTIFICATIONS_TOKEN, LSY_TELEGRAM_BOT_TOKEN
+#   DEEPSEEK_API_KEY, LSY_GITHUB_TOKEN, LSY_GITHUB_NOTIFICATIONS_TOKEN (optional).
+# The WeChat bot account is bound once with lsy/deploy/wechat-login.mjs and kept in
+# $DSH_HOME/lsy-wechat/account.json.
 
 # Remote-first: this instance is reached through a browser on another machine,
 # so never launch applications on the host display.
@@ -26,25 +28,26 @@
     - id: webhook-runtime
       name: '@deepseek-ai/dsh-webhook'
 
+    # Routing state (agent-created subscriptions and repository watches) lives in storage;
+    # these rows only carry deployment-wide settings.
     - id: lsy-event-bus
       name: '@deepseek-ai/dsh-lsy-event-bus'
       config:
-        subscriptions: []
+        webUrl: https://dsh-events.tailc2559b.ts.net/
+        suppress:
+          actors: []
+          markers: ['Dsh-Agent:']
 
     - id: lsy-github-sensor
       name: '@deepseek-ai/dsh-lsy-github-sensor'
-      config:
-        repos: []
 
-    # Disabled until the home patch supplies a chat id.
-    - id: lsy-telegram
-      name: '@deepseek-ai/dsh-lsy-telegram'
-      disabled: true
-      config:
-        chatId: unset
+    # Owner channel: chat Session over WeChat and ctx.lsyNotifier for the bus.
+    - id: lsy-wechat
+      name: '@deepseek-ai/dsh-lsy-wechat'
 
-    # Unattended agent preset: `standard` minus interactive-only tools
-    # (command-goal, tool-goal, planning, tool-ask-user, tool-plugin-manager, tool-plugin-market).
+    # Unattended agent preset: `standard` minus interactive-only tools (command-goal, tool-goal,
+    # planning, tool-ask-user, tool-plugin-manager, tool-plugin-market), plus the watch tools.
+    # Used by the WeChat chat Session and by Sessions that watches start.
     - id: preset-unattended
       name: '@deepseek-ai/dsh-agent-preset'
       config:
@@ -55,11 +58,18 @@
             name: '@deepseek-ai/dsh-persona'
             config:
               prefix: >-
-                You are an unattended agent powered by the {{model}} model, started by an event
-                subscription on an always-on host. No human is watching this Session: never wait
-                for input, finish the task in this turn, and end with a short answer suitable for a
-                phone notification. Mark every commit or comment you create with the trailer
-                `Dsh-Agent: <session title>` so your own changes do not trigger you again.
+                You are the owner's always-on agent, powered by the {{model}} model, running on
+                their Mac mini under the dedicated `dsh-runtime` account. A turn starts in one of
+                three ways: the owner writes to you on WeChat, a watch you created fires, or a
+                reminder you scheduled comes due. Nobody approves tool calls and nobody can answer
+                questions mid-turn, so finish what you can in this turn. Your final answer is sent
+                to the owner's WeChat as plain text: keep it short, use the owner's language, and
+                avoid Markdown tables and headings. When a watch or reminder turn has nothing worth
+                the owner's attention, answer exactly NO_REPLY and nothing is sent. Manage what you
+                monitor with watch_create, watch_list, and watch_delete, and recurring time-based
+                checks with schedule_create, then tell the owner what you set up. Mark every commit
+                or comment you create with the trailer `Dsh-Agent: <session title>` so your own
+                changes do not trigger you again.
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
@@ -82,6 +92,8 @@
             name: '@deepseek-ai/dsh-tool-jobs'
           - id: tool-schedule
             name: '@deepseek-ai/dsh-tool-schedule'
+          - id: lsy-tool-watch
+            name: '@deepseek-ai/dsh-lsy-tool-watch'
           - id: skill-filesystem
             name: '@deepseek-ai/dsh-skill-filesystem'
           - id: tool-skill
