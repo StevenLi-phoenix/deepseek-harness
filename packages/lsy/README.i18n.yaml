@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/README.md
+/:
+  en: a47531926ab2f649
+  zh: 91d70ad65ed257db
+/lsy-event-driven-agent-runs:
+  en: 019f10b56ca3d680
+  zh: 43fac1ee9e3dd2ad
+/lsy-event-driven-agent-runs/summary:
+  en: 28e6849faa735763
+  zh: 619f22384806c022
+/lsy-event-driven-agent-runs/table-of-contents:
+  en: 1eb35b015a6c423f
+  zh: a8a3dceee2c9e943
+/lsy-event-driven-agent-runs/packages:
+  en: 327d0b9b34edf5c2
+  zh: 5632ac9209f83116
+/lsy-event-driven-agent-runs/related-documentation:
+  en: a06e2cdf6e89f93b
+  zh: 4b4f369517bd7d85
+/lsy-event-driven-agent-runs/dev-note:
+  en: 1dacfe263d6e9886
+  zh: 44a51bff96f2922e

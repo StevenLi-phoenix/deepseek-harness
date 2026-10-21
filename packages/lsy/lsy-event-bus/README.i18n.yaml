@@ -1,0 +1,52 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/lsy-event-bus/README.md
+/:
+  en: dd47d4c125312b92
+  zh: 4d0374d4686e2e57
+/deepseek-ai-dsh-lsy-event-bus:
+  en: 20ef9611ef3013c9
+  zh: 0ac7e4e9f4ee4c25
+/deepseek-ai-dsh-lsy-event-bus/summary:
+  en: 248405a1cd337aef
+  zh: 6bfbfc34dd78fe2d
+/deepseek-ai-dsh-lsy-event-bus/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-lsy-event-bus/use-this-package:
+  en: a39a4ffcb3f44dce
+  zh: 4ca922663ef64464
+/deepseek-ai-dsh-lsy-event-bus/use-this-package/when-to-choose-it:
+  en: 16db4c6242271818
+  zh: 269129a8fc261f2a
+/deepseek-ai-dsh-lsy-event-bus/use-this-package/minimal-configuration:
+  en: f140d79530fd37b3
+  zh: 5b62bbec3d31b701
+/deepseek-ai-dsh-lsy-event-bus/understand-the-implementation:
+  en: 028825f29c12666b
+  zh: 42a2bb38295b165c
+/deepseek-ai-dsh-lsy-event-bus/further-exploration:
+  en: 2664b38ec03197c4
+  zh: 7c90577e7b463161
+/deepseek-ai-dsh-lsy-event-bus/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-lsy-event-bus/model-experience/session-prompt:
+  en: 3296e9dd8138b0a0
+  zh: 3296e9dd8138b0a0
+/deepseek-ai-dsh-lsy-event-bus/model-experience/session-prompt/what-the-model-sees:
+  en: ea43dfd4780bdf21
+  zh: fe26d7c86316f09f
+/deepseek-ai-dsh-lsy-event-bus/model-experience/session-prompt/token-effect:
+  en: 15f1bd20208d87c7
+  zh: e0376ae862bd0a53
+/deepseek-ai-dsh-lsy-event-bus/model-experience/session-prompt/kv-cache-effect:
+  en: 123e914f0f5d21ab
+  zh: fea6368ff6208b71
+/deepseek-ai-dsh-lsy-event-bus/known-limitations-and-deferred-work:
+  en: dd04ccb28de28d68
+  zh: 7b8b5b2a7bba22f8
+/deepseek-ai-dsh-lsy-event-bus/dev-note:
+  en: dac22737892b401e
+  zh: d08a76f9e2202280

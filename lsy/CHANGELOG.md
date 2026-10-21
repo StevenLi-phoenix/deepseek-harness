@@ -1,0 +1,9 @@
+# Changelog
+
+Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelog](https://keepachangelog.com/). Upstream changes are not repeated here; see [`../packages/lsy/UPSTREAM.md`](../packages/lsy/UPSTREAM.md) for the upstream baseline.
+
+## [Unreleased]
+
+### Added
+- `@deepseek-ai/dsh-lsy-event-bus`: durable event bus with dedupe, loop suppression (agent actors and output markers), user-authored subscriptions, coalescing windows, rolling hourly rate limits, notify dispatch through `ctx.lsyNotifier`, Session dispatch through the webhook runtime (`lsy-event` kind), and first-turn result reports.
+- `packages/lsy/UPSTREAM.md` ledger and this `lsy/` deployment directory.
