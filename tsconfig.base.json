@@ -431,6 +431,7 @@
       "@deepseek-ai/dsh-lsp": ["./packages/lsp/lsp/src"],
       "@deepseek-ai/dsh-lsp-stdio": ["./packages/lsp/lsp-stdio/src"],
       "@deepseek-ai/dsh-lsy-event-bus": ["./packages/lsy/lsy-event-bus/src"],
+      "@deepseek-ai/dsh-lsy-github-sensor": ["./packages/lsy/lsy-github-sensor/src"],
       "@deepseek-ai/dsh-lsy-telegram": ["./packages/lsy/lsy-telegram/src"],
       "@deepseek-ai/dsh-mcp-client": ["./packages/mcp/mcp-client/src"],
       "@deepseek-ai/dsh-mcp-resources": ["./packages/mcp/mcp-resources/src"],

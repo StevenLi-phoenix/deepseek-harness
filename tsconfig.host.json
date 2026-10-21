@@ -503,6 +503,7 @@
     { "path": "./packages/experimental/webhook-github" },
     { "path": "./packages/lsy/lsy-event-bus" },
     { "path": "./packages/lsy/lsy-telegram" },
+    { "path": "./packages/lsy/lsy-github-sensor" },
     { "path": "./packages/todo/tool-todo" },
     { "path": "./packages/plan/plan-mode" },
     { "path": "./packages/preset/agent-preset-registry" },

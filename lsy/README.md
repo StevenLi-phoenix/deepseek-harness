@@ -14,7 +14,8 @@ Deployment files for running this fork as an always-on, event-driven agent servi
 ```sh
 pnpm exec vitest run packages/lsy
 pnpm exec vitest run packages/lsy --coverage --coverage.include='packages/lsy/*/src/**/*.ts'
-pnpm exec tsc -b packages/lsy/lsy-event-bus packages/lsy/lsy-telegram
+pnpm exec tsc -b packages/lsy/lsy-event-bus packages/lsy/lsy-telegram packages/lsy/lsy-github-sensor
+pnpm exec tsc -p tsconfig.host.json --noEmit   # also type-checks tests
 pnpm exec tsx scripts/run-oxlint.ts packages/lsy
 pnpm run constraints && pnpm run verify-product-use && pnpm run verify-tsconfig-paths
 pnpm run verify-translation-pairing packages/lsy/README.md packages/lsy/*/README.md

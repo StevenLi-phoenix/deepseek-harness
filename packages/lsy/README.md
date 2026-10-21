@@ -25,6 +25,7 @@ Let GitHub activity and local process health wake an agent or ping your phone wi
 | Package | Role |
 |---|---|
 | [`lsy-event-bus/`](lsy-event-bus/README.md) | Dedupe, loop suppression, subscriptions, coalescing, rate limits, notify and Session dispatch |
+| [`lsy-github-sensor/`](lsy-github-sensor/README.md) | Polls GitHub releases, tags, commits, and notifications with conditional requests |
 | [`lsy-telegram/`](lsy-telegram/README.md) | Telegram notifier providing `ctx.lsyNotifier` |
 
 -----

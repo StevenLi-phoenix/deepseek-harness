@@ -25,6 +25,7 @@ kind: "package-group"
 | 包 | 作用 |
 |---|---|
 | [`lsy-event-bus/`](lsy-event-bus/README.zh.md) | 去重、回环抑制、订阅、合批、限流、通知与 Session 分发 |
+| [`lsy-github-sensor/`](lsy-github-sensor/README.zh.md) | 用条件请求轮询 GitHub 的 release、tag、提交与通知 |
 | [`lsy-telegram/`](lsy-telegram/README.zh.md) | 提供 `ctx.lsyNotifier` 的 Telegram 通知器 |
 
 -----

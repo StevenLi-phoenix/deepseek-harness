@@ -11480,6 +11480,37 @@ importers:
         specifier: workspace:*
         version: link:../../experimental/webhook
 
+  packages/lsy/lsy-github-sensor:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/cordis-plugin-timer':
+        specifier: workspace:~
+        version: link:../../../vendor/timer
+      '@deepseek-ai/dsh-credentials':
+        specifier: workspace:*
+        version: link:../../credentials/credentials
+      '@deepseek-ai/dsh-lsy-event-bus':
+        specifier: workspace:*
+        version: link:../lsy-event-bus
+      '@deepseek-ai/dsh-storage':
+        specifier: workspace:*
+        version: link:../../storage/storage
+      '@deepseek-ai/dsh-storage-domain':
+        specifier: workspace:*
+        version: link:../../storage/storage-domain
+      '@deepseek-ai/dsh-webhook':
+        specifier: workspace:*
+        version: link:../../experimental/webhook
+
   packages/lsy/lsy-telegram:
     dependencies:
       '@deepseek-ai/schemastery':
