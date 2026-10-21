@@ -8,7 +8,7 @@ Every `sudo` line is meant to be run by hand, one at a time. The agent in this s
 
 | Path | Owner | Contents |
 |---|---|---|
-| `/Users/Shared/lsy-dsh/<sha>/` | lishuyu, 755 | Installed build (≈1.6 GB); `dsh-runtime` can read, not write |
+| `/Users/Shared/lsy-dsh/<sha>/` | lishuyu, 755 | Installed build (≈1.6 GB) plus `lsy/` (profile and `setup-profile.sh`); `dsh-runtime` can read, not write |
 | `/Users/Shared/lsy-dsh/current` | lishuyu | Symlink to the active build |
 | `/Users/Shared/lsy-dsh/routing.patch.yml` | lishuyu, 644 | Routing layer: subscriptions, repositories, chat id |
 | `/Users/dsh-runtime/.dsh/` | dsh-runtime, 700 | `DSH_HOME`: profile, sessions, storages, `.env` secrets |
@@ -57,7 +57,7 @@ lsy/deploy/upgrade.sh          # builds, tests, packs, installs, points current 
 sudo -u dsh-runtime mkdir -p /Users/dsh-runtime/.dsh /Users/dsh-runtime/work /Users/dsh-runtime/Library/Logs/dsh-events
 sudo -u dsh-runtime chmod 700 /Users/dsh-runtime/.dsh
 sudo -u dsh-runtime ln -s /Users/Shared/lsy-dsh/routing.patch.yml /Users/dsh-runtime/.dsh/cordis.patch.yml
-sudo -u dsh-runtime /Users/lishuyu/Codes/deepseek-harness/lsy/deploy/setup-profile.sh /Users/dsh-runtime/.dsh /Users/Shared/lsy-dsh/current
+sudo -u dsh-runtime /Users/Shared/lsy-dsh/current/lsy/deploy/setup-profile.sh /Users/dsh-runtime/.dsh /Users/Shared/lsy-dsh/current
 ```
 
 ## 5. Secrets (typed in your terminal, never pasted into a chat)
