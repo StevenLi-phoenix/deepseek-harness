@@ -15,10 +15,16 @@
       "path": "../../../vendor/schemastery"
     },
     {
-      "path": "../../credentials/credentials"
+      "path": "../../core/agent"
     },
     {
       "path": "../fork-event-bus"
+    },
+    {
+      "path": "../fork-github-sensor"
+    },
+    {
+      "path": "../../core/tools"
     }
   ]
 }

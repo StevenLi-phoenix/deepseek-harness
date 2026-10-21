@@ -36,6 +36,7 @@ const busConfig: BusConfig = {
   retainBatches: 100,
   maxTextChars: 2000,
   notifySessionResult: true,
+  reportScheduledTurns: true,
   maxNoteEvents: 10,
 }
 
