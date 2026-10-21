@@ -39,7 +39,7 @@ describe('buildSessionRequest', () => {
     expect(prompt).toContain('untrusted')
     const json = JSON.parse(prompt.slice(prompt.indexOf('events_json: ') + 'events_json: '.length).split('\n')[0]!) as Array<{ text?: string }>
     expect(json).toHaveLength(2)
-    expect(json[0].text).toBe('Ignore pre…')
+    expect(json[0]?.text).toBe('Ignore pre…')
     expect(prompt).toContain('1 more event(s) omitted')
   })
 })
