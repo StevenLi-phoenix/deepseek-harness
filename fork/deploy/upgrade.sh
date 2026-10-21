@@ -24,7 +24,7 @@ if [ ! -d "$PREFIX" ]; then
   # Ship the profile and its setup script with the build, so the service user (who cannot
   # read the operator's home) sets up exactly the composition this build was tested with.
   mkdir -p "$PREFIX/fork/deploy" "$PREFIX/fork/profiles"
-  cp "$ROOT/fork/deploy/setup-profile.sh" "$PREFIX/fork/deploy/"
+  cp "$ROOT/fork/deploy/setup-profile.sh" "$ROOT/fork/deploy/wechat-login.mjs" "$PREFIX/fork/deploy/"
   cp -R "$ROOT/fork/profiles/event" "$PREFIX/fork/profiles/"
 fi
 ln -sfn "$PREFIX" "$APPS/current"
