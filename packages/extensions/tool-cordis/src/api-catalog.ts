@@ -1547,6 +1547,126 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'lsyEventBus',
+    summary: 'Durable event bus.',
+    description: 'Durable event bus. Sensors publish; subscriptions from the configuration or created at run time decide which events reach which actuator; the bus owns dedupe, loop suppression, coalescing, and rate limits so actuators never see raw sensor traffic.',
+    methods: [
+      {
+        signature: 'async publish(input: LsyEventInput): Promise<PublishOutcome>',
+        description: 'Publish one sensor observation.',
+        parameters: [{ name: 'input', description: 'event; `source` + `key` identify it for dedupe.' }],
+        returns: '`accepted` (queued for at least one subscription), `duplicate`, `suppressed`, or `unmatched`.',
+        throws: ['when a required field is empty.'],
+      },
+      {
+        signature: 'events(): LsyEventRecord[]',
+        description: 'Stored events, oldest first.',
+        parameters: [],
+        returns: 'snapshot of the events table.',
+      },
+      {
+        signature: 'batches(): BatchRecord[]',
+        description: 'Stored batches, oldest first.',
+        parameters: [],
+        returns: 'snapshot of the batches table.',
+      },
+      {
+        signature: 'pendingCount(): number',
+        description: 'Number of event/subscription pairs waiting for a batch.',
+        parameters: [],
+        returns: 'pending row count.',
+      },
+      {
+        signature: 'async subscribe(subscription: Subscription, meta: SubscriptionMeta = {}): Promise<SubscriptionView>',
+        description: 'Add a routing rule at run time. It is stored durably and survives restarts.',
+        parameters: [{ name: 'subscription', description: 'rule; validated like a configuration row.' }, { name: 'meta', description: 'provenance, e.g. the creating Session.' }],
+        returns: 'the stored subscription with its (empty) status.',
+        throws: ['{LsySubscriptionError} `invalid_subscription` for a rule the bus cannot route, or `duplicate_id` for an id the configuration or another stored subscription already uses.'],
+      },
+      {
+        signature: 'async unsubscribe(id: string): Promise<UnsubscribeOutcome>',
+        description: 'Remove a run-time subscription, its pending events, and its flush timer. Batches already created stay in the history.',
+        parameters: [{ name: 'id', description: 'subscription id.' }],
+        returns: '`removed`, `not_found`, or `config_owned` for an id the configuration owns.',
+      },
+      {
+        signature: 'listSubscriptions(): SubscriptionView[]',
+        description: 'Every subscription, configuration first and then run-time ones by creation time, with live status.',
+        parameters: [],
+        returns: 'snapshot; before the storage domain opens, only configuration rows with empty status.',
+      },
+    ],
+  },
+  {
+    key: 'lsyGithubSensor',
+    summary: 'Polls GitHub on a fixed period with conditional requests and publishes what is new since the previous poll.',
+    description: 'Polls GitHub on a fixed period with conditional requests and publishes what is new since the previous poll. The first successful poll of a stream only records a baseline. Repositories come from the configuration and from watches created at run time; a stream several watches name is polled once.',
+    methods: [
+      {
+        signature: 'cursor(stream: string): StreamCursor | undefined',
+        description: 'Stored cursor of one stream.',
+        parameters: [{ name: 'stream', description: 'stream id, see {@link streamId}, or `notifications`.' }],
+        returns: 'cursor, or undefined before the first poll.',
+      },
+      {
+        signature: 'pollStatus(stream: string): PollStatus | undefined',
+        description: 'Outcome of the latest poll of one stream in this process.',
+        parameters: [{ name: 'stream', description: 'stream id, see {@link streamId}, or `notifications`.' }],
+        returns: 'status, or undefined before the first poll since start or after the stream was forgotten.',
+      },
+      {
+        signature: 'async watch(ref: string, spec: RepoWatch): Promise<WatchedRepo>',
+        description: 'Watch a repository at run time. The watch is stored durably; a poll starts right away so the existing items become the baseline, and only later items are published. A watch with the same ref is replaced.',
+        parameters: [{ name: 'ref', description: 'watch id, e.g. the bus subscription that routes its events.' }, { name: 'spec', description: '`owner/name`, a non-empty subset of streams, and an optional commits branch.' }],
+        returns: 'the stored watch with its stream status.',
+        throws: ['{TypeError} when the ref, repository, streams, or branch is invalid.'],
+      },
+      {
+        signature: 'async unwatch(ref: string): Promise<boolean>',
+        description: 'Stop a run-time watch. Cursors of streams nobody polls anymore are deleted, so watching the repository again records a fresh baseline.',
+        parameters: [{ name: 'ref', description: 'watch id.' }],
+        returns: 'true when the watch existed.',
+      },
+      {
+        signature: 'watchedRepos(): WatchedRepo[]',
+        description: 'Every polled repository, configuration first and then run-time watches by creation time.',
+        parameters: [],
+        returns: 'snapshot with per-stream baseline and latest poll.',
+      },
+      {
+        signature: 'async probe(repo: string, signal?: AbortSignal): Promise<RepoProbe>',
+        description: 'Check that a repository exists and the repository token can read it. Never throws.',
+        parameters: [{ name: 'repo', description: '`owner/name`.' }, { name: 'signal', description: 'optional caller cancellation.' }],
+        returns: 'canonical name, visibility, and default branch, or the HTTP status (0 without a response) and a message.',
+      },
+      {
+        signature: 'async credentialStatus(): Promise<CredentialStatus>',
+        description: 'Report which tokens resolve. Token values never leave the credential store.',
+        parameters: [],
+        returns: 'per-reference status and whether notification polling is on.',
+      },
+    ],
+  },
+  {
+    key: 'lsyNotifier',
+    summary: 'Notification actuator contract; a channel plugin provides it as `ctx.lsyNotifier`.',
+    description: 'Notification actuator contract; a channel plugin provides it as `ctx.lsyNotifier`.',
+    methods: [
+      {
+        signature: 'send(note: LsyNote): Promise<void>',
+        description: 'Deliver one message.',
+        parameters: [{ name: 'note', description: 'title, optional body, and optional link.' }],
+        returns: 'resolves once the channel accepted the message; rejects on failure.',
+      },
+      {
+        signature: 'ownsSession?(sessionId: string): boolean',
+        description: 'Whether the channel already relays every turn of this Session to the owner (e.g. its chat Session), so the bus must not report those turns again.',
+        parameters: [{ name: 'sessionId', description: 'Session to check.' }],
+        returns: 'true when the channel relays this Session\'s turns itself.',
+      },
+    ],
+  },
+  {
     key: 'mcpResources',
     summary: 'Scoped resource access plus three tools shared by configured MCP servers.',
     description: 'Scoped resource access plus three tools shared by configured MCP servers.',
@@ -4962,6 +5082,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface BashEnvVariableInfo extends BashEnvVariable {\n    contributor: string;\n    key: DshEnvironmentKey;\n}',
   },
   {
+    name: 'BatchRecord',
+    declaration: 'export type BatchRecord = z.infer<typeof batchRecordSchema>;',
+  },
+  {
+    name: 'BatchSummary',
+    declaration: 'export interface BatchSummary {\n    id: string;\n    createdAt: number;\n    eventCount: number;\n    status: \'dispatched\' | \'delivered\' | \'completed\' | \'failed\';\n    error?: string;\n    sessionId?: string;\n    outcome?: string;\n    silent?: boolean;\n}',
+  },
+  {
     name: 'BoxProps',
     declaration: 'export interface BoxProps {\n    readonly flexDirection?: \'row\' | \'column\' | undefined;\n    readonly paddingX?: number | undefined;\n    readonly paddingY?: number | undefined;\n    readonly padding?: number | undefined;\n    readonly gap?: number | undefined;\n    readonly border?: boolean | string | undefined;\n    readonly borderColor?: string | undefined;\n    readonly children?: UiNode | undefined;\n}',
   },
@@ -5296,6 +5424,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'CredentialRef',
     declaration: 'export type CredentialRef = Branded<\'CredentialRef\'>;',
+  },
+  {
+    name: 'CredentialStatus',
+    declaration: 'export interface CredentialStatus {\n    token: TokenStatus;\n    notificationsToken: TokenStatus;\n    notifications: boolean;\n}',
   },
   {
     name: 'CronInput',
@@ -6026,6 +6158,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface LspRange {\n    readonly start: LspPosition;\n    readonly end: LspPosition;\n}',
   },
   {
+    name: 'LsyEventInput',
+    declaration: 'export interface LsyEventInput {\n    readonly source: string;\n    readonly kind: string;\n    readonly key: string;\n    readonly subject: string;\n    readonly title: string;\n    readonly url?: string | undefined;\n    readonly actor?: string | undefined;\n    readonly text?: string | undefined;\n    readonly occurredAt?: number | undefined;\n}',
+  },
+  {
+    name: 'LsyEventRecord',
+    declaration: 'export type LsyEventRecord = z.infer<typeof eventRecordSchema>;',
+  },
+  {
+    name: 'LsyNote',
+    declaration: 'export interface LsyNote {\n    title: string;\n    body?: string | undefined;\n    url?: string | undefined;\n}',
+  },
+  {
     name: 'ManagementError',
     declaration: 'export interface ManagementError {\n    code: ReadOnlyReason | \'unknown-plugin\' | \'invalid-spec\' | \'already-installed\' | \'ambiguous-install\' | \'not-bundle\' | \'not-removable\' | \'stop-profile\' | \'bundle-in-use\' | \'stale-approval\' | \'incompatible-version\' | \'operation-error\';\n    diagnostic?: string;\n    incompatible?: IncompatiblePlugin[];\n}',
   },
@@ -6446,6 +6590,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type PluginSpecInspection = {\n    readonly status: \'accepted\';\n    readonly kind: InstallSpecKind;\n    readonly name?: string;\n    readonly version?: string;\n    readonly description?: string;\n    readonly bundle: boolean | null;\n    readonly registry: Registry;\n    readonly host?: string;\n} | {\n    readonly status: \'refused\';\n    readonly problem: PluginInspectProblem;\n    readonly reason: string;\n    readonly registries?: Registry[];\n};',
   },
   {
+    name: 'PollStatus',
+    declaration: 'export interface PollStatus {\n    at: number;\n    ok: boolean;\n    detail?: string;\n}',
+  },
+  {
     name: 'PostToolDecision',
     declaration: 'export type PostToolDecision = {\n    kind: \'accept\';\n    content?: ContentBlock[];\n    value?: never;\n    additionalContexts?: UserMessage[];\n} | {\n    kind: \'accept\';\n    value: JsonValue;\n    content?: never;\n    additionalContexts?: UserMessage[];\n} | {\n    kind: \'block\';\n    feedback: ContentBlock[];\n    additionalContexts?: UserMessage[];\n};',
   },
@@ -6634,6 +6782,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface PtcRunSpec extends PtcRunRequest {\n    cwd: string;\n    timeoutMs: number | null;\n}',
   },
   {
+    name: 'PublishOutcome',
+    declaration: 'export type PublishOutcome = \'accepted\' | \'duplicate\' | \'suppressed\' | \'unmatched\';',
+  },
+  {
     name: 'QueueAction',
     declaration: 'export type QueueAction = {\n    readonly kind: \'edit\';\n    readonly content: readonly TextBlock[];\n} | {\n    readonly kind: \'remove\';\n} | {\n    readonly kind: \'steer\';\n};',
   },
@@ -6760,6 +6912,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ReplayEnvelope',
     declaration: 'export interface ReplayEnvelope {\n    response: unknown;\n    blocks?: readonly unknown[];\n}',
+  },
+  {
+    name: 'RepoProbe',
+    declaration: 'export type RepoProbe = {\n    ok: true;\n    fullName: string;\n    private: boolean;\n    defaultBranch: string;\n} | {\n    ok: false;\n    status: number;\n    message: string;\n};',
+  },
+  {
+    name: 'RepoStream',
+    declaration: 'export type RepoStream = \'releases\' | \'commits\' | \'tags\';',
+  },
+  {
+    name: 'RepoWatch',
+    declaration: 'export interface RepoWatch {\n    repo: string;\n    watch: RepoStream[];\n    branch?: string;\n}',
   },
   {
     name: 'RequestContext',
@@ -7000,6 +7164,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionAccess',
     declaration: 'export type SessionAccess = \'read\' | \'write\';',
+  },
+  {
+    name: 'SessionAction',
+    declaration: 'export interface SessionAction {\n    workspacePath: string;\n    agentPreset: string;\n    permissionPreset: string;\n    instructions: string;\n    titlePrefix?: string;\n    maxPromptEvents: number;\n    maxTextChars: number;\n}',
   },
   {
     name: 'SessionActivity',
@@ -7364,10 +7532,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionPromptValue',
     declaration: 'export interface SessionPromptValue {\n    readonly accepted: true;\n}',
-  },
-  {
-    name: 'SessionRecord',
-    declaration: 'export interface SessionRecord {\n    header: SessionHeader;\n    live: boolean;\n    persisted: boolean;\n    formatStatus?: \'current\' | \'migration-required\';\n}',
   },
   {
     name: 'SessionReferenceCandidate',
@@ -7818,6 +7982,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type StreamChunk = {\n    type: \'block-start\';\n    index: number;\n    blockType: ContentBlockType;\n} | {\n    type: \'text-delta\';\n    index: number;\n    text: string;\n} | {\n    type: \'reasoning-delta\';\n    index: number;\n    text: string;\n} | {\n    type: \'tool-call-delta\';\n    index: number;\n    id: ToolCallId;\n    name?: string;\n    argumentsDelta: string;\n} | {\n    type: \'block-end\';\n    index: number;\n    block: ContentBlock;\n} | {\n    type: \'usage\';\n    usage: TokenUsage;\n} | {\n    type: \'finish\';\n    reason: FinishReason;\n    replayState?: ReplayEnvelope;\n};',
   },
   {
+    name: 'StreamCursor',
+    declaration: 'export type StreamCursor = z.infer<typeof cursorSchema>;',
+  },
+  {
+    name: 'StreamStatus',
+    declaration: 'export interface StreamStatus {\n    stream: RepoStream;\n    id: string;\n    baseline: boolean;\n    lastPoll?: PollStatus;\n}',
+  },
+  {
     name: 'SubagentActivation',
     declaration: 'export interface SubagentActivation {\n    readonly childId: SessionId;\n    readonly messageId?: MessageId;\n    readonly result: Promise<SubagentResult>;\n    dispose(): Promise<void>;\n}',
   },
@@ -7976,6 +8148,26 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SubprocessTerminalSpawnSpec',
     declaration: 'export interface SubprocessTerminalSpawnSpec {\n    argv: readonly string[];\n    cwd: string;\n    env?: Record<string, string> | undefined;\n    rows: number;\n    cols: number;\n    terminalType: string;\n    shellActivity?: boolean | undefined;\n    graceMs: number;\n    signal?: AbortSignal | undefined;\n}',
+  },
+  {
+    name: 'Subscription',
+    declaration: 'export interface Subscription {\n    id: string;\n    sources: string[];\n    kinds: string[];\n    subjects: string[];\n    action: \'notify\' | \'session\';\n    coalesceMs: number;\n    maxPerHour: number;\n    session?: SessionAction;\n}',
+  },
+  {
+    name: 'SubscriptionMeta',
+    declaration: 'export interface SubscriptionMeta {\n    createdBy?: string;\n}',
+  },
+  {
+    name: 'SubscriptionOrigin',
+    declaration: 'export type SubscriptionOrigin = \'config\' | \'agent\';',
+  },
+  {
+    name: 'SubscriptionStatus',
+    declaration: 'export interface SubscriptionStatus {\n    pending: number;\n    batchesLastHour: number;\n    nextFlushAt?: number;\n    lastBatch?: BatchSummary;\n}',
+  },
+  {
+    name: 'SubscriptionView',
+    declaration: 'export interface SubscriptionView extends Subscription {\n    origin: SubscriptionOrigin;\n    createdAt?: number;\n    createdBy?: string;\n    status: SubscriptionStatus;\n}',
   },
   {
     name: 'SurfaceEvent',
@@ -8180,6 +8372,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TokenMeasurementBaseline',
     declaration: 'export type TokenMeasurementBaseline = {\n    readonly kind: \'none\';\n    readonly tokens: 0;\n} | {\n    readonly kind: \'estimated\';\n    readonly tokens: number;\n} | {\n    readonly kind: \'usage\';\n    readonly tokens: number;\n    readonly usage: Readonly<TokenUsage>;\n};',
+  },
+  {
+    name: 'TokenStatus',
+    declaration: 'export interface TokenStatus {\n    ref: string;\n    configured: boolean;\n}',
   },
   {
     name: 'TokenSurfaceNode',
@@ -8542,6 +8738,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type UiRenderResult = UiNode;',
   },
   {
+    name: 'UnsubscribeOutcome',
+    declaration: 'export type UnsubscribeOutcome = \'removed\' | \'not_found\' | \'config_owned\';',
+  },
+  {
     name: 'UpdateTeamTaskRequest',
     declaration: 'export interface UpdateTeamTaskRequest {\n    readonly taskId: TeamTaskId;\n    readonly expectedRevision: number;\n    readonly action: TeamTaskAction;\n    readonly subject?: string;\n    readonly description?: string;\n    readonly blockedBy?: readonly TeamTaskId[];\n    readonly writeScopes?: readonly string[];\n    readonly owner?: string;\n}',
   },
@@ -8552,6 +8752,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'VerifiedWebhookDelivery',
     declaration: 'export interface VerifiedWebhookDelivery<K extends string = string> {\n    readonly kind: K;\n    readonly source: WebhookSourceId;\n    readonly deliveryId: WebhookDeliveryId;\n    readonly event: WebhookEventOf<K>;\n    readonly receivedAt: number;\n}',
+  },
+  {
+    name: 'WatchedRepo',
+    declaration: 'export interface WatchedRepo extends RepoWatch {\n    origin: \'config\' | \'agent\';\n    ref?: string;\n    createdAt?: number;\n    streams: StreamStatus[];\n}',
   },
   {
     name: 'WebBootBatch',

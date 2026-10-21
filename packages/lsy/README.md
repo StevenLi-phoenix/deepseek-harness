@@ -1,5 +1,5 @@
 ---
-description: "The lsy package group: fork-local sensors, the event bus, and notifiers that let external events wake an unattended agent on an always-on host."
+description: "The lsy package group: fork-local sensors, the event bus, watch tools, and the WeChat channel that let external events and the owner's messages wake an agent on an always-on host."
 kind: "package-group"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Let GitHub activity and local process health wake an agent or ping your phone without anyone watching a dashboard. Sensors poll and publish events; the bus deduplicates, suppresses the agent's own echoes, batches, and rate-limits; actuators send a Telegram message or start an unattended webhook Session and report its answer. Only subscriptions you wrote can start anything. This group is fork-local and tracks upstream through a ledger.
+Talk to an always-on agent on WeChat and let it watch GitHub for you, without editing configuration or watching a dashboard. You say what matters; the agent creates its own watches and reminders with tools. Sensors poll and publish events; the bus deduplicates, suppresses the agent's own echoes, batches, and rate-limits; actuators send a WeChat message or start an unattended Session whose answer comes back to WeChat. This group is fork-local and tracks upstream through a ledger.
 
 ## Table of Contents
 
@@ -26,7 +26,8 @@ Let GitHub activity and local process health wake an agent or ping your phone wi
 |---|---|
 | [`lsy-event-bus/`](lsy-event-bus/README.md) | Dedupe, loop suppression, subscriptions, coalescing, rate limits, notify and Session dispatch |
 | [`lsy-github-sensor/`](lsy-github-sensor/README.md) | Polls GitHub releases, tags, commits, and notifications with conditional requests |
-| [`lsy-telegram/`](lsy-telegram/README.md) | Telegram notifier providing `ctx.lsyNotifier` |
+| [`lsy-tool-watch/`](lsy-tool-watch/README.md) | `watch_create`, `watch_list`, `watch_delete` tools: the agent manages its own watches |
+| [`lsy-wechat/`](lsy-wechat/README.md) | WeChat (iLink bot) channel: owner chat Session, reply relay, and `ctx.lsyNotifier` |
 
 -----
 

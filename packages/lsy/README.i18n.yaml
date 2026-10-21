@@ -3,20 +3,20 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/lsy/README.md
 /:
-  en: a47531926ab2f649
-  zh: 91d70ad65ed257db
+  en: 8baaddf9cf57a87e
+  zh: dccce063f91c1b44
 /lsy-event-driven-agent-runs:
   en: 019f10b56ca3d680
   zh: 43fac1ee9e3dd2ad
 /lsy-event-driven-agent-runs/summary:
-  en: 28e6849faa735763
-  zh: 619f22384806c022
+  en: 6263c5830bb437ec
+  zh: 48fe135e8fd46d43
 /lsy-event-driven-agent-runs/table-of-contents:
   en: 1eb35b015a6c423f
   zh: a8a3dceee2c9e943
 /lsy-event-driven-agent-runs/packages:
-  en: c74be37df49ecb36
-  zh: 310482ec0a25eb22
+  en: fc9792faef06acb3
+  zh: ec2d6f3e95c9dce3
 /lsy-event-driven-agent-runs/related-documentation:
   en: a06e2cdf6e89f93b
   zh: 4b4f369517bd7d85

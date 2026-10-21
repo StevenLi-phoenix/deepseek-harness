@@ -1,0 +1,7 @@
+# Bilingual-pair consistency record for lsy.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/subsystems/lsy.md
+/lsy-event-service-fork-local:
+  en: a4f5f13afa8a2346
+  zh: 5efedbac73e1646c
