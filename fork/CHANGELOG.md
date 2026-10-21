@@ -1,0 +1,9 @@
+# Changelog
+
+Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelog](https://keepachangelog.com/). Upstream changes are not repeated here; see [`../packages/fork/UPSTREAM.md`](../packages/fork/UPSTREAM.md) for the upstream baseline.
+
+## [Unreleased]
+
+### Added
+- `@deepseek-ai/dsh-fork-event-bus`: durable event bus with dedupe, loop suppression (agent actors and output markers), user-authored subscriptions, coalescing windows, rolling hourly rate limits, notify dispatch through `ctx.forkNotifier`, Session dispatch through the webhook runtime (`fork-event` kind), and first-turn result reports.
+- `packages/fork/UPSTREAM.md` ledger and this `fork/` deployment directory.
