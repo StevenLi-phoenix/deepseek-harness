@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- LaunchDaemon for the lsy event service. Runs the installed fork build as the
+     unprivileged dsh-runtime user; install to /Library/LaunchDaemons (root:wheel 644). -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>app.lishuyu.dsh-events</string>
+    <key>UserName</key>
+    <string>dsh-runtime</string>
+    <key>GroupName</key>
+    <string>staff</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/node</string>
+        <string>/Users/Shared/lsy-dsh/current/node_modules/@deepseek-ai/dsh/lib/bin.js</string>
+        <string>event</string>
+        <string>--no-open</string>
+        <string>--port</string>
+        <string>3081</string>
+        <string>--trusted-host</string>
+        <string>dsh-events.tailc2559b.ts.net</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/dsh-runtime/work</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>/Users/dsh-runtime</string>
+        <key>DSH_HOME</key>
+        <string>/Users/dsh-runtime/.dsh</string>
+        <key>DSH_AGENTS_HOME</key>
+        <string>/Users/dsh-runtime/.agents</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>LANG</key>
+        <string>en_US.UTF-8</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    <key>StandardOutPath</key>
+    <string>/Users/dsh-runtime/Library/Logs/dsh-events/stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/dsh-runtime/Library/Logs/dsh-events/stderr.log</string>
+</dict>
+</plist>

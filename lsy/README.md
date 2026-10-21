@@ -9,6 +9,8 @@ Deployment files for running this fork as an always-on, event-driven agent servi
 | [`CHANGELOG.md`](CHANGELOG.md) | Fork-local changes (Keep a Changelog) |
 | [`profiles/event/`](profiles/event/) | Event profile: `package.json` (bundles) and `cordis.patch.yml` (composition layer, code-owned) |
 | [`profiles/event/home.patch.example.yml`](profiles/event/home.patch.example.yml) | Routing layer template for `$DSH_HOME/cordis.patch.yml` (deployment-owned) |
+| [`deploy/RUNBOOK.md`](deploy/RUNBOOK.md) | Isolated deployment on the Mac mini: `dsh-runtime` user, LaunchDaemon, secrets, verification |
+| [`deploy/`](deploy/) | `install-app.sh`, `setup-profile.sh`, `upgrade.sh`, LaunchDaemon template |
 | [`../packages/lsy/UPSTREAM.md`](../packages/lsy/UPSTREAM.md) | Upstream baseline, copied packages, touched upstream files, upgrade procedure |
 
 ## Checks for the lsy group
