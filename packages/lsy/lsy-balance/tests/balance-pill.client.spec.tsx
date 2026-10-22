@@ -3,7 +3,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
-import { createBalanceStore, type BalanceState } from '../src/client/balance.ts'
+import { createBalanceStore, type BalanceState, type ProviderReading } from '../src/client/balance.ts'
 import { BalancePill, POLL_MS, WAKE_MS, type BalancePillProps } from '../src/client/BalancePill.tsx'
 import { en, zh } from '../src/client/locales.ts'
 
@@ -19,6 +19,18 @@ function mount(state: Partial<BalanceState>, translate = t) {
 }
 
 const cny = (total: string, toppedUp = total, granted = '0') => ({ currency: 'CNY' as const, total, toppedUp, granted })
+const OPENROUTER: ProviderReading = { source: 'openrouter', label: 'OpenRouter', status: 'ready', kind: 'credit', currency: 'USD', remaining: 7.5, limit: 10, used: 2.5 }
+const OPENCODE: ProviderReading = {
+  source: 'opencode-go', label: 'OpenCode Go', status: 'ready', kind: 'quota',
+  windows: [{ name: 'fiveHour', percent: 12, resetsAt: null }, { name: 'weekly', percent: 34.4, resetsAt: '2026-10-26T12:00:00' }],
+}
+
+/** Text of the tooltip bubble after hovering the pill. */
+function hoverText(): string {
+  fireEvent.mouseEnter(screen.getByRole('button'))
+  act(() => { vi.advanceTimersByTime(0) })
+  return document.body.textContent ?? ''
+}
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -31,53 +43,56 @@ afterEach(() => {
 })
 
 describe('BalancePill', () => {
-  it('renders nothing before the first answer and while signed out', () => {
+  it('renders nothing before the first answer and while there is nothing to show', () => {
     expect(mount({}).view.container.innerHTML).toBe('')
     cleanup()
     expect(mount({ phase: 'signed-out' }).view.container.innerHTML).toBe('')
   })
 
-  it('shows each currency total and refreshes on click', () => {
+  it('shows one labelled segment per provider and refreshes on click', () => {
     const { refresh } = mount({
-      phase: 'ready', wallets: [cny('12.345', '10', '2.345'), { currency: 'USD', total: '1', toppedUp: '1', granted: '0' }],
-      updatedAt: Date.now(), checkedAt: Date.now(),
+      phase: 'ready', wallets: [cny('12.345', '10', '2.345')], updatedAt: Date.now(), checkedAt: Date.now(), providers: [OPENROUTER, OPENCODE],
     })
-    const button = screen.getByRole('button', { name: 'DeepSeek 账号余额 ¥12.34 / $1.00，点击刷新' })
-    expect(button.textContent).toBe('¥12.34·$1.00')
-    expect(button.className).not.toMatch(/exhausted|stale/)
+    const button = screen.getByRole('button', { name: '余额：DeepSeek ¥12.34, OpenRouter $7.50, OpenCode Go 34%。点击刷新' })
+    expect(button.textContent).toBe('DeepSeek ¥12.34·OpenRouter $7.50·OpenCode Go 34%')
     refresh.mockClear()
     fireEvent.click(button)
     expect(refresh).toHaveBeenCalledWith(0)
   })
 
-  it('explains the reading in its tooltip', () => {
-    mount({ phase: 'ready', wallets: [cny('12.34', '10', '2.34')], updatedAt: Date.now(), checkedAt: Date.now() })
-    fireEvent.mouseEnter(screen.getByRole('button'))
-    act(() => { vi.advanceTimersByTime(0) })
-    expect(document.body.textContent).toContain('充值 ¥10.00 · 赠金 ¥2.34')
-    expect(document.body.textContent).toContain('17:30 更新 · 点击刷新')
+  it('explains each segment in its tooltip', () => {
+    mount({ phase: 'ready', wallets: [cny('12.34', '10', '2.34')], updatedAt: Date.now(), checkedAt: Date.now(), providers: [OPENROUTER, OPENCODE] })
+    const text = hoverText()
+    expect(text).toContain('DeepSeek 账号：充值 ¥10.00 · 赠金 ¥2.34')
+    expect(text).toContain('OpenRouter：剩余 $7.50（限额 $10.00，已用 $2.50）')
+    expect(text).toContain('OpenCode Go：5 小时 12% · 每周 34%')
+    expect(text).toContain('每周额度 10-26 12:00 重置')
+    expect(text).toContain('17:30 更新 · 点击刷新')
   })
 
-  it('tints an exhausted balance and shows ¥0.00 for an account without wallets', () => {
-    mount({ phase: 'ready', wallets: [], updatedAt: Date.now(), checkedAt: Date.now() })
-    const button = screen.getByRole('button')
-    expect(button.textContent).toBe('¥0.00')
-    expect(button.className).toMatch(/exhausted/)
+  it('shows provider keys while the account is signed out', () => {
+    mount({ phase: 'signed-out', checkedAt: Date.now(), providers: [OPENROUTER] })
+    expect(screen.getByRole('button').textContent).toBe('OpenRouter $7.50')
   })
 
-  it('dims a stale reading and says when it was taken', () => {
-    const taken = Date.now() - 600_000
-    mount({ phase: 'failed', wallets: [cny('5')], updatedAt: taken, checkedAt: Date.now() }, tEn)
-    const button = screen.getByRole('button')
-    expect(button.className).toMatch(/stale/)
-    fireEvent.mouseEnter(button)
-    act(() => { vi.advanceTimersByTime(0) })
-    expect(document.body.textContent).toContain('Refresh failed; balance as of 17:20 · click to retry')
+  it('tints exhausted segments only and dims unreadable ones', () => {
+    mount({
+      phase: 'ready', wallets: [], updatedAt: Date.now(), checkedAt: Date.now(),
+      providers: [{ ...OPENROUTER, remaining: 0 }, { source: 'deepseek', label: 'DeepSeek API', status: 'failed', reason: 'HTTP 401' }],
+    })
+    const segment = (key: string) => document.querySelector(`[data-balance-source="${key}"]`)!
+    expect(segment('account').textContent).toBe('DeepSeek ¥0.00')
+    expect(segment('account').className).toMatch(/exhausted/)
+    expect(segment('openrouter').className).toMatch(/exhausted/)
+    expect(segment('deepseek').textContent).toBe('·DeepSeek API —')
+    expect(segment('deepseek').className).toMatch(/stale/)
+    expect(hoverText()).toContain('DeepSeek API：读取失败（HTTP 401）')
   })
 
-  it('shows a placeholder when no balance was ever read', () => {
-    mount({ phase: 'failed', wallets: [], updatedAt: null, checkedAt: Date.now() })
-    expect(screen.getByRole('button', { name: '余额 —' }).textContent).toBe('余额 —')
+  it('dims a stale account reading and says when it was taken', () => {
+    mount({ phase: 'failed', wallets: [cny('5')], updatedAt: Date.now() - 600_000, checkedAt: Date.now() }, tEn)
+    expect(document.querySelector('[data-balance-source="account"]')!.className).toMatch(/stale/)
+    expect(hoverText()).toContain('DeepSeek account refresh failed; balance above as of 17:20')
   })
 
   it('marks a refresh in flight', () => {

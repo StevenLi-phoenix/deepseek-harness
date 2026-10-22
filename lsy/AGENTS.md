@@ -14,7 +14,7 @@ These rules supplement the repo-wide [AGENTS.md](../AGENTS.md) for this fork's e
 - `lsy-event-bus` dedupes, suppresses the agent's own activity (configured actors and the `Dsh-Agent:` commit trailer), matches subscriptions (from configuration or created at run time), coalesces, and rate-limits per hour. A batch either goes to `ctx.lsyNotifier` (`notify`) or starts an unattended Session through the webhook runtime (`session`, kind `lsy-event`); first-turn results and unattended reminder turns are reported back. A final answer of exactly `NO_REPLY` sends nothing; `failureDetail()` turns a failed turn's `LlmFailure` into the one-line reason shown to the owner.
 - `lsy-wechat` is the owner channel over the iLink bot API: one long-lived chat Session (`/new` starts another), `ctx.lsyNotifier`, a reply window of about 24 hours with about 10 replies per owner message, and an outbox delivered as a digest.
 - `lsy-tool-watch` gives the agent `watch_create`, `watch_list`, and `watch_delete`; time-based checks use the built-in `schedule_create`.
-- `lsy-balance` is the only browser plugin: a `conversation.composer.dock` pill reading `account.getBalance`. Its tests are `*.client.spec.*` and type-check in `tsconfig.client.json`, not the host aggregate.
+- `lsy-balance` is the only browser plugin: a `conversation.composer.dock` pill reading `account.getBalance` and its own Host route `/api/lsy.balance`, which resolves provider keys on the Host. It has split `tsconfig.host.json` and `tsconfig.client.json`; `*.client.spec.*` tests type-check in the client aggregate, the rest in the host aggregate.
 
 ## Profile layering
 

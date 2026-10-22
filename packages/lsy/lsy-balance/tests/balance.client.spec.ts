@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AccountDetails } from '@deepseek-ai/dsh-deepseek-account/types'
-import { BalanceLoader, createBalanceStore, formatAmount, summarizeWallets } from '../src/client/balance.ts'
+import { BalanceLoader, createBalanceStore, formatAmount, summarizeWallets, type ProviderReading } from '../src/client/balance.ts'
 
 type BalanceAnswer = AccountDetails['balance'] | null
+
+const OPENROUTER: ProviderReading = { source: 'openrouter', label: 'OpenRouter', status: 'ready', kind: 'credit', currency: 'USD', remaining: 7.5, limit: 10, used: 2.5 }
+const noProviders = (): Promise<readonly ProviderReading[]> => Promise.resolve([])
 
 const ready = (cny: string, bonus = '0'): BalanceAnswer => ({
   status: 'ready', value: [{ currency: 'CNY', balance: cny }], bonusWallets: [{ currency: 'CNY', balance: bonus }],
@@ -44,7 +47,7 @@ describe('formatAmount', () => {
 describe('BalanceLoader', () => {
   it('publishes a ready answer with its wallets and time', async () => {
     const store = createBalanceStore()
-    const loader = new BalanceLoader(store, () => Promise.resolve(ready('8.5', '1.5')), () => 1_000)
+    const loader = new BalanceLoader(store, () => Promise.resolve(ready('8.5', '1.5')), () => Promise.resolve([OPENROUTER]), () => 1_000)
     await loader.refresh(0)
     expect(store.getSnapshot()).toEqual({
       phase: 'ready',
@@ -52,6 +55,7 @@ describe('BalanceLoader', () => {
       updatedAt: 1_000,
       checkedAt: 1_000,
       refreshing: false,
+      providers: [OPENROUTER],
     })
   })
 
@@ -59,7 +63,7 @@ describe('BalanceLoader', () => {
     const store = createBalanceStore()
     let now = 0
     const read = vi.fn(() => Promise.resolve(ready('1')))
-    const loader = new BalanceLoader(store, read, () => now)
+    const loader = new BalanceLoader(store, read, noProviders, () => now)
     await Promise.all([loader.refresh(60_000), loader.refresh(60_000)])
     expect(read).toHaveBeenCalledTimes(1)
     now = 59_999
@@ -76,7 +80,7 @@ describe('BalanceLoader', () => {
   it('marks the request in flight', async () => {
     const store = createBalanceStore()
     const pending = Promise.withResolvers<BalanceAnswer>()
-    const loader = new BalanceLoader(store, () => pending.promise, () => 5)
+    const loader = new BalanceLoader(store, () => pending.promise, noProviders, () => 5)
     const refresh = loader.refresh(0)
     expect(store.getSnapshot().refreshing).toBe(true)
     pending.resolve(ready('1'))
@@ -92,7 +96,7 @@ describe('BalanceLoader', () => {
     const loader = new BalanceLoader(store, () => {
       const answer = answers.shift()
       return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer ?? null)
-    }, () => now)
+    }, noProviders, () => now)
     await loader.refresh(0)
     now = 10
     await loader.refresh(0)
@@ -109,5 +113,21 @@ describe('BalanceLoader', () => {
     ])
     await loader.refresh(0)
     expect(store.getSnapshot()).toMatchObject({ phase: 'signed-out', wallets: [], updatedAt: null })
+  })
+
+  it('asks the Host to bypass its cache on a forced refresh and keeps readings through a failed route', async () => {
+    const store = createBalanceStore()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const readProviders = vi.fn((_fresh: boolean): Promise<readonly ProviderReading[]> => Promise.resolve([OPENROUTER]))
+    let now = 0
+    const loader = new BalanceLoader(store, () => Promise.resolve(null), readProviders, () => now)
+    await loader.refresh(60_000)
+    expect(readProviders).toHaveBeenLastCalledWith(false)
+    readProviders.mockRejectedValueOnce(new Error('offline'))
+    now = 1
+    await loader.refresh(0)
+    expect(readProviders).toHaveBeenLastCalledWith(true)
+    expect(store.getSnapshot()).toMatchObject({ phase: 'signed-out', providers: [OPENROUTER] })
+    expect(warn).toHaveBeenCalledWith('[lsy-balance] provider balances read failed')
   })
 })

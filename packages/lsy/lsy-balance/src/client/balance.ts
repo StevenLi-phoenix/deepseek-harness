@@ -1,24 +1,19 @@
 /**
- * DeepSeek account balance for the composer dock: per-currency totals of the
- * topped-up and granted wallets, read through the same Host account Remote the
- * Account settings page uses, so the pill and that page always agree.
+ * Balances for the composer dock: the DeepSeek account's per-currency totals,
+ * read through the same Host account Remote the Account settings page uses,
+ * and the readings of the provider keys the Host balance route queries
+ * (OpenRouter, the DeepSeek API, OpenCode Go).
  */
 
 import { Big } from 'big.js'
 import type { AccountDetails, AccountWallet } from '@deepseek-ai/dsh-deepseek-account/types'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { ProviderReading, WalletLine } from '../readings.ts'
+
+export type { ProviderReading, WalletLine } from '../readings.ts'
 
 /** Wallet currencies Platform reports. */
 export type Currency = AccountWallet['currency']
-
-/** One currency's balance; decimal strings keep the server's precision. */
-export interface WalletLine {
-  readonly currency: Currency
-  /** Topped-up plus granted. */
-  readonly total: string
-  readonly toppedUp: string
-  readonly granted: string
-}
 
 /** What the pill renders. */
 export interface BalanceState {
@@ -31,6 +26,8 @@ export interface BalanceState {
   /** Time of the last settled request, ready or not; freshness is measured from here. */
   checkedAt: number | null
   refreshing: boolean
+  /** The Host route's last answer: one reading per provider key it holds. */
+  providers: readonly ProviderReading[]
 }
 
 /** One Host balance answer: null when no account grant is stored. */
@@ -80,21 +77,23 @@ function grouped(value: string): string {
 
 /** @returns a store holding the not-yet-loaded state. */
 export function createBalanceStore(): SnapshotStore<BalanceState> {
-  return createSnapshotStore<BalanceState>({ phase: 'idle', wallets: [], updatedAt: null, checkedAt: null, refreshing: false })
+  return createSnapshotStore<BalanceState>({ phase: 'idle', wallets: [], updatedAt: null, checkedAt: null, refreshing: false, providers: [] })
 }
 
-/** Reads the balance into a store, one request at a time. */
+/** Reads the balances into a store, one round at a time. */
 export class BalanceLoader {
   private inFlight: Promise<void> | undefined
 
   /**
    * @param store - the store the pill renders.
-   * @param read - one Host balance query; rejects on transport failure.
+   * @param read - one account balance query; rejects on transport failure.
+   * @param readProviders - one Host balance route query; `fresh` asks the Host to bypass its cache.
    * @param now - clock, replaceable in tests.
    */
   constructor(
     private readonly store: SnapshotStore<BalanceState>,
     private readonly read: () => Promise<BalanceAnswer>,
+    private readonly readProviders: (fresh: boolean) => Promise<readonly ProviderReading[]>,
     private readonly now: () => number = Date.now,
   ) {}
 
@@ -109,20 +108,23 @@ export class BalanceLoader {
     const { checkedAt } = this.store.getSnapshot()
     if (maxAgeMs > 0 && checkedAt !== null && this.now() - checkedAt < maxAgeMs) return Promise.resolve()
     this.store.update((draft) => { draft.refreshing = true })
-    const request = this.query().finally(() => { this.inFlight = undefined })
+    const request = this.query(maxAgeMs === 0).finally(() => { this.inFlight = undefined })
     this.inFlight = request
     return request
   }
 
-  private async query(): Promise<void> {
-    let answer: BalanceAnswer
-    try { answer = await this.read() }
-    catch { answer = { status: 'failed' } }
+  private async query(fresh: boolean): Promise<void> {
+    const [answer, providers] = await Promise.all([
+      this.read().catch((): BalanceAnswer => ({ status: 'failed' })),
+      // A failed route keeps the previous readings; each reading carries its own failure.
+      this.readProviders(fresh).catch(() => { console.warn('[lsy-balance] provider balances read failed'); return undefined }),
+    ])
     const at = this.now()
     if (answer?.status === 'failed') console.warn('[lsy-balance] balance read failed')
     this.store.update((draft) => {
       draft.refreshing = false
       draft.checkedAt = at
+      if (providers !== undefined) draft.providers = providers
       if (answer === null) {
         draft.phase = 'signed-out'
         draft.wallets = []

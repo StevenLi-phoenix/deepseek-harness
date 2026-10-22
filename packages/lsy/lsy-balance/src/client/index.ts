@@ -1,7 +1,8 @@
 /**
  * Balance pill plugin, browser half: one `conversation.composer.dock` entry
  * after the activity and usage pills, showing the DeepSeek account balance
- * the Host reads for the Account settings page (`account.getBalance`).
+ * the Host reads for the Account settings page (`account.getBalance`) and the
+ * provider-key readings of this package's Host route (`api/lsy.balance`).
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: pulls the ctx.remote merge (the account namespace) into this program.
@@ -12,6 +13,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { AccountClientMetadata } from '@deepseek-ai/dsh-deepseek-account/types'
+import { BALANCE_ROUTE, type BalanceRouteBody, type ProviderReading } from '../readings.ts'
 import { BalanceLoader, createBalanceStore } from './balance.ts'
 import { BalancePill, type BalancePillInjected } from './BalancePill.tsx'
 import { en, zh } from './locales.ts'
@@ -45,6 +47,15 @@ export function apply(ctx: ClientContext): void {
     const result = await ctx.remote.account.getBalance(client)
     if (!result.ok) throw new Error(result.error.message)
     return result.value
+  }, async (fresh): Promise<readonly ProviderReading[]> => {
+    // Document-relative, so a served mount keeps working; the sign-in cookie rides along.
+    const response = await fetch(fresh ? `${BALANCE_ROUTE}?fresh=1` : BALANCE_ROUTE, { credentials: 'same-origin', cache: 'no-store' })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const body: unknown = await response.json()
+    const readings = typeof body === 'object' && body !== null ? (body as Partial<BalanceRouteBody>).readings : undefined
+    if (!Array.isArray(readings)) throw new Error('unexpected balance route answer')
+    // The Host half of this package wrote the body; its shape is this package's own contract.
+    return readings as readonly ProviderReading[]
   })
   const injected = (): BalancePillInjected => ({
     hooks: { balance: store },

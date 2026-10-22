@@ -2185,6 +2185,40 @@ export interface LspLocalServerConfig {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsp-stdio -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-balance -->
+<a id="deepseek-aidsh-lsy-balance"></a>
+
+## `@deepseek-ai/dsh-lsy-balance`
+
+- `inject`: `credentials` · `connection`
+- `source`: [`packages/lsy/lsy-balance/src/index.ts:17`](../packages/lsy/lsy-balance/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Providers to query; a source whose key reference is unset is skipped. */
+  sources: BalanceSource[]
+  /** How long an answer is served from cache, in milliseconds. */
+  cacheMs: number
+  /** Deadline of one provider request, in milliseconds. */
+  timeoutMs: number
+}
+
+/** One configured balance source. */
+export interface BalanceSource {
+  /** Which provider endpoint to query. */
+  kind: BalanceSourceKind
+  /** Credential reference holding the provider key (the Models page's `apiKeyEnv`). */
+  keyRef: string
+  /** Name shown in the pill and its tooltip. */
+  label: string
+}
+
+/** Providers with a balance or quota endpoint. */
+export type BalanceSourceKind = 'deepseek' | 'openrouter' | 'opencode-go'
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-balance -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-event-bus -->
 <a id="deepseek-aidsh-lsy-event-bus"></a>
 
@@ -4890,7 +4924,6 @@ export interface Config {
 | `@deepseek-ai/dsh-host-plugin-inventory` | `loader` | [`packages/host/plugin-inventory/src/index.ts`](../packages/host/plugin-inventory/src/index.ts) |
 | `@deepseek-ai/dsh-llm` | — | [`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts) |
 | `@deepseek-ai/dsh-lsp` | — | [`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts) |
-| `@deepseek-ai/dsh-lsy-balance` | — | [`packages/lsy/lsy-balance/src/index.ts`](../packages/lsy/lsy-balance/src/index.ts) |
 | `@deepseek-ai/dsh-mcp-resources` | `tools` | [`packages/mcp/mcp-resources/src/index.ts`](../packages/mcp/mcp-resources/src/index.ts) |
 | `@deepseek-ai/dsh-otel` | — | [`packages/telemetry/otel/src/index.ts`](../packages/telemetry/otel/src/index.ts) |
 | `@deepseek-ai/dsh-sandbox-ssh` | `ssh` | [`packages/ssh/sandbox-ssh/src/index.ts`](../packages/ssh/sandbox-ssh/src/index.ts) |

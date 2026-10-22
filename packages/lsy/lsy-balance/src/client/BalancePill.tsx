@@ -1,19 +1,20 @@
 /**
- * Composer dock pill showing the DeepSeek account balance next to the activity
- * and usage pills. It renders nothing until the first answer and while signed
- * out; afterwards it shows each currency's total, tints red when nothing is
- * left, dims a reading a failed refresh could not renew, and refreshes on
- * click, on window focus, and every few minutes while the page is visible.
+ * Composer dock pill showing every balance in one row: the DeepSeek account
+ * and each provider key the Host holds ("DeepSeek ¥12.34 · OpenRouter $7.50 ·
+ * OpenCode Go 34%"). It renders nothing until the first answer or while there
+ * is nothing to show; a segment with nothing left turns red, an unrenewed one
+ * dims, and the tooltip explains each. It refreshes on click (bypassing the
+ * Host cache), on window focus, and every two minutes while the page is visible.
  */
 
 import { useEffect, type ReactNode } from 'react'
 import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import { Big } from 'big.js'
-import { formatAmount, type BalanceState, type WalletLine } from './balance.ts'
+import type { BalanceState } from './balance.ts'
 // Type-only: registers the lsy.balance locale namespace this component's `t` reads.
 import type {} from './locales.ts'
+import { pillSegments, tooltipLines, type Translate } from './segments.ts'
 import css from './BalancePill.module.css'
 
 /** Background refresh period, and the age a mount accepts. */
@@ -34,24 +35,6 @@ export interface BalancePillInjected {
 /** Props delivered by the dock outlet. */
 export type BalancePillProps = InjectFace<BalancePillInjected> & PropsLocale<'lsy.balance'>
 
-function clock(at: number): string {
-  const date = new Date(at)
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
-}
-
-function tooltipText(state: BalanceState, t: BalancePillProps['t']): string {
-  if (state.refreshing) return t('tooltip.refreshing')
-  const wallets = state.wallets.map(wallet => t('tooltip.wallet', {
-    toppedUp: formatAmount(wallet.toppedUp, wallet.currency),
-    granted: formatAmount(wallet.granted, wallet.currency),
-  }))
-  if (state.phase === 'failed') {
-    return state.updatedAt === null ? t('tooltip.failed') : [...wallets, t('tooltip.stale', { time: clock(state.updatedAt) })].join('\n')
-  }
-  /* v8 ignore next -- a ready state always carries its answer time */
-  return [...wallets, t('tooltip.updated', { time: clock(state.updatedAt ?? Date.now()) })].join('\n')
-}
-
 function WalletIcon(): ReactNode {
   return (
     <svg viewBox="0 0 16 16" fill="none" aria-hidden className={css.icon}>
@@ -65,7 +48,7 @@ function WalletIcon(): ReactNode {
 /**
  * Render the balance pill.
  * @param props - the dock-delivered store hook, refresh callback, and copy.
- * @returns the pill, or null before the first answer and while signed out.
+ * @returns the pill, or null while there is nothing to show.
  */
 export function BalancePill({ useBalance, refresh, t }: BalancePillProps): ReactNode {
   const state = useBalance(value => value)
@@ -83,38 +66,33 @@ export function BalancePill({ useBalance, refresh, t }: BalancePillProps): React
     }
   }, [refresh])
 
-  if (state.phase === 'idle' || state.phase === 'signed-out') return null
-  const wallets: readonly WalletLine[] = state.phase === 'ready' && state.wallets.length === 0
-    ? [{ currency: 'CNY', total: '0', toppedUp: '0', granted: '0' }]
-    : state.wallets
-  const amounts = wallets.map(wallet => formatAmount(wallet.total, wallet.currency))
-  const exhausted = wallets.length > 0 && wallets.every(wallet => new Big(wallet.total).lte(0))
-  const className = [
-    css.pill,
-    exhausted ? css.exhausted : '',
-    state.phase === 'failed' ? css.stale : '',
-    state.refreshing ? css.refreshing : '',
-  ].filter(Boolean).join(' ')
+  const translate = t as Translate
+  const segments = pillSegments(state, translate)
+  if (segments.length === 0) return null
   return (
     <span className={css.anchor} data-composer-stat="balance">
-      <Tooltip label={() => tooltipText(state, t)} side="top" portal>
+      <Tooltip label={() => tooltipLines(state, translate).join('\n')} side="top" portal>
         <button
           type="button"
-          className={className}
-          aria-label={amounts.length === 0 ? t('pill.unavailable') : t('pill.aria', { amount: amounts.join(' / ') })}
+          className={state.refreshing ? `${css.pill} ${css.refreshing}` : css.pill}
+          aria-label={translate('pill.aria', { summary: segments.map(segment => `${segment.label} ${segment.value}`).join(', ') })}
           aria-busy={state.refreshing}
           onClick={() => { refresh(0) }}
         >
           <WalletIcon />
           <span className={css.label}>
-            {amounts.length === 0
-              ? t('pill.unavailable')
-              : amounts.map((amount, index) => (
-                <span key={wallets[index]?.currency}>
-                  {index > 0 ? <span className={css.sep} aria-hidden>·</span> : null}
-                  {amount}
-                </span>
-              ))}
+            {segments.map((segment, index) => (
+              <span
+                key={segment.key}
+                data-balance-source={segment.key}
+                className={[css.segment, segment.exhausted ? css.exhausted : '', segment.stale ? css.stale : ''].filter(Boolean).join(' ')}
+              >
+                {index > 0 ? <span className={css.sep} aria-hidden>·</span> : null}
+                <span className={css.name}>{segment.label}</span>
+                {' '}
+                {segment.value}
+              </span>
+            ))}
           </span>
         </button>
       </Tooltip>
