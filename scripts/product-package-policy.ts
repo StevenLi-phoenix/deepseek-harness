@@ -19,6 +19,7 @@ export const PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackagePolic
   'packages/browser-use/browser-use': { category: 'optional', reason: 'Service definition used by explicitly selected browser providers.' },
   'packages/computer-use/computer-use': { category: 'optional', reason: 'Service definition used by explicitly selected computer providers.' },
   'packages/lsp/lsp': { category: 'optional', reason: 'Service definition for deployment-configured language servers.' },
+  'packages/lsy/lsy-balance': { category: 'optional', reason: 'Fork-local composer balance pill mounted by the event profile bundle.' },
   'packages/lsy/lsy-event-bus': { category: 'optional', reason: 'Fork-local event bus mounted by the deployment-owned event profile.' },
   'packages/lsy/lsy-wechat': { category: 'optional', reason: 'Fork-local WeChat channel; requires a QR-bound iLink bot account.' },
   'packages/lsy/lsy-tool-watch': { category: 'optional', reason: 'Fork-local watch tools mounted by the event profile preset.' },

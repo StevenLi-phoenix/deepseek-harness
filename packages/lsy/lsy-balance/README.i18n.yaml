@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/lsy-balance/README.md
+/:
+  en: 8e78b91ef0cca026
+  zh: 8f2f551bf292a9da
+/deepseek-ai-dsh-lsy-balance:
+  en: 59b01ff673aae9e9
+  zh: 9515b63df4cc5c5f
+/deepseek-ai-dsh-lsy-balance/summary:
+  en: 7f356a10474a3164
+  zh: a850d4fe47c81238
+/deepseek-ai-dsh-lsy-balance/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-lsy-balance/use-this-package:
+  en: 007a9ce6965ac06b
+  zh: 5ee3e4b8b29cbb27
+/deepseek-ai-dsh-lsy-balance/understand-the-implementation:
+  en: 9dff9b75d9a2b30e
+  zh: 1040b7f2ebe5e878
+/deepseek-ai-dsh-lsy-balance/further-exploration:
+  en: 322a1d8d0db04c2e
+  zh: c3f264ec7b825b73
+/deepseek-ai-dsh-lsy-balance/model-experience:
+  en: c921e4a6484059dc
+  zh: d5f75820461cb34c
+/deepseek-ai-dsh-lsy-balance/model-experience/kv-cache-effect:
+  en: ca75c51c89c2c9b0
+  zh: a18013b9ffbc0b06
+/deepseek-ai-dsh-lsy-balance/known-limitations-and-deferred-work:
+  en: 3902e8839b7548b6
+  zh: 515b826f117505ab
+/deepseek-ai-dsh-lsy-balance/known-limitations-and-deferred-work/dev-note:
+  en: 94f1ffc7729b8876
+  zh: 5cbcf1ec58cbfe3a

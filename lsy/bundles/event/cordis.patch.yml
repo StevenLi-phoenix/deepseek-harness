@@ -44,6 +44,10 @@
     - id: lsy-github-sensor
       name: '@deepseek-ai/dsh-lsy-github-sensor'
 
+    # Composer dock pill: the DeepSeek account balance next to the activity and usage pills.
+    - id: lsy-balance
+      name: '@deepseek-ai/dsh-lsy-balance'
+
     # Owner channel: chat Session over WeChat and ctx.lsyNotifier for the bus.
     - id: lsy-wechat
       name: '@deepseek-ai/dsh-lsy-wechat'
