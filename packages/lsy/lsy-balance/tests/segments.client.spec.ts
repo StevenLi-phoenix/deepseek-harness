@@ -31,6 +31,22 @@ describe('pillSegments', () => {
     expect(quota).toMatchObject({ value: '100%', exhausted: true })
   })
 
+  it('shows only funded currencies, CNY first, and names the rolling window', () => {
+    const reading: ProviderReading = { source: 'deepseek', label: 'DeepSeek API', status: 'ready', kind: 'wallets', wallets: [
+      { currency: 'USD', total: '0.00', toppedUp: '0.00', granted: '0.00' },
+      { currency: 'CNY', total: '329.91', toppedUp: '323.91', granted: '5.99' },
+    ] }
+    expect(pillSegments(state({ providers: [reading] }), t)[0]).toMatchObject({ value: '¥329.91', exhausted: false })
+    expect(tooltipLines(state({ providers: [reading] }), t)[0]).toBe('DeepSeek API：充值 ¥323.91 · 赠金 ¥5.99')
+    // The same account seen through Platform lists its wallets in another order and without the empty one.
+    const account = { phase: 'ready' as const, wallets: [{ currency: 'CNY' as const, total: '329.910', toppedUp: '323.91', granted: '5.99' }] }
+    expect(pillSegments(state({ ...account, providers: [reading] }), t).map(segment => segment.key)).toEqual(['account'])
+    const quota: ProviderReading = { source: 'opencode-go', label: 'OC', status: 'ready', kind: 'quota', windows: [{ name: 'rolling', percent: 3, resetsAt: null }] }
+    expect(tooltipLines(state({ providers: [quota] }), t)[0]).toBe('OC：5 小时 3%')
+    const empty = { ...reading, wallets: reading.wallets.map(wallet => ({ ...wallet, total: '0.00' })) }
+    expect(pillSegments(state({ providers: [empty] }), t)[0]).toMatchObject({ value: '¥0.00', exhausted: true })
+  })
+
   it('keeps unknown quota window names and treats an empty quota as unreadable', () => {
     const reading: ProviderReading = { source: 'opencode-go', label: 'OC', status: 'ready', kind: 'quota', windows: [{ name: 'daily', percent: 5, resetsAt: 'not a date' }] }
     expect(tooltipLines(state({ providers: [reading] }), t)[0]).toBe('OC：daily 5%')
