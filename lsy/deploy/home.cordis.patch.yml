@@ -25,3 +25,15 @@
   config:
     trustedHosts: !!js ctx.webStartup.trustedHosts
     cookieMaxAgeDays: 365
+
+# The preview notice is acknowledged here rather than through its dialog: the dialog writes
+# the profile patch, which setup-profile.sh replaces on every upgrade. When a build ships a
+# newer notice (WELCOME_NOTICE_VERSION in dsh-client-ui-settings-models), bump this value.
+- id: ui-settings-general
+  config:
+    welcomeNoticeVersion: '2026-09-28.1'
+
+# Models come from OpenRouter, so skip the official DeepSeek API-key onboarding dialog.
+- id: ui-settings-models
+  config:
+    credentialOnboarding: false
