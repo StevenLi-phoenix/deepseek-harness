@@ -15,6 +15,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 
 ### Changed
 - LaunchDaemon `app.lishuyu.dsh-events.plist` also trusts `dsh.tailc2559b.ts.net`, so the event service can take over the Tailscale name of the interactive instance it replaces without a plist change.
+- Models route through OpenRouter: `lsy/deploy/home.cordis.patch.yml` (installed as `$DSH_HOME/cordis.patch.yml`) enables the `openrouter` route of `llm-pi-ai` keyed by `OPENROUTER_API_KEY` and makes `deepseek/deepseek-v4.1-flash` the default model. Verified with `--dump-config` and a headless request that reached OpenRouter. `RUNBOOK.md` step 5 now covers the OpenRouter key, one classic GitHub token for both GitHub names, the home patch, and logging `gh` in for `git push` (the harness strips credential-shaped variables from agent shells).
 - Event service logs move from `~dsh-runtime/Library/Logs/dsh-events/` (inside the 700 `Library`) to `/Users/dsh-runtime/logs/`, which the operator reads without sudo.
 
 ### Fixed

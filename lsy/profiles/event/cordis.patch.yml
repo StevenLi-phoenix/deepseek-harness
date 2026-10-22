@@ -5,7 +5,8 @@
 # schedule_create), and the owner reaches the agent over WeChat.
 #
 # Secrets are read per use from the instance credential store or $DSH_HOME/.env:
-#   DEEPSEEK_API_KEY, LSY_GITHUB_TOKEN, LSY_GITHUB_NOTIFICATIONS_TOKEN (optional).
+#   the model key the deployment's home patch names (lsy/deploy/home.cordis.patch.yml:
+#   OPENROUTER_API_KEY), LSY_GITHUB_TOKEN, LSY_GITHUB_NOTIFICATIONS_TOKEN (optional).
 # The WeChat bot account is bound once with lsy/deploy/wechat-login.mjs and kept in
 # $DSH_HOME/lsy-wechat/account.json.
 

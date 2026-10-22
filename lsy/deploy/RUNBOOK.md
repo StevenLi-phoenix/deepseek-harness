@@ -79,17 +79,26 @@ sudo -u dsh-runtime /Users/Shared/lsy-dsh/current/lsy/deploy/setup-profile.sh /U
 
 ## 5. Secrets (typed in your terminal, never pasted into a chat)
 
-Use keys that belong to this service only: a separate DeepSeek key, a fine-grained **read-only** GitHub token (public repositories, plus any private ones you want watched), and optionally a classic token with **only** the `notifications` scope for your GitHub notification threads.
+Two keys, both for this service only: an OpenRouter key (models) and a classic GitHub token with `repo`, `workflow`, and `read:org` (sensor, notifications, `git push`, `gh`). Leave out `admin:public_key`: it can add SSH keys to the account, which outlive revoking the token. `repo` already covers `/notifications`, so the same token fills both GitHub names. Every command below reads input with echo off and prints only names and modes.
 
 ```sh
-sudo -u dsh-runtime sh -c 'umask 077; cat >> /Users/dsh-runtime/.dsh/.env'
-# paste, then Ctrl-D:
-# DEEPSEEK_API_KEY=...
-# LSY_GITHUB_TOKEN=...
-# LSY_GITHUB_NOTIFICATIONS_TOKEN=...
+cd / && sudo -u dsh-runtime /bin/zsh -fc 'umask 077; f=/Users/dsh-runtime/.dsh/.env; read -rs "v?OpenRouter key (hidden): "; print; [[ -n $v ]] || exit 1; { print -r -- "OPENROUTER_API_KEY=$v"; /usr/bin/grep -v -e "^OPENROUTER_API_KEY=" -e "^DEEPSEEK_API_KEY=" $f 2>/dev/null; } >| $f.new && /bin/mv -f $f.new $f && /bin/ls -l $f && /usr/bin/cut -d= -f1 $f'
+cd / && sudo -u dsh-runtime /bin/zsh -fc 'umask 077; f=/Users/dsh-runtime/.dsh/.env; read -rs "v?GitHub classic token (hidden): "; print; [[ -n $v ]] && print -r -- "LSY_GITHUB_TOKEN=$v" >> $f && print -r -- "LSY_GITHUB_NOTIFICATIONS_TOKEN=$v" >> $f; /bin/ls -l $f; /usr/bin/cut -d= -f1 $f'
 ```
 
-Everything in this file is readable by the agent (it runs as `dsh-runtime`); that is why each token must be scoped so that a leak costs little.
+Models route through OpenRouter by a home patch (`lsy/deploy/home.cordis.patch.yml`: the `openrouter` route of `llm-pi-ai` keyed by `OPENROUTER_API_KEY`, default model `deepseek/deepseek-v4.1-flash`). It sits above the profile layer, so upgrades never overwrite it:
+
+```sh
+/bin/cat /Volumes/MiniSSD/deepseek-harness/lsy/deploy/home.cordis.patch.yml | sudo -u dsh-runtime /bin/zsh -fc 'umask 077; /bin/cat >| /Users/dsh-runtime/.dsh/cordis.patch.yml'
+```
+
+The harness strips every variable whose name contains `KEY`, `PASSWORD`, `SECRET`, or `TOKEN` from the agent's shell commands, so `git` never sees the `.env` token. Log `gh` in for the service user instead; `git push` and `gh pr` then authenticate through it:
+
+```sh
+cd / && sudo -u dsh-runtime /usr/bin/env HOME=/Users/dsh-runtime PATH=/opt/homebrew/bin:/usr/bin:/bin /bin/zsh -fc '/usr/bin/sed -n "s/^LSY_GITHUB_TOKEN=//p" ~/.dsh/.env | gh auth login --hostname github.com --git-protocol https --insecure-storage --with-token && gh auth setup-git --hostname github.com && git config --global user.name "Steven Li (dsh)" && git config --global user.email lishuyustevenli@163.com && gh auth status'
+```
+
+The agent runs as `dsh-runtime`, so it can read `.env` and `~/.config/gh/hosts.yml` (plain text: a daemon user has no unlocked keychain). Keep each key scoped so that a leak costs little.
 
 ## 6. Bind WeChat
 
