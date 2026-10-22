@@ -17,3 +17,11 @@
   config:
     provider: openrouter
     model: deepseek/deepseek-v4.1-flash
+
+# Browser sign-in lasts a year instead of 30 days: the instance is reachable only on the
+# tailnet, and every restart already rotates the first-login token. A patch replaces the
+# entry's whole config, so the bundle's trustedHosts line is restated.
+- id: connection
+  config:
+    trustedHosts: !!js ctx.webStartup.trustedHosts
+    cookieMaxAgeDays: 365
