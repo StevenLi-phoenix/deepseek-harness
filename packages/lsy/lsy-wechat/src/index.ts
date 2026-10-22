@@ -23,7 +23,11 @@ export type * from './storage.ts'
 
 /** How the owner's chat Session is created. */
 export interface ChatConfig {
-  /** Absolute directory the chat Session works in; created when missing. */
+  /**
+   * Absolute directory the chat Session works in, owner-only (0700). It is
+   * recreated before every forwarded message, so a temp directory emptied by
+   * a restart still serves the stored Session.
+   */
   workspacePath: string
   /** Agent preset of the chat Session. */
   agentPreset: string
@@ -63,7 +67,7 @@ export interface Config {
 export const Config: z<Config> = z.object({
   accountFile: z.string(),
   chat: z.object({
-    workspacePath: z.string().default('/Users/dsh-runtime/work'),
+    workspacePath: z.string().default('/tmp/dsh-wechat'),
     agentPreset: z.string().default('unattended'),
     permissionPreset: z.string().default('danger-full-access'),
     title: z.string().default('微信'),
@@ -333,6 +337,8 @@ export class WechatChannel extends Service implements LsyNotifier {
 
   /** Prompt the owner's chat Session with one message. */
   private async forward(domain: Domain<typeof wechatDomain>, account: WechatAccount, text: string): Promise<void> {
+    // The chat is not a project: its scratch directory may live in /tmp, which a restart empties.
+    mkdirSync(this.config.chat.workspacePath, { recursive: true, mode: 0o700 })
     const sessionId = await this.chatSession(domain, account)
     await this.ctx.sessionController.prompt({
       requestId: randomUUID() as SessionRequestId,
@@ -362,7 +368,6 @@ export class WechatChannel extends Service implements LsyNotifier {
     const chat = this.config.chat
     // Fails on an unknown preset before a Session exists.
     this.ctx.permissionPresets.resolve(chat.permissionPreset)
-    mkdirSync(chat.workspacePath, { recursive: true })
     const created = await this.ctx.sessionController.create({ cwd: chat.workspacePath, agentPreset: chat.agentPreset })
     const resolved = await this.ctx.sessionController.resolveAgent(created.sessionId)
     if ('error' in resolved) throw resolved.error

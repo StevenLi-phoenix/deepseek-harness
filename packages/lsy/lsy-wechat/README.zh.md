@@ -47,7 +47,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
       name: '@deepseek-ai/dsh-lsy-wechat'
       config:
         chat:
-          workspacePath: /Users/dsh-runtime/work
+          workspacePath: /tmp/dsh-wechat
           agentPreset: unattended
           permissionPreset: danger-full-access
 ```
@@ -55,7 +55,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 | 字段 | 默认值 | 含义 |
 |---|---|---|
 | `accountFile` | `<DSH_HOME>/lsy-wechat/account.json` | 登录命令写入的账号文件 |
-| `chat.workspacePath` | `/Users/dsh-runtime/work` | 对话 Session 的绝对路径目录；不存在时自动创建 |
+| `chat.workspacePath` | `/tmp/dsh-wechat` | 对话 Session 的绝对路径临时目录（对话是个人助手，不是项目）；每次转发消息前按仅属主可访问（0700）创建，所以重启清空 `/tmp` 后已存的 Session 仍可用 |
 | `chat.agentPreset` | `unattended` | 新对话 Session 的 agent preset |
 | `chat.permissionPreset` | `danger-full-access` | 新对话 Session 设置的 permission preset |
 | `chat.title` | `微信` | 新对话 Session 的标题 |

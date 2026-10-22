@@ -47,7 +47,7 @@ The command writes `<DSH_HOME>/lsy-wechat/account.json` with mode 600 and prints
       name: '@deepseek-ai/dsh-lsy-wechat'
       config:
         chat:
-          workspacePath: /Users/dsh-runtime/work
+          workspacePath: /tmp/dsh-wechat
           agentPreset: unattended
           permissionPreset: danger-full-access
 ```
@@ -55,7 +55,7 @@ The command writes `<DSH_HOME>/lsy-wechat/account.json` with mode 600 and prints
 | Field | Default | Meaning |
 |---|---|---|
 | `accountFile` | `<DSH_HOME>/lsy-wechat/account.json` | Account written by the login command |
-| `chat.workspacePath` | `/Users/dsh-runtime/work` | Absolute directory of the chat Session; created when missing |
+| `chat.workspacePath` | `/tmp/dsh-wechat` | Absolute scratch directory of the chat Session, which is a personal assistant rather than a project; created owner-only (0700) before every forwarded message, so a restart that empties `/tmp` does not strand the stored Session |
 | `chat.agentPreset` | `unattended` | Agent preset of a new chat Session |
 | `chat.permissionPreset` | `danger-full-access` | Permission preset set on a new chat Session |
 | `chat.title` | `微信` | Title of a new chat Session |
