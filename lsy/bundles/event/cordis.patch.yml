@@ -48,9 +48,13 @@
     - id: lsy-balance
       name: '@deepseek-ai/dsh-lsy-balance'
 
-    # Owner channel: chat Session over WeChat and ctx.lsyNotifier for the bus.
+    # Owner channel: chat Session over WeChat and ctx.lsyNotifier for the bus. The chat works in a
+    # clone of the owner's tracking repository StevenLi-phoenix/me (RUNBOOK step 5).
     - id: lsy-wechat
       name: '@deepseek-ai/dsh-lsy-wechat'
+      config:
+        chat:
+          workspacePath: /Users/dsh-runtime/me
 
     # Unattended agent preset: `standard` minus interactive-only tools (command-goal, tool-goal,
     # planning, tool-ask-user, tool-plugin-manager, tool-plugin-market), plus the watch tools.

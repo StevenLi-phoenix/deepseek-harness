@@ -14,7 +14,8 @@ Every `sudo` line is meant to be run by hand, one at a time. The agent runs with
 | `/Users/Shared/lsy-dsh/current` | lishuyu | Symlink to the active build |
 | `/Users/dsh-runtime/.dsh/` | dsh-runtime, 700 | `DSH_HOME`: profile, Sessions, storages (watches, subscriptions, cursors), `.env` secrets |
 | `/Users/dsh-runtime/.dsh/lsy-wechat/account.json` | dsh-runtime, 600 | WeChat bot binding written by `wechat-login.mjs` |
-| `/Users/dsh-runtime/work/` | dsh-runtime | Workspace of the WeChat chat Session and of watch-started Sessions; WeChat attachments land in `.wechat-inbox/` (700, files 600) |
+| `/Users/dsh-runtime/me/` | dsh-runtime | Clone of `StevenLi-phoenix/me` (private), the WeChat chat Session's workspace; WeChat attachments land in its `.wechat-inbox/` (700, files 600, ignored by its own `.gitignore`) |
+| `/Users/dsh-runtime/work/` | dsh-runtime | Workspace of watch-started Sessions |
 | `/Users/dsh-runtime/logs/` | dsh-runtime, 755 | `stdout.log`, `stderr.log`; outside the 700 `Library`, so the operator (group `staff`) reads them without sudo, first-login URL included |
 | `/Library/LaunchDaemons/app.lishuyu.dsh-events.plist` | root:wheel 644 | Service definition (from `app.lishuyu.dsh-events.plist`) |
 
@@ -99,6 +100,14 @@ cd / && sudo -u dsh-runtime /usr/bin/env HOME=/Users/dsh-runtime PATH=/opt/homeb
 ```
 
 The agent runs as `dsh-runtime`, so it can read `.env` and `~/.config/gh/hosts.yml` (plain text: a daemon user has no unlocked keychain). Keep each key scoped so that a leak costs little.
+
+The WeChat chat works in a clone of the owner's tracking repository (the event bundle sets `chat.workspacePath`):
+
+```sh
+cd / && sudo -u dsh-runtime /usr/bin/env HOME=/Users/dsh-runtime PATH=/opt/homebrew/bin:/usr/bin:/bin git clone https://github.com/StevenLi-phoenix/me.git /Users/dsh-runtime/me
+```
+
+Without the clone, `lsy-wechat` creates an empty directory there and the agent has no repository to commit to.
 
 ## 6. Bind WeChat
 

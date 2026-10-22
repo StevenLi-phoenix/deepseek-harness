@@ -55,7 +55,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 | 字段 | 默认值 | 含义 |
 |---|---|---|
 | `accountFile` | `<DSH_HOME>/lsy-wechat/account.json` | 登录命令写入的账号文件 |
-| `chat.workspacePath` | `/Users/dsh-runtime/work` | 对话 Session 的绝对路径目录；每次转发消息前确保存在。收到的附件存进其中的 `.wechat-inbox/`（目录 0700，文件 0600） |
+| `chat.workspacePath` | `/Users/dsh-runtime/work` | 对话 Session 的绝对路径目录；每次转发消息前确保存在。收到的附件存进其中的 `.wechat-inbox/`（目录 0700，文件 0600），它自带忽略规则，工作区是 git 仓库时附件也不会被提交 |
 | `chat.agentPreset` | `unattended` | 新对话 Session 的 agent preset |
 | `chat.permissionPreset` | `danger-full-access` | 新对话 Session 设置的 permission preset |
 | `chat.title` | `微信` | 新对话 Session 的标题 |

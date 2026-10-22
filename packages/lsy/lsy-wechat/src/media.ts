@@ -8,7 +8,7 @@
  */
 
 import { createDecipheriv, randomBytes } from 'node:crypto'
-import { mkdir, open } from 'node:fs/promises'
+import { mkdir, open, writeFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { ItemType, type CdnMediaRef, type WeixinItem } from './api.ts'
 
@@ -185,7 +185,9 @@ export async function downloadMedia(item: WeixinItem, options: DownloadOptions):
 
 /**
  * Write one attachment into the inbox: the directory is created owner-only
- * (0700), the file owner-only (0600), never over an existing file.
+ * (0700) and ignores itself through its own `.gitignore`, so a workspace that
+ * is a git repository never commits the owner's attachments; the file is
+ * owner-only (0600) and never written over an existing one.
  * @param directory - absolute inbox directory.
  * @param media - the attachment.
  * @param now - receipt time, which leads the file name.
@@ -193,6 +195,9 @@ export async function downloadMedia(item: WeixinItem, options: DownloadOptions):
  */
 export async function saveInboxFile(directory: string, media: InboundMedia, now: Date = new Date()): Promise<string> {
   await mkdir(directory, { recursive: true, mode: 0o700 })
+  await writeFile(join(directory, '.gitignore'), '*\n', { flag: 'wx', mode: 0o600 }).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+  })
   const pad = (value: number): string => String(value).padStart(2, '0')
   const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
   const path = join(directory, `${stamp}-${randomBytes(4).toString('hex')}-${media.name}`)
