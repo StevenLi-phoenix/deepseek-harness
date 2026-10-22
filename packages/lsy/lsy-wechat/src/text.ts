@@ -133,11 +133,12 @@ export function contentText(content: readonly unknown[]): string | undefined {
  * What to tell the owner when a chat turn ends.
  * @param text - final assistant text of the turn, if any.
  * @param outcome - `TurnEndReason.kind`.
+ * @param detail - one-line failure reason (`failureDetail`), shown under the warning.
  * @returns the message, or undefined when the turn needs none.
  */
-export function relayText(text: string | undefined, outcome: string): string | undefined {
+export function relayText(text: string | undefined, outcome: string, detail?: string): string | undefined {
   if (isSilentReply(text)) return undefined
-  const warning = `⚠️ 本轮未完成（${outcome}）`
+  const warning = detail === undefined ? `⚠️ 本轮未完成（${outcome}）` : `⚠️ 本轮未完成（${outcome}）\n原因：${detail}`
   if (text === undefined) return outcome === 'completed' ? undefined : warning
   return outcome === 'completed' ? text : `${text}\n\n${warning}`
 }

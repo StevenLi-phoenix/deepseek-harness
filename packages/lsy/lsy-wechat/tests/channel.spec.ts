@@ -349,6 +349,15 @@ describe('WechatChannel chat', () => {
     expect(h.ilink.sent.map(sent => sent.text)).toEqual(['⚠️ 本轮未完成（error）', 'partial\n\n⚠️ 本轮未完成（aborted）'])
   })
 
+  it('tells the owner and the log why a turn failed', async () => {
+    const h = await harness()
+    await h.ownerSays('one')
+    h.emit('chat-1', { type: 'turn/end', seq: 9, data: { turn: 1, reason: { kind: 'error', error: { code: 'AUTH', message: '401 User not found.', status: 401 } } } })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['⚠️ 本轮未完成（error）\n原因：AUTH: 401 User not found.'])
+    expect(h.logs.some(line => line.text.startsWith('lsy-wechat: Session chat-1 ended a turn (error: AUTH: 401 User not found.); relaying'))).toBe(true)
+  })
+
   it('splits long replies into labeled parts', async () => {
     const h = await harness({ config: { maxMessageChars: 200 } })
     await h.ownerSays('one')

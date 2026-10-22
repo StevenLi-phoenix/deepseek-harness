@@ -96,6 +96,35 @@ export function formatBatchNote(subscription: string, events: readonly BatchEven
   return { title: `${subscription}: ${events.length} event(s)`, body: clip(lines.join('\n'), MAX_NOTE_BODY_CHARS) }
 }
 
+/** A failure reason is one line under a phone-sized message. */
+const MAX_FAILURE_CHARS = 200
+
+/** The fields of a `TurnEndReason` that explain a failed turn. */
+export interface TurnFailureReason {
+  readonly kind: string
+  /** Present on `error`: the structured `LlmFailure`. */
+  readonly error?: { readonly code: string; readonly message: string } | undefined
+}
+
+/**
+ * One-line reason of a failed turn, e.g. `AUTH: 401 User not found.`
+ * @param reason - `TurnEndReason` of the turn.
+ * @returns `code: message` within 200 characters, or undefined when the turn did not fail with a reason.
+ */
+export function failureDetail(reason: TurnFailureReason): string | undefined {
+  if (reason.kind !== 'error' || reason.error === undefined) return undefined
+  const { code, message } = reason.error
+  const line = message.replace(/\s+/g, ' ').trim()
+  return clampLabel(line.startsWith(code) ? line : `${code}: ${line}`, MAX_FAILURE_CHARS)
+}
+
+/** Note body: the final text (or its absence), then the failure reason when there is one. */
+function noteBody(text: string | undefined, detail: string | undefined): string {
+  const trimmed = text?.trim()
+  const body = trimmed ? clip(trimmed, MAX_NOTE_BODY_CHARS) : '(no assistant text)'
+  return detail === undefined ? body : `${body}\n\nReason: ${detail}`
+}
+
 /** Facts reported when a webhook Session ends its first turn. */
 export interface SessionResult {
   subscription: string
@@ -106,19 +135,20 @@ export interface SessionResult {
   text: string | undefined
   /** Web UI link. */
   url: string | undefined
+  /** {@link failureDetail} of a failed turn. */
+  detail?: string | undefined
 }
 
 /**
  * Render a Session result as one message.
- * @param result - outcome and final assistant text.
+ * @param result - outcome, final assistant text, and failure reason.
  * @returns message for the notifier.
  */
 export function formatResultNote(result: SessionResult): LsyNote {
   const title = result.outcome === 'completed' ? `✅ ${result.title}` : `⚠️ ${result.title} (${result.outcome})`
-  const text = result.text?.trim()
   return {
     title,
-    body: text ? clip(text, MAX_NOTE_BODY_CHARS) : '(no assistant text)',
+    body: noteBody(result.text, result.detail),
     ...(result.url === undefined ? {} : { url: result.url }),
   }
 }
@@ -174,19 +204,20 @@ export interface ReminderResult {
   text: string | undefined
   /** Web UI link. */
   url: string | undefined
+  /** {@link failureDetail} of a failed turn. */
+  detail?: string | undefined
 }
 
 /**
  * Render a reminder turn result as one message.
- * @param result - label, outcome, and final assistant text.
+ * @param result - label, outcome, final assistant text, and failure reason.
  * @returns message for the notifier.
  */
 export function formatReminderNote(result: ReminderResult): LsyNote {
   const title = result.outcome === 'completed' ? `⏰ ${result.label}` : `⚠️ ⏰ ${result.label} (${result.outcome})`
-  const text = result.text?.trim()
   return {
     title,
-    body: text ? clip(text, MAX_NOTE_BODY_CHARS) : '(no assistant text)',
+    body: noteBody(result.text, result.detail),
     ...(result.url === undefined ? {} : { url: result.url }),
   }
 }

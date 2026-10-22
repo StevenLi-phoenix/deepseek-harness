@@ -289,6 +289,15 @@ describe('LsyEventBus Session observation', () => {
     expect(bus.batches()[0]).toMatchObject({ status: 'completed', outcome: 'error', sessionId: 's1' })
   })
 
+  it('reports and records why a first turn failed', async () => {
+    const { emit, userMessage, notes, bus } = await started()
+    emit('s1', userMessage)
+    emit('s1', { type: 'turn/end', seq: 2, data: { turn: 1, reason: { kind: 'error', error: { code: 'AUTH', message: '401 User not found.', status: 401 } } } })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(notes).toEqual([{ title: '⚠️ triage: octo/repo v1.0.0 (error)', body: '(no assistant text)\n\nReason: AUTH: 401 User not found.', url: 'https://dsh.example/' }])
+    expect(bus.batches()[0]).toMatchObject({ status: 'completed', outcome: 'error', error: 'AUTH: 401 User not found.' })
+  })
+
   it('records the outcome without a message when result notifications are off', async () => {
     const { emit, userMessage, notes, bus } = await started(withConfig(sessionConfig, { notifySessionResult: false }))
     emit('s1', userMessage)

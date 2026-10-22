@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LSY_SILENT_REPLY, batchTitle, buildSessionRequest, formatBatchNote, formatReminderNote, formatResultNote, isSilentReply, reminderLabel } from '../src/prompt.ts'
+import { LSY_SILENT_REPLY, batchTitle, buildSessionRequest, failureDetail, formatBatchNote, formatReminderNote, formatResultNote, isSilentReply, reminderLabel } from '../src/prompt.ts'
 import type { BatchEvent, SessionAction } from '../src/types.ts'
 
 const action: SessionAction = {
@@ -74,6 +74,30 @@ describe('formatResultNote', () => {
     expect(note.body).toBe('(no assistant text)')
     expect(note.url).toBeUndefined()
   })
+
+  it('appends the failure reason after the text', () => {
+    const note = formatResultNote({ subscription: 'releases', title: 't', outcome: 'error', text: 'partial', url: undefined, detail: 'AUTH: 401 User not found.' })
+    expect(note.body).toBe('partial\n\nReason: AUTH: 401 User not found.')
+  })
+})
+
+describe('failureDetail', () => {
+  it('explains only failed turns', () => {
+    expect(failureDetail({ kind: 'completed' })).toBeUndefined()
+    expect(failureDetail({ kind: 'aborted' })).toBeUndefined()
+    expect(failureDetail({ kind: 'error' })).toBeUndefined()
+  })
+
+  it('joins the code and message on one line', () => {
+    expect(failureDetail({ kind: 'error', error: { code: 'AUTH', message: '401 User not found.' } })).toBe('AUTH: 401 User not found.')
+    expect(failureDetail({ kind: 'error', error: { code: 'QUOTA', message: 'QUOTA: out of credits\n  top up  first' } })).toBe('QUOTA: out of credits top up first')
+  })
+
+  it('bounds a long message to 200 characters', () => {
+    const detail = failureDetail({ kind: 'error', error: { code: 'UNKNOWN', message: 'x'.repeat(500) } })
+    expect(detail).toHaveLength(200)
+    expect(detail!.endsWith('…')).toBe(true)
+  })
 })
 
 describe('isSilentReply', () => {
@@ -126,5 +150,10 @@ describe('formatReminderNote', () => {
   it('marks other outcomes and tolerates missing text', () => {
     expect(formatReminderNote({ label: 'Check CI', outcome: 'cancelled', text: undefined, url: undefined }))
       .toEqual({ title: '⚠️ ⏰ Check CI (cancelled)', body: '(no assistant text)' })
+  })
+
+  it('appends the failure reason', () => {
+    expect(formatReminderNote({ label: 'Check CI', outcome: 'error', text: undefined, url: undefined, detail: 'RATE_LIMIT: slow down' }))
+      .toEqual({ title: '⚠️ ⏰ Check CI (error)', body: '(no assistant text)\n\nReason: RATE_LIMIT: slow down' })
   })
 })

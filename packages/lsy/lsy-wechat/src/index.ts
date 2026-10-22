@@ -5,7 +5,7 @@ import { mkdirSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
-import type { LsyNote, LsyNotifier } from '@deepseek-ai/dsh-lsy-event-bus'
+import { failureDetail, type LsyNote, type LsyNotifier } from '@deepseek-ai/dsh-lsy-event-bus'
 import type {} from '@deepseek-ai/dsh-permission-presets'
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-title'
@@ -394,8 +394,10 @@ export class WechatChannel extends Service implements LsyNotifier {
     const text = this.replies.get(session.id)
     this.replies.delete(session.id)
     const outcome = event.data.reason.kind
-    const reply = relayText(text, outcome)
-    this.ctx.logger.info(`lsy-wechat: Session ${session.id} ended a turn (${outcome}); ${reply === undefined ? 'nothing to relay' : `relaying ${reply.length} chars`}`)
+    const detail = failureDetail(event.data.reason)
+    const reply = relayText(text, outcome, detail)
+    const ended = detail === undefined ? outcome : `${outcome}: ${detail}`
+    this.ctx.logger.info(`lsy-wechat: Session ${session.id} ended a turn (${ended}); ${reply === undefined ? 'nothing to relay' : `relaying ${reply.length} chars`}`)
     if (reply !== undefined) this.track(this.deliver(reply))
   }
 

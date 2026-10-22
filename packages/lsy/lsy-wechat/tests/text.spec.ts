@@ -107,6 +107,12 @@ describe('relayText', () => {
   ] as const)('relays %j after %s as %j', (text, outcome, expected) => {
     expect(relayText(text, outcome)).toBe(expected)
   })
+
+  it('adds the failure reason under the warning', () => {
+    expect(relayText(undefined, 'error', 'AUTH: 401 User not found.')).toBe('⚠️ 本轮未完成（error）\n原因：AUTH: 401 User not found.')
+    expect(relayText('partial', 'error', 'QUOTA: no credits')).toBe('partial\n\n⚠️ 本轮未完成（error）\n原因：QUOTA: no credits')
+    expect(relayText('done', 'completed', 'ignored')).toBe('done')
+  })
 })
 
 describe('buildDigest', () => {
