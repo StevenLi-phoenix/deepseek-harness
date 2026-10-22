@@ -12,3 +12,6 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 - `lsy/profiles/event`: event profile composition (Web bundles + webhook runtime + lsy packages + console logger), `unattended` agent preset (standard minus ask-user, plan mode, goals, plugin tools; plus the watch tools) whose persona targets WeChat delivery, and the open-in-app pair disabled for remote use. Smoke-tested from source: real GitHub baseline polling and a synthetic event dispatched into a webhook Session with the `unattended` preset.
 - `lsy/deploy/`: `install-app.sh` (packed install, optional deps kept for koffi), `setup-profile.sh` (profile layout and plugin links for the installed product), `upgrade.sh` (build, test, pack, install, switch `current`), `wechat-login.mjs`, LaunchDaemon template `app.lishuyu.dsh-events.plist` (user `dsh-runtime`, port 3081), and `RUNBOOK.md` for the isolated deployment.
 - `packages/lsy/UPSTREAM.md` ledger and this `lsy/` deployment directory.
+
+### Fixed
+- `RUNBOOK.md` step 0: drop the recursive `chown` of `/Volumes/MiniSSD` (with ownership enabled every entry already belonged to `lishuyu`; only the volume root needs it) in favor of a `find` check, stop and restart globalawareness alongside kaorou, and note that `launchctl bootstrap` may report `5: Input/output error` for a service that did start.

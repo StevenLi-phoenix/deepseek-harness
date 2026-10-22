@@ -22,22 +22,25 @@ Every `sudo` line is meant to be run by hand, one at a time. The agent runs with
 
 `diskutil info /Volumes/MiniSSD` reports `Owners: Disabled` (mounted `noowners`): every local user acts as the owner of every file there, so `dsh-runtime` could read and write kaorou data, backups, and other projects. Turn ownership on and give the volume back to `lishuyu`.
 
-Do it while kaorou has no burn or upload in flight (check its panel): stopping the daemon kills in-flight `ffmpeg`, and between `enableOwnership` and the end of the `chown` kaorou cannot write files that are still owned by `_unknown`. The `chown` walks every file on the volume (the `node_modules` trees are large), so expect minutes.
+Do it while kaorou has no burn or upload in flight (check its panel): stopping the daemon kills in-flight `ffmpeg`. globalawareness writes to the volume too (`/Volumes/MiniSSD/globalAwarness/data`), so it stops and starts with kaorou.
 
 ```sh
 launchctl bootout gui/$(id -u)/app.lishuyu.kaorou.daemon
 launchctl bootout gui/$(id -u)/app.lishuyu.kaorou.api
+launchctl bootout gui/$(id -u)/app.lishuyu.globalawareness
 sudo diskutil enableOwnership /Volumes/MiniSSD
+find /Volumes/MiniSSD ! -user lishuyu -print 2>/dev/null | head    # expect only /Volumes/MiniSSD
 sudo chown lishuyu:staff /Volumes/MiniSSD
-sudo find /Volumes/MiniSSD -mindepth 1 -maxdepth 1 ! -name .fseventsd ! -name .Spotlight-V100 -exec chown -R lishuyu:staff {} +
 chmod 700 /Volumes/MiniSSD
 launchctl bootstrap gui/$(id -u) /Users/lishuyu/Library/LaunchAgents/app.lishuyu.kaorou.api.plist
 launchctl bootstrap gui/$(id -u) /Users/lishuyu/Library/LaunchAgents/app.lishuyu.kaorou.daemon.plist
+launchctl bootstrap gui/$(id -u) /Users/lishuyu/Library/LaunchAgents/app.lishuyu.globalawareness.plist
 ```
 
-- Files written while ownership was off are stored as `_unknown` (99); that is why the `chown` is needed. `.fseventsd` and `.Spotlight-V100` belong to the system services and are left alone.
+- With ownership on, files keep the uid of the user who wrote them: on 2026-10-21 all 273,037 entries were already `501:20` and only the volume root showed `root:wheel`, so the `chown` touches the root alone. If the `find` lists anything else, `sudo chown -R lishuyu:staff` those paths; leave `.fseventsd`, `.Spotlight-V100`, and `.Trashes` to the system.
 - `chmod 700` closes the volume to every other local account. Guest SMB clients of the `MiniSSD` share lose access; logging in to the share as `lishuyu` keeps working.
-- Check: `diskutil info /Volumes/MiniSSD | grep Owners` → `Enabled`; `ls -ld /Volumes/MiniSSD` → `drwx------  lishuyu  staff`; kaorou panel shows the daemon back.
+- On 2026-10-22 each `bootstrap` printed `Bootstrap failed: 5: Input/output error` although the service did start; trust `launchctl print gui/$(id -u)/<label>` (`state = running`) over that message.
+- Check: `diskutil info /Volumes/MiniSSD | grep Owners` → `Enabled`; `ls -ld /Volumes/MiniSSD` → `drwx------  lishuyu  staff`; kaorou panel shows the daemon back; globalawareness listens on `127.0.0.1:8790`.
 
 ## 1. Close the home directory
 
