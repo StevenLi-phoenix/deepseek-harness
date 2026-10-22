@@ -50,16 +50,23 @@
   margin: 0 6px;
 }
 
-/* Nothing left to spend: new turns on the account route will fail. */
-.exhausted,
-.exhausted:hover,
-.exhausted:focus-visible {
+/* One provider's reading; the name sits a step quieter than its value. */
+.segment {
+  white-space: nowrap;
+}
+
+.name {
+  opacity: 0.72;
+}
+
+/* Nothing left to spend: requests on that route will fail. */
+.exhausted {
   color: var(--dsw-alias-state-error-primary);
 }
 
-/* A reading the last refresh could not renew. */
+/* A reading the last refresh could not renew, or none at all. */
 .stale {
-  opacity: 0.6;
+  opacity: 0.55;
 }
 
 .refreshing .icon {
