@@ -21,11 +21,11 @@
   en: 831e47681cfb8c50
   zh: 9d998c62874aeea6
 /deepseek-ai-dsh-lsy-wechat/use-this-package/minimal-configuration:
-  en: feb3bc7cf54bc1b9
-  zh: 964d041bdc5b361d
+  en: 06b148bee3e404ca
+  zh: 668fbab20e56f0f1
 /deepseek-ai-dsh-lsy-wechat/understand-the-implementation:
-  en: 095410f207d2e6f7
-  zh: f9b627a9845c8fb0
+  en: f8b0ffcccd47444a
+  zh: 70dc245cb27f0ec6
 /deepseek-ai-dsh-lsy-wechat/further-exploration:
   en: 83884c0df0e5bbe8
   zh: 3e5295fc26d74540
@@ -36,17 +36,17 @@
   en: a19f429aab1a23b3
   zh: 55b1ba7f2ba3363e
 /deepseek-ai-dsh-lsy-wechat/model-experience/chat-session/what-the-model-sees:
-  en: 151ffb04a08f56b2
-  zh: d5b9f0e3bf6515c1
+  en: 81ef65d2461fcf6e
+  zh: fd7ea73a2a9f8404
 /deepseek-ai-dsh-lsy-wechat/model-experience/chat-session/token-effect:
-  en: 3f04e57a79fe0c5d
-  zh: 0547c0d05fd344b6
+  en: 8613b93ebd34af85
+  zh: 535838f64b2312ca
 /deepseek-ai-dsh-lsy-wechat/model-experience/chat-session/kv-cache-effect:
   en: 799452efb569ad8c
   zh: ded6c9d49d309ded
 /deepseek-ai-dsh-lsy-wechat/known-limitations-and-deferred-work:
-  en: d14d5e2050aaf66c
-  zh: ddffdd55838d1fab
+  en: 6ccf870c9fe18f9b
+  zh: 68f5ef6b59f9892b
 /deepseek-ai-dsh-lsy-wechat/known-limitations-and-deferred-work/dev-note:
   en: e764a798720a7a3b
   zh: 9848cab6ad2f7146

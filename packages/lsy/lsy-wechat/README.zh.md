@@ -47,7 +47,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
       name: '@deepseek-ai/dsh-lsy-wechat'
       config:
         chat:
-          workspacePath: /tmp/dsh-wechat
+          workspacePath: /Users/dsh-runtime/work
           agentPreset: unattended
           permissionPreset: danger-full-access
 ```
@@ -55,7 +55,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 | 字段 | 默认值 | 含义 |
 |---|---|---|
 | `accountFile` | `<DSH_HOME>/lsy-wechat/account.json` | 登录命令写入的账号文件 |
-| `chat.workspacePath` | `/tmp/dsh-wechat` | 对话 Session 的绝对路径临时目录（对话是个人助手，不是项目）；每次转发消息前按仅属主可访问（0700）创建，所以重启清空 `/tmp` 后已存的 Session 仍可用 |
+| `chat.workspacePath` | `/Users/dsh-runtime/work` | 对话 Session 的绝对路径目录；每次转发消息前确保存在。收到的附件存进其中的 `.wechat-inbox/`（目录 0700，文件 0600） |
 | `chat.agentPreset` | `unattended` | 新对话 Session 的 agent preset |
 | `chat.permissionPreset` | `danger-full-access` | 新对话 Session 设置的 permission preset |
 | `chat.title` | `微信` | 新对话 Session 的标题 |
@@ -68,8 +68,11 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 | `accountPollMs` | `30000` | 没有可用账号时重新检查账号文件的间隔 |
 | `longPollTimeoutMs` | `35000` | 服务器给出建议值之前的长轮询时限 |
 | `requestTimeoutMs` | `15000` | 一次发送的时限 |
+| `cdnBaseUrl` | `https://novac2c.cdn.weixin.qq.com/c2c` | 下载附件用的微信 CDN；服务器给出的 `full_url` 若不在这个 origin 上则拒绝 |
+| `maxMediaBytes` | `26214400` | 下载附件的大小上限（25 MiB） |
+| `mediaTimeoutMs` | `60000` | 一个附件下载的时限 |
 
-在对话里发 `/new` 会开始一个新的对话 Session。文字、语音转写和引用会交给 agent；图片、文件和视频以 `[图片]`、`[文件 名称]` 之类的占位符出现。
+在对话里发 `/new` 会开始一个新的对话 Session。文字、语音转写和引用会交给 agent。图片、文件和视频会从微信 CDN 下载、解密并存进 inbox；模型的线路支持图片时，图片也会作为图片内容交给模型。
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-lsy-wechat)是全部可用字段的权威来源。
 
@@ -81,7 +84,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 <details>
 <summary>实现细节——点击展开</summary>
 
-插件运行期间，通道持续长轮询 `ilink/bot/getupdates`，并在处理消息之前把返回的游标存进 `lsy_wechat` storage domain，所以崩溃只会丢消息，不会重复发 prompt。两次轮询之间它会重读账号文件；没有可用账号、或服务器报告 token 失效（`-14`）时，它只记一次日志，然后每隔 `accountPollMs` 检查一次文件。它只接受 owner 发来的用户消息。每条消息打开一个回复窗口（`context_token`、接收时间、已用条数），先把 outbox 作为摘要消息发出（摘要永远不占窗口的最后一个名额），再用 `sessionController.prompt()` 转给 owner 的对话 Session。`resolveAgent()` 成功时复用已存的 Session；Session 不存在或已损坏时，用 `sessionController.create()` 新建一个，并设置 permission preset 和标题。通道跟踪自己创建的每个对话 Session 的 `session/event`，记住这一轮最新的助手文本，在这一轮结束时发出，除非它是 `NO_REPLY`。`send()` 和回复转发共用一条串行的投递路径：文本只经由已打开、未过期且仍有名额的窗口发出，占用最后一个名额的那条带一句提示，其余的连同原因进入 outbox。`ret -2` 关闭窗口，`-14` 暂停通道，网络失败时文本留在 outbox 里。
+插件运行期间，通道持续长轮询 `ilink/bot/getupdates`，并在处理消息之前把返回的游标存进 `lsy_wechat` storage domain，所以崩溃只会丢消息，不会重复发 prompt。两次轮询之间它会重读账号文件；没有可用账号、或服务器报告 token 失效（`-14`）时，它只记一次日志，然后每隔 `accountPollMs` 检查一次文件。它只接受 owner 发来的用户消息。每条消息打开一个回复窗口（`context_token`、接收时间、已用条数），先把 outbox 作为摘要消息发出（摘要永远不占窗口的最后一个名额），再用 `sessionController.prompt()` 转给 owner 的对话 Session。转发之前，每个图片、文件和视频条目都会被下载（AES-128-ECB，密钥取 `image_item.aeskey` 或 `media.aes_key`），按内容或文件名判断类型，再写进 inbox；prompt 为每个附件附一行说明，图片作为图片内容附上；如果被拒绝为 `session/attachment-invalid`（模型只支持文本），就只带说明重发一次。`resolveAgent()` 成功时复用已存的 Session；Session 不存在或已损坏时，用 `sessionController.create()` 新建一个，并设置 permission preset 和标题。通道跟踪自己创建的每个对话 Session 的 `session/event`，记住这一轮最新的助手文本，在这一轮结束时发出，除非它是 `NO_REPLY`。`send()` 和回复转发共用一条串行的投递路径：文本只经由已打开、未过期且仍有名额的窗口发出，占用最后一个名额的那条带一句提示，其余的连同原因进入 outbox。`ret -2` 关闭窗口，`-14` 暂停通道，网络失败时文本留在 outbox 里。
 
 | 文件 | 作用 |
 |---|---|
@@ -89,9 +92,10 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 | [`src/api.ts`](src/api.ts) | 最小的 iLink 客户端，每个请求有独立时限；错误信息从不包含 token |
 | [`src/login.ts`](src/login.ts) | 二维码登录状态机、终端登录命令、账号文件 |
 | [`src/text.ts`](src/text.ts) | 入站文本提取、消息拆分、转发文本、摘要 |
+| [`src/media.ts`](src/media.ts) | CDN 下载与解密、图片类型识别、inbox、附件说明 |
 | [`src/storage.ts`](src/storage.ts) | 游标、回复窗口、对话 Session 与 outbox 的 storage-domain 表 |
 
-这是 fork 本地的包；`lsy` 组如何跟踪上游见 [`../UPSTREAM.md`](../UPSTREAM.md)。协议参照腾讯 OpenClaw 微信插件（`@tencent-weixin/openclaw-weixin` 2.4.10）；这个客户端只实现二维码登录、`getupdates` 和文本 `sendmessage`。[`lsy/deploy/wechat-login.mjs`](../../../lsy/deploy/wechat-login.mjs) 只是 `runLoginCli()` 外面的一层薄壳，逻辑由测试覆盖。
+这是 fork 本地的包；`lsy` 组如何跟踪上游见 [`../UPSTREAM.md`](../UPSTREAM.md)。协议参照腾讯 OpenClaw 微信插件（`@tencent-weixin/openclaw-weixin` 2.4.10）；这个客户端实现二维码登录、`getupdates`、媒体下载和文本 `sendmessage`。媒体格式与 origin 校验参照 [xiaoshihou514/dsh-weixin](https://github.com/xiaoshihou514/dsh-weixin)（MIT）。[`lsy/deploy/wechat-login.mjs`](../../../lsy/deploy/wechat-login.mjs) 只是 `runLoginCli()` 外面的一层薄壳，逻辑由测试覆盖。
 
 </details>
 
@@ -114,11 +118,11 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 
 #### 模型看到什么
 
-owner 的每条微信消息都以普通用户 prompt 的形式进入对话 Session，带上配置的 `chat.timeZone`，和在 Web UI 里输入的文字一样。文本不带任何微信包装；引用会多一行 `[引用] …`，语音消息是 `[语音] <转写>`，媒体是占位符。每一轮模型的最终回答以纯文本发回，所以 Markdown 在手机上会原样显示。最终回答恰好是 `NO_REPLY` 时什么也不发。
+owner 的每条微信消息都以普通用户 prompt 的形式进入对话 Session，带上配置的 `chat.timeZone`，和在 Web UI 里输入的文字一样。文本不带任何微信包装；引用会多一行 `[引用] …`，语音消息是 `[语音] <转写>`，媒体是占位符，后面每个附件跟一行说明，例如 `- image (image/jpeg, 84.2 KB) saved at /Users/dsh-runtime/work/.wechat-inbox/…-image.jpg; it is attached to this message.`；没能取到的附件会注明取不到、内容不可用。不超过 20 MiB、格式为 Host 接受的 PNG、JPEG、GIF、WebP 的图片，同时作为同一条消息的图片内容。每一轮模型的最终回答以纯文本发回，所以 Markdown 在手机上会原样显示。最终回答恰好是 `NO_REPLY` 时什么也不发。
 
 #### Token 影响
 
-每条微信消息一条用户消息，长度就是 owner 写的长度。对话 Session 长期存在，上下文会跨天增长，直到压缩或 `/new`。
+每条微信消息一条用户消息，长度就是 owner 写的长度，外加每个附件约一行说明，以及每张附上的图片的图片 token。对话 Session 长期存在，上下文会跨天增长，直到压缩或 `/new`。
 
 #### KV Cache 影响
 
@@ -131,7 +135,8 @@ owner 的每条微信消息都以普通用户 prompt 的形式进入对话 Sessi
 - **24 小时窗口**——owner 最后一条消息之后大约一天内，微信才接受 bot 的消息；之后的文本在 outbox 里等待。如果在等提醒，每天给 bot 发一个字。
 - **每条 owner 消息约 10 条回复**——窗口内 bot 能发的消息数有限；最后一条会说明这一点，其余的等 owner 下一条消息。
 - **不能主动发起联系**——owner 给 bot 发消息之前，bot 无法发言。
-- **只有文本**——图片、文件、语音音频和视频既不下载也不发送；只有占位符和语音转写会交给 agent。
+- **收媒体，回文字**——图片、文件和视频都能收到；语音只以转写交给 agent，bot 也只回复文字。
+- **inbox 不会自动清理**——收到的附件一直留在 `.wechat-inbox/`，需要手动删除。
 - **没有"正在输入"提示**——agent 工作时 owner 看不到任何动静。
 - **入站至多一次**——存储游标与转发消息之间崩溃会丢掉那条消息。
 - **限制来自第三方文档**——窗口时长、额度和长度上限没有官方公布，所以它们是配置项而不是常量。

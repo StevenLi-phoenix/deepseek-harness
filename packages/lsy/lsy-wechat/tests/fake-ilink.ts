@@ -1,7 +1,7 @@
 /** In-memory iLink double: QR login, long-poll updates, and sends, behind a `fetch` replacement. */
 
 /** iLink endpoints the client calls. */
-export type Endpoint = 'ilink/bot/get_bot_qrcode' | 'ilink/bot/get_qrcode_status' | 'ilink/bot/getupdates' | 'ilink/bot/sendmessage'
+export type Endpoint = 'ilink/bot/get_bot_qrcode' | 'ilink/bot/get_qrcode_status' | 'ilink/bot/getupdates' | 'ilink/bot/sendmessage' | 'cdn/download'
 
 /** One canned answer: a JSON body, a raw body, a status, or a thrown network error. */
 export type Reply = { status?: number; body?: unknown; raw?: string } | Error
@@ -30,6 +30,8 @@ const LONG_POLL: ReadonlySet<Endpoint> = new Set(['ilink/bot/get_qrcode_status',
 export class FakeIlink {
   readonly requests: RecordedRequest[] = []
   readonly sent: SentText[] = []
+  /** CDN downloads by `encrypted_query_param`: encrypted bytes, or an HTTP status to fail with. */
+  readonly cdn = new Map<string, Uint8Array | number>()
   private readonly queues = new Map<Endpoint, Reply[]>()
   private readonly waiters = new Map<Endpoint, Array<(reply: Reply) => void>>()
   private qrCount = 0
@@ -84,6 +86,12 @@ export class FakeIlink {
   /** `fetch` replacement bound to this double. */
   readonly fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const url = new URL(input instanceof Request ? input.url : String(input))
+    if (url.pathname.endsWith('/download')) {
+      const headers = Object.fromEntries(new Headers(init?.headers).entries())
+      this.requests.push({ method: init?.method ?? 'GET', origin: url.origin, endpoint: 'cdn/download', query: Object.fromEntries(url.searchParams), headers, body: undefined })
+      const entry = this.cdn.get(url.searchParams.get('encrypted_query_param') ?? '')
+      return typeof entry === 'object' ? new Response(new Uint8Array(entry)) : new Response('missing', { status: entry ?? 404 })
+    }
     const endpoint = url.pathname.slice(1) as Endpoint
     const headers = Object.fromEntries(new Headers(init?.headers).entries())
     const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined
@@ -128,4 +136,10 @@ export class FakeIlink {
 /** An inbound text message from `from`. */
 export function textMessage(from: string, text: string, contextToken = `ctx-${text}`, extra: Record<string, unknown> = {}): Record<string, unknown> {
   return { from_user_id: from, message_type: 1, context_token: contextToken, item_list: [{ type: 1, text_item: { text } }], ...extra }
+}
+
+/** An inbound message with one image item, keyed for the double's CDN. */
+export function imageMessage(from: string, param: string, aeskeyHex: string, contextToken = `ctx-${param}`): Record<string, unknown> {
+  const item = { type: 2, image_item: { aeskey: aeskeyHex, media: { encrypt_query_param: param } } }
+  return { from_user_id: from, message_type: 1, context_token: contextToken, item_list: [item] }
 }

@@ -2345,7 +2345,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-lsy-wechat`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/lsy/lsy-wechat/src/index.ts:39`](../packages/lsy/lsy-wechat/src/index.ts)
+- `source`: [`packages/lsy/lsy-wechat/src/index.ts:44`](../packages/lsy/lsy-wechat/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
@@ -2370,11 +2370,21 @@ export interface Config {
   longPollTimeoutMs: number
   /** Deadline of one send, in milliseconds. */
   requestTimeoutMs: number
+  /** WeChat CDN base for media downloads; a server-provided `full_url` must share its origin. */
+  cdnBaseUrl: string
+  /** Largest attachment downloaded, in bytes. */
+  maxMediaBytes: number
+  /** Deadline of one attachment download, in milliseconds. */
+  mediaTimeoutMs: number
 }
 
 /** How the owner's chat Session is created. */
 export interface ChatConfig {
-  /** Absolute directory the chat Session works in; created when missing. */
+  /**
+   * Absolute directory the chat Session works in; created before every
+   * forwarded message, so a removed directory never strands the stored
+   * Session. Received attachments go to its `.wechat-inbox/`.
+   */
   workspacePath: string
   /** Agent preset of the chat Session. */
   agentPreset: string
@@ -4880,6 +4890,7 @@ export interface Config {
 | `@deepseek-ai/dsh-host-plugin-inventory` | `loader` | [`packages/host/plugin-inventory/src/index.ts`](../packages/host/plugin-inventory/src/index.ts) |
 | `@deepseek-ai/dsh-llm` | — | [`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts) |
 | `@deepseek-ai/dsh-lsp` | — | [`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts) |
+| `@deepseek-ai/dsh-lsy-balance` | — | [`packages/lsy/lsy-balance/src/index.ts`](../packages/lsy/lsy-balance/src/index.ts) |
 | `@deepseek-ai/dsh-mcp-resources` | `tools` | [`packages/mcp/mcp-resources/src/index.ts`](../packages/mcp/mcp-resources/src/index.ts) |
 | `@deepseek-ai/dsh-otel` | — | [`packages/telemetry/otel/src/index.ts`](../packages/telemetry/otel/src/index.ts) |
 | `@deepseek-ai/dsh-sandbox-ssh` | `ssh` | [`packages/ssh/sandbox-ssh/src/index.ts`](../packages/ssh/sandbox-ssh/src/index.ts) |

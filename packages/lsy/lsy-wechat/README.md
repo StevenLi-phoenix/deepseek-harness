@@ -47,7 +47,7 @@ The command writes `<DSH_HOME>/lsy-wechat/account.json` with mode 600 and prints
       name: '@deepseek-ai/dsh-lsy-wechat'
       config:
         chat:
-          workspacePath: /tmp/dsh-wechat
+          workspacePath: /Users/dsh-runtime/work
           agentPreset: unattended
           permissionPreset: danger-full-access
 ```
@@ -55,7 +55,7 @@ The command writes `<DSH_HOME>/lsy-wechat/account.json` with mode 600 and prints
 | Field | Default | Meaning |
 |---|---|---|
 | `accountFile` | `<DSH_HOME>/lsy-wechat/account.json` | Account written by the login command |
-| `chat.workspacePath` | `/tmp/dsh-wechat` | Absolute scratch directory of the chat Session, which is a personal assistant rather than a project; created owner-only (0700) before every forwarded message, so a restart that empties `/tmp` does not strand the stored Session |
+| `chat.workspacePath` | `/Users/dsh-runtime/work` | Absolute directory of the chat Session; created before every forwarded message. Received attachments go to its `.wechat-inbox/` (0700, files 0600) |
 | `chat.agentPreset` | `unattended` | Agent preset of a new chat Session |
 | `chat.permissionPreset` | `danger-full-access` | Permission preset set on a new chat Session |
 | `chat.title` | `微信` | Title of a new chat Session |
@@ -68,8 +68,11 @@ The command writes `<DSH_HOME>/lsy-wechat/account.json` with mode 600 and prints
 | `accountPollMs` | `30000` | Account file re-check period while no usable account exists |
 | `longPollTimeoutMs` | `35000` | Long-poll deadline until the server suggests another |
 | `requestTimeoutMs` | `15000` | Deadline of one send |
+| `cdnBaseUrl` | `https://novac2c.cdn.weixin.qq.com/c2c` | WeChat CDN for attachments; a server-provided `full_url` on another origin is refused |
+| `maxMediaBytes` | `26214400` | Largest attachment downloaded (25 MiB) |
+| `mediaTimeoutMs` | `60000` | Deadline of one attachment download |
 
-In the chat, `/new` starts a fresh chat Session. Text, voice transcripts, and quotes reach the agent; images, files, and videos arrive as placeholders such as `[图片]` or `[文件 name]`.
+In the chat, `/new` starts a fresh chat Session. Text, voice transcripts, and quotes reach the agent. Images, files, and videos are downloaded from the WeChat CDN, decrypted, and saved in the inbox; images also reach the model as image parts when its route accepts images.
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-lsy-wechat) is the exhaustive source for every accepted field.
 
@@ -81,7 +84,7 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The channel long-polls `ilink/bot/getupdates` while the plugin is active and stores the returned cursor in the `lsy_wechat` storage domain before it handles the messages, so a crash drops messages rather than repeating prompts. It re-reads the account file between polls; without a usable account, or after the server reports the token stale (`-14`), it logs once and checks the file every `accountPollMs`. It accepts only user messages from the owner. Each one opens a reply window (`context_token`, receive time, used count), flushes the outbox as digest messages that never take the window's last slot, and is forwarded with `sessionController.prompt()` to the owner's chat Session. The stored Session is reused while `resolveAgent()` succeeds; a missing or broken one is replaced by a new Session created with `sessionController.create()`, given its permission preset and title. The channel follows `session/event` for every chat Session it created, keeps the latest assistant text of the turn, and sends it when the turn ends unless it is `NO_REPLY`. `send()` and the relay share one serialized delivery path: a text goes out only through an open, unexpired window with slots left, the send that takes the last slot carries a footer, and everything else is queued with its reason. `ret -2` closes the window, `-14` pauses the channel, and network failures keep the text queued.
+The channel long-polls `ilink/bot/getupdates` while the plugin is active and stores the returned cursor in the `lsy_wechat` storage domain before it handles the messages, so a crash drops messages rather than repeating prompts. It re-reads the account file between polls; without a usable account, or after the server reports the token stale (`-14`), it logs once and checks the file every `accountPollMs`. It accepts only user messages from the owner. Each one opens a reply window (`context_token`, receive time, used count), flushes the outbox as digest messages that never take the window's last slot, and is forwarded with `sessionController.prompt()` to the owner's chat Session. Before that, each image, file, and video item is downloaded (AES-128-ECB, key from `image_item.aeskey` or `media.aes_key`), typed from its bytes or name, and written to the inbox; the prompt gets a note per attachment and the images as image parts, and a `session/attachment-invalid` refusal (a text-only model) is retried with the note alone. The stored Session is reused while `resolveAgent()` succeeds; a missing or broken one is replaced by a new Session created with `sessionController.create()`, given its permission preset and title. The channel follows `session/event` for every chat Session it created, keeps the latest assistant text of the turn, and sends it when the turn ends unless it is `NO_REPLY`. `send()` and the relay share one serialized delivery path: a text goes out only through an open, unexpired window with slots left, the send that takes the last slot carries a footer, and everything else is queued with its reason. `ret -2` closes the window, `-14` pauses the channel, and network failures keep the text queued.
 
 | File | Role |
 |---|---|
@@ -89,9 +92,10 @@ The channel long-polls `ilink/bot/getupdates` while the plugin is active and sto
 | [`src/api.ts`](src/api.ts) | Minimal iLink client with per-request deadlines; errors never contain the token |
 | [`src/login.ts`](src/login.ts) | QR login status machine, terminal login command, account file |
 | [`src/text.ts`](src/text.ts) | Inbound text extraction, message splitting, relay text, digests |
+| [`src/media.ts`](src/media.ts) | CDN download and decryption, image type detection, the inbox, and the attachment note |
 | [`src/storage.ts`](src/storage.ts) | Storage-domain tables for cursors, reply windows, chat Sessions, and the outbox |
 
-This is a fork-local package; [`../UPSTREAM.md`](../UPSTREAM.md) describes how the `lsy` group tracks upstream. The protocol follows the Tencent OpenClaw WeChat plugin (`@tencent-weixin/openclaw-weixin` 2.4.10); this client implements only QR login, `getupdates`, and text `sendmessage`. [`lsy/deploy/wechat-login.mjs`](../../../lsy/deploy/wechat-login.mjs) is a thin shim over `runLoginCli()`, which the tests cover.
+This is a fork-local package; [`../UPSTREAM.md`](../UPSTREAM.md) describes how the `lsy` group tracks upstream. The protocol follows the Tencent OpenClaw WeChat plugin (`@tencent-weixin/openclaw-weixin` 2.4.10); this client implements QR login, `getupdates`, media download, and text `sendmessage`. The media layout and origin check follow [xiaoshihou514/dsh-weixin](https://github.com/xiaoshihou514/dsh-weixin) (MIT). [`lsy/deploy/wechat-login.mjs`](../../../lsy/deploy/wechat-login.mjs) is a thin shim over `runLoginCli()`, which the tests cover.
 
 </details>
 
@@ -114,11 +118,11 @@ This is a fork-local package; [`../UPSTREAM.md`](../UPSTREAM.md) describes how t
 
 #### What the model sees
 
-Each WeChat message of the owner arrives in the chat Session as an ordinary user prompt with the configured `chat.timeZone`, the same as text typed in the Web UI. The text carries no WeChat framing; a quote adds one `[引用] …` line, a voice message reads `[语音] <transcript>`, and media read as placeholders. The model's final answer of each turn is relayed back as plain text, so Markdown shows up literally on the phone. A final answer of exactly `NO_REPLY` sends nothing.
+Each WeChat message of the owner arrives in the chat Session as an ordinary user prompt with the configured `chat.timeZone`, the same as text typed in the Web UI. The text carries no WeChat framing; a quote adds one `[引用] …` line, a voice message reads `[语音] <transcript>`, and media read as placeholders followed by one note per attachment, such as `- image (image/jpeg, 84.2 KB) saved at /Users/dsh-runtime/work/.wechat-inbox/…-image.jpg; it is attached to this message.`; an attachment that could not be fetched says so and that its content is unavailable. Images within 20 MiB in a format the Host accepts (PNG, JPEG, GIF, WebP) are also image parts of the same message. The model's final answer of each turn is relayed back as plain text, so Markdown shows up literally on the phone. A final answer of exactly `NO_REPLY` sends nothing.
 
 #### Token effect
 
-One user message per WeChat message, as long as the owner wrote it. The chat Session is long-lived, so its context grows across days until compaction or `/new`.
+One user message per WeChat message, as long as the owner wrote it, plus about one line per attachment and the image tokens of each attached image. The chat Session is long-lived, so its context grows across days until compaction or `/new`.
 
 #### KV Cache effect
 
@@ -131,7 +135,8 @@ Messages are appended to one Session, so each turn reuses the cached prefix of t
 - **24-hour window** — WeChat accepts bot messages only for about a day after the owner's last message; later texts wait in the outbox. Send the bot a word once a day if you expect alerts.
 - **About 10 replies per owner message** — the window allows a limited number of bot messages; the last one says so, and the rest wait for the owner's next message.
 - **No proactive first contact** — the bot cannot write before the owner has written to it.
-- **Text only** — images, files, voice audio, and video are neither downloaded nor sent; only placeholders and voice transcripts reach the agent.
+- **Receives media, sends text** — images, files, and videos arrive; voice reaches the agent as its transcript only, and the bot replies with text only.
+- **The inbox is never pruned** — received attachments stay in `.wechat-inbox/` until removed by hand.
 - **No typing indicator** — the owner sees nothing while the agent works.
 - **At-most-once intake** — a crash between storing the cursor and forwarding a message drops that message.
 - **Limits are third-party documented** — window length, quota, and size limits are not officially published, so they are configuration, not constants.

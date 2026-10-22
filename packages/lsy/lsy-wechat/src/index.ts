@@ -2,7 +2,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
-import { isAbsolute } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 import { failureDetail, type LsyNote, type LsyNotifier } from '@deepseek-ai/dsh-lsy-event-bus'
@@ -13,6 +13,7 @@ import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import z from '@deepseek-ai/schemastery'
 import { IlinkApiError, IlinkClient, ILINK_SEND_REJECTED, isStaleTokenError, MESSAGE_TYPE_USER, type WeixinMessage } from './api.ts'
 import { accountFilePath, readAccountFile, type WechatAccount } from './login.ts'
+import { attachmentNote, describeMedia, downloadMedia, isPromptImage, mediaSpec, saveInboxFile, type ReceivedMedia } from './media.ts'
 import { wechatDomain, type OutboxRecord, type WindowRecord } from './storage.ts'
 import { buildDigest, contentText, fitText, inboundText, NEW_CHAT_REPLY, QUOTA_FOOTER, relayText, renderNote, splitText, WECHAT_MAX_TEXT_BYTES } from './text.ts'
 
@@ -24,9 +25,9 @@ export type * from './storage.ts'
 /** How the owner's chat Session is created. */
 export interface ChatConfig {
   /**
-   * Absolute directory the chat Session works in, owner-only (0700). It is
-   * recreated before every forwarded message, so a temp directory emptied by
-   * a restart still serves the stored Session.
+   * Absolute directory the chat Session works in; created before every
+   * forwarded message, so a removed directory never strands the stored
+   * Session. Received attachments go to its `.wechat-inbox/`.
    */
   workspacePath: string
   /** Agent preset of the chat Session. */
@@ -61,13 +62,19 @@ export interface Config {
   longPollTimeoutMs: number
   /** Deadline of one send, in milliseconds. */
   requestTimeoutMs: number
+  /** WeChat CDN base for media downloads; a server-provided `full_url` must share its origin. */
+  cdnBaseUrl: string
+  /** Largest attachment downloaded, in bytes. */
+  maxMediaBytes: number
+  /** Deadline of one attachment download, in milliseconds. */
+  mediaTimeoutMs: number
 }
 
 /** Configuration schema. */
 export const Config: z<Config> = z.object({
   accountFile: z.string(),
   chat: z.object({
-    workspacePath: z.string().default('/tmp/dsh-wechat'),
+    workspacePath: z.string().default('/Users/dsh-runtime/work'),
     agentPreset: z.string().default('unattended'),
     permissionPreset: z.string().default('danger-full-access'),
     title: z.string().default('微信'),
@@ -81,6 +88,9 @@ export const Config: z<Config> = z.object({
   accountPollMs: z.natural().min(1000).default(30_000),
   longPollTimeoutMs: z.natural().min(1000).default(35_000),
   requestTimeoutMs: z.natural().min(1000).default(15_000),
+  cdnBaseUrl: z.string().default('https://novac2c.cdn.weixin.qq.com/c2c'),
+  maxMediaBytes: z.natural().min(1024).default(25 * 1024 * 1024),
+  mediaTimeoutMs: z.natural().min(1000).default(60_000),
 })
 
 /** Exact owner text that starts a fresh chat Session. */
@@ -107,6 +117,11 @@ function assertConfig(config: Config): void {
   }
   if (!isAbsolute(config.chat.workspacePath)) throw new Error('lsy-wechat: chat.workspacePath must be an absolute path')
   if (config.chat.title.trim() === '') throw new Error('lsy-wechat: chat.title must be non-empty')
+  const cdn = URL.parse(config.cdnBaseUrl)
+  const loopback = cdn !== null && ['127.0.0.1', 'localhost', '[::1]'].includes(cdn.hostname)
+  if (cdn === null || !(cdn.protocol === 'https:' || (cdn.protocol === 'http:' && loopback))) {
+    throw new Error('lsy-wechat: cdnBaseUrl must be an HTTPS URL (HTTP only on loopback)')
+  }
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: config.chat.timeZone })
   } catch {
@@ -327,7 +342,7 @@ export class WechatChannel extends Service implements LsyNotifier {
       return
     }
     try {
-      await this.forward(domain, account, text)
+      await this.forward(domain, account, text, await this.receiveMedia(message))
     } catch (error: unknown) {
       if (this.stopping) return
       this.ctx.logger.warn(`lsy-wechat: forwarding the owner message failed: ${errorText(error)}`)
@@ -335,19 +350,63 @@ export class WechatChannel extends Service implements LsyNotifier {
     }
   }
 
-  /** Prompt the owner's chat Session with one message. */
-  private async forward(domain: Domain<typeof wechatDomain>, account: WechatAccount, text: string): Promise<void> {
-    // The chat is not a project: its scratch directory may live in /tmp, which a restart empties.
-    mkdirSync(this.config.chat.workspacePath, { recursive: true, mode: 0o700 })
+  /** Download each image, file, and video of an owner message into the inbox; a failure becomes its reason. */
+  private async receiveMedia(message: WeixinMessage): Promise<ReceivedMedia[]> {
+    const received: ReceivedMedia[] = []
+    for (const item of message.item_list ?? []) {
+      const spec = mediaSpec(item)
+      if (spec === undefined) continue
+      try {
+        const media = await downloadMedia(item, {
+          cdnBaseUrl: this.config.cdnBaseUrl,
+          maxBytes: this.config.maxMediaBytes,
+          timeoutMs: this.config.mediaTimeoutMs,
+          signal: this.abort.signal,
+        })
+        const path = await saveInboxFile(join(this.config.chat.workspacePath, '.wechat-inbox'), media)
+        this.ctx.logger.info(`lsy-wechat: received ${describeMedia(media)} at ${path}`)
+        received.push({ media, path })
+      } catch (error: unknown) {
+        if (this.stopping) throw error
+        this.ctx.logger.warn(`lsy-wechat: could not receive ${spec.kind}: ${errorText(error)}`)
+        received.push({ failed: spec.kind, name: spec.name, reason: errorText(error) })
+      }
+    }
+    return received
+  }
+
+  /**
+   * Prompt the owner's chat Session with one message: the text, a note on
+   * each attachment, and the images as image parts. A Session that refuses
+   * images (a text-only model) gets the note with the saved paths instead.
+   */
+  private async forward(
+    domain: Domain<typeof wechatDomain>, account: WechatAccount, text: string, received: readonly ReceivedMedia[],
+  ): Promise<void> {
+    mkdirSync(this.config.chat.workspacePath, { recursive: true })
     const sessionId = await this.chatSession(domain, account)
-    await this.ctx.sessionController.prompt({
-      requestId: randomUUID() as SessionRequestId,
-      sessionId,
-      mode: 'queue',
-      content: [{ type: 'text', text }],
-      clientTimeZone: this.config.chat.timeZone,
-    }, this.abort.signal)
-    this.ctx.logger.info(`lsy-wechat: forwarded ${text.length} chars to Session ${sessionId}`)
+    const images = received.filter(isPromptImage)
+    const prompt = (attach: boolean): Promise<unknown> => {
+      const note = attachmentNote(received, attach)
+      return this.ctx.sessionController.prompt({
+        requestId: randomUUID() as SessionRequestId,
+        sessionId,
+        mode: 'queue',
+        content: [
+          { type: 'text', text: note === '' ? text : `${text}\n\n${note}` },
+          ...attach ? images.map(image => ({ type: 'image' as const, mediaType: image.media.mediaType, data: image.media.data.toString('base64'), name: image.media.name })) : [],
+        ],
+        clientTimeZone: this.config.chat.timeZone,
+      }, this.abort.signal)
+    }
+    try {
+      await prompt(images.length > 0)
+    } catch (error: unknown) {
+      if (images.length === 0 || (error as { code?: unknown }).code !== 'session/attachment-invalid') throw error
+      this.ctx.logger.warn(`lsy-wechat: Session ${sessionId} refused the image parts (${errorText(error)}); forwarding the saved paths only`)
+      await prompt(false)
+    }
+    this.ctx.logger.info(`lsy-wechat: forwarded ${text.length} chars${images.length > 0 ? ` and ${images.length} image(s)` : ''} to Session ${sessionId}`)
   }
 
   /** The owner's chat Session: the stored one while it resolves, otherwise a new one. */

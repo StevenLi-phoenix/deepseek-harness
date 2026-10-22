@@ -1,4 +1,5 @@
-import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { createCipheriv } from 'node:crypto'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -11,10 +12,18 @@ import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-
 import WechatChannel, { Config, type ChatConfig } from '../src/index.ts'
 import type { WechatAccount } from '../src/login.ts'
 import { wechatDomain } from '../src/storage.ts'
-import { FakeIlink, textMessage } from './fake-ilink.ts'
+import { FakeIlink, imageMessage, textMessage } from './fake-ilink.ts'
 
 const OWNER = 'owner@im.wechat'
 const TOKEN = 'bot-token-secret'
+const CDN = 'https://cdn.test/c2c'
+const MEDIA_KEY = Buffer.from('00112233445566778899aabbccddeeff', 'hex')
+const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('sticker')])
+
+function encryptMedia(data: Uint8Array): Buffer {
+  const cipher = createCipheriv('aes-128-ecb', MEDIA_KEY, null)
+  return Buffer.concat([cipher.update(data), cipher.final()])
+}
 const FOOTER = '\n\n（消息额度已用完，回复任意消息继续接收）'
 
 /** A log line the channel wrote. */
@@ -34,6 +43,8 @@ function fakeSessions(onPrompt: () => void = () => {}) {
     /** Newly created Sessions fail to resolve. */
     brokenCreate: false,
     promptError: undefined as unknown,
+    /** Errors thrown by the next prompts, one each, before {@link promptError}. */
+    promptErrorsOnce: [] as unknown[],
     /** Prompts wait for their abort signal. */
     holdPrompts: false,
     onPrompt,
@@ -54,6 +65,7 @@ function fakeSessions(onPrompt: () => void = () => {}) {
     prompt: async (request: SessionPromptRequest, signal: AbortSignal) => {
       state.prompts.push(request)
       state.onPrompt()
+      if (state.promptErrorsOnce.length > 0) throw state.promptErrorsOnce.shift()
       if (state.promptError !== undefined) throw state.promptError
       if (state.holdPrompts) {
         await new Promise((_resolve, reject) => { signal.addEventListener('abort', () => { reject(new Error('prompt aborted')) }) })
@@ -156,6 +168,9 @@ async function harness(options: {
     accountPollMs: 30_000,
     longPollTimeoutMs: 35_000,
     requestTimeoutMs: 15_000,
+    cdnBaseUrl: CDN,
+    maxMediaBytes: 4096,
+    mediaTimeoutMs: 60_000,
     ...rest,
   }
   await ctx.plugin(WechatChannel, config)
@@ -250,16 +265,78 @@ describe('WechatChannel chat', () => {
     ])
   })
 
-  it('keeps the chat workspace private and recreates it after a temp-directory sweep', async () => {
+  it('recreates a removed workspace before prompting the stored Session', async () => {
     const h = await harness()
     await h.ownerSays('one')
-    expect(statSync(join(dir, 'work')).mode & 0o777).toBe(0o700)
-    // macOS empties /tmp on restart; the stored Session must still find its cwd.
     rmSync(join(dir, 'work'), { recursive: true })
     await h.ownerSays('two')
     expect(h.sessions.created).toHaveLength(1)
     expect(h.sessions.prompts.map(prompt => prompt.sessionId)).toEqual(['chat-1', 'chat-1'])
-    expect(statSync(join(dir, 'work')).mode & 0o777).toBe(0o700)
+    expect(existsSync(join(dir, 'work'))).toBe(true)
+  })
+
+  it('hands a received image to the Session and keeps a private copy in the inbox', async () => {
+    const h = await harness()
+    h.ilink.cdn.set('img-1', encryptMedia(PNG))
+    h.ilink.updates([imageMessage(OWNER, 'img-1', MEDIA_KEY.toString('hex'))])
+    // Downloads write real files, which fake timers cannot advance.
+    await vi.waitFor(() => { expect(h.sessions.prompts).toHaveLength(1) })
+    const inbox = join(dir, 'work', '.wechat-inbox')
+    const [saved] = readdirSync(inbox)
+    expect(saved).toMatch(/^\d{8}-\d{6}-[0-9a-f]{8}-image\.png$/)
+    expect(readFileSync(join(inbox, saved!))).toEqual(PNG)
+    expect(statSync(join(inbox, saved!)).mode & 0o777).toBe(0o600)
+    expect(statSync(inbox).mode & 0o777).toBe(0o700)
+    expect(h.sessions.prompts).toHaveLength(1)
+    expect(h.sessions.prompts[0]!.content).toEqual([
+      { type: 'text', text: `[图片]\n\nWeChat attachments:\n- image (image/png, 15 B) saved at ${join(inbox, saved!)}; it is attached to this message.` },
+      { type: 'image', mediaType: 'image/png', data: PNG.toString('base64'), name: 'image.png' },
+    ])
+    // The CDN never sees the bot token, and the logs never see the CDN parameter.
+    expect(h.ilink.requestsTo('cdn/download')[0]!.headers['authorization']).toBeUndefined()
+    expect(h.logs.filter(line => line.text.includes('img-1'))).toEqual([])
+    expect(h.logs.some(line => line.text === 'lsy-wechat: forwarded 4 chars and 1 image(s) to Session chat-1')).toBe(true)
+  })
+
+  it('falls back to the saved path when the Session refuses images', async () => {
+    const h = await harness()
+    h.sessions.promptErrorsOnce.push(Object.assign(new Error('Model "m" does not support image input.'), { code: 'session/attachment-invalid' }))
+    h.ilink.cdn.set('img-2', encryptMedia(PNG))
+    h.ilink.updates([imageMessage(OWNER, 'img-2', MEDIA_KEY.toString('hex'))])
+    await vi.waitFor(() => { expect(h.sessions.prompts).toHaveLength(2) })
+    expect(h.sessions.prompts).toHaveLength(2)
+    expect(h.sessions.prompts[1]!.requestId).not.toBe(h.sessions.prompts[0]!.requestId)
+    expect(h.sessions.prompts[1]!.content).toEqual([
+      { type: 'text', text: expect.stringMatching(/saved at .*-image\.png; the current model does not accept images\.$/) as unknown },
+    ])
+    expect(h.ilink.sent).toEqual([])
+    expect(h.logs.some(line => line.type === 'warn' && line.text.includes('refused the image parts'))).toBe(true)
+  })
+
+  it('tells the agent which attachments could not be received and saves the rest', async () => {
+    const h = await harness()
+    h.ilink.cdn.set('gone', 404)
+    h.ilink.cdn.set('doc', encryptMedia(Buffer.from('%PDF-1.7 tiny')))
+    const fileKey = Buffer.from(MEDIA_KEY.toString('hex')).toString('base64')
+    h.ilink.updates([{
+      from_user_id: OWNER, message_type: 1, context_token: 'ctx-mixed',
+      item_list: [
+        { type: 1, text_item: { text: '看看这两个' } },
+        { type: 2, image_item: { aeskey: MEDIA_KEY.toString('hex'), media: { encrypt_query_param: 'gone' } } },
+        { type: 4, file_item: { file_name: 'report.pdf', media: { encrypt_query_param: 'doc', aes_key: fileKey } } },
+      ],
+    }])
+    await vi.waitFor(() => { expect(h.sessions.prompts).toHaveLength(1) })
+    const [saved] = readdirSync(join(dir, 'work', '.wechat-inbox'))
+    expect(saved).toMatch(/-report\.pdf$/)
+    expect(h.sessions.prompts[0]!.content).toEqual([{ type: 'text', text: [
+      '看看这两个\n[图片]\n[文件 report.pdf]',
+      '',
+      'WeChat attachments:',
+      '- image could not be received (CDN download failed with HTTP 404); its content is unavailable, so do not look for it on disk.',
+      `- file "report.pdf" (application/pdf, 13 B) saved at ${join(dir, 'work', '.wechat-inbox', saved!)}.`,
+    ].join('\n') }])
+    expect(h.logs.some(line => line.type === 'warn' && line.text === 'lsy-wechat: could not receive image: CDN download failed with HTTP 404')).toBe(true)
   })
 
   it('starts a new chat Session when the stored one no longer resolves', async () => {
@@ -628,7 +705,7 @@ describe('WechatChannel chat Session bookkeeping', () => {
 describe('WechatChannel configuration', () => {
   it('applies defaults', () => {
     expect(resolveConfig({})).toEqual({
-      chat: { workspacePath: '/tmp/dsh-wechat', agentPreset: 'unattended', permissionPreset: 'danger-full-access', title: '微信', timeZone: 'America/New_York' },
+      chat: { workspacePath: '/Users/dsh-runtime/work', agentPreset: 'unattended', permissionPreset: 'danger-full-access', title: '微信', timeZone: 'America/New_York' },
       maxMessageChars: 3000,
       maxReplyParts: 3,
       repliesPerToken: 10,
@@ -637,6 +714,9 @@ describe('WechatChannel configuration', () => {
       accountPollMs: 30_000,
       longPollTimeoutMs: 35_000,
       requestTimeoutMs: 15_000,
+      cdnBaseUrl: 'https://novac2c.cdn.weixin.qq.com/c2c',
+      maxMediaBytes: 25 * 1024 * 1024,
+      mediaTimeoutMs: 60_000,
     })
     expect(() => resolveConfig({ repliesPerToken: 1 })).toThrow()
     expect(() => resolveConfig({ maxMessageChars: 50 })).toThrow()
@@ -647,6 +727,8 @@ describe('WechatChannel configuration', () => {
     ['a relative workspace', { chat: { workspacePath: 'work' } }, /chat.workspacePath must be an absolute path/],
     ['a blank title', { chat: { title: ' ' } }, /chat.title must be non-empty/],
     ['an unknown time zone', { chat: { timeZone: 'Mars/Olympus' } }, /chat.timeZone "Mars\/Olympus" is not a valid IANA time zone/],
+    ['a plain-HTTP CDN', { cdnBaseUrl: 'http://cdn.example/c2c' }, /cdnBaseUrl must be an HTTPS URL/],
+    ['an unparsable CDN', { cdnBaseUrl: 'not a url' }, /cdnBaseUrl must be an HTTPS URL/],
   ])('rejects %s at load', (_label, overrides: Record<string, unknown>, message) => {
     const base = resolveConfig({ accountFile: '/tmp/account.json' })
     const config = Object.assign({}, base, overrides, { chat: Object.assign({}, base.chat, overrides['chat']) }) as Config
