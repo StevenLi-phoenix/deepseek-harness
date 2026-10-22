@@ -45,8 +45,8 @@
     <key>ThrottleInterval</key>
     <integer>30</integer>
     <key>StandardOutPath</key>
-    <string>/Users/dsh-runtime/Library/Logs/dsh-events/stdout.log</string>
+    <string>/Users/dsh-runtime/logs/stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/dsh-runtime/Library/Logs/dsh-events/stderr.log</string>
+    <string>/Users/dsh-runtime/logs/stderr.log</string>
 </dict>
 </plist>
