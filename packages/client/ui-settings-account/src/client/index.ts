@@ -241,6 +241,10 @@ export function apply(ctx: Context): void {
       }
     },
     async cancel(id) { const result = await ctx.remote.account.cancelSignIn(id); if (!result.ok) throw new Error('account cancel failed') },
+    async completeSignIn(id, url) {
+      const result = await ctx.remote.account.completeSignIn(id, url)
+      if (!result.ok) throw new Error('account complete failed')
+    },
     async hasRunningAccountTasks() {
       const result = await ctx.remote.account.hasRunningAccountTasks()
       if (!result.ok) throw new Error('account task query failed')

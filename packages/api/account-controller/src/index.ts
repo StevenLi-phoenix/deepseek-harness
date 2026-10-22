@@ -58,13 +58,23 @@ export class AccountController extends TypertRemoteService {
   /**
    * Begin browser sign-in.
    * @param client - identity of the requesting UI, captured by a new attempt.
-   * @param callbackOrigin - browser-accessible loopback HTTP origin.
+   * @param callbackOrigin - origin of the initiating page; a non-loopback page completes the attempt with `completeSignIn`.
    * @param loginSource - initiating UI, used to return from a failed exchange.
    * @returns a new or already-active login attempt.
    */
   @Remote
   startSignIn(client: AccountClientMetadata, callbackOrigin: string, loginSource: 'web' | 'desktop'): Promise<AccountView> {
     return this.ctx.deepseekAccount.startSignIn(client, callbackOrigin, loginSource)
+  }
+  /**
+   * Finish the named attempt from the callback address the browser ended on.
+   * @param attemptId - attempt the address belongs to.
+   * @param callbackUrl - full address copied from the browser.
+   * @returns state after the exchange settles; fails without ending the attempt when the address does not match it.
+   */
+  @Remote
+  completeSignIn(attemptId: SignInAttemptId, callbackUrl: string): Promise<AccountView> {
+    return this.ctx.deepseekAccount.completeSignIn(attemptId, callbackUrl)
   }
   /**
    * Cancel the named local attempt.

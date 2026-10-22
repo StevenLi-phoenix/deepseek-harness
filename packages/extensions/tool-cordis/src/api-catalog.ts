@@ -948,8 +948,14 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       {
         signature: 'abstract startSignIn(client: AccountClientMetadata, callbackOrigin: string, loginSource: \'web\' | \'desktop\'): Promise<AccountView>',
         description: 'Join an active attempt or start browser authorization.',
-        parameters: [{ name: 'client', description: 'identity of the requesting UI; a new attempt captures it, and joining retains the original attempt\'s identity.' }, { name: 'callbackOrigin', description: 'browser-accessible loopback HTTP origin, including any SSH local port.' }, { name: 'loginSource', description: 'initiating UI, used to return from a failed exchange.' }],
+        parameters: [{ name: 'client', description: 'identity of the requesting UI; a new attempt captures it, and joining retains the original attempt\'s identity.' }, { name: 'callbackOrigin', description: 'origin of the initiating page: a loopback HTTP origin (including any SSH local port) receives the browser callback; any other HTTP(S) origin starts an attempt completed by `completeSignIn`.' }, { name: 'loginSource', description: 'initiating UI, used to return from a failed exchange.' }],
         returns: 'the initial snapshot without waiting for browser approval.',
+      },
+      {
+        signature: 'abstract completeSignIn(id: SignInAttemptId, callbackUrl: string): Promise<AccountView>',
+        description: 'Finish an attempt from the callback address the browser ended on, for pages that cannot receive the callback.',
+        parameters: [{ name: 'id', description: 'attempt the address belongs to.' }, { name: 'callbackUrl', description: 'full callback address copied from the browser; a missing `http://` is assumed.' }],
+        returns: 'state after the exchange settles; rejects without ending the attempt when the address does not match it.',
       },
       {
         signature: 'abstract cancelSignIn(id: SignInAttemptId): Promise<AccountView>',
@@ -7795,7 +7801,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SignInAttemptView',
-    declaration: 'export interface SignInAttemptView {\n    readonly id: SignInAttemptId;\n    readonly phase: \'initializing\' | \'waiting-browser\' | \'exchanging\' | \'committing\' | \'succeeded\' | \'cancelled\' | \'expired\' | \'failed\';\n    readonly authorizeUrl?: string;\n    readonly expiresAt?: number;\n    readonly errorCode?: SignInErrorCode;\n}',
+    declaration: 'export interface SignInAttemptView {\n    readonly id: SignInAttemptId;\n    readonly phase: \'initializing\' | \'waiting-browser\' | \'exchanging\' | \'committing\' | \'succeeded\' | \'cancelled\' | \'expired\' | \'failed\';\n    readonly authorizeUrl?: string;\n    readonly expiresAt?: number;\n    readonly errorCode?: SignInErrorCode;\n    readonly pasteCallbackPrefix?: string;\n}',
   },
   {
     name: 'SignInErrorCode',

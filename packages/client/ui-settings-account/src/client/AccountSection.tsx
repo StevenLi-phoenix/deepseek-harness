@@ -10,6 +10,7 @@ import { formatBalance } from './formatBalance.ts'
 import { AccountAvatar } from './AccountAvatar.tsx'
 import type { AccountAvatarSnapshot } from './account-avatar.ts'
 import { authorizeUrlWithTheme } from './authorize-url.ts'
+import { CallbackPaste } from './CallbackPaste.tsx'
 import type { BonusNotice } from './bonus-notices.ts'
 import css from './AccountSection.module.css'
 
@@ -81,6 +82,12 @@ export interface AccountSectionInjected {
   start: () => Promise<void>
   /** @param id - attempt to cancel. @returns after cancellation or an already-admitted commit. */
   cancel: (id: SignInAttemptId) => Promise<void>
+  /**
+   * @param id - attempt whose page cannot receive the browser callback.
+   * @param url - address the browser stopped on after sign-in.
+   * @returns after the sign-in completes; rejects when the Host refuses the address.
+   */
+  completeSignIn: (id: SignInAttemptId, url: string) => Promise<void>
   /** @returns whether a running task currently uses the account token. */
   hasRunningAccountTasks: () => Promise<boolean>
   /** @returns after local account credentials are removed. */
@@ -90,7 +97,9 @@ export interface AccountSectionInjected {
 export type AccountSectionProps =
   PropsRuntime<'settings.section'> & PropsLocale<'settings.account'> & InjectFace<AccountSectionInjected>
 /** @param props - localized actions, account subscription, and the shared Platform page channel. @returns account settings UI. */
-export function AccountSection({ t, useAccount, useTheme, start, cancel, openPlatformPage, avatarFailed }: AccountSectionProps) {
+export function AccountSection({
+  t, useAccount, useTheme, start, cancel, completeSignIn, openPlatformPage, avatarFailed,
+}: AccountSectionProps) {
   const { view: state, details, avatar, failed: streamFailed } = useAccount(value => value)
   const colorScheme = useTheme(snapshot => snapshot.active.colorScheme)
   // The shared host owns the native view; this page holds only its own request,
@@ -184,6 +193,9 @@ export function AccountSection({ t, useAccount, useTheme, start, cancel, openPla
         <Button variant="outline" disabled={busy || attempt.phase === 'committing'}
           onClick={() => { void run(() => cancel(attempt.id)) }}>{t('cancel')}</Button>
       </div>}
+      {active && attempt.phase === 'waiting-browser' && attempt.pasteCallbackPrefix !== undefined
+        && <CallbackPaste key={attempt.id} prefix={attempt.pasteCallbackPrefix} t={t}
+          submit={url => completeSignIn(attempt.id, url)} />}
       <div className={css.balanceCard}>
         <div className={css.row}>
           <span>{t('balance')}</span>

@@ -28,6 +28,11 @@ export interface SignInAttemptView {
   readonly authorizeUrl?: string
   readonly expiresAt?: number
   readonly errorCode?: SignInErrorCode
+  /**
+   * Set when the initiating page is not on a loopback origin, so the browser callback cannot reach this Host:
+   * the browser ends on an unreachable address starting with this prefix, which the user pastes into `completeSignIn`.
+   */
+  readonly pasteCallbackPrefix?: string
 }
 /** Browser destinations derived from the Host's platform configuration; never carry tokens. */
 export interface AccountLinks {

@@ -5,15 +5,18 @@ import type { AccountSnapshot } from './AccountSection.tsx'
 import type { SignInAttemptId } from '@deepseek-ai/dsh-deepseek-account/types'
 import type { AccountKey } from './locales.ts'
 import { authorizeUrlWithTheme } from './authorize-url.ts'
+import { CallbackPaste } from './CallbackPaste.tsx'
 import css from './SignInDialog.module.css'
 
 /** @param props - safe account state, localized copy, and user actions. @returns login dialog. */
-export function SignInDialog({ account, colorScheme, start, cancel, close, useApiKey, t }: {
+export function SignInDialog({ account, colorScheme, start, cancel, completeSignIn, close, useApiKey, t }: {
   account: AccountSnapshot
   /** Resolved scheme of the active application theme; the copied link carries it. */
   colorScheme: 'light' | 'dark'
   start: () => Promise<void>
   cancel: (id: SignInAttemptId) => Promise<void>
+  /** Finish an attempt whose page cannot receive the callback from the address the browser stopped on. */
+  completeSignIn: (id: SignInAttemptId, url: string) => Promise<void>
   close: () => void
   useApiKey: () => void
   t: (key: AccountKey) => string
@@ -76,6 +79,9 @@ export function SignInDialog({ account, colorScheme, start, cancel, close, useAp
       </p> : <p className={css.description}>
         {error ? t(failureKey) : expired ? t('timeoutDescription') : t('loginDescription')}
       </p>}
+      {waiting && phase === 'waiting-browser' && attempt?.pasteCallbackPrefix !== undefined
+        && <CallbackPaste key={attempt.id} prefix={attempt.pasteCallbackPrefix} t={t}
+          submit={url => completeSignIn(attempt.id, url)} />}
     </div>
     <div className={css.actions}>
       <Button variant="outline" className={css.secondaryButton} disabled={committing || busy}

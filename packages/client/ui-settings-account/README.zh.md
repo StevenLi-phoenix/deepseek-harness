@@ -103,7 +103,7 @@ Desktop preload 标记在账号凭证已存储后启用引导。进度属于本�
 
 - 通知文案按客户端读取时的界面语言由服务端本地化。切换语言本身不会重新读取未通知赠金，因此已在屏幕上的通知会沿用服务端先前语言下发的文案，直到用户手动刷新或登录生命周期重新开始。
 
-- Web 登录要求页面 origin 为回环 HTTP（`localhost`、`127.0.0.1` 或 `[::1]`），因为 Host 只接受这些回调 origin。经 `--trusted-host` 或 HTTPS 反向代理访问的 Web UI 仍显示登录入口，但发起登录会进入通用的失败重试状态；这类部署应改为添加 API Key。
+- 页面 origin 为回环 HTTP（`localhost`、`127.0.0.1` 或 `[::1]`）时，Web 登录直接接收浏览器回调。经 `--trusted-host` 或 HTTPS 反向代理访问的 Web UI 收不到回调：登录后浏览器停在一个打不开的回环地址，登录对话框和账号设置会显示输入框，粘贴该地址后通过 `completeSignIn` 完成登录。地址被拒时就地提示，尝试保持等待。
 
 - Platform 视图的弹窗会把文档内其它子节点设为 inert，其中包括 Desktop 拥有的顶栏菜单 host，因此 Application 和 Edit 菜单保持可见，但在视图关闭前无法操作。放行该 host 需要 Desktop 侧提供 inert 契约。
 

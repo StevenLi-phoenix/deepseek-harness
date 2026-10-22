@@ -103,7 +103,7 @@ No model request prefix changes.
 
 - The notice copy is server-localized for the UI language in effect when the client reads it. Switching language does not itself re-read the unnotified bonus, so a notice already on screen keeps the copy the server sent for the earlier language until the user refreshes or the account lifecycle restarts.
 
-- Web sign-in needs a loopback HTTP page origin (`localhost`, `127.0.0.1`, or `[::1]`), because the Host accepts only those callback origins. A Web UI reached through `--trusted-host` or an HTTPS reverse proxy still shows the entry, but starting sign-in fails with the generic retry state; such deployments add an API key instead.
+- Web sign-in from a loopback HTTP page origin (`localhost`, `127.0.0.1`, or `[::1]`) receives the browser callback directly. A Web UI reached through `--trusted-host` or an HTTPS reverse proxy cannot: after sign-in the browser stops on an unreachable loopback address, and the sign-in dialog and Account settings show a field for pasting that address, which finishes sign-in through `completeSignIn`. A rejected address shows an inline message and keeps the attempt waiting.
 
 - The Platform view’s dialog marks every other document child inert, including the Desktop-owned caption menu host, so the Application and Edit menu stays visible but cannot be operated until the view closes. Exempting that host needs an inertness contract owned by the Desktop.
 

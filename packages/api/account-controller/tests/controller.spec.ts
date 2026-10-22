@@ -22,6 +22,7 @@ function fixture() {
     ackBonusNotified: vi.fn<DeepSeekAccount['ackBonusNotified']>().mockResolvedValue(false),
     startSignIn: vi.fn<DeepSeekAccount['startSignIn']>().mockResolvedValue(state),
     cancelSignIn: vi.fn<DeepSeekAccount['cancelSignIn']>().mockResolvedValue(state),
+    completeSignIn: vi.fn<DeepSeekAccount['completeSignIn']>().mockResolvedValue(state),
     signOut: vi.fn<DeepSeekAccount['signOut']>().mockResolvedValue(state),
     watch: vi.fn<DeepSeekAccount['watch']>(),
   }
@@ -40,6 +41,9 @@ it('delegates account operations without coupling profile and balance queries', 
   const id = 'attempt' as SignInAttemptId
   expect(await controller.cancelSignIn(id)).toBe(state)
   expect(provider.cancelSignIn).toHaveBeenCalledExactlyOnceWith(id)
+  const pasted = 'http://127.0.0.1:8080/oauth/callback?code=c&state=s'
+  expect(await controller.completeSignIn(id, pasted)).toBe(state)
+  expect(provider.completeSignIn).toHaveBeenCalledExactlyOnceWith(id, pasted)
   expect(await controller.signOut(client)).toBe(state)
   expect(provider.signOut).toHaveBeenCalledExactlyOnceWith(client)
   const failure = new Error('storage unavailable')

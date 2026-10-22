@@ -23,6 +23,7 @@ class Account extends DeepSeekAccount {
   override async ackBonusNotified() { return false }
   override async startSignIn() { return state }
   override async cancelSignIn() { return state }
+  override async completeSignIn() { return state }
   override async signOut() { return state }
   override async rejectToken() {}
   override async resolveToken() { return undefined }

@@ -12,7 +12,7 @@ import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import type { AuthorizationSession } from '@deepseek-ai/dsh-authorization'
 import { profile, readAccountDetail, readUnnotifiedBonuses, sendBonusNotified } from './details.ts'
 import { revokeAccount, type LogoutRetryPolicy } from './logout.ts'
-import { AccountUnauthorizedError, PlatformAuthError, platformHeaders, platformOrigin, browserUrl, requestPlatform, initialization, exchange, loginOrigin } from './protocol.ts'
+import { AccountUnauthorizedError, PlatformAuthError, platformHeaders, platformOrigin, browserUrl, requestPlatform, initialization, exchange, signInCallback, pastedCallbackUrl } from './protocol.ts'
 
 const KEY = credentialKey('deepseek-account-platform', 'default')
 const DEVICE = credentialKey('deepseek-account-platform', 'device')
@@ -75,6 +75,8 @@ interface Attempt {
   origin: string
   loginSource: 'web' | 'desktop'
   disposeCallback?: () => Promise<void>
+  /** Validate a callback address against this attempt and release its code; set once authorization runs. */
+  accept?: (url: URL) => 'accepted' | 'invalid' | 'gone'
   callback?: ServerResponse
   initialProfile?: { token: string; value: AccountDetails['profile'] }
   completionUrl?: string
@@ -401,7 +403,11 @@ export class PlatformAccount extends DeepSeekAccount {
 
   override async startSignIn(client: AccountClientMetadata, callbackOrigin: string, loginSource: 'web' | 'desktop'): Promise<AccountView> {
     if (this.removing !== undefined) await this.removing
-    const origin = loginOrigin(callbackOrigin)
+    const callback = signInCallback(callbackOrigin)
+    // A remote page cannot receive the callback, so Platform redirects to this Host's loopback port and the user pastes the address.
+    const port = callback.kind === 'paste' ? this.ctx.get('webServer')?.port : undefined
+    if (callback.kind === 'paste' && port === undefined) throw new PlatformAuthError('protocol')
+    const origin = callback.kind === 'loopback' ? callback.origin : `http://127.0.0.1:${String(port)}`
     if (this.closed) throw new PlatformAuthError('protocol')
     if (this.attempt !== undefined && ['initializing', 'waiting-browser', 'exchanging', 'committing'].includes(this.attempt.view.phase)) {
       return this.getState()
@@ -418,7 +424,10 @@ export class PlatformAccount extends DeepSeekAccount {
       origin, loginSource,
       locale: platformWireLocale(client.locale),
       clientHeaders: platformClientHeaders(this.platform, client),
-      view: { id: randomUUID() as SignInAttemptId, phase: 'initializing' },
+      view: {
+        id: randomUUID() as SignInAttemptId, phase: 'initializing',
+        ...callback.kind === 'paste' ? { pasteCallbackPrefix: `${origin}/oauth/callback` } : {},
+      },
       controller: new AbortController(), done: Promise.resolve(), running: Promise.resolve(),
     }
     this.attempt = attempt
@@ -444,6 +453,18 @@ export class PlatformAccount extends DeepSeekAccount {
       await attempt.disposeCallback?.()
     })
     this.changed()
+    return this.getState()
+  }
+
+  override async completeSignIn(id: SignInAttemptId, callbackUrl: string): Promise<AccountView> {
+    const attempt = this.attempt
+    if (attempt?.view.id !== id || attempt.accept === undefined) throw new PlatformAuthError('expired')
+    const url = pastedCallbackUrl(callbackUrl)
+    // Only the loopback address this attempt sent as redirect_uri carries its code.
+    if (url.origin !== attempt.origin) throw new PlatformAuthError('protocol')
+    const outcome = attempt.accept(url)
+    if (outcome !== 'accepted') throw new PlatformAuthError(outcome === 'gone' ? 'expired' : 'protocol')
+    await attempt.done
     return this.getState()
   }
 
@@ -535,25 +556,30 @@ export class PlatformAccount extends DeepSeekAccount {
     let timer = setTimeout(() =>{  deadline.abort() }, this.attemptTimeout)
     const abort = (): void => { code.reject(new PlatformAuthError('expired')) }
     signal.addEventListener('abort', abort, { once: true })
+    // One check for both delivery paths: the browser reaching /oauth/callback and an address pasted by the user.
+    let received = false
+    attempt.accept = (url) => {
+      const receivedCode = url.searchParams.get('code')
+      const receivedState = url.searchParams.get('state') ?? ''
+      const validState = Buffer.byteLength(receivedState) === Buffer.byteLength(state)
+        && timingSafeEqual(Buffer.from(receivedState), Buffer.from(state))
+      if (url.pathname !== '/oauth/callback' || !validState || !receivedCode
+        || url.searchParams.getAll('state').length !== 1 || url.searchParams.getAll('code').length !== 1) return 'invalid'
+      if (signal.aborted || received || attempt.view.phase !== 'waiting-browser') return 'gone'
+      received = true
+      code.resolve(receivedCode)
+      return 'accepted'
+    }
     try {
       attempt.disposeCallback = this.ctx.effect(() => webServer.register({
         kind: 'exact', path: '/oauth/callback', handler: (req, res) => {
           let url: URL
           try { url = new URL(req.url ?? '/', 'http://127.0.0.1') }
           catch { res.writeHead(400, { 'cache-control': 'no-store' }).end(); return }
-          const receivedCode = url.searchParams.get('code')
-          const receivedState = url.searchParams.get('state') ?? ''
-          const validState = Buffer.byteLength(receivedState) === Buffer.byteLength(state)
-            && timingSafeEqual(Buffer.from(receivedState), Buffer.from(state))
-          if (req.method !== 'GET' || url.pathname !== '/oauth/callback' || !validState || !receivedCode
-            || url.searchParams.getAll('state').length !== 1 || url.searchParams.getAll('code').length !== 1) {
-            res.writeHead(400, { 'cache-control': 'no-store' }).end(); return
-          }
-          if (signal.aborted || attempt.callback !== undefined || attempt.view.phase !== 'waiting-browser') {
-            res.writeHead(410, { 'cache-control': 'no-store' }).end(); return
-          }
+          const outcome = req.method === 'GET' ? attempt.accept?.(url) : 'invalid'
+          if (outcome === 'invalid') { res.writeHead(400, { 'cache-control': 'no-store' }).end(); return }
+          if (outcome !== 'accepted') { res.writeHead(410, { 'cache-control': 'no-store' }).end(); return }
           attempt.callback = res
-          code.resolve(receivedCode)
         },
       }), 'account: browser callback')
       signal.throwIfAborted()
