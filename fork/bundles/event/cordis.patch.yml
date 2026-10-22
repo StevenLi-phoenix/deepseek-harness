@@ -48,9 +48,13 @@
     - id: fork-balance
       name: '@deepseek-ai/dsh-fork-balance'
 
-    # Owner channel: chat Session over WeChat and ctx.forkNotifier for the bus.
+    # Owner channel: chat Session over WeChat and ctx.forkNotifier for the bus. The chat works in a
+    # clone of the owner's tracking repository StevenLi-phoenix/me (RUNBOOK step 5).
     - id: fork-wechat
       name: '@deepseek-ai/dsh-fork-wechat'
+      config:
+        chat:
+          workspacePath: /Users/dsh-runtime/me
 
     # Unattended agent preset: `standard` minus interactive-only tools (command-goal, tool-goal,
     # planning, tool-ask-user, tool-plugin-manager, tool-plugin-market), plus the watch tools.

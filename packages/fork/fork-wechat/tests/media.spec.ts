@@ -109,6 +109,8 @@ describe('saveInboxFile', () => {
     expect(readFileSync(first)).toEqual(PNG)
     expect(statSync(first).mode & 0o777).toBe(0o600)
     expect(statSync(join(dir, 'inbox')).mode & 0o777).toBe(0o700)
+    // The inbox ignores itself, so a workspace that is a git repository never commits the owner's attachments.
+    expect(readFileSync(join(dir, 'inbox', '.gitignore'), 'utf8')).toBe('*\n')
   })
 })
 

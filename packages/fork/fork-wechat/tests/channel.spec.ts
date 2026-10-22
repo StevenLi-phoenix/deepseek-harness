@@ -282,7 +282,7 @@ describe('WechatChannel chat', () => {
     // Downloads write real files, which fake timers cannot advance.
     await vi.waitFor(() => { expect(h.sessions.prompts).toHaveLength(1) })
     const inbox = join(dir, 'work', '.wechat-inbox')
-    const [saved] = readdirSync(inbox)
+    const [saved] = readdirSync(inbox).filter(name => !name.startsWith('.'))
     expect(saved).toMatch(/^\d{8}-\d{6}-[0-9a-f]{8}-image\.png$/)
     expect(readFileSync(join(inbox, saved!))).toEqual(PNG)
     expect(statSync(join(inbox, saved!)).mode & 0o777).toBe(0o600)
@@ -327,7 +327,7 @@ describe('WechatChannel chat', () => {
       ],
     }])
     await vi.waitFor(() => { expect(h.sessions.prompts).toHaveLength(1) })
-    const [saved] = readdirSync(join(dir, 'work', '.wechat-inbox'))
+    const [saved] = readdirSync(join(dir, 'work', '.wechat-inbox')).filter(name => !name.startsWith('.'))
     expect(saved).toMatch(/-report\.pdf$/)
     expect(h.sessions.prompts[0]!.content).toEqual([{ type: 'text', text: [
       '看看这两个\n[图片]\n[文件 report.pdf]',
