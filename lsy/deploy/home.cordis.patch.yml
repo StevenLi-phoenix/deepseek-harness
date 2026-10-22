@@ -1,39 +1,20 @@
 # Deployment overlay for the event service: install as $DSH_HOME/cordis.patch.yml
 # (/Users/dsh-runtime/.dsh/cordis.patch.yml, owned by dsh-runtime). The home patch
-# outranks the profile patch, so `setup-profile.sh` refreshing the profile on upgrade
-# never touches it; the Models page cannot override these fields either.
-#
-# Models go through OpenRouter. The key is a credential reference resolved per
-# request from $DSH_HOME/.env (OPENROUTER_API_KEY); it never appears here.
-- id: llm-pi-ai
-  config:
-    providers:
-      openrouter:
-        apiKeyEnv: OPENROUTER_API_KEY
-
-# Agents created by entry points (WeChat chat, watch-started Sessions, the Web UI)
-# start on this model; a Session can still switch models in the Web UI picker.
-- id: agent-default-model
-  config:
-    provider: openrouter
-    model: deepseek/deepseek-v4.1-flash
+# outranks every other layer and the Web UI refuses to save any entry it sets, so it
+# holds only deployment fixtures the UI does not edit. Model providers, the default
+# model, and other settings live in the owner's profile patch, seeded from
+# lsy/profiles/event/cordis.patch.yml and edited from the Web UI afterwards.
 
 # Browser sign-in lasts a year instead of 30 days: the instance is reachable only on the
-# tailnet, and every restart already rotates the first-login token. A patch replaces the
-# entry's whole config, so the bundle's trustedHosts line is restated.
+# tailnet, and the cookie signing secret survives restarts. A patch replaces the entry's
+# whole config, so the bundle's trustedHosts line is restated.
 - id: connection
   config:
     trustedHosts: !!js ctx.webStartup.trustedHosts
     cookieMaxAgeDays: 365
 
-# The preview notice is acknowledged here rather than through its dialog: the dialog writes
-# the profile patch, which setup-profile.sh replaces on every upgrade. When a build ships a
-# newer notice (WELCOME_NOTICE_VERSION in dsh-client-ui-settings-models), bump this value.
-- id: ui-settings-general
-  config:
-    welcomeNoticeVersion: '2026-09-28.1'
-
-# Models come from OpenRouter, so skip the official DeepSeek API-key onboarding dialog.
+# Models come from OpenRouter or other configured providers, so skip the official
+# DeepSeek API-key onboarding dialog.
 - id: ui-settings-models
   config:
     credentialOnboarding: false

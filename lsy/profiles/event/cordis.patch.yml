@@ -3,4 +3,16 @@
 # overrides, disables, and insert lists; `!!js` expressions allowed).
 # Web UI settings forms save here; setup-profile.sh creates this file once and never replaces it.
 # The event composition itself is the @deepseek-ai/dsh-lsy-event-bundle layer.
-[]
+#
+# Starting values, yours to change from the Web UI (Models page, model picker, settings):
+# models through OpenRouter, keyed by OPENROUTER_API_KEY in $DSH_HOME/.env, and new
+# Sessions (WeChat chat, watch-started, Web UI) on deepseek/deepseek-v4.1-flash.
+- id: llm-pi-ai
+  config:
+    providers:
+      openrouter:
+        apiKeyEnv: OPENROUTER_API_KEY
+- id: agent-default-model
+  config:
+    provider: openrouter
+    model: deepseek/deepseek-v4.1-flash
