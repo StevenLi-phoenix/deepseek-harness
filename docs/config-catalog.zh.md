@@ -2304,7 +2304,7 @@ export interface SessionAction {
 ## `@deepseek-ai/dsh-fork-github-sensor`
 
 - `inject`: `timer` · `storageDomain` · `credentials` · `forkEventBus`
-- `source`: [`packages/fork/fork-github-sensor/src/index.ts:90`](../packages/fork/fork-github-sensor/src/index.ts)
+- `source`: [`packages/fork/fork-github-sensor/src/index.ts:94`](../packages/fork/fork-github-sensor/src/index.ts)
 
 ```ts config-catalog
 /** Sensor configuration. */
