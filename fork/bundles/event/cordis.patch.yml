@@ -44,6 +44,10 @@
     - id: fork-github-sensor
       name: '@deepseek-ai/dsh-fork-github-sensor'
 
+    # Composer dock pill: the DeepSeek account balance next to the activity and usage pills.
+    - id: fork-balance
+      name: '@deepseek-ai/dsh-fork-balance'
+
     # Owner channel: chat Session over WeChat and ctx.forkNotifier for the bus.
     - id: fork-wechat
       name: '@deepseek-ai/dsh-fork-wechat'

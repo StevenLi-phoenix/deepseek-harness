@@ -430,6 +430,7 @@
       "@deepseek-ai/dsh-loader-smoke": ["./packages/test-support/loader-smoke/src"],
       "@deepseek-ai/dsh-lsp": ["./packages/lsp/lsp/src"],
       "@deepseek-ai/dsh-lsp-stdio": ["./packages/lsp/lsp-stdio/src"],
+      "@deepseek-ai/dsh-fork-balance": ["./packages/fork/fork-balance/src"],
       "@deepseek-ai/dsh-fork-event-bus": ["./packages/fork/fork-event-bus/src"],
       "@deepseek-ai/dsh-fork-github-sensor": ["./packages/fork/fork-github-sensor/src"],
       "@deepseek-ai/dsh-fork-tool-watch": ["./packages/fork/fork-tool-watch/src"],

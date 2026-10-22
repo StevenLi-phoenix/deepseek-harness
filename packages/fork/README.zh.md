@@ -24,6 +24,7 @@ kind: "package-group"
 
 | 包 | 作用 |
 |---|---|
+| [`fork-balance/`](fork-balance/README.zh.md) | 输入框下方统计栏里的 DeepSeek 账号余额小块 |
 | [`fork-event-bus/`](fork-event-bus/README.zh.md) | 去重、回环抑制、订阅、合批、限流、通知与 Session 分发 |
 | [`fork-github-sensor/`](fork-github-sensor/README.zh.md) | 用条件请求轮询 GitHub 的 release、tag、提交与通知 |
 | [`fork-tool-watch/`](fork-tool-watch/README.zh.md) | `watch_create`、`watch_list`、`watch_delete` 工具：agent 自己管理监控 |

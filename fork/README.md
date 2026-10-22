@@ -20,7 +20,7 @@ Deployment files for running this fork as an always-on, event-driven agent servi
 ```sh
 pnpm exec vitest run packages/fork
 pnpm exec vitest run packages/fork --coverage --coverage.include='packages/fork/*/src/**/*.ts'
-pnpm exec tsc -b packages/fork/fork-event-bus packages/fork/fork-github-sensor packages/fork/fork-tool-watch packages/fork/fork-wechat
+pnpm exec tsc -b packages/fork/fork-event-bus packages/fork/fork-github-sensor packages/fork/fork-tool-watch packages/fork/fork-wechat packages/fork/fork-balance
 pnpm exec tsc -p tsconfig.host.json --noEmit   # also type-checks tests
 pnpm exec tsx scripts/run-oxlint.ts packages/fork fork/deploy
 pnpm run constraints && pnpm run verify-product-use && pnpm run verify-tsconfig-paths
