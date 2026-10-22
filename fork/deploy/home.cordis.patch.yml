@@ -1,0 +1,19 @@
+# Deployment overlay for the event service: install as $DSH_HOME/cordis.patch.yml
+# (/Users/dsh-runtime/.dsh/cordis.patch.yml, owned by dsh-runtime). The home patch
+# outranks the profile patch, so `setup-profile.sh` refreshing the profile on upgrade
+# never touches it; the Models page cannot override these fields either.
+#
+# Models go through OpenRouter. The key is a credential reference resolved per
+# request from $DSH_HOME/.env (OPENROUTER_API_KEY); it never appears here.
+- id: llm-pi-ai
+  config:
+    providers:
+      openrouter:
+        apiKeyEnv: OPENROUTER_API_KEY
+
+# Agents created by entry points (WeChat chat, watch-started Sessions, the Web UI)
+# start on this model; a Session can still switch models in the Web UI picker.
+- id: agent-default-model
+  config:
+    provider: openrouter
+    model: deepseek/deepseek-v4.1-flash

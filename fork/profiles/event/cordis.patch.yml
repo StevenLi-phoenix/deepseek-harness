@@ -5,7 +5,8 @@
 # schedule_create), and the owner reaches the agent over WeChat.
 #
 # Secrets are read per use from the instance credential store or $DSH_HOME/.env:
-#   DEEPSEEK_API_KEY, FORK_GITHUB_TOKEN, FORK_GITHUB_NOTIFICATIONS_TOKEN (optional).
+#   the model key the deployment's home patch names (fork/deploy/home.cordis.patch.yml:
+#   OPENROUTER_API_KEY), FORK_GITHUB_TOKEN, FORK_GITHUB_NOTIFICATIONS_TOKEN (optional).
 # The WeChat bot account is bound once with fork/deploy/wechat-login.mjs and kept in
 # $DSH_HOME/fork-wechat/account.json.
 
