@@ -11606,6 +11606,24 @@ importers:
         specifier: workspace:*
         version: link:../../core/tools
 
+  packages/fork/fork-tool-wechat:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../llm/llm
+      '@deepseek-ai/dsh-fork-event-bus':
+        specifier: workspace:*
+        version: link:../fork-event-bus
+      '@deepseek-ai/dsh-fork-wechat':
+        specifier: workspace:*
+        version: link:../fork-wechat
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../core/tools
+
   packages/fork/fork-wechat:
     dependencies:
       '@deepseek-ai/schemastery':

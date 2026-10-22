@@ -28,6 +28,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`fork-event-bus/`](fork-event-bus/README.md) | Dedupe, loop suppression, subscriptions, coalescing, rate limits, notify and Session dispatch |
 | [`fork-github-sensor/`](fork-github-sensor/README.md) | Polls GitHub releases, tags, commits, and notifications with conditional requests |
 | [`fork-tool-watch/`](fork-tool-watch/README.md) | `watch_create`, `watch_list`, `watch_delete` tools: the agent manages its own watches |
+| [`fork-tool-wechat/`](fork-tool-wechat/README.md) | `wechat_send_file` tool: the agent sends pictures, videos, and files to the owner |
 | [`fork-wechat/`](fork-wechat/README.md) | WeChat (iLink bot) channel: owner chat Session, reply relay, and `ctx.forkNotifier` |
 
 -----

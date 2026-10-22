@@ -1,7 +1,8 @@
 /** In-memory iLink double: QR login, long-poll updates, and sends, behind a `fetch` replacement. */
 
 /** iLink endpoints the client calls. */
-export type Endpoint = 'ilink/bot/get_bot_qrcode' | 'ilink/bot/get_qrcode_status' | 'ilink/bot/getupdates' | 'ilink/bot/sendmessage' | 'cdn/download'
+export type Endpoint = 'ilink/bot/get_bot_qrcode' | 'ilink/bot/get_qrcode_status' | 'ilink/bot/getupdates' | 'ilink/bot/sendmessage'
+  | 'ilink/bot/getuploadurl' | 'cdn/download' | 'cdn/upload'
 
 /** One canned answer: a JSON body, a raw body, a status, or a thrown network error. */
 export type Reply = { status?: number; body?: unknown; raw?: string } | Error
@@ -30,8 +31,11 @@ const LONG_POLL: ReadonlySet<Endpoint> = new Set(['ilink/bot/get_qrcode_status',
 export class FakeIlink {
   readonly requests: RecordedRequest[] = []
   readonly sent: SentText[] = []
-  /** CDN downloads by `encrypted_query_param`: encrypted bytes, or an HTTP status to fail with. */
+  /** CDN downloads by `encrypted_query_param`: encrypted bytes, or an HTTP status to fail with; uploads land here too. */
   readonly cdn = new Map<string, Uint8Array | number>()
+  /** Every accepted send, whatever its item. */
+  readonly sentItems: { to: string; item: Record<string, unknown>; contextToken: string }[] = []
+  private uploadCount = 0
   private readonly queues = new Map<Endpoint, Reply[]>()
   private readonly waiters = new Map<Endpoint, Array<(reply: Reply) => void>>()
   private qrCount = 0
@@ -86,6 +90,14 @@ export class FakeIlink {
   /** `fetch` replacement bound to this double. */
   readonly fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const url = new URL(input instanceof Request ? input.url : String(input))
+    if (url.pathname.endsWith('/upload')) {
+      const headers = Object.fromEntries(new Headers(init?.headers).entries())
+      this.requests.push({ method: init?.method ?? 'GET', origin: url.origin, endpoint: 'cdn/upload', query: Object.fromEntries(url.searchParams), headers, body: undefined })
+      this.uploadCount += 1
+      const param = `dl-${this.uploadCount}`
+      this.cdn.set(param, new Uint8Array(await new Response(init?.body as BodyInit).arrayBuffer()))
+      return new Response(null, { status: 200, headers: { 'x-encrypted-param': param } })
+    }
     if (url.pathname.endsWith('/download')) {
       const headers = Object.fromEntries(new Headers(init?.headers).entries())
       this.requests.push({ method: init?.method ?? 'GET', origin: url.origin, endpoint: 'cdn/download', query: Object.fromEntries(url.searchParams), headers, body: undefined })
@@ -102,8 +114,11 @@ export class FakeIlink {
     if (reply instanceof Error) throw reply
     const status = reply.status ?? 200
     if (endpoint === 'ilink/bot/sendmessage' && status === 200 && reply.raw === undefined && ((reply.body as { ret?: number } | undefined)?.ret ?? 0) === 0) {
-      const msg = (body as { msg: { to_user_id: string; item_list: Array<{ text_item: { text: string } }>; context_token: string } }).msg
-      this.sent.push({ to: msg.to_user_id, text: msg.item_list[0]!.text_item.text, contextToken: msg.context_token })
+      type Item = Record<string, unknown> & { text_item?: { text: string } }
+      const msg = (body as { msg: { to_user_id: string; item_list: Item[]; context_token: string } }).msg
+      const item = msg.item_list[0]!
+      this.sentItems.push({ to: msg.to_user_id, item, contextToken: msg.context_token })
+      if (item.text_item !== undefined) this.sent.push({ to: msg.to_user_id, text: item.text_item.text, contextToken: msg.context_token })
     }
     return new Response(reply.raw ?? JSON.stringify(reply.body ?? {}), { status, headers: { 'content-type': 'application/json' } })
   }
@@ -115,6 +130,7 @@ export class FakeIlink {
       const qrcode = `qr-${this.qrCount}`
       return Promise.resolve({ body: { ret: 0, qrcode, qrcode_img_content: `https://liteapp.weixin.qq.com/q/${this.qrCount}?qrcode=${qrcode}&bot_type=3` } })
     }
+    if (endpoint === 'ilink/bot/getuploadurl') return Promise.resolve({ body: { ret: 0, upload_param: `up-${this.uploadCount + 1}` } })
     if (!LONG_POLL.has(endpoint)) return Promise.resolve({ body: { ret: 0 } })
     return new Promise((resolve, reject) => {
       const waiters = this.waiters.get(endpoint) ?? []

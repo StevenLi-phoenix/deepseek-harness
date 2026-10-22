@@ -51,7 +51,7 @@ function link(name, directory) {
 // The installed product resolves only its own default packages; the experimental webhook runtime, its
 // GitHub adapter, and the console logger are profile plugins here, linked like the fork packages.
 for (const name of ['@deepseek-ai/dsh-webhook', '@deepseek-ai/dsh-webhook-github', '@deepseek-ai/cordis-plugin-logger-console', '@deepseek-ai/dsh-fork-event-bus', '@deepseek-ai/dsh-fork-github-sensor',
-  '@deepseek-ai/dsh-fork-wechat', '@deepseek-ai/dsh-fork-tool-watch', '@deepseek-ai/dsh-fork-balance']) {
+  '@deepseek-ai/dsh-fork-wechat', '@deepseek-ai/dsh-fork-tool-watch', '@deepseek-ai/dsh-fork-tool-wechat', '@deepseek-ai/dsh-fork-balance']) {
   link(name, join(prefix, 'node_modules', name))
 }
 link('@deepseek-ai/dsh-fork-event-bundle', bundleDir)

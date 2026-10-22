@@ -505,6 +505,7 @@
     { "path": "./packages/fork/fork-event-bus" },
     { "path": "./packages/fork/fork-wechat" },
     { "path": "./packages/fork/fork-tool-watch" },
+    { "path": "./packages/fork/fork-tool-wechat" },
     { "path": "./packages/fork/fork-github-sensor" },
     { "path": "./packages/todo/tool-todo" },
     { "path": "./packages/plan/plan-mode" },

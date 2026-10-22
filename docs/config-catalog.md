@@ -2377,7 +2377,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-fork-wechat`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/fork-wechat/src/index.ts:44`](../packages/fork/fork-wechat/src/index.ts)
+- `source`: [`packages/fork/fork-wechat/src/index.ts:45`](../packages/fork/fork-wechat/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
@@ -4922,6 +4922,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-host-plugin-inventory` | `loader` | [`packages/host/plugin-inventory/src/index.ts`](../packages/host/plugin-inventory/src/index.ts) |
 | `@deepseek-ai/dsh-llm` | — | [`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts) |
 | `@deepseek-ai/dsh-lsp` | — | [`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts) |
+| `@deepseek-ai/dsh-fork-tool-wechat` | `tools` | [`packages/fork/fork-tool-wechat/src/index.ts`](../packages/fork/fork-tool-wechat/src/index.ts) |
 | `@deepseek-ai/dsh-mcp-resources` | `tools` | [`packages/mcp/mcp-resources/src/index.ts`](../packages/mcp/mcp-resources/src/index.ts) |
 | `@deepseek-ai/dsh-otel` | — | [`packages/telemetry/otel/src/index.ts`](../packages/telemetry/otel/src/index.ts) |
 | `@deepseek-ai/dsh-sandbox-ssh` | `ssh` | [`packages/ssh/sandbox-ssh/src/index.ts`](../packages/ssh/sandbox-ssh/src/index.ts) |

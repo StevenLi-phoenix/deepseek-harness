@@ -28,6 +28,7 @@ kind: "package-group"
 | [`fork-event-bus/`](fork-event-bus/README.zh.md) | 去重、回环抑制、订阅、合批、限流、通知与 Session 分发 |
 | [`fork-github-sensor/`](fork-github-sensor/README.zh.md) | 用条件请求轮询 GitHub 的 release、tag、提交与通知 |
 | [`fork-tool-watch/`](fork-tool-watch/README.zh.md) | `watch_create`、`watch_list`、`watch_delete` 工具：agent 自己管理监控 |
+| [`fork-tool-wechat/`](fork-tool-wechat/README.zh.md) | `wechat_send_file` 工具：agent 给 owner 发图片、视频和文件 |
 | [`fork-wechat/`](fork-wechat/README.zh.md) | 微信（iLink bot）通道：主人对话 Session、回复转发，以及 `ctx.forkNotifier` |
 
 -----

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ItemType } from '../src/api.ts'
-import { describeMedia, downloadMedia, mediaSpec, parseMediaKey, saveInboxFile, sniffImageType } from '../src/media.ts'
+import { describeMedia, downloadMedia, mediaSpec, outboundKind, parseMediaKey, saveInboxFile, sniffImageType, uploadMedia } from '../src/media.ts'
 
 const KEY = Buffer.from('00112233445566778899aabbccddeeff', 'hex')
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('rest of a png')])
@@ -119,5 +119,77 @@ describe('describeMedia', () => {
     expect(describeMedia({ kind: 'image', name: 'image.png', mediaType: 'image/png', data: Buffer.alloc(2048) })).toBe('image (image/png, 2.0 KB)')
     expect(describeMedia({ kind: 'file', name: 'a.pdf', mediaType: 'application/pdf', data: Buffer.alloc(3 * 1024 * 1024) })).toBe('file "a.pdf" (application/pdf, 3.0 MB)')
     expect(describeMedia({ kind: 'video', name: 'video.mp4', mediaType: 'video/mp4', data: Buffer.alloc(10) })).toBe('video (video/mp4, 10 B)')
+  })
+})
+
+/** A CDN double that keeps what was uploaded and serves it back for download. */
+function uploadCdn(options: { status?: number; omitParam?: boolean } = {}) {
+  const stored = new Map<string, Uint8Array>()
+  const uploads: { url: string; headers: Record<string, string> }[] = []
+  const fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const url = new URL(input instanceof Request ? input.url : String(input))
+    expect(init?.redirect).toBe('error')
+    if (url.pathname.endsWith('/upload')) {
+      uploads.push({ url: url.href, headers: Object.fromEntries(new Headers(init?.headers).entries()) })
+      if (options.status !== undefined) return new Response('no', { status: options.status })
+      const param = `dl-${uploads.length}`
+      stored.set(param, new Uint8Array(await new Response(init?.body as BodyInit).arrayBuffer()))
+      return new Response(null, { status: 200, headers: options.omitParam === true ? {} : { 'x-encrypted-param': param } })
+    }
+    const entry = stored.get(url.searchParams.get('encrypted_query_param') ?? '')
+    return entry === undefined ? new Response('missing', { status: 404 }) : new Response(new Uint8Array(entry))
+  }
+  return { fetch, uploads, stored }
+}
+
+describe('outboundKind', () => {
+  it('sends image bytes as a picture, known video extensions as video, and the rest as files', () => {
+    expect(outboundKind('anything.bin', PNG)).toBe('image')
+    expect(outboundKind('clip.MP4', Buffer.from('....ftypisom'))).toBe('video')
+    expect(outboundKind('notes.pdf', Buffer.from('%PDF-1.7'))).toBe('file')
+    expect(outboundKind('fake.png', Buffer.from('not really'))).toBe('file')
+  })
+})
+
+describe('uploadMedia', () => {
+  it('uploads the encrypted file and builds an item our own download path decrypts back', async () => {
+    const cdn = uploadCdn()
+    const requests: unknown[] = []
+    const client = { getUploadUrl: (request: unknown) => { requests.push(request); return Promise.resolve({ uploadParam: 'up+1' }) } }
+    const { kind, item } = await uploadMedia(client, 'owner@im.wechat', 'sticker.png', PNG, { cdnBaseUrl: CDN, timeoutMs: 5000, fetch: cdn.fetch })
+    expect(kind).toBe('image')
+    expect(requests).toEqual([expect.objectContaining({
+      media_type: 1, to_user_id: 'owner@im.wechat', rawsize: PNG.byteLength, filesize: 32,
+      rawfilemd5: expect.stringMatching(/^[0-9a-f]{32}$/) as unknown,
+      filekey: expect.stringMatching(/^[0-9a-f]{32}$/) as unknown,
+      aeskey: expect.stringMatching(/^[0-9a-f]{32}$/) as unknown,
+    })])
+    expect(cdn.uploads[0]!.url).toMatch(/^https:\/\/cdn\.test\/c2c\/upload\?encrypted_query_param=up%2B1&filekey=[0-9a-f]{32}$/)
+    expect(cdn.uploads[0]!.headers['content-type']).toBe('application/octet-stream')
+    expect(item).toMatchObject({ type: ItemType.IMAGE, image_item: { media: { encrypt_query_param: 'dl-1', encrypt_type: 1 }, mid_size: 32 } })
+    // The receiving side of this package reads the item it built: same bytes back.
+    await expect(downloadMedia(item, { cdnBaseUrl: CDN, maxBytes: 1024, timeoutMs: 5000, fetch: cdn.fetch })).resolves.toMatchObject({ kind: 'image', data: PNG })
+  })
+
+  it('names file items and sizes video items', async () => {
+    const cdn = uploadCdn()
+    const client = { getUploadUrl: () => Promise.resolve({ uploadFullUrl: 'https://cdn.test/c2c/upload?encrypted_query_param=x&filekey=y' }) }
+    const pdf = await uploadMedia(client, 'o', '/tmp/报告 v2.pdf', Buffer.from('%PDF-1.7 tiny'), { cdnBaseUrl: CDN, timeoutMs: 5000, fetch: cdn.fetch })
+    expect(pdf.item).toMatchObject({ type: ItemType.FILE, file_item: { file_name: '报告 v2.pdf', len: '13' } })
+    await expect(downloadMedia(pdf.item, { cdnBaseUrl: CDN, maxBytes: 1024, timeoutMs: 5000, fetch: cdn.fetch })).resolves.toMatchObject({ kind: 'file', name: '报告 v2.pdf', mediaType: 'application/pdf' })
+    const video = await uploadMedia(client, 'o', 'clip.mov', Buffer.alloc(20), { cdnBaseUrl: CDN, timeoutMs: 5000, fetch: cdn.fetch })
+    expect(video.item).toMatchObject({ type: ItemType.VIDEO, video_item: { video_size: 32 } })
+  })
+
+  it('refuses a foreign upload URL and reports CDN failures without URLs', async () => {
+    const client = (answer: { uploadFullUrl?: string; uploadParam?: string }) => ({ getUploadUrl: () => Promise.resolve(answer) })
+    const ok = uploadCdn()
+    await expect(uploadMedia(client({ uploadFullUrl: 'https://evil.test/upload' }), 'o', 'a.png', PNG, { cdnBaseUrl: CDN, timeoutMs: 5000, fetch: ok.fetch }))
+      .rejects.toThrow(/^upload URL is outside the WeChat CDN$/)
+    expect(ok.uploads).toEqual([])
+    await expect(uploadMedia(client({ uploadParam: 'p' }), 'o', 'a.png', PNG, { cdnBaseUrl: CDN, timeoutMs: 5000, fetch: uploadCdn({ status: 500 }).fetch }))
+      .rejects.toThrow(/^CDN upload failed with HTTP 500$/)
+    await expect(uploadMedia(client({ uploadParam: 'p' }), 'o', 'a.png', PNG, { cdnBaseUrl: CDN, timeoutMs: 5000, fetch: uploadCdn({ omitParam: true }).fetch }))
+      .rejects.toThrow(/^CDN upload returned no download parameter$/)
   })
 })
