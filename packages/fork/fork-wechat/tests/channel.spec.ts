@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -248,6 +248,18 @@ describe('WechatChannel chat', () => {
       ['chat-1', [{ type: 'text', text: 'two' }]],
       ['chat-1', [{ type: 'text', text: 'three' }]],
     ])
+  })
+
+  it('keeps the chat workspace private and recreates it after a temp-directory sweep', async () => {
+    const h = await harness()
+    await h.ownerSays('one')
+    expect(statSync(join(dir, 'work')).mode & 0o777).toBe(0o700)
+    // macOS empties /tmp on restart; the stored Session must still find its cwd.
+    rmSync(join(dir, 'work'), { recursive: true })
+    await h.ownerSays('two')
+    expect(h.sessions.created).toHaveLength(1)
+    expect(h.sessions.prompts.map(prompt => prompt.sessionId)).toEqual(['chat-1', 'chat-1'])
+    expect(statSync(join(dir, 'work')).mode & 0o777).toBe(0o700)
   })
 
   it('starts a new chat Session when the stored one no longer resolves', async () => {
@@ -616,7 +628,7 @@ describe('WechatChannel chat Session bookkeeping', () => {
 describe('WechatChannel configuration', () => {
   it('applies defaults', () => {
     expect(resolveConfig({})).toEqual({
-      chat: { workspacePath: '/Users/dsh-runtime/work', agentPreset: 'unattended', permissionPreset: 'danger-full-access', title: '微信', timeZone: 'America/New_York' },
+      chat: { workspacePath: '/tmp/dsh-wechat', agentPreset: 'unattended', permissionPreset: 'danger-full-access', title: '微信', timeZone: 'America/New_York' },
       maxMessageChars: 3000,
       maxReplyParts: 3,
       repliesPerToken: 10,
