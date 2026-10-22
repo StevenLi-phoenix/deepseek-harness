@@ -18,6 +18,7 @@ kind: "package-reference"
 - [延伸阅读](#further-exploration)
 - [模型体验](#model-experience)
 - [已知限制与延后工作](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
 -----
 
@@ -122,3 +123,15 @@ preset 挂载这个包的 Agent，每次请求都有一份固定的 schema 开�
 - **同一仓库的 watch 共享事件**——订阅按仓库和 kind 匹配，所以同一仓库的两个 watch（例如两个分支的 commits）都会看到任一分支的提交。
 - **不能原地修改**——修改 watch 要先 `watch_delete` 再 `watch_create`，会重新记录基线。
 - **watch 作用于整个实例**——preset 挂载了这些工具的任何 Agent，都能看到并删除所有 agent 创建的 watch。
+
+<a id="dev-note"></a>
+### 开发备注
+
+<details>
+<summary>维护者的工作上下文——点击展开</summary>
+
+本开发备注是不具权威性的工作上下文：尚未决定的探索方向与维护者备注。已交付的行为与既定理由以上文、包代码和相关 Agent Note 为准。
+
+- 监控目前只覆盖 GitHub 来源（`github_repo`、`github_notifications`）；新增传感器后，要先给 `watch_create` 加上对应的种类，agent 才能不改配置就订阅它。
+
+</details>

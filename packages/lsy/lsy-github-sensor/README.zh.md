@@ -18,6 +18,7 @@ kind: "package-reference"
 - [延伸阅读](#further-exploration)
 - [模型体验](#model-experience)
 - [已知限制与延后工作](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
 -----
 
@@ -139,3 +140,15 @@ release 说明与提交信息占大头：每个事件最多 `maxTextChars` 个�
 - **轮询状态只在内存里**——重启后 `lastPoll` 为空，直到每个流再被轮询一次。
 - **不标记已读**——通知线程在 GitHub 上保持未读；每次线程更新都是一个新事件。
 - **通知需要 classic token**——GitHub 的通知 API 不接受 fine-grained token。
+
+<a id="dev-note"></a>
+### 开发备注
+
+<details>
+<summary>维护者的工作上下文——点击展开</summary>
+
+本开发备注是不具权威性的工作上下文：尚未决定的探索方向与维护者备注。已交付的行为与既定理由以上文、包代码和相关 Agent Note 为准。
+
+- 没有 `LSY_GITHUB_TOKEN` 时，GitHub 把每次轮询（包括 304 响应）都计入每小时 60 次的匿名限额；每个仓库每 60 秒最多轮询三类数据流，所以这样的部署几分钟内就会因限速暂停。
+
+</details>

@@ -18,6 +18,7 @@ Watch any GitHub repository you can read, including ones where you cannot instal
 - [Further Exploration](#further-exploration)
 - [Model Experience](#model-experience)
 - [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
 -----
 
@@ -139,3 +140,15 @@ Independent of polling: events only ever open new Sessions, which establish rath
 - **Poll status is in memory** — `lastPoll` starts empty after a restart until each stream is polled again.
 - **No read marking** — notification threads stay unread on GitHub; each thread update is a new event.
 - **Classic token for notifications** — GitHub's notifications API does not accept fine-grained tokens.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+This Dev Note is non-authoritative working context: undecided directions and notes for maintainers. Shipped behavior and accepted rationale live in the sections above, the package code, and the linked Agent Notes.
+
+- Without `LSY_GITHUB_TOKEN`, GitHub counts every poll, 304 responses included, against its 60-per-hour unauthenticated limit; each repository polls up to three streams every 60 seconds, so such a deployment pauses on rate limits within minutes.
+
+</details>

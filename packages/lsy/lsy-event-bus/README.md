@@ -18,6 +18,7 @@ Route events from sensors to a phone notification or a new unattended agent Sess
 - [Further Exploration](#further-exploration)
 - [Model Experience](#model-experience)
 - [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
 -----
 
@@ -151,3 +152,15 @@ The message opens a new Session, so it establishes rather than invalidates that 
 - **Reminder names come from the Host framing** — if the schedule message format changes, reports fall back to `⏰ Session <id>`.
 - **No Web link to one Session** — results link to the Web root; the client has no per-Session URL.
 - **Whole-domain rewrites** — the JSON storage backend rewrites the domain on each write; keep retention bounded.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+This Dev Note is non-authoritative working context: undecided directions and notes for maintainers. Shipped behavior and accepted rationale live in the sections above, the package code, and the linked Agent Notes.
+
+- Only the first turn of a bus-started Session and unattended reminder turns are reported; later turns of the same Session reach the owner only through the Web UI. Whether to follow later turns is undecided.
+
+</details>

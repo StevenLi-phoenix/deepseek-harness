@@ -48,7 +48,7 @@ pendingCount(): number
 /**
  * Add a routing rule at run time. It is stored durably and survives restarts.
  * @param subscription - rule; validated like a configuration row.
- * @param meta - provenance, e.g. the creating Session.
+ * @param meta - who created the subscription, e.g. the creating Session.
  * @returns the stored subscription with its (empty) status.
  * @throws {LsySubscriptionError} `invalid_subscription` for a rule the bus cannot route, or `duplicate_id`
  * for an id the configuration or another stored subscription already uses.

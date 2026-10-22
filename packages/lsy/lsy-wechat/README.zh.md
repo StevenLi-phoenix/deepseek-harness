@@ -18,6 +18,7 @@ kind: "package-reference"
 - [延伸阅读](#further-exploration)
 - [模型体验](#model-experience)
 - [已知限制与延后工作](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
 -----
 
@@ -134,3 +135,15 @@ owner 的每条微信消息都以普通用户 prompt 的形式进入对话 Sessi
 - **没有"正在输入"提示**——agent 工作时 owner 看不到任何动静。
 - **入站至多一次**——存储游标与转发消息之间崩溃会丢掉那条消息。
 - **限制来自第三方文档**——窗口时长、额度和长度上限没有官方公布，所以它们是配置项而不是常量。
+
+<a id="dev-note"></a>
+### 开发备注
+
+<details>
+<summary>维护者的工作上下文——点击展开</summary>
+
+本开发备注是不具权威性的工作上下文：尚未决定的探索方向与维护者备注。已交付的行为与既定理由以上文、包代码和相关 Agent Note 为准。
+
+- `/new` 是唯一的聊天命令；其他命令（例如在微信里切换聊天 Session 的模型）尚未决定。
+
+</details>

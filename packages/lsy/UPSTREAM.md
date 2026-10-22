@@ -8,7 +8,7 @@ This fork keeps upstream `packages/` untouched. Fork-local code lives in `packag
 |---|---|
 | Upstream | `https://github.com/deepseek-ai/deepseek-harness` (`upstream` remote) |
 | Base tag | `dsh-v0.2.1-rc.2` |
-| Base commit | `687f282e8625c6b8d11ff58211a90524be2e4317` |
+| Base commit | The commit of tag `dsh-v0.2.1-rc.2` (`git rev-list -n 1 dsh-v0.2.1-rc.2`) |
 | Fork branch | `lsy/main` (`master` mirrors upstream) |
 
 ## Copied packages

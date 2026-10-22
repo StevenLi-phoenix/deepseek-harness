@@ -1585,7 +1585,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       {
         signature: 'async subscribe(subscription: Subscription, meta: SubscriptionMeta = {}): Promise<SubscriptionView>',
         description: 'Add a routing rule at run time. It is stored durably and survives restarts.',
-        parameters: [{ name: 'subscription', description: 'rule; validated like a configuration row.' }, { name: 'meta', description: 'provenance, e.g. the creating Session.' }],
+        parameters: [{ name: 'subscription', description: 'rule; validated like a configuration row.' }, { name: 'meta', description: 'who created the subscription, e.g. the creating Session.' }],
         returns: 'the stored subscription with its (empty) status.',
         throws: ['{LsySubscriptionError} `invalid_subscription` for a rule the bus cannot route, or `duplicate_id` for an id the configuration or another stored subscription already uses.'],
       },

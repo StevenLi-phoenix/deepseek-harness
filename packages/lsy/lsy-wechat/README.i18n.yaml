@@ -12,8 +12,8 @@
   en: b296a735ab295cfb
   zh: fb1acb3d0e400845
 /deepseek-ai-dsh-lsy-wechat/table-of-contents:
-  en: b563e4ec4727d0de
-  zh: bd4ef01ceedb8324
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
 /deepseek-ai-dsh-lsy-wechat/use-this-package:
   en: 69b5a731280c0022
   zh: 3a914cd34120da77
@@ -45,5 +45,8 @@
   en: 799452efb569ad8c
   zh: ded6c9d49d309ded
 /deepseek-ai-dsh-lsy-wechat/known-limitations-and-deferred-work:
-  en: 3b439e897e90ad2c
-  zh: 7706a9d8076fa9f8
+  en: d14d5e2050aaf66c
+  zh: ddffdd55838d1fab
+/deepseek-ai-dsh-lsy-wechat/known-limitations-and-deferred-work/dev-note:
+  en: e764a798720a7a3b
+  zh: 9848cab6ad2f7146

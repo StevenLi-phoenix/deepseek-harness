@@ -12,8 +12,8 @@
   en: e88d226a3a5f3c95
   zh: ef5b5209459f6e4a
 /deepseek-ai-dsh-lsy-event-bus/table-of-contents:
-  en: b563e4ec4727d0de
-  zh: bd4ef01ceedb8324
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
 /deepseek-ai-dsh-lsy-event-bus/use-this-package:
   en: df168e70f7f2e5b9
   zh: e14b773f28c6e421
@@ -51,5 +51,8 @@
   en: 23469d9cad27fdf2
   zh: 034706e03224cb28
 /deepseek-ai-dsh-lsy-event-bus/known-limitations-and-deferred-work:
-  en: 2a3a9e3ac13fe85e
-  zh: 497a022aef03e780
+  en: 3becb1fd073621f7
+  zh: 4d821a8462fca61b
+/deepseek-ai-dsh-lsy-event-bus/known-limitations-and-deferred-work/dev-note:
+  en: ef95102f99ab30c8
+  zh: 570da28b68d7fad9

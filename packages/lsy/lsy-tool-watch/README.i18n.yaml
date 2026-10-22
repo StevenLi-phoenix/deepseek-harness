@@ -12,8 +12,8 @@
   en: 4bcc78619ed64341
   zh: 0a7f52bb92e36176
 /deepseek-ai-dsh-lsy-tool-watch/table-of-contents:
-  en: b563e4ec4727d0de
-  zh: bd4ef01ceedb8324
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
 /deepseek-ai-dsh-lsy-tool-watch/use-this-package:
   en: d55afbf666f91943
   zh: 4f9dbda1c90c9a0d
@@ -60,5 +60,8 @@
   en: 2fbf2175168e8244
   zh: fdc53d49bb7c3bca
 /deepseek-ai-dsh-lsy-tool-watch/known-limitations-and-deferred-work:
-  en: 2882837620240d74
-  zh: dfc0f91c24a8fee8
+  en: 052c05b478696224
+  zh: c8405939f3a26fa6
+/deepseek-ai-dsh-lsy-tool-watch/known-limitations-and-deferred-work/dev-note:
+  en: c1ef2a8f414061d8
+  zh: f248cedc7c09689b
