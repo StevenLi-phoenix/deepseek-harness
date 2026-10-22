@@ -2302,7 +2302,7 @@ export interface SessionAction {
 ## `@deepseek-ai/dsh-lsy-github-sensor`
 
 - `inject`: `timer` · `storageDomain` · `credentials` · `lsyEventBus`
-- `source`: [`packages/lsy/lsy-github-sensor/src/index.ts:90`](../packages/lsy/lsy-github-sensor/src/index.ts)
+- `source`: [`packages/lsy/lsy-github-sensor/src/index.ts:94`](../packages/lsy/lsy-github-sensor/src/index.ts)
 
 ```ts config-catalog
 /** Sensor configuration. */

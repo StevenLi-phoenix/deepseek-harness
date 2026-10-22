@@ -83,6 +83,11 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 | `github.tag` | `<repo>:tag:<name>` | repository | — |
 | `github.commit` | `<repo>:commit:<sha>` | repository | GitHub login, else git author name |
 | `github.notification.<type>` | `notification:<thread>:<updated_at>` | repository | — |
+| `github.<event>.<action>` (webhooks only) | `<repo>:<event>:<delivery id>` | repository | sender login |
+
+### Webhooks
+
+With `@deepseek-ai/dsh-webhook` and `@deepseek-ai/dsh-webhook-github` mounted, the sensor also registers one webhook rule (`lsy-github-sensor`, kind `github`). A verified delivery is mapped and published to the bus, and the rule never starts a Session itself: a published release, a created tag, and commits pushed to the default branch become the events above with the same keys, so a change seen by both a webhook and a poll is one event; a webhook brings it within seconds and polling covers a missed delivery. Pull requests, issues, issue comments, reviews, finished workflow runs, and other repository events become `github.<event>.<action>`, for example `github.pull_request.opened` or `github.workflow_run.completed`. `ping` and App installation events are dropped. The lsy event service receives a GitHub App's deliveries through the `github-relay` service on phm (see the [runbook](../../../lsy/deploy/RUNBOOK.md)).
 
 -----
 
@@ -98,6 +103,7 @@ One tick polls the union of configured and agent-created repositories, each stre
 |---|---|
 | [`src/index.ts`](src/index.ts) | Service, configuration, run-time watches, probe, tick, conditional fetch, rate-limit backoff |
 | [`src/github.ts`](src/github.ts) | Response parsing and event mapping |
+| [`src/webhook.ts`](src/webhook.ts) | Webhook delivery mapping |
 | [`src/storage.ts`](src/storage.ts) | Cursor and watch tables |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md). `tests/fake-github.ts` is a REST double with ETag, Last-Modified, X-Poll-Interval, and rate-limit behavior; the `@deepseek-ai/dsh-lsy-tool-watch` tests reuse it.
@@ -140,6 +146,7 @@ Independent of polling: events only ever open new Sessions, which establish rath
 - **Poll status is in memory** — `lastPoll` starts empty after a restart until each stream is polled again.
 - **No read marking** — notification threads stay unread on GitHub; each thread update is a new event.
 - **Classic token for notifications** — GitHub's notifications API does not accept fine-grained tokens.
+- **Webhook commits are default-branch only** — a push to another branch is not an event, even when a watch follows that branch's commits by polling.
 
 <a id="dev-note"></a>
 ### Dev Note

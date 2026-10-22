@@ -88,8 +88,14 @@ export const parseCommits = (body: unknown): Commit[] | undefined => parseList(c
 /** Notification threads, most recently updated first. */
 export const parseThreads = (body: unknown): Thread[] | undefined => parseList(threadSchema, body)
 
+/** One release, as a webhook `release` payload carries it; undefined when the shape is unexpected. */
+export function parseRelease(value: unknown): Release | undefined {
+  const parsed = releaseSchema.safeParse(value)
+  return parsed.success ? parsed.data : undefined
+}
+
 /** Parse an ISO timestamp, omitting the field when absent. */
-function occurredAt(value: string | null | undefined): { occurredAt?: number } {
+export function occurredAt(value: string | null | undefined): { occurredAt?: number } {
   if (value === null || value === undefined) return {}
   const parsed = Date.parse(value)
   return Number.isNaN(parsed) ? {} : { occurredAt: parsed }

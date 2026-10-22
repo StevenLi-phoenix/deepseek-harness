@@ -27,11 +27,14 @@
   en: de8b4f9e8df2c91d
   zh: d6e06882c6a6f4f9
 /deepseek-ai-dsh-lsy-github-sensor/use-this-package/events:
-  en: c8ce8252cd04c5f0
-  zh: d502d9d0cfaecf2b
+  en: 94ac2bfbaee1b546
+  zh: 68cbf92287522f7a
+/deepseek-ai-dsh-lsy-github-sensor/use-this-package/webhooks:
+  en: 6fb3d89cb5f2aac5
+  zh: 35b89b02df3a5339
 /deepseek-ai-dsh-lsy-github-sensor/understand-the-implementation:
-  en: 286117ed84de29b3
-  zh: f50263dada7d2894
+  en: 68726bff8c87e320
+  zh: ecf71da2e1a7b403
 /deepseek-ai-dsh-lsy-github-sensor/further-exploration:
   en: e065d9ec6846e471
   zh: d990956aafcc0c96
@@ -51,8 +54,8 @@
   en: cba369e25c091d39
   zh: d84edd031e96dc5d
 /deepseek-ai-dsh-lsy-github-sensor/known-limitations-and-deferred-work:
-  en: c44ce181cea93df1
-  zh: 3a1e0851cb1dac56
+  en: 21441003f9db8152
+  zh: 29d0d7f454219d7d
 /deepseek-ai-dsh-lsy-github-sensor/known-limitations-and-deferred-work/dev-note:
   en: 3b6b95e95156aa17
   zh: 3a19dead7f1b75f9

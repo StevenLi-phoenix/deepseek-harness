@@ -31,6 +31,17 @@
     - id: webhook-runtime
       name: '@deepseek-ai/dsh-webhook'
 
+    # GitHub App webhooks. GitHub posts to https://api.lishuyu.app/github-relay/github on phm, which
+    # forwards the untouched body and signature headers over the tailnet to this route; the HMAC check
+    # here is the only trust boundary. lsy-github-sensor's rule turns deliveries into bus events.
+    - id: webhook-github
+      name: '@deepseek-ai/dsh-webhook-github'
+      config:
+        source: github-app
+        path: /hooks/github
+        secretEnv: LSY_GITHUB_WEBHOOK_SECRET
+        maxBodyBytes: 26214400
+
     # Routing state (agent-created subscriptions and repository watches) lives in storage;
     # these rows only carry deployment-wide settings.
     - id: lsy-event-bus

@@ -166,6 +166,24 @@ launchctl bootout gui/$(id -u)/app.lishuyu.dsh && launchctl disable gui/$(id -u)
 
 Every restart prints a new first-login URL to stdout (`grep -o 'http://127.0.0.1:3081/?token=[^ ]*' /Users/dsh-runtime/logs/stdout.log | tail -1`); open it with the host replaced by `https://dsh.tailc2559b.ts.net`. The cookie it sets lasts 30 days. Roll back with `launchctl enable` and `launchctl bootstrap` of `~/Library/LaunchAgents/app.lishuyu.dsh.plist` and the serve line with port 3080.
 
+## 11. GitHub webhooks through phm (optional)
+
+Polling reports within a minute and spends the owner's shared REST quota on anything that is not a 304. A private GitHub App pushes repository events instead, in seconds and at no quota cost. GitHub cannot reach the mini, so deliveries go through the `github-relay` service of the API platform on phm (`StevenLi-phoenix/api`, `plugins/github-relay`), which forwards the untouched body and signature headers over the tailnet to `https://dsh.tailc2559b.ts.net/hooks/github`. The mini verifies the signature; phm holds no secret.
+
+1. The webhook secret is `LSY_GITHUB_WEBHOOK_SECRET` in `/Users/dsh-runtime/.dsh/.env` (`openssl rand -hex 32`; restart after changing it). Export a copy for the GitHub form without printing it:
+   ```sh
+   umask 077; sudo -n -u dsh-runtime /usr/bin/sed -n 's/^LSY_GITHUB_WEBHOOK_SECRET=//p' /Users/dsh-runtime/.dsh/.env > ~/lsy-github-webhook-secret.txt
+   ```
+2. Publish the relay: merge the `github-relay` plugin into the API platform's `main`, then on phm add the Caddy route and reload:
+   ```sh
+   ssh phm "printf 'handle /github-relay/* {\n  reverse_proxy 127.0.0.1:18080\n}\n' > /etc/caddy/services-api/github-relay.caddy && caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy"
+   ```
+3. Register the App with the form prefilled (private, webhook to the relay, read-only permissions, the events below), paste the secret from `~/lsy-github-webhook-secret.txt` (`pbcopy < ~/lsy-github-webhook-secret.txt`), create it, and install it on the repositories to watch:
+   `https://github.com/settings/apps/new?name=lsy-dsh-events&description=Webhooks%20for%20the%20lsy%20dsh%20event%20service&url=https://github.com/StevenLi-phoenix/deepseek-harness&public=false&webhook_active=true&webhook_url=https://api.lishuyu.app/github-relay/github&metadata=read&contents=read&issues=read&pull_requests=read&actions=read&events[]=push&events[]=create&events[]=release&events[]=pull_request&events[]=pull_request_review&events[]=issues&events[]=issue_comment&events[]=workflow_run`
+4. Remove the exported copy: `trash ~/lsy-github-webhook-secret.txt`.
+
+Verify on the App's **Advanced** page: the `ping` delivery shows `202`, and `stdout.log` gains `lsy-github-sensor: webhook …` lines for later deliveries. A `401` means the secrets differ; `502` means phm could not reach the mini; `415` means the content type is not `application/json`. Watches still poll, so a missed delivery is caught within a minute.
+
 ## Operator access without passwords (optional)
 
 `/etc/sudoers.d/dsh-events` (root:wheel 440, written with `sudo visudo -f /etc/sudoers.d/dsh-events`) lets the operator act as the service user and restart the daemon without a password, so config edits, `.env` changes, and upgrades need no one at the keyboard:

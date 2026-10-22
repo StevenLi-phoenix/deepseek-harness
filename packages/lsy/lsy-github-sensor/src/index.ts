@@ -5,9 +5,13 @@ import type {} from '@deepseek-ai/cordis-plugin-timer'
 import { credentialRef, type CredentialRef } from '@deepseek-ai/dsh-credentials'
 import type { LsyEventInput } from '@deepseek-ai/dsh-lsy-event-bus'
 import type { Domain } from '@deepseek-ai/dsh-storage-domain'
+import type { WebhookRuleId } from '@deepseek-ai/dsh-webhook'
+// Type-only: merges the `github` delivery event (`{ name, payload }`) into the webhook runtime's event map.
+import type {} from '@deepseek-ai/dsh-webhook-github'
 import z from '@deepseek-ai/schemastery'
 import { commitEvent, notificationEvent, parseCommits, parseReleases, parseRepository, parseTags, parseThreads, releaseEvent, tagEvent } from './github.ts'
 import { sensorDomain, type StreamCursor, type WatchRecord } from './storage.ts'
+import { deliveryEvents } from './webhook.ts'
 
 export * from './github.ts'
 export type * from './storage.ts'
@@ -109,6 +113,9 @@ export interface Config {
   /** Seen ids remembered per stream. */
   maxSeenPerStream: number
 }
+
+/** Webhook rule of this sensor; one per process. */
+const WEBHOOK_RULE_ID = 'lsy-github-sensor' as WebhookRuleId
 
 /** Configuration schema. */
 export const Config: z<Config> = z.object({
@@ -247,6 +254,25 @@ export class GithubSensor extends Service {
   constructor(ctx: Context, private readonly config: Config) {
     super(ctx, 'lsyGithubSensor')
     assertConfig(config)
+    // Webhooks are optional: with a webhook runtime mounted (and dsh-webhook-github in front of it),
+    // deliveries become the same bus events polling produces, seconds after the change.
+    ctx.inject(['webhookRuntime'], (scope) => {
+      scope.effect(() => scope.webhookRuntime.register({
+        id: WEBHOOK_RULE_ID,
+        kind: 'github',
+        run: async (delivery) => {
+          const events = deliveryEvents(delivery.event, delivery.deliveryId, this.config.maxTextChars)
+          const counts = new Map<string, number>()
+          for (const event of events) {
+            const outcome = await this.ctx.lsyEventBus.publish(event)
+            counts.set(outcome, (counts.get(outcome) ?? 0) + 1)
+          }
+          const summary = [...counts].map(([outcome, count]) => `${count} ${outcome}`).join(', ')
+          this.ctx.logger.info(`lsy-github-sensor: webhook ${delivery.event.name} ${delivery.deliveryId}: ${events.length} event(s)${summary === '' ? '' : ` (${summary})`}`)
+          return null
+        },
+      }), 'lsyGithubSensor.webhookRule()')
+    })
     this.tokenRef = credentialRef(config.tokenEnv)
     this.notificationsRef = credentialRef(config.notificationsTokenEnv)
     this.ready = ctx.storageDomain.open(sensorDomain)

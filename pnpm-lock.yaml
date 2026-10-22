@@ -11565,6 +11565,9 @@ importers:
       '@deepseek-ai/dsh-webhook':
         specifier: workspace:*
         version: link:../../experimental/webhook
+      '@deepseek-ai/dsh-webhook-github':
+        specifier: workspace:*
+        version: link:../../experimental/webhook-github
 
   packages/lsy/lsy-tool-watch:
     dependencies:

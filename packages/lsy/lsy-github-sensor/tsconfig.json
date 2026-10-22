@@ -25,6 +25,12 @@
     },
     {
       "path": "../lsy-event-bus"
+    },
+    {
+      "path": "../../experimental/webhook"
+    },
+    {
+      "path": "../../experimental/webhook-github"
     }
   ]
 }

@@ -48,9 +48,9 @@ function link(name, directory) {
   manifest.dependencies[name] = `file:${directory}`
   links.push(name)
 }
-// The installed product resolves only its own default packages; the experimental webhook runtime and the
-// console logger are profile plugins here, linked like the lsy packages.
-for (const name of ['@deepseek-ai/dsh-webhook', '@deepseek-ai/cordis-plugin-logger-console', '@deepseek-ai/dsh-lsy-event-bus', '@deepseek-ai/dsh-lsy-github-sensor',
+// The installed product resolves only its own default packages; the experimental webhook runtime, its
+// GitHub adapter, and the console logger are profile plugins here, linked like the lsy packages.
+for (const name of ['@deepseek-ai/dsh-webhook', '@deepseek-ai/dsh-webhook-github', '@deepseek-ai/cordis-plugin-logger-console', '@deepseek-ai/dsh-lsy-event-bus', '@deepseek-ai/dsh-lsy-github-sensor',
   '@deepseek-ai/dsh-lsy-wechat', '@deepseek-ai/dsh-lsy-tool-watch', '@deepseek-ai/dsh-lsy-balance']) {
   link(name, join(prefix, 'node_modules', name))
 }

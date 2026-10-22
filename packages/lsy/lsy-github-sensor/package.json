@@ -44,6 +44,7 @@
     "@deepseek-ai/dsh-lsy-event-bus": "workspace:*",
     "@deepseek-ai/dsh-storage": "workspace:*",
     "@deepseek-ai/dsh-storage-domain": "workspace:*",
-    "@deepseek-ai/dsh-webhook": "workspace:*"
+    "@deepseek-ai/dsh-webhook": "workspace:*",
+    "@deepseek-ai/dsh-webhook-github": "workspace:*"
   }
 }

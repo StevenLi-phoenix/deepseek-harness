@@ -83,6 +83,11 @@ kind: "package-reference"
 | `github.tag` | `<repo>:tag:<name>` | 仓库 | — |
 | `github.commit` | `<repo>:commit:<sha>` | 仓库 | GitHub 登录名，否则为 git 作者名 |
 | `github.notification.<type>` | `notification:<thread>:<updated_at>` | 仓库 | — |
+| `github.<event>.<action>`（仅 webhook） | `<repo>:<event>:<delivery id>` | 仓库 | 发送者 login |
+
+### Webhook
+
+挂载了 `@deepseek-ai/dsh-webhook` 和 `@deepseek-ai/dsh-webhook-github` 时，传感器还会注册一条 webhook 规则（`lsy-github-sensor`，kind 为 `github`）。通过校验的投递被映射后发布到总线，规则本身从不创建 Session：发布的 release、新建的 tag、推到默认分支的提交，都变成上表中 key 相同的事件，所以同一变化即使 webhook 和轮询都看到，也只算一个事件；webhook 让它几秒内到达，轮询兜住漏掉的投递。PR、issue、issue 评论、review、已结束的 workflow run 以及其他仓库事件变成 `github.<event>.<action>`，例如 `github.pull_request.opened` 或 `github.workflow_run.completed`。`ping` 和 App 安装类事件会被丢弃。lsy 事件服务通过 phm 上的 `github-relay` 服务接收 GitHub App 的投递（见 [runbook](../../../lsy/deploy/RUNBOOK.md)）。
 
 -----
 
@@ -98,6 +103,7 @@ kind: "package-reference"
 |---|---|
 | [`src/index.ts`](src/index.ts) | 服务、配置、运行时 watch、probe、tick、条件请求、限流退避 |
 | [`src/github.ts`](src/github.ts) | 响应解析与事件映射 |
+| [`src/webhook.ts`](src/webhook.ts) | webhook 投递映射 |
 | [`src/storage.ts`](src/storage.ts) | 游标表与 watch 表 |
 
 这是 fork 本地的包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。`tests/fake-github.ts` 是带 ETag、Last-Modified、X-Poll-Interval 与限流行为的 REST 替身；`@deepseek-ai/dsh-lsy-tool-watch` 的测试复用了它。
@@ -140,6 +146,7 @@ release 说明与提交信息占大头：每个事件最多 `maxTextChars` 个�
 - **轮询状态只在内存里**——重启后 `lastPoll` 为空，直到每个流再被轮询一次。
 - **不标记已读**——通知线程在 GitHub 上保持未读；每次线程更新都是一个新事件。
 - **通知需要 classic token**——GitHub 的通知 API 不接受 fine-grained token。
+- **webhook 只报默认分支的提交**——推到其他分支不算事件，即使某个 watch 在用轮询跟踪那个分支的提交。
 
 <a id="dev-note"></a>
 ### 开发备注
