@@ -1,0 +1,58 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/lsy-tool-wechat/README.md
+/:
+  en: b5ca50b0a742a760
+  zh: beef20c54e44f11b
+/deepseek-ai-dsh-lsy-tool-wechat:
+  en: fabcdd234432a7b6
+  zh: 5f169c96342d1051
+/deepseek-ai-dsh-lsy-tool-wechat/summary:
+  en: da162f66daec7f26
+  zh: 7bfd97b408100fe8
+/deepseek-ai-dsh-lsy-tool-wechat/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-lsy-tool-wechat/use-this-package:
+  en: a7941623eb6e7e85
+  zh: ef887bd14a2b1471
+/deepseek-ai-dsh-lsy-tool-wechat/understand-the-implementation:
+  en: 19f2347d8fb8aaf2
+  zh: ed04d83c95d82585
+/deepseek-ai-dsh-lsy-tool-wechat/further-exploration:
+  en: fbb0c043ed951db2
+  zh: 9c5b414e553023d6
+/deepseek-ai-dsh-lsy-tool-wechat/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-lsy-tool-wechat/model-experience/send-tool:
+  en: 32be3bbb2ad13667
+  zh: efc91bf504ad3789
+/deepseek-ai-dsh-lsy-tool-wechat/model-experience/send-tool/what-the-model-sees:
+  en: cc41869ca46fdc7f
+  zh: 503fb18c12b0ffb8
+/deepseek-ai-dsh-lsy-tool-wechat/model-experience/send-tool/token-effect:
+  en: 9b6fea54ebf84b5a
+  zh: 7b386bb46c6dd9f5
+/deepseek-ai-dsh-lsy-tool-wechat/model-experience/send-tool/kv-cache-effect:
+  en: 5b38c23791d4786e
+  zh: 73534032522a91f8
+/deepseek-ai-dsh-lsy-tool-wechat/model-experience/send-results:
+  en: eac0d9475e171f8e
+  zh: 603f1886906cfa8d
+/deepseek-ai-dsh-lsy-tool-wechat/model-experience/send-results/what-the-model-sees:
+  en: 7b8b1eed8d59de15
+  zh: 757de25525ae0688
+/deepseek-ai-dsh-lsy-tool-wechat/model-experience/send-results/token-effect:
+  en: 7aa5c06d9b372bc1
+  zh: 67b2b39ce1a8003f
+/deepseek-ai-dsh-lsy-tool-wechat/model-experience/send-results/kv-cache-effect:
+  en: 2fbf2175168e8244
+  zh: fdc53d49bb7c3bca
+/deepseek-ai-dsh-lsy-tool-wechat/known-limitations-and-deferred-work:
+  en: 1e1eb457997bd21d
+  zh: 0e2c0e04ac3531db
+/deepseek-ai-dsh-lsy-tool-wechat/known-limitations-and-deferred-work/dev-note:
+  en: b00afaa29a73b626
+  zh: bf0ebe65b08dd824

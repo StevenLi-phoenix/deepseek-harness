@@ -11606,6 +11606,24 @@ importers:
         specifier: workspace:*
         version: link:../../core/tools
 
+  packages/lsy/lsy-tool-wechat:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../llm/llm
+      '@deepseek-ai/dsh-lsy-event-bus':
+        specifier: workspace:*
+        version: link:../lsy-event-bus
+      '@deepseek-ai/dsh-lsy-wechat':
+        specifier: workspace:*
+        version: link:../lsy-wechat
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../core/tools
+
   packages/lsy/lsy-wechat:
     dependencies:
       '@deepseek-ai/schemastery':

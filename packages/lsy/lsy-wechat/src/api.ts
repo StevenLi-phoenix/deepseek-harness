@@ -88,6 +88,15 @@ const qrStatusSchema = z.object({
   redirect_host: z.string().nullish(),
 })
 
+const uploadUrlSchema = z.object({
+  ret: z.number().nullish(),
+  errmsg: z.string().nullish(),
+  /** CDN upload parameter; the URL is `<cdn>/upload?encrypted_query_param=…&filekey=…`. */
+  upload_param: z.string().nullish(),
+  /** Complete upload URL, preferred when present. */
+  upload_full_url: z.string().nullish(),
+})
+
 const sendReplySchema = z.object({
   ret: z.number().nullish(),
   errmsg: z.string().nullish(),
@@ -97,6 +106,25 @@ const sendReplySchema = z.object({
 export type WeixinItem = z.infer<typeof itemSchema>
 /** Encrypted CDN reference of one media item. */
 export type CdnMediaRef = z.infer<typeof cdnMediaSchema>
+
+/** `media_type` of an upload. */
+export const UploadMediaType = { IMAGE: 1, VIDEO: 2, FILE: 3 } as const
+
+/** Body of `ilink/bot/getuploadurl`, minus the fields the client adds. */
+export interface UploadUrlRequest {
+  /** Random 32-hex-character key naming the upload. */
+  filekey: string
+  media_type: (typeof UploadMediaType)[keyof typeof UploadMediaType]
+  to_user_id: string
+  /** Plaintext size in bytes. */
+  rawsize: number
+  /** Plaintext MD5, hex. */
+  rawfilemd5: string
+  /** Ciphertext size in bytes (AES-128-ECB with PKCS#7 padding). */
+  filesize: number
+  /** AES-128 key, 32 hex characters. */
+  aeskey: string
+}
 /** One message item with its optional quote. */
 export type WeixinMessageItem = z.infer<typeof messageItemSchema>
 /** One inbound message as received. */
@@ -338,7 +366,41 @@ export class IlinkClient {
    * @throws {IlinkApiError} on a non-zero `ret` (`-2` rejected, `-14` stale token).
    * @throws {IlinkError} on transport failures or a timeout.
    */
-  async sendText(to: string, text: string, contextToken: string, signal?: AbortSignal): Promise<void> {
+  sendText(to: string, text: string, contextToken: string, signal?: AbortSignal): Promise<void> {
+    return this.sendItem(to, { type: ItemType.TEXT, text_item: { text } }, contextToken, signal)
+  }
+
+  /**
+   * Ask where to upload one encrypted attachment for a recipient.
+   * @param request - file key, media type, recipient, plaintext size and MD5, ciphertext size, and the hex AES key.
+   * @param signal - external cancellation.
+   * @returns the complete upload URL or the upload parameter, whichever the server gave.
+   * @throws {IlinkApiError} on a non-zero `ret`.
+   * @throws {IlinkError} on transport failures, a timeout, or an answer with neither.
+   */
+  async getUploadUrl(request: UploadUrlRequest, signal?: AbortSignal): Promise<{ uploadFullUrl?: string; uploadParam?: string }> {
+    const path = 'ilink/bot/getuploadurl'
+    const raw = await this.call({ method: 'POST', path, body: { ...request, no_need_thumb: true, base_info: baseInfo() }, timeoutMs: this.timeoutMs, signal })
+    if (raw === TIMED_OUT) throw new IlinkError(`iLink ${path}: timed out after ${this.timeoutMs}ms`)
+    const reply = parseBody(path, uploadUrlSchema, raw)
+    const ret = reply.ret ?? 0
+    if (ret !== 0) throw new IlinkApiError(path, ret, 0, present(reply.errmsg))
+    const uploadFullUrl = present(reply.upload_full_url?.trim())
+    const uploadParam = present(reply.upload_param)
+    if (uploadFullUrl === undefined && uploadParam === undefined) throw new IlinkError(`iLink ${path}: no upload URL in the answer`)
+    return { ...uploadFullUrl === undefined ? {} : { uploadFullUrl }, ...uploadParam === undefined ? {} : { uploadParam } }
+  }
+
+  /**
+   * Send one finished message holding a single item: text, or an uploaded image, video, or file.
+   * @param to - recipient user id.
+   * @param item - the message item.
+   * @param contextToken - `context_token` of a recent message from that user.
+   * @param signal - external cancellation.
+   * @throws {IlinkApiError} on a non-zero `ret` (`-2` rejected, `-14` stale token).
+   * @throws {IlinkError} on transport failures or a timeout.
+   */
+  async sendItem(to: string, item: Record<string, unknown>, contextToken: string, signal?: AbortSignal): Promise<void> {
     const path = 'ilink/bot/sendmessage'
     const msg = {
       from_user_id: '',
@@ -346,7 +408,7 @@ export class IlinkClient {
       client_id: `dsh-lsy-wechat-${randomUUID()}`,
       message_type: MESSAGE_TYPE_BOT,
       message_state: 2,
-      item_list: [{ type: ItemType.TEXT, text_item: { text } }],
+      item_list: [item],
       context_token: contextToken,
     }
     const raw = await this.call({ method: 'POST', path, body: { msg, base_info: baseInfo() }, timeoutMs: this.timeoutMs, signal })

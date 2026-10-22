@@ -48,9 +48,12 @@
       name: '@deepseek-ai/dsh-lsy-event-bus'
       config:
         webUrl: https://dsh.tailc2559b.ts.net/
+        # Loop suppression by identity, which the host sets, never by text the model writes: the
+        # agent acts on GitHub as the lsy-dsh-events App, so its own pushes, comments, and commits
+        # (git identity = the bot's noreply address) carry this login.
         suppress:
-          actors: []
-          markers: ['Dsh-Agent:']
+          actors: ['lsy-dsh-events[bot]']
+          markers: []
 
     - id: lsy-github-sensor
       name: '@deepseek-ai/dsh-lsy-github-sensor'
@@ -89,9 +92,8 @@
                 avoid Markdown tables and headings. When a watch or reminder turn has nothing worth
                 the owner's attention, answer exactly NO_REPLY and nothing is sent. Manage what you
                 monitor with watch_create, watch_list, and watch_delete, and recurring time-based
-                checks with schedule_create, then tell the owner what you set up. Mark every commit
-                or comment you create with the trailer `Dsh-Agent: <session title>` so your own
-                changes do not trigger you again.
+                checks with schedule_create, then tell the owner what you set up. Send the owner a
+                file or picture with wechat_send_file.
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
@@ -116,6 +118,8 @@
             name: '@deepseek-ai/dsh-tool-schedule'
           - id: lsy-tool-watch
             name: '@deepseek-ai/dsh-lsy-tool-watch'
+          - id: lsy-tool-wechat
+            name: '@deepseek-ai/dsh-lsy-tool-wechat'
           - id: skill-filesystem
             name: '@deepseek-ai/dsh-skill-filesystem'
           - id: tool-skill

@@ -41,7 +41,7 @@ kind: "package-reference"
       name: '@deepseek-ai/dsh-lsy-event-bus'
       config:
         webUrl: https://dsh.example.ts.net/
-        suppress: { actors: [my-agent-bot], markers: ['Dsh-Agent:'] }
+        suppress: { actors: ['my-agent-app[bot]'] }
         subscriptions:
           - id: releases
             kinds: [github.release, github.tag]
@@ -68,7 +68,7 @@ kind: "package-reference"
 | `subscriptions[].coalesceMs` | `60000` | 第一条待处理事件之后、后续事件并入同一批的窗口 |
 | `subscriptions[].maxPerHour` | `12` | 滚动一小时内的批次上限；超出的等待 |
 | `subscriptions[].session` | `session` 时必填 | 绝对路径 `workspacePath`、`instructions`、preset 与 prompt 上限 |
-| `suppress.actors` / `suppress.markers` | `[]` | agent 的身份与输出标记，命中的事件被丢弃 |
+| `suppress.actors` / `suppress.markers` | `[]` | agent 的身份与输出标记，命中的事件被丢弃；优先用身份（由宿主设定），不要依赖标记（取决于模型写了什么） |
 | `retainEvents` / `retainBatches` | `5000` / `1000` | 保留的历史；最旧的已结算记录先被清理 |
 | `maxTextChars` | `4000` | 每个事件不可信正文的存储字符上限 |
 | `notifySessionResult` | `true` | 把总线启动的 Session 第一轮的结果发给通知器 |

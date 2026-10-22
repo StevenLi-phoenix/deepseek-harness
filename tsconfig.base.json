@@ -434,6 +434,7 @@
       "@deepseek-ai/dsh-lsy-event-bus": ["./packages/lsy/lsy-event-bus/src"],
       "@deepseek-ai/dsh-lsy-github-sensor": ["./packages/lsy/lsy-github-sensor/src"],
       "@deepseek-ai/dsh-lsy-tool-watch": ["./packages/lsy/lsy-tool-watch/src"],
+      "@deepseek-ai/dsh-lsy-tool-wechat": ["./packages/lsy/lsy-tool-wechat/src"],
       "@deepseek-ai/dsh-lsy-wechat": ["./packages/lsy/lsy-wechat/src"],
       "@deepseek-ai/dsh-mcp-client": ["./packages/mcp/mcp-client/src"],
       "@deepseek-ai/dsh-mcp-resources": ["./packages/mcp/mcp-resources/src"],

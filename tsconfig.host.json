@@ -505,6 +505,7 @@
     { "path": "./packages/lsy/lsy-event-bus" },
     { "path": "./packages/lsy/lsy-wechat" },
     { "path": "./packages/lsy/lsy-tool-watch" },
+    { "path": "./packages/lsy/lsy-tool-wechat" },
     { "path": "./packages/lsy/lsy-github-sensor" },
     { "path": "./packages/todo/tool-todo" },
     { "path": "./packages/plan/plan-mode" },

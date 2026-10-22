@@ -1,16 +1,18 @@
 /**
- * Inbound WeChat media: download from the WeChat CDN, AES-128-ECB decryption,
- * type detection, and the owner-only inbox the agent reads files from.
+ * WeChat media: inbound download from the WeChat CDN with AES-128-ECB
+ * decryption, type detection, and the owner-only inbox the agent reads files
+ * from; outbound encryption and upload of a local file as an image, video, or
+ * file item.
  *
  * The CDN reference layout, the two `aes_key` encodings, and the origin check
  * follow xiaoshihou514/dsh-weixin (MIT, src/media.ts and src/protocol.ts) and
  * Tencent's @tencent-weixin/openclaw-weixin (src/cdn/pic-decrypt.ts).
  */
 
-import { createDecipheriv, randomBytes } from 'node:crypto'
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
 import { mkdir, open, writeFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
-import { ItemType, type CdnMediaRef, type WeixinItem } from './api.ts'
+import { ItemType, UploadMediaType, type CdnMediaRef, type IlinkClient, type WeixinItem } from './api.ts'
 
 /** Media the channel downloads; voice arrives as its transcript instead. */
 export type MediaKind = 'image' | 'file' | 'video'
@@ -118,7 +120,7 @@ export function mediaSpec(item: WeixinItem): MediaSpec | undefined {
 
 /** Fetch failures as safe text: CDN URLs carry the encrypted parameter and never reach a log or prompt. */
 function requestFailure(error: unknown, timedOut: boolean): Error {
-  if (timedOut) return new Error('CDN download timed out')
+  if (timedOut) return new Error('CDN request timed out')
   const cause = error instanceof Error && error.cause instanceof Error ? (error.cause as NodeJS.ErrnoException).code : undefined
   return new Error(cause === undefined ? 'CDN request failed' : `CDN request failed (${cause})`)
 }
@@ -260,4 +262,101 @@ export function attachmentNote(received: readonly ReceivedMedia[], imagesAttache
     return imagesAttached ? `${where}; it is attached to this message.` : `${where}; the current model does not accept images.`
   })
   return ['WeChat attachments:', ...lines].join('\n')
+}
+
+/** What an outgoing attachment is sent as. */
+export type OutboundKind = 'image' | 'video' | 'file'
+
+const VIDEO_EXTENSIONS: ReadonlySet<string> = new Set(['.mp4', '.mov', '.m4v'])
+const UPLOAD_TYPE: Record<OutboundKind, (typeof UploadMediaType)[keyof typeof UploadMediaType]> = {
+  image: UploadMediaType.IMAGE, video: UploadMediaType.VIDEO, file: UploadMediaType.FILE,
+}
+
+/**
+ * How an outgoing file is sent: a picture when its bytes are a PNG, JPEG, GIF,
+ * or WebP image, a video for `.mp4`, `.mov`, and `.m4v`, a file otherwise.
+ * @param name - file name, for the extension.
+ * @param data - file content.
+ * @returns the kind.
+ */
+export function outboundKind(name: string, data: Uint8Array): OutboundKind {
+  if (sniffImageType(data) !== undefined) return 'image'
+  if (VIDEO_EXTENSIONS.has(extname(name).toLowerCase())) return 'video'
+  return 'file'
+}
+
+/** Upload deadline, destination check, and transport. */
+export interface UploadOptions {
+  /** CDN base; an upload URL must share its origin. */
+  cdnBaseUrl: string
+  timeoutMs: number
+  fetch?: typeof fetch
+  signal?: AbortSignal
+}
+
+/**
+ * Encrypt one file with a fresh AES-128 key, upload it to the WeChat CDN for a
+ * recipient, and build the message item that delivers it. The flow follows
+ * xiaoshihou514/dsh-weixin (MIT, `sendMedia`) and @tencent-weixin/openclaw-weixin
+ * (`src/cdn/upload.ts`): `getuploadurl`, POST the ciphertext, read the download
+ * parameter from `x-encrypted-param`.
+ * @param client - iLink client of the bot account.
+ * @param to - recipient user id.
+ * @param name - file name shown for a file item.
+ * @param data - file content.
+ * @param options - CDN base, deadline, and transport.
+ * @returns the kind and the item for `sendmessage`.
+ * @throws Error with a reason fit for the agent; it never includes an upload URL.
+ */
+export async function uploadMedia(
+  client: Pick<IlinkClient, 'getUploadUrl'>, to: string, name: string, data: Buffer, options: UploadOptions,
+): Promise<{ kind: OutboundKind; item: Record<string, unknown> }> {
+  const kind = outboundKind(name, data)
+  const key = randomBytes(16)
+  const filekey = randomBytes(16).toString('hex')
+  const cipher = createCipheriv('aes-128-ecb', key, null)
+  const ciphertext = Buffer.concat([cipher.update(data), cipher.final()])
+  const { uploadFullUrl, uploadParam } = await client.getUploadUrl({
+    filekey,
+    media_type: UPLOAD_TYPE[kind],
+    to_user_id: to,
+    rawsize: data.byteLength,
+    rawfilemd5: createHash('md5').update(data).digest('hex'),
+    filesize: ciphertext.byteLength,
+    aeskey: key.toString('hex'),
+  }, options.signal)
+  const base = options.cdnBaseUrl.replace(/\/+$/, '')
+  const url = new URL(uploadFullUrl
+    ?? `${base}/upload?encrypted_query_param=${encodeURIComponent(uploadParam ?? '')}&filekey=${encodeURIComponent(filekey)}`)
+  if (url.origin !== new URL(base).origin) throw new Error('upload URL is outside the WeChat CDN')
+
+  const timeout = AbortSignal.timeout(options.timeoutMs)
+  let response: Response
+  try {
+    response = await (options.fetch ?? fetch)(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream' },
+      body: new Uint8Array(ciphertext),
+      redirect: 'error',
+      signal: options.signal === undefined ? timeout : AbortSignal.any([options.signal, timeout]),
+    })
+  } catch (error) {
+    if (options.signal?.aborted === true) throw error
+    throw requestFailure(error, timeout.aborted)
+  }
+  await response.body?.cancel()
+  if (!response.ok) throw new Error(`CDN upload failed with HTTP ${response.status}`)
+  const downloadParam = response.headers.get('x-encrypted-param')
+  if (downloadParam === null || downloadParam === '') throw new Error('CDN upload returned no download parameter')
+
+  // The key travels as base64 of its hex spelling, the encoding parseMediaKey's second branch reads.
+  const media = { encrypt_query_param: downloadParam, aes_key: Buffer.from(key.toString('hex')).toString('base64'), encrypt_type: 1 }
+  switch (kind) {
+    case 'image':
+      return { kind, item: { type: ItemType.IMAGE, image_item: { media, mid_size: ciphertext.byteLength } } }
+    case 'video':
+      return { kind, item: { type: ItemType.VIDEO, video_item: { media, video_size: ciphertext.byteLength } } }
+    case 'file':
+      return { kind, item: { type: ItemType.FILE, file_item: { media, file_name: safeName(name, 'file.bin'), len: String(data.byteLength) } } }
+  }
 }

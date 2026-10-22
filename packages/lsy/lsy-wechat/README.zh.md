@@ -74,6 +74,8 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 
 在对话里发 `/new` 会开始一个新的对话 Session。文字、语音转写和引用会交给 agent。图片、文件和视频会从微信 CDN 下载、解密并存进 inbox；模型的线路支持图片时，图片也会作为图片内容交给模型。
 
+`sendFile(path)` 把本机文件发回去：内容是图片就发成图片，`.mp4`、`.mov`、`.m4v` 发成视频，其他发成文件。模型不该决定的事都由宿主决定：收件人永远是 owner，文件只经当前回复窗口发送（从不进 outbox），窗口的最后一个名额留给本轮的文字回复，路径必须指向 `maxMediaBytes` 以内的普通文件。工具包 [`@deepseek-ai/dsh-lsy-tool-wechat`](../lsy-tool-wechat/README.zh.md) 把它作为 `wechat_send_file` 提供给 agent。
+
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-lsy-wechat)是全部可用字段的权威来源。
 
 -----
@@ -92,7 +94,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 | [`src/api.ts`](src/api.ts) | 最小的 iLink 客户端，每个请求有独立时限；错误信息从不包含 token |
 | [`src/login.ts`](src/login.ts) | 二维码登录状态机、终端登录命令、账号文件 |
 | [`src/text.ts`](src/text.ts) | 入站文本提取、消息拆分、转发文本、摘要 |
-| [`src/media.ts`](src/media.ts) | CDN 下载与解密、图片类型识别、inbox、附件说明 |
+| [`src/media.ts`](src/media.ts) | CDN 下载与解密、图片类型识别、inbox、附件说明；外发的加密与上传（`getuploadurl`、CDN POST、`x-encrypted-param`） |
 | [`src/storage.ts`](src/storage.ts) | 游标、回复窗口、对话 Session 与 outbox 的 storage-domain 表 |
 
 这是 fork 本地的包；`lsy` 组如何跟踪上游见 [`../UPSTREAM.md`](../UPSTREAM.md)。协议参照腾讯 OpenClaw 微信插件（`@tencent-weixin/openclaw-weixin` 2.4.10）；这个客户端实现二维码登录、`getupdates`、媒体下载和文本 `sendmessage`。媒体格式与 origin 校验参照 [xiaoshihou514/dsh-weixin](https://github.com/xiaoshihou514/dsh-weixin)（MIT）。[`lsy/deploy/wechat-login.mjs`](../../../lsy/deploy/wechat-login.mjs) 只是 `runLoginCli()` 外面的一层薄壳，逻辑由测试覆盖。
@@ -135,7 +137,7 @@ owner 的每条微信消息都以普通用户 prompt 的形式进入对话 Sessi
 - **24 小时窗口**——owner 最后一条消息之后大约一天内，微信才接受 bot 的消息；之后的文本在 outbox 里等待。如果在等提醒，每天给 bot 发一个字。
 - **每条 owner 消息约 10 条回复**——窗口内 bot 能发的消息数有限；最后一条会说明这一点，其余的等 owner 下一条消息。
 - **不能主动发起联系**——owner 给 bot 发消息之前，bot 无法发言。
-- **收媒体，回文字**——图片、文件和视频都能收到；语音只以转写交给 agent，bot 也只回复文字。
+- **语音只有文字**——语音只以转写交给 agent，bot 也从不发语音；图片、文件和视频两个方向都支持。
 - **inbox 不会自动清理**——收到的附件一直留在 `.wechat-inbox/`，需要手动删除。
 - **没有"正在输入"提示**——agent 工作时 owner 看不到任何动静。
 - **入站至多一次**——存储游标与转发消息之间崩溃会丢掉那条消息。

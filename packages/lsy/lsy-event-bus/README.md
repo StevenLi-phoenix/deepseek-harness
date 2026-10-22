@@ -41,7 +41,7 @@ Choose it when external events should wake an agent or a human without a person 
       name: '@deepseek-ai/dsh-lsy-event-bus'
       config:
         webUrl: https://dsh.example.ts.net/
-        suppress: { actors: [my-agent-bot], markers: ['Dsh-Agent:'] }
+        suppress: { actors: ['my-agent-app[bot]'] }
         subscriptions:
           - id: releases
             kinds: [github.release, github.tag]
@@ -68,7 +68,7 @@ Choose it when external events should wake an agent or a human without a person 
 | `subscriptions[].coalesceMs` | `60000` | Window after the first pending event that later events join |
 | `subscriptions[].maxPerHour` | `12` | Batches per rolling hour; later ones wait |
 | `subscriptions[].session` | required for `session` | Absolute `workspacePath`, `instructions`, presets, prompt bounds |
-| `suppress.actors` / `suppress.markers` | `[]` | Agent identities and output markers whose events are dropped |
+| `suppress.actors` / `suppress.markers` | `[]` | Agent identities and output markers whose events are dropped; prefer identities, which the host sets, over markers, which depend on what the model writes |
 | `retainEvents` / `retainBatches` | `5000` / `1000` | Stored history; the oldest settled rows are pruned |
 | `maxTextChars` | `4000` | Stored characters of each event's untrusted text |
 | `notifySessionResult` | `true` | Send each bus-started Session's first-turn result to the notifier |

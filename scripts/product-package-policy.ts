@@ -22,6 +22,7 @@ export const PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackagePolic
   'packages/lsy/lsy-balance': { category: 'optional', reason: 'Fork-local composer balance pill mounted by the event profile bundle.' },
   'packages/lsy/lsy-event-bus': { category: 'optional', reason: 'Fork-local event bus mounted by the deployment-owned event profile.' },
   'packages/lsy/lsy-wechat': { category: 'optional', reason: 'Fork-local WeChat channel; requires a QR-bound iLink bot account.' },
+  'packages/lsy/lsy-tool-wechat': { category: 'optional', reason: 'Fork-local WeChat file tool mounted by the event profile preset.' },
   'packages/lsy/lsy-tool-watch': { category: 'optional', reason: 'Fork-local watch tools mounted by the event profile preset.' },
   'packages/lsy/lsy-github-sensor': { category: 'optional', reason: 'Fork-local sensor; requires configured repositories and tokens.' },
   'packages/lsp/lsp-stdio': { category: 'optional', reason: 'Requires an explicit server list and language-server executables.' },

@@ -10,6 +10,7 @@ import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 import WechatChannel, { Config, type ChatConfig } from '../src/index.ts'
+import { downloadMedia } from '../src/media.ts'
 import type { WechatAccount } from '../src/login.ts'
 import { wechatDomain } from '../src/storage.ts'
 import { FakeIlink, imageMessage, textMessage } from './fake-ilink.ts'
@@ -699,6 +700,72 @@ describe('WechatChannel chat Session bookkeeping', () => {
     expect(h.channel.ownsSession('chat-1')).toBe(true)
     expect(h.channel.ownsSession('old-0')).toBe(false)
     expect(h.channel.ownsSession('old-1')).toBe(true)
+  })
+})
+
+describe('WechatChannel sendFile', () => {
+  const file = (name: string, data: Uint8Array | string): string => {
+    const path = join(dir, name)
+    writeFileSync(path, data)
+    return path
+  }
+
+  it('uploads a picture and sends it to the owner through the open window', async () => {
+    const h = await harness()
+    await h.ownerSays('来张图')
+    const path = file('sticker.png', PNG)
+    expect(await h.channel.sendFile(path)).toEqual({ sent: 'image', name: 'sticker.png', bytes: PNG.byteLength })
+    const upload = h.ilink.requestsTo('ilink/bot/getuploadurl')[0]!.body as Record<string, unknown>
+    expect(upload).toMatchObject({ media_type: 1, to_user_id: OWNER, rawsize: PNG.byteLength, no_need_thumb: true })
+    expect(h.ilink.requestsTo('ilink/bot/getuploadurl')[0]!.headers['authorization']).toBe(`Bearer ${TOKEN}`)
+    // The CDN never sees the bot token.
+    expect(h.ilink.requestsTo('cdn/upload')[0]!.headers['authorization']).toBeUndefined()
+    const sent = h.ilink.sentItems.at(-1)!
+    expect(sent).toMatchObject({ to: OWNER, contextToken: 'ctx-来张图', item: { type: 2, image_item: { media: { encrypt_query_param: 'dl-1', encrypt_type: 1 } } } })
+    // The uploaded bytes decrypt back to the file.
+    const media = await downloadMedia(sent.item, { cdnBaseUrl: CDN, maxBytes: 4096, timeoutMs: 5000, fetch: h.ilink.fetch })
+    expect(media.data).toEqual(PNG)
+    expect(h.logs.some(line => line.text === `lsy-wechat: sent image sticker.png (${PNG.byteLength} bytes) from ${path} (1/10 of this window)`)).toBe(true)
+  })
+
+  it('sends documents as files and never queues them', async () => {
+    const h = await harness()
+    expect(await h.channel.sendFile(file('a.pdf', '%PDF-1.7'))).toEqual({ notSent: 'the owner has not written yet' })
+    expect(h.ilink.requestsTo('ilink/bot/getuploadurl')).toEqual([])
+    expect(h.channel.outbox()).toEqual([])
+    await h.ownerSays('报告')
+    expect(await h.channel.sendFile(join(dir, 'a.pdf'))).toEqual({ sent: 'file', name: 'a.pdf', bytes: 8 })
+    expect(h.ilink.sentItems.at(-1)!.item).toMatchObject({ type: 4, file_item: { file_name: 'a.pdf', len: '8' } })
+  })
+
+  it('keeps the last slot of the window for the text reply', async () => {
+    const h = await harness({ config: { repliesPerToken: 2 } })
+    await h.ownerSays('两张')
+    expect(await h.channel.sendFile(file('one.png', PNG))).toMatchObject({ sent: 'image' })
+    expect(await h.channel.sendFile(join(dir, 'one.png'))).toEqual({ notSent: 'reply quota nearly used up; the last message is kept for the text reply' })
+    await h.finishTurn('chat-1', '发了')
+    expect(h.ilink.sent.at(-1)!.text).toMatch(/^发了/)
+  })
+
+  it('refuses what is not a readable regular file within the size limit, before any request', async () => {
+    const h = await harness()
+    await h.ownerSays('文件')
+    expect(await h.channel.sendFile('relative.png')).toEqual({ notSent: 'path must be absolute' })
+    expect(await h.channel.sendFile(dir)).toEqual({ notSent: 'not a regular file' })
+    expect(await h.channel.sendFile(join(dir, 'missing.png'))).toEqual({ notSent: 'cannot read the file (ENOENT)' })
+    expect(await h.channel.sendFile(file('empty.txt', ''))).toEqual({ notSent: 'the file is empty' })
+    expect(await h.channel.sendFile(file('big.bin', Buffer.alloc(4097)))).toEqual({ notSent: 'the file exceeds 4096 bytes' })
+    expect(h.ilink.requestsTo('ilink/bot/getuploadurl')).toEqual([])
+  })
+
+  it('pauses the channel when the token is stale and reports a failed upload', async () => {
+    const h = await harness()
+    await h.ownerSays('图')
+    h.ilink.reply('ilink/bot/getuploadurl', { body: { ret: 5, errmsg: 'busy' } })
+    expect(await h.channel.sendFile(file('a.png', PNG))).toEqual({ notSent: 'upload failed: iLink ilink/bot/getuploadurl failed: ret 5, errcode 0 (busy)' })
+    h.ilink.reply('ilink/bot/getuploadurl', { body: { ret: -14 } })
+    expect(await h.channel.sendFile(join(dir, 'a.png'))).toEqual({ notSent: 'bot token is stale' })
+    expect(await h.channel.sendFile(join(dir, 'a.png'))).toEqual({ notSent: 'bot token is stale' })
   })
 })
 

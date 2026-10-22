@@ -74,6 +74,8 @@ The command writes `<DSH_HOME>/lsy-wechat/account.json` with mode 600 and prints
 
 In the chat, `/new` starts a fresh chat Session. Text, voice transcripts, and quotes reach the agent. Images, files, and videos are downloaded from the WeChat CDN, decrypted, and saved in the inbox; images also reach the model as image parts when its route accepts images.
 
+`sendFile(path)` sends a local file back: image bytes go out as a picture, `.mp4`, `.mov`, and `.m4v` as a video, anything else as a file. The host decides everything the model must not: the recipient is always the owner, the file goes only through the open reply window (never the outbox), the window's last slot stays for the turn's text reply, and the path must name a regular file within `maxMediaBytes`. The tool package [`@deepseek-ai/dsh-lsy-tool-wechat`](../lsy-tool-wechat/README.md) exposes it to the agent as `wechat_send_file`.
+
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-lsy-wechat) is the exhaustive source for every accepted field.
 
 -----
@@ -92,7 +94,7 @@ The channel long-polls `ilink/bot/getupdates` while the plugin is active and sto
 | [`src/api.ts`](src/api.ts) | Minimal iLink client with per-request deadlines; errors never contain the token |
 | [`src/login.ts`](src/login.ts) | QR login status machine, terminal login command, account file |
 | [`src/text.ts`](src/text.ts) | Inbound text extraction, message splitting, relay text, digests |
-| [`src/media.ts`](src/media.ts) | CDN download and decryption, image type detection, the inbox, and the attachment note |
+| [`src/media.ts`](src/media.ts) | CDN download and decryption, image type detection, the inbox, and the attachment note; outbound encryption and upload (`getuploadurl`, CDN POST, `x-encrypted-param`) |
 | [`src/storage.ts`](src/storage.ts) | Storage-domain tables for cursors, reply windows, chat Sessions, and the outbox |
 
 This is a fork-local package; [`../UPSTREAM.md`](../UPSTREAM.md) describes how the `lsy` group tracks upstream. The protocol follows the Tencent OpenClaw WeChat plugin (`@tencent-weixin/openclaw-weixin` 2.4.10); this client implements QR login, `getupdates`, media download, and text `sendmessage`. The media layout and origin check follow [xiaoshihou514/dsh-weixin](https://github.com/xiaoshihou514/dsh-weixin) (MIT). [`lsy/deploy/wechat-login.mjs`](../../../lsy/deploy/wechat-login.mjs) is a thin shim over `runLoginCli()`, which the tests cover.
@@ -135,7 +137,7 @@ Messages are appended to one Session, so each turn reuses the cached prefix of t
 - **24-hour window** — WeChat accepts bot messages only for about a day after the owner's last message; later texts wait in the outbox. Send the bot a word once a day if you expect alerts.
 - **About 10 replies per owner message** — the window allows a limited number of bot messages; the last one says so, and the rest wait for the owner's next message.
 - **No proactive first contact** — the bot cannot write before the owner has written to it.
-- **Receives media, sends text** — images, files, and videos arrive; voice reaches the agent as its transcript only, and the bot replies with text only.
+- **Voice is text only** — voice reaches the agent as its transcript, and the bot never sends voice; images, files, and videos go both ways.
 - **The inbox is never pruned** — received attachments stay in `.wechat-inbox/` until removed by hand.
 - **No typing indicator** — the owner sees nothing while the agent works.
 - **At-most-once intake** — a crash between storing the cursor and forwarding a message drops that message.

@@ -2,7 +2,8 @@
 
 import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
-import { isAbsolute, join } from 'node:path'
+import { readFile, stat } from 'node:fs/promises'
+import { basename, isAbsolute, join } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 import { failureDetail, type LsyNote, type LsyNotifier } from '@deepseek-ai/dsh-lsy-event-bus'
@@ -11,9 +12,9 @@ import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-title'
 import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import z from '@deepseek-ai/schemastery'
-import { IlinkApiError, IlinkClient, ILINK_SEND_REJECTED, isStaleTokenError, MESSAGE_TYPE_USER, type WeixinMessage } from './api.ts'
+import { IlinkApiError, IlinkClient, ILINK_SEND_REJECTED, isStaleTokenError, ItemType, MESSAGE_TYPE_USER, type WeixinMessage } from './api.ts'
 import { accountFilePath, readAccountFile, type WechatAccount } from './login.ts'
-import { attachmentNote, describeMedia, downloadMedia, isPromptImage, mediaSpec, saveInboxFile, type ReceivedMedia } from './media.ts'
+import { attachmentNote, describeMedia, downloadMedia, isPromptImage, mediaSpec, saveInboxFile, uploadMedia, type OutboundKind, type ReceivedMedia } from './media.ts'
 import { wechatDomain, type OutboxRecord, type WindowRecord } from './storage.ts'
 import { buildDigest, contentText, fitText, inboundText, NEW_CHAT_REPLY, QUOTA_FOOTER, relayText, renderNote, splitText, WECHAT_MAX_TEXT_BYTES } from './text.ts'
 
@@ -102,6 +103,11 @@ const FIRST_RETRY_MS = 2000
 const MAX_RETRY_MS = 60_000
 /** Resolve failures that keep the stored chat Session: it exists and is only unavailable right now. */
 const TRANSIENT_RESOLVE_CODES: ReadonlySet<string> = new Set(['session/agent-busy', 'session/writer-held'])
+
+/** Outcome of {@link WechatChannel.sendFile}: what went out, or why nothing did. */
+export type SendFileResult =
+  | { readonly sent: OutboundKind; readonly name: string; readonly bytes: number }
+  | { readonly notSent: string }
 
 /** A usable reply window and what sending through it needs. */
 interface Target {
@@ -204,6 +210,53 @@ export class WechatChannel extends Service implements LsyNotifier {
    */
   async send(note: LsyNote): Promise<void> {
     await this.deliver(renderNote(note))
+  }
+
+  /**
+   * Send one local file to the owner: a picture when its bytes are an image, a
+   * video for `.mp4`/`.mov`/`.m4v`, a file otherwise. The recipient is always
+   * the owner and the file goes only through the open reply window, never
+   * queued; the window's last slot stays for the turn's text reply.
+   * @param path - absolute path of a regular file within `maxMediaBytes`.
+   * @returns what was sent, or why it was not.
+   */
+  async sendFile(path: string): Promise<SendFileResult> {
+    if (!isAbsolute(path)) return { notSent: 'path must be absolute' }
+    let size: number
+    try {
+      const info = await stat(path)
+      if (!info.isFile()) return { notSent: 'not a regular file' }
+      size = info.size
+    } catch (error: unknown) {
+      return { notSent: `cannot read the file (${(error as NodeJS.ErrnoException).code ?? errorText(error)})` }
+    }
+    if (size === 0) return { notSent: 'the file is empty' }
+    if (size > this.config.maxMediaBytes) return { notSent: `the file exceeds ${this.config.maxMediaBytes} bytes` }
+    const data = await readFile(path)
+    const name = basename(path)
+    return this.serialize(async (): Promise<SendFileResult> => {
+      const domain = await this.ready
+      const target = this.target(domain)
+      if (typeof target === 'string') return { notSent: target }
+      if (target.window.used + 1 >= this.config.repliesPerToken) return { notSent: 'reply quota nearly used up; the last message is kept for the text reply' }
+      const { baseUrl, botToken: token } = target.account
+      const client = new IlinkClient({ baseUrl, token, timeoutMs: this.config.requestTimeoutMs })
+      let uploaded: Awaited<ReturnType<typeof uploadMedia>>
+      try {
+        uploaded = await uploadMedia(client, target.account.ownerUserId, name, data, {
+          cdnBaseUrl: this.config.cdnBaseUrl, timeoutMs: this.config.mediaTimeoutMs, signal: this.abort.signal,
+        })
+      } catch (error: unknown) {
+        if (isStaleTokenError(error)) {
+          this.markStale(target.account)
+          return { notSent: 'bot token is stale' }
+        }
+        this.ctx.logger.warn(`lsy-wechat: uploading ${name} failed: ${errorText(error)}`)
+        return { notSent: `upload failed: ${errorText(error)}` }
+      }
+      const outcome = await this.transmitItem(domain, target, uploaded.item, `${uploaded.kind} ${name} (${size} bytes) from ${path}`)
+      return outcome === 'sent' ? { sent: uploaded.kind, name, bytes: size } : { notSent: outcome }
+    })
   }
 
   /**
@@ -500,12 +553,19 @@ export class WechatChannel extends Service implements LsyNotifier {
     return { account, key, window }
   }
 
-  /** Send one message and count it against the window; a failure returns why it was not sent. */
-  private async transmit(domain: Domain<typeof wechatDomain>, target: Target, text: string): Promise<string> {
+  /** Send one text message and count it against the window; a failure returns why it was not sent. */
+  private transmit(domain: Domain<typeof wechatDomain>, target: Target, text: string): Promise<string> {
+    return this.transmitItem(domain, target, { type: ItemType.TEXT, text_item: { text } }, `${text.length} chars`)
+  }
+
+  /** Send one message item and count it against the window; a failure returns why it was not sent. */
+  private async transmitItem(
+    domain: Domain<typeof wechatDomain>, target: Target, item: Record<string, unknown>, label: string,
+  ): Promise<string> {
     const { baseUrl, botToken: token } = target.account
     const client = new IlinkClient({ baseUrl, token, timeoutMs: this.config.requestTimeoutMs })
     try {
-      await client.sendText(target.account.ownerUserId, text, target.window.token, this.abort.signal)
+      await client.sendItem(target.account.ownerUserId, item, target.window.token, this.abort.signal)
     } catch (error: unknown) {
       if (error instanceof IlinkApiError && error.ret === ILINK_SEND_REJECTED) {
         await domain.table('windows').put(target.key, { ...target.window, exhausted: true })
@@ -521,7 +581,7 @@ export class WechatChannel extends Service implements LsyNotifier {
     }
     const used = target.window.used + 1
     await domain.table('windows').put(target.key, { ...target.window, used })
-    this.ctx.logger.info(`lsy-wechat: sent ${text.length} chars (${used}/${this.config.repliesPerToken} of this window)`)
+    this.ctx.logger.info(`lsy-wechat: sent ${label} (${used}/${this.config.repliesPerToken} of this window)`)
     return 'sent'
   }
 
