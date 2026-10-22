@@ -18,6 +18,7 @@ Tell the agent "let me know when deepseek-harness ships a release" and it sets t
 - [Further Exploration](#further-exploration)
 - [Model Experience](#model-experience)
 - [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
 -----
 
@@ -122,3 +123,15 @@ Append-only; newly visible content follows the reusable request prefix and does 
 - **Same-repository watches share events** — subscriptions match by repository and kind, so two watches of one repository, such as commits on two branches, both see commits from either branch.
 - **No in-place update** — changing a watch means `watch_delete` and `watch_create`, which records a new baseline.
 - **Watches are instance-wide** — any Agent whose preset mounts the tools sees and can delete every agent-created watch.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+This Dev Note is non-authoritative working context: undecided directions and notes for maintainers. Shipped behavior and accepted rationale live in the sections above, the package code, and the linked Agent Notes.
+
+- Watches cover GitHub sources only (`github_repo`, `github_notifications`); a new sensor needs its own `watch_create` kind before the agent can subscribe to it without editing configuration.
+
+</details>

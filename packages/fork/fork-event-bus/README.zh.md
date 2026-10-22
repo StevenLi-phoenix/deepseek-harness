@@ -18,6 +18,7 @@ kind: "package-reference"
 - [延伸阅读](#further-exploration)
 - [模型体验](#model-experience)
 - [已知限制与延后工作](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
 -----
 
@@ -151,3 +152,15 @@ kind: "package-reference"
 - **提醒名取自 Host 框架文本**——schedule 消息格式变化后，回报退回 `⏰ Session <id>`。
 - **没有指向单个 Session 的 Web 链接**——结果链接到 Web 根路径；客户端没有按 Session 的 URL。
 - **整个 domain 重写**——JSON 存储后端每次写入都重写整个 domain；保留量要有上限。
+
+<a id="dev-note"></a>
+### 开发备注
+
+<details>
+<summary>维护者的工作上下文——点击展开</summary>
+
+本开发备注是不具权威性的工作上下文：尚未决定的探索方向与维护者备注。已交付的行为与既定理由以上文、包代码和相关 Agent Note 为准。
+
+- 只报告由总线启动的 Session 的第一轮，以及无人值守的提醒轮次；同一 Session 后续的轮次只能在 Web UI 里看到。是否跟踪后续轮次尚未决定。
+
+</details>

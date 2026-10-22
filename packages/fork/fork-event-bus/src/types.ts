@@ -82,7 +82,7 @@ export interface Subscription {
 /** Where a subscription comes from: the bus configuration or a run-time `subscribe()` call. */
 export type SubscriptionOrigin = 'config' | 'agent'
 
-/** Provenance recorded with a run-time subscription. */
+/** Creator recorded with a run-time subscription. */
 export interface SubscriptionMeta {
   /** Session whose agent created the subscription. */
   createdBy?: string

@@ -18,6 +18,7 @@ Chat with your agent from WeChat on your phone. Bind a bot once by scanning a QR
 - [Further Exploration](#further-exploration)
 - [Model Experience](#model-experience)
 - [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
 -----
 
@@ -134,3 +135,15 @@ Messages are appended to one Session, so each turn reuses the cached prefix of t
 - **No typing indicator** — the owner sees nothing while the agent works.
 - **At-most-once intake** — a crash between storing the cursor and forwarding a message drops that message.
 - **Limits are third-party documented** — window length, quota, and size limits are not officially published, so they are configuration, not constants.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+This Dev Note is non-authoritative working context: undecided directions and notes for maintainers. Shipped behavior and accepted rationale live in the sections above, the package code, and the linked Agent Notes.
+
+- `/new` is the only chat command; other commands, such as switching the chat Session's model from WeChat, are undecided.
+
+</details>
