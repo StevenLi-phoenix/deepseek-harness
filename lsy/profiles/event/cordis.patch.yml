@@ -34,7 +34,7 @@
     - id: lsy-event-bus
       name: '@deepseek-ai/dsh-lsy-event-bus'
       config:
-        webUrl: https://dsh-events.tailc2559b.ts.net/
+        webUrl: https://dsh.tailc2559b.ts.net/
         suppress:
           actors: []
           markers: ['Dsh-Agent:']

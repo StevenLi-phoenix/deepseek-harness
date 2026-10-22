@@ -146,22 +146,38 @@ Say it in WeChat; the agent sets it up with its tools and confirms:
 - `每天早上 9 点看一下 kaorou 队列有没有卡住的任务，没问题就别打扰我` → a reminder; quiet runs answer `NO_REPLY` and send nothing.
 - `列一下你现在在盯什么` / `把 xxx 那个删掉` → `watch_list` / `watch_delete`; reminders use `schedule_list` / `schedule_delete`.
 
-## 10. Web access (optional)
+## 10. Web access: take over `dsh.tailc2559b.ts.net`
 
-The first-login URL is printed to stdout: `grep -o 'http://127.0.0.1:3081/?token=[^ ]*' /Users/dsh-runtime/logs/stdout.log | tail -1`. To reach it from other tailnet devices (and to make the links in result messages work), publish a Tailscale Service the same way as `svc:dsh`, approve it in the admin console, and keep the plist's `--trusted-host` in sync:
+The event service replaced the interactive instance on 2026-10-22: the existing Tailscale Service `svc:dsh` now proxies to port 3081 (the plist already trusts that name, and the profile's `webUrl` points there), and the old LaunchAgent is stopped and disabled, keeping its plist, `~/.dsh`, and the npm install for a rollback:
 
 ```sh
-/Applications/Tailscale.app/Contents/MacOS/Tailscale serve --service=svc:dsh-events --https=443 http://127.0.0.1:3081
-/Applications/Tailscale.app/Contents/MacOS/Tailscale serve advertise svc:dsh-events
+/Applications/Tailscale.app/Contents/MacOS/Tailscale serve --service=svc:dsh --https=443 http://127.0.0.1:3081
+launchctl bootout gui/$(id -u)/app.lishuyu.dsh && launchctl disable gui/$(id -u)/app.lishuyu.dsh
 ```
 
+Every restart prints a new first-login URL to stdout (`grep -o 'http://127.0.0.1:3081/?token=[^ ]*' /Users/dsh-runtime/logs/stdout.log | tail -1`); open it with the host replaced by `https://dsh.tailc2559b.ts.net`. The cookie it sets lasts 30 days. Roll back with `launchctl enable` and `launchctl bootstrap` of `~/Library/LaunchAgents/app.lishuyu.dsh.plist` and the serve line with port 3080.
+
+## Operator access without passwords (optional)
+
+`/etc/sudoers.d/dsh-events` (root:wheel 440, written with `sudo visudo -f /etc/sudoers.d/dsh-events`) lets the operator act as the service user and restart the daemon without a password, so config edits, `.env` changes, and upgrades need no one at the keyboard:
+
+```
+lishuyu ALL = (dsh-runtime) NOPASSWD: ALL
+lishuyu ALL = (root) NOPASSWD: /bin/launchctl kickstart -k system/app.lishuyu.dsh-events
+```
+
+Acting as `dsh-runtime` is a step down from `lishuyu`; root is limited to the one restart.
+
 ## Operate
+
+Patch edits (`$DSH_HOME/cordis.patch.yml`, the profile patch) reload live; `.env` edits and new builds need a restart. A home patch entry replaces that entry's whole `config`, so override only entries whose config it restates in full.
 
 | Task | Command |
 |---|---|
 | Change what is watched | Ask the agent on WeChat |
-| Upgrade | `lsy/deploy/upgrade.sh`, then the two commands it prints |
-| Roll back | `ln -sfn /Users/Shared/lsy-dsh/<old sha> /Users/Shared/lsy-dsh/current`, then `sudo launchctl kickstart -k system/app.lishuyu.dsh-events` |
+| Upgrade | `lsy/deploy/upgrade.sh`, then `sudo -n -u dsh-runtime /Users/Shared/lsy-dsh/current/lsy/deploy/setup-profile.sh /Users/dsh-runtime/.dsh /Users/Shared/lsy-dsh/current` and `sudo -n launchctl kickstart -k system/app.lishuyu.dsh-events` |
+| Roll back | `ln -sfn /Users/Shared/lsy-dsh/<old sha> /Users/Shared/lsy-dsh/current`, then the two commands above |
 | Re-bind WeChat | Step 6 again; no restart needed |
+| New chat Session (e.g. after a model change) | Send `/new` on WeChat |
 | Stop | `sudo launchctl bootout system/app.lishuyu.dsh-events` |
-| Status | `sudo launchctl print system/app.lishuyu.dsh-events \| grep -E 'state\|pid'` |
+| Status | `launchctl print system/app.lishuyu.dsh-events \| grep -E 'state\|pid'`; `tail /Users/dsh-runtime/logs/stdout.log` |

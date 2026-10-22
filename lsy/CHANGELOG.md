@@ -14,6 +14,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 - `packages/lsy/UPSTREAM.md` ledger and this `lsy/` deployment directory.
 
 ### Changed
+- The event service takes over `dsh.tailc2559b.ts.net` from the interactive instance: the event bus `webUrl` points there, and `RUNBOOK.md` step 10 records the cutover (`svc:dsh` to port 3081, old LaunchAgent stopped and disabled) and its rollback, plus the passwordless operator sudoers entry and live-reload notes.
 - Failed turns say why: `failureDetail()` (event bus) turns a `TurnEndReason` of kind `error` into one line (`AUTH: 401 User not found.`, at most 200 characters). The WeChat warning adds `原因：…` under `⚠️ 本轮未完成（error）`, bus result and reminder notes add `Reason: …`, the batch record keeps it as `error`, and both log lines carry it.
 - LaunchDaemon `app.lishuyu.dsh-events.plist` also trusts `dsh.tailc2559b.ts.net`, so the event service can take over the Tailscale name of the interactive instance it replaces without a plist change.
 - Models route through OpenRouter: `lsy/deploy/home.cordis.patch.yml` (installed as `$DSH_HOME/cordis.patch.yml`) enables the `openrouter` route of `llm-pi-ai` keyed by `OPENROUTER_API_KEY` and makes `deepseek/deepseek-v4.1-flash` the default model. Verified with `--dump-config` and a headless request that reached OpenRouter. `RUNBOOK.md` step 5 now covers the OpenRouter key, one classic GitHub token for both GitHub names, the home patch, and logging `gh` in for `git push` (the harness strips credential-shaped variables from agent shells).
