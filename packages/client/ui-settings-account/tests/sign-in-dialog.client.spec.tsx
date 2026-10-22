@@ -11,9 +11,10 @@ const id = 'login-attempt' as SignInAttemptId
 function dialogProps(attempt: AccountView['attempt'], copy: typeof en | typeof zh = en, colorScheme: 'light' | 'dark' = 'dark') {
   const start = vi.fn(async () => {})
   const cancel = vi.fn(async () => {})
+  const completeSignIn = vi.fn<(id: SignInAttemptId, url: string) => Promise<void>>(async () => {})
   const close = vi.fn()
   const useApiKey = vi.fn()
-  return { start, cancel, close, useApiKey, colorScheme, t: (key: keyof typeof en) => copy[key],
+  return { start, cancel, completeSignIn, close, useApiKey, colorScheme, t: (key: keyof typeof en) => copy[key],
     account: { view: { status: 'signed-out' as const, attempt, links: { usageUrl: 'https://platform.deepseek.com/usage', topUpUrl: 'https://platform.deepseek.com/top_up' } }, details: undefined, avatar: undefined, failed: false } }
 }
 function mount(attempt: AccountView['attempt'], copy: typeof en | typeof zh = en, colorScheme: 'light' | 'dark' = 'dark') {
@@ -211,4 +212,27 @@ it('does not reuse network advice for a subsequent start failure', async () => {
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.retry })) })
   expect(screen.getByText(en.failed)).toBeTruthy()
   expect(screen.queryByText(en.noResponse)).toBeNull()
+})
+
+const pasteCallbackPrefix = 'http://127.0.0.1:3081/oauth/callback'
+it('offers no paste field when the page receives the callback itself', () => {
+  mount({ id, phase: 'waiting-browser', authorizeUrl: 'https://platform.deepseek.com/dsh/authorize?state=example' })
+  expect(screen.queryByRole('textbox', { name: en.pasteLabel })).toBeNull()
+})
+it.each([en, zh])('completes a remote-page sign-in from the pasted address', async (copy) => {
+  const props = dialogProps({ id, phase: 'waiting-browser', authorizeUrl: 'https://platform.deepseek.com/dsh/authorize?state=example', pasteCallbackPrefix }, copy)
+  render(<SignInDialog {...props} />)
+  fireEvent.change(screen.getByRole('textbox', { name: copy.pasteLabel }), { target: { value: `${pasteCallbackPrefix}?code=c&state=s` } })
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: copy.pasteSubmit })) })
+  expect(props.completeSignIn).toHaveBeenCalledExactlyOnceWith(id, `${pasteCallbackPrefix}?code=c&state=s`)
+})
+it('keeps waiting instead of failing the sign-in when a pasted address is rejected', async () => {
+  const props = dialogProps({ id, phase: 'waiting-browser', pasteCallbackPrefix })
+  props.completeSignIn.mockRejectedValueOnce(new Error('account complete failed'))
+  render(<SignInDialog {...props} />)
+  fireEvent.change(screen.getByRole('textbox', { name: en.pasteLabel }), { target: { value: 'http://127.0.0.1:3081/oauth/callback?code=c&state=old' } })
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.pasteSubmit })) })
+  expect(screen.getByRole('alert').textContent).toBe(en.pasteFailed)
+  expect(screen.getByRole('heading').textContent).toBe(en.browserTitle)
+  expect(props.close).not.toHaveBeenCalled()
 })

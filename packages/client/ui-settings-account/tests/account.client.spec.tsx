@@ -40,7 +40,8 @@ function operationsOf(state: Omit<AccountView, 'links'>, details?: Partial<Accou
     bonusNoticeShown: vi.fn(), bonusNoticeDismissed: vi.fn(),
     refreshAccount: vi.fn(() => Promise.resolve()),
     avatarFailed: vi.fn(),
-    start: vi.fn(() => Promise.resolve()), cancel: vi.fn(() => Promise.resolve()), signOut: vi.fn(() => Promise.resolve()),
+    start: vi.fn(() => Promise.resolve()), cancel: vi.fn(() => Promise.resolve()),
+    completeSignIn: vi.fn(() => Promise.resolve()), signOut: vi.fn(() => Promise.resolve()),
   }
 }
 

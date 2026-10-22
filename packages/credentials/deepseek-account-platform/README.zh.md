@@ -59,6 +59,8 @@ getUnnotifiedBonuses 读取同一来源上的 GET /api/v0/users/get_unnotified_b
 
 已鉴权客户端提供浏览器可访问的回调来源（含 SSH 本地转发端口）和 UI 类型。提供者固定回调路径，并在初始化与兑换时使用同一个 redirect_uri。回调请求使用 state 和 PKCE 校验，不要求 RPC 鉴权。完成、取消和卸载仅移除本次尝试的路由。兑换失败发布 failed 状态，不自动重试：Web 关闭授权标签页，原标签页显示失败弹窗；回调页尝试自行关闭，并提供手动关闭提示。Desktop 收到 HTTP 204，并通过账号状态流聚焦现有登录界面。
 
+Platform 只接受回环 HTTP 的 redirect_uri，所以位于其他普通 HTTP(S) origin（例如 tailnet 域名或 HTTPS 反向代理）的页面收不到回调。这类尝试发送 `http://127.0.0.1:<webServer 端口>/oauth/callback`，以 `pasteCallbackPrefix` 报告该地址，登录后浏览器停在这个打不开的地址上。`completeSignIn(id, url)` 接受从地址栏复制的地址（缺少 `http://` 时自动补上），校验与回调路由相同（state、code、阶段、期限），然后等待兑换完成。粘贴的地址 origin 或路径不对、state 不匹配时以 `protocol` 拒绝，尝试保持等待；尝试不存在或已完成时以 `expired` 拒绝。没有 Host 持有的 PKCE verifier，单独的 code 无法兑换。
+
 Host 诊断仅在请求、响应校验或登录失败时，通过 `console.error` 写入标准错误及 Host 调试器 Console，前缀为 `[deepseek-account]`。成功请求、调用方主动取消和正常账号状态变化不输出日志；请求超时仍记录为失败。失败诊断包含接口路径、HTTP 状态、数值响应码、失败阶段、校验失败的字段路径、实际类型和校验码，以及浏览器 URL 拒绝规则，不包含请求头、请求和响应正文、授权 URL 或原始异常。
 
 `rewriteBrowserOrigin` 默认为 `false`，要求浏览器地址同源。私有开发 patch 可设为 `true`，将授权页和完成页地址映射到 `platformOrigin`，保留固定路径和查询字符串。原地址必须使用 HTTPS 或已匹配配置来源；仍拒绝用户名密码、片段和非预期路径。发布的 profile 保持严格同源校验。
@@ -92,7 +94,7 @@ attemptTimeoutMs 包含初始化、等待浏览器和兑换的耗时。初始化
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- 浏览器登录需要 Host webServer，仅支持通过带显式端口的 HTTP localhost、127.0.0.1 或 [::1] 本机访问及 SSH 本地转发，不支持非本机域名的反向代理。账号 token 没有过期或刷新流程；用户主动在 DSH 退出登录时，先删除本地授权，再在后台调用 POST /auth-api/v0/users/logout。远程失败不会恢复本地登录态。默认仅针对捕获的旧 token 最多额外重试五次，指数退避间隔为 1、2、4、8、16 秒；logoutMaxRetries（0–5）和 logoutRetryDelayMs 可配置该策略。每次请求使用 requestTimeoutMs。提供者关闭时取消请求和等待，不持久化待撤销任务。本地凭证删除失败仍向调用者报错。签发 token 前的授权尝试仍有有效期。初始化后的取消或超时会在后台发送一次 POST /auth-api/v0/dsh/auth_cancel，携带 auth_init.biz_data 中的 authorize_id 和原始 code_verifier，不附带账号授权。本地取消不等待该请求，也不会因失败而恢复；requestTimeoutMs 限制请求时间，提供者关闭时中止请求。TODO(product-error-ui)：产品需定义已给定 biz code 的本地化文案和交互表现。在此之前，业务失败沿用现有“操作失败，请重试”兜底；其他 code 和 HTTP 错误也使用该兜底。开发授权不能认证生产请求。
+- 浏览器登录需要 Host webServer。通过带显式端口的 HTTP localhost、127.0.0.1 或 [::1] 本机访问及 SSH 本地转发时直接接收回调；其他 origin 的页面通过粘贴回调地址完成登录。账号 token 没有过期或刷新流程；用户主动在 DSH 退出登录时，先删除本地授权，再在后台调用 POST /auth-api/v0/users/logout。远程失败不会恢复本地登录态。默认仅针对捕获的旧 token 最多额外重试五次，指数退避间隔为 1、2、4、8、16 秒；logoutMaxRetries（0–5）和 logoutRetryDelayMs 可配置该策略。每次请求使用 requestTimeoutMs。提供者关闭时取消请求和等待，不持久化待撤销任务。本地凭证删除失败仍向调用者报错。签发 token 前的授权尝试仍有有效期。初始化后的取消或超时会在后台发送一次 POST /auth-api/v0/dsh/auth_cancel，携带 auth_init.biz_data 中的 authorize_id 和原始 code_verifier，不附带账号授权。本地取消不等待该请求，也不会因失败而恢复；requestTimeoutMs 限制请求时间，提供者关闭时中止请求。TODO(product-error-ui)：产品需定义已给定 biz code 的本地化文案和交互表现。在此之前，业务失败沿用现有“操作失败，请重试”兜底；其他 code 和 HTTP 错误也使用该兜底。开发授权不能认证生产请求。
 
 <a id="dev-note"></a>
 ### 开发备注

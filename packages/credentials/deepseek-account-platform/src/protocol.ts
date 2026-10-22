@@ -256,3 +256,34 @@ export function loginOrigin(value: string): string {
   }
   return `${url.protocol}//${url.hostname}:${Number(explicitPort)}`
 }
+
+/** How an initiating page receives the browser callback. */
+export type SignInCallback = { readonly kind: 'loopback'; readonly origin: string } | { readonly kind: 'paste' }
+
+/**
+ * Classify the initiating page origin. Platform redirects only to loopback HTTP origins, so a loopback page
+ * receives the callback itself, while a remote page (a tailnet name, a reverse proxy domain) cannot: its attempt
+ * redirects to this Host's loopback address and the user pastes the address the browser ends on.
+ * @param value - origin of the page, supplied by the authenticated initiating client.
+ * @returns the loopback origin to redirect to, or `paste` for a plain remote HTTP(S) origin.
+ */
+export function signInCallback(value: string): SignInCallback {
+  let url: URL
+  try { url = new URL(value) } catch { throw new PlatformAuthError('protocol') }
+  if (['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) return { kind: 'loopback', origin: loginOrigin(value) }
+  if ((url.protocol !== 'http:' && url.protocol !== 'https:') || !/^https?:\/\/[^/?#@]+\/?$/i.test(value)) {
+    throw new PlatformAuthError('protocol')
+  }
+  return { kind: 'paste' }
+}
+
+/**
+ * Read a callback address pasted by the user, assuming `http://` when it was copied without a scheme.
+ * @param value - text copied from the browser address bar.
+ * @returns the parsed address.
+ */
+export function pastedCallbackUrl(value: string): URL {
+  const text = value.trim()
+  try { return new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `http://${text}`) }
+  catch { throw new PlatformAuthError('protocol') }
+}

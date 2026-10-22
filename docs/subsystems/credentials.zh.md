@@ -309,11 +309,20 @@ abstract ackBonusNotified(accountId: AccountUserId, orderId: AccountBonusOrderId
 /**
  * Join an active attempt or start browser authorization.
  * @param client - identity of the requesting UI; a new attempt captures it, and joining retains the original attempt's identity.
- * @param callbackOrigin - browser-accessible loopback HTTP origin, including any SSH local port.
+ * @param callbackOrigin - origin of the initiating page: a loopback HTTP origin (including any SSH local port)
+ * receives the browser callback; any other HTTP(S) origin starts an attempt completed by `completeSignIn`.
  * @param loginSource - initiating UI, used to return from a failed exchange.
  * @returns the initial snapshot without waiting for browser approval.
  */
 abstract startSignIn(client: AccountClientMetadata, callbackOrigin: string, loginSource: 'web' | 'desktop'): Promise<AccountView>
+
+/**
+ * Finish an attempt from the callback address the browser ended on, for pages that cannot receive the callback.
+ * @param id - attempt the address belongs to.
+ * @param callbackUrl - full callback address copied from the browser; a missing `http://` is assumed.
+ * @returns state after the exchange settles; rejects without ending the attempt when the address does not match it.
+ */
+abstract completeSignIn(id: SignInAttemptId, callbackUrl: string): Promise<AccountView>
 
 /**
  * Cancel only the named attempt; committing attempts settle before returning.

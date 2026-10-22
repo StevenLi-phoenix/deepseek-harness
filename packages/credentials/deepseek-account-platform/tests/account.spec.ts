@@ -666,9 +666,9 @@ it('keeps cancellation authoritative without reopening WebUI after a delayed exc
   expect(await f.account.getState()).toMatchObject({ status: 'signed-out', attempt: { phase: 'cancelled' } })
 })
 
-it.each(['https://example.com', 'http://example.com', 'http://127.0.0.1.evil.test',
-  'http://localhost', 'http://127.0.0.1', 'http://[::1]', 'http://localhost:0', 'http://localhost:65536',
-  'http://user@localhost', 'http://localhost/path', 'http://localhost/?x=1', 'http://localhost/#x', 'invalid'])
+it.each(['http://localhost', 'http://127.0.0.1', 'http://[::1]', 'http://localhost:0', 'http://localhost:65536',
+  'https://127.0.0.1:8080', 'http://user@localhost', 'http://localhost/path', 'http://localhost/?x=1', 'http://localhost/#x',
+  'https://user@example.com', 'https://example.com/path', 'https://example.com/?x=1', 'ftp://example.com', 'invalid'])
 ('rejects unsupported callback origin %s before starting authorization', async (origin) => {
   const f = await fixture()
   await expect(f.account.startSignIn(clientMetadata(), origin, 'web')).rejects.toThrow('account: protocol')
@@ -680,6 +680,54 @@ it('normalizes supported loopback callback origins', () => {
   expect(loginOrigin('http://127.0.0.1:8080')).toBe('http://127.0.0.1:8080')
   expect(loginOrigin('http://[::1]:8080/')).toBe('http://[::1]:8080')
   expect(loginOrigin('http://localhost:80')).toBe('http://localhost:80')
+})
+
+it.each(['https://dsh.example.ts.net', 'http://example.com', 'http://127.0.0.1.evil.test'])
+('signs in from remote page %s with the pasted callback address', async (page) => {
+  const f = await fixture()
+  await f.account.startSignIn(clientMetadata(), page, 'web')
+  const state = await f.wait('waiting-browser')
+  // Platform accepts only loopback redirects; the browser ends on this Host's loopback address instead.
+  expect(f.init().redirect_uri).toBe(`${f.callbackOrigin}/oauth/callback`)
+  expect(state.attempt?.pasteCallbackPrefix).toBe(`${f.callbackOrigin}/oauth/callback`)
+  const done = await f.account.completeSignIn(state.attempt!.id, `  ${f.callback()}\n`)
+  expect(done).toMatchObject({ status: 'credential-stored', attempt: { phase: 'succeeded' } })
+})
+
+it('accepts a pasted callback address without its scheme', async () => {
+  const f = await fixture()
+  await f.account.startSignIn(clientMetadata(), 'https://dsh.example.ts.net', 'web')
+  const state = await f.wait('waiting-browser')
+  const pasted = f.callback().replace(/^http:\/\//, '')
+  expect((await f.account.completeSignIn(state.attempt!.id, pasted)).status).toBe('credential-stored')
+})
+
+it('keeps the attempt waiting when a pasted address does not match it', async () => {
+  const f = await fixture()
+  await f.account.startSignIn(clientMetadata(), 'https://dsh.example.ts.net', 'web')
+  const state = await f.wait('waiting-browser')
+  const id = state.attempt!.id
+  for (const pasted of [f.callback('wrong-state'), f.callback().replace('/oauth/callback', '/other'),
+    f.callback().replace('127.0.0.1', 'localhost'), `${f.init().redirect_uri}?state=${f.init().state}`, 'not a url']) {
+    await expect(f.account.completeSignIn(id, pasted)).rejects.toThrow('account: protocol')
+  }
+  expect((await f.account.getState()).attempt).toMatchObject({ id, phase: 'waiting-browser' })
+  expect((await f.account.completeSignIn(id, f.callback())).status).toBe('credential-stored')
+  await expect(f.account.completeSignIn(id, f.callback())).rejects.toThrow('account: expired')
+})
+
+it('refuses a pasted address for an unknown attempt', async () => {
+  const f = await fixture()
+  await expect(f.account.completeSignIn('missing' as never, 'http://127.0.0.1:1/oauth/callback?code=x&state=y'))
+    .rejects.toThrow('account: expired')
+})
+
+it('also completes a loopback attempt from a pasted address', async () => {
+  const f = await fixture()
+  await f.account.startSignIn(clientMetadata(), f.callbackOrigin, 'web')
+  const state = await f.wait('waiting-browser')
+  expect(state.attempt?.pasteCallbackPrefix).toBeUndefined()
+  expect((await f.account.completeSignIn(state.attempt!.id, f.callback())).status).toBe('credential-stored')
 })
 
 it('cancels remotely with the original PKCE verifier without waiting for acknowledgment', async () => {

@@ -334,6 +334,11 @@ for (const desktop of [false, true]) it(`uses the browser or Desktop login carri
   mock.remote.account.cancelSignIn.mockResolvedValueOnce(ok(view)).mockResolvedValueOnce(failure)
   await actions.cancel(id)
   await expect(actions.cancel(id)).rejects.toThrow('account cancel failed')
+  const pasted = 'http://127.0.0.1:3081/oauth/callback?code=c&state=s'
+  mock.remote.account.completeSignIn.mockResolvedValueOnce(ok(view)).mockResolvedValueOnce(failure)
+  await actions.completeSignIn(id, pasted)
+  expect(mock.remote.account.completeSignIn).toHaveBeenLastCalledWith(id, pasted)
+  await expect(actions.completeSignIn(id, pasted)).rejects.toThrow('account complete failed')
   mock.remote.account.signOut.mockResolvedValueOnce(ok(view)).mockResolvedValueOnce(failure)
   await actions.signOut()
   // The launcher renders nothing, so the refused Remote call reaches the caller unchanged.
