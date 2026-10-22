@@ -23,16 +23,19 @@ if [ ! -d "$PREFIX" ]; then
   "$ROOT/lsy/deploy/install-app.sh" "$DIST" "$PREFIX"
   # Ship the profile and its setup script with the build, so the service user (who cannot
   # read the operator's home) sets up exactly the composition this build was tested with.
-  mkdir -p "$PREFIX/lsy/deploy" "$PREFIX/lsy/profiles"
+  mkdir -p "$PREFIX/lsy/deploy" "$PREFIX/lsy/profiles" "$PREFIX/lsy/bundles"
   cp "$ROOT/lsy/deploy/setup-profile.sh" "$ROOT/lsy/deploy/wechat-login.mjs" "$PREFIX/lsy/deploy/"
   cp -R "$ROOT/lsy/profiles/event" "$PREFIX/lsy/profiles/"
+  cp -R "$ROOT/lsy/bundles/event" "$PREFIX/lsy/bundles/"
 fi
+# The profile layout must hold in throwaway homes before current points at this build.
+"$ROOT/lsy/deploy/check-setup-profile.sh" "$PREFIX"
 ln -sfn "$PREFIX" "$APPS/current"
 echo "upgrade: $APPS/current -> $PREFIX"
 cat <<NEXT
 
-Finish the switch (privileged; run one at a time):
-  sudo -u dsh-runtime $APPS/current/lsy/deploy/setup-profile.sh /Users/dsh-runtime/.dsh $APPS/current
-  sudo launchctl kickstart -k system/app.lishuyu.dsh-events
-Roll back: ln -sfn $APPS/<previous sha> $APPS/current, then the kickstart line.
+Finish the switch (passwordless with /etc/sudoers.d/dsh-events):
+  sudo -n -u dsh-runtime /usr/bin/env PATH=/opt/homebrew/bin:/usr/bin:/bin $APPS/current/lsy/deploy/setup-profile.sh /Users/dsh-runtime/.dsh $APPS/current
+  sudo -n /bin/launchctl kickstart -k system/app.lishuyu.dsh-events
+Roll back: ln -sfn $APPS/<previous sha> $APPS/current, then the same two lines.
 NEXT

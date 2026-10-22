@@ -9,9 +9,10 @@ Deployment files for running this fork as an always-on, event-driven agent servi
 | Path | Contents |
 |---|---|
 | [`CHANGELOG.md`](CHANGELOG.md) | Fork-local changes (Keep a Changelog) |
-| [`profiles/event/`](profiles/event/) | Event profile: `package.json` (bundles) and `cordis.patch.yml` (composition, code-owned; routing state lives in storage and is managed by the agent's tools) |
+| [`bundles/event/`](bundles/event/) | `@deepseek-ai/dsh-lsy-event-bundle`: the event composition as a bundle layer (code-owned; routing state lives in storage and is managed by the agent's tools) |
+| [`profiles/event/`](profiles/event/) | Event profile: `package.json` (Web bundles plus the event bundle) and `cordis.patch.yml`, the owner's empty patch layer that Web UI settings write to |
 | [`deploy/RUNBOOK.md`](deploy/RUNBOOK.md) | Isolated deployment on the Mac mini: `dsh-runtime` user, LaunchDaemon, secrets, WeChat binding, verification |
-| [`deploy/`](deploy/) | `install-app.sh`, `setup-profile.sh`, `upgrade.sh`, `wechat-login.mjs`, LaunchDaemon template |
+| [`deploy/`](deploy/) | `install-app.sh`, `setup-profile.sh` (links plugins and the bundle; creates the owner layer once), `check-setup-profile.sh`, `upgrade.sh`, `wechat-login.mjs`, `home.cordis.patch.yml`, LaunchDaemon template |
 | [`../packages/lsy/UPSTREAM.md`](../packages/lsy/UPSTREAM.md) | Upstream baseline, copied packages, touched upstream files, upgrade procedure |
 
 ## Checks for the lsy group
@@ -32,8 +33,9 @@ pnpm run verify-config-catalog && pnpm run verify-cordis-catalog && pnpm run ver
 
 ```sh
 export DSH_HOME=/path/to/test-home            # never the live ~/.dsh
-mkdir -p "$DSH_HOME/profiles/event"
+mkdir -p "$DSH_HOME/profiles/event/node_modules/@deepseek-ai"
 cp lsy/profiles/event/package.json lsy/profiles/event/cordis.patch.yml "$DSH_HOME/profiles/event/"
+ln -s "$PWD/lsy/bundles/event" "$DSH_HOME/profiles/event/node_modules/@deepseek-ai/dsh-lsy-event-bundle"
 pnpm dsh event --dump-config | less            # composed tree, with the layer that set each row
 pnpm dsh event --port 3092 --no-open           # Web UI + sensors + bus + WeChat channel
 ```

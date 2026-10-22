@@ -10,7 +10,7 @@ Every `sudo` line is meant to be run by hand, one at a time. The agent runs with
 
 | Path | Owner | Contents |
 |---|---|---|
-| `/Users/Shared/lsy-dsh/<sha>/` | lishuyu, 755 | Installed build (≈1.6 GB) plus `lsy/` (profile, `setup-profile.sh`, `wechat-login.mjs`); `dsh-runtime` can read, not write |
+| `/Users/Shared/lsy-dsh/<sha>/` | lishuyu, 755 | Installed build (≈1.6 GB) plus `lsy/` (event bundle, profile template, `setup-profile.sh`, `wechat-login.mjs`); `dsh-runtime` can read, not write |
 | `/Users/Shared/lsy-dsh/current` | lishuyu | Symlink to the active build |
 | `/Users/dsh-runtime/.dsh/` | dsh-runtime, 700 | `DSH_HOME`: profile, Sessions, storages (watches, subscriptions, cursors), `.env` secrets |
 | `/Users/dsh-runtime/.dsh/lsy-wechat/account.json` | dsh-runtime, 600 | WeChat bot binding written by `wechat-login.mjs` |
@@ -170,7 +170,7 @@ Acting as `dsh-runtime` is a step down from `lishuyu`; root is limited to the on
 
 ## Operate
 
-Patch edits (`$DSH_HOME/cordis.patch.yml`, the profile patch) reload live; `.env` edits and new builds need a restart. A home patch entry replaces that entry's whole `config`, so override only entries whose config it restates in full.
+Patch edits (`$DSH_HOME/cordis.patch.yml`, the profile patch) reload live; `.env` edits and new builds need a restart. The composition is the `@deepseek-ai/dsh-lsy-event-bundle` layer linked from the build; the profile patch `profiles/event/cordis.patch.yml` is the owner's layer, where Web UI settings save, and upgrades keep it. A home patch entry replaces that entry's whole `config`, so override only entries whose config it restates in full.
 
 | Task | Command |
 |---|---|

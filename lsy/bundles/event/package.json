@@ -1,0 +1,13 @@
+{
+  "name": "@deepseek-ai/dsh-lsy-event-bundle",
+  "version": "0.0.0",
+  "private": true,
+  "description": "lsy event service composition: webhook runtime, lsy plugins, the unattended preset, and remote-first overrides on top of the Web bundles.",
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml"
+      ]
+    }
+  }
+}
