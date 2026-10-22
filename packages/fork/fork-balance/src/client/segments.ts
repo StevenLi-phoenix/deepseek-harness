@@ -22,9 +22,12 @@ export interface Segment {
   readonly stale: boolean
 }
 
+/** OpenCode Go names its five-hour window `rolling`. */
 const WINDOW_KEYS: Readonly<Record<string, BalanceKey>> = {
-  fiveHour: 'window.fiveHour', weekly: 'window.weekly', monthly: 'window.monthly',
+  rolling: 'window.fiveHour', fiveHour: 'window.fiveHour', weekly: 'window.weekly', monthly: 'window.monthly',
 }
+
+const CURRENCY_ORDER: Readonly<Record<WalletLine['currency'], number>> = { CNY: 0, USD: 1 }
 
 function clock(at: number): string {
   const date = new Date(at)
@@ -40,8 +43,15 @@ function usd(amount: number): string {
   return formatAmount(String(amount), 'USD')
 }
 
+/** The wallets worth showing: funded ones, CNY first; an account with none funded shows its first. */
+function shown(wallets: readonly WalletLine[]): WalletLine[] {
+  const sorted = wallets.toSorted((left, right) => CURRENCY_ORDER[left.currency] - CURRENCY_ORDER[right.currency])
+  const funded = sorted.filter(wallet => new Big(wallet.total).gt(0))
+  return funded.length > 0 ? funded : sorted.slice(0, 1)
+}
+
 function totals(wallets: readonly WalletLine[]): string {
-  return wallets.map(wallet => formatAmount(wallet.total, wallet.currency)).join(' / ')
+  return shown(wallets).map(wallet => formatAmount(wallet.total, wallet.currency)).join(' / ')
 }
 
 function drained(wallets: readonly WalletLine[]): boolean {
@@ -58,8 +68,9 @@ function accountWallets(state: BalanceState): readonly WalletLine[] {
 /** The DeepSeek API key of the signed-in account reports the same wallets; one segment is enough. */
 function sameAccount(state: BalanceState, reading: ProviderReading): boolean {
   if (state.phase !== 'ready' || reading.status !== 'ready' || reading.kind !== 'wallets') return false
-  const key = (wallets: readonly WalletLine[]): string =>
-    wallets.map(wallet => `${wallet.currency}:${new Big(wallet.total).toString()}`).sort().join(',')
+  // Platform and the API list empty wallets differently, so only funded ones identify the account.
+  const key = (wallets: readonly WalletLine[]): string => wallets.filter(wallet => !new Big(wallet.total).eq(0))
+    .map(wallet => `${wallet.currency}:${new Big(wallet.total).toString()}`).sort().join(',')
   return key(state.wallets) === key(reading.wallets)
 }
 
@@ -117,7 +128,7 @@ export function pillSegments(state: BalanceState, t: Translate): Segment[] {
 }
 
 function walletLines(label: string, wallets: readonly WalletLine[], t: Translate): string[] {
-  return wallets.map(wallet => t('tooltip.wallet', {
+  return shown(wallets).map(wallet => t('tooltip.wallet', {
     label,
     toppedUp: formatAmount(wallet.toppedUp, wallet.currency),
     granted: formatAmount(wallet.granted, wallet.currency),
