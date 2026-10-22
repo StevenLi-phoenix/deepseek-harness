@@ -15,6 +15,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 
 ### Changed
 - LaunchDaemon `app.lishuyu.dsh-events.plist` also trusts `dsh.tailc2559b.ts.net`, so the event service can take over the Tailscale name of the interactive instance it replaces without a plist change.
+- Event service logs move from `~dsh-runtime/Library/Logs/dsh-events/` (inside the 700 `Library`) to `/Users/dsh-runtime/logs/`, which the operator reads without sudo.
 
 ### Fixed
 - `RUNBOOK.md` step 0: drop the recursive `chown` of `/Volumes/MiniSSD` (with ownership enabled every entry already belonged to `lishuyu`; only the volume root needs it) in favor of a `find` check, stop and restart globalawareness alongside kaorou, and note that `launchctl bootstrap` may report `5: Input/output error` for a service that did start.

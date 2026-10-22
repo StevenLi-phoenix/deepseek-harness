@@ -15,7 +15,7 @@ Every `sudo` line is meant to be run by hand, one at a time. The agent runs with
 | `/Users/dsh-runtime/.dsh/` | dsh-runtime, 700 | `DSH_HOME`: profile, Sessions, storages (watches, subscriptions, cursors), `.env` secrets |
 | `/Users/dsh-runtime/.dsh/lsy-wechat/account.json` | dsh-runtime, 600 | WeChat bot binding written by `wechat-login.mjs` |
 | `/Users/dsh-runtime/work/` | dsh-runtime | Workspace of the WeChat chat Session and of watch-started Sessions |
-| `/Users/dsh-runtime/Library/Logs/dsh-events/` | dsh-runtime | `stdout.log`, `stderr.log` |
+| `/Users/dsh-runtime/logs/` | dsh-runtime, 755 | `stdout.log`, `stderr.log`; outside the 700 `Library`, so the operator (group `staff`) reads them without sudo, first-login URL included |
 | `/Library/LaunchDaemons/app.lishuyu.dsh-events.plist` | root:wheel 644 | Service definition (from `app.lishuyu.dsh-events.plist`) |
 
 ## 0. Close `/Volumes/MiniSSD`
@@ -72,7 +72,7 @@ cd /Volumes/MiniSSD/deepseek-harness && lsy/deploy/upgrade.sh    # builds, tests
 ## 4. Prepare the service home
 
 ```sh
-sudo -u dsh-runtime mkdir -p /Users/dsh-runtime/.dsh /Users/dsh-runtime/work /Users/dsh-runtime/Library/Logs/dsh-events
+sudo -u dsh-runtime mkdir -p /Users/dsh-runtime/.dsh /Users/dsh-runtime/work /Users/dsh-runtime/logs
 sudo -u dsh-runtime chmod 700 /Users/dsh-runtime/.dsh
 sudo -u dsh-runtime /Users/Shared/lsy-dsh/current/lsy/deploy/setup-profile.sh /Users/dsh-runtime/.dsh /Users/Shared/lsy-dsh/current
 ```
@@ -116,7 +116,7 @@ sudo launchctl bootstrap system /Library/LaunchDaemons/app.lishuyu.dsh-events.pl
 
 ```sh
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3081/               # 401 = up
-sudo tail -n 30 /Users/dsh-runtime/Library/Logs/dsh-events/stdout.log         # sensor, bus, and wechat lines
+tail -n 30 /Users/dsh-runtime/logs/stdout.log              # sensor, bus, and wechat lines
 sudo -u dsh-runtime cat /Users/lishuyu/.env                                    # must fail: Permission denied
 sudo -u dsh-runtime ls /Users/lishuyu/.ssh                                     # must fail: Permission denied
 sudo -u dsh-runtime ls /Volumes/MiniSSD                                        # must fail: Permission denied
@@ -139,7 +139,7 @@ Say it in WeChat; the agent sets it up with its tools and confirms:
 
 ## 10. Web access (optional)
 
-The first-login URL is printed to stdout: `sudo grep -o 'http://127.0.0.1:3081/?token=[^ ]*' /Users/dsh-runtime/Library/Logs/dsh-events/stdout.log | tail -1`. To reach it from other tailnet devices (and to make the links in result messages work), publish a Tailscale Service the same way as `svc:dsh`, approve it in the admin console, and keep the plist's `--trusted-host` in sync:
+The first-login URL is printed to stdout: `grep -o 'http://127.0.0.1:3081/?token=[^ ]*' /Users/dsh-runtime/logs/stdout.log | tail -1`. To reach it from other tailnet devices (and to make the links in result messages work), publish a Tailscale Service the same way as `svc:dsh`, approve it in the admin console, and keep the plist's `--trusted-host` in sync:
 
 ```sh
 /Applications/Tailscale.app/Contents/MacOS/Tailscale serve --service=svc:dsh-events --https=443 http://127.0.0.1:3081
