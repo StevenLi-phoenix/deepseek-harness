@@ -31,11 +31,23 @@ const DEFAULT_TIMEOUT_MS = 15_000
 /** `bot_type` this channel logs in as. */
 const BOT_TYPE = '3'
 
+/** Encrypted CDN reference of one media item (see media.ts). */
+const cdnMediaSchema = z.object({
+  encrypt_query_param: z.string().nullish(),
+  /** base64 of the raw key (images) or of its hex spelling (files, voice, video). */
+  aes_key: z.string().nullish(),
+  /** Complete download URL, when the server provides one. */
+  full_url: z.string().nullish(),
+})
+
 const itemSchema = z.object({
   type: z.number().nullish(),
   text_item: z.object({ text: z.string().nullish() }).nullish(),
   voice_item: z.object({ text: z.string().nullish() }).nullish(),
-  file_item: z.object({ file_name: z.string().nullish() }).nullish(),
+  /** `aeskey` is the image key as 32 hex characters, preferred over `media.aes_key`. */
+  image_item: z.object({ media: cdnMediaSchema.nullish(), aeskey: z.string().nullish() }).nullish(),
+  file_item: z.object({ file_name: z.string().nullish(), media: cdnMediaSchema.nullish() }).nullish(),
+  video_item: z.object({ media: cdnMediaSchema.nullish() }).nullish(),
 })
 
 const messageItemSchema = itemSchema.extend({
@@ -83,6 +95,8 @@ const sendReplySchema = z.object({
 
 /** One message item as received; every field is optional on the wire. */
 export type WeixinItem = z.infer<typeof itemSchema>
+/** Encrypted CDN reference of one media item. */
+export type CdnMediaRef = z.infer<typeof cdnMediaSchema>
 /** One message item with its optional quote. */
 export type WeixinMessageItem = z.infer<typeof messageItemSchema>
 /** One inbound message as received. */
