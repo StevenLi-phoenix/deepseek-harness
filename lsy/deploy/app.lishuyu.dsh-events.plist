@@ -20,6 +20,8 @@
         <string>3081</string>
         <string>--trusted-host</string>
         <string>dsh-events.tailc2559b.ts.net</string>
+        <string>--trusted-host</string>
+        <string>dsh.tailc2559b.ts.net</string>
     </array>
     <key>WorkingDirectory</key>
     <string>/Users/dsh-runtime/work</string>

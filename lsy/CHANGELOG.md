@@ -13,5 +13,8 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 - `lsy/deploy/`: `install-app.sh` (packed install, optional deps kept for koffi), `setup-profile.sh` (profile layout and plugin links for the installed product), `upgrade.sh` (build, test, pack, install, switch `current`), `wechat-login.mjs`, LaunchDaemon template `app.lishuyu.dsh-events.plist` (user `dsh-runtime`, port 3081), and `RUNBOOK.md` for the isolated deployment.
 - `packages/lsy/UPSTREAM.md` ledger and this `lsy/` deployment directory.
 
+### Changed
+- LaunchDaemon `app.lishuyu.dsh-events.plist` also trusts `dsh.tailc2559b.ts.net`, so the event service can take over the Tailscale name of the interactive instance it replaces without a plist change.
+
 ### Fixed
 - `RUNBOOK.md` step 0: drop the recursive `chown` of `/Volumes/MiniSSD` (with ownership enabled every entry already belonged to `lishuyu`; only the volume root needs it) in favor of a `find` check, stop and restart globalawareness alongside kaorou, and note that `launchctl bootstrap` may report `5: Input/output error` for a service that did start.
