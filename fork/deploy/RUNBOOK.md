@@ -86,7 +86,7 @@ cd / && sudo -u dsh-runtime /bin/zsh -fc 'umask 077; f=/Users/dsh-runtime/.dsh/.
 cd / && sudo -u dsh-runtime /bin/zsh -fc 'umask 077; f=/Users/dsh-runtime/.dsh/.env; read -rs "v?GitHub classic token (hidden): "; print; [[ -n $v ]] && print -r -- "FORK_GITHUB_TOKEN=$v" >> $f && print -r -- "FORK_GITHUB_NOTIFICATIONS_TOKEN=$v" >> $f; /bin/ls -l $f; /usr/bin/cut -d= -f1 $f'
 ```
 
-Models route through OpenRouter by a home patch (`fork/deploy/home.cordis.patch.yml`: the `openrouter` route of `llm-pi-ai` keyed by `OPENROUTER_API_KEY`, default model `deepseek/deepseek-v4.1-flash`). It sits above the profile layer, so upgrades never overwrite it:
+Models start on OpenRouter: the owner's profile patch is seeded (once, by `setup-profile.sh`) with the `openrouter` route of `llm-pi-ai` keyed by `OPENROUTER_API_KEY` and the default model `deepseek/deepseek-v4.1-flash`; change either from the Web UI afterwards. The home patch (`fork/deploy/home.cordis.patch.yml`) holds only what the UI must not edit: the 365-day sign-in cookie and the disabled DeepSeek key onboarding. The UI refuses to save any entry a home patch sets, so never put UI settings there:
 
 ```sh
 /bin/cat /Volumes/MiniSSD/deepseek-harness/fork/deploy/home.cordis.patch.yml | sudo -u dsh-runtime /bin/zsh -fc 'umask 077; /bin/cat >| /Users/dsh-runtime/.dsh/cordis.patch.yml'
@@ -170,7 +170,7 @@ Acting as `dsh-runtime` is a step down from `owner`; root is limited to the one 
 
 ## Operate
 
-Patch edits (`$DSH_HOME/cordis.patch.yml`, the profile patch) reload live; `.env` edits and new builds need a restart. The composition is the `@deepseek-ai/dsh-fork-event-bundle` layer linked from the build; the profile patch `profiles/event/cordis.patch.yml` is the owner's layer, where Web UI settings save, and upgrades keep it. A home patch entry replaces that entry's whole `config`, so override only entries whose config it restates in full.
+Patch edits (`$DSH_HOME/cordis.patch.yml`, the profile patch) reload live; `.env` edits and new builds need a restart. The composition is the `@deepseek-ai/dsh-fork-event-bundle` layer linked from the build; the profile patch `profiles/event/cordis.patch.yml` is the owner's layer, where Web UI settings save, and upgrades keep it. A home patch entry replaces that entry's whole `config`, so override only entries whose config it restates in full, and the Web UI refuses to save an entry the home patch sets ("Configuration for … is overridden by a home patch").
 
 | Task | Command |
 |---|---|
