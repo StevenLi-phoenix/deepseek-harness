@@ -9,7 +9,7 @@ import type { VerifiedWebhookDelivery, WebhookDeliveryId, WebhookRule, WebhookRu
 import z from '@deepseek-ai/schemastery'
 import { z as zod } from 'zod'
 import { matchesSubscription, suppressionReason } from './match.ts'
-import { FORK_SILENT_REPLY, batchTitle, buildSessionRequest, clip, formatBatchNote, formatReminderNote, formatResultNote, isSilentReply, reminderLabel } from './prompt.ts'
+import { FORK_SILENT_REPLY, batchTitle, buildSessionRequest, clip, failureDetail, formatBatchNote, formatReminderNote, formatResultNote, isSilentReply, reminderLabel } from './prompt.ts'
 import { busDomain, type BatchRecord, type ForkEventRecord, type SubscriptionRecord } from './storage.ts'
 import type {
   BatchEvent, BatchSummary, ForkDeliveryEvent, ForkEventInput, ForkNotifier, PublishOutcome, SessionAction, Subscription,
@@ -701,13 +701,15 @@ export class ForkEventBus extends Service {
         this.tracked.delete(session.id)
         this.reminders.delete(session.id)
         const outcome = event.data.reason.kind
+        const detail = failureDetail(event.data.reason)
+        const ended = detail === undefined ? outcome : `${outcome} (${detail})`
         // The first-turn result of a bus-started Session already carries a reminder that joined that turn.
         if (tracked !== undefined) {
-          this.ctx.logger.info(`fork-event-bus: Session ${session.id} of ${tracked.batchId} ended its first turn: ${outcome}`)
-          this.track(this.reportResult(tracked, outcome))
+          this.ctx.logger.info(`fork-event-bus: Session ${session.id} of ${tracked.batchId} ended its first turn: ${ended}`)
+          this.track(this.reportResult(tracked, outcome, detail))
         } else if (reminder !== undefined) {
-          this.ctx.logger.info(`fork-event-bus: reminder turn of Session ${session.id} ended: ${outcome}`)
-          this.track(this.reportReminder(session.id, reminder, outcome))
+          this.ctx.logger.info(`fork-event-bus: reminder turn of Session ${session.id} ended: ${ended}`)
+          this.track(this.reportReminder(session.id, reminder, outcome, detail))
         }
         return
       }
@@ -724,20 +726,20 @@ export class ForkEventBus extends Service {
   }
 
   /** Send a reminder turn's final answer to the notifier unless it is the silent reply. */
-  private async reportReminder(sessionId: string, reminder: TrackedReminder, outcome: string): Promise<void> {
+  private async reportReminder(sessionId: string, reminder: TrackedReminder, outcome: string, detail: string | undefined): Promise<void> {
     if (isSilentReply(reminder.text)) {
       this.ctx.logger.info(`fork-event-bus: reminder turn of Session ${sessionId} answered ${FORK_SILENT_REPLY}; nothing sent`)
       return
     }
     const notifier = this.ctx.get('forkNotifier')
     if (notifier === undefined) return
-    await notifier.send(formatReminderNote({ label: reminder.label, outcome, text: reminder.text, url: this.config.webUrl }))
+    await notifier.send(formatReminderNote({ label: reminder.label, outcome, text: reminder.text, url: this.config.webUrl, detail }))
   }
 
   /** Record the Session outcome and send it to the notifier unless it is the silent reply. */
-  private async reportResult(tracked: TrackedSession, outcome: string): Promise<void> {
+  private async reportResult(tracked: TrackedSession, outcome: string, detail: string | undefined): Promise<void> {
     const silent = isSilentReply(tracked.text)
-    await this.markBatch(tracked.batchId, { status: 'completed', outcome, ...(silent ? { silent } : {}) })
+    await this.markBatch(tracked.batchId, { status: 'completed', outcome, ...(silent ? { silent } : {}), ...(detail === undefined ? {} : { error: detail }) })
     if (silent) {
       this.ctx.logger.info(`fork-event-bus: Session of ${tracked.batchId} answered ${FORK_SILENT_REPLY}; nothing sent`)
       return
@@ -751,6 +753,7 @@ export class ForkEventBus extends Service {
       outcome,
       text: tracked.text,
       url: this.config.webUrl,
+      detail,
     }))
   }
 
