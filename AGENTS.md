@@ -180,6 +180,10 @@ Docs accompany every code change: update affected README and JSDoc contracts tog
 
 `CLAUDE.md` symlinks `AGENTS.md` at root and `packages/`; edit the real file. Keep each rule self-contained while linking high-level docs. Condense when clarity survives; raise a `verify-doc-budgets` ceiling when the required content genuinely needs more space.
 
+## Fork layer (lsy)
+
+Branch `lsy/main` adds an event service in `packages/lsy/` and `lsy/`. Before changing them, or any upstream file from this fork, read [lsy/AGENTS.md](lsy/AGENTS.md): upstream-edit [ledger](packages/lsy/UPSTREAM.md), profile layering, regeneration, [deployment](lsy/deploy/RUNBOOK.md).
+
 ## Vendoring policy
 
 `vendor/` packages are pinned source copies (manifest with upstream SHAs in [vendor/README.md](vendor/README.md)). Update via the sync procedure there; re-apply or retire the logged local modifications; rerun `pnpm run test && pnpm run build`.
