@@ -133,6 +133,10 @@ async function harness(options: {
   sessions?: ReturnType<typeof fakeSessions>
   /** Leave `accountFile` unset so the channel derives it from DSH_HOME. */
   defaultAccountFile?: boolean
+  /** Live root agents the Host registry reports; omitted means no registry. */
+  agents?: FakeAgent[]
+  /** Session titles by id. */
+  titles?: Record<string, string>
 } = {}) {
   const ilink = options.ilink ?? new FakeIlink()
   vi.stubGlobal('fetch', ilink.fetch)
@@ -164,8 +168,15 @@ async function harness(options: {
     set: vi.fn(),
   }
   ctx.provide('permissionPresets', presets as never)
-  const titles = { rename: vi.fn() }
+  const titleById = options.titles ?? {}
+  const titleOf = (session: { id: string }): { title: string | undefined } | undefined =>
+    (session.id in titleById ? { title: titleById[session.id] } : undefined)
+  const titles = { rename: vi.fn(), get: vi.fn(titleOf) }
   ctx.provide('sessionTitle', titles as never)
+  if (options.agents !== undefined) {
+    const agents = options.agents
+    ctx.provide('agents', { roots: () => [...agents], get: (id: string) => agents.find(agent => agent.session.id === id) } as never)
+  }
   const { chat, ...rest } = options.config ?? {}
   const config: Config = {
     ...(options.defaultAccountFile === true ? {} : { accountFile }),
@@ -202,6 +213,17 @@ async function harness(options: {
   return {
     ctx, channel, ilink, sessions: sessions.state, presets, titles, logs, emit, ownerSays, finishTurn, accountFile, pool, sentAtPrompt,
   }
+}
+
+/** A live root agent as the Host registry lists it. */
+interface FakeAgent {
+  session: { id: string; header: Record<string, unknown> }
+  status: 'idle' | 'running'
+  cancel: ReturnType<typeof vi.fn>
+}
+
+function fakeAgent(id: string, status: 'idle' | 'running'): FakeAgent {
+  return { session: { id, header: {} }, status, cancel: vi.fn() }
 }
 
 function assistant(text: string): unknown {
@@ -265,7 +287,7 @@ describe('WechatChannel chat', () => {
 
     const ilink = new FakeIlink()
     const second = await harness({ pool, sessions, ilink })
-    expect((ilink.requests[0]!.body as { get_updates_buf: string }).get_updates_buf).toBe('buf-2')
+    expect((ilink.requestsTo('ilink/bot/getupdates')[0]!.body as { get_updates_buf: string }).get_updates_buf).toBe('buf-2')
     expect(second.channel.ownsSession('chat-1')).toBe(true)
     await second.ownerSays('three')
     expect(sessions.state.created).toHaveLength(1)
@@ -483,6 +505,191 @@ describe('WechatChannel notes in the chat Session', () => {
     expect(text).not.toContain('just')
     expect(text).toContain('✅ operator: watch globe errors\n\nmonitor mon-ac1fa1 is running')
     expect(h.sessions.prompts).toHaveLength(prompts)
+  })
+})
+
+describe('WechatChannel typing indicator', () => {
+  const turnStart = (h: { emit: (id: string, event: unknown) => void }, id: string): void => {
+    h.emit(id, { type: 'turn/start', seq: 2, data: { turn: 1 } })
+  }
+
+  it('shows typing while the chat Session works and clears it after the reply', async () => {
+    const h = await harness()
+    await h.ownerSays('hi')
+    expect(h.ilink.requestsTo('ilink/bot/getconfig').map(request => request.body)).toMatchObject([{ ilink_user_id: OWNER, context_token: 'ctx-hi' }])
+    expect(h.ilink.typing).toEqual([1])
+    turnStart(h, 'chat-1')
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(h.ilink.typing).toEqual([1, 1, 1])
+    await h.finishTurn('chat-1', 'hello')
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['hello'])
+    expect(h.ilink.typing).toEqual([1, 1, 1, 2])
+    // The cancel follows the reply, so the bubble never disappears before the answer shows.
+    const order = h.ilink.requests.map(request => request.endpoint)
+    expect(order.lastIndexOf('ilink/bot/sendmessage')).toBeLessThan(order.lastIndexOf('ilink/bot/sendtyping'))
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(h.ilink.typing).toEqual([1, 1, 1, 2])
+    expect(h.ilink.requestsTo('ilink/bot/getconfig')).toHaveLength(1)
+  })
+
+  it('types for a turn the owner did not start and clears it when the turn sends nothing', async () => {
+    const h = await harness()
+    await h.ownerSays('hi')
+    await h.finishTurn('chat-1', 'hello')
+    turnStart(h, 'chat-1')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.ilink.typing).toEqual([1, 2, 1])
+    await h.finishTurn('chat-1', 'NO_REPLY')
+    expect(h.ilink.typing).toEqual([1, 2, 1, 2])
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['hello'])
+    turnStart(h, 'other-session')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.ilink.typing).toEqual([1, 2, 1, 2])
+  })
+
+  it('keeps typing while more messages join a running turn', async () => {
+    const h = await harness()
+    await h.ownerSays('one')
+    turnStart(h, 'chat-1')
+    await h.ownerSays('two')
+    await vi.advanceTimersByTimeAsync(4_000)
+    expect(h.ilink.typing).toEqual([1])
+    await h.finishTurn('chat-1', 'both answered')
+    expect(h.ilink.typing).toEqual([1, 2])
+  })
+
+  it('never lets a typing failure delay or block the reply, and backs off', async () => {
+    const h = await harness()
+    h.ilink.reply('ilink/bot/getconfig', { body: { ret: -1, errmsg: 'busy' } })
+    await h.ownerSays('one')
+    await h.finishTurn('chat-1', 'answer one')
+    await h.ownerSays('two')
+    expect(h.ilink.requestsTo('ilink/bot/getconfig')).toHaveLength(1)
+    expect(h.ilink.typing).toEqual([])
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['answer one'])
+    expect(h.logs.filter(line => line.text.startsWith('lsy-wechat: typing unavailable'))).toHaveLength(1)
+    await h.finishTurn('chat-1', 'answer two')
+    await vi.advanceTimersByTimeAsync(60_000)
+    h.ilink.reply('ilink/bot/sendtyping', { body: { ret: -2 } })
+    await h.ownerSays('three')
+    expect(h.ilink.requestsTo('ilink/bot/getconfig')).toHaveLength(2)
+    await h.finishTurn('chat-1', 'answer three')
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['answer one', 'answer two', 'answer three'])
+  })
+
+  it('gives up typing after an hour even when the turn never ends', async () => {
+    const h = await harness()
+    await h.ownerSays('hi')
+    await vi.advanceTimersByTimeAsync(61 * 60_000)
+    const sent = h.ilink.typing.length
+    expect(h.ilink.typing.at(-1)).toBe(2)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(h.ilink.typing).toHaveLength(sent)
+  })
+
+  it('fetches a new typing ticket after a day', async () => {
+    const h = await harness()
+    await h.ownerSays('one')
+    await h.finishTurn('chat-1', 'a')
+    vi.setSystemTime(new Date('2026-10-22T19:00:00.000Z'))
+    await h.ownerSays('two')
+    expect(h.ilink.requestsTo('ilink/bot/getconfig').map(request => (request.body as { context_token: string }).context_token)).toEqual(['ctx-one', 'ctx-two'])
+  })
+})
+
+describe('WechatChannel commands', () => {
+  it('answers /help without involving the agent', async () => {
+    const h = await harness()
+    await h.ownerSays('/help')
+    await h.ownerSays(' /HELP ')
+    expect(h.sessions.prompts).toEqual([])
+    expect(h.ilink.typing).toEqual([])
+    const [help] = h.ilink.sent.map(sent => sent.text)
+    expect(help).toContain('/stop')
+    expect(help).toContain('/new')
+    expect(help).toContain('/help')
+    expect(h.ilink.sent).toHaveLength(2)
+  })
+
+  it('stops every running task on /stop, clears the queue, and reports what it stopped', async () => {
+    const chat = fakeAgent('chat-1', 'running')
+    const task = fakeAgent('webhook-1', 'running')
+    const idle = fakeAgent('webhook-2', 'idle')
+    const h = await harness({ agents: [chat, task, idle], titles: { 'webhook-1': 'operator: 重新挂监控' } })
+    await h.ownerSays('hi')
+    h.emit('chat-1', { type: 'turn/start', seq: 2, data: { turn: 1 } })
+    await h.ownerSays('/stop')
+    expect(chat.cancel).toHaveBeenCalledWith({ kind: 'user' })
+    expect(task.cancel).toHaveBeenCalledWith({ kind: 'user' })
+    expect(idle.cancel).not.toHaveBeenCalled()
+    expect(h.sessions.prompts).toHaveLength(1)
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['⏹ 已停下 2 个正在运行的任务：\n• 微信对话\n• operator: 重新挂监控\n\n监控和定时提醒不受影响；要停它们，直接告诉我。'])
+    expect(h.ilink.typing.at(-1)).toBe(2)
+    // The cancelled turn ends as aborted by the user: the /stop answer already said so.
+    h.emit('chat-1', assistant('half an answer'))
+    h.emit('chat-1', { type: 'turn/end', seq: 9, data: { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } } })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.ilink.sent).toHaveLength(1)
+    expect(h.logs.some(line => line.text === 'lsy-wechat: /stop cancelled 2 running Session(s): chat-1, webhook-1')).toBe(true)
+  })
+
+  it('says so when /stop finds nothing running', async () => {
+    const h = await harness({ agents: [fakeAgent('chat-1', 'idle')] })
+    await h.ownerSays('/stop')
+    const bare = await harness({ ilink: new FakeIlink() })
+    await bare.ownerSays('/stop')
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['现在没有正在运行的任务。'])
+    expect(bare.ilink.sent.map(sent => sent.text)).toEqual(['现在没有正在运行的任务。'])
+  })
+
+  it('still reports a turn the owner aborted some other way', async () => {
+    const h = await harness()
+    await h.ownerSays('hi')
+    h.emit('chat-1', { type: 'turn/end', seq: 9, data: { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } } })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['⚠️ 本轮未完成（aborted）'])
+  })
+})
+
+describe('WechatChannel lifecycle notices', () => {
+  it('tells iLink when the bot goes online and offline, clearing typing first', async () => {
+    const h = await harness()
+    expect(h.ilink.requestsTo('ilink/bot/msg/notifystart')).toHaveLength(1)
+    await h.ownerSays('hi')
+    await contexts.splice(0).at(0)!.fiber.dispose()
+    expect(h.ilink.typing).toEqual([1, 2])
+    expect(h.ilink.requestsTo('ilink/bot/msg/notifystop')).toHaveLength(1)
+  })
+
+  it('tells the owner when a restart cuts off a chat turn', async () => {
+    const h = await harness()
+    await h.ownerSays('hi')
+    h.emit('chat-1', { type: 'turn/start', seq: 2, data: { turn: 1 } })
+    await contexts.splice(0).at(0)!.fiber.dispose()
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['⚠️ dsh 正在重启，这一轮被打断了，没有完成。重启后（约半分钟）需要的话再发一次。'])
+    expect(h.ilink.typing).toEqual([1, 2])
+
+    const quiet = await harness({ ilink: new FakeIlink() })
+    await quiet.ownerSays('hi')
+    await quiet.finishTurn('chat-1', 'done')
+    await contexts.splice(0).at(0)!.fiber.dispose()
+    expect(quiet.ilink.sent.map(sent => sent.text)).toEqual(['done'])
+  })
+
+  it('logs once when a typing ticket is fetched', async () => {
+    const h = await harness()
+    await h.ownerSays('one')
+    await h.ownerSays('two')
+    expect(h.logs.filter(line => line.text === 'lsy-wechat: typing ticket fetched')).toHaveLength(1)
+  })
+
+  it('keeps running when a lifecycle notice fails', async () => {
+    const ilink = new FakeIlink()
+    ilink.reply('ilink/bot/msg/notifystart', new Error('offline'))
+    const h = await harness({ ilink })
+    await h.ownerSays('hi')
+    expect(h.sessions.prompts).toHaveLength(1)
+    expect(h.logs.some(line => line.text.startsWith('lsy-wechat: notifystart failed'))).toBe(true)
   })
 })
 

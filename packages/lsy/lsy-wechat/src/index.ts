@@ -24,7 +24,8 @@ declare module '@deepseek-ai/dsh-llm' {
   }
 }
 
-import { buildDigest, contentText, fitText, formatGap, inboundText, NEW_CHAT_REPLY, QUOTA_FOOTER, relayText, renderNote, sharedNoteText, splitText, timeGapNotice, WECHAT_MAX_TEXT_BYTES } from './text.ts'
+import { buildDigest, contentText, fitText, formatGap, HELP_REPLY, inboundText, NEW_CHAT_REPLY, QUOTA_FOOTER, relayText, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES } from './text.ts'
+import { TypingIndicator } from './typing.ts'
 
 export * from './api.ts'
 export * from './login.ts'
@@ -111,6 +112,14 @@ export const Config: z<Config> = z.object({
 
 /** Exact owner text that starts a fresh chat Session. */
 const NEW_CHAT_COMMAND = '/new'
+/** Exact owner text that cancels every running turn on the Host. */
+const STOP_COMMAND = '/stop'
+/** Exact owner text that lists the commands. */
+const HELP_COMMAND = '/help'
+/** How long typing stays on after a forwarded message when no chat turn starts. */
+const TYPING_GRACE_MS = 60_000
+/** Deadline of the offline notice sent while the channel stops. */
+const STOP_NOTICE_TIMEOUT_MS = 3000
 
 /** Chat Sessions remembered for {@link WechatChannel.ownsSession}; the oldest are forgotten first. */
 const MAX_REMEMBERED_SESSIONS = 200
@@ -124,6 +133,11 @@ const TRANSIENT_RESOLVE_CODES: ReadonlySet<string> = new Set(['session/agent-bus
 export type SendFileResult =
   | { readonly sent: OutboundKind; readonly name: string; readonly bytes: number }
   | { readonly notSent: string }
+
+/** What `/stop` needs of the Host agent registry; read through `ctx.get`, so the channel works without one. */
+interface RootAgents {
+  roots(): Array<{ readonly session: Session; readonly status: string; cancel(cause: { kind: 'user' }): void }>
+}
 
 /** A usable reply window and what sending through it needs. */
 interface Target {
@@ -187,8 +201,20 @@ export class WechatChannel extends Service implements LsyNotifier {
   private account: WechatAccount | undefined
   /** Last logged account state, so each change is logged once. */
   private accountState = ''
+  /** Account state the server was last told is online. */
+  private onlineState = ''
   /** Bot token the server declared stale; the loop waits for a different one. */
   private staleToken: string | undefined
+  /** The owner's "typing" line while a chat Session works. */
+  private readonly typing: TypingIndicator
+  /** The latest stored reply window, readable after storage closed during teardown. */
+  private lastWindow: { key: string; window: WindowRecord } | undefined
+  /** Owned Sessions with a running turn. */
+  private readonly working = new Set<string>()
+  /** Owned Sessions cancelled by `/stop`, whose aborted turn needs no relay. */
+  private readonly stoppedByOwner = new Set<string>()
+  /** Stops typing when a forwarded message starts no chat turn. */
+  private typingGrace: NodeJS.Timeout | undefined
 
   /**
    * @param ctx - Host services owning storage, Sessions, presets, and titles.
@@ -199,12 +225,33 @@ export class WechatChannel extends Service implements LsyNotifier {
     assertConfig(config)
     this.accountFile = config.accountFile ?? accountFilePath()
     this.ready = ctx.storageDomain.open(wechatDomain)
+    this.typing = new TypingIndicator({
+      fetchTicket: async () => {
+        const account = this.usableAccount()
+        const window = this.domain?.table('windows').get(`${account.botId}/${account.ownerUserId}`)
+        const { typingTicket } = await this.client(account).getConfig(account.ownerUserId, window?.token, this.abort.signal)
+        if (typingTicket === undefined) throw new Error('the server gave no typing ticket')
+        return typingTicket
+      },
+      // No channel signal: the cancel must still go out while the channel stops; the request deadline bounds it.
+      send: async (ticket, status) => {
+        const account = this.usableAccount()
+        await this.client(account).sendTyping(account.ownerUserId, ticket, status)
+      },
+      warn: (message) => { this.ctx.logger.warn(`lsy-wechat: typing unavailable: ${message}; replies are unaffected`) },
+      fetched: () => { this.ctx.logger.info('lsy-wechat: typing ticket fetched') },
+    })
 
     ctx.effect(async () => {
       const domain = await this.ready
       this.domain = domain
       const cleanup = ctx.effect(() => async () => {
         this.stopping = true
+        this.clearTypingGrace()
+        // A running chat turn dies with the process; say so while the reply window is still usable.
+        if (this.working.size > 0) await this.sendRestartNotice()
+        await this.typing.stop()
+        await this.notifyLifecycle('stop')
         this.abort.abort(new Error('lsy-wechat is stopping'))
         await this.loop
         await Promise.allSettled([...this.inflight])
@@ -406,8 +453,13 @@ export class WechatChannel extends Service implements LsyNotifier {
       } else {
         this.ctx.logger.info(`lsy-wechat: bot ${read.account.botId} active for owner ${read.account.ownerUserId}`)
       }
+      this.typing.forgetTicket()
     }
     this.account = read.kind === 'ok' ? read.account : undefined
+    if (read.kind === 'ok' && state !== this.onlineState) {
+      this.onlineState = state
+      this.track(this.notifyLifecycle('start'))
+    }
     return this.account
   }
 
@@ -440,26 +492,112 @@ export class WechatChannel extends Service implements LsyNotifier {
       if (token === '') {
         this.ctx.logger.warn('lsy-wechat: owner message carries no context_token; replies wait in the outbox')
       } else {
-        await domain.table('windows').put(`${account.botId}/${account.ownerUserId}`, { token, receivedAt: Date.now(), used: 0, exhausted: false })
+        await this.putWindow(domain, `${account.botId}/${account.ownerUserId}`, { token, receivedAt: Date.now(), used: 0, exhausted: false })
       }
       await this.flushOutbox(domain)
     })
     if (text === '') return
-    if (text === NEW_CHAT_COMMAND) {
+    const command = text.trim().toLowerCase()
+    if (command === NEW_CHAT_COMMAND) {
       await this.serialize(async () => {
         if (await domain.table('chats').delete(account.ownerUserId)) this.ctx.logger.info('lsy-wechat: owner started a new chat')
       })
       await this.deliver(NEW_CHAT_REPLY, 'notice')
       return
     }
+    if (command === HELP_COMMAND) {
+      await this.deliver(HELP_REPLY, 'notice')
+      return
+    }
+    if (command === STOP_COMMAND) {
+      await this.stopEverything()
+      return
+    }
+    // Typing starts before attachments download, so the owner sees the message was taken up.
+    this.typing.start()
     const gap = timeGapNotice(arrivedAt, before, this.config.timeGapMs, this.config.chat.timeZone)
     try {
       const quietMs = arrivedAt - Math.max(before?.ownerAt ?? 0, before?.sentAt ?? 0)
       await this.forward(domain, account, text, await this.receiveMedia(message), gap === undefined ? undefined : { text: gap, quietMs })
+      this.armTypingGrace()
     } catch (error: unknown) {
       if (this.stopping) return
+      this.settleTyping()
       this.ctx.logger.warn(`lsy-wechat: forwarding the owner message failed: ${errorText(error)}`)
       await this.deliver(`⚠️ 消息没能交给 agent：${fitText(errorText(error), 300)}`, 'notice')
+    }
+  }
+
+  /**
+   * `/stop`: cancel every running root turn on the Host (this chat and the bus Sessions), dropping
+   * their queued messages, and tell the owner what stopped. Monitors and reminders keep running;
+   * they are not turns. A chat turn stopped this way is not relayed as unfinished.
+   */
+  private async stopEverything(): Promise<void> {
+    const registry = (this.ctx.get as (name: string) => unknown)('agents') as RootAgents | undefined
+    const running = (registry?.roots() ?? []).filter(agent => agent.status === 'running')
+    const labels: string[] = []
+    for (const agent of running) {
+      const id = agent.session.id
+      if (this.ownsSession(id)) this.stoppedByOwner.add(id)
+      agent.cancel({ kind: 'user' })
+      labels.push(this.ownsSession(id) ? '微信对话' : this.ctx.sessionTitle.get(agent.session)?.title ?? `Session ${id}`)
+    }
+    this.clearTypingGrace()
+    await this.typing.stop()
+    this.ctx.logger.info(`lsy-wechat: /stop cancelled ${running.length} running Session(s)${running.length === 0 ? '' : `: ${running.map(agent => agent.session.id).join(', ')}`}`)
+    await this.deliver(running.length === 0 ? STOP_IDLE_REPLY : stopReply(labels), 'notice')
+  }
+
+  /** Stop typing unless a chat turn is still running. */
+  private settleTyping(): void {
+    if (this.working.size > 0) return
+    this.clearTypingGrace()
+    void this.typing.stop()
+  }
+
+  /** After a forward, stop typing if no chat turn has started within {@link TYPING_GRACE_MS}. */
+  private armTypingGrace(): void {
+    this.clearTypingGrace()
+    if (this.working.size > 0) return
+    this.typingGrace = setTimeout(() => {
+      this.typingGrace = undefined
+      if (this.working.size === 0) void this.typing.stop()
+    }, TYPING_GRACE_MS)
+  }
+
+  private clearTypingGrace(): void {
+    if (this.typingGrace !== undefined) clearTimeout(this.typingGrace)
+    this.typingGrace = undefined
+  }
+
+  /** The bound account, unless there is none or its token went stale. */
+  private usableAccount(): WechatAccount {
+    const account = this.account
+    if (account === undefined) throw new Error('no bound account')
+    if (account.botToken === this.staleToken) throw new Error('bot token is stale')
+    return account
+  }
+
+  /** A client for one account with the configured request deadline. */
+  private client(account: WechatAccount, timeoutMs = this.config.requestTimeoutMs): IlinkClient {
+    return new IlinkClient({ baseUrl: account.baseUrl, token: account.botToken, timeoutMs })
+  }
+
+  /** Tell iLink the bot went online or offline; a failure is logged and ignored. */
+  private async notifyLifecycle(phase: 'start' | 'stop'): Promise<void> {
+    let account: WechatAccount
+    try {
+      account = this.usableAccount()
+    } catch {
+      return
+    }
+    try {
+      if (phase === 'start') await this.client(account).notifyStart(this.abort.signal)
+      else await this.client(account, STOP_NOTICE_TIMEOUT_MS).notifyStop()
+      this.ctx.logger.debug(`lsy-wechat: notify${phase} sent`)
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`lsy-wechat: notify${phase} failed: ${errorText(error)}`)
     }
   }
 
@@ -566,23 +704,37 @@ export class WechatChannel extends Service implements LsyNotifier {
     return created.sessionId
   }
 
-  /** Remember each owned Session's latest assistant text and relay it when the turn ends. */
+  /** Follow each owned Session: typing while a turn runs, its latest assistant text, and the relay when the turn ends. */
   private observeSession(session: Session, event: SessionEvent): void {
     if (!this.ownsSession(session.id)) return
+    if (event.type === 'turn/start') {
+      this.working.add(session.id)
+      this.clearTypingGrace()
+      this.typing.start()
+      return
+    }
     if (event.type === 'assistant/message') {
       const text = contentText(event.data.message.content)
       if (text !== undefined) this.replies.set(session.id, text)
       return
     }
     if (event.type !== 'turn/end') return
+    this.working.delete(session.id)
     const text = this.replies.get(session.id)
     this.replies.delete(session.id)
+    if (this.stoppedByOwner.delete(session.id) && event.data.reason.kind === 'aborted') {
+      this.ctx.logger.info(`lsy-wechat: Session ${session.id} was stopped by /stop; nothing to relay`)
+      this.settleTyping()
+      return
+    }
     const outcome = event.data.reason.kind
     const detail = failureDetail(event.data.reason)
     const reply = relayText(text, outcome, detail)
     const ended = detail === undefined ? outcome : `${outcome}: ${detail}`
     this.ctx.logger.info(`lsy-wechat: Session ${session.id} ended a turn (${ended}); ${reply === undefined ? 'nothing to relay' : `relaying ${reply.length} chars`}`)
-    if (reply !== undefined) this.track(this.deliver(reply, 'reply'))
+    // Typing clears after the reply went out, so the chat never looks idle before the answer shows.
+    if (reply !== undefined) this.track(this.deliver(reply, 'reply').finally(() => { this.settleTyping() }))
+    else this.settleTyping()
   }
 
   /** Split one text into messages and send or queue each in order. */
@@ -635,7 +787,7 @@ export class WechatChannel extends Service implements LsyNotifier {
       await client.sendItem(target.account.ownerUserId, item, target.window.token, this.abort.signal)
     } catch (error: unknown) {
       if (error instanceof IlinkApiError && error.ret === ILINK_SEND_REJECTED) {
-        await domain.table('windows').put(target.key, { ...target.window, exhausted: true })
+        await this.putWindow(domain, target.key, { ...target.window, exhausted: true })
         this.ctx.logger.info('lsy-wechat: WeChat rejected a send (ret -2); the reply window stays closed until the owner writes again')
         return 'rejected by WeChat (ret -2)'
       }
@@ -647,10 +799,38 @@ export class WechatChannel extends Service implements LsyNotifier {
       return 'send failed'
     }
     const used = target.window.used + 1
-    await domain.table('windows').put(target.key, { ...target.window, used })
+    await this.putWindow(domain, target.key, { ...target.window, used })
     await this.recordActivity(domain, target.account.ownerUserId, { sentAt: Date.now(), sent: kind })
     this.ctx.logger.info(`lsy-wechat: sent ${label} (${used}/${this.config.repliesPerToken} of this window)`)
     return 'sent'
+  }
+
+  /** Store a reply window and keep a copy for teardown. */
+  private async putWindow(domain: Domain<typeof wechatDomain>, key: string, window: WindowRecord): Promise<void> {
+    await domain.table('windows').put(key, window)
+    this.lastWindow = { key, window }
+  }
+
+  /**
+   * Tell the owner a restart cut off the running chat turn. Runs during teardown, after storage may
+   * have closed, so it sends straight through the last known window and records nothing; a stale
+   * count only makes a later send meet `ret -2`, which already queues the text.
+   */
+  private async sendRestartNotice(): Promise<void> {
+    const account = this.account
+    const cached = this.lastWindow
+    const usable = account !== undefined && account.botToken !== this.staleToken && cached !== undefined
+      && cached.key === `${account.botId}/${account.ownerUserId}`
+      && !cached.window.exhausted && cached.window.used < this.config.repliesPerToken
+      && Date.now() - cached.window.receivedAt <= this.config.contextTtlMs
+    this.ctx.logger.info(`lsy-wechat: stopping during a chat turn (${[...this.working].join(', ')}); ${usable ? 'telling the owner' : 'no open window to tell the owner'}`)
+    if (!usable) return
+    try {
+      const item = { type: ItemType.TEXT, text_item: { text: RESTART_CUT_REPLY } }
+      await this.client(account, STOP_NOTICE_TIMEOUT_MS).sendItem(account.ownerUserId, item, cached.window.token)
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`lsy-wechat: could not tell the owner about the restart: ${errorText(error)}`)
+    }
   }
 
   /** Merge one change into the owner's chat activity. */

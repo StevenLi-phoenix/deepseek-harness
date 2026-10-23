@@ -289,6 +289,15 @@ describe('LsyEventBus Session observation', () => {
     expect(bus.batches()[0]).toMatchObject({ status: 'completed', outcome: 'error', sessionId: 's1' })
   })
 
+  it('records but does not report a first turn the owner stopped', async () => {
+    const { emit, userMessage, notes, bus } = await started()
+    emit('s1', userMessage)
+    emit('s1', { type: 'turn/end', seq: 2, data: { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } } })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(notes).toEqual([])
+    expect(bus.batches()[0]).toMatchObject({ status: 'completed', outcome: 'aborted', sessionId: 's1' })
+  })
+
   it('reports and records why a first turn failed', async () => {
     const { emit, userMessage, notes, bus } = await started()
     emit('s1', userMessage)

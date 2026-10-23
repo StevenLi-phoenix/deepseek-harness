@@ -90,7 +90,7 @@ kind: "package-reference"
 
 ### 结果回报
 
-总线启动的 Session 结束第一轮时，总线把结局记到批次上，并把最终的 assistant 文本发给 `ctx.lsyNotifier`。Host schedule 提醒（`source.kind: schedule`）在通知器自己不转发的 Session（`ownsSession(sessionId)`）里开启一轮时，总线把这一轮的最终回答发出去，标题为 `⏰ <提醒 prompt 的第一行>`。两种情况下，最终回答恰好是 `NO_REPLY`（`LSY_SILENT_REPLY`）时什么也不发；批次记录 `silent: true`。
+总线启动的 Session 结束第一轮时，总线把结局记到批次上，并把最终的 assistant 文本发给 `ctx.lsyNotifier`。Host schedule 提醒（`source.kind: schedule`）在通知器自己不转发的 Session（`ownsSession(sessionId)`）里开启一轮时，总线把这一轮的最终回答发出去，标题为 `⏰ <提醒 prompt 的第一行>`。两种情况下，最终回答恰好是 `NO_REPLY`（`LSY_SILENT_REPLY`）时什么也不发；批次记录 `silent: true`。owner 停下的轮次（以 `aborted` 结束、原因为 `user`，来自 Web UI 或微信 `/stop`）只记录、不报告，因为停它的人已经知道。
 
 -----
 

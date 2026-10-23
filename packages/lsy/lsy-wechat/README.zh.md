@@ -73,7 +73,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 | `mediaTimeoutMs` | `60000` | 一个附件下载的时限 |
 | `timeGapMs` | `1800000` | 对话安静多久（30 分钟）之后，你的下一条消息带一段时间说明交给 agent：你何时写的、对话安静了多久、上一条消息是什么；`0` 关闭 |
 
-在对话里发 `/new` 会开始一个新的对话 Session。文字、语音转写和引用会交给 agent。图片、文件和视频会从微信 CDN 下载、解密并存进 inbox；模型的线路支持图片时，图片也会作为图片内容交给模型。
+在对话里发 `/stop` 会取消 Host 上所有正在运行的轮次（这里的对话和后台 Session），丢掉它们排队的消息，并回复停下了哪些；监控和定时提醒照常运行。`/new` 开始一个新的对话 Session，`/help` 列出这些命令；命令不会交给 agent。agent 工作时，对话里会显示微信的“对方正在输入”，从消息到达一直持续到回复发出。重启打断了正在运行的对话轮次时，会在对话里说明，而不是让问题石沉大海。文字、语音转写和引用会交给 agent。图片、文件和视频会从微信 CDN 下载、解密并存进 inbox；模型的线路支持图片时，图片也会作为图片内容交给模型。
 
 `sendFile(path)` 把本机文件发回去：内容是图片就发成图片，`.mp4`、`.mov`、`.m4v` 发成视频，其他发成文件。模型不该决定的事都由宿主决定：收件人永远是 owner，文件只经当前回复窗口发送（从不进 outbox），窗口的最后一个名额留给本轮的文字回复，路径必须指向 `maxMediaBytes` 以内的普通文件。工具包 [`@deepseek-ai/dsh-lsy-tool-wechat`](../lsy-tool-wechat/README.zh.md) 把它作为 `wechat_send_file` 提供给 agent。
 
@@ -87,14 +87,15 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 <details>
 <summary>实现细节——点击展开</summary>
 
-插件运行期间，通道持续长轮询 `ilink/bot/getupdates`，并在处理消息之前把返回的游标存进 `lsy_wechat` storage domain，所以崩溃只会丢消息，不会重复发 prompt。两次轮询之间它会重读账号文件；没有可用账号、或服务器报告 token 失效（`-14`）时，它只记一次日志，然后每隔 `accountPollMs` 检查一次文件。它只接受 owner 发来的用户消息。每条消息打开一个回复窗口（`context_token`、接收时间、已用条数），先把 outbox 作为摘要消息发出（摘要永远不占窗口的最后一个名额），再用 `sessionController.prompt()` 以 `steer` 模式转给 owner 的对话 Session：Session 空闲时开始新一轮，正在忙时在下一个步骤边界接收这条消息，所以紧跟一句话发来的图片会进入正在回答那句话的那一轮。转发之前，每个图片、文件和视频条目都会被下载（AES-128-ECB，密钥取 `image_item.aeskey` 或 `media.aes_key`），按内容或文件名判断类型，再写进 inbox；prompt 为每个附件附一行说明，图片作为图片内容附上；如果被拒绝为 `session/attachment-invalid`（模型只支持文本），就只带说明重发一次。`resolveAgent()` 成功时复用已存的 Session；Session 不存在或已损坏时，用 `sessionController.create()` 新建一个，并设置 permission preset 和标题。通道跟踪自己创建的每个对话 Session 的 `session/event`，记住这一轮最新的助手文本，在这一轮结束时发出，除非它是 `NO_REPLY`。`send()` 和回复转发共用一条串行的投递路径：文本只经由已打开、未过期且仍有名额的窗口发出，占用最后一个名额的那条带一句提示，其余的连同原因进入 outbox。`ret -2` 关闭窗口，`-14` 暂停通道，网络失败时文本留在 outbox 里。每次 `send()` 还会把渲染好的通知注入最新的对话 Session（`agent.inject()`，来源类型 `lsy-wechat`，形式 `notice`），并说明它来自另一个 Session、不是 owner 说的话，附上发出时间：它等下一轮，不会自己开一轮；之所以这样，是因为 owner 对这条通知的回复会进入对话 Session，而不是写这条通知的那个 Session，所以它可能在发出几小时后才进入那个 Session 的历史。`activity` 表记录 owner 上次写消息的时间，以及 bot 上次给 owner 发了什么、何时发的。它在 outbox 刷出之前读取，因此新消息放出的摘要不算数；对话安静超过 `timeGapMs` 之后，owner 的消息在 prompt 之前先注入一条时间间隔提示。
+插件运行期间，通道持续长轮询 `ilink/bot/getupdates`，并在处理消息之前把返回的游标存进 `lsy_wechat` storage domain，所以崩溃只会丢消息，不会重复发 prompt。两次轮询之间它会重读账号文件；没有可用账号、或服务器报告 token 失效（`-14`）时，它只记一次日志，然后每隔 `accountPollMs` 检查一次文件。它只接受 owner 发来的用户消息。每条消息打开一个回复窗口（`context_token`、接收时间、已用条数），先把 outbox 作为摘要消息发出（摘要永远不占窗口的最后一个名额），再用 `sessionController.prompt()` 以 `steer` 模式转给 owner 的对话 Session：Session 空闲时开始新一轮，正在忙时在下一个步骤边界接收这条消息，所以紧跟一句话发来的图片会进入正在回答那句话的那一轮。转发之前，每个图片、文件和视频条目都会被下载（AES-128-ECB，密钥取 `image_item.aeskey` 或 `media.aes_key`），按内容或文件名判断类型，再写进 inbox；prompt 为每个附件附一行说明，图片作为图片内容附上；如果被拒绝为 `session/attachment-invalid`（模型只支持文本），就只带说明重发一次。`resolveAgent()` 成功时复用已存的 Session；Session 不存在或已损坏时，用 `sessionController.create()` 新建一个，并设置 permission preset 和标题。通道跟踪自己创建的每个对话 Session 的 `session/event`，记住这一轮最新的助手文本，在这一轮结束时发出，除非它是 `NO_REPLY`。`send()` 和回复转发共用一条串行的投递路径：文本只经由已打开、未过期且仍有名额的窗口发出，占用最后一个名额的那条带一句提示，其余的连同原因进入 outbox。`ret -2` 关闭窗口，`-14` 暂停通道，网络失败时文本留在 outbox 里。每次 `send()` 还会把渲染好的通知注入最新的对话 Session（`agent.inject()`，来源类型 `lsy-wechat`，形式 `notice`），并说明它来自另一个 Session、不是 owner 说的话，附上发出时间：它等下一轮，不会自己开一轮；之所以这样，是因为 owner 对这条通知的回复会进入对话 Session，而不是写这条通知的那个 Session，所以它可能在发出几小时后才进入那个 Session 的历史。`activity` 表记录 owner 上次写消息的时间，以及 bot 上次给 owner 发了什么、何时发的。它在 outbox 刷出之前读取，因此新消息放出的摘要不算数；对话安静超过 `timeGapMs` 之后，owner 的消息在 prompt 之前先注入一条时间间隔提示。“正在输入”沿用 OpenClaw 的协议：`ilink/bot/getconfig` 给出按用户的 `typing_ticket`（缓存一天；取失败时从 30 秒到一小时退避），`ilink/bot/sendtyping` 在自己的 Session 有正在运行的轮次时每 5 秒发一次状态 1，转发消息后若没有轮次开始最多保持一分钟，回复送达后发一次状态 2；一小时还没结束就停掉。`/stop` 通过 Host 注册表取消所有正在运行的根 agent（`agent.cancel({ kind: 'user' })`），按对话或 Session 标题命名，并跳过它中止的对话轮次的转发。账号生效时通道发送 `ilink/bot/msg/notifystart`，停止时发送 `notifystop`；那时仍在运行的对话轮次会收到一条重启提示，经由最后已知的窗口发出，因为存储可能已经关闭。
 
 | 文件 | 作用 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 服务、配置、长轮询循环、对话 Session、回复转发、投递与 outbox |
 | [`src/api.ts`](src/api.ts) | 最小的 iLink 客户端，每个请求有独立时限；错误信息从不包含 token |
 | [`src/login.ts`](src/login.ts) | 二维码登录状态机、终端登录命令、账号文件 |
-| [`src/text.ts`](src/text.ts) | 入站文本提取、消息拆分、转发文本、摘要、时间戳、时间间隔提示与转来通知的文本 |
+| [`src/text.ts`](src/text.ts) | 入站文本提取、消息拆分、转发文本、摘要、时间戳、时间间隔提示与转来通知的文本、命令回复 |
+| [`src/typing.ts`](src/typing.ts) | “正在输入”提示：带退避的 ticket 缓存、5 秒保活、一小时上限、失败从不影响回复 |
 | [`src/media.ts`](src/media.ts) | CDN 下载与解密、图片类型识别、inbox、附件说明；外发的加密与上传（`getuploadurl`、CDN POST、`x-encrypted-param`） |
 | [`src/storage.ts`](src/storage.ts) | 游标、回复窗口、对话 Session、outbox 与对话动态的 storage-domain 表 |
 
@@ -155,7 +156,6 @@ host-alerts: 1 event(s)
 - **不能主动发起联系**——owner 给 bot 发消息之前，bot 无法发言。
 - **语音只有文字**——语音只以转写交给 agent，bot 也从不发语音；图片、文件和视频两个方向都支持。
 - **inbox 不会自动清理**——收到的附件一直留在 `.wechat-inbox/`，需要手动删除。
-- **没有"正在输入"提示**——agent 工作时 owner 看不到任何动静。
 - **入站至多一次**——存储游标与转发消息之间崩溃会丢掉那条消息。
 - **限制来自第三方文档**——窗口时长、额度和长度上限没有官方公布，所以它们是配置项而不是常量。
 
@@ -167,6 +167,7 @@ host-alerts: 1 event(s)
 
 本开发备注是不具权威性的工作上下文：尚未决定的探索方向与维护者备注。已交付的行为与既定理由以上文、包代码和相关 Agent Note 为准。
 
-- `/new` 是唯一的聊天命令；其他命令（例如在微信里切换聊天 Session 的模型）尚未决定。
+- 聊天命令有 `/stop`、`/new` 和 `/help`；其他命令（例如在微信里切换聊天 Session 的模型）尚未决定。`/stop` 只取消轮次；停监控和定时提醒要通过 agent。
+- 不发送工具调用进度条目（`TOOL_CALL_START` / `TOOL_CALL_RESULT`，OpenClaw 插件默认会发）：每条都是一次 `sendmessage`，它是否占回复窗口的额度没有文档，一个工具很多的轮次可能用掉回复和其他 Session 通知需要的名额。改由“正在输入”提示表明 agent 在工作。
 
 </details>

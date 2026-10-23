@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { clientVersion, IlinkApiError, IlinkClient, IlinkError, ILINK_BASE_URL, isStaleTokenError } from '../src/api.ts'
+import { clientVersion, IlinkApiError, IlinkClient, IlinkError, ILINK_BASE_URL, isStaleTokenError, TypingStatus } from '../src/api.ts'
 import { FakeIlink, textMessage } from './fake-ilink.ts'
 
 const TOKEN = 'secret-bot-token-123'
@@ -133,6 +133,48 @@ describe('IlinkClient requests', () => {
     const pending = new IlinkClient({ fetch: hangingFetch }).getBotQrcode().catch((error: unknown) => error)
     await vi.advanceTimersByTimeAsync(15_000)
     expect(await pending).toMatchObject({ message: 'iLink ilink/bot/get_bot_qrcode: timed out after 15000ms' })
+  })
+})
+
+describe('IlinkClient typing and lifecycle', () => {
+  it('reads the typing ticket for a user, with the context token when there is one', async () => {
+    const ilink = new FakeIlink()
+    ilink.reply('ilink/bot/getconfig', { body: { ret: 0, typing_ticket: 'dGlja2V0' } }, { body: { ret: 0 } })
+    expect(await client(ilink).getConfig('owner@im.wechat', 'ctx-1')).toEqual({ typingTicket: 'dGlja2V0' })
+    expect(await client(ilink).getConfig('owner@im.wechat', undefined)).toEqual({})
+    const [first, second] = ilink.requestsTo('ilink/bot/getconfig')
+    expect(first!.body).toMatchObject({ ilink_user_id: 'owner@im.wechat', context_token: 'ctx-1', base_info: { channel_version: '0.2.1' } })
+    expect(second!.body).not.toHaveProperty('context_token')
+    expect(first!.headers['authorization']).toBe(`Bearer ${TOKEN}`)
+  })
+
+  it('sends typing and cancel with the ticket', async () => {
+    const ilink = new FakeIlink()
+    await client(ilink).sendTyping('owner@im.wechat', 'dGlja2V0', TypingStatus.TYPING)
+    await client(ilink).sendTyping('owner@im.wechat', 'dGlja2V0', TypingStatus.CANCEL)
+    expect(ilink.requestsTo('ilink/bot/sendtyping').map(request => request.body)).toMatchObject([
+      { ilink_user_id: 'owner@im.wechat', typing_ticket: 'dGlja2V0', status: 1, base_info: {} },
+      { ilink_user_id: 'owner@im.wechat', typing_ticket: 'dGlja2V0', status: 2, base_info: {} },
+    ])
+    expect(ilink.typing).toEqual([1, 2])
+  })
+
+  it('tells the server when the channel starts and stops', async () => {
+    const ilink = new FakeIlink()
+    await client(ilink).notifyStart()
+    await client(ilink).notifyStop()
+    expect(ilink.requests.map(request => request.endpoint)).toEqual(['ilink/bot/msg/notifystart', 'ilink/bot/msg/notifystop'])
+    expect(ilink.requests[0]!.body).toMatchObject({ base_info: { bot_agent: 'dsh-lsy-wechat/0.2.1' } })
+  })
+
+  it('reports a refused config, typing, or lifecycle call', async () => {
+    const ilink = new FakeIlink()
+    ilink.reply('ilink/bot/getconfig', { body: { ret: -1, errmsg: 'no' } })
+    ilink.reply('ilink/bot/sendtyping', { body: { ret: -2 } })
+    ilink.reply('ilink/bot/msg/notifystop', { body: { ret: 5 } })
+    await expect(client(ilink).getConfig('u', undefined)).rejects.toBeInstanceOf(IlinkApiError)
+    await expect(client(ilink).sendTyping('u', 't', TypingStatus.TYPING)).rejects.toThrow('ilink/bot/sendtyping failed: ret -2')
+    await expect(client(ilink).notifyStop()).rejects.toThrow('ret 5')
   })
 })
 

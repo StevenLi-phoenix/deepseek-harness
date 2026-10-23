@@ -102,6 +102,18 @@ const sendReplySchema = z.object({
   errmsg: z.string().nullish(),
 })
 
+const configSchema = z.object({
+  ret: z.number().nullish(),
+  errmsg: z.string().nullish(),
+  /** Opaque ticket `ilink/bot/sendtyping` requires for this user. */
+  typing_ticket: z.string().nullish(),
+})
+
+/** `status` of `ilink/bot/sendtyping`. */
+export const TypingStatus = { TYPING: 1, CANCEL: 2 } as const
+/** One of {@link TypingStatus}. */
+export type TypingStatusValue = (typeof TypingStatus)[keyof typeof TypingStatus]
+
 /** One message item as received; every field is optional on the wire. */
 export type WeixinItem = z.infer<typeof itemSchema>
 /** Encrypted CDN reference of one media item. */
@@ -414,6 +426,71 @@ export class IlinkClient {
     const raw = await this.call({ method: 'POST', path, body: { msg, base_info: baseInfo() }, timeoutMs: this.timeoutMs, signal })
     if (raw === TIMED_OUT) throw new IlinkError(`iLink ${path}: timed out after ${this.timeoutMs}ms`)
     const reply = parseBody(path, sendReplySchema, raw)
+    const ret = reply.ret ?? 0
+    if (ret !== 0) throw new IlinkApiError(path, ret, 0, present(reply.errmsg))
+  }
+
+  /**
+   * Read the bot's per-user configuration; today only the typing ticket.
+   * @param userId - the user the bot talks to.
+   * @param contextToken - `context_token` of a recent message from that user, when there is one.
+   * @param signal - external cancellation.
+   * @returns the typing ticket, absent when the server gave none.
+   * @throws {IlinkApiError} on a non-zero `ret`.
+   * @throws {IlinkError} on transport failures or a timeout.
+   */
+  async getConfig(userId: string, contextToken: string | undefined, signal?: AbortSignal): Promise<{ typingTicket?: string }> {
+    const path = 'ilink/bot/getconfig'
+    const body = { ilink_user_id: userId, ...contextToken === undefined ? {} : { context_token: contextToken }, base_info: baseInfo() }
+    const reply = parseBody(path, configSchema, await this.post(path, body, signal))
+    const ret = reply.ret ?? 0
+    if (ret !== 0) throw new IlinkApiError(path, ret, 0, present(reply.errmsg))
+    const typingTicket = present(reply.typing_ticket)
+    return typingTicket === undefined ? {} : { typingTicket }
+  }
+
+  /**
+   * Show or clear the "typing" line in the user's chat. The server drops it after a few
+   * seconds, so a long task sends {@link TypingStatus.TYPING} again periodically.
+   * @param userId - the user the bot talks to.
+   * @param typingTicket - ticket from {@link getConfig}.
+   * @param status - typing or cancel.
+   * @param signal - external cancellation.
+   * @throws {IlinkApiError} on a non-zero `ret`.
+   * @throws {IlinkError} on transport failures or a timeout.
+   */
+  async sendTyping(userId: string, typingTicket: string, status: TypingStatusValue, signal?: AbortSignal): Promise<void> {
+    await this.expectOk('ilink/bot/sendtyping', { ilink_user_id: userId, typing_ticket: typingTicket, status, base_info: baseInfo() }, signal)
+  }
+
+  /**
+   * Tell the server the channel client started, so it can reconcile the bot's online state.
+   * @param signal - external cancellation.
+   * @throws {IlinkError} on any failure.
+   */
+  async notifyStart(signal?: AbortSignal): Promise<void> {
+    await this.expectOk('ilink/bot/msg/notifystart', { base_info: baseInfo() }, signal)
+  }
+
+  /**
+   * Tell the server the channel client is stopping.
+   * @param signal - external cancellation.
+   * @throws {IlinkError} on any failure.
+   */
+  async notifyStop(signal?: AbortSignal): Promise<void> {
+    await this.expectOk('ilink/bot/msg/notifystop', { base_info: baseInfo() }, signal)
+  }
+
+  /** POST one body with the ordinary deadline; a timeout becomes an {@link IlinkError}. */
+  private async post(path: string, body: unknown, signal: AbortSignal | undefined): Promise<unknown> {
+    const raw = await this.call({ method: 'POST', path, body, timeoutMs: this.timeoutMs, signal })
+    if (raw === TIMED_OUT) throw new IlinkError(`iLink ${path}: timed out after ${this.timeoutMs}ms`)
+    return raw
+  }
+
+  /** POST one body whose answer carries only `ret` and `errmsg`. */
+  private async expectOk(path: string, body: unknown, signal: AbortSignal | undefined): Promise<void> {
+    const reply = parseBody(path, sendReplySchema, await this.post(path, body, signal))
     const ret = reply.ret ?? 0
     if (ret !== 0) throw new IlinkApiError(path, ret, 0, present(reply.errmsg))
   }

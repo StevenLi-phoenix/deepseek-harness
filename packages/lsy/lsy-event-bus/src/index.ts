@@ -714,13 +714,15 @@ export class LsyEventBus extends Service {
         const outcome = event.data.reason.kind
         const detail = failureDetail(event.data.reason)
         const ended = detail === undefined ? outcome : `${outcome} (${detail})`
+        // Whoever stopped the turn (Web UI, WeChat /stop) already knows; a report would only repeat it.
+        const stoppedByOwner = event.data.reason.kind === 'aborted' && event.data.reason.reason.kind === 'user'
         // The first-turn result of a bus-started Session already carries a reminder that joined that turn.
         if (tracked !== undefined) {
           this.ctx.logger.info(`lsy-event-bus: Session ${session.id} of ${tracked.batchId} ended its first turn: ${ended}`)
-          this.track(this.reportResult(tracked, outcome, detail))
+          this.track(this.reportResult(tracked, outcome, detail, stoppedByOwner))
         } else if (reminder !== undefined) {
           this.ctx.logger.info(`lsy-event-bus: reminder turn of Session ${session.id} ended: ${ended}`)
-          this.track(this.reportReminder(session.id, reminder, outcome, detail))
+          this.track(this.reportReminder(session.id, reminder, outcome, detail, stoppedByOwner))
         }
         return
       }
@@ -737,7 +739,13 @@ export class LsyEventBus extends Service {
   }
 
   /** Send a reminder turn's final answer to the notifier unless it is the silent reply. */
-  private async reportReminder(sessionId: string, reminder: TrackedReminder, outcome: string, detail: string | undefined): Promise<void> {
+  private async reportReminder(
+    sessionId: string, reminder: TrackedReminder, outcome: string, detail: string | undefined, stoppedByOwner: boolean,
+  ): Promise<void> {
+    if (stoppedByOwner) {
+      this.ctx.logger.info(`lsy-event-bus: reminder turn of Session ${sessionId} was stopped by the owner; nothing sent`)
+      return
+    }
     if (isSilentReply(reminder.text)) {
       this.ctx.logger.info(`lsy-event-bus: reminder turn of Session ${sessionId} answered ${LSY_SILENT_REPLY}; nothing sent`)
       return
@@ -748,10 +756,14 @@ export class LsyEventBus extends Service {
     await notifier.send(formatReminderNote({ label, icon, outcome, text, url: this.config.webUrl, detail }))
   }
 
-  /** Record the Session outcome and send it to the notifier unless it is the silent reply. */
-  private async reportResult(tracked: TrackedSession, outcome: string, detail: string | undefined): Promise<void> {
+  /** Record the Session outcome and send it to the notifier unless it is the silent reply or the owner stopped it. */
+  private async reportResult(tracked: TrackedSession, outcome: string, detail: string | undefined, stoppedByOwner: boolean): Promise<void> {
     const silent = isSilentReply(tracked.text)
     await this.markBatch(tracked.batchId, { status: 'completed', outcome, ...(silent ? { silent } : {}), ...(detail === undefined ? {} : { error: detail }) })
+    if (stoppedByOwner) {
+      this.ctx.logger.info(`lsy-event-bus: Session of ${tracked.batchId} was stopped by the owner; nothing sent`)
+      return
+    }
     if (silent) {
       this.ctx.logger.info(`lsy-event-bus: Session of ${tracked.batchId} answered ${LSY_SILENT_REPLY}; nothing sent`)
       return

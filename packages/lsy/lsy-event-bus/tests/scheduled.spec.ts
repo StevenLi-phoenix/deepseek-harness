@@ -80,6 +80,14 @@ describe('LsyEventBus scheduled turn reports', () => {
     expect(notes[0]).toMatchObject({ title: '⚠️ ⏰ Check whether the nightly build passed (error)', body: '(no assistant text)' })
   })
 
+  it('stays silent when the owner stopped the reminder turn', async () => {
+    const { emit, notes } = await harness()
+    emit('s1', sessionEvents.schedule(ONE_SHOT))
+    emit('s1', { type: 'turn/end', seq: 9, data: { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } } })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(notes).toEqual([])
+  })
+
   it('stays silent when the final answer is NO_REPLY', async () => {
     const { emit, notes } = await harness()
     await runTurn(emit, 's1', `  ${LSY_SILENT_REPLY}\n`)

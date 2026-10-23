@@ -90,7 +90,7 @@ Matching, flushing, restart recovery, and the webhook Session rule all use the m
 
 ### Result reports
 
-When a bus-started Session ends its first turn, the bus records the outcome on the batch and sends the final assistant text to `ctx.lsyNotifier`. When a Host-schedule reminder (`source.kind: schedule`) starts a turn in a Session that the notifier does not relay itself (`ownsSession(sessionId)`), the bus sends that turn's final answer titled `⏰ <first line of the reminder prompt>`. In both cases a final answer of exactly `NO_REPLY` (`LSY_SILENT_REPLY`) sends nothing; a batch records `silent: true`.
+When a bus-started Session ends its first turn, the bus records the outcome on the batch and sends the final assistant text to `ctx.lsyNotifier`. When a Host-schedule reminder (`source.kind: schedule`) starts a turn in a Session that the notifier does not relay itself (`ownsSession(sessionId)`), the bus sends that turn's final answer titled `⏰ <first line of the reminder prompt>`. In both cases a final answer of exactly `NO_REPLY` (`LSY_SILENT_REPLY`) sends nothing; a batch records `silent: true`. A turn the owner stopped (ended `aborted` with cause `user`, from the Web UI or WeChat `/stop`) is recorded but not reported, since whoever stopped it already knows.
 
 -----
 
