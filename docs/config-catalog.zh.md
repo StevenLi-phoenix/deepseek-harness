@@ -2465,7 +2465,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-fork-wechat`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/fork-wechat/src/index.ts:53`](../packages/fork/fork-wechat/src/index.ts)
+- `source`: [`packages/fork/fork-wechat/src/index.ts:54`](../packages/fork/fork-wechat/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */

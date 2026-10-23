@@ -2,7 +2,8 @@
 
 /** iLink endpoints the client calls. */
 export type Endpoint = 'ilink/bot/get_bot_qrcode' | 'ilink/bot/get_qrcode_status' | 'ilink/bot/getupdates' | 'ilink/bot/sendmessage'
-  | 'ilink/bot/getuploadurl' | 'cdn/download' | 'cdn/upload'
+  | 'ilink/bot/getuploadurl' | 'ilink/bot/getconfig' | 'ilink/bot/sendtyping' | 'ilink/bot/msg/notifystart' | 'ilink/bot/msg/notifystop'
+  | 'cdn/download' | 'cdn/upload'
 
 /** One canned answer: a JSON body, a raw body, a status, or a thrown network error. */
 export type Reply = { status?: number; body?: unknown; raw?: string } | Error
@@ -33,6 +34,8 @@ export class FakeIlink {
   readonly sent: SentText[] = []
   /** CDN downloads by `encrypted_query_param`: encrypted bytes, or an HTTP status to fail with; uploads land here too. */
   readonly cdn = new Map<string, Uint8Array | number>()
+  /** Typing statuses sent, in order: 1 typing, 2 cancel. */
+  readonly typing: number[] = []
   /** Every accepted send, whatever its item. */
   readonly sentItems: { to: string; item: Record<string, unknown>; contextToken: string }[] = []
   private uploadCount = 0
@@ -120,6 +123,9 @@ export class FakeIlink {
       this.sentItems.push({ to: msg.to_user_id, item, contextToken: msg.context_token })
       if (item.text_item !== undefined) this.sent.push({ to: msg.to_user_id, text: item.text_item.text, contextToken: msg.context_token })
     }
+    if (endpoint === 'ilink/bot/sendtyping' && status === 200 && reply.raw === undefined && ((reply.body as { ret?: number } | undefined)?.ret ?? 0) === 0) {
+      this.typing.push((body as { status: number }).status)
+    }
     return new Response(reply.raw ?? JSON.stringify(reply.body ?? {}), { status, headers: { 'content-type': 'application/json' } })
   }
 
@@ -131,6 +137,7 @@ export class FakeIlink {
       return Promise.resolve({ body: { ret: 0, qrcode, qrcode_img_content: `https://liteapp.weixin.qq.com/q/${this.qrCount}?qrcode=${qrcode}&bot_type=3` } })
     }
     if (endpoint === 'ilink/bot/getuploadurl') return Promise.resolve({ body: { ret: 0, upload_param: `up-${this.uploadCount + 1}` } })
+    if (endpoint === 'ilink/bot/getconfig') return Promise.resolve({ body: { ret: 0, typing_ticket: 'ticket-1' } })
     if (!LONG_POLL.has(endpoint)) return Promise.resolve({ body: { ret: 0 } })
     return new Promise((resolve, reject) => {
       const waiters = this.waiters.get(endpoint) ?? []

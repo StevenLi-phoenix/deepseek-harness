@@ -9,6 +9,27 @@ export const WECHAT_MAX_TEXT_BYTES = 16_384
 export const QUOTA_FOOTER = '\n\n（消息额度已用完，回复任意消息继续接收）'
 /** Reply to `/new`. */
 export const NEW_CHAT_REPLY = '已开始新对话。'
+/** Answer to `/help`. */
+export const HELP_REPLY = [
+  '可用命令：',
+  '/stop  立刻停下所有正在运行的任务（这里的对话和后台任务），并清掉排队的消息',
+  '/new   开始新对话（旧对话还在网页里）',
+  '/help  显示这份说明',
+  '',
+  '其他内容都直接交给 agent：文字、语音、图片、文件和视频都行。',
+].join('\n')
+/** Sent when the channel stops while a chat turn runs, so the owner's question does not vanish silently. */
+export const RESTART_CUT_REPLY = '⚠️ dsh 正在重启，这一轮被打断了，没有完成。重启后（约半分钟）需要的话再发一次。'
+/** Answer to `/stop` when nothing runs. */
+export const STOP_IDLE_REPLY = '现在没有正在运行的任务。'
+
+/**
+ * Answer to `/stop` after cancelling running tasks.
+ * @param labels - one name per cancelled task, in the order they were stopped.
+ */
+export function stopReply(labels: readonly string[]): string {
+  return `⏹ 已停下 ${labels.length} 个正在运行的任务：\n${labels.map(label => `• ${label}`).join('\n')}\n\n监控和定时提醒不受影响；要停它们，直接告诉我。`
+}
 /** Characters of a quoted message kept in front of the owner's text. */
 const MAX_QUOTE_CHARS = 200
 /** Separator between digest entries. */
