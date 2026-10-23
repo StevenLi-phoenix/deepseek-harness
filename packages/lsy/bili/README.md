@@ -44,7 +44,7 @@ Choose it when the agent should keep a presence of its own on Bilibili, separate
           agentPreset: bili
 ```
 
-Then open **Settings → Bilibili account** (B站账号), press **Sign in with QR**, and scan the code with the Bilibili app signed in to the agent's account (an account made in the international app with Google sign-in works: the web QR login needs no password). The section shows the account, today's budget per action, the body clock, the owner's interests text, recent writes, and, when risk control paused writes, the reason and a **Resume** button.
+Then open **Settings → Bilibili account** (B站账号), press **Sign in with QR**, and scan the code with the Bilibili app signed in to the agent's account. The section shows the account, today's budget per action, the body clock, the owner's interests text, recent writes, and, when risk control paused writes, the reason and a **Resume** button.
 
 | Field | Default | Meaning |
 |---|---|---|
