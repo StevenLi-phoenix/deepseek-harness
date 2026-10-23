@@ -120,6 +120,10 @@
             name: '@deepseek-ai/dsh-lsy-tool-watch'
           - id: lsy-tool-wechat
             name: '@deepseek-ai/dsh-lsy-tool-wechat'
+          # Owner memory: the Host puts <DSH_HOME>/lsy-memory/memory.jsonl in front of each root
+          # Session and the agent keeps it with memory_search, memory_save, and memory_forget.
+          - id: lsy-memory
+            name: '@deepseek-ai/dsh-lsy-memory'
           - id: skill-filesystem
             name: '@deepseek-ai/dsh-skill-filesystem'
           - id: tool-skill

@@ -345,7 +345,9 @@ flowchart TD
     pkg_lsy_balance["lsy-balance"]
     pkg_lsy_event_bus["lsy-event-bus"]
     pkg_lsy_github_sensor["lsy-github-sensor"]
+    pkg_lsy_memory["lsy-memory"]
     pkg_lsy_tool_watch["lsy-tool-watch"]
+    pkg_lsy_tool_wechat["lsy-tool-wechat"]
     pkg_lsy_wechat["lsy-wechat"]
   end
   subgraph group_mcp["packages/mcp"]
@@ -1002,6 +1004,11 @@ flowchart TD
   pkg_tool_lsp --> pkg_timeout
   pkg_tool_lsp --> pkg_tools
   pkg_tool_lsp --> pkg_working_directory
+  pkg_lsy_memory --> pkg_agent
+  pkg_lsy_memory --> pkg_home_paths
+  pkg_lsy_memory --> pkg_llm
+  pkg_lsy_memory --> pkg_session
+  pkg_lsy_memory --> pkg_tools
   pkg_lsy_tool_watch --> pkg_agent
   pkg_lsy_tool_watch --> pkg_lsy_event_bus
   pkg_lsy_tool_watch --> pkg_lsy_github_sensor
@@ -1447,6 +1454,9 @@ flowchart TD
   pkg_subagent_dsh_sdk --> pkg_session
   pkg_subagent_dsh_sdk --> pkg_subagent
   pkg_subagent_dsh_sdk --> pkg_subprocess
+  pkg_lsy_tool_wechat --> pkg_lsy_event_bus
+  pkg_lsy_tool_wechat --> pkg_lsy_wechat
+  pkg_lsy_tool_wechat --> pkg_tools
   pkg_tool_schedule --> pkg_llm
   pkg_tool_schedule --> pkg_schedule
   pkg_tool_schedule --> pkg_subagent
@@ -1737,6 +1747,7 @@ flowchart TD
 | [`tool-ask-user`](../packages/interaction/tool-ask-user) | `interaction` | [`agent`](../packages/core/agent), [`tools`](../packages/core/tools), [`user-questions`](../packages/interaction/user-questions) |
 | [`tool-jobs`](../packages/jobs/tool-jobs) | `jobs` | [`agent`](../packages/core/agent), [`jobs`](../packages/jobs/jobs), [`llm`](../packages/llm/llm), [`output-retention`](../packages/util/output-retention), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`tool-lsp`](../packages/lsp/tool-lsp) | `lsp` | [`llm`](../packages/llm/llm), [`lsp`](../packages/lsp/lsp), [`system-prompt`](../packages/core/system-prompt), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools), [`working-directory`](../packages/session/working-directory) |
+| [`lsy-memory`](../packages/lsy/lsy-memory) | `lsy` | [`agent`](../packages/core/agent), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`tools`](../packages/core/tools) |
 | [`lsy-tool-watch`](../packages/lsy/lsy-tool-watch) | `lsy` | [`agent`](../packages/core/agent), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-github-sensor`](../packages/lsy/lsy-github-sensor), [`tools`](../packages/core/tools) |
 | [`mcp-resources`](../packages/mcp/mcp-resources) | `mcp` | [`llm`](../packages/llm/llm), [`scope`](../packages/core/scope), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`agent-preset-registry`](../packages/preset/agent-preset-registry) | `preset` | [`agent`](../packages/core/agent), [`scope`](../packages/core/scope), [`session`](../packages/core/session), [`session-projection`](../packages/session/session-projection), [`settings`](../packages/settings/settings), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools), [`typert-protocol`](../packages/typert/protocol) |
@@ -1802,5 +1813,6 @@ flowchart TD
 | [`sdk-jsonrpc-server`](../packages/sdk/server) | `sdk` | [`agent`](../packages/core/agent), [`attachment`](../packages/attachment/attachment), [`llm`](../packages/llm/llm), [`llm-deepseek-api-key`](../packages/llm/llm-deepseek-api-key), [`scope`](../packages/core/scope), [`sdk-protocol`](../packages/sdk/protocol), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`working-directory`](../packages/session/working-directory) |
 | [`client-test-runtime`](../packages/test-support/client-runtime) | `test-support` | [`api-gateway`](../packages/api/gateway), [`api-session-controller`](../packages/api/session-controller), [`api-workspace-controller`](../packages/api/workspace-controller), [`attachment`](../packages/attachment/attachment), [`client-connection`](../packages/client/connection), [`client-hmr`](../packages/client/hmr), [`client-modules`](../packages/client/modules), [`client-store`](../packages/client/store), [`client-ui-chat`](../packages/client/ui-chat), [`client-ui-conversation`](../packages/client/ui-conversation), [`client-ui-renderer`](../packages/client/ui-renderer), [`client-ui-session`](../packages/client/ui-session), [`client-ui-settings`](../packages/client/ui-settings), [`client-ui-slots`](../packages/client/ui-slots), [`client-web`](../packages/client/web), [`remote-mock`](../packages/test-support/remote-mock), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`typert-protocol`](../packages/typert/protocol) |
 | [`subagent-dsh-sdk`](../packages/subagent/subagent-dsh-sdk) | `subagent` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`sdk-client`](../packages/sdk/client), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`subprocess`](../packages/subprocess/subprocess) |
+| [`lsy-tool-wechat`](../packages/lsy/lsy-tool-wechat) | `lsy` | [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-wechat`](../packages/lsy/lsy-wechat), [`tools`](../packages/core/tools) |
 | [`tool-schedule`](../packages/schedule/tool-schedule) | `schedule` | [`llm`](../packages/llm/llm), [`schedule`](../packages/schedule/schedule), [`subagent`](../packages/subagent/subagent), [`tools`](../packages/core/tools) |
 <!-- END GENERATED module-graph:packages -->

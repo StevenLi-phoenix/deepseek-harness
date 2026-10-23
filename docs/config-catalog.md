@@ -2344,6 +2344,25 @@ export type RepoStream = 'releases' | 'commits' | 'tags'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-github-sensor -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-memory -->
+<a id="deepseek-aidsh-lsy-memory"></a>
+
+## `@deepseek-ai/dsh-lsy-memory`
+
+- `inject`: `tools`
+- `source`: [`packages/lsy/lsy-memory/src/index.ts:41`](../packages/lsy/lsy-memory/src/index.ts)
+
+```ts config-catalog
+/** Memory file and context budget. */
+export interface Config {
+  /** Absolute path of the memory file; defaults to `<DSH_HOME>/lsy-memory/memory.jsonl`. */
+  file?: string
+  /** Cap on the memory block, in bytes. */
+  maxBytes?: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-memory -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-tool-watch -->
 <a id="deepseek-aidsh-lsy-tool-watch"></a>
 

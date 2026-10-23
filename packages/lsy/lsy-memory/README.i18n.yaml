@@ -1,0 +1,58 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/lsy-memory/README.md
+/:
+  en: ab09394dbf48b5f6
+  zh: e29d850f5d435171
+/deepseek-ai-dsh-lsy-memory:
+  en: e53ccdcaad97baba
+  zh: a2cba8de9ec4695b
+/deepseek-ai-dsh-lsy-memory/summary:
+  en: fdf94310f2f0a1a4
+  zh: a26c618931e84cb5
+/deepseek-ai-dsh-lsy-memory/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-lsy-memory/use-this-package:
+  en: 9f1f4298b85c0e0f
+  zh: 76f814234a72c623
+/deepseek-ai-dsh-lsy-memory/understand-the-implementation:
+  en: 17ad0fe65b959b78
+  zh: 9657bed0d703ef92
+/deepseek-ai-dsh-lsy-memory/further-exploration:
+  en: 2f63222240791f11
+  zh: 1957349e48fa65cc
+/deepseek-ai-dsh-lsy-memory/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-lsy-memory/model-experience/memory-block:
+  en: c3cd427d8d480a46
+  zh: 4c61ab3ebf942d74
+/deepseek-ai-dsh-lsy-memory/model-experience/memory-block/what-the-model-sees:
+  en: 627027eecb24ac26
+  zh: 1014b5706634d698
+/deepseek-ai-dsh-lsy-memory/model-experience/memory-block/token-effect:
+  en: d2306606e1f5ff0d
+  zh: 77140e8cd038e359
+/deepseek-ai-dsh-lsy-memory/model-experience/memory-block/kv-cache-effect:
+  en: 7c6be6e15d5416d7
+  zh: 78d8edb9e074f57e
+/deepseek-ai-dsh-lsy-memory/model-experience/memory-tools:
+  en: b160ca92da193ddb
+  zh: 337cb883c2dc3d7d
+/deepseek-ai-dsh-lsy-memory/model-experience/memory-tools/what-the-model-sees:
+  en: d6645f5256899e8c
+  zh: bba0de2f4f80e21d
+/deepseek-ai-dsh-lsy-memory/model-experience/memory-tools/token-effect:
+  en: 09cda3aa4f2d94a1
+  zh: d38b5be56a06afe3
+/deepseek-ai-dsh-lsy-memory/model-experience/memory-tools/kv-cache-effect:
+  en: 44574f4487e48b3e
+  zh: 5af2107448c78ee5
+/deepseek-ai-dsh-lsy-memory/known-limitations-and-deferred-work:
+  en: 573f3d082f5d614a
+  zh: dcf6ca9d7ce1c14a
+/deepseek-ai-dsh-lsy-memory/known-limitations-and-deferred-work/dev-note:
+  en: 135e3ebef08f8412
+  zh: de51499d928d7147

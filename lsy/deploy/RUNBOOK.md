@@ -189,6 +189,16 @@ Polling reports within a minute and spends the owner's shared REST quota on anyt
 
 Verify on the App's **Advanced** page: the `ping` delivery shows `202`, and `stdout.log` gains `lsy-github-sensor: webhook …` lines for later deliveries. A `401` means the secrets differ; `502` means phm could not reach the mini; `415` means the content type is not `application/json`. Watches still poll, so a missed delivery is caught within a minute.
 
+## 12. Import memory (optional)
+
+The agent remembers the owner in `/Users/dsh-runtime/.dsh/lsy-memory/memory.jsonl` (600): instructions and preferences reach every new Session in full, other entries by their opening words, and the agent saves and corrects entries itself ([`lsy-memory`](../../packages/lsy/lsy-memory/README.md)). To start from a claude.ai memory export, pipe it to the importer as the service user; it keeps the export's dates, skips entries already present, and prints counts only:
+
+```sh
+sudo -n -u dsh-runtime /usr/bin/env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node /Users/Shared/lsy-dsh/current/lsy/deploy/memory-import.mjs < ~/Downloads/memory.md
+```
+
+Add `--dry-run` to only count. The next Session sees the entries; no restart is needed.
+
 ## Operator access without passwords (optional)
 
 `/etc/sudoers.d/dsh-events` (root:wheel 440, written with `sudo visudo -f /etc/sudoers.d/dsh-events`) lets the operator act as the service user and restart the daemon without a password, so config edits, `.env` changes, and upgrades need no one at the keyboard:

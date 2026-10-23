@@ -507,6 +507,7 @@
     { "path": "./packages/lsy/lsy-tool-watch" },
     { "path": "./packages/lsy/lsy-tool-wechat" },
     { "path": "./packages/lsy/lsy-github-sensor" },
+    { "path": "./packages/lsy/lsy-memory" },
     { "path": "./packages/todo/tool-todo" },
     { "path": "./packages/plan/plan-mode" },
     { "path": "./packages/preset/agent-preset-registry" },

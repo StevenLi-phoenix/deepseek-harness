@@ -27,6 +27,7 @@ kind: "package-group"
 | [`lsy-balance/`](lsy-balance/README.zh.md) | 账号设置页里列出各供应商 key 余额或配额的卡片 |
 | [`lsy-event-bus/`](lsy-event-bus/README.zh.md) | 去重、回环抑制、订阅、合批、限流、通知与 Session 分发 |
 | [`lsy-github-sensor/`](lsy-github-sensor/README.zh.md) | 用条件请求轮询 GitHub 的 release、tag、提交与通知 |
+| [`lsy-memory/`](lsy-memory/README.zh.md) | 跨 Session 的主人记忆：记忆块、`memory_search`、`memory_save`、`memory_forget`，以及 claude.ai 导出导入器 |
 | [`lsy-tool-watch/`](lsy-tool-watch/README.zh.md) | `watch_create`、`watch_list`、`watch_delete` 工具：agent 自己管理监控 |
 | [`lsy-tool-wechat/`](lsy-tool-wechat/README.zh.md) | `wechat_send_file` 工具：agent 给 owner 发图片、视频和文件 |
 | [`lsy-wechat/`](lsy-wechat/README.zh.md) | 微信（iLink bot）通道：主人对话 Session、回复转发，以及 `ctx.lsyNotifier` |
