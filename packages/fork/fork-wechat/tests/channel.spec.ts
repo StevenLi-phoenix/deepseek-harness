@@ -37,6 +37,8 @@ interface LogLine {
 function fakeSessions(onPrompt: () => void = () => {}) {
   const state = {
     created: [] as SessionCreateRequest[],
+    /** Messages injected into chat Sessions, as [sessionId, text]. */
+    injected: [] as [string, string][],
     prompts: [] as SessionPromptRequest[],
     live: new Set<string>(),
     /** Error code resolveAgent returns for one Session id. */
@@ -60,7 +62,7 @@ function fakeSessions(onPrompt: () => void = () => {}) {
     resolveAgent: async (sessionId: string) => {
       const code = state.errors.get(sessionId) ?? (state.live.has(sessionId) ? undefined : 'session/not-found')
       return code === undefined
-        ? { agent: { session: { id: sessionId } } }
+        ? { agent: { session: { id: sessionId }, inject: (message: { content: { type: string; text?: string }[] }) => { state.injected.push([sessionId, message.content[0]?.text ?? '']) } } }
         : { error: Object.assign(new Error(`${code}: ${sessionId}`), { code }) }
     },
     prompt: async (request: SessionPromptRequest, signal: AbortSignal) => {
@@ -454,6 +456,23 @@ describe('WechatChannel chat', () => {
     await h.finishTurn('chat-1', 'x'.repeat(400))
     expect(h.ilink.sent.map(sent => sent.text.slice(0, 6))).toEqual(['[1/3]\n', '[2/3]\n', '[3/3]\n'])
     for (const sent of h.ilink.sent) expect(Array.from(sent.text).length).toBeLessThanOrEqual(200)
+  })
+})
+
+describe('WechatChannel notes in the chat Session', () => {
+  it('copies a note another Session sent into the chat Session without starting a turn', async () => {
+    const h = await harness()
+    await h.channel.send({ title: 'before any chat' })
+    expect(h.sessions.injected).toEqual([])
+    await h.ownerSays('hi')
+    const prompts = h.sessions.prompts.length
+    await h.channel.send({ title: '✅ operator: watch globe errors', body: 'monitor mon-ac1fa1 is running' })
+    expect(h.sessions.injected).toHaveLength(1)
+    const [sessionId, text] = h.sessions.injected[0]!
+    expect(sessionId).toBe('chat-1')
+    expect(text).toContain('It is context, not the owner speaking')
+    expect(text).toContain('✅ operator: watch globe errors\n\nmonitor mon-ac1fa1 is running')
+    expect(h.sessions.prompts).toHaveLength(prompts)
   })
 })
 

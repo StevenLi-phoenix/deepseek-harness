@@ -435,6 +435,7 @@
       "@deepseek-ai/dsh-fork-event-ingest": ["./packages/fork/fork-event-ingest/src"],
       "@deepseek-ai/dsh-fork-github-sensor": ["./packages/fork/fork-github-sensor/src"],
       "@deepseek-ai/dsh-fork-memory": ["./packages/fork/fork-memory/src"],
+      "@deepseek-ai/dsh-fork-sysmon": ["./packages/fork/fork-sysmon/src"],
       "@deepseek-ai/dsh-fork-tool-monitor": ["./packages/fork/fork-tool-monitor/src"],
       "@deepseek-ai/dsh-fork-tool-watch": ["./packages/fork/fork-tool-watch/src"],
       "@deepseek-ai/dsh-fork-tool-wechat": ["./packages/fork/fork-tool-wechat/src"],

@@ -510,6 +510,7 @@
     { "path": "./packages/fork/fork-memory" },
     { "path": "./packages/fork/fork-event-ingest" },
     { "path": "./packages/fork/fork-tool-monitor" },
+    { "path": "./packages/fork/fork-sysmon/tsconfig.host.json" },
     { "path": "./packages/todo/tool-todo" },
     { "path": "./packages/plan/plan-mode" },
     { "path": "./packages/preset/agent-preset-registry" },

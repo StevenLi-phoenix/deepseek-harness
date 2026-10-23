@@ -2403,6 +2403,35 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-memory -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-sysmon -->
+<a id="deepseek-aidsh-fork-sysmon"></a>
+
+## `@deepseek-ai/dsh-fork-sysmon`
+
+- `inject`: `connection`
+- `source`: [`packages/fork/fork-sysmon/src/index.ts:20`](../packages/fork/fork-sysmon/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Absolute path of the macmon binary (power, temperature, memory); unset tries `<home>/bin/macmon`, then `/opt/homebrew/bin/macmon`. */
+  macmonPath?: string
+  /** Volumes to show, in order; a mount that cannot be read is skipped and reported. */
+  mounts: SysmonMount[]
+  /** How long a snapshot is served from cache, in milliseconds. */
+  cacheMs: number
+}
+
+/** One volume to show. */
+export interface SysmonMount {
+  /** Mount point passed to `statfs`, for example `/Volumes/MiniSSD`. */
+  mount: string
+  /** Name shown on the volume's row. */
+  label: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-sysmon -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-watch -->
 <a id="deepseek-aidsh-fork-tool-watch"></a>
 
@@ -2436,7 +2465,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-fork-wechat`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/fork-wechat/src/index.ts:45`](../packages/fork/fork-wechat/src/index.ts)
+- `source`: [`packages/fork/fork-wechat/src/index.ts:53`](../packages/fork/fork-wechat/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
