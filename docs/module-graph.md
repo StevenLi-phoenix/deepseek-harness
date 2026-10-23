@@ -340,6 +340,7 @@ flowchart TD
     pkg_tool_lsp["tool-lsp"]
   end
   subgraph group_lsy["packages/lsy"]
+    pkg_bili["bili"]
     pkg_lsy_balance["lsy-balance"]
     pkg_lsy_event_bus["lsy-event-bus"]
     pkg_lsy_event_ingest["lsy-event-ingest"]
@@ -350,6 +351,7 @@ flowchart TD
     pkg_lsy_tool_watch["lsy-tool-watch"]
     pkg_lsy_tool_wechat["lsy-tool-wechat"]
     pkg_lsy_wechat["lsy-wechat"]
+    pkg_tool_bili["tool-bili"]
   end
   subgraph group_mcp["packages/mcp"]
     pkg_mcp_client["mcp-client"]
@@ -1017,6 +1019,9 @@ flowchart TD
   pkg_lsy_tool_watch --> pkg_lsy_event_bus
   pkg_lsy_tool_watch --> pkg_lsy_github_sensor
   pkg_lsy_tool_watch --> pkg_tools
+  pkg_tool_bili --> pkg_bili
+  pkg_tool_bili --> pkg_tools
+  pkg_tool_bili --> pkg_util_values
   pkg_mcp_resources --> pkg_llm
   pkg_mcp_resources --> pkg_scope
   pkg_mcp_resources --> pkg_system_prompt
@@ -1599,6 +1604,7 @@ flowchart TD
 | [`host-directory-picker-native`](../packages/host/directory-picker-native) | `host` | — |
 | [`host-open-in-app`](../packages/host/open-in-app) | `host` | — |
 | [`host-webserver`](../packages/host/webserver) | `host` | — |
+| [`bili`](../packages/lsy/bili) | `lsy` | — |
 | [`lsy-balance`](../packages/lsy/lsy-balance) | `lsy` | — |
 | [`lsy-sysmon`](../packages/lsy/lsy-sysmon) | `lsy` | — |
 | [`session-format`](../packages/session/session-format) | `session` | — |
@@ -1764,6 +1770,7 @@ flowchart TD
 | [`tool-lsp`](../packages/lsp/tool-lsp) | `lsp` | [`llm`](../packages/llm/llm), [`lsp`](../packages/lsp/lsp), [`system-prompt`](../packages/core/system-prompt), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools), [`working-directory`](../packages/session/working-directory) |
 | [`lsy-memory`](../packages/lsy/lsy-memory) | `lsy` | [`agent`](../packages/core/agent), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`tools`](../packages/core/tools) |
 | [`lsy-tool-watch`](../packages/lsy/lsy-tool-watch) | `lsy` | [`agent`](../packages/core/agent), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-github-sensor`](../packages/lsy/lsy-github-sensor), [`tools`](../packages/core/tools) |
+| [`tool-bili`](../packages/lsy/tool-bili) | `lsy` | [`bili`](../packages/lsy/bili), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
 | [`mcp-resources`](../packages/mcp/mcp-resources) | `mcp` | [`llm`](../packages/llm/llm), [`scope`](../packages/core/scope), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`agent-preset-registry`](../packages/preset/agent-preset-registry) | `preset` | [`agent`](../packages/core/agent), [`scope`](../packages/core/scope), [`session`](../packages/core/session), [`session-projection`](../packages/session/session-projection), [`settings`](../packages/settings/settings), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools), [`typert-protocol`](../packages/typert/protocol) |
 | [`session-checkpoint-policy`](../packages/session/session-checkpoint-policy) | `session` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`tools`](../packages/core/tools) |

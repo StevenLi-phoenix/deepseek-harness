@@ -24,6 +24,7 @@ kind: "package-group"
 
 | 包 | 作用 |
 |---|---|
+| [`bili/`](bili/README.zh.md) | agent 自己的 B站账号：扫码登录、Cookie 刷新、受守卫保护的写操作、风控刹车、唤醒其 Session 的作息与收件箱，以及设置页 |
 | [`lsy-balance/`](lsy-balance/README.zh.md) | 账号设置页里列出各供应商 key 余额或配额的卡片 |
 | [`lsy-event-bus/`](lsy-event-bus/README.zh.md) | 去重、回环抑制、订阅、合批、限流、通知与 Session 分发 |
 | [`lsy-event-ingest/`](lsy-event-ingest/README.zh.md) | `POST /hooks/lsy` 路由：主人自己的服务用每个来源一个的 bearer token 推送事件 |
@@ -34,6 +35,7 @@ kind: "package-group"
 | [`lsy-tool-watch/`](lsy-tool-watch/README.zh.md) | `watch_create`、`watch_list`、`watch_delete` 工具：agent 自己管理监控 |
 | [`lsy-tool-wechat/`](lsy-tool-wechat/README.zh.md) | `wechat_send_file` 工具：agent 给 owner 发图片、视频和文件 |
 | [`lsy-wechat/`](lsy-wechat/README.zh.md) | 微信（iLink bot）通道：主人对话 Session、回复转发，以及 `ctx.lsyNotifier` |
+| [`tool-bili/`](tool-bili/README.zh.md) | `bili` preset 的 B站工具：动态、借字幕看视频、评论、收件箱、受守卫保护的写操作与日记 |
 
 -----
 

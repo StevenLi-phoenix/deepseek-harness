@@ -137,6 +137,7 @@
     { "path": "./packages/client/ui-user-questions" },
     { "path": "./packages/lsy/lsy-balance/tsconfig.client.json" },
     { "path": "./packages/lsy/lsy-sysmon/tsconfig.client.json" },
+    { "path": "./packages/lsy/bili/tsconfig.client.json" },
     { "path": "./packages/client/ui-trajectory" },
     { "path": "./packages/session-query/session-log-export/tsconfig.client.json" },
     { "path": "./packages/client/ui-open-in-app" },

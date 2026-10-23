@@ -24,6 +24,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 
 | Package | Role |
 |---|---|
+| [`bili/`](bili/README.md) | The agent's own Bilibili account: QR sign-in, cookie refresh, guarded writes, a risk brake, a body clock and inbox that wake its Session, and a Settings section |
 | [`lsy-balance/`](lsy-balance/README.md) | Account settings card with the balance or quota of every provider key |
 | [`lsy-event-bus/`](lsy-event-bus/README.md) | Dedupe, loop suppression, subscriptions, coalescing, rate limits, notify and Session dispatch |
 | [`lsy-event-ingest/`](lsy-event-ingest/README.md) | `POST /hooks/lsy` route: the owner's own services push events under one bearer token per source |
@@ -34,6 +35,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`lsy-tool-watch/`](lsy-tool-watch/README.md) | `watch_create`, `watch_list`, `watch_delete` tools: the agent manages its own watches |
 | [`lsy-tool-wechat/`](lsy-tool-wechat/README.md) | `wechat_send_file` tool: the agent sends pictures, videos, and files to the owner |
 | [`lsy-wechat/`](lsy-wechat/README.md) | WeChat (iLink bot) channel: owner chat Session, reply relay, and `ctx.lsyNotifier` |
+| [`tool-bili/`](tool-bili/README.md) | Bilibili tools of the `bili` preset: feeds, videos through subtitles, comments, inbox, guarded writes, and a journal |
 
 -----
 

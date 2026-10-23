@@ -431,6 +431,101 @@ export type Config = LocalConfig
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-bash-sandbox -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-bili -->
+<a id="deepseek-aidsh-bili"></a>
+
+## `@deepseek-ai/dsh-bili`
+
+- `inject`: `timer` · `storageDomain` · `credentials` · `sessionController` · `permissionPresets` · `sessionTitle`
+- `source`: [`packages/lsy/bili/src/index.ts:96`](../packages/lsy/bili/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** The owner's main account (UID); the only account this one may message. Unset, messaging is off. */
+  ownerMid?: number
+  /** IANA time zone of the body clock, day boundaries for caps, and prompt times. */
+  timeZone: string
+  /** Daily wake windows in `timeZone` (`HH:MM`, start inclusive, end exclusive, same day); one random wake in each. */
+  wakes: WakeWindow[]
+  /** Probability (0-1) that a window gets no wake on a given day. */
+  skipChance: number
+  /** What the owner is interested in, shown in every wake prompt until edited in Settings. */
+  interests: string
+  /** The account's Session. */
+  session: SessionConfig
+  /** Daily write caps. */
+  caps: CapsConfig
+  /** Shortest gap between two writes, in milliseconds. */
+  writeGapMinMs: number
+  /** Longest gap between two writes, in milliseconds; each gap is random between the two. */
+  writeGapMaxMs: number
+  /** How long a write waits for its slot before it answers "try later", in milliseconds. */
+  writeWaitMs: number
+  /** Shortest gap between two requests, in milliseconds. */
+  requestGapMs: number
+  /** Extra random gap of up to this many milliseconds per request. */
+  requestJitterMs: number
+  /** Deadline of one request, in milliseconds. */
+  requestTimeoutMs: number
+  /** Inbox check period, in milliseconds; checks cost no model tokens. */
+  inboxPollMs: number
+  /** Most inbox wakes per rolling hour; later items wait. */
+  inboxWakesPerHour: number
+  /** How long reads back off after a risk-control answer, in milliseconds. */
+  readBackoffMs: number
+  /** Delay before checking that an accepted comment or reply is visible to others, in milliseconds. */
+  visibilityCheckMs: number
+  /** Cookie check period, in milliseconds; a refresh happens when Bilibili asks for one. */
+  refreshCheckMs: number
+  /** PEM public key Bilibili's web client uses for the cookie-refresh path; change it only if Bilibili rotates it. */
+  refreshPublicKey: string
+}
+
+/** One daily wake window in local time. */
+export interface WakeWindow {
+  /** `HH:MM`, inclusive. */
+  start: string
+  /** `HH:MM`, exclusive; later than `start` on the same day. */
+  end: string
+}
+
+/** How the account's Session is created. */
+export interface SessionConfig {
+  /** Absolute directory the Session works in; created before every wake. */
+  workspacePath: string
+  /** Agent preset of the Session; the bundle defines `bili` with only the Bilibili tools. */
+  agentPreset: string
+  /** Permission preset set on a new Session; the `bili` preset mounts no shell or file tools, and nobody approves calls. */
+  permissionPreset: string
+  /** Session title. */
+  title: string
+}
+
+/** Daily write caps; each is bounded by a hard maximum in code. */
+export interface CapsConfig {
+  /** Accounts followed per day. */
+  follow: number
+  /** Accounts unfollowed per day. */
+  unfollow: number
+  /** Favorite additions and removals per day. */
+  favorite: number
+  /** Videos liked per day. */
+  like: number
+  /** Watch-later additions and removals per day. */
+  watchlater: number
+  /** Top-level comments per day; one per video ever. */
+  comment: number
+  /** Replies per day; one per answered comment ever. */
+  reply: number
+  /** Text dynamics per day. */
+  dynamic: number
+  /** Messages to the owner's main account per day. */
+  dmOwner: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-bili -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-client-connection -->
 <a id="deepseek-aidsh-client-connection"></a>
 
@@ -5032,6 +5127,7 @@ export interface Config {
 | `@deepseek-ai/dsh-subprocess-local` | — | [`packages/subprocess/subprocess-local/src/index.ts`](../packages/subprocess/subprocess-local/src/index.ts) |
 | `@deepseek-ai/dsh-subprocess-ssh` | `ssh` | [`packages/ssh/subprocess-ssh/src/index.ts`](../packages/ssh/subprocess-ssh/src/index.ts) |
 | `@deepseek-ai/dsh-terminal` | — | [`packages/terminal/terminal/src/index.ts`](../packages/terminal/terminal/src/index.ts) |
+| `@deepseek-ai/dsh-tool-bili` | `tools` | [`packages/lsy/tool-bili/src/index.ts`](../packages/lsy/tool-bili/src/index.ts) |
 | `@deepseek-ai/dsh-tool-call-timeout-policy` | `tools` | [`packages/guard/timeout-policy/src/index.ts`](../packages/guard/timeout-policy/src/index.ts) |
 | `@deepseek-ai/dsh-tool-cordis` | `tools` · `cordisInspect` | [`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/tool-cordis/src/index.ts) |
 | `@deepseek-ai/dsh-tool-schedule` | `tools` | [`packages/schedule/tool-schedule/src/index.ts`](../packages/schedule/tool-schedule/src/index.ts) |

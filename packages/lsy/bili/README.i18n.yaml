@@ -1,0 +1,61 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/bili/README.md
+/:
+  en: c2380df565266f8d
+  zh: f4b47152b9a1a4d2
+/deepseek-ai-dsh-bili:
+  en: f3b1301eff6b2d4d
+  zh: 934e02fa61f51d0b
+/deepseek-ai-dsh-bili/summary:
+  en: 2d01801b8087d35b
+  zh: d24e24aff9d51a59
+/deepseek-ai-dsh-bili/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-bili/use-this-package:
+  en: 8b6825035c174a67
+  zh: 191033f1457487ca
+/deepseek-ai-dsh-bili/use-this-package/when-to-choose-it:
+  en: ae92493fabf141e4
+  zh: 2e1831598579a5e4
+/deepseek-ai-dsh-bili/use-this-package/minimal-configuration:
+  en: 2f8cb2b1daa5f443
+  zh: 6ed2b5c805929be9
+/deepseek-ai-dsh-bili/use-this-package/what-the-owner-sees:
+  en: 70d57b9ff9051d1d
+  zh: 5a02a675497727e5
+/deepseek-ai-dsh-bili/understand-the-implementation:
+  en: ae1f4eadbc19bca5
+  zh: 2791de731a2c96dd
+/deepseek-ai-dsh-bili/further-exploration:
+  en: 36062c367e791118
+  zh: df508ec28033831f
+/deepseek-ai-dsh-bili/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-bili/model-experience/wake-prompts:
+  en: 4938e82083dbe51d
+  zh: b1be464d99e3fc8b
+/deepseek-ai-dsh-bili/model-experience/wake-prompts/what-the-model-sees:
+  en: ed12727076450fc9
+  zh: 593f5bec00f567e4
+/deepseek-ai-dsh-bili/model-experience/wake-prompts/what-the-model-sees/body-clock-wake:
+  en: 984ce97a2cdbcfaf
+  zh: 2c602d6ca83730db
+/deepseek-ai-dsh-bili/model-experience/wake-prompts/what-the-model-sees/inbox-wake:
+  en: 291de83b35f768ae
+  zh: 1594f18c5dc89dac
+/deepseek-ai-dsh-bili/model-experience/wake-prompts/token-effect:
+  en: 73a9067c1e3b5cb0
+  zh: 8852d1c25f27c199
+/deepseek-ai-dsh-bili/model-experience/wake-prompts/kv-cache-effect:
+  en: b426c1f8f6b8ce4c
+  zh: b07ff5f15663c1ef
+/deepseek-ai-dsh-bili/known-limitations-and-deferred-work:
+  en: 45dd955008b0c975
+  zh: 1e3d9a9849fec104
+/deepseek-ai-dsh-bili/known-limitations-and-deferred-work/dev-note:
+  en: c8807258e942f5c0
+  zh: f184b0d6e376dc80

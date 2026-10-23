@@ -1,0 +1,52 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/tool-bili/README.md
+/:
+  en: 671e962051794f10
+  zh: 628cd5daeb53cdb3
+/deepseek-ai-dsh-tool-bili:
+  en: 7e38574fc443447a
+  zh: 8e3e163fb930100d
+/deepseek-ai-dsh-tool-bili/summary:
+  en: 1e7b759b3d06af3d
+  zh: fa0e1add31c69c51
+/deepseek-ai-dsh-tool-bili/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-tool-bili/use-this-package:
+  en: 86b926b496669378
+  zh: 2084eead3ec1e5ce
+/deepseek-ai-dsh-tool-bili/understand-the-implementation:
+  en: 5a60faa048cada7b
+  zh: 743f53f62d69f3af
+/deepseek-ai-dsh-tool-bili/further-exploration:
+  en: d7bd09ffca46c1ea
+  zh: 470e28f5bf1a521a
+/deepseek-ai-dsh-tool-bili/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-tool-bili/model-experience/bilibili-tools:
+  en: b5d6b1a18b865dca
+  zh: 31f39ba21dd86dbc
+/deepseek-ai-dsh-tool-bili/model-experience/bilibili-tools/what-the-model-sees:
+  en: 652531b29f97299f
+  zh: e6baf6797d7ddcce
+/deepseek-ai-dsh-tool-bili/model-experience/bilibili-tools/what-the-model-sees/a-video-read:
+  en: 8a410e9f4ca1f05d
+  zh: 77494203c180613f
+/deepseek-ai-dsh-tool-bili/model-experience/bilibili-tools/what-the-model-sees/a-write-result:
+  en: b73b3fd791ebf238
+  zh: d188d2fd16a58ac2
+/deepseek-ai-dsh-tool-bili/model-experience/bilibili-tools/token-effect:
+  en: 905edc04d4a9d042
+  zh: a86466759335cda9
+/deepseek-ai-dsh-tool-bili/model-experience/bilibili-tools/kv-cache-effect:
+  en: 939fc48b860407b7
+  zh: b99e365592e2afa3
+/deepseek-ai-dsh-tool-bili/known-limitations-and-deferred-work:
+  en: b44d2d168066fc98
+  zh: 2a9c5f015ba80fbd
+/deepseek-ai-dsh-tool-bili/known-limitations-and-deferred-work/dev-note:
+  en: 446e106180e9dfcd
+  zh: 5a0bf24759459323
