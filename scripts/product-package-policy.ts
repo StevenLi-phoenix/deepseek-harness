@@ -28,6 +28,7 @@ export const PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackagePolic
   'packages/lsy/lsy-event-ingest': { category: 'optional', reason: 'Fork-local push route for the owner\'s services; requires per-source tokens.' },
   'packages/lsy/lsy-tool-monitor': { category: 'optional', reason: 'Fork-local monitor tools mounted by the event profile preset.' },
   'packages/lsy/lsy-memory': { category: 'optional', reason: 'Fork-local owner memory (context block and memory tools) mounted by the event profile preset.' },
+  'packages/lsy/lsy-sysmon': { category: 'optional', reason: 'Fork-local System status settings section mounted by the event profile bundle.' },
   'packages/lsp/lsp-stdio': { category: 'optional', reason: 'Requires an explicit server list and language-server executables.' },
   'packages/lsp/tool-lsp': { category: 'optional', reason: 'Model tools selected together with a configured LSP provider.' },
   'packages/ssh/ssh': { category: 'optional', reason: 'Explicit remote connection and helper configuration.' },

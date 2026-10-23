@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "System status",
+    "description": "Shows the Host machine's CPU, memory, power, temperature, and disk usage in Settings."
+  }
+}

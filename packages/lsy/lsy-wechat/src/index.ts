@@ -6,6 +6,8 @@ import { readFile, stat } from 'node:fs/promises'
 import { basename, isAbsolute, join } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { ContextFormed, UserMessage } from '@deepseek-ai/dsh-llm'
 import { failureDetail, type LsyNote, type LsyNotifier } from '@deepseek-ai/dsh-lsy-event-bus'
 import type {} from '@deepseek-ai/dsh-permission-presets'
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
@@ -16,6 +18,12 @@ import { IlinkApiError, IlinkClient, ILINK_SEND_REJECTED, isStaleTokenError, Ite
 import { accountFilePath, readAccountFile, type WechatAccount } from './login.ts'
 import { attachmentNote, describeMedia, downloadMedia, isPromptImage, mediaSpec, saveInboxFile, uploadMedia, type OutboundKind, type ReceivedMedia } from './media.ts'
 import { wechatDomain, type OutboxRecord, type WindowRecord } from './storage.ts'
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'lsy-wechat': { kind: 'lsy-wechat' } & ContextFormed
+  }
+}
+
 import { buildDigest, contentText, fitText, inboundText, NEW_CHAT_REPLY, QUOTA_FOOTER, relayText, renderNote, splitText, WECHAT_MAX_TEXT_BYTES } from './text.ts'
 
 export * from './api.ts'
@@ -96,6 +104,9 @@ export const Config: z<Config> = z.object({
 
 /** Exact owner text that starts a fresh chat Session. */
 const NEW_CHAT_COMMAND = '/new'
+/** Frames a note another Session sent the owner, as the chat Session reads it. */
+const SHARED_NOTE_INTRO = 'Another session (an event, reminder, monitor, or operator task) just sent the owner this message on WeChat. It is context, not the owner speaking: the owner may reply to it in this chat.'
+
 /** Chat Sessions remembered for {@link WechatChannel.ownsSession}; the oldest are forgotten first. */
 const MAX_REMEMBERED_SESSIONS = 200
 /** First retry delay after a failed long-poll; doubles up to {@link MAX_RETRY_MS}. */
@@ -209,7 +220,37 @@ export class WechatChannel extends Service implements LsyNotifier {
    * @throws only when storage fails.
    */
   async send(note: LsyNote): Promise<void> {
-    await this.deliver(renderNote(note))
+    const text = renderNote(note)
+    await this.deliver(text)
+    await this.shareWithChat(text)
+  }
+
+  /**
+   * Leave a copy of a message another Session sent the owner in the owner's chat Session, so that
+   * when the owner answers it on WeChat (where every reply reaches the chat Session) the agent knows
+   * what was said. It waits for the chat Session's next turn and never starts one; with no chat
+   * Session yet there is nobody to tell. A failure only costs the context, never the delivery.
+   * @param text - the rendered note, as the owner received or will receive it.
+   */
+  private async shareWithChat(text: string): Promise<void> {
+    let chatId: string | undefined
+    try {
+      const chats = this.domain === undefined ? [] : [...this.domain.table('chats').entries()].map(([, row]) => row)
+      const chat = chats.sort((a, b) => b.createdAt - a.createdAt)[0]
+      if (chat === undefined) return
+      chatId = chat.sessionId
+      const resolved = await this.ctx.sessionController.resolveAgent(chatId as SessionId)
+      if (!('agent' in resolved)) return
+      const agent = resolved.agent as { inject?: (message: UserMessage) => void }
+      if (typeof agent.inject !== 'function') return
+      agent.inject(createUserMessage({
+        content: [{ type: 'text', text: `${SHARED_NOTE_INTRO}\n${text}` }],
+        source: { kind: 'lsy-wechat', form: 'notice', summary: 'another Session messaged the owner' },
+      }))
+      this.ctx.logger.info(`lsy-wechat: shared a ${text.length}-char note with chat Session ${chatId}`)
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`lsy-wechat: could not share a note with chat Session ${chatId ?? '(unknown)'}: ${errorText(error)}`)
+    }
   }
 
   /**

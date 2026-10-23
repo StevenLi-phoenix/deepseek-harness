@@ -24,7 +24,7 @@ if [ ! -d "$PREFIX" ]; then
   # Ship the profile and its setup script with the build, so the service user (who cannot
   # read the operator's home) sets up exactly the composition this build was tested with.
   mkdir -p "$PREFIX/lsy/deploy" "$PREFIX/lsy/profiles" "$PREFIX/lsy/bundles"
-  cp "$ROOT/lsy/deploy/setup-profile.sh" "$ROOT/lsy/deploy/wechat-login.mjs" "$ROOT/lsy/deploy/memory-import.mjs" "$PREFIX/lsy/deploy/"
+  cp "$ROOT/lsy/deploy/setup-profile.sh" "$ROOT/lsy/deploy/wechat-login.mjs" "$ROOT/lsy/deploy/memory-import.mjs" "$ROOT/lsy/deploy/disk-watch.mjs" "$PREFIX/lsy/deploy/"
   cp -R "$ROOT/lsy/profiles/event" "$PREFIX/lsy/profiles/"
   cp -R "$ROOT/lsy/bundles/event" "$PREFIX/lsy/bundles/"
 fi

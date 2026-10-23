@@ -510,6 +510,7 @@
     { "path": "./packages/lsy/lsy-memory" },
     { "path": "./packages/lsy/lsy-event-ingest" },
     { "path": "./packages/lsy/lsy-tool-monitor" },
+    { "path": "./packages/lsy/lsy-sysmon/tsconfig.host.json" },
     { "path": "./packages/todo/tool-todo" },
     { "path": "./packages/plan/plan-mode" },
     { "path": "./packages/preset/agent-preset-registry" },

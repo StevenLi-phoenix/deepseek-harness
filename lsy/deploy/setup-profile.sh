@@ -52,7 +52,7 @@ function link(name, directory) {
 // GitHub adapter, and the console logger are profile plugins here, linked like the lsy packages.
 for (const name of ['@deepseek-ai/dsh-webhook', '@deepseek-ai/dsh-webhook-github', '@deepseek-ai/cordis-plugin-logger-console', '@deepseek-ai/dsh-lsy-event-bus', '@deepseek-ai/dsh-lsy-github-sensor',
   '@deepseek-ai/dsh-lsy-wechat', '@deepseek-ai/dsh-lsy-tool-watch', '@deepseek-ai/dsh-lsy-tool-wechat', '@deepseek-ai/dsh-lsy-balance', '@deepseek-ai/dsh-lsy-memory',
-  '@deepseek-ai/dsh-lsy-event-ingest', '@deepseek-ai/dsh-lsy-tool-monitor']) {
+  '@deepseek-ai/dsh-lsy-event-ingest', '@deepseek-ai/dsh-lsy-tool-monitor', '@deepseek-ai/dsh-lsy-sysmon']) {
   link(name, join(prefix, 'node_modules', name))
 }
 link('@deepseek-ai/dsh-lsy-event-bundle', bundleDir)

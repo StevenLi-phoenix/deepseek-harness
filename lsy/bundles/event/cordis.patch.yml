@@ -94,6 +94,14 @@
                 the task below on the owner's behalf. Do it as you would a request the owner sent on
                 WeChat. Your final answer goes to the owner's WeChat: keep it short and in the
                 owner's language.
+          # Host health warnings pushed by lsy/deploy/disk-watch.mjs (an AMS service): a plain WeChat
+          # message, no model. The event key carries the day, so one warning per volume per day.
+          - id: host-alerts
+            sources: [host]
+            kinds: ['host.*']
+            action: notify
+            coalesceMs: 0
+            maxPerHour: 6
 
     # Push route for the owner's services: POST /hooks/lsy with `Authorization: Bearer <token>`. The
     # token decides the source; kinds must start with "<source>.". Tokens live in $DSH_HOME/.env.
@@ -105,6 +113,8 @@
             tokenEnv: LSY_INGEST_TOKEN_KAOROU
           - id: operator
             tokenEnv: LSY_INGEST_TOKEN_OPERATOR
+          - id: host
+            tokenEnv: LSY_INGEST_TOKEN_HOST
 
     - id: lsy-github-sensor
       name: '@deepseek-ai/dsh-lsy-github-sensor'
@@ -112,6 +122,12 @@
     # Composer dock pill: the DeepSeek account balance next to the activity and usage pills.
     - id: lsy-balance
       name: '@deepseek-ai/dsh-lsy-balance'
+
+    # Settings → System status: this Mac's CPU, memory, power, temperature, and disks per volume.
+    # Power and temperature come from /Users/dsh-runtime/bin/macmon (sudoless); the defaults
+    # show /System/Volumes/Data (Internal) and /Volumes/MiniSSD.
+    - id: lsy-sysmon
+      name: '@deepseek-ai/dsh-lsy-sysmon'
 
     # Owner channel: chat Session over WeChat and ctx.lsyNotifier for the bus. The chat works in a
     # clone of the owner's tracking repository StevenLi-phoenix/me (RUNBOOK step 5).

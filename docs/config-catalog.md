@@ -2401,6 +2401,35 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-memory -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-sysmon -->
+<a id="deepseek-aidsh-lsy-sysmon"></a>
+
+## `@deepseek-ai/dsh-lsy-sysmon`
+
+- `inject`: `connection`
+- `source`: [`packages/lsy/lsy-sysmon/src/index.ts:20`](../packages/lsy/lsy-sysmon/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Absolute path of the macmon binary (power, temperature, memory); unset tries `<home>/bin/macmon`, then `/opt/homebrew/bin/macmon`. */
+  macmonPath?: string
+  /** Volumes to show, in order; a mount that cannot be read is skipped and reported. */
+  mounts: SysmonMount[]
+  /** How long a snapshot is served from cache, in milliseconds. */
+  cacheMs: number
+}
+
+/** One volume to show. */
+export interface SysmonMount {
+  /** Mount point passed to `statfs`, for example `/Volumes/MiniSSD`. */
+  mount: string
+  /** Name shown on the volume's row. */
+  label: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-sysmon -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-tool-watch -->
 <a id="deepseek-aidsh-lsy-tool-watch"></a>
 
@@ -2434,7 +2463,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-lsy-wechat`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/lsy/lsy-wechat/src/index.ts:45`](../packages/lsy/lsy-wechat/src/index.ts)
+- `source`: [`packages/lsy/lsy-wechat/src/index.ts:53`](../packages/lsy/lsy-wechat/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
