@@ -54,6 +54,36 @@
         suppress:
           actors: ['dsh-events[bot]']
           markers: []
+        # Events the owner's own services push through lsy-event-ingest. The instructions are
+        # trusted text; the pushed event fields reach the Session as untrusted data.
+        subscriptions:
+          - id: kaorou
+            sources: [kaorou]
+            kinds: ['kaorou.*']
+            action: session
+            coalesceMs: 60000
+            maxPerHour: 4
+            session:
+              workspacePath: /Users/dsh-runtime/work
+              agentPreset: unattended
+              permissionPreset: danger-full-access
+              titlePrefix: kaorou
+              instructions: >-
+                kaorou, the owner's YouTube-to-Bilibili pipeline on this Mac, reported the events
+                below. Its API is http://127.0.0.1:8096 without auth: GET /jobs, /jobs/<id>/detail,
+                /jobs/<id>/logs, /logs?source=daemon&limit=200, and /system. Find the cause with GET
+                requests only; never retry, cancel, or change anything. Answer in Chinese in at most
+                three sentences: what failed, the likely cause, and what the owner should do. Answer
+                NO_REPLY when it has already recovered.
+
+    # Push route for the owner's services: POST /hooks/lsy with `Authorization: Bearer <token>`. The
+    # token decides the source; kinds must start with "<source>.". Tokens live in $DSH_HOME/.env.
+    - id: lsy-event-ingest
+      name: '@deepseek-ai/dsh-lsy-event-ingest'
+      config:
+        sources:
+          - id: kaorou
+            tokenEnv: LSY_INGEST_TOKEN_KAOROU
 
     - id: lsy-github-sensor
       name: '@deepseek-ai/dsh-lsy-github-sensor'
@@ -92,8 +122,9 @@
                 avoid Markdown tables and headings. When a watch or reminder turn has nothing worth
                 the owner's attention, answer exactly NO_REPLY and nothing is sent. Manage what you
                 monitor with watch_create, watch_list, and watch_delete, and recurring time-based
-                checks with schedule_create, then tell the owner what you set up. Send the owner a
-                file or picture with wechat_send_file.
+                checks with schedule_create, then tell the owner what you set up. Watch a log or
+                anything else a command can print with monitor_start: its new lines come back to
+                this conversation. Send the owner a file or picture with wechat_send_file.
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
@@ -124,6 +155,9 @@
           # Session and the agent keeps it with memory_search, memory_save, and memory_forget.
           - id: lsy-memory
             name: '@deepseek-ai/dsh-lsy-memory'
+          # Claude Code-style monitors: a command's new stdout lines come back to the same Session.
+          - id: lsy-tool-monitor
+            name: '@deepseek-ai/dsh-lsy-tool-monitor'
           - id: skill-filesystem
             name: '@deepseek-ai/dsh-skill-filesystem'
           - id: tool-skill

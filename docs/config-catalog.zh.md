@@ -2298,6 +2298,35 @@ export interface SessionAction {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-event-bus -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-event-ingest -->
+<a id="deepseek-aidsh-lsy-event-ingest"></a>
+
+## `@deepseek-ai/dsh-lsy-event-ingest`
+
+- `inject`: `webServer` · `credentials` · `lsyEventBus`
+- `source`: [`packages/lsy/lsy-event-ingest/src/index.ts:36`](../packages/lsy/lsy-event-ingest/src/index.ts)
+
+```ts config-catalog
+/** Route, sources, and body ceiling. */
+export interface Config {
+  /** Route path; must start with `/hooks/` and not end with `/`. */
+  path?: string
+  /** Services allowed to push, each with its own bearer token; with none configured every request gets 503. */
+  sources?: IngestSource[]
+  /** Largest accepted request body, in bytes. */
+  maxBodyBytes?: number
+}
+
+/** One service allowed to push. */
+export interface IngestSource {
+  /** Source id on the bus, e.g. `kaorou`; event kinds must start with `<id>.`. */
+  id: string
+  /** Credential reference of this source's bearer token. */
+  tokenEnv: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-event-ingest -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-github-sensor -->
 <a id="deepseek-aidsh-lsy-github-sensor"></a>
 
@@ -4943,6 +4972,7 @@ export interface Config {
 | `@deepseek-ai/dsh-host-plugin-inventory` | `loader` | [`packages/host/plugin-inventory/src/index.ts`](../packages/host/plugin-inventory/src/index.ts) |
 | `@deepseek-ai/dsh-llm` | — | [`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts) |
 | `@deepseek-ai/dsh-lsp` | — | [`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts) |
+| `@deepseek-ai/dsh-lsy-tool-monitor` | `tools` | [`packages/lsy/lsy-tool-monitor/src/index.ts`](../packages/lsy/lsy-tool-monitor/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-tool-wechat` | `tools` | [`packages/lsy/lsy-tool-wechat/src/index.ts`](../packages/lsy/lsy-tool-wechat/src/index.ts) |
 | `@deepseek-ai/dsh-mcp-resources` | `tools` | [`packages/mcp/mcp-resources/src/index.ts`](../packages/mcp/mcp-resources/src/index.ts) |
 | `@deepseek-ai/dsh-otel` | — | [`packages/telemetry/otel/src/index.ts`](../packages/telemetry/otel/src/index.ts) |

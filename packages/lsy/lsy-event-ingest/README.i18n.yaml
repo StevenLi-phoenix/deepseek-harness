@@ -1,0 +1,58 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/lsy-event-ingest/README.md
+/:
+  en: 2229337d1b95b434
+  zh: a807d5e2ac302ad4
+/deepseek-ai-dsh-lsy-event-ingest:
+  en: 78d8ae5aa887b6da
+  zh: e26a9bd170120cf0
+/deepseek-ai-dsh-lsy-event-ingest/summary:
+  en: 4506b6a10c3e467a
+  zh: a4fc0588be45e861
+/deepseek-ai-dsh-lsy-event-ingest/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-lsy-event-ingest/use-this-package:
+  en: a33ecb64a7ac1956
+  zh: 73681c429c9a73fd
+/deepseek-ai-dsh-lsy-event-ingest/use-this-package/when-to-choose-it:
+  en: 9ab8240a940b8317
+  zh: ef012d2104ab9b79
+/deepseek-ai-dsh-lsy-event-ingest/use-this-package/minimal-configuration:
+  en: a0d77d5b5b927dd3
+  zh: 5b43df1dd8dfbe52
+/deepseek-ai-dsh-lsy-event-ingest/use-this-package/push-an-event:
+  en: 08c977323b1a2c56
+  zh: b7258f70af7b1430
+/deepseek-ai-dsh-lsy-event-ingest/use-this-package/replies:
+  en: f183857ceaac2c0e
+  zh: d9a0bbad20213cbd
+/deepseek-ai-dsh-lsy-event-ingest/understand-the-implementation:
+  en: aae6db48537a1579
+  zh: a8dd46a85623d43d
+/deepseek-ai-dsh-lsy-event-ingest/further-exploration:
+  en: 69ccdd9ae1a75711
+  zh: 7e1f0ef470a72498
+/deepseek-ai-dsh-lsy-event-ingest/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-lsy-event-ingest/model-experience/event-data-in-session-prompts:
+  en: 8dc9ce4dbe9f1d11
+  zh: a9e7e4574d829424
+/deepseek-ai-dsh-lsy-event-ingest/model-experience/event-data-in-session-prompts/what-the-model-sees:
+  en: 6e21bd68464f73d6
+  zh: 040b6d6d997bed25
+/deepseek-ai-dsh-lsy-event-ingest/model-experience/event-data-in-session-prompts/token-effect:
+  en: 69ae47ca31e5431b
+  zh: b5281695e4976cd5
+/deepseek-ai-dsh-lsy-event-ingest/model-experience/event-data-in-session-prompts/kv-cache-effect:
+  en: 44c1e37e031446da
+  zh: 961439948a9045a1
+/deepseek-ai-dsh-lsy-event-ingest/known-limitations-and-deferred-work:
+  en: fb8aa8907ee9dc7f
+  zh: 857cd33ecc972087
+/deepseek-ai-dsh-lsy-event-ingest/known-limitations-and-deferred-work/dev-note:
+  en: 60fde1165a8f1e94
+  zh: 46604776941cba9b

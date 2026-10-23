@@ -24,6 +24,8 @@ for id in lsy-event-bus lsy-github-sensor lsy-wechat preset-unattended; do
   /usr/bin/grep -q "^- id: $id\$" "$WORK/fresh.yml" || fail "composition lacks $id"
 done
 /usr/bin/grep -q "@deepseek-ai/dsh-lsy-memory" "$WORK/fresh.yml" || fail "unattended preset lacks lsy-memory"
+/usr/bin/grep -q "@deepseek-ai/dsh-lsy-tool-monitor" "$WORK/fresh.yml" || fail "unattended preset lacks lsy-tool-monitor"
+/usr/bin/grep -q "^- id: lsy-event-ingest$" "$WORK/fresh.yml" || fail "composition lacks lsy-event-ingest"
 
 OLD="$WORK/old"; mkdir -p "$OLD/profiles/event"
 { echo '# lsy event profile — composition layer (code-owned).'; echo '[]'; } > "$OLD/profiles/event/cordis.patch.yml"

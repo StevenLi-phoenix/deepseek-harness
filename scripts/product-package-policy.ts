@@ -25,6 +25,8 @@ export const PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackagePolic
   'packages/lsy/lsy-tool-wechat': { category: 'optional', reason: 'Fork-local WeChat file tool mounted by the event profile preset.' },
   'packages/lsy/lsy-tool-watch': { category: 'optional', reason: 'Fork-local watch tools mounted by the event profile preset.' },
   'packages/lsy/lsy-github-sensor': { category: 'optional', reason: 'Fork-local sensor; requires configured repositories and tokens.' },
+  'packages/lsy/lsy-event-ingest': { category: 'optional', reason: 'Fork-local push route for the owner\'s services; requires per-source tokens.' },
+  'packages/lsy/lsy-tool-monitor': { category: 'optional', reason: 'Fork-local monitor tools mounted by the event profile preset.' },
   'packages/lsy/lsy-memory': { category: 'optional', reason: 'Fork-local owner memory (context block and memory tools) mounted by the event profile preset.' },
   'packages/lsp/lsp-stdio': { category: 'optional', reason: 'Requires an explicit server list and language-server executables.' },
   'packages/lsp/tool-lsp': { category: 'optional', reason: 'Model tools selected together with a configured LSP provider.' },
