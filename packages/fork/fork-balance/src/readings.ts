@@ -32,7 +32,7 @@ interface ReadingBase {
   readonly label: string
 }
 
-/** One provider's balance as the pill renders it. */
+/** One provider's balance as the card renders it. */
 export type ProviderReading = ReadingBase & (
   | { readonly status: 'failed'; readonly reason: string }
   | { readonly status: 'ready'; readonly kind: 'wallets'; readonly wallets: readonly WalletLine[] }

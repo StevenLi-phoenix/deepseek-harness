@@ -1,5 +1,5 @@
 /**
- * Balances for the composer dock: the DeepSeek account's per-currency totals,
+ * Balances for the Account page card: the DeepSeek account's per-currency totals,
  * read through the same Host account Remote the Account settings page uses,
  * and the readings of the provider keys the Host balance route queries
  * (OpenRouter, the DeepSeek API, OpenCode Go).
@@ -15,11 +15,11 @@ export type { ProviderReading, WalletLine } from '../readings.ts'
 /** Wallet currencies Platform reports. */
 export type Currency = AccountWallet['currency']
 
-/** What the pill renders. */
+/** What the card renders. */
 export interface BalanceState {
   /** `idle` until the first answer; `signed-out` when no account grant is stored. */
   phase: 'idle' | 'ready' | 'signed-out' | 'failed'
-  /** Last good wallets; a failed refresh keeps them so the pill can show them as stale. */
+  /** Last good wallets; a failed refresh keeps them. */
   wallets: readonly WalletLine[]
   /** Time of the last ready answer. */
   updatedAt: number | null
@@ -85,7 +85,7 @@ export class BalanceLoader {
   private inFlight: Promise<void> | undefined
 
   /**
-   * @param store - the store the pill renders.
+   * @param store - the store the card renders.
    * @param read - one account balance query; rejects on transport failure.
    * @param readProviders - one Host balance route query; `fresh` asks the Host to bypass its cache.
    * @param now - clock, replaceable in tests.

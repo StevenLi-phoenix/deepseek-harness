@@ -3,7 +3,9 @@ import { Big } from 'big.js'
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { Button, IconRightUpOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { AccountDetails, AccountView, SignInAttemptId } from '@deepseek-ai/dsh-deepseek-account/types'
-import type { PropsRuntime, PropsLocale, InjectFace, HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
+import type { PropsRuntime, PropsLocale, PropsRenderSlots, InjectFace, HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
+// Type-only: pulls this package's SlotMap merge (the balances extension area).
+import type {} from './slot-contract.ts'
 import type { ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
 import type { PlatformPage, PlatformPages } from './platform-pages.ts'
 import { formatBalance } from './formatBalance.ts'
@@ -93,12 +95,16 @@ export interface AccountSectionInjected {
   /** @returns after local account credentials are removed. */
   signOut: () => Promise<void>
 }
-/** Composed account section props. */
+/**
+ * Composed account section props. The extension seat is optional: a direct
+ * render without it shows no extension area.
+ */
 export type AccountSectionProps =
   PropsRuntime<'settings.section'> & PropsLocale<'settings.account'> & InjectFace<AccountSectionInjected>
+  & Partial<PropsRenderSlots<'settings.account.balances'>>
 /** @param props - localized actions, account subscription, and the shared Platform page channel. @returns account settings UI. */
 export function AccountSection({
-  t, useAccount, useTheme, start, cancel, completeSignIn, openPlatformPage, avatarFailed,
+  t, useAccount, useTheme, start, cancel, completeSignIn, openPlatformPage, avatarFailed, renderSlot,
 }: AccountSectionProps) {
   const { view: state, details, avatar, failed: streamFailed } = useAccount(value => value)
   const colorScheme = useTheme(snapshot => snapshot.active.colorScheme)
@@ -167,6 +173,7 @@ export function AccountSection({
         <Button variant="primary" className={css.signInButton} disabled={busy || state === undefined}
           onClick={() => { void run(start) }}>{t('signIn')}</Button>
       </div>
+      {renderSlot?.('settings.account.balances', {})}
     </section>
   )
   return (
@@ -233,6 +240,7 @@ export function AccountSection({
           </div>
         </div>
       </div>
+      {renderSlot?.('settings.account.balances', {})}
     </section>
   )
 }

@@ -24,9 +24,6 @@
       "path": "../../client/store"
     },
     {
-      "path": "../../client/ui-conversation/tsconfig.client.json"
-    },
-    {
       "path": "../../client/ui-primitives"
     },
     {
@@ -37,6 +34,9 @@
     },
     {
       "path": "../../credentials/deepseek-account"
+    },
+    {
+      "path": "../../client/ui-settings-account"
     }
   ]
 }

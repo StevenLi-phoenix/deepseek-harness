@@ -731,3 +731,17 @@ it.each(['desktopOnboardingVisible', 'onboarding'] as const)('defers bonus displ
   await vi.waitFor(() => { expect(operations.bonusNoticeShown).toHaveBeenCalledExactlyOnceWith(notice.orderId) })
   expect(screen.getByText(notice.message)).toBeTruthy()
 })
+
+it('renders the balances extension area after the balance card', () => {
+  const operations = mount({ status: 'signed-out', attempt: null })
+  cleanup()
+  const renderSlot = vi.fn((name: string) => <div data-testid="extension">{name}</div>)
+  const props = { ...({} as GlobalStandardProps), ...operations,
+    useAccount: <T,>(select: (value: AccountSnapshot) => T) => select(operations.hooks.account.getSnapshot()),
+    useTheme: <T,>(select: (value: ThemeSnapshot) => T) => select(operations.hooks.theme.getSnapshot()), close: () => {},
+    t: (key: string) => en[key as AccountKey],
+  }
+  render(<AccountSection {...props} renderSlot={renderSlot as never} />)
+  expect(renderSlot).toHaveBeenCalledWith('settings.account.balances', {})
+  expect(screen.getByTestId('extension').textContent).toBe('settings.account.balances')
+})

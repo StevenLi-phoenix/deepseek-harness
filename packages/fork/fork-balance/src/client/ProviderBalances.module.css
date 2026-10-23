@@ -1,0 +1,167 @@
+/* Matches the Account page's balance card (ui-settings-account
+   AccountSection.module.css): same card, row rhythm, and amount type. */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  border: 0.5px solid var(--dsw-alias-settings-card-stroke);
+  border-radius: var(--dsw-radius-xl);
+  background: var(--dsw-alias-settings-card-fill);
+  font-size: 13px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.header,
+.row,
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.header {
+  min-height: 32px;
+}
+
+.title {
+  font-weight: 510;
+}
+
+.status,
+.detail,
+.windowLabel,
+.windowValue {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.divider {
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.row {
+  min-height: 40px;
+  padding: 2px 0;
+}
+
+.identity {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.name {
+  font-weight: 510;
+}
+
+.detail {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.value {
+  flex: none;
+  font-size: 18px;
+  line-height: 28px;
+  font-weight: 510;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Nothing left to spend: requests on that route will fail. */
+.exhausted {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* A reading that could not be taken. */
+.stale {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.windows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 4px;
+}
+
+.window {
+  display: grid;
+  grid-template-columns: 56px 1fr 40px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.windowValue {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.track {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--dsw-alias-border-l2);
+}
+
+.fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 3px;
+  background: var(--dsw-alias-state-business-primary);
+  transition: width 240ms ease;
+}
+
+.high {
+  background: var(--dsw-alias-state-warning-primary, var(--dsw-alias-state-business-primary));
+}
+
+.full {
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.footer {
+  justify-content: flex-end;
+}
+
+.refresh {
+  flex: none;
+  height: 36px;
+  min-width: 58px;
+  padding: 0 14px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-md);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.refresh:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.refresh:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+}
+
+.refresh:disabled {
+  cursor: default;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill { transition: none; }
+}
