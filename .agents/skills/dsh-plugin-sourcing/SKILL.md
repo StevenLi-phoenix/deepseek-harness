@@ -1,6 +1,6 @@
 ---
 name: dsh-plugin-sourcing
-description: Before building any new capability for DeepSeek Harness (a dsh plugin, tool, sensor, channel, UI panel, memory, monitor, provider, or a fork-local packages/lsy package), search the dsh plugin market, npm, and GitHub for an existing implementation; download and review the best candidates without running them; install a candidate that meets the requirement and passes review, otherwise reference it and write our own. Use this whenever someone asks to add, build, implement, or "make dsh able to" do something new, even when they do not mention the market or plugins.
+description: Before building any new capability for DeepSeek Harness (a dsh plugin, tool, sensor, channel, UI panel, memory, monitor, provider, or a fork-local packages/lsy package), search the GitHub topic dsh-plugin (the source of truth for dsh plugins) and its market-index mirrors for an existing implementation; download and review the best candidates without running them; install a candidate that meets the requirement and passes review, otherwise reference it and write our own. Use this whenever someone asks to add, build, implement, or "make dsh able to" do something new, even when they do not mention the market or plugins.
 ---
 
 # Source a DSH capability before building it
@@ -18,21 +18,21 @@ Write two or three lines before searching, because the review in step 4 is a com
 ## 2. Search, cheapest and most trusted first
 
 1. **This repository.** Upstream may already ship it, possibly off by default: search `packages/` (including `packages/experimental/`), `apps/cli/config/examples/`, and `docs/user/guide/` for the capability's nouns. Example: memory was already covered by `docs/user/guide/mcp-memory.md` (three MCP memory servers).
-2. **Plugin market indexes.** A dsh agent with the `plugin_market` tool searches the indexes the profile configures. Otherwise run the bundled script, which validates each index with the repo's own `parseMarketIndex` and matches every word:
+2. **The GitHub topic [`dsh-plugin`](https://github.com/topics/dsh-plugin): the source of truth.** dsh plugins are published as GitHub repositories tagged `dsh-plugin`; every market index and awesome list is crawled from that topic, so search it directly:
+
+   ```sh
+   gh search repos --topic dsh-plugin <word> [word...] --sort updated --limit 30 \
+     --json fullName,description,stargazersCount,updatedAt,url
+   ```
+
+   Try a few phrasings, and Chinese terms too: many descriptions are bilingual. Stars and recent updates help rank, but neither substitutes for the review in step 4.
+3. **Mirrors, for extra metadata.** Indexes add what GitHub search lacks, such as `engines.dsh` and the npm package name. A dsh agent with the `plugin_market` tool searches the indexes its profile configures; otherwise the bundled script validates each index with the repo's own `parseMarketIndex` and matches every word:
 
    ```sh
    pnpm exec tsx .agents/skills/dsh-plugin-sourcing/scripts/search-market.mts <word> [word...]
-   pnpm exec tsx .agents/skills/dsh-plugin-sourcing/scripts/search-market.mts --index <url> <word>
    ```
 
-   Its default indexes are community catalogs (jsDelivr `dsh-plugin-catalog`, `wangyutansheng/dsh-market-index`), not official ones; treat their listings as leads, not endorsements. Try a few phrasings, and Chinese terms too: many descriptions are bilingual.
-3. **npm and GitHub directly**, for packages no index has picked up yet:
-
-   ```sh
-   npm search --json "dsh <words>"            # or "keywords:dsh-plugin <word>"
-   gh search repos "dsh-plugin <words>" --limit 20
-   gh search repos --topic dsh-plugin <word> --limit 20
-   ```
+   Its default indexes (jsDelivr `dsh-plugin-catalog`, `wangyutansheng/dsh-market-index`) are third-party crawls of the topic and can lag it; `npm search --json "dsh <words>"` finds packages that were published without a topic.
 
 Record the queries you ran; step 6 reports them.
 
@@ -84,4 +84,5 @@ Installing, always pinned to the version you reviewed:
 ## 6. Record and report
 
 - In this fork: one `lsy/CHANGELOG.md` entry (Added) naming the package, version, and why. A referenced project goes in the new package README's Dev Note ("follows <repo> (<license>) at <version or commit>"); a built-from-scratch one notes the searches that found nothing.
+- When something we built is published as its own repository, tag it so the next person finds it where they look: `gh repo edit <owner>/<repo> --add-topic dsh-plugin`.
 - Tell the requester, briefly: the queries, the candidates and the verdict for each with the deciding reason, and what was installed, referenced, or built.
