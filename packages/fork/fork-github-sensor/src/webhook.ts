@@ -17,9 +17,9 @@ export interface GithubDelivery {
   readonly payload: unknown
 }
 
-/** Deliveries about the App itself, not a repository. */
+/** Deliveries about the App itself, not a repository, and per-job CI chatter that workflow_run already summarizes. */
 const HOUSEKEEPING: ReadonlySet<string> = new Set([
-  'ping', 'installation', 'installation_repositories', 'installation_target', 'github_app_authorization',
+  'ping', 'installation', 'installation_repositories', 'installation_target', 'github_app_authorization', 'workflow_job',
 ])
 
 const envelope = z.object({
@@ -79,6 +79,10 @@ function describe(name: string, action: string | undefined, detail: Detail): Des
       return { title: `comment on #${issue?.number ?? '?'}: ${issue?.title ?? ''}`.trimEnd(), url: detail.comment?.html_url ?? issue?.html_url, text: detail.comment?.body }
     case 'pull_request_review':
       return { title: `review ${detail.review?.state ?? action ?? ''} on PR #${pr?.number ?? '?'}: ${pr?.title ?? ''}`.trimEnd(), url: detail.review?.html_url ?? pr?.html_url, text: detail.review?.body }
+    case 'check_suite':
+    case 'check_run':
+      // Only a finished check says anything; requested and in-progress ones arrive several times per push.
+      return action === 'completed' ? { title: `${name.replace('_', ' ')} completed` } : undefined
     case 'workflow_run': {
       const run = detail.workflow_run
       // Requested and in-progress runs say nothing yet; only a finished run has news.

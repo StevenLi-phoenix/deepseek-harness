@@ -68,9 +68,10 @@ function accountWallets(state: BalanceState): readonly WalletLine[] {
 /** The DeepSeek API key of the signed-in account reports the same wallets; one segment is enough. */
 function sameAccount(state: BalanceState, reading: ProviderReading): boolean {
   if (state.phase !== 'ready' || reading.status !== 'ready' || reading.kind !== 'wallets') return false
-  // Platform and the API list empty wallets differently, so only funded ones identify the account.
+  // Platform and the API list empty wallets differently and with different precision (329.8642
+  // against 329.86), so the account is identified by the funded amounts as the pill shows them.
   const key = (wallets: readonly WalletLine[]): string => wallets.filter(wallet => !new Big(wallet.total).eq(0))
-    .map(wallet => `${wallet.currency}:${new Big(wallet.total).toString()}`).sort().join(',')
+    .map(wallet => formatAmount(wallet.total, wallet.currency)).sort().join(',')
   return key(state.wallets) === key(reading.wallets)
 }
 

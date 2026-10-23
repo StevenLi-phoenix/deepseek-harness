@@ -225,7 +225,7 @@ describe('WechatChannel chat', () => {
     expect(h.sessions.prompts).toEqual([{
       requestId: expect.stringMatching(/^[0-9a-f-]{36}$/) as unknown,
       sessionId: 'chat-1',
-      mode: 'queue',
+      mode: 'steer',
       content: [{ type: 'text', text: 'hello' }],
       clientTimeZone: 'America/New_York',
     }])
