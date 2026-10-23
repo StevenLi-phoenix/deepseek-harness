@@ -183,6 +183,11 @@ export function renderNote(note: LsyNote): string {
   return [note.title, note.body, note.url].filter(part => part !== undefined && part.trim() !== '').join('\n\n')
 }
 
+/** Who sent a shared note, by default: a Session the bus or the owner's tools started. */
+const OTHER_SESSION = 'another session (an event, reminder, monitor, or operator task)'
+/** Who sent a note relayed from a chat Session the owner left with `/new`. */
+export const EARLIER_CHAT = 'an earlier chat Session (before /new; a reminder or monitor it set up)'
+
 /** Stands in for a quoted message whose text neither the server nor the channel's records hold. */
 const QUOTE_UNAVAILABLE = '（一条较早的消息，内容取不到）'
 /** iLink ids carry their creation time in milliseconds above the low 22 bits. */
@@ -408,8 +413,9 @@ export function timeGapNotice(now: number, before: ActivityRecord | undefined, m
  * @param text - the rendered note.
  * @param at - when it was sent, in Unix epoch milliseconds.
  * @param timeZone - IANA zone for the time.
+ * @param from - who sent it, as the chat Session reads it.
  */
-export function sharedNoteText(text: string, at: number, timeZone: string): string {
-  return `At ${formatStamp(at, timeZone)} (${timeZone}), another session (an event, reminder, monitor, or operator task) sent the owner this message on WeChat.`
+export function sharedNoteText(text: string, at: number, timeZone: string, from: string = OTHER_SESSION): string {
+  return `At ${formatStamp(at, timeZone)} (${timeZone}), ${from} sent the owner this message on WeChat.`
     + ` It is context, not the owner speaking: the owner may reply to it in this chat.\n${text}`
 }

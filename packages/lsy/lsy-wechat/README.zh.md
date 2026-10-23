@@ -122,7 +122,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 
 #### 模型看到什么
 
-owner 的每条微信消息都以普通用户 prompt 的形式进入对话 Session，带上配置的 `chat.timeZone`，和在 Web UI 里输入的文字一样。文本不带任何微信包装；引用会多一行 `[引用] …`，语音消息是 `[语音] <转写>`，媒体是占位符，后面每个附件跟一行说明，例如 `- image (image/jpeg, 84.2 KB) saved at /Users/dsh-runtime/work/.wechat-inbox/…-image.jpg; it is attached to this message.`；没能取到的附件会注明取不到、内容不可用。不超过 20 MiB、格式为 Host 接受的 PNG、JPEG、GIF、WebP 的图片，同时作为同一条消息的图片内容。每一轮模型的最终回答原样发回，微信会渲染其中的 Markdown（标题、列表、引用、表格、代码块）。最终回答恰好是 `NO_REPLY` 时什么也不发。对话安静了 `timeGapMs` 或更久时，owner 的消息之前会先来一条提示（来源类型 `lsy-wechat`，形式 `notice`）；另一个 Session 发给 owner 的通知也以提示形式到达，并附上发出时间。两者中的每个时间都来自通道自己的记录，从不来自模型。
+owner 的每条微信消息都以普通用户 prompt 的形式进入对话 Session，带上配置的 `chat.timeZone`，和在 Web UI 里输入的文字一样。文本不带任何微信包装；引用会多一行 `[引用] …`，语音消息是 `[语音] <转写>`，媒体是占位符，后面每个附件跟一行说明，例如 `- image (image/jpeg, 84.2 KB) saved at /Users/dsh-runtime/work/.wechat-inbox/…-image.jpg; it is attached to this message.`；没能取到的附件会注明取不到、内容不可用。不超过 20 MiB、格式为 Host 接受的 PNG、JPEG、GIF、WebP 的图片，同时作为同一条消息的图片内容。每一轮模型的最终回答原样发回，微信会渲染其中的 Markdown（标题、列表、引用、表格、代码块）。最终回答恰好是 `NO_REPLY` 时什么也不发。对话安静了 `timeGapMs` 或更久时，owner 的消息之前会先来一条提示（来源类型 `lsy-wechat`，形式 `notice`）；另一个 Session 发给 owner 的通知也以提示形式到达，并附上发出时间；owner 用 `/new` 离开的旧对话 Session 发出的回答也一样（它设的提醒和监控还在跑），说明里称它为 `an earlier chat Session (before /new; a reminder or monitor it set up)`。两者中的每个时间都来自通道自己的记录，从不来自模型。
 
 ##### 时间间隔提示
 

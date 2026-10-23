@@ -24,7 +24,7 @@ declare module '@deepseek-ai/dsh-llm' {
   }
 }
 
-import { buildDigest, contentText, fitText, formatGap, HELP_REPLY, inboundText, NEW_CHAT_REPLY, QUOTA_FOOTER, relayText, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES } from './text.ts'
+import { buildDigest, contentText, EARLIER_CHAT, fitText, formatGap, HELP_REPLY, inboundText, NEW_CHAT_REPLY, QUOTA_FOOTER, relayText, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES } from './text.ts'
 import { TypingIndicator } from './typing.ts'
 
 export * from './api.ts'
@@ -289,11 +289,11 @@ export class WechatChannel extends Service implements LsyNotifier {
    * Session yet there is nobody to tell. A failure only costs the context, never the delivery.
    * @param text - the rendered note, as the owner received or will receive it.
    */
-  private async shareWithChat(text: string): Promise<void> {
+  private async shareWithChat(text: string, from?: string, except?: string): Promise<void> {
     const chats = this.domain === undefined ? [] : [...this.domain.table('chats').entries()].map(([, row]) => row)
     const chat = chats.sort((a, b) => b.createdAt - a.createdAt)[0]
-    if (chat === undefined) return
-    const shared = sharedNoteText(text, Date.now(), this.config.chat.timeZone)
+    if (chat === undefined || chat.sessionId === except) return
+    const shared = sharedNoteText(text, Date.now(), this.config.chat.timeZone, from)
     if (await this.injectNotice(chat.sessionId as SessionId, shared, 'another Session messaged the owner')) {
       this.ctx.logger.info(`lsy-wechat: shared a ${text.length}-char note with chat Session ${chat.sessionId}`)
     }
@@ -739,6 +739,9 @@ export class WechatChannel extends Service implements LsyNotifier {
     this.ctx.logger.info(`lsy-wechat: Session ${session.id} ended a turn (${ended}); ${reply === undefined ? 'nothing to relay' : `relaying ${reply.length} chars`}`)
     // Typing clears after the reply went out, so the chat never looks idle before the answer shows.
     if (reply !== undefined) this.track(this.deliver(reply, 'reply').finally(() => { this.settleTyping() }))
+    // A chat Session the owner left with /new can still answer (its reminders and monitors live on):
+    // the current chat Session gets a copy, since the owner's reply to it lands there.
+    if (reply !== undefined) this.track(this.shareWithChat(reply, EARLIER_CHAT, session.id))
     else this.settleTyping()
   }
 
