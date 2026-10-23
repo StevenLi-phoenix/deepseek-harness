@@ -20,6 +20,19 @@ JNrRuoEUXpabUzGB8QIDAQAB
 
 /** `source` the web header's login sends. */
 const QR_SOURCE = 'main-fe-header'
+/**
+ * bilibili.com serves two web versions, mainland (`web_cn`) and international (`web_i`, under
+ * language paths such as `/en/`). An account registered overseas (the international app's Google
+ * sign-in) is refused on the mainland version with code 48007, and the official login popup then
+ * moves to the international one. These are the page and the request metadata that popup sends
+ * there (`x-bili-device-req-json` from its METADATA middleware, `x-bili-locale-json` from its
+ * locale middleware); mainland accounts sign in through it as well.
+ */
+const INTERNATIONAL_PAGE = 'https://www.bilibili.com/en/'
+const INTERNATIONAL_PARAMS: Readonly<Record<string, string>> = {
+  'x-bili-device-req-json': JSON.stringify({ platform: 'web', device: 'pc', spmid: '333.42', mobi_app: 'web_i' }),
+  'x-bili-locale-json': JSON.stringify({ c_locale: { language: 'en' } }),
+}
 /** QR poll codes. */
 const QR_DONE = 0
 const QR_EXPIRED = 86038
@@ -76,7 +89,10 @@ export type QrPoll =
  * @param client - Bilibili client.
  */
 export async function startQr(client: BiliClient): Promise<QrCode> {
-  const { data } = await client.call('qrGenerate', { query: { source: QR_SOURCE } })
+  const { data } = await client.call('qrGenerate', {
+    query: { source: QR_SOURCE, go_url: INTERNATIONAL_PAGE, ...INTERNATIONAL_PARAMS },
+    referer: INTERNATIONAL_PAGE,
+  })
   const fields = data as { url?: unknown; qrcode_key?: unknown } | undefined
   if (typeof fields?.url !== 'string' || typeof fields.qrcode_key !== 'string') throw new Error('qrcode/generate answered without a code')
   return { url: fields.url, key: fields.qrcode_key }
@@ -89,7 +105,10 @@ export async function startQr(client: BiliClient): Promise<QrCode> {
  * @param key - `qrcode_key`.
  */
 export async function pollQr(client: BiliClient, key: string): Promise<QrPoll> {
-  const { data, setCookies } = await client.call('qrPoll', { query: { qrcode_key: key, source: QR_SOURCE } })
+  const { data, setCookies } = await client.call('qrPoll', {
+    query: { qrcode_key: key, source: QR_SOURCE, ...INTERNATIONAL_PARAMS },
+    referer: INTERNATIONAL_PAGE,
+  })
   const fields = data as { code?: unknown; url?: unknown; refresh_token?: unknown; message?: unknown } | undefined
   switch (fields?.code) {
     case QR_WAITING:
