@@ -503,6 +503,7 @@
     { "path": "./packages/experimental/webhook-github" },
     { "path": "./packages/fork/fork-balance/tsconfig.host.json" },
     { "path": "./packages/fork/fork-event-bus" },
+    { "path": "./packages/fork/owner-relay" },
     { "path": "./packages/fork/fork-wechat" },
     { "path": "./packages/fork/fork-tool-watch" },
     { "path": "./packages/fork/fork-tool-wechat" },

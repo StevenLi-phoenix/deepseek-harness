@@ -24,6 +24,9 @@
       "path": "../fork-event-bus"
     },
     {
+      "path": "../owner-relay"
+    },
+    {
       "path": "../../interaction/permission-presets"
     },
     {

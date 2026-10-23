@@ -353,6 +353,7 @@ flowchart TD
     pkg_fork_tool_watch["fork-tool-watch"]
     pkg_fork_tool_wechat["fork-tool-wechat"]
     pkg_fork_wechat["fork-wechat"]
+    pkg_owner_relay["owner-relay"]
     pkg_tool_bili["tool-bili"]
   end
   subgraph group_mcp["packages/mcp"]
@@ -571,6 +572,8 @@ flowchart TD
   pkg_fork_github_sensor --> pkg_credentials
   pkg_fork_github_sensor --> pkg_fork_event_bus
   pkg_fork_github_sensor --> pkg_storage_domain
+  pkg_owner_relay --> pkg_fork_event_bus
+  pkg_owner_relay --> pkg_session
   pkg_ptc_runtime --> pkg_sandbox
   pkg_sandbox_local --> pkg_llm
   pkg_sandbox_local --> pkg_sandbox
@@ -1421,6 +1424,7 @@ flowchart TD
   pkg_fork_wechat --> pkg_home_paths
   pkg_fork_wechat --> pkg_llm
   pkg_fork_wechat --> pkg_fork_event_bus
+  pkg_fork_wechat --> pkg_owner_relay
   pkg_fork_wechat --> pkg_permission_presets
   pkg_fork_wechat --> pkg_session
   pkg_fork_wechat --> pkg_session_title
@@ -1675,6 +1679,7 @@ flowchart TD
 | [`host-product-telemetry-otel`](../packages/host/product-telemetry-otel) | `host` | [`otel`](../packages/telemetry/otel) |
 | [`fork-event-ingest`](../packages/fork/fork-event-ingest) | `fork` | [`credentials`](../packages/credentials/credentials), [`host-webserver`](../packages/host/webserver), [`fork-event-bus`](../packages/fork/fork-event-bus) |
 | [`fork-github-sensor`](../packages/fork/fork-github-sensor) | `fork` | [`credentials`](../packages/credentials/credentials), [`fork-event-bus`](../packages/fork/fork-event-bus), [`storage-domain`](../packages/storage/storage-domain) |
+| [`owner-relay`](../packages/fork/owner-relay) | `fork` | [`fork-event-bus`](../packages/fork/fork-event-bus), [`session`](../packages/core/session) |
 | [`ptc-runtime`](../packages/ptc-runtime/ptc-runtime) | `ptc-runtime` | [`sandbox`](../packages/sandbox/sandbox) |
 | [`sandbox-local`](../packages/sandbox/sandbox-local) | `sandbox` | [`llm`](../packages/llm/llm), [`sandbox`](../packages/sandbox/sandbox), [`session`](../packages/core/session) |
 | [`session-persistence-jsonl`](../packages/session/session-persistence-jsonl) | `session` | [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence) |
@@ -1832,7 +1837,7 @@ flowchart TD
 | [`workflow-ptc`](../packages/workflow/workflow-ptc) | `workflow` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`ptc-runtime`](../packages/ptc-runtime/ptc-runtime), [`sandbox`](../packages/sandbox/sandbox), [`sandbox-policy`](../packages/sandbox/sandbox-policy), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`tools`](../packages/core/tools), [`workflow`](../packages/workflow/workflow), [`working-directory`](../packages/session/working-directory) |
 | [`experimental-tool-agent-team`](../packages/experimental/tool-agent-team) | `experimental` | [`agent`](../packages/core/agent), [`experimental-agent-team`](../packages/experimental/agent-team), [`session`](../packages/core/session), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`fork-tool-monitor`](../packages/fork/fork-tool-monitor) | `fork` | [`agent`](../packages/core/agent), [`api-session-controller`](../packages/api/session-controller), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`storage-domain`](../packages/storage/storage-domain), [`subprocess`](../packages/subprocess/subprocess), [`tools`](../packages/core/tools) |
-| [`fork-wechat`](../packages/fork/fork-wechat) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
+| [`fork-wechat`](../packages/fork/fork-wechat) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`schedule`](../packages/schedule/schedule) | `schedule` | [`agent`](../packages/core/agent), [`api-session-controller`](../packages/api/session-controller), [`brand`](../packages/util/brand), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`session-projection`](../packages/session/session-projection), [`storage-domain`](../packages/storage/storage-domain), [`subagent`](../packages/subagent/subagent), [`tools`](../packages/core/tools), [`typert-protocol`](../packages/typert/protocol), [`workspace`](../packages/workspace/workspace) |
 | [`sdk-client`](../packages/sdk/client) | `sdk` | [`llm`](../packages/llm/llm), [`sdk-protocol`](../packages/sdk/protocol), [`session`](../packages/core/session) |
 | [`sdk-jsonrpc-server`](../packages/sdk/server) | `sdk` | [`agent`](../packages/core/agent), [`attachment`](../packages/attachment/attachment), [`llm`](../packages/llm/llm), [`llm-deepseek-api-key`](../packages/llm/llm-deepseek-api-key), [`scope`](../packages/core/scope), [`sdk-protocol`](../packages/sdk/protocol), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`working-directory`](../packages/session/working-directory) |

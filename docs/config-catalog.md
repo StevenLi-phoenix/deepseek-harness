@@ -435,7 +435,7 @@ export type Config = LocalConfig
 ## `@deepseek-ai/dsh-bili`
 
 - `inject`: `timer` · `storageDomain` · `credentials` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/bili/src/index.ts:113`](../packages/fork/bili/src/index.ts)
+- `source`: [`packages/fork/bili/src/index.ts:117`](../packages/fork/bili/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -2604,7 +2604,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-fork-wechat`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/fork-wechat/src/index.ts:54`](../packages/fork/fork-wechat/src/index.ts)
+- `source`: [`packages/fork/fork-wechat/src/index.ts:56`](../packages/fork/fork-wechat/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
@@ -5159,6 +5159,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-fork-tool-wechat` | `tools` | [`packages/fork/fork-tool-wechat/src/index.ts`](../packages/fork/fork-tool-wechat/src/index.ts) |
 | `@deepseek-ai/dsh-mcp-resources` | `tools` | [`packages/mcp/mcp-resources/src/index.ts`](../packages/mcp/mcp-resources/src/index.ts) |
 | `@deepseek-ai/dsh-otel` | — | [`packages/telemetry/otel/src/index.ts`](../packages/telemetry/otel/src/index.ts) |
+| `@deepseek-ai/dsh-owner-relay` | — | [`packages/fork/owner-relay/src/index.ts`](../packages/fork/owner-relay/src/index.ts) |
 | `@deepseek-ai/dsh-sandbox-ssh` | `ssh` | [`packages/ssh/sandbox-ssh/src/index.ts`](../packages/ssh/sandbox-ssh/src/index.ts) |
 | `@deepseek-ai/dsh-session` | — | [`packages/core/session/src/index.ts`](../packages/core/session/src/index.ts) |
 | `@deepseek-ai/dsh-session-checkpoint-policy` | `llm` · `sessionPersistence` · `sessions` · `tools` | [`packages/session/session-checkpoint-policy/src/index.ts`](../packages/session/session-checkpoint-policy/src/index.ts) |
