@@ -207,8 +207,8 @@ Patch edits (`$DSH_HOME/cordis.patch.yml`, the profile patch) reload live; `.env
 | Task | Command |
 |---|---|
 | Change what is watched | Ask the agent on WeChat |
-| Upgrade | `lsy/deploy/upgrade.sh`, then `sudo -n -u dsh-runtime /Users/Shared/lsy-dsh/current/lsy/deploy/setup-profile.sh /Users/dsh-runtime/.dsh /Users/Shared/lsy-dsh/current` and `sudo -n launchctl kickstart -k system/app.lishuyu.dsh-events` |
-| Roll back | `ln -sfn /Users/Shared/lsy-dsh/<old sha> /Users/Shared/lsy-dsh/current`, then the two commands above |
+| Upgrade | `lsy/deploy/upgrade.sh` (run it from a separate `git worktree` so the main tree stays editable; it keeps the new build and the one it replaces and deletes older ones), then `sudo -n -u dsh-runtime /Users/Shared/lsy-dsh/current/lsy/deploy/setup-profile.sh /Users/dsh-runtime/.dsh /Users/Shared/lsy-dsh/current` and `sudo -n launchctl kickstart -k system/app.lishuyu.dsh-events` |
+| Roll back | `ln -sfn /Users/Shared/lsy-dsh/<previous sha> /Users/Shared/lsy-dsh/current`, then the two commands above; only the previous build is kept |
 | Re-bind WeChat | Step 6 again; no restart needed |
 | New chat Session (e.g. after a model change) | Send `/new` on WeChat |
 | Stop | `sudo launchctl bootout system/app.lishuyu.dsh-events` |

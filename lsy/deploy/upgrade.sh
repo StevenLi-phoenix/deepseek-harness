@@ -30,8 +30,22 @@ if [ ! -d "$PREFIX" ]; then
 fi
 # The profile layout must hold in throwaway homes before current points at this build.
 "$ROOT/lsy/deploy/check-setup-profile.sh" "$PREFIX"
+PREVIOUS=$(readlink "$APPS/current" || true)
 ln -sfn "$PREFIX" "$APPS/current"
 echo "upgrade: $APPS/current -> $PREFIX"
+# Keep this build and the one current pointed at before (the rollback); delete older ones
+# outright. Each is ~1.6 GB of node_modules on the internal disk and rebuilds from git; moved
+# to the Trash they kept their space, which filled the disk on 2026-10-22.
+if [ -n "$PREVIOUS" ] && [ "$PREVIOUS" != "$PREFIX" ]; then
+  for build in "$APPS"/*/; do
+    build=${build%/}
+    [ -L "$build" ] && continue
+    { [ "$build" = "$PREFIX" ] || [ "$build" = "$PREVIOUS" ]; } && continue
+    [[ $(basename "$build") =~ ^[0-9a-f]{7,40}$ ]] || continue
+    echo "upgrade: removing old build $build"
+    rm -rf "$build"
+  done
+fi
 cat <<NEXT
 
 Finish the switch (passwordless with /etc/sudoers.d/dsh-events):
