@@ -25,7 +25,7 @@ declare module '@deepseek-ai/dsh-llm' {
   }
 }
 
-export { CATEGORIES, FULL_TEXT_CATEGORIES, MAX_TEXT_CHARS, type MemoryCategory, type MemoryDraft, type MemoryEntry } from './entries.ts'
+export { CATEGORIES, CATEGORY_DISPLAY, MAX_TEXT_CHARS, type MemoryCategory, type MemoryDraft, type MemoryEntry } from './entries.ts'
 export { parseClaudeExport } from './export.ts'
 export { renderMemoryBlock } from './render.ts'
 export { defaultMemoryFile, localDate, MAX_ENTRIES, MemoryError, MemoryStore } from './store.ts'
@@ -81,6 +81,7 @@ const CATEGORY_HELP = 'instructions: how the owner wants you to work; preference
 /** Whether the memory message is part of what the model currently sees. */
 function memoryVisible(session: Session): boolean {
   for (const seq of session.surface.nodes) {
+    // oxlint-disable-next-line typescript/no-deprecated -- Same Session history read as agent-instructions.
     const event = session.eventAt(seq)
     if (event?.type === 'user/message' && event.data.source.kind === name) return true
   }

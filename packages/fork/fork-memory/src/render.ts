@@ -3,7 +3,7 @@
  * categories as one line of opening words per entry, inside a byte budget.
  */
 
-import { CATEGORIES, FULL_TEXT_CATEGORIES, type MemoryCategory, type MemoryEntry } from './entries.ts'
+import { CATEGORIES, CATEGORY_DISPLAY, type MemoryCategory, type MemoryEntry } from './entries.ts'
 
 const OPEN = '<system-reminder>'
 const CLOSE = '</system-reminder>'
@@ -21,7 +21,7 @@ const HEADINGS: Readonly<Record<MemoryCategory, string>> = {
 
 const INTRO = [
   'Your memory of the owner, kept across sessions. Follow the instructions and preferences below unless the owner says otherwise in this conversation.',
-  'Identity, career, and project entries show only their opening words: call memory_search for the full entry before relying on one, and whenever the owner\'s background, people, courses, work, or projects may matter. Entries mix Chinese and English, so search in both when unsure.',
+  'Career and project entries show only their opening words, and identity entries (people, family, school, accounts) are only counted: call memory_search for the full entry before relying on one, and whenever the owner\'s background, people, courses, work, or projects may matter. Entries mix Chinese and English, so search in both when unsure.',
   'When the owner asks you to remember something, corrects a remembered fact, or asks you to forget one, call memory_save or memory_forget in the same turn. Each entry is one fact; the host dates it.',
 ].join('\n')
 
@@ -33,7 +33,7 @@ function opening(text: string): string {
 }
 
 function line(entry: MemoryEntry): string {
-  return FULL_TEXT_CATEGORIES.has(entry.category)
+  return CATEGORY_DISPLAY[entry.category] === 'full'
     ? `- [${entry.date}] (${entry.id}) ${entry.text}`
     : `- ${entry.id} · ${opening(entry.text)}`
 }
@@ -56,7 +56,16 @@ export function renderMemoryBlock(entries: readonly MemoryEntry[], maxBytes: num
   for (const category of CATEGORIES) {
     const members = entries.filter(entry => entry.category === category)
     if (members.length === 0) continue
-    const suffix = FULL_TEXT_CATEGORIES.has(category) ? '' : ' (opening words; memory_search for details)'
+    if (CATEGORY_DISPLAY[category] === 'count') {
+      const counted = `\n## ${HEADINGS[category]}\n${String(members.length)} entries, not listed; memory_search finds them.`
+      const cost = bytes(counted) + 1
+      if (omitted === 0 && used + cost + reserve <= maxBytes) {
+        lines.push(counted)
+        used += cost
+      }
+      continue
+    }
+    const suffix = CATEGORY_DISPLAY[category] === 'full' ? '' : ' (opening words; memory_search for details)'
     const heading = `\n## ${HEADINGS[category]}${suffix}`
     let headed = false
     for (const entry of members) {
