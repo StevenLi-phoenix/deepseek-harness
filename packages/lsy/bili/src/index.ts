@@ -835,11 +835,13 @@ export class BiliAccount extends Service {
         const plan = domain.table('plans').get(day)
         if (plan === undefined) return 0
         let count = 0
-        // At most once: a wake is marked done before its prompt, so a restart never repeats it.
+        // At most once: a wake is marked done before its prompt, so a restart never repeats it. With
+        // no signed-in account it cannot happen at all, so it is marked missed rather than done.
+        const active = this.account()?.state === 'active'
         const wakes = plan.wakes.map((wake) => {
           if (wake.state !== 'planned' || wake.at === undefined || wake.at > now) return wake
           count += 1
-          return { ...wake, state: 'done' as const }
+          return { ...wake, state: active ? 'done' as const : 'missed' as const }
         })
         if (count > 0) await domain.table('plans').put(day, { ...plan, wakes })
         return count
