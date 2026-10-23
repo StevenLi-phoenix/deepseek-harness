@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-在 DeepSeek 账号余额所在的页面，同时看到每条模型线路还剩多少。在**设置 → 账号与余额**的账号卡片下方，一张卡片列出 Host 持有的每个供应商 key：OpenRouter key 在限额内的剩余、DeepSeek API key 的钱包、OpenCode Go 各档配额（用进度条表示）。用完的线路变红；读不到的会说明原因。卡片在打开页面和点击“刷新”时读取。
+在 DeepSeek 账号余额所在的页面，同时看到每条模型线路还剩多少。在**设置 → 账号与余额**的账号卡片下方，一张卡片列出 Host 持有的每个供应商 key：OpenRouter key 在限额内的剩余、DeepSeek API key 的钱包、OpenCode Go 各档配额（用进度条表示，每档标出自己的重置时间）。用完的线路变红；读不到的会说明原因。卡片在打开页面和点击“刷新”时读取。
 
 ## 目录
 

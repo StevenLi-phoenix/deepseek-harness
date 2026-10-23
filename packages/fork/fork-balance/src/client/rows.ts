@@ -16,6 +16,8 @@ export type Translate = (key: BalanceKey, params?: Record<string, string | numbe
 export interface WindowBar {
   readonly label: string
   readonly percent: number
+  /** When the window resets, relative to the reading (`今天 13:49`, `11-15 13:32`); null when unknown. */
+  readonly resets: string | null
 }
 
 /** One provider row. */
@@ -51,6 +53,20 @@ function dateClock(at: number): string {
   return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${clock(at)}`
 }
 
+/** A reset time as the card shows it: today, tomorrow, or month-day and clock. */
+function resetLabel(resetsAt: string | null, now: number, t: Translate): string | null {
+  const at = resetsAt === null ? Number.NaN : Date.parse(resetsAt)
+  if (Number.isNaN(at)) return null
+  const day = (time: number): number => {
+    const date = new Date(time)
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+  }
+  const days = Math.round((day(at) - day(now)) / 86_400_000)
+  if (days === 0) return t('reset.today', { time: clock(at) })
+  if (days === 1) return t('reset.tomorrow', { time: clock(at) })
+  return dateClock(at)
+}
+
 function usd(amount: number): string {
   return formatAmount(String(amount), 'USD')
 }
@@ -80,7 +96,7 @@ function windowName(name: string, t: Translate): string {
   return key === undefined ? name : t(key)
 }
 
-function row(reading: ProviderReading, t: Translate): ProviderRow {
+function row(reading: ProviderReading, t: Translate, now: number): ProviderRow {
   const base = { key: reading.source, label: reading.label }
   if (reading.status === 'failed') {
     return { ...base, value: t('value.unavailable'), details: [t('detail.failed', { reason: reading.reason })], windows: [], exhausted: false, stale: true }
@@ -120,7 +136,9 @@ function row(reading: ProviderReading, t: Translate): ProviderRow {
         value: t('value.used', { amount: `${Math.round(top.percent)}%` }),
         details: Number.isNaN(resets) ? [] : [t('detail.reset', { window: windowName(top.name, t), time: dateClock(resets) })],
         windows: reading.windows.map(window => ({
-          label: windowName(window.name, t), percent: Math.max(0, Math.min(100, window.percent)),
+          label: windowName(window.name, t),
+          percent: Math.max(0, Math.min(100, window.percent)),
+          resets: resetLabel(window.resetsAt, now, t),
         })),
         exhausted: top.percent >= 100,
         stale: false,
@@ -137,7 +155,8 @@ function row(reading: ProviderReading, t: Translate): ProviderRow {
  * @returns rows; empty when no provider key is configured.
  */
 export function providerRows(state: BalanceState, t: Translate): ProviderRow[] {
-  return state.providers.filter(reading => !sameAccount(state, reading)).map(reading => row(reading, t))
+  const now = state.checkedAt ?? Date.now()
+  return state.providers.filter(reading => !sameAccount(state, reading)).map(reading => row(reading, t, now))
 }
 
 /**

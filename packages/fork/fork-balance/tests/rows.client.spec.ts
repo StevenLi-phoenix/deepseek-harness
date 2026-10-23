@@ -27,7 +27,7 @@ describe('providerRows', () => {
       { key: 'deepseek', label: 'DeepSeek API', value: '¥329.86', details: ['充值 ¥323.87 · 赠金 ¥5.99'], windows: [], exhausted: false, stale: false },
       {
         key: 'opencode-go', label: 'OpenCode Go', value: '已用 29%', details: ['每周额度 10-26 00:00 重置'], exhausted: false, stale: false,
-        windows: [{ label: '5 小时', percent: 0 }, { label: '每周', percent: 29.4 }, { label: '每月', percent: 25 }],
+        windows: [{ label: '5 小时', percent: 0, resets: null }, { label: '每周', percent: 29.4, resets: '10-26 00:00' }, { label: '每月', percent: 25, resets: null }],
       },
     ])
   })
@@ -46,11 +46,23 @@ describe('providerRows', () => {
       { source: 'deepseek', label: 'DeepSeek API', status: 'failed', reason: 'HTTP 401' },
     ] }), t)
     expect(rows[0]).toMatchObject({ value: '$0.00', exhausted: true })
-    expect(rows[1]).toMatchObject({ value: '已用 120%', exhausted: true, details: [], windows: [{ label: 'daily', percent: 100 }] })
+    expect(rows[1]).toMatchObject({ value: '已用 120%', exhausted: true, details: [], windows: [{ label: 'daily', percent: 100, resets: null }] })
     expect(rows[2]).toMatchObject({ value: '—', stale: true, details: ['读取失败（HTTP 401）'] })
     expect(providerRows(state({ providers: [{ ...OPENROUTER, remaining: null, limit: null, used: 1.5 }] }), t)[0])
       .toMatchObject({ value: '已用 $1.50', details: ['这个 key 没有设置限额'] })
     expect(providerRows(state({ providers: [{ ...OPENCODE, windows: [] }] }), t)[0]).toMatchObject({ value: '—', stale: true })
+  })
+
+  it('gives each window its own reset time, relative to when it was read', () => {
+    const at = (month: number, day: number, hour: number, minute: number): string =>
+      new Date(2026, month - 1, day, hour, minute).toISOString()
+    const quota: ProviderReading = { ...OPENCODE, windows: [
+      { name: 'rolling', percent: 0, resetsAt: at(10, 23, 13, 49) },
+      { name: 'weekly', percent: 30, resetsAt: at(10, 24, 20, 0) },
+      { name: 'monthly', percent: 25, resetsAt: at(11, 15, 13, 32) },
+    ] }
+    const [row] = providerRows(state({ checkedAt: new Date(2026, 9, 23, 12, 11).getTime(), providers: [quota] }), t)
+    expect(row!.windows.map(window => window.resets)).toEqual(['今天 13:49', '明天 20:00', '11-15 13:32'])
   })
 
   it('says when the readings were taken', () => {
