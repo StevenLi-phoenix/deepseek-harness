@@ -27,6 +27,9 @@ done
 /usr/bin/grep -q "@deepseek-ai/dsh-fork-tool-monitor" "$WORK/fresh.yml" || fail "unattended preset lacks fork-tool-monitor"
 /usr/bin/grep -q "^- id: fork-event-ingest$" "$WORK/fresh.yml" || fail "composition lacks fork-event-ingest"
 /usr/bin/grep -q "@deepseek-ai/dsh-fork-sysmon" "$WORK/fresh.yml" || fail "composition lacks fork-sysmon"
+/usr/bin/grep -q "^- id: bili\$" "$WORK/fresh.yml" || fail "composition lacks bili"
+/usr/bin/grep -q "^- id: preset-bili\$" "$WORK/fresh.yml" || fail "composition lacks preset-bili"
+/usr/bin/grep -q "@deepseek-ai/dsh-tool-bili" "$WORK/fresh.yml" || fail "bili preset lacks tool-bili"
 
 OLD="$WORK/old"; mkdir -p "$OLD/profiles/event"
 { echo '# fork event profile — composition layer (code-owned).'; echo '[]'; } > "$OLD/profiles/event/cordis.patch.yml"

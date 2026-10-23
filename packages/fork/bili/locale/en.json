@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Bilibili account",
+    "description": "Signs the agent in to its own Bilibili account and shows its login, pause state, today's budget, interests, and next wakes in Settings."
+  }
+}

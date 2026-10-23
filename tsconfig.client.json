@@ -137,6 +137,7 @@
     { "path": "./packages/client/ui-user-questions" },
     { "path": "./packages/fork/fork-balance/tsconfig.client.json" },
     { "path": "./packages/fork/fork-sysmon/tsconfig.client.json" },
+    { "path": "./packages/fork/bili/tsconfig.client.json" },
     { "path": "./packages/client/ui-trajectory" },
     { "path": "./packages/session-query/session-log-export/tsconfig.client.json" },
     { "path": "./packages/client/ui-open-in-app" },

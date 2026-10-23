@@ -29,6 +29,8 @@ export const PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackagePolic
   'packages/fork/fork-tool-monitor': { category: 'optional', reason: 'Fork-local monitor tools mounted by the event profile preset.' },
   'packages/fork/fork-memory': { category: 'optional', reason: 'Fork-local owner memory (context block and memory tools) mounted by the event profile preset.' },
   'packages/fork/fork-sysmon': { category: 'optional', reason: 'Fork-local System status settings section mounted by the event profile bundle.' },
+  'packages/fork/bili': { category: 'optional', reason: 'Fork-local Bilibili account service and settings section; requires a QR-signed-in account.' },
+  'packages/fork/tool-bili': { category: 'optional', reason: 'Fork-local Bilibili tools mounted by the event profile bili preset.' },
   'packages/lsp/lsp-stdio': { category: 'optional', reason: 'Requires an explicit server list and language-server executables.' },
   'packages/lsp/tool-lsp': { category: 'optional', reason: 'Model tools selected together with a configured LSP provider.' },
   'packages/ssh/ssh': { category: 'optional', reason: 'Explicit remote connection and helper configuration.' },

@@ -549,6 +549,139 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'bili',
+    summary: 'The agent\'s own Bilibili account: sign-in, cookie refresh, guarded writes, the body clock, the inbox poll, the final-answer relay, and the Settings route.',
+    description: 'The agent\'s own Bilibili account: sign-in, cookie refresh, guarded writes, the body clock, the inbox poll, the final-answer relay, and the Settings route.',
+    methods: [
+      {
+        signature: 'ownsSession(sessionId: string): boolean',
+        description: 'Whether this plugin created a Session (and relays its turns).',
+        parameters: [{ name: 'sessionId', description: 'Session to check.' }],
+        returns: 'true for every Session this plugin created.',
+      },
+      {
+        signature: 'async follow(mid: number): Promise<WriteOutcome>',
+        description: 'Follow an account.',
+        parameters: [{ name: 'mid', description: 'its user id.' }],
+        returns: 'the write guard\'s outcome.',
+      },
+      {
+        signature: 'async unfollow(mid: number): Promise<WriteOutcome>',
+        description: 'Unfollow an account; the owner\'s account stays followed.',
+        parameters: [{ name: 'mid', description: 'its user id.' }],
+        returns: 'the write guard\'s outcome.',
+      },
+      {
+        signature: 'async favorite(bvid: string, options: { remove?: boolean; folderId?: number } = {}): Promise<WriteOutcome>',
+        description: 'Add a video to a favorite folder (the default one unless named), or remove it.',
+        parameters: [{ name: 'bvid', description: 'BV id.' }, { name: 'options', description: '`remove`, and a folder id from `me()`.' }],
+        returns: 'the write guard\'s outcome.',
+      },
+      {
+        signature: 'async like(bvid: string): Promise<WriteOutcome>',
+        description: 'Like a video.',
+        parameters: [{ name: 'bvid', description: 'BV id.' }],
+        returns: 'the write guard\'s outcome.',
+      },
+      {
+        signature: 'async watchLater(bvid: string, remove: boolean = false): Promise<WriteOutcome>',
+        description: 'Add a video to watch later, or remove it.',
+        parameters: [{ name: 'bvid', description: 'BV id.' }, { name: 'remove', description: 'remove instead of add.' }],
+        returns: 'the write guard\'s outcome.',
+      },
+      {
+        signature: 'async comment(bvid: string, text: string): Promise<WriteOutcome>',
+        description: 'Post one top-level comment on a video; one per video ever.',
+        parameters: [{ name: 'bvid', description: 'BV id.' }, { name: 'text', description: 'at most 500 characters.' }],
+        returns: 'the write guard\'s outcome; a sent comment carries its id as `receipt`.',
+      },
+      {
+        signature: 'async reply(rpid: string, text: string): Promise<WriteOutcome>',
+        description: 'Reply to a comment that replied to or mentioned this account (from its inbox); one reply per comment ever.',
+        parameters: [{ name: 'rpid', description: 'the comment\'s id as the inbox shows it.' }, { name: 'text', description: 'at most 500 characters.' }],
+        returns: 'the write guard\'s outcome; a sent reply carries its id as `receipt`.',
+      },
+      {
+        signature: 'async dynamic(text: string): Promise<WriteOutcome>',
+        description: 'Post a text-only dynamic.',
+        parameters: [{ name: 'text', description: 'at most 1000 characters.' }],
+        returns: 'the write guard\'s outcome; a sent dynamic carries its id as `receipt`.',
+      },
+      {
+        signature: 'async dmOwner(text: string): Promise<WriteOutcome>',
+        description: 'Message the owner\'s main account; nobody else can be messaged.',
+        parameters: [{ name: 'text', description: 'at most 500 characters.' }],
+        returns: 'the write guard\'s outcome; a sent message carries its key as `receipt`.',
+      },
+      {
+        signature: 'async homeFeed(): Promise<VideoCard[]>',
+        description: 'The next batch of the home feed.',
+        parameters: [],
+        returns: 'about 12 bounded video cards.',
+      },
+      {
+        signature: 'async followingFeed(offset?: string): Promise<{ items: FeedPost[]; next?: string }>',
+        description: 'What followed accounts posted.',
+        parameters: [{ name: 'offset', description: '`next` of the previous page.' }],
+        returns: 'bounded posts, newest first, and the `next` offset when there are more.',
+      },
+      {
+        signature: 'async popular(page: number = 1): Promise<VideoCard[]>',
+        description: 'Popular videos.',
+        parameters: [{ name: 'page', description: 'from 1.' }],
+        returns: 'bounded video cards.',
+      },
+      {
+        signature: 'async search(keyword: string, page: number = 1): Promise<VideoCard[]>',
+        description: 'Search videos.',
+        parameters: [{ name: 'keyword', description: 'search words.' }, { name: 'page', description: 'from 1.' }],
+        returns: 'bounded video cards.',
+      },
+      {
+        signature: 'async video( bvid: string, options: { subtitlePage?: number; part?: number } = {}, ): Promise<{ video: VideoDetail; subtitle: SubtitleView; topComments: CommentView[] }>',
+        description: 'A video: facts, one page of subtitles (with coverage notes), and top comments.',
+        parameters: [{ name: 'bvid', description: 'BV id.' }, { name: 'options', description: 'subtitle page and part.' }],
+        returns: 'the facts, one subtitle page or the reason there is none, and up to five top comments.',
+      },
+      {
+        signature: 'async comments(bvid: string, options: { order?: \'hot\' | \'new\'; offset?: string; root?: string; page?: number } = {}): Promise<{ comments: CommentView[]; next?: string; root?: CommentView }>',
+        description: 'Comments of a video, or one thread when `root` is given.',
+        parameters: [{ name: 'bvid', description: 'BV id.' }, { name: 'options', description: 'order, `next` offset, root comment id, and thread page.' }],
+        returns: 'bounded comments and the `next` offset, or a thread with its root.',
+      },
+      {
+        signature: 'async inbox(): Promise<InboxView>',
+        description: 'Unread counts, the newest replies and mentions, and the owner\'s latest messages; what it shows counts as seen.',
+        parameters: [],
+        returns: 'unread counts, up to ten replies and mentions, and the owner\'s latest messages.',
+      },
+      {
+        signature: 'async me(): Promise<MeView>',
+        description: 'The account, its folders, and today\'s budget.',
+        parameters: [],
+        returns: 'the account facts, or `signedIn: false`, with today\'s budget and any pause.',
+      },
+      {
+        signature: 'async journalWrite(text: string): Promise<{ saved: true; seq: number; leftToday: number } | { refused: string }>',
+        description: 'Keep one dated journal entry.',
+        parameters: [{ name: 'text', description: 'at most 600 characters; at most 8 entries a day.' }],
+        returns: 'the stored entry\'s number and what is left today, or why it was refused.',
+      },
+      {
+        signature: 'async journalRead(page: number = 1): Promise<{ entries: { seq: number; day: string; text: string }[]; page: number; pages: number }>',
+        description: 'Recent journal entries, newest first.',
+        parameters: [{ name: 'page', description: 'from 1.' }],
+        returns: 'up to ten entries and the page count.',
+      },
+      {
+        signature: 'async view(): Promise<BiliView>',
+        description: 'What the Settings section shows. Built from storage only, so no cookie or token can reach it.',
+        parameters: [],
+        returns: 'the view.',
+      },
+    ],
+  },
+  {
     key: 'browserUse',
     summary: 'Owns one optional provider registration in the shared browser-use service.',
     description: 'Owns one optional provider registration in the shared browser-use service.',
@@ -4804,20 +4937,12 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface AccountDetails {\n    readonly profile: {\n        readonly status: \'ready\';\n        readonly value: AccountProfile;\n    } | {\n        readonly status: \'failed\';\n    };\n    readonly balance: {\n        readonly status: \'ready\';\n        readonly value: readonly AccountWallet[];\n        readonly bonusWallets: readonly AccountWallet[];\n    } | {\n        readonly status: \'failed\';\n    };\n}',
   },
   {
-    name: 'AccountLinks',
-    declaration: 'export interface AccountLinks {\n    readonly usageUrl: string;\n    readonly topUpUrl: string;\n}',
-  },
-  {
     name: 'AccountProfile',
     declaration: 'export interface AccountProfile {\n    readonly id: AccountUserId | null;\n    readonly name: string | null;\n    readonly contact: string | null;\n    readonly avatarUrl?: string | null;\n}',
   },
   {
     name: 'AccountUserId',
     declaration: 'export type AccountUserId = Branded<\'AccountUserId\'>;',
-  },
-  {
-    name: 'AccountView',
-    declaration: 'export interface AccountView {\n    readonly status: \'signed-out\' | \'credential-stored\';\n    readonly links: AccountLinks;\n    readonly attempt: SignInAttemptView | null;\n}',
   },
   {
     name: 'AccountWallet',
@@ -5096,6 +5221,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface BatchSummary {\n    id: string;\n    createdAt: number;\n    eventCount: number;\n    status: \'dispatched\' | \'delivered\' | \'completed\' | \'failed\';\n    error?: string;\n    sessionId?: string;\n    outcome?: string;\n    silent?: boolean;\n}',
   },
   {
+    name: 'BiliView',
+    declaration: 'export interface BiliView {\n    readonly account: AccountView;\n    readonly login: LoginView;\n    readonly pause: {\n        readonly scope: typeof PAUSE_SCOPES[number];\n        readonly reason: string;\n        readonly since: number;\n    } | null;\n    readonly readsResumeAt: number | null;\n    readonly usage: {\n        readonly day: string;\n        readonly actions: readonly UsageView[];\n    };\n    readonly interests: {\n        readonly text: string;\n        readonly updatedAt: number | null;\n    };\n    readonly clock: {\n        readonly timeZone: string;\n        readonly today: readonly WakeView[];\n        readonly nextWakeAt: number | null;\n        readonly lastWake: {\n            readonly at: number;\n            readonly reason: \'clock\' | \'inbox\';\n        } | null;\n    };\n    readonly recent: readonly RecentWriteView[];\n    readonly ownerMid: number;\n}',
+  },
+  {
     name: 'BoxProps',
     declaration: 'export interface BoxProps {\n    readonly flexDirection?: \'row\' | \'column\' | undefined;\n    readonly paddingX?: number | undefined;\n    readonly paddingY?: number | undefined;\n    readonly padding?: number | undefined;\n    readonly gap?: number | undefined;\n    readonly border?: boolean | string | undefined;\n    readonly borderColor?: string | undefined;\n    readonly children?: UiNode | undefined;\n}',
   },
@@ -5190,6 +5319,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'CommandSubmitAttachment',
     declaration: 'export type CommandSubmitAttachment = ({\n    readonly type: \'image\';\n} & EncodedImageAttachment) | {\n    readonly type: \'file\';\n    readonly receiptId: string;\n};',
+  },
+  {
+    name: 'CommentView',
+    declaration: 'export interface CommentView {\n    rpid: string;\n    author: string;\n    authorMid?: number;\n    text: string;\n    likes?: number;\n    replies?: number;\n    at?: string;\n    preview?: CommentView[];\n}',
   },
   {
     name: 'CompactionAgentContext',
@@ -5616,6 +5749,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type FeedbackCategory = \'task-result\' | \'instruction-following\' | \'product-interaction\' | \'service-stability\' | \'resource-cost\' | \'security-privacy-permission\' | \'other\';',
   },
   {
+    name: 'FeedPost',
+    declaration: 'export interface FeedPost {\n    kind: \'video\' | \'post\' | \'forward\' | \'other\';\n    id: string;\n    author: string;\n    authorMid?: number;\n    at?: string;\n    text?: string;\n    video?: VideoCard;\n    quoted?: string;\n}',
+  },
+  {
     name: 'FiberState',
     declaration: 'export const enum FiberState {\n    PENDING,\n    LOADING,\n    ACTIVE,\n    FAILED,\n    DISPOSED,\n    UNLOADING\n}',
   },
@@ -5654,6 +5791,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'FinishReasonMap',
     declaration: 'export interface FinishReasonMap {\n    \'stop\': {\n        kind: \'stop\';\n    };\n    \'tool-calls\': {\n        kind: \'tool-calls\';\n    };\n    \'max-tokens\': {\n        kind: \'max-tokens\';\n    };\n    \'aborted\': {\n        kind: \'aborted\';\n        failure: LlmFailure;\n    };\n    \'error\': {\n        kind: \'error\';\n        failure: LlmFailure;\n    };\n}',
+  },
+  {
+    name: 'Folder',
+    declaration: 'export interface Folder {\n    id: number;\n    title: string;\n    count: number;\n    isDefault: boolean;\n    contains?: boolean;\n}',
   },
   {
     name: 'FrequencyTooHighError',
@@ -5814,6 +5955,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ImageVariantId',
     declaration: 'export type ImageVariantId = Branded<\'ImageVariantId\'>;',
+  },
+  {
+    name: 'InboxItem',
+    declaration: 'export interface InboxItem {\n    id: string;\n    at: number;\n    from: string;\n    fromMid: number;\n    text: string;\n    about: string;\n    type: number;\n    oid: string;\n    rpid: string;\n    root: string;\n}',
+  },
+  {
+    name: 'InboxView',
+    declaration: 'export interface InboxView {\n    unread: {\n        replies: number;\n        mentions: number;\n        messages: number;\n    };\n    replies: Omit<InboxItem, \'type\' | \'oid\' | \'root\'>[];\n    mentions: Omit<InboxItem, \'type\' | \'oid\' | \'root\'>[];\n    ownerMessages: OwnerMessage[];\n}',
   },
   {
     name: 'IncompatiblePlugin',
@@ -6124,6 +6273,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type LogExporterOptions = Omit<OTLPExporterNodeConfigBase, \'selfObsMeterProvider\'> & {\n    url: string;\n};',
   },
   {
+    name: 'LoginView',
+    declaration: 'export interface LoginView {\n    readonly state: \'idle\' | \'waiting\' | \'scanned\' | \'expired\' | \'failed\' | \'done\';\n    readonly qr?: {\n        readonly modules: readonly string[];\n        readonly expiresAt: number;\n    };\n    readonly error?: string;\n}',
+  },
+  {
     name: 'LspHover',
     declaration: 'export interface LspHover {\n    readonly contents: string;\n    readonly range?: LspRange;\n}',
   },
@@ -6364,6 +6517,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface MessageSourceMap {\n    user: {\n        kind: \'user\';\n    };\n    model: ModelMessageSource;\n    tool: ToolMessageSource;\n    \'system-prompt\': SystemPromptMessageSource;\n}',
   },
   {
+    name: 'MeView',
+    declaration: 'export interface MeView {\n    signedIn: boolean;\n    mid?: number;\n    uname?: string;\n    level?: number;\n    following?: number;\n    followers?: number;\n    folders?: Folder[];\n    budget: Record<WriteAction, number>;\n    pause?: string;\n    readsResumeAt?: string;\n}',
+  },
+  {
     name: 'ModDefinition',
     declaration: 'export interface ModDefinition {\n    readonly name: string;\n    readonly version?: string;\n    readonly root?: string;\n    readonly options?: PluginOptions;\n    readonly register: ModRegister;\n}',
   },
@@ -6486,6 +6643,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'OTelEventScalar',
     declaration: 'export type OTelEventScalar = string | number | boolean;',
+  },
+  {
+    name: 'OwnerMessage',
+    declaration: 'export interface OwnerMessage {\n    id: string;\n    at: number;\n    text: string;\n}',
   },
   {
     name: 'PackageResult',
@@ -6814,6 +6975,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ReasoningEffortId',
     declaration: 'export type ReasoningEffortId = Branded<\'ReasoningEffortId\'>;',
+  },
+  {
+    name: 'RecentWriteView',
+    declaration: 'export interface RecentWriteView {\n    readonly at: number;\n    readonly action: WriteAction;\n    readonly target: string;\n    readonly state: \'reserved\' | \'accepted\' | \'failed\' | \'uncertain\';\n    readonly detail?: string;\n    readonly visibility?: \'pending\' | \'visible\' | \'hidden\' | \'unknown\';\n}',
   },
   {
     name: 'RecurringScheduleRecord',
@@ -7800,14 +7965,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type SignInAttemptId = Branded<\'SignInAttemptId\'>;',
   },
   {
-    name: 'SignInAttemptView',
-    declaration: 'export interface SignInAttemptView {\n    readonly id: SignInAttemptId;\n    readonly phase: \'initializing\' | \'waiting-browser\' | \'exchanging\' | \'committing\' | \'succeeded\' | \'cancelled\' | \'expired\' | \'failed\';\n    readonly authorizeUrl?: string;\n    readonly expiresAt?: number;\n    readonly errorCode?: SignInErrorCode;\n    readonly pasteCallbackPrefix?: string;\n}',
-  },
-  {
-    name: 'SignInErrorCode',
-    declaration: 'export type SignInErrorCode = \'no-response\' | \'network\' | \'protocol\' | \'expired\' | \'storage\';',
-  },
-  {
     name: 'SkillCandidate',
     declaration: 'export interface SkillCandidate extends SkillSummary {\n    readonly rank: number;\n    readonly locator: unknown;\n    readonly metadata?: Readonly<Record<string, unknown>>;\n}',
   },
@@ -8174,6 +8331,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SubscriptionView',
     declaration: 'export interface SubscriptionView extends Subscription {\n    origin: SubscriptionOrigin;\n    createdAt?: number;\n    createdBy?: string;\n    status: SubscriptionStatus;\n}',
+  },
+  {
+    name: 'SubtitleView',
+    declaration: 'export type SubtitleView = {\n    available: true;\n    language: string;\n    machine: boolean;\n    page: number;\n    pages: number;\n    text: string;\n    coverage: string;\n} | {\n    available: false;\n    coverage: string;\n};',
   },
   {
     name: 'SurfaceEvent',
@@ -8752,12 +8913,32 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface UpdateTeamTaskRequest {\n    readonly taskId: TeamTaskId;\n    readonly expectedRevision: number;\n    readonly action: TeamTaskAction;\n    readonly subject?: string;\n    readonly description?: string;\n    readonly blockedBy?: readonly TeamTaskId[];\n    readonly writeScopes?: readonly string[];\n    readonly owner?: string;\n}',
   },
   {
+    name: 'UsageView',
+    declaration: 'export interface UsageView {\n    readonly action: WriteAction;\n    readonly used: number;\n    readonly cap: number;\n}',
+  },
+  {
     name: 'UserMessage',
     declaration: 'export interface UserMessage extends MessageBase {\n    readonly role: \'user\';\n}',
   },
   {
     name: 'VerifiedWebhookDelivery',
     declaration: 'export interface VerifiedWebhookDelivery<K extends string = string> {\n    readonly kind: K;\n    readonly source: WebhookSourceId;\n    readonly deliveryId: WebhookDeliveryId;\n    readonly event: WebhookEventOf<K>;\n    readonly receivedAt: number;\n}',
+  },
+  {
+    name: 'VideoCard',
+    declaration: 'export interface VideoCard {\n    bvid: string;\n    title: string;\n    author: string;\n    authorMid?: number;\n    duration?: string;\n    views?: number;\n    likes?: number;\n    published?: string;\n    desc?: string;\n    reason?: string;\n}',
+  },
+  {
+    name: 'VideoDetail',
+    declaration: 'export interface VideoDetail extends VideoCard {\n    aid: string;\n    cid: number;\n    category?: string;\n    favorites?: number;\n    coins?: number;\n    comments?: number;\n    danmaku?: number;\n    parts: VideoPart[];\n}',
+  },
+  {
+    name: 'VideoPart',
+    declaration: 'export interface VideoPart {\n    page: number;\n    cid: number;\n    title: string;\n    duration?: string;\n}',
+  },
+  {
+    name: 'WakeView',
+    declaration: 'export interface WakeView {\n    readonly window: string;\n    readonly at: number | null;\n    readonly state: typeof WAKE_STATES[number];\n}',
   },
   {
     name: 'WatchedRepo',
@@ -9078,6 +9259,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WorkspaceView',
     declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
+  },
+  {
+    name: 'WriteAction',
+    declaration: 'export type WriteAction = typeof WRITE_ACTIONS[number];',
+  },
+  {
+    name: 'WriteOutcome',
+    declaration: 'export type WriteOutcome = {\n    readonly outcome: \'sent\';\n    readonly detail: string;\n    readonly receipt?: string;\n} | {\n    readonly outcome: \'already\';\n    readonly detail: string;\n} | {\n    readonly outcome: \'refused\';\n    readonly detail: string;\n} | {\n    readonly outcome: \'uncertain\';\n    readonly detail: string;\n};',
   },
 ]
 
