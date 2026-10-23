@@ -3,20 +3,20 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/lsy/lsy-tool-monitor/README.md
 /:
-  en: 76cbe4f4c0dcf327
-  zh: ea83d25b206d3f1a
+  en: 22f7da7b43a9ad2a
+  zh: 89a32c8341fe684f
 /deepseek-ai-dsh-lsy-tool-monitor:
   en: c1c4677ba6fe49f8
   zh: 2dcd44be7ebc02f3
 /deepseek-ai-dsh-lsy-tool-monitor/summary:
-  en: 6a1248a30c9e61c3
-  zh: 2fc5f96549182aff
+  en: 1a7f3010dc3d391a
+  zh: 49150800eb4a1d43
 /deepseek-ai-dsh-lsy-tool-monitor/table-of-contents:
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
 /deepseek-ai-dsh-lsy-tool-monitor/use-this-package:
-  en: 727ffc18e834be3f
-  zh: 74c2d5e8b9318629
+  en: 68c669de9a9f576a
+  zh: c181fdca560c3a05
 /deepseek-ai-dsh-lsy-tool-monitor/use-this-package/when-to-choose-it:
   en: 9a6752461f0ba23b
   zh: 5bccc78259301ed0
@@ -24,11 +24,14 @@
   en: 1ff4a934e0deb81c
   zh: d76c7827d57d1897
 /deepseek-ai-dsh-lsy-tool-monitor/use-this-package/when-a-monitor-ends:
-  en: 63af76931f213c9e
-  zh: 07d582ac9e7f59d1
+  en: 7c77377e28637107
+  zh: cf43d8f586bbcef3
+/deepseek-ai-dsh-lsy-tool-monitor/use-this-package/after-a-host-restart:
+  en: 9ccfa678f60db5b0
+  zh: b4e82e7306a96963
 /deepseek-ai-dsh-lsy-tool-monitor/understand-the-implementation:
-  en: 5af5aef344c5201a
-  zh: 3ba482e34a6eee9f
+  en: a3f1a04a2ccd5aff
+  zh: 7ddc66865024199c
 /deepseek-ai-dsh-lsy-tool-monitor/further-exploration:
   en: ade807cec6a20ae8
   zh: b6e96e7d14e0e517
@@ -39,11 +42,11 @@
   en: a307cb76160637a6
   zh: f21a7f129418dfca
 /deepseek-ai-dsh-lsy-tool-monitor/model-experience/monitor-tools/what-the-model-sees:
-  en: 51ac7fcaf0d6508f
-  zh: 779b464052b49f77
+  en: 59e01fc3fce3666b
+  zh: f747846c17361e23
 /deepseek-ai-dsh-lsy-tool-monitor/model-experience/monitor-tools/token-effect:
-  en: e2fab1f05ceb5780
-  zh: 71a375993d22850a
+  en: 79c2f9e9613365c4
+  zh: 7e9a9c13dd88900d
 /deepseek-ai-dsh-lsy-tool-monitor/model-experience/monitor-tools/kv-cache-effect:
   en: 44574f4487e48b3e
   zh: 5af2107448c78ee5
@@ -51,8 +54,8 @@
   en: 4aeffa303f746289
   zh: 529a4bc53b343e54
 /deepseek-ai-dsh-lsy-tool-monitor/model-experience/monitor-notices/what-the-model-sees:
-  en: 3fd85e682e160d72
-  zh: 00813cc05c3d629f
+  en: 20ccbbf47b9023fa
+  zh: e65669abc58a14ff
 /deepseek-ai-dsh-lsy-tool-monitor/model-experience/monitor-notices/token-effect:
   en: 4aabd17743d86c56
   zh: 76e57e57330c6c33
@@ -60,8 +63,8 @@
   en: 78a3fd42de0ec820
   zh: 38b33960f4c26954
 /deepseek-ai-dsh-lsy-tool-monitor/known-limitations-and-deferred-work:
-  en: c0947a387809d36b
-  zh: 0ba4a975fbe1c40c
+  en: 057eaaface1e0b78
+  zh: 18257b9131ca90b3
 /deepseek-ai-dsh-lsy-tool-monitor/known-limitations-and-deferred-work/dev-note:
-  en: fe9f4e591c311315
-  zh: 43a6a8821f5a7cfa
+  en: e59a09d849c81f4a
+  zh: 22cff2e37cf276e6

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildDigest, contentText, fitText, inboundText, relayText, renderNote, splitText } from '../src/text.ts'
+import { buildDigest, contentText, fitText, formatGap, formatStamp, inboundText, relayText, renderNote, sharedNoteText, splitText, timeGapNotice } from '../src/text.ts'
 
 describe('fitText', () => {
   it('keeps short text and cuts long text to the code-point limit', () => {
@@ -142,5 +142,67 @@ describe('buildDigest', () => {
     const digest = buildDigest([{ text: '中'.repeat(30), queuedAt: at }, { text: '中'.repeat(30), queuedAt: at }], 1000, 'UTC', 200)
     expect(digest.count).toBe(1)
     expect(Buffer.byteLength(digest.text, 'utf8')).toBeLessThanOrEqual(200)
+  })
+})
+
+describe('formatStamp and formatGap', () => {
+  it('prints weekday, date, and 24-hour time in the zone', () => {
+    expect(formatStamp(Date.parse('2026-10-22T12:49:00Z'), 'America/New_York')).toBe('Thu 2026-10-22 08:49')
+    expect(formatStamp(Date.parse('2026-10-22T04:05:00Z'), 'America/New_York')).toBe('Thu 2026-10-22 00:05')
+  })
+
+  it('rounds gaps down to minutes, hours, and days', () => {
+    expect(formatGap(59_000)).toBe('under a minute')
+    expect(formatGap(12 * 60_000 + 59_000)).toBe('12 min')
+    expect(formatGap(5 * 3_600_000)).toBe('5 h')
+    expect(formatGap(5 * 3_600_000 + 39 * 60_000)).toBe('5 h 39 min')
+    expect(formatGap(2 * 86_400_000 + 3 * 3_600_000 + 7 * 60_000)).toBe('2 d 3 h')
+    expect(formatGap(-5)).toBe('under a minute')
+  })
+})
+
+describe('timeGapNotice', () => {
+  const zone = 'America/New_York'
+  const now = Date.parse('2026-10-22T12:49:00Z')
+  const minGap = 30 * 60_000
+
+  it('names the gap, the last message, and the owner\'s previous message after a quiet spell', () => {
+    const text = timeGapNotice(now, { ownerAt: Date.parse('2026-10-21T18:00:00Z'), sentAt: Date.parse('2026-10-22T07:10:00Z'), sent: 'note' }, minGap, zone)
+    expect(text).toBe(
+      'Time check: the owner sent the message below at Thu 2026-10-22 08:49 (America/New_York), after 5 h 39 min of silence in this WeChat chat.'
+      + ' The last message before it was a note another session (an event, reminder, monitor, or operator task) sent the owner, at Thu 2026-10-22 03:10;'
+      + ' the owner last wrote at Wed 2026-10-21 14:00 (18 h 49 min ago).'
+      + ' Read the new message on its own terms: it starts a new exchange unless it clearly refers back to something earlier.',
+    )
+  })
+
+  it('says when the owner\'s own message was the last one', () => {
+    const text = timeGapNotice(now, { ownerAt: Date.parse('2026-10-22T10:00:00Z'), sentAt: Date.parse('2026-10-22T09:00:00Z'), sent: 'reply' }, minGap, zone)
+    expect(text).toContain('after 2 h 49 min of silence')
+    expect(text).toContain('The last message before it was the owner\'s own, at Thu 2026-10-22 06:00.')
+    expect(text).not.toContain('last wrote')
+  })
+
+  it('names a reply as the agent\'s own', () => {
+    const text = timeGapNotice(now, { sentAt: Date.parse('2026-10-22T11:00:00Z'), sent: 'reply' }, minGap, zone)
+    expect(text).toContain('The last message before it was your reply, at Thu 2026-10-22 07:00.')
+  })
+
+  it('stays silent while the chat is active, before any history, and when turned off', () => {
+    expect(timeGapNotice(now, { ownerAt: now - minGap + 1 }, minGap, zone)).toBeUndefined()
+    expect(timeGapNotice(now, { ownerAt: now - 60 * 60_000, sentAt: now - 60_000, sent: 'reply' }, minGap, zone)).toBeUndefined()
+    expect(timeGapNotice(now, undefined, minGap, zone)).toBeUndefined()
+    expect(timeGapNotice(now, {}, minGap, zone)).toBeUndefined()
+    expect(timeGapNotice(now, { ownerAt: now - 86_400_000 }, 0, zone)).toBeUndefined()
+  })
+})
+
+describe('sharedNoteText', () => {
+  it('dates the note instead of calling it new', () => {
+    const text = sharedNoteText('host-alerts: 1 event(s)', Date.parse('2026-10-22T07:10:00Z'), 'America/New_York')
+    expect(text).toBe(
+      'At Thu 2026-10-22 03:10 (America/New_York), another session (an event, reminder, monitor, or operator task) sent the owner this message on WeChat.'
+      + ' It is context, not the owner speaking: the owner may reply to it in this chat.\nhost-alerts: 1 event(s)',
+    )
   })
 })

@@ -1,6 +1,7 @@
 /** Pure text handling: inbound extraction, outbound size limits, reply framing, and outbox digests. */
 import { isSilentReply, type LsyNote } from '@deepseek-ai/dsh-lsy-event-bus'
 import { ItemType, type WeixinItem, type WeixinMessage } from './api.ts'
+import type { ActivityRecord, SentKind } from './storage.ts'
 
 /** Third-party-documented ceiling of one WeChat text message in UTF-8 bytes. */
 export const WECHAT_MAX_TEXT_BYTES = 16_384
@@ -192,4 +193,81 @@ export function buildDigest(
     bytes += entryBytes
   }
   return { text: [header(entries.length), ...entries].join('\n\n'), count: entries.length }
+}
+
+/** How the time-gap notice names the bot's latest message. */
+const SENT_PHRASES: Record<SentKind, string> = {
+  reply: 'your reply',
+  note: 'a note another session (an event, reminder, monitor, or operator task) sent the owner',
+  file: 'a file you sent',
+  notice: 'a WeChat channel notice',
+  digest: 'a digest of messages that had waited for the owner',
+}
+
+/**
+ * Wall-clock time as the chat Session reads it.
+ * @param ms - Unix epoch milliseconds.
+ * @param timeZone - IANA zone.
+ * @returns e.g. `Thu 2026-10-22 08:49`.
+ */
+export function formatStamp(ms: number, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone, weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(ms)
+  const part = (type: Intl.DateTimeFormatPartTypes): string => parts.find(item => item.type === type)?.value ?? ''
+  return `${part('weekday')} ${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}`
+}
+
+/**
+ * A duration rounded down to whole minutes, at most two units.
+ * @param ms - milliseconds; negative counts as zero.
+ * @returns e.g. `12 min`, `5 h 39 min`, `2 d 3 h`, or `under a minute`.
+ */
+export function formatGap(ms: number): string {
+  const minutes = Math.floor(Math.max(0, ms) / 60_000)
+  if (minutes < 1) return 'under a minute'
+  const days = Math.floor(minutes / 1440)
+  const hours = Math.floor((minutes % 1440) / 60)
+  const rest = minutes % 60
+  if (days > 0) return hours > 0 ? `${days} d ${hours} h` : `${days} d`
+  if (hours > 0) return rest > 0 ? `${hours} h ${rest} min` : `${hours} h`
+  return `${rest} min`
+}
+
+/**
+ * What the chat Session reads before an owner message that ends a quiet spell, so that it neither
+ * takes the message for an answer to whatever came last nor guesses the time. All times come from
+ * the channel's own records, never from the model.
+ * @param now - when the owner message arrived.
+ * @param before - the chat's activity before that message.
+ * @param minGapMs - silence, in milliseconds, that counts as a quiet spell; 0 turns the notice off.
+ * @param timeZone - IANA zone for the times.
+ * @returns the notice, or undefined while the chat is active or has no history.
+ */
+export function timeGapNotice(now: number, before: ActivityRecord | undefined, minGapMs: number, timeZone: string): string | undefined {
+  const ownerAt = before?.ownerAt
+  const sentAt = before?.sentAt
+  const last = Math.max(ownerAt ?? -Infinity, sentAt ?? -Infinity)
+  if (minGapMs <= 0 || !Number.isFinite(last) || now - last < minGapMs) return undefined
+  const head = `Time check: the owner sent the message below at ${formatStamp(now, timeZone)} (${timeZone}), after ${formatGap(now - last)} of silence in this WeChat chat.`
+  let previous: string
+  if (sentAt === undefined || (ownerAt !== undefined && ownerAt > sentAt)) {
+    previous = ` The last message before it was the owner's own, at ${formatStamp(last, timeZone)}.`
+  } else {
+    const owner = ownerAt === undefined ? '.' : `; the owner last wrote at ${formatStamp(ownerAt, timeZone)} (${formatGap(now - ownerAt)} ago).`
+    previous = ` The last message before it was ${SENT_PHRASES[before?.sent ?? 'reply']}, at ${formatStamp(sentAt, timeZone)}${owner}`
+  }
+  return `${head}${previous} Read the new message on its own terms: it starts a new exchange unless it clearly refers back to something earlier.`
+}
+
+/**
+ * The copy of another Session's note that the chat Session keeps. It enters the chat Session's
+ * history only at that Session's next step, often hours later, so it carries the time it was sent.
+ * @param text - the rendered note.
+ * @param at - when it was sent, in Unix epoch milliseconds.
+ * @param timeZone - IANA zone for the time.
+ */
+export function sharedNoteText(text: string, at: number, timeZone: string): string {
+  return `At ${formatStamp(at, timeZone)} (${timeZone}), another session (an event, reminder, monitor, or operator task) sent the owner this message on WeChat.`
+    + ` It is context, not the owner speaking: the owner may reply to it in this chat.\n${text}`
 }

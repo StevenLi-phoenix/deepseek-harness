@@ -17,14 +17,14 @@ import z from '@deepseek-ai/schemastery'
 import { IlinkApiError, IlinkClient, ILINK_SEND_REJECTED, isStaleTokenError, ItemType, MESSAGE_TYPE_USER, type WeixinMessage } from './api.ts'
 import { accountFilePath, readAccountFile, type WechatAccount } from './login.ts'
 import { attachmentNote, describeMedia, downloadMedia, isPromptImage, mediaSpec, saveInboxFile, uploadMedia, type OutboundKind, type ReceivedMedia } from './media.ts'
-import { wechatDomain, type OutboxRecord, type WindowRecord } from './storage.ts'
+import { wechatDomain, type ActivityRecord, type OutboxRecord, type SentKind, type WindowRecord } from './storage.ts'
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
     'lsy-wechat': { kind: 'lsy-wechat' } & ContextFormed
   }
 }
 
-import { buildDigest, contentText, fitText, inboundText, NEW_CHAT_REPLY, QUOTA_FOOTER, relayText, renderNote, splitText, WECHAT_MAX_TEXT_BYTES } from './text.ts'
+import { buildDigest, contentText, fitText, formatGap, inboundText, NEW_CHAT_REPLY, QUOTA_FOOTER, relayText, renderNote, sharedNoteText, splitText, timeGapNotice, WECHAT_MAX_TEXT_BYTES } from './text.ts'
 
 export * from './api.ts'
 export * from './login.ts'
@@ -77,6 +77,12 @@ export interface Config {
   maxMediaBytes: number
   /** Deadline of one attachment download, in milliseconds. */
   mediaTimeoutMs: number
+  /**
+   * Chat silence, in milliseconds, after which the owner's next message reaches the chat Session
+   * with a note of when it was sent, how long the chat was quiet, and what the last message was.
+   * 0 turns the note off.
+   */
+  timeGapMs: number
 }
 
 /** Configuration schema. */
@@ -100,12 +106,11 @@ export const Config: z<Config> = z.object({
   cdnBaseUrl: z.string().default('https://novac2c.cdn.weixin.qq.com/c2c'),
   maxMediaBytes: z.natural().min(1024).default(25 * 1024 * 1024),
   mediaTimeoutMs: z.natural().min(1000).default(60_000),
+  timeGapMs: z.natural().default(1_800_000),
 })
 
 /** Exact owner text that starts a fresh chat Session. */
 const NEW_CHAT_COMMAND = '/new'
-/** Frames a note another Session sent the owner, as the chat Session reads it. */
-const SHARED_NOTE_INTRO = 'Another session (an event, reminder, monitor, or operator task) just sent the owner this message on WeChat. It is context, not the owner speaking: the owner may reply to it in this chat.'
 
 /** Chat Sessions remembered for {@link WechatChannel.ownsSession}; the oldest are forgotten first. */
 const MAX_REMEMBERED_SESSIONS = 200
@@ -221,7 +226,7 @@ export class WechatChannel extends Service implements LsyNotifier {
    */
   async send(note: LsyNote): Promise<void> {
     const text = renderNote(note)
-    await this.deliver(text)
+    await this.deliver(text, 'note')
     await this.shareWithChat(text)
   }
 
@@ -233,23 +238,30 @@ export class WechatChannel extends Service implements LsyNotifier {
    * @param text - the rendered note, as the owner received or will receive it.
    */
   private async shareWithChat(text: string): Promise<void> {
-    let chatId: string | undefined
+    const chats = this.domain === undefined ? [] : [...this.domain.table('chats').entries()].map(([, row]) => row)
+    const chat = chats.sort((a, b) => b.createdAt - a.createdAt)[0]
+    if (chat === undefined) return
+    const shared = sharedNoteText(text, Date.now(), this.config.chat.timeZone)
+    if (await this.injectNotice(chat.sessionId as SessionId, shared, 'another Session messaged the owner')) {
+      this.ctx.logger.info(`lsy-wechat: shared a ${text.length}-char note with chat Session ${chat.sessionId}`)
+    }
+  }
+
+  /**
+   * Queue a channel notice for a chat Session's next step without starting a turn.
+   * @returns whether it was queued; a failure is logged and only costs the context.
+   */
+  private async injectNotice(sessionId: SessionId, text: string, summary: string): Promise<boolean> {
     try {
-      const chats = this.domain === undefined ? [] : [...this.domain.table('chats').entries()].map(([, row]) => row)
-      const chat = chats.sort((a, b) => b.createdAt - a.createdAt)[0]
-      if (chat === undefined) return
-      chatId = chat.sessionId
-      const resolved = await this.ctx.sessionController.resolveAgent(chatId as SessionId)
-      if (!('agent' in resolved)) return
+      const resolved = await this.ctx.sessionController.resolveAgent(sessionId)
+      if (!('agent' in resolved)) return false
       const agent = resolved.agent as { inject?: (message: UserMessage) => void }
-      if (typeof agent.inject !== 'function') return
-      agent.inject(createUserMessage({
-        content: [{ type: 'text', text: `${SHARED_NOTE_INTRO}\n${text}` }],
-        source: { kind: 'lsy-wechat', form: 'notice', summary: 'another Session messaged the owner' },
-      }))
-      this.ctx.logger.info(`lsy-wechat: shared a ${text.length}-char note with chat Session ${chatId}`)
+      if (typeof agent.inject !== 'function') return false
+      agent.inject(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'lsy-wechat', form: 'notice', summary } }))
+      return true
     } catch (error: unknown) {
-      this.ctx.logger.warn(`lsy-wechat: could not share a note with chat Session ${chatId ?? '(unknown)'}: ${errorText(error)}`)
+      this.ctx.logger.warn(`lsy-wechat: could not pass a notice (${summary}) to chat Session ${sessionId}: ${errorText(error)}`)
+      return false
     }
   }
 
@@ -295,7 +307,7 @@ export class WechatChannel extends Service implements LsyNotifier {
         this.ctx.logger.warn(`lsy-wechat: uploading ${name} failed: ${errorText(error)}`)
         return { notSent: `upload failed: ${errorText(error)}` }
       }
-      const outcome = await this.transmitItem(domain, target, uploaded.item, `${uploaded.kind} ${name} (${size} bytes) from ${path}`)
+      const outcome = await this.transmitItem(domain, target, uploaded.item, `${uploaded.kind} ${name} (${size} bytes) from ${path}`, 'file')
       return outcome === 'sent' ? { sent: uploaded.kind, name, bytes: size } : { notSent: outcome }
     })
   }
@@ -419,7 +431,12 @@ export class WechatChannel extends Service implements LsyNotifier {
     const text = inboundText(message)
     this.ctx.logger.info(`lsy-wechat: owner message (${text.length} chars)`)
     const token = message.context_token ?? ''
+    const arrivedAt = Date.now()
+    let before: ActivityRecord | undefined
     await this.serialize(async () => {
+      // Read before the outbox flush below, whose digest would otherwise count as the latest message.
+      before = domain.table('activity').get(account.ownerUserId)
+      await this.recordActivity(domain, account.ownerUserId, { ownerAt: arrivedAt })
       if (token === '') {
         this.ctx.logger.warn('lsy-wechat: owner message carries no context_token; replies wait in the outbox')
       } else {
@@ -432,15 +449,17 @@ export class WechatChannel extends Service implements LsyNotifier {
       await this.serialize(async () => {
         if (await domain.table('chats').delete(account.ownerUserId)) this.ctx.logger.info('lsy-wechat: owner started a new chat')
       })
-      await this.deliver(NEW_CHAT_REPLY)
+      await this.deliver(NEW_CHAT_REPLY, 'notice')
       return
     }
+    const gap = timeGapNotice(arrivedAt, before, this.config.timeGapMs, this.config.chat.timeZone)
     try {
-      await this.forward(domain, account, text, await this.receiveMedia(message))
+      const quietMs = arrivedAt - Math.max(before?.ownerAt ?? 0, before?.sentAt ?? 0)
+      await this.forward(domain, account, text, await this.receiveMedia(message), gap === undefined ? undefined : { text: gap, quietMs })
     } catch (error: unknown) {
       if (this.stopping) return
       this.ctx.logger.warn(`lsy-wechat: forwarding the owner message failed: ${errorText(error)}`)
-      await this.deliver(`⚠️ 消息没能交给 agent：${fitText(errorText(error), 300)}`)
+      await this.deliver(`⚠️ 消息没能交给 agent：${fitText(errorText(error), 300)}`, 'notice')
     }
   }
 
@@ -473,12 +492,17 @@ export class WechatChannel extends Service implements LsyNotifier {
    * Prompt the owner's chat Session with one message: the text, a note on
    * each attachment, and the images as image parts. A Session that refuses
    * images (a text-only model) gets the note with the saved paths instead.
+   * A time-gap notice, when the chat was quiet, is queued just before it.
    */
   private async forward(
     domain: Domain<typeof wechatDomain>, account: WechatAccount, text: string, received: readonly ReceivedMedia[],
+    gap?: { text: string; quietMs: number },
   ): Promise<void> {
     mkdirSync(this.config.chat.workspacePath, { recursive: true })
     const sessionId = await this.chatSession(domain, account)
+    if (gap !== undefined && await this.injectNotice(sessionId, gap.text, 'time since the last chat message')) {
+      this.ctx.logger.info(`lsy-wechat: told chat Session ${sessionId} the chat was quiet for ${formatGap(gap.quietMs)}`)
+    }
     const images = received.filter(isPromptImage)
     const prompt = (attach: boolean): Promise<unknown> => {
       const note = attachmentNote(received, attach)
@@ -558,28 +582,28 @@ export class WechatChannel extends Service implements LsyNotifier {
     const reply = relayText(text, outcome, detail)
     const ended = detail === undefined ? outcome : `${outcome}: ${detail}`
     this.ctx.logger.info(`lsy-wechat: Session ${session.id} ended a turn (${ended}); ${reply === undefined ? 'nothing to relay' : `relaying ${reply.length} chars`}`)
-    if (reply !== undefined) this.track(this.deliver(reply))
+    if (reply !== undefined) this.track(this.deliver(reply, 'reply'))
   }
 
   /** Split one text into messages and send or queue each in order. */
-  private deliver(text: string): Promise<void> {
+  private deliver(text: string, kind: SentKind): Promise<void> {
     return this.serialize(async () => {
       const domain = await this.ready
       const chars = this.config.maxMessageChars - Array.from(QUOTA_FOOTER).length
       const bytes = WECHAT_MAX_TEXT_BYTES - Buffer.byteLength(QUOTA_FOOTER, 'utf8')
-      for (const part of splitText(text, chars, this.config.maxReplyParts, bytes)) await this.deliverPart(domain, part)
+      for (const part of splitText(text, chars, this.config.maxReplyParts, bytes)) await this.deliverPart(domain, part, kind)
     })
   }
 
   /** Send one message through the open window, or queue it with the reason it cannot go now. */
-  private async deliverPart(domain: Domain<typeof wechatDomain>, text: string): Promise<void> {
+  private async deliverPart(domain: Domain<typeof wechatDomain>, text: string, kind: SentKind): Promise<void> {
     const target = this.target(domain)
     if (typeof target === 'string') {
       await this.enqueue(domain, text, target)
       return
     }
     const last = target.window.used + 1 >= this.config.repliesPerToken
-    const outcome = await this.transmit(domain, target, last ? `${text}${QUOTA_FOOTER}` : text)
+    const outcome = await this.transmit(domain, target, last ? `${text}${QUOTA_FOOTER}` : text, kind)
     if (outcome !== 'sent') await this.enqueue(domain, text, outcome)
   }
 
@@ -597,13 +621,13 @@ export class WechatChannel extends Service implements LsyNotifier {
   }
 
   /** Send one text message and count it against the window; a failure returns why it was not sent. */
-  private transmit(domain: Domain<typeof wechatDomain>, target: Target, text: string): Promise<string> {
-    return this.transmitItem(domain, target, { type: ItemType.TEXT, text_item: { text } }, `${text.length} chars`)
+  private transmit(domain: Domain<typeof wechatDomain>, target: Target, text: string, kind: SentKind): Promise<string> {
+    return this.transmitItem(domain, target, { type: ItemType.TEXT, text_item: { text } }, `${text.length} chars`, kind)
   }
 
-  /** Send one message item and count it against the window; a failure returns why it was not sent. */
+  /** Send one message item, count it against the window, and record it as the chat's latest; a failure returns why it was not sent. */
   private async transmitItem(
-    domain: Domain<typeof wechatDomain>, target: Target, item: Record<string, unknown>, label: string,
+    domain: Domain<typeof wechatDomain>, target: Target, item: Record<string, unknown>, label: string, kind: SentKind,
   ): Promise<string> {
     const { baseUrl, botToken: token } = target.account
     const client = new IlinkClient({ baseUrl, token, timeoutMs: this.config.requestTimeoutMs })
@@ -624,8 +648,15 @@ export class WechatChannel extends Service implements LsyNotifier {
     }
     const used = target.window.used + 1
     await domain.table('windows').put(target.key, { ...target.window, used })
+    await this.recordActivity(domain, target.account.ownerUserId, { sentAt: Date.now(), sent: kind })
     this.ctx.logger.info(`lsy-wechat: sent ${label} (${used}/${this.config.repliesPerToken} of this window)`)
     return 'sent'
+  }
+
+  /** Merge one change into the owner's chat activity. */
+  private async recordActivity(domain: Domain<typeof wechatDomain>, ownerUserId: string, change: ActivityRecord): Promise<void> {
+    const activity = domain.table('activity')
+    await activity.put(ownerUserId, { ...activity.get(ownerUserId), ...change })
   }
 
   /** Queue one text; a full outbox drops its oldest texts. */
@@ -647,7 +678,7 @@ export class WechatChannel extends Service implements LsyNotifier {
       const target = this.target(domain)
       if (typeof target === 'string' || target.window.used + 1 >= this.config.repliesPerToken) return
       const digest = buildDigest(rows, this.config.maxMessageChars, this.config.chat.timeZone)
-      if (await this.transmit(domain, target, digest.text) !== 'sent') return
+      if (await this.transmit(domain, target, digest.text, 'digest') !== 'sent') return
       for (const row of rows.slice(0, digest.count)) await domain.table('outbox').delete(outboxKey(row.seq))
       this.ctx.logger.info(`lsy-wechat: delivered ${digest.count} queued text(s) as one digest`)
       rows = rows.slice(digest.count)

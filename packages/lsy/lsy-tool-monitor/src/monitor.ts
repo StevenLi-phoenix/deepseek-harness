@@ -66,6 +66,20 @@ export interface StartRequest {
   readonly env?: Record<string, string>
 }
 
+/** A stored monitor started again after a host restart: its id, start time, and deadline stay. */
+export interface RestoreRequest extends Omit<StartRequest, 'timeoutMs'> {
+  readonly id: string
+  readonly startedAt: number
+  /** Epoch ms when the host stops it; absent for a persistent monitor. */
+  readonly deadline?: number
+}
+
+/**
+ * Sends one notice to the owner. False, now or when the promise settles, means
+ * the owner's Session is gone, which stops the monitor; a promise must not reject.
+ */
+export type Deliver = (owner: string, monitor: MonitorView, notice: MonitorNotice) => boolean | Promise<boolean>
+
 interface Live {
   view: MonitorView & { status: 'running' | 'ended'; lines: number; notices: number; ended?: string }
   owner: string
@@ -83,34 +97,61 @@ interface Live {
 
 const STOPPED_BY_OWNER = 'stopped by monitor_stop'
 const GONE = 'its session is gone'
-const SILENT_ENDINGS = new Set([STOPPED_BY_OWNER, 'host shutting down', GONE])
+const SHUTTING_DOWN = 'host shutting down'
+const SILENT_ENDINGS = new Set([STOPPED_BY_OWNER, SHUTTING_DOWN, GONE])
 
 /** Why a start was refused. */
 export class MonitorRefused extends Error {}
 
 /**
  * All monitors of one plugin instance.
- * `deliver` returns false when the owner is gone, which stops the monitor.
+ * `deliver` answers false when the owner is gone, which stops the monitor.
+ * `ended` hears of every ending except disposal, whose monitors run again after
+ * a restart: once per monitor, as soon as the reason is known, so a stop that
+ * disposal overtakes still counts.
  */
 export class MonitorRegistry {
   private readonly live = new Map<string, Live>()
   private readonly finished: MonitorView[] = []
   private readonly ownerOf = new Map<string, string>()
+  /** After disposal no notice goes out, whatever the processes still print or however they end. */
+  private disposed = false
 
   constructor(
-    private readonly deliver: (owner: string, monitor: MonitorView, notice: MonitorNotice) => boolean,
+    private readonly deliver: Deliver,
     private readonly limits: MonitorLimits = DEFAULT_LIMITS,
     private readonly now: () => number = Date.now,
+    private readonly ended: (monitor: MonitorView, reason: string) => void = () => {},
   ) {}
 
   /** Start a monitor; throws {@link MonitorRefused} past the per-owner cap. */
   start(request: StartRequest): MonitorView {
-    const running = [...this.live.values()].filter(entry => entry.owner === request.owner && entry.view.status === 'running')
+    this.admit(request.owner)
+    let id: string
+    do id = `mon-${randomBytes(3).toString('hex')}`
+    while (this.live.has(id))
+    const startedAt = this.now()
+    return this.launch(id, startedAt, request.timeoutMs === undefined ? undefined : startedAt + request.timeoutMs, request)
+  }
+
+  /**
+   * Start a stored monitor again under its own id, stopping it at its original deadline.
+   * Throws {@link MonitorRefused} when that id is running or past the per-owner cap.
+   */
+  restore(request: RestoreRequest): MonitorView {
+    if (this.live.has(request.id)) throw new MonitorRefused(`monitor ${request.id} is already running`)
+    this.admit(request.owner)
+    return this.launch(request.id, request.startedAt, request.deadline, request)
+  }
+
+  private admit(owner: string): void {
+    const running = [...this.live.values()].filter(entry => entry.owner === owner && entry.view.status === 'running')
     if (running.length >= this.limits.maxPerOwner) {
       throw new MonitorRefused(`${String(running.length)} monitors are already running; stop one with monitor_stop first.`)
     }
-    const id = `mon-${randomBytes(3).toString('hex')}`
-    const startedAt = this.now()
+  }
+
+  private launch(id: string, startedAt: number, deadline: number | undefined, request: Omit<StartRequest, 'timeoutMs'>): MonitorView {
     // Own process group, so stopping reaches every process the script started.
     const child = spawn('/bin/bash', ['-c', request.command], {
       cwd: request.cwd,
@@ -125,7 +166,7 @@ export class MonitorRegistry {
         command: request.command,
         status: 'running',
         startedAt,
-        ...request.timeoutMs === undefined ? {} : { deadline: startedAt + request.timeoutMs },
+        ...deadline === undefined ? {} : { deadline },
         lines: 0,
         notices: 0,
       },
@@ -152,9 +193,10 @@ export class MonitorRegistry {
       this.flush(entry)
       this.finish(entry, entry.stopReason ?? (signal === null ? `exited with code ${String(code)}` : `killed by ${signal}`))
     })
-    const timeoutMs = request.timeoutMs
-    if (timeoutMs !== undefined) {
-      entry.deadlineTimer = setTimeout(() => { this.stop(id, `reached its ${String(Math.round(timeoutMs / 60_000))}-minute timeout`) }, timeoutMs)
+    if (deadline !== undefined) {
+      // A restored monitor keeps the timeout it was started with and waits only for the time left.
+      const minutes = Math.round((deadline - startedAt) / 60_000)
+      entry.deadlineTimer = setTimeout(() => { this.stop(id, `reached its ${String(minutes)}-minute timeout`) }, Math.max(0, deadline - this.now()))
     }
     return this.snapshot(entry)
   }
@@ -167,6 +209,7 @@ export class MonitorRegistry {
     const entry = this.live.get(id)
     if (entry === undefined || entry.view.status !== 'running' || entry.stopReason !== undefined) return false
     entry.stopReason = reason
+    this.ended(this.snapshot(entry), reason)
     this.signal(entry, 'SIGTERM')
     entry.killTimer = setTimeout(() => { this.signal(entry, 'SIGKILL') }, this.limits.killGraceMs)
     return true
@@ -174,11 +217,13 @@ export class MonitorRegistry {
 
   /**
    * Stop the running monitors whose owner is gone, so a silent monitor does not outlive its Session.
-   * @param alive - whether an owner still has an agent.
+   * @param alive - whether an owner's Session can still be reached; asked once per owner.
    */
-  sweep(alive: (owner: string) => boolean): void {
-    for (const entry of this.live.values()) {
-      if (entry.view.status === 'running' && !alive(entry.owner)) this.stop(entry.view.id, GONE)
+  async sweep(alive: (owner: string) => boolean | Promise<boolean>): Promise<void> {
+    const owners = new Set([...this.live.values()].filter(entry => entry.view.status === 'running').map(entry => entry.owner))
+    for (const owner of owners) {
+      if (await alive(owner)) continue
+      for (const entry of [...this.live.values()]) if (entry.owner === owner) this.stop(entry.view.id, GONE)
     }
   }
 
@@ -193,10 +238,11 @@ export class MonitorRegistry {
     return this.live.get(id)?.owner === owner
   }
 
-  /** Stop everything without notices (plugin disposal). */
+  /** Stop everything without notices or `ended` (plugin disposal): these monitors run again after a restart. */
   dispose(): void {
+    this.disposed = true
     for (const entry of this.live.values()) {
-      entry.stopReason = 'host shutting down'
+      entry.stopReason ??= SHUTTING_DOWN
       this.clearTimers(entry)
       this.signal(entry, 'SIGKILL')
     }
@@ -225,7 +271,7 @@ export class MonitorRegistry {
   private flush(entry: Live): void {
     if (entry.flushTimer !== undefined) clearTimeout(entry.flushTimer)
     entry.flushTimer = undefined
-    if (entry.pending.length === 0) return
+    if (entry.pending.length === 0 || this.disposed) return
     const now = this.now()
     entry.sent = entry.sent.filter(time => now - time < 3_600_000)
     if (entry.sent.length >= this.limits.maxNoticesPerHour) {
@@ -239,7 +285,10 @@ export class MonitorRegistry {
     entry.dropped = 0
     entry.sent.push(now)
     entry.view.notices += 1
-    if (!this.deliver(entry.owner, this.snapshot(entry), notice)) this.stop(entry.view.id, GONE)
+    const delivered = this.deliver(entry.owner, this.snapshot(entry), notice)
+    // An owner whose agent must be loaded first answers later.
+    if (delivered === false) this.stop(entry.view.id, GONE)
+    else if (delivered !== true) void delivered.then((reached) => { if (!reached) this.stop(entry.view.id, GONE) })
   }
 
   private finish(entry: Live, reason: string): void {
@@ -251,9 +300,11 @@ export class MonitorRegistry {
     this.ownerOf.set(entry.view.id, entry.owner)
     this.finished.unshift(this.snapshot(entry))
     this.finished.splice(20)
+    // A stop reported its reason when it began.
+    if (entry.stopReason === undefined) this.ended(this.snapshot(entry), reason)
     // The owner asked for a stop and already has the tool result; a gone owner has no inbox.
-    if (!SILENT_ENDINGS.has(reason)) {
-      this.deliver(entry.owner, this.snapshot(entry), { kind: 'ended', reason, stderr: [...entry.stderr] })
+    if (!this.disposed && !SILENT_ENDINGS.has(reason)) {
+      void this.deliver(entry.owner, this.snapshot(entry), { kind: 'ended', reason, stderr: [...entry.stderr] })
     }
   }
 

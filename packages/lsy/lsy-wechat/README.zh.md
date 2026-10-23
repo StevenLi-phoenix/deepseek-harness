@@ -71,6 +71,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 | `cdnBaseUrl` | `https://novac2c.cdn.weixin.qq.com/c2c` | 下载附件用的微信 CDN；服务器给出的 `full_url` 若不在这个 origin 上则拒绝 |
 | `maxMediaBytes` | `26214400` | 下载附件的大小上限（25 MiB） |
 | `mediaTimeoutMs` | `60000` | 一个附件下载的时限 |
+| `timeGapMs` | `1800000` | 对话安静多久（30 分钟）之后，你的下一条消息带一段时间说明交给 agent：你何时写的、对话安静了多久、上一条消息是什么；`0` 关闭 |
 
 在对话里发 `/new` 会开始一个新的对话 Session。文字、语音转写和引用会交给 agent。图片、文件和视频会从微信 CDN 下载、解密并存进 inbox；模型的线路支持图片时，图片也会作为图片内容交给模型。
 
@@ -86,16 +87,16 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 <details>
 <summary>实现细节——点击展开</summary>
 
-插件运行期间，通道持续长轮询 `ilink/bot/getupdates`，并在处理消息之前把返回的游标存进 `lsy_wechat` storage domain，所以崩溃只会丢消息，不会重复发 prompt。两次轮询之间它会重读账号文件；没有可用账号、或服务器报告 token 失效（`-14`）时，它只记一次日志，然后每隔 `accountPollMs` 检查一次文件。它只接受 owner 发来的用户消息。每条消息打开一个回复窗口（`context_token`、接收时间、已用条数），先把 outbox 作为摘要消息发出（摘要永远不占窗口的最后一个名额），再用 `sessionController.prompt()` 以 `steer` 模式转给 owner 的对话 Session：Session 空闲时开始新一轮，正在忙时在下一个步骤边界接收这条消息，所以紧跟一句话发来的图片会进入正在回答那句话的那一轮。转发之前，每个图片、文件和视频条目都会被下载（AES-128-ECB，密钥取 `image_item.aeskey` 或 `media.aes_key`），按内容或文件名判断类型，再写进 inbox；prompt 为每个附件附一行说明，图片作为图片内容附上；如果被拒绝为 `session/attachment-invalid`（模型只支持文本），就只带说明重发一次。`resolveAgent()` 成功时复用已存的 Session；Session 不存在或已损坏时，用 `sessionController.create()` 新建一个，并设置 permission preset 和标题。通道跟踪自己创建的每个对话 Session 的 `session/event`，记住这一轮最新的助手文本，在这一轮结束时发出，除非它是 `NO_REPLY`。`send()` 和回复转发共用一条串行的投递路径：文本只经由已打开、未过期且仍有名额的窗口发出，占用最后一个名额的那条带一句提示，其余的连同原因进入 outbox。`ret -2` 关闭窗口，`-14` 暂停通道，网络失败时文本留在 outbox 里。每次 `send()` 还会把渲染好的通知注入最新的对话 Session（`agent.inject()`，来源类型 `lsy-wechat`，形式 `notice`），并说明它来自另一个 Session、不是 owner 说的话：它等下一轮，不会自己开一轮；之所以这样，是因为 owner 对这条通知的回复会进入对话 Session，而不是写这条通知的那个 Session。
+插件运行期间，通道持续长轮询 `ilink/bot/getupdates`，并在处理消息之前把返回的游标存进 `lsy_wechat` storage domain，所以崩溃只会丢消息，不会重复发 prompt。两次轮询之间它会重读账号文件；没有可用账号、或服务器报告 token 失效（`-14`）时，它只记一次日志，然后每隔 `accountPollMs` 检查一次文件。它只接受 owner 发来的用户消息。每条消息打开一个回复窗口（`context_token`、接收时间、已用条数），先把 outbox 作为摘要消息发出（摘要永远不占窗口的最后一个名额），再用 `sessionController.prompt()` 以 `steer` 模式转给 owner 的对话 Session：Session 空闲时开始新一轮，正在忙时在下一个步骤边界接收这条消息，所以紧跟一句话发来的图片会进入正在回答那句话的那一轮。转发之前，每个图片、文件和视频条目都会被下载（AES-128-ECB，密钥取 `image_item.aeskey` 或 `media.aes_key`），按内容或文件名判断类型，再写进 inbox；prompt 为每个附件附一行说明，图片作为图片内容附上；如果被拒绝为 `session/attachment-invalid`（模型只支持文本），就只带说明重发一次。`resolveAgent()` 成功时复用已存的 Session；Session 不存在或已损坏时，用 `sessionController.create()` 新建一个，并设置 permission preset 和标题。通道跟踪自己创建的每个对话 Session 的 `session/event`，记住这一轮最新的助手文本，在这一轮结束时发出，除非它是 `NO_REPLY`。`send()` 和回复转发共用一条串行的投递路径：文本只经由已打开、未过期且仍有名额的窗口发出，占用最后一个名额的那条带一句提示，其余的连同原因进入 outbox。`ret -2` 关闭窗口，`-14` 暂停通道，网络失败时文本留在 outbox 里。每次 `send()` 还会把渲染好的通知注入最新的对话 Session（`agent.inject()`，来源类型 `lsy-wechat`，形式 `notice`），并说明它来自另一个 Session、不是 owner 说的话，附上发出时间：它等下一轮，不会自己开一轮；之所以这样，是因为 owner 对这条通知的回复会进入对话 Session，而不是写这条通知的那个 Session，所以它可能在发出几小时后才进入那个 Session 的历史。`activity` 表记录 owner 上次写消息的时间，以及 bot 上次给 owner 发了什么、何时发的。它在 outbox 刷出之前读取，因此新消息放出的摘要不算数；对话安静超过 `timeGapMs` 之后，owner 的消息在 prompt 之前先注入一条时间间隔提示。
 
 | 文件 | 作用 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 服务、配置、长轮询循环、对话 Session、回复转发、投递与 outbox |
 | [`src/api.ts`](src/api.ts) | 最小的 iLink 客户端，每个请求有独立时限；错误信息从不包含 token |
 | [`src/login.ts`](src/login.ts) | 二维码登录状态机、终端登录命令、账号文件 |
-| [`src/text.ts`](src/text.ts) | 入站文本提取、消息拆分、转发文本、摘要 |
+| [`src/text.ts`](src/text.ts) | 入站文本提取、消息拆分、转发文本、摘要、时间戳、时间间隔提示与转来通知的文本 |
 | [`src/media.ts`](src/media.ts) | CDN 下载与解密、图片类型识别、inbox、附件说明；外发的加密与上传（`getuploadurl`、CDN POST、`x-encrypted-param`） |
-| [`src/storage.ts`](src/storage.ts) | 游标、回复窗口、对话 Session 与 outbox 的 storage-domain 表 |
+| [`src/storage.ts`](src/storage.ts) | 游标、回复窗口、对话 Session、outbox 与对话动态的 storage-domain 表 |
 
 这是 fork 本地的包；`lsy` 组如何跟踪上游见 [`../UPSTREAM.md`](../UPSTREAM.md)。协议参照腾讯 OpenClaw 微信插件（`@tencent-weixin/openclaw-weixin` 2.4.10）；这个客户端实现二维码登录、`getupdates`、媒体下载和文本 `sendmessage`。媒体格式与 origin 校验参照 [xiaoshihou514/dsh-weixin](https://github.com/xiaoshihou514/dsh-weixin)（MIT）。[`lsy/deploy/wechat-login.mjs`](../../../lsy/deploy/wechat-login.mjs) 只是 `runLoginCli()` 外面的一层薄壳，逻辑由测试覆盖。
 
@@ -120,15 +121,30 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 
 #### 模型看到什么
 
-owner 的每条微信消息都以普通用户 prompt 的形式进入对话 Session，带上配置的 `chat.timeZone`，和在 Web UI 里输入的文字一样。文本不带任何微信包装；引用会多一行 `[引用] …`，语音消息是 `[语音] <转写>`，媒体是占位符，后面每个附件跟一行说明，例如 `- image (image/jpeg, 84.2 KB) saved at /Users/dsh-runtime/work/.wechat-inbox/…-image.jpg; it is attached to this message.`；没能取到的附件会注明取不到、内容不可用。不超过 20 MiB、格式为 Host 接受的 PNG、JPEG、GIF、WebP 的图片，同时作为同一条消息的图片内容。每一轮模型的最终回答以纯文本发回，所以 Markdown 在手机上会原样显示。最终回答恰好是 `NO_REPLY` 时什么也不发。
+owner 的每条微信消息都以普通用户 prompt 的形式进入对话 Session，带上配置的 `chat.timeZone`，和在 Web UI 里输入的文字一样。文本不带任何微信包装；引用会多一行 `[引用] …`，语音消息是 `[语音] <转写>`，媒体是占位符，后面每个附件跟一行说明，例如 `- image (image/jpeg, 84.2 KB) saved at /Users/dsh-runtime/work/.wechat-inbox/…-image.jpg; it is attached to this message.`；没能取到的附件会注明取不到、内容不可用。不超过 20 MiB、格式为 Host 接受的 PNG、JPEG、GIF、WebP 的图片，同时作为同一条消息的图片内容。每一轮模型的最终回答原样发回，微信会渲染其中的 Markdown（标题、列表、引用、表格、代码块）。最终回答恰好是 `NO_REPLY` 时什么也不发。对话安静了 `timeGapMs` 或更久时，owner 的消息之前会先来一条提示（来源类型 `lsy-wechat`，形式 `notice`）；另一个 Session 发给 owner 的通知也以提示形式到达，并附上发出时间。两者中的每个时间都来自通道自己的记录，从不来自模型。
+
+##### 时间间隔提示
+
+```markdown
+Time check: the owner sent the message below at Thu 2026-10-22 08:49 (America/New_York), after 5 h 39 min of silence in this WeChat chat. The last message before it was a note another session (an event, reminder, monitor, or operator task) sent the owner, at Thu 2026-10-22 03:10; the owner last wrote at Wed 2026-10-21 14:00 (18 h 49 min ago). Read the new message on its own terms: it starts a new exchange unless it clearly refers back to something earlier.
+```
+
+##### 转来的通知
+
+```markdown
+At Thu 2026-10-22 03:10 (America/New_York), another session (an event, reminder, monitor, or operator task) sent the owner this message on WeChat. It is context, not the owner speaking: the owner may reply to it in this chat.
+host-alerts: 1 event(s)
+
+• Internal 磁盘已用 91.9%，只剩 18 GB
+```
 
 #### Token 影响
 
-每条微信消息一条用户消息，长度就是 owner 写的长度，外加每个附件约一行说明，以及每张附上的图片的图片 token。对话 Session 长期存在，上下文会跨天增长，直到压缩或 `/new`。
+每条微信消息一条用户消息，长度就是 owner 写的长度，外加每个附件约一行说明，以及每张附上的图片的图片 token。安静一段时间之后的时间间隔提示约 100 token；每条转来的通知是它的正文加一行说明。对话 Session 长期存在，上下文会跨天增长，直到压缩或 `/new`。
 
 #### KV Cache 影响
 
-消息追加到同一个 Session，每一轮都复用到目前为止对话的缓存前缀。`/new` 开始一个空 Session，前缀从头建立。
+消息和提示都追加到同一个 Session，每一轮都复用到目前为止对话的缓存前缀。`/new` 开始一个空 Session，前缀从头建立。
 
 ## 已知限制与延后工作
 

@@ -40,6 +40,8 @@ function fakeSessions(onPrompt: () => void = () => {}) {
     /** Messages injected into chat Sessions, as [sessionId, text]. */
     injected: [] as [string, string][],
     prompts: [] as SessionPromptRequest[],
+    /** What reached chat Sessions, in order: `inject:<text>` and `prompt:<text>`. */
+    order: [] as string[],
     live: new Set<string>(),
     /** Error code resolveAgent returns for one Session id. */
     errors: new Map<string, string>(),
@@ -62,11 +64,16 @@ function fakeSessions(onPrompt: () => void = () => {}) {
     resolveAgent: async (sessionId: string) => {
       const code = state.errors.get(sessionId) ?? (state.live.has(sessionId) ? undefined : 'session/not-found')
       return code === undefined
-        ? { agent: { session: { id: sessionId }, inject: (message: { content: { type: string; text?: string }[] }) => { state.injected.push([sessionId, message.content[0]?.text ?? '']) } } }
+        ? { agent: { session: { id: sessionId }, inject: (message: { content: { type: string; text?: string }[] }) => {
+          const text = message.content[0]?.text ?? ''
+          state.injected.push([sessionId, text])
+          state.order.push(`inject:${text}`)
+        } } }
         : { error: Object.assign(new Error(`${code}: ${sessionId}`), { code }) }
     },
     prompt: async (request: SessionPromptRequest, signal: AbortSignal) => {
       state.prompts.push(request)
+      state.order.push(`prompt:${request.content[0]?.type === 'text' ? request.content[0].text : ''}`)
       state.onPrompt()
       if (state.promptErrorsOnce.length > 0) throw state.promptErrorsOnce.shift()
       if (state.promptError !== undefined) throw state.promptError
@@ -174,6 +181,7 @@ async function harness(options: {
     cdnBaseUrl: CDN,
     maxMediaBytes: 4096,
     mediaTimeoutMs: 60_000,
+    timeGapMs: 1_800_000,
     ...rest,
   }
   await ctx.plugin(WechatChannel, config)
@@ -471,8 +479,86 @@ describe('WechatChannel notes in the chat Session', () => {
     const [sessionId, text] = h.sessions.injected[0]!
     expect(sessionId).toBe('chat-1')
     expect(text).toContain('It is context, not the owner speaking')
+    expect(text).toMatch(/^At Wed 2026-10-21 14:00 \(America\/New_York\), another session/)
+    expect(text).not.toContain('just')
     expect(text).toContain('✅ operator: watch globe errors\n\nmonitor mon-ac1fa1 is running')
     expect(h.sessions.prompts).toHaveLength(prompts)
+  })
+})
+
+describe('WechatChannel time awareness', () => {
+  /** Move the wall clock without firing the long-poll timers. */
+  const at = (iso: string): void => { vi.setSystemTime(new Date(iso)) }
+  const gapNotices = (h: { sessions: { injected: [string, string][] } }): string[] =>
+    h.sessions.injected.map(([, text]) => text).filter(text => text.startsWith('Time check:'))
+
+  it('dates a relayed note and tells the chat Session how long the chat was quiet', async () => {
+    const h = await harness()
+    await h.ownerSays('hi')
+    await h.finishTurn('chat-1', 'hello')
+    at('2026-10-22T07:10:00.000Z')
+    await h.channel.send({ title: 'host-alerts: 1 event(s)', body: '• Internal 磁盘已用 91.9%' })
+    at('2026-10-22T12:49:00.000Z')
+    await h.ownerSays('早上好')
+
+    const [note, notice] = h.sessions.injected.map(([, text]) => text)
+    expect(note).toMatch(/^At Thu 2026-10-22 03:10 \(America\/New_York\), another session/)
+    expect(notice).toBe(
+      'Time check: the owner sent the message below at Thu 2026-10-22 08:49 (America/New_York), after 5 h 39 min of silence in this WeChat chat.'
+      + ' The last message before it was a note another session (an event, reminder, monitor, or operator task) sent the owner, at Thu 2026-10-22 03:10;'
+      + ' the owner last wrote at Wed 2026-10-21 14:00 (18 h 49 min ago).'
+      + ' Read the new message on its own terms: it starts a new exchange unless it clearly refers back to something earlier.',
+    )
+    // The notice reaches the chat Session just before the message it describes.
+    expect(h.sessions.order.slice(-2)).toEqual([`inject:${notice!}`, 'prompt:早上好'])
+    expect(h.logs.some(line => line.text === 'lsy-wechat: told chat Session chat-1 the chat was quiet for 5 h 39 min')).toBe(true)
+  })
+
+  it('adds nothing to the first message or while the chat is active', async () => {
+    const h = await harness()
+    await h.ownerSays('one')
+    await h.finishTurn('chat-1', 'reply one')
+    at('2026-10-21T18:25:00.000Z')
+    await h.ownerSays('two')
+    expect(gapNotices(h)).toEqual([])
+    expect(h.sessions.prompts).toHaveLength(2)
+  })
+
+  it('measures from the reply, not from a digest flushed by the new message', async () => {
+    const h = await harness({ config: { contextTtlMs: 3_600_000 } })
+    await h.ownerSays('one')
+    await h.finishTurn('chat-1', 'reply one')
+    at('2026-10-21T20:00:00.000Z')
+    // The window expired: the note waits in the outbox and goes out as a digest when the owner writes.
+    await h.channel.send({ title: 'queued note' })
+    at('2026-10-21T21:00:00.000Z')
+    await h.ownerSays('two')
+    expect(h.ilink.sent.at(-1)!.text).toContain('queued note')
+    expect(gapNotices(h)).toHaveLength(1)
+    expect(gapNotices(h)[0]).toContain('after 3 h of silence')
+    expect(gapNotices(h)[0]).toContain('The last message before it was your reply, at Wed 2026-10-21 14:00;')
+  })
+
+  it('remembers the chat across a host restart', async () => {
+    const pool = new MemoryMediaPool()
+    const sessions = fakeSessions()
+    const first = await harness({ pool, sessions })
+    await first.ownerSays('one')
+    await first.finishTurn('chat-1', 'reply one')
+    await contexts.splice(0).at(0)!.fiber.dispose()
+    at('2026-10-21T20:00:00.000Z')
+    const second = await harness({ pool, sessions })
+    await second.ownerSays('two')
+    expect(gapNotices(second)).toHaveLength(1)
+    expect(gapNotices(second)[0]).toContain('after 2 h of silence')
+  })
+
+  it('is off with timeGapMs 0', async () => {
+    const h = await harness({ config: { timeGapMs: 0 } })
+    await h.ownerSays('one')
+    at('2026-10-23T18:00:00.000Z')
+    await h.ownerSays('two')
+    expect(gapNotices(h)).toEqual([])
   })
 })
 
@@ -803,6 +889,7 @@ describe('WechatChannel configuration', () => {
       cdnBaseUrl: 'https://novac2c.cdn.weixin.qq.com/c2c',
       maxMediaBytes: 25 * 1024 * 1024,
       mediaTimeoutMs: 60_000,
+      timeGapMs: 1_800_000,
     })
     expect(() => resolveConfig({ repliesPerToken: 1 })).toThrow()
     expect(() => resolveConfig({ maxMessageChars: 50 })).toThrow()

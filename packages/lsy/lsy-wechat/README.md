@@ -71,6 +71,7 @@ The command writes `<DSH_HOME>/lsy-wechat/account.json` with mode 600 and prints
 | `cdnBaseUrl` | `https://novac2c.cdn.weixin.qq.com/c2c` | WeChat CDN for attachments; a server-provided `full_url` on another origin is refused |
 | `maxMediaBytes` | `26214400` | Largest attachment downloaded (25 MiB) |
 | `mediaTimeoutMs` | `60000` | Deadline of one attachment download |
+| `timeGapMs` | `1800000` | Chat silence (30 min) after which your next message reaches the agent with a time check: when you wrote, how long the chat was quiet, and what the last message was; `0` turns it off |
 
 In the chat, `/new` starts a fresh chat Session. Text, voice transcripts, and quotes reach the agent. Images, files, and videos are downloaded from the WeChat CDN, decrypted, and saved in the inbox; images also reach the model as image parts when its route accepts images.
 
@@ -86,16 +87,16 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The channel long-polls `ilink/bot/getupdates` while the plugin is active and stores the returned cursor in the `lsy_wechat` storage domain before it handles the messages, so a crash drops messages rather than repeating prompts. It re-reads the account file between polls; without a usable account, or after the server reports the token stale (`-14`), it logs once and checks the file every `accountPollMs`. It accepts only user messages from the owner. Each one opens a reply window (`context_token`, receive time, used count), flushes the outbox as digest messages that never take the window's last slot, and is forwarded with `sessionController.prompt()` in `steer` mode to the owner's chat Session: an idle Session starts a turn, and a busy one takes the message at its next step, so a picture sent right after a word reaches the turn already answering that word. Before that, each image, file, and video item is downloaded (AES-128-ECB, key from `image_item.aeskey` or `media.aes_key`), typed from its bytes or name, and written to the inbox; the prompt gets a note per attachment and the images as image parts, and a `session/attachment-invalid` refusal (a text-only model) is retried with the note alone. The stored Session is reused while `resolveAgent()` succeeds; a missing or broken one is replaced by a new Session created with `sessionController.create()`, given its permission preset and title. The channel follows `session/event` for every chat Session it created, keeps the latest assistant text of the turn, and sends it when the turn ends unless it is `NO_REPLY`. `send()` and the relay share one serialized delivery path: a text goes out only through an open, unexpired window with slots left, the send that takes the last slot carries a footer, and everything else is queued with its reason. `ret -2` closes the window, `-14` pauses the channel, and network failures keep the text queued. Every `send()` also injects the rendered note into the newest chat Session (`agent.inject()`, source kind `lsy-wechat`, form `notice`), framed as another Session's message rather than the owner's: it waits for the next turn without starting one, because the owner's reply to that note reaches the chat Session, not the Session that wrote it.
+The channel long-polls `ilink/bot/getupdates` while the plugin is active and stores the returned cursor in the `lsy_wechat` storage domain before it handles the messages, so a crash drops messages rather than repeating prompts. It re-reads the account file between polls; without a usable account, or after the server reports the token stale (`-14`), it logs once and checks the file every `accountPollMs`. It accepts only user messages from the owner. Each one opens a reply window (`context_token`, receive time, used count), flushes the outbox as digest messages that never take the window's last slot, and is forwarded with `sessionController.prompt()` in `steer` mode to the owner's chat Session: an idle Session starts a turn, and a busy one takes the message at its next step, so a picture sent right after a word reaches the turn already answering that word. Before that, each image, file, and video item is downloaded (AES-128-ECB, key from `image_item.aeskey` or `media.aes_key`), typed from its bytes or name, and written to the inbox; the prompt gets a note per attachment and the images as image parts, and a `session/attachment-invalid` refusal (a text-only model) is retried with the note alone. The stored Session is reused while `resolveAgent()` succeeds; a missing or broken one is replaced by a new Session created with `sessionController.create()`, given its permission preset and title. The channel follows `session/event` for every chat Session it created, keeps the latest assistant text of the turn, and sends it when the turn ends unless it is `NO_REPLY`. `send()` and the relay share one serialized delivery path: a text goes out only through an open, unexpired window with slots left, the send that takes the last slot carries a footer, and everything else is queued with its reason. `ret -2` closes the window, `-14` pauses the channel, and network failures keep the text queued. Every `send()` also injects the rendered note into the newest chat Session (`agent.inject()`, source kind `lsy-wechat`, form `notice`), framed as another Session's message rather than the owner's and dated with its send time: it waits for the next turn without starting one, because the owner's reply to that note reaches the chat Session, not the Session that wrote it, so it may enter that Session's history hours after it was sent. The `activity` table keeps when the owner last wrote and when, and what, the bot last sent the owner. It is read before the outbox flush, so a digest the new message releases does not count, and an owner message after `timeGapMs` of silence gets a time-gap notice injected just before its prompt.
 
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Service, configuration, long-poll loop, chat Session, reply relay, delivery and outbox |
 | [`src/api.ts`](src/api.ts) | Minimal iLink client with per-request deadlines; errors never contain the token |
 | [`src/login.ts`](src/login.ts) | QR login status machine, terminal login command, account file |
-| [`src/text.ts`](src/text.ts) | Inbound text extraction, message splitting, relay text, digests |
+| [`src/text.ts`](src/text.ts) | Inbound text extraction, message splitting, relay text, digests, time stamps, time-gap and shared-note texts |
 | [`src/media.ts`](src/media.ts) | CDN download and decryption, image type detection, the inbox, and the attachment note; outbound encryption and upload (`getuploadurl`, CDN POST, `x-encrypted-param`) |
-| [`src/storage.ts`](src/storage.ts) | Storage-domain tables for cursors, reply windows, chat Sessions, and the outbox |
+| [`src/storage.ts`](src/storage.ts) | Storage-domain tables for cursors, reply windows, chat Sessions, the outbox, and chat activity |
 
 This is a fork-local package; [`../UPSTREAM.md`](../UPSTREAM.md) describes how the `lsy` group tracks upstream. The protocol follows the Tencent OpenClaw WeChat plugin (`@tencent-weixin/openclaw-weixin` 2.4.10); this client implements QR login, `getupdates`, media download, and text `sendmessage`. The media layout and origin check follow [xiaoshihou514/dsh-weixin](https://github.com/xiaoshihou514/dsh-weixin) (MIT). [`lsy/deploy/wechat-login.mjs`](../../../lsy/deploy/wechat-login.mjs) is a thin shim over `runLoginCli()`, which the tests cover.
 
@@ -120,15 +121,30 @@ This is a fork-local package; [`../UPSTREAM.md`](../UPSTREAM.md) describes how t
 
 #### What the model sees
 
-Each WeChat message of the owner arrives in the chat Session as an ordinary user prompt with the configured `chat.timeZone`, the same as text typed in the Web UI. The text carries no WeChat framing; a quote adds one `[引用] …` line, a voice message reads `[语音] <transcript>`, and media read as placeholders followed by one note per attachment, such as `- image (image/jpeg, 84.2 KB) saved at /Users/dsh-runtime/work/.wechat-inbox/…-image.jpg; it is attached to this message.`; an attachment that could not be fetched says so and that its content is unavailable. Images within 20 MiB in a format the Host accepts (PNG, JPEG, GIF, WebP) are also image parts of the same message. The model's final answer of each turn is relayed back as plain text, so Markdown shows up literally on the phone. A final answer of exactly `NO_REPLY` sends nothing.
+Each WeChat message of the owner arrives in the chat Session as an ordinary user prompt with the configured `chat.timeZone`, the same as text typed in the Web UI. The text carries no WeChat framing; a quote adds one `[引用] …` line, a voice message reads `[语音] <transcript>`, and media read as placeholders followed by one note per attachment, such as `- image (image/jpeg, 84.2 KB) saved at /Users/dsh-runtime/work/.wechat-inbox/…-image.jpg; it is attached to this message.`; an attachment that could not be fetched says so and that its content is unavailable. Images within 20 MiB in a format the Host accepts (PNG, JPEG, GIF, WebP) are also image parts of the same message. The model's final answer of each turn is relayed back unchanged, and WeChat renders its Markdown (headings, lists, quotes, tables, code blocks). A final answer of exactly `NO_REPLY` sends nothing. When the chat was quiet for `timeGapMs` or longer, a notice (source kind `lsy-wechat`, form `notice`) comes just before the owner's message, and a note another Session sent the owner arrives as a notice dated with its send time; every time in either comes from the channel's own records, never from the model.
+
+##### Time-gap notice
+
+```markdown
+Time check: the owner sent the message below at Thu 2026-10-22 08:49 (America/New_York), after 5 h 39 min of silence in this WeChat chat. The last message before it was a note another session (an event, reminder, monitor, or operator task) sent the owner, at Thu 2026-10-22 03:10; the owner last wrote at Wed 2026-10-21 14:00 (18 h 49 min ago). Read the new message on its own terms: it starts a new exchange unless it clearly refers back to something earlier.
+```
+
+##### Shared note
+
+```markdown
+At Thu 2026-10-22 03:10 (America/New_York), another session (an event, reminder, monitor, or operator task) sent the owner this message on WeChat. It is context, not the owner speaking: the owner may reply to it in this chat.
+host-alerts: 1 event(s)
+
+• Internal 磁盘已用 91.9%，只剩 18 GB
+```
 
 #### Token effect
 
-One user message per WeChat message, as long as the owner wrote it, plus about one line per attachment and the image tokens of each attached image. The chat Session is long-lived, so its context grows across days until compaction or `/new`.
+One user message per WeChat message, as long as the owner wrote it, plus about one line per attachment and the image tokens of each attached image. A time-gap notice adds about 100 tokens after a quiet spell, and each shared note adds its text plus a one-line frame. The chat Session is long-lived, so its context grows across days until compaction or `/new`.
 
 #### KV Cache effect
 
-Messages are appended to one Session, so each turn reuses the cached prefix of the conversation so far. `/new` starts an empty Session with a new prefix.
+Messages and notices are appended to one Session, so each turn reuses the cached prefix of the conversation so far. `/new` starts an empty Session with a new prefix.
 
 ## Known Limitations and Deferred Work
 

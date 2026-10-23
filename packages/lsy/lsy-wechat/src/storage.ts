@@ -1,4 +1,4 @@
-/** Durable channel state: long-poll cursors, reply windows, chat Sessions, and undelivered texts. */
+/** Durable channel state: long-poll cursors, reply windows, chat Sessions, undelivered texts, and chat activity. */
 import { z } from 'zod'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 
@@ -38,6 +38,20 @@ const outboxSchema = z.object({
   queuedAt: z.number(),
 }).strict()
 
+/** What the bot's latest message to the owner was. */
+export const SENT_KINDS = ['reply', 'note', 'file', 'notice', 'digest'] as const
+/** One of {@link SENT_KINDS}: a chat Session reply, another Session's note, a file, a channel notice, or an outbox digest. */
+export type SentKind = typeof SENT_KINDS[number]
+
+const activitySchema = z.object({
+  /** When the owner's latest message arrived, in Unix epoch milliseconds. */
+  ownerAt: z.number().optional(),
+  /** When the bot last sent the owner a message, in Unix epoch milliseconds. */
+  sentAt: z.number().optional(),
+  /** What that message was. */
+  sent: z.enum(SENT_KINDS).optional(),
+}).strict()
+
 /** Long-poll cursor of one bot. */
 export type CursorRecord = z.infer<typeof cursorSchema>
 /** Reply window opened by the owner's latest message. */
@@ -48,10 +62,13 @@ export type ChatRecord = z.infer<typeof chatSchema>
 export type SessionRecord = z.infer<typeof sessionSchema>
 /** One text waiting for a reply window. */
 export type OutboxRecord = z.infer<typeof outboxSchema>
+/** Latest message in the owner's chat, each way. */
+export type ActivityRecord = z.infer<typeof activitySchema>
 
 /**
  * Channel storage. `cursors` is keyed by bot id, `windows` by `<botId>/<ownerUserId>`,
- * `chats` by owner id, `sessions` by Session id, and `outbox` by zero-padded `seq`.
+ * `chats` and `activity` by owner id, `sessions` by Session id, and `outbox` by zero-padded `seq`.
+ * A table added later loads empty from an existing file, so `activity` needs no version change.
  */
 export const wechatDomain = defineDomain({
   name: 'lsy_wechat',
@@ -62,5 +79,6 @@ export const wechatDomain = defineDomain({
     chats: domainTable<string, ChatRecord>(chatSchema),
     sessions: domainTable<string, SessionRecord>(sessionSchema),
     outbox: domainTable<string, OutboxRecord>(outboxSchema),
+    activity: domainTable<string, ActivityRecord>(activitySchema),
   },
 })
