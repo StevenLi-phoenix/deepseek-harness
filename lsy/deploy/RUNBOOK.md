@@ -96,7 +96,7 @@ Models start on OpenRouter: the owner's profile patch is seeded (once, by `setup
 The harness strips every variable whose name contains `KEY`, `PASSWORD`, `SECRET`, or `TOKEN` from the agent's shell commands, so `git` never sees the `.env` token. Log `gh` in for the service user instead; `git push` and `gh pr` then authenticate through it:
 
 ```sh
-cd / && sudo -u dsh-runtime /usr/bin/env HOME=/Users/dsh-runtime PATH=/opt/homebrew/bin:/usr/bin:/bin /bin/zsh -fc '/usr/bin/sed -n "s/^LSY_GITHUB_TOKEN=//p" ~/.dsh/.env | gh auth login --hostname github.com --git-protocol https --insecure-storage --with-token && gh auth setup-git --hostname github.com && git config --global user.name "Steven Li (dsh)" && git config --global user.email lishuyustevenli@163.com && gh auth status'
+cd / && sudo -u dsh-runtime /usr/bin/env HOME=/Users/dsh-runtime PATH=/opt/homebrew/bin:/usr/bin:/bin /bin/zsh -fc '/usr/bin/sed -n "s/^LSY_GITHUB_TOKEN=//p" ~/.dsh/.env | gh auth login --hostname github.com --git-protocol https --insecure-storage --with-token && gh auth setup-git --hostname github.com && git config --global user.name "dsh-events[bot]" && git config --global user.email "346633139+dsh-events[bot]@users.noreply.github.com" && gh auth status'
 ```
 
 The agent runs as `dsh-runtime`, so it can read `.env` and `~/.config/gh/hosts.yml` (plain text: a daemon user has no unlocked keychain). Keep each key scoped so that a leak costs little.
@@ -179,8 +179,13 @@ Polling reports within a minute and spends the owner's shared REST quota on anyt
    ssh phm "printf 'handle /github-relay/* {\n  reverse_proxy 127.0.0.1:18080\n}\n' > /etc/caddy/services-api/github-relay.caddy && caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy"
    ```
 3. Register the App with the form prefilled (private, webhook to the relay, read-only permissions, the events below), paste the secret from `~/lsy-github-webhook-secret.txt` (`pbcopy < ~/lsy-github-webhook-secret.txt`), create it, and install it on the repositories to watch:
-   `https://github.com/settings/apps/new?name=lsy-dsh-events&description=Webhooks%20for%20the%20lsy%20dsh%20event%20service&url=https://github.com/StevenLi-phoenix/deepseek-harness&public=false&webhook_active=true&webhook_url=https://api.lishuyu.app/github-relay/github&metadata=read&contents=read&issues=read&pull_requests=read&actions=read&events[]=push&events[]=create&events[]=release&events[]=pull_request&events[]=pull_request_review&events[]=issues&events[]=issue_comment&events[]=workflow_run`
+   `https://github.com/settings/apps/new?name=dsh-events&description=Webhooks%20for%20the%20lsy%20dsh%20event%20service&url=https://github.com/StevenLi-phoenix/deepseek-harness&public=false&webhook_active=true&webhook_url=https://api.lishuyu.app/github-relay/github&metadata=read&contents=read&issues=read&pull_requests=read&actions=read&events[]=push&events[]=create&events[]=release&events[]=pull_request&events[]=pull_request_review&events[]=issues&events[]=issue_comment&events[]=workflow_run`
 4. Remove the exported copy: `trash ~/lsy-github-webhook-secret.txt`.
+5. The App is `dsh-events`; its bot is `dsh-events[bot]` (user id 346633139). Generate a private key on the App page and pipe it to the service account without printing it, then trash the download:
+   ```sh
+   cat ~/dsh-events.*.private-key.pem | sudo -n -u dsh-runtime /bin/sh -c 'umask 077; cat > /Users/dsh-runtime/.dsh/github-app.private-key.pem'
+   ```
+   The service's git identity is the bot (step 5's `git config`), so the agent's commits carry the login the event bus suppresses (`suppress.actors`), whichever token pushes them.
 
 Verify on the App's **Advanced** page: the `ping` delivery shows `202`, and `stdout.log` gains `lsy-github-sensor: webhook …` lines for later deliveries. A `401` means the secrets differ; `502` means phm could not reach the mini; `415` means the content type is not `application/json`. Watches still poll, so a missed delivery is caught within a minute.
 

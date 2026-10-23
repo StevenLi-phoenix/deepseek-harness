@@ -49,10 +49,10 @@
       config:
         webUrl: https://dsh.tailc2559b.ts.net/
         # Loop suppression by identity, which the host sets, never by text the model writes: the
-        # agent acts on GitHub as the lsy-dsh-events App, so its own pushes, comments, and commits
+        # agent acts on GitHub as the dsh-events App, so its own pushes, comments, and commits
         # (git identity = the bot's noreply address) carry this login.
         suppress:
-          actors: ['lsy-dsh-events[bot]']
+          actors: ['dsh-events[bot]']
           markers: []
 
     - id: lsy-github-sensor
