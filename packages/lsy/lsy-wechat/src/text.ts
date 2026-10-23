@@ -55,9 +55,31 @@ export function fitText(text: string, maxChars: number, maxBytes: number = WECHA
   return `${kept}…`
 }
 
+/** Length of a fence marker (```` ``` ```` or `~~~`, three or more) opening a line; 0 when there is none. */
+function fenceRun(line: string): number {
+  return /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1]?.length ?? 0
+}
+
+/** A GFM table row: pipes at both ends. */
+function isTableRow(line: string): boolean {
+  const trimmed = line.trim()
+  return trimmed.length >= 2 && trimmed.startsWith('|') && trimmed.endsWith('|')
+}
+
+/** A GFM table separator row, such as `| --- | :-: |`. */
+function isTableSeparator(line: string): boolean {
+  if (!isTableRow(line)) return false
+  const inner = line.trim().slice(1, -1)
+  return inner !== '' && inner.split('|').every(cell => /^:?-+:?$/.test(cell.trim()))
+}
+
 /**
  * Split text into messages of at most `maxChars` code points, preferring line
- * breaks, and label the parts `[i/n]`. Beyond `maxParts` the last part is cut.
+ * breaks, and label the parts `[i/n]`. WeChat renders Markdown, so a part that
+ * ends inside a code fence closes it and the next reopens it with the same
+ * opening line, and a part that starts inside a table repeats its header and
+ * separator rows. A line longer than a part is cut; beyond `maxParts` the last
+ * part is cut. The fence and table handling follows pan17/dsh-wechat (MIT).
  * @param text - text to send.
  * @param maxChars - code points per message, labels included.
  * @param maxParts - messages at most.
@@ -68,29 +90,123 @@ export function splitText(text: string, maxChars: number, maxParts: number, maxB
   if (Array.from(text).length <= maxChars && Buffer.byteLength(text, 'utf8') <= maxBytes) return [text]
   // Room for a `[n/n]\n` label; byte budgets assume 4 bytes per code point at worst.
   const budget = Math.max(1, Math.min(maxChars - 8, Math.floor((maxBytes - 16) / 4)))
-  const chunks: string[] = []
-  let rest = Array.from(text)
-  while (rest.length > 0 && chunks.length < maxParts) {
-    if (chunks.length === maxParts - 1 || rest.length <= budget) {
-      chunks.push(fitText(rest.join(''), budget, budget * 4))
-      break
-    }
-    const window = rest.slice(0, budget)
-    const lineBreak = window.lastIndexOf('\n')
-    const cut = lineBreak >= budget / 2 ? lineBreak + 1 : budget
-    chunks.push(rest.slice(0, cut).join('').trimEnd())
-    rest = rest.slice(cut)
+  const width = (line: string): number => Array.from(line).length
+  const lines = text.split('\n')
+  const parts: string[] = []
+  let current: string[] = []
+  let used = 0
+  /** Lines carried into the current part (a reopened fence or a table header); a part of only these is empty. */
+  let carried = 0
+  let fence: { open: string; close: string; run: number; marker: string } | undefined
+  let table: { header: string; separator: string } | undefined
+
+  const add = (line: string): void => {
+    if (current.length === 0 && line.trim() === '') return
+    used += width(line) + (current.length > 0 ? 1 : 0)
+    current.push(line)
   }
-  return chunks.map((chunk, index) => `[${index + 1}/${chunks.length}]\n${chunk}`)
+  /** Whether `line` closes the open fence. */
+  const closes = (line: string): boolean =>
+    fence !== undefined && fenceRun(line) >= fence.run && line.trim() === fence.marker.repeat(fenceRun(line))
+  /** Code points the current part keeps free to close an open fence; the closing line itself uses them. */
+  const reserve = (line: string): number => (fence === undefined || closes(line) ? 0 : width(fence.close) + 1)
+  const room = (line: string): number => budget - used - reserve(line)
+  /** End the current part; returns false when the parts are used up. */
+  const flush = (): boolean => {
+    if (parts.length === maxParts - 1) return false
+    // A fence opened by this part's last line has no body here yet: the opener moves on instead of rendering empty.
+    const bare = fence !== undefined && current.length > carried && current.at(-1) === fence.open
+    const body = bare ? current.slice(0, -1) : current
+    if (body.length > carried) parts.push([...body, ...fence === undefined || bare ? [] : [fence.close]].join('\n').trimEnd())
+    current = []
+    used = 0
+    carried = 0
+    if (fence !== undefined) add(fence.open)
+    else if (table !== undefined) {
+      add(table.header)
+      add(table.separator)
+    }
+    carried = current.length
+    return true
+  }
+
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index] ?? ''
+    const next = lines[index + 1] ?? ''
+    const header = fence === undefined && table === undefined && isTableRow(line) && isTableSeparator(next)
+    const unit = header ? [line, next] : [line]
+    const need = unit.reduce((sum, item) => sum + width(item) + 1, 0) - (current.length === 0 ? 1 : 0)
+    if (need > room(line) && current.length > carried && !flush()) {
+      parts.push(fitText([...current, ...lines.slice(index)].join('\n'), budget, budget * 4))
+      return parts.map((part, at) => `[${at + 1}/${parts.length}]\n${part}`)
+    }
+    if (width(line) + 1 > room(line) && unit.length === 1) {
+      // A line longer than a part: cut it, carrying the open fence or table into each piece.
+      let rest = Array.from(line)
+      while (rest.length > 0) {
+        const take = Math.max(1, room(line) - (current.length > 0 ? 1 : 0))
+        add(rest.slice(0, take).join(''))
+        rest = rest.slice(take)
+        if (rest.length > 0 && !flush()) {
+          parts.push(fitText([...current, rest.join(''), ...lines.slice(index + 1)].join('\n'), budget, budget * 4))
+          return parts.map((part, at) => `[${at + 1}/${parts.length}]\n${part}`)
+        }
+      }
+    } else {
+      for (const item of unit) add(item)
+    }
+    // Structure after this line: fences open and close, tables start at a header and end at prose.
+    if (fence !== undefined) {
+      if (closes(line)) fence = undefined
+    } else if (fenceRun(line) > 0) {
+      const run = fenceRun(line)
+      const marker = line.trimStart().charAt(0)
+      fence = { open: line, close: marker.repeat(run), run, marker }
+      table = undefined
+    } else if (header) {
+      table = { header: line, separator: next }
+      index += 1
+    } else if (table !== undefined && !isTableRow(line)) {
+      table = undefined
+    }
+  }
+  if (current.length > carried) parts.push(current.join('\n').trimEnd())
+  return parts.map((part, at) => `[${at + 1}/${parts.length}]\n${part}`)
 }
 
 /**
  * Plain text of a note: title, body, and link separated by blank lines.
  * @param note - bus notification.
- * @returns the text WeChat shows; it renders no Markdown.
+ * @returns the text WeChat shows.
  */
 export function renderNote(note: LsyNote): string {
   return [note.title, note.body, note.url].filter(part => part !== undefined && part.trim() !== '').join('\n\n')
+}
+
+/** Stands in for a quoted message whose text neither the server nor the channel's records hold. */
+const QUOTE_UNAVAILABLE = '（一条较早的消息，内容取不到）'
+/** iLink ids carry their creation time in milliseconds above the low 22 bits. */
+const ID_TIME_SHIFT = 22n
+/** Decoded id times before this are not times. */
+const MIN_ID_TIME = Date.UTC(2020, 0, 1)
+
+/**
+ * When a quoted message was sent: its create or update time, or the time in its id.
+ * Follows xmanrui/dsh-im (MIT), `weixin-api.mjs` `weixinMessageTimestampMs`.
+ * @param item - the quoted item.
+ * @param now - clock, to reject ids that decode to the future.
+ * @returns Unix epoch milliseconds, or undefined when the item carries no usable time.
+ */
+export function quotedAt(item: WeixinItem, now: number = Date.now()): number | undefined {
+  for (const value of [item.create_time_ms, item.update_time_ms]) {
+    if (typeof value === 'number' && Number.isSafeInteger(value) && value > MIN_ID_TIME) return value
+  }
+  const id = item.msg_id
+  let ms: number
+  if (typeof id === 'string') ms = /^\d{16,20}$/.test(id) ? Number(BigInt(id) >> ID_TIME_SHIFT) : Number.NaN
+  else if (typeof id === 'number' && Number.isFinite(id) && id > 0) ms = Math.floor(id / 2 ** 22)
+  else return undefined
+  return Number.isSafeInteger(ms) && ms >= MIN_ID_TIME && ms <= now + 86_400_000 ? ms : undefined
 }
 
 /** Text or placeholder of one item; empty for items that carry nothing usable. */
@@ -121,12 +237,17 @@ function itemText(item: WeixinItem): string {
  * @param message - inbound message.
  * @returns the text, or an empty string when nothing usable was sent.
  */
-export function inboundText(message: WeixinMessage): string {
+export function inboundText(message: WeixinMessage, recall?: (sentAt: number) => string | undefined): string {
   const lines: string[] = []
   for (const item of message.item_list ?? []) {
     const quote = item.ref_msg
     if (quote !== null && quote !== undefined) {
-      const quoted = (quote.message_item ? itemText(quote.message_item) : '') || (quote.title ?? '')
+      let quoted = (quote.message_item ? itemText(quote.message_item) : '') || (quote.title ?? '')
+      // A quoted bot message arrives as times only: look up what was sent then.
+      if (quoted.trim() === '' && quote.message_item && recall !== undefined) {
+        const at = quotedAt(quote.message_item)
+        quoted = (at === undefined ? undefined : recall(at)) ?? QUOTE_UNAVAILABLE
+      }
       const flat = quoted.replace(/\s+/g, ' ').trim()
       if (flat !== '') lines.push(`[引用] ${fitText(flat, MAX_QUOTE_CHARS)}`)
     }

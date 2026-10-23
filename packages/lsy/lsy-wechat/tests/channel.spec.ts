@@ -480,6 +480,28 @@ describe('WechatChannel chat', () => {
     expect(h.logs.some(line => line.text.startsWith('lsy-wechat: Session chat-1 ended a turn (error: AUTH: 401 User not found.); relaying'))).toBe(true)
   })
 
+  it('recovers the text of a quoted bot message from what it sent', async () => {
+    const h = await harness()
+    await h.ownerSays('hi')
+    await h.finishTurn('chat-1', 'the disk is at 92%')
+    const sentAt = Date.now()
+    vi.setSystemTime(new Date('2026-10-21T19:00:00.000Z'))
+    await h.channel.send({ title: 'a later note' })
+    h.ilink.updates([{ from_user_id: OWNER, message_type: 1, context_token: 'ctx-q', item_list: [
+      { type: 1, text_item: { text: '这个怎么办' }, ref_msg: { message_item: { type: 8, create_time_ms: sentAt + 300 } } },
+    ] }])
+    await vi.advanceTimersByTimeAsync(0)
+    const last = h.sessions.prompts.at(-1)!.content[0]
+    expect(last).toEqual({ type: 'text', text: '[引用] the disk is at 92%\n这个怎么办' })
+  })
+
+  it('replaces unpaired surrogates the server would refuse', async () => {
+    const h = await harness()
+    await h.ownerSays('one')
+    await h.finishTurn('chat-1', 'cut \ud83d here')
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['cut \ufffd here'])
+  })
+
   it('splits long replies into labeled parts', async () => {
     const h = await harness({ config: { maxMessageChars: 200 } })
     await h.ownerSays('one')
@@ -831,6 +853,8 @@ describe('WechatChannel delivery', () => {
     expect(h.ilink.requestsTo('ilink/bot/sendmessage')).toHaveLength(1)
     expect(h.channel.outbox().map(row => row.text)).toEqual(['a', 'b'])
     expect(h.logs.some(line => line.text.includes('(rejected by WeChat (ret -2))'))).toBe(true)
+    const diagnosis = /WeChat rejected a send \(ret -2\) of \d+ chars, \d+ bytes, after \d+\/10 sends with this token/
+    expect(h.logs.some(line => diagnosis.test(line.text))).toBe(true)
     await h.ownerSays('again')
     expect(h.ilink.sent.map(sent => sent.text.startsWith('📬 未送达的 2 条消息'))).toEqual([true])
   })

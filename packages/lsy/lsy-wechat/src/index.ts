@@ -118,6 +118,11 @@ const STOP_COMMAND = '/stop'
 const HELP_COMMAND = '/help'
 /** How long typing stays on after a forwarded message when no chat turn starts. */
 const TYPING_GRACE_MS = 60_000
+/** Sent texts kept for reading back quotes, by count and by age. */
+const SENT_KEEP = 200
+const SENT_KEEP_MS = 30 * 24 * 60 * 60_000
+/** How far a quoted message's time may lie outside a send and still match it. */
+const QUOTE_MATCH_MS = 15_000
 /** Deadline of the offline notice sent while the channel stops. */
 const STOP_NOTICE_TIMEOUT_MS = 3000
 
@@ -480,7 +485,7 @@ export class WechatChannel extends Service implements LsyNotifier {
       this.ctx.logger.info(`lsy-wechat: dropped a message from ${message.from_user_id ?? 'an unknown user'}, who is not the owner`)
       return
     }
-    const text = inboundText(message)
+    const text = inboundText(message, at => this.recallSent(domain, at))
     this.ctx.logger.info(`lsy-wechat: owner message (${text.length} chars)`)
     const token = message.context_token ?? ''
     const arrivedAt = Date.now()
@@ -738,7 +743,9 @@ export class WechatChannel extends Service implements LsyNotifier {
   }
 
   /** Split one text into messages and send or queue each in order. */
-  private deliver(text: string, kind: SentKind): Promise<void> {
+  private deliver(raw: string, kind: SentKind): Promise<void> {
+    // An unpaired surrogate (a cut emoji in model output) makes sendmessage fail with ret -1.
+    const text = raw.toWellFormed()
     return this.serialize(async () => {
       const domain = await this.ready
       const chars = this.config.maxMessageChars - Array.from(QUOTA_FOOTER).length
@@ -783,12 +790,16 @@ export class WechatChannel extends Service implements LsyNotifier {
   ): Promise<string> {
     const { baseUrl, botToken: token } = target.account
     const client = new IlinkClient({ baseUrl, token, timeoutMs: this.config.requestTimeoutMs })
+    const text = (item as { text_item?: { text?: unknown } }).text_item?.text
+    const startedAt = Date.now()
     try {
       await client.sendItem(target.account.ownerUserId, item, target.window.token, this.abort.signal)
     } catch (error: unknown) {
       if (error instanceof IlinkApiError && error.ret === ILINK_SEND_REJECTED) {
         await this.putWindow(domain, target.key, { ...target.window, exhausted: true })
-        this.ctx.logger.info('lsy-wechat: WeChat rejected a send (ret -2); the reply window stays closed until the owner writes again')
+        // Size and slot count tell a too-long message from a used-up window, which iLink reports alike.
+        const size = typeof text === 'string' ? `${Array.from(text).length} chars, ${Buffer.byteLength(text, 'utf8')} bytes` : label
+        this.ctx.logger.info(`lsy-wechat: WeChat rejected a send (ret -2) of ${size}, after ${target.window.used}/${this.config.repliesPerToken} sends with this token; the reply window stays closed until the owner writes again`)
         return 'rejected by WeChat (ret -2)'
       }
       if (isStaleTokenError(error)) {
@@ -801,8 +812,34 @@ export class WechatChannel extends Service implements LsyNotifier {
     const used = target.window.used + 1
     await this.putWindow(domain, target.key, { ...target.window, used })
     await this.recordActivity(domain, target.account.ownerUserId, { sentAt: Date.now(), sent: kind })
+    if (typeof text === 'string') await this.rememberSent(domain, text, startedAt)
     this.ctx.logger.info(`lsy-wechat: sent ${label} (${used}/${this.config.repliesPerToken} of this window)`)
     return 'sent'
+  }
+
+  /** Keep one sent text for {@link recallSent}: the newest {@link SENT_KEEP} within {@link SENT_KEEP_MS}. */
+  private async rememberSent(domain: Domain<typeof wechatDomain>, text: string, sentAt: number): Promise<void> {
+    const table = domain.table('sent')
+    const now = Date.now()
+    const rows = [...table.entries()].map(([, row]) => row).sort((a, b) => a.seq - b.seq)
+    const seq = (rows.at(-1)?.seq ?? 0) + 1
+    await table.put(outboxKey(seq), { seq, text, sentAt, doneAt: now })
+    const stale = rows.filter((row, index) => now - row.doneAt > SENT_KEEP_MS || index < rows.length + 1 - SENT_KEEP)
+    for (const row of stale) await table.delete(outboxKey(row.seq))
+  }
+
+  /**
+   * The text the bot sent closest to `at`, within {@link QUOTE_MATCH_MS}: iLink gives a quoted bot
+   * message only its time. Follows xmanrui/dsh-im (MIT), `state-store.mjs` `recentOutboundTextFor`.
+   */
+  private recallSent(domain: Domain<typeof wechatDomain>, at: number): string | undefined {
+    let best: { text: string; distance: number } | undefined
+    for (const [, row] of domain.table('sent').entries()) {
+      const distance = at < row.sentAt ? row.sentAt - at : at > row.doneAt ? at - row.doneAt : 0
+      if (distance <= QUOTE_MATCH_MS && (best === undefined || distance < best.distance)) best = { text: row.text, distance }
+    }
+    if (best !== undefined) this.ctx.logger.info('lsy-wechat: read back the text of a quoted bot message')
+    return best?.text
   }
 
   /** Store a reply window and keep a copy for teardown. */

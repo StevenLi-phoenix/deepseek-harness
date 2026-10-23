@@ -135,6 +135,31 @@ export interface LoginOptions {
 /** Hostname with an optional port; anything else in `redirect_host` is ignored. */
 const HOST = /^[A-Za-z0-9.-]+(?::\d+)?$/
 
+/**
+ * WeChat's own domains, the only hosts a bot token may go to: a redirect or base URL the server
+ * names elsewhere is refused. Follows xmanrui/dsh-im (MIT), `weixin-api.mjs` `isWeixinHost`.
+ */
+function isWeixinHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/\.$/, '')
+  return host === 'weixin.qq.com' || host.endsWith('.weixin.qq.com') || host === 'wechat.com' || host.endsWith('.wechat.com')
+}
+
+/** A `redirect_host` worth following: a WeChat hostname, with no port or 443. */
+function trustedRedirect(value: string): boolean {
+  if (!HOST.test(value)) return false
+  const [host = '', port] = value.split(':')
+  return isWeixinHost(host) && (port === undefined || port === '443')
+}
+
+/** The server's base URL, which receives the bot token on every later call: HTTPS on 443 under a WeChat domain. */
+function pinnedBaseUrl(value: string): string {
+  const url = URL.parse(value.includes('://') ? value : `https://${value}`)
+  if (url === null || url.protocol !== 'https:' || !isWeixinHost(url.hostname) || (url.port !== '' && url.port !== '443')) {
+    throw new LoginError(`the server returned an untrusted base URL (${value}); run the login again`)
+  }
+  return `${url.origin}${url.pathname.replace(/\/+$/, '')}`
+}
+
 /** Wait `ms`; an abort ends the wait early and throws the abort reason. */
 async function delay(ms: number, signal: AbortSignal | undefined): Promise<void> {
   await new Promise<void>((resolve) => {
@@ -159,9 +184,7 @@ function confirmedResult(status: QrStatus, fallbackBaseUrl: string): LoginResult
   if (status.botToken === undefined || status.botId === undefined || status.ownerUserId === undefined) {
     throw new LoginError('login was confirmed but the server returned no bot credentials; run the login again')
   }
-  const baseUrl = status.baseUrl === undefined
-    ? fallbackBaseUrl
-    : status.baseUrl.includes('://') ? status.baseUrl : `https://${status.baseUrl}`
+  const baseUrl = status.baseUrl === undefined ? fallbackBaseUrl : pinnedBaseUrl(status.baseUrl)
   return { botToken: status.botToken, botId: status.botId, baseUrl, ownerUserId: status.ownerUserId }
 }
 
@@ -213,7 +236,7 @@ export async function loginWithQr(options: LoginOptions): Promise<LoginResult> {
         scanned = true
         break
       case 'scaned_but_redirect':
-        if (status.redirectHost !== undefined && HOST.test(status.redirectHost)) {
+        if (status.redirectHost !== undefined && trustedRedirect(status.redirectHost)) {
           poller = new IlinkClient({ baseUrl: `https://${status.redirectHost}`, ...transport })
           progress(`已扫码，切换到 ${status.redirectHost} 继续确认。`)
         }

@@ -52,6 +52,16 @@ const activitySchema = z.object({
   sent: z.enum(SENT_KINDS).optional(),
 }).strict()
 
+const sentSchema = z.object({
+  /** Send order. */
+  seq: z.number().int().nonnegative(),
+  /** The text as the owner received it. */
+  text: z.string(),
+  /** When the send started and when it was accepted, in Unix epoch milliseconds. */
+  sentAt: z.number(),
+  doneAt: z.number(),
+}).strict()
+
 /** Long-poll cursor of one bot. */
 export type CursorRecord = z.infer<typeof cursorSchema>
 /** Reply window opened by the owner's latest message. */
@@ -64,10 +74,12 @@ export type SessionRecord = z.infer<typeof sessionSchema>
 export type OutboxRecord = z.infer<typeof outboxSchema>
 /** Latest message in the owner's chat, each way. */
 export type ActivityRecord = z.infer<typeof activitySchema>
+/** One text the bot sent, kept so a quote of it can be read back. */
+export type SentRecord = z.infer<typeof sentSchema>
 
 /**
  * Channel storage. `cursors` is keyed by bot id, `windows` by `<botId>/<ownerUserId>`,
- * `chats` and `activity` by owner id, `sessions` by Session id, and `outbox` by zero-padded `seq`.
+ * `chats` and `activity` by owner id, `sessions` by Session id, and `outbox` and `sent` by zero-padded `seq`.
  * A table added later loads empty from an existing file, so `activity` needs no version change.
  */
 export const wechatDomain = defineDomain({
@@ -80,5 +92,6 @@ export const wechatDomain = defineDomain({
     sessions: domainTable<string, SessionRecord>(sessionSchema),
     outbox: domainTable<string, OutboxRecord>(outboxSchema),
     activity: domainTable<string, ActivityRecord>(activitySchema),
+    sent: domainTable<string, SentRecord>(sentSchema),
   },
 })

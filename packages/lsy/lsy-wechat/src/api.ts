@@ -48,6 +48,11 @@ const itemSchema = z.object({
   image_item: z.object({ media: cdnMediaSchema.nullish(), aeskey: z.string().nullish() }).nullish(),
   file_item: z.object({ file_name: z.string().nullish(), media: cdnMediaSchema.nullish() }).nullish(),
   video_item: z.object({ media: cdnMediaSchema.nullish() }).nullish(),
+  /** When the item was created, in Unix epoch milliseconds; quoted bot messages carry only this. */
+  create_time_ms: z.number().nullish(),
+  update_time_ms: z.number().nullish(),
+  /** uint64 id, read only for the send time in its high bits, which JSON.parse precision loss leaves intact. */
+  msg_id: z.union([z.number(), z.string()]).nullish(),
 })
 
 const messageItemSchema = itemSchema.extend({
@@ -55,7 +60,7 @@ const messageItemSchema = itemSchema.extend({
   ref_msg: z.object({ title: z.string().nullish(), message_item: itemSchema.nullish() }).nullish(),
 })
 
-// uint64 ids (message_id, msg_id, ...) are not declared, so precision lost by JSON.parse never matters.
+// Message-level uint64 ids (message_id, seq, ...) are not declared, so precision lost by JSON.parse never matters.
 const messageSchema = z.object({
   from_user_id: z.string().nullish(),
   message_type: z.number().nullish(),
