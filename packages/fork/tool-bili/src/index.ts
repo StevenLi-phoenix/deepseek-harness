@@ -35,6 +35,7 @@ const OUTCOME_SCHEMA = {
     outcome: { type: 'string', required: true, enum: ['sent', 'already', 'refused', 'uncertain'] },
     detail: { type: 'string', required: true },
     receipt: { type: 'string' },
+    verification: { type: 'string', description: 'Bilibili\'s words when it refused until the account verifies a phone number.' },
   },
 } as const
 
@@ -195,7 +196,7 @@ export function apply(ctx: Context): void {
     })
     read({
       name: 'bili_me',
-      description: 'Your own account: name, level, follow counts, favorite folders (their ids for bili_favorite), how many of each write you have left today, and whether writes are paused.',
+      description: 'Your own account: name, level and EXP toward the next level, coins, today\'s daily rewards (login, watch, share, coin EXP), follow counts, favorite folders (their ids for bili_favorite), how many of each write you have left today, and whether writes are paused.',
       label: 'account',
       parameters: {},
       title: () => 'Bilibili account',
@@ -238,6 +239,28 @@ export function apply(ctx: Context): void {
       run: args => account.like(str(args['bvid'])),
     })
     write({
+      name: 'bili_coin',
+      description: [
+        'Give a video coins, without a like. Coins are scarce: about one a day comes from signing in, so give them only to a video you genuinely love.',
+        'An original video takes up to 2 coins from you and any other (a repost) 1; count defaults to that most. One coin write per video ever.',
+        'There is no daily limit; the host refuses when your balance is below count. bili_me shows the balance.',
+      ].join(' '),
+      parameters: { bvid, count: { type: 'integer', enum: [1, 2], description: 'Coins to give: 1, or 2 for an original video. Default the most the video takes.' } },
+      title: args => `Coin ${str(args['bvid'])}`,
+      run: args => account.coin(str(args['bvid']), typeof args['count'] === 'number' ? args['count'] : undefined),
+    })
+    write({
+      name: 'bili_triple',
+      description: [
+        '一键三连: like, coin (2 for an original, 1 for a repost), and save to your default folder in one go. The strongest appreciation you can give, for a video you genuinely love.',
+        'Coins are scarce (about one a day from signing in). Parts you already did are reported, not redone; once per video ever.',
+        'The host refuses when your balance cannot cover the coins, or when today\'s like or favorite budget would be exceeded by the parts it adds.',
+      ].join(' '),
+      parameters: { bvid },
+      title: args => `Triple ${str(args['bvid'])}`,
+      run: args => account.triple(str(args['bvid'])),
+    })
+    write({
       name: 'bili_watchlater',
       description: 'Put a video on your watch-later list to come back to on a later wake, or take it off with remove: true.',
       parameters: { bvid, remove: { type: 'boolean', description: 'Remove instead of add.' } },
@@ -267,7 +290,7 @@ export function apply(ctx: Context): void {
     })
     write({
       name: 'bili_dm_owner',
-      description: 'Send a private message, at most 500 characters, to the owner\'s main Bilibili account; nobody else can be messaged. Use it rarely, e.g. to hand over a video inside the app: your final answer already reaches the owner on WeChat.',
+      description: 'Send an extra private message, at most 500 characters, to the owner\'s main Bilibili account; nobody else can be messaged. Your final answer already reaches the owner as a Bilibili message from your account, so use this only when a second, separate message is really needed. Plain text: messages show no Markdown.',
       parameters: { text: { type: 'string', required: true, description: 'The message, at most 500 characters.' } },
       title: () => 'Message the owner on Bilibili',
       run: args => account.dmOwner(str(args['text'])),

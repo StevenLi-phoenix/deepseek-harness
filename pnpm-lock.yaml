@@ -11473,6 +11473,9 @@ importers:
       '@deepseek-ai/cordis-plugin-timer':
         specifier: workspace:~
         version: link:../../../vendor/timer
+      '@deepseek-ai/dsh-agent-default-model':
+        specifier: workspace:*
+        version: link:../../core/agent-default-model
       '@deepseek-ai/dsh-api-session-controller':
         specifier: workspace:*
         version: link:../../api/session-controller
@@ -11503,6 +11506,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: workspace:*
+        version: link:../../session/session-projection
       '@deepseek-ai/dsh-session-title':
         specifier: workspace:*
         version: link:../../session/session-title

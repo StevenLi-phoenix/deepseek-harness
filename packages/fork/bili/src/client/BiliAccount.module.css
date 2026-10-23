@@ -398,6 +398,80 @@
   text-align: right;
 }
 
+.adjusted {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bili-blue) 14%, transparent);
+  color: var(--bili-blue);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+}
+
+/* Level: the badge, the EXP bar toward the next level, and today's reward chips. */
+.levelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.levelBadge {
+  padding: 0 8px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--bili-pink);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 24px;
+  letter-spacing: 0.02em;
+}
+
+.rewards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rewards .chip[data-done] {
+  background: color-mix(in srgb, var(--bili-pink) 16%, transparent);
+  color: var(--bili-pink);
+}
+
+/* The outcome of the owner's last Wake now. */
+.manual {
+  display: flex;
+  flex: 1 1 160px;
+  flex-direction: column;
+  min-width: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.manual[data-outcome='refused'] {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+/* The route the clock decides by: a priced route gets the accent rule on its left. */
+.route {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  border-left: 2px solid var(--dsw-alias-border-l2);
+  border-radius: 0 var(--dsw-radius-sm) var(--dsw-radius-sm) 0;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.route[data-priced] {
+  border-left-color: var(--bili-blue);
+}
+
 .wake[data-state='done'] .wakeState {
   color: var(--dsw-alias-state-success-primary);
 }
@@ -421,6 +495,23 @@
   box-sizing: border-box;
 }
 
+.input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-md);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
+}
+
+.input[aria-invalid] {
+  border-color: var(--dsw-alias-state-danger-primary, #d93026);
+}
+
+.input:focus,
 .textarea:focus {
   outline: 2px solid color-mix(in srgb, var(--dsw-alias-state-business-primary) 50%, transparent);
   outline-offset: 1px;

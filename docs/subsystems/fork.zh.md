@@ -27,6 +27,28 @@ The agent's own Bilibili account: sign-in, cookie refresh, guarded writes, the b
 ownsSession(sessionId: string): boolean
 
 /**
+ * Give a video coins, never with a like. Bilibili takes at most 2 coins per
+ * video from one account for an original and 1 otherwise; `count` defaults to
+ * that most. One coin write per video ever, and no daily cap: the balance
+ * limits it. A refusal code from Bilibili is reported, never retried.
+ * @param bvid - BV id.
+ * @param count - 1 or 2; default the most the video takes.
+ * @returns the write guard's outcome.
+ */
+async coin(bvid: string, count?: number): Promise<WriteOutcome>
+
+/**
+ * 一键三连: like, coins (2 for an original, 1 otherwise), and a favorite in the
+ * default folder, in one request. One per video ever, with the normal write
+ * gap. Parts already done are reported and not counted; the like and favorite
+ * it adds count against those daily caps, and it is refused when either cap
+ * it would need is used up, or when the coins it would give exceed the balance.
+ * @param bvid - BV id.
+ * @returns the write guard's outcome.
+ */
+async triple(bvid: string): Promise<WriteOutcome>
+
+/**
  * Follow an account.
  * @param mid - its user id.
  * @returns the write guard's outcome.

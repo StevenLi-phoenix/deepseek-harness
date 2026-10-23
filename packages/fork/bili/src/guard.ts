@@ -3,21 +3,31 @@
  * before its request goes out and settled as `accepted`, `failed`, or
  * `uncertain` after; `reserved` and `uncertain` rows count against the daily
  * caps exactly like accepted ones, and nothing uncertain is ever sent again.
+ * Coins have no daily cap: the balance and Bilibili's per-video rule limit them.
  * Writes share one slot: after each, the next waits a random gap.
  */
 import { randomUUID } from 'node:crypto'
 import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import { SPEECH_ACTIONS, WRITE_ACTIONS, type biliDomain, type LedgerRecord, type PauseRecord, type WriteAction } from './storage.ts'
+import { CAPPED_ACTIONS, type CappedAction } from './view.ts'
 import { dayKey } from './time.ts'
 
 /** Default daily caps. */
-export const DEFAULT_CAPS: Readonly<Record<WriteAction, number>> = {
-  follow: 10, unfollow: 10, favorite: 20, like: 30, watchlater: 30, comment: 3, reply: 5, dynamic: 1, dmOwner: 5,
+export const DEFAULT_CAPS: Readonly<Record<CappedAction, number>> = {
+  follow: 10, unfollow: 10, favorite: 20, like: 30, watchlater: 30, comment: 3, reply: 5, dynamic: 1,
+  dmOwner: 5, dmReply: 30, watch: 10, share: 5,
 }
 /** Caps no configuration can exceed. */
-export const HARD_CAPS: Readonly<Record<WriteAction, number>> = {
-  follow: 30, unfollow: 30, favorite: 60, like: 100, watchlater: 100, comment: 10, reply: 20, dynamic: 3, dmOwner: 20,
+export const HARD_CAPS: Readonly<Record<CappedAction, number>> = {
+  follow: 30, unfollow: 30, favorite: 60, like: 100, watchlater: 100, comment: 10, reply: 20, dynamic: 3,
+  dmOwner: 20, dmReply: 60, watch: 10, share: 10,
 }
+
+/** Writes that happen at most once per target, ever; their rows are kept through pruning. */
+const ONCE_EVER: ReadonlySet<WriteAction> = new Set(['comment', 'reply', 'coin', 'triple', 'share'])
+
+/** Messages to the owner: every one is its own write, so "never sent again" is per text, not per recipient. */
+const MESSAGE_ACTIONS: ReadonlySet<WriteAction> = new Set(['dmOwner', 'dmReply'])
 
 /** Ledger states that count against a cap. */
 const COUNTED: ReadonlySet<LedgerRecord['state']> = new Set(['reserved', 'accepted', 'uncertain'])
@@ -32,14 +42,20 @@ export function ledgerRows(domain: BiliDomain): LedgerRecord[] {
 }
 
 /**
- * Writes counted against each cap on one local day.
+ * Writes counted on one local day. A triple counts once as itself, and its
+ * like and favorite parts count against the like and favorite caps only when
+ * it adds them (a reserved or uncertain triple counts what it set out to add).
  * @param domain - account storage.
  * @param day - local day key.
  */
 export function usage(domain: BiliDomain, day: string): Record<WriteAction, number> {
   const used = Object.fromEntries(WRITE_ACTIONS.map(action => [action, 0])) as Record<WriteAction, number>
   for (const [, row] of domain.table('ledger').entries()) {
-    if (row.day === day && COUNTED.has(row.state)) used[row.action] += 1
+    if (row.day !== day || !COUNTED.has(row.state)) continue
+    used[row.action] += 1
+    if (row.action !== 'triple') continue
+    if (row.adds?.includes('like') === true) used.like += 1
+    if (row.adds?.includes('favorite') === true) used.favorite += 1
   }
   return used
 }
@@ -52,10 +68,11 @@ export function usage(domain: BiliDomain, day: string): Record<WriteAction, numb
  * @param timeZone - zone of the day boundary.
  */
 export function remaining(
-  domain: BiliDomain, caps: Readonly<Record<WriteAction, number>>, now: number, timeZone: string,
-): Record<WriteAction, number> {
+  domain: BiliDomain, caps: Readonly<Record<CappedAction, number>>, now: number, timeZone: string,
+): Record<CappedAction, number> {
   const used = usage(domain, dayKey(now, timeZone))
-  return Object.fromEntries(WRITE_ACTIONS.map(action => [action, Math.max(0, caps[action] - used[action])])) as Record<WriteAction, number>
+  const left = CAPPED_ACTIONS.map(action => [action, Math.max(0, caps[action] - used[action])])
+  return Object.fromEntries(left) as Record<CappedAction, number>
 }
 
 /**
@@ -71,30 +88,37 @@ export function pauseRefusal(pause: PauseRecord | undefined, action: WriteAction
 }
 
 /**
- * Whether an earlier write already took this target for good: one comment per
- * video ever, one reply per comment ever. Failed rows do not count; uncertain ones do.
+ * Whether an earlier write already took this target: one comment per video,
+ * one reply per comment, one coin write and one triple per video, and one share
+ * report per video, ever; one watch report per video per day. Failed rows do not count;
+ * uncertain ones do.
  * @param domain - account storage.
  * @param action - the write.
  * @param target - its target key.
+ * @param day - local day, for once-a-day actions.
  */
-export function alreadyTaken(domain: BiliDomain, action: WriteAction, target: string): boolean {
-  if (action !== 'comment' && action !== 'reply') return false
+export function alreadyTaken(domain: BiliDomain, action: WriteAction, target: string, day?: string): boolean {
+  const ever = ONCE_EVER.has(action)
+  if (!ever && action !== 'watch') return false
   for (const [, row] of domain.table('ledger').entries()) {
-    if (row.action === action && row.target === target && COUNTED.has(row.state)) return true
+    if (row.action === action && row.target === target && COUNTED.has(row.state) && (ever || row.day === day)) return true
   }
   return false
 }
 
 /**
  * Whether an earlier attempt of the same write ended `uncertain`: it may have
- * happened, so it is never sent again.
+ * happened, so it is never sent again. For messages, the same write is the
+ * same text to the same recipient.
  * @param domain - account storage.
  * @param action - the write.
  * @param target - its target key.
+ * @param text - the message text, for message actions.
  */
-export function uncertainBefore(domain: BiliDomain, action: WriteAction, target: string): boolean {
+export function uncertainBefore(domain: BiliDomain, action: WriteAction, target: string, text?: string): boolean {
   for (const [, row] of domain.table('ledger').entries()) {
-    if (row.action === action && row.target === target && row.state === 'uncertain') return true
+    if (row.action !== action || row.target !== target || row.state !== 'uncertain') continue
+    if (!MESSAGE_ACTIONS.has(action) || row.text === text?.trim()) return true
   }
   return false
 }
@@ -167,17 +191,25 @@ export async function takeSlot(
   domain: BiliDomain, now: number, gap: { minMs: number; maxMs: number }, random: () => number,
 ): Promise<void> {
   const nextAt = now + gap.minMs + Math.floor(random() * Math.max(0, gap.maxMs - gap.minMs))
-  await domain.table('slots').put('write', { nextAt })
+  await domain.table('slots').put('write', { nextAt, lastAt: now })
+}
+
+/**
+ * When the previous write finished; a reply to the owner waits only a short gap after it.
+ * @param domain - account storage.
+ */
+export function lastWrite(domain: BiliDomain): number | undefined {
+  return domain.table('slots').get('write')?.lastAt
 }
 
 /**
  * Drop the oldest settled rows beyond the retention bound. Reserved rows, and
- * comment and reply rows (the memory behind "one per target ever"), stay.
+ * the rows behind "once per target ever" (comments, replies, coins, triples, shares), stay.
  */
 async function prune(domain: BiliDomain): Promise<void> {
   const table = domain.table('ledger')
   const excess = table.size - MAX_LEDGER_ROWS
   if (excess <= 0) return
-  const victims = ledgerRows(domain).filter(row => row.state !== 'reserved' && row.action !== 'comment' && row.action !== 'reply').slice(0, excess)
+  const victims = ledgerRows(domain).filter(row => row.state !== 'reserved' && !ONCE_EVER.has(row.action)).slice(0, excess)
   for (const row of victims) await table.delete(row.id)
 }
