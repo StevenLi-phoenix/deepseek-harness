@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- LaunchDaemon for the agent-managed services harness (StevenLi-phoenix/agent-managed-services),
+     the macOS stand-in for its ams-harness.service. Runs `ams run` as dsh-runtime; every service
+     declared under /Users/dsh-runtime/.ams/services/<id>/service.toml is its child, and what its
+     rules cannot settle lands in /Users/dsh-runtime/.ams/logs/escalations.jsonl for the agent.
+     macOS has no user namespaces or cgroups, so services run as dsh-runtime itself
+     (--no-isolation); the dsh-runtime account is the isolation boundary.
+     Install to /Library/LaunchDaemons (root:wheel 644). -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>app.lishuyu.ams</string>
+    <key>UserName</key>
+    <string>dsh-runtime</string>
+    <key>GroupName</key>
+    <string>staff</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/dsh-runtime/ams/.venv/bin/ams</string>
+        <string>run</string>
+        <string>--no-isolation</string>
+        <string>--policy</string>
+        <string>platform</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/dsh-runtime</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>/Users/dsh-runtime</string>
+        <key>AMS_STATE_DIR</key>
+        <string>/Users/dsh-runtime/.ams</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>LANG</key>
+        <string>en_US.UTF-8</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    <!-- The harness's own shutdown budget is 45 s; give it room before SIGKILL. -->
+    <key>ExitTimeOut</key>
+    <integer>60</integer>
+    <key>StandardOutPath</key>
+    <string>/Users/dsh-runtime/logs/ams.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/dsh-runtime/logs/ams.err.log</string>
+</dict>
+</plist>
