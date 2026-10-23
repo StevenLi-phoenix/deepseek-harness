@@ -503,6 +503,7 @@
     { "path": "./packages/experimental/webhook-github" },
     { "path": "./packages/lsy/lsy-balance/tsconfig.host.json" },
     { "path": "./packages/lsy/lsy-event-bus" },
+    { "path": "./packages/lsy/owner-relay" },
     { "path": "./packages/lsy/lsy-wechat" },
     { "path": "./packages/lsy/lsy-tool-watch" },
     { "path": "./packages/lsy/lsy-tool-wechat" },

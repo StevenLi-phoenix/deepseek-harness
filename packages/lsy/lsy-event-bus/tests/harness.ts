@@ -1,4 +1,4 @@
-/** Shared bus test fixtures: memory storage, notifier and webhook runtime doubles, and Session event emission. */
+/** Shared bus test fixtures: memory storage, notifier, owner relay, and webhook runtime doubles, and Session event emission. */
 import { Context } from '@deepseek-ai/cordis'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
 import Storage from '@deepseek-ai/dsh-storage'
@@ -84,6 +84,8 @@ export interface HarnessOptions {
   pool?: MemoryMediaPool
   /** `false` mounts no notifier; an object replaces the recording double. */
   notifier?: false | Partial<LsyNotifier>
+  /** Claiming channel per Session, served as `ctx.ownerRelay.ownerOf()`; omitted mounts no relay. */
+  claims?: ReadonlyMap<string, string>
   runtime?: FakeRuntime | false
 }
 
@@ -111,6 +113,8 @@ export async function harness(options: HarnessOptions = {}) {
   if (options.notifier !== false) {
     ctx.provide('lsyNotifier', { send: async (note: LsyNote) => { notes.push(note) }, ...options.notifier })
   }
+  const claims = options.claims
+  if (claims !== undefined) ctx.provide('ownerRelay' as never, { ownerOf: (id: string) => claims.get(id) } as never)
   const runtime = options.runtime === false ? fakeRuntime() : options.runtime ?? fakeRuntime()
   if (options.runtime !== false) ctx.provide('webhookRuntime', runtime as never)
   await ctx.plugin(LsyEventBus, options.config ?? baseConfig)

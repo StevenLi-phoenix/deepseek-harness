@@ -16,11 +16,11 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 
 ### `ctx.bili` — `BiliAccount`
 
-The agent's own Bilibili account: sign-in, cookie refresh, guarded writes, the body clock, the inbox poll, the final-answer relay, and the Settings route.
+The agent's own Bilibili account: sign-in, cookie refresh, guarded writes, the body clock, the inbox poll, the DM channel of the owner relay, and the Settings route.
 
 ```ts cordis-catalog
 /**
- * Whether this plugin created a Session (and relays its turns).
+ * Whether this plugin created a Session; each one is claimed by the DM channel.
  * @param sessionId - Session to check.
  * @returns true for every Session this plugin created.
  */
@@ -326,19 +326,58 @@ Notification actuator contract; a channel plugin provides it as `ctx.lsyNotifier
 ```ts cordis-catalog
 /**
  * Deliver one message.
- * @param note - title, optional body, and optional link.
+ * @param note - title, optional body, optional link, and optional origin.
  * @returns resolves once the channel accepted the message; rejects on failure.
  */
 send(note: LsyNote): Promise<void>
 
 /**
- * Whether the channel already relays every turn of this Session to the owner
- * (e.g. its chat Session), so the bus must not report those turns again.
+ * Whether the channel created this Session (e.g. its chat Session). Kept for callers outside the
+ * bus; the bus asks `ctx.ownerRelay.ownerOf()` which Sessions a relay channel delivers itself.
  * @param sessionId - Session to check.
- * @returns true when the channel relays this Session's turns itself.
+ * @returns true when the channel created this Session.
  */
 ownsSession?(sessionId: string): boolean
 ```
 
 Source: [`packages/lsy/lsy-event-bus/src/types.ts`](../../packages/lsy/lsy-event-bus/src/types.ts)
+
+<a id="ctxownerrelay--ownerrelay"></a>
+
+### `ctx.ownerRelay` — `OwnerRelay`
+
+The relay. Claims live in memory: each channel claims its stored Sessions again when it registers, and unregistering releases them. Every decision is logged at info level with the Session id and the reason, never the text.
+
+```ts cordis-catalog
+/**
+ * Add a channel.
+ * @param channel - name, delivery, hooks, and fallback label.
+ * @returns a disposer that removes the channel and releases every Session it claimed.
+ * @throws when a channel of the same name is registered.
+ */
+registerChannel(channel: RelayChannel): () => void
+
+/**
+ * Relay a Session's turns through one channel from now on.
+ * @param sessionId - Session to claim; a claim by another channel moves to this one.
+ * @param channelName - the claiming channel's name.
+ */
+claim(sessionId: string, channelName: string): void
+
+/**
+ * Stop relaying a Session.
+ * @param sessionId - Session to release.
+ * @returns whether it was claimed.
+ */
+release(sessionId: string): boolean
+
+/**
+ * The channel that relays a Session's turns.
+ * @param sessionId - Session to check.
+ * @returns the channel name, or undefined when no channel claimed the Session.
+ */
+ownerOf(sessionId: string): string | undefined
+```
+
+Source: [`packages/lsy/owner-relay/src/index.ts`](../../packages/lsy/owner-relay/src/index.ts)
 <!-- END GENERATED cordis-surface -->

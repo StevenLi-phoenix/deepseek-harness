@@ -144,21 +144,27 @@ export interface LsyNote {
   title: string
   body?: string | undefined
   url?: string | undefined
+  /**
+   * Who sent it, as the owner's chat Session should read the copy a channel shares with it, e.g.
+   * `the Bilibili account's Session (its answer could not go out as a Bilibili message)`. Never
+   * shown to the owner; without it the channel names a generic other Session.
+   */
+  origin?: string | undefined
 }
 
 /** Notification actuator contract; a channel plugin provides it as `ctx.lsyNotifier`. */
 export interface LsyNotifier {
   /**
    * Deliver one message.
-   * @param note - title, optional body, and optional link.
+   * @param note - title, optional body, optional link, and optional origin.
    * @returns resolves once the channel accepted the message; rejects on failure.
    */
   send(note: LsyNote): Promise<void>
   /**
-   * Whether the channel already relays every turn of this Session to the owner
-   * (e.g. its chat Session), so the bus must not report those turns again.
+   * Whether the channel created this Session (e.g. its chat Session). Kept for callers outside the
+   * bus; the bus asks `ctx.ownerRelay.ownerOf()` which Sessions a relay channel delivers itself.
    * @param sessionId - Session to check.
-   * @returns true when the channel relays this Session's turns itself.
+   * @returns true when the channel created this Session.
    */
   ownsSession?(sessionId: string): boolean
 }

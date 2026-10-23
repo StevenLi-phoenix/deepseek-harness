@@ -25,7 +25,7 @@ Give your always-on agent a Bilibili account of its own and let it live there li
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount the account at the root of a Web profile that also mounts `@deepseek-ai/dsh-lsy-wechat` (for `ctx.lsyNotifier`), and define an agent preset whose plugins include [`@deepseek-ai/dsh-tool-bili`](../tool-bili/README.md). It needs the Host Session Controller, permission presets, Session titles, the storage domain facility, the credential store, and timers; the Settings section needs the browser connection.
+Mount the account at the root of a Web profile that also mounts [`@deepseek-ai/dsh-owner-relay`](../owner-relay/README.md) (`ctx.ownerRelay`, which hands each turn's answer to the account's `bili-dm` channel) and `@deepseek-ai/dsh-lsy-wechat` (for `ctx.lsyNotifier`), and define an agent preset whose plugins include [`@deepseek-ai/dsh-tool-bili`](../tool-bili/README.md). It needs the Host Session Controller, permission presets, Session titles, the storage domain facility, the credential store, and timers; the Settings section needs the browser connection.
 
 ### When to choose it
 
@@ -78,8 +78,8 @@ When the account's Session runs on a model route with time-of-day pricing, the b
 
 ### What the owner sees
 
-- **On Bilibili** — the final answer of every turn a wake started arrives as a private message from the agent's account to `ownerMid`, unless it is exactly `NO_REPLY`: an answer to the owner's own message is a reply (counted as `dmReply`, sent a few seconds after the previous write), any other turn's answer is a share (`dmOwner`). Long answers are split into at most two messages of 500 characters, the rest cut with `…`. A turn the owner started in the Web UI stays there. After a message from the owner, the account checks its messages every minute until 15 minutes after the latest one.
-- **On WeChat** — only what needs the owner: one notice when the login needs renewing (`dsh 的 B站登录失效了：设置 → B站账号 扫码`), one when risk control pauses writes, one when a comment looks hidden, and any answer that could not go out as a Bilibili message (not mutual followers, budget used up, writes paused, a failed or uncertain send), titled `📺 B站：这条没能用 B站私信发出，改发微信` and ending with the reason; when Bilibili wants a verified phone number first, that line quotes it: `B站私信没发出：<Bilibili's words>`.
+- **On Bilibili** — the final answer of every turn a wake started arrives as a private message from the agent's account to `ownerMid`, unless it is exactly `NO_REPLY`: an answer to the owner's own message is a reply (counted as `dmReply`, sent a few seconds after the previous write), any other turn's answer is a share (`dmOwner`). Long answers are split into at most two messages of 500 characters, the rest cut with `…`. A turn the owner started in the Web UI stays there, and so does a reminder or monitor turn: the event bus does not report a Session the account's channel claimed. After a message from the owner, the account checks its messages every minute until 15 minutes after the latest one.
+- **On WeChat** — only what needs the owner: one notice when the login needs renewing (`dsh 的 B站登录失效了：设置 → B站账号 扫码`), one when risk control pauses writes, one when a comment looks hidden, and any answer that could not go out as a Bilibili message (not mutual followers, budget used up, writes paused, a failed or uncertain send), titled `📺 B站：这条没能用 B站私信发出，改发微信` and ending with the reason; when Bilibili wants a verified phone number first, that line quotes it: `B站私信没发出：<Bilibili's words>`. The copy the WeChat chat Session keeps names its sender `the Bilibili account's Session (its answer could not go out as a Bilibili message)`, so a reply there has its context.
 - **In Settings** — everything above, built from the plugin's storage only, so no cookie or token can appear there: a level card (level, EXP to the next level, the coin balance, and today's login, watch, share, and coin EXP), today's use of every budget, a lasting hint (这个号需要验证手机号才能发私信, or …评论和动态) quoting Bilibili while it refuses messages or public speech for want of a verified phone number, cleared by the next write of that kind that goes through, and the body clock card, which also names the model route the clock decides by and whether it is priced (with the next off-peak start during a peak), marks a wake that was clipped, moved, or deferred, and has **Wake now**. Wake now prompts the Session at once with the body-clock prompt, outside today's plan; it is the owner's request, so it runs in a peak too and says so, and it is refused, with the reason shown, while signed out, while the login needs renewing, while the Session is in a turn, or within a minute of the last one. The route is `GET`/`POST /api/bili`, behind the connection's sign-in like every `/api` route.
 
 -----
@@ -102,7 +102,8 @@ The body clock stores one plan per local day (a random time in each window, `ski
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | `BiliAccount` (`ctx.bili`): configuration, lifecycle, sign-in, refresh, brake, write guard, clock, inbox, relay, reads, journal, Settings route |
+| [`src/index.ts`](src/index.ts) | `BiliAccount` (`ctx.bili`): configuration, lifecycle, sign-in, refresh, brake, write guard, clock, inbox, the relay registration, reads, journal, Settings route |
+| [`src/dm.ts`](src/dm.ts) | `DmChannel`, the `bili-dm` channel of `ctx.ownerRelay`: each wake's origin, the answer as one or two messages, the WeChat fallback |
 | [`src/client.ts`](src/client.ts) | Allowlisted, spaced HTTP client; risk detection; lossless JSON |
 | [`src/endpoints.ts`](src/endpoints.ts) | The endpoint allowlist |
 | [`src/api.ts`](src/api.ts) | Typed reads (bounded) and single-request writes |
@@ -111,7 +112,7 @@ The body clock stores one plan per local day (a random time in each window, `ski
 | [`src/clock.ts`](src/clock.ts), [`src/time.ts`](src/time.ts) | Daily plans and zone arithmetic |
 | [`src/pricing.ts`](src/pricing.ts) | Pricing rules as data: validation, UTC peak intervals, off-peak parts, the route precedence |
 | [`src/wbi.ts`](src/wbi.ts), [`src/cookies.ts`](src/cookies.ts) | WBI signing; cookie jar |
-| [`src/text.ts`](src/text.ts) | Bounding, the untrusted wrapper, prompts, notices, relay text |
+| [`src/text.ts`](src/text.ts) | Bounding, the untrusted wrapper, prompts, notices, message splitting |
 | [`src/storage.ts`](src/storage.ts) | The `bili` storage domain |
 | [`src/view.ts`](src/view.ts), [`src/client/`](src/client/) | The Settings view contract and the browser section |
 
@@ -126,6 +127,7 @@ This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 
 - [Bilibili tools](../tool-bili/README.md) — what the account's Session can call
 - [WeChat channel](../lsy-wechat/README.md) — where notices and fallback answers go
+- [Owner relay](../owner-relay/README.md) — the turn-end rules and the claim that keeps the bus out
 - [Credentials](../../credentials/credentials/README.md) — the record that holds the session
 - [Storage domain](../../storage/storage-domain/README.md) — durable tables
 

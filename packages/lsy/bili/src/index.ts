@@ -3,7 +3,8 @@
  * by scanning a web QR code from Settings; the cookies and refresh token live
  * in one credential record and are refreshed daily. The account's long-lived
  * Session wakes on a body clock and when its inbox has something new, and
- * each turn's final answer goes to the owner's WeChat. Every write passes one
+ * `ctx.ownerRelay` hands each woken turn's final answer to the account's DM
+ * channel (`src/dm.ts`), which messages the owner. Every write passes one
  * host-side guard (identity check, daily caps, one comment per video, a
  * random gap, a durable ledger), and risk-control answers pause writes until
  * the owner resumes them in Settings. Nothing here can be cleared by the model.
@@ -20,8 +21,10 @@ import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 import { credentialKey, type CredentialKey } from '@deepseek-ai/dsh-credentials'
 // Type-only: the ctx.lsyNotifier service the WeChat channel provides.
 import type {} from '@deepseek-ai/dsh-lsy-event-bus'
+// Type-only: ctx.ownerRelay, which relays the account's turns through its DM channel.
+import type {} from '@deepseek-ai/dsh-owner-relay'
 import type {} from '@deepseek-ai/dsh-permission-presets'
-import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
+import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 // Type-only: ctx.sessionProjections, where an explicit model pick waits for its first request.
 import type {} from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-session-title'
@@ -40,11 +43,12 @@ import { REFRESH_PUBLIC_KEY, confirmRefresh, deviceCookies, exchangeRefresh, par
 import { BiliApiError, BiliClient, BiliRefused, BiliRiskError, BiliTransportError, BiliVerifyError } from './client.ts'
 import { nextPlanned, rollPlan, settlePlan, windowProblem, type WakeWindow } from './clock.ts'
 import type { CookieJar } from './cookies.ts'
+import { BILI_NOTICE_ORIGIN, BILI_RELAY_CHANNEL, DmChannel } from './dm.ts'
 import type { Endpoint, EndpointName } from './endpoints.ts'
 import { WEEKDAYS, nextOffPeak, peakAt, pricingProblem, routeOf, ruleFor, type PricingRule, type Route } from './pricing.ts'
 import { DEFAULT_CAPS, HARD_CAPS, alreadyTaken, lastWrite, ledgerRows, nextSlot, pauseRefusal, remaining, reserve, settle, settleInterrupted, takeSlot, uncertainBefore, usage } from './guard.ts'
 import { SPEECH_ACTIONS, TRIPLE_PARTS, biliDomain, seqKey, type AccountRecord, type LedgerRecord, type PendingRecord, type PlanRecord, type TriplePart, type WriteAction } from './storage.ts'
-import { FALLBACK_TITLE, NOTICES, TEXT_LIMITS, codePoints, failureDetail, inboxPrompt, relayBody, splitMessage, wakePrompt } from './text.ts'
+import { NOTICES, TEXT_LIMITS, codePoints, inboxPrompt, wakePrompt } from './text.ts'
 import { dayKey, formatGap, formatStamp, isTimeZone, localTime, nextDayStart } from './time.ts'
 import { BILI_PATH, CAPPED_ACTIONS, HOST_REPORTS, MAX_INTERESTS_CHARS, VERIFY_KINDS, type BiliView, type ProgressView, type LoginView, type ManualWakeView, type RouteView, type VerifyKind, type WakeReason, type CappedAction } from './view.ts'
 
@@ -230,8 +234,6 @@ const OWNER_WAKES_PER_HOUR = 30
 const FAST_POLL_MS = 60_000
 /** ... for this long after the latest one. */
 const CONVERSATION_MS = 900_000
-/** How long a turn's answer waits for its write slot before it goes to WeChat instead. */
-const ANSWER_WAIT_MS = 900_000
 /** A second Wake now within this long of a started one is refused (a double click). */
 const MANUAL_WAKE_DEBOUNCE_MS = 60_000
 /** A deferred wake not fired within this long after its new time is missed. */
@@ -413,7 +415,7 @@ function qrModules(text: string): string[] {
 
 /**
  * The agent's own Bilibili account: sign-in, cookie refresh, guarded writes,
- * the body clock, the inbox poll, the final-answer relay, and the Settings route.
+ * the body clock, the inbox poll, the DM channel of the owner relay, and the Settings route.
  */
 export class BiliAccount extends Service {
   static inject = ['timer', 'storageDomain', 'credentials', 'sessionController', 'permissionPresets', 'sessionTitle']
@@ -423,7 +425,6 @@ export class BiliAccount extends Service {
   private readonly client: BiliClient
   private readonly abort = new AbortController()
   private readonly inflight = new Set<Promise<void>>()
-  private readonly replies = new Map<string, string>()
   private readonly visibilityTimers = new Map<string, () => void>()
   private readonly timers = new Set<() => void>()
   private domain: Domain<typeof biliDomain> | undefined
@@ -442,8 +443,8 @@ export class BiliAccount extends Service {
   private manual: ManualWakeView | undefined
   /** When the last Wake now that was not refused began; it debounces double clicks. */
   private manualStartedAt = -Infinity
-  /** What started the turn each owned Session is running: the wake reason, and whether it carried owner messages. */
-  private readonly origins = new Map<string, { reason: WakeReason; owner: boolean }>()
+  /** The account's channel of `ctx.ownerRelay`: woken turns' answers as Bilibili messages to the owner. */
+  private readonly dm: DmChannel
   /** The owner's conversation keeps the fast message check until then. */
   private conversationUntil = 0
   /** The next fast message check, while the owner is messaging. */
@@ -467,6 +468,13 @@ export class BiliAccount extends Service {
       debug: (message) => { ctx.logger.debug(`bili: ${message}`) },
     }, { gapMs: config.requestGapMs, jitterMs: config.requestJitterMs, timeoutMs: config.requestTimeoutMs })
     this.ready = ctx.storageDomain.open(biliDomain)
+    this.dm = new DmChannel({
+      messageOwner: (action, text, maxWaitMs) => this.messageOwner(action, text, maxWaitMs),
+      reportShares: (text) => { this.track(this.reportSharesIn(text)) },
+      hold: work => this.hold(work),
+      notifier: () => this.ctx.get('lsyNotifier'),
+      logger: { info: (message) => { ctx.logger.info(message) }, warn: (message) => { ctx.logger.warn(message) } },
+    })
 
     ctx.effect(async () => {
       const domain = await this.ready
@@ -487,7 +495,14 @@ export class BiliAccount extends Service {
       return cleanup
     }, 'bili.init()')
 
-    ctx.on('session/event', (session, event) => { this.observeSession(session, event) })
+    // The relay delivers the account's answers through the DM channel whenever it is mounted.
+    ctx.plugin({
+      name: 'bili-owner-relay',
+      inject: ['ownerRelay'],
+      apply: (child: Context) => {
+        child.effect(() => this.joinRelay(child), 'bili: ownerRelay')
+      },
+    })
 
     // The Settings route mounts whenever the connection service is present; the account works without it.
     ctx.plugin({
@@ -537,6 +552,13 @@ export class BiliAccount extends Service {
       this.ctx.logger.warn(`bili: background work failed: ${errorText(error)}`)
     }).finally(() => this.inflight.delete(tracked))
     this.inflight.add(tracked)
+  }
+
+  /** Keep work another service awaits alive until teardown drains it; its outcome stays the caller's. */
+  private hold<T>(work: Promise<T>): Promise<T> {
+    const held = work.then(() => undefined, () => undefined).finally(() => this.inflight.delete(held))
+    this.inflight.add(held)
+    return work
   }
 
   /** Run `work` once after `ms`. */
@@ -621,7 +643,7 @@ export class BiliAccount extends Service {
     }
   }
 
-  /** Tell the owner on WeChat; a missing or failing channel only costs the message. */
+  /** Tell the owner on WeChat, labelled as a host notice; a missing or failing channel only costs the message. */
   private async notify(title: string): Promise<void> {
     const notifier = this.ctx.get('lsyNotifier')
     if (notifier === undefined) {
@@ -629,7 +651,7 @@ export class BiliAccount extends Service {
       return
     }
     try {
-      await notifier.send({ title })
+      await notifier.send({ title, origin: BILI_NOTICE_ORIGIN })
     } catch (error: unknown) {
       this.ctx.logger.warn(`bili: notifying the owner failed: ${errorText(error)}`)
     }
@@ -828,15 +850,37 @@ export class BiliAccount extends Service {
     this.ctx.logger.info(`bili: signed in as ${nav.uname ?? '?'} (${poll.mid})`)
   }
 
-  // ── The account's Session and the relay ───────────────────────────────
+  // ── The account's Session and its DM channel ──────────────────────────
 
   /**
-   * Whether this plugin created a Session (and relays its turns).
+   * Whether this plugin created a Session; each one is claimed by the DM channel.
    * @param sessionId - Session to check.
    * @returns true for every Session this plugin created.
    */
   ownsSession(sessionId: string): boolean {
     return this.domain?.table('sessions').get(sessionId) !== undefined
+  }
+
+  /**
+   * Register the DM channel and claim every stored Session once storage is open.
+   * @returns a disposer that unregisters the channel, which releases its claims.
+   */
+  private joinRelay(child: Context): () => void {
+    const relay = child.ownerRelay
+    const unregister = relay.registerChannel(this.dm)
+    let joined = true
+    this.ready.then((domain) => {
+      if (!joined) return
+      const ids = [...domain.table('sessions').keys()]
+      for (const id of ids) relay.claim(id, BILI_RELAY_CHANNEL)
+      this.ctx.logger.info(`bili: the relay carries ${ids.length} Session(s) through channel ${BILI_RELAY_CHANNEL}`)
+    }, (error: unknown) => {
+      this.ctx.logger.warn(`bili: Sessions not claimed with the relay: ${errorText(error)}`)
+    })
+    return () => {
+      joined = false
+      unregister()
+    }
   }
 
   /** The account's Session: the stored one while it resolves, otherwise a new one. */
@@ -859,6 +903,8 @@ export class BiliAccount extends Service {
     this.ctx.permissionPresets.set(resolved.agent.session, session.permissionPreset)
     this.ctx.sessionTitle.rename(resolved.agent.session, session.title)
     const now = Date.now()
+    // Claimed before the first prompt, so the relay follows the Session's first turn.
+    this.ctx.get('ownerRelay')?.claim(created.sessionId, BILI_RELAY_CHANNEL)
     await this.serialize(async () => {
       await domain.table('sessions').put(created.sessionId, { sessionId: created.sessionId, createdAt: now })
       await domain.table('current').put('session', { sessionId: created.sessionId, createdAt: now })
@@ -882,7 +928,7 @@ export class BiliAccount extends Service {
       return false
     }
     // Known before the turn can end: its answer goes back by the channel of what started it.
-    this.origins.set(sessionId, { reason, owner })
+    this.dm.setOrigin(sessionId, { reason, owner })
     try {
       await this.ctx.sessionController.prompt({
         requestId: randomUUID() as SessionRequestId,
@@ -892,7 +938,7 @@ export class BiliAccount extends Service {
         clientTimeZone: this.config.timeZone,
       }, this.abort.signal)
     } catch (error: unknown) {
-      this.origins.delete(sessionId)
+      this.dm.dropOrigin(sessionId)
       throw error
     }
     const now = Date.now()
@@ -905,79 +951,6 @@ export class BiliAccount extends Service {
     })
     this.ctx.logger.info(`bili: ${reason} wake prompted Session ${sessionId} (${text.length} chars)`)
     return true
-  }
-
-  /** Remember each owned Session's latest assistant text and relay it to the owner when the turn ends. */
-  private observeSession(session: Session, event: SessionEvent): void {
-    if (!this.ownsSession(session.id)) return
-    if (event.type === 'assistant/message') {
-      const text = event.data.message.content
-        .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
-        .map(part => part.text).join('\n').trim()
-      if (text !== '') this.replies.set(session.id, text)
-      return
-    }
-    if (event.type !== 'turn/end') return
-    const text = this.replies.get(session.id)
-    this.replies.delete(session.id)
-    const origin = this.origins.get(session.id)
-    this.origins.delete(session.id)
-    const outcome = event.data.reason.kind
-    const detail = failureDetail(event.data.reason)
-    const ended = detail === undefined ? outcome : `${outcome}: ${detail}`
-    if (origin === undefined) {
-      // The owner talking to the Session in the Web UI reads the answer there.
-      this.ctx.logger.info(`bili: Session ${session.id} ended a turn no wake started (${ended}); its answer stays in the Session`)
-      return
-    }
-    // The owner's /stop aborts every root Session; they know, so nothing is sent (as the bus and WeChat relays do).
-    if (event.data.reason.kind === 'aborted' && event.data.reason.reason.kind === 'user') {
-      this.ctx.logger.info(`bili: Session ${session.id} ended a ${origin.reason} turn stopped by the owner; nothing is sent`)
-      return
-    }
-    const body = relayBody(text, outcome, detail)
-    const action = origin.owner ? 'dmReply' : 'dmOwner'
-    this.ctx.logger.info(`bili: Session ${session.id} ended a ${origin.reason} turn (${ended}); ${body === undefined ? 'nothing to send' : `sending ${body.length} chars to the owner (${action})`}`)
-    if (body !== undefined) this.track(this.deliverAnswer(body, action))
-  }
-
-  /**
-   * Send a turn's answer to the owner as Bilibili messages from the account:
-   * a reply to the owner's messages, or a share. It is split into at most two
-   * messages; whatever cannot go out (not mutual, budget, pause, a failed or
-   * uncertain send) goes to WeChat with the reason.
-   */
-  private async deliverAnswer(body: string, action: 'dmOwner' | 'dmReply'): Promise<void> {
-    const parts = splitMessage(body, TEXT_LIMITS[action], 2)
-    for (const [index, part] of parts.entries()) {
-      const outcome = await this.messageOwner(action, part, ANSWER_WAIT_MS)
-      if (outcome.outcome !== 'sent') {
-        // A refusal for want of a verified phone number quotes Bilibili; anything else says why in the host's words.
-        const line = outcome.outcome === 'refused' && outcome.verification !== undefined
-          ? `B站私信没发出：${outcome.verification}`
-          : `原因：${outcome.detail}`
-        await this.fallback(parts.slice(index).join('\n\n'), line)
-        return
-      }
-    }
-    this.ctx.logger.info(`bili: sent the turn's answer to the owner as ${parts.length} Bilibili message(s) (${action})`)
-  }
-
-  /** An answer that could not go out as a Bilibili message goes to WeChat, ending with a line that says why. */
-  private async fallback(text: string, why: string): Promise<void> {
-    this.ctx.logger.warn(`bili: the answer goes to WeChat instead of a Bilibili message: ${why}`)
-    const notifier = this.ctx.get('lsyNotifier')
-    if (notifier === undefined) {
-      this.ctx.logger.warn('bili: no lsyNotifier is mounted; the answer was not delivered')
-      return
-    }
-    try {
-      await notifier.send({ title: FALLBACK_TITLE, body: `${text}\n\n${why}` })
-      // Delivered to the owner, so a video link in it was shared.
-      this.track(this.reportSharesIn(text))
-    } catch (error: unknown) {
-      this.ctx.logger.warn(`bili: notifying the owner failed: ${errorText(error)}`)
-    }
   }
 
   // ── Body clock ─────────────────────────────────────────────────────────
@@ -1881,7 +1854,7 @@ export class BiliAccount extends Service {
     return this.messageOwner('dmOwner', text)
   }
 
-  /** One message to the owner's main account through the write guard. */
+  /** One message to the owner's main account through the write guard; the DM channel sends answers through it. */
   private async messageOwner(action: 'dmOwner' | 'dmReply', text: string, maxWaitMs?: number): Promise<WriteOutcome> {
     const ownerMid = this.ownerMid()
     if (ownerMid === undefined) return { outcome: 'refused', detail: 'no owner account is configured' }

@@ -142,6 +142,16 @@ interface TrackedReminder {
   text: string | undefined
 }
 
+/**
+ * What the bus reads of `ctx.ownerRelay` (`@deepseek-ai/dsh-owner-relay`). That package depends on
+ * this one (`failureDetail`, `isSilentReply`, `LsyNotifier`), so the bus reads the service through
+ * this shape instead of importing it.
+ */
+interface OwnerRelayView {
+  /** The channel that relays a Session's turns itself, or undefined. */
+  ownerOf(sessionId: string): string | undefined
+}
+
 /** A batch persisted by a flush and waiting for its actuator. */
 interface FlushedBatch {
   batch: BatchRecord
@@ -731,11 +741,21 @@ export class LsyEventBus extends Service {
     }
   }
 
-  /** Start following a reminder turn unless reports are off, the bus already follows the Session, or the notifier relays it itself. */
+  /** Start following a reminder turn unless reports are off, the bus already follows the Session, or a relay channel claimed it. */
   private trackReminder(sessionId: string, label: string | undefined, icon: string): void {
     if (!this.config.reportScheduledTurns || this.tracked.has(sessionId) || this.reminders.has(sessionId)) return
-    if (this.ctx.get('lsyNotifier')?.ownsSession?.(sessionId) === true) return
+    const owner = this.relayOwner(sessionId)
+    if (owner !== undefined) {
+      this.ctx.logger.info(`lsy-event-bus: Session ${sessionId} is relayed by ${owner}; its ${icon} turn is not reported`)
+      return
+    }
     this.reminders.set(sessionId, { label: label ?? `Session ${sessionId}`, icon, text: undefined })
+  }
+
+  /** The relay channel that claimed a Session, read from `ctx.ownerRelay` when it is mounted. */
+  private relayOwner(sessionId: string): string | undefined {
+    const relay = (this.ctx.get as (name: string) => unknown)('ownerRelay') as Partial<OwnerRelayView> | undefined
+    return relay?.ownerOf?.(sessionId)
   }
 
   /** Send a reminder turn's final answer to the notifier unless it is the silent reply. */

@@ -1,0 +1,58 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/owner-relay/README.md
+/:
+  en: a206d7291257e4ff
+  zh: f5124917bd975826
+/deepseek-ai-dsh-owner-relay:
+  en: 3466c8c384bcf3bf
+  zh: 3de991a01d3d64e2
+/deepseek-ai-dsh-owner-relay/summary:
+  en: 0062f2a124011732
+  zh: 1a5d5ad09ad3775c
+/deepseek-ai-dsh-owner-relay/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-owner-relay/use-this-package:
+  en: fae92d06b578dd2a
+  zh: 17bdf80b6648e617
+/deepseek-ai-dsh-owner-relay/use-this-package/when-to-choose-it:
+  en: 8cfc3495de5970ea
+  zh: f47d909d4d168a28
+/deepseek-ai-dsh-owner-relay/use-this-package/the-rules:
+  en: 01ee6098e4c1f66f
+  zh: f58200dfaf2dfcdc
+/deepseek-ai-dsh-owner-relay/use-this-package/the-service:
+  en: 1771be941c1ced11
+  zh: 5dd31e26cfc07d7d
+/deepseek-ai-dsh-owner-relay/understand-the-implementation:
+  en: 6c086eecb2c4c5dd
+  zh: 4974f14dabcf80c2
+/deepseek-ai-dsh-owner-relay/further-exploration:
+  en: 885bff77b9e5f466
+  zh: d00237f420108f97
+/deepseek-ai-dsh-owner-relay/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-owner-relay/model-experience/fallback-note:
+  en: bf9fd7282d3a2b6c
+  zh: f90bab5d9087ca38
+/deepseek-ai-dsh-owner-relay/model-experience/fallback-note/what-the-model-sees:
+  en: 429d5e43e0773fd0
+  zh: 6ff71641d1231edf
+/deepseek-ai-dsh-owner-relay/model-experience/fallback-note/what-the-model-sees/shared-fallback-note:
+  en: 9fec596592d3ebe5
+  zh: 278b1f8fdd79c6dd
+/deepseek-ai-dsh-owner-relay/model-experience/fallback-note/token-effect:
+  en: 5cdcb6e3e9e6ff38
+  zh: 4acb8fbb95ee5394
+/deepseek-ai-dsh-owner-relay/model-experience/fallback-note/kv-cache-effect:
+  en: 879f75422fffdf2a
+  zh: b3c95e008ae02fe5
+/deepseek-ai-dsh-owner-relay/known-limitations-and-deferred-work:
+  en: 299f04bd5cd94727
+  zh: a4330f87e04b982c
+/deepseek-ai-dsh-owner-relay/known-limitations-and-deferred-work/dev-note:
+  en: f5a978a38c22a856
+  zh: 218bdaf571d14829

@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { BILI_NOTICE_ORIGIN } from '../src/dm.ts'
 import { FakeBili, replyItem } from './fake-bili.ts'
 import { allLogs, contexts, credentialStore, harness } from './harness.ts'
 
@@ -167,7 +168,7 @@ describe('public speech', () => {
     await vi.advanceTimersByTimeAsync(320_000)
     expect((await h.view()).recent[0]).toMatchObject({ visibility: 'hidden' })
     expect((await h.view()).pause).toMatchObject({ scope: 'speech', reason: 'comment 500000000001 possibly hidden' })
-    expect(h.notes).toEqual([{ title: 'dsh 在 B站的评论可能被隐藏了（BV1aa4y1X7aa），公开发言已暂停：设置 → B站账号 检查后点「恢复」' }])
+    expect(h.notes).toEqual([{ title: 'dsh 在 B站的评论可能被隐藏了（BV1aa4y1X7aa），公开发言已暂停：设置 → B站账号 检查后点「恢复」', origin: BILI_NOTICE_ORIGIN }])
     expect(await h.run(h.account.dynamic('今天看到一只会开门的猫'))).toEqual({ outcome: 'refused', detail: 'public speech is paused (comment 500000000001 possibly hidden) until the owner resumes it in Settings' })
     // Quiet writes go on.
     expect(await h.run(h.account.like(CAT))).toMatchObject({ outcome: 'sent' })

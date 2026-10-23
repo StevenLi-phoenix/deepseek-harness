@@ -94,11 +94,13 @@ describe('LsyEventBus scheduled turn reports', () => {
     expect(notes).toHaveLength(0)
   })
 
-  it('skips Sessions the notifier already relays', async () => {
-    const owned = new Set(['chat'])
-    const { emit, notes } = await harness({ notifier: { ownsSession: id => owned.has(id) } })
-    await runTurn(emit, 'chat', 'Relayed by the channel itself.')
+  it('skips Sessions a relay channel claimed, whatever the notifier owns', async () => {
+    const claims = new Map([['chat', 'wechat'], ['bili-1', 'bili-dm']])
+    const { emit, notes } = await harness({ claims, notifier: { ownsSession: id => id === 'other' } })
+    await runTurn(emit, 'chat', 'Relayed by the WeChat channel.')
+    await runTurn(emit, 'bili-1', 'Relayed by the Bilibili account.')
     expect(notes).toHaveLength(0)
+    // The notifier's own answer no longer decides: only the relay's claims do.
     await runTurn(emit, 'other', 'Reported.')
     expect(notes.map(note => note.body)).toEqual(['Reported.'])
   })

@@ -550,12 +550,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   },
   {
     key: 'bili',
-    summary: 'The agent\'s own Bilibili account: sign-in, cookie refresh, guarded writes, the body clock, the inbox poll, the final-answer relay, and the Settings route.',
-    description: 'The agent\'s own Bilibili account: sign-in, cookie refresh, guarded writes, the body clock, the inbox poll, the final-answer relay, and the Settings route.',
+    summary: 'The agent\'s own Bilibili account: sign-in, cookie refresh, guarded writes, the body clock, the inbox poll, the DM channel of the owner relay, and the Settings route.',
+    description: 'The agent\'s own Bilibili account: sign-in, cookie refresh, guarded writes, the body clock, the inbox poll, the DM channel of the owner relay, and the Settings route.',
     methods: [
       {
         signature: 'ownsSession(sessionId: string): boolean',
-        description: 'Whether this plugin created a Session (and relays its turns).',
+        description: 'Whether this plugin created a Session; each one is claimed by the DM channel.',
         parameters: [{ name: 'sessionId', description: 'Session to check.' }],
         returns: 'true for every Session this plugin created.',
       },
@@ -1806,14 +1806,14 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       {
         signature: 'send(note: LsyNote): Promise<void>',
         description: 'Deliver one message.',
-        parameters: [{ name: 'note', description: 'title, optional body, and optional link.' }],
+        parameters: [{ name: 'note', description: 'title, optional body, optional link, and optional origin.' }],
         returns: 'resolves once the channel accepted the message; rejects on failure.',
       },
       {
         signature: 'ownsSession?(sessionId: string): boolean',
-        description: 'Whether the channel already relays every turn of this Session to the owner (e.g. its chat Session), so the bus must not report those turns again.',
+        description: 'Whether the channel created this Session (e.g. its chat Session). Kept for callers outside the bus; the bus asks `ctx.ownerRelay.ownerOf()` which Sessions a relay channel delivers itself.',
         parameters: [{ name: 'sessionId', description: 'Session to check.' }],
-        returns: 'true when the channel relays this Session\'s turns itself.',
+        returns: 'true when the channel created this Session.',
       },
     ],
   },
@@ -1902,6 +1902,37 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Create an independent byte-bounded Session-log channel. Authorization and redaction precede reporting; the consumer owns shutdown and its outer deadline.',
         parameters: [{ name: 'options', description: 'transport, scope, resource, queue, and diagnostic settings selected by the consumer.' }],
         returns: 'the caller-owned channel, preserving complete accepted events within the request byte ceiling.',
+      },
+    ],
+  },
+  {
+    key: 'ownerRelay',
+    summary: 'The relay.',
+    description: 'The relay. Claims live in memory: each channel claims its stored Sessions again when it registers, and unregistering releases them. Every decision is logged at info level with the Session id and the reason, never the text.',
+    methods: [
+      {
+        signature: 'registerChannel(channel: RelayChannel): () => void',
+        description: 'Add a channel.',
+        parameters: [{ name: 'channel', description: 'name, delivery, hooks, and fallback label.' }],
+        returns: 'a disposer that removes the channel and releases every Session it claimed.',
+        throws: ['when a channel of the same name is registered.'],
+      },
+      {
+        signature: 'claim(sessionId: string, channelName: string): void',
+        description: 'Relay a Session\'s turns through one channel from now on.',
+        parameters: [{ name: 'sessionId', description: 'Session to claim; a claim by another channel moves to this one.' }, { name: 'channelName', description: 'the claiming channel\'s name.' }],
+      },
+      {
+        signature: 'release(sessionId: string): boolean',
+        description: 'Stop relaying a Session.',
+        parameters: [{ name: 'sessionId', description: 'Session to release.' }],
+        returns: 'whether it was claimed.',
+      },
+      {
+        signature: 'ownerOf(sessionId: string): string | undefined',
+        description: 'The channel that relays a Session\'s turns.',
+        parameters: [{ name: 'sessionId', description: 'Session to check.' }],
+        returns: 'the channel name, or undefined when no channel claimed the Session.',
       },
     ],
   },
@@ -6350,7 +6381,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LsyNote',
-    declaration: 'export interface LsyNote {\n    title: string;\n    body?: string | undefined;\n    url?: string | undefined;\n}',
+    declaration: 'export interface LsyNote {\n    title: string;\n    body?: string | undefined;\n    url?: string | undefined;\n    origin?: string | undefined;\n}',
   },
   {
     name: 'ManagementError',
@@ -7023,6 +7054,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'Registry',
     declaration: 'export type Registry = string | null;',
+  },
+  {
+    name: 'RelayAnswer',
+    declaration: 'export interface RelayAnswer {\n    readonly sessionId: string;\n    readonly text: string;\n    readonly outcome: string;\n    readonly detail?: string | undefined;\n}',
+  },
+  {
+    name: 'RelayChannel',
+    declaration: 'export interface RelayChannel {\n    readonly name: string;\n    readonly fallbackLabel?: string;\n    deliver(answer: RelayAnswer): Promise<RelayDelivery>;\n    onTurnStart?(sessionId: string): void;\n    onTurnEnd?(sessionId: string): void;\n    onTurnSettled?(sessionId: string): void;\n}',
+  },
+  {
+    name: 'RelayDelivery',
+    declaration: 'export type RelayDelivery = \'sent\' | \'kept\';',
   },
   {
     name: 'Reload',

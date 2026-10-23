@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildDigest, contentText, fitText, formatGap, formatStamp, inboundText, quotedAt, relayText, renderNote, sharedNoteText, splitText, timeGapNotice } from '../src/text.ts'
+import { buildDigest, fitText, formatGap, formatStamp, inboundText, quotedAt, renderNote, sharedNoteText, splitText, timeGapNotice } from '../src/text.ts'
 
 describe('fitText', () => {
   it('keeps short text and cuts long text to the code-point limit', () => {
@@ -122,33 +122,6 @@ describe('inboundText', () => {
   it('bounds long quotes', () => {
     const text = inboundText({ item_list: [{ type: 1, text_item: { text: 'q' }, ref_msg: { title: 'z'.repeat(500) } }] })
     expect(text.split('\n')[0]).toBe(`[引用] ${'z'.repeat(199)}…`)
-  })
-})
-
-describe('contentText', () => {
-  it('joins text parts and ignores everything else', () => {
-    expect(contentText([{ type: 'thinking', thinking: 'x' }, null, { type: 'text', text: 'a' }, { type: 'text', text: 'b' }, { type: 'text' }])).toBe('a\nb')
-    expect(contentText([{ type: 'text', text: '  ' }])).toBeUndefined()
-  })
-})
-
-describe('relayText', () => {
-  it.each([
-    ['answer', 'completed', 'answer'],
-    ['NO_REPLY', 'completed', undefined],
-    [' NO_REPLY ', 'error', undefined],
-    [undefined, 'completed', undefined],
-    [undefined, 'error', '⚠️ 本轮未完成（error）'],
-    [undefined, 'aborted', '⚠️ 本轮未完成（aborted）'],
-    ['partial', 'max-tokens', 'partial\n\n⚠️ 本轮未完成（max-tokens）'],
-  ] as const)('relays %j after %s as %j', (text, outcome, expected) => {
-    expect(relayText(text, outcome)).toBe(expected)
-  })
-
-  it('adds the failure reason under the warning', () => {
-    expect(relayText(undefined, 'error', 'AUTH: 401 User not found.')).toBe('⚠️ 本轮未完成（error）\n原因：AUTH: 401 User not found.')
-    expect(relayText('partial', 'error', 'QUOTA: no credits')).toBe('partial\n\n⚠️ 本轮未完成（error）\n原因：QUOTA: no credits')
-    expect(relayText('done', 'completed', 'ignored')).toBe('done')
   })
 })
 

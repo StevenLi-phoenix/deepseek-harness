@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { BILI_NOTICE_ORIGIN } from '../src/dm.ts'
 import { GRANT_KEY } from '../src/index.ts'
 import { FakeBili } from './fake-bili.ts'
 import { allLogs, contexts, credentialStore, harness } from './harness.ts'
@@ -79,7 +80,7 @@ describe('cookie refresh', () => {
     fake.reply('/x/passport-login/web/cookie/refresh', { body: { code: 86095, message: 'refresh_csrf 错误' } })
     await vi.advanceTimersByTimeAsync(70_000)
     expect((await h.view()).account).toMatchObject({ state: 'login-needed', reason: 'the cookie refresh failed: cookieRefresh: code 86095 (refresh_csrf 错误)' })
-    expect(h.notes).toEqual([{ title: 'dsh 的 B站登录失效了：设置 → B站账号 扫码' }])
+    expect(h.notes).toEqual([{ title: 'dsh 的 B站登录失效了：设置 → B站账号 扫码', origin: BILI_NOTICE_ORIGIN }])
 
     const like = await h.run(h.account.like('BV1aa4y1X7aa'))
     expect(like).toEqual({ outcome: 'refused', detail: 'the Bilibili login needs renewing (the cookie refresh failed: cookieRefresh: code 86095 (refresh_csrf 错误)); the owner has been told' })
@@ -101,7 +102,7 @@ describe('cookie refresh', () => {
     fake.session = undefined
     await vi.advanceTimersByTimeAsync(70_000)
     expect((await h.view()).account.state).toBe('login-needed')
-    expect(h.notes).toEqual([{ title: 'dsh 的 B站登录失效了：设置 → B站账号 扫码' }])
+    expect(h.notes).toEqual([{ title: 'dsh 的 B站登录失效了：设置 → B站账号 扫码', origin: BILI_NOTICE_ORIGIN }])
   })
 })
 
@@ -114,7 +115,7 @@ describe('risk brake', () => {
     const like = await h.run(h.account.like('BV1aa4y1X7aa'))
     expect(like).toEqual({ outcome: 'refused', detail: 'Bilibili\'s risk control stopped it (HTTP 412); writes are paused until the owner resumes them' })
     await vi.advanceTimersByTimeAsync(0)
-    expect(h.notes).toEqual([{ title: 'dsh 的 B站账号触发了风控（HTTP 412），所有写操作已暂停：设置 → B站账号 检查后点「恢复」' }])
+    expect(h.notes).toEqual([{ title: 'dsh 的 B站账号触发了风控（HTTP 412），所有写操作已暂停：设置 → B站账号 检查后点「恢复」', origin: BILI_NOTICE_ORIGIN }])
     const paused = await h.view()
     expect(paused.pause).toMatchObject({ scope: 'all', reason: 'HTTP 412' })
     expect(paused.readsResumeAt).toBe(Date.now() + 1_800_000 - (Date.now() - paused.pause!.since))

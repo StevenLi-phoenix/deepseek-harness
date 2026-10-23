@@ -24,6 +24,9 @@
       "path": "../lsy-event-bus"
     },
     {
+      "path": "../owner-relay"
+    },
+    {
       "path": "../../interaction/permission-presets"
     },
     {

@@ -437,7 +437,7 @@ export type Config = LocalConfig
 ## `@deepseek-ai/dsh-bili`
 
 - `inject`: `timer` · `storageDomain` · `credentials` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/lsy/bili/src/index.ts:113`](../packages/lsy/bili/src/index.ts)
+- `source`: [`packages/lsy/bili/src/index.ts:117`](../packages/lsy/bili/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -2606,7 +2606,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-lsy-wechat`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/lsy/lsy-wechat/src/index.ts:54`](../packages/lsy/lsy-wechat/src/index.ts)
+- `source`: [`packages/lsy/lsy-wechat/src/index.ts:56`](../packages/lsy/lsy-wechat/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
@@ -5161,6 +5161,7 @@ export interface Config {
 | `@deepseek-ai/dsh-lsy-tool-wechat` | `tools` | [`packages/lsy/lsy-tool-wechat/src/index.ts`](../packages/lsy/lsy-tool-wechat/src/index.ts) |
 | `@deepseek-ai/dsh-mcp-resources` | `tools` | [`packages/mcp/mcp-resources/src/index.ts`](../packages/mcp/mcp-resources/src/index.ts) |
 | `@deepseek-ai/dsh-otel` | — | [`packages/telemetry/otel/src/index.ts`](../packages/telemetry/otel/src/index.ts) |
+| `@deepseek-ai/dsh-owner-relay` | — | [`packages/lsy/owner-relay/src/index.ts`](../packages/lsy/owner-relay/src/index.ts) |
 | `@deepseek-ai/dsh-sandbox-ssh` | `ssh` | [`packages/ssh/sandbox-ssh/src/index.ts`](../packages/ssh/sandbox-ssh/src/index.ts) |
 | `@deepseek-ai/dsh-session` | — | [`packages/core/session/src/index.ts`](../packages/core/session/src/index.ts) |
 | `@deepseek-ai/dsh-session-checkpoint-policy` | `llm` · `sessionPersistence` · `sessions` · `tools` | [`packages/session/session-checkpoint-policy/src/index.ts`](../packages/session/session-checkpoint-policy/src/index.ts) |

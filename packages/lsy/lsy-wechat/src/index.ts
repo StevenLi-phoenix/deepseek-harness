@@ -1,4 +1,4 @@
-/** WeChat (iLink bot) channel: the owner's chat Session, reply relay, and `ctx.lsyNotifier`. */
+/** WeChat (iLink bot) channel: the owner's chat Session, its `wechat` relay channel, and `ctx.lsyNotifier`. */
 
 import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
@@ -8,9 +8,11 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContextFormed, UserMessage } from '@deepseek-ai/dsh-llm'
-import { failureDetail, type LsyNote, type LsyNotifier } from '@deepseek-ai/dsh-lsy-event-bus'
+import type { LsyNote, LsyNotifier } from '@deepseek-ai/dsh-lsy-event-bus'
+// Type-only: ctx.ownerRelay, which relays each chat Session's final answers through this channel.
+import type { RelayAnswer, RelayChannel, RelayDelivery } from '@deepseek-ai/dsh-owner-relay'
 import type {} from '@deepseek-ai/dsh-permission-presets'
-import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
+import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-title'
 import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import z from '@deepseek-ai/schemastery'
@@ -24,7 +26,7 @@ declare module '@deepseek-ai/dsh-llm' {
   }
 }
 
-import { buildDigest, contentText, EARLIER_CHAT, fitText, formatGap, HELP_REPLY, inboundText, NEW_CHAT_REPLY, QUOTA_FOOTER, relayText, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES } from './text.ts'
+import { buildDigest, EARLIER_CHAT, fitText, formatGap, HELP_REPLY, inboundText, NEW_CHAT_REPLY, QUOTA_FOOTER, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES } from './text.ts'
 import { TypingIndicator } from './typing.ts'
 
 export * from './api.ts'
@@ -110,6 +112,9 @@ export const Config: z<Config> = z.object({
   timeGapMs: z.natural().default(1_800_000),
 })
 
+/** Name of the channel through which `ctx.ownerRelay` relays the chat Sessions' answers. */
+export const WECHAT_RELAY_CHANNEL = 'wechat'
+
 /** Exact owner text that starts a fresh chat Session. */
 const NEW_CHAT_COMMAND = '/new'
 /** Exact owner text that cancels every running turn on the Host. */
@@ -182,11 +187,11 @@ function outboxKey(seq: number): string {
 
 /**
  * WeChat channel for one owner. Long-polls the bound bot, forwards the
- * owner's messages into one long-lived chat Session, relays each turn's final
- * answer back, and delivers bus notifications. iLink only lets a bot answer
- * within a window opened by the owner's latest message, so texts that find no
- * open window wait in a durable outbox and arrive as a digest when the owner
- * writes again.
+ * owner's messages into one long-lived chat Session, delivers each turn's
+ * final answer that `ctx.ownerRelay` hands its `wechat` channel, and delivers
+ * bus notifications. iLink only lets a bot answer within a window opened by
+ * the owner's latest message, so texts that find no open window wait in a
+ * durable outbox and arrive as a digest when the owner writes again.
  */
 export class WechatChannel extends Service implements LsyNotifier {
   static inject = ['storageDomain', 'sessionController', 'permissionPresets', 'sessionTitle']
@@ -196,8 +201,6 @@ export class WechatChannel extends Service implements LsyNotifier {
   private readonly accountFile: string
   private readonly abort = new AbortController()
   private readonly inflight = new Set<Promise<void>>()
-  /** Latest assistant text of the running turn, per owned Session. */
-  private readonly replies = new Map<string, string>()
   private domain: Domain<typeof wechatDomain> | undefined
   private loop: Promise<void> | undefined
   private chain: Promise<unknown> = Promise.resolve()
@@ -216,8 +219,6 @@ export class WechatChannel extends Service implements LsyNotifier {
   private lastWindow: { key: string; window: WindowRecord } | undefined
   /** Owned Sessions with a running turn. */
   private readonly working = new Set<string>()
-  /** Owned Sessions cancelled by `/stop`, whose aborted turn needs no relay. */
-  private readonly stoppedByOwner = new Set<string>()
   /** Stops typing when a forwarded message starts no chat turn. */
   private typingGrace: NodeJS.Timeout | undefined
 
@@ -267,7 +268,67 @@ export class WechatChannel extends Service implements LsyNotifier {
       return cleanup
     }, 'lsyWechat.init()')
 
-    ctx.on('session/event', (session, event) => { this.observeSession(session, event) })
+    // The relay delivers the chat Sessions' answers here whenever it is mounted; the channel works without it.
+    ctx.plugin({
+      name: 'lsy-wechat-owner-relay',
+      inject: ['ownerRelay'],
+      apply: (child: Context) => {
+        child.effect(() => this.joinRelay(child), 'lsyWechat.ownerRelay()')
+      },
+    })
+  }
+
+  /**
+   * Register the `wechat` channel and claim every stored chat Session once storage is open.
+   * @returns a disposer that unregisters the channel, which releases its claims.
+   */
+  private joinRelay(child: Context): () => void {
+    const relay = child.ownerRelay
+    const channel: RelayChannel = {
+      name: WECHAT_RELAY_CHANNEL,
+      deliver: answer => this.hold(this.relayAnswer(answer)),
+      onTurnStart: (sessionId) => {
+        this.working.add(sessionId)
+        this.clearTypingGrace()
+        this.typing.start()
+      },
+      onTurnEnd: (sessionId) => { this.working.delete(sessionId) },
+      // Typing clears after the reply went out, so the chat never looks idle before the answer shows.
+      onTurnSettled: () => { this.settleTyping() },
+    }
+    const unregister = relay.registerChannel(channel)
+    let joined = true
+    this.ready.then((domain) => {
+      if (!joined) return
+      const ids = [...domain.table('sessions').keys()]
+      for (const id of ids) relay.claim(id, WECHAT_RELAY_CHANNEL)
+      this.ctx.logger.info(`lsy-wechat: the relay carries ${ids.length} chat Session(s) through channel ${WECHAT_RELAY_CHANNEL}`)
+    }, (error: unknown) => {
+      this.ctx.logger.warn(`lsy-wechat: chat Sessions not claimed with the relay: ${errorText(error)}`)
+    })
+    return () => {
+      joined = false
+      unregister()
+    }
+  }
+
+  /**
+   * Deliver a chat Session's answer that the relay handed over. A chat Session the owner left with
+   * /new can still answer (its reminders and monitors live on): the current chat Session gets a
+   * copy, since the owner's reply to it lands there.
+   * @returns `sent` once the text was sent or durably queued.
+   */
+  private async relayAnswer(answer: RelayAnswer): Promise<RelayDelivery> {
+    await this.deliver(answer.text, 'reply')
+    await this.shareWithChat(answer.text, EARLIER_CHAT, answer.sessionId)
+    return 'sent'
+  }
+
+  /** Keep work another service awaits alive until teardown drains it; its outcome stays the caller's. */
+  private hold<T>(work: Promise<T>): Promise<T> {
+    const held = work.then(() => undefined, () => undefined).finally(() => this.inflight.delete(held))
+    this.inflight.add(held)
+    return work
   }
 
   /**
@@ -279,7 +340,7 @@ export class WechatChannel extends Service implements LsyNotifier {
   async send(note: LsyNote): Promise<void> {
     const text = renderNote(note)
     await this.deliver(text, 'note')
-    await this.shareWithChat(text)
+    await this.shareWithChat(text, note.origin)
   }
 
   /**
@@ -288,6 +349,8 @@ export class WechatChannel extends Service implements LsyNotifier {
    * what was said. It waits for the chat Session's next turn and never starts one; with no chat
    * Session yet there is nobody to tell. A failure only costs the context, never the delivery.
    * @param text - the rendered note, as the owner received or will receive it.
+   * @param from - who sent it, as the chat Session reads it; a generic other Session by default.
+   * @param except - a Session that needs no copy: the chat Session that wrote the text itself.
    */
   private async shareWithChat(text: string, from?: string, except?: string): Promise<void> {
     const chats = this.domain === undefined ? [] : [...this.domain.table('chats').entries()].map(([, row]) => row)
@@ -365,7 +428,8 @@ export class WechatChannel extends Service implements LsyNotifier {
   }
 
   /**
-   * Whether this channel relays the turns of a Session: true for every chat Session it created.
+   * Whether this channel created a Session: true for every chat Session it remembers, all of which
+   * it claims with `ctx.ownerRelay`.
    * @param sessionId - Session to check.
    * @returns true for the current and earlier chat Sessions.
    */
@@ -536,7 +600,8 @@ export class WechatChannel extends Service implements LsyNotifier {
   /**
    * `/stop`: cancel every running root turn on the Host (this chat and the bus Sessions), dropping
    * their queued messages, and tell the owner what stopped. Monitors and reminders keep running;
-   * they are not turns. A chat turn stopped this way is not relayed as unfinished.
+   * they are not turns. The cancel cause is `user`, so `ctx.ownerRelay` and the bus send nothing for
+   * the aborted turns: this answer already says what stopped.
    */
   private async stopEverything(): Promise<void> {
     const registry = (this.ctx.get as (name: string) => unknown)('agents') as RootAgents | undefined
@@ -544,7 +609,6 @@ export class WechatChannel extends Service implements LsyNotifier {
     const labels: string[] = []
     for (const agent of running) {
       const id = agent.session.id
-      if (this.ownsSession(id)) this.stoppedByOwner.add(id)
       agent.cancel({ kind: 'user' })
       labels.push(this.ownsSession(id) ? '微信对话' : this.ctx.sessionTitle.get(agent.session)?.title ?? `Session ${id}`)
     }
@@ -670,6 +734,8 @@ export class WechatChannel extends Service implements LsyNotifier {
       await prompt(false)
     }
     this.ctx.logger.info(`lsy-wechat: forwarded ${text.length} chars${images.length > 0 ? ` and ${images.length} image(s)` : ''} to Session ${sessionId}`)
+    // The answer comes back only through the relay; without it the owner would wait in silence.
+    if (this.ctx.get('ownerRelay') === undefined) this.ctx.logger.warn('lsy-wechat: no ownerRelay is mounted, so the answer will not reach WeChat')
   }
 
   /** The owner's chat Session: the stored one while it resolves, otherwise a new one. */
@@ -696,6 +762,9 @@ export class WechatChannel extends Service implements LsyNotifier {
     this.ctx.permissionPresets.set(resolved.agent.session, chat.permissionPreset)
     this.ctx.sessionTitle.rename(resolved.agent.session, chat.title)
     const now = Date.now()
+    const relay = this.ctx.get('ownerRelay')
+    // Claimed before the first prompt, so the relay follows the Session's first turn.
+    relay?.claim(created.sessionId, WECHAT_RELAY_CHANNEL)
     await this.serialize(async () => {
       const sessions = domain.table('sessions')
       await sessions.put(created.sessionId, { ownerUserId: account.ownerUserId, createdAt: now })
@@ -703,46 +772,13 @@ export class WechatChannel extends Service implements LsyNotifier {
       const excess = [...sessions.entries()]
         .sort(([, a], [, b]) => a.createdAt - b.createdAt)
         .slice(0, Math.max(0, sessions.size - MAX_REMEMBERED_SESSIONS))
-      for (const [id] of excess) await sessions.delete(id)
+      for (const [id] of excess) {
+        await sessions.delete(id)
+        relay?.release(id)
+      }
     })
     this.ctx.logger.info(`lsy-wechat: created chat Session ${created.sessionId} in ${chat.workspacePath} (${chat.agentPreset}, ${chat.permissionPreset})`)
     return created.sessionId
-  }
-
-  /** Follow each owned Session: typing while a turn runs, its latest assistant text, and the relay when the turn ends. */
-  private observeSession(session: Session, event: SessionEvent): void {
-    if (!this.ownsSession(session.id)) return
-    if (event.type === 'turn/start') {
-      this.working.add(session.id)
-      this.clearTypingGrace()
-      this.typing.start()
-      return
-    }
-    if (event.type === 'assistant/message') {
-      const text = contentText(event.data.message.content)
-      if (text !== undefined) this.replies.set(session.id, text)
-      return
-    }
-    if (event.type !== 'turn/end') return
-    this.working.delete(session.id)
-    const text = this.replies.get(session.id)
-    this.replies.delete(session.id)
-    if (this.stoppedByOwner.delete(session.id) && event.data.reason.kind === 'aborted') {
-      this.ctx.logger.info(`lsy-wechat: Session ${session.id} was stopped by /stop; nothing to relay`)
-      this.settleTyping()
-      return
-    }
-    const outcome = event.data.reason.kind
-    const detail = failureDetail(event.data.reason)
-    const reply = relayText(text, outcome, detail)
-    const ended = detail === undefined ? outcome : `${outcome}: ${detail}`
-    this.ctx.logger.info(`lsy-wechat: Session ${session.id} ended a turn (${ended}); ${reply === undefined ? 'nothing to relay' : `relaying ${reply.length} chars`}`)
-    // Typing clears after the reply went out, so the chat never looks idle before the answer shows.
-    if (reply !== undefined) this.track(this.deliver(reply, 'reply').finally(() => { this.settleTyping() }))
-    // A chat Session the owner left with /new can still answer (its reminders and monitors live on):
-    // the current chat Session gets a copy, since the owner's reply to it lands there.
-    if (reply !== undefined) this.track(this.shareWithChat(reply, EARLIER_CHAT, session.id))
-    else this.settleTyping()
   }
 
   /** Split one text into messages and send or queue each in order. */

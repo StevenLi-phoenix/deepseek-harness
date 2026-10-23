@@ -1,9 +1,13 @@
-/** Mounts BiliAccount over memory storage, a shared credential double, fake Sessions, a recording notifier, and the fake Bilibili. */
+/**
+ * Mounts BiliAccount and the owner relay over memory storage, a shared credential double, fake Sessions,
+ * a recording notifier, and the fake Bilibili.
+ */
 import { Context } from '@deepseek-ai/cordis'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
 import type { SessionCreateRequest, SessionPromptRequest } from '@deepseek-ai/dsh-api-session-controller'
 import type { CredentialKey, CredentialRecord } from '@deepseek-ai/dsh-credentials'
-import type { LsyNote } from '@deepseek-ai/dsh-lsy-event-bus'
+import LsyEventBus, { Config as BusConfig, type LsyNote } from '@deepseek-ai/dsh-lsy-event-bus'
+import OwnerRelay from '@deepseek-ai/dsh-owner-relay'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import { vi, type Mock } from 'vitest'
@@ -50,6 +54,8 @@ export function fakeSessions() {
   const state = {
     created: [] as SessionCreateRequest[],
     prompts: [] as SessionPromptRequest[],
+    /** Messages injected into Sessions, as [sessionId, text]. */
+    injected: [] as [string, string][],
     live: new Set<string>(),
     status: new Map<string, string>(),
     /** The model route of each Session's last request. */
@@ -60,7 +66,9 @@ export function fakeSessions() {
   const controller = {
     create: (request: SessionCreateRequest) => {
       state.created.push(request)
-      const sessionId = `bili-${state.created.length}`
+      // The account's Sessions are bili-N; a WeChat chat Session (preset `unattended`) is chat-N.
+      const prefix = request.agentPreset === 'unattended' ? 'chat' : 'bili'
+      const sessionId = `${prefix}-${state.created.filter(created => (created.agentPreset === 'unattended') === (prefix === 'chat')).length}`
       state.live.add(sessionId)
       return Promise.resolve({ sessionId })
     },
@@ -71,6 +79,7 @@ export function fakeSessions() {
           requestHeader: () => { const config = state.headers.get(sessionId); return config === undefined ? undefined : { config } },
         },
         status: state.status.get(sessionId) ?? 'idle',
+        inject: (message: { content: { type: string; text?: string }[] }) => { state.injected.push([sessionId, message.content[0]?.text ?? '']) },
       } }
       : { error: Object.assign(new Error(`session/not-found: ${sessionId}`), { code: 'session/not-found' }) }),
     prompt: (request: SessionPromptRequest) => {
@@ -104,6 +113,10 @@ export interface HarnessOptions {
   bili?: FakeBili
   sessions?: ReturnType<typeof fakeSessions>
   notes?: LsyNote[]
+  /** `false` mounts no recording notifier, so a test can mount the real WeChat channel. */
+  notifier?: false
+  /** Mount the real event bus too, with its defaults. */
+  bus?: boolean
   workspace?: string
   /** The profile default model route, read on every call. */
   defaultModel?: { provider: string; model: string }
@@ -140,7 +153,10 @@ export async function harness(options: HarnessOptions = {}) {
   const titles: { rename: Mock<(session: unknown, title: string) => void> } = { rename: vi.fn() }
   ctx.provide('sessionTitle', titles as never)
   const notes = options.notes ?? []
-  ctx.provide('lsyNotifier', { send: (note: LsyNote) => { notes.push(note); return Promise.resolve() } } as never)
+  if (options.notifier !== false) ctx.provide('lsyNotifier', { send: (note: LsyNote) => { notes.push(note); return Promise.resolve() } } as never)
+  // The relay carries the account's answers to its DM channel, as the event bundle mounts it.
+  await ctx.plugin(OwnerRelay)
+  if (options.bus === true) await ctx.plugin(LsyEventBus, BusConfig({} as never))
   if (options.defaultModel !== undefined) {
     const defaultModel = options.defaultModel
     ctx.provide('agentDefaultModel', { currentSelection: () => ({ ...defaultModel }) } as never)

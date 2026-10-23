@@ -11500,6 +11500,12 @@ importers:
       '@deepseek-ai/dsh-lsy-event-bus':
         specifier: workspace:*
         version: link:../lsy-event-bus
+      '@deepseek-ai/dsh-lsy-wechat':
+        specifier: workspace:*
+        version: link:../lsy-wechat
+      '@deepseek-ai/dsh-owner-relay':
+        specifier: workspace:*
+        version: link:../owner-relay
       '@deepseek-ai/dsh-permission-presets':
         specifier: workspace:*
         version: link:../../interaction/permission-presets
@@ -11854,6 +11860,9 @@ importers:
       '@deepseek-ai/dsh-lsy-event-bus':
         specifier: workspace:*
         version: link:../lsy-event-bus
+      '@deepseek-ai/dsh-owner-relay':
+        specifier: workspace:*
+        version: link:../owner-relay
       '@deepseek-ai/dsh-permission-presets':
         specifier: workspace:*
         version: link:../../interaction/permission-presets
@@ -11869,6 +11878,18 @@ importers:
       '@deepseek-ai/dsh-storage-domain':
         specifier: workspace:*
         version: link:../../storage/storage-domain
+
+  packages/lsy/owner-relay:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-lsy-event-bus':
+        specifier: workspace:*
+        version: link:../lsy-event-bus
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../core/session
 
   packages/lsy/tool-bili:
     devDependencies:

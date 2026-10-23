@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用这个包
 
-在 Web profile 里把通道挂在 `@deepseek-ai/dsh-lsy-event-bus` 旁边。它提供 `ctx.lsyNotifier`，总线的通知就发到这里；它依赖 Host 的 Session Controller、permission preset、Session 标题和 storage domain facility。
+在 Web profile 里把通道挂在 `@deepseek-ai/dsh-lsy-event-bus` 旁边。它提供 `ctx.lsyNotifier`，总线的通知就发到这里；它依赖 Host 的 Session Controller、permission preset、Session 标题和 storage domain facility。对话的回答经由 [`@deepseek-ai/dsh-owner-relay`](../owner-relay/README.zh.md)（`ctx.ownerRelay`）送回，这个插件注册的是它的 `wechat` 通道；没有中继时，对话照样接收消息，但不发回答。
 
 ### 何时选用
 
@@ -87,14 +87,14 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 <details>
 <summary>实现细节——点击展开</summary>
 
-插件运行期间，通道持续长轮询 `ilink/bot/getupdates`，并在处理消息之前把返回的游标存进 `lsy_wechat` storage domain，所以崩溃只会丢消息，不会重复发 prompt。两次轮询之间它会重读账号文件；没有可用账号、或服务器报告 token 失效（`-14`）时，它只记一次日志，然后每隔 `accountPollMs` 检查一次文件。它只接受 owner 发来的用户消息。每条消息打开一个回复窗口（`context_token`、接收时间、已用条数），先把 outbox 作为摘要消息发出（摘要永远不占窗口的最后一个名额），再用 `sessionController.prompt()` 以 `steer` 模式转给 owner 的对话 Session：Session 空闲时开始新一轮，正在忙时在下一个步骤边界接收这条消息，所以紧跟一句话发来的图片会进入正在回答那句话的那一轮。转发之前，每个图片、文件和视频条目都会被下载（AES-128-ECB，密钥取 `image_item.aeskey` 或 `media.aes_key`），按内容或文件名判断类型，再写进 inbox；prompt 为每个附件附一行说明，图片作为图片内容附上；如果被拒绝为 `session/attachment-invalid`（模型只支持文本），就只带说明重发一次。`resolveAgent()` 成功时复用已存的 Session；Session 不存在或已损坏时，用 `sessionController.create()` 新建一个，并设置 permission preset 和标题。通道跟踪自己创建的每个对话 Session 的 `session/event`，记住这一轮最新的助手文本，在这一轮结束时发出，除非它是 `NO_REPLY`。`send()` 和回复转发共用一条串行的投递路径：文本只经由已打开、未过期且仍有名额的窗口发出，占用最后一个名额的那条带一句提示，其余的连同原因进入 outbox。`ret -2` 关闭窗口，`-14` 暂停通道，网络失败时文本留在 outbox 里。每次 `send()` 还会把渲染好的通知注入最新的对话 Session（`agent.inject()`，来源类型 `lsy-wechat`，形式 `notice`），并说明它来自另一个 Session、不是 owner 说的话，附上发出时间：它等下一轮，不会自己开一轮；之所以这样，是因为 owner 对这条通知的回复会进入对话 Session，而不是写这条通知的那个 Session，所以它可能在发出几小时后才进入那个 Session 的历史。`activity` 表记录 owner 上次写消息的时间，以及 bot 上次给 owner 发了什么、何时发的。它在 outbox 刷出之前读取，因此新消息放出的摘要不算数；对话安静超过 `timeGapMs` 之后，owner 的消息在 prompt 之前先注入一条时间间隔提示。“正在输入”沿用 OpenClaw 的协议：`ilink/bot/getconfig` 给出按用户的 `typing_ticket`（缓存一天；取失败时从 30 秒到一小时退避），`ilink/bot/sendtyping` 在自己的 Session 有正在运行的轮次时每 5 秒发一次状态 1，转发消息后若没有轮次开始最多保持一分钟，回复送达后发一次状态 2；一小时还没结束就停掉。`/stop` 通过 Host 注册表取消所有正在运行的根 agent（`agent.cancel({ kind: 'user' })`），按对话或 Session 标题命名，并跳过它中止的对话轮次的转发。账号生效时通道发送 `ilink/bot/msg/notifystart`，停止时发送 `notifystop`；那时仍在运行的对话轮次会收到一条重启提示，经由最后已知的窗口发出，因为存储可能已经关闭。每条发送成功的文字记在 `sent` 里（最新 200 条，最多 30 天）；引用的条目只带 `create_time_ms`、`update_time_ms` 或 `msg_id`（高位是时间）时，按 15 秒内最接近的那次发送找回正文，找不到就写 `（一条较早的消息，内容取不到）`。拆分时代码块会在各段间关闭再重开、表格会重复表头，发出的文字会补成合法的 UTF-16（不成对的代理项会让 `sendmessage` 失败），`ret -2` 会连同文字长度和本窗口已发条数一起记日志，登录时 `weixin.qq.com` / `wechat.com` 以外或非 HTTPS 的跳转地址和 base URL 会被拒绝，因为 bot token 会跟着发过去。引用找回和主机固定参考 xmanrui/dsh-im（MIT）；代码块与表格拆分参考 pan17/dsh-wechat（MIT）。
+插件运行期间，通道持续长轮询 `ilink/bot/getupdates`，并在处理消息之前把返回的游标存进 `lsy_wechat` storage domain，所以崩溃只会丢消息，不会重复发 prompt。两次轮询之间它会重读账号文件；没有可用账号、或服务器报告 token 失效（`-14`）时，它只记一次日志，然后每隔 `accountPollMs` 检查一次文件。它只接受 owner 发来的用户消息。每条消息打开一个回复窗口（`context_token`、接收时间、已用条数），先把 outbox 作为摘要消息发出（摘要永远不占窗口的最后一个名额），再用 `sessionController.prompt()` 以 `steer` 模式转给 owner 的对话 Session：Session 空闲时开始新一轮，正在忙时在下一个步骤边界接收这条消息，所以紧跟一句话发来的图片会进入正在回答那句话的那一轮。转发之前，每个图片、文件和视频条目都会被下载（AES-128-ECB，密钥取 `image_item.aeskey` 或 `media.aes_key`），按内容或文件名判断类型，再写进 inbox；prompt 为每个附件附一行说明，图片作为图片内容附上；如果被拒绝为 `session/attachment-invalid`（模型只支持文本），就只带说明重发一次。`resolveAgent()` 成功时复用已存的 Session；Session 不存在或已损坏时，用 `sessionController.create()` 新建一个，并设置 permission preset 和标题。通道创建的每个对话 Session 都在第一次 prompt 之前以 `wechat` 通道向 `ctx.ownerRelay` 认领，记得的每个旧 Session 在通道注册时重新认领；中继在每轮结束时套用它的规则（`NO_REPLY` 或 owner 停下的一轮什么也不发）并把回答交过来，不是当前对话 Session 的回答还会复制一份到当前对话里。`send()` 和转来的回答共用一条串行的投递路径：文本只经由已打开、未过期且仍有名额的窗口发出，占用最后一个名额的那条带一句提示，其余的连同原因进入 outbox。`ret -2` 关闭窗口，`-14` 暂停通道，网络失败时文本留在 outbox 里。每次 `send()` 还会把渲染好的通知注入最新的对话 Session（`agent.inject()`，来源类型 `lsy-wechat`，形式 `notice`），并说明它来自另一个 Session、不是 owner 说的话（发送方给出通知的 `origin` 时用它来称呼），附上发出时间：它等下一轮，不会自己开一轮；之所以这样，是因为 owner 对这条通知的回复会进入对话 Session，而不是写这条通知的那个 Session，所以它可能在发出几小时后才进入那个 Session 的历史。`activity` 表记录 owner 上次写消息的时间，以及 bot 上次给 owner 发了什么、何时发的。它在 outbox 刷出之前读取，因此新消息放出的摘要不算数；对话安静超过 `timeGapMs` 之后，owner 的消息在 prompt 之前先注入一条时间间隔提示。“正在输入”沿用 OpenClaw 的协议：`ilink/bot/getconfig` 给出按用户的 `typing_ticket`（缓存一天；取失败时从 30 秒到一小时退避），`ilink/bot/sendtyping` 在自己的 Session 有正在运行的轮次时（中继的 `onTurnStart` 和 `onTurnEnd` 钩子）每 5 秒发一次状态 1，转发消息后若没有轮次开始最多保持一分钟，回复送达后（`onTurnSettled`）发一次状态 2；一小时还没结束就停掉。`/stop` 通过 Host 注册表取消所有正在运行的根 agent（`agent.cancel({ kind: 'user' })`），按对话或 Session 标题命名；原因 `user` 让中继和总线对它中止的轮次什么也不发，和 Web UI 的停止一样。账号生效时通道发送 `ilink/bot/msg/notifystart`，停止时发送 `notifystop`；那时仍在运行的对话轮次会收到一条重启提示，经由最后已知的窗口发出，因为存储可能已经关闭。每条发送成功的文字记在 `sent` 里（最新 200 条，最多 30 天）；引用的条目只带 `create_time_ms`、`update_time_ms` 或 `msg_id`（高位是时间）时，按 15 秒内最接近的那次发送找回正文，找不到就写 `（一条较早的消息，内容取不到）`。拆分时代码块会在各段间关闭再重开、表格会重复表头，发出的文字会补成合法的 UTF-16（不成对的代理项会让 `sendmessage` 失败），`ret -2` 会连同文字长度和本窗口已发条数一起记日志，登录时 `weixin.qq.com` / `wechat.com` 以外或非 HTTPS 的跳转地址和 base URL 会被拒绝，因为 bot token 会跟着发过去。引用找回和主机固定参考 xmanrui/dsh-im（MIT）；代码块与表格拆分参考 pan17/dsh-wechat（MIT）。
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 服务、配置、长轮询循环、对话 Session、回复转发、投递与 outbox |
+| [`src/index.ts`](src/index.ts) | 服务、配置、长轮询循环、对话 Session、`wechat` 中继通道、投递与 outbox |
 | [`src/api.ts`](src/api.ts) | 最小的 iLink 客户端，每个请求有独立时限；错误信息从不包含 token |
 | [`src/login.ts`](src/login.ts) | 二维码登录状态机、终端登录命令、账号文件 |
-| [`src/text.ts`](src/text.ts) | 入站文本提取与引用时间、按 Markdown 结构拆分消息、转发文本、摘要、时间戳、时间间隔提示与转来通知的文本、命令回复 |
+| [`src/text.ts`](src/text.ts) | 入站文本提取与引用时间、按 Markdown 结构拆分消息、摘要、时间戳、时间间隔提示与转来通知的文本、命令回复 |
 | [`src/typing.ts`](src/typing.ts) | “正在输入”提示：带退避的 ticket 缓存、5 秒保活、一小时上限、失败从不影响回复 |
 | [`src/media.ts`](src/media.ts) | CDN 下载与解密、图片类型识别、inbox、附件说明；外发的加密与上传（`getuploadurl`、CDN POST、`x-encrypted-param`） |
 | [`src/storage.ts`](src/storage.ts) | 游标、回复窗口、对话 Session、outbox、对话动态与最近发出的文字的 storage-domain 表 |
@@ -109,6 +109,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 ## 延伸阅读
 
 - [事件总线](../lsy-event-bus/README.zh.md)——把通知和 Session 结果发给这个通道
+- [回答中继](../owner-relay/README.zh.md)——在每轮结束时决定对话 Session 的回答发什么
 - [Session Controller](../../api/session-controller/README.zh.md)——创建、解析对话 Session 并向它发 prompt
 - [Permission presets](../../interaction/permission-presets/README.zh.md)——对话 Session 的权限档位
 - [Storage domain](../../storage/storage-domain/README.zh.md)——持久表
@@ -122,7 +123,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 
 #### 模型看到什么
 
-owner 的每条微信消息都以普通用户 prompt 的形式进入对话 Session，带上配置的 `chat.timeZone`，和在 Web UI 里输入的文字一样。文本不带任何微信包装；引用会多一行 `[引用] …`，语音消息是 `[语音] <转写>`，媒体是占位符，后面每个附件跟一行说明，例如 `- image (image/jpeg, 84.2 KB) saved at /Users/dsh-runtime/work/.wechat-inbox/…-image.jpg; it is attached to this message.`；没能取到的附件会注明取不到、内容不可用。不超过 20 MiB、格式为 Host 接受的 PNG、JPEG、GIF、WebP 的图片，同时作为同一条消息的图片内容。每一轮模型的最终回答原样发回，微信会渲染其中的 Markdown（标题、列表、引用、表格、代码块）。最终回答恰好是 `NO_REPLY` 时什么也不发。对话安静了 `timeGapMs` 或更久时，owner 的消息之前会先来一条提示（来源类型 `lsy-wechat`，形式 `notice`）；另一个 Session 发给 owner 的通知也以提示形式到达，并附上发出时间；owner 用 `/new` 离开的旧对话 Session 发出的回答也一样（它设的提醒和监控还在跑），说明里称它为 `an earlier chat Session (before /new; a reminder or monitor it set up)`。两者中的每个时间都来自通道自己的记录，从不来自模型。
+owner 的每条微信消息都以普通用户 prompt 的形式进入对话 Session，带上配置的 `chat.timeZone`，和在 Web UI 里输入的文字一样。文本不带任何微信包装；引用会多一行 `[引用] …`，语音消息是 `[语音] <转写>`，媒体是占位符，后面每个附件跟一行说明，例如 `- image (image/jpeg, 84.2 KB) saved at /Users/dsh-runtime/work/.wechat-inbox/…-image.jpg; it is attached to this message.`；没能取到的附件会注明取不到、内容不可用。不超过 20 MiB、格式为 Host 接受的 PNG、JPEG、GIF、WebP 的图片，同时作为同一条消息的图片内容。每一轮模型的最终回答原样发回，微信会渲染其中的 Markdown（标题、列表、引用、表格、代码块）。最终回答恰好是 `NO_REPLY` 时什么也不发。对话安静了 `timeGapMs` 或更久时，owner 的消息之前会先来一条提示（来源类型 `lsy-wechat`，形式 `notice`）；另一个 Session 发给 owner 的通知也以提示形式到达，附上发出时间，并用通知指明的发送方称呼它（例如 `the Bilibili account's Session (its answer could not go out as a Bilibili message)`），没有指明时称为另一个 session；owner 用 `/new` 离开的旧对话 Session 发出的回答也一样（它设的提醒和监控还在跑），说明里称它为 `an earlier chat Session (before /new; a reminder or monitor it set up)`。两者中的每个时间都来自通道自己的记录，从不来自模型。
 
 ##### 时间间隔提示
 

@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用这个包
 
-把账号挂在一个同时挂了 `@deepseek-ai/dsh-lsy-wechat`（提供 `ctx.lsyNotifier`）的 Web profile 根部，并定义一个插件列表里含 [`@deepseek-ai/dsh-tool-bili`](../tool-bili/README.zh.md) 的 agent preset。它需要宿主的 Session Controller、权限预设、Session 标题、存储域、凭据存储和定时器；设置页需要浏览器连接。
+把账号挂在一个同时挂了 [`@deepseek-ai/dsh-owner-relay`](../owner-relay/README.zh.md)（`ctx.ownerRelay`，把每一轮的回答交给账号的 `bili-dm` 通道）和 `@deepseek-ai/dsh-lsy-wechat`（提供 `ctx.lsyNotifier`）的 Web profile 根部，并定义一个插件列表里含 [`@deepseek-ai/dsh-tool-bili`](../tool-bili/README.zh.md) 的 agent preset。它需要宿主的 Session Controller、权限预设、Session 标题、存储域、凭据存储和定时器；设置页需要浏览器连接。
 
 ### 何时选用
 
@@ -78,8 +78,8 @@ kind: "package-reference"
 
 ### owner 看到什么
 
-- **在 B站上**——由醒来开始的每一轮，最终回答都以 agent 账号发给 `ownerMid` 的私信送达，除非它恰好是 `NO_REPLY`：回答 owner 自己的私信算回复（计入 `dmReply`，在上一次写操作后几秒发出），其他轮次的回答算分享（`dmOwner`）。过长的回答最多拆成两条 500 字的私信，其余用 `…` 截断。owner 在 Web UI 里开始的轮次留在那里。收到 owner 的私信后，账号每分钟查一次私信，直到最后一条之后 15 分钟。
-- **在微信上**——只有需要 owner 处理的事：登录需要续期时一条通知（`dsh 的 B站登录失效了：设置 → B站账号 扫码`），风控暂停写操作时一条，评论疑似被隐藏时一条，以及没能以 B站私信发出的回答（没有互相关注、额度用完、写操作暂停、发送失败或结果不明），标题为 `📺 B站：这条没能用 B站私信发出，改发微信`，结尾写明原因；B站要求先验证手机号时，这一行引用它的原话：`B站私信没发出：<B站的原话>`。
+- **在 B站上**——由醒来开始的每一轮，最终回答都以 agent 账号发给 `ownerMid` 的私信送达，除非它恰好是 `NO_REPLY`：回答 owner 自己的私信算回复（计入 `dmReply`，在上一次写操作后几秒发出），其他轮次的回答算分享（`dmOwner`）。过长的回答最多拆成两条 500 字的私信，其余用 `…` 截断。owner 在 Web UI 里开始的轮次留在那里，提醒或监控开启的轮次也一样：事件总线不报告账号通道认领的 Session。收到 owner 的私信后，账号每分钟查一次私信，直到最后一条之后 15 分钟。
+- **在微信上**——只有需要 owner 处理的事：登录需要续期时一条通知（`dsh 的 B站登录失效了：设置 → B站账号 扫码`），风控暂停写操作时一条，评论疑似被隐藏时一条，以及没能以 B站私信发出的回答（没有互相关注、额度用完、写操作暂停、发送失败或结果不明），标题为 `📺 B站：这条没能用 B站私信发出，改发微信`，结尾写明原因；B站要求先验证手机号时，这一行引用它的原话：`B站私信没发出：<B站的原话>`。微信对话 Session 里保留的副本把发送方称为 `the Bilibili account's Session (its answer could not go out as a Bilibili message)`，所以在那里回复时有上下文。
 - **在设置里**——上面的全部内容，只从插件的存储构建，因此不可能出现任何 Cookie 或令牌：等级卡片（等级、距下一级的经验、硬币余额，以及今天登录、观看、分享和投币的经验）、今天每项额度的用量、B站因为没有验证手机号而拒绝私信或公开发言时一条引用 B站原话的常驻提示（这个号需要验证手机号才能发私信，或……评论和动态），直到同类写操作有一条发出去才消失，以及作息卡片，它写出作息据以决定的模型路由、它是否分时计价（高峰时附下一个谷时开始的时间），标出被裁剪、移动或推迟的醒来，并有**立即唤醒**。立即唤醒马上用作息提示词唤醒 Session，不占今天的计划；这是 owner 的请求，所以高峰里也会执行并注明；未登录、登录需要续期、Session 正在进行一轮或一分钟内刚唤醒过时会拒绝，并显示原因。路由是 `GET`/`POST /api/bili`，和所有 `/api` 路由一样受连接的登录检查保护。
 
 -----
@@ -102,7 +102,8 @@ kind: "package-reference"
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | `BiliAccount`（`ctx.bili`）：配置、生命周期、登录、刷新、刹车、写守卫、作息、收件箱、转发、读取、日记、设置路由 |
+| [`src/index.ts`](src/index.ts) | `BiliAccount`（`ctx.bili`）：配置、生命周期、登录、刷新、刹车、写守卫、作息、收件箱、向中继注册、读取、日记、设置路由 |
+| [`src/dm.ts`](src/dm.ts) | `DmChannel`，`ctx.ownerRelay` 的 `bili-dm` 通道：每次唤醒的来源、拆成一两条私信的回答、改发微信的兜底 |
 | [`src/client.ts`](src/client.ts) | 白名单、限速的 HTTP 客户端；风控识别；无损 JSON |
 | [`src/endpoints.ts`](src/endpoints.ts) | 接口白名单 |
 | [`src/api.ts`](src/api.ts) | 有类型的读取（有界）与单请求写入 |
@@ -111,7 +112,7 @@ kind: "package-reference"
 | [`src/clock.ts`](src/clock.ts)、[`src/time.ts`](src/time.ts) | 每日计划与时区运算 |
 | [`src/pricing.ts`](src/pricing.ts) | 作为数据的计价规则：校验、UTC 高峰区间、谷时部分、路由优先级 |
 | [`src/wbi.ts`](src/wbi.ts)、[`src/cookies.ts`](src/cookies.ts) | WBI 签名；Cookie 罐 |
-| [`src/text.ts`](src/text.ts) | 截断、不可信包装、提示词、通知、转发文本 |
+| [`src/text.ts`](src/text.ts) | 截断、不可信包装、提示词、通知、拆分私信 |
 | [`src/storage.ts`](src/storage.ts) | `bili` 存储域 |
 | [`src/view.ts`](src/view.ts)、[`src/client/`](src/client/) | 设置视图契约与浏览器端页面 |
 
@@ -126,6 +127,7 @@ kind: "package-reference"
 
 - [B站工具](../tool-bili/README.zh.md)——账号 Session 能调用什么
 - [微信通道](../lsy-wechat/README.zh.md)——通知和兜底回答去往哪里
+- [回答中继](../owner-relay/README.zh.md)——每轮结束时的规则，以及让总线不插手的认领
 - [凭据](../../credentials/credentials/README.zh.md)——保存会话的记录
 - [存储域](../../storage/storage-domain/README.zh.md)——持久表
 

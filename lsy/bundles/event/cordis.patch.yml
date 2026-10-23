@@ -50,6 +50,14 @@
         secretEnv: LSY_GITHUB_WEBHOOK_SECRET
         maxBodyBytes: 26214400
 
+    # One relay of a Session's final answer to the owner (ctx.ownerRelay). lsy-wechat (channel
+    # `wechat`) and bili (channel `bili-dm`) claim their Sessions; at each turn end the relay applies
+    # one rule set (owner-stopped or NO_REPLY sends nothing, an unfinished turn adds a warning) and
+    # hands the answer to the claiming channel, falling back to WeChat with the channel's label. The
+    # bus reports reminder and monitor turns only of Sessions no channel claimed.
+    - id: owner-relay
+      name: '@deepseek-ai/dsh-owner-relay'
+
     # Routing state (agent-created subscriptions and repository watches) lives in storage;
     # these rows only carry deployment-wide settings.
     - id: lsy-event-bus
@@ -137,8 +145,9 @@
     - id: lsy-sysmon
       name: '@deepseek-ai/dsh-lsy-sysmon'
 
-    # Owner channel: chat Session over WeChat and ctx.lsyNotifier for the bus. The chat works in a
-    # clone of the owner's tracking repository StevenLi-phoenix/me (RUNBOOK step 5).
+    # Owner channel: chat Session over WeChat (its answers come through owner-relay's `wechat`
+    # channel) and ctx.lsyNotifier for the bus. The chat works in a clone of the owner's tracking
+    # repository StevenLi-phoenix/me (RUNBOOK step 5).
     - id: lsy-wechat
       name: '@deepseek-ai/dsh-lsy-wechat'
       config:
@@ -148,10 +157,11 @@
     # The agent's own Bilibili account (ctx.bili). It mostly watches: a body clock wakes its own
     # Session (preset `bili`, below) at one random time in each window, new replies, mentions, and
     # messages from the owner's main account wake it too, and each woken turn's final answer goes
-    # back to the owner as a Bilibili message (WeChat carries only notices and answers a message
-    # could not carry). Every write passes the host's guard (daily caps, one comment per video, a
-    # random 60-180 s gap, a ledger); coins have no daily cap, only the balance. Risk control pauses
-    # writes until the owner resumes them in Settings.
+    # back to the owner as a Bilibili message through owner-relay's `bili-dm` channel (WeChat
+    # carries only notices and answers a message could not carry). Every write passes the host's
+    # guard (daily caps, one comment per video, a random 60-180 s gap, a ledger); coins have no
+    # daily cap, only the balance. Risk control pauses writes until the owner resumes them in
+    # Settings.
     - id: bili
       name: '@deepseek-ai/dsh-bili'
       config:

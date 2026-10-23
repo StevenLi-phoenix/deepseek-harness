@@ -1,46 +1,11 @@
 /**
  * Pure text handling: bounding Bilibili strings, wrapping them as untrusted
- * data for the model, the wake and inbox prompts, the owner notices, and the
- * relayed final answer.
+ * data for the model, the wake and inbox prompts, the owner notices, and
+ * splitting an answer into messages.
  */
 import type { WriteAction } from './storage.ts'
 import { CAPPED_ACTIONS, HOST_REPORTS, type CappedAction } from './view.ts'
 import { formatGap, formatStamp } from './time.ts'
-
-/**
- * Final answer that asks for no message, the same word the lsy event bus uses
- * (`LSY_SILENT_REPLY`). Repeated here, with {@link failureDetail}, because a
- * package with a browser half takes no runtime export from another workspace
- * package unless the dependency policy classifies it.
- */
-export const SILENT_REPLY = 'NO_REPLY'
-
-/**
- * Whether a final answer asks for no message.
- * @param text - final assistant text, if any.
- */
-export function isSilentReply(text: string | undefined): boolean {
-  return text?.trim() === SILENT_REPLY
-}
-
-/** The fields of a `TurnEndReason` that explain a failed turn. */
-export interface TurnFailureReason {
-  readonly kind: string
-  readonly error?: { readonly code: string; readonly message: string } | undefined
-}
-
-/**
- * One-line reason of a failed turn, e.g. `AUTH: 401 User not found.`, as lsy-event-bus words it.
- * @param reason - `TurnEndReason` of the turn.
- * @returns `code: message` within 200 characters, or undefined when the turn did not fail with a reason.
- */
-export function failureDetail(reason: TurnFailureReason): string | undefined {
-  if (reason.kind !== 'error' || reason.error === undefined) return undefined
-  const { code, message } = reason.error
-  const line = message.replace(/\s+/g, ' ').trim()
-  const full = line.startsWith(code) ? line : `${code}: ${line}`
-  return full.length > 200 ? `${full.slice(0, 199)}…` : full
-}
 
 /** Tag around Bilibili content in tool results and prompts. */
 export const UNTRUSTED_TAG = 'bilibili_data'
@@ -227,17 +192,3 @@ export const NOTICES = {
   riskPaused: (reason: string): string => `dsh 的 B站账号触发了风控（${reason}），所有写操作已暂停：设置 → B站账号 检查后点「恢复」`,
   speechPaused: (target: string): string => `dsh 在 B站的评论可能被隐藏了（${target}），公开发言已暂停：设置 → B站账号 检查后点「恢复」`,
 } as const
-
-/**
- * What the owner gets when a turn of the account's Session ends.
- * @param text - final assistant text of the turn, if any.
- * @param outcome - `TurnEndReason.kind`.
- * @param detail - one-line failure reason (`failureDetail`).
- * @returns the message body, or undefined when nothing is sent.
- */
-export function relayBody(text: string | undefined, outcome: string, detail?: string): string | undefined {
-  if (isSilentReply(text)) return undefined
-  const warning = detail === undefined ? `⚠️ 本轮未完成（${outcome}）` : `⚠️ 本轮未完成（${outcome}）\n原因：${detail}`
-  if (text === undefined) return outcome === 'completed' ? undefined : warning
-  return outcome === 'completed' ? text : `${text}\n\n${warning}`
-}

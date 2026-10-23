@@ -447,6 +447,7 @@
       "@deepseek-ai/dsh-native-command": ["./packages/util/native-command/src"],
       "@deepseek-ai/dsh-office-to-pdf": ["./packages/document/office-to-pdf/src"],
       "@deepseek-ai/dsh-output-retention": ["./packages/util/output-retention/src"],
+      "@deepseek-ai/dsh-owner-relay": ["./packages/lsy/owner-relay/src"],
       "@deepseek-ai/dsh-package-manifest": ["./packages/util/package-manifest/src"],
       "@deepseek-ai/dsh-permission-presets": ["./packages/interaction/permission-presets/src"],
       "@deepseek-ai/dsh-persona": ["./packages/preset/persona/src"],

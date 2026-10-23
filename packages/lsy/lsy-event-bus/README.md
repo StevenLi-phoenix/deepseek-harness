@@ -90,7 +90,7 @@ Matching, flushing, restart recovery, and the webhook Session rule all use the m
 
 ### Result reports
 
-When a bus-started Session ends its first turn, the bus records the outcome on the batch and sends the final assistant text to `ctx.lsyNotifier`. When a Host-schedule reminder (`source.kind: schedule`) starts a turn in a Session that the notifier does not relay itself (`ownsSession(sessionId)`), the bus sends that turn's final answer titled `⏰ <first line of the reminder prompt>`. In both cases a final answer of exactly `NO_REPLY` (`LSY_SILENT_REPLY`) sends nothing; a batch records `silent: true`. A turn the owner stopped (ended `aborted` with cause `user`, from the Web UI or WeChat `/stop`) is recorded but not reported, since whoever stopped it already knows.
+When a bus-started Session ends its first turn, the bus records the outcome on the batch and sends the final assistant text to `ctx.lsyNotifier`. When a Host-schedule reminder (`source.kind: schedule`) starts a turn in a Session that no channel of [`ctx.ownerRelay`](../owner-relay/README.md) claimed (`ownerOf(sessionId)` is `undefined`), the bus sends that turn's final answer titled `⏰ <first line of the reminder prompt>`. In both cases a final answer of exactly `NO_REPLY` (`LSY_SILENT_REPLY`) sends nothing; a batch records `silent: true`. A turn the owner stopped (ended `aborted` with cause `user`, from the Web UI or WeChat `/stop`) is recorded but not reported, since whoever stopped it already knows.
 
 -----
 
@@ -110,7 +110,7 @@ When a bus-started Session ends its first turn, the bus records the outcome on t
 | [`src/prompt.ts`](src/prompt.ts) | Session request, batch, result, and reminder message rendering; the silent reply |
 | [`src/storage.ts`](src/storage.ts) | Storage-domain tables for events, pending rows, batches, and run-time subscriptions |
 
-This is a fork-local package; [`../UPSTREAM.md`](../UPSTREAM.md) describes how the `lsy` group tracks upstream. `@deepseek-ai/dsh-lsy-wechat` imports `LSY_SILENT_REPLY`, `isSilentReply()`, and `LsyNotifier.ownsSession()`, so they stay stable.
+This is a fork-local package; [`../UPSTREAM.md`](../UPSTREAM.md) describes how the `lsy` group tracks upstream. `@deepseek-ai/dsh-owner-relay` imports `isSilentReply()` and `failureDetail()`, and `@deepseek-ai/dsh-lsy-tool-watch` calls `LsyNotifier.ownsSession()`, so they stay stable. Because the relay depends on this package, the bus reads `ctx.ownerRelay` through a structural `ownerOf()` view instead of importing it. A note's optional `origin` names its sender for the channel's copy in the owner's chat Session and is never shown to the owner.
 
 </details>
 

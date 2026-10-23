@@ -27,6 +27,7 @@ done
 /usr/bin/grep -q "@deepseek-ai/dsh-lsy-tool-monitor" "$WORK/fresh.yml" || fail "unattended preset lacks lsy-tool-monitor"
 /usr/bin/grep -q "^- id: lsy-event-ingest$" "$WORK/fresh.yml" || fail "composition lacks lsy-event-ingest"
 /usr/bin/grep -q "@deepseek-ai/dsh-lsy-sysmon" "$WORK/fresh.yml" || fail "composition lacks lsy-sysmon"
+/usr/bin/grep -q "^- id: owner-relay\$" "$WORK/fresh.yml" || fail "composition lacks owner-relay"
 /usr/bin/grep -q "^- id: bili\$" "$WORK/fresh.yml" || fail "composition lacks bili"
 /usr/bin/grep -q "^- id: preset-bili\$" "$WORK/fresh.yml" || fail "composition lacks preset-bili"
 /usr/bin/grep -q "@deepseek-ai/dsh-tool-bili" "$WORK/fresh.yml" || fail "bili preset lacks tool-bili"

@@ -1,5 +1,5 @@
-/** Pure text handling: inbound extraction, outbound size limits, reply framing, and outbox digests. */
-import { isSilentReply, type LsyNote } from '@deepseek-ai/dsh-lsy-event-bus'
+/** Pure text handling: inbound extraction, outbound size limits, shared-note framing, and outbox digests. */
+import type { LsyNote } from '@deepseek-ai/dsh-lsy-event-bus'
 import { ItemType, type WeixinItem, type WeixinMessage } from './api.ts'
 import type { ActivityRecord, SentKind } from './storage.ts'
 
@@ -175,7 +175,8 @@ export function splitText(text: string, maxChars: number, maxParts: number, maxB
 }
 
 /**
- * Plain text of a note: title, body, and link separated by blank lines.
+ * Plain text of a note: title, body, and link separated by blank lines. The note's `origin` frames
+ * only the chat Session's copy ({@link sharedNoteText}); the owner never sees it.
  * @param note - bus notification.
  * @returns the text WeChat shows.
  */
@@ -260,35 +261,6 @@ export function inboundText(message: WeixinMessage, recall?: (sentAt: number) =>
     if (text !== '') lines.push(text)
   }
   return lines.join('\n').trim()
-}
-
-/**
- * Concatenated text parts of one message content.
- * @param content - content parts of an assistant message.
- * @returns the joined text, or undefined when it has none.
- */
-export function contentText(content: readonly unknown[]): string | undefined {
-  const text = content
-    .filter((part): part is { type: 'text'; text: string } => typeof part === 'object' && part !== null
-      && 'type' in part && part.type === 'text' && 'text' in part && typeof part.text === 'string')
-    .map(part => part.text)
-    .join('\n')
-    .trim()
-  return text === '' ? undefined : text
-}
-
-/**
- * What to tell the owner when a chat turn ends.
- * @param text - final assistant text of the turn, if any.
- * @param outcome - `TurnEndReason.kind`.
- * @param detail - one-line failure reason (`failureDetail`), shown under the warning.
- * @returns the message, or undefined when the turn needs none.
- */
-export function relayText(text: string | undefined, outcome: string, detail?: string): string | undefined {
-  if (isSilentReply(text)) return undefined
-  const warning = detail === undefined ? `⚠️ 本轮未完成（${outcome}）` : `⚠️ 本轮未完成（${outcome}）\n原因：${detail}`
-  if (text === undefined) return outcome === 'completed' ? undefined : warning
-  return outcome === 'completed' ? text : `${text}\n\n${warning}`
 }
 
 /** One undelivered text. */

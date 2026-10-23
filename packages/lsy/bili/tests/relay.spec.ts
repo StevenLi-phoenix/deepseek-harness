@@ -7,6 +7,8 @@ import { FakeBili } from './fake-bili.ts'
 import { allLogs, contexts, fakeSessions, harness } from './harness.ts'
 
 const OWNER = 200000001
+/** How the WeChat chat Session reads a fallback copy of the account's answer. */
+const ORIGIN = 'the Bilibili account\'s Session (its answer could not go out as a Bilibili message)'
 let dir: string
 let fake: FakeBili
 
@@ -151,6 +153,7 @@ describe('shares', () => {
     expect(h.notes).toEqual([{
       title: '📺 B站：这条没能用 B站私信发出，改发微信',
       body: '分享一个视频\n\n原因：the owner\'s account does not follow this account back; Bilibili delivers messages only between mutual followers, so ask the owner to follow it',
+      origin: ORIGIN,
     }])
 
     // A failed send, and a turn that failed, both land on WeChat with why.
@@ -163,6 +166,7 @@ describe('shares', () => {
     expect(h.notes[1]).toEqual({
       title: '📺 B站：这条没能用 B站私信发出，改发微信',
       body: '⚠️ 本轮未完成（error）\n原因：AUTH: 401 User not found.\n\n原因：the outcome is unknown (dmSend: network error (TypeError)); it counts against today\'s budget and will not be sent again',
+      origin: ORIGIN,
     })
   })
 
@@ -196,7 +200,7 @@ describe('phone verification', () => {
     await vi.advanceTimersByTimeAsync(600_000)
     await h.answer('在')
     expect(fake.sentMessages).toEqual([])
-    expect(h.notes).toEqual([{ title: '📺 B站：这条没能用 B站私信发出，改发微信', body: `在\n\nB站私信没发出：${NEEDS_PHONE}` }])
+    expect(h.notes).toEqual([{ title: '📺 B站：这条没能用 B站私信发出，改发微信', body: `在\n\nB站私信没发出：${NEEDS_PHONE}`, origin: ORIGIN }])
     const view = await h.view()
     // A refusal, not risk control: no pause, and the ledger says why in Bilibili's words.
     expect(view.pause).toBeNull()

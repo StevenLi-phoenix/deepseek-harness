@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
 import type { SessionCreateRequest, SessionPromptRequest } from '@deepseek-ai/dsh-api-session-controller'
+import OwnerRelay from '@deepseek-ai/dsh-owner-relay'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -195,6 +196,8 @@ async function harness(options: {
     timeGapMs: 1_800_000,
     ...rest,
   }
+  // The relay carries the chat Sessions' answers to the channel, as the event bundle mounts it.
+  await ctx.plugin(OwnerRelay)
   await ctx.plugin(WechatChannel, config)
   await vi.advanceTimersByTimeAsync(0)
   const channel = ctx.lsyNotifier as WechatChannel
@@ -496,7 +499,7 @@ describe('WechatChannel chat', () => {
     h.emit('chat-1', { type: 'turn/end', seq: 9, data: { turn: 1, reason: { kind: 'error', error: { code: 'AUTH', message: '401 User not found.', status: 401 } } } })
     await vi.advanceTimersByTimeAsync(0)
     expect(h.ilink.sent.map(sent => sent.text)).toEqual(['⚠️ 本轮未完成（error）\n原因：AUTH: 401 User not found.'])
-    expect(h.logs.some(line => line.text.startsWith('lsy-wechat: Session chat-1 ended a turn (error: AUTH: 401 User not found.); relaying'))).toBe(true)
+    expect(h.logs.some(line => line.text.startsWith('owner-relay: Session chat-1 ended a turn (error: AUTH: 401 User not found.); relaying'))).toBe(true)
   })
 
   it('recovers the text of a quoted bot message from what it sent', async () => {
@@ -546,6 +549,18 @@ describe('WechatChannel notes in the chat Session', () => {
     expect(text).not.toContain('just')
     expect(text).toContain('✅ operator: watch globe errors\n\nmonitor mon-ac1fa1 is running')
     expect(h.sessions.prompts).toHaveLength(prompts)
+  })
+
+  it('names the sender a note gives as its origin, which the owner never sees', async () => {
+    const h = await harness()
+    await h.ownerSays('hi')
+    const origin = 'the Bilibili account\'s Session (its answer could not go out as a Bilibili message)'
+    await h.channel.send({ title: '📺 B站：这条没能用 B站私信发出，改发微信', body: 'a share', origin })
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['📺 B站：这条没能用 B站私信发出，改发微信\n\na share'])
+    const [sessionId, text] = h.sessions.injected[0]!
+    expect(sessionId).toBe('chat-1')
+    expect(text.startsWith(`At Wed 2026-10-21 14:00 (America/New_York), ${origin} sent the owner this message on WeChat.`)).toBe(true)
+    expect(text.endsWith('\n📺 B站：这条没能用 B站私信发出，改发微信\n\na share')).toBe(true)
   })
 })
 
@@ -683,10 +698,14 @@ describe('WechatChannel commands', () => {
     expect(bare.ilink.sent.map(sent => sent.text)).toEqual(['现在没有正在运行的任务。'])
   })
 
-  it('still reports a turn the owner aborted some other way', async () => {
+  it('sends nothing for a turn the owner stopped from the Web UI either, but reports any other abort', async () => {
     const h = await harness()
     await h.ownerSays('hi')
+    // The Web UI's stop cancels with cause `user`, as /stop does: the owner already knows.
     h.emit('chat-1', { type: 'turn/end', seq: 9, data: { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } } })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.ilink.sent).toEqual([])
+    h.emit('chat-1', { type: 'turn/end', seq: 12, data: { turn: 2, reason: { kind: 'aborted', reason: { kind: 'legacy' } } } })
     await vi.advanceTimersByTimeAsync(0)
     expect(h.ilink.sent.map(sent => sent.text)).toEqual(['⚠️ 本轮未完成（aborted）'])
   })
@@ -923,7 +942,7 @@ describe('WechatChannel delivery', () => {
     h.ilink.reply('ilink/bot/sendmessage', new TypeError('fetch failed'))
     h.pool.failNextWrites = 1
     await h.finishTurn('chat-1', 'answer')
-    expect(h.logs.some(line => line.type === 'warn' && line.text.startsWith('lsy-wechat: background work failed:'))).toBe(true)
+    expect(h.logs.some(line => line.type === 'warn' && line.text.startsWith('owner-relay: wechat could not deliver the answer of Session chat-1:'))).toBe(true)
   })
 })
 
@@ -1055,6 +1074,32 @@ describe('WechatChannel chat Session bookkeeping', () => {
     expect(h.channel.ownsSession('chat-1')).toBe(true)
     expect(h.channel.ownsSession('old-0')).toBe(false)
     expect(h.channel.ownsSession('old-1')).toBe(true)
+  })
+
+  it('claims its chat Sessions with the relay, again after a restart, and releases those it forgets', async () => {
+    const pool = new MemoryMediaPool()
+    const seedCtx = new Context()
+    const facility = await mountStorage(seedCtx, pool)
+    await vi.advanceTimersByTimeAsync(0)
+    const domain = await facility.open(wechatDomain)
+    for (let n = 0; n < 200; n += 1) await domain.table('sessions').put(`old-${n}`, { ownerUserId: OWNER, createdAt: n })
+    await domain.close()
+    await seedCtx.fiber.dispose()
+
+    const sessions = fakeSessions()
+    const first = await harness({ pool, sessions })
+    expect(first.ctx.ownerRelay.ownerOf('old-0')).toBe('wechat')
+    await first.ownerSays('hi')
+    expect(first.ctx.ownerRelay.ownerOf('chat-1')).toBe('wechat')
+    expect(first.ctx.ownerRelay.ownerOf('old-0')).toBeUndefined()
+    expect(first.ctx.ownerRelay.ownerOf('old-1')).toBe('wechat')
+    expect(first.ctx.ownerRelay.ownerOf('other')).toBeUndefined()
+    await first.ctx.fiber.dispose()
+
+    const second = await harness({ pool, sessions, ilink: new FakeIlink() })
+    expect(second.ctx.ownerRelay.ownerOf('chat-1')).toBe('wechat')
+    await second.finishTurn('chat-1', 'after the restart')
+    expect(second.logs.some(line => line.text === 'owner-relay: wechat sent the answer of Session chat-1')).toBe(true)
   })
 })
 

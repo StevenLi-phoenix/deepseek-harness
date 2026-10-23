@@ -27,6 +27,7 @@ export const PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackagePolic
   'packages/lsy/lsy-github-sensor': { category: 'optional', reason: 'Fork-local sensor; requires configured repositories and tokens.' },
   'packages/lsy/lsy-event-ingest': { category: 'optional', reason: 'Fork-local push route for the owner\'s services; requires per-source tokens.' },
   'packages/lsy/lsy-tool-monitor': { category: 'optional', reason: 'Fork-local monitor tools mounted by the event profile preset.' },
+  'packages/lsy/owner-relay': { category: 'optional', reason: 'Fork-local relay of Session answers to the owner\'s channels, mounted by the event profile bundle.' },
   'packages/lsy/lsy-memory': { category: 'optional', reason: 'Fork-local owner memory (context block and memory tools) mounted by the event profile preset.' },
   'packages/lsy/lsy-sysmon': { category: 'optional', reason: 'Fork-local System status settings section mounted by the event profile bundle.' },
   'packages/lsy/bili': { category: 'optional', reason: 'Fork-local Bilibili account service and settings section; requires a QR-signed-in account.' },

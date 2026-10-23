@@ -112,7 +112,7 @@ describe('body clock', () => {
     await vi.advanceTimersByTimeAsync(300_000)
     expect(fake.requestsTo('/web_im/v1/web_im/send_msg')).toEqual([])
     expect(h.notes).toEqual([])
-    expect(h.logs.some(line => line.text === 'bili: Session bili-1 ended a clock turn stopped by the owner; nothing is sent')).toBe(true)
+    expect(h.logs.some(line => line.text === 'owner-relay: Session bili-1 ended a turn (aborted) the owner stopped; nothing is relayed')).toBe(true)
     // An abort the owner did not ask for still tells them the turn did not finish.
     await h.post({ action: 'wake' })
     h.emit('bili-1', { type: 'turn/end', seq: 12, data: { turn: 2, reason: { kind: 'aborted', reason: { kind: 'legacy' } } } })
