@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildDigest, contentText, fitText, formatGap, formatStamp, inboundText, relayText, renderNote, sharedNoteText, splitText, timeGapNotice } from '../src/text.ts'
+import { buildDigest, contentText, fitText, formatGap, formatStamp, inboundText, quotedAt, relayText, renderNote, sharedNoteText, splitText, timeGapNotice } from '../src/text.ts'
 
 describe('fitText', () => {
   it('keeps short text and cuts long text to the code-point limit', () => {
@@ -27,6 +27,43 @@ describe('splitText', () => {
   it('hard-cuts text without usable line breaks and cuts the last allowed part', () => {
     const parts = splitText('x'.repeat(100), 28, 2)
     expect(parts).toEqual([`[1/2]\n${'x'.repeat(20)}`, `[2/2]\n${'x'.repeat(19)}…`])
+  })
+
+  it('closes and reopens a code fence that a split falls into', () => {
+    const code = Array.from({ length: 12 }, (_, i) => `const v${i} = ${i}`)
+    const text = ['Intro', '```ts', ...code, '```', 'Done'].join('\n')
+    const parts = splitText(text, 80, 9)
+    expect(parts.length).toBeGreaterThan(1)
+    for (const part of parts) {
+      const body = part.split('\n').slice(1)
+      expect(body.filter(line => line.startsWith('```')).length % 2).toBe(0)
+      expect(Array.from(part).length).toBeLessThanOrEqual(80)
+    }
+    expect(parts.flatMap(part => part.split('\n').slice(1)).filter(line => line.startsWith('const'))).toEqual(code)
+    expect(parts[1]!.split('\n')[1]).toBe('```ts')
+    expect(parts.at(-1)!.endsWith('Done')).toBe(true)
+  })
+
+  it('never leaves an empty fence when a part fills up right before the closing marker', () => {
+    const text = ['```', 'x'.repeat(30), '```', 'tail'].join('\n')
+    const parts = splitText(text, 42, 4)
+    expect(parts.some(part => /```\n```/.test(part))).toBe(false)
+    expect(parts).toEqual([`[1/2]\n\`\`\`\n${'x'.repeat(26)}\n\`\`\``, '[2/2]\n```\nxxxx\n```\ntail'])
+    for (const part of parts) expect(Array.from(part).length).toBeLessThanOrEqual(42)
+  })
+
+  it('repeats the header of a table that a split falls into', () => {
+    const rows = Array.from({ length: 10 }, (_, i) => `| r${i} | ${i * 7} |`)
+    const text = ['| name | value |', '| --- | --- |', ...rows].join('\n')
+    const parts = splitText(text, 70, 9)
+    expect(parts.length).toBeGreaterThan(1)
+    for (const part of parts) expect(part.split('\n').slice(1, 3)).toEqual(['| name | value |', '| --- | --- |'])
+    expect(parts.flatMap(part => part.split('\n').slice(3))).toEqual(rows)
+  })
+
+  it('drops blank lines at the start of a part', () => {
+    const text = `${'a'.repeat(30)}\n\n\n${'b'.repeat(30)}`
+    expect(splitText(text, 40, 3)).toEqual([`[1/2]\n${'a'.repeat(30)}`, `[2/2]\n${'b'.repeat(30)}`])
   })
 
   it('splits text that fits in characters but not in bytes', () => {
@@ -194,6 +231,28 @@ describe('timeGapNotice', () => {
     expect(timeGapNotice(now, undefined, minGap, zone)).toBeUndefined()
     expect(timeGapNotice(now, {}, minGap, zone)).toBeUndefined()
     expect(timeGapNotice(now, { ownerAt: now - 86_400_000 }, 0, zone)).toBeUndefined()
+  })
+})
+
+describe('quoted bot messages', () => {
+  const sent = Date.parse('2026-10-22T07:10:00Z')
+  const quoting = (quoted: Record<string, unknown>) => ({ item_list: [{ type: 1, text_item: { text: '这个怎么办' }, ref_msg: { message_item: quoted } }] })
+
+  it('reads when the quoted message was sent from its times or its id', () => {
+    expect(quotedAt({ type: 8, create_time_ms: sent })).toBe(sent)
+    expect(quotedAt({ type: 8, update_time_ms: sent })).toBe(sent)
+    // iLink ids carry the send time in their high bits; JSON numbers lose only low bits.
+    expect(quotedAt({ type: 8, msg_id: sent * 2 ** 22 + 12_345 }, sent)).toBe(sent)
+    expect(quotedAt({ type: 8, msg_id: String(BigInt(sent) << 22n | 7n) }, sent)).toBe(sent)
+    expect(quotedAt({ type: 8, msg_id: 42 }, sent)).toBeUndefined()
+    expect(quotedAt({ type: 8 })).toBeUndefined()
+  })
+
+  it('fills in a quoted bot message the server sent without text', () => {
+    const recall = (at: number): string | undefined => (at === sent ? '内置盘 磁盘已用 91.9%' : undefined)
+    expect(inboundText(quoting({ type: 8, create_time_ms: sent }) as never, recall)).toBe('[引用] 内置盘 磁盘已用 91.9%\n这个怎么办')
+    expect(inboundText(quoting({ type: 8, create_time_ms: sent + 1 }) as never, recall)).toBe('[引用] （一条较早的消息，内容取不到）\n这个怎么办')
+    expect(inboundText(quoting({ type: 1, text_item: { text: 'own words' } }) as never, recall)).toBe('[引用] own words\n这个怎么办')
   })
 })
 

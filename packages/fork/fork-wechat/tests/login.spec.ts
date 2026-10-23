@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { accountFilePath, loginWithQr, LoginError, readAccountFile, runLoginCli, writeAccountFile, type LoginOptions, type WechatAccount } from '../src/login.ts'
 import { FakeIlink } from './fake-ilink.ts'
 
-const CONFIRMED = { status: 'confirmed', bot_token: 'tok-secret', ilink_bot_id: 'bot@im.bot', baseurl: 'https://idc.ilink.test', ilink_user_id: 'owner@im.wechat' }
+const CONFIRMED = { status: 'confirmed', bot_token: 'tok-secret', ilink_bot_id: 'bot@im.bot', baseurl: 'https://idc.ilinkai.weixin.qq.com', ilink_user_id: 'owner@im.wechat' }
 
 let dir: string
 
@@ -48,21 +48,36 @@ describe('loginWithQr', () => {
     const ilink = new FakeIlink()
     ilink.statuses({ status: 'wait' }, { status: 'scaned' }, { status: 'scaned' }, { status: 'something-new' }, CONFIRMED)
     const { opts, shown, progress } = options(ilink)
-    expect(await loginWithQr(opts)).toEqual({ botToken: 'tok-secret', botId: 'bot@im.bot', baseUrl: 'https://idc.ilink.test', ownerUserId: 'owner@im.wechat' })
+    expect(await loginWithQr(opts)).toEqual({ botToken: 'tok-secret', botId: 'bot@im.bot', baseUrl: 'https://idc.ilinkai.weixin.qq.com', ownerUserId: 'owner@im.wechat' })
     expect(shown).toEqual([['https://liteapp.weixin.qq.com/q/1?qrcode=qr-1&bot_type=3', 1]])
     expect(progress).toEqual(['已扫码，请在手机微信上确认。'])
     expect(ilink.requestsTo('ilink/bot/get_qrcode_status').map(request => request.query['qrcode'])).toEqual(['qr-1', 'qr-1', 'qr-1', 'qr-1', 'qr-1'])
   })
 
-  it('follows a host redirect and ignores a malformed one', async () => {
+  it('follows a WeChat host redirect and ignores a malformed or foreign one', async () => {
     const ilink = new FakeIlink()
-    ilink.statuses({ status: 'scaned_but_redirect', redirect_host: 'bad host/path' }, { status: 'scaned_but_redirect' }, { status: 'scaned_but_redirect', redirect_host: 'idc2.ilink.test' }, CONFIRMED)
+    ilink.statuses(
+      { status: 'scaned_but_redirect', redirect_host: 'bad host/path' },
+      { status: 'scaned_but_redirect', redirect_host: 'evil.example' },
+      { status: 'scaned_but_redirect', redirect_host: 'weixin.qq.com.evil.example' },
+      { status: 'scaned_but_redirect' },
+      { status: 'scaned_but_redirect', redirect_host: 'idc2.weixin.qq.com' },
+      CONFIRMED,
+    )
     const { opts, progress } = options(ilink)
     await loginWithQr(opts)
     expect(ilink.requestsTo('ilink/bot/get_qrcode_status').map(request => request.origin)).toEqual([
-      'https://ilink.test', 'https://ilink.test', 'https://ilink.test', 'https://idc2.ilink.test',
+      'https://ilink.test', 'https://ilink.test', 'https://ilink.test', 'https://ilink.test', 'https://ilink.test', 'https://idc2.weixin.qq.com',
     ])
-    expect(progress).toEqual(['已扫码，切换到 idc2.ilink.test 继续确认。'])
+    expect(progress).toEqual(['已扫码，切换到 idc2.weixin.qq.com 继续确认。'])
+  })
+
+  it('refuses a base URL outside WeChat or without HTTPS', async () => {
+    for (const baseurl of ['https://evil.example', 'http://ilinkai.weixin.qq.com', 'https://ilinkai.weixin.qq.com:8443', 'https://weixin.qq.com.evil.example']) {
+      const ilink = new FakeIlink()
+      ilink.statuses({ ...CONFIRMED, baseurl })
+      await expect(loginWithQr(options(ilink).opts)).rejects.toThrow('untrusted base URL')
+    }
   })
 
   it('asks for the verification number, retries after a wrong one, and drops it once scanned', async () => {
@@ -106,9 +121,9 @@ describe('loginWithQr', () => {
 
   it('falls back to the login origin and adds a missing scheme to the base URL', async () => {
     const ilink = new FakeIlink()
-    ilink.statuses({ ...CONFIRMED, baseurl: '' }, { ...CONFIRMED, baseurl: 'idc3.ilink.test' })
+    ilink.statuses({ ...CONFIRMED, baseurl: '' }, { ...CONFIRMED, baseurl: 'idc3.wechat.com' })
     expect((await loginWithQr(options(ilink).opts)).baseUrl).toBe('https://ilink.test')
-    expect((await loginWithQr(options(ilink).opts)).baseUrl).toBe('https://idc3.ilink.test')
+    expect((await loginWithQr(options(ilink).opts)).baseUrl).toBe('https://idc3.wechat.com')
   })
 
   it('retries failed status polls and gives up after maxFailures in a row', async () => {
