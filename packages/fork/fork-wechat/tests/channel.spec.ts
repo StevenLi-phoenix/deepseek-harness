@@ -446,6 +446,25 @@ describe('WechatChannel chat', () => {
     expect(h.ilink.sent).toEqual([{ to: OWNER, text: 'note', contextToken: 'ctx-sticker' }])
   })
 
+  it('copies what an earlier chat Session relays into the current one, so a reply has its context', async () => {
+    const h = await harness()
+    await h.ownerSays('one')
+    await h.finishTurn('chat-1', 'first answer')
+    await h.ownerSays('/new')
+    await h.ownerSays('two')
+    await h.finishTurn('chat-2', 'second answer')
+    expect(h.sessions.injected).toEqual([])
+    // A reminder the first chat Session set up fires after /new: its answer reaches the owner and the current chat.
+    await h.finishTurn('chat-1', 'weekly job done')
+    expect(h.ilink.sent.at(-1)!.text).toBe('weekly job done')
+    expect(h.sessions.injected).toHaveLength(1)
+    const [sessionId, text] = h.sessions.injected[0]!
+    expect(sessionId).toBe('chat-2')
+    expect(text.startsWith('At Wed 2026-10-21 14:00 (America/New_York), '
+      + 'an earlier chat Session (before /new; a reminder or monitor it set up) sent the owner this message on WeChat.')).toBe(true)
+    expect(text.endsWith('\nweekly job done')).toBe(true)
+  })
+
   it('starts a fresh chat on /new and keeps relaying earlier chat Sessions', async () => {
     const h = await harness()
     await h.ownerSays('/new')
