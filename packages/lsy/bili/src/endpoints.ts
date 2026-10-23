@@ -68,6 +68,8 @@ export const ENDPOINTS = {
   favFolders: { method: 'GET', host: API, path: '/x/v3/fav/folder/created/list-all', kind: 'read', cookies: true, signedIn: true },
   hasLike: { method: 'GET', host: API, path: '/x/web-interface/archive/has/like', kind: 'read', cookies: true, signedIn: true },
   watchLater: { method: 'GET', host: API, path: '/x/v2/history/toview', kind: 'read', cookies: true, signedIn: true },
+  expReward: { method: 'GET', host: API, path: '/x/member/web/exp/reward', kind: 'read', cookies: true, signedIn: true },
+  coinsGiven: { method: 'GET', host: API, path: '/x/web-interface/archive/coins', kind: 'read', cookies: true, signedIn: true },
 
   // Writing; only the write guard calls these.
   relationModify: { method: 'POST', host: API, path: '/x/relation/modify', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf'], referer: 'https://space.bilibili.com/' },
@@ -76,6 +78,10 @@ export const ENDPOINTS = {
   watchLaterAdd: { method: 'POST', host: API, path: '/x/v2/history/toview/add', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf'] },
   watchLaterDel: { method: 'POST', host: API, path: '/x/v2/history/toview/del', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf'] },
   replyAdd: { method: 'POST', host: API, path: '/x/v2/reply/add', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf'] },
+  watchReport: { method: 'POST', host: API, path: '/x/click-interface/web/heartbeat', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf'] },
+  shareReport: { method: 'POST', host: API, path: '/x/web-interface/share/add', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf'] },
+  coin: { method: 'POST', host: API, path: '/x/web-interface/coin/add', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf'] },
+  triple: { method: 'POST', host: API, path: '/x/web-interface/archive/like/triple', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf'] },
   dynamicCreate: { method: 'POST', host: API, path: '/x/dynamic/feed/create/dyn', kind: 'write', cookies: true, signedIn: true, wbi: true, csrfQuery: ['csrf'], referer: 'https://t.bilibili.com/' },
   dmSend: { method: 'POST', host: VC, path: '/web_im/v1/web_im/send_msg', kind: 'write', cookies: true, signedIn: true, wbi: true, csrfForm: ['csrf', 'csrf_token'], referer: MESSAGE_PAGE },
 } as const satisfies Record<string, Endpoint>

@@ -229,4 +229,21 @@ describe('messages to the owner', () => {
     const h = await harness({ bili: fake, workspace: dir, config: { ownerMid: undefined } })
     expect(await h.run(h.account.dmOwner('hi'))).toEqual({ outcome: 'refused', detail: 'no owner account is configured' })
   })
+
+  it('messages the main account set in Settings, which wins over the configured one, and refuses bad UIDs', async () => {
+    const h = await signedIn({ ownerMid: undefined })
+    expect(await h.view()).toMatchObject({ ownerMid: 0, ownerUpdatedAt: null })
+    for (const mid of [0, -5, 1.5, '200000002', 2 ** 53]) expect((await h.post({ action: 'owner', mid })).status).toBe(400)
+    // The account's own UID is not the owner's main account.
+    expect((await h.post({ action: 'owner', mid: 3000001 })).status).toBe(400)
+    const saved = await (await h.post({ action: 'owner', mid: 200000002 })).json() as { ownerMid: number; ownerUpdatedAt: number | null }
+    expect(saved).toMatchObject({ ownerMid: 200000002, ownerUpdatedAt: expect.any(Number) as unknown })
+    fake.relations.set(200000002, 6)
+    expect(await h.run(h.account.dmOwner('找到你了'))).toMatchObject({ outcome: 'sent' })
+    expect(fake.sentMessages).toEqual([{ receiver: 200000002, text: '找到你了' }])
+
+    const configured = await signedIn()
+    await configured.post({ action: 'owner', mid: 200000002 })
+    expect((await configured.view()).ownerMid).toBe(200000002)
+  })
 })

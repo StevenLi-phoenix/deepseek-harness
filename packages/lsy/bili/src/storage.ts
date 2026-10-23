@@ -6,7 +6,7 @@
  */
 import { z } from 'zod'
 import type { DomainSpec, DomainTableSpec } from '@deepseek-ai/dsh-storage-domain'
-import { ACCOUNT_STATES, PAUSE_SCOPES, WAKE_STATES, WRITE_ACTIONS, type WriteAction } from './view.ts'
+import { ACCOUNT_STATES, PAUSE_SCOPES, WAKE_ADJUSTMENTS, WAKE_REASONS, WAKE_STATES, WRITE_ACTIONS, type WriteAction } from './view.ts'
 
 export { WRITE_ACTIONS, type WriteAction } from './view.ts'
 
@@ -47,6 +47,11 @@ export const SPEECH_ACTIONS: ReadonlySet<WriteAction> = new Set(['comment', 'rep
 
 /** Ledger states: `reserved` before the request, then one of the others; `uncertain` is never retried. */
 export const LEDGER_STATES = ['reserved', 'accepted', 'failed', 'uncertain'] as const
+/** Parts of a triple (一键三连). */
+export const TRIPLE_PARTS = ['like', 'coin', 'favorite'] as const
+/** One of {@link TRIPLE_PARTS}. */
+export type TriplePart = typeof TRIPLE_PARTS[number]
+
 /** Post-send visibility of a comment or reply. */
 export const VISIBILITY_STATES = ['pending', 'visible', 'hidden', 'unknown'] as const
 
@@ -73,11 +78,21 @@ const ledgerSchema = z.object({
   visibility: z.enum(VISIBILITY_STATES).optional(),
   /** When the visibility check runs. */
   visibilityDueAt: z.number().optional(),
+  /** Coins a coin write gives, or a triple gives when it adds its coin part. */
+  coins: z.number().int().positive().optional(),
+  /**
+   * Parts a triple adds: reserved with what the pre-read found missing, settled
+   * with what Bilibili applied. Its like and favorite parts count against the
+   * like and favorite caps.
+   */
+  adds: z.array(z.enum(TRIPLE_PARTS)).optional(),
 }).strict()
 
 const slotSchema = z.object({
   /** Earliest time of the next write, in Unix epoch milliseconds. */
   nextAt: z.number(),
+  /** When the previous write finished; a reply to the owner keeps only a short gap from it. */
+  lastAt: z.number().optional(),
 }).strict()
 
 const planSchema = z.object({
@@ -88,14 +103,22 @@ const planSchema = z.object({
     /** Planned time, in Unix epoch milliseconds; absent when the window is skipped today. */
     at: z.number().optional(),
     state: z.enum(WAKE_STATES),
+    /** A planned wake not fired by then is missed: the window's end, or later when off-peak pricing moved or deferred it. */
+    closes: z.number().optional(),
+    /** How off-peak pricing changed the wake: confined to the off-peak part, moved past a peak, or deferred at wake time. */
+    adjusted: z.enum(WAKE_ADJUSTMENTS).optional(),
   }).strict()),
+  /** The model route the plan was made for, and whether it has time-of-day pricing. */
+  route: z.object({ provider: z.string(), model: z.string(), priced: z.boolean() }).strict().optional(),
 }).strict()
 
 const wakeSchema = z.object({
   at: z.number(),
-  /** `clock` for a body-clock wake, `inbox` for new replies, mentions, or owner messages. */
-  reason: z.enum(['clock', 'inbox']),
+  /** `clock` for a body-clock wake, `inbox` for new replies, mentions, or owner messages, `manual` for the owner's Wake now. */
+  reason: z.enum(WAKE_REASONS),
   sessionId: z.string(),
+  /** The wake carried messages from the owner's account; it counts only against the owner-message ceiling. */
+  owner: z.boolean().optional(),
 }).strict()
 
 const inboxSchema = z.object({
@@ -123,6 +146,26 @@ const targetSchema = z.object({
   at: z.number(),
 }).strict()
 
+const progressSchema = z.object({
+  level: z.number().int().nonnegative(),
+  exp: z.number().nonnegative(),
+  /** EXP floor of the current level, and the next level's threshold (null at LV6). */
+  min: z.number().nonnegative(),
+  next: z.number().nullable(),
+  coins: z.number().nonnegative(),
+  /** Today's daily rewards, keyed by the local day they were read on. */
+  rewards: z.object({
+    day: z.string(), login: z.boolean(), watch: z.boolean(), share: z.boolean(), coinExp: z.number(),
+  }).strict().nullable(),
+  checkedAt: z.number(),
+}).strict()
+
+const verifySchema = z.object({
+  /** Bilibili's refusal, its own words. */
+  message: z.string(),
+  since: z.number(),
+}).strict()
+
 const journalSchema = z.object({
   seq: z.number().int().positive(),
   day: z.string(),
@@ -132,6 +175,12 @@ const journalSchema = z.object({
 
 const settingSchema = z.object({
   text: z.string(),
+  updatedAt: z.number(),
+}).strict()
+
+const ownerSchema = z.object({
+  /** The owner's main account (UID). */
+  mid: z.number(),
   updatedAt: z.number(),
 }).strict()
 
@@ -160,10 +209,16 @@ export type InboxRecord = z.infer<typeof inboxSchema>
 export type PendingRecord = z.infer<typeof pendingSchema>
 /** A comment someone wrote to the account (a reply or a mention) that it may answer. */
 export type TargetRecord = z.infer<typeof targetSchema>
+/** Level, EXP, coins, and today's daily rewards. */
+export type ProgressRecord = z.infer<typeof progressSchema>
+/** A kind of write Bilibili refuses until the account verifies a phone number. */
+export type VerifyRecord = z.infer<typeof verifySchema>
 /** One journal entry. */
 export type JournalRecord = z.infer<typeof journalSchema>
 /** One owner-edited text setting. */
 export type SettingRecord = z.infer<typeof settingSchema>
+/** The owner's main account, as set in Settings. */
+export type OwnerRecord = z.infer<typeof ownerSchema>
 /** A Session this plugin created. */
 export type SessionRecord = z.infer<typeof sessionSchema>
 
@@ -171,8 +226,9 @@ export type SessionRecord = z.infer<typeof sessionSchema>
  * Account storage. `account` is keyed `current`; `pause` by scope key `writes`;
  * `backoff` by `reads`; `ledger` by write id; `slots` by `write`; `plans` by day;
  * `wakes` by zero-padded time; `inbox` by kind; `pending` by `<kind>:<id>`;
- * `targets` by comment id (`rpid`); `journal` by zero-padded `seq`; `settings` by name (`interests`); `sessions`
- * by Session id, and `current` names the live one.
+ * `targets` by comment id (`rpid`); `verify` by kind (`message`, `speech`); `journal` by zero-padded `seq`;
+ * `settings` by name (`interests`); `owner` by `main`; `sessions` by Session id, and `current`
+ * names the live one.
  */
 export const biliDomain = {
   name: 'bili',
@@ -189,7 +245,10 @@ export const biliDomain = {
     pending: table<PendingRecord>(pendingSchema),
     targets: table<TargetRecord>(targetSchema),
     journal: table<JournalRecord>(journalSchema),
+    progress: table<ProgressRecord>(progressSchema),
+    verify: table<VerifyRecord>(verifySchema),
     settings: table<SettingRecord>(settingSchema),
+    owner: table<OwnerRecord>(ownerSchema),
     sessions: table<SessionRecord>(sessionSchema),
     current: table<SessionRecord>(sessionSchema),
   },

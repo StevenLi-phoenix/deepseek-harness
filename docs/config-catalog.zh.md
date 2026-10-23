@@ -437,12 +437,15 @@ export type Config = LocalConfig
 ## `@deepseek-ai/dsh-bili`
 
 - `inject`: `timer` · `storageDomain` · `credentials` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/lsy/bili/src/index.ts:96`](../packages/lsy/bili/src/index.ts)
+- `source`: [`packages/lsy/bili/src/index.ts:113`](../packages/lsy/bili/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
 export interface Config {
-  /** The owner's main account (UID); the only account this one may message. Unset, messaging is off. */
+  /**
+   * The owner's main account (UID); the only account this one may message. The UID set in
+   * Settings wins, so a deployment can keep it out of committed files. Unset, messaging is off.
+   */
   ownerMid?: number
   /** IANA time zone of the body clock, day boundaries for caps, and prompt times. */
   timeZone: string
@@ -462,6 +465,10 @@ export interface Config {
   writeGapMaxMs: number
   /** How long a write waits for its slot before it answers "try later", in milliseconds. */
   writeWaitMs: number
+  /** Shortest gap before a reply to the owner's message, in milliseconds; a conversation needs no minutes-long gap. */
+  dmReplyGapMinMs: number
+  /** Longest gap before a reply to the owner's message, in milliseconds. */
+  dmReplyGapMaxMs: number
   /** Shortest gap between two requests, in milliseconds. */
   requestGapMs: number
   /** Extra random gap of up to this many milliseconds per request. */
@@ -480,6 +487,13 @@ export interface Config {
   refreshCheckMs: number
   /** PEM public key Bilibili's web client uses for the cookie-refresh path; change it only if Bilibili rotates it. */
   refreshPublicKey: string
+  /**
+   * Time-of-day pricing of model routes, in UTC. While the account's Session runs on a listed
+   * provider, body-clock wakes fall only outside `peak` (a window is clipped to its off-peak part, or
+   * moved past the peak it lies in), and wakes and inbox items that come due in a peak wait for it to
+   * end. Empty: wakes ignore pricing.
+   */
+  pricing: PricingRule[]
 }
 
 /** One daily wake window in local time. */
@@ -502,7 +516,10 @@ export interface SessionConfig {
   title: string
 }
 
-/** Daily write caps; each is bounded by a hard maximum in code. */
+/**
+ * Daily write caps; each is bounded by a hard maximum in code. Coins have no
+ * daily cap: the coin balance and Bilibili's per-video rule limit them.
+ */
 export interface CapsConfig {
   /** Accounts followed per day. */
   follow: number
@@ -520,9 +537,38 @@ export interface CapsConfig {
   reply: number
   /** Text dynamics per day. */
   dynamic: number
-  /** Messages to the owner's main account per day. */
+  /** Messages the account sends the owner's main account on its own (a turn's share, or `bili_dm_owner`) per day. */
   dmOwner: number
+  /** Messages that answer the owner's own messages per day (each part of a split answer counts). */
+  dmReply: number
+  /** Watch reports per day: one per video whose subtitles the account read. */
+  watch: number
+  /** Share reports per day: one per video ever, for a link the host delivered to the owner. */
+  share: number
 }
+
+/** The time-of-day pricing of some model providers. */
+export interface PricingRule {
+  /** Provider ids (route keys) this rule prices, e.g. `deepseek-official`. */
+  providers: string[]
+  /** Peak periods in UTC; every other time is off-peak. */
+  peak: PeakSpan[]
+  /** UTC dates (`YYYY-MM-DD`) with no peak at all, such as public holidays. */
+  noPeakDates?: string[]
+}
+
+/** One recurring peak period, in UTC. */
+export interface PeakSpan {
+  /** UTC weekdays the span applies to. */
+  days: Weekday[]
+  /** `HH:MM` UTC, inclusive. */
+  start: string
+  /** `HH:MM` UTC, exclusive, after `start`; `24:00` is the end of the day. */
+  end: string
+}
+
+/** One of {@link WEEKDAYS}. */
+export type Weekday = typeof WEEKDAYS[number]
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-bili -->
 

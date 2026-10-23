@@ -108,7 +108,8 @@ describe('reads', () => {
     const h = await harness({ bili: fake, workspace: dir })
     await h.signIn()
     const home = await h.run(h.account.homeFeed())
-    expect(home).toEqual([
+    expect(home).toHaveLength(3)
+    expect(home.slice(0, 2)).toEqual([
       { bvid: 'BV1aa4y1X7aa', title: '一只猫学会了开门', author: '猫的主人', authorMid: 777, duration: '2:05', views: 1234, likes: 56, published: '2026-09-21', reason: '关注的人赞过' },
       { bvid: 'BV1bb4y1X7bb', title: '没有字幕的风景', author: '风景', authorMid: 778, duration: '2:05', views: 1234, likes: 56, published: '2026-09-21', reason: '关注的人赞过' },
     ])
@@ -178,7 +179,8 @@ describe('journal and account card', () => {
       folders: [{ id: 1001, title: '默认收藏夹', count: 0, isDefault: true }, { id: 1002, title: '慢慢看', count: 0, isDefault: false }],
     })
     expect(me.budget).toEqual({
-      follow: 10, unfollow: 10, favorite: 20, like: 29, watchlater: 30, comment: 3, reply: 5, dynamic: 1, dmOwner: 5,
+      follow: 10, unfollow: 10, favorite: 20, like: 29, watchlater: 30, comment: 3, reply: 5, dynamic: 1,
+      dmOwner: 5, dmReply: 30, watch: 10, share: 5,
     })
     expect(me.pause).toBeUndefined()
   })

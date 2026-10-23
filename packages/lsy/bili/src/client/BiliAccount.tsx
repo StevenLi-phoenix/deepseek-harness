@@ -160,6 +160,26 @@ function PauseBanner({ view, act, busy, t }: CardProps): ReactNode {
   )
 }
 
+/** Which writes Bilibili refuses until the account verifies a phone number; it goes away once one of them goes through. */
+function VerifyBanner({ view, t }: { view: BiliView; t: Translate }): ReactNode {
+  const rows = view.verification
+  if (rows.length === 0) return null
+  const zone = view.clock.timeZone
+  const kinds = new Set(rows.map(row => row.kind))
+  const title = kinds.size > 1 ? 'verify.both' : kinds.has('message') ? 'verify.message' : 'verify.speech'
+  return (
+    <section className={css.banner} role="status" data-scope="verify">
+      <div className={css.bannerText}>
+        <span className={css.bannerTitle}>{t(title)}</span>
+        {rows.map(row => (
+          <span key={row.kind} className={css.meta} data-kind={row.kind}>{t('verify.quote', { message: row.message, date: dateTime(row.since, zone) })}</span>
+        ))}
+        <span className={css.bannerHint}>{t('verify.hint')}</span>
+      </div>
+    </section>
+  )
+}
+
 function UsageCard({ view, t }: { view: BiliView; t: Translate }): ReactNode {
   return (
     <Card title={t('usage.title')} meta={t('usage.day', { day: view.usage.day })}>
@@ -181,22 +201,93 @@ function UsageCard({ view, t }: { view: BiliView; t: Translate }): ReactNode {
   )
 }
 
-function ClockCard({ view, now, t }: { view: BiliView; now: number; t: Translate }): ReactNode {
+/** The outcome line of the owner's last Wake now. */
+function manualLines(view: BiliView, t: Translate): string[] {
+  const manual = view.manualWake
+  if (manual === null) return []
+  const zone = view.clock.timeZone
+  if (manual.outcome === 'refused') return [t(`clock.manual.refused.${manual.reason ?? 'failed'}`, { detail: manual.detail ?? '' })]
+  const lines = [t('clock.manual.started', { time: clockTime(manual.at, zone) })]
+  if (manual.peak !== undefined) {
+    lines.push(t('clock.manual.peak', { provider: manual.peak.provider, time: manual.peak.offPeakAt === null ? '—' : clockTime(manual.peak.offPeakAt, zone) }))
+  }
+  if (manual.readsResumeAt !== undefined) lines.push(t('clock.manual.reads', { time: clockTime(manual.readsResumeAt, zone) }))
+  return lines
+}
+
+function ProgressCard({ view, now, t }: Omit<CardProps, 'act' | 'busy'>): ReactNode {
+  const progress = view.progress
+  if (progress === null) return null
+  const span = progress.next === null ? 1 : Math.max(1, progress.next - progress.min)
+  const ratio = progress.next === null ? 1 : Math.min(1, Math.max(0, (progress.exp - progress.min) / span))
+  const rewards = progress.rewards
+  return (
+    <Card title={t('progress.title')} meta={t('progress.checked', { ago: agoText(progress.checkedAt, now, t) })}>
+      <div className={css.levelRow}>
+        <span className={css.levelBadge}>{t('progress.level', { level: progress.level })}</span>
+        <span className={css.meta}>{t('progress.coins', { coins: progress.coins })}</span>
+      </div>
+      <span className={css.track} role="meter" aria-label={t('progress.title')} aria-valuemin={progress.min} aria-valuemax={progress.next ?? progress.exp} aria-valuenow={progress.exp}>
+        <span className={css.fill} data-level="normal" style={{ width: `${Math.round(ratio * 100)}%` }} />
+      </span>
+      <div className={css.details}>
+        <span>{progress.next === null ? t('progress.max', { exp: progress.exp }) : t('progress.exp', { exp: progress.exp, next: progress.next })}</span>
+        {progress.next === null ? null : <span>{t('progress.toNext', { level: progress.level + 1, left: progress.next - progress.exp })}</span>}
+      </div>
+      {rewards === null
+        ? null
+        : (
+          <div className={css.rewards} aria-label={t('progress.today', { day: rewards.day })}>
+            {(['login', 'watch', 'share'] as const).map(kind => (
+              <span key={kind} className={css.chip} data-done={rewards[kind] ? '' : undefined}>{t(`progress.${kind}`)}</span>
+            ))}
+            <span className={css.chip} data-done={rewards.coinExp > 0 ? '' : undefined}>{t('progress.coinExp', { exp: rewards.coinExp })}</span>
+          </div>
+        )}
+    </Card>
+  )
+}
+
+function ClockCard({ view, now, act, busy, t }: CardProps): ReactNode {
   const { clock } = view
+  const manual = manualLines(view, t)
   return (
     <Card title={t('clock.title')} meta={clock.timeZone}>
       <ul className={css.wakes}>
         {clock.today.map(wake => (
           <li key={wake.window} className={css.wake} data-state={wake.state}>
             <span className={css.wakeWindow}>{wake.window}</span>
-            <span className={css.wakeAt}>{wake.at === null ? '—' : clockTime(wake.at, clock.timeZone)}</span>
+            <span className={css.wakeAt}>
+              {wake.at === null ? '—' : clockTime(wake.at, clock.timeZone)}
+              {wake.adjusted === undefined ? null : <span className={css.adjusted} data-adjusted={wake.adjusted}>{t(`clock.adjusted.${wake.adjusted}`)}</span>}
+            </span>
             <span className={css.wakeState}>{t(`clock.state.${wake.state}`)}</span>
           </li>
         ))}
       </ul>
+      {clock.route === null
+        ? null
+        : (
+          <div className={css.route} data-priced={clock.route.priced ? '' : undefined} title={clock.route.model}>
+            <span>{t(clock.route.priced ? 'clock.route.priced' : 'clock.route.flat', { provider: clock.route.provider })}</span>
+            {clock.route.offPeakAt === null ? null : <span className={css.meta}>{t('clock.route.offPeak', { time: clockTime(clock.route.offPeakAt, clock.timeZone) })}</span>}
+          </div>
+        )}
       <div className={css.details}>
         <span>{clock.nextWakeAt === null ? t('clock.none') : t('clock.next', { time: clockTime(clock.nextWakeAt, clock.timeZone) })}</span>
         {clock.lastWake === null ? null : <span>{t('clock.last', { ago: agoText(clock.lastWake.at, now, t), reason: t(`clock.reason.${clock.lastWake.reason}`) })}</span>}
+      </div>
+      <div className={css.actions}>
+        {manual.length === 0
+          ? null
+          : (
+            <span className={css.manual} role="status" data-outcome={view.manualWake?.outcome}>
+              {manual.map(line => <span key={line}>{line}</span>)}
+            </span>
+          )}
+        <button type="button" className={css.secondary} disabled={busy || view.account.state !== 'active'} onClick={() => { act({ action: 'wake' }) }}>
+          {t('clock.wakeNow')}
+        </button>
       </div>
     </Card>
   )
@@ -229,6 +320,47 @@ function InterestsCard({ view, act, busy, t }: Omit<CardProps, 'now'>): ReactNod
       <div className={css.actions}>
         <span className={css.meta}>{t('interests.count', { count: length, max: MAX_INTERESTS_CHARS })}</span>
         <button type="button" className={css.primary} disabled={busy || !changed} onClick={() => { act({ action: 'interests', text: draft }) }}>{t('interests.save')}</button>
+      </div>
+    </Card>
+  )
+}
+
+/** A UID as the owner may type it: digits only, at most 16 of them. */
+const UID_PATTERN = /^\d{1,16}$/
+
+function OwnerCard({ view, act, busy, t }: Omit<CardProps, 'now'>): ReactNode {
+  const stored = view.ownerMid === 0 ? '' : String(view.ownerMid)
+  const [draft, setDraft] = useState(stored)
+  const [base, setBase] = useState(stored)
+  // A save (or another tab's) moves the stored UID; an untouched draft follows it.
+  if (stored !== base) {
+    setBase(stored)
+    if (draft === base) setDraft(stored)
+  }
+  const value = draft.trim()
+  const valid = UID_PATTERN.test(value) && Number(value) > 0
+  const id = useId()
+  const saved = view.ownerUpdatedAt === null ? {} : { meta: t('owner.saved', { time: dateTime(view.ownerUpdatedAt, view.clock.timeZone) }) }
+  return (
+    <Card title={t('owner.title')} {...saved}>
+      <label className={css.hint} htmlFor={id}>{t('owner.hint')}</label>
+      <input
+        id={id}
+        className={css.input}
+        value={draft}
+        inputMode="numeric"
+        autoComplete="off"
+        spellCheck={false}
+        maxLength={16}
+        placeholder={t('owner.placeholder')}
+        aria-invalid={value !== '' && !valid ? true : undefined}
+        onChange={(event) => { setDraft(event.target.value) }}
+      />
+      <div className={css.actions}>
+        {stored === '' ? <span className={css.meta} data-owner-unset="">{t('owner.unset')}</span> : null}
+        <button type="button" className={css.primary} disabled={busy || !valid || value === stored} onClick={() => { act({ action: 'owner', mid: Number(value) }) }}>
+          {t('owner.save')}
+        </button>
       </div>
     </Card>
   )
@@ -290,10 +422,13 @@ export function BiliAccountSection({ useBili, refresh, act, t }: BiliAccountProp
         : (
           <>
             <PauseBanner view={view} now={now} act={act} busy={busy} t={translate} />
+            <VerifyBanner view={view} t={translate} />
             <div className={css.grid}>
               <AccountCard view={view} now={now} act={act} busy={busy} t={translate} />
               <UsageCard view={view} t={translate} />
-              <ClockCard view={view} now={now} t={translate} />
+              <ProgressCard view={view} now={now} t={translate} />
+              <ClockCard view={view} now={now} act={act} busy={busy} t={translate} />
+              <OwnerCard view={view} act={act} busy={busy} t={translate} />
               <InterestsCard view={view} act={act} busy={busy} t={translate} />
               <RecentCard view={view} now={now} t={translate} />
             </div>

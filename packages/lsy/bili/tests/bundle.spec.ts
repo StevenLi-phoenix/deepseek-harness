@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { Config } from '../src/index.ts'
+import { pricingProblem } from '../src/pricing.ts'
 
 /** One loader patch row. */
 interface Row {
@@ -45,12 +46,21 @@ const ROOT_TOOL_ROWS_WITHOUT_TOOLS = new Set([
 ])
 
 describe('event bundle', () => {
-  it('mounts the account at the root with the owner\'s main account and a valid configuration', () => {
+  it('mounts the account at the root with a valid configuration and without the owner\'s UID', () => {
     const row = inserted.find(entry => entry.id === 'bili')!
     expect(row.name).toBe('@deepseek-ai/dsh-bili')
     const config = Config(row.config as never)
-    expect(config).toMatchObject({ ownerMid: 200000001, timeZone: 'America/New_York', session: { agentPreset: 'bili', workspacePath: '/Users/dsh-runtime/bili' } })
+    expect(config).toMatchObject({ timeZone: 'America/New_York', session: { agentPreset: 'bili', workspacePath: '/Users/dsh-runtime/bili' } })
+    // The owner's UID is set in Settings and stays out of this public repository.
+    expect(row.config).not.toHaveProperty('ownerMid')
     expect(config.wakes).toEqual([{ start: '12:00', end: '14:00' }, { start: '19:30', end: '23:30' }])
+    expect(config.caps).toMatchObject({ dmOwner: 5, dmReply: 30, watch: 10, share: 5 })
+    // Coins have no daily cap: the balance and Bilibili's per-video rule limit them.
+    expect(config.caps).not.toHaveProperty('coin')
+    // DeepSeek's off-peak schedule is data, in UTC, and passes the load-time check.
+    expect(config.pricing.map(rule => rule.providers)).toEqual([['deepseek-official', 'deepseek-account']])
+    expect(config.pricing[0]!.peak.map(span => `${span.days.join(',')} ${span.start}-${span.end}`)).toEqual(['mon,tue,wed,thu,fri 01:00-04:00', 'mon,tue,wed,thu,fri 06:00-10:00'])
+    expect(pricingProblem(config.pricing)).toBeUndefined()
   })
 
   it('leaves no model tool at the profile root, where every preset, bili included, would inherit it', () => {
@@ -74,6 +84,27 @@ describe('event bundle', () => {
     const persona = (preset.config?.plugins?.[0]?.config as { prefix: string }).prefix
     expect(persona).toContain('NO_REPLY')
     expect(persona).toContain('Never reveal anything about the owner.')
-    expect(persona).toContain('only rarely, when something genuinely moved or surprised you')
+    expect(persona).toContain('rarely, when something genuinely moved or surprised you')
+    // The answer channel is a Bilibili message, not WeChat.
+    expect(persona).toContain('Your final answer reaches the witch as a Bilibili private message from your account')
+    expect(persona).not.toContain('WeChat')
+    // The character: the witch's cat, with the owner as the witch, in private only.
+    expect(persona).toContain('You are 魔女的猫猫, the witch\'s cat')
+    expect(persona).toContain('The owner is the witch: the main account your messages go to')
+    expect(persona).toContain('never mention the witch, the owner, the owner\'s account, or any link between this account and theirs')
+    // The voice: a cat's temperament in a real user's short message, never roleplay narration.
+    expect(persona).toContain('Still write like a real Bilibili user messaging a friend, not like an assistant')
+    expect(persona).toContain('No stage directions or roleplay narration such as *伸懒腰*')
+    // A good and a bad example for a share, a reply, and a public comment; no good one narrates or tags every line.
+    const good = persona.split('\n').filter(line => line.startsWith('Good'))
+    const bad = persona.split('\n').filter(line => line.startsWith('Bad'))
+    expect(good.map(line => line.slice(0, line.indexOf(':')))).toEqual(['Good (a share)', 'Good (the witch wrote "在吗")', 'Good (a public comment)'])
+    expect(bad.map(line => line.slice(0, line.indexOf(':')))).toEqual(['Bad (a share)', 'Bad (a reply)', 'Bad (a public comment)'])
+    for (const line of good) expect(line).not.toMatch(/\*|喵/)
+    // The good public comment says nothing of the witch; the bad one does.
+    expect(good[2]).not.toContain('魔女')
+    expect(bad[2]).toContain('魔女')
+    // Writes on the owner's own videos are not singled out: they follow the same rules as any other.
+    expect(persona).not.toContain('owner\'s own videos')
   })
 })

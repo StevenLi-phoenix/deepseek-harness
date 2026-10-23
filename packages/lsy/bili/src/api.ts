@@ -114,6 +114,10 @@ export interface NavInfo {
   mid?: number
   uname?: string
   level?: number
+  /** Experience: the current total, the current level's floor, and the next level's threshold (null at LV6). */
+  exp?: { current: number; min: number; next: number | null }
+  /** Coin balance. */
+  coins?: number
 }
 
 /**
@@ -129,7 +133,12 @@ export async function navInfo(client: BiliClient): Promise<NavInfo> {
     throw error
   }
   if (data['isLogin'] !== true) return { isLogin: false }
-  return compact({ isLogin: true, mid: num(data['mid']), uname: clean(data['uname'], LIMITS.name), level: num(obj(data['level_info'])['current_level']) })
+  const level = obj(data['level_info'])
+  const current = num(level['current_exp'])
+  const exp = current === undefined ? undefined : { current, min: num(level['current_min']) ?? 0, next: num(level['next_exp']) ?? null }
+  return compact({
+    isLogin: true, mid: num(data['mid']), uname: clean(data['uname'], LIMITS.name), level: num(level['current_level']), exp, coins: num(data['money']) ?? 0,
+  })
 }
 
 /**
@@ -273,6 +282,10 @@ export interface VideoDetail extends VideoCard {
   comments?: number
   danmaku?: number
   parts: VideoPart[]
+  /** Length in seconds. */
+  seconds?: number
+  /** The uploader marked it original (`copyright` 1): it takes up to 2 coins from one account; anything else takes 1. */
+  original: boolean
 }
 
 /**
@@ -293,6 +306,8 @@ export async function videoInfo(client: BiliClient, bvid: string, timeZone: stri
     ...base,
     aid,
     cid,
+    seconds: num(view['duration']),
+    original: num(view['copyright']) === 1,
     category: clean(view['tname'], 30) || undefined,
     favorites: num(stat['favorite']),
     coins: num(stat['coin']),
@@ -317,13 +332,15 @@ export const COVERAGE = {
 } as const
 
 /**
- * The subtitle text of one video part, paginated.
+ * The subtitle text of one video part, paginated, and how far into the video the read page reaches.
  * @param client - Bilibili client.
  * @param bvid - BV id.
  * @param cid - part id.
  * @param page - subtitle page, from 1.
  */
-export async function subtitles(client: BiliClient, bvid: string, cid: number, page: number): Promise<SubtitleView> {
+export async function subtitles(
+  client: BiliClient, bvid: string, cid: number, page: number,
+): Promise<{ view: SubtitleView; reached?: number }> {
   const { data } = await client.call('player', { query: { bvid, cid } })
   const tracks = list(obj(obj(data)['subtitle'])['subtitles'])
   const rank = (track: Json): number => {
@@ -337,31 +354,39 @@ export async function subtitles(client: BiliClient, bvid: string, cid: number, p
   const raw = typeof track?.['subtitle_url'] === 'string' ? track['subtitle_url'] : ''
   const url = URL.parse(raw.startsWith('//') ? `https:${raw}` : raw)
   const endpoint = url === null ? undefined : allowedEndpoint('GET', url.href)
-  if (track === undefined || url === null || (endpoint !== 'subtitleAi' && endpoint !== 'subtitleFile')) return { available: false, coverage: COVERAGE.none }
+  const none = { view: { available: false as const, coverage: COVERAGE.none } }
+  if (track === undefined || url === null || (endpoint !== 'subtitleAi' && endpoint !== 'subtitleFile')) return none
   const file = await client.call(endpoint, { path: url.pathname, query: Object.fromEntries(url.searchParams) })
-  const lines = list(obj(file.data)['body'])
-    .map(line => `[${clockText(num(line['from'])) ?? '?'}] ${clean(line['content'], 300)}`)
-  const pages: string[] = []
-  let current = ''
+  const lines = list(obj(file.data)['body']).map(line => ({
+    text: `[${clockText(num(line['from'])) ?? '?'}] ${clean(line['content'], 300)}`,
+    to: num(line['to']) ?? num(line['from']) ?? 0,
+  }))
+  // Each page keeps where its speech ends, so a read page tells how far the video was followed.
+  const pages: { text: string; to: number }[] = []
+  let current = { text: '', to: 0 }
   for (const line of lines) {
-    if (current !== '' && current.length + line.length + 1 > LIMITS.subtitlePage) {
+    if (current.text !== '' && current.text.length + line.text.length + 1 > LIMITS.subtitlePage) {
       pages.push(current)
-      current = ''
+      current = { text: '', to: 0 }
     }
-    current = current === '' ? line : `${current}\n${line}`
+    current = { text: current.text === '' ? line.text : `${current.text}\n${line.text}`, to: Math.max(current.to, line.to) }
   }
-  if (current !== '') pages.push(current)
-  if (pages.length === 0) return { available: false, coverage: COVERAGE.none }
+  if (current.text !== '') pages.push(current)
+  if (pages.length === 0) return none
   const index = Math.min(Math.max(1, page), pages.length)
   const machine = text(track['lan']).startsWith('ai-') || (num(track['ai_type']) ?? 0) > 0
+  const read = pages[index - 1]
   return {
-    available: true,
-    language: clean(track['lan_doc'] ?? track['lan'], 30),
-    machine,
-    page: index,
-    pages: pages.length,
-    text: pages[index - 1] ?? '',
-    coverage: machine ? COVERAGE.machine : COVERAGE.human,
+    view: {
+      available: true,
+      language: clean(track['lan_doc'] ?? track['lan'], 30),
+      machine,
+      page: index,
+      pages: pages.length,
+      text: read?.text ?? '',
+      coverage: machine ? COVERAGE.machine : COVERAGE.human,
+    },
+    ...(read === undefined ? {} : { reached: Math.ceil(read.to) }),
   }
 }
 
@@ -651,6 +676,93 @@ export async function hasLiked(client: BiliClient, bvid: string): Promise<boolea
 export async function watchLaterAids(client: BiliClient): Promise<Set<string>> {
   const data = obj((await client.call('watchLater')).data)
   return new Set(list(data['list']).map(item => id(item['aid'])).filter((aid): aid is string => aid !== undefined))
+}
+
+/** Today's daily rewards: each worth 5 EXP, plus up to 50 EXP from coins. */
+export interface DailyRewards {
+  login: boolean
+  watch: boolean
+  share: boolean
+  /** EXP from coins today (the server updates it with a delay). */
+  coinExp: number
+}
+
+/**
+ * Today's daily reward status.
+ * @param client - Bilibili client.
+ */
+export async function dailyRewards(client: BiliClient): Promise<DailyRewards> {
+  const data = obj((await client.call('expReward')).data)
+  return { login: data['login'] === true, watch: data['watch'] === true, share: data['share'] === true, coinExp: num(data['coins']) ?? 0 }
+}
+
+/**
+ * Coins the account already gave a video.
+ * @param client - Bilibili client.
+ * @param bvid - BV id.
+ */
+export async function coinsGiven(client: BiliClient, bvid: string): Promise<number> {
+  return num(obj((await client.call('coinsGiven', { query: { bvid } })).data)['multiply']) ?? 0
+}
+
+/**
+ * Report that the account watched a video as far as `seconds` (the web player's heartbeat).
+ * @param client - Bilibili client.
+ * @param video - aid, BV id, part, the account's mid, and the video length.
+ * @param seconds - how far it watched.
+ */
+export async function reportWatch(
+  client: BiliClient, video: { aid: string; bvid: string; cid: number; mid: number; duration: number }, seconds: number,
+): Promise<void> {
+  const now = Math.floor(Date.now() / 1000)
+  await client.call('watchReport', {
+    form: {
+      aid: video.aid, bvid: video.bvid, cid: video.cid, mid: video.mid, played_time: seconds, realtime: seconds, real_played_time: seconds,
+      video_duration: video.duration, start_ts: now - seconds, dt: 2,
+    },
+    referer: videoPage(video.bvid),
+  })
+}
+
+/**
+ * Report that the account shared a video.
+ * @param client - Bilibili client.
+ * @param bvid - BV id.
+ */
+export async function reportShare(client: BiliClient, bvid: string): Promise<void> {
+  await client.call('shareReport', { form: { bvid, source: 'web_normal' }, referer: videoPage(bvid) })
+}
+
+/**
+ * Give a video coins, without a like.
+ * @param client - Bilibili client.
+ * @param aid - video aid.
+ * @param bvid - BV id.
+ * @param count - 1, or 2 for an original video.
+ */
+export async function giveCoin(client: BiliClient, aid: string, bvid: string, count: 1 | 2): Promise<void> {
+  await client.call('coin', { form: { aid, multiply: count, select_like: 0 }, referer: videoPage(bvid) })
+}
+
+/** What a triple (一键三连) applied, as Bilibili answers it. */
+export interface TripleResult {
+  like: boolean
+  coin: boolean
+  favorite: boolean
+  /** Coins it gave when `coin` is true. */
+  coins: number
+}
+
+/**
+ * Like, coin, and favorite a video in one request (一键三连): the favorite goes
+ * to the default folder, the coins are 2 for an original and 1 otherwise.
+ * @param client - Bilibili client.
+ * @param aid - video aid.
+ * @param bvid - BV id.
+ */
+export async function tripleLike(client: BiliClient, aid: string, bvid: string): Promise<TripleResult> {
+  const data = obj((await client.call('triple', { form: { aid }, referer: videoPage(bvid) })).data)
+  return { like: data['like'] === true, coin: data['coin'] === true, favorite: data['fav'] === true, coins: num(data['multiply']) ?? 0 }
 }
 
 /** `Referer` of a video page. */

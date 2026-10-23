@@ -14,32 +14,39 @@ import { mkdirSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-timer'
+// Type-only: ctx.agentDefaultModel, the profile's default model route.
+import type {} from '@deepseek-ai/dsh-agent-default-model'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 import { credentialKey, type CredentialKey } from '@deepseek-ai/dsh-credentials'
 // Type-only: the ctx.lsyNotifier service the WeChat channel provides.
 import type {} from '@deepseek-ai/dsh-lsy-event-bus'
 import type {} from '@deepseek-ai/dsh-permission-presets'
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
+// Type-only: ctx.sessionProjections, where an explicit model pick waits for its first request.
+import type {} from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-session-title'
 import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import z from '@deepseek-ai/schemastery'
 import { encode } from 'uqr'
 import {
-  addReply, addWatchLater, bvidOf, commentRows, comments, createDynamic, dealFavorite, folders, followingFeed, hasLiked, homeFeed,
-  inboxItems, likeVideo, modifyRelation, navInfo, ownerMessages, popular, relationStat, relationTo, removeWatchLater, search,
-  sendMessage, subtitles, thread, threadRows, unreadCounts, videoInfo, VIDEO_AREA, watchLaterAids,
+  addReply, addWatchLater, bvidOf, coinsGiven, commentRows, comments, createDynamic, dailyRewards, dealFavorite, folders, followingFeed,
+  giveCoin, hasLiked, homeFeed, inboxItems, likeVideo, modifyRelation, navInfo, ownerMessages, popular, relationStat, relationTo,
+  removeWatchLater, reportShare, reportWatch, search, sendMessage, subtitles, thread, threadRows, tripleLike, unreadCounts, videoInfo,
+  VIDEO_AREA, watchLaterAids,
   type CommentView, type FeedPost, type Folder, type InboxItem, type OwnerMessage, type SubtitleView, type VideoCard, type VideoDetail,
 } from './api.ts'
+import type { DailyRewards } from './api.ts'
 import { REFRESH_PUBLIC_KEY, confirmRefresh, deviceCookies, exchangeRefresh, parseGrant, pollQr, refreshNeeded, startQr, type BiliGrant, type QrPoll } from './auth.ts'
-import { BiliApiError, BiliClient, BiliRefused, BiliRiskError, BiliTransportError } from './client.ts'
+import { BiliApiError, BiliClient, BiliRefused, BiliRiskError, BiliTransportError, BiliVerifyError } from './client.ts'
 import { nextPlanned, rollPlan, settlePlan, windowProblem, type WakeWindow } from './clock.ts'
 import type { CookieJar } from './cookies.ts'
 import type { Endpoint, EndpointName } from './endpoints.ts'
-import { DEFAULT_CAPS, HARD_CAPS, alreadyTaken, ledgerRows, nextSlot, pauseRefusal, remaining, reserve, settle, settleInterrupted, takeSlot, uncertainBefore, usage } from './guard.ts'
-import { biliDomain, seqKey, type AccountRecord, type LedgerRecord, type PendingRecord, type PlanRecord, type WriteAction } from './storage.ts'
-import { NOTICES, TEXT_LIMITS, codePoints, failureDetail, inboxPrompt, relayBody, wakePrompt } from './text.ts'
-import { dayKey, formatGap, isTimeZone, nextDayStart } from './time.ts'
-import { BILI_PATH, MAX_INTERESTS_CHARS, WRITE_ACTIONS, type BiliView, type LoginView } from './view.ts'
+import { WEEKDAYS, nextOffPeak, peakAt, pricingProblem, routeOf, ruleFor, type PricingRule, type Route } from './pricing.ts'
+import { DEFAULT_CAPS, HARD_CAPS, alreadyTaken, lastWrite, ledgerRows, nextSlot, pauseRefusal, remaining, reserve, settle, settleInterrupted, takeSlot, uncertainBefore, usage } from './guard.ts'
+import { SPEECH_ACTIONS, TRIPLE_PARTS, biliDomain, seqKey, type AccountRecord, type LedgerRecord, type PendingRecord, type PlanRecord, type TriplePart, type WriteAction } from './storage.ts'
+import { FALLBACK_TITLE, NOTICES, TEXT_LIMITS, codePoints, failureDetail, inboxPrompt, relayBody, splitMessage, wakePrompt } from './text.ts'
+import { dayKey, formatGap, formatStamp, isTimeZone, localTime, nextDayStart } from './time.ts'
+import { BILI_PATH, CAPPED_ACTIONS, HOST_REPORTS, MAX_INTERESTS_CHARS, VERIFY_KINDS, type BiliView, type ProgressView, type LoginView, type ManualWakeView, type RouteView, type VerifyKind, type WakeReason, type CappedAction } from './view.ts'
 
 export { BiliApiError, BiliClient, BiliRefused, BiliRiskError, BiliTransportError, allowedEndpoint, parseJson, RISK_CODES, USER_AGENT } from './client.ts'
 export { ENDPOINTS, type Endpoint, type EndpointName } from './endpoints.ts'
@@ -48,6 +55,7 @@ export { COVERAGE, LIMITS, type CommentView, type FeedPost, type Folder, type In
 export { REFRESH_PUBLIC_KEY, correspondPath, refreshCsrf, type BiliGrant } from './auth.ts'
 export { TEXT_LIMITS, UNTRUSTED_NOTE, UNTRUSTED_TAG, clean, untrusted } from './text.ts'
 export { signQuery, mixinKey } from './wbi.ts'
+export { WEEKDAYS, nextOffPeak, offPeakParts, peakAt, routeOf, type PeakSpan, type PricingRule, type Route, type Weekday } from './pricing.ts'
 export * from './view.ts'
 export type { LedgerRecord, PlanRecord } from './storage.ts'
 
@@ -70,7 +78,10 @@ export interface SessionConfig {
   title: string
 }
 
-/** Daily write caps; each is bounded by a hard maximum in code. */
+/**
+ * Daily write caps; each is bounded by a hard maximum in code. Coins have no
+ * daily cap: the coin balance and Bilibili's per-video rule limit them.
+ */
 export interface CapsConfig {
   /** Accounts followed per day. */
   follow: number
@@ -88,13 +99,22 @@ export interface CapsConfig {
   reply: number
   /** Text dynamics per day. */
   dynamic: number
-  /** Messages to the owner's main account per day. */
+  /** Messages the account sends the owner's main account on its own (a turn's share, or `bili_dm_owner`) per day. */
   dmOwner: number
+  /** Messages that answer the owner's own messages per day (each part of a split answer counts). */
+  dmReply: number
+  /** Watch reports per day: one per video whose subtitles the account read. */
+  watch: number
+  /** Share reports per day: one per video ever, for a link the host delivered to the owner. */
+  share: number
 }
 
 /** Plugin configuration. */
 export interface Config {
-  /** The owner's main account (UID); the only account this one may message. Unset, messaging is off. */
+  /**
+   * The owner's main account (UID); the only account this one may message. The UID set in
+   * Settings wins, so a deployment can keep it out of committed files. Unset, messaging is off.
+   */
   ownerMid?: number
   /** IANA time zone of the body clock, day boundaries for caps, and prompt times. */
   timeZone: string
@@ -114,6 +134,10 @@ export interface Config {
   writeGapMaxMs: number
   /** How long a write waits for its slot before it answers "try later", in milliseconds. */
   writeWaitMs: number
+  /** Shortest gap before a reply to the owner's message, in milliseconds; a conversation needs no minutes-long gap. */
+  dmReplyGapMinMs: number
+  /** Longest gap before a reply to the owner's message, in milliseconds. */
+  dmReplyGapMaxMs: number
   /** Shortest gap between two requests, in milliseconds. */
   requestGapMs: number
   /** Extra random gap of up to this many milliseconds per request. */
@@ -132,9 +156,16 @@ export interface Config {
   refreshCheckMs: number
   /** PEM public key Bilibili's web client uses for the cookie-refresh path; change it only if Bilibili rotates it. */
   refreshPublicKey: string
+  /**
+   * Time-of-day pricing of model routes, in UTC. While the account's Session runs on a listed
+   * provider, body-clock wakes fall only outside `peak` (a window is clipped to its off-peak part, or
+   * moved past the peak it lies in), and wakes and inbox items that come due in a peak wait for it to
+   * end. Empty: wakes ignore pricing.
+   */
+  pricing: PricingRule[]
 }
 
-const capsSchema = z.object(Object.fromEntries(WRITE_ACTIONS.map(action => [
+const capsSchema = z.object(Object.fromEntries(CAPPED_ACTIONS.map(action => [
   action, z.natural().max(HARD_CAPS[action]).default(DEFAULT_CAPS[action]),
 ]))) as unknown as z<CapsConfig>
 
@@ -155,6 +186,8 @@ export const Config: z<Config> = z.object({
   writeGapMinMs: z.natural().min(60_000).default(60_000),
   writeGapMaxMs: z.natural().min(60_000).default(180_000),
   writeWaitMs: z.natural().max(600_000).default(200_000),
+  dmReplyGapMinMs: z.natural().min(1000).default(3000),
+  dmReplyGapMaxMs: z.natural().min(1000).default(10_000),
   requestGapMs: z.natural().min(1000).default(1200),
   requestJitterMs: z.natural().default(800),
   requestTimeoutMs: z.natural().min(1000).default(15_000),
@@ -164,6 +197,11 @@ export const Config: z<Config> = z.object({
   visibilityCheckMs: z.natural().min(30_000).default(300_000),
   refreshCheckMs: z.natural().min(3_600_000).default(86_400_000),
   refreshPublicKey: z.string().default(REFRESH_PUBLIC_KEY),
+  pricing: z.array(z.object({
+    providers: z.array(z.string()),
+    peak: z.array(z.object({ days: z.array(z.union(WEEKDAYS)), start: z.string(), end: z.string() })),
+    noPeakDates: z.array(z.string()),
+  })).default([]),
 })
 
 /** The credential record of the account. */
@@ -186,6 +224,18 @@ const MAX_TARGETS = 2000
 const MAX_WAKE_ITEMS = 20
 /** Wake log rows kept. */
 const MAX_WAKE_ROWS = 400
+/** Owner-message wakes per rolling hour, however the inbox cap is set. */
+const OWNER_WAKES_PER_HOUR = 30
+/** After a message from the owner, messages are checked this often ... */
+const FAST_POLL_MS = 60_000
+/** ... for this long after the latest one. */
+const CONVERSATION_MS = 900_000
+/** How long a turn's answer waits for its write slot before it goes to WeChat instead. */
+const ANSWER_WAIT_MS = 900_000
+/** A second Wake now within this long of a started one is refused (a double click). */
+const MANUAL_WAKE_DEBOUNCE_MS = 60_000
+/** A deferred wake not fired within this long after its new time is missed. */
+const DEFER_GRACE_MS = 3_600_000
 /** Plans kept, in days. */
 const PLAN_DAYS = 14
 /** Journal limits. */
@@ -195,7 +245,8 @@ export const JOURNAL_LIMITS = { chars: 600, perDay: 8, pageSize: 10 } as const
 export type WriteOutcome =
   | { readonly outcome: 'sent'; readonly detail: string; readonly receipt?: string }
   | { readonly outcome: 'already'; readonly detail: string }
-  | { readonly outcome: 'refused'; readonly detail: string }
+  /** `verification` carries Bilibili's words when it refused for want of a verified phone number. */
+  | { readonly outcome: 'refused'; readonly detail: string; readonly verification?: string }
   | { readonly outcome: 'uncertain'; readonly detail: string }
 
 /** A write the guard runs. */
@@ -212,6 +263,14 @@ interface WriteSpec {
   perform: () => Promise<string | undefined>
   /** Check later that others can see it. */
   visibility?: boolean
+  /** How long it may wait for its slot; `writeWaitMs` by default. */
+  maxWaitMs?: number
+  /** Coins it gives, recorded on its ledger row. */
+  coins?: () => number | undefined
+  /** Triple parts it adds: read at reservation (what the pre-read found missing) and again once Bilibili answered. */
+  adds?: () => readonly TriplePart[]
+  /** The `sent` outcome's detail; `<action> sent` by default. */
+  sentDetail?: () => string
 }
 
 /** The account card and budget the `bili_me` tool shows. */
@@ -223,7 +282,13 @@ export interface MeView {
   following?: number
   followers?: number
   folders?: Folder[]
-  budget: Record<WriteAction, number>
+  /** EXP: the current total, the level's floor, and the next level's threshold (null at LV6). */
+  exp?: { current: number; min: number; next: number | null }
+  /** Coin balance. */
+  coins?: number
+  /** Today's daily rewards (5 EXP each for login, watch, share; up to 50 EXP from coins). */
+  rewards?: DailyRewards
+  budget: Record<CappedAction, number>
   pause?: string
   readsResumeAt?: string
 }
@@ -267,10 +332,65 @@ function assertConfig(config: Config): void {
   const problem = windowProblem(config.wakes)
   if (problem !== undefined) throw new Error(`bili: ${problem}`)
   if (config.writeGapMaxMs < config.writeGapMinMs) throw new Error('bili: writeGapMaxMs must not be below writeGapMinMs')
+  if (config.dmReplyGapMaxMs < config.dmReplyGapMinMs) throw new Error('bili: dmReplyGapMaxMs must not be below dmReplyGapMinMs')
   if (!config.refreshPublicKey.includes('BEGIN PUBLIC KEY')) throw new Error('bili: refreshPublicKey must be a PEM public key')
+  const pricing = pricingProblem(config.pricing)
+  if (pricing !== undefined) throw new Error(`bili: ${pricing}`)
+}
+
+/** A route as the clock decides by: where it came from and whether it is priced. */
+type CheckedRoute = Route & { rule: PricingRule | undefined }
+
+/** How a log line names a route. */
+function routeText(route: CheckedRoute | undefined): string {
+  if (route === undefined) return 'an unknown model route (no time-of-day pricing)'
+  return `${route.provider}/${route.model} (${route.source} route, ${route.rule === undefined ? 'no time-of-day pricing' : 'off-peak pricing'})`
 }
 
 /** Ledger fields of a comment area. */
+/** The daily cap of an action, or undefined for coins, which have none. */
+function capOf(caps: CapsConfig, action: WriteAction): number | undefined {
+  return (caps as Partial<Record<WriteAction, number>>)[action]
+}
+
+/** Which phone-verification hint a write belongs to: messages to the owner, or public speech. */
+function verifyKind(action: WriteAction): VerifyKind | undefined {
+  if (action === 'dmOwner' || action === 'dmReply') return 'message'
+  return SPEECH_ACTIONS.has(action) ? 'speech' : undefined
+}
+
+/** `1 coin`, `2 coins`. */
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`
+}
+
+/** Why the balance cannot cover a coin write, or nothing. */
+function balanceRefusal(balance: number, needed: number): string | undefined {
+  return balance < needed ? `the account has ${plural(balance, 'coin')}; this needs ${needed} (about one comes each day from signing in)` : undefined
+}
+
+/** What a triple did: the parts it added, and those done before. */
+function tripleDetail(added: readonly TriplePart[], before: readonly TriplePart[], coins: number): string {
+  const words: Record<TriplePart, string> = { like: 'liked', coin: `gave ${plural(coins, 'coin')}`, favorite: 'saved to the default folder' }
+  const head = added.length === 0 ? 'Bilibili applied none of the missing parts' : added.map(part => words[part]).join(', ')
+  return before.length === 0 ? head : `${head}; already done before: ${before.join(', ')}`
+}
+
+/** Bilibili's coin refusals, explained. */
+const COIN_CODES: Readonly<Record<number, string>> = {
+  [-104]: 'not enough coins',
+  34002: 'an account cannot coin its own video',
+  34003: 'that coin count is not allowed for this video',
+  34004: 'coins were given too quickly',
+  34005: 'this video already has the most coins this account may give',
+}
+
+/** A hint after a coin or triple refusal code, or nothing. */
+function coinCodeHint(action: WriteAction, code: number): string {
+  const hint = action === 'coin' || action === 'triple' ? COIN_CODES[code] : undefined
+  return hint === undefined ? '' : `: ${hint}`
+}
+
 function areaFields(area: WriteSpec['area']): Partial<Pick<LedgerRecord, 'type' | 'oid' | 'root'>> {
   if (area === undefined) return {}
   return { type: area.type, oid: area.oid, ...(area.root === undefined ? {} : { root: area.root }) }
@@ -314,6 +434,22 @@ export class BiliAccount extends Service {
   private login: LoginAttempt = { view: { state: 'idle' } }
   private sessionCheck: Promise<void> | undefined
   private feedIndex = 0
+  /** The model route of the last check, for the Settings view. */
+  private lastRoute: CheckedRoute | undefined
+  /** Delivers waiting inbox items when a peak ends. */
+  private inboxTimer: { at: number; dispose: () => void } | undefined
+  /** The owner's last Wake now, for the Settings view. */
+  private manual: ManualWakeView | undefined
+  /** When the last Wake now that was not refused began; it debounces double clicks. */
+  private manualStartedAt = -Infinity
+  /** What started the turn each owned Session is running: the wake reason, and whether it carried owner messages. */
+  private readonly origins = new Map<string, { reason: WakeReason; owner: boolean }>()
+  /** The owner's conversation keeps the fast message check until then. */
+  private conversationUntil = 0
+  /** The next fast message check, while the owner is messaging. */
+  private fastPoll: (() => void) | undefined
+  /** An inbox check is running; another one waits for the next tick. */
+  private inboxPolling = false
 
   /**
    * @param ctx - Host services owning timers, storage, credentials, and Sessions.
@@ -339,6 +475,8 @@ export class BiliAccount extends Service {
         this.stopping = true
         this.abort.abort(new Error('bili is stopping'))
         this.clockTimer?.()
+        this.inboxTimer?.dispose()
+        this.fastPoll?.()
         for (const dispose of [...this.timers, ...this.visibilityTimers.values()]) dispose()
         await Promise.allSettled([...this.inflight])
         await this.chain
@@ -544,6 +682,7 @@ export class BiliAccount extends Service {
     if (!facts.refresh) {
       await this.updateAccount({ checkedAt: Date.now() })
       this.ctx.logger.info(`bili: cookies of ${account.uname} are current (${trigger})`)
+      await this.refreshProgress()
       return
     }
     let fresh: Awaited<ReturnType<typeof exchangeRefresh>>
@@ -732,7 +871,7 @@ export class BiliAccount extends Service {
    * Prompt the account's Session unless it is busy.
    * @returns whether the prompt went in.
    */
-  private async promptSession(text: string, reason: 'clock' | 'inbox'): Promise<boolean> {
+  private async promptSession(text: string, reason: WakeReason, owner = false): Promise<boolean> {
     mkdirSync(this.config.session.workspacePath, { recursive: true })
     const sessionId = await this.accountSession()
     const resolved = await this.ctx.sessionController.resolveAgent(sessionId)
@@ -742,18 +881,25 @@ export class BiliAccount extends Service {
       this.ctx.logger.info(`bili: Session ${sessionId} is ${status}; ${reason} wake skipped`)
       return false
     }
-    await this.ctx.sessionController.prompt({
-      requestId: randomUUID() as SessionRequestId,
-      sessionId,
-      mode: 'queue',
-      content: [{ type: 'text', text }],
-      clientTimeZone: this.config.timeZone,
-    }, this.abort.signal)
+    // Known before the turn can end: its answer goes back by the channel of what started it.
+    this.origins.set(sessionId, { reason, owner })
+    try {
+      await this.ctx.sessionController.prompt({
+        requestId: randomUUID() as SessionRequestId,
+        sessionId,
+        mode: 'queue',
+        content: [{ type: 'text', text }],
+        clientTimeZone: this.config.timeZone,
+      }, this.abort.signal)
+    } catch (error: unknown) {
+      this.origins.delete(sessionId)
+      throw error
+    }
     const now = Date.now()
     await this.serialize(async () => {
       const domain = await this.ready
       const wakes = domain.table('wakes')
-      await wakes.put(seqKey(now), { at: now, reason, sessionId })
+      await wakes.put(seqKey(now), { at: now, reason, sessionId, ...(owner ? { owner } : {}) })
       const excess = [...wakes.keys()].sort().slice(0, Math.max(0, wakes.size - MAX_WAKE_ROWS))
       for (const key of excess) await wakes.delete(key)
     })
@@ -774,50 +920,150 @@ export class BiliAccount extends Service {
     if (event.type !== 'turn/end') return
     const text = this.replies.get(session.id)
     this.replies.delete(session.id)
+    const origin = this.origins.get(session.id)
+    this.origins.delete(session.id)
     const outcome = event.data.reason.kind
     const detail = failureDetail(event.data.reason)
-    const body = relayBody(text, outcome, detail)
-    this.ctx.logger.info(`bili: Session ${session.id} ended a turn (${detail === undefined ? outcome : `${outcome}: ${detail}`}); ${body === undefined ? 'nothing to relay' : `relaying ${body.length} chars`}`)
-    if (body !== undefined) this.track(this.relay(body))
-  }
-
-  private async relay(body: string): Promise<void> {
-    const notifier = this.ctx.get('lsyNotifier')
-    if (notifier === undefined) {
-      this.ctx.logger.warn('bili: no lsyNotifier is mounted; the final answer was not relayed')
+    const ended = detail === undefined ? outcome : `${outcome}: ${detail}`
+    if (origin === undefined) {
+      // The owner talking to the Session in the Web UI reads the answer there.
+      this.ctx.logger.info(`bili: Session ${session.id} ended a turn no wake started (${ended}); its answer stays in the Session`)
       return
     }
-    await notifier.send({ title: '📺 B站', body })
+    // The owner's /stop aborts every root Session; they know, so nothing is sent (as the bus and WeChat relays do).
+    if (event.data.reason.kind === 'aborted' && event.data.reason.reason.kind === 'user') {
+      this.ctx.logger.info(`bili: Session ${session.id} ended a ${origin.reason} turn stopped by the owner; nothing is sent`)
+      return
+    }
+    const body = relayBody(text, outcome, detail)
+    const action = origin.owner ? 'dmReply' : 'dmOwner'
+    this.ctx.logger.info(`bili: Session ${session.id} ended a ${origin.reason} turn (${ended}); ${body === undefined ? 'nothing to send' : `sending ${body.length} chars to the owner (${action})`}`)
+    if (body !== undefined) this.track(this.deliverAnswer(body, action))
+  }
+
+  /**
+   * Send a turn's answer to the owner as Bilibili messages from the account:
+   * a reply to the owner's messages, or a share. It is split into at most two
+   * messages; whatever cannot go out (not mutual, budget, pause, a failed or
+   * uncertain send) goes to WeChat with the reason.
+   */
+  private async deliverAnswer(body: string, action: 'dmOwner' | 'dmReply'): Promise<void> {
+    const parts = splitMessage(body, TEXT_LIMITS[action], 2)
+    for (const [index, part] of parts.entries()) {
+      const outcome = await this.messageOwner(action, part, ANSWER_WAIT_MS)
+      if (outcome.outcome !== 'sent') {
+        // A refusal for want of a verified phone number quotes Bilibili; anything else says why in the host's words.
+        const line = outcome.outcome === 'refused' && outcome.verification !== undefined
+          ? `B站私信没发出：${outcome.verification}`
+          : `原因：${outcome.detail}`
+        await this.fallback(parts.slice(index).join('\n\n'), line)
+        return
+      }
+    }
+    this.ctx.logger.info(`bili: sent the turn's answer to the owner as ${parts.length} Bilibili message(s) (${action})`)
+  }
+
+  /** An answer that could not go out as a Bilibili message goes to WeChat, ending with a line that says why. */
+  private async fallback(text: string, why: string): Promise<void> {
+    this.ctx.logger.warn(`bili: the answer goes to WeChat instead of a Bilibili message: ${why}`)
+    const notifier = this.ctx.get('lsyNotifier')
+    if (notifier === undefined) {
+      this.ctx.logger.warn('bili: no lsyNotifier is mounted; the answer was not delivered')
+      return
+    }
+    try {
+      await notifier.send({ title: FALLBACK_TITLE, body: `${text}\n\n${why}` })
+      // Delivered to the owner, so a video link in it was shared.
+      this.track(this.reportSharesIn(text))
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`bili: notifying the owner failed: ${errorText(error)}`)
+    }
   }
 
   // ── Body clock ─────────────────────────────────────────────────────────
 
-  /** Today's plan, rolled once and settled against the clock. */
-  private async todayPlan(now: number): Promise<PlanRecord> {
+  /**
+   * The model route the account's Session will use, by the Session Controller's
+   * precedence: an explicit pick not yet used, else the Session's last request,
+   * else the profile default. A Session is resolved only when one exists.
+   */
+  private async checkRoute(): Promise<CheckedRoute | undefined> {
+    let pick: { provider: string; model: string } | undefined
+    let header: { provider: string; model: string } | undefined
+    const stored = this.domain?.table('current').get('session')
+    if (stored !== undefined) {
+      try {
+        const resolved = await this.ctx.sessionController.resolveAgent(stored.sessionId as SessionId)
+        if ('agent' in resolved) {
+          const session = resolved.agent.session
+          pick = this.ctx.get('sessionProjections')?.stateOf(session, 'modelSelection')?.pending ?? undefined
+          header = (session as Partial<Pick<Session, 'requestHeader'>>).requestHeader?.()?.config
+        }
+      } catch (error: unknown) {
+        this.ctx.logger.debug(`bili: could not read the route of Session ${stored.sessionId}: ${errorText(error)}`)
+      }
+    }
+    const route = routeOf({ pick, header, fallback: this.ctx.get('agentDefaultModel')?.currentSelection() })
+    this.lastRoute = route === undefined ? undefined : { ...route, rule: ruleFor(this.config.pricing, route.provider) }
+    return this.lastRoute
+  }
+
+  /** The local day before the one containing `now`. */
+  private previousDay(now: number): string {
+    const { timeZone } = this.config
+    return dayKey(localTime(dayKey(now, timeZone), 0, timeZone) - 1, timeZone)
+  }
+
+  /**
+   * Today's plan, rolled once (for the route's pricing) and settled against the
+   * clock, and yesterday's settled too: a wake moved or deferred past local
+   * midnight still belongs to the day it was planned for.
+   */
+  private async currentPlans(
+    now: number, route: CheckedRoute | undefined = this.lastRoute,
+  ): Promise<{ today: PlanRecord; yesterday?: PlanRecord }> {
     return this.serialize(async () => {
       const domain = await this.ready
-      const day = dayKey(now, this.config.timeZone)
+      const { wakes, skipChance, timeZone } = this.config
+      const day = dayKey(now, timeZone)
       const plans = domain.table('plans')
       const stored = plans.get(day)
-      const { wakes, skipChance, timeZone } = this.config
-      const plan = settlePlan(stored ?? rollPlan(day, wakes, skipChance, timeZone), wakes, now, timeZone)
-      if (plan !== stored) await plans.put(day, plan)
+      const rolled = stored ?? {
+        ...rollPlan(day, wakes, skipChance, timeZone, Math.random, route?.rule),
+        ...(route === undefined ? {} : { route: { provider: route.provider, model: route.model, priced: route.rule !== undefined } }),
+      }
+      const today = settlePlan(rolled, wakes, now, timeZone)
+      if (today !== stored) await plans.put(day, today)
       if (stored === undefined) {
-        const planned = plan.wakes.filter(wake => wake.state === 'planned').length
-        this.ctx.logger.info(`bili: body clock for ${day}: ${planned} wake(s), ${plan.wakes.length - planned} window(s) skipped`)
+        const count = (state: string): number => today.wakes.filter(wake => wake.state === state).length
+        const changed = (kind: string): number => today.wakes.filter(wake => wake.adjusted === kind).length
+        const notes = [`${count('planned')} wake(s)`, `${count('skipped')} window(s) skipped`]
+        if (changed('clipped') > 0) notes.push(`${changed('clipped')} clipped to off-peak`)
+        if (changed('moved') > 0) notes.push(`${changed('moved')} moved past a peak`)
+        this.ctx.logger.info(`bili: body clock for ${day} on ${routeText(route)}: ${notes.join(', ')}`)
         for (const key of [...plans.keys()].sort().slice(0, Math.max(0, plans.size - PLAN_DAYS))) await plans.delete(key)
       }
-      return plan
+      const before = plans.get(this.previousDay(now))
+      const yesterday = before === undefined ? undefined : settlePlan(before, wakes, now, timeZone)
+      if (yesterday !== undefined && yesterday !== before) await plans.put(yesterday.day, yesterday)
+      return yesterday === undefined ? { today } : { today, yesterday }
     })
+  }
+
+  /** The earliest planned wake of today's and yesterday's plans. */
+  private nextWake(plans: { today: PlanRecord; yesterday?: PlanRecord }): number | undefined {
+    const times = [plans.today, plans.yesterday]
+      .flatMap(plan => (plan === undefined ? [] : [nextPlanned(plan)?.at]))
+      .filter((at): at is number => at !== undefined)
+    return times.length === 0 ? undefined : Math.min(...times)
   }
 
   /** Arm the timer for the next planned wake or the next local midnight. */
   private async armClock(): Promise<void> {
     if (this.stopping) return
     const now = Date.now()
-    const plan = await this.todayPlan(now)
-    const next = nextPlanned(plan)
-    const at = Math.min(next?.at ?? Infinity, nextDayStart(now, this.config.timeZone))
+    const plans = await this.currentPlans(now, await this.checkRoute())
+    const at = Math.min(this.nextWake(plans) ?? Infinity, nextDayStart(now, this.config.timeZone))
     this.clockTimer?.()
     this.clockTimer = this.ctx.timeout(() => {
       this.clockTimer = undefined
@@ -825,28 +1071,49 @@ export class BiliAccount extends Service {
     }, Math.max(0, at - now))
   }
 
-  /** Fire the wakes that are due (at most one prompt), then re-arm. */
+  /**
+   * Fire the wakes that are due (at most one prompt), then re-arm. While the
+   * route is priced and in a peak, due wakes move to the next off-peak start
+   * instead; they stay planned, so they still fire exactly once.
+   */
   private async onClock(): Promise<void> {
     try {
       const now = Date.now()
-      const due = await this.serialize(async () => {
+      const route = await this.checkRoute()
+      const deferTo = route?.rule === undefined || peakAt(route.rule, now) === undefined ? undefined : nextOffPeak(route.rule, now)
+      const settled = await this.serialize(async () => {
         const domain = await this.ready
-        const day = dayKey(now, this.config.timeZone)
-        const plan = domain.table('plans').get(day)
-        if (plan === undefined) return 0
-        let count = 0
+        let fired = 0
+        let deferred = 0
+        let missed = 0
         // At most once: a wake is marked done before its prompt, so a restart never repeats it. With
         // no signed-in account it cannot happen at all, so it is marked missed rather than done.
         const active = this.account()?.state === 'active'
-        const wakes = plan.wakes.map((wake) => {
-          if (wake.state !== 'planned' || wake.at === undefined || wake.at > now) return wake
-          count += 1
-          return { ...wake, state: active ? 'done' as const : 'missed' as const }
-        })
-        if (count > 0) await domain.table('plans').put(day, { ...plan, wakes })
-        return count
+        for (const day of [this.previousDay(now), dayKey(now, this.config.timeZone)]) {
+          const plan = domain.table('plans').get(day)
+          if (plan === undefined) continue
+          const wakes = plan.wakes.map((wake) => {
+            if (wake.state !== 'planned' || wake.at === undefined || wake.at > now) return wake
+            if (!active) {
+              missed += 1
+              return { ...wake, state: 'missed' as const }
+            }
+            if (deferTo !== undefined) {
+              deferred += 1
+              return { ...wake, at: deferTo, adjusted: 'deferred' as const, closes: Math.max(wake.closes ?? 0, deferTo + DEFER_GRACE_MS) }
+            }
+            fired += 1
+            return { ...wake, state: 'done' as const }
+          })
+          if (wakes.some((wake, index) => wake !== plan.wakes[index])) await domain.table('plans').put(day, { ...plan, wakes })
+        }
+        return { fired, deferred, missed }
       })
-      if (due > 0) await this.clockWake(now)
+      if (settled.missed > 0) this.ctx.logger.info('bili: body-clock wake skipped: no active account')
+      if (settled.deferred > 0 && deferTo !== undefined) {
+        this.ctx.logger.info(`bili: ${settled.deferred} body-clock wake(s) deferred to ${formatStamp(deferTo, this.config.timeZone)} (${route?.provider ?? '?'} is in a peak period)`)
+      }
+      if (settled.fired > 0) await this.clockWake(now)
     } finally {
       await this.armClock()
     }
@@ -859,6 +1126,15 @@ export class BiliAccount extends Service {
       this.ctx.logger.info('bili: body-clock wake skipped: no active account')
       return
     }
+    try {
+      await this.promptSession(await this.wakeText(now), 'clock')
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`bili: body-clock wake failed: ${errorText(error)}`)
+    }
+  }
+
+  /** The body-clock prompt: time, budget, inbox counts (best effort), interests, and any pause. */
+  private async wakeText(now: number): Promise<string> {
     let inbox = { replies: 0, mentions: 0, ownerMessages: 0, otherMessages: 0 }
     try {
       const counts = await unreadCounts(this.client)
@@ -870,7 +1146,7 @@ export class BiliAccount extends Service {
       this.ctx.logger.warn(`bili: unread counts for the wake failed: ${errorText(error)}`)
     }
     const domain = await this.ready
-    const prompt = wakePrompt({
+    return wakePrompt({
       now,
       timeZone: this.config.timeZone,
       lastWakeAt: this.lastWake()?.at,
@@ -879,20 +1155,62 @@ export class BiliAccount extends Service {
       interests: this.interests().text,
       pause: domain.table('pause').get('writes'),
     })
-    try {
-      await this.promptSession(prompt, 'clock')
-    } catch (error: unknown) {
-      this.ctx.logger.warn(`bili: body-clock wake failed: ${errorText(error)}`)
+  }
+
+  /**
+   * The owner's Wake now from Settings: the body-clock prompt, now, outside
+   * today's plan. It is the owner's explicit request, so a priced route's peak
+   * does not stop it (the outcome says so); it never steers into a running turn
+   * and ignores a second request within a minute of a started one.
+   */
+  private async manualWake(): Promise<ManualWakeView> {
+    const now = Date.now()
+    const refuse = (reason: NonNullable<ManualWakeView['reason']>, detail?: string): ManualWakeView => {
+      this.ctx.logger.info(`bili: manual wake refused (${reason}${detail === undefined ? '' : `: ${detail}`})`)
+      return { at: now, outcome: 'refused', reason, ...(detail === undefined ? {} : { detail }) }
     }
+    const account = this.account()
+    if (account === undefined) return refuse('signed-out')
+    if (account.state !== 'active') return refuse('login-needed')
+    if (now - this.manualStartedAt < MANUAL_WAKE_DEBOUNCE_MS) return refuse('recent')
+    // Set before any await, so a second click arriving meanwhile is refused.
+    const previous = this.manualStartedAt
+    this.manualStartedAt = now
+    const route = await this.checkRoute()
+    const peak = route?.rule === undefined || peakAt(route.rule, now) === undefined
+      ? undefined
+      : { provider: route.provider, offPeakAt: nextOffPeak(route.rule, now) ?? null }
+    const backoff = this.domain?.table('backoff').get('reads')
+    const readsResumeAt = backoff !== undefined && backoff.until > now ? backoff.until : undefined
+    let prompted: boolean
+    try {
+      prompted = await this.promptSession(await this.wakeText(now), 'manual')
+    } catch (error: unknown) {
+      this.manualStartedAt = previous
+      return refuse('failed', errorText(error))
+    }
+    if (!prompted) {
+      this.manualStartedAt = previous
+      return refuse('busy')
+    }
+    const sessionId = this.domain?.table('current').get('session')?.sessionId ?? '?'
+    const notes = [peak === undefined ? '' : `, in a peak period of ${peak.provider}`, readsResumeAt === undefined ? '' : '; reads are backing off'].join('')
+    this.ctx.logger.info(`bili: the owner woke the Session (${sessionId}) from Settings${notes}`)
+    return { at: now, outcome: 'started', ...(peak === undefined ? {} : { peak }), ...(readsResumeAt === undefined ? {} : { readsResumeAt }) }
   }
 
   /** The latest wake, if any. */
-  private lastWake(): { at: number; reason: 'clock' | 'inbox' } | undefined {
+  private lastWake(): { at: number; reason: WakeReason } | undefined {
     const wakes = this.domain?.table('wakes')
     if (wakes === undefined) return undefined
     const last = [...wakes.keys()].sort().at(-1)
     const row = last === undefined ? undefined : wakes.get(last)
     return row === undefined ? undefined : { at: row.at, reason: row.reason }
+  }
+
+  /** The owner's main account: the UID set in Settings, else the configured one. */
+  private ownerMid(): number | undefined {
+    return this.domain?.table('owner').get('main')?.mid ?? this.config.ownerMid
   }
 
   /** The interests text: the owner's Settings edit, else the configured one. */
@@ -907,7 +1225,17 @@ export class BiliAccount extends Service {
   private async pollInbox(): Promise<void> {
     const account = this.account()
     const backoff = this.domain?.table('backoff').get('reads')
-    if (account?.state !== 'active' || (backoff !== undefined && backoff.until > Date.now())) return
+    if (account?.state !== 'active' || (backoff !== undefined && backoff.until > Date.now()) || this.inboxPolling) return
+    this.inboxPolling = true
+    try {
+      await this.checkInbox()
+    } finally {
+      this.inboxPolling = false
+    }
+  }
+
+  /** One inbox check: collect, then deliver. */
+  private async checkInbox(): Promise<void> {
     try {
       await this.collectInbox()
     } catch (error: unknown) {
@@ -928,7 +1256,7 @@ export class BiliAccount extends Service {
     const baselined = (kind: PendingRecord['kind']): boolean => domain.table('inbox').get(kind) !== undefined
     if (counts.replies > 0 || !baselined('reply')) await this.queueItems('reply', await inboxItems(this.client, 'reply'))
     if (counts.mentions > 0 || !baselined('at')) await this.queueItems('at', await inboxItems(this.client, 'at'))
-    const ownerMid = this.config.ownerMid
+    const ownerMid = this.ownerMid()
     if (ownerMid !== undefined && (counts.messages > 0 || !baselined('dm'))) await this.queueItems('dm', await ownerMessages(this.client, ownerMid))
   }
 
@@ -955,7 +1283,32 @@ export class BiliAccount extends Service {
       await this.trimTable(domain, 'targets', MAX_TARGETS)
       if (row === undefined) this.ctx.logger.info(`bili: inbox baseline for ${kind}: ${items.length} item(s) already there`)
       else if (queued > 0) this.ctx.logger.info(`bili: ${queued} new ${kind} item(s) in the inbox`)
+      if (row !== undefined && queued > 0 && kind === 'dm') this.ownerSpoke(Date.now())
     })
+  }
+
+  /**
+   * The owner sent a message: check messages every minute until 15 minutes
+   * after the latest one, so a conversation does not wait for the 10-minute check.
+   */
+  private ownerSpoke(now: number): void {
+    const quiet = this.conversationUntil <= now
+    this.conversationUntil = now + CONVERSATION_MS
+    if (quiet) this.ctx.logger.info(`bili: the owner is messaging; checking messages every 60 s until ${formatStamp(this.conversationUntil, this.config.timeZone)} (extended by each new message)`)
+    if (this.fastPoll === undefined) this.armFastPoll()
+  }
+
+  /** Arm the next fast check, or end the conversation window. */
+  private armFastPoll(): void {
+    if (this.stopping) return
+    if (Date.now() >= this.conversationUntil) {
+      this.fastPoll = undefined
+      this.ctx.logger.info('bili: the owner\'s conversation went quiet; back to the 10-minute inbox check')
+      return
+    }
+    this.fastPoll = this.ctx.timeout(() => {
+      this.track(this.pollInbox().finally(() => { this.armFastPoll() }))
+    }, FAST_POLL_MS)
   }
 
   /** Drop the oldest rows (by their `at`) of a table beyond `max`. */
@@ -974,29 +1327,59 @@ export class BiliAccount extends Service {
     await domain.table('targets').put(item.rpid, { oid: item.oid, type: item.type, root: item.root, mid: item.fromMid, at: item.at })
   }
 
-  /** Hand queued items to the Session, within the hourly wake cap. */
+  /** Hand waiting inbox items over once a priced route's peak ends; one timer, armed once per peak. */
+  private waitForOffPeak(route: CheckedRoute, count: number, now: number): void {
+    const at = route.rule === undefined ? undefined : nextOffPeak(route.rule, now)
+    if (at === undefined || this.inboxTimer?.at === at) return
+    this.inboxTimer?.dispose()
+    const dispose = this.ctx.timeout(() => {
+      this.inboxTimer = undefined
+      if (!this.stopping) this.track(this.deliverInbox())
+    }, Math.max(0, at - now))
+    this.inboxTimer = { at, dispose }
+    this.ctx.logger.info(`bili: ${count} inbox item(s) wait for off-peak at ${formatStamp(at, this.config.timeZone)} (${route.provider} is in a peak period)`)
+  }
+
+  /**
+   * Hand queued items to the Session. Messages from the owner's account wake it
+   * at once (a conversation; at most 30 such wakes an hour, outside the inbox
+   * cap and the off-peak rule, since the owner asked); other items wait for the
+   * hourly cap and a priced route's off-peak time.
+   */
   private async deliverInbox(): Promise<void> {
     const domain = await this.ready
     const pending = [...domain.table('pending').entries()].map(([key, row]) => ({ key, row })).sort((a, b) => a.row.at - b.row.at)
     if (pending.length === 0) return
+    const owner = pending.some(({ row }) => row.kind === 'dm')
     const hourAgo = Date.now() - 3_600_000
-    const recent = [...domain.table('wakes').entries()].filter(([, wake]) => wake.reason === 'inbox' && wake.at > hourAgo).length
-    if (recent >= this.config.inboxWakesPerHour) {
-      this.ctx.logger.info(`bili: ${pending.length} inbox item(s) wait: ${recent} inbox wake(s) in the last hour`)
+    const wakes = [...domain.table('wakes').entries()].map(([, wake]) => wake).filter(wake => wake.reason === 'inbox' && wake.at > hourAgo)
+    const recent = wakes.filter(wake => (wake.owner === true) === owner).length
+    if (recent >= (owner ? OWNER_WAKES_PER_HOUR : this.config.inboxWakesPerHour)) {
+      this.ctx.logger.info(`bili: ${pending.length} inbox item(s) wait: ${recent} ${owner ? 'owner-message' : 'inbox'} wake(s) in the last hour`)
       return
     }
-    const batch = pending.slice(0, MAX_WAKE_ITEMS)
     const now = Date.now()
+    if (!owner) {
+      const route = await this.checkRoute()
+      if (route?.rule !== undefined && peakAt(route.rule, now) !== undefined) {
+        this.waitForOffPeak(route, pending.length, now)
+        return
+      }
+    }
+    // The owner's messages come first, so a full batch never leaves one behind.
+    const ordered = owner ? [...pending.filter(({ row }) => row.kind === 'dm'), ...pending.filter(({ row }) => row.kind !== 'dm')] : pending
+    const batch = ordered.slice(0, MAX_WAKE_ITEMS)
     const prompt = inboxPrompt({
       now,
       timeZone: this.config.timeZone,
       budget: remaining(domain, this.config.caps, now, this.config.timeZone),
       pause: domain.table('pause').get('writes'),
       items: batch.map(({ row }) => row.item),
+      owner,
     })
     let prompted = false
     try {
-      prompted = await this.promptSession(prompt, 'inbox')
+      prompted = await this.promptSession(prompt, 'inbox', owner)
     } catch (error: unknown) {
       this.ctx.logger.warn(`bili: inbox wake failed: ${errorText(error)}`)
     }
@@ -1024,10 +1407,19 @@ export class BiliAccount extends Service {
     }
     const now = Date.now()
     const used = usage(domain, dayKey(now, this.config.timeZone))[spec.action]
-    if (used >= this.config.caps[spec.action]) return `today's ${spec.action} budget (${this.config.caps[spec.action]}) is used up`
-    if (uncertainBefore(domain, spec.action, spec.target)) return `an earlier ${spec.action} of ${spec.target} has an unknown outcome; it is never sent again`
-    if (alreadyTaken(domain, spec.action, spec.target)) {
-      return spec.action === 'comment' ? `this account already commented on ${spec.target}; one comment per video` : `this account already replied to comment ${spec.target}`
+    const cap = capOf(this.config.caps, spec.action)
+    if (cap !== undefined && used >= cap) return `today's ${spec.action} budget (${cap}) is used up`
+    if (uncertainBefore(domain, spec.action, spec.target, spec.text)) return `an earlier ${spec.action} of ${spec.target} has an unknown outcome; it is never sent again`
+    if (alreadyTaken(domain, spec.action, spec.target, dayKey(now, this.config.timeZone))) {
+      const taken: Partial<Record<WriteAction, string>> = {
+        comment: `this account already commented on ${spec.target}; one comment per video`,
+        reply: `this account already replied to comment ${spec.target}`,
+        coin: `this account already gave ${spec.target} coins; one coin write per video`,
+        triple: `this account already gave ${spec.target} a triple (一键三连); one per video`,
+        share: `${spec.target} was already reported as shared`,
+        watch: `${spec.target} was already reported as watched today`,
+      }
+      return taken[spec.action] ?? `${spec.action} ${spec.target} is already done`
     }
     return undefined
   }
@@ -1069,8 +1461,13 @@ export class BiliAccount extends Service {
       return refused(`could not check before writing: ${errorText(error)}`)
     }
     const domain = await this.ready
-    const wait = nextSlot(domain) - Date.now()
-    if (wait > this.config.writeWaitMs) return refused(`the next write slot opens in ${formatGap(wait)}; try later`)
+    // A reply to the owner keeps a conversation's pace: a few seconds after the previous write, not minutes.
+    const replyGap = this.config.dmReplyGapMinMs + Math.floor(Math.random() * (this.config.dmReplyGapMaxMs - this.config.dmReplyGapMinMs))
+    // Watch and share reports describe what the account did; they neither wait for the slot nor take it.
+    const wait = HOST_REPORTS.has(spec.action) ? 0
+      : spec.action === 'dmReply' ? (lastWrite(domain) ?? -Infinity) + replyGap - Date.now()
+        : nextSlot(domain) - Date.now()
+    if (wait > (spec.maxWaitMs ?? this.config.writeWaitMs)) return refused(`the next write slot opens in ${formatGap(wait)}; try later`)
     if (wait > 0) {
       this.ctx.logger.info(`bili: ${spec.action} ${spec.target} waits ${Math.ceil(wait / 1000)} s for its slot`)
       await this.sleep(wait)
@@ -1078,22 +1475,29 @@ export class BiliAccount extends Service {
     // A risk answer to another request can arrive while this write waits.
     const late = this.writeRefusal(spec)
     if (late !== undefined) return refused(late)
+    const coins = spec.coins?.()
     const row = await this.serialize(() => reserve(domain, {
       action: spec.action,
       target: spec.target,
       ...(spec.text === undefined ? {} : { text: spec.text.trim() }),
       ...areaFields(spec.area),
+      ...(coins === undefined ? {} : { coins }),
+      ...(spec.adds === undefined ? {} : { adds: [...spec.adds()] }),
     }, Date.now(), this.config.timeZone))
     let outcome: WriteOutcome
     try {
       const receipt = await spec.perform()
       const now = Date.now()
+      const given = spec.coins?.()
       await this.serialize(() => settle(domain, row.id, {
         state: 'accepted', settledAt: now,
         ...(receipt === undefined ? {} : { receipt }),
         ...(spec.visibility === true && receipt !== undefined ? { visibility: 'pending' as const, visibilityDueAt: now + this.config.visibilityCheckMs } : {}),
+        ...(spec.adds === undefined ? {} : { adds: [...spec.adds()] }),
+        ...(given === undefined ? {} : { coins: given }),
       }))
-      outcome = { outcome: 'sent', detail: `${spec.action} sent`, ...(receipt === undefined ? {} : { receipt }) }
+      outcome = { outcome: 'sent', detail: spec.sentDetail?.() ?? `${spec.action} sent`, ...(receipt === undefined ? {} : { receipt }) }
+      await this.verified(spec.action)
       const settled = domain.table('ledger').get(row.id)
       if (spec.visibility === true && receipt !== undefined && settled !== undefined) this.armVisibility(settled)
     } catch (error: unknown) {
@@ -1101,20 +1505,46 @@ export class BiliAccount extends Service {
       if (error instanceof BiliTransportError) {
         await this.serialize(() => settle(domain, row.id, { state: 'uncertain', settledAt: now, detail: error.message }))
         outcome = { outcome: 'uncertain', detail: `the outcome is unknown (${error.message}); it counts against today's budget and will not be sent again` }
+      } else if (error instanceof BiliVerifyError) {
+        // Not risk control: nothing happened, writes stay open, and the owner sees a hint in Settings.
+        const detail = `Bilibili refused it until the account verifies a phone number: code ${error.code}${error.detail === '' ? '' : ` (${error.detail})`}`
+        await this.serialize(() => settle(domain, row.id, { state: 'failed', settledAt: now, detail }))
+        await this.needsVerification(spec.action, error.detail === '' ? `code ${error.code}` : error.detail)
+        outcome = { outcome: 'refused', detail, verification: error.detail === '' ? `code ${error.code}` : error.detail }
       } else {
         const detail = error instanceof BiliRiskError
           ? `Bilibili's risk control stopped it (${error.reason}); writes are paused until the owner resumes them`
-          : error instanceof BiliApiError ? `Bilibili refused it: code ${error.code}${error.detail === '' ? '' : ` (${error.detail})`}` : errorText(error)
+          : error instanceof BiliApiError ? `Bilibili refused it: code ${error.code}${error.detail === '' ? '' : ` (${error.detail})`}${coinCodeHint(spec.action, error.code)}` : errorText(error)
         await this.serialize(() => settle(domain, row.id, { state: 'failed', settledAt: now, detail }))
         if (error instanceof BiliApiError && error.code === -101) this.track(this.checkSession(`code -101 from ${error.endpoint}`))
         outcome = { outcome: 'refused', detail }
       }
     }
     const gap = { minMs: this.config.writeGapMinMs, maxMs: this.config.writeGapMaxMs }
-    await this.serialize(() => takeSlot(domain, Date.now(), gap, Math.random))
+    if (!HOST_REPORTS.has(spec.action)) await this.serialize(() => takeSlot(domain, Date.now(), gap, Math.random))
+    if (outcome.outcome === 'sent' && (spec.action === 'coin' || spec.action === 'triple' || HOST_REPORTS.has(spec.action))) this.track(this.refreshProgress())
     const used = usage(domain, dayKey(Date.now(), this.config.timeZone))[spec.action]
-    this.ctx.logger.info(`bili: ${spec.action} ${spec.target} ${outcome.outcome} (${used}/${this.config.caps[spec.action]} today)`)
+    const cap = capOf(this.config.caps, spec.action)
+    this.ctx.logger.info(`bili: ${spec.action} ${spec.target} ${outcome.outcome} (${used}${cap === undefined ? '' : `/${cap}`} today)`)
     return outcome
+  }
+
+  /** Remember that Bilibili wants a verified phone number for this kind of write; Settings shows it until one goes through. */
+  private async needsVerification(action: WriteAction, message: string): Promise<void> {
+    const kind = verifyKind(action)
+    const domain = this.domain
+    if (kind === undefined || domain === undefined) return
+    this.ctx.logger.warn(`bili: Bilibili wants a verified phone number before ${action} (${message}); Settings shows a hint until a ${kind} goes through`)
+    await this.serialize(() => domain.table('verify').put(kind, { message, since: domain.table('verify').get(kind)?.since ?? Date.now() }))
+  }
+
+  /** A write of this kind went through: the verification hint, if any, is gone. */
+  private async verified(action: WriteAction): Promise<void> {
+    const kind = verifyKind(action)
+    const domain = this.domain
+    if (kind === undefined || domain?.table('verify').get(kind) === undefined) return
+    this.ctx.logger.info(`bili: a ${kind} went through; the phone-verification hint is cleared`)
+    await this.serialize(() => domain.table('verify').delete(kind))
   }
 
   /** Schedule the visibility check of an accepted comment or reply. */
@@ -1175,13 +1605,121 @@ export class BiliAccount extends Service {
     return refusal === undefined ? undefined : { outcome: 'refused', detail: refusal }
   }
 
-  /** The aid of a video, or a refusal. */
-  private async aidOf(bvid: string): Promise<{ aid: string } | { refusal: string }> {
+  /** A video to write on, or why not. */
+  private async aidOf(bvid: string): Promise<{ aid: string; video: VideoDetail } | { refusal: string }> {
     if (bvidOf(bvid) === undefined) return { refusal: `${JSON.stringify(bvid)} is not a BV id` }
+    let video: VideoDetail
     try {
-      return { aid: (await videoInfo(this.client, bvid, this.config.timeZone)).aid }
+      video = await videoInfo(this.client, bvid, this.config.timeZone)
     } catch (error: unknown) {
       return { refusal: `could not read ${bvid}: ${errorText(error)}` }
+    }
+    return { aid: video.aid, video }
+  }
+
+  /**
+   * Give a video coins, never with a like. Bilibili takes at most 2 coins per
+   * video from one account for an original and 1 otherwise; `count` defaults to
+   * that most. One coin write per video ever, and no daily cap: the balance
+   * limits it. A refusal code from Bilibili is reported, never retried.
+   * @param bvid - BV id.
+   * @param count - 1 or 2; default the most the video takes.
+   * @returns the write guard's outcome.
+   */
+  async coin(bvid: string, count?: number): Promise<WriteOutcome> {
+    if (count !== undefined && count !== 1 && count !== 2) return { outcome: 'refused', detail: 'count must be 1 or 2' }
+    const early = this.precheck('coin', bvid)
+    if (early !== undefined) return early
+    const target = await this.aidOf(bvid)
+    if ('refusal' in target) return { outcome: 'refused', detail: target.refusal }
+    const most = target.video.original ? 2 : 1
+    const coins: 1 | 2 = count === undefined ? most : count
+    if (coins > most) return { outcome: 'refused', detail: `${bvid} is not marked original, so Bilibili takes at most 1 coin for it` }
+    let given = 0
+    return this.write({
+      action: 'coin', target: bvid,
+      coins: () => coins,
+      check: async () => {
+        given = await coinsGiven(this.client, bvid)
+        if (given > 0) return undefined
+        return balanceRefusal((await navInfo(this.client)).coins ?? 0, coins)
+      },
+      preRead: () => Promise.resolve(given > 0 ? `this account already gave this video ${plural(given, 'coin')}; one coin write per video` : undefined),
+      perform: async () => { await giveCoin(this.client, target.aid, bvid, coins); return undefined },
+      sentDetail: () => `gave ${plural(coins, 'coin')}`,
+    })
+  }
+
+  /**
+   * 一键三连: like, coins (2 for an original, 1 otherwise), and a favorite in the
+   * default folder, in one request. One per video ever, with the normal write
+   * gap. Parts already done are reported and not counted; the like and favorite
+   * it adds count against those daily caps, and it is refused when either cap
+   * it would need is used up, or when the coins it would give exceed the balance.
+   * @param bvid - BV id.
+   * @returns the write guard's outcome.
+   */
+  async triple(bvid: string): Promise<WriteOutcome> {
+    const early = this.precheck('triple', bvid)
+    if (early !== undefined) return early
+    const target = await this.aidOf(bvid)
+    if ('refusal' in target) return { outcome: 'refused', detail: target.refusal }
+    const most = target.video.original ? 2 : 1
+    let adds: TriplePart[] = []
+    let done: TriplePart[] = []
+    let coins = most
+    return this.write({
+      action: 'triple', target: bvid,
+      adds: () => adds,
+      coins: () => (adds.includes('coin') ? coins : undefined),
+      check: async () => {
+        const mid = this.account()?.mid
+        if (mid === undefined) return 'no Bilibili account is signed in'
+        const liked = await hasLiked(this.client, bvid)
+        const given = await coinsGiven(this.client, bvid)
+        const saved = (await folders(this.client, mid, target.aid)).some(folder => folder.contains)
+        const state: Record<TriplePart, boolean> = { like: liked, coin: given > 0, favorite: saved }
+        done = TRIPLE_PARTS.filter(part => state[part])
+        adds = TRIPLE_PARTS.filter(part => !state[part])
+        if (adds.length === 0) return undefined
+        const left = remaining(await this.ready, this.config.caps, Date.now(), this.config.timeZone)
+        if (adds.includes('like') && left.like < 1) return `today's like budget (${this.config.caps.like}) is used up, and the triple would add a like`
+        if (adds.includes('favorite') && left.favorite < 1) return `today's favorite budget (${this.config.caps.favorite}) is used up, and the triple would add a favorite`
+        return adds.includes('coin') ? balanceRefusal((await navInfo(this.client)).coins ?? 0, most) : undefined
+      },
+      preRead: () => Promise.resolve(adds.length === 0 ? 'this account already liked, coined, and saved this video' : undefined),
+      perform: async () => {
+        const result = await tripleLike(this.client, target.aid, bvid)
+        if (result.coin && result.coins > 0) coins = result.coins
+        // Only what Bilibili applied counts; a part it skipped stays undone.
+        adds = adds.filter(part => result[part])
+        return undefined
+      },
+      sentDetail: () => tripleDetail(adds, done, coins),
+    })
+  }
+
+  /** Report a watch of a video whose subtitles the account read, as far as it read; once a day. */
+  private async reportWatchOf(video: VideoDetail, cid: number, reached: number): Promise<void> {
+    const mid = this.account()?.mid
+    if (mid === undefined) return
+    const seconds = Math.max(1, Math.min(reached, video.seconds ?? reached))
+    const outcome = await this.write({
+      action: 'watch', target: video.bvid,
+      perform: async () => {
+        await reportWatch(this.client, { aid: video.aid, bvid: video.bvid, cid, mid, duration: video.seconds ?? seconds }, seconds)
+        return undefined
+      },
+    })
+    if (outcome.outcome === 'uncertain') this.ctx.logger.warn(`bili: the watch report of ${video.bvid} has an unknown outcome; not sent again`)
+  }
+
+  /** Report a share for each video link the host delivered to the owner; once per video. */
+  private async reportSharesIn(text: string): Promise<void> {
+    const ids = [...new Set(text.match(/BV[0-9A-Za-z]{10}/g) ?? [])].slice(0, 3)
+    for (const bvid of ids) {
+      if (this.precheck('share', bvid) !== undefined) continue
+      await this.write({ action: 'share', target: bvid, perform: async () => { await reportShare(this.client, bvid); return undefined } })
     }
   }
 
@@ -1207,7 +1745,7 @@ export class BiliAccount extends Service {
    */
   async unfollow(mid: number): Promise<WriteOutcome> {
     if (!Number.isSafeInteger(mid) || mid <= 0) return { outcome: 'refused', detail: 'mid must be a positive user id' }
-    if (mid === this.config.ownerMid) return { outcome: 'refused', detail: 'the owner\'s account stays followed' }
+    if (mid === this.ownerMid()) return { outcome: 'refused', detail: 'the owner\'s account stays followed' }
     return this.write({
       action: 'unfollow', target: `mid:${mid}`,
       preRead: async () => ([2, 6].includes(await relationTo(this.client, mid)) ? undefined : 'not following'),
@@ -1317,6 +1855,8 @@ export class BiliAccount extends Service {
   async reply(rpid: string, text: string): Promise<WriteOutcome> {
     const target = this.domain?.table('targets').get(rpid)
     if (target === undefined) return { outcome: 'refused', detail: `comment ${rpid} is not one that replied to or mentioned this account; read bili_inbox first` }
+    const early = this.precheck('reply', rpid, text)
+    if (early !== undefined) return early
     return this.write({
       action: 'reply', target: rpid, text, area: { type: target.type, oid: target.oid, root: target.root }, visibility: true,
       perform: () => addReply(this.client, { type: target.type, oid: target.oid, root: target.root, parent: rpid }, text.trim()),
@@ -1338,10 +1878,15 @@ export class BiliAccount extends Service {
    * @returns the write guard's outcome; a sent message carries its key as `receipt`.
    */
   async dmOwner(text: string): Promise<WriteOutcome> {
-    const ownerMid = this.config.ownerMid
+    return this.messageOwner('dmOwner', text)
+  }
+
+  /** One message to the owner's main account through the write guard. */
+  private async messageOwner(action: 'dmOwner' | 'dmReply', text: string, maxWaitMs?: number): Promise<WriteOutcome> {
+    const ownerMid = this.ownerMid()
     if (ownerMid === undefined) return { outcome: 'refused', detail: 'no owner account is configured' }
-    return this.write({
-      action: 'dmOwner', target: `mid:${ownerMid}`, text,
+    const outcome = await this.write({
+      action, target: `mid:${ownerMid}`, text, ...(maxWaitMs === undefined ? {} : { maxWaitMs }),
       check: async () => {
         const relation = await relationTo(this.client, ownerMid)
         if (relation === 6) return undefined
@@ -1353,6 +1898,8 @@ export class BiliAccount extends Service {
         sender: this.account()?.mid ?? 0, receiver: ownerMid, text: text.trim(), deviceId: await this.deviceId(),
       }),
     })
+    if (outcome.outcome === 'sent') this.track(this.reportSharesIn(text))
+    return outcome
   }
 
   /** A stable device id for messages. */
@@ -1428,7 +1975,9 @@ export class BiliAccount extends Service {
       const cid = video.parts.find(part => part.page === options.part)?.cid ?? video.cid
       const subtitle = await subtitles(this.client, bvid, cid, options.subtitlePage ?? 1)
       const top = await comments(this.client, video.aid, { order: 'hot' }, this.config.timeZone)
-      return { video, subtitle, topComments: top.comments.slice(0, 5) }
+      // It read what the video says: report a watch that far (in the background; never the owner's videos).
+      if (subtitle.reached !== undefined) this.track(this.reportWatchOf(video, cid, subtitle.reached))
+      return { video, subtitle: subtitle.view, topComments: top.comments.slice(0, 5) }
     })
   }
 
@@ -1463,7 +2012,7 @@ export class BiliAccount extends Service {
       const unread = await unreadCounts(this.client)
       const replies = await inboxItems(this.client, 'reply')
       const mentions = await inboxItems(this.client, 'at')
-      const ownerMid = this.config.ownerMid
+      const ownerMid = this.ownerMid()
       const owner = ownerMid === undefined ? [] : await ownerMessages(this.client, ownerMid)
       await this.markSeen('reply', replies)
       await this.markSeen('at', mentions)
@@ -1514,12 +2063,50 @@ export class BiliAccount extends Service {
       const nav = await navInfo(this.client)
       const stat = await relationStat(this.client, account.mid)
       const list = await folders(this.client, account.mid)
-      if (nav.level !== undefined && nav.level !== account.level) await this.updateAccount({ level: nav.level })
+      const rewards = await dailyRewards(this.client)
+      await this.storeProgress(nav, rewards)
       return {
         signedIn: true, mid: account.mid, uname: nav.uname ?? account.uname, level: nav.level ?? account.level,
+        ...(nav.exp === undefined ? {} : { exp: nav.exp }), ...(nav.coins === undefined ? {} : { coins: nav.coins }), rewards,
         ...stat, folders: list, ...base,
       }
     })
+  }
+
+  /** Read level, EXP, coins, and today's rewards again (after a report or a coin, and with each cookie check). */
+  private async refreshProgress(): Promise<void> {
+    if (this.account()?.state !== 'active') return
+    try {
+      await this.storeProgress(await navInfo(this.client), await dailyRewards(this.client))
+    } catch (error: unknown) {
+      this.ctx.logger.debug(`bili: could not read level and daily rewards: ${errorText(error)}`)
+    }
+  }
+
+  /** Keep the latest level, EXP, coins, and rewards for Settings; log a level-up. */
+  private async storeProgress(nav: Awaited<ReturnType<typeof navInfo>>, rewards: DailyRewards): Promise<void> {
+    const exp = nav.exp
+    if (!nav.isLogin || exp === undefined) return
+    const now = Date.now()
+    const level = nav.level ?? 0
+    const before = this.account()?.level
+    await this.serialize(async () => {
+      const domain = await this.ready
+      await domain.table('progress').put('current', {
+        level, exp: exp.current, min: exp.min, next: exp.next, coins: nav.coins ?? 0,
+        rewards: { day: dayKey(now, this.config.timeZone), ...rewards }, checkedAt: now,
+      })
+    })
+    if (before !== undefined && level !== before) {
+      await this.updateAccount({ level })
+      this.ctx.logger.info(`bili: the account is now LV${level} (${exp.current} EXP)`)
+    }
+  }
+
+  /** The stored progress, for Settings. */
+  private progressView(): ProgressView | null {
+    const row = this.domain?.table('progress').get('current')
+    return row === undefined ? null : { ...row }
   }
 
   // ── Journal ────────────────────────────────────────────────────────────
@@ -1577,7 +2164,7 @@ export class BiliAccount extends Service {
     const backoff = domain.table('backoff').get('reads')
     const day = dayKey(now, this.config.timeZone)
     const used = usage(domain, day)
-    const plan = await this.todayPlan(now)
+    const plans = await this.currentPlans(now)
     const recent = ledgerRows(domain).slice(-10).reverse()
     const lastWake = this.lastWake()
     return {
@@ -1585,25 +2172,42 @@ export class BiliAccount extends Service {
       login: this.login.view,
       pause: pause === undefined ? null : { scope: pause.scope, reason: pause.reason, since: pause.since },
       readsResumeAt: backoff === undefined || backoff.until <= now ? null : backoff.until,
-      usage: { day, actions: WRITE_ACTIONS.map(action => ({ action, used: used[action], cap: this.config.caps[action] })) },
+      usage: { day, actions: CAPPED_ACTIONS.map(action => ({ action, used: used[action], cap: this.config.caps[action] })) },
       interests: this.interests(),
       clock: {
         timeZone: this.config.timeZone,
-        today: plan.wakes.map(wake => ({
+        today: plans.today.wakes.map(wake => ({
           window: `${this.config.wakes[wake.window]?.start ?? '?'}–${this.config.wakes[wake.window]?.end ?? '?'}`,
           at: wake.at ?? null,
           state: wake.state,
+          ...(wake.adjusted === undefined ? {} : { adjusted: wake.adjusted }),
         })),
-        nextWakeAt: nextPlanned(plan)?.at ?? null,
+        nextWakeAt: this.nextWake(plans) ?? null,
         lastWake: lastWake ?? null,
+        route: this.routeView(now),
       },
       recent: recent.map(row => ({
         at: row.reservedAt, action: row.action, target: row.target, state: row.state,
         ...(row.detail === undefined ? {} : { detail: row.detail }),
         ...(row.visibility === undefined ? {} : { visibility: row.visibility }),
       })),
-      ownerMid: this.config.ownerMid ?? 0,
+      ownerMid: this.ownerMid() ?? 0,
+      ownerUpdatedAt: domain.table('owner').get('main')?.updatedAt ?? null,
+      manualWake: this.manual ?? null,
+      progress: this.progressView(),
+      verification: VERIFY_KINDS.flatMap((kind) => {
+        const row = domain.table('verify').get(kind)
+        return row === undefined ? [] : [{ kind, message: row.message, since: row.since }]
+      }),
     }
+  }
+
+  /** The route of the last check, with when off-peak starts while it is in a peak. */
+  private routeView(now: number): RouteView | null {
+    const route = this.lastRoute
+    if (route === undefined) return null
+    const offPeakAt = route.rule === undefined || peakAt(route.rule, now) === undefined ? null : nextOffPeak(route.rule, now) ?? null
+    return { provider: route.provider, model: route.model, source: route.source, priced: route.rule !== undefined, offPeakAt }
   }
 
   /** `GET` answers the view; `POST` takes one owner action and answers the new view. */
@@ -1622,6 +2226,8 @@ export class BiliAccount extends Service {
         await this.startLogin()
       } else if (action === 'resume') {
         await this.resume()
+      } else if (action === 'wake') {
+        this.manual = await this.manualWake()
       } else if (action === 'interests') {
         const text = (body as { text?: unknown }).text
         if (typeof text !== 'string' || codePoints(text) > MAX_INTERESTS_CHARS) return Response.json({ error: `text must be a string of at most ${MAX_INTERESTS_CHARS} characters` }, { status: 400, headers })
@@ -1630,11 +2236,31 @@ export class BiliAccount extends Service {
           await domain.table('settings').put('interests', { text: text.trim(), updatedAt: Date.now() })
         })
         this.ctx.logger.info(`bili: the owner updated the interests text (${codePoints(text.trim())} chars)`)
+      } else if (action === 'owner') {
+        const mid = (body as { mid?: unknown }).mid
+        if (typeof mid !== 'number' || !Number.isSafeInteger(mid) || mid <= 0) return Response.json({ error: 'mid must be a positive integer UID' }, { status: 400, headers })
+        if (mid === this.account()?.mid) return Response.json({ error: 'mid is this account itself, not the owner\'s main account' }, { status: 400, headers })
+        await this.setOwner(mid)
       } else {
         return Response.json({ error: 'unknown action' }, { status: 400, headers })
       }
     }
     return Response.json(await this.view(), { headers })
+  }
+
+  /**
+   * Store the owner's main account. A different UID drops the owner-message baseline, so the next
+   * inbox check records the new conversation's history instead of waking on it.
+   */
+  private async setOwner(mid: number): Promise<void> {
+    const changed = await this.serialize(async () => {
+      const domain = await this.ready
+      const before = this.ownerMid()
+      await domain.table('owner').put('main', { mid, updatedAt: Date.now() })
+      if (before !== mid) await domain.table('inbox').delete('dm')
+      return before !== mid
+    })
+    this.ctx.logger.info(`bili: the owner ${changed ? 'set a new' : 'saved the same'} main account UID`)
   }
 
   /** The owner's Resume: lift the write pause and the read back-off. */

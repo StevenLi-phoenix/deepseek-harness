@@ -560,6 +560,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'true for every Session this plugin created.',
       },
       {
+        signature: 'async coin(bvid: string, count?: number): Promise<WriteOutcome>',
+        description: 'Give a video coins, never with a like. Bilibili takes at most 2 coins per video from one account for an original and 1 otherwise; `count` defaults to that most. One coin write per video ever, and no daily cap: the balance limits it. A refusal code from Bilibili is reported, never retried.',
+        parameters: [{ name: 'bvid', description: 'BV id.' }, { name: 'count', description: '1 or 2; default the most the video takes.' }],
+        returns: 'the write guard\'s outcome.',
+      },
+      {
+        signature: 'async triple(bvid: string): Promise<WriteOutcome>',
+        description: '一键三连: like, coins (2 for an original, 1 otherwise), and a favorite in the default folder, in one request. One per video ever, with the normal write gap. Parts already done are reported and not counted; the like and favorite it adds count against those daily caps, and it is refused when either cap it would need is used up, or when the coins it would give exceed the balance.',
+        parameters: [{ name: 'bvid', description: 'BV id.' }],
+        returns: 'the write guard\'s outcome.',
+      },
+      {
         signature: 'async follow(mid: number): Promise<WriteOutcome>',
         description: 'Follow an account.',
         parameters: [{ name: 'mid', description: 'its user id.' }],
@@ -5222,7 +5234,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'BiliView',
-    declaration: 'export interface BiliView {\n    readonly account: AccountView;\n    readonly login: LoginView;\n    readonly pause: {\n        readonly scope: typeof PAUSE_SCOPES[number];\n        readonly reason: string;\n        readonly since: number;\n    } | null;\n    readonly readsResumeAt: number | null;\n    readonly usage: {\n        readonly day: string;\n        readonly actions: readonly UsageView[];\n    };\n    readonly interests: {\n        readonly text: string;\n        readonly updatedAt: number | null;\n    };\n    readonly clock: {\n        readonly timeZone: string;\n        readonly today: readonly WakeView[];\n        readonly nextWakeAt: number | null;\n        readonly lastWake: {\n            readonly at: number;\n            readonly reason: \'clock\' | \'inbox\';\n        } | null;\n    };\n    readonly recent: readonly RecentWriteView[];\n    readonly ownerMid: number;\n}',
+    declaration: 'export interface BiliView {\n    readonly account: AccountView;\n    readonly login: LoginView;\n    readonly pause: {\n        readonly scope: typeof PAUSE_SCOPES[number];\n        readonly reason: string;\n        readonly since: number;\n    } | null;\n    readonly readsResumeAt: number | null;\n    readonly usage: {\n        readonly day: string;\n        readonly actions: readonly UsageView[];\n    };\n    readonly interests: {\n        readonly text: string;\n        readonly updatedAt: number | null;\n    };\n    readonly clock: {\n        readonly timeZone: string;\n        readonly today: readonly WakeView[];\n        readonly nextWakeAt: number | null;\n        readonly lastWake: {\n            readonly at: number;\n            readonly reason: WakeReason;\n        } | null;\n        readonly route: RouteView | null;\n    };\n    readonly recent: readonly RecentWriteView[];\n    readonly ownerMid: number;\n    readonly ownerUpdatedAt: number | null;\n    readonly manualWake: ManualWakeView | null;\n    readonly progress: ProgressView | null;\n    readonly verification: readonly VerificationView[];\n}',
   },
   {
     name: 'BoxProps',
@@ -5251,6 +5263,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ButtonProps',
     declaration: 'export interface ButtonProps {\n    readonly label: string;\n    readonly hotkey?: string | undefined;\n    readonly disabled?: boolean | undefined;\n    readonly onPress?: (() => unknown) | undefined;\n}',
+  },
+  {
+    name: 'CappedAction',
+    declaration: 'export type CappedAction = Exclude<WriteAction, typeof UNCAPPED_ACTIONS[number]>;',
   },
   {
     name: 'ChangeResult',
@@ -5579,6 +5595,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'DailyInput',
     declaration: 'export interface DailyInput {\n    readonly time: string;\n    readonly time_zone: string;\n}',
+  },
+  {
+    name: 'DailyRewards',
+    declaration: 'export interface DailyRewards {\n    login: boolean;\n    watch: boolean;\n    share: boolean;\n    coinExp: number;\n}',
+  },
+  {
+    name: 'DailyRewardsView',
+    declaration: 'export interface DailyRewardsView {\n    readonly day: string;\n    readonly login: boolean;\n    readonly watch: boolean;\n    readonly share: boolean;\n    readonly coinExp: number;\n}',
   },
   {
     name: 'DailyScheduleRecord',
@@ -6337,6 +6361,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ManualCompactAgentContext extends CompactionAgentContext {\n    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;\n}',
   },
   {
+    name: 'ManualWakeView',
+    declaration: 'export interface ManualWakeView {\n    readonly at: number;\n    readonly outcome: \'started\' | \'refused\';\n    readonly reason?: \'signed-out\' | \'login-needed\' | \'busy\' | \'recent\' | \'failed\';\n    readonly detail?: string;\n    readonly peak?: {\n        readonly provider: string;\n        readonly offPeakAt: number | null;\n    };\n    readonly readsResumeAt?: number;\n}',
+  },
+  {
     name: 'MarketCompatibility',
     declaration: 'export type MarketCompatibility = {\n    readonly compatible: true;\n} | {\n    readonly compatible: false;\n    readonly runtimeVersion: string;\n    readonly requirements: Readonly<Record<string, string>>;\n    readonly exempted: boolean;\n};',
   },
@@ -6518,7 +6546,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'MeView',
-    declaration: 'export interface MeView {\n    signedIn: boolean;\n    mid?: number;\n    uname?: string;\n    level?: number;\n    following?: number;\n    followers?: number;\n    folders?: Folder[];\n    budget: Record<WriteAction, number>;\n    pause?: string;\n    readsResumeAt?: string;\n}',
+    declaration: 'export interface MeView {\n    signedIn: boolean;\n    mid?: number;\n    uname?: string;\n    level?: number;\n    following?: number;\n    followers?: number;\n    folders?: Folder[];\n    exp?: {\n        current: number;\n        min: number;\n        next: number | null;\n    };\n    coins?: number;\n    rewards?: DailyRewards;\n    budget: Record<CappedAction, number>;\n    pause?: string;\n    readsResumeAt?: string;\n}',
   },
   {
     name: 'ModDefinition',
@@ -6835,6 +6863,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ProfileReconciliation',
     declaration: 'export interface ProfileReconciliation {\n    warnings: string[];\n    pending: PendingModule[];\n    restartReason?: \'module-comparison\' | \'package-moved\';\n}',
+  },
+  {
+    name: 'ProgressView',
+    declaration: 'export interface ProgressView {\n    readonly level: number;\n    readonly exp: number;\n    readonly min: number;\n    readonly next: number | null;\n    readonly coins: number;\n    readonly rewards: DailyRewardsView | null;\n    readonly checkedAt: number;\n}',
   },
   {
     name: 'ProjectionChangeListener',
@@ -7159,6 +7191,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ResumeAgentOptions',
     declaration: 'export interface ResumeAgentOptions {\n    readonly resumeSessionId: SessionId;\n    readonly parentAgent?: Agent;\n    readonly agentOptions?: AgentOptions;\n    readonly signal?: AbortSignal;\n    readonly setup?: AgentSetup;\n}',
+  },
+  {
+    name: 'RouteView',
+    declaration: 'export interface RouteView {\n    readonly provider: string;\n    readonly model: string;\n    readonly source: \'pick\' | \'session\' | \'default\';\n    readonly priced: boolean;\n    readonly offPeakAt: number | null;\n}',
   },
   {
     name: 'RpcId',
@@ -8914,15 +8950,23 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'UsageView',
-    declaration: 'export interface UsageView {\n    readonly action: WriteAction;\n    readonly used: number;\n    readonly cap: number;\n}',
+    declaration: 'export interface UsageView {\n    readonly action: CappedAction;\n    readonly used: number;\n    readonly cap: number;\n}',
   },
   {
     name: 'UserMessage',
     declaration: 'export interface UserMessage extends MessageBase {\n    readonly role: \'user\';\n}',
   },
   {
+    name: 'VerificationView',
+    declaration: 'export interface VerificationView {\n    readonly kind: VerifyKind;\n    readonly message: string;\n    readonly since: number;\n}',
+  },
+  {
     name: 'VerifiedWebhookDelivery',
     declaration: 'export interface VerifiedWebhookDelivery<K extends string = string> {\n    readonly kind: K;\n    readonly source: WebhookSourceId;\n    readonly deliveryId: WebhookDeliveryId;\n    readonly event: WebhookEventOf<K>;\n    readonly receivedAt: number;\n}',
+  },
+  {
+    name: 'VerifyKind',
+    declaration: 'export type VerifyKind = typeof VERIFY_KINDS[number];',
   },
   {
     name: 'VideoCard',
@@ -8930,15 +8974,19 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'VideoDetail',
-    declaration: 'export interface VideoDetail extends VideoCard {\n    aid: string;\n    cid: number;\n    category?: string;\n    favorites?: number;\n    coins?: number;\n    comments?: number;\n    danmaku?: number;\n    parts: VideoPart[];\n}',
+    declaration: 'export interface VideoDetail extends VideoCard {\n    aid: string;\n    cid: number;\n    category?: string;\n    favorites?: number;\n    coins?: number;\n    comments?: number;\n    danmaku?: number;\n    parts: VideoPart[];\n    seconds?: number;\n    original: boolean;\n}',
   },
   {
     name: 'VideoPart',
     declaration: 'export interface VideoPart {\n    page: number;\n    cid: number;\n    title: string;\n    duration?: string;\n}',
   },
   {
+    name: 'WakeReason',
+    declaration: 'export type WakeReason = typeof WAKE_REASONS[number];',
+  },
+  {
     name: 'WakeView',
-    declaration: 'export interface WakeView {\n    readonly window: string;\n    readonly at: number | null;\n    readonly state: typeof WAKE_STATES[number];\n}',
+    declaration: 'export interface WakeView {\n    readonly window: string;\n    readonly at: number | null;\n    readonly state: typeof WAKE_STATES[number];\n    readonly adjusted?: typeof WAKE_ADJUSTMENTS[number];\n}',
   },
   {
     name: 'WatchedRepo',
@@ -9266,7 +9314,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WriteOutcome',
-    declaration: 'export type WriteOutcome = {\n    readonly outcome: \'sent\';\n    readonly detail: string;\n    readonly receipt?: string;\n} | {\n    readonly outcome: \'already\';\n    readonly detail: string;\n} | {\n    readonly outcome: \'refused\';\n    readonly detail: string;\n} | {\n    readonly outcome: \'uncertain\';\n    readonly detail: string;\n};',
+    declaration: 'export type WriteOutcome = {\n    readonly outcome: \'sent\';\n    readonly detail: string;\n    readonly receipt?: string;\n} | {\n    readonly outcome: \'already\';\n    readonly detail: string;\n} | {\n    readonly outcome: \'refused\';\n    readonly detail: string;\n    readonly verification?: string;\n} | {\n    readonly outcome: \'uncertain\';\n    readonly detail: string;\n};',
   },
 ]
 

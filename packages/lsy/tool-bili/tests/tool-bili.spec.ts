@@ -27,7 +27,7 @@ afterEach(async () => {
 
 const TOOLS = [
   'bili_home_feed', 'bili_following_feed', 'bili_popular', 'bili_search', 'bili_video', 'bili_comments', 'bili_inbox', 'bili_me',
-  'bili_follow', 'bili_unfollow', 'bili_favorite', 'bili_like', 'bili_watchlater', 'bili_comment', 'bili_reply', 'bili_dynamic', 'bili_dm_owner',
+  'bili_follow', 'bili_unfollow', 'bili_favorite', 'bili_like', 'bili_coin', 'bili_triple', 'bili_watchlater', 'bili_comment', 'bili_reply', 'bili_dynamic', 'bili_dm_owner',
   'bili_journal_write', 'bili_journal_read',
 ]
 
@@ -44,6 +44,12 @@ describe('tool-bili', () => {
       expect(schemas.find(schema => schema.name === name)!.description).toContain('Never reveal anything about the owner.')
     }
     expect(schemas.find(schema => schema.name === 'bili_video')!.description).toContain('never claim you watched or heard it')
+    expect(schemas.find(schema => schema.name === 'bili_dm_owner')!.description).toContain('Your final answer already reaches the owner as a Bilibili message from your account')
+    expect(schemas.find(schema => schema.name === 'bili_coin')!.description).toContain('give them only to a video you genuinely love')
+    expect(schemas.find(schema => schema.name === 'bili_coin')!.description).toContain('There is no daily limit')
+    expect(schemas.find(schema => schema.name === 'bili_triple')!.description).toContain('The strongest appreciation you can give')
+    const coin = schemas.find(schema => schema.name === 'bili_coin')!.parameters as { properties: Record<string, { enum?: unknown }> }
+    expect(coin.properties['count']!.enum).toEqual([1, 2])
   })
 
   it('wraps Bilibili content as untrusted data that cannot close its block, and caps its length', async () => {
@@ -77,6 +83,9 @@ describe('tool-bili', () => {
       dmOwner: vi.fn(() => Promise.resolve({ outcome: 'uncertain', detail: 'the outcome is unknown' })),
       watchLater: vi.fn(() => Promise.resolve({ outcome: 'sent', detail: 'watchlater sent' })),
       follow: vi.fn(() => Promise.reject(new Error('boom'))),
+      coin: vi.fn(() => Promise.resolve({ outcome: 'refused', detail: 'the account has 0 coins; this needs 2 (about one comes each day from signing in)' })),
+      triple: vi.fn(() => Promise.resolve({ outcome: 'sent', detail: 'liked, gave 2 coins, saved to the default folder' })),
+      dmReply: vi.fn(),
     }
     const { call } = await mount(outcomes)
     expect((await call('bili_like', { bvid: 'BV1aa4y1X7aa' })).value).toEqual({ outcome: 'sent', detail: 'like sent' })
@@ -89,6 +98,13 @@ describe('tool-bili', () => {
     expect(outcomes.favorite).toHaveBeenCalledWith('BV1aa4y1X7aa', { remove: true, folderId: 1002 })
     expect(outcomes.dmOwner).toHaveBeenCalledWith('看这个')
     expect(outcomes.watchLater).toHaveBeenCalledWith('BV1aa4y1X7aa', true)
+    expect((await call('bili_coin', { bvid: 'BV1aa4y1X7aa' })).value).toMatchObject({ outcome: 'refused' })
+    expect(outcomes.coin).toHaveBeenCalledWith('BV1aa4y1X7aa', undefined)
+    await call('bili_coin', { bvid: 'BV1aa4y1X7aa', count: 1 })
+    expect(outcomes.coin).toHaveBeenLastCalledWith('BV1aa4y1X7aa', 1)
+    expect((await call('bili_coin', { bvid: 'BV1aa4y1X7aa', count: 3 })).value).toBeUndefined()
+    expect((await call('bili_triple', { bvid: 'BV1aa4y1X7aa' })).value).toEqual({ outcome: 'sent', detail: 'liked, gave 2 coins, saved to the default folder' })
+    expect(outcomes.triple).toHaveBeenCalledWith('BV1aa4y1X7aa')
   })
 
   it('lets the registry refuse calls without required arguments', async () => {

@@ -52,6 +52,10 @@ export function fakeSessions() {
     prompts: [] as SessionPromptRequest[],
     live: new Set<string>(),
     status: new Map<string, string>(),
+    /** The model route of each Session's last request. */
+    headers: new Map<string, { provider: string; model: string }>(),
+    /** An explicit model pick not yet used, per Session. */
+    picks: new Map<string, { provider: string; model: string }>(),
   }
   const controller = {
     create: (request: SessionCreateRequest) => {
@@ -61,7 +65,13 @@ export function fakeSessions() {
       return Promise.resolve({ sessionId })
     },
     resolveAgent: (sessionId: string) => Promise.resolve(state.live.has(sessionId)
-      ? { agent: { session: { id: sessionId }, status: state.status.get(sessionId) ?? 'idle' } }
+      ? { agent: {
+        session: {
+          id: sessionId,
+          requestHeader: () => { const config = state.headers.get(sessionId); return config === undefined ? undefined : { config } },
+        },
+        status: state.status.get(sessionId) ?? 'idle',
+      } }
       : { error: Object.assign(new Error(`session/not-found: ${sessionId}`), { code: 'session/not-found' }) }),
     prompt: (request: SessionPromptRequest) => {
       state.prompts.push(request)
@@ -95,6 +105,8 @@ export interface HarnessOptions {
   sessions?: ReturnType<typeof fakeSessions>
   notes?: LsyNote[]
   workspace?: string
+  /** The profile default model route, read on every call. */
+  defaultModel?: { provider: string; model: string }
 }
 
 /**
@@ -129,6 +141,13 @@ export async function harness(options: HarnessOptions = {}) {
   ctx.provide('sessionTitle', titles as never)
   const notes = options.notes ?? []
   ctx.provide('lsyNotifier', { send: (note: LsyNote) => { notes.push(note); return Promise.resolve() } } as never)
+  if (options.defaultModel !== undefined) {
+    const defaultModel = options.defaultModel
+    ctx.provide('agentDefaultModel', { currentSelection: () => ({ ...defaultModel }) } as never)
+  }
+  ctx.provide('sessionProjections', {
+    stateOf: (session: { id: string }, key: string) => (key === 'modelSelection' ? { lastUsed: null, pending: sessions.state.picks.get(session.id) ?? null } : undefined),
+  } as never)
   const routes: Route[] = []
   ctx.provide('connection', { fetch: { register: (route: Route) => { routes.push(route); return () => Promise.resolve() } } } as never)
   const config = Config({

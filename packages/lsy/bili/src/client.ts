@@ -26,6 +26,15 @@ export const COOKIE_HOSTS: ReadonlySet<string> = new Set(['api.bilibili.com', 'a
 export const RISK_CODES: ReadonlySet<number> = new Set([-352, -412, -509, -799, 10031, 12015, 21020, 21046])
 /** Message words Bilibili uses for challenges and risk control. */
 const RISK_WORDS = /captcha|验证码|风控|账号异常/i
+/**
+ * JSON codes that mean the account must bind or verify a phone number, or
+ * verify its real name, before this write: -108, -110, -114 (no phone bound),
+ * -113, -115 (no real-name verification), 21015 (messages need a bound phone),
+ * 4126021 (dynamics need a bound phone). They are refusals, not risk control.
+ */
+export const VERIFY_CODES: ReadonlySet<number> = new Set([-108, -110, -113, -114, -115, 21015, 4126021])
+/** Message words of the same demand when the code is not one of {@link VERIFY_CODES}; `验证码` (captcha) is risk control. */
+const VERIFY_WORDS = /手机|绑定|实名|验证(?!码)/
 /** Largest response body read. */
 const MAX_BODY_BYTES = 4 * 1024 * 1024
 /** WBI keys rotate daily; a cached pair is used for at most this long. */
@@ -63,6 +72,22 @@ export class BiliApiError extends Error {
   constructor(readonly endpoint: EndpointName, readonly code: number, readonly detail: string, readonly data?: unknown) {
     super(`${endpoint}: code ${code}${detail === '' ? '' : ` (${detail})`}`)
     this.name = 'BiliApiError'
+  }
+}
+
+/**
+ * Bilibili refused a write until the account binds or verifies a phone number
+ * (or verifies its real name). Nothing happened; it is not risk control.
+ */
+export class BiliVerifyError extends BiliApiError {
+  /**
+   * @param endpoint - allowlist entry name.
+   * @param code - the JSON `code`.
+   * @param detail - the JSON `message`, bounded.
+   */
+  constructor(endpoint: EndpointName, code: number, detail: string) {
+    super(endpoint, code, detail)
+    this.name = 'BiliVerifyError'
   }
 }
 
@@ -349,6 +374,7 @@ export class BiliClient {
     const message = messageText(json['message'] ?? json['msg'])
     if (typeof (data as { v_voucher?: unknown } | undefined)?.v_voucher === 'string') return this.risk(name, entry, `captcha (code ${json.code})`)
     if (RISK_CODES.has(json.code)) return this.risk(name, entry, `code ${json.code}`)
+    if (VERIFY_CODES.has(json.code) || (json.code !== 0 && VERIFY_WORDS.test(message))) throw new BiliVerifyError(name, json.code, message)
     if (json.code !== 0 && RISK_WORDS.test(message)) return this.risk(name, entry, `code ${json.code}, challenge`)
     if (json.code !== 0) throw new BiliApiError(name, json.code, message, data)
     return { data, body: json, setCookies }
