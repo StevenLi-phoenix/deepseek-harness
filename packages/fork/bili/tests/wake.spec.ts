@@ -110,6 +110,8 @@ describe('body clock', () => {
     await vi.advanceTimersByTimeAsync(Date.parse('2026-10-23T17:00:05Z') - Date.now())
     expect(sessions.state.prompts).toEqual([])
     expect(h.logs.some(line => line.text === 'bili: body-clock wake skipped: no active account')).toBe(true)
+    // A wake that found no account did not happen: the page must not say it woke.
+    expect((await h.view()).clock.today[0]).toMatchObject({ window: '12:00–14:00', state: 'missed' })
     await h.signIn()
     // The evening wake creates the Session, finds it running a turn, and leaves it alone.
     sessions.state.status.set('bili-1', 'running')
