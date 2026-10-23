@@ -22,6 +22,18 @@
     },
     {
       "path": "../../subprocess/subprocess"
+    },
+    {
+      "path": "../../api/session-controller/tsconfig.host.json"
+    },
+    {
+      "path": "../../core/session"
+    },
+    {
+      "path": "../../session/session-persistence"
+    },
+    {
+      "path": "../../storage/storage-domain"
     }
   ]
 }
