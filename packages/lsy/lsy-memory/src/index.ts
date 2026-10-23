@@ -81,7 +81,6 @@ const CATEGORY_HELP = 'instructions: how the owner wants you to work; preference
 /** Whether the memory message is part of what the model currently sees. */
 function memoryVisible(session: Session): boolean {
   for (const seq of session.surface.nodes) {
-    // oxlint-disable-next-line typescript/no-deprecated -- Same Session history read as agent-instructions.
     const event = session.eventAt(seq)
     if (event?.type === 'user/message' && event.data.source.kind === name) return true
   }
