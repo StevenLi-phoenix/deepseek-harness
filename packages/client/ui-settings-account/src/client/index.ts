@@ -35,6 +35,7 @@ export type { AccountSectionInjected, AccountSectionProps } from './AccountSecti
 export type { AccountMenuProps } from './AccountMenu.tsx'
 export type { AccountSnapshot } from './AccountSection.tsx'
 export type { AccountKey } from './locales.ts'
+export type { AccountBalancesOwnerProps } from './slot-contract.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap { 'settings.account': AccountKey }
@@ -321,6 +322,7 @@ export function apply(ctx: Context): void {
         unregister ??= ctx.slots.register({
           name: 'settings.section', id: 'account', order: -10, label: () => t('nav'),
           locale: 'settings.account', inject: () => operations,
+          children: { 'settings.account.balances': { kind: 'list', scope: 'root' } },
         }, AccountSection)
       } else {
         unregister?.()

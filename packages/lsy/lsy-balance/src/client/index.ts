@@ -1,35 +1,35 @@
 /**
- * Balance pill plugin, browser half: one `conversation.composer.dock` entry
- * after the activity and usage pills, showing the DeepSeek account balance
- * the Host reads for the Account settings page (`account.getBalance`) and the
- * provider-key readings of this package's Host route (`api/lsy.balance`).
+ * Provider balances plugin, browser half: one entry in the Account settings
+ * page's `settings.account.balances` area, under the DeepSeek account card,
+ * listing the provider-key readings of this package's Host route
+ * (`api/lsy.balance`). The account balance (`account.getBalance`) is read
+ * only to leave out a DeepSeek API key that belongs to the same account.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: pulls the ctx.remote merge (the account namespace) into this program.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-// Type-only: pulls the ui-conversation SlotMap merge (the composer dock).
-import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+// Type-only: pulls the Account page's SlotMap merge (the balances area).
+import type {} from '@deepseek-ai/dsh-client-ui-settings-account/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { AccountClientMetadata } from '@deepseek-ai/dsh-deepseek-account/types'
 import { BALANCE_ROUTE, type BalanceRouteBody, type ProviderReading } from '../readings.ts'
 import { BalanceLoader, createBalanceStore } from './balance.ts'
-import { BalancePill, type BalancePillInjected } from './BalancePill.tsx'
+import { ProviderBalances, type ProviderBalancesInjected } from './ProviderBalances.tsx'
 import { en, zh } from './locales.ts'
 
-export type { BalancePillInjected, BalancePillProps } from './BalancePill.tsx'
+export type { ProviderBalancesInjected, ProviderBalancesProps } from './ProviderBalances.tsx'
 export type { BalanceKey } from './locales.ts'
 
 /** Dictionary namespace owned by this plugin. */
 const NS = 'lsy.balance'
 
-/** Required services: the dock's slot registry, locale, and the account Remote. */
+/** Required services: the slot registry, locale, and the account Remote. */
 export const inject = ['slots', 'locale', 'remote', 'remote.account']
 
 /**
- * Register the dictionaries and the dock entry over one shared store, so every
- * open composer shows the same reading from one request.
+ * Register the dictionaries and the Account page entry over one shared store.
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
@@ -57,12 +57,11 @@ export function apply(ctx: ClientContext): void {
     // The Host half of this package wrote the body; its shape is this package's own contract.
     return readings as readonly ProviderReading[]
   })
-  const injected = (): BalancePillInjected => ({
+  const injected = (): ProviderBalancesInjected => ({
     hooks: { balance: store },
     refresh: (maxAgeMs) => { void loader.refresh(maxAgeMs) },
   })
-  // After ui-chat's activity (0) and usage (1) pills.
-  ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
-    name: 'conversation.composer.dock', id: 'balance', order: 2, locale: NS, inject: injected,
-  }, BalancePill))
+  ctx.slots.inject('settings.account.balances', () => ctx.slots.register({
+    name: 'settings.account.balances', id: 'lsy-provider-balances', order: 0, locale: NS, inject: injected,
+  }, ProviderBalances))
 }

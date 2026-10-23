@@ -1,5 +1,5 @@
 ---
-description: "Composer dock pill that keeps every balance in view next to the activity and usage readings: the DeepSeek account, plus OpenRouter, DeepSeek API, and OpenCode Go keys read on the Host."
+description: "Account settings card listing the balance or quota of every provider key the Host holds (OpenRouter, the DeepSeek API, OpenCode Go), under the DeepSeek account card; keys never leave the Host."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-See what every model route has left without opening Settings or a provider console. Under the composer, after the activity and usage readings, the pill shows one labelled segment per source: `DeepSeek ¥12.34 · OpenRouter $7.50 · OpenCode Go 34%`. Hovering explains each segment and when it was read. A segment with nothing left turns red, an unreadable one dims, and the pill refreshes on click, on window focus, and every two minutes while the page is visible.
+See what every model route has left on the page where the DeepSeek account balance already lives. Under the account card in **Settings → Account and balance**, one card lists each provider key the Host holds: what an OpenRouter key has left under its limit, a DeepSeek API key's wallets, and OpenCode Go's quota windows as bars. A route with nothing left turns red; one that could not be read says why. The card reads when the page opens and on Refresh.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ See what every model route has left without opening Settings or a provider conso
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount the row next to the Web bundles; the lsy event bundle mounts it. The Host must serve the `account` Remote (`@deepseek-ai/dsh-api-account-controller` over a DeepSeek account provider) and the `credentials` and `connection` services, which the Web bundles already compose.
+Mount the row next to the Web bundles; the lsy event bundle mounts it. It needs the Account settings page (`@deepseek-ai/dsh-client-ui-settings-account`, which declares the `settings.account.balances` area) and, on the Host, the `account` Remote and the `credentials` and `connection` services, all of which the Web bundles compose.
 
 ```yaml
 - id: lsy-balance
@@ -35,10 +35,10 @@ Mount the row next to the Web bundles; the lsy event bundle mounts it. The Host 
 | Field | Default | Meaning |
 |---|---|---|
 | `sources` | OpenRouter (`OPENROUTER_API_KEY`), DeepSeek API (`DEEPSEEK_API_KEY`), OpenCode Go (`OPENCODE_GO_API_KEY`) | Keys to read: `kind` (`openrouter`, `deepseek`, `opencode-go`), `keyRef` (the credential reference, the Models page's `apiKeyEnv`), and `label`. A source whose key is unset is skipped |
-| `cacheMs` | `60000` | How long the Host serves an answer from cache; a click bypasses it at most every 10 s |
+| `cacheMs` | `60000` | How long the Host serves an answer from cache; Refresh bypasses it at most every 10 s |
 | `timeoutMs` | `15000` | Deadline of one provider request |
 
-The DeepSeek account shows topped-up plus granted credit, an OpenRouter key what is left under its limit, a DeepSeek API key its wallets, and OpenCode Go its most-used quota window. Amounts follow the Account settings page: two decimals rounded down, `<¥0.01` below one cent. A DeepSeek API reading equal to the signed-in account's is not shown twice.
+Amounts follow the Account page: two decimals rounded down, `<¥0.01` below one cent. A DeepSeek API key that reports the same funded amounts as the signed-in account is left out, since the account card above already shows them. With no key configured the card does not render.
 
 -----
 
@@ -50,17 +50,17 @@ The DeepSeek account shows topped-up plus granted credit, an OpenRouter key what
 
 The Host half registers `GET /api/lsy.balance` on the connection, so the `/api` sign-in check guards it. For each configured source it resolves the key through `credentials.resolve()`, sends it only to that provider's endpoint (`openrouter.ai/api/v1/key`, `api.deepseek.com/user/balance`, `opencode.ai/inference/go/v1/usage`), and answers readings without the key; failures are fixed phrases such as `HTTP 401`, never a response body. Answers are cached for `cacheMs` and shared while in flight; a missing key is logged once.
 
-The browser half registers one `conversation.composer.dock` entry (`id: balance`, `order: 2`, after ui-chat's `activity` and `usage` pills) through `ctx.slots.inject`, so it follows the dock declaration's lifetime. One store and one `BalanceLoader` serve every open composer. Each round calls `account.getBalance` with the client identity the Account settings page sends and fetches the document-relative `api/lsy.balance` (`?fresh=1` for a click); it shares a round in flight and skips one when an answer settled within the caller's accepted age: two minutes for a mount or the timer, thirty seconds for a returning window, none for a click. A `null` account answer means signed out; a failed one keeps the last good wallets, and a failed route keeps the last readings. Account amounts are decimal strings summed with `big.js`, so nothing passes through floating point.
+The browser half registers one entry (`lsy-provider-balances`) in the Account page's `settings.account.balances` area through `ctx.slots.inject`, so it follows that declaration's lifetime. One store and one `BalanceLoader` serve it. Each round fetches the document-relative `api/lsy.balance` (`?fresh=1` for Refresh) and calls `account.getBalance` with the Account page's client identity, only to recognize a DeepSeek API key of the same account; a round in flight is shared, and opening the page accepts a reading up to 30 seconds old. A failed route keeps the last readings.
 
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Host half: configuration, the cached `/api/lsy.balance` route |
 | [`src/sources.ts`](src/sources.ts) | Per-provider queries and response parsing |
 | [`src/readings.ts`](src/readings.ts) | Reading types and the route path, shared by both halves |
-| [`src/client/index.ts`](src/client/index.ts) | Browser entry: dictionaries, the loader over the account Remote and the route, the dock registration |
+| [`src/client/index.ts`](src/client/index.ts) | Browser entry: dictionaries, the loader, the Account page registration |
 | [`src/client/balance.ts`](src/client/balance.ts) | Wallet summary, amount formatting, store factory, loader |
-| [`src/client/segments.ts`](src/client/segments.ts) | Segments and tooltip lines from the store state |
-| [`src/client/BalancePill.tsx`](src/client/BalancePill.tsx) | The pill and its refresh triggers |
+| [`src/client/rows.ts`](src/client/rows.ts) | Card rows and the freshness line from the store state |
+| [`src/client/ProviderBalances.tsx`](src/client/ProviderBalances.tsx) | The card |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 
@@ -71,15 +71,15 @@ This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 <a id="further-exploration"></a>
 ## Further Exploration
 
-- [Account settings](../../client/ui-settings-account/README.md) — the page whose balance query this pill shares
-- [Platform account provider](../../credentials/deepseek-account-platform/README.md) — where the Host reads the wallets
+- [Account settings](../../client/ui-settings-account/README.md) — the page and the `settings.account.balances` area this card fills
+- [Platform account provider](../../credentials/deepseek-account-platform/README.md) — where the Host reads the account's wallets
 
 -----
 
 <a id="model-experience"></a>
 ## Model Experience
 
-None, as the pill is browser chrome; nothing here reaches a model request.
+None, as the card is browser chrome; nothing here reaches a model request.
 
 #### KV Cache effect
 
@@ -91,7 +91,7 @@ None; this package neither assembles nor sends a provider request.
 
 - **OpenRouter shows the key, not the account** — `/api/v1/key` reports what is left under the key's own limit; a key without a limit shows what it has used, since the account's credit needs a management key.
 - **Three providers** — other keys on the Models page have no reading until `sources.ts` learns their endpoint.
-- **Polling, not push** — spending shows up on the next refresh, at most two minutes later while the page is visible (one minute of Host cache included), or at once on click.
+- **Read on demand** — the card reads when the page opens and on Refresh, with up to a minute of Host cache.
 
 <a id="dev-note"></a>
 ### Dev Note
@@ -101,6 +101,6 @@ None; this package neither assembles nor sends a provider request.
 
 This Dev Note is non-authoritative working context: undecided directions and notes for maintainers. Shipped behavior and accepted rationale live in the sections above, the package code, and the linked Agent Notes.
 
-- A turn-end refresh would show spending sooner than the timer; it needs a Session event the dock entry can observe without reaching into ui-chat.
+- An earlier version was a composer dock pill; the owner moved it to the Account page, where balances belong.
 
 </details>

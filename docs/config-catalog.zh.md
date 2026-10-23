@@ -2210,7 +2210,7 @@ export interface BalanceSource {
   kind: BalanceSourceKind
   /** Credential reference holding the provider key (the Models page's `apiKeyEnv`). */
   keyRef: string
-  /** Name shown in the pill and its tooltip. */
+  /** Name shown on the provider's row. */
   label: string
 }
 

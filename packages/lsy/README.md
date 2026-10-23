@@ -24,7 +24,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 
 | Package | Role |
 |---|---|
-| [`lsy-balance/`](lsy-balance/README.md) | Composer dock pill with the DeepSeek account balance |
+| [`lsy-balance/`](lsy-balance/README.md) | Account settings card with the balance or quota of every provider key |
 | [`lsy-event-bus/`](lsy-event-bus/README.md) | Dedupe, loop suppression, subscriptions, coalescing, rate limits, notify and Session dispatch |
 | [`lsy-github-sensor/`](lsy-github-sensor/README.md) | Polls GitHub releases, tags, commits, and notifications with conditional requests |
 | [`lsy-tool-watch/`](lsy-tool-watch/README.md) | `watch_create`, `watch_list`, `watch_delete` tools: the agent manages its own watches |

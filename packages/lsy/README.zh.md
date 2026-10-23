@@ -24,7 +24,7 @@ kind: "package-group"
 
 | 包 | 作用 |
 |---|---|
-| [`lsy-balance/`](lsy-balance/README.zh.md) | 输入框下方统计栏里的 DeepSeek 账号余额小块 |
+| [`lsy-balance/`](lsy-balance/README.zh.md) | 账号设置页里列出各供应商 key 余额或配额的卡片 |
 | [`lsy-event-bus/`](lsy-event-bus/README.zh.md) | 去重、回环抑制、订阅、合批、限流、通知与 Session 分发 |
 | [`lsy-github-sensor/`](lsy-github-sensor/README.zh.md) | 用条件请求轮询 GitHub 的 release、tag、提交与通知 |
 | [`lsy-tool-watch/`](lsy-tool-watch/README.zh.md) | `watch_create`、`watch_list`、`watch_delete` 工具：agent 自己管理监控 |

@@ -156,6 +156,7 @@ async function bench() {
   runtime.ctx.slots.inject('settings.section', () => runtime.ctx.slots.register({
     name: 'settings.section', id: 'account', locale: 'settings.account',
     inject: () => sectionOperations(accountSnapshot.getSnapshot(), pages),
+    children: { 'settings.account.balances': { kind: 'list', scope: 'root' } },
   }, AccountSection))
   runtime.ctx.slots.inject('shell.overlay', () => runtime.ctx.slots.register({
     name: 'shell.overlay', id: 'desktop-onboarding', locale: 'settings.account',
