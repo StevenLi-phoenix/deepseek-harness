@@ -39,7 +39,7 @@ describe('pillSegments', () => {
     expect(pillSegments(state({ providers: [reading] }), t)[0]).toMatchObject({ value: '¥329.91', exhausted: false })
     expect(tooltipLines(state({ providers: [reading] }), t)[0]).toBe('DeepSeek API：充值 ¥323.91 · 赠金 ¥5.99')
     // The same account seen through Platform lists its wallets in another order and without the empty one.
-    const account = { phase: 'ready' as const, wallets: [{ currency: 'CNY' as const, total: '329.910', toppedUp: '323.91', granted: '5.99' }] }
+    const account = { phase: 'ready' as const, wallets: [{ currency: 'CNY' as const, total: '329.9142', toppedUp: '323.9242', granted: '5.99' }] }
     expect(pillSegments(state({ ...account, providers: [reading] }), t).map(segment => segment.key)).toEqual(['account'])
     const quota: ProviderReading = { source: 'opencode-go', label: 'OC', status: 'ready', kind: 'quota', windows: [{ name: 'rolling', percent: 3, resetsAt: null }] }
     expect(tooltipLines(state({ providers: [quota] }), t)[0]).toBe('OC：5 小时 3%')

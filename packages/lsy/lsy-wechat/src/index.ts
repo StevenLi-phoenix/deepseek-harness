@@ -444,7 +444,9 @@ export class WechatChannel extends Service implements LsyNotifier {
       return this.ctx.sessionController.prompt({
         requestId: randomUUID() as SessionRequestId,
         sessionId,
-        mode: 'queue',
+        // Steer, not queue: a message sent while the agent works (often a picture right after a
+        // word) joins the running turn at its next step, so the model sees it natively there.
+        mode: 'steer',
         content: [
           { type: 'text', text: note === '' ? text : `${text}\n\n${note}` },
           ...attach ? images.map(image => ({ type: 'image' as const, mediaType: image.media.mediaType, data: image.media.data.toString('base64'), name: image.media.name })) : [],

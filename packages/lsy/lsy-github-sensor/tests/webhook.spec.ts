@@ -53,6 +53,9 @@ describe('deliveryEvents', () => {
   it('names other repository events generically and drops app housekeeping and repository-less deliveries', () => {
     expect(events('star', { action: 'created' })[0]).toMatchObject({ kind: 'github.star.created', title: 'star created', url: 'https://github.com/octo/repo' })
     expect(events('ping', { zen: 'Keep it logically awesome.' })).toEqual([])
+    expect(events('workflow_job', { action: 'queued' })).toEqual([])
+    expect(events('check_suite', { action: 'requested' })).toEqual([])
+    expect(events('check_suite', { action: 'completed' })[0]).toMatchObject({ kind: 'github.check_suite.completed', title: 'check suite completed' })
     expect(deliveryEvents({ name: 'installation', payload: { action: 'created', sender } }, 'd-2', 2000)).toEqual([])
     expect(deliveryEvents({ name: 'push', payload: { ref: 'refs/heads/main' } }, 'd-3', 2000)).toEqual([])
   })
