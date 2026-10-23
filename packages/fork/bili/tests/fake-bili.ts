@@ -84,6 +84,16 @@ export class FakeBili {
   readonly confirmed: string[] = []
   /** QR poll codes, in order; the last repeats. */
   qrCodes: number[] = [86101, 86090, 0]
+  /**
+   * The account was registered overseas (the international app's Google sign-in): a confirmed QR
+   * login answers 48007 unless the request comes from the international web version (`web_i`).
+   */
+  overseas = true
+  /** Whether a confirmed QR login is refused for the version the request names. */
+  overseasRefusal(device: { mobi_app?: string }): boolean {
+    return this.overseas && device.mobi_app !== 'web_i'
+  }
+
   readonly videos = new Map<string, FakeVideo>()
   readonly comments: FakeComment[] = []
   /** The account's relation attribute to others (2 following, 6 mutual). */
@@ -195,6 +205,9 @@ export class FakeBili {
       case '/x/passport-login/web/qrcode/poll': {
         const code = this.qrCodes.length > 1 ? this.qrCodes.shift()! : this.qrCodes[0]!
         if (code !== 0) return this.ok({ url: '', refresh_token: '', timestamp: 0, code, message: '' })
+        if (this.overseasRefusal(JSON.parse(query['x-bili-device-req-json'] ?? '{}') as { mobi_app?: string })) {
+          return this.code(48007, '当前账号暂不支持在本APP登录')
+        }
         const set = this.issue()
         return this.ok({ url: 'https://passport.biligame.com/x/passport-login/web/crossDomain?ticket=game', refresh_token: this.session!.refreshToken, timestamp: Date.now(), code: 0, message: '' }, set)
       }

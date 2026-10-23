@@ -70,6 +70,34 @@ describe('QR login', () => {
     expect(h.logs.some(line => line.text === 'bili: signed in as dsh-看客 (3000001)')).toBe(true)
   })
 
+  it('signs in as the international web version, which overseas accounts need', async () => {
+    const h = await harness({ bili: fake, workspace: dir })
+    await h.signIn()
+    expect((await h.view()).account.state).toBe('active')
+    for (const path of ['/x/passport-login/web/qrcode/generate', '/x/passport-login/web/qrcode/poll']) {
+      for (const request of fake.requestsTo(path)) {
+        expect(JSON.parse(request.query['x-bili-device-req-json']!)).toEqual({ platform: 'web', device: 'pc', spmid: '333.42', mobi_app: 'web_i' })
+        expect(JSON.parse(request.query['x-bili-locale-json']!)).toEqual({ c_locale: { language: 'en' } })
+        expect(request.query['source']).toBe('main-fe-header')
+        expect(request.headers['referer']).toBe('https://www.bilibili.com/en/')
+      }
+    }
+    expect(fake.requestsTo('/x/passport-login/web/qrcode/generate')[0]!.query['go_url']).toBe('https://www.bilibili.com/en/')
+  })
+
+  it('stops at a refusal from Bilibili and shows its message instead of polling on', async () => {
+    fake.qrCodes = [86090, 0]
+    const h = await harness({ bili: fake, workspace: dir })
+    vi.spyOn(fake, 'overseasRefusal').mockReturnValue(true)
+    await h.post({ action: 'login' })
+    await vi.advanceTimersByTimeAsync(10_000)
+    const polls = fake.requestsTo('/x/passport-login/web/qrcode/poll').length
+    expect((await h.view()).login).toEqual({ state: 'failed', error: 'B站拒绝了这次登录：当前账号暂不支持在本APP登录（48007）' })
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(fake.requestsTo('/x/passport-login/web/qrcode/poll')).toHaveLength(polls)
+    expect(h.logs.filter(line => line.text.startsWith('bili: Bilibili refused the QR login: code 48007'))).toHaveLength(1)
+  })
+
   it('reports an expired QR code and starts a fresh one on request', async () => {
     fake.qrCodes = [86101, 86038]
     const h = await harness({ bili: fake, workspace: dir })

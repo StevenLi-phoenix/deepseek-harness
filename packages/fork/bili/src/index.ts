@@ -621,7 +621,15 @@ export class BiliAccount extends Service {
     try {
       poll = await pollQr(this.client, attempt.key)
     } catch (error: unknown) {
-      this.ctx.logger.warn(`bili: QR poll failed: ${errorText(error)}`)
+      // A business code or risk control is Bilibili's answer about this login: polling on repeats it.
+      if (error instanceof BiliApiError || error instanceof BiliRiskError) {
+        if (this.login !== attempt) return
+        const said = error instanceof BiliApiError ? `${error.detail === '' ? '未知原因' : error.detail}（${error.code}）` : `风控（${error.reason}）`
+        attempt.view = { state: 'failed', error: `B站拒绝了这次登录：${said}` }
+        this.ctx.logger.warn(`bili: Bilibili refused the QR login: ${error instanceof BiliApiError ? `code ${error.code} (${error.detail})` : error.reason}`)
+        return
+      }
+      this.ctx.logger.warn(`bili: QR poll failed: ${errorText(error)}; trying again`)
       this.after(QR_POLL_MS, () => this.pollLogin(attempt))
       return
     }
