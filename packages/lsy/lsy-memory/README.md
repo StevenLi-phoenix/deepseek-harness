@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The agent remembers the owner across Sessions. The Host keeps entries in `<DSH_HOME>/lsy-memory/memory.jsonl` and puts them in front of the model itself: the first request of every root Session, and the first after compaction hides the earlier copy, carries a memory block with the owner's instructions and preferences in full and every other entry by its opening words. The agent reads full entries with `memory_search` and keeps memory current with `memory_save` and `memory_forget`. Entries use the categories of claude.ai's memory export, so an export imports as it is.
+The agent remembers the owner across Sessions. The Host keeps entries in `<DSH_HOME>/lsy-memory/memory.jsonl` and puts them in front of the model itself: the first request of every root Session, and the first after compaction, carries a memory block with instructions and preferences in full, career and project entries by their opening words, and only the number of identity entries, so details about people and accounts leave the Host only when a search asks for them. The agent reads entries with `memory_search` and writes with `memory_save` and `memory_forget`. claude.ai memory exports import as they are.
 
 ## Table of Contents
 
@@ -43,7 +43,7 @@ Each entry is one line of text with an id, a category, and the date of its last 
 |---|---|---|
 | `instructions` | full text | How the owner wants the agent to work |
 | `preferences` | full text | Tastes, opinions, style |
-| `identity` | opening words | Who the owner is: people, school, accounts |
+| `identity` | count only | Who the owner is: people, family, school, accounts |
 | `career` | opening words | Jobs and applications |
 | `projects` | opening words | What the owner builds or researches |
 
@@ -98,11 +98,11 @@ This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 
 #### What the model sees
 
-One user-role message per root Session, inside `<system-reminder>`: three lines saying to follow the instructions and preferences, to call `memory_search` before relying on an entry shown by its opening words or whenever the owner's background may matter (searching in Chinese and English), and to call `memory_save` or `memory_forget` in the same turn when the owner asks to remember, correct, or forget something. Then `## Instructions` and `## Preferences` as `- [date] (id) text` lines, and `## Identity`, `## Career`, `## Projects` as `- id · <first 80 characters>…` lines, ending with `(N more entries did not fit; memory_search finds them.)` when the budget runs out.
+One user-role message per root Session, inside `<system-reminder>`: three lines saying to follow the instructions and preferences, to call `memory_search` before relying on an entry that is shown by its opening words or only counted, or whenever the owner's background may matter (searching in Chinese and English), and to call `memory_save` or `memory_forget` in the same turn when the owner asks to remember, correct, or forget something. Then `## Instructions` and `## Preferences` as `- [date] (id) text` lines, `## Identity` as `N entries, not listed; memory_search finds them.`, and `## Career`, `## Projects` as `- id · <first 80 characters>…` lines, ending with `(N more entries did not fit; memory_search finds them.)` when the budget runs out.
 
 #### Token effect
 
-The block's size, at most `maxBytes`, once per root Session and again after each compaction; the owner's 180-entry claude.ai export renders to about 30 KB. Subagents pay nothing.
+The block's size, at most `maxBytes`, once per root Session and again after each compaction; the owner's memory (170 entries) renders to about 24 KB. Subagents pay nothing.
 
 #### KV Cache effect
 
@@ -127,7 +127,7 @@ Prefix-stable while tool definitions are unchanged; results are appended after t
 <a id="known-limitations-and-deferred-work"></a>
 
 - **Substring search** — no embeddings or synonyms; a Chinese term does not find an English entry, so the block tells the model to search in both languages.
-- **Recall of indexed entries is the model's choice** — instructions and preferences always arrive; details of other entries arrive only when the model searches.
+- **Recall of other entries is the model's choice** — instructions and preferences always arrive; details of career, project, and identity entries arrive only when the model searches.
 - **One owner, one file** — every Session under the preset shares the same memory.
 
 <a id="dev-note"></a>

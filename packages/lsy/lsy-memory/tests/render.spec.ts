@@ -9,23 +9,29 @@ describe('renderMemoryBlock', () => {
     expect(renderMemoryBlock([], 65_536)).toBeUndefined()
   })
 
-  it('carries instructions and preferences in full and indexes the rest by opening words', () => {
+  it('carries instructions and preferences in full, career and projects by opening words, identity as a count', () => {
     const long = `${'长'.repeat(85)}尾巴`
     const text = renderMemoryBlock([
       entry('aaaaaa', 'projects', 'INKFISH P0 — simulation'),
       entry('bbbbbb', 'instructions', 'Search before claiming'),
-      entry('cccccc', 'identity', long),
+      entry('cccccc', 'career', long),
       entry('dddddd', 'preferences', 'Dense Markdown'),
+      entry('eeeeee', 'identity', 'Father 某某 (someone@example.com)'),
+      entry('ffffff', 'identity', 'Roommate 某某'),
     ], 65_536) ?? ''
     expect(text.startsWith('<system-reminder>\nYour memory of the owner')).toBe(true)
     expect(text.endsWith('</system-reminder>')).toBe(true)
     expect(text).toContain('## Instructions\n- [2026-10-20] (bbbbbb) Search before claiming')
     expect(text).toContain('## Preferences\n- [2026-10-20] (dddddd) Dense Markdown')
-    expect(text).toContain(`## Identity (opening words; memory_search for details)\n- cccccc · ${'长'.repeat(80)}…`)
+    expect(text).toContain(`## Career (opening words; memory_search for details)\n- cccccc · ${'长'.repeat(80)}…`)
     expect(text).not.toContain('尾巴')
+    expect(text).toContain('## Identity\n2 entries, not listed; memory_search finds them.')
+    expect(text).not.toContain('某某')
+    expect(text).not.toContain('eeeeee')
     expect(text.indexOf('## Instructions')).toBeLessThan(text.indexOf('## Preferences'))
     expect(text.indexOf('## Preferences')).toBeLessThan(text.indexOf('## Identity'))
-    expect(text.indexOf('## Identity')).toBeLessThan(text.indexOf('## Projects'))
+    expect(text.indexOf('## Identity')).toBeLessThan(text.indexOf('## Career'))
+    expect(text.indexOf('## Career')).toBeLessThan(text.indexOf('## Projects'))
   })
 
   it('escapes a closing tag inside an entry', () => {

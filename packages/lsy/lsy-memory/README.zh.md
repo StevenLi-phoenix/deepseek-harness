@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-让 agent 跨 Session 记住主人。Host 把条目保存在 `<DSH_HOME>/lsy-memory/memory.jsonl`，并由自己放到模型面前：每个根 Session 的第一个请求，以及压缩隐去先前副本后的第一个请求，都会带上一个记忆块，其中主人的指令和偏好是全文，其余条目只列开头几个字。agent 用 `memory_search` 读取完整条目，用 `memory_save` 和 `memory_forget` 让记忆保持最新。条目采用 claude.ai 记忆导出的分类，所以导出文件可以原样导入。
+让 agent 跨 Session 记住主人。Host 把条目保存在 `<DSH_HOME>/lsy-memory/memory.jsonl`，并由自己放到模型面前：每个根 Session 的第一个请求以及压缩后的第一个请求都会带上记忆块，其中指令和偏好是全文，职业和项目条目只列开头几个字，身份条目只给数量，因此关于人物和账号的细节只在搜索时才离开 Host。agent 用 `memory_search` 读取条目，用 `memory_save` 和 `memory_forget` 写入。claude.ai 的记忆导出可以原样导入。
 
 ## 目录
 
@@ -43,7 +43,7 @@ kind: "package-reference"
 |---|---|---|
 | `instructions` | 全文 | 主人希望 agent 怎么做事 |
 | `preferences` | 全文 | 口味、观点、风格 |
-| `identity` | 开头几个字 | 主人是谁：人物、学校、账号 |
+| `identity` | 只给数量 | 主人是谁：人物、家人、学校、账号 |
 | `career` | 开头几个字 | 工作与求职 |
 | `projects` | 开头几个字 | 主人在做或在研究的东西 |
 
@@ -98,11 +98,11 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 
 #### 模型看到的内容
 
-每个根 Session 一条 user 角色消息，包在 `<system-reminder>` 中：三行说明，要求遵循指令和偏好；在依赖只列开头的条目之前，或主人的背景可能相关时，调用 `memory_search`（中英文都搜）；主人要求记住、更正或忘掉某事时，在同一轮调用 `memory_save` 或 `memory_forget`。随后是 `## Instructions` 和 `## Preferences`，格式为 `- [date] (id) text`；`## Identity`、`## Career`、`## Projects` 的格式为 `- id · <前 80 个字符>…`；预算用完时以 `(N more entries did not fit; memory_search finds them.)` 结尾。
+每个根 Session 一条 user 角色消息，包在 `<system-reminder>` 中：三行说明，要求遵循指令和偏好；在依赖只列开头或只给数量的条目之前，或主人的背景可能相关时，调用 `memory_search`（中英文都搜）；主人要求记住、更正或忘掉某事时，在同一轮调用 `memory_save` 或 `memory_forget`。随后是 `## Instructions` 和 `## Preferences`，格式为 `- [date] (id) text`；`## Identity` 只有一行 `N entries, not listed; memory_search finds them.`；`## Career`、`## Projects` 的格式为 `- id · <前 80 个字符>…`；预算用完时以 `(N more entries did not fit; memory_search finds them.)` 结尾。
 
 #### Token 影响
 
-记忆块的大小，最多 `maxBytes`，每个根 Session 一次，每次压缩后再一次；主人 180 条的 claude.ai 导出渲染后约 30 KB。subagent 不承担。
+记忆块的大小，最多 `maxBytes`，每个根 Session 一次，每次压缩后再一次；主人的记忆（170 条）渲染后约 24 KB。subagent 不承担。
 
 #### KV Cache 影响
 
@@ -127,7 +127,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 <a id="known-limitations-and-deferred-work"></a>
 
 - **子串搜索**——没有 embedding 或同义词；中文词找不到英文条目，所以记忆块要求模型中英文都搜。
-- **只列开头的条目由模型决定是否回忆**——指令和偏好总会送达；其他条目的细节只在模型搜索时才出现。
+- **其他条目由模型决定是否回忆**——指令和偏好总会送达；职业、项目和身份条目的细节只在模型搜索时才出现。
 - **一个主人，一个文件**——该 preset 下的所有 Session 共享同一份记忆。
 
 <a id="dev-note"></a>

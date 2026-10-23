@@ -9,8 +9,18 @@ export const CATEGORIES = ['instructions', 'preferences', 'identity', 'career', 
 /** One memory category. */
 export type MemoryCategory = typeof CATEGORIES[number]
 
-/** Categories whose entries the context block carries in full; the rest are listed by opening words. */
-export const FULL_TEXT_CATEGORIES: ReadonlySet<MemoryCategory> = new Set(['instructions', 'preferences'])
+/**
+ * How the context block shows each category: `full` text, `opening` words only, or
+ * just a `count`. Identity entries (people, family, accounts) stay out of every request
+ * until a search asks for them.
+ */
+export const CATEGORY_DISPLAY: Readonly<Record<MemoryCategory, 'full' | 'opening' | 'count'>> = {
+  instructions: 'full',
+  preferences: 'full',
+  identity: 'count',
+  career: 'opening',
+  projects: 'opening',
+}
 
 /** One stored memory. */
 export interface MemoryEntry {

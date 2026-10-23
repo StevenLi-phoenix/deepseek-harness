@@ -191,7 +191,7 @@ Verify on the App's **Advanced** page: the `ping` delivery shows `202`, and `std
 
 ## 12. Import memory (optional)
 
-The agent remembers the owner in `/Users/dsh-runtime/.dsh/lsy-memory/memory.jsonl` (600): instructions and preferences reach every new Session in full, other entries by their opening words, and the agent saves and corrects entries itself ([`lsy-memory`](../../packages/lsy/lsy-memory/README.md)). To start from a claude.ai memory export, pipe it to the importer as the service user; it keeps the export's dates, skips entries already present, and prints counts only:
+The agent remembers the owner in `/Users/dsh-runtime/.dsh/lsy-memory/memory.jsonl` (600): instructions and preferences reach every new Session in full, career and project entries by their opening words, identity entries only as a count, and the agent saves and corrects entries itself ([`lsy-memory`](../../packages/lsy/lsy-memory/README.md)). To start from a claude.ai memory export, pipe it to the importer as the service user; it keeps the export's dates, skips entries already present, and prints counts only:
 
 ```sh
 sudo -n -u dsh-runtime /usr/bin/env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node /Users/Shared/lsy-dsh/current/lsy/deploy/memory-import.mjs < ~/Downloads/memory.md
