@@ -76,6 +76,9 @@ export function ProviderBalances({ useBalance, refresh, t }: ProviderBalancesPro
                       aria-valuemin={0}
                       aria-valuemax={100}
                       aria-valuenow={Math.round(window.percent)}
+                      aria-valuetext={window.resets === null
+                        ? `${Math.round(window.percent)}%`
+                        : t('window.resets', { percent: `${Math.round(window.percent)}%`, time: window.resets })}
                     >
                       <span
                         className={window.percent >= 100 ? `${css.fill} ${css.full}` : window.percent >= 80 ? `${css.fill} ${css.high}` : css.fill}
@@ -83,6 +86,7 @@ export function ProviderBalances({ useBalance, refresh, t }: ProviderBalancesPro
                       />
                     </span>
                     <span className={css.windowValue}>{`${Math.round(window.percent)}%`}</span>
+                    <span className={css.windowReset} data-window-reset="">{window.resets ?? ''}</span>
                   </div>
                 ))}
               </div>

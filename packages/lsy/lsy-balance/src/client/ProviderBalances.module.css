@@ -34,7 +34,8 @@
 .status,
 .detail,
 .windowLabel,
-.windowValue {
+.windowValue,
+.windowReset {
   color: var(--dsw-alias-label-tertiary);
 }
 
@@ -95,16 +96,21 @@
 
 .window {
   display: grid;
-  grid-template-columns: 56px 1fr 40px;
+  grid-template-columns: 56px 1fr 40px 80px;
   align-items: center;
   gap: 10px;
   font-size: 12px;
   line-height: 18px;
 }
 
-.windowValue {
+.windowValue,
+.windowReset {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.windowReset {
+  white-space: nowrap;
 }
 
 .track {

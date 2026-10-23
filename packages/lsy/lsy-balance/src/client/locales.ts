@@ -17,6 +17,9 @@ export const zh = {
   'window.fiveHour': '5 小时',
   'window.weekly': '每周',
   'window.monthly': '每月',
+  'window.resets': '{percent}，{time} 重置',
+  'reset.today': '今天 {time}',
+  'reset.tomorrow': '明天 {time}',
 } satisfies Record<string, string>
 
 /** The balance namespace key union. */
@@ -46,4 +49,7 @@ export const en: Record<BalanceKey, string> = {
   'window.fiveHour': '5-hour',
   'window.weekly': 'Weekly',
   'window.monthly': 'Monthly',
+  'window.resets': '{percent}, resets {time}',
+  'reset.today': 'today {time}',
+  'reset.tomorrow': 'tomorrow {time}',
 }

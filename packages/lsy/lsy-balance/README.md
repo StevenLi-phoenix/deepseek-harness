@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-See what every model route has left on the page where the DeepSeek account balance already lives. Under the account card in **Settings → Account and balance**, one card lists each provider key the Host holds: what an OpenRouter key has left under its limit, a DeepSeek API key's wallets, and OpenCode Go's quota windows as bars. A route with nothing left turns red; one that could not be read says why. The card reads when the page opens and on Refresh.
+See what every model route has left on the page where the DeepSeek account balance already lives. Under the account card in **Settings → Account and balance**, one card lists each provider key the Host holds: what an OpenRouter key has left under its limit, a DeepSeek API key's wallets, and OpenCode Go's quota windows as bars, each with its own reset time. A route with nothing left turns red; one that could not be read says why. The card reads when the page opens and on Refresh.
 
 ## Table of Contents
 

@@ -19,7 +19,9 @@ function mount(state: Partial<BalanceState>) {
 
 const OPENROUTER: ProviderReading = { source: 'openrouter', label: 'OpenRouter', status: 'ready', kind: 'credit', currency: 'USD', remaining: 7.5, limit: 10, used: 2.5 }
 const OPENCODE: ProviderReading = { source: 'opencode-go', label: 'OpenCode Go', status: 'ready', kind: 'quota', windows: [
-  { name: 'rolling', percent: 10, resetsAt: null }, { name: 'weekly', percent: 85, resetsAt: null }, { name: 'monthly', percent: 100, resetsAt: null },
+  { name: 'rolling', percent: 10, resetsAt: null },
+  { name: 'weekly', percent: 85, resetsAt: new Date(2026, 9, 25, 20, 0).toISOString() },
+  { name: 'monthly', percent: 100, resetsAt: new Date(2026, 10, 15, 13, 32).toISOString() },
 ] }
 
 afterEach(() => { cleanup() })
@@ -41,6 +43,9 @@ describe('ProviderBalances', () => {
     expect(meters[1]!.firstElementChild!.className).toMatch(/high/)
     expect(meters[2]!.firstElementChild!.className).toMatch(/full/)
     expect(document.querySelector('[data-balance-source="opencode-go"]')!.textContent).toContain('已用 100%')
+    const resets = [...document.querySelectorAll('[data-window-reset]')].map(cell => cell.textContent)
+    expect(resets).toEqual(['', '10-25 20:00', '11-15 13:32'])
+    expect(meters[2]!.getAttribute('aria-valuetext')).toBe('100%，11-15 13:32 重置')
   })
 
   it('refreshes on demand and holds the button while a read is in flight', () => {
