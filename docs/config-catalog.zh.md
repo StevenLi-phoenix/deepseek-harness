@@ -2242,7 +2242,10 @@ export interface Config {
   maxTextChars: number
   /** Send the final assistant text of each bus-started Session to the notifier. */
   notifySessionResult: boolean
-  /** Send the final assistant text of each unattended Host-schedule reminder turn to the notifier. */
+  /**
+   * Send the final assistant text of each unattended Host-schedule reminder turn, and of each
+   * turn a lsy-tool-monitor notice wakes, to the notifier.
+   */
   reportScheduledTurns: boolean
   /** Events listed in one notify message before the remainder is counted. */
   maxNoteEvents: number
@@ -2294,6 +2297,12 @@ export interface SessionAction {
   maxPromptEvents: number
   /** Maximum characters of each event's untrusted text in the prompt. */
   maxTextChars: number
+  /**
+   * The source is an authenticated owner channel (for example lsy-event-ingest's `operator`
+   * token): the prompt presents each event's `text` as the owner's request instead of
+   * untrusted data. Only set it on subscriptions whose sources no outsider can publish to.
+   */
+  trustedText?: boolean
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-event-bus -->

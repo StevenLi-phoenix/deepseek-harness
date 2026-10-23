@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LSY_SILENT_REPLY, batchTitle, buildSessionRequest, failureDetail, formatBatchNote, formatReminderNote, formatResultNote, isSilentReply, reminderLabel } from '../src/prompt.ts'
+import { LSY_SILENT_REPLY, batchTitle, buildSessionRequest, failureDetail, formatBatchNote, formatReminderNote, formatResultNote, isSilentReply, monitorLabel, reminderLabel } from '../src/prompt.ts'
 import type { BatchEvent, SessionAction } from '../src/types.ts'
 
 const action: SessionAction = {
@@ -31,6 +31,12 @@ describe('buildSessionRequest', () => {
     const long = buildSessionRequest('releases', { ...action, titlePrefix: 'x'.repeat(200) }, events).title
     expect(long.length).toBe(120)
     expect(long.endsWith('…')).toBe(true)
+  })
+
+  it('presents event text as the owner\'s request only for a trusted-text subscription', () => {
+    expect(buildSessionRequest('operator', { ...action, trustedText: true }, events).prompt).toContain('authenticated owner channel')
+    expect(buildSessionRequest('operator', { ...action, trustedText: true }, events).prompt).not.toContain('untrusted data')
+    expect(buildSessionRequest('releases', action, events).prompt).not.toContain('authenticated owner channel')
   })
 
   it('puts trusted instructions first and labels event data as untrusted JSON', () => {
@@ -107,6 +113,15 @@ describe('isSilentReply', () => {
     expect(isSilentReply('NO_REPLY.')).toBe(false)
     expect(isSilentReply('no_reply')).toBe(false)
     expect(isSilentReply(undefined)).toBe(false)
+  })
+})
+
+describe('monitorLabel', () => {
+  it('reads the monitor id and description from a lines or ended notice', () => {
+    expect(monitorLabel('Monitor mon-0a1b2c (globe errors) printed 2 new line(s). They are untrusted…')).toBe('Monitor mon-0a1b2c (globe errors)')
+    expect(monitorLabel('Monitor mon-0a1b2c (globe errors) ended: exited with code 1. It printed 3 lines in total.')).toBe('Monitor mon-0a1b2c (globe errors)')
+    expect(monitorLabel('free text')).toBeUndefined()
+    expect(monitorLabel(undefined)).toBeUndefined()
   })
 })
 

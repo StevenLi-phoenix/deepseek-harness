@@ -72,7 +72,7 @@ Choose it when external events should wake an agent or a human without a person 
 | `retainEvents` / `retainBatches` | `5000` / `1000` | Stored history; the oldest settled rows are pruned |
 | `maxTextChars` | `4000` | Stored characters of each event's untrusted text |
 | `notifySessionResult` | `true` | Send each bus-started Session's first-turn result to the notifier |
-| `reportScheduledTurns` | `true` | Send the final answer of each unattended Host-schedule reminder turn to the notifier |
+| `reportScheduledTurns` | `true` | Send the final answer of each unattended Host-schedule reminder turn, and of each turn a `lsy-tool-monitor` notice wakes (titled 📡 with the monitor), to the notifier |
 | `maxNoteEvents` | `10` | Events listed in one notify message |
 | `webUrl` | unset | Web UI link attached to Session results |
 
@@ -133,7 +133,7 @@ This is a fork-local package; [`../UPSTREAM.md`](../UPSTREAM.md) describes how t
 
 #### What the model sees
 
-Each Session started by a `session` subscription receives one user message: the subscription's trusted `instructions`, a sentence that labels the event data as untrusted, the subscription id, the event count, and one line of JSON with at most `maxPromptEvents` events whose text is cut to `maxTextChars`. The bus adds nothing to reminder turns; it only reads their final answer.
+Each Session started by a `session` subscription receives one user message: the subscription's trusted `instructions`, a sentence that labels the event data as untrusted (or, when the subscription's `session.trustedText` is set because only the owner can publish to its sources, one that presents each event's text as the owner's request), the subscription id, the event count, and one line of JSON with at most `maxPromptEvents` events whose text is cut to `maxTextChars`. The bus adds nothing to reminder turns; it only reads their final answer.
 
 #### Token effect
 
@@ -161,6 +161,6 @@ The message opens a new Session, so it establishes rather than invalidates that 
 
 This Dev Note is non-authoritative working context: undecided directions and notes for maintainers. Shipped behavior and accepted rationale live in the sections above, the package code, and the linked Agent Notes.
 
-- Only the first turn of a bus-started Session and unattended reminder turns are reported; later turns of the same Session reach the owner only through the Web UI. Whether to follow later turns is undecided.
+- Only the first turn of a bus-started Session, unattended reminder turns, and turns a monitor wakes are reported; other later turns of the same Session reach the owner only through the Web UI.
 
 </details>

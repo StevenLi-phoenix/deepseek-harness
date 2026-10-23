@@ -9,7 +9,7 @@ import type { VerifiedWebhookDelivery, WebhookDeliveryId, WebhookRule, WebhookRu
 import z from '@deepseek-ai/schemastery'
 import { z as zod } from 'zod'
 import { matchesSubscription, suppressionReason } from './match.ts'
-import { LSY_SILENT_REPLY, batchTitle, buildSessionRequest, clip, failureDetail, formatBatchNote, formatReminderNote, formatResultNote, isSilentReply, reminderLabel } from './prompt.ts'
+import { LSY_SILENT_REPLY, batchTitle, buildSessionRequest, clip, failureDetail, formatBatchNote, formatReminderNote, formatResultNote, isSilentReply, monitorLabel, reminderLabel } from './prompt.ts'
 import { busDomain, type BatchRecord, type LsyEventRecord, type SubscriptionRecord } from './storage.ts'
 import type {
   BatchEvent, BatchSummary, LsyDeliveryEvent, LsyEventInput, LsyNotifier, PublishOutcome, SessionAction, Subscription,
@@ -59,7 +59,10 @@ export interface Config {
   maxTextChars: number
   /** Send the final assistant text of each bus-started Session to the notifier. */
   notifySessionResult: boolean
-  /** Send the final assistant text of each unattended Host-schedule reminder turn to the notifier. */
+  /**
+   * Send the final assistant text of each unattended Host-schedule reminder turn, and of each
+   * turn a lsy-tool-monitor notice wakes, to the notifier.
+   */
   reportScheduledTurns: boolean
   /** Events listed in one notify message before the remainder is counted. */
   maxNoteEvents: number
@@ -77,6 +80,7 @@ const sessionActionSchema: z<SessionAction> = z.object({
   titlePrefix: z.string(),
   maxPromptEvents: z.natural().min(1).default(50),
   maxTextChars: z.natural().min(1).default(2000),
+  trustedText: z.boolean().default(false),
 })
 
 const subscriptionSchema: z<Subscription> = z.object({
@@ -133,6 +137,8 @@ interface TrackedSession {
 /** A Session running a turn started by a Host-schedule reminder. */
 interface TrackedReminder {
   label: string
+  /** ⏰ for a reminder, 📡 for a monitor-woken turn. */
+  icon: string
   text: string | undefined
 }
 
@@ -671,7 +677,12 @@ export class LsyEventBus extends Service {
         // `schedule` is declared by the Host schedule service, which this package does not import.
         const kind: string = source.kind
         if (kind === 'schedule') {
-          this.trackReminder(session.id, messageText(event.data.content))
+          this.trackReminder(session.id, reminderLabel(messageText(event.data.content)), '⏰')
+          return
+        }
+        // A turn woken by a monitor's output (lsy-tool-monitor) is reported like a reminder turn.
+        if (kind === 'lsy-tool-monitor') {
+          this.trackReminder(session.id, monitorLabel(messageText(event.data.content)), '📡')
           return
         }
         if (source.kind !== 'webhook' || source.provider !== LSY_EVENT_KIND || this.tracked.has(session.id)) return
@@ -719,10 +730,10 @@ export class LsyEventBus extends Service {
   }
 
   /** Start following a reminder turn unless reports are off, the bus already follows the Session, or the notifier relays it itself. */
-  private trackReminder(sessionId: string, text: string | undefined): void {
+  private trackReminder(sessionId: string, label: string | undefined, icon: string): void {
     if (!this.config.reportScheduledTurns || this.tracked.has(sessionId) || this.reminders.has(sessionId)) return
     if (this.ctx.get('lsyNotifier')?.ownsSession?.(sessionId) === true) return
-    this.reminders.set(sessionId, { label: reminderLabel(text) ?? `Session ${sessionId}`, text: undefined })
+    this.reminders.set(sessionId, { label: label ?? `Session ${sessionId}`, icon, text: undefined })
   }
 
   /** Send a reminder turn's final answer to the notifier unless it is the silent reply. */
@@ -733,7 +744,8 @@ export class LsyEventBus extends Service {
     }
     const notifier = this.ctx.get('lsyNotifier')
     if (notifier === undefined) return
-    await notifier.send(formatReminderNote({ label: reminder.label, outcome, text: reminder.text, url: this.config.webUrl, detail }))
+    const { label, icon, text } = reminder
+    await notifier.send(formatReminderNote({ label, icon, outcome, text, url: this.config.webUrl, detail }))
   }
 
   /** Record the Session outcome and send it to the notifier unless it is the silent reply. */

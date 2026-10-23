@@ -72,7 +72,7 @@ kind: "package-reference"
 | `retainEvents` / `retainBatches` | `5000` / `1000` | 保留的历史；最旧的已结算记录先被清理 |
 | `maxTextChars` | `4000` | 每个事件不可信正文的存储字符上限 |
 | `notifySessionResult` | `true` | 把总线启动的 Session 第一轮的结果发给通知器 |
-| `reportScheduledTurns` | `true` | 把每个无人值守的 Host schedule 提醒轮次的最终回答发给通知器 |
+| `reportScheduledTurns` | `true` | 把每个无人值守的 Host schedule 提醒轮次、以及每个被 `lsy-tool-monitor` 通知唤醒的轮次（标题为 📡 加监控名）的最终回答发给通知器 |
 | `maxNoteEvents` | `10` | 一条通知里列出的事件数 |
 | `webUrl` | 未设置 | 附在 Session 结果里的 Web UI 链接 |
 
@@ -133,7 +133,7 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-`session` 订阅启动的每个 Session 收到一条用户消息：订阅里可信的 `instructions`，一句把事件数据标为不可信的说明，订阅 id，事件数量，以及一行 JSON，其中最多 `maxPromptEvents` 个事件，正文截断到 `maxTextChars`。总线不往提醒轮次里加任何内容，只读取它的最终回答。
+`session` 订阅启动的每个 Session 收到一条用户消息：订阅里可信的 `instructions`，一句把事件数据标为不可信的说明（若订阅的 `session.trustedText` 已设置，即只有主人能向其来源发布事件，则改为一句把每个事件的正文当作主人请求的说明），订阅 id，事件数量，以及一行 JSON，其中最多 `maxPromptEvents` 个事件，正文截断到 `maxTextChars`。总线不往提醒轮次里加任何内容，只读取它的最终回答。
 
 #### Token 影响
 
@@ -161,6 +161,6 @@ kind: "package-reference"
 
 本开发备注是不具权威性的工作上下文：尚未决定的探索方向与维护者备注。已交付的行为与既定理由以上文、包代码和相关 Agent Note 为准。
 
-- 只报告由总线启动的 Session 的第一轮，以及无人值守的提醒轮次；同一 Session 后续的轮次只能在 Web UI 里看到。是否跟踪后续轮次尚未决定。
+- 只报告由总线启动的 Session 的第一轮、无人值守的提醒轮次和被监控唤醒的轮次；同一 Session 其他后续轮次只能在 Web UI 里看到。
 
 </details>

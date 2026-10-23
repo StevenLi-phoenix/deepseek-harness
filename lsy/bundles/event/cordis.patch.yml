@@ -75,6 +75,25 @@
                 requests only; never retry, cancel, or change anything. Answer in Chinese in at most
                 three sentences: what failed, the likely cause, and what the owner should do. Answer
                 NO_REPLY when it has already recovered.
+          # The owner's own Claude Code sessions hand tasks to this agent. Its token is readable only
+          # by the owner's account, so the event text is the owner's request (trustedText).
+          - id: operator
+            sources: [operator]
+            kinds: ['operator.*']
+            action: session
+            coalesceMs: 1000
+            maxPerHour: 10
+            session:
+              workspacePath: /Users/dsh-runtime/work
+              agentPreset: unattended
+              permissionPreset: danger-full-access
+              titlePrefix: operator
+              trustedText: true
+              instructions: >-
+                The owner's operator, a Claude Code session the owner runs on this Mac, hands you
+                the task below on the owner's behalf. Do it as you would a request the owner sent on
+                WeChat. Your final answer goes to the owner's WeChat: keep it short and in the
+                owner's language.
 
     # Push route for the owner's services: POST /hooks/lsy with `Authorization: Bearer <token>`. The
     # token decides the source; kinds must start with "<source>.". Tokens live in $DSH_HOME/.env.
@@ -84,6 +103,8 @@
         sources:
           - id: kaorou
             tokenEnv: LSY_INGEST_TOKEN_KAOROU
+          - id: operator
+            tokenEnv: LSY_INGEST_TOKEN_OPERATOR
 
     - id: lsy-github-sensor
       name: '@deepseek-ai/dsh-lsy-github-sensor'

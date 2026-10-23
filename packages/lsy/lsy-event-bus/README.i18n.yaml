@@ -21,8 +21,8 @@
   en: 816aa7cb41e2592d
   zh: 18c8c1bba8523d27
 /deepseek-ai-dsh-lsy-event-bus/use-this-package/minimal-configuration:
-  en: 79a79c46945d444c
-  zh: 7e8bb54802bc26bd
+  en: 5b7f074709363970
+  zh: 0aae456155e083f3
 /deepseek-ai-dsh-lsy-event-bus/use-this-package/run-time-subscriptions:
   en: b41e56162f37e80d
   zh: 263f172046836cbb
@@ -42,8 +42,8 @@
   en: 3296e9dd8138b0a0
   zh: 3296e9dd8138b0a0
 /deepseek-ai-dsh-lsy-event-bus/model-experience/session-prompt/what-the-model-sees:
-  en: 1ec2bcc25018ec73
-  zh: f4ef3af381c4506c
+  en: b05e55de793388b7
+  zh: 5bd407a71be39f84
 /deepseek-ai-dsh-lsy-event-bus/model-experience/session-prompt/token-effect:
   en: 15f1bd20208d87c7
   zh: e0376ae862bd0a53
@@ -54,5 +54,5 @@
   en: 3becb1fd073621f7
   zh: 4d821a8462fca61b
 /deepseek-ai-dsh-lsy-event-bus/known-limitations-and-deferred-work/dev-note:
-  en: ef95102f99ab30c8
-  zh: 570da28b68d7fad9
+  en: 134e4f14d9adec92
+  zh: 93d84264214171ed

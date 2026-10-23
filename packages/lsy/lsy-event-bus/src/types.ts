@@ -57,6 +57,12 @@ export interface SessionAction {
   maxPromptEvents: number
   /** Maximum characters of each event's untrusted text in the prompt. */
   maxTextChars: number
+  /**
+   * The source is an authenticated owner channel (for example lsy-event-ingest's `operator`
+   * token): the prompt presents each event's `text` as the owner's request instead of
+   * untrusted data. Only set it on subscriptions whose sources no outsider can publish to.
+   */
+  trustedText?: boolean
 }
 
 /** One routing rule, from the bus configuration or created at run time through `LsyEventBus.subscribe()`. */
