@@ -507,6 +507,7 @@
     { "path": "./packages/fork/fork-tool-watch" },
     { "path": "./packages/fork/fork-tool-wechat" },
     { "path": "./packages/fork/fork-github-sensor" },
+    { "path": "./packages/fork/fork-memory" },
     { "path": "./packages/todo/tool-todo" },
     { "path": "./packages/plan/plan-mode" },
     { "path": "./packages/preset/agent-preset-registry" },

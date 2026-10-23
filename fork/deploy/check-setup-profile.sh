@@ -23,6 +23,7 @@ compose "$FRESH" > "$WORK/fresh.yml"
 for id in fork-event-bus fork-github-sensor fork-wechat preset-unattended; do
   /usr/bin/grep -q "^- id: $id\$" "$WORK/fresh.yml" || fail "composition lacks $id"
 done
+/usr/bin/grep -q "@deepseek-ai/dsh-fork-memory" "$WORK/fresh.yml" || fail "unattended preset lacks fork-memory"
 
 OLD="$WORK/old"; mkdir -p "$OLD/profiles/event"
 { echo '# fork event profile — composition layer (code-owned).'; echo '[]'; } > "$OLD/profiles/event/cordis.patch.yml"

@@ -2346,6 +2346,25 @@ export type RepoStream = 'releases' | 'commits' | 'tags'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-github-sensor -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-memory -->
+<a id="deepseek-aidsh-fork-memory"></a>
+
+## `@deepseek-ai/dsh-fork-memory`
+
+- `inject`: `tools`
+- `source`: [`packages/fork/fork-memory/src/index.ts:41`](../packages/fork/fork-memory/src/index.ts)
+
+```ts config-catalog
+/** Memory file and context budget. */
+export interface Config {
+  /** Absolute path of the memory file; defaults to `<DSH_HOME>/fork-memory/memory.jsonl`. */
+  file?: string
+  /** Cap on the memory block, in bytes. */
+  maxBytes?: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-memory -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-watch -->
 <a id="deepseek-aidsh-fork-tool-watch"></a>
 
