@@ -10,9 +10,11 @@ export const WRITE_ACTIONS = ['follow', 'unfollow', 'favorite', 'like', 'watchla
 export type WriteAction = typeof WRITE_ACTIONS[number]
 /**
  * Writes without a daily cap: coins (a single coin or a triple) are limited by
- * the coin balance and Bilibili's per-video rule instead.
+ * the coin balance and Bilibili's per-video rule instead, and answers to the
+ * owner's own messages by nothing but the reply gap: the owner starts that
+ * conversation, so however much they write, each message gets its answer.
  */
-export const UNCAPPED_ACTIONS = ['coin', 'triple'] as const
+export const UNCAPPED_ACTIONS = ['coin', 'triple', 'dmReply'] as const
 /** A write with a daily cap. */
 export type CappedAction = Exclude<WriteAction, typeof UNCAPPED_ACTIONS[number]>
 /** Writes with a daily cap, in display order. */
@@ -39,6 +41,24 @@ export type WakeReason = typeof WAKE_REASONS[number]
 
 /** How off-peak pricing changed a wake: confined to its window's off-peak part, moved past a peak, or deferred at wake time. */
 export const WAKE_ADJUSTMENTS = ['clipped', 'moved', 'deferred'] as const
+
+/** Who wrote a taste note: the owner in Settings, or the account's Session. */
+export const TASTE_SOURCES = ['owner', 'cat'] as const
+/** Taste note limits: code points per note, and notes kept (the oldest of the Session's own go first). */
+export const TASTE_LIMITS = { chars: 200, notes: 20 } as const
+/**
+ * Grades of a watched video: `must` 值得看 (worth the owner's ten minutes), `ok` 可以看
+ * (informative, no loss if missed), `skip` 不值当 (clickbait, rehash, padding).
+ */
+export const GRADES = ['must', 'ok', 'skip'] as const
+/** One of {@link GRADES}. */
+export type Grade = typeof GRADES[number]
+/** Code points of a grade's reason. */
+export const VERDICT_CHARS = 120
+/** Longest keywords text (one keyword per line). */
+export const MAX_KEYWORDS_CHARS = 1000
+/** Trend notebook limits: code points of a term and of its note, entries kept (the oldest go first), and days a wake still lists one. */
+export const TREND_LIMITS = { term: 30, chars: 200, entries: 60, freshDays: 30 } as const
 
 /** The account card. `signed-out` means no account was ever signed in. */
 export interface AccountView {
@@ -155,6 +175,61 @@ export interface BiliView {
    * of that kind goes through.
    */
   readonly verification: readonly VerificationView[]
+  /** What the account knows of the owner's taste, oldest first; every wake carries it. */
+  readonly taste: readonly TasteNoteView[]
+  /** The videos it sent the owner, newest first, with how the owner took each. */
+  readonly finds: readonly FindView[]
+  /** Memes and events it keeps up with, newest first. */
+  readonly trends: readonly TrendView[]
+  /** The owner's search keywords, one per line; every wake searches them first. */
+  readonly keywords: { readonly text: string; readonly updatedAt: number | null }
+  /** Today's report: how many it graded of each grade, and picks sent against the day's quota. */
+  readonly today: {
+    readonly day: string
+    readonly graded: Readonly<Record<Grade, number>>
+    readonly picks: number
+    readonly perDay: number
+  }
+  /** The videos it graded, newest first. */
+  readonly seen: readonly SeenView[]
+}
+
+/** One graded video. */
+export interface SeenView {
+  readonly bvid: string
+  readonly at: number
+  readonly title?: string
+  readonly author?: string
+  readonly grade: Grade
+  readonly reason: string
+  readonly read: boolean
+  /** It went to the owner. */
+  readonly sent: boolean
+}
+
+/** One meme or event in the account's notebook. */
+export interface TrendView {
+  readonly seq: number
+  readonly at: number
+  readonly term: string
+  readonly note: string
+}
+
+/** One note about the owner's taste. */
+export interface TasteNoteView {
+  readonly seq: number
+  readonly at: number
+  readonly text: string
+  readonly from: typeof TASTE_SOURCES[number]
+}
+
+/** One video the account sent the owner. */
+export interface FindView {
+  readonly bvid: string
+  readonly at: number
+  readonly title?: string
+  /** The owner's first message after it, in their words. */
+  readonly reaction?: { readonly text: string; readonly at: number }
 }
 
 /** One kind of write Bilibili refused for want of a verified phone number. */
@@ -185,6 +260,10 @@ export type BiliAction =
   | { readonly action: 'wake' }
   | { readonly action: 'interests'; readonly text: string }
   | { readonly action: 'owner'; readonly mid: number }
+  | { readonly action: 'taste-add'; readonly text: string }
+  | { readonly action: 'taste-delete'; readonly seq: number }
+  | { readonly action: 'trend-delete'; readonly seq: number }
+  | { readonly action: 'keywords'; readonly text: string }
 
 /** Longest interests text the route stores. */
 export const MAX_INTERESTS_CHARS = 2000

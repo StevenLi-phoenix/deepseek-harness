@@ -1,11 +1,13 @@
 /**
  * The account's DM channel (`bili-dm`) of `ctx.ownerRelay`: the final answer of each turn a wake
  * started goes to the owner as Bilibili messages from the account, and whatever cannot go out goes
- * to WeChat with the reason, labelled for the owner's chat Session as the account's.
+ * to WeChat with the reason, labelled for the owner's chat Session as the account's. A body-clock
+ * or Wake-now turn that ends before the wake watched enough is held back while the host asks for
+ * more browsing.
  */
 // Type-only: the ctx.lsyNotifier contract and the relay's channel contract.
 import type { LsyNotifier } from '@deepseek-ai/dsh-lsy-event-bus'
-import type { RelayAnswer, RelayChannel, RelayDelivery } from '@deepseek-ai/dsh-owner-relay'
+import type { RelayAnswer, RelayChannel, RelayDecision, RelayDelivery } from '@deepseek-ai/dsh-owner-relay'
 import { FALLBACK_TITLE, TEXT_LIMITS, splitMessage } from './text.ts'
 import type { WakeReason } from './view.ts'
 
@@ -43,6 +45,13 @@ export interface DmChannelHost {
   reportShares(text: string): void
   /** Keep a delivery alive until the account's teardown drains it; its outcome stays the relay's. */
   hold<T>(work: Promise<T>): Promise<T>
+  /**
+   * A completed wake turn ended with `draft` (undefined for NO_REPLY or no text): whether the host
+   * holds it back and asks the Session to keep browsing, because the wake watched too little.
+   */
+  continueWake(sessionId: string, origin: WakeOrigin, draft: string | undefined): boolean
+  /** A wake turn ended in a way that ends the wake (the owner stopped it, or it failed). */
+  endWake(sessionId: string): void
   /** The WeChat notifier, read per use. */
   notifier(): Pick<LsyNotifier, 'send'> | undefined
   logger: { info(message: string): void; warn(message: string): void }
@@ -94,14 +103,19 @@ export class DmChannel implements RelayChannel {
 
   /**
    * A turn ended: it takes the recorded origin, whether or not the relay delivers anything, so a
-   * later turn no wake started (the owner in the Web UI) never inherits it.
+   * later turn no wake started (the owner in the Web UI) never inherits it. A wake turn with
+   * nothing to send may still be asked to keep browsing; one the owner stopped ends its wake.
    * @param sessionId - the account's Session.
+   * @param ended - the relay's decision for the turn.
    */
-  onTurnEnd(sessionId: string): void {
+  onTurnEnd(sessionId: string, ended: RelayDecision['kind']): void {
     const origin = this.origins.get(sessionId)
     this.origins.delete(sessionId)
-    if (origin === undefined) this.ended.delete(sessionId)
-    else this.ended.set(sessionId, origin)
+    this.ended.delete(sessionId)
+    if (origin === undefined) return
+    if (ended === 'answer') this.ended.set(sessionId, origin)
+    else if (ended === 'stopped') this.host.endWake(sessionId)
+    else this.host.continueWake(sessionId, origin, undefined)
   }
 
   /**
@@ -116,6 +130,13 @@ export class DmChannel implements RelayChannel {
     // Taken at once: the relay calls deliver in the same tick as onTurnEnd, before the next wake can record an origin.
     const origin = this.ended.get(answer.sessionId)
     this.ended.delete(answer.sessionId)
+    if (origin !== undefined) {
+      if (answer.outcome !== 'completed') this.host.endWake(answer.sessionId)
+      else if (this.host.continueWake(answer.sessionId, origin, answer.text)) {
+        this.host.logger.info(`bili: held the ${origin.reason} turn's answer of Session ${answer.sessionId} (${answer.text.length} chars) until the wake has watched more`)
+        return Promise.resolve('kept')
+      }
+    }
     return this.host.hold(this.send(answer, origin))
   }
 

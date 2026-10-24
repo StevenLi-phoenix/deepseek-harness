@@ -37,6 +37,19 @@ const VIEW: BiliView = {
   manualWake: null,
   progress: { level: 2, exp: 1234, min: 200, next: 1500, coins: 5, rewards: { day: '2026-10-23', login: true, watch: true, share: false, coinExp: 0 }, checkedAt: NOW - 120_000 },
   verification: [],
+  taste: [
+    { seq: 1, at: NOW - 3_600_000, text: '不想看大众热门里的社会纪实', from: 'owner' },
+    { seq: 2, at: NOW - 600_000, text: '她爱看 AI agent 圈正在发酵的事', from: 'cat' },
+  ],
+  finds: [{ bvid: 'BV1cc4y1X7cc', at: NOW - 900_000, title: '鱼灾一周复盘', reaction: { text: '这个好', at: NOW - 800_000 } }],
+  trends: [{ seq: 1, at: NOW - 1_800_000, term: '鱼灾', note: 'B站上 DeepSeek agent（大肥鱼）刷屏的那一周' }],
+  keywords: { text: 'DeepSeek Harness\nClaude Code', updatedAt: NOW - 86_400_000 },
+  today: { day: '2026-10-23', graded: { must: 1, ok: 1, skip: 1 }, picks: 1, perDay: 5 },
+  seen: [
+    { bvid: 'BV1cc4y1X7cc', at: NOW - 1_000_000, title: '鱼灾一周复盘', author: '复盘君', grade: 'must', reason: '说的就是我们这种 agent', read: true, sent: true },
+    { bvid: 'BV1dd4y1X7dd', at: NOW - 1_100_000, title: '安全养鱼指南', author: '养鱼人', grade: 'ok', reason: '有用但不新', read: true, sent: false },
+    { bvid: 'BV1ee4y1X7ee', at: NOW - 1_200_000, title: '震惊！', author: '标题党', grade: 'skip', reason: '标题党', read: false, sent: false },
+  ],
 }
 
 function mount(state: Partial<BiliState>) {
@@ -219,6 +232,44 @@ describe('BiliAccountSection', () => {
   it('says when the status cannot be read', () => {
     mount({ checkedAt: NOW, stale: true })
     expect(screen.getByRole('status').textContent).toBe('暂时读不到账号状态，稍后自动重试。')
+  })
+})
+
+describe('scouting cards', () => {
+  it('shows what it watched with grades and a filter, the keywords, its taste notes and finds, and the trends; the owner edits them', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOW)
+    const { actions } = mount({ view: VIEW, checkedAt: NOW })
+    const seen = screen.getByRole('region', { name: '它刷过的视频' })
+    expect(seen.textContent).toContain('今天：值得看 1 · 可以看 1 · 不值当 1')
+    expect(seen.textContent).toContain('已推给你 1 / 5')
+    expect(within(seen).getByRole('link', { name: '鱼灾一周复盘' }).getAttribute('href')).toBe('https://www.bilibili.com/video/BV1cc4y1X7cc')
+    expect(seen.textContent).toContain('没读字幕')
+    fireEvent.click(within(seen).getByRole('button', { name: '值得看' }))
+    expect(within(seen).queryByRole('link', { name: '安全养鱼指南' })).toBeNull()
+    expect(within(seen).getByRole('button', { name: '值得看' }).getAttribute('aria-pressed')).toBe('true')
+
+    const keywords = screen.getByRole('region', { name: '关注关键词' })
+    fireEvent.change(within(keywords).getByRole('textbox'), { target: { value: 'DeepSeek Harness\nClaude Code\n大肥鱼' } })
+    fireEvent.click(within(keywords).getByRole('button', { name: '保存' }))
+
+    const taste = screen.getByRole('region', { name: '它记住的口味' })
+    expect(taste.textContent).toContain('你写的')
+    expect(taste.textContent).toContain('它记的')
+    expect(taste.textContent).toContain('你回：这个好')
+    fireEvent.click(within(taste).getAllByRole('button', { name: '删掉' })[1]!)
+    fireEvent.change(within(taste).getByRole('textbox'), { target: { value: '少推入门教程' } })
+    fireEvent.click(within(taste).getByRole('button', { name: '记下' }))
+
+    const trends = screen.getByRole('region', { name: '圈内热梗' })
+    expect(trends.textContent).toContain('鱼灾')
+    fireEvent.click(within(trends).getByRole('button', { name: '删掉' }))
+    expect(actions).toEqual([
+      { action: 'keywords', text: 'DeepSeek Harness\nClaude Code\n大肥鱼' },
+      { action: 'taste-delete', seq: 2 },
+      { action: 'taste-add', text: '少推入门教程' },
+      { action: 'trend-delete', seq: 1 },
+    ])
   })
 })
 

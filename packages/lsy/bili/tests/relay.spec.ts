@@ -71,7 +71,8 @@ describe('replies to the owner', () => {
     expect(fake.sentMessages).toEqual([{ receiver: OWNER, text: 'hi！我在。今天看到一只会开门的猫：https://www.bilibili.com/video/BV1aa4y1X7aa' }])
     expect(h.notes).toEqual([])
     const usage = (await h.view()).usage.actions
-    expect(usage.find(row => row.action === 'dmReply')).toEqual({ action: 'dmReply', used: 1, cap: 30 })
+    expect(usage.some(row => (row.action as string) === 'dmReply')).toBe(false)
+    expect((await h.view()).recent.filter(row => row.action === 'dmReply')).toHaveLength(1)
     expect(usage.find(row => row.action === 'dmOwner')).toEqual({ action: 'dmOwner', used: 0, cap: 5 })
     expect(h.logs.some(line => line.text === 'bili: sent the turn\'s answer to the owner as 1 Bilibili message(s) (dmReply)')).toBe(true)
   })
@@ -113,7 +114,7 @@ describe('replies to the owner', () => {
     await vi.advanceTimersByTimeAsync(600_000)
     await h.answer(`${'a'.repeat(450)}\n\n${'b'.repeat(450)}`)
     expect(fake.sentMessages.map(message => message.text)).toEqual(['a'.repeat(450), 'b'.repeat(450)])
-    expect((await h.view()).usage.actions.find(row => row.action === 'dmReply')?.used).toBe(2)
+    expect((await h.view()).recent.filter(row => row.action === 'dmReply')).toHaveLength(2)
   })
 })
 

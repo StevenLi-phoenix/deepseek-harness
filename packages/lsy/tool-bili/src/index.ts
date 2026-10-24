@@ -142,11 +142,39 @@ export function apply(ctx: Context): void {
     })
     read({
       name: 'bili_search',
-      description: 'Search Bilibili videos by keyword, 20 results per page.',
+      description: 'Search Bilibili videos by keyword, 20 results per page; order newest finds what people are talking about right now.',
       label: 'search results',
-      parameters: { keyword: { type: 'string', required: true, description: 'Search words.' }, page },
+      parameters: {
+        keyword: { type: 'string', required: true, description: 'Search words.' },
+        page,
+        order: { type: 'string', enum: ['relevance', 'newest'], description: 'relevance (default) or newest first.' },
+      },
       title: args => `Search Bilibili: ${str(args['keyword'])}`,
-      run: args => account.search(str(args['keyword']), int(args['page'], 1)),
+      run: args => account.search(str(args['keyword']), int(args['page'], 1), args['order'] === 'newest' ? 'newest' : 'relevance'),
+    })
+    read({
+      name: 'bili_ranking',
+      description: 'Bilibili\'s site-wide leaderboard (排行榜) across all zones, top 30.',
+      label: 'leaderboard',
+      parameters: {},
+      title: () => 'Bilibili leaderboard',
+      run: () => account.ranking(),
+    })
+    read({
+      name: 'bili_hot_searches',
+      description: 'What the whole site is searching for right now (热搜): up to 30 keywords. New memes and events show up here first; search one to see what it is about.',
+      label: 'hot searches',
+      parameters: {},
+      title: () => 'Bilibili hot searches',
+      run: () => account.hotSearches(),
+    })
+    read({
+      name: 'bili_danmaku',
+      description: 'A sample of a video\'s danmaku (弹幕), up to 40 lines spread across it, each with its second: the jokes and reactions of its own viewers, and the memes going around.',
+      label: 'danmaku',
+      parameters: { bvid, part: { type: 'integer', description: 'Part number of a multi-part video, from 1.' } },
+      title: args => `Danmaku of ${str(args['bvid'])}`,
+      run: args => account.danmaku(str(args['bvid']), typeof args['part'] === 'number' ? args['part'] : undefined),
     })
     read({
       name: 'bili_video',
@@ -306,6 +334,74 @@ export function apply(ctx: Context): void {
       },
       presentCall: () => ({ card: 'generic', title: 'Write in the Bilibili journal', kind: 'other' }),
     }))
+    scoped.tools.register(defineTool({
+      name: 'bili_taste_write',
+      description: [
+        'Save one note about the owner\'s taste, at most 200 characters: how they took a find, what they want more or less of, in their words where you can.',
+        'Every wake shows your notes and the owner\'s own, numbered; pass replaces with one of your notes\' numbers to rewrite it instead of adding one. The owner\'s notes are theirs: you cannot rewrite them.',
+      ].join(' '),
+      parameters: {
+        text: { type: 'string', required: true, description: 'The note, at most 200 characters.' },
+        replaces: { type: 'integer', description: 'Number of one of your notes to rewrite.' },
+      },
+      output: { schema: JSON_SCHEMA, render: (_args: unknown, value: unknown) => [{ type: 'text' as const, text: JSON.stringify(value) }] },
+      async execute(args): Promise<JsonValue> {
+        return await account.tasteWrite(args.text, typeof args.replaces === 'number' ? args.replaces : undefined)
+      },
+      presentCall: () => ({ card: 'generic', title: 'Note the owner\'s taste', kind: 'other' }),
+    }))
+    /** One host-record tool: its value as JSON, not Bilibili content. */
+    const record = (spec: { name: string; description: string; parameters: ParameterSchemaSpec; title: string; kind: 'read' | 'other'; run: (args: Record<string, unknown>) => Promise<unknown> }): void => {
+      scoped.tools.register(defineTool({
+        name: spec.name,
+        description: spec.description,
+        parameters: spec.parameters,
+        output: { schema: JSON_SCHEMA, render: (_args: unknown, value: unknown) => [{ type: 'text' as const, text: JSON.stringify(value) }] },
+        async execute(args): Promise<JsonValue> {
+          try {
+            return JSON.parse(JSON.stringify(await spec.run(args as Record<string, unknown>))) as JsonValue
+          } catch (error: unknown) {
+            return { error: errorText(error) }
+          }
+        },
+        presentCall: () => ({ card: 'generic', title: spec.title, kind: spec.kind }),
+      }))
+    }
+    record({
+      name: 'bili_verdict',
+      description: [
+        'Grade a video you watched, for the seen list and the owner\'s picks: must (值得看: you truly want the owner to spend these minutes), ok (可以看: informative, no loss if missed), or skip (不值当: clickbait, rehash, padding), with one line of why.',
+        'must needs evidence: you read its subtitles with bili_video first; from the title alone it is at most ok. Only must videos may go to the owner. Grading again replaces the grade; feeds and search mark videos you graded.',
+      ].join(' '),
+      parameters: {
+        bvid,
+        grade: { type: 'string', required: true, enum: ['must', 'ok', 'skip'], description: 'must, ok, or skip.' },
+        reason: { type: 'string', required: true, description: 'Why, at most 120 characters.' },
+      },
+      title: 'Grade a Bilibili video',
+      kind: 'other',
+      run: args => account.verdict(str(args['bvid']), str(args['grade']) as 'must' | 'ok' | 'skip', str(args['reason'])),
+    })
+    record({
+      name: 'bili_seen',
+      description: 'Your seen list: the videos you graded, newest first (grade, why, whether you read the subtitles), or one video\'s grade with bvid. Check it before judging a video again.',
+      parameters: { bvid: { type: 'string', description: 'One BV id to look up.' }, limit: { type: 'integer', description: 'Entries, at most 50 (default 30).' } },
+      title: 'Read the seen list',
+      kind: 'read',
+      run: args => account.seen(str(args['bvid']) || undefined, int(args['limit'], 30)),
+    })
+    record({
+      name: 'bili_trend_write',
+      description: 'Note a meme, event, or phrase going around (a 梗 in the danmaku, a hot search, a word everyone in a community uses): the term, and what it is, where it comes from, and which community it lives in, at most 200 characters. Every wake lists your fresh notes, so you understand them later and can tell the owner what is trending. A term already noted is rewritten.',
+      parameters: {
+        term: { type: 'string', required: true, description: 'The meme itself, at most 30 characters.' },
+        note: { type: 'string', required: true, description: 'What it is, at most 200 characters.' },
+        replaces: { type: 'integer', description: 'Number of an entry to rewrite.' },
+      },
+      title: 'Note a trend',
+      kind: 'other',
+      run: args => account.trendWrite(str(args['term']), str(args['note']), typeof args['replaces'] === 'number' ? args['replaces'] : undefined),
+    })
     scoped.tools.register(defineTool({
       name: 'bili_journal_read',
       description: 'Read your diary of life on Bilibili, newest entries first, 10 per page.',

@@ -89,6 +89,60 @@ export interface WakeFacts {
   interests: string
   /** Why writes are paused, when they are. */
   pause?: { scope: 'all' | 'speech'; reason: string } | undefined
+  /** Notes on the owner's taste, oldest first. */
+  taste?: readonly TasteLine[] | undefined
+  /** Recent videos sent to the owner, newest first. */
+  finds?: readonly FindLine[] | undefined
+  /** Videos to watch before an answer goes out; 0 sets no floor. */
+  minWatched?: number | undefined
+  /** Fresh memes and events from the notebook, newest first. */
+  trends?: readonly TrendLine[] | undefined
+  /** The owner's search keywords. */
+  keywords?: readonly string[] | undefined
+  /** Picks sent today, and the day's quota; absent without a quota. */
+  picks?: { sent: number; perDay: number } | undefined
+}
+
+/** Most picks one message carries; a message is 500 code points. */
+export const PICKS_PER_MESSAGE = 4
+
+/** The keyword line of a wake. */
+function keywordsLine(keywords: readonly string[] | undefined): string | undefined {
+  if (keywords === undefined || keywords.length === 0) return undefined
+  return `The owner's search keywords: ${keywords.join(' / ')}. Search each with bili_search order newest before the feeds, and prefer videos from the last few days.`
+}
+
+/** The picks line of a wake: grading, the evidence a pick needs, and what is left of the day's quota. */
+function picksLine(picks: WakeFacts['picks']): string | undefined {
+  if (picks === undefined) return undefined
+  const left = Math.max(0, picks.perDay - picks.sent)
+  const grading = 'Grade every video you watch with bili_verdict (must 值得看, ok 可以看, skip 不值当, and why); only videos you graded must after reading their subtitles may go to the owner.'
+  return left === 0
+    ? `${grading} Today's ${picks.perDay} picks are all sent: answer NO_REPLY unless something is exceptional.`
+    : `${grading} Picks sent today: ${picks.sent} of ${picks.perDay}. Send this wake's must videos in one message, at most ${Math.min(PICKS_PER_MESSAGE, left)}: each its title, its link, and one line of why.`
+}
+
+/** One meme or event as prompts list it. */
+export interface TrendLine {
+  seq: number
+  at: number
+  term: string
+  note: string
+}
+
+/** One taste note as prompts list it. */
+export interface TasteLine {
+  seq: number
+  text: string
+  from: 'owner' | 'cat'
+}
+
+/** One video sent to the owner as prompts list it. */
+export interface FindLine {
+  bvid: string
+  at: number
+  title?: string | undefined
+  reaction?: { text: string; at: number } | undefined
 }
 
 /** One line listing what each action has left today. */
@@ -105,9 +159,49 @@ function pauseLine(pause: WakeFacts['pause']): string | undefined {
     : `Public speech is paused (${pause.reason}) until the owner resumes it in Settings: no comments, replies, or dynamics for now.`
 }
 
+/** Characters of the recent-finds block. */
+const FINDS_BLOCK_CHARS = 4000
+/** Code points of a held answer quoted back in a continuation prompt. */
+const HELD_DRAFT_CHARS = 1000
+
+/** The taste notes block, or nothing without notes. */
+function tasteBlock(taste: readonly TasteLine[] | undefined): string | undefined {
+  if (taste === undefined || taste.length === 0) return undefined
+  const lines = taste.map(note => `[${note.seq}] (${note.from === 'owner' ? 'the owner wrote' : 'you wrote'}) ${note.text}`)
+  return ['What you know of the owner\'s taste (bili_taste_write adds a note, or replaces one by its number):', ...lines].join('\n')
+}
+
+/** The recent finds block, or nothing before the first find; titles and replies are data. */
+function findsBlock(finds: readonly FindLine[] | undefined, timeZone: string): string | undefined {
+  if (finds === undefined || finds.length === 0) return undefined
+  const rows = finds.map(find => ({
+    bvid: find.bvid,
+    sent: formatStamp(find.at, timeZone),
+    ...(find.title === undefined ? {} : { title: find.title }),
+    ownerReply: find.reaction?.text ?? '(none yet)',
+  }))
+  return [
+    'Videos you already sent the owner, newest first, with the owner\'s first message after each; never send one again:',
+    untrusted('your finds', rows, FINDS_BLOCK_CHARS),
+  ].join('\n')
+}
+
+/** The trend notebook block, or nothing while it is empty. */
+function trendsBlock(trends: readonly TrendLine[] | undefined, timeZone: string): string | undefined {
+  if (trends === undefined || trends.length === 0) return undefined
+  const lines = trends.map(trend => `[${trend.seq}] ${trend.term} (noted ${formatStamp(trend.at, timeZone)}): ${trend.note}`)
+  return ['Memes and events you keep up with, newest first (bili_trend_write adds one, or rewrites one by its number):', ...lines].join('\n')
+}
+
+/** The floor line of a wake: how much to watch before an answer goes out. */
+function depthLine(minWatched: number | undefined): string | undefined {
+  if (minWatched === undefined || minWatched <= 0) return undefined
+  return `Watch at least ${minWatched} videos through their subtitles this wake before you settle on anything for the owner; the host holds back an answer sent sooner and asks you to keep browsing.`
+}
+
 /**
  * Prompt of a body-clock wake.
- * @param facts - time, budget, inbox counts, interests, and pause state.
+ * @param facts - time, budget, inbox counts, interests, pause state, taste notes, recent finds, fresh trends, and the watch floor.
  * @returns the prompt text.
  */
 export function wakePrompt(facts: WakeFacts): string {
@@ -119,9 +213,50 @@ export function wakePrompt(facts: WakeFacts): string {
     `Inbox: ${replies} unread replies, ${mentions} mentions, ${ownerMessages} unread messages from the owner, ${otherMessages} from others.`,
     pauseLine(facts.pause),
     facts.interests.trim() === '' ? undefined : `The owner's interests, as they wrote them: ${facts.interests.trim()}`,
+    tasteBlock(facts.taste),
+    findsBlock(facts.finds, facts.timeZone),
+    trendsBlock(facts.trends, facts.timeZone),
+    keywordsLine(facts.keywords),
+    depthLine(facts.minWatched),
+    picksLine(facts.picks),
     `Spend this wake as you like. ${ANSWER_CHANNEL}; answer exactly NO_REPLY when nothing is worth sending.`,
   ]
   return lines.filter((line): line is string => line !== undefined).join('\n')
+}
+
+/** Facts of a continuation: the wake asks for more watching before its answer goes out. */
+export interface ContinueFacts {
+  /** Distinct videos watched this wake. */
+  watched: number
+  minWatched: number
+  /** This continuation's number, from 1, and the most there will be. */
+  round: number
+  rounds: number
+  /** The answer the host held back, if the last turn had one. */
+  draft?: string | undefined
+  /** Videos the held answer links that are not graded must. */
+  unjudged?: readonly string[] | undefined
+}
+
+/**
+ * Prompt of a continuation turn within the same wake.
+ * @param facts - how much was watched, the floor, the round, the held answer, and its ungraded links.
+ * @returns the prompt text.
+ */
+export function continuePrompt(facts: ContinueFacts): string {
+  const draft = facts.draft === undefined ? '' : clean(facts.draft, HELD_DRAFT_CHARS, true)
+  const short = facts.watched < facts.minWatched
+  const unjudged = facts.unjudged ?? []
+  return [
+    short
+      ? `Keep browsing: you have watched ${facts.watched} of at least ${facts.minWatched} videos this wake (continuation ${facts.round} of ${facts.rounds}).`
+      : `Not yet: you watched ${facts.watched} videos this wake, but your answer cannot go out as it is (continuation ${facts.round} of ${facts.rounds}).`,
+    draft === '' ? undefined : `Your last answer was held back, not sent: «${draft}»`,
+    unjudged.length === 0 ? undefined : `Not graded must with bili_verdict, so they cannot go to the owner: ${unjudged.join(', ')}. Read their subtitles and grade them, or leave them out.`,
+    short
+      ? 'Try a source you have not used this wake (a search on the owner\'s keywords, popular, the leaderboard, hot searches, your following feed, the home feed), watch and grade what looks good, then send this wake\'s must videos in one message, or exactly NO_REPLY.'
+      : 'Then send this wake\'s must videos in one message, or exactly NO_REPLY.',
+  ].filter((line): line is string => line !== undefined).join('\n')
 }
 
 /** Facts an inbox wake carries. */
@@ -134,11 +269,24 @@ export interface InboxFacts {
   items: readonly Record<string, string | number>[]
   /** Some items are messages from the owner's account, so the final answer is a reply to them. */
   owner?: boolean
+  /** Notes on the owner's taste, oldest first. */
+  taste?: readonly TasteLine[] | undefined
+  /** The latest video sent to the owner, when their messages may answer it. */
+  lastFind?: FindLine | undefined
+}
+
+/** The lines of an owner-message wake about taste: the latest find their message may answer, and what to keep. */
+function ownerTasteLines(facts: InboxFacts): (string | undefined)[] {
+  if (facts.owner !== true) return []
+  return [
+    facts.lastFind === undefined ? undefined : `Your latest find for the owner, sent ${formatStamp(facts.lastFind.at, facts.timeZone)}: https://www.bilibili.com/video/${facts.lastFind.bvid}`,
+    'When their message tells you something about their taste (how they took a find, what they want more or less of), save it with bili_taste_write, in their words where you can.',
+  ]
 }
 
 /**
  * Prompt of an inbox wake: what is new, as untrusted data.
- * @param facts - time, budget, pause state, and the new items.
+ * @param facts - time, budget, pause state, the new items, taste notes, and the latest find.
  * @returns the prompt text.
  */
 export function inboxPrompt(facts: InboxFacts): string {
@@ -147,6 +295,8 @@ export function inboxPrompt(facts: InboxFacts): string {
     `Writes left today: ${budgetLine(facts.budget)}.`,
     pauseLine(facts.pause),
     untrusted('inbox', facts.items, 12_000),
+    tasteBlock(facts.taste),
+    ...ownerTasteLines(facts),
     facts.owner === true
       ? 'Your final answer is your reply to the owner\'s message: it goes back to them as a Bilibili message from your account. Plain text; link videos as https://www.bilibili.com/video/<bvid>. Answer exactly NO_REPLY only when the message needs no answer.'
       : `Answer only what moves you; most items need nothing. ${ANSWER_CHANNEL}; answer exactly NO_REPLY when nothing is worth sending.`,

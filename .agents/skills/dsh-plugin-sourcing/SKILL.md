@@ -58,12 +58,18 @@ Read the source the way an attacker would have written it:
 - Red flags: obfuscated or minified-only code with no source, `eval` / `new Function`, dynamic `require` of remote code, postinstall downloads.
 - Fit: compare against step 1 line by line, including the hard constraints, and check for overlap with packages already mounted (two plugins registering the same tool name, route, or slot conflict).
 
+## 4b. Enumerate every feature of each same-type candidate
+
+Before deciding, list **all** features of every candidate that does the same kind of job, whether or not you will install it. Read its whole README, its settings schema and defaults, the prompts it gives the model, the tools and routes it registers, and its output (reports, lists, messages). Write one table, one row per feature, with three columns: what the candidate does, what we have, and the decision (**adopt** or **skip**, with the reason). Show the table to the requester before writing code.
+
+A rewrite that ships without the adopted features is worse than installing the candidate. On 2026-10-23 we rewrote dsh-bili-scroll because of a security hole, but we read only the top of its README. The rewrite missed its core loop: keyword search, a seen list, grades backed by evidence, picks per day, the report, and one DM per round. The owner had to point that out after the rewrite went live.
+
 ## 5. Decide
 
 | Outcome | When | Then |
 |---|---|---|
 | **Install** | Meets the requirement, passes review, compatible, no conflict | Install the exact reviewed version (below). |
-| **Reference** | Useful design or code, but it conflicts, fails review, is incompatible, or does more than we want | Do not install. Write our own (a `packages/lsy/` package in this fork) using it as the reference; copy code only under a compatible license, with attribution. |
+| **Reference** | Useful design or code, but it conflicts, fails review, is incompatible, or does more than we want | Do not install. Write our own (a `packages/lsy/` package in this fork) using it as the reference. It must cover every **adopt** row of the feature table from 4b before it ships. Copy code only under a compatible license, with attribution. |
 | **Build** | Nothing fits | Write it ourselves, and note that the market was searched. |
 
 Installing, always pinned to the version you reviewed:

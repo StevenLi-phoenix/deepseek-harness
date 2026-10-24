@@ -51,7 +51,7 @@ describe('body clock', () => {
     expect(prompt).toMatchObject({ sessionId: 'bili-1', mode: 'queue', clientTimeZone: 'America/New_York' })
     expect(prompt.content).toEqual([{ type: 'text', text: [
       'Body clock: you wake up at Fri 2026-10-23 13:00 (America/New_York). This is your first wake.',
-      'Writes left today: follow 10, unfollow 10, favorite 20, like 30, watch later 30, comment 3, reply 5, dynamic 1, message to owner 5, reply to owner 30.',
+      'Writes left today: follow 10, unfollow 10, favorite 20, like 30, watch later 30, comment 3, reply 5, dynamic 1, message to owner 5.',
       'Inbox: 2 unread replies, 0 mentions, 0 unread messages from the owner, 0 from others.',
       'The owner\'s interests, as they wrote them: 猫、天文、老电影',
       'Spend this wake as you like. Your final answer reaches the owner as a Bilibili message from your account (plain text; link videos as https://www.bilibili.com/video/<bvid>); answer exactly NO_REPLY when nothing is worth sending.',

@@ -1,12 +1,14 @@
 /**
  * Durable account state outside the credential store: the signed-in account's
  * public facts, write pauses, the write ledger, the body-clock plans, the wake
- * log, inbox cursors, the journal, and the owner's interests text. Cookie
+ * log, inbox cursors, the journal, the owner's interests text, the notes on
+ * their taste, the videos sent to them with how they took each, and the memes
+ * and events the account keeps up with. Cookie
  * values and the refresh token live only in the credential record.
  */
 import { z } from 'zod'
 import type { DomainSpec, DomainTableSpec } from '@deepseek-ai/dsh-storage-domain'
-import { ACCOUNT_STATES, PAUSE_SCOPES, WAKE_ADJUSTMENTS, WAKE_REASONS, WAKE_STATES, WRITE_ACTIONS, type WriteAction } from './view.ts'
+import { ACCOUNT_STATES, GRADES, PAUSE_SCOPES, TASTE_SOURCES, WAKE_ADJUSTMENTS, WAKE_REASONS, WAKE_STATES, WRITE_ACTIONS, type WriteAction } from './view.ts'
 
 export { WRITE_ACTIONS, type WriteAction } from './view.ts'
 
@@ -178,6 +180,49 @@ const settingSchema = z.object({
   updatedAt: z.number(),
 }).strict()
 
+const tasteSchema = z.object({
+  seq: z.number().int().positive(),
+  at: z.number(),
+  /** One lesson about the owner's taste. */
+  text: z.string(),
+  /** Who wrote it: the owner in Settings, or the account's Session with `bili_taste_write`. */
+  from: z.enum(TASTE_SOURCES),
+}).strict()
+
+const seenSchema = z.object({
+  bvid: z.string(),
+  /** When it was graded (or graded again). */
+  at: z.number(),
+  title: z.string().optional(),
+  author: z.string().optional(),
+  /** `must` 值得看, `ok` 可以看, `skip` 不值当. */
+  grade: z.enum(GRADES),
+  /** Why, in the account's words. */
+  reason: z.string(),
+  /** Whether the account had read its subtitles when it graded it. */
+  read: z.boolean(),
+}).strict()
+
+const trendSchema = z.object({
+  seq: z.number().int().positive(),
+  /** When it was noted or last rewritten. */
+  at: z.number(),
+  /** The meme, event, or phrase, e.g. `鱼灾`. */
+  term: z.string(),
+  /** What it is, where it comes from, and which community it lives in. */
+  note: z.string(),
+}).strict()
+
+const findSchema = z.object({
+  bvid: z.string(),
+  /** When the message with its link went out. */
+  at: z.number(),
+  /** The title, when the account watched it before sending. */
+  title: z.string().optional(),
+  /** The owner's first message after it (within a day, before the next find): how they took it, in their words. */
+  reaction: z.object({ text: z.string(), at: z.number() }).strict().optional(),
+}).strict()
+
 const deviceSchema = z.object({
   /** When ExClimbWuzhi accepted the jar's device. */
   enrolledAt: z.number(),
@@ -222,6 +267,14 @@ export type VerifyRecord = z.infer<typeof verifySchema>
 export type JournalRecord = z.infer<typeof journalSchema>
 /** One owner-edited text setting. */
 export type SettingRecord = z.infer<typeof settingSchema>
+/** One note about the owner's taste, shown in every wake. */
+export type TasteRecord = z.infer<typeof tasteSchema>
+/** One video the account sent the owner, and how they took it. */
+export type FindRecord = z.infer<typeof findSchema>
+/** One meme or event the account noted, shown in every wake while it is fresh. */
+export type TrendRecord = z.infer<typeof trendSchema>
+/** One video the account graded: the seen list that keeps it from judging a video twice. */
+export type SeenRecord = z.infer<typeof seenSchema>
 /** The device enrollment of the stored jar. */
 export type DeviceRecord = z.infer<typeof deviceSchema>
 /** The owner's main account, as set in Settings. */
@@ -233,9 +286,9 @@ export type SessionRecord = z.infer<typeof sessionSchema>
  * Account storage. `account` is keyed `current`; `pause` by scope key `writes`;
  * `backoff` by `reads`; `ledger` by write id; `slots` by `write`; `plans` by day;
  * `wakes` by zero-padded time; `inbox` by kind; `pending` by `<kind>:<id>`;
- * `targets` by comment id (`rpid`); `verify` by kind (`message`, `speech`); `journal` by zero-padded `seq`;
- * `settings` by name (`interests`); `owner` by `main`; `sessions` by Session id, and `current`
- * names the live one.
+ * `targets` by comment id (`rpid`); `verify` by kind (`message`, `speech`); `journal`, `taste`, and
+ * `trends` by zero-padded `seq`; `finds` and `seen` by BV id; `settings` by name (`interests`); `owner` by `main`; `sessions`
+ * by Session id, and `current` names the live one.
  */
 export const biliDomain = {
   name: 'bili',
@@ -252,6 +305,10 @@ export const biliDomain = {
     pending: table<PendingRecord>(pendingSchema),
     targets: table<TargetRecord>(targetSchema),
     journal: table<JournalRecord>(journalSchema),
+    taste: table<TasteRecord>(tasteSchema),
+    finds: table<FindRecord>(findSchema),
+    trends: table<TrendRecord>(trendSchema),
+    seen: table<SeenRecord>(seenSchema),
     progress: table<ProgressRecord>(progressSchema),
     verify: table<VerifyRecord>(verifySchema),
     settings: table<SettingRecord>(settingSchema),

@@ -86,6 +86,8 @@ export interface VideoCard {
   desc?: string
   /** Why Bilibili recommends it, when it says. */
   reason?: string
+  /** The account's own grade, when it graded this video before (`must`, `ok`, `skip`). */
+  graded?: string
 }
 
 /** A card from a feed, search, or popular item. */
@@ -250,18 +252,89 @@ export async function popular(client: BiliClient, page: number, timeZone: string
 }
 
 /**
+ * The site leaderboard (排行榜) across all zones.
+ * @param client - Bilibili client.
+ * @param timeZone - zone for publish days.
+ * @returns up to 30 bounded video cards, top first.
+ */
+export async function ranking(client: BiliClient, timeZone: string): Promise<VideoCard[]> {
+  const { data } = await client.call('ranking', { query: { rid: 0, type: 'all' } })
+  return list(obj(data)['list'])
+    .slice(0, 30)
+    .map(item => card(item, timeZone))
+    .filter((item): item is VideoCard => item !== undefined)
+}
+
+/** One danmaku line: where it flies, in seconds, and what it says. */
+export interface DanmakuLine {
+  at: number
+  text: string
+}
+
+/** XML entities a danmaku line may carry. */
+const XML_ENTITIES: Readonly<Record<string, string>> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: '\'' }
+
+/**
+ * A sample of a video part's danmaku, spread across its length.
+ * @param client - Bilibili client.
+ * @param cid - the part's cid.
+ * @param limit - lines at most.
+ * @returns lines in time order.
+ */
+export async function danmaku(client: BiliClient, cid: number, limit: number): Promise<DanmakuLine[]> {
+  const { data } = await client.call('danmaku', { query: { oid: cid } })
+  const xml = typeof data === 'string' ? data : ''
+  const lines: DanmakuLine[] = []
+  for (const match of xml.matchAll(/<d p="([\d.]+)[^"]*">([^<]*)<\/d>/g)) {
+    const text = clean((match[2] ?? '').replace(/&(amp|lt|gt|quot|apos);/g, (_all, name: string) => XML_ENTITIES[name] ?? ''), 60)
+    if (text !== '') lines.push({ at: Math.floor(Number(match[1])), text })
+  }
+  lines.sort((a, b) => a.at - b.at)
+  if (lines.length <= limit) return lines
+  const step = lines.length / limit
+  return lines.filter((_line, index) => Math.floor(index / step) !== Math.floor((index - 1) / step))
+}
+
+/** Search order: Bilibili's default ranking, or newest first. */
+export type SearchOrder = 'relevance' | 'newest'
+
+/**
  * Search videos.
  * @param client - Bilibili client.
  * @param keyword - search words.
  * @param page - from 1.
  * @param timeZone - zone for publish days.
+ * @param order - `relevance` (Bilibili's `totalrank`) or `newest` (`pubdate`).
  */
-export async function search(client: BiliClient, keyword: string, page: number, timeZone: string): Promise<VideoCard[]> {
-  const { data } = await client.call('search', { query: { search_type: 'video', keyword, page } })
+export async function search(client: BiliClient, keyword: string, page: number, timeZone: string, order: SearchOrder = 'relevance'): Promise<VideoCard[]> {
+  const sort = order === 'newest' ? { order: 'pubdate' } : {}
+  const { data } = await client.call('search', { query: { search_type: 'video', keyword, page, ...sort } })
   return list(obj(data)['result'])
     .filter(item => item['type'] === undefined || item['type'] === 'video')
     .map(item => card(item, timeZone, compact({ desc: clean(item['description'], 200, true) || undefined })))
     .filter((item): item is VideoCard => item !== undefined)
+}
+
+/** One entry of the hot-search list. */
+export interface HotSearch {
+  keyword: string
+  /** What the search box shows, when it differs from the keyword. */
+  label?: string
+}
+
+/**
+ * The hot-search list (热搜): what the whole site searches for right now.
+ * @param client - Bilibili client.
+ * @param limit - entries, at most 50.
+ */
+export async function hotSearches(client: BiliClient, limit: number): Promise<HotSearch[]> {
+  const { data } = await client.call('hotSearch', { query: { limit, platform: 'web' } })
+  return list(obj(obj(data)['trending'])['list']).flatMap((item) => {
+    const keyword = clean(item['keyword'], LIMITS.title)
+    if (keyword === '') return []
+    const label = clean(item['show_name'], LIMITS.title)
+    return [label === '' || label === keyword ? { keyword } : { keyword, label }]
+  })
 }
 
 /** One part of a multi-part video. */

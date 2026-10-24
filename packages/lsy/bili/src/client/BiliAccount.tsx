@@ -12,7 +12,7 @@ import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the settings shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
-import { MAX_INTERESTS_CHARS, type BiliAction, type BiliView, type WriteAction } from '../view.ts'
+import { GRADES, MAX_INTERESTS_CHARS, MAX_KEYWORDS_CHARS, TASTE_LIMITS, type BiliAction, type BiliView, type Grade, type WriteAction } from '../view.ts'
 import { LOGIN_POLL_MS, POLL_INTERVAL_MS, startPolling, type BiliState } from './bili.ts'
 import { agoText, clockTime, countdown, dateTime, qrPath, stampTime, usageLevel, type Translate } from './format.ts'
 import css from './BiliAccount.module.css'
@@ -325,6 +325,157 @@ function InterestsCard({ view, act, busy, t }: Omit<CardProps, 'now'>): ReactNod
   )
 }
 
+function KeywordsCard({ view, act, busy, t }: Omit<CardProps, 'now'>): ReactNode {
+  const stored = view.keywords.text
+  const [draft, setDraft] = useState(stored)
+  const [base, setBase] = useState(stored)
+  // A save (or another tab's) moves the stored text; an untouched draft follows it.
+  if (stored !== base) {
+    setBase(stored)
+    if (draft === base) setDraft(stored)
+  }
+  const id = useId()
+  const saved = view.keywords.updatedAt === null ? {} : { meta: t('keywords.saved', { time: dateTime(view.keywords.updatedAt, view.clock.timeZone) }) }
+  return (
+    <Card title={t('keywords.title')} {...saved}>
+      <label className={css.hint} htmlFor={id}>{t('keywords.hint')}</label>
+      <textarea
+        id={id}
+        className={css.textarea}
+        value={draft}
+        rows={4}
+        maxLength={MAX_KEYWORDS_CHARS}
+        placeholder={t('keywords.placeholder')}
+        onChange={(event) => { setDraft(event.target.value) }}
+      />
+      <div className={css.actions}>
+        <button type="button" className={css.primary} disabled={busy || draft.trim() === stored.trim()} onClick={() => { act({ action: 'keywords', text: draft }) }}>{t('keywords.save')}</button>
+      </div>
+    </Card>
+  )
+}
+
+/** Rows the seen list shows before "show more". */
+const SEEN_PAGE = 20
+
+function SeenCard({ view, now, t }: { view: BiliView; now: number; t: Translate }): ReactNode {
+  const [filter, setFilter] = useState<Grade | 'all'>('all')
+  const [shown, setShown] = useState(SEEN_PAGE)
+  const { today } = view
+  const rows = filter === 'all' ? view.seen : view.seen.filter(row => row.grade === filter)
+  const meta = today.perDay === 0 ? t('seen.picksOpen', { picks: today.picks }) : t('seen.picks', { picks: today.picks, perDay: today.perDay })
+  return (
+    <Card title={t('seen.title')} meta={meta} wide>
+      <span className={css.hint} data-seen-today="">{t('seen.today', { must: today.graded.must, ok: today.graded.ok, skip: today.graded.skip })}</span>
+      <div className={css.filters} role="group" aria-label={t('seen.title')}>
+        {(['all', ...GRADES] as const).map(grade => (
+          <button key={grade} type="button" className={css.filter} aria-pressed={filter === grade} data-grade={grade} onClick={() => { setFilter(grade); setShown(SEEN_PAGE) }}>
+            {t(grade === 'all' ? 'seen.filter.all' : `seen.grade.${grade}`)}
+          </button>
+        ))}
+      </div>
+      {rows.length === 0
+        ? <span className={css.meta}>{t('seen.empty')}</span>
+        : (
+          <ul className={css.recent}>
+            {rows.slice(0, shown).map(row => (
+              <li key={row.bvid} className={css.seenRow} data-grade={row.grade}>
+                <span className={css.grade} data-grade={row.grade}>{t(`seen.grade.${row.grade}`)}</span>
+                <a className={css.seenTitle} href={`https://www.bilibili.com/video/${row.bvid}`} target="_blank" rel="noreferrer">{row.title ?? row.bvid}</a>
+                {row.author === undefined ? null : <span className={css.meta}>{row.author}</span>}
+                {row.sent ? <span className={css.chip} data-state="accepted">{t('seen.sent')}</span> : null}
+                {row.read ? null : <span className={css.chip} data-state="uncertain">{t('seen.unread')}</span>}
+                <span className={css.recentAt}>{agoText(row.at, now, t)}</span>
+                <span className={css.recentDetail}>{row.reason}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      {rows.length > shown
+        ? (
+          <div className={css.actions}>
+            <button type="button" className={css.secondary} onClick={() => { setShown(shown + SEEN_PAGE) }}>{t('seen.more', { n: Math.min(SEEN_PAGE, rows.length - shown) })}</button>
+          </div>
+        )
+        : null}
+    </Card>
+  )
+}
+
+function TasteCard({ view, now, act, busy, t }: CardProps): ReactNode {
+  const [draft, setDraft] = useState('')
+  const id = useId()
+  return (
+    <Card title={t('taste.title')} wide>
+      <span className={css.hint}>{t('taste.hint')}</span>
+      {view.taste.length === 0
+        ? <span className={css.meta}>{t('taste.empty')}</span>
+        : (
+          <ul className={css.recent}>
+            {view.taste.map(note => (
+              <li key={note.seq} className={css.recentRow} data-taste={note.from}>
+                <span className={css.chip} data-from={note.from}>{t(`taste.from.${note.from}`)}</span>
+                <span className={css.noteText}>{note.text}</span>
+                <span className={css.recentAt}>{agoText(note.at, now, t)}</span>
+                <button type="button" className={css.linkButton} disabled={busy} onClick={() => { act({ action: 'taste-delete', seq: note.seq }) }}>{t('taste.delete')}</button>
+              </li>
+            ))}
+          </ul>
+        )}
+      <div className={css.addRow}>
+        <input
+          id={id}
+          className={css.input}
+          value={draft}
+          maxLength={TASTE_LIMITS.chars}
+          placeholder={t('taste.placeholder')}
+          aria-label={t('taste.title')}
+          onChange={(event) => { setDraft(event.target.value) }}
+        />
+        <button type="button" className={css.primary} disabled={busy || draft.trim() === ''} onClick={() => { act({ action: 'taste-add', text: draft }); setDraft('') }}>{t('taste.add')}</button>
+      </div>
+      {view.finds.length === 0
+        ? null
+        : (
+          <>
+            <span className={css.subTitle}>{t('taste.finds')}</span>
+            <ul className={css.recent}>
+              {view.finds.map(find => (
+                <li key={find.bvid} className={css.recentRow} data-find={find.bvid}>
+                  <a className={css.seenTitle} href={`https://www.bilibili.com/video/${find.bvid}`} target="_blank" rel="noreferrer">{find.title ?? find.bvid}</a>
+                  <span className={css.recentAt}>{agoText(find.at, now, t)}</span>
+                  <span className={css.recentDetail}>{find.reaction === undefined ? t('taste.noReaction') : t('taste.reaction', { text: find.reaction.text })}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+    </Card>
+  )
+}
+
+function TrendsCard({ view, now, act, busy, t }: CardProps): ReactNode {
+  return (
+    <Card title={t('trends.title')} wide>
+      <span className={css.hint}>{t('trends.hint')}</span>
+      {view.trends.length === 0
+        ? <span className={css.meta}>{t('trends.empty')}</span>
+        : (
+          <ul className={css.recent}>
+            {view.trends.map(trend => (
+              <li key={trend.seq} className={css.recentRow} data-trend={trend.seq}>
+                <span className={css.term}>{trend.term}</span>
+                <span className={css.recentAt}>{agoText(trend.at, now, t)}</span>
+                <button type="button" className={css.linkButton} disabled={busy} onClick={() => { act({ action: 'trend-delete', seq: trend.seq }) }}>{t('trends.delete')}</button>
+                <span className={css.recentDetail}>{trend.note}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+    </Card>
+  )
+}
+
 /** A UID as the owner may type it: digits only, at most 16 of them. */
 const UID_PATTERN = /^\d{1,16}$/
 
@@ -428,8 +579,12 @@ export function BiliAccountSection({ useBili, refresh, act, t }: BiliAccountProp
               <UsageCard view={view} t={translate} />
               <ProgressCard view={view} now={now} t={translate} />
               <ClockCard view={view} now={now} act={act} busy={busy} t={translate} />
+              <SeenCard view={view} now={now} t={translate} />
               <OwnerCard view={view} act={act} busy={busy} t={translate} />
+              <KeywordsCard view={view} act={act} busy={busy} t={translate} />
               <InterestsCard view={view} act={act} busy={busy} t={translate} />
+              <TasteCard view={view} now={now} act={act} busy={busy} t={translate} />
+              <TrendsCard view={view} now={now} act={act} busy={busy} t={translate} />
               <RecentCard view={view} now={now} t={translate} />
             </div>
           </>

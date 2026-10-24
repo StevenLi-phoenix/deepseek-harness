@@ -2,7 +2,7 @@ import { setImmediate } from 'node:timers/promises'
 import { Context } from '@deepseek-ai/cordis'
 import type { LsyNote } from '@deepseek-ai/dsh-lsy-event-bus'
 import { afterEach, describe, expect, it } from 'vitest'
-import OwnerRelay, { type RelayAnswer, type RelayChannel, type RelayDelivery } from '../src/index.ts'
+import OwnerRelay, { type RelayAnswer, type RelayChannel, type RelayDecision, type RelayDelivery } from '../src/index.ts'
 
 /** A log line the relay wrote. */
 interface LogLine {
@@ -45,6 +45,8 @@ async function mount(options: { notifier?: false | ((note: LsyNote) => Promise<v
 function recorder(name: string, options: { fallbackLabel?: string; deliver?: (answer: RelayAnswer) => Promise<RelayDelivery> } = {}) {
   const calls: string[] = []
   const answers: RelayAnswer[] = []
+  /** How each ended turn ended, as `onTurnEnd` heard it. */
+  const ends: RelayDecision['kind'][] = []
   const channel: RelayChannel = {
     name,
     ...(options.fallbackLabel === undefined ? {} : { fallbackLabel: options.fallbackLabel }),
@@ -54,10 +56,10 @@ function recorder(name: string, options: { fallbackLabel?: string; deliver?: (an
       return options.deliver === undefined ? 'sent' : await options.deliver(answer)
     },
     onTurnStart: (sessionId) => { calls.push(`start:${sessionId}`) },
-    onTurnEnd: (sessionId) => { calls.push(`end:${sessionId}`) },
+    onTurnEnd: (sessionId, ended) => { calls.push(`end:${sessionId}`); ends.push(ended) },
     onTurnSettled: (sessionId) => { calls.push(`settled:${sessionId}`) },
   }
-  return { channel, calls, answers }
+  return { channel, calls, answers, ends }
 }
 
 const turnStart = { type: 'turn/start', seq: 0, data: { turn: 1 } }
@@ -116,6 +118,10 @@ describe('OwnerRelay rules', () => {
     ])
     // Every turn still ends and settles, so typing and per-turn state clear.
     expect(wechat.calls).toEqual(['start:chat-1', 'end:chat-1', 'settled:chat-1', 'start:chat-1', 'end:chat-1', 'settled:chat-1', 'start:chat-1', 'end:chat-1', 'settled:chat-1'])
+    // The channel hears why, so it can tell a turn with nothing to say from one the owner stopped.
+    expect(wechat.ends).toEqual(['silent', 'stopped', 'empty'])
+    await turn(h.emit, 'chat-1', 'An answer.')
+    expect(wechat.ends.at(-1)).toBe('answer')
   })
 
   it('relays an unfinished turn with a warning and the failure reason', async () => {

@@ -594,3 +594,124 @@
   .primary,
   .secondary { transition: none; }
 }
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.filter {
+  padding: 2px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.filter[aria-pressed='true'] {
+  border-color: var(--bili-pink);
+  background: color-mix(in srgb, var(--bili-pink) 12%, transparent);
+  color: var(--bili-pink);
+}
+
+.seenRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.seenRow + .seenRow {
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.grade {
+  min-width: 44px;
+  padding: 0 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 590;
+  line-height: 18px;
+  text-align: center;
+}
+
+.grade[data-grade='must'] {
+  background: color-mix(in srgb, var(--bili-pink) 16%, transparent);
+  color: var(--bili-pink);
+}
+
+.grade[data-grade='ok'] {
+  background: color-mix(in srgb, var(--bili-blue) 14%, transparent);
+  color: var(--bili-blue);
+}
+
+.grade[data-grade='skip'] {
+  background: var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.seenTitle {
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seenTitle:hover {
+  color: var(--bili-blue);
+  text-decoration: underline;
+}
+
+.noteText {
+  flex: 1 1 200px;
+  min-width: 0;
+  line-height: 20px;
+}
+
+.term {
+  flex: 1 1 auto;
+  font-weight: 590;
+}
+
+.chip[data-from='owner'] {
+  background: color-mix(in srgb, var(--bili-pink) 14%, transparent);
+  color: var(--bili-pink);
+}
+
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.linkButton:hover:not(:disabled) {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.addRow {
+  display: flex;
+  gap: 8px;
+}
+
+.addRow .input {
+  flex: 1 1 auto;
+}
+
+.subTitle {
+  margin-top: 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 590;
+}

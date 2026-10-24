@@ -47,8 +47,11 @@ export interface RelayChannel {
   deliver(answer: RelayAnswer): Promise<RelayDelivery>
   /** A claimed Session started a turn. */
   onTurnStart?(sessionId: string): void
-  /** A claimed Session ended a turn; called before `deliver`, whether or not anything is sent. */
-  onTurnEnd?(sessionId: string): void
+  /**
+   * A claimed Session ended a turn; called before `deliver`, whether or not anything is sent.
+   * @param ended - the relay's decision: `answer` (a `deliver` follows), `silent` (NO_REPLY), `stopped` (the owner stopped it), or `empty`.
+   */
+  onTurnEnd?(sessionId: string, ended: RelayDecision['kind']): void
   /** The ended turn's answer went out, was kept, failed, or there was none. */
   onTurnSettled?(sessionId: string): void
 }
@@ -180,7 +183,7 @@ export class OwnerRelay extends Service {
 
   /** Apply the decision of one ended turn: say why nothing goes out, or hand the answer to its channel. */
   private turnEnded(sessionId: string, channel: RelayChannel, ended: string, decision: RelayDecision): void {
-    this.hook(channel, 'onTurnEnd', sessionId)
+    this.hook(channel, 'onTurnEnd', sessionId, decision.kind)
     if (decision.kind !== 'answer') {
       this.ctx.logger.info(`owner-relay: Session ${sessionId} ended a turn (${ended}) ${NOTHING[decision.kind]}`)
       this.hook(channel, 'onTurnSettled', sessionId)
@@ -232,9 +235,10 @@ export class OwnerRelay extends Service {
   }
 
   /** Call one channel hook; a throwing hook is logged and never stops the relay. */
-  private hook(channel: RelayChannel, hook: Hook, sessionId: string): void {
+  private hook(channel: RelayChannel, hook: Hook, sessionId: string, ended?: RelayDecision['kind']): void {
     try {
-      channel[hook]?.(sessionId)
+      if (hook === 'onTurnEnd') channel.onTurnEnd?.(sessionId, ended ?? 'empty')
+      else channel[hook]?.(sessionId)
     } catch (error: unknown) {
       this.ctx.logger.warn(`owner-relay: ${channel.name} ${hook} failed for Session ${sessionId}: ${errorText(error)}`)
     }

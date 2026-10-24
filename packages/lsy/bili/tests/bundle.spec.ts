@@ -53,8 +53,15 @@ describe('event bundle', () => {
     expect(config).toMatchObject({ timeZone: 'America/New_York', session: { agentPreset: 'bili', workspacePath: '/Users/dsh-runtime/bili' } })
     // The owner's UID is set in Settings and stays out of this public repository.
     expect(row.config).not.toHaveProperty('ownerMid')
-    expect(config.wakes).toEqual([{ start: '12:00', end: '14:00' }, { start: '19:30', end: '23:30' }])
-    expect(config.caps).toMatchObject({ dmOwner: 5, dmReply: 30, watch: 10, share: 5 })
+    // Six scouting rounds a day, each watching at least six videos before anything goes out.
+    expect(config.wakes).toHaveLength(6)
+    expect(config.skipChance).toBe(0.1)
+    expect(config.depth).toEqual({ minWatched: 6, maxRounds: 3 })
+    expect(config.picksPerDay).toBe(5)
+    expect(config.caps).toMatchObject({ dmOwner: 6, watch: 60, share: 5 })
+    // Answers to the owner's own messages have no cap.
+    expect(config.caps).not.toHaveProperty('dmReply')
+    expect(row.config).not.toHaveProperty('caps.dmReply')
     // Coins have no daily cap: the balance and Bilibili's per-video rule limit them.
     expect(config.caps).not.toHaveProperty('coin')
     // DeepSeek's off-peak schedule is data, in UTC, and passes the load-time check.
@@ -133,5 +140,11 @@ describe('event bundle', () => {
     expect(bad[3]).toContain('魔女')
     // Writes on the owner's own videos are not singled out: they follow the same rules as any other.
     expect(persona).not.toContain('owner\'s own videos')
+    // It scouts, grades with evidence, learns, and keeps up with memes; the lazy cat is gone.
+    for (const tool of ['bili_verdict', 'bili_seen', 'bili_taste_write', 'bili_trend_write']) expect(persona).toContain(tool)
+    expect(persona).toContain('watch at least six videos through their')
+    expect(persona).toContain('A video is must only when you read it')
+    expect(persona).not.toContain('a bit lazy')
+    expect(persona).not.toContain('mostly just watches')
   })
 })

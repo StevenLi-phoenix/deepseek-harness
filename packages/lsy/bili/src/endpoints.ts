@@ -53,6 +53,12 @@ export const ENDPOINTS = {
   followingFeed: { method: 'GET', host: API, path: '/x/polymer/web-dynamic/v1/feed/all', kind: 'read', cookies: true, signedIn: true, referer: 'https://t.bilibili.com/' },
   popular: { method: 'GET', host: API, path: '/x/web-interface/popular', kind: 'read', cookies: true },
   search: { method: 'GET', host: API, path: '/x/web-interface/wbi/search/type', kind: 'read', cookies: true, wbi: true, referer: 'https://search.bilibili.com/' },
+  // The site leaderboard (排行榜), all zones, as the ranking page reads it.
+  ranking: { method: 'GET', host: API, path: '/x/web-interface/ranking/v2', kind: 'read', cookies: true, wbi: true, referer: 'https://www.bilibili.com/v/popular/rank/all' },
+  // A video's danmaku as XML (`<d p="seconds,…">text</d>`), by its cid.
+  danmaku: { method: 'GET', host: API, path: '/x/v1/dm/list.so', kind: 'read', cookies: true, response: 'text', referer: 'https://www.bilibili.com/' },
+  // The hot-search list the search box shows (热搜), as RSSHub's bilibili/hot-search reads it.
+  hotSearch: { method: 'GET', host: API, path: '/x/web-interface/wbi/search/square', kind: 'read', cookies: true, wbi: true, referer: 'https://www.bilibili.com/' },
   view: { method: 'GET', host: API, path: '/x/web-interface/view', kind: 'read', cookies: true },
   player: { method: 'GET', host: API, path: '/x/player/wbi/v2', kind: 'read', cookies: true, wbi: true },
   // Subtitle files: the URL comes from `player`; no cookies, only its own `auth_key`.

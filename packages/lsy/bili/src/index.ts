@@ -33,10 +33,12 @@ import z from '@deepseek-ai/schemastery'
 import { encode } from 'uqr'
 import {
   addReply, addWatchLater, bvidOf, coinsGiven, commentRows, comments, createDynamic, dailyRewards, dealFavorite, folders, followingFeed,
-  giveCoin, hasLiked, homeFeed, inboxItems, likeVideo, modifyRelation, navInfo, ownerMessages, popular, relationStat, relationTo,
+  danmaku, giveCoin, hasLiked, homeFeed, hotSearches, inboxItems, likeVideo, ranking, modifyRelation, navInfo, ownerMessages, popular,
+  relationStat, relationTo,
   removeWatchLater, reportShare, reportWatch, search, sendMessage, subtitles, thread, threadRows, tripleLike, unreadCounts, videoInfo,
   VIDEO_AREA, watchLaterAids,
-  type CommentView, type FeedPost, type Folder, type InboxItem, type OwnerMessage, type SubtitleView, type VideoCard, type VideoDetail,
+  type CommentView, type DanmakuLine, type FeedPost, type Folder, type HotSearch, type InboxItem, type OwnerMessage, type SearchOrder,
+  type SubtitleView, type VideoCard, type VideoDetail,
 } from './api.ts'
 import type { DailyRewards } from './api.ts'
 import { REFRESH_PUBLIC_KEY, confirmRefresh, deviceCookies, enrollDevice, exchangeRefresh, newDeviceIds, parseGrant, pollQr, refreshNeeded, startQr, type BiliGrant, type QrPoll } from './auth.ts'
@@ -47,15 +49,19 @@ import { BILI_NOTICE_ORIGIN, BILI_RELAY_CHANNEL, DmChannel } from './dm.ts'
 import type { Endpoint, EndpointName } from './endpoints.ts'
 import { WEEKDAYS, nextOffPeak, peakAt, pricingProblem, routeOf, ruleFor, type PricingRule, type Route } from './pricing.ts'
 import { DEFAULT_CAPS, HARD_CAPS, alreadyTaken, lastWrite, ledgerRows, nextSlot, pauseRefusal, remaining, reserve, settle, settleInterrupted, takeSlot, uncertainBefore, usage } from './guard.ts'
-import { SPEECH_ACTIONS, TRIPLE_PARTS, biliDomain, seqKey, type AccountRecord, type LedgerRecord, type PendingRecord, type PlanRecord, type TriplePart, type WriteAction } from './storage.ts'
-import { NOTICES, TEXT_LIMITS, codePoints, inboxPrompt, wakePrompt } from './text.ts'
+import {
+  SPEECH_ACTIONS, TRIPLE_PARTS, biliDomain, seqKey,
+  type AccountRecord, type FindRecord, type LedgerRecord, type PendingRecord, type PlanRecord, type SeenRecord, type TasteRecord,
+  type TrendRecord, type TriplePart, type WriteAction,
+} from './storage.ts'
+import { NOTICES, TEXT_LIMITS, clean, codePoints, continuePrompt, inboxPrompt, wakePrompt } from './text.ts'
 import { dayKey, formatGap, formatStamp, isTimeZone, localTime, nextDayStart } from './time.ts'
-import { BILI_PATH, CAPPED_ACTIONS, HOST_REPORTS, MAX_INTERESTS_CHARS, VERIFY_KINDS, type BiliView, type ProgressView, type LoginView, type ManualWakeView, type RouteView, type VerifyKind, type WakeReason, type CappedAction } from './view.ts'
+import { BILI_PATH, CAPPED_ACTIONS, GRADES, HOST_REPORTS, MAX_INTERESTS_CHARS, MAX_KEYWORDS_CHARS, TASTE_LIMITS, TREND_LIMITS, VERDICT_CHARS, VERIFY_KINDS, type Grade, type SeenView, type BiliView, type ProgressView, type LoginView, type ManualWakeView, type RouteView, type VerifyKind, type WakeReason, type CappedAction } from './view.ts'
 
 export { BiliApiError, BiliClient, BiliRefused, BiliRiskError, BiliTransportError, allowedEndpoint, parseJson, RISK_CODES, USER_AGENT } from './client.ts'
 export { ENDPOINTS, type Endpoint, type EndpointName } from './endpoints.ts'
 export { DEFAULT_CAPS, HARD_CAPS } from './guard.ts'
-export { COVERAGE, LIMITS, type CommentView, type FeedPost, type Folder, type InboxItem, type OwnerMessage, type SubtitleView, type VideoCard, type VideoDetail } from './api.ts'
+export { COVERAGE, LIMITS, type CommentView, type FeedPost, type Folder, type HotSearch, type InboxItem, type OwnerMessage, type SearchOrder, type SubtitleView, type VideoCard, type VideoDetail } from './api.ts'
 export { REFRESH_PUBLIC_KEY, correspondPath, refreshCsrf, type BiliGrant } from './auth.ts'
 export { TEXT_LIMITS, UNTRUSTED_NOTE, UNTRUSTED_TAG, clean, untrusted } from './text.ts'
 export { signQuery, mixinKey } from './wbi.ts'
@@ -103,14 +109,23 @@ export interface CapsConfig {
   reply: number
   /** Text dynamics per day. */
   dynamic: number
-  /** Messages the account sends the owner's main account on its own (a turn's share, or `bili_dm_owner`) per day. */
+  /**
+   * Messages the account sends the owner's main account on its own (a turn's share, or
+   * `bili_dm_owner`) per day; answers to the owner's own messages have no cap.
+   */
   dmOwner: number
-  /** Messages that answer the owner's own messages per day (each part of a split answer counts). */
-  dmReply: number
   /** Watch reports per day: one per video whose subtitles the account read. */
   watch: number
   /** Share reports per day: one per video ever, for a link the host delivered to the owner. */
   share: number
+}
+
+/** The watch floor of a wake. */
+export interface DepthConfig {
+  /** Distinct videos opened with `video()` before an answer goes out. */
+  minWatched: number
+  /** Continuation turns at most per wake. */
+  maxRounds: number
 }
 
 /** Plugin configuration. */
@@ -126,8 +141,18 @@ export interface Config {
   wakes: WakeWindow[]
   /** Probability (0-1) that a window gets no wake on a given day. */
   skipChance: number
+  /**
+   * How much a body-clock or Wake-now wake watches before its answer goes out: a turn that ends
+   * with fewer than `minWatched` distinct videos opened is held back, and the Session is asked to
+   * keep browsing, at most `maxRounds` times; then the last answer goes out. `minWatched` 0 holds nothing.
+   */
+  depth: DepthConfig
   /** What the owner is interested in, shown in every wake prompt until edited in Settings. */
   interests: string
+  /** Search keywords every wake searches first, newest first, until the owner edits them in Settings. */
+  keywords: string[]
+  /** Videos graded must that may go to the owner per day (the day's picks); 0 sets no quota. */
+  picksPerDay: number
   /** The account's Session. */
   session: SessionConfig
   /** Daily write caps. */
@@ -179,7 +204,13 @@ export const Config: z<Config> = z.object({
   timeZone: z.string().default('America/New_York'),
   wakes: z.array(z.object({ start: z.string(), end: z.string() })).default([{ start: '12:00', end: '14:00' }, { start: '19:30', end: '23:30' }]),
   skipChance: z.number().min(0).max(1).default(0.15),
+  depth: z.object({
+    minWatched: z.natural().max(30).default(0),
+    maxRounds: z.natural().max(6).default(3),
+  }),
   interests: z.string().default(''),
+  keywords: z.array(z.string()).default([]),
+  picksPerDay: z.natural().max(50).default(0),
   session: z.object({
     workspacePath: z.string().default('/Users/dsh-runtime/bili'),
     agentPreset: z.string().default('bili'),
@@ -228,8 +259,6 @@ const MAX_TARGETS = 2000
 const MAX_WAKE_ITEMS = 20
 /** Wake log rows kept. */
 const MAX_WAKE_ROWS = 400
-/** Owner-message wakes per rolling hour, however the inbox cap is set. */
-const OWNER_WAKES_PER_HOUR = 30
 /** After a message from the owner, messages are checked this often ... */
 const FAST_POLL_MS = 60_000
 /** ... for this long after the latest one. */
@@ -242,6 +271,43 @@ const DEFER_GRACE_MS = 3_600_000
 const PLAN_DAYS = 14
 /** Journal limits. */
 export const JOURNAL_LIMITS = { chars: 600, perDay: 8, pageSize: 10 } as const
+/** Finds kept; the oldest go first. */
+const MAX_FINDS = 30
+/** Finds a wake prompt lists. */
+const FINDS_IN_PROMPT = 5
+/** Finds Settings shows. */
+const FINDS_IN_VIEW = 10
+/** Hot-search keywords read at once. */
+const HOT_SEARCHES = 30
+/** Graded videos kept; the oldest go first. */
+const MAX_SEEN_VIDEOS = 2000
+/** Graded videos Settings shows. */
+const SEEN_IN_VIEW = 100
+/** Videos whose subtitles were read, remembered as the evidence a must grade needs. */
+const MAX_READ = 500
+/** Keywords a wake lists. */
+const MAX_KEYWORDS = 12
+/** Danmaku lines one read returns. */
+const DANMAKU_LINES = 40
+/** Fresh trends a wake prompt lists. */
+const TRENDS_IN_PROMPT = 15
+/** The owner's first message within this long after a find is kept as how they took it. */
+const REACTION_WINDOW_MS = 86_400_000
+/** Code points of a kept reaction. */
+const REACTION_CHARS = 200
+/** Titles of watched videos remembered for the finds that link them. */
+const MAX_TITLES = 200
+/** Pause between a held turn's end and its continuation prompt, so the Session is idle again. */
+const CONTINUE_DELAY_MS = 3000
+
+/** A body-clock or Wake-now wake in progress: what it opened, and how many continuations it had. */
+interface WakeRun {
+  readonly sessionId: string
+  readonly reason: WakeReason
+  /** Distinct BV ids opened with `video()` since the wake's prompt. */
+  readonly watched: Set<string>
+  rounds: number
+}
 
 /** What a write tool learns. */
 export type WriteOutcome =
@@ -451,6 +517,12 @@ export class BiliAccount extends Service {
   private fastPoll: (() => void) | undefined
   /** An inbox check is running; another one waits for the next tick. */
   private inboxPolling = false
+  /** The body-clock or Wake-now wake in progress, until its answer goes out or it ends. */
+  private wakeRun: WakeRun | undefined
+  /** Titles and uploaders of videos the account opened, for finds and grades; oldest first. */
+  private readonly titles = new Map<string, { title: string; author: string }>()
+  /** Videos whose subtitles the account read: the evidence a must grade needs; oldest first. */
+  private readonly read = new Set<string>()
 
   /**
    * @param ctx - Host services owning timers, storage, credentials, and Sessions.
@@ -471,8 +543,10 @@ export class BiliAccount extends Service {
     this.ready = ctx.storageDomain.open(biliDomain)
     this.dm = new DmChannel({
       messageOwner: (action, text, maxWaitMs) => this.messageOwner(action, text, maxWaitMs),
-      reportShares: (text) => { this.track(this.reportSharesIn(text)) },
+      reportShares: (text) => { this.delivered(text) },
       hold: work => this.hold(work),
+      continueWake: (sessionId, origin, draft) => this.continueWake(sessionId, origin.reason, draft),
+      endWake: (sessionId) => { this.endWake(sessionId, 'its turn did not complete') },
       notifier: () => this.ctx.get('lsyNotifier'),
       logger: { info: (message) => { ctx.logger.info(message) }, warn: (message) => { ctx.logger.warn(message) } },
     })
@@ -954,21 +1028,25 @@ export class BiliAccount extends Service {
   }
 
   /**
-   * Prompt the account's Session unless it is busy.
+   * Prompt the account's Session unless it is busy. A body-clock or Wake-now prompt starts a wake
+   * run that counts what it watches; a continuation belongs to the run already going and is not a
+   * new wake.
    * @returns whether the prompt went in.
    */
-  private async promptSession(text: string, reason: WakeReason, owner = false): Promise<boolean> {
+  private async promptSession(text: string, reason: WakeReason, owner = false, continuation = false): Promise<boolean> {
     mkdirSync(this.config.session.workspacePath, { recursive: true })
     const sessionId = await this.accountSession()
     const resolved = await this.ctx.sessionController.resolveAgent(sessionId)
     if ('error' in resolved) throw resolved.error
     const status = (resolved.agent as { status?: string }).status
     if (status !== undefined && status !== 'idle') {
-      this.ctx.logger.info(`bili: Session ${sessionId} is ${status}; ${reason} wake skipped`)
+      this.ctx.logger.info(`bili: Session ${sessionId} is ${status}; ${reason} ${continuation ? 'continuation' : 'wake'} skipped`)
       return false
     }
     // Known before the turn can end: its answer goes back by the channel of what started it.
     this.dm.setOrigin(sessionId, { reason, owner })
+    const run = !continuation && (reason === 'clock' || reason === 'manual') && this.config.depth.minWatched > 0
+    if (run) this.wakeRun = { sessionId, reason, watched: new Set(), rounds: 0 }
     try {
       await this.ctx.sessionController.prompt({
         requestId: randomUUID() as SessionRequestId,
@@ -979,7 +1057,12 @@ export class BiliAccount extends Service {
       }, this.abort.signal)
     } catch (error: unknown) {
       this.dm.dropOrigin(sessionId)
+      if (run) this.wakeRun = undefined
       throw error
+    }
+    if (continuation) {
+      this.ctx.logger.info(`bili: ${reason} wake continued in Session ${sessionId} (${text.length} chars)`)
+      return true
     }
     const now = Date.now()
     await this.serialize(async () => {
@@ -991,6 +1074,48 @@ export class BiliAccount extends Service {
     })
     this.ctx.logger.info(`bili: ${reason} wake prompted Session ${sessionId} (${text.length} chars)`)
     return true
+  }
+
+  /**
+   * A completed turn of a body-clock or Wake-now wake ended: below the watch floor, and with
+   * continuations left, hold its answer back and ask the Session to keep browsing.
+   * @param draft - the answer, or undefined for NO_REPLY or no text.
+   * @returns whether the answer is held (a continuation follows).
+   */
+  private continueWake(sessionId: string, reason: WakeReason, draft: string | undefined): boolean {
+    const run = this.wakeRun
+    if (run === undefined || run.sessionId !== sessionId || run.reason !== reason) return false
+    const { minWatched, maxRounds } = this.config.depth
+    const watched = run.watched.size
+    // A link to a video not graded must never goes out while a continuation is left.
+    const unjudged = this.unjudged(draft)
+    if ((watched >= minWatched && unjudged.length === 0) || run.rounds >= maxRounds || this.stopping) {
+      this.wakeRun = undefined
+      this.ctx.logger.info(`bili: the ${reason} wake ends after ${watched} video(s) watched and ${run.rounds} continuation(s)${unjudged.length === 0 ? '' : `; ${unjudged.length} link(s) not graded must go out anyway`}`)
+      return false
+    }
+    run.rounds += 1
+    const text = continuePrompt({ watched, minWatched, round: run.rounds, rounds: maxRounds, draft, unjudged })
+    const why = watched < minWatched ? `watched ${watched} of ${minWatched} video(s)` : `links ${unjudged.length} video(s) not graded must`
+    this.ctx.logger.info(`bili: the ${reason} wake ${why}; asking for more (continuation ${run.rounds} of ${maxRounds})`)
+    this.after(CONTINUE_DELAY_MS, async () => {
+      let prompted = false
+      try {
+        prompted = await this.promptSession(text, reason, false, true)
+      } catch (error: unknown) {
+        this.ctx.logger.warn(`bili: the continuation of the ${reason} wake failed: ${errorText(error)}`)
+      }
+      if (!prompted) this.endWake(sessionId, 'its continuation did not go in')
+    })
+    return true
+  }
+
+  /** End the wake run of a Session, saying why. */
+  private endWake(sessionId: string, why: string): void {
+    const run = this.wakeRun
+    if (run?.sessionId !== sessionId) return
+    this.wakeRun = undefined
+    this.ctx.logger.info(`bili: the ${run.reason} wake ends: ${why} (${run.watched.size} video(s) watched)`)
   }
 
   // ── Body clock ─────────────────────────────────────────────────────────
@@ -1167,6 +1292,12 @@ export class BiliAccount extends Service {
       inbox,
       interests: this.interests().text,
       pause: domain.table('pause').get('writes'),
+      taste: this.tasteNotes(),
+      finds: this.recentFinds().slice(0, FINDS_IN_PROMPT),
+      trends: this.trendNotes(true).slice(0, TRENDS_IN_PROMPT),
+      keywords: this.keywords().list,
+      minWatched: this.config.depth.minWatched,
+      ...(this.config.picksPerDay === 0 ? {} : { picks: { sent: this.picksToday(now), perDay: this.config.picksPerDay } }),
     })
   }
 
@@ -1296,8 +1427,27 @@ export class BiliAccount extends Service {
       await this.trimTable(domain, 'targets', MAX_TARGETS)
       if (row === undefined) this.ctx.logger.info(`bili: inbox baseline for ${kind}: ${items.length} item(s) already there`)
       else if (queued > 0) this.ctx.logger.info(`bili: ${queued} new ${kind} item(s) in the inbox`)
-      if (row !== undefined && queued > 0 && kind === 'dm') this.ownerSpoke(Date.now())
+      if (row !== undefined && queued > 0 && kind === 'dm') {
+        await this.keepReaction(domain, items.filter((item): item is OwnerMessage => !('rpid' in item) && !(row.seen.includes(item.id))))
+        this.ownerSpoke(Date.now())
+      }
     })
+  }
+
+  /**
+   * The owner's first message after the latest find, within a day of it, is how they took it:
+   * kept on the find in their words, so every later wake sees it whatever the Session remembers.
+   * Runs inside `serialize`.
+   */
+  private async keepReaction(domain: Domain<typeof biliDomain>, messages: readonly OwnerMessage[]): Promise<void> {
+    const latest = [...domain.table('finds').entries()].map(([, find]) => find).sort((a, b) => b.at - a.at)[0]
+    if (latest === undefined || latest.reaction !== undefined) return
+    const first = [...messages].sort((a, b) => a.at - b.at)
+      .find(message => message.at >= latest.at && message.at - latest.at < REACTION_WINDOW_MS)
+    const text = first === undefined ? '' : clean(first.text, REACTION_CHARS, true)
+    if (first === undefined || text === '') return
+    await domain.table('finds').put(latest.bvid, { ...latest, reaction: { text, at: first.at } })
+    this.ctx.logger.info(`bili: kept the owner's reply to the find ${latest.bvid} (${codePoints(text)} chars)`)
   }
 
   /**
@@ -1355,21 +1505,22 @@ export class BiliAccount extends Service {
 
   /**
    * Hand queued items to the Session. Messages from the owner's account wake it
-   * at once (a conversation; at most 30 such wakes an hour, outside the inbox
-   * cap and the off-peak rule, since the owner asked); other items wait for the
-   * hourly cap and a priced route's off-peak time.
+   * at once, however many they send (a conversation they started: no hourly cap
+   * and no off-peak rule); other items wait for the hourly cap and a priced
+   * route's off-peak time.
    */
   private async deliverInbox(): Promise<void> {
     const domain = await this.ready
     const pending = [...domain.table('pending').entries()].map(([key, row]) => ({ key, row })).sort((a, b) => a.row.at - b.row.at)
     if (pending.length === 0) return
     const owner = pending.some(({ row }) => row.kind === 'dm')
-    const hourAgo = Date.now() - 3_600_000
-    const wakes = [...domain.table('wakes').entries()].map(([, wake]) => wake).filter(wake => wake.reason === 'inbox' && wake.at > hourAgo)
-    const recent = wakes.filter(wake => (wake.owner === true) === owner).length
-    if (recent >= (owner ? OWNER_WAKES_PER_HOUR : this.config.inboxWakesPerHour)) {
-      this.ctx.logger.info(`bili: ${pending.length} inbox item(s) wait: ${recent} ${owner ? 'owner-message' : 'inbox'} wake(s) in the last hour`)
-      return
+    if (!owner) {
+      const hourAgo = Date.now() - 3_600_000
+      const recent = [...domain.table('wakes').entries()].filter(([, wake]) => wake.reason === 'inbox' && wake.owner !== true && wake.at > hourAgo).length
+      if (recent >= this.config.inboxWakesPerHour) {
+        this.ctx.logger.info(`bili: ${pending.length} inbox item(s) wait: ${recent} inbox wake(s) in the last hour`)
+        return
+      }
     }
     const now = Date.now()
     if (!owner) {
@@ -1389,6 +1540,8 @@ export class BiliAccount extends Service {
       pause: domain.table('pause').get('writes'),
       items: batch.map(({ row }) => row.item),
       owner,
+      taste: this.tasteNotes(),
+      lastFind: this.recentFinds().find(find => now - find.at < REACTION_WINDOW_MS),
     })
     let prompted = false
     try {
@@ -1911,8 +2064,58 @@ export class BiliAccount extends Service {
         sender: this.account()?.mid ?? 0, receiver: ownerMid, text: text.trim(), deviceId: await this.deviceId(),
       }),
     })
-    if (outcome.outcome === 'sent') this.track(this.reportSharesIn(text))
+    if (outcome.outcome === 'sent') this.delivered(text)
     return outcome
+  }
+
+  /** A message reached the owner: each video it links is a find, and its share is reported. */
+  private delivered(text: string): void {
+    this.track(this.recordFinds(text))
+    this.track(this.reportSharesIn(text))
+  }
+
+  /** Keep each video a message to the owner linked as a find, with its title when the account watched it. */
+  private async recordFinds(text: string): Promise<void> {
+    const ids = [...new Set(text.match(/BV[0-9A-Za-z]{10}/g) ?? [])].slice(0, 3)
+    if (ids.length === 0) return
+    const now = Date.now()
+    await this.serialize(async () => {
+      const domain = await this.ready
+      const finds = domain.table('finds')
+      for (const bvid of ids) {
+        const title = this.titles.get(bvid)?.title ?? domain.table('seen').get(bvid)?.title
+        await finds.put(bvid, { bvid, at: now, ...(title === undefined ? {} : { title }) })
+      }
+      const oldest = [...finds.entries()].sort(([, a], [, b]) => a.at - b.at).slice(0, Math.max(0, finds.size - MAX_FINDS))
+      for (const [key] of oldest) await finds.delete(key)
+    })
+    this.ctx.logger.info(`bili: the owner got ${ids.length} find(s): ${ids.join(', ')}`)
+  }
+
+  /** Remember an opened video's title and uploader for finds and grades; the oldest are forgotten first. */
+  private rememberTitle(bvid: string, title: string, author: string): void {
+    this.titles.delete(bvid)
+    this.titles.set(bvid, { title, author })
+    for (const key of this.titles.keys()) {
+      if (this.titles.size <= MAX_TITLES) break
+      this.titles.delete(key)
+    }
+  }
+
+  /** Add to a bounded set, forgetting the oldest. */
+  private remember(set: Set<string>, value: string, max: number): void {
+    set.delete(value)
+    set.add(value)
+    for (const key of set) {
+      if (set.size <= max) break
+      set.delete(key)
+    }
+  }
+
+  /** The finds, newest first. */
+  private recentFinds(): FindRecord[] {
+    const rows = this.domain === undefined ? [] : [...this.domain.table('finds').entries()].map(([, row]) => row)
+    return rows.sort((a, b) => b.at - a.at)
   }
 
   /** A stable device id for messages. */
@@ -1936,17 +2139,52 @@ export class BiliAccount extends Service {
   async homeFeed(): Promise<VideoCard[]> {
     this.requireActive()
     this.feedIndex += 1
-    return this.reading(() => homeFeed(this.client, this.feedIndex, this.config.timeZone))
+    return this.cards(await this.reading(() => homeFeed(this.client, this.feedIndex, this.config.timeZone)))
   }
 
   /**
-   * What followed accounts posted.
+   * The site leaderboard (排行榜) across all zones.
+   * @returns up to 30 bounded video cards, top first.
+   */
+  async ranking(): Promise<VideoCard[]> {
+    this.requireActive()
+    return this.cards(await this.reading(() => ranking(this.client, this.config.timeZone)))
+  }
+
+  /**
+   * A sample of a video's danmaku: the jokes and reactions of its own viewers.
+   * @param bvid - BV id.
+   * @param part - part number of a multi-part video.
+   * @returns up to 40 lines across the video, each with its second.
+   */
+  async danmaku(bvid: string, part?: number): Promise<{ bvid: string; lines: DanmakuLine[] }> {
+    this.requireActive()
+    if (bvidOf(bvid) === undefined) throw new Error(`${JSON.stringify(bvid)} is not a BV id`)
+    return this.reading(async () => {
+      const video = await videoInfo(this.client, bvid, this.config.timeZone)
+      const cid = video.parts.find(page => page.page === part)?.cid ?? video.cid
+      return { bvid: video.bvid, lines: await danmaku(this.client, cid, DANMAKU_LINES) }
+    })
+  }
+
+  /** Video cards without the owner's own uploads, each marked with the account's grade if it graded it. */
+  private cards(items: VideoCard[]): VideoCard[] {
+    const seen = this.domain?.table('seen')
+    return this.notOwners(items).map((item) => {
+      const grade = seen?.get(item.bvid)?.grade
+      return grade === undefined ? item : { ...item, graded: grade }
+    })
+  }
+
+  /**
+   * What followed accounts posted, without the owner's own posts.
    * @param offset - `next` of the previous page.
    * @returns bounded posts, newest first, and the `next` offset when there are more.
    */
   async followingFeed(offset?: string): Promise<{ items: FeedPost[]; next?: string }> {
     this.requireActive()
-    return this.reading(() => followingFeed(this.client, offset, this.config.timeZone))
+    const page = await this.reading(() => followingFeed(this.client, offset, this.config.timeZone))
+    return { ...page, items: this.notOwners(page.items) }
   }
 
   /**
@@ -1956,20 +2194,30 @@ export class BiliAccount extends Service {
    */
   async popular(page: number = 1): Promise<VideoCard[]> {
     this.requireActive()
-    return this.reading(() => popular(this.client, Math.max(1, Math.floor(page)), this.config.timeZone))
+    return this.cards(await this.reading(() => popular(this.client, Math.max(1, Math.floor(page)), this.config.timeZone)))
   }
 
   /**
    * Search videos.
    * @param keyword - search words.
    * @param page - from 1.
+   * @param order - `relevance` (default) or `newest` first.
    * @returns bounded video cards.
    */
-  async search(keyword: string, page: number = 1): Promise<VideoCard[]> {
+  async search(keyword: string, page: number = 1, order: SearchOrder = 'relevance'): Promise<VideoCard[]> {
     this.requireActive()
     const words = keyword.trim().slice(0, 100)
     if (words === '') throw new Error('the keyword is empty')
-    return this.reading(() => search(this.client, words, Math.max(1, Math.floor(page)), this.config.timeZone))
+    return this.cards(await this.reading(() => search(this.client, words, Math.max(1, Math.floor(page)), this.config.timeZone, order)))
+  }
+
+  /**
+   * Feed entries without the owner's own uploads and posts: the owner has seen them, so they are never finds,
+   * and the account's browsing goes to what the owner has not seen.
+   */
+  private notOwners<T extends { authorMid?: number | undefined }>(items: T[]): T[] {
+    const owner = this.ownerMid()
+    return owner === undefined ? items : items.filter(item => item.authorMid !== owner)
   }
 
   /**
@@ -1985,8 +2233,12 @@ export class BiliAccount extends Service {
     if (bvidOf(bvid) === undefined) throw new Error(`${JSON.stringify(bvid)} is not a BV id`)
     return this.reading(async () => {
       const video = await videoInfo(this.client, bvid, this.config.timeZone)
+      // Opened in a wake: it counts toward the wake's watch floor, and a find that links it gets its title.
+      this.wakeRun?.watched.add(video.bvid)
+      this.rememberTitle(video.bvid, video.title, video.author)
       const cid = video.parts.find(part => part.page === options.part)?.cid ?? video.cid
       const subtitle = await subtitles(this.client, bvid, cid, options.subtitlePage ?? 1)
+      if (subtitle.reached !== undefined) this.remember(this.read, video.bvid, MAX_READ)
       const top = await comments(this.client, video.aid, { order: 'hot' }, this.config.timeZone)
       // It read what the video says: report a watch that far (in the background; never the owner's videos).
       if (subtitle.reached !== undefined) this.track(this.reportWatchOf(video, cid, subtitle.reached))
@@ -2163,6 +2415,176 @@ export class BiliAccount extends Service {
     return { entries, page: index, pages }
   }
 
+  // ── Taste ──────────────────────────────────────────────────────────────
+
+  /** The notes on the owner's taste, oldest first; every wake prompt lists them. */
+  private tasteNotes(): TasteRecord[] {
+    const rows = this.domain === undefined ? [] : [...this.domain.table('taste').entries()].map(([, row]) => row)
+    return rows.sort((a, b) => a.seq - b.seq)
+  }
+
+  /**
+   * Keep one note about the owner's taste (`bili_taste_write`): what a reaction to a find taught,
+   * or what the owner said they want more or less of.
+   * @param text - at most 200 characters, one line.
+   * @param replaces - number of one of the Session's own notes to rewrite instead of adding one.
+   * @returns the note's number and how many notes there are, or why it was refused.
+   */
+  async tasteWrite(text: string, replaces?: number): Promise<{ saved: true; seq: number; notes: number } | { refused: string }> {
+    return this.keepTaste(text, 'cat', replaces)
+  }
+
+  /**
+   * Add or rewrite a note. When the notes are full, the oldest of the Session's own makes room;
+   * the owner's stay until the owner deletes them, and the Session cannot rewrite them.
+   */
+  private async keepTaste(text: string, from: TasteRecord['from'], replaces?: number): Promise<{ saved: true; seq: number; notes: number } | { refused: string }> {
+    const note = clean(text, 10_000)
+    if (note === '') return { refused: 'the note is empty' }
+    if (codePoints(note) > TASTE_LIMITS.chars) return { refused: `the note is ${codePoints(note)} characters; the limit is ${TASTE_LIMITS.chars}` }
+    return this.serialize(async () => {
+      const domain = await this.ready
+      const table = domain.table('taste')
+      const rows = [...table.entries()].map(([, row]) => row).sort((a, b) => a.seq - b.seq)
+      const now = Date.now()
+      if (replaces !== undefined) {
+        const old = rows.find(row => row.seq === replaces)
+        if (old === undefined) return { refused: `there is no note ${replaces}` }
+        if (old.from === 'owner' && from === 'cat') return { refused: `note ${replaces} is the owner's own; add a new note instead` }
+        await table.put(seqKey(old.seq), { seq: old.seq, at: now, text: note, from })
+        this.ctx.logger.info(`bili: taste note ${old.seq} rewritten by the ${from === 'owner' ? 'owner' : 'Session'} (${codePoints(note)} chars)`)
+        return { saved: true as const, seq: old.seq, notes: rows.length }
+      }
+      let count = rows.length
+      if (count >= TASTE_LIMITS.notes) {
+        const victim = rows.find(row => row.from === 'cat')
+        if (victim === undefined) return { refused: `all ${TASTE_LIMITS.notes} notes are the owner's own` }
+        await table.delete(seqKey(victim.seq))
+        count -= 1
+        this.ctx.logger.info(`bili: taste note ${victim.seq} dropped to make room`)
+      }
+      const seq = Math.max(0, ...rows.map(row => row.seq)) + 1
+      await table.put(seqKey(seq), { seq, at: now, text: note, from })
+      this.ctx.logger.info(`bili: taste note ${seq} by the ${from === 'owner' ? 'owner' : 'Session'} (${codePoints(note)} chars)`)
+      return { saved: true as const, seq, notes: count + 1 }
+    })
+  }
+
+  // ── Grades ─────────────────────────────────────────────────────────────
+
+  /**
+   * Grade a watched video (`bili_verdict`): `must` 值得看, `ok` 可以看, or `skip` 不值当, and why.
+   * `must` needs evidence: the account read the video's subtitles with `video()` first; a grade from
+   * the title alone is at most `ok`. Grading again replaces the grade.
+   * @param bvid - BV id.
+   * @param grade - the grade.
+   * @param reason - why, at most 120 characters.
+   * @returns the grade kept, or why it was refused.
+   */
+  async verdict(bvid: string, grade: Grade, reason: string): Promise<{ saved: true; grade: Grade } | { refused: string }> {
+    const id = bvidOf(bvid)
+    if (id === undefined) return { refused: `${JSON.stringify(bvid)} is not a BV id` }
+    if (!(GRADES as readonly string[]).includes(grade)) return { refused: 'grade must be must, ok, or skip' }
+    const why = clean(reason, 10_000)
+    if (why === '') return { refused: 'say why' }
+    if (codePoints(why) > VERDICT_CHARS) return { refused: `the reason is ${codePoints(why)} characters; the limit is ${VERDICT_CHARS}` }
+    const read = this.read.has(id)
+    if (grade === 'must' && !read) return { refused: `you have not read the subtitles of ${id} (bili_video); without them it is at most ok` }
+    const known = this.titles.get(id)
+    await this.serialize(async () => {
+      const domain = await this.ready
+      const table = domain.table('seen')
+      const facts = known === undefined ? {} : { title: known.title, author: known.author }
+      await table.put(id, { bvid: id, at: Date.now(), ...facts, grade, reason: why, read })
+      const oldest = [...table.entries()].sort(([, a], [, b]) => a.at - b.at).slice(0, Math.max(0, table.size - MAX_SEEN_VIDEOS))
+      for (const [key] of oldest) await table.delete(key)
+    })
+    this.ctx.logger.info(`bili: graded ${id} ${grade}${read ? '' : ' (subtitles not read)'}`)
+    return { saved: true as const, grade }
+  }
+
+  /**
+   * The seen list: what the account graded, newest first, or one video's grade.
+   * @param bvid - one video to look up.
+   * @param limit - entries, at most 50.
+   * @returns the grades.
+   */
+  async seen(bvid?: string, limit: number = 30): Promise<{ entries: Omit<SeenRecord, 'at'>[] }> {
+    const domain = await this.ready
+    const rows = [...domain.table('seen').entries()].map(([, row]) => row).sort((a, b) => b.at - a.at)
+    const picked = bvid === undefined ? rows.slice(0, Math.max(1, Math.min(50, Math.floor(limit)))) : rows.filter(row => row.bvid === bvid)
+    return { entries: picked.map(({ at: _at, ...row }) => row) }
+  }
+
+  /** Links of a held answer that are not graded must. */
+  private unjudged(text: string | undefined): string[] {
+    const seen = this.domain?.table('seen')
+    const ids = [...new Set(text?.match(/BV[0-9A-Za-z]{10}/g) ?? [])]
+    return ids.filter(id => seen?.get(id)?.grade !== 'must')
+  }
+
+  /** Picks sent today: finds delivered since local midnight. */
+  private picksToday(now: number): number {
+    const day = dayKey(now, this.config.timeZone)
+    return this.recentFinds().filter(find => dayKey(find.at, this.config.timeZone) === day).length
+  }
+
+  /** The owner's keywords: the Settings edit, else the configured ones. */
+  private keywords(): { list: string[]; text: string; updatedAt: number | null } {
+    const row = this.domain?.table('settings').get('keywords')
+    const text = row === undefined ? this.config.keywords.join('\n') : row.text
+    const list = text.split('\n').map(line => line.trim()).filter(line => line !== '').slice(0, MAX_KEYWORDS)
+    return { list, text, updatedAt: row?.updatedAt ?? null }
+  }
+
+  // ── Trends ─────────────────────────────────────────────────────────────
+
+  /**
+   * The hot-search list (热搜): what the whole site searches for right now.
+   * @returns up to 30 keywords, each with the label the search box shows when it differs.
+   */
+  async hotSearches(): Promise<HotSearch[]> {
+    this.requireActive()
+    return this.reading(() => hotSearches(this.client, HOT_SEARCHES))
+  }
+
+  /** The trend notebook, newest first; `fresh` keeps only what a wake still lists. */
+  private trendNotes(fresh = false): TrendRecord[] {
+    const rows = this.domain === undefined ? [] : [...this.domain.table('trends').entries()].map(([, row]) => row)
+    const since = Date.now() - TREND_LIMITS.freshDays * 86_400_000
+    return rows.filter(row => !fresh || row.at >= since).sort((a, b) => b.at - a.at || b.seq - a.seq)
+  }
+
+  /**
+   * Note one meme, event, or phrase the account met (`bili_trend_write`): what it is, where it
+   * comes from, and which community it lives in, so later wakes understand it and can tell the owner.
+   * A term already noted is rewritten in place.
+   * @param term - the meme itself, at most 30 characters.
+   * @param note - at most 200 characters.
+   * @param replaces - number of an entry to rewrite instead.
+   * @returns the entry's number, or why it was refused.
+   */
+  async trendWrite(term: string, note: string, replaces?: number): Promise<{ saved: true; seq: number } | { refused: string }> {
+    const name = clean(term, 10_000)
+    const text = clean(note, 10_000)
+    if (name === '' || text === '') return { refused: 'the term and its note must both be filled' }
+    if (codePoints(name) > TREND_LIMITS.term) return { refused: `the term is ${codePoints(name)} characters; the limit is ${TREND_LIMITS.term}` }
+    if (codePoints(text) > TREND_LIMITS.chars) return { refused: `the note is ${codePoints(text)} characters; the limit is ${TREND_LIMITS.chars}` }
+    return this.serialize(async () => {
+      const domain = await this.ready
+      const table = domain.table('trends')
+      const rows = [...table.entries()].map(([, row]) => row)
+      const old = replaces === undefined ? rows.find(row => row.term === name) : rows.find(row => row.seq === replaces)
+      if (replaces !== undefined && old === undefined) return { refused: `there is no entry ${replaces}` }
+      const seq = old?.seq ?? Math.max(0, ...rows.map(row => row.seq)) + 1
+      await table.put(seqKey(seq), { seq, at: Date.now(), term: name, note: text })
+      const oldest = [...table.entries()].sort(([, a], [, b]) => a.at - b.at).slice(0, Math.max(0, table.size - TREND_LIMITS.entries))
+      for (const [key] of oldest) await table.delete(key)
+      this.ctx.logger.info(`bili: trend ${seq} ${old === undefined ? 'noted' : 'rewritten'} (${codePoints(name)}+${codePoints(text)} chars)`)
+      return { saved: true as const, seq }
+    })
+  }
+
   // ── Settings route ─────────────────────────────────────────────────────
 
   /**
@@ -2212,7 +2634,33 @@ export class BiliAccount extends Service {
         const row = domain.table('verify').get(kind)
         return row === undefined ? [] : [{ kind, message: row.message, since: row.since }]
       }),
+      taste: this.tasteNotes().map(({ seq, at, text, from }) => ({ seq, at, text, from })),
+      finds: this.recentFinds().slice(0, FINDS_IN_VIEW).map(({ bvid, at, title, reaction }) => ({
+        bvid, at, ...(title === undefined ? {} : { title }), ...(reaction === undefined ? {} : { reaction }),
+      })),
+      trends: this.trendNotes().map(({ seq, at, term, note }) => ({ seq, at, term, note })),
+      keywords: { text: this.keywords().text, updatedAt: this.keywords().updatedAt },
+      today: this.todayView(domain, now),
+      seen: this.seenView(domain),
     }
+  }
+
+  /** Today's report: grades given today, and picks sent against the quota. */
+  private todayView(domain: Domain<typeof biliDomain>, now: number): BiliView['today'] {
+    const day = dayKey(now, this.config.timeZone)
+    const graded: Record<Grade, number> = { must: 0, ok: 0, skip: 0 }
+    for (const [, row] of domain.table('seen').entries()) if (dayKey(row.at, this.config.timeZone) === day) graded[row.grade] += 1
+    return { day, graded, picks: this.picksToday(now), perDay: this.config.picksPerDay }
+  }
+
+  /** The graded videos, newest first, marked when they went to the owner. */
+  private seenView(domain: Domain<typeof biliDomain>): SeenView[] {
+    const finds = domain.table('finds')
+    return [...domain.table('seen').entries()].map(([, row]) => row).sort((a, b) => b.at - a.at).slice(0, SEEN_IN_VIEW)
+      .map(({ bvid, at, title, author, grade, reason, read }) => ({
+        bvid, at, ...(title === undefined ? {} : { title }), ...(author === undefined ? {} : { author }),
+        grade, reason, read, sent: finds.get(bvid) !== undefined,
+      }))
   }
 
   /** The route of the last check, with when off-peak starts while it is in a peak. */
@@ -2254,6 +2702,26 @@ export class BiliAccount extends Service {
         if (typeof mid !== 'number' || !Number.isSafeInteger(mid) || mid <= 0) return Response.json({ error: 'mid must be a positive integer UID' }, { status: 400, headers })
         if (mid === this.account()?.mid) return Response.json({ error: 'mid is this account itself, not the owner\'s main account' }, { status: 400, headers })
         await this.setOwner(mid)
+      } else if (action === 'taste-add') {
+        const text = (body as { text?: unknown }).text
+        const kept = typeof text === 'string' ? await this.keepTaste(text, 'owner') : { refused: 'text must be a string' }
+        if ('refused' in kept) return Response.json({ error: kept.refused }, { status: 400, headers })
+      } else if (action === 'taste-delete') {
+        const seq = (body as { seq?: unknown }).seq
+        if (typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq <= 0) return Response.json({ error: 'seq must be a note number' }, { status: 400, headers })
+        const deleted = await this.serialize(async () => (await this.ready).table('taste').delete(seqKey(seq)))
+        if (deleted) this.ctx.logger.info(`bili: the owner deleted taste note ${seq}`)
+      } else if (action === 'keywords') {
+        const text = (body as { text?: unknown }).text
+        if (typeof text !== 'string' || codePoints(text) > MAX_KEYWORDS_CHARS) return Response.json({ error: `text must be a string of at most ${MAX_KEYWORDS_CHARS} characters` }, { status: 400, headers })
+        const kept = text.split('\n').map(line => line.trim()).filter(line => line !== '').join('\n')
+        await this.serialize(async () => { await (await this.ready).table('settings').put('keywords', { text: kept, updatedAt: Date.now() }) })
+        this.ctx.logger.info(`bili: the owner updated the keywords (${kept === '' ? 0 : kept.split('\n').length})`)
+      } else if (action === 'trend-delete') {
+        const seq = (body as { seq?: unknown }).seq
+        if (typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq <= 0) return Response.json({ error: 'seq must be an entry number' }, { status: 400, headers })
+        const deleted = await this.serialize(async () => (await this.ready).table('trends').delete(seqKey(seq)))
+        if (deleted) this.ctx.logger.info(`bili: the owner deleted trend ${seq}`)
       } else {
         return Response.json({ error: 'unknown action' }, { status: 400, headers })
       }
