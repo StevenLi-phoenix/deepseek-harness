@@ -73,6 +73,16 @@ describe('event bundle', () => {
     expect(enabled.map(([, row]) => row.name).filter(name => !ROOT_TOOL_ROWS_WITHOUT_TOOLS.has(name!))).toEqual([])
   })
 
+  it('gives the WeChat agent the same character: the witch\'s familiar, who never names her bare', () => {
+    const preset = inserted.find(entry => entry.id === 'preset-unattended')!
+    const persona = (preset.config?.plugins?.[0]?.config as { prefix: string }).prefix
+    expect(persona).toContain('You are 魔女的猫猫, the witch\'s cat: her familiar (使魔) and her always-on agent')
+    expect(persona).toContain('Address her as 魔女大人 or 魔女殿下, and when you speak of her, 祂; never her bare name 魔女')
+    expect(persona).toContain('No stage directions or roleplay narration such as *伸懒腰*')
+    // The work it does for her is unchanged.
+    for (const tool of ['NO_REPLY', 'watch_create', 'schedule_create', 'monitor_start', 'wechat_send_file']) expect(persona).toContain(tool)
+  })
+
   it('gives the bili preset only its persona, the time, the Bilibili tools, and compaction', () => {
     const preset = inserted.find(entry => entry.id === 'preset-bili')!
     expect(preset.config?.['id']).toBe('bili')
