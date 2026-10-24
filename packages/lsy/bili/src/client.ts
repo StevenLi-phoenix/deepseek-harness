@@ -372,10 +372,12 @@ export class BiliClient {
     const json = parsed as Record<string, unknown> & { code: number }
     const data = json['data'] ?? json['result']
     const message = messageText(json['message'] ?? json['msg'])
-    if (typeof (data as { v_voucher?: unknown } | undefined)?.v_voucher === 'string') return this.risk(name, entry, `captcha (code ${json.code})`)
-    if (RISK_CODES.has(json.code)) return this.risk(name, entry, `code ${json.code}`)
+    // Bilibili's own words go with the code, so the owner can tell a flagged account from a captcha.
+    const said = message === '' ? `code ${json.code}` : `code ${json.code}: ${message}`
+    if (typeof (data as { v_voucher?: unknown } | undefined)?.v_voucher === 'string') return this.risk(name, entry, `captcha (${said})`)
+    if (RISK_CODES.has(json.code)) return this.risk(name, entry, said)
     if (VERIFY_CODES.has(json.code) || (json.code !== 0 && VERIFY_WORDS.test(message))) throw new BiliVerifyError(name, json.code, message)
-    if (json.code !== 0 && RISK_WORDS.test(message)) return this.risk(name, entry, `code ${json.code}, challenge`)
+    if (json.code !== 0 && RISK_WORDS.test(message)) return this.risk(name, entry, said)
     if (json.code !== 0) throw new BiliApiError(name, json.code, message, data)
     return { data, body: json, setCookies }
   }
