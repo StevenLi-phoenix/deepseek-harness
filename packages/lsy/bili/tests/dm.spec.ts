@@ -2,6 +2,7 @@
 import type { LsyNote } from '@deepseek-ai/dsh-lsy-event-bus'
 import { describe, expect, it, vi } from 'vitest'
 import { BILI_FALLBACK_LABEL, DmChannel, type DmOutcome } from '../src/dm.ts'
+import { OWNER_ADDRESS, addressOwner } from '../src/text.ts'
 
 /** A host double whose messages wait until the test settles them. */
 function host(options: { notifier?: false | ((note: LsyNote) => Promise<void>) } = {}) {
@@ -93,5 +94,45 @@ describe('DmChannel', () => {
     await missing.settle({ outcome: 'refused', detail: 'writes are paused' })
     await answer
     expect(missing.host.reportShares).not.toHaveBeenCalled()
+  })
+})
+
+describe('addressOwner', () => {
+  it('writes the bare 魔女 that stands alone as an address as 魔女大人', () => {
+    expect(addressOwner('魔女，我半夜醒着，刷到一集冷门纪录片')).toEqual({ text: '魔女大人，我半夜醒着，刷到一集冷门纪录片', rewritten: 1 })
+    expect(addressOwner('魔女你看这个')).toEqual({ text: '魔女大人你看这个', rewritten: 1 })
+    expect(addressOwner('好看！魔女～快来\n魔女')).toEqual({ text: '好看！魔女大人～快来\n魔女大人', rewritten: 2 })
+    expect(addressOwner('晚安，魔女')).toEqual({ text: '晚安，魔女大人', rewritten: 1 })
+    expect(addressOwner('喵，魔女，这个好看吗，魔女？')).toEqual({ text: '喵，魔女大人，这个好看吗，魔女大人？', rewritten: 2 })
+    expect(OWNER_ADDRESS).toBe('魔女大人')
+  })
+
+  it('leaves the respectful forms, compounds, and titles alone', () => {
+    for (const text of [
+      '魔女大人，这只猫自己学会开门了',
+      '魔女殿下，刚睡醒',
+      '祂今天应该会喜欢这个',
+      '我是魔女的猫猫',
+      '小魔女的入学仪式也太狠了',
+      '魔女之旅出第三季了 https://www.bilibili.com/video/BV1aa4y1X7aa',
+      '【魔女】这个标题有点意思',
+      '在，刚睡醒，在刷视频',
+    ]) expect(addressOwner(text)).toEqual({ text, rewritten: 0 })
+  })
+})
+
+describe('DmChannel address', () => {
+  it('sends an answer that names the owner bare as 魔女大人, by message and by the WeChat fallback, and logs only the count', async () => {
+    const h = host()
+    const dm = new DmChannel(h.host)
+    dm.setOrigin('bili-1', { reason: 'clock', owner: false })
+    dm.onTurnEnd('bili-1')
+    const share = dm.deliver({ sessionId: 'bili-1', text: '魔女，这只猫自己学会开门了', outcome: 'completed' })
+    await new Promise(resolve => setImmediate(resolve))
+    expect(h.host.messageOwner.mock.calls.map(([, text]) => text)).toEqual(['魔女大人，这只猫自己学会开门了'])
+    await h.settle({ outcome: 'refused', detail: 'no owner account is configured' })
+    expect(await share).toBe('sent')
+    expect(h.notes.map(note => note.body)).toEqual(['魔女大人，这只猫自己学会开门了\n\n原因：no owner account is configured'])
+    expect(h.host.logger.info).toHaveBeenCalledWith('bili: the answer of Session bili-1 named the owner bare 1 time(s); it goes out as 魔女大人')
   })
 })
