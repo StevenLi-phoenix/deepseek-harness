@@ -111,9 +111,9 @@ describe('risk brake', () => {
     const credentials = credentialStore()
     const h = await harness({ bili: fake, credentials, workspace: dir })
     await h.signIn()
-    fake.reply('/x/web-interface/archive/like', { status: 412, raw: 'blocked' })
-    const like = await h.run(h.account.like('BV1aa4y1X7aa'))
-    expect(like).toEqual({ outcome: 'refused', detail: 'Bilibili\'s risk control stopped it (HTTP 412); writes are paused until the owner resumes them' })
+    // Risk control on a read pauses every write and backs reads off.
+    fake.reply('/x/web-interface/popular', { status: 412, raw: 'blocked' })
+    await expect(h.run(h.account.popular())).rejects.toThrow('risk control (HTTP 412)')
     await vi.advanceTimersByTimeAsync(0)
     expect(h.notes).toEqual([{ title: 'dsh 的 B站账号触发了风控（HTTP 412），所有写操作已暂停：设置 → B站账号 检查后点「恢复」', origin: BILI_NOTICE_ORIGIN }])
     const paused = await h.view()
@@ -140,6 +140,30 @@ describe('risk brake', () => {
     expect(await again.run(again.account.follow(777))).toMatchObject({ outcome: 'sent' })
   })
 
+  it('pauses only public writes after risk control on a like: reading and messages to the owner go on', async () => {
+    fake.relations.set(200000001, 6)
+    const h = await harness({ bili: fake, workspace: dir })
+    await h.signIn()
+    fake.reply('/x/web-interface/archive/like', { status: 412, raw: 'blocked' })
+    expect(await h.run(h.account.like('BV1aa4y1X7aa'))).toEqual({
+      outcome: 'refused', detail: 'Bilibili\'s risk control stopped it (HTTP 412); public writes are paused (messages to the owner still go) until the owner resumes them',
+    })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.notes).toEqual([{ title: 'dsh 的 B站账号点赞、收藏、关注这类操作被风控拦了（HTTP 412），这类操作已暂停，给你的私信照常：设置 → B站账号 检查后点「恢复」', origin: BILI_NOTICE_ORIGIN }])
+    const view = await h.view()
+    expect(view.pause).toMatchObject({ scope: 'public', reason: 'HTTP 412' })
+    expect(view.readsResumeAt).toBeNull()
+    expect((await h.run(h.account.popular())).length).toBeGreaterThan(0)
+    expect(await h.run(h.account.follow(777))).toEqual({ outcome: 'refused', detail: 'public writes are paused (HTTP 412) until the owner resumes them in Settings; messages to the owner still go' })
+    expect(await h.run(h.account.dmOwner('魔女大人，看这个'))).toMatchObject({ outcome: 'sent' })
+    // A later risk answer on a read widens the pause to every write.
+    fake.reply('/x/web-interface/popular', { body: { code: -412, message: '请求被拦截' } })
+    await expect(h.run(h.account.popular())).rejects.toThrow('risk control (code -412: 请求被拦截)')
+    await vi.advanceTimersByTimeAsync(0)
+    expect((await h.view()).pause).toMatchObject({ scope: 'all' })
+    expect(h.notes).toHaveLength(2)
+  })
+
   it('treats code -352 with a voucher as risk control', async () => {
     const h = await harness({ bili: fake, workspace: dir })
     await h.signIn()
@@ -154,9 +178,9 @@ describe('risk brake', () => {
     await h.signIn()
     fake.reply('/x/web-interface/archive/like', { body: { code: -403, message: '账号异常,操作失败' } })
     const like = await h.run(h.account.like('BV1aa4y1X7aa'))
-    expect(like).toEqual({ outcome: 'refused', detail: 'Bilibili\'s risk control stopped it (code -403: 账号异常,操作失败); writes are paused until the owner resumes them' })
+    expect(like).toEqual({ outcome: 'refused', detail: 'Bilibili\'s risk control stopped it (code -403: 账号异常,操作失败); public writes are paused (messages to the owner still go) until the owner resumes them' })
     await vi.advanceTimersByTimeAsync(0)
-    expect((await h.view()).pause).toMatchObject({ scope: 'all', reason: 'code -403: 账号异常,操作失败' })
-    expect(h.notes).toEqual([{ title: 'dsh 的 B站账号触发了风控（code -403: 账号异常,操作失败），所有写操作已暂停：设置 → B站账号 检查后点「恢复」', origin: BILI_NOTICE_ORIGIN }])
+    expect((await h.view()).pause).toMatchObject({ scope: 'public', reason: 'code -403: 账号异常,操作失败' })
+    expect(h.notes).toEqual([{ title: 'dsh 的 B站账号点赞、收藏、关注这类操作被风控拦了（code -403: 账号异常,操作失败），这类操作已暂停，给你的私信照常：设置 → B站账号 检查后点「恢复」', origin: BILI_NOTICE_ORIGIN }])
   })
 })

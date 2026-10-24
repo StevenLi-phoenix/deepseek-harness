@@ -7,6 +7,7 @@
  * (risk control, errors, network failures).
  */
 import { createHash, generateKeyPairSync, privateDecrypt, constants } from 'node:crypto'
+import { buvidFp } from '../src/auth.ts'
 import { mixinKey } from '../src/wbi.ts'
 
 /** One canned answer: a JSON body, a status, a raw body, or a thrown network error. */
@@ -238,6 +239,8 @@ export class FakeBili {
       case '/x/internal/gaia-gateway/ExClimbWuzhi': {
         const payload = JSON.parse((request.json as { payload: string }).payload) as Record<string, unknown>
         if (cookies['buvid3'] === undefined || payload['df35'] !== cookies['_uuid']) return this.code(-400, '请求错误')
+        // The fingerprint cookie must be the hash of this very report.
+        if (cookies['buvid_fp'] !== buvidFp(JSON.stringify(request.json))) return this.code(-400, '请求错误')
         this.enrolled.add(cookies['buvid3'])
         return this.ok(undefined)
       }

@@ -30,8 +30,12 @@ export type VerifyKind = typeof VERIFY_KINDS[number]
 
 /** Login states of a stored account. */
 export const ACCOUNT_STATES = ['active', 'login-needed'] as const
-/** What a pause stops: every write, or only public speech (comments, replies, dynamics). */
-export const PAUSE_SCOPES = ['all', 'speech'] as const
+/**
+ * What a pause stops: every write; every write but messages to the owner and watch reports (`public`,
+ * after risk control on a like, favorite, follow, or other public write); or only public speech
+ * (comments, replies, dynamics).
+ */
+export const PAUSE_SCOPES = ['all', 'public', 'speech'] as const
 /** Body-clock wake states. */
 export const WAKE_STATES = ['planned', 'done', 'skipped', 'missed'] as const
 /** Why the Session was woken: the body clock, new inbox items, or the owner's Wake now in Settings. */

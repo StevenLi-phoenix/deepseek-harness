@@ -150,9 +150,9 @@ function PauseBanner({ view, act, busy, t }: CardProps): ReactNode {
   return (
     <section className={css.banner} role="alert" data-scope={pause?.scope ?? 'reads'}>
       <div className={css.bannerText}>
-        <span className={css.bannerTitle}>{pause === null ? reads : t(pause.scope === 'all' ? 'pause.all' : 'pause.speech')}</span>
+        <span className={css.bannerTitle}>{pause === null ? reads : t(`pause.${pause.scope}`)}</span>
         {pause === null ? null : <span className={css.meta}>{t('pause.reason', { reason: pause.reason, date: dateTime(pause.since, zone) })}</span>}
-        {pause === null ? null : <span className={css.bannerHint}>{t(pause.scope === 'all' ? 'pause.allHint' : 'pause.speechHint')}</span>}
+        {pause === null ? null : <span className={css.bannerHint}>{t(`pause.${pause.scope}Hint`)}</span>}
         {pause !== null && reads !== '' ? <span className={css.meta}>{reads}</span> : null}
       </div>
       <button type="button" className={css.primary} disabled={busy} onClick={() => { act({ action: 'resume' }) }}>{t('pause.resume')}</button>

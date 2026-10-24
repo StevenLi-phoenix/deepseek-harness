@@ -860,7 +860,8 @@ export async function dealFavorite(
 
 /** Like a video. */
 export async function likeVideo(client: BiliClient, aid: string, bvid: string): Promise<void> {
-  await client.call('like', { form: { aid, like: 1 }, referer: videoPage(bvid) })
+  // The form bilibili-api-python sends: aid and bvid, with csrf and csrf_token (both filled by the client).
+  await client.call('like', { form: { aid, bvid, like: 1 }, referer: videoPage(bvid) })
 }
 
 /** Add a video to watch later. */

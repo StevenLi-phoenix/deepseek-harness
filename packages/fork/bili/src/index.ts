@@ -41,14 +41,22 @@ import {
   type SubtitleView, type VideoCard, type VideoDetail,
 } from './api.ts'
 import type { DailyRewards } from './api.ts'
-import { REFRESH_PUBLIC_KEY, confirmRefresh, deviceCookies, enrollDevice, exchangeRefresh, newDeviceIds, parseGrant, pollQr, refreshNeeded, startQr, type BiliGrant, type QrPoll } from './auth.ts'
-import { BiliApiError, BiliClient, BiliRefused, BiliRiskError, BiliTransportError, BiliVerifyError } from './client.ts'
+import {
+  REFRESH_PUBLIC_KEY, buvidFp, confirmRefresh, deviceCookies, devicePayload, enrollDevice, exchangeRefresh, newDeviceIds, parseGrant,
+  pollQr,
+  refreshNeeded, startQr, type BiliGrant, type QrPoll,
+} from './auth.ts'
+import { BiliApiError, BiliClient, BiliRefused, BiliRiskError, BiliTransportError, BiliVerifyError, USER_AGENT } from './client.ts'
 import { nextPlanned, rollPlan, settlePlan, windowProblem, type WakeWindow } from './clock.ts'
 import type { CookieJar } from './cookies.ts'
 import { BILI_NOTICE_ORIGIN, BILI_RELAY_CHANNEL, DmChannel } from './dm.ts'
-import type { Endpoint, EndpointName } from './endpoints.ts'
+import { ENDPOINTS, type Endpoint, type EndpointName } from './endpoints.ts'
 import { WEEKDAYS, nextOffPeak, peakAt, pricingProblem, routeOf, ruleFor, type PricingRule, type Route } from './pricing.ts'
-import { DEFAULT_CAPS, HARD_CAPS, alreadyTaken, lastWrite, ledgerRows, nextSlot, pauseRefusal, remaining, reserve, settle, settleInterrupted, takeSlot, uncertainBefore, usage } from './guard.ts'
+import {
+  DEFAULT_CAPS, HARD_CAPS, alreadyTaken, lastWrite, ledgerRows, nextSlot, pauseRefusal, remaining, reserve, settle,
+  settleInterrupted, takeSlot,
+  uncertainBefore, usage,
+} from './guard.ts'
 import {
   SPEECH_ACTIONS, TRIPLE_PARTS, biliDomain, seqKey,
   type AccountRecord, type FindRecord, type LedgerRecord, type PendingRecord, type PlanRecord, type SeenRecord, type TasteRecord,
@@ -739,18 +747,28 @@ export class BiliAccount extends Service {
     }
   }
 
-  /** Risk control answered: reads back off, writes pause until the owner resumes them, and the owner hears once per pause. */
+  /**
+   * Risk control answered, and the owner hears once per pause. A read (or sign-in step) backs reads
+   * off and pauses every write; a message to the owner pauses every write; any other write (a like,
+   * favorite, follow, comment) pauses only public writes, so messages to the owner and reading go on.
+   * Each pause lasts until the owner resumes it in Settings; a wider one replaces a narrower one.
+   */
   private async brake(name: EndpointName, reason: string): Promise<void> {
     const now = Date.now()
+    const endpoint = ENDPOINTS[name]
+    const scope: 'all' | 'public' = endpoint.kind === 'write' && name !== 'dmSend' ? 'public' : 'all'
+    const reads = endpoint.kind !== 'write'
     const fresh = await this.serialize(async () => {
       const domain = await this.ready
-      await domain.table('backoff').put('reads', { until: now + this.config.readBackoffMs, reason })
-      if (domain.table('pause').get('writes')?.scope === 'all') return false
-      await domain.table('pause').put('writes', { scope: 'all', reason, since: now })
+      if (reads) await domain.table('backoff').put('reads', { until: now + this.config.readBackoffMs, reason })
+      const current = domain.table('pause').get('writes')?.scope
+      if (current === 'all' || current === scope) return false
+      await domain.table('pause').put('writes', { scope, reason, since: now })
       return true
     })
-    this.ctx.logger.error(`bili: risk control on ${name} (${reason}); reads back off for ${formatGap(this.config.readBackoffMs)}, writes are paused until the owner resumes them in Settings`)
-    if (fresh) await this.notify(NOTICES.riskPaused(reason))
+    const what = scope === 'all' ? 'writes are paused' : 'public writes are paused (messages to the owner still go)'
+    this.ctx.logger.error(`bili: risk control on ${name} (${reason}); ${reads ? `reads back off for ${formatGap(this.config.readBackoffMs)}, ` : ''}${what} until the owner resumes them in Settings`)
+    if (fresh) await this.notify(scope === 'all' ? NOTICES.riskPaused(reason) : NOTICES.publicPaused(reason))
   }
 
   /** The session is gone and cannot be refreshed: stop writes and tell the owner once. */
@@ -905,19 +923,18 @@ export class BiliAccount extends Service {
   private async enroll(why: string): Promise<void> {
     const grant = await this.grant()
     if (grant === undefined || grant.cookies['buvid3'] === undefined) return
-    const kept = grant.cookies['b_nut'] === undefined ? undefined : grant.cookies['_uuid']
-    if (kept !== undefined && this.domain?.table('device').get('current') !== undefined) return
-    let uuid: string
-    if (kept === undefined) {
-      const fresh = newDeviceIds(Date.now(), Math.random)
-      uuid = fresh._uuid
-      await this.storeGrant({ ...grant, cookies: { ...grant.cookies, ...fresh } })
-      this.ctx.logger.info(`bili: gave the stored device its browser ids (${why})`)
-    } else {
-      uuid = kept
-    }
+    const nut = grant.cookies['b_nut']
+    const kept = nut === undefined ? undefined : grant.cookies['_uuid']
+    // A device enrolled before buvid_fp existed is enrolled again, with the full report.
+    if (kept !== undefined && grant.cookies['buvid_fp'] !== undefined && this.domain?.table('device').get('current') !== undefined) return
+    const now = Date.now()
+    const ids = kept === undefined || nut === undefined ? newDeviceIds(now, Math.random) : { _uuid: kept, b_nut: nut }
+    const body = { payload: JSON.stringify(devicePayload(ids._uuid, now, Math.random, USER_AGENT)) }
+    // The fingerprint cookie is the hash of this very report, and goes with it.
+    await this.storeGrant({ ...grant, cookies: { ...grant.cookies, ...ids, buvid_fp: buvidFp(JSON.stringify(body)) } })
+    if (kept === undefined) this.ctx.logger.info(`bili: gave the stored device its browser ids (${why})`)
     try {
-      await enrollDevice(this.client, uuid, Date.now(), Math.random)
+      await enrollDevice(this.client, body)
     } catch (error: unknown) {
       this.ctx.logger.warn(`bili: could not enroll the device (${why}): ${errorText(error)}; likes may be refused until it is enrolled at the next start`)
       return
@@ -1678,8 +1695,10 @@ export class BiliAccount extends Service {
         await this.needsVerification(spec.action, error.detail === '' ? `code ${error.code}` : error.detail)
         outcome = { outcome: 'refused', detail, verification: error.detail === '' ? `code ${error.code}` : error.detail }
       } else {
+        // Risk control on a message pauses every write; on any other write, only public ones (see brake).
+        const paused = spec.action === 'dmOwner' || spec.action === 'dmReply' ? 'writes are paused' : 'public writes are paused (messages to the owner still go)'
         const detail = error instanceof BiliRiskError
-          ? `Bilibili's risk control stopped it (${error.reason}); writes are paused until the owner resumes them`
+          ? `Bilibili's risk control stopped it (${error.reason}); ${paused} until the owner resumes them`
           : error instanceof BiliApiError ? `Bilibili refused it: code ${error.code}${error.detail === '' ? '' : ` (${error.detail})`}${coinCodeHint(spec.action, error.code)}` : errorText(error)
         await this.serialize(() => settle(domain, row.id, { state: 'failed', settledAt: now, detail }))
         if (error instanceof BiliApiError && error.code === -101) this.track(this.checkSession(`code -101 from ${error.endpoint}`))
