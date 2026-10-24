@@ -437,7 +437,7 @@ export type Config = LocalConfig
 ## `@deepseek-ai/dsh-bili`
 
 - `inject`: `timer` · `storageDomain` · `credentials` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/lsy/bili/src/index.ts:140`](../packages/lsy/bili/src/index.ts)
+- `source`: [`packages/lsy/bili/src/index.ts:145`](../packages/lsy/bili/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
