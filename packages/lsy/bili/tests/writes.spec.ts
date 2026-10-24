@@ -130,8 +130,8 @@ describe('write guard', () => {
     expect(await h.run(h.account.favorite(CAT))).toEqual({ outcome: 'already', detail: 'already in folder 默认收藏夹' })
     expect(await h.run(h.account.watchLater(CAT))).toEqual({ outcome: 'already', detail: 'already on watch later' })
     expect(await h.run(h.account.unfollow(778))).toEqual({ outcome: 'already', detail: 'not following' })
-    // Nothing was written and nothing counted.
-    expect(fake.requests.filter(request => request.method === 'POST')).toEqual([])
+    // Nothing was written (beyond the sign-in's device enrollment) and nothing counted.
+    expect(fake.requests.filter(request => request.method === 'POST' && request.path !== '/x/internal/gaia-gateway/ExClimbWuzhi')).toEqual([])
     expect((await h.view()).usage.actions.every(row => row.used === 0)).toBe(true)
     // A named folder and removal.
     expect(await h.run(h.account.favorite(CAT, { folderId: 1002 }))).toMatchObject({ outcome: 'sent' })
