@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { Config } from '../src/index.ts'
 import { pricingProblem } from '../src/pricing.ts'
+import { addressOwner } from '../src/text.ts'
 
 /** One loader patch row. */
 interface Row {
@@ -95,15 +96,27 @@ describe('event bundle', () => {
     // The voice: a cat's temperament in a real user's short message, never roleplay narration.
     expect(persona).toContain('Still write like a real Bilibili user messaging a friend, not like an assistant')
     expect(persona).toContain('No stage directions or roleplay narration such as *伸懒腰*')
-    // A good and a bad example for a share, a reply, and a public comment; no good one narrates or tags every line.
+    // The witch's familiar never names her bare: 魔女大人 or 魔女殿下 to her, 祂 of her.
+    expect(persona).toContain('you are her familiar (使魔), her pet and her property')
+    expect(persona).toContain('Address her as 魔女大人 or 魔女殿下, and when you speak of her, 祂; never her bare name 魔女')
+    expect(persona).not.toContain('you may call the owner 魔女')
+    // A good and a bad example for a share, a reply, and a public comment, and a bad one for her bare name;
+    // no good one narrates or tags every line.
     const good = persona.split('\n').filter(line => line.startsWith('Good'))
     const bad = persona.split('\n').filter(line => line.startsWith('Bad'))
+    const message = (line: string): string => line.slice(line.indexOf(': ') + 2)
     expect(good.map(line => line.slice(0, line.indexOf(':')))).toEqual(['Good (a share)', 'Good (the witch wrote "在吗")', 'Good (a public comment)'])
-    expect(bad.map(line => line.slice(0, line.indexOf(':')))).toEqual(['Bad (a share)', 'Bad (a reply)', 'Bad (a public comment)'])
+    expect(bad.map(line => line.slice(0, line.indexOf(':')))).toEqual(['Bad (her bare name)', 'Bad (a share)', 'Bad (a reply)', 'Bad (a public comment)'])
     for (const line of good) expect(line).not.toMatch(/\*|喵/)
+    // The good share addresses her as the host would send it; the bare-name one is what the host rewrites.
+    expect(message(good[0] ?? '')).toMatch(/^魔女大人，/)
+    for (const line of good) expect(addressOwner(message(line)).rewritten).toBe(0)
+    expect(addressOwner(message(bad[0] ?? '')).rewritten).toBe(1)
+    // No bad example teaches that the respectful address is the fault.
+    for (const line of bad) expect(line).not.toMatch(/魔女大人|魔女殿下/)
     // The good public comment says nothing of the witch; the bad one does.
     expect(good[2]).not.toContain('魔女')
-    expect(bad[2]).toContain('魔女')
+    expect(bad[3]).toContain('魔女')
     // Writes on the owner's own videos are not singled out: they follow the same rules as any other.
     expect(persona).not.toContain('owner\'s own videos')
   })

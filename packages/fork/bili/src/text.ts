@@ -183,6 +183,30 @@ export function splitMessage(text: string, max: number, parts: number): string[]
   return pieces.filter(piece => piece !== '')
 }
 
+/** How the account addresses the owner, the witch whose familiar it is. */
+export const OWNER_ADDRESS = '魔女大人'
+
+/** The bare 魔女 leading a line or sentence as an address: followed by punctuation, a space, 你, or the line's end. */
+const BARE_LEAD = /(^|[。！？!?…～~]\s*)魔女(?=[\s，,。！？!?…～~：:]|你|$)/gmu
+/** The bare 魔女 after a comma as an address: followed by punctuation or the line's end. */
+const BARE_TAIL = /([，,]\s*)魔女(?=\s*(?:[，,。！？!?…～~]|$))/gmu
+
+/**
+ * Write the owner's bare name as {@link OWNER_ADDRESS} where it stands alone as an address: in the
+ * owner's setting, a familiar naming the witch bare is insolence. Respectful forms (魔女大人,
+ * 魔女殿下), compounds (魔女的猫猫, 小魔女, 魔女病), and titles (魔女之旅) are left alone.
+ * @param text - an answer for the owner.
+ * @returns the text, and how many bare addresses were rewritten.
+ */
+export function addressOwner(text: string): { text: string; rewritten: number } {
+  let rewritten = 0
+  const address = (_match: string, before: string): string => {
+    rewritten += 1
+    return `${before}${OWNER_ADDRESS}`
+  }
+  return { text: text.replace(BARE_LEAD, address).replace(BARE_TAIL, address), rewritten }
+}
+
 /** Title of a turn's answer that could not go out as a Bilibili message and came to WeChat instead. */
 export const FALLBACK_TITLE = '📺 B站：这条没能用 B站私信发出，改发微信'
 
