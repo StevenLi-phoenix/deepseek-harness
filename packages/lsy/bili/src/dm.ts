@@ -6,7 +6,7 @@
 // Type-only: the ctx.lsyNotifier contract and the relay's channel contract.
 import type { LsyNotifier } from '@deepseek-ai/dsh-lsy-event-bus'
 import type { RelayAnswer, RelayChannel, RelayDelivery } from '@deepseek-ai/dsh-owner-relay'
-import { FALLBACK_TITLE, OWNER_ADDRESS, TEXT_LIMITS, addressOwner, splitMessage } from './text.ts'
+import { FALLBACK_TITLE, TEXT_LIMITS, splitMessage } from './text.ts'
 import type { WakeReason } from './view.ts'
 
 /** Name of the account's channel in `ctx.ownerRelay`. */
@@ -131,10 +131,7 @@ export class DmChannel implements RelayChannel {
     const action: DmAction = origin.owner ? 'dmReply' : 'dmOwner'
     const sending = `sending ${answer.text.length} chars to the owner (${action})`
     this.host.logger.info(`bili: Session ${sessionId} ended a ${origin.reason} turn (${ended}); ${sending}`)
-    // The host, not the model, keeps the familiar from naming the witch bare, by message and by WeChat alike.
-    const { text, rewritten } = addressOwner(answer.text)
-    if (rewritten > 0) this.host.logger.info(`bili: the answer of Session ${sessionId} named the owner bare ${rewritten} time(s); it goes out as ${OWNER_ADDRESS}`)
-    const parts = splitMessage(text, TEXT_LIMITS[action], 2)
+    const parts = splitMessage(answer.text, TEXT_LIMITS[action], 2)
     for (const [index, part] of parts.entries()) {
       const outcome = await this.host.messageOwner(action, part, ANSWER_WAIT_MS)
       if (outcome.outcome !== 'sent') {

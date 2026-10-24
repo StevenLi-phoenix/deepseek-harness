@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { Config } from '../src/index.ts'
 import { pricingProblem } from '../src/pricing.ts'
-import { addressOwner } from '../src/text.ts'
 
 /** One loader patch row. */
 interface Row {
@@ -64,6 +63,11 @@ describe('event bundle', () => {
     expect(pricingProblem(config.pricing)).toBeUndefined()
   })
 
+  it('logs the account, its tools, and owner-relay at debug while they are new, everything else at info', () => {
+    const logger = inserted.find(row => row.id === 'logger-console')
+    expect(logger?.config).toEqual({ levels: { 'default': 2, 'bili-account': 3, 'tool-bili': 3, 'owner-relay': 3 } })
+  })
+
   it('leaves no model tool at the profile root, where every preset, bili included, would inherit it', () => {
     const enabled = [...composedRoot()].filter(([, row]) => row.enabled && row.name?.startsWith('@deepseek-ai/dsh-tool-'))
     expect(enabled.map(([, row]) => row.name).filter(name => !ROOT_TOOL_ROWS_WITHOUT_TOOLS.has(name!))).toEqual([])
@@ -108,10 +112,10 @@ describe('event bundle', () => {
     expect(good.map(line => line.slice(0, line.indexOf(':')))).toEqual(['Good (a share)', 'Good (the witch wrote "在吗")', 'Good (a public comment)'])
     expect(bad.map(line => line.slice(0, line.indexOf(':')))).toEqual(['Bad (her bare name)', 'Bad (a share)', 'Bad (a reply)', 'Bad (a public comment)'])
     for (const line of good) expect(line).not.toMatch(/\*|喵/)
-    // The good share addresses her as the host would send it; the bare-name one is what the host rewrites.
+    // The good share addresses her as 魔女大人; no good example names her bare, and the bare-name one does.
     expect(message(good[0] ?? '')).toMatch(/^魔女大人，/)
-    for (const line of good) expect(addressOwner(message(line)).rewritten).toBe(0)
-    expect(addressOwner(message(bad[0] ?? '')).rewritten).toBe(1)
+    for (const line of good) expect(message(line)).not.toMatch(/^魔女[，,]/)
+    expect(message(bad[0] ?? '')).toMatch(/^魔女，/)
     // No bad example teaches that the respectful address is the fault.
     for (const line of bad) expect(line).not.toMatch(/魔女大人|魔女殿下/)
     // The good public comment says nothing of the witch; the bad one does.
