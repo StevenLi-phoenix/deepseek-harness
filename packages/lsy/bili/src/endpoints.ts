@@ -48,6 +48,9 @@ export const ENDPOINTS = {
   confirmRefresh: { method: 'POST', host: PASSPORT, path: '/x/passport-login/web/confirm/refresh', kind: 'auth', cookies: true, signedIn: true, csrfForm: ['csrf'] },
   nav: { method: 'GET', host: API, path: '/x/web-interface/nav', kind: 'read', cookies: true },
 
+  // The web ticket a browser keeps in `bili_ticket` (GenWebTicket; HMAC-signed query, csrf in the query).
+  webTicket: { method: 'POST', host: API, path: '/bapis/bilibili.api.ticket.v1.Ticket/GenWebTicket', kind: 'auth', cookies: true, csrfQuery: ['csrf'], referer: 'https://www.bilibili.com/' },
+
   // Reading.
   homeFeed: { method: 'GET', host: API, path: '/x/web-interface/wbi/index/top/feed/rcmd', kind: 'read', cookies: true, wbi: true },
   followingFeed: { method: 'GET', host: API, path: '/x/polymer/web-dynamic/v1/feed/all', kind: 'read', cookies: true, signedIn: true, referer: 'https://t.bilibili.com/' },
@@ -82,7 +85,7 @@ export const ENDPOINTS = {
   // Writing; only the write guard calls these.
   relationModify: { method: 'POST', host: API, path: '/x/relation/modify', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf'], referer: 'https://space.bilibili.com/' },
   favDeal: { method: 'POST', host: API, path: '/x/v3/fav/resource/deal', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf'] },
-  like: { method: 'POST', host: API, path: '/x/web-interface/archive/like', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf', 'csrf_token'] },
+  like: { method: 'POST', host: API, path: '/x/web-interface/archive/like', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf'] },
   watchLaterAdd: { method: 'POST', host: API, path: '/x/v2/history/toview/add', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf'] },
   watchLaterDel: { method: 'POST', host: API, path: '/x/v2/history/toview/del', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf'] },
   replyAdd: { method: 'POST', host: API, path: '/x/v2/reply/add', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf'] },

@@ -54,7 +54,7 @@ describe('QR login', () => {
     const payload = (record as { payload: { mid: number; cookies: Record<string, string>; refreshToken: string } }).payload
     expect(payload.mid).toBe(3_000_001)
     expect(payload.refreshToken).toBe('refresh-token-1')
-    expect(Object.keys(payload.cookies).sort()).toEqual(['DedeUserID', 'DedeUserID__ckMd5', 'SESSDATA', '_uuid', 'b_nut', 'bili_jct', 'buvid3', 'buvid4', 'buvid_fp', 'sid'])
+    expect(Object.keys(payload.cookies).sort()).toEqual(['DedeUserID', 'DedeUserID__ckMd5', 'SESSDATA', '_uuid', 'b_nut', 'bili_jct', 'bili_ticket', 'bili_ticket_expires', 'buvid3', 'buvid4', 'buvid_fp', 'sid'])
 
     // Login endpoints get no cookies and never follow redirects.
     for (const path of ['/x/passport-login/web/qrcode/generate', '/x/passport-login/web/qrcode/poll']) {

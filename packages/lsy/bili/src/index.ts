@@ -43,7 +43,7 @@ import {
 import type { DailyRewards } from './api.ts'
 import {
   REFRESH_PUBLIC_KEY, buvidFp, confirmRefresh, deviceCookies, devicePayload, enrollDevice, exchangeRefresh, newDeviceIds, parseGrant,
-  pollQr,
+  pollQr, webTicket,
   refreshNeeded, startQr, type BiliGrant, type QrPoll,
 } from './auth.ts'
 import { BiliApiError, BiliClient, BiliRefused, BiliRiskError, BiliTransportError, BiliVerifyError, USER_AGENT } from './client.ts'
@@ -64,7 +64,12 @@ import {
 } from './storage.ts'
 import { NOTICES, TEXT_LIMITS, clean, codePoints, continuePrompt, inboxPrompt, wakePrompt } from './text.ts'
 import { dayKey, formatGap, formatStamp, isTimeZone, localTime, nextDayStart } from './time.ts'
-import { BILI_PATH, CAPPED_ACTIONS, GRADES, HOST_REPORTS, MAX_INTERESTS_CHARS, MAX_KEYWORDS_CHARS, TASTE_LIMITS, TREND_LIMITS, VERDICT_CHARS, VERIFY_KINDS, type Grade, type SeenView, type BiliView, type ProgressView, type LoginView, type ManualWakeView, type RouteView, type VerifyKind, type WakeReason, type CappedAction } from './view.ts'
+import {
+  BILI_PATH, CAPPED_ACTIONS, GRADES, HOST_REPORTS, MAX_INTERESTS_CHARS, MAX_KEYWORDS_CHARS, TASTE_LIMITS, TREND_LIMITS,
+  VERDICT_CHARS, VERIFY_KINDS, type Grade, type SeenView, type BiliView, type ProgressView, type LoginView, type ManualWakeView,
+  type RouteView,
+  type VerifyKind, type WakeReason, type CappedAction,
+} from './view.ts'
 
 export { BiliApiError, BiliClient, BiliRefused, BiliRiskError, BiliTransportError, allowedEndpoint, parseJson, RISK_CODES, USER_AGENT } from './client.ts'
 export { ENDPOINTS, type Endpoint, type EndpointName } from './endpoints.ts'
@@ -287,6 +292,8 @@ const FINDS_IN_PROMPT = 5
 const FINDS_IN_VIEW = 10
 /** Hot-search keywords read at once. */
 const HOT_SEARCHES = 30
+/** A web ticket this close to expiring is renewed. */
+const TICKET_RENEW_MS = 86_400_000
 /** Graded videos kept; the oldest go first. */
 const MAX_SEEN_VIDEOS = 2000
 /** Graded videos Settings shows. */
@@ -624,9 +631,37 @@ export class BiliAccount extends Service {
         await this.checkSession('start')
       } finally {
         await this.enroll('start')
+        await this.ticket('start')
       }
     })
-    this.every(this.config.refreshCheckMs, () => this.checkSession('daily'))
+    this.every(this.config.refreshCheckMs, async () => {
+      await this.checkSession('daily')
+      await this.ticket('daily')
+    })
+  }
+
+  /**
+   * Keep the jar's `bili_ticket` (and `bili_ticket_expires`) fresh, as a browser does: a new ticket
+   * from GenWebTicket when there is none or it expires within a day. A failure is logged; the next
+   * check tries again.
+   */
+  private async ticket(why: string): Promise<void> {
+    const grant = await this.grant()
+    // Signed in (a session cookie), whether or not sign-in has finished recording the account.
+    if (grant?.cookies['SESSDATA'] === undefined || this.account()?.state === 'login-needed') return
+    const expires = Number(grant.cookies['bili_ticket_expires'] ?? 0) * 1000
+    if (grant.cookies['bili_ticket'] !== undefined && expires - Date.now() > TICKET_RENEW_MS) return
+    let fresh: { bili_ticket: string; bili_ticket_expires: string }
+    try {
+      fresh = await webTicket(this.client, Date.now())
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`bili: could not get a web ticket (${why}): ${errorText(error)}`)
+      return
+    }
+    const current = await this.grant()
+    if (current === undefined) return
+    await this.storeGrant({ ...current, cookies: { ...current.cookies, ...fresh } })
+    this.ctx.logger.info(`bili: got a web ticket until ${formatStamp(Number(fresh.bili_ticket_expires) * 1000, this.config.timeZone)} (${why})`)
   }
 
   /** Run storage work one piece at a time; rejections reach the caller without breaking the chain. */
@@ -958,6 +993,7 @@ export class BiliAccount extends Service {
     // A new login brings a new buvid3, which needs its own enrollment.
     await this.serialize(async () => { await (await this.ready).table('device').delete('current') })
     await this.enroll('sign-in')
+    await this.ticket('sign-in')
     let nav: Awaited<ReturnType<typeof navInfo>>
     try {
       nav = await navInfo(this.client)
@@ -1696,9 +1732,10 @@ export class BiliAccount extends Service {
         outcome = { outcome: 'refused', detail, verification: error.detail === '' ? `code ${error.code}` : error.detail }
       } else {
         // Risk control on a message pauses every write; on any other write, only public ones (see brake).
-        const paused = spec.action === 'dmOwner' || spec.action === 'dmReply' ? 'writes are paused' : 'public writes are paused (messages to the owner still go)'
+        const paused = spec.action === 'dmOwner' || spec.action === 'dmReply' ? 'writes are paused until the owner resumes them'
+          : 'public writes are paused (messages to the owner still go) until the owner resumes them'
         const detail = error instanceof BiliRiskError
-          ? `Bilibili's risk control stopped it (${error.reason}); ${paused} until the owner resumes them`
+          ? `Bilibili's risk control stopped it (${error.reason}); ${paused}`
           : error instanceof BiliApiError ? `Bilibili refused it: code ${error.code}${error.detail === '' ? '' : ` (${error.detail})`}${coinCodeHint(spec.action, error.code)}` : errorText(error)
         await this.serialize(() => settle(domain, row.id, { state: 'failed', settledAt: now, detail }))
         if (error instanceof BiliApiError && error.code === -101) this.track(this.checkSession(`code -101 from ${error.endpoint}`))

@@ -51,7 +51,7 @@ describe('write guard', () => {
     const like = fake.requestsTo('/x/web-interface/archive/like')[0]!
     expect(like.form).toMatchObject({ aid: '101', like: '1', csrf: fake.session!.bili_jct })
     expect(like.headers['cookie']).toContain('buvid3=BUVID3-FAKE-infoc')
-    expect(like.headers['referer']).toBe(`https://www.bilibili.com/video/${CAT}/`)
+    expect(like.headers['referer']).toBe(`https://www.bilibili.com/en/video/${CAT}/`)
     expect(like.headers['origin']).toBe('https://www.bilibili.com')
     const recent = (await h.view()).recent
     expect(recent.map(row => [row.action, row.target, row.state])).toEqual([['watchlater', CAT, 'accepted'], ['like', CAT, 'accepted']])
@@ -131,7 +131,7 @@ describe('write guard', () => {
     expect(await h.run(h.account.watchLater(CAT))).toEqual({ outcome: 'already', detail: 'already on watch later' })
     expect(await h.run(h.account.unfollow(778))).toEqual({ outcome: 'already', detail: 'not following' })
     // Nothing was written (beyond the sign-in's device enrollment) and nothing counted.
-    expect(fake.requests.filter(request => request.method === 'POST' && request.path !== '/x/internal/gaia-gateway/ExClimbWuzhi')).toEqual([])
+    expect(fake.requests.filter(request => request.method === 'POST' && !['/x/internal/gaia-gateway/ExClimbWuzhi', '/bapis/bilibili.api.ticket.v1.Ticket/GenWebTicket'].includes(request.path))).toEqual([])
     expect((await h.view()).usage.actions.every(row => row.used === 0)).toBe(true)
     // A named folder and removal.
     expect(await h.run(h.account.favorite(CAT, { folderId: 1002 }))).toMatchObject({ outcome: 'sent' })

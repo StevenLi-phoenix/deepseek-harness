@@ -803,7 +803,7 @@ export async function reportWatch(
  * @param bvid - BV id.
  */
 export async function reportShare(client: BiliClient, bvid: string): Promise<void> {
-  await client.call('shareReport', { form: { bvid, source: 'web_normal' }, referer: videoPage(bvid) })
+  await client.call('shareReport', { query: INTL_WRITE_QUERY, form: { bvid, ...pageFields() }, referer: intlVideoPage(bvid) })
 }
 
 /**
@@ -814,7 +814,7 @@ export async function reportShare(client: BiliClient, bvid: string): Promise<voi
  * @param count - 1, or 2 for an original video.
  */
 export async function giveCoin(client: BiliClient, aid: string, bvid: string, count: 1 | 2): Promise<void> {
-  await client.call('coin', { form: { aid, multiply: count, select_like: 0 }, referer: videoPage(bvid) })
+  await client.call('coin', { query: INTL_WRITE_QUERY, form: { aid, multiply: count, select_like: 0, ...pageFields() }, referer: intlVideoPage(bvid) })
 }
 
 /** What a triple (一键三连) applied, as Bilibili answers it. */
@@ -834,13 +834,45 @@ export interface TripleResult {
  * @param bvid - BV id.
  */
 export async function tripleLike(client: BiliClient, aid: string, bvid: string): Promise<TripleResult> {
-  const data = obj((await client.call('triple', { form: { aid }, referer: videoPage(bvid) })).data)
+  const data = obj((await client.call('triple', { query: INTL_WRITE_QUERY, form: { aid, ...pageFields() }, referer: intlVideoPage(bvid) })).data)
   return { like: data['like'] === true, coin: data['coin'] === true, favorite: data['fav'] === true, coins: num(data['multiply']) ?? 0 }
 }
 
 /** `Referer` of a video page. */
 function videoPage(bvid: string | undefined): string {
   return bvid === undefined ? 'https://www.bilibili.com/' : `https://www.bilibili.com/video/${bvid}/`
+}
+
+/**
+ * Query the international web version (`web_i`, bilibili.com/en/) puts on a like, as captured from a
+ * real browser liking with this account on 2026-10-24: the device and locale metadata. The account
+ * was registered overseas and signs in only there, so its interaction writes carry it too.
+ */
+export const INTL_WRITE_QUERY: Readonly<Record<string, string>> = {
+  'x-bili-locale-json': JSON.stringify({ c_locale: { language: 'en' }, always_translate: true }),
+  'x-bili-device-req-json': JSON.stringify({ platform: 'web', device: 'pc', spmid: '333.788', mobi_app: 'web_i' }),
+}
+
+/**
+ * Form fields a video page adds to an interaction write, from the same capture: where the click came
+ * from, the page's spm and statistics, and its eab, ramval, source, and ga flags.
+ * @param random - uniform source in [0, 1), for `ramval`.
+ */
+export function pageFields(random: () => number = Math.random): Record<string, string | number> {
+  return {
+    from_spmid: '333.337.search-card.all.click',
+    spmid: '333.788.0.0',
+    statistics: JSON.stringify({ appId: 182, platform: 5 }),
+    eab_x: 2,
+    ramval: Math.floor(random() * 10),
+    source: 'web_normal',
+    ga: 1,
+  }
+}
+
+/** `Referer` of a video page on the international web version. */
+function intlVideoPage(bvid: string): string {
+  return `https://www.bilibili.com/en/video/${bvid}/`
 }
 
 /** Follow (`1`) or unfollow (`2`) an account. */
@@ -860,8 +892,8 @@ export async function dealFavorite(
 
 /** Like a video. */
 export async function likeVideo(client: BiliClient, aid: string, bvid: string): Promise<void> {
-  // The form bilibili-api-python sends: aid and bvid, with csrf and csrf_token (both filled by the client).
-  await client.call('like', { form: { aid, bvid, like: 1 }, referer: videoPage(bvid) })
+  // The request a real browser sends on bilibili.com/en/ (csrf is filled by the client).
+  await client.call('like', { query: INTL_WRITE_QUERY, form: { aid, like: 1, ...pageFields() }, referer: intlVideoPage(bvid) })
 }
 
 /** Add a video to watch later. */
