@@ -15,12 +15,12 @@ import { dayKey } from './time.ts'
 /** Default daily caps. */
 export const DEFAULT_CAPS: Readonly<Record<CappedAction, number>> = {
   follow: 10, unfollow: 10, favorite: 20, like: 30, watchlater: 30, comment: 3, reply: 5, dynamic: 1,
-  dmOwner: 5, dmReply: 30, watch: 10, share: 5,
+  dmOwner: 5, watch: 10, share: 5,
 }
 /** Caps no configuration can exceed. */
 export const HARD_CAPS: Readonly<Record<CappedAction, number>> = {
   follow: 30, unfollow: 30, favorite: 60, like: 100, watchlater: 100, comment: 10, reply: 20, dynamic: 3,
-  dmOwner: 20, dmReply: 60, watch: 10, share: 10,
+  dmOwner: 20, watch: 100, share: 10,
 }
 
 /** Writes that happen at most once per target, ever; their rows are kept through pruning. */

@@ -53,7 +53,7 @@ export interface FakeComment {
 
 const WBI_KEYS = { imgKey: '7cd084941338484aae1ad9425b84077c', subKey: '4932caff0ff746eab6f01bf08b70ac45' }
 /** Paths that require a WBI signature. */
-const SIGNED = new Set(['/x/web-interface/wbi/index/top/feed/rcmd', '/x/web-interface/wbi/search/type', '/x/player/wbi/v2', '/x/v2/reply/wbi/main', '/web_im/v1/web_im/send_msg', '/x/dynamic/feed/create/dyn'])
+const SIGNED = new Set(['/x/web-interface/wbi/index/top/feed/rcmd', '/x/web-interface/wbi/search/type', '/x/web-interface/wbi/search/square', '/x/web-interface/ranking/v2', '/x/player/wbi/v2', '/x/v2/reply/wbi/main', '/web_im/v1/web_im/send_msg', '/x/dynamic/feed/create/dyn'])
 /** Paths that require the session cookie. */
 const SIGNED_IN = new Set([
   '/x/passport-login/web/cookie/info', '/x/passport-login/web/cookie/refresh', '/x/passport-login/web/confirm/refresh', '/x/polymer/web-dynamic/v1/feed/all',
@@ -120,6 +120,11 @@ export class FakeBili {
   replyItems: Record<string, unknown>[] = []
   atItems: Record<string, unknown>[] = []
   ownerMessages: { sender: number; text: string; key: string; at: number }[] = []
+  /** The hot-search list (热搜). */
+  hotSearches: { keyword: string; show_name?: string; icon?: string }[] = [
+    { keyword: '鱼灾', show_name: 'B站鱼灾', icon: 'https://i0.hdslb.com/bfs/legacy/hot.png' },
+    { keyword: '大肥鱼' },
+  ]
   /** New comments are hidden from signed-out readers. */
   hideNewComments = false
   private readonly queues = new Map<string, Reply[]>()
@@ -275,6 +280,18 @@ export class FakeBili {
           })),
           no_more: false,
         })
+      case '/x/web-interface/ranking/v2':
+        return this.ok({ list: [...this.videos.values()].map(video => ({
+          aid: video.aid, bvid: video.bvid, title: video.title, duration: 125, pubdate: 1_790_000_000, owner: video.owner,
+          stat: { view: 99_000, like: 5000 },
+        })) })
+      case '/x/v1/dm/list.so': {
+        const video = [...this.videos.values()].find(entry => entry.cid === Number(query['oid']))
+        const lines = video === undefined ? [] : ['前方高能', '鱼灾 &amp; 大肥鱼', '哈哈哈哈'].map((text, index) => `<d p="${index * 30}.5,1,25,16777215,0,0,abc,${index}">${text}</d>`)
+        return { raw: `<?xml version="1.0" encoding="UTF-8"?><i><chatid>${query['oid'] ?? ''}</chatid>${lines.join('')}</i>`, headers: { 'content-type': 'text/xml' } }
+      }
+      case '/x/web-interface/wbi/search/square':
+        return this.ok({ trending: { title: 'bilibili热搜', top_list: [], list: this.hotSearches.slice(0, Number(query['limit'] ?? 10)) } })
       case '/x/web-interface/wbi/search/type':
         return this.ok({ result: [...this.videos.values()].filter(video => video.title.includes(query['keyword'] ?? '')).map(video => ({ type: 'video', aid: video.aid, bvid: video.bvid, title: video.title, author: video.owner.name, mid: video.owner.mid, duration: '2:05', play: 10, description: video.desc })) })
       case '/x/web-interface/view': {

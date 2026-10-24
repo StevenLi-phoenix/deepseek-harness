@@ -28,7 +28,8 @@ afterEach(async () => {
 const TOOLS = [
   'bili_home_feed', 'bili_following_feed', 'bili_popular', 'bili_search', 'bili_video', 'bili_comments', 'bili_inbox', 'bili_me',
   'bili_follow', 'bili_unfollow', 'bili_favorite', 'bili_like', 'bili_coin', 'bili_triple', 'bili_watchlater', 'bili_comment', 'bili_reply', 'bili_dynamic', 'bili_dm_owner',
-  'bili_journal_write', 'bili_journal_read',
+  'bili_journal_write', 'bili_journal_read', 'bili_taste_write',
+  'bili_ranking', 'bili_hot_searches', 'bili_danmaku', 'bili_verdict', 'bili_seen', 'bili_trend_write',
 ]
 
 describe('tool-bili', () => {
@@ -121,5 +122,37 @@ describe('tool-bili', () => {
     expect((await call('bili_journal_write', { text: '看了猫' })).value).toEqual({ saved: true, seq: 3, leftToday: 5 })
     expect((await call('bili_journal_read', {})).value).toMatchObject({ entries: [{ seq: 3 }] })
     expect(journalRead).toHaveBeenCalledWith(1)
+  })
+
+  it('keeps a taste note, or rewrites one by its number', async () => {
+    const tasteWrite = vi.fn(() => Promise.resolve({ saved: true, seq: 4, notes: 4 }))
+    const { ctx, call } = await mount({ tasteWrite })
+    expect((await call('bili_taste_write', { text: '她不爱看大众热门' })).value).toEqual({ saved: true, seq: 4, notes: 4 })
+    expect(tasteWrite).toHaveBeenCalledWith('她不爱看大众热门', undefined)
+    await call('bili_taste_write', { text: '她想看 AI agent 圈正在发酵的事', replaces: 2 })
+    expect(tasteWrite).toHaveBeenLastCalledWith('她想看 AI agent 圈正在发酵的事', 2)
+    expect(ctx.tools.schemas().find(schema => schema.name === 'bili_taste_write')!.description).toContain('you cannot rewrite them')
+  })
+
+  it('grades a video, reads the seen list, and notes a trend, answering host refusals as they are', async () => {
+    const verdict = vi.fn(() => Promise.resolve({ refused: 'you have not read the subtitles of BV1aa4y1X7aa (bili_video); without them it is at most ok' }))
+    const seen = vi.fn(() => Promise.resolve({ entries: [] }))
+    const trendWrite = vi.fn(() => Promise.resolve({ saved: true, seq: 1 }))
+    const { call } = await mount({ verdict, seen, trendWrite })
+    expect((await call('bili_verdict', { bvid: 'BV1aa4y1X7aa', grade: 'must', reason: '鱼灾复盘，和我们有关' })).value).toMatchObject({ refused: expect.stringContaining('at most ok') as string })
+    expect(verdict).toHaveBeenCalledWith('BV1aa4y1X7aa', 'must', '鱼灾复盘，和我们有关')
+    await call('bili_seen', { bvid: 'BV1aa4y1X7aa' })
+    expect(seen).toHaveBeenCalledWith('BV1aa4y1X7aa', 30)
+    expect((await call('bili_trend_write', { term: '鱼灾', note: 'B站上 DeepSeek agent 刷屏的一周' })).value).toEqual({ saved: true, seq: 1 })
+    expect(trendWrite).toHaveBeenCalledWith('鱼灾', 'B站上 DeepSeek agent 刷屏的一周', undefined)
+  })
+
+  it('searches newest first when asked', async () => {
+    const search = vi.fn(() => Promise.resolve([]))
+    const { call } = await mount({ search })
+    await call('bili_search', { keyword: '大肥鱼', order: 'newest' })
+    expect(search).toHaveBeenLastCalledWith('大肥鱼', 1, 'newest')
+    await call('bili_search', { keyword: '大肥鱼', page: 2 })
+    expect(search).toHaveBeenLastCalledWith('大肥鱼', 2, 'relevance')
   })
 })
