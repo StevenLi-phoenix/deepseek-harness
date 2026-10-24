@@ -435,7 +435,7 @@ export type Config = LocalConfig
 ## `@deepseek-ai/dsh-bili`
 
 - `inject`: `timer` · `storageDomain` · `credentials` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/lsy/bili/src/index.ts:117`](../packages/lsy/bili/src/index.ts)
+- `source`: [`packages/lsy/bili/src/index.ts:132`](../packages/lsy/bili/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -451,8 +451,18 @@ export interface Config {
   wakes: WakeWindow[]
   /** Probability (0-1) that a window gets no wake on a given day. */
   skipChance: number
+  /**
+   * How much a body-clock or Wake-now wake watches before its answer goes out: a turn that ends
+   * with fewer than `minWatched` distinct videos opened is held back, and the Session is asked to
+   * keep browsing, at most `maxRounds` times; then the last answer goes out. `minWatched` 0 holds nothing.
+   */
+  depth: DepthConfig
   /** What the owner is interested in, shown in every wake prompt until edited in Settings. */
   interests: string
+  /** Search keywords every wake searches first, newest first, until the owner edits them in Settings. */
+  keywords: string[]
+  /** Videos graded must that may go to the owner per day (the day's picks); 0 sets no quota. */
+  picksPerDay: number
   /** The account's Session. */
   session: SessionConfig
   /** Daily write caps. */
@@ -502,6 +512,14 @@ export interface WakeWindow {
   end: string
 }
 
+/** The watch floor of a wake. */
+export interface DepthConfig {
+  /** Distinct videos opened with `video()` before an answer goes out. */
+  minWatched: number
+  /** Continuation turns at most per wake. */
+  maxRounds: number
+}
+
 /** How the account's Session is created. */
 export interface SessionConfig {
   /** Absolute directory the Session works in; created before every wake. */
@@ -535,10 +553,11 @@ export interface CapsConfig {
   reply: number
   /** Text dynamics per day. */
   dynamic: number
-  /** Messages the account sends the owner's main account on its own (a turn's share, or `bili_dm_owner`) per day. */
+  /**
+   * Messages the account sends the owner's main account on its own (a turn's share, or
+   * `bili_dm_owner`) per day; answers to the owner's own messages have no cap.
+   */
   dmOwner: number
-  /** Messages that answer the owner's own messages per day (each part of a split answer counts). */
-  dmReply: number
   /** Watch reports per day: one per video whose subtitles the account read. */
   watch: number
   /** Share reports per day: one per video ever, for a link the host delivered to the owner. */

@@ -632,8 +632,20 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'about 12 bounded video cards.',
       },
       {
+        signature: 'async ranking(): Promise<VideoCard[]>',
+        description: 'The site leaderboard (排行榜) across all zones.',
+        parameters: [],
+        returns: 'up to 30 bounded video cards, top first.',
+      },
+      {
+        signature: 'async danmaku(bvid: string, part?: number): Promise<{ bvid: string; lines: DanmakuLine[] }>',
+        description: 'A sample of a video\'s danmaku: the jokes and reactions of its own viewers.',
+        parameters: [{ name: 'bvid', description: 'BV id.' }, { name: 'part', description: 'part number of a multi-part video.' }],
+        returns: 'up to 40 lines across the video, each with its second.',
+      },
+      {
         signature: 'async followingFeed(offset?: string): Promise<{ items: FeedPost[]; next?: string }>',
-        description: 'What followed accounts posted.',
+        description: 'What followed accounts posted, without the owner\'s own posts.',
         parameters: [{ name: 'offset', description: '`next` of the previous page.' }],
         returns: 'bounded posts, newest first, and the `next` offset when there are more.',
       },
@@ -644,9 +656,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'bounded video cards.',
       },
       {
-        signature: 'async search(keyword: string, page: number = 1): Promise<VideoCard[]>',
+        signature: 'async search(keyword: string, page: number = 1, order: SearchOrder = \'relevance\'): Promise<VideoCard[]>',
         description: 'Search videos.',
-        parameters: [{ name: 'keyword', description: 'search words.' }, { name: 'page', description: 'from 1.' }],
+        parameters: [{ name: 'keyword', description: 'search words.' }, { name: 'page', description: 'from 1.' }, { name: 'order', description: '`relevance` (default) or `newest` first.' }],
         returns: 'bounded video cards.',
       },
       {
@@ -684,6 +696,36 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Recent journal entries, newest first.',
         parameters: [{ name: 'page', description: 'from 1.' }],
         returns: 'up to ten entries and the page count.',
+      },
+      {
+        signature: 'async tasteWrite(text: string, replaces?: number): Promise<{ saved: true; seq: number; notes: number } | { refused: string }>',
+        description: 'Keep one note about the owner\'s taste (`bili_taste_write`): what a reaction to a find taught, or what the owner said they want more or less of.',
+        parameters: [{ name: 'text', description: 'at most 200 characters, one line.' }, { name: 'replaces', description: 'number of one of the Session\'s own notes to rewrite instead of adding one.' }],
+        returns: 'the note\'s number and how many notes there are, or why it was refused.',
+      },
+      {
+        signature: 'async verdict(bvid: string, grade: Grade, reason: string): Promise<{ saved: true; grade: Grade } | { refused: string }>',
+        description: 'Grade a watched video (`bili_verdict`): `must` 值得看, `ok` 可以看, or `skip` 不值当, and why. `must` needs evidence: the account read the video\'s subtitles with `video()` first; a grade from the title alone is at most `ok`. Grading again replaces the grade.',
+        parameters: [{ name: 'bvid', description: 'BV id.' }, { name: 'grade', description: 'the grade.' }, { name: 'reason', description: 'why, at most 120 characters.' }],
+        returns: 'the grade kept, or why it was refused.',
+      },
+      {
+        signature: 'async seen(bvid?: string, limit: number = 30): Promise<{ entries: Omit<SeenRecord, \'at\'>[] }>',
+        description: 'The seen list: what the account graded, newest first, or one video\'s grade.',
+        parameters: [{ name: 'bvid', description: 'one video to look up.' }, { name: 'limit', description: 'entries, at most 50.' }],
+        returns: 'the grades.',
+      },
+      {
+        signature: 'async hotSearches(): Promise<HotSearch[]>',
+        description: 'The hot-search list (热搜): what the whole site searches for right now.',
+        parameters: [],
+        returns: 'up to 30 keywords, each with the label the search box shows when it differs.',
+      },
+      {
+        signature: 'async trendWrite(term: string, note: string, replaces?: number): Promise<{ saved: true; seq: number } | { refused: string }>',
+        description: 'Note one meme, event, or phrase the account met (`bili_trend_write`): what it is, where it comes from, and which community it lives in, so later wakes understand it and can tell the owner. A term already noted is rewritten in place.',
+        parameters: [{ name: 'term', description: 'the meme itself, at most 30 characters.' }, { name: 'note', description: 'at most 200 characters.' }, { name: 'replaces', description: 'number of an entry to rewrite instead.' }],
+        returns: 'the entry\'s number, or why it was refused.',
       },
       {
         signature: 'async view(): Promise<BiliView>',
@@ -5265,7 +5307,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'BiliView',
-    declaration: 'export interface BiliView {\n    readonly account: AccountView;\n    readonly login: LoginView;\n    readonly pause: {\n        readonly scope: typeof PAUSE_SCOPES[number];\n        readonly reason: string;\n        readonly since: number;\n    } | null;\n    readonly readsResumeAt: number | null;\n    readonly usage: {\n        readonly day: string;\n        readonly actions: readonly UsageView[];\n    };\n    readonly interests: {\n        readonly text: string;\n        readonly updatedAt: number | null;\n    };\n    readonly clock: {\n        readonly timeZone: string;\n        readonly today: readonly WakeView[];\n        readonly nextWakeAt: number | null;\n        readonly lastWake: {\n            readonly at: number;\n            readonly reason: WakeReason;\n        } | null;\n        readonly route: RouteView | null;\n    };\n    readonly recent: readonly RecentWriteView[];\n    readonly ownerMid: number;\n    readonly ownerUpdatedAt: number | null;\n    readonly manualWake: ManualWakeView | null;\n    readonly progress: ProgressView | null;\n    readonly verification: readonly VerificationView[];\n}',
+    declaration: 'export interface BiliView {\n    readonly account: AccountView;\n    readonly login: LoginView;\n    readonly pause: {\n        readonly scope: typeof PAUSE_SCOPES[number];\n        readonly reason: string;\n        readonly since: number;\n    } | null;\n    readonly readsResumeAt: number | null;\n    readonly usage: {\n        readonly day: string;\n        readonly actions: readonly UsageView[];\n    };\n    readonly interests: {\n        readonly text: string;\n        readonly updatedAt: number | null;\n    };\n    readonly clock: {\n        readonly timeZone: string;\n        readonly today: readonly WakeView[];\n        readonly nextWakeAt: number | null;\n        readonly lastWake: {\n            readonly at: number;\n            readonly reason: WakeReason;\n        } | null;\n        readonly route: RouteView | null;\n    };\n    readonly recent: readonly RecentWriteView[];\n    readonly ownerMid: number;\n    readonly ownerUpdatedAt: number | null;\n    readonly manualWake: ManualWakeView | null;\n    readonly progress: ProgressView | null;\n    readonly verification: readonly VerificationView[];\n    readonly taste: readonly TasteNoteView[];\n    readonly finds: readonly FindView[];\n    readonly trends: readonly TrendView[];\n    readonly keywords: {\n        readonly text: string;\n        readonly updatedAt: number | null;\n    };\n    readonly today: {\n        readonly day: string;\n        readonly graded: Readonly<Record<Grade, number>>;\n        readonly picks: number;\n        readonly perDay: numb /* …truncated — full shape in source */',
   },
   {
     name: 'BoxProps',
@@ -5640,6 +5682,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface DailyScheduleRecord {\n    readonly id: ScheduleId;\n    readonly kind: \'daily\';\n    readonly title: string;\n    readonly prompt: string;\n    readonly time: string;\n    readonly timeZone: string;\n    readonly scheduledAt: string;\n}',
   },
   {
+    name: 'DanmakuLine',
+    declaration: 'export interface DanmakuLine {\n    at: number;\n    text: string;\n}',
+  },
+  {
     name: 'DeepSeekLlmApiExtensionMap',
     declaration: 'export interface DeepSeekLlmApiExtensionMap {\n}',
   },
@@ -5840,6 +5886,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface FileUploadValue {\n    readonly receiptId: FileUploadReceiptId;\n    readonly file: FileAttachmentRef;\n}',
   },
   {
+    name: 'FindView',
+    declaration: 'export interface FindView {\n    readonly bvid: string;\n    readonly at: number;\n    readonly title?: string;\n    readonly reaction?: {\n        readonly text: string;\n        readonly at: number;\n    };\n}',
+  },
+  {
     name: 'FinishReason',
     declaration: 'export type FinishReason = FinishReasonMap[keyof FinishReasonMap];',
   },
@@ -5952,6 +6002,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface GoalView extends GoalSnapshot {\n    readonly roundsStarted: number;\n    readonly createdAt: number;\n    readonly updatedAt: number;\n    readonly activation: GoalActivation;\n}',
   },
   {
+    name: 'Grade',
+    declaration: 'export type Grade = typeof GRADES[number];',
+  },
+  {
     name: 'GrantRecord',
     declaration: 'export interface GrantRecord {\n    readonly kind: \'grant\';\n    readonly payload: unknown;\n}',
   },
@@ -5986,6 +6040,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'HostConnectionRpc',
     declaration: 'export interface HostConnectionRpc {\n    handle(channel: string, handler: ConnectionRpcHandler): () => Promise<void>;\n    intercept(channel: \'/api\', matches: ConnectionRpcEndpointMatcher, handler: ConnectionRpcHandler): () => Promise<void>;\n}',
+  },
+  {
+    name: 'HotSearch',
+    declaration: 'export interface HotSearch {\n    keyword: string;\n    label?: string;\n}',
   },
   {
     name: 'ImageAttachmentLimits',
@@ -7061,7 +7119,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'RelayChannel',
-    declaration: 'export interface RelayChannel {\n    readonly name: string;\n    readonly fallbackLabel?: string;\n    deliver(answer: RelayAnswer): Promise<RelayDelivery>;\n    onTurnStart?(sessionId: string): void;\n    onTurnEnd?(sessionId: string): void;\n    onTurnSettled?(sessionId: string): void;\n}',
+    declaration: 'export interface RelayChannel {\n    readonly name: string;\n    readonly fallbackLabel?: string;\n    deliver(answer: RelayAnswer): Promise<RelayDelivery>;\n    onTurnStart?(sessionId: string): void;\n    onTurnEnd?(sessionId: string, ended: RelayDecision[\'kind\']): void;\n    onTurnSettled?(sessionId: string): void;\n}',
+  },
+  {
+    name: 'RelayDecision',
+    declaration: 'export type RelayDecision = {\n    readonly kind: \'stopped\';\n} | {\n    readonly kind: \'silent\';\n} | {\n    readonly kind: \'empty\';\n} | {\n    readonly kind: \'answer\';\n    readonly text: string;\n    readonly outcome: string;\n    readonly detail?: string;\n};',
   },
   {
     name: 'RelayDelivery',
@@ -7380,12 +7442,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SearchMatchesResultView {\n    card: \'search\';\n    shape: \'matches\';\n    title?: string;\n    files: SearchFileMatches[];\n    truncated: boolean;\n    total: number;\n}',
   },
   {
+    name: 'SearchOrder',
+    declaration: 'export type SearchOrder = \'relevance\' | \'newest\';',
+  },
+  {
     name: 'SearchPathsResultView',
     declaration: 'export interface SearchPathsResultView {\n    card: \'search\';\n    shape: \'paths\';\n    title?: string;\n    paths: string[];\n    truncated: boolean;\n    total: number;\n}',
   },
   {
     name: 'SearchResultView',
     declaration: 'export type SearchResultView = SearchMatchesResultView | SearchPathsResultView;',
+  },
+  {
+    name: 'SeenRecord',
+    declaration: 'export type SeenRecord = z.infer<typeof seenSchema>;',
   },
   {
     name: 'SendTeamMessageRequest',
@@ -8460,6 +8530,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type TableValueOf<S extends DomainSpec, N extends keyof S[\'tables\']> = S[\'tables\'][N] extends DomainTableSpec<string, infer V> ? V : never;',
   },
   {
+    name: 'TasteNoteView',
+    declaration: 'export interface TasteNoteView {\n    readonly seq: number;\n    readonly at: number;\n    readonly text: string;\n    readonly from: typeof TASTE_SOURCES[number];\n}',
+  },
+  {
     name: 'TeamId',
     declaration: 'export type TeamId = Branded<\'TeamId\'>;',
   },
@@ -8800,6 +8874,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type TranslationSpec = AnonymousTranslationSpec | PaidTranslationSpec;',
   },
   {
+    name: 'TrendView',
+    declaration: 'export interface TrendView {\n    readonly seq: number;\n    readonly at: number;\n    readonly term: string;\n    readonly note: string;\n}',
+  },
+  {
     name: 'TurnCompleteInput',
     declaration: 'export interface TurnCompleteInput {\n    turnId: string;\n    answer: string;\n    durationMs: number;\n    isAborted: boolean;\n    reason: \'answer\' | \'aborted\' | \'error\';\n    agentId?: string;\n    usage?: TurnUsage;\n}',
   },
@@ -9013,7 +9091,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'VideoCard',
-    declaration: 'export interface VideoCard {\n    bvid: string;\n    title: string;\n    author: string;\n    authorMid?: number;\n    duration?: string;\n    views?: number;\n    likes?: number;\n    published?: string;\n    desc?: string;\n    reason?: string;\n}',
+    declaration: 'export interface VideoCard {\n    bvid: string;\n    title: string;\n    author: string;\n    authorMid?: number;\n    duration?: string;\n    views?: number;\n    likes?: number;\n    published?: string;\n    desc?: string;\n    reason?: string;\n    graded?: string;\n}',
   },
   {
     name: 'VideoDetail',

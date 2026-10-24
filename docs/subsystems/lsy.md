@@ -122,7 +122,21 @@ async dmOwner(text: string): Promise<WriteOutcome>
 async homeFeed(): Promise<VideoCard[]>
 
 /**
- * What followed accounts posted.
+ * The site leaderboard (排行榜) across all zones.
+ * @returns up to 30 bounded video cards, top first.
+ */
+async ranking(): Promise<VideoCard[]>
+
+/**
+ * A sample of a video's danmaku: the jokes and reactions of its own viewers.
+ * @param bvid - BV id.
+ * @param part - part number of a multi-part video.
+ * @returns up to 40 lines across the video, each with its second.
+ */
+async danmaku(bvid: string, part?: number): Promise<{ bvid: string; lines: DanmakuLine[] }>
+
+/**
+ * What followed accounts posted, without the owner's own posts.
  * @param offset - `next` of the previous page.
  * @returns bounded posts, newest first, and the `next` offset when there are more.
  */
@@ -139,9 +153,10 @@ async popular(page: number = 1): Promise<VideoCard[]>
  * Search videos.
  * @param keyword - search words.
  * @param page - from 1.
+ * @param order - `relevance` (default) or `newest` first.
  * @returns bounded video cards.
  */
-async search(keyword: string, page: number = 1): Promise<VideoCard[]>
+async search(keyword: string, page: number = 1, order: SearchOrder = 'relevance'): Promise<VideoCard[]>
 
 /**
  * A video: facts, one page of subtitles (with coverage notes), and top comments.
@@ -184,6 +199,51 @@ async journalWrite(text: string): Promise<{ saved: true; seq: number; leftToday:
  * @returns up to ten entries and the page count.
  */
 async journalRead(page: number = 1): Promise<{ entries: { seq: number; day: string; text: string }[]; page: number; pages: number }>
+
+/**
+ * Keep one note about the owner's taste (`bili_taste_write`): what a reaction to a find taught,
+ * or what the owner said they want more or less of.
+ * @param text - at most 200 characters, one line.
+ * @param replaces - number of one of the Session's own notes to rewrite instead of adding one.
+ * @returns the note's number and how many notes there are, or why it was refused.
+ */
+async tasteWrite(text: string, replaces?: number): Promise<{ saved: true; seq: number; notes: number } | { refused: string }>
+
+/**
+ * Grade a watched video (`bili_verdict`): `must` 值得看, `ok` 可以看, or `skip` 不值当, and why.
+ * `must` needs evidence: the account read the video's subtitles with `video()` first; a grade from
+ * the title alone is at most `ok`. Grading again replaces the grade.
+ * @param bvid - BV id.
+ * @param grade - the grade.
+ * @param reason - why, at most 120 characters.
+ * @returns the grade kept, or why it was refused.
+ */
+async verdict(bvid: string, grade: Grade, reason: string): Promise<{ saved: true; grade: Grade } | { refused: string }>
+
+/**
+ * The seen list: what the account graded, newest first, or one video's grade.
+ * @param bvid - one video to look up.
+ * @param limit - entries, at most 50.
+ * @returns the grades.
+ */
+async seen(bvid?: string, limit: number = 30): Promise<{ entries: Omit<SeenRecord, 'at'>[] }>
+
+/**
+ * The hot-search list (热搜): what the whole site searches for right now.
+ * @returns up to 30 keywords, each with the label the search box shows when it differs.
+ */
+async hotSearches(): Promise<HotSearch[]>
+
+/**
+ * Note one meme, event, or phrase the account met (`bili_trend_write`): what it is, where it
+ * comes from, and which community it lives in, so later wakes understand it and can tell the owner.
+ * A term already noted is rewritten in place.
+ * @param term - the meme itself, at most 30 characters.
+ * @param note - at most 200 characters.
+ * @param replaces - number of an entry to rewrite instead.
+ * @returns the entry's number, or why it was refused.
+ */
+async trendWrite(term: string, note: string, replaces?: number): Promise<{ saved: true; seq: number } | { refused: string }>
 
 /**
  * What the Settings section shows. Built from storage only, so no cookie or token can reach it.
