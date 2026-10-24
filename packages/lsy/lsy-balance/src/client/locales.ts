@@ -18,8 +18,12 @@ export const zh = {
   'window.weekly': '每周',
   'window.monthly': '每月',
   'window.resets': '{percent}，{time} 重置',
+  'window.paced': '{reading}，{pace}',
   'reset.today': '今天 {time}',
   'reset.tomorrow': '明天 {time}',
+  'pace.elapsed': '时间已过 {percent}',
+  'pace.projected': '照这个速度，到期约用 {percent}',
+  'pace.runsOut': '照这个速度，{time} 用完',
 } satisfies Record<string, string>
 
 /** The balance namespace key union. */
@@ -50,6 +54,10 @@ export const en: Record<BalanceKey, string> = {
   'window.weekly': 'Weekly',
   'window.monthly': 'Monthly',
   'window.resets': '{percent}, resets {time}',
+  'window.paced': '{reading}; {pace}',
   'reset.today': 'today {time}',
   'reset.tomorrow': 'tomorrow {time}',
+  'pace.elapsed': '{percent} of the time gone',
+  'pace.projected': 'on pace for {percent} at the reset',
+  'pace.runsOut': 'on pace to run out {time}',
 }

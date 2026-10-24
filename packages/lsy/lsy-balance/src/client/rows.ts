@@ -18,6 +18,14 @@ export interface WindowBar {
   readonly percent: number
   /** When the window resets, relative to the reading (`今天 13:49`, `11-15 13:32`); null when unknown. */
   readonly resets: string | null
+  /** How much of the window's time had passed at the reading, 0 to 100; null when its span is unknown. */
+  readonly elapsed: number | null
+  /** The use at the reset if the pace so far holds; null before a tenth of the window, with nothing used, or used up. */
+  readonly projected: number | null
+  /** The line under the bar: the time gone, then the projection or when the pace runs out; null without `elapsed`. */
+  readonly pace: string | null
+  /** At the pace so far the window runs out before it resets. */
+  readonly overPace: boolean
 }
 
 /** One provider row. */
@@ -41,6 +49,14 @@ const WINDOW_KEYS: Readonly<Record<string, BalanceKey>> = {
   rolling: 'window.fiveHour', fiveHour: 'window.fiveHour', weekly: 'window.weekly', monthly: 'window.monthly',
 }
 
+const HOUR_MS = 3_600_000
+
+/** Length of the fixed-length windows; `monthly` runs from the same day a month before its reset. */
+const WINDOW_MS: Readonly<Record<string, number>> = { rolling: 5 * HOUR_MS, fiveHour: 5 * HOUR_MS, weekly: 7 * 24 * HOUR_MS }
+
+/** A projection needs this share of the window's time behind it. */
+const PROJECT_AFTER = 0.1
+
 const CURRENCY_ORDER: Readonly<Record<WalletLine['currency'], number>> = { CNY: 0, USD: 1 }
 
 function clock(at: number): string {
@@ -53,10 +69,8 @@ function dateClock(at: number): string {
   return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${clock(at)}`
 }
 
-/** A reset time as the card shows it: today, tomorrow, or month-day and clock. */
-function resetLabel(resetsAt: string | null, now: number, t: Translate): string | null {
-  const at = resetsAt === null ? Number.NaN : Date.parse(resetsAt)
-  if (Number.isNaN(at)) return null
+/** A time as the card shows it: today, tomorrow, or month-day and clock. */
+function timeLabel(at: number, now: number, t: Translate): string {
   const day = (time: number): number => {
     const date = new Date(time)
     return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
@@ -65,6 +79,39 @@ function resetLabel(resetsAt: string | null, now: number, t: Translate): string 
   if (days === 0) return t('reset.today', { time: clock(at) })
   if (days === 1) return t('reset.tomorrow', { time: clock(at) })
   return dateClock(at)
+}
+
+/** When a window opened: a fixed length before its reset, or the same day a month before (clamped to that month's end). */
+function windowStart(name: string, resetsAt: number): number | undefined {
+  if (name !== 'monthly') {
+    const length = WINDOW_MS[name]
+    return length === undefined ? undefined : resetsAt - length
+  }
+  const reset = new Date(resetsAt)
+  const lastDay = new Date(reset.getFullYear(), reset.getMonth(), 0).getDate()
+  return new Date(reset.getFullYear(), reset.getMonth() - 1, Math.min(reset.getDate(), lastDay),
+    reset.getHours(), reset.getMinutes(), reset.getSeconds(), reset.getMilliseconds()).getTime()
+}
+
+type Pace = Pick<WindowBar, 'elapsed' | 'projected' | 'pace' | 'overPace'>
+
+const NO_PACE: Pace = { elapsed: null, projected: null, pace: null, overPace: false }
+
+/**
+ * How far a window is through its time, and where its use is headed: the use so far over the share
+ * of time gone. A pace that reaches 100 % before the reset says when.
+ */
+function paceOf(name: string, percent: number, resetsAt: number, now: number, t: Translate): Pace {
+  const start = windowStart(name, resetsAt)
+  if (start === undefined || now < start || now > resetsAt) return NO_PACE
+  const share = (now - start) / (resetsAt - start)
+  const elapsed = share * 100
+  const gone = t('pace.elapsed', { percent: `${Math.round(elapsed)}%` })
+  if (share < PROJECT_AFTER || percent <= 0 || percent >= 100) return { elapsed, projected: null, pace: gone, overPace: false }
+  const projected = percent / share
+  if (projected < 100) return { elapsed, projected, pace: `${gone} · ${t('pace.projected', { percent: `${Math.round(projected)}%` })}`, overPace: false }
+  const runsOut = start + (now - start) * 100 / percent
+  return { elapsed, projected, pace: `${gone} · ${t('pace.runsOut', { time: timeLabel(runsOut, now, t) })}`, overPace: true }
 }
 
 function usd(amount: number): string {
@@ -135,11 +182,13 @@ function row(reading: ProviderReading, t: Translate, now: number): ProviderRow {
         ...base,
         value: t('value.used', { amount: `${Math.round(top.percent)}%` }),
         details: Number.isNaN(resets) ? [] : [t('detail.reset', { window: windowName(top.name, t), time: dateClock(resets) })],
-        windows: reading.windows.map(window => ({
-          label: windowName(window.name, t),
-          percent: Math.max(0, Math.min(100, window.percent)),
-          resets: resetLabel(window.resetsAt, now, t),
-        })),
+        windows: reading.windows.map((window) => {
+          const percent = Math.max(0, Math.min(100, window.percent))
+          const at = window.resetsAt === null ? Number.NaN : Date.parse(window.resetsAt)
+          return Number.isNaN(at)
+            ? { label: windowName(window.name, t), percent, resets: null, ...NO_PACE }
+            : { label: windowName(window.name, t), percent, resets: timeLabel(at, now, t), ...paceOf(window.name, percent, at, now, t) }
+        }),
         exhausted: top.percent >= 100,
         stale: false,
       }

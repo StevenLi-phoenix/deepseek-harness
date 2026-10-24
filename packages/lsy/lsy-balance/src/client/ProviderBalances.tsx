@@ -2,7 +2,9 @@
  * Account page card listing the balance or quota of every provider key the
  * Host holds (OpenRouter, the DeepSeek API, OpenCode Go), under the DeepSeek
  * account card. One row per provider: name and explanation on the left, the
- * headline value on the right, and a bar per window for quota subscriptions.
+ * headline value on the right, and a bar per window for quota subscriptions,
+ * marked where the window's time stands, with a line saying where the pace
+ * so far leads.
  * It reads on opening and on Refresh, and renders nothing while no provider
  * key is configured.
  */
@@ -66,29 +68,33 @@ export function ProviderBalances({ useBalance, refresh, t }: ProviderBalancesPro
             ? null
             : (
               <div className={css.windows}>
-                {row.windows.map(window => (
-                  <div key={window.label} className={css.window}>
-                    <span className={css.windowLabel}>{window.label}</span>
-                    <span
-                      className={css.track}
-                      role="meter"
-                      aria-label={window.label}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-valuenow={Math.round(window.percent)}
-                      aria-valuetext={window.resets === null
-                        ? `${Math.round(window.percent)}%`
-                        : t('window.resets', { percent: `${Math.round(window.percent)}%`, time: window.resets })}
-                    >
+                {row.windows.map((window) => {
+                  const percent = `${Math.round(window.percent)}%`
+                  const reading = window.resets === null ? percent : t('window.resets', { percent, time: window.resets })
+                  const fill = window.percent >= 100 ? css.full : window.percent >= 80 || window.overPace ? css.high : ''
+                  return (
+                    <div key={window.label} className={css.window}>
+                      <span className={css.windowLabel}>{window.label}</span>
                       <span
-                        className={window.percent >= 100 ? `${css.fill} ${css.full}` : window.percent >= 80 ? `${css.fill} ${css.high}` : css.fill}
-                        style={{ width: `${window.percent}%` }}
-                      />
-                    </span>
-                    <span className={css.windowValue}>{`${Math.round(window.percent)}%`}</span>
-                    <span className={css.windowReset} data-window-reset="">{window.resets ?? ''}</span>
-                  </div>
-                ))}
+                        className={css.track}
+                        role="meter"
+                        aria-label={window.label}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={Math.round(window.percent)}
+                        aria-valuetext={window.pace === null ? reading : t('window.paced', { reading, pace: window.pace })}
+                      >
+                        <span className={[css.fill, fill].filter(Boolean).join(' ')} style={{ width: `${window.percent}%` }} />
+                        {window.elapsed === null
+                          ? null
+                          : <span className={css.now} style={{ left: `${Math.round(window.elapsed)}%` }} data-window-now="" aria-hidden="true" />}
+                      </span>
+                      <span className={css.windowValue}>{percent}</span>
+                      <span className={css.windowReset} data-window-reset="">{window.resets ?? ''}</span>
+                      <span className={window.overPace ? `${css.pace} ${css.paceWarn}` : css.pace} data-window-pace="">{window.pace ?? ''}</span>
+                    </div>
+                  )
+                })}
               </div>
             )}
         </div>

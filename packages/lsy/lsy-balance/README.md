@@ -52,6 +52,8 @@ The Host half registers `GET /api/lsy.balance` on the connection, so the `/api` 
 
 The browser half registers one entry (`lsy-provider-balances`) in the Account page's `settings.account.balances` area through `ctx.slots.inject`, so it follows that declaration's lifetime. One store and one `BalanceLoader` serve it. Each round fetches the document-relative `api/lsy.balance` (`?fresh=1` for Refresh) and calls `account.getBalance` with the Account page's client identity, only to recognize a DeepSeek API key of the same account; a round in flight is shared, and opening the page accepts a reading up to 30 seconds old. A failed route keeps the last readings.
 
+Each quota bar carries a tick where the window's time stands at the reading: the five-hour and weekly windows end at their reset and are 5 hours and 7 days long, the monthly one opens on the same day a month before its reset (the 31st follows the last day of a shorter month). The line under the bar says how much of that time is gone (`时间已过 33%`), then, once a tenth of the window has passed and something was used, where the use so far leads at the reset (`照这个速度，到期约用 75%`), or when it runs out first (`照这个速度，明天 10:32 用完`, which also turns the bar to the warning color). A reading outside its window, an unknown window, or one without a reset shows no tick and no line.
+
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Host half: configuration, the cached `/api/lsy.balance` route |
