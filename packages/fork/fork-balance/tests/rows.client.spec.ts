@@ -27,7 +27,11 @@ describe('providerRows', () => {
       { key: 'deepseek', label: 'DeepSeek API', value: '¥329.86', details: ['充值 ¥323.87 · 赠金 ¥5.99'], windows: [], exhausted: false, stale: false },
       {
         key: 'opencode-go', label: 'OpenCode Go', value: '已用 29%', details: ['每周额度 10-26 00:00 重置'], exhausted: false, stale: false,
-        windows: [{ label: '5 小时', percent: 0, resets: null }, { label: '每周', percent: 29.4, resets: '10-26 00:00' }, { label: '每月', percent: 25, resets: null }],
+        windows: [
+          { label: '5 小时', percent: 0, resets: null, elapsed: null, projected: null, pace: null, overPace: false },
+          { label: '每周', percent: 29.4, resets: '10-26 00:00', elapsed: null, projected: null, pace: null, overPace: false },
+          { label: '每月', percent: 25, resets: null, elapsed: null, projected: null, pace: null, overPace: false },
+        ],
       },
     ])
   })
@@ -63,6 +67,48 @@ describe('providerRows', () => {
     ] }
     const [row] = providerRows(state({ checkedAt: new Date(2026, 9, 23, 12, 11).getTime(), providers: [quota] }), t)
     expect(row!.windows.map(window => window.resets)).toEqual(['今天 13:49', '明天 20:00', '11-15 13:32'])
+  })
+
+  it('shows how much of each window\'s time has passed and where the pace so far leads', () => {
+    const now = new Date(2026, 10, 25, 13, 32).getTime()
+    const hours = (count: number): string => new Date(now + count * 3_600_000).toISOString()
+    const quota: ProviderReading = { ...OPENCODE, windows: [
+      // Four of five hours to go, nothing used: the time only.
+      { name: 'rolling', percent: 0, resetsAt: hours(4) },
+      // Half the week gone and 80 % used: on pace to run out tomorrow at 10:32, before the reset.
+      { name: 'weekly', percent: 80, resetsAt: hours(84) },
+      // 20 of 30 days to go (11-15 to 12-15): a third of the time, a quarter used, so three quarters at the reset.
+      { name: 'monthly', percent: 25, resetsAt: new Date(2026, 11, 15, 13, 32).toISOString() },
+      // Under a tenth of the window gone: too early to project.
+      { name: 'weekly', percent: 5, resetsAt: hours(156) },
+      // Used up: nothing left to project.
+      { name: 'monthly', percent: 100, resetsAt: new Date(2026, 11, 15, 13, 32).toISOString() },
+    ] }
+    const [row] = providerRows(state({ checkedAt: now, providers: [quota] }), t)
+    const summary = row!.windows.map(window =>
+      [Math.round(window.elapsed ?? -1), window.projected === null ? null : Math.round(window.projected), window.pace, window.overPace])
+    expect(summary).toEqual([
+      [20, null, '时间已过 20%', false],
+      [50, 160, '时间已过 50% · 照这个速度，明天 10:32 用完', true],
+      [33, 75, '时间已过 33% · 照这个速度，到期约用 75%', false],
+      [7, null, '时间已过 7%', false],
+      [33, null, '时间已过 33%', false],
+    ])
+  })
+
+  it('measures a month back from its reset day, and says nothing outside the window or without a length', () => {
+    const quota = (name: string, resetsAt: string | null, at: number) => providerRows(state({
+      checkedAt: at, providers: [{ ...OPENCODE, windows: [{ name, percent: 10, resetsAt }] }],
+    }), t)[0]!.windows[0]!
+    // A reset on the 31st follows a month that ends on the 28th: 3 of 31 days gone.
+    expect(Math.round(quota('monthly', new Date(2027, 2, 31).toISOString(), new Date(2027, 2, 3).getTime()).elapsed!)).toBe(10)
+    // A reading from before the window opened, after it reset, of an unknown window, or without a reset: no pace.
+    for (const window of [
+      quota('weekly', new Date(2026, 10, 25).toISOString(), new Date(2026, 10, 1).getTime()),
+      quota('weekly', new Date(2026, 10, 25).toISOString(), new Date(2026, 10, 26).getTime()),
+      quota('daily', new Date(2026, 10, 25).toISOString(), new Date(2026, 10, 24).getTime()),
+      quota('weekly', null, new Date(2026, 10, 24).getTime()),
+    ]) expect(window).toMatchObject({ elapsed: null, projected: null, pace: null, overPace: false })
   })
 
   it('says when the readings were taken', () => {
