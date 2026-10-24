@@ -143,6 +143,45 @@ export async function deviceCookies(client: BiliClient): Promise<CookieJar> {
   return jar
 }
 
+/** Digits bilibili.com's own script draws `_uuid` from; `10` is one of them. */
+const UUID_DIGITS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', '10']
+const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+
+/**
+ * The ids a browser makes on its first visit, as bilibili.com's script does: `_uuid` (five groups
+ * of random digits, the time's last five milliseconds digits, `infoc`) and `b_nut` (Unix seconds).
+ * @param now - Unix epoch milliseconds.
+ * @param random - uniform source in [0, 1).
+ */
+export function newDeviceIds(now: number, random: () => number): { _uuid: string; b_nut: string } {
+  const group = (length: number): string => Array.from({ length }, () => UUID_DIGITS[Math.floor(random() * UUID_DIGITS.length)]).join('')
+  return { _uuid: `${[8, 4, 4, 4, 12].map(group).join('-')}${String(now % 100_000).padStart(5, '0')}infoc`, b_nut: String(Math.floor(now / 1000)) }
+}
+
+/**
+ * Enroll the device the way a browser's first page does: one ExClimbWuzhi report carrying `_uuid`
+ * and a canvas fingerprint tail (a PNG data URL ends in its IEND chunk), sent with the jar's
+ * buvid3, `_uuid`, and `b_nut`. Without it Bilibili answers likes and shares with -403 账号异常.
+ * @param client - Bilibili client; the jar must already hold `_uuid` and `b_nut`.
+ * @param uuid - the jar's `_uuid`.
+ * @param now - Unix epoch milliseconds.
+ * @param random - uniform source in [0, 1).
+ * @throws whatever the client throws for a non-zero answer.
+ */
+export async function enrollDevice(client: BiliClient, uuid: string, now: number, random: () => number): Promise<void> {
+  const canvas = `${Array.from({ length: 34 }, () => BASE64[Math.floor(random() * BASE64.length)]).join('')}AAAAAElFTkSuQmCC`
+  const payload = {
+    '3064': 1,
+    '5062': String(now),
+    '03bf': encodeURIComponent('https://www.bilibili.com/'),
+    '39c8': '333.1007.fp.risk',
+    '3c43': { adca: 'MacIntel', bfe9: canvas },
+    'df35': uuid,
+    '07a4': 'zh-CN',
+  }
+  await client.call('exClimbWuzhi', { json: { payload: JSON.stringify(payload) } })
+}
+
 /**
  * The `correspond` path for a refresh: RSA-OAEP (SHA-256) of `refresh_<ms>`, hex.
  * @param publicKey - PEM public key.

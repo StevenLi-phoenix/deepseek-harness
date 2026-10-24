@@ -39,7 +39,7 @@ import {
   type CommentView, type FeedPost, type Folder, type InboxItem, type OwnerMessage, type SubtitleView, type VideoCard, type VideoDetail,
 } from './api.ts'
 import type { DailyRewards } from './api.ts'
-import { REFRESH_PUBLIC_KEY, confirmRefresh, deviceCookies, exchangeRefresh, parseGrant, pollQr, refreshNeeded, startQr, type BiliGrant, type QrPoll } from './auth.ts'
+import { REFRESH_PUBLIC_KEY, confirmRefresh, deviceCookies, enrollDevice, exchangeRefresh, newDeviceIds, parseGrant, pollQr, refreshNeeded, startQr, type BiliGrant, type QrPoll } from './auth.ts'
 import { BiliApiError, BiliClient, BiliRefused, BiliRiskError, BiliTransportError, BiliVerifyError } from './client.ts'
 import { nextPlanned, rollPlan, settlePlan, windowProblem, type WakeWindow } from './clock.ts'
 import type { CookieJar } from './cookies.ts'
@@ -536,7 +536,14 @@ export class BiliAccount extends Service {
       : `bili: account ${account.uname} (${account.mid}) is ${account.state}`)
     await this.armClock()
     this.every(this.config.inboxPollMs, () => this.pollInbox())
-    this.after(FIRST_SESSION_CHECK_MS, () => this.checkSession('start'))
+    // An account signed in before enrollment, or whose enrollment failed, enrolls once the start check is done.
+    this.after(FIRST_SESSION_CHECK_MS, async () => {
+      try {
+        await this.checkSession('start')
+      } finally {
+        await this.enroll('start')
+      }
+    })
     this.every(this.config.refreshCheckMs, () => this.checkSession('daily'))
   }
 
@@ -816,6 +823,35 @@ export class BiliAccount extends Service {
     }
   }
 
+  /**
+   * Enroll the stored jar's device unless it is enrolled: a jar without `_uuid` or `b_nut` gets
+   * them first, keeping its buvid3. A failure is logged and tried again at the next start.
+   * @param why - what asked for it, for the log.
+   */
+  private async enroll(why: string): Promise<void> {
+    const grant = await this.grant()
+    if (grant === undefined || grant.cookies['buvid3'] === undefined) return
+    const kept = grant.cookies['b_nut'] === undefined ? undefined : grant.cookies['_uuid']
+    if (kept !== undefined && this.domain?.table('device').get('current') !== undefined) return
+    let uuid: string
+    if (kept === undefined) {
+      const fresh = newDeviceIds(Date.now(), Math.random)
+      uuid = fresh._uuid
+      await this.storeGrant({ ...grant, cookies: { ...grant.cookies, ...fresh } })
+      this.ctx.logger.info(`bili: gave the stored device its browser ids (${why})`)
+    } else {
+      uuid = kept
+    }
+    try {
+      await enrollDevice(this.client, uuid, Date.now(), Math.random)
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`bili: could not enroll the device (${why}): ${errorText(error)}; likes may be refused until it is enrolled at the next start`)
+      return
+    }
+    await this.serialize(async () => { await (await this.ready).table('device').put('current', { enrolledAt: Date.now() }) })
+    this.ctx.logger.info(`bili: enrolled the device with Bilibili (${why})`)
+  }
+
   /** Store a confirmed login, add device cookies, and confirm the account through `nav`. */
   private async completeLogin(attempt: LoginAttempt, poll: Extract<QrPoll, { state: 'done' }>): Promise<void> {
     let device: CookieJar = {}
@@ -825,9 +861,12 @@ export class BiliAccount extends Service {
       this.ctx.logger.warn(`bili: could not get device cookies (${errorText(error)}); search may refuse requests until the next login`)
     }
     const now = Date.now()
-    const cookies = { ...poll.cookies, ...device }
+    const cookies = { ...poll.cookies, ...device, ...newDeviceIds(now, Math.random) }
     await this.storeGrant({ version: 1, mid: poll.mid, cookies, refreshToken: poll.refreshToken, loggedInAt: now, refreshedAt: now })
     this.client.resetWbi()
+    // A new login brings a new buvid3, which needs its own enrollment.
+    await this.serialize(async () => { await (await this.ready).table('device').delete('current') })
+    await this.enroll('sign-in')
     let nav: Awaited<ReturnType<typeof navInfo>>
     try {
       nav = await navInfo(this.client)

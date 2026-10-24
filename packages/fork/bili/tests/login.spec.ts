@@ -54,7 +54,7 @@ describe('QR login', () => {
     const payload = (record as { payload: { mid: number; cookies: Record<string, string>; refreshToken: string } }).payload
     expect(payload.mid).toBe(3_000_001)
     expect(payload.refreshToken).toBe('refresh-token-1')
-    expect(Object.keys(payload.cookies).sort()).toEqual(['DedeUserID', 'DedeUserID__ckMd5', 'SESSDATA', 'bili_jct', 'buvid3', 'buvid4', 'sid'])
+    expect(Object.keys(payload.cookies).sort()).toEqual(['DedeUserID', 'DedeUserID__ckMd5', 'SESSDATA', '_uuid', 'b_nut', 'bili_jct', 'buvid3', 'buvid4', 'sid'])
 
     // Login endpoints get no cookies and never follow redirects.
     for (const path of ['/x/passport-login/web/qrcode/generate', '/x/passport-login/web/qrcode/poll']) {
@@ -65,7 +65,8 @@ describe('QR login', () => {
     }
     // The view never carries a cookie or token value (DedeUserID is the public mid).
     const text = JSON.stringify(await h.view())
-    const { DedeUserID: _mid, ...secret } = payload.cookies
+    // The mid and b_nut (the sign-in time in Unix seconds) are not secret; the view shows both.
+    const { DedeUserID: _mid, b_nut: _signedIn, ...secret } = payload.cookies
     for (const value of [...Object.values(secret), payload.refreshToken]) expect(text).not.toContain(value)
     expect(h.logs.some(line => line.text === 'bili: signed in as dsh-看客 (3000001)')).toBe(true)
   })

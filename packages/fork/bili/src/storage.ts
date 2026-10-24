@@ -178,6 +178,11 @@ const settingSchema = z.object({
   updatedAt: z.number(),
 }).strict()
 
+const deviceSchema = z.object({
+  /** When ExClimbWuzhi accepted the jar's device. */
+  enrolledAt: z.number(),
+}).strict()
+
 const ownerSchema = z.object({
   /** The owner's main account (UID). */
   mid: z.number(),
@@ -217,6 +222,8 @@ export type VerifyRecord = z.infer<typeof verifySchema>
 export type JournalRecord = z.infer<typeof journalSchema>
 /** One owner-edited text setting. */
 export type SettingRecord = z.infer<typeof settingSchema>
+/** The device enrollment of the stored jar. */
+export type DeviceRecord = z.infer<typeof deviceSchema>
 /** The owner's main account, as set in Settings. */
 export type OwnerRecord = z.infer<typeof ownerSchema>
 /** A Session this plugin created. */
@@ -249,6 +256,7 @@ export const biliDomain = {
     verify: table<VerifyRecord>(verifySchema),
     settings: table<SettingRecord>(settingSchema),
     owner: table<OwnerRecord>(ownerSchema),
+    device: table<DeviceRecord>(deviceSchema),
     sessions: table<SessionRecord>(sessionSchema),
     current: table<SessionRecord>(sessionSchema),
   },

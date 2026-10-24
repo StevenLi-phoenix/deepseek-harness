@@ -40,6 +40,8 @@ export const ENDPOINTS = {
   qrGenerate: { method: 'GET', host: PASSPORT, path: '/x/passport-login/web/qrcode/generate', kind: 'auth', cookies: false },
   qrPoll: { method: 'GET', host: PASSPORT, path: '/x/passport-login/web/qrcode/poll', kind: 'auth', cookies: false },
   fingerSpi: { method: 'GET', host: API, path: '/x/frontend/finger/spi', kind: 'auth', cookies: false },
+  // The device fingerprint report a browser's first page sends; it gives buvid3 a server-side profile.
+  exClimbWuzhi: { method: 'POST', host: API, path: '/x/internal/gaia-gateway/ExClimbWuzhi', kind: 'auth', cookies: true, referer: 'https://www.bilibili.com/' },
   cookieInfo: { method: 'GET', host: PASSPORT, path: '/x/passport-login/web/cookie/info', kind: 'auth', cookies: true, signedIn: true, csrfQuery: ['csrf'] },
   correspond: { method: 'GET', host: 'www.bilibili.com', path: /^\/correspond\/1\/[0-9a-f]{256}$/, kind: 'auth', cookies: true, signedIn: true, response: 'text' },
   cookieRefresh: { method: 'POST', host: PASSPORT, path: '/x/passport-login/web/cookie/refresh', kind: 'auth', cookies: true, signedIn: true, csrfForm: ['csrf'] },

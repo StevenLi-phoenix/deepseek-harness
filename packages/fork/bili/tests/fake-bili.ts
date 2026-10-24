@@ -110,6 +110,8 @@ export class FakeBili {
   readonly relations = new Map<number, number>()
   readonly folders = [{ id: 1001, title: '默认收藏夹', attr: 0, items: new Set<number>() }, { id: 1002, title: '慢慢看', attr: 22, items: new Set<number>() }]
   readonly liked = new Set<number>()
+  /** buvid3 values ExClimbWuzhi enrolled; a like or share from any other device is refused with -403 账号异常. */
+  readonly enrolled = new Set<string>()
   readonly toview = new Set<number>()
   readonly dynamics: string[] = []
   readonly sentMessages: { receiver: number; text: string }[] = []
@@ -212,7 +214,7 @@ export class FakeBili {
     const cookies = this.cookies(request)
     const signedIn = this.session !== undefined && cookies['SESSDATA'] === this.session.SESSDATA
     if (SIGNED_IN.has(path) && !signedIn) return this.code(-101, '账号未登录')
-    if (request.method === 'POST') {
+    if (request.method === 'POST' && path !== '/x/internal/gaia-gateway/ExClimbWuzhi') {
       const csrf = form['csrf'] ?? query['csrf']
       if (csrf !== this.session?.bili_jct) return this.code(-111, 'csrf 校验失败')
     }
@@ -227,6 +229,12 @@ export class FakeBili {
         }
         const set = this.issue()
         return this.ok({ url: 'https://passport.biligame.com/x/passport-login/web/crossDomain?ticket=game', refresh_token: this.session!.refreshToken, timestamp: Date.now(), code: 0, message: '' }, set)
+      }
+      case '/x/internal/gaia-gateway/ExClimbWuzhi': {
+        const payload = JSON.parse((request.json as { payload: string }).payload) as Record<string, unknown>
+        if (cookies['buvid3'] === undefined || payload['df35'] !== cookies['_uuid']) return this.code(-400, '请求错误')
+        this.enrolled.add(cookies['buvid3'])
+        return this.ok(undefined)
       }
       case '/x/frontend/finger/spi':
         return this.ok({ b_3: 'BUVID3-FAKE-infoc', b_4: 'BUVID4-FAKE' })
@@ -308,6 +316,7 @@ export class FakeBili {
         this.rewards.watch = true
         return this.ok(undefined)
       case '/x/web-interface/share/add':
+        if (!this.enrolled.has(cookies['buvid3'] ?? '')) return this.code(-403, '账号异常,操作失败')
         if (this.shared.includes(form['bvid']!)) return this.code(71000, '重复分享')
         this.shared.push(form['bvid']!)
         this.rewards.share = true
@@ -358,6 +367,7 @@ export class FakeBili {
         }
         return this.ok({ prompt: false })
       case '/x/web-interface/archive/like':
+        if (!this.enrolled.has(cookies['buvid3'] ?? '')) return this.code(-403, '账号异常,操作失败')
         this.liked.add(Number(form['aid']))
         return this.ok(undefined)
       case '/x/v2/history/toview/add':
