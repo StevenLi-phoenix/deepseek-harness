@@ -90,6 +90,19 @@ describe('event bundle', () => {
     for (const tool of ['NO_REPLY', 'watch_create', 'schedule_create', 'monitor_start', 'wechat_send_file']) expect(persona).toContain(tool)
   })
 
+  it('bans the model\'s stock lines in both characters, the same list in each', () => {
+    const banned = (id: string): string => {
+      const persona = (inserted.find(entry => entry.id === id)!.config?.plugins?.[0]?.config as { prefix: string }).prefix
+      const start = persona.indexOf('Never write these stock lines')
+      return persona.slice(start, persona.indexOf('Say the plain thing you mean instead.', start))
+    }
+    const wechat = banned('preset-unattended')
+    expect(wechat).toBe(banned('preset-bili'))
+    for (const line of ['「这句话稳」', '「我记住了」', '「睡吧，我守着」', '「行，我认」', '「你自己掂量」', '「……比……重/轻/稳/沉」', '「这话是ta告诉你的，还是你自己想明白的」']) {
+      expect(wechat).toContain(line)
+    }
+  })
+
   it('gives the bili preset only its persona, the time, the Bilibili tools, and compaction', () => {
     const preset = inserted.find(entry => entry.id === 'preset-bili')!
     expect(preset.config?.['id']).toBe('bili')
