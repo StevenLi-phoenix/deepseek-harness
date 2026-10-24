@@ -82,7 +82,7 @@ export const ENDPOINTS = {
   // Writing; only the write guard calls these.
   relationModify: { method: 'POST', host: API, path: '/x/relation/modify', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf'], referer: 'https://space.bilibili.com/' },
   favDeal: { method: 'POST', host: API, path: '/x/v3/fav/resource/deal', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf'] },
-  like: { method: 'POST', host: API, path: '/x/web-interface/archive/like', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf'] },
+  like: { method: 'POST', host: API, path: '/x/web-interface/archive/like', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf', 'csrf_token'] },
   watchLaterAdd: { method: 'POST', host: API, path: '/x/v2/history/toview/add', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf'] },
   watchLaterDel: { method: 'POST', host: API, path: '/x/v2/history/toview/del', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf'] },
   replyAdd: { method: 'POST', host: API, path: '/x/v2/reply/add', kind: 'write', cookies: true, signedIn: true, csrfForm: ['csrf'] },

@@ -23,6 +23,9 @@ export const HARD_CAPS: Readonly<Record<CappedAction, number>> = {
   dmOwner: 20, watch: 100, share: 10,
 }
 
+/** Writes a `public` pause lets through: messages to the owner, and the host's watch reports. */
+export const PUBLIC_PAUSE_ALLOWS: ReadonlySet<WriteAction> = new Set(['dmOwner', 'dmReply', 'watch'])
+
 /** Writes that happen at most once per target, ever; their rows are kept through pruning. */
 const ONCE_EVER: ReadonlySet<WriteAction> = new Set(['comment', 'reply', 'coin', 'triple', 'share'])
 
@@ -83,6 +86,9 @@ export function remaining(
 export function pauseRefusal(pause: PauseRecord | undefined, action: WriteAction): string | undefined {
   if (pause === undefined) return undefined
   if (pause.scope === 'all') return `writes are paused (${pause.reason}) until the owner resumes them in Settings`
+  if (pause.scope === 'public') {
+    return PUBLIC_PAUSE_ALLOWS.has(action) ? undefined : `public writes are paused (${pause.reason}) until the owner resumes them in Settings; messages to the owner still go`
+  }
   if (SPEECH_ACTIONS.has(action)) return `public speech is paused (${pause.reason}) until the owner resumes it in Settings`
   return undefined
 }

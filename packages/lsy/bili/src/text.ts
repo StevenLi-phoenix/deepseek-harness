@@ -88,7 +88,7 @@ export interface WakeFacts {
   /** The owner's interests text from Settings. */
   interests: string
   /** Why writes are paused, when they are. */
-  pause?: { scope: 'all' | 'speech'; reason: string } | undefined
+  pause?: { scope: 'all' | 'public' | 'speech'; reason: string } | undefined
   /** Notes on the owner's taste, oldest first. */
   taste?: readonly TasteLine[] | undefined
   /** Recent videos sent to the owner, newest first. */
@@ -154,6 +154,9 @@ export function budgetLine(budget: Readonly<Record<CappedAction, number>>): stri
 /** The pause line of a prompt. */
 function pauseLine(pause: WakeFacts['pause']): string | undefined {
   if (pause === undefined) return undefined
+  if (pause.scope === 'public') {
+    return `Likes, favorites, follows, comments, and other public writes are paused (${pause.reason}) until the owner resumes them in Settings: read, watch, grade, and message the owner as usual, but do not try them.`
+  }
   return pause.scope === 'all'
     ? `Writes are paused (${pause.reason}) until the owner resumes them in Settings: only read and watch for now.`
     : `Public speech is paused (${pause.reason}) until the owner resumes it in Settings: no comments, replies, or dynamics for now.`
@@ -340,5 +343,6 @@ export const FALLBACK_TITLE = '📺 B站：这条没能用 B站私信发出，�
 export const NOTICES = {
   loginNeeded: 'dsh 的 B站登录失效了：设置 → B站账号 扫码',
   riskPaused: (reason: string): string => `dsh 的 B站账号触发了风控（${reason}），所有写操作已暂停：设置 → B站账号 检查后点「恢复」`,
+  publicPaused: (reason: string): string => `dsh 的 B站账号点赞、收藏、关注这类操作被风控拦了（${reason}），这类操作已暂停，给你的私信照常：设置 → B站账号 检查后点「恢复」`,
   speechPaused: (target: string): string => `dsh 在 B站的评论可能被隐藏了（${target}），公开发言已暂停：设置 → B站账号 检查后点「恢复」`,
 } as const

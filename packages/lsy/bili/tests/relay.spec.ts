@@ -231,6 +231,6 @@ describe('phone verification', () => {
     fake.reply('/x/v2/reply/add', { body: { code: 12099, message: '请输入验证码' } })
     await vi.advanceTimersByTimeAsync(200_000)
     expect(await h.run(h.account.comment('BV1bb4y1X7bb', '风景真好'))).toMatchObject({ outcome: 'refused' })
-    expect((await h.view()).pause).toMatchObject({ scope: 'all' })
+    expect((await h.view()).pause).toMatchObject({ scope: 'public' })
   })
 })

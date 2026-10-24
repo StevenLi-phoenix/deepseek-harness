@@ -158,28 +158,111 @@ export function newDeviceIds(now: number, random: () => number): { _uuid: string
   return { _uuid: `${[8, 4, 4, 4, 12].map(group).join('-')}${String(now % 100_000).padStart(5, '0')}infoc`, b_nut: String(Math.floor(now / 1000)) }
 }
 
+/** PDF viewers Chrome reports in `navigator.plugins`, each with its two MIME types. */
+const PDF_PLUGINS = ['PDF Viewer', 'Chrome PDF Viewer', 'Chromium PDF Viewer', 'Microsoft Edge PDF Viewer', 'WebKit built-in PDF']
+  .map(name => [name, 'Portable Document Format', [['application/pdf', 'pdf'], ['text/pdf', 'pdf']]])
+
 /**
- * Enroll the device the way a browser's first page does: one ExClimbWuzhi report carrying `_uuid`
- * and a canvas fingerprint tail (a PNG data URL ends in its IEND chunk), sent with the jar's
- * buvid3, `_uuid`, and `b_nut`. Without it Bilibili answers likes and shares with -403 账号异常.
- * @param client - Bilibili client; the jar must already hold `_uuid` and `b_nut`.
+ * The fingerprint report a browser's first page sends to ExClimbWuzhi, for Chrome on a Mac: the field
+ * set bilibili-api-python reports (navigator, screen, time zone, plugins, canvas tails), with this
+ * client's own values. A canvas data URL ends in its PNG IEND chunk.
  * @param uuid - the jar's `_uuid`.
  * @param now - Unix epoch milliseconds.
  * @param random - uniform source in [0, 1).
- * @throws whatever the client throws for a non-zero answer.
+ * @param userAgent - the client's User-Agent.
+ * @returns the report, before it is serialized.
  */
-export async function enrollDevice(client: BiliClient, uuid: string, now: number, random: () => number): Promise<void> {
-  const canvas = `${Array.from({ length: 34 }, () => BASE64[Math.floor(random() * BASE64.length)]).join('')}AAAAAElFTkSuQmCC`
-  const payload = {
+export function devicePayload(uuid: string, now: number, random: () => number, userAgent: string): Record<string, unknown> {
+  const canvas = (length: number): string => Array.from({ length }, () => BASE64[Math.floor(random() * BASE64.length)]).join('')
+  return {
     '3064': 1,
-    '5062': String(now),
+    '5062': now,
     '03bf': encodeURIComponent('https://www.bilibili.com/'),
-    '39c8': '333.1007.fp.risk',
-    '3c43': { adca: 'MacIntel', bfe9: canvas },
+    '39c8': '333.788.fp.risk',
+    '34f1': '',
+    'd402': '',
+    '654a': '',
+    '6e7c': '1512x862',
+    '3c43': {
+      '2673': 0, '5766': 24, '6527': 0, '7003': 1, '807e': 1, 'b8ce': userAgent, '641c': 0, '07a4': 'zh-CN',
+      '1c57': 'not available', '0bd0': 8, '748e': [982, 1512], 'd61f': [862, 1512],
+      'fc9d': new Date(now).getTimezoneOffset(), '6aa9': Intl.DateTimeFormat().resolvedOptions().timeZone,
+      '75b8': 1, '3b21': 1, '8a1c': 0, 'd52f': 'not available', 'adca': 'MacIntel', '80c9': PDF_PLUGINS,
+      '13ab': `${canvas(10)}AAAAASUVORK5CYII=`, 'bfe9': `${canvas(34)}AAAAAElFTkSuQmCC`,
+    },
+    '8b94': encodeURIComponent('https://www.bilibili.com/'),
     'df35': uuid,
     '07a4': 'zh-CN',
+    '5f45': null,
+    'db46': 0,
   }
-  await client.call('exClimbWuzhi', { json: { payload: JSON.stringify(payload) } })
+}
+
+/** 64-bit mask of the hash arithmetic. */
+const MASK64 = (1n << 64n) - 1n
+
+/** Rotate a 64-bit value left. */
+function rotl64(value: bigint, bits: bigint): bigint {
+  return ((value << bits) | (value >> (64n - bits))) & MASK64
+}
+
+/** MurmurHash3's 64-bit finalizer. */
+function fmix64(value: bigint): bigint {
+  let k = value ^ (value >> 33n)
+  k = (k * 0xff51afd7ed558ccdn) & MASK64
+  k ^= k >> 33n
+  k = (k * 0xc4ceb9fe1a85ec53n) & MASK64
+  return k ^ (k >> 33n)
+}
+
+/**
+ * `buvid_fp`: MurmurHash3 x64 128 of the ExClimbWuzhi request body, seed 31, the low and high
+ * halves in unpadded hex, as bilibili-api-python derives it.
+ * @param body - the exact JSON body sent.
+ * @returns the cookie value.
+ */
+export function buvidFp(body: string): string {
+  const bytes = Buffer.from(body, 'utf8')
+  const c1 = 0x87c37b91114253d5n
+  const c2 = 0x4cf5ad432745937fn
+  let h1 = 31n
+  let h2 = 31n
+  const blocks = Math.floor(bytes.length / 16)
+  for (let block = 0; block < blocks; block += 1) {
+    const k1 = rotl64((bytes.readBigUInt64LE(block * 16) * c1) & MASK64, 31n) * c2 & MASK64
+    h1 = ((rotl64(h1 ^ k1, 27n) + h2) * 5n + 0x52dce729n) & MASK64
+    const k2 = rotl64((bytes.readBigUInt64LE(block * 16 + 8) * c2) & MASK64, 33n) * c1 & MASK64
+    h2 = ((rotl64(h2 ^ k2, 31n) + h1) * 5n + 0x38495ab5n) & MASK64
+  }
+  const tail = bytes.subarray(blocks * 16)
+  let k1 = 0n
+  let k2 = 0n
+  for (let index = tail.length - 1; index >= 8; index -= 1) k2 ^= BigInt(tail[index] ?? 0) << BigInt(8 * (index - 8))
+  if (tail.length > 8) h2 ^= rotl64((k2 * c2) & MASK64, 33n) * c1 & MASK64
+  for (let index = Math.min(tail.length, 8) - 1; index >= 0; index -= 1) k1 ^= BigInt(tail[index] ?? 0) << BigInt(8 * index)
+  if (tail.length > 0) h1 ^= rotl64((k1 * c1) & MASK64, 31n) * c2 & MASK64
+  const length = BigInt(bytes.length)
+  h1 ^= length
+  h2 ^= length
+  h1 = (h1 + h2) & MASK64
+  h2 = (h2 + h1) & MASK64
+  h1 = fmix64(h1)
+  h2 = fmix64(h2)
+  h1 = (h1 + h2) & MASK64
+  h2 = (h2 + h1) & MASK64
+  return `${h1.toString(16)}${h2.toString(16)}`
+}
+
+/**
+ * Enroll the device the way a browser's first page does: one ExClimbWuzhi report (see
+ * {@link devicePayload}), sent with the jar's buvid3, buvid4, `_uuid`, `b_nut`, and the `buvid_fp`
+ * derived from this very body ({@link buvidFp}), which the caller stores first.
+ * @param client - Bilibili client; the jar must already hold `_uuid`, `b_nut`, and `buvid_fp`.
+ * @param body - the request body, `{"payload":"<the report as JSON>"}`.
+ * @throws whatever the client throws for a non-zero answer.
+ */
+export async function enrollDevice(client: BiliClient, body: { payload: string }): Promise<void> {
+  await client.call('exClimbWuzhi', { json: body })
 }
 
 /**
