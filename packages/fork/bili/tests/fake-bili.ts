@@ -6,7 +6,7 @@
  * and csrf like the real site, and any endpoint can be given canned answers
  * (risk control, errors, network failures).
  */
-import { createHash, generateKeyPairSync, privateDecrypt, constants } from 'node:crypto'
+import { createHash, createHmac, generateKeyPairSync, privateDecrypt, constants } from 'node:crypto'
 import { buvidFp } from '../src/auth.ts'
 import { mixinKey } from '../src/wbi.ts'
 
@@ -121,6 +121,8 @@ export class FakeBili {
   replyItems: Record<string, unknown>[] = []
   atItems: Record<string, unknown>[] = []
   ownerMessages: { sender: number; text: string; key: string; at: number }[] = []
+  /** Web tickets issued. */
+  tickets = 0
   /** The hot-search list (热搜). */
   hotSearches: { keyword: string; show_name?: string; icon?: string }[] = [
     { keyword: '鱼灾', show_name: 'B站鱼灾', icon: 'https://i0.hdslb.com/bfs/legacy/hot.png' },
@@ -243,6 +245,13 @@ export class FakeBili {
         if (cookies['buvid_fp'] !== buvidFp(JSON.stringify(request.json))) return this.code(-400, '请求错误')
         this.enrolled.add(cookies['buvid3'])
         return this.ok(undefined)
+      }
+      case '/bapis/bilibili.api.ticket.v1.Ticket/GenWebTicket': {
+        // The page's own HMAC of `ts<seconds>`; a wrong one is refused.
+        const ts = query['context[ts]'] ?? ''
+        if (query['key_id'] !== 'ec02' || query['hexsign'] !== createHmac('sha256', 'XgwSnGZ1p').update(`ts${ts}`).digest('hex')) return this.code(-400, '请求错误')
+        this.tickets += 1
+        return this.ok({ ticket: `TICKET-FAKE-${this.tickets}`, created_at: Number(ts), ttl: 259_200, context: {}, nav: {} })
       }
       case '/x/frontend/finger/spi':
         return this.ok({ b_3: 'BUVID3-FAKE-infoc', b_4: 'BUVID4-FAKE' })

@@ -65,8 +65,49 @@ describe('device enrollment', () => {
     expect(enroll!.headers['cookie']).toContain(`buvid_fp=${cookies['buvid_fp']}`)
     expect(logged(h, 'info', 'bili: enrolled the device with Bilibili (sign-in)')).toBe(true)
     expect(await h.run(h.account.like('BV1aa4y1X7aa'))).toMatchObject({ outcome: 'sent' })
-    // The like form bilibili-api-python sends: aid and bvid, with csrf and csrf_token.
-    expect(fake.requestsTo('/x/web-interface/archive/like').at(-1)!.form).toMatchObject({ aid: '101', bvid: 'BV1aa4y1X7aa', like: '1', csrf: expect.any(String) as string, csrf_token: expect.any(String) as string })
+    // The like a real browser sends on bilibili.com/en/ with this account (captured 2026-10-24).
+    const like = fake.requestsTo('/x/web-interface/archive/like').at(-1)!
+    expect(like.query).toMatchObject({
+      'x-bili-device-req-json': '{"platform":"web","device":"pc","spmid":"333.788","mobi_app":"web_i"}',
+      'x-bili-locale-json': '{"c_locale":{"language":"en"},"always_translate":true}',
+    })
+    expect(like.form).toEqual({
+      aid: '101', like: '1', from_spmid: '333.337.search-card.all.click', spmid: '333.788.0.0', statistics: '{"appId":182,"platform":5}',
+      eab_x: '2', ramval: '5', source: 'web_normal', ga: '1', csrf: expect.any(String) as string,
+    })
+    expect(like.headers).toMatchObject({
+      'referer': 'https://www.bilibili.com/en/video/BV1aa4y1X7aa/',
+      'origin': 'https://www.bilibili.com',
+      'user-agent': USER_AGENT,
+      'sec-ch-ua': '"Google Chrome";v="155", "Chromium";v="155", "Not(A:Brand";v="24"',
+      'sec-ch-ua-platform': '"macOS"',
+      'sec-fetch-site': 'same-site',
+      'accept-language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
+    })
+    expect(USER_AGENT).toContain('Chrome/155.0.0.0')
+    // The web ticket a browser keeps goes with it.
+    expect(like.headers['cookie']).toContain('bili_ticket=TICKET-FAKE-1')
+    // It expires three days after it was issued at sign-in.
+    expect(Math.floor(Date.now() / 1000) + 259_200 - Number(cookiesOf(credentials)['bili_ticket_expires'])).toBeLessThan(120)
+  })
+
+  it('gets the web ticket with the page\'s HMAC signature, and renews it only when it is a day from expiring', async () => {
+    const credentials = credentialStore()
+    const h = await harness({ bili: fake, credentials, workspace: dir })
+    await h.signIn()
+    const [ticket] = fake.requestsTo('/bapis/bilibili.api.ticket.v1.Ticket/GenWebTicket')
+    expect(ticket!.query).toMatchObject({ key_id: 'ec02', csrf: expect.any(String) as string })
+    expect(h.logs.some(line => /^bili: got a web ticket until .+ \(sign-in\)$/.test(line.text))).toBe(true)
+    // A restart a day later keeps it; one two and a half days later renews it.
+    await h.ctx.fiber.dispose()
+    vi.setSystemTime(Date.now() + 86_400_000)
+    await harness({ bili: fake, credentials, pool: h.pool, notes: h.notes, workspace: dir })
+    await vi.advanceTimersByTimeAsync(70_000)
+    expect(fake.tickets).toBe(1)
+    vi.setSystemTime(Date.now() + 1.5 * 86_400_000)
+    await vi.advanceTimersByTimeAsync(86_400_000)
+    expect(fake.tickets).toBe(2)
+    expect(cookiesOf(credentials)['bili_ticket']).toBe('TICKET-FAKE-2')
   })
 
   it('derives buvid_fp with MurmurHash3 x64 128, seed 31, like the reference implementation', () => {

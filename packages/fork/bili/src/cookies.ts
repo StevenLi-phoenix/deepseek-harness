@@ -6,7 +6,9 @@
  */
 
 /** Cookies a web session needs; anything else Bilibili sets is dropped. */
-export const COOKIE_NAMES = ['SESSDATA', 'bili_jct', 'DedeUserID', 'DedeUserID__ckMd5', 'sid', 'buvid3', 'buvid4', '_uuid', 'b_nut', 'buvid_fp'] as const
+export const COOKIE_NAMES = [
+  'SESSDATA', 'bili_jct', 'DedeUserID', 'DedeUserID__ckMd5', 'sid', 'buvid3', 'buvid4', '_uuid', 'b_nut', 'buvid_fp', 'bili_ticket', 'bili_ticket_expires',
+] as const
 /** One of {@link COOKIE_NAMES}. */
 export type CookieName = typeof COOKIE_NAMES[number]
 /** The kept cookies by name. */

@@ -5,7 +5,7 @@
  * possession of the session to `www.bilibili.com/correspond`, exchanges the
  * refresh token for new cookies, and then retires the old token.
  */
-import { constants, publicEncrypt } from 'node:crypto'
+import { constants, createHmac, publicEncrypt } from 'node:crypto'
 import { z } from 'zod'
 import type { BiliClient } from './client.ts'
 import { cookiesFromUrl, mergeSetCookies, isSignedIn, type CookieJar } from './cookies.ts'
@@ -251,6 +251,30 @@ export function buvidFp(body: string): string {
   h1 = (h1 + h2) & MASK64
   h2 = (h2 + h1) & MASK64
   return `${h1.toString(16)}${h2.toString(16)}`
+}
+
+/** HMAC key bilibili.com's own script signs a web-ticket request with (public, in the page source). */
+const TICKET_KEY = 'XgwSnGZ1p'
+
+/**
+ * A web ticket the way bilibili.com's script gets one (GenWebTicket, key id `ec02`): `hexsign` is the
+ * HMAC-SHA256 of `ts<unix seconds>`; the answer's ticket goes in the jar as `bili_ticket`, with
+ * `bili_ticket_expires` (Unix seconds) from its `created_at` and `ttl`.
+ * @param client - Bilibili client; the csrf query is filled from the jar.
+ * @param now - Unix epoch milliseconds.
+ * @returns the two cookies.
+ * @throws when the answer has no ticket.
+ */
+export async function webTicket(client: BiliClient, now: number): Promise<{ bili_ticket: string; bili_ticket_expires: string }> {
+  const ts = Math.floor(now / 1000)
+  const hexsign = createHmac('sha256', TICKET_KEY).update(`ts${ts}`).digest('hex')
+  const { data } = await client.call('webTicket', { query: { 'key_id': 'ec02', hexsign, 'context[ts]': ts } })
+  const fields = typeof data === 'object' && data !== null ? data as Record<string, unknown> : {}
+  const ticket = fields['ticket']
+  if (typeof ticket !== 'string' || ticket === '') throw new Error('GenWebTicket answered no ticket')
+  const created = typeof fields['created_at'] === 'number' ? fields['created_at'] : ts
+  const ttl = typeof fields['ttl'] === 'number' ? fields['ttl'] : 259_200
+  return { bili_ticket: ticket, bili_ticket_expires: String(created + ttl) }
 }
 
 /**

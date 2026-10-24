@@ -11,8 +11,17 @@ import { cookieHeader, type CookieJar } from './cookies.ts'
 import { ENDPOINTS, type Endpoint, type EndpointName } from './endpoints.ts'
 import { keyFromUrl, signQuery, type WbiKeys } from './wbi.ts'
 
-/** Desktop browser identity sent with every request. */
-export const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
+/** Desktop browser identity sent with every request: Chrome 155 on macOS, as a real browser sent it on 2026-10-24. */
+export const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36'
+/** The client hints and language that browser sends with every fetch; they must agree with {@link USER_AGENT}. */
+export const BROWSER_HEADERS: Readonly<Record<string, string>> = {
+  'accept-language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
+  'sec-ch-ua': '"Google Chrome";v="155", "Chromium";v="155", "Not(A:Brand";v="24"',
+  'sec-ch-ua-mobile': '?0',
+  'sec-ch-ua-platform': '"macOS"',
+  'sec-fetch-dest': 'empty',
+  'sec-fetch-mode': 'cors',
+}
 /** Hosts that may receive the account's cookies. */
 export const COOKIE_HOSTS: ReadonlySet<string> = new Set(['api.bilibili.com', 'api.vc.bilibili.com', 'passport.bilibili.com', 'www.bilibili.com'])
 /**
@@ -259,6 +268,9 @@ export class BiliClient {
     const headers: Record<string, string> = {
       'user-agent': USER_AGENT,
       'accept': entry.response === 'text' ? 'text/html,application/xhtml+xml' : 'application/json, text/plain, */*',
+      ...BROWSER_HEADERS,
+      // A bilibili.com page fetching another bilibili.com host is same-site; subtitle files are on hdslb.com.
+      'sec-fetch-site': entry.host.endsWith('bilibili.com') ? 'same-site' : 'cross-site',
       referer,
     }
     if (jar !== undefined && COOKIE_HOSTS.has(entry.host)) {
