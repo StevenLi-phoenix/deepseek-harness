@@ -3,14 +3,14 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/lsy/bili/README.md
 /:
-  en: 08129d2910e74ebe
-  zh: f0c04bf835e1e148
+  en: 3d7afb56a99bb994
+  zh: c9463ae6a11189a1
 /deepseek-ai-dsh-bili:
   en: f3b1301eff6b2d4d
   zh: 934e02fa61f51d0b
 /deepseek-ai-dsh-bili/summary:
-  en: 9893e4bab1b48369
-  zh: 471350b87d5283bc
+  en: cfeac4135dfc74c3
+  zh: d7d1eec80a4b7f91
 /deepseek-ai-dsh-bili/table-of-contents:
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
@@ -18,20 +18,20 @@
   en: aaaf95b5329c7335
   zh: f8b4c15b865e723a
 /deepseek-ai-dsh-bili/use-this-package/when-to-choose-it:
-  en: ae92493fabf141e4
-  zh: 2e1831598579a5e4
+  en: 0d67b9db5f294ad7
+  zh: c240ffe68b6dd9c4
 /deepseek-ai-dsh-bili/use-this-package/minimal-configuration:
-  en: 38d71fd87c43c265
-  zh: 8a1948a33d194eed
+  en: dfc66c04c390b360
+  zh: 8e9daf15105ec25f
 /deepseek-ai-dsh-bili/use-this-package/off-peak-wakes:
-  en: 178b3e894249cfb6
-  zh: e73ad793837397a2
+  en: cab34305a0136f8e
+  zh: 39208bd0b2690294
 /deepseek-ai-dsh-bili/use-this-package/what-the-owner-sees:
-  en: edd66c255148ad69
-  zh: a65c40ac0545ec16
+  en: 212d91c7cd6fc780
+  zh: 8cf8d692faa63e8f
 /deepseek-ai-dsh-bili/understand-the-implementation:
-  en: 3eb3ef4a3be6a46d
-  zh: d09fa7dcd1cc9892
+  en: e5b020e49c2822bc
+  zh: 0dd83990ec2ea65b
 /deepseek-ai-dsh-bili/further-exploration:
   en: e9a997bb00879e80
   zh: 9826beadff191b83
@@ -42,23 +42,26 @@
   en: 4938e82083dbe51d
   zh: b1be464d99e3fc8b
 /deepseek-ai-dsh-bili/model-experience/wake-prompts/what-the-model-sees:
-  en: 893704fbdd809f24
-  zh: a9c33e045cfe9327
+  en: a3dfa57c7d7c3b97
+  zh: 7aa48eb627e321c5
 /deepseek-ai-dsh-bili/model-experience/wake-prompts/what-the-model-sees/body-clock-wake:
   en: 984ce97a2cdbcfaf
   zh: 2c602d6ca83730db
 /deepseek-ai-dsh-bili/model-experience/wake-prompts/what-the-model-sees/inbox-wake:
   en: 291de83b35f768ae
   zh: 1594f18c5dc89dac
+/deepseek-ai-dsh-bili/model-experience/wake-prompts/what-the-model-sees/continuation:
+  en: 7f9ed324e3a63201
+  zh: d51afa429f1b80cd
 /deepseek-ai-dsh-bili/model-experience/wake-prompts/token-effect:
-  en: 73a9067c1e3b5cb0
-  zh: 8852d1c25f27c199
+  en: f1579ead06c96014
+  zh: 55c22d0cc754999c
 /deepseek-ai-dsh-bili/model-experience/wake-prompts/kv-cache-effect:
-  en: b426c1f8f6b8ce4c
-  zh: b07ff5f15663c1ef
+  en: d3fe0877e692b4a5
+  zh: ed4e51d76a45b96d
 /deepseek-ai-dsh-bili/known-limitations-and-deferred-work:
-  en: f6795e23cc0d09d9
-  zh: 02093db8f49f8288
+  en: bf30abf44a1a7eb7
+  zh: 41683ef43b9c34bb
 /deepseek-ai-dsh-bili/known-limitations-and-deferred-work/dev-note:
-  en: c8807258e942f5c0
-  zh: f184b0d6e376dc80
+  en: 3ba6dbf521ac2edf
+  zh: 0099ebbee6e71bf2

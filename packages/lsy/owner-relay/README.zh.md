@@ -57,7 +57,7 @@ agent 的某个 Session 结束一轮时你会收到什么，由一个地方决�
 | `release(sessionId)` | 不再转发这个 Session；返回它原先是否被认领。 |
 | `ownerOf(sessionId)` | 认领它的通道名，没有则为 `undefined`。 |
 
-一个通道（`RelayChannel`）有 `name`、`deliver(answer)`、可选的钩子 `onTurnStart`、`onTurnEnd`、`onTurnSettled`，以及可选的 `fallbackLabel`。回答带有 `sessionId`、`text`（主人收到的内容）、`outcome` 和 `detail`（失败原因）。`deliver` 以 `sent`（已发出或已持久排队）或 `kept`（通道选择不发，比如不是唤醒开启的 B站那一轮）完成，送不出时 reject。中继在 `turn/start` 时调用 `onTurnStart`；在 `turn/end` 时先调用 `onTurnEnd`，再在同一个 tick 里调用 `deliver`，等 `deliver` 和可能的退回都结束后调用 `onTurnSettled`。没有要发的内容时，`onTurnSettled` 紧跟在 `onTurnEnd` 之后。
+一个通道（`RelayChannel`）有 `name`、`deliver(answer)`、可选的钩子 `onTurnStart`、`onTurnEnd`、`onTurnSettled`，以及可选的 `fallbackLabel`。回答带有 `sessionId`、`text`（主人收到的内容）、`outcome` 和 `detail`（失败原因）。`deliver` 以 `sent`（已发出或已持久排队）或 `kept`（通道选择不发，比如不是唤醒开启的 B站那一轮）完成，送不出时 reject。中继在 `turn/start` 时调用 `onTurnStart`；在 `turn/end` 时先调用 `onTurnEnd(sessionId, ended)`，再在同一个 tick 里调用 `deliver`，等 `deliver` 和可能的退回都结束后调用 `onTurnSettled`。没有要发的内容时，`onTurnSettled` 紧跟在 `onTurnEnd` 之后。`ended` 是中继对这一轮的决定：`answer`（随后会调用 `deliver`）、`silent`（最终文本是 `NO_REPLY`）、`stopped`（主人停掉了这一轮）或 `empty`（完成了但没有文本），所以按轮记录状态的通道，即使什么都没有投递，也知道这一轮是怎么结束的。
 
 `deliver` reject 时，中继给 `ctx.lsyNotifier` 发一条 `↪️ 这条回答没能从原渠道发出，改发这里` 通知：回答本身、下面一行 `原因：<error>`，并把通道的 `fallbackLabel` 作为通知的 `origin`，微信对话 Session 里的副本会以它作为发送者。没有标签的通道就是通知器自己，它送不出时只记日志。
 
@@ -66,7 +66,7 @@ agent 的某个 Session 结束一轮时你会收到什么，由一个地方决�
 | 通道 | 插件 | 认领 | 投递 | `fallbackLabel` |
 |---|---|---|---|---|
 | `wechat` | `@deepseek-ai/dsh-lsy-wechat` | 它记得的每个对话 Session（当前的和更早的） | 一条微信回复；更早的对话 Session 的回答还会复制一份到当前对话里 | 无：它就是通知器 |
-| `bili-dm` | `@deepseek-ai/dsh-bili` | 账号的 Session | 唤醒开启的一轮发 B站私信（否则 `kept`）；发不出去的部分带着原因和标签改发微信 | `the Bilibili account's Session (its answer could not go out as a Bilibili message)` |
+| `bili-dm` | `@deepseek-ai/dsh-bili` | 账号的 Session | 唤醒开启的一轮发 B站私信（否则 `kept`；回答被观看下限压住、这次唤醒还在继续浏览时也是 `kept`）；发不出去的部分带着原因和标签改发微信 | `the Bilibili account's Session (its answer could not go out as a Bilibili message)` |
 
 `@deepseek-ai/dsh-lsy-event-bus` 在跟踪提醒或监控那一轮之前先问 `ownerOf()`，所以被认领的 Session 的一轮只经由它的通道送达主人一次。
 
@@ -78,7 +78,7 @@ agent 的某个 Session 结束一轮时你会收到什么，由一个地方决�
 <details>
 <summary>实现细节——点击展开</summary>
 
-`OwnerRelay` 是一个 Cordis 服务（`ctx.ownerRelay`），监听 `session/event`，忽略没有被认领的 Session。对被认领的 Session，它保存最新的 `assistant/message` 文本（`contentText`：拼接文本部分，没有文本的消息保留上一条），在 `turn/end` 时取出并套用 `decideRelay`。钩子在事件里同步调用，每个都包在自己的 `try` 里，出错的钩子只记日志，不会让中继停下；`deliver` 在第一个 `await` 之前就被调用，所以通道可以读取 `onTurnEnd` 刚设好的每轮状态。投递在后台进行，销毁时等它们结束。被一个尚未注册的通道认领的 Session 只记日志并跳过。
+`OwnerRelay` 是一个 Cordis 服务（`ctx.ownerRelay`），监听 `session/event`，忽略没有被认领的 Session。对被认领的 Session，它保存最新的 `assistant/message` 文本（`contentText`：拼接文本部分，没有文本的消息保留上一条），在 `turn/end` 时取出并套用 `decideRelay`。钩子在事件里同步调用，每个都包在自己的 `try` 里，出错的钩子只记日志，不会让中继停下；`deliver` 在第一个 `await` 之前就被调用，所以通道可以读取 `onTurnEnd` 刚设好的每轮状态；`onTurnEnd` 的第二个参数是 `decision.kind`。投递在后台进行，销毁时等它们结束。被一个尚未注册的通道认领的 Session 只记日志并跳过。
 
 每个决定都以 info 级别记日志，带 Session id 和原因，从不记录正文：`owner-relay: Session <id> ended a turn (<outcome>); relaying <n> chars through <channel>`、什么也不转发的原因（`the owner stopped`、`that answered NO_REPLY`、`without text`），以及 `<channel> sent` 或 `kept the answer`。被 reject 的投递和每次退回的结果以 warn 或 info 记录。
 
