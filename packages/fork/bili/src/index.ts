@@ -466,6 +466,7 @@ export class BiliAccount extends Service {
       sleep: ms => this.sleep(ms),
       random: () => Math.random(),
       debug: (message) => { ctx.logger.debug(`bili: ${message}`) },
+      info: (message) => { ctx.logger.info(`bili: ${message}`) },
     }, { gapMs: config.requestGapMs, jitterMs: config.requestJitterMs, timeoutMs: config.requestTimeoutMs })
     this.ready = ctx.storageDomain.open(biliDomain)
     this.dm = new DmChannel({

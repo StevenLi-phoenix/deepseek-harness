@@ -148,6 +148,8 @@ export interface ClientHooks {
   random(): number
   /** Debug log line; never request data. */
   debug(message: string): void
+  /** Info log line for an answer with a non-zero code: Bilibili's code and words, never request data. */
+  info(message: string): void
 }
 
 /** Spacing and deadlines. */
@@ -324,6 +326,7 @@ export class BiliClient {
   ): Promise<CallResult> {
     const deadline = AbortSignal.timeout(this.timing.timeoutMs)
     let response: Response
+    const started = Date.now()
     try {
       response = await fetch(url, {
         method: init.method,
@@ -336,7 +339,7 @@ export class BiliClient {
       signal?.throwIfAborted()
       throw new BiliTransportError(name, deadline.aborted ? `no answer within ${this.timing.timeoutMs} ms` : `network error (${error instanceof Error ? error.name : 'unknown'})`)
     }
-    this.hooks.debug(`${name} → HTTP ${response.status}`)
+    this.hooks.debug(`${name} → HTTP ${response.status} (${Date.now() - started} ms)`)
     if (response.status === 412 || response.status === 429) {
       await response.body?.cancel()
       return this.risk(name, entry, `HTTP ${response.status}`)
@@ -374,6 +377,7 @@ export class BiliClient {
     const message = messageText(json['message'] ?? json['msg'])
     // Bilibili's own words go with the code, so the owner can tell a flagged account from a captcha.
     const said = message === '' ? `code ${json.code}` : `code ${json.code}: ${message}`
+    if (json.code !== 0) this.hooks.info(`${name} answered ${said}`)
     if (typeof (data as { v_voucher?: unknown } | undefined)?.v_voucher === 'string') return this.risk(name, entry, `captcha (${said})`)
     if (RISK_CODES.has(json.code)) return this.risk(name, entry, said)
     if (VERIFY_CODES.has(json.code) || (json.code !== 0 && VERIFY_WORDS.test(message))) throw new BiliVerifyError(name, json.code, message)

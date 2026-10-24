@@ -28,12 +28,18 @@
   disabled: true
 
 - insert:
-    # Runtime logs to stdout (launchd captures them). 2 = info, 3 = debug.
+    # Runtime logs to stdout (launchd captures them). 2 = info, 3 = debug. A logger is named after
+    # its plugin's class, hyphenated (BiliAccount → bili-account). New plugins log at debug until
+    # they have run quietly for a while, then move to info: the Bilibili account, its tools, and
+    # owner-relay since 2026-10-23.
     - id: logger-console
       name: '@deepseek-ai/cordis-plugin-logger-console'
       config:
         levels:
           default: 2
+          bili-account: 3
+          tool-bili: 3
+          owner-relay: 3
 
     # Session creation seam used by the bus for `session` subscriptions.
     - id: webhook-runtime

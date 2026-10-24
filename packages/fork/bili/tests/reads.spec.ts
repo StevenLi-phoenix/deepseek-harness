@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { BiliClient, BiliRefused, BiliTransportError, allowedEndpoint, parseJson, type ClientHooks } from '../src/client.ts'
+import { BiliApiError, BiliClient, BiliRefused, BiliTransportError, allowedEndpoint, parseJson, type ClientHooks } from '../src/client.ts'
 import { COVERAGE } from '../src/api.ts'
 import { untrusted } from '../src/text.ts'
 import { FakeBili } from './fake-bili.ts'
@@ -32,15 +32,17 @@ afterEach(async () => {
 function client(jar: Record<string, string> | undefined = { SESSDATA: 's', bili_jct: 'c', DedeUserID: '1' }) {
   vi.stubGlobal('fetch', fake.fetch)
   const risks: string[] = []
+  const logs: string[] = []
   const hooks: ClientHooks = {
     jar: () => Promise.resolve(jar),
     admit: () => {},
     onRisk: (name, _entry, reason) => { risks.push(`${name} ${reason}`) },
     sleep: ms => new Promise((resolve) => { setTimeout(resolve, ms) }),
     random: () => 0,
-    debug: () => {},
+    debug: (message) => { logs.push(`debug ${message}`) },
+    info: (message) => { logs.push(`info ${message}`) },
   }
-  return { client: new BiliClient(hooks, { gapMs: 1200, jitterMs: 800, timeoutMs: 15_000 }), risks }
+  return { client: new BiliClient(hooks, { gapMs: 1200, jitterMs: 800, timeoutMs: 15_000 }), risks, logs }
 }
 
 describe('client', () => {
@@ -83,6 +85,19 @@ describe('client', () => {
     redirected.catch(() => undefined)
     await vi.advanceTimersByTimeAsync(2000)
     await expect(redirected).rejects.toThrow(new BiliTransportError('view', 'refused to follow a redirect (HTTP 302)'))
+  })
+
+  it('logs each answer at debug, and Bilibili\'s code and words of every refusal at info, never request data', async () => {
+    const { client: bili, logs } = client({ SESSDATA: 'secret-sessdata', bili_jct: 'secret-csrf', DedeUserID: '1' })
+    await bili.call('popular', { query: { pn: 1, ps: 20 } })
+    fake.reply('/x/web-interface/view', { body: { code: -404, message: '啥都木有' } })
+    const missing = bili.call('view', { query: { bvid: 'BV1aa4y1X7aa' } })
+    missing.catch(() => undefined)
+    await vi.advanceTimersByTimeAsync(3000)
+    await expect(missing).rejects.toBeInstanceOf(BiliApiError)
+    expect(logs[0]).toMatch(/^debug popular → HTTP 200 \(\d+ ms\)$/)
+    expect(logs.filter(line => line.startsWith('info'))).toEqual(['info view answered code -404: 啥都木有'])
+    expect(logs.join('\n')).not.toMatch(/secret|BV1aa4y1X7aa|pn=/)
   })
 
   it('signs WBI queries the fake verifies, and reports risk answers', async () => {
