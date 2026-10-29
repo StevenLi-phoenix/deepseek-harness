@@ -152,6 +152,17 @@ export interface LsyNote {
   origin?: string | undefined
 }
 
+/** A message another of the agent's Sessions sends the owner's main agent. */
+export interface LsyAgentMessage {
+  /** The message as the sending Session wrote it; the main agent reads it as untrusted data. */
+  text: string
+  /**
+   * Who sent it, as the main agent reads it, e.g. `the Bilibili account's Session (the agent on its
+   * own Bilibili account, which reads public Bilibili content)`.
+   */
+  from: string
+}
+
 /** Notification actuator contract; a channel plugin provides it as `ctx.lsyNotifier`. */
 export interface LsyNotifier {
   /**
@@ -160,6 +171,15 @@ export interface LsyNotifier {
    * @returns resolves once the channel accepted the message; rejects on failure.
    */
   send(note: LsyNote): Promise<void>
+  /**
+   * Pass a message from another of the agent's Sessions to the owner's main agent: the channel's
+   * chat Session, which takes it up in a turn of its own once it is idle. That turn's answer reaches
+   * the owner like any other chat answer. Channels without a chat Session omit it.
+   * @param message - the text and who sent it.
+   * @returns the chat Session the message was queued in.
+   * @throws when there is no chat to pass it to or the Session refused the prompt.
+   */
+  tellMainAgent?(message: LsyAgentMessage): Promise<string>
   /**
    * Whether the channel created this Session (e.g. its chat Session). Kept for callers outside the
    * bus; the bus asks `ctx.ownerRelay.ownerOf()` which Sessions a relay channel delivers itself.

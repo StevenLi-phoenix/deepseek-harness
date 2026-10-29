@@ -8,7 +8,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContextFormed, UserMessage } from '@deepseek-ai/dsh-llm'
-import type { LsyNote, LsyNotifier } from '@deepseek-ai/dsh-lsy-event-bus'
+import type { LsyAgentMessage, LsyNote, LsyNotifier } from '@deepseek-ai/dsh-lsy-event-bus'
 // Type-only: ctx.ownerRelay, which relays each chat Session's final answers through this channel.
 import type { RelayAnswer, RelayChannel, RelayDelivery } from '@deepseek-ai/dsh-owner-relay'
 import type {} from '@deepseek-ai/dsh-permission-presets'
@@ -26,7 +26,7 @@ declare module '@deepseek-ai/dsh-llm' {
   }
 }
 
-import { buildDigest, EARLIER_CHAT, fitText, formatGap, HELP_REPLY, inboundText, NEW_CHAT_REPLY, QUOTA_FOOTER, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES } from './text.ts'
+import { agentMessageText, buildDigest, EARLIER_CHAT, fitText, formatGap, HELP_REPLY, inboundText, NEW_CHAT_REPLY, QUOTA_FOOTER, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES } from './text.ts'
 import { TypingIndicator } from './typing.ts'
 
 export * from './api.ts'
@@ -341,6 +341,31 @@ export class WechatChannel extends Service implements LsyNotifier {
     const text = renderNote(note)
     await this.deliver(text, 'note')
     await this.shareWithChat(text, note.origin)
+  }
+
+  /**
+   * Pass a message from another of the agent's Sessions to the owner's current chat Session (the
+   * main agent), creating one when there is none. It is queued, so a turn the owner started finishes
+   * first; the turn it starts ends like any chat turn, and the relay sends its answer to the owner.
+   * @param message - the text and who sent it, framed for the chat Session by {@link agentMessageText}.
+   * @returns the chat Session the message was queued in.
+   * @throws when no account is bound (there is no chat), or the Session refused the prompt.
+   */
+  async tellMainAgent(message: LsyAgentMessage): Promise<SessionId> {
+    const domain = await this.ready
+    const account = this.account
+    if (account === undefined) throw new Error('WeChat is not bound yet, so the main agent has no chat')
+    mkdirSync(this.config.chat.workspacePath, { recursive: true })
+    const sessionId = await this.chatSession(domain, account)
+    await this.ctx.sessionController.prompt({
+      requestId: randomUUID() as SessionRequestId,
+      sessionId,
+      mode: 'queue',
+      content: [{ type: 'text', text: agentMessageText(message, Date.now(), this.config.chat.timeZone) }],
+      clientTimeZone: this.config.chat.timeZone,
+    }, this.abort.signal)
+    this.ctx.logger.info(`lsy-wechat: queued a ${message.text.length}-char message from another Session for chat Session ${sessionId}`)
+    return sessionId
   }
 
   /**

@@ -134,4 +134,33 @@ describe('the account\'s DM channel and the owner relay', () => {
     expect(shared[0]).toContain(`, ${ORIGIN} sent the owner this message on WeChat. It is context, not the owner speaking`)
     expect(shared[0]!.endsWith(`\n${note}`)).toBe(true)
   })
+
+  it('passes a message to the WeChat main agent, whose answer goes to the owner on WeChat', async () => {
+    const sessions = fakeSessions()
+    const h = await harness({ bili: fake, sessions, workspace: dir, notifier: false })
+    const ilink = new FakeIlink()
+    vi.stubGlobal('fetch', (input: string | URL | Request, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input)
+      return url.startsWith('https://ilink.test') ? ilink.fetch(input, init) : fake.fetch(input, init)
+    })
+    const accountFile = join(dir, 'account.json')
+    writeFileSync(accountFile, JSON.stringify({ botToken: 'bot-token', botId: 'bot@im.bot', baseUrl: 'https://ilink.test', ownerUserId: WECHAT_OWNER, boundAt: '2026-10-21T00:00:00.000Z' }))
+    await h.ctx.plugin(WechatChannel, WechatConfig({ accountFile, chat: { workspacePath: join(dir, 'chat') } } as never))
+    await vi.advanceTimersByTimeAsync(0)
+    ilink.updates([textMessage(WECHAT_OWNER, 'hi', 'ctx-hi')])
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(await h.account.tellMainAgent('魔女大人让我告诉你：人格卡能装 https://www.bilibili.com/video/BV1sTnn6DEWv')).toMatchObject({ outcome: 'sent' })
+    const prompt = sessions.state.prompts.at(-1)!
+    expect(prompt).toMatchObject({ sessionId: 'chat-1', mode: 'queue' })
+    const text = prompt.content[0]?.type === 'text' ? prompt.content[0].text : ''
+    expect(text).toContain(', the Bilibili account\'s Session (the agent that lives on its own Bilibili account and reads public Bilibili content) sent you, the owner\'s main agent, the message below.')
+    expect(text.endsWith('\n<agent_message trust="untrusted">\n魔女大人让我告诉你：人格卡能装 https://www.bilibili.com/video/BV1sTnn6DEWv\n</agent_message>')).toBe(true)
+
+    h.emit('chat-1', assistant('猫猫说人格卡能装，我看了一下，装的话要重启 dsh。要装吗？'))
+    h.emit('chat-1', turnEnd(2))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(ilink.sent.map(sent => sent.text)).toEqual(['猫猫说人格卡能装，我看了一下，装的话要重启 dsh。要装吗？'])
+    expect(fake.sentMessages).toEqual([])
+  })
 })

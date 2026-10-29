@@ -4,11 +4,13 @@
  * lengths; writes return what the host's write guard decided (`sent`,
  * `already`, `refused` with the reason, or `uncertain`) and never retry. The
  * account, its limits, its pauses, and the one message recipient live in
- * `ctx.bili` (`@deepseek-ai/dsh-bili`); nothing here can widen them.
+ * `ctx.bili` (`@deepseek-ai/dsh-bili`); nothing here can widen them. One tool
+ * leaves Bilibili: `bili_tell_main_agent` messages the owner's main agent
+ * through the WeChat channel, within the account's daily limit.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { untrusted, type BiliAccount, type WriteOutcome } from '@deepseek-ai/dsh-bili'
+import { MAIN_AGENT_MAX_CHARS, untrusted, type BiliAccount, type WriteOutcome } from '@deepseek-ai/dsh-bili'
 import { defineTool, type ParameterSchemaSpec } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
@@ -324,6 +326,21 @@ export function apply(ctx: Context): void {
       run: args => account.dmOwner(str(args['text'])),
     })
 
+    scoped.tools.register(defineTool({
+      name: 'bili_tell_main_agent',
+      description: [
+        `Send one message, at most ${MAIN_AGENT_MAX_CHARS} characters, to the owner's main agent: the agent the owner talks to on WeChat, which works on the owner's Mac with their files, tools, and memory.`,
+        'Use it when the owner asks you to tell the main agent something, or a find needs work only it can do; say what the owner asked and what you found, with links.',
+        'It takes the message up in a turn of its own and answers the owner on WeChat; no answer comes back to you. A few messages a day at most; the result is sent, or refused with the reason.',
+        'Your final answer still reaches the owner as a Bilibili message.',
+      ].join(' '),
+      parameters: { text: { type: 'string', required: true, description: `The message, at most ${MAIN_AGENT_MAX_CHARS} characters.` } },
+      output: { schema: OUTCOME_SCHEMA, render: (_args: unknown, value: unknown) => [{ type: 'text' as const, text: JSON.stringify(value) }] },
+      async execute(args): Promise<WriteOutcome> {
+        return await account.tellMainAgent(args.text)
+      },
+      presentCall: () => ({ card: 'generic', title: 'Message the main agent', kind: 'other' }),
+    }))
     scoped.tools.register(defineTool({
       name: 'bili_journal_write',
       description: 'Keep your diary of life on Bilibili: one dated entry, at most 600 characters and 8 a day, about what you watched, liked, or thought. It survives conversation compaction, so write down what you want to remember.',

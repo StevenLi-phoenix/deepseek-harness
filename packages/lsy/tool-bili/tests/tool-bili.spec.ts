@@ -28,7 +28,7 @@ afterEach(async () => {
 const TOOLS = [
   'bili_home_feed', 'bili_following_feed', 'bili_popular', 'bili_search', 'bili_video', 'bili_comments', 'bili_inbox', 'bili_me',
   'bili_follow', 'bili_unfollow', 'bili_favorite', 'bili_like', 'bili_coin', 'bili_triple', 'bili_watchlater', 'bili_comment', 'bili_reply', 'bili_dynamic', 'bili_dm_owner',
-  'bili_journal_write', 'bili_journal_read', 'bili_taste_write',
+  'bili_journal_write', 'bili_journal_read', 'bili_taste_write', 'bili_tell_main_agent',
   'bili_ranking', 'bili_hot_searches', 'bili_danmaku', 'bili_verdict', 'bili_seen', 'bili_trend_write',
 ]
 
@@ -113,6 +113,20 @@ describe('tool-bili', () => {
     const { call } = await mount({ like })
     expect(await call('bili_like', {})).not.toHaveProperty('value')
     expect(like).not.toHaveBeenCalled()
+  })
+
+  it('messages the main agent through the account, which owns the daily limit and the channel', async () => {
+    const tellMainAgent = vi.fn(() => Promise.resolve({ outcome: 'sent', detail: 'the main agent got it and takes it up in a turn of its own; its answer goes to the owner on WeChat, not to you. 4 left today.' }))
+    const { ctx, call } = await mount({ tellMainAgent })
+    const schema = ctx.tools.schemas().find(entry => entry.name === 'bili_tell_main_agent')!
+    expect(Object.keys((schema.parameters as { properties: Record<string, unknown> }).properties)).toEqual(['text'])
+    expect(schema.description).toContain('Send one message, at most 2000 characters, to the owner\'s main agent')
+    expect(schema.description).toContain('no answer comes back to you')
+    expect((await call('bili_tell_main_agent', { text: '魔女大人让我告诉你：人格卡能装' })).value).toMatchObject({ outcome: 'sent' })
+    expect(tellMainAgent).toHaveBeenCalledWith('魔女大人让我告诉你：人格卡能装')
+    expect((await call('bili_tell_main_agent', {})).value).toBeUndefined()
+    expect(tellMainAgent).toHaveBeenCalledTimes(1)
+    expect(ctx.tools.get('bili_tell_main_agent')!.presentCall!({ text: 'x' })).toEqual({ card: 'generic', title: 'Message the main agent', kind: 'other' })
   })
 
   it('writes and reads the journal', async () => {

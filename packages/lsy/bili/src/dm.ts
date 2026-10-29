@@ -17,6 +17,8 @@ export const BILI_RELAY_CHANNEL = 'bili-dm'
 export const BILI_FALLBACK_LABEL = 'the Bilibili account\'s Session (its answer could not go out as a Bilibili message)'
 /** Who sent a host notice about the account (sign-in, risk-control pause, hidden comment), as the owner's chat Session reads it. */
 export const BILI_NOTICE_ORIGIN = 'the dsh-bili plugin (a host notice about dsh\'s own Bilibili account, not the agent speaking)'
+/** Who sent a message to the owner's main agent (`bili_tell_main_agent`), as the main agent reads it. */
+export const BILI_AGENT_ORIGIN = 'the Bilibili account\'s Session (the agent that lives on its own Bilibili account and reads public Bilibili content)'
 /** How long a turn's answer waits for its write slot before it goes to WeChat instead. */
 export const ANSWER_WAIT_MS = 900_000
 

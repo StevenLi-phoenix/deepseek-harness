@@ -49,7 +49,7 @@ import {
 import { BiliApiError, BiliClient, BiliRefused, BiliRiskError, BiliTransportError, BiliVerifyError, USER_AGENT } from './client.ts'
 import { nextPlanned, rollPlan, settlePlan, windowProblem, type WakeWindow } from './clock.ts'
 import type { CookieJar } from './cookies.ts'
-import { BILI_NOTICE_ORIGIN, BILI_RELAY_CHANNEL, DmChannel } from './dm.ts'
+import { BILI_AGENT_ORIGIN, BILI_NOTICE_ORIGIN, BILI_RELAY_CHANNEL, DmChannel } from './dm.ts'
 import { ENDPOINTS, type Endpoint, type EndpointName } from './endpoints.ts'
 import { WEEKDAYS, nextOffPeak, peakAt, pricingProblem, routeOf, ruleFor, type PricingRule, type Route } from './pricing.ts'
 import {
@@ -166,6 +166,8 @@ export interface Config {
   keywords: string[]
   /** Videos graded must that may go to the owner per day (the day's picks); 0 sets no quota. */
   picksPerDay: number
+  /** Messages the account's Session may send the owner's main agent per day (`bili_tell_main_agent`); 0 turns them off. */
+  mainAgentPerDay: number
   /** The account's Session. */
   session: SessionConfig
   /** Daily write caps. */
@@ -224,6 +226,7 @@ export const Config: z<Config> = z.object({
   interests: z.string().default(''),
   keywords: z.array(z.string()).default([]),
   picksPerDay: z.natural().max(50).default(0),
+  mainAgentPerDay: z.natural().max(20).default(5),
   session: z.object({
     workspacePath: z.string().default('/Users/dsh-runtime/bili'),
     agentPreset: z.string().default('bili'),
@@ -284,6 +287,8 @@ const DEFER_GRACE_MS = 3_600_000
 const PLAN_DAYS = 14
 /** Journal limits. */
 export const JOURNAL_LIMITS = { chars: 600, perDay: 8, pageSize: 10 } as const
+/** Code points of one message to the owner's main agent. */
+export const MAIN_AGENT_MAX_CHARS = 2000
 /** Finds kept; the oldest go first. */
 const MAX_FINDS = 30
 /** Finds a wake prompt lists. */
@@ -2469,6 +2474,48 @@ export class BiliAccount extends Service {
       .slice((index - 1) * JOURNAL_LIMITS.pageSize, index * JOURNAL_LIMITS.pageSize)
       .map(({ seq, day, text }) => ({ seq, day, text }))
     return { entries, page: index, pages }
+  }
+
+  // ── Main agent ─────────────────────────────────────────────────────────
+
+  /**
+   * Send one message to the owner's main agent (`bili_tell_main_agent`): the WeChat channel queues it
+   * in the owner's chat Session as untrusted data, and that Session's answer goes to the owner on
+   * WeChat. Bounded per day by `mainAgentPerDay`; only messages that were queued count.
+   * @param text - at most {@link MAIN_AGENT_MAX_CHARS} characters.
+   * @returns `sent` with what is left today, or `refused` with the reason.
+   */
+  async tellMainAgent(text: string): Promise<WriteOutcome> {
+    const message = text.trim()
+    if (message === '') return { outcome: 'refused', detail: 'the message is empty' }
+    const chars = codePoints(message)
+    if (chars > MAIN_AGENT_MAX_CHARS) return { outcome: 'refused', detail: `the message is ${chars} characters; the limit is ${MAIN_AGENT_MAX_CHARS}` }
+    return this.serialize(async (): Promise<WriteOutcome> => {
+      const domain = await this.ready
+      const now = Date.now()
+      const day = dayKey(now, this.config.timeZone)
+      const rows = [...domain.table('told').entries()].map(([, row]) => row)
+      // Only today's messages count, so earlier days' rows go.
+      for (const row of rows.filter(row => row.day !== day)) await domain.table('told').delete(seqKey(row.seq))
+      const kept = rows.filter(row => row.day === day)
+      const today = kept.length
+      const perDay = this.config.mainAgentPerDay
+      if (today >= perDay) return { outcome: 'refused', detail: `today's ${perDay} message(s) to the main agent are used up` }
+      const notifier = this.ctx.get('lsyNotifier')
+      if (notifier?.tellMainAgent === undefined) return { outcome: 'refused', detail: 'the owner\'s WeChat channel is not running, so the main agent cannot be reached' }
+      let sessionId: string
+      try {
+        sessionId = await notifier.tellMainAgent({ text: message, from: BILI_AGENT_ORIGIN })
+      } catch (error: unknown) {
+        this.ctx.logger.warn(`bili: the message to the main agent did not go out: ${errorText(error)}`)
+        return { outcome: 'refused', detail: `the main agent could not take it: ${errorText(error)}` }
+      }
+      const seq = Math.max(0, ...kept.map(row => row.seq)) + 1
+      await domain.table('told').put(seqKey(seq), { seq, day, at: now, chars, sessionId })
+      this.ctx.logger.info(`bili: told the main agent ${chars} chars in chat Session ${sessionId} (${today + 1}/${perDay} today)`)
+      const left = perDay - today - 1
+      return { outcome: 'sent', detail: `the main agent got it and takes it up in a turn of its own; its answer goes to the owner on WeChat, not to you. ${left} left today.` }
+    })
   }
 
   // ── Taste ──────────────────────────────────────────────────────────────
