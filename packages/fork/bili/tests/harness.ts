@@ -6,7 +6,7 @@ import { Context } from '@deepseek-ai/cordis'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
 import type { SessionCreateRequest, SessionPromptRequest } from '@deepseek-ai/dsh-api-session-controller'
 import type { CredentialKey, CredentialRecord } from '@deepseek-ai/dsh-credentials'
-import ForkEventBus, { Config as BusConfig, type ForkNote } from '@deepseek-ai/dsh-fork-event-bus'
+import ForkEventBus, { Config as BusConfig, type ForkAgentMessage, type ForkNote } from '@deepseek-ai/dsh-fork-event-bus'
 import OwnerRelay from '@deepseek-ai/dsh-owner-relay'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
@@ -115,6 +115,8 @@ export interface HarnessOptions {
   notes?: ForkNote[]
   /** `false` mounts no recording notifier, so a test can mount the real WeChat channel. */
   notifier?: false
+  /** The recording notifier's `tellMainAgent`; omitted, the notifier has none. */
+  mainAgent?: (message: ForkAgentMessage) => Promise<string>
   /** Mount the real event bus too, with its defaults. */
   bus?: boolean
   workspace?: string
@@ -153,7 +155,10 @@ export async function harness(options: HarnessOptions = {}) {
   const titles: { rename: Mock<(session: unknown, title: string) => void> } = { rename: vi.fn() }
   ctx.provide('sessionTitle', titles as never)
   const notes = options.notes ?? []
-  if (options.notifier !== false) ctx.provide('forkNotifier', { send: (note: ForkNote) => { notes.push(note); return Promise.resolve() } } as never)
+  if (options.notifier !== false) {
+    const send = (note: ForkNote): Promise<void> => { notes.push(note); return Promise.resolve() }
+    ctx.provide('forkNotifier', (options.mainAgent === undefined ? { send } : { send, tellMainAgent: options.mainAgent }) as never)
+  }
   // The relay carries the account's answers to its DM channel, as the event bundle mounts it.
   await ctx.plugin(OwnerRelay)
   if (options.bus === true) await ctx.plugin(ForkEventBus, BusConfig({} as never))

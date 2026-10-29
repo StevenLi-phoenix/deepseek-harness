@@ -1,8 +1,8 @@
 /**
  * Durable account state outside the credential store: the signed-in account's
  * public facts, write pauses, the write ledger, the body-clock plans, the wake
- * log, inbox cursors, the journal, the owner's interests text, the notes on
- * their taste, the videos sent to them with how they took each, and the memes
+ * log, inbox cursors, the journal, today's messages to the owner's main agent, the owner's interests
+ * text, the notes on their taste, the videos sent to them with how they took each, and the memes
  * and events the account keeps up with. Cookie
  * values and the refresh token live only in the credential record.
  */
@@ -175,6 +175,16 @@ const journalSchema = z.object({
   text: z.string(),
 }).strict()
 
+const toldSchema = z.object({
+  seq: z.number().int().positive(),
+  day: z.string(),
+  at: z.number(),
+  /** Code points of the message; the text itself lives in both Sessions' logs. */
+  chars: z.number().int().positive(),
+  /** The main agent's chat Session the message was queued in. */
+  sessionId: z.string().min(1),
+}).strict()
+
 const settingSchema = z.object({
   text: z.string(),
   updatedAt: z.number(),
@@ -265,6 +275,8 @@ export type ProgressRecord = z.infer<typeof progressSchema>
 export type VerifyRecord = z.infer<typeof verifySchema>
 /** One journal entry. */
 export type JournalRecord = z.infer<typeof journalSchema>
+/** One message the account's Session sent the owner's main agent today; the daily limit counts these. */
+export type ToldRecord = z.infer<typeof toldSchema>
 /** One owner-edited text setting. */
 export type SettingRecord = z.infer<typeof settingSchema>
 /** One note about the owner's taste, shown in every wake. */
@@ -286,9 +298,10 @@ export type SessionRecord = z.infer<typeof sessionSchema>
  * Account storage. `account` is keyed `current`; `pause` by scope key `writes`;
  * `backoff` by `reads`; `ledger` by write id; `slots` by `write`; `plans` by day;
  * `wakes` by zero-padded time; `inbox` by kind; `pending` by `<kind>:<id>`;
- * `targets` by comment id (`rpid`); `verify` by kind (`message`, `speech`); `journal`, `taste`, and
- * `trends` by zero-padded `seq`; `finds` and `seen` by BV id; `settings` by name (`interests`); `owner` by `main`; `sessions`
- * by Session id, and `current` names the live one.
+ * `targets` by comment id (`rpid`); `verify` by kind (`message`, `speech`); `journal`, `told`
+ * (today's only), `taste`, and `trends` by zero-padded `seq`; `finds` and `seen` by BV id;
+ * `settings` by name (`interests`); `owner` by `main`; `sessions` by Session id, and `current`
+ * names the live one.
  */
 export const biliDomain = {
   name: 'bili',
@@ -305,6 +318,7 @@ export const biliDomain = {
     pending: table<PendingRecord>(pendingSchema),
     targets: table<TargetRecord>(targetSchema),
     journal: table<JournalRecord>(journalSchema),
+    told: table<ToldRecord>(toldSchema),
     taste: table<TasteRecord>(tasteSchema),
     finds: table<FindRecord>(findSchema),
     trends: table<TrendRecord>(trendSchema),

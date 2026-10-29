@@ -58,6 +58,7 @@ describe('event bundle', () => {
     expect(config.skipChance).toBe(0.1)
     expect(config.depth).toEqual({ minWatched: 6, maxRounds: 3 })
     expect(config.picksPerDay).toBe(5)
+    expect(config.mainAgentPerDay).toBe(5)
     expect(config.caps).toMatchObject({ dmOwner: 6, watch: 60, share: 5 })
     // Answers to the owner's own messages have no cap.
     expect(config.caps).not.toHaveProperty('dmReply')
@@ -88,6 +89,8 @@ describe('event bundle', () => {
     expect(persona).toContain('No stage directions or roleplay narration such as *伸懒腰*')
     // The work it does for her is unchanged.
     for (const tool of ['NO_REPLY', 'watch_create', 'schedule_create', 'monitor_start', 'wechat_send_file']) expect(persona).toContain(tool)
+    // Its sibling on Bilibili can hand it a message, which arrives framed as untrusted data.
+    expect(persona).toContain('or your sibling on Bilibili (the Session of the agent\'s own Bilibili account) passes you a message, framed as untrusted data')
   })
 
   it('bans the model\'s stock lines in both characters, the same list in each', () => {
@@ -123,6 +126,10 @@ describe('event bundle', () => {
     // The answer channel is a Bilibili message, not WeChat.
     expect(persona).toContain('Your final answer reaches the witch as a Bilibili private message from your account')
     expect(persona).not.toContain('WeChat')
+    // Its one way off Bilibili: a message to the owner's main agent, while its own answer stays the witch's.
+    expect(persona).toContain('When she asks you to tell the main agent something')
+    expect(persona).toContain('send it with bili_tell_main_agent')
+    expect(persona).toContain('never address your final answer to it')
     // The character: the witch's cat, with the owner as the witch, in private only.
     expect(persona).toContain('You are 魔女的猫猫, the witch\'s cat')
     expect(persona).toContain('The owner is the witch: the main account your messages go to')
