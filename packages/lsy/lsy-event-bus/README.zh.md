@@ -110,7 +110,7 @@ kind: "package-reference"
 | [`src/prompt.ts`](src/prompt.ts) | Session 请求、批次、结果与提醒消息的渲染；静默回答 |
 | [`src/storage.ts`](src/storage.ts) | 事件、待处理行、批次与运行时订阅的 storage-domain 表 |
 
-这是 fork 本地的包；`lsy` 组如何跟踪上游见 [`../UPSTREAM.md`](../UPSTREAM.md)。`@deepseek-ai/dsh-owner-relay` 引用了 `isSilentReply()` 和 `failureDetail()`，`@deepseek-ai/dsh-lsy-tool-watch` 调用 `LsyNotifier.ownsSession()`，所以它们保持稳定。因为中继依赖这个包，总线通过一个结构化的 `ownerOf()` 视图读取 `ctx.ownerRelay`，而不导入它。通知可选的 `origin` 为通道放进主人对话 Session 的副本指明发送方，从不显示给主人。
+这是 fork 本地的包；`lsy` 组如何跟踪上游见 [`../UPSTREAM.md`](../UPSTREAM.md)。`@deepseek-ai/dsh-owner-relay` 引用了 `isSilentReply()` 和 `failureDetail()`，`@deepseek-ai/dsh-lsy-tool-watch` 调用 `LsyNotifier.ownsSession()`，所以它们保持稳定。因为中继依赖这个包，总线通过一个结构化的 `ownerOf()` 视图读取 `ctx.ownerRelay`，而不导入它。通知可选的 `origin` 为通道放进主人对话 Session 的副本指明发送方，从不显示给主人。`LsyNotifier.tellMainAgent()` 是可选方法，总线从不调用它：有对话 Session 的通道（lsy-wechat）实现它，让另一个 Session（dsh-bili 的）能给 owner 的主 agent 递一条消息。
 
 </details>
 

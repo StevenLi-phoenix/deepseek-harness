@@ -698,6 +698,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'up to ten entries and the page count.',
       },
       {
+        signature: 'async tellMainAgent(text: string): Promise<WriteOutcome>',
+        description: 'Send one message to the owner\'s main agent (`bili_tell_main_agent`): the WeChat channel queues it in the owner\'s chat Session as untrusted data, and that Session\'s answer goes to the owner on WeChat. Bounded per day by `mainAgentPerDay`; only messages that were queued count.',
+        parameters: [{ name: 'text', description: 'at most {@link MAIN_AGENT_MAX_CHARS} characters.' }],
+        returns: '`sent` with what is left today, or `refused` with the reason.',
+      },
+      {
         signature: 'async tasteWrite(text: string, replaces?: number): Promise<{ saved: true; seq: number; notes: number } | { refused: string }>',
         description: 'Keep one note about the owner\'s taste (`bili_taste_write`): what a reaction to a find taught, or what the owner said they want more or less of.',
         parameters: [{ name: 'text', description: 'at most 200 characters, one line.' }, { name: 'replaces', description: 'number of one of the Session\'s own notes to rewrite instead of adding one.' }],
@@ -1850,6 +1856,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Deliver one message.',
         parameters: [{ name: 'note', description: 'title, optional body, optional link, and optional origin.' }],
         returns: 'resolves once the channel accepted the message; rejects on failure.',
+      },
+      {
+        signature: 'tellMainAgent?(message: LsyAgentMessage): Promise<string>',
+        description: 'Pass a message from another of the agent\'s Sessions to the owner\'s main agent: the channel\'s chat Session, which takes it up in a turn of its own once it is idle. That turn\'s answer reaches the owner like any other chat answer. Channels without a chat Session omit it.',
+        parameters: [{ name: 'message', description: 'the text and who sent it.' }],
+        returns: 'the chat Session the message was queued in.',
+        throws: ['when there is no chat to pass it to or the Session refused the prompt.'],
       },
       {
         signature: 'ownsSession?(sessionId: string): boolean',
@@ -6428,6 +6441,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'LspRange',
     declaration: 'export interface LspRange {\n    readonly start: LspPosition;\n    readonly end: LspPosition;\n}',
+  },
+  {
+    name: 'LsyAgentMessage',
+    declaration: 'export interface LsyAgentMessage {\n    text: string;\n    from: string;\n}',
   },
   {
     name: 'LsyEventInput',

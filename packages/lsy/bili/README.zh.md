@@ -55,6 +55,7 @@ kind: "package-reference"
 | `interests` | 空 | owner 的兴趣，在设置里改之前每次醒来都带上 |
 | `keywords` | 空 | owner 的搜索关键词（用前 12 个）；每次醒来都列出它们，并要求在刷信息流之前对每个词按最新排序搜一遍。设置里保存过的列表优先于它 |
 | `picksPerDay` | `0` | 每天最多可以发给 owner 的、打为 must 的视频数（最多 50）：每次醒来都被告知今天已发出几条，并被要求把这次的 must 视频合成一条私信，最多四个。`0` 表示不设额度，提示词里也不带打分与推荐那一行。bundle 设为 5 |
+| `mainAgentPerDay` | `5` | 账号 Session 每个本地日最多能用 `bili_tell_main_agent` 发给 owner 主 agent 的消息数（最多 20）；只有微信通道排进去的消息才计数，`0` 表示不让工具发出。bundle 设为 5 |
 | `session.workspacePath` | `/Users/dsh-runtime/bili` | 账号 Session 的目录；每次醒来前创建 |
 | `session.agentPreset` | `bili` | Session 的 agent preset |
 | `session.permissionPreset` | `danger-full-access` | 新 Session 的权限预设；`bili` preset 不挂 shell 或文件工具，也没人审批调用 |
@@ -83,6 +84,7 @@ kind: "package-reference"
 
 - **在 B站上**——由醒来开始的每一轮，最终回答都以 agent 账号发给 `ownerMid` 的私信送达，除非它恰好是 `NO_REPLY`：回答 owner 自己的私信算回复（记为 `dmReply`，没有额度，在上一次写操作后几秒发出），其他轮次的回答算分享（`dmOwner`）。设了 `picksPerDay` 时，每次醒来被要求发一条私信，装下这次的 must 视频，最多四个，每个附标题、链接和一句理由。设了 `depth.minWatched` 时，作息或立即唤醒那一轮的回答会被压住、不发，直到这次醒来打开了这么多不同的视频，并且只链接它打为 must 的视频：宿主随后让同一个 Session 继续浏览，引用被压住的回答并点名没打分的链接，最多 `depth.maxRounds` 次，最后一次之后，最后的回答照常发出。对 owner 私信的回答从不被压住，owner 停掉的一轮则结束这次醒来。过长的回答最多拆成两条 500 字的私信，其余用 `…` 截断。owner 在 Web UI 里开始的轮次留在那里，提醒或监控开启的轮次也一样：事件总线不报告账号通道认领的 Session。收到 owner 的私信后，账号每分钟查一次私信，直到最后一条之后 15 分钟。
 - **在微信上**——只有需要 owner 处理的事：登录需要续期时一条通知（`dsh 的 B站登录失效了：设置 → B站账号 扫码`），风控暂停写操作时一条，评论疑似被隐藏时一条，以及没能以 B站私信发出的回答（没有互相关注、额度用完、写操作暂停、发送失败或结果不明），标题为 `📺 B站：这条没能用 B站私信发出，改发微信`，结尾写明原因；B站要求先验证手机号时，这一行引用它的原话：`B站私信没发出：<B站的原话>`。微信对话 Session 里保留的副本把发送方称为 `the Bilibili account's Session (its answer could not go out as a Bilibili message)`，所以在那里回复时有上下文。
+- **经由主 agent**——owner 让账号转告主 agent 某件事（或某个发现需要主 agent 在 Mac 上动手）时，Session 用 `bili_tell_main_agent` 发出：`ctx.lsyNotifier.tellMainAgent()` 把它作为不可信数据排进微信对话 Session，主 agent 的回答在微信上送到 owner。账号自己的回答仍以 B站私信送达。
 - **在设置里**——上面的全部内容，只从插件的存储构建，因此不可能出现任何 Cookie 或令牌：等级卡片（等级、距下一级的经验、硬币余额，以及今天登录、观看、分享和投币的经验）、今天每项额度的用量、B站因为没有验证手机号而拒绝私信或公开发言时一条引用 B站原话的常驻提示（这个号需要验证手机号才能发私信，或……评论和动态），直到同类写操作有一条发出去才消失，以及作息卡片，它写出作息据以决定的模型路由、它是否分时计价（高峰时附下一个谷时开始的时间），标出被裁剪、移动或推迟的醒来，并有**立即唤醒**。立即唤醒马上用作息提示词唤醒 Session，不占今天的计划；这是 owner 的请求，所以高峰里也会执行并注明；未登录、登录需要续期、Session 正在进行一轮或一分钟内刚唤醒过时会拒绝，并显示原因。另有四张卡片对应巡视：**它刷过的视频**显示今天按分数统计的数量和已推送条数与额度的对比，然后是最新的 100 个打过分的视频，可按分数筛选，每个有链接、理由，以及"已推给你"和"没读字幕"的标记；**关注关键词**是关键词列表，一行一个，保存后优先于配置里的列表；**它记住的口味**列出口味笔记及各自是谁写的，owner 可以在这里添加和删除笔记，并显示最近十条推过的视频和 owner 对每条的第一次回复；**圈内热梗**列出热梗笔记本，每条都能删除。路由是 `GET`/`POST /api/bili`，和所有 `/api` 路由一样受连接的登录检查保护。
 
 -----
@@ -111,7 +113,7 @@ kind: "package-reference"
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | `BiliAccount`（`ctx.bili`）：配置、生命周期、登录、刷新、刹车、写守卫、作息、观看下限、收件箱、向中继注册、读取、打分、推送记录、口味笔记、热梗、日记、设置路由 |
+| [`src/index.ts`](src/index.ts) | `BiliAccount`（`ctx.bili`）：配置、生命周期、登录、刷新、刹车、写守卫、作息、观看下限、收件箱、向中继注册、读取、打分、推送记录、口味笔记、热梗、日记、给主 agent 的消息、设置路由 |
 | [`src/dm.ts`](src/dm.ts) | `DmChannel`，`ctx.ownerRelay` 的 `bili-dm` 通道：每次唤醒的来源、醒来继续浏览期间被压住的回答、拆成一两条私信的回答、改发微信的兜底 |
 | [`src/client.ts`](src/client.ts) | 白名单、限速的 HTTP 客户端；风控识别；无损 JSON |
 | [`src/endpoints.ts`](src/endpoints.ts) | 接口白名单 |

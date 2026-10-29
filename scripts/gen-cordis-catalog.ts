@@ -885,6 +885,7 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   SubscriptionView: 'fork-local subscription view is owned by packages/lsy/lsy-event-bus/README.md',
   UnsubscribeOutcome: 'fork-local unsubscribe result is owned by packages/lsy/lsy-event-bus/README.md',
   LsyNote: 'fork-local notifier message is owned by packages/lsy/lsy-event-bus/README.md',
+  LsyAgentMessage: 'fork-local message for the main agent is owned by packages/lsy/lsy-event-bus/README.md',
   StreamCursor: 'fork-local polling cursor is owned by packages/lsy/lsy-github-sensor/README.md',
   PollStatus: 'fork-local poll status is owned by packages/lsy/lsy-github-sensor/README.md',
   RepoWatch: 'fork-local repository watch is owned by packages/lsy/lsy-github-sensor/README.md',

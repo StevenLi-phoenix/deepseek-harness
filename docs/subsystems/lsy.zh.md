@@ -201,6 +201,15 @@ async journalWrite(text: string): Promise<{ saved: true; seq: number; leftToday:
 async journalRead(page: number = 1): Promise<{ entries: { seq: number; day: string; text: string }[]; page: number; pages: number }>
 
 /**
+ * Send one message to the owner's main agent (`bili_tell_main_agent`): the WeChat channel queues it
+ * in the owner's chat Session as untrusted data, and that Session's answer goes to the owner on
+ * WeChat. Bounded per day by `mainAgentPerDay`; only messages that were queued count.
+ * @param text - at most {@link MAIN_AGENT_MAX_CHARS} characters.
+ * @returns `sent` with what is left today, or `refused` with the reason.
+ */
+async tellMainAgent(text: string): Promise<WriteOutcome>
+
+/**
  * Keep one note about the owner's taste (`bili_taste_write`): what a reaction to a find taught,
  * or what the owner said they want more or less of.
  * @param text - at most 200 characters, one line.
@@ -390,6 +399,16 @@ Notification actuator contract; a channel plugin provides it as `ctx.lsyNotifier
  * @returns resolves once the channel accepted the message; rejects on failure.
  */
 send(note: LsyNote): Promise<void>
+
+/**
+ * Pass a message from another of the agent's Sessions to the owner's main agent: the channel's
+ * chat Session, which takes it up in a turn of its own once it is idle. That turn's answer reaches
+ * the owner like any other chat answer. Channels without a chat Session omit it.
+ * @param message - the text and who sent it.
+ * @returns the chat Session the message was queued in.
+ * @throws when there is no chat to pass it to or the Session refused the prompt.
+ */
+tellMainAgent?(message: LsyAgentMessage): Promise<string>
 
 /**
  * Whether the channel created this Session (e.g. its chat Session). Kept for callers outside the
