@@ -465,6 +465,8 @@ export interface Config {
   keywords: string[]
   /** Videos graded must that may go to the owner per day (the day's picks); 0 sets no quota. */
   picksPerDay: number
+  /** Messages the account's Session may send the owner's main agent per day (`bili_tell_main_agent`); 0 turns them off. */
+  mainAgentPerDay: number
   /** The account's Session. */
   session: SessionConfig
   /** Daily write caps. */
