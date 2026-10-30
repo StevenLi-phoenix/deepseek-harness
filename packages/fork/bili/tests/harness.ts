@@ -78,6 +78,7 @@ export function fakeSessions() {
           id: sessionId,
           requestHeader: () => { const config = state.headers.get(sessionId); return config === undefined ? undefined : { config } },
         },
+        model: { current: () => state.picks.get(sessionId) },
         status: state.status.get(sessionId) ?? 'idle',
         inject: (message: { content: { type: string; text?: string }[] }) => { state.injected.push([sessionId, message.content[0]?.text ?? '']) },
       } }
@@ -166,9 +167,6 @@ export async function harness(options: HarnessOptions = {}) {
     const defaultModel = options.defaultModel
     ctx.provide('agentDefaultModel', { currentSelection: () => ({ ...defaultModel }) } as never)
   }
-  ctx.provide('sessionProjections', {
-    stateOf: (session: { id: string }, key: string) => (key === 'modelSelection' ? { lastUsed: null, pending: sessions.state.picks.get(session.id) ?? null } : undefined),
-  } as never)
   const routes: Route[] = []
   ctx.provide('connection', { fetch: { register: (route: Route) => { routes.push(route); return () => Promise.resolve() } } } as never)
   const config = Config({

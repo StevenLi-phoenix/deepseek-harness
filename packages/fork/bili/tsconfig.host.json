@@ -44,9 +44,6 @@
     },
     {
       "path": "../../core/agent-default-model"
-    },
-    {
-      "path": "../../session/session-projection"
     }
   ]
 }
