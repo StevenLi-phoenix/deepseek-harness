@@ -13,7 +13,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { BILI_ROUTE, type BiliAction, type BiliView } from '../view.ts'
 import { BiliLoader, createBiliStore, parseView } from './bili.ts'
 import { BiliAccountSection, type BiliAccountInjected } from './BiliAccount.tsx'
-import { en, zh } from './locales.ts'
+import { de, en, es, fr, ja, pt, ru, zh } from './locales.ts'
 
 export type { BiliAccountInjected, BiliAccountProps } from './BiliAccount.tsx'
 export type { BiliKey } from './locales.ts'
@@ -43,7 +43,7 @@ async function request(init?: RequestInit): Promise<BiliView> {
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'bili: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'bili: dictionaries')
   const t = ctx.locale.bind(NS)
   const store = createBiliStore()
   const loader = new BiliLoader(store, () => request(), action => request({

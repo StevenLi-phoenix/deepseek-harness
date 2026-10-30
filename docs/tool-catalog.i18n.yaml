@@ -9,8 +9,8 @@
   en: 6cc2cd9ced70bb09
   zh: 1c0e6cb4ba2ed637
 /tool-schema-catalog/tool-package-map:
-  en: fd4d90071c13dcbd
-  zh: 87867027203f0354
+  en: 8e95200a90fd0db6
+  zh: aef79654ea2fbf16
 /tool-schema-catalog/deepseek-ai-dsh-plugin-manager:
   en: e0143916bb634762
   zh: e0143916bb634762
@@ -111,8 +111,98 @@
   en: bdd9e88c49029e05
   zh: bdd9e88c49029e05
 /tool-schema-catalog/deepseek-ai-dsh-tool-bash-persistent/bash:
-  en: 86421501a9d65ccc
-  zh: d1dc400507952331
+  en: f9a3a24b673708f2
+  zh: a7a69be02e6f443b
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili:
+  en: fd0865fd096223ce
+  zh: fd0865fd096223ce
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-coin:
+  en: 80ec6c304980ddd3
+  zh: 99a9e878c8f7b322
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-comment:
+  en: af8f62d12d6c27a5
+  zh: 85da07dbbed2c8bc
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-comments:
+  en: f7243e734ca58cf7
+  zh: 6ff6c03761d4ebd0
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-danmaku:
+  en: a7faae7dc134774e
+  zh: 4716981144288f7c
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-dm-owner:
+  en: 81468fffcc16338a
+  zh: 4543d72d54da1db4
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-dynamic:
+  en: 73dd32f99bf766ad
+  zh: a67a6f142679d5be
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-favorite:
+  en: 525fdbd56eb13d71
+  zh: 928eab090efddc80
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-follow:
+  en: 022ea72ae6c7912d
+  zh: b09d8ca94b5154a1
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-following-feed:
+  en: d6b911f4f77643d7
+  zh: 5aab1367013340d7
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-home-feed:
+  en: 06c231510fd87499
+  zh: edbb78caee1d971a
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-hot-searches:
+  en: 0c583a130bb67fdd
+  zh: 7f282ca7d19fea15
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-inbox:
+  en: b539334ae6e86cde
+  zh: 231f679a1372de0d
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-journal-read:
+  en: d68d86a66655235f
+  zh: a86e812b63db524c
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-journal-write:
+  en: 178f8d72f31d7a5e
+  zh: a1d52e19883228aa
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-like:
+  en: 23450fb1d151d02e
+  zh: a4667e1b281f2253
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-me:
+  en: 06f783538b3505f5
+  zh: 60a0f58564a8e6af
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-popular:
+  en: 07b0196a95ce1721
+  zh: d77e09be0e4fdc86
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-ranking:
+  en: 3e159f01cc65fe82
+  zh: 9d39dc6862095551
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-reply:
+  en: 89fc15eb1cd606c4
+  zh: 0dd4d02a47b6f17c
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-search:
+  en: 4880cafaea5b6d64
+  zh: 88b2c61604505819
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-seen:
+  en: d2916afa21d7d19b
+  zh: 81052862c4a52096
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-taste-write:
+  en: 140e0ceba2c77532
+  zh: 8c45a363a4cd95d7
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-tell-main-agent:
+  en: 6a36ed6c91614806
+  zh: e860dda015207fd3
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-trend-write:
+  en: 272af5507b66289b
+  zh: aed70229a4e2fda9
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-triple:
+  en: 27fd311d4cc3129f
+  zh: 4ca3309b1e61e77c
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-unfollow:
+  en: 6e89b6b06cff2750
+  zh: d1854854aa042e6e
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-verdict:
+  en: a6828651fe08c9ee
+  zh: b8d7c52b04112c76
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-video:
+  en: 54457a986970382e
+  zh: c7901631808bb2c3
+/tool-schema-catalog/deepseek-ai-dsh-tool-bili/bili-watchlater:
+  en: 988ec82d4f280281
+  zh: 98767eda774c4d6c
 /tool-schema-catalog/deepseek-ai-dsh-tool-pwsh-persistent:
   en: 40a053607298a4c5
   zh: 40a053607298a4c5
