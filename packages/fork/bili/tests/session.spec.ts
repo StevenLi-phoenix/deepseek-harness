@@ -60,6 +60,16 @@ describe('cookie refresh', () => {
     expect(fake.requests.some(request => request.path.startsWith('/correspond/1/') && request.headers['cookie']?.includes(before.cookies['SESSDATA']!))).toBe(true)
     expect(fake.confirmed).toEqual([before.refreshToken])
     expect(fake.requestsTo('/x/passport-login/web/confirm/refresh')[0]!.form['csrf']).toBe(after.cookies['bili_jct'])
+    // Every step goes out as the international web version, like the QR login that made the session.
+    const steps = [
+      ...['/x/passport-login/web/cookie/info', '/x/passport-login/web/cookie/refresh', '/x/passport-login/web/confirm/refresh'].map(path => fake.requestsTo(path)[0]!),
+      fake.requests.find(request => request.path.startsWith('/correspond/1/'))!,
+    ]
+    for (const step of steps) expect(step.headers['referer']).toBe('https://www.bilibili.com/en/')
+    for (const step of steps.slice(0, 3)) {
+      expect(JSON.parse(step.query['x-bili-device-req-json']!)).toEqual({ platform: 'web', device: 'pc', spmid: '333.42', mobi_app: 'web_i' })
+      expect(JSON.parse(step.query['x-bili-locale-json']!)).toEqual({ c_locale: { language: 'en' } })
+    }
     expect(h.notes).toEqual([])
     expect((await h.view()).account.state).toBe('active')
     expect(h.logs.some(line => line.text === 'bili: refreshed the cookies of dsh-看客 (3000001)')).toBe(true)

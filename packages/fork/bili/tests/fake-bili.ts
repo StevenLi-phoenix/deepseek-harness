@@ -97,10 +97,11 @@ export class FakeBili {
   qrCodes: number[] = [86101, 86090, 0]
   /**
    * The account was registered overseas (the international app's Google sign-in): a confirmed QR
-   * login answers 48007 unless the request comes from the international web version (`web_i`).
+   * login and a cookie refresh answer 48007 unless the request comes from the international web
+   * version (`web_i`).
    */
   overseas = true
-  /** Whether a confirmed QR login is refused for the version the request names. */
+  /** Whether a confirmed QR login or a cookie refresh is refused for the version the request names. */
   overseasRefusal(device: { mobi_app?: string }): boolean {
     return this.overseas && device.mobi_app !== 'web_i'
   }
@@ -268,6 +269,9 @@ export class FakeBili {
         this.refreshTimestamp = Date.now()
         return this.ok({ refresh: this.refreshDue, timestamp: this.refreshTimestamp })
       case '/x/passport-login/web/cookie/refresh': {
+        if (this.overseasRefusal(JSON.parse(query['x-bili-device-req-json'] ?? '{}') as { mobi_app?: string })) {
+          return this.code(48007, '当前账号暂不支持在本APP登录')
+        }
         if (form['refresh_csrf'] !== this.refreshCsrf || form['refresh_token'] !== this.session!.refreshToken || form['source'] !== 'main_web') return this.code(86095, 'refresh_csrf 错误或 refresh_token 与 cookie 不匹配')
         this.pendingOldToken = this.session!.refreshToken
         const set = this.issue()

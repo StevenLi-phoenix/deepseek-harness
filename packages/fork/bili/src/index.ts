@@ -870,11 +870,10 @@ export class BiliAccount extends Service {
   }
 
   /**
-   * Bilibili refused a refresh. The old cookies stay valid after a refused refresh: for an account
-   * registered overseas, `cookie/refresh` answers 48007 on every attempt, including the one
-   * bilibili.com's own correspond page makes, and a refresh token it rejects answers -101 while the
-   * session works. `nav` decides: signed in keeps the session until the next check tries again;
-   * signed out needs a new login; no answer leaves the account as it is.
+   * Bilibili refused a refresh. A refusal does not end the session: `cookie/refresh` answers -101
+   * for a refresh token it rejects while `nav` still says signed in. `nav` decides: signed in keeps
+   * the session until the next check tries again; signed out needs a new login; no answer leaves the
+   * account as it is.
    * @param trigger - what started the check, for the log.
    * @param refusal - Bilibili's refusal, for the log and the login-needed reason.
    */
