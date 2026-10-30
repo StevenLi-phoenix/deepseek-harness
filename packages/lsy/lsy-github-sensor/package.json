@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-lsy-github-sensor",
   "description": "GitHub polling sensor for the lsy event bus: releases, tags, commits, and notifications with conditional requests",
-  "version": "0.2.1-rc.2",
+  "version": "0.2.2-alpha.2",
   "publishConfig": {
     "access": "public"
   },

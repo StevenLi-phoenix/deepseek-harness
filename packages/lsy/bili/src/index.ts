@@ -25,8 +25,6 @@ import type {} from '@deepseek-ai/dsh-lsy-event-bus'
 import type {} from '@deepseek-ai/dsh-owner-relay'
 import type {} from '@deepseek-ai/dsh-permission-presets'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
-// Type-only: ctx.sessionProjections, where an explicit model pick waits for its first request.
-import type {} from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-session-title'
 import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import z from '@deepseek-ai/schemastery'
@@ -1201,7 +1199,7 @@ export class BiliAccount extends Service {
 
   /**
    * The model route the account's Session will use, by the Session Controller's
-   * precedence: an explicit pick not yet used, else the Session's last request,
+   * precedence: the Agent's recorded selection (an explicit pick not yet used, else the last used), else the Session's last request,
    * else the profile default. A Session is resolved only when one exists.
    */
   private async checkRoute(): Promise<CheckedRoute | undefined> {
@@ -1213,7 +1211,7 @@ export class BiliAccount extends Service {
         const resolved = await this.ctx.sessionController.resolveAgent(stored.sessionId as SessionId)
         if ('agent' in resolved) {
           const session = resolved.agent.session
-          pick = this.ctx.get('sessionProjections')?.stateOf(session, 'modelSelection')?.pending ?? undefined
+          pick = resolved.agent.model.current()
           header = (session as Partial<Pick<Session, 'requestHeader'>>).requestHeader?.()?.config
         }
       } catch (error: unknown) {

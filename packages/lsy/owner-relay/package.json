@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-owner-relay",
   "description": "One relay of a Session's final answer to the owner: channels claim Sessions, one rule set decides at turn end, and a channel that cannot deliver falls back to ctx.lsyNotifier",
-  "version": "0.2.1-rc.2",
+  "version": "0.2.2-alpha.2",
   "publishConfig": {
     "access": "public"
   },

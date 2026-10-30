@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-lsy-balance",
   "description": "Account settings card with the balance or quota of every provider key the Host holds",
-  "version": "0.2.1-rc.2",
+  "version": "0.2.2-alpha.2",
   "publishConfig": {
     "access": "public"
   },

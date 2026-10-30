@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-lsy-event-bus",
   "description": "Durable event bus for event-driven agent runs: dedupe, loop suppression, subscriptions, coalescing, rate limits, and dispatch to notify or Session actuators",
-  "version": "0.2.1-rc.2",
+  "version": "0.2.2-alpha.2",
   "publishConfig": {
     "access": "public"
   },

@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-lsy-tool-monitor",
   "description": "Model-facing monitor tools: a bash command whose stdout lines come back to the same Session as they appear, like Claude Code's Monitor",
-  "version": "0.2.1-rc.2",
+  "version": "0.2.2-alpha.2",
   "publishConfig": {
     "access": "public"
   },

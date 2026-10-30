@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-lsy-memory",
   "description": "Owner memory across Sessions: a JSONL store the Host injects into each root Session, memory_search/memory_save/memory_forget tools, and a claude.ai export importer",
-  "version": "0.2.1-rc.2",
+  "version": "0.2.2-alpha.2",
   "publishConfig": {
     "access": "public"
   },

@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-bili",
   "description": "The agent's own Bilibili account: QR login, cookie refresh, guarded writes, a body clock that wakes its Session, and a Settings section",
-  "version": "0.2.1-rc.2",
+  "version": "0.2.2-alpha.2",
   "publishConfig": {
     "access": "public"
   },
@@ -76,7 +76,6 @@
     "react-dom": "^18.2.0",
     "yaml": "^2.9.0",
     "@deepseek-ai/dsh-agent-default-model": "workspace:*",
-    "@deepseek-ai/dsh-session-projection": "workspace:*",
     "@deepseek-ai/dsh-owner-relay": "workspace:*",
     "@deepseek-ai/dsh-lsy-wechat": "workspace:*"
   }
