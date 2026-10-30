@@ -7,6 +7,7 @@ import GithubSensor, { type Config as SensorConfig } from '@deepseek-ai/dsh-lsy-
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import ToolRuntime, { type ToolExecutionToken } from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { vi } from 'vitest'
 import { FakeGitHub } from '../../lsy-github-sensor/tests/fake-github.ts'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
@@ -106,6 +107,7 @@ export async function harness(options: HarnessOptions = {}) {
   // Native tool presentation only reads the prompt's tool-provider seam.
   ctx.provide('systemPrompt', { tools: () => () => {} } as never)
   await ctx.plugin(ToolRuntime)
+  await ctx.plugin(NativeToolExecutor)
   await ctx.plugin(LsyEventBus, Object.assign({}, busConfig, options.bus))
   await ctx.plugin(GithubSensor, Object.assign({}, sensorConfig, options.sensor))
   // The plugin's Config schema fills the omitted defaults.
@@ -114,8 +116,8 @@ export async function harness(options: HarnessOptions = {}) {
 
   /** Run one tool through the registry, which validates arguments and the output schema. */
   const call = async (name: string, args: unknown) => {
-    const result = await ctx.tools.execute({ callId: ToolCallId(`${name}-call`), signal: new AbortController().signal, name, arguments: args })
-    return result
+    const batch = await ctx.tools.execute({ signal: new AbortController().signal, calls: [{ type: 'tool-call', id: ToolCallId(`${name}-call`), name, arguments: JSON.stringify(args) }] })
+    return batch.results[0]!.result
   }
   /** Run one tool body directly with a caller Agent stub. */
   const callAs = async (sessionId: string, name: string, args: unknown) => {

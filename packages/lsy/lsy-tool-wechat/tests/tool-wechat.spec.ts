@@ -1,6 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as ToolWechat from '../src/index.ts'
 
@@ -11,9 +12,10 @@ async function mount(notifier: unknown) {
   contexts.push(ctx)
   ctx.provide('systemPrompt', { tools: () => () => {} } as never)
   await ctx.plugin(ToolRuntime)
+  await ctx.plugin(NativeToolExecutor)
   ctx.provide('lsyNotifier', notifier as never)
   await ctx.plugin(ToolWechat)
-  const call = (args: unknown) => ctx.tools.execute({ callId: ToolCallId('send-call'), signal: new AbortController().signal, name: 'wechat_send_file', arguments: args })
+  const call = async (args: unknown) => (await ctx.tools.execute({ signal: new AbortController().signal, calls: [{ type: 'tool-call', id: ToolCallId('send-call'), name: 'wechat_send_file', arguments: JSON.stringify(args) }] })).results[0]!.result
   return { ctx, call }
 }
 

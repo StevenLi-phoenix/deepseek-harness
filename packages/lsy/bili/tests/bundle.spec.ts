@@ -42,6 +42,7 @@ function composedRoot(): Map<string, { name?: string; enabled: boolean }> {
 const ROOT_TOOL_ROWS_WITHOUT_TOOLS = new Set([
   '@deepseek-ai/dsh-tool-call-timeout-policy',
   '@deepseek-ai/dsh-tool-cordis/host',
+  '@deepseek-ai/dsh-tool-executor-native',
   '@deepseek-ai/dsh-tool-subagent/model-selection-settings',
 ])
 

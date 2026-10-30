@@ -8,6 +8,7 @@ import { createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { ContextFormed } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId, SessionSeq, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { afterEach, describe, expect, it } from 'vitest'
 import * as Memory from '../src/index.ts'
 import { MemoryStore } from '../src/store.ts'
@@ -34,15 +35,19 @@ async function mount(config: Partial<Memory.Config> = {}) {
   contexts.push(ctx)
   ctx.provide('systemPrompt', { tools: () => () => {} } as never)
   await ctx.plugin(ToolRuntime)
+  await ctx.plugin(NativeToolExecutor)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(Memory, { file, ...config })
   const call = async (name: string, args: unknown): Promise<unknown> => {
-    const result = await ctx.tools.execute({ callId: ToolCallId(`${name}-call`), signal: new AbortController().signal, name, arguments: args })
+    const batch = await ctx.tools.execute({ signal: new AbortController().signal, calls: [{ type: 'tool-call', id: ToolCallId(`${name}-call`), name, arguments: JSON.stringify(args) }] })
+    const result = batch.results[0]!.result
     const block = result.content.find(item => item.type === 'text')
     return block?.type === 'text' ? JSON.parse(block.text) : undefined
   }
   return { ctx, call, store: new MemoryStore(file) }
 }
+
+const MODEL_SELECTION = { provider: 'test', model: 'test' }
 
 function agentOn(session: Session): Agent {
   return {
@@ -50,6 +55,7 @@ function agentOn(session: Session): Agent {
     options: {},
     session,
     inbox: unsupportedInbox(),
+    model: { current: () => undefined, select: () => {} },
     status: 'running',
     ctx: new Context(),
     send: () => {},
@@ -67,7 +73,7 @@ async function step(ctx: Context, agent: Agent, stepNumber = 1, signal = new Abo
   const prompt = createUserMessage({ content: [{ type: 'text', text: 'hello' }], source: { kind: 'lsy-memory-test' } })
   const decision = await agentEvents(ctx, agent).waterfall(
     'agent/pre-step',
-    { messages: [prompt], turn: 1, step: stepNumber, signal },
+    { messages: [prompt], turn: 1, step: stepNumber, signal, modelSelection: MODEL_SELECTION },
     () => Promise.resolve({ kind: 'enter' as const, messages: [prompt] }),
   )
   if (decision.kind !== 'enter') return []
@@ -147,7 +153,7 @@ describe('memory block', () => {
     const idle = Session.create(SessionId('idle'))
     const decision = await agentEvents(ctx, agentOn(idle)).waterfall(
       'agent/pre-step',
-      { messages: [], turn: 1, step: 1, signal: new AbortController().signal },
+      { messages: [], turn: 1, step: 1, signal: new AbortController().signal, modelSelection: MODEL_SELECTION },
       () => Promise.resolve({ kind: 'enter' as const, messages: [] }),
     )
     expect(decision).toEqual({ kind: 'enter', messages: [] })
