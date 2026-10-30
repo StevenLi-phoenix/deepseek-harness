@@ -1,6 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as ToolBili from '../src/index.ts'
 
@@ -12,10 +13,12 @@ async function mount(account: Record<string, unknown>) {
   contexts.push(ctx)
   ctx.provide('systemPrompt', { tools: () => () => {} } as never)
   await ctx.plugin(ToolRuntime)
+  await ctx.plugin(NativeToolExecutor)
   ctx.provide('bili', account as never)
   await ctx.plugin(ToolBili)
   const call = async (name: string, args: unknown) => {
-    const result = await ctx.tools.execute({ callId: ToolCallId(`${name}-call`), signal: new AbortController().signal, name, arguments: args }) as { value?: unknown; content?: { type: string; text: string }[] }
+    const batch = await ctx.tools.execute({ signal: new AbortController().signal, calls: [{ type: 'tool-call', id: ToolCallId(`${name}-call`), name, arguments: JSON.stringify(args) }] })
+    const result = batch.results[0]!.result as { value?: unknown; content?: { type: string; text: string }[] }
     return result
   }
   return { ctx, call }

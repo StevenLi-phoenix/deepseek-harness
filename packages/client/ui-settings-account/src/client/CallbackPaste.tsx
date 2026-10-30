@@ -4,6 +4,9 @@ import { Button, IconLoadingOutlineRegular } from '@deepseek-ai/dsh-client-ui-pr
 import type { AccountKey } from './locales.ts'
 import css from './CallbackPaste.module.css'
 
+/** Query shown after the callback prefix in the empty field; protocol syntax, not translated copy. */
+const CALLBACK_QUERY = '?code=…'
+
 /**
  * @param props - address prefix the browser stops on, the completion action, and localized copy.
  * @returns prompt, address field, and submit button; a rejected address keeps the field for another try.
@@ -26,7 +29,7 @@ export function CallbackPaste({ prefix, submit, t }: {
   return <div className={css.paste}>
     <p className={css.prompt}>{t('pastePrompt')}<code className={css.prefix}>{prefix}</code>{t('pastePromptEnd')}</p>
     <div className={css.row}>
-      <input className={css.input} type="text" aria-label={t('pasteLabel')} placeholder={`${prefix}?code=…`}
+      <input className={css.input} type="text" aria-label={t('pasteLabel')} placeholder={prefix + CALLBACK_QUERY}
         value={value} spellCheck={false} autoComplete="off" autoCapitalize="off" disabled={busy}
         onChange={(event) => { setValue(event.target.value); setFailed(false) }}
         onKeyDown={(event) => { if (event.key === 'Enter' && value.trim() !== '' && !busy) void send() }} />

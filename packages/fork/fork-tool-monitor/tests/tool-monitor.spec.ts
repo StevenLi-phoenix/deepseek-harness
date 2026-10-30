@@ -5,6 +5,7 @@ import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 import * as Monitor from '../src/index.ts'
@@ -141,15 +142,15 @@ async function mount(world: World, options: { storageDomain?: unknown; resolveDe
   if (options.storageDomain === undefined) await mountStorage(ctx, world.pool)
   else ctx.provide('storageDomain', options.storageDomain as never)
   await ctx.plugin(ToolRuntime)
+  await ctx.plugin(NativeToolExecutor)
   await ctx.plugin(Monitor)
   const call = async (session: FakeSession | undefined, name: string, args: unknown): Promise<Record<string, unknown>> => {
-    const result = await ctx.tools.execute({
-      callId: ToolCallId(`${name}-call`),
+    const batch = await ctx.tools.execute({
       signal: new AbortController().signal,
-      name,
-      arguments: args,
+      calls: [{ type: 'tool-call', id: ToolCallId(`${name}-call`), name, arguments: JSON.stringify(args) }],
       ...session === undefined ? {} : { agent: session.agent as never },
     })
+    const result = batch.results[0]!.result
     const block = result.content.find(item => item.type === 'text')
     return block?.type === 'text' ? JSON.parse(block.text) as Record<string, unknown> : {}
   }

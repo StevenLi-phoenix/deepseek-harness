@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FakeBili } from '../../bili/tests/fake-bili.ts'
 import { allLogs, contexts, harness } from '../../bili/tests/harness.ts'
@@ -33,11 +34,12 @@ describe('tool-bili over the account service', () => {
     await h.signIn()
     h.ctx.provide('systemPrompt', { tools: () => () => {} } as never)
     await h.ctx.plugin(ToolRuntime)
+    await h.ctx.plugin(NativeToolExecutor)
     await h.ctx.plugin(ToolBili)
     type Result = Promise<{ value: unknown; content: { text: string }[] }>
     const call = (name: string, args: unknown): Result => h.run(h.ctx.tools.execute({
-      callId: ToolCallId(name), signal: new AbortController().signal, name, arguments: args,
-    })) as Result
+      signal: new AbortController().signal, calls: [{ type: 'tool-call', id: ToolCallId(name), name, arguments: JSON.stringify(args) }],
+    }).then(batch => batch.results[0]!.result)) as Result
 
     const cat = await call('bili_video', { bvid: 'BV1aa4y1X7aa' })
     expect(cat.content[0]!.text).toContain('<bilibili_data source="video" trust="untrusted">')

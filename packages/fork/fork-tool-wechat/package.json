@@ -37,6 +37,7 @@
     "@deepseek-ai/dsh-llm": "workspace:*",
     "@deepseek-ai/dsh-fork-event-bus": "workspace:*",
     "@deepseek-ai/dsh-fork-wechat": "workspace:*",
+    "@deepseek-ai/dsh-tool-executor-native": "workspace:*",
     "@deepseek-ai/dsh-tools": "workspace:*"
   }
 }
