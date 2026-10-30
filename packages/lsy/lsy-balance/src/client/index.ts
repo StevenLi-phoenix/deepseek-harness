@@ -17,7 +17,7 @@ import type { AccountClientMetadata } from '@deepseek-ai/dsh-deepseek-account/ty
 import { BALANCE_ROUTE, type BalanceRouteBody, type ProviderReading } from '../readings.ts'
 import { BalanceLoader, createBalanceStore } from './balance.ts'
 import { ProviderBalances, type ProviderBalancesInjected } from './ProviderBalances.tsx'
-import { en, zh } from './locales.ts'
+import { de, en, es, fr, ja, pt, ru, zh } from './locales.ts'
 
 export type { ProviderBalancesInjected, ProviderBalancesProps } from './ProviderBalances.tsx'
 export type { BalanceKey } from './locales.ts'
@@ -33,7 +33,7 @@ export const inject = ['slots', 'locale', 'remote', 'remote.account']
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'lsy-balance: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'lsy-balance: dictionaries')
   const store = createBalanceStore()
   const loader = new BalanceLoader(store, async () => {
     const version = process.env.DSH_CLIENT_VERSION

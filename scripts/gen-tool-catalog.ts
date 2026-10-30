@@ -51,6 +51,8 @@ import * as ToolAskUser from '@deepseek-ai/dsh-tool-ask-user'
 import * as ToolBash from '@deepseek-ai/dsh-tool-bash'
 import * as ToolPwsh from '@deepseek-ai/dsh-tool-pwsh'
 import * as ToolBashPersistent from '@deepseek-ai/dsh-tool-bash-persistent'
+import * as ToolBili from '@deepseek-ai/dsh-tool-bili'
+import type { BiliAccount } from '@deepseek-ai/dsh-bili'
 import * as ToolPwshPersistent from '@deepseek-ai/dsh-tool-pwsh-persistent'
 import CordisHostRunner from '@deepseek-ai/dsh-cordis-host-runner'
 import * as ToolCordis from '@deepseek-ai/dsh-tool-cordis'
@@ -371,6 +373,19 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'One owner-isolated persistent bash tool; deployment composition supplies the PTY backend and may override the model-facing environment description.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-bili',
+    dir: 'tool-bili',
+    source: 'packages/lsy/tool-bili/src/index.ts',
+    requires: ['ctx.tools', 'ctx.bili (the account service of @deepseek-ai/dsh-bili)', 'ctx.lsyNotifier for bili_tell_main_agent'],
+    writes: ['tool/call', 'tool/result', 'the Bilibili account\'s write ledger, journal, grades, taste notes, and trends'],
+    async mount(ctx) {
+      // Schema harvest never reaches Bilibili: the account service is a stub.
+      ctx.provide('bili', {} as BiliAccount)
+      await ctx.plugin(ToolBili)
+    },
+    note: 'Fork-local (lsy): mounted only in the event profile\'s `bili` preset, so the main agents never see these tools.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-pwsh-persistent',

@@ -184,8 +184,10 @@
   cursor: pointer;
 }
 
-.refresh:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+@media (hover: hover) {
+  .refresh:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
 }
 
 .refresh:focus-visible {

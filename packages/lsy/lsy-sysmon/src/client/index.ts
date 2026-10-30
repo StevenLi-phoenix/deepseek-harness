@@ -13,7 +13,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { SYSMON_ROUTE } from '../snapshot.ts'
 import { SysmonLoader, createSysmonStore, parseSnapshot } from './sysmon.ts'
 import { SystemStatusSection, type SystemStatusInjected } from './SystemStatus.tsx'
-import { en, zh } from './locales.ts'
+import { de, en, es, fr, ja, pt, ru, zh } from './locales.ts'
 
 export type { SystemStatusInjected, SystemStatusProps } from './SystemStatus.tsx'
 export type { SysmonKey } from './locales.ts'
@@ -32,7 +32,7 @@ export const inject = ['slots', 'locale']
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'lsy-sysmon: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'lsy-sysmon: dictionaries')
   const t = ctx.locale.bind(NS)
   const store = createSysmonStore()
   const loader = new SysmonLoader(store, async () => {
