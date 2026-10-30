@@ -3,7 +3,8 @@
  * (scanned with the Bilibili app, including the international app whose
  * account signed in with Google), not the TV client. The refresh flow proves
  * possession of the session to `www.bilibili.com/correspond`, exchanges the
- * refresh token for new cookies, and then retires the old token.
+ * refresh token for new cookies, and then retires the old token. Both flows go
+ * out as the international web version.
  */
 import { constants, createHmac, publicEncrypt } from 'node:crypto'
 import { z } from 'zod'
@@ -308,7 +309,7 @@ export function refreshCsrf(html: string): string | undefined {
 
 /** Whether the session needs a refresh, with the server time the path must use. */
 export async function refreshNeeded(client: BiliClient): Promise<{ refresh: boolean; timestamp: number }> {
-  const { data } = await client.call('cookieInfo')
+  const { data } = await client.call('cookieInfo', { query: INTERNATIONAL_PARAMS, referer: INTERNATIONAL_PAGE })
   const fields = data as { refresh?: unknown; timestamp?: unknown } | undefined
   if (typeof fields?.refresh !== 'boolean' || typeof fields.timestamp !== 'number') throw new Error('cookie/info answered without refresh facts')
   return { refresh: fields.refresh, timestamp: fields.timestamp }
@@ -323,6 +324,8 @@ export interface RefreshedSession {
 /**
  * Exchange the refresh token for new cookies. The caller stores the result
  * before {@link confirmRefresh}, so a crash between the two keeps the new session.
+ * An account registered overseas is refused with 48007 unless the exchange names
+ * the international web version, as the login did.
  * @param client - Bilibili client, still sending the old cookies.
  * @param grant - the stored session.
  * @param publicKey - PEM key for the correspond path.
@@ -331,11 +334,13 @@ export interface RefreshedSession {
 export async function exchangeRefresh(
   client: BiliClient, grant: BiliGrant, publicKey: string, timestamp: number,
 ): Promise<RefreshedSession> {
-  const page = await client.call('correspond', { path: `/correspond/1/${correspondPath(publicKey, timestamp)}` })
+  const page = await client.call('correspond', { path: `/correspond/1/${correspondPath(publicKey, timestamp)}`, referer: INTERNATIONAL_PAGE })
   const csrf = refreshCsrf(String(page.data))
   if (csrf === undefined) throw new Error('the correspond page carried no refresh_csrf')
   const { data, setCookies } = await client.call('cookieRefresh', {
+    query: INTERNATIONAL_PARAMS,
     form: { refresh_csrf: csrf, source: 'main_web', refresh_token: grant.refreshToken },
+    referer: INTERNATIONAL_PAGE,
   })
   const token = (data as { refresh_token?: unknown } | undefined)?.refresh_token
   if (typeof token !== 'string' || token === '') throw new Error('cookie/refresh answered without a refresh token')
@@ -350,5 +355,5 @@ export async function exchangeRefresh(
  * @param oldToken - the refresh token that was exchanged.
  */
 export async function confirmRefresh(client: BiliClient, oldToken: string): Promise<void> {
-  await client.call('confirmRefresh', { form: { refresh_token: oldToken } })
+  await client.call('confirmRefresh', { query: INTERNATIONAL_PARAMS, form: { refresh_token: oldToken }, referer: INTERNATIONAL_PAGE })
 }
