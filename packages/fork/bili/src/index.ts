@@ -856,7 +856,7 @@ export class BiliAccount extends Service {
         this.ctx.logger.warn(`bili: cookie refresh (${trigger}) did not complete: ${errorText(error)}; trying again later`)
         return
       }
-      return this.loginNeeded(`the cookie refresh failed: ${errorText(error)}`)
+      return this.refreshRefused(trigger, errorText(error))
     }
     const now = Date.now()
     await this.storeGrant({ ...grant, cookies: fresh.cookies, refreshToken: fresh.refreshToken, refreshedAt: now })
@@ -867,6 +867,28 @@ export class BiliAccount extends Service {
     } catch (error: unknown) {
       this.ctx.logger.warn(`bili: retiring the old refresh token failed (${errorText(error)}); the new cookies are stored and work`)
     }
+  }
+
+  /**
+   * Bilibili refused a refresh. The old cookies stay valid after a refused refresh: for an account
+   * registered overseas, `cookie/refresh` answers 48007 on every attempt, including the one
+   * bilibili.com's own correspond page makes, and a refresh token it rejects answers -101 while the
+   * session works. `nav` decides: signed in keeps the session until the next check tries again;
+   * signed out needs a new login; no answer leaves the account as it is.
+   * @param trigger - what started the check, for the log.
+   * @param refusal - Bilibili's refusal, for the log and the login-needed reason.
+   */
+  private async refreshRefused(trigger: string, refusal: string): Promise<void> {
+    let nav: Awaited<ReturnType<typeof navInfo>>
+    try {
+      nav = await navInfo(this.client)
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`bili: cookie refresh (${trigger}) was refused (${refusal}) and nav could not confirm the session: ${errorText(error)}; trying again later`)
+      return
+    }
+    if (!nav.isLogin) return this.loginNeeded(`the cookie refresh failed (${refusal}) and Bilibili says the session is signed out`)
+    await this.updateAccount({ checkedAt: Date.now() })
+    this.ctx.logger.warn(`bili: cookie refresh (${trigger}) was refused (${refusal}); the session still works, so it stays in use and the next check tries again`)
   }
 
   /** A read met code -101: check the session in the background and say so. */
