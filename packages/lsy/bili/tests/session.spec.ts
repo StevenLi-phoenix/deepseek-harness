@@ -73,17 +73,56 @@ describe('cookie refresh', () => {
     expect((await h.view()).account.checkedAt).toBeGreaterThan(0)
   })
 
-  it('marks the account login-needed, stops writes, and tells the owner once when the refresh fails', async () => {
+  it('keeps the session when Bilibili refuses the refresh but nav still accepts the cookies, and tries again at the next check', async () => {
+    const credentials = credentialStore()
+    const h = await harness({ bili: fake, credentials, workspace: dir })
+    await h.signIn()
+    const before = grantOf(credentials)
+    fake.refreshDue = true
+    // What the overseas account met on 2026-10-26 and 2026-10-29: the refresh answers 48007 while the session still works.
+    fake.reply('/x/passport-login/web/cookie/refresh', { body: { code: 48007, message: '当前账号暂不支持在本APP登录' } })
+    await vi.advanceTimersByTimeAsync(70_000)
+
+    const view = await h.view()
+    expect(view.account).toMatchObject({ state: 'active' })
+    expect(view.account.checkedAt).toBeGreaterThan(0)
+    expect(h.notes).toEqual([])
+    expect(grantOf(credentials)).toEqual(before)
+    expect(h.logs.some(line => line.text === 'bili: cookie refresh (start) was refused (cookieRefresh: code 48007 (当前账号暂不支持在本APP登录)); the session still works, so it stays in use and the next check tries again')).toBe(true)
+    expect(await h.run(h.account.like('BV1aa4y1X7aa'))).toMatchObject({ outcome: 'sent' })
+
+    // The daily check asks again; this time the refresh goes through.
+    await vi.advanceTimersByTimeAsync(86_400_000)
+    expect(fake.requestsTo('/x/passport-login/web/cookie/refresh')).toHaveLength(2)
+    expect(grantOf(credentials).refreshToken).toBe('refresh-token-2')
+    expect((await h.view()).account.state).toBe('active')
+  })
+
+  it('keeps the account as it is when the refresh is refused and nav cannot be reached', async () => {
+    const h = await harness({ bili: fake, workspace: dir })
+    await h.signIn()
+    fake.refreshDue = true
+    fake.reply('/x/passport-login/web/cookie/refresh', { body: { code: 48007, message: '当前账号暂不支持在本APP登录' } })
+    fake.reply('/x/web-interface/nav', new TypeError('fetch failed'))
+    await vi.advanceTimersByTimeAsync(70_000)
+    expect((await h.view()).account.state).toBe('active')
+    expect(h.notes).toEqual([])
+    expect(h.logs.some(line => line.text.startsWith('bili: cookie refresh (start) was refused (cookieRefresh: code 48007 (当前账号暂不支持在本APP登录)) and nav could not confirm the session: '))).toBe(true)
+  })
+
+  it('marks the account login-needed, stops writes, and tells the owner once when the refresh fails and nav says signed out', async () => {
     const h = await harness({ bili: fake, workspace: dir })
     await h.signIn()
     fake.refreshDue = true
     fake.reply('/x/passport-login/web/cookie/refresh', { body: { code: 86095, message: 'refresh_csrf 错误' } })
+    fake.reply('/x/web-interface/nav', { body: { code: -101, message: '账号未登录', data: { isLogin: false } } })
     await vi.advanceTimersByTimeAsync(70_000)
-    expect((await h.view()).account).toMatchObject({ state: 'login-needed', reason: 'the cookie refresh failed: cookieRefresh: code 86095 (refresh_csrf 错误)' })
+    const reason = 'the cookie refresh failed (cookieRefresh: code 86095 (refresh_csrf 错误)) and Bilibili says the session is signed out'
+    expect((await h.view()).account).toMatchObject({ state: 'login-needed', reason })
     expect(h.notes).toEqual([{ title: 'dsh 的 B站登录失效了：设置 → B站账号 扫码', origin: BILI_NOTICE_ORIGIN }])
 
     const like = await h.run(h.account.like('BV1aa4y1X7aa'))
-    expect(like).toEqual({ outcome: 'refused', detail: 'the Bilibili login needs renewing (the cookie refresh failed: cookieRefresh: code 86095 (refresh_csrf 错误)); the owner has been told' })
+    expect(like).toEqual({ outcome: 'refused', detail: `the Bilibili login needs renewing (${reason}); the owner has been told` })
     expect(fake.requestsTo('/x/web-interface/archive/like')).toEqual([])
 
     // Another expired session later does not repeat the notice.
