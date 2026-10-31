@@ -2821,6 +2821,7 @@ export interface Config {
    * Hold a protected write (`instructions`, `preferences`, `identity`) until the owner approves it
    * when the turn was not the owner's alone, refuse to forget a protected entry then, and show
    * `identity` entries only as a count. Off keeps the provenance records and notices but no holds.
+   * `LSY_MEMORY_HOLD=0` in the environment turns it off whatever the configuration says.
    */
   hold?: boolean
   /** Tell the owner on WeChat about protected writes, one merged notice per turn. */
@@ -3042,7 +3043,10 @@ export interface SysmonMount {
 ```ts config-catalog
 /** Settings. */
 export interface Config {
-  /** Refuse the owner-only tools outside a clean owner turn; off only logs what would have been refused. */
+  /**
+   * Refuse the owner-only tools outside a clean owner turn; off only logs what would have been refused.
+   * `LSY_TAINT_ENFORCE=0` in the environment turns it off whatever the configuration says.
+   */
   enforce?: boolean
   /** Tools that act on other sessions or machines, refused outside a clean owner turn. */
   ownerOnlyTools?: string[]
@@ -5801,6 +5805,7 @@ export interface Config {
 | `@deepseek-ai/dsh-lsp` | — | [`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-tool-monitor` | `tools` · `storageDomain` · `sessionController` · `sessionPersistence` | [`packages/lsy/lsy-tool-monitor/src/index.ts`](../packages/lsy/lsy-tool-monitor/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-tool-qq` | `tools` | [`packages/lsy/lsy-tool-qq/src/index.ts`](../packages/lsy/lsy-tool-qq/src/index.ts) |
+| `@deepseek-ai/dsh-lsy-tool-up` | `tools` · `credentials` | [`packages/lsy/lsy-tool-up/src/index.ts`](../packages/lsy/lsy-tool-up/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-tool-voice` | `tools` | [`packages/lsy/lsy-tool-voice/src/index.ts`](../packages/lsy/lsy-tool-voice/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-tool-wechat` | `tools` | [`packages/lsy/lsy-tool-wechat/src/index.ts`](../packages/lsy/lsy-tool-wechat/src/index.ts) |
 | `@deepseek-ai/dsh-mcp-resources` | `tools` | [`packages/mcp/mcp-resources/src/index.ts`](../packages/mcp/mcp-resources/src/index.ts) |

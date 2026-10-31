@@ -349,7 +349,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-lsy-taint` | yes | Turn origin for the owner's main agent: who started the current turn (the owner, a relayed message, an event, a reminder), which tools read strangers' words in it, and the rules that follow |
 | `@deepseek-ai/dsh-lsy-tool-monitor` | no | Model-facing monitor tools: a bash command whose stdout lines come back to the same Session as they appear, like Claude Code's Monitor |
 | `@deepseek-ai/dsh-lsy-tool-qq` | no | Read-only qq_groups, qq_digest, qq_recent, and qq_search tools: the agent reads what the QQ observer recorded and digested |
-| `@deepseek-ai/dsh-lsy-tool-up` | no | Model-facing up_* tools for the creator account (bili-svc): reads of comments, private messages and videos, and two reply tools that only ask the Reply Gate; the answer is sent, held, or blocked |
+| `@deepseek-ai/dsh-lsy-tool-up` | no | Model-facing up_* tools for the creator account's reads and Reply Gate replies (bili-svc) |
 | `@deepseek-ai/dsh-lsy-tool-voice` | no | Model-facing speak tool: turn text into speech and send the audio to the owner over the lsy WeChat channel |
 | `@deepseek-ai/dsh-lsy-tool-watch` | yes | Model-facing watch_create, watch_list, and watch_delete tools over the lsy event bus and GitHub sensor |
 | `@deepseek-ai/dsh-lsy-tool-wechat` | no | Model-facing wechat_send_file tool: send a local file to the owner over the lsy WeChat channel |

@@ -101,6 +101,8 @@ describe('QqObserver recording', () => {
     expect(h.observer.searchMessages('不该记录', { limit: 5 })).toEqual([])
     expect(dataOf(h.observer).search('私聊内容', { limit: 5 })).toEqual([])
     expect(h.logs.filter(line => line.text.includes(`not recording group ${OTHER_GROUP}`))).toHaveLength(1)
+    // Unlisted groups are only counted, so the owner can see which are busy before listing one.
+    expect(h.observer.unlistedActivity()).toEqual([{ groupId: OTHER_GROUP, name: '闲聊群', messages: 1 }])
     // Bodies stay out of the log.
     expect(h.logs.filter(line => line.text.includes('今天讨论部署') || line.text.includes('私聊内容'))).toEqual([])
   })

@@ -267,6 +267,9 @@ export class QqObserver extends Service {
   private selfId = ''
   private credentialState = ''
   private readonly seenUnlisted = new Set<string>()
+  /** Messages seen per unlisted group since start: a count only, nothing of them is kept. */
+  private readonly unlistedCounts = new Map<string, number>()
+  private readonly startedAt = Date.now()
   private readonly lastSend = new Map<string, number>()
   private readonly sentToday = new Map<string, { day: string; count: number }>()
   private downloadsRunning = 0
@@ -343,6 +346,16 @@ export class QqObserver extends Service {
         lastDigestAt: stat?.lastDigestAt ?? null,
       }
     }).sort((a, b) => Number(b.recorded) - Number(a.recorded) || b.messages - a.messages || a.name.localeCompare(b.name))
+  }
+
+  /**
+   * How many messages each group that is not recorded has shown since the observer started: a count, nothing else.
+   * @returns group number, name, and count, busiest first.
+   */
+  unlistedActivity(): Array<{ groupId: string; name: string; messages: number }> {
+    return [...this.unlistedCounts]
+      .map(([groupId, messages]) => ({ groupId, name: this.store.groupName(groupId) ?? groupId, messages }))
+      .sort((a, b) => b.messages - a.messages)
   }
 
   /**
@@ -618,6 +631,7 @@ export class QqObserver extends Service {
     if (userId === this.selfId && this.selfId !== '') return false
     if (!this.recorded.has(groupId)) {
       this.counters.dropped += 1
+      this.unlistedCounts.set(groupId, (this.unlistedCounts.get(groupId) ?? 0) + 1)
       if (!this.seenUnlisted.has(groupId)) {
         this.seenUnlisted.add(groupId)
         this.ctx.logger.info(`lsy-qq: not recording group ${groupId}${this.store.groupName(groupId) === undefined ? '' : ` (${this.store.groupName(groupId)})`}: it is not in groups`)
@@ -766,6 +780,10 @@ export class QqObserver extends Service {
 
   private logStats(): void {
     const c = this.counters
+    if (this.unlistedCounts.size > 0 && c.dropped > 0) {
+      const top = this.unlistedActivity().slice(0, 30).map(group => `${group.groupId} ${group.name} ${group.messages}`).join(' | ')
+      this.ctx.logger.info(`lsy-qq: messages seen per unlisted group since ${new Date(this.startedAt).toISOString()} (counts only, nothing kept): ${top}`)
+    }
     if (c.messages + c.dropped + c.private + c.media + c.voices === 0) return
     this.ctx.logger.info(`lsy-qq: since the last report: ${c.messages} message(s) recorded, ${c.media} image(s) and ${c.voices} voice(s) saved, ${c.dropped} from unlisted groups dropped, ${c.private} private message(s) ignored; downloads hold ${this.store.mediaBytes()} bytes`)
     this.counters.messages = this.counters.media = this.counters.voices = this.counters.dropped = this.counters.private = 0

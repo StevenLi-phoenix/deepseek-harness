@@ -35,7 +35,7 @@ The package connects to a OneBot v11 WebSocket server, which in this fleet is Na
         groups: ['123456789']
 ```
 
-Until a group number is listed nothing is recorded: messages of every other group are dropped on arrival, and the log names each such group once (`not recording group <number> (<name>)`), which is how you find the numbers. Private chats are not stored at all.
+Until a group number is listed nothing is recorded: messages of every other group are dropped on arrival, and the log names each such group once (`not recording group <number> (<name>)`), which is how you find the numbers. Private chats are not stored at all. The log also reports, every ten minutes, how many messages each unlisted group has shown since the start (a count only, nothing of them is kept), which helps to pick the busy ones.
 
 | Field | Default | Meaning |
 |---|---|---|

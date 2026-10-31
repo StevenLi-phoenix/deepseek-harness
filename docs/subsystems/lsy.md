@@ -435,6 +435,12 @@ The observer. Provides `ctx.lsyQq`, whose read methods the agent tools use; its 
 groupOverview(): GroupOverview[]
 
 /**
+ * How many messages each group that is not recorded has shown since the observer started: a count, nothing else.
+ * @returns group number, name, and count, busiest first.
+ */
+unlistedActivity(): Array<{ groupId: string; name: string; messages: number }>
+
+/**
  * Display name of a group.
  * @param groupId - group number.
  * @returns the name the account last saw, or the number.

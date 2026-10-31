@@ -2414,6 +2414,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'recorded groups first, then the others.',
       },
       {
+        signature: 'unlistedActivity(): Array<{ groupId: string; name: string; messages: number }>',
+        description: 'How many messages each group that is not recorded has shown since the observer started: a count, nothing else.',
+        parameters: [],
+        returns: 'group number, name, and count, busiest first.',
+      },
+      {
         signature: 'groupName(groupId: string): string',
         description: 'Display name of a group.',
         parameters: [{ name: 'groupId', description: 'group number.' }],
