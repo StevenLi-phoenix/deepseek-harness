@@ -142,7 +142,10 @@ describe('trends and sources', () => {
     await h.post({ action: 'wake' })
     const prompt = (h.sessions.prompts.at(-1)!.content[0] as { text: string }).text
     expect(prompt).toContain('Memes and events you keep up with, newest first (bili_trend_write adds one, or rewrites one by its number):')
-    expect(prompt).toMatch(/\[3\] 大肥鱼 \(noted [^)]+\): DeepSeek 驱动的 agent 账号/)
+    // Trend notes copy what Bilibili users wrote, so they sit in an untrusted block like the finds.
+    const trendBlock = prompt.slice(prompt.indexOf('Memes and events you keep up with'))
+    expect(trendBlock).toContain('<bilibili_data source="your trend notes" trust="untrusted">')
+    expect(trendBlock).toMatch(/"seq": 3,\n\s+"term": "大肥鱼",\n\s+"noted": "[^"]+",\n\s+"note": "DeepSeek 驱动的 agent 账号"/)
     expect(prompt).not.toContain('旧梗')
     expect(prompt).not.toContain('鱼灾')
     expect(prompt).toContain('The owner\'s search keywords: DeepSeek Harness / Claude Code / 大肥鱼. Search each with bili_search order newest before the feeds')

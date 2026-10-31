@@ -164,6 +164,8 @@ function pauseLine(pause: WakeFacts['pause']): string | undefined {
 
 /** Characters of the recent-finds block. */
 const FINDS_BLOCK_CHARS = 4000
+/** Characters of the trend-notes block. */
+const TRENDS_BLOCK_CHARS = 4000
 /** Code points of a held answer quoted back in a continuation prompt. */
 const HELD_DRAFT_CHARS = 1000
 
@@ -192,8 +194,12 @@ function findsBlock(finds: readonly FindLine[] | undefined, timeZone: string): s
 /** The trend notebook block, or nothing while it is empty. */
 function trendsBlock(trends: readonly TrendLine[] | undefined, timeZone: string): string | undefined {
   if (trends === undefined || trends.length === 0) return undefined
-  const lines = trends.map(trend => `[${trend.seq}] ${trend.term} (noted ${formatStamp(trend.at, timeZone)}): ${trend.note}`)
-  return ['Memes and events you keep up with, newest first (bili_trend_write adds one, or rewrites one by its number):', ...lines].join('\n')
+  // Notes of memes and events copy what Bilibili users wrote, so they enter as data like the finds.
+  const rows = trends.map(trend => ({ seq: trend.seq, term: trend.term, noted: formatStamp(trend.at, timeZone), note: trend.note }))
+  return [
+    'Memes and events you keep up with, newest first (bili_trend_write adds one, or rewrites one by its number):',
+    untrusted('your trend notes', rows, TRENDS_BLOCK_CHARS),
+  ].join('\n')
 }
 
 /** The floor line of a wake: how much to watch before an answer goes out. */
