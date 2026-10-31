@@ -2806,7 +2806,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-fork-memory`
 
 - `inject`: `tools`
-- `source`: [`packages/fork/fork-memory/src/index.ts:56`](../packages/fork/fork-memory/src/index.ts)
+- `source`: [`packages/fork/fork-memory/src/index.ts:57`](../packages/fork/fork-memory/src/index.ts)
 
 ```ts config-catalog
 /** Memory file and context budget. */
