@@ -23,6 +23,7 @@ export const PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackagePolic
   'packages/fork/fork-balance': { category: 'optional', reason: 'Fork-local composer balance pill mounted by the event profile bundle.' },
   'packages/fork/fork-event-bus': { category: 'optional', reason: 'Fork-local event bus mounted by the deployment-owned event profile.' },
   'packages/fork/fork-qq': { category: 'optional', reason: 'Fork-local QQ group observer; requires a OneBot v11 protocol end (NapCat) logged in to a QQ account.' },
+  'packages/fork/fork-qqbot': { category: 'optional', reason: 'Fork-local official QQ bot channel (disabled by default); requires a QQ Open Platform bot (AppID and AppSecret).' },
   'packages/fork/fork-tool-qq': { category: 'optional', reason: 'Fork-local read-only QQ tools mounted by the event profile preset.' },
   'packages/fork/fork-wechat': { category: 'optional', reason: 'Fork-local WeChat channel; requires a QR-bound iLink bot account.' },
   'packages/fork/fork-tool-wechat': { category: 'optional', reason: 'Fork-local WeChat file tool mounted by the event profile preset.' },

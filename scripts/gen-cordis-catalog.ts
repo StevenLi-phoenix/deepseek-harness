@@ -157,6 +157,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   forkNotifier: 'fork.md',
   ownerRelay: 'fork.md',
   forkQq: 'fork.md',
+  forkQqBot: 'fork.md',
   forkVoice: 'fork.md',
   bili: 'fork.md',
   workspaceRegistry: 'workspace.md',

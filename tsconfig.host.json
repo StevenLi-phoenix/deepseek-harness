@@ -563,6 +563,7 @@
     { "path": "./packages/fork/fork-event-bus" },
     { "path": "./packages/fork/owner-relay" },
     { "path": "./packages/fork/fork-qq" },
+    { "path": "./packages/fork/fork-qqbot" },
     { "path": "./packages/fork/fork-tool-qq" },
     { "path": "./packages/fork/fork-wechat" },
     { "path": "./packages/fork/fork-tool-watch" },

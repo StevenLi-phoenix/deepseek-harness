@@ -34,6 +34,7 @@ done
 /usr/bin/grep -q "@deepseek-ai/dsh-tool-bili" "$WORK/fresh.yml" || fail "bili preset lacks tool-bili"
 /usr/bin/grep -q "^- id: fork-qq\$" "$WORK/fresh.yml" || fail "composition lacks fork-qq"
 /usr/bin/grep -q "^- id: preset-qq-digest\$" "$WORK/fresh.yml" || fail "composition lacks preset-qq-digest"
+/usr/bin/grep -q "^- id: preset-qqbot\$" "$WORK/fresh.yml" || fail "composition lacks preset-qqbot"
 /usr/bin/grep -q "@deepseek-ai/dsh-fork-tool-qq" "$WORK/fresh.yml" || fail "unattended preset lacks fork-tool-qq"
 
 if [ -d "$PREFIX/fork/skills/autocut" ]; then
