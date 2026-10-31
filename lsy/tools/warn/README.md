@@ -28,4 +28,6 @@ curl -fsS -m 5 -H "Authorization: Bearer $(cat ~/.config/warn/token)" -H 'Conten
   https://dsh.tailc2559b.ts.net/hooks/lsy
 ```
 
+Also here: `systemd/` (`warn@.service` + `warn-unit-failed`, for `OnFailure=warn@%n.service` on Linux hosts) and `docker_health_watch.py` (follows `docker events`, warns when a container turns unhealthy; the laptop runs it as a scheduled task).
+
 Tests: `python3 -m unittest discover -s lsy/tools/warn` (starts a fake endpoint on a local port). Procedure for the DSH side, hosts, and sources: [RUNBOOK §17](../../deploy/RUNBOOK.md).

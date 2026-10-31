@@ -1,0 +1,9 @@
+# Template: OnFailure=warn@%n.service in a drop-in of any unit (see lsy/tools/warn/README.md).
+# Install: /etc/systemd/system/warn@.service, /usr/local/bin/warn and /usr/local/bin/warn-unit-failed (755).
+[Unit]
+Description=Hand the failure of %I to DSH (warn)
+
+[Service]
+Type=oneshot
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/local/bin/warn-unit-failed %I

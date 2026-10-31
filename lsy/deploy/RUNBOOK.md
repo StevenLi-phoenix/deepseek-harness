@@ -368,7 +368,11 @@ Any program hands a warning to DSH, the one brain, with `warn` (`lsy/tools/warn`
    warn --source HOST.test --severity info "test: please ignore"
    ```
    Check: `stdout.log` shows `lsy-event-ingest: warn warn.HOST.test.info (...): accepted`, then a `warn-…` Session whose answer is `NO_REPLY`. The tailnet is trusted; a wrong token returns 401.
-3. Sources: mini-ops watches `system/app.lishuyu.ams`; the laptop's `docker events` watcher calls `warn` when a container turns unhealthy; n8, phm, and racknerd use the template `warn@.service` (`warn --source %H.systemd --severity error "%i failed"`) with `OnFailure=warn@%n.service` in a drop-in of each key unit; programs call `warn` or the curl line directly.
+3. Sources:
+   - mini-ops watches `system/app.lishuyu.ams` (observe only; `ops.toml` block `ams`, no log tail: `ams.err.log` is tens of MB of INFO).
+   - Linux hosts (n8, phm, racknerd): copy `lsy/tools/warn/systemd/warn@.service` to `/etc/systemd/system/`, `warn-unit-failed` to `/usr/local/bin/` (755), then give each key unit a drop-in `/etc/systemd/system/<unit>.d/10-warn.conf` with `[Unit]` / `OnFailure=warn@%n.service`, and `systemctl daemon-reload`. A failed unit sends `warn.<host>.systemd.error` with its `systemctl status`. A unit with `Restart=` only fails after its start limit is hit. Self-test: a oneshot unit with `ExecStart=/bin/false` and the same `OnFailure=` line, started once, then removed.
+   - Laptop (Windows): `docker_health_watch.py` follows `docker events` for `health_status` and calls `warn` once per container that turns `unhealthy` (`warn.<host>.docker.error`; recoveries only reach its log). It runs as the scheduled task `warn-docker-health` (at logon of the owner's account, `pythonw.exe`, no console), logs to `~/.local/state/warn/docker-health-watch.log`. Remove: `schtasks /Delete /TN warn-docker-health /F`.
+   - Programs call `warn` or the curl line directly.
 4. Limits: the WeChat reply allowance (about 10 per owner message) is shared by every source. Alert text is untrusted and the Session runs with `danger-full-access`, so the instructions allow read-only checks only; a read-only permission preset would narrow the exposure if the risk grows.
 5. Stop: remove the `warn` and `ci` subscriptions from the bundle (or comment out `LSY_INGEST_TOKEN_WARN`), upgrade, restart; `warn` on the hosts keeps exiting 0.
 
