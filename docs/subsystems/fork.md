@@ -16,7 +16,7 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 
 ### `ctx.bili` — `BiliAccount`
 
-The agent's own Bilibili account: sign-in, cookie refresh, guarded writes, the body clock, the inbox poll, the DM channel of the owner relay, and the Settings route.
+The agent's own Bilibili account, through bili-svc: reads, actions, the owner-message check, the DM channel of the owner relay, the journal, messages to the main agent, and the Settings route.
 
 ```ts cordis-catalog
 /**
@@ -27,38 +27,35 @@ The agent's own Bilibili account: sign-in, cookie refresh, guarded writes, the b
 ownsSession(sessionId: string): boolean
 
 /**
- * Give a video coins, never with a like. Bilibili takes at most 2 coins per
- * video from one account for an original and 1 otherwise; `count` defaults to
- * that most. One coin write per video ever, and no daily cap: the balance
- * limits it. A refusal code from Bilibili is reported, never retried.
+ * Give a video coins, never with a like. Bilibili takes at most 2 coins per video from one
+ * account for an original and 1 otherwise; `count` defaults to that most. bili-svc allows one
+ * coin write per video ever; the balance limits the rest.
  * @param bvid - BV id.
  * @param count - 1 or 2; default the most the video takes.
- * @returns the write guard's outcome.
+ * @returns the outcome.
  */
 async coin(bvid: string, count?: number): Promise<WriteOutcome>
 
 /**
- * 一键三连: like, coins (2 for an original, 1 otherwise), and a favorite in the
- * default folder, in one request. One per video ever, with the normal write
- * gap. Parts already done are reported and not counted; the like and favorite
- * it adds count against those daily caps, and it is refused when either cap
- * it would need is used up, or when the coins it would give exceed the balance.
+ * 一键三连: like, coins (2 for an original, 1 otherwise), and a favorite in the default folder,
+ * in one request. Parts already done are reported; all three done answers `already` without a
+ * call. bili-svc allows one triple per video ever and counts it against its caps.
  * @param bvid - BV id.
- * @returns the write guard's outcome.
+ * @returns the outcome.
  */
 async triple(bvid: string): Promise<WriteOutcome>
 
 /**
  * Follow an account.
  * @param mid - its user id.
- * @returns the write guard's outcome.
+ * @returns the outcome.
  */
 async follow(mid: number): Promise<WriteOutcome>
 
 /**
  * Unfollow an account; the owner's account stays followed.
  * @param mid - its user id.
- * @returns the write guard's outcome.
+ * @returns the outcome.
  */
 async unfollow(mid: number): Promise<WriteOutcome>
 
@@ -66,14 +63,14 @@ async unfollow(mid: number): Promise<WriteOutcome>
  * Add a video to a favorite folder (the default one unless named), or remove it.
  * @param bvid - BV id.
  * @param options - `remove`, and a folder id from `me()`.
- * @returns the write guard's outcome.
+ * @returns the outcome.
  */
 async favorite(bvid: string, options: { remove?: boolean; folderId?: number } = {}): Promise<WriteOutcome>
 
 /**
  * Like a video.
  * @param bvid - BV id.
- * @returns the write guard's outcome.
+ * @returns the outcome.
  */
 async like(bvid: string): Promise<WriteOutcome>
 
@@ -81,39 +78,9 @@ async like(bvid: string): Promise<WriteOutcome>
  * Add a video to watch later, or remove it.
  * @param bvid - BV id.
  * @param remove - remove instead of add.
- * @returns the write guard's outcome.
+ * @returns the outcome.
  */
 async watchLater(bvid: string, remove: boolean = false): Promise<WriteOutcome>
-
-/**
- * Post one top-level comment on a video; one per video ever.
- * @param bvid - BV id.
- * @param text - at most 500 characters.
- * @returns the write guard's outcome; a sent comment carries its id as `receipt`.
- */
-async comment(bvid: string, text: string): Promise<WriteOutcome>
-
-/**
- * Reply to a comment that replied to or mentioned this account (from its inbox); one reply per comment ever.
- * @param rpid - the comment's id as the inbox shows it.
- * @param text - at most 500 characters.
- * @returns the write guard's outcome; a sent reply carries its id as `receipt`.
- */
-async reply(rpid: string, text: string): Promise<WriteOutcome>
-
-/**
- * Post a text-only dynamic.
- * @param text - at most 1000 characters.
- * @returns the write guard's outcome; a sent dynamic carries its id as `receipt`.
- */
-async dynamic(text: string): Promise<WriteOutcome>
-
-/**
- * Message the owner's main account; nobody else can be messaged.
- * @param text - at most 500 characters.
- * @returns the write guard's outcome; a sent message carries its key as `receipt`.
- */
-async dmOwner(text: string): Promise<WriteOutcome>
 
 /**
  * The next batch of the home feed.
@@ -159,7 +126,14 @@ async popular(page: number = 1): Promise<VideoCard[]>
 async search(keyword: string, page: number = 1, order: SearchOrder = 'relevance'): Promise<VideoCard[]>
 
 /**
- * A video: facts, one page of subtitles (with coverage notes), and top comments.
+ * The hot-search list (热搜): what the whole site searches for right now.
+ * @returns up to 30 keywords, each with the label the search box shows when it differs.
+ */
+async hotSearches(): Promise<HotSearch[]>
+
+/**
+ * A video: facts, one page of subtitles (with coverage notes), and top comments. A video whose
+ * subtitles were read is reported as watched that far (bili-svc keeps it to once a day).
  * @param bvid - BV id.
  * @param options - subtitle page and part.
  * @returns the facts, one subtitle page or the reason there is none, and up to five top comments.
@@ -175,14 +149,15 @@ async video( bvid: string, options: { subtitlePage?: number; part?: number } = {
 async comments(bvid: string, options: { order?: 'hot' | 'new'; offset?: string; root?: string; page?: number } = {}): Promise<{ comments: CommentView[]; next?: string; root?: CommentView }>
 
 /**
- * Unread counts, the newest replies and mentions, and the owner's latest messages; what it shows counts as seen.
+ * Unread counts, the newest replies and mentions, and the owner's latest messages; the owner's
+ * messages it shows count as handed over.
  * @returns unread counts, up to ten replies and mentions, and the owner's latest messages.
  */
 async inbox(): Promise<InboxView>
 
 /**
- * The account, its folders, and today's budget.
- * @returns the account facts, or `signedIn: false`, with today's budget and any pause.
+ * The account, its folders, its level and coins, and whether bili-svc holds actions.
+ * @returns the account facts, or `signedIn: false`.
  */
 async me(): Promise<MeView>
 
@@ -210,52 +185,9 @@ async journalRead(page: number = 1): Promise<{ entries: { seq: number; day: stri
 async tellMainAgent(text: string): Promise<WriteOutcome>
 
 /**
- * Keep one note about the owner's taste (`bili_taste_write`): what a reaction to a find taught,
- * or what the owner said they want more or less of.
- * @param text - at most 200 characters, one line.
- * @param replaces - number of one of the Session's own notes to rewrite instead of adding one.
- * @returns the note's number and how many notes there are, or why it was refused.
- */
-async tasteWrite(text: string, replaces?: number): Promise<{ saved: true; seq: number; notes: number } | { refused: string }>
-
-/**
- * Grade a watched video (`bili_verdict`): `must` 值得看, `ok` 可以看, or `skip` 不值当, and why.
- * `must` needs evidence: the account read the video's subtitles with `video()` first; a grade from
- * the title alone is at most `ok`. Grading again replaces the grade.
- * @param bvid - BV id.
- * @param grade - the grade.
- * @param reason - why, at most 120 characters.
- * @returns the grade kept, or why it was refused.
- */
-async verdict(bvid: string, grade: Grade, reason: string): Promise<{ saved: true; grade: Grade } | { refused: string }>
-
-/**
- * The seen list: what the account graded, newest first, or one video's grade.
- * @param bvid - one video to look up.
- * @param limit - entries, at most 50.
- * @returns the grades.
- */
-async seen(bvid?: string, limit: number = 30): Promise<{ entries: Omit<SeenRecord, 'at'>[] }>
-
-/**
- * The hot-search list (热搜): what the whole site searches for right now.
- * @returns up to 30 keywords, each with the label the search box shows when it differs.
- */
-async hotSearches(): Promise<HotSearch[]>
-
-/**
- * Note one meme, event, or phrase the account met (`bili_trend_write`): what it is, where it
- * comes from, and which community it lives in, so later wakes understand it and can tell the owner.
- * A term already noted is rewritten in place.
- * @param term - the meme itself, at most 30 characters.
- * @param note - at most 200 characters.
- * @param replaces - number of an entry to rewrite instead.
- * @returns the entry's number, or why it was refused.
- */
-async trendWrite(term: string, note: string, replaces?: number): Promise<{ saved: true; seq: number } | { refused: string }>
-
-/**
- * What the Settings section shows. Built from storage only, so no cookie or token can reach it.
+ * What the Settings section shows: the account as bili-svc lists it, read-only, and the owner's
+ * main account. bili-svc's status names accounts and session states only, so no cookie or token
+ * can reach it.
  * @returns the view.
  */
 async view(): Promise<BiliView>

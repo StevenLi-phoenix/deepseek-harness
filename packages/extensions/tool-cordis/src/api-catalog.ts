@@ -594,8 +594,8 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   },
   {
     key: 'bili',
-    summary: 'The agent\'s own Bilibili account: sign-in, cookie refresh, guarded writes, the body clock, the inbox poll, the DM channel of the owner relay, and the Settings route.',
-    description: 'The agent\'s own Bilibili account: sign-in, cookie refresh, guarded writes, the body clock, the inbox poll, the DM channel of the owner relay, and the Settings route.',
+    summary: 'The agent\'s own Bilibili account, through bili-svc: reads, actions, the owner-message check, the DM channel of the owner relay, the journal, messages to the main agent, and the Settings route.',
+    description: 'The agent\'s own Bilibili account, through bili-svc: reads, actions, the owner-message check, the DM channel of the owner relay, the journal, messages to the main agent, and the Settings route.',
     methods: [
       {
         signature: 'ownsSession(sessionId: string): boolean',
@@ -605,69 +605,45 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async coin(bvid: string, count?: number): Promise<WriteOutcome>',
-        description: 'Give a video coins, never with a like. Bilibili takes at most 2 coins per video from one account for an original and 1 otherwise; `count` defaults to that most. One coin write per video ever, and no daily cap: the balance limits it. A refusal code from Bilibili is reported, never retried.',
+        description: 'Give a video coins, never with a like. Bilibili takes at most 2 coins per video from one account for an original and 1 otherwise; `count` defaults to that most. bili-svc allows one coin write per video ever; the balance limits the rest.',
         parameters: [{ name: 'bvid', description: 'BV id.' }, { name: 'count', description: '1 or 2; default the most the video takes.' }],
-        returns: 'the write guard\'s outcome.',
+        returns: 'the outcome.',
       },
       {
         signature: 'async triple(bvid: string): Promise<WriteOutcome>',
-        description: '一键三连: like, coins (2 for an original, 1 otherwise), and a favorite in the default folder, in one request. One per video ever, with the normal write gap. Parts already done are reported and not counted; the like and favorite it adds count against those daily caps, and it is refused when either cap it would need is used up, or when the coins it would give exceed the balance.',
+        description: '一键三连: like, coins (2 for an original, 1 otherwise), and a favorite in the default folder, in one request. Parts already done are reported; all three done answers `already` without a call. bili-svc allows one triple per video ever and counts it against its caps.',
         parameters: [{ name: 'bvid', description: 'BV id.' }],
-        returns: 'the write guard\'s outcome.',
+        returns: 'the outcome.',
       },
       {
         signature: 'async follow(mid: number): Promise<WriteOutcome>',
         description: 'Follow an account.',
         parameters: [{ name: 'mid', description: 'its user id.' }],
-        returns: 'the write guard\'s outcome.',
+        returns: 'the outcome.',
       },
       {
         signature: 'async unfollow(mid: number): Promise<WriteOutcome>',
         description: 'Unfollow an account; the owner\'s account stays followed.',
         parameters: [{ name: 'mid', description: 'its user id.' }],
-        returns: 'the write guard\'s outcome.',
+        returns: 'the outcome.',
       },
       {
         signature: 'async favorite(bvid: string, options: { remove?: boolean; folderId?: number } = {}): Promise<WriteOutcome>',
         description: 'Add a video to a favorite folder (the default one unless named), or remove it.',
         parameters: [{ name: 'bvid', description: 'BV id.' }, { name: 'options', description: '`remove`, and a folder id from `me()`.' }],
-        returns: 'the write guard\'s outcome.',
+        returns: 'the outcome.',
       },
       {
         signature: 'async like(bvid: string): Promise<WriteOutcome>',
         description: 'Like a video.',
         parameters: [{ name: 'bvid', description: 'BV id.' }],
-        returns: 'the write guard\'s outcome.',
+        returns: 'the outcome.',
       },
       {
         signature: 'async watchLater(bvid: string, remove: boolean = false): Promise<WriteOutcome>',
         description: 'Add a video to watch later, or remove it.',
         parameters: [{ name: 'bvid', description: 'BV id.' }, { name: 'remove', description: 'remove instead of add.' }],
-        returns: 'the write guard\'s outcome.',
-      },
-      {
-        signature: 'async comment(bvid: string, text: string): Promise<WriteOutcome>',
-        description: 'Post one top-level comment on a video; one per video ever.',
-        parameters: [{ name: 'bvid', description: 'BV id.' }, { name: 'text', description: 'at most 500 characters.' }],
-        returns: 'the write guard\'s outcome; a sent comment carries its id as `receipt`.',
-      },
-      {
-        signature: 'async reply(rpid: string, text: string): Promise<WriteOutcome>',
-        description: 'Reply to a comment that replied to or mentioned this account (from its inbox); one reply per comment ever.',
-        parameters: [{ name: 'rpid', description: 'the comment\'s id as the inbox shows it.' }, { name: 'text', description: 'at most 500 characters.' }],
-        returns: 'the write guard\'s outcome; a sent reply carries its id as `receipt`.',
-      },
-      {
-        signature: 'async dynamic(text: string): Promise<WriteOutcome>',
-        description: 'Post a text-only dynamic.',
-        parameters: [{ name: 'text', description: 'at most 1000 characters.' }],
-        returns: 'the write guard\'s outcome; a sent dynamic carries its id as `receipt`.',
-      },
-      {
-        signature: 'async dmOwner(text: string): Promise<WriteOutcome>',
-        description: 'Message the owner\'s main account; nobody else can be messaged.',
-        parameters: [{ name: 'text', description: 'at most 500 characters.' }],
-        returns: 'the write guard\'s outcome; a sent message carries its key as `receipt`.',
+        returns: 'the outcome.',
       },
       {
         signature: 'async homeFeed(): Promise<VideoCard[]>',
@@ -706,8 +682,14 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'bounded video cards.',
       },
       {
+        signature: 'async hotSearches(): Promise<HotSearch[]>',
+        description: 'The hot-search list (热搜): what the whole site searches for right now.',
+        parameters: [],
+        returns: 'up to 30 keywords, each with the label the search box shows when it differs.',
+      },
+      {
         signature: 'async video( bvid: string, options: { subtitlePage?: number; part?: number } = {}, ): Promise<{ video: VideoDetail; subtitle: SubtitleView; topComments: CommentView[] }>',
-        description: 'A video: facts, one page of subtitles (with coverage notes), and top comments.',
+        description: 'A video: facts, one page of subtitles (with coverage notes), and top comments. A video whose subtitles were read is reported as watched that far (bili-svc keeps it to once a day).',
         parameters: [{ name: 'bvid', description: 'BV id.' }, { name: 'options', description: 'subtitle page and part.' }],
         returns: 'the facts, one subtitle page or the reason there is none, and up to five top comments.',
       },
@@ -719,15 +701,15 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async inbox(): Promise<InboxView>',
-        description: 'Unread counts, the newest replies and mentions, and the owner\'s latest messages; what it shows counts as seen.',
+        description: 'Unread counts, the newest replies and mentions, and the owner\'s latest messages; the owner\'s messages it shows count as handed over.',
         parameters: [],
         returns: 'unread counts, up to ten replies and mentions, and the owner\'s latest messages.',
       },
       {
         signature: 'async me(): Promise<MeView>',
-        description: 'The account, its folders, and today\'s budget.',
+        description: 'The account, its folders, its level and coins, and whether bili-svc holds actions.',
         parameters: [],
-        returns: 'the account facts, or `signedIn: false`, with today\'s budget and any pause.',
+        returns: 'the account facts, or `signedIn: false`.',
       },
       {
         signature: 'async journalWrite(text: string): Promise<{ saved: true; seq: number; leftToday: number } | { refused: string }>',
@@ -748,38 +730,8 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: '`sent` with what is left today, or `refused` with the reason.',
       },
       {
-        signature: 'async tasteWrite(text: string, replaces?: number): Promise<{ saved: true; seq: number; notes: number } | { refused: string }>',
-        description: 'Keep one note about the owner\'s taste (`bili_taste_write`): what a reaction to a find taught, or what the owner said they want more or less of.',
-        parameters: [{ name: 'text', description: 'at most 200 characters, one line.' }, { name: 'replaces', description: 'number of one of the Session\'s own notes to rewrite instead of adding one.' }],
-        returns: 'the note\'s number and how many notes there are, or why it was refused.',
-      },
-      {
-        signature: 'async verdict(bvid: string, grade: Grade, reason: string): Promise<{ saved: true; grade: Grade } | { refused: string }>',
-        description: 'Grade a watched video (`bili_verdict`): `must` 值得看, `ok` 可以看, or `skip` 不值当, and why. `must` needs evidence: the account read the video\'s subtitles with `video()` first; a grade from the title alone is at most `ok`. Grading again replaces the grade.',
-        parameters: [{ name: 'bvid', description: 'BV id.' }, { name: 'grade', description: 'the grade.' }, { name: 'reason', description: 'why, at most 120 characters.' }],
-        returns: 'the grade kept, or why it was refused.',
-      },
-      {
-        signature: 'async seen(bvid?: string, limit: number = 30): Promise<{ entries: Omit<SeenRecord, \'at\'>[] }>',
-        description: 'The seen list: what the account graded, newest first, or one video\'s grade.',
-        parameters: [{ name: 'bvid', description: 'one video to look up.' }, { name: 'limit', description: 'entries, at most 50.' }],
-        returns: 'the grades.',
-      },
-      {
-        signature: 'async hotSearches(): Promise<HotSearch[]>',
-        description: 'The hot-search list (热搜): what the whole site searches for right now.',
-        parameters: [],
-        returns: 'up to 30 keywords, each with the label the search box shows when it differs.',
-      },
-      {
-        signature: 'async trendWrite(term: string, note: string, replaces?: number): Promise<{ saved: true; seq: number } | { refused: string }>',
-        description: 'Note one meme, event, or phrase the account met (`bili_trend_write`): what it is, where it comes from, and which community it lives in, so later wakes understand it and can tell the owner. A term already noted is rewritten in place.',
-        parameters: [{ name: 'term', description: 'the meme itself, at most 30 characters.' }, { name: 'note', description: 'at most 200 characters.' }, { name: 'replaces', description: 'number of an entry to rewrite instead.' }],
-        returns: 'the entry\'s number, or why it was refused.',
-      },
-      {
         signature: 'async view(): Promise<BiliView>',
-        description: 'What the Settings section shows. Built from storage only, so no cookie or token can reach it.',
+        description: 'What the Settings section shows: the account as bili-svc lists it, read-only, and the owner\'s main account. bili-svc\'s status names accounts and session states only, so no cookie or token can reach it.',
         parameters: [],
         returns: 'the view.',
       },
@@ -6209,7 +6161,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'BiliView',
-    declaration: 'export interface BiliView {\n    readonly account: AccountView;\n    readonly login: LoginView;\n    readonly pause: {\n        readonly scope: typeof PAUSE_SCOPES[number];\n        readonly reason: string;\n        readonly since: number;\n    } | null;\n    readonly readsResumeAt: number | null;\n    readonly usage: {\n        readonly day: string;\n        readonly actions: readonly UsageView[];\n    };\n    readonly interests: {\n        readonly text: string;\n        readonly updatedAt: number | null;\n    };\n    readonly clock: {\n        readonly timeZone: string;\n        readonly today: readonly WakeView[];\n        readonly nextWakeAt: number | null;\n        readonly lastWake: {\n            readonly at: number;\n            readonly reason: WakeReason;\n        } | null;\n        readonly route: RouteView | null;\n    };\n    readonly recent: readonly RecentWriteView[];\n    readonly ownerMid: number;\n    readonly ownerUpdatedAt: number | null;\n    readonly manualWake: ManualWakeView | null;\n    readonly progress: ProgressView | null;\n    readonly verification: readonly VerificationView[];\n    readonly taste: readonly TasteNoteView[];\n    readonly finds: readonly FindView[];\n    readonly trends: readonly TrendView[];\n    readonly keywords: {\n        readonly text: string;\n        readonly updatedAt: number | null;\n    };\n    readonly today: {\n        readonly day: string;\n        readonly graded: Readonly<Record<Grade, number>>;\n        readonly picks: number;\n        readonly perDay: numb /* …truncated — full shape in source */',
+    declaration: 'export interface BiliView {\n    readonly account: AccountView;\n    readonly gate: GateView | null;\n    readonly ownerMid: number;\n    readonly ownerUpdatedAt: number | null;\n    readonly timeZone: string;\n}',
   },
   {
     name: 'BindingOrigin',
@@ -6246,10 +6198,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ButtonProps',
     declaration: 'export interface ButtonProps {\n    readonly label: string;\n    readonly hotkey?: string | undefined;\n    readonly disabled?: boolean | undefined;\n    readonly onPress?: (() => unknown) | undefined;\n}',
-  },
-  {
-    name: 'CappedAction',
-    declaration: 'export type CappedAction = Exclude<WriteAction, typeof UNCAPPED_ACTIONS[number]>;',
   },
   {
     name: 'ChangeRequestCheck',
@@ -6664,10 +6612,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface DailyRewards {\n    login: boolean;\n    watch: boolean;\n    share: boolean;\n    coinExp: number;\n}',
   },
   {
-    name: 'DailyRewardsView',
-    declaration: 'export interface DailyRewardsView {\n    readonly day: string;\n    readonly login: boolean;\n    readonly watch: boolean;\n    readonly share: boolean;\n    readonly coinExp: number;\n}',
-  },
-  {
     name: 'DailyScheduleRecord',
     declaration: 'export interface DailyScheduleRecord {\n    readonly id: ScheduleId;\n    readonly kind: \'daily\';\n    readonly title: string;\n    readonly prompt: string;\n    readonly time: string;\n    readonly timeZone: string;\n    readonly scheduledAt: string;\n}',
   },
@@ -6880,10 +6824,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface FileUploadValue {\n    readonly receiptId: FileUploadReceiptId;\n    readonly file: FileAttachmentRef;\n}',
   },
   {
-    name: 'FindView',
-    declaration: 'export interface FindView {\n    readonly bvid: string;\n    readonly at: number;\n    readonly title?: string;\n    readonly reaction?: {\n        readonly text: string;\n        readonly at: number;\n    };\n}',
-  },
-  {
     name: 'FinishReason',
     declaration: 'export type FinishReason = FinishReasonMap[keyof FinishReasonMap];',
   },
@@ -7084,6 +7024,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface FsWriteOutcome {\n    operation: \'create\' | \'update\';\n    version: FsVersion;\n    before: string | null;\n    after: string;\n}',
   },
   {
+    name: 'GateView',
+    declaration: 'export interface GateView {\n    readonly mode: string;\n    readonly readonly: boolean;\n}',
+  },
+  {
     name: 'GenerateOptions',
     declaration: 'export interface GenerateOptions<Purpose extends string = LlmRequestPurpose> {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: RequestMessage[];\n    system?: string;\n    tools?: ToolSchema[];\n    toolHistory?: ToolHistory;\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    purpose?: Purpose;\n}',
   },
@@ -7134,10 +7078,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'GoalView',
     declaration: 'export interface GoalView extends GoalSnapshot {\n    readonly roundsStarted: number;\n    readonly createdAt: number;\n    readonly updatedAt: number;\n    readonly activation: GoalActivation;\n}',
-  },
-  {
-    name: 'Grade',
-    declaration: 'export type Grade = typeof GRADES[number];',
   },
   {
     name: 'GrantRecord',
@@ -7528,10 +7468,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type LogExporterOptions = Omit<OTLPExporterNodeConfigBase, \'selfObsMeterProvider\'> & {\n    url: string;\n};',
   },
   {
-    name: 'LoginView',
-    declaration: 'export interface LoginView {\n    readonly state: \'idle\' | \'waiting\' | \'scanned\' | \'expired\' | \'failed\' | \'done\';\n    readonly qr?: {\n        readonly modules: readonly string[];\n        readonly expiresAt: number;\n    };\n    readonly error?: string;\n}',
-  },
-  {
     name: 'LspHover',
     declaration: 'export interface LspHover {\n    readonly contents: string;\n    readonly range?: LspRange;\n}',
   },
@@ -7594,10 +7530,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ManualCompactAgentContext',
     declaration: 'export interface ManualCompactAgentContext extends CompactionAgentContext {\n    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;\n}',
-  },
-  {
-    name: 'ManualWakeView',
-    declaration: 'export interface ManualWakeView {\n    readonly at: number;\n    readonly outcome: \'started\' | \'refused\';\n    readonly reason?: \'signed-out\' | \'login-needed\' | \'busy\' | \'recent\' | \'failed\';\n    readonly detail?: string;\n    readonly peak?: {\n        readonly provider: string;\n        readonly offPeakAt: number | null;\n    };\n    readonly readsResumeAt?: number;\n}',
   },
   {
     name: 'MarketCompatibility',
@@ -7797,7 +7729,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'MeView',
-    declaration: 'export interface MeView {\n    signedIn: boolean;\n    mid?: number;\n    uname?: string;\n    level?: number;\n    following?: number;\n    followers?: number;\n    folders?: Folder[];\n    exp?: {\n        current: number;\n        min: number;\n        next: number | null;\n    };\n    coins?: number;\n    rewards?: DailyRewards;\n    budget: Record<CappedAction, number>;\n    pause?: string;\n    readsResumeAt?: string;\n}',
+    declaration: 'export interface MeView {\n    signedIn: boolean;\n    mid?: number;\n    uname?: string;\n    level?: number;\n    following?: number;\n    followers?: number;\n    folders?: Folder[];\n    exp?: {\n        current: number;\n        min: number;\n        next: number | null;\n    };\n    coins?: number;\n    rewards?: DailyRewards;\n    limits: string;\n    pause?: string;\n}',
   },
   {
     name: 'ModDefinition',
@@ -8192,10 +8124,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ProfileReconciliation {\n    warnings: string[];\n    pending: PendingModule[];\n    restartReason?: \'module-comparison\' | \'package-moved\';\n}',
   },
   {
-    name: 'ProgressView',
-    declaration: 'export interface ProgressView {\n    readonly level: number;\n    readonly exp: number;\n    readonly min: number;\n    readonly next: number | null;\n    readonly coins: number;\n    readonly rewards: DailyRewardsView | null;\n    readonly checkedAt: number;\n}',
-  },
-  {
     name: 'ProjectionChangeListener',
     declaration: 'export type ProjectionChangeListener = (session: Session, key: Extract<keyof SessionProjectionMap, string>, value: unknown, seq: SessionSeq) => void;',
   },
@@ -8346,10 +8274,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ReasoningEffortId',
     declaration: 'export type ReasoningEffortId = Branded<\'ReasoningEffortId\'>;',
-  },
-  {
-    name: 'RecentWriteView',
-    declaration: 'export interface RecentWriteView {\n    readonly at: number;\n    readonly action: WriteAction;\n    readonly target: string;\n    readonly state: \'reserved\' | \'accepted\' | \'failed\' | \'uncertain\';\n    readonly detail?: string;\n    readonly visibility?: \'pending\' | \'visible\' | \'hidden\' | \'unknown\';\n}',
   },
   {
     name: 'RecommendationDetails',
@@ -8580,10 +8504,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type ReviewDecision = \'approved\' | \'changes-requested\' | \'review-required\' | \'none\';',
   },
   {
-    name: 'RouteView',
-    declaration: 'export interface RouteView {\n    readonly provider: string;\n    readonly model: string;\n    readonly source: \'pick\' | \'session\' | \'default\';\n    readonly priced: boolean;\n    readonly offPeakAt: number | null;\n}',
-  },
-  {
     name: 'RpcId',
     declaration: 'export type RpcId = Branded<\'rpc-id\'>;',
   },
@@ -8774,10 +8694,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SearchResultView',
     declaration: 'export type SearchResultView = SearchMatchesResultView | SearchPathsResultView;',
-  },
-  {
-    name: 'SeenRecord',
-    declaration: 'export type SeenRecord = z.infer<typeof seenSchema>;',
   },
   {
     name: 'SendTeamMessageRequest',
@@ -9140,10 +9056,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionPageRequest {\n    readonly address: SessionAddress;\n    readonly throughSeq?: number;\n    readonly beforeSeq?: number;\n    readonly maxMessages?: number;\n    readonly turnWindow?: {\n        readonly minMessages: number;\n        readonly minTurns: number;\n    };\n}',
   },
   {
-    name: 'SessionPendingInput',
-    declaration: 'export type SessionPendingInput = \'approval\' | \'question\' | \'other\';',
-  },
-  {
     name: 'SessionPersistenceCreateOptions',
     declaration: 'export interface SessionPersistenceCreateOptions {\n    readonly signal?: AbortSignal;\n    readonly inheritedEventCount?: SessionLogOffset;\n}',
   },
@@ -9236,10 +9148,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionPromptValue {\n    readonly accepted: true;\n}',
   },
   {
-    name: 'SessionQueuedItem',
-    declaration: 'export interface SessionQueuedItem {\n    readonly id: MessageId;\n    readonly placement: \'queued\' | \'steering\' | \'context\';\n    readonly rpcId?: SessionRequestId;\n    readonly content: readonly JsonValue[];\n}',
-  },
-  {
     name: 'SessionReferenceCandidate',
     declaration: 'export interface SessionReferenceCandidate {\n    sessionId: SessionId;\n    label: string;\n    displayTitle?: string;\n    cwd?: string;\n    sameWorkspace: boolean;\n    createdAt: number;\n}',
   },
@@ -9326,10 +9234,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionStartSource',
     declaration: 'export type SessionStartSource = \'startup\' | \'resume\' | \'clear\' | \'compact\';',
-  },
-  {
-    name: 'SessionState',
-    declaration: 'export interface SessionState {\n    readonly cursor: number;\n    readonly active: boolean;\n    readonly running: boolean;\n    readonly queue: readonly SessionQueuedItem[] | null;\n    readonly pendingInput: readonly SessionPendingInput[];\n}',
   },
   {
     name: 'SessionStateRequest',
@@ -9988,10 +9892,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type TableValueOf<S extends DomainSpec, N extends keyof S[\'tables\']> = S[\'tables\'][N] extends DomainTableSpec<string, infer V> ? V : never;',
   },
   {
-    name: 'TasteNoteView',
-    declaration: 'export interface TasteNoteView {\n    readonly seq: number;\n    readonly at: number;\n    readonly text: string;\n    readonly from: typeof TASTE_SOURCES[number];\n}',
-  },
-  {
     name: 'TeamId',
     declaration: 'export type TeamId = Branded<\'TeamId\'>;',
   },
@@ -10344,10 +10244,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type TranslationSpec = AnonymousTranslationSpec | PaidTranslationSpec;',
   },
   {
-    name: 'TrendView',
-    declaration: 'export interface TrendView {\n    readonly seq: number;\n    readonly at: number;\n    readonly term: string;\n    readonly note: string;\n}',
-  },
-  {
     name: 'TtsProviderName',
     declaration: 'export type TtsProviderName = \'feiyu\' | \'mac-mini\';',
   },
@@ -10556,28 +10452,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface UpdateTeamTaskRequest {\n    readonly taskId: TeamTaskId;\n    readonly expectedRevision: number;\n    readonly action: TeamTaskAction;\n    readonly subject?: string;\n    readonly description?: string;\n    readonly blockedBy?: readonly TeamTaskId[];\n    readonly writeScopes?: readonly string[];\n    readonly owner?: string;\n}',
   },
   {
-    name: 'UsageView',
-    declaration: 'export interface UsageView {\n    readonly action: CappedAction;\n    readonly used: number;\n    readonly cap: number;\n}',
-  },
-  {
     name: 'UserMessage',
     declaration: 'export interface UserMessage extends MessageBase {\n    readonly role: \'user\';\n}',
-  },
-  {
-    name: 'VerificationView',
-    declaration: 'export interface VerificationView {\n    readonly kind: VerifyKind;\n    readonly message: string;\n    readonly since: number;\n}',
   },
   {
     name: 'VerifiedWebhookDelivery',
     declaration: 'export interface VerifiedWebhookDelivery<K extends string = string> {\n    readonly kind: K;\n    readonly source: WebhookSourceId;\n    readonly deliveryId: WebhookDeliveryId;\n    readonly event: WebhookEventOf<K>;\n    readonly receivedAt: number;\n}',
   },
   {
-    name: 'VerifyKind',
-    declaration: 'export type VerifyKind = typeof VERIFY_KINDS[number];',
-  },
-  {
     name: 'VideoCard',
-    declaration: 'export interface VideoCard {\n    bvid: string;\n    title: string;\n    author: string;\n    authorMid?: number;\n    duration?: string;\n    views?: number;\n    likes?: number;\n    published?: string;\n    desc?: string;\n    reason?: string;\n    graded?: string;\n}',
+    declaration: 'export interface VideoCard {\n    bvid: string;\n    title: string;\n    author: string;\n    authorMid?: number;\n    duration?: string;\n    views?: number;\n    likes?: number;\n    published?: string;\n    desc?: string;\n    reason?: string;\n}',
   },
   {
     name: 'VideoDetail',
@@ -10586,14 +10470,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'VideoPart',
     declaration: 'export interface VideoPart {\n    page: number;\n    cid: number;\n    title: string;\n    duration?: string;\n}',
-  },
-  {
-    name: 'WakeReason',
-    declaration: 'export type WakeReason = typeof WAKE_REASONS[number];',
-  },
-  {
-    name: 'WakeView',
-    declaration: 'export interface WakeView {\n    readonly window: string;\n    readonly at: number | null;\n    readonly state: typeof WAKE_STATES[number];\n    readonly adjusted?: typeof WAKE_ADJUSTMENTS[number];\n}',
   },
   {
     name: 'WatchedRepo',
@@ -10922,10 +10798,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WorkspaceView',
     declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
-  },
-  {
-    name: 'WriteAction',
-    declaration: 'export type WriteAction = typeof WRITE_ACTIONS[number];',
   },
   {
     name: 'WriteOutcome',
