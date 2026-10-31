@@ -266,7 +266,7 @@ export function apply(ctx: Context): void {
 
   reply({
     name: 'up_reply_comment',
-    description: 'Reply to one comment on the creator\'s own video as the creator. At most 140 characters, friendly and short, plain text, no links, no contact details, at most one @. Each comment gets at most one reply.',
+    description: 'Reply to one comment under a video of the channel, speaking as the cat (魔女的猫猫). At most 140 characters, friendly and short, plain text, no links, no contact details, at most one @. Each comment gets at most one reply.',
     parameters: {
       rpid: { type: 'integer', required: true, description: 'Comment id from up_comments.' },
       message: { type: 'string', required: true, description: 'The reply text.' },
@@ -277,7 +277,7 @@ export function apply(ctx: Context): void {
   })
   reply({
     name: 'up_reply_dm',
-    description: 'Reply to the latest private message of one conversation as the creator. At most 100 characters, plain text, no links, no contact details, no @. Only conversations awaiting a reply, with someone the creator follows back.',
+    description: 'Reply to the latest private message of one conversation, speaking as the cat (魔女的猫猫). At most 100 characters, plain text, no links, no contact details, no @. Only conversations awaiting a reply, with someone the cat follows back.',
     parameters: {
       talker: { type: 'integer', required: true, description: 'The other person\'s id from up_dm_sessions.' },
       message: { type: 'string', required: true, description: 'The reply text.' },
