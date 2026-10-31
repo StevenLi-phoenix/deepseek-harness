@@ -203,12 +203,12 @@ Add `--dry-run` to only count. The next Session sees the entries; no restart is 
 
 `lsy-qq` lets people you list talk to the agent on QQ, through the official QQ Open Platform bot (no QQ client, no third-party protocol bridge, no listening port: the service only opens an outbound WebSocket to Tencent). It answers nobody until you list them.
 
-1. Register the bot (you, in a browser): `https://q.qq.com` → sign in by scanning with your phone's QQ → create a bot → copy its AppID and AppSecret. A new bot may run in the platform's sandbox first; add the people and groups you test with there.
-2. Store the credentials in your own terminal (hidden input; only names and modes are printed), then restart:
+1. Create and bind the bot (you, with your phone): run the login as the service user, scan the QR code with your phone's QQ, and confirm. The platform creates the bot for your QQ account and hands the AppID and AppSecret to this process, which writes `LSY_QQ_APP_ID` and `LSY_QQ_APP_SECRET` into `/Users/dsh-runtime/.dsh/.env` (mode 600) and prints only the AppID and your openid (the first entry for `allow.users`):
    ```sh
-   cd / && sudo -u dsh-runtime /bin/zsh -fc 'umask 077; f=/Users/dsh-runtime/.dsh/.env; read -r "i?QQ AppID: "; read -rs "v?QQ AppSecret (hidden): "; print; [[ -n $i && -n $v ]] || exit 1; { print -r -- "LSY_QQ_APP_ID=$i"; print -r -- "LSY_QQ_APP_SECRET=$v"; /usr/bin/grep -v -e "^LSY_QQ_APP_ID=" -e "^LSY_QQ_APP_SECRET=" $f 2>/dev/null; } >| $f.new && /bin/mv -f $f.new $f && /bin/ls -l $f && /usr/bin/cut -d= -f1 $f'
-   sudo -n /bin/launchctl kickstart -k system/app.lishuyu.dsh-events
+   ssh -t mini 'sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node /Users/Shared/lsy-dsh/current/lsy/deploy/qq-login.mjs --qr-png /Users/dsh-runtime/qq-login.png'
    ```
+   The code is replaced when it expires (up to three codes, ten minutes in all; `--timeout-min` changes that). To use a bot you already made at `q.qq.com` instead, put its AppID and AppSecret in `.env` yourself.
+2. Restart so the service reads `.env`: `sudo -n /bin/launchctl kickstart -k system/app.lishuyu.dsh-events`.
 3. Check the log: `grep 'lsy-qq' /Users/dsh-runtime/logs/stdout.log | tail` shows `credentials found` and `connected to the QQ gateway`. Without both variables it says `are not both set` and stays offline.
 4. Write to the bot from QQ. The first message is dropped (the log shows `dropped a c2c message from user <openid>, not on allow.users`) and WeChat gets one note with the openid. Add it to the owner layer, which reloads live (no restart):
    ```yaml

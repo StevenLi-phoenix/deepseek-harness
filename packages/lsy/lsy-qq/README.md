@@ -33,7 +33,13 @@ Choose it when family, friends, or a group should be able to chat with the agent
 
 ### Minimal configuration
 
-Register a bot once, at `q.qq.com` (QQ Open Platform → create a bot, sign in by scanning with your phone's QQ). Put its AppID and AppSecret in `<DSH_HOME>/.env` as `LSY_QQ_APP_ID` and `LSY_QQ_APP_SECRET`, typed in your own terminal, and restart the service. Then mount the channel and list who may talk to it; an openid is what QQ calls a person or group to this bot, and it is not a QQ number:
+Create the bot once with the login command: run it as the service user, scan its QR code with your phone's QQ, and confirm. The platform creates the bot for your QQ account and hands the AppID and AppSecret to the command, which writes `LSY_QQ_APP_ID` and `LSY_QQ_APP_SECRET` into `<DSH_HOME>/.env` (mode 600) and prints only the AppID and your own openid, the first entry for `allow.users`. Restart the service afterwards, because `.env` is read at launch. `--qr-png <file>` also saves the code as an image (mode 600), and `--timeout-min` sets how long to wait. A bot you registered at `q.qq.com` yourself works too: put its AppID and AppSecret in `.env` by hand.
+
+```sh
+sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node /Users/Shared/lsy-dsh/current/lsy/deploy/qq-login.mjs
+```
+
+Then mount the channel and list who may talk to it; an openid is what QQ calls a person or group to this bot, and it is not a QQ number:
 
 ```yaml
 - insert:
@@ -77,6 +83,8 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 
 The channel talks to QQ only through `QqTransport` ([`src/transport.ts`](src/transport.ts)); the default implementation wraps Tencent's official SDK `@tencent-connect/qqbot-nodejs` (pinned, MIT), which fetches and refreshes the app token, holds the gateway WebSocket (heartbeat, resume, reconnect), and numbers the replies of one message. The channel asks the gateway for the group-and-private-message intent only, because the SDK's default adds guild intents a personal bot may not hold, and QQ closes such a connection with 4914 or 4915. Guild and guild-DM events are discarded at the boundary. A connection that fails (bad credentials, a fatal close) is retried with a delay doubling from 2 s to 2 min, reset after a minute of stable service; SDK log lines are kept at debug and scrubbed of the secret and bearer tokens. A test double mounted as `lsyQqTransport` replaces the SDK in tests.
 
+The login ([`src/login.ts`](src/login.ts), run by [`lsy/deploy/qq-login.mjs`](../../../lsy/deploy/qq-login.mjs)) follows the bind flow of Tencent's `@tencent-connect/qqbot-connector` as it can be read from the published package, written fresh because that package is not licensed for redistribution: `create_bind_task` with a fresh 32-byte key, the QR page `q.qq.com/qqbot/openclaw/connect.html?task_id=…`, and `poll_bind_result` until the platform returns the AppID, the AppSecret encrypted with that key (AES-256-GCM), and the scanner's openid. An expired code is replaced (three at most). The command writes the secret straight into the `.env` file and never prints it.
+
 Each inbound message is checked in this order: the allowlist (a group message needs its `group_openid` in `allow.groups`, a private one its sender in `allow.users`), then the per-peer rate limit. It then opens a reply window (the message id, its arrival time, replies used) in the `lsy_qq` storage domain, handles `/new` and `/help` itself, and otherwise prompts the peer's chat Session with `sessionController.prompt()` in `steer` mode: a message sent while the agent works joins the running turn. The Session is found by peer key (`c2c:<user_openid>` or `group:<group_openid>`) and reused while `resolveAgent()` succeeds; a missing one is replaced by a Session created with the configured preset, titled with the peer's short id, and claimed with `ctx.ownerRelay` as channel `qq` before its first prompt. Every remembered Session is claimed again when the channel registers.
 
 The relay hands each turn's final answer (nothing for `NO_REPLY`) to the channel, which splits it and sends each part quoting the peer's latest message while its window is open and fewer than five replies went out, otherwise as a proactive message. A part QQ refuses throws, and the relay falls back to `ctx.lsyNotifier` with the label `a QQ chat Session (its answer could not go out on QQ)`. All sends and storage writes run one at a time.
@@ -85,6 +93,7 @@ The relay hands each turn's final answer (nothing for `NO_REPLY`) to the channel
 |---|---|
 | [`src/index.ts`](src/index.ts) | Service, configuration, connection loop, allowlist, chat Sessions, the `qq` relay channel, delivery |
 | [`src/transport.ts`](src/transport.ts) | `QqTransport`, the event normalizer, and the default transport over the official SDK |
+| [`src/login.ts`](src/login.ts) | QR login against the platform's bind service, the QR PNG, the `.env` writer, and the login command |
 | [`src/text.ts`](src/text.ts) | Inbound framing and spoof protection, reply splitting, command replies |
 | [`src/storage.ts`](src/storage.ts) | Storage-domain tables for chat Sessions, reply windows, and reported unknown senders |
 

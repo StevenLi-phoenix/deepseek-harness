@@ -24,6 +24,9 @@
       "path": "../lsy-event-bus"
     },
     {
+      "path": "../../util/home-paths"
+    },
+    {
       "path": "../owner-relay"
     },
     {

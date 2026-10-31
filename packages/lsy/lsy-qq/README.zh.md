@@ -33,7 +33,13 @@ kind: "package-reference"
 
 ### 最小配置
 
-先在 `q.qq.com` 注册一个机器人（QQ 开放平台 → 创建机器人，用手机 QQ 扫码登录）。把它的 AppID 和 AppSecret 在你自己的终端里写进 `<DSH_HOME>/.env`，变量名为 `LSY_QQ_APP_ID` 和 `LSY_QQ_APP_SECRET`，然后重启服务。再挂载通道并列出允许的人；openid 是 QQ 对这个机器人称呼某个人或某个群的编号，不是 QQ 号：
+用登录命令创建一次机器人：以服务用户身份运行，用手机 QQ 扫描它的二维码并确认。平台会为你的 QQ 号创建机器人，并把 AppID 和 AppSecret 交给这个命令；命令把 `LSY_QQ_APP_ID` 和 `LSY_QQ_APP_SECRET` 写进 `<DSH_HOME>/.env`（权限 600），只打印 AppID 和你自己的 openid，后者就是 `allow.users` 的第一项。之后重启服务，因为 `.env` 在启动时读取。`--qr-png <file>` 还会把二维码存成图片（权限 600），`--timeout-min` 设置等待多久。你自己在 `q.qq.com` 注册的机器人也可以用：手动把它的 AppID 和 AppSecret 写进 `.env`。
+
+```sh
+sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node /Users/Shared/lsy-dsh/current/lsy/deploy/qq-login.mjs
+```
+
+然后挂载通道并列出允许的人；openid 是 QQ 对这个机器人称呼某个人或某个群的编号，不是 QQ 号：
 
 ```yaml
 - insert:
@@ -77,6 +83,8 @@ kind: "package-reference"
 
 通道只通过 `QqTransport`（[`src/transport.ts`](src/transport.ts)）和 QQ 通信；默认实现封装腾讯官方 SDK `@tencent-connect/qqbot-nodejs`（固定版本，MIT），由它获取并刷新 app token、维持网关 WebSocket（心跳、resume、重连），并给同一条消息的回复编号。通道只向网关申请群聊和私聊消息这一个 intent，因为 SDK 默认还会加上个人机器人可能没有的频道 intent，QQ 会以 4914 或 4915 关闭这样的连接；频道和频道私信事件在边界处丢弃。失败的连接（凭据错误、致命关闭）按 2 秒到 2 分钟翻倍的间隔重试，稳定运行一分钟后重置；SDK 的日志只记在 debug 级别，并抹掉密钥和 bearer token。测试里用挂在 `lsyQqTransport` 的替身代替 SDK。
 
+登录（[`src/login.ts`](src/login.ts)，由 [`lsy/deploy/qq-login.mjs`](../../../lsy/deploy/qq-login.mjs) 运行）沿用腾讯 `@tencent-connect/qqbot-connector` 已发布包里可读到的绑定流程，但代码是重新写的，因为那个包不允许再分发：用新的 32 字节密钥调用 `create_bind_task`，二维码页面是 `q.qq.com/qqbot/openclaw/connect.html?task_id=…`，然后轮询 `poll_bind_result`，直到平台返回 AppID、用该密钥加密的 AppSecret（AES-256-GCM）和扫码用户的 openid。二维码过期会被替换（最多三张）。命令把密钥直接写进 `.env` 文件，从不打印。
+
 每条入站消息按以下顺序检查：先是名单（群消息要求 `group_openid` 在 `allow.groups` 里，私聊要求发信人在 `allow.users` 里），再是每个对象的频率限制。通过后它在 `lsy_qq` storage domain 里打开一个回复窗口（消息 id、到达时间、已用回复数），自己处理 `/new` 和 `/help`，其余消息用 `sessionController.prompt()` 以 `steer` 模式发给该对象的对话 Session：agent 工作期间发来的消息会并入正在进行的一轮。Session 按对象键（`c2c:<user_openid>` 或 `group:<group_openid>`）查找，`resolveAgent()` 成功就复用；缺失的会换成按配置 preset 新建的 Session，标题用对象的短 id，并在第一次 prompt 之前以 `qq` 通道向 `ctx.ownerRelay` 认领。通道注册时，所有记得的 Session 会被再次认领。
 
 relay 把每一轮的最终回答（`NO_REPLY` 不发）交给通道，通道把它拆开逐条发送：对象最近那条消息的窗口还开着、回复少于五条时引用该消息，否则作为主动消息发出。QQ 拒收的部分会抛错，relay 随后退回 `ctx.lsyNotifier`，标签是 `a QQ chat Session (its answer could not go out on QQ)`。所有发送和存储写入一次只做一件。
@@ -85,6 +93,7 @@ relay 把每一轮的最终回答（`NO_REPLY` 不发）交给通道，通道把
 |---|---|
 | [`src/index.ts`](src/index.ts) | 服务、配置、连接循环、名单、对话 Session、`qq` relay 通道、投递 |
 | [`src/transport.ts`](src/transport.ts) | `QqTransport`、事件规范化，以及基于官方 SDK 的默认传输 |
+| [`src/login.ts`](src/login.ts) | 对平台绑定服务的扫码登录、二维码 PNG、`.env` 写入器和登录命令 |
 | [`src/text.ts`](src/text.ts) | 入站消息加框与防伪造、回复拆分、命令回复 |
 | [`src/storage.ts`](src/storage.ts) | 对话 Session、回复窗口和已通知的陌生发信人的 storage-domain 表 |
 

@@ -19,6 +19,7 @@ import { qqDomain } from './storage.ts'
 import { ATTACHMENT_NOTE, FORWARD_FAILED_PREFIX, frameInbound, HELP_REPLY, NEW_CHAT_REPLY, shortId, splitText } from './text.ts'
 import { createSdkTransport, type QqInbound, type QqTarget, type QqTransport } from './transport.ts'
 
+export * from './login.ts'
 export * from './text.ts'
 export * from './transport.ts'
 export type * from './storage.ts'
