@@ -154,7 +154,7 @@ describe('memory-admin feedback', () => {
 })
 
 describe('feedback mode of the plugin', () => {
-  async function harness(feedbackScope: Memory.Config['feedbackScope'], seed: (store: FeedbackStore, memory: MemoryStore) => Promise<void>) {
+  async function harness(feedbackScope: Memory.FeedbackScope, seed: (store: FeedbackStore, memory: MemoryStore) => Promise<void>) {
     const dir = await tmp()
     const file = join(dir, 'memory.jsonl')
     await seed(new FeedbackStore(join(dir, 'feedback.jsonl')), new MemoryStore(file))
