@@ -2,7 +2,7 @@
 
 English | [中文](fork.zh.md)
 
-The fork-local services behind the event-driven agent: [`@deepseek-ai/dsh-fork-event-bus`](../../packages/fork/fork-event-bus/README.md) routes sensor events to notifications or unattended Sessions, [`@deepseek-ai/dsh-fork-github-sensor`](../../packages/fork/fork-github-sensor/README.md) polls GitHub, [`@deepseek-ai/dsh-fork-wechat`](../../packages/fork/fork-wechat/README.md) provides the `forkNotifier` contract over WeChat, and [`@deepseek-ai/dsh-bili`](../../packages/fork/bili/README.md) is the agent's own Bilibili account. Behavior, configuration, and limitations are on each package README; the [upstream ledger](../../packages/fork/UPSTREAM.md) records how the fork tracks upstream.
+The fork-local services behind the event-driven agent: [`@deepseek-ai/dsh-fork-event-bus`](../../packages/fork/fork-event-bus/README.md) routes sensor events to notifications or unattended Sessions, [`@deepseek-ai/dsh-fork-github-sensor`](../../packages/fork/fork-github-sensor/README.md) polls GitHub, [`@deepseek-ai/dsh-fork-wechat`](../../packages/fork/fork-wechat/README.md) provides the `forkNotifier` contract over WeChat, [`@deepseek-ai/dsh-fork-qq`](../../packages/fork/fork-qq/README.md) lets the people the owner lists talk to the agent on QQ, and [`@deepseek-ai/dsh-bili`](../../packages/fork/bili/README.md) is the agent's own Bilibili account. Behavior, configuration, and limitations are on each package README; the [upstream ledger](../../packages/fork/UPSTREAM.md) records how the fork tracks upstream.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -420,6 +420,24 @@ ownsSession?(sessionId: string): boolean
 ```
 
 Source: [`packages/fork/fork-event-bus/src/types.ts`](../../packages/fork/fork-event-bus/src/types.ts)
+
+<a id="ctxlsyqq--qqchannel"></a>
+
+### `ctx.forkQq` — `QqChannel`
+
+QQ channel. Connects the official bot to the QQ Open Platform, answers only the openids in `allow`, gives each private chat and each group its own chat Session, and delivers each turn's final answer that `ctx.ownerRelay` hands its `qq` channel. QQ lets a bot reply to a message within a window (about an hour in private chats, minutes in groups) and at most five times; later answers go out as proactive messages, and an answer QQ refuses falls back to `ctx.forkNotifier` through the relay.
+
+```ts cordis-catalog
+/**
+ * Whether this channel created a Session: true for every chat Session it remembers, all of which
+ * it claims with `ctx.ownerRelay`.
+ * @param sessionId - Session to check.
+ * @returns true for the current and earlier chat Sessions of every peer.
+ */
+ownsSession(sessionId: string): boolean
+```
+
+Source: [`packages/fork/fork-qq/src/index.ts`](../../packages/fork/fork-qq/src/index.ts)
 
 <a id="ctxownerrelay--ownerrelay"></a>
 

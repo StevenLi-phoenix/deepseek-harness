@@ -156,6 +156,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   forkGithubSensor: 'fork.md',
   forkNotifier: 'fork.md',
   ownerRelay: 'fork.md',
+  forkQq: 'fork.md',
   bili: 'fork.md',
   workspaceRegistry: 'workspace.md',
   workspaceController: 'workspace.md',

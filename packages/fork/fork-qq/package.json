@@ -57,6 +57,7 @@
     "@deepseek-ai/dsh-storage": "workspace:*",
     "@deepseek-ai/dsh-storage-domain": "workspace:*",
     "@types/ws": "^8.18.1",
-    "ws": "^8.21.3"
+    "ws": "^8.21.3",
+    "yaml": "^2.9.0"
   }
 }

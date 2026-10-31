@@ -225,6 +225,7 @@ export class QqChannel extends Service {
    * Whether this channel created a Session: true for every chat Session it remembers, all of which
    * it claims with `ctx.ownerRelay`.
    * @param sessionId - Session to check.
+   * @returns true for the current and earlier chat Sessions of every peer.
    */
   ownsSession(sessionId: string): boolean {
     return this.domain?.table('sessions').get(sessionId) !== undefined
