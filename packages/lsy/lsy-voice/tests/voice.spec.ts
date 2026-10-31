@@ -50,7 +50,7 @@ async function mount(overrides: Record<string, unknown> = {}, keys: Record<strin
 
 describe('defaults', () => {
   it('speaks through the local Mac mini service first and falls back to feiyu, with transcription off', () => {
-    const config = Config({})
+    const config = Config({} as never)
     expect(config.tts).toMatchObject({ enabled: true, provider: 'mac-mini', fallback: 'feiyu', format: 'mp3', maxChars: 200 })
     expect(config.tts.macMini).toMatchObject({ baseUrl: 'http://127.0.0.1:8098', speaker: 'vivian', language: 'Chinese', timeoutMs: 240_000 })
     expect(config.tts.feiyu).toMatchObject({ baseUrl: 'http://100.117.175.117:19880', apiKeyEnv: 'LSY_FEIYU_API_KEY', voice: 'feiyu', style: 'cute', jobTimeoutMs: 180_000 })
