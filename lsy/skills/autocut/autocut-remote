@@ -96,6 +96,10 @@ def main():
     p.add_argument("path")
     p.add_argument("--dest", default=DEFAULT_DEST)
 
+    p = sub.add_parser("preview", help="重新压一份更小的预览（微信上传超时时用）：preview JOB --max-mib 4")
+    p.add_argument("job")
+    p.add_argument("--max-mib", type=float, default=4.0)
+
     p = sub.add_parser("confirm", help="用户明确同意成片后调用（记录用户原话）")
     p.add_argument("job")
     p.add_argument("--quote", required=True, help="用户确认的原话")
@@ -191,6 +195,8 @@ def main():
         except (urllib.error.URLError, OSError) as e:
             out({"ok": False, "error": {"code": "fetch_failed", "message": str(e), "fix": "确认 path 是 job 里的相对路径（先 status 看 files）"}})
         out({"ok": True, "path": dest, "bytes": n, "next": [{"cmd": "wechat_send_file path=%s" % dest, "why": "发给用户（≤25 MiB）"}]})
+    if a.cmd == "preview":
+        out(call("POST", "/v1/jobs/%s/preview" % j, {"max_mib": a.max_mib}, timeout=900))
     if a.cmd == "confirm":
         out(call("POST", "/v1/jobs/%s/confirm" % j, {"quote": a.quote}))
     if a.cmd == "reject":

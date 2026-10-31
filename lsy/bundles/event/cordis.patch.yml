@@ -234,6 +234,9 @@
     - id: lsy-wechat
       name: '@deepseek-ai/dsh-lsy-wechat'
       config:
+        # The Mac mini's upload to the WeChat CDN measured about 65 KB/s (2026-10-31): the default 60 s
+        # timeout failed a 10 MiB and a 22 MiB video. 300 s fits the 8 MiB previews autocut sends.
+        mediaTimeoutMs: 300000
         chat:
           workspacePath: /Users/dsh-runtime/me
           # A message another Session passes the main agent (Bilibili, Claude Code) starts a turn marked as
