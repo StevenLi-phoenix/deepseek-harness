@@ -74,6 +74,6 @@ describe('cc_send in the real agent loop', () => {
     expect(ran).toEqual(['schedule_create'])
     await new Promise((resolve) => { setTimeout(resolve, 20) })
     expect(sent).toHaveLength(1)
-    expect(sent[0]!.body).toContain('schedule_create（回合来源：peer:bili）')
+    expect(sent[0]!.body).toContain('定时提醒（schedule_create）')
   })
 })

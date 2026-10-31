@@ -70,6 +70,8 @@ export async function runImportCli(io: ImportCliIo = {}): Promise<number> {
 const ADMIN_USAGE = [
   'usage: memory-admin <command> [--file <memory.jsonl>]',
   '  ids                             id, category, source of every entry and every waiting write (no text)',
+  '  recent [--limit <n>]            newest changes first (waiting writes on top) with the opening of the text: find the id a notice meant',
+  '  show <id>                       one entry in full, with its history',
   '  approve <id>...                 keep waiting writes',
   '  discard <id>...                 drop waiting writes',
   '  revert <id>...                  undo the latest change of entries (a waiting write is dropped)',
@@ -78,8 +80,18 @@ const ADMIN_USAGE = [
   '  forget --purge <id>...          erase entries and every trace in the history, snapshots, and waiting writes',
 ].join('\n')
 
+/** Characters of an entry text `memory-admin recent` shows. */
+const RECENT_TEXT_CHARS = 60
+
+const oneLine = (text: string, chars: number): string => {
+  const flat = text.replaceAll(/\s+/gu, ' ').trim()
+  return flat.length <= chars ? flat : `${flat.slice(0, chars)}…`
+}
+
 /**
- * Run the admin tool: review and undo memory changes. It prints ids, categories, and counts, never entry text.
+ * Run the admin tool: review and undo memory changes. `ids` prints ids, categories, and counts without text;
+ * `recent` and `show` print entry text, because the owner runs this tool over SSH (or has Claude Code run it) to
+ * find the entry a notice meant.
  * @param io - arguments, environment, and streams.
  * @returns the process exit code.
  */
@@ -92,12 +104,14 @@ export async function runAdminCli(io: ImportCliIo = {}): Promise<number> {
   let since: string | undefined
   let dryRun = false
   let purge = false
+  let limit = 10
   const words: string[] = []
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--file' && argv[index + 1] !== undefined) file = argv[++index]
     else if (arg === '--session' && argv[index + 1] !== undefined) session = argv[++index]
     else if (arg === '--since' && argv[index + 1] !== undefined) since = argv[++index]
+    else if (arg === '--limit' && /^\d+$/u.test(argv[index + 1] ?? '')) limit = Number(argv[++index])
     else if (arg === '--dry-run') dryRun = true
     else if (arg === '--purge') purge = true
     else if (arg !== undefined && !arg.startsWith('-')) words.push(arg)
@@ -115,6 +129,27 @@ export async function runAdminCli(io: ImportCliIo = {}): Promise<number> {
         for (const entry of index.entries) out(`${entry.id} ${entry.category} ${entry.source}`)
         for (const entry of index.pending) out(`${entry.id} ${entry.category} pending-${entry.op}`)
         out(`memory-admin: ${String(index.entries.length)} entries, ${String(index.pending.length)} waiting`)
+        return 0
+      }
+      case 'recent': {
+        const lines = (await store.listPending()).toReversed().map(entry => `waiting ${entry.op} ${entry.id} ${entry.category} ${entry.source ?? 'legacy'} ${entry.date} ${oneLine(entry.text, RECENT_TEXT_CHARS)}`)
+        for (const record of (await store.history()).toReversed()) {
+          const entry = record.after ?? record.before
+          lines.push(`${record.at} ${record.op} ${record.id} ${entry?.category ?? '-'} ${record.source ?? 'legacy'} ${record.origin ?? '-'} ${oneLine(entry?.text ?? '', RECENT_TEXT_CHARS)}`)
+        }
+        for (const line of lines.slice(0, limit)) out(line)
+        return 0
+      }
+      case 'show': {
+        const [id] = ids
+        if (id === undefined) { err(ADMIN_USAGE); return 2 }
+        const entry = (await store.list()).find(candidate => candidate.id === id)
+        const waiting = (await store.listPending()).find(candidate => candidate.id === id)
+        const found = entry ?? waiting
+        if (found === undefined) { err(`memory-admin: no entry or waiting write under id ${id}`); return 1 }
+        out(`${found.id} ${found.category} ${found.source ?? 'legacy'} ${found.date}${waiting !== undefined && entry === undefined ? ' (waiting)' : ''}`)
+        out(found.text)
+        for (const record of (await store.history()).filter(candidate => candidate.id === id)) out(`${record.at} ${record.op} ${record.source ?? 'legacy'} ${record.origin ?? '-'} session ${record.session ?? '-'}`)
         return 0
       }
       case 'approve':

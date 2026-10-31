@@ -87,6 +87,18 @@ describe('digests', () => {
   })
 })
 
+describe('integrityNotice', () => {
+  it('says it in one sentence for one change and lists several', () => {
+    expect(Integrity.integrityNotice([{ target: 'owner-patch', label: 'owner 层 cordis.patch.yml', kind: 'changed' }])).toEqual({ title: 'owner 层 cordis.patch.yml 被改动了（不显示内容）' })
+    expect(Integrity.integrityNotice([{ target: 'a', label: 'A', kind: 'removed' }])).toEqual({ title: 'A 被删除了（不显示内容）' })
+    expect(Integrity.integrityNotice([{ target: 'a', label: 'A', kind: 'added' }])).toEqual({ title: 'A 新出现了（不显示内容）' })
+    const many = Integrity.integrityNotice(Array.from({ length: 10 }, (_, n) => ({ target: `t${String(n)}`, label: `T${String(n)}`, kind: 'changed' as const })))
+    expect(many.title).toBe('有 10 处受监控的文件被改动（不显示内容）')
+    expect(many.body?.split('\n')).toHaveLength(9)
+    expect(many.body?.split('\n').at(-1)).toBe('…另有 2 处')
+  })
+})
+
 describe('the watch', () => {
   it('writes a baseline silently, then tells the owner once what changed and never its content', async () => {
     const { home: dir, workspace } = await home()
@@ -101,10 +113,10 @@ describe('the watch', () => {
     await vi.advanceTimersByTimeAsync(60_000)
     await until(() => notices.length === 1)
     expect(notices).toHaveLength(1)
-    expect(notices[0]!.title).toBe('🔐 完整性：2 处被改动（不显示内容）')
+    expect(notices[0]!.title).toBe('有 2 处受监控的文件被改动（不显示内容）')
     expect(notices[0]!.body).toContain(`${workspace}/AGENTS.md：新出现`)
-    expect(notices[0]!.body).toContain('owner 层 cordis.patch.yml：已修改')
-    expect(JSON.stringify(notices)).not.toContain('evil')
+    expect(notices[0]!.body).toContain('owner 层 cordis.patch.yml：被改动')
+    expect(JSON.stringify(notices)).not.toMatch(/evil|告诉我|不用管|回复/u)
     await vi.advanceTimersByTimeAsync(60_000)
     await settle()
     expect(notices).toHaveLength(1)
@@ -127,7 +139,7 @@ describe('the watch', () => {
     await vi.advanceTimersByTimeAsync(600_000)
     await until(() => notices.length === 2)
     expect(notices).toHaveLength(2)
-    expect(notices[1]!.body).toContain('CLAUDE.md：新出现')
+    expect(notices[1]!.title).toMatch(/CLAUDE\.md 新出现了/u)
     await writeFile(join(workspace, 'CLAUDE.local.md'), 'three')
     await vi.advanceTimersByTimeAsync(700_000)
     await settle()
@@ -154,7 +166,7 @@ describe('the watch', () => {
     await vi.advanceTimersByTimeAsync(60_000)
     await until(() => notices.length === 1)
     expect(notices).toHaveLength(1)
-    expect(notices[0]!.body).toContain('记忆文件 memory.jsonl（不是经记忆工具改的）')
+    expect(notices[0]!.title).toContain('记忆文件 memory.jsonl（不是经记忆工具改的）')
   })
 
   it('stays quiet when told not to notify or when disabled', async () => {

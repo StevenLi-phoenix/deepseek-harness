@@ -70,7 +70,7 @@ This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 ## Further Exploration
 
 - [Owner memory](../fork-memory/README.md) — holds protected writes of turns that are not clean
-- [WeChat channel](../fork-wechat/README.md) — mints the untrusted request id and runs the owner's reply words
+- [WeChat channel](../fork-wechat/README.md) — mints the untrusted request id
 - [Claude Code bridge](../fork-cc-bridge/README.md) — the tools this package guards
 
 -----

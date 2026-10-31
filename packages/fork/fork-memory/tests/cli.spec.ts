@@ -83,6 +83,28 @@ describe('memory-admin', () => {
     expect(out.join('\n')).not.toContain('private')
   })
 
+  it('lists recent changes newest first, with the text opening, to find the id of a notice', async () => {
+    const { dir, kept, planted, waiting } = await seeded()
+    const { code, out } = await admin(['recent', '--limit', '5'], dir)
+    expect(code).toBe(0)
+    expect(out[0]).toMatch(new RegExp(`^waiting add ${waiting.id} preferences tainted-turn .*waiting private text$`, 'u'))
+    expect(out[1]).toMatch(new RegExp(`^\\d{4}-\\d\\d-\\d\\dT\\S+ add ${planted.id} identity tainted-turn .*planted secret text$`, 'u'))
+    expect(out[2]).toMatch(new RegExp(`^\\d{4}-\\d\\d-\\d\\dT\\S+ add ${kept.id} instructions owner-turn .*private rule text$`, 'u'))
+    expect(out).toHaveLength(3)
+    expect((await admin(['recent', '--limit', '1'], dir)).out).toHaveLength(1)
+  })
+
+  it('shows one entry in full with its history', async () => {
+    const { dir, kept } = await seeded()
+    const { code, out } = await admin(['show', kept.id], dir)
+    expect(code).toBe(0)
+    expect(out[0]).toBe(`${kept.id} instructions owner-turn ${kept.date}`)
+    expect(out[1]).toBe('private rule text')
+    expect(out.slice(2).join('\n')).toMatch(/add owner-turn/u)
+    expect((await admin(['show', 'ffffff'], dir)).code).toBe(1)
+    expect((await admin(['show'], dir)).code).toBe(2)
+  })
+
   it('approves, discards, and reverts by id', async () => {
     const { dir, store, planted, waiting } = await seeded()
     expect((await admin(['approve', waiting.id], dir)).code).toBe(0)
