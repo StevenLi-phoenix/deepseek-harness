@@ -571,6 +571,7 @@
     { "path": "./packages/lsy/lsy-tool-watch" },
     { "path": "./packages/lsy/lsy-tool-wechat" },
     { "path": "./packages/lsy/lsy-voice" },
+    { "path": "./packages/lsy/lsy-tool-up" },
     { "path": "./packages/lsy/lsy-tool-voice" },
     { "path": "./packages/lsy/lsy-github-sensor" },
     { "path": "./packages/lsy/lsy-memory" },

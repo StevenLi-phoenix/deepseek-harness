@@ -14123,6 +14123,30 @@ importers:
         specifier: workspace:*
         version: link:../../util/values
 
+  packages/lsy/lsy-tool-up:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-credentials':
+        specifier: workspace:*
+        version: link:../../credentials/credentials
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../llm/llm
+      '@deepseek-ai/dsh-tool-executor-native':
+        specifier: workspace:*
+        version: link:../../core/tool-executor-native
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../core/tools
+      '@deepseek-ai/dsh-util-values':
+        specifier: workspace:*
+        version: link:../../util/values
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
+
   packages/lsy/lsy-tool-voice:
     devDependencies:
       '@deepseek-ai/cordis':

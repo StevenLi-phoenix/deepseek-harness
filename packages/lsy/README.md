@@ -36,6 +36,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`lsy-sysmon/`](lsy-sysmon/README.md) | Settings section with the Host machine's CPU, memory, power, temperature, and disk usage per volume |
 | [`lsy-taint/`](lsy-taint/README.md) | Turn origin: who started the open turn and whether strangers' words reached it; Claude Code messaging only in the owner's own turns, reminders and watches from other turns reported |
 | [`lsy-tool-monitor/`](lsy-tool-monitor/README.md) | `monitor_start`, `monitor_stop`, `monitor_list` tools: a command's output lines come back to the same Session |
+| [`lsy-tool-up/`](lsy-tool-up/README.md) | `up_*` tools: the agent reads the creator account's comments, private messages and videos and asks bili-svc's Reply Gate for replies; the answer is `sent`, `held`, or `blocked` |
 | [`lsy-tool-voice/`](lsy-tool-voice/README.md) | `speak` tool: the agent turns text into speech and sends the audio to the owner on WeChat |
 | [`lsy-cc-bridge/`](lsy-cc-bridge/README.md) | `cc_list_sessions`, `cc_send`, `cc_start`, `cc_stop` tools: work with Claude Code sessions of the agent's own account |
 | [`lsy-tool-qq/`](lsy-tool-qq/README.md) | `qq_groups`, `qq_digest`, `qq_recent`, `qq_search` tools: the agent reads what the QQ observer recorded and digested |

@@ -384,6 +384,7 @@ flowchart TD
     pkg_lsy_taint["lsy-taint"]
     pkg_lsy_tool_monitor["lsy-tool-monitor"]
     pkg_lsy_tool_qq["lsy-tool-qq"]
+    pkg_lsy_tool_up["lsy-tool-up"]
     pkg_lsy_tool_voice["lsy-tool-voice"]
     pkg_lsy_tool_watch["lsy-tool-watch"]
     pkg_lsy_tool_wechat["lsy-tool-wechat"]
@@ -1083,6 +1084,9 @@ flowchart TD
   pkg_lsy_taint --> pkg_lsy_event_bus
   pkg_lsy_taint --> pkg_session
   pkg_lsy_taint --> pkg_tools
+  pkg_lsy_tool_up --> pkg_credentials
+  pkg_lsy_tool_up --> pkg_tools
+  pkg_lsy_tool_up --> pkg_util_values
   pkg_lsy_tool_voice --> pkg_lsy_event_bus
   pkg_lsy_tool_voice --> pkg_lsy_voice
   pkg_lsy_tool_voice --> pkg_tools
@@ -1927,6 +1931,7 @@ flowchart TD
 | [`tool-lsp`](../packages/lsp/tool-lsp) | `lsp` | [`llm`](../packages/llm/llm), [`lsp`](../packages/lsp/lsp), [`system-prompt`](../packages/core/system-prompt), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools), [`working-directory`](../packages/session/working-directory) |
 | [`lsy-cc-bridge`](../packages/lsy/lsy-cc-bridge) | `lsy` | [`agent`](../packages/core/agent), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`tools`](../packages/core/tools) |
 | [`lsy-taint`](../packages/lsy/lsy-taint) | `lsy` | [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`session`](../packages/core/session), [`tools`](../packages/core/tools) |
+| [`lsy-tool-up`](../packages/lsy/lsy-tool-up) | `lsy` | [`credentials`](../packages/credentials/credentials), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
 | [`lsy-tool-voice`](../packages/lsy/lsy-tool-voice) | `lsy` | [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-voice`](../packages/lsy/lsy-voice), [`tools`](../packages/core/tools) |
 | [`lsy-tool-watch`](../packages/lsy/lsy-tool-watch) | `lsy` | [`agent`](../packages/core/agent), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-github-sensor`](../packages/lsy/lsy-github-sensor), [`tools`](../packages/core/tools) |
 | [`tool-bili`](../packages/lsy/tool-bili) | `lsy` | [`bili`](../packages/lsy/bili), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |

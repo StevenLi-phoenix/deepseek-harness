@@ -30,6 +30,7 @@ export const PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackagePolic
   'packages/lsy/lsy-wechat': { category: 'optional', reason: 'Fork-local WeChat channel; requires a QR-bound iLink bot account.' },
   'packages/lsy/lsy-tool-wechat': { category: 'optional', reason: 'Fork-local WeChat file tool mounted by the event profile preset.' },
   'packages/lsy/lsy-voice': { category: 'optional', reason: 'Fork-local voice service (speech and transcription through the owner\'s own services) mounted by the event profile bundle.' },
+  'packages/lsy/lsy-tool-up': { category: 'optional', reason: 'Fork-local up_* tools for the creator account (bili-svc) mounted by the event profile\'s up preset.' },
   'packages/lsy/lsy-tool-voice': { category: 'optional', reason: 'Fork-local speak tool mounted by the event profile preset.' },
   'packages/lsy/lsy-tool-watch': { category: 'optional', reason: 'Fork-local watch tools mounted by the event profile preset.' },
   'packages/lsy/lsy-github-sensor': { category: 'optional', reason: 'Fork-local sensor; requires configured repositories and tokens.' },

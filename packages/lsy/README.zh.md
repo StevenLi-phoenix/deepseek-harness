@@ -36,6 +36,7 @@ kind: "package-group"
 | [`lsy-sysmon/`](lsy-sysmon/README.zh.md) | 设置里显示 Host 机器 CPU、内存、功耗、温度与各卷磁盘用量的分区 |
 | [`lsy-taint/`](lsy-taint/README.zh.md) | 回合来源：当前回合由谁发起、陌生人的话有没有进来；只在 owner 自己的回合里联系 Claude Code，其他回合建的提醒和监控要上报 |
 | [`lsy-tool-monitor/`](lsy-tool-monitor/README.zh.md) | `monitor_start`、`monitor_stop`、`monitor_list` 工具：命令输出的每一行都回到同一个 Session |
+| [`lsy-tool-up/`](lsy-tool-up/README.zh.md) | `up_*` 工具：agent 读取创作者号的评论、私信和稿件，并向 bili-svc 回复闸门申请回复；答案只有 `sent`、`held`、`blocked` |
 | [`lsy-tool-voice/`](lsy-tool-voice/README.zh.md) | `speak` 工具：agent 把文字合成语音，并把音频发给微信上的 owner |
 | [`lsy-cc-bridge/`](lsy-cc-bridge/README.zh.md) | `cc_list_sessions`、`cc_send`、`cc_start`、`cc_stop` 工具：与 agent 自己账号下的 Claude Code 会话协作 |
 | [`lsy-tool-qq/`](lsy-tool-qq/README.zh.md) | `qq_groups`、`qq_digest`、`qq_recent`、`qq_search` 工具：agent 读取 QQ 观察者记录和摘要的内容 |

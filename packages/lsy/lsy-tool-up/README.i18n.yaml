@@ -1,0 +1,58 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/lsy-tool-up/README.md
+/:
+  en: a672c32e5dd63e05
+  zh: 3b37ebbaacab4607
+/deepseek-ai-dsh-lsy-tool-up:
+  en: c616183ed9d130e7
+  zh: 27ff9e499f7a58e8
+/deepseek-ai-dsh-lsy-tool-up/summary:
+  en: deb3f3590a656828
+  zh: d3748f382dfa4467
+/deepseek-ai-dsh-lsy-tool-up/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-lsy-tool-up/use-this-package:
+  en: c1fe2645dc62ca7e
+  zh: ddb2d2653262b015
+/deepseek-ai-dsh-lsy-tool-up/understand-the-implementation:
+  en: e15bcfde9778c9d8
+  zh: be9d84d167c10f1a
+/deepseek-ai-dsh-lsy-tool-up/further-exploration:
+  en: 0210546747e2ca87
+  zh: 819cf7e0855927cb
+/deepseek-ai-dsh-lsy-tool-up/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-lsy-tool-up/model-experience/read-tools:
+  en: bfc6c1f83d6fc49d
+  zh: e480f3edbf9ec3f4
+/deepseek-ai-dsh-lsy-tool-up/model-experience/read-tools/what-the-model-sees:
+  en: af8bc235fdf690b0
+  zh: 7666fbb0ccd51513
+/deepseek-ai-dsh-lsy-tool-up/model-experience/read-tools/token-effect:
+  en: 6305a1157d3ff588
+  zh: 26fc5b2cd6718ac3
+/deepseek-ai-dsh-lsy-tool-up/model-experience/read-tools/kv-cache-effect:
+  en: 5b38c23791d4786e
+  zh: 9f7edb91bdc225ee
+/deepseek-ai-dsh-lsy-tool-up/model-experience/reply-tools:
+  en: 21aece5bbefe20a6
+  zh: eb7f8ab909b19ecb
+/deepseek-ai-dsh-lsy-tool-up/model-experience/reply-tools/what-the-model-sees:
+  en: e2bd339e59bb8261
+  zh: 219070f1f27f3f16
+/deepseek-ai-dsh-lsy-tool-up/model-experience/reply-tools/token-effect:
+  en: 85b41793b38d050d
+  zh: c819bfb9443257a3
+/deepseek-ai-dsh-lsy-tool-up/model-experience/reply-tools/kv-cache-effect:
+  en: 2fbf2175168e8244
+  zh: 933b34c34d2d1700
+/deepseek-ai-dsh-lsy-tool-up/known-limitations-and-deferred-work:
+  en: 600212eb036f8ee3
+  zh: db8b876f2924107d
+/deepseek-ai-dsh-lsy-tool-up/known-limitations-and-deferred-work/dev-note:
+  en: 201c08d81f6e9080
+  zh: 9d9472cde4af73ac

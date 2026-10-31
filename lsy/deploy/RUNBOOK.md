@@ -341,6 +341,16 @@ Acting as `dsh-runtime` is a step down from `lishuyu`; root is limited to the on
    ```
    Audio files the owner sends on WeChat are then transcribed by `http://127.0.0.1:8099/transcribe` (the mini's asr-service; `asr.engine: whisper` for English) and the text joins the attachment note. Nothing records or listens; only files already sent are read.
 
+## 16. Creator account replies through bili-svc (optional)
+
+bili-svc is a separate private service on this Mac (`app.lishuyu.bili.svc`, `127.0.0.1:8097`); it owns the creator account's session, the Reply Gate, and the events. This service only hosts the `up` preset (`lsy-tool-up`) and the `bili` ingest source.
+
+1. Two tokens, both made on the Mac without printing them, written to the service `.env` (back it up first; restart afterwards):
+   - `LSY_INGEST_TOKEN_BILI`: bili-svc pushes events to `/hooks/lsy` with it (the same value is in bili-svc's `ingest-token` file).
+   - `BILI_SVC_TOKEN_UP`: bili-svc's `up` caller (scopes `read`, `reply`), made with `bili-svc token create --name up --scopes read,reply`.
+2. Check: `stdout.log` shows the `bili` source accepting events (`202`); a batch of new comments starts a `bili-up` Session; `up_status` in it reports the gate mode. The ledger and the brake live in bili-svc (`bili-svc ledger`, `bili-svc gate status`).
+3. Stop: `bili-svc gate readonly` (replies stop at once, reads continue), or remove the `bili-digest` subscription. Only a person lifts a brake: `bili-svc gate release`, then `bili-svc gate mode auto`.
+
 ## Operate
 
 Patch edits (`$DSH_HOME/cordis.patch.yml`, the profile patch) reload live; `.env` edits and new builds need a restart. The composition is the `@deepseek-ai/dsh-lsy-event-bundle` layer linked from the build; the profile patch `profiles/event/cordis.patch.yml` is the owner's layer, where Web UI settings save, and upgrades keep it. A home patch entry replaces that entry's whole `config`, so override only entries whose config it restates in full, and the Web UI refuses to save an entry the home patch sets ("Configuration for … is overridden by a home patch").
