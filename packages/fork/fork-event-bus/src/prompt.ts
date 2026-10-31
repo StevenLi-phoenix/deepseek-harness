@@ -78,7 +78,15 @@ export function buildSessionRequest(subscription: string, action: SessionAction,
     permissionPreset: action.permissionPreset,
     title: batchTitle(action.titlePrefix ?? subscription, events),
     prompt: lines.join('\n'),
+    ...modelOf(action),
   }
+}
+
+/** The action's model route for the request; a materialized empty `{}` names none. */
+function modelOf(action: SessionAction): { model?: { provider: string; model: string } } {
+  const provider = action.model?.provider ?? ''
+  const model = action.model?.model ?? ''
+  return provider !== '' && model !== '' ? { model: { provider, model } } : {}
 }
 
 /**
