@@ -10,7 +10,10 @@ cd "$ROOT"
 SHA=$(git rev-parse --short HEAD)
 DIST=/Volumes/MiniSSD/lsy-dsh-dist/$SHA
 APPS=/Users/Shared/lsy-dsh
-PREFIX=$APPS/$SHA
+# Builds sit in a *.noindex directory so Spotlight leaves their node_modules alone (see prune-builds.sh);
+# <apps>/current stays the stable path the LaunchDaemon and the sudoers rules use.
+BUILDS=$APPS/builds.noindex
+PREFIX=$BUILDS/$SHA
 echo "upgrade: building $SHA"
 pnpm install --frozen-lockfile
 pnpm run build:official
@@ -38,19 +41,15 @@ echo "upgrade: $APPS/current -> $PREFIX"
 # outright. Each is ~1.6 GB of node_modules on the internal disk and rebuilds from git; moved
 # to the Trash they kept their space, which filled the disk on 2026-10-22.
 if [ -n "$PREVIOUS" ] && [ "$PREVIOUS" != "$PREFIX" ]; then
-  for build in "$APPS"/*/; do
-    build=${build%/}
-    [ -L "$build" ] && continue
-    { [ "$build" = "$PREFIX" ] || [ "$build" = "$PREVIOUS" ]; } && continue
-    [[ $(basename "$build") =~ ^[0-9a-f]{7,40}$ ]] || continue
-    echo "upgrade: removing old build $build"
-    rm -rf "$build"
-  done
+  "$ROOT/lsy/deploy/check-prune-builds.sh"
+  "$ROOT/lsy/deploy/prune-builds.sh" "$APPS" "$PREFIX" "$PREVIOUS"
 fi
 cat <<NEXT
 
 Finish the switch (passwordless with /etc/sudoers.d/dsh-events):
   sudo -n -u dsh-runtime /usr/bin/env PATH=/opt/homebrew/bin:/usr/bin:/bin $APPS/current/lsy/deploy/setup-profile.sh /Users/dsh-runtime/.dsh $APPS/current
   sudo -n /bin/launchctl kickstart -k system/app.lishuyu.dsh-events
-Roll back: ln -sfn $APPS/<previous sha> $APPS/current, then the same two lines.
+Roll back: ln -sfn ${PREVIOUS:-$BUILDS/<previous sha>} $APPS/current, then the same two lines.
+If the previous build is still directly under $APPS (the layout before builds.noindex), move it once nothing runs from it:
+  $ROOT/lsy/deploy/prune-builds.sh --relocate $APPS <that build>
 NEXT

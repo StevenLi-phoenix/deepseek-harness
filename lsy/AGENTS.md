@@ -44,7 +44,7 @@ The `event` profile composes, in order: the base and Web bundles; `@deepseek-ai/
 
 ## Deployment (Mac mini)
 
-The [runbook](deploy/RUNBOOK.md) owns the procedure. The service runs as the non-admin user `dsh-runtime` (LaunchDaemon `app.lishuyu.dsh-events`, `127.0.0.1:3081`, served as `https://dsh.tailc2559b.ts.net`); `/Users/lishuyu` and `/Volumes/MiniSSD` are closed to it. Builds install to `/Users/Shared/lsy-dsh/<sha>` behind the `current` symlink; logs are `/Users/dsh-runtime/logs/{stdout,stderr}.log`, and stdout carries the first-login token URL, so redact it when reading.
+The [runbook](deploy/RUNBOOK.md) owns the procedure. The service runs as the non-admin user `dsh-runtime` (LaunchDaemon `app.lishuyu.dsh-events`, `127.0.0.1:3081`, served as `https://dsh.tailc2559b.ts.net`); `/Users/lishuyu` and `/Volumes/MiniSSD` are closed to it. Builds install to `/Users/Shared/lsy-dsh/builds.noindex/<sha>` (Spotlight skips `*.noindex`) behind the `current` symlink; logs are `/Users/dsh-runtime/logs/{stdout,stderr}.log`, and stdout carries the first-login token URL, so redact it when reading.
 
 Upgrade without a password through `/etc/sudoers.d/dsh-events`:
 
