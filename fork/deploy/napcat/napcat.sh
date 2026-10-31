@@ -62,8 +62,11 @@ start() {
   docker rm -f "$NAME" >/dev/null 2>&1 || true
   local account=()
   [ -n "$uin" ] && account=(-e "ACCOUNT=$uin")
+  # QQ ties a login to the device. A container gets a random MAC when it is created, so without a fixed one every
+  # recreate looks like a new device and the saved session is useless (the official compose files fix it the same way).
   docker run -d --name "$NAME" --restart unless-stopped --memory 2g --memory-swap 2g --shm-size 512m \
     --log-opt max-size=10m --log-opt max-file=3 \
+    --mac-address 02:42:ac:11:00:02 --hostname localhost \
     -p "127.0.0.1:$PORT:3001" -v napcat-config:/app/napcat/config -v napcat-qq:/app/.config/QQ \
     ${account[@]+"${account[@]}"} "$IMAGE" >/dev/null
   echo "started $NAME on 127.0.0.1:$PORT${uin:+ (quick login $uin)}"
