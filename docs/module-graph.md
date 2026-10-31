@@ -382,6 +382,7 @@ flowchart TD
     pkg_fork_taint["fork-taint"]
     pkg_fork_tool_monitor["fork-tool-monitor"]
     pkg_fork_tool_qq["fork-tool-qq"]
+    pkg_fork_tool_up["fork-tool-up"]
     pkg_fork_tool_voice["fork-tool-voice"]
     pkg_fork_tool_watch["fork-tool-watch"]
     pkg_fork_tool_wechat["fork-tool-wechat"]
@@ -1081,6 +1082,9 @@ flowchart TD
   pkg_fork_taint --> pkg_fork_event_bus
   pkg_fork_taint --> pkg_session
   pkg_fork_taint --> pkg_tools
+  pkg_fork_tool_up --> pkg_credentials
+  pkg_fork_tool_up --> pkg_tools
+  pkg_fork_tool_up --> pkg_util_values
   pkg_fork_tool_voice --> pkg_fork_event_bus
   pkg_fork_tool_voice --> pkg_fork_voice
   pkg_fork_tool_voice --> pkg_tools
@@ -1925,6 +1929,7 @@ flowchart TD
 | [`tool-lsp`](../packages/lsp/tool-lsp) | `lsp` | [`llm`](../packages/llm/llm), [`lsp`](../packages/lsp/lsp), [`system-prompt`](../packages/core/system-prompt), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools), [`working-directory`](../packages/session/working-directory) |
 | [`fork-cc-bridge`](../packages/fork/fork-cc-bridge) | `fork` | [`agent`](../packages/core/agent), [`fork-event-bus`](../packages/fork/fork-event-bus), [`tools`](../packages/core/tools) |
 | [`fork-taint`](../packages/fork/fork-taint) | `fork` | [`fork-event-bus`](../packages/fork/fork-event-bus), [`session`](../packages/core/session), [`tools`](../packages/core/tools) |
+| [`fork-tool-up`](../packages/fork/fork-tool-up) | `fork` | [`credentials`](../packages/credentials/credentials), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
 | [`fork-tool-voice`](../packages/fork/fork-tool-voice) | `fork` | [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-voice`](../packages/fork/fork-voice), [`tools`](../packages/core/tools) |
 | [`fork-tool-watch`](../packages/fork/fork-tool-watch) | `fork` | [`agent`](../packages/core/agent), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-github-sensor`](../packages/fork/fork-github-sensor), [`tools`](../packages/core/tools) |
 | [`tool-bili`](../packages/fork/tool-bili) | `fork` | [`bili`](../packages/fork/bili), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |

@@ -53,7 +53,7 @@ function link(name, directory) {
 for (const name of ['@deepseek-ai/dsh-webhook', '@deepseek-ai/dsh-webhook-github', '@deepseek-ai/cordis-plugin-logger-console', '@deepseek-ai/dsh-fork-event-bus', '@deepseek-ai/dsh-fork-github-sensor',
   '@deepseek-ai/dsh-fork-wechat', '@deepseek-ai/dsh-fork-tool-watch', '@deepseek-ai/dsh-fork-tool-wechat', '@deepseek-ai/dsh-fork-balance', '@deepseek-ai/dsh-fork-memory',
   '@deepseek-ai/dsh-fork-event-ingest', '@deepseek-ai/dsh-fork-tool-monitor', '@deepseek-ai/dsh-fork-cc-bridge', '@deepseek-ai/dsh-fork-sysmon', '@deepseek-ai/dsh-bili',
-  '@deepseek-ai/dsh-fork-voice', '@deepseek-ai/dsh-fork-tool-voice',
+  '@deepseek-ai/dsh-fork-voice', '@deepseek-ai/dsh-fork-tool-voice', '@deepseek-ai/dsh-fork-tool-up',
   '@deepseek-ai/dsh-tool-bili', '@deepseek-ai/dsh-owner-relay', '@deepseek-ai/dsh-fork-qq', '@deepseek-ai/dsh-fork-tool-qq', '@deepseek-ai/dsh-fork-qqbot',
   '@deepseek-ai/dsh-fork-taint', '@deepseek-ai/dsh-fork-integrity']) {
   link(name, join(prefix, 'node_modules', name))

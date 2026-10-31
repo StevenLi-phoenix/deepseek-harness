@@ -496,6 +496,7 @@
       "@deepseek-ai/dsh-fork-taint": ["./packages/fork/fork-taint/src"],
       "@deepseek-ai/dsh-fork-tool-monitor": ["./packages/fork/fork-tool-monitor/src"],
       "@deepseek-ai/dsh-fork-tool-qq": ["./packages/fork/fork-tool-qq/src"],
+      "@deepseek-ai/dsh-fork-tool-up": ["./packages/fork/fork-tool-up/src"],
       "@deepseek-ai/dsh-fork-tool-voice": ["./packages/fork/fork-tool-voice/src"],
       "@deepseek-ai/dsh-fork-tool-watch": ["./packages/fork/fork-tool-watch/src"],
       "@deepseek-ai/dsh-fork-tool-wechat": ["./packages/fork/fork-tool-wechat/src"],
