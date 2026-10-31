@@ -3,14 +3,14 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/lsy/lsy-tool-qq/README.md
 /:
-  en: 5b069154731fd0b6
-  zh: 59cfa78bd02648af
+  en: 24a6bec308f61b48
+  zh: 016bd1e3a35145a3
 /deepseek-ai-dsh-lsy-tool-qq:
   en: 7bc29a82a60a3f91
   zh: 60fe818a6889bf2a
 /deepseek-ai-dsh-lsy-tool-qq/summary:
-  en: 723b4e77712c3f3c
-  zh: 3381f3c438631a59
+  en: d6016e22570459da
+  zh: b6a8df95d2c65ad1
 /deepseek-ai-dsh-lsy-tool-qq/table-of-contents:
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
@@ -30,8 +30,8 @@
   en: eeb1da60ff71e371
   zh: 3569619df130e3d4
 /deepseek-ai-dsh-lsy-tool-qq/model-experience/qq-tools/what-the-model-sees:
-  en: 426408b4e48fb0ac
-  zh: cb6f604292be541c
+  en: 046942c217ef4367
+  zh: 4152e57863744ae3
 /deepseek-ai-dsh-lsy-tool-qq/model-experience/qq-tools/token-effect:
   en: 9b6fea54ebf84b5a
   zh: 614bc9df6077de46
@@ -42,8 +42,8 @@
   en: 49eebc176a09d1a6
   zh: aaa58b5f20fbceb2
 /deepseek-ai-dsh-lsy-tool-qq/model-experience/qq-results/what-the-model-sees:
-  en: 73d03f7420a14c09
-  zh: dd90ffbbb7c09bfa
+  en: 4a7ab88988106e25
+  zh: 785bff3361ea88ea
 /deepseek-ai-dsh-lsy-tool-qq/model-experience/qq-results/token-effect:
   en: 7edccb3800ebaa96
   zh: 5cd38510f0f6ead9

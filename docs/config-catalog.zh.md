@@ -2858,7 +2858,7 @@ export interface Config {
     maxImageBytes: number
     /** Stop downloading once the downloads together reach this many bytes. */
     maxTotalBytes: number
-    /** Delete downloads of messages older than this many days; 0 keeps them. */
+    /** Delete downloads of messages older than this many days; 0 keeps them. 30 by default. */
     retainDays: number
     /** Hosts media may be fetched from, as suffixes. */
     hostSuffixes: string[]
@@ -2876,6 +2876,11 @@ export interface Config {
   asr: {
     /** Send voice messages to `ctx.lsyVoice.transcribe`. Off by default; it needs lsy-voice with transcription on. */
     enabled: boolean
+  }
+  /** How long raw messages are kept. Digests are not affected and can be deleted by group or date. */
+  retention: {
+    /** Delete messages (text, raw segments, media rows) older than this many days; 0 keeps them. 30 by default. */
+    textDays: number
   }
   /** Drop the text and files of a message its sender recalled. */
   honorRecall: boolean
@@ -2909,6 +2914,14 @@ export interface Config {
     maxPromptChars: number
     /** Model calls one group may use in one round. */
     maxCallsPerRound: number
+    /** Show members to the model, and so in the digests, as stable aliases (`群友#a3f9`), never names or QQ numbers. */
+    aliasMembers: boolean
+    /** Ask for the section on what members know or argued, by alias. Off by default: no per-member profiles. */
+    profiles: boolean
+    /** Digests kept per group; the oldest are deleted when a new one is stored. */
+    keepPerGroup: number
+    /** Longest digest stored, in characters. */
+    maxDigestChars: number
     /** Provider route of the digest Session's model; the profile's default when omitted. */
     provider?: string
     /** Model id on that route; the profile's default when omitted. */

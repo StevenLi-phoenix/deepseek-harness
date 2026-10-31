@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { chunkTranscript, DigestRunner, digestPrompt, formatLine, stampIn, type DigestConfig } from '../src/digest.ts'
+import { chunkTranscript, DigestRunner, digestPrompt, formatLine, memberAlias, stampIn, type DigestConfig } from '../src/digest.ts'
 import { QqStore, type MessageRow } from '../src/store.ts'
 
 let dir: string
@@ -26,7 +26,8 @@ function fill(groupId: string, count: number, startAt = NOW - 5 * HOUR): void {
 function config(overrides: Partial<DigestConfig> = {}): DigestConfig {
   return {
     enabled: true, everyHours: 24, minMessages: 5, maxPromptChars: 60_000, maxCallsPerRound: 5, agentPreset: 'qq-digest', permissionPreset: 'read-only',
-    workspacePath: join(dir, 'ws'), timeZone: 'Asia/Shanghai', timeoutMs: 2000, ...overrides,
+    workspacePath: join(dir, 'ws'), timeZone: 'Asia/Shanghai', timeoutMs: 2000,
+    aliasMembers: false, profiles: false, keepPerGroup: 200, maxDigestChars: 3000, ...overrides,
   }
 }
 
@@ -82,7 +83,7 @@ describe('transcript helpers', () => {
   it('formats a line with the card, the last four digits of the number, and the quoted member', () => {
     const base = { id: 1, groupId: 'g1', messageId: 'm2', at: NOW, userId: '123456789', nickname: '昵称', card: '名片', role: '', text: '同意\n第二行', replyTo: 'm1', kinds: '', recalled: false } satisfies MessageRow
     const quoted: MessageRow = { ...base, id: 0, messageId: 'm1', userId: '5', card: '', nickname: '小明', replyTo: null }
-    expect(formatLine(base, id => (id === 'm1' ? quoted : undefined), 'Asia/Shanghai')).toBe('[10-31 20:00] 名片(6789) ↳回复小明：同意 ⏎ 第二行')
+    expect(formatLine(base, id => (id === 'm1' ? quoted : undefined), 'Asia/Shanghai')).toBe('[10-31 20:00] 名片(6789) ↳回复小明(5)：同意 ⏎ 第二行')
     expect(formatLine(base, () => undefined, 'Asia/Shanghai')).toContain('↳回复某条旧消息')
     expect(formatLine({ ...base, card: '', nickname: '', replyTo: null }, () => undefined, 'UTC')).toBe('[10-31 12:00] 123456789(6789)：同意 ⏎ 第二行')
   })
@@ -185,5 +186,53 @@ describe('DigestRunner', () => {
     const stored = await runner(h, config()).runRound(['g1', 'g2'], new AbortController().signal)
     expect(stored).toBe(1)
     expect(store.digests({ limit: 5 }).map(d => d.groupId)).toEqual(['g2'])
+  })
+
+  it('shows members to the model as stable aliases when asked, and asks for no member profiles by default', async () => {
+    fill('g1', 8)
+    const h = harness('摘要')
+    await runner(h, config({ aliasMembers: true })).runRound(['g1'], new AbortController().signal)
+    const prompt = h.prompts[0]!
+    expect(prompt).toMatch(/\[10-31 \d\d:\d\d\] 群友#[0-9a-f]{4}：第0条讨论内容/)
+    expect(prompt).not.toContain('成员0')
+    expect(prompt).not.toContain('(0000)')
+    expect(prompt).not.toContain('成员观点与专长')
+    expect(prompt).toContain('never write a QQ number')
+    // The same member keeps the same alias in a later round, because the salt is stored.
+    const first = /群友#[0-9a-f]{4}/.exec(prompt)![0]
+    fill('g1', 8, NOW - HOUR)
+    const later = new DigestRunner(h.ctx, store, config({ aliasMembers: true }), join(dir, 'data'), id => id, () => NOW + 25 * HOUR)
+    await later.runRound(['g1'], new AbortController().signal)
+    expect(h.prompts[1]).toContain(first)
+  })
+
+  it('asks for the member section only when profiles are switched on', async () => {
+    fill('g1', 8)
+    const h = harness('摘要')
+    await runner(h, config({ aliasMembers: true, profiles: true })).runRound(['g1'], new AbortController().signal)
+    expect(h.prompts[0]).toContain('## 成员观点与专长')
+    expect(h.prompts[0]).toContain('never a real name or QQ number')
+  })
+
+  it('keeps only the newest digests per group and cuts a long one', async () => {
+    fill('g1', 8)
+    const h = harness('x'.repeat(5000))
+    const run = runner(h, config({ keepPerGroup: 2, maxDigestChars: 600 }))
+    await run.runRound(['g1'], new AbortController().signal)
+    expect(Array.from(store.digests({ groupId: 'g1', limit: 5 })[0]!.text)).toHaveLength(600)
+    for (let round = 1; round <= 3; round += 1) {
+      fill('g1', 8, NOW - HOUR)
+      await new DigestRunner(h.ctx, store, config({ keepPerGroup: 2, maxDigestChars: 600 }), join(dir, 'data'), id => id, () => NOW + round * 25 * HOUR).runRound(['g1'], new AbortController().signal)
+    }
+    expect(store.digests({ groupId: 'g1', limit: 9 })).toHaveLength(2)
+  })
+})
+
+describe('memberAlias', () => {
+  it('is stable for a member and salt, differs across members and salts, and hides the number', () => {
+    expect(memberAlias('10001', 's')).toBe(memberAlias('10001', 's'))
+    expect(memberAlias('10001', 's')).not.toBe(memberAlias('10002', 's'))
+    expect(memberAlias('10001', 's')).not.toBe(memberAlias('10001', 't'))
+    expect(memberAlias('10001', 's')).toMatch(/^群友#[0-9a-f]{4}$/)
   })
 })

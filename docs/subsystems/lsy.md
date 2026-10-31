@@ -479,6 +479,13 @@ digests(options: { groupId?: string; days: number; limit: number }): DigestRow[]
  * @throws {@link SendRefused} when a rule says no, or the protocol end is not connected.
  */
 async sendGroupMessage(groupId: string, text: string): Promise<void>
+
+/**
+ * Delete stored digests: the observer's learned knowledge. Raw messages age out by themselves.
+ * @param options - one group and/or those made before `beforeMs`; at least one is required.
+ * @returns how many digests were deleted.
+ */
+forgetDigests(options: { groupId?: string; beforeMs?: number }): number
 ```
 
 Source: [`packages/lsy/lsy-qq/src/index.ts`](../../packages/lsy/lsy-qq/src/index.ts)

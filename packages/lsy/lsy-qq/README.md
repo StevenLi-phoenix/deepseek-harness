@@ -46,7 +46,8 @@ Until a group number is listed nothing is recorded: messages of every other grou
 | `media.images` | `true` | Download the images of recorded messages |
 | `media.maxImageBytes` | `15728640` | Largest image downloaded |
 | `media.maxTotalBytes` | `5368709120` | Downloads stop when they together reach this (5 GiB); the log warns once an hour |
-| `media.retainDays` | `0` | Delete downloads of messages older than this many days; `0` keeps them |
+| `media.retainDays` | `30` | Delete downloads of messages older than this many days; `0` keeps them |
+| `retention.textDays` | `30` | Delete raw messages (text, raw segments, media rows) older than this many days; `0` keeps them. Digests are not affected |
 | `media.hostSuffixes` | QQ's CDN hosts | A media link on any other host, or on an IP address, is not fetched |
 | `media.timeoutMs` | `30000` | Deadline of one download |
 | `voice.download` | `true` | Keep voice messages as MP3 (the protocol end decodes QQ's SILK) |
@@ -62,6 +63,9 @@ Until a group number is listed nothing is recorded: messages of every other grou
 | `digest.minMessages` | `15` | A group with fewer new messages waits for the next round |
 | `digest.maxPromptChars` | `60000` | Transcript characters per model call; a larger backlog is split |
 | `digest.maxCallsPerRound` | `5` | Model calls one group may use in one round |
+| `digest.aliasMembers` | `true` | Show members to the digest model as stable aliases (`群友#a3f9`, a salted hash of the QQ number), so digests carry neither names nor numbers |
+| `digest.profiles` | `false` | Also ask for the section on what particular members know or argued (by alias); off by default: no per-member profiles |
+| `digest.keepPerGroup`, `digest.maxDigestChars` | `200`, `3000` | Digests kept per group (the oldest are deleted when a new one is stored) and the longest digest stored |
 | `digest.provider`, `digest.model` | unset | The digest Session's model (provider route and model id), such as a cheap model; unset uses the profile's default |
 | `digest.agentPreset`, `digest.permissionPreset` | `qq-digest`, `read-only` | The event bundle's `qq-digest` preset has a persona and no tools |
 | `digest.workspacePath`, `digest.timeZone`, `digest.timeoutMs` | `/Users/dsh-runtime/qq-digest`, `Asia/Shanghai`, `900000` | Working directory, the zone of the transcript's times, and the wait for one model call |
@@ -69,7 +73,7 @@ Until a group number is listed nothing is recorded: messages of every other grou
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-lsy-qq) is the exhaustive source for every accepted field.
 
-Reading is the service's job: `groupOverview()`, `recentMessages()`, `searchMessages()`, `digests()`, and `groupName()` answer only for recorded groups. `sendGroupMessage(groupId, text)` exists for future code and refuses unless `send.enabled` is true and the group is in `send.groups`; nothing in this package or in the tools calls it.
+Digests are the observer's learned knowledge and carry their source (`qq-group:<number>`, digest number, date); they keep past the 30 days, and `forgetDigests({ groupId?, beforeMs? })` (the `qq_forget` tool) deletes them by group or date. Reading is the service's job: `groupOverview()`, `recentMessages()`, `searchMessages()`, `digests()`, and `groupName()` answer only for recorded groups. `sendGroupMessage(groupId, text)` exists for future code and refuses unless `send.enabled` is true and the group is in `send.groups`; nothing in this package or in the tools calls it.
 
 -----
 
@@ -117,7 +121,7 @@ This is a fork-local package; [`../UPSTREAM.md`](../UPSTREAM.md) describes how t
 
 #### What the model sees
 
-One user prompt per transcript chunk in a new Session: an instruction in English naming the group, the section headings to write (话题, 结论与事实, 术语与梗, 常见问题, 成员观点与专长, 链接与资料) and a 1500-character limit, then the transcript inside `<qq_group_messages trust="untrusted">`, one line per message as `[MM-DD HH:mm] name(last 4 digits of QQ) ↳reply: text`. The preset's persona says the chat is data and the Session has no tools. The final text is the digest; `NO_REPLY` means nothing was worth keeping.
+One user prompt per transcript chunk in a new Session: an instruction in English naming the group, the section headings to write (话题, 结论与事实, 术语与梗, 常见问题, 链接与资料; 成员观点与专长 only with `digest.profiles`) and a 1500-character limit, then the transcript inside `<qq_group_messages trust="untrusted">`, one line per message as `[MM-DD HH:mm] 群友#a3f9 ↳reply: text` (members are aliases by default; with `digest.aliasMembers` off, name and the last 4 digits of the QQ number). The preset's persona says the chat is data and the Session has no tools. The final text is the digest; `NO_REPLY` means nothing was worth keeping.
 
 #### Token effect
 
@@ -131,6 +135,7 @@ Each call is a new Session with its own short prefix; nothing is shared between 
 
 <a id="known-limitations-and-deferred-work"></a>
 
+- **Retention** — raw messages and downloads are deleted after 30 days; a digest or a quoted name inside message text can still carry what a member wrote about themselves.
 - **Unofficial client, ban risk** — NapCat is not an official bot: Tencent can sign the account out or restrict it. Use a spare account, keep it read-only, and do not log it in from many places.
 - **Only the groups the account is in** — someone has to add the account to each group first.
 - **Text, images, and voice** — video and group files are recorded as metadata only; a forwarded chat is recorded as `[合并转发]`.

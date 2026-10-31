@@ -51,7 +51,7 @@ export interface Config {
     maxImageBytes: number
     /** Stop downloading once the downloads together reach this many bytes. */
     maxTotalBytes: number
-    /** Delete downloads of messages older than this many days; 0 keeps them. */
+    /** Delete downloads of messages older than this many days; 0 keeps them. 30 by default. */
     retainDays: number
     /** Hosts media may be fetched from, as suffixes. */
     hostSuffixes: string[]
@@ -69,6 +69,11 @@ export interface Config {
   asr: {
     /** Send voice messages to `ctx.lsyVoice.transcribe`. Off by default; it needs lsy-voice with transcription on. */
     enabled: boolean
+  }
+  /** How long raw messages are kept. Digests are not affected and can be deleted by group or date. */
+  retention: {
+    /** Delete messages (text, raw segments, media rows) older than this many days; 0 keeps them. 30 by default. */
+    textDays: number
   }
   /** Drop the text and files of a message its sender recalled. */
   honorRecall: boolean
@@ -102,6 +107,14 @@ export interface Config {
     maxPromptChars: number
     /** Model calls one group may use in one round. */
     maxCallsPerRound: number
+    /** Show members to the model, and so in the digests, as stable aliases (`群友#a3f9`), never names or QQ numbers. */
+    aliasMembers: boolean
+    /** Ask for the section on what members know or argued, by alias. Off by default: no per-member profiles. */
+    profiles: boolean
+    /** Digests kept per group; the oldest are deleted when a new one is stored. */
+    keepPerGroup: number
+    /** Longest digest stored, in characters. */
+    maxDigestChars: number
     /** Provider route of the digest Session's model; the profile's default when omitted. */
     provider?: string
     /** Model id on that route; the profile's default when omitted. */
@@ -131,7 +144,7 @@ export const Config: z<Config> = z.object({
     images: z.boolean().default(true),
     maxImageBytes: z.natural().min(1024).default(15 * 1024 * 1024),
     maxTotalBytes: z.natural().min(1024).default(5 * 1024 ** 3),
-    retainDays: z.natural().default(0),
+    retainDays: z.natural().default(30),
     hostSuffixes: z.array(z.string()).default([...DEFAULT_MEDIA_HOST_SUFFIXES]),
     timeoutMs: z.natural().min(1000).default(30_000),
   }),
@@ -140,6 +153,7 @@ export const Config: z<Config> = z.object({
     maxBytes: z.natural().min(1024).default(10 * 1024 * 1024),
   }),
   asr: z.object({ enabled: z.boolean().default(false) }),
+  retention: z.object({ textDays: z.natural().default(30) }),
   honorRecall: z.boolean().default(true),
   backfill: z.object({
     enabled: z.boolean().default(true),
@@ -157,6 +171,10 @@ export const Config: z<Config> = z.object({
     minMessages: z.natural().min(1).default(15),
     maxPromptChars: z.natural().min(2000).default(60_000),
     maxCallsPerRound: z.natural().min(1).default(5),
+    aliasMembers: z.boolean().default(true),
+    profiles: z.boolean().default(false),
+    keepPerGroup: z.natural().min(1).default(200),
+    maxDigestChars: z.natural().min(500).default(3000),
     provider: z.string(),
     model: z.string(),
     agentPreset: z.string().default('qq-digest'),
@@ -284,6 +302,10 @@ export class QqObserver extends Service {
       workspacePath: d.workspacePath,
       timeZone: d.timeZone,
       timeoutMs: d.timeoutMs,
+      aliasMembers: d.aliasMembers,
+      profiles: d.profiles,
+      keepPerGroup: d.keepPerGroup,
+      maxDigestChars: d.maxDigestChars,
     }
     this.digest = new DigestRunner(ctx, this.store, digestConfig, this.dataDir, id => this.store.groupName(id) ?? id, () => this.now())
     ctx.logger.info(`lsy-qq: recording ${config.groups.length} group(s)${config.groups.length === 0 ? ' (the list is empty: every message is dropped; add group numbers to groups)' : ''}; sending ${config.send.enabled ? `on for ${config.send.groups.length} group(s)` : 'off'}; voice transcription ${config.asr.enabled ? 'on' : 'off'}; digests ${d.enabled ? `every ${d.everyHours} h` : 'off'}; data in ${this.dataDir}`)
@@ -725,7 +747,7 @@ export class QqObserver extends Service {
           const stored = await this.digest.runRound([...this.recorded], this.abort.signal)
           if (stored > 0) this.ctx.logger.info(`lsy-qq: digest round stored ${stored} digest(s)`)
         }
-        if (this.config.media.retainDays > 0 && this.now() - lastRetention >= RETENTION_CHECK_MS) {
+        if (this.now() - lastRetention >= RETENTION_CHECK_MS) {
           lastRetention = this.now()
           await this.prune()
         }
@@ -749,14 +771,34 @@ export class QqObserver extends Service {
     this.counters.messages = this.counters.media = this.counters.voices = this.counters.dropped = this.counters.private = 0
   }
 
-  /** Delete downloads of messages older than `media.retainDays`. */
+  /** Apply the retention windows: raw messages older than `retention.textDays`, downloads older than `media.retainDays`. */
   private async prune(): Promise<void> {
-    const expired = this.store.expiredMedia(this.now() - this.config.media.retainDays * 86_400_000)
-    for (const item of expired) {
-      await removeMedia(item.localPath)
-      this.store.clearMediaFile(item.id)
+    const { retainDays } = this.config.media
+    if (retainDays > 0) {
+      const expired = this.store.expiredMedia(this.now() - retainDays * 86_400_000)
+      for (const item of expired) {
+        await removeMedia(item.localPath)
+        this.store.clearMediaFile(item.id)
+      }
+      if (expired.length > 0) this.ctx.logger.info(`lsy-qq: removed ${expired.length} download(s) older than ${retainDays} day(s)`)
     }
-    if (expired.length > 0) this.ctx.logger.info(`lsy-qq: removed ${expired.length} download(s) older than ${this.config.media.retainDays} day(s)`)
+    const { textDays } = this.config.retention
+    if (textDays > 0) {
+      const gone = this.store.pruneMessages(this.now() - textDays * 86_400_000)
+      for (const path of gone.files) await removeMedia(path)
+      if (gone.messages > 0) this.ctx.logger.info(`lsy-qq: deleted ${gone.messages} message(s) older than ${textDays} day(s) and ${gone.files.length} file(s)`)
+    }
+  }
+
+  /**
+   * Delete stored digests: the observer's learned knowledge. Raw messages age out by themselves.
+   * @param options - one group and/or those made before `beforeMs`; at least one is required.
+   * @returns how many digests were deleted.
+   */
+  forgetDigests(options: { groupId?: string; beforeMs?: number }): number {
+    const count = this.store.deleteDigests(options)
+    this.ctx.logger.info(`lsy-qq: deleted ${count} digest(s)${options.groupId === undefined ? '' : ` of group ${options.groupId}`}${options.beforeMs === undefined ? '' : ' made before a cutoff'}`)
+    return count
   }
 }
 

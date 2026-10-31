@@ -46,7 +46,8 @@ kind: "package-reference"
 | `media.images` | `true` | 下载已记录消息里的图片 |
 | `media.maxImageBytes` | `15728640` | 下载的最大图片 |
 | `media.maxTotalBytes` | `5368709120` | 下载总量达到这个值（5 GiB）就停止；日志每小时警告一次 |
-| `media.retainDays` | `0` | 删除早于这么多天的消息的下载；`0` 为保留 |
+| `media.retainDays` | `30` | 删除早于这么多天的消息的下载；`0` 为保留 |
+| `retention.textDays` | `30` | 删除早于这么多天的原始消息（文字、原始片段、媒体行）；`0` 为保留。摘要不受影响 |
 | `media.hostSuffixes` | QQ 的 CDN 域名 | 其他域名或 IP 地址上的媒体链接不会被抓取 |
 | `media.timeoutMs` | `30000` | 单次下载的期限 |
 | `voice.download` | `true` | 把语音消息存成 MP3（协议端负责解码 QQ 的 SILK） |
@@ -62,6 +63,9 @@ kind: "package-reference"
 | `digest.minMessages` | `15` | 新消息少于这个数的群等下一轮 |
 | `digest.maxPromptChars` | `60000` | 每次模型调用的转录字符数；积压更多就拆开 |
 | `digest.maxCallsPerRound` | `5` | 一个群在一轮里最多用几次模型调用 |
+| `digest.aliasMembers` | `true` | 给摘要模型看到的成员是稳定的别名（`群友#a3f9`，QQ 号加盐的哈希），所以摘要里既没有名字也没有号码 |
+| `digest.profiles` | `false` | 同时要求写“成员观点与专长”一节（按别名）；默认关闭：不做逐人画像 |
+| `digest.keepPerGroup`、`digest.maxDigestChars` | `200`、`3000` | 每个群保留的摘要数（存新摘要时删最旧的）和单份摘要的最大字数 |
 | `digest.provider`、`digest.model` | 未设置 | 摘要 Session 的模型（provider 路由和模型 id），例如便宜的模型；不设置就用 profile 的默认模型 |
 | `digest.agentPreset`、`digest.permissionPreset` | `qq-digest`、`read-only` | 事件 bundle 的 `qq-digest` preset 只有人设、没有工具 |
 | `digest.workspacePath`、`digest.timeZone`、`digest.timeoutMs` | `/Users/dsh-runtime/qq-digest`、`Asia/Shanghai`、`900000` | 工作目录、转录里时间所用的时区，以及等待一次模型调用的期限 |
@@ -69,7 +73,7 @@ kind: "package-reference"
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-lsy-qq)是全部可接受字段的完整来源。
 
-读取由服务负责：`groupOverview()`、`recentMessages()`、`searchMessages()`、`digests()` 和 `groupName()` 只对已记录的群作答。`sendGroupMessage(groupId, text)` 留给以后的代码，除非 `send.enabled` 为 true 且该群在 `send.groups` 里，否则一律拒绝；本包和工具里没有任何地方调用它。
+摘要是观察者学到的知识，带着来源（`qq-group:<群号>`、摘要编号、日期）；它们不受 30 天限制，`forgetDigests({ groupId?, beforeMs? })`（即 `qq_forget` 工具）按群或日期删除。读取由服务负责：`groupOverview()`、`recentMessages()`、`searchMessages()`、`digests()` 和 `groupName()` 只对已记录的群作答。`sendGroupMessage(groupId, text)` 留给以后的代码，除非 `send.enabled` 为 true 且该群在 `send.groups` 里，否则一律拒绝；本包和工具里没有任何地方调用它。
 
 -----
 
@@ -117,7 +121,7 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-每份转录在新 Session 里是一条用户 prompt：一段英文指令，点名这个群、要写的小节标题（话题、结论与事实、术语与梗、常见问题、成员观点与专长、链接与资料）和 1500 字上限，然后是 `<qq_group_messages trust="untrusted">` 里的转录，每条消息一行，格式为 `[MM-DD HH:mm] name(QQ 号末四位) ↳reply: text`。preset 的人设说明聊天内容是数据、Session 没有工具。最终文字就是摘要；`NO_REPLY` 表示没有值得保留的内容。
+每份转录在新 Session 里是一条用户 prompt：一段英文指令，点名这个群、要写的小节标题（话题、结论与事实、术语与梗、常见问题、链接与资料；只有开启 `digest.profiles` 才加“成员观点与专长”）和 1500 字上限，然后是 `<qq_group_messages trust="untrusted">` 里的转录，每条消息一行，格式为 `[MM-DD HH:mm] 群友#a3f9 ↳reply: text`（成员默认是别名；关闭 `digest.aliasMembers` 时是名字加 QQ 号末四位）。preset 的人设说明聊天内容是数据、Session 没有工具。最终文字就是摘要；`NO_REPLY` 表示没有值得保留的内容。
 
 #### Token 影响
 
@@ -131,6 +135,7 @@ kind: "package-reference"
 
 <a id="known-limitations-and-deferred-work"></a>
 
+- **保留期**——原始消息和下载在 30 天后删除；摘要里或消息文字里引用的名字，仍可能带着成员自己写的关于自己的信息。
 - **非官方客户端，有封号风险**——NapCat 不是官方机器人：腾讯可能让账号下线或限制它。请用备用小号、保持只读，不要在很多地方登录。
 - **只能看账号所在的群**——得有人先把这个号拉进每个群。
 - **文字、图片和语音**——视频和群文件只记录元数据；合并转发的聊天记录记为 `[合并转发]`。

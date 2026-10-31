@@ -29,7 +29,10 @@ describe('event bundle', () => {
     // The token is the name of a $DSH_HOME/.env entry, never a value.
     expect(config.tokenEnv).toBe('LSY_QQ_ONEBOT_TOKEN')
     expect(config.honorRecall).toBe(true)
-    expect(config.digest).toMatchObject({ enabled: true, agentPreset: 'qq-digest', permissionPreset: 'read-only' })
+    expect(config.digest).toMatchObject({ enabled: true, agentPreset: 'qq-digest', permissionPreset: 'read-only', aliasMembers: true, profiles: false })
+    // Raw messages and downloads are kept 30 days; digests stay until deleted.
+    expect(config.retention.textDays).toBe(30)
+    expect(config.media.retainDays).toBe(30)
   })
 
   it('gives the qq-digest preset a persona and nothing else: no tool a chat message could steer', () => {
