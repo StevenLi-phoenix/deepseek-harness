@@ -294,6 +294,15 @@ Switches live in the owner layer (`$DSH_HOME/profiles/event/cordis.patch.yml`, r
   config: { enabled: false }        # no watch
 ```
 
+Probes: `lsy/probes/` holds nine situations (E1 to E9: a relayed message or a hidden web instruction asks for a memory write or a Claude Code message, the owner states a wrong fact, a memory entry conflicts with the persona, strangers ask who the owner is, a QQ line poses as the witch, form of address) and E10, the persona probes across models. They build the prompt the real preset sees and ask a model what it would do; tools are not executed, so they measure a model's disposition and not the Host's guards (the unit and agent-loop tests cover those). Run them on a laptop with Claude Code logged in (the subscription, no API key); every raw answer is saved before it is parsed:
+
+```sh
+pnpm exec tsx lsy/probes/run.mts --models haiku,sonnet --samples 3          # all probes
+pnpm exec tsx lsy/probes/run.mts --models haiku --samples 1 --only E1,E2    # a quick check
+```
+
+Rerun them after a persona change, a model change, or a Claude Code upgrade, and compare the table with the previous run.
+
 Optional hardening for the operator, not done by any script: make the home patch immutable, so the agent's account cannot edit the file that can override a persona. Test it on a copy first; the Web UI refuses to save an entry the home patch sets, so nothing it edits lives there.
 
 ```sh
