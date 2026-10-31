@@ -356,7 +356,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-lsy-voice` | yes | Voice for the owner's agents: text to speech through feiyu or the Mac mini TTS service, and speech to text through the asr-service (off by default) |
 | `@deepseek-ai/dsh-lsy-wechat` | yes | WeChat (iLink bot) channel: owner chat Session, notification delivery, and ctx.lsyNotifier for the lsy event bus |
 | `@deepseek-ai/dsh-owner-relay` | no | One relay of a Session's final answer to the owner: channels claim Sessions, one rule set decides at turn end, and a channel that cannot deliver falls back to ctx.lsyNotifier |
-| `@deepseek-ai/dsh-tool-bili` | no | Model-facing Bilibili tools for the agent's own account: browse, watch through subtitles, curate, speak rarely, and keep a journal |
+| `@deepseek-ai/dsh-tool-bili` | no | Model-facing Bilibili tools for the agent's own account: browse, watch through subtitles, like, coin, follow, and save through bili-svc, and keep a journal; no speech |
 
 ## mcp
 
