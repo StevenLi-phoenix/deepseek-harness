@@ -116,6 +116,17 @@ describe('owner-only tools', () => {
     expect(ran).toEqual(['cc_send'])
   })
 
+  it('lets LSY_TAINT_ENFORCE=0 in the environment switch the refusal off', async () => {
+    vi.stubEnv('LSY_TAINT_ENFORCE', '0')
+    try {
+      const { call, ran } = await mount()
+      expect(await call('cc_send', turn([PEER]))).toContain('"ok":true')
+      expect(ran).toEqual(['cc_send'])
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('takes the guarded tools from the configuration', async () => {
     const { call, ran } = await mount({ ownerOnlyTools: ['cc_list_sessions'] })
     expect(await call('cc_list_sessions', turn([PEER]))).toContain('only available')

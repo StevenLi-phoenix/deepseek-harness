@@ -78,7 +78,7 @@ sudo -n -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/no
   /Users/Shared/lsy-dsh/current/lsy/deploy/memory-admin.mjs ids
 ```
 
-`approve <id>…`, `discard <id>…`, `revert <id>…`, `rollback --session <id>` or `--since <ISO time>` (add `--dry-run` to count), and `forget --purge <id>…`, which erases an entry from the file, the history, every snapshot, and the held writes. To switch the protection off, set `hold: false` in the `lsy-memory` row of the profile patch; the records and notices continue. To roll back to the previous build, first `discard` the held writes (an older build ignores `memory.pending.jsonl` and reads the other new fields as absent, so nothing else needs doing).
+`approve <id>…`, `discard <id>…`, `revert <id>…`, `rollback --session <id>` or `--since <ISO time>` (add `--dry-run` to count), and `forget --purge <id>…`, which erases an entry from the file, the history, every snapshot, and the held writes. To switch the protection off, set `hold: false` in the bundle row, or put `LSY_MEMORY_HOLD=0` in `$DSH_HOME/.env` and restart (a profile patch cannot reach a row inside a preset); the records and notices continue. To roll back to the previous build, first `discard` the held writes (an older build ignores `memory.pending.jsonl` and reads the other new fields as absent, so nothing else needs doing).
 
 -----
 

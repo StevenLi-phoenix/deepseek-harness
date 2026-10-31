@@ -56,6 +56,7 @@ export interface Config {
    * Hold a protected write (`instructions`, `preferences`, `identity`) until the owner approves it
    * when the turn was not the owner's alone, refuse to forget a protected entry then, and show
    * `identity` entries only as a count. Off keeps the provenance records and notices but no holds.
+   * `LSY_MEMORY_HOLD=0` in the environment turns it off whatever the configuration says.
    */
   hold?: boolean
   /** Tell the owner on WeChat about protected writes, one merged notice per turn. */
@@ -133,7 +134,8 @@ const NOTICE_LINGER_MS = 5 * 60_000
 export function apply(ctx: Context, config: Config): void {
   const store = new MemoryStore(config.file ?? defaultMemoryFile())
   const maxBytes = config.maxBytes ?? 65_536
-  const hold = config.hold ?? true
+  // The environment switch works from `$DSH_HOME/.env` (restart needed), because a profile patch cannot reach a row inside a preset.
+  const hold = process.env['LSY_MEMORY_HOLD'] === '0' ? false : config.hold ?? true
   const notify = config.notify ?? true
   const noticesPerDay = config.noticesPerDay ?? 12
 

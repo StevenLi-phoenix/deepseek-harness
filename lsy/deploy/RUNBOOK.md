@@ -285,15 +285,12 @@ Three plugins keep what the agent learns from steering it by accident or by a st
 - **`lsy-taint`** (in the `unattended` preset) reads from the Session log who started each turn. With `enforce: true` it refuses `cc_send` and `cc_start` outside a turn the owner started alone and reports reminders and watches made in other turns. The log shows `lsy-taint: cc_send refused …` or `would be refused` (`enforce: false`).
 - **`lsy-integrity`** (at the root) watches the profile patches, instruction files, skills, schedule, and memory file, and tells the owner on WeChat which one changed. State is in `/Users/dsh-runtime/.dsh/lsy-integrity/` (`baseline.json`, `persona.json`, `tics.json`). After a deliberate change, nothing needs resetting: the new state becomes the baseline when the notice goes out. Delete `baseline.json` to start over silently.
 
-Switches live in the owner layer (`$DSH_HOME/profiles/event/cordis.patch.yml`, reloads live), one entry per plugin, restating its whole `config`:
+Switches. `lsy-memory` and `lsy-taint` sit inside the `unattended` preset, which a profile patch cannot reach, so they have environment kill switches in `$DSH_HOME/.env` (back the file up first, then restart): `LSY_MEMORY_HOLD=0` (provenance, history, and notices stay; nothing is held, no identity withholding) and `LSY_TAINT_ENFORCE=0` (log only). `lsy-integrity` is a root row, so the owner layer reaches it: `- id: lsy-integrity` with `disabled: true`. The permanent form of each switch is the bundle row (`hold: false`, `enforce: false`).
 
-```yaml
-- id: lsy-memory
-  config: { hold: false }           # provenance, history, and notices stay; nothing is held
-- id: lsy-taint
-  config: { enforce: false }        # log only
-- id: lsy-integrity
-  config: { enabled: false }        # no watch
+```sh
+cd / && sudo -n -u dsh-runtime /bin/cp -p /Users/dsh-runtime/.dsh/.env /Users/dsh-runtime/.dsh/.env.bak.$(date +%Y%m%d%H%M%S)
+printf 'LSY_MEMORY_HOLD=0\n' | sudo -n -u dsh-runtime /bin/sh -c 'umask 077; cat >> /Users/dsh-runtime/.dsh/.env'    # remove the line to turn it back on
+sudo -n /bin/launchctl kickstart -k system/app.lishuyu.dsh-events
 ```
 
 Probes: `lsy/probes/` holds nine situations (E1 to E9: a relayed message or a hidden web instruction asks for a memory write or a Claude Code message, the owner states a wrong fact, a memory entry conflicts with the persona, strangers ask who the owner is, a QQ line poses as the witch, form of address) and E10, the persona probes across models. They build the prompt the real preset sees and ask a model what it would do; tools are not executed, so they measure a model's disposition and not the Host's guards (the unit and agent-loop tests cover those). Run them on a laptop with Claude Code logged in (the subscription, no API key); every raw answer is saved before it is parsed:

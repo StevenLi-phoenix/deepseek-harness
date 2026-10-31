@@ -28,7 +28,10 @@ export const inject = ['tools']
 
 /** Settings. */
 export interface Config {
-  /** Refuse the owner-only tools outside a clean owner turn; off only logs what would have been refused. */
+  /**
+   * Refuse the owner-only tools outside a clean owner turn; off only logs what would have been refused.
+   * `LSY_TAINT_ENFORCE=0` in the environment turns it off whatever the configuration says.
+   */
   enforce?: boolean
   /** Tools that act on other sessions or machines, refused outside a clean owner turn. */
   ownerOnlyTools?: string[]
@@ -55,7 +58,8 @@ const LINGER_MS = 5 * 60_000
  * @param config - settings.
  */
 export function apply(ctx: Context, config: Config): void {
-  const enforce = config.enforce ?? true
+  // The environment switch works from `$DSH_HOME/.env` (restart needed), because a profile patch cannot reach a row inside a preset.
+  const enforce = process.env['LSY_TAINT_ENFORCE'] === '0' ? false : config.enforce ?? true
   const ownerOnly = new Set(config.ownerOnlyTools ?? ['cc_send', 'cc_start'])
   const audited = new Set(config.auditedTools ?? ['schedule_create', 'watch_create'])
   const notify = config.notify ?? true

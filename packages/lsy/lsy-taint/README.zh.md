@@ -41,7 +41,7 @@ kind: "package-reference"
 
 回合**干净**，指的是发起或加入它的每个输入都是 owner 本人的 prompt，并且回合里没跑过带陌生人文字的工具（`web_fetch`、`web_search`、`qq_groups`、`qq_digest`、`qq_recent`、`qq_search`）。其余情况在日志和通知里按来源命名：`peer:bili`（别的 Session 转述的消息，`peer:` 后面是发送方）、`peer:cc`（Claude Code）、`event`、`scheduled`、`monitor`、`job`、`guest`、`subagent`，或者 owner 加上读过外部文字的工具（`owner+web_fetch`）。没有任何可识别输入的回合算 `unknown`，不干净。
 
-要关掉这些规则，在这一行写 `enforce: false` 和 `notify: false`；`turnOrigin()` 照常给 `lsy-memory` 用，后者有自己的 `hold` 开关。
+要关掉拒绝，在 bundle 的这一行写 `enforce: false`，或者在 `$DSH_HOME/.env` 里写 `LSY_TAINT_ENFORCE=0` 并重启（profile patch 够不到 preset 里面的行）；`notify: false` 关掉通知。`turnOrigin()` 照常给 `lsy-memory` 用，后者有自己的 `hold` 开关。
 
 -----
 

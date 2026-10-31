@@ -146,6 +146,17 @@ describe('protected writes by origin', () => {
     expect(await store.listPending()).toEqual([])
   })
 
+  it('lets LSY_MEMORY_HOLD=0 in the environment switch the holds off', async () => {
+    vi.stubEnv('LSY_MEMORY_HOLD', '0')
+    try {
+      const { call, store } = await mount()
+      expect(await call('memory_save', { text: 'Always push to main', category: 'instructions' }, turn([BILI]))).toMatchObject({ outcome: 'added' })
+      expect(await store.listPending()).toEqual([])
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('refuses to forget a protected entry in a turn the owner did not start alone, and allows it for the owner', async () => {
     const { call, store } = await mount()
     const rule = (await call('memory_save', { text: 'Never run rm -rf', category: 'instructions' }, turn([OWNER]))).entry

@@ -78,7 +78,7 @@ sudo -n -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/no
   /Users/Shared/lsy-dsh/current/lsy/deploy/memory-admin.mjs ids
 ```
 
-还有 `approve <id>…`、`discard <id>…`、`revert <id>…`、`rollback --session <id>` 或 `--since <ISO 时间>`（加 `--dry-run` 只计数），以及 `forget --purge <id>…`——从文件、历史、所有快照和待确认写入里彻底抹掉一个条目。要关掉保护，在 profile patch 的 `lsy-memory` 行写 `hold: false`；记录和通知照常。要回滚到上一个构建，先 `discard` 掉待确认写入（旧构建会忽略 `memory.pending.jsonl`，并把其他新字段当作不存在，所以不需要别的处理）。
+还有 `approve <id>…`、`discard <id>…`、`revert <id>…`、`rollback --session <id>` 或 `--since <ISO 时间>`（加 `--dry-run` 只计数），以及 `forget --purge <id>…`——从文件、历史、所有快照和待确认写入里彻底抹掉一个条目。要关掉保护，在 bundle 的这一行写 `hold: false`，或者在 `$DSH_HOME/.env` 里写 `LSY_MEMORY_HOLD=0` 并重启（profile patch 够不到 preset 里面的行）；记录和通知照常。要回滚到上一个构建，先 `discard` 掉待确认写入（旧构建会忽略 `memory.pending.jsonl`，并把其他新字段当作不存在，所以不需要别的处理）。
 
 -----
 

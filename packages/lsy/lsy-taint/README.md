@@ -41,7 +41,7 @@ Add the row to the plugin list of the agent preset that should be guarded. The l
 
 A turn is **clean** when every input that started or joined it was the owner's own prompt and no tool that carries strangers' words (`web_fetch`, `web_search`, `qq_groups`, `qq_digest`, `qq_recent`, `qq_search`) ran in it. Anything else is named by its origin in logs and notices: `peer:bili` (a message another Session passed on; the part after `peer:` names the sender), `peer:cc` (Claude Code), `event`, `scheduled`, `monitor`, `job`, `guest`, `subagent`, or the owner plus the tools that read outside text (`owner+web_fetch`). A turn with no recognised input counts as `unknown`, which is not clean.
 
-To switch the rules off, set `enforce: false` and `notify: false` in the row; `turnOrigin()` keeps working for `lsy-memory`, which has its own `hold` switch.
+To switch the refusal off, set `enforce: false` in the bundle row, or put `LSY_TAINT_ENFORCE=0` in `$DSH_HOME/.env` and restart (a profile patch cannot reach a row inside a preset); `notify: false` stops the notices. `turnOrigin()` keeps working for `lsy-memory`, which has its own `hold` switch.
 
 -----
 

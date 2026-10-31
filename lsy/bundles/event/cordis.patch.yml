@@ -564,21 +564,17 @@
           # speak: text to speech, sent to the owner on WeChat as an audio file.
           - id: lsy-tool-voice
             name: '@deepseek-ai/dsh-lsy-tool-voice'
-          # Owner memory: the Host puts <DSH_HOME>/lsy-memory/memory.jsonl in front of each root
-          # Session and the agent keeps it with memory_search, memory_save, and memory_forget.
           # Who started this turn decides what it may do: cc_send and cc_start only in a turn the owner started
           # alone; reminders and watches made in any other turn are marked and reported. `enforce: false`
-          # only logs what it would refuse.
+          # (or LSY_TAINT_ENFORCE=0 in $DSH_HOME/.env) only logs what it would refuse.
           - id: lsy-taint
             name: '@deepseek-ai/dsh-lsy-taint'
-            config:
-              enforce: false
+          # Owner memory: the Host puts <DSH_HOME>/lsy-memory/memory.jsonl in front of each root Session and the
+          # agent keeps it with memory_search, memory_save, and memory_forget. A protected write (instructions,
+          # preferences, identity) made in a turn the owner did not start alone is held until the owner answers
+          # `记下 <id>` on WeChat (`hold: false`, or LSY_MEMORY_HOLD=0 in $DSH_HOME/.env, switches that off).
           - id: lsy-memory
             name: '@deepseek-ai/dsh-lsy-memory'
-            config:
-              # Provenance, history, and WeChat notices are on; holding protected writes of
-              # turns the owner did not start alone waits for the owner's WeChat commands.
-              hold: false
           # Claude Code-style monitors: a command's new stdout lines come back to the same Session.
           - id: lsy-tool-monitor
             name: '@deepseek-ai/dsh-lsy-tool-monitor'
