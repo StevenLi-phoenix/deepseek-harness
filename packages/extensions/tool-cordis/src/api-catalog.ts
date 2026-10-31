@@ -7521,7 +7521,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LsyNote',
-    declaration: 'export interface LsyNote {\n    title: string;\n    body?: string | undefined;\n    url?: string | undefined;\n    origin?: string | undefined;\n}',
+    declaration: 'export interface LsyNote {\n    title: string;\n    body?: string | undefined;\n    url?: string | undefined;\n    origin?: string | undefined;\n    safety?: true | undefined;\n}',
   },
   {
     name: 'ManagementError',
