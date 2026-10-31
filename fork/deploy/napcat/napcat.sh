@@ -59,6 +59,7 @@ start() {
   local account=()
   [ -n "$uin" ] && account=(-e "ACCOUNT=$uin")
   docker run -d --name "$NAME" --restart unless-stopped --memory 2g --memory-swap 2g --shm-size 512m \
+    --log-opt max-size=10m --log-opt max-file=3 \
     -p "127.0.0.1:$PORT:3001" -v napcat-config:/app/napcat/config -v napcat-qq:/app/.config/QQ \
     ${account[@]+"${account[@]}"} "$IMAGE" >/dev/null
   echo "started $NAME on 127.0.0.1:$PORT${uin:+ (quick login $uin)}"
