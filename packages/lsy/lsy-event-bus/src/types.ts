@@ -63,6 +63,18 @@ export interface SessionAction {
    * untrusted data. Only set it on subscriptions whose sources no outsider can publish to.
    */
   trustedText?: boolean
+  /**
+   * A model route for this subscription's Sessions instead of the profile's default, as
+   * `{ provider, model }` (the provider is a registered `llm-pi-ai` route). Configuration rows only;
+   * the Session then runs without the default's reasoning effort. Omitted, or both fields empty:
+   * the default applies.
+   */
+  model?: {
+    /** Registered `llm-pi-ai` route name. */
+    provider: string
+    /** Provider-owned model id. */
+    model: string
+  }
 }
 
 /** One routing rule, from the bus configuration or created at run time through `LsyEventBus.subscribe()`. */

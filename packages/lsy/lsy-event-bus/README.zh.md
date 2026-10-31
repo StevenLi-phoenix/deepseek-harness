@@ -133,7 +133,7 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-`session` 订阅启动的每个 Session 收到一条用户消息：订阅里可信的 `instructions`，一句把事件数据标为不可信的说明（若订阅的 `session.trustedText` 已设置，即只有主人能向其来源发布事件，则改为一句把每个事件的正文当作主人请求的说明），订阅 id，事件数量，以及一行 JSON，其中最多 `maxPromptEvents` 个事件，正文截断到 `maxTextChars`。总线不往提醒轮次里加任何内容，只读取它的最终回答。
+`session` 订阅启动的每个 Session 收到一条用户消息：订阅里可信的 `instructions`，一句把事件数据标为不可信的说明（若订阅的 `session.trustedText` 已设置，即只有主人能向其来源发布事件，则改为一句把每个事件的正文当作主人请求的说明），订阅 id，事件数量，以及一行 JSON，其中最多 `maxPromptEvents` 个事件，正文截断到 `maxTextChars`。总线不往提醒轮次里加任何内容，只读取它的最终回答。配置行还可以设置 `session.model`（`{ provider, model }`，即已注册的 `llm-pi-ai` 线路），让它启动的 Session 走这条线路而不是 profile 的默认线路；此时 Session 不带默认值的 reasoning effort，用 `subscribe()` 创建的运行时订阅不能设置它。
 
 #### Token 影响
 

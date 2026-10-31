@@ -25,6 +25,12 @@ describe('buildSessionRequest', () => {
     expect(request.permissionPreset).toBe('danger-full-access')
   })
 
+  it('hands a subscription\'s own model route to the Session request, and nothing when it names none', () => {
+    expect(buildSessionRequest('ci', { ...action, model: { provider: 'opencode-go-edge', model: 'opencode-go/deepseek-v4.1-flash' } }, events).model)
+      .toEqual({ provider: 'opencode-go-edge', model: 'opencode-go/deepseek-v4.1-flash' })
+    expect(buildSessionRequest('releases', action, events)).not.toHaveProperty('model')
+  })
+
   it('titles the Session by subscription, first event, and remaining count within 120 characters', () => {
     expect(buildSessionRequest('releases', action, events).title).toBe('releases: octo/repo v1.0.0 (+2)')
     expect(buildSessionRequest('releases', action, events.slice(0, 1)).title).toBe('releases: octo/repo v1.0.0')

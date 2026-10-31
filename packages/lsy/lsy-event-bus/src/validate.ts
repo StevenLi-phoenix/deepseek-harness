@@ -32,6 +32,12 @@ function sessionProblem(id: string, session: unknown): string | undefined {
   if (!isIntegerAtLeast(session.maxPromptEvents, 1)) return `${label}: session.maxPromptEvents must be a positive integer`
   if (!isIntegerAtLeast(session.maxTextChars, 1)) return `${label}: session.maxTextChars must be a positive integer`
   if (session.titlePrefix !== undefined && typeof session.titlePrefix !== 'string') return `${label}: session.titlePrefix must be a string`
+  const model = session.model
+  if (model !== undefined) {
+    // Schemastery hands an unset `model` over as `{}`: both fields absent means none.
+    const empty = isRecord(model) && model.provider === undefined && model.model === undefined
+    if (!empty && !(isRecord(model) && isFilled(model.provider) && isFilled(model.model))) return `${label}: session.model needs a provider and a model`
+  }
   return undefined
 }
 

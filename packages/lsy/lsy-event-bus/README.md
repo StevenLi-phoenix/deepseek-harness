@@ -133,7 +133,7 @@ This is a fork-local package; [`../UPSTREAM.md`](../UPSTREAM.md) describes how t
 
 #### What the model sees
 
-Each Session started by a `session` subscription receives one user message: the subscription's trusted `instructions`, a sentence that labels the event data as untrusted (or, when the subscription's `session.trustedText` is set because only the owner can publish to its sources, one that presents each event's text as the owner's request), the subscription id, the event count, and one line of JSON with at most `maxPromptEvents` events whose text is cut to `maxTextChars`. The bus adds nothing to reminder turns; it only reads their final answer.
+Each Session started by a `session` subscription receives one user message: the subscription's trusted `instructions`, a sentence that labels the event data as untrusted (or, when the subscription's `session.trustedText` is set because only the owner can publish to its sources, one that presents each event's text as the owner's request), the subscription id, the event count, and one line of JSON with at most `maxPromptEvents` events whose text is cut to `maxTextChars`. The bus adds nothing to reminder turns; it only reads their final answer. A configuration row may also set `session.model` (`{ provider, model }`, a registered `llm-pi-ai` route) to run its Sessions on that route instead of the profile's default; the Session then runs without the default's reasoning effort, and run-time subscriptions made with `subscribe()` cannot set it.
 
 #### Token effect
 

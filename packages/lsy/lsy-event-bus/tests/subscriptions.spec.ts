@@ -236,6 +236,8 @@ describe('subscriptionProblem', () => {
     ['a zero prompt event bound', { ...triage, session: { ...session, maxPromptEvents: 0 } }, /session.maxPromptEvents must be a positive integer/],
     ['a zero text bound', { ...triage, session: { ...session, maxTextChars: 0 } }, /session.maxTextChars must be a positive integer/],
     ['a non-string title prefix', { ...triage, session: { ...session, titlePrefix: 3 } }, /session.titlePrefix must be a string/],
+    ['a model without a provider', { ...triage, session: { ...session, model: { model: 'm' } } }, /session.model needs a provider and a model/],
+    ['a model with an empty id', { ...triage, session: { ...session, model: { provider: 'p', model: ' ' } } }, /session.model needs a provider and a model/],
   ])('reports %s', (_label, value, message) => {
     expect(subscriptionProblem(value)).toMatch(message)
   })
@@ -244,5 +246,6 @@ describe('subscriptionProblem', () => {
     expect(subscriptionProblem(tags)).toBeUndefined()
     expect(subscriptionProblem(triage)).toBeUndefined()
     expect(subscriptionProblem({ ...triage, session: { ...session, titlePrefix: 'x' } })).toBeUndefined()
+    expect(subscriptionProblem({ ...triage, session: { ...session, model: { provider: 'p', model: 'm' } } })).toBeUndefined()
   })
 })

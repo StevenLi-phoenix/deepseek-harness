@@ -81,6 +81,7 @@ const sessionActionSchema: z<SessionAction> = z.object({
   maxPromptEvents: z.natural().min(1).default(50),
   maxTextChars: z.natural().min(1).default(2000),
   trustedText: z.boolean().default(false),
+  model: z.object({ provider: z.string(), model: z.string() }),
 })
 
 const subscriptionSchema: z<Subscription> = z.object({
