@@ -376,6 +376,7 @@ flowchart TD
     pkg_fork_github_sensor["fork-github-sensor"]
     pkg_fork_memory["fork-memory"]
     pkg_fork_qq["fork-qq"]
+    pkg_fork_qqbot["fork-qqbot"]
     pkg_fork_sysmon["fork-sysmon"]
     pkg_fork_tool_monitor["fork-tool-monitor"]
     pkg_fork_tool_qq["fork-tool-qq"]
@@ -1497,6 +1498,16 @@ flowchart TD
   pkg_fork_qq --> pkg_permission_presets
   pkg_fork_qq --> pkg_session
   pkg_fork_qq --> pkg_session_title
+  pkg_fork_qqbot --> pkg_api_session_controller
+  pkg_fork_qqbot --> pkg_credentials
+  pkg_fork_qqbot --> pkg_home_paths
+  pkg_fork_qqbot --> pkg_llm
+  pkg_fork_qqbot --> pkg_fork_event_bus
+  pkg_fork_qqbot --> pkg_owner_relay
+  pkg_fork_qqbot --> pkg_permission_presets
+  pkg_fork_qqbot --> pkg_session
+  pkg_fork_qqbot --> pkg_session_title
+  pkg_fork_qqbot --> pkg_storage_domain
   pkg_fork_tool_monitor --> pkg_agent
   pkg_fork_tool_monitor --> pkg_api_session_controller
   pkg_fork_tool_monitor --> pkg_llm
@@ -1967,6 +1978,7 @@ flowchart TD
 | [`workflow-ptc`](../packages/workflow/workflow-ptc) | `workflow` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`ptc-runtime`](../packages/ptc-runtime/ptc-runtime), [`sandbox`](../packages/sandbox/sandbox), [`sandbox-policy`](../packages/sandbox/sandbox-policy), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`tools`](../packages/core/tools), [`workflow`](../packages/workflow/workflow), [`working-directory`](../packages/session/working-directory) |
 | [`experimental-tool-agent-team`](../packages/experimental/tool-agent-team) | `experimental` | [`agent`](../packages/core/agent), [`experimental-agent-team`](../packages/experimental/agent-team), [`session`](../packages/core/session), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`fork-qq`](../packages/fork/fork-qq) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`fork-event-bus`](../packages/fork/fork-event-bus), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title) |
+| [`fork-qqbot`](../packages/fork/fork-qqbot) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`fork-tool-monitor`](../packages/fork/fork-tool-monitor) | `fork` | [`agent`](../packages/core/agent), [`api-session-controller`](../packages/api/session-controller), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`storage-domain`](../packages/storage/storage-domain), [`subprocess`](../packages/subprocess/subprocess), [`tools`](../packages/core/tools) |
 | [`fork-wechat`](../packages/fork/fork-wechat) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-voice`](../packages/fork/fork-voice), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`schedule`](../packages/schedule/schedule) | `schedule` | [`agent`](../packages/core/agent), [`api-session-controller`](../packages/api/session-controller), [`brand`](../packages/util/brand), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`session-projection`](../packages/session/session-projection), [`storage-domain`](../packages/storage/storage-domain), [`subagent`](../packages/subagent/subagent), [`tools`](../packages/core/tools), [`typert-protocol`](../packages/typert/protocol), [`util-time`](../packages/util/time), [`workspace`](../packages/workspace/workspace) |
