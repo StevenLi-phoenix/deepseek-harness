@@ -107,9 +107,13 @@ def main():
 
     p = sub.add_parser("handoff", help="只有 confirm 之后才能用：交付/上传")
     p.add_argument("job")
-    p.add_argument("--to", default="local", help="local（默认，只落盘）| kaorou（交烤肉上传）")
-    p.add_argument("--title", default="")
-    p.add_argument("--desc", default="")
+    p.add_argument("--to", default="local", help="local（默认，只落盘）| kaorou（交烤肉上传到 B 站）")
+    p.add_argument("--title", default="", help="标题（≤80 字；kaorou 必填）")
+    p.add_argument("--desc", default="", help="简介（转载文字会自动附在后面）")
+    p.add_argument("--tags", default="", help="kaorou 必填：逗号分隔，每个 ≤20 字，至少 1 个")
+    p.add_argument("--tid", type=int, default=0, help="B 站二级分区 id，默认 17（单机游戏）")
+    p.add_argument("--visibility", default="", help="self（默认，仅自己可见）| public（用户明确要求公开才用）")
+    p.add_argument("--season", default="", help="加入的合集标题")
 
     a = ap.parse_args()
     j = getattr(a, "job", None)
@@ -189,7 +193,16 @@ def main():
     if a.cmd == "reject":
         out(call("POST", "/v1/jobs/%s/reject" % j, {"reason": a.reason, "text": a.text, "outputs": a.output}))
     if a.cmd == "handoff":
-        out(call("POST", "/v1/jobs/%s/handoff" % j, {"to": a.to, "title": a.title, "desc": a.desc}))
+        body = {"to": a.to, "title": a.title, "desc": a.desc}
+        if a.tags:
+            body["tags"] = [t.strip() for t in a.tags.split(",") if t.strip()]
+        if a.tid:
+            body["tid"] = a.tid
+        if a.visibility:
+            body["visibility"] = a.visibility
+        if a.season:
+            body["season"] = a.season
+        out(call("POST", "/v1/jobs/%s/handoff" % j, body, timeout=3700))
 
 
 if __name__ == "__main__":

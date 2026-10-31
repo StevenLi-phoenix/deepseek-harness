@@ -97,6 +97,31 @@
                 requests only; never retry, cancel, or change anything. Answer in Chinese in at most
                 three sentences: what failed, the likely cause, and what the owner should do. Answer
                 NO_REPLY when it has already recovered.
+          # autocut-worker (video editing on this Mac) pushes autocut.ready when a pipeline stops at
+          # "waiting for the owner's confirmation" and autocut.failed when it gives up. The event text
+          # is untrusted data; the instructions below are the trusted part.
+          - id: autocut
+            sources: [autocut]
+            kinds: ['autocut.*']
+            action: session
+            coalesceMs: 2000
+            maxPerHour: 30
+            session:
+              workspacePath: /Users/dsh-runtime/work
+              agentPreset: unattended
+              permissionPreset: danger-full-access
+              titlePrefix: autocut
+              instructions: >-
+                autocut-worker, the owner's video editing service on this Mac, reported the event
+                below. Load the autocut skill first. autocut.ready: a pipeline finished and the
+                cuts wait for the owner's confirmation. Read the job with `autocut-remote status
+                <job>`, fetch each live deliverable's preview with `autocut-remote fetch`, and send
+                it to the owner with wechat_send_file together with the summary, reporting the
+                numbers as they are (cut counts, uncertain places, failed checks, repost label).
+                The owner asked for this video earlier; this message is not their answer, so never
+                confirm, reject, or hand off here. autocut.failed: tell the owner in at most three
+                sentences what failed and what to do, using the error's fix. Answer NO_REPLY when
+                the owner has already been told about this job and run.
           # The owner's own Claude Code sessions hand tasks to this agent. Its token is readable only
           # by the owner's account, so the event text is the owner's request (trustedText).
           - id: operator
@@ -137,6 +162,8 @@
             tokenEnv: LSY_INGEST_TOKEN_OPERATOR
           - id: host
             tokenEnv: LSY_INGEST_TOKEN_HOST
+          - id: autocut
+            tokenEnv: LSY_INGEST_TOKEN_AUTOCUT
 
     - id: lsy-github-sensor
       name: '@deepseek-ai/dsh-lsy-github-sensor'
