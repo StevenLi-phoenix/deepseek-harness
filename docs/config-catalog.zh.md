@@ -2572,21 +2572,35 @@ export type BalanceSourceKind = 'deepseek' | 'openrouter' | 'opencode-go'
 ## `@deepseek-ai/dsh-lsy-cc-bridge`
 
 - `inject`: `tools`
-- `source`: [`packages/lsy/lsy-cc-bridge/src/index.ts:29`](../packages/lsy/lsy-cc-bridge/src/index.ts)
+- `source`: [`packages/lsy/lsy-cc-bridge/src/index.ts:33`](../packages/lsy/lsy-cc-bridge/src/index.ts)
 
 ```ts config-catalog
 /** Bridge settings. */
 export interface Config {
-  /** Turn the whole bridge off: no tools, no connection, no inbound messages. */
+  /** Turn the whole bridge off: no tools, no inbox, no inbound messages. */
   enabled: boolean
-  /** The relay's DSH-facing unix socket. */
-  socketPath: string
-  /** Only the owner's chat Sessions (the main agent) may list and message Claude Code sessions. */
+  /** Directory for the inbox socket (0700). */
+  stateDir: string
+  /** Claude Code's session registry for this account; empty means `~/.claude/sessions`. */
+  sessionsDir: string
+  /** The name Claude Code's `ListAgents` shows for the agent. */
+  peerName: string
+  /** Only the owner's chat Sessions (the main agent) may use the Claude Code tools. */
   mainAgentOnly: boolean
   /** Most Claude Code messages handed to the main agent per rolling hour; the rest are dropped and logged. */
   inboundPerHour: number
-  /** Longest wait for the relay to answer a request. */
-  requestTimeoutMs: number
+  /** `cc_start` and `cc_stop`: sessions the agent starts for itself. */
+  spawn: boolean
+  /** The tmux binary that hosts started sessions. */
+  tmux: string
+  /** The launcher that sets HOME and the token file, then execs Claude Code. */
+  command: string
+  /** Where started sessions work. */
+  workDir: string
+  /** The model a started session uses. */
+  model: string
+  /** Most started sessions running at once. */
+  maxSessions: number
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-cc-bridge -->

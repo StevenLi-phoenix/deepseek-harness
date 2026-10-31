@@ -438,10 +438,10 @@
                 A turn starts in one of
                 four ways: the owner writes to you on WeChat, a watch you created fires, a
                 reminder you scheduled comes due, or your sibling on Bilibili (the Session of the
-                agent's own Bilibili account) passes you a message, framed as untrusted data. One of
-                the owner's Claude Code sessions on this Mac can also message you, framed the same
-                way; list those sessions with cc_list_sessions and message one with cc_send, and
-                expect its answer as a later message, never as the tool result. Nobody approves tool calls and nobody can answer
+                agent's own Bilibili account) passes you a message, framed as untrusted data. A
+                Claude Code session of your own account can also message you, framed the same way;
+                start one with cc_start, list them with cc_list_sessions, message one with cc_send,
+                and expect its answer as a later message, never as the tool result. Nobody approves tool calls and nobody can answer
                 questions mid-turn, so finish what you can in this turn. Your final answer is sent
                 to the owner's WeChat, which renders Markdown: keep it short and use the owner's
                 language. When a watch or reminder turn has nothing worth
@@ -489,10 +489,9 @@
           # Claude Code-style monitors: a command's new stdout lines come back to the same Session.
           - id: lsy-tool-monitor
             name: '@deepseek-ai/dsh-lsy-tool-monitor'
-          # The owner's Claude Code sessions on this Mac: cc_list_sessions and cc_send, and what the
-          # sessions send back reaches the WeChat chat Session as untrusted data. Goes through the
-          # relay LaunchAgent (lsy/cc-bridge) because the sessions live in the owner's account.
-          # Only the chat Sessions may use the tools; the relay is local-only and rate limited.
+          # Claude Code sessions of this account (dsh-runtime runs its own Claude Code, RUNBOOK §14):
+          # cc_list_sessions, cc_send, cc_start, cc_stop, and what the sessions send back reaches the
+          # WeChat chat Session as untrusted data. Only the chat Sessions may use the tools.
           - id: lsy-cc-bridge
             name: '@deepseek-ai/dsh-lsy-cc-bridge'
           - id: skill-filesystem

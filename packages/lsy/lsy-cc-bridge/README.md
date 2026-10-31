@@ -1,5 +1,5 @@
 ---
-description: "Model-facing cc_list_sessions and cc_send tools: the agent talks to the owner's Claude Code sessions on the same Mac through a local relay, and what those sessions send back reaches the main agent as untrusted data."
+description: "Model-facing cc_list_sessions, cc_send, cc_start, and cc_stop tools: the agent works with Claude Code sessions of its own account, and what those sessions send back reaches the main agent as untrusted data."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Your always-on agent and the Claude Code sessions you run on the same Mac can now talk to each other. The agent lists running sessions (`cc_list_sessions`) and hands one a task or asks for progress (`cc_send`); a session's message to the agent arrives in the WeChat chat Session as a turn of its own. Both directions are untrusted data, never your command. A small relay in your account ([`lsy/cc-bridge`](../../../lsy/cc-bridge/README.md)) carries messages over local unix sockets; no port is opened.
+Your always-on agent can work with Claude Code. It starts sessions of its own (`cc_start`), lists them (`cc_list_sessions`), hands one a task or asks for progress (`cc_send`), and stops it (`cc_stop`); a session's message to the agent arrives in the WeChat chat Session as a turn of its own. Both directions are untrusted data, never your command. The sessions run as the same macOS user as the agent, with a read-only setup, so the agent reaches them over local unix sockets: no port, no relay, and your own sessions stay out of reach.
 
 ## Table of Contents
 
@@ -25,24 +25,23 @@ Your always-on agent and the Claude Code sessions you run on the same Mac can no
 <a id="use-this-package"></a>
 ## Use this package
 
-Run the relay as the owner first ([`lsy/cc-bridge/install.sh`](../../../lsy/cc-bridge/install.sh)), then add the row to the plugin list of the agent preset that should reach Claude Code, in a process that also mounts `@deepseek-ai/dsh-lsy-wechat`. The lsy event profile mounts it in its `unattended` preset.
+Provision Claude Code for the service user first ([RUNBOOK §14](../../../lsy/deploy/RUNBOOK.md): `lsy/deploy/claude-dsh/install.sh`, then the owner's `claude setup-token` stored in a 0600 file). Then add the row to the plugin list of the agent preset that should use it, in a process that also mounts `@deepseek-ai/dsh-lsy-wechat`. The lsy event profile mounts it in its `unattended` preset with the defaults.
 
 ```yaml
 - id: lsy-cc-bridge
   name: '@deepseek-ai/dsh-lsy-cc-bridge'
-  config:
-    socketPath: /Users/Shared/dsh-cc-bridge/dsh.sock
 ```
 
 | Option | Default | Meaning |
 |---|---|---|
-| `enabled` | `true` | `false` registers no tools and opens no connection. |
-| `socketPath` | `/Users/Shared/dsh-cc-bridge/dsh.sock` | The relay's DSH-facing unix socket. |
-| `mainAgentOnly` | `true` | Only the owner's WeChat chat Sessions may list and message Claude Code sessions; watch, reminder, and event Sessions get an error. |
+| `enabled` | `true` | `false` registers no tools and opens no inbox. |
+| `stateDir` | `/Users/dsh-runtime/.dsh/lsy-cc-bridge` | Directory of the inbox socket (0700). |
+| `sessionsDir` | `~/.claude/sessions` | Claude Code's session registry of this account. |
+| `peerName` | `dsh-agent` | The name Claude Code's `ListAgents` shows for the agent. |
+| `mainAgentOnly` | `true` | Only the owner's WeChat chat Sessions may use the tools; watch, reminder, and event Sessions get an error. |
 | `inboundPerHour` | `30` | Messages from Claude Code handed to the main agent per rolling hour; later ones are dropped and logged. |
-| `requestTimeoutMs` | `10000` | Longest wait for the relay to answer. |
-
-Without the relay the tools answer with an error and the plugin reconnects with backoff (1 s up to 30 s), so starting the relay later needs no restart here.
+| `spawn` | `true` | Register `cc_start` and `cc_stop`. |
+| `tmux`, `command`, `workDir`, `model`, `maxSessions` | `/opt/homebrew/bin/tmux`, `/Users/dsh-runtime/bin/claude-dsh`, `/Users/dsh-runtime/work/cc`, `sonnet`, `3` | How started sessions run. |
 
 -----
 
@@ -52,19 +51,25 @@ Without the relay the tools answer with an error and the plugin reconnects with 
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-`src/client.ts` holds one long-lived connection to the relay: JSON lines, a request id per call, a hello on connect, and reconnect with backoff. The relay pushes `message` events (what a session sent) and `status` events (Claude Code's receipts, such as held or dropped). A message is acknowledged once `onMessage` took it; one that could not be taken is offered again after 30 s, up to 5 times, and the relay replays whatever was never acknowledged on the next connect, so a restart of either side loses nothing within the relay's one-hour window.
+`src/hub.ts` is the agent's end of Claude Code's peer messaging, inside the DSH process. It listens on one socket (`<stateDir>/cc.sock`, 0600 in a 0700 directory) and registers a peer record so `ListAgents` shows the agent; to send, it writes a frame to a session's own socket after checking that the session is live in the registry (`src/registry.ts`: pid alive and start time equal to `ps -o lstart=`). An inbound message is attributed to the session whose record owns the `from` socket, not to the name it gives itself; Node cannot read a connection's peer pid, so the account boundary is the guard. Rates (6 sends a minute per session, 20 in total; 6 inbound a minute per session, 30 in total) and the 8,000-character limit are enforced here, a session that is limited gets one notice a minute, and a message the main agent could not take yet is offered again after 30 s, up to 5 times.
 
-`src/index.ts` registers the two tools and wires inbound messages to `ctx.lsyNotifier.tellMainAgent`, the same door the Bilibili Session uses: the chat Session queues the message framed as untrusted data, and its answer goes to the owner on WeChat (`NO_REPLY` sends nothing). The sender's label comes from the relay, which found the session by the process that connected, not from the message; quotes, angle brackets, and control characters in a session name are stripped before it enters the frame. A message that arrives while the chat channel is not running stays unacknowledged and is offered again.
+`src/spawn.ts` starts sessions in detached tmux (own server, `-L dsh-cc`) from a cleaned environment (`env -i`), so none of the service's secrets reach them; the launcher reads the OAuth token from its file. `src/wire.ts` holds the internal message format in one place.
+
+`src/index.ts` registers the four tools and hands inbound messages to `ctx.lsyNotifier.tellMainAgent`, the same door the Bilibili Session uses: the chat Session queues the message framed as untrusted data and its answer goes to the owner on WeChat (`NO_REPLY` sends nothing). The sender's label is built from the registry, with quotes, angle brackets, and control characters stripped.
 
 ```text
-Claude Code session --SendMessage--> relay (owner) --> this plugin --> tellMainAgent --> chat Session
-chat Session --cc_send--> this plugin --> relay (owner) --> the session's own inbox socket
+Claude Code session --SendMessage--> cc.sock --> hub --> tellMainAgent --> chat Session
+chat Session --cc_send--> hub --> the session's own socket in /tmp/cc-socks-502
+chat Session --cc_start--> tmux -L dsh-cc --> claude-dsh --> a new session
 ```
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Plugin entry: options, the two tools, the inbound hand-over and its hourly cap |
-| [`src/client.ts`](src/client.ts) | Relay connection: requests, reconnect, acknowledgement, retry, duplicate suppression |
+| [`src/index.ts`](src/index.ts) | Plugin entry: options, the four tools, the inbound hand-over and its hourly cap |
+| [`src/hub.ts`](src/hub.ts) | Inbox, sending, limits, retry of undelivered inbound messages, the peer record |
+| [`src/registry.ts`](src/registry.ts) | Live sessions of this account and how a name resolves |
+| [`src/spawn.ts`](src/spawn.ts) | `cc_start` and `cc_stop` over tmux |
+| [`src/wire.ts`](src/wire.ts) | Claude Code's internal message format |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 
@@ -75,7 +80,7 @@ This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 <a id="further-exploration"></a>
 ## Further Exploration
 
-- [Relay and its security model](../../../lsy/cc-bridge/README.md) — sockets, permissions, the Claude Code message format, rate limits
+- [Claude Code for the service user](../../../lsy/deploy/RUNBOOK.md) — provisioning, the token file, and what a started session may do
 - [WeChat channel](../lsy-wechat/README.md) — the chat Session that receives inbound messages
 
 -----
@@ -87,7 +92,7 @@ This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 
 #### What the model sees
 
-One tool schema whenever the calling Agent's preset mounts the package: `cc_list_sessions`, no parameters. The description says it lists the owner's running Claude Code sessions on this Mac, newest activity first, with name, pid, working directory, status, and seconds since the last change.
+One tool schema whenever the calling Agent's preset mounts the package: `cc_list_sessions`, no parameters. The description says it lists the Claude Code sessions of the agent's own account, newest activity first, with name, pid, working directory, status, and seconds since the last change.
 
 #### Token effect
 
@@ -106,6 +111,20 @@ Prefix-stable while tool definitions and visibility are unchanged; mounting or d
 #### Token effect
 
 A fixed schema cost of about 300 tokens on every request from an Agent whose preset mounts the package; a result is a few dozen tokens.
+
+#### KV Cache effect
+
+Append-only per call; newly visible content follows the reusable request prefix and does not invalidate existing KV Cache entries.
+
+### Start and stop tools
+
+#### What the model sees
+
+`cc_start` with the required string `name` and the optional string `task`, and `cc_stop` with `name`. The description says the session runs under the agent's own account with a conservative setup (read, search, `ls`, `git status|log|diff`, message; no edits, other commands, or web), that at most 3 run at once, that `cc_start` returns once the session is up (up to 45 seconds), and that its answer comes back later as a message to the main agent.
+
+#### Token effect
+
+A fixed schema cost of about 350 tokens for the two tools on every request from an Agent whose preset mounts the package; a result is a few dozen tokens.
 
 #### KV Cache effect
 
@@ -130,8 +149,9 @@ Append-only; the prompt joins the chat Session's history after the reusable pref
 <a id="known-limitations-and-deferred-work"></a>
 
 - **No call-and-wait** — a session's answer is a later message, not the tool result, because a Claude Code session answers when its own turn ends.
-- **Delivery is a hand-over** — `sent: true` means the relay put the message in the session's inbox; whether that session reads it, holds it for its user, or ignores it is its own decision, and Claude Code's receipts appear only in the log.
-- **Local only** — sessions on other machines are not listed; Claude Code's peer protocol is internal and versioned, so a Claude Code update can break the relay (see its README).
+- **Delivery is a hand-over** — `sent: true` means the bridge put the message in the session's inbox; whether that session reads it or ignores it is its own decision, and Claude Code's receipts appear only in the log.
+- **Own account only** — the owner's sessions under another macOS account are not reachable, by design; reaching them needs a relay across the two accounts (built once and removed, see the changelog).
+- **Internal wire format** — Claude Code's peer protocol is undocumented and versioned (`peerProtocol` 1, checked on 2.1.314), so a Claude Code update can break it; the RUNBOOK says how to re-check.
 
 <a id="dev-note"></a>
 ### Dev Note
@@ -141,6 +161,6 @@ Append-only; the prompt joins the chat Session's history after the reusable pref
 
 This Dev Note is non-authoritative working context: undecided directions and notes for maintainers. Shipped behavior and accepted rationale live in the sections above, the package code, and the linked Agent Notes.
 
-- Tests run against a fake relay on a temp unix socket (`tests/fake-relay.ts`); the relay's own tests live in `lsy/cc-bridge/tests`.
+- Tests use fake sessions (unix sockets plus registry records) in a temp directory and a fake tmux runner; no Claude Code is started.
 
 </details>

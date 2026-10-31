@@ -3,26 +3,26 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/lsy/lsy-cc-bridge/README.md
 /:
-  en: 81f5055683279c64
-  zh: 0803518030a84ada
+  en: 76379532c4bbb115
+  zh: f69270fca41cde8e
 /deepseek-ai-dsh-lsy-cc-bridge:
   en: 4537017f8289fff1
   zh: 35cdbf1223ae87a8
 /deepseek-ai-dsh-lsy-cc-bridge/summary:
-  en: 1d6725fb48fbaf80
-  zh: 5cb7d14383910407
+  en: 09f23313896125bc
+  zh: b92c4c0f3c677a34
 /deepseek-ai-dsh-lsy-cc-bridge/table-of-contents:
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
 /deepseek-ai-dsh-lsy-cc-bridge/use-this-package:
-  en: c7b80511987981f1
-  zh: 497151e30e7b2d11
+  en: a2fc5a8999564d18
+  zh: 77c28e20cd87b825
 /deepseek-ai-dsh-lsy-cc-bridge/understand-the-implementation:
-  en: c4557353d8b3a069
-  zh: a1a0e9eb07ca0ac9
+  en: c88089045abc911b
+  zh: 947f3b7a99810bd9
 /deepseek-ai-dsh-lsy-cc-bridge/further-exploration:
-  en: 5ebb6edca86002d3
-  zh: 74679a7dd7f1e3ac
+  en: e952c3de037ca6ad
+  zh: 4bc37b48385e7216
 /deepseek-ai-dsh-lsy-cc-bridge/model-experience:
   en: 215e7ba838619b7b
   zh: a311da3843709f90
@@ -30,8 +30,8 @@
   en: c0d32260ebb01e49
   zh: 8f25fc0cece7b0b2
 /deepseek-ai-dsh-lsy-cc-bridge/model-experience/list-tool/what-the-model-sees:
-  en: 03880b03b7d20864
-  zh: d6ebfea645e1428e
+  en: 248d890dc6ea1cd0
+  zh: b213c9d30c9ff458
 /deepseek-ai-dsh-lsy-cc-bridge/model-experience/list-tool/token-effect:
   en: 1c2c302f06b8ea87
   zh: 04ab1fed478febce
@@ -50,6 +50,18 @@
 /deepseek-ai-dsh-lsy-cc-bridge/model-experience/send-tool/kv-cache-effect:
   en: 125cf8f3351e0ad4
   zh: 982f462244347be5
+/deepseek-ai-dsh-lsy-cc-bridge/model-experience/start-and-stop-tools:
+  en: 1a2725bf08f465c2
+  zh: dcb2652a0d77eb0a
+/deepseek-ai-dsh-lsy-cc-bridge/model-experience/start-and-stop-tools/what-the-model-sees:
+  en: 343783b3e7987d97
+  zh: b73bd911662a7707
+/deepseek-ai-dsh-lsy-cc-bridge/model-experience/start-and-stop-tools/token-effect:
+  en: 84528088031900c4
+  zh: 3298e90d6afab92d
+/deepseek-ai-dsh-lsy-cc-bridge/model-experience/start-and-stop-tools/kv-cache-effect:
+  en: 125cf8f3351e0ad4
+  zh: 982f462244347be5
 /deepseek-ai-dsh-lsy-cc-bridge/model-experience/inbound-messages:
   en: a7cf78d3edb96c6b
   zh: 413763157d42fb53
@@ -63,8 +75,8 @@
   en: 3a5da136d02a2a63
   zh: 74a0d5bcbe04c6bd
 /deepseek-ai-dsh-lsy-cc-bridge/known-limitations-and-deferred-work:
-  en: 07a0addaf465e5ca
-  zh: 6083404b0fff7b39
+  en: 6ac8424b234fb206
+  zh: 4caf82fbd1e1a709
 /deepseek-ai-dsh-lsy-cc-bridge/known-limitations-and-deferred-work/dev-note:
-  en: c7afe6d3e5177a36
-  zh: 61e7dc0abbb30fcb
+  en: 944e404933fa1f50
+  zh: d4d24425c4175913

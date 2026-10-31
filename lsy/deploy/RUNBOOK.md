@@ -222,27 +222,30 @@ Add `--dry-run` to only count. The next Session sees the entries; no restart is 
 5. Stop it: delete `LSY_QQ_APP_SECRET` from `.env` and restart, or `- id: lsy-qq` with `disabled: true` in the owner layer. Roll the secret on `q.qq.com` if it leaked.
 
 The QQ Sessions use the `qq` preset (persona, time, compaction; no shell, files, or web). `/new` in a chat starts a fresh Session. An answer QQ refuses (a reply window that passed, a quota) reaches the owner on WeChat as a note labelled with the QQ Session.
-## 14. Claude Code bridge (optional)
+## 14. Claude Code for the service user (optional)
 
-The agent and the owner's Claude Code sessions on this Mac talk through a relay that runs as `lishuyu`, because the sessions' sockets (`/tmp/cc-socks`, 0600) belong to that account. The `unattended` preset already mounts the `lsy-cc-bridge` plugin; without the relay its tools answer "not connected". Details, permissions, and the security model: [`../cc-bridge/README.md`](../cc-bridge/README.md).
+The agent can start and talk to Claude Code sessions of its own. They run as `dsh-runtime`, so the agent reaches their sockets (`/tmp/cc-socks-502`, 0600) directly; the owner's sessions under `lishuyu` stay out of reach. The `unattended` preset already mounts the `lsy-cc-bridge` plugin; until this step is done `cc_start` reports that the session did not register.
 
-Install as `lishuyu` (no sudo; from SSH or any shell on the Mac):
-
-```sh
-/Users/Shared/lsy-dsh/current/lsy/cc-bridge/install.sh     # copies relay.py to ~/.local/libexec/dsh-cc-bridge, loads gui/501/app.lishuyu.dsh-cc-bridge
-```
-
-Verify the Claude Code bridge:
+Provision (as the operator; no password prompts with the sudoers file of "Operator access"):
 
 ```sh
-launchctl print gui/$(id -u)/app.lishuyu.dsh-cc-bridge | grep -E 'state|pid'
-ls -lde /Users/Shared/dsh-cc-bridge /Users/Shared/dsh-cc-bridge/dsh.sock         # drwx------+ and srw-------+, one ACL entry for dsh-runtime
-sudo -n -u dsh-runtime /usr/bin/python3 -c 'import socket,json;s=socket.socket(socket.AF_UNIX);s.settimeout(5);s.connect("/Users/Shared/dsh-cc-bridge/dsh.sock");s.sendall(b"{\"id\":1,\"op\":\"list\"}\n");print(s.recv(65536).decode()[:300])'
-tail -n 20 ~/.local/state/dsh-cc-bridge/relay.log
-grep 'cc-bridge' /Users/dsh-runtime/logs/stdout.log | tail -5                    # "connected to the relay"
+/Users/Shared/lsy-dsh/current/lsy/deploy/claude-dsh/install.sh      # copies the operator's Claude Code binary (same version), the launcher, and the settings
 ```
 
-After a Claude Code update, send one message each way before relying on the bridge: in a test session, "use ListAgents, then SendMessage `hello` to `dsh-agent`" must log `inbox: message … from <session>` in `relay.log`, and the agent's `cc_send` to that session must show `send: … <- … chars` followed by the session reading it. Stop the bridge with `launchctl bootout gui/$(id -u)/app.lishuyu.dsh-cc-bridge`, remove it with `install.sh --uninstall`, or switch the agent side off with `enabled: false` in the `lsy-cc-bridge` row of the profile patch.
+Sign in with a long-lived token the owner generates (`claude setup-token` in the owner's own terminal; the owner types it, nobody pastes it into a chat). Store it without printing it, then check:
+
+```sh
+umask 077; sudo -n -u dsh-runtime /usr/bin/tee /Users/dsh-runtime/.config/claude-code/oauth_token >/dev/null < <file holding only the token>
+sudo -n -u dsh-runtime /Users/dsh-runtime/bin/claude-dsh -p "reply with exactly: OK" < /dev/null     # prints OK
+```
+
+The file must hold the bare `sk-ant-oat01-…` value (mode 0600, directory 0700). `claude-dsh` exports it as `CLAUDE_CODE_OAUTH_TOKEN` for the one process it execs. The first interactive start asks for a theme and to trust `/Users/dsh-runtime/work/cc` once; run `sudo -n -u dsh-runtime /opt/homebrew/bin/tmux -L dsh-cc-setup new-session -s setup -c /Users/dsh-runtime/work/cc /Users/dsh-runtime/bin/claude-dsh` from a terminal, answer both (choose "Yes, I trust this folder"), and exit.
+
+What a started session may do (`/Users/dsh-runtime/.claude/settings.json`, `dontAsk`: whatever is not allowed is refused, because nobody can answer a prompt): read and search files, run `ls` and `git status|log|diff`, send and list peer messages. It cannot edit files, run other commands, or use the web, and it cannot read `~/.dsh`, `~/.config`, `~/.ssh`, `.env`, `*.pem`, or `*.key`. Loosen the allow list in that file if a task needs more; it is the owner's layer and `install.sh` never replaces it.
+
+Verify the bridge end to end: `cc_start` a session named `probe` from the chat (or start one by hand in tmux), see `cc-bridge: cc_start "probe" is up` in `stdout.log`, `cc_send` it a line, have it `SendMessage` to `dsh-agent`, and see `cc-bridge: passed … chars from "probe"`. Stop it with `cc_stop`. After a Claude Code update (copy the new binary with `install.sh <version>`), repeat the round trip: the peer message format is internal and may change.
+
+Switch the agent side off with `enabled: false` in the `lsy-cc-bridge` row of the profile patch (`spawn: false` keeps messaging but removes `cc_start`/`cc_stop`).
 
 ## Operator access without passwords (optional)
 

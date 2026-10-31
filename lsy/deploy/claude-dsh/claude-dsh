@@ -1,0 +1,12 @@
+#!/bin/bash
+# Claude Code for the DSH service user: HOME is dsh-runtime, the OAuth token comes from a 0600 file and
+# stays out of argv, plists, and logs. DSH starts sessions with it (cc_start); by hand:
+#   sudo -n -u dsh-runtime /Users/dsh-runtime/bin/claude-dsh -p "reply with exactly: OK" < /dev/null
+set -euo pipefail
+export HOME=/Users/dsh-runtime
+export PATH=/opt/homebrew/bin:/usr/bin:/bin
+CLAUDE_CODE_OAUTH_TOKEN="$(/bin/cat /Users/dsh-runtime/.config/claude-code/oauth_token)"
+export CLAUDE_CODE_OAUTH_TOKEN
+export DISABLE_AUTOUPDATER=1
+cd /Users/dsh-runtime/work/cc
+exec /Users/dsh-runtime/.local/bin/claude "$@"
