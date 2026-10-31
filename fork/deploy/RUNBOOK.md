@@ -10,8 +10,8 @@ Every `sudo` line is meant to be run by hand, one at a time. The agent runs with
 
 | Path | Owner | Contents |
 |---|---|---|
-| `/Users/Shared/fork-dsh/<sha>/` | owner, 755 | Installed build (≈1.6 GB) plus `fork/` (event bundle, profile template, `setup-profile.sh`, `wechat-login.mjs`); `dsh-runtime` can read, not write |
-| `/Users/Shared/fork-dsh/current` | owner | Symlink to the active build |
+| `/Users/Shared/fork-dsh/builds.noindex/<sha>/` | owner, 755 | Installed build (≈1.6 GB) plus `fork/` (event bundle, profile template, `setup-profile.sh`, `wechat-login.mjs`); `dsh-runtime` can read, not write; the `.noindex` name keeps Spotlight out of every build's `node_modules` (indexing each new 1.7 GB build held the mini at load 24 on 2026-10-31) |
+| `/Users/Shared/fork-dsh/current` | owner | Symlink to the active build; the LaunchDaemon, the sudoers rules, and the profile links use this path only |
 | `/Users/dsh-runtime/.dsh/` | dsh-runtime, 700 | `DSH_HOME`: profile, Sessions, storages (watches, subscriptions, cursors), `.env` secrets |
 | `/Users/dsh-runtime/.dsh/fork-wechat/account.json` | dsh-runtime, 600 | WeChat bot binding written by `wechat-login.mjs` |
 | `/Users/dsh-runtime/me/` | dsh-runtime | Clone of `StevenLi-phoenix/me` (private), the WeChat chat Session's workspace; WeChat attachments land in its `.wechat-inbox/` (700, files 600, ignored by its own `.gitignore`) |
@@ -348,8 +348,8 @@ Patch edits (`$DSH_HOME/cordis.patch.yml`, the profile patch) reload live; `.env
 | Task | Command |
 |---|---|
 | Change what is watched | Ask the agent on WeChat |
-| Upgrade | `fork/deploy/upgrade.sh` (run it from a separate `git worktree` so the main tree stays editable; it keeps the new build and the one it replaces and deletes older ones), then `sudo -n -u dsh-runtime /Users/Shared/fork-dsh/current/fork/deploy/setup-profile.sh /Users/dsh-runtime/.dsh /Users/Shared/fork-dsh/current` and `sudo -n launchctl kickstart -k system/app.lishuyu.dsh-events` |
-| Roll back | `ln -sfn /Users/Shared/fork-dsh/<previous sha> /Users/Shared/fork-dsh/current`, then the two commands above; only the previous build is kept |
+| Upgrade | `fork/deploy/upgrade.sh` (run it from a separate `git worktree` so the main tree stays editable; it keeps the new build and the one it replaces and deletes older ones, in `builds.noindex` or in the old layout directly under `/Users/Shared/fork-dsh`), then `sudo -n -u dsh-runtime /Users/Shared/fork-dsh/current/fork/deploy/setup-profile.sh /Users/dsh-runtime/.dsh /Users/Shared/fork-dsh/current` and `sudo -n launchctl kickstart -k system/app.lishuyu.dsh-events` |
+| Roll back | `ln -sfn /Users/Shared/fork-dsh/builds.noindex/<previous sha> /Users/Shared/fork-dsh/current`, then the two commands above; only the previous build is kept. A previous build from before 2026-10-31 sits at `/Users/Shared/fork-dsh/<sha>`; once `current` points elsewhere and the service restarted, move it with `fork/deploy/prune-builds.sh --relocate /Users/Shared/fork-dsh /Users/Shared/fork-dsh/<sha>` |
 | Re-bind WeChat | Step 6 again; no restart needed |
 | New chat Session (e.g. after a model change) | Send `/new` on WeChat |
 | Stop | `sudo launchctl bootout system/app.lishuyu.dsh-events` |
