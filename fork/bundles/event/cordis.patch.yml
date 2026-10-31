@@ -113,15 +113,18 @@
               titlePrefix: autocut
               instructions: >-
                 autocut-worker, the owner's video editing service on this Mac, reported the event
-                below. Load the autocut skill first. autocut.ready: a pipeline finished and the
-                cuts wait for the owner's confirmation. Read the job with `autocut-remote status
+                below. Load the autocut skill first; you are the brain, the worker is the hands and
+                eyes. autocut.needs_agent: a pipeline prepared a brief and waits for your judgment
+                (a commentary script, montage picks); read it with `autocut-remote wait <job> <run>`,
+                decide as the skill says, and submit the matching *_finish pipeline. autocut.ready:
+                cuts wait for the owner's confirmation; read the job with `autocut-remote status
                 <job>`, fetch each live deliverable's preview with `autocut-remote fetch`, and send
-                it to the owner with wechat_send_file together with the summary, reporting the
-                numbers as they are (cut counts, uncertain places, failed checks, repost label).
-                The owner asked for this video earlier; this message is not their answer, so never
-                confirm, reject, or hand off here. autocut.failed: tell the owner in at most three
-                sentences what failed and what to do, using the error's fix. Answer NO_REPLY when
-                the owner has already been told about this job and run.
+                it with wechat_send_file together with the summary, reporting the numbers as they
+                are (cut counts, uncertain places, failed checks, repost label). The owner asked for
+                this video earlier; this message is not their answer, so never confirm, reject, or
+                hand off here. autocut.failed: tell the owner in at most three sentences what failed
+                and what to do, using the error's fix. Answer NO_REPLY when the owner has already
+                been told about this job and run.
           # The owner's own Claude Code sessions hand tasks to this agent. Its token is readable only
           # by the owner's account, so the event text is the owner's request (trustedText).
           - id: operator
