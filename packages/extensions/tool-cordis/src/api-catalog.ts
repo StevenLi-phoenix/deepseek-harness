@@ -7521,7 +7521,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ForkNote',
-    declaration: 'export interface ForkNote {\n    title: string;\n    body?: string | undefined;\n    url?: string | undefined;\n    origin?: string | undefined;\n}',
+    declaration: 'export interface ForkNote {\n    title: string;\n    body?: string | undefined;\n    url?: string | undefined;\n    origin?: string | undefined;\n    safety?: true | undefined;\n}',
   },
   {
     name: 'ManagementError',
