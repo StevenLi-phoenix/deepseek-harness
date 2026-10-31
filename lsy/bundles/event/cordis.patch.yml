@@ -178,14 +178,14 @@
     - id: lsy-sysmon
       name: '@deepseek-ai/dsh-lsy-sysmon'
 
-    # Voice (ctx.lsyVoice): text to speech for the `speak` tool (the Mac mini TTS service first, feiyu
-    # on the laptop as fallback; the feiyu key is LSY_FEIYU_API_KEY in $DSH_HOME/.env) and speech
-    # to text for audio files the owner sends on WeChat. Transcription is OFF: to turn it on, add
+    # Voice (ctx.lsyVoice): text to speech for the `speak` tool (feiyu on the laptop, no fallback;
+    # the Mac mini TTS service was retired on 2026-10-31; the key is LSY_FEIYU_API_KEY in
+    # $DSH_HOME/.env) and speech to text for audio files the owner sends on WeChat. Transcription is OFF: to turn it on, add
     # to the profile patch ($DSH_HOME/profiles/event/cordis.patch.yml)
     #   - id: lsy-voice
     #     config: { asr: { enabled: true } }
     # (every other field keeps its default; a patch entry's config replaces the whole config, so
-    # restate any field changed here). It reads files only; it never opens a microphone.
+    # restate any field changed here, and put asr into an existing lsy-voice row of the patch). It reads files only; it never opens a microphone.
     - id: lsy-voice
       name: '@deepseek-ai/dsh-lsy-voice'
       config:

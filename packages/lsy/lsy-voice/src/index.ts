@@ -2,8 +2,9 @@
  * Voice for the owner's agents: text to speech (`ctx.lsyVoice.speak`) and speech to text
  * (`ctx.lsyVoice.transcribe`), both through the owner's own services over HTTP.
  *
- * Speech goes to feiyu (laptop, the default) or the Mac mini TTS service, with the other as an
- * optional fallback. Speech to text goes to the mini's asr-service and is off until
+ * Speech goes to feiyu (laptop, the default, no fallback). The Mac mini TTS service was retired on
+ * 2026-10-31 (its model held about 13 GB of GPU memory and took minutes to cold-start); the
+ * `mac-mini` provider stays selectable for a host that runs one again. Speech to text goes to the mini's asr-service and is off until
  * `asr.enabled` is set; nothing here ever opens a microphone, it only reads audio files handed to it.
  * Every provider answer is written to the data directory before it is parsed, and a failed call
  * leaves a log line with the reason.
@@ -50,9 +51,9 @@ export interface Config {
   tts: {
     /** Turns `speak` off when false. */
     enabled: boolean
-    /** First provider to try. */
+    /** First provider to try (`mac-mini` is retired). */
     provider: TtsProviderName
-    /** Provider tried when the first fails; `none` stops after one. */
+    /** Provider tried when the first fails; `none` (the default) stops after one. */
     fallback: TtsProviderName | 'none'
     /** Delivered file format; `mp3` needs ffmpeg and falls back to `wav` when the conversion fails. */
     format: 'mp3' | 'wav'
@@ -83,7 +84,10 @@ export interface Config {
       /** Pause between job polls, in milliseconds. */
       pollMs: number
     }
-    /** The Mac mini TTS service (Qwen3-TTS, answers the WAV directly). */
+    /**
+     * The Mac mini TTS service (Qwen3-TTS, answers the WAV directly). Retired on 2026-10-31; used only when
+     * selected as `provider` or `fallback`.
+     */
     macMini: {
       /** Base URL of the service. */
       baseUrl: string
@@ -122,8 +126,8 @@ export const Config: z<Config> = z.object({
   keepDays: z.natural().min(1).default(14),
   tts: z.object({
     enabled: z.boolean().default(true),
-    provider: z.union(['feiyu', 'mac-mini'] as const).default('mac-mini'),
-    fallback: z.union(['feiyu', 'mac-mini', 'none'] as const).default('feiyu'),
+    provider: z.union(['feiyu', 'mac-mini'] as const).default('feiyu'),
+    fallback: z.union(['feiyu', 'mac-mini', 'none'] as const).default('none'),
     format: z.union(['mp3', 'wav'] as const).default('mp3'),
     ffmpegPath: z.string().default('/opt/homebrew/bin/ffmpeg'),
     maxChars: z.natural().min(1).max(2000).default(200),

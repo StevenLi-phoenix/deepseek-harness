@@ -3074,7 +3074,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-lsy-voice`
 
 - `inject`: `credentials`
-- `source`: [`packages/lsy/lsy-voice/src/index.ts:44`](../packages/lsy/lsy-voice/src/index.ts)
+- `source`: [`packages/lsy/lsy-voice/src/index.ts:45`](../packages/lsy/lsy-voice/src/index.ts)
 
 ```ts config-catalog
 /** Voice configuration. Every field has a default, so a patch entry restates only what it changes. */
@@ -3087,9 +3087,9 @@ export interface Config {
   tts: {
     /** Turns `speak` off when false. */
     enabled: boolean
-    /** First provider to try. */
+    /** First provider to try (`mac-mini` is retired). */
     provider: TtsProviderName
-    /** Provider tried when the first fails; `none` stops after one. */
+    /** Provider tried when the first fails; `none` (the default) stops after one. */
     fallback: TtsProviderName | 'none'
     /** Delivered file format; `mp3` needs ffmpeg and falls back to `wav` when the conversion fails. */
     format: 'mp3' | 'wav'
@@ -3120,7 +3120,10 @@ export interface Config {
       /** Pause between job polls, in milliseconds. */
       pollMs: number
     }
-    /** The Mac mini TTS service (Qwen3-TTS, answers the WAV directly). */
+    /**
+     * The Mac mini TTS service (Qwen3-TTS, answers the WAV directly). Retired on 2026-10-31; used only when
+     * selected as `provider` or `fallback`.
+     */
     macMini: {
       /** Base URL of the service. */
       baseUrl: string

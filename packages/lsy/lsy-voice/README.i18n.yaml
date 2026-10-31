@@ -3,23 +3,23 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/lsy/lsy-voice/README.md
 /:
-  en: 8c7a446fe6341960
-  zh: f2bcd3d59665424e
+  en: fd7b3ffa4e7cd093
+  zh: 2847f173590f87ce
 /deepseek-ai-dsh-lsy-voice:
   en: b67200093fa27362
   zh: 00ea85a4d3ec0abe
 /deepseek-ai-dsh-lsy-voice/summary:
-  en: 2a94f7080f659b8d
-  zh: 5f42f923d7520e6f
+  en: b946b9f70d874ed7
+  zh: 7ff79c5840eff199
 /deepseek-ai-dsh-lsy-voice/table-of-contents:
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
 /deepseek-ai-dsh-lsy-voice/use-this-package:
-  en: fa1b622b9b428e45
-  zh: 89fa524a94442e03
+  en: 2c6f9f72f2ad17c8
+  zh: 92973f817054479d
 /deepseek-ai-dsh-lsy-voice/use-this-package/turn-speech-to-text-on:
-  en: 631544c4706435f5
-  zh: f7cb5381685596d8
+  en: b3ceaea0049a02ce
+  zh: 4568333a868ff718
 /deepseek-ai-dsh-lsy-voice/understand-the-implementation:
   en: e76e30c03d959c32
   zh: 422aaa9f43a49921
@@ -42,8 +42,8 @@
   en: c23707e9443e929b
   zh: 9b4b25064558dd5c
 /deepseek-ai-dsh-lsy-voice/known-limitations-and-deferred-work:
-  en: dc15b8d57b88af69
-  zh: 4b4425506f0e58b1
+  en: 639ad71ff0298b57
+  zh: 1e288f3cf0defc38
 /deepseek-ai-dsh-lsy-voice/known-limitations-and-deferred-work/dev-note:
-  en: fb42e2895686c858
-  zh: eec4492ecacb4112
+  en: 2647a13fd40eefcb
+  zh: 608b71188dcc57fc
