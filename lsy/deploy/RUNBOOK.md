@@ -306,7 +306,8 @@ Optional hardening for the operator, not done by any script: make the home patch
 
 ```sh
 sudo chown root:wheel /Users/dsh-runtime/.dsh/cordis.patch.yml
-sudo chflags uchg /Users/dsh-runtime/.dsh/cordis.patch.yml     # undo: sudo chflags nouchg …; sudo chown dsh-runtime:staff …
+sudo chmod 644 /Users/dsh-runtime/.dsh/cordis.patch.yml        # the service still has to read it; the 700 directory keeps others out
+sudo chflags uchg /Users/dsh-runtime/.dsh/cordis.patch.yml     # undo: sudo chflags nouchg …; sudo chown dsh-runtime:staff …; sudo chmod 600 …
 ```
 
 ## Operator access without passwords (optional)
