@@ -43,6 +43,12 @@
     },
     {
       "path": "../../llm/llm"
+    },
+    {
+      "path": "../fork-memory"
+    },
+    {
+      "path": "../fork-taint"
     }
   ]
 }

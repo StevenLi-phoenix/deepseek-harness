@@ -40,7 +40,7 @@ describe('BiliAccount.tellMainAgent', () => {
       outcome: 'sent',
       detail: 'the main agent got it and takes it up in a turn of its own; its answer goes to the owner on WeChat, not to you. 4 left today.',
     })
-    expect(agent.told).toEqual([{ text: '人格卡能装，记忆照文件结构抄一份 https://www.bilibili.com/video/BV1sTnn6DEWv', from: BILI_AGENT_ORIGIN }])
+    expect(agent.told).toEqual([{ text: '人格卡能装，记忆照文件结构抄一份 https://www.bilibili.com/video/BV1sTnn6DEWv', from: BILI_AGENT_ORIGIN, origin: 'bili' }])
     expect(h.logs.some(line => line.text === 'bili: told the main agent 60 chars in chat Session chat-1 (1/5 today)')).toBe(true)
     // Nothing goes to the owner from the account itself.
     expect(h.notes).toEqual([])

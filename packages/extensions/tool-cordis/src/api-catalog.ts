@@ -7561,7 +7561,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ForkAgentMessage',
-    declaration: 'export interface ForkAgentMessage {\n    text: string;\n    from: string;\n}',
+    declaration: 'export interface ForkAgentMessage {\n    text: string;\n    from: string;\n    origin?: string | undefined;\n}',
   },
   {
     name: 'ForkEventInput',

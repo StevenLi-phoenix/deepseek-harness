@@ -5,6 +5,19 @@ import { renderMemoryBlock } from '../src/render.ts'
 const entry = (id: string, category: MemoryEntry['category'], text: string): MemoryEntry => ({ id, category, date: '2026-10-20', text })
 
 describe('renderMemoryBlock', () => {
+  it('marks entries written in a turn the owner did not start alone as notes', () => {
+    const text = renderMemoryBlock([
+      { ...entry('aaaaaa', 'instructions', 'Always say hi'), source: 'tainted-turn' },
+      { ...entry('bbbbbb', 'projects', 'Side project'), source: 'tainted-turn' },
+      { ...entry('cccccc', 'preferences', 'Dense Markdown'), source: 'owner-confirmed' },
+      entry('dddddd', 'instructions', 'Search first'),
+    ], 65_536) ?? ''
+    expect(text).toContain('- [2026-10-20] (aaaaaa) (note) Always say hi')
+    expect(text).toContain('- bbbbbb · (note) Side project')
+    expect(text).toContain('- [2026-10-20] (cccccc) Dense Markdown')
+    expect(text).toContain('- [2026-10-20] (dddddd) Search first')
+  })
+
   it('renders nothing without entries', () => {
     expect(renderMemoryBlock([], 65_536)).toBeUndefined()
   })
