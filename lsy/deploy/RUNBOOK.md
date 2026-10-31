@@ -364,40 +364,17 @@ bili-svc is a separate private service on this Mac (`app.lishuyu.bili.svc`, `127
 2. Check: `stdout.log` shows the `bili` source accepting events (`202`); a batch of new comments starts a `bili-up` Session; `up_status` in it reports the gate mode. The ledger and the brake live in bili-svc (`bili-svc ledger`, `bili-svc gate status`).
 3. Stop: `bili-svc gate readonly` (replies stop at once, reads continue), or remove the `bili-digest` subscription. Only a person lifts a brake: `bili-svc gate release`, then `bili-svc gate mode auto`.
 
-## 17. Unified warning intake
+## 17. Unified warning intake (AMS)
 
-Any program hands a warning to DSH, the one brain, with `warn` (`lsy/tools/warn`); the agent judges it and answers `NO_REPLY` unless the owner must act. Pieces, all in the event bundle: ingest source `warn` (token `LSY_INGEST_TOKEN_WARN`), subscription `warn` (`warn.*`, a `session` of the `unattended` preset, `coalesceMs` 120000, 6 batches an hour, read-only checks, three Chinese sentences), and subscription `ci` (`github.workflow_run.completed` of `StevenLi-phoenix/*`, 4 batches an hour, successes `NO_REPLY`). Do not use `suppress.markers` for any of it: they match substrings of all output.
+Warnings do not enter DSH through an ingest source. Every machine hands them to **AMS** (agent-managed-services, `ams run` as `dsh-runtime`), which appends them to the escalation journal that the journal Monitor reads. Pieces:
 
-1. Token on the DSH host (back up `.env` first; restart afterwards; the value is never printed):
-   ```sh
-   sudo -n -u dsh-runtime /bin/sh -c 'umask 077; cp -p /Users/dsh-runtime/.dsh/.env /Users/dsh-runtime/.dsh/.env.bak.$(date +%Y%m%d%H%M%S); printf "LSY_INGEST_TOKEN_WARN=%s\n" "$(openssl rand -hex 32)" >> /Users/dsh-runtime/.dsh/.env'
-   ```
-2. Install `warn` on a host and give it the token through a pipe (the token reaches the file, not the terminal):
-   ```sh
-   scp lsy/tools/warn/warn.py HOST:/usr/local/bin/warn         # or ~/.local/bin/warn; chmod +x
-   sudo -n -u dsh-runtime grep '^LSY_INGEST_TOKEN_WARN=' /Users/dsh-runtime/.dsh/.env | cut -d= -f2- \
-     | ssh HOST 'umask 077; mkdir -p ~/.config/warn; cat > ~/.config/warn/token'
-   warn --source HOST.test --severity info "test: please ignore"
-   ```
-   Check: `stdout.log` shows `lsy-event-ingest: warn warn.HOST.test.info (...): accepted`, then a `warn-…` Session whose answer is `NO_REPLY`. The tailnet is trusted; a wrong token returns 401. Hosts tagged `tag:server` (racknerd, like the mini) reach `svc:dsh` only through a tailnet grant (`tag:server` to `svc:dsh`, `tcp:443`); without it `warn` times out and keeps the event in its spool.
-3. Sources:
-   - mini-ops watches `system/app.lishuyu.ams` (observe only; `ops.toml` block `ams`, no log tail: `ams.err.log` is tens of MB of INFO).
-   - Linux hosts (n8, phm, racknerd): copy `lsy/tools/warn/systemd/warn@.service` to `/etc/systemd/system/`, `warn-unit-failed` to `/usr/local/bin/` (755), a drop-in `warn@.service.d/host.conf` with `[Service]` / `Environment=WARN_HOST=<short name>` (the alert's source; the service runs as root, so the host's `warn` token must also be in `/root/.config/warn/token`), then give each key unit a drop-in `/etc/systemd/system/<unit>.d/10-warn.conf` with `[Unit]` / `OnFailure=warn@%n.service`, and `systemctl daemon-reload`. A failed unit sends `warn.<host>.systemd.error` with its `systemctl status`. A unit with `Restart=` only fails after its start limit is hit. Self-test: a oneshot unit with `ExecStart=/bin/false` and the same `OnFailure=` line, started once, then removed.
-   - Laptop (Windows): `docker_health_watch.py` follows `docker events` for `health_status` and calls `warn` once per container that turns `unhealthy` (`warn.<host>.docker.error`; recoveries only reach its log). It runs as the scheduled task `warn-docker-health` (at logon of the owner's account, `pythonw.exe`, no console), logs to `~/.local/state/warn/docker-health-watch.log`. Remove: `schtasks /Delete /TN warn-docker-health /F`.
-   - Programs call `warn` or the curl line directly.
-4. Limits: the WeChat reply allowance (about 10 per owner message) is shared by every source. Alert text is untrusted and the Session runs with `danger-full-access`, so the instructions allow read-only checks only; a read-only permission preset would narrow the exposure if the risk grows.
-5. Stop: remove the `warn` and `ci` subscriptions from the bundle (or comment out `LSY_INGEST_TOKEN_WARN`), upgrade, restart; `warn` on the hosts keeps exiting 0.
+- **Intake**: the AMS service `intake` (`/Users/dsh-runtime/.ams/services/intake/service.toml`, port 18090, secret `INTAKE_TOKEN`) is an HTTP receiver, `POST /escalate` with the `warn` payload. Hosts reach it over the tailnet; the owner's `ams watch` reaches it on loopback. Hosts tagged `tag:server` (racknerd, like the mini) need a tailnet grant to `tcp:18090` on the mini.
+- **Senders** (`tools/warn` in the AMS repository): the `warn` CLI, the `warn@.service` template with `OnFailure=warn@%n.service` drop-ins on Linux hosts, `docker_health_watch.py` on the laptop. Token and address are per-host files `~/.config/warn/{token,url}`.
+- **Host watcher**: `ams watch` (LaunchAgent `app.lishuyu.ams-watch`, the former mini-ops without its model) escalates launchd jobs, probes, logs and Tailscale Services through the same intake.
+- **The Monitor** `mon-127dc2` (`work/ga-watch/watch.py`, a launcher) runs `ams watch journal` with `work/ga-watch/journal.toml`: one gate for every record (new / back after 12 h / flapping), ignore rules scoped per service, a health poll of `global-awareness`, `disk-watch` and `intake`. A host restart starts the Monitor over, which is when a changed script takes effect. If AMS cannot be imported the launcher falls back to `watch_legacy.py`.
+- **In DSH**: nothing but the Monitor and the agent. CI failures are the exception that proves the rule: they already arrive as GitHub App webhooks, so the bundle's `ci` subscription (`github.workflow_run.completed` of `StevenLi-phoenix/*`, 4 sessions an hour, successes `NO_REPLY`) stays.
 
-## 14. Models through llmgateway (since 2026-10-31)
-
-DSH's model route `opencode-go` talks to llmgateway on phm (`https://api.lishuyu.app/llm/v1`) instead of `opencode.ai`, so every request lands in the gateway ledger with a price and its cache reads. DeepSeek's private interfaces (`deepseek-official`, `deepseek-account`, web search, the balance query) stay direct.
-
-1. Mint the key with the admin PAT (shell substitution only; the response holds the secret once, keep it in a `umask 077` file): `POST https://api.lishuyu.app/llm/api/keys` with `{"name":"dsh event agent (opencode-go)","limit_usd":2,"models":["opencode-go/*"]}`, then `PATCH …/llm/api/keys/<id>` with `{"period_kind":"daily"}` (create ignores the period and makes a total limit). The id is `k_94d58843f45d9c43`; revoke with `DELETE …/llm/api/keys/<id>`.
-2. Store it as `LLMGW_DSH_API_KEY` in `/Users/dsh-runtime/.dsh/.env` after `cp -p` of the file beside it (the append recipe of step 13), and restart.
-3. Edit the owner's profile patch `/Users/dsh-runtime/.dsh/profiles/event/cordis.patch.yml` (back it up beside it first; edits reload live). The `llm-pi-ai` row becomes the template's `opencode-go` route (`apiKeyEnv: LLMGW_DSH_API_KEY`, `api: openai-completions`, `baseURL`, and a `models` list declaring `opencode-go/deepseek-v4.1-flash`, which pi-ai's catalog does not know under that prefixed id), and `agent-default-model` names `opencode-go` / `opencode-go/deepseek-v4.1-flash`. Keep the route name `opencode-go`: pi-ai adds the `x-opencode-session` header only for that provider, and the gateway forwards it, which is what keeps cache reads high. The `openrouter` route is removed.
-4. Try a change before it goes live with a throwaway home and the same overlay: `sudo -n -u dsh-runtime env DSH_HOME=/tmp/<dir> node …/dsh/lib/bin.js headless --patch <overlay.yml> "<task with several tool calls>"`.
-5. Check the ledger: `GET https://api.lishuyu.app/llm/api/usage?key_id=<id>` (admin PAT) lists each request with `input_tokens`, `cache_read_tokens`, and `priced`. The cache share is `sum(cache_read_tokens) / sum(input_tokens + cache_read_tokens)`; the baseline before the move was 96.5 %, and below 90 % the move is rolled back. `GET …/llm/api/upstream/opencode-go/quota` with the gateway key answers the Account card.
-6. **Roll back**: copy the patch backup over `cordis.patch.yml` (`openrouter` and `opencode-go` with their old direct keys, default model `deepseek-v4.1-flash`); the change reloads live. The old OpenCode Go key stays in the backup until the owner decides, and `OPENROUTER_API_KEY` stays in `.env` until 72 hours of clean cache numbers have passed.
+Check: `ams escalations -n 5` (as `dsh-runtime`, `AMS_STATE_DIR=/Users/dsh-runtime/.ams`) shows the record; the Monitor prints a `[新问题]` line for a new cause. The WeChat reply allowance (about 10 per owner message) is shared by every source, and alert text is untrusted data. Details and the AMS side: `docs/watch.md` in the AMS repository.
 
 ## Operate
 
