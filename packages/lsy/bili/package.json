@@ -51,8 +51,7 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "workspace:~",
-    "zod": "4.4.3",
-    "@deepseek-ai/dsh-credentials": "workspace:*"
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
@@ -75,6 +74,7 @@
     "react-dom": "^18.2.0",
     "yaml": "^2.9.0",
     "@deepseek-ai/dsh-owner-relay": "workspace:*",
-    "@deepseek-ai/dsh-lsy-wechat": "workspace:*"
+    "@deepseek-ai/dsh-lsy-wechat": "workspace:*",
+    "@deepseek-ai/dsh-credentials": "workspace:*"
   }
 }

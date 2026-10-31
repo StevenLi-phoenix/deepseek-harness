@@ -16,7 +16,8 @@ import { isAbsolute } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-timer'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
-import { credentialRef } from '@deepseek-ai/dsh-credentials'
+// Type-only: the credential store's reference brand; this package takes no runtime export from it.
+import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
 // Type-only: the ctx.lsyNotifier service the WeChat channel provides.
 import type {} from '@deepseek-ai/dsh-lsy-event-bus'
 // Type-only: ctx.ownerRelay, which relays the account's turns through its DM channel.
@@ -388,7 +389,8 @@ export class BiliAccount extends Service {
 
   /** The bearer token, read per call; never logged. */
   private async token(): Promise<string | undefined> {
-    const resolved = await this.ctx.credentials.resolve(credentialRef(TOKEN_CREDENTIAL))
+    // A fixed shell identifier, so it is a valid reference without the runtime `credentialRef()` check.
+    const resolved = await this.ctx.credentials.resolve(TOKEN_CREDENTIAL as CredentialRef)
     return resolved?.value === undefined || resolved.value === '' ? undefined : resolved.value
   }
 
