@@ -2808,7 +2808,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-lsy-memory`
 
 - `inject`: `tools`
-- `source`: [`packages/lsy/lsy-memory/src/index.ts:56`](../packages/lsy/lsy-memory/src/index.ts)
+- `source`: [`packages/lsy/lsy-memory/src/index.ts:57`](../packages/lsy/lsy-memory/src/index.ts)
 
 ```ts config-catalog
 /** Memory file and context budget. */
