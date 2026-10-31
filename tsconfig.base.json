@@ -492,6 +492,7 @@
       "@deepseek-ai/dsh-lsy-qq": ["./packages/lsy/lsy-qq/src"],
       "@deepseek-ai/dsh-lsy-sysmon": ["./packages/lsy/lsy-sysmon/src"],
       "@deepseek-ai/dsh-lsy-tool-monitor": ["./packages/lsy/lsy-tool-monitor/src"],
+      "@deepseek-ai/dsh-lsy-tool-qq": ["./packages/lsy/lsy-tool-qq/src"],
       "@deepseek-ai/dsh-lsy-tool-voice": ["./packages/lsy/lsy-tool-voice/src"],
       "@deepseek-ai/dsh-lsy-tool-watch": ["./packages/lsy/lsy-tool-watch/src"],
       "@deepseek-ai/dsh-lsy-tool-wechat": ["./packages/lsy/lsy-tool-wechat/src"],

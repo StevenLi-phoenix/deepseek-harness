@@ -1,136 +1,193 @@
-/** QQ channel over the official QQ Open Platform Bot API: allowlisted peers, one chat Session each, and the `qq` relay channel. */
+/**
+ * QQ group observer: a personal QQ account, reached through a OneBot v11 protocol end (NapCat) on this machine,
+ * lurks in the groups the owner lists. The channel records their messages, downloads their images, transcribes
+ * their voice messages when asked, digests them on a schedule, and lets the agent read all of it. It never speaks:
+ * sending is off, and turns on only per group, for code that asks for it. Nothing is a chat entrance for the agent.
+ */
 
-import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
-import { isAbsolute } from 'node:path'
+import { join, isAbsolute } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
-import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
-import type {} from '@deepseek-ai/dsh-llm'
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { LsyNotifier } from '@deepseek-ai/dsh-lsy-event-bus'
-// Type-only: ctx.ownerRelay, which relays each chat Session's final answers through this channel.
-import type { RelayAnswer, RelayChannel, RelayDelivery } from '@deepseek-ai/dsh-owner-relay'
 import type {} from '@deepseek-ai/dsh-permission-presets'
-import type { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-title'
-import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import z from '@deepseek-ai/schemastery'
-import { qqDomain } from './storage.ts'
-import { ATTACHMENT_NOTE, FORWARD_FAILED_PREFIX, frameInbound, HELP_REPLY, NEW_CHAT_REPLY, shortId, splitText } from './text.ts'
-import { createSdkTransport, type QqInbound, type QqTarget, type QqTransport } from './transport.ts'
+import { DigestRunner, type DigestConfig } from './digest.ts'
+import { DEFAULT_MEDIA_HOST_SUFFIXES, detectExtension, fetchCapped, isAllowedMediaUrl, removeMedia, saveMedia } from './media.ts'
+import { isPrivateUrl, OneBotClient, type OneBotEvent } from './onebot.ts'
+import { displayName, parseMessage } from './text.ts'
+import { QqStore, type DigestRow, type GroupStats, type MessageRow } from './store.ts'
 
-export * from './login.ts'
+export * from './digest.ts'
+export * from './media.ts'
+export * from './onebot.ts'
+export * from './store.ts'
 export * from './text.ts'
-export * from './transport.ts'
-export type * from './storage.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
-    /** The QQ channel. */
-    lsyQq: QqChannel
+    /** The QQ group observer. */
+    lsyQq: QqObserver
   }
-}
-
-/** Who may talk to the bot: openids QQ assigned, listed here. Both lists start empty, so nobody gets an answer. */
-export interface AllowConfig {
-  /** `user_openid`s whose private messages are answered. */
-  users: string[]
-  /** `group_openid`s whose @ messages are answered, from any member. */
-  groups: string[]
-}
-
-/** How a peer's chat Session is created. */
-export interface SessionConfig {
-  /** Absolute directory the chat Sessions work in; created before every forwarded message. */
-  workspacePath: string
-  /** Agent preset of the chat Sessions; the bundle defines `qq` with a persona and no shell, file, or web tools. */
-  agentPreset: string
-  /** Permission preset applied when a chat Session is created. */
-  permissionPreset: string
-  /** Session title prefix; the peer's short id follows. */
-  titlePrefix: string
-  /** IANA time zone sent with every prompt. */
-  timeZone: string
 }
 
 /** Channel configuration. */
 export interface Config {
-  /** Name of the credential (`$DSH_HOME/.env` variable or stored credential) holding the bot's AppID. */
-  appIdEnv: string
-  /** Name of the credential holding the bot's AppSecret. */
-  appSecretEnv: string
-  /** Who is answered. */
-  allow: AllowConfig
-  /** Chat Session settings. */
-  session: SessionConfig
-  /** Code points per QQ message; longer answers are split. */
-  maxMessageChars: number
-  /** Messages one answer may be split into (QQ allows five replies to one inbound message). */
-  maxReplyParts: number
-  /** Messages one peer may send per minute before the rest are dropped. */
-  perPeerPerMinute: number
-  /** How long a private message keeps its reply window open, in milliseconds. */
-  c2cReplyWindowMs: number
-  /** How long a group message keeps its reply window open, in milliseconds. */
-  groupReplyWindowMs: number
-  /** Tell the owner (through `ctx.lsyNotifier`) when a sender outside the allowlist writes, so its openid can be added. */
-  notifyUnknown: boolean
-  /** Credential re-check period while the AppID or AppSecret is missing, in milliseconds. */
-  credentialPollMs: number
+  /** WebSocket address of the protocol end (NapCat's OneBot server); it must be on this machine or the tailnet. */
+  url: string
+  /** Credential holding the protocol end's access token. */
+  tokenEnv: string
+  /** Group numbers to record. Empty records nothing; messages of every other group are dropped on arrival. */
+  groups: string[]
+  /** Directory of the database and downloads; defaults to `<DSH_HOME>/lsy-qq`. */
+  dataDir?: string
+  media: {
+    /** Download the images of recorded messages. */
+    images: boolean
+    /** Largest image downloaded, in bytes. */
+    maxImageBytes: number
+    /** Stop downloading once the downloads together reach this many bytes. */
+    maxTotalBytes: number
+    /** Delete downloads of messages older than this many days; 0 keeps them. */
+    retainDays: number
+    /** Hosts media may be fetched from, as suffixes. */
+    hostSuffixes: string[]
+    /** Deadline of one download, in milliseconds. */
+    timeoutMs: number
+  }
+  /** Keep voice messages and, with `asr.enabled`, transcribe them. */
+  voice: {
+    /** Fetch the audio of voice messages. */
+    download: boolean
+    /** Largest audio kept, in bytes. */
+    maxBytes: number
+  }
+  asr: {
+    /** Send voice messages to `ctx.lsyVoice.transcribe`. Off by default; it needs lsy-voice with transcription on. */
+    enabled: boolean
+  }
+  /** Drop the text and files of a message its sender recalled. */
+  honorRecall: boolean
+  /** Fetch what was missed while disconnected. */
+  backfill: {
+    enabled: boolean
+    /** Messages fetched per group at most. */
+    maxMessages: number
+  }
+  /** Sending to a group. Off, and a group must be listed too; nothing in this package calls it on its own. */
+  send: {
+    enabled: boolean
+    groups: string[]
+    /** Seconds between two sends to one group, at least. */
+    minIntervalSec: number
+    /** Sends per group per day, at most. */
+    maxPerDay: number
+  }
+  digest: {
+    enabled: boolean
+    everyHours: number
+    minMessages: number
+    maxPromptChars: number
+    maxCallsPerRound: number
+    /** Model of the digest Session; the profile's default when omitted. */
+    provider?: string
+    model?: string
+    agentPreset: string
+    permissionPreset: string
+    workspacePath: string
+    timeZone: string
+    timeoutMs: number
+  }
+  /** Tell the owner when the protocol end has been unreachable this long, in milliseconds; 0 turns it off. */
+  offlineNoticeMs: number
 }
 
 /** Configuration schema. */
 export const Config: z<Config> = z.object({
-  appIdEnv: z.string().role('credential-ref').default('LSY_QQ_APP_ID'),
-  appSecretEnv: z.string().role('credential-ref').default('LSY_QQ_APP_SECRET'),
-  allow: z.object({
-    users: z.array(z.string()).default([]),
+  url: z.string().default('ws://127.0.0.1:3001'),
+  tokenEnv: z.string().role('credential-ref').default('LSY_QQ_ONEBOT_TOKEN'),
+  groups: z.array(z.string()).default([]),
+  dataDir: z.string(),
+  media: z.object({
+    images: z.boolean().default(true),
+    maxImageBytes: z.natural().min(1024).default(15 * 1024 * 1024),
+    maxTotalBytes: z.natural().min(1024).default(5 * 1024 ** 3),
+    retainDays: z.natural().default(0),
+    hostSuffixes: z.array(z.string()).default([...DEFAULT_MEDIA_HOST_SUFFIXES]),
+    timeoutMs: z.natural().min(1000).default(30_000),
+  }),
+  voice: z.object({
+    download: z.boolean().default(true),
+    maxBytes: z.natural().min(1024).default(10 * 1024 * 1024),
+  }),
+  asr: z.object({ enabled: z.boolean().default(false) }),
+  honorRecall: z.boolean().default(true),
+  backfill: z.object({
+    enabled: z.boolean().default(true),
+    maxMessages: z.natural().min(1).default(300),
+  }),
+  send: z.object({
+    enabled: z.boolean().default(false),
     groups: z.array(z.string()).default([]),
+    minIntervalSec: z.natural().min(1).default(60),
+    maxPerDay: z.natural().min(1).default(10),
   }),
-  session: z.object({
-    workspacePath: z.string().default('/Users/dsh-runtime/qq'),
-    agentPreset: z.string().default('qq'),
-    permissionPreset: z.string().default('danger-full-access'),
-    titlePrefix: z.string().default('QQ'),
-    timeZone: z.string().default('America/New_York'),
+  digest: z.object({
+    enabled: z.boolean().default(true),
+    everyHours: z.natural().min(1).default(24),
+    minMessages: z.natural().min(1).default(15),
+    maxPromptChars: z.natural().min(2000).default(60_000),
+    maxCallsPerRound: z.natural().min(1).default(5),
+    provider: z.string(),
+    model: z.string(),
+    agentPreset: z.string().default('qq-digest'),
+    permissionPreset: z.string().default('read-only'),
+    workspacePath: z.string().default('/Users/dsh-runtime/qq-digest'),
+    timeZone: z.string().default('Asia/Shanghai'),
+    timeoutMs: z.natural().min(10_000).default(15 * 60_000),
   }),
-  maxMessageChars: z.natural().min(100).max(4500).default(1500),
-  maxReplyParts: z.natural().min(1).max(5).default(4),
-  perPeerPerMinute: z.natural().min(1).default(10),
-  c2cReplyWindowMs: z.natural().min(60_000).default(3_300_000),
-  groupReplyWindowMs: z.natural().min(30_000).default(270_000),
-  notifyUnknown: z.boolean().default(true),
-  credentialPollMs: z.natural().min(1000).default(30_000),
+  offlineNoticeMs: z.natural().default(10 * 60_000),
 })
 
-/** Name of the channel through which `ctx.ownerRelay` relays the chat Sessions' answers. */
-export const QQ_RELAY_CHANNEL = 'qq'
-
-/** QQ accepts five passive replies to one inbound message id. */
-const MAX_PASSIVE_REPLIES = 5
 /** First retry delay after a failed connection; doubles up to {@link MAX_RETRY_MS}. */
 const FIRST_RETRY_MS = 2000
 const MAX_RETRY_MS = 120_000
-/** A connection that stayed ready this long resets the retry delay. */
+/** A connection that stayed up this long resets the retry delay. */
 const STABLE_MS = 60_000
-/** Chat Sessions remembered for {@link QqChannel.ownsSession}; the oldest are forgotten first. */
-const MAX_REMEMBERED_SESSIONS = 200
-/** The owner hears of a given unknown sender at most this often, and of all of them at most {@link UNKNOWN_PER_HOUR} times an hour. */
-const UNKNOWN_RENOTIFY_MS = 24 * 60 * 60_000
-const UNKNOWN_PER_HOUR = 3
-/** Resolve failures that keep the stored chat Session: it exists and is only unavailable right now. */
-const TRANSIENT_RESOLVE_CODES: ReadonlySet<string> = new Set(['session/agent-busy', 'session/writer-held'])
-/** Longest unknown-sender message quoted to the owner, in code points. */
-const UNKNOWN_PREVIEW_CHARS = 80
+/** Group list refresh period. */
+const GROUP_REFRESH_MS = 3_600_000
+/** Digest schedule check and media retention check periods. */
+const DIGEST_CHECK_MS = 10 * 60_000
+const RETENTION_CHECK_MS = 6 * 3_600_000
+/** Downloads running at once. */
+const MEDIA_CONCURRENCY = 2
+
+/** What a media download needs to know about its message. */
+interface MediaJob {
+  rowId: number
+  groupId: string
+  at: number
+  mediaId: number
+  kind: string
+  url: string | undefined
+  file: string | undefined
+  name: string | undefined
+}
 
 /** Fail at load on configuration that cannot work. */
 function assertConfig(config: Config): void {
-  if (!isAbsolute(config.session.workspacePath)) throw new Error('lsy-qq: session.workspacePath must be an absolute path')
-  if (config.session.titlePrefix.trim() === '') throw new Error('lsy-qq: session.titlePrefix must be non-empty')
+  if (!isPrivateUrl(config.url)) throw new Error('lsy-qq: url must be a ws:// or wss:// address on this machine (127.0.0.1, localhost) or the tailnet (100.64.0.0/10, *.ts.net)')
+  if (config.dataDir !== undefined && !isAbsolute(config.dataDir)) throw new Error('lsy-qq: dataDir must be an absolute path')
+  if (!isAbsolute(config.digest.workspacePath)) throw new Error('lsy-qq: digest.workspacePath must be an absolute path')
+  for (const id of [...config.groups, ...config.send.groups]) {
+    if (!/^[0-9]{3,20}$/.test(id)) throw new Error(`lsy-qq: ${JSON.stringify(id)} is not a group number (digits only)`)
+  }
   try {
-    new Intl.DateTimeFormat('en-US', { timeZone: config.session.timeZone })
+    new Intl.DateTimeFormat('en-US', { timeZone: config.digest.timeZone })
   } catch {
-    throw new Error(`lsy-qq: session.timeZone "${config.session.timeZone}" is not a valid IANA time zone`)
+    throw new Error(`lsy-qq: digest.timeZone "${config.digest.timeZone}" is not a valid IANA time zone`)
   }
 }
 
@@ -139,148 +196,170 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-/** Peer key of an inbound message: the user in a private chat, the group in a group chat. */
-export function peerKeyOf(message: Pick<QqInbound, 'scope' | 'senderId' | 'groupId'>): string {
-  return message.scope === 'group' ? `group:${message.groupId ?? ''}` : `c2c:${message.senderId}`
-}
+/** A send the channel refused. */
+export class SendRefused extends Error {}
 
-/** Messages per rolling minute, per key. */
-class RateWindow {
-  private readonly hits = new Map<string, number[]>()
-  constructor(private readonly limit: number) {}
-
-  /** @returns whether this hit fits within the limit; a refused hit is not counted. */
-  allow(key: string, now: number): boolean {
-    const recent = (this.hits.get(key) ?? []).filter(at => now - at < 60_000)
-    if (recent.length >= this.limit) {
-      this.hits.set(key, recent)
-      return false
-    }
-    recent.push(now)
-    this.hits.set(key, recent)
-    return true
-  }
+/** One group in {@link QqObserver.groupOverview}. */
+export interface GroupOverview {
+  groupId: string
+  name: string
+  memberCount: number | null
+  /** Whether the group is on the `groups` list. */
+  recorded: boolean
+  messages: number
+  firstAt: number | null
+  lastAt: number | null
+  lastDigestAt: number | null
 }
 
 /**
- * QQ channel. Connects the official bot to the QQ Open Platform, answers only the openids in `allow`,
- * gives each private chat and each group its own chat Session, and delivers each turn's final answer
- * that `ctx.ownerRelay` hands its `qq` channel. QQ lets a bot reply to a message within a window
- * (about an hour in private chats, minutes in groups) and at most five times; later answers go out
- * as proactive messages, and an answer QQ refuses falls back to `ctx.lsyNotifier` through the relay.
+ * The observer. Provides `ctx.lsyQq`, whose read methods the agent tools use; its connection to the protocol end
+ * and its writes to the database are the only things it does on its own.
  */
-export class QqChannel extends Service {
-  static inject = ['storageDomain', 'sessionController', 'permissionPresets', 'sessionTitle', 'credentials']
+export class QqObserver extends Service {
+  static inject = ['sessionController', 'permissionPresets', 'sessionTitle', 'credentials']
   static Config = Config
 
-  private readonly ready: Promise<Domain<typeof qqDomain>>
+  readonly dataDir: string
+  readonly store: QqStore
   private readonly abort = new AbortController()
   private readonly inflight = new Set<Promise<void>>()
-  private readonly rate: RateWindow
-  private domain: Domain<typeof qqDomain> | undefined
+  private readonly recorded: ReadonlySet<string>
+  private readonly digest: DigestRunner
+  private client: OneBotClient | undefined
   private loop: Promise<void> | undefined
-  private chain: Promise<unknown> = Promise.resolve()
   private stopping = false
-  private transport: QqTransport | undefined
-  /** Last logged credential state, so each change is logged once. */
+  private selfId = ''
   private credentialState = ''
-  /** When the owner was last told about unknown senders, newest last. */
-  private readonly unknownTold: number[] = []
+  private readonly seenUnlisted = new Set<string>()
+  private readonly lastSend = new Map<string, number>()
+  private readonly sentToday = new Map<string, { day: string; count: number }>()
+  private downloadsRunning = 0
+  private readonly downloadQueue: Array<() => Promise<void>> = []
+  private budgetWarnedAt = 0
+  private disconnectedSince: number | undefined
+  private outageNoticed = false
+  private readonly counters = { messages: 0, media: 0, voices: 0, dropped: 0, private: 0 }
+  /** Replaced by tests. */
+  now: () => number = Date.now
 
   /**
-   * @param ctx - Host services owning storage, Sessions, presets, titles, and credentials.
-   * @param config - Credentials, allowlist, chat Session settings, and delivery limits.
+   * @param ctx - Host services: Sessions for the digest, and credentials for the token.
+   * @param config - Connection, group list, media, voice, digest, and send settings.
    */
   constructor(ctx: Context, private readonly config: Config) {
     super(ctx, 'lsyQq')
     assertConfig(config)
-    this.rate = new RateWindow(config.perPeerPerMinute)
-    this.ready = ctx.storageDomain.open(qqDomain)
+    this.dataDir = config.dataDir ?? join(resolveDshHome(undefined, process.env), 'lsy-qq')
+    mkdirSync(this.dataDir, { recursive: true, mode: 0o700 })
+    this.store = new QqStore(join(this.dataDir, 'qq.db'))
+    this.recorded = new Set(config.groups)
+    const d = config.digest
+    const digestConfig: DigestConfig = {
+      enabled: d.enabled,
+      everyHours: d.everyHours,
+      minMessages: d.minMessages,
+      maxPromptChars: d.maxPromptChars,
+      maxCallsPerRound: d.maxCallsPerRound,
+      model: d.provider !== undefined && d.model !== undefined ? { provider: d.provider, model: d.model } : undefined,
+      agentPreset: d.agentPreset,
+      permissionPreset: d.permissionPreset,
+      workspacePath: d.workspacePath,
+      timeZone: d.timeZone,
+      timeoutMs: d.timeoutMs,
+    }
+    this.digest = new DigestRunner(ctx, this.store, digestConfig, this.dataDir, id => this.store.groupName(id) ?? id, () => this.now())
+    ctx.logger.info(`lsy-qq: recording ${config.groups.length} group(s)${config.groups.length === 0 ? ' (the list is empty: every message is dropped; add group numbers to groups)' : ''}; sending ${config.send.enabled ? `on for ${config.send.groups.length} group(s)` : 'off'}; voice transcription ${config.asr.enabled ? 'on' : 'off'}; digests ${d.enabled ? `every ${d.everyHours} h` : 'off'}; data in ${this.dataDir}`)
 
-    ctx.effect(async () => {
-      const domain = await this.ready
-      this.domain = domain
-      const cleanup = ctx.effect(() => async () => {
+    ctx.effect(() => {
+      this.loop = this.run()
+      const schedule = this.schedule()
+      return async () => {
         this.stopping = true
         this.abort.abort(new Error('lsy-qq is stopping'))
-        await this.loop
+        await Promise.allSettled([this.loop, schedule])
         await Promise.allSettled([...this.inflight])
-        await this.chain // serialize() keeps the chain itself non-rejecting.
-        await domain.close()
-      }, 'lsyQq.lifecycle()')
-      this.loop = this.run()
-      return cleanup
-    }, 'lsyQq.init()')
-
-    // The relay delivers the chat Sessions' answers here whenever it is mounted; the channel works without it.
-    ctx.plugin({
-      name: 'lsy-qq-owner-relay',
-      inject: ['ownerRelay'],
-      apply: (child: Context) => {
-        child.effect(() => this.joinRelay(child), 'lsyQq.ownerRelay()')
-      },
-    })
+        this.store.close()
+      }
+    }, 'lsyQq.lifecycle()')
   }
+
+  // ---- reading, for the tools ----
+
+  /** Every group the account is in, with what is recorded of it. */
+  groupOverview(): GroupOverview[] {
+    const stats = new Map<string, GroupStats>(this.store.stats().map(stat => [stat.groupId, stat]))
+    const known = new Map(this.store.groups().map(group => [group.groupId, group]))
+    for (const id of this.recorded) if (!known.has(id)) known.set(id, { groupId: id, name: id, memberCount: null, updatedAt: 0 })
+    return [...known.values()].map((group) => {
+      const stat = stats.get(group.groupId)
+      return {
+        groupId: group.groupId, name: group.name, memberCount: group.memberCount, recorded: this.recorded.has(group.groupId),
+        messages: stat?.messages ?? 0,
+        firstAt: stat?.firstAt ?? null,
+        lastAt: stat?.lastAt ?? null,
+        lastDigestAt: stat?.lastDigestAt ?? null,
+      }
+    }).sort((a, b) => Number(b.recorded) - Number(a.recorded) || b.messages - a.messages || a.name.localeCompare(b.name))
+  }
+
+  /** Display name of a group. */
+  groupName(groupId: string): string {
+    return this.store.groupName(groupId) ?? groupId
+  }
+
+  /** Whether a group is on the `groups` list. */
+  isRecorded(groupId: string): boolean {
+    return this.recorded.has(groupId)
+  }
+
+  /** Recent messages of a recorded group, oldest first. */
+  recentMessages(groupId: string, options: { hours: number; limit: number; userId?: string }): MessageRow[] {
+    if (!this.recorded.has(groupId)) return []
+    const sinceMs = this.now() - options.hours * 3_600_000
+    return this.store.recent(groupId, { sinceMs, limit: options.limit, ...options.userId === undefined ? {} : { userId: options.userId } })
+  }
+
+  /** Search the recorded groups' messages, newest first. */
+  searchMessages(query: string, options: { groupId?: string; limit: number }): MessageRow[] {
+    if (options.groupId !== undefined && !this.recorded.has(options.groupId)) return []
+    return this.store.search(query, options).filter(row => this.recorded.has(row.groupId))
+  }
+
+  /** Newest digests of the recorded groups. */
+  digests(options: { groupId?: string; days: number; limit: number }): DigestRow[] {
+    if (options.groupId !== undefined && !this.recorded.has(options.groupId)) return []
+    const sinceMs = this.now() - options.days * 86_400_000
+    return this.store.digests({ ...options.groupId === undefined ? {} : { groupId: options.groupId }, sinceMs, limit: options.limit })
+      .filter(row => this.recorded.has(row.groupId))
+  }
+
+  // ---- sending (off by default) ----
 
   /**
-   * Whether this channel created a Session: true for every chat Session it remembers, all of which
-   * it claims with `ctx.ownerRelay`.
-   * @param sessionId - Session to check.
-   * @returns true for the current and earlier chat Sessions of every peer.
+   * Send text to a group. Refused unless `send.enabled` is true and the group is in `send.groups`, and held to
+   * `send.minIntervalSec` between sends and `send.maxPerDay` a day for that group. Nothing in this package calls it.
+   * @throws {@link SendRefused} when a rule says no, or the protocol end is not connected.
    */
-  ownsSession(sessionId: string): boolean {
-    return this.domain?.table('sessions').get(sessionId) !== undefined
+  async sendGroupMessage(groupId: string, text: string): Promise<void> {
+    const rules = this.config.send
+    if (!rules.enabled) throw new SendRefused('sending is turned off (send.enabled is false)')
+    if (!rules.groups.includes(groupId)) throw new SendRefused(`group ${groupId} is not in send.groups`)
+    if (this.client === undefined || !this.client.connected) throw new SendRefused('not connected to the protocol end')
+    const now = this.now()
+    if (now - (this.lastSend.get(groupId) ?? 0) < rules.minIntervalSec * 1000) throw new SendRefused(`less than ${rules.minIntervalSec} s since the last send to group ${groupId}`)
+    const day = new Date(now).toISOString().slice(0, 10)
+    const today = this.sentToday.get(groupId)
+    const count = today?.day === day ? today.count : 0
+    if (count >= rules.maxPerDay) throw new SendRefused(`group ${groupId} already got ${rules.maxPerDay} messages today`)
+    await this.client.call('send_group_msg', { group_id: Number(groupId), message: [{ type: 'text', data: { text } }] })
+    this.lastSend.set(groupId, now)
+    this.sentToday.set(groupId, { day, count: count + 1 })
+    this.ctx.logger.info(`lsy-qq: sent ${Array.from(text).length} chars to group ${groupId} (${count + 1} today)`)
   }
 
-  /** Register the `qq` channel and claim every stored chat Session once storage is open. */
-  private joinRelay(child: Context): () => void {
-    const relay = child.ownerRelay
-    const channel: RelayChannel = {
-      name: QQ_RELAY_CHANNEL,
-      fallbackLabel: 'a QQ chat Session (its answer could not go out on QQ)',
-      deliver: answer => this.hold(this.relayAnswer(answer)),
-    }
-    const unregister = relay.registerChannel(channel)
-    let joined = true
-    this.ready.then((domain) => {
-      if (!joined) return
-      const ids = [...domain.table('sessions').keys()]
-      for (const id of ids) relay.claim(id, QQ_RELAY_CHANNEL)
-      this.ctx.logger.info(`lsy-qq: the relay carries ${ids.length} chat Session(s) through channel ${QQ_RELAY_CHANNEL}`)
-    }, (error: unknown) => {
-      this.ctx.logger.warn(`lsy-qq: chat Sessions not claimed with the relay: ${errorText(error)}`)
-    })
-    return () => {
-      joined = false
-      unregister()
-    }
-  }
+  // ---- plumbing ----
 
-  /**
-   * Deliver a chat Session's answer that the relay handed over.
-   * @returns `sent` once QQ accepted every part, `kept` for a Session this channel no longer knows.
-   * @throws when QQ refused a part; the relay then falls back to the notifier.
-   */
-  private async relayAnswer(answer: RelayAnswer): Promise<RelayDelivery> {
-    const domain = await this.ready
-    const peerKey = domain.table('sessions').get(answer.sessionId)?.peerKey
-    const chat = peerKey === undefined ? undefined : domain.table('chats').get(peerKey)
-    if (peerKey === undefined || chat === undefined || chat.sessionId !== answer.sessionId) {
-      this.ctx.logger.info(`lsy-qq: Session ${answer.sessionId} is not a peer's current chat; its answer stays in the Session`)
-      return 'kept'
-    }
-    await this.deliver(domain, peerKey, chat.scope, chat.targetId, answer.text)
-    return 'sent'
-  }
-
-  /** Keep work another service awaits alive until teardown drains it; its outcome stays the caller's. */
-  private hold<T>(work: Promise<T>): Promise<T> {
-    const held = work.then(() => undefined, () => undefined).finally(() => this.inflight.delete(held))
-    this.inflight.add(held)
-    return work
-  }
-
-  /** Keep background work alive until teardown drains it. */
   private track(work: Promise<void>): void {
     const tracked = work.catch((error: unknown) => {
       this.ctx.logger.warn(`lsy-qq: background work failed: ${errorText(error)}`)
@@ -288,14 +367,6 @@ export class QqChannel extends Service {
     this.inflight.add(tracked)
   }
 
-  /** Run storage and send work one at a time; rejections reach the caller without breaking the chain. */
-  private serialize<T>(work: () => Promise<T>): Promise<T> {
-    const result = this.chain.then(work)
-    this.chain = result.catch(() => undefined)
-    return result
-  }
-
-  /** Resolve after `ms`, or as soon as the channel stops. */
   private pause(ms: number): Promise<void> {
     return new Promise((resolve) => {
       const done = (): void => {
@@ -308,252 +379,341 @@ export class QqChannel extends Service {
     })
   }
 
-  /** Read the bot's AppID and AppSecret; undefined while either is missing. Never logs a value. */
-  private async credentials(): Promise<{ appId: string; appSecret: string } | undefined> {
-    const [id, secret] = await Promise.all([
-      this.ctx.credentials.resolve(credentialRef(this.config.appIdEnv)),
-      this.ctx.credentials.resolve(credentialRef(this.config.appSecretEnv)),
-    ])
-    const appId = id?.value.trim() ?? ''
-    const appSecret = secret?.value.trim() ?? ''
-    const state = `${appId === '' ? 'no-id' : 'id'}:${appSecret === '' ? 'no-secret' : 'secret'}`
+  /** The protocol end's token; undefined while it is missing. Never logged. */
+  private async token(): Promise<string | undefined> {
+    const credential = await this.ctx.credentials.resolve(credentialRef(this.config.tokenEnv))
+    const value = credential?.value.trim() ?? ''
+    const state = value === '' ? 'missing' : 'present'
     if (state !== this.credentialState) {
       this.credentialState = state
-      if (appId === '' || appSecret === '') {
-        this.ctx.logger.info(`lsy-qq: ${this.config.appIdEnv} and ${this.config.appSecretEnv} are not both set (${state}); QQ stays offline and re-checks every ${this.config.credentialPollMs / 1000}s`)
-      } else {
-        this.ctx.logger.info(`lsy-qq: credentials found (bot app ${appId})`)
-      }
+      this.ctx.logger.info(state === 'missing'
+        ? `lsy-qq: ${this.config.tokenEnv} is not set; QQ stays offline and re-checks every 30 s`
+        : 'lsy-qq: the OneBot access token was found')
     }
-    return appId === '' || appSecret === '' ? undefined : { appId, appSecret }
+    return value === '' ? undefined : value
   }
 
-  /** The transport to QQ: a test double mounted as `lsyQqTransport`, otherwise the official SDK. */
-  private makeTransport(credentials: { appId: string; appSecret: string }): QqTransport {
-    const injected = (this.ctx.get as (name: string) => unknown)('lsyQqTransport') as QqTransport | undefined
-    return injected ?? createSdkTransport({
-      ...credentials,
-      log: {
-        debug: (message) => { this.ctx.logger.debug(`lsy-qq: sdk: ${message}`) },
-        warn: (message) => { this.ctx.logger.warn(`lsy-qq: sdk: ${message}`) },
-      },
-    })
-  }
-
-  /** Stay connected while the plugin is active; waits for credentials, and backs off after a failed connection. */
+  /** Stay connected while the plugin is active. */
   private async run(): Promise<void> {
     let failures = 0
     while (!this.stopping) {
-      const credentials = await this.credentials()
-      if (credentials === undefined) {
-        await this.pause(this.config.credentialPollMs)
+      const token = await this.token()
+      if (token === undefined) {
+        await this.pause(30_000)
         continue
       }
-      const transport = this.makeTransport(credentials)
-      this.transport = transport
-      let readyAt: number | undefined
+      const client = new OneBotClient({ url: this.config.url, token })
+      this.client = client
+      let upAt: number | undefined
       try {
-        await transport.run({
-          message: (message) => { this.track(this.handleMessage(message)) },
-          ready: () => {
-            readyAt = Date.now()
-            this.ctx.logger.info('lsy-qq: connected to the QQ gateway')
+        await client.run({
+          event: (event) => { this.track(this.handleEvent(event)) },
+          open: () => {
+            upAt = this.now()
+            this.disconnectedSince = undefined
+            this.outageNoticed = false
+            this.ctx.logger.info(`lsy-qq: connected to the protocol end at ${this.config.url}`)
+            this.track(this.onOpen())
           },
-          disconnected: (reason) => { this.ctx.logger.warn(`lsy-qq: disconnected from the QQ gateway: ${reason}`) },
+          close: (reason) => { this.ctx.logger.warn(`lsy-qq: the protocol end connection closed (${reason})`) },
         }, this.abort.signal)
         if (this.stopping) return
-        this.ctx.logger.warn('lsy-qq: the QQ connection ended without a stop; reconnecting')
       } catch (error: unknown) {
         if (this.stopping) return
-        this.ctx.logger.warn(`lsy-qq: the QQ connection failed: ${errorText(error)}`)
+        this.ctx.logger.warn(`lsy-qq: could not reach the protocol end: ${errorText(error)}`)
       } finally {
-        this.transport = undefined
+        this.client = undefined
       }
-      failures = readyAt !== undefined && Date.now() - readyAt >= STABLE_MS ? 1 : failures + 1
+      this.disconnectedSince ??= this.now()
+      this.track(this.checkOutage())
+      failures = upAt !== undefined && this.now() - upAt >= STABLE_MS ? 1 : failures + 1
       const wait = Math.min(FIRST_RETRY_MS * 2 ** (failures - 1), MAX_RETRY_MS)
-      this.ctx.logger.info(`lsy-qq: reconnecting in ${wait / 1000}s (attempt ${failures})`)
+      this.ctx.logger.info(`lsy-qq: reconnecting in ${wait / 1000} s (attempt ${failures})`)
       await this.pause(wait)
     }
   }
 
-  /** Whether this peer is on the allowlist. */
-  private allowed(message: QqInbound): boolean {
-    return message.scope === 'group'
-      ? this.config.allow.groups.includes(message.groupId ?? '')
-      : this.config.allow.users.includes(message.senderId)
+  /** Tell the owner once when the protocol end stays unreachable. */
+  private async checkOutage(): Promise<void> {
+    const since = this.disconnectedSince
+    if (since === undefined || this.outageNoticed || this.config.offlineNoticeMs === 0) return
+    if (this.now() - since < this.config.offlineNoticeMs) return
+    await this.notifyOwner('QQ 协议端连不上', `lsy-qq 已有 ${Math.round((this.now() - since) / 60_000)} 分钟连不上 ${this.config.url}；检查 NapCat 容器是否在跑、QQ 是否被踢下线需要重新扫码。`)
   }
 
-  /** Accept one inbound message: allowlist, rate limit, reply window, commands, then the peer's chat Session. */
-  private async handleMessage(message: QqInbound): Promise<void> {
-    const domain = await this.ready
-    const peerKey = peerKeyOf(message)
-    const targetId = message.scope === 'group' ? message.groupId ?? '' : message.senderId
-    if (!this.allowed(message)) {
-      this.ctx.logger.info(`lsy-qq: dropped a ${message.scope} message from ${message.scope === 'group' ? `member ${message.senderId} of group ${targetId}` : `user ${message.senderId}`}, not on allow.${message.scope === 'group' ? 'groups' : 'users'}`)
-      if (this.config.notifyUnknown) await this.reportUnknown(domain, message, targetId)
-      return
-    }
-    if (!this.rate.allow(peerKey, Date.now())) {
-      this.ctx.logger.warn(`lsy-qq: dropped a message from ${peerKey}: more than ${this.config.perPeerPerMinute} a minute`)
-      return
-    }
-    const text = message.text !== '' ? message.text : message.attachments > 0 ? ATTACHMENT_NOTE : ''
-    if (text === '') {
-      this.ctx.logger.debug(`lsy-qq: ignored an empty ${message.scope} message from ${peerKey}`)
-      return
-    }
-    this.ctx.logger.info(`lsy-qq: ${message.scope} message from ${peerKey} (${text.length} chars${message.attachments > 0 ? `, ${message.attachments} attachment(s) not read` : ''})`)
-    await this.serialize(async () => {
-      await domain.table('windows').put(peerKey, { msgId: message.messageId, receivedAt: Date.now(), used: 0 })
-    })
-    const command = text.trim().toLowerCase()
-    if (command === '/new') {
-      await this.serialize(async () => {
-        const chat = domain.table('chats').get(peerKey)
-        if (chat === undefined) return
-        await domain.table('chats').delete(peerKey)
-        await domain.table('sessions').delete(chat.sessionId)
-        this.ctx.get('ownerRelay')?.release(chat.sessionId)
-        this.ctx.logger.info(`lsy-qq: ${peerKey} started a new chat`)
-      })
-      await this.reply(domain, peerKey, message.scope, targetId, NEW_CHAT_REPLY)
-      return
-    }
-    if (command === '/help') {
-      await this.reply(domain, peerKey, message.scope, targetId, HELP_REPLY)
-      return
-    }
-    try {
-      await this.forward(domain, peerKey, message, targetId, text)
-    } catch (error: unknown) {
-      if (this.stopping) return
-      this.ctx.logger.warn(`lsy-qq: forwarding the ${peerKey} message failed: ${errorText(error)}`)
-      await this.reply(domain, peerKey, message.scope, targetId, `${FORWARD_FAILED_PREFIX}${errorText(error).slice(0, 200)}`)
-    }
-  }
-
-  /** Tell the owner, rarely, that a sender outside the allowlist wrote, with the openid to add. */
-  private async reportUnknown(domain: Domain<typeof qqDomain>, message: QqInbound, targetId: string): Promise<void> {
+  private async notifyOwner(title: string, body: string): Promise<void> {
+    this.outageNoticed = true
     const notifier = this.ctx.get('lsyNotifier') as LsyNotifier | undefined
     if (notifier === undefined) return
-    const now = Date.now()
-    await this.serialize(async () => {
-      const key = message.scope === 'group' ? `group:${targetId}` : `c2c:${message.senderId}`
-      const seen = domain.table('unknown').get(key)
-      if (seen !== undefined && now - seen.notifiedAt < UNKNOWN_RENOTIFY_MS) return
-      const recent = this.unknownTold.filter(at => now - at < 3_600_000)
-      this.unknownTold.splice(0, this.unknownTold.length, ...recent)
-      if (this.unknownTold.length >= UNKNOWN_PER_HOUR) return
-      this.unknownTold.push(now)
-      await domain.table('unknown').put(key, { notifiedAt: now })
-      const preview = Array.from(message.text).slice(0, UNKNOWN_PREVIEW_CHARS).join('')
-      const list = message.scope === 'group' ? 'allow.groups' : 'allow.users'
-      const id = message.scope === 'group' ? targetId : message.senderId
-      try {
-        await notifier.send({
-          title: `QQ：${message.scope === 'group' ? '一个未放行的群' : '一个未放行的用户'}给机器人发了消息`,
-          body: `没有回复。要放行就把这个 openid 加进 lsy-qq 的 ${list}：\n${id}${message.scope === 'group' ? `\n（发言成员 ${message.senderId}）` : ''}${preview === '' ? '' : `\n内容开头：${preview}`}`,
-          origin: 'the QQ channel (an unlisted sender wrote; this is a notice, not the owner)',
-        })
-      } catch (error: unknown) {
-        this.ctx.logger.warn(`lsy-qq: could not tell the owner about an unlisted sender: ${errorText(error)}`)
-      }
-    })
-  }
-
-  /** Prompt the peer's chat Session with the framed message. */
-  private async forward(
-    domain: Domain<typeof qqDomain>, peerKey: string, message: QqInbound, targetId: string, text: string,
-  ): Promise<void> {
-    const session = this.config.session
-    mkdirSync(session.workspacePath, { recursive: true })
-    const sessionId = await this.chatSession(domain, peerKey, message, targetId)
-    await this.ctx.sessionController.prompt({
-      requestId: randomUUID() as SessionRequestId,
-      sessionId,
-      // Steer, not queue: a message sent while the agent works joins the running turn at its next step.
-      mode: 'steer',
-      content: [{ type: 'text', text: frameInbound(message, text) }],
-      clientTimeZone: session.timeZone,
-    }, this.abort.signal)
-    this.ctx.logger.info(`lsy-qq: forwarded ${text.length} chars from ${peerKey} to Session ${sessionId}`)
-    // The answer comes back only through the relay; without it the peer would wait in silence.
-    if (this.ctx.get('ownerRelay') === undefined) this.ctx.logger.warn('lsy-qq: no ownerRelay is mounted, so answers will not reach QQ')
-  }
-
-  /** The peer's chat Session: the stored one while it resolves, otherwise a new one. */
-  private async chatSession(domain: Domain<typeof qqDomain>, peerKey: string, message: QqInbound, targetId: string): Promise<SessionId> {
-    const stored = domain.table('chats').get(peerKey)
-    if (stored !== undefined) {
-      const sessionId = stored.sessionId as SessionId
-      const resolved = await this.ctx.sessionController.resolveAgent(sessionId)
-      if ('agent' in resolved) return sessionId
-      if (TRANSIENT_RESOLVE_CODES.has(resolved.error.code)) throw resolved.error
-      this.ctx.logger.info(`lsy-qq: chat Session ${sessionId} of ${peerKey} is unavailable (${resolved.error.code}); starting a new one`)
-    }
-    const session = this.config.session
-    // Fails on an unknown preset before a Session exists.
-    this.ctx.permissionPresets.resolve(session.permissionPreset)
-    const created = await this.ctx.sessionController.create({ cwd: session.workspacePath, agentPreset: session.agentPreset })
-    const resolved = await this.ctx.sessionController.resolveAgent(created.sessionId)
-    if ('error' in resolved) throw resolved.error
-    this.ctx.permissionPresets.set(resolved.agent.session, session.permissionPreset)
-    this.ctx.sessionTitle.rename(resolved.agent.session, `${session.titlePrefix} ${message.scope === 'group' ? '群' : '私聊'} ${shortId(targetId)}`)
-    const now = Date.now()
-    const relay = this.ctx.get('ownerRelay')
-    // Claimed before the first prompt, so the relay follows the Session's first turn.
-    relay?.claim(created.sessionId, QQ_RELAY_CHANNEL)
-    await this.serialize(async () => {
-      const sessions = domain.table('sessions')
-      await sessions.put(created.sessionId, { peerKey, createdAt: now })
-      await domain.table('chats').put(peerKey, { sessionId: created.sessionId, scope: message.scope, targetId, createdAt: now })
-      const excess = [...sessions.entries()]
-        .sort(([, a], [, b]) => a.createdAt - b.createdAt)
-        .slice(0, Math.max(0, sessions.size - MAX_REMEMBERED_SESSIONS))
-      for (const [id] of excess) {
-        await sessions.delete(id)
-        relay?.release(id)
-      }
-    })
-    this.ctx.logger.info(`lsy-qq: created chat Session ${created.sessionId} for ${peerKey} in ${session.workspacePath} (${session.agentPreset}, ${session.permissionPreset})`)
-    return created.sessionId
-  }
-
-  /** Send a fixed reply; a failure is logged and never thrown. */
-  private async reply(domain: Domain<typeof qqDomain>, peerKey: string, scope: 'c2c' | 'group', targetId: string, text: string): Promise<void> {
     try {
-      await this.deliver(domain, peerKey, scope, targetId, text)
+      await notifier.send({ title, body, origin: 'the QQ observer (a notice, not the owner)' })
     } catch (error: unknown) {
-      this.ctx.logger.warn(`lsy-qq: reply to ${peerKey} failed: ${errorText(error)}`)
+      this.ctx.logger.warn(`lsy-qq: could not tell the owner: ${errorText(error)}`)
     }
   }
 
-  /**
-   * Split an answer and send each part, quoting the peer's latest message while its reply window is
-   * open and fewer than five passive replies went out; otherwise as proactive messages.
-   * @throws when QQ refuses a part or no connection is up.
-   */
-  private deliver(domain: Domain<typeof qqDomain>, peerKey: string, scope: 'c2c' | 'group', targetId: string, raw: string): Promise<void> {
-    return this.serialize(async () => {
-      const transport = this.transport
-      if (transport === undefined) throw new Error('QQ is not connected')
-      const parts = splitText(raw, this.config.maxMessageChars, this.config.maxReplyParts)
-      const windowMs = scope === 'group' ? this.config.groupReplyWindowMs : this.config.c2cReplyWindowMs
-      for (const part of parts) {
-        const window = domain.table('windows').get(peerKey)
-        const passive = window !== undefined && Date.now() - window.receivedAt < windowMs && window.used < MAX_PASSIVE_REPLIES
-        const target: QqTarget = { scope, id: targetId, ...(passive ? { msgId: window.msgId } : {}) }
-        try {
-          await transport.send(target, part)
-        } catch (error: unknown) {
-          this.ctx.logger.warn(`lsy-qq: sending ${part.length} chars to ${peerKey} as a ${passive ? 'reply' : 'proactive message'} failed: ${errorText(error)}`)
-          throw error
-        }
-        if (passive) await domain.table('windows').put(peerKey, { ...window, used: window.used + 1 })
+  /** After a connection opens: who we are, which groups, and what was missed. */
+  private async onOpen(): Promise<void> {
+    const client = this.client
+    if (client === undefined) return
+    try {
+      const me = await client.call<{ user_id?: number | string; nickname?: string }>('get_login_info')
+      this.selfId = String(me.user_id ?? '')
+      this.ctx.logger.info(`lsy-qq: logged in as ${this.selfId}`)
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`lsy-qq: get_login_info failed: ${errorText(error)}`)
+    }
+    await this.refreshGroups()
+    if (this.config.backfill.enabled) {
+      for (const groupId of this.recorded) {
+        if (this.stopping || this.client !== client) break
+        await this.backfill(groupId).catch((error: unknown) => {
+          this.ctx.logger.warn(`lsy-qq: backfill of group ${groupId} failed: ${errorText(error)}`)
+        })
       }
-      this.ctx.logger.info(`lsy-qq: sent ${parts.length} message(s) to ${peerKey}`)
-    })
+    }
+  }
+
+  private async refreshGroups(): Promise<void> {
+    const client = this.client
+    if (client === undefined) return
+    try {
+      const list = await client.call<Array<{ group_id: number | string; group_name?: string; member_count?: number }>>('get_group_list')
+      const now = this.now()
+      for (const group of list) {
+        const groupId = String(group.group_id)
+        this.store.upsertGroup({ groupId, name: group.group_name ?? groupId, memberCount: group.member_count }, now)
+      }
+      const missing = [...this.recorded].filter(id => !list.some(group => String(group.group_id) === id))
+      this.ctx.logger.info(`lsy-qq: the account is in ${list.length} group(s); ${this.recorded.size - missing.length} of the ${this.recorded.size} listed one(s) found${missing.length === 0 ? '' : `; not a member of ${missing.join(', ')}`}`)
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`lsy-qq: get_group_list failed: ${errorText(error)}`)
+    }
+  }
+
+  /** Fetch a group's history backwards until it meets a message already stored, or the cap. */
+  private async backfill(groupId: string): Promise<void> {
+    const client = this.client
+    if (client === undefined) return
+    let seq: string | undefined
+    let fetched = 0
+    let added = 0
+    while (fetched < this.config.backfill.maxMessages && this.client === client) {
+      const data = await client.call<{ messages?: OneBotEvent[] }>('get_group_msg_history', { group_id: Number(groupId), count: 50, ...seq === undefined ? {} : { message_seq: Number(seq) } })
+      const messages = data.messages ?? []
+      if (messages.length === 0) break
+      let known = false
+      for (const message of [...messages].reverse()) {
+        fetched += 1
+        if (this.store.hasMessage(groupId, String(message.message_id))) known = true
+        else if (await this.record({ ...message, post_type: 'message', message_type: 'group', group_id: groupId }, true)) added += 1
+      }
+      const oldest = messages[0]?.message_seq === undefined ? undefined : String(messages[0].message_seq)
+      if (known || oldest === undefined || oldest === seq) break
+      seq = oldest
+    }
+    if (added > 0) this.ctx.logger.info(`lsy-qq: backfilled ${added} message(s) of group ${groupId}`)
+  }
+
+  // ---- events ----
+
+  private async handleEvent(event: OneBotEvent): Promise<void> {
+    if (event.post_type === 'message') {
+      if (event.message_type === 'group') {
+        await this.record(event, false)
+      } else {
+        // Private chats are not the observer's business: not stored, not counted by content.
+        this.counters.private += 1
+      }
+      return
+    }
+    if (event.post_type !== 'notice') return
+    if (event.notice_type === 'group_recall' && this.config.honorRecall) {
+      await this.onRecall(String(event.group_id ?? ''), String(event.message_id ?? ''))
+    } else if (event.notice_type === 'bot_offline') {
+      this.ctx.logger.warn('lsy-qq: the protocol end reports the account went offline')
+      await this.notifyOwner('QQ 号掉线了', 'NapCat 报告这个 QQ 号下线（被踢或登录失效）。需要重新扫码登录。')
+    }
+  }
+
+  private async onRecall(groupId: string, messageId: string): Promise<void> {
+    if (!this.recorded.has(groupId)) return
+    const paths = this.store.recall(groupId, messageId)
+    if (paths === undefined) return
+    for (const path of paths) await removeMedia(path)
+    this.ctx.logger.info(`lsy-qq: a message of group ${groupId} was recalled; its text and ${paths.length} file(s) were dropped`)
+  }
+
+  /** Record a group message when its group is listed. @returns whether a new row was stored. */
+  private async record(event: OneBotEvent, backfilled: boolean): Promise<boolean> {
+    const groupId = String(event.group_id ?? '')
+    const userId = String(event.user_id ?? event.sender?.user_id ?? '')
+    if (groupId === '' || userId === '' || event.message_id === undefined) return false
+    if (userId === this.selfId && this.selfId !== '') return false
+    if (!this.recorded.has(groupId)) {
+      this.counters.dropped += 1
+      if (!this.seenUnlisted.has(groupId)) {
+        this.seenUnlisted.add(groupId)
+        this.ctx.logger.info(`lsy-qq: not recording group ${groupId}${this.store.groupName(groupId) === undefined ? '' : ` (${this.store.groupName(groupId)})`}: it is not in groups`)
+      }
+      return false
+    }
+    const parsed = parseMessage(event.message)
+    const sender = event.sender ?? {}
+    const at = typeof event.time === 'number' ? event.time * 1000 : this.now()
+    const row = this.store.insertMessage({
+      groupId, messageId: String(event.message_id), seq: event.message_seq === undefined ? undefined : String(event.message_seq), at,
+      userId, nickname: sender.nickname ?? '', card: sender.card ?? '', role: sender.role ?? '', text: parsed.text, replyTo: parsed.replyTo,
+      kinds: parsed.kinds, raw: JSON.stringify(event.message ?? []), backfilled,
+    }, parsed.media, this.now())
+    if (row === undefined) return false
+    this.counters.messages += 1
+    this.ctx.logger.debug(`lsy-qq: recorded message ${event.message_id} of group ${groupId} from ${displayName(sender, userId)} (${Array.from(parsed.text).length} chars, ${parsed.media.length} media)`)
+    for (const media of this.store.mediaOf(row)) {
+      const item: MediaJob = {
+        rowId: row, groupId, at, mediaId: media.id, kind: media.kind,
+        url: media.url ?? undefined, file: media.file ?? undefined, name: media.name ?? undefined,
+      }
+      this.enqueue(() => this.fetchMedia(item))
+    }
+    return true
+  }
+
+  // ---- media ----
+
+  private enqueue(job: () => Promise<void>): void {
+    this.downloadQueue.push(job)
+    this.pump()
+  }
+
+  private pump(): void {
+    while (this.downloadsRunning < MEDIA_CONCURRENCY && this.downloadQueue.length > 0) {
+      const job = this.downloadQueue.shift()
+      if (job === undefined) break
+      this.downloadsRunning += 1
+      this.track(job().finally(() => { this.downloadsRunning -= 1; this.pump() }))
+    }
+  }
+
+  private overBudget(): boolean {
+    if (this.store.mediaBytes() < this.config.media.maxTotalBytes) return false
+    if (this.now() - this.budgetWarnedAt > 3_600_000) {
+      this.budgetWarnedAt = this.now()
+      this.ctx.logger.warn(`lsy-qq: downloads reached media.maxTotalBytes (${this.config.media.maxTotalBytes}); new media is not downloaded`)
+    }
+    return true
+  }
+
+  private async fetchMedia(item: MediaJob): Promise<void> {
+    const { rowId, groupId, at, mediaId, kind, url, name } = item
+    const media = this.config.media
+    try {
+      if (kind === 'image') {
+        if (!media.images || url === undefined || this.overBudget()) return
+        if (!isAllowedMediaUrl(url, media.hostSuffixes)) {
+          this.store.setMediaError(mediaId, 'the address is not on media.hostSuffixes')
+          return
+        }
+        const bytes = await fetchCapped(url, media.maxImageBytes, media.timeoutMs)
+        const saved = await saveMedia(this.dataDir, groupId, at, bytes, detectExtension(bytes, 'image', name))
+        this.store.setMediaFile(mediaId, { localPath: saved.path, sha256: saved.sha256, bytes: saved.bytes })
+        this.counters.media += 1
+      } else if (kind === 'voice') {
+        await this.fetchVoice(item)
+      }
+    } catch (error: unknown) {
+      this.store.setMediaError(mediaId, errorText(error))
+      this.ctx.logger.debug(`lsy-qq: could not fetch ${kind} of message row ${rowId}: ${errorText(error)}`)
+    }
+  }
+
+  /** Fetch a voice message as MP3 through the protocol end (which decodes QQ's SILK), keep it, and transcribe it if asked. */
+  private async fetchVoice(item: MediaJob): Promise<void> {
+    const { rowId, groupId, at, mediaId, url, file, name } = item
+    if (!this.config.voice.download || this.overBudget()) return
+    let bytes: Buffer | undefined
+    const client = this.client
+    if (client !== undefined && file !== undefined) {
+      try {
+        const data = await client.call<{ base64?: string; file?: string }>('get_record', { file, out_format: 'mp3' })
+        if (typeof data.base64 === 'string' && data.base64 !== '') bytes = Buffer.from(data.base64, 'base64')
+      } catch (error: unknown) {
+        this.ctx.logger.debug(`lsy-qq: get_record failed for message row ${rowId}: ${errorText(error)}`)
+      }
+    }
+    if (bytes === undefined && url !== undefined && isAllowedMediaUrl(url, this.config.media.hostSuffixes)) {
+      bytes = await fetchCapped(url, this.config.voice.maxBytes, this.config.media.timeoutMs)
+    }
+    if (bytes === undefined) {
+      this.store.setMediaError(mediaId, 'the protocol end gave no audio')
+      return
+    }
+    if (bytes.length > this.config.voice.maxBytes) {
+      this.store.setMediaError(mediaId, `audio exceeds ${this.config.voice.maxBytes} bytes`)
+      return
+    }
+    const saved = await saveMedia(this.dataDir, groupId, at, bytes, detectExtension(bytes, 'voice', name))
+    this.store.setMediaFile(mediaId, { localPath: saved.path, sha256: saved.sha256, bytes: saved.bytes })
+    this.counters.voices += 1
+    if (!this.config.asr.enabled) return
+    const voice = this.ctx.get('lsyVoice') as { canTranscribe(path: string): boolean; transcribe(path: string): Promise<{ text: string }> } | undefined
+    if (voice === undefined || !voice.canTranscribe(saved.path)) {
+      this.ctx.logger.debug(`lsy-qq: voice of message row ${rowId} not transcribed: lsy-voice is missing, off, or does not read this format`)
+      return
+    }
+    const transcript = await voice.transcribe(saved.path)
+    const text = transcript.text.trim()
+    if (text === '') return
+    this.store.setTranscript(mediaId, text)
+    this.store.appendText(rowId, ` 〔语音转写：${text}〕`)
+  }
+
+  // ---- schedules ----
+
+  /** Digest rounds and media retention, until the plugin stops. */
+  private async schedule(): Promise<void> {
+    let lastRetention = 0
+    let lastGroups = this.now()
+    await this.pause(30_000)
+    while (!this.stopping) {
+      try {
+        if (this.config.digest.enabled) {
+          const stored = await this.digest.runRound([...this.recorded], this.abort.signal)
+          if (stored > 0) this.ctx.logger.info(`lsy-qq: digest round stored ${stored} digest(s)`)
+        }
+        if (this.config.media.retainDays > 0 && this.now() - lastRetention >= RETENTION_CHECK_MS) {
+          lastRetention = this.now()
+          await this.prune()
+        }
+        if (this.client?.connected === true && this.now() - lastGroups >= GROUP_REFRESH_MS) {
+          lastGroups = this.now()
+          await this.refreshGroups()
+        }
+        await this.checkOutage()
+        this.logStats()
+      } catch (error: unknown) {
+        this.ctx.logger.warn(`lsy-qq: scheduled work failed: ${errorText(error)}`)
+      }
+      await this.pause(DIGEST_CHECK_MS)
+    }
+  }
+
+  private logStats(): void {
+    const c = this.counters
+    if (c.messages + c.dropped + c.private + c.media + c.voices === 0) return
+    this.ctx.logger.info(`lsy-qq: since the last report: ${c.messages} message(s) recorded, ${c.media} image(s) and ${c.voices} voice(s) saved, ${c.dropped} from unlisted groups dropped, ${c.private} private message(s) ignored; downloads hold ${this.store.mediaBytes()} bytes`)
+    this.counters.messages = this.counters.media = this.counters.voices = this.counters.dropped = this.counters.private = 0
+  }
+
+  /** Delete downloads of messages older than `media.retainDays`. */
+  private async prune(): Promise<void> {
+    const expired = this.store.expiredMedia(this.now() - this.config.media.retainDays * 86_400_000)
+    for (const item of expired) {
+      await removeMedia(item.localPath)
+      this.store.clearMediaFile(item.id)
+    }
+    if (expired.length > 0) this.ctx.logger.info(`lsy-qq: removed ${expired.length} download(s) older than ${this.config.media.retainDays} day(s)`)
   }
 }
 
-export default QqChannel
+export default QqObserver
