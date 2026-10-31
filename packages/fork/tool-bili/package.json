@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-tool-bili",
-  "description": "Model-facing Bilibili tools for the agent's own account: browse, watch through subtitles, curate, speak rarely, and keep a journal",
+  "description": "Model-facing Bilibili tools for the agent's own account: browse, watch through subtitles, like, coin, follow, and save through bili-svc, and keep a journal; no speech",
   "version": "0.2.2-alpha.2",
   "publishConfig": {
     "access": "public"
