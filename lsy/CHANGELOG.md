@@ -63,8 +63,6 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 
 ### Changed
 - Deploys install builds into `/Users/Shared/lsy-dsh/builds.noindex/<sha>` (2026-10-31): Spotlight skips `*.noindex`, so the 1.7 GB `node_modules` of every new build is no longer indexed from scratch (mdworker held the mini at load 24 after five or six deploys in one evening). `/Users/Shared/lsy-dsh/current` still names the active build for the LaunchDaemon, the sudoers rules, and the profile links. `lsy/deploy/prune-builds.sh` keeps the new and the previous build wherever they live, removes the rest (both layouts), and moves a legacy build with `--relocate`; `check-prune-builds.sh` is its regression check and runs inside `upgrade.sh`. Rollback is `ln -sfn …/builds.noindex/<previous sha> …/current`.
-
-### Changed
 - Upstream sync to `deepseek-ai/deepseek-harness` master `ce7073d512` (workspace version 0.2.2-alpha.2, from the 2026-10-17 base `687f282e86`), merged into `lsy/main` with a merge commit. Every `packages/lsy/*` manifest is at 0.2.2-alpha.2. Adaptations to upstream changes:
   - `@deepseek-ai/dsh-bili` reads the Agent's recorded model selection from `agent.model.current()` (the deprecated `sessionProjections.stateOf` is gone from its route check) and no longer depends on `dsh-session-projection`.
   - The event bundle drops the separate `tool-subagent-control/list-agents` row: the package's main entry now registers `list_agents` with `send_message` and `interrupt_agent`.
