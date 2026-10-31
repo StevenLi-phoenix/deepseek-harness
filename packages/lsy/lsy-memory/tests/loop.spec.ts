@@ -64,7 +64,7 @@ describe('memory_save in the real agent loop', () => {
     expect((await store.list())[0]).toMatchObject({ text: SAVE.text, source: 'owner-turn', origin: 'owner', session: 'chat' })
     await new Promise((resolve) => { setTimeout(resolve, 20) })
     expect(sent).toHaveLength(1)
-    expect(sent[0]!.body).toContain('已记下')
+    expect(sent[0]!.title).toBe('记住了一条指令：Always push straight to main（来源：微信对话）')
   })
 
   it('holds the same call in a turn a message another Session passed on started', async () => {
@@ -76,7 +76,7 @@ describe('memory_save in the real agent loop', () => {
     expect((await store.listPending())[0]).toMatchObject({ text: SAVE.text, origin: 'peer:bili', source: 'tainted-turn' })
     await new Promise((resolve) => { setTimeout(resolve, 20) })
     expect(sent).toHaveLength(1)
-    expect(sent[0]!.title).toBe('🧠 记忆：1 条待你确认')
+    expect(sent[0]!.title).toMatch(/^扣下了一条指令，还没写入：Always push straight to main（来源：B站猫猫的传话）$/u)
   })
 
   it('holds an owner turn once it has read a web page, but not the turn after it', async () => {

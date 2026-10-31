@@ -45,9 +45,6 @@
       "path": "../../llm/llm"
     },
     {
-      "path": "../lsy-memory"
-    },
-    {
       "path": "../lsy-taint"
     }
   ]

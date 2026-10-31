@@ -138,6 +138,7 @@ export function apply(ctx: Context, config: Config): void {
   const hold = process.env['LSY_MEMORY_HOLD'] === '0' ? false : config.hold ?? true
   const notify = config.notify ?? true
   const noticesPerDay = config.noticesPerDay ?? 12
+  ctx.logger.info('lsy-memory: hold %s, notices %s (at most %d a day)', hold ? 'on' : 'off (observing: records, history, and notices only)', notify ? 'on' : 'off', noticesPerDay)
 
   /** Notices queued per Session until its turn ends, and how many went out today. */
   const queued = new Map<string, { items: NoticeItem[]; timer: ReturnType<typeof setTimeout> }>()
@@ -162,7 +163,7 @@ export function apply(ctx: Context, config: Config): void {
     sentToday.count += 1
     const note = memoryNotice(entry.items)
     try {
-      await notifier.send({ title: note.title, body: note.body, origin: 'the memory tool of your own Session (a notice to the owner about memory it wrote)' })
+      await notifier.send({ title: note.title, ...note.body === undefined ? {} : { body: note.body }, origin: 'the memory tool of your own Session (a notice to the owner about memory it wrote)' })
       ctx.logger.info('memory notice sent for session %s: %d change(s), %d held', sessionId, entry.items.length, entry.items.filter(item => item.kind === 'held').length)
     } catch (error: unknown) {
       ctx.logger.warn('memory notice for session %s failed: %s', sessionId, error instanceof Error ? error.message : String(error))
@@ -318,11 +319,13 @@ export function apply(ctx: Context, config: Config): void {
           return {
             outcome: 'held' as const,
             entry: publicEntry(waiting),
-            message: 'Not saved yet: this turn was not the owner\'s alone, so the owner was asked on WeChat to keep it or drop it. Do not save it again and do not tell the owner it is remembered.',
+            message: 'Not saved yet: this turn was not the owner\'s alone, so the write is held for the owner to review. Do not save it again and do not tell the owner it is remembered.',
           }
         }
         const result = await store.save(args, meta)
-        ctx.logger.info('memory %s %s (%s, %d chars) from %s', result.outcome, result.entry.id, result.entry.category, result.entry.text.length, label)
+        // With hold off the write goes through; the marker lets the log say how many writes hold would have kept back.
+        const wouldHold = !hold && isProtected(args.category) && !origin.clean && result.outcome !== 'unchanged'
+        ctx.logger.info('memory %s %s (%s, %d chars) from %s%s', result.outcome, result.entry.id, result.entry.category, result.entry.text.length, label, wouldHold ? ' [would be held]' : '')
         if (result.outcome !== 'unchanged' && isProtected(result.entry.category)) {
           enqueue(session?.id, { kind: result.outcome === 'added' ? 'saved' : 'replaced', id: result.entry.id, category: result.entry.category, text: result.entry.text, origin: label })
         }

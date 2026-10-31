@@ -1,9 +1,13 @@
 /**
- * The WeChat notice for a turn's protected memory changes: one short message, the entries' opening
- * words, and the reply words that undo, keep, or drop them.
+ * The WeChat notice for a turn's protected memory changes: one short message in plain language that
+ * says what happened and where it came from. It carries no id and asks for no reply: the owner
+ * reviews and undoes changes with the `memory-admin` CLI (RUNBOOK 15), or tells the agent in words.
  */
 
+import { originZh } from '@deepseek-ai/dsh-lsy-taint'
 import type { MemoryCategory } from './entries.ts'
+
+export { originZh }
 
 /** One change the owner is told about. */
 export interface NoticeItem {
@@ -28,52 +32,41 @@ function opening(text: string): string {
   return parts.length <= OPENING_CHARS ? text : `${parts.slice(0, OPENING_CHARS).join('')}…`
 }
 
-const FROM: Readonly<Record<string, string>> = {
-  owner: '你的消息',
-  'peer:bili': 'B站猫猫的传话',
-  'peer:cc': 'Claude Code 的消息',
-  'peer:peer': '另一个 Session 的传话',
-  event: '事件触发的回合',
-  scheduled: '提醒触发的回合',
-  monitor: '监控触发的回合',
-  job: '后台任务触发的回合',
-  guest: '非 owner 的发言',
-  subagent: '子 agent',
-  unknown: '来源不明的回合',
+const CATEGORY_ZH: Readonly<Record<MemoryCategory, string>> = {
+  instructions: '指令',
+  preferences: '偏好',
+  identity: '身份信息',
+  career: '职业信息',
+  projects: '项目',
 }
 
-/**
- * Where a write came from, in the owner's words.
- * @param origin - the `describeOrigin` label.
- */
-export function originZh(origin: string): string {
-  const [first = 'unknown', ...tools] = origin.split('+')
-  const base = FROM[first] ?? (first.startsWith('peer:') ? `${first.slice(5)} 的传话` : first)
-  const extra = tools.filter(name => name !== 'owner' && !(name in FROM))
-  return extra.length === 0 ? base : `${base}，且读过 ${extra.join('、')} 的内容`
+/** Where a write came from, as a clause: the owner's own chat reads as WeChat. */
+function sourceClause(origin: string): string {
+  return `来源：${origin === 'owner' ? '微信对话' : originZh(origin)}`
+}
+
+function sentence(item: NoticeItem): string {
+  const category = CATEGORY_ZH[item.category]
+  const lead = {
+    saved: `记住了一条${category}`,
+    replaced: `改写了一条${category}`,
+    held: `扣下了一条${category}，还没写入`,
+    forgot: `忘掉了一条${category}`,
+  } as const
+  return `${lead[item.kind]}：${opening(item.text)}（${sourceClause(item.origin)}）`
 }
 
 /**
  * Build the notice.
  * @param items - the changes of one turn, in order.
- * @returns the title and body of one WeChat message.
+ * @returns the title (the whole message for one change) and, for several, one sentence per change.
  */
-export function memoryNotice(items: readonly NoticeItem[]): { title: string; body: string } {
+export function memoryNotice(items: readonly NoticeItem[]): { title: string; body?: string } {
+  const [only] = items
+  if (items.length === 1 && only !== undefined) return { title: sentence(only) }
   const held = items.filter(item => item.kind === 'held').length
-  const done = items.length - held
-  const title = held > 0
-    ? `🧠 记忆：${String(held)} 条待你确认${done > 0 ? `，${String(done)} 条已写入` : ''}`
-    : `🧠 记忆：${String(items.length)} 条变动`
-  const verb = { saved: '已记下', replaced: '已改写', held: '待确认', forgot: '已忘记' } as const
-  const lines = items.slice(0, LISTED).map((item) => {
-    const base = `${verb[item.kind]} [${item.id}] ${item.category}：${opening(item.text)}`
-    return item.kind === 'held' ? `${base}（来自${originZh(item.origin)}）` : item.origin === 'owner' ? base : `${base}（来自${originZh(item.origin)}）`
-  })
+  const title = `这一轮改动了 ${String(items.length)} 条记忆${held > 0 ? `，其中 ${String(held)} 条先扣下了` : ''}`
+  const lines = items.slice(0, LISTED).map(sentence)
   if (items.length > LISTED) lines.push(`…另有 ${String(items.length - LISTED)} 条`)
-  const heldIds = items.filter(item => item.kind === 'held').slice(0, 3).map(item => item.id)
-  const doneIds = items.filter(item => item.kind !== 'held').slice(0, 3).map(item => item.id)
-  const hints: string[] = []
-  if (heldIds.length > 0) hints.push(`保留回复「记下 ${heldIds.join(' ')}」，丢弃回复「忽略 ${heldIds.join(' ')}」`)
-  if (doneIds.length > 0) hints.push(`撤销回复「撤销 ${doneIds.join(' ')}」`)
-  return { title, body: [...lines, ...hints].join('\n') }
+  return { title, body: lines.join('\n') }
 }

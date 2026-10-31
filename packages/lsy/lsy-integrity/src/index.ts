@@ -154,11 +154,13 @@ export async function scan(
  * The notice for a set of changes.
  * @param changes - what differs from the baseline.
  */
-export function integrityNotice(changes: readonly Change[]): { title: string; body: string } {
-  const verb = { changed: '已修改', added: '新出现', removed: '已删除' } as const
+export function integrityNotice(changes: readonly Change[]): { title: string; body?: string } {
+  const verb = { changed: '被改动', added: '新出现', removed: '被删除' } as const
+  const [only] = changes
+  if (changes.length === 1 && only !== undefined) return { title: `${only.label} ${verb[only.kind]}了（不显示内容）` }
   return {
-    title: `🔐 完整性：${String(changes.length)} 处被改动（不显示内容）`,
-    body: [...changes.slice(0, 8).map(change => `· ${change.label}：${verb[change.kind]}`), ...changes.length > 8 ? [`…另有 ${String(changes.length - 8)} 处`] : [], '是你自己改的就不用管；不是的话告诉我，我来查。'].join('\n'),
+    title: `有 ${String(changes.length)} 处受监控的文件被改动（不显示内容）`,
+    body: [...changes.slice(0, 8).map(change => `· ${change.label}：${verb[change.kind]}`), ...changes.length > 8 ? [`…另有 ${String(changes.length - 8)} 处`] : []].join('\n'),
   }
 }
 
@@ -218,7 +220,7 @@ export function apply(ctx: Context, config: Config): void {
     if (config.notify !== false && notifier !== undefined) {
       const note = integrityNotice(changes)
       try {
-        await notifier.send({ title: note.title, body: note.body, origin: 'the integrity watch of your own host (a notice to the owner that a file steering the agent changed)' })
+        await notifier.send({ title: note.title, ...note.body === undefined ? {} : { body: note.body }, origin: 'the integrity watch of your own host (a notice to the owner that a file steering the agent changed)' })
         lastNoticeAt = now
         sentToday.count += 1
         ctx.logger.info('lsy-integrity: told the owner about %d change(s)', changes.length)

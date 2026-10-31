@@ -118,3 +118,28 @@ export function describeOrigin(origin: TurnOrigin): string {
   if (origin.triggers.length === 0) return 'unknown'
   return [...new Set(origin.triggers), ...origin.contaminated].join('+')
 }
+
+const FROM: Readonly<Record<string, string>> = {
+  owner: '你的消息',
+  'peer:bili': 'B站猫猫的传话',
+  'peer:cc': 'Claude Code 的消息',
+  'peer:peer': '另一个 Session 的传话',
+  event: '事件触发的回合',
+  scheduled: '提醒触发的回合',
+  monitor: '监控触发的回合',
+  job: '后台任务触发的回合',
+  guest: '非 owner 的发言',
+  subagent: '子 agent',
+  unknown: '来源不明的回合',
+}
+
+/**
+ * Where a write came from, in the owner's words.
+ * @param origin - the `describeOrigin` label.
+ */
+export function originZh(origin: string): string {
+  const [first = 'unknown', ...tools] = origin.split('+')
+  const base = FROM[first] ?? (first.startsWith('peer:') ? `${first.slice(5)} 的传话` : first)
+  const extra = tools.filter(name => name !== 'owner' && !(name in FROM))
+  return extra.length === 0 ? base : `${base}，且读过 ${extra.join('、')} 的内容`
+}

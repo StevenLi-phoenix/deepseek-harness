@@ -37,7 +37,7 @@ Add the row to the plugin list of the agent preset that should remember. The lsy
 | `file` | `<DSH_HOME>/lsy-memory/memory.jsonl` | The memory file |
 | `maxBytes` | `65536` | Cap on the memory block; entries that do not fit are counted in a closing line and stay searchable |
 | `hold` | `true` | Hold a protected write (`instructions`, `preferences`, `identity`) made in a turn the owner did not start alone until the owner approves it; refuse to forget a protected entry in such a turn; show `identity` entries there only as a count |
-| `notify` | `true` | Tell the owner on WeChat about protected writes: one merged notice per turn, with the words to undo, keep, or drop |
+| `notify` | `true` | Tell the owner on WeChat about protected writes: one merged notice per turn, in plain sentences (what happened and where it came from), with no ids and nothing to reply |
 | `noticesPerDay` | `12` | Notices the owner gets in a day; further changes stay in the history |
 
 Each entry is one line of text with an id, a category, and the date of its last write:
@@ -69,16 +69,16 @@ The Host stamps every write with where it came from, read from the Session's log
 | `snapshots/memory-YYYY-MM-DD.jsonl` (600) | The memory file as it stood before the first change of each day; the latest 30 are kept |
 | `memory.pending.jsonl` (600) | Protected writes held for the owner; never shown in a prompt; at most 50, dropped after 14 days |
 
-With `hold` on, a protected write from a turn the owner did not start alone is not made: the tool answers `held`, and the owner gets a WeChat notice (`待确认 [id] …（来自B站猫猫的传话）`). Replying `记下 <id>` on WeChat keeps it (marked `owner-confirmed`), `忽略 <id>` drops it, and `撤销 <id>` undoes the latest change to an entry the owner was told about; [`lsy-wechat`](../lsy-wechat/README.md) runs these words itself, only on the owner's own messages. Every protected write the owner's own turn makes is announced the same way, with the words to undo it.
+With `hold` on, a protected write from a turn the owner did not start alone is not made: the tool answers `held`, and the owner gets one plain sentence on WeChat (`扣下了一条指令，还没写入：…（来源：B站猫猫的传话）`). WeChat has no command words: the owner keeps, drops, or undoes entries with the `memory-admin` CLI over SSH (or has Claude Code run it), or simply tells the agent in words, which writes in a turn the owner started alone. Every protected write the owner's own turn makes is announced the same way (`记住了一条偏好：…（来源：微信对话）`); one turn's changes merge into one message, and `noticesPerDay` caps them.
 
-The same operations are available on the host, as the service user, printing ids, categories, and counts and never text:
+The owner runs these on the host as the service user, from a laptop with `ssh mini '…'` (the RUNBOOK has the full line). `ids` prints ids, categories, and counts and never text; `recent` and `show` print text, to find the id a notice meant:
 
 ```sh
 sudo -n -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node \
   /Users/Shared/lsy-dsh/current/lsy/deploy/memory-admin.mjs ids
 ```
 
-`approve <id>…`, `discard <id>…`, `revert <id>…`, `rollback --session <id>` or `--since <ISO time>` (add `--dry-run` to count), and `forget --purge <id>…`, which erases an entry from the file, the history, every snapshot, and the held writes. To switch the protection off, set `hold: false` in the bundle row, or put `LSY_MEMORY_HOLD=0` in `$DSH_HOME/.env` and restart (a profile patch cannot reach a row inside a preset); the records and notices continue. To roll back to the previous build, first `discard` the held writes (an older build ignores `memory.pending.jsonl` and reads the other new fields as absent, so nothing else needs doing).
+`recent [--limit n]` (newest changes first, waiting writes on top), `show <id>` (one entry in full with its history), `approve <id>…`, `discard <id>…`, `revert <id>…`, `rollback --session <id>` or `--since <ISO time>` (add `--dry-run` to count), and `forget --purge <id>…`, which erases an entry from the file, the history, every snapshot, and the held writes. To switch the protection off, set `hold: false` in the bundle row, or put `LSY_MEMORY_HOLD=0` in `$DSH_HOME/.env` and restart (a profile patch cannot reach a row inside a preset); the records and notices continue. To roll back to the previous build, first `discard` the held writes (an older build ignores `memory.pending.jsonl` and reads the other new fields as absent, so nothing else needs doing).
 
 -----
 

@@ -70,7 +70,7 @@ kind: "package-reference"
 ## 延伸阅读
 
 - [Owner 记忆](../lsy-memory/README.zh.md)——扣下非干净回合的保护类写入
-- [微信通道](../lsy-wechat/README.zh.md)——生成不可信请求 id，并执行 owner 的回复口令
+- [微信通道](../lsy-wechat/README.zh.md)——生成不可信请求 id
 - [Claude Code 桥](../lsy-cc-bridge/README.zh.md)——这个包守护的工具
 
 -----

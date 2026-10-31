@@ -15,9 +15,9 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-lsy-event-bus'
 import type { PreToolDecision } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
-import { describeOrigin, turnOrigin } from './origin.ts'
+import { describeOrigin, originZh, turnOrigin } from './origin.ts'
 
-export { CONTAMINATING_TOOLS, describeOrigin, turnOrigin, untrustedRequestId, UNTRUSTED_REQUEST_PREFIX } from './origin.ts'
+export { CONTAMINATING_TOOLS, describeOrigin, originZh, turnOrigin, untrustedRequestId, UNTRUSTED_REQUEST_PREFIX } from './origin.ts'
 export type { TurnOrigin, TurnOriginOptions } from './origin.ts'
 
 /** Plugin name. */
@@ -52,6 +52,9 @@ export const Config: z<Config> = z.object({
 /** Seconds a turn's audit lines wait for the turn to end. */
 const LINGER_MS = 5 * 60_000
 
+/** The audited tools in the owner's words. */
+const AUDITED_ZH: Readonly<Record<string, string>> = { schedule_create: '定时提醒', watch_create: '监控' }
+
 /**
  * Register the policy.
  * @param ctx - the preset scope's context.
@@ -63,7 +66,8 @@ export function apply(ctx: Context, config: Config): void {
   const ownerOnly = new Set(config.ownerOnlyTools ?? ['cc_send', 'cc_start'])
   const audited = new Set(config.auditedTools ?? ['schedule_create', 'watch_create'])
   const notify = config.notify ?? true
-  const queued = new Map<string, { lines: string[]; timer: ReturnType<typeof setTimeout> }>()
+  ctx.logger.info('lsy-taint: enforce %s (%s), audit notices %s', enforce ? 'on' : 'off (observing: log only)', [...ownerOnly].join(', '), notify ? 'on' : 'off')
+  const queued = new Map<string, { lines: string[]; sources: Set<string>; timer: ReturnType<typeof setTimeout> }>()
 
   const flush = async (sessionId: string): Promise<void> => {
     const entry = queued.get(sessionId)
@@ -74,8 +78,8 @@ export function apply(ctx: Context, config: Config): void {
     if (notifier === undefined) return
     try {
       await notifier.send({
-        title: `⚠️ 非你本人发起的回合留下了 ${String(entry.lines.length)} 个会在之后触发的东西`,
-        body: [...entry.lines.slice(0, 6), '不是你要的，就让我删掉。'].join('\n'),
+        title: `一次不是你本人发起的回合（来源：${[...entry.sources].map(originZh).join('、')}）设置了 ${String(entry.lines.length)} 个之后会自己触发的东西`,
+        body: [...entry.lines.slice(0, 6), ...entry.lines.length > 6 ? [`…另有 ${String(entry.lines.length - 6)} 个`] : []].join('\n'),
         origin: 'the turn-origin guard of your own Session (a notice to the owner about a reminder or watch set up in a turn the owner did not start)',
       })
       ctx.logger.info('lsy-taint: told the owner about %d audited call(s) of session %s', entry.lines.length, sessionId)
@@ -84,15 +88,16 @@ export function apply(ctx: Context, config: Config): void {
     }
   }
 
-  const enqueue = (sessionId: string, line: string): void => {
+  const enqueue = (sessionId: string, line: string, source: string): void => {
     const existing = queued.get(sessionId)
     if (existing !== undefined) {
       existing.lines.push(line)
+      existing.sources.add(source)
       return
     }
     const timer = setTimeout(() => { void flush(sessionId) }, LINGER_MS)
     timer.unref()
-    queued.set(sessionId, { lines: [line], timer })
+    queued.set(sessionId, { lines: [line], sources: new Set([source]), timer })
   }
 
   ctx.on('session/event', (session, event) => {
@@ -123,7 +128,7 @@ export function apply(ctx: Context, config: Config): void {
       }
     }
     ctx.logger.warn('lsy-taint: %s used in a turn the owner did not start alone (%s), session %s', exec.name, label, exec.agent.session.id)
-    if (notify) enqueue(exec.agent.session.id, `· ${exec.name}（回合来源：${label}）`)
+    if (notify) enqueue(exec.agent.session.id, `· ${AUDITED_ZH[exec.name] ?? exec.name}（${exec.name}）`, label)
     return decision
   })
 }

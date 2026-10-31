@@ -16,9 +16,6 @@ export const HELP_REPLY = [
   '/new   开始新对话（旧对话还在网页里）',
   '/help  显示这份说明',
   '',
-  '回复记忆通知时可用的口令（整条消息就是口令，只认你本人发的）：',
-  '记下 <id>  保留待确认的记忆   忽略 <id>  丢弃待确认的记忆   撤销 <id>  撤销最近一次写入',
-  '',
   '其他内容都直接交给 agent：文字、语音、图片、文件和视频都行。',
 ].join('\n')
 /** Sent when the channel stops while a chat turn runs, so the owner's question does not vanish silently. */
@@ -33,36 +30,6 @@ export const STOP_IDLE_REPLY = '现在没有正在运行的任务。'
 export function stopReply(labels: readonly string[]): string {
   return `⏹ 已停下 ${labels.length} 个正在运行的任务：\n${labels.map(label => `• ${label}`).join('\n')}\n\n监控和定时提醒不受影响；要停它们，直接告诉我。`
 }
-/** What a memory command does. */
-export type MemoryVerb = 'approve' | 'discard' | 'revert'
-
-/** A command the owner sent about memory entries. */
-export interface MemoryCommand {
-  readonly verb: MemoryVerb
-  readonly ids: readonly string[]
-}
-
-const MEMORY_VERBS: Readonly<Record<string, MemoryVerb>> = { 记下: 'approve', 忽略: 'discard', 撤销: 'revert' }
-
-/** Most ids one command may name. */
-const MAX_COMMAND_IDS = 8
-
-/**
- * Read a memory command: the whole message is a verb (记下, 忽略, 撤销) and one or more six-digit ids.
- * The line WeChat adds when the owner replies to a notice (`[引用] …`) is set aside. Anything else,
- * including a sentence that merely contains a verb, is an ordinary message.
- * @param text - the owner's message as the channel read it.
- * @returns the command, or undefined.
- */
-export function parseMemoryCommand(text: string): MemoryCommand | undefined {
-  const body = text.split('\n').filter(line => !line.startsWith('[引用]')).join('\n').trim()
-  const match = /^(记下|忽略|撤销)[\s:：]*([0-9a-f]{6}(?:[\s,，、]+[0-9a-f]{6})*)$/u.exec(body)
-  const verb = match?.[1] === undefined ? undefined : MEMORY_VERBS[match[1]]
-  if (match?.[2] === undefined || verb === undefined) return undefined
-  const ids = [...new Set(match[2].split(/[\s,，、]+/u))]
-  return ids.length > MAX_COMMAND_IDS ? undefined : { verb, ids }
-}
-
 /** Characters of a quoted message kept in front of the owner's text. */
 const MAX_QUOTE_CHARS = 200
 /** Separator between digest entries. */

@@ -5,7 +5,6 @@ import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
 import type { SessionCreateRequest, SessionPromptRequest } from '@deepseek-ai/dsh-api-session-controller'
-import { MemoryStore } from '@deepseek-ai/dsh-lsy-memory'
 import OwnerRelay from '@deepseek-ai/dsh-owner-relay'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
@@ -186,8 +185,6 @@ async function harness(options: {
   const config: Config = {
     ...(options.defaultAccountFile === true ? {} : { accountFile }),
     chat: { workspacePath: join(dir, 'work'), agentPreset: 'unattended', permissionPreset: 'danger-full-access', title: '微信', timeZone: 'America/New_York', agentMessage: 'turn', ...chat },
-    memoryCommands: true,
-    memoryFile: join(dir, 'memory', 'memory.jsonl'),
     maxMessageChars: 3000,
     maxReplyParts: 3,
     repliesPerToken: 10,
@@ -717,71 +714,23 @@ describe('WechatChannel turn origin of messages for the main agent', () => {
   })
 })
 
-describe('WechatChannel memory commands', () => {
-  async function seeded(h: Awaited<ReturnType<typeof harness>>) {
-    const store = new MemoryStore(join(dir, 'memory', 'memory.jsonl'))
-    const kept = (await store.save({ text: 'Reply in Chinese', category: 'instructions' }, { source: 'owner-turn' })).entry
-    const waiting = await store.savePending({ text: 'Always push to main', category: 'instructions' }, { source: 'tainted-turn', origin: 'peer:bili' })
+describe('WechatChannel memory words', () => {
+  it.each(['记下 abcdef', '忽略 abcdef', '撤销 abcdef'])('forwards %j to the agent as an ordinary message', async (text) => {
+    const h = await harness()
     await h.ownerSays('hi')
-    return { store, kept, waiting }
-  }
-
-  it('keeps a waiting write on 记下 <id>, answers on the Host, and starts no turn', async () => {
-    const h = await harness()
-    const { store, waiting } = await seeded(h)
     const prompts = h.sessions.prompts.length
-    await h.ownerSays(`记下 ${waiting.id}`)
-    await vi.waitFor(() => { expect(h.ilink.sent.at(-1)?.text).toBe(`✅ 已记下 [${waiting.id}] instructions：Always push to main`) })
-    expect(h.sessions.prompts).toHaveLength(prompts)
-    expect((await store.list()).map(entry => entry.text)).toEqual(['Reply in Chinese', 'Always push to main'])
-    expect(await store.listPending()).toEqual([])
-    expect(h.sessions.injected.at(-1)![1]).toContain(`kept ${waiting.id} (instructions)`)
-    expect(h.sessions.injected.at(-1)![1]).not.toContain('Always push')
-  })
-
-  it('drops a waiting write on 忽略, and undoes the latest change on 撤销', async () => {
-    const h = await harness()
-    const { store, kept, waiting } = await seeded(h)
-    await h.ownerSays(`忽略 ${waiting.id}`)
-    await vi.waitFor(() => { expect(h.ilink.sent.at(-1)?.text).toBe(`🗑 已忽略 [${waiting.id}] instructions`) })
-    expect(await store.listPending()).toEqual([])
-    await h.ownerSays(`撤销：${kept.id}`)
-    await vi.waitFor(() => { expect(h.ilink.sent.at(-1)?.text).toBe(`↩️ 已撤销 [${kept.id}] instructions（该条已删除）`) })
-    expect(await store.list()).toEqual([])
-  })
-
-  it('takes several ids, reports the ones it cannot find, and ignores the reply-quote line', async () => {
-    const h = await harness()
-    const { store, waiting } = await seeded(h)
-    await h.ownerSays(`[引用] 🧠 记忆：1 条待你确认\n记下 ${waiting.id}, abcdef`)
-    await vi.waitFor(() => { expect(h.ilink.sent.at(-1)?.text).toContain(`✅ 已记下 [${waiting.id}]`) })
-    expect(h.ilink.sent.at(-1)!.text).toContain('⚠️ [abcdef] 没有找到可处理的记录')
-    expect(await store.listPending()).toEqual([])
-  })
-
-  it('leaves sentences that merely contain the words to the agent', async () => {
-    const h = await harness()
-    const { waiting } = await seeded(h)
-    const prompts = h.sessions.prompts.length
-    await h.ownerSays(`请记下 ${waiting.id} 这个`)
-    await h.ownerSays('记下 这件事')
-    await h.ownerSays(`记下 ${waiting.id} 然后告诉我`)
-    expect(h.sessions.prompts).toHaveLength(prompts + 3)
-  })
-
-  it('forwards the words as an ordinary message when the commands are off', async () => {
-    const h = await harness({ config: { memoryCommands: false } })
-    const { store, waiting } = await seeded(h)
-    const prompts = h.sessions.prompts.length
-    await h.ownerSays(`记下 ${waiting.id}`)
+    const sent = h.ilink.sent.length
+    await h.ownerSays(text)
     expect(h.sessions.prompts).toHaveLength(prompts + 1)
-    expect(await store.listPending()).toHaveLength(1)
+    expect(h.ilink.sent).toHaveLength(sent)
   })
 
-  it('lists the words in /help', async () => {
+  it('lists no memory words in /help', async () => {
     const h = await harness()
     await h.ownerSays('/help')
-    expect(h.ilink.sent.at(-1)!.text).toContain('记下 <id>')
+    const text = h.ilink.sent.at(-1)!.text
+    expect(text).toContain('/stop')
+    expect(text).not.toMatch(/记下|忽略|撤销|<id>/u)
   })
 })
 
@@ -1394,7 +1343,6 @@ describe('WechatChannel configuration', () => {
   it('applies defaults', () => {
     expect(resolveConfig({})).toEqual({
       chat: { workspacePath: '/Users/dsh-runtime/work', agentPreset: 'unattended', permissionPreset: 'danger-full-access', title: '微信', timeZone: 'America/New_York', agentMessage: 'turn' },
-      memoryCommands: true,
       maxMessageChars: 3000,
       maxReplyParts: 3,
       repliesPerToken: 10,
@@ -1408,6 +1356,9 @@ describe('WechatChannel configuration', () => {
       mediaTimeoutMs: 60_000,
       timeGapMs: 1_800_000,
     })
+    expect('memoryCommands' in resolveConfig({})).toBe(false)
+    // A profile patch written before the commands were removed still sets the key: it must not stop the service.
+    expect(() => resolveConfig({ memoryCommands: false, memoryFile: '/x' })).not.toThrow()
     expect(() => resolveConfig({ repliesPerToken: 1 })).toThrow()
     expect(() => resolveConfig({ maxMessageChars: 50 })).toThrow()
   })

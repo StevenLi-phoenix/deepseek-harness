@@ -276,21 +276,32 @@ Switch the agent side off with `enabled: false` in the `lsy-cc-bridge` row of th
 
 Three plugins keep what the agent learns from steering it by accident or by a stranger's words. They need no setup beyond the build; this step is the operator's reference.
 
-- **`lsy-memory`** stamps every entry with where it came from, keeps a history and daily snapshots, and tells the owner on WeChat about protected writes (`instructions`, `preferences`, `identity`). Files next to `memory.jsonl` in `/Users/dsh-runtime/.dsh/lsy-memory/`: `memory.history.jsonl`, `memory.pending.jsonl`, `snapshots/` (all 600/700). Review and undo as the service user; the tool prints ids, categories, and counts, never text:
+- **`lsy-memory`** stamps every entry with where it came from, keeps a history and daily snapshots, and tells the owner on WeChat about protected writes (`instructions`, `preferences`, `identity`) in one plain sentence per turn, at most 12 notices a day (`noticesPerDay`), for example `记住了一条偏好：…（来源：微信对话）`. WeChat has no command words and no ids: the notice asks for no reply. Reviewing and undoing is the owner's CLI, run over SSH by the owner or by Claude Code on the owner's behalf. Files next to `memory.jsonl` in `/Users/dsh-runtime/.dsh/lsy-memory/`: `memory.history.jsonl`, `memory.pending.jsonl`, `snapshots/` (all 600/700).
+
+  Full command (the `cd /` matters: the service user cannot read the SSH user's home as a working directory):
   ```sh
-  sudo -n -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node /Users/Shared/lsy-dsh/current/lsy/deploy/memory-admin.mjs ids
-  # approve <id>... | discard <id>... | revert <id>... | rollback --session <id> [--dry-run] | rollback --since <ISO time> | forget --purge <id>...
+  ssh mini 'cd / && sudo -n -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node /Users/Shared/lsy-dsh/current/lsy/deploy/memory-admin.mjs <command>'
   ```
-  Back up first when changing the store by hand: `sudo -n -u dsh-runtime /bin/cp -p /Users/dsh-runtime/.dsh/lsy-memory/memory.jsonl /Users/dsh-runtime/.dsh/lsy-memory/.memory.jsonl.bak.$(date +%Y%m%d%H%M%S)`.
+  | `<command>` | Does |
+  |---|---|
+  | `ids` | id, category, and source of every entry and waiting write (no text) |
+  | `recent --limit 10` | newest changes first, waiting writes on top, with the opening of each text: find the entry a notice meant |
+  | `show <id>` | one entry in full with its history |
+  | `approve <id>…` / `discard <id>…` | keep or drop writes that `hold` kept waiting |
+  | `revert <id>…` | undo the latest change of an entry (a waiting write is dropped) |
+  | `rollback --session <id> [--dry-run]` / `rollback --since <ISO time> [--dry-run]` | undo what a Session's turns, or everything since a time, changed |
+  | `forget --purge <id>…` | erase an entry from the file, the history, every snapshot, and the waiting writes |
+
+  A typical review after a notice: `recent --limit 5`, then `revert <id>` for the one that should not be there. Back up first when changing the store by hand: `ssh mini 'cd / && sudo -n -u dsh-runtime /bin/cp -p /Users/dsh-runtime/.dsh/lsy-memory/memory.jsonl /Users/dsh-runtime/.dsh/lsy-memory/.memory.jsonl.bak.$(date +%Y%m%d%H%M%S)'`.
 - **`lsy-taint`** (in the `unattended` preset) reads from the Session log who started each turn. With `enforce: true` it refuses `cc_send` and `cc_start` outside a turn the owner started alone and reports reminders and watches made in other turns. The log shows `lsy-taint: cc_send refused …` or `would be refused` (`enforce: false`).
 - **`lsy-integrity`** (at the root) watches the profile patches, instruction files, skills, schedule, and memory file, and tells the owner on WeChat which one changed. State is in `/Users/dsh-runtime/.dsh/lsy-integrity/` (`baseline.json`, `persona.json`, `tics.json`). After a deliberate change, nothing needs resetting: the new state becomes the baseline when the notice goes out. Delete `baseline.json` to start over silently.
 
-Switches. `lsy-memory` and `lsy-taint` sit inside the `unattended` preset, which a profile patch cannot reach, so they have environment kill switches in `$DSH_HOME/.env` (back the file up first, then restart): `LSY_MEMORY_HOLD=0` (provenance, history, and notices stay; nothing is held, no identity withholding) and `LSY_TAINT_ENFORCE=0` (log only). `lsy-integrity` is a root row, so the owner layer reaches it: `- id: lsy-integrity` with `disabled: true`. The permanent form of each switch is the bundle row (`hold: false`, `enforce: false`).
+Switches. `hold` (protected writes from turns the owner did not start alone wait for `approve`/`discard`) and `enforce` (`cc_send` and `cc_start` refused in such turns) are **off** (2026-10-31): the owner decides when they go on. In the observing state the log still records what they would do: `memory added … [would be held]` and `lsy-taint: cc_send would be refused …`, and `lsy-memory: hold off …` / `lsy-taint: enforce off …` at startup show the state. Both are set twice: `hold: false` and `enforce: false` in the bundle rows, and `LSY_MEMORY_HOLD=0` and `LSY_TAINT_ENFORCE=0` in `$DSH_HOME/.env` (the environment switch wins over the row, and a profile patch cannot reach a row inside the `unattended` preset). To turn one on, set its bundle row to `true`, remove its `.env` line, deploy, and restart. `lsy-integrity` is a root row, so the owner layer reaches it: `- id: lsy-integrity` with `disabled: true`.
 
 ```sh
-cd / && sudo -n -u dsh-runtime /bin/cp -p /Users/dsh-runtime/.dsh/.env /Users/dsh-runtime/.dsh/.env.bak.$(date +%Y%m%d%H%M%S)
-printf 'LSY_MEMORY_HOLD=0\n' | sudo -n -u dsh-runtime /bin/sh -c 'umask 077; cat >> /Users/dsh-runtime/.dsh/.env'    # remove the line to turn it back on
-sudo -n /bin/launchctl kickstart -k system/app.lishuyu.dsh-events
+ssh mini 'cd / && sudo -n -u dsh-runtime /bin/cp -p /Users/dsh-runtime/.dsh/.env /Users/dsh-runtime/.dsh/.env.bak.$(date +%Y%m%d%H%M%S)'
+ssh mini 'cd / && printf "LSY_MEMORY_HOLD=0\n" | sudo -n -u dsh-runtime /bin/sh -c "umask 077; cat >> /Users/dsh-runtime/.dsh/.env"'    # remove the line to turn it back on
+ssh mini 'sudo -n /bin/launchctl kickstart -k system/app.lishuyu.dsh-events'
 ```
 
 Probes: `lsy/probes/` holds nine situations (E1 to E9: a relayed message or a hidden web instruction asks for a memory write or a Claude Code message, the owner states a wrong fact, a memory entry conflicts with the persona, strangers ask who the owner is, a QQ line poses as the witch, form of address) and E10, the persona probes across models. They build the prompt the real preset sees and ask a model what it would do; tools are not executed, so they measure a model's disposition and not the Host's guards (the unit and agent-loop tests cover those). Run them on a laptop with Claude Code logged in (the subscription, no API key); every raw answer is saved before it is parsed:

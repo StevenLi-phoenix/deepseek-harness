@@ -37,7 +37,7 @@ kind: "package-reference"
 | `file` | `<DSH_HOME>/lsy-memory/memory.jsonl` | 记忆文件 |
 | `maxBytes` | `65536` | 记忆块上限；放不下的条目在末行计数，仍可搜索 |
 | `hold` | `true` | owner 没有独自发起的回合里写保护类（`instructions`、`preferences`、`identity`）时，先扣下，等 owner 批准；这类回合不能忘掉保护类条目，查 `identity` 只返回条数 |
-| `notify` | `true` | 保护类写入经微信告诉 owner：每个回合合并成一条，附上撤销、保留、丢弃的口令 |
+| `notify` | `true` | 保护类写入经微信告诉 owner：每个回合合并成一条，用平实的句子说清发生了什么、来自哪里，不带 id，也不要求回复 |
 | `noticesPerDay` | `12` | owner 一天最多收到的通知条数；其余变动仍写进历史 |
 
 每个条目是一行文本，带 id、分类和最后一次写入的日期：
@@ -69,16 +69,16 @@ Host 给每次写入盖上来源章，来源读自 Session 日志，不取决于
 | `snapshots/memory-YYYY-MM-DD.jsonl`（600） | 每天第一次变动之前的记忆文件；保留最近 30 份 |
 | `memory.pending.jsonl`（600） | 等 owner 决定的保护类写入；从不进任何 prompt；最多 50 条，14 天后丢弃 |
 
-`hold` 开着时，owner 没有独自发起的回合里的保护类写入不会生效：工具回答 `held`，owner 收到微信通知（`待确认 [id] …（来自B站猫猫的传话）`）。在微信回复 `记下 <id>` 保留它（标 `owner-confirmed`），`忽略 <id>` 丢弃，`撤销 <id>` 撤销 owner 已被告知的条目的最近一次变动；这些口令由 [`lsy-wechat`](../lsy-wechat/README.zh.md) 自己执行，只认 owner 本人的消息。owner 自己回合里的每次保护类写入也用同样的方式告知，并附撤销口令。
+`hold` 开着时，owner 没有独自发起的回合里的保护类写入不会生效：工具回答 `held`，owner 在微信上收到一句平实的话（`扣下了一条指令，还没写入：…（来源：B站猫猫的传话）`）。微信上没有任何口令：owner 通过 SSH 用 `memory-admin` 保留、丢弃或撤销条目（也可以让 Claude Code 代为执行），或者直接用自然语言告诉 agent，由 owner 独自发起的回合来写。owner 自己回合里的每次保护类写入也用同样的方式告知（`记住了一条偏好：…（来源：微信对话）`）；一个回合的变动合并成一条消息，`noticesPerDay` 设上限。
 
-同样的操作也能在主机上以服务用户身份执行，只打印 id、分类和数量，不打印文字：
+这些操作由 owner 在主机上以服务用户身份执行，从笔记本用 `ssh mini '…'` 即可（完整命令见 RUNBOOK）。`ids` 只打印 id、分类和数量，不打印文字；`recent` 和 `show` 会打印文字，用来找到通知说的是哪一条：
 
 ```sh
 sudo -n -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node \
   /Users/Shared/lsy-dsh/current/lsy/deploy/memory-admin.mjs ids
 ```
 
-还有 `approve <id>…`、`discard <id>…`、`revert <id>…`、`rollback --session <id>` 或 `--since <ISO 时间>`（加 `--dry-run` 只计数），以及 `forget --purge <id>…`——从文件、历史、所有快照和待确认写入里彻底抹掉一个条目。要关掉保护，在 bundle 的这一行写 `hold: false`，或者在 `$DSH_HOME/.env` 里写 `LSY_MEMORY_HOLD=0` 并重启（profile patch 够不到 preset 里面的行）；记录和通知照常。要回滚到上一个构建，先 `discard` 掉待确认写入（旧构建会忽略 `memory.pending.jsonl`，并把其他新字段当作不存在，所以不需要别的处理）。
+还有 `recent [--limit n]`（最新的变动在前，待确认写入在最上）、`show <id>`（一个条目的全文和它的历史）、`approve <id>…`、`discard <id>…`、`revert <id>…`、`rollback --session <id>` 或 `--since <ISO 时间>`（加 `--dry-run` 只计数），以及 `forget --purge <id>…`——从文件、历史、所有快照和待确认写入里彻底抹掉一个条目。要关掉保护，在 bundle 的这一行写 `hold: false`，或者在 `$DSH_HOME/.env` 里写 `LSY_MEMORY_HOLD=0` 并重启（profile patch 够不到 preset 里面的行）；记录和通知照常。要回滚到上一个构建，先 `discard` 掉待确认写入（旧构建会忽略 `memory.pending.jsonl`，并把其他新字段当作不存在，所以不需要别的处理）。
 
 -----
 

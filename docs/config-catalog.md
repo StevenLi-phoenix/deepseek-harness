@@ -3182,7 +3182,7 @@ export type TtsProviderName = 'feiyu' | 'mac-mini'
 ## `@deepseek-ai/dsh-lsy-wechat`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/lsy/lsy-wechat/src/index.ts:66`](../packages/lsy/lsy-wechat/src/index.ts)
+- `source`: [`packages/lsy/lsy-wechat/src/index.ts:65`](../packages/lsy/lsy-wechat/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
@@ -3191,13 +3191,6 @@ export interface Config {
   accountFile?: string
   /** Chat Session settings. */
   chat: ChatConfig
-  /**
-   * Answer the owner's `记下 <id>`, `忽略 <id>`, and `撤销 <id>` messages about held and recent memory
-   * writes on the Host, without the model; only the owner's own messages are read.
-   */
-  memoryCommands: boolean
-  /** The memory file those commands act on; defaults to `<DSH_HOME>/lsy-memory/memory.jsonl`. */
-  memoryFile?: string
   /** Code points per WeChat message; longer texts are split. */
   maxMessageChars: number
   /** Messages one text may be split into; the last is cut beyond that. */
