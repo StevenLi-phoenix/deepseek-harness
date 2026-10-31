@@ -15,11 +15,14 @@
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
 /deepseek-ai-dsh-lsy-memory/use-this-package:
-  en: 54237c52a3f6ed02
-  zh: eb921d6dfdbd92d0
+  en: ed428a3bc72f1fd0
+  zh: 96aa67cccae54b2d
+/deepseek-ai-dsh-lsy-memory/use-this-package/who-wrote-it-and-undoing-it:
+  en: b5530c1905cdd875
+  zh: 2678709e58f5b17e
 /deepseek-ai-dsh-lsy-memory/understand-the-implementation:
-  en: 17ad0fe65b959b78
-  zh: 9657bed0d703ef92
+  en: a4f1875f07f00a0a
+  zh: 1d78e45a4e25b376
 /deepseek-ai-dsh-lsy-memory/further-exploration:
   en: 2f63222240791f11
   zh: 1957349e48fa65cc
@@ -42,8 +45,8 @@
   en: b160ca92da193ddb
   zh: 337cb883c2dc3d7d
 /deepseek-ai-dsh-lsy-memory/model-experience/memory-tools/what-the-model-sees:
-  en: d6645f5256899e8c
-  zh: bba0de2f4f80e21d
+  en: 81dff5482540001b
+  zh: 6012458b26e378a3
 /deepseek-ai-dsh-lsy-memory/model-experience/memory-tools/token-effect:
   en: 09cda3aa4f2d94a1
   zh: d38b5be56a06afe3
@@ -51,8 +54,8 @@
   en: 44574f4487e48b3e
   zh: 5af2107448c78ee5
 /deepseek-ai-dsh-lsy-memory/known-limitations-and-deferred-work:
-  en: 49e7b72ecff427fb
-  zh: ae70bb7b831e5cc0
+  en: d753dd195658385f
+  zh: 1e9874247e0d26b5
 /deepseek-ai-dsh-lsy-memory/known-limitations-and-deferred-work/dev-note:
   en: 135e3ebef08f8412
   zh: de51499d928d7147

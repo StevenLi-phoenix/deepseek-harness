@@ -2524,7 +2524,7 @@ export class BiliAccount extends Service {
       if (notifier?.tellMainAgent === undefined) return { outcome: 'refused', detail: 'the owner\'s WeChat channel is not running, so the main agent cannot be reached' }
       let sessionId: string
       try {
-        sessionId = await notifier.tellMainAgent({ text: message, from: BILI_AGENT_ORIGIN })
+        sessionId = await notifier.tellMainAgent({ text: message, from: BILI_AGENT_ORIGIN, origin: 'bili' })
       } catch (error: unknown) {
         this.ctx.logger.warn(`bili: the message to the main agent did not go out: ${errorText(error)}`)
         return { outcome: 'refused', detail: `the main agent could not take it: ${errorText(error)}` }

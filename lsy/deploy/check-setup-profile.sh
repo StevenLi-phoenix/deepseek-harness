@@ -24,6 +24,7 @@ for id in lsy-event-bus lsy-github-sensor lsy-wechat preset-unattended; do
   /usr/bin/grep -q "^- id: $id\$" "$WORK/fresh.yml" || fail "composition lacks $id"
 done
 /usr/bin/grep -q "@deepseek-ai/dsh-lsy-memory" "$WORK/fresh.yml" || fail "unattended preset lacks lsy-memory"
+/usr/bin/grep -q "@deepseek-ai/dsh-lsy-taint" "$WORK/fresh.yml" || fail "unattended preset lacks lsy-taint"
 /usr/bin/grep -q "@deepseek-ai/dsh-lsy-tool-monitor" "$WORK/fresh.yml" || fail "unattended preset lacks lsy-tool-monitor"
 /usr/bin/grep -q "@deepseek-ai/dsh-lsy-cc-bridge" "$WORK/fresh.yml" || fail "unattended preset lacks lsy-cc-bridge"
 /usr/bin/grep -q "^- id: lsy-event-ingest$" "$WORK/fresh.yml" || fail "composition lacks lsy-event-ingest"
@@ -36,6 +37,7 @@ done
 /usr/bin/grep -q "^- id: preset-qq-digest\$" "$WORK/fresh.yml" || fail "composition lacks preset-qq-digest"
 /usr/bin/grep -q "^- id: preset-qqbot\$" "$WORK/fresh.yml" || fail "composition lacks preset-qqbot"
 /usr/bin/grep -q "@deepseek-ai/dsh-lsy-tool-qq" "$WORK/fresh.yml" || fail "unattended preset lacks lsy-tool-qq"
+/usr/bin/grep -q "^- id: lsy-integrity$" "$WORK/fresh.yml" || fail "composition lacks lsy-integrity"
 
 if [ -d "$PREFIX/lsy/skills/autocut" ]; then
   [ -L "$FRESH/skills/autocut" ] && [ -f "$FRESH/skills/autocut/SKILL.md" ] || fail "autocut skill not linked into the home"

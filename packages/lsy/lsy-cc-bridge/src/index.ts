@@ -185,7 +185,7 @@ export function apply(ctx: Context, config: Config): void {
     delivered.push(now)
     let sessionId: string
     try {
-      sessionId = await notifier.tellMainAgent({ text, from: senderLabel(message.from) })
+      sessionId = await notifier.tellMainAgent({ text, from: senderLabel(message.from), origin: 'cc' })
     } catch (error: unknown) {
       delivered.splice(delivered.lastIndexOf(now), 1)
       throw error

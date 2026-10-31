@@ -27,6 +27,15 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map(async (dir) => { await rm(dir, { recursive: true, force: true }) }))
 })
 
+/** A fake agent on a Session whose open turn was started by `source`; the default is the owner's own prompt. */
+function turnAgent(inputs: Array<Parameters<typeof createUserMessage>[0]['source']> = [{ kind: 'user', rpcId: 'owner-prompt-1' } as never], tools: string[] = [], id = 'chat'): Agent {
+  const session = Session.create(SessionId(id))
+  session.append('turn/start', { turn: 1 })
+  for (const source of inputs) session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'hi' }], source }), { surfaceOp: 'append' })
+  for (const name of tools) session.append('tool/call', { turn: 1, step: 1, callId: ToolCallId(`${name}-0`), name, arguments: '{}' })
+  return agentOn(session)
+}
+
 async function mount(config: Partial<Memory.Config> = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'lsy-memory-plugin-'))
   dirs.push(dir)
@@ -38,8 +47,8 @@ async function mount(config: Partial<Memory.Config> = {}) {
   await ctx.plugin(NativeToolExecutor)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(Memory, { file, ...config })
-  const call = async (name: string, args: unknown): Promise<unknown> => {
-    const batch = await ctx.tools.execute({ signal: new AbortController().signal, calls: [{ type: 'tool-call', id: ToolCallId(`${name}-call`), name, arguments: JSON.stringify(args) }] })
+  const call = async (name: string, args: unknown, agent: Agent = turnAgent()): Promise<unknown> => {
+    const batch = await ctx.tools.execute({ signal: new AbortController().signal, agent, calls: [{ type: 'tool-call', id: ToolCallId(`${name}-call`), name, arguments: JSON.stringify(args) }] })
     const result = batch.results[0]!.result
     const block = result.content.find(item => item.type === 'text')
     return block?.type === 'text' ? JSON.parse(block.text) : undefined

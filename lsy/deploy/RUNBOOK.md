@@ -270,6 +270,37 @@ Remote Control (`remoteControlAtStartup` and `enableRemoteControl` are on in the
 
 Switch the agent side off with `enabled: false` in the `lsy-cc-bridge` row of the profile patch (`spawn: false` keeps messaging but removes `cc_start`/`cc_stop`).
 
+## 15. Memory and persona safety
+
+Three plugins keep what the agent learns from steering it by accident or by a stranger's words. They need no setup beyond the build; this step is the operator's reference.
+
+- **`lsy-memory`** stamps every entry with where it came from, keeps a history and daily snapshots, and tells the owner on WeChat about protected writes (`instructions`, `preferences`, `identity`). Files next to `memory.jsonl` in `/Users/dsh-runtime/.dsh/lsy-memory/`: `memory.history.jsonl`, `memory.pending.jsonl`, `snapshots/` (all 600/700). Review and undo as the service user; the tool prints ids, categories, and counts, never text:
+  ```sh
+  sudo -n -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node /Users/Shared/lsy-dsh/current/lsy/deploy/memory-admin.mjs ids
+  # approve <id>... | discard <id>... | revert <id>... | rollback --session <id> [--dry-run] | rollback --since <ISO time> | forget --purge <id>...
+  ```
+  Back up first when changing the store by hand: `sudo -n -u dsh-runtime /bin/cp -p /Users/dsh-runtime/.dsh/lsy-memory/memory.jsonl /Users/dsh-runtime/.dsh/lsy-memory/.memory.jsonl.bak.$(date +%Y%m%d%H%M%S)`.
+- **`lsy-taint`** (in the `unattended` preset) reads from the Session log who started each turn. With `enforce: true` it refuses `cc_send` and `cc_start` outside a turn the owner started alone and reports reminders and watches made in other turns. The log shows `lsy-taint: cc_send refused …` or `would be refused` (`enforce: false`).
+- **`lsy-integrity`** (at the root) watches the profile patches, instruction files, skills, schedule, and memory file, and tells the owner on WeChat which one changed. State is in `/Users/dsh-runtime/.dsh/lsy-integrity/` (`baseline.json`, `persona.json`, `tics.json`). After a deliberate change, nothing needs resetting: the new state becomes the baseline when the notice goes out. Delete `baseline.json` to start over silently.
+
+Switches live in the owner layer (`$DSH_HOME/profiles/event/cordis.patch.yml`, reloads live), one entry per plugin, restating its whole `config`:
+
+```yaml
+- id: lsy-memory
+  config: { hold: false }           # provenance, history, and notices stay; nothing is held
+- id: lsy-taint
+  config: { enforce: false }        # log only
+- id: lsy-integrity
+  config: { enabled: false }        # no watch
+```
+
+Optional hardening for the operator, not done by any script: make the home patch immutable, so the agent's account cannot edit the file that can override a persona. Test it on a copy first; the Web UI refuses to save an entry the home patch sets, so nothing it edits lives there.
+
+```sh
+sudo chown root:wheel /Users/dsh-runtime/.dsh/cordis.patch.yml
+sudo chflags uchg /Users/dsh-runtime/.dsh/cordis.patch.yml     # undo: sudo chflags nouchg …; sudo chown dsh-runtime:staff …
+```
+
 ## Operator access without passwords (optional)
 
 `/etc/sudoers.d/dsh-events` (root:wheel 440, written with `sudo visudo -f /etc/sudoers.d/dsh-events`) lets the operator act as the service user and restart the daemon without a password, so config edits, `.env` changes, and upgrades need no one at the keyboard:

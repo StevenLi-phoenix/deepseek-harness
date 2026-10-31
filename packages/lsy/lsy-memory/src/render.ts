@@ -32,10 +32,12 @@ function opening(text: string): string {
   return parts.length <= INDEX_CHARS ? text : `${parts.slice(0, INDEX_CHARS).join('')}…`
 }
 
+/** An entry written in a turn the owner did not start alone is a lead to weigh, not an order. */
 function line(entry: MemoryEntry): string {
+  const note = entry.source === 'tainted-turn' ? '(note) ' : ''
   return CATEGORY_DISPLAY[entry.category] === 'full'
-    ? `- [${entry.date}] (${entry.id}) ${entry.text}`
-    : `- ${entry.id} · ${opening(entry.text)}`
+    ? `- [${entry.date}] (${entry.id}) ${note}${entry.text}`
+    : `- ${entry.id} · ${note}${opening(entry.text)}`
 }
 
 const bytes = (text: string): number => Buffer.byteLength(text, 'utf8')

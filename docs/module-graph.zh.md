@@ -376,10 +376,12 @@ flowchart TD
     pkg_lsy_event_bus["lsy-event-bus"]
     pkg_lsy_event_ingest["lsy-event-ingest"]
     pkg_lsy_github_sensor["lsy-github-sensor"]
+    pkg_lsy_integrity["lsy-integrity"]
     pkg_lsy_memory["lsy-memory"]
     pkg_lsy_qq["lsy-qq"]
     pkg_lsy_qqbot["lsy-qqbot"]
     pkg_lsy_sysmon["lsy-sysmon"]
+    pkg_lsy_taint["lsy-taint"]
     pkg_lsy_tool_monitor["lsy-tool-monitor"]
     pkg_lsy_tool_qq["lsy-tool-qq"]
     pkg_lsy_tool_voice["lsy-tool-voice"]
@@ -616,6 +618,9 @@ flowchart TD
   pkg_lsy_github_sensor --> pkg_credentials
   pkg_lsy_github_sensor --> pkg_lsy_event_bus
   pkg_lsy_github_sensor --> pkg_storage_domain
+  pkg_lsy_integrity --> pkg_home_paths
+  pkg_lsy_integrity --> pkg_lsy_event_bus
+  pkg_lsy_integrity --> pkg_session
   pkg_owner_relay --> pkg_lsy_event_bus
   pkg_owner_relay --> pkg_session
   pkg_ptc_runtime --> pkg_sandbox
@@ -1075,11 +1080,9 @@ flowchart TD
   pkg_lsy_cc_bridge --> pkg_agent
   pkg_lsy_cc_bridge --> pkg_lsy_event_bus
   pkg_lsy_cc_bridge --> pkg_tools
-  pkg_lsy_memory --> pkg_agent
-  pkg_lsy_memory --> pkg_home_paths
-  pkg_lsy_memory --> pkg_llm
-  pkg_lsy_memory --> pkg_session
-  pkg_lsy_memory --> pkg_tools
+  pkg_lsy_taint --> pkg_lsy_event_bus
+  pkg_lsy_taint --> pkg_session
+  pkg_lsy_taint --> pkg_tools
   pkg_lsy_tool_voice --> pkg_lsy_event_bus
   pkg_lsy_tool_voice --> pkg_lsy_voice
   pkg_lsy_tool_voice --> pkg_tools
@@ -1207,6 +1210,13 @@ flowchart TD
   pkg_host_plugin_inventory --> pkg_agent_preset_registry
   pkg_host_plugin_inventory --> pkg_brand
   pkg_host_plugin_inventory --> pkg_typert_protocol
+  pkg_lsy_memory --> pkg_agent
+  pkg_lsy_memory --> pkg_home_paths
+  pkg_lsy_memory --> pkg_llm
+  pkg_lsy_memory --> pkg_lsy_event_bus
+  pkg_lsy_memory --> pkg_lsy_taint
+  pkg_lsy_memory --> pkg_session
+  pkg_lsy_memory --> pkg_tools
   pkg_mcp_client --> pkg_attachment
   pkg_mcp_client --> pkg_llm
   pkg_mcp_client --> pkg_mcp_resources
@@ -1522,6 +1532,8 @@ flowchart TD
   pkg_lsy_wechat --> pkg_home_paths
   pkg_lsy_wechat --> pkg_llm
   pkg_lsy_wechat --> pkg_lsy_event_bus
+  pkg_lsy_wechat --> pkg_lsy_memory
+  pkg_lsy_wechat --> pkg_lsy_taint
   pkg_lsy_wechat --> pkg_lsy_voice
   pkg_lsy_wechat --> pkg_owner_relay
   pkg_lsy_wechat --> pkg_permission_presets
@@ -1811,6 +1823,7 @@ flowchart TD
 | [`host-product-telemetry-otel`](../packages/host/product-telemetry-otel) | `host` | [`otel`](../packages/telemetry/otel) |
 | [`lsy-event-ingest`](../packages/lsy/lsy-event-ingest) | `lsy` | [`credentials`](../packages/credentials/credentials), [`host-webserver`](../packages/host/webserver), [`lsy-event-bus`](../packages/lsy/lsy-event-bus) |
 | [`lsy-github-sensor`](../packages/lsy/lsy-github-sensor) | `lsy` | [`credentials`](../packages/credentials/credentials), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`storage-domain`](../packages/storage/storage-domain) |
+| [`lsy-integrity`](../packages/lsy/lsy-integrity) | `lsy` | [`home-paths`](../packages/util/home-paths), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`session`](../packages/core/session) |
 | [`owner-relay`](../packages/lsy/owner-relay) | `lsy` | [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`session`](../packages/core/session) |
 | [`ptc-runtime`](../packages/ptc-runtime/ptc-runtime) | `ptc-runtime` | [`sandbox`](../packages/sandbox/sandbox) |
 | [`sandbox-local`](../packages/sandbox/sandbox-local) | `sandbox` | [`llm`](../packages/llm/llm), [`sandbox`](../packages/sandbox/sandbox), [`session`](../packages/core/session) |
@@ -1913,7 +1926,7 @@ flowchart TD
 | [`tool-jobs`](../packages/jobs/tool-jobs) | `jobs` | [`agent`](../packages/core/agent), [`jobs`](../packages/jobs/jobs), [`llm`](../packages/llm/llm), [`output-retention`](../packages/util/output-retention), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`tool-lsp`](../packages/lsp/tool-lsp) | `lsp` | [`llm`](../packages/llm/llm), [`lsp`](../packages/lsp/lsp), [`system-prompt`](../packages/core/system-prompt), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools), [`working-directory`](../packages/session/working-directory) |
 | [`lsy-cc-bridge`](../packages/lsy/lsy-cc-bridge) | `lsy` | [`agent`](../packages/core/agent), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`tools`](../packages/core/tools) |
-| [`lsy-memory`](../packages/lsy/lsy-memory) | `lsy` | [`agent`](../packages/core/agent), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`tools`](../packages/core/tools) |
+| [`lsy-taint`](../packages/lsy/lsy-taint) | `lsy` | [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`session`](../packages/core/session), [`tools`](../packages/core/tools) |
 | [`lsy-tool-voice`](../packages/lsy/lsy-tool-voice) | `lsy` | [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-voice`](../packages/lsy/lsy-voice), [`tools`](../packages/core/tools) |
 | [`lsy-tool-watch`](../packages/lsy/lsy-tool-watch) | `lsy` | [`agent`](../packages/core/agent), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-github-sensor`](../packages/lsy/lsy-github-sensor), [`tools`](../packages/core/tools) |
 | [`tool-bili`](../packages/lsy/tool-bili) | `lsy` | [`bili`](../packages/lsy/bili), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
@@ -1939,6 +1952,7 @@ flowchart TD
 | [`webhook`](../packages/experimental/webhook) | `experimental` | [`agent`](../packages/core/agent), [`agent-default-model`](../packages/core/agent-default-model), [`agent-preset-registry`](../packages/preset/agent-preset-registry), [`llm`](../packages/llm/llm), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`workspace`](../packages/workspace/workspace) |
 | [`tool-cordis`](../packages/extensions/tool-cordis) | `extensions` | [`agent`](../packages/core/agent), [`app-boot`](../packages/boot/app-boot), [`cordis-host-runner`](../packages/extensions/cordis-host-runner), [`tools`](../packages/core/tools) |
 | [`host-plugin-inventory`](../packages/host/plugin-inventory) | `host` | [`agent-preset-registry`](../packages/preset/agent-preset-registry), [`brand`](../packages/util/brand), [`typert-protocol`](../packages/typert/protocol) |
+| [`lsy-memory`](../packages/lsy/lsy-memory) | `lsy` | [`agent`](../packages/core/agent), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-taint`](../packages/lsy/lsy-taint), [`session`](../packages/core/session), [`tools`](../packages/core/tools) |
 | [`mcp-client`](../packages/mcp/mcp-client) | `mcp` | [`attachment`](../packages/attachment/attachment), [`llm`](../packages/llm/llm), [`mcp-resources`](../packages/mcp/mcp-resources), [`scope`](../packages/core/scope), [`subprocess`](../packages/subprocess/subprocess), [`system-prompt`](../packages/core/system-prompt), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools) |
 | [`agent-preset`](../packages/preset/agent-preset) | `preset` | [`agent-preset-registry`](../packages/preset/agent-preset-registry) |
 | [`session-telemetry-otel`](../packages/session/session-telemetry-otel) | `session` | [`anonymous-user-id`](../packages/identity/anonymous-user-id), [`command-feedback`](../packages/feedback/command-feedback), [`llm`](../packages/llm/llm), [`message-feedback`](../packages/feedback/message-feedback), [`otel`](../packages/telemetry/otel), [`session`](../packages/core/session), [`session-telemetry`](../packages/session/session-telemetry) |
@@ -1982,7 +1996,7 @@ flowchart TD
 | [`lsy-qq`](../packages/lsy/lsy-qq) | `lsy` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title) |
 | [`lsy-qqbot`](../packages/lsy/lsy-qqbot) | `lsy` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`owner-relay`](../packages/lsy/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`lsy-tool-monitor`](../packages/lsy/lsy-tool-monitor) | `lsy` | [`agent`](../packages/core/agent), [`api-session-controller`](../packages/api/session-controller), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`storage-domain`](../packages/storage/storage-domain), [`subprocess`](../packages/subprocess/subprocess), [`tools`](../packages/core/tools) |
-| [`lsy-wechat`](../packages/lsy/lsy-wechat) | `lsy` | [`api-session-controller`](../packages/api/session-controller), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-voice`](../packages/lsy/lsy-voice), [`owner-relay`](../packages/lsy/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
+| [`lsy-wechat`](../packages/lsy/lsy-wechat) | `lsy` | [`api-session-controller`](../packages/api/session-controller), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-memory`](../packages/lsy/lsy-memory), [`lsy-taint`](../packages/lsy/lsy-taint), [`lsy-voice`](../packages/lsy/lsy-voice), [`owner-relay`](../packages/lsy/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`schedule`](../packages/schedule/schedule) | `schedule` | [`agent`](../packages/core/agent), [`api-session-controller`](../packages/api/session-controller), [`brand`](../packages/util/brand), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`session-projection`](../packages/session/session-projection), [`storage-domain`](../packages/storage/storage-domain), [`subagent`](../packages/subagent/subagent), [`tools`](../packages/core/tools), [`typert-protocol`](../packages/typert/protocol), [`util-time`](../packages/util/time), [`workspace`](../packages/workspace/workspace) |
 | [`sdk-client`](../packages/sdk/client) | `sdk` | [`llm`](../packages/llm/llm), [`sdk-protocol`](../packages/sdk/protocol), [`session`](../packages/core/session) |
 | [`client-test-runtime`](../packages/test-support/client-runtime) | `test-support` | [`api-gateway`](../packages/api/gateway), [`api-session-controller`](../packages/api/session-controller), [`api-workspace-controller`](../packages/api/workspace-controller), [`attachment`](../packages/attachment/attachment), [`client-connection`](../packages/client/connection), [`client-hmr`](../packages/client/hmr), [`client-modules`](../packages/client/modules), [`client-store`](../packages/client/store), [`client-ui-chat`](../packages/client/ui-chat), [`client-ui-context-menu`](../packages/client/ui-context-menu), [`client-ui-conversation`](../packages/client/ui-conversation), [`client-ui-renderer`](../packages/client/ui-renderer), [`client-ui-session`](../packages/client/ui-session), [`client-ui-settings`](../packages/client/ui-settings), [`client-ui-slots`](../packages/client/ui-slots), [`client-web`](../packages/client/web), [`remote-mock`](../packages/test-support/remote-mock), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`typert-protocol`](../packages/typert/protocol) |

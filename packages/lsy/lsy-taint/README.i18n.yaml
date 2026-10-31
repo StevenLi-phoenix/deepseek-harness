@@ -1,0 +1,46 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/lsy-taint/README.md
+/:
+  en: 9fcef26ebf84ce34
+  zh: 082f9628ff79893f
+/deepseek-ai-dsh-lsy-taint:
+  en: 77b24482260302a5
+  zh: 3ee82ce9e4579625
+/deepseek-ai-dsh-lsy-taint/summary:
+  en: 9f7172baf6955bfd
+  zh: cce69e5c8cc0fbc5
+/deepseek-ai-dsh-lsy-taint/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-lsy-taint/use-this-package:
+  en: d1fe3fb3fceb667f
+  zh: cb00d9d4647255b0
+/deepseek-ai-dsh-lsy-taint/understand-the-implementation:
+  en: 7df5d2f651757d90
+  zh: 0ee8e1784cb703f5
+/deepseek-ai-dsh-lsy-taint/further-exploration:
+  en: 22aedf2970de690d
+  zh: 1f16ea84ac86504c
+/deepseek-ai-dsh-lsy-taint/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-lsy-taint/model-experience/refusal:
+  en: f8e11dfa91811a29
+  zh: faa187520aa07cdb
+/deepseek-ai-dsh-lsy-taint/model-experience/refusal/what-the-model-sees:
+  en: ae10f6475682428a
+  zh: 23d8ca9acdccd041
+/deepseek-ai-dsh-lsy-taint/model-experience/refusal/token-effect:
+  en: 0fdc64106a3efa79
+  zh: ce264049389bfb9a
+/deepseek-ai-dsh-lsy-taint/model-experience/refusal/kv-cache-effect:
+  en: 7237ad122fbd1d43
+  zh: 4ac0dd32c40d9071
+/deepseek-ai-dsh-lsy-taint/known-limitations-and-deferred-work:
+  en: b6da7e0e52cfc7b1
+  zh: 40825c38a99970e2
+/deepseek-ai-dsh-lsy-taint/known-limitations-and-deferred-work/dev-note:
+  en: d9c82ab6ff5ca7cd
+  zh: d86ace9271638a2d

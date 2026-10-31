@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/lsy-integrity/README.md
+/:
+  en: f24fb42e22661f41
+  zh: 9b72bf4886fd7ac4
+/deepseek-ai-dsh-lsy-integrity:
+  en: 91e90d4938208b0f
+  zh: f0ad3fd8810e638f
+/deepseek-ai-dsh-lsy-integrity/summary:
+  en: e0d628db5f379bee
+  zh: e9e9fdb89b848502
+/deepseek-ai-dsh-lsy-integrity/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-lsy-integrity/use-this-package:
+  en: d8ff7be60a99d2e2
+  zh: f1d16ef7ba9d90c8
+/deepseek-ai-dsh-lsy-integrity/understand-the-implementation:
+  en: 5c1f5902b0d40515
+  zh: cdd946b8bb30cead
+/deepseek-ai-dsh-lsy-integrity/further-exploration:
+  en: 814d71f0c85513f1
+  zh: cad118ec2d55d86c
+/deepseek-ai-dsh-lsy-integrity/model-experience:
+  en: b020111d4ffa2b42
+  zh: 03fe6a21b89d0dc0
+/deepseek-ai-dsh-lsy-integrity/model-experience/kv-cache-effect:
+  en: 6eacc192ad60da1d
+  zh: 1bd8db1eb5db7bee
+/deepseek-ai-dsh-lsy-integrity/known-limitations-and-deferred-work:
+  en: 0243fdf4fbea1933
+  zh: 6a25c43aff2a710b
+/deepseek-ai-dsh-lsy-integrity/known-limitations-and-deferred-work/dev-note:
+  en: c9cc004a4b34fbd0
+  zh: ac59e3f89120c8a7

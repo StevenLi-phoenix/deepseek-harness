@@ -36,9 +36,9 @@ async function mount(options: Options = {}) {
   ctx.provide('systemPrompt', { tools: () => () => {} } as never)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(NativeToolExecutor)
-  const told: { text: string; from: string }[] = []
+  const told: { text: string; from: string; origin?: string }[] = []
   const notifier = options.notifier === undefined
-    ? { send: vi.fn(), ownsSession: (id: string) => id === 'chat-1', tellMainAgent: (m: { text: string; from: string }) => { told.push(m); return Promise.resolve('chat-1') } }
+    ? { send: vi.fn(), ownsSession: (id: string) => id === 'chat-1', tellMainAgent: (m: { text: string; from: string; origin?: string }) => { told.push(m); return Promise.resolve('chat-1') } }
     : options.notifier
   if (notifier !== null) ctx.provide('lsyNotifier', notifier as never)
   const config: Bridge.Config = {
@@ -153,6 +153,8 @@ describe('inbound messages', () => {
     await session.sendTo(inbox, 'the build is green; anything else?')
     await until(() => told.length === 1)
     expect(told[0]!.from).toBe(`a Claude Code session on this Mac named "worker" (pid ${String(process.ppid)} working in /work/app), the owner's own coding agent running in the owner's account`)
+    // The chat Session marks the turn it starts as not the owner's, by this origin.
+    expect(told[0]!.origin).toBe('cc')
     expect(told[0]!.text).toContain('not from the owner')
     expect(told[0]!.text).toContain('call cc_send')
     expect(told[0]!.text).toContain('the build is green; anything else?')

@@ -341,10 +341,12 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-lsy-event-bus` | yes | Durable event bus for event-driven agent runs: dedupe, loop suppression, subscriptions, coalescing, rate limits, and dispatch to notify or Session actuators |
 | `@deepseek-ai/dsh-lsy-event-ingest` | yes | Authenticated POST route through which the owner's own services push events into the lsy event bus, one token per source |
 | `@deepseek-ai/dsh-lsy-github-sensor` | yes | GitHub polling sensor for the lsy event bus: releases, tags, commits, and notifications with conditional requests |
+| `@deepseek-ai/dsh-lsy-integrity` | yes | Integrity watch for the owner's main agent: hashes of the files that steer it, a WeChat notice when one changes, persona hashes per Session, and a count of the persona's forbidden stock lines |
 | `@deepseek-ai/dsh-lsy-memory` | yes | Owner memory across Sessions: a JSONL store the Host injects into each root Session, memory_search/memory_save/memory_forget tools, and a claude.ai export importer |
 | `@deepseek-ai/dsh-lsy-qq` | yes | QQ group observer over a OneBot v11 protocol end: records listed groups, downloads images, transcribes voice on request, digests on a schedule, and never speaks by default |
 | `@deepseek-ai/dsh-lsy-qqbot` | yes | QQ channel over the official QQ Open Platform Bot API: allowlisted private chats and group @ mentions reach per-peer chat Sessions |
 | `@deepseek-ai/dsh-lsy-sysmon` | yes | System status settings section: the Host machine's CPU, memory, power, temperature, and disk usage per volume |
+| `@deepseek-ai/dsh-lsy-taint` | yes | Turn origin for the owner's main agent: who started the current turn (the owner, a relayed message, an event, a reminder), which tools read strangers' words in it, and the rules that follow |
 | `@deepseek-ai/dsh-lsy-tool-monitor` | no | Model-facing monitor tools: a bash command whose stdout lines come back to the same Session as they appear, like Claude Code's Monitor |
 | `@deepseek-ai/dsh-lsy-tool-qq` | no | Read-only qq_groups, qq_digest, qq_recent, and qq_search tools: the agent reads what the QQ observer recorded and digested |
 | `@deepseek-ai/dsh-lsy-tool-voice` | no | Model-facing speak tool: turn text into speech and send the audio to the owner over the lsy WeChat channel |

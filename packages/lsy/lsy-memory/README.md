@@ -36,6 +36,9 @@ Add the row to the plugin list of the agent preset that should remember. The lsy
 |---|---|---|
 | `file` | `<DSH_HOME>/lsy-memory/memory.jsonl` | The memory file |
 | `maxBytes` | `65536` | Cap on the memory block; entries that do not fit are counted in a closing line and stay searchable |
+| `hold` | `true` | Hold a protected write (`instructions`, `preferences`, `identity`) made in a turn the owner did not start alone until the owner approves it; refuse to forget a protected entry in such a turn; show `identity` entries there only as a count |
+| `notify` | `true` | Tell the owner on WeChat about protected writes: one merged notice per turn, with the words to undo, keep, or drop |
+| `noticesPerDay` | `12` | Notices the owner gets in a day; further changes stay in the history |
 
 Each entry is one line of text with an id, a category, and the date of its last write:
 
@@ -56,6 +59,27 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 
 Add `--dry-run` to only count. The next Session sees the result; no restart is needed. The file is plain JSONL (mode 600) and may be edited by hand: a line that is not a valid entry stops injection and every write until it is fixed, rather than being dropped.
 
+### Who wrote it, and undoing it
+
+The Host stamps every write with where it came from, read from the Session's log and not from anything the model says (see [`lsy-taint`](../lsy-taint/README.md)): `source` is `owner-turn` (the owner started the turn alone and no web or QQ text was read in it), `tainted-turn` (a relayed message, event, reminder, monitor, or a turn that read web or QQ text started or shaped it), `owner-confirmed` (a held write the owner approved), or `import`. An entry without `source` predates the field and reads as legacy. `session` and `origin` name the Session and the turn's origin. A `tainted-turn` entry shows as `(note)` in the memory block: a lead to weigh, not an order. Next to the memory file:
+
+| File | Holds |
+|---|---|
+| `memory.history.jsonl` (600) | The full before and after of every change, with the Session, the origin, and the SHA-256 of the memory file right after it |
+| `snapshots/memory-YYYY-MM-DD.jsonl` (600) | The memory file as it stood before the first change of each day; the latest 30 are kept |
+| `memory.pending.jsonl` (600) | Protected writes held for the owner; never shown in a prompt; at most 50, dropped after 14 days |
+
+With `hold` on, a protected write from a turn the owner did not start alone is not made: the tool answers `held`, and the owner gets a WeChat notice (`待确认 [id] …（来自B站猫猫的传话）`). Replying `记下 <id>` on WeChat keeps it (marked `owner-confirmed`), `忽略 <id>` drops it, and `撤销 <id>` undoes the latest change to an entry the owner was told about; [`lsy-wechat`](../lsy-wechat/README.md) runs these words itself, only on the owner's own messages. Every protected write the owner's own turn makes is announced the same way, with the words to undo it.
+
+The same operations are available on the host, as the service user, printing ids, categories, and counts and never text:
+
+```sh
+sudo -n -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node \
+  /Users/Shared/lsy-dsh/current/lsy/deploy/memory-admin.mjs ids
+```
+
+`approve <id>…`, `discard <id>…`, `revert <id>…`, `rollback --session <id>` or `--since <ISO time>` (add `--dry-run` to count), and `forget --purge <id>…`, which erases an entry from the file, the history, every snapshot, and the held writes. To switch the protection off, set `hold: false` in the `lsy-memory` row of the profile patch; the records and notices continue. To roll back to the previous build, first `discard` the held writes (an older build ignores `memory.pending.jsonl` and reads the other new fields as absent, so nothing else needs doing).
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -71,11 +95,12 @@ The tools call `MemoryStore`, which validates everything the model sends: catego
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Plugin entry: the pre-step injection and the three tools |
-| [`src/store.ts`](src/store.ts) | The JSONL store: list, save, forget, import, search |
+| [`src/store.ts`](src/store.ts) | The JSONL store: list, save, hold, approve, revert, roll back, purge, import, search, and the history and snapshots |
+| [`src/notice.ts`](src/notice.ts) | The WeChat notice for a turn's protected changes |
 | [`src/render.ts`](src/render.ts) | The memory block and its byte budget |
 | [`src/entries.ts`](src/entries.ts) | Entry type, categories, validation |
 | [`src/export.ts`](src/export.ts) | claude.ai export parser |
-| [`src/cli.ts`](src/cli.ts) | `memory-import` (run through [`lsy/deploy/memory-import.mjs`](../../../lsy/deploy/memory-import.mjs)) |
+| [`src/cli.ts`](src/cli.ts) | `memory-import` (run through [`lsy/deploy/memory-import.mjs`](../../../lsy/deploy/memory-import.mjs)) and `memory-admin` ([`lsy/deploy/memory-admin.mjs`](../../../lsy/deploy/memory-admin.mjs)) |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 
@@ -112,7 +137,7 @@ Append-only: the block enters after the reusable prefix on the first request and
 
 #### What the model sees
 
-Three tool schemas whenever the Agent's preset mounts the package: `memory_search` (`query`, optional `category` and `limit`), `memory_save` (`text`, `category`, optional `id` to replace), and `memory_forget` (`id`). Results are one JSON text block: `{ "entries": [{ id, category, date, text }], "more" }`, `{ "outcome": "added" | "replaced" | "unchanged", "entry" }`, `{ "forgot": entry }`, or `{ "error": "<code>", "message" }` with codes `invalid_text`, `invalid_category`, `invalid_id`, `not_found`, `full`, `corrupt`.
+Three tool schemas whenever the Agent's preset mounts the package: `memory_search` (`query`, optional `category` and `limit`), `memory_save` (`text`, `category`, optional `id` to replace), and `memory_forget` (`id`). Results are one JSON text block: `{ "entries": [{ id, category, date, text, source? }], "more", "identityWithheld"? }`, `{ "outcome": "added" | "replaced" | "unchanged" | "held", "entry" }`, `{ "forgot": entry }`, or `{ "error": "<code>", "message" }` with codes `invalid_text`, `invalid_category`, `invalid_id`, `not_found`, `full`, `corrupt`, `pending_full`, `nothing_to_revert`, `not_allowed`. A `held` outcome carries a message saying the write waits for the owner and must not be repeated or reported as remembered; `identityWithheld` counts identity entries a turn the owner did not start alone was not shown.
 
 #### Token effect
 
@@ -129,6 +154,7 @@ Prefix-stable while tool definitions are unchanged; results are appended after t
 - **Substring search** — no embeddings or synonyms; a Chinese term does not find an English entry, so the block tells the model to search in both languages.
 - **Recall of other entries is the model's choice** — instructions and preferences always arrive; details of career, project, and identity entries arrive only when the model searches.
 - **One owner, one file** — every Session under the preset shares the same memory.
+- **Origin is per turn** — a held write is judged by the turn's inputs and by whether a web or QQ tool ran in it; words a stranger put into a file the agent later reads, or into a compaction summary, are outside what the Host can see.
 
 <a id="dev-note"></a>
 ### Dev Note

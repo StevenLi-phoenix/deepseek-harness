@@ -36,6 +36,9 @@ kind: "package-reference"
 |---|---|---|
 | `file` | `<DSH_HOME>/lsy-memory/memory.jsonl` | 记忆文件 |
 | `maxBytes` | `65536` | 记忆块上限；放不下的条目在末行计数，仍可搜索 |
+| `hold` | `true` | owner 没有独自发起的回合里写保护类（`instructions`、`preferences`、`identity`）时，先扣下，等 owner 批准；这类回合不能忘掉保护类条目，查 `identity` 只返回条数 |
+| `notify` | `true` | 保护类写入经微信告诉 owner：每个回合合并成一条，附上撤销、保留、丢弃的口令 |
+| `noticesPerDay` | `12` | owner 一天最多收到的通知条数；其余变动仍写进历史 |
 
 每个条目是一行文本，带 id、分类和最后一次写入的日期：
 
@@ -56,6 +59,27 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 
 加 `--dry-run` 只计数。下一个 Session 就能看到结果，不需要重启。文件是普通 JSONL（权限 600），可以手工编辑：不是合法条目的行会让注入和所有写入停下，直到修好为止，而不会被丢掉。
 
+### 谁写的，以及怎么撤销
+
+Host 给每次写入盖上来源章，来源读自 Session 日志，不取决于模型说了什么（见 [`lsy-taint`](../lsy-taint/README.zh.md)）：`source` 为 `owner-turn`（owner 独自发起的回合，期间没读过网页或 QQ 文字）、`tainted-turn`（由转述的消息、事件、提醒、监控发起，或读过网页、QQ 文字的回合）、`owner-confirmed`（owner 批准过的待确认写入）或 `import`。没有 `source` 的条目早于这个字段，按 legacy 读。`session` 和 `origin` 记下 Session 和回合来源。`tainted-turn` 条目在记忆块里标 `(note)`：是线索，不是命令。记忆文件旁边还有：
+
+| 文件 | 内容 |
+|---|---|
+| `memory.history.jsonl`（600） | 每次变动前后的完整内容，附 Session、来源，以及变动后记忆文件的 SHA-256 |
+| `snapshots/memory-YYYY-MM-DD.jsonl`（600） | 每天第一次变动之前的记忆文件；保留最近 30 份 |
+| `memory.pending.jsonl`（600） | 等 owner 决定的保护类写入；从不进任何 prompt；最多 50 条，14 天后丢弃 |
+
+`hold` 开着时，owner 没有独自发起的回合里的保护类写入不会生效：工具回答 `held`，owner 收到微信通知（`待确认 [id] …（来自B站猫猫的传话）`）。在微信回复 `记下 <id>` 保留它（标 `owner-confirmed`），`忽略 <id>` 丢弃，`撤销 <id>` 撤销 owner 已被告知的条目的最近一次变动；这些口令由 [`lsy-wechat`](../lsy-wechat/README.zh.md) 自己执行，只认 owner 本人的消息。owner 自己回合里的每次保护类写入也用同样的方式告知，并附撤销口令。
+
+同样的操作也能在主机上以服务用户身份执行，只打印 id、分类和数量，不打印文字：
+
+```sh
+sudo -n -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node \
+  /Users/Shared/lsy-dsh/current/lsy/deploy/memory-admin.mjs ids
+```
+
+还有 `approve <id>…`、`discard <id>…`、`revert <id>…`、`rollback --session <id>` 或 `--since <ISO 时间>`（加 `--dry-run` 只计数），以及 `forget --purge <id>…`——从文件、历史、所有快照和待确认写入里彻底抹掉一个条目。要关掉保护，在 profile patch 的 `lsy-memory` 行写 `hold: false`；记录和通知照常。要回滚到上一个构建，先 `discard` 掉待确认写入（旧构建会忽略 `memory.pending.jsonl`，并把其他新字段当作不存在，所以不需要别的处理）。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -71,11 +95,12 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 | 文件 | 作用 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件入口：pre-step 注入与三个工具 |
-| [`src/store.ts`](src/store.ts) | JSONL 存储：列出、保存、遗忘、导入、搜索 |
+| [`src/store.ts`](src/store.ts) | JSONL 存储：列出、保存、扣下、批准、撤销、回滚、抹除、导入、搜索，以及历史和快照 |
+| [`src/notice.ts`](src/notice.ts) | 一个回合的保护类变动对应的微信通知 |
 | [`src/render.ts`](src/render.ts) | 记忆块与字节预算 |
 | [`src/entries.ts`](src/entries.ts) | 条目类型、分类、校验 |
 | [`src/export.ts`](src/export.ts) | claude.ai 导出解析器 |
-| [`src/cli.ts`](src/cli.ts) | `memory-import`（通过 [`lsy/deploy/memory-import.mjs`](../../../lsy/deploy/memory-import.mjs) 运行） |
+| [`src/cli.ts`](src/cli.ts) | `memory-import`（通过 [`lsy/deploy/memory-import.mjs`](../../../lsy/deploy/memory-import.mjs) 运行）和 `memory-admin`（[`lsy/deploy/memory-admin.mjs`](../../../lsy/deploy/memory-admin.mjs)） |
 
 这是 fork 本地包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。
 
@@ -112,7 +137,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 
 #### 模型看到的内容
 
-只要 Agent 的 preset 挂载了这个包，就有三个工具 schema：`memory_search`（`query`，可选 `category` 和 `limit`）、`memory_save`（`text`、`category`，可选替换用的 `id`）、`memory_forget`（`id`）。结果是一个 JSON 文本块：`{ "entries": [{ id, category, date, text }], "more" }`、`{ "outcome": "added" | "replaced" | "unchanged", "entry" }`、`{ "forgot": entry }`，或 `{ "error": "<code>", "message" }`，错误码有 `invalid_text`、`invalid_category`、`invalid_id`、`not_found`、`full`、`corrupt`。
+只要 Agent 的 preset 挂载了这个包，就有三个工具 schema：`memory_search`（`query`，可选 `category` 和 `limit`）、`memory_save`（`text`、`category`，可选替换用的 `id`）、`memory_forget`（`id`）。结果是一个 JSON 文本块：`{ "entries": [{ id, category, date, text, source? }], "more", "identityWithheld"? }`、`{ "outcome": "added" | "replaced" | "unchanged" | "held", "entry" }`、`{ "forgot": entry }`，或 `{ "error": "<code>", "message" }`，错误码有 `invalid_text`、`invalid_category`、`invalid_id`、`not_found`、`full`、`corrupt`、`pending_full`、`nothing_to_revert`、`not_allowed`。`held` 结果附一句话，说明这次写入在等 owner、不要重复保存、也不要说成已经记住；`identityWithheld` 是 owner 没有独自发起的回合没看到的 identity 条目数。
 
 #### Token 影响
 
@@ -129,6 +154,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 - **子串搜索**——没有 embedding 或同义词；中文词找不到英文条目，所以记忆块要求模型中英文都搜。
 - **其他条目由模型决定是否回忆**——指令和偏好总会送达；职业、项目和身份条目的细节只在模型搜索时才出现。
 - **一个主人，一个文件**——该 preset 下的所有 Session 共享同一份记忆。
+- **来源按回合判断**——待确认写入由回合的输入以及回合里有没有跑过网页或 QQ 工具来判断；陌生人把话放进 agent 之后会读的文件或压缩摘要里，Host 看不到。
 
 <a id="dev-note"></a>
 ### 开发备注

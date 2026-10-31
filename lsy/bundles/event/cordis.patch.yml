@@ -173,6 +173,9 @@
       config:
         chat:
           workspacePath: /Users/dsh-runtime/me
+          # A message another Session passes the main agent (Bilibili, Claude Code) starts a turn marked as
+          # not the owner's (`turn`); `notify` only tells the owner on WeChat and starts nothing.
+          agentMessage: turn
 
     # The agent's own Bilibili account (ctx.bili). It mostly watches: a body clock wakes its own
     # Session (preset `bili`, below) at one random time in each window, new replies, mentions, and
@@ -267,6 +270,19 @@
     - id: lsy-qqbot
       name: '@deepseek-ai/dsh-lsy-qqbot'
       disabled: true
+
+    # Integrity watch: digests of what steers the agent (both profile patches, the instruction files and
+    # skill directories of its workspaces, the memory file against its history, the scheduled tasks). A change
+    # reaches the owner on WeChat as the target's name, never its content, merged and at most a few a day. It
+    # also logs a hash of each Session's system prompt and counts the persona's forbidden stock lines per day
+    # ($DSH_HOME/lsy-integrity/tics.json, counts only).
+    - id: lsy-integrity
+      name: '@deepseek-ai/dsh-lsy-integrity'
+      config:
+        workspaces:
+          - /Users/dsh-runtime/me
+          - /Users/dsh-runtime/work
+          - /Users/dsh-runtime/bili
 
     # Bilibili preset: the account's Session reads public content and can speak publicly, so it
     # gets only its persona, the time, the Bilibili tools, and compaction (the Session is
@@ -523,8 +539,19 @@
             name: '@deepseek-ai/dsh-lsy-tool-voice'
           # Owner memory: the Host puts <DSH_HOME>/lsy-memory/memory.jsonl in front of each root
           # Session and the agent keeps it with memory_search, memory_save, and memory_forget.
+          # Who started this turn decides what it may do: cc_send and cc_start only in a turn the owner started
+          # alone; reminders and watches made in any other turn are marked and reported. `enforce: false`
+          # only logs what it would refuse.
+          - id: lsy-taint
+            name: '@deepseek-ai/dsh-lsy-taint'
+            config:
+              enforce: false
           - id: lsy-memory
             name: '@deepseek-ai/dsh-lsy-memory'
+            config:
+              # Provenance, history, and WeChat notices are on; holding protected writes of
+              # turns the owner did not start alone waits for the owner's WeChat commands.
+              hold: false
           # Claude Code-style monitors: a command's new stdout lines come back to the same Session.
           - id: lsy-tool-monitor
             name: '@deepseek-ai/dsh-lsy-tool-monitor'

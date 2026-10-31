@@ -31,6 +31,12 @@
     },
     {
       "path": "../../util/home-paths"
+    },
+    {
+      "path": "../lsy-event-bus"
+    },
+    {
+      "path": "../lsy-taint"
     }
   ]
 }

@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { runImportCli } from '../src/cli.ts'
+import { runAdminCli, runImportCli } from '../src/cli.ts'
 import { MemoryStore } from '../src/store.ts'
 
 const dirs: string[] = []
@@ -51,5 +51,65 @@ describe('memory-import', () => {
   it('fails on an export without entries or with bad arguments', async () => {
     expect((await run([], 'nothing here')).code).toBe(1)
     expect((await run(['--bogus'])).code).toBe(2)
+  })
+})
+
+describe('memory-admin', () => {
+  async function admin(argv: string[], dir: string) {
+    const out: string[] = []
+    const err: string[] = []
+    const code = await runAdminCli({ argv, env: { DSH_HOME: dir }, stdout: line => out.push(line), stderr: line => err.push(line) })
+    return { code, out, err }
+  }
+
+  async function seeded() {
+    const dir = await mkdtemp(join(tmpdir(), 'lsy-memory-admin-'))
+    dirs.push(dir)
+    const store = new MemoryStore(join(dir, 'lsy-memory', 'memory.jsonl'))
+    const kept = (await store.save({ text: 'private rule text', category: 'instructions' }, { source: 'owner-turn', session: 'good' })).entry
+    const planted = (await store.save({ text: 'planted secret text', category: 'identity' }, { source: 'tainted-turn', session: 'bad' })).entry
+    const waiting = await store.savePending({ text: 'waiting private text', category: 'preferences' }, { source: 'tainted-turn', session: 'bad' })
+    return { dir, store, kept, planted, waiting }
+  }
+
+  it('lists ids, categories, and sources, never text', async () => {
+    const { dir, kept, planted, waiting } = await seeded()
+    const { code, out } = await admin(['ids'], dir)
+    expect(code).toBe(0)
+    expect(out).toEqual([
+      `${kept.id} instructions owner-turn`, `${planted.id} identity tainted-turn`, `${waiting.id} preferences pending-add`,
+      'memory-admin: 2 entries, 1 waiting',
+    ])
+    expect(out.join('\n')).not.toContain('private')
+  })
+
+  it('approves, discards, and reverts by id', async () => {
+    const { dir, store, planted, waiting } = await seeded()
+    expect((await admin(['approve', waiting.id], dir)).code).toBe(0)
+    expect((await store.list()).map(entry => entry.id)).toContain(waiting.id)
+    expect((await admin(['revert', planted.id], dir)).out).toEqual([`memory-admin: revert ${planted.id} done`])
+    expect((await store.list()).map(entry => entry.id)).not.toContain(planted.id)
+    expect((await admin(['discard', 'ffffff'], dir)).code).toBe(1)
+  })
+
+  it('rolls back a Session and erases an entry with every trace', async () => {
+    const { dir, store, kept, planted } = await seeded()
+    const dry = await admin(['rollback', '--session', 'bad', '--dry-run'], dir)
+    expect(dry.out[0]).toBe(`memory-admin: rollback (dry run): 1 change(s) matched, 0 restored, 1 removed; ids ${planted.id}`)
+    expect(await store.list()).toHaveLength(2)
+    expect((await admin(['rollback', '--session', 'bad'], dir)).out[0]).toContain('1 removed')
+    expect((await store.list()).map(entry => entry.id)).toEqual([kept.id])
+    const purged = await admin(['forget', '--purge', kept.id], dir)
+    expect(purged.out[0]).toMatch(/^memory-admin: purged .*: 1 entry, \d+ history, \d+ snapshot, 0 waiting$/u)
+    expect(await store.list()).toEqual([])
+  })
+
+  it('refuses bad arguments', async () => {
+    const { dir } = await seeded()
+    expect((await admin([], dir)).code).toBe(2)
+    expect((await admin(['rollback'], dir)).code).toBe(2)
+    expect((await admin(['forget', 'abcdef'], dir)).code).toBe(2)
+    expect((await admin(['approve'], dir)).code).toBe(2)
+    expect((await admin(['--bogus'], dir)).code).toBe(2)
   })
 })

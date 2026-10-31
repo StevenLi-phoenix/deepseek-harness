@@ -25,6 +25,8 @@ export const PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackagePolic
   'packages/lsy/lsy-qq': { category: 'optional', reason: 'Fork-local QQ group observer; requires a OneBot v11 protocol end (NapCat) logged in to a QQ account.' },
   'packages/lsy/lsy-qqbot': { category: 'optional', reason: 'Fork-local official QQ bot channel (disabled by default); requires a QQ Open Platform bot (AppID and AppSecret).' },
   'packages/lsy/lsy-tool-qq': { category: 'optional', reason: 'Fork-local read-only QQ tools mounted by the event profile preset.' },
+  'packages/lsy/lsy-taint': { category: 'optional', reason: 'Fork-local turn origin for the owner\'s main agent; mounted by the event profile preset.' },
+  'packages/lsy/lsy-integrity': { category: 'optional', reason: 'Fork-local integrity watch for the owner\'s main agent; mounted by the event profile.' },
   'packages/lsy/lsy-wechat': { category: 'optional', reason: 'Fork-local WeChat channel; requires a QR-bound iLink bot account.' },
   'packages/lsy/lsy-tool-wechat': { category: 'optional', reason: 'Fork-local WeChat file tool mounted by the event profile preset.' },
   'packages/lsy/lsy-voice': { category: 'optional', reason: 'Fork-local voice service (speech and transcription through the owner\'s own services) mounted by the event profile bundle.' },

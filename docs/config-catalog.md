@@ -2768,13 +2768,45 @@ export type RepoStream = 'releases' | 'commits' | 'tags'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-github-sensor -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-integrity -->
+<a id="deepseek-aidsh-lsy-integrity"></a>
+
+## `@deepseek-ai/dsh-lsy-integrity`
+
+- `source`: [`packages/lsy/lsy-integrity/src/index.ts:32`](../packages/lsy/lsy-integrity/src/index.ts)
+
+```ts config-catalog
+/** Settings. */
+export interface Config {
+  /** Turn the whole watch off. */
+  enabled?: boolean
+  /** Directories the agent works in: their instruction files and skill directories are watched. */
+  workspaces?: string[]
+  /** Seconds between scans. */
+  intervalSec?: number
+  /** Tell the owner on WeChat when a target changes. */
+  notify?: boolean
+  /** Fewest seconds between two notices; changes seen sooner wait for the next one. */
+  minGapSec?: number
+  /** Notices in a day. */
+  noticesPerDay?: number
+  /** Agent presets whose answers are checked for the persona's forbidden stock lines. */
+  ticPresets?: string[]
+  /** Directory of the state files; defaults to `<DSH_HOME>/lsy-integrity`. */
+  stateDir?: string
+  /** The memory file whose digest is checked against the memory history; defaults to `<DSH_HOME>/lsy-memory/memory.jsonl`. */
+  memoryFile?: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-integrity -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-memory -->
 <a id="deepseek-aidsh-lsy-memory"></a>
 
 ## `@deepseek-ai/dsh-lsy-memory`
 
 - `inject`: `tools`
-- `source`: [`packages/lsy/lsy-memory/src/index.ts:41`](../packages/lsy/lsy-memory/src/index.ts)
+- `source`: [`packages/lsy/lsy-memory/src/index.ts:50`](../packages/lsy/lsy-memory/src/index.ts)
 
 ```ts config-catalog
 /** Memory file and context budget. */
@@ -2783,6 +2815,16 @@ export interface Config {
   file?: string
   /** Cap on the memory block, in bytes. */
   maxBytes?: number
+  /**
+   * Hold a protected write (`instructions`, `preferences`, `identity`) until the owner approves it
+   * when the turn was not the owner's alone, refuse to forget a protected entry then, and show
+   * `identity` entries only as a count. Off keeps the provenance records and notices but no holds.
+   */
+  hold?: boolean
+  /** Tell the owner on WeChat about protected writes, one merged notice per turn. */
+  notify?: boolean
+  /** Notices the owner gets in a day; further writes are still recorded in the history. */
+  noticesPerDay?: number
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-memory -->
@@ -2974,6 +3016,29 @@ export interface SysmonMount {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-sysmon -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-taint -->
+<a id="deepseek-aidsh-lsy-taint"></a>
+
+## `@deepseek-ai/dsh-lsy-taint`
+
+- `inject`: `tools`
+- `source`: [`packages/lsy/lsy-taint/src/index.ts:30`](../packages/lsy/lsy-taint/src/index.ts)
+
+```ts config-catalog
+/** Settings. */
+export interface Config {
+  /** Refuse the owner-only tools outside a clean owner turn; off only logs what would have been refused. */
+  enforce?: boolean
+  /** Tools that act on other sessions or machines, refused outside a clean owner turn. */
+  ownerOnlyTools?: string[]
+  /** Tools that outlive the turn, allowed everywhere but marked when a turn that is not clean uses them. */
+  auditedTools?: string[]
+  /** Tell the owner on WeChat about audited calls, one merged notice per turn. */
+  notify?: boolean
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-taint -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-tool-watch -->
 <a id="deepseek-aidsh-lsy-tool-watch"></a>
 
@@ -3097,7 +3162,7 @@ export type TtsProviderName = 'feiyu' | 'mac-mini'
 ## `@deepseek-ai/dsh-lsy-wechat`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/lsy/lsy-wechat/src/index.ts:58`](../packages/lsy/lsy-wechat/src/index.ts)
+- `source`: [`packages/lsy/lsy-wechat/src/index.ts:66`](../packages/lsy/lsy-wechat/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
@@ -3106,6 +3171,13 @@ export interface Config {
   accountFile?: string
   /** Chat Session settings. */
   chat: ChatConfig
+  /**
+   * Answer the owner's `记下 <id>`, `忽略 <id>`, and `撤销 <id>` messages about held and recent memory
+   * writes on the Host, without the model; only the owner's own messages are read.
+   */
+  memoryCommands: boolean
+  /** The memory file those commands act on; defaults to `<DSH_HOME>/lsy-memory/memory.jsonl`. */
+  memoryFile?: string
   /** Code points per WeChat message; longer texts are split. */
   maxMessageChars: number
   /** Messages one text may be split into; the last is cut beyond that. */
@@ -3152,6 +3224,12 @@ export interface ChatConfig {
   title: string
   /** IANA time zone sent with every prompt and used for digest timestamps. */
   timeZone: string
+  /**
+   * What a message another Session passes the main agent does: `turn` queues it as a prompt that starts
+   * a turn of its own (the turn is marked as not the owner's); `notify` only tells the owner and leaves
+   * the message in the chat as a notice, so nothing happens until the owner replies.
+   */
+  agentMessage: 'turn' | 'notify'
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-wechat -->

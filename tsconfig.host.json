@@ -565,6 +565,8 @@
     { "path": "./packages/lsy/lsy-qq" },
     { "path": "./packages/lsy/lsy-qqbot" },
     { "path": "./packages/lsy/lsy-tool-qq" },
+    { "path": "./packages/lsy/lsy-taint" },
+    { "path": "./packages/lsy/lsy-integrity" },
     { "path": "./packages/lsy/lsy-wechat" },
     { "path": "./packages/lsy/lsy-tool-watch" },
     { "path": "./packages/lsy/lsy-tool-wechat" },

@@ -7561,7 +7561,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LsyAgentMessage',
-    declaration: 'export interface LsyAgentMessage {\n    text: string;\n    from: string;\n}',
+    declaration: 'export interface LsyAgentMessage {\n    text: string;\n    from: string;\n    origin?: string | undefined;\n}',
   },
   {
     name: 'LsyEventInput',

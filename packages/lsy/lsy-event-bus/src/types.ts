@@ -161,6 +161,12 @@ export interface LsyAgentMessage {
    * own Bilibili account, which reads public Bilibili content)`.
    */
   from: string
+  /**
+   * A short token naming the sender (`bili`, `cc`), which the channel puts in the request id of the
+   * prompt it queues, so the Host can tell a turn started by this message from one the owner started.
+   * Defaults to `peer`.
+   */
+  origin?: string | undefined
 }
 
 /** Notification actuator contract; a channel plugin provides it as `ctx.lsyNotifier`. */

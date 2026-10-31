@@ -9,6 +9,8 @@ import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContextFormed, UserMessage } from '@deepseek-ai/dsh-llm'
 import type { LsyAgentMessage, LsyNote, LsyNotifier } from '@deepseek-ai/dsh-lsy-event-bus'
+import { defaultMemoryFile, MemoryError, MemoryStore } from '@deepseek-ai/dsh-lsy-memory'
+import { untrustedRequestId } from '@deepseek-ai/dsh-lsy-taint'
 // Type-only: ctx.ownerRelay, which relays each chat Session's final answers through this channel.
 import type { RelayAnswer, RelayChannel, RelayDelivery } from '@deepseek-ai/dsh-owner-relay'
 // Type-only: ctx.lsyVoice, which reads the audio files the owner sends when transcription is on.
@@ -28,7 +30,7 @@ declare module '@deepseek-ai/dsh-llm' {
   }
 }
 
-import { agentMessageText, buildDigest, EARLIER_CHAT, fitText, formatGap, HELP_REPLY, inboundText, NEW_CHAT_REPLY, QUOTA_FOOTER, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES } from './text.ts'
+import { agentMessageText, buildDigest, parseMemoryCommand, type MemoryCommand, EARLIER_CHAT, fitText, formatGap, HELP_REPLY, inboundText, NEW_CHAT_REPLY, QUOTA_FOOTER, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES } from './text.ts'
 import { TypingIndicator } from './typing.ts'
 
 export * from './api.ts'
@@ -52,6 +54,12 @@ export interface ChatConfig {
   title: string
   /** IANA time zone sent with every prompt and used for digest timestamps. */
   timeZone: string
+  /**
+   * What a message another Session passes the main agent does: `turn` queues it as a prompt that starts
+   * a turn of its own (the turn is marked as not the owner's); `notify` only tells the owner and leaves
+   * the message in the chat as a notice, so nothing happens until the owner replies.
+   */
+  agentMessage: 'turn' | 'notify'
 }
 
 /** Channel configuration. */
@@ -60,6 +68,13 @@ export interface Config {
   accountFile?: string
   /** Chat Session settings. */
   chat: ChatConfig
+  /**
+   * Answer the owner's `记下 <id>`, `忽略 <id>`, and `撤销 <id>` messages about held and recent memory
+   * writes on the Host, without the model; only the owner's own messages are read.
+   */
+  memoryCommands: boolean
+  /** The memory file those commands act on; defaults to `<DSH_HOME>/lsy-memory/memory.jsonl`. */
+  memoryFile?: string
   /** Code points per WeChat message; longer texts are split. */
   maxMessageChars: number
   /** Messages one text may be split into; the last is cut beyond that. */
@@ -99,7 +114,10 @@ export const Config: z<Config> = z.object({
     permissionPreset: z.string().default('danger-full-access'),
     title: z.string().default('微信'),
     timeZone: z.string().default('America/New_York'),
+    agentMessage: z.union(['turn', 'notify'] as const).default('turn'),
   }),
+  memoryCommands: z.boolean().default(true),
+  memoryFile: z.string(),
   maxMessageChars: z.natural().min(200).max(WECHAT_MAX_TEXT_BYTES).default(3000),
   maxReplyParts: z.natural().min(1).default(3),
   repliesPerToken: z.natural().min(2).default(10),
@@ -359,14 +377,29 @@ export class WechatChannel extends Service implements LsyNotifier {
     if (account === undefined) throw new Error('WeChat is not bound yet, so the main agent has no chat')
     mkdirSync(this.config.chat.workspacePath, { recursive: true })
     const sessionId = await this.chatSession(domain, account)
+    const framed = agentMessageText(message, Date.now(), this.config.chat.timeZone)
+    if (this.config.chat.agentMessage === 'notify') {
+      // No turn: the owner is told, the chat keeps the message as a notice, and the owner's reply decides what happens.
+      const origin = message.origin ?? 'peer'
+      await this.deliver(renderNote({
+        title: `📨 ${origin === 'bili' ? 'B站猫猫' : origin === 'cc' ? 'Claude Code' : '另一个 Session'}给主 agent 递了话（没有开始处理）`,
+        body: `${fitText(message.text.replaceAll(/\s+/gu, ' ').trim(), 300)}\n\n要我处理，直接回复我；不理它就当没看到。`,
+      }), 'note')
+      if (!await this.injectNotice(sessionId, framed, 'another Session messaged the main agent')) {
+        throw new Error('the message could not be left in the chat Session')
+      }
+      this.ctx.logger.info(`lsy-wechat: told the owner about a ${message.text.length}-char message from another Session (${origin}); no turn started`)
+      return sessionId
+    }
     await this.ctx.sessionController.prompt({
-      requestId: randomUUID() as SessionRequestId,
+      // The request id is how the Host later tells this turn from one the owner started.
+      requestId: untrustedRequestId(message.origin ?? 'peer') as SessionRequestId,
       sessionId,
       mode: 'queue',
-      content: [{ type: 'text', text: agentMessageText(message, Date.now(), this.config.chat.timeZone) }],
+      content: [{ type: 'text', text: framed }],
       clientTimeZone: this.config.chat.timeZone,
     }, this.abort.signal)
-    this.ctx.logger.info(`lsy-wechat: queued a ${message.text.length}-char message from another Session for chat Session ${sessionId}`)
+    this.ctx.logger.info(`lsy-wechat: queued a ${message.text.length}-char message from another Session (${message.origin ?? 'peer'}) for chat Session ${sessionId}`)
     return sessionId
   }
 
@@ -609,6 +642,11 @@ export class WechatChannel extends Service implements LsyNotifier {
       await this.stopEverything()
       return
     }
+    const memoryCommand = this.config.memoryCommands ? parseMemoryCommand(text) : undefined
+    if (memoryCommand !== undefined) {
+      await this.runMemoryCommand(domain, account, memoryCommand)
+      return
+    }
     // Typing starts before attachments download, so the owner sees the message was taken up.
     this.typing.start()
     const gap = timeGapNotice(arrivedAt, before, this.config.timeGapMs, this.config.chat.timeZone)
@@ -621,6 +659,45 @@ export class WechatChannel extends Service implements LsyNotifier {
       this.settleTyping()
       this.ctx.logger.warn(`lsy-wechat: forwarding the owner message failed: ${errorText(error)}`)
       await this.deliver(`⚠️ 消息没能交给 agent：${fitText(errorText(error), 300)}`, 'notice')
+    }
+  }
+
+  /**
+   * The owner's `记下`, `忽略`, or `撤销` with ids: act on the memory file here, on the Host, so no model
+   * decides it and no other source can send these words. Only ids, categories, and the owner's own
+   * entry text are echoed. The chat Session learns what happened as a notice that starts no turn.
+   */
+  private async runMemoryCommand(domain: Domain<typeof wechatDomain>, account: WechatAccount, command: MemoryCommand): Promise<void> {
+    const store = new MemoryStore(this.config.memoryFile ?? defaultMemoryFile())
+    const sessionId = domain.table('chats').get(account.ownerUserId)?.sessionId
+    const meta = { origin: 'owner', ...sessionId === undefined ? {} : { session: sessionId } }
+    const lines: string[] = []
+    const done: string[] = []
+    for (const id of command.ids) {
+      try {
+        if (command.verb === 'approve') {
+          const entry = await store.approve(id, meta)
+          lines.push(`✅ 已记下 [${entry.id}] ${entry.category}：${fitText(entry.text, 80)}`)
+          done.push(`kept ${entry.id} (${entry.category})`)
+        } else if (command.verb === 'discard') {
+          const entry = await store.discard(id)
+          lines.push(`🗑 已忽略 [${entry.id}] ${entry.category}`)
+          done.push(`dropped ${entry.id} (${entry.category})`)
+        } else {
+          const result = await store.revert(id, meta)
+          const what = result.outcome === 'removed' ? '该条已删除' : result.outcome === 'restored' ? `恢复为：${fitText(result.entry.text, 80)}` : '待确认的写入已丢弃'
+          lines.push(`↩️ 已撤销 [${id}] ${result.entry.category}（${what}）`)
+          done.push(`undid ${id} (${result.entry.category}, ${result.outcome})`)
+        }
+      } catch (error: unknown) {
+        if (!(error instanceof MemoryError)) throw error
+        lines.push(`⚠️ [${id}] ${error.code === 'not_found' || error.code === 'nothing_to_revert' ? '没有找到可处理的记录（已处理、已过期，或 id 有误）' : error.message}`)
+      }
+    }
+    this.ctx.logger.info(`lsy-wechat: memory command ${command.verb} for ${command.ids.length} id(s): ${done.length} done`)
+    await this.deliver(lines.join('\n'), 'notice')
+    if (done.length > 0 && sessionId !== undefined) {
+      await this.injectNotice(sessionId as SessionId, `The owner answered a memory notice on WeChat (${done.join('; ')}). Nothing more is needed; do not repeat the change.`, 'the owner answered a memory notice')
     }
   }
 
