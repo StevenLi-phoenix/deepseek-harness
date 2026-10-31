@@ -2756,7 +2756,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-fork-qq`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle` · `credentials`
-- `source`: [`packages/fork/fork-qq/src/index.ts:56`](../packages/fork/fork-qq/src/index.ts)
+- `source`: [`packages/fork/fork-qq/src/index.ts:57`](../packages/fork/fork-qq/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
