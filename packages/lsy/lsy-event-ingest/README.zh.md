@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用这个包
 
-把路由挂在运行 `@deepseek-ai/dsh-lsy-event-bus` 和 Host web server 的进程里，在凭据存储中给每个推送的服务一个专属 token，再为它的事件加一个总线订阅。lsy event bundle 挂载时只有一个来源 `kaorou`，它的 token `LSY_INGEST_TOKEN_KAOROU` 放在 `$DSH_HOME/.env`；它的 `kaorou` 订阅会为 `kaorou.*` 事件启动一个诊断 Session（见 [bundle patch](../../../lsy/bundles/event/cordis.patch.yml)）。
+把路由挂在运行 `@deepseek-ai/dsh-lsy-event-bus` 和 Host web server 的进程里，在凭据存储中给每个推送的服务一个专属 token，再为它的事件加一个总线订阅。lsy event bundle 挂载时带有 `kaorou`、`operator`、`host`、`autocut`、`bili`、`warn` 六个来源，各自的 token（`LSY_INGEST_TOKEN_<SOURCE>`）放在 `$DSH_HOME/.env`；例如 `kaorou` 订阅会为 `kaorou.*` 事件启动一个诊断 Session，`warn`（任何程序的告警，用 [`lsy/tools/warn`](../../../lsy/tools/warn/warn.py) 里的 `warn` CLI 发送）订阅会启动一个判断用的 Session，除非主人必须处理，否则回答 `NO_REPLY`（见 [bundle patch](../../../lsy/bundles/event/cordis.patch.yml)）。
 
 ### 何时选用
 

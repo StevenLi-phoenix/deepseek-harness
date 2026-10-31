@@ -25,7 +25,7 @@ Let your own services tell the agent when something needs attention, with one au
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount the route in the process that runs `@deepseek-ai/dsh-lsy-event-bus` and the Host web server, give every pushing service its own token in the credential store, and add a bus subscription for its events. The lsy event bundle mounts it with one source, `kaorou`, whose token `LSY_INGEST_TOKEN_KAOROU` lives in `$DSH_HOME/.env`; its `kaorou` subscription starts a diagnosis Session for `kaorou.*` events ([bundle patch](../../../lsy/bundles/event/cordis.patch.yml)).
+Mount the route in the process that runs `@deepseek-ai/dsh-lsy-event-bus` and the Host web server, give every pushing service its own token in the credential store, and add a bus subscription for its events. The lsy event bundle mounts it with the sources `kaorou`, `operator`, `host`, `autocut`, `bili`, and `warn`, each token (`LSY_INGEST_TOKEN_<SOURCE>`) in `$DSH_HOME/.env`; for example its `kaorou` subscription starts a diagnosis Session for `kaorou.*` events, and `warn` (any program's warning, sent with the `warn` CLI in [`lsy/tools/warn`](../../../lsy/tools/warn/warn.py)) starts one judging Session that answers `NO_REPLY` unless the owner must act ([bundle patch](../../../lsy/bundles/event/cordis.patch.yml)).
 
 ### When to choose it
 

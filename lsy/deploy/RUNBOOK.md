@@ -352,6 +352,26 @@ bili-svc is a separate private service on this Mac (`app.lishuyu.bili.svc`, `127
 2. Check: `stdout.log` shows the `bili` source accepting events (`202`); a batch of new comments starts a `bili-up` Session; `up_status` in it reports the gate mode. The ledger and the brake live in bili-svc (`bili-svc ledger`, `bili-svc gate status`).
 3. Stop: `bili-svc gate readonly` (replies stop at once, reads continue), or remove the `bili-digest` subscription. Only a person lifts a brake: `bili-svc gate release`, then `bili-svc gate mode auto`.
 
+## 17. Unified warning intake
+
+Any program hands a warning to DSH, the one brain, with `warn` (`lsy/tools/warn`); the agent judges it and answers `NO_REPLY` unless the owner must act. Pieces, all in the event bundle: ingest source `warn` (token `LSY_INGEST_TOKEN_WARN`), subscription `warn` (`warn.*`, a `session` of the `unattended` preset, `coalesceMs` 120000, 6 batches an hour, read-only checks, three Chinese sentences), and subscription `ci` (`github.workflow_run.completed` of `StevenLi-phoenix/*`, 4 batches an hour, successes `NO_REPLY`). Do not use `suppress.markers` for any of it: they match substrings of all output.
+
+1. Token on the DSH host (back up `.env` first; restart afterwards; the value is never printed):
+   ```sh
+   sudo -n -u dsh-runtime /bin/sh -c 'umask 077; cp -p /Users/dsh-runtime/.dsh/.env /Users/dsh-runtime/.dsh/.env.bak.$(date +%Y%m%d%H%M%S); printf "LSY_INGEST_TOKEN_WARN=%s\n" "$(openssl rand -hex 32)" >> /Users/dsh-runtime/.dsh/.env'
+   ```
+2. Install `warn` on a host and give it the token through a pipe (the token reaches the file, not the terminal):
+   ```sh
+   scp lsy/tools/warn/warn.py HOST:/usr/local/bin/warn         # or ~/.local/bin/warn; chmod +x
+   sudo -n -u dsh-runtime grep '^LSY_INGEST_TOKEN_WARN=' /Users/dsh-runtime/.dsh/.env | cut -d= -f2- \
+     | ssh HOST 'umask 077; mkdir -p ~/.config/warn; cat > ~/.config/warn/token'
+   warn --source HOST.test --severity info "test: please ignore"
+   ```
+   Check: `stdout.log` shows `lsy-event-ingest: warn warn.HOST.test.info (...): accepted`, then a `warn-…` Session whose answer is `NO_REPLY`. The tailnet is trusted; a wrong token returns 401.
+3. Sources: mini-ops watches `system/app.lishuyu.ams`; the laptop's `docker events` watcher calls `warn` when a container turns unhealthy; n8, phm, and racknerd use the template `warn@.service` (`warn --source %H.systemd --severity error "%i failed"`) with `OnFailure=warn@%n.service` in a drop-in of each key unit; programs call `warn` or the curl line directly.
+4. Limits: the WeChat reply allowance (about 10 per owner message) is shared by every source. Alert text is untrusted and the Session runs with `danger-full-access`, so the instructions allow read-only checks only; a read-only permission preset would narrow the exposure if the risk grows.
+5. Stop: remove the `warn` and `ci` subscriptions from the bundle (or comment out `LSY_INGEST_TOKEN_WARN`), upgrade, restart; `warn` on the hosts keeps exiting 0.
+
 ## Operate
 
 Patch edits (`$DSH_HOME/cordis.patch.yml`, the profile patch) reload live; `.env` edits and new builds need a restart. The composition is the `@deepseek-ai/dsh-lsy-event-bundle` layer linked from the build; the profile patch `profiles/event/cordis.patch.yml` is the owner's layer, where Web UI settings save, and upgrades keep it. A home patch entry replaces that entry's whole `config`, so override only entries whose config it restates in full, and the Web UI refuses to save an entry the home patch sets ("Configuration for … is overridden by a home patch").
