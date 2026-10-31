@@ -115,7 +115,7 @@
                 autocut-worker, the owner's video editing service on this Mac, reported the event
                 below. Load the autocut skill first; you are the brain, the worker is the hands and
                 eyes. autocut.needs_agent: a pipeline prepared a brief and waits for your judgment
-                (a commentary script, montage picks); read it with `autocut-remote wait <job> <run>`,
+                (cut decisions, a commentary script, montage picks, an edit list); read it with `autocut-remote wait <job> <run>`,
                 decide as the skill says, and submit the matching *_finish pipeline. autocut.ready:
                 cuts wait for the owner's confirmation; read the job with `autocut-remote status
                 <job>`, fetch each live deliverable's preview with `autocut-remote fetch`, and send

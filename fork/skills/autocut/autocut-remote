@@ -64,7 +64,8 @@ def main():
     p = sub.add_parser("ingest", help="下载链接素材（--url）或取 inbox 文件（--inbox）")
     p.add_argument("job")
     p.add_argument("--url")
-    p.add_argument("--inbox")
+    p.add_argument("--inbox", help="取 mini inbox 里的文件（复制进 job）")
+    p.add_argument("--inbox-link", dest="inbox_link", help="链接 mini inbox 里的大文件（不复制，只读使用），例如 ksp-career2-eve/xxx.mp4")
     p.add_argument("--wait", type=int, default=100)
 
     p = sub.add_parser("upload", help="把本机文件上传成 job 的素材")
@@ -95,6 +96,12 @@ def main():
     p.add_argument("job")
     p.add_argument("path")
     p.add_argument("--dest", default=DEFAULT_DEST)
+
+    p = sub.add_parser("frame", help="按时间点取一帧：frame JOB src/x.mp4 --t 125.5；再 fetch 到本机用 read_image 看")
+    p.add_argument("job")
+    p.add_argument("source")
+    p.add_argument("--t", type=float, required=True)
+    p.add_argument("--width", type=int, default=960)
 
     p = sub.add_parser("preview", help="重新压一份更小的预览（微信上传超时时用）：preview JOB --max-mib 4")
     p.add_argument("job")
@@ -136,7 +143,7 @@ def main():
     if a.cmd == "status":
         out(call("GET", "/v1/jobs/%s" % j))
     if a.cmd == "ingest":
-        body = {"url": a.url} if a.url else {"inbox": a.inbox}
+        body = {"url": a.url} if a.url else ({"inbox_link": a.inbox_link} if a.inbox_link else {"inbox": a.inbox})
         r = call("POST", "/v1/jobs/%s/ingest" % j, body)
         if r.get("ok") and r["run"].get("id") and a.wait:
             r = wait_run(j, r["run"]["id"], a.wait)
@@ -195,6 +202,8 @@ def main():
         except (urllib.error.URLError, OSError) as e:
             out({"ok": False, "error": {"code": "fetch_failed", "message": str(e), "fix": "确认 path 是 job 里的相对路径（先 status 看 files）"}})
         out({"ok": True, "path": dest, "bytes": n, "next": [{"cmd": "wechat_send_file path=%s" % dest, "why": "发给用户（≤25 MiB）"}]})
+    if a.cmd == "frame":
+        out(call("POST", "/v1/jobs/%s/frame" % j, {"source": a.source, "t": a.t, "width": a.width}, timeout=120))
     if a.cmd == "preview":
         out(call("POST", "/v1/jobs/%s/preview" % j, {"max_mib": a.max_mib}, timeout=900))
     if a.cmd == "confirm":
