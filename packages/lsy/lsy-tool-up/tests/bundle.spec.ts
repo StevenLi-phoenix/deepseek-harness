@@ -39,6 +39,9 @@ describe('up preset and bili events in the event bundle', () => {
   it('keeps the persona to passive, short, plain replies that name no videos and tag nobody', () => {
     const persona = (preset.config?.plugins?.[0]?.config as { prefix: string }).prefix
     for (const needle of ['never start a conversation', 'recommend', 'no @', 'real person']) expect(persona).toContain(needle)
+    // Drafting mistakes the owner deleted replies for: claims about a video nobody opened, and a misread tone.
+    expect(persona).toContain('You cannot see the video: never state what it does or does not contain')
+    expect(persona).toContain('whether they are joking, teasing, or annoyed')
   })
 
   it('keeps the tools out of every other preset and the profile root', () => {

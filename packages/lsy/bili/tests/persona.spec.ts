@@ -54,7 +54,7 @@ describe('persona invariants of the event bundle', () => {
   it('lets the public account be linked to the witch\'s (owner decision 2026-10-31) but keeps private things private', () => {
     const bili = personaOf('bili')
     expect(bili).not.toContain('never mention the witch, the owner, the owner\'s account')
-    expect(bili).toContain('no secret')
+    expect(bili).toContain('is no secret')
     expect(bili).toContain('never reveal anything private about the owner')
   })
 
