@@ -42,6 +42,7 @@ The feiyu key goes into `$DSH_HOME/.env` as `LSY_FEIYU_API_KEY` (restart after c
 | `tts.provider` / `tts.fallback` | `mac-mini` / `feiyu` | First provider and the one tried after it fails (`none` stops after one). feiyu sounds better and answers in 6-8 s, but the Mac mini, where the event service runs, could not reach it on 2026-10-30 (TCP to the laptop's port 19880 timed out), so the local service leads; set `tts.provider: feiyu` where the laptop is reachable |
 | `tts.format` | `mp3` | `mp3` converts with ffmpeg (`tts.ffmpegPath`, default `/opt/homebrew/bin/ffmpeg`) and delivers the WAV when that fails |
 | `tts.maxChars` | `200` | Longest text; longer text is refused so the agent splits it (the Mac mini service needs about 25 s plus 2.4 s per character) |
+| `tts.cache` | `true` | A text spoken before reuses its file (until `keepDays` removes it) instead of calling a service again; a changed voice setting takes effect once the old file is gone or with `false` |
 | `tts.retries` / `tts.retryDelayMs` | `2` / `1000` | Extra attempts of one HTTP call; 429, 5xx, timeouts, and network errors retry, other 4xx fail at once |
 | `tts.feiyu.*` | laptop `http://100.117.175.117:19880`, voice `feiyu`, style `cute` | `timeoutMs` 30 s per call, `jobTimeoutMs` 180 s per job (the first request after idle loads the model, about 45 s), `pollMs` 2 s |
 | `tts.macMini.*` | `http://127.0.0.1:8098` (the event service runs on the mini), speaker `vivian`, `Chinese` | `timeoutMs` 240 s (a cold model load and the synthesis itself are slow) |

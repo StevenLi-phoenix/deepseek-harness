@@ -2971,6 +2971,8 @@ export interface Config {
     ffmpegPath: string
     /** Longest text accepted, in characters. */
     maxChars: number
+    /** Reuse the audio of a text spoken before (until `keepDays` removes it) instead of synthesizing it again. */
+    cache: boolean
     /** Extra attempts of one HTTP call after the first. */
     retries: number
     /** First pause before a retry, in milliseconds; it doubles each time. */

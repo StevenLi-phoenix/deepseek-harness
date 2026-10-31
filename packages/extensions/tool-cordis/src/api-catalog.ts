@@ -9608,7 +9608,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SpeakResult',
-    declaration: 'export interface SpeakResult {\n    path: string;\n    format: \'mp3\' | \'wav\';\n    bytes: number;\n    provider: TtsProviderName;\n    fellBackFrom?: string;\n    elapsedMs: number;\n}',
+    declaration: 'export interface SpeakResult {\n    path: string;\n    format: \'mp3\' | \'wav\';\n    bytes: number;\n    provider: TtsProviderName;\n    cached?: boolean;\n    fellBackFrom?: string;\n    elapsedMs: number;\n}',
   },
   {
     name: 'SpeechCatalog',

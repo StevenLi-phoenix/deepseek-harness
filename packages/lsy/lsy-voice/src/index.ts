@@ -60,6 +60,8 @@ export interface Config {
     ffmpegPath: string
     /** Longest text accepted, in characters. */
     maxChars: number
+    /** Reuse the audio of a text spoken before (until `keepDays` removes it) instead of synthesizing it again. */
+    cache: boolean
     /** Extra attempts of one HTTP call after the first. */
     retries: number
     /** First pause before a retry, in milliseconds; it doubles each time. */
@@ -125,6 +127,7 @@ export const Config: z<Config> = z.object({
     format: z.union(['mp3', 'wav'] as const).default('mp3'),
     ffmpegPath: z.string().default('/opt/homebrew/bin/ffmpeg'),
     maxChars: z.natural().min(1).max(2000).default(200),
+    cache: z.boolean().default(true),
     retries: z.natural().default(2),
     retryDelayMs: z.natural().default(1000),
     feiyu: z.object({
@@ -163,6 +166,8 @@ export interface SpeakResult {
   bytes: number
   /** Provider that produced the audio. */
   provider: TtsProviderName
+  /** True when the file is the audio of an earlier call for the same text and no service was used. */
+  cached?: boolean
   /** The first provider's failure, when the fallback produced the audio. */
   fellBackFrom?: string
   elapsedMs: number
@@ -183,6 +188,11 @@ const DAY_MS = 86_400_000
 /** Human-readable error text. */
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+/** First eight hex digits of the text's SHA-256: the cache key in file names. */
+function textHash(text: string): string {
+  return createHash('sha256').update(text).digest('hex').slice(0, 8)
 }
 
 /** `YYYYMMDD-HHMMSS` of a date, in the process time zone. */
@@ -256,8 +266,15 @@ export class LsyVoice extends Service {
     const text = input.trim()
     if (text === '') throw new VoiceError('there is no text to say')
     if (Array.from(text).length > tts.maxChars) throw new VoiceError(`the text is ${Array.from(text).length} characters; speech takes at most ${tts.maxChars}, so say it in parts`)
-    const signal = outer === undefined ? this.abort.signal : AbortSignal.any([outer, this.abort.signal])
     const started = Date.now()
+    if (tts.cache) {
+      const hit = await this.cachedAudio(text, started)
+      if (hit !== undefined) {
+        this.ctx.logger.info(`lsy-voice: reused the audio of ${Array.from(text).length} chars from ${hit.provider} -> ${hit.path}`)
+        return hit
+      }
+    }
+    const signal = outer === undefined ? this.abort.signal : AbortSignal.any([outer, this.abort.signal])
     const order: TtsProviderName[] = [tts.provider, ...tts.fallback !== 'none' && tts.fallback !== tts.provider ? [tts.fallback] : []]
     let failed: string | undefined
     for (const name of order) {
@@ -278,13 +295,37 @@ export class LsyVoice extends Service {
     throw new VoiceError(`speech failed (${failed ?? 'no provider'})`)
   }
 
+  /** The newest delivered file of an earlier call for this text, in the configured format. */
+  private async cachedAudio(text: string, started: number): Promise<SpeakResult | undefined> {
+    const dir = join(this.dataDir, 'audio')
+    const format = this.config.tts.format
+    const pattern = new RegExp(`^\\d{8}-\\d{6}-${textHash(text)}-(feiyu|mac-mini)\\.${format}$`)
+    let names: string[]
+    try {
+      names = await readdir(dir)
+    } catch {
+      return undefined
+    }
+    for (const name of names.filter(item => pattern.test(item)).sort().reverse()) {
+      const path = join(dir, name)
+      const provider = (pattern.exec(name)?.[1] ?? 'mac-mini') as TtsProviderName
+      try {
+        const info = await stat(path)
+        if (info.size > 0) return { path, format, bytes: info.size, provider, cached: true, elapsedMs: Date.now() - started }
+      } catch {
+        continue
+      }
+    }
+    return undefined
+  }
+
   /** Write the raw answer, convert, and describe the deliverable. */
   private async keep(
     name: TtsProviderName, text: string, synthesis: { audio: Buffer; raw?: string }, started: number, failed: string | undefined,
   ): Promise<SpeakResult> {
     const dir = join(this.dataDir, 'audio')
     await mkdir(dir, { recursive: true, mode: 0o700 })
-    const base = join(dir, `${stamp(this.now())}-${createHash('sha256').update(text).digest('hex').slice(0, 8)}-${name}`)
+    const base = join(dir, `${stamp(this.now())}-${textHash(text)}-${name}`)
     if (synthesis.raw !== undefined) await writeFile(`${base}.job.json`, synthesis.raw, { mode: 0o600 })
     await writeFile(`${base}.wav`, synthesis.audio, { mode: 0o600 })
     let path = `${base}.wav`

@@ -42,6 +42,7 @@ feiyu 的 key 以 `LSY_FEIYU_API_KEY` 写入 `$DSH_HOME/.env`（改 `.env` 后�
 | `tts.provider` / `tts.fallback` | `mac-mini` / `feiyu` | 首选服务与失败后改用的服务（`none` 表示只试一个）。feiyu 音质更好、6-8 秒出声，但事件服务所在的 Mac mini 在 2026-10-30 连不上笔记本的 19880 端口（TCP 超时），所以本机服务排第一；能连上笔记本的环境把 `tts.provider` 设成 `feiyu` |
 | `tts.format` | `mp3` | `mp3` 用 ffmpeg 转换（`tts.ffmpegPath`，默认 `/opt/homebrew/bin/ffmpeg`），转换失败则交付 WAV |
 | `tts.maxChars` | `200` | 文字上限；更长的会被拒绝，让 agent 分段（Mac mini 服务约需 25 秒加每字 2.4 秒） |
+| `tts.cache` | `true` | 说过的文字直接复用已有文件（直到 `keepDays` 清理），不再调用服务；改了音色设置后，要等旧文件被清理或把它设为 `false` 才生效 |
 | `tts.retries` / `tts.retryDelayMs` | `2` / `1000` | 单次 HTTP 调用的额外重试次数；429、5xx、超时和网络错误会重试，其余 4xx 立即失败 |
 | `tts.feiyu.*` | 笔记本 `http://100.117.175.117:19880`，音色 `feiyu`，风格 `cute` | `timeoutMs` 单次调用 30 秒，`jobTimeoutMs` 单个任务 180 秒（闲置后的第一次请求要加载模型，约 45 秒），`pollMs` 2 秒 |
 | `tts.macMini.*` | `http://127.0.0.1:8098`（事件服务就跑在 mini 上），说话人 `vivian`，`Chinese` | `timeoutMs` 240 秒（模型冷启动和合成本身都慢） |

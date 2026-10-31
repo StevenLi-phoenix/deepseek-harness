@@ -51,7 +51,7 @@ async function mount(overrides: Record<string, unknown> = {}, keys: Record<strin
 describe('defaults', () => {
   it('speaks through the local Mac mini service first and falls back to feiyu, with transcription off', () => {
     const config = Config({} as never)
-    expect(config.tts).toMatchObject({ enabled: true, provider: 'mac-mini', fallback: 'feiyu', format: 'mp3', maxChars: 200 })
+    expect(config.tts).toMatchObject({ enabled: true, provider: 'mac-mini', fallback: 'feiyu', format: 'mp3', maxChars: 200, cache: true })
     expect(config.tts.macMini).toMatchObject({ baseUrl: 'http://127.0.0.1:8098', speaker: 'vivian', language: 'Chinese', timeoutMs: 240_000 })
     expect(config.tts.feiyu).toMatchObject({ baseUrl: 'http://100.117.175.117:19880', apiKeyEnv: 'LSY_FEIYU_API_KEY', voice: 'feiyu', style: 'cute', jobTimeoutMs: 180_000 })
     expect(config.asr).toMatchObject({ enabled: false, baseUrl: 'http://127.0.0.1:8099', engine: 'funasr' })
@@ -132,6 +132,30 @@ describe('speak', () => {
     expect(a.path).not.toBe(b.path)
     const order = host.seen.filter(item => item.path === '/feiyu/v1/speech' || item.path === '/feiyu/v1/jobs/job1/audio').map(item => item.path)
     expect(order).toEqual(['/feiyu/v1/speech', '/feiyu/v1/jobs/job1/audio', '/feiyu/v1/speech', '/feiyu/v1/jobs/job1/audio'])
+  })
+
+  it('reuses the audio of a text it already spoke instead of calling a service again', async () => {
+    const { voice, logs } = await mount()
+    const first = await voice.speak('今天一切正常。')
+    const again = await voice.speak('  今天一切正常。 ')
+    expect(again).toMatchObject({ path: first.path, provider: first.provider, cached: true })
+    expect(host.requests('/feiyu/v1/speech')).toHaveLength(1)
+    expect(logs.some(line => line.type === 'info' && line.text.startsWith('lsy-voice: reused the audio of 7 chars'))).toBe(true)
+    await voice.speak('另一句话。')
+    expect(host.requests('/feiyu/v1/speech')).toHaveLength(2)
+  })
+
+  it('synthesizes again when the cache is off or the cached file is gone', async () => {
+    const off = await mount({ tts: { cache: false } })
+    await off.voice.speak('同一句')
+    await off.voice.speak('同一句')
+    expect(host.requests('/feiyu/v1/speech')).toHaveLength(2)
+    host.seen.length = 0
+    const { voice } = await mount()
+    const first = await voice.speak('会被删掉')
+    rmSync(first.path)
+    expect((await voice.speak('会被删掉')).cached).toBeUndefined()
+    expect(host.requests('/feiyu/v1/speech')).toHaveLength(2)
   })
 
   it('removes files older than keepDays', async () => {
