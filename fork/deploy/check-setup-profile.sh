@@ -33,7 +33,8 @@ done
 /usr/bin/grep -q "^- id: preset-bili\$" "$WORK/fresh.yml" || fail "composition lacks preset-bili"
 /usr/bin/grep -q "@deepseek-ai/dsh-tool-bili" "$WORK/fresh.yml" || fail "bili preset lacks tool-bili"
 /usr/bin/grep -q "^- id: fork-qq\$" "$WORK/fresh.yml" || fail "composition lacks fork-qq"
-/usr/bin/grep -q "^- id: preset-qq\$" "$WORK/fresh.yml" || fail "composition lacks preset-qq"
+/usr/bin/grep -q "^- id: preset-qq-digest\$" "$WORK/fresh.yml" || fail "composition lacks preset-qq-digest"
+/usr/bin/grep -q "@deepseek-ai/dsh-fork-tool-qq" "$WORK/fresh.yml" || fail "unattended preset lacks fork-tool-qq"
 
 OLD="$WORK/old"; mkdir -p "$OLD/profiles/event"
 { echo '# fork event profile — composition layer (code-owned).'; echo '[]'; } > "$OLD/profiles/event/cordis.patch.yml"

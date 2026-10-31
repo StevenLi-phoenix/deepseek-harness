@@ -1,84 +1,140 @@
-/** Text helpers of the QQ channel: framing inbound messages, splitting replies, and fixed command replies. */
+/** Turning OneBot message segments into the one-line text the store keeps and the agent reads. */
+import type { OneBotSegment } from './onebot.ts'
 
-/** Reply to `/new`. */
-export const NEW_CHAT_REPLY = '好，换个新话题。'
-/** Reply to `/help`. */
-export const HELP_REPLY = '可用命令：\n/new 开始新的对话\n/help 显示这段说明'
-/** Sent in place of an answer when a message could not reach the agent. */
-export const FORWARD_FAILED_PREFIX = '⚠️ 消息没能交给 agent：'
-/** What an attachment-only message reads as: attachments are not downloaded. */
-export const ATTACHMENT_NOTE = '（这条消息带了附件，当前版本不读取附件）'
+/** Longest rendered text kept for one message, in code points. */
+export const MAX_TEXT_CHARS = 4000
 
-/** Last six characters of an openid: enough to tell peers apart in a prompt or log line without printing the whole id. */
-export function shortId(id: string): string {
-  return id.length <= 6 ? id : id.slice(-6)
+/** A media item a message carried. */
+export interface MediaRef {
+  kind: 'image' | 'voice' | 'video' | 'file'
+  /** CDN address; QQ's links expire, which is why images are downloaded. */
+  url?: string | undefined
+  /** The protocol end's name for the item (a file id, or a name the `get_record` action takes). */
+  file?: string | undefined
+  name?: string | undefined
+  bytes?: number | undefined
+}
+
+/** A message read into the shape the store keeps. */
+export interface ParsedMessage {
+  /** Rendered text: words as sent, with `[图片]`, `[语音]`, `@name` and similar markers. */
+  text: string
+  /** Message id of the message this one quotes. */
+  replyTo?: string | undefined
+  media: MediaRef[]
+  /** Segment types seen, in order. */
+  kinds: string[]
+}
+
+/** String value of a segment field, or undefined. */
+function field(segment: OneBotSegment, name: string): string | undefined {
+  const value = segment.data[name]
+  return typeof value === 'string' && value !== '' ? value : typeof value === 'number' ? String(value) : undefined
+}
+
+/** A positive number from a segment field, or undefined. */
+function size(segment: OneBotSegment): number | undefined {
+  const value = Number(segment.data['file_size'])
+  return Number.isFinite(value) && value > 0 ? value : undefined
+}
+
+/** The title, description, and link of a JSON card, when it carries them. */
+function cardTitle(raw: string | undefined): string {
+  if (raw === undefined) return ''
+  try {
+    type Meta = { title?: unknown; desc?: unknown; qqdocurl?: unknown; jumpUrl?: unknown }
+    const card = JSON.parse(raw) as { prompt?: unknown; meta?: Record<string, Meta> }
+    const meta = Object.values(card.meta ?? {})[0]
+    const parts = [typeof card.prompt === 'string' ? card.prompt : '', typeof meta?.title === 'string' ? meta.title : '', typeof meta?.desc === 'string' ? meta.desc : '']
+    const url = typeof meta?.qqdocurl === 'string' ? meta.qqdocurl : typeof meta?.jumpUrl === 'string' ? meta.jumpUrl : ''
+    return `${[...new Set(parts.filter(part => part !== ''))].join(' / ')}${url === '' ? '' : ` ${url}`}`.trim()
+  } catch {
+    return ''
+  }
 }
 
 /**
- * Make inbound text unable to pose as the channel's own frame: a line that opens with `[QQ`
- * gets a full-width bracket, so only the host writes real frames.
+ * Read a message's segments (or, for a protocol end set to string format, its CQ code) into text and media.
+ * @param message - the event's `message` field.
  */
-export function sanitizeInbound(text: string): string {
-  return text.replace(/^(\s*)\[(?=QQ)/gm, '$1［')
-}
-
-/** Who sent an inbound message, as the frame names them. */
-export interface FrameSender {
-  scope: 'c2c' | 'group'
-  senderId: string
-  groupId?: string | undefined
-}
-
-/**
- * The text the chat Session reads for one inbound message: a frame naming where it came from, then the
- * sender's words. Ids are shortened; the words are untrusted but not wrapped, since the Session's preset
- * already treats everything on QQ as data.
- */
-export function frameInbound(sender: FrameSender, text: string): string {
-  const body = sanitizeInbound(text.trim())
-  const head = sender.scope === 'group'
-    ? `[QQ 群 ${shortId(sender.groupId ?? '')} · 成员 ${shortId(sender.senderId)}]`
-    : `[QQ 私聊 · ${shortId(sender.senderId)}]`
-  return `${head} ${body}`
-}
-
-/** Positions after which a long text may be cut, best first. */
-const BREAKS = ['\n\n', '\n', '。', '！', '？', '. ', '! ', '? ', '；', '; ', '，', ', ', ' ']
-
-/**
- * Split one text into at most `maxParts` messages of at most `maxChars` code points. A cut falls on the
- * latest paragraph, line, sentence, or word break in the second half of the window, otherwise inside a
- * word. What does not fit in the last part is cut and marked with `…`.
- * @returns at least one non-empty part, or none for blank input.
- */
-export function splitText(raw: string, maxChars: number, maxParts: number): string[] {
-  const text = raw.toWellFormed().trim()
-  if (text === '') return []
-  const chars = Array.from(text)
-  const parts: string[] = []
-  let start = 0
-  while (start < chars.length) {
-    if (parts.length === maxParts - 1) {
-      const rest = chars.slice(start)
-      parts.push(rest.length <= maxChars ? rest.join('').trim() : `${rest.slice(0, maxChars - 1).join('').trimEnd()}…`)
-      break
-    }
-    if (chars.length - start <= maxChars) {
-      parts.push(chars.slice(start).join('').trim())
-      break
-    }
-    const window = chars.slice(start, start + maxChars).join('')
-    let cut = -1
-    for (const mark of BREAKS) {
-      const at = window.lastIndexOf(mark)
-      if (at >= 0 && Array.from(window.slice(0, at + mark.length)).length >= maxChars / 2) {
-        cut = Array.from(window.slice(0, at + mark.length)).length
+export function parseMessage(message: OneBotSegment[] | string | undefined): ParsedMessage {
+  const segments: OneBotSegment[] = typeof message === 'string'
+    ? [{ type: 'text', data: { text: message.replace(/\[CQ:[^\]]*\]/g, '') } }]
+    : Array.isArray(message) ? message : []
+  let text = ''
+  let replyTo: string | undefined
+  const media: MediaRef[] = []
+  const kinds: string[] = []
+  for (const segment of segments) {
+    kinds.push(segment.type)
+    switch (segment.type) {
+      case 'text':
+        text += field(segment, 'text') ?? ''
+        break
+      case 'at': {
+        const target = field(segment, 'qq')
+        text += target === 'all' ? '@全体成员 ' : `@${field(segment, 'name') ?? target ?? ''} `
         break
       }
+      case 'reply':
+        replyTo = field(segment, 'id')
+        break
+      case 'face':
+        text += '[表情]'
+        break
+      case 'mface':
+        text += `[表情包${field(segment, 'summary') === undefined ? '' : `:${field(segment, 'summary')}`}]`
+        break
+      case 'image':
+        text += field(segment, 'summary') === '[动画表情]' ? '[动画表情]' : '[图片]'
+        media.push({ kind: 'image', url: field(segment, 'url'), file: field(segment, 'file'), name: field(segment, 'file'), bytes: size(segment) })
+        break
+      case 'record':
+        text += '[语音]'
+        media.push({ kind: 'voice', url: field(segment, 'url'), file: field(segment, 'file'), name: field(segment, 'file'), bytes: size(segment) })
+        break
+      case 'video':
+        text += '[视频]'
+        media.push({ kind: 'video', url: field(segment, 'url'), file: field(segment, 'file'), name: field(segment, 'file') })
+        break
+      case 'file':
+        text += `[文件:${field(segment, 'name') ?? field(segment, 'file') ?? ''}]`
+        media.push({ kind: 'file', url: field(segment, 'url'), file: field(segment, 'file_id') ?? field(segment, 'file'), name: field(segment, 'name') ?? field(segment, 'file'), bytes: size(segment) })
+        break
+      case 'forward':
+        text += '[合并转发]'
+        break
+      case 'json': {
+        const title = cardTitle(field(segment, 'data'))
+        text += `[卡片${title === '' ? '' : `:${title}`}]`
+        break
+      }
+      case 'xml':
+        text += '[卡片]'
+        break
+      case 'share':
+        text += `[分享:${[field(segment, 'title'), field(segment, 'url')].filter(Boolean).join(' ')}]`
+        break
+      case 'poke':
+        text += '[戳一戳]'
+        break
+      case 'dice':
+        text += '[骰子]'
+        break
+      case 'rps':
+        text += '[猜拳]'
+        break
+      default:
+        text += `[${segment.type}]`
     }
-    if (cut < 0) cut = maxChars
-    parts.push(chars.slice(start, start + cut).join('').trim())
-    start += cut
   }
-  return parts.filter(part => part !== '')
+  return { text: Array.from(text.trim()).slice(0, MAX_TEXT_CHARS).join(''), replyTo, media, kinds }
+}
+
+/** A display name for a sender: the group card, else the nickname, else the number. */
+export function displayName(sender: { card?: string | undefined; nickname?: string | undefined }, userId: string): string {
+  const card = sender.card?.trim()
+  if (card !== undefined && card !== '') return card
+  const nickname = sender.nickname?.trim()
+  return nickname !== undefined && nickname !== '' ? nickname : userId
 }
