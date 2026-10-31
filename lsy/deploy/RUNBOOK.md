@@ -367,7 +367,7 @@ Any program hands a warning to DSH, the one brain, with `warn` (`lsy/tools/warn`
      | ssh HOST 'umask 077; mkdir -p ~/.config/warn; cat > ~/.config/warn/token'
    warn --source HOST.test --severity info "test: please ignore"
    ```
-   Check: `stdout.log` shows `lsy-event-ingest: warn warn.HOST.test.info (...): accepted`, then a `warn-…` Session whose answer is `NO_REPLY`. The tailnet is trusted; a wrong token returns 401.
+   Check: `stdout.log` shows `lsy-event-ingest: warn warn.HOST.test.info (...): accepted`, then a `warn-…` Session whose answer is `NO_REPLY`. The tailnet is trusted; a wrong token returns 401. Hosts tagged `tag:server` (racknerd, like the mini) reach `svc:dsh` only through a tailnet grant (`tag:server` to `svc:dsh`, `tcp:443`); without it `warn` times out and keeps the event in its spool.
 3. Sources:
    - mini-ops watches `system/app.lishuyu.ams` (observe only; `ops.toml` block `ams`, no log tail: `ams.err.log` is tens of MB of INFO).
    - Linux hosts (n8, phm, racknerd): copy `lsy/tools/warn/systemd/warn@.service` to `/etc/systemd/system/`, `warn-unit-failed` to `/usr/local/bin/` (755), a drop-in `warn@.service.d/host.conf` with `[Service]` / `Environment=WARN_HOST=<short name>` (the alert's source; the service runs as root, so the host's `warn` token must also be in `/root/.config/warn/token`), then give each key unit a drop-in `/etc/systemd/system/<unit>.d/10-warn.conf` with `[Unit]` / `OnFailure=warn@%n.service`, and `systemctl daemon-reload`. A failed unit sends `warn.<host>.systemd.error` with its `systemctl status`. A unit with `Restart=` only fails after its start limit is hit. Self-test: a oneshot unit with `ExecStart=/bin/false` and the same `OnFailure=` line, started once, then removed.
