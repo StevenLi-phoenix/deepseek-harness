@@ -1,11 +1,11 @@
 /**
- * Mounts BiliAccount and the owner relay over memory storage, a shared credential double, fake Sessions,
- * a recording notifier, and the fake Bilibili.
+ * Mounts BiliAccount and the owner relay over memory storage, a credential double that resolves the
+ * bili-svc token, fake Sessions, a recording notifier, and the fake bili-svc.
  */
 import { Context } from '@deepseek-ai/cordis'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
 import type { SessionCreateRequest, SessionPromptRequest } from '@deepseek-ai/dsh-api-session-controller'
-import type { CredentialKey, CredentialRecord } from '@deepseek-ai/dsh-credentials'
+import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
 import LsyEventBus, { Config as BusConfig, type LsyAgentMessage, type LsyNote } from '@deepseek-ai/dsh-lsy-event-bus'
 import OwnerRelay from '@deepseek-ai/dsh-owner-relay'
 import Storage from '@deepseek-ai/dsh-storage'
@@ -14,7 +14,7 @@ import { vi, type Mock } from 'vitest'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 import BiliAccount, { Config } from '../src/index.ts'
 import type { BiliView } from '../src/view.ts'
-import { FakeBili } from './fake-bili.ts'
+import { FakeBiliSvc, SVC_TOKEN } from './fake-bili-svc.ts'
 
 /** A log line the plugin wrote. */
 export interface LogLine {
@@ -35,18 +35,18 @@ export const contexts: Context[] = []
 /** Every log line of every mount, for the secret check. */
 export const allLogs: LogLine[] = []
 
-/** Credential store shared across re-mounts, like the file the real provider keeps. */
-export function credentialStore() {
-  const records = new Map<string, CredentialRecord>()
+/** Credential double: `values` holds the environment-style credentials it resolves (the bili-svc token by default). */
+export function credentialStore(values: Record<string, string> = { BILI_SVC_TOKEN_BILI: SVC_TOKEN }) {
+  const resolved: string[] = []
   const provider = {
-    readRecord: (key: CredentialKey) => Promise.resolve(records.get(key)),
-    modifyRecord: async (key: CredentialKey, mutate: (current: CredentialRecord | undefined) => Promise<CredentialRecord | undefined>) => {
-      const next = await mutate(records.get(key))
-      if (next !== undefined) records.set(key, next)
-      return next ?? records.get(key)
+    resolve: (ref: CredentialRef) => {
+      const name = String(ref)
+      resolved.push(name)
+      const value = values[name]
+      return Promise.resolve(value === undefined ? undefined : { value })
     },
   }
-  return { records, provider }
+  return { values, resolved, provider }
 }
 
 /** Session Controller double: Sessions are live and idle once created unless told otherwise. */
@@ -111,7 +111,7 @@ export interface HarnessOptions {
   config?: Record<string, unknown>
   pool?: MemoryMediaPool
   credentials?: ReturnType<typeof credentialStore>
-  bili?: FakeBili
+  svc?: FakeBiliSvc
   sessions?: ReturnType<typeof fakeSessions>
   notes?: LsyNote[]
   /** `false` mounts no recording notifier, so a test can mount the real WeChat channel. */
@@ -121,8 +121,6 @@ export interface HarnessOptions {
   /** Mount the real event bus too, with its defaults. */
   bus?: boolean
   workspace?: string
-  /** The profile default model route, read on every call. */
-  defaultModel?: { provider: string; model: string }
 }
 
 /**
@@ -130,8 +128,8 @@ export interface HarnessOptions {
  * @param options - shared state for re-mounts and configuration overrides.
  */
 export async function harness(options: HarnessOptions = {}) {
-  const bili = options.bili ?? new FakeBili()
-  vi.stubGlobal('fetch', bili.fetch)
+  const svc = options.svc ?? new FakeBiliSvc()
+  vi.stubGlobal('fetch', svc.fetch)
   const ctx = new Context()
   contexts.push(ctx)
   const logs: LogLine[] = []
@@ -163,15 +161,10 @@ export async function harness(options: HarnessOptions = {}) {
   // The relay carries the account's answers to its DM channel, as the event bundle mounts it.
   await ctx.plugin(OwnerRelay)
   if (options.bus === true) await ctx.plugin(LsyEventBus, BusConfig({} as never))
-  if (options.defaultModel !== undefined) {
-    const defaultModel = options.defaultModel
-    ctx.provide('agentDefaultModel', { currentSelection: () => ({ ...defaultModel }) } as never)
-  }
   const routes: Route[] = []
   ctx.provide('connection', { fetch: { register: (route: Route) => { routes.push(route); return () => Promise.resolve() } } } as never)
   const config = Config({
     ownerMid: 200000001,
-    refreshPublicKey: bili.keys.publicKey,
     inboxPollMs: 86_400_000,
     session: { workspacePath: options.workspace ?? '/tmp/bili-test-workspace' },
     ...options.config,
@@ -200,14 +193,8 @@ export async function harness(options: HarnessOptions = {}) {
   const post = (body: unknown, contentType = 'application/json'): Promise<Response> => run(route().fetch(new Request('http://127.0.0.1/api/bili', {
     method: 'POST', headers: { 'content-type': contentType }, body: typeof body === 'string' ? body : JSON.stringify(body),
   })))
-  /** Sign in through the Settings QR login. */
-  const signIn = async (): Promise<void> => {
-    await post({ action: 'login' })
-    for (let step = 0; step < 120 && (await view()).account.state !== 'active'; step += 1) await vi.advanceTimersByTimeAsync(1000)
-    if ((await view()).account.state !== 'active') throw new Error('sign-in did not complete')
-  }
   const emit = (sessionId: string, event: unknown): void => { (ctx.emit as (...args: unknown[]) => void)('session/event', { id: sessionId }, event) }
   return {
-    ctx, account, bili, notes, logs, routes, sessions: sessions.state, credentials, presets, titles, pool, run, view, post, signIn, emit,
+    ctx, account, svc, notes, logs, routes, sessions: sessions.state, credentials, presets, titles, pool, run, view, post, emit,
   }
 }

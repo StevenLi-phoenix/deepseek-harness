@@ -1,55 +1,23 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { BiliView } from '../src/view.ts'
 import { BiliLoader, createBiliStore, parseView, type BiliState } from '../src/client/bili.ts'
 import { BiliAccountSection, type BiliAccountProps } from '../src/client/BiliAccount.tsx'
-import { agoText, countdown, qrPath, usageLevel } from '../src/client/format.ts'
-import { zh } from '../src/client/locales.ts'
+import { agoText } from '../src/client/format.ts'
+import { en, zh } from '../src/client/locales.ts'
 
 const t = makeTranslate(zh) as BiliAccountProps['t']
 const NOW = Date.parse('2026-10-23T18:00:00Z')
 
 const VIEW: BiliView = {
-  account: { state: 'active', mid: 3_000_001, uname: '看客', level: 2, loggedInAt: NOW - 86_400_000, refreshedAt: NOW - 7_200_000 },
-  login: { state: 'idle' },
-  pause: null,
-  readsResumeAt: null,
-  usage: { day: '2026-10-23', actions: [
-    { action: 'like', used: 30, cap: 30 }, { action: 'comment', used: 1, cap: 3 }, { action: 'favorite', used: 16, cap: 20 },
-  ] },
-  interests: { text: '猫和天文', updatedAt: null },
-  clock: {
-    timeZone: 'America/New_York',
-    today: [{ window: '12:00–14:00', at: Date.parse('2026-10-23T17:00:00Z'), state: 'done' }, { window: '19:30–23:30', at: null, state: 'skipped' }],
-    nextWakeAt: null,
-    lastWake: { at: NOW - 3_600_000, reason: 'clock' },
-    route: { provider: 'opencode-go', model: 'deepseek-v4.1-flash', source: 'default', priced: false, offPeakAt: null },
-  },
-  recent: [
-    { at: NOW - 600_000, action: 'comment', target: 'BV1aa4y1X7aa', state: 'accepted', visibility: 'hidden' },
-    { at: NOW - 1_200_000, action: 'like', target: 'BV1bb4y1X7bb', state: 'uncertain', detail: 'the outcome is unknown' },
-  ],
+  account: { account: 'maomao', session: 'ok', mid: 3_000_001, uname: '魔女的猫猫', checkedAt: NOW - 60_000 },
+  gate: { mode: 'auto', readonly: false },
   ownerMid: 200000001,
   ownerUpdatedAt: null,
-  manualWake: null,
-  progress: { level: 2, exp: 1234, min: 200, next: 1500, coins: 5, rewards: { day: '2026-10-23', login: true, watch: true, share: false, coinExp: 0 }, checkedAt: NOW - 120_000 },
-  verification: [],
-  taste: [
-    { seq: 1, at: NOW - 3_600_000, text: '不想看大众热门里的社会纪实', from: 'owner' },
-    { seq: 2, at: NOW - 600_000, text: '她爱看 AI agent 圈正在发酵的事', from: 'cat' },
-  ],
-  finds: [{ bvid: 'BV1cc4y1X7cc', at: NOW - 900_000, title: '鱼灾一周复盘', reaction: { text: '这个好', at: NOW - 800_000 } }],
-  trends: [{ seq: 1, at: NOW - 1_800_000, term: '鱼灾', note: 'B站上 DeepSeek agent（大肥鱼）刷屏的那一周' }],
-  keywords: { text: 'DeepSeek Harness\nClaude Code', updatedAt: NOW - 86_400_000 },
-  today: { day: '2026-10-23', graded: { must: 1, ok: 1, skip: 1 }, picks: 1, perDay: 5 },
-  seen: [
-    { bvid: 'BV1cc4y1X7cc', at: NOW - 1_000_000, title: '鱼灾一周复盘', author: '复盘君', grade: 'must', reason: '说的就是我们这种 agent', read: true, sent: true },
-    { bvid: 'BV1dd4y1X7dd', at: NOW - 1_100_000, title: '安全养鱼指南', author: '养鱼人', grade: 'ok', reason: '有用但不新', read: true, sent: false },
-    { bvid: 'BV1ee4y1X7ee', at: NOW - 1_200_000, title: '震惊！', author: '标题党', grade: 'skip', reason: '标题党', read: false, sent: false },
-  ],
+  timeZone: 'America/New_York',
 }
 
 function mount(state: Partial<BiliState>) {
@@ -69,207 +37,62 @@ afterEach(() => {
 })
 
 describe('BiliAccountSection', () => {
-  it('shows the account, budget bars, body clock, interests, and recent writes', () => {
+  it('shows the account as bili-svc reports it, read-only, with no sign-in', () => {
     vi.useFakeTimers()
     vi.setSystemTime(NOW)
     mount({ view: VIEW, checkedAt: NOW })
     const hero = screen.getByRole('region', { name: '账号' })
-    expect(hero.textContent).toContain('看客')
-    expect(hero.textContent).toContain('Lv2')
+    expect(hero.textContent).toContain('魔女的猫猫')
     expect(hero.textContent).toContain('在线')
     expect(hero.textContent).toContain('UID 3000001')
-    expect(hero.textContent).toContain('Cookie 2 小时前刷新')
-    expect(screen.getByRole('button', { name: '重新登录' })).toBeTruthy()
-    const meters = screen.getAllByRole('meter')
-    expect(meters.map(meter => [meter.getAttribute('aria-label'), meter.getAttribute('aria-valuenow'), meter.firstElementChild!.getAttribute('data-level')]))
-      .toEqual([['点赞', '30', 'full'], ['评论', '1', 'normal'], ['收藏', '16', 'warn'], ['等级', '1234', 'normal']])
-    const clock = screen.getByRole('region', { name: '作息' })
-    expect(clock.textContent).toContain('13:00')
-    expect(clock.textContent).toContain('今天跳过')
-    expect(clock.textContent).toContain('今天没有更多醒来的安排')
-    expect(clock.textContent).toContain('上次醒来：1 小时前（作息）')
-    expect(clock.textContent).toContain('opencode-go：不分时段计价')
-    expect(within(screen.getByRole('region', { name: '主人的兴趣' })).getByRole<HTMLTextAreaElement>('textbox').value).toBe('猫和天文')
-    expect(within(screen.getByRole('region', { name: '主号' })).getByRole<HTMLInputElement>('textbox').value).toBe('200000001')
-    const recent = screen.getByRole('region', { name: '最近的写操作' })
-    expect(recent.textContent).toContain('可能被隐藏')
-    expect(recent.textContent).toContain('结果不明')
-    expect(recent.textContent).toContain('the outcome is unknown')
+    expect(hero.textContent).toContain('bili-svc 账号 maomao')
+    expect(hero.textContent).toContain('1 分钟前检查过')
+    expect(hero.textContent).toContain('登录由 bili-svc 保管和续期')
+    // Nothing to press on the account card: the login is bili-svc's.
+    expect(within(hero).queryAllByRole('button')).toEqual([])
+    expect(screen.queryByText(/扫码登录|二维码|立即唤醒|今日额度|它刷过的视频|它记住的口味|圈内热梗|关注关键词|主人的兴趣/)).toBeNull()
+    expect(screen.queryByRole('img')).toBeNull()
   })
 
-  it('renders the QR code with steps, polls faster while it waits, and starts a login', () => {
+  it('says when bili-svc holds the session as dead or cannot be reached', () => {
     vi.useFakeTimers()
     vi.setSystemTime(NOW)
-    const waiting: BiliView = { ...VIEW, account: { state: 'signed-out' }, login: { state: 'waiting', qr: { modules: ['111', '101', '111'], expiresAt: NOW + 150_000 } } }
-    const { refresh } = mount({ view: waiting, checkedAt: NOW })
-    const qr = screen.getByRole('img', { name: '登录二维码' })
-    expect(qr.getAttribute('viewBox')).toBe('0 0 3 3')
-    expect(qr.querySelector('path')!.getAttribute('d')).toBe(qrPath(['111', '101', '111']))
-    expect(screen.getByText('用 App 扫一扫这个二维码')).toBeTruthy()
-    expect(screen.getByText('等待扫码…')).toBeTruthy()
-    expect(screen.getByText('2:30 后过期')).toBeTruthy()
-    expect(refresh).toHaveBeenCalledTimes(1)
-    act(() => { vi.advanceTimersByTime(2000) })
-    expect(refresh).toHaveBeenCalledTimes(2)
-    expect(screen.getByText('2:28 后过期')).toBeTruthy()
+    const dead = mount({ view: { ...VIEW, account: { ...VIEW.account, session: 'dead' } }, checkedAt: NOW })
+    expect(screen.getByRole('region', { name: '账号' }).textContent).toContain('登录失效')
+    dead.view.unmount()
+    mount({ view: { ...VIEW, gate: null, account: { account: 'maomao', session: 'unreachable', error: 'bili-svc is unreachable (TypeError)', checkedAt: NOW } }, checkedAt: NOW })
+    const hero = screen.getByRole('region', { name: '账号' })
+    expect(hero.textContent).toContain('连不上 bili-svc')
+    expect(hero.textContent).toContain('原因：bili-svc is unreachable (TypeError)')
+    expect(hero.textContent).toContain('还不知道是哪个号')
+  })
+
+  it('shows a banner while bili-svc holds every action', () => {
+    mount({ view: { ...VIEW, gate: { mode: 'readonly', readonly: true } }, checkedAt: NOW })
+    expect(screen.getByText('bili-svc 暂停了所有操作（readonly）')).toBeTruthy()
     cleanup()
-    const signedOut = mount({ view: { ...VIEW, account: { state: 'signed-out' } }, checkedAt: NOW })
-    fireEvent.click(screen.getByRole('button', { name: '扫码登录' }))
-    expect(signedOut.actions).toEqual([{ action: 'login' }])
-  })
-
-  it('shows a pause with its reason and the owner\'s Resume', () => {
-    const paused: BiliView = { ...VIEW, pause: { scope: 'all', reason: 'HTTP 412', since: NOW }, readsResumeAt: NOW + 1_800_000 }
-    const { actions } = mount({ view: paused, checkedAt: NOW })
-    const banner = screen.getByRole('alert')
-    expect(banner.getAttribute('data-scope')).toBe('all')
-    expect(banner.textContent).toContain('所有写操作已暂停')
-    expect(banner.textContent).toContain('HTTP 412')
-    expect(banner.textContent).toContain('dsh 自己无法解除暂停')
-    fireEvent.click(screen.getByRole('button', { name: '恢复' }))
-    expect(actions).toEqual([{ action: 'resume' }])
-  })
-
-  it('shows a lasting hint, quoting Bilibili, while the account needs a verified phone number', () => {
-    expect(screen.queryByText(/验证手机号/)).toBeNull()
-    const since = Date.parse('2026-10-23T13:00:00Z')
-    mount({ view: { ...VIEW, verification: [{ kind: 'message', message: '为了维护社区的良好秩序，只有绑定手机号的账号才能发送消息', since }] }, checkedAt: NOW })
-    const hint = screen.getByText('这个号需要验证手机号才能发私信').closest('section')!
-    expect(hint.getAttribute('data-scope')).toBe('verify')
-    expect(hint.textContent).toContain('B站：「为了维护社区的良好秩序，只有绑定手机号的账号才能发送消息」')
-    expect(hint.textContent).toContain('发不出去的私信改发微信')
-    // No button: the owner fixes it in the Bilibili app, and the next message that goes through clears it.
-    expect(hint.querySelector('button')).toBeNull()
-    cleanup()
-    mount({ view: { ...VIEW, verification: [{ kind: 'message', message: 'a', since }, { kind: 'speech', message: '请先绑定手机', since }] }, checkedAt: NOW })
-    expect(screen.getByText('这个号需要验证手机号才能发私信和评论')).toBeTruthy()
-  })
-
-  it('shows the level, EXP to the next level, coins, and today\'s rewards', () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(NOW)
     mount({ view: VIEW, checkedAt: NOW })
-    const level = screen.getByRole('region', { name: '等级' })
-    expect(level.textContent).toContain('Lv2')
-    expect(level.textContent).toContain('硬币 5')
-    expect(level.textContent).toContain('1234 / 1500 经验')
-    expect(level.textContent).toContain('距 Lv3 还差 266')
-    expect(level.querySelector('[role="meter"]')!.getAttribute('aria-valuenow')).toBe('1234')
-    const done = [...level.querySelectorAll('[data-done]')].map(chip => chip.textContent)
-    expect(done).toEqual(['登录 +5', '观看 +5'])
-    cleanup()
-    mount({ view: { ...VIEW, progress: { ...VIEW.progress!, level: 6, exp: 30000, min: 28800, next: null } }, checkedAt: NOW })
-    expect(screen.getByRole('region', { name: '等级' }).textContent).toContain('30000 经验 · 已满级')
+    expect(screen.queryByText(/bili-svc 暂停了所有操作/)).toBeNull()
   })
 
-  it('says when wakes follow a priced route\'s off-peak hours, and how a wake was moved', () => {
-    const priced: BiliView = {
-      ...VIEW,
-      clock: {
-        ...VIEW.clock,
-        today: [{ window: '19:30–23:30', at: Date.parse('2026-10-23T04:00:00Z'), state: 'planned', adjusted: 'deferred' }],
-        route: { provider: 'deepseek-official', model: 'deepseek-flash', source: 'session', priced: true, offPeakAt: Date.parse('2026-10-23T04:00:00Z') },
-      },
-    }
-    mount({ view: priced, checkedAt: NOW })
-    const clock = screen.getByRole('region', { name: '作息' })
-    expect(clock.textContent).toContain('deepseek-official：按峰谷计价，只在谷时醒')
-    expect(clock.textContent).toContain('现在是高峰，谷时从 00:00 开始')
-    expect(clock.querySelector('[data-adjusted="deferred"]')!.textContent).toBe('推迟到谷时')
-    expect(clock.querySelector('[data-priced]')!.getAttribute('title')).toBe('deepseek-flash')
-  })
-
-  it('wakes the Session on request and shows what happened', () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(NOW)
-    const { actions } = mount({ view: VIEW, checkedAt: NOW })
-    fireEvent.click(screen.getByRole('button', { name: '立即唤醒' }))
-    expect(actions).toEqual([{ action: 'wake' }])
-    cleanup()
-    mount({ view: { ...VIEW, manualWake: { at: Date.parse('2026-10-23T07:00:00Z'), outcome: 'started', peak: { provider: 'deepseek-official', offPeakAt: Date.parse('2026-10-23T10:00:00Z') } }, clock: { ...VIEW.clock, lastWake: { at: NOW - 60_000, reason: 'manual' } } }, checkedAt: NOW })
-    const clock = screen.getByRole('region', { name: '作息' })
-    expect(clock.textContent).toContain('03:00 已唤醒')
-    expect(clock.textContent).toContain('这次在 deepseek-official 的高峰时段（谷时从 06:00 开始）')
-    expect(clock.textContent).toContain('上次醒来：1 分钟前（手动）')
-    cleanup()
-    mount({ view: { ...VIEW, manualWake: { at: NOW, outcome: 'refused', reason: 'busy' } }, checkedAt: NOW })
-    expect(screen.getByText('没有唤醒：它正在进行一轮对话')).toBeTruthy()
-    cleanup()
-    mount({ view: { ...VIEW, account: { state: 'signed-out' } }, checkedAt: NOW })
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '立即唤醒' }).disabled).toBe(true)
-  })
-
-  it('saves edited interests and asks for a renewed login', () => {
-    const { actions } = mount({ view: { ...VIEW, account: { ...VIEW.account, state: 'login-needed', reason: 'expired' } }, checkedAt: NOW })
-    expect(screen.getByText('需要重新登录')).toBeTruthy()
-    expect(screen.getByText('原因：expired')).toBeTruthy()
-    const interests = within(screen.getByRole('region', { name: '主人的兴趣' }))
-    const save = interests.getByRole('button', { name: '保存' }) as HTMLButtonElement
-    expect(save.disabled).toBe(true)
-    fireEvent.change(interests.getByRole('textbox'), { target: { value: '猫、天文、老电影' } })
-    expect(save.disabled).toBe(false)
-    fireEvent.click(save)
-    fireEvent.click(screen.getByRole('button', { name: '扫码续上登录' }))
-    expect(actions).toEqual([{ action: 'interests', text: '猫、天文、老电影' }, { action: 'login' }])
-  })
-
-  it('sets the main account from a UID, and says answers go to WeChat until then', () => {
+  it('sets the main account from a UID, and says nothing is answered until then', () => {
     const { actions } = mount({ view: { ...VIEW, ownerMid: 0 }, checkedAt: NOW })
-    const owner = within(screen.getByRole('region', { name: '主号' }))
-    expect(owner.getByText('还没设置：在这之前，回答都发到微信。')).toBeTruthy()
-    const input = owner.getByRole<HTMLInputElement>('textbox')
-    const save = owner.getByRole('button', { name: '保存' }) as HTMLButtonElement
-    expect(save.disabled).toBe(true)
-    fireEvent.change(input, { target: { value: 'space.bilibili.com/12' } })
-    expect(save.disabled).toBe(true)
+    const card = screen.getByRole('region', { name: '主号' })
+    expect(card.textContent).toContain('还没设置：在这之前，它不读也不回任何私信。')
+    const input = within(card).getByRole('textbox')
+    const save = within(card).getByRole('button', { name: '保存' })
+    fireEvent.change(input, { target: { value: '12ab' } })
     expect(input.getAttribute('aria-invalid')).toBe('true')
-    fireEvent.change(input, { target: { value: ' 12345678 ' } })
-    expect(save.disabled).toBe(false)
+    expect((save as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.change(input, { target: { value: '200000002' } })
     fireEvent.click(save)
-    expect(actions).toEqual([{ action: 'owner', mid: 12345678 }])
+    expect(actions).toEqual([{ action: 'owner', mid: 200000002 }])
   })
 
-  it('says when the status cannot be read', () => {
-    mount({ checkedAt: NOW, stale: true })
-    expect(screen.getByRole('status').textContent).toBe('暂时读不到账号状态，稍后自动重试。')
-  })
-})
-
-describe('scouting cards', () => {
-  it('shows what it watched with grades and a filter, the keywords, its taste notes and finds, and the trends; the owner edits them', () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(NOW)
-    const { actions } = mount({ view: VIEW, checkedAt: NOW })
-    const seen = screen.getByRole('region', { name: '它刷过的视频' })
-    expect(seen.textContent).toContain('今天：值得看 1 · 可以看 1 · 不值当 1')
-    expect(seen.textContent).toContain('已推给你 1 / 5')
-    expect(within(seen).getByRole('link', { name: '鱼灾一周复盘' }).getAttribute('href')).toBe('https://www.bilibili.com/video/BV1cc4y1X7cc')
-    expect(seen.textContent).toContain('没读字幕')
-    fireEvent.click(within(seen).getByRole('button', { name: '值得看' }))
-    expect(within(seen).queryByRole('link', { name: '安全养鱼指南' })).toBeNull()
-    expect(within(seen).getByRole('button', { name: '值得看' }).getAttribute('aria-pressed')).toBe('true')
-
-    const keywords = screen.getByRole('region', { name: '关注关键词' })
-    fireEvent.change(within(keywords).getByRole('textbox'), { target: { value: 'DeepSeek Harness\nClaude Code\n大肥鱼' } })
-    fireEvent.click(within(keywords).getByRole('button', { name: '保存' }))
-
-    const taste = screen.getByRole('region', { name: '它记住的口味' })
-    expect(taste.textContent).toContain('你写的')
-    expect(taste.textContent).toContain('它记的')
-    expect(taste.textContent).toContain('你回：这个好')
-    fireEvent.click(within(taste).getAllByRole('button', { name: '删掉' })[1]!)
-    fireEvent.change(within(taste).getByRole('textbox'), { target: { value: '少推入门教程' } })
-    fireEvent.click(within(taste).getByRole('button', { name: '记下' }))
-
-    const trends = screen.getByRole('region', { name: '圈内热梗' })
-    expect(trends.textContent).toContain('鱼灾')
-    fireEvent.click(within(trends).getByRole('button', { name: '删掉' }))
-    expect(actions).toEqual([
-      { action: 'keywords', text: 'DeepSeek Harness\nClaude Code\n大肥鱼' },
-      { action: 'taste-delete', seq: 2 },
-      { action: 'taste-add', text: '少推入门教程' },
-      { action: 'trend-delete', seq: 1 },
-    ])
+  it('polls while mounted and says when the status cannot be read', () => {
+    const { refresh } = mount({ view: null, stale: true, checkedAt: NOW })
+    expect(refresh).toHaveBeenCalled()
+    expect(screen.getByText('暂时读不到账号状态，稍后自动重试。')).toBeTruthy()
   })
 })
 
@@ -277,7 +100,7 @@ describe('BiliLoader', () => {
   it('shares one read, keeps the last view through failures, and posts actions', async () => {
     const store = createBiliStore()
     const read = vi.fn<() => Promise<BiliView>>(() => Promise.resolve(VIEW))
-    const post = vi.fn((_action: unknown) => Promise.resolve({ ...VIEW, interests: { text: 'x', updatedAt: 1 } }))
+    const post = vi.fn((_action: unknown) => Promise.resolve({ ...VIEW, ownerMid: 7, ownerUpdatedAt: 1 }))
     const loader = new BiliLoader(store, read, post, () => 42)
     await Promise.all([loader.refresh(), loader.refresh()])
     expect(read).toHaveBeenCalledTimes(1)
@@ -286,20 +109,22 @@ describe('BiliLoader', () => {
     read.mockRejectedValueOnce(new Error('offline'))
     await loader.refresh()
     expect(store.getSnapshot()).toMatchObject({ view: VIEW, stale: true })
-    await loader.act({ action: 'interests', text: 'x' })
-    expect(store.getSnapshot()).toMatchObject({ view: { interests: { text: 'x' } }, stale: false, busy: null, error: null })
-    post.mockRejectedValueOnce(new Error('text must be a string'))
-    await loader.act({ action: 'resume' })
-    expect(store.getSnapshot().error).toBe('text must be a string')
+    await loader.act({ action: 'owner', mid: 7 })
+    expect(store.getSnapshot()).toMatchObject({ view: { ownerMid: 7 }, stale: false, busy: null, error: null })
+    post.mockRejectedValueOnce(new Error('mid must be a positive integer UID'))
+    await loader.act({ action: 'owner', mid: 7 })
+    expect(store.getSnapshot().error).toBe('mid must be a positive integer UID')
     vi.restoreAllMocks()
   })
 
-  it('checks the answer shape and formats times', () => {
+  it('checks the answer shape, formats times, and keeps every dictionary on the same keys', () => {
     expect(() => parseView({})).toThrow('unexpected Bilibili account answer')
+    expect(() => parseView({ account: {}, login: {}, usage: {}, clock: {}, recent: [] })).toThrow('unexpected Bilibili account answer')
     expect(parseView(VIEW)).toBe(VIEW)
-    expect(countdown(NOW + 61_000, NOW)).toBe('1:01')
     expect(agoText(NOW - 30_000, NOW, t as never)).toBe('刚刚')
     expect(agoText(NOW - 3 * 86_400_000, NOW, t as never)).toBe('3 天前')
-    expect(usageLevel(0, 0)).toBe('full')
+    expect(Object.keys(en).sort()).toEqual(Object.keys(zh).sort())
+    const retired = /^(login|clock|seen|taste|trends|keywords|interests|usage|pause|verify|progress|recent|action)\./
+    for (const key of Object.keys(zh)) expect(key).not.toMatch(retired)
   })
 })

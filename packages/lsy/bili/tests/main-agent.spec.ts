@@ -44,7 +44,7 @@ describe('BiliAccount.tellMainAgent', () => {
     expect(h.logs.some(line => line.text === 'bili: told the main agent 60 chars in chat Session chat-1 (1/5 today)')).toBe(true)
     // Nothing goes to the owner from the account itself.
     expect(h.notes).toEqual([])
-    expect(h.bili.sentMessages).toEqual([])
+    expect(h.svc.replies).toEqual([])
   })
 
   it('refuses an empty or overlong message before it counts', async () => {

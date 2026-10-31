@@ -1,12 +1,13 @@
 /**
- * Typed Bilibili operations over the allowlisted client: each read returns
- * compact, bounded values (titles, names, and texts cut to fixed lengths), and
- * each write sends exactly one request and returns its receipt. Response
+ * Typed Bilibili operations over bili-svc's door: each read returns compact,
+ * bounded values (titles, names, and texts cut to fixed lengths), and each
+ * action asks for exactly one request, which bili-svc caps, spaces, and
+ * ledgers. There is no comment, dynamic, share, or message here. Response
  * shapes follow the community reference SocialSisterYi/bilibili-API-collect
  * and field observations in dsh-bili-pod, dsh-bili-humanism, and
  * dsh-bili-scroll (MIT).
  */
-import { BiliApiError, BiliTransportError, allowedEndpoint, type BiliClient } from './client.ts'
+import { BiliApiError, BiliSessionError, BiliTransportError, allowedEndpoint, type BiliCaller } from './client.ts'
 import { clean } from './text.ts'
 import { dayKey, formatStamp } from './time.ts'
 
@@ -86,8 +87,6 @@ export interface VideoCard {
   desc?: string
   /** Why Bilibili recommends it, when it says. */
   reason?: string
-  /** The account's own grade, when it graded this video before (`must`, `ok`, `skip`). */
-  graded?: string
 }
 
 /** A card from a feed, search, or popular item. */
@@ -123,15 +122,15 @@ export interface NavInfo {
 }
 
 /**
- * The signed-in account, as Bilibili sees the stored cookies.
+ * The signed-in account, as Bilibili sees bili-svc's session.
  * @param client - Bilibili client.
  */
-export async function navInfo(client: BiliClient): Promise<NavInfo> {
+export async function navInfo(client: BiliCaller): Promise<NavInfo> {
   let data: Json
   try {
     data = obj((await client.call('nav')).data)
   } catch (error: unknown) {
-    if (error instanceof BiliApiError && error.code === -101) return { isLogin: false }
+    if ((error instanceof BiliApiError && error.code === -101) || error instanceof BiliSessionError) return { isLogin: false }
     throw error
   }
   if (data['isLogin'] !== true) return { isLogin: false }
@@ -149,7 +148,7 @@ export async function navInfo(client: BiliClient): Promise<NavInfo> {
  * @param index - batch number, from 1; each call asks for a fresh batch.
  * @param timeZone - zone for publish days.
  */
-export async function homeFeed(client: BiliClient, index: number, timeZone: string): Promise<VideoCard[]> {
+export async function homeFeed(client: BiliCaller, index: number, timeZone: string): Promise<VideoCard[]> {
   const { data } = await client.call('homeFeed', {
     query: { fresh_type: 4, ps: 12, fresh_idx: index, fresh_idx_1h: index, brush: index, feed_version: 'V8', homepage_ver: 1, web_location: 1430650 },
   })
@@ -227,7 +226,7 @@ function feedPost(item: Json, timeZone: string): FeedPost | undefined {
  * @param timeZone - zone for times.
  */
 export async function followingFeed(
-  client: BiliClient, offset: string | undefined, timeZone: string,
+  client: BiliCaller, offset: string | undefined, timeZone: string,
 ): Promise<{ items: FeedPost[]; next?: string }> {
   const { data } = await client.call('followingFeed', {
     query: { type: 'all', platform: 'web', features: 'itemOpusStyle', timezone_offset: -480, ...(offset === undefined ? {} : { offset }) },
@@ -244,7 +243,7 @@ export async function followingFeed(
  * @param page - from 1.
  * @param timeZone - zone for publish days.
  */
-export async function popular(client: BiliClient, page: number, timeZone: string): Promise<VideoCard[]> {
+export async function popular(client: BiliCaller, page: number, timeZone: string): Promise<VideoCard[]> {
   const { data } = await client.call('popular', { query: { pn: page, ps: 20 } })
   return list(obj(data)['list'])
     .map(item => card(item, timeZone, compact({ reason: clean(obj(item['rcmd_reason'])['content'], LIMITS.reason) || undefined })))
@@ -257,7 +256,7 @@ export async function popular(client: BiliClient, page: number, timeZone: string
  * @param timeZone - zone for publish days.
  * @returns up to 30 bounded video cards, top first.
  */
-export async function ranking(client: BiliClient, timeZone: string): Promise<VideoCard[]> {
+export async function ranking(client: BiliCaller, timeZone: string): Promise<VideoCard[]> {
   const { data } = await client.call('ranking', { query: { rid: 0, type: 'all' } })
   return list(obj(data)['list'])
     .slice(0, 30)
@@ -281,7 +280,7 @@ const XML_ENTITIES: Readonly<Record<string, string>> = { amp: '&', lt: '<', gt: 
  * @param limit - lines at most.
  * @returns lines in time order.
  */
-export async function danmaku(client: BiliClient, cid: number, limit: number): Promise<DanmakuLine[]> {
+export async function danmaku(client: BiliCaller, cid: number, limit: number): Promise<DanmakuLine[]> {
   const { data } = await client.call('danmaku', { query: { oid: cid } })
   const xml = typeof data === 'string' ? data : ''
   const lines: DanmakuLine[] = []
@@ -306,7 +305,7 @@ export type SearchOrder = 'relevance' | 'newest'
  * @param timeZone - zone for publish days.
  * @param order - `relevance` (Bilibili's `totalrank`) or `newest` (`pubdate`).
  */
-export async function search(client: BiliClient, keyword: string, page: number, timeZone: string, order: SearchOrder = 'relevance'): Promise<VideoCard[]> {
+export async function search(client: BiliCaller, keyword: string, page: number, timeZone: string, order: SearchOrder = 'relevance'): Promise<VideoCard[]> {
   const sort = order === 'newest' ? { order: 'pubdate' } : {}
   const { data } = await client.call('search', { query: { search_type: 'video', keyword, page, ...sort } })
   return list(obj(data)['result'])
@@ -327,7 +326,7 @@ export interface HotSearch {
  * @param client - Bilibili client.
  * @param limit - entries, at most 50.
  */
-export async function hotSearches(client: BiliClient, limit: number): Promise<HotSearch[]> {
+export async function hotSearches(client: BiliCaller, limit: number): Promise<HotSearch[]> {
   const { data } = await client.call('hotSearch', { query: { limit, platform: 'web' } })
   return list(obj(obj(data)['trending'])['list']).flatMap((item) => {
     const keyword = clean(item['keyword'], LIMITS.title)
@@ -367,7 +366,7 @@ export interface VideoDetail extends VideoCard {
  * @param bvid - BV id.
  * @param timeZone - zone for the publish day.
  */
-export async function videoInfo(client: BiliClient, bvid: string, timeZone: string): Promise<VideoDetail> {
+export async function videoInfo(client: BiliCaller, bvid: string, timeZone: string): Promise<VideoDetail> {
   const { data } = await client.call('view', { query: { bvid } })
   const view = obj(data)
   const base = card(view, timeZone, compact({ desc: clean(view['desc'], LIMITS.desc, true) || undefined }))
@@ -412,7 +411,7 @@ export const COVERAGE = {
  * @param page - subtitle page, from 1.
  */
 export async function subtitles(
-  client: BiliClient, bvid: string, cid: number, page: number,
+  client: BiliCaller, bvid: string, cid: number, page: number,
 ): Promise<{ view: SubtitleView; reached?: number }> {
   const { data } = await client.call('player', { query: { bvid, cid } })
   const tracks = list(obj(obj(data)['subtitle'])['subtitles'])
@@ -502,7 +501,7 @@ export interface ThreadArea {
   root: string
 }
 
-/** Raw comment rows, for visibility checks that need `invisible` and `state`. */
+/** Raw comment rows of one page. */
 export interface CommentRows {
   rows: Json[]
   next?: string
@@ -512,12 +511,11 @@ export interface CommentRows {
  * One page of a comment area's top-level comments.
  * @param client - Bilibili client.
  * @param area - area type and `oid`.
- * @param options - `hot` or `new` order, the `next` offset of the previous page, and anonymity.
+ * @param options - `hot` or `new` order, and the `next` offset of the previous page.
  */
-export async function commentRows(client: BiliClient, area: { type: number; oid: string }, options: { order: 'hot' | 'new'; offset?: string; anonymous?: boolean }): Promise<CommentRows> {
+export async function commentRows(client: BiliCaller, area: { type: number; oid: string }, options: { order: 'hot' | 'new'; offset?: string }): Promise<CommentRows> {
   const { data } = await client.call('replies', {
     query: { oid: area.oid, type: area.type, mode: options.order === 'hot' ? 3 : 2, pagination_str: JSON.stringify({ offset: options.offset ?? '' }), plat: 1, web_location: 1315875 },
-    anonymous: options.anonymous === true,
   })
   const page = obj(data)
   const cursor = obj(page['cursor'])
@@ -532,7 +530,7 @@ export async function commentRows(client: BiliClient, area: { type: number; oid:
  * @param options - order and offset.
  * @param timeZone - zone for times.
  */
-export async function comments(client: BiliClient, aid: string, options: { order: 'hot' | 'new'; offset?: string }, timeZone: string): Promise<{ comments: CommentView[]; next?: string }> {
+export async function comments(client: BiliCaller, aid: string, options: { order: 'hot' | 'new'; offset?: string }, timeZone: string): Promise<{ comments: CommentView[]; next?: string }> {
   const page = await commentRows(client, { type: VIDEO_AREA, oid: aid }, options)
   const rows = page.rows.map(row => comment(row, timeZone)).filter((row): row is CommentView => row !== undefined)
   return compact({ comments: rows, next: page.next })
@@ -543,12 +541,11 @@ export async function comments(client: BiliClient, aid: string, options: { order
  * @param client - Bilibili client.
  * @param area - area type, `oid`, and root comment.
  * @param page - from 1.
- * @param anonymous - read as a signed-out visitor.
  */
 export async function threadRows(
-  client: BiliClient, area: ThreadArea, page: number, anonymous = false,
+  client: BiliCaller, area: ThreadArea, page: number,
 ): Promise<{ root?: Json; rows: Json[]; count?: number }> {
-  const { data } = await client.call('replyThread', { query: { oid: area.oid, type: area.type, root: area.root, ps: 20, pn: page }, anonymous })
+  const { data } = await client.call('replyThread', { query: { oid: area.oid, type: area.type, root: area.root, ps: 20, pn: page } })
   const thread = obj(data)
   return compact({ root: thread['root'] === undefined ? undefined : obj(thread['root']), rows: list(thread['replies']), count: num(obj(thread['page'])['count']) })
 }
@@ -561,7 +558,7 @@ export async function threadRows(
  * @param timeZone - zone for times.
  */
 export async function thread(
-  client: BiliClient, area: ThreadArea, page: number, timeZone: string,
+  client: BiliCaller, area: ThreadArea, page: number, timeZone: string,
 ): Promise<{ root?: CommentView; replies: CommentView[]; count?: number }> {
   const rows = await threadRows(client, area, page)
   return compact({
@@ -583,7 +580,7 @@ export interface UnreadCounts {
  * Unread replies, mentions, and messages.
  * @param client - Bilibili client.
  */
-export async function unreadCounts(client: BiliClient): Promise<UnreadCounts> {
+export async function unreadCounts(client: BiliCaller): Promise<UnreadCounts> {
   const feed = obj((await client.call('unread', { query: { build: 0, mobi_app: 'web' } })).data)
   const dm = obj((await client.call('dmUnread', { query: { unread_type: 0, build: 0, mobi_app: 'web' } })).data)
   return {
@@ -591,6 +588,15 @@ export async function unreadCounts(client: BiliClient): Promise<UnreadCounts> {
     mentions: num(feed['at']) ?? 0,
     messages: (num(dm['follow_unread']) ?? 0) + (num(dm['unfollow_unread']) ?? 0),
   }
+}
+
+/**
+ * Unread private messages, from followed and other accounts: the owner-message check reads only this.
+ * @param client - Bilibili client.
+ */
+export async function unreadMessages(client: BiliCaller): Promise<number> {
+  const dm = obj((await client.call('dmUnread', { query: { unread_type: 0, build: 0, mobi_app: 'web' } })).data)
+  return (num(dm['follow_unread']) ?? 0) + (num(dm['unfollow_unread']) ?? 0)
 }
 
 /** One reply to or mention of the account. */
@@ -616,7 +622,7 @@ export interface InboxItem {
  * @param client - Bilibili client.
  * @param kind - `reply` or `at`.
  */
-export async function inboxItems(client: BiliClient, kind: 'reply' | 'at'): Promise<InboxItem[]> {
+export async function inboxItems(client: BiliCaller, kind: 'reply' | 'at'): Promise<InboxItem[]> {
   const { data } = await client.call(kind === 'reply' ? 'replyFeed' : 'atFeed', { query: { platform: 'web', build: 0, mobi_app: 'web' } })
   const items: InboxItem[] = []
   for (const entry of list(obj(data)['items'])) {
@@ -672,7 +678,7 @@ function messageText(type: unknown, content: unknown): string {
  * @param client - Bilibili client.
  * @param ownerMid - the owner's main account.
  */
-export async function ownerMessages(client: BiliClient, ownerMid: number): Promise<OwnerMessage[]> {
+export async function ownerMessages(client: BiliCaller, ownerMid: number): Promise<OwnerMessage[]> {
   const { data } = await client.call('dmMessages', { query: { talker_id: ownerMid, session_type: 1, size: 20, build: 0, mobi_app: 'web' } })
   const messages: OwnerMessage[] = []
   for (const message of list(obj(data)['messages'])) {
@@ -690,13 +696,13 @@ export async function ownerMessages(client: BiliClient, ownerMid: number): Promi
  * @param client - Bilibili client.
  * @param mid - the account.
  */
-export async function relationStat(client: BiliClient, mid: number): Promise<{ following?: number; followers?: number }> {
+export async function relationStat(client: BiliCaller, mid: number): Promise<{ following?: number; followers?: number }> {
   const data = obj((await client.call('relationStat', { query: { vmid: mid } })).data)
   return compact({ following: num(data['following']), followers: num(data['follower']) })
 }
 
 /** `attribute` of the account's relation to another: 0 none, 2 following, 6 mutual, 128 blocked. */
-export async function relationTo(client: BiliClient, fid: number): Promise<number> {
+export async function relationTo(client: BiliCaller, fid: number): Promise<number> {
   return num(obj((await client.call('relation', { query: { fid } })).data)['attribute']) ?? 0
 }
 
@@ -716,7 +722,7 @@ export interface Folder {
  * @param mid - the account.
  * @param aid - a video whose membership to report.
  */
-export async function folders(client: BiliClient, mid: number, aid?: string): Promise<Folder[]> {
+export async function folders(client: BiliCaller, mid: number, aid?: string): Promise<Folder[]> {
   const { data } = await client.call('favFolders', { query: { up_mid: mid, ...(aid === undefined ? {} : { type: 2, rid: aid }) } })
   return list(obj(data)['list']).flatMap((folder) => {
     const folderId = num(folder['id'])
@@ -738,7 +744,7 @@ export async function folders(client: BiliClient, mid: number, aid?: string): Pr
  * @param client - Bilibili client.
  * @param bvid - BV id.
  */
-export async function hasLiked(client: BiliClient, bvid: string): Promise<boolean> {
+export async function hasLiked(client: BiliCaller, bvid: string): Promise<boolean> {
   return num((await client.call('hasLike', { query: { bvid } })).data) === 1
 }
 
@@ -746,7 +752,7 @@ export async function hasLiked(client: BiliClient, bvid: string): Promise<boolea
  * Aids on the watch-later list.
  * @param client - Bilibili client.
  */
-export async function watchLaterAids(client: BiliClient): Promise<Set<string>> {
+export async function watchLaterAids(client: BiliCaller): Promise<Set<string>> {
   const data = obj((await client.call('watchLater')).data)
   return new Set(list(data['list']).map(item => id(item['aid'])).filter((aid): aid is string => aid !== undefined))
 }
@@ -764,7 +770,7 @@ export interface DailyRewards {
  * Today's daily reward status.
  * @param client - Bilibili client.
  */
-export async function dailyRewards(client: BiliClient): Promise<DailyRewards> {
+export async function dailyRewards(client: BiliCaller): Promise<DailyRewards> {
   const data = obj((await client.call('expReward')).data)
   return { login: data['login'] === true, watch: data['watch'] === true, share: data['share'] === true, coinExp: num(data['coins']) ?? 0 }
 }
@@ -774,7 +780,7 @@ export async function dailyRewards(client: BiliClient): Promise<DailyRewards> {
  * @param client - Bilibili client.
  * @param bvid - BV id.
  */
-export async function coinsGiven(client: BiliClient, bvid: string): Promise<number> {
+export async function coinsGiven(client: BiliCaller, bvid: string): Promise<number> {
   return num(obj((await client.call('coinsGiven', { query: { bvid } })).data)['multiply']) ?? 0
 }
 
@@ -785,7 +791,7 @@ export async function coinsGiven(client: BiliClient, bvid: string): Promise<numb
  * @param seconds - how far it watched.
  */
 export async function reportWatch(
-  client: BiliClient, video: { aid: string; bvid: string; cid: number; mid: number; duration: number }, seconds: number,
+  client: BiliCaller, video: { aid: string; bvid: string; cid: number; mid: number; duration: number }, seconds: number,
 ): Promise<void> {
   const now = Math.floor(Date.now() / 1000)
   await client.call('watchReport', {
@@ -798,22 +804,13 @@ export async function reportWatch(
 }
 
 /**
- * Report that the account shared a video.
- * @param client - Bilibili client.
- * @param bvid - BV id.
- */
-export async function reportShare(client: BiliClient, bvid: string): Promise<void> {
-  await client.call('shareReport', { query: INTL_WRITE_QUERY, form: { bvid, ...pageFields() }, referer: intlVideoPage(bvid) })
-}
-
-/**
  * Give a video coins, without a like.
  * @param client - Bilibili client.
  * @param aid - video aid.
  * @param bvid - BV id.
  * @param count - 1, or 2 for an original video.
  */
-export async function giveCoin(client: BiliClient, aid: string, bvid: string, count: 1 | 2): Promise<void> {
+export async function giveCoin(client: BiliCaller, aid: string, bvid: string, count: 1 | 2): Promise<void> {
   await client.call('coin', { query: INTL_WRITE_QUERY, form: { aid, multiply: count, select_like: 0, ...pageFields() }, referer: intlVideoPage(bvid) })
 }
 
@@ -833,7 +830,7 @@ export interface TripleResult {
  * @param aid - video aid.
  * @param bvid - BV id.
  */
-export async function tripleLike(client: BiliClient, aid: string, bvid: string): Promise<TripleResult> {
+export async function tripleLike(client: BiliCaller, aid: string, bvid: string): Promise<TripleResult> {
   const data = obj((await client.call('triple', { query: INTL_WRITE_QUERY, form: { aid, ...pageFields() }, referer: intlVideoPage(bvid) })).data)
   return { like: data['like'] === true, coin: data['coin'] === true, favorite: data['fav'] === true, coins: num(data['multiply']) ?? 0 }
 }
@@ -876,13 +873,13 @@ function intlVideoPage(bvid: string): string {
 }
 
 /** Follow (`1`) or unfollow (`2`) an account. */
-export async function modifyRelation(client: BiliClient, fid: number, act: 1 | 2): Promise<void> {
+export async function modifyRelation(client: BiliCaller, fid: number, act: 1 | 2): Promise<void> {
   await client.call('relationModify', { form: { fid, act, re_src: 11 }, referer: `https://space.bilibili.com/${fid}/` })
 }
 
 /** Add a video to, or remove it from, favorite folders. */
 export async function dealFavorite(
-  client: BiliClient, aid: string, change: { add: number[]; remove: number[] }, bvid?: string,
+  client: BiliCaller, aid: string, change: { add: number[]; remove: number[] }, bvid?: string,
 ): Promise<void> {
   await client.call('favDeal', {
     form: { rid: aid, type: 2, add_media_ids: change.add.join(','), del_media_ids: change.remove.join(','), platform: 'web' },
@@ -891,75 +888,17 @@ export async function dealFavorite(
 }
 
 /** Like a video. */
-export async function likeVideo(client: BiliClient, aid: string, bvid: string): Promise<void> {
+export async function likeVideo(client: BiliCaller, aid: string, bvid: string): Promise<void> {
   // The request a real browser sends on bilibili.com/en/ (csrf is filled by the client).
   await client.call('like', { query: INTL_WRITE_QUERY, form: { aid, like: 1, ...pageFields() }, referer: intlVideoPage(bvid) })
 }
 
 /** Add a video to watch later. */
-export async function addWatchLater(client: BiliClient, aid: string): Promise<void> {
+export async function addWatchLater(client: BiliCaller, aid: string): Promise<void> {
   await client.call('watchLaterAdd', { form: { aid } })
 }
 
 /** Remove a video from watch later. */
-export async function removeWatchLater(client: BiliClient, aid: string): Promise<void> {
+export async function removeWatchLater(client: BiliCaller, aid: string): Promise<void> {
   await client.call('watchLaterDel', { form: { aid } })
-}
-
-/**
- * Post a comment, or a reply when `root` is given.
- * @returns the new comment's id.
- * @throws {BiliTransportError} when Bilibili accepted it without an exact id, which leaves the outcome uncertain.
- */
-export async function addReply(
-  client: BiliClient, area: { type: number; oid: string; root?: string; parent?: string }, message: string, bvid?: string,
-): Promise<string> {
-  const thread = area.root === undefined ? {} : { root: area.root, parent: area.parent ?? area.root }
-  const { data } = await client.call('replyAdd', {
-    form: { type: area.type, oid: area.oid, message, plat: 1, ...thread },
-    referer: videoPage(bvid),
-  })
-  const rpid = id(obj(data)['rpid_str']) ?? id(obj(data)['rpid'])
-  if (rpid === undefined) throw new BiliTransportError('replyAdd', 'accepted without an exact comment id')
-  return rpid
-}
-
-/**
- * Post a text-only dynamic.
- * @returns the dynamic id.
- */
-export async function createDynamic(client: BiliClient, text: string): Promise<string> {
-  const { data } = await client.call('dynamicCreate', {
-    json: { dyn_req: { content: { contents: [{ raw_text: text, type: 1, biz_id: '' }] }, scene: 1, meta: { app_meta: { from: 'create.dynamic.web', mobi_app: 'web' } } } },
-  })
-  const dynamicId = id(obj(data)['dyn_id_str']) ?? id(obj(data)['dyn_id'])
-  if (dynamicId === undefined) throw new BiliTransportError('dynamicCreate', 'accepted without a dynamic id')
-  return dynamicId
-}
-
-/**
- * Send one text message.
- * @returns the message key, when Bilibili answers one.
- */
-export async function sendMessage(
-  client: BiliClient, message: { sender: number; receiver: number; text: string; deviceId: string },
-): Promise<string | undefined> {
-  const { sender, receiver, deviceId } = message
-  const { data } = await client.call('dmSend', {
-    query: { w_sender_uid: sender, w_receiver_id: receiver, w_dev_id: deviceId },
-    form: {
-      'msg[sender_uid]': sender,
-      'msg[receiver_id]': receiver,
-      'msg[receiver_type]': 1,
-      'msg[msg_type]': 1,
-      'msg[msg_status]': 0,
-      'msg[content]': JSON.stringify({ content: message.text }),
-      'msg[dev_id]': deviceId,
-      'msg[timestamp]': Math.floor(Date.now() / 1000),
-      'msg[new_face_version]': 0,
-      build: 0,
-      mobi_app: 'web',
-    },
-  })
-  return id(obj(data)['msg_key'])
 }

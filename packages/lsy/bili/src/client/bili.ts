@@ -1,8 +1,7 @@
 /**
  * The Bilibili account store, its loader, and its poller: one request at a
- * time shared by every caller, the last view kept through failures, owner
- * actions posted to the same route, and a faster refresh while a QR code is
- * live.
+ * time shared by every caller, the last view kept through failures, and owner
+ * actions posted to the same route.
  */
 
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
@@ -12,8 +11,6 @@ export type { BiliAction, BiliView } from '../view.ts'
 
 /** How often the open section refreshes. */
 export const POLL_INTERVAL_MS = 5000
-/** How often it refreshes while a QR code waits for its scan. */
-export const LOGIN_POLL_MS = 2000
 
 /** What the section renders. */
 export interface BiliState {
@@ -42,7 +39,7 @@ export function createBiliStore(): SnapshotStore<BiliState> {
  */
 export function parseView(body: unknown): BiliView {
   const fields = typeof body === 'object' && body !== null ? body as Partial<Record<keyof BiliView, unknown>> : {}
-  if (typeof fields.account !== 'object' || typeof fields.login !== 'object' || typeof fields.usage !== 'object' || typeof fields.clock !== 'object' || !Array.isArray(fields.recent)) {
+  if (typeof fields.account !== 'object' || fields.account === null || typeof fields.ownerMid !== 'number' || typeof fields.timeZone !== 'string') {
     throw new Error('unexpected Bilibili account answer')
   }
   return body as BiliView
@@ -75,7 +72,7 @@ export class BiliLoader {
 
   /**
    * Post one owner action and publish the view it answers.
-   * @param action - login, resume, or an interests edit.
+   * @param action - the owner's main account.
    */
   async act(action: BiliAction): Promise<void> {
     this.store.update((draft) => {

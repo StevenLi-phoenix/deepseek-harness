@@ -3,7 +3,6 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { Config } from '../src/index.ts'
-import { pricingProblem } from '../src/pricing.ts'
 
 /** One loader patch row. */
 interface Row {
@@ -47,29 +46,24 @@ const ROOT_TOOL_ROWS_WITHOUT_TOOLS = new Set([
 ])
 
 describe('event bundle', () => {
-  it('mounts the account at the root with a valid configuration and without the owner\'s UID', () => {
+  it('mounts the account at the root as a client of bili-svc, with a valid configuration and without the owner\'s UID', () => {
     const row = inserted.find(entry => entry.id === 'bili')!
     expect(row.name).toBe('@deepseek-ai/dsh-bili')
     const config = Config(row.config as never)
-    expect(config).toMatchObject({ timeZone: 'America/New_York', session: { agentPreset: 'bili', workspacePath: '/Users/dsh-runtime/bili' } })
+    expect(config).toMatchObject({ account: 'maomao', timeZone: 'America/New_York', mainAgentPerDay: 5, session: { agentPreset: 'bili', workspacePath: '/Users/dsh-runtime/bili' } })
     // The owner's UID is set in Settings and stays out of this public repository.
     expect(row.config).not.toHaveProperty('ownerMid')
-    // Six scouting rounds a day, each watching at least six videos before anything goes out.
-    expect(config.wakes).toHaveLength(6)
-    expect(config.skipChance).toBe(0.1)
-    expect(config.depth).toEqual({ minWatched: 6, maxRounds: 3 })
-    expect(config.picksPerDay).toBe(5)
-    expect(config.mainAgentPerDay).toBe(5)
-    expect(config.caps).toMatchObject({ dmOwner: 6, watch: 60, share: 5 })
-    // Answers to the owner's own messages have no cap.
-    expect(config.caps).not.toHaveProperty('dmReply')
-    expect(row.config).not.toHaveProperty('caps.dmReply')
-    // Coins have no daily cap: the balance and Bilibili's per-video rule limit them.
-    expect(config.caps).not.toHaveProperty('coin')
-    // DeepSeek's off-peak schedule is data, in UTC, and passes the load-time check.
-    expect(config.pricing.map(rule => rule.providers)).toEqual([['deepseek-official', 'deepseek-account']])
-    expect(config.pricing[0]!.peak.map(span => `${span.days.join(',')} ${span.start}-${span.end}`)).toEqual(['mon,tue,wed,thu,fri 01:00-04:00', 'mon,tue,wed,thu,fri 06:00-10:00'])
-    expect(pricingProblem(config.pricing)).toBeUndefined()
+    // No scouting, no local write guard: bili-svc keeps the caps, the ledger, and the brake.
+    for (const field of ['wakes', 'skipChance', 'depth', 'picksPerDay', 'keywords', 'interests', 'caps', 'pricing', 'refreshPublicKey', 'writeGapMinMs', 'inboxWakesPerHour']) {
+      expect(row.config).not.toHaveProperty(field)
+      expect(config).not.toHaveProperty(field)
+    }
+  })
+
+  it('names the bili-svc token as a credential of the bundle, and no Bilibili session', () => {
+    const text = readFileSync(join(import.meta.dirname, '../../../../lsy/bundles/event/cordis.patch.yml'), 'utf8')
+    expect(text).toContain('BILI_SVC_TOKEN_BILI')
+    expect(text).not.toMatch(/signed in by QR|cookies and refresh token live/)
   })
 
   it('logs the account, its tools, and owner-relay at debug while they are new, everything else at info', () => {
@@ -161,11 +155,5 @@ describe('event bundle', () => {
     expect(bad[3]).toContain('魔女')
     // Writes on the owner's own videos are not singled out: they follow the same rules as any other.
     expect(persona).not.toContain('owner\'s own videos')
-    // It scouts, grades with evidence, learns, and keeps up with memes; the lazy cat is gone.
-    for (const tool of ['bili_verdict', 'bili_seen', 'bili_taste_write', 'bili_trend_write']) expect(persona).toContain(tool)
-    expect(persona).toContain('watch at least six videos through their')
-    expect(persona).toContain('A video is must only when you read it')
-    expect(persona).not.toContain('a bit lazy')
-    expect(persona).not.toContain('mostly just watches')
   })
 })

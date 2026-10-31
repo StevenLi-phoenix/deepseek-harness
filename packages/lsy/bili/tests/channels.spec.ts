@@ -5,24 +5,22 @@ import { join } from 'node:path'
 import WechatChannel, { Config as WechatConfig } from '@deepseek-ai/dsh-lsy-wechat'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FakeIlink, textMessage } from '../../lsy-wechat/tests/fake-ilink.ts'
-import { FakeBili } from './fake-bili.ts'
+import { FakeBiliSvc } from './fake-bili-svc.ts'
 import { allLogs, contexts, credentialStore, fakeSessions, harness } from './harness.ts'
 
 const OWNER = 200000001
 const WECHAT_OWNER = 'owner@im.wechat'
 /** How the WeChat chat Session reads a fallback copy of the account's answer. */
 const ORIGIN = 'the Bilibili account\'s Session (its answer could not go out as a Bilibili message)'
-const NOT_MUTUAL = 'the owner\'s account does not follow this account back; Bilibili delivers messages only between mutual followers, so ask the owner to follow it'
 let dir: string
-let fake: FakeBili
+let svc: FakeBiliSvc
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'bili-channels-'))
-  fake = new FakeBili()
+  svc = new FakeBiliSvc()
   vi.useFakeTimers()
   // Fri 2026-10-23 10:00 in New York (EDT).
   vi.setSystemTime(new Date('2026-10-23T14:00:00.000Z'))
-  vi.spyOn(Math, 'random').mockReturnValue(0.5)
 })
 
 afterEach(async () => {
@@ -42,6 +40,14 @@ function turnEnd(turn: number): unknown {
   return { type: 'turn/end', seq: 9, data: { turn, reason: { kind: 'completed' } } }
 }
 
+/** The owner's main account writes once; the next message check (within ten minutes) prompts the Session. */
+async function ownerWrites(text: string): Promise<void> {
+  const key = String(6_984_393_491_767_670_000n + BigInt(svc.ownerMessages.length + 1))
+  svc.ownerMessages.push({ sender: OWNER, text, key, at: Math.floor(Date.now() / 1000) })
+  svc.unread.follow = 1
+  await vi.advanceTimersByTimeAsync(600_000)
+}
+
 /** A Host-schedule reminder message, as the schedule service frames it. */
 const REMINDER = {
   type: 'user/message',
@@ -51,66 +57,63 @@ const REMINDER = {
 
 describe('the account\'s DM channel and the owner relay', () => {
   it('claims the account\'s Session with the relay, again after a restart', async () => {
-    fake.relations.set(OWNER, 6)
     const credentials = credentialStore()
     const sessions = fakeSessions()
-    const first = await harness({ bili: fake, credentials, sessions, workspace: dir })
-    await first.signIn()
+    const first = await harness({ svc, credentials, sessions, workspace: dir, config: { inboxPollMs: 600_000 } })
+    await vi.advanceTimersByTimeAsync(600_000)
     expect(first.ctx.ownerRelay.ownerOf('bili-1')).toBeUndefined()
-    await first.post({ action: 'wake' })
+    await ownerWrites('在吗')
     expect(first.ctx.ownerRelay.ownerOf('bili-1')).toBe('bili-dm')
     await first.ctx.fiber.dispose()
 
-    const again = await harness({ bili: fake, credentials, sessions, pool: first.pool, workspace: dir })
+    const again = await harness({ svc, credentials, sessions, pool: first.pool, workspace: dir })
     expect(again.ctx.ownerRelay.ownerOf('bili-1')).toBe('bili-dm')
     expect(again.logs.some(line => line.text === 'bili: the relay carries 1 Session(s) through channel bili-dm')).toBe(true)
   })
 
-  it('forgets a wake\'s origin when its turn sends nothing, so a later Web UI turn stays in the Session', async () => {
-    fake.relations.set(OWNER, 6)
-    const h = await harness({ bili: fake, workspace: dir })
-    await h.signIn()
-    await h.post({ action: 'wake' })
+  it('forgets the reply mark when its turn sends nothing, so a later Web UI turn stays in the Session', async () => {
+    const h = await harness({ svc, workspace: dir, config: { inboxPollMs: 600_000 } })
+    await vi.advanceTimersByTimeAsync(600_000)
+    await ownerWrites('嗯')
     h.emit('bili-1', assistant('NO_REPLY'))
     h.emit('bili-1', turnEnd(1))
     h.emit('bili-1', assistant('a Web UI answer'))
     h.emit('bili-1', turnEnd(2))
-    await vi.advanceTimersByTimeAsync(300_000)
-    expect(fake.sentMessages).toEqual([])
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(svc.replies).toEqual([])
     expect(h.notes).toEqual([])
-    expect(h.logs.some(line => line.text === 'bili: Session bili-1 ended a turn no wake started (completed); its answer stays in the Session')).toBe(true)
+    expect(h.logs.some(line => line.text === 'bili: Session bili-1 ended a turn the owner\'s messages did not start (completed); its answer stays in the Session')).toBe(true)
   })
 
   it('keeps the event bus from reporting a reminder turn of the account\'s Session', async () => {
-    fake.relations.set(OWNER, 6)
-    const h = await harness({ bili: fake, workspace: dir, bus: true })
-    await h.signIn()
-    await h.post({ action: 'wake' })
+    const h = await harness({ svc, workspace: dir, bus: true, config: { inboxPollMs: 600_000 } })
+    await vi.advanceTimersByTimeAsync(600_000)
+    await ownerWrites('今天看什么了')
     h.emit('bili-1', assistant('今天看到一只会开门的猫'))
     h.emit('bili-1', turnEnd(1))
-    await vi.advanceTimersByTimeAsync(300_000)
-    expect(fake.sentMessages.map(message => message.text)).toEqual(['今天看到一只会开门的猫'])
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(svc.replies.map(reply => reply.message)).toEqual(['今天看到一只会开门的猫'])
 
     // A reminder turn in the same Session: the DM channel claimed it, so the bus stays out and nothing reaches WeChat.
     h.emit('bili-1', REMINDER)
     h.emit('bili-1', assistant('the reminder\'s answer'))
     h.emit('bili-1', turnEnd(2))
-    await vi.advanceTimersByTimeAsync(300_000)
+    await vi.advanceTimersByTimeAsync(1000)
     expect(h.notes).toEqual([])
-    expect(fake.sentMessages).toHaveLength(1)
+    expect(svc.replies).toHaveLength(1)
     expect(h.logs.some(line => line.text === 'lsy-event-bus: Session bili-1 is relayed by bili-dm; its ⏰ turn is not reported')).toBe(true)
-    expect(h.logs.some(line => line.text === 'bili: Session bili-1 ended a turn no wake started (completed); its answer stays in the Session')).toBe(true)
+    expect(h.logs.some(line => line.text === 'bili: Session bili-1 ended a turn the owner\'s messages did not start (completed); its answer stays in the Session')).toBe(true)
   })
 
   it('shares an answer that fell back to WeChat with the WeChat chat Session, framed as the account\'s', async () => {
-    fake.relations.set(OWNER, 2)
+    svc.replyStatus = ['held']
     const sessions = fakeSessions()
-    const h = await harness({ bili: fake, sessions, workspace: dir, notifier: false })
+    const h = await harness({ svc, sessions, workspace: dir, notifier: false, config: { inboxPollMs: 600_000 } })
     // The real WeChat channel is the notifier; its iLink double and the Bilibili double share fetch.
     const ilink = new FakeIlink()
     vi.stubGlobal('fetch', (input: string | URL | Request, init?: RequestInit) => {
       const url = input instanceof Request ? input.url : String(input)
-      return url.startsWith('https://ilink.test') ? ilink.fetch(input, init) : fake.fetch(input, init)
+      return url.startsWith('https://ilink.test') ? ilink.fetch(input, init) : svc.fetch(input, init)
     })
     const accountFile = join(dir, 'account.json')
     writeFileSync(accountFile, JSON.stringify({ botToken: 'bot-token', botId: 'bot@im.bot', baseUrl: 'https://ilink.test', ownerUserId: WECHAT_OWNER, boundAt: '2026-10-21T00:00:00.000Z' }))
@@ -120,13 +123,13 @@ describe('the account\'s DM channel and the owner relay', () => {
     await vi.advanceTimersByTimeAsync(0)
     expect(sessions.state.prompts.map(prompt => prompt.sessionId)).toEqual(['chat-1'])
 
-    await h.signIn()
-    await h.post({ action: 'wake' })
-    h.emit('bili-1', assistant('分享一个视频'))
+    await vi.advanceTimersByTimeAsync(600_000)
+    await ownerWrites('在吗')
+    h.emit('bili-1', assistant('在的，刚看完一个视频'))
     h.emit('bili-1', turnEnd(1))
-    await vi.advanceTimersByTimeAsync(300_000)
-    expect(fake.sentMessages).toEqual([])
-    const note = `📺 B站：这条没能用 B站私信发出，改发微信\n\n分享一个视频\n\n原因：${NOT_MUTUAL}`
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(svc.replies).toHaveLength(1)
+    const note = '📺 B站：这条没能用 B站私信发出，改发微信\n\n在的，刚看完一个视频\n\n原因：bili-svc\'s Reply Gate answered held (r-1)'
     expect(ilink.sent.map(sent => sent.text)).toContain(note)
     const shared = sessions.state.injected.filter(([sessionId]) => sessionId === 'chat-1').map(([, text]) => text)
     expect(shared).toHaveLength(1)
@@ -137,11 +140,11 @@ describe('the account\'s DM channel and the owner relay', () => {
 
   it('passes a message to the WeChat main agent, whose answer goes to the owner on WeChat', async () => {
     const sessions = fakeSessions()
-    const h = await harness({ bili: fake, sessions, workspace: dir, notifier: false })
+    const h = await harness({ svc, sessions, workspace: dir, notifier: false })
     const ilink = new FakeIlink()
     vi.stubGlobal('fetch', (input: string | URL | Request, init?: RequestInit) => {
       const url = input instanceof Request ? input.url : String(input)
-      return url.startsWith('https://ilink.test') ? ilink.fetch(input, init) : fake.fetch(input, init)
+      return url.startsWith('https://ilink.test') ? ilink.fetch(input, init) : svc.fetch(input, init)
     })
     const accountFile = join(dir, 'account.json')
     writeFileSync(accountFile, JSON.stringify({ botToken: 'bot-token', botId: 'bot@im.bot', baseUrl: 'https://ilink.test', ownerUserId: WECHAT_OWNER, boundAt: '2026-10-21T00:00:00.000Z' }))
@@ -161,6 +164,6 @@ describe('the account\'s DM channel and the owner relay', () => {
     h.emit('chat-1', turnEnd(2))
     await vi.advanceTimersByTimeAsync(0)
     expect(ilink.sent.map(sent => sent.text)).toEqual(['猫猫说人格卡能装，我看了一下，装的话要重启 dsh。要装吗？'])
-    expect(fake.sentMessages).toEqual([])
+    expect(svc.replies).toEqual([])
   })
 })

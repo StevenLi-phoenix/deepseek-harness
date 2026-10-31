@@ -11,8 +11,9 @@
 #   LLMGW_DSH_API_KEY), LSY_GITHUB_TOKEN, LSY_GITHUB_NOTIFICATIONS_TOKEN (optional).
 # The WeChat bot account is bound once with lsy/deploy/wechat-login.mjs and kept in
 # $DSH_HOME/lsy-wechat/account.json.
-# The agent's own Bilibili account is signed in by QR from Settings → Bilibili account; its
-# cookies and refresh token live in one credential record (owner `bili`).
+# The agent's own Bilibili account (ctx.bili) is a client of bili-svc (127.0.0.1:8097), which holds
+# and refreshes every Bilibili session; ctx.bili calls it with BILI_SVC_TOKEN_BILI from the credential
+# store (lsy-tool-up uses BILI_SVC_TOKEN_UP). Neither token is the session itself.
 
 # Remote-first: this instance is reached through a browser on another machine,
 # so never launch applications on the host display.
@@ -266,73 +267,25 @@
           # not the owner's (`turn`); `notify` only tells the owner on WeChat and starts nothing.
           agentMessage: turn
 
-    # The agent's own Bilibili account (ctx.bili). It mostly watches: a body clock wakes its own
-    # Session (preset `bili`, below) at one random time in each window, new replies, mentions, and
-    # messages from the owner's main account wake it too, and each woken turn's final answer goes
-    # back to the owner as a Bilibili message through owner-relay's `bili-dm` channel (WeChat
-    # carries only notices and answers a message could not carry). Every write passes the host's
-    # guard (daily caps, one comment per video, a random 60-180 s gap, a ledger); coins have no
-    # daily cap, only the balance. Risk control pauses writes until the owner resumes them in
-    # Settings.
+    # The agent's own Bilibili account (ctx.bili), as a client of bili-svc. bili-svc holds and refreshes
+    # its session and is the only place that writes to Bilibili: reads and the non-speech actions (like,
+    # coin, triple, follow, favorite, watch later, the watch heartbeat) go through its door, under its
+    # ledger, daily caps, and brake. When the owner's main account messages the account, the account's
+    # own Session (preset `bili`, below) answers, and the answer goes back through bili-svc's Reply Gate
+    # by owner-relay's `bili-dm` channel (WeChat carries whatever the Gate holds or blocks). It never
+    # comments, replies to strangers, posts, or messages the owner on its own; replies to viewers are the
+    # `up` preset's, behind the same Gate.
     - id: bili
       name: '@deepseek-ai/dsh-bili'
       config:
         timeZone: America/New_York
-        # Six scouting rounds a day (2026-10-24: two were far too few). Each one watches at least six
-        # videos before its answer may go out, and links only videos it graded must after reading them.
-        wakes:
-          - start: '08:30'
-            end: '10:00'
-          - start: '11:00'
-            end: '12:30'
-          - start: '13:30'
-            end: '15:00'
-          - start: '16:00'
-            end: '17:30'
-          - start: '19:00'
-            end: '20:30'
-          - start: '21:30'
-            end: '23:30'
-        skipChance: 0.1
-        depth:
-          minWatched: 6
-          maxRounds: 3
-        picksPerDay: 5
+        # bili-svc's id of the agent's account.
+        account: maomao
         # bili_tell_main_agent: messages the account's Session may hand the WeChat main agent per day.
         mainAgentPerDay: 5
         session:
           workspacePath: /Users/dsh-runtime/bili
           agentPreset: bili
-        # Answers to the owner's own messages have no cap. These bound only what the account does on
-        # its own, against a runaway or steered Session.
-        caps:
-          follow: 10
-          unfollow: 10
-          favorite: 20
-          like: 30
-          watchlater: 30
-          comment: 3
-          reply: 5
-          dynamic: 1
-          dmOwner: 6
-          watch: 60
-          share: 5
-        # Time-of-day model pricing, in UTC; wakes on a listed provider fall only off-peak. DeepSeek's
-        # official API (api-docs.deepseek.com/zh-cn/quick_start/pricing, in force since 2026-08-17)
-        # charges half outside its peak: Monday-Friday 09:00-12:00 and 14:00-18:00 Beijing time, which
-        # is 01:00-04:00 and 06:00-10:00 UTC on the same weekday. Chinese public holidays have no
-        # peak: add each as a UTC date once the State Council publishes the year's arrangement
-        # (2027-01-01 is fixed). OpenCode Go (through llmgateway) prices the same at any time.
-        pricing:
-          - providers: [deepseek-official, deepseek-account]
-            peak:
-              - days: [mon, tue, wed, thu, fri]
-                start: '01:00'
-                end: '04:00'
-              - days: [mon, tue, wed, thu, fri]
-                start: '06:00'
-                end: '10:00'
-            noPeakDates: ['2027-01-01']
 
     # The QQ observer (ctx.lsyQq): a personal QQ account, reached through NapCat on this Mac
     # (lsy/deploy/napcat/napcat.sh, a container on colima bound to 127.0.0.1:3001), lurks in the groups
@@ -373,8 +326,9 @@
           - /Users/dsh-runtime/work
           - /Users/dsh-runtime/bili
 
-    # Bilibili preset: the account's Session reads public content and can speak publicly, so it
-    # gets only its persona, the time, the Bilibili tools, and compaction (the Session is
+    # Bilibili preset: the account's Session reads public content and answers the owner's own Bilibili
+    # messages, so it gets only its persona, the time, the Bilibili tools (reads and non-speech actions
+    # through bili-svc; no comment, reply, dynamic, or message tool), and compaction (the Session is
     # long-lived; its journal carries what it wants to keep across compactions). No shell, files,
     # schedules, monitors, subagents, web, or owner memory. Its one way off Bilibili is
     # bili_tell_main_agent: a few messages a day to the WeChat main agent, which reads them as
