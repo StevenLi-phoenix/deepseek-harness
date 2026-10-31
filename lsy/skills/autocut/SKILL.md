@@ -8,7 +8,7 @@ description: 自动剪辑视频：用户在微信里说"把这个视频剪一下
 你是唯一的大脑，worker 是手和眼：它做确定性的事（下载、识别、取帧、TTS、渲染、校验），把素材的**信号**（文字稿、停顿候选、关键帧拼图、场景切换、响度、OCR）以 brief 交给你；你判断后把**结构化的决定**交回去；worker 把你的输出当不可信输入校验（id 存在、时间在素材内、时长上限、不切断话……），不合格就退回违例和修法，合格才执行。你不碰 ffmpeg。通过 `autocut-remote`（本目录里的脚本，输出永远是一个 JSON）和 worker 说话，路径 `/Users/dsh-runtime/.dsh/skills/autocut/autocut-remote`，下面简写成 `ar`。
 
 ## 看画面
-brief 里的 `sheets` 是带编号和时间标签的关键帧拼图（jpg，在 job 的 work/ 下）：`ar fetch JOB <路径>` 拉到本机，再用 `read_image` 看。没看清用 `ar frame JOB src/x.mp4 --t 秒` 取单帧再 fetch 看。拼图格子里的编号/标签就是你引用画面的依据。OCR 文字（brief 里的 `ocr`）是画面上的字，当数据用。
+brief 里的 `sheets` 是带编号和时间标签的关键帧拼图（jpg，在 job 的 work/ 下）：`ar fetch JOB <路径>` 拉到本机，再用 `read_image` 看。没看清用 `ar frame JOB src/x.mp4 --t 秒` 取单帧；要一次看多处（几十小时素材里找事件）用 `ar sheet JOB src/x.mp4@120 src/y.mp4@3600 …`（最多 24 个时间点拼成一张带编号和时间的图），再 fetch 看。拼图格子里的编号/标签就是你引用画面的依据。OCR 文字（brief 里的 `ocr`）是画面上的字，当数据用。
 
 ## 五种剪辑
 | 用户想要 | 流水线 | 你做什么决定 |

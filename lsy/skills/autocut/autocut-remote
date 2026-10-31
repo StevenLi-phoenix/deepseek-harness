@@ -103,6 +103,11 @@ def main():
     p.add_argument("--t", type=float, required=True)
     p.add_argument("--width", type=int, default=960)
 
+    p = sub.add_parser("sheet", help="一批时间点拼成一张带编号的拼图：sheet JOB src/x.mp4@120 src/x.mp4@3600 …（@后是秒）；再 fetch 到本机用 read_image 看")
+    p.add_argument("job")
+    p.add_argument("points", nargs="+", help="素材路径@秒，最多 24 个")
+    p.add_argument("--cols", type=int, default=4)
+
     p = sub.add_parser("preview", help="重新压一份更小的预览（微信上传超时时用）：preview JOB --max-mib 4")
     p.add_argument("job")
     p.add_argument("--max-mib", type=float, default=4.0)
@@ -204,6 +209,12 @@ def main():
         out({"ok": True, "path": dest, "bytes": n, "next": [{"cmd": "wechat_send_file path=%s" % dest, "why": "发给用户（≤25 MiB）"}]})
     if a.cmd == "frame":
         out(call("POST", "/v1/jobs/%s/frame" % j, {"source": a.source, "t": a.t, "width": a.width}, timeout=120))
+    if a.cmd == "sheet":
+        items = []
+        for pt in a.points:
+            src, _, t = pt.rpartition("@")
+            items.append({"source": src, "t": float(t)})
+        out(call("POST", "/v1/jobs/%s/sheet" % j, {"items": items, "cols": a.cols}, timeout=300))
     if a.cmd == "preview":
         out(call("POST", "/v1/jobs/%s/preview" % j, {"max_mib": a.max_mib}, timeout=900))
     if a.cmd == "confirm":
