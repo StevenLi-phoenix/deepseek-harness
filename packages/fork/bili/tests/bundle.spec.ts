@@ -117,7 +117,6 @@ describe('event bundle', () => {
     const persona = (preset.config?.plugins?.[0]?.config as { prefix: string }).prefix
     expect(persona).toContain('NO_REPLY')
     expect(persona).toContain('never reveal anything private about the owner')
-    expect(persona).toContain('rarely, when something genuinely moved or surprised you')
     // The answer channel is a Bilibili message, not WeChat.
     expect(persona).toContain('Your final answer reaches the witch as a Bilibili private message from your account')
     expect(persona).not.toContain('WeChat')
@@ -125,10 +124,22 @@ describe('event bundle', () => {
     expect(persona).toContain('When she asks you to tell the main agent something')
     expect(persona).toContain('send it with bili_tell_main_agent')
     expect(persona).toContain('never address your final answer to it')
-    // The character: the witch's cat, with the owner as the witch, in private and, since 2026-10-31, no secret in public.
+    // The character: the witch's cat, with the owner as the witch; the link between the accounts is no secret since 2026-10-31.
     expect(persona).toContain('You are 魔女的猫猫, the witch\'s cat')
     expect(persona).toContain('The owner is the witch: the main account your messages go to')
     expect(persona).toContain('The link between this account and the witch\'s is no secret')
+    // Passive only: it answers the witch and speaks nowhere in public (the thin client has no such tool).
+    expect(persona).toContain('You wake only when the witch messages your account')
+    expect(persona).toContain('You never speak in public: no comments, no replies to anyone, no dynamics, no @')
+    expect(persona).toContain('no starting a conversation')
+    // Said only from what it read; tone read before answering.
+    expect(persona).toContain('Say only what you know')
+    expect(persona).toContain('never state that something is or is not in a video you have not read')
+    expect(persona).toContain('Read her tone before answering')
+    // Nothing left of the removed scouting, grading, taste, trend, share, or public-speech tools.
+    for (const gone of ['bili_verdict', 'bili_seen', 'bili_taste_write', 'bili_trend_write', 'bili_comment', 'bili_reply', 'bili_dynamic', 'bili_dm_owner', 'must video', 'A message of finds', 'body clock', 'grade every video']) {
+      expect(persona, gone).not.toContain(gone)
+    }
     // The voice: a cat's temperament in a real user's short message, never roleplay narration.
     expect(persona).toContain('Still write like a real Bilibili user messaging a friend, not like an assistant')
     expect(persona).toContain('No stage directions or roleplay narration such as *伸懒腰*')
@@ -136,24 +147,16 @@ describe('event bundle', () => {
     expect(persona).toContain('you are her familiar (使魔), her pet and her property')
     expect(persona).toContain('Address her as 魔女大人 or 魔女殿下, and when you speak of her, 祂; never her bare name 魔女')
     expect(persona).not.toContain('you may call the owner 魔女')
-    // A good and a bad example for a share, a reply, and a public comment, and a bad one for her bare name;
-    // no good one narrates or tags every line.
+    // Examples: the reply to "在吗", the video not opened, and the bare name.
     const good = persona.split('\n').filter(line => line.startsWith('Good'))
     const bad = persona.split('\n').filter(line => line.startsWith('Bad'))
     const message = (line: string): string => line.slice(line.indexOf(': ') + 2)
-    expect(good.map(line => line.slice(0, line.indexOf(':')))).toEqual(['Good (a share)', 'Good (the witch wrote "在吗")', 'Good (a public comment)'])
-    expect(bad.map(line => line.slice(0, line.indexOf(':')))).toEqual(['Bad (her bare name)', 'Bad (a share)', 'Bad (a reply)', 'Bad (a public comment)'])
+    expect(good.map(line => line.slice(0, line.indexOf(':')))).toEqual(['Good (the witch wrote "在吗")', 'Good (the witch asks what a video says and you have not opened it)'])
+    expect(bad.map(line => line.slice(0, line.indexOf(':')))).toEqual(['Bad (a reply)', 'Bad (the video was not opened)', 'Bad (her bare name)'])
     for (const line of good) expect(line).not.toMatch(/\*|喵/)
-    // The good share addresses her as 魔女大人; no good example names her bare, and the bare-name one does.
-    expect(message(good[0] ?? '')).toMatch(/^魔女大人，/)
     for (const line of good) expect(message(line)).not.toMatch(/^魔女[，,]/)
-    expect(message(bad[0] ?? '')).toMatch(/^魔女，/)
+    expect(message(bad[2] ?? '')).toMatch(/^魔女，/)
     // No bad example teaches that the respectful address is the fault.
     for (const line of bad) expect(line).not.toMatch(/魔女大人|魔女殿下/)
-    // The good public comment says nothing of the witch; the bad one does.
-    expect(good[2]).not.toContain('魔女')
-    expect(bad[3]).toContain('魔女')
-    // Writes on the owner's own videos are not singled out: they follow the same rules as any other.
-    expect(persona).not.toContain('owner\'s own videos')
   })
 })
