@@ -439,6 +439,43 @@ ownsSession(sessionId: string): boolean
 
 Source: [`packages/lsy/lsy-qq/src/index.ts`](../../packages/lsy/lsy-qq/src/index.ts)
 
+<a id="ctxlsyvoice--lsyvoice"></a>
+
+### `ctx.lsyVoice` — `LsyVoice`
+
+Service behind `ctx.lsyVoice`.
+
+```ts cordis-catalog
+/**
+ * Whether `transcribe` would take this file: transcription is on and the extension is a format the asr-service reads.
+ * @param path - file name or path.
+ * @returns true when `transcribe` would accept the file.
+ */
+canTranscribe(path: string): boolean
+
+/**
+ * Turn a text into an audio file under the data directory. The provider's answer is written first
+ * (`<name>.wav`, plus `<name>.job.json` when the provider has job metadata); the delivered file is
+ * that WAV, or its MP3 conversion.
+ * @param text - what to say.
+ * @param options - `signal` cancels the call.
+ * @returns the file and who made it.
+ * @throws VoiceError when speech is off, the text is unusable, or every provider failed.
+ */
+speak(text: string, options: { signal?: AbortSignal } = {}): Promise<SpeakResult>
+
+/**
+ * Transcribe an audio file. The service's raw answer is written to `<dataDir>/asr/` before it is parsed.
+ * @param path - absolute path of an audio file the asr-service reads (m4a, mp3, wav, flac, ogg, wma, aac, webm).
+ * @param options - `signal` cancels the call.
+ * @returns the text and where the raw answer lives.
+ * @throws VoiceError when transcription is off, the file is unusable, or the service failed.
+ */
+async transcribe(path: string, options: { signal?: AbortSignal } = {}): Promise<TranscribeResult>
+```
+
+Source: [`packages/lsy/lsy-voice/src/index.ts`](../../packages/lsy/lsy-voice/src/index.ts)
+
 <a id="ctxownerrelay--ownerrelay"></a>
 
 ### `ctx.ownerRelay` — `OwnerRelay`

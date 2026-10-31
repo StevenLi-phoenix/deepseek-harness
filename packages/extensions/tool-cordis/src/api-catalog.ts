@@ -2411,6 +2411,38 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'lsyVoice',
+    summary: 'Service behind `ctx.lsyVoice`.',
+    description: 'Service behind `ctx.lsyVoice`.',
+    methods: [
+      {
+        signature: 'now: () => Date = () => new Date()',
+        description: 'Replaced by tests.',
+        parameters: [],
+      },
+      {
+        signature: 'canTranscribe(path: string): boolean',
+        description: 'Whether `transcribe` would take this file: transcription is on and the extension is a format the asr-service reads.',
+        parameters: [{ name: 'path', description: 'file name or path.' }],
+        returns: 'true when `transcribe` would accept the file.',
+      },
+      {
+        signature: 'speak(text: string, options: { signal?: AbortSignal } = {}): Promise<SpeakResult>',
+        description: 'Turn a text into an audio file under the data directory. The provider\'s answer is written first (`<name>.wav`, plus `<name>.job.json` when the provider has job metadata); the delivered file is that WAV, or its MP3 conversion.',
+        parameters: [{ name: 'text', description: 'what to say.' }, { name: 'options', description: '`signal` cancels the call.' }],
+        returns: 'the file and who made it.',
+        throws: ['VoiceError when speech is off, the text is unusable, or every provider failed.'],
+      },
+      {
+        signature: 'async transcribe(path: string, options: { signal?: AbortSignal } = {}): Promise<TranscribeResult>',
+        description: 'Transcribe an audio file. The service\'s raw answer is written to `<dataDir>/asr/` before it is parsed.',
+        parameters: [{ name: 'path', description: 'absolute path of an audio file the asr-service reads (m4a, mp3, wav, flac, ogg, wma, aac, webm).' }, { name: 'options', description: '`signal` cancels the call.' }],
+        returns: 'the text and where the raw answer lives.',
+        throws: ['VoiceError when transcription is off, the file is unusable, or the service failed.'],
+      },
+    ],
+  },
+  {
     key: 'mcpResources',
     summary: 'Scoped resource access plus three tools shared by configured MCP servers.',
     description: 'Scoped resource access plus three tools shared by configured MCP servers.',
@@ -9526,6 +9558,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SpawnTeammateResult {\n    readonly member: TeamMemberView;\n}',
   },
   {
+    name: 'SpeakResult',
+    declaration: 'export interface SpeakResult {\n    path: string;\n    format: \'mp3\' | \'wav\';\n    bytes: number;\n    provider: TtsProviderName;\n    fellBackFrom?: string;\n    elapsedMs: number;\n}',
+  },
+  {
     name: 'SpeechCatalog',
     declaration: 'export interface SpeechCatalog extends SpeechSnapshot {\n    readonly maxAudioBytes: number;\n    readonly maxDurationSeconds: number;\n}',
   },
@@ -10214,8 +10250,8 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ToolUseSummary {\n    tool_use_id: string;\n    tool: string;\n    input: Record<string, unknown>;\n}',
   },
   {
-    name: 'Transcript',
-    declaration: 'export interface Transcript {\n    readonly text: string;\n    readonly audioSeconds: number;\n    readonly inferenceSeconds: number;\n}',
+    name: 'TranscribeResult',
+    declaration: 'export interface TranscribeResult {\n    text: string;\n    engine: string;\n    durationS?: number;\n    rawPath: string;\n    elapsedMs: number;\n}',
   },
   {
     name: 'TranscriptionRequest',
@@ -10236,6 +10272,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TrendView',
     declaration: 'export interface TrendView {\n    readonly seq: number;\n    readonly at: number;\n    readonly term: string;\n    readonly note: string;\n}',
+  },
+  {
+    name: 'TtsProviderName',
+    declaration: 'export type TtsProviderName = \'feiyu\' | \'mac-mini\';',
   },
   {
     name: 'TurnBoundaryProjection',
