@@ -125,6 +125,7 @@ describe('tool-bili', () => {
     expect(Object.keys((schema.parameters as { properties: Record<string, unknown> }).properties)).toEqual(['text'])
     expect(schema.description).toContain('Send one message, at most 2000 characters, to the owner\'s main agent')
     expect(schema.description).toContain('no answer comes back to you')
+    expect(schema.description).toContain('put their words in quotation marks and say where they came from')
     expect((await call('bili_tell_main_agent', { text: '魔女大人让我告诉你：人格卡能装' })).value).toMatchObject({ outcome: 'sent' })
     expect(tellMainAgent).toHaveBeenCalledWith('魔女大人让我告诉你：人格卡能装')
     expect((await call('bili_tell_main_agent', {})).value).toBeUndefined()
@@ -139,6 +140,9 @@ describe('tool-bili', () => {
     expect((await call('bili_journal_write', { text: '看了猫' })).value).toEqual({ saved: true, seq: 3, leftToday: 5 })
     expect((await call('bili_journal_read', {})).value).toMatchObject({ entries: [{ seq: 3 }] })
     expect(journalRead).toHaveBeenCalledWith(1)
+    // An entry may repeat what strangers wrote on Bilibili, so the read comes back as untrusted data.
+    const text = (await call('bili_journal_read', {})).content![0]!.text
+    expect(text.startsWith('<bilibili_data source="your journal" trust="untrusted">\n')).toBe(true)
   })
 
   it('keeps a taste note, or rewrites one by its number', async () => {

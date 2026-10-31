@@ -8,6 +8,11 @@ These rules supplement the repo-wide [AGENTS.md](../AGENTS.md) for this fork's e
 - Every edit outside `packages/lsy/` and `lsy/` is an upstream-file edit: add its file and change to the ledger's "Upstream files touched" table in the same commit, so a sync can re-apply it.
 - Record fork changes in [CHANGELOG.md](CHANGELOG.md) (Keep a Changelog sections under `[Unreleased]`).
 
+## Memory and persona safety
+
+- **Learning happens in data, never in the persona.** The persona lives in read-only bundle files reviewed in git; what the agent learns goes only into bounded containers (`lsy-memory`, the Bilibili taste, journal, and trend notes) that record where it came from, that the owner can see and delete, and that enter prompts as data. Text from a stranger, a relayed message, a web page, an event, or a QQ group is never the owner's word: a turn it started cannot write protected memory (`instructions`, `preferences`, `identity`) without the owner's confirmation, and cannot message Claude Code.
+- Persona changes need the invariants in `packages/lsy/bili/tests/persona.spec.ts` to stay green.
+
 ## Event service architecture
 
 - `lsy-github-sensor` polls releases, tags, branch commits, and `/notifications`, and publishes `LsyEventInput` rows to `lsy-event-bus`. Its webhook rule turns GitHub App deliveries (relayed by phm's `github-relay` to `/hooks/github`) into events keyed like polling's.
