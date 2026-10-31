@@ -488,6 +488,7 @@
       "@deepseek-ai/dsh-lsy-event-ingest": ["./packages/lsy/lsy-event-ingest/src"],
       "@deepseek-ai/dsh-lsy-github-sensor": ["./packages/lsy/lsy-github-sensor/src"],
       "@deepseek-ai/dsh-lsy-memory": ["./packages/lsy/lsy-memory/src"],
+      "@deepseek-ai/dsh-lsy-qq": ["./packages/lsy/lsy-qq/src"],
       "@deepseek-ai/dsh-lsy-sysmon": ["./packages/lsy/lsy-sysmon/src"],
       "@deepseek-ai/dsh-lsy-tool-monitor": ["./packages/lsy/lsy-tool-monitor/src"],
       "@deepseek-ai/dsh-lsy-tool-watch": ["./packages/lsy/lsy-tool-watch/src"],

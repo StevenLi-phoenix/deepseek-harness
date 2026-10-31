@@ -341,6 +341,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-lsy-event-ingest` | yes | Authenticated POST route through which the owner's own services push events into the lsy event bus, one token per source |
 | `@deepseek-ai/dsh-lsy-github-sensor` | yes | GitHub polling sensor for the lsy event bus: releases, tags, commits, and notifications with conditional requests |
 | `@deepseek-ai/dsh-lsy-memory` | yes | Owner memory across Sessions: a JSONL store the Host injects into each root Session, memory_search/memory_save/memory_forget tools, and a claude.ai export importer |
+| `@deepseek-ai/dsh-lsy-qq` | yes | QQ channel over the official QQ Open Platform Bot API: allowlisted private chats and group @ mentions reach per-peer chat Sessions |
 | `@deepseek-ai/dsh-lsy-sysmon` | yes | System status settings section: the Host machine's CPU, memory, power, temperature, and disk usage per volume |
 | `@deepseek-ai/dsh-lsy-tool-monitor` | no | Model-facing monitor tools: a bash command whose stdout lines come back to the same Session as they appear, like Claude Code's Monitor |
 | `@deepseek-ai/dsh-lsy-tool-watch` | yes | Model-facing watch_create, watch_list, and watch_delete tools over the lsy event bus and GitHub sensor |

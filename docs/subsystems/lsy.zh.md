@@ -2,7 +2,7 @@
 
 [English](lsy.md) | 中文
 
-事件驱动 agent 背后的 fork 本地服务：[`@deepseek-ai/dsh-lsy-event-bus`](../../packages/lsy/lsy-event-bus/README.zh.md) 把传感器事件路由成通知或无人值守的 Session，[`@deepseek-ai/dsh-lsy-github-sensor`](../../packages/lsy/lsy-github-sensor/README.zh.md) 轮询 GitHub，[`@deepseek-ai/dsh-lsy-wechat`](../../packages/lsy/lsy-wechat/README.zh.md) 通过微信提供 `lsyNotifier` 契约，[`@deepseek-ai/dsh-bili`](../../packages/lsy/bili/README.zh.md) 是 agent 自己的 B站账号。行为、配置与限制见各包 README；[上游账本](../../packages/lsy/UPSTREAM.md)记录 fork 如何跟踪上游。
+事件驱动 agent 背后的 fork 本地服务：[`@deepseek-ai/dsh-lsy-event-bus`](../../packages/lsy/lsy-event-bus/README.zh.md) 把传感器事件路由成通知或无人值守的 Session，[`@deepseek-ai/dsh-lsy-github-sensor`](../../packages/lsy/lsy-github-sensor/README.zh.md) 轮询 GitHub，[`@deepseek-ai/dsh-lsy-wechat`](../../packages/lsy/lsy-wechat/README.zh.md) 通过微信提供 `lsyNotifier` 契约，[`@deepseek-ai/dsh-lsy-qq`](../../packages/lsy/lsy-qq/README.zh.md) 让主人列入名单的人在 QQ 上和 agent 聊天，[`@deepseek-ai/dsh-bili`](../../packages/lsy/bili/README.zh.md) 是 agent 自己的 B站账号。行为、配置与限制见各包 README；[上游账本](../../packages/lsy/UPSTREAM.md)记录 fork 如何跟踪上游。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -420,6 +420,24 @@ ownsSession?(sessionId: string): boolean
 ```
 
 Source: [`packages/lsy/lsy-event-bus/src/types.ts`](../../packages/lsy/lsy-event-bus/src/types.ts)
+
+<a id="ctxlsyqq--qqchannel"></a>
+
+### `ctx.lsyQq` — `QqChannel`
+
+QQ channel. Connects the official bot to the QQ Open Platform, answers only the openids in `allow`, gives each private chat and each group its own chat Session, and delivers each turn's final answer that `ctx.ownerRelay` hands its `qq` channel. QQ lets a bot reply to a message within a window (about an hour in private chats, minutes in groups) and at most five times; later answers go out as proactive messages, and an answer QQ refuses falls back to `ctx.lsyNotifier` through the relay.
+
+```ts cordis-catalog
+/**
+ * Whether this channel created a Session: true for every chat Session it remembers, all of which
+ * it claims with `ctx.ownerRelay`.
+ * @param sessionId - Session to check.
+ * @returns true for the current and earlier chat Sessions of every peer.
+ */
+ownsSession(sessionId: string): boolean
+```
+
+Source: [`packages/lsy/lsy-qq/src/index.ts`](../../packages/lsy/lsy-qq/src/index.ts)
 
 <a id="ctxownerrelay--ownerrelay"></a>
 

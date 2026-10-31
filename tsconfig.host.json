@@ -562,6 +562,7 @@
     { "path": "./packages/lsy/lsy-balance/tsconfig.host.json" },
     { "path": "./packages/lsy/lsy-event-bus" },
     { "path": "./packages/lsy/owner-relay" },
+    { "path": "./packages/lsy/lsy-qq" },
     { "path": "./packages/lsy/lsy-wechat" },
     { "path": "./packages/lsy/lsy-tool-watch" },
     { "path": "./packages/lsy/lsy-tool-wechat" },

@@ -374,6 +374,7 @@ flowchart TD
     pkg_lsy_event_ingest["lsy-event-ingest"]
     pkg_lsy_github_sensor["lsy-github-sensor"]
     pkg_lsy_memory["lsy-memory"]
+    pkg_lsy_qq["lsy-qq"]
     pkg_lsy_sysmon["lsy-sysmon"]
     pkg_lsy_tool_monitor["lsy-tool-monitor"]
     pkg_lsy_tool_watch["lsy-tool-watch"]
@@ -1477,6 +1478,15 @@ flowchart TD
   pkg_experimental_tool_agent_team --> pkg_session
   pkg_experimental_tool_agent_team --> pkg_system_prompt
   pkg_experimental_tool_agent_team --> pkg_tools
+  pkg_lsy_qq --> pkg_api_session_controller
+  pkg_lsy_qq --> pkg_credentials
+  pkg_lsy_qq --> pkg_llm
+  pkg_lsy_qq --> pkg_lsy_event_bus
+  pkg_lsy_qq --> pkg_owner_relay
+  pkg_lsy_qq --> pkg_permission_presets
+  pkg_lsy_qq --> pkg_session
+  pkg_lsy_qq --> pkg_session_title
+  pkg_lsy_qq --> pkg_storage_domain
   pkg_lsy_tool_monitor --> pkg_agent
   pkg_lsy_tool_monitor --> pkg_api_session_controller
   pkg_lsy_tool_monitor --> pkg_llm
@@ -1939,6 +1949,7 @@ flowchart TD
 | [`sdk-protocol`](../packages/sdk/protocol) | `sdk` | [`commands`](../packages/interaction/commands), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`user-questions`](../packages/interaction/user-questions) |
 | [`workflow-ptc`](../packages/workflow/workflow-ptc) | `workflow` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`ptc-runtime`](../packages/ptc-runtime/ptc-runtime), [`sandbox`](../packages/sandbox/sandbox), [`sandbox-policy`](../packages/sandbox/sandbox-policy), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`tools`](../packages/core/tools), [`workflow`](../packages/workflow/workflow), [`working-directory`](../packages/session/working-directory) |
 | [`experimental-tool-agent-team`](../packages/experimental/tool-agent-team) | `experimental` | [`agent`](../packages/core/agent), [`experimental-agent-team`](../packages/experimental/agent-team), [`session`](../packages/core/session), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
+| [`lsy-qq`](../packages/lsy/lsy-qq) | `lsy` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`llm`](../packages/llm/llm), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`owner-relay`](../packages/lsy/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`lsy-tool-monitor`](../packages/lsy/lsy-tool-monitor) | `lsy` | [`agent`](../packages/core/agent), [`api-session-controller`](../packages/api/session-controller), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`storage-domain`](../packages/storage/storage-domain), [`subprocess`](../packages/subprocess/subprocess), [`tools`](../packages/core/tools) |
 | [`lsy-wechat`](../packages/lsy/lsy-wechat) | `lsy` | [`api-session-controller`](../packages/api/session-controller), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`owner-relay`](../packages/lsy/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`schedule`](../packages/schedule/schedule) | `schedule` | [`agent`](../packages/core/agent), [`api-session-controller`](../packages/api/session-controller), [`brand`](../packages/util/brand), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`session-projection`](../packages/session/session-projection), [`storage-domain`](../packages/storage/storage-domain), [`subagent`](../packages/subagent/subagent), [`tools`](../packages/core/tools), [`typert-protocol`](../packages/typert/protocol), [`util-time`](../packages/util/time), [`workspace`](../packages/workspace/workspace) |

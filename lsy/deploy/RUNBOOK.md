@@ -199,6 +199,30 @@ sudo -n -u dsh-runtime /usr/bin/env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebr
 
 Add `--dry-run` to only count. The next Session sees the entries; no restart is needed.
 
+## 13. QQ (optional)
+
+`lsy-qq` lets people you list talk to the agent on QQ, through the official QQ Open Platform bot (no QQ client, no third-party protocol bridge, no listening port: the service only opens an outbound WebSocket to Tencent). It answers nobody until you list them.
+
+1. Register the bot (you, in a browser): `https://q.qq.com` → sign in by scanning with your phone's QQ → create a bot → copy its AppID and AppSecret. A new bot may run in the platform's sandbox first; add the people and groups you test with there.
+2. Store the credentials in your own terminal (hidden input; only names and modes are printed), then restart:
+   ```sh
+   cd / && sudo -u dsh-runtime /bin/zsh -fc 'umask 077; f=/Users/dsh-runtime/.dsh/.env; read -r "i?QQ AppID: "; read -rs "v?QQ AppSecret (hidden): "; print; [[ -n $i && -n $v ]] || exit 1; { print -r -- "LSY_QQ_APP_ID=$i"; print -r -- "LSY_QQ_APP_SECRET=$v"; /usr/bin/grep -v -e "^LSY_QQ_APP_ID=" -e "^LSY_QQ_APP_SECRET=" $f 2>/dev/null; } >| $f.new && /bin/mv -f $f.new $f && /bin/ls -l $f && /usr/bin/cut -d= -f1 $f'
+   sudo -n /bin/launchctl kickstart -k system/app.lishuyu.dsh-events
+   ```
+3. Check the log: `grep 'lsy-qq' /Users/dsh-runtime/logs/stdout.log | tail` shows `credentials found` and `connected to the QQ gateway`. Without both variables it says `are not both set` and stays offline.
+4. Write to the bot from QQ. The first message is dropped (the log shows `dropped a c2c message from user <openid>, not on allow.users`) and WeChat gets one note with the openid. Add it to the owner layer, which reloads live (no restart):
+   ```yaml
+   - id: lsy-qq
+     config:
+       allow:
+         users: ['<user_openid>']
+         groups: ['<group_openid>']
+   ```
+   in `/Users/dsh-runtime/.dsh/profiles/event/cordis.patch.yml` (a group's openid appears in the same log line when someone @-mentions the bot there).
+5. Stop it: delete `LSY_QQ_APP_SECRET` from `.env` and restart, or `- id: lsy-qq` with `disabled: true` in the owner layer. Roll the secret on `q.qq.com` if it leaked.
+
+The QQ Sessions use the `qq` preset (persona, time, compaction; no shell, files, or web). `/new` in a chat starts a fresh Session. An answer QQ refuses (a reply window that passed, a quota) reaches the owner on WeChat as a note labelled with the QQ Session.
+
 ## Operator access without passwords (optional)
 
 `/etc/sudoers.d/dsh-events` (root:wheel 440, written with `sudo visudo -f /etc/sudoers.d/dsh-events`) lets the operator act as the service user and restart the daemon without a password, so config edits, `.env` changes, and upgrades need no one at the keyboard:

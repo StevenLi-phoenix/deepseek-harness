@@ -156,6 +156,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   lsyGithubSensor: 'lsy.md',
   lsyNotifier: 'lsy.md',
   ownerRelay: 'lsy.md',
+  lsyQq: 'lsy.md',
   bili: 'lsy.md',
   workspaceRegistry: 'workspace.md',
   workspaceController: 'workspace.md',

@@ -2,7 +2,7 @@
 
 English | [中文](lsy.zh.md)
 
-The fork-local services behind the event-driven agent: [`@deepseek-ai/dsh-lsy-event-bus`](../../packages/lsy/lsy-event-bus/README.md) routes sensor events to notifications or unattended Sessions, [`@deepseek-ai/dsh-lsy-github-sensor`](../../packages/lsy/lsy-github-sensor/README.md) polls GitHub, [`@deepseek-ai/dsh-lsy-wechat`](../../packages/lsy/lsy-wechat/README.md) provides the `lsyNotifier` contract over WeChat, and [`@deepseek-ai/dsh-bili`](../../packages/lsy/bili/README.md) is the agent's own Bilibili account. Behavior, configuration, and limitations are on each package README; the [upstream ledger](../../packages/lsy/UPSTREAM.md) records how the fork tracks upstream.
+The fork-local services behind the event-driven agent: [`@deepseek-ai/dsh-lsy-event-bus`](../../packages/lsy/lsy-event-bus/README.md) routes sensor events to notifications or unattended Sessions, [`@deepseek-ai/dsh-lsy-github-sensor`](../../packages/lsy/lsy-github-sensor/README.md) polls GitHub, [`@deepseek-ai/dsh-lsy-wechat`](../../packages/lsy/lsy-wechat/README.md) provides the `lsyNotifier` contract over WeChat, [`@deepseek-ai/dsh-lsy-qq`](../../packages/lsy/lsy-qq/README.md) lets the people the owner lists talk to the agent on QQ, and [`@deepseek-ai/dsh-bili`](../../packages/lsy/bili/README.md) is the agent's own Bilibili account. Behavior, configuration, and limitations are on each package README; the [upstream ledger](../../packages/lsy/UPSTREAM.md) records how the fork tracks upstream.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -420,6 +420,24 @@ ownsSession?(sessionId: string): boolean
 ```
 
 Source: [`packages/lsy/lsy-event-bus/src/types.ts`](../../packages/lsy/lsy-event-bus/src/types.ts)
+
+<a id="ctxlsyqq--qqchannel"></a>
+
+### `ctx.lsyQq` — `QqChannel`
+
+QQ channel. Connects the official bot to the QQ Open Platform, answers only the openids in `allow`, gives each private chat and each group its own chat Session, and delivers each turn's final answer that `ctx.ownerRelay` hands its `qq` channel. QQ lets a bot reply to a message within a window (about an hour in private chats, minutes in groups) and at most five times; later answers go out as proactive messages, and an answer QQ refuses falls back to `ctx.lsyNotifier` through the relay.
+
+```ts cordis-catalog
+/**
+ * Whether this channel created a Session: true for every chat Session it remembers, all of which
+ * it claims with `ctx.ownerRelay`.
+ * @param sessionId - Session to check.
+ * @returns true for the current and earlier chat Sessions of every peer.
+ */
+ownsSession(sessionId: string): boolean
+```
+
+Source: [`packages/lsy/lsy-qq/src/index.ts`](../../packages/lsy/lsy-qq/src/index.ts)
 
 <a id="ctxownerrelay--ownerrelay"></a>
 

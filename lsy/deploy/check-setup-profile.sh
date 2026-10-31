@@ -31,6 +31,8 @@ done
 /usr/bin/grep -q "^- id: bili\$" "$WORK/fresh.yml" || fail "composition lacks bili"
 /usr/bin/grep -q "^- id: preset-bili\$" "$WORK/fresh.yml" || fail "composition lacks preset-bili"
 /usr/bin/grep -q "@deepseek-ai/dsh-tool-bili" "$WORK/fresh.yml" || fail "bili preset lacks tool-bili"
+/usr/bin/grep -q "^- id: lsy-qq\$" "$WORK/fresh.yml" || fail "composition lacks lsy-qq"
+/usr/bin/grep -q "^- id: preset-qq\$" "$WORK/fresh.yml" || fail "composition lacks preset-qq"
 
 OLD="$WORK/old"; mkdir -p "$OLD/profiles/event"
 { echo '# lsy event profile — composition layer (code-owned).'; echo '[]'; } > "$OLD/profiles/event/cordis.patch.yml"

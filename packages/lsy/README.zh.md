@@ -30,6 +30,7 @@ kind: "package-group"
 | [`lsy-event-ingest/`](lsy-event-ingest/README.zh.md) | `POST /hooks/lsy` 路由：主人自己的服务用每个来源一个的 bearer token 推送事件 |
 | [`lsy-github-sensor/`](lsy-github-sensor/README.zh.md) | 用条件请求轮询 GitHub 的 release、tag、提交与通知 |
 | [`lsy-memory/`](lsy-memory/README.zh.md) | 跨 Session 的主人记忆：记忆块、`memory_search`、`memory_save`、`memory_forget`，以及 claude.ai 导出导入器 |
+| [`lsy-qq/`](lsy-qq/README.zh.md) | 走 QQ 开放平台官方机器人的 QQ 通道：主人列入名单的私聊和群各有一个对话 Session，回答经 `owner-relay` 送达 |
 | [`lsy-sysmon/`](lsy-sysmon/README.zh.md) | 设置里显示 Host 机器 CPU、内存、功耗、温度与各卷磁盘用量的分区 |
 | [`lsy-tool-monitor/`](lsy-tool-monitor/README.zh.md) | `monitor_start`、`monitor_stop`、`monitor_list` 工具：命令输出的每一行都回到同一个 Session |
 | [`lsy-tool-watch/`](lsy-tool-watch/README.zh.md) | `watch_create`、`watch_list`、`watch_delete` 工具：agent 自己管理监控 |

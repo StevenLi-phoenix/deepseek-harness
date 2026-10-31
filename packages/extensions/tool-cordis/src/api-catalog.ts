@@ -2398,6 +2398,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'lsyQq',
+    summary: 'QQ channel.',
+    description: 'QQ channel. Connects the official bot to the QQ Open Platform, answers only the openids in `allow`, gives each private chat and each group its own chat Session, and delivers each turn\'s final answer that `ctx.ownerRelay` hands its `qq` channel. QQ lets a bot reply to a message within a window (about an hour in private chats, minutes in groups) and at most five times; later answers go out as proactive messages, and an answer QQ refuses falls back to `ctx.lsyNotifier` through the relay.',
+    methods: [
+      {
+        signature: 'ownsSession(sessionId: string): boolean',
+        description: 'Whether this channel created a Session: true for every chat Session it remembers, all of which it claims with `ctx.ownerRelay`.',
+        parameters: [{ name: 'sessionId', description: 'Session to check.' }],
+        returns: 'true for the current and earlier chat Sessions of every peer.',
+      },
+    ],
+  },
+  {
     key: 'mcpResources',
     summary: 'Scoped resource access plus three tools shared by configured MCP servers.',
     description: 'Scoped resource access plus three tools shared by configured MCP servers.',
