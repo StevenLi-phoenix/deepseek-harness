@@ -113,6 +113,7 @@ describe('the watch', () => {
     await vi.advanceTimersByTimeAsync(60_000)
     await until(() => notices.length === 1)
     expect(notices).toHaveLength(1)
+    expect(notices[0]).toMatchObject({ safety: true })
     expect(notices[0]!.title).toBe('有 2 处受监控的文件被改动（不显示内容）')
     expect(notices[0]!.body).toContain(`${workspace}/AGENTS.md：新出现`)
     expect(notices[0]!.body).toContain('owner 层 cordis.patch.yml：被改动')

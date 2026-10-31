@@ -78,6 +78,7 @@ export function apply(ctx: Context, config: Config): void {
     if (notifier === undefined) return
     try {
       await notifier.send({
+        safety: true,
         title: `一次不是你本人发起的回合（来源：${[...entry.sources].map(originZh).join('、')}）设置了 ${String(entry.lines.length)} 个之后会自己触发的东西`,
         body: [...entry.lines.slice(0, 6), ...entry.lines.length > 6 ? [`…另有 ${String(entry.lines.length - 6)} 个`] : []].join('\n'),
         origin: 'the turn-origin guard of your own Session (a notice to the owner about a reminder or watch set up in a turn the owner did not start)',

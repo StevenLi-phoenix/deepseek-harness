@@ -3081,7 +3081,7 @@ export type TtsProviderName = 'feiyu' | 'mac-mini'
 ## `@deepseek-ai/dsh-fork-wechat`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/fork-wechat/src/index.ts:65`](../packages/fork/fork-wechat/src/index.ts)
+- `source`: [`packages/fork/fork-wechat/src/index.ts:69`](../packages/fork/fork-wechat/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
@@ -3090,6 +3090,8 @@ export interface Config {
   accountFile?: string
   /** Chat Session settings. */
   chat: ChatConfig
+  /** The operator's mute file for safety notices; defaults to `<DSH_HOME>/notices.muted`. */
+  muteFile?: string
   /** Code points per WeChat message; longer texts are split. */
   maxMessageChars: number
   /** Messages one text may be split into; the last is cut beyond that. */

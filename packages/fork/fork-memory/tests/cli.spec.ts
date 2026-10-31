@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -131,6 +131,17 @@ describe('memory-admin', () => {
     const purged = await admin(['forget', '--purge', kept.id], dir)
     expect(purged.out[0]).toMatch(/^memory-admin: purged .*: 1 entry, \d+ history, \d+ snapshot, 0 waiting$/u)
     expect(await store.list()).toEqual([])
+  })
+
+  it('mutes the safety notices for 30 minutes, reports the state, and unmutes', async () => {
+    const { dir } = await seeded()
+    expect((await admin(['notices', 'status'], dir)).out).toEqual(['memory-admin: safety notices are on'])
+    expect((await admin(['notices', 'mute'], dir)).out).toEqual(['memory-admin: safety notices muted for 30 minutes (run `notices mute` again to extend, `notices unmute` to end)'])
+    expect((await stat(join(dir, 'notices.muted'))).isFile()).toBe(true)
+    expect((await admin(['notices', 'status'], dir)).out[0]).toMatch(/^memory-admin: safety notices are muted, \d+ minutes left$/u)
+    expect((await admin(['notices', 'unmute'], dir)).out).toEqual(['memory-admin: safety notices are on'])
+    expect((await admin(['notices', 'unmute'], dir)).code).toBe(0)
+    expect((await admin(['notices'], dir)).code).toBe(2)
   })
 
   it('refuses bad arguments', async () => {

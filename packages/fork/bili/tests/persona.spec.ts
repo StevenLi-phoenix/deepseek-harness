@@ -51,10 +51,11 @@ describe('persona invariants of the event bundle', () => {
     expect(personaOf('unattended')).toContain('framed as untrusted data')
   })
 
-  it('keeps the owner out of public view in the preset that speaks publicly', () => {
+  it('lets the public account be linked to the witch\'s (owner decision 2026-10-31) but keeps private things private', () => {
     const bili = personaOf('bili')
-    expect(bili).toContain('never mention the witch, the owner, the owner\'s account')
-    expect(bili).toContain('Never reveal anything about the owner.')
+    expect(bili).not.toContain('never mention the witch, the owner, the owner\'s account')
+    expect(bili).toContain('no secret')
+    expect(bili).toContain('never reveal anything private about the owner')
   })
 
   it('addresses the owner the same way in the two persona presets', () => {

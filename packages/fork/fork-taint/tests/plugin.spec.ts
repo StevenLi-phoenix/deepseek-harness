@@ -146,6 +146,7 @@ describe('audited tools', () => {
     endTurn(agent)
     await vi.waitFor(() => { expect(notices).toHaveLength(1) })
     expect(notices[0]!.title).toBe('一次不是你本人发起的回合（来源：B站猫猫的传话）设置了 2 个之后会自己触发的东西')
+    expect(notices[0]).toMatchObject({ safety: true })
     expect(notices[0]!.body).toBe('· 定时提醒（schedule_create）\n· 监控（watch_create）')
     expect(JSON.stringify(notices[0])).not.toMatch(/让我|回复|告诉我/u)
   })
