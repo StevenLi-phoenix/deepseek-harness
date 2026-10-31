@@ -69,7 +69,7 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-只要调用方 Agent 的 preset 挂载了该包且 `ctx.lsyVoice` 存在，就有一个工具 schema：`speak`，必填字符串 `text`，可选布尔 `send`（默认 true）。描述里写明：文字会变成语音，默认以 mp3 文件发给微信上的 owner（微信机器人不能发语音气泡）；文字要短而自然、适合说出口（最多约 600 字，更长的分几次调用），按口语写法书写；发送只在 owner 最近一条消息还新鲜时有效。
+只要调用方 Agent 的 preset 挂载了该包且 `ctx.lsyVoice` 存在，就有一个工具 schema：`speak`，必填字符串 `text`，可选布尔 `send`（默认 true）。描述里写明：文字会变成语音，默认以 mp3 文件发给微信上的 owner（微信机器人不能发语音气泡）；文字要短而自然、适合说出口（一两句话，默认不超过配置的 200 字，更长的分几次调用，因为合成要几十秒），按口语写法书写；发送只在 owner 最近一条消息还新鲜时有效。
 
 #### Token 影响
 
@@ -83,7 +83,7 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-每次调用返回一个 JSON 文本块：`{ "path", "format": "mp3" | "wav", "bytes", "provider", "sent"? , "notSent"? }`，其中 `sent` 是发出的类型，`notSent` 是没发出的原因（`reply window expired`、`the owner has not written yet`、`the WeChat channel is not mounted`，以及 `wechat_send_file` 报告的其他原因）；或者 `{ "error": "<原因>" }`，例如 `speech is turned off (lsy-voice tts.enabled is false)`、`the text is 700 characters; speech takes at most 600, so say it in parts`、`speech failed (feiyu: …; mac-mini: …)`。
+每次调用返回一个 JSON 文本块：`{ "path", "format": "mp3" | "wav", "bytes", "provider", "sent"? , "notSent"? }`，其中 `sent` 是发出的类型，`notSent` 是没发出的原因（`reply window expired`、`the owner has not written yet`、`the WeChat channel is not mounted`，以及 `wechat_send_file` 报告的其他原因）；或者 `{ "error": "<原因>" }`，例如 `speech is turned off (lsy-voice tts.enabled is false)`、`the text is 300 characters; speech takes at most 200, so say it in parts`、`speech failed (feiyu: …; mac-mini: …)`。
 
 #### Token 影响
 

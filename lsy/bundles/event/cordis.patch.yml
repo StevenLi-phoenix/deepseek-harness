@@ -151,8 +151,8 @@
     - id: lsy-sysmon
       name: '@deepseek-ai/dsh-lsy-sysmon'
 
-    # Voice (ctx.lsyVoice): text to speech for the `speak` tool (feiyu on the laptop first, the Mac
-    # mini TTS service as fallback; the feiyu key is LSY_FEIYU_API_KEY in $DSH_HOME/.env) and speech
+    # Voice (ctx.lsyVoice): text to speech for the `speak` tool (the Mac mini TTS service first, feiyu
+    # on the laptop as fallback; the feiyu key is LSY_FEIYU_API_KEY in $DSH_HOME/.env) and speech
     # to text for audio files the owner sends on WeChat. Transcription is OFF: to turn it on, add
     # to the profile patch ($DSH_HOME/profiles/event/cordis.patch.yml)
     #   - id: lsy-voice

@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Your agent can talk, and can understand a voice note. `ctx.lsyVoice.speak(text)` turns text into an audio file with your own services: feiyu on the laptop first, the Mac mini's TTS service when feiyu is down. `ctx.lsyVoice.transcribe(path)` turns an audio file into text through the mini's asr-service. Transcription is off until you switch it on, and it only reads files that were handed to it: nothing here opens a microphone or listens. Every service answer is saved to disk before it is parsed, every call has a deadline and retries, and every failure is logged with its reason.
+Your agent can talk, and can understand a voice note. `ctx.lsyVoice.speak(text)` turns text into an audio file with your own services: the Mac mini's TTS service first, feiyu on the laptop when the mini's fails. `ctx.lsyVoice.transcribe(path)` turns an audio file into text through the mini's asr-service. Transcription is off until you switch it on, and it only reads files that were handed to it: nothing here opens a microphone or listens. Every service answer is saved to disk before it is parsed, every call has a deadline and retries, and every failure is logged with its reason.
 
 ## Table of Contents
 
@@ -39,12 +39,12 @@ The feiyu key goes into `$DSH_HOME/.env` as `LSY_FEIYU_API_KEY` (restart after c
 | `dataDir` | `<DSH_HOME>/lsy-voice` | Audio under `audio/`, raw ASR answers under `asr/` (directories 0700, files 0600) |
 | `keepDays` | `14` | Files older than this are removed on the next call |
 | `tts.enabled` | `true` | Turns `speak` off |
-| `tts.provider` / `tts.fallback` | `feiyu` / `mac-mini` | First provider and the one tried after it fails (`none` stops after one) |
+| `tts.provider` / `tts.fallback` | `mac-mini` / `feiyu` | First provider and the one tried after it fails (`none` stops after one). feiyu sounds better and answers in 6-8 s, but the Mac mini, where the event service runs, could not reach it on 2026-10-30 (TCP to the laptop's port 19880 timed out), so the local service leads; set `tts.provider: feiyu` where the laptop is reachable |
 | `tts.format` | `mp3` | `mp3` converts with ffmpeg (`tts.ffmpegPath`, default `/opt/homebrew/bin/ffmpeg`) and delivers the WAV when that fails |
-| `tts.maxChars` | `600` | Longest text; longer text is refused so the agent splits it |
+| `tts.maxChars` | `200` | Longest text; longer text is refused so the agent splits it (the Mac mini service needs about 25 s plus 2.4 s per character) |
 | `tts.retries` / `tts.retryDelayMs` | `2` / `1000` | Extra attempts of one HTTP call; 429, 5xx, timeouts, and network errors retry, other 4xx fail at once |
 | `tts.feiyu.*` | laptop `http://100.117.175.117:19880`, voice `feiyu`, style `cute` | `timeoutMs` 30 s per call, `jobTimeoutMs` 180 s per job (the first request after idle loads the model, about 45 s), `pollMs` 2 s |
-| `tts.macMini.*` | `http://stevens-mac-mini.tailc2559b.ts.net:8098`, speaker `vivian`, `Chinese` | `timeoutMs` 120 s (a cold model load is slow) |
+| `tts.macMini.*` | `http://127.0.0.1:8098` (the event service runs on the mini), speaker `vivian`, `Chinese` | `timeoutMs` 240 s (a cold model load and the synthesis itself are slow) |
 | `asr.enabled` | `false` | The switch for speech to text |
 | `asr.baseUrl` / `asr.engine` / `asr.language` | `http://127.0.0.1:8099` / `funasr` / unset | `funasr` is Chinese; `whisper` is English and multilingual (`language` is its hint) |
 | `asr.timeoutMs` / `asr.retries` / `asr.maxBytes` | 120 s / `2` / 25 MiB | Per call, extra attempts, largest file |
@@ -116,7 +116,7 @@ Append-only: the clause is part of the owner's message and follows the reusable 
 
 - **Files only** — WeChat's own voice messages arrive with WeChat's transcript and no audio, so only audio files sent as attachments reach the asr-service. There is no microphone path.
 - **No voice bubbles** — iLink bots cannot send voice messages, so speech goes out as an mp3 file attachment.
-- **Feiyu is a laptop GPU** — the first request after idle takes about 45 s, each later one 6–8 s, and the laptop must be awake; the fallback then answers, with its own cold start.
+- **Slow either way** — the Mac mini service took 32 s for 7 characters and 85 s for 25 on 2026-10-30, and feiyu takes about 45 s for the first request after idle and 6–8 s after that, from a laptop that must be awake and, from the mini, was unreachable that day.
 - **Bilibili** — the Bilibili account's messages carry text only and its preset has no `speak` tool.
 
 <a id="dev-note"></a>
@@ -127,7 +127,7 @@ Append-only: the clause is part of the owner's message and follows the reusable 
 
 This Dev Note is non-authoritative working context: undecided directions and notes for maintainers. Shipped behavior and accepted rationale live in the sections above, the package code, and the linked Agent Notes.
 
-- 2026-10-30: on the first day the Mac mini TTS service sat in `loading` for over six minutes under memory pressure, which is why feiyu is the default.
+- 2026-10-30: measured from the laptop-side Mac, feiyu is the better provider (cold 50 s, warm 6.4 s) while the Mac mini service sat in `loading` for over six minutes; measured from the mini, feiyu's port timed out and the local service answered, so the defaults follow the production host. Check `curl http://100.117.175.117:19880/health` from the mini before flipping them.
 - WeChat's `voice_item` carries a transcript and, per the iLink protocol, a SILK media reference; decoding SILK needs a decoder that is not installed on the host.
 
 </details>

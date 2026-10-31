@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-你的 agent 能开口说话，也能听懂一条语音文件。`ctx.lsyVoice.speak(text)` 用你自己的服务把文字合成音频文件：先用笔记本上的 feiyu，feiyu 不可用时换 Mac mini 的 TTS 服务。`ctx.lsyVoice.transcribe(path)` 经 mini 的 asr-service 把音频文件转成文字。语音转文字在你打开开关之前保持关闭，并且只读交给它的文件：这里没有任何打开麦克风或监听的代码。服务的每份回答都先存盘再解析，每次调用都有超时和重试，失败都会带着原因写入日志。
+你的 agent 能开口说话，也能听懂一条语音文件。`ctx.lsyVoice.speak(text)` 用你自己的服务把文字合成音频文件：先用 Mac mini 的 TTS 服务，它失败时换笔记本上的 feiyu。`ctx.lsyVoice.transcribe(path)` 经 mini 的 asr-service 把音频文件转成文字。语音转文字在你打开开关之前保持关闭，并且只读交给它的文件：这里没有任何打开麦克风或监听的代码。服务的每份回答都先存盘再解析，每次调用都有超时和重试，失败都会带着原因写入日志。
 
 ## 目录
 
@@ -39,12 +39,12 @@ feiyu 的 key 以 `LSY_FEIYU_API_KEY` 写入 `$DSH_HOME/.env`（改 `.env` 后�
 | `dataDir` | `<DSH_HOME>/lsy-voice` | 音频在 `audio/`，ASR 原始回答在 `asr/`（目录 0700，文件 0600） |
 | `keepDays` | `14` | 超过该天数的文件在下一次调用时删除 |
 | `tts.enabled` | `true` | 关闭 `speak` |
-| `tts.provider` / `tts.fallback` | `feiyu` / `mac-mini` | 首选服务与失败后改用的服务（`none` 表示只试一个） |
+| `tts.provider` / `tts.fallback` | `mac-mini` / `feiyu` | 首选服务与失败后改用的服务（`none` 表示只试一个）。feiyu 音质更好、6-8 秒出声，但事件服务所在的 Mac mini 在 2026-10-30 连不上笔记本的 19880 端口（TCP 超时），所以本机服务排第一；能连上笔记本的环境把 `tts.provider` 设成 `feiyu` |
 | `tts.format` | `mp3` | `mp3` 用 ffmpeg 转换（`tts.ffmpegPath`，默认 `/opt/homebrew/bin/ffmpeg`），转换失败则交付 WAV |
-| `tts.maxChars` | `600` | 文字上限；更长的会被拒绝，让 agent 分段 |
+| `tts.maxChars` | `200` | 文字上限；更长的会被拒绝，让 agent 分段（Mac mini 服务约需 25 秒加每字 2.4 秒） |
 | `tts.retries` / `tts.retryDelayMs` | `2` / `1000` | 单次 HTTP 调用的额外重试次数；429、5xx、超时和网络错误会重试，其余 4xx 立即失败 |
 | `tts.feiyu.*` | 笔记本 `http://100.117.175.117:19880`，音色 `feiyu`，风格 `cute` | `timeoutMs` 单次调用 30 秒，`jobTimeoutMs` 单个任务 180 秒（闲置后的第一次请求要加载模型，约 45 秒），`pollMs` 2 秒 |
-| `tts.macMini.*` | `http://stevens-mac-mini.tailc2559b.ts.net:8098`，说话人 `vivian`，`Chinese` | `timeoutMs` 120 秒（模型冷启动很慢） |
+| `tts.macMini.*` | `http://127.0.0.1:8098`（事件服务就跑在 mini 上），说话人 `vivian`，`Chinese` | `timeoutMs` 240 秒（模型冷启动和合成本身都慢） |
 | `asr.enabled` | `false` | 语音转文字的开关 |
 | `asr.baseUrl` / `asr.engine` / `asr.language` | `http://127.0.0.1:8099` / `funasr` / 未设置 | `funasr` 用于中文；`whisper` 用于英文和多语言（`language` 是它的语言提示） |
 | `asr.timeoutMs` / `asr.retries` / `asr.maxBytes` | 120 秒 / `2` / 25 MiB | 单次调用超时、额外重试次数、文件大小上限 |
@@ -116,7 +116,7 @@ feiyu 的 key 以 `LSY_FEIYU_API_KEY` 写入 `$DSH_HOME/.env`（改 `.env` 后�
 
 - **只处理文件**——微信自己的语音消息只带微信的转写文字、不带音频，所以只有作为附件发来的音频文件才会到 asr-service。没有麦克风通路。
 - **没有语音气泡**——iLink 机器人不能发语音消息，语音以 mp3 文件附件发出。
-- **feiyu 是笔记本 GPU**——闲置后第一次请求约 45 秒，之后每次 6–8 秒，并且笔记本必须醒着；feiyu 不可用时由兜底服务应答，它也有自己的冷启动。
+- **两边都慢**——2026-10-30 实测 Mac mini 服务合成 7 个字用了 32 秒、25 个字用了 85 秒；feiyu 闲置后第一次请求约 45 秒，之后 6–8 秒，要求笔记本醒着，而且当天从 mini 连不上它。
 - **B 站**——B 站账号的消息只能发文字，它的 preset 也没有 `speak` 工具。
 
 <a id="dev-note"></a>
@@ -127,7 +127,7 @@ feiyu 的 key 以 `LSY_FEIYU_API_KEY` 写入 `$DSH_HOME/.env`（改 `.env` 后�
 
 本开发备注是不具权威性的工作上下文：尚未决定的探索方向与维护者备注。已交付的行为与既定理由以上文、包代码和相关 Agent Note 为准。
 
-- 2026-10-30：当天 Mac mini TTS 服务在内存压力下停在 `loading` 超过六分钟，所以默认用 feiyu。
+- 2026-10-30：从笔记本这边的 Mac 测，feiyu 更好（冷启动 50 秒、热 6.4 秒），而 Mac mini 服务停在 `loading` 超过六分钟；从 mini 测，feiyu 端口超时、本机服务能应答，所以默认值跟着生产主机走。改默认值前先在 mini 上跑 `curl http://100.117.175.117:19880/health`。
 - 微信的 `voice_item` 带转写文字，按 iLink 协议还带一个 SILK 媒体引用；解 SILK 需要宿主上没有安装的解码器。
 
 </details>

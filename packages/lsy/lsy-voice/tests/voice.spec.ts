@@ -37,7 +37,7 @@ async function mount(overrides: Record<string, unknown> = {}, keys: Record<strin
   ctx.logger.exporter({ levels: { default: 3 }, export: (message) => { logs.push({ type: message.type, text: String(message.args[0]) }) } })
   ctx.provide('credentials', { resolve: async (ref: string) => (keys[ref] === undefined ? undefined : { value: keys[ref], source: 'env' }) } as never)
   const tts = {
-    format: 'wav', retryDelayMs: 1, retries: 1,
+    provider: 'feiyu', fallback: 'mac-mini', format: 'wav', retryDelayMs: 1, retries: 1,
     feiyu: { baseUrl: `${url}/feiyu`, pollMs: 100 },
     macMini: { baseUrl: `${url}/mini` },
     ...(overrides.tts as object | undefined),
@@ -47,6 +47,16 @@ async function mount(overrides: Record<string, unknown> = {}, keys: Record<strin
   await ctx.plugin(LsyVoice, Config({ dataDir: dir, tts, asr, ...rest } as never))
   return { ctx, voice: ctx.lsyVoice, dir, logs }
 }
+
+describe('defaults', () => {
+  it('speaks through the local Mac mini service first and falls back to feiyu, with transcription off', () => {
+    const config = Config({})
+    expect(config.tts).toMatchObject({ enabled: true, provider: 'mac-mini', fallback: 'feiyu', format: 'mp3', maxChars: 200 })
+    expect(config.tts.macMini).toMatchObject({ baseUrl: 'http://127.0.0.1:8098', speaker: 'vivian', language: 'Chinese', timeoutMs: 240_000 })
+    expect(config.tts.feiyu).toMatchObject({ baseUrl: 'http://100.117.175.117:19880', apiKeyEnv: 'LSY_FEIYU_API_KEY', voice: 'feiyu', style: 'cute', jobTimeoutMs: 180_000 })
+    expect(config.asr).toMatchObject({ enabled: false, baseUrl: 'http://127.0.0.1:8099', engine: 'funasr' })
+  })
+})
 
 describe('speak', () => {
   it('writes the provider answer to disk, returns the file, and logs it without the text', async () => {

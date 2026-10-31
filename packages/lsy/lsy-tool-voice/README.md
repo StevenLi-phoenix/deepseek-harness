@@ -69,7 +69,7 @@ This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 
 #### What the model sees
 
-One tool schema whenever the calling Agent's preset mounts the package and `ctx.lsyVoice` exists: `speak` with the required string `text` and the optional boolean `send` (default true). The description says that the text becomes speech and, by default, goes to the owner on WeChat as an mp3 file because WeChat bots cannot send voice bubbles; to keep the text short and natural to say (about 600 characters at most, longer speech in several calls), written the way it is spoken; and that sending works only while the owner's last message is recent.
+One tool schema whenever the calling Agent's preset mounts the package and `ctx.lsyVoice` exists: `speak` with the required string `text` and the optional boolean `send` (default true). The description says that the text becomes speech and, by default, goes to the owner on WeChat as an mp3 file because WeChat bots cannot send voice bubbles; to keep the text short and natural to say (a sentence or two, within the configured 200 characters by default, longer speech in several calls because synthesis takes tens of seconds), written the way it is spoken; and that sending works only while the owner's last message is recent.
 
 #### Token effect
 
@@ -83,7 +83,7 @@ Prefix-stable while tool definitions and visibility are unchanged; mounting or d
 
 #### What the model sees
 
-One JSON text block per call: `{ "path", "format": "mp3" | "wav", "bytes", "provider", "sent"? , "notSent"? }` with `sent` set to what went out or `notSent` holding the reason (`reply window expired`, `the owner has not written yet`, `the WeChat channel is not mounted`, and the other reasons `wechat_send_file` reports), or `{ "error": "<reason>" }` such as `speech is turned off (lsy-voice tts.enabled is false)`, `the text is 700 characters; speech takes at most 600, so say it in parts`, or `speech failed (feiyu: …; mac-mini: …)`.
+One JSON text block per call: `{ "path", "format": "mp3" | "wav", "bytes", "provider", "sent"? , "notSent"? }` with `sent` set to what went out or `notSent` holding the reason (`reply window expired`, `the owner has not written yet`, `the WeChat channel is not mounted`, and the other reasons `wechat_send_file` reports), or `{ "error": "<reason>" }` such as `speech is turned off (lsy-voice tts.enabled is false)`, `the text is 300 characters; speech takes at most 200, so say it in parts`, or `speech failed (feiyu: …; mac-mini: …)`.
 
 #### Token effect
 

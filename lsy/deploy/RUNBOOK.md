@@ -257,7 +257,7 @@ Acting as `dsh-runtime` is a step down from `lishuyu`; root is limited to the on
 
 ## 13. Voice (optional)
 
-`lsy-voice` gives the WeChat agent a `speak` tool (text to speech, delivered as an mp3 file because iLink bots cannot send voice bubbles) and can transcribe audio files the owner sends. It is mounted by the bundle; only the key needs a step. feiyu runs on the laptop (`http://100.117.175.117:19880`, first request after idle about 45 s, then 6-8 s), the Mac mini TTS service (`:8098`) is the fallback.
+`lsy-voice` gives the WeChat agent a `speak` tool (text to speech, delivered as an mp3 file because iLink bots cannot send voice bubbles) and can transcribe audio files the owner sends. It is mounted by the bundle; only the key needs a step. The Mac mini TTS service (`http://127.0.0.1:8098`, about 25 s plus 2.4 s per character, so `tts.maxChars` is 200) answers first; feiyu on the laptop (`http://100.117.175.117:19880`, first request after idle about 45 s, then 6-8 s) is the fallback because the mini could not open that port on 2026-10-30. Check with `curl -m 8 http://100.117.175.117:19880/health` from the mini, and set `tts.provider: feiyu` in the profile patch once it answers.
 
 1. Add the feiyu key to the service `.env` without printing it (the laptop's container holds it; restart afterwards):
    ```sh
@@ -265,8 +265,8 @@ Acting as `dsh-runtime` is a step down from `lishuyu`; root is limited to the on
    printf 'LSY_FEIYU_API_KEY=%s\n' "$KEY" | sudo -n -u dsh-runtime /bin/sh -c 'umask 077; cat >> /Users/dsh-runtime/.dsh/.env'
    sudo -n /bin/launchctl kickstart -k system/app.lishuyu.dsh-events
    ```
-   `<docker>` is the laptop's Docker CLI invocation (see the API platform runner notes). Without the key `speak` fails with `feiyu: the API key is not configured` and falls back to the Mac mini.
-2. Check: ask the agent on WeChat to say something; `stdout.log` shows `lsy-voice: spoke N chars with feiyu in … ms -> /Users/dsh-runtime/.dsh/lsy-voice/audio/…mp3` and `lsy-tool-voice: spoke … sent as file`. Raw answers and audio stay in `$DSH_HOME/lsy-voice/` for 14 days.
+   `<docker>` is the laptop's Docker CLI invocation (see the API platform runner notes). Without the key the feiyu fallback fails with `feiyu: the API key is not configured`.
+2. Check: ask the agent on WeChat to say something; `stdout.log` shows `lsy-voice: spoke N chars with mac-mini in … ms -> /Users/dsh-runtime/.dsh/lsy-voice/audio/…mp3` and `lsy-tool-voice: spoke … sent as file`. Raw answers and audio stay in `$DSH_HOME/lsy-voice/` for 14 days.
 3. Speech to text is off. To turn it on, add to `$DSH_HOME/profiles/event/cordis.patch.yml` (reloads live):
    ```yaml
    - id: lsy-voice
