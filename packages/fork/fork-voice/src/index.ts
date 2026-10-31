@@ -120,11 +120,11 @@ export const Config: z<Config> = z.object({
   keepDays: z.natural().min(1).default(14),
   tts: z.object({
     enabled: z.boolean().default(true),
-    provider: z.union(['feiyu', 'mac-mini'] as const).default('feiyu'),
-    fallback: z.union(['feiyu', 'mac-mini', 'none'] as const).default('mac-mini'),
+    provider: z.union(['feiyu', 'mac-mini'] as const).default('mac-mini'),
+    fallback: z.union(['feiyu', 'mac-mini', 'none'] as const).default('feiyu'),
     format: z.union(['mp3', 'wav'] as const).default('mp3'),
     ffmpegPath: z.string().default('/opt/homebrew/bin/ffmpeg'),
-    maxChars: z.natural().min(1).max(2000).default(600),
+    maxChars: z.natural().min(1).max(2000).default(200),
     retries: z.natural().default(2),
     retryDelayMs: z.natural().default(1000),
     feiyu: z.object({
@@ -137,10 +137,10 @@ export const Config: z<Config> = z.object({
       pollMs: z.natural().min(100).default(2000),
     }),
     macMini: z.object({
-      baseUrl: z.string().default('http://stevens-mac-mini.tailc2559b.ts.net:8098'),
+      baseUrl: z.string().default('http://127.0.0.1:8098'),
       speaker: z.string().default('vivian'),
       language: z.string().default('Chinese'),
-      timeoutMs: z.natural().min(1000).default(120_000),
+      timeoutMs: z.natural().min(1000).default(240_000),
     }),
   }),
   asr: z.object({

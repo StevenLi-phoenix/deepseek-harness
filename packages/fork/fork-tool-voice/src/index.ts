@@ -25,7 +25,7 @@ interface FileSender {
 
 const DESCRIPTION = [
   'Say something out loud: turns the text into speech and, by default, sends the audio to the owner on WeChat as an audio file (WeChat does not let a bot send voice bubbles, so it arrives as an mp3 attachment the owner taps to play).',
-  'Use it when the owner asks you to speak, read something aloud, or when a spoken note is warmer than text; keep the text short and natural to say, at most about 600 characters, and split longer speech into several calls.',
+  'Use it when the owner asks you to speak, read something aloud, or when a spoken note is warmer than text; keep the text short and natural to say (a sentence or two, within the configured limit of 200 characters by default; a longer text is refused, so split it) because synthesis takes tens of seconds.',
   'Write numbers, units, and symbols the way they are spoken. Sending works only while the owner\'s last WeChat message is recent; otherwise the file is still saved and the result says why it was not sent.',
   'Your final answer still goes out as the text reply.',
 ].join(' ')
