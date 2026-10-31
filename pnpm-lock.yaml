@@ -13784,6 +13784,9 @@ importers:
       '@deepseek-ai/dsh-lsy-event-bus':
         specifier: workspace:*
         version: link:../lsy-event-bus
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
 
   packages/lsy/lsy-github-sensor:
     dependencies:

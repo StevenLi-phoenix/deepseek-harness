@@ -39,6 +39,7 @@
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-credentials": "workspace:*",
     "@deepseek-ai/dsh-host-webserver": "workspace:*",
-    "@deepseek-ai/dsh-lsy-event-bus": "workspace:*"
+    "@deepseek-ai/dsh-lsy-event-bus": "workspace:*",
+    "yaml": "^2.9.0"
   }
 }
