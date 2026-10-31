@@ -2756,7 +2756,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-lsy-qq`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle` · `credentials`
-- `source`: [`packages/lsy/lsy-qq/src/index.ts:56`](../packages/lsy/lsy-qq/src/index.ts)
+- `source`: [`packages/lsy/lsy-qq/src/index.ts:57`](../packages/lsy/lsy-qq/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
