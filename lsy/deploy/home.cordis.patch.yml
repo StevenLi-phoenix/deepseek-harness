@@ -13,7 +13,7 @@
     trustedHosts: !!js ctx.webStartup.trustedHosts
     cookieMaxAgeDays: 365
 
-# Models come from OpenRouter or other configured providers, so skip the official
+# Models come from llmgateway or other configured providers, so skip the official
 # DeepSeek API-key onboarding dialog.
 - id: ui-settings-models
   config:

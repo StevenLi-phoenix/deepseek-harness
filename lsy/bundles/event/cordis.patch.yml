@@ -8,7 +8,7 @@
 #
 # Secrets are read per use from the instance credential store or $DSH_HOME/.env:
 #   the model key the deployment's home patch names (lsy/deploy/home.cordis.patch.yml:
-#   OPENROUTER_API_KEY), LSY_GITHUB_TOKEN, LSY_GITHUB_NOTIFICATIONS_TOKEN (optional).
+#   LLMGW_DSH_API_KEY), LSY_GITHUB_TOKEN, LSY_GITHUB_NOTIFICATIONS_TOKEN (optional).
 # The WeChat bot account is bound once with lsy/deploy/wechat-login.mjs and kept in
 # $DSH_HOME/lsy-wechat/account.json.
 # The agent's own Bilibili account is signed in by QR from Settings → Bilibili account; its
@@ -353,7 +353,7 @@
         # charges half outside its peak: Monday-Friday 09:00-12:00 and 14:00-18:00 Beijing time, which
         # is 01:00-04:00 and 06:00-10:00 UTC on the same weekday. Chinese public holidays have no
         # peak: add each as a UTC date once the State Council publishes the year's arrangement
-        # (2027-01-01 is fixed). OpenCode Go and OpenRouter price the same at any time.
+        # (2027-01-01 is fixed). OpenCode Go (through llmgateway) prices the same at any time.
         pricing:
           - providers: [deepseek-official, deepseek-account]
             peak:

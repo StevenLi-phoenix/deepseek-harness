@@ -9,7 +9,7 @@ interface Route {
   fetch: (request: Request) => Promise<Response>
 }
 
-const KEYS: Record<string, string> = { OPENROUTER_API_KEY: 'sk-or-secret', DEEPSEEK_API_KEY: 'sk-ds-secret' }
+const KEYS: Record<string, string> = { LLMGW_DSH_API_KEY: 'sk-gw-secret', DEEPSEEK_API_KEY: 'sk-ds-secret' }
 
 async function mount(config: Record<string, unknown> = {}) {
   const ctx = new Context()
@@ -37,7 +37,12 @@ beforeEach(() => {
   vi.spyOn(Date, 'now').mockImplementation(() => now)
   upstream = vi.fn((input: string | URL | Request) => {
     const url = String(input instanceof Request ? input.url : input)
-    if (url === 'https://openrouter.ai/api/v1/key') return Promise.resolve(Response.json({ data: { limit: 10, limit_remaining: 7.5, usage: 2.5 } }))
+    if (url === 'https://api.lishuyu.app/llm/api/upstream/opencode-go/quota') {
+      return Promise.resolve(Response.json({
+        usage: { rolling: { status: 'ok', percent: 5, resetsAt: '2026-10-31T07:52:27.000Z' } },
+        key: { limit_usd: 2, period: { kind: 'daily', seconds: null }, spend_usd: 0.25, remaining_usd: 1.75 },
+      }))
+    }
     if (url === 'https://api.deepseek.com/user/balance') return Promise.resolve(new Response('busy', { status: 503 }))
     return Promise.resolve(new Response('unexpected', { status: 500 }))
   })
@@ -53,13 +58,29 @@ describe('lsy-balance Host route', () => {
   it('reads every source whose key is set and skips the rest', async () => {
     const { get, logs } = await mount()
     expect(await get()).toEqual({ readings: [
-      { source: 'openrouter', label: 'OpenRouter', status: 'ready', kind: 'credit', currency: 'USD', remaining: 7.5, limit: 10, used: 2.5 },
       { source: 'deepseek', label: 'DeepSeek API', status: 'failed', reason: 'HTTP 503' },
+      {
+        source: 'opencode-go', label: 'OpenCode Go', status: 'ready', kind: 'quota',
+        windows: [{ name: 'rolling', percent: 5, resetsAt: '2026-10-31T07:52:27.000Z' }],
+        key: { period: 'daily', limitUsd: 2, spendUsd: 0.25, remainingUsd: 1.75 },
+      },
     ] })
     expect(upstream).toHaveBeenCalledTimes(2)
     expect(logs).toContain('warn lsy-balance: DeepSeek API balance read failed: HTTP 503')
-    expect(logs).toContain('info lsy-balance: OPENCODE_GO_API_KEY is not set; OpenCode Go is not shown')
-    expect(logs.join('\n')).not.toMatch(/sk-(or|ds)-secret/)
+    expect(logs.join('\n')).not.toMatch(/sk-(gw|ds)-secret/)
+    const gateway = upstream.mock.calls.find(call => String(call[0]).includes('/opencode-go/quota'))!
+    expect(new Headers((gateway[1] as RequestInit).headers).get('authorization')).toBe('Bearer sk-gw-secret')
+  })
+
+  it('shows no OpenCode Go row, and says so once, while the gateway key is unset', async () => {
+    delete KEYS['LLMGW_DSH_API_KEY']
+    try {
+      const { get, logs } = await mount()
+      expect((await get()).readings.map(reading => reading.source)).toEqual(['deepseek'])
+      expect(logs).toContain('info lsy-balance: LLMGW_DSH_API_KEY is not set; OpenCode Go is not shown')
+    } finally {
+      KEYS['LLMGW_DSH_API_KEY'] = 'sk-gw-secret'
+    }
   })
 
   it('answers from a fresh cache, refreshes at most every ten seconds on request, and shares requests in flight', async () => {
@@ -80,7 +101,7 @@ describe('lsy-balance Host route', () => {
   })
 
   it('honors configured sources and their labels', async () => {
-    const { get } = await mount({ sources: [{ kind: 'openrouter', keyRef: 'OPENROUTER_API_KEY', label: 'OR' }] })
-    expect((await get()).readings.map(reading => reading.label)).toEqual(['OR'])
+    const { get } = await mount({ sources: [{ kind: 'opencode-go', keyRef: 'LLMGW_DSH_API_KEY', label: 'GW' }] })
+    expect((await get()).readings.map(reading => reading.label)).toEqual(['GW'])
   })
 })

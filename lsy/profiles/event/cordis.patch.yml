@@ -5,14 +5,34 @@
 # The event composition itself is the @deepseek-ai/dsh-lsy-event-bundle layer.
 #
 # Starting values, yours to change from the Web UI (Models page, model picker, settings):
-# models through OpenRouter, keyed by OPENROUTER_API_KEY in $DSH_HOME/.env, and new
-# Sessions (WeChat chat, watch-started, Web UI) on deepseek/deepseek-v4.1-flash.
+# models through llmgateway (https://api.lishuyu.app/llm/v1), keyed by LLMGW_DSH_API_KEY in
+# $DSH_HOME/.env, serving OpenCode Go's DeepSeek V4.1 Flash as `opencode-go/deepseek-v4.1-flash`.
+# The route keeps the name `opencode-go`: pi-ai then sends the per-conversation `x-opencode-session`
+# header the gateway forwards, which is what keeps prompt-cache reads near 96 %. New Sessions (WeChat
+# chat, watch-started, Web UI) use this model. The route's `models` list declares the model itself,
+# because the gateway's prefixed id is not in pi-ai's catalog.
 - id: llm-pi-ai
   config:
     providers:
-      openrouter:
-        apiKeyEnv: OPENROUTER_API_KEY
+      opencode-go:
+        apiKeyEnv: LLMGW_DSH_API_KEY
+        api: openai-completions
+        baseURL: https://api.lishuyu.app/llm/v1
+        models:
+          - id: opencode-go/deepseek-v4.1-flash
+            name: DeepSeek V4.1 Flash (llmgateway)
+            contextWindow: 1000000
+            maxTokens: 384000
+            input: [text, image]
+            reasoningEfforts: { off: null, low: low, high: high, max: max }
+            compat:
+              supportsStore: false
+              supportsDeveloperRole: false
+              maxTokensField: max_tokens
+              requiresReasoningContentOnAssistantMessages: true
+              thinkingFormat: deepseek
 - id: agent-default-model
   config:
-    provider: openrouter
-    model: deepseek/deepseek-v4.1-flash
+    provider: opencode-go
+    model: opencode-go/deepseek-v4.1-flash
+    reasoningEffort: low

@@ -17,8 +17,7 @@ function mount(state: Partial<BalanceState>) {
   return { store, refresh, view }
 }
 
-const OPENROUTER: ProviderReading = { source: 'openrouter', label: 'OpenRouter', status: 'ready', kind: 'credit', currency: 'USD', remaining: 7.5, limit: 10, used: 2.5 }
-const OPENCODE: ProviderReading = { source: 'opencode-go', label: 'OpenCode Go', status: 'ready', kind: 'quota', windows: [
+const OPENCODE: ProviderReading = { source: 'opencode-go', label: 'OpenCode Go', status: 'ready', kind: 'quota', key: { period: 'daily', limitUsd: 2, spendUsd: 0.25, remainingUsd: 1.75 }, windows: [
   { name: 'rolling', percent: 10, resetsAt: null },
   { name: 'weekly', percent: 85, resetsAt: new Date(2026, 9, 25, 20, 0).toISOString() },
   { name: 'monthly', percent: 100, resetsAt: new Date(2026, 10, 15, 13, 32).toISOString() },
@@ -34,9 +33,9 @@ describe('ProviderBalances', () => {
   })
 
   it('lists each provider with its value, explanation, and quota bars', () => {
-    mount({ checkedAt: new Date(2026, 9, 22, 20, 5).getTime(), providers: [OPENROUTER, OPENCODE] })
+    mount({ checkedAt: new Date(2026, 9, 22, 20, 5).getTime(), providers: [OPENCODE] })
     const card = screen.getByRole('region', { name: '其他供应商余额' })
-    expect(card.textContent).toContain('OpenRouter限额 $10.00 · 已用 $2.50$7.50')
+    expect(card.textContent).toContain('每日限额 $2.00 · 已用 $0.25')
     expect(screen.getByRole('status').textContent).toBe('20:05 更新')
     const meters = screen.getAllByRole('meter')
     expect(meters.map(meter => [meter.getAttribute('aria-label'), meter.getAttribute('aria-valuenow')])).toEqual([['5 小时', '10'], ['每周', '85'], ['每月', '100']])
@@ -70,7 +69,7 @@ describe('ProviderBalances', () => {
   })
 
   it('refreshes on demand and holds the button while a read is in flight', () => {
-    const { refresh, view, store } = mount({ checkedAt: 0, providers: [OPENROUTER] })
+    const { refresh, view, store } = mount({ checkedAt: 0, providers: [OPENCODE] })
     refresh.mockClear()
     fireEvent.click(screen.getByRole('button', { name: '刷新其他供应商余额' }))
     expect(refresh).toHaveBeenCalledWith(0)

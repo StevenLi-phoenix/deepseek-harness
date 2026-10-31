@@ -3,23 +3,23 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/lsy/lsy-balance/README.md
 /:
-  en: 80f285ff03e6f6a3
-  zh: 5502a25d2152bc4e
+  en: ea37f96e54b6db6a
+  zh: dc459f45c7d9f269
 /deepseek-ai-dsh-lsy-balance:
   en: 59b01ff673aae9e9
   zh: 9515b63df4cc5c5f
 /deepseek-ai-dsh-lsy-balance/summary:
-  en: a71f3f40b761f2e3
-  zh: 1f8d932aeba2341e
+  en: 6318f3ab8ff780e4
+  zh: d0c11df5dda4dcca
 /deepseek-ai-dsh-lsy-balance/table-of-contents:
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
 /deepseek-ai-dsh-lsy-balance/use-this-package:
-  en: 779363a70f216178
-  zh: 72a5de25b9c44bcc
+  en: 4e511b3f850fb37f
+  zh: b7eb20fb943bf55e
 /deepseek-ai-dsh-lsy-balance/understand-the-implementation:
-  en: d10b2de873b52b26
-  zh: ec57e35702f94cab
+  en: f2eb5bca383dc818
+  zh: 75293a8abfb9f486
 /deepseek-ai-dsh-lsy-balance/further-exploration:
   en: b6791012697e9904
   zh: 68d23d0b79022b13
@@ -30,8 +30,8 @@
   en: ca75c51c89c2c9b0
   zh: a18013b9ffbc0b06
 /deepseek-ai-dsh-lsy-balance/known-limitations-and-deferred-work:
-  en: 700476d78964dd5a
-  zh: e609b4f3df62e1d4
+  en: a4c9876f9734b70f
+  zh: ba8d8a9973666d97
 /deepseek-ai-dsh-lsy-balance/known-limitations-and-deferred-work/dev-note:
   en: f24be6ccd34dd28d
   zh: a37fd8858fafaaba

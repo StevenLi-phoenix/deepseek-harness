@@ -1,6 +1,6 @@
 /**
  * Account page card listing the balance or quota of every provider key the
- * Host holds (OpenRouter, the DeepSeek API, OpenCode Go), under the DeepSeek
+ * Host holds (the DeepSeek API, OpenCode Go through llmgateway), under the DeepSeek
  * account card. One row per provider: name and explanation on the left, the
  * headline value on the right, and a bar per window for quota subscriptions,
  * marked where the window's time stands, with a line saying where the pace

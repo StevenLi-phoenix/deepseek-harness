@@ -5,7 +5,7 @@
  */
 
 import { Big } from 'big.js'
-import type { BalanceState, ProviderReading, WalletLine } from './balance.ts'
+import type { BalanceState, KeyLimit, ProviderReading, WalletLine } from './balance.ts'
 import { formatAmount } from './balance.ts'
 import type { BalanceKey } from './locales.ts'
 
@@ -138,6 +138,15 @@ function sameAccount(state: BalanceState, reading: ProviderReading): boolean {
   return key(state.wallets) === key(reading.wallets)
 }
 
+const PERIOD_KEYS: Readonly<Record<string, BalanceKey>> = { daily: 'period.daily', monthly: 'period.monthly', total: 'period.total' }
+
+/** The gateway key's limit line: `每日限额 $2.00 · 已用 $0.25`, or its spend alone when it has no limit. */
+function keyLine(key: KeyLimit, t: Translate): string {
+  if (key.limitUsd === null) return t('detail.keyUnlimited', { used: usd(key.spendUsd) })
+  const period = PERIOD_KEYS[key.period]
+  return t('detail.keyLimit', { period: period === undefined ? key.period : t(period), limit: usd(key.limitUsd), used: usd(key.spendUsd) })
+}
+
 function windowName(name: string, t: Translate): string {
   const key = WINDOW_KEYS[name]
   return key === undefined ? name : t(key)
@@ -162,17 +171,6 @@ function row(reading: ProviderReading, t: Translate, now: number): ProviderRow {
         stale: false,
       }
     }
-    case 'credit':
-      return reading.remaining === null || reading.limit === null
-        ? { ...base, value: t('value.used', { amount: usd(reading.used) }), details: [t('detail.noLimit')], windows: [], exhausted: false, stale: false }
-        : {
-          ...base,
-          value: usd(reading.remaining),
-          details: [t('detail.credit', { limit: usd(reading.limit), used: usd(reading.used) })],
-          windows: [],
-          exhausted: reading.remaining <= 0,
-          stale: false,
-        }
     case 'quota': {
       const top = reading.windows.reduce<(typeof reading.windows)[number] | undefined>(
         (best, window) => best === undefined || window.percent > best.percent ? window : best, undefined)
@@ -181,7 +179,10 @@ function row(reading: ProviderReading, t: Translate, now: number): ProviderRow {
       return {
         ...base,
         value: t('value.used', { amount: `${Math.round(top.percent)}%` }),
-        details: Number.isNaN(resets) ? [] : [t('detail.reset', { window: windowName(top.name, t), time: dateClock(resets) })],
+        details: [
+          ...Number.isNaN(resets) ? [] : [t('detail.reset', { window: windowName(top.name, t), time: dateClock(resets) })],
+          ...reading.key === undefined ? [] : [keyLine(reading.key, t)],
+        ],
         windows: reading.windows.map((window) => {
           const percent = Math.max(0, Math.min(100, window.percent))
           const at = window.resetsAt === null ? Number.NaN : Date.parse(window.resetsAt)
@@ -189,7 +190,8 @@ function row(reading: ProviderReading, t: Translate, now: number): ProviderRow {
             ? { label: windowName(window.name, t), percent, resets: null, ...NO_PACE }
             : { label: windowName(window.name, t), percent, resets: timeLabel(at, now, t), ...paceOf(window.name, percent, at, now, t) }
         }),
-        exhausted: top.percent >= 100,
+        // A spent key limit fails requests on this route even while the quota windows have room.
+        exhausted: top.percent >= 100 || (reading.key?.remainingUsd ?? 1) <= 0,
         stale: false,
       }
     }

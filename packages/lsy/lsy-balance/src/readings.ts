@@ -24,6 +24,17 @@ export interface QuotaWindow {
   readonly resetsAt: string | null
 }
 
+/** The spending limit of the llmgateway key a quota reading was taken with, in US dollars. */
+export interface KeyLimit {
+  /** How often the limit resets: `daily`, `monthly`, `total`, or whatever the gateway names. */
+  readonly period: string
+  /** The limit; null when the key has none. */
+  readonly limitUsd: number | null
+  readonly spendUsd: number
+  /** What is left under the limit; null when the key has none. */
+  readonly remainingUsd: number | null
+}
+
 /** Fields every reading carries. */
 interface ReadingBase {
   /** Source kind, also the stable id: one reading per kind. */
@@ -38,14 +49,11 @@ export type ProviderReading = ReadingBase & (
   | { readonly status: 'ready'; readonly kind: 'wallets'; readonly wallets: readonly WalletLine[] }
   | {
     readonly status: 'ready'
-    readonly kind: 'credit'
-    readonly currency: 'USD'
-    /** Credit left under the key's limit; null when the key has no limit. */
-    readonly remaining: number | null
-    readonly limit: number | null
-    readonly used: number
+    readonly kind: 'quota'
+    readonly windows: readonly QuotaWindow[]
+    /** The gateway key's own spending limit, when the quota route reports it. */
+    readonly key?: KeyLimit
   }
-  | { readonly status: 'ready'; readonly kind: 'quota'; readonly windows: readonly QuotaWindow[] }
 )
 
 /** Body of `GET api/lsy.balance`. */

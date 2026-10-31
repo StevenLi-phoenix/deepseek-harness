@@ -1,7 +1,8 @@
 /**
  * Provider balances plugin, node half: `GET /api/lsy.balance` answers the balance
- * or quota of every configured provider key (OpenRouter, the DeepSeek API,
- * OpenCode Go) for the browser half. Keys are resolved through the
+ * or quota of every configured provider key (the DeepSeek API, and OpenCode Go
+ * through llmgateway, whose answer also carries the gateway key's spending
+ * limit) for the browser half. Keys are resolved through the
  * credentials service and never leave the Host; the route sits under `/api`,
  * so the connection's sign-in check guards it. Answers are cached, so open
  * pages cost at most one round of provider requests per minute.
@@ -26,7 +27,7 @@ export interface Config {
 /** Configuration schema. */
 export const Config: z<Config> = z.object({
   sources: z.array(z.object({
-    kind: z.union(['deepseek', 'openrouter', 'opencode-go'] as const),
+    kind: z.union(['deepseek', 'opencode-go'] as const),
     keyRef: z.string(),
     label: z.string(),
   })).default(DEFAULT_SOURCES.map(source => ({ ...source }))),

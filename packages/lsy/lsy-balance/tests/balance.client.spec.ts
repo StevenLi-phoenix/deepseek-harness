@@ -4,7 +4,7 @@ import { BalanceLoader, createBalanceStore, formatAmount, summarizeWallets, type
 
 type BalanceAnswer = AccountDetails['balance'] | null
 
-const OPENROUTER: ProviderReading = { source: 'openrouter', label: 'OpenRouter', status: 'ready', kind: 'credit', currency: 'USD', remaining: 7.5, limit: 10, used: 2.5 }
+const GATEWAY: ProviderReading = { source: 'opencode-go', label: 'OpenCode Go', status: 'ready', kind: 'quota', windows: [{ name: 'rolling', percent: 5, resetsAt: null }] }
 const noProviders = (): Promise<readonly ProviderReading[]> => Promise.resolve([])
 
 const ready = (cny: string, bonus = '0'): BalanceAnswer => ({
@@ -47,7 +47,7 @@ describe('formatAmount', () => {
 describe('BalanceLoader', () => {
   it('publishes a ready answer with its wallets and time', async () => {
     const store = createBalanceStore()
-    const loader = new BalanceLoader(store, () => Promise.resolve(ready('8.5', '1.5')), () => Promise.resolve([OPENROUTER]), () => 1_000)
+    const loader = new BalanceLoader(store, () => Promise.resolve(ready('8.5', '1.5')), () => Promise.resolve([GATEWAY]), () => 1_000)
     await loader.refresh(0)
     expect(store.getSnapshot()).toEqual({
       phase: 'ready',
@@ -55,7 +55,7 @@ describe('BalanceLoader', () => {
       updatedAt: 1_000,
       checkedAt: 1_000,
       refreshing: false,
-      providers: [OPENROUTER],
+      providers: [GATEWAY],
     })
   })
 
@@ -118,7 +118,7 @@ describe('BalanceLoader', () => {
   it('asks the Host to bypass its cache on a forced refresh and keeps readings through a failed route', async () => {
     const store = createBalanceStore()
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const readProviders = vi.fn((_fresh: boolean): Promise<readonly ProviderReading[]> => Promise.resolve([OPENROUTER]))
+    const readProviders = vi.fn((_fresh: boolean): Promise<readonly ProviderReading[]> => Promise.resolve([GATEWAY]))
     let now = 0
     const loader = new BalanceLoader(store, () => Promise.resolve(null), readProviders, () => now)
     await loader.refresh(60_000)
@@ -127,7 +127,7 @@ describe('BalanceLoader', () => {
     now = 1
     await loader.refresh(0)
     expect(readProviders).toHaveBeenLastCalledWith(true)
-    expect(store.getSnapshot()).toMatchObject({ phase: 'signed-out', providers: [OPENROUTER] })
+    expect(store.getSnapshot()).toMatchObject({ phase: 'signed-out', providers: [GATEWAY] })
     expect(warn).toHaveBeenCalledWith('[lsy-balance] provider balances read failed')
   })
 })

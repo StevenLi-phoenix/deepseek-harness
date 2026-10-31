@@ -80,14 +80,14 @@ sudo -u dsh-runtime /Users/Shared/lsy-dsh/current/lsy/deploy/setup-profile.sh /U
 
 ## 5. Secrets (typed in your terminal, never pasted into a chat)
 
-Two keys, both for this service only: an OpenRouter key (models) and a classic GitHub token with `repo`, `workflow`, and `read:org` (sensor, notifications, `git push`, `gh`). Leave out `admin:public_key`: it can add SSH keys to the account, which outlive revoking the token. `repo` already covers `/notifications`, so the same token fills both GitHub names. Every command below reads input with echo off and prints only names and modes.
+Two keys, both for this service only: an llmgateway key (models, `opencode-go/*`, USD 2 a day) and a classic GitHub token with `repo`, `workflow`, and `read:org` (sensor, notifications, `git push`, `gh`). Leave out `admin:public_key`: it can add SSH keys to the account, which outlive revoking the token. `repo` already covers `/notifications`, so the same token fills both GitHub names. Every command below reads input with echo off and prints only names and modes.
 
 ```sh
-cd / && sudo -u dsh-runtime /bin/zsh -fc 'umask 077; f=/Users/dsh-runtime/.dsh/.env; read -rs "v?OpenRouter key (hidden): "; print; [[ -n $v ]] || exit 1; { print -r -- "OPENROUTER_API_KEY=$v"; /usr/bin/grep -v -e "^OPENROUTER_API_KEY=" -e "^DEEPSEEK_API_KEY=" $f 2>/dev/null; } >| $f.new && /bin/mv -f $f.new $f && /bin/ls -l $f && /usr/bin/cut -d= -f1 $f'
+cd / && sudo -u dsh-runtime /bin/zsh -fc 'umask 077; f=/Users/dsh-runtime/.dsh/.env; read -rs "v?llmgateway key (hidden): "; print; [[ -n $v ]] || exit 1; { print -r -- "LLMGW_DSH_API_KEY=$v"; /usr/bin/grep -v -e "^LLMGW_DSH_API_KEY=" -e "^DEEPSEEK_API_KEY=" $f 2>/dev/null; } >| $f.new && /bin/mv -f $f.new $f && /bin/ls -l $f && /usr/bin/cut -d= -f1 $f'
 cd / && sudo -u dsh-runtime /bin/zsh -fc 'umask 077; f=/Users/dsh-runtime/.dsh/.env; read -rs "v?GitHub classic token (hidden): "; print; [[ -n $v ]] && print -r -- "LSY_GITHUB_TOKEN=$v" >> $f && print -r -- "LSY_GITHUB_NOTIFICATIONS_TOKEN=$v" >> $f; /bin/ls -l $f; /usr/bin/cut -d= -f1 $f'
 ```
 
-Models start on OpenRouter: the owner's profile patch is seeded (once, by `setup-profile.sh`) with the `openrouter` route of `llm-pi-ai` keyed by `OPENROUTER_API_KEY` and the default model `deepseek/deepseek-v4.1-flash`; change either from the Web UI afterwards. The home patch (`lsy/deploy/home.cordis.patch.yml`) holds only what the UI must not edit: the 365-day sign-in cookie and the disabled DeepSeek key onboarding. The UI refuses to save any entry a home patch sets, so never put UI settings there:
+Models start on llmgateway: the owner's profile patch is seeded (once, by `setup-profile.sh`) with the `opencode-go` route of `llm-pi-ai` pointing at `https://api.lishuyu.app/llm/v1`, keyed by `LLMGW_DSH_API_KEY`, serving `opencode-go/deepseek-v4.1-flash` as the default model (step 14); change either from the Web UI afterwards. The home patch (`lsy/deploy/home.cordis.patch.yml`) holds only what the UI must not edit: the 365-day sign-in cookie and the disabled DeepSeek key onboarding. The UI refuses to save any entry a home patch sets, so never put UI settings there:
 
 ```sh
 /bin/cat /Volumes/MiniSSD/deepseek-harness/lsy/deploy/home.cordis.patch.yml | sudo -u dsh-runtime /bin/zsh -fc 'umask 077; /bin/cat >| /Users/dsh-runtime/.dsh/cordis.patch.yml'
@@ -375,6 +375,17 @@ Any program hands a warning to DSH, the one brain, with `warn` (`lsy/tools/warn`
    - Programs call `warn` or the curl line directly.
 4. Limits: the WeChat reply allowance (about 10 per owner message) is shared by every source. Alert text is untrusted and the Session runs with `danger-full-access`, so the instructions allow read-only checks only; a read-only permission preset would narrow the exposure if the risk grows.
 5. Stop: remove the `warn` and `ci` subscriptions from the bundle (or comment out `LSY_INGEST_TOKEN_WARN`), upgrade, restart; `warn` on the hosts keeps exiting 0.
+
+## 14. Models through llmgateway (since 2026-10-31)
+
+DSH's model route `opencode-go` talks to llmgateway on phm (`https://api.lishuyu.app/llm/v1`) instead of `opencode.ai`, so every request lands in the gateway ledger with a price and its cache reads. DeepSeek's private interfaces (`deepseek-official`, `deepseek-account`, web search, the balance query) stay direct.
+
+1. Mint the key with the admin PAT (shell substitution only; the response holds the secret once, keep it in a `umask 077` file): `POST https://api.lishuyu.app/llm/api/keys` with `{"name":"dsh event agent (opencode-go)","limit_usd":2,"models":["opencode-go/*"]}`, then `PATCH …/llm/api/keys/<id>` with `{"period_kind":"daily"}` (create ignores the period and makes a total limit). The id is `k_94d58843f45d9c43`; revoke with `DELETE …/llm/api/keys/<id>`.
+2. Store it as `LLMGW_DSH_API_KEY` in `/Users/dsh-runtime/.dsh/.env` after `cp -p` of the file beside it (the append recipe of step 13), and restart.
+3. Edit the owner's profile patch `/Users/dsh-runtime/.dsh/profiles/event/cordis.patch.yml` (back it up beside it first; edits reload live). The `llm-pi-ai` row becomes the template's `opencode-go` route (`apiKeyEnv: LLMGW_DSH_API_KEY`, `api: openai-completions`, `baseURL`, and a `models` list declaring `opencode-go/deepseek-v4.1-flash`, which pi-ai's catalog does not know under that prefixed id), and `agent-default-model` names `opencode-go` / `opencode-go/deepseek-v4.1-flash`. Keep the route name `opencode-go`: pi-ai adds the `x-opencode-session` header only for that provider, and the gateway forwards it, which is what keeps cache reads high. The `openrouter` route is removed.
+4. Try a change before it goes live with a throwaway home and the same overlay: `sudo -n -u dsh-runtime env DSH_HOME=/tmp/<dir> node …/dsh/lib/bin.js headless --patch <overlay.yml> "<task with several tool calls>"`.
+5. Check the ledger: `GET https://api.lishuyu.app/llm/api/usage?key_id=<id>` (admin PAT) lists each request with `input_tokens`, `cache_read_tokens`, and `priced`. The cache share is `sum(cache_read_tokens) / sum(input_tokens + cache_read_tokens)`; the baseline before the move was 96.5 %, and below 90 % the move is rolled back. `GET …/llm/api/upstream/opencode-go/quota` with the gateway key answers the Account card.
+6. **Roll back**: copy the patch backup over `cordis.patch.yml` (`openrouter` and `opencode-go` with their old direct keys, default model `deepseek-v4.1-flash`); the change reloads live. The old OpenCode Go key stays in the backup until the owner decides, and `OPENROUTER_API_KEY` stays in `.env` until 72 hours of clean cache numbers have passed.
 
 ## Operate
 
