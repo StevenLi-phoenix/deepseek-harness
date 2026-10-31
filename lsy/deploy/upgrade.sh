@@ -27,6 +27,7 @@ if [ ! -d "$PREFIX" ]; then
   cp "$ROOT/lsy/deploy/setup-profile.sh" "$ROOT/lsy/deploy/wechat-login.mjs" "$ROOT/lsy/deploy/memory-import.mjs" "$ROOT/lsy/deploy/disk-watch.mjs" "$PREFIX/lsy/deploy/"
   cp -R "$ROOT/lsy/profiles/event" "$PREFIX/lsy/profiles/"
   cp -R "$ROOT/lsy/bundles/event" "$PREFIX/lsy/bundles/"
+  [ ! -d "$ROOT/lsy/skills" ] || cp -R "$ROOT/lsy/skills" "$PREFIX/lsy/"
 fi
 # The profile layout must hold in throwaway homes before current points at this build.
 "$ROOT/lsy/deploy/check-setup-profile.sh" "$PREFIX"

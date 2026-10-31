@@ -36,6 +36,10 @@ done
 /usr/bin/grep -q "^- id: preset-qq-digest\$" "$WORK/fresh.yml" || fail "composition lacks preset-qq-digest"
 /usr/bin/grep -q "@deepseek-ai/dsh-lsy-tool-qq" "$WORK/fresh.yml" || fail "unattended preset lacks lsy-tool-qq"
 
+if [ -d "$PREFIX/lsy/skills/autocut" ]; then
+  [ -L "$FRESH/skills/autocut" ] && [ -f "$FRESH/skills/autocut/SKILL.md" ] || fail "autocut skill not linked into the home"
+fi
+
 OLD="$WORK/old"; mkdir -p "$OLD/profiles/event"
 { echo '# lsy event profile — composition layer (code-owned).'; echo '[]'; } > "$OLD/profiles/event/cordis.patch.yml"
 "$SETUP" "$OLD" "$PREFIX" >/dev/null

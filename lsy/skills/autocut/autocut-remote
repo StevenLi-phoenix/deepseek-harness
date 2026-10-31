@@ -1,0 +1,196 @@
+#!/usr/bin/python3
+"""autocut-remote：DSH agent 调 mini 上 autocut-worker（http://127.0.0.1:8102）的命令行外壳。
+
+只依赖 python3 标准库（系统 python 3.9 可跑）。stdout 永远是一个 JSON；错误同样是 JSON，退出码非 0。
+用法见 SKILL.md；`autocut-remote --help` 列出全部子命令。
+"""
+import argparse
+import json
+import os
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+BASE = os.environ.get("AUTOCUT_WORKER_URL", "http://127.0.0.1:8102")
+DEFAULT_DEST = "/Users/dsh-runtime/work/autocut"
+
+
+def call(method, path, body=None, timeout=140):
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(BASE + path, data=data, method=method, headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        try:
+            return json.loads(e.read())
+        except ValueError:
+            return {"ok": False, "error": {"code": "http_%d" % e.code, "message": str(e), "fix": ""}}
+    except (urllib.error.URLError, OSError) as e:
+        return {"ok": False, "error": {"code": "worker_unreachable", "message": "连不上 autocut-worker：%s" % e,
+                                        "fix": "告诉用户 mini 上的 autocut-worker 没在运行（launchd 标签 app.lishuyu.autocut.worker）；不要自己重启"}}
+
+
+def out(obj):
+    print(json.dumps(obj, ensure_ascii=False))
+    sys.exit(0 if obj.get("ok", True) else 1)
+
+
+def wait_run(job, run_id, seconds):
+    r = call("GET", "/v1/jobs/%s/runs/%s?wait=%d" % (job, run_id, min(seconds, 110)), timeout=seconds + 30)
+    return r
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="autocut-remote", description=__doc__.strip().splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    p = sub.add_parser("health", help="worker 是否正常")
+    p = sub.add_parser("jobs", help="列出最近的 job")
+
+    p = sub.add_parser("new", help="新建 job（一个任务一个 job）")
+    p.add_argument("--name", default="job")
+    p.add_argument("--purpose", default="", help="用户说的这次任务要做什么（原话）")
+    p.add_argument("--third-party", action="store_true", help="素材是第三方内容")
+    p.add_argument("--repost-label", action="store_true", help="成片/简介需要标注转载并附原链接")
+    p.add_argument("--credit", default="", help="额外的署名文字")
+    p.add_argument("--budget-cny", type=float, default=2.0, help="本任务 LLM 现金上限，默认 2 元")
+
+    p = sub.add_parser("status", help="job 概况：来源、文件、最近的 run、确认状态")
+    p.add_argument("job")
+
+    p = sub.add_parser("ingest", help="下载链接素材（--url）或取 inbox 文件（--inbox）")
+    p.add_argument("job")
+    p.add_argument("--url")
+    p.add_argument("--inbox")
+    p.add_argument("--wait", type=int, default=100)
+
+    p = sub.add_parser("upload", help="把本机文件上传成 job 的素材")
+    p.add_argument("job")
+    p.add_argument("file")
+
+    p = sub.add_parser("run", help="跑 autocut 子命令：run JOB cut src/x.mp4 --pace natural")
+    p.add_argument("job")
+    p.add_argument("--wait", type=int, default=100)
+    p.add_argument("argv", nargs=argparse.REMAINDER)
+
+    p = sub.add_parser("pipeline", help="跑流水线：pipeline JOB cut source=src/x.mp4 pace=natural")
+    p.add_argument("job")
+    p.add_argument("name")
+    p.add_argument("opts", nargs="*", help="key=value，值按 JSON 解析，失败则当字符串")
+    p.add_argument("--wait", type=int, default=100)
+
+    p = sub.add_parser("wait", help="等一个 run（最多 --seconds 秒，最长 110）")
+    p.add_argument("job")
+    p.add_argument("run")
+    p.add_argument("--seconds", type=int, default=100)
+
+    p = sub.add_parser("cancel", help="取消一个 run")
+    p.add_argument("job")
+    p.add_argument("run")
+
+    p = sub.add_parser("fetch", help="把 job 里的文件下载到本机（发微信前先 fetch）")
+    p.add_argument("job")
+    p.add_argument("path")
+    p.add_argument("--dest", default=DEFAULT_DEST)
+
+    p = sub.add_parser("confirm", help="用户明确同意成片后调用（记录用户原话）")
+    p.add_argument("job")
+    p.add_argument("--quote", required=True, help="用户确认的原话")
+
+    p = sub.add_parser("reject", help="用户不满意：记录原因，之后带反馈重做")
+    p.add_argument("job")
+    p.add_argument("--reason", required=True, help="length|standalone|boring|irrelevant|captions|copyright|other")
+    p.add_argument("--text", default="", help="用户原话")
+    p.add_argument("--output", action="append", default=[], help="被拒的成片 id（可多次）")
+
+    p = sub.add_parser("handoff", help="只有 confirm 之后才能用：交付/上传")
+    p.add_argument("job")
+    p.add_argument("--to", default="local", help="local（默认，只落盘）| kaorou（交烤肉上传）")
+    p.add_argument("--title", default="")
+    p.add_argument("--desc", default="")
+
+    a = ap.parse_args()
+    j = getattr(a, "job", None)
+
+    if a.cmd == "health":
+        out(call("GET", "/health"))
+    if a.cmd == "jobs":
+        out(call("GET", "/v1/jobs"))
+    if a.cmd == "new":
+        cfg = {"purpose": a.purpose, "third_party": a.third_party, "budget_cny": a.budget_cny,
+               "attribution": {"repost_label": a.repost_label, "text": a.credit}}
+        out(call("POST", "/v1/jobs", {"name": a.name, "config": cfg}))
+    if a.cmd == "status":
+        out(call("GET", "/v1/jobs/%s" % j))
+    if a.cmd == "ingest":
+        body = {"url": a.url} if a.url else {"inbox": a.inbox}
+        r = call("POST", "/v1/jobs/%s/ingest" % j, body)
+        if r.get("ok") and r["run"].get("id") and a.wait:
+            r = wait_run(j, r["run"]["id"], a.wait)
+        out(r)
+    if a.cmd == "upload":
+        name = urllib.parse.quote(os.path.basename(a.file))
+        size = os.path.getsize(a.file)
+        with open(a.file, "rb") as f:
+            req = urllib.request.Request("%s/v1/jobs/%s/upload?name=%s" % (BASE, j, name), data=f, method="PUT", headers={"Content-Length": str(size)})
+            try:
+                with urllib.request.urlopen(req, timeout=3600) as resp:
+                    out(json.loads(resp.read()))
+            except urllib.error.HTTPError as e:
+                out(json.loads(e.read()))
+    if a.cmd == "run":
+        argv = a.argv[1:] if a.argv and a.argv[0] == "--" else a.argv
+        if not argv:
+            out({"ok": False, "error": {"code": "usage", "message": "缺子命令", "fix": "autocut-remote run JOB cut src/x.mp4"}})
+        r = call("POST", "/v1/jobs/%s/run" % j, {"cmd": argv[0], "args": argv[1:]})
+        if r.get("ok") and a.wait:
+            r = wait_run(j, r["run"]["id"], a.wait)
+        out(r)
+    if a.cmd == "pipeline":
+        opts = {}
+        for kv in a.opts:
+            k, _, v = kv.partition("=")
+            try:
+                opts[k] = json.loads(v)
+            except ValueError:
+                opts[k] = v
+        r = call("POST", "/v1/jobs/%s/pipelines/%s" % (j, a.name), opts)
+        if r.get("ok") and a.wait:
+            r = wait_run(j, r["run"]["id"], a.wait)
+        out(r)
+    if a.cmd == "wait":
+        out(wait_run(j, a.run, a.seconds))
+    if a.cmd == "cancel":
+        out(call("POST", "/v1/jobs/%s/runs/%s/cancel" % (j, a.run)))
+    if a.cmd == "fetch":
+        dest_dir = os.path.join(a.dest, j)
+        os.makedirs(dest_dir, exist_ok=True)
+        dest = os.path.join(dest_dir, os.path.basename(a.path))
+        url = "%s/v1/jobs/%s/file?path=%s" % (BASE, j, urllib.parse.quote(a.path))
+        try:
+            with urllib.request.urlopen(url, timeout=600) as resp, open(dest + ".part", "wb") as f:
+                n = 0
+                while True:
+                    b = resp.read(1 << 20)
+                    if not b:
+                        break
+                    f.write(b)
+                    n += len(b)
+            os.replace(dest + ".part", dest)
+        except urllib.error.HTTPError as e:
+            out(json.loads(e.read()))
+        except (urllib.error.URLError, OSError) as e:
+            out({"ok": False, "error": {"code": "fetch_failed", "message": str(e), "fix": "确认 path 是 job 里的相对路径（先 status 看 files）"}})
+        out({"ok": True, "path": dest, "bytes": n, "next": [{"cmd": "wechat_send_file path=%s" % dest, "why": "发给用户（≤25 MiB）"}]})
+    if a.cmd == "confirm":
+        out(call("POST", "/v1/jobs/%s/confirm" % j, {"quote": a.quote}))
+    if a.cmd == "reject":
+        out(call("POST", "/v1/jobs/%s/reject" % j, {"reason": a.reason, "text": a.text, "outputs": a.output}))
+    if a.cmd == "handoff":
+        out(call("POST", "/v1/jobs/%s/handoff" % j, {"to": a.to, "title": a.title, "desc": a.desc}))
+
+
+if __name__ == "__main__":
+    main()
