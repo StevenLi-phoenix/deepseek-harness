@@ -11,7 +11,7 @@
 
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdir, readdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, readdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { basename, extname, isAbsolute, join } from 'node:path'
 import { promisify } from 'node:util'
 import { Context, Service } from '@deepseek-ai/cordis'
@@ -292,6 +292,7 @@ export class LsyVoice extends Service {
     if (this.config.tts.format === 'mp3') {
       try {
         await execFileAsync(this.config.tts.ffmpegPath, ['-y', '-v', 'error', '-i', `${base}.wav`, '-codec:a', 'libmp3lame', '-q:a', '4', '-f', 'mp3', `${base}.mp3.part`], { timeout: 30_000 })
+        await chmod(`${base}.mp3.part`, 0o600)
         await rename(`${base}.mp3.part`, `${base}.mp3`)
         path = `${base}.mp3`
         format = 'mp3'
