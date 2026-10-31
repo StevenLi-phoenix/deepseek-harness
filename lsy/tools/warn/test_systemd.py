@@ -50,11 +50,19 @@ class UnitFailedTest(unittest.TestCase):
         self.stub("warn", "exit 7")
         self.assertEqual(self.run_script("foo.service").returncode, 0)
 
-    def test_template_has_no_recursion_and_uses_unescaped_instance(self):
+    def test_warn_host_overrides_hostname(self):
+        env = {"PATH": "%s:/usr/bin:/bin" % self.bin, "HOME": self.tmp.name, "WARN_HOST": "phm"}
+        subprocess.run(["/bin/sh", str(SCRIPT), "foo.service"], env=env, timeout=20)
+        self.assertIn("--source phm.systemd", self.out.read_text())
+        self.assertIn("failed on phm", self.out.read_text())
+
+    def test_template_has_no_recursion_and_passes_the_literal_instance(self):
         unit = (HERE / "systemd" / "warn@.service").read_text()
         body = "\n".join(l for l in unit.splitlines() if not l.lstrip().startswith("#"))
         self.assertNotIn("OnFailure", body)
-        self.assertIn("warn-unit-failed %I", unit)
+        # OnFailure=warn@%n.service already carries the literal unit name, so %i (not the unescaping %I,
+        # which turns every dash into a slash) is the unit.
+        self.assertIn("warn-unit-failed %i", unit)
         self.assertIn("Type=oneshot", unit)
 
 
