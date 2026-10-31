@@ -199,6 +199,14 @@
               agentPreset: unattended
               permissionPreset: danger-full-access
               titlePrefix: ci
+              # Canary (2026-10-31, 24 h): this subscription's Sessions run on the route `opencode`, which
+              # the owner's profile patch points at the Cloudflare edge copy of llmgateway with the key
+              # LLMGW_EDGE_CANARY_KEY (the route is named `opencode` because pi-ai sends the
+              # x-opencode-session header only for the opencode providers). To roll back, point that route
+              # back at https://api.lishuyu.app/llm/v1 with LLMGW_DSH_API_KEY, or drop this model line.
+              model:
+                provider: opencode
+                model: opencode-go/deepseek-v4.1-flash
               instructions: >-
                 Finished GitHub Actions runs of the owner's repositories are listed below; each title
                 ends with the conclusion. A run whose conclusion is success, cancelled, or skipped,

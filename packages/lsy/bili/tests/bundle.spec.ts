@@ -71,6 +71,18 @@ describe('event bundle', () => {
     expect(logger?.config).toEqual({ levels: { 'default': 2, 'bili-account': 3, 'tool-bili': 3, 'owner-relay': 3 } })
   })
 
+  it('runs only the ci subscription on the edge-gateway canary route, and no other Session', () => {
+    const bus = inserted.find(entry => entry.id === 'lsy-event-bus')!
+    type Subscription = { id: string; session?: { model?: { provider: string; model: string } } }
+    const subscriptions = (bus.config as { subscriptions: Subscription[] }).subscriptions
+    const pinned = subscriptions.filter(subscription => subscription.session?.model !== undefined)
+    expect(pinned.map(subscription => subscription.id)).toEqual(['ci'])
+    expect(pinned[0]!.session!.model).toEqual({ provider: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' })
+    // The chat agent and the Bilibili Sessions follow the profile default.
+    const bili = inserted.find(entry => entry.id === 'bili')!
+    expect(bili.config).not.toHaveProperty('model')
+  })
+
   it('leaves no model tool at the profile root, where every preset, bili included, would inherit it', () => {
     const enabled = [...composedRoot()].filter(([, row]) => row.enabled && row.name?.startsWith('@deepseek-ai/dsh-tool-'))
     expect(enabled.map(([, row]) => row.name).filter(name => !ROOT_TOOL_ROWS_WITHOUT_TOOLS.has(name!))).toEqual([])
