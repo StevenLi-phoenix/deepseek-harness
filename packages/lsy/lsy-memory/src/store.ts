@@ -119,7 +119,7 @@ export function localDate(now: Date = new Date()): string {
 const locks = new Map<string, Promise<void>>()
 
 /** Run `task` after every earlier task on the same file has settled. */
-async function serialized<T>(file: string, task: () => Promise<T>): Promise<T> {
+export async function serialized<T>(file: string, task: () => Promise<T>): Promise<T> {
   const previous = locks.get(file) ?? Promise.resolve()
   const run = previous.then(task)
   const settled = run.then(() => {}, () => {})
@@ -633,7 +633,7 @@ export class MemoryStore {
   }
 }
 
-function freshId(entries: readonly { readonly id: string }[]): string {
+export function freshId(entries: readonly { readonly id: string }[]): string {
   const taken = new Set(entries.map(entry => entry.id))
   for (;;) {
     const id = randomBytes(3).toString('hex')

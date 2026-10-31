@@ -2808,7 +2808,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-lsy-memory`
 
 - `inject`: `tools`
-- `source`: [`packages/lsy/lsy-memory/src/index.ts:50`](../packages/lsy/lsy-memory/src/index.ts)
+- `source`: [`packages/lsy/lsy-memory/src/index.ts:56`](../packages/lsy/lsy-memory/src/index.ts)
 
 ```ts config-catalog
 /** Memory file and context budget. */
@@ -2828,7 +2828,14 @@ export interface Config {
   notify?: boolean
   /** Notices the owner gets in a day; further writes are still recorded in the history. */
   noticesPerDay?: number
+  /**
+   * Feedback mode, for the Bilibili persona presets (`up`, `bili`): no memory block and no tools; the Host puts the
+   * owner's keep/delete verdicts on that scope's replies in front of each root Session as examples of tone.
+   */
+  feedbackScope?: FeedbackScope
 }
+
+export type FeedbackScope = typeof FEEDBACK_SCOPES[number]
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-memory -->
 

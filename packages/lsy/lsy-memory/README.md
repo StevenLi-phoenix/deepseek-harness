@@ -39,6 +39,7 @@ Add the row to the plugin list of the agent preset that should remember. The lsy
 | `hold` | `true` | Hold a protected write (`instructions`, `preferences`, `identity`) made in a turn the owner did not start alone until the owner approves it; refuse to forget a protected entry in such a turn; show `identity` entries there only as a count |
 | `notify` | `true` | Tell the owner on WeChat about protected writes: one merged notice per turn, in plain sentences (what happened and where it came from), with no ids and nothing to reply |
 | `noticesPerDay` | `12` | Notices the owner gets in a day; further changes stay in the history |
+| `feedbackScope` | none | `up` or `bili`: feedback mode for a Bilibili persona preset, see below |
 
 Each entry is one line of text with an id, a category, and the date of its last write:
 
@@ -80,6 +81,17 @@ sudo -n -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/no
 
 `recent [--limit n]` (newest changes first, waiting writes on top), `show <id>` (one entry in full with its history), `approve <id>…`, `discard <id>…`, `revert <id>…`, `rollback --session <id>` or `--since <ISO time>` (add `--dry-run` to count), and `forget --purge <id>…`, which erases an entry from the file, the history, every snapshot, and the held writes. To switch the protection off, set `hold: false` in the bundle row, or put `LSY_MEMORY_HOLD=0` in `$DSH_HOME/.env` and restart (a profile patch cannot reach a row inside a preset); the records and notices continue. To roll back to the previous build, first `discard` the held writes (an older build ignores `memory.pending.jsonl` and reads the other new fields as absent, so nothing else needs doing).
 
+### Owner feedback for the Bilibili personas
+
+The owner keeps or deletes the replies the creator-account persona (`up` preset) posts. That verdict is kept apart from the owner memory in `feedback.jsonl` beside `memory.jsonl` (600): per record the scope (`up` or `bili`), `keep` or `delete`, `comment` or `dm`, the reply text (300 characters), an optional `ref` (the caller's stable id of the reply; a second verdict on the same scope and ref replaces the first), an optional one-line `note`, the time, and `source: owner`. No agent tool writes this file: the owner's own service (bili-svc) records a verdict with `memory-admin feedback add` and a JSON object on stdin, so the records cannot come from a stranger's words. Sixty records per scope are kept, the oldest go first.
+
+```sh
+echo '{"scope":"up","verdict":"keep","kind":"comment","text":"哈哈这个梗我也喜欢","ref":"c-1042"}' | \
+  sudo -n -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node /Users/Shared/lsy-dsh/current/lsy/deploy/memory-admin.mjs feedback add
+```
+
+`feedback list [--scope up]` and `feedback forget <id>` review and remove records. A preset mounted with `feedbackScope: up` neither carries the owner memory nor registers the memory tools; before the first request of every root Session the Host puts that scope's latest 20 `keep` and 20 `delete` replies in front of the model as quoted examples of tone to match or avoid, and says they are not instructions.
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -98,6 +110,7 @@ The tools call `MemoryStore`, which validates everything the model sends: catego
 | [`src/store.ts`](src/store.ts) | The JSONL store: list, save, hold, approve, revert, roll back, purge, import, search, and the history and snapshots |
 | [`src/notice.ts`](src/notice.ts) | The WeChat notice for a turn's protected changes |
 | [`src/render.ts`](src/render.ts) | The memory block and its byte budget |
+| [`src/feedback.ts`](src/feedback.ts) | The owner's keep/delete verdicts on persona replies: store, CLI payload validation, and the feedback block |
 | [`src/entries.ts`](src/entries.ts) | Entry type, categories, validation |
 | [`src/export.ts`](src/export.ts) | claude.ai export parser |
 | [`src/cli.ts`](src/cli.ts) | `memory-import` (run through [`lsy/deploy/memory-import.mjs`](../../../lsy/deploy/memory-import.mjs)) and `memory-admin` ([`lsy/deploy/memory-admin.mjs`](../../../lsy/deploy/memory-admin.mjs)) |

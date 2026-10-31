@@ -17,8 +17,10 @@ import { describeOrigin, turnOrigin, type TurnOrigin } from '@deepseek-ai/dsh-ls
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
 import { CATEGORIES, isCategory, isProtected, type MemoryEntry, type WriteMeta } from './entries.ts'
+import { FEEDBACK_SCOPES, FeedbackStore, renderFeedbackBlock, type FeedbackScope } from './feedback.ts'
 import { renderMemoryBlock } from './render.ts'
 import { defaultMemoryFile, MemoryError, MemoryStore } from './store.ts'
+import { dirname, join } from 'node:path'
 import { memoryNotice, type NoticeItem } from './notice.ts'
 
 declare module '@deepseek-ai/dsh-llm' {
@@ -38,6 +40,11 @@ export {
   defaultMemoryFile, localDate, MAX_ENTRIES, MAX_PENDING, MemoryError, MemoryStore,
   type HistoryRecord, type RollbackFilter, type RollbackResult,
 } from './store.ts'
+export {
+  defaultFeedbackFile, FEEDBACK_KINDS, FEEDBACK_SCOPES, FEEDBACK_VERDICTS, FeedbackError, FeedbackStore,
+  MAX_FEEDBACK_PER_SCOPE, renderFeedbackBlock,
+  type FeedbackEntry, type FeedbackInput, type FeedbackKind, type FeedbackScope, type FeedbackVerdict,
+} from './feedback.ts'
 export { runAdminCli, runImportCli } from './cli.ts'
 
 /** Plugin name; also the source kind of the memory message. */
@@ -63,6 +70,11 @@ export interface Config {
   notify?: boolean
   /** Notices the owner gets in a day; further writes are still recorded in the history. */
   noticesPerDay?: number
+  /**
+   * Feedback mode, for the Bilibili persona presets (`up`, `bili`): no memory block and no tools; the Host puts the
+   * owner's keep/delete verdicts on that scope's replies in front of each root Session as examples of tone.
+   */
+  feedbackScope?: FeedbackScope
 }
 
 /** Schemastery validation for {@link Config}. */
@@ -72,6 +84,7 @@ export const Config: z<Config> = z.object({
   hold: z.boolean().default(true),
   notify: z.boolean().default(true),
   noticesPerDay: z.natural().min(1).default(12),
+  feedbackScope: z.union(FEEDBACK_SCOPES),
 })
 
 const SEARCH_LIMIT = 20
@@ -127,11 +140,49 @@ function failure(error: unknown): { error: string; message: string } {
 const NOTICE_LINGER_MS = 5 * 60_000
 
 /**
+ * Feedback mode: the pre-step injection of one scope's keep/delete verdicts, read-only and without tools.
+ * @param ctx - the preset scope's context.
+ * @param config - memory file (the feedback file sits beside it) and block budget.
+ * @param scope - whose replies the verdicts are about.
+ */
+function applyFeedback(ctx: Context, config: Config, scope: FeedbackScope): void {
+  const store = new FeedbackStore(config.file === undefined ? join(dirname(defaultMemoryFile()), 'feedback.jsonl') : join(dirname(config.file), 'feedback.jsonl'))
+  const maxBytes = Math.min(config.maxBytes ?? 8192, 8192)
+  ctx.logger.info('lsy-memory: feedback mode, scope %s (read-only, no owner memory)', scope)
+  ctx.on('agent/pre-step', async ({ agent, messages, step, signal }, next): Promise<PreStepDecision> => {
+    const decision = await next()
+    if (decision.kind === 'reject' || signal.aborted
+      || agent.session.header.origin === 'subagent'
+      || (step === 1 && decision.messages.length === 0)
+      || memoryVisible(agent.session)) return decision
+    let text: string | undefined
+    try {
+      const entries = await store.list(scope)
+      text = renderFeedbackBlock(entries, maxBytes)
+      if (text !== undefined) ctx.logger.info('feedback block (%d verdicts, %d bytes, scope %s) entered session %s', entries.length, Buffer.byteLength(text), scope, agent.session.id)
+    } catch (error: unknown) {
+      ctx.logger.warn('feedback not loaded for session %s: %s', agent.session.id, error instanceof Error ? error.message : String(error))
+    }
+    if (text === undefined) return decision
+    const block = createUserMessage({
+      content: [{ type: 'text', text }],
+      source: { kind: name, form: 'instructions' },
+    })
+    const lastClaimed = decision.messages.findLastIndex(message => messages.includes(message))
+    return { ...decision, messages: decision.messages.toSpliced(lastClaimed + 1, 0, block) }
+  })
+}
+
+/**
  * Register the memory tools and the pre-step injection.
  * @param ctx - the preset scope's context.
  * @param config - memory file and context budget.
  */
 export function apply(ctx: Context, config: Config): void {
+  if (config.feedbackScope !== undefined) {
+    applyFeedback(ctx, config, config.feedbackScope)
+    return
+  }
   const store = new MemoryStore(config.file ?? defaultMemoryFile())
   const maxBytes = config.maxBytes ?? 65_536
   // The environment switch works from `$DSH_HOME/.env` (restart needed), because a profile patch cannot reach a row inside a preset.

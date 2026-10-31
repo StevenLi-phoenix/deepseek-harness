@@ -4,8 +4,10 @@
  */
 
 import { readFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { parseClaudeExport } from './export.ts'
 import { CATEGORIES } from './entries.ts'
+import { defaultFeedbackFile, FEEDBACK_SCOPES, FeedbackStore, type FeedbackScope } from './feedback.ts'
 import { defaultMemoryFile, MemoryStore } from './store.ts'
 
 const USAGE = 'usage: memory-import [--dry-run] [--file <memory.jsonl>] [<export.md>]   (reads the export from stdin without a path)'
@@ -72,6 +74,10 @@ const ADMIN_USAGE = [
   '  ids                             id, category, source of every entry and every waiting write (no text)',
   '  recent [--limit <n>]            newest changes first (waiting writes on top) with the opening of the text: find the id a notice meant',
   '  show <id>                       one entry in full, with its history',
+  '  feedback add                    record the owner\'s keep/delete verdict on a persona reply: one JSON object on stdin',
+  '                                  {"scope":"up|bili","verdict":"keep|delete","kind":"comment|dm","text":"<reply>","ref":"<stable id>","note":"<optional>"}',
+  '  feedback list [--scope up|bili] verdicts, newest first',
+  '  feedback forget <id>            remove one verdict',
   '  approve <id>...                 keep waiting writes',
   '  discard <id>...                 drop waiting writes',
   '  revert <id>...                  undo the latest change of entries (a waiting write is dropped)',
@@ -79,6 +85,9 @@ const ADMIN_USAGE = [
   '  rollback --since <ISO time> [--dry-run]   undo what changed since a time',
   '  forget --purge <id>...          erase entries and every trace in the history, snapshots, and waiting writes',
 ].join('\n')
+
+/** What the history records for a change the CLI made. */
+const ADMIN_META = { origin: 'memory-admin' } as const
 
 /** Characters of an entry text `memory-admin recent` shows. */
 const RECENT_TEXT_CHARS = 60
@@ -105,6 +114,7 @@ export async function runAdminCli(io: ImportCliIo = {}): Promise<number> {
   let dryRun = false
   let purge = false
   let limit = 10
+  let scope: string | undefined
   const words: string[] = []
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
@@ -112,6 +122,7 @@ export async function runAdminCli(io: ImportCliIo = {}): Promise<number> {
     else if (arg === '--session' && argv[index + 1] !== undefined) session = argv[++index]
     else if (arg === '--since' && argv[index + 1] !== undefined) since = argv[++index]
     else if (arg === '--limit' && /^\d+$/u.test(argv[index + 1] ?? '')) limit = Number(argv[++index])
+    else if (arg === '--scope' && argv[index + 1] !== undefined) scope = argv[++index]
     else if (arg === '--dry-run') dryRun = true
     else if (arg === '--purge') purge = true
     else if (arg !== undefined && !arg.startsWith('-')) words.push(arg)
@@ -130,6 +141,40 @@ export async function runAdminCli(io: ImportCliIo = {}): Promise<number> {
         for (const entry of index.pending) out(`${entry.id} ${entry.category} pending-${entry.op}`)
         out(`memory-admin: ${String(index.entries.length)} entries, ${String(index.pending.length)} waiting`)
         return 0
+      }
+      case 'feedback': {
+        const [action, id] = ids
+        const feedback = new FeedbackStore(file === undefined ? defaultFeedbackFile(io.env) : join(dirname(file), 'feedback.jsonl'))
+        if (action === 'add') {
+          let payload: unknown
+          try {
+            payload = JSON.parse(await readAll(io.stdin ?? process.stdin))
+          } catch {
+            err('memory-admin: feedback add needs one JSON object on stdin')
+            return 1
+          }
+          if (typeof payload !== 'object' || payload === null) {
+            err('memory-admin: feedback add needs one JSON object on stdin')
+            return 1
+          }
+          const result = await feedback.add(payload as Record<string, unknown> as never)
+          out(`memory-admin: feedback ${result.entry.id} ${result.entry.scope} ${result.entry.verdict} ${result.outcome}`)
+          return 0
+        }
+        if (action === 'list') {
+          if (scope !== undefined && !(FEEDBACK_SCOPES as readonly string[]).includes(scope)) { err(ADMIN_USAGE); return 2 }
+          for (const entry of await feedback.list(scope as FeedbackScope | undefined)) {
+            out(`${entry.id} ${entry.scope} ${entry.verdict} ${entry.kind} ${entry.at} ${oneLine(entry.text, RECENT_TEXT_CHARS)}`)
+          }
+          return 0
+        }
+        if (action === 'forget' && id !== undefined) {
+          await feedback.forget(id)
+          out(`memory-admin: feedback ${id} forgotten`)
+          return 0
+        }
+        err(ADMIN_USAGE)
+        return 2
       }
       case 'recent': {
         const lines = (await store.listPending()).toReversed().map(entry => `waiting ${entry.op} ${entry.id} ${entry.category} ${entry.source ?? 'legacy'} ${entry.date} ${oneLine(entry.text, RECENT_TEXT_CHARS)}`)
@@ -157,9 +202,9 @@ export async function runAdminCli(io: ImportCliIo = {}): Promise<number> {
       case 'revert': {
         if (ids.length === 0) { err(ADMIN_USAGE); return 2 }
         for (const id of ids) {
-          if (command === 'approve') await store.approve(id)
+          if (command === 'approve') await store.approve(id, ADMIN_META)
           else if (command === 'discard') await store.discard(id)
-          else await store.revert(id)
+          else await store.revert(id, ADMIN_META)
           out(`memory-admin: ${command} ${id} done`)
         }
         return 0

@@ -39,6 +39,7 @@ kind: "package-reference"
 | `hold` | `true` | owner 没有独自发起的回合里写保护类（`instructions`、`preferences`、`identity`）时，先扣下，等 owner 批准；这类回合不能忘掉保护类条目，查 `identity` 只返回条数 |
 | `notify` | `true` | 保护类写入经微信告诉 owner：每个回合合并成一条，用平实的句子说清发生了什么、来自哪里，不带 id，也不要求回复 |
 | `noticesPerDay` | `12` | owner 一天最多收到的通知条数；其余变动仍写进历史 |
+| `feedbackScope` | 无 | `up` 或 `bili`：给 B站人格 preset 用的反馈模式，见下 |
 
 每个条目是一行文本，带 id、分类和最后一次写入的日期：
 
@@ -80,6 +81,17 @@ sudo -n -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/no
 
 还有 `recent [--limit n]`（最新的变动在前，待确认写入在最上）、`show <id>`（一个条目的全文和它的历史）、`approve <id>…`、`discard <id>…`、`revert <id>…`、`rollback --session <id>` 或 `--since <ISO 时间>`（加 `--dry-run` 只计数），以及 `forget --purge <id>…`——从文件、历史、所有快照和待确认写入里彻底抹掉一个条目。要关掉保护，在 bundle 的这一行写 `hold: false`，或者在 `$DSH_HOME/.env` 里写 `LSY_MEMORY_HOLD=0` 并重启（profile patch 够不到 preset 里面的行）；记录和通知照常。要回滚到上一个构建，先 `discard` 掉待确认写入（旧构建会忽略 `memory.pending.jsonl`，并把其他新字段当作不存在，所以不需要别的处理）。
 
+### B站人格的 owner 反馈
+
+owner 会对创作者号人格（`up` preset）发出的回复选择保留或删除。这些判定和 owner 记忆分开，存在 `memory.jsonl` 旁边的 `feedback.jsonl`（600）里：每条记录有 scope（`up` 或 `bili`）、`keep` 或 `delete`、`comment` 或 `dm`、回复原文（300 字）、可选的 `ref`（调用方给这条回复的稳定 id；同一 scope 和 ref 上的第二个判定会替换第一个）、可选的一句 `note`、时间，以及 `source: owner`。没有任何 agent 工具能写这个文件：owner 自己的服务（bili-svc）用 `memory-admin feedback add`，从 stdin 传一个 JSON 对象来记录判定，所以记录不可能来自陌生人的话。每个 scope 保留 60 条，最旧的先丢。
+
+```sh
+echo '{"scope":"up","verdict":"keep","kind":"comment","text":"哈哈这个梗我也喜欢","ref":"c-1042"}' | \
+  sudo -n -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node /Users/Shared/lsy-dsh/current/lsy/deploy/memory-admin.mjs feedback add
+```
+
+`feedback list [--scope up]` 和 `feedback forget <id>` 用来查看和删除记录。用 `feedbackScope: up` 挂载的 preset 既不带 owner 记忆，也不注册记忆工具；每个 root Session 的第一次请求之前，Host 把这个 scope 最近 20 条 `keep` 和 20 条 `delete` 的回复作为引用的语气示例放到模型面前，并声明它们不是指令。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -98,6 +110,7 @@ sudo -n -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/no
 | [`src/store.ts`](src/store.ts) | JSONL 存储：列出、保存、扣下、批准、撤销、回滚、抹除、导入、搜索，以及历史和快照 |
 | [`src/notice.ts`](src/notice.ts) | 一个回合的保护类变动对应的微信通知 |
 | [`src/render.ts`](src/render.ts) | 记忆块与字节预算 |
+| [`src/feedback.ts`](src/feedback.ts) | owner 对人格回复的保留/删除判定：存储、CLI 载荷校验和反馈块 |
 | [`src/entries.ts`](src/entries.ts) | 条目类型、分类、校验 |
 | [`src/export.ts`](src/export.ts) | claude.ai 导出解析器 |
 | [`src/cli.ts`](src/cli.ts) | `memory-import`（通过 [`lsy/deploy/memory-import.mjs`](../../../lsy/deploy/memory-import.mjs) 运行）和 `memory-admin`（[`lsy/deploy/memory-admin.mjs`](../../../lsy/deploy/memory-admin.mjs)） |

@@ -291,6 +291,7 @@ Three plugins keep what the agent learns from steering it by accident or by a st
   | `revert <id>…` | undo the latest change of an entry (a waiting write is dropped) |
   | `rollback --session <id> [--dry-run]` / `rollback --since <ISO time> [--dry-run]` | undo what a Session's turns, or everything since a time, changed |
   | `forget --purge <id>…` | erase an entry from the file, the history, every snapshot, and the waiting writes |
+  | `feedback add` (JSON on stdin) / `feedback list [--scope up]` / `feedback forget <id>` | the owner's keep/delete verdicts on the `up` persona's replies (`feedback.jsonl`); bili-svc calls `feedback add`, the `up` preset reads its scope as examples of tone, and no agent tool writes it |
 
   A typical review after a notice: `recent --limit 5`, then `revert <id>` for the one that should not be there. Back up first when changing the store by hand: `ssh mini 'cd / && sudo -n -u dsh-runtime /bin/cp -p /Users/dsh-runtime/.dsh/lsy-memory/memory.jsonl /Users/dsh-runtime/.dsh/lsy-memory/.memory.jsonl.bak.$(date +%Y%m%d%H%M%S)'`.
 - **`lsy-taint`** (in the `unattended` preset) reads from the Session log who started each turn. With `enforce: true` it refuses `cc_send` and `cc_start` outside a turn the owner started alone and reports reminders and watches made in other turns. The log shows `lsy-taint: cc_send refused …` or `would be refused` (`enforce: false`).

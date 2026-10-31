@@ -28,10 +28,17 @@ const bus = inserted.find(row => row.id === 'lsy-event-bus')!
 const ingest = inserted.find(row => row.id === 'lsy-event-ingest')!
 
 describe('up preset and bili events in the event bundle', () => {
-  it('gives the up preset only its persona, the time, and the up tools', () => {
+  it('gives the up preset only its persona, the time, the up tools, and the owner\'s verdicts on its replies (read-only, no memory tools)', () => {
     expect(preset.config?.['id']).toBe('up')
     const names = (preset.config?.plugins ?? []).map(plugin => plugin.name)
-    expect(names).toEqual(['@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context', '@deepseek-ai/dsh-lsy-tool-up'])
+    expect(names).toEqual(['@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context', '@deepseek-ai/dsh-lsy-tool-up', '@deepseek-ai/dsh-lsy-memory'])
+    const feedback = (preset.config?.plugins ?? []).find(plugin => plugin.name === '@deepseek-ai/dsh-lsy-memory')!
+    expect(feedback.config).toEqual({ feedbackScope: 'up' })
+  })
+
+  it('keeps the persona to passive, short, plain replies that name no videos and tag nobody', () => {
+    const persona = (preset.config?.plugins?.[0]?.config as { prefix: string }).prefix
+    for (const needle of ['never start a conversation', 'recommend', 'no @', 'real person']) expect(persona).toContain(needle)
   })
 
   it('keeps the tools out of every other preset and the profile root', () => {
