@@ -57,8 +57,14 @@ start() {
   fi
   # NapCat logs every received group message (group, nickname, text) at info level, and docker keeps that
   # output: log only warnings and errors, and keep no log file. The login QR code is announced at warn level.
+  # The default file seeds new accounts, but each logged-in account has its own napcat_<uin>.json made on its first login
+  # (info level), and that one wins: patch every one of them.
   docker run --rm -v napcat-config:/cfg --entrypoint bash "$IMAGE" -c \
-    'f=/cfg/napcat.json; [ -f $f ] || cp /app/napcat/config/napcat.json $f 2>/dev/null || echo "{}" > $f; jq ".consoleLogLevel = \"warn\" | .fileLogLevel = \"warn\" | .fileLog = false" $f > $f.new && mv $f.new $f'
+    '[ -f /cfg/napcat.json ] || cp /app/napcat/config/napcat.json /cfg/napcat.json 2>/dev/null || echo "{}" > /cfg/napcat.json
+     for f in /cfg/napcat.json /cfg/napcat_[0-9]*.json; do
+       [ -f "$f" ] || continue
+       jq ".consoleLogLevel = \"warn\" | .fileLogLevel = \"warn\" | .fileLog = false" "$f" > "$f.new" && mv "$f.new" "$f"
+     done'
   docker rm -f "$NAME" >/dev/null 2>&1 || true
   local account=()
   [ -n "$uin" ] && account=(-e "ACCOUNT=$uin")
