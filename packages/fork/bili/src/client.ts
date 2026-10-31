@@ -1,55 +1,26 @@
 /**
- * The only way this package talks to Bilibili. Every request names an entry
- * of the endpoint allowlist (method, host, and path), so nothing else can be
- * reached; redirects are never followed; cookies go only to Bilibili API hosts
- * and only for entries that need them; requests are spaced by a minimum gap
- * with jitter and bounded by a deadline. Risk-control answers (HTTP 412/429,
- * codes -352/-412/-799, a captcha voucher) are reported to the owner of the
- * client before they surface as {@link BiliRiskError}.
+ * The only way this package reaches Bilibili: bili-svc on the same Mac. Every call names an
+ * endpoint of bili-svc's door (`POST /v1/bili/call`) with the account's query and form; bili-svc
+ * holds the session (cookies, refresh, device), signs, paces, and owns the ledger, the daily caps,
+ * and the risk brake of every action. This client adds only the bearer token
+ * (`BILI_SVC_TOKEN_BILI`), a deadline (30 s for reads, 330 s for actions, which may wait minutes
+ * for bili-svc's sender slot), and the mapping of bili-svc's `outcome` to this package's errors.
+ * No cookie or Bilibili credential ever passes through it.
  */
-import { cookieHeader, type CookieJar } from './cookies.ts'
-import { ENDPOINTS, type Endpoint, type EndpointName } from './endpoints.ts'
-import { keyFromUrl, signQuery, type WbiKeys } from './wbi.ts'
+import { ENDPOINTS, isEndpointName, type Endpoint, type EndpointName } from './endpoints.ts'
 
-/** Desktop browser identity sent with every request: Chrome 155 on macOS, as a real browser sent it on 2026-10-24. */
-export const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36'
-/** The client hints and language that browser sends with every fetch; they must agree with {@link USER_AGENT}. */
-export const BROWSER_HEADERS: Readonly<Record<string, string>> = {
-  'accept-language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
-  'sec-ch-ua': '"Google Chrome";v="155", "Chromium";v="155", "Not(A:Brand";v="24"',
-  'sec-ch-ua-mobile': '?0',
-  'sec-ch-ua-platform': '"macOS"',
-  'sec-fetch-dest': 'empty',
-  'sec-fetch-mode': 'cors',
-}
-/** Hosts that may receive the account's cookies. */
-export const COOKIE_HOSTS: ReadonlySet<string> = new Set(['api.bilibili.com', 'api.vc.bilibili.com', 'passport.bilibili.com', 'www.bilibili.com'])
-/**
- * JSON codes that mean risk control or a demand to slow down: -352 (risk check
- * failed), -412 (request intercepted), -799 and -509 (too frequent); and, from
- * the write endpoints, 12015 (comment needs a captcha), 21020 and 21046 (DMs
- * too fast), 10031 (favorites too fast). The content-restricted `-412` that
- * play-URL endpoints return for one video does not apply: this client never
- * calls them.
- */
-export const RISK_CODES: ReadonlySet<number> = new Set([-352, -412, -509, -799, 10031, 12015, 21020, 21046])
-/** Message words Bilibili uses for challenges and risk control. */
-const RISK_WORDS = /captcha|验证码|风控|账号异常/i
-/**
- * JSON codes that mean the account must bind or verify a phone number, or
- * verify its real name, before this write: -108, -110, -114 (no phone bound),
- * -113, -115 (no real-name verification), 21015 (messages need a bound phone),
- * 4126021 (dynamics need a bound phone). They are refusals, not risk control.
- */
-export const VERIFY_CODES: ReadonlySet<number> = new Set([-108, -110, -113, -114, -115, 21015, 4126021])
-/** Message words of the same demand when the code is not one of {@link VERIFY_CODES}; `验证码` (captcha) is risk control. */
-const VERIFY_WORDS = /手机|绑定|实名|验证(?!码)/
-/** Largest response body read. */
-const MAX_BODY_BYTES = 4 * 1024 * 1024
-/** WBI keys rotate daily; a cached pair is used for at most this long. */
-const WBI_KEYS_TTL_MS = 12 * 3_600_000
+/** Default bili-svc address; `BILI_SVC_URL` in the service environment overrides it. */
+export const DEFAULT_SERVICE_URL = 'http://127.0.0.1:8097'
+/** Credential holding this package's bili-svc bearer token (scopes `bili`, `read`, `reply`). */
+export const TOKEN_CREDENTIAL = 'BILI_SVC_TOKEN_BILI'
+/** Deadline of a read, and of a status or account call. */
+export const READ_TIMEOUT_MS = 30_000
+/** Deadline of an action or an owner reply: bili-svc may wait up to 330 s for its sender slot. */
+export const ACTION_TIMEOUT_MS = 330_000
+/** Largest answer read. */
+const MAX_BODY_CHARS = 8 * 1024 * 1024
 
-/** A request this client refused to send. */
+/** A call this client refused, or bili-svc refused before anything reached Bilibili (no token, HTTP 401/403/404/422). */
 export class BiliRefused extends Error {
   /** @param message - why, without request data. */
   constructor(message: string) {
@@ -58,11 +29,11 @@ export class BiliRefused extends Error {
   }
 }
 
-/** Bilibili answered with risk control; the request did nothing. */
+/** Bilibili answered with risk control; bili-svc tripped its brake. */
 export class BiliRiskError extends Error {
   /**
-   * @param endpoint - allowlist entry name.
-   * @param reason - e.g. `HTTP 412`, `code -352`, `captcha`.
+   * @param endpoint - endpoint name.
+   * @param reason - Bilibili's code and words, e.g. `code -352: 风控校验失败`.
    */
   constructor(readonly endpoint: EndpointName, readonly reason: string) {
     super(`${endpoint}: risk control (${reason})`)
@@ -70,29 +41,25 @@ export class BiliRiskError extends Error {
   }
 }
 
-/** Bilibili answered with a non-zero business code. */
+/** Bilibili answered with a non-zero business code (bili-svc's `api_error`). */
 export class BiliApiError extends Error {
   /**
-   * @param endpoint - allowlist entry name.
+   * @param endpoint - endpoint name.
    * @param code - the JSON `code`.
-   * @param detail - the JSON `message`, bounded.
-   * @param data - the `data` field that came with the code, when there was one.
+   * @param detail - Bilibili's message, bounded.
    */
-  constructor(readonly endpoint: EndpointName, readonly code: number, readonly detail: string, readonly data?: unknown) {
+  constructor(readonly endpoint: EndpointName, readonly code: number, readonly detail: string) {
     super(`${endpoint}: code ${code}${detail === '' ? '' : ` (${detail})`}`)
     this.name = 'BiliApiError'
   }
 }
 
-/**
- * Bilibili refused a write until the account binds or verifies a phone number
- * (or verifies its real name). Nothing happened; it is not risk control.
- */
+/** Bilibili refused an action until the account verifies a phone number or real name (bili-svc's `verify`). */
 export class BiliVerifyError extends BiliApiError {
   /**
-   * @param endpoint - allowlist entry name.
+   * @param endpoint - endpoint name.
    * @param code - the JSON `code`.
-   * @param detail - the JSON `message`, bounded.
+   * @param detail - Bilibili's message, bounded.
    */
   constructor(endpoint: EndpointName, code: number, detail: string) {
     super(endpoint, code, detail)
@@ -100,75 +67,110 @@ export class BiliVerifyError extends BiliApiError {
   }
 }
 
+/** bili-svc has no usable session for the account (`session_expired`, `session_unavailable`): the owner renews it in bili-svc. */
+export class BiliSessionError extends Error {
+  /**
+   * @param endpoint - endpoint name.
+   * @param outcome - bili-svc's outcome.
+   * @param detail - its words, bounded.
+   */
+  constructor(readonly endpoint: EndpointName, readonly outcome: 'session_expired' | 'session_unavailable', readonly detail: string) {
+    super(`the Bilibili session in bili-svc is not usable (${outcome}${detail === '' ? '' : `: ${detail}`}); bili-svc owns the login, and the owner renews it there`)
+    this.name = 'BiliSessionError'
+  }
+}
+
+/** bili-svc decided an action without sending it, or after: `refused`, `held`, `already`, or `uncertain`. */
+export class BiliOutcomeError extends Error {
+  /**
+   * @param endpoint - endpoint name.
+   * @param outcome - bili-svc's outcome.
+   * @param reason - its reason text, bounded.
+   */
+  constructor(readonly endpoint: EndpointName, readonly outcome: 'refused' | 'held' | 'already' | 'uncertain', readonly reason: string) {
+    super(`${endpoint}: ${outcome}${reason === '' ? '' : ` (${reason})`}`)
+    this.name = 'BiliOutcomeError'
+  }
+}
+
 /**
- * The request may or may not have reached Bilibili: a network failure, a
- * deadline, a server error, or an answer this client could not read. For a
- * write this means the outcome is unknown.
+ * The call may or may not have reached bili-svc (and Bilibili): no answer by the deadline, a
+ * network failure, a server error, or an answer this client could not read. For an action the
+ * outcome is unknown.
  */
 export class BiliTransportError extends Error {
   /**
-   * @param endpoint - allowlist entry name.
+   * @param endpoint - endpoint name, or the bili-svc route.
    * @param detail - what failed, without request data.
    */
-  constructor(readonly endpoint: EndpointName, detail: string) {
+  constructor(readonly endpoint: string, detail: string) {
     super(`${endpoint}: ${detail}`)
     this.name = 'BiliTransportError'
   }
 }
 
-/** Arguments of one call. */
+/** Arguments of one call; bili-svc adds csrf, WBI, and cookies. */
 export interface CallOptions {
-  /** Query parameters; signed when the entry needs WBI. */
   query?: Readonly<Record<string, string | number>>
-  /** Form body of a POST; csrf fields are added from the jar. */
+  /** Form body of an action. */
   form?: Readonly<Record<string, string | number>>
-  /** JSON body of a POST. */
+  /** JSON body. */
   json?: unknown
-  /** Path suffix for entries with a pattern path (the `correspond` page, subtitle files). */
+  /** Path suffix of a subtitle file. */
   path?: string
-  /** Send no cookies, as a signed-out visitor would. */
+  /** Read as a signed-out visitor. */
   anonymous?: boolean
-  /** `Referer` of the page that would make this request, e.g. a video page; must be a Bilibili page. */
+  /** `Referer` of the page that would make the request; bili-svc keeps it only for Bilibili pages. */
   referer?: string
   signal?: AbortSignal
 }
 
 /** One answer. */
 export interface CallResult {
-  /** The JSON `data` (or `result`) field, the text of a text entry, or the whole value of a file entry. */
+  /** The endpoint's data, the text of a text endpoint, or the file of a subtitle. */
   data: unknown
-  /** The whole parsed JSON body; undefined for text entries. */
-  body: Record<string, unknown> | undefined
-  /** Raw `Set-Cookie` headers. */
-  setCookies: string[]
+  /** The whole answer of bili-svc. */
+  body: Record<string, unknown>
+}
+
+/** Anything that can call an endpoint: the remote client, or a test double. */
+export interface BiliCaller {
+  call(name: EndpointName, options?: CallOptions): Promise<CallResult>
+}
+
+/** One account as `GET /v1/status` lists it. */
+export interface ServiceAccount {
+  id: string
+  mid: number
+  display: string
+  /** `ok`, `dead` (Bilibili ended it), `missing` (no readable session), or `none` (bili-svc holds no session for it). */
+  session: string
+}
+
+/** What `GET /v1/status` answers, as far as this package reads it. */
+export interface ServiceStatus {
+  accounts: ServiceAccount[]
+  gate: { mode: string; readonly: boolean } | undefined
+}
+
+/** bili-svc's answer to an owner reply: only whether the Reply Gate sent it. */
+export interface ReplyAnswer {
+  status: 'sent' | 'held' | 'blocked'
+  id?: string
 }
 
 /** What the client needs from its owner. */
-export interface ClientHooks {
-  /** The current jar, read per request; undefined while signed out. */
-  jar(): Promise<CookieJar | undefined>
-  /** Called before every request; throw to refuse it (reads during a back-off). */
-  admit(endpoint: EndpointName, entry: Endpoint): void
-  /** A risk-control answer arrived. */
-  onRisk(endpoint: EndpointName, entry: Endpoint, reason: string): void
-  /** Resolve after `ms`, or reject when the owner stops. */
-  sleep(ms: number): Promise<void>
-  /** Uniform source in [0, 1), for jitter. */
-  random(): number
-  /** Debug log line; never request data. */
+export interface RemoteHooks {
+  /** bili-svc's base URL. */
+  baseUrl: string
+  /** bili-svc's id of the agent's account (`account` of every call). */
+  account: string
+  /** The bearer token, read per call; undefined when the credential is not set. */
+  token(): Promise<string | undefined>
+  /** Debug log line; never request data or the token. */
   debug(message: string): void
-  /** Info log line for an answer with a non-zero code: Bilibili's code and words, never request data. */
+  /** Info log line for a call that did not succeed; never request data or the token. */
   info(message: string): void
-}
-
-/** Spacing and deadlines. */
-export interface ClientTiming {
-  /** Minimum gap between two requests, in milliseconds. */
-  gapMs: number
-  /** Extra random gap up to this many milliseconds. */
-  jitterMs: number
-  /** Deadline of one request. */
-  timeoutMs: number
 }
 
 /**
@@ -189,11 +191,10 @@ function pathMatches(entry: Endpoint, path: string): boolean {
 }
 
 /**
- * The allowlist entry for a method and URL, if any. Exported for tests and
- * for callers handed a URL by Bilibili (subtitle files).
+ * The endpoint of a method and URL, if any: how a subtitle URL from `player` becomes a call.
  * @param method - HTTP method.
  * @param url - absolute URL.
- * @returns the entry name, or undefined when nothing allows it.
+ * @returns the endpoint name, or undefined when none matches.
  */
 export function allowedEndpoint(method: string, url: string): EndpointName | undefined {
   const parsed = URL.parse(url)
@@ -204,203 +205,174 @@ export function allowedEndpoint(method: string, url: string): EndpointName | und
   return undefined
 }
 
-/** URL-encoded text of query or form fields. */
-function formText(fields: Readonly<Record<string, string | number>>): string {
-  return new URLSearchParams(Object.entries(fields).map(([key, value]) => [key, String(value)])).toString()
+/** Bounded one-line text of a field. */
+function line(value: unknown, max = 200): string {
+  return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, max) : ''
 }
 
-/** Pages a request may claim to come from. */
-const REFERER_ORIGINS: ReadonlySet<string> = new Set(['https://www.bilibili.com', 'https://t.bilibili.com', 'https://space.bilibili.com', 'https://search.bilibili.com', 'https://message.bilibili.com'])
-
-/** The entry's referer, or a caller's page on a Bilibili site. */
-function refererOf(entry: Endpoint, requested: string | undefined): string {
-  if (requested !== undefined && REFERER_ORIGINS.has(URL.parse(requested)?.origin ?? '')) return requested
-  return entry.referer ?? 'https://www.bilibili.com/'
+/** A finite number, or undefined. */
+function num(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
-/** Bounded one-line text of a JSON message. */
-function messageText(value: unknown): string {
-  return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, 160) : ''
+/** Bilibili's code and words, as bili-svc passed them on. */
+function said(answer: Record<string, unknown>): string {
+  const code = num(answer['code'])
+  const message = line(answer['message'])
+  if (code === undefined) return message
+  return message === '' ? `code ${code}` : `code ${code}: ${message}`
 }
 
-/** Rate-limited, allowlisted Bilibili HTTP client. */
-export class BiliClient {
-  private queue: Promise<void> = Promise.resolve()
-  private lastAt = 0
-  private wbi: { keys: WbiKeys; at: number } | undefined
+/** A client of bili-svc. */
+export class RemoteBiliClient implements BiliCaller {
+  /** @param hooks - base URL, account, token, and logging. */
+  constructor(private readonly hooks: RemoteHooks) {}
 
-  /**
-   * @param hooks - jar, admission, risk report, sleep, random, and debug log.
-   * @param timing - spacing and deadline.
-   */
-  constructor(private readonly hooks: ClientHooks, private readonly timing: ClientTiming) {}
+  /** bili-svc's base URL. */
+  get baseUrl(): string {
+    return this.hooks.baseUrl
+  }
 
-  /** Forget the cached WBI keys, e.g. after a sign-in. */
-  resetWbi(): void {
-    this.wbi = undefined
+  /** bili-svc's id of the agent's account. */
+  get account(): string {
+    return this.hooks.account
   }
 
   /**
-   * Call one allowlisted endpoint.
-   * @param name - allowlist entry.
-   * @param options - query, body, path suffix, anonymity, cancellation.
+   * Call one endpoint through bili-svc's door.
+   * @param name - endpoint name; anything not in {@link ENDPOINTS} is refused before any request.
+   * @param options - query, form, path suffix, anonymity, cancellation.
    * @returns the answer's data.
-   * @throws {BiliRefused} before sending; {@link BiliRiskError}, {@link BiliApiError}, or {@link BiliTransportError} after.
+   * @throws {BiliRefused} before sending or for HTTP 401/403/404/422; {@link BiliRiskError},
+   *   {@link BiliApiError}, {@link BiliVerifyError}, {@link BiliSessionError}, {@link BiliOutcomeError},
+   *   or {@link BiliTransportError} after.
    */
   async call(name: EndpointName, options: CallOptions = {}): Promise<CallResult> {
+    if (!isEndpointName(name)) throw new BiliRefused(`${String(name)} is not an endpoint this package may call`)
     const entry: Endpoint = ENDPOINTS[name]
-    this.hooks.admit(name, entry)
-    const jar = options.anonymous === true || !entry.cookies ? undefined : await this.hooks.jar()
-    if (entry.cookies && options.anonymous !== true && jar === undefined && entry.signedIn === true) {
-      throw new BiliRefused(`${name} needs a signed-in account`)
+    const body = {
+      endpoint: name,
+      account: this.hooks.account,
+      ...(options.query === undefined ? {} : { query: options.query }),
+      ...(options.form === undefined ? {} : { form: options.form }),
+      ...(options.json === undefined ? {} : { json: options.json }),
+      ...(options.path === undefined ? {} : { path: options.path }),
+      ...(options.referer === undefined ? {} : { referer: options.referer }),
+      ...(options.anonymous === true ? { anonymous: true } : {}),
     }
-    const query: Record<string, string | number> = { ...options.query }
-    for (const field of entry.csrfQuery ?? []) query[field] = this.csrf(name, jar)
-    let search = ''
-    if (entry.wbi === true) search = signQuery(query, await this.wbiKeys(), Math.floor(Date.now() / 1000))
-    else if (Object.keys(query).length > 0) search = formText(query)
-    const path = typeof entry.path === 'string' ? entry.path : options.path ?? ''
-    const url = `https://${entry.host}${path}${search === '' ? '' : `?${search}`}`
-    // Second line of defense: the built URL must itself match the same entry.
-    if (allowedEndpoint(entry.method, url) !== name) throw new BiliRefused(`${name} does not allow this URL`)
-
-    const referer = refererOf(entry, options.referer)
-    const headers: Record<string, string> = {
-      'user-agent': USER_AGENT,
-      'accept': entry.response === 'text' ? 'text/html,application/xhtml+xml' : 'application/json, text/plain, */*',
-      ...BROWSER_HEADERS,
-      // A bilibili.com page fetching another bilibili.com host is same-site; subtitle files are on hdslb.com.
-      'sec-fetch-site': entry.host.endsWith('bilibili.com') ? 'same-site' : 'cross-site',
-      referer,
+    const timeoutMs = entry.kind === 'write' ? ACTION_TIMEOUT_MS : READ_TIMEOUT_MS
+    const { status, answer } = await this.request(name, 'POST', '/v1/bili/call', body, timeoutMs, options.signal)
+    this.refusedStatus(name, status, answer)
+    if (status !== 200) throw new BiliTransportError(name, `bili-svc answered HTTP ${status}`)
+    if (answer['ok'] === true) return { data: answer['data'], body: answer }
+    const outcome = line(answer['outcome'], 40)
+    const reason = line(answer['reason']) || line(answer['message'])
+    this.hooks.info(`bili: ${name} answered ${outcome || 'no outcome'}${reason === '' ? '' : ` (${said(answer) || reason})`}`)
+    switch (outcome) {
+      case 'risk':
+        throw new BiliRiskError(name, said(answer) || 'risk control')
+      case 'verify':
+        throw new BiliVerifyError(name, num(answer['code']) ?? 0, line(answer['message']))
+      case 'api_error':
+        throw new BiliApiError(name, num(answer['code']) ?? 0, line(answer['message']))
+      case 'session_expired':
+      case 'session_unavailable':
+        throw new BiliSessionError(name, outcome, line(answer['message']))
+      case 'refused':
+      case 'held':
+      case 'already':
+      case 'uncertain':
+        throw new BiliOutcomeError(name, outcome, reason)
+      default:
+        throw new BiliTransportError(name, `bili-svc answered an unknown outcome ${JSON.stringify(outcome)}`)
     }
-    if (jar !== undefined && COOKIE_HOSTS.has(entry.host)) {
-      const cookie = cookieHeader(jar)
-      if (cookie !== '') headers['cookie'] = cookie
-    }
-    let body: string | undefined
-    if (entry.method === 'POST') {
-      headers['origin'] = new URL(referer).origin
-      if (options.json !== undefined) {
-        headers['content-type'] = 'application/json'
-        body = JSON.stringify(options.json)
-      } else {
-        const form: Record<string, string | number> = { ...options.form }
-        for (const field of entry.csrfForm ?? []) form[field] = this.csrf(name, jar)
-        headers['content-type'] = 'application/x-www-form-urlencoded'
-        body = formText(form)
-      }
-    }
-    await this.spaced()
-    return await this.send(name, entry, url, { method: entry.method, headers, body }, options.signal)
   }
 
-  /** The jar's csrf token for an entry that needs one. */
-  private csrf(name: EndpointName, jar: CookieJar | undefined): string {
-    const token = jar?.bili_jct
-    if (token === undefined) throw new BiliRefused(`${name} needs the account's csrf cookie`)
-    return token
-  }
-
-  /** WBI keys from `nav`, cached for at most a day. */
-  private async wbiKeys(): Promise<WbiKeys> {
-    if (this.wbi !== undefined && Date.now() - this.wbi.at < WBI_KEYS_TTL_MS) return this.wbi.keys
-    let data: unknown
-    try {
-      data = (await this.call('nav')).data
-    } catch (error: unknown) {
-      // Signed out (-101), nav still publishes the keys.
-      if (!(error instanceof BiliApiError) || error.code !== -101 || error.data === undefined) throw error
-      data = error.data
-    }
-    const image = (data as { wbi_img?: { img_url?: unknown; sub_url?: unknown } } | undefined)?.wbi_img
-    const imgKey = keyFromUrl(image?.img_url)
-    const subKey = keyFromUrl(image?.sub_url)
-    if (imgKey === undefined || subKey === undefined) throw new BiliTransportError('nav', 'answer carries no WBI keys')
-    this.wbi = { keys: { imgKey, subKey }, at: Date.now() }
-    return this.wbi.keys
-  }
-
-  /** Wait for this request's turn: requests go one at a time, at least `gapMs` (+ jitter) apart. */
-  private spaced(): Promise<void> {
-    const turn = this.queue.then(async () => {
-      const wait = this.lastAt + this.timing.gapMs + Math.floor(this.hooks.random() * this.timing.jitterMs) - Date.now()
-      if (this.lastAt > 0 && wait > 0) await this.hooks.sleep(wait)
-      this.lastAt = Date.now()
+  /**
+   * The accounts bili-svc holds and its gate.
+   * @param signal - cancellation.
+   * @returns the accounts, each with its session state, and the gate's mode.
+   */
+  async status(signal?: AbortSignal): Promise<ServiceStatus> {
+    const { status, answer } = await this.request('status', 'GET', '/v1/status', undefined, READ_TIMEOUT_MS, signal)
+    if (status === 401 || status === 403) throw new BiliRefused(`bili-svc did not accept the token for /v1/status (HTTP ${status})`)
+    if (status !== 200) throw new BiliTransportError('status', `bili-svc answered HTTP ${status}`)
+    const accounts = (Array.isArray(answer['accounts']) ? answer['accounts'] : []).flatMap((raw: unknown) => {
+      const row = typeof raw === 'object' && raw !== null ? raw as Record<string, unknown> : {}
+      const id = line(row['id'], 64)
+      if (id === '') return []
+      return [{ id, mid: num(row['mid']) ?? 0, display: line(row['display'], 40), session: line(row['session'], 20) || 'none' }]
     })
-    this.queue = turn.catch(() => undefined)
-    return turn
+    const gate = typeof answer['gate'] === 'object' && answer['gate'] !== null ? answer['gate'] as Record<string, unknown> : undefined
+    return { accounts, gate: gate === undefined ? undefined : { mode: line(gate['mode'], 40), readonly: gate['readonly'] === true } }
   }
 
-  /** Send one built request and classify the answer. */
-  private async send(
-    name: EndpointName, entry: Endpoint, url: string,
-    init: { method: string; headers: Record<string, string>; body: string | undefined }, signal: AbortSignal | undefined,
-  ): Promise<CallResult> {
-    const deadline = AbortSignal.timeout(this.timing.timeoutMs)
-    let response: Response
+  /**
+   * Answer the owner's private message through bili-svc's Reply Gate (`POST /v1/reply/dm`).
+   * @param talker - the owner's main account.
+   * @param message - the reply, at most 500 characters.
+   * @param signal - cancellation.
+   * @returns `sent`, `held`, or `blocked`, with bili-svc's ledger id.
+   * @throws {BiliRefused} for no token or HTTP 401/403/404/422; {@link BiliTransportError} when the outcome is unknown.
+   */
+  async replyDm(talker: number, message: string, signal?: AbortSignal): Promise<ReplyAnswer> {
+    const body = { account: this.hooks.account, talker, message }
+    const { status, answer } = await this.request('reply/dm', 'POST', '/v1/reply/dm', body, ACTION_TIMEOUT_MS, signal)
+    this.refusedStatus('reply/dm', status, answer)
+    if (status !== 200) throw new BiliTransportError('reply/dm', `bili-svc answered HTTP ${status}`)
+    const verdict = answer['status']
+    if (verdict !== 'sent' && verdict !== 'held' && verdict !== 'blocked') throw new BiliTransportError('reply/dm', 'bili-svc answered no status')
+    const id = line(answer['id'], 64)
+    this.hooks.debug(`bili: reply/dm answered ${verdict}${id === '' ? '' : ` (${id})`}`)
+    return id === '' ? { status: verdict } : { status: verdict, id }
+  }
+
+  /** HTTP answers bili-svc decides before Bilibili: nothing was done. */
+  private refusedStatus(name: string, status: number, answer: Record<string, unknown>): void {
+    if (status === 401 || status === 403) throw new BiliRefused(`bili-svc did not accept the token for ${name} (HTTP ${status}${line(answer['error'], 60) === '' ? '' : `: ${line(answer['error'], 60)}`})`)
+    if (status === 404) throw new BiliRefused(`bili-svc does not know the account ${this.hooks.account} (HTTP 404)`)
+    if (status === 422) throw new BiliRefused(`bili-svc refused the request as malformed (HTTP 422${line(answer['error'], 60) === '' ? '' : `: ${line(answer['error'], 60)}`})`)
+  }
+
+  /** One request to bili-svc with the token and a deadline; answers the status and the parsed body. */
+  private async request(
+    name: string, method: 'GET' | 'POST', route: string, body: unknown, timeoutMs: number, signal: AbortSignal | undefined,
+  ): Promise<{ status: number; answer: Record<string, unknown> }> {
+    const token = await this.hooks.token()
+    if (token === undefined || token === '') throw new BiliRefused(`${TOKEN_CREDENTIAL} is not set, so bili-svc cannot be called; ${name} was not sent`)
+    signal?.throwIfAborted()
+    // A timer of its own, so the deadline follows the host's clock (and a test's fake one).
+    const deadline = new AbortController()
+    const timer = setTimeout(() => { deadline.abort(new Error('deadline')) }, timeoutMs)
     const started = Date.now()
+    let response: Response
+    let text: string
     try {
-      response = await fetch(url, {
-        method: init.method,
-        headers: init.headers,
-        ...(init.body === undefined ? {} : { body: init.body }),
+      response = await fetch(`${this.hooks.baseUrl}${route}`, {
+        method,
+        headers: { 'authorization': `Bearer ${token}`, 'accept': 'application/json', ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         redirect: 'manual',
-        signal: signal === undefined ? deadline : AbortSignal.any([signal, deadline]),
+        signal: signal === undefined ? deadline.signal : AbortSignal.any([signal, deadline.signal]),
       })
+      text = await response.text()
     } catch (error: unknown) {
       signal?.throwIfAborted()
-      throw new BiliTransportError(name, deadline.aborted ? `no answer within ${this.timing.timeoutMs} ms` : `network error (${error instanceof Error ? error.name : 'unknown'})`)
+      throw new BiliTransportError(name, deadline.signal.aborted ? `no answer from bili-svc within ${timeoutMs} ms` : `bili-svc is unreachable (${error instanceof Error ? error.name : 'unknown'})`)
+    } finally {
+      clearTimeout(timer)
     }
-    this.hooks.debug(`${name} → HTTP ${response.status} (${Date.now() - started} ms)`)
-    if (response.status === 412 || response.status === 429) {
-      await response.body?.cancel()
-      return this.risk(name, entry, `HTTP ${response.status}`)
+    this.hooks.debug(`bili: ${name} → bili-svc HTTP ${response.status} (${Date.now() - started} ms)`)
+    if (text.length > MAX_BODY_CHARS) throw new BiliTransportError(name, 'bili-svc answer too large')
+    let parsed: unknown = {}
+    if (text !== '') {
+      try {
+        parsed = parseJson(text)
+      } catch {
+        throw new BiliTransportError(name, `bili-svc answer is not JSON (HTTP ${response.status})`)
+      }
     }
-    if (response.status >= 300 && response.status < 400) {
-      await response.body?.cancel()
-      throw new BiliTransportError(name, `refused to follow a redirect (HTTP ${response.status})`)
-    }
-    if (!response.ok) {
-      await response.body?.cancel()
-      throw new BiliTransportError(name, `HTTP ${response.status}`)
-    }
-    const declared = Number(response.headers.get('content-length') ?? 0)
-    if (declared > MAX_BODY_BYTES) {
-      await response.body?.cancel()
-      throw new BiliTransportError(name, 'answer too large')
-    }
-    const text = await response.text()
-    if (text.length > MAX_BODY_BYTES) throw new BiliTransportError(name, 'answer too large')
-    const setCookies = response.headers.getSetCookie()
-    if (entry.response === 'text') return { data: text, body: undefined, setCookies }
-    let parsed: unknown
-    try {
-      parsed = parseJson(text)
-    } catch {
-      if (/captcha|验证码/i.test(text.slice(0, 8192))) return this.risk(name, entry, 'captcha page')
-      throw new BiliTransportError(name, 'answer is not JSON')
-    }
-    if (entry.response === 'file') return { data: parsed, body: undefined, setCookies }
-    if (typeof parsed !== 'object' || parsed === null || typeof (parsed as { code?: unknown }).code !== 'number') {
-      throw new BiliTransportError(name, 'answer has no code')
-    }
-    const json = parsed as Record<string, unknown> & { code: number }
-    const data = json['data'] ?? json['result']
-    const message = messageText(json['message'] ?? json['msg'])
-    // Bilibili's own words go with the code, so the owner can tell a flagged account from a captcha.
-    const said = message === '' ? `code ${json.code}` : `code ${json.code}: ${message}`
-    if (json.code !== 0) this.hooks.info(`${name} answered ${said}`)
-    if (typeof (data as { v_voucher?: unknown } | undefined)?.v_voucher === 'string') return this.risk(name, entry, `captcha (${said})`)
-    if (RISK_CODES.has(json.code)) return this.risk(name, entry, said)
-    if (VERIFY_CODES.has(json.code) || (json.code !== 0 && VERIFY_WORDS.test(message))) throw new BiliVerifyError(name, json.code, message)
-    if (json.code !== 0 && RISK_WORDS.test(message)) return this.risk(name, entry, said)
-    if (json.code !== 0) throw new BiliApiError(name, json.code, message, data)
-    return { data, body: json, setCookies }
-  }
-
-  /** Report a risk answer, then fail the call. */
-  private risk(name: EndpointName, entry: Endpoint, reason: string): never {
-    this.hooks.onRisk(name, entry, reason)
-    throw new BiliRiskError(name, reason)
+    const answer = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {}
+    return { status: response.status, answer }
   }
 }

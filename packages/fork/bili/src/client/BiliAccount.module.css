@@ -87,19 +87,13 @@
 }
 
 .meta,
-.details,
 .hint {
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
   line-height: 18px;
 }
 
-.details {
-  display: flex;
-  flex-direction: column;
-}
-
-/* Account hero: avatar, name row with level and state, then the login panel. */
+/* Account hero: avatar, name row with the session state, then the hint. */
 .hero {
   flex-direction: row;
   flex-wrap: wrap;
@@ -130,7 +124,7 @@
   font-weight: 600;
 }
 
-.hero[data-account='signed-out'] .avatar {
+.hero:not([data-account='ok']) .avatar {
   background: var(--dsw-alias-border-l2);
   color: var(--dsw-alias-label-tertiary);
 }
@@ -155,16 +149,6 @@
   line-height: 24px;
 }
 
-.level {
-  padding: 0 6px;
-  border-radius: var(--dsw-radius-sm);
-  background: var(--bili-pink);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 16px;
-}
-
 .pill {
   padding: 0 8px;
   border-radius: 999px;
@@ -175,12 +159,15 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-.pill[data-state='active'] {
+.pill[data-state='ok'] {
   background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 16%, transparent);
   color: var(--dsw-alias-state-success-primary);
 }
 
-.pill[data-state='login-needed'] {
+.pill[data-state='dead'],
+.pill[data-state='missing'],
+.pill[data-state='none'],
+.pill[data-state='unreachable'] {
   background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 18%, transparent);
   color: var(--dsw-alias-state-warn-primary);
 }
@@ -191,52 +178,6 @@
   line-height: 18px;
 }
 
-.login {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 16px;
-}
-
-.qr {
-  flex: none;
-  width: 156px;
-  height: 156px;
-  padding: 6px;
-  border-radius: var(--dsw-radius-lg);
-  background: #fff;
-  box-shadow: 0 0 0 0.5px var(--dsw-alias-settings-card-stroke);
-}
-
-.loginText {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-width: 280px;
-}
-
-.steps {
-  margin: 0;
-  padding-left: 18px;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 20px;
-}
-
-.loginStatus {
-  font-weight: 510;
-}
-
-.loginStatus[data-state='scanned'] {
-  color: var(--dsw-alias-state-success-primary);
-}
-
-.loginStatus[data-state='expired'],
-.loginStatus[data-state='failed'] {
-  color: var(--dsw-alias-state-warn-primary);
-  font-size: 12px;
-}
-
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -245,42 +186,25 @@
   gap: 10px;
 }
 
-.primary,
-.secondary {
+.primary {
   height: 30px;
   padding: 0 14px;
   border: none;
   border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-state-business-primary);
+  color: var(--dsw-alias-label-primary-foreground);
   font: inherit;
   font-weight: 510;
   cursor: pointer;
   transition: opacity 160ms ease, background 160ms ease;
 }
 
-.primary {
-  background: var(--dsw-alias-state-business-primary);
-  color: var(--dsw-alias-label-primary-foreground);
-}
-
-.secondary {
-  background: transparent;
-  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-border-l3);
-  color: var(--dsw-alias-label-primary);
-}
-
-@media (hover: hover) {
-  .secondary:hover:not(:disabled) {
-    background: var(--dsw-alias-interactive-bg-hover);
-  }
-}
-
-.primary:disabled,
-.secondary:disabled {
+.primary:disabled {
   opacity: 0.45;
   cursor: default;
 }
 
-/* Pause banner: the one thing that needs the owner. */
+/* Gate banner: bili-svc holds every action. */
 .banner {
   display: flex;
   flex-wrap: wrap;
@@ -291,11 +215,6 @@
   border: 0.5px solid color-mix(in srgb, var(--dsw-alias-state-warn-primary) 45%, transparent);
   border-radius: var(--dsw-radius-xl);
   background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 10%, var(--dsw-alias-settings-card-fill));
-}
-
-.banner[data-scope='all'] {
-  border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 45%, transparent);
-  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 8%, var(--dsw-alias-settings-card-fill));
 }
 
 .bannerText {
@@ -324,184 +243,6 @@
   font-size: 12px;
 }
 
-/* Today's budget: one compact bar per action. */
-.usage,
-.wakes,
-.recent {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.usageRow {
-  display: grid;
-  grid-template-columns: 72px 1fr 52px;
-  align-items: center;
-  gap: 10px;
-}
-
-.usageLabel {
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-}
-
-.usageCount {
-  text-align: right;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.track {
-  position: relative;
-  display: block;
-  height: 6px;
-  border-radius: 3px;
-  overflow: hidden;
-  background: var(--dsw-alias-border-l2);
-}
-
-.fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: 3px;
-  background: var(--bili-blue);
-  transition: width 400ms ease;
-}
-
-.fill[data-level='warn'] {
-  background: var(--dsw-alias-state-warn-primary);
-}
-
-.fill[data-level='full'] {
-  background: var(--bili-pink);
-}
-
-/* Body clock: one line per window. */
-.wake {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  align-items: center;
-  gap: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.wakeWindow {
-  color: var(--dsw-alias-label-secondary);
-}
-
-.wakeAt {
-  font-weight: 510;
-}
-
-.wakeState {
-  min-width: 64px;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
-  text-align: right;
-}
-
-.adjusted {
-  margin-left: 6px;
-  padding: 0 6px;
-  border-radius: 999px;
-  corner-shape: round;
-  background: color-mix(in srgb, var(--bili-blue) 14%, transparent);
-  color: var(--bili-blue);
-  font-size: 11px;
-  font-weight: 400;
-  line-height: 16px;
-}
-
-/* Level: the badge, the EXP bar toward the next level, and today's reward chips. */
-.levelRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.levelBadge {
-  padding: 0 8px;
-  border-radius: var(--dsw-radius-sm);
-  background: var(--bili-pink);
-  color: #fff;
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 24px;
-  letter-spacing: 0.02em;
-}
-
-.rewards {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.rewards .chip[data-done] {
-  background: color-mix(in srgb, var(--bili-pink) 16%, transparent);
-  color: var(--bili-pink);
-}
-
-/* The outcome of the owner's last Wake now. */
-.manual {
-  display: flex;
-  flex: 1 1 160px;
-  flex-direction: column;
-  min-width: 0;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.manual[data-outcome='refused'] {
-  color: var(--dsw-alias-state-warn-primary);
-}
-
-/* The route the clock decides by: a priced route gets the accent rule on its left. */
-.route {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px 10px;
-  /* Accent bar beside the route text; `[data-priced]` turns it Bilibili blue. */
-  border-left: 2px solid color-mix(in srgb, var(--dsw-alias-label-secondary) 40%, transparent);
-  border-radius: 0 var(--dsw-radius-sm) var(--dsw-radius-sm) 0;
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.route[data-priced] {
-  border-left-color: var(--bili-blue);
-}
-
-.wake[data-state='done'] .wakeState {
-  color: var(--dsw-alias-state-success-primary);
-}
-
-.wake[data-state='skipped'] .wakeAt,
-.wake[data-state='missed'] .wakeAt {
-  color: var(--dsw-alias-label-tertiary);
-  text-decoration: line-through;
-}
-
-.textarea {
-  width: 100%;
-  min-height: 64px;
-  padding: 8px 10px;
-  border: 0.5px solid var(--dsw-alias-border-l3);
-  border-radius: var(--dsw-radius-md);
-  background: transparent;
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  resize: vertical;
-  box-sizing: border-box;
-}
-
 .input {
   width: 100%;
   padding: 8px 10px;
@@ -518,213 +259,16 @@
   border-color: var(--dsw-alias-state-danger-primary, #d93026);
 }
 
-.input:focus,
-.textarea:focus {
+.input:focus {
   outline: 2px solid color-mix(in srgb, var(--dsw-alias-state-business-primary) 50%, transparent);
   outline-offset: 1px;
 }
 
-.recentRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 0;
-}
-
-.recentRow + .recentRow {
-  border-top: 0.5px solid var(--dsw-alias-border-l2);
-}
-
-.recentAction {
-  min-width: 64px;
-  font-weight: 510;
-}
-
-.recentTarget {
-  flex: 1 1 120px;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--dsw-alias-label-secondary);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.recentAt {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
-}
-
-.recentDetail {
-  flex-basis: 100%;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.chip {
-  padding: 0 7px;
-  border-radius: 999px;
-  corner-shape: round;
-  background: var(--dsw-alias-border-l2);
-  color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
-  line-height: 18px;
-}
-
-.chip[data-state='accepted'],
-.chip[data-visibility='visible'] {
-  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent);
-  color: var(--dsw-alias-state-success-primary);
-}
-
-.chip[data-state='uncertain'],
-.chip[data-visibility='hidden'] {
-  background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 16%, transparent);
-  color: var(--dsw-alias-state-warn-primary);
-}
-
-.chip[data-state='failed'] {
-  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent);
-  color: var(--dsw-alias-state-error-primary);
-}
-
-.section[data-stale] .name,
-.section[data-stale] .usageCount {
+.section[data-stale] .name {
   color: var(--dsw-alias-label-tertiary);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .dot[data-tone='live'] { animation: none; }
-  .fill,
-  .primary,
-  .secondary { transition: none; }
-}
-
-.filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.filter {
-  padding: 2px 10px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 999px;
-  corner-shape: round;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.filter[aria-pressed='true'] {
-  border-color: var(--bili-pink);
-  background: color-mix(in srgb, var(--bili-pink) 12%, transparent);
-  color: var(--bili-pink);
-}
-
-.seenRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 8px;
-  padding: 6px 0;
-}
-
-.seenRow + .seenRow {
-  border-top: 0.5px solid var(--dsw-alias-border-l2);
-}
-
-.grade {
-  min-width: 44px;
-  padding: 0 7px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 590;
-  line-height: 18px;
-  text-align: center;
-}
-
-.grade[data-grade='must'] {
-  background: color-mix(in srgb, var(--bili-pink) 16%, transparent);
-  color: var(--bili-pink);
-}
-
-.grade[data-grade='ok'] {
-  background: color-mix(in srgb, var(--bili-blue) 14%, transparent);
-  color: var(--bili-blue);
-}
-
-.grade[data-grade='skip'] {
-  background: var(--dsw-alias-border-l2);
-  color: var(--dsw-alias-label-tertiary);
-}
-
-.seenTitle {
-  flex: 1 1 200px;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--dsw-alias-label-primary);
-  text-decoration: none;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-@media (hover: hover) {
-  .seenTitle:hover {
-    color: var(--bili-blue);
-    text-decoration: underline;
-  }
-}
-
-.noteText {
-  flex: 1 1 200px;
-  min-width: 0;
-  line-height: 20px;
-}
-
-.term {
-  flex: 1 1 auto;
-  font-weight: 590;
-}
-
-.chip[data-from='owner'] {
-  background: color-mix(in srgb, var(--bili-pink) 14%, transparent);
-  color: var(--bili-pink);
-}
-
-.linkButton {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--dsw-alias-label-tertiary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-@media (hover: hover) {
-  .linkButton:hover:not(:disabled) {
-    color: var(--dsw-alias-state-error-primary);
-  }
-}
-
-.addRow {
-  display: flex;
-  gap: 8px;
-}
-
-.addRow .input {
-  flex: 1 1 auto;
-}
-
-.subTitle {
-  margin-top: 4px;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  font-weight: 590;
+  .primary { transition: none; }
 }

@@ -29,31 +29,35 @@ afterEach(async () => {
 })
 
 const TOOLS = [
-  'bili_home_feed', 'bili_following_feed', 'bili_popular', 'bili_search', 'bili_video', 'bili_comments', 'bili_inbox', 'bili_me',
-  'bili_follow', 'bili_unfollow', 'bili_favorite', 'bili_like', 'bili_coin', 'bili_triple', 'bili_watchlater', 'bili_comment', 'bili_reply', 'bili_dynamic', 'bili_dm_owner',
-  'bili_journal_write', 'bili_journal_read', 'bili_taste_write', 'bili_tell_main_agent',
-  'bili_ranking', 'bili_hot_searches', 'bili_danmaku', 'bili_verdict', 'bili_seen', 'bili_trend_write',
+  'bili_home_feed', 'bili_following_feed', 'bili_popular', 'bili_search', 'bili_ranking', 'bili_hot_searches', 'bili_danmaku',
+  'bili_video', 'bili_comments', 'bili_inbox', 'bili_me',
+  'bili_like', 'bili_triple', 'bili_coin', 'bili_follow', 'bili_unfollow', 'bili_favorite', 'bili_watchlater',
+  'bili_tell_main_agent', 'bili_journal_write', 'bili_journal_read',
 ]
 
+/** Tools that spoke, scouted, or messaged the owner on the account's own initiative: gone. */
+const REMOVED = ['bili_comment', 'bili_reply', 'bili_dynamic', 'bili_dm_owner', 'bili_verdict', 'bili_seen', 'bili_taste_write', 'bili_trend_write']
+
 describe('tool-bili', () => {
-  it('registers the read, write, and journal tools, and none that lifts a pause or names a message recipient', async () => {
+  it('registers exactly the reads, the non-speech actions, the journal, and the main-agent message, and nothing that speaks', async () => {
     const { ctx } = await mount({})
     const schemas = ctx.tools.schemas()
     expect(schemas.map(schema => schema.name).sort()).toEqual([...TOOLS].sort())
-    expect(schemas.some(schema => /resume|pause|unpause/i.test(schema.name))).toBe(false)
-    const dm = schemas.find(schema => schema.name === 'bili_dm_owner')!
-    expect(Object.keys((dm.parameters as { properties: Record<string, unknown> }).properties)).toEqual(['text'])
-    for (const name of ['bili_comment', 'bili_reply', 'bili_dynamic']) {
-      expect(schemas.find(schema => schema.name === name)!.description).toContain('Speak rarely: only when something genuinely moved or surprised you')
-      expect(schemas.find(schema => schema.name === name)!.description).toContain('Never reveal anything about the owner.')
-    }
+    for (const name of REMOVED) expect(ctx.tools.get(name), name).toBeUndefined()
+    expect(schemas.some(schema => /resume|pause|unpause|comment$|reply|dynamic|dm_owner|share/i.test(schema.name))).toBe(false)
+    // No tool takes a free text that goes to Bilibili: only the journal and the main agent take text.
+    const texts = schemas.filter(schema => 'text' in ((schema.parameters as { properties?: Record<string, unknown> }).properties ?? {})).map(schema => schema.name).sort()
+    expect(texts).toEqual(['bili_journal_write', 'bili_tell_main_agent'])
     expect(schemas.find(schema => schema.name === 'bili_video')!.description).toContain('never claim you watched or heard it')
-    expect(schemas.find(schema => schema.name === 'bili_dm_owner')!.description).toContain('Your final answer already reaches the owner as a Bilibili message from your account')
+    expect(schemas.find(schema => schema.name === 'bili_like')!.description).toContain('bili-svc enforces daily limits')
+    expect(schemas.find(schema => schema.name === 'bili_inbox')!.description).not.toContain('bili_reply')
     expect(schemas.find(schema => schema.name === 'bili_coin')!.description).toContain('give them only to a video you genuinely love')
     expect(schemas.find(schema => schema.name === 'bili_coin')!.description).toContain('There is no daily limit')
     expect(schemas.find(schema => schema.name === 'bili_triple')!.description).toContain('The strongest appreciation you can give')
     const coin = schemas.find(schema => schema.name === 'bili_coin')!.parameters as { properties: Record<string, { enum?: unknown }> }
     expect(coin.properties['count']!.enum).toEqual([1, 2])
+    const removed = /bili_(comment|reply|dynamic|dm_owner|verdict|seen|taste_write|trend_write)\b/
+    for (const schema of schemas) expect(schema.description, schema.name).not.toMatch(removed)
   })
 
   it('wraps Bilibili content as untrusted data that cannot close its block, and caps its length', async () => {
@@ -73,34 +77,30 @@ describe('tool-bili', () => {
   })
 
   it('answers a failed read with the host\'s reason, outside the untrusted block', async () => {
-    const { call } = await mount({ homeFeed: () => Promise.reject(new Error('no Bilibili account is signed in yet; the owner signs it in from Settings')) })
+    const reason = 'the Bilibili session in bili-svc is not usable (session_expired); bili-svc owns the login, and the owner renews it there'
+    const { call } = await mount({ homeFeed: () => Promise.reject(new Error(reason)) })
     const result = await call('bili_home_feed', {})
-    expect(result.value).toEqual({ error: 'no Bilibili account is signed in yet; the owner signs it in from Settings' })
-    expect(result.content![0]!.text).toBe('{"error":"no Bilibili account is signed in yet; the owner signs it in from Settings"}')
+    expect(result.value).toEqual({ error: reason })
+    expect(result.content![0]!.text).toBe(JSON.stringify({ error: reason }))
   })
 
-  it('passes write arguments to the guard and returns its outcome unchanged', async () => {
+  it('passes action arguments to the account and returns bili-svc\'s outcome unchanged', async () => {
     const outcomes = {
       like: vi.fn(() => Promise.resolve({ outcome: 'sent', detail: 'like sent' })),
-      comment: vi.fn(() => Promise.resolve({ outcome: 'refused', detail: 'this account already commented on BV1aa4y1X7aa; one comment per video' })),
       favorite: vi.fn(() => Promise.resolve({ outcome: 'already', detail: 'already in folder 默认收藏夹' })),
-      dmOwner: vi.fn(() => Promise.resolve({ outcome: 'uncertain', detail: 'the outcome is unknown' })),
-      watchLater: vi.fn(() => Promise.resolve({ outcome: 'sent', detail: 'watchlater sent' })),
+      watchLater: vi.fn(() => Promise.resolve({ outcome: 'uncertain', detail: 'the outcome is unknown' })),
       follow: vi.fn(() => Promise.reject(new Error('boom'))),
+      unfollow: vi.fn(() => Promise.resolve({ outcome: 'refused', detail: 'bili-svc refused it (daily cap of unfollow reached (10))' })),
       coin: vi.fn(() => Promise.resolve({ outcome: 'refused', detail: 'the account has 0 coins; this needs 2 (about one comes each day from signing in)' })),
       triple: vi.fn(() => Promise.resolve({ outcome: 'sent', detail: 'liked, gave 2 coins, saved to the default folder' })),
-      dmReply: vi.fn(),
     }
     const { call } = await mount(outcomes)
     expect((await call('bili_like', { bvid: 'BV1aa4y1X7aa' })).value).toEqual({ outcome: 'sent', detail: 'like sent' })
-    expect((await call('bili_comment', { bvid: 'BV1aa4y1X7aa', text: '好看' })).value).toMatchObject({ outcome: 'refused' })
     expect((await call('bili_favorite', { bvid: 'BV1aa4y1X7aa', folder_id: 1002, remove: true })).value).toMatchObject({ outcome: 'already' })
-    expect((await call('bili_dm_owner', { text: '看这个' })).value).toEqual({ outcome: 'uncertain', detail: 'the outcome is unknown' })
-    expect((await call('bili_watchlater', { bvid: 'BV1aa4y1X7aa', remove: true })).value).toMatchObject({ outcome: 'sent' })
+    expect((await call('bili_watchlater', { bvid: 'BV1aa4y1X7aa', remove: true })).value).toEqual({ outcome: 'uncertain', detail: 'the outcome is unknown' })
     expect((await call('bili_follow', { mid: 777 })).value).toEqual({ outcome: 'refused', detail: 'boom' })
-    expect(outcomes.comment).toHaveBeenCalledWith('BV1aa4y1X7aa', '好看')
+    expect((await call('bili_unfollow', { mid: 777 })).value).toMatchObject({ outcome: 'refused', detail: 'bili-svc refused it (daily cap of unfollow reached (10))' })
     expect(outcomes.favorite).toHaveBeenCalledWith('BV1aa4y1X7aa', { remove: true, folderId: 1002 })
-    expect(outcomes.dmOwner).toHaveBeenCalledWith('看这个')
     expect(outcomes.watchLater).toHaveBeenCalledWith('BV1aa4y1X7aa', true)
     expect((await call('bili_coin', { bvid: 'BV1aa4y1X7aa' })).value).toMatchObject({ outcome: 'refused' })
     expect(outcomes.coin).toHaveBeenCalledWith('BV1aa4y1X7aa', undefined)
@@ -143,29 +143,6 @@ describe('tool-bili', () => {
     // An entry may repeat what strangers wrote on Bilibili, so the read comes back as untrusted data.
     const text = (await call('bili_journal_read', {})).content![0]!.text
     expect(text.startsWith('<bilibili_data source="your journal" trust="untrusted">\n')).toBe(true)
-  })
-
-  it('keeps a taste note, or rewrites one by its number', async () => {
-    const tasteWrite = vi.fn(() => Promise.resolve({ saved: true, seq: 4, notes: 4 }))
-    const { ctx, call } = await mount({ tasteWrite })
-    expect((await call('bili_taste_write', { text: '她不爱看大众热门' })).value).toEqual({ saved: true, seq: 4, notes: 4 })
-    expect(tasteWrite).toHaveBeenCalledWith('她不爱看大众热门', undefined)
-    await call('bili_taste_write', { text: '她想看 AI agent 圈正在发酵的事', replaces: 2 })
-    expect(tasteWrite).toHaveBeenLastCalledWith('她想看 AI agent 圈正在发酵的事', 2)
-    expect(ctx.tools.schemas().find(schema => schema.name === 'bili_taste_write')!.description).toContain('you cannot rewrite them')
-  })
-
-  it('grades a video, reads the seen list, and notes a trend, answering host refusals as they are', async () => {
-    const verdict = vi.fn(() => Promise.resolve({ refused: 'you have not read the subtitles of BV1aa4y1X7aa (bili_video); without them it is at most ok' }))
-    const seen = vi.fn(() => Promise.resolve({ entries: [] }))
-    const trendWrite = vi.fn(() => Promise.resolve({ saved: true, seq: 1 }))
-    const { call } = await mount({ verdict, seen, trendWrite })
-    expect((await call('bili_verdict', { bvid: 'BV1aa4y1X7aa', grade: 'must', reason: '鱼灾复盘，和我们有关' })).value).toMatchObject({ refused: expect.stringContaining('at most ok') as string })
-    expect(verdict).toHaveBeenCalledWith('BV1aa4y1X7aa', 'must', '鱼灾复盘，和我们有关')
-    await call('bili_seen', { bvid: 'BV1aa4y1X7aa' })
-    expect(seen).toHaveBeenCalledWith('BV1aa4y1X7aa', 30)
-    expect((await call('bili_trend_write', { term: '鱼灾', note: 'B站上 DeepSeek agent 刷屏的一周' })).value).toEqual({ saved: true, seq: 1 })
-    expect(trendWrite).toHaveBeenCalledWith('鱼灾', 'B站上 DeepSeek agent 刷屏的一周', undefined)
   })
 
   it('searches newest first when asked', async () => {

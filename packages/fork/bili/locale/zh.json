@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "B站账号",
-    "description": "让 agent 登录它自己的 B站账号，并在设置中显示登录状态、暂停状态、今日额度、兴趣与下次醒来时间。"
+    "description": "在设置中只读显示 agent 自己的 B站账号在 bili-svc 里的状态（登录由 bili-svc 保管），并保存主人的主号。"
   }
 }
