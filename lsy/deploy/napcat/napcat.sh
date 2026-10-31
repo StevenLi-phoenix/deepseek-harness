@@ -55,6 +55,10 @@ start() {
     unset t
     echo "wrote a new OneBot token to $DSH_ENV (not shown); restart the dsh service so it reads it"
   fi
+  # NapCat logs every received group message (group, nickname, text) at info level, and docker keeps that
+  # output: log only warnings and errors, and keep no log file. The login QR code is announced at warn level.
+  docker run --rm -v napcat-config:/cfg --entrypoint bash "$IMAGE" -c \
+    'f=/cfg/napcat.json; [ -f $f ] || cp /app/napcat/config/napcat.json $f 2>/dev/null || echo "{}" > $f; jq ".consoleLogLevel = \"warn\" | .fileLogLevel = \"warn\" | .fileLog = false" $f > $f.new && mv $f.new $f'
   docker rm -f "$NAME" >/dev/null 2>&1 || true
   local account=()
   [ -n "$uin" ] && account=(-e "ACCOUNT=$uin")
