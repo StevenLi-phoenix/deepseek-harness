@@ -29,11 +29,9 @@ describe('gen-tool-catalog collectToolCatalog', () => {
     expect(names).toEqual([
       'apply_patch', 'ask_user_question', 'bash', 'bash',
       // Fork-local (lsy): the Bilibili account tools of packages/lsy/tool-bili.
-      'bili_coin', 'bili_comment', 'bili_comments', 'bili_danmaku', 'bili_dm_owner', 'bili_dynamic', 'bili_favorite',
-      'bili_follow', 'bili_following_feed', 'bili_home_feed', 'bili_hot_searches', 'bili_inbox', 'bili_journal_read',
-      'bili_journal_write', 'bili_like', 'bili_me', 'bili_popular', 'bili_ranking', 'bili_reply', 'bili_search', 'bili_seen',
-      'bili_taste_write', 'bili_tell_main_agent', 'bili_trend_write', 'bili_triple', 'bili_unfollow', 'bili_verdict',
-      'bili_video', 'bili_watchlater',
+      'bili_coin', 'bili_comments', 'bili_danmaku', 'bili_favorite', 'bili_follow', 'bili_following_feed', 'bili_home_feed',
+      'bili_hot_searches', 'bili_inbox', 'bili_journal_read', 'bili_journal_write', 'bili_like', 'bili_me', 'bili_popular',
+      'bili_ranking', 'bili_search', 'bili_tell_main_agent', 'bili_triple', 'bili_unfollow', 'bili_video', 'bili_watchlater',
       'cordis_inspect_list',
       'cordis_inspect_query',
       'create_goal', 'create_worktree', 'edit', 'exit_plan_mode', 'get_goal', 'glob', 'grep',

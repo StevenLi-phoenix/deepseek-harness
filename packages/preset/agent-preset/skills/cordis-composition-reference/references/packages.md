@@ -335,7 +335,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 
 | Package | Config | Description |
 |---|---|---|
-| `@deepseek-ai/dsh-bili` | yes | The agent's own Bilibili account: QR login, cookie refresh, guarded writes, a body clock that wakes its Session, and a Settings section |
+| `@deepseek-ai/dsh-bili` | yes | The agent's own Bilibili account as a client of bili-svc: reads and non-speech actions through bili-svc's door, the owner's messages answered through its Reply Gate, and a read-only Settings section |
 | `@deepseek-ai/dsh-lsy-balance` | yes | Account settings card with the balance or quota of every provider key the Host holds |
 | `@deepseek-ai/dsh-lsy-cc-bridge` | yes | Model-facing cc_list_sessions and cc_send tools: the agent talks to the owner's Claude Code sessions on the same Mac through a relay, and their replies reach the main agent |
 | `@deepseek-ai/dsh-lsy-event-bus` | yes | Durable event bus for event-driven agent runs: dedupe, loop suppression, subscriptions, coalescing, rate limits, and dispatch to notify or Session actuators |

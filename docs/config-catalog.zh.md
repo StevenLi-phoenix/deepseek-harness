@@ -460,96 +460,31 @@ export type Config = LocalConfig
 ## `@deepseek-ai/dsh-bili`
 
 - `inject`: `timer` · `storageDomain` · `credentials` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/lsy/bili/src/index.ts:143`](../packages/lsy/bili/src/index.ts)
+- `source`: [`packages/lsy/bili/src/index.ts:78`](../packages/lsy/bili/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
 export interface Config {
   /**
-   * The owner's main account (UID); the only account this one may message. The UID set in
-   * Settings wins, so a deployment can keep it out of committed files. Unset, messaging is off.
+   * The owner's main account (UID): the only account whose messages the Session answers. The UID
+   * set in Settings wins, so a deployment can keep it out of committed files. Unset, nothing is answered.
    */
   ownerMid?: number
-  /** IANA time zone of the body clock, day boundaries for caps, and prompt times. */
+  /** bili-svc's id of the agent's account: the `account` of every call. */
+  account: string
+  /** IANA time zone of the journal, the main-agent limit, and prompt times. */
   timeZone: string
-  /** Daily wake windows in `timeZone` (`HH:MM`, start inclusive, end exclusive, same day); one random wake in each. */
-  wakes: WakeWindow[]
-  /** Probability (0-1) that a window gets no wake on a given day. */
-  skipChance: number
-  /**
-   * How much a body-clock or Wake-now wake watches before its answer goes out: a turn that ends
-   * with fewer than `minWatched` distinct videos opened is held back, and the Session is asked to
-   * keep browsing, at most `maxRounds` times; then the last answer goes out. `minWatched` 0 holds nothing.
-   */
-  depth: DepthConfig
-  /** What the owner is interested in, shown in every wake prompt until edited in Settings. */
-  interests: string
-  /** Search keywords every wake searches first, newest first, until the owner edits them in Settings. */
-  keywords: string[]
-  /** Videos graded must that may go to the owner per day (the day's picks); 0 sets no quota. */
-  picksPerDay: number
   /** Messages the account's Session may send the owner's main agent per day (`bili_tell_main_agent`); 0 turns them off. */
   mainAgentPerDay: number
   /** The account's Session. */
   session: SessionConfig
-  /** Daily write caps. */
-  caps: CapsConfig
-  /** Shortest gap between two writes, in milliseconds. */
-  writeGapMinMs: number
-  /** Longest gap between two writes, in milliseconds; each gap is random between the two. */
-  writeGapMaxMs: number
-  /** How long a write waits for its slot before it answers "try later", in milliseconds. */
-  writeWaitMs: number
-  /** Shortest gap before a reply to the owner's message, in milliseconds; a conversation needs no minutes-long gap. */
-  dmReplyGapMinMs: number
-  /** Longest gap before a reply to the owner's message, in milliseconds. */
-  dmReplyGapMaxMs: number
-  /** Shortest gap between two requests, in milliseconds. */
-  requestGapMs: number
-  /** Extra random gap of up to this many milliseconds per request. */
-  requestJitterMs: number
-  /** Deadline of one request, in milliseconds. */
-  requestTimeoutMs: number
-  /** Inbox check period, in milliseconds; checks cost no model tokens. */
+  /** Owner-message check period, in milliseconds; checks cost no model tokens. */
   inboxPollMs: number
-  /** Most inbox wakes per rolling hour; later items wait. */
-  inboxWakesPerHour: number
-  /** How long reads back off after a risk-control answer, in milliseconds. */
-  readBackoffMs: number
-  /** Delay before checking that an accepted comment or reply is visible to others, in milliseconds. */
-  visibilityCheckMs: number
-  /** Cookie check period, in milliseconds; a refresh happens when Bilibili asks for one. */
-  refreshCheckMs: number
-  /** PEM public key Bilibili's web client uses for the cookie-refresh path; change it only if Bilibili rotates it. */
-  refreshPublicKey: string
-  /**
-   * Time-of-day pricing of model routes, in UTC. While the account's Session runs on a listed
-   * provider, body-clock wakes fall only outside `peak` (a window is clipped to its off-peak part, or
-   * moved past the peak it lies in), and wakes and inbox items that come due in a peak wait for it to
-   * end. Empty: wakes ignore pricing.
-   */
-  pricing: PricingRule[]
-}
-
-/** One daily wake window in local time. */
-export interface WakeWindow {
-  /** `HH:MM`, inclusive. */
-  start: string
-  /** `HH:MM`, exclusive; later than `start` on the same day. */
-  end: string
-}
-
-/** The watch floor of a wake. */
-export interface DepthConfig {
-  /** Distinct videos opened with `video()` before an answer goes out. */
-  minWatched: number
-  /** Continuation turns at most per wake. */
-  maxRounds: number
 }
 
 /** How the account's Session is created. */
 export interface SessionConfig {
-  /** Absolute directory the Session works in; created before every wake. */
+  /** Absolute directory the Session works in; created before every prompt. */
   workspacePath: string
   /** Agent preset of the Session; the bundle defines `bili` with only the Bilibili tools. */
   agentPreset: string
@@ -558,61 +493,6 @@ export interface SessionConfig {
   /** Session title. */
   title: string
 }
-
-/**
- * Daily write caps; each is bounded by a hard maximum in code. Coins have no
- * daily cap: the coin balance and Bilibili's per-video rule limit them.
- */
-export interface CapsConfig {
-  /** Accounts followed per day. */
-  follow: number
-  /** Accounts unfollowed per day. */
-  unfollow: number
-  /** Favorite additions and removals per day. */
-  favorite: number
-  /** Videos liked per day. */
-  like: number
-  /** Watch-later additions and removals per day. */
-  watchlater: number
-  /** Top-level comments per day; one per video ever. */
-  comment: number
-  /** Replies per day; one per answered comment ever. */
-  reply: number
-  /** Text dynamics per day. */
-  dynamic: number
-  /**
-   * Messages the account sends the owner's main account on its own (a turn's share, or
-   * `bili_dm_owner`) per day; answers to the owner's own messages have no cap.
-   */
-  dmOwner: number
-  /** Watch reports per day: one per video whose subtitles the account read. */
-  watch: number
-  /** Share reports per day: one per video ever, for a link the host delivered to the owner. */
-  share: number
-}
-
-/** The time-of-day pricing of some model providers. */
-export interface PricingRule {
-  /** Provider ids (route keys) this rule prices, e.g. `deepseek-official`. */
-  providers: string[]
-  /** Peak periods in UTC; every other time is off-peak. */
-  peak: PeakSpan[]
-  /** UTC dates (`YYYY-MM-DD`) with no peak at all, such as public holidays. */
-  noPeakDates?: string[]
-}
-
-/** One recurring peak period, in UTC. */
-export interface PeakSpan {
-  /** UTC weekdays the span applies to. */
-  days: Weekday[]
-  /** `HH:MM` UTC, inclusive. */
-  start: string
-  /** `HH:MM` UTC, exclusive, after `start`; `24:00` is the end of the day. */
-  end: string
-}
-
-/** One of {@link WEEKDAYS}. */
-export type Weekday = typeof WEEKDAYS[number]
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-bili -->
 

@@ -379,7 +379,7 @@ const TOOL_PACKAGES: ToolPackage[] = [
     dir: 'tool-bili',
     source: 'packages/lsy/tool-bili/src/index.ts',
     requires: ['ctx.tools', 'ctx.bili (the account service of @deepseek-ai/dsh-bili)', 'ctx.lsyNotifier for bili_tell_main_agent'],
-    writes: ['tool/call', 'tool/result', 'the Bilibili account\'s write ledger, journal, grades, taste notes, and trends'],
+    writes: ['tool/call', 'tool/result', 'the Bilibili account\'s journal; actions go to bili-svc, which keeps their ledger'],
     async mount(ctx) {
       // Schema harvest never reaches Bilibili: the account service is a stub.
       ctx.provide('bili', {} as BiliAccount)
