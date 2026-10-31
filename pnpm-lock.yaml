@@ -13784,6 +13784,9 @@ importers:
       '@deepseek-ai/dsh-fork-event-bus':
         specifier: workspace:*
         version: link:../fork-event-bus
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
 
   packages/fork/fork-github-sensor:
     dependencies:
