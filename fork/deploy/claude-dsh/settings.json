@@ -1,0 +1,8 @@
+{
+  "env": { "DISABLE_AUTOUPDATER": "1" },
+  "permissions": {
+    "defaultMode": "dontAsk",
+    "allow": ["Read", "Glob", "Grep", "SendMessage", "ListAgents", "Bash(ls:*)", "Bash(git status:*)", "Bash(git log:*)", "Bash(git diff:*)"],
+    "deny": ["Read(/Users/dsh-runtime/.dsh/**)", "Read(/Users/dsh-runtime/.config/**)", "Read(/Users/dsh-runtime/.ssh/**)", "Read(**/.env)", "Read(**/.env.*)", "Read(**/*.pem)", "Read(**/*.key)", "WebFetch", "WebSearch"]
+  }
+}

@@ -34,7 +34,7 @@ kind: "package-group"
 | [`fork-sysmon/`](fork-sysmon/README.zh.md) | 设置里显示 Host 机器 CPU、内存、功耗、温度与各卷磁盘用量的分区 |
 | [`fork-tool-monitor/`](fork-tool-monitor/README.zh.md) | `monitor_start`、`monitor_stop`、`monitor_list` 工具：命令输出的每一行都回到同一个 Session |
 | [`fork-tool-voice/`](fork-tool-voice/README.zh.md) | `speak` 工具：agent 把文字合成语音，并把音频发给微信上的 owner |
-| [`fork-cc-bridge/`](fork-cc-bridge/README.zh.md) | `cc_list_sessions`、`cc_send` 工具：经 relay 与这台 Mac 上 owner 的 Claude Code 会话通信 |
+| [`fork-cc-bridge/`](fork-cc-bridge/README.zh.md) | `cc_list_sessions`、`cc_send`、`cc_start`、`cc_stop` 工具：与 agent 自己账号下的 Claude Code 会话协作 |
 | [`fork-tool-watch/`](fork-tool-watch/README.zh.md) | `watch_create`、`watch_list`、`watch_delete` 工具：agent 自己管理监控 |
 | [`fork-tool-wechat/`](fork-tool-wechat/README.zh.md) | `wechat_send_file` 工具：agent 给 owner 发图片、视频和文件 |
 | [`fork-voice/`](fork-voice/README.zh.md) | `ctx.forkVoice`：文字转语音（feiyu，Mac mini TTS 兜底）与音频文件转文字（asr-service，默认关闭） |
