@@ -127,6 +127,26 @@ describe('cc tools', () => {
   })
 })
 
+describe('reach', () => {
+  it('defaults to the service account\'s own session registry, never another user\'s', () => {
+    expect(Bridge.resolveSessionsDir('', '/Users/dsh-runtime')).toBe('/Users/dsh-runtime/.claude/sessions')
+    expect(Bridge.Config({} as never).sessionsDir).toBe('')
+  })
+
+  it('lists and messages only sessions of the configured registry', async () => {
+    const { call, session, dirs } = await mount()
+    const elsewhere = tempDirs()
+    const other = new FakeSession(elsewhere.socks, elsewhere.sessionsDir, 'owners-session', process.ppid + 0)
+    await other.start({ procStart: await processStart(process.ppid) })
+    cleanups.push(async () => { await other.stop(); rmSync(elsewhere.root, { recursive: true, force: true }) })
+    rmSync(`${dirs.sessionsDir}/${String(process.ppid)}.json`)
+    expect(await call(CHAT, 'cc_list_sessions', {})).toEqual({ sessions: [] })
+    expect(await call(CHAT, 'cc_send', { to: 'owners-session', text: 'hi' })).toMatchObject({ error: expect.stringContaining('no live') as string })
+    expect(session.received).toEqual([])
+    expect(other.received).toEqual([])
+  })
+})
+
 describe('inbound messages', () => {
   it('reach the main agent as a labelled message', async () => {
     const { inbox, session, told } = await mount()

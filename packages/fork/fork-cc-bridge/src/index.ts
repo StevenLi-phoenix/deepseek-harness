@@ -147,6 +147,11 @@ export function sessionForModel(session: SessionView, now: number): Omit<Session
   return { ...rest, ...quiet }
 }
 
+/** The session registry the bridge reads: this account's own, which keeps the owner's sessions out of reach. */
+export function resolveSessionsDir(configured: string, home: string): string {
+  return configured === '' ? join(home, '.claude', 'sessions') : configured
+}
+
 /**
  * Register the tools, and listen for what Claude Code sessions send to the agent.
  * @param ctx - the preset scope's context.
@@ -192,7 +197,7 @@ export function apply(ctx: Context, config: Config): void {
   const home = homedir()
   const hub = new PeerHub({
     stateDir: config.stateDir,
-    sessionsDir: config.sessionsDir === '' ? join(home, '.claude', 'sessions') : config.sessionsDir,
+    sessionsDir: resolveSessionsDir(config.sessionsDir, home),
     peerName: config.peerName,
     maxText: MAX_TEXT_CHARS,
     sendPerMin: 6, sendTotalPerMin: 20, inboundPerMin: 6, inboundTotalPerMin: 30,

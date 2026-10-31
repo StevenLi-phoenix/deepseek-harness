@@ -5,8 +5,11 @@
 set -euo pipefail
 export HOME=/Users/dsh-runtime
 export PATH=/opt/homebrew/bin:/usr/bin:/bin
-CLAUDE_CODE_OAUTH_TOKEN="$(/bin/cat /Users/dsh-runtime/.config/claude-code/oauth_token)"
-export CLAUDE_CODE_OAUTH_TOKEN
+# A full claude.ai login (`/login` as this user, needed for Remote Control) wins over the inference-only token.
+if [[ ! -s /Users/dsh-runtime/.claude/.credentials.json ]]; then
+  CLAUDE_CODE_OAUTH_TOKEN="$(/bin/cat /Users/dsh-runtime/.config/claude-code/oauth_token)"
+  export CLAUDE_CODE_OAUTH_TOKEN
+fi
 export DISABLE_AUTOUPDATER=1
 cd /Users/dsh-runtime/work/cc
 exec /Users/dsh-runtime/.local/bin/claude "$@"
