@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { readFileSync } from 'node:fs'
 import { Context } from '@deepseek-ai/cordis'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createAssistantMessage, createSystemMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId, SESSION_FORMAT_VERSION, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parse } from 'yaml'
@@ -171,6 +171,9 @@ describe('the watch', () => {
   })
 })
 
+/** An assistant message as the loop records it. */
+const assistantMessage = (text: string) => createAssistantMessage({ content: [{ type: 'text', text }], source: { kind: 'model', provider: 'test', model: 'test' } as never })
+
 describe('system prompt hashes and stock lines', () => {
   function chatSession(preset: string): Session {
     return Session.create(SessionId(`s-${preset}`), undefined, { version: SESSION_FORMAT_VERSION, id: SessionId(`s-${preset}`), createdAt: 0, isSeeded: false, agentPreset: preset })
@@ -188,7 +191,8 @@ describe('system prompt hashes and stock lines', () => {
     ;(ctx.logger as unknown as { info: unknown }).info = info
     ;(ctx.logger as unknown as { warn: unknown }).warn = warn
     const session = chatSession('unattended')
-    const prompt = (text: string): SessionEvent => ({ type: 'system/message', seq: 0, time: 0, data: { content: [{ type: 'text', text }] } }) as never
+    const prompt = (text: string): SessionEvent => ({ type: 'system/message', seq: 0, time: 0, data: { turn: 1, step: 1, message: createSystemMessage(text) } }) as never
+    ctx.emit('session/event', session, prompt(''))
     ctx.emit('session/event', session, prompt('You are the cat.'))
     await settle()
     ctx.emit('session/event', session, prompt('You are the cat.'))
@@ -207,7 +211,7 @@ describe('system prompt hashes and stock lines', () => {
     const session = chatSession('unattended')
     const say = (text: string): void => {
       session.append('turn/start', { turn: 1 })
-      session.append('assistant/message', { role: 'assistant', id: 'm', content: [{ type: 'text', text }], source: { kind: 'model' } } as never, { surfaceOp: 'append' })
+      session.append('assistant/message', { turn: 1, step: 1, message: assistantMessage(text) } as never, { surfaceOp: 'append' })
       emit(ctx, session, { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } as never })
       session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
     }
@@ -227,7 +231,7 @@ describe('system prompt hashes and stock lines', () => {
     const ctx = await mount({})
     const session = chatSession('qq-digest')
     session.append('turn/start', { turn: 1 })
-    session.append('assistant/message', { role: 'assistant', id: 'm', content: [{ type: 'text', text: '这话我记下了' }], source: { kind: 'model' } } as never, { surfaceOp: 'append' })
+    session.append('assistant/message', { turn: 1, step: 1, message: assistantMessage('这话我记下了') } as never, { surfaceOp: 'append' })
     emit(ctx, session, { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } as never })
     await settle()
     await expect(readFile(join(dir, 'lsy-integrity', 'tics.json'), 'utf8')).rejects.toThrow()

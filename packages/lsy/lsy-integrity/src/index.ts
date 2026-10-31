@@ -262,7 +262,9 @@ export function apply(ctx: Context, config: Config): void {
   ctx.on('session/event', (session, event) => {
     const preset = session.header.agentPreset ?? 'unknown'
     if (event.type === 'system/message') {
-      const text = textOf(event.data as { content?: unknown })
+      const text = textOf(event.data.message)
+      // An empty prompt means "none yet"; it carries no persona to hash.
+      if (text === '') return
       const sha = sha256(text).slice(0, 12)
       void (async () => {
         await loadPersona()
@@ -280,7 +282,10 @@ export function apply(ctx: Context, config: Config): void {
         // oxlint-disable-next-line typescript/no-deprecated -- Same Session history read as lsy-memory's visibility check.
         const earlier = session.eventAt(seq as never)
         if (earlier?.type === 'turn/start') break
-        if (earlier?.type === 'assistant/message') { answer = textOf(earlier.data as { content?: unknown }); break }
+        if (earlier?.type === 'assistant/message') {
+          answer = textOf(earlier.data.message)
+          break
+        }
       }
       if (answer.trim() === '' || answer.trim() === 'NO_REPLY') return
       const hits = ticHits(answer)
