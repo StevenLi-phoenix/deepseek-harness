@@ -24,6 +24,9 @@
       "path": "../fork-event-bus"
     },
     {
+      "path": "../../util/home-paths"
+    },
+    {
       "path": "../owner-relay"
     },
     {
