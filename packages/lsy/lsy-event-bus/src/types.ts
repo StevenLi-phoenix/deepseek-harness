@@ -162,6 +162,11 @@ export interface LsyNote {
    * shown to the owner; without it the channel names a generic other Session.
    */
   origin?: string | undefined
+  /**
+   * A notice from the memory and persona safety plugins (memory writes, audited reminders, integrity). A channel drops
+   * these while the operator's mute switch is on, so a test never reaches the owner's phone; other notes are unaffected.
+   */
+  safety?: true | undefined
 }
 
 /** A message another of the agent's Sessions sends the owner's main agent. */

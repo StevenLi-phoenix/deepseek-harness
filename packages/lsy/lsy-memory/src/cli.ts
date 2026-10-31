@@ -3,8 +3,9 @@
  * the service user so the file belongs to that user; it prints counts, never entry text.
  */
 
-import { readFile } from 'node:fs/promises'
+import { readFile, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { parseClaudeExport } from './export.ts'
 import { CATEGORIES } from './entries.ts'
 import { defaultFeedbackFile, FEEDBACK_SCOPES, FeedbackStore, type FeedbackScope } from './feedback.ts'
@@ -78,6 +79,7 @@ const ADMIN_USAGE = [
   '                                  {"scope":"up|bili","verdict":"keep|delete","kind":"comment|dm","text":"<reply>","ref":"<stable id>","note":"<optional>"}',
   '  feedback list [--scope up|bili] verdicts, newest first',
   '  feedback forget <id>            remove one verdict',
+  '  notices mute|unmute|status      silence the memory, reminder, and integrity notices to WeChat for 30 minutes (for tests)',
   '  approve <id>...                 keep waiting writes',
   '  discard <id>...                 drop waiting writes',
   '  revert <id>...                  undo the latest change of entries (a waiting write is dropped)',
@@ -85,6 +87,9 @@ const ADMIN_USAGE = [
   '  rollback --since <ISO time> [--dry-run]   undo what changed since a time',
   '  forget --purge <id>...          erase entries and every trace in the history, snapshots, and waiting writes',
 ].join('\n')
+
+/** How long the mute file silences the safety notices (the channel applies the same window). */
+const MUTE_MS = 30 * 60_000
 
 /** What the history records for a change the CLI made. */
 const ADMIN_META = { origin: 'memory-admin' } as const
@@ -141,6 +146,29 @@ export async function runAdminCli(io: ImportCliIo = {}): Promise<number> {
         for (const entry of index.pending) out(`${entry.id} ${entry.category} pending-${entry.op}`)
         out(`memory-admin: ${String(index.entries.length)} entries, ${String(index.pending.length)} waiting`)
         return 0
+      }
+      case 'notices': {
+        const muteFile = join(resolveDshHome(undefined, io.env ?? process.env), 'notices.muted')
+        const [action] = ids
+        if (action === 'mute') {
+          await writeFile(muteFile, '', { mode: 0o600 })
+          const now = new Date()
+          await utimes(muteFile, now, now)
+          out('memory-admin: safety notices muted for 30 minutes (run `notices mute` again to extend, `notices unmute` to end)')
+          return 0
+        }
+        if (action === 'unmute') {
+          await rm(muteFile, { force: true })
+          out('memory-admin: safety notices are on')
+          return 0
+        }
+        if (action === 'status') {
+          const left = await stat(muteFile).then(info => Math.ceil((MUTE_MS - (Date.now() - info.mtimeMs)) / 60_000), () => 0)
+          out(left > 0 ? `memory-admin: safety notices are muted, ${String(left)} minutes left` : 'memory-admin: safety notices are on')
+          return 0
+        }
+        err(ADMIN_USAGE)
+        return 2
       }
       case 'feedback': {
         const [action, id] = ids

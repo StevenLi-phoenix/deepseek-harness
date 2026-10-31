@@ -1,11 +1,12 @@
 /** WeChat (iLink bot) channel: the owner's chat Session, its `wechat` relay channel, and `ctx.lsyNotifier`. */
 
 import { randomUUID } from 'node:crypto'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, statSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 import { basename, isAbsolute, join } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContextFormed, UserMessage } from '@deepseek-ai/dsh-llm'
 import type { LsyAgentMessage, LsyNote, LsyNotifier } from '@deepseek-ai/dsh-lsy-event-bus'
@@ -31,6 +32,9 @@ declare module '@deepseek-ai/dsh-llm' {
 
 import { agentMessageText, buildDigest, EARLIER_CHAT, fitText, formatGap, HELP_REPLY, inboundText, NEW_CHAT_REPLY, QUOTA_FOOTER, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES } from './text.ts'
 import { TypingIndicator } from './typing.ts'
+
+/** How long a mute file keeps the safety notices quiet, in milliseconds. */
+const SAFETY_MUTE_MS = 30 * 60_000
 
 export * from './api.ts'
 export * from './login.ts'
@@ -67,6 +71,8 @@ export interface Config {
   accountFile?: string
   /** Chat Session settings. */
   chat: ChatConfig
+  /** The operator's mute file for safety notices; defaults to `<DSH_HOME>/notices.muted`. */
+  muteFile?: string
   /** Code points per WeChat message; longer texts are split. */
   maxMessageChars: number
   /** Messages one text may be split into; the last is cut beyond that. */
@@ -100,6 +106,7 @@ export interface Config {
 /** Configuration schema. */
 export const Config: z<Config> = z.object({
   accountFile: z.string(),
+  muteFile: z.string(),
   chat: z.object({
     workspacePath: z.string().default('/Users/dsh-runtime/work'),
     agentPreset: z.string().default('unattended'),
@@ -209,6 +216,7 @@ export class WechatChannel extends Service implements LsyNotifier {
 
   private readonly ready: Promise<Domain<typeof wechatDomain>>
   private readonly accountFile: string
+  private readonly muteFile: string
   private readonly abort = new AbortController()
   private readonly inflight = new Set<Promise<void>>()
   private domain: Domain<typeof wechatDomain> | undefined
@@ -240,6 +248,7 @@ export class WechatChannel extends Service implements LsyNotifier {
     super(ctx, 'lsyNotifier')
     assertConfig(config)
     this.accountFile = config.accountFile ?? accountFilePath()
+    this.muteFile = config.muteFile ?? join(resolveDshHome(undefined, process.env), 'notices.muted')
     this.ready = ctx.storageDomain.open(wechatDomain)
     this.typing = new TypingIndicator({
       fetchTicket: async () => {
@@ -348,9 +357,25 @@ export class WechatChannel extends Service implements LsyNotifier {
    * @throws only when storage fails.
    */
   async send(note: LsyNote): Promise<void> {
+    if (note.safety === true && this.safetyMuted()) {
+      this.ctx.logger.info(`lsy-wechat: safety notice muted (${note.title.length + (note.body?.length ?? 0)} chars not sent; operator mute is on)`)
+      return
+    }
     const text = renderNote(note)
     await this.deliver(text, 'note')
     await this.shareWithChat(text, note.origin)
+  }
+
+  /**
+   * Whether the operator's mute switch is on: the file exists and was touched in the last 30 minutes (an old file
+   * lapses by itself, so a forgotten mute cannot silence the safety notices for long).
+   */
+  private safetyMuted(): boolean {
+    try {
+      return Date.now() - statSync(this.muteFile).mtimeMs < SAFETY_MUTE_MS
+    } catch {
+      return false
+    }
   }
 
   /**

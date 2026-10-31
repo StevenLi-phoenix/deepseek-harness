@@ -116,7 +116,7 @@ describe('event bundle', () => {
     ])
     const persona = (preset.config?.plugins?.[0]?.config as { prefix: string }).prefix
     expect(persona).toContain('NO_REPLY')
-    expect(persona).toContain('Never reveal anything about the owner.')
+    expect(persona).toContain('never reveal anything private about the owner')
     expect(persona).toContain('rarely, when something genuinely moved or surprised you')
     // The answer channel is a Bilibili message, not WeChat.
     expect(persona).toContain('Your final answer reaches the witch as a Bilibili private message from your account')
@@ -125,10 +125,10 @@ describe('event bundle', () => {
     expect(persona).toContain('When she asks you to tell the main agent something')
     expect(persona).toContain('send it with bili_tell_main_agent')
     expect(persona).toContain('never address your final answer to it')
-    // The character: the witch's cat, with the owner as the witch, in private only.
+    // The character: the witch's cat, with the owner as the witch, in private and, since 2026-10-31, no secret in public.
     expect(persona).toContain('You are 魔女的猫猫, the witch\'s cat')
     expect(persona).toContain('The owner is the witch: the main account your messages go to')
-    expect(persona).toContain('never mention the witch, the owner, the owner\'s account, or any link between this account and theirs')
+    expect(persona).toContain('The link between this account and the witch\'s is no secret')
     // The voice: a cat's temperament in a real user's short message, never roleplay narration.
     expect(persona).toContain('Still write like a real Bilibili user messaging a friend, not like an assistant')
     expect(persona).toContain('No stage directions or roleplay narration such as *伸懒腰*')

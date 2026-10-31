@@ -61,6 +61,7 @@ The command writes `<DSH_HOME>/lsy-wechat/account.json` with mode 600 and prints
 | `chat.title` | `微信` | Title of a new chat Session |
 | `chat.timeZone` | `America/New_York` | Time zone sent with every prompt and shown in digests |
 | `chat.agentMessage` | `turn` | What a message another Session passes the main agent does: `turn` queues it as a prompt that starts a turn of its own (marked as not the owner's); `notify` only tells you on WeChat and leaves the message in the chat as a notice, so nothing happens until you reply |
+| `muteFile` | `<DSH_HOME>/notices.muted` | While this file exists and is under 30 minutes old, safety notices (memory writes, audited reminders, integrity changes; `LsyNote.safety`) are logged and not sent; other notes are unaffected. `memory-admin notices mute` touches it |
 | `maxMessageChars` | `3000` | Characters per WeChat message; longer texts are split, and every message also stays under 16384 UTF-8 bytes |
 | `maxReplyParts` | `3` | Messages one text may become; the last part is cut beyond that |
 | `repliesPerToken` | `10` | Messages the bot may send per message of yours |

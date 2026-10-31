@@ -200,6 +200,7 @@ describe('notices to the owner', () => {
     expect(sent).toEqual([])
     endTurn(agent)
     await vi.waitFor(() => { expect(sent).toHaveLength(1) })
+    expect(sent[0]).toMatchObject({ safety: true })
     expect(sent[0]!.title).toBe('这一轮改动了 2 条记忆')
     expect(sent[0]!.body).toBe('记住了一条指令：Reply in Chinese（来源：微信对话）\n记住了一条偏好：Likes tea（来源：微信对话）')
     expect(sent[0]!.body).not.toContain('A project')

@@ -61,6 +61,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 | `chat.title` | `微信` | 新对话 Session 的标题 |
 | `chat.timeZone` | `America/New_York` | 随每条 prompt 发送、也用于摘要时间戳的时区 |
 | `chat.agentMessage` | `turn` | 别的 Session 给主 agent 递话时怎么办：`turn` 把它排成一条 prompt、自己开一轮（这一轮会被标记为非 owner 发起）；`notify` 只在微信上告诉你，并把这条消息作为提示留在对话里，你回复之前什么都不会发生 |
+| `muteFile` | `<DSH_HOME>/notices.muted` | 这个文件存在且不到 30 分钟时，安全类通知（记忆写入、被审计的提醒、完整性变动，即 `LsyNote.safety`）只记日志、不发送；其他通知不受影响。`memory-admin notices mute` 会刷新它 |
 | `maxMessageChars` | `3000` | 每条微信消息的字符数；更长的文本会拆分，每条消息同时不超过 16384 个 UTF-8 字节 |
 | `maxReplyParts` | `3` | 一段文本最多拆成的消息数；超出部分截断在最后一条 |
 | `repliesPerToken` | `10` | 你每发一条消息，bot 可以发的消息数 |

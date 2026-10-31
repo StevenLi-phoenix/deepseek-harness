@@ -291,6 +291,7 @@ Three plugins keep what the agent learns from steering it by accident or by a st
   | `revert <id>…` | undo the latest change of an entry (a waiting write is dropped) |
   | `rollback --session <id> [--dry-run]` / `rollback --since <ISO time> [--dry-run]` | undo what a Session's turns, or everything since a time, changed |
   | `forget --purge <id>…` | erase an entry from the file, the history, every snapshot, and the waiting writes |
+  | `notices mute` / `notices unmute` / `notices status` | silence the memory, reminder, and integrity notices to WeChat for 30 minutes (`$DSH_HOME/notices.muted`; it lapses by itself): run it before any test that writes memory or edits the profile patch, so nothing reaches the owner's phone |
   | `feedback add` (JSON on stdin) / `feedback list [--scope up]` / `feedback forget <id>` | the owner's keep/delete verdicts on the `up` persona's replies (`feedback.jsonl`); bili-svc calls `feedback add`, the `up` preset reads its scope as examples of tone, and no agent tool writes it |
 
   A typical review after a notice: `recent --limit 5`, then `revert <id>` for the one that should not be there. Back up first when changing the store by hand: `ssh mini 'cd / && sudo -n -u dsh-runtime /bin/cp -p /Users/dsh-runtime/.dsh/lsy-memory/memory.jsonl /Users/dsh-runtime/.dsh/lsy-memory/.memory.jsonl.bak.$(date +%Y%m%d%H%M%S)'`.

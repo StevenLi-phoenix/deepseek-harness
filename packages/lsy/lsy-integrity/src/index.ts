@@ -220,7 +220,7 @@ export function apply(ctx: Context, config: Config): void {
     if (config.notify !== false && notifier !== undefined) {
       const note = integrityNotice(changes)
       try {
-        await notifier.send({ title: note.title, ...note.body === undefined ? {} : { body: note.body }, origin: 'the integrity watch of your own host (a notice to the owner that a file steering the agent changed)' })
+        await notifier.send({ title: note.title, ...note.body === undefined ? {} : { body: note.body }, safety: true, origin: 'the integrity watch of your own host (a notice to the owner that a file steering the agent changed)' })
         lastNoticeAt = now
         sentToday.count += 1
         ctx.logger.info('lsy-integrity: told the owner about %d change(s)', changes.length)

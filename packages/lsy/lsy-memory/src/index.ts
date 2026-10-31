@@ -214,7 +214,7 @@ export function apply(ctx: Context, config: Config): void {
     sentToday.count += 1
     const note = memoryNotice(entry.items)
     try {
-      await notifier.send({ title: note.title, ...note.body === undefined ? {} : { body: note.body }, origin: 'the memory tool of your own Session (a notice to the owner about memory it wrote)' })
+      await notifier.send({ title: note.title, ...note.body === undefined ? {} : { body: note.body }, safety: true, origin: 'the memory tool of your own Session (a notice to the owner about memory it wrote)' })
       ctx.logger.info('memory notice sent for session %s: %d change(s), %d held', sessionId, entry.items.length, entry.items.filter(item => item.kind === 'held').length)
     } catch (error: unknown) {
       ctx.logger.warn('memory notice for session %s failed: %s', sessionId, error instanceof Error ? error.message : String(error))
