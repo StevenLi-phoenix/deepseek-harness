@@ -245,6 +245,8 @@ What a started session may do (`/Users/dsh-runtime/.claude/settings.json`, `dont
 
 Verify the bridge end to end: `cc_start` a session named `probe` from the chat (or start one by hand in tmux), see `cc-bridge: cc_start "probe" is up` in `stdout.log`, `cc_send` it a line, have it `SendMessage` to `dsh-agent`, and see `cc-bridge: passed … chars from "probe"`. Stop it with `cc_stop`. After a Claude Code update (copy the new binary with `install.sh <version>`), repeat the round trip: the peer message format is internal and may change.
 
+Remote Control (`remoteControlAtStartup` and `enableRemoteControl` are on in the seeded settings, as for the owner's own sessions) needs a full claude.ai login: the inference-only token from `claude setup-token` makes a session print `Remote Control disconnected — /login`. To enable it, the owner signs in once as the service user (`sudo -n -u dsh-runtime /Users/dsh-runtime/bin/claude-dsh`, then `/login` and follow the browser link); `claude-dsh` stops exporting the token once `/Users/dsh-runtime/.claude/.credentials.json` exists.
+
 Switch the agent side off with `enabled: false` in the `lsy-cc-bridge` row of the profile patch (`spawn: false` keeps messaging but removes `cc_start`/`cc_stop`).
 
 ## Operator access without passwords (optional)

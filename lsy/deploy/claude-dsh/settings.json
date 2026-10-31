@@ -1,4 +1,6 @@
 {
+  "remoteControlAtStartup": true,
+  "enableRemoteControl": true,
   "env": { "DISABLE_AUTOUPDATER": "1" },
   "permissions": {
     "defaultMode": "dontAsk",
