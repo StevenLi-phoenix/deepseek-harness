@@ -78,6 +78,7 @@ describe('speak', () => {
     const result = await voice.speak('你好')
     expect(result.format).toBe('mp3')
     expect(result.path.endsWith('.mp3')).toBe(true)
+    expect(statSync(result.path).mode & 0o777).toBe(0o600)
     expect(execFileSync(FFMPEG, ['-v', 'error', '-i', result.path, '-f', 'null', '-']).length).toBe(0)
   })
 
