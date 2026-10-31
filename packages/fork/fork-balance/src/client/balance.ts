@@ -2,7 +2,7 @@
  * Balances for the Account page card: the DeepSeek account's per-currency totals,
  * read through the same Host account Remote the Account settings page uses,
  * and the readings of the provider keys the Host balance route queries
- * (OpenRouter, the DeepSeek API, OpenCode Go).
+ * (the DeepSeek API, OpenCode Go through llmgateway).
  */
 
 import { Big } from 'big.js'
@@ -10,7 +10,7 @@ import type { AccountDetails, AccountWallet } from '@deepseek-ai/dsh-deepseek-ac
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ProviderReading, WalletLine } from '../readings.ts'
 
-export type { ProviderReading, WalletLine } from '../readings.ts'
+export type { KeyLimit, ProviderReading, WalletLine } from '../readings.ts'
 
 /** Wallet currencies Platform reports. */
 export type Currency = AccountWallet['currency']

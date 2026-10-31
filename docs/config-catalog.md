@@ -2536,7 +2536,7 @@ export interface LspLocalServerConfig {
 ## `@deepseek-ai/dsh-fork-balance`
 
 - `inject`: `credentials` · `connection`
-- `source`: [`packages/fork/fork-balance/src/index.ts:17`](../packages/fork/fork-balance/src/index.ts)
+- `source`: [`packages/fork/fork-balance/src/index.ts:18`](../packages/fork/fork-balance/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -2560,7 +2560,7 @@ export interface BalanceSource {
 }
 
 /** Providers with a balance or quota endpoint. */
-export type BalanceSourceKind = 'deepseek' | 'openrouter' | 'opencode-go'
+export type BalanceSourceKind = 'deepseek' | 'opencode-go'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-balance -->
 
