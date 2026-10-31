@@ -33,8 +33,10 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`fork-qq/`](fork-qq/README.md) | QQ channel over the official QQ Open Platform bot: owner-listed private chats and groups, one chat Session each, answers through `owner-relay` |
 | [`fork-sysmon/`](fork-sysmon/README.md) | Settings section with the Host machine's CPU, memory, power, temperature, and disk usage per volume |
 | [`fork-tool-monitor/`](fork-tool-monitor/README.md) | `monitor_start`, `monitor_stop`, `monitor_list` tools: a command's output lines come back to the same Session |
+| [`fork-tool-voice/`](fork-tool-voice/README.md) | `speak` tool: the agent turns text into speech and sends the audio to the owner on WeChat |
 | [`fork-tool-watch/`](fork-tool-watch/README.md) | `watch_create`, `watch_list`, `watch_delete` tools: the agent manages its own watches |
 | [`fork-tool-wechat/`](fork-tool-wechat/README.md) | `wechat_send_file` tool: the agent sends pictures, videos, and files to the owner |
+| [`fork-voice/`](fork-voice/README.md) | `ctx.forkVoice`: text to speech (feiyu, Mac mini TTS fallback) and speech to text for audio files (asr-service, off by default) |
 | [`fork-wechat/`](fork-wechat/README.md) | WeChat (iLink bot) channel: owner chat Session, its answers through `owner-relay`, and `ctx.forkNotifier` |
 | [`owner-relay/`](owner-relay/README.md) | `ctx.ownerRelay`: one rule set for every claimed Session's final answer, handed to its channel (WeChat, Bilibili messages) with a labelled WeChat fallback |
 | [`tool-bili/`](tool-bili/README.md) | Bilibili tools of the `bili` preset: feeds, videos through subtitles, comments, inbox, guarded writes, and a journal |

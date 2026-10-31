@@ -33,8 +33,10 @@ kind: "package-group"
 | [`fork-qq/`](fork-qq/README.zh.md) | 走 QQ 开放平台官方机器人的 QQ 通道：主人列入名单的私聊和群各有一个对话 Session，回答经 `owner-relay` 送达 |
 | [`fork-sysmon/`](fork-sysmon/README.zh.md) | 设置里显示 Host 机器 CPU、内存、功耗、温度与各卷磁盘用量的分区 |
 | [`fork-tool-monitor/`](fork-tool-monitor/README.zh.md) | `monitor_start`、`monitor_stop`、`monitor_list` 工具：命令输出的每一行都回到同一个 Session |
+| [`fork-tool-voice/`](fork-tool-voice/README.zh.md) | `speak` 工具：agent 把文字合成语音，并把音频发给微信上的 owner |
 | [`fork-tool-watch/`](fork-tool-watch/README.zh.md) | `watch_create`、`watch_list`、`watch_delete` 工具：agent 自己管理监控 |
 | [`fork-tool-wechat/`](fork-tool-wechat/README.zh.md) | `wechat_send_file` 工具：agent 给 owner 发图片、视频和文件 |
+| [`fork-voice/`](fork-voice/README.zh.md) | `ctx.forkVoice`：文字转语音（feiyu，Mac mini TTS 兜底）与音频文件转文字（asr-service，默认关闭） |
 | [`fork-wechat/`](fork-wechat/README.zh.md) | 微信（iLink bot）通道：主人对话 Session、经 `owner-relay` 送达的回答，以及 `ctx.forkNotifier` |
 | [`owner-relay/`](owner-relay/README.zh.md) | `ctx.ownerRelay`：所有被认领 Session 的最终回答走同一套规则，交给认领它的通道（微信、B站私信），发不出时带标签降级到微信 |
 | [`tool-bili/`](tool-bili/README.zh.md) | `bili` preset 的 B站工具：动态、借字幕看视频、评论、收件箱、受守卫保护的写操作与日记 |

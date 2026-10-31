@@ -24,6 +24,9 @@
       "path": "../fork-event-bus"
     },
     {
+      "path": "../fork-voice"
+    },
+    {
       "path": "../owner-relay"
     },
     {

@@ -566,6 +566,8 @@
     { "path": "./packages/fork/fork-wechat" },
     { "path": "./packages/fork/fork-tool-watch" },
     { "path": "./packages/fork/fork-tool-wechat" },
+    { "path": "./packages/fork/fork-voice" },
+    { "path": "./packages/fork/fork-tool-voice" },
     { "path": "./packages/fork/fork-github-sensor" },
     { "path": "./packages/fork/fork-memory" },
     { "path": "./packages/fork/fork-event-ingest" },

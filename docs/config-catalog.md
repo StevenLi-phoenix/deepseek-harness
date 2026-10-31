@@ -2863,13 +2863,101 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-watch -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-voice -->
+<a id="deepseek-aidsh-fork-voice"></a>
+
+## `@deepseek-ai/dsh-fork-voice`
+
+- `inject`: `credentials`
+- `source`: [`packages/fork/fork-voice/src/index.ts:44`](../packages/fork/fork-voice/src/index.ts)
+
+```ts config-catalog
+/** Voice configuration. Every field has a default, so a patch entry restates only what it changes. */
+export interface Config {
+  /** Absolute directory for audio and raw service answers; defaults to `<DSH_HOME>/fork-voice`. */
+  dataDir?: string
+  /** Keep files this many days; older ones are removed on the next call. */
+  keepDays: number
+  /** Text to speech: the `speak` path. */
+  tts: {
+    /** Turns `speak` off when false. */
+    enabled: boolean
+    /** First provider to try. */
+    provider: TtsProviderName
+    /** Provider tried when the first fails; `none` stops after one. */
+    fallback: TtsProviderName | 'none'
+    /** Delivered file format; `mp3` needs ffmpeg and falls back to `wav` when the conversion fails. */
+    format: 'mp3' | 'wav'
+    /** Absolute path of the ffmpeg binary used for the mp3 conversion. */
+    ffmpegPath: string
+    /** Longest text accepted, in characters. */
+    maxChars: number
+    /** Extra attempts of one HTTP call after the first. */
+    retries: number
+    /** First pause before a retry, in milliseconds; it doubles each time. */
+    retryDelayMs: number
+    /** The feiyu voice service on the laptop (async jobs, bearer key). */
+    feiyu: {
+      /** Base URL of the service. */
+      baseUrl: string
+      /** Credential reference of the bearer key (in `$DSH_HOME/.env`). */
+      apiKeyEnv: string
+      /** Voice name sent with each job. */
+      voice: string
+      /** Style sent with each job (`cute` or `gentle`). */
+      style: string
+      /** Deadline of one HTTP call, in milliseconds. */
+      timeoutMs: number
+      /** Deadline of the whole job (queue, cold model load of about 45 s, synthesis), in milliseconds. */
+      jobTimeoutMs: number
+      /** Pause between job polls, in milliseconds. */
+      pollMs: number
+    }
+    /** The Mac mini TTS service (Qwen3-TTS, answers the WAV directly). */
+    macMini: {
+      /** Base URL of the service. */
+      baseUrl: string
+      /** Preset speaker name. */
+      speaker: string
+      /** Language name the service expects, for example `Chinese`. */
+      language: string
+      /** Deadline of one call in milliseconds; the first call after idle loads the model. */
+      timeoutMs: number
+    }
+  }
+  /** Speech to text on audio files; reads files only and never opens a microphone. */
+  asr: {
+    /** Transcribe audio files the owner sends; off until set. */
+    enabled: boolean
+    /** Base URL of the asr-service. */
+    baseUrl: string
+    /** `funasr` (Chinese) or `whisper` (English and multilingual). */
+    engine: 'funasr' | 'whisper'
+    /** Whisper language hint, for example `en`. */
+    language?: string
+    /** Deadline of one call in milliseconds. */
+    timeoutMs: number
+    /** Extra attempts of one call after the first. */
+    retries: number
+    /** First pause before a retry, in milliseconds; it doubles each time. */
+    retryDelayMs: number
+    /** Largest audio file sent, in bytes. */
+    maxBytes: number
+  }
+}
+
+/** Providers a text can be synthesized by. */
+export type TtsProviderName = 'feiyu' | 'mac-mini'
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-voice -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-wechat -->
 <a id="deepseek-aidsh-fork-wechat"></a>
 
 ## `@deepseek-ai/dsh-fork-wechat`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/fork-wechat/src/index.ts:56`](../packages/fork/fork-wechat/src/index.ts)
+- `source`: [`packages/fork/fork-wechat/src/index.ts:58`](../packages/fork/fork-wechat/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
@@ -5476,6 +5564,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-llm` | — | [`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts) |
 | `@deepseek-ai/dsh-lsp` | — | [`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts) |
 | `@deepseek-ai/dsh-fork-tool-monitor` | `tools` · `storageDomain` · `sessionController` · `sessionPersistence` | [`packages/fork/fork-tool-monitor/src/index.ts`](../packages/fork/fork-tool-monitor/src/index.ts) |
+| `@deepseek-ai/dsh-fork-tool-voice` | `tools` | [`packages/fork/fork-tool-voice/src/index.ts`](../packages/fork/fork-tool-voice/src/index.ts) |
 | `@deepseek-ai/dsh-fork-tool-wechat` | `tools` | [`packages/fork/fork-tool-wechat/src/index.ts`](../packages/fork/fork-tool-wechat/src/index.ts) |
 | `@deepseek-ai/dsh-mcp-resources` | `tools` | [`packages/mcp/mcp-resources/src/index.ts`](../packages/mcp/mcp-resources/src/index.ts) |
 | `@deepseek-ai/dsh-message-quotes` | — | [`packages/session/message-quotes/src/index.ts`](../packages/session/message-quotes/src/index.ts) |

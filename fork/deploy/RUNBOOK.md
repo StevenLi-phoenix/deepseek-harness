@@ -234,6 +234,27 @@ owner ALL = (root) NOPASSWD: /bin/launchctl kickstart -k system/app.lishuyu.dsh-
 
 Acting as `dsh-runtime` is a step down from `owner`; root is limited to the one restart.
 
+## 13. Voice (optional)
+
+`fork-voice` gives the WeChat agent a `speak` tool (text to speech, delivered as an mp3 file because iLink bots cannot send voice bubbles) and can transcribe audio files the owner sends. It is mounted by the bundle; only the key needs a step. feiyu runs on the laptop (`http://100.117.175.117:19880`, first request after idle about 45 s, then 6-8 s), the Mac mini TTS service (`:8098`) is the fallback.
+
+1. Add the feiyu key to the service `.env` without printing it (the laptop's container holds it; restart afterwards):
+   ```sh
+   KEY=$(ssh laptop-stevenli '<docker> exec feiyu-voice cat /store/runtime/api_key.txt' | tr -d '\r\n')
+   printf 'FORK_FEIYU_API_KEY=%s\n' "$KEY" | sudo -n -u dsh-runtime /bin/sh -c 'umask 077; cat >> /Users/dsh-runtime/.dsh/.env'
+   sudo -n /bin/launchctl kickstart -k system/app.lishuyu.dsh-events
+   ```
+   `<docker>` is the laptop's Docker CLI invocation (see the API platform runner notes). Without the key `speak` fails with `feiyu: the API key is not configured` and falls back to the Mac mini.
+2. Check: ask the agent on WeChat to say something; `stdout.log` shows `fork-voice: spoke N chars with feiyu in … ms -> /Users/dsh-runtime/.dsh/fork-voice/audio/…mp3` and `fork-tool-voice: spoke … sent as file`. Raw answers and audio stay in `$DSH_HOME/fork-voice/` for 14 days.
+3. Speech to text is off. To turn it on, add to `$DSH_HOME/profiles/event/cordis.patch.yml` (reloads live):
+   ```yaml
+   - id: fork-voice
+     config:
+       asr:
+         enabled: true
+   ```
+   Audio files the owner sends on WeChat are then transcribed by `http://127.0.0.1:8099/transcribe` (the mini's asr-service; `asr.engine: whisper` for English) and the text joins the attachment note. Nothing records or listens; only files already sent are read.
+
 ## Operate
 
 Patch edits (`$DSH_HOME/cordis.patch.yml`, the profile patch) reload live; `.env` edits and new builds need a restart. The composition is the `@deepseek-ai/dsh-fork-event-bundle` layer linked from the build; the profile patch `profiles/event/cordis.patch.yml` is the owner's layer, where Web UI settings save, and upgrades keep it. A home patch entry replaces that entry's whole `config`, so override only entries whose config it restates in full, and the Web UI refuses to save an entry the home patch sets ("Configuration for … is overridden by a home patch").
