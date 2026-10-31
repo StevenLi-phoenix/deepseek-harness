@@ -3,50 +3,44 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/lsy/lsy-qq/README.md
 /:
-  en: eab9cae6480eca7a
-  zh: 3166110d48773042
+  en: ec0f3c8d123c5fc8
+  zh: a5add5883ddbd3e2
 /deepseek-ai-dsh-lsy-qq:
   en: 09ea753ac22ec0dc
   zh: 49e52a2ad78880b3
 /deepseek-ai-dsh-lsy-qq/summary:
-  en: 2d96b5d606073a28
-  zh: 3682f16bb9c780b4
+  en: 1758c571caa4c955
+  zh: 7bcaeb3c76728efb
 /deepseek-ai-dsh-lsy-qq/table-of-contents:
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
 /deepseek-ai-dsh-lsy-qq/use-this-package:
-  en: e92b37dfccb7606e
-  zh: f73bd2f703e0ef24
-/deepseek-ai-dsh-lsy-qq/use-this-package/when-to-choose-it:
-  en: 072a061b99899266
-  zh: e8756fe5e905348f
-/deepseek-ai-dsh-lsy-qq/use-this-package/minimal-configuration:
-  en: 1ec1b6a3feff3eda
-  zh: cc0dab56e09182f6
+  en: f4fbf5edeebb82c5
+  zh: 377d2191cfec85d1
 /deepseek-ai-dsh-lsy-qq/understand-the-implementation:
-  en: 99384a5806a04604
-  zh: c563aad7a5e0475a
+  en: ccf438cf37a516ca
+  zh: 07e31e84d7412059
 /deepseek-ai-dsh-lsy-qq/further-exploration:
-  en: ad886a1a505fe71b
-  zh: fd9b4b3a5dcc4dea
+  en: 997bb24766271bfe
+  zh: fe794c4412bf8df0
 /deepseek-ai-dsh-lsy-qq/model-experience:
   en: 215e7ba838619b7b
   zh: a311da3843709f90
-/deepseek-ai-dsh-lsy-qq/model-experience/chat-session:
-  en: a19f429aab1a23b3
-  zh: 55b1ba7f2ba3363e
-/deepseek-ai-dsh-lsy-qq/model-experience/chat-session/what-the-model-sees:
-  en: dc87c094e51b7dc7
-  zh: 9b3e1f61924e2578
-/deepseek-ai-dsh-lsy-qq/model-experience/chat-session/token-effect:
-  en: 7c3a63464c1260eb
-  zh: 406b613ea06ebec8
-/deepseek-ai-dsh-lsy-qq/model-experience/chat-session/kv-cache-effect:
-  en: 18729f41d434d7b7
-  zh: 8c31db2ab3ce14ba
+/deepseek-ai-dsh-lsy-qq/model-experience/digest-session:
+  en: ff61e2afb475c4c8
+  zh: fa8a9d75cca03c1c
+/deepseek-ai-dsh-lsy-qq/model-experience/digest-session/what-the-model-sees:
+  en: 94391bad9b2fe540
+  zh: d4d6739853e43cff
+/deepseek-ai-dsh-lsy-qq/model-experience/digest-session/token-effect:
+  en: 90f74dbf3c4bb85d
+  zh: 891c6a44c51d3721
+/deepseek-ai-dsh-lsy-qq/model-experience/digest-session/kv-cache-effect:
+  en: 2a081b1e46186958
+  zh: 50b0b82fa7c68d56
 /deepseek-ai-dsh-lsy-qq/known-limitations-and-deferred-work:
-  en: d218e4e93b16118d
-  zh: db85fcdf1d245f14
+  en: 68f9d8b1cb18024f
+  zh: 22f0b564a810ead7
 /deepseek-ai-dsh-lsy-qq/known-limitations-and-deferred-work/dev-note:
-  en: 6b0b75086027dbeb
-  zh: 5b41190ed3af1348
+  en: fad15e9a181ec6b8
+  zh: d8deba71a7ad3028

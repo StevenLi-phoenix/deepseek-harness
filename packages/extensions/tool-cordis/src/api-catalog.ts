@@ -2399,14 +2399,55 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   },
   {
     key: 'lsyQq',
-    summary: 'QQ channel.',
-    description: 'QQ channel. Connects the official bot to the QQ Open Platform, answers only the openids in `allow`, gives each private chat and each group its own chat Session, and delivers each turn\'s final answer that `ctx.ownerRelay` hands its `qq` channel. QQ lets a bot reply to a message within a window (about an hour in private chats, minutes in groups) and at most five times; later answers go out as proactive messages, and an answer QQ refuses falls back to `ctx.lsyNotifier` through the relay.',
+    summary: 'The observer.',
+    description: 'The observer. Provides `ctx.lsyQq`, whose read methods the agent tools use; its connection to the protocol end and its writes to the database are the only things it does on its own.',
     methods: [
       {
-        signature: 'ownsSession(sessionId: string): boolean',
-        description: 'Whether this channel created a Session: true for every chat Session it remembers, all of which it claims with `ctx.ownerRelay`.',
-        parameters: [{ name: 'sessionId', description: 'Session to check.' }],
-        returns: 'true for the current and earlier chat Sessions of every peer.',
+        signature: 'now: () => number = Date.now',
+        description: 'Replaced by tests.',
+        parameters: [],
+      },
+      {
+        signature: 'groupOverview(): GroupOverview[]',
+        description: 'Every group the account is in, with what is recorded of it.',
+        parameters: [],
+        returns: 'recorded groups first, then the others.',
+      },
+      {
+        signature: 'groupName(groupId: string): string',
+        description: 'Display name of a group.',
+        parameters: [{ name: 'groupId', description: 'group number.' }],
+        returns: 'the name the account last saw, or the number.',
+      },
+      {
+        signature: 'isRecorded(groupId: string): boolean',
+        description: 'Whether a group is on the `groups` list.',
+        parameters: [{ name: 'groupId', description: 'group number.' }],
+        returns: 'true for a recorded group.',
+      },
+      {
+        signature: 'recentMessages(groupId: string, options: { hours: number; limit: number; userId?: string }): MessageRow[]',
+        description: 'Recent messages of a recorded group, oldest first.',
+        parameters: [{ name: 'groupId', description: 'group number; an unrecorded group yields nothing.' }, { name: 'options', description: 'window in hours, at most `limit` messages, optionally one member\'s QQ number.' }],
+        returns: 'the messages.',
+      },
+      {
+        signature: 'searchMessages(query: string, options: { groupId?: string; limit: number }): MessageRow[]',
+        description: 'Search the recorded groups\' messages, newest first.',
+        parameters: [{ name: 'query', description: 'words to find.' }, { name: 'options', description: 'one group, or all recorded groups, and at most `limit` matches.' }],
+        returns: 'the matching messages.',
+      },
+      {
+        signature: 'digests(options: { groupId?: string; days: number; limit: number }): DigestRow[]',
+        description: 'Newest digests of the recorded groups.',
+        parameters: [{ name: 'options', description: 'one group, or all recorded groups, a window in days, and at most `limit` digests.' }],
+        returns: 'the digests, newest first.',
+      },
+      {
+        signature: 'async sendGroupMessage(groupId: string, text: string): Promise<void>',
+        description: 'Send text to a group. Refused unless `send.enabled` is true and the group is in `send.groups`, and held to `send.minIntervalSec` between sends and `send.maxPerDay` a day for that group. Nothing in this package calls it.',
+        parameters: [{ name: 'groupId', description: 'group number.' }, { name: 'text', description: 'what to send.' }],
+        throws: ['{@link SendRefused} when a rule says no, or the protocol end is not connected.'],
       },
     ],
   },
@@ -6642,6 +6683,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface DiffResultView {\n    card: \'diff\';\n    title?: string;\n    diffs: FileDiff[];\n}',
   },
   {
+    name: 'DigestRow',
+    declaration: 'export interface DigestRow {\n    id: number;\n    groupId: string;\n    fromRow: number;\n    toRow: number;\n    messageCount: number;\n    text: string;\n    model: string;\n    usage: string | null;\n    rawPath: string | null;\n    createdAt: number;\n}',
+  },
+  {
     name: 'DirectoryEntry',
     declaration: 'export interface DirectoryEntry {\n    name: string;\n    path: string;\n    hidden: boolean;\n}',
   },
@@ -7072,6 +7117,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'GrantRecord',
     declaration: 'export interface GrantRecord {\n    readonly kind: \'grant\';\n    readonly payload: unknown;\n}',
+  },
+  {
+    name: 'GroupOverview',
+    declaration: 'export interface GroupOverview {\n    groupId: string;\n    name: string;\n    memberCount: number | null;\n    recorded: boolean;\n    messages: number;\n    firstAt: number | null;\n    lastAt: number | null;\n    lastDigestAt: number | null;\n}',
   },
   {
     name: 'HookBudget',
@@ -7712,6 +7761,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'MessageRoleMap',
     declaration: 'export interface MessageRoleMap {\n    system: SystemMessage;\n    developer: DeveloperMessage;\n    user: UserMessage;\n    assistant: AssistantMessage;\n    tool: ToolResultMessage;\n}',
+  },
+  {
+    name: 'MessageRow',
+    declaration: 'export interface MessageRow {\n    id: number;\n    groupId: string;\n    messageId: string;\n    at: number;\n    userId: string;\n    nickname: string;\n    card: string;\n    role: string;\n    text: string;\n    replyTo: string | null;\n    kinds: string;\n    recalled: boolean;\n}',
   },
   {
     name: 'MessageSourceMap',

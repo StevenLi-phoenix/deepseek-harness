@@ -2792,56 +2792,96 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-lsy-qq`
 
-- `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle` · `credentials`
-- `source`: [`packages/lsy/lsy-qq/src/index.ts:57`](../packages/lsy/lsy-qq/src/index.ts)
+- `inject`: `sessionController` · `permissionPresets` · `sessionTitle` · `credentials`
+- `source`: [`packages/lsy/lsy-qq/src/index.ts:37`](../packages/lsy/lsy-qq/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
 export interface Config {
-  /** Name of the credential (`$DSH_HOME/.env` variable or stored credential) holding the bot's AppID. */
-  appIdEnv: string
-  /** Name of the credential holding the bot's AppSecret. */
-  appSecretEnv: string
-  /** Who is answered. */
-  allow: AllowConfig
-  /** Chat Session settings. */
-  session: SessionConfig
-  /** Code points per QQ message; longer answers are split. */
-  maxMessageChars: number
-  /** Messages one answer may be split into (QQ allows five replies to one inbound message). */
-  maxReplyParts: number
-  /** Messages one peer may send per minute before the rest are dropped. */
-  perPeerPerMinute: number
-  /** How long a private message keeps its reply window open, in milliseconds. */
-  c2cReplyWindowMs: number
-  /** How long a group message keeps its reply window open, in milliseconds. */
-  groupReplyWindowMs: number
-  /** Tell the owner (through `ctx.lsyNotifier`) when a sender outside the allowlist writes, so its openid can be added. */
-  notifyUnknown: boolean
-  /** Credential re-check period while the AppID or AppSecret is missing, in milliseconds. */
-  credentialPollMs: number
-}
-
-/** Who may talk to the bot: openids QQ assigned, listed here. Both lists start empty, so nobody gets an answer. */
-export interface AllowConfig {
-  /** `user_openid`s whose private messages are answered. */
-  users: string[]
-  /** `group_openid`s whose @ messages are answered, from any member. */
+  /** WebSocket address of the protocol end (NapCat's OneBot server); it must be on this machine or the tailnet. */
+  url: string
+  /** Credential holding the protocol end's access token. */
+  tokenEnv: string
+  /** Group numbers to record. Empty records nothing; messages of every other group are dropped on arrival. */
   groups: string[]
-}
-
-/** How a peer's chat Session is created. */
-export interface SessionConfig {
-  /** Absolute directory the chat Sessions work in; created before every forwarded message. */
-  workspacePath: string
-  /** Agent preset of the chat Sessions; the bundle defines `qq` with a persona and no shell, file, or web tools. */
-  agentPreset: string
-  /** Permission preset applied when a chat Session is created. */
-  permissionPreset: string
-  /** Session title prefix; the peer's short id follows. */
-  titlePrefix: string
-  /** IANA time zone sent with every prompt. */
-  timeZone: string
+  /** Directory of the database and downloads; defaults to `<DSH_HOME>/lsy-qq`. */
+  dataDir?: string
+  /** Image downloads: what is fetched, from where, and how much is kept. */
+  media: {
+    /** Download the images of recorded messages. */
+    images: boolean
+    /** Largest image downloaded, in bytes. */
+    maxImageBytes: number
+    /** Stop downloading once the downloads together reach this many bytes. */
+    maxTotalBytes: number
+    /** Delete downloads of messages older than this many days; 0 keeps them. */
+    retainDays: number
+    /** Hosts media may be fetched from, as suffixes. */
+    hostSuffixes: string[]
+    /** Deadline of one download, in milliseconds. */
+    timeoutMs: number
+  }
+  /** Keep voice messages and, with `asr.enabled`, transcribe them. */
+  voice: {
+    /** Fetch the audio of voice messages. */
+    download: boolean
+    /** Largest audio kept, in bytes. */
+    maxBytes: number
+  }
+  /** Voice transcription. */
+  asr: {
+    /** Send voice messages to `ctx.lsyVoice.transcribe`. Off by default; it needs lsy-voice with transcription on. */
+    enabled: boolean
+  }
+  /** Drop the text and files of a message its sender recalled. */
+  honorRecall: boolean
+  /** Fetch what was missed while disconnected. */
+  backfill: {
+    /** Fetch history after each connection. */
+    enabled: boolean
+    /** Messages fetched per group at most. */
+    maxMessages: number
+  }
+  /** Sending to a group. Off, and a group must be listed too; nothing in this package calls it on its own. */
+  send: {
+    /** Allow `sendGroupMessage` at all. */
+    enabled: boolean
+    /** Groups sending is allowed in, on top of `enabled`. */
+    groups: string[]
+    /** Seconds between two sends to one group, at least. */
+    minIntervalSec: number
+    /** Sends per group per day, at most. */
+    maxPerDay: number
+  }
+  /** Scheduled digests of the recorded groups, made by one-turn Sessions. */
+  digest: {
+    /** Digest each recorded group on a schedule. */
+    enabled: boolean
+    /** Hours between digests of one group. */
+    everyHours: number
+    /** A group with fewer new messages than this waits for the next round. */
+    minMessages: number
+    /** Characters of transcript per model call; a longer backlog is cut into several calls. */
+    maxPromptChars: number
+    /** Model calls one group may use in one round. */
+    maxCallsPerRound: number
+    /** Provider route of the digest Session's model; the profile's default when omitted. */
+    provider?: string
+    /** Model id on that route; the profile's default when omitted. */
+    model?: string
+    /** Agent preset of the digest Session; the bundle defines `qq-digest` with a persona and no tools. */
+    agentPreset: string
+    /** Permission preset set on the digest Session. */
+    permissionPreset: string
+    /** Absolute working directory of the digest Sessions. */
+    workspacePath: string
+    /** IANA zone the transcript's times are written in. */
+    timeZone: string
+    /** How long to wait for one model call, in milliseconds. */
+    timeoutMs: number
+  }
+  /** Tell the owner when the protocol end has been unreachable this long, in milliseconds; 0 turns it off. */
+  offlineNoticeMs: number
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-qq -->
@@ -5603,6 +5643,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-llm` | — | [`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts) |
 | `@deepseek-ai/dsh-lsp` | — | [`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-tool-monitor` | `tools` · `storageDomain` · `sessionController` · `sessionPersistence` | [`packages/lsy/lsy-tool-monitor/src/index.ts`](../packages/lsy/lsy-tool-monitor/src/index.ts) |
+| `@deepseek-ai/dsh-lsy-tool-qq` | `tools` | [`packages/lsy/lsy-tool-qq/src/index.ts`](../packages/lsy/lsy-tool-qq/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-tool-voice` | `tools` | [`packages/lsy/lsy-tool-voice/src/index.ts`](../packages/lsy/lsy-tool-voice/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-tool-wechat` | `tools` | [`packages/lsy/lsy-tool-wechat/src/index.ts`](../packages/lsy/lsy-tool-wechat/src/index.ts) |
 | `@deepseek-ai/dsh-mcp-resources` | `tools` | [`packages/mcp/mcp-resources/src/index.ts`](../packages/mcp/mcp-resources/src/index.ts) |

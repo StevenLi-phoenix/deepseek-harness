@@ -30,11 +30,12 @@ kind: "package-group"
 | [`lsy-event-ingest/`](lsy-event-ingest/README.zh.md) | `POST /hooks/lsy` 路由：主人自己的服务用每个来源一个的 bearer token 推送事件 |
 | [`lsy-github-sensor/`](lsy-github-sensor/README.zh.md) | 用条件请求轮询 GitHub 的 release、tag、提交与通知 |
 | [`lsy-memory/`](lsy-memory/README.zh.md) | 跨 Session 的主人记忆：记忆块、`memory_search`、`memory_save`、`memory_forget`，以及 claude.ai 导出导入器 |
-| [`lsy-qq/`](lsy-qq/README.zh.md) | 走 QQ 开放平台官方机器人的 QQ 通道：主人列入名单的私聊和群各有一个对话 Session，回答经 `owner-relay` 送达 |
+| [`lsy-qq/`](lsy-qq/README.zh.md) | 基于 OneBot v11 协议端（NapCat）的 QQ 群观察者：记录名单里的群、按计划做摘要、默认从不发言 |
 | [`lsy-sysmon/`](lsy-sysmon/README.zh.md) | 设置里显示 Host 机器 CPU、内存、功耗、温度与各卷磁盘用量的分区 |
 | [`lsy-tool-monitor/`](lsy-tool-monitor/README.zh.md) | `monitor_start`、`monitor_stop`、`monitor_list` 工具：命令输出的每一行都回到同一个 Session |
 | [`lsy-tool-voice/`](lsy-tool-voice/README.zh.md) | `speak` 工具：agent 把文字合成语音，并把音频发给微信上的 owner |
 | [`lsy-cc-bridge/`](lsy-cc-bridge/README.zh.md) | `cc_list_sessions`、`cc_send`、`cc_start`、`cc_stop` 工具：与 agent 自己账号下的 Claude Code 会话协作 |
+| [`lsy-tool-qq/`](lsy-tool-qq/README.zh.md) | `qq_groups`、`qq_digest`、`qq_recent`、`qq_search` 工具：agent 读取 QQ 观察者记录和摘要的内容 |
 | [`lsy-tool-watch/`](lsy-tool-watch/README.zh.md) | `watch_create`、`watch_list`、`watch_delete` 工具：agent 自己管理监控 |
 | [`lsy-tool-wechat/`](lsy-tool-wechat/README.zh.md) | `wechat_send_file` 工具：agent 给 owner 发图片、视频和文件 |
 | [`lsy-voice/`](lsy-voice/README.zh.md) | `ctx.lsyVoice`：文字转语音（feiyu，Mac mini TTS 兜底）与音频文件转文字（asr-service，默认关闭） |

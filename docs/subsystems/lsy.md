@@ -2,7 +2,7 @@
 
 English | [中文](lsy.zh.md)
 
-The fork-local services behind the event-driven agent: [`@deepseek-ai/dsh-lsy-event-bus`](../../packages/lsy/lsy-event-bus/README.md) routes sensor events to notifications or unattended Sessions, [`@deepseek-ai/dsh-lsy-github-sensor`](../../packages/lsy/lsy-github-sensor/README.md) polls GitHub, [`@deepseek-ai/dsh-lsy-wechat`](../../packages/lsy/lsy-wechat/README.md) provides the `lsyNotifier` contract over WeChat, [`@deepseek-ai/dsh-lsy-qq`](../../packages/lsy/lsy-qq/README.md) lets the people the owner lists talk to the agent on QQ, and [`@deepseek-ai/dsh-bili`](../../packages/lsy/bili/README.md) is the agent's own Bilibili account. Behavior, configuration, and limitations are on each package README; the [upstream ledger](../../packages/lsy/UPSTREAM.md) records how the fork tracks upstream.
+The fork-local services behind the event-driven agent: [`@deepseek-ai/dsh-lsy-event-bus`](../../packages/lsy/lsy-event-bus/README.md) routes sensor events to notifications or unattended Sessions, [`@deepseek-ai/dsh-lsy-github-sensor`](../../packages/lsy/lsy-github-sensor/README.md) polls GitHub, [`@deepseek-ai/dsh-lsy-wechat`](../../packages/lsy/lsy-wechat/README.md) provides the `lsyNotifier` contract over WeChat, [`@deepseek-ai/dsh-lsy-qq`](../../packages/lsy/lsy-qq/README.md) lurks in the QQ groups the owner lists and digests them, and [`@deepseek-ai/dsh-bili`](../../packages/lsy/bili/README.md) is the agent's own Bilibili account. Behavior, configuration, and limitations are on each package README; the [upstream ledger](../../packages/lsy/UPSTREAM.md) records how the fork tracks upstream.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -421,20 +421,64 @@ ownsSession?(sessionId: string): boolean
 
 Source: [`packages/lsy/lsy-event-bus/src/types.ts`](../../packages/lsy/lsy-event-bus/src/types.ts)
 
-<a id="ctxlsyqq--qqchannel"></a>
+<a id="ctxlsyqq--qqobserver"></a>
 
-### `ctx.lsyQq` — `QqChannel`
+### `ctx.lsyQq` — `QqObserver`
 
-QQ channel. Connects the official bot to the QQ Open Platform, answers only the openids in `allow`, gives each private chat and each group its own chat Session, and delivers each turn's final answer that `ctx.ownerRelay` hands its `qq` channel. QQ lets a bot reply to a message within a window (about an hour in private chats, minutes in groups) and at most five times; later answers go out as proactive messages, and an answer QQ refuses falls back to `ctx.lsyNotifier` through the relay.
+The observer. Provides `ctx.lsyQq`, whose read methods the agent tools use; its connection to the protocol end and its writes to the database are the only things it does on its own.
 
 ```ts cordis-catalog
 /**
- * Whether this channel created a Session: true for every chat Session it remembers, all of which
- * it claims with `ctx.ownerRelay`.
- * @param sessionId - Session to check.
- * @returns true for the current and earlier chat Sessions of every peer.
+ * Every group the account is in, with what is recorded of it.
+ * @returns recorded groups first, then the others.
  */
-ownsSession(sessionId: string): boolean
+groupOverview(): GroupOverview[]
+
+/**
+ * Display name of a group.
+ * @param groupId - group number.
+ * @returns the name the account last saw, or the number.
+ */
+groupName(groupId: string): string
+
+/**
+ * Whether a group is on the `groups` list.
+ * @param groupId - group number.
+ * @returns true for a recorded group.
+ */
+isRecorded(groupId: string): boolean
+
+/**
+ * Recent messages of a recorded group, oldest first.
+ * @param groupId - group number; an unrecorded group yields nothing.
+ * @param options - window in hours, at most `limit` messages, optionally one member's QQ number.
+ * @returns the messages.
+ */
+recentMessages(groupId: string, options: { hours: number; limit: number; userId?: string }): MessageRow[]
+
+/**
+ * Search the recorded groups' messages, newest first.
+ * @param query - words to find.
+ * @param options - one group, or all recorded groups, and at most `limit` matches.
+ * @returns the matching messages.
+ */
+searchMessages(query: string, options: { groupId?: string; limit: number }): MessageRow[]
+
+/**
+ * Newest digests of the recorded groups.
+ * @param options - one group, or all recorded groups, a window in days, and at most `limit` digests.
+ * @returns the digests, newest first.
+ */
+digests(options: { groupId?: string; days: number; limit: number }): DigestRow[]
+
+/**
+ * Send text to a group. Refused unless `send.enabled` is true and the group is in `send.groups`, and held to
+ * `send.minIntervalSec` between sends and `send.maxPerDay` a day for that group. Nothing in this package calls it.
+ * @param groupId - group number.
+ * @param text - what to send.
+ * @throws {@link SendRefused} when a rule says no, or the protocol end is not connected.
+ */
+async sendGroupMessage(groupId: string, text: string): Promise<void>
 ```
 
 Source: [`packages/lsy/lsy-qq/src/index.ts`](../../packages/lsy/lsy-qq/src/index.ts)

@@ -3,5 +3,5 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/subsystems/lsy.md
 /lsy-event-service-fork-local:
-  en: a974f8be187c925a
-  zh: 914dbae2898aa676
+  en: e0b77bec85e915c9
+  zh: 728b14ec029545eb

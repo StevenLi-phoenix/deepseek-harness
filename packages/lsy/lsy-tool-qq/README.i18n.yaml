@@ -1,0 +1,58 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/lsy-tool-qq/README.md
+/:
+  en: 5b069154731fd0b6
+  zh: 59cfa78bd02648af
+/deepseek-ai-dsh-lsy-tool-qq:
+  en: 7bc29a82a60a3f91
+  zh: 60fe818a6889bf2a
+/deepseek-ai-dsh-lsy-tool-qq/summary:
+  en: 723b4e77712c3f3c
+  zh: 3381f3c438631a59
+/deepseek-ai-dsh-lsy-tool-qq/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-lsy-tool-qq/use-this-package:
+  en: d65e4c7454a98042
+  zh: 398fb8385dbe4383
+/deepseek-ai-dsh-lsy-tool-qq/understand-the-implementation:
+  en: 47f0c14b3ac59248
+  zh: b6ba567f696d29eb
+/deepseek-ai-dsh-lsy-tool-qq/further-exploration:
+  en: 841b5ccc8762868d
+  zh: 01d08a396571efe2
+/deepseek-ai-dsh-lsy-tool-qq/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-lsy-tool-qq/model-experience/qq-tools:
+  en: eeb1da60ff71e371
+  zh: 3569619df130e3d4
+/deepseek-ai-dsh-lsy-tool-qq/model-experience/qq-tools/what-the-model-sees:
+  en: 426408b4e48fb0ac
+  zh: cb6f604292be541c
+/deepseek-ai-dsh-lsy-tool-qq/model-experience/qq-tools/token-effect:
+  en: 9b6fea54ebf84b5a
+  zh: 614bc9df6077de46
+/deepseek-ai-dsh-lsy-tool-qq/model-experience/qq-tools/kv-cache-effect:
+  en: 5b38c23791d4786e
+  zh: 7fe8d755a7d66d19
+/deepseek-ai-dsh-lsy-tool-qq/model-experience/qq-results:
+  en: 49eebc176a09d1a6
+  zh: aaa58b5f20fbceb2
+/deepseek-ai-dsh-lsy-tool-qq/model-experience/qq-results/what-the-model-sees:
+  en: 73d03f7420a14c09
+  zh: dd90ffbbb7c09bfa
+/deepseek-ai-dsh-lsy-tool-qq/model-experience/qq-results/token-effect:
+  en: 7edccb3800ebaa96
+  zh: 5cd38510f0f6ead9
+/deepseek-ai-dsh-lsy-tool-qq/model-experience/qq-results/kv-cache-effect:
+  en: 2fbf2175168e8244
+  zh: e0cf64f4d830f1ec
+/deepseek-ai-dsh-lsy-tool-qq/known-limitations-and-deferred-work:
+  en: fdb9c032caee953c
+  zh: ca021c9379f384ab
+/deepseek-ai-dsh-lsy-tool-qq/known-limitations-and-deferred-work/dev-note:
+  en: 964ce4773e8932de
+  zh: 46067a29588f06d7

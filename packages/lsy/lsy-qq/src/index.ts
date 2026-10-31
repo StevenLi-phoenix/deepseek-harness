@@ -43,6 +43,7 @@ export interface Config {
   groups: string[]
   /** Directory of the database and downloads; defaults to `<DSH_HOME>/lsy-qq`. */
   dataDir?: string
+  /** Image downloads: what is fetched, from where, and how much is kept. */
   media: {
     /** Download the images of recorded messages. */
     images: boolean
@@ -64,6 +65,7 @@ export interface Config {
     /** Largest audio kept, in bytes. */
     maxBytes: number
   }
+  /** Voice transcription. */
   asr: {
     /** Send voice messages to `ctx.lsyVoice.transcribe`. Off by default; it needs lsy-voice with transcription on. */
     enabled: boolean
@@ -72,32 +74,47 @@ export interface Config {
   honorRecall: boolean
   /** Fetch what was missed while disconnected. */
   backfill: {
+    /** Fetch history after each connection. */
     enabled: boolean
     /** Messages fetched per group at most. */
     maxMessages: number
   }
   /** Sending to a group. Off, and a group must be listed too; nothing in this package calls it on its own. */
   send: {
+    /** Allow `sendGroupMessage` at all. */
     enabled: boolean
+    /** Groups sending is allowed in, on top of `enabled`. */
     groups: string[]
     /** Seconds between two sends to one group, at least. */
     minIntervalSec: number
     /** Sends per group per day, at most. */
     maxPerDay: number
   }
+  /** Scheduled digests of the recorded groups, made by one-turn Sessions. */
   digest: {
+    /** Digest each recorded group on a schedule. */
     enabled: boolean
+    /** Hours between digests of one group. */
     everyHours: number
+    /** A group with fewer new messages than this waits for the next round. */
     minMessages: number
+    /** Characters of transcript per model call; a longer backlog is cut into several calls. */
     maxPromptChars: number
+    /** Model calls one group may use in one round. */
     maxCallsPerRound: number
-    /** Model of the digest Session; the profile's default when omitted. */
+    /** Provider route of the digest Session's model; the profile's default when omitted. */
     provider?: string
+    /** Model id on that route; the profile's default when omitted. */
     model?: string
+    /** Agent preset of the digest Session; the bundle defines `qq-digest` with a persona and no tools. */
     agentPreset: string
+    /** Permission preset set on the digest Session. */
     permissionPreset: string
+    /** Absolute working directory of the digest Sessions. */
     workspacePath: string
+    /** IANA zone the transcript's times are written in. */
     timeZone: string
+    /** How long to wait for one model call, in milliseconds. */
     timeoutMs: number
   }
   /** Tell the owner when the protocol end has been unreachable this long, in milliseconds; 0 turns it off. */
@@ -286,7 +303,10 @@ export class QqObserver extends Service {
 
   // ---- reading, for the tools ----
 
-  /** Every group the account is in, with what is recorded of it. */
+  /**
+   * Every group the account is in, with what is recorded of it.
+   * @returns recorded groups first, then the others.
+   */
   groupOverview(): GroupOverview[] {
     const stats = new Map<string, GroupStats>(this.store.stats().map(stat => [stat.groupId, stat]))
     const known = new Map(this.store.groups().map(group => [group.groupId, group]))
@@ -303,30 +323,52 @@ export class QqObserver extends Service {
     }).sort((a, b) => Number(b.recorded) - Number(a.recorded) || b.messages - a.messages || a.name.localeCompare(b.name))
   }
 
-  /** Display name of a group. */
+  /**
+   * Display name of a group.
+   * @param groupId - group number.
+   * @returns the name the account last saw, or the number.
+   */
   groupName(groupId: string): string {
     return this.store.groupName(groupId) ?? groupId
   }
 
-  /** Whether a group is on the `groups` list. */
+  /**
+   * Whether a group is on the `groups` list.
+   * @param groupId - group number.
+   * @returns true for a recorded group.
+   */
   isRecorded(groupId: string): boolean {
     return this.recorded.has(groupId)
   }
 
-  /** Recent messages of a recorded group, oldest first. */
+  /**
+   * Recent messages of a recorded group, oldest first.
+   * @param groupId - group number; an unrecorded group yields nothing.
+   * @param options - window in hours, at most `limit` messages, optionally one member's QQ number.
+   * @returns the messages.
+   */
   recentMessages(groupId: string, options: { hours: number; limit: number; userId?: string }): MessageRow[] {
     if (!this.recorded.has(groupId)) return []
     const sinceMs = this.now() - options.hours * 3_600_000
     return this.store.recent(groupId, { sinceMs, limit: options.limit, ...options.userId === undefined ? {} : { userId: options.userId } })
   }
 
-  /** Search the recorded groups' messages, newest first. */
+  /**
+   * Search the recorded groups' messages, newest first.
+   * @param query - words to find.
+   * @param options - one group, or all recorded groups, and at most `limit` matches.
+   * @returns the matching messages.
+   */
   searchMessages(query: string, options: { groupId?: string; limit: number }): MessageRow[] {
     if (options.groupId !== undefined && !this.recorded.has(options.groupId)) return []
     return this.store.search(query, options).filter(row => this.recorded.has(row.groupId))
   }
 
-  /** Newest digests of the recorded groups. */
+  /**
+   * Newest digests of the recorded groups.
+   * @param options - one group, or all recorded groups, a window in days, and at most `limit` digests.
+   * @returns the digests, newest first.
+   */
   digests(options: { groupId?: string; days: number; limit: number }): DigestRow[] {
     if (options.groupId !== undefined && !this.recorded.has(options.groupId)) return []
     const sinceMs = this.now() - options.days * 86_400_000
@@ -339,6 +381,8 @@ export class QqObserver extends Service {
   /**
    * Send text to a group. Refused unless `send.enabled` is true and the group is in `send.groups`, and held to
    * `send.minIntervalSec` between sends and `send.maxPerDay` a day for that group. Nothing in this package calls it.
+   * @param groupId - group number.
+   * @param text - what to send.
    * @throws {@link SendRefused} when a rule says no, or the protocol end is not connected.
    */
   async sendGroupMessage(groupId: string, text: string): Promise<void> {

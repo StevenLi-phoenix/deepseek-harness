@@ -1,5 +1,5 @@
 ---
-description: "QQ channel for the event service over the official QQ Open Platform bot: owner-listed private chats and group @ mentions each get a chat Session, and the answers go back through owner-relay's qq channel."
+description: "QQ group observer for the event service: a personal QQ account, through a OneBot v11 protocol end (NapCat) on the same machine, records the groups the owner lists, downloads their images, transcribes voice on request, digests them on a schedule, and never speaks by default."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Let people you choose talk to the agent on QQ. The channel connects the official bot you register on the QQ Open Platform: a private message, or a group message that @-mentions the bot, from an openid you listed gets its own chat Session, and each answer comes back as a QQ message. Nobody is answered until you list them, and their Session has no tools beyond conversation. The connection is outbound only, to Tencent's gateway, with no QQ client or third-party protocol bridge in the path.
+Let your agent lurk in QQ groups and learn from them. A personal QQ account, logged in once by scanning a code, sits in the groups you choose. The package records each group's messages, images, and voice notes on this machine, writes a digest of every group on a schedule (topics, settled facts, jargon, frequent questions, who knows what, links), and lets the agent search and read it all. It never speaks, adds friends, or reacts: sending is off, and the QQ side is only ever read.
 
 ## Table of Contents
 
@@ -25,53 +25,51 @@ Let people you choose talk to the agent on QQ. The channel connects the official
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount the channel in a Web profile next to [`@deepseek-ai/dsh-owner-relay`](../owner-relay/README.md) (`ctx.ownerRelay`), whose `qq` channel this plugin registers; without the relay the channel takes messages but sends no answers. It needs the Host Session Controller, permission presets, Session titles, the credential store, and the storage domain facility. It provides `ctx.lsyQq` and leaves `ctx.lsyNotifier` to the WeChat channel: an answer QQ refuses, and the note about an unlisted sender, go to the owner through the notifier.
-
-### When to choose it
-
-Choose it when family, friends, or a group should be able to chat with the agent on QQ while you decide who. Avoid it as your own control channel: the default Session has no shell, files, or web, by design, and a group shares one Session among its members.
-
-### Minimal configuration
-
-Create the bot once with the login command: run it as the service user, scan its QR code with your phone's QQ, and confirm. The platform creates the bot for your QQ account and hands the AppID and AppSecret to the command, which writes `LSY_QQ_APP_ID` and `LSY_QQ_APP_SECRET` into `<DSH_HOME>/.env` (mode 600) and prints only the AppID and your own openid, the first entry for `allow.users`. Restart the service afterwards, because `.env` is read at launch. `--qr-png <file>` also saves the code as an image (mode 600), and `--timeout-min` sets how long to wait. A bot you registered at `q.qq.com` yourself works too: put its AppID and AppSecret in `.env` by hand.
-
-```sh
-sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node /Users/Shared/lsy-dsh/current/lsy/deploy/qq-login.mjs
-```
-
-Then mount the channel and list who may talk to it; an openid is what QQ calls a person or group to this bot, and it is not a QQ number:
+The package connects to a OneBot v11 WebSocket server, which in this fleet is NapCat in a Docker container on colima ([`lsy/deploy/napcat/napcat.sh`](../../../lsy/deploy/napcat/napcat.sh), RUNBOOK step 13). It provides `ctx.lsyQq`, whose read methods [`@deepseek-ai/dsh-lsy-tool-qq`](../lsy-tool-qq/README.md) turns into agent tools. It needs the Host Session Controller, permission presets, Session titles, and the credential store; it uses `ctx.lsyVoice` (voice transcription) and `ctx.lsyNotifier` (an offline notice) when they are mounted. Mount it, then list the groups to record:
 
 ```yaml
 - insert:
     - id: lsy-qq
       name: '@deepseek-ai/dsh-lsy-qq'
       config:
-        allow:
-          users: []
-          groups: []
+        groups: ['123456789']
 ```
 
-When someone outside the lists writes, the log shows `dropped a c2c message from user <openid>, not on allow.users` and the owner's channel gets one note with that openid (at most once a day per sender, three an hour in all); copy it into `allow` in the profile patch, which reloads live.
+Until a group number is listed nothing is recorded: messages of every other group are dropped on arrival, and the log names each such group once (`not recording group <number> (<name>)`), which is how you find the numbers. Private chats are not stored at all.
 
 | Field | Default | Meaning |
 |---|---|---|
-| `appIdEnv`, `appSecretEnv` | `LSY_QQ_APP_ID`, `LSY_QQ_APP_SECRET` | Names of the credentials holding the bot's AppID and AppSecret; while either is missing the channel stays offline and re-checks |
-| `allow.users` | `[]` | `user_openid`s whose private messages are answered |
-| `allow.groups` | `[]` | `group_openid`s whose @ messages are answered, from any member |
-| `session.workspacePath` | `/Users/dsh-runtime/qq` | Absolute directory of the chat Sessions; created before every forwarded message |
-| `session.agentPreset` | `qq` | Agent preset of a new chat Session; the event bundle defines `qq` with a persona, the time, and compaction only |
-| `session.permissionPreset` | `danger-full-access` | Permission preset set on a new chat Session; the `qq` preset mounts nothing the permission could unlock |
-| `session.titlePrefix`, `session.timeZone` | `QQ`, `America/New_York` | Session title prefix (a short id follows) and the time zone sent with every prompt |
-| `maxMessageChars` | `1500` | Characters per QQ message; longer answers are split |
-| `maxReplyParts` | `4` | Messages one answer may become (QQ allows five replies to one message); the last part is cut beyond that |
-| `perPeerPerMinute` | `10` | Messages one user or group may send a minute; the rest are dropped and logged |
-| `c2cReplyWindowMs`, `groupReplyWindowMs` | `3300000`, `270000` | How long a message keeps its reply window open (55 min and 4.5 min; QQ's own limits are an hour and 5 minutes) |
-| `notifyUnknown` | `true` | Tell the owner when a sender outside the lists writes |
-| `credentialPollMs` | `30000` | Credential re-check period while the AppID or AppSecret is missing |
-
-In a chat, `/new` starts a fresh Session and `/help` lists the commands; commands never reach the agent. Text reaches the agent; an attachment is counted and the agent is told one came, but nothing is downloaded.
+| `url` | `ws://127.0.0.1:3001` | WebSocket address of the protocol end; it must be on this machine (127.0.0.1, localhost) or the tailnet (100.64.0.0/10, `*.ts.net`) |
+| `tokenEnv` | `LSY_QQ_ONEBOT_TOKEN` | Name of the credential holding the protocol end's access token; sent as a Bearer header; while it is missing the observer stays offline |
+| `groups` | `[]` | Group numbers to record |
+| `dataDir` | `<DSH_HOME>/lsy-qq` | Database (`qq.db`), downloads (`media/`), and raw digest answers (`digest-raw/`); created with mode 0700 |
+| `media.images` | `true` | Download the images of recorded messages |
+| `media.maxImageBytes` | `15728640` | Largest image downloaded |
+| `media.maxTotalBytes` | `5368709120` | Downloads stop when they together reach this (5 GiB); the log warns once an hour |
+| `media.retainDays` | `0` | Delete downloads of messages older than this many days; `0` keeps them |
+| `media.hostSuffixes` | QQ's CDN hosts | A media link on any other host, or on an IP address, is not fetched |
+| `media.timeoutMs` | `30000` | Deadline of one download |
+| `voice.download` | `true` | Keep voice messages as MP3 (the protocol end decodes QQ's SILK) |
+| `voice.maxBytes` | `10485760` | Largest audio kept |
+| `asr.enabled` | `false` | Transcribe voice messages with `ctx.lsyVoice.transcribe`; needs lsy-voice with `asr.enabled` |
+| `honorRecall` | `true` | A message its sender recalls loses its text, raw segments, and files |
+| `backfill.enabled`, `backfill.maxMessages` | `true`, `300` | After connecting, fetch what was missed (history pages walked back until a stored message is met) |
+| `send.enabled` | `false` | Allow `sendGroupMessage` at all |
+| `send.groups` | `[]` | Groups sending is allowed in, on top of `send.enabled` |
+| `send.minIntervalSec`, `send.maxPerDay` | `60`, `10` | At least this long between two sends to one group, and at most this many a day |
+| `digest.enabled` | `true` | Digest each recorded group on a schedule |
+| `digest.everyHours` | `24` | Hours between digests of one group |
+| `digest.minMessages` | `15` | A group with fewer new messages waits for the next round |
+| `digest.maxPromptChars` | `60000` | Transcript characters per model call; a larger backlog is split |
+| `digest.maxCallsPerRound` | `5` | Model calls one group may use in one round |
+| `digest.provider`, `digest.model` | unset | The digest Session's model (provider route and model id), such as a cheap model; unset uses the profile's default |
+| `digest.agentPreset`, `digest.permissionPreset` | `qq-digest`, `read-only` | The event bundle's `qq-digest` preset has a persona and no tools |
+| `digest.workspacePath`, `digest.timeZone`, `digest.timeoutMs` | `/Users/dsh-runtime/qq-digest`, `Asia/Shanghai`, `900000` | Working directory, the zone of the transcript's times, and the wait for one model call |
+| `offlineNoticeMs` | `600000` | Tell the owner (through `ctx.lsyNotifier`) when the protocol end has been unreachable this long, or reports the account offline; `0` turns it off |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-lsy-qq) is the exhaustive source for every accepted field.
+
+Reading is the service's job: `groupOverview()`, `recentMessages()`, `searchMessages()`, `digests()`, and `groupName()` answer only for recorded groups. `sendGroupMessage(groupId, text)` exists for future code and refuses unless `send.enabled` is true and the group is in `send.groups`; nothing in this package or in the tools calls it.
 
 -----
 
@@ -81,23 +79,22 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The channel talks to QQ only through `QqTransport` ([`src/transport.ts`](src/transport.ts)); the default implementation wraps Tencent's official SDK `@tencent-connect/qqbot-nodejs` (pinned, MIT), which fetches and refreshes the app token, holds the gateway WebSocket (heartbeat, resume, reconnect), and numbers the replies of one message. The channel asks the gateway for the group-and-private-message intent only, because the SDK's default adds guild intents a personal bot may not hold, and QQ closes such a connection with 4914 or 4915. Guild and guild-DM events are discarded at the boundary. A connection that fails (bad credentials, a fatal close) is retried with a delay doubling from 2 s to 2 min, reset after a minute of stable service; SDK log lines are kept at debug and scrubbed of the secret and bearer tokens. A test double mounted as `lsyQqTransport` replaces the SDK in tests.
+`OneBotClient` ([`src/onebot.ts`](src/onebot.ts)) opens the forward WebSocket with the token as a Bearer header, drops a socket that is silent for two minutes (NapCat heartbeats every 30 s), correlates API calls by `echo`, and scrubs the token from every error. The observer reconnects with a delay doubling from 2 s to 2 min, reset after a minute of stable service. After each connection it reads the login (`get_login_info`), refreshes the group list (`get_group_list`, hourly after that), and backfills each recorded group (`get_group_msg_history`, newest page first, back until it meets a stored message or `backfill.maxMessages`).
 
-The login ([`src/login.ts`](src/login.ts), run by [`lsy/deploy/qq-login.mjs`](../../../lsy/deploy/qq-login.mjs)) follows the bind flow of Tencent's `@tencent-connect/qqbot-connector` as it can be read from the published package, written fresh because that package is not licensed for redistribution: `create_bind_task` with a fresh 32-byte key, the QR page `q.qq.com/qqbot/openclaw/connect.html?task_id=…`, and `poll_bind_result` until the platform returns the AppID, the AppSecret encrypted with that key (AES-256-GCM), and the scanner's openid. An expired code is replaced (three at most). The command writes the secret straight into the `.env` file and never prints it.
+A group message is parsed ([`src/text.ts`](src/text.ts)) into one line of text (`@name`, `[图片]`, `[语音]`, `[文件:name]`, `[卡片:title url]`, and so on), the quoted message id, and its media. [`src/store.ts`](src/store.ts) writes it to SQLite (`node:sqlite`, WAL) under a unique key of group and QQ message id, so reconnects and backfills never double a row, with an FTS5 index using the trigram tokenizer for Chinese and English substring search (queries under three characters fall back to `LIKE`). Images are fetched only from the hosts in `media.hostSuffixes`, over HTTPS, with no redirect followed, under a size cap, two at a time, into `media/<group>/<YYYYMM>/<sha256>.<ext>` (mode 0600; identical bytes share a file). A voice message is fetched as MP3 through `get_record` (falling back to its link), saved the same way, and, with `asr.enabled`, transcribed by lsy-voice; the transcript is appended to the message text and the search index. A recall notice drops the message's text, raw segments, media rows, and files.
 
-Each inbound message is checked in this order: the allowlist (a group message needs its `group_openid` in `allow.groups`, a private one its sender in `allow.users`), then the per-peer rate limit. It then opens a reply window (the message id, its arrival time, replies used) in the `lsy_qq` storage domain, handles `/new` and `/help` itself, and otherwise prompts the peer's chat Session with `sessionController.prompt()` in `steer` mode: a message sent while the agent works joins the running turn. The Session is found by peer key (`c2c:<user_openid>` or `group:<group_openid>`) and reused while `resolveAgent()` succeeds; a missing one is replaced by a Session created with the configured preset, titled with the peer's short id, and claimed with `ctx.ownerRelay` as channel `qq` before its first prompt. Every remembered Session is claimed again when the channel registers.
-
-The relay hands each turn's final answer (nothing for `NO_REPLY`) to the channel, which splits it and sends each part quoting the peer's latest message while its window is open and fewer than five replies went out, otherwise as a proactive message. A part QQ refuses throws, and the relay falls back to `ctx.lsyNotifier` with the label `a QQ chat Session (its answer could not go out on QQ)`. All sends and storage writes run one at a time.
+Every `digest` round (a check every ten minutes) picks the groups whose last digest is `everyHours` old and which have `minMessages` new messages, cuts the backlog into transcripts of at most `maxPromptChars`, and for each runs one turn in a new Session of the `qq-digest` preset (no tools, permission `read-only`, the configured model). The Session's final text is written to `digest-raw/` before it is stored; a `NO_REPLY` answer stores a placeholder so the cursor moves on; the step usage is stored with the digest and logged. The transcript is framed as untrusted data and cannot close its own block.
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Service, configuration, connection loop, allowlist, chat Sessions, the `qq` relay channel, delivery |
-| [`src/transport.ts`](src/transport.ts) | `QqTransport`, the event normalizer, and the default transport over the official SDK |
-| [`src/login.ts`](src/login.ts) | QR login against the platform's bind service, the QR PNG, the `.env` writer, and the login command |
-| [`src/text.ts`](src/text.ts) | Inbound framing and spoof protection, reply splitting, command replies |
-| [`src/storage.ts`](src/storage.ts) | Storage-domain tables for chat Sessions, reply windows, and reported unknown senders |
+| [`src/index.ts`](src/index.ts) | Service, configuration, connection loop, event handling, media downloads, schedules, reads, gated sending |
+| [`src/onebot.ts`](src/onebot.ts) | OneBot v11 client and the address check |
+| [`src/text.ts`](src/text.ts) | Segments to text and media |
+| [`src/store.ts`](src/store.ts) | SQLite schema, FTS5 search, retention and digest queries |
+| [`src/media.ts`](src/media.ts) | Address allowlist, capped fetch, type detection, content-addressed files |
+| [`src/digest.ts`](src/digest.ts) | Transcript chunking, the digest prompt, and the model call through a Session |
 
-This is a fork-local package; [`../UPSTREAM.md`](../UPSTREAM.md) describes how the `lsy` group tracks upstream. The choice of the official Open Platform over OneBot bridges (NapCat, LLBot, Lagrange), which run a QQ client or reimplement its protocol and put the account at risk of a ban, and over the official tencent-connect/dsh-qqbot plugin (reviewed, MIT), which does not use the relay, so its answers would skip the fleet's turn rules and the owner fallback, and whose access control defaults to open, is recorded in [`lsy/CHANGELOG.md`](../../../lsy/CHANGELOG.md).
+This is a fork-local package; [`../UPSTREAM.md`](../UPSTREAM.md) describes how the `lsy` group tracks upstream. The protocol end is NapCat: it runs Tencent's own Linux QQ client with a plugin, so no QQ protocol is reimplemented here. LLBot's macOS CLI was rejected because it signs packets with closed native modules that call the vendor's token service; the official QQ Open Platform bot was built first and dropped because a bot sees only messages that @-mention it in groups and cannot be a member that reads everything. The data stays under `dataDir` on this machine; the only text that leaves it is the transcript sent to the digest model and what the agent reads through its tools.
 
 </details>
 
@@ -106,41 +103,41 @@ This is a fork-local package; [`../UPSTREAM.md`](../UPSTREAM.md) describes how t
 <a id="further-exploration"></a>
 ## Further Exploration
 
-- [Owner relay](../owner-relay/README.md) — decides at each turn end what a chat Session's answer sends
-- [WeChat channel](../lsy-wechat/README.md) — the owner's channel; receives what QQ could not deliver
-- [Session Controller](../../api/session-controller/README.md) — creates, resolves, and prompts the chat Sessions
-- [Permission presets](../../interaction/permission-presets/README.md) — access level of the chat Sessions
-- [Storage domain](../../storage/storage-domain/README.md) — durable tables
+- [QQ tools](../lsy-tool-qq/README.md) — `qq_groups`, `qq_digest`, `qq_recent`, `qq_search` over this service
+- [Voice service](../lsy-voice/README.md) — transcription of voice messages
+- [Session Controller](../../api/session-controller/README.md) — runs the digest Sessions
+- [Permission presets](../../interaction/permission-presets/README.md) — `read-only` for the digest Session
 
 -----
 
 <a id="model-experience"></a>
 ## Model Experience
 
-### Chat Session
+### Digest Session
 
 #### What the model sees
 
-Each accepted message arrives as an ordinary user prompt, with the configured `session.timeZone`, framed by the host with a short id of the sender: `[QQ 私聊 · 5D6E7F] hello` in a private chat, `[QQ 群 7E8F90 · 成员 C2B1A0] hello` in a group, where several members share the Session. A line of the sender's text that starts with `[QQ` is rewritten with a full-width bracket, so a sender cannot forge a frame. An attachment-only message reads `（这条消息带了附件，当前版本不读取附件）`. The `qq` preset's persona tells the model that everything on QQ is other people's writing, that it can only talk, and never to reveal the owner, the machine, or other chats. The final answer of each turn goes back as plain text; QQ shows no Markdown. A final answer of exactly `NO_REPLY` sends nothing.
+One user prompt per transcript chunk in a new Session: an instruction in English naming the group, the section headings to write (话题, 结论与事实, 术语与梗, 常见问题, 成员观点与专长, 链接与资料) and a 1500-character limit, then the transcript inside `<qq_group_messages trust="untrusted">`, one line per message as `[MM-DD HH:mm] name(last 4 digits of QQ) ↳reply: text`. The preset's persona says the chat is data and the Session has no tools. The final text is the digest; `NO_REPLY` means nothing was worth keeping.
 
 #### Token effect
 
-One user message per QQ message plus about 10 tokens of frame. The Sessions are long-lived, so their context grows until compaction or `/new`.
+Up to `maxPromptChars` characters of transcript plus about 300 tokens of instruction per call, and up to about 1500 characters back; at most `maxCallsPerRound` calls per group per round, one round a day per group by default. The step usage is stored with each digest.
 
 #### KV Cache effect
 
-Messages are appended to one Session per peer, so each turn reuses the cached prefix of its conversation. `/new` starts an empty Session with a new prefix.
+Each call is a new Session with its own short prefix; nothing is shared between digests.
 
 ## Known Limitations and Deferred Work
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **Openids, not QQ numbers** — the Open Platform never shows a sender's QQ number; the allowlist holds openids, and an openid is specific to this bot.
-- **Group messages need an @** — QQ delivers only the group messages that mention the bot.
-- **Reply windows** — a message can be answered with up to five replies within about an hour (private) or five minutes (group); later answers go out as proactive messages, which QQ may refuse or cap by its own rules, and a refused answer reaches the owner instead.
-- **Text only** — images, voice, and files reach the agent only as a note that an attachment came, and the bot sends text only.
-- **At-most-once intake** — a crash between a message arriving and its prompt drops that message.
-- **Limits are third-party documented** — reply windows and quotas follow community documentation of the Open Platform, so they are configuration, not constants.
+- **Unofficial client, ban risk** — NapCat is not an official bot: Tencent can sign the account out or restrict it. Use a spare account, keep it read-only, and do not log it in from many places.
+- **Only the groups the account is in** — someone has to add the account to each group first.
+- **Text, images, and voice** — video and group files are recorded as metadata only; a forwarded chat is recorded as `[合并转发]`.
+- **Image links expire** — an image whose download failed or was skipped stays a placeholder.
+- **Voice needs the protocol end's decoder** — `get_record` must return the audio as base64; otherwise the raw link is stored and not transcribed.
+- **At-most-once for a crash** — a message that arrives while the process dies is recovered by the backfill only up to `backfill.maxMessages`.
+- **Not verified against QQ** — the observer is tested against a local stand-in for NapCat; its first real login should be watched in the log.
 
 <a id="dev-note"></a>
 ### Dev Note
@@ -150,7 +147,8 @@ Messages are appended to one Session per peer, so each turn reuses the cached pr
 
 This Dev Note is non-authoritative working context: undecided directions and notes for maintainers. Shipped behavior and accepted rationale live in the sections above, the package code, and the linked Agent Notes.
 
-- The channel was tested against the SDK with a local stand-in for the Open Platform (token endpoint, gateway WebSocket, message API); it has not yet run against Tencent's servers, so the first real connection should be watched in the log.
-- A `tell_main_agent` tool like the Bilibili account's, rich media, and Markdown replies (a separate permission on the platform) are undecided.
+- Embedding search over the messages (bge-m3 through the registry) would complement the trigram search; undecided.
+- Per-member profiles (what each person knows) are only in the digests today.
+- Group files are not downloaded; `get_group_file_url` would make that possible.
 
 </details>
