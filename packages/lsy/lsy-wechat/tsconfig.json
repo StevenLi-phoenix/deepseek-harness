@@ -24,6 +24,9 @@
       "path": "../lsy-event-bus"
     },
     {
+      "path": "../lsy-voice"
+    },
+    {
       "path": "../owner-relay"
     },
     {

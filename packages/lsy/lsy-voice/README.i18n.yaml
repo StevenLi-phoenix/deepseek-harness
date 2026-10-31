@@ -1,0 +1,49 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/lsy-voice/README.md
+/:
+  en: 8c7a446fe6341960
+  zh: f2bcd3d59665424e
+/deepseek-ai-dsh-lsy-voice:
+  en: b67200093fa27362
+  zh: 00ea85a4d3ec0abe
+/deepseek-ai-dsh-lsy-voice/summary:
+  en: a5acc18a41073d8e
+  zh: cb806a54ce83f395
+/deepseek-ai-dsh-lsy-voice/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-lsy-voice/use-this-package:
+  en: dbe07c5def650e36
+  zh: a555ec330fae3f61
+/deepseek-ai-dsh-lsy-voice/use-this-package/turn-speech-to-text-on:
+  en: 631544c4706435f5
+  zh: f7cb5381685596d8
+/deepseek-ai-dsh-lsy-voice/understand-the-implementation:
+  en: e76e30c03d959c32
+  zh: 422aaa9f43a49921
+/deepseek-ai-dsh-lsy-voice/further-exploration:
+  en: 871bc7f48b37f120
+  zh: 4b087c326be92767
+/deepseek-ai-dsh-lsy-voice/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-lsy-voice/model-experience/transcript-of-an-audio-file:
+  en: 96ba8f0b9100f5a8
+  zh: ac53b1c8a5e53386
+/deepseek-ai-dsh-lsy-voice/model-experience/transcript-of-an-audio-file/what-the-model-sees:
+  en: ed6abfd5602d2c14
+  zh: ed53fa9daff1004d
+/deepseek-ai-dsh-lsy-voice/model-experience/transcript-of-an-audio-file/token-effect:
+  en: a40b35bcec80064d
+  zh: f3745a8868169d98
+/deepseek-ai-dsh-lsy-voice/model-experience/transcript-of-an-audio-file/kv-cache-effect:
+  en: c23707e9443e929b
+  zh: 9b4b25064558dd5c
+/deepseek-ai-dsh-lsy-voice/known-limitations-and-deferred-work:
+  en: 11d9ed6ae31560db
+  zh: 646d6a8dc9fd31f0
+/deepseek-ai-dsh-lsy-voice/known-limitations-and-deferred-work/dev-note:
+  en: 0f3b2104f5e65f66
+  zh: df6aa53a25e52283

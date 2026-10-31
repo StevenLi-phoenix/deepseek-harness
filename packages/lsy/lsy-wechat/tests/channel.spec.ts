@@ -138,6 +138,8 @@ async function harness(options: {
   agents?: FakeAgent[]
   /** Session titles by id. */
   titles?: Record<string, string>
+  /** A `ctx.lsyVoice` double; omitted means lsy-voice is not mounted. */
+  voice?: unknown
 } = {}) {
   const ilink = options.ilink ?? new FakeIlink()
   vi.stubGlobal('fetch', ilink.fetch)
@@ -174,6 +176,7 @@ async function harness(options: {
     (session.id in titleById ? { title: titleById[session.id] } : undefined)
   const titles = { rename: vi.fn(), get: vi.fn(titleOf) }
   ctx.provide('sessionTitle', titles as never)
+  if (options.voice !== undefined) ctx.provide('lsyVoice', options.voice as never)
   if (options.agents !== undefined) {
     const agents = options.agents
     ctx.provide('agents', { roots: () => [...agents], get: (id: string) => agents.find(agent => agent.session.id === id) } as never)
@@ -373,6 +376,69 @@ describe('WechatChannel chat', () => {
       `- file "report.pdf" (application/pdf, 13 B) saved at ${join(dir, 'work', '.wechat-inbox', saved!)}.`,
     ].join('\n') }])
     expect(h.logs.some(line => line.type === 'warn' && line.text === 'lsy-wechat: could not receive image: CDN download failed with HTTP 404')).toBe(true)
+  })
+
+  describe('audio attachments', () => {
+    const fileKey = Buffer.from(MEDIA_KEY.toString('hex')).toString('base64')
+    const audioMessage = (name: string, param: string) => ({
+      from_user_id: OWNER, message_type: 1, context_token: `ctx-${param}`,
+      item_list: [{ type: 4, file_item: { file_name: name, media: { encrypt_query_param: param, aes_key: fileKey } } }],
+    })
+    const voiceDouble = (transcribe: (path: string) => Promise<unknown>, enabled = true) => ({
+      asrEnabled: enabled,
+      canTranscribe: (path: string) => enabled && /\.(mp3|wav|m4a)$/i.test(path),
+      transcribe: vi.fn(transcribe),
+    })
+
+    it('puts the transcript of an audio file in the prompt when transcription is on', async () => {
+      const voice = voiceDouble(async () => ({ text: '明天早上八点叫我起床', engine: 'funasr', rawPath: '/x.json', elapsedMs: 900 }))
+      const h = await harness({ voice })
+      h.ilink.cdn.set('note', encryptMedia(Buffer.from('ID3 not really audio')))
+      h.ilink.updates([audioMessage('note.mp3', 'note')])
+      await vi.waitFor(() => { expect(h.sessions.prompts).toHaveLength(1) })
+      const [saved] = readdirSync(join(dir, 'work', '.wechat-inbox')).filter(name => !name.startsWith('.'))
+      const saveAt = join(dir, 'work', '.wechat-inbox', saved!)
+      expect(voice.transcribe).toHaveBeenCalledWith(saveAt, expect.anything())
+      expect(h.sessions.prompts[0]!.content).toEqual([{ type: 'text', text: [
+        '[文件 note.mp3]',
+        '',
+        'WeChat attachments:',
+        `- file "note.mp3" (audio/mpeg, 20 B) saved at ${saveAt}; speech-to-text (funasr) of what the owner said in it: 「明天早上八点叫我起床」`,
+      ].join('\n') }])
+      expect(h.logs.some(line => line.type === 'info' && line.text === 'lsy-wechat: transcribed note.mp3 (10 chars)')).toBe(true)
+    })
+
+    it('says the transcription failed and still delivers the file note', async () => {
+      const voice = voiceDouble(async () => { throw new Error('asr POST /transcribe timed out after 120000 ms') })
+      const h = await harness({ voice })
+      h.ilink.cdn.set('note', encryptMedia(Buffer.from('ID3 not really audio')))
+      h.ilink.updates([audioMessage('note.mp3', 'note')])
+      await vi.waitFor(() => { expect(h.sessions.prompts).toHaveLength(1) })
+      const text = (h.sessions.prompts[0]!.content[0] as { text: string }).text
+      expect(text).toMatch(/saved at .*-note\.mp3; speech-to-text failed \(asr POST \/transcribe timed out after 120000 ms\)\.$/)
+      expect(h.logs.some(line => line.type === 'warn' && line.text === 'lsy-wechat: could not transcribe note.mp3: asr POST /transcribe timed out after 120000 ms')).toBe(true)
+    })
+
+    it('leaves audio files alone when transcription is off or lsy-voice is not mounted', async () => {
+      const off = voiceDouble(async () => ({ text: 'x', engine: 'funasr', rawPath: '', elapsedMs: 1 }), false)
+      for (const voice of [off, undefined]) {
+        const h = await harness({ voice })
+        h.ilink.cdn.set('note', encryptMedia(Buffer.from('ID3 not really audio')))
+        h.ilink.updates([audioMessage('note.mp3', 'note')])
+        await vi.waitFor(() => { expect(h.sessions.prompts).toHaveLength(1) })
+        expect((h.sessions.prompts[0]!.content[0] as { text: string }).text).toMatch(/saved at [^;]*-note\.mp3\.$/)
+      }
+      expect(off.transcribe).not.toHaveBeenCalled()
+    })
+
+    it('does not transcribe documents', async () => {
+      const voice = voiceDouble(async () => ({ text: 'x', engine: 'funasr', rawPath: '', elapsedMs: 1 }))
+      const h = await harness({ voice })
+      h.ilink.cdn.set('doc', encryptMedia(Buffer.from('%PDF-1.7 tiny')))
+      h.ilink.updates([audioMessage('report.pdf', 'doc')])
+      await vi.waitFor(() => { expect(h.sessions.prompts).toHaveLength(1) })
+      expect(voice.transcribe).not.toHaveBeenCalled()
+    })
   })
 
   it('starts a new chat Session when the stored one no longer resolves', async () => {

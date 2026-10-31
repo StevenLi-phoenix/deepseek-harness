@@ -1,0 +1,58 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/lsy-tool-voice/README.md
+/:
+  en: a86c9ff17e27fdf7
+  zh: 565ad83e3fe0a33b
+/deepseek-ai-dsh-lsy-tool-voice:
+  en: 2b8596c4eee9d3f0
+  zh: 2a7231653c002839
+/deepseek-ai-dsh-lsy-tool-voice/summary:
+  en: 25f1f45bde799f3f
+  zh: f4d035292e0df23c
+/deepseek-ai-dsh-lsy-tool-voice/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-lsy-tool-voice/use-this-package:
+  en: 985d56c3be1ece44
+  zh: 0638fcacefb5144c
+/deepseek-ai-dsh-lsy-tool-voice/understand-the-implementation:
+  en: 3cbcd123c0b54bc6
+  zh: d47cef9fc91dc84d
+/deepseek-ai-dsh-lsy-tool-voice/further-exploration:
+  en: 6a733a5aa7afb1a3
+  zh: 14139e1652295e1f
+/deepseek-ai-dsh-lsy-tool-voice/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-lsy-tool-voice/model-experience/speak-tool:
+  en: a7ba271b8389e1f4
+  zh: 8d8928f30861f2dc
+/deepseek-ai-dsh-lsy-tool-voice/model-experience/speak-tool/what-the-model-sees:
+  en: 4a815ea3eb9e991c
+  zh: 93a93809c8d8cc2a
+/deepseek-ai-dsh-lsy-tool-voice/model-experience/speak-tool/token-effect:
+  en: 9b6fea54ebf84b5a
+  zh: a9085ac0476b86ed
+/deepseek-ai-dsh-lsy-tool-voice/model-experience/speak-tool/kv-cache-effect:
+  en: 5b38c23791d4786e
+  zh: ee76dfc43a986563
+/deepseek-ai-dsh-lsy-tool-voice/model-experience/speak-results:
+  en: 5d0f756c71dc235a
+  zh: d28a40367c7b5f81
+/deepseek-ai-dsh-lsy-tool-voice/model-experience/speak-results/what-the-model-sees:
+  en: f890690fe2bde282
+  zh: 07167651e078865c
+/deepseek-ai-dsh-lsy-tool-voice/model-experience/speak-results/token-effect:
+  en: 7aa5c06d9b372bc1
+  zh: 134d318dd5201130
+/deepseek-ai-dsh-lsy-tool-voice/model-experience/speak-results/kv-cache-effect:
+  en: 2fbf2175168e8244
+  zh: 9ed25f9061c187c9
+/deepseek-ai-dsh-lsy-tool-voice/known-limitations-and-deferred-work:
+  en: e8c5f6e1abf71c28
+  zh: a38455474caeeb63
+/deepseek-ai-dsh-lsy-tool-voice/known-limitations-and-deferred-work/dev-note:
+  en: 1058b664f80f65b9
+  zh: 4198cd8475aa9433

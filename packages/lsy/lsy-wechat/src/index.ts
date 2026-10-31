@@ -11,6 +11,8 @@ import type { ContextFormed, UserMessage } from '@deepseek-ai/dsh-llm'
 import type { LsyAgentMessage, LsyNote, LsyNotifier } from '@deepseek-ai/dsh-lsy-event-bus'
 // Type-only: ctx.ownerRelay, which relays each chat Session's final answers through this channel.
 import type { RelayAnswer, RelayChannel, RelayDelivery } from '@deepseek-ai/dsh-owner-relay'
+// Type-only: ctx.lsyVoice, which reads the audio files the owner sends when transcription is on.
+import type {} from '@deepseek-ai/dsh-lsy-voice'
 import type {} from '@deepseek-ai/dsh-permission-presets'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-title'
@@ -18,7 +20,7 @@ import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import z from '@deepseek-ai/schemastery'
 import { IlinkApiError, IlinkClient, ILINK_SEND_REJECTED, isStaleTokenError, ItemType, MESSAGE_TYPE_USER, type WeixinMessage } from './api.ts'
 import { accountFilePath, readAccountFile, type WechatAccount } from './login.ts'
-import { attachmentNote, describeMedia, downloadMedia, isPromptImage, mediaSpec, saveInboxFile, uploadMedia, type OutboundKind, type ReceivedMedia } from './media.ts'
+import { attachmentNote, describeMedia, downloadMedia, isPromptImage, mediaSpec, saveInboxFile, uploadMedia, type OutboundKind, type ReceivedMedia, type Transcription } from './media.ts'
 import { wechatDomain, type ActivityRecord, type OutboxRecord, type SentKind, type WindowRecord } from './storage.ts'
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
@@ -710,7 +712,8 @@ export class WechatChannel extends Service implements LsyNotifier {
         })
         const path = await saveInboxFile(join(this.config.chat.workspacePath, '.wechat-inbox'), media)
         this.ctx.logger.info(`lsy-wechat: received ${describeMedia(media)} at ${path}`)
-        received.push({ media, path })
+        const transcript = media.kind === 'file' ? await this.transcribe(media.name, path) : undefined
+        received.push(transcript === undefined ? { media, path } : { media, path, transcript })
       } catch (error: unknown) {
         if (this.stopping) throw error
         this.ctx.logger.warn(`lsy-wechat: could not receive ${spec.kind}: ${errorText(error)}`)
@@ -718,6 +721,24 @@ export class WechatChannel extends Service implements LsyNotifier {
       }
     }
     return received
+  }
+
+  /**
+   * Speech-to-text of a received audio file, when `ctx.lsyVoice` is mounted and transcription is on.
+   * A failure is the answer, not an error: the file still reaches the agent, with the reason.
+   */
+  private async transcribe(name: string, path: string): Promise<Transcription | undefined> {
+    const voice = this.ctx.get('lsyVoice')
+    if (voice === undefined || !voice.canTranscribe(path)) return undefined
+    try {
+      const heard = await voice.transcribe(path, { signal: this.abort.signal })
+      this.ctx.logger.info(`lsy-wechat: transcribed ${name} (${Array.from(heard.text).length} chars)`)
+      return { text: heard.text, engine: heard.engine }
+    } catch (error: unknown) {
+      if (this.stopping) throw error
+      this.ctx.logger.warn(`lsy-wechat: could not transcribe ${name}: ${errorText(error)}`)
+      return { failed: errorText(error) }
+    }
   }
 
   /**

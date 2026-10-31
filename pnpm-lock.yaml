@@ -13966,6 +13966,27 @@ importers:
         specifier: workspace:*
         version: link:../../core/tools
 
+  packages/lsy/lsy-tool-voice:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../llm/llm
+      '@deepseek-ai/dsh-lsy-event-bus':
+        specifier: workspace:*
+        version: link:../lsy-event-bus
+      '@deepseek-ai/dsh-lsy-voice':
+        specifier: workspace:*
+        version: link:../lsy-voice
+      '@deepseek-ai/dsh-tool-executor-native':
+        specifier: workspace:*
+        version: link:../../core/tool-executor-native
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../core/tools
+
   packages/lsy/lsy-tool-watch:
     dependencies:
       '@deepseek-ai/schemastery':
@@ -14027,6 +14048,22 @@ importers:
         specifier: workspace:*
         version: link:../../core/tools
 
+  packages/lsy/lsy-voice:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-credentials':
+        specifier: workspace:*
+        version: link:../../credentials/credentials
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:*
+        version: link:../../util/home-paths
+
   packages/lsy/lsy-wechat:
     dependencies:
       '@deepseek-ai/schemastery':
@@ -14057,6 +14094,9 @@ importers:
       '@deepseek-ai/dsh-lsy-event-bus':
         specifier: workspace:*
         version: link:../lsy-event-bus
+      '@deepseek-ai/dsh-lsy-voice':
+        specifier: workspace:*
+        version: link:../lsy-voice
       '@deepseek-ai/dsh-owner-relay':
         specifier: workspace:*
         version: link:../owner-relay

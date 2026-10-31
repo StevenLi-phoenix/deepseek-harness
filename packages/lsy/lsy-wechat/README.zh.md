@@ -73,7 +73,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 | `mediaTimeoutMs` | `60000` | 一个附件下载的时限 |
 | `timeGapMs` | `1800000` | 对话安静多久（30 分钟）之后，你的下一条消息带一段时间说明交给 agent：你何时写的、对话安静了多久、上一条消息是什么；`0` 关闭 |
 
-在对话里发 `/stop` 会取消 Host 上所有正在运行的轮次（这里的对话和后台 Session），丢掉它们排队的消息，并回复停下了哪些；监控和定时提醒照常运行。`/new` 开始一个新的对话 Session，`/help` 列出这些命令；命令不会交给 agent。agent 工作时，对话里会显示微信的“对方正在输入”，从消息到达一直持续到回复发出。重启打断了正在运行的对话轮次时，会在对话里说明，而不是让问题石沉大海。文字、语音转写和引用会交给 agent；引用 bot 自己发的消息时，微信送来的引用不带正文，通道会补上发送时记下的文字。长回答拆分时，每一段里的代码块和表格都照样能渲染。图片、文件和视频会从微信 CDN 下载、解密并存进 inbox；模型的线路支持图片时，图片也会作为图片内容交给模型。
+在对话里发 `/stop` 会取消 Host 上所有正在运行的轮次（这里的对话和后台 Session），丢掉它们排队的消息，并回复停下了哪些；监控和定时提醒照常运行。`/new` 开始一个新的对话 Session，`/help` 列出这些命令；命令不会交给 agent。agent 工作时，对话里会显示微信的“对方正在输入”，从消息到达一直持续到回复发出。重启打断了正在运行的对话轮次时，会在对话里说明，而不是让问题石沉大海。文字、语音转写和引用会交给 agent；引用 bot 自己发的消息时，微信送来的引用不带正文，通道会补上发送时记下的文字。长回答拆分时，每一段里的代码块和表格都照样能渲染。图片、文件和视频会从微信 CDN 下载、解密并存进 inbox；模型的线路支持图片时，图片也会作为图片内容交给模型。挂载了 [`lsy-voice`](../lsy-voice/README.zh.md) 且打开 `asr.enabled` 时，音频文件还会被转写，文字并入附件说明。
 
 `sendFile(path)` 把本机文件发回去：内容是图片就发成图片，`.mp4`、`.mov`、`.m4v` 发成视频，其他发成文件。模型不该决定的事都由宿主决定：收件人永远是 owner，文件只经当前回复窗口发送（从不进 outbox），窗口的最后一个名额留给本轮的文字回复，路径必须指向 `maxMediaBytes` 以内的普通文件。工具包 [`@deepseek-ai/dsh-lsy-tool-wechat`](../lsy-tool-wechat/README.zh.md) 把它作为 `wechat_send_file` 提供给 agent。
 
@@ -98,7 +98,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 | [`src/login.ts`](src/login.ts) | 二维码登录状态机、终端登录命令、账号文件 |
 | [`src/text.ts`](src/text.ts) | 入站文本提取与引用时间、按 Markdown 结构拆分消息、摘要、时间戳、时间间隔提示与转来通知的文本、命令回复 |
 | [`src/typing.ts`](src/typing.ts) | “正在输入”提示：带退避的 ticket 缓存、5 秒保活、一小时上限、失败从不影响回复 |
-| [`src/media.ts`](src/media.ts) | CDN 下载与解密、图片类型识别、inbox、附件说明；外发的加密与上传（`getuploadurl`、CDN POST、`x-encrypted-param`） |
+| [`src/media.ts`](src/media.ts) | CDN 下载与解密、图片类型识别、inbox、附件说明（含音频文件的转写）；外发的加密与上传（`getuploadurl`、CDN POST、`x-encrypted-param`） |
 | [`src/storage.ts`](src/storage.ts) | 游标、回复窗口、对话 Session、outbox、对话动态与最近发出的文字的 storage-domain 表 |
 
 这是 fork 本地的包；`lsy` 组如何跟踪上游见 [`../UPSTREAM.md`](../UPSTREAM.md)。协议参照腾讯 OpenClaw 微信插件（`@tencent-weixin/openclaw-weixin` 2.4.10）；这个客户端实现二维码登录、`getupdates`、媒体下载和文本 `sendmessage`。媒体格式与 origin 校验参照 [xiaoshihou514/dsh-weixin](https://github.com/xiaoshihou514/dsh-weixin)（MIT）。[`lsy/deploy/wechat-login.mjs`](../../../lsy/deploy/wechat-login.mjs) 只是 `runLoginCli()` 外面的一层薄壳，逻辑由测试覆盖。
@@ -125,7 +125,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 
 #### 模型看到什么
 
-owner 的每条微信消息都以普通用户 prompt 的形式进入对话 Session，带上配置的 `chat.timeZone`，和在 Web UI 里输入的文字一样。文本不带任何微信包装；引用会多一行 `[引用] …`，语音消息是 `[语音] <转写>`，媒体是占位符，后面每个附件跟一行说明，例如 `- image (image/jpeg, 84.2 KB) saved at /Users/dsh-runtime/work/.wechat-inbox/…-image.jpg; it is attached to this message.`；没能取到的附件会注明取不到、内容不可用。不超过 20 MiB、格式为 Host 接受的 PNG、JPEG、GIF、WebP 的图片，同时作为同一条消息的图片内容。每一轮模型的最终回答原样发回，微信会渲染其中的 Markdown（标题、列表、引用、表格、代码块）。最终回答恰好是 `NO_REPLY` 时什么也不发。对话安静了 `timeGapMs` 或更久时，owner 的消息之前会先来一条提示（来源类型 `lsy-wechat`，形式 `notice`）；另一个 Session 发给 owner 的通知也以提示形式到达，附上发出时间，并用通知指明的发送方称呼它（例如 `the Bilibili account's Session (its answer could not go out as a Bilibili message)`），没有指明时称为另一个 session；owner 用 `/new` 离开的旧对话 Session 发出的回答也一样（它设的提醒和监控还在跑），说明里称它为 `an earlier chat Session (before /new; a reminder or monitor it set up)`。两者中的每个时间都来自通道自己的记录，从不来自模型。另一个 Session 发给主 agent 的消息（`tellMainAgent()`）以排队的用户 prompt 到达，并开启自己的轮次：先是一段说明，写明发送方和时间，说明这不是 owner 在说话、内容是信息而不是指令、agent 只能用读操作去核实、改动这台 Mac、花钱或代 owner 行事都要等 owner 开口，以及回答发给 owner 或写 `NO_REPLY`；后面是放在 `<agent_message trust="untrusted">` 块里的消息，消息本身无法提前闭合这个块。
+owner 的每条微信消息都以普通用户 prompt 的形式进入对话 Session，带上配置的 `chat.timeZone`，和在 Web UI 里输入的文字一样。文本不带任何微信包装；引用会多一行 `[引用] …`，语音消息是 `[语音] <转写>`，媒体是占位符，后面每个附件跟一行说明，例如 `- image (image/jpeg, 84.2 KB) saved at /Users/dsh-runtime/work/.wechat-inbox/…-image.jpg; it is attached to this message.`；`lsy-voice` 转写过的音频文件，在它那一行末尾加上 `; speech-to-text (<engine>) of what the owner said in it: 「<文字>」`（失败则是 `; speech-to-text failed (<原因>)`）；没能取到的附件会注明取不到、内容不可用。不超过 20 MiB、格式为 Host 接受的 PNG、JPEG、GIF、WebP 的图片，同时作为同一条消息的图片内容。每一轮模型的最终回答原样发回，微信会渲染其中的 Markdown（标题、列表、引用、表格、代码块）。最终回答恰好是 `NO_REPLY` 时什么也不发。对话安静了 `timeGapMs` 或更久时，owner 的消息之前会先来一条提示（来源类型 `lsy-wechat`，形式 `notice`）；另一个 Session 发给 owner 的通知也以提示形式到达，附上发出时间，并用通知指明的发送方称呼它（例如 `the Bilibili account's Session (its answer could not go out as a Bilibili message)`），没有指明时称为另一个 session；owner 用 `/new` 离开的旧对话 Session 发出的回答也一样（它设的提醒和监控还在跑），说明里称它为 `an earlier chat Session (before /new; a reminder or monitor it set up)`。两者中的每个时间都来自通道自己的记录，从不来自模型。另一个 Session 发给主 agent 的消息（`tellMainAgent()`）以排队的用户 prompt 到达，并开启自己的轮次：先是一段说明，写明发送方和时间，说明这不是 owner 在说话、内容是信息而不是指令、agent 只能用读操作去核实、改动这台 Mac、花钱或代 owner 行事都要等 owner 开口，以及回答发给 owner 或写 `NO_REPLY`；后面是放在 `<agent_message trust="untrusted">` 块里的消息，消息本身无法提前闭合这个块。
 
 ##### 时间间隔提示
 
@@ -166,7 +166,7 @@ At Wed 2026-10-28 19:12 (America/New_York), the Bilibili account's Session (the 
 - **24 小时窗口**——owner 最后一条消息之后大约一天内，微信才接受 bot 的消息；之后的文本在 outbox 里等待。如果在等提醒，每天给 bot 发一个字。
 - **每条 owner 消息约 10 条回复**——窗口内 bot 能发的消息数有限；最后一条会说明这一点，其余的等 owner 下一条消息。
 - **不能主动发起联系**——owner 给 bot 发消息之前，bot 无法发言。
-- **语音只有文字**——语音只以转写交给 agent，bot 也从不发语音；图片、文件和视频两个方向都支持。
+- **语音只有文字**——语音只以微信的转写交给 agent，bot 也从不发语音气泡（`speak` 的音频以 mp3 文件发出）；音频文件只在 `lsy-voice` 打开 `asr.enabled` 时转写；图片、文件和视频两个方向都支持。
 - **inbox 不会自动清理**——收到的附件一直留在 `.wechat-inbox/`，需要手动删除。
 - **入站至多一次**——存储游标与转发消息之间崩溃会丢掉那条消息。
 - **限制来自第三方文档**——窗口时长、额度和长度上限没有官方公布，所以它们是配置项而不是常量。

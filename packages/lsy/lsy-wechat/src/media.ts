@@ -53,7 +53,7 @@ export interface DownloadOptions {
 const FILE_TYPES: Readonly<Record<string, string>> = {
   '.pdf': 'application/pdf', '.txt': 'text/plain', '.md': 'text/markdown', '.csv': 'text/csv', '.json': 'application/json',
   '.zip': 'application/zip', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
-  '.mp3': 'audio/mpeg', '.mp4': 'video/mp4', '.mov': 'video/quicktime',
+  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.ogg': 'audio/ogg', '.flac': 'audio/flac', '.aac': 'audio/aac', '.mp4': 'video/mp4', '.mov': 'video/quicktime',
   '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
@@ -227,9 +227,12 @@ export function describeMedia(media: InboundMedia): string {
 /** Largest image handed to the Session as an image part; the Host's default image limit. */
 export const PROMPT_IMAGE_MAX_BYTES = 20 * 1024 * 1024
 
+/** Speech-to-text of a received audio file: what was said, or why it could not be read. */
+export type Transcription = { text: string; engine: string } | { failed: string }
+
 /** One media item of an owner message after the download attempt. */
 export type ReceivedMedia =
-  | { media: InboundMedia; path: string }
+  | { media: InboundMedia; path: string; transcript?: Transcription }
   | { failed: MediaKind; name: string; reason: string }
 
 /**
@@ -258,6 +261,11 @@ export function attachmentNote(received: readonly ReceivedMedia[], imagesAttache
       return `- ${what} could not be received (${item.reason}); its content is unavailable, so do not look for it on disk.`
     }
     const where = `- ${describeMedia(item.media)} saved at ${item.path}`
+    if (item.transcript !== undefined) {
+      return 'failed' in item.transcript
+        ? `${where}; speech-to-text failed (${item.transcript.failed}).`
+        : `${where}; speech-to-text (${item.transcript.engine}) of what the owner said in it: 「${item.transcript.text}」`
+    }
     if (!isPromptImage(item)) return `${where}.`
     return imagesAttached ? `${where}; it is attached to this message.` : `${where}; the current model does not accept images.`
   })
