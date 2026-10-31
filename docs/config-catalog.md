@@ -2564,6 +2564,31 @@ export type BalanceSourceKind = 'deepseek' | 'openrouter' | 'opencode-go'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-balance -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-cc-bridge -->
+<a id="deepseek-aidsh-fork-cc-bridge"></a>
+
+## `@deepseek-ai/dsh-fork-cc-bridge`
+
+- `inject`: `tools`
+- `source`: [`packages/fork/fork-cc-bridge/src/index.ts:29`](../packages/fork/fork-cc-bridge/src/index.ts)
+
+```ts config-catalog
+/** Bridge settings. */
+export interface Config {
+  /** Turn the whole bridge off: no tools, no connection, no inbound messages. */
+  enabled: boolean
+  /** The relay's DSH-facing unix socket. */
+  socketPath: string
+  /** Only the owner's chat Sessions (the main agent) may list and message Claude Code sessions. */
+  mainAgentOnly: boolean
+  /** Most Claude Code messages handed to the main agent per rolling hour; the rest are dropped and logged. */
+  inboundPerHour: number
+  /** Longest wait for the relay to answer a request. */
+  requestTimeoutMs: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-cc-bridge -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-event-bus -->
 <a id="deepseek-aidsh-fork-event-bus"></a>
 

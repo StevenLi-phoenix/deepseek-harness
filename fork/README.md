@@ -13,6 +13,7 @@ Deployment files for running this fork as an always-on, event-driven agent servi
 | [`profiles/event/`](profiles/event/) | Event profile: `package.json` (Web bundles plus the event bundle) and `cordis.patch.yml`, the owner's empty patch layer that Web UI settings write to |
 | [`deploy/RUNBOOK.md`](deploy/RUNBOOK.md) | Isolated deployment on the Mac mini: `dsh-runtime` user, LaunchDaemon, secrets, WeChat binding, verification |
 | [`deploy/`](deploy/) | `install-app.sh`, `setup-profile.sh` (links plugins and the bundle; creates the owner layer once), `check-setup-profile.sh`, `upgrade.sh`, `wechat-login.mjs`, `home.cordis.patch.yml`, LaunchDaemon template |
+| [`cc-bridge/`](cc-bridge/README.md) | Relay between the DSH agent and the owner's Claude Code sessions: `relay.py`, `install.sh`, the LaunchAgent template, tests |
 | [`../packages/fork/UPSTREAM.md`](../packages/fork/UPSTREAM.md) | Upstream baseline, copied packages, touched upstream files, upgrade procedure |
 
 ## Checks for the fork group
@@ -20,7 +21,8 @@ Deployment files for running this fork as an always-on, event-driven agent servi
 ```sh
 pnpm exec vitest run packages/fork
 pnpm exec vitest run packages/fork --coverage --coverage.include='packages/fork/*/src/**/*.ts'
-pnpm exec tsc -b packages/fork/fork-event-bus packages/fork/fork-github-sensor packages/fork/fork-tool-watch packages/fork/fork-wechat packages/fork/fork-qq packages/fork/fork-balance packages/fork/bili packages/fork/tool-bili
+pnpm exec tsc -b packages/fork/fork-cc-bridge packages/fork/fork-event-bus packages/fork/fork-github-sensor packages/fork/fork-tool-watch packages/fork/fork-wechat packages/fork/fork-qq packages/fork/fork-balance packages/fork/bili packages/fork/tool-bili
+python3 -m unittest discover -s fork/cc-bridge/tests
 pnpm exec tsc -p tsconfig.host.json --noEmit   # also type-checks tests
 pnpm exec tsx scripts/run-oxlint.ts packages/fork fork/deploy
 pnpm run constraints && pnpm run verify-product-use && pnpm run verify-tsconfig-paths

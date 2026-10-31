@@ -372,6 +372,7 @@ flowchart TD
   subgraph group_fork["packages/fork"]
     pkg_bili["bili"]
     pkg_fork_balance["fork-balance"]
+    pkg_fork_cc_bridge["fork-cc-bridge"]
     pkg_fork_event_bus["fork-event-bus"]
     pkg_fork_event_ingest["fork-event-ingest"]
     pkg_fork_github_sensor["fork-github-sensor"]
@@ -1069,6 +1070,9 @@ flowchart TD
   pkg_tool_lsp --> pkg_timeout
   pkg_tool_lsp --> pkg_tools
   pkg_tool_lsp --> pkg_working_directory
+  pkg_fork_cc_bridge --> pkg_agent
+  pkg_fork_cc_bridge --> pkg_fork_event_bus
+  pkg_fork_cc_bridge --> pkg_tools
   pkg_fork_memory --> pkg_agent
   pkg_fork_memory --> pkg_home_paths
   pkg_fork_memory --> pkg_llm
@@ -1896,6 +1900,7 @@ flowchart TD
 | [`tool-ask-user`](../packages/interaction/tool-ask-user) | `interaction` | [`agent`](../packages/core/agent), [`tools`](../packages/core/tools), [`user-questions`](../packages/interaction/user-questions) |
 | [`tool-jobs`](../packages/jobs/tool-jobs) | `jobs` | [`agent`](../packages/core/agent), [`jobs`](../packages/jobs/jobs), [`llm`](../packages/llm/llm), [`output-retention`](../packages/util/output-retention), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`tool-lsp`](../packages/lsp/tool-lsp) | `lsp` | [`llm`](../packages/llm/llm), [`lsp`](../packages/lsp/lsp), [`system-prompt`](../packages/core/system-prompt), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools), [`working-directory`](../packages/session/working-directory) |
+| [`fork-cc-bridge`](../packages/fork/fork-cc-bridge) | `fork` | [`agent`](../packages/core/agent), [`fork-event-bus`](../packages/fork/fork-event-bus), [`tools`](../packages/core/tools) |
 | [`fork-memory`](../packages/fork/fork-memory) | `fork` | [`agent`](../packages/core/agent), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`tools`](../packages/core/tools) |
 | [`fork-tool-voice`](../packages/fork/fork-tool-voice) | `fork` | [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-voice`](../packages/fork/fork-voice), [`tools`](../packages/core/tools) |
 | [`fork-tool-watch`](../packages/fork/fork-tool-watch) | `fork` | [`agent`](../packages/core/agent), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-github-sensor`](../packages/fork/fork-github-sensor), [`tools`](../packages/core/tools) |

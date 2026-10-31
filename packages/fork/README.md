@@ -34,6 +34,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`fork-sysmon/`](fork-sysmon/README.md) | Settings section with the Host machine's CPU, memory, power, temperature, and disk usage per volume |
 | [`fork-tool-monitor/`](fork-tool-monitor/README.md) | `monitor_start`, `monitor_stop`, `monitor_list` tools: a command's output lines come back to the same Session |
 | [`fork-tool-voice/`](fork-tool-voice/README.md) | `speak` tool: the agent turns text into speech and sends the audio to the owner on WeChat |
+| [`fork-cc-bridge/`](fork-cc-bridge/README.md) | `cc_list_sessions`, `cc_send` tools: talk to the owner's Claude Code sessions on this Mac through a relay |
 | [`fork-tool-watch/`](fork-tool-watch/README.md) | `watch_create`, `watch_list`, `watch_delete` tools: the agent manages its own watches |
 | [`fork-tool-wechat/`](fork-tool-wechat/README.md) | `wechat_send_file` tool: the agent sends pictures, videos, and files to the owner |
 | [`fork-voice/`](fork-voice/README.md) | `ctx.forkVoice`: text to speech (feiyu, Mac mini TTS fallback) and speech to text for audio files (asr-service, off by default) |

@@ -13,6 +13,7 @@
 | [`profiles/event/`](profiles/event/) | 事件 profile：`package.json`（Web bundle 加事件 bundle）与 `cordis.patch.yml`，即主人自己的空 patch 层，Web 设置页写入这里 |
 | [`deploy/RUNBOOK.md`](deploy/RUNBOOK.md) | Mac mini 上的隔离部署：`dsh-runtime` 用户、LaunchDaemon、密钥、微信绑定、验证 |
 | [`deploy/`](deploy/) | `install-app.sh`、`setup-profile.sh`（软链插件和 bundle，只在首次创建主人层）、`check-setup-profile.sh`、`upgrade.sh`、`wechat-login.mjs`、`home.cordis.patch.yml`、LaunchDaemon 模板 |
+| [`cc-bridge/`](cc-bridge/README.zh.md) | DSH agent 与 owner 的 Claude Code 会话之间的 relay：`relay.py`、`install.sh`、LaunchAgent 模板、测试 |
 | [`../packages/fork/UPSTREAM.md`](../packages/fork/UPSTREAM.md) | 上游基线、复制的包、改动过的上游文件、升级流程 |
 
 ## fork 组的检查
@@ -20,7 +21,8 @@
 ```sh
 pnpm exec vitest run packages/fork
 pnpm exec vitest run packages/fork --coverage --coverage.include='packages/fork/*/src/**/*.ts'
-pnpm exec tsc -b packages/fork/fork-event-bus packages/fork/fork-github-sensor packages/fork/fork-tool-watch packages/fork/fork-wechat packages/fork/fork-qq packages/fork/fork-balance packages/fork/bili packages/fork/tool-bili
+pnpm exec tsc -b packages/fork/fork-cc-bridge packages/fork/fork-event-bus packages/fork/fork-github-sensor packages/fork/fork-tool-watch packages/fork/fork-wechat packages/fork/fork-qq packages/fork/fork-balance packages/fork/bili packages/fork/tool-bili
+python3 -m unittest discover -s fork/cc-bridge/tests
 pnpm exec tsc -p tsconfig.host.json --noEmit   # also type-checks tests
 pnpm exec tsx scripts/run-oxlint.ts packages/fork fork/deploy
 pnpm run constraints && pnpm run verify-product-use && pnpm run verify-tsconfig-paths

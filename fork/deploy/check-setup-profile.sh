@@ -25,6 +25,7 @@ for id in fork-event-bus fork-github-sensor fork-wechat preset-unattended; do
 done
 /usr/bin/grep -q "@deepseek-ai/dsh-fork-memory" "$WORK/fresh.yml" || fail "unattended preset lacks fork-memory"
 /usr/bin/grep -q "@deepseek-ai/dsh-fork-tool-monitor" "$WORK/fresh.yml" || fail "unattended preset lacks fork-tool-monitor"
+/usr/bin/grep -q "@deepseek-ai/dsh-fork-cc-bridge" "$WORK/fresh.yml" || fail "unattended preset lacks fork-cc-bridge"
 /usr/bin/grep -q "^- id: fork-event-ingest$" "$WORK/fresh.yml" || fail "composition lacks fork-event-ingest"
 /usr/bin/grep -q "@deepseek-ai/dsh-fork-sysmon" "$WORK/fresh.yml" || fail "composition lacks fork-sysmon"
 /usr/bin/grep -q "^- id: owner-relay\$" "$WORK/fresh.yml" || fail "composition lacks owner-relay"
