@@ -2449,6 +2449,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'groupId', description: 'group number.' }, { name: 'text', description: 'what to send.' }],
         throws: ['{@link SendRefused} when a rule says no, or the protocol end is not connected.'],
       },
+      {
+        signature: 'forgetDigests(options: { groupId?: string; beforeMs?: number }): number',
+        description: 'Delete stored digests: the observer\'s learned knowledge. Raw messages age out by themselves.',
+        parameters: [{ name: 'options', description: 'one group and/or those made before `beforeMs`; at least one is required.' }],
+        returns: 'how many digests were deleted.',
+      },
     ],
   },
   {

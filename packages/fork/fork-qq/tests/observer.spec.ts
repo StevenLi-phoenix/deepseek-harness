@@ -224,6 +224,27 @@ describe('QqObserver recording', () => {
   })
 })
 
+describe('QqObserver retention', () => {
+  it('deletes raw messages and downloads older than 30 days but keeps digests', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(PNG)))
+    const h = await boot()
+    const now = Date.now()
+    h.fake.push(groupMessage(GROUP, USER, [{ type: 'text', data: { text: '三个月前的闲聊' } }, { type: 'image', data: { url: 'https://gchat.qpic.cn/a.jpg' } }], { time: Math.floor(now / 1000) - 90 * 86_400 }))
+    h.fake.push(groupMessage(GROUP, USER, '刚才的讨论内容', { time: Math.floor(now / 1000) - 60 }))
+    await until(() => dataOf(h.observer).stats()[0]?.messages === 2, 'both rows')
+    await until(() => dataOf(h.observer).mediaOf(1).some(m => m.localPath !== null), 'the image')
+    const path = dataOf(h.observer).mediaOf(1)[0]!.localPath!
+    dataOf(h.observer).insertDigest({ groupId: GROUP, fromRow: 1, toRow: 2, messageCount: 2, text: '摘要', model: 'm', createdAt: now - 80 * 86_400_000 })
+    await (h.observer as unknown as { prune(): Promise<void> }).prune()
+    expect(dataOf(h.observer).search('三个月前', { limit: 5 })).toEqual([])
+    expect(dataOf(h.observer).search('刚才的讨论', { limit: 5 })).toHaveLength(1)
+    expect(existsSync(path)).toBe(false)
+    expect(h.observer.digests({ groupId: GROUP, days: 365, limit: 5 })).toHaveLength(1)
+    expect(h.observer.forgetDigests({ groupId: GROUP })).toBe(1)
+    expect(() => h.observer.forgetDigests({})).toThrow()
+  })
+})
+
 describe('QqObserver connection and owner notices', () => {
   it('stays offline and says why while the token is missing', async () => {
     const h = await boot({ credentials: {}, connect: false })

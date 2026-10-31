@@ -73,6 +73,30 @@ describe('QqStore messages', () => {
   })
 })
 
+describe('QqStore retention and deletion', () => {
+  it('prunes messages older than a cutoff with their media and search entries, and lists their files', () => {
+    const old = store.insertMessage(message({ messageId: 'old', at: 100, text: '很久以前的讨论内容' }), [{ kind: 'image' }], 0)!
+    store.insertMessage(message({ messageId: 'new', at: 9000, text: '最近的讨论内容' }), [], 0)
+    store.setMediaFile(store.mediaOf(old)[0]!.id, { localPath: '/m/old.jpg', sha256: 'a', bytes: 1 })
+    expect(store.pruneMessages(5000)).toEqual({ messages: 1, files: ['/m/old.jpg'] })
+    expect(store.search('很久以前', { limit: 5 })).toEqual([])
+    expect(store.search('最近的', { limit: 5 })).toHaveLength(1)
+    expect(store.mediaOf(old)).toEqual([])
+    expect(store.pruneMessages(5000)).toEqual({ messages: 0, files: [] })
+  })
+
+  it('deletes digests by group or by date, never all at once by accident, and caps a group', () => {
+    for (let i = 1; i <= 4; i += 1) store.insertDigest({ groupId: 'g1', fromRow: i, toRow: i, messageCount: 1, text: `d${i}`, model: 'm', createdAt: i * 100 })
+    store.insertDigest({ groupId: 'g2', fromRow: 1, toRow: 1, messageCount: 1, text: 'other', model: 'm', createdAt: 50 })
+    expect(() => store.deleteDigests({})).toThrow('needs a group or a date')
+    expect(store.capDigests('g1', 3)).toBe(1)
+    expect(store.digests({ groupId: 'g1', limit: 9 }).map(d => d.text)).toEqual(['d4', 'd3', 'd2'])
+    expect(store.deleteDigests({ groupId: 'g1', beforeMs: 250 })).toBe(1)
+    expect(store.deleteDigests({ beforeMs: 1000 })).toBe(3)
+    expect(store.digests({ limit: 9 })).toEqual([])
+  })
+})
+
 describe('QqStore media, digests, and meta', () => {
   it('tracks downloaded bytes and finds media past retention', () => {
     const old = store.insertMessage(message({ messageId: 'old', at: 100 }), [{ kind: 'image' }], 0)!

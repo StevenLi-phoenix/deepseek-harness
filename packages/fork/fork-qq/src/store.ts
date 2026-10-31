@@ -381,6 +381,21 @@ export class QqStore {
     this.db.prepare('UPDATE media SET local_path = NULL WHERE id = ?').run(mediaId)
   }
 
+  /**
+   * Delete messages older than `beforeMs` with their media rows (the index follows).
+   * @returns how many messages went and the local files of their media, for the caller to delete.
+   */
+  pruneMessages(beforeMs: number): { messages: number; files: string[] } {
+    return this.transaction(() => {
+      const files = (this.db.prepare(`
+        SELECT media.local_path AS local_path FROM media JOIN messages ON messages.id = media.message_row
+        WHERE messages.at < ? AND media.local_path IS NOT NULL
+      `).all(beforeMs) as Row[]).map(row => String(row['local_path']))
+      const result = this.db.prepare('DELETE FROM messages WHERE at < ?').run(beforeMs)
+      return { messages: Number(result.changes), files }
+    })
+  }
+
   // ---- digests ----
 
   insertDigest(digest: NewDigest): number {
@@ -404,6 +419,35 @@ export class QqStore {
       text: String(row['text']), model: String(row['model']), usage: row['usage'] === null ? null : String(row['usage']),
       rawPath: row['raw_path'] === null ? null : String(row['raw_path']), createdAt: Number(row['created_at']),
     }))
+  }
+
+  /**
+   * Delete digests, optionally of one group and/or made before `beforeMs`.
+   * @returns how many were deleted.
+   */
+  deleteDigests(options: { groupId?: string; beforeMs?: number }): number {
+    const params: SQLInputValue[] = []
+    const where: string[] = []
+    if (options.groupId !== undefined) {
+      where.push('group_id = ?')
+      params.push(options.groupId)
+    }
+    if (options.beforeMs !== undefined) {
+      where.push('created_at < ?')
+      params.push(options.beforeMs)
+    }
+    if (where.length === 0) throw new Error('deleteDigests needs a group or a date')
+    return Number(this.db.prepare(`DELETE FROM digests WHERE ${where.join(' AND ')}`).run(...params).changes)
+  }
+
+  /** Keep the newest `keep` digests of a group and delete the rest. @returns how many were deleted. */
+  capDigests(groupId: string, keep: number): number {
+    const result = this.db.prepare(`
+      DELETE FROM digests WHERE group_id = ? AND id NOT IN (
+        SELECT id FROM digests WHERE group_id = ? ORDER BY created_at DESC, id DESC LIMIT ?
+      )
+    `).run(groupId, groupId, keep)
+    return Number(result.changes)
   }
 
   /** Row id the latest digest of a group reached, or 0. */
