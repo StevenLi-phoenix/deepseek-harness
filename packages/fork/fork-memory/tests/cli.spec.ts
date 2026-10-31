@@ -114,6 +114,13 @@ describe('memory-admin', () => {
     expect((await admin(['discard', 'ffffff'], dir)).code).toBe(1)
   })
 
+  it('stamps the history of what it does with its own origin, so a review shows who undid what', async () => {
+    const { dir, store, planted } = await seeded()
+    await admin(['revert', planted.id], dir)
+    const record = (await store.history()).at(-1)!
+    expect(record).toMatchObject({ op: 'revert', id: planted.id, origin: 'memory-admin' })
+  })
+
   it('rolls back a Session and erases an entry with every trace', async () => {
     const { dir, store, kept, planted } = await seeded()
     const dry = await admin(['rollback', '--session', 'bad', '--dry-run'], dir)
