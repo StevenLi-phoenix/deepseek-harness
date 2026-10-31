@@ -24,7 +24,7 @@ kind: "package-group"
 
 | 包 | 作用 |
 |---|---|
-| [`bili/`](bili/README.zh.md) | agent 自己的 B站账号：扫码登录、Cookie 刷新、受守卫保护的写操作、风控刹车、唤醒其 Session 的作息与收件箱，以及设置页 |
+| [`bili/`](bili/README.zh.md) | agent 自己的 B站账号，作为 bili-svc 的客户端：读取和不发言的操作走 bili-svc 的门，owner 的私信经它的回复闸门回复，以及只读的设置页卡片 |
 | [`lsy-balance/`](lsy-balance/README.zh.md) | 账号设置页里列出各供应商 key 余额或配额的卡片 |
 | [`lsy-event-bus/`](lsy-event-bus/README.zh.md) | 去重、回环抑制、订阅、合批、限流、通知与 Session 分发 |
 | [`lsy-event-ingest/`](lsy-event-ingest/README.zh.md) | `POST /hooks/lsy` 路由：主人自己的服务用每个来源一个的 bearer token 推送事件 |
@@ -45,7 +45,7 @@ kind: "package-group"
 | [`lsy-voice/`](lsy-voice/README.zh.md) | `ctx.lsyVoice`：文字转语音（feiyu，Mac mini TTS 兜底）与音频文件转文字（asr-service，默认关闭） |
 | [`lsy-wechat/`](lsy-wechat/README.zh.md) | 微信（iLink bot）通道：主人对话 Session、经 `owner-relay` 送达的回答，以及 `ctx.lsyNotifier` |
 | [`owner-relay/`](owner-relay/README.zh.md) | `ctx.ownerRelay`：所有被认领 Session 的最终回答走同一套规则，交给认领它的通道（微信、B站私信），发不出时带标签降级到微信 |
-| [`tool-bili/`](tool-bili/README.zh.md) | `bili` preset 的 B站工具：动态、借字幕看视频、评论、收件箱、受守卫保护的写操作与日记 |
+| [`tool-bili/`](tool-bili/README.zh.md) | `bili` preset 的 B站工具：动态、借字幕看视频、评论、收件箱，经 bili-svc 点赞、投币、关注和收藏，以及日记；不发言 |
 
 -----
 

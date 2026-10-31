@@ -364,6 +364,16 @@ bili-svc is a separate private service on this Mac (`app.lishuyu.bili.svc`, `127
 2. Check: `stdout.log` shows the `bili` source accepting events (`202`); a batch of new comments starts a `bili-up` Session; `up_status` in it reports the gate mode. The ledger and the brake live in bili-svc (`bili-svc ledger`, `bili-svc gate status`).
 3. Stop: `bili-svc gate readonly` (replies stop at once, reads continue), or remove the `bili-digest` subscription. Only a person lifts a brake: `bili-svc gate release`, then `bili-svc gate mode auto`.
 
+## 16b. The agent's own Bilibili account through bili-svc
+
+`ctx.bili` (the `bili` preset's account, 魔女的猫猫) holds no Bilibili session: bili-svc holds and refreshes it, and every read, action, and reply to the owner goes through bili-svc. One account has one session owner, so bili-svc takes the session over before this build runs, and DSH's old copy is retired.
+
+1. In bili-svc's configuration: `[accounts.maomao]` with `refresh_mode = "owner"` and the account's `mid`, `routes.agent_account = "maomao"`, and the owner's main UID in `gate.owner_mids` (the Gate answers the owner without its classifier, cap, or time window). Import the session once, from the record DSH kept (`bili/account` in `/Users/dsh-runtime/.dsh/.credentials.yaml`), piped straight into `bili-svc session import maomao` (JSON `{ "cookies": {…}, "refresh_token": "…" }` on stdin; nothing is echoed); then `bili-svc session status maomao` shows its mid and fingerprint. From then on only bili-svc refreshes it: delete the `bili/account` record (back the file up first), since a second refresher would invalidate bili-svc's refresh token.
+2. A token for DSH, made on the Mac without printing it, written to the service `.env` (back it up first; restart afterwards): `BILI_SVC_TOKEN_BILI` from `bili-svc token create --name bili --scopes bili,read,reply --accounts maomao`.
+3. Install the build and restart (step 7 and Operate). `BILI_SVC_URL` changes the address from `http://127.0.0.1:8097` if bili-svc moves.
+4. Check: Settings → B站账号 shows 魔女的猫猫 with its UID and 在线, read from bili-svc's `/v1/status`; a message from the owner's main account to the account is answered as a Bilibili message within ten minutes, and `bili-svc ledger` lists it as a DM reply; `bili_like` in the `bili` Session appears in `bili-svc ledger` as `like`. Without the token, `stdout.log` shows `BILI_SVC_TOKEN_BILI is not set` on the first call and nothing reaches Bilibili.
+5. Stop: `bili-svc gate readonly` holds every action and reply of both accounts at once (an answer to the owner then comes on WeChat with `held`); only a person lifts a brake: `bili-svc gate release`, then `bili-svc gate mode auto`.
+
 ## 17. Unified warning intake (AMS)
 
 Warnings do not enter DSH through an ingest source. Every machine hands them to **AMS** (agent-managed-services, `ams run` as `dsh-runtime`), which appends them to the escalation journal that the journal Monitor reads. Pieces:

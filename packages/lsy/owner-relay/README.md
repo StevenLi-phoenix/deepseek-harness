@@ -66,7 +66,7 @@ Claims live in memory. Each channel claims its stored Sessions again when it reg
 | Channel | Plugin | Claims | Delivers | `fallbackLabel` |
 |---|---|---|---|---|
 | `wechat` | `@deepseek-ai/dsh-lsy-wechat` | Every chat Session it remembers (current and earlier ones) | A WeChat reply; an earlier chat Session's answer is also copied into the current one | None: it is the notifier |
-| `bili-dm` | `@deepseek-ai/dsh-bili` | The account's Sessions | Bilibili messages for a turn a wake started (`kept` otherwise, and `kept` for an answer the watch floor holds back while the wake keeps browsing); what cannot go out goes to WeChat with its reason and the label | `the Bilibili account's Session (its answer could not go out as a Bilibili message)` |
+| `bili-dm` | `@deepseek-ai/dsh-bili` | The account's Sessions | Replies through bili-svc's Reply Gate for a turn the owner's own Bilibili messages started (`kept` otherwise); what the Gate holds or blocks goes to WeChat with its reason and the label | `the Bilibili account's Session (its answer could not go out as a Bilibili message)` |
 
 `@deepseek-ai/dsh-lsy-event-bus` asks `ownerOf()` before it follows a reminder or monitor turn, so a claimed Session's turn reaches the owner once, through its channel.
 

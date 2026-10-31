@@ -24,7 +24,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 
 | Package | Role |
 |---|---|
-| [`bili/`](bili/README.md) | The agent's own Bilibili account: QR sign-in, cookie refresh, guarded writes, a risk brake, a body clock and inbox that wake its Session, and a Settings section |
+| [`bili/`](bili/README.md) | The agent's own Bilibili account as a client of bili-svc: reads and non-speech actions through bili-svc's door, the owner's messages answered through its Reply Gate, and a read-only Settings card |
 | [`lsy-balance/`](lsy-balance/README.md) | Account settings card with the balance or quota of every provider key |
 | [`lsy-event-bus/`](lsy-event-bus/README.md) | Dedupe, loop suppression, subscriptions, coalescing, rate limits, notify and Session dispatch |
 | [`lsy-event-ingest/`](lsy-event-ingest/README.md) | `POST /hooks/lsy` route: the owner's own services push events under one bearer token per source |
@@ -45,7 +45,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`lsy-voice/`](lsy-voice/README.md) | `ctx.lsyVoice`: text to speech (feiyu, Mac mini TTS fallback) and speech to text for audio files (asr-service, off by default) |
 | [`lsy-wechat/`](lsy-wechat/README.md) | WeChat (iLink bot) channel: owner chat Session, its answers through `owner-relay`, and `ctx.lsyNotifier` |
 | [`owner-relay/`](owner-relay/README.md) | `ctx.ownerRelay`: one rule set for every claimed Session's final answer, handed to its channel (WeChat, Bilibili messages) with a labelled WeChat fallback |
-| [`tool-bili/`](tool-bili/README.md) | Bilibili tools of the `bili` preset: feeds, videos through subtitles, comments, inbox, guarded writes, and a journal |
+| [`tool-bili/`](tool-bili/README.md) | Bilibili tools of the `bili` preset: feeds, videos through subtitles, comments, inbox, likes, coins, follows, and saves through bili-svc, and a journal; no speech |
 
 -----
 

@@ -66,7 +66,7 @@ agent 的某个 Session 结束一轮时你会收到什么，由一个地方决�
 | 通道 | 插件 | 认领 | 投递 | `fallbackLabel` |
 |---|---|---|---|---|
 | `wechat` | `@deepseek-ai/dsh-lsy-wechat` | 它记得的每个对话 Session（当前的和更早的） | 一条微信回复；更早的对话 Session 的回答还会复制一份到当前对话里 | 无：它就是通知器 |
-| `bili-dm` | `@deepseek-ai/dsh-bili` | 账号的 Session | 唤醒开启的一轮发 B站私信（否则 `kept`；回答被观看下限压住、这次唤醒还在继续浏览时也是 `kept`）；发不出去的部分带着原因和标签改发微信 | `the Bilibili account's Session (its answer could not go out as a Bilibili message)` |
+| `bili-dm` | `@deepseek-ai/dsh-bili` | 账号的 Session | owner 本人的 B站私信开启的一轮，经 bili-svc 的回复闸门回复（否则 `kept`）；闸门扣下或拦住的部分带着原因和标签改发微信 | `the Bilibili account's Session (its answer could not go out as a Bilibili message)` |
 
 `@deepseek-ai/dsh-lsy-event-bus` 在跟踪提醒或监控那一轮之前先问 `ownerOf()`，所以被认领的 Session 的一轮只经由它的通道送达主人一次。
 
