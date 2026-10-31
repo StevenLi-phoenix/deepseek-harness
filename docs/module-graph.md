@@ -370,6 +370,7 @@ flowchart TD
   subgraph group_lsy["packages/lsy"]
     pkg_bili["bili"]
     pkg_lsy_balance["lsy-balance"]
+    pkg_lsy_cc_bridge["lsy-cc-bridge"]
     pkg_lsy_event_bus["lsy-event-bus"]
     pkg_lsy_event_ingest["lsy-event-ingest"]
     pkg_lsy_github_sensor["lsy-github-sensor"]
@@ -1067,6 +1068,9 @@ flowchart TD
   pkg_tool_lsp --> pkg_timeout
   pkg_tool_lsp --> pkg_tools
   pkg_tool_lsp --> pkg_working_directory
+  pkg_lsy_cc_bridge --> pkg_agent
+  pkg_lsy_cc_bridge --> pkg_lsy_event_bus
+  pkg_lsy_cc_bridge --> pkg_tools
   pkg_lsy_memory --> pkg_agent
   pkg_lsy_memory --> pkg_home_paths
   pkg_lsy_memory --> pkg_llm
@@ -1894,6 +1898,7 @@ flowchart TD
 | [`tool-ask-user`](../packages/interaction/tool-ask-user) | `interaction` | [`agent`](../packages/core/agent), [`tools`](../packages/core/tools), [`user-questions`](../packages/interaction/user-questions) |
 | [`tool-jobs`](../packages/jobs/tool-jobs) | `jobs` | [`agent`](../packages/core/agent), [`jobs`](../packages/jobs/jobs), [`llm`](../packages/llm/llm), [`output-retention`](../packages/util/output-retention), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`tool-lsp`](../packages/lsp/tool-lsp) | `lsp` | [`llm`](../packages/llm/llm), [`lsp`](../packages/lsp/lsp), [`system-prompt`](../packages/core/system-prompt), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools), [`working-directory`](../packages/session/working-directory) |
+| [`lsy-cc-bridge`](../packages/lsy/lsy-cc-bridge) | `lsy` | [`agent`](../packages/core/agent), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`tools`](../packages/core/tools) |
 | [`lsy-memory`](../packages/lsy/lsy-memory) | `lsy` | [`agent`](../packages/core/agent), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`tools`](../packages/core/tools) |
 | [`lsy-tool-voice`](../packages/lsy/lsy-tool-voice) | `lsy` | [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-voice`](../packages/lsy/lsy-voice), [`tools`](../packages/core/tools) |
 | [`lsy-tool-watch`](../packages/lsy/lsy-tool-watch) | `lsy` | [`agent`](../packages/core/agent), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-github-sensor`](../packages/lsy/lsy-github-sensor), [`tools`](../packages/core/tools) |

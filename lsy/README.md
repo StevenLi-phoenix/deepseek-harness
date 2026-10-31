@@ -13,6 +13,7 @@ Deployment files for running this fork as an always-on, event-driven agent servi
 | [`profiles/event/`](profiles/event/) | Event profile: `package.json` (Web bundles plus the event bundle) and `cordis.patch.yml`, the owner's empty patch layer that Web UI settings write to |
 | [`deploy/RUNBOOK.md`](deploy/RUNBOOK.md) | Isolated deployment on the Mac mini: `dsh-runtime` user, LaunchDaemon, secrets, WeChat binding, verification |
 | [`deploy/`](deploy/) | `install-app.sh`, `setup-profile.sh` (links plugins and the bundle; creates the owner layer once), `check-setup-profile.sh`, `upgrade.sh`, `wechat-login.mjs`, `home.cordis.patch.yml`, LaunchDaemon template |
+| [`cc-bridge/`](cc-bridge/README.md) | Relay between the DSH agent and the owner's Claude Code sessions: `relay.py`, `install.sh`, the LaunchAgent template, tests |
 | [`../packages/lsy/UPSTREAM.md`](../packages/lsy/UPSTREAM.md) | Upstream baseline, copied packages, touched upstream files, upgrade procedure |
 
 ## Checks for the lsy group
@@ -20,7 +21,8 @@ Deployment files for running this fork as an always-on, event-driven agent servi
 ```sh
 pnpm exec vitest run packages/lsy
 pnpm exec vitest run packages/lsy --coverage --coverage.include='packages/lsy/*/src/**/*.ts'
-pnpm exec tsc -b packages/lsy/lsy-event-bus packages/lsy/lsy-github-sensor packages/lsy/lsy-tool-watch packages/lsy/lsy-wechat packages/lsy/lsy-qq packages/lsy/lsy-balance packages/lsy/bili packages/lsy/tool-bili
+pnpm exec tsc -b packages/lsy/lsy-cc-bridge packages/lsy/lsy-event-bus packages/lsy/lsy-github-sensor packages/lsy/lsy-tool-watch packages/lsy/lsy-wechat packages/lsy/lsy-qq packages/lsy/lsy-balance packages/lsy/bili packages/lsy/tool-bili
+python3 -m unittest discover -s lsy/cc-bridge/tests
 pnpm exec tsc -p tsconfig.host.json --noEmit   # also type-checks tests
 pnpm exec tsx scripts/run-oxlint.ts packages/lsy lsy/deploy
 pnpm run constraints && pnpm run verify-product-use && pnpm run verify-tsconfig-paths

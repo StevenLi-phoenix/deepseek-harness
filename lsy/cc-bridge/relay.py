@@ -7,7 +7,7 @@ user (`dsh-runtime`) cannot reach them. This relay runs as the owner and sits be
   Claude Code sessions  <-- cc-peer protocol -->  relay  <-- JSON lines -->  DSH (dsh-runtime)
 
   * Inbox socket (0600, state dir 0700): Claude Code sessions send to it with their native
-    SendMessage tool (`uds:<path>`), and it shows up in their ListAgents as the peer `dsh`.
+    SendMessage tool (`uds:<path>`), and it shows up in their ListAgents as the peer `dsh-agent`.
   * DSH socket (0600 + an ACL entry for `dsh-runtime`, in a 0700 directory): the DSH plugin lists
     sessions, sends to one, and receives what sessions sent.
 
@@ -343,7 +343,7 @@ class Config:
         self.dsh_socket = kw.get('dsh_socket') or os.path.join(self.dsh_dir, 'dsh.sock')
         self.dsh_user = kw.get('dsh_user', 'dsh-runtime')
         self.allowed_uids: Set[int] = set(kw.get('allowed_uids') or [])
-        self.peer_name = kw.get('peer_name') or 'dsh'
+        self.peer_name = kw.get('peer_name') or 'dsh-agent'
         self.register = kw.get('register', True)
         self.max_text = kw.get('max_text') or DEFAULT_MAX_TEXT
         self.send_per_min = kw.get('send_per_min') or 6      # per target session
@@ -692,6 +692,21 @@ class Relay:
 # ---------------------------------------------------------------------------------------------
 
 
+def setup_logging(verbose: bool, log_file: str) -> None:
+    from logging.handlers import RotatingFileHandler
+    fmt = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG if verbose else logging.INFO)
+    os.umask(0o077)
+    os.makedirs(os.path.dirname(log_file), mode=0o700, exist_ok=True)
+    handlers = [RotatingFileHandler(log_file, maxBytes=1 << 20, backupCount=5)]
+    if sys.stderr.isatty():
+        handlers.append(logging.StreamHandler(sys.stderr))
+    for handler in handlers:
+        handler.setFormatter(fmt)
+        root.addHandler(handler)
+
+
 def parse_args(argv: Optional[List[str]] = None) -> Config:
     p = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     p.add_argument('--state-dir')
@@ -700,15 +715,15 @@ def parse_args(argv: Optional[List[str]] = None) -> Config:
     p.add_argument('--dsh-dir')
     p.add_argument('--dsh-socket')
     p.add_argument('--dsh-user', default=os.environ.get('DSH_CC_BRIDGE_DSH_USER', 'dsh-runtime'))
-    p.add_argument('--name', dest='peer_name', default=os.environ.get('DSH_CC_BRIDGE_NAME', 'dsh'))
+    p.add_argument('--name', dest='peer_name', default=os.environ.get('DSH_CC_BRIDGE_NAME', 'dsh-agent'))
     p.add_argument('--no-register', dest='register', action='store_false', help='do not write the peer record ListAgents reads')
     p.add_argument('--targets', default=os.environ.get('DSH_CC_BRIDGE_TARGETS'),
                    help='comma-separated session names DSH may message (default: any)')
     p.add_argument('--max-text', type=int, default=DEFAULT_MAX_TEXT)
     p.add_argument('--verbose', action='store_true')
+    p.add_argument('--log-file', help='default: <state dir>/relay.log, rotated at 1 MB, 5 files')
     a = p.parse_args(argv)
-    logging.basicConfig(level=logging.DEBUG if a.verbose else logging.INFO, stream=sys.stderr,
-                        format='%(asctime)s %(levelname)s %(message)s')
+    setup_logging(a.verbose, a.log_file or os.path.join(a.state_dir or os.path.expanduser('~/.local/state/dsh-cc-bridge'), 'relay.log'))
     targets = [t.strip().lower() for t in a.targets.split(',') if t.strip()] if a.targets else None
     return Config(state_dir=a.state_dir, sessions_dir=a.sessions_dir, inbox_socket=a.inbox_socket, dsh_dir=a.dsh_dir,
                   dsh_socket=a.dsh_socket, dsh_user=a.dsh_user, peer_name=a.peer_name, register=a.register,

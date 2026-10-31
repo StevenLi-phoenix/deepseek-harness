@@ -222,6 +222,27 @@ Add `--dry-run` to only count. The next Session sees the entries; no restart is 
 5. Stop it: delete `LSY_QQ_APP_SECRET` from `.env` and restart, or `- id: lsy-qq` with `disabled: true` in the owner layer. Roll the secret on `q.qq.com` if it leaked.
 
 The QQ Sessions use the `qq` preset (persona, time, compaction; no shell, files, or web). `/new` in a chat starts a fresh Session. An answer QQ refuses (a reply window that passed, a quota) reaches the owner on WeChat as a note labelled with the QQ Session.
+## 14. Claude Code bridge (optional)
+
+The agent and the owner's Claude Code sessions on this Mac talk through a relay that runs as `lishuyu`, because the sessions' sockets (`/tmp/cc-socks`, 0600) belong to that account. The `unattended` preset already mounts the `lsy-cc-bridge` plugin; without the relay its tools answer "not connected". Details, permissions, and the security model: [`../cc-bridge/README.md`](../cc-bridge/README.md).
+
+Install as `lishuyu` (no sudo; from SSH or any shell on the Mac):
+
+```sh
+/Users/Shared/lsy-dsh/current/lsy/cc-bridge/install.sh     # copies relay.py to ~/.local/libexec/dsh-cc-bridge, loads gui/501/app.lishuyu.dsh-cc-bridge
+```
+
+Verify the Claude Code bridge:
+
+```sh
+launchctl print gui/$(id -u)/app.lishuyu.dsh-cc-bridge | grep -E 'state|pid'
+ls -lde /Users/Shared/dsh-cc-bridge /Users/Shared/dsh-cc-bridge/dsh.sock         # drwx------+ and srw-------+, one ACL entry for dsh-runtime
+sudo -n -u dsh-runtime /usr/bin/python3 -c 'import socket,json;s=socket.socket(socket.AF_UNIX);s.settimeout(5);s.connect("/Users/Shared/dsh-cc-bridge/dsh.sock");s.sendall(b"{\"id\":1,\"op\":\"list\"}\n");print(s.recv(65536).decode()[:300])'
+tail -n 20 ~/.local/state/dsh-cc-bridge/relay.log
+grep 'cc-bridge' /Users/dsh-runtime/logs/stdout.log | tail -5                    # "connected to the relay"
+```
+
+After a Claude Code update, send one message each way before relying on the bridge: in a test session, "use ListAgents, then SendMessage `hello` to `dsh-agent`" must log `inbox: message … from <session>` in `relay.log`, and the agent's `cc_send` to that session must show `send: … <- … chars` followed by the session reading it. Stop the bridge with `launchctl bootout gui/$(id -u)/app.lishuyu.dsh-cc-bridge`, remove it with `install.sh --uninstall`, or switch the agent side off with `enabled: false` in the `lsy-cc-bridge` row of the profile patch.
 
 ## Operator access without passwords (optional)
 

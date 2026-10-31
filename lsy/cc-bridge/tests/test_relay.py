@@ -13,6 +13,7 @@ import sys
 import tempfile
 import unittest
 
+sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import relay  # noqa: E402
 
@@ -204,7 +205,7 @@ class RelayCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(frame['priority'], 'next')
         self.assertEqual(frame['from'], relay.encode_address(self.cfg.inbox_socket))
         parsed = relay.parse_wrapper(frame['message']['content'])
-        self.assertEqual(parsed['fromName'], 'dsh')
+        self.assertEqual(parsed['fromName'], 'dsh-agent')
         self.assertEqual(parsed['fromMode'], 'prompting')
         self.assertIn('Not the user', parsed['body'])
         self.assertIn('please summarise the repo', parsed['body'])

@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write lsy/cc-bridge/README.md
+/cc-bridge-the-relay-between-the-dsh-agent-and-claude-code-sessions:
+  en: 9f96b38643649c81
+  zh: b8d5fe624a9644cb
+/cc-bridge-the-relay-between-the-dsh-agent-and-claude-code-sessions/why-a-relay:
+  en: d2c284f3e3c8d97b
+  zh: d992eadaa10443f2
+/cc-bridge-the-relay-between-the-dsh-agent-and-claude-code-sessions/what-is-where:
+  en: 3bd7e4830ca6a44c
+  zh: 208e7b70c2086e0a
+/cc-bridge-the-relay-between-the-dsh-agent-and-claude-code-sessions/security-model:
+  en: e31e8d29a7132e58
+  zh: 3b1828c06d501eba
+/cc-bridge-the-relay-between-the-dsh-agent-and-claude-code-sessions/claude-code-s-peer-protocol-research-notes:
+  en: c6f9ef83e3a81bc8
+  zh: cdfe2ff05573574b
+/cc-bridge-the-relay-between-the-dsh-agent-and-claude-code-sessions/dsh-facing-protocol:
+  en: d0a15915dc713a2d
+  zh: fb2a585699688a63
+/cc-bridge-the-relay-between-the-dsh-agent-and-claude-code-sessions/install-operate-remove:
+  en: 85931427aceb3eeb
+  zh: fbb00c7fb2849d3c
+/cc-bridge-the-relay-between-the-dsh-agent-and-claude-code-sessions/tests:
+  en: 8b1a2bca483ccee0
+  zh: 7b9fc215b23c8d37

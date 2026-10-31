@@ -572,6 +572,7 @@
     { "path": "./packages/lsy/lsy-memory" },
     { "path": "./packages/lsy/lsy-event-ingest" },
     { "path": "./packages/lsy/lsy-tool-monitor" },
+    { "path": "./packages/lsy/lsy-cc-bridge" },
     { "path": "./packages/lsy/lsy-sysmon/tsconfig.host.json" },
     { "path": "./packages/lsy/bili/tsconfig.host.json" },
     { "path": "./packages/lsy/tool-bili" },

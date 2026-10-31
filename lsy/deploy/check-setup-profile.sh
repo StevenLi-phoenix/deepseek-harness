@@ -25,6 +25,7 @@ for id in lsy-event-bus lsy-github-sensor lsy-wechat preset-unattended; do
 done
 /usr/bin/grep -q "@deepseek-ai/dsh-lsy-memory" "$WORK/fresh.yml" || fail "unattended preset lacks lsy-memory"
 /usr/bin/grep -q "@deepseek-ai/dsh-lsy-tool-monitor" "$WORK/fresh.yml" || fail "unattended preset lacks lsy-tool-monitor"
+/usr/bin/grep -q "@deepseek-ai/dsh-lsy-cc-bridge" "$WORK/fresh.yml" || fail "unattended preset lacks lsy-cc-bridge"
 /usr/bin/grep -q "^- id: lsy-event-ingest$" "$WORK/fresh.yml" || fail "composition lacks lsy-event-ingest"
 /usr/bin/grep -q "@deepseek-ai/dsh-lsy-sysmon" "$WORK/fresh.yml" || fail "composition lacks lsy-sysmon"
 /usr/bin/grep -q "^- id: owner-relay\$" "$WORK/fresh.yml" || fail "composition lacks owner-relay"
