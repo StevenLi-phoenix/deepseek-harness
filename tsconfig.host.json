@@ -563,6 +563,7 @@
     { "path": "./packages/lsy/lsy-event-bus" },
     { "path": "./packages/lsy/owner-relay" },
     { "path": "./packages/lsy/lsy-qq" },
+    { "path": "./packages/lsy/lsy-qqbot" },
     { "path": "./packages/lsy/lsy-tool-qq" },
     { "path": "./packages/lsy/lsy-wechat" },
     { "path": "./packages/lsy/lsy-tool-watch" },

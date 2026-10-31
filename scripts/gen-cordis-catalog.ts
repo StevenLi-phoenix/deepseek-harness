@@ -157,6 +157,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   lsyNotifier: 'lsy.md',
   ownerRelay: 'lsy.md',
   lsyQq: 'lsy.md',
+  lsyQqBot: 'lsy.md',
   lsyVoice: 'lsy.md',
   bili: 'lsy.md',
   workspaceRegistry: 'workspace.md',

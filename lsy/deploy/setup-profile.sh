@@ -54,7 +54,7 @@ for (const name of ['@deepseek-ai/dsh-webhook', '@deepseek-ai/dsh-webhook-github
   '@deepseek-ai/dsh-lsy-wechat', '@deepseek-ai/dsh-lsy-tool-watch', '@deepseek-ai/dsh-lsy-tool-wechat', '@deepseek-ai/dsh-lsy-balance', '@deepseek-ai/dsh-lsy-memory',
   '@deepseek-ai/dsh-lsy-event-ingest', '@deepseek-ai/dsh-lsy-tool-monitor', '@deepseek-ai/dsh-lsy-cc-bridge', '@deepseek-ai/dsh-lsy-sysmon', '@deepseek-ai/dsh-bili',
   '@deepseek-ai/dsh-lsy-voice', '@deepseek-ai/dsh-lsy-tool-voice',
-  '@deepseek-ai/dsh-tool-bili', '@deepseek-ai/dsh-owner-relay', '@deepseek-ai/dsh-lsy-qq', '@deepseek-ai/dsh-lsy-tool-qq']) {
+  '@deepseek-ai/dsh-tool-bili', '@deepseek-ai/dsh-owner-relay', '@deepseek-ai/dsh-lsy-qq', '@deepseek-ai/dsh-lsy-tool-qq', '@deepseek-ai/dsh-lsy-qqbot']) {
   link(name, join(prefix, 'node_modules', name))
 }
 link('@deepseek-ai/dsh-lsy-event-bundle', bundleDir)

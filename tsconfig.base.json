@@ -490,6 +490,7 @@
       "@deepseek-ai/dsh-lsy-github-sensor": ["./packages/lsy/lsy-github-sensor/src"],
       "@deepseek-ai/dsh-lsy-memory": ["./packages/lsy/lsy-memory/src"],
       "@deepseek-ai/dsh-lsy-qq": ["./packages/lsy/lsy-qq/src"],
+      "@deepseek-ai/dsh-lsy-qqbot": ["./packages/lsy/lsy-qqbot/src"],
       "@deepseek-ai/dsh-lsy-sysmon": ["./packages/lsy/lsy-sysmon/src"],
       "@deepseek-ai/dsh-lsy-tool-monitor": ["./packages/lsy/lsy-tool-monitor/src"],
       "@deepseek-ai/dsh-lsy-tool-qq": ["./packages/lsy/lsy-tool-qq/src"],

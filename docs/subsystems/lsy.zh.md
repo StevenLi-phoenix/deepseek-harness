@@ -483,6 +483,24 @@ async sendGroupMessage(groupId: string, text: string): Promise<void>
 
 Source: [`packages/lsy/lsy-qq/src/index.ts`](../../packages/lsy/lsy-qq/src/index.ts)
 
+<a id="ctxlsyqqbot--qqbotchannel"></a>
+
+### `ctx.lsyQqBot` — `QqBotChannel`
+
+QQ channel. Connects the official bot to the QQ Open Platform, answers only the openids in `allow`, gives each private chat and each group its own chat Session, and delivers each turn's final answer that `ctx.ownerRelay` hands its `qqbot` channel. QQ lets a bot reply to a message within a window (about an hour in private chats, minutes in groups) and at most five times; later answers go out as proactive messages, and an answer QQ refuses falls back to `ctx.lsyNotifier` through the relay.
+
+```ts cordis-catalog
+/**
+ * Whether this channel created a Session: true for every chat Session it remembers, all of which
+ * it claims with `ctx.ownerRelay`.
+ * @param sessionId - Session to check.
+ * @returns true for the current and earlier chat Sessions of every peer.
+ */
+ownsSession(sessionId: string): boolean
+```
+
+Source: [`packages/lsy/lsy-qqbot/src/index.ts`](../../packages/lsy/lsy-qqbot/src/index.ts)
+
 <a id="ctxlsyvoice--lsyvoice"></a>
 
 ### `ctx.lsyVoice` — `LsyVoice`

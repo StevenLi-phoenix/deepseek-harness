@@ -2888,6 +2888,65 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-qq -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-qqbot -->
+<a id="deepseek-aidsh-lsy-qqbot"></a>
+
+## `@deepseek-ai/dsh-lsy-qqbot`
+
+- `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle` · `credentials`
+- `source`: [`packages/lsy/lsy-qqbot/src/index.ts:57`](../packages/lsy/lsy-qqbot/src/index.ts)
+
+```ts config-catalog
+/** Channel configuration. */
+export interface Config {
+  /** Name of the credential (`$DSH_HOME/.env` variable or stored credential) holding the bot's AppID. */
+  appIdEnv: string
+  /** Name of the credential holding the bot's AppSecret. */
+  appSecretEnv: string
+  /** Who is answered. */
+  allow: AllowConfig
+  /** Chat Session settings. */
+  session: SessionConfig
+  /** Code points per QQ message; longer answers are split. */
+  maxMessageChars: number
+  /** Messages one answer may be split into (QQ allows five replies to one inbound message). */
+  maxReplyParts: number
+  /** Messages one peer may send per minute before the rest are dropped. */
+  perPeerPerMinute: number
+  /** How long a private message keeps its reply window open, in milliseconds. */
+  c2cReplyWindowMs: number
+  /** How long a group message keeps its reply window open, in milliseconds. */
+  groupReplyWindowMs: number
+  /** Tell the owner (through `ctx.lsyNotifier`) when a sender outside the allowlist writes, so its openid can be added. */
+  notifyUnknown: boolean
+  /** Credential re-check period while the AppID or AppSecret is missing, in milliseconds. */
+  credentialPollMs: number
+}
+
+/** Who may talk to the bot: openids QQ assigned, listed here. Both lists start empty, so nobody gets an answer. */
+export interface AllowConfig {
+  /** `user_openid`s whose private messages are answered. */
+  users: string[]
+  /** `group_openid`s whose @ messages are answered, from any member. */
+  groups: string[]
+}
+
+/** How a peer's chat Session is created. */
+export interface SessionConfig {
+  /** Absolute directory the chat Sessions work in; created before every forwarded message. */
+  workspacePath: string
+  /** Agent preset of the chat Sessions; the bundle defines `qqbot` with a persona and no shell, file, or web tools. */
+  agentPreset: string
+  /** Permission preset applied when a chat Session is created. */
+  permissionPreset: string
+  /** Session title prefix; the peer's short id follows. */
+  titlePrefix: string
+  /** IANA time zone sent with every prompt. */
+  timeZone: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-qqbot -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-sysmon -->
 <a id="deepseek-aidsh-lsy-sysmon"></a>
 

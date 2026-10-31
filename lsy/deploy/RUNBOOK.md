@@ -222,6 +222,27 @@ Where the data is: `/Users/dsh-runtime/.dsh/lsy-qq/` (database `qq.db`, `media/`
 
 Stop or remove: `lsy/deploy/napcat/napcat.sh stop` (the account goes offline; the observer reconnects when it returns and tells the owner on WeChat after ten minutes without a connection), or `- id: lsy-qq` with `disabled: true` in the owner layer. To forget the QQ login entirely, `docker rm -f napcat && docker volume rm napcat-qq napcat-config`, and sign the device out in QQ's settings. Roll the token by deleting `LSY_QQ_ONEBOT_TOKEN` from `.env`, `docker volume rm napcat-config`, and running `start` again.
 
+## 13b. Official QQ bot channel (disabled by default)
+
+`lsy-qqbot` answers owner-listed people on QQ through the official QQ Open Platform bot, one chat Session each (preset `qqbot`, no tools). It is separate from the observer of step 13 and is not needed for it. The bundle carries its row with `disabled: true`, so a stock install loads nothing and opens no connection. A bot sees only private messages and the group messages that @-mention it, cannot message first, and has no voice, which is why the QQ account is used by the observer instead.
+
+To enable it:
+
+1. Create the bot (you, with your phone): `ssh -t mini 'sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node /Users/Shared/lsy-dsh/current/lsy/deploy/qqbot-login.mjs --qr-png /Users/dsh-runtime/qqbot-login.png'` and scan the code with your phone's QQ (a code lives about three minutes; the command replaces it up to three times). It writes `LSY_QQBOT_APP_ID` and `LSY_QQBOT_APP_SECRET` into `/Users/dsh-runtime/.dsh/.env` (mode 600) and prints the AppID and your openid; the secret is never shown. A bot made at `q.qq.com` works too: put its AppID and AppSecret in `.env` by hand.
+2. In `/Users/dsh-runtime/.dsh/profiles/event/cordis.patch.yml` add
+   ```yaml
+   - id: lsy-qqbot
+     disabled: false
+     config:
+       allow:
+         users: ['<user_openid>']
+         groups: ['<group_openid>']
+   ```
+   and restart (`sudo -n /bin/launchctl kickstart -k system/app.lishuyu.dsh-events`). The first message of an unlisted sender is dropped and logged with its openid (`dropped a c2c message from user <openid>`), and the owner gets one WeChat note with it; openids are not QQ numbers.
+3. Disable it again: remove the entry or set `disabled: true`, and delete `LSY_QQBOT_APP_SECRET` from `.env`.
+
+Limits of the platform: a group message reaches the bot only if it @-mentions it; a reply must quote the inbound message within about an hour (private) or five minutes (group), at most five times; later answers go out as proactive messages, which QQ may refuse, and then fall back to the owner's WeChat.
+
 ## 14. Claude Code for the service user (optional)
 
 The agent can start and talk to Claude Code sessions of its own. They run as `dsh-runtime`, so the agent reaches their sockets (`/tmp/cc-socks-502`, 0600) directly; the owner's sessions under `lishuyu` stay out of reach. The `unattended` preset already mounts the `lsy-cc-bridge` plugin; until this step is done `cc_start` reports that the session did not register.
