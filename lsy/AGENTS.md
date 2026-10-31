@@ -10,8 +10,7 @@ These rules supplement the repo-wide [AGENTS.md](../AGENTS.md) for this fork's e
 
 ## Memory and persona safety
 
-- **Learning happens in data, never in the persona.** The persona lives in read-only bundle files reviewed in git; what the agent learns goes only into bounded containers (`lsy-memory`, the Bilibili taste, journal, and trend notes) that record where it came from, that the owner can see and delete, and that enter prompts as data. Text from a stranger, a relayed message, a web page, an event, or a QQ group is never the owner's word: a turn it started cannot write protected memory (`instructions`, `preferences`, `identity`) without the owner's confirmation, and cannot message Claude Code.
-- Persona changes need the invariants in `packages/lsy/bili/tests/persona.spec.ts` to stay green.
+- **Learning happens in data, never in the persona.** The persona is read-only bundle text reviewed in git; what the agent learns goes only into bounded containers (`lsy-memory`, Bilibili taste, journal, trends) that record their source, are visible and deletable to the owner, and enter prompts as data. A stranger's words (a relayed message, web page, event, QQ group) are not the owner's: the turn they start cannot write protected memory or message Claude Code unconfirmed ([lsy-taint](../packages/lsy/lsy-taint/README.md)). Keep `packages/lsy/bili/tests/persona.spec.ts` green.
 
 ## Event service architecture
 
