@@ -61,3 +61,14 @@ link('@deepseek-ai/dsh-fork-event-bundle', bundleDir)
 writeFileSync(target, `${JSON.stringify(manifest, null, 2)}\n`)
 console.log(`setup-profile: ${links.length} link(s) in ${join(target, '..')}`)
 NODE
+# Owner skills shipped with the build (fork/skills/<name>): the skill-filesystem user root <DSH_HOME>/skills
+# picks them up live, so linking is enough (no restart). A plain directory left by a manual install is replaced.
+if [ -d "$PREFIX/fork/skills" ]; then
+  mkdir -p "$HOME_DIR/skills"
+  for skill in "$PREFIX"/fork/skills/*/; do
+    name=$(basename "$skill")
+    [ -L "$HOME_DIR/skills/$name" ] || rm -rf "${HOME_DIR:?}/skills/${name:?}"
+    ln -sfn "${skill%/}" "$HOME_DIR/skills/$name"
+  done
+  echo "setup-profile: linked skills from $PREFIX/fork/skills into $HOME_DIR/skills"
+fi

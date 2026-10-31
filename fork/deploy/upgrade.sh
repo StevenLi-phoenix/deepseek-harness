@@ -27,6 +27,7 @@ if [ ! -d "$PREFIX" ]; then
   cp "$ROOT/fork/deploy/setup-profile.sh" "$ROOT/fork/deploy/wechat-login.mjs" "$ROOT/fork/deploy/memory-import.mjs" "$ROOT/fork/deploy/disk-watch.mjs" "$PREFIX/fork/deploy/"
   cp -R "$ROOT/fork/profiles/event" "$PREFIX/fork/profiles/"
   cp -R "$ROOT/fork/bundles/event" "$PREFIX/fork/bundles/"
+  [ ! -d "$ROOT/fork/skills" ] || cp -R "$ROOT/fork/skills" "$PREFIX/fork/"
 fi
 # The profile layout must hold in throwaway homes before current points at this build.
 "$ROOT/fork/deploy/check-setup-profile.sh" "$PREFIX"
