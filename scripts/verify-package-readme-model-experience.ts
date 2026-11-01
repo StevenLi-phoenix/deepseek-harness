@@ -178,6 +178,7 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/lsy/lsy-presence': { kind: 'none', reason: 'Tells the channels whether the owner sleeps and holds back their messages; adds nothing to model requests.' },
   'packages/lsy/lsy-sysmon': { kind: 'none', reason: 'Settings section reading the Host machine status; registers nothing model-facing.' },
   'packages/lsy/lsy-style-settings': { kind: 'none', reason: 'Settings section showing the speaking-style samples; registers nothing model-facing (the samples reach the model through lsy-style).' },
+  'packages/lsy/lsy-config': { kind: 'none', reason: 'Settings card editing plugin configuration; registers nothing model-facing.' },
   'packages/lsy/lsy-qq-login': { kind: 'none', reason: 'Settings section showing the QQ connection and login QR code; registers nothing model-facing, and the code never enters a model request.' },
   'packages/lsy/lsy-cc-admin': { kind: 'none', reason: 'Lists and starts Claude Code sessions for a settings page; registers nothing model-facing.' },
   'packages/lsy/lsy-console': { kind: 'none', reason: 'Settings sections over service state, subscriptions, Claude Code sessions, and a voice preview; registers nothing model-facing.' },

@@ -486,6 +486,7 @@
       "@deepseek-ai/dsh-lsy-balance": ["./packages/lsy/lsy-balance/src"],
       "@deepseek-ai/dsh-lsy-cc-admin": ["./packages/lsy/lsy-cc-admin/src"],
       "@deepseek-ai/dsh-lsy-cc-bridge": ["./packages/lsy/lsy-cc-bridge/src"],
+      "@deepseek-ai/dsh-lsy-config": ["./packages/lsy/lsy-config/src"],
       "@deepseek-ai/dsh-lsy-console": ["./packages/lsy/lsy-console/src"],
       "@deepseek-ai/dsh-lsy-event-bus": ["./packages/lsy/lsy-event-bus/src"],
       "@deepseek-ai/dsh-lsy-event-ingest": ["./packages/lsy/lsy-event-ingest/src"],

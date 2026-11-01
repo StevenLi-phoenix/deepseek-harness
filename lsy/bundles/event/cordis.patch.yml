@@ -299,6 +299,11 @@
     # goes through this root service; its defaults are the bridge's own.
     - id: lsy-cc-admin
       name: '@deepseek-ai/dsh-lsy-cc-admin'
+    # Settings → All settings card (factory settings.plugin-config): every Config field of the plugin entries a
+    # Settings page names, with the layer that set it; saves go to the owner's profile patch. Read-only for an
+    # entry the home patch sets; credential fields show whether they hold a value, never the value.
+    - id: lsy-config
+      name: '@deepseek-ai/dsh-lsy-config'
 
     # Voice (ctx.lsyVoice): text to speech for the `speak` tool (feiyu on the laptop, no fallback;
     # the Mac mini TTS service was retired on 2026-10-31; the key is LSY_FEIYU_API_KEY in

@@ -40,6 +40,8 @@ Mount the row next to the Web bundles; the lsy event bundle mounts it. It needs 
 
 Install macmon for the user the service runs as: `brew install macmon`, or a release binary in that user's `~/bin`. Without it the section still shows CPU, disks, and an approximate memory figure (total minus free pages, which counts the macOS file cache as used).
 
+The page ends with the [All settings](../lsy-config/README.md) card for this plugin's `lsy-sysmon` entry, so the fields above can be changed from the page.
+
 -----
 
 <a id="understand-the-implementation"></a>

@@ -1,0 +1,46 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/lsy-config/README.md
+/:
+  en: 107082981371cfa5
+  zh: 6e7bdbc92bc88271
+/deepseek-ai-dsh-lsy-config:
+  en: ded2c681b55fd507
+  zh: 536c3c7dbfb8cde5
+/deepseek-ai-dsh-lsy-config/summary:
+  en: 773161c0b2cce1b9
+  zh: 33a0246dee3005b2
+/deepseek-ai-dsh-lsy-config/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-lsy-config/use-this-package:
+  en: 752bce8a644e653b
+  zh: e990ff5a45fb0c9c
+/deepseek-ai-dsh-lsy-config/use-this-package/put-the-card-in-a-settings-section:
+  en: 59d70f2ec401d4a2
+  zh: 698f1bb296eda418
+/deepseek-ai-dsh-lsy-config/use-this-package/what-the-card-shows:
+  en: ded5452e922befc4
+  zh: bb9c55eb25a07f14
+/deepseek-ai-dsh-lsy-config/use-this-package/saving:
+  en: b2c813776dea54cb
+  zh: 87d95b9cd59c4552
+/deepseek-ai-dsh-lsy-config/understand-the-implementation:
+  en: b79dd5f1406882b2
+  zh: c100eec9fd4ae31e
+/deepseek-ai-dsh-lsy-config/further-exploration:
+  en: 54497b5a5d51d202
+  zh: 429c70638ecd544d
+/deepseek-ai-dsh-lsy-config/model-experience:
+  en: 751c3fd04a33c145
+  zh: a9426f5001570a7a
+/deepseek-ai-dsh-lsy-config/model-experience/kv-cache-effect:
+  en: d0326f65e29a4da0
+  zh: a8a1b3d1ea57dc32
+/deepseek-ai-dsh-lsy-config/known-limitations-and-deferred-work:
+  en: c029563bba4a5951
+  zh: e325df79fd24f51e
+/deepseek-ai-dsh-lsy-config/known-limitations-and-deferred-work/dev-note:
+  en: 4eac87d4575bc9bd
+  zh: 33e2aa704d39cee4

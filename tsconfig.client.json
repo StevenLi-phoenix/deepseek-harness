@@ -155,6 +155,7 @@
     { "path": "./packages/client/ui-user-questions" },
     { "path": "./packages/lsy/lsy-balance/tsconfig.client.json" },
     { "path": "./packages/lsy/lsy-sysmon/tsconfig.client.json" },
+    { "path": "./packages/lsy/lsy-config/tsconfig.client.json" },
     { "path": "./packages/lsy/lsy-qq-login/tsconfig.client.json" },
     { "path": "./packages/lsy/lsy-style-settings/tsconfig.client.json" },
     { "path": "./packages/lsy/lsy-memory-admin/tsconfig.client.json" },

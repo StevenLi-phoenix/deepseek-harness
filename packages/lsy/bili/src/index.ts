@@ -106,18 +106,18 @@ export interface Config {
 
 /** Configuration schema. */
 export const Config: z<Config> = z.object({
-  ownerMid: z.natural(),
-  account: z.string().default('maomao'),
-  manageTokenEnv: z.string().role('credential-ref').default(DEFAULT_MANAGE_CREDENTIAL),
-  timeZone: z.string().default('America/New_York'),
-  mainAgentPerDay: z.natural().max(20).default(5),
+  ownerMid: z.natural().description("The owner's main account (UID), the only one whose messages the Session answers; the UID set in Settings wins. Unset, nothing is answered."),
+  account: z.string().default('maomao').description("bili-svc's id of the agent's account: the account of every call."),
+  manageTokenEnv: z.string().role('credential-ref').default(DEFAULT_MANAGE_CREDENTIAL).description('Name of the credential holding the bili-svc management token; only the name is configured here.'),
+  timeZone: z.string().default('America/New_York').description('IANA time zone of the journal, the main-agent limit, and prompt times.'),
+  mainAgentPerDay: z.natural().max(20).default(5).description("Messages the account's Session may send the owner's main agent per day (bili_tell_main_agent); 0 turns them off."),
   session: z.object({
-    workspacePath: z.string().default('/Users/dsh-runtime/bili'),
-    agentPreset: z.string().default('bili'),
-    permissionPreset: z.string().default('danger-full-access'),
-    title: z.string().default('B站'),
+    workspacePath: z.string().default('/Users/dsh-runtime/bili').description('Absolute working directory of the account Session.'),
+    agentPreset: z.string().default('bili').description('Agent preset of the account Session.'),
+    permissionPreset: z.string().default('danger-full-access').description('Permission preset set on the account Session.'),
+    title: z.string().default('B站').description('Title of the account Session.'),
   }),
-  inboxPollMs: z.natural().min(120_000).default(600_000),
+  inboxPollMs: z.natural().min(120_000).default(600_000).description('Owner-message check period, in milliseconds; checks cost no model tokens.'),
 })
 
 /** Resolve failures that keep the stored Session: it exists and is only unavailable right now. */

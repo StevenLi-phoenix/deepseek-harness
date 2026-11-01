@@ -43,6 +43,21 @@ afterEach(() => {
 })
 
 describe('SystemStatusSection', () => {
+  it('ends with the All settings card for the lsy-sysmon entry, and renders without the card factory', () => {
+    const store = createSysmonStore()
+    store.update((draft) => { Object.assign(draft, { snapshot: SNAPSHOT, checkedAt: 1 }) })
+    const renderFactorySlot = vi.fn((_name: string, _props: object) => <div data-testid="plugin-config" />)
+    const props = {
+      close: () => {}, useSysmon: bindSnapshotSelector(store), refresh: vi.fn(), t, renderFactorySlot,
+    } as unknown as SystemStatusProps
+    const { container } = render(<SystemStatusSection {...props} />)
+    expect(renderFactorySlot).toHaveBeenCalledWith('settings.plugin-config', { entries: ['lsy-sysmon'] })
+    expect(container.querySelector('section')?.lastElementChild).toBe(screen.getByTestId('plugin-config'))
+    cleanup()
+    mount({ snapshot: SNAPSHOT, checkedAt: 1 })
+    expect(screen.queryByTestId('plugin-config')).toBeNull()
+  })
+
   it('reads on opening, every 5 s while open, and stops when closed', () => {
     vi.useFakeTimers()
     const { refresh, view, store, rerender } = mount({})

@@ -8,9 +8,11 @@
 
 import { useEffect, useId, type ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
-import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { InjectFace, PropsLocale, PropsRenderFactories, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the settings shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+// Type-only: declares the 'settings.plugin-config' factory this section renders at its foot.
+import type {} from '@deepseek-ai/dsh-lsy-config/client'
 // Type-only: registers the lsy.sysmon locale namespace this component's `t` reads.
 import type {} from './locales.ts'
 import {
@@ -29,8 +31,12 @@ export interface SystemStatusInjected {
   refresh: () => void
 }
 
+/** The plugin entries whose every setting the page lists under the status cards. */
+const CONFIG_ENTRIES = ['lsy-sysmon'] as const
+
 /** Props delivered by the settings shell. */
 export type SystemStatusProps = PropsRuntime<'settings.section'> & InjectFace<SystemStatusInjected> & PropsLocale<'lsy.sysmon'>
+  & Partial<PropsRenderFactories>
 
 const LEVEL_CLASS = { normal: '', warn: css.warn, critical: css.critical } as const
 
@@ -65,7 +71,7 @@ function Details({ lines }: { lines: readonly string[] }): ReactNode {
  * @param props - the store hook, refresh callback, and copy.
  * @returns the section.
  */
-export function SystemStatusSection({ useSysmon, refresh, t }: SystemStatusProps): ReactNode {
+export function SystemStatusSection({ useSysmon, refresh, renderFactorySlot, t }: SystemStatusProps): ReactNode {
   const state = useSysmon(value => value)
   useEffect(() => startPolling(refresh, POLL_INTERVAL_MS), [refresh])
 
@@ -135,6 +141,7 @@ export function SystemStatusSection({ useSysmon, refresh, t }: SystemStatusProps
               )}
           </div>
         )}
+      {renderFactorySlot?.('settings.plugin-config', { entries: CONFIG_ENTRIES })}
     </section>
   )
 }
