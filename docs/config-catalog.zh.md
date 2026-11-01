@@ -460,7 +460,7 @@ export type Config = LocalConfig
 ## `@deepseek-ai/dsh-bili`
 
 - `inject`: `timer` · `storageDomain` · `credentials` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/bili/src/index.ts:84`](../packages/fork/bili/src/index.ts)
+- `source`: [`packages/fork/bili/src/index.ts:88`](../packages/fork/bili/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -2568,7 +2568,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-fork-event-bus`
 
 - `inject`: `timer` · `storageDomain`
-- `source`: [`packages/fork/fork-event-bus/src/index.ts:58`](../packages/fork/fork-event-bus/src/index.ts)
+- `source`: [`packages/fork/fork-event-bus/src/index.ts:65`](../packages/fork/fork-event-bus/src/index.ts)
 
 ```ts config-catalog
 /** Bus configuration. */
@@ -2594,6 +2594,11 @@ export interface Config {
   maxNoteEvents: number
   /** Web UI link attached to Session result messages. */
   webUrl?: string
+  /**
+   * Archive chat Sessions nobody touched for `inactiveDays` (archive only, never delete). A plain object without this
+   * block keeps it off; the schema fills in the defaults.
+   */
+  autoArchive?: AutoArchiveConfig
 }
 
 /** One routing rule, from the bus configuration or created at run time through `ForkEventBus.subscribe()`. */
@@ -2622,6 +2627,22 @@ export interface SuppressConfig {
   actors: string[]
   /** Substrings the agent writes into its own output (e.g. a commit trailer). */
   markers: string[]
+}
+
+/** Auto-archive configuration (the `autoArchive` block of the bus configuration). */
+export interface AutoArchiveConfig {
+  /** Run the sweep. */
+  enabled: boolean
+  /** Archive Sessions whose last message is older than this many days. */
+  inactiveDays: number
+  /** Select and log, but archive nothing. */
+  dryRun: boolean
+  /** Most Sessions archived by one sweep; the rest wait for the next. */
+  maxPerSweep: number
+  /** Minutes after startup before the first sweep. */
+  firstSweepMinutes: number
+  /** Hours between sweeps. */
+  sweepHours: number
 }
 
 /** How a `session` subscription turns one batch into a new agent Session. */
@@ -2663,6 +2684,11 @@ export interface SessionAction {
    * omitted, or `enabled: false`, starts a new Session per batch.
    */
   persistent?: PersistentSessionAction
+  /**
+   * Web UI project title for `workspacePath`: before a Session starts there, the bus creates the directory and
+   * registers it as a project with this title unless one exists. Omitted: the directory must exist.
+   */
+  project?: string
 }
 
 /**
@@ -2675,6 +2701,8 @@ export interface SessionAction {
 export interface PersistentSessionAction {
   /** Reuse one Session for this subscription. */
   enabled: boolean
+  /** One Session for the whole subscription, or one per event subject (a repository, a video). */
+  key: 'subscription' | 'subject'
   /** Days after which the next batch starts a new Session and archives the old one. */
   rolloverDays: number
   /** Characters of the carried-over compaction summary kept in the new Session's first message. */
@@ -3309,7 +3337,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-fork-tool-up`
 
 - `inject`: `tools` · `credentials`
-- `source`: [`packages/fork/fork-tool-up/src/index.ts:59`](../packages/fork/fork-tool-up/src/index.ts)
+- `source`: [`packages/fork/fork-tool-up/src/index.ts:61`](../packages/fork/fork-tool-up/src/index.ts)
 
 ```ts config-catalog
 /** Notes, evidence, and the Session they belong to. */

@@ -89,6 +89,8 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 
 relay 把每一轮的最终回答（`NO_REPLY` 不发）交给通道，通道把它拆开逐条发送：对象最近那条消息的窗口还开着、回复少于五条时引用该消息，否则作为主动消息发出。QQ 拒收的部分会抛错，relay 随后退回 `ctx.forkNotifier`，标签是 `a QQ chat Session (its answer could not go out on QQ)`。所有发送和存储写入一次只做一件。
 
+挂载了 `ctx.forkEventBus` 时，渠道用 `protectSessions('qqbot', …)` 认领每个对端当前的聊天 Session，总线的自动归档永远不会归档它；被重置替换掉的 Session 仍可归档，任一插件重载时认领随之撤回。
+
 | 文件 | 作用 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 服务、配置、连接循环、名单、对话 Session、`qq` relay 通道、投递 |

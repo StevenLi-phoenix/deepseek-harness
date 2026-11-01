@@ -9,8 +9,8 @@
   en: 20ef9611ef3013c9
   zh: 0ac7e4e9f4ee4c25
 /deepseek-ai-dsh-fork-event-bus/summary:
-  en: fe47a1517d5b7155
-  zh: a4a6ef8e9f8684ef
+  en: 0fdf821deaa04a36
+  zh: 5484f18e1e0a4861
 /deepseek-ai-dsh-fork-event-bus/table-of-contents:
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
@@ -21,20 +21,23 @@
   en: 816aa7cb41e2592d
   zh: 18c8c1bba8523d27
 /deepseek-ai-dsh-fork-event-bus/use-this-package/minimal-configuration:
-  en: 60d35ad95ffe06c4
-  zh: c6032299344d8b06
+  en: 15441bcd57af522d
+  zh: 9e88bb2567c876fb
 /deepseek-ai-dsh-fork-event-bus/use-this-package/run-time-subscriptions:
   en: 0e5aa8261a7a4a2e
   zh: d18884f9f229f7fd
 /deepseek-ai-dsh-fork-event-bus/use-this-package/persistent-sessions:
-  en: 8aa54e79d41d784d
-  zh: ca9db219dd516fe6
+  en: 7871130e68c8e09d
+  zh: 41cba9790f1152c5
+/deepseek-ai-dsh-fork-event-bus/use-this-package/auto-archive:
+  en: 231cdeb469db4318
+  zh: a8040de857178896
 /deepseek-ai-dsh-fork-event-bus/use-this-package/result-reports:
   en: 6ef188ada61c6bae
   zh: 3b322d494f7869df
 /deepseek-ai-dsh-fork-event-bus/understand-the-implementation:
-  en: 156b8b15966c31be
-  zh: 20c5226e1a6f2dd0
+  en: c97fe8bd1165b0fd
+  zh: da0877dda034f1c6
 /deepseek-ai-dsh-fork-event-bus/further-exploration:
   en: fdbaf8d980245aa7
   zh: 070b4a9e0ca5a670
@@ -54,8 +57,8 @@
   en: 76a1a39f133968f7
   zh: 0aa29005e3ee0fcb
 /deepseek-ai-dsh-fork-event-bus/known-limitations-and-deferred-work:
-  en: 09b6d03d3e4ff27b
-  zh: 3bf87a9c3aecbb64
+  en: f136d775bfe9590b
+  zh: 78e4fb2a6b0a280a
 /deepseek-ai-dsh-fork-event-bus/known-limitations-and-deferred-work/dev-note:
   en: 2b37c6cbf673f6fd
   zh: cf08de597627eff2

@@ -63,7 +63,7 @@ kind: "package-reference"
 
 每个工具就是带 `up` token 的一次对 bili-svc 的 HTTP 调用。读工具返回 bili-svc 给的 JSON，截到 12,000 个字符，包进 `<bilibili_data trust="untrusted">`，块内的 `<` 和 `>` 都被转义，任何评论都关不掉这个块。两个回复工具提交 `{rpid, message}` 或 `{talker, message}`，只接受 bili-svc 返回的 `sent`、`held`、`blocked`；其他任何结果（HTTP 错误、超时、缺 token、未知状态）都变成带宿主错误文字的 `held`，绝不会是 `sent`。回复调用可能要等闸门的随机间隔几分钟，所以超时设为 330 秒。
 
-频道笔记存在这个包自己的 JSON 文件里（权限 0600），其他插件都不读不写：不会进入 fork-memory，`unattended`（微信）preset 也从不挂载这个包。添加时先规范化（NFKC、合并空白），以下情况拒绝：为空、太长、重复、列表已满，或含个人信息：姓名（称谓、自我介绍、拉丁全名）、UID 或任意五位以上连续数字、电话或联系账号、邮箱、地址、学校或单位、与个人相关的地点、@ 账号。笔记以一条 `<bili_channel_notes trust="untrusted-derived">` 用户消息（source `fork-tool-up`，form `notice`）进入 Session：第一次请求时、每次压缩之后、以及笔记有变化后的下一轮开始时。
+频道笔记存在这个包自己的 JSON 文件里（权限 0600），其他插件都不读不写：不会进入 fork-memory，`unattended`（微信）preset 也从不挂载这个包。添加时先规范化（NFKC、合并空白），以下情况拒绝：为空、太长、重复、列表已满，或含个人信息：姓名（称谓、自我介绍、拉丁全名）、UID 或任意五位以上连续数字、电话或联系账号、邮箱、地址、学校或单位、与个人相关的地点、@ 账号。本地规则放行的笔记再交给共享的文本守卫（`ctx.forkGuard`，purpose 为 `bili-channel-note`，audience 为 `channel`）：守卫拒绝时，回答里只给守卫的公开原因（触发的规则留在主机日志里）；守卫出错或没有挂载时，所有笔记都被拒绝（失败即关闭），直到它恢复；删除笔记不需要守卫。笔记以一条 `<bili_channel_notes trust="untrusted-derived">` 用户消息（source `fork-tool-up`，form `notice`）进入 Session：第一次请求时、每次压缩之后、以及笔记有变化后的下一轮开始时。
 
 bili-svc 没有按 id 取单条评论的端点，所以证据校验先从这个插件已经通过 `up_comments` 和 `up_comment_thread` 返回过的评论里找（按 rpid 缓存），没找到再读现有的 `GET /v1/comments/{rpid}/thread`（根评论楼的第一页）。创作者自己账号（`/v1/status` 的 `accounts[].mid`）的评论永远不算证据；在这些 id 未知时，一律不算。原始 UID 不会离开插件。笔记工具和证据校验都会问 `ctx.forkEventBus.persistentSubscriptionOf(sessionId)`，按 Session 计数直到该轮结束，并记录每次结果。
 
@@ -124,7 +124,7 @@ bili-svc 没有按 id 取单条评论的端点，所以证据校验先从这个�
 
 #### 模型看到什么
 
-`bili_channel_note(op, text)`，`op` 为 `add` 或 `remove`；描述给出上限，要求笔记写频道整体、绝不写某一位观众，并说明每轮调用有上限、只能在频道的常驻 Session 里用。结果是 `{ "status": "added" | "removed", "id", "count" }` 或 `{ "status": "refused", "reason", "pii"?, "count"? }`。笔记以 `<bili_channel_notes trust="untrusted-derived">` 块回到模型面前，块里是一个 JSON 列表，开头说明这些是模型根据观众的话写下的笔记，要当数据读。
+`bili_channel_note(op, text)`，`op` 为 `add` 或 `remove`；描述给出上限，要求笔记写频道整体、绝不写某一位观众，并说明每轮调用有上限、只能在频道的常驻 Session 里用。结果是 `{ "status": "added" | "removed", "id", "count" }` 或 `{ "status": "refused", "reason", "pii"?, "message"?, "count"? }`，其中 `reason` 为 `guard` 时，`message` 带着守卫的公开原因，`guard_unavailable` 表示没能问到守卫。笔记以 `<bili_channel_notes trust="untrusted-derived">` 块回到模型面前，块里是一个 JSON 列表，开头说明这些是模型根据观众的话写下的笔记，要当数据读。
 
 #### Token 影响
 
@@ -142,6 +142,7 @@ bili-svc 没有按 id 取单条评论的端点，所以证据校验先从这个�
 - **没有原因** —— agent 永远不知道回复为什么被 held 或 blocked；owner 去 bili-svc 的台账里看。
 - **一个账号** —— 只对应 bili-svc 的 `reply_*` 路由指向的创作者号；agent 自己的账号仍用独立的 `bili_*` 工具。
 - **证据范围** —— 只有本进程里 Session 读过的评论，或位于其根评论楼第一页的评论能被校验；更早的评论不计。
+- **笔记需要文本守卫**——没有挂载 `fork-guard`（这个包还不在每个分支上）时，不能添加笔记，只能删除；解决办法是挂载它，而不是放松工具。
 - **笔记只在磁盘上** —— owner 在 JSON 文件里查看或删除笔记；暂时没有对应的 Settings 页面。
 
 <a id="dev-note"></a>

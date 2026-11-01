@@ -44,6 +44,8 @@ kind: "package-reference"
 
 **订阅。**在总线配置里定义的订阅显示“来自配置”，没有按钮。`watch_create` 或表单建的订阅可以暂停（不再匹配新事件，已在排队的事件保留）、恢复，或在第二次点击后删除；删除监视时也会停掉它的仓库轮询，和 `watch_delete` 一致。表单需要名称、来源/类型/对象 glob（至少一项）、通知或会话模式，会话模式还要任务说明；会话订阅按配置的预设和工作区运行。定时提醒（`schedule_create`）可以暂停、恢复和删除；改时间请对智能体说。
 
+**会话自动归档。**同一分区在监控说明下面显示总线是否归档闲置已久的对话 Session（`fork-event-bus` 的 `autoArchive`）：规则（闲置天数、每次上限、间隔）、下次检查、保护自己 Session 的插件、上一次检查（检查和归档的 Session 数，以及按原因分类的跳过）和最近归档的 30 个 Session。**预览**列出一次检查会归档什么但不归档；**立即归档**真的跑一次。两个按钮点下去立刻变成“正在检查…”，Host 回答之前保持禁用。底部的设置卡片只列 `fork-event-bus` 的 `autoArchive` 字段，所以改动（天数、试运行、上限）是一次明确的保存，会重载总线。
+
 **Claude Code 与语音。**这里的会话属于 `dsh-runtime` 自己的 Claude Code，不是你本人的。页面只能停止桥在自己 tmux 服务器里启动的会话，最多同时启动 `fork-cc-admin` 的 `maxSessions`（3）个。第一条任务会作为 Claude Code 的 prompt 参数，所以从这里启动的会话把它当作你本人的话。语音卡片显示朗读和听写是否有应答，试听按钮合成固定的一句话并在浏览器里播放，不发往任何频道。听写属于配置，所以卡片只给出开启它的补丁，保持只读。
 
 -----
@@ -58,7 +60,7 @@ Host 部分在 connection 上注册 `GET /api/fork.overview`、`GET`/`POST /api/
 
 总览并行读取每张卡片。每个 HTTP 探测有 `probeTimeoutMs`，整张卡片的上限是它的两倍加半秒，所以卡死的服务只花一个期限并显示为红色；抛错的卡片显示红色，日志只记错误类型。卡片带的是状态和事实（计数、名称、秒数），从不带 URL、密钥或消息正文。构建标识取入口文件所在的 `builds.noindex/<sha>` 目录和它上面 `@deepseek-ai/dsh` 包的版本。Claude Code 的登录状态：`~/.claude/.credentials.json` 非空为 `full`，OAuth token 文件非空为 `token`，否则 `none`；这些文件只做 `stat`。
 
-订阅用总线自己的 API：`listSubscriptions()`、`batches()`（算触发次数）、`subscribe()`、`unsubscribe()` 和 `setPaused()`；提醒用 `ctx.schedule.catalog()` 和 `edit()`（`active`、`delete`）。浏览器立刻移除或翻转一行，Host 的回答再替换它；被拒绝时把那一行放回去并说明原因。`monitor_start` 启动的监控属于启动它的对话，登记在 Host 够不到的预设作用域里，所以页面只说明去哪里管理，不列出它们。
+订阅用总线自己的 API：`listSubscriptions()`、`batches()`（算触发次数）、`subscribe()`、`unsubscribe()` 和 `setPaused()`；提醒用 `ctx.schedule.catalog()` 和 `edit()`（`active`、`delete`）。浏览器立刻移除或翻转一行，Host 的回答再替换它；被拒绝时把那一行放回去并说明原因。`monitor_start` 启动的监控属于启动它的对话，登记在 Host 够不到的预设作用域里，所以页面只说明去哪里管理，不列出它们。自动归档卡片用同一个 GET 读取 `archiveStatus()`，POST 动作 `archive.sweep`（`dryRun` 为 true 或 false）运行 `sweepArchive()`；归档 Session 的标题截到 80 个字符，不发送任何 Session 内容。
 
 Claude Code 会话来自 `ctx.forkClaudeCode`（[`fork-cc-admin`](../fork-cc-admin/README.zh.md)），通过一个很小的结构类型读取，所以这个带浏览器部分的包不会运行时导入任何对等包的值。语音和总线的错误同理，Host 部分按名字识别它们。
 
@@ -68,7 +70,7 @@ Claude Code 会话来自 `ctx.forkClaudeCode`（[`fork-cc-admin`](../fork-cc-adm
 |---|---|
 | [`src/index.ts`](src/index.ts) | Host 部分：三个路由、状态码与错误应答 |
 | [`src/overview.ts`](src/overview.ts) | 各卡片与它们带期限的探测 |
-| [`src/subscriptions.ts`](src/subscriptions.ts) | 总线与定时服务上的列表与动作 |
+| [`src/subscriptions.ts`](src/subscriptions.ts) | 总线与定时服务上的列表与动作，以及自动归档的视图与检查 |
 | [`src/agents.ts`](src/agents.ts) | Claude Code 与语音卡片、启动、停止和试听 |
 | [`src/claude-code.ts`](src/claude-code.ts) | 本页用到的 `ctx.forkClaudeCode` 的形状 |
 | [`src/request.ts`](src/request.ts)、[`src/log.ts`](src/log.ts)、[`src/probe.ts`](src/probe.ts)、[`src/build-info.ts`](src/build-info.ts) | 请求体解析与拒绝、动作日志、期限、构建标识 |

@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-把传感器产生的事件路由成手机通知或新的无人值守 agent Session，路由规则是你写在配置里的订阅，或 agent 自己用 `watch_create` 创建的订阅。总线丢掉重复事件和 agent 自己造成的事件，把突发事件合批并限制每小时批次数，嘈杂的仓库不会刷爆手机或模型预算。状态在重启后保留。订阅可以保留一个常驻 Session，每一批接着进行，每月用它的摘要换一个新的。Session 的结果和无人值守的提醒轮次都以一条带最终回答的消息送回，回答 `NO_REPLY` 时什么也不发。
+把传感器产生的事件路由成手机通知或新的无人值守 agent Session，路由规则是你写在配置里的订阅，或 agent 自己用 `watch_create` 创建的订阅。总线丢掉重复事件和 agent 自己造成的事件，把突发事件合批并限制每小时批次数，嘈杂的仓库不会刷爆手机或模型预算。状态在重启后保留。闲置一周的对话 Session 会被归档，从不删除；运行中的、置顶的、常驻的和 owner 渠道的 Session 不会被动。订阅可以保留一个常驻 Session，每一批接着进行，每月用它的摘要换一个新的。Session 的结果和无人值守的提醒轮次都以一条带最终回答的消息送回，回答 `NO_REPLY` 时什么也不发。
 
 ## 目录
 
@@ -71,6 +71,8 @@ kind: "package-reference"
 | `subscriptions[].session.persistent.enabled` | `false` | 订阅的所有批次共用一个 Session，而不是每批一个（只限配置行） |
 | `subscriptions[].session.persistent.rolloverDays` | `30` | 超过这么多天后，下一批开一个新 Session，带上旧 Session 最后一次的压缩摘要，旧 Session 被归档 |
 | `subscriptions[].session.persistent.maxSeedChars` | `20000` | 带过去的摘要的字符上限 |
+| `subscriptions[].session.persistent.key` | `subscription` | `subscription` 为订阅保留一个 Session；`subject` 为每个事件对象（一个仓库、一个视频）各保留一个，标题为 `<titlePrefix>: <subject>`，并把一批按对象拆开 |
+| `subscriptions[].session.project` | 未设置 | `workspacePath` 在 Web UI 里的项目标题：Session 在那里启动之前，总线建好目录并把它登记为项目，已有项目则不动（已有项目保留原标题） |
 | `suppress.actors` / `suppress.markers` | `[]` | agent 的身份与输出标记，命中的事件被丢弃；优先用身份（由宿主设定），不要依赖标记（取决于模型写了什么） |
 | `retainEvents` / `retainBatches` | `5000` / `1000` | 保留的历史；最旧的已结算记录先被清理 |
 | `maxTextChars` | `4000` | 每个事件不可信正文的存储字符上限 |
@@ -78,6 +80,11 @@ kind: "package-reference"
 | `reportScheduledTurns` | `true` | 把每个无人值守的 Host schedule 提醒轮次、以及每个被 `fork-tool-monitor` 通知唤醒的轮次（标题为 📡 加监控名）的最终回答发给通知器 |
 | `maxNoteEvents` | `10` | 一条通知里列出的事件数；通知还带上这一批所有事件的类型（`ForkNote.kinds`），在主人睡觉时压消息的通道拿它去匹配自己的紧急类型 |
 | `webUrl` | 未设置 | 附在 Session 结果里的 Web UI 链接 |
+| `autoArchive.enabled` | `true` | 归档闲置已久的对话 Session（见[自动归档](#auto-archive)）；只归档，不删除 |
+| `autoArchive.inactiveDays` | `7` | Session 最后一条消息过了多少天才到期 |
+| `autoArchive.dryRun` | `false` | 只筛选并记日志，不归档 |
+| `autoArchive.maxPerSweep` | `50` | 一次检查最多归档的 Session 数，其余等下一次 |
+| `autoArchive.firstSweepMinutes` / `sweepHours` | `10` / `6` | 启动后多少分钟做第一次检查，之后每隔多少小时一次 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-fork-event-bus)是全部可用字段的权威来源。
 
@@ -101,7 +108,19 @@ kind: "package-reference"
 - **暂不可用**——Session 此刻接不了新一轮（写入者被占用、没有 controller）时，这一批得到一个一次性 Session（`detached`），存储的那个保留。
 - **轮换**——存储的 Session 满 `rolloverDays` 天后，下一批开一个新 Session，它的第一条消息以 `previous_summary_json` 带上最后一次压缩摘要，并标为由不可信数据派生。这个 Session 的第一条消息到达后，它成为订阅的 Session，旧的用 `ctx.workspaceRegistry.archiveSession()` 归档：DSH 没有删除 Session 的功能，归档保留日志可读，并阻止它再跑模型步骤。
 
+设置 `key: subject` 时，总线改为每个事件对象保留一个 Session：它把一批按对象拆成子批次行（不计入 `maxPerHour`），各自接入该对象的 Session，Session 存在 `<subscription>|<subject>` 下，标题为 `<titlePrefix>: <subject>`。常驻 Session 的标题是固定的（`titlePrefix`，或订阅 id），不随每一批的事件重新生成。`ensureProject(path, name)` 创建项目目录并在 Web UI 里登记一次；总线为 `session.project` 调用它，其他插件也可以通过 `ctx.forkEventBus.ensureProject()` 调用。
+
 `persistentSessions()` 列出每个订阅的 Session（id、开始时间、批次数、压缩次数、它替换的 Session），`persistentSubscriptionOf(sessionId)` 说出这是哪个订阅当前的 Session；fork-tool-up 在写频道笔记或查证据前会问它。每个批次记录带有 `delivery`：`fresh`、`persistent-new`、`persistent`、`rollover` 或 `detached`。
+
+<a id="auto-archive"></a>
+### 自动归档
+
+每隔 `sweepHours` 小时，总线列出 Host 的 Session（`ctx.sessionController.list()`），把最后一条消息早于 `inactiveDays` 天的 Session 通过 `ctx.workspaceRegistry.archiveSession()` 归档。这是 Host 自己的归档：它先问每个 `workspace/session-activity` 提供方，有正在运行的轮次、智能体、任务或定时提醒的 Session 会被拒绝（记为 `active`）；它从不删除，归档的 Session 在 Web UI 里一键就能恢复。每次检查都会记日志，写明各项计数、归档的 id 和按原因分类的跳过数，并保留上一次的报告和最近 200 个归档的 Session（存在 `fork_event_bus_archive` domain 里），供 `archiveStatus()` 和设置 → 订阅与监控使用。
+
+下列 Session 不会被动，并按原因计数：`recent`（近期活跃）、`subagent` 的、`running`（运行中）、`pinned`（置顶）、订阅的 `persistent` 常驻 Session、运行时订阅或 watch 的创建者（`subscription`），以及被插件认领的。插件用 `protectSessions(label, check)` 认领自己的 Session；`check({ id, updatedAt, cwd, title })` 返回 `true`（或一个原因）即保留，抛错也保留，返回的函数撤回认领。`fork-wechat` 认领 owner 当前的聊天 Session（`wechat`），`fork-qqbot` 认领各对端当前的聊天 Session（`qqbot`），`fork-qq` 认领各群的常驻摘要 Session（`qq`）。要在注入了 `forkEventBus` 的 effect 里注册，这样总线或插件重载时认领会随之撤回。
+
+- `archiveStatus()`——设置、`nextSweepAt`、保护方标签、上一次检查的报告，以及最近归档的 Session（新的在前）。
+- `sweepArchive({ dryRun? })`——立刻检查一次（设置页的按钮）；已有检查在跑时会加入它，`dryRun` 只列出会归档什么。
 
 ### 结果回报
 
@@ -124,6 +143,7 @@ kind: "package-reference"
 | [`src/match.ts`](src/match.ts) | 通配匹配与回环抑制 |
 | [`src/prompt.ts`](src/prompt.ts) | Session 请求、批次、结果与提醒消息的渲染；静默回答 |
 | [`src/storage.ts`](src/storage.ts) | 事件、待处理行、批次、运行时订阅与常驻 Session 的 storage-domain 表 |
+| [`src/archive.ts`](src/archive.ts) | 自动归档：检查定时器、筛选规则、保护方登记表，以及最近归档表 |
 
 这是 fork 本地的包；`fork` 组如何跟踪上游见 [`../UPSTREAM.md`](../UPSTREAM.md)。`@deepseek-ai/dsh-owner-relay` 引用了 `isSilentReply()` 和 `failureDetail()`，`@deepseek-ai/dsh-fork-tool-watch` 调用 `ForkNotifier.ownsSession()`，所以它们保持稳定。因为中继依赖这个包，总线通过一个结构化的 `ownerOf()` 视图读取 `ctx.ownerRelay`，而不导入它。通知可选的 `origin` 为通道放进主人对话 Session 的副本指明发送方，从不显示给主人；递给主 agent 的消息另有一个可选的 `origin` 记号（`bili`、`cc`），它会进入通道所排 prompt 的请求 id，让 Host 能分清这一轮是它开启的，还是 owner 发起的。`ForkNotifier.tellMainAgent()` 是可选方法，总线从不调用它：有对话 Session 的通道（fork-wechat）实现它，让另一个 Session（dsh-bili 的）能给 owner 的主 agent 递一条消息。
 
@@ -167,6 +187,8 @@ kind: "package-reference"
 - **至多一次分发**——记录批次与调用 actuator 之间崩溃会丢掉这一批。
 - **轮次回报只在内存里**——总线启动的 Session 或提醒轮次运行期间重启，会丢失这一轮的回报。
 - **没有删除 Session**——轮换掉的常驻 Session 只是归档、不删除；它的日志留在磁盘上，直到 owner 删除。
+- **自动归档要读每个 Session 的摘要**——一次检查会列出 Host 知道的全部 Session；有几万个时要几秒，所以每六小时一次而不是频繁检查。
+- **常驻 Session 不会被检查到**——订阅的常驻 Session（`key: subject` 时每个对象一个）一直留到它轮换；再也不跑 CI 的仓库，它的 Session 会一直留在侧栏里。
 - **轮换的种子**——从没压缩过的 Session 只交出它的 id；总线没在运行时发生的压缩，摘要总线看不到。
 - **提醒名取自 Host 框架文本**——schedule 消息格式变化后，回报退回 `⏰ Session <id>`。
 - **没有指向单个 Session 的 Web 链接**——结果链接到 Web 根路径；客户端没有按 Session 的 URL。

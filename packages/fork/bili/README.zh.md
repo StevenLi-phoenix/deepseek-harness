@@ -70,6 +70,15 @@ kind: "package-reference"
 - **来自主 agent**——owner 让这个号转告主 agent 时，Session 用 `bili_tell_main_agent` 发出：`ctx.forkNotifier.tellMainAgent()` 把它作为不可信数据排进微信聊天 Session，主 agent 的回答在微信上送达 owner。这个号自己的回答仍以 B站私信送达。
 - **在设置页里**——有 manage 令牌时：闸门（模式、急停和它的原因、今天各项用量对上限；**解除急停**、一键**切到只读**；急停还在时**切到自动**是灰的，并写明顺序（先解除急停）；否则要再点一次明确确认，确认文字会说明回复闸门之后会以 bili-svc 的 `reply_comment` 路由所指账号的名义，在创作者视频下回评论、也回私信，受今日额度限制；bili-svc 拒绝时原话显示在卡片里）；每个账号一张卡（昵称、UID、状态、谁负责续期、上次续期或导入、失效原因），带**扫码登录**（二维码会变成“已扫码”，成功后自动关闭）、**刷新会话**、**检查**和**退出登录**（再点一次才生效）；会话归别的服务管的账号（`refresh_mode` 为 `external`，比如猫灯）不显示任何操作按钮；一个默认折叠的最近 20 条动作记录（可以再加载更多），草稿和判定都按纯文本显示；以及主号 UID。每个按钮点下去立刻显示忙碌状态。没有 manage 令牌时只剩只读卡片和主号 UID，并提示 `manageTokenEnv`。路由是 `GET`/`POST /api/bili`（`GET` 可带 `?ledger=<行数>`），和所有 `/api` 路由一样要先通过连接的登录。Host 校验每个操作的请求体（账号 id、退出登录必须重复账号 id、数值有上限），把每次操作连同账号、结果和耗时写进日志（从不写令牌、二维码 key 或 URL），bili-svc 拒绝时把它的原话和一个代码（`mode_refused`、`not_owner`、`refresh_failed`）交给页面解释。
 
+### 其他插件能读到什么
+
+`ctx.biliHot` 把站里当下的流行说法交给 `fork-style` 这类使用方，来源只是账号本来就在做的读取，不会为它新发请求：`bili_video` 和 `bili_comments` 返回的热评（至少 20 个赞）和 `bili_hot_searches` 的关键词。
+
+- `comments({ since? })`——`{ text, likes, bvid, at }[]`，最近读到的在前。评论只保留文字、点赞数、视频和读取时间：不存 UID、昵称、指向个人的链接或 `@`；回复开头的 `回复 @name :` 会被剪掉，含 `@` 的文字整条丢弃。
+- `words({ since? })`——关键词字符串，最近上榜的在前。
+
+存储有上限，最多 2000 条评论、500 个词，行在 14 天后过期（每次写入和读取都检查），存储失败只记日志，不会让它所属的那次读取失败。文字是陌生人的公开发言：使用方要先过滤，并当作数据引用。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -98,6 +107,7 @@ kind: "package-reference"
 | [`src/api.ts`](src/api.ts) | 有类型的读取（有长度上限）和单次调用的操作 |
 | [`src/text.ts`](src/text.ts) | 长度裁剪、不可信包装、owner 私信提示词、消息拆分 |
 | [`src/time.ts`](src/time.ts) | 某个时区里的日期键和时间戳 |
+| [`src/hot.ts`](src/hot.ts) | `ctx.biliHot`：热评和热搜词的有上限、会过期的存储 |
 | [`src/storage.ts`](src/storage.ts) | `bili` 存储域 |
 | [`src/view.ts`](src/view.ts)、[`src/client/`](src/client/) | 设置页视图约定和浏览器端设置页 |
 
@@ -161,6 +171,7 @@ Your final answer is your reply to the owner's message: it goes back to them as 
 - **看就是读**——agent 通过字幕（大多是机器转写）、简介、评论和一部分弹幕了解视频；它看不到画面，也听不到声音。
 - **私信需要互相关注**——B站只在互相关注的账号之间投递私信；owner 的主号和 agent 的账号必须互相关注，否则闸门发送失败，回答改发微信。
 - **私信是纯文本**——B站私信不显示 Markdown，超过两条 500 字私信的回答会被截断。
+- **流行说法只跟着 agent 的读取走**——`ctx.biliHot` 只存 `bili_video`、`bili_comments`、`bili_hot_searches` 近 14 天返回过的内容，agent 没读过就是空的；它自己不发请求。
 - **被扣下的回答不带原因**——bili-svc 对非管理员令牌只说 `held` 或 `blocked`，所以微信兜底只说是哪一种，不说为什么。
 
 <a id="dev-note"></a>
