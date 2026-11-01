@@ -343,6 +343,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-lsy-github-sensor` | yes | GitHub polling sensor for the lsy event bus: releases, tags, commits, and notifications with conditional requests |
 | `@deepseek-ai/dsh-lsy-integrity` | yes | Integrity watch for the owner's main agent: hashes of the files that steer it, a WeChat notice when one changes, persona hashes per Session, and a count of the persona's forbidden stock lines |
 | `@deepseek-ai/dsh-lsy-memory` | yes | Owner memory across Sessions: a JSONL store the Host injects into each root Session, memory_search/memory_save/memory_forget tools, and a claude.ai export importer |
+| `@deepseek-ai/dsh-lsy-memory-admin` | no | Memory settings section: review, approve, undo, and erase what the agent remembers about the owner (browser half; the Host route is @deepseek-ai/dsh-lsy-memory/settings) |
 | `@deepseek-ai/dsh-lsy-qq` | yes | QQ group observer over a OneBot v11 protocol end: records listed groups, downloads images, transcribes voice on request, digests on a schedule, and never speaks by default |
 | `@deepseek-ai/dsh-lsy-qq-login` | no | QQ settings section: the QQ observer's connection, NapCat's login state, and the login QR code to scan from the phone when QQ was signed out |
 | `@deepseek-ai/dsh-lsy-qqbot` | yes | QQ channel over the official QQ Open Platform Bot API: allowlisted private chats and group @ mentions reach per-peer chat Sessions |

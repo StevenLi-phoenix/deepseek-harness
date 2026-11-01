@@ -2721,7 +2721,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-lsy-memory`
 
 - `inject`: `tools`
-- `source`: [`packages/lsy/lsy-memory/src/index.ts:57`](../packages/lsy/lsy-memory/src/index.ts)
+- `source`: [`packages/lsy/lsy-memory/src/index.ts:62`](../packages/lsy/lsy-memory/src/index.ts)
 
 ```ts config-catalog
 /** Memory file and context budget. */
@@ -5912,6 +5912,7 @@ export interface Config {
 | `@deepseek-ai/dsh-host-plugin-inventory` | `loader` | [`packages/host/plugin-inventory/src/index.ts`](../packages/host/plugin-inventory/src/index.ts) |
 | `@deepseek-ai/dsh-llm` | — | [`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts) |
 | `@deepseek-ai/dsh-lsp` | — | [`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts) |
+| `@deepseek-ai/dsh-lsy-memory-admin` | — | [`packages/lsy/lsy-memory-admin/src/index.ts`](../packages/lsy/lsy-memory-admin/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-qq-login` | `connection` · `lsyQq` | [`packages/lsy/lsy-qq-login/src/index.ts`](../packages/lsy/lsy-qq-login/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-style-settings` | `connection` | [`packages/lsy/lsy-style-settings/src/index.ts`](../packages/lsy/lsy-style-settings/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-tool-monitor` | `tools` · `storageDomain` · `sessionController` · `sessionPersistence` | [`packages/lsy/lsy-tool-monitor/src/index.ts`](../packages/lsy/lsy-tool-monitor/src/index.ts) |

@@ -582,6 +582,7 @@
     { "path": "./packages/lsy/lsy-qq-login/tsconfig.host.json" },
     { "path": "./packages/lsy/lsy-style" },
     { "path": "./packages/lsy/lsy-style-settings/tsconfig.host.json" },
+    { "path": "./packages/lsy/lsy-memory-admin/tsconfig.host.json" },
     { "path": "./packages/lsy/bili/tsconfig.host.json" },
     { "path": "./packages/lsy/tool-bili" },
     { "path": "./packages/todo/tool-todo" },

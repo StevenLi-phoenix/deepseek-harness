@@ -7,6 +7,7 @@ import { readFile, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { parseClaudeExport } from './export.ts'
+import { CLI_ORIGIN, reviewWrite } from './admin.ts'
 import { CATEGORIES } from './entries.ts'
 import { defaultFeedbackFile, FEEDBACK_SCOPES, FeedbackStore, type FeedbackScope } from './feedback.ts'
 import { defaultMemoryFile, MemoryStore } from './store.ts'
@@ -90,9 +91,6 @@ const ADMIN_USAGE = [
 
 /** How long the mute file silences the safety notices (the channel applies the same window). */
 const MUTE_MS = 30 * 60_000
-
-/** What the history records for a change the CLI made. */
-const ADMIN_META = { origin: 'memory-admin' } as const
 
 /** Characters of an entry text `memory-admin recent` shows. */
 const RECENT_TEXT_CHARS = 60
@@ -230,9 +228,7 @@ export async function runAdminCli(io: ImportCliIo = {}): Promise<number> {
       case 'revert': {
         if (ids.length === 0) { err(ADMIN_USAGE); return 2 }
         for (const id of ids) {
-          if (command === 'approve') await store.approve(id, ADMIN_META)
-          else if (command === 'discard') await store.discard(id)
-          else await store.revert(id, ADMIN_META)
+          await reviewWrite(store, command, id, CLI_ORIGIN)
           out(`memory-admin: ${command} ${id} done`)
         }
         return 0

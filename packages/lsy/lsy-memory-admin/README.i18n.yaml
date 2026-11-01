@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/lsy-memory-admin/README.md
+/:
+  en: 637d26a24b630e7a
+  zh: a539ce65fd18f521
+/deepseek-ai-dsh-lsy-memory-admin:
+  en: e67b11d744f9bfb3
+  zh: 37d242c9f87137ef
+/deepseek-ai-dsh-lsy-memory-admin/summary:
+  en: 7f59ab201ad1f430
+  zh: ac8b8146a9cc2f83
+/deepseek-ai-dsh-lsy-memory-admin/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-lsy-memory-admin/use-this-package:
+  en: 1543b0f814016c1f
+  zh: a036a4b5f5a7c1fe
+/deepseek-ai-dsh-lsy-memory-admin/understand-the-implementation:
+  en: a6284ca8b124fed0
+  zh: 1daa53f7f53116e2
+/deepseek-ai-dsh-lsy-memory-admin/further-exploration:
+  en: b1ef69179219f757
+  zh: bbf67d5fd8d5a056
+/deepseek-ai-dsh-lsy-memory-admin/model-experience:
+  en: f1c5ac0fff418584
+  zh: 69a4dd39da5b51de
+/deepseek-ai-dsh-lsy-memory-admin/model-experience/kv-cache-effect:
+  en: ca75c51c89c2c9b0
+  zh: bc18dcaf8e5986ea
+/deepseek-ai-dsh-lsy-memory-admin/known-limitations-and-deferred-work:
+  en: d0a7175ffd6be1a8
+  zh: 63122743740e1b0c
+/deepseek-ai-dsh-lsy-memory-admin/known-limitations-and-deferred-work/dev-note:
+  en: 6a31fd7ccfb46fb1
+  zh: 061a578e8bc10e71

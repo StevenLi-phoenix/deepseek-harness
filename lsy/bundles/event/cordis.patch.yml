@@ -254,6 +254,16 @@
     - id: lsy-sysmon
       name: '@deepseek-ai/dsh-lsy-sysmon'
 
+    # Settings → Memory: waiting writes to approve or discard, entries to search, undo, or erase, a
+    # Session's changes to roll back, and the keep/delete verdicts on persona replies. The page is
+    # lsy-memory-admin (browser half); its Host route /api/lsy.memory is lsy-memory-settings, which reads
+    # the file the lsy-memory rows below use (<DSH_HOME>/lsy-memory/memory.jsonl). The route sits under
+    # the Web UI sign-in and registers no tool, so no agent can reach it.
+    - id: lsy-memory-admin
+      name: '@deepseek-ai/dsh-lsy-memory-admin'
+    - id: lsy-memory-settings
+      name: '@deepseek-ai/dsh-lsy-memory/settings'
+
     # Voice (ctx.lsyVoice): text to speech for the `speak` tool (feiyu on the laptop, no fallback;
     # the Mac mini TTS service was retired on 2026-10-31; the key is LSY_FEIYU_API_KEY in
     # $DSH_HOME/.env) and speech to text for audio files the owner sends on WeChat. Transcription is OFF: to turn it on, add

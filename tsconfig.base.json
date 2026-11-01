@@ -490,6 +490,7 @@
       "@deepseek-ai/dsh-lsy-github-sensor": ["./packages/lsy/lsy-github-sensor/src"],
       "@deepseek-ai/dsh-lsy-integrity": ["./packages/lsy/lsy-integrity/src"],
       "@deepseek-ai/dsh-lsy-memory": ["./packages/lsy/lsy-memory/src"],
+      "@deepseek-ai/dsh-lsy-memory-admin": ["./packages/lsy/lsy-memory-admin/src"],
       "@deepseek-ai/dsh-lsy-qq": ["./packages/lsy/lsy-qq/src"],
       "@deepseek-ai/dsh-lsy-qq-login": ["./packages/lsy/lsy-qq-login/src"],
       "@deepseek-ai/dsh-lsy-qqbot": ["./packages/lsy/lsy-qqbot/src"],

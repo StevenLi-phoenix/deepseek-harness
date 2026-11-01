@@ -36,7 +36,7 @@ export const PENDING_DAYS = 14
 export const SNAPSHOTS_KEPT = 30
 
 /** Why a store operation was refused. */
-export type MemoryErrorCode = 'invalid_text' | 'invalid_category' | 'invalid_id' | 'not_found' | 'full' | 'corrupt' | 'pending_full' | 'nothing_to_revert'
+export type MemoryErrorCode = 'invalid_text' | 'invalid_category' | 'invalid_id' | 'not_found' | 'full' | 'corrupt' | 'pending_full' | 'nothing_to_revert' | 'stale_preview'
 
 /** A refused store operation; `message` is safe to show the model. */
 export class MemoryError extends Error {
@@ -52,6 +52,19 @@ export interface SaveResult {
   /** `added` for a new entry, `replaced` for an id given, `unchanged` when the same text already exists. */
   readonly outcome: 'added' | 'replaced' | 'unchanged'
 }
+
+/**
+ * Whether a rollback by this filter undoes a history record.
+ * @param record - one history record.
+ * @param filter - the Session and/or time to go back to.
+ */
+export function matchesRollback(record: HistoryRecord, filter: RollbackFilter): boolean {
+  return (filter.session === undefined || record.session === filter.session)
+    && (filter.since === undefined || record.at >= filter.since)
+    && record.op !== 'rollback'
+}
+
+const stalePreview = (): MemoryError => new MemoryError('stale_preview', 'memory changed since the preview; preview again.')
 
 /** What {@link MemoryStore.importDrafts} did. */
 export interface ImportResult {
@@ -93,6 +106,32 @@ export interface RollbackResult {
   readonly removed: number
   /** Ids of the entries it touched. */
   readonly ids: readonly string[]
+  /** SHA-256 of the entries the answer was computed from: a preview and its application agree only when this does. */
+  readonly state: string
+}
+
+/** Options of {@link MemoryStore.rollback}. */
+export interface RollbackOptions {
+  /** Only count. */
+  readonly dryRun?: boolean
+  /** Checked against the answer computed under the file lock, before anything is written; false refuses with `stale_preview`. */
+  readonly expect?: (planned: RollbackResult) => boolean
+}
+
+/** What {@link MemoryStore.purge} removed, place by place. */
+export interface PurgeResult {
+  readonly entries: number
+  readonly history: number
+  readonly snapshots: number
+  readonly pending: number
+}
+
+/** Options of {@link MemoryStore.purge}. */
+export interface PurgeOptions {
+  /** Only count what would be erased. */
+  readonly dryRun?: boolean
+  /** Checked against the counts computed under the file lock, before anything is erased; false refuses with `stale_preview`. */
+  readonly expect?: (planned: PurgeResult) => boolean
 }
 
 /** What {@link MemoryStore.search} found. */
@@ -426,14 +465,11 @@ export class MemoryStore {
   /**
    * Undo every change a Session's turns made, or every change since a time, newest first.
    * @param filter - the Session id and/or the ISO time to go back to.
-   * @param options - `dryRun` only counts.
+   * @param options - `dryRun` only counts; `expect` guards what a confirmed rollback applies.
    */
-  async rollback(filter: RollbackFilter, options: { dryRun?: boolean } = {}): Promise<RollbackResult> {
+  async rollback(filter: RollbackFilter, options: RollbackOptions = {}): Promise<RollbackResult> {
     if (filter.session === undefined && filter.since === undefined) throw new MemoryError('invalid_id', 'give a session or a since time to roll back.')
-    const matches = (await this.history()).filter(record =>
-      (filter.session === undefined || record.session === filter.session)
-      && (filter.since === undefined || record.at >= filter.since)
-      && record.op !== 'rollback')
+    const matches = (await this.history()).filter(record => matchesRollback(record, filter))
     const ids = [...new Set(matches.map(record => record.id))]
     const result = (entries: MemoryEntry[]): { entries: MemoryEntry[]; restored: number; removed: number } => {
       let next = [...entries]
@@ -454,12 +490,15 @@ export class MemoryStore {
       return { entries: next, restored, removed }
     }
     if (options.dryRun === true) {
-      const outcome = result(await this.list())
-      return { matched: matches.length, restored: outcome.restored, removed: outcome.removed, ids }
+      const before = await this.list()
+      const outcome = result(before)
+      return { matched: matches.length, restored: outcome.restored, removed: outcome.removed, ids, state: sha256(serialize(before)) }
     }
     return await this.mutate({}, (entries) => {
       const outcome = result(entries)
-      const summary = { matched: matches.length, restored: outcome.restored, removed: outcome.removed, ids }
+      const state = sha256(serialize(entries))
+      const summary = { matched: matches.length, restored: outcome.restored, removed: outcome.removed, ids, state }
+      if (options.expect?.(summary) === false) throw stalePreview()
       return { entries: outcome.entries, result: summary, op: 'rollback' }
     })
   }
@@ -467,42 +506,49 @@ export class MemoryStore {
   /**
    * Erase an entry and every trace of it: the file, the history, the snapshots, and the waiting writes.
    * @param id - entry id.
+   * @param options - `dryRun` only counts; `expect` guards what a confirmed erase applies.
    * @returns the number of places it was removed from.
    */
-  async purge(id: unknown): Promise<{ entries: number; history: number; snapshots: number; pending: number }> {
+  async purge(id: unknown, options: PurgeOptions = {}): Promise<PurgeResult> {
     if (!isEntryId(id)) throw new MemoryError('invalid_id', `id ${JSON.stringify(id)} is not six hex digits.`)
     return await serialized(this.file, async () => {
       const entries = await this.list()
       const kept = entries.filter(entry => entry.id !== id)
-      if (kept.length !== entries.length) await this.writeEntries(kept)
       const history = await this.history()
       const keptHistory = history.filter(record => record.id !== id)
+      const pending = await this.listPending()
+      const keptPending = pending.filter(entry => entry.id !== id && entry.target !== id)
+      let snapshotHits = 0
+      const snapshotLines = new Map<string, string[]>()
+      for (const name of await this.snapshotNames()) {
+        const lines = (await this.read(join(this.snapshotDir, name))).split('\n').filter(line => line.trim() !== '')
+        const left = lines.filter((line) => {
+          try { return (JSON.parse(line) as { id?: unknown }).id !== id } catch { return true }
+        })
+        if (left.length !== lines.length) {
+          snapshotHits += 1
+          snapshotLines.set(name, left)
+        }
+      }
+      const planned: PurgeResult = {
+        entries: entries.length - kept.length,
+        history: history.length - keptHistory.length,
+        snapshots: snapshotHits,
+        pending: pending.length - keptPending.length,
+      }
+      if (options.expect?.(planned) === false) throw stalePreview()
+      if (options.dryRun === true) return planned
+      if (kept.length !== entries.length) await this.writeEntries(kept)
       if (keptHistory.length !== history.length) {
         const temporary = `${this.historyFile}.${String(process.pid)}.tmp`
         await writeFile(temporary, keptHistory.map(record => JSON.stringify(record)).join('\n') + (keptHistory.length > 0 ? '\n' : ''), { mode: 0o600 })
         await rename(temporary, this.historyFile)
       }
-      let snapshots = 0
-      for (const name of await this.snapshotNames()) {
-        const path = join(this.snapshotDir, name)
-        const lines = (await this.read(path)).split('\n').filter(line => line.trim() !== '')
-        const left = lines.filter((line) => {
-          try { return (JSON.parse(line) as { id?: unknown }).id !== id } catch { return true }
-        })
-        if (left.length !== lines.length) {
-          await writeFile(path, left.join('\n') + (left.length > 0 ? '\n' : ''), { mode: 0o600 })
-          snapshots += 1
-        }
+      for (const [name, left] of snapshotLines) {
+        await writeFile(join(this.snapshotDir, name), left.join('\n') + (left.length > 0 ? '\n' : ''), { mode: 0o600 })
       }
-      const pending = await this.listPending()
-      const keptPending = pending.filter(entry => entry.id !== id && entry.target !== id)
       if (keptPending.length !== pending.length) await this.writePending(keptPending)
-      return {
-        entries: entries.length - kept.length,
-        history: history.length - keptHistory.length,
-        snapshots,
-        pending: pending.length - keptPending.length,
-      }
+      return planned
     })
   }
 

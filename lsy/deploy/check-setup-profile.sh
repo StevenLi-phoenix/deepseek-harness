@@ -29,6 +29,8 @@ done
 /usr/bin/grep -q "@deepseek-ai/dsh-lsy-cc-bridge" "$WORK/fresh.yml" || fail "unattended preset lacks lsy-cc-bridge"
 /usr/bin/grep -q "^- id: lsy-event-ingest$" "$WORK/fresh.yml" || fail "composition lacks lsy-event-ingest"
 /usr/bin/grep -q "@deepseek-ai/dsh-lsy-sysmon" "$WORK/fresh.yml" || fail "composition lacks lsy-sysmon"
+/usr/bin/grep -q "@deepseek-ai/dsh-lsy-memory-admin" "$WORK/fresh.yml" || fail "composition lacks lsy-memory-admin"
+/usr/bin/grep -q "@deepseek-ai/dsh-lsy-memory/settings" "$WORK/fresh.yml" || fail "composition lacks the lsy-memory settings route"
 /usr/bin/grep -q "^- id: owner-relay\$" "$WORK/fresh.yml" || fail "composition lacks owner-relay"
 /usr/bin/grep -q "^- id: bili\$" "$WORK/fresh.yml" || fail "composition lacks bili"
 /usr/bin/grep -q "^- id: preset-bili\$" "$WORK/fresh.yml" || fail "composition lacks preset-bili"

@@ -376,6 +376,7 @@ flowchart TD
     pkg_lsy_github_sensor["lsy-github-sensor"]
     pkg_lsy_integrity["lsy-integrity"]
     pkg_lsy_memory["lsy-memory"]
+    pkg_lsy_memory_admin["lsy-memory-admin"]
     pkg_lsy_qq["lsy-qq"]
     pkg_lsy_qq_login["lsy-qq-login"]
     pkg_lsy_qqbot["lsy-qqbot"]
@@ -1762,6 +1763,7 @@ flowchart TD
 | [`host-webserver`](../packages/host/webserver) | `host` | — |
 | [`bili`](../packages/lsy/bili) | `lsy` | — |
 | [`lsy-balance`](../packages/lsy/lsy-balance) | `lsy` | — |
+| [`lsy-memory-admin`](../packages/lsy/lsy-memory-admin) | `lsy` | — |
 | [`lsy-qq-login`](../packages/lsy/lsy-qq-login) | `lsy` | — |
 | [`lsy-style-settings`](../packages/lsy/lsy-style-settings) | `lsy` | — |
 | [`lsy-sysmon`](../packages/lsy/lsy-sysmon) | `lsy` | — |

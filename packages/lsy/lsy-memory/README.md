@@ -70,9 +70,18 @@ The Host stamps every write with where it came from, read from the Session's log
 | `snapshots/memory-YYYY-MM-DD.jsonl` (600) | The memory file as it stood before the first change of each day; the latest 30 are kept |
 | `memory.pending.jsonl` (600) | Protected writes held for the owner; never shown in a prompt; at most 50, dropped after 14 days |
 
-With `hold` on, a protected write from a turn the owner did not start alone is not made: the tool answers `held`, and the owner gets one plain sentence on WeChat (`扣下了一条指令，还没写入：…（来源：B站猫猫的传话）`). WeChat has no command words: the owner keeps, drops, or undoes entries with the `memory-admin` CLI over SSH (or has Claude Code run it), or simply tells the agent in words, which writes in a turn the owner started alone. Every protected write the owner's own turn makes is announced the same way (`记住了一条偏好：…（来源：微信对话）`); one turn's changes merge into one message, and `noticesPerDay` caps them.
+With `hold` on, a protected write from a turn the owner did not start alone is not made: the tool answers `held`, and the owner gets one plain sentence on WeChat (`扣下了一条指令，还没写入：…（来源：B站猫猫的传话）`). WeChat has no command words: the owner answers in **Settings → Memory** (below), or simply tells the agent in words, which writes in a turn the owner started alone. The `memory-admin` CLI over SSH (or run by Claude Code) does the same and stays as the fallback. Every protected write the owner's own turn makes is announced the same way (`记住了一条偏好：…（来源：微信对话）`); one turn's changes merge into one message, and `noticesPerDay` caps them.
 
-The owner runs these on the host as the service user, from a laptop with `ssh mini '…'` (the RUNBOOK has the full line). `ids` prints ids, categories, and counts and never text; `recent` and `show` print text, to find the id a notice meant:
+**Settings → Memory** is the primary place to review and undo. Mount the `lsy-memory-settings` row at the Host root, next to the `lsy-memory-admin` row (the page, package [`lsy-memory-admin`](../lsy-memory-admin/README.md)); the lsy event profile mounts both:
+
+```yaml
+- id: lsy-memory-settings
+  name: '@deepseek-ai/dsh-lsy-memory/settings'
+```
+
+The row has one optional field, `file` (the memory file, default as above; the feedback file sits beside it). The page lists the waiting writes first, with where each came from and the Session behind it, to approve or discard; the entries, searchable by text and category, newest change first, with the full text and history on demand, to undo or erase; a rollback of a Session's changes or of everything since a time, which always shows a preview first and applies exactly that preview; and the feedback verdicts. The route is `GET`/`POST /api/lsy.memory` under the Web UI sign-in; it registers no tool, so no agent can call it, and it has no action that writes an entry, so a write waiting for the owner cannot be approved by the Session that made it. It calls the same functions as the CLI (`src/admin.ts`) and stamps its changes in the history with the origin `settings`.
+
+The CLI runs on the host as the service user, from a laptop with `ssh mini '…'` (the RUNBOOK has the full line). `ids` prints ids, categories, and counts and never text; `recent` and `show` print text, to find the id a notice meant:
 
 ```sh
 sudo -n -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node \
@@ -113,6 +122,8 @@ The tools call `MemoryStore`, which validates everything the model sends: catego
 | [`src/feedback.ts`](src/feedback.ts) | The owner's keep/delete verdicts on persona replies: store, CLI payload validation, and the feedback block |
 | [`src/entries.ts`](src/entries.ts) | Entry type, categories, validation |
 | [`src/export.ts`](src/export.ts) | claude.ai export parser |
+| [`src/admin.ts`](src/admin.ts) | The review functions the CLI and the Settings route share: approve, discard, revert, and the previewed rollback and erase with their tokens |
+| [`src/settings.ts`](src/settings.ts) | The `/api/lsy.memory` route (`@deepseek-ai/dsh-lsy-memory/settings`); [`src/settings/`](src/settings) holds its read model, request handler, and wire types |
 | [`src/cli.ts`](src/cli.ts) | `memory-import` (run through [`lsy/deploy/memory-import.mjs`](../../../lsy/deploy/memory-import.mjs)) and `memory-admin` ([`lsy/deploy/memory-admin.mjs`](../../../lsy/deploy/memory-admin.mjs)) |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
