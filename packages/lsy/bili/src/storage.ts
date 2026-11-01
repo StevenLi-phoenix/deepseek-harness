@@ -89,7 +89,7 @@ export type SessionRecord = z.infer<typeof sessionSchema>
 /**
  * Account storage. `inbox` by kind (`dm`); `pending` by `<kind>:<id>`; `journal` and `told` (today's
  * only) by zero-padded `seq`; `owner` by `main`; `sessions` by Session id, and `current` names the live one;
- * `hotComments` by rpid and `hotWords` by word (`ctx.biliHot`, bounded and expiring).
+ * `hot_comments` by rpid and `hot_words` by word (`ctx.biliHot`, bounded and expiring).
  */
 export const biliDomain = {
   name: 'bili',
@@ -102,8 +102,8 @@ export const biliDomain = {
     owner: table<OwnerRecord>(ownerSchema),
     sessions: table<SessionRecord>(sessionSchema),
     current: table<SessionRecord>(sessionSchema),
-    hotComments: table<HotCommentRecord>(hotCommentSchema),
-    hotWords: table<HotWordRecord>(hotWordSchema),
+    hot_comments: table<HotCommentRecord>(hotCommentSchema),
+    hot_words: table<HotWordRecord>(hotWordSchema),
   },
 } as const satisfies DomainSpec
 
