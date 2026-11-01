@@ -1,10 +1,11 @@
 /**
- * The presence state machine, pure: what the phone's Sleep Focus, the daily window, and a button in
+ * The presence state machine, pure: what the Sleep Focus signal, the daily window, and a button in
  * Settings say, and which of them wins. The service keeps the inputs and asks this module for the
  * answer and for the next moment it can change.
  *
  * Precedence: a button that is still in force, then a fresh Focus signal, then the daily window.
- * A Focus signal that arrives after a button ends the button, because the phone has spoken again.
+ * A Focus change that arrives after a button ends the button, because the watcher saw the state move again; a heartbeat
+ * that repeats the held state refreshes how long it holds and changes nothing else.
  * Clock times are read in the owner's time zone; on the two days a year the zone changes its offset,
  * a boundary can land an hour off.
  */
@@ -18,9 +19,9 @@ export interface PresenceRules {
   /** IANA zone of the owner. */
   timeZone: string
   window: QuietWindow
-  /** How long an awake Focus signal outranks the window, in milliseconds. */
+  /** How long a Focus-off signal outranks the window without a newer one (heartbeats refresh it), in milliseconds. */
   focusFreshMs: number
-  /** How long an asleep Focus signal holds without its off signal, in milliseconds. */
+  /** How long a Focus-on signal holds without a newer one (heartbeats refresh it), in milliseconds. */
   sleepMaxMs: number
   /** How long a button holds when it names no end, in milliseconds. */
   manualMaxMs: number
@@ -109,7 +110,7 @@ function manualEnd(manual: ManualInput, rules: PresenceRules): number {
 function manualActive(now: number, inputs: PresenceInputs, rules: PresenceRules): inputs is PresenceInputs & { manual: ManualInput } {
   const { manual, focus } = inputs
   if (manual === undefined || now >= manualEnd(manual, rules)) return false
-  return focus === undefined || focus.at <= manual.at
+  return focus === undefined || focus.since <= manual.at
 }
 
 /** How long the Focus signal holds, in milliseconds. */
@@ -131,7 +132,7 @@ export function evaluate(now: number, inputs: PresenceInputs, rules: PresenceRul
   }
   const { focus } = inputs
   if (focus !== undefined && now - focus.at < focusHold(focus, rules)) {
-    return { asleep: focus.asleep, source: 'focus', since: focus.at, until: focus.asleep ? focus.at + rules.sleepMaxMs : null }
+    return { asleep: focus.asleep, source: 'focus', since: focus.since, until: focus.asleep ? focus.at + rules.sleepMaxMs : null }
   }
   const position = windowPosition(now, rules)
   if (position === undefined) return { asleep: false, source: 'window', since: null, until: null }

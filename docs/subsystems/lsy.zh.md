@@ -429,8 +429,11 @@ registerHolder(holder: DeferralHolder): () => void
 async flushNow(): Promise<number>
 
 /**
- * Apply a Focus signal pushed by the phone (the `presence` ingest source). The Host's receipt time is
- * the signal's time; the pusher's clock and key are ignored.
+ * Apply a Focus signal pushed by `focus-watch` (the `presence` ingest source). The Host's receipt time is
+ * the signal's time; the pusher's clock is ignored, and its key only tells a heartbeat (`heartbeat…`) from a
+ * change. A signal that repeats the state already held, which every heartbeat does, refreshes how long the
+ * state holds and nothing else: no change of `since`, no end to a button, no listener call, no flush. Only a
+ * signal that flips the state (or the first one) begins a new state and ends a button.
  * @param event - `presence.sleep.on` or `presence.sleep.off`.
  * @returns `asleep` or `awake`, as the signal says.
  * @throws {Error} for any other kind.

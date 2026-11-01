@@ -3,14 +3,14 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/lsy/lsy-wechat-settings/README.md
 /:
-  en: 3569393a9fd01fb0
-  zh: 525a39c0b6361f38
+  en: 4aa1961ef362763b
+  zh: 4faf1cdcf6105248
 /deepseek-ai-dsh-lsy-wechat-settings:
   en: 68f295ccbfe7ac00
   zh: 41aee730338ce684
 /deepseek-ai-dsh-lsy-wechat-settings/summary:
-  en: 7705e1c4f56bf56e
-  zh: eef50907f667a772
+  en: 088e8fbfa5fd4a22
+  zh: 9bd627c25a883cca
 /deepseek-ai-dsh-lsy-wechat-settings/table-of-contents:
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
@@ -18,8 +18,8 @@
   en: 6bd3fb74d3801d2c
   zh: adfd5c71dd51b472
 /deepseek-ai-dsh-lsy-wechat-settings/understand-the-implementation:
-  en: 8f6541f2211284ea
-  zh: f95fd725ce24c8e3
+  en: 922e1cc7a5cc6099
+  zh: 7a3fcb42b0c3714a
 /deepseek-ai-dsh-lsy-wechat-settings/further-exploration:
   en: 71612b6c94b3598e
   zh: b5d2212be1109f99

@@ -3,7 +3,12 @@ import { z } from 'zod'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 
 const inputsSchema = z.object({
-  focus: z.object({ asleep: z.boolean(), at: z.number() }).strict().optional(),
+  focus: z.object({
+    asleep: z.boolean(),
+    at: z.number(),
+    since: z.number().optional(),
+    heartbeatAt: z.number().optional(),
+  }).strict().optional(),
   manual: z.object({ asleep: z.boolean(), at: z.number(), until: z.number().optional() }).strict().optional(),
 }).strict()
 

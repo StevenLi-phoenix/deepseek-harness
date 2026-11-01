@@ -2412,7 +2412,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async ingest(event: LsyEventInput): Promise<string>',
-        description: 'Apply a Focus signal pushed by the phone (the `presence` ingest source). The Host\'s receipt time is the signal\'s time; the pusher\'s clock and key are ignored.',
+        description: 'Apply a Focus signal pushed by `focus-watch` (the `presence` ingest source). The Host\'s receipt time is the signal\'s time; the pusher\'s clock is ignored, and its key only tells a heartbeat (`heartbeat…`) from a change. A signal that repeats the state already held, which every heartbeat does, refreshes how long the state holds and nothing else: no change of `since`, no end to a button, no listener call, no flush. Only a signal that flips the state (or the first one) begins a new state and ends a button.',
         parameters: [{ name: 'event', description: '`presence.sleep.on` or `presence.sleep.off`.' }],
         returns: '`asleep` or `awake`, as the signal says.',
         throws: ['{Error} for any other kind.'],
@@ -7073,7 +7073,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'FocusView',
-    declaration: 'export interface FocusView {\n    readonly asleep: boolean;\n    readonly at: number;\n}',
+    declaration: 'export interface FocusView {\n    readonly asleep: boolean;\n    readonly at: number;\n    readonly since: number;\n    readonly heartbeatAt: number | null;\n}',
   },
   {
     name: 'Folder',
@@ -8349,7 +8349,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'PresenceView',
-    declaration: 'export interface PresenceView {\n    readonly asleep: boolean;\n    readonly source: PresenceSource;\n    readonly since: number | null;\n    readonly until: number | null;\n    readonly manual: ManualView | null;\n    readonly lastFocus: FocusView | null;\n    readonly window: QuietWindow;\n    readonly deferred: number;\n    readonly urgentKinds: readonly string[];\n    readonly shortcut: ShortcutView;\n    readonly timeZone: string;\n}',
+    declaration: 'export interface PresenceView {\n    readonly asleep: boolean;\n    readonly source: PresenceSource;\n    readonly since: number | null;\n    readonly until: number | null;\n    readonly manual: ManualView | null;\n    readonly lastFocus: FocusView | null;\n    readonly window: QuietWindow;\n    readonly deferred: number;\n    readonly urgentKinds: readonly string[];\n    readonly signalSilent: boolean;\n    readonly focusFreshHours: number;\n    readonly timeZone: string;\n}',
   },
   {
     name: 'PresetDefinition',
@@ -9750,10 +9750,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ShellSandboxInfo',
     declaration: 'export interface ShellSandboxInfo {\n    mode: SandboxMode;\n    denied: boolean;\n    enforcement?: SandboxEnforcement;\n    runnerFailed?: boolean;\n}',
-  },
-  {
-    name: 'ShortcutView',
-    declaration: 'export interface ShortcutView {\n    readonly url: string | null;\n    readonly path: string;\n    readonly header: \'Authorization\';\n    readonly tokenEnv: string;\n    readonly bodyOn: string;\n    readonly bodyOff: string;\n}',
   },
   {
     name: 'SignInAttemptId',

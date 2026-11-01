@@ -1,9 +1,10 @@
 /**
- * Owner presence: whether the owner is asleep, as `ctx.lsyPresence`. The phone's Sleep Focus is the
- * main source (an iOS Shortcut pushes `presence.sleep.on` and `presence.sleep.off` to
- * `lsy-event-ingest`, which hands them to this service and never to the event bus, so they cannot start
- * a Session or send a message); a daily window in the owner's time zone covers the days no signal
- * arrives; the Settings buttons override both. Channels ask {@link LsyPresence.isAsleep} and
+ * Owner presence: whether the owner is asleep, as `ctx.lsyPresence`. The Sleep Focus is the main source:
+ * `focus-watch` on the Mac mini reads the state iCloud syncs from the phone and pushes `presence.sleep.on` and
+ * `presence.sleep.off` to `lsy-event-ingest` on every change and as a heartbeat every 30 minutes; ingest hands
+ * them to this service and never to the event bus, so they cannot start a Session or send a message. A signal
+ * that repeats the held state only refreshes how long it holds. A daily window in the owner's time zone
+ * covers the time the watcher is silent; the Settings buttons override both. Channels ask {@link LsyPresence.isAsleep} and
  * {@link LsyPresence.isUrgent}, hold back what is not urgent, and flush when the owner wakes.
  *
  * @module @deepseek-ai/dsh-lsy-presence
@@ -16,7 +17,7 @@ import z from '@deepseek-ai/schemastery'
 import { PresenceSettings, type SettingsConnection } from './settings.ts'
 import { evaluate, hours, nextChange, nextClockTime, type PresenceInputs, type PresenceRules, type PresenceState } from './state.ts'
 import { presenceDomain, type InputsRecord } from './storage.ts'
-import { CLOCK_PATTERN, KIND_SLEEP_OFF, KIND_SLEEP_ON, PRESENCE_SOURCE, type FocusView, type ManualView, type PresenceView, type QuietWindow } from './view.ts'
+import { CLOCK_PATTERN, HEARTBEAT_KEY, KIND_SLEEP_OFF, KIND_SLEEP_ON, PRESENCE_SOURCE, SIGNAL_SILENT_MS, type FocusView, type ManualView, type PresenceView, type QuietWindow } from './view.ts'
 
 export * from './state.ts'
 export * from './view.ts'
@@ -37,7 +38,7 @@ export interface Config {
   timeZone: string
   /** Daily fallback window, used when no Focus signal is fresh; the Settings page can replace it. */
   window: QuietWindow
-  /** Hours an awake Focus signal outranks the window. */
+  /** Hours a Focus signal holds without a newer one before the window decides again (the watcher sends a heartbeat every 30 minutes). */
   focusFreshHours: number
   /** Hours an asleep Focus signal holds when its off signal never arrives. */
   sleepMaxHours: number
@@ -45,12 +46,6 @@ export interface Config {
   manualMaxHours: number
   /** Globs of the event kinds that are sent while the owner sleeps. */
   urgentKinds: string[]
-  /** Full URL of `lsy-event-ingest`'s route, shown in the Shortcut instructions. */
-  ingestUrl?: string
-  /** Path of that route. */
-  ingestPath: string
-  /** Name of the environment variable that holds the `presence` ingest token, shown in the instructions (the value is never read here). */
-  tokenEnv: string
 }
 
 /** Configuration schema. */
@@ -61,13 +56,10 @@ export const Config: z<Config> = z.object({
     start: z.string().pattern(CLOCK_PATTERN).default('03:30'),
     end: z.string().pattern(CLOCK_PATTERN).default('10:30'),
   }),
-  focusFreshHours: z.natural().min(1).default(20),
+  focusFreshHours: z.natural().min(1).default(2),
   sleepMaxHours: z.natural().min(1).default(14),
   manualMaxHours: z.natural().min(1).default(12),
   urgentKinds: z.array(z.string()).default([...DEFAULT_URGENT_KINDS]),
-  ingestUrl: z.string(),
-  ingestPath: z.string().default('/hooks/lsy'),
-  tokenEnv: z.string().default('LSY_INGEST_TOKEN_PRESENCE'),
 })
 
 /** What a channel that holds messages back registers, so Settings can count and flush them. */
@@ -99,7 +91,6 @@ function assertConfig(config: Config): void {
     throw new Error(`lsy-presence: timeZone "${config.timeZone}" is not a valid IANA time zone`)
   }
   if (config.window.enabled && config.window.start === config.window.end) throw new Error('lsy-presence: window start and end must differ')
-  if (config.ingestUrl !== undefined && !URL.canParse(config.ingestUrl)) throw new Error('lsy-presence: ingestUrl must be a URL')
 }
 
 /**
@@ -138,7 +129,7 @@ export class LsyPresence extends Service implements LsyIngestSink {
       const domain = await this.ready
       this.domain = domain
       const stored = domain.table('inputs').get('owner')
-      this.inputs = { focus: stored?.focus, manual: stored?.manual }
+      this.inputs = { focus: restoredFocus(stored?.focus), manual: stored?.manual }
       const window = domain.table('window').get('window')
       if (window !== undefined) this.window = window
       this.refresh('restored', false)
@@ -233,8 +224,11 @@ export class LsyPresence extends Service implements LsyIngestSink {
   }
 
   /**
-   * Apply a Focus signal pushed by the phone (the `presence` ingest source). The Host's receipt time is
-   * the signal's time; the pusher's clock and key are ignored.
+   * Apply a Focus signal pushed by `focus-watch` (the `presence` ingest source). The Host's receipt time is
+   * the signal's time; the pusher's clock is ignored, and its key only tells a heartbeat (`heartbeat…`) from a
+   * change. A signal that repeats the state already held, which every heartbeat does, refreshes how long the
+   * state holds and nothing else: no change of `since`, no end to a button, no listener call, no flush. Only a
+   * signal that flips the state (or the first one) begins a new state and ends a button.
    * @param event - `presence.sleep.on` or `presence.sleep.off`.
    * @returns `asleep` or `awake`, as the signal says.
    * @throws {Error} for any other kind.
@@ -244,7 +238,14 @@ export class LsyPresence extends Service implements LsyIngestSink {
       throw new Error(`unknown presence kind; use ${KIND_SLEEP_ON} or ${KIND_SLEEP_OFF}`)
     }
     const asleep = event.kind === KIND_SLEEP_ON
-    await this.update(() => ({ ...this.inputs, focus: { asleep, at: Date.now() }, manual: undefined }), `focus ${asleep ? 'on' : 'off'}`)
+    const heartbeat = HEARTBEAT_KEY.test(event.key)
+    await this.update(() => {
+      const at = Date.now()
+      const held = this.inputs.focus
+      const heartbeatAt = heartbeat ? at : held?.heartbeatAt ?? null
+      if (held?.asleep === asleep) return { ...this.inputs, focus: { ...held, at, heartbeatAt } }
+      return { ...this.inputs, focus: { asleep, at, since: at, heartbeatAt }, manual: undefined }
+    }, `focus ${asleep ? 'on' : 'off'}${heartbeat ? ' (heartbeat)' : ''}`)
     return asleep ? 'asleep' : 'awake'
   }
 
@@ -299,7 +300,7 @@ export class LsyPresence extends Service implements LsyIngestSink {
     const manualView: ManualView | null = active
       ? { asleep: manual.asleep, at: manual.at, until: state.until ?? manual.at + rules.manualMaxMs }
       : null
-    const lastFocus: FocusView | null = focus === undefined ? null : { asleep: focus.asleep, at: focus.at }
+    const lastFocus: FocusView | null = focus === undefined ? null : { ...focus }
     return {
       asleep: state.asleep,
       source: state.source,
@@ -310,7 +311,8 @@ export class LsyPresence extends Service implements LsyIngestSink {
       window: this.window,
       deferred,
       urgentKinds: this.config.urgentKinds,
-      shortcut: shortcut(this.config),
+      signalSilent: focus === undefined || Date.now() - focus.at > SIGNAL_SILENT_MS,
+      focusFreshHours: this.config.focusFreshHours,
       timeZone: this.config.timeZone,
     }
   }
@@ -385,24 +387,26 @@ export class LsyPresence extends Service implements LsyIngestSink {
 function storable(inputs: PresenceInputs): InputsRecord {
   const { focus, manual } = inputs
   return {
-    ...focus === undefined ? {} : { focus: { asleep: focus.asleep, at: focus.at } },
+    ...focus === undefined
+      ? {}
+      : {
+        focus: {
+          asleep: focus.asleep,
+          at: focus.at,
+          since: focus.since,
+          ...focus.heartbeatAt === null ? {} : { heartbeatAt: focus.heartbeatAt },
+        },
+      },
     ...manual === undefined
       ? {}
       : { manual: { asleep: manual.asleep, at: manual.at, ...manual.until === undefined ? {} : { until: manual.until } } },
   }
 }
 
-/** The Shortcut instructions' texts. */
-function shortcut(config: Config): PresenceView['shortcut'] {
-  const body = (kind: string, title: string): string => JSON.stringify({ kind, key: '<date>', subject: 'owner', title })
-  return {
-    url: config.ingestUrl ?? null,
-    path: config.ingestPath,
-    header: 'Authorization',
-    tokenEnv: config.tokenEnv,
-    bodyOn: body(KIND_SLEEP_ON, 'Sleep Focus on'),
-    bodyOff: body(KIND_SLEEP_OFF, 'Sleep Focus off'),
-  }
+/** A stored Focus row as the state machine reads it; rows from before heartbeats have no `since` or `heartbeatAt`. */
+function restoredFocus(row: NonNullable<InputsRecord['focus']> | undefined): FocusView | undefined {
+  if (row === undefined) return undefined
+  return { asleep: row.asleep, at: row.at, since: row.since ?? row.at, heartbeatAt: row.heartbeatAt ?? null }
 }
 
 export default LsyPresence

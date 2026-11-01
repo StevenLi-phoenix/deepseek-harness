@@ -410,22 +410,19 @@ Check: `ams escalations -n 5` (as `dsh-runtime`, `AMS_STATE_DIR=/Users/dsh-runti
 
 ## 18. Quiet hours: the owner's sleep (optional)
 
-`lsy-presence` decides whether the owner is asleep; while the owner is, `lsy-wechat` holds the messages that are not urgent and sends them as one digest on waking. The signal is the iPhone's Sleep Focus; a daily window (03:30-10:30 New York) covers days without one, and **Settings → 勿扰** has buttons that win over both. Urgent kinds (`host.disk.full`, `host.*.critical`, `bili.risk.*`, `bili.gate.readonly`) and the replies to a message the owner sent in the last 30 minutes are never held.
+`lsy-presence` decides whether the owner is asleep; while the owner is, `lsy-wechat` holds the messages that are not urgent and sends them as one digest on waking. The signal is the Sleep Focus that iCloud syncs from the phone, which `focus-watch` (a signed binary on the Mac mini under `lishuyu`, with Full Disk Access) reads and posts to `http://127.0.0.1:3081/hooks/lsy` as `presence.sleep.on` / `presence.sleep.off` on every change and as a heartbeat every 30 minutes (keys `sleep-on-<ts>`, `sleep-off-<ts>`, `heartbeat-…`, subject `owner`). A signal holds for 2 hours without a newer one (14 hours for asleep), so a stopped watcher hands over to the daily window (03:30-10:30 New York); **Settings → 勿扰** has buttons that win over both. Urgent kinds (`host.disk.full`, `host.*.critical`, `bili.risk.*`, `bili.gate.readonly`) and the replies to a message the owner sent in the last 30 minutes are never held.
 
-1. Make the ingest token for the `presence` source on the Mac mini, without printing it, and put a copy on the clipboard to paste into the iPhone (Universal Clipboard). Back up the service `.env` first; restart afterwards:
+1. Create the ingest token for the `presence` source on the Mac mini without printing it, back up the service `.env` first, and restart afterwards:
    ```sh
    sudo -u dsh-runtime cp -p /Users/dsh-runtime/.dsh/.env /Users/dsh-runtime/.dsh/.env.bak.$(date +%Y%m%d%H%M%S)
-   TOKEN=$(openssl rand -hex 32); printf %s "$TOKEN" | pbcopy
-   printf 'LSY_INGEST_TOKEN_PRESENCE=%s\n' "$TOKEN" | sudo -u dsh-runtime tee -a /Users/dsh-runtime/.dsh/.env >/dev/null; unset TOKEN
+   TOKEN=$(openssl rand -hex 32)
+   printf 'LSY_INGEST_TOKEN_PRESENCE=%s\n' "$TOKEN" | sudo -u dsh-runtime tee -a /Users/dsh-runtime/.dsh/.env >/dev/null
+   mkdir -p ~/.config/focus-watch && (umask 077 && printf %s "$TOKEN" > ~/.config/focus-watch/ingest-token); unset TOKEN
    sudo /bin/launchctl kickstart -k system/app.lishuyu.dsh-events
    ```
-   The bundle already declares the `presence` ingest source (a sink of `ctx.lsyPresence`: its events never reach the event bus) and the `lsy-presence` row; with the token unset the route answers 401 to the phone and the daily window decides.
-2. Create the two Shortcuts on the iPhone, which must be connected to Tailscale (the URL is `https://dsh.tailc2559b.ts.net/hooks/lsy`). **Settings → 勿扰 → iPhone 快捷指令** shows the same steps, URL, and bodies:
-   1. Shortcuts app → Automation (自动化) → + → Create Personal Automation (创建个人自动化) → Focus (专注模式) → Sleep (睡眠) → tick **only** Turned On (已开启) → Next. Choose Run Immediately (立即运行), not Ask Before Running.
-   2. New Blank Automation (新建空白自动化) → add the action **Get Contents of URL (获取 URL 内容)**.
-   3. URL: `https://dsh.tailc2559b.ts.net/hooks/lsy`. Show More (显示更多): Method **POST**; Headers: `Authorization` = `Bearer ` + the token (paste it), `Content-Type` = `application/json`; Request Body **JSON** with four Text fields: `kind` = `presence.sleep.on`, `key` = the variable **Current Date (当前日期)**, `subject` = `owner`, `title` = `Sleep Focus on`. Done (完成).
-   4. Repeat with Sleep → tick **only** Turned Off (已关闭), the same action and headers, `kind` = `presence.sleep.off`, `title` = `Sleep Focus off`.
-3. Check: turn Sleep Focus on and off once. **Settings → 勿扰** shows "最近一次 Focus 信号" as just now, and `stdout.log` shows `presence presence.sleep.on (…): asleep` then `lsy-presence: asleep by focus (focus on)`. From a shell: `curl -sS -X POST https://dsh.tailc2559b.ts.net/hooks/lsy -H "Authorization: Bearer $(pbpaste)" -H 'content-type: application/json' -d '{"kind":"presence.sleep.off","key":"manual-test","subject":"owner","title":"test"}'` answers `{"outcome":"awake"}`.
+   The bundle already declares the `presence` ingest source (a sink of `ctx.lsyPresence`: its events never reach the event bus) and the `lsy-presence` row. `~/.config/focus-watch/ingest-token` is `lishuyu`'s file, mode 0600; the value is the same as `LSY_INGEST_TOKEN_PRESENCE`.
+2. Install `focus-watch` as `lishuyu` on the Mac mini per its README (build, sign, grant Full Disk Access, start). It posts to the local address above, so nothing leaves the machine.
+3. Check: **Settings → 勿扰 → 睡眠信号** shows the latest signal and heartbeat within 30 minutes, and `stdout.log` shows `presence heartbeat-…: asleep|awake`. Turning Sleep Focus on or off on the phone shows `lsy-presence: asleep by focus (focus on)` (or off) after iCloud syncs it. With no signal for over an hour the page says: "focus-watch 没在发信号：在 mini 上运行 `~/.local/libexec/focus-watch/focus-watch status` 查看". By hand: `curl -sS -X POST http://127.0.0.1:3081/hooks/lsy -H "Authorization: Bearer $(cat ~/.config/focus-watch/ingest-token)" -H 'content-type: application/json' -d '{"kind":"presence.sleep.off","key":"heartbeat-manual-test","subject":"owner","title":"test"}'` answers `{"outcome":"awake"}`.
 4. Stop: set `disabled: true` on the `lsy-presence` row in the profile patch (everything is sent as before), or press **我醒了** for up to 12 hours. Held messages are in the WeChat outbox; **立即发送** sends them.
 
 ## Operate

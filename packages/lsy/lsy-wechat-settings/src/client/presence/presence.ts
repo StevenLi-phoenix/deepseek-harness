@@ -45,8 +45,8 @@ export function parseAnswer(body: unknown): PresenceAnswer {
   const fields = typeof body === 'object' && body !== null ? body as Record<string, unknown> : {}
   const view = fields['view']
   if (typeof view !== 'object' || view === null) throw new Error('unexpected quiet-hours answer')
-  const { window, shortcut, timeZone, asleep } = view as Record<string, unknown>
-  if (typeof asleep !== 'boolean' || typeof timeZone !== 'string' || typeof window !== 'object' || window === null || typeof shortcut !== 'object' || shortcut === null) {
+  const { window, signalSilent, timeZone, asleep } = view as Record<string, unknown>
+  if (typeof asleep !== 'boolean' || typeof timeZone !== 'string' || typeof window !== 'object' || window === null || typeof signalSilent !== 'boolean') {
     throw new Error('unexpected quiet-hours answer')
   }
   return body as PresenceAnswer

@@ -19,17 +19,16 @@ const inserted = bundle.flatMap(row => row.insert ?? [])
 const row = (id: string): Row => inserted.find(entry => entry.id === id)!
 
 describe('event bundle', () => {
-  it('mounts lsy-presence in the owner\'s time zone with the instructions pointing at the real route', () => {
+  it('mounts lsy-presence in the owner\'s time zone', () => {
     const presence = row('lsy-presence')
     expect(presence.name).toBe('@deepseek-ai/dsh-lsy-presence')
-    expect(presence.config).toEqual({ timeZone: 'America/New_York', ingestUrl: 'https://dsh.tailc2559b.ts.net/hooks/lsy' })
-    expect(Config(presence.config as never)).toMatchObject({ ingestPath: '/hooks/lsy', tokenEnv: 'LSY_INGEST_TOKEN_PRESENCE' })
+    expect(presence.config).toEqual({ timeZone: 'America/New_York' })
+    expect(Config(presence.config as never)).toMatchObject({ focusFreshHours: 2 })
   })
 
-  it('declares the presence ingest source as a sink of ctx.lsyPresence, with the token the instructions name', () => {
+  it('declares the presence ingest source as a sink of ctx.lsyPresence', () => {
     const source = row('lsy-event-ingest').config!.sources!.find(entry => entry.id === PRESENCE_SOURCE)
     expect(source).toEqual({ id: 'presence', tokenEnv: 'LSY_INGEST_TOKEN_PRESENCE', sink: 'lsyPresence' })
-    expect(Config({} as never).tokenEnv).toBe(source!.tokenEnv)
   })
 
   it('has no subscription that could match a presence event, so none starts a Session or sends a note', () => {

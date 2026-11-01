@@ -1,7 +1,6 @@
 /**
  * What the Settings route answers and accepts, shared by both halves as types, constants, and pure
- * helpers only. Nothing here can carry a token: the Shortcut instructions name the environment
- * variable that holds it, never its value.
+ * helpers only. Nothing here can carry a token.
  */
 
 /** Absolute Host registration path of the Settings route. */
@@ -11,12 +10,12 @@ export const PRESENCE_ROUTE = PRESENCE_PATH.slice(1)
 
 /** Ingest source id the phone pushes under; its event kinds start with `presence.`. */
 export const PRESENCE_SOURCE = 'presence'
-/** Event kind of Sleep Focus turning on. */
+/** Event kind of Sleep Focus turning on (also the heartbeat while it stays on). */
 export const KIND_SLEEP_ON = 'presence.sleep.on'
-/** Event kind of Sleep Focus turning off. */
+/** Event kind of Sleep Focus turning off (also the heartbeat while it stays off). */
 export const KIND_SLEEP_OFF = 'presence.sleep.off'
 
-/** Where the current answer comes from: the phone's Sleep Focus, the daily window, or a button in Settings. */
+/** Where the current answer comes from: the Sleep Focus signal, the daily window, or a button in Settings. */
 export type PresenceSource = 'focus' | 'window' | 'manual'
 
 /** Daily fallback window, in the owner's time zone; it wraps past midnight when `start` is later than `end`. */
@@ -38,27 +37,22 @@ export interface ManualView {
   readonly until: number
 }
 
-/** The latest signal from the phone's Sleep Focus. */
+/**
+ * The latest signal about the Sleep Focus, from `focus-watch` on the Mac mini (which reads the state iCloud syncs from the phone).
+ * A signal that repeats the state already held (a heartbeat, every 30 minutes) only refreshes `at`.
+ */
 export interface FocusView {
   readonly asleep: boolean
-  /** Unix epoch milliseconds the Host received it. */
+  /** Unix epoch milliseconds the Host received the latest signal, heartbeat or change. */
   readonly at: number
+  /** Unix epoch milliseconds the held state began: the signal that flipped it. */
+  readonly since: number
+  /** Unix epoch milliseconds of the latest heartbeat; null before the first. */
+  readonly heartbeatAt: number | null
 }
 
-/** How the phone is told to push, for the Shortcut instructions. */
-export interface ShortcutView {
-  /** Full URL of the ingest route when the deployment names it; null otherwise. */
-  readonly url: string | null
-  /** Path of the ingest route. */
-  readonly path: string
-  /** Request header that carries the token. */
-  readonly header: 'Authorization'
-  /** Name of the environment variable that holds the token on the Host (never its value). */
-  readonly tokenEnv: string
-  /** JSON body for Sleep Focus turning on and off; `<date>` stands for the Shortcut's Current Date variable. */
-  readonly bodyOn: string
-  readonly bodyOff: string
-}
+/** How long without any signal before the page says the watcher is silent, in milliseconds. */
+export const SIGNAL_SILENT_MS = 3_600_000
 
 /** Body of `GET api/lsy.presence`. */
 export interface PresenceView {
@@ -77,7 +71,10 @@ export interface PresenceView {
   readonly deferred: number
   /** Globs of the event kinds that are sent even while the owner sleeps. */
   readonly urgentKinds: readonly string[]
-  readonly shortcut: ShortcutView
+  /** No signal for over {@link SIGNAL_SILENT_MS} (or none yet): the page tells the owner how to check the watcher. */
+  readonly signalSilent: boolean
+  /** Hours a Focus signal outranks the daily window, for the window card's text. */
+  readonly focusFreshHours: number
   /** IANA zone the window and the manual times are read in. */
   readonly timeZone: string
 }
@@ -100,3 +97,6 @@ export type PresenceAction =
 
 /** A clock time as the owner types it: `HH:MM`, 24-hour. */
 export const CLOCK_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/u
+
+/** Keys of heartbeat signals start with this; any other key is a state change the watcher saw. */
+export const HEARTBEAT_KEY = /^heartbeat/iu

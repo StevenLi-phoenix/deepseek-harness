@@ -1,9 +1,8 @@
 /**
  * The quiet-hours (勿扰) Settings section: whether the owner counts as asleep and why, the buttons that
- * override it, the daily fallback window, the urgent event kinds, and the iPhone Shortcut that feeds the
- * phone's Sleep Focus to the Host, with the latest signal shown so the owner can see the automation
- * works. It polls while mounted and pauses while the page is hidden. Nothing it shows is a token: the
- * instructions name the environment variable that holds it.
+ * override it, the daily fallback window, the urgent event kinds, and where the Sleep Focus signal comes from
+ * (focus-watch on the Mac mini), with the latest signal and heartbeat shown so the owner can see it works and a
+ * hint to check the watcher after an hour of silence. It polls while mounted and pauses while the page is hidden.
  */
 
 import { useEffect, useId, useState, type ReactNode } from 'react'
@@ -43,7 +42,7 @@ function Card({ title, wide, children }: { title: string; wide?: boolean; childr
   )
 }
 
-function StateCard({ view, now, busy, act, t }: { view: PresenceView; now: number; busy: boolean; act: Act; t: Translate }): ReactNode {
+function StateCard({ view, busy, act, t }: { view: PresenceView; busy: boolean; act: Act; t: Translate }): ReactNode {
   const times = [
     view.since === null ? undefined : t('state.since', { time: dateTime(view.since, view.timeZone) }),
     view.asleep && view.until !== null ? t('state.until', { time: dateTime(view.until, view.timeZone) }) : undefined,
@@ -59,11 +58,6 @@ function StateCard({ view, now, busy, act, t }: { view: PresenceView; now: numbe
         {times === '' ? null : <span className={css.meta}>{times}</span>}
         <span className={css.hint}>{view.asleep ? t('state.asleep.hint') : t('state.awake.hint')}</span>
         <span className={view.deferred > 0 ? css.big : css.meta}>{view.deferred > 0 ? t('held.count', { n: view.deferred }) : t('held.none')}</span>
-        <span className={css.meta}>
-          {view.lastFocus === null
-            ? t('focus.none')
-            : t('focus.last', { ago: agoText(view.lastFocus.at, now, t), state: t(view.lastFocus.asleep ? 'focus.on' : 'focus.off') })}
-        </span>
         {view.manual === null
           ? null
           : (
@@ -119,7 +113,7 @@ function WindowCard({ view, busy, act, t }: { view: PresenceView; busy: boolean;
   const changed = draft.enabled !== stored.enabled || draft.start !== stored.start || draft.end !== stored.end
   return (
     <Card title={t('window.title')}>
-      <span className={css.hint}>{t('window.hint', { zone: view.timeZone })}</span>
+      <span className={css.hint}>{t('window.hint', { hours: view.focusFreshHours, zone: view.timeZone })}</span>
       <label className={css.check}>
         <input type="checkbox" checked={draft.enabled} onChange={(event) => { setDraft({ ...draft, enabled: event.target.checked }) }} />
         {t('window.enabled')}
@@ -148,30 +142,21 @@ function UrgentCard({ view, t }: { view: PresenceView; t: Translate }): ReactNod
   )
 }
 
-function ShortcutCard({ view, t }: { view: PresenceView; t: Translate }): ReactNode {
-  const { shortcut } = view
-  // A code sample, not UI copy: the header name, a colon, and the scheme.
-  const authHeader = [shortcut.header, 'Bearer …'].join(': ')
-  const steps = ['shortcut.step1', 'shortcut.step2', 'shortcut.step3', 'shortcut.step4', 'shortcut.step5', 'shortcut.step6', 'shortcut.step7'] as const
+function SignalCard({ view, now, t }: { view: PresenceView; now: number; t: Translate }): ReactNode {
+  const { lastFocus } = view
   return (
-    <Card title={t('shortcut.title')} wide>
-      <span className={css.hint}>{t('shortcut.intro')}</span>
-      <dl className={css.facts}>
-        <dt>{t('shortcut.url')}</dt>
-        <dd><code className={css.code}>{shortcut.url ?? t('shortcut.url.unset', { path: shortcut.path })}</code></dd>
-        <dt>{t('shortcut.headers')}</dt>
-        <dd>
-          <code className={css.code}>{authHeader}</code>
-          <span className={css.hint}>{t('shortcut.header.auth', { env: shortcut.tokenEnv })}</span>
-          <code className={css.code}>{t('shortcut.header.type')}</code>
-        </dd>
-        <dt>{t('shortcut.body.on')}</dt>
-        <dd><pre className={css.pre}>{shortcut.bodyOn}</pre></dd>
-        <dt>{t('shortcut.body.off')}</dt>
-        <dd><pre className={css.pre}>{shortcut.bodyOff}</pre><span className={css.hint}>{t('shortcut.body.note')}</span></dd>
-      </dl>
-      <span className={css.cardTitle}>{t('shortcut.steps.title')}</span>
-      <ol className={css.steps}>{steps.map(step => <li key={step}>{t(step)}</li>)}</ol>
+    <Card title={t('signal.title')} wide>
+      <span className={css.hint}>{t('signal.source')}</span>
+      {lastFocus === null
+        ? <span className={css.meta}>{t('focus.none')}</span>
+        : (
+          <div className={css.who}>
+            <span>{t('focus.last', { ago: agoText(lastFocus.at, now, t), state: t(lastFocus.asleep ? 'focus.on' : 'focus.off') })}</span>
+            <span className={css.meta}>{lastFocus.heartbeatAt === null ? t('signal.heartbeat.none') : t('signal.heartbeat', { ago: agoText(lastFocus.heartbeatAt, now, t) })}</span>
+            <span className={css.meta}>{t('signal.since', { time: dateTime(lastFocus.since, view.timeZone) })}</span>
+          </div>
+        )}
+      {view.signalSilent ? <span className={css.reason} role="status">{t('signal.silent')}</span> : null}
     </Card>
   )
 }
@@ -206,11 +191,11 @@ export function PresenceSection({ usePresence, refresh, act, t }: PresenceProps)
         ? null
         : (
           <div className={css.grid}>
-            <StateCard view={view} now={now} busy={state.busy !== null} act={act} t={translate} />
+            <StateCard view={view} busy={state.busy !== null} act={act} t={translate} />
             <ButtonsCard view={view} state={state} act={act} t={translate} />
             <WindowCard view={view} busy={state.busy !== null} act={act} t={translate} />
             <UrgentCard view={view} t={translate} />
-            <ShortcutCard view={view} t={translate} />
+            <SignalCard view={view} now={now} t={translate} />
           </div>
         )}
     </section>
