@@ -147,7 +147,7 @@ describe('GitHub event pipeline', () => {
     emit({ type: 'assistant/message', seq: 2, data: { message: { content: [{ type: 'text', text: 'Issue 9 needs a reply; the human change is fine.' }] } } })
     emit({ type: 'turn/end', seq: 3, data: { turn: 1, reason: { kind: 'completed' } } })
     await vi.advanceTimersByTimeAsync(0)
-    expect(notes.at(-1)?.title).toMatch(/^✅ triage: /)
+    expect(notes.at(-1)?.title).toMatch(/^triage: /)
     expect(notes.at(-1)?.body).toBe('Issue 9 needs a reply; the human change is fine.')
   })
 })

@@ -31,8 +31,8 @@ describe('buildSessionRequest', () => {
     expect(buildSessionRequest('releases', action, events)).not.toHaveProperty('model')
   })
 
-  it('titles the Session by subscription, first event, and remaining count within 120 characters', () => {
-    expect(buildSessionRequest('releases', action, events).title).toBe('releases: octo/repo v1.0.0 (+2)')
+  it('titles the Session by subscription and its one event, or by subject and count, within 120 characters', () => {
+    expect(buildSessionRequest('releases', action, events).title).toBe('releases: octo/repo (3 events)')
     expect(buildSessionRequest('releases', action, events.slice(0, 1)).title).toBe('releases: octo/repo v1.0.0')
     const long = buildSessionRequest('releases', { ...action, titlePrefix: 'x'.repeat(200) }, events).title
     expect(long.length).toBe(120)
@@ -60,6 +60,12 @@ describe('batchTitle', () => {
   it('labels an empty batch instead of failing', () => {
     expect(batchTitle('x', [])).toBe('x: no events')
   })
+
+  it('never borrows one event\'s title for a batch of several, and counts the other subjects', () => {
+    const mixed = [...events, { id: 'github:d', source: 'github', kind: 'github.commit', subject: 'octo/other', title: 'feat: x' }]
+    expect(batchTitle('ci', mixed)).toBe('ci: octo/repo +1 (4 events)')
+    expect(batchTitle('ci', mixed)).not.toContain('v1.0.0')
+  })
 })
 
 describe('formatBatchNote', () => {
@@ -78,9 +84,9 @@ describe('formatBatchNote', () => {
 })
 
 describe('formatResultNote', () => {
-  it('reports the Session outcome and its final assistant text', () => {
+  it('titles a completed turn without a mark and carries its final assistant text', () => {
     const note = formatResultNote({ subscription: 'releases', title: 'releases: octo/repo v1.0.0', outcome: 'completed', text: 'All good.', url: 'https://dsh.example/' })
-    expect(note.title).toBe('✅ releases: octo/repo v1.0.0')
+    expect(note.title).toBe('releases: octo/repo v1.0.0')
     expect(note.body).toBe('All good.')
     expect(note.url).toBe('https://dsh.example/')
   })

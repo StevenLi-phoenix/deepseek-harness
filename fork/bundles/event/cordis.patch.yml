@@ -227,14 +227,21 @@
               model:
                 provider: opencode
                 model: opencode-go/deepseek-v4.1-flash
+              # The owner hears about CI only when it needs them (2026-11-01): a red run is normally someone (often an
+              # agent) still at work on the code, and that person sees it already.
               instructions: >-
                 Finished GitHub Actions runs of the owner's repositories are listed below; each title
-                ends with the conclusion. A run whose conclusion is success, cancelled, or skipped,
-                or that failed on a branch where a later run already succeeded, needs nothing: answer
-                exactly NO_REPLY when every run is like that. Otherwise, for each failed run read the failing step with `gh run view <run id> --log-failed`
-                (read-only; never re-run, cancel, or change anything), and answer in Chinese in at most
-                three sentences: which repository and workflow failed, the likely cause, and what the
-                owner should do.
+                ends with the conclusion. A red run is normally a developer, often an agent, still at
+                work, and they see it themselves; the owner does not need to hear about it. Answer
+                exactly NO_REPLY unless a run needs the owner: a failure no code change can fix (an
+                expired or missing secret or token, billing or quota, a runner offline, an outage of a
+                third-party service), a failed deployment or release, or the default branch (main,
+                master, fork/main) failing the same workflow twice in a row with no green run between.
+                A failure on another branch or a pull request never needs the owner, and neither does
+                a success. When a run needs the owner, read its failing step with `gh run view <run id>
+                --log-failed` (read-only; never re-run, cancel, or change anything) and answer in
+                Chinese in at most three sentences: the repository, workflow, and branch, what broke,
+                and what the owner should do.
 
     # Push route for the owner's services: POST /hooks/events with `Authorization: Bearer <token>`. The
     # token decides the source; kinds must start with "<source>.". Tokens live in $DSH_HOME/.env.

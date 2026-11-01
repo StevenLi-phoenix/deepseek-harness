@@ -124,7 +124,7 @@ kind: "package-reference"
 
 ### 结果回报
 
-总线启动的 Session 结束第一轮、或常驻 Session 结束某一批的那一轮时，总线把结局记到批次上，在日志里记下订阅、Session、投递方式、最后一次请求的输入 token、是否跑了压缩以及这一轮按名字统计的工具调用，并把最终的 assistant 文本发给 `ctx.forkNotifier`。Host schedule 提醒（`source.kind: schedule`）在没有被 [`ctx.ownerRelay`](../owner-relay/README.zh.md) 的任何通道认领的 Session（`ownerOf(sessionId)` 为 `undefined`）里开启一轮时，总线把这一轮的最终回答发出去，标题为 `⏰ <提醒 prompt 的第一行>`。两种情况下，最终回答恰好是 `NO_REPLY`（`FORK_SILENT_REPLY`）时什么也不发；批次记录 `silent: true`。owner 停下的轮次（以 `aborted` 结束、原因为 `user`，来自 Web UI 或微信 `/stop`）只记录、不报告，因为停它的人已经知道。
+总线启动的 Session 结束第一轮、或常驻 Session 结束某一批的那一轮时，总线把结局记到批次上，在日志里记下订阅、Session、投递方式、最后一次请求的输入 token、是否跑了压缩以及这一轮按名字统计的工具调用，并把最终的 assistant 文本发给 `ctx.forkNotifier`，标题用批次标题：一个事件时写这个事件本身，多个事件时写主题和条数（`ci: octo/repo (3 events)`），不拿其中某一个事件的标题。正常结束的一轮不加标记；其他结局的标题是 `⚠️ <标题> (<结局>)`。Host schedule 提醒（`source.kind: schedule`）在没有被 [`ctx.ownerRelay`](../owner-relay/README.zh.md) 的任何通道认领的 Session（`ownerOf(sessionId)` 为 `undefined`）里开启一轮时，总线把这一轮的最终回答发出去，标题为 `⏰ <提醒 prompt 的第一行>`。两种情况下，最终回答恰好是 `NO_REPLY`（`FORK_SILENT_REPLY`）时什么也不发；批次记录 `silent: true`。owner 停下的轮次（以 `aborted` 结束、原因为 `user`，来自 Web UI 或微信 `/stop`）只记录、不报告，因为停它的人已经知道。
 
 -----
 

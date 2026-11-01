@@ -36,16 +36,19 @@ function clampLabel(text: string, limit: number): string {
 }
 
 /**
- * Title shared by a batch record and the Session it starts.
+ * Title shared by a batch record and the Session it starts. A single event names itself; several name their subject and
+ * count, never one event's title, since a note under that title answers for the whole batch.
  * @param prefix - subscription id or configured prefix.
  * @param events - batch events, oldest first; never empty in practice.
  * @returns at most 120 characters.
  */
 export function batchTitle(prefix: string, events: readonly BatchEvent[]): string {
-  const first = events[0]
-  const label = first === undefined ? 'no events' : `${first.subject} ${first.title}`
-  const more = events.length > 1 ? ` (+${events.length - 1})` : ''
-  return clampLabel(`${prefix}: ${label}${more}`, MAX_TITLE_CHARS)
+  const [first] = events
+  if (first === undefined) return clampLabel(`${prefix}: no events`, MAX_TITLE_CHARS)
+  if (events.length === 1) return clampLabel(`${prefix}: ${first.subject} ${first.title}`, MAX_TITLE_CHARS)
+  const subjects = new Set(events.map(event => event.subject))
+  const who = subjects.size === 1 ? first.subject : `${first.subject} +${String(subjects.size - 1)}`
+  return clampLabel(`${prefix}: ${who} (${String(events.length)} events)`, MAX_TITLE_CHARS)
 }
 
 /** What a rollover carries from the archived Session into the first message of the new one. */
@@ -183,12 +186,13 @@ export interface SessionResult {
 }
 
 /**
- * Render a Session result as one message.
+ * Render a Session result as one message. A completed turn carries no mark, because a mark next to an event title reads
+ * as that event's verdict; a turn that did not complete is marked with its outcome.
  * @param result - outcome, final assistant text, and failure reason.
  * @returns message for the notifier.
  */
 export function formatResultNote(result: SessionResult): ForkNote {
-  const title = result.outcome === 'completed' ? `✅ ${result.title}` : `⚠️ ${result.title} (${result.outcome})`
+  const title = result.outcome === 'completed' ? result.title : `⚠️ ${result.title} (${result.outcome})`
   return {
     title,
     body: noteBody(result.text, result.detail),

@@ -189,7 +189,7 @@ describe('ForkEventBus session actuator', () => {
     emit({ type: 'turn/end', seq: 4, data: { turn: 1, reason: { kind: 'completed' } } })
     await vi.advanceTimersByTimeAsync(0)
 
-    expect(notes).toEqual([{ title: '✅ triage: octo/repo v1.0.0', body: 'Final answer.', url: 'https://dsh.example/' }])
+    expect(notes).toEqual([{ title: 'triage: octo/repo v1.0.0', body: 'Final answer.', url: 'https://dsh.example/' }])
     expect(bus.batches()[0]).toMatchObject({ status: 'completed', sessionId: 'webhook-123', outcome: 'completed' })
 
     // Later turns of the same Session are not reported again.
@@ -340,7 +340,7 @@ describe('ForkEventBus Session observation', () => {
     h.emit('s1', { type: 'turn/end', seq: 2, data: { turn: 1, reason: { kind: 'completed' } } })
     await vi.advanceTimersByTimeAsync(0)
     expect(h.bus.batches().map(batch => batch.id)).not.toContain(h.batch.id)
-    expect(h.notes[0]!.title).toBe('✅ triage')
+    expect(h.notes[0]!.title).toBe('triage')
   })
 })
 

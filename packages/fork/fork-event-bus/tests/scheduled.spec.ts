@@ -129,7 +129,7 @@ describe('ForkEventBus scheduled turn reports', () => {
     emit('w1', sessionEvents.assistant('Handled both.'))
     emit('w1', sessionEvents.turnEnd())
     await vi.advanceTimersByTimeAsync(0)
-    expect(notes).toEqual([expect.objectContaining({ title: '✅ triage: octo/repo v1.0.0', body: 'Handled both.' })])
+    expect(notes).toEqual([expect.objectContaining({ title: 'triage: octo/repo v1.0.0', body: 'Handled both.' })])
 
     // A reminder the event Session scheduled for later is reported on its own.
     await runTurn(emit, 'w1', 'Follow-up: still fine.')
