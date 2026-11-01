@@ -80,6 +80,11 @@ export interface SessionAction {
    * omitted, or `enabled: false`, starts a new Session per batch.
    */
   persistent?: PersistentSessionAction
+  /**
+   * Web UI project title for `workspacePath`: before a Session starts there, the bus creates the directory and
+   * registers it as a project with this title unless one exists. Omitted: the directory must exist.
+   */
+  project?: string
 }
 
 /**
@@ -92,6 +97,8 @@ export interface SessionAction {
 export interface PersistentSessionAction {
   /** Reuse one Session for this subscription. */
   enabled: boolean
+  /** One Session for the whole subscription, or one per event subject (a repository, a video). */
+  key: 'subscription' | 'subject'
   /** Days after which the next batch starts a new Session and archives the old one. */
   rolloverDays: number
   /** Characters of the carried-over compaction summary kept in the new Session's first message. */
@@ -168,6 +175,8 @@ export interface BatchSummary {
 /** The persistent Session of one subscription, as `LsyEventBus.persistentSessions()` reports it. */
 export interface PersistentSessionView {
   subscription: string
+  /** The subject of a `key: subject` Session. */
+  subject?: string
   sessionId: string
   /** When the Session became the subscription's Session, in Unix epoch milliseconds. */
   createdAt: number

@@ -65,19 +65,31 @@ export function fakeController(...known: string[]): FakeController {
   return controller
 }
 
-/** Workspace registry double recording archives. */
+/** Workspace registry double recording archives and projects. */
 export interface FakeRegistry {
   archivedSessionIds: string[]
+  projects: Map<string, string>
   archiveSession(sessionId: string): Promise<void>
+  resolveByPath(path: string): Promise<{ path: string; title: string } | undefined>
+  create(path: string, title?: string): Promise<{ path: string; title: string }>
 }
 
 /** A Workspace registry double; `refuse` makes archiving reject. */
 export function fakeRegistry(refuse?: string): FakeRegistry {
   const registry: FakeRegistry = {
     archivedSessionIds: [],
+    projects: new Map(),
     async archiveSession(sessionId) {
       if (refuse !== undefined) throw new Error(refuse)
       registry.archivedSessionIds.push(sessionId)
+    },
+    async resolveByPath(path) {
+      const title = registry.projects.get(path)
+      return title === undefined ? undefined : { path, title }
+    },
+    async create(path, title) {
+      registry.projects.set(path, title ?? path)
+      return { path, title: title ?? path }
     },
   }
   return registry
