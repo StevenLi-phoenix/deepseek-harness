@@ -14,7 +14,7 @@ const QQ_FIELDS = [
   'send.enabled', 'send.groups', 'send.minIntervalSec', 'send.maxPerDay',
   'digest.enabled', 'digest.everyHours', 'digest.minMessages', 'digest.maxPromptChars', 'digest.maxCallsPerRound',
   'digest.aliasMembers', 'digest.profiles', 'digest.keepPerGroup', 'digest.maxDigestChars', 'digest.provider', 'digest.model',
-  'digest.agentPreset', 'digest.permissionPreset', 'digest.workspacePath', 'digest.timeZone', 'digest.timeoutMs',
+  'digest.agentPreset', 'digest.permissionPreset', 'digest.workspacePath', 'digest.timeZone', 'digest.timeoutMs', 'digest.maxToolCalls', 'digest.archiveSessions', 'digest.resident',
   'offlineNoticeMs', 'reconnectQuietMs', 'offlineRepeatMs', 'settingsUrl',
   'login.enabled', 'login.url', 'login.timeoutMs',
 ]

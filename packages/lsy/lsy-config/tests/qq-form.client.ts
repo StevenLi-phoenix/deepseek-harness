@@ -496,6 +496,41 @@ export const QQ_FORM: FieldNode[] = [
         'step': 1,
       },
       {
+        'key': 'maxToolCalls',
+        'path': [
+          'digest',
+          'maxToolCalls',
+        ],
+        'kind': 'number',
+        'required': false,
+        'layer': 'default',
+        'default': 12,
+        'min': 1,
+        'step': 1,
+      },
+      {
+        'key': 'archiveSessions',
+        'path': [
+          'digest',
+          'archiveSessions',
+        ],
+        'kind': 'boolean',
+        'required': false,
+        'layer': 'default',
+        'default': true,
+      },
+      {
+        'key': 'resident',
+        'path': [
+          'digest',
+          'resident',
+        ],
+        'kind': 'boolean',
+        'required': false,
+        'layer': 'default',
+        'default': true,
+      },
+      {
         'key': 'provider',
         'path': [
           'digest',
@@ -546,7 +581,7 @@ export const QQ_FORM: FieldNode[] = [
         'kind': 'string',
         'required': false,
         'layer': 'default',
-        'default': '/Users/dsh-runtime/qq-digest',
+        'default': '/Users/dsh-runtime/work/qq',
       },
       {
         'key': 'timeZone',

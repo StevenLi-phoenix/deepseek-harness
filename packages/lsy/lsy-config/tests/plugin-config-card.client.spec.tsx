@@ -87,11 +87,11 @@ describe('PluginConfigCard', () => {
     const view = entryView('lsy-qq', withValues(QQ_FORM))
     mount(['lsy-qq'], { 'lsy-qq': { view } })
     open('lsy-qq')
-    expect(document.querySelectorAll('[data-path]')).toHaveLength(48)
+    expect(document.querySelectorAll('[data-path]')).toHaveLength(51)
     expect(control(within(row('groups')).getByRole('textbox')).value).toBe('1001')
     expect(control(within(row('media.retainDays')).getByRole('textbox')).value).toBe('7')
     expect(within(row('tokenEnv')).getByText('环境变量名；这里只显示名字，不读取它的值')).toBeTruthy()
-    expect(screen.getByText('48 个字段')).toBeTruthy()
+    expect(screen.getByText('51 个字段')).toBeTruthy()
   })
 
   it('shows a credential as set or not, never a value', () => {
