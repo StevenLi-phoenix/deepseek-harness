@@ -1,0 +1,32 @@
+{
+  "digests": [
+    {
+      "groupId": "123456789",
+      "fromCursor": "c1",
+      "toCursor": "c40",
+      "messageCount": 40,
+      "text": "## 话题\n部署",
+      "model": "m",
+      "usage": null,
+      "rawPath": "/data/digest-raw/a.md",
+      "createdAt": 1789500000000
+    }
+  ],
+  "notes": [
+    {
+      "groupId": "123456789",
+      "text": "常聊显卡",
+      "createdAt": 1789500000000
+    }
+  ],
+  "groupSessions": [
+    {
+      "groupId": "123456789",
+      "sessionId": "digest-1",
+      "createdAt": 1789000000000,
+      "generation": 1
+    }
+  ],
+  "aliasSalt": "salt-uuid",
+  "outageNoticeAt": null
+}

@@ -1,0 +1,12 @@
+{
+  "login": {
+    "door": "ok",
+    "state": "online",
+    "uin": "99999",
+    "nickname": "bot",
+    "error": null,
+    "qrUrl": null
+  },
+  "refreshed": false,
+  "reason": "logged-in"
+}

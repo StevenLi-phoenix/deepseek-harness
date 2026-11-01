@@ -348,9 +348,9 @@ export class QqRecorder {
 
   /** @returns messages of a recorded group after a cursor, in log order. */
   page(groupId: string, after: string | undefined, limit: number): { items: Message[]; nextCursor: string | null } {
-    if (!this.recordedIds.has(groupId)) return { items: [], nextCursor: null }
     const row = after === undefined ? 0 : rowOf(after)
     if (row === undefined) throw new RangeError('after is not a cursor of this recorder')
+    if (!this.recordedIds.has(groupId)) return { items: [], nextCursor: null }
     const items = this.store.after(groupId, row, limit).map(toMessage)
     return { items, nextCursor: items.length >= limit ? items.at(-1)?.cursor ?? null : null }
   }

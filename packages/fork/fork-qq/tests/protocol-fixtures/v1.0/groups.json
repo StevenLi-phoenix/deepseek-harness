@@ -1,0 +1,22 @@
+[
+  {
+    "groupId": "123456789",
+    "name": "技术群",
+    "memberCount": 80,
+    "recorded": true,
+    "messages": 120,
+    "firstAt": 1789000000000,
+    "lastAt": 1790000000000,
+    "unlistedSeen": 0
+  },
+  {
+    "groupId": "987654321",
+    "name": "闲聊群",
+    "memberCount": null,
+    "recorded": false,
+    "messages": 0,
+    "firstAt": null,
+    "lastAt": null,
+    "unlistedSeen": 7
+  }
+]
