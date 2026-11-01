@@ -408,6 +408,30 @@ async credentialStatus(): Promise<CredentialStatus>
 
 Source: [`packages/fork/fork-github-sensor/src/index.ts`](../../packages/fork/fork-github-sensor/src/index.ts)
 
+<a id="ctxlsyguard--guardservice"></a>
+
+### `ctx.forkGuard` — `GuardService`
+
+The validator.
+
+```ts cordis-catalog
+/**
+ * Check a text before it is written where others can read it.
+ * @param text - the text as it would be written.
+ * @param options - purpose, audience, and the Session that wrote it.
+ * @returns `{ ok: true }`, or the rule that refused it and a reason that never repeats the text. Never rejects.
+ */
+async check(text: string, options: GuardCheckOptions): Promise<GuardVerdict>
+
+/**
+ * Counts for the Settings overview, last 24 hours, without any text.
+ * @returns checks, refusals by rule, the last layer failure, and the latest check.
+ */
+health(): GuardHealth
+```
+
+Source: [`packages/fork/fork-guard/src/service.ts`](../../packages/fork/fork-guard/src/service.ts)
+
 <a id="ctxlsynotifier--forknotifier"></a>
 
 ### `ctx.forkNotifier` — `ForkNotifier`

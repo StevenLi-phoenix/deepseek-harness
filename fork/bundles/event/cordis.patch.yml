@@ -401,6 +401,19 @@
           - /Users/dsh-runtime/work
           - /Users/dsh-runtime/bili
 
+    # Content guard: `ctx.forkGuard.check(text, { purpose, audience })`, the one validator for text that others can read
+    # (persona updates, style notes, QQ group notes, Bilibili channel notes). Layers, in order, any failure refuses:
+    # patterns (phone, email, ID, cards, long numbers, @, addresses, links), canaries ($DSH_HOME/fork-guard/canaries.txt
+    # plus `extraCanaries`), overlap with the owner's memory file, and a model on the profile's default route (never
+    # switched off for audience `public`). Raw model responses are kept 14 days in $DSH_HOME/fork-guard/raw. In the
+    # profile patch, `- id: fork-guard` with `config.extraCanaries` adds honeypot tokens (restate any other field you set).
+    - id: fork-guard
+      name: '@deepseek-ai/dsh-fork-guard'
+    # Settings → Memory shows the guard's settings (the All settings card) and its refusals of the last 24 hours by rule
+    # (counts only, never a text) over GET /api/fork.guard, under the Web UI sign-in; it registers no tool.
+    - id: fork-guard-settings
+      name: '@deepseek-ai/dsh-fork-guard/settings'
+
     # Speaking style (Settings → 说话风格): once a day, short exchanges from the recorded QQ groups (ctx.forkQq) and
     # from the comments under the owner's Bilibili videos (bili-svc's read API, token BILI_SVC_TOKEN_UP), filtered
     # without a model, kept in $DSH_HOME/fork-style/samples.jsonl (at most 60 active, the owner's own pinned first). The

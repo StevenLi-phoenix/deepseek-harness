@@ -2393,6 +2393,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'forkGuard',
+    summary: 'The validator.',
+    description: 'The validator.',
+    methods: [
+      {
+        signature: 'async check(text: string, options: GuardCheckOptions): Promise<GuardVerdict>',
+        description: 'Check a text before it is written where others can read it.',
+        parameters: [{ name: 'text', description: 'the text as it would be written.' }, { name: 'options', description: 'purpose, audience, and the Session that wrote it.' }],
+        returns: '`{ ok: true }`, or the rule that refused it and a reason that never repeats the text. Never rejects.',
+      },
+      {
+        signature: 'health(): GuardHealth',
+        description: 'Counts for the Settings overview, last 24 hours, without any text.',
+        parameters: [],
+        returns: 'checks, refusals by rule, the last layer failure, and the latest check.',
+      },
+    ],
+  },
+  {
     key: 'forkNotifier',
     summary: 'Notification actuator contract; a channel plugin provides it as `ctx.forkNotifier`.',
     description: 'Notification actuator contract; a channel plugin provides it as `ctx.forkNotifier`.',
@@ -7391,6 +7410,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'GroupOverview',
     declaration: 'export interface GroupOverview {\n    groupId: string;\n    name: string;\n    memberCount: number | null;\n    recorded: boolean;\n    messages: number;\n    firstAt: number | null;\n    lastAt: number | null;\n    lastDigestAt: number | null;\n}',
+  },
+  {
+    name: 'GuardAudience',
+    declaration: 'export type GuardAudience = \'public\' | \'channel\';',
+  },
+  {
+    name: 'GuardCheckOptions',
+    declaration: 'export interface GuardCheckOptions {\n    readonly purpose: string;\n    readonly audience: GuardAudience;\n    readonly sessionId?: string | undefined;\n}',
+  },
+  {
+    name: 'GuardHealth',
+    declaration: 'export interface GuardHealth {\n    readonly checked: number;\n    readonly rejected: number;\n    readonly byRule: Readonly<Record<string, number>>;\n    readonly lastError: {\n        readonly at: number;\n        readonly rule: string;\n        readonly message: string;\n    } | null;\n    readonly lastCheckAt: number | null;\n}',
+  },
+  {
+    name: 'GuardVerdict',
+    declaration: 'export type GuardVerdict = {\n    readonly ok: true;\n} | {\n    readonly ok: false;\n    readonly rule: string;\n    readonly publicReason: string;\n};',
   },
   {
     name: 'HookBudget',

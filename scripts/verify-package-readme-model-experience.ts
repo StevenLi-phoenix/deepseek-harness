@@ -176,6 +176,7 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/fork/fork-memory-admin': { kind: 'none', reason: 'Settings section for reviewing agent memory; registers no tool and adds nothing to model requests.' },
   'packages/fork/fork-wechat-settings': { kind: 'none', reason: 'Settings sections for the WeChat channel and quiet hours; register no tool and add nothing to model requests.' },
   'packages/fork/fork-presence': { kind: 'none', reason: 'Tells the channels whether the owner sleeps and holds back their messages; adds nothing to model requests.' },
+  'packages/fork/fork-guard': { kind: 'none', reason: 'Host-side validator called by other plugins; registers no tool and adds nothing to the main agent\'s requests (its own review request is a separate one-shot call with the text fenced).' },
   'packages/fork/fork-sysmon': { kind: 'none', reason: 'Settings section reading the Host machine status; registers nothing model-facing.' },
   'packages/fork/fork-style-settings': { kind: 'none', reason: 'Settings section showing the speaking-style samples; registers nothing model-facing (the samples reach the model through fork-style).' },
   'packages/fork/fork-config': { kind: 'none', reason: 'Settings card editing plugin configuration; registers nothing model-facing.' },

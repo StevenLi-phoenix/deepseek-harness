@@ -30,6 +30,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`fork-event-bus/`](fork-event-bus/README.md) | Dedupe, loop suppression, subscriptions, coalescing, rate limits, notify and Session dispatch |
 | [`fork-event-ingest/`](fork-event-ingest/README.md) | `POST /hooks/events` route: the owner's own services push events under one bearer token per source |
 | [`fork-github-sensor/`](fork-github-sensor/README.md) | Polls GitHub releases, tags, commits, and notifications with conditional requests |
+| [`fork-guard/`](fork-guard/README.md) | `ctx.forkGuard.check`: one validator for text that others can read; patterns, canary strings, overlap with the owner's memory, and a model, any layer that cannot run refusing |
 | [`fork-integrity/`](fork-integrity/README.md) | Integrity watch: digests of the files that steer the agent, a WeChat notice naming what changed, system prompt hashes, and a count of the persona's forbidden stock lines |
 | [`fork-memory/`](fork-memory/README.md) | Owner memory across Sessions: the memory block, `memory_search`, `memory_save`, `memory_forget`, and the claude.ai export importer |
 | [`fork-wechat-settings/`](fork-wechat-settings/README.md) | Browser half of Settings → WeChat (bind by QR code, channel health, unbind) and Settings → 勿扰 (quiet hours) |
