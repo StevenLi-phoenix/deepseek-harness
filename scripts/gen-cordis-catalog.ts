@@ -1010,6 +1010,7 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   StylePanel: 'fork-local speaking-style panel is owned by packages/lsy/lsy-style/README.md',
   StyleEditAnswer: 'fork-local speaking-style edit answer is owned by packages/lsy/lsy-style/README.md',
   RunReport: 'fork-local speaking-style collection report is owned by packages/lsy/lsy-style/README.md',
+  StyleHealth: 'fork-local speaking-style counts are owned by packages/lsy/lsy-style/README.md',
   QqConnection: 'fork-local QQ connection state is owned by packages/lsy/lsy-qq/README.md',
   QqLoginReading: 'fork-local NapCat login reading is owned by packages/lsy/lsy-qq/README.md',
   RefreshRefusal: 'fork-local fresh-code refusal reason is owned by packages/lsy/lsy-qq/README.md',

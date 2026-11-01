@@ -33,7 +33,7 @@ import { StyleCollector, type BiliReader, type CollectSettings, type QqSource } 
 import { localDay, renderStyleBlock } from './render.ts'
 import { StyleError, StyleStore } from './store.ts'
 import { AnswerLog, readTrend } from './trend.ts'
-import type { RunReport, StyleEditAnswer, StylePanel } from './view.ts'
+import type { RunReport, StyleEditAnswer, StylePanel, TrendDay } from './view.ts'
 
 export { biliPairs, pickForRun, qqPairs, screenPairs, StyleCollector, type Accepted, type BiliComment, type BiliReader, type Pair, type QqMessage, type QqSource } from './collect.ts'
 export { createBiliReader, parseComment } from './bili.ts'
@@ -201,6 +201,35 @@ function textOf(message: { content?: unknown }): string {
   return (message.content as Array<{ type?: string; text?: string }>).filter(block => block.type === 'text').map(block => block.text ?? '').join('\n')
 }
 
+/** What `ctx.lsyStyle.health()` answers: counts only, never sample text. */
+export interface StyleHealth {
+  /** Active samples. */
+  readonly kept: number
+  /** Samples waiting for the owner. */
+  readonly pending: number
+  readonly review: 'optional' | 'required'
+  /** Epoch milliseconds of the last collection run's start; null before the first. */
+  readonly lastRefreshAt: number | null
+  /** Share of answers with stock lines, last three days against the four before; null with fewer than two days of data. */
+  readonly ticTrend: 'up' | 'flat' | 'down' | null
+}
+
+/**
+ * The direction of the stock-line share: the last three days with answers (fewer with little data) against the days before, within a week.
+ * @param days - the trend, oldest first.
+ * @returns `up` or `down` when the shares differ by more than five points, `flat` otherwise, null with too little data.
+ */
+export function ticTrend(days: readonly TrendDay[]): StyleHealth['ticTrend'] {
+  const shares = days.filter(day => day.answers > 0).slice(-7).map(day => day.withTics / day.answers)
+  if (shares.length < 2) return null
+  const split = Math.min(3, Math.floor(shares.length / 2))
+  const recent = shares.slice(-split)
+  const before = shares.slice(0, shares.length - split)
+  const mean = (values: readonly number[]): number => values.reduce((sum, value) => sum + value, 0) / values.length
+  const delta = mean(recent) - mean(before)
+  return delta > 0.05 ? 'up' : delta < -0.05 ? 'down' : 'flat'
+}
+
 /** The samples, their collection, and the block: what the root row provides as `ctx.lsyStyle`. */
 export class StyleService {
   /** The rotation zone of the block. */
@@ -208,6 +237,7 @@ export class StyleService {
   private readonly store: StyleStore
   private readonly collector: StyleCollector
   private readonly abort = new AbortController()
+  private latest: StyleHealth = { kept: 0, pending: 0, review: 'optional', lastRefreshAt: null, ticTrend: null }
 
   /**
    * @param ctx - the root context: logger, `ctx.lsyQq`, and `ctx.credentials`, each read when a run needs it.
@@ -249,6 +279,15 @@ export class StyleService {
     })
   }
 
+  /**
+   * Counts for the Settings overview, without any sample text; refreshed whenever the panel is read, after each run,
+   * and on the schedule check.
+   * @returns active (`kept`) and pending samples, the review mode, the last run's start, and the stock-line trend.
+   */
+  health(): StyleHealth {
+    return { ...this.latest, review: this.config.review }
+  }
+
   /** Stop a run in progress (its Bilibili reads end). */
   dispose(): void {
     this.abort.abort()
@@ -279,8 +318,13 @@ export class StyleService {
    */
   async runIfDue(): Promise<RunReport | undefined> {
     const at = await this.nextRunAt()
-    if (at === undefined || Date.now() < at || this.collector.busy) return undefined
-    return await this.collector.run('schedule', this.abort.signal)
+    if (at === undefined || Date.now() < at || this.collector.busy) {
+      await this.panel()
+      return undefined
+    }
+    const report = await this.collector.run('schedule', this.abort.signal)
+    await this.panel()
+    return report
   }
 
   /**
@@ -291,6 +335,13 @@ export class StyleService {
     const [records, lastRun, trend, next] = await Promise.all([
       this.store.live(), this.collector.lastRun(), readTrend(this.paths.ticsFile, join(this.paths.dir, 'answers.json')), this.nextRunAt(),
     ])
+    this.latest = {
+      kept: records.filter(record => record.status === 'active').length,
+      pending: records.filter(record => record.status === 'pending').length,
+      review: this.config.review,
+      lastRefreshAt: lastRun?.at ?? null,
+      ticTrend: ticTrend(trend),
+    }
     return {
       enabled: this.config.enabled,
       review: this.config.review,
@@ -349,6 +400,7 @@ export class StyleService {
   async collect(): Promise<StylePanel> {
     if (this.config.enabled) {
       void this.collector.run('manual', this.abort.signal)
+        .then(async () => { await this.panel() })
         .catch((error: unknown) => { this.ctx.logger.warn('lsy-style: manual run failed: %s', error instanceof Error ? error.message : String(error)) })
     }
     return await this.panel()
@@ -418,6 +470,7 @@ function applyCollect(ctx: Context, config: Config): void {
   ctx.logger.info('lsy-style: collect mode, %s, review %s, every %d h, samples in %s', config.enabled ? 'on' : 'off (no collection, no block)', config.review, config.everyHours, dir)
   // ctx.provide is itself an effect: the service goes when this plugin unloads.
   ctx.provide('lsyStyle', service)
+  void service.panel().catch((error: unknown) => { ctx.logger.warn('lsy-style: first read failed: %s', error instanceof Error ? error.message : String(error)) })
   ctx.effect(() => () => { service.dispose() }, 'lsy-style: stop collection')
 
   // Answer lengths of the presets that get the block, for the page's trend: the turn's last assistant text, counted

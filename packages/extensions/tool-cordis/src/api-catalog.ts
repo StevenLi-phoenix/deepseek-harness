@@ -2469,6 +2469,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [],
       },
       {
+        signature: 'health(): StyleHealth',
+        description: 'Counts for the Settings overview, without any sample text; refreshed whenever the panel is read, after each run, and on the schedule check.',
+        parameters: [],
+        returns: 'active (`kept`) and pending samples, the review mode, the last run\'s start, and the stock-line trend.',
+      },
+      {
         signature: 'dispose(): void',
         description: 'Stop a run in progress (its Bilibili reads end).',
         parameters: [],
@@ -9757,6 +9763,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'StreamStatus',
     declaration: 'export interface StreamStatus {\n    stream: RepoStream;\n    id: string;\n    baseline: boolean;\n    lastPoll?: PollStatus;\n}',
+  },
+  {
+    name: 'StyleHealth',
+    declaration: 'export interface StyleHealth {\n    readonly kept: number;\n    readonly pending: number;\n    readonly review: \'optional\' | \'required\';\n    readonly lastRefreshAt: number | null;\n    readonly ticTrend: \'up\' | \'flat\' | \'down\' | null;\n}',
   },
   {
     name: 'SubagentActivation',
