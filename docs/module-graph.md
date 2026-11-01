@@ -389,6 +389,7 @@ flowchart TD
     pkg_fork_style_settings["fork-style-settings"]
     pkg_fork_sysmon["fork-sysmon"]
     pkg_fork_taint["fork-taint"]
+    pkg_fork_time_gap["fork-time-gap"]
     pkg_fork_tool_monitor["fork-tool-monitor"]
     pkg_fork_tool_qq["fork-tool-qq"]
     pkg_fork_tool_up["fork-tool-up"]
@@ -1624,6 +1625,12 @@ flowchart TD
   pkg_fork_style --> pkg_session
   pkg_fork_style --> pkg_tools
   pkg_fork_style --> pkg_web
+  pkg_fork_time_gap --> pkg_agent
+  pkg_fork_time_gap --> pkg_llm
+  pkg_fork_time_gap --> pkg_fork_taint
+  pkg_fork_time_gap --> pkg_owner_relay
+  pkg_fork_time_gap --> pkg_session
+  pkg_fork_time_gap --> pkg_session_projection
   pkg_fork_tool_qq --> pkg_attachment
   pkg_fork_tool_qq --> pkg_llm
   pkg_fork_tool_qq --> pkg_fork_qq
@@ -1633,12 +1640,17 @@ flowchart TD
   pkg_fork_tool_watch --> pkg_fork_event_bus
   pkg_fork_tool_watch --> pkg_fork_github_sensor
   pkg_fork_tool_watch --> pkg_tools
+  pkg_fork_guard --> pkg_agent_default_model
+  pkg_fork_guard --> pkg_home_paths
+  pkg_fork_guard --> pkg_llm
+  pkg_fork_guard --> pkg_fork_memory
   pkg_fork_wechat --> pkg_api_session_controller
   pkg_fork_wechat --> pkg_home_paths
   pkg_fork_wechat --> pkg_llm
   pkg_fork_wechat --> pkg_fork_event_bus
   pkg_fork_wechat --> pkg_fork_presence
   pkg_fork_wechat --> pkg_fork_taint
+  pkg_fork_wechat --> pkg_fork_time_gap
   pkg_fork_wechat --> pkg_fork_voice
   pkg_fork_wechat --> pkg_owner_relay
   pkg_fork_wechat --> pkg_permission_presets
@@ -1646,10 +1658,6 @@ flowchart TD
   pkg_fork_wechat --> pkg_session
   pkg_fork_wechat --> pkg_session_title
   pkg_fork_wechat --> pkg_storage_domain
-  pkg_fork_guard --> pkg_agent_default_model
-  pkg_fork_guard --> pkg_home_paths
-  pkg_fork_guard --> pkg_llm
-  pkg_fork_guard --> pkg_fork_memory
   pkg_fork_tool_wechat --> pkg_fork_event_bus
   pkg_fork_tool_wechat --> pkg_fork_wechat
   pkg_fork_tool_wechat --> pkg_tools
@@ -2057,9 +2065,10 @@ flowchart TD
 | [`fork-memory`](../packages/fork/fork-memory) | `fork` | [`agent`](../packages/core/agent), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-taint`](../packages/fork/fork-taint), [`session`](../packages/core/session), [`tools`](../packages/core/tools) |
 | [`fork-qqbot`](../packages/fork/fork-qqbot) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`fork-style`](../packages/fork/fork-style) | `fork` | [`agent`](../packages/core/agent), [`agent-default-model`](../packages/core/agent-default-model), [`compaction`](../packages/compaction/compaction), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-integrity`](../packages/fork/fork-integrity), [`fork-qq`](../packages/fork/fork-qq), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`web`](../packages/web/web) |
+| [`fork-time-gap`](../packages/fork/fork-time-gap) | `fork` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`fork-taint`](../packages/fork/fork-taint), [`owner-relay`](../packages/fork/owner-relay), [`session`](../packages/core/session), [`session-projection`](../packages/session/session-projection) |
 | [`fork-tool-qq`](../packages/fork/fork-tool-qq) | `fork` | [`attachment`](../packages/attachment/attachment), [`llm`](../packages/llm/llm), [`fork-qq`](../packages/fork/fork-qq), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
 | [`fork-tool-watch`](../packages/fork/fork-tool-watch) | `fork` | [`agent`](../packages/core/agent), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-github-sensor`](../packages/fork/fork-github-sensor), [`tools`](../packages/core/tools) |
-| [`fork-wechat`](../packages/fork/fork-wechat) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-presence`](../packages/fork/fork-presence), [`fork-taint`](../packages/fork/fork-taint), [`fork-voice`](../packages/fork/fork-voice), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`schedule`](../packages/schedule/schedule), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`fork-guard`](../packages/fork/fork-guard) | `fork` | [`agent-default-model`](../packages/core/agent-default-model), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-memory`](../packages/fork/fork-memory) |
+| [`fork-wechat`](../packages/fork/fork-wechat) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-presence`](../packages/fork/fork-presence), [`fork-taint`](../packages/fork/fork-taint), [`fork-time-gap`](../packages/fork/fork-time-gap), [`fork-voice`](../packages/fork/fork-voice), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`schedule`](../packages/schedule/schedule), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`fork-tool-wechat`](../packages/fork/fork-tool-wechat) | `fork` | [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-wechat`](../packages/fork/fork-wechat), [`tools`](../packages/core/tools) |
 <!-- END GENERATED module-graph:packages -->

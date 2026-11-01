@@ -312,7 +312,7 @@ describe('SubscriptionsSection auto-archive card', () => {
     render(<SubscriptionsSection {...props} />)
     expect(renderFactorySlot).toHaveBeenCalledWith('settings.plugin-config', expect.objectContaining({ entries: ['fork-event-bus'] }))
     // The section's own time-check card renders in the same pass; pick the bus card's call.
-    const { exclude } = renderFactorySlot.mock.calls.find(([, props]) => (props as { entries: string[] }).entries[0] === 'fork-event-bus')![1] as { exclude: string[] }
+    const { exclude } = renderFactorySlot.mock.calls.find(([, props]) => props.entries[0] === 'fork-event-bus')![1] as { entries: readonly string[]; exclude?: string[] }
     expect(exclude).toEqual(expect.arrayContaining(['subscriptions', 'suppress', 'webUrl']))
     expect(exclude).not.toContain('autoArchive')
     expect(card().lastElementChild).toBe(screen.getByTestId('plugin-config'))

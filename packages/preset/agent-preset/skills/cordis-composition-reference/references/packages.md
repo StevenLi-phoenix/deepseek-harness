@@ -356,6 +356,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-fork-style-settings` | no | Speaking style settings section: the real QQ and Bilibili exchanges that tune the main agent's voice, one-tap deletion, review, lines of the owner's own, and the stock-line trend |
 | `@deepseek-ai/dsh-fork-sysmon` | yes | System status settings section: the Host machine's CPU, memory, power, temperature, and disk usage per volume |
 | `@deepseek-ai/dsh-fork-taint` | yes | Turn origin for the owner's main agent: who started the current turn (the owner, a relayed message, an event, a reminder), which tools read strangers' words in it, and the rules that follow |
+| `@deepseek-ai/dsh-fork-time-gap` | yes | Time check for every Session: an input that arrives after a quiet spell reaches the model with the current time, how long the Session was quiet, and a reminder to read it on its own terms |
 | `@deepseek-ai/dsh-fork-tool-monitor` | no | Model-facing monitor tools: a bash command whose stdout lines come back to the same Session as they appear, like Claude Code's Monitor |
 | `@deepseek-ai/dsh-fork-tool-qq` | yes | Read-only qq_groups, qq_digest, qq_recent, and qq_search tools: the agent reads what the QQ observer recorded and digested |
 | `@deepseek-ai/dsh-fork-tool-up` | yes | Model-facing up_* tools for the creator account's reads and Reply Gate replies (bili-svc) |

@@ -45,6 +45,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`fork-cc-admin/`](fork-cc-admin/README.md) | Root service `ctx.forkClaudeCode`: the service account's Claude Code sessions, listed, started with a first task, and stopped, for the Settings page |
 | [`fork-console/`](fork-console/README.md) | Settings sections for a service health overview, event subscriptions and schedule reminders, and Claude Code sessions with a voice preview |
 | [`fork-taint/`](fork-taint/README.md) | Turn origin: who started the open turn and whether strangers' words reached it; Claude Code messaging only in the owner's own turns, reminders and watches from other turns reported |
+| [`fork-time-gap/`](fork-time-gap/README.md) | Time check for every Session: an input that arrives after a quiet spell (5 minutes) reaches the model with the time, how long the Session was quiet, and a reminder to read it on its own terms |
 | [`fork-tool-monitor/`](fork-tool-monitor/README.md) | `monitor_start`, `monitor_stop`, `monitor_list` tools: a command's output lines come back to the same Session |
 | [`fork-tool-up/`](fork-tool-up/README.md) | `up_*` tools: the agent reads the creator account's comments, private messages and videos and asks bili-svc's Reply Gate for replies; the answer is `sent`, `held`, or `blocked` |
 | [`fork-tool-voice/`](fork-tool-voice/README.md) | `speak` tool: the agent turns text into speech and sends the audio to the owner on WeChat |

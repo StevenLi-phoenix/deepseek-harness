@@ -3425,6 +3425,33 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-taint -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-time-gap -->
+<a id="deepseek-aidsh-fork-time-gap"></a>
+
+## `@deepseek-ai/dsh-fork-time-gap`
+
+- `inject`: `agents` · `sessionProjections`
+- `source`: [`packages/fork/fork-time-gap/src/index.ts:42`](../packages/fork/fork-time-gap/src/index.ts)
+
+```ts config-catalog
+/** Settings, edited in Settings → 订阅与监控 through the All settings card. */
+export interface Config {
+  /** Add the notice at all. */
+  enabled: boolean
+  /** Shortest silence, in milliseconds, after which an incoming input gets the notice. */
+  thresholdMs: number
+  /** IANA zone of the times in the notice. */
+  timeZone: string
+  /** Presets whose Sessions never get the notice. */
+  excludePresets: string[]
+  /** Presets whose prompts carry someone else's words (a channel bot), so the notice says "the sender". */
+  senderPresets: string[]
+  /** Owner-relay channels that write their own time check before the owner's messages in the Sessions they claim. */
+  deferChannels: string[]
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-time-gap -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-qq -->
 <a id="deepseek-aidsh-fork-tool-qq"></a>
 
@@ -3645,7 +3672,8 @@ export interface Config {
   /**
    * Chat silence, in milliseconds, after which the owner's next message reaches the chat Session
    * with a note of when it was sent, how long the chat was quiet, and what the last message was.
-   * 0 turns the note off.
+   * Defaults to fork-time-gap's 5 minutes, which leaves the owner's WeChat messages to this check
+   * (its `deferChannels`). 0 turns the note off.
    */
   timeGapMs: number
   /**
