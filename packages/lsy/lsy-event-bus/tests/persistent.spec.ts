@@ -1,5 +1,7 @@
+import { rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Config, LSY_EVENT_KIND } from '../src/index.ts'
+import { Config, ensureProject, LSY_EVENT_KIND, persistentKey } from '../src/index.ts'
 import type { Subscription } from '../src/types.ts'
 import { disposeAll, fakeController, fakeRegistry, fakeRuntime, harness, release, sessionConfig, withConfig, type FakeController } from './harness.ts'
 
@@ -304,5 +306,107 @@ describe('persistent session subscriptions', () => {
     await bus.setPaused('octo-persist', false)
     await vi.advanceTimersByTimeAsync(120_000)
     expect(runtime.deliveries).toHaveLength(1)
+  })
+
+  it('a gone Session that left a compaction summary is replaced by a seeded one', async () => {
+    const { bus, runtime, controller, emit, batch, arrive, logs } = await mount()
+    await arrive('s1', await batch())
+    emit('s1', { type: 'compaction/summary', seq: 2, data: { summary: [{ type: 'text', text: 'Regulars like cats.' }] } })
+    await vi.advanceTimersByTimeAsync(0)
+    controller.known.delete('s1')
+    const second = await batch()
+    expect(bus.batches().at(-1)).toMatchObject({ delivery: 'rollover' })
+    const request = await runtime.rules[0]!.run(runtime.deliveries[1]!, new AbortController().signal)
+    expect(request!.prompt).toContain('previous_summary_json: "Regulars like cats."')
+    expect(logs.some(line => line.includes('starts a new one seeded with its last compaction summary'))).toBe(true)
+    await arrive('s2', second)
+    expect(bus.persistentSessions()).toMatchObject([{ sessionId: 's2', previous: 's1' }])
+  })
+})
+
+describe('persistent.key: subject', () => {
+  const subjectSub: Subscription = {
+    ...persistentSub,
+    session: { ...persistentSub.session!, titlePrefix: 'CI', persistent: { enabled: true, key: 'subject', rolloverDays: 30, maxSeedChars: 40 } },
+  }
+  const subjectConfig = withConfig(sessionConfig, { subscriptions: [subjectSub] })
+
+  /** Publish one release of `repo` and flush. */
+  async function publish(bus: Awaited<ReturnType<typeof harness>>['bus'], n: number, repo: string): Promise<void> {
+    await bus.publish(release(n, { subject: repo, key: `${repo}:release:${n}` }))
+  }
+
+  it('keys the table by subscription and subject', () => {
+    expect(persistentKey('ci')).toBe('ci')
+    expect(persistentKey('ci', 'a/b')).toBe('ci|a/b')
+    expect(Config({ subscriptions: [{ id: 'a', action: 'session', session: { workspacePath: '/w', instructions: 'x', persistent: { enabled: true, key: 'subject' } } }] } as never).subscriptions[0]!.session!.persistent).toMatchObject({ key: 'subject' })
+  })
+
+  it('splits a batch by subject into one Session per subject, with a fixed title and child batch rows', async () => {
+    const controller = fakeController()
+    const runtime = fakeRuntime()
+    const logs: string[] = []
+    const { bus, emit } = await harness({ config: subjectConfig, controller, runtime, logs })
+    await publish(bus, 1, 'octo/a')
+    await publish(bus, 2, 'octo/b')
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(runtime.deliveries).toHaveLength(2)
+    const batches = bus.batches()
+    expect(batches).toHaveLength(2)
+    expect(batches.map(row => row.subject).sort()).toEqual(['octo/a', 'octo/b'])
+    expect(batches.filter(row => row.parent !== undefined)).toHaveLength(1)
+    expect(logs.some(line => line.includes('split by subject into 2'))).toBe(true)
+    const requests = await Promise.all(runtime.deliveries.map(delivery => runtime.rules[0]!.run(delivery, new AbortController().signal)))
+    expect(requests.map(request => request!.title).sort()).toEqual(['CI: octo/a', 'CI: octo/b'])
+    for (const [index, row] of batches.entries()) {
+      controller.known.add(`s${index}`)
+      emit(`s${index}`, userMessage(row.id))
+    }
+    await vi.advanceTimersByTimeAsync(0)
+    expect(bus.persistentSessions().map(view => view.subject).sort()).toEqual(['octo/a', 'octo/b'])
+
+    // The next release of octo/a goes into octo/a's own Session only.
+    await publish(bus, 3, 'octo/a')
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(runtime.deliveries).toHaveLength(2)
+    const owner = bus.persistentSessions().find(view => view.subject === 'octo/a')!
+    expect(controller.followups.get(owner.sessionId)).toHaveLength(1)
+    expect(bus.persistentSessions().find(view => view.subject === 'octo/b')!.batches).toBe(1)
+  })
+
+  it('split child batches do not count against maxPerHour', async () => {
+    const limited = withConfig(sessionConfig, { subscriptions: [{ ...subjectSub, maxPerHour: 1 }] })
+    const runtime = fakeRuntime()
+    const { bus } = await harness({ config: limited, runtime })
+    await publish(bus, 1, 'octo/a')
+    await publish(bus, 2, 'octo/b')
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(runtime.deliveries).toHaveLength(2)
+  })
+})
+
+describe('ensureProject', () => {
+  it('creates the directory and registers a project once, keeping an existing project title', async () => {
+    const registry = fakeRegistry()
+    const dir = `${tmpdir()}/lsy-bus-project-${process.pid}-${Date.now()}`
+    expect(await ensureProject(registry, dir, 'B站')).toBe('created')
+    expect(registry.projects.get(dir)).toBe('B站')
+    expect(await ensureProject(registry, dir, 'Other')).toBe('existing')
+    expect(registry.projects.get(dir)).toBe('B站')
+    expect(await ensureProject(undefined, `${dir}/x`, 'n')).toBe('directory-only')
+    await rm(dir, { recursive: true })
+  })
+
+  it('the bus registers a subscription\'s project before its first Session, once', async () => {
+    const registry = fakeRegistry()
+    const projectDir = `${tmpdir()}/lsy-bus-ws-${process.pid}-${Date.now()}`
+    const sub: Subscription = { ...persistentSub, session: { ...persistentSub.session!, workspacePath: projectDir, project: '事件' } }
+    const { bus } = await harness({ config: withConfig(sessionConfig, { subscriptions: [sub] }), registry })
+    await bus.publish(release(1))
+    await vi.advanceTimersByTimeAsync(1_000)
+    await bus.publish(release(2))
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect([...registry.projects]).toEqual([[projectDir, '事件']])
+    await rm(projectDir, { recursive: true })
   })
 })
