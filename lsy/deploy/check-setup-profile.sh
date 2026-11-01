@@ -31,6 +31,8 @@ done
 /usr/bin/grep -q "@deepseek-ai/dsh-lsy-sysmon" "$WORK/fresh.yml" || fail "composition lacks lsy-sysmon"
 /usr/bin/grep -q "@deepseek-ai/dsh-lsy-memory-admin" "$WORK/fresh.yml" || fail "composition lacks lsy-memory-admin"
 /usr/bin/grep -q "@deepseek-ai/dsh-lsy-memory/settings" "$WORK/fresh.yml" || fail "composition lacks the lsy-memory settings route"
+/usr/bin/grep -q "@deepseek-ai/dsh-lsy-console" "$WORK/fresh.yml" || fail "composition lacks lsy-console"
+/usr/bin/grep -q "^- id: lsy-cc-admin$" "$WORK/fresh.yml" || fail "composition lacks lsy-cc-admin"
 /usr/bin/grep -q "^- id: owner-relay\$" "$WORK/fresh.yml" || fail "composition lacks owner-relay"
 /usr/bin/grep -q "^- id: bili\$" "$WORK/fresh.yml" || fail "composition lacks bili"
 /usr/bin/grep -q "^- id: preset-bili\$" "$WORK/fresh.yml" || fail "composition lacks preset-bili"

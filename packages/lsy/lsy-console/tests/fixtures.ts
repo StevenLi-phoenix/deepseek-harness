@@ -1,12 +1,13 @@
-/** Shared Host test fixtures: a connection double that captures routes, loopback services to probe, and a fake tmux. */
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+/** Shared Host test fixtures: a connection double that captures routes, loopback services to probe, and a Claude Code double. */
+import { mkdtempSync, rmSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import * as plugin from '../src/index.ts'
-import { ClaudeCode } from '../src/claude-code.ts'
+import type { CcOutcome, ClaudeCodeService } from '../src/claude-code.ts'
+import type { CcView } from '../src/views.ts'
 
 interface Route {
   path: string
@@ -53,37 +54,37 @@ export async function closedUrl(): Promise<string> {
   return url
 }
 
-/**
- * A fake tmux binary: `list-sessions` prints the names in its state file, `new-session -s <name>` adds one,
- * and `kill-session -t <name>` removes it.
- * @param dir - directory to write into.
- * @returns the binary's path and the state file's.
- */
-export function fakeTmux(dir: string): { tmux: string; state: string; log: string } {
-  const tmux = join(dir, 'tmux')
-  const state = join(dir, 'tmux-sessions')
-  const log = join(dir, 'tmux-calls')
-  writeFileSync(state, '')
-  writeFileSync(tmux, `#!/bin/bash
-echo "$*" >> '${log}'
-shift 2
-case "$1" in
-  list-sessions) [ -s '${state}' ] && cat '${state}' || exit 1 ;;
-  new-session) while [ "$1" != "-s" ]; do shift; done; echo "$2" >> '${state}' ;;
-  kill-session) grep -vx "$3" '${state}' > '${state}.tmp'; mv '${state}.tmp' '${state}' ;;
-esac
-exit 0
-`)
-  chmodSync(tmux, 0o755)
-  return { tmux, state, log }
+/** An in-memory `ctx.lsyClaudeCode`: the sessions it lists and the calls it records. */
+export class FakeClaudeCode implements ClaudeCodeService {
+  enabled = true
+  view_: CcView = { enabled: true, login: 'token', sessions: [], maxSessions: 3, started: [] }
+  readonly calls: string[] = []
+  next: CcOutcome = { ok: true }
+
+  view(): Promise<CcView> {
+    return Promise.resolve(this.view_)
+  }
+
+  start(name: string, task: string | undefined): Promise<CcOutcome> {
+    this.calls.push(`start ${name}${task === undefined ? '' : ` ${task}`}`)
+    return Promise.resolve(this.next)
+  }
+
+  stop(name: string): Promise<CcOutcome> {
+    this.calls.push(`stop ${name}`)
+    return Promise.resolve(this.next)
+  }
 }
 
-/** A temporary service-account home, removed by `cleanup()`. */
-export function tempHome() {
-  const home = mkdtempSync(join(tmpdir(), 'lsy-console-'))
-  mkdirSync(join(home, '.claude', 'sessions'), { recursive: true })
-  mkdirSync(join(home, '.config', 'claude-code'), { recursive: true })
-  return { home, cleanup: () => { rmSync(home, { recursive: true, force: true }) } }
+/**
+ * A temporary directory, removed by the teardown list.
+ * @param cleanups - the test's teardown list.
+ * @returns the directory.
+ */
+export function tempDir(cleanups: Array<() => void | Promise<void>>): string {
+  const dir = mkdtempSync(join(tmpdir(), 'lsy-console-'))
+  cleanups.push(() => { rmSync(dir, { recursive: true, force: true }) })
+  return dir
 }
 
 /** Collected log lines of a context. */
@@ -98,12 +99,11 @@ export interface MountOptions {
   /** The context to mount on; a new one by default. */
   ctx?: Context
   config?: Record<string, unknown>
-  home?: string
 }
 
 /**
  * Mount the plugin on a context with a connection double.
- * @param options - context, configuration overrides, and the service account home.
+ * @param options - context and configuration overrides.
  * @returns the context, captured routes, log lines, and a `call()` that drives a route.
  */
 export async function mountConsole(options: MountOptions = {}) {
@@ -115,11 +115,9 @@ export async function mountConsole(options: MountOptions = {}) {
     bili: { url: 'http://127.0.0.1:1' },
     ams: { url: '' },
     probeTimeoutMs: 300,
-    claudeCode: { sessionsDir: options.home === undefined ? '' : join(options.home, '.claude', 'sessions'), tmux: '/nonexistent/tmux' },
     ...options.config,
   } as never)
-  const claudeCode = new ClaudeCode(config.claudeCode, options.home ?? '/nonexistent/home')
-  plugin.mount(ctx, config, claudeCode)
+  plugin.apply(ctx, config)
   const call = async (path: string, init: { method?: string; body?: unknown; contentType?: string | null; raw?: string } = {}) => {
     const route = routes.find(entry => entry.path === path)
     if (route === undefined) throw new Error(`route ${path} not registered`)
@@ -129,5 +127,5 @@ export async function mountConsole(options: MountOptions = {}) {
     const body = method === 'POST' ? (init.raw ?? JSON.stringify(init.body ?? {})) : undefined
     return route.fetch(new Request(`http://127.0.0.1${path}`, { method, headers, ...body === undefined ? {} : { body } }))
   }
-  return { ctx, routes, logs, call, config, claudeCode }
+  return { ctx, routes, logs, call, config }
 }

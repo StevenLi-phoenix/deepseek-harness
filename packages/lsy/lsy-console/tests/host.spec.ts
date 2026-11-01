@@ -34,10 +34,6 @@ describe('lsy-console Host half', () => {
       bili: { url: 'http://127.0.0.1:8097' },
       ams: { url: 'http://127.0.0.1:18090' },
       probeTimeoutMs: 2000,
-      claudeCode: {
-        enabled: true, sessionsDir: '', tmux: '/opt/homebrew/bin/tmux', command: '/Users/dsh-runtime/bin/claude-dsh',
-        workDir: '/Users/dsh-runtime/work/cc', model: 'sonnet', maxSessions: 3,
-      },
       subscriptions: {
         workspacePath: '/Users/dsh-runtime/work', agentPreset: 'unattended', permissionPreset: 'danger-full-access',
         coalesceSeconds: 60, notifyMaxPerHour: 12, sessionMaxPerHour: 4,
@@ -71,13 +67,13 @@ describe('readBuildInfo', () => {
   it('names the sha from builds.noindex and the version from the @deepseek-ai/dsh package above the entry', () => {
     const root = mkdtempSync(join(tmpdir(), 'lsy-build-'))
     dirs.push(root)
-    const build = join(root, 'builds.noindex', '2595c4b887')
+    const build = join(root, 'builds.noindex', '0a1b2c3d4e')
     const lib = join(build, 'node_modules', '@deepseek-ai', 'dsh', 'lib')
     mkdirSync(lib, { recursive: true })
     writeFileSync(join(build, 'node_modules', '@deepseek-ai', 'dsh', 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh', version: '1.2.3' }))
     writeFileSync(join(lib, 'bin.js'), '')
     symlinkSync(build, join(root, 'current'))
-    expect(readBuildInfo(join(root, 'current', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js'))).toEqual({ version: '1.2.3', sha: '2595c4b887' })
+    expect(readBuildInfo(join(root, 'current', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js'))).toEqual({ version: '1.2.3', sha: '0a1b2c3d4e' })
   })
 
   it('returns nulls for a missing entry and no sha for a source checkout', () => {

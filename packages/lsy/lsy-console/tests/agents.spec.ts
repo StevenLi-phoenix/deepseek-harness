@@ -1,10 +1,9 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
 import { VoiceError } from '@deepseek-ai/dsh-lsy-voice'
-import { ClaudeCode } from '../src/claude-code.ts'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ActionError, AgentsView } from '../src/views.ts'
-import { FakeService, closedUrl, fakeTmux, mountConsole, tempHome } from './fixtures.ts'
+import { FakeClaudeCode, FakeService, closedUrl, mountConsole, tempDir } from './fixtures.ts'
 
 const PATH = '/api/lsy.agents'
 const cleanups: Array<() => void | Promise<void>> = []
@@ -12,91 +11,104 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup()
 })
 
-async function setup(config: Record<string, unknown> = {}, provide: Record<string, unknown> = {}) {
-  const { home, cleanup } = tempHome()
-  cleanups.push(cleanup)
-  const tmux = fakeTmux(home)
-  const mounted = await mountConsole({ home, config: { claudeCode: { sessionsDir: join(home, '.claude', 'sessions'), tmux: tmux.tmux }, ...config } })
-  for (const [name, value] of Object.entries(provide)) mounted.ctx.provide(name as never, value as never)
+async function setup(
+  config: Record<string, unknown> = {},
+  provide: Record<string, unknown> = {},
+  claudeCode: FakeClaudeCode | null = new FakeClaudeCode(),
+) {
+  const mounted = await mountConsole({ config })
+  const all = claudeCode === null ? provide : { lsyClaudeCode: claudeCode, ...provide }
+  for (const [name, value] of Object.entries(all)) mounted.ctx.provide(name as never, value as never)
   const get = async (): Promise<AgentsView> => await (await mounted.call(PATH)).json() as AgentsView
   const post = (body: unknown) => mounted.call(PATH, { method: 'POST', body })
-  return { ...mounted, home, tmux, get, post, tmuxCalls: () => (existsSync(tmux.log) ? readFileSync(tmux.log, 'utf8').trim().split('\n') : []) }
+  return { ...mounted, get, post, claudeCode }
 }
 
 describe('Claude Code card', () => {
-  it('reports the login state from file existence alone', async () => {
-    const { home, get } = await setup()
-    expect((await get()).cc).toMatchObject({ enabled: true, login: 'none', sessions: [], maxSessions: 3, started: [] })
-    writeFileSync(join(home, '.config', 'claude-code', 'oauth_token'), 'sk-ant-oat01-SECRET')
-    expect((await get()).cc!.login).toBe('token')
-    writeFileSync(join(home, '.claude', '.credentials.json'), '{"claudeAiOauth":{"accessToken":"SECRET2"}}')
-    const view = await get()
-    expect(view.cc!.login).toBe('full')
-    expect(JSON.stringify(view)).not.toMatch(/SECRET/u)
+  it('shows what lsy-cc-admin reports: the login state, sessions, and the tmux sessions started', async () => {
+    const claudeCode = new FakeClaudeCode()
+    claudeCode.view_ = {
+      enabled: true, login: 'full', maxSessions: 3, started: ['review-1'],
+      sessions: [{ name: 'review-1', pid: 111, status: 'idle', cwd: '/work/cc', updatedAt: 5, managed: true }],
+    }
+    const { get } = await setup({}, {}, claudeCode)
+    expect((await get()).cc).toEqual(claudeCode.view_)
   })
 
-  it('is null when the bridge is disabled', async () => {
-    const { get } = await setup({ claudeCode: { enabled: false } })
+  it('is null when the service is absent or switched off', async () => {
+    expect((await (await setup({}, {}, null)).get()).cc).toBeNull()
+    const off = new FakeClaudeCode()
+    off.enabled = false
+    expect((await (await setup({}, {}, off)).get()).cc).toBeNull()
+  })
+
+  it('answers the rest of the page when reading the sessions fails, and logs only the error class', async () => {
+    const claudeCode = new FakeClaudeCode()
+    claudeCode.view = () => Promise.reject(new TypeError('secret path /Users/x'))
+    const { get, logs } = await setup({}, {}, claudeCode)
     expect((await get()).cc).toBeNull()
-  })
-
-  it('lists the tmux sessions the bridge started', async () => {
-    const { get, post } = await setup()
-    await post({ action: 'cc.start', name: 'review-1' })
-    expect((await get()).cc!.started).toEqual(['review-1'])
+    expect(logs.join('\n')).toContain('reading Claude Code sessions failed: TypeError')
+    expect(logs.join('\n')).not.toContain('/Users/x')
   })
 })
 
 describe('cc.start and cc.stop', () => {
-  it('starts a named session in tmux, with the first task as one quoted prompt argument', async () => {
-    const { post, tmuxCalls, logs } = await setup()
-    const response = await post({ action: 'cc.start', name: 'review-1', task: 'read it; echo \'$HOME\'' })
+  it('starts a named session with the first task, answers the fresh view, and logs without the task', async () => {
+    const { post, claudeCode, logs } = await setup()
+    const response = await post({ action: 'cc.start', name: 'review-1', task: 'read the logs' })
     expect(response.status).toBe(200)
-    expect(await response.json()).toMatchObject({ ok: true, cc: { started: ['review-1'] } })
-    const call = tmuxCalls().find(line => line.includes('new-session'))!
-    expect(call).toContain('-s review-1')
-    expect(call).toContain('--name review-1 -- \'read it; echo \'\\\'\'$HOME\'\\\'\'\'')
+    expect(await response.json()).toMatchObject({ ok: true, cc: { login: 'token' } })
+    expect(claudeCode!.calls).toEqual(['start review-1 read the logs'])
     expect(logs.filter(line => line.includes('lsy-console: cc.start'))).toEqual([expect.stringMatching(/^info lsy-console: cc\.start review-1 -> ok \(\d+ ms\)$/u)])
-    // The task is the owner's text: it must not be logged.
-    expect(logs.join('\n')).not.toContain('read it')
+    expect(logs.join('\n')).not.toContain('read the logs')
   })
 
-  it('refuses names that are not lower-case words and tasks beyond the tool\'s limit', async () => {
-    const { post, tmuxCalls } = await setup()
+  it('starts without a task, and refuses names that are not lower-case words and tasks beyond the tool\'s limit before calling the service', async () => {
+    const { post, claudeCode } = await setup()
+    expect((await post({ action: 'cc.start', name: 'review-1' })).status).toBe(200)
+    expect(claudeCode!.calls).toEqual(['start review-1'])
     for (const name of ['Bad Name', 'x;rm', '', 'a'.repeat(32)]) expect((await post({ action: 'cc.start', name })).status).toBe(400)
     const long = await post({ action: 'cc.start', name: 'ok', task: 'a'.repeat(8001) })
     expect([long.status, await long.json()]).toEqual([400, { error: 'invalid_request', detail: 'task' }])
-    expect(tmuxCalls().filter(line => line.includes('new-session'))).toEqual([])
+    expect(claudeCode!.calls).toHaveLength(1)
   })
 
-  it('stops at three running sessions and reports duplicates', async () => {
-    const { post } = await setup()
-    for (const name of ['one', 'two', 'three']) expect((await post({ action: 'cc.start', name })).status).toBe(200)
-    const fourth = await post({ action: 'cc.start', name: 'four' })
-    expect([fourth.status, await fourth.json()]).toEqual([429, { error: 'limit_reached' }])
-    const duplicate = await post({ action: 'cc.start', name: 'two' })
-    expect(duplicate.status).toBe(400)
-    expect(await duplicate.json()).toMatchObject({ error: 'invalid_request' })
+  it.each([
+    ['limit_reached', 429, undefined],
+    ['invalid_request', 400, 'a session named two is already running'],
+    ['start_failed', 502, 'tmux could not start the session'],
+  ] as const)('relays the service\'s %s refusal', async (error, status, detail) => {
+    const claudeCode = new FakeClaudeCode()
+    claudeCode.next = { ok: false, error, ...detail === undefined ? {} : { detail } }
+    const { post, logs } = await setup({}, {}, claudeCode)
+    const response = await post({ action: 'cc.start', name: 'two' })
+    expect([response.status, await response.json()]).toEqual([status, detail === undefined ? { error } : { error, detail }])
+    expect(logs.some(line => line.startsWith(`warn lsy-console: cc.start two -> ${error}`))).toBe(true)
   })
 
-  it('stops a session it started and refuses one it did not', async () => {
-    const { post, get } = await setup()
-    await post({ action: 'cc.start', name: 'review-1' })
+  it('stops a session and relays not_found and failures', async () => {
+    const claudeCode = new FakeClaudeCode()
+    const { post } = await setup({}, {}, claudeCode)
     expect((await post({ action: 'cc.stop', name: 'review-1' })).status).toBe(200)
-    expect((await get()).cc!.started).toEqual([])
-    const again = await post({ action: 'cc.stop', name: 'review-1' })
-    expect([again.status, (await again.json() as ActionError).error]).toEqual([404, 'not_found'])
+    expect(claudeCode.calls).toEqual(['stop review-1'])
+    claudeCode.next = { ok: false, error: 'not_found', detail: 'no session named review-1 was started by cc_start' }
+    expect((await post({ action: 'cc.stop', name: 'review-1' })).status).toBe(404)
+    claudeCode.next = { ok: false, error: 'stop_failed' }
+    expect((await post({ action: 'cc.stop', name: 'review-1' })).status).toBe(502)
+    expect((await post({ action: 'cc.stop', name: 'Bad Name' })).status).toBe(400)
   })
 
-  it('reports a tmux that cannot start a session', async () => {
-    const { post } = await setup({ claudeCode: { tmux: '/nonexistent/tmux' } })
-    const response = await post({ action: 'cc.start', name: 'review-1' })
-    expect([response.status, (await response.json() as ActionError).error]).toEqual([502, 'start_failed'])
+  it('says unavailable when the service is absent or switched off', async () => {
+    const { post } = await setup({}, {}, null)
+    expect(await (await post({ action: 'cc.start', name: 'x' })).json()).toEqual({ error: 'unavailable', detail: 'cc' })
+    const off = new FakeClaudeCode()
+    off.enabled = false
+    expect((await (await setup({}, {}, off)).post({ action: 'cc.stop', name: 'x' })).status).toBe(503)
   })
 
-  it('says unavailable when the bridge is disabled', async () => {
-    const { post } = await setup({ claudeCode: { enabled: false } })
-    expect((await post({ action: 'cc.start', name: 'x' })).status).toBe(503)
+  it('refuses an unknown action', async () => {
+    const { post } = await setup()
+    expect(await (await post({ action: 'cc.explode', name: 'x' })).json()).toEqual({ error: 'invalid_request', detail: 'action' })
   })
 })
 
@@ -137,8 +149,7 @@ describe('voice.preview', () => {
   }
 
   it('returns the synthesized audio to the caller and sends it nowhere else', async () => {
-    const { home } = tempHome()
-    cleanups.push(() => undefined)
+    const home = tempDir(cleanups)
     const audioPath = join(home, 'preview.mp3')
     writeFileSync(audioPath, Buffer.from([0x49, 0x44, 0x33, 1, 2, 3]))
     const speak = vi.fn(() => Promise.resolve({ path: audioPath, format: 'mp3' }))
@@ -156,7 +167,7 @@ describe('voice.preview', () => {
   })
 
   it('serves a WAV when that is the format', async () => {
-    const { home } = tempHome()
+    const home = tempDir(cleanups)
     const audioPath = join(home, 'preview.wav')
     writeFileSync(audioPath, 'RIFF')
     const { post } = await setup({}, { lsyVoice: voiceDouble({ speak: () => Promise.resolve({ path: audioPath, format: 'wav' }) }) })
@@ -171,6 +182,8 @@ describe('voice.preview', () => {
     const response = await failing.post({ action: 'voice.preview' })
     const body = await response.json() as ActionError
     expect([response.status, body.error, body.detail!.length]).toEqual([502, 'speech_failed', 160])
+    const broken = await setup({}, { lsyVoice: voiceDouble({ speak: () => Promise.reject(new TypeError('not a voice failure')) }) })
+    expect((await broken.post({ action: 'voice.preview' })).status).toBe(500)
   })
 
   it('takes one preview at a time', async () => {
@@ -181,23 +194,9 @@ describe('voice.preview', () => {
     await vi.waitFor(() => { expect(speak).toHaveBeenCalled() })
     const second = await post({ action: 'voice.preview' })
     expect([second.status, await second.json()]).toEqual([429, { error: 'limit_reached', detail: 'preview' }])
-    const { home } = tempHome()
+    const home = tempDir(cleanups)
     writeFileSync(join(home, 'a.mp3'), 'x')
     finish({ path: join(home, 'a.mp3'), format: 'mp3' })
     expect((await first).status).toBe(200)
-  })
-})
-
-describe('ClaudeCode adapter', () => {
-  it('keeps the bridge\'s defaults in step with lsy-cc-bridge', async () => {
-    const { Config: BridgeConfig } = await import('@deepseek-ai/dsh-lsy-cc-bridge')
-    const { Config } = await import('../src/config.ts')
-    const bridge = BridgeConfig({} as never)
-    const mine = Config({} as never).claudeCode
-    expect({ tmux: mine.tmux, command: mine.command, workDir: mine.workDir, model: mine.model, maxSessions: mine.maxSessions })
-      .toEqual({
-        tmux: bridge.tmux, command: bridge.command, workDir: bridge.workDir, model: bridge.model, maxSessions: bridge.maxSessions,
-      })
-    expect(typeof ClaudeCode).toBe('function')
   })
 })

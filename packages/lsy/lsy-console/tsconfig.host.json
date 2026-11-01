@@ -26,9 +26,6 @@
       "path": "../../../vendor/schemastery"
     },
     {
-      "path": "../lsy-cc-bridge"
-    },
-    {
       "path": "../lsy-event-bus"
     },
     {

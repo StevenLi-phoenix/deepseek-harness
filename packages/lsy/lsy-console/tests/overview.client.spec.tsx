@@ -15,7 +15,7 @@ const CHECKED = new Date(2026, 10, 1, 9, 30, 15).getTime()
 const VIEW: OverviewView = {
   checkedAt: CHECKED,
   cards: [
-    { id: 'dsh', tone: 'ok', state: 'up', facts: { version: '0.2.2', sha: '2595c4b887', uptime: 3600 } },
+    { id: 'dsh', tone: 'ok', state: 'up', facts: { version: '0.2.2', sha: '0a1b2c3d4e', uptime: 3600 } },
     { id: 'bus', tone: 'warn', state: 'limited', facts: { subscriptions: 3, paused: 0, pending: 1, events: 9, batches: 4, limited: 2 } },
     { id: 'bili', tone: 'down', state: 'down', facts: { plugin: true } },
     { id: 'qq', tone: 'off', state: 'absent', facts: {} },
@@ -67,7 +67,7 @@ describe('OverviewSection', () => {
     expect(regions).toEqual([['dsh', 'ok'], ['bus', 'warn'], ['bili', 'down'], ['qq', 'off'], ['cc', 'ok'], ['llm', 'ok']])
     const dsh = screen.getByRole('region', { name: '事件服务' })
     expect(dsh.textContent).toContain('运行中')
-    expect(dsh.textContent).toContain('版本 0.2.2 · 构建 2595c4b887 · 已运行 60 分钟'.replace('60 分钟', '1 小时 0 分'))
+    expect(dsh.textContent).toContain('版本 0.2.2 · 构建 0a1b2c3d4e · 已运行 60 分钟'.replace('60 分钟', '1 小时 0 分'))
     expect(screen.getByRole('region', { name: 'B站服务' }).textContent).toContain('bili-svc 没有响应')
     expect(screen.getByRole('region', { name: '事件总线' }).textContent).toContain('被限流 2 次')
     expect(screen.getByRole('region', { name: 'QQ 观察器' }).textContent).toContain('未加载')

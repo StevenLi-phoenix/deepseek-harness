@@ -71,7 +71,7 @@ feiyu 的 key 以 `LSY_FEIYU_API_KEY` 写入 `$DSH_HOME/.env`（改 `.env` 后�
 <details>
 <summary>实现细节——点击展开</summary>
 
-`speak` 一次只跑一个调用：feiyu 的 GPU 同时只接一个任务，突发请求不应堆积重试。一次调用先试 `tts.provider`，再试 `tts.fallback`；每个服务先把原始回答写盘再做别的事：`audio/` 下的 `<name>.job.json`（feiyu 最终的任务记录）和 `<name>.wav`，文件名由时间、文字哈希和服务名组成。交付物是这份 WAV 或它的 MP3 转换结果（先写成 `.mp3.part` 再改名）。`transcribe` 读取文件，POST 到 `/transcribe`，先把原始 JSON 写到 `asr/<时间>-<音频哈希>.json`，再读取 `full_text`。日志只记长度、服务、耗时和路径，不记说出的文字，也不记 key。`describe()` 给 [`lsy-console`](../lsy-console/README.md) 的设置总览报告开关和各服务的地址（不含 key）。
+`speak` 一次只跑一个调用：feiyu 的 GPU 同时只接一个任务，突发请求不应堆积重试。一次调用先试 `tts.provider`，再试 `tts.fallback`；每个服务先把原始回答写盘再做别的事：`audio/` 下的 `<name>.job.json`（feiyu 最终的任务记录）和 `<name>.wav`，文件名由时间、文字哈希和服务名组成。交付物是这份 WAV 或它的 MP3 转换结果（先写成 `.mp3.part` 再改名）。`transcribe` 读取文件，POST 到 `/transcribe`，先把原始 JSON 写到 `asr/<时间>-<音频哈希>.json`，再读取 `full_text`。日志只记长度、服务、耗时和路径，不记说出的文字，也不记 key。`describe()` 给 [`lsy-console`](../lsy-console/README.zh.md) 的设置总览报告开关和各服务的地址（不含 key）。
 
 | 文件 | 作用 |
 |---|---|

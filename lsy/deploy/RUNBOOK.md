@@ -431,7 +431,9 @@ Patch edits (`$DSH_HOME/cordis.patch.yml`, the profile patch) reload live; `.env
 
 | Task | Command |
 |---|---|
-| Change what is watched | Ask the agent on WeChat |
+| Change what is watched | Ask the agent on WeChat, or use Settings → Subscriptions and monitors (pause, resume, delete, create; reminders too) |
+| See whether every service is up | Settings → Service overview (bili-svc, QQ, WeChat, voice, Claude Code, AMS intake, event bus, balance); its Manage links open each service's section |
+| Start or stop a Claude Code session, try the voice | Settings → Claude Code and voice |
 | Upgrade | `lsy/deploy/upgrade.sh` (run it from a separate `git worktree` so the main tree stays editable; it keeps the new build and the one it replaces and deletes older ones, in `builds.noindex` or in the old layout directly under `/Users/Shared/lsy-dsh`), then `sudo -n -u dsh-runtime /Users/Shared/lsy-dsh/current/lsy/deploy/setup-profile.sh /Users/dsh-runtime/.dsh /Users/Shared/lsy-dsh/current` and `sudo -n launchctl kickstart -k system/app.lishuyu.dsh-events` |
 | Roll back | `ln -sfn /Users/Shared/lsy-dsh/builds.noindex/<previous sha> /Users/Shared/lsy-dsh/current`, then the two commands above; only the previous build is kept. A previous build from before 2026-10-31 sits at `/Users/Shared/lsy-dsh/<sha>`; once `current` points elsewhere and the service restarted, move it with `lsy/deploy/prune-builds.sh --relocate /Users/Shared/lsy-dsh /Users/Shared/lsy-dsh/<sha>` |
 | Re-bind WeChat | Step 6 again; no restart needed |

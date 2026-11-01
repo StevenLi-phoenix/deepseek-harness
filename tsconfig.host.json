@@ -578,6 +578,7 @@
     { "path": "./packages/lsy/lsy-event-ingest" },
     { "path": "./packages/lsy/lsy-tool-monitor" },
     { "path": "./packages/lsy/lsy-cc-bridge" },
+    { "path": "./packages/lsy/lsy-cc-admin" },
     { "path": "./packages/lsy/lsy-sysmon/tsconfig.host.json" },
     { "path": "./packages/lsy/lsy-qq-login/tsconfig.host.json" },
     { "path": "./packages/lsy/lsy-style" },

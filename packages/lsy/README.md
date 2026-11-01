@@ -40,6 +40,8 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`lsy-style-settings/`](lsy-style-settings/README.md) | Settings section 说话风格: the samples with one-tap deletion, review, the owner's own lines, collection counts, and the stock-line trend |
 | [`lsy-memory-admin/`](lsy-memory-admin/README.md) | Settings section for reviewing agent memory: waiting writes, entries, previewed rollback and erase, persona feedback (its Host route is `lsy-memory`'s `settings` entry) |
 | [`lsy-sysmon/`](lsy-sysmon/README.md) | Settings section with the Host machine's CPU, memory, power, temperature, and disk usage per volume |
+| [`lsy-cc-admin/`](lsy-cc-admin/README.md) | Root service `ctx.lsyClaudeCode`: the service account's Claude Code sessions, listed, started with a first task, and stopped, for the Settings page |
+| [`lsy-console/`](lsy-console/README.md) | Settings sections for a service health overview, event subscriptions and schedule reminders, and Claude Code sessions with a voice preview |
 | [`lsy-taint/`](lsy-taint/README.md) | Turn origin: who started the open turn and whether strangers' words reached it; Claude Code messaging only in the owner's own turns, reminders and watches from other turns reported |
 | [`lsy-tool-monitor/`](lsy-tool-monitor/README.md) | `monitor_start`, `monitor_stop`, `monitor_list` tools: a command's output lines come back to the same Session |
 | [`lsy-tool-up/`](lsy-tool-up/README.md) | `up_*` tools: the agent reads the creator account's comments, private messages and videos and asks bili-svc's Reply Gate for replies; the answer is `sent`, `held`, or `blocked` |

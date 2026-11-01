@@ -5,7 +5,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { ClaudeCode } from './claude-code.ts'
+import { claudeCodeOf } from './claude-code.ts'
 import type { Config } from './config.ts'
 import { readBuildInfo, type BuildInfo } from './build-info.ts'
 import { TIMED_OUT, httpProbe, isHealthy, isReachable, within } from './probe.ts'
@@ -40,7 +40,6 @@ export const LIVE_ENV: OverviewEnv = {
 export interface OverviewSources {
   readonly ctx: Context
   readonly config: Config
-  readonly claudeCode: ClaudeCode
   readonly env?: OverviewEnv
 }
 
@@ -129,7 +128,9 @@ async function voiceCard({ ctx, config, env = LIVE_ENV }: OverviewSources): Prom
   return card('voice', 'ok', 'up', facts)
 }
 
-async function ccCard({ claudeCode }: OverviewSources): Promise<ServiceCard> {
+async function ccCard({ ctx }: OverviewSources): Promise<ServiceCard> {
+  const claudeCode = claudeCodeOf(ctx)
+  if (claudeCode === undefined) return absent('cc')
   if (!claudeCode.enabled) return card('cc', 'off', 'disabled')
   const view = await claudeCode.view()
   const facts = { sessions: view.sessions.length, max: view.maxSessions, login: view.login }

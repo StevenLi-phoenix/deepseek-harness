@@ -2237,6 +2237,37 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'lsyClaudeCode',
+    summary: 'Service behind `ctx.lsyClaudeCode`.',
+    description: 'Service behind `ctx.lsyClaudeCode`.',
+    methods: [
+      {
+        signature: 'login(): CcLogin',
+        description: 'How the service account is signed in, from file existence only.',
+        parameters: [],
+        returns: 'the login state.',
+      },
+      {
+        signature: 'async view(): Promise<CcView>',
+        description: 'Live sessions and the tmux sessions the bridge started.',
+        parameters: [],
+        returns: 'the view.',
+      },
+      {
+        signature: 'async start(name: string, task: string | undefined): Promise<CcOutcome>',
+        description: 'Start a session, optionally with a first task.',
+        parameters: [{ name: 'name', description: 'lower-case letters, digits, and hyphens, at most 31 characters.' }, { name: 'task', description: 'the first prompt, at most {@link MAX_TASK_CHARS} characters.' }],
+        returns: 'the outcome; the limit is a code of its own so a page can word it.',
+      },
+      {
+        signature: 'async stop(name: string): Promise<CcOutcome>',
+        description: 'Stop a session the bridge started.',
+        parameters: [{ name: 'name', description: 'the name it was started with.' }],
+        returns: 'the outcome.',
+      },
+    ],
+  },
+  {
     key: 'lsyEventBus',
     summary: 'Durable event bus.',
     description: 'Durable event bus. Sensors publish; subscriptions from the configuration or created at run time decide which events reach which actuator; the bus owns dedupe, loop suppression, coalescing, and rate limits so actuators never see raw sensor traffic.',
@@ -2290,6 +2321,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Remove a run-time subscription, its pending events, and its flush timer. Batches already created stay in the history.',
         parameters: [{ name: 'id', description: 'subscription id.' }],
         returns: '`removed`, `not_found`, or `config_owned` for an id the configuration owns.',
+      },
+      {
+        signature: 'async setPaused(id: string, paused: boolean): Promise<PauseOutcome>',
+        description: 'Pause or resume a run-time subscription. A paused subscription stops matching new events (they are `unmatched` for it) and holds the events already pending; resuming flushes those after the usual coalesce window. The flag is stored, so it survives restarts.',
+        parameters: [{ name: 'id', description: 'subscription id.' }, { name: 'paused', description: 'true to pause, false to resume.' }],
+        returns: '`ok`, `not_found`, or `config_owned` for an id the configuration owns.',
+      },
+      {
+        signature: 'stats(): BusStats',
+        description: 'Counters for the last rolling hour and the current queue, for status pages.',
+        parameters: [],
+        returns: 'snapshot; before the storage domain opens, only the configuration rows are counted.',
       },
       {
         signature: 'listSubscriptions(): SubscriptionView[]',
@@ -2665,6 +2708,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'now: () => Date = () => new Date()',
         description: 'Replaced by tests.',
         parameters: [],
+      },
+      {
+        signature: 'describe(): VoiceSummary',
+        description: 'The switches and the endpoint of each service, for status pages. Keys and credential references are not included.',
+        parameters: [],
+        returns: 'snapshot of the configuration.',
       },
       {
         signature: 'canTranscribe(path: string): boolean',
@@ -6432,6 +6481,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface BundleRowInfo {\n    rowId: string;\n    moduleName: string;\n    meta?: PluginLocalizedMeta;\n    entryId?: PluginEntryId;\n}',
   },
   {
+    name: 'BusStats',
+    declaration: 'export interface BusStats {\n    subscriptions: number;\n    paused: number;\n    pending: number;\n    eventsLastHour: number;\n    batchesLastHour: number;\n    rateLimitHitsLastHour: number;\n}',
+  },
+  {
     name: 'ButtonProps',
     declaration: 'export interface ButtonProps {\n    readonly label: string;\n    readonly hotkey?: string | undefined;\n    readonly disabled?: boolean | undefined;\n    readonly onPress?: (() => unknown) | undefined;\n}',
   },
@@ -8158,6 +8211,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'PatchHunk',
     declaration: 'export interface PatchHunk {\n    lineNumber: number;\n    context?: string;\n    oldLines: string[];\n    newLines: string[];\n    isEndOfFile: boolean;\n}',
+  },
+  {
+    name: 'PauseOutcome',
+    declaration: 'export type PauseOutcome = \'ok\' | \'not_found\' | \'config_owned\';',
   },
   {
     name: 'PeerAdmission',
@@ -10128,16 +10185,12 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SubscriptionMeta {\n    createdBy?: string;\n}',
   },
   {
-    name: 'SubscriptionOrigin',
-    declaration: 'export type SubscriptionOrigin = \'config\' | \'agent\';',
-  },
-  {
     name: 'SubscriptionStatus',
     declaration: 'export interface SubscriptionStatus {\n    pending: number;\n    batchesLastHour: number;\n    nextFlushAt?: number;\n    lastBatch?: BatchSummary;\n}',
   },
   {
     name: 'SubscriptionView',
-    declaration: 'export interface SubscriptionView extends Subscription {\n    origin: SubscriptionOrigin;\n    createdAt?: number;\n    createdBy?: string;\n    status: SubscriptionStatus;\n}',
+    declaration: 'export interface SubscriptionView extends Subscription {\n    origin: SubscriptionOrigin;\n    createdAt?: number;\n    createdBy?: string;\n    paused?: true;\n    status: SubscriptionStatus;\n}',
   },
   {
     name: 'SubtitleView',
@@ -10770,6 +10823,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'VideoPart',
     declaration: 'export interface VideoPart {\n    page: number;\n    cid: number;\n    title: string;\n    duration?: string;\n}',
+  },
+  {
+    name: 'VoiceSummary',
+    declaration: 'export interface VoiceSummary {\n    tts: {\n        enabled: boolean;\n        provider: TtsProviderName;\n        fallback: TtsProviderName | \'none\';\n        format: \'mp3\' | \'wav\';\n        maxChars: number;\n        url: string;\n    };\n    asr: {\n        enabled: boolean;\n        engine: \'funasr\' | \'whisper\';\n        url: string;\n    };\n}',
   },
   {
     name: 'WatchedRepo',
