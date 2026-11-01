@@ -1,39 +1,11 @@
 {
-  "extends": "../../../tsconfig.base.json",
-  "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "lib/types"
-  },
-  "include": [
-    "src"
-  ],
+  "files": [],
   "references": [
     {
-      "path": "../../../vendor/cordis"
+      "path": "./tsconfig.host.json"
     },
     {
-      "path": "../../../vendor/schemastery"
-    },
-    {
-      "path": "../../api/session-controller/tsconfig.host.json"
-    },
-    {
-      "path": "../../credentials/credentials"
-    },
-    {
-      "path": "../../util/home-paths"
-    },
-    {
-      "path": "../fork-event-bus"
-    },
-    {
-      "path": "../../interaction/permission-presets"
-    },
-    {
-      "path": "../../core/session"
-    },
-    {
-      "path": "../../session/session-title"
+      "path": "./tsconfig.client.json"
     }
   ]
 }
