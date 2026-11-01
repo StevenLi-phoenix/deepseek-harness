@@ -70,7 +70,8 @@ const ALLOWED: Record<(typeof OUTSIDE_PRESETS)[number], string[]> = {
     '@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context',
     'cordis:group', '@deepseek-ai/dsh-compaction-basic', '@deepseek-ai/dsh-compaction-tool-result-pruner',
   ],
-  'qq-digest': ['@deepseek-ai/dsh-persona'],
+  // fork-tool-qq reads only what the QQ observer recorded; it carries no owner memory and reaches no WeChat side.
+  'qq-digest': ['@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-fork-tool-qq', 'cordis:group', '@deepseek-ai/dsh-compaction-basic'],
 }
 
 describe('channel isolation of the event bundle\'s presets', () => {
