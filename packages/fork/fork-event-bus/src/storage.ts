@@ -1,4 +1,4 @@
-/** Durable bus state: every published event, pending subscription work, dispatched batches, and run-time subscriptions. */
+/** Durable bus state: published events, pending subscription work, dispatched batches, run-time subscriptions, persistent Sessions. */
 import { z } from 'zod'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 
@@ -39,6 +39,20 @@ const batchRecordSchema = z.object({
   outcome: z.string().optional(),
   /** True when the Session's final answer was the silent reply, so no result message was sent. */
   silent: z.boolean().optional(),
+  /** How a `session` batch was delivered (absent on rows written before persistent Sessions). */
+  delivery: z.enum(['fresh', 'persistent-new', 'persistent', 'rollover', 'detached']).optional(),
+}).strict()
+
+const persistentRecordSchema = z.object({
+  subscription: z.string().min(1),
+  sessionId: z.string().min(1),
+  createdAt: z.number(),
+  batches: z.number().int().min(0),
+  compactions: z.number().int().min(0),
+  /** Text of the Session's latest compaction summary, bounded; seeds the next Session at a rollover. */
+  lastSummary: z.string().optional(),
+  /** The Session this one replaced at a rollover; archived once this one exists. */
+  previous: z.string().optional(),
 }).strict()
 
 const sessionActionSchema = z.object({
@@ -73,6 +87,8 @@ export type PendingRecord = z.infer<typeof pendingRecordSchema>
 export type BatchRecord = z.infer<typeof batchRecordSchema>
 /** One subscription created at run time, keyed by its id. */
 export type SubscriptionRecord = z.infer<typeof subscriptionRecordSchema>
+/** The persistent Session of one subscription, keyed by subscription id. */
+export type PersistentRecord = z.infer<typeof persistentRecordSchema>
 
 /** Bus storage; malformed rows reject opening the domain. */
 export const busDomain = defineDomain({
@@ -83,5 +99,6 @@ export const busDomain = defineDomain({
     pending: domainTable<string, PendingRecord>(pendingRecordSchema),
     batches: domainTable<string, BatchRecord>(batchRecordSchema),
     subscriptions: domainTable<string, SubscriptionRecord>(subscriptionRecordSchema),
+    persistent: domainTable<string, PersistentRecord>(persistentRecordSchema),
   },
 })

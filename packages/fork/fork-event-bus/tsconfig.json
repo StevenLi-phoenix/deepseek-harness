@@ -25,6 +25,18 @@
     },
     {
       "path": "../../experimental/webhook"
+    },
+    {
+      "path": "../../api/session-controller/tsconfig.host.json"
+    },
+    {
+      "path": "../../compaction/compaction"
+    },
+    {
+      "path": "../../llm/llm"
+    },
+    {
+      "path": "../../workspace/workspace"
     }
   ]
 }
