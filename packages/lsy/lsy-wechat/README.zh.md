@@ -194,5 +194,6 @@ At Wed 2026-10-28 19:12 (America/New_York), the Bilibili account's Session (the 
 
 - 聊天命令有 `/stop`、`/new` 和 `/help`；其他命令（例如在微信里切换聊天 Session 的模型）尚未决定。`/stop` 只取消轮次；停监控和定时提醒要通过 agent。
 - 不发送工具调用进度条目（`TOOL_CALL_START` / `TOOL_CALL_RESULT`，OpenClaw 插件默认会发）：每条都是一次 `sendmessage`，它是否占回复窗口的额度没有文档，而 xmanrui/dsh-im 在真实账号上的测试（issue 151）发现，一条 owner 消息之后的每次 `sendmessage` 都计数，第十一条返回 `ret -2`，所以一个工具很多的轮次可能用掉回复和其他 Session 通知需要的名额。改由“正在输入”提示表明 agent 在工作。
+- 回复不流式发送：微信没有原地编辑消息的机制。`sendmessage` 接受 `message_state: 1`（`GENERATING`），但微信客户端不渲染气泡更新（epiral/weixin-bot 的协议记录），OpenClaw 插件 2.4.10 也把每条消息都按 `FINISH` 发出并关闭了分块流式。把半截回答拆成多条消息会用掉回复窗口的名额，所以每个回答写完才发出，等待期间由“正在输入”提示覆盖。
 
 </details>

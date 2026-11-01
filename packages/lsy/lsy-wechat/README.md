@@ -194,5 +194,6 @@ This Dev Note is non-authoritative working context: undecided directions and not
 
 - The chat commands are `/stop`, `/new`, and `/help`; others, such as switching the chat Session's model from WeChat, are undecided. `/stop` cancels turns only; stopping monitors and reminders goes through the agent.
 - Tool-call progress items (`TOOL_CALL_START` / `TOOL_CALL_RESULT`, which the OpenClaw plugin sends by default) are not sent: each is a `sendmessage`, and whether it counts against the reply window's quota is undocumented, and xmanrui/dsh-im's real-account test (issue 151) found that every `sendmessage` after one owner message counts, the eleventh failing with `ret -2`, so a tool-heavy turn could spend the slots the reply and other Sessions' notes need. The typing line shows the agent is working instead.
+- Replies are not streamed: WeChat has no in-place message edit. `sendmessage` accepts `message_state: 1` (`GENERATING`), but the WeChat client does not render bubble updates (epiral/weixin-bot protocol notes), and the OpenClaw plugin 2.4.10 sends every message as `FINISH` with block streaming disabled. Sending partial answers as separate messages would spend the reply window's slots, so each answer goes out once it is complete, and the typing line covers the wait.
 
 </details>
