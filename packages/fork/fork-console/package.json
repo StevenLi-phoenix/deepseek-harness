@@ -51,12 +51,14 @@
     "@deepseek-ai/dsh-client-ui-renderer": "workspace:*",
     "@deepseek-ai/dsh-client-ui-settings": "workspace:*",
     "@deepseek-ai/dsh-client-ui-slots": "workspace:*",
+    "@deepseek-ai/dsh-fork-cc-admin": "workspace:*",
     "@deepseek-ai/dsh-fork-event-bus": "workspace:*",
     "@deepseek-ai/dsh-fork-voice": "workspace:*",
     "@deepseek-ai/dsh-schedule": "workspace:*",
     "@testing-library/react": "^16.3.3",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "yaml": "^2.9.0"
   },
   "files": [
     "locale/*.json",

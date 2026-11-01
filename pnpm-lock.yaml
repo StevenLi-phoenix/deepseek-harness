@@ -13772,6 +13772,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: workspace:*
         version: link:../../client/ui-slots
+      '@deepseek-ai/dsh-fork-cc-admin':
+        specifier: workspace:*
+        version: link:../fork-cc-admin
       '@deepseek-ai/dsh-fork-event-bus':
         specifier: workspace:*
         version: link:../fork-event-bus
@@ -13790,6 +13793,9 @@ importers:
       react-dom:
         specifier: ^18.2.0
         version: 18.3.1(react@18.3.1)
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
 
   packages/fork/fork-event-bus:
     dependencies:
