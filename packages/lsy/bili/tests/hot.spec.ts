@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { HOT_MAX_COMMENTS, HOT_MIN_LIKES, HOT_TTL_MS, hotText } from '../src/hot.ts'
+import { HOT_MAX_COMMENTS, HOT_MIN_LIKES, HOT_TTL_MS, hotText, type HotStore } from '../src/hot.ts'
 import { FakeBiliSvc } from './fake-bili-svc.ts'
 import { allLogs, contexts, harness } from './harness.ts'
 
@@ -103,7 +103,7 @@ describe('ctx.biliHot', () => {
     const h = await harness({ svc, workspace: dir })
     // Fill past the cap through the store the reads use (the fake serves 20 comments a page).
     const view = (rpid: number) => ({ rpid: String(rpid), author: '', text: `梗${rpid}号`, likes: 50 })
-    const store = h.ctx.biliHot as unknown as { noteComments(bvid: string, rows: unknown[]): Promise<void> }
+    const store = h.ctx.biliHot as HotStore
     for (let batch = 0; batch < 11; batch += 1) {
       vi.setSystemTime(Date.now() + 1000)
       await store.noteComments('BV1UnHN6SECP', Array.from({ length: 200 }, (_, index) => view(batch * 200 + index)))
@@ -121,8 +121,7 @@ describe('ctx.biliHot', () => {
   it('reads still work when the store fails, and the failure is logged', async () => {
     addComment(1, '海水过滤器', 100)
     const h = await harness({ svc, workspace: dir })
-    const store = h.ctx.biliHot as unknown as { serialize: () => Promise<never> }
-    store.serialize = () => Promise.reject(new Error('disk full'))
+    Reflect.set(h.ctx.biliHot, 'serialize', () => Promise.reject(new Error('disk full')))
     expect((await h.account.comments('BV1UnHN6SECP')).comments).toHaveLength(1)
     await vi.advanceTimersByTimeAsync(0)
     expect(h.logs.some(line => line.type === 'warn' && line.text.includes('hot comments not kept: disk full'))).toBe(true)
@@ -133,6 +132,6 @@ describe('ctx.biliHot', () => {
     expect(hotText('a   b')).toBe('a b')
     expect(hotText('哈')).toBeUndefined()
     expect(hotText('找 @某人')).toBeUndefined()
-    expect([...hotText('梗'.repeat(500))!]).toHaveLength(200)
+    expect(Array.from(hotText('梗'.repeat(500))!)).toHaveLength(200)
   })
 })

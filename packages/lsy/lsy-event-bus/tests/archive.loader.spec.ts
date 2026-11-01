@@ -98,13 +98,13 @@ describe('auto-archive through the real Loader', () => {
     context.baseUrl = pathToFileURL(root).href + '/'
     await context.plugin(Loader)
     context.loader.builtins.include = Include
-    context.loader.internal = {
+    Reflect.set(context.loader, 'internal', {
       version: 'v2',
       async import(specifier: string) {
         if (!modules.has(specifier)) throw new Error(`unexpected Loader import: ${specifier}`)
         return modules.get(specifier)
       },
-    } as unknown as NonNullable<typeof context.loader.internal>
+    })
     await context.loader.create({ name: 'cordis:include', config: { path: pathToFileURL(configPath).href } })
     await context.loader.await()
     expect([...context.loader.entries()].filter(entry => entry.fiber === undefined && !entry.disabled)).toEqual([])
@@ -122,7 +122,7 @@ describe('auto-archive through the real Loader', () => {
     // A config change reloads the bus: the old instance's timer and protectors are gone, the channel registers again on the new one.
     const archivedBefore = [...registry.archivedSessionIds]
     const busEntry = [...context.loader.entries()].find(entry => entry.options.name === '@deepseek-ai/dsh-lsy-event-bus')!
-    await context.loader.update(busEntry.id, { name: '@deepseek-ai/dsh-lsy-event-bus', config: { autoArchive: { inactiveDays: 3, firstSweepMinutes: 60, sweepHours: 1 } } })
+    await context.loader.update(busEntry.id, { config: { autoArchive: { inactiveDays: 3, firstSweepMinutes: 60, sweepHours: 1 } } })
     await context.loader.await()
     const second = context.lsyEventBus
     expect(second).not.toBe(first)

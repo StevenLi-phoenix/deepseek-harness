@@ -1,8 +1,8 @@
 /**
  * Durable state of the account's DSH side: the owner-message cursor and queue, the journal,
  * today's messages to the owner's main agent, the owner's main account as set in Settings, and
- * the Sessions this plugin created, and the hot comments and words for `ctx.biliHot`. No session, cookie, ledger, cap, or pause lives here: bili-svc
- * owns all of them.
+ * the Sessions this plugin created, and the hot comments and words for `ctx.biliHot`. No session, cookie, ledger, cap, or pause
+ * lives here: bili-svc owns all of them.
  *
  * Tables of the retired scouting, sign-in, and write guard (`account`, `pause`, `backoff`, `ledger`,
  * `slots`, `plans`, `wakes`, `targets`, `taste`, `finds`, `trends`, `seen`, `progress`, `verify`,

@@ -188,7 +188,6 @@
               titlePrefix: B站评论与私信
               persistent:
                 enabled: true
-                key: subscription
                 rolloverDays: 30
               instructions: >-
                 New comments or private messages arrived for the creator account. The events below carry

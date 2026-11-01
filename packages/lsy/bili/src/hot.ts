@@ -66,8 +66,9 @@ const REPLY_PREFIX = /^回复\s*@[^:：]{1,40}[:：]\s*/u
  */
 export function hotText(text: string): string | undefined {
   const cleaned = text.replace(REPLY_PREFIX, '').replace(/\s+/gu, ' ').trim()
-  if ([...cleaned].length < 2 || cleaned.includes('@')) return undefined
-  return [...cleaned].slice(0, HOT_COMMENT_CHARS).join('')
+  const characters = Array.from(cleaned)
+  if (characters.length < 2 || cleaned.includes('@')) return undefined
+  return characters.slice(0, HOT_COMMENT_CHARS).join('')
 }
 
 /** The write-through store behind {@link BiliHot}; the account notes what its reads showed. */
@@ -131,20 +132,20 @@ export class HotStore implements BiliHot {
     }
   }
 
-  async comments(options: { since?: number } = {}): Promise<BiliHotComment[]> {
+  comments(options: { since?: number } = {}): Promise<BiliHotComment[]> {
     const floor = Math.max(options.since ?? 0, this.deps.now() - HOT_TTL_MS)
-    return this.serialize(async domain => [...domain.table('hotComments').entries()]
+    return this.serialize(domain => Promise.resolve([...domain.table('hotComments').entries()]
       .map(([, row]) => row)
       .filter(row => row.at >= floor && row.likes >= HOT_MIN_LIKES)
-      .sort((a, b) => b.at - a.at || b.likes - a.likes))
+      .sort((a, b) => b.at - a.at || b.likes - a.likes)))
   }
 
-  async words(options: { since?: number } = {}): Promise<string[]> {
+  words(options: { since?: number } = {}): Promise<string[]> {
     const floor = Math.max(options.since ?? 0, this.deps.now() - HOT_TTL_MS)
-    return this.serialize(async domain => [...domain.table('hotWords').entries()]
+    return this.serialize(domain => Promise.resolve([...domain.table('hotWords').entries()]
       .filter(([, row]) => row.at >= floor)
       .sort((a, b) => b[1].at - a[1].at)
-      .map(([word]) => word))
+      .map(([word]) => word)))
   }
 }
 
