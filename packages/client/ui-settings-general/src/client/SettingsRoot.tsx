@@ -18,9 +18,10 @@ import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import {
   ConnectionIndicator, Tooltip, useModalLayer,
-  IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconCloseOutlineRegular, IconDataOutlineMedium,
-  IconGaugeOutlineMedium, IconPersonalizationOutlineMedium, IconPlayOutlineMedium, IconSettingsOutlineMedium,
-  IconUserOutlineMedium, IconUsersOutlineMedium,
+  IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconClockOutlineMedium, IconCloseOutlineRegular, IconCodeOutlineMedium,
+  IconDatabaseOutlineMedium, IconDataOutlineMedium, IconFlatListOutlineMedium, IconGaugeOutlineMedium, IconNewChatOutlineMedium,
+  IconPersonalizationOutlineMedium, IconPlayOutlineMedium, IconQueueOutlineMedium, IconSettingsOutlineMedium, IconUserOutlineMedium,
+  IconUsersOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConnectionIndicatorState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SettingsRootComponentProps, SettingsSectionRow } from './shell-contract.ts'
@@ -32,18 +33,29 @@ const RECOVERY_CONFIRMATION_MS = 2_000
 /** Minimum visible time for the connecting pill; shorter attempts read as flicker. */
 const CONNECTING_MIN_VISIBLE_MS = 800
 
-/** Nav glyph by section id; unknown ids fall back to the settings gear. */
+/** Nav glyph by section id, one per section; unknown ids fall back to the settings gear (General's own glyph). */
+const NAV_ICONS: Readonly<Record<string, typeof IconSettingsOutlineMedium>> = {
+  'account': IconUserOutlineMedium,
+  'models': IconDataOutlineMedium,
+  'agent-presets': IconAgentPresetOutlineMedium,
+  'plugins': IconPersonalizationOutlineMedium,
+  'archived-sessions': IconArchiveOutlineMedium,
+  // Fork-added sections (packages/lsy), by the id each registers: service overview, subscriptions, and Claude Code
+  // agents (lsy-console); the WeChat page and its presence page; memory; System status; the Bilibili account; QQ.
+  'lsy-overview': IconFlatListOutlineMedium,
+  'lsy-subscriptions': IconQueueOutlineMedium,
+  'lsy-agents': IconCodeOutlineMedium,
+  'lsy-wechat': IconNewChatOutlineMedium,
+  'lsy-presence': IconClockOutlineMedium,
+  'lsy-memory': IconDatabaseOutlineMedium,
+  'lsy-sysmon': IconGaugeOutlineMedium,
+  'bili': IconPlayOutlineMedium,
+  'lsy-qq': IconUsersOutlineMedium,
+}
+
 function navIcon(id: string) {
-  if (id === 'account') return <IconUserOutlineMedium className={css.navIcon} size={16} />
-  if (id === 'models') return <IconDataOutlineMedium className={css.navIcon} size={16} />
-  if (id === 'agent-presets') return <IconAgentPresetOutlineMedium className={css.navIcon} size={16} />
-  if (id === 'plugins') return <IconPersonalizationOutlineMedium className={css.navIcon} size={16} />
-  if (id === 'archived-sessions') return <IconArchiveOutlineMedium className={css.navIcon} size={16} />
-  // Fork-added sections (packages/lsy): System status, the Bilibili account, and QQ.
-  if (id === 'lsy-sysmon') return <IconGaugeOutlineMedium className={css.navIcon} size={16} />
-  if (id === 'bili') return <IconPlayOutlineMedium className={css.navIcon} size={16} />
-  if (id === 'lsy-qq') return <IconUsersOutlineMedium className={css.navIcon} size={16} />
-  return <IconSettingsOutlineMedium className={css.navIcon} size={16} />
+  const Icon = Object.hasOwn(NAV_ICONS, id) ? NAV_ICONS[id] ?? IconSettingsOutlineMedium : IconSettingsOutlineMedium
+  return <Icon className={css.navIcon} size={16} />
 }
 
 type PanelProps = {
