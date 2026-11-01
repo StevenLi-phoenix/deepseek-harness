@@ -2837,6 +2837,11 @@ export interface Config {
   }
   /** Tell the owner when the protocol end has been unreachable this long, in milliseconds; 0 turns it off. */
   offlineNoticeMs: number
+  /**
+   * While an outage lasts, remind the owner again after this long, in milliseconds; 0 never repeats. What was told is kept
+   * on disk, so a reload or deploy in the middle of an outage does not tell again. 24 hours by default.
+   */
+  offlineRepeatMs: number
   /** Where the Settings page lives, quoted in the owner notice (the event service's address); unset names the page without a link. */
   settingsUrl?: string
   /** The login door: the window onto NapCat's login that the Settings page's QQ section uses. */
