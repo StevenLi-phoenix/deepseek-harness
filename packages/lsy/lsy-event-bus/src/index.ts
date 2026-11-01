@@ -810,6 +810,7 @@ export class LsyEventBus extends Service {
     await this.markBatch(batch.id, { delivery: 'persistent', sessionId: stored.sessionId })
     const count = await this.serialize(async () => {
       const current = domain.table('persistent').get(subscription.id)
+      /* v8 ignore next -- a rollover or replacement recorded between the follow-up and this count. */
       if (current?.sessionId !== stored.sessionId) return stored.batches + 1
       await domain.table('persistent').put(subscription.id, { ...current, batches: current.batches + 1 })
       return current.batches + 1
@@ -839,7 +840,7 @@ export class LsyEventBus extends Service {
    */
   private async adopt(subscriptionId: string, sessionId: string, delivery: SessionDelivery): Promise<void> {
     const domain = await this.ready
-    const previous = await this.serialize(async () => {
+    const adopted = await this.serialize(async () => {
       const table = domain.table('persistent')
       const current = table.get(subscriptionId)
       if (current?.sessionId === sessionId) return undefined
@@ -851,8 +852,10 @@ export class LsyEventBus extends Service {
         compactions: 0,
         ...(current === undefined ? {} : { previous: current.sessionId }),
       })
-      return current?.sessionId
+      return { previous: current?.sessionId }
     })
+    if (adopted === undefined) return
+    const { previous } = adopted
     this.ctx.logger.info(`lsy-event-bus: Session ${sessionId} is now the persistent Session of ${subscriptionId} (${delivery})${previous === undefined ? '' : `, replacing ${previous}`}`)
     if (previous !== undefined) await this.archive(previous, subscriptionId)
   }

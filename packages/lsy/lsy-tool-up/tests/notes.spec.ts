@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -154,6 +154,12 @@ describe('bili_channel_note', () => {
     expect(await call({ op: 'add', text: '二' })).toMatchObject({ status: 'refused', reason: 'turn_cap' })
     turnEnd()
     expect(await call({ op: 'add', text: '二' })).toMatchObject({ status: 'added', count: 2 })
+  })
+
+  it('answers store_error when the notes file cannot be read', async () => {
+    const { call, file } = await mount()
+    await mkdir(file, { recursive: true })
+    expect(await call({ op: 'add', text: '谐音梗' })).toMatchObject({ status: 'refused', reason: 'store_error' })
   })
 
   it('defaults to five calls a turn, 30 notes of 40 characters', () => {

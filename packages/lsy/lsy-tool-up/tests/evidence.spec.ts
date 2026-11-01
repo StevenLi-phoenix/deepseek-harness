@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -109,6 +109,18 @@ describe('bili evidence verifier', () => {
     await expect(capped).rejects.toMatchObject({ code: 'turn_cap' })
     ;(ctx.emit as (...args: unknown[]) => void)('session/event', { id: 'up-1' }, { type: 'turn/end', seq: 1, data: { turn: 1, reason: { kind: 'completed' } } })
     await expect(evidence.evidenceOf(['1'], { sessionId: 'up-1' })).resolves.toEqual([])
+  })
+
+  it('refuses a salt file that holds a short salt, and leaves out an id whose thread read fails', async () => {
+    const file = join(await tmp(), 'salt')
+    await writeFile(file, 'short\n')
+    await expect(loadSalt(file)).rejects.toThrow(/shorter than 32/)
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.endsWith('/v1/status')) return new Response(JSON.stringify({ accounts: [{ mid: OWN }] }), { status: 200 })
+      throw new Error('connect ECONNREFUSED')
+    }))
+    const { evidence } = await mount()
+    expect(await evidence.evidenceOf(['5'], { sessionId: 'up-1' })).toEqual([])
   })
 
   it('keeps nothing while the creator\'s own accounts are unknown', async () => {
