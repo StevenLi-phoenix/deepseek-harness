@@ -98,5 +98,9 @@ export type PresenceAction =
 /** A clock time as the owner types it: `HH:MM`, 24-hour. */
 export const CLOCK_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/u
 
-/** Keys of heartbeat signals start with this; any other key is a state change the watcher saw. */
-export const HEARTBEAT_KEY = /^heartbeat/iu
+/**
+ * Keys of focus-watch's heartbeats: `sleep-on-hb-<bucket>` or `sleep-off-hb-<bucket>` (one per 30-minute bucket, so a retry
+ * repeats the key). A key that starts with `heartbeat` counts too. Any other key, such as `sleep-on-<ts>`, is a change the
+ * watcher saw.
+ */
+export const HEARTBEAT_KEY = /^sleep-(?:on|off)-hb-\d+$|^heartbeat/iu

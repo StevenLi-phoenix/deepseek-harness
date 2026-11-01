@@ -49,7 +49,7 @@ kind: "package-reference"
 | `manualMaxHours` | `12` | 设置里的按钮没有指定结束时间时最长保持多久 |
 | `urgentKinds` | `host.disk.full`、`host.*.critical`、`bili.risk.*`、`bili.gate.readonly` | 即使你在睡觉也立刻发送的事件类型（glob） |
 
-`focus-watch`（Mac mini 上以主人用户运行的已签名二进制，有完全磁盘访问权限，读取 iCloud 从手机同步来的 Focus 数据库）向 `POST http://127.0.0.1:3081/hooks/lsy` 发请求，带 `Authorization: Bearer <令牌>`。状态变化是 `{"kind":"presence.sleep.on","key":"sleep-on-<ts>","subject":"owner","title":…}`（关闭时用 `presence.sleep.off`，key 为 `sleep-off-<ts>`）；每 30 分钟它用以 `heartbeat` 开头的 key 重复当前状态。令牌和安装见 [RUNBOOK §18](../../../lsy/deploy/RUNBOOK.md)。
+`focus-watch`（Mac mini 上以主人用户运行的已签名二进制，有完全磁盘访问权限，读取 iCloud 从手机同步来的 Focus 数据库）向 `POST http://127.0.0.1:3081/hooks/lsy` 发请求，带 `Authorization: Bearer <令牌>`。状态变化是 `{"kind":"presence.sleep.on","key":"sleep-on-<ts>","subject":"owner","title":…}`（关闭时用 `presence.sleep.off`，key 为 `sleep-off-<ts>`）；每 30 分钟它用 `sleep-on-hb-<桶号>` 或 `sleep-off-hb-<桶号>` 作 key 重复当前状态（桶号是 30 分钟区间的编号，重试时 key 不变）。令牌和安装见 [RUNBOOK §18](../../../lsy/deploy/RUNBOOK.md)。
 
 **心跳是幂等的。** 重复已保持状态的信号（每个心跳都是）只会刷新状态的保持时间，以及最近一次信号和心跳的时间。它不会移动状态的起点、不会终结设置里的按钮、不会调用 `onChange` 监听器，也不会放出消息；已经醒着时的 `presence.sleep.off` 心跳什么也不改变。只有让状态翻转的信号（或第一条信号）才开始新状态并终结按钮。
 
