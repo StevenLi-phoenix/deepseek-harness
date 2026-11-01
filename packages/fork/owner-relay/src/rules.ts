@@ -27,7 +27,7 @@ export interface RelayAnswer {
 export type RelayDecision =
   /** The owner stopped the turn (WeChat `/stop` or the Web UI's stop): they know, so nothing is sent. */
   | { readonly kind: 'stopped' }
-  /** The final answer is exactly `NO_REPLY`. */
+  /** The final answer, or its last line, is exactly `NO_REPLY`. */
   | { readonly kind: 'silent' }
   /** A completed turn without assistant text. */
   | { readonly kind: 'empty' }

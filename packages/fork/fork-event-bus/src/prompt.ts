@@ -12,11 +12,12 @@ export const FORK_SILENT_REPLY = 'NO_REPLY'
 
 /**
  * Whether a turn's final answer asks for no message to the owner.
+ * Models often explain the decision first, so a last line of exactly the token counts too.
  * @param text - final assistant text, if any.
- * @returns true when the trimmed text is exactly {@link FORK_SILENT_REPLY}.
+ * @returns true when the trimmed text, or its last line, is exactly {@link FORK_SILENT_REPLY}.
  */
 export function isSilentReply(text: string | undefined): boolean {
-  return text?.trim() === FORK_SILENT_REPLY
+  return text?.trim().split('\n').at(-1)?.trim() === FORK_SILENT_REPLY
 }
 
 /**

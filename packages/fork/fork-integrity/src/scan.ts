@@ -53,11 +53,21 @@ async function dirDigest(root: string): Promise<string> {
   return sha(rows.join('\n'))
 }
 
-/** The scheduled tasks by id and definition; delivery history changes on every run and is left out. */
+/**
+ * One task's definition. A repeating task (anything but `at`) moves `scheduledAt` to its next
+ * occurrence on every run, so that field is run state there; for `at` it is the definition.
+ */
+function definitionOf(record: unknown): unknown {
+  if (record === null || typeof record !== 'object' || Array.isArray(record)) return record ?? null
+  const { scheduledAt, ...rest } = record as Record<string, unknown>
+  return rest.kind === 'at' ? { ...rest, scheduledAt } : rest
+}
+
+/** The scheduled tasks by id and definition; delivery history and next-run times change on every run and are left out. */
 async function scheduleDigest(path: string): Promise<string> {
   const parsed = JSON.parse(await readFile(path, 'utf8')) as { tables?: { tasks?: Record<string, { record?: unknown }> } }
   const tasks = parsed.tables?.tasks ?? {}
-  return sha(Object.keys(tasks).toSorted().map(id => `${id}\0${sha(JSON.stringify(tasks[id]?.record ?? null))}`).join('\n'))
+  return sha(Object.keys(tasks).toSorted().map(id => `${id}\0${sha(JSON.stringify(definitionOf(tasks[id]?.record)))}`).join('\n'))
 }
 
 /**

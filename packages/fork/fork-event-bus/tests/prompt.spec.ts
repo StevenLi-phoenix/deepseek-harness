@@ -113,12 +113,19 @@ describe('failureDetail', () => {
 })
 
 describe('isSilentReply', () => {
-  it('matches only the exact silent token after trimming', () => {
+  it('matches the silent token after trimming and nothing close to it', () => {
     expect(isSilentReply(FORK_SILENT_REPLY)).toBe(true)
     expect(isSilentReply(` ${FORK_SILENT_REPLY}\n`)).toBe(true)
     expect(isSilentReply('NO_REPLY.')).toBe(false)
     expect(isSilentReply('no_reply')).toBe(false)
     expect(isSilentReply(undefined)).toBe(false)
+  })
+
+  it('matches an answer whose last line is the silent token after the model explained itself', () => {
+    expect(isSilentReply('Gate is read-only, so replies are not allowed right now.\n\nNO_REPLY')).toBe(true)
+    expect(isSilentReply('门禁是 readonly，不回复。\nNO_REPLY\n')).toBe(true)
+    expect(isSilentReply('NO_REPLY\nbut actually, here is the news')).toBe(false)
+    expect(isSilentReply('I would answer NO_REPLY here')).toBe(false)
   })
 })
 

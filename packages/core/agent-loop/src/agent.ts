@@ -285,7 +285,7 @@ export class ReactLoopAgent implements Agent {
     if (this.phase.kind !== 'running') throw new Error(`agent "${this.id}": pre-step outside running phase`)
     const signal = this.phase.abort.signal
     const claimed = this.inbox.claim(target, position.turn)
-    const selection = this.model.current()
+    const selection = await this.routableSelection(signal)
     if (selection === undefined) {
       throw new Error(`agent "${this.id}" has no provider/model: set AgentOptions.provider and AgentOptions.model or record a model selection`)
     }
@@ -313,6 +313,29 @@ export class ReactLoopAgent implements Agent {
     } catch (error: unknown) {
       toolSet.dispose()
       throw error
+    }
+  }
+
+  /**
+   * The recorded selection, or the live configured route when the recorded model is no longer
+   * configured (renamed or removed from its provider). A long-lived Session otherwise keeps its
+   * last-used route forever and fails every turn with UNKNOWN_MODEL. The switch is recorded, so the
+   * model-change notice and later steps follow it. Any other resolution failure stays the step's.
+   */
+  private async routableSelection(signal: AbortSignal): Promise<ModelSelection | undefined> {
+    const selection = this.model.current()
+    const { provider, model, reasoningEffort } = this.options
+    if (selection === undefined || !provider || !model) return selection
+    if (selection.provider === provider && selection.model === model) return selection
+    try {
+      await this.loopCtx.llm.resolveCallConfig({ provider: selection.provider, model: selection.model }, signal)
+      return selection
+    } catch (error: unknown) {
+      if (!(error instanceof LlmError) || error.code !== 'UNKNOWN_MODEL') return selection
+      const fallback: ModelSelection = { provider, model, ...reasoningEffort === undefined ? {} : { reasoningEffort } }
+      this.ctx.logger.warn(`agent "${this.id}": recorded route ${selection.provider}/${selection.model} is gone (${errorChain(error)}); continuing with the configured route ${provider}/${model}`)
+      this.model.select(fallback)
+      return fallback
     }
   }
 
