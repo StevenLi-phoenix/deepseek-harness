@@ -45,6 +45,7 @@ The plugin has no configuration. Its limits are fixed in the code:
 | stderr kept | The last 10 lines, shown when the monitor ends |
 | Stop | SIGTERM to the process group, SIGKILL after 5 s |
 | Host restart | Running monitors start again with the same id and the time left to their deadline |
+| Session handover | With `lsy-event-bus` mounted, a conversation that moves to a new Session (WeChat `/new`) takes its running monitors along: notices, `monitor_list`, and `monitor_stop` follow the new Session, and the stored owner changes, so a restart reports there too |
 
 ### When to choose it
 

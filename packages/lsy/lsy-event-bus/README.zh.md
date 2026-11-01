@@ -119,6 +119,8 @@ kind: "package-reference"
 
 下列 Session 不会被动，并按原因计数：`recent`（近期活跃）、`unknown`（Host 列出它时没有活动元数据，它的日志最后写入时间也读不到）、`subagent` 的、`running`（运行中）、`pinned`（置顶）、订阅的 `persistent` 常驻 Session、运行时订阅或 watch 的创建者（`subscription`），以及被插件认领的。插件用 `protectSessions(label, check)` 认领自己的 Session；`check({ id, updatedAt, cwd, title })` 返回 `true`（或一个原因）即保留，抛错也保留，返回的函数撤回认领。`lsy-wechat` 认领 owner 当前的聊天 Session（`wechat`），`lsy-qqbot` 认领各对端当前的聊天 Session（`qqbot`），`lsy-qq` 认领各群的常驻摘要 Session（`qq`）。要在注入了 `lsyEventBus` 的 effect 里注册，这样总线或插件重载时认领会随之撤回。
 
+对话换到新 Session 里继续时（微信 `/new`），`handOverSessions(from, to)` 把旧 Session 名下的东西转过去：它们建的运行时订阅把创建者改为 `to`（`subscription` 保护和设置页里的来源跟着走），然后每个用 `registerHandover(kind, move)` 登记的转移函数转移自己的绑定，并以 `{ id, label }` 条目返回（`lsy-tool-monitor` 登记了 `monitor`）。返回值按类型列出转过去的条目，以及失败的转移函数；失败的会记日志，其余照常运行，每个转移函数都必须幂等，以便调用方重试。和认领一样，要在注入了 `lsyEventBus` 的 effect 里注册。
+
 - `archiveStatus()`——设置、`nextSweepAt`、保护方标签、上一次检查的报告，以及最近归档的 Session（新的在前）。
 - `sweepArchive({ dryRun? })`——立刻检查一次（设置页的按钮）；已有检查在跑时会加入它，`dryRun` 只列出会归档什么。
 

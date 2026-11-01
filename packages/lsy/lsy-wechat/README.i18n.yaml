@@ -21,14 +21,14 @@
   en: 831e47681cfb8c50
   zh: 9d998c62874aeea6
 /deepseek-ai-dsh-lsy-wechat/use-this-package/minimal-configuration:
-  en: 01eea99dc6c9d969
-  zh: a04d705fa5f2a2d6
+  en: 8997b7dde5d8b93c
+  zh: b482277ba16cdb82
 /deepseek-ai-dsh-lsy-wechat/use-this-package/quiet-hours:
   en: 6ba82b382917815c
   zh: 30706075df13a6d4
 /deepseek-ai-dsh-lsy-wechat/understand-the-implementation:
-  en: a21f199421131d00
-  zh: aeeface54c9e48cd
+  en: d2e334a7473c621c
+  zh: 59e3a1fbbe2c439f
 /deepseek-ai-dsh-lsy-wechat/further-exploration:
   en: 8736516ba091bef0
   zh: 49ba2ae0ade25673
@@ -39,26 +39,29 @@
   en: a19f429aab1a23b3
   zh: 55b1ba7f2ba3363e
 /deepseek-ai-dsh-lsy-wechat/model-experience/chat-session/what-the-model-sees:
-  en: d46741663e4fb27b
-  zh: fc714be4739d4283
+  en: 30f10bad3936de82
+  zh: e50054111a11f28b
 /deepseek-ai-dsh-lsy-wechat/model-experience/chat-session/what-the-model-sees/time-gap-notice:
   en: 7453a788c2d54bf8
   zh: 7d4a10ae3958ae21
 /deepseek-ai-dsh-lsy-wechat/model-experience/chat-session/what-the-model-sees/shared-note:
   en: d199f3d0f1a7f283
   zh: 343e8c6dfae96117
+/deepseek-ai-dsh-lsy-wechat/model-experience/chat-session/what-the-model-sees/handover-notice:
+  en: f9156fa3bdf17a8e
+  zh: 23e3e5dbe21d92e0
 /deepseek-ai-dsh-lsy-wechat/model-experience/chat-session/what-the-model-sees/message-from-another-session:
   en: f92d4ca31a30bc7b
   zh: ab050226a608877c
 /deepseek-ai-dsh-lsy-wechat/model-experience/chat-session/token-effect:
-  en: ccc6b9969d4a62fa
-  zh: 486379392592c40f
+  en: b51bbba9699c7d10
+  zh: 6d5a47a611f33140
 /deepseek-ai-dsh-lsy-wechat/model-experience/chat-session/kv-cache-effect:
   en: 4d2838921c24db11
   zh: 6f3b27453433a4e8
 /deepseek-ai-dsh-lsy-wechat/known-limitations-and-deferred-work:
-  en: ec38109fa28a63e1
-  zh: 9a53bd525bd5db36
+  en: 3a874465c42b85c5
+  zh: c6d974a5482bd91a
 /deepseek-ai-dsh-lsy-wechat/known-limitations-and-deferred-work/dev-note:
   en: 6887c1a211fa1631
   zh: 7baa8b5765207a44

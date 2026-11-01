@@ -74,6 +74,8 @@ RRULE 时间规则使用 `{ kind: "rrule", rrule: "DTSTART:…\nRRULE:…" }`。
 
 `list({ active?, limit?, offset? })`、`catalog()`、`view({ id })`、`history({ id, limit, before? })` 和 `run({ id })` 服务宿主全部任务。Remote `create` 和 `edit` 委托同一原生方法。包根入口与 `/client` 暴露同名无前缀类型。Remote 输入错误使用 `schedule/input-invalid` 和 `details.code`。
 
+`handOverSessions(from, to, signal?)` 把一些 Session 的任务移到另一个 Session，用于在新 Session 里继续的对话：`session` 目标指向某个 `from` Session 的活动或已暂停任务改为投递到 `to`，所有活动或已暂停任务的参与 Session 中 `from` 都换成 `to`，因此归档检查、Session 时钟标记和变更通知都跟着走。`to` 按 `session` 目标校验。已结束任务保留原来的 Session。每个被移动任务的修订推进，其在线参与 Session 收到 `updated` 通知；重复调用不写入，返回空列表。
+
 `deleteInactive()` 通过一次领域批量写入移除全部已结束任务，保留活动和已暂停任务。它返回删除数量；没有已结束任务时不执行写入。非空批量写入成功后发出 `schedule/changed`，不通知 Agent。批量写入被拒绝时也发出该事件，且不返回数量；正常失败保留全部行，`unknown-state` 失败则可能已移除行，并隔离领域直到重新打开。
 
 <a id="storage-format"></a>
