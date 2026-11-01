@@ -1,0 +1,41 @@
+[
+  {
+    "type": "status",
+    "status": {
+      "connection": {
+        "state": "connected",
+        "since": 1790000000000,
+        "attempt": 0,
+        "lastError": null,
+        "selfId": "99999"
+      },
+      "outage": {
+        "disconnectedSince": null,
+        "botOfflineAt": null
+      },
+      "recordedGroups": 2,
+      "configRevision": "a1b2c3d4e5f6",
+      "counters": {
+        "messages": 10,
+        "media": 2,
+        "voices": 1,
+        "dropped": 3,
+        "private": 0
+      }
+    }
+  },
+  {
+    "type": "messages",
+    "groupId": "123456789",
+    "count": 3,
+    "lastCursor": "c45"
+  },
+  {
+    "type": "bot-offline",
+    "at": 1790000000000
+  },
+  {
+    "type": "ping",
+    "at": 1790000015000
+  }
+]

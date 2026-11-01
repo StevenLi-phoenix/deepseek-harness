@@ -1,0 +1,19 @@
+{
+  "items": [
+    {
+      "cursor": "c42",
+      "groupId": "123456789",
+      "messageId": "7001",
+      "at": 1790000000000,
+      "userId": "10001",
+      "nickname": "昵称",
+      "card": "名片",
+      "role": "member",
+      "text": "今天讨论部署",
+      "replyTo": null,
+      "kinds": "text",
+      "recalled": false
+    }
+  ],
+  "nextCursor": "c42"
+}
