@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Get QQ back after a sign-out from your phone, with no terminal. **Settings → QQ** shows one verdict ("QQ is connected", "Scan to log in", "NapCat is not answering", and so on) with the next step under it. When a scan is needed it draws the login QR code large enough to scan from another screen and renews it as NapCat rotates it; scan it with phone QQ, confirm, and the verdict turns to "connected" within seconds, because the observer reconnects at once when NapCat reports it is logged in. A second card lists the protocol-end connection (since when, which attempt, the last error), NapCat's login, and how many groups are recorded. The page reads every 3 seconds while open.
+Get QQ back after a sign-out from your phone, with no terminal. **Settings → QQ** gives one verdict ("QQ is connected", "Scan to log in", "NapCat is not answering") with the next step under it. When a scan is needed it draws the login QR code large enough to scan from another screen and follows NapCat's rotation; scan, confirm, and the verdict turns to "connected" within seconds. A second card lists the connection (since when, which attempt, last error), NapCat's login, and the recorded groups.
 
 ## Table of Contents
 
