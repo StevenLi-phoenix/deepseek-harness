@@ -108,7 +108,7 @@ export function commentsOf(body: unknown): CachedComment[] {
  */
 export function ownMidsOf(body: unknown): number[] {
   const accounts = record(body)['accounts']
-  return Array.isArray(accounts) ? accounts.map(account => int(record(account)['mid'])).filter(mid => mid !== undefined && mid > 0) : []
+  return Array.isArray(accounts) ? accounts.map(account => int(record(account)['mid'])).filter((mid): mid is number => mid !== undefined && mid > 0) : []
 }
 
 /** Comments by rpid, oldest insertion dropped first beyond `size`. */

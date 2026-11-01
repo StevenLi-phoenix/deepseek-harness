@@ -45,7 +45,7 @@ async function mount(options: { persistent?: string; bus?: boolean; config?: Par
   }
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(NativeToolExecutor)
-  await ctx.plugin(ToolUp, { notes: { file }, evidence: { saltFile: join(dir, 'salt') }, ...options.config })
+  await ctx.plugin(ToolUp, ToolUp.Config({ notes: { file }, evidence: { saltFile: join(dir, 'salt') }, ...options.config } as never))
   let n = 0
   const call = async (args: unknown, sessionId = 'up-1') => {
     n += 1
@@ -157,7 +157,7 @@ describe('bili_channel_note', () => {
   })
 
   it('defaults to five calls a turn, 30 notes of 40 characters', () => {
-    expect(ToolUp.Config({})).toMatchObject({ subscription: 'bili-digest', callsPerTurn: 5, notes: { maxEntries: 30, maxChars: 40 }, evidence: { cacheSize: 2000, maxIds: 20 } })
+    expect(ToolUp.Config({} as never)).toMatchObject({ subscription: 'bili-digest', callsPerTurn: 5, notes: { maxEntries: 30, maxChars: 40 }, evidence: { cacheSize: 2000, maxIds: 20 } })
   })
 })
 
@@ -173,7 +173,7 @@ describe('channel notes in the up Session', () => {
     await mountAgentLoopTestDependencies(ctx)
     ctx.provide('credentials', { resolve: async () => ({ value: 't' }) } as never)
     await ctx.plugin(AgentLoop, { agents: [] })
-    await ctx.plugin(ToolUp, { notes: { file }, evidence: { saltFile: join(dir, 'salt') } })
+    await ctx.plugin(ToolUp, ToolUp.Config({ notes: { file }, evidence: { saltFile: join(dir, 'salt') } } as never))
     ctx.llm.registerAdapter(['mock'], adapter)
     const agent = await ctx.agentLoop.create(SessionId('up-1'), { provider: 'mock', model: 'mock' })
     const done = new Promise<void>((resolve) => {

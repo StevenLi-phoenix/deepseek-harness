@@ -24,7 +24,7 @@ async function setup() {
   ctx.provide('credentials', { resolve: async () => ({ value: 't' }) } as never)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(NativeToolExecutor)
-  return { ctx, config: { notes: { file: join(dir, 'notes.json') }, evidence: { saltFile: join(dir, 'salt') } } }
+  return { ctx, config: ToolUp.Config({ notes: { file: join(dir, 'notes.json') }, evidence: { saltFile: join(dir, 'salt') } } as never) }
 }
 
 // The agent-preset registry refuses a preset whose rows publish a service outside an isolate realm
