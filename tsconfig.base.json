@@ -491,6 +491,7 @@
       "@deepseek-ai/dsh-fork-integrity": ["./packages/fork/fork-integrity/src"],
       "@deepseek-ai/dsh-fork-memory": ["./packages/fork/fork-memory/src"],
       "@deepseek-ai/dsh-fork-qq": ["./packages/fork/fork-qq/src"],
+      "@deepseek-ai/dsh-fork-qq-login": ["./packages/fork/fork-qq-login/src"],
       "@deepseek-ai/dsh-fork-qqbot": ["./packages/fork/fork-qqbot/src"],
       "@deepseek-ai/dsh-fork-sysmon": ["./packages/fork/fork-sysmon/src"],
       "@deepseek-ai/dsh-fork-taint": ["./packages/fork/fork-taint/src"],

@@ -28,6 +28,9 @@ describe('event bundle', () => {
     expect(config.url).toBe('ws://127.0.0.1:3001')
     // The token is the name of a $DSH_HOME/.env entry, never a value.
     expect(config.tokenEnv).toBe('FORK_QQ_ONEBOT_TOKEN')
+    // The Settings page's login section asks the door napcat.sh starts next to NapCat, on this machine only.
+    expect(config.login).toEqual({ enabled: true, url: 'http://127.0.0.1:3002', timeoutMs: 5000 })
+    expect(config.settingsUrl).toBeUndefined()
     expect(config.honorRecall).toBe(true)
     expect(config.digest).toMatchObject({ enabled: true, agentPreset: 'qq-digest', permissionPreset: 'read-only', aliasMembers: true, profiles: false })
     // Raw messages and downloads are kept 30 days; digests stay until deleted.

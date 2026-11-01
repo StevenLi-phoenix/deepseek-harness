@@ -12,7 +12,7 @@
       "path": "../../../vendor/cordis"
     },
     {
-      "path": "../fork-qq/tsconfig.host.json"
+      "path": "../fork-qq"
     },
     {
       "path": "../../core/tools"

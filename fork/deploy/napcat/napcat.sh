@@ -4,9 +4,10 @@
 # account must not be able to read, so only the operator's docker socket reaches it.
 #
 #   napcat.sh build           fetch NapCat-Docker and NapCat.Shell.zip (pinned, checksummed) and build the image
-#   napcat.sh start [UIN]     seed the OneBot config with a fresh token, start the container; with UIN, quick-login that account
-#   napcat.sh qr [FILE]       copy the current login QR code out of the container (default /tmp/napcat-qr.png)
-#   napcat.sh status | logs | stop
+#   napcat.sh start [UIN]     seed the OneBot config with a fresh token, start the container and the login door; with UIN, quick-login that account
+#   napcat.sh door            (re)start only the login door: the DSH Settings page's QQ section reads NapCat's login state and QR code through it
+#   napcat.sh qr [FILE]       copy the current login QR code out of the container (default /tmp/napcat-qr.png); the Settings page shows the same code
+#   napcat.sh status | logs [N] | logs door [N] | stop
 #
 # The OneBot access token is generated here (openssl) and written to $DSH_ENV as FORK_QQ_ONEBOT_TOKEN; it is
 # never printed. Re-running `start` keeps the existing token.
@@ -21,6 +22,9 @@ WORK="${NAPCAT_WORK:-$HOME/dsh-qq-napcat}"
 IMAGE="dsh-napcat:local"
 NAME="napcat"
 PORT="${NAPCAT_PORT:-3001}"
+DOOR_NAME="napcat-login"
+DOOR_PORT="${NAPCAT_DOOR_PORT:-3002}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
 DSH_ENV="${DSH_ENV:-/Users/dsh-runtime/.dsh/.env}"
 
 die() { echo "napcat.sh: $*" >&2; exit 1; }
@@ -37,6 +41,22 @@ build() {
   docker build -q -t "$IMAGE" .
   rm -rf "$WORK" && mv "$WORK.new" "$WORK"
   echo "built $IMAGE (NapCat-Docker $DOCKER_REPO_SHA, NapCat.Shell $SHELL_TAG)"
+}
+
+# The login door (login-door.py) is the only thing the event service may use of NapCat's WebUI, which can open a shell in
+# the container and read the QQ session. It runs in its own container from the same image (python3 is in it), holds the WebUI
+# token by reading webui.json from the config volume (read-only mount), checks callers against the OneBot token, and is
+# published on 127.0.0.1 only. It is linked to NapCat by name, so it is created after NapCat and again whenever NapCat is.
+door() {
+  docker image inspect "$IMAGE" >/dev/null 2>&1 || die "no image: run build first"
+  docker inspect "$NAME" >/dev/null 2>&1 || die "$NAME is not created: run start first"
+  docker rm -f "$DOOR_NAME" >/dev/null 2>&1 || true
+  docker run -d --name "$DOOR_NAME" --restart unless-stopped --memory 128m --memory-swap 128m \
+    --cap-drop ALL --security-opt no-new-privileges --read-only --tmpfs /tmp \
+    --log-opt max-size=1m --log-opt max-file=2 \
+    --link "$NAME:napcat" -p "127.0.0.1:$DOOR_PORT:3002" -v napcat-config:/cfg:ro \
+    --entrypoint python3 "$IMAGE" -I -c "$(cat "$HERE/login-door.py")" >/dev/null
+  echo "started $DOOR_NAME on 127.0.0.1:$DOOR_PORT (the Settings page's QQ section reads NapCat's login through it)"
 }
 
 token_exists() { sudo -n -u dsh-runtime /usr/bin/grep -q '^FORK_QQ_ONEBOT_TOKEN=.' "$DSH_ENV"; }
@@ -76,14 +96,16 @@ start() {
     -p "127.0.0.1:$PORT:3001" -v napcat-config:/app/napcat/config -v napcat-qq:/app/.config/QQ \
     ${account[@]+"${account[@]}"} "$IMAGE" >/dev/null
   echo "started $NAME on 127.0.0.1:$PORT${uin:+ (quick login $uin)}"
+  door
 }
 
 case "${1:-}" in
   build) build ;;
   start) start "${2:-}" ;;
   qr) docker cp "$NAME:/app/napcat/cache/qrcode.png" "${2:-/tmp/napcat-qr.png}" && chmod 600 "${2:-/tmp/napcat-qr.png}" && echo "${2:-/tmp/napcat-qr.png}" ;;
+  door) door ;;
   status) docker ps --filter "name=$NAME" --format '{{.Names}} {{.Status}} {{.Ports}}' ;;
-  logs) docker logs --tail "${2:-80}" "$NAME" 2>&1 ;;
-  stop) docker stop "$NAME" ;;
-  *) sed -n '2,13p' "$0"; exit 2 ;;
+  logs) if [ "${2:-}" = door ]; then docker logs --tail "${3:-80}" "$DOOR_NAME" 2>&1; else docker logs --tail "${2:-80}" "$NAME" 2>&1; fi ;;
+  stop) docker stop "$DOOR_NAME" "$NAME" ;;
+  *) sed -n '2,15p' "$0"; exit 2 ;;
 esac

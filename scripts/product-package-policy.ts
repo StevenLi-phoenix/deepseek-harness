@@ -40,6 +40,7 @@ export const PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackagePolic
   'packages/fork/owner-relay': { category: 'optional', reason: 'Fork-local relay of Session answers to the owner\'s channels, mounted by the event profile bundle.' },
   'packages/fork/fork-memory': { category: 'optional', reason: 'Fork-local owner memory (context block and memory tools) mounted by the event profile preset.' },
   'packages/fork/fork-sysmon': { category: 'optional', reason: 'Fork-local System status settings section mounted by the event profile bundle.' },
+  'packages/fork/fork-qq-login': { category: 'optional', reason: 'Fork-local QQ settings section (observer connection, NapCat login, login QR code) mounted by the event profile bundle; needs the QQ observer.' },
   'packages/fork/bili': { category: 'optional', reason: 'Fork-local Bilibili account client of bili-svc and its settings section; requires bili-svc and its BILI_SVC_TOKEN_BILI token.' },
   'packages/fork/tool-bili': { category: 'optional', reason: 'Fork-local Bilibili tools mounted by the event profile bili preset.' },
   'packages/lsp/lsp-stdio': { category: 'optional', reason: 'Requires an explicit server list and language-server executables.' },

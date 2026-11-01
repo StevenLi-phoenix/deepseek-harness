@@ -2735,7 +2735,7 @@ export type FeedbackScope = typeof FEEDBACK_SCOPES[number]
 ## `@deepseek-ai/dsh-fork-qq`
 
 - `inject`: `sessionController` · `permissionPresets` · `sessionTitle` · `credentials`
-- `source`: [`packages/fork/fork-qq/src/index.ts:37`](../packages/fork/fork-qq/src/index.ts)
+- `source`: [`packages/fork/fork-qq/src/index.ts:41`](../packages/fork/fork-qq/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
@@ -2837,6 +2837,17 @@ export interface Config {
   }
   /** Tell the owner when the protocol end has been unreachable this long, in milliseconds; 0 turns it off. */
   offlineNoticeMs: number
+  /** Where the Settings page lives, quoted in the owner notice (the event service's address); unset names the page without a link. */
+  settingsUrl?: string
+  /** The login door: the window onto NapCat's login that the Settings page's QQ section uses. */
+  login: {
+    /** Ask the door at all. */
+    enabled: boolean
+    /** The door's address; it must be on this machine or the tailnet. */
+    url: string
+    /** Deadline of one call to the door, in milliseconds. */
+    timeoutMs: number
+  }
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-qq -->
@@ -5695,6 +5706,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-host-plugin-inventory` | `loader` | [`packages/host/plugin-inventory/src/index.ts`](../packages/host/plugin-inventory/src/index.ts) |
 | `@deepseek-ai/dsh-llm` | — | [`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts) |
 | `@deepseek-ai/dsh-lsp` | — | [`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts) |
+| `@deepseek-ai/dsh-fork-qq-login` | `connection` · `forkQq` | [`packages/fork/fork-qq-login/src/index.ts`](../packages/fork/fork-qq-login/src/index.ts) |
 | `@deepseek-ai/dsh-fork-tool-monitor` | `tools` · `storageDomain` · `sessionController` · `sessionPersistence` | [`packages/fork/fork-tool-monitor/src/index.ts`](../packages/fork/fork-tool-monitor/src/index.ts) |
 | `@deepseek-ai/dsh-fork-tool-qq` | `tools` | [`packages/fork/fork-tool-qq/src/index.ts`](../packages/fork/fork-tool-qq/src/index.ts) |
 | `@deepseek-ai/dsh-fork-tool-up` | `tools` · `credentials` | [`packages/fork/fork-tool-up/src/index.ts`](../packages/fork/fork-tool-up/src/index.ts) |

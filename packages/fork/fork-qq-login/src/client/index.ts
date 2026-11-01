@@ -10,7 +10,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the settings shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
-import { QQ_REFRESH_ROUTE, QQ_ROUTE } from '../panel-view.ts'
+import { QQ_REFRESH_ROUTE, QQ_ROUTE } from '../view.ts'
 import { QqLoader, createQqStore, parsePanel } from './qq.ts'
 import { QqLoginSection, type QqLoginInjected } from './QqLogin.tsx'
 import { de, en, es, fr, ja, pt, ru, zh } from './locales.ts'

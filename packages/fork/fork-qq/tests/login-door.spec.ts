@@ -40,15 +40,26 @@ class FakeWebUi {
     this.calls.push(`${request.method} ${path}`)
     if (path === '/api/auth/login') {
       const expected = createHash('sha256').update(`${WEBUI_TOKEN}.napcat`).digest('hex')
-      return reply(body['hash'] === expected ? { code: 0, message: 'success', data: { Credential: CREDENTIAL } } : { code: -1, message: 'token is invalid' })
+      reply(body['hash'] === expected ? { code: 0, message: 'success', data: { Credential: CREDENTIAL } } : { code: -1, message: 'token is invalid' })
+      return
     }
     if (request.headers.authorization !== `Bearer ${CREDENTIAL}` || this.refuseCredential > 0) {
       this.refuseCredential = Math.max(0, this.refuseCredential - 1)
-      return reply({ code: -1, message: 'Unauthorized' })
+      reply({ code: -1, message: 'Unauthorized' })
+      return
     }
-    if (path === '/api/QQLogin/CheckLoginStatus') return reply({ code: 0, message: 'success', data: this.check })
-    if (path === '/api/QQLogin/GetQQLoginInfo') return reply({ code: 0, message: 'success', data: this.info })
-    if (path === '/api/QQLogin/RefreshQRcode') return reply(this.refreshAnswer)
+    if (path === '/api/QQLogin/CheckLoginStatus') {
+      reply({ code: 0, message: 'success', data: this.check })
+      return
+    }
+    if (path === '/api/QQLogin/GetQQLoginInfo') {
+      reply({ code: 0, message: 'success', data: this.info })
+      return
+    }
+    if (path === '/api/QQLogin/RefreshQRcode') {
+      reply(this.refreshAnswer)
+      return
+    }
     response.statusCode = 404
     reply({ code: -1, message: 'nope' })
   }

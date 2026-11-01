@@ -16,9 +16,9 @@ import type {} from '@deepseek-ai/dsh-session-title'
 import z from '@deepseek-ai/schemastery'
 import { DigestRunner, type DigestConfig } from './digest.ts'
 import { DEFAULT_MEDIA_HOST_SUFFIXES, detectExtension, fetchCapped, isAllowedMediaUrl, removeMedia, saveMedia } from './media.ts'
-import { LoginDoor, qrMatrix, type DoorResult } from './login.ts'
+import { LoginDoor, type DoorResult } from './login.ts'
 import { isPrivateAddress, isPrivateUrl, OneBotClient, type OneBotEvent } from './onebot.ts'
-import { QQ_PATH, QQ_REFRESH_PATH, type QqConnection, type QqLogin, type QqPanel, type QqRefreshAnswer } from './panel-view.ts'
+import type { QqConnection, QqLoginReading } from './status.ts'
 import { displayName, parseMessage } from './text.ts'
 import { QqStore, type DigestRow, type GroupStats, type MessageRow } from './store.ts'
 
@@ -26,7 +26,7 @@ export * from './digest.ts'
 export * from './login.ts'
 export * from './media.ts'
 export * from './onebot.ts'
-export * from './panel-view.ts'
+export * from './status.ts'
 export * from './store.ts'
 export * from './text.ts'
 
@@ -224,18 +224,6 @@ const LOGIN_CACHE_MS = 1500
 /** NapCat logged in while the observer is still backing off: reconnect at once, but not more often than this. */
 const WAKE_GAP_MS = 10_000
 
-/** The slice of the connection service the QQ section's routes use. */
-interface QqRoutes {
-  readonly fetch: {
-    register(route: {
-      readonly path: string
-      readonly methods: readonly ('GET' | 'POST')[]
-      readonly requestBody: 'buffered'
-      readonly fetch: (request: Request) => Promise<Response>
-    }): () => Promise<void>
-  }
-}
-
 /** What a media download needs to know about its message. */
 interface MediaJob {
   rowId: number
@@ -321,8 +309,8 @@ export class QqObserver extends Service {
   private attempt = 0
   private lastError: string | undefined
   private readonly door: LoginDoor | undefined
-  private loginCache: { at: number; login: QqLogin } | undefined
-  private loginInFlight: Promise<QqLogin> | undefined
+  private loginCache: { at: number; login: QqLoginReading } | undefined
+  private loginInFlight: Promise<QqLoginReading> | undefined
   private lastLoginKey = ''
   private lastWakeAt = 0
   private wakeRetry: (() => void) | undefined
@@ -363,18 +351,6 @@ export class QqObserver extends Service {
     ctx.logger.info(`fork-qq: recording ${config.groups.length} group(s)${config.groups.length === 0 ? ' (the list is empty: every message is dropped; add group numbers to groups)' : ''}; sending ${config.send.enabled ? `on for ${config.send.groups.length} group(s)` : 'off'}; voice transcription ${config.asr.enabled ? 'on' : 'off'}; digests ${d.enabled ? `every ${d.everyHours} h` : 'off'}; data in ${this.dataDir}`)
 
     this.door = config.login.enabled ? new LoginDoor({ url: config.login.url, timeoutMs: config.login.timeoutMs }) : undefined
-    ctx.inject(['connection'], (scope) => {
-      const connection = Reflect.get(scope, 'connection') as QqRoutes
-      scope.effect(() => connection.fetch.register({
-        path: QQ_PATH, methods: ['GET'], requestBody: 'buffered',
-        fetch: async request => Response.json(await this.panel({ fresh: new URL(request.url).searchParams.get('fresh') === '1' }), { headers: { 'cache-control': 'no-store' } }),
-      }), `fork-qq: ${QQ_PATH}`)
-      scope.effect(() => connection.fetch.register({
-        path: QQ_REFRESH_PATH, methods: ['POST'], requestBody: 'buffered',
-        fetch: async () => Response.json(await this.refreshLoginQr(), { headers: { 'cache-control': 'no-store' } }),
-      }), `fork-qq: ${QQ_REFRESH_PATH}`)
-    })
-
     ctx.effect(() => {
       this.loop = this.run()
       const schedule = this.schedule()
@@ -514,7 +490,11 @@ export class QqObserver extends Service {
     return `在 DSH 网页端「设置 → QQ」扫码重新登录${url === undefined ? '' : `：${url}`}`
   }
 
-  /** @returns the observer's connection to the protocol end, as the Settings page shows it. */
+  /**
+   * The observer's connection to the protocol end, for the Settings page's QQ section: whether the socket is up,
+   * since when, how many attempts have failed in a row, and why the last one did.
+   * @returns the connection state; `selfId` is the logged-in account only while connected.
+   */
   connectionStatus(): QqConnection {
     const up = this.connState === 'connected'
     return {
@@ -527,27 +507,35 @@ export class QqObserver extends Service {
   }
 
   /**
-   * What the Settings page's QQ section shows: the observer's connection, and NapCat's login as the login door
-   * reports it. When NapCat turns out to be logged in while the observer is still backing off, the observer
-   * reconnects at once, so a scan on the page ends in "connected" within seconds.
-   * @param options - `fresh` skips the shared answer of the last 1.5 s.
-   * @returns the panel.
+   * How many groups the observer records, for the Settings page's QQ section.
+   * @returns the size of the configured `groups` list.
    */
-  async panel(options: { fresh?: boolean } = {}): Promise<QqPanel> {
+  recordedGroups(): number {
+    return this.recorded.size
+  }
+
+  /**
+   * NapCat's login as the login door reports it, for the Settings page's QQ section. When NapCat turns out to be
+   * logged in while the observer is still backing off, the observer reconnects at once, so a scan on the page ends
+   * in "connected" within seconds. Answers are shared for 1.5 s.
+   * @param options - `fresh` skips the shared answer.
+   * @returns the reading; `door` says why there is no `state` when the door could not answer.
+   */
+  async loginStatus(options: { fresh?: boolean } = {}): Promise<QqLoginReading> {
     const login = await this.loginView(options.fresh === true)
     if (login.state === 'online' && (this.connState === 'reconnecting' || this.connState === 'starting') && this.now() - this.lastWakeAt >= WAKE_GAP_MS) {
       this.lastWakeAt = this.now()
       this.ctx.logger.info('fork-qq: NapCat is logged in; reconnecting now')
       this.wakeRetry?.()
     }
-    return { at: this.now(), connection: this.connectionStatus(), login, groupsRecorded: this.recorded.size }
+    return login
   }
 
   /**
    * Ask NapCat for a fresh login QR code (it renews the code by itself about every two minutes).
-   * @returns the panel after the request, and whether the door passed it on.
+   * @returns the reading after the request, and whether the door passed the request on (it declines a second one within seconds).
    */
-  async refreshLoginQr(): Promise<QqRefreshAnswer> {
+  async refreshLogin(): Promise<{ login: QqLoginReading; refreshed: boolean }> {
     const token = this.door === undefined ? undefined : await this.token()
     let refreshed = false
     if (this.door !== undefined && token !== undefined) {
@@ -557,16 +545,16 @@ export class QqObserver extends Service {
       this.noteLogin(this.loginCache.login)
     }
     this.ctx.logger.info(`fork-qq: asked NapCat for a fresh login QR from the settings page (${refreshed ? 'done' : 'not done'})`)
-    return { ...await this.panel(), refreshed }
+    return { login: await this.loginStatus(), refreshed }
   }
 
-  private loginView(fresh: boolean): Promise<QqLogin> {
-    if (this.door === undefined) return Promise.resolve({ door: 'disabled', state: null, uin: null, nickname: null, error: null, qr: null })
+  private loginView(fresh: boolean): Promise<QqLoginReading> {
+    if (this.door === undefined) return Promise.resolve({ door: 'disabled', state: null, uin: null, nickname: null, error: null, qrUrl: null })
     const cached = this.loginCache
     if (!fresh && cached !== undefined && this.now() - cached.at < LOGIN_CACHE_MS) return Promise.resolve(cached.login)
     if (!fresh && this.loginInFlight !== undefined) return this.loginInFlight
     const door = this.door
-    const read = (async (): Promise<QqLogin> => {
+    const read = (async (): Promise<QqLoginReading> => {
       const token = await this.token()
       const login = this.toLogin(token === undefined ? { kind: 'unauthorized' } : await door.status(token))
       this.loginCache = { at: this.now(), login }
@@ -577,16 +565,13 @@ export class QqObserver extends Service {
     return read
   }
 
-  private toLogin(result: DoorResult): QqLogin {
-    if (result.kind !== 'ok') return { door: result.kind, state: null, uin: null, nickname: null, error: null, qr: null }
-    return {
-      door: 'ok', state: result.login, uin: result.uin, nickname: result.nickname, error: result.error,
-      qr: result.qrUrl === null ? null : qrMatrix(result.qrUrl),
-    }
+  private toLogin(result: DoorResult): QqLoginReading {
+    if (result.kind !== 'ok') return { door: result.kind, state: null, uin: null, nickname: null, error: null, qrUrl: null }
+    return { door: 'ok', state: result.login, uin: result.uin, nickname: result.nickname, error: result.error, qrUrl: result.qrUrl }
   }
 
   /** Log a change of the login picture once, by state name only: never the code or the link. */
-  private noteLogin(login: QqLogin): void {
+  private noteLogin(login: QqLoginReading): void {
     const key = login.door === 'ok' ? `login:${login.state}` : `door:${login.door}`
     if (key === this.lastLoginKey) return
     this.lastLoginKey = key

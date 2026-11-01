@@ -1006,6 +1006,8 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   UnsubscribeOutcome: 'fork-local unsubscribe result is owned by packages/fork/fork-event-bus/README.md',
   ForkNote: 'fork-local notifier message is owned by packages/fork/fork-event-bus/README.md',
   GroupOverview: 'fork-local group summary is owned by packages/fork/fork-qq/README.md',
+  QqConnection: 'fork-local QQ connection state is owned by packages/fork/fork-qq/README.md',
+  QqLoginReading: 'fork-local NapCat login reading is owned by packages/fork/fork-qq/README.md',
   MessageRow: 'fork-local stored message is owned by packages/fork/fork-qq/README.md',
   DigestRow: 'fork-local stored digest is owned by packages/fork/fork-qq/README.md',
   ForkAgentMessage: 'fork-local message for the main agent is owned by packages/fork/fork-event-bus/README.md',

@@ -2,11 +2,10 @@
  * Client of the login door (`fork/deploy/napcat/login-door.py`): the narrow window onto NapCat's WebUI that tells
  * whether QQ is logged in and, when a scan is needed, which code to scan. The door speaks to NapCat with the WebUI
  * token, which this process never holds; callers present the OneBot token they already have. Everything the door
- * answers is checked field by field again here, and the QR link is turned into a module matrix the browser draws.
+ * answers is checked field by field again here.
  */
 
-import { encode } from 'uqr'
-import type { QqLoginState, QqQrMatrix } from './panel-view.ts'
+import type { QqLoginState } from './status.ts'
 
 /** What asking the door came to. */
 export type DoorResult =
@@ -57,20 +56,6 @@ export function parseDoorAnswer(body: unknown): DoorResult {
     nickname: text(fields['nickname'], 64),
     error: text(fields['error'], 200),
     qrUrl: login === 'qr' ? qrLink(fields['qrUrl']) : null,
-  }
-}
-
-/**
- * Encode a login link as a square module matrix.
- * @param link - the link NapCat's code stands for.
- * @returns the matrix, or null when it cannot be encoded.
- */
-export function qrMatrix(link: string): QqQrMatrix | null {
-  try {
-    const { size, data } = encode(link, { ecc: 'M' })
-    return { size, rows: data.map(row => row.map(dark => (dark ? '1' : '0')).join('')) }
-  } catch {
-    return null
   }
 }
 

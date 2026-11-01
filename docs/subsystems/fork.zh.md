@@ -419,6 +419,34 @@ digests(options: { groupId?: string; days: number; limit: number }): DigestRow[]
 async sendGroupMessage(groupId: string, text: string): Promise<void>
 
 /**
+ * The observer's connection to the protocol end, for the Settings page's QQ section: whether the socket is up,
+ * since when, how many attempts have failed in a row, and why the last one did.
+ * @returns the connection state; `selfId` is the logged-in account only while connected.
+ */
+connectionStatus(): QqConnection
+
+/**
+ * How many groups the observer records, for the Settings page's QQ section.
+ * @returns the size of the configured `groups` list.
+ */
+recordedGroups(): number
+
+/**
+ * NapCat's login as the login door reports it, for the Settings page's QQ section. When NapCat turns out to be
+ * logged in while the observer is still backing off, the observer reconnects at once, so a scan on the page ends
+ * in "connected" within seconds. Answers are shared for 1.5 s.
+ * @param options - `fresh` skips the shared answer.
+ * @returns the reading; `door` says why there is no `state` when the door could not answer.
+ */
+async loginStatus(options: { fresh?: boolean } = {}): Promise<QqLoginReading>
+
+/**
+ * Ask NapCat for a fresh login QR code (it renews the code by itself about every two minutes).
+ * @returns the reading after the request, and whether the door passed the request on (it declines a second one within seconds).
+ */
+async refreshLogin(): Promise<{ login: QqLoginReading; refreshed: boolean }>
+
+/**
  * Delete stored digests: the observer's learned knowledge. Raw messages age out by themselves.
  * @param options - one group and/or those made before `beforeMs`; at least one is required.
  * @returns how many digests were deleted.

@@ -377,6 +377,7 @@ flowchart TD
     pkg_fork_integrity["fork-integrity"]
     pkg_fork_memory["fork-memory"]
     pkg_fork_qq["fork-qq"]
+    pkg_fork_qq_login["fork-qq-login"]
     pkg_fork_qqbot["fork-qqbot"]
     pkg_fork_sysmon["fork-sysmon"]
     pkg_fork_taint["fork-taint"]
@@ -1751,6 +1752,7 @@ flowchart TD
 | [`host-webserver`](../packages/host/webserver) | `host` | — |
 | [`bili`](../packages/fork/bili) | `fork` | — |
 | [`fork-balance`](../packages/fork/fork-balance) | `fork` | — |
+| [`fork-qq-login`](../packages/fork/fork-qq-login) | `fork` | — |
 | [`fork-sysmon`](../packages/fork/fork-sysmon) | `fork` | — |
 | [`message-quotes`](../packages/session/message-quotes) | `session` | — |
 | [`session-format`](../packages/session/session-format) | `session` | — |
