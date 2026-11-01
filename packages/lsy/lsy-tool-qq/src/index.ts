@@ -279,7 +279,7 @@ function registerDigestTools(scoped: Context, observer: QqObserver): void {
     },
     output: { schema: { type: 'json' }, render: (_args: unknown, value: unknown) => answer(value) },
     async execute(args, exec): Promise<JsonValue> {
-      return outcome(observer.groupNote(exec.agent?.session.id, asText(args['groupId']), asText(args['op']), asText(args['text'])))
+      return outcome(await observer.groupNote(exec.agent?.session.id, asText(args['groupId']), asText(args['op']), asText(args['text'])))
     },
     presentCall: args => ({ card: 'generic', title: `${asText(args['op'])} QQ group note`, kind: 'edit' }),
   }))

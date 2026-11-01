@@ -41,7 +41,7 @@ type HarnessOptions = {
   lost?: Set<string>
 }
 
-function harness(answer: string | ((prompt: string, sessionId: string) => string), options: HarnessOptions = {}) {
+function harness(answer: string | ((prompt: string, sessionId: string) => string | Promise<string>), options: HarnessOptions = {}) {
   const ctx = new Context()
   const created: unknown[] = []
   const prompts: string[] = []
@@ -61,11 +61,11 @@ function harness(answer: string | ((prompt: string, sessionId: string) => string
       const text = request.content[0]!.text
       prompts.push(text)
       if (options.silent === true) return { accepted: true }
-      queueMicrotask(() => {
+      queueMicrotask(async () => {
         const session = { id: request.sessionId }
         let reply: string
         try {
-          reply = typeof answer === 'function' ? answer(text, request.sessionId) : answer
+          reply = typeof answer === 'function' ? await answer(text, request.sessionId) : answer
         } catch {
           ;(ctx.emit as (...args: unknown[]) => void)('session/event', session, { type: 'turn/end', seq: 2, data: { reason: { kind: 'failed' } } })
           return
@@ -286,9 +286,9 @@ describe('DigestRunner tools', () => {
   it('refuses a tool call for another group, and a second digest in one turn', async () => {
     fill('g1', 12)
     const results: unknown[] = []
-    const h = harness((_prompt, session) => {
+    const h = harness(async (_prompt, session) => {
       results.push(r.writeDigest(session, 'g2', '别的群'))
-      results.push(r.groupNote(session, 'g2', 'add', '别的群笔记'))
+      results.push(await r.groupNote(session, 'g2', 'add', '别的群笔记'))
       results.push(r.writeDigest(session, 'g1', '第一份'))
       results.push(r.writeDigest(session, 'g1', '第二份'))
       return '好'
@@ -308,8 +308,8 @@ describe('DigestRunner tools', () => {
   it('caps the calls of one turn, refused ones included', async () => {
     fill('g1', 12)
     const outcomes: boolean[] = []
-    const h = harness((_prompt, session) => {
-      for (let i = 0; i < 6; i += 1) outcomes.push(r.groupNote(session, 'g1', 'add', `话题${i}`).ok)
+    const h = harness(async (_prompt, session) => {
+      for (let i = 0; i < 6; i += 1) outcomes.push((await r.groupNote(session, 'g1', 'add', `话题${i}`)).ok)
       return '好'
     })
     r = asRunner(h, config({ maxToolCalls: 4 }))
@@ -326,17 +326,17 @@ describe('DigestRunner tools', () => {
     expect(r.writeDigest('nobody', 'g1', 'x')).toEqual({ ok: false, error: expect.stringContaining('only inside a QQ digest turn') })
     expect(r.writeDigest(undefined, 'g1', 'x').ok).toBe(false)
     await r.runRound(['g1'], new AbortController().signal)
-    expect(r.groupNote(ended, 'g1', 'add', '话题').ok).toBe(false)
+    expect((await r.groupNote(ended, 'g1', 'add', '话题')).ok).toBe(false)
   })
 
   it('adds a note only after the filter passes it, saying why when it does not', async () => {
     fill('g1', 12)
     const results: Array<{ ok: boolean; error?: string }> = []
-    const h = harness((_prompt, session) => {
-      results.push(r.groupNote(session, 'g1', 'add', '成员0 总是半夜发言'))
-      results.push(r.groupNote(session, 'g1', 'add', '联系 13812345678'))
-      results.push(r.groupNote(session, 'g1', 'add', '夜间活跃，爱发表情包'))
-      results.push(r.groupNote(session, 'g1', 'add', '夜间活跃，爱发表情包'))
+    const h = harness(async (_prompt, session) => {
+      results.push(await r.groupNote(session, 'g1', 'add', '成员0 总是半夜发言'))
+      results.push(await r.groupNote(session, 'g1', 'add', '联系 13812345678'))
+      results.push(await r.groupNote(session, 'g1', 'add', '夜间活跃，爱发表情包'))
+      results.push(await r.groupNote(session, 'g1', 'add', '夜间活跃，爱发表情包'))
       return '好'
     })
     r = asRunner(h, config())
@@ -351,11 +351,11 @@ describe('DigestRunner tools', () => {
     store.addNote('g1', '旧笔记甲', 1)
     store.addNote('g1', '旧笔记乙', 2)
     const logs: string[] = []
-    const h = harness((_prompt, session) => {
-      expect(r.groupNote(session, 'g1', 'remove', '#1').ok).toBe(true)
-      expect(r.groupNote(session, 'g1', 'remove', '旧笔记乙').ok).toBe(true)
-      expect(r.groupNote(session, 'g1', 'remove', '不存在').ok).toBe(false)
-      expect(r.groupNote(session, 'g1', 'rename', 'x').ok).toBe(false)
+    const h = harness(async (_prompt, session) => {
+      expect((await r.groupNote(session, 'g1', 'remove', '#1')).ok).toBe(true)
+      expect((await r.groupNote(session, 'g1', 'remove', '旧笔记乙')).ok).toBe(true)
+      expect((await r.groupNote(session, 'g1', 'remove', '不存在')).ok).toBe(false)
+      expect((await r.groupNote(session, 'g1', 'rename', 'x')).ok).toBe(false)
       r.writeDigest(session, 'g1', '摘要')
       return '好'
     })
@@ -411,6 +411,75 @@ describe('DigestRunner tools', () => {
     expect(r.groupOfSession('digest-1')).toBeUndefined()
     expect(r.recentTextOf('digest-1')).toBeUndefined()
     expect(r.groupOfSession(undefined)).toBeUndefined()
+  })
+
+  describe('the guard', () => {
+    type Verdict = { ok: true } | { ok: false; rule: string; publicReason: string }
+    const withGuard = (h: ReturnType<typeof harness>, check: (text: string, options: Record<string, unknown>) => Promise<Verdict>) => {
+      h.ctx.provide('lsyGuard', { check } as never)
+    }
+    it('asks the guard about every note after the local filter, as a channel-audience note of the calling Session', async () => {
+      fill('g1', 12)
+      const asked: Array<[string, Record<string, unknown>]> = []
+      let session = ''
+      const h = harness(async (_prompt, id) => { session = id; await r.groupNote(id, 'g1', 'add', '夜间活跃，爱发表情包'); return '好' })
+      withGuard(h, (text, options) => { asked.push([text, options]); return Promise.resolve({ ok: true }) })
+      r = asRunner(h, config())
+      await r.runRound(['g1'], new AbortController().signal)
+      expect(asked).toEqual([['夜间活跃，爱发表情包', { purpose: 'qq-group-note', audience: 'channel', sessionId: session }]])
+      expect(store.notes('g1').map(entry => entry.text)).toEqual(['夜间活跃，爱发表情包'])
+    })
+
+    it('refuses a note the guard refuses, and tells the model the public reason, not the rule', async () => {
+      fill('g1', 12)
+      const results: Array<{ ok: boolean; error?: string }> = []
+      const h = harness(async (_prompt, id) => { results.push(await r.groupNote(id, 'g1', 'add', '夜间活跃，爱发表情包')); return '好' })
+      withGuard(h, () => Promise.resolve({ ok: false, rule: 'canary', publicReason: '包含不该出现的内容' }))
+      r = asRunner(h, config())
+      await r.runRound(['g1'], new AbortController().signal)
+      expect(results[0]).toEqual({ ok: false, error: 'note refused: 包含不该出现的内容' })
+      expect(JSON.stringify(results)).not.toContain('canary')
+      expect(store.notes('g1')).toEqual([])
+    })
+
+    it('refuses when the guard itself fails, so a broken check never lets a note through', async () => {
+      fill('g1', 12)
+      const results: Array<{ ok: boolean; error?: string }> = []
+      const h = harness(async (_prompt, id) => { results.push(await r.groupNote(id, 'g1', 'add', '夜间活跃，爱发表情包')); return '好' })
+      withGuard(h, () => Promise.reject(new Error('classifier down')))
+      r = asRunner(h, config())
+      await r.runRound(['g1'], new AbortController().signal)
+      expect(results[0]?.ok).toBe(false)
+      expect(results[0]?.error).toContain('could not be checked')
+      expect(store.notes('g1')).toEqual([])
+    })
+
+    it('does not call the guard for a note the local filter, the group binding, or the cap already refused, nor for a removal', async () => {
+      fill('g1', 12)
+      store.addNote('g1', '旧笔记', 1)
+      const check = vi.fn(() => Promise.resolve({ ok: true } as Verdict))
+      const h = harness(async (_prompt, id) => {
+        await r.groupNote(id, 'g1', 'add', '联系 13812345678')
+        await r.groupNote(id, 'g2', 'add', '别的群笔记')
+        await r.groupNote(id, 'g1', 'remove', '#1')
+        return '好'
+      })
+      withGuard(h, check)
+      r = asRunner(h, config())
+      await r.runRound(['g1'], new AbortController().signal)
+      expect(check).not.toHaveBeenCalled()
+    })
+
+    it('works without a guard service, on the local filter alone, and says so once', async () => {
+      fill('g1', 12)
+      const logs: string[] = []
+      const h = harness(async (_prompt, id) => { await r.groupNote(id, 'g1', 'add', '话题甲'); await r.groupNote(id, 'g1', 'add', '话题乙'); return '好' })
+      h.ctx.logger.exporter({ levels: { default: 3 }, export: (m) => { logs.push(String(m.args[0])) } })
+      r = asRunner(h, config())
+      await r.runRound(['g1'], new AbortController().signal)
+      expect(store.notes('g1')).toHaveLength(2)
+      expect(logs.filter(line => line.includes('no lsyGuard'))).toHaveLength(1)
+    })
   })
 
   describe('resident Sessions', () => {

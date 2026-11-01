@@ -2555,7 +2555,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'what to tell the model.',
       },
       {
-        signature: 'groupNote(sessionId: string | undefined, groupId: string, op: string, text: string): ToolOutcome',
+        signature: 'groupNote(sessionId: string | undefined, groupId: string, op: string, text: string): Promise<ToolOutcome>',
         description: '`qq_group_note` for the tools of the digest preset: add or remove a note of the group the calling Session is digesting.',
         parameters: [{ name: 'sessionId', description: 'the calling Session.' }, { name: 'groupId', description: 'the group the model names; it must be the group the Session is digesting.' }, { name: 'op', description: '`add` or `remove`.' }, { name: 'text', description: 'the note, or for `remove` its `#id` or exact text.' }],
         returns: 'what to tell the model.',

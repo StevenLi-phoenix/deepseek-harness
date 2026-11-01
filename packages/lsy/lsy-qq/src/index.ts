@@ -601,7 +601,7 @@ export class QqObserver extends Service {
    * @param text - the note, or for `remove` its `#id` or exact text.
    * @returns what to tell the model.
    */
-  groupNote(sessionId: string | undefined, groupId: string, op: string, text: string): ToolOutcome {
+  groupNote(sessionId: string | undefined, groupId: string, op: string, text: string): Promise<ToolOutcome> {
     return this.digest.groupNote(sessionId, groupId, op, text)
   }
 

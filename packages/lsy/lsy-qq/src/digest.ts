@@ -70,6 +70,12 @@ interface RoundBinding {
   texts: readonly string[]
 }
 
+/** The slice of the shared guard (`ctx.lsyGuard`) the group notes use. */
+interface LsyGuard {
+  check(text: string, options: { purpose: string; audience: 'public' | 'channel'; sessionId?: string }):
+  Promise<{ ok: true } | { ok: false; rule: string; publicReason: string }>
+}
+
 /** What a tool answers the model. */
 export type ToolOutcome = { ok: true; message: string } | { ok: false; error: string }
 
@@ -216,6 +222,7 @@ interface TurnSession {
 export class DigestRunner {
   /** The Sessions that are digesting right now, by id: what their tools may touch. */
   private readonly bindings = new Map<string, RoundBinding>()
+  private guardWarned = false
 
   constructor(
     private readonly ctx: Context,
@@ -308,14 +315,15 @@ export class DigestRunner {
 
   /**
    * `qq_group_note`: add or remove a note of the group the calling Session is digesting. A note describes the group,
-   * never a person: the filter refuses names, numbers, addresses, schools, and the like.
+   * never a person: the local filter refuses names, numbers, addresses, schools, and the like, and the shared guard
+   * (`ctx.lsyGuard`, which also runs a model check) must pass it too. A guard that fails refuses the note.
    * @param sessionId - the calling Session.
    * @param groupId - the group the model names; it must be the Session's own.
    * @param op - `add` or `remove`.
    * @param text - the note (add), or a note's `#id` or exact text (remove).
    * @returns what to tell the model.
    */
-  groupNote(sessionId: string | undefined, groupId: string, op: string, text: string): ToolOutcome {
+  async groupNote(sessionId: string | undefined, groupId: string, op: string, text: string): Promise<ToolOutcome> {
     const entered = this.enter(sessionId, groupId)
     if ('error' in entered) return { ok: false, error: entered.error }
     const { binding } = entered
@@ -331,10 +339,29 @@ export class DigestRunner {
     if (op !== 'add') return refuse('op must be add or remove')
     const verdict = checkNote(text, this.store.memberNames(groupId))
     if (!verdict.ok) return refuse(`note refused: ${verdict.reason}`)
+    const guarded = await this.guard(verdict.text, sessionId)
+    if (!guarded.ok) return refuse(guarded.error)
     const id = this.store.addNote(groupId, verdict.text, this.now())
     if (id === undefined) return refuse(`not added: the group already has this note or the maximum of ${MAX_NOTES_PER_GROUP} (remove one first)`)
     binding.notesAdded += 1
     return { ok: true, message: `note #${id} added` }
+  }
+
+  /** Ask the shared guard about a note; without the service only the local filter applies. */
+  private async guard(text: string, sessionId: string | undefined): Promise<{ ok: true } | { ok: false; error: string }> {
+    const service = this.ctx.get('lsyGuard') as LsyGuard | undefined
+    if (service === undefined) {
+      if (!this.guardWarned) this.ctx.logger.warn('lsy-qq: no lsyGuard service is mounted; group notes pass the local filter only')
+      this.guardWarned = true
+      return { ok: true }
+    }
+    try {
+      const verdict = await service.check(text, { purpose: 'qq-group-note', audience: 'channel', ...sessionId === undefined ? {} : { sessionId } })
+      return verdict.ok ? { ok: true } : { ok: false, error: `note refused: ${verdict.publicReason}` }
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`lsy-qq: the guard failed on a group note: ${errorText(error)}`)
+      return { ok: false, error: 'note refused: it could not be checked right now; try again next round' }
+    }
   }
 
   /** The per-install salt of member aliases, created on first use. */
