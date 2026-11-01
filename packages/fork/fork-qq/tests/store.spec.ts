@@ -61,15 +61,14 @@ describe('QqStore messages', () => {
     expect(store.insertMessage(message({ text: '撤回前的秘密内容' }), [], 0)).toBeUndefined()
   })
 
-  it('lists groups with counts and digest times', () => {
+  it('lists groups with counts', () => {
     store.upsertGroup({ groupId: 'g1', name: '技术群', memberCount: 80 }, 1)
     store.upsertGroup({ groupId: 'g1', name: '技术交流群', memberCount: 81 }, 2)
     store.insertMessage(message({ messageId: 'a', at: 10 }), [], 0)
     store.insertMessage(message({ messageId: 'b', at: 20 }), [], 0)
-    store.insertDigest({ groupId: 'g1', fromRow: 1, toRow: 2, messageCount: 2, text: '摘要', model: 'm', createdAt: 99 })
     expect(store.groups()).toEqual([{ groupId: 'g1', name: '技术交流群', memberCount: 81, updatedAt: 2 }])
     expect(store.groupName('g1')).toBe('技术交流群')
-    expect(store.stats()).toEqual([{ groupId: 'g1', messages: 2, firstAt: 10, lastAt: 20, lastDigestAt: 99 }])
+    expect(store.stats()).toEqual([{ groupId: 'g1', messages: 2, firstAt: 10, lastAt: 20 }])
   })
 })
 
@@ -84,20 +83,9 @@ describe('QqStore retention and deletion', () => {
     expect(store.mediaOf(old)).toEqual([])
     expect(store.pruneMessages(5000)).toEqual({ messages: 0, files: [] })
   })
-
-  it('deletes digests by group or by date, never all at once by accident, and caps a group', () => {
-    for (let i = 1; i <= 4; i += 1) store.insertDigest({ groupId: 'g1', fromRow: i, toRow: i, messageCount: 1, text: `d${i}`, model: 'm', createdAt: i * 100 })
-    store.insertDigest({ groupId: 'g2', fromRow: 1, toRow: 1, messageCount: 1, text: 'other', model: 'm', createdAt: 50 })
-    expect(() => store.deleteDigests({})).toThrow('needs a group or a date')
-    expect(store.capDigests('g1', 3)).toBe(1)
-    expect(store.digests({ groupId: 'g1', limit: 9 }).map(d => d.text)).toEqual(['d4', 'd3', 'd2'])
-    expect(store.deleteDigests({ groupId: 'g1', beforeMs: 250 })).toBe(1)
-    expect(store.deleteDigests({ beforeMs: 1000 })).toBe(3)
-    expect(store.digests({ limit: 9 })).toEqual([])
-  })
 })
 
-describe('QqStore media, digests, and meta', () => {
+describe('QqStore media, paging, and meta', () => {
   it('tracks downloaded bytes and finds media past retention', () => {
     const old = store.insertMessage(message({ messageId: 'old', at: 100 }), [{ kind: 'image' }], 0)!
     const fresh = store.insertMessage(message({ messageId: 'new', at: 9000 }), [{ kind: 'image' }], 0)!
@@ -114,19 +102,21 @@ describe('QqStore media, digests, and meta', () => {
     expect(store.mediaOf(fresh)[0]!.transcript).toBe('转写')
   })
 
-  it('returns digests newest first and remembers how far digesting got', () => {
+  it('pages a group\'s messages in log order and reports the highest row', () => {
     for (let i = 1; i <= 3; i += 1) store.insertMessage(message({ messageId: `m${i}`, at: i }), [], 0)
-    expect(store.digestedUpTo('g1')).toBe(0)
-    store.insertDigest({ groupId: 'g1', fromRow: 1, toRow: 2, messageCount: 2, text: 'one', model: 'm', usage: '{"in":1}', rawPath: '/raw/1', createdAt: 100 })
-    store.insertDigest({ groupId: 'g1', fromRow: 3, toRow: 3, messageCount: 1, text: 'two', model: 'm', createdAt: 200 })
-    store.insertDigest({ groupId: 'g2', fromRow: 1, toRow: 1, messageCount: 1, text: 'other', model: 'm', createdAt: 300 })
-    expect(store.digests({ groupId: 'g1', limit: 5 }).map(d => d.text)).toEqual(['two', 'one'])
-    expect(store.digests({ sinceMs: 150, limit: 5 }).map(d => d.text)).toEqual(['other', 'two'])
-    expect(store.digestedUpTo('g1')).toBe(3)
-    expect(store.lastDigestAt('g1')).toBe(200)
+    expect(store.after('g1', 0, 2).map(m => m.messageId)).toEqual(['m1', 'm2'])
     expect(store.after('g1', 2, 10).map(m => m.messageId)).toEqual(['m3'])
     expect(store.lastRow('g1')).toBe(3)
     expect(store.lastRow('none')).toBe(0)
+  })
+
+  it('lists the distinct names a group\'s members showed', () => {
+    store.insertMessage(message({ messageId: 'a', userId: 'u1', nickname: '甲', card: '甲卡' }), [], 0)
+    store.insertMessage(message({ messageId: 'b', userId: 'u1', nickname: '甲', card: '甲卡' }), [], 0)
+    store.insertMessage(message({ messageId: 'c', userId: 'u2', nickname: '乙', card: '' }), [], 0)
+    expect(store.members('g1').sort((a, b) => a.userId.localeCompare(b.userId))).toEqual([
+      { userId: 'u1', nickname: '甲', card: '甲卡' }, { userId: 'u2', nickname: '乙', card: '' },
+    ])
   })
 
   it('stores small settings', () => {

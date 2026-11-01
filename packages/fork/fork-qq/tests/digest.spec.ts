@@ -4,22 +4,33 @@ import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { chunkTranscript, DigestRunner, digestPrompt, formatLine, memberAlias, stampIn, type DigestConfig } from '../src/digest.ts'
-import { QqStore, type MessageRow } from '../src/store.ts'
+import type { Message as MessageRow } from '../src/protocol.ts'
+import type { DigestStore } from '../src/digest-storage.ts'
+import { FakeLog, memoryStore } from './digest-harness.ts'
 
 let dir: string
-let store: QqStore
+let store: DigestStore
+let log: FakeLog
+let closeStore: () => Promise<void>
 const HOUR = 3_600_000
 const NOW = Date.UTC(2026, 9, 31, 12, 0, 0)
 
-beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'fork-qq-digest-')); store = new QqStore(':memory:') })
-afterEach(() => { store.close(); rmSync(dir, { recursive: true, force: true }) })
+beforeEach(async () => {
+  dir = mkdtempSync(join(tmpdir(), 'fork-qq-digest-'))
+  const opened = await memoryStore()
+  store = opened.store
+  closeStore = opened.close
+  log = new FakeLog()
+  log.names.set('g1', '技术群')
+})
+afterEach(async () => { await closeStore(); rmSync(dir, { recursive: true, force: true }) })
 
 let serial = 0
 
 function fill(groupId: string, count: number, startAt = NOW - 5 * HOUR): void {
   for (let i = 0; i < count; i += 1) {
     serial += 1
-    store.insertMessage({ groupId, messageId: `${groupId}-${serial}`, at: startAt + i * 1000, userId: `1000${i % 3}`, nickname: `昵称${i % 3}`, card: `成员${i % 3}`, role: 'member', text: `第${i}条讨论内容`, kinds: ['text'] }, [], 0)
+    log.insert({ groupId, messageId: `${groupId}-${serial}`, at: startAt + i * 1000, userId: `1000${i % 3}`, nickname: `昵称${i % 3}`, card: `成员${i % 3}`, text: `第${i}条讨论内容` })
   }
 }
 
@@ -81,7 +92,7 @@ function harness(answer: string | ((prompt: string, sessionId: string) => string
   return { ctx, created, prompts, selected, presets, titles, archived }
 }
 
-const runner = (h: ReturnType<typeof harness>, cfg: DigestConfig) => new DigestRunner(h.ctx, store, cfg, join(dir, 'data'), id => (id === 'g1' ? '技术群' : id), () => NOW)
+const runner = (h: ReturnType<typeof harness>, cfg: DigestConfig) => new DigestRunner(h.ctx, store, log, cfg, join(dir, 'raw'), () => NOW)
 
 describe('transcript helpers', () => {
   it('writes times in the configured zone', () => {
@@ -90,20 +101,20 @@ describe('transcript helpers', () => {
   })
 
   it('formats a line with the card, the last four digits of the number, and the quoted member', () => {
-    const base = { id: 1, groupId: 'g1', messageId: 'm2', at: NOW, userId: '123456789', nickname: '昵称', card: '名片', role: '', text: '同意\n第二行', replyTo: 'm1', kinds: '', recalled: false } satisfies MessageRow
-    const quoted: MessageRow = { ...base, id: 0, messageId: 'm1', userId: '5', card: '', nickname: '小明', replyTo: null }
+    const base = { cursor: 'c1', groupId: 'g1', messageId: 'm2', at: NOW, userId: '123456789', nickname: '昵称', card: '名片', role: '', text: '同意\n第二行', replyTo: 'm1', kinds: '', recalled: false } satisfies MessageRow
+    const quoted: MessageRow = { ...base, cursor: 'c0', messageId: 'm1', userId: '5', card: '', nickname: '小明', replyTo: null }
     expect(formatLine(base, id => (id === 'm1' ? quoted : undefined), 'Asia/Shanghai')).toBe('[10-31 20:00] 名片(6789) ↳回复小明(5)：同意 ⏎ 第二行')
     expect(formatLine(base, () => undefined, 'Asia/Shanghai')).toContain('↳回复某条旧消息')
     expect(formatLine({ ...base, card: '', nickname: '', replyTo: null }, () => undefined, 'UTC')).toBe('[10-31 12:00] 123456789(6789)：同意 ⏎ 第二行')
   })
 
-  it('cuts a backlog into chunks by size, tracking the rows each covers', () => {
-    store.insertMessage({ groupId: 'g1', messageId: 'a', at: 1, userId: '1', nickname: '', card: '', role: '', text: 'x'.repeat(60), kinds: [] }, [], 0)
-    store.insertMessage({ groupId: 'g1', messageId: 'b', at: 2, userId: '1', nickname: '', card: '', role: '', text: 'y'.repeat(60), kinds: [] }, [], 0)
-    store.insertMessage({ groupId: 'g1', messageId: 'c', at: 3, userId: '1', nickname: '', card: '', role: '', text: 'z'.repeat(60), kinds: [] }, [], 0)
-    const rows = store.after('g1', 0, 10)
+  it('cuts a backlog into chunks by size, tracking the cursors each covers', async () => {
+    log.insert({ groupId: 'g1', messageId: 'a', at: 1, text: 'x'.repeat(60) })
+    log.insert({ groupId: 'g1', messageId: 'b', at: 2, text: 'y'.repeat(60) })
+    log.insert({ groupId: 'g1', messageId: 'c', at: 3, text: 'z'.repeat(60) })
+    const rows = (await log.page('g1', undefined, 10)).items
     const chunks = chunkTranscript(rows, row => row.text, 130)
-    expect(chunks.map(chunk => [chunk.fromRow, chunk.toRow, chunk.count])).toEqual([[1, 2, 2], [3, 3, 1]])
+    expect(chunks.map(chunk => [chunk.fromCursor, chunk.toCursor, chunk.count])).toEqual([['c1', 'c2', 2], ['c3', 'c3', 1]])
     expect(chunkTranscript([], () => '', 100)).toEqual([])
   })
 
@@ -127,10 +138,10 @@ describe('DigestRunner', () => {
     expect(h.prompts[0]).toContain('"技术群"')
     expect(h.prompts[0]).toContain('成员0(0000)')
     const [digest] = store.digests({ groupId: 'g1', limit: 5 })
-    expect(digest).toMatchObject({ messageCount: 12, fromRow: 1, toRow: 12, text: '## 话题\n部署与监控讨论。', model: 'openrouter/deepseek/deepseek-v4.1-flash', createdAt: NOW })
+    expect(digest).toMatchObject({ messageCount: 12, fromCursor: 'c1', toCursor: 'c12', text: '## 话题\n部署与监控讨论。', model: 'openrouter/deepseek/deepseek-v4.1-flash', createdAt: NOW })
     expect(JSON.parse(digest!.usage!)).toEqual({ inputTokens: 500, outputTokens: 80 })
     expect(readFileSync(digest!.rawPath!, 'utf8')).toBe('## 话题\n部署与监控讨论。')
-    expect(store.digestedUpTo('g1')).toBe(12)
+    expect(store.digestedUpTo('g1')).toBe('c12')
   })
 
   it('waits for enough new messages and for the interval, and picks up where it stopped', async () => {
@@ -146,9 +157,9 @@ describe('DigestRunner', () => {
     expect(await run.runRound(['g1'], new AbortController().signal)).toBe(0)
     expect(h.prompts).toHaveLength(1)
     // A later round starts after the rows already digested.
-    const later = new DigestRunner(h.ctx, store, config(), join(dir, 'data'), id => id, () => NOW + 25 * HOUR)
+    const later = new DigestRunner(h.ctx, store, log, config(), join(dir, 'raw'), () => NOW + 25 * HOUR)
     expect(await later.runRound(['g1'], new AbortController().signal)).toBe(1)
-    expect(store.digests({ groupId: 'g1', limit: 5 }).map(d => [d.fromRow, d.toRow])).toEqual([[14, 33], [1, 13]])
+    expect(store.digests({ groupId: 'g1', limit: 5 }).map(d => [d.fromCursor, d.toCursor])).toEqual([['c14', 'c33'], ['c1', 'c13']])
   })
 
   it('stores a placeholder for NO_REPLY so the cursor moves on, and keeps the raw answer', async () => {
@@ -156,8 +167,8 @@ describe('DigestRunner', () => {
     const h = harness('NO_REPLY')
     await runner(h, config()).runRound(['g1'], new AbortController().signal)
     expect(store.digests({ limit: 5 })[0]!.text).toBe('（这一段没有值得记录的内容）')
-    expect(store.digestedUpTo('g1')).toBe(8)
-    expect(readdirSync(join(dir, 'data', 'digest-raw'))).toHaveLength(1)
+    expect(store.digestedUpTo('g1')).toBe('c8')
+    expect(readdirSync(join(dir, 'raw'))).toHaveLength(1)
   })
 
   it('splits a large backlog into several calls, at most maxCallsPerRound, and leaves the rest for the next round', async () => {
@@ -167,7 +178,7 @@ describe('DigestRunner', () => {
     expect(stored).toBe(2)
     const digests = store.digests({ groupId: 'g1', limit: 9 })
     expect(digests).toHaveLength(2)
-    expect(store.digestedUpTo('g1')).toBeLessThan(40)
+    expect(Number(store.digestedUpTo('g1')!.slice(1))).toBeLessThan(40)
   })
 
   it('stores nothing and moves nothing when the turn does not complete', async () => {
@@ -175,7 +186,7 @@ describe('DigestRunner', () => {
     const h = harness('half', { kind: 'failed' })
     expect(await runner(h, config()).runRound(['g1'], new AbortController().signal)).toBe(0)
     expect(store.digests({ limit: 5 })).toEqual([])
-    expect(existsSync(join(dir, 'data', 'digest-raw'))).toBe(false)
+    expect(existsSync(join(dir, 'raw'))).toBe(false)
   })
 
   it('gives up on a turn that never ends', async () => {
@@ -210,7 +221,7 @@ describe('DigestRunner', () => {
     // The same member keeps the same alias in a later round, because the salt is stored.
     const first = /群友#[0-9a-f]{4}/.exec(prompt)![0]
     fill('g1', 8, NOW - HOUR)
-    const later = new DigestRunner(h.ctx, store, config({ aliasMembers: true }), join(dir, 'data'), id => id, () => NOW + 25 * HOUR)
+    const later = new DigestRunner(h.ctx, store, log, config({ aliasMembers: true }), join(dir, 'raw'), () => NOW + 25 * HOUR)
     await later.runRound(['g1'], new AbortController().signal)
     expect(h.prompts[1]).toContain(first)
   })
@@ -231,7 +242,7 @@ describe('DigestRunner', () => {
     expect(Array.from(store.digests({ groupId: 'g1', limit: 5 })[0]!.text)).toHaveLength(600)
     for (let round = 1; round <= 3; round += 1) {
       fill('g1', 8, NOW - HOUR)
-      await new DigestRunner(h.ctx, store, config({ keepPerGroup: 2, maxDigestChars: 600 }), join(dir, 'data'), id => id, () => NOW + round * 25 * HOUR).runRound(['g1'], new AbortController().signal)
+      await new DigestRunner(h.ctx, store, log, config({ keepPerGroup: 2, maxDigestChars: 600 }), join(dir, 'raw'), () => NOW + round * 25 * HOUR).runRound(['g1'], new AbortController().signal)
     }
     expect(store.digests({ groupId: 'g1', limit: 9 })).toHaveLength(2)
   })
@@ -275,7 +286,7 @@ describe('DigestRunner tools', () => {
 
   it('tells the model the group number and shows the notes the group has, by id', async () => {
     fill('g1', 12)
-    store.addNote('g1', '常聊显卡', 1)
+    await store.addNote('g1', '常聊显卡', 1)
     const h = harness('## 话题\nx')
     r = asRunner(h, config())
     await r.runRound(['g1'], new AbortController().signal)
@@ -350,8 +361,8 @@ describe('DigestRunner tools', () => {
 
   it('removes a note by id or text, and logs the turn with tool calls and notes', async () => {
     fill('g1', 12)
-    store.addNote('g1', '旧笔记甲', 1)
-    store.addNote('g1', '旧笔记乙', 2)
+    await store.addNote('g1', '旧笔记甲', 1)
+    await store.addNote('g1', '旧笔记乙', 2)
     const logs: string[] = []
     const h = harness(async (_prompt, session) => {
       expect((await r.groupNote(session, 'g1', 'remove', '#1')).ok).toBe(true)
@@ -458,7 +469,7 @@ describe('DigestRunner tools', () => {
 
     it('does not call the guard for a note the local filter, the group binding, or the cap already refused, nor for a removal', async () => {
       fill('g1', 12)
-      store.addNote('g1', '旧笔记', 1)
+      await store.addNote('g1', '旧笔记', 1)
       const check = vi.fn(() => Promise.resolve({ ok: true } as Verdict))
       const h = harness(async (_prompt, id) => {
         await r.groupNote(id, 'g1', 'add', '联系 13812345678')
@@ -474,7 +485,7 @@ describe('DigestRunner tools', () => {
 
     it('refuses every added note without a guard service, with a clear result, warns once, and still lets the digest and removals through', async () => {
       fill('g1', 12)
-      store.addNote('g1', '旧笔记', 1)
+      await store.addNote('g1', '旧笔记', 1)
       const logs: string[] = []
       const results: Array<{ ok: boolean; error?: string }> = []
       const h = harness(async (_prompt, id) => {
@@ -498,7 +509,7 @@ describe('DigestRunner tools', () => {
     const DAY = 24 * HOUR
     let clock = NOW
     const resident = (h: ReturnType<typeof harness>, overrides: Partial<DigestConfig> = {}, rolloverDays = 30) => (
-      new DigestRunner(h.ctx, store, config({ resident: true, ...overrides }), join(dir, 'data'), id => (id === 'g1' ? '技术群' : id), () => clock, () => rolloverDays * DAY)
+      new DigestRunner(h.ctx, store, log, config({ resident: true, ...overrides }), join(dir, 'raw'), () => clock, () => rolloverDays * DAY)
     )
     const round = (run: DigestRunner) => run.runRound(['g1'], new AbortController().signal)
     beforeEach(() => { clock = NOW })
@@ -537,7 +548,7 @@ describe('DigestRunner tools', () => {
       const h = harness('## 话题\n旧摘要内容')
       const run = resident(h)
       await round(run)
-      store.addNote('g1', '常聊显卡', 1)
+      await store.addNote('g1', '常聊显卡', 1)
       clock = NOW + 31 * DAY
       fill('g1', 10, NOW + 30 * DAY)
       await round(run)

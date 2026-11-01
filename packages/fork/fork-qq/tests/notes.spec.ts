@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { checkNote, MAX_NOTE_CHARS } from '../src/pii.ts'
-import { MAX_NOTES_PER_GROUP, QqStore } from '../src/store.ts'
+import { MAX_NOTES_PER_GROUP, type DigestStore } from '../src/digest-storage.ts'
+import { memoryStore } from './digest-harness.ts'
 
 describe('group note filter', () => {
   const ok = (text: string, names: string[] = []) => checkNote(text, names)
@@ -44,43 +45,45 @@ describe('group note filter', () => {
   })
 })
 
-describe('group notes in the store', () => {
-  let store: QqStore
-  beforeEach(() => { store = new QqStore(':memory:') })
-  afterEach(() => { store.close() })
+describe('group notes in the digest storage', () => {
+  let store: DigestStore
+  let close: () => Promise<void>
+  beforeEach(async () => { ({ store, close } = await memoryStore()) })
+  afterEach(async () => { await close() })
 
-  it('keeps notes per group, oldest first, with ids the model can name', () => {
-    const a = store.addNote('g1', '常聊显卡', 10)
-    const b = store.addNote('g1', '爱用表情包', 20)
-    store.addNote('g2', '另一个群', 30)
+  it('keeps notes per group, oldest first, with ids the model can name', async () => {
+    const a = await store.addNote('g1', '常聊显卡', 10)
+    const b = await store.addNote('g1', '爱用表情包', 20)
+    await store.addNote('g2', '另一个群', 30)
     expect(store.notes('g1').map(note => [note.id, note.text])).toEqual([[a, '常聊显卡'], [b, '爱用表情包']])
     expect(store.notes('g2')).toHaveLength(1)
   })
 
-  it('does not add the same note twice, and stops at the cap', () => {
-    expect(store.addNote('g1', '常聊显卡', 1)).toBeDefined()
-    expect(store.addNote('g1', '常聊显卡', 2)).toBeUndefined()
-    for (let i = 1; i < MAX_NOTES_PER_GROUP; i += 1) store.addNote('g1', `话题${i}`, i)
+  it('does not add the same note twice, and stops at the cap', async () => {
+    expect(await store.addNote('g1', '常聊显卡', 1)).toBeDefined()
+    expect(await store.addNote('g1', '常聊显卡', 2)).toBeUndefined()
+    for (let i = 1; i < MAX_NOTES_PER_GROUP; i += 1) await store.addNote('g1', `话题${i}`, i)
     expect(store.notes('g1')).toHaveLength(MAX_NOTES_PER_GROUP)
-    expect(store.addNote('g1', '第三十一条', 99)).toBeUndefined()
+    expect(await store.addNote('g1', '第三十一条', 99)).toBeUndefined()
   })
 
-  it('removes a note by id, by "#id", or by its exact text, only inside its own group', () => {
-    const a = store.addNote('g1', '常聊显卡', 1)!
-    store.addNote('g1', '爱用表情包', 2)
-    const c = store.addNote('g1', '黑话炼丹', 3)!
-    expect(store.removeNote('g1', String(a))).toBe(true)
-    expect(store.removeNote('g1', `#${c}`)).toBe(true)
-    expect(store.removeNote('g1', '爱用表情包')).toBe(true)
-    expect(store.removeNote('g1', '爱用表情包')).toBe(false)
-    const other = store.addNote('g2', '别组', 4)!
-    expect(store.removeNote('g1', String(other))).toBe(false)
+  it('removes a note by id, by "#id", or by its exact text, only inside its own group', async () => {
+    const a = (await store.addNote('g1', '常聊显卡', 1))!
+    await store.addNote('g1', '爱用表情包', 2)
+    const c = (await store.addNote('g1', '黑话炼丹', 3))!
+    expect(await store.removeNote('g1', String(a))).toBe(true)
+    expect(await store.removeNote('g1', `#${c}`)).toBe(true)
+    expect(await store.removeNote('g1', '爱用表情包')).toBe(true)
+    expect(await store.removeNote('g1', '爱用表情包')).toBe(false)
+    const other = (await store.addNote('g2', '别组', 4))!
+    expect(await store.removeNote('g1', String(other))).toBe(false)
     expect(store.notes('g2')).toHaveLength(1)
   })
 
-  it('lists the names members showed, for the filter', () => {
-    store.insertMessage({ groupId: 'g1', messageId: 'm1', at: 1, userId: '1', nickname: '老王', card: '王老师', role: '', text: 'hi', kinds: [] }, [], 0)
-    store.insertMessage({ groupId: 'g2', messageId: 'm2', at: 1, userId: '2', nickname: '别人', card: '', role: '', text: 'hi', kinds: [] }, [], 0)
-    expect(store.memberNames('g1').sort()).toEqual(['王老师', '老王'])
+  it('never reuses the id of a removed note, so a model that named #3 cannot hit another note', async () => {
+    const first = (await store.addNote('g1', '甲', 1))!
+    await store.removeNote('g1', String(first))
+    const second = (await store.addNote('g1', '乙', 2))!
+    expect(second).toBeGreaterThan(first)
   })
 })

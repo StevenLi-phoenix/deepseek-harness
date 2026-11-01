@@ -3,10 +3,9 @@ import { createHash } from 'node:crypto'
 import { chmod, mkdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-/** Hosts QQ serves message media from; a link anywhere else is not followed. */
-export const DEFAULT_MEDIA_HOST_SUFFIXES: readonly string[] = [
-  '.qq.com', '.qpic.cn', '.gtimg.cn', '.qlogo.cn', '.qfile.qq.com', '.myqcloud.com', '.nt.qq.com.cn',
-]
+import { DEFAULT_MEDIA_HOST_SUFFIXES } from './address.ts'
+
+export { DEFAULT_MEDIA_HOST_SUFFIXES }
 
 /**
  * Whether a media link may be fetched: HTTPS, a plain host name (no IP address, no port), and a suffix on the list.
