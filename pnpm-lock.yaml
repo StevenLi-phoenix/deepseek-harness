@@ -13844,6 +13844,9 @@ importers:
       '@deepseek-ai/dsh-fork-cc-admin':
         specifier: workspace:*
         version: link:../fork-cc-admin
+      '@deepseek-ai/dsh-fork-config':
+        specifier: workspace:*
+        version: link:../fork-config
       '@deepseek-ai/dsh-fork-event-bus':
         specifier: workspace:*
         version: link:../fork-event-bus
@@ -13881,6 +13884,12 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis
+      '@deepseek-ai/cordis-plugin-include':
+        specifier: workspace:~
+        version: link:../../../vendor/include
+      '@deepseek-ai/cordis-plugin-loader':
+        specifier: workspace:~
+        version: link:../../../vendor/loader
       '@deepseek-ai/cordis-plugin-timer':
         specifier: workspace:~
         version: link:../../../vendor/timer

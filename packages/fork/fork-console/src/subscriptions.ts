@@ -6,12 +6,14 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type { Subscription, SubscriptionView } from '@deepseek-ai/dsh-fork-event-bus'
+import type { ArchivedRecord, ArchiveStatus, Subscription, SubscriptionView, SweepReport } from '@deepseek-ai/dsh-fork-event-bus'
 import type { ScheduleCatalogEntry } from '@deepseek-ai/dsh-schedule'
 import type { Config } from './config.ts'
 import { logAction, type Log } from './log.ts'
 import { Refusal, parseBody } from './request.ts'
-import type { NewSubscription, ScheduleRow, SubscriptionAction, SubscriptionRow, SubscriptionsView } from './views.ts'
+import type {
+  ArchivedRow, ArchiveSweepView, ArchiveView, NewSubscription, ScheduleRow, SubscriptionAction, SubscriptionRow, SubscriptionsView,
+} from './views.ts'
 
 const ID = /^[a-z0-9][a-z0-9-]{0,62}$/u
 /** Selector globs: printable, no whitespace, so a stray space or newline is a mistake caught early. */
@@ -23,6 +25,11 @@ export const CREATED_BY_SETTINGS = 'settings'
 /** Prompt bounds of the Sessions a `session` subscription starts; those of `watch_create`. */
 const SESSION_PROMPT_EVENTS = 50
 const SESSION_TEXT_CHARS = 2000
+
+/** Rows the page lists of the recently archived Sessions, and of a preview. */
+const RECENT_ROWS = 30
+const PREVIEW_ROWS = 20
+const TITLE_CHARS = 80
 
 const selectors = z.array(z.string().required().pattern(GLOB)).max(MAX_SELECTORS).default([])
 
@@ -63,6 +70,11 @@ const createSchema: z<CreateBody> = z.object({
   }).required(),
 })
 
+const sweepSchema: z<{ action: 'archive.sweep'; dryRun: boolean }> = z.object({
+  action: z.const('archive.sweep').required(),
+  dryRun: z.boolean().default(false),
+})
+
 const changeSchema: z<ChangeBody> = z.object({
   action: z.union(['pause', 'resume', 'delete'] as const).required(),
   target: z.union(['subscription', 'schedule'] as const).required(),
@@ -95,6 +107,42 @@ function subscriptionRow(view: SubscriptionView, fired: { count: number }): Subs
     fireCount: fired.count,
     pending: view.status.pending,
     lastStatus: last?.status ?? null,
+  }
+}
+
+const clipTitle = (title: string | undefined): string | null => (title === undefined || title === '' ? null : Array.from(title).slice(0, TITLE_CHARS).join(''))
+
+function archivedRow(record: ArchivedRecord): ArchivedRow {
+  return { id: record.sessionId, title: clipTitle(record.title), lastActiveAt: record.lastActiveAt, archivedAt: record.archivedAt }
+}
+
+function sweepView(report: SweepReport): ArchiveSweepView {
+  return {
+    at: report.at,
+    trigger: report.trigger,
+    dryRun: report.dryRun,
+    scanned: report.scanned,
+    archived: report.dryRun ? report.wouldArchive.length : report.archived.length,
+    skipped: report.skipped,
+    errors: report.errors.length,
+    aborted: report.aborted ?? null,
+    preview: report.wouldArchive.slice(0, PREVIEW_ROWS).map(entry => ({
+      id: entry.id, title: clipTitle(entry.title), lastActiveAt: entry.lastActiveAt, archivedAt: null,
+    })),
+  }
+}
+
+function archiveView(status: ArchiveStatus): ArchiveView {
+  return {
+    enabled: status.enabled,
+    dryRun: status.dryRun,
+    inactiveDays: status.inactiveDays,
+    maxPerSweep: status.maxPerSweep,
+    sweepHours: status.sweepHours,
+    nextSweepAt: status.nextSweepAt ?? null,
+    protectors: status.protectors,
+    last: status.lastSweep === undefined ? null : sweepView(status.lastSweep),
+    recent: status.recent.slice(0, RECENT_ROWS).map(archivedRow),
   }
 }
 
@@ -140,6 +188,7 @@ export async function listSubscriptions(ctx: Context, config: Config, now: () =>
   return {
     subscriptions: bus?.listSubscriptions().map(view => subscriptionRow(view, { count: counts.get(view.id) ?? 0 })) ?? null,
     schedules: schedule === undefined ? null : (await schedule.catalog()).map(scheduleRow),
+    archive: bus === undefined ? null : archiveView(bus.archiveStatus()),
     defaults: {
       coalesceSeconds: config.subscriptions.coalesceSeconds,
       notifyMaxPerHour: config.subscriptions.notifyMaxPerHour,
@@ -240,6 +289,13 @@ export async function runSubscriptionAction(ctx: Context, config: Config, log: L
   if (requested === 'create') {
     const form = parseBody(createSchema, body).subscription
     await logAction(log, 'subscription.create', form.id, () => create(ctx, config, form))
+    return
+  }
+  if (requested === 'archive.sweep') {
+    const sweep = parseBody(sweepSchema, body)
+    const bus = ctx.get('forkEventBus')
+    if (bus === undefined) throw new Refusal('unavailable', 'bus')
+    await logAction(log, sweep.dryRun ? 'archive.preview' : 'archive.sweep', 'sessions', async () => { await bus.sweepArchive({ dryRun: sweep.dryRun }) })
     return
   }
   const parsed = parseBody(changeSchema, body)

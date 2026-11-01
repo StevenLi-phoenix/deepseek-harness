@@ -52,6 +52,7 @@
     "@deepseek-ai/dsh-client-ui-settings": "workspace:*",
     "@deepseek-ai/dsh-client-ui-slots": "workspace:*",
     "@deepseek-ai/dsh-fork-cc-admin": "workspace:*",
+    "@deepseek-ai/dsh-fork-config": "workspace:*",
     "@deepseek-ai/dsh-fork-event-bus": "workspace:*",
     "@deepseek-ai/dsh-fork-style": "workspace:*",
     "@deepseek-ai/dsh-fork-voice": "workspace:*",

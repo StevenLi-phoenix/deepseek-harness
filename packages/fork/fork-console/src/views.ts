@@ -68,12 +68,59 @@ export interface ScheduleRow {
   readonly lastFiredAt: number | null
 }
 
+/** One Session the auto-archive sweep archived (or, in a preview, would archive). */
+export interface ArchivedRow {
+  readonly id: string
+  /** The Session's title as the sidebar shows it, cut to 80 characters; null when it has none. */
+  readonly title: string | null
+  /** Time of its last message. */
+  readonly lastActiveAt: number
+  /** When it was archived; null in a preview. */
+  readonly archivedAt: number | null
+}
+
+/** The last auto-archive sweep. */
+export interface ArchiveSweepView {
+  readonly at: number
+  readonly trigger: 'timer' | 'manual'
+  /** A preview: nothing was archived. */
+  readonly dryRun: boolean
+  readonly scanned: number
+  /** Sessions archived, or in a preview the number that would be. */
+  readonly archived: number
+  /** Sessions left alone, by reason (`recent`, `persistent`, `wechat`, ...). */
+  readonly skipped: Readonly<Record<string, number>>
+  readonly errors: number
+  /** Why the sweep could not run; null when it ran. */
+  readonly aborted: string | null
+  /** A preview's Sessions, oldest first, at most 20. */
+  readonly preview: readonly ArchivedRow[]
+}
+
+/** The event bus's auto-archive (chat Sessions idle for days are archived, never deleted). */
+export interface ArchiveView {
+  readonly enabled: boolean
+  readonly dryRun: boolean
+  readonly inactiveDays: number
+  readonly maxPerSweep: number
+  readonly sweepHours: number
+  /** When the next sweep runs; null while it is off. */
+  readonly nextSweepAt: number | null
+  /** Plugins that keep their own Sessions out of the sweep. */
+  readonly protectors: readonly string[]
+  readonly last: ArchiveSweepView | null
+  /** Newest first, at most 30. */
+  readonly recent: readonly ArchivedRow[]
+}
+
 /** Body of `GET api/fork.subscriptions`. */
 export interface SubscriptionsView {
   /** Null when the bus is not mounted. */
   readonly subscriptions: readonly SubscriptionRow[] | null
   /** Null when the schedule service is not mounted. */
   readonly schedules: readonly ScheduleRow[] | null
+  /** Null when the bus is not mounted. */
+  readonly archive: ArchiveView | null
   /** Defaults the create form shows. */
   readonly defaults: {
     readonly coalesceSeconds: number
@@ -103,6 +150,8 @@ export interface NewSubscription {
 export type SubscriptionAction =
   | { readonly action: 'create'; readonly subscription: NewSubscription }
   | { readonly action: 'pause' | 'resume' | 'delete'; readonly target: 'subscription' | 'schedule'; readonly id: string }
+  /** Run an auto-archive sweep now; `dryRun` only lists what it would archive. */
+  | { readonly action: 'archive.sweep'; readonly dryRun: boolean }
 
 /** Stable refusal codes of the POST routes; the browser picks the copy by code. */
 export const ACTION_ERRORS = [
