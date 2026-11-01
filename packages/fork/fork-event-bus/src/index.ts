@@ -78,13 +78,6 @@ export interface Config {
   maxNoteEvents: number
   /** Web UI link attached to Session result messages. */
   webUrl?: string
-  /**
-   * Archive a Session this bus started once its last batch is this many days old (0 never archives). A persistent
-   * Session archived this way is replaced at its next batch, seeded with its last compaction summary.
-   */
-  archiveIdleDays: number
-  /** Minutes between two idle-Session sweeps. */
-  archiveSweepMinutes: number
 }
 
 // Schemastery materializes a missing nested object as `{}`, so the fields a
@@ -133,8 +126,6 @@ export const Config: z<Config> = z.object({
   reportScheduledTurns: z.boolean().default(true),
   maxNoteEvents: z.natural().min(1).default(10),
   webUrl: z.string(),
-  archiveIdleDays: z.natural().default(7),
-  archiveSweepMinutes: z.natural().min(1).default(360),
 })
 
 /** Shape check for deliveries that come back through the webhook rule. */
@@ -430,9 +421,6 @@ export class ForkEventBus extends Service {
         await domain.close()
       }, 'forkEventBus.lifecycle()')
       await this.restorePending()
-      if (config.archiveIdleDays > 0) {
-        ctx.effect(() => ctx.interval(() => { this.track(this.archiveIdle()) }, config.archiveSweepMinutes * 60_000), 'forkEventBus.archiveIdle()')
-      }
       return cleanup
     }, 'forkEventBus.init()')
 
@@ -1076,33 +1064,6 @@ export class ForkEventBus extends Service {
       })
       this.ctx.logger.info(`fork-event-bus: persistent Session ${sessionId} of ${current.subscription} compacted (#${current.compactions + 1}${summary === undefined ? ', no summary text' : `, ${summary.length}-char summary kept for the rollover`})`)
     })
-  }
-
-  /**
-   * Archive the Sessions this bus started (fresh, one-off, and persistent) whose last batch is `archiveIdleDays` old.
-   * A Session that is running is skipped and tried again at the next sweep; its log stays readable in the archive.
-   */
-  private async archiveIdle(): Promise<void> {
-    const registry = this.ctx.get('workspaceRegistry')
-    if (registry === undefined || this.stopping) return
-    const cutoff = Date.now() - this.config.archiveIdleDays * DAY_MS
-    const last = new Map<string, number>()
-    for (const batch of this.batches()) {
-      if (batch.sessionId !== undefined) last.set(batch.sessionId, Math.max(last.get(batch.sessionId) ?? 0, batch.createdAt))
-    }
-    const archived = new Set<string>(registry.archivedSessionIds)
-    const idle = [...last].filter(([sessionId, at]) => at < cutoff && !archived.has(sessionId) && !this.tracked.has(sessionId))
-    let done = 0
-    for (const [sessionId, at] of idle) {
-      try {
-        await registry.archiveSession(sessionId as SessionId)
-        done += 1
-        this.ctx.logger.info(`fork-event-bus: archived idle Session ${sessionId} (last batch ${new Date(at).toISOString()})`)
-      } catch (error: unknown) {
-        this.ctx.logger.info(`fork-event-bus: idle Session ${sessionId} not archived now: ${errorText(error)}`)
-      }
-    }
-    if (idle.length > 0) this.ctx.logger.info(`fork-event-bus: idle sweep archived ${done} of ${idle.length} Session(s) idle for ${this.config.archiveIdleDays} day(s)`)
   }
 
   /** Merge fields into one stored batch; a pruned batch is ignored. */
