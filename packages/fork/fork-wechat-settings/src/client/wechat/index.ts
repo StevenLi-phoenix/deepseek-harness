@@ -9,7 +9,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the settings shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
-import { WECHAT_ROUTE, type WechatAction } from '../view.ts'
+import { WECHAT_ROUTE, type WechatAction } from '../../wechat-view.ts'
 import { WechatLoader, WechatRefused, createWechatStore, parseAnswer } from './wechat.ts'
 import { WechatSection, type WechatInjected } from './WechatSection.tsx'
 import { de, en, es, fr, ja, pt, ru, zh } from './locales.ts'
@@ -22,9 +22,6 @@ const NS = 'fork.wechat'
 
 /** Settings navigation position: after System status (40) and the Bilibili account (45). */
 const SECTION_ORDER = 52
-
-/** Required services: the slot registry and locale. */
-export const inject = ['slots', 'locale']
 
 /** One request to the route; the sign-in cookie rides along. */
 async function request(action?: WechatAction) {
@@ -42,9 +39,9 @@ async function request(action?: WechatAction) {
 
 /**
  * Register the dictionaries and the Settings section over one shared store.
- * @param ctx - client root context.
+ * @param ctx - client root context with the slot registry and locale.
  */
-export function apply(ctx: ClientContext): void {
+export function registerWechat(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'fork-wechat: dictionaries')
   const t = ctx.locale.bind(NS)
   const store = createWechatStore()

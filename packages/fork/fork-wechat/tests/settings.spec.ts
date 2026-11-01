@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -339,5 +340,13 @@ describe('view contents', () => {
       'binding', 'state', 'botId', 'ownerId', 'boundAt', 'channel', 'link', 'lastPollAt', 'failures', 'lastError', 'lastInboundAt', 'lastOutboundAt', 'lastOutboundKind',
       'window', 'open', 'closed', 'repliesLeft', 'repliesPerToken', 'expiresAt', 'outbox', 'count', 'limit', 'oldestAt', 'loginActive', 'timeZone',
     ]))
+  })
+})
+
+describe('wire types', () => {
+  it('are shared with the browser half as a byte-identical copy', async () => {
+    const host = await readFile(new URL('../src/view.ts', import.meta.url), 'utf8')
+    const client = await readFile(new URL('../../fork-wechat-settings/src/wechat-view.ts', import.meta.url), 'utf8')
+    expect(host).toBe(client)
   })
 })

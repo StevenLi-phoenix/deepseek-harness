@@ -1,5 +1,5 @@
 /** Drawing a QR code the Host sent as module rows: one SVG path, no scripts and no HTML from the Host. */
-import type { LoginQr } from '../view.ts'
+import type { LoginQr } from '../../wechat-view.ts'
 
 /** Light modules around the code that scanners need. */
 export const QUIET_ZONE = 3

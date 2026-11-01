@@ -15,7 +15,7 @@
       "path": "../fork-event-bus"
     },
     {
-      "path": "../fork-wechat/tsconfig.host.json"
+      "path": "../fork-wechat"
     },
     {
       "path": "../../core/tools"

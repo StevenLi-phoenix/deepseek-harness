@@ -9,7 +9,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the settings shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
-import { PRESENCE_ROUTE, type PresenceAction } from '../view.ts'
+import { PRESENCE_ROUTE, type PresenceAction } from '../../presence-view.ts'
 import { PresenceLoader, createPresenceStore, parseAnswer } from './presence.ts'
 import { PresenceSection, type PresenceInjected } from './PresenceSection.tsx'
 import { de, en, es, fr, ja, pt, ru, zh } from './locales.ts'
@@ -22,9 +22,6 @@ const NS = 'fork.presence'
 
 /** Settings navigation position: right after the WeChat section (52). */
 const SECTION_ORDER = 53
-
-/** Required services: the slot registry and locale. */
-export const inject = ['slots', 'locale']
 
 /** One request to the route; the sign-in cookie rides along. */
 async function request(action?: PresenceAction) {
@@ -42,9 +39,9 @@ async function request(action?: PresenceAction) {
 
 /**
  * Register the dictionaries and the Settings section over one shared store.
- * @param ctx - client root context.
+ * @param ctx - client root context with the slot registry and locale.
  */
-export function apply(ctx: ClientContext): void {
+export function registerPresence(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'fork-presence: dictionaries')
   const t = ctx.locale.bind(NS)
   const store = createPresenceStore()

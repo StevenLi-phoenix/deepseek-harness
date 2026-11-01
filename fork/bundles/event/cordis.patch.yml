@@ -281,6 +281,11 @@
         timeZone: America/New_York
         ingestUrl: https://dsh.tailc2559b.ts.net/hooks/events
 
+    # The browser half of Settings → WeChat (微信, /api/fork.wechat) and Settings → 勿扰 (/api/fork.presence).
+    # Their Host routes are served by the fork-wechat and fork-presence rows; this package only delivers the pages.
+    - id: fork-wechat-settings
+      name: '@deepseek-ai/dsh-fork-wechat-settings'
+
     # Voice (ctx.forkVoice): text to speech for the `speak` tool (feiyu on the laptop, no fallback;
     # the Mac mini TTS service was retired on 2026-10-31; the key is FORK_FEIYU_API_KEY in
     # $DSH_HOME/.env) and speech to text for audio files the owner sends on WeChat. Transcription is OFF: to turn it on, add

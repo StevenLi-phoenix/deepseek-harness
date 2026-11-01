@@ -11,7 +11,7 @@ import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the settings shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
-import { VERIFY_CODE_PATTERN, type ChannelLink, type LoginSnapshot, type WechatView } from '../view.ts'
+import { VERIFY_CODE_PATTERN, type ChannelLink, type LoginSnapshot, type WechatView } from '../../wechat-view.ts'
 import { agoText, dateTime, spanText, stampTime, type Translate } from './format.ts'
 import { qrPath, qrViewSize, isWeixinLink } from './qr.ts'
 import { LOGIN_POLL_INTERVAL_MS, POLL_INTERVAL_MS, loginIsOpen, startPolling, type WechatState } from './wechat.ts'

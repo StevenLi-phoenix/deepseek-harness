@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/fork/fork-wechat-settings/README.md
+/:
+  en: 3569393a9fd01fb0
+  zh: 525a39c0b6361f38
+/deepseek-ai-dsh-fork-wechat-settings:
+  en: 68f295ccbfe7ac00
+  zh: 41aee730338ce684
+/deepseek-ai-dsh-fork-wechat-settings/summary:
+  en: 7705e1c4f56bf56e
+  zh: eef50907f667a772
+/deepseek-ai-dsh-fork-wechat-settings/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-fork-wechat-settings/use-this-package:
+  en: 6bd3fb74d3801d2c
+  zh: adfd5c71dd51b472
+/deepseek-ai-dsh-fork-wechat-settings/understand-the-implementation:
+  en: 8f6541f2211284ea
+  zh: f95fd725ce24c8e3
+/deepseek-ai-dsh-fork-wechat-settings/further-exploration:
+  en: 71612b6c94b3598e
+  zh: b5d2212be1109f99
+/deepseek-ai-dsh-fork-wechat-settings/model-experience:
+  en: f1605a7fd0094ea8
+  zh: ee56361b5bdf27a0
+/deepseek-ai-dsh-fork-wechat-settings/model-experience/kv-cache-effect:
+  en: ca75c51c89c2c9b0
+  zh: 2dd3f298281cf138
+/deepseek-ai-dsh-fork-wechat-settings/known-limitations-and-deferred-work:
+  en: f6101e6a1ca67049
+  zh: 1c328b62708069f5
+/deepseek-ai-dsh-fork-wechat-settings/known-limitations-and-deferred-work/dev-note:
+  en: 617fbdb02bd515e4
+  zh: cf26d56139a0e21d

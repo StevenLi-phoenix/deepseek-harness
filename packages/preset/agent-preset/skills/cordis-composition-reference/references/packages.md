@@ -344,7 +344,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-fork-integrity` | yes | Integrity watch for the owner's main agent: hashes of the files that steer it, a WeChat notice when one changes, persona hashes per Session, and a count of the persona's forbidden stock lines |
 | `@deepseek-ai/dsh-fork-memory` | yes | Owner memory across Sessions: a JSONL store the Host injects into each root Session, memory_search/memory_save/memory_forget tools, and a claude.ai export importer |
 | `@deepseek-ai/dsh-fork-memory-admin` | no | Memory settings section: review, approve, undo, and erase what the agent remembers about the owner (browser half; the Host route is @deepseek-ai/dsh-fork-memory/settings) |
-| `@deepseek-ai/dsh-fork-presence` | yes | Owner presence for the event service: asleep or awake from the phone's Sleep Focus, a daily fallback window, and manual overrides, with a Settings section; channels hold back non-urgent messages while the owner sleeps |
+| `@deepseek-ai/dsh-fork-presence` | yes | Owner presence for the event service: asleep or awake from the phone's Sleep Focus, a daily fallback window, and manual overrides; channels hold back non-urgent messages while the owner sleeps (the Settings page is @deepseek-ai/dsh-fork-wechat-settings) |
 | `@deepseek-ai/dsh-fork-qq` | yes | QQ group observer over a OneBot v11 protocol end: records listed groups, downloads images, transcribes voice on request, digests on a schedule, and never speaks by default |
 | `@deepseek-ai/dsh-fork-qq-login` | no | QQ settings section: the QQ observer's connection, NapCat's login state, and the login QR code to scan from the phone when QQ was signed out |
 | `@deepseek-ai/dsh-fork-qqbot` | yes | QQ channel over the official QQ Open Platform Bot API: allowlisted private chats and group @ mentions reach per-peer chat Sessions |
@@ -360,6 +360,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-fork-tool-wechat` | no | Model-facing wechat_send_file tool: send a local file to the owner over the fork WeChat channel |
 | `@deepseek-ai/dsh-fork-voice` | yes | Voice for the owner's agents: text to speech through feiyu or the Mac mini TTS service, and speech to text through the asr-service (off by default) |
 | `@deepseek-ai/dsh-fork-wechat` | yes | WeChat (iLink bot) channel: owner chat Session, notification delivery, and ctx.forkNotifier for the fork event bus |
+| `@deepseek-ai/dsh-fork-wechat-settings` | no | WeChat and quiet-hours (勿扰) settings sections: bind the owner's WeChat bot by QR code, see the channel's health, unbind, and control when the owner counts as asleep (browser half; the Host routes are served by @deepseek-ai/dsh-fork-wechat and @deepseek-ai/dsh-fork-presence) |
 | `@deepseek-ai/dsh-owner-relay` | no | One relay of a Session's final answer to the owner: channels claim Sessions, one rule set decides at turn end, and a channel that cannot deliver falls back to ctx.forkNotifier |
 | `@deepseek-ai/dsh-tool-bili` | no | Model-facing Bilibili tools for the agent's own account: browse, watch through subtitles, like, coin, follow, and save through bili-svc, and keep a journal; no speech |
 

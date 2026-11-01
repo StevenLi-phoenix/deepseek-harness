@@ -7,7 +7,8 @@
   },
   "include": [
     "src/client",
-    "src/view.ts",
+    "src/wechat-view.ts",
+    "src/presence-view.ts",
     "src/css-modules.d.ts"
   ],
   "references": [

@@ -11,7 +11,7 @@ import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the settings shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
-import { CLOCK_PATTERN, type PresenceAction, type PresenceView } from '../view.ts'
+import { CLOCK_PATTERN, type PresenceAction, type PresenceView } from '../../presence-view.ts'
 import { agoText, dateTime, stampTime, type Translate } from './format.ts'
 import { POLL_INTERVAL_MS, startPolling, type PresenceState } from './presence.ts'
 import css from './PresenceSection.module.css'

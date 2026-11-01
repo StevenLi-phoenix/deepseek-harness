@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用这个包
 
-把这一行挂在 `@deepseek-ai/dsh-fork-wechat` 和 `@deepseek-ai/dsh-fork-event-ingest` 旁边；fork event bundle 已经挂载了它。它需要 storage domain facility；设置页还需要 Host 的 `connection` 服务和设置外壳。它提供 `ctx.forkPresence`。再加上承载手机信号的 ingest 来源，这是一个 *sink* 来源：它的事件交给这个服务，不进事件总线，所以没有任何订阅会因它们启动 Session 或发通知：
+把这一行挂在 `@deepseek-ai/dsh-fork-wechat` 和 `@deepseek-ai/dsh-fork-event-ingest` 旁边；fork event bundle 已经挂载了它。它需要 storage domain facility；设置页的路由还需要 Host 的 `connection` 服务；页面本身需要 `@deepseek-ai/dsh-fork-wechat-settings` 和设置外壳。它提供 `ctx.forkPresence`。再加上承载手机信号的 ingest 来源，这是一个 *sink* 来源：它的事件交给这个服务，不进事件总线，所以没有任何订阅会因它们启动 Session 或发通知：
 
 ```yaml
 - id: fork-presence
@@ -71,7 +71,7 @@ kind: "package-reference"
 
 服务实现了 `ForkIngestSink`。`fork-event-ingest` 对声明了 `sink: forkPresence` 的来源，把校验过的事件交给它而不发布到总线，并回答 `202 {"outcome":"asleep"|"awake"}`；`presence.sleep.on` 和 `presence.sleep.off` 以外的类型是 `400`，服务没挂载是 `503`。路由 `GET`/`POST /api/fork.presence` 位于 `/api` 下，受 connection 的登录校验保护；每个动作（`sleep.now`、`wake.now`、`quiet.until`、`manual.clear`、`window.set`、`flush`）都按 schemastery schema 校验，并记录结果和耗时。任何回答里都没有令牌。
 
-浏览器端注册 `settings.section` 条目 `fork-presence`（顺序 53），带八种语言的词典；打开且页面可见时每 5 秒轮询 `api/fork.presence`。
+设置页是只含浏览器端的包 [`@deepseek-ai/dsh-fork-wechat-settings`](../fork-wechat-settings/README.zh.md) 里的分区 `fork-presence`（顺序 53）：八种语言，打开且页面可见时每 5 秒轮询 `api/fork.presence`。本包没有浏览器面；它的 `src/view.ts` 与那个包里的副本逐字节相同，由测试检查。
 
 | 文件 | 作用 |
 |---|---|
@@ -80,7 +80,6 @@ kind: "package-reference"
 | [`src/settings.ts`](src/settings.ts) | 路由 `/api/fork.presence` 及其动作 |
 | [`src/storage.ts`](src/storage.ts) | storage domain |
 | [`src/view.ts`](src/view.ts) | 两端共用的类型和常量 |
-| [`src/client/`](src/client) | 设置分区、它的 store 和轮询、词典 |
 
 这是 fork 本地的包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。
 

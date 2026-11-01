@@ -174,6 +174,7 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/client/ui-directory-picker-browse': { kind: 'none', reason: 'Browser-side directory-browsing surface; registers nothing model-facing.' },
   'packages/fork/fork-balance': { kind: 'none', reason: 'Account settings card reading provider balances; registers nothing model-facing.' },
   'packages/fork/fork-memory-admin': { kind: 'none', reason: 'Settings section for reviewing agent memory; registers no tool and adds nothing to model requests.' },
+  'packages/fork/fork-wechat-settings': { kind: 'none', reason: 'Settings sections for the WeChat channel and quiet hours; register no tool and add nothing to model requests.' },
   'packages/fork/fork-presence': { kind: 'none', reason: 'Tells the channels whether the owner sleeps and holds back their messages; adds nothing to model requests.' },
   'packages/fork/fork-sysmon': { kind: 'none', reason: 'Settings section reading the Host machine status; registers nothing model-facing.' },
   'packages/fork/fork-style-settings': { kind: 'none', reason: 'Settings section showing the speaking-style samples; registers nothing model-facing (the samples reach the model through fork-style).' },

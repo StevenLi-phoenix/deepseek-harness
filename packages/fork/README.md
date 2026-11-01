@@ -31,6 +31,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`fork-github-sensor/`](fork-github-sensor/README.md) | Polls GitHub releases, tags, commits, and notifications with conditional requests |
 | [`fork-integrity/`](fork-integrity/README.md) | Integrity watch: digests of the files that steer the agent, a WeChat notice naming what changed, system prompt hashes, and a count of the persona's forbidden stock lines |
 | [`fork-memory/`](fork-memory/README.md) | Owner memory across Sessions: the memory block, `memory_search`, `memory_save`, `memory_forget`, and the claude.ai export importer |
+| [`fork-wechat-settings/`](fork-wechat-settings/README.md) | Browser half of Settings → WeChat (bind by QR code, channel health, unbind) and Settings → 勿扰 (quiet hours) |
 | [`fork-presence/`](fork-presence/README.md) | Whether the owner sleeps (the phone's Sleep Focus, a daily window, buttons in Settings → 勿扰); WeChat holds non-urgent messages meanwhile and sends them as one digest on waking |
 | [`fork-qq/`](fork-qq/README.md) | QQ group observer over a OneBot v11 protocol end (NapCat): records the listed groups, digests them on a schedule, never speaks by default |
 | [`fork-qqbot/`](fork-qqbot/README.md) | Official QQ bot channel, disabled by default: owner-listed private chats and @-mentions, one chat Session each, answers through `owner-relay` |

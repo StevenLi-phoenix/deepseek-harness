@@ -5971,6 +5971,7 @@ export interface Config {
 | `@deepseek-ai/dsh-fork-tool-monitor` | `tools` · `storageDomain` · `sessionController` · `sessionPersistence` | [`packages/fork/fork-tool-monitor/src/index.ts`](../packages/fork/fork-tool-monitor/src/index.ts) |
 | `@deepseek-ai/dsh-fork-tool-voice` | `tools` | [`packages/fork/fork-tool-voice/src/index.ts`](../packages/fork/fork-tool-voice/src/index.ts) |
 | `@deepseek-ai/dsh-fork-tool-wechat` | `tools` | [`packages/fork/fork-tool-wechat/src/index.ts`](../packages/fork/fork-tool-wechat/src/index.ts) |
+| `@deepseek-ai/dsh-fork-wechat-settings` | — | [`packages/fork/fork-wechat-settings/src/index.ts`](../packages/fork/fork-wechat-settings/src/index.ts) |
 | `@deepseek-ai/dsh-mcp-resources` | `tools` | [`packages/mcp/mcp-resources/src/index.ts`](../packages/mcp/mcp-resources/src/index.ts) |
 | `@deepseek-ai/dsh-message-quotes` | — | [`packages/session/message-quotes/src/index.ts`](../packages/session/message-quotes/src/index.ts) |
 | `@deepseek-ai/dsh-otel` | — | [`packages/telemetry/otel/src/index.ts`](../packages/telemetry/otel/src/index.ts) |

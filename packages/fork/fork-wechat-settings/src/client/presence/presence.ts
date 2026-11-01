@@ -4,9 +4,9 @@
  */
 
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { PresenceAction, PresenceAnswer, PresenceView } from '../view.ts'
+import type { PresenceAction, PresenceAnswer, PresenceView } from '../../presence-view.ts'
 
-export type { PresenceAction, PresenceAnswer, PresenceView } from '../view.ts'
+export type { PresenceAction, PresenceAnswer, PresenceView } from '../../presence-view.ts'
 
 /** How often the open section refreshes. */
 export const POLL_INTERVAL_MS = 5000

@@ -31,6 +31,7 @@ kind: "package-group"
 | [`fork-github-sensor/`](fork-github-sensor/README.zh.md) | 用条件请求轮询 GitHub 的 release、tag、提交与通知 |
 | [`fork-integrity/`](fork-integrity/README.zh.md) | 完整性监控：操控 agent 的文件的摘要、点名告诉 owner 哪里变了的微信通知、系统 prompt 哈希，以及人格禁用口头禅的计数 |
 | [`fork-memory/`](fork-memory/README.zh.md) | 跨 Session 的主人记忆：记忆块、`memory_search`、`memory_save`、`memory_forget`，以及 claude.ai 导出导入器 |
+| [`fork-wechat-settings/`](fork-wechat-settings/README.zh.md) | 设置 → 微信（扫码绑定、通道健康、解绑）和设置 → 勿扰的浏览器端 |
 | [`fork-presence/`](fork-presence/README.zh.md) | 主人是否在睡觉（手机的睡眠专注、每日时段、设置 → 勿扰里的按钮）；这段时间微信压下不紧急的消息，醒来后合成一条发出 |
 | [`fork-qq/`](fork-qq/README.zh.md) | 基于 OneBot v11 协议端（NapCat）的 QQ 群观察者：记录名单里的群、按计划做摘要、默认从不发言 |
 | [`fork-qqbot/`](fork-qqbot/README.zh.md) | 官方 QQ 机器人通道，默认禁用：主人列入名单的私聊和 @ 消息各有一个对话 Session，回答经 `owner-relay` 送达 |
