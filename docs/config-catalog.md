@@ -2566,7 +2566,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-fork-event-bus`
 
 - `inject`: `timer` · `storageDomain`
-- `source`: [`packages/fork/fork-event-bus/src/index.ts:65`](../packages/fork/fork-event-bus/src/index.ts)
+- `source`: [`packages/fork/fork-event-bus/src/index.ts:66`](../packages/fork/fork-event-bus/src/index.ts)
 
 ```ts config-catalog
 /** Bus configuration. */
@@ -3602,7 +3602,7 @@ export type TtsProviderName = 'feiyu' | 'mac-mini'
 ## `@deepseek-ai/dsh-fork-wechat`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/fork-wechat/src/index.ts:75`](../packages/fork/fork-wechat/src/index.ts)
+- `source`: [`packages/fork/fork-wechat/src/index.ts:78`](../packages/fork/fork-wechat/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */

@@ -267,6 +267,21 @@ async history(request: ScheduleDeliveryHistoryRequest): Promise<ScheduleDelivery
  * @returns The updated task, the deletion outcome, or a non-mutating miss or conflict.
  */
 async edit( request: ScheduleEditRequest, actorSessionId?: SessionId, signal?: AbortSignal, ): Promise<ScheduleEditResult>
+
+/**
+ * Move every task of some Sessions to another Session, for a conversation that continues in a new Session.
+ *
+ * Each active or paused task whose `session` target names a `from` Session delivers to `to` afterwards, and `to`
+ * replaces the `from` Sessions among the involved Sessions of every active or paused task. Ended tasks keep the
+ * Sessions they ran in. A moved task reads as updated: its revision advances, an in-flight delivery reservation is
+ * dropped like any retarget, and the live involved Sessions receive an `updated` notice. Tasks that involve no `from`
+ * Session are not written, so a repeated call writes nothing and returns an empty list.
+ * @param from - Sessions whose tasks move; `to` itself is ignored.
+ * @param to - Destination Session; it must exist, must not be archived, and must not belong to a delegated child.
+ * @param signal - Cancellation checked before the durable writes begin, including after FIFO waits.
+ * @returns The moved tasks in catalog order.
+ */
+async handOverSessions(from: readonly SessionId[], to: SessionId, signal?: AbortSignal): Promise<ScheduleCatalogEntry[]>
 ```
 
 Types: [SessionId](core.zh.md)

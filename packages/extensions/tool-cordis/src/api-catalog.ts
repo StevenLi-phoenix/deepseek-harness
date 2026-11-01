@@ -2360,6 +2360,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the disposer; the bus drops every claim when it stops.',
       },
       {
+        signature: 'registerHandover(kind: string, move: SessionHandoverMover): () => void',
+        description: 'Register a mover that runs on every handOverSessions, for a plugin whose bindings name a Session (what it delivers to it, or records as created by it). Register inside an effect so a reload withdraws it: `ctx.inject([\'forkEventBus\'], scoped => { scoped.effect(() => scoped.forkEventBus.registerHandover(\'monitor\', move)) })`.',
+        parameters: [{ name: 'kind', description: 'binding kind reported with what the mover moved, for example `monitor`.' }, { name: 'move', description: 'the mover.' }],
+        returns: 'the disposer.',
+      },
+      {
+        signature: 'async handOverSessions(from: readonly string[], to: string): Promise<SessionHandoverReport>',
+        description: 'Move every binding of some Sessions to another Session, for a conversation that continues in a new Session (WeChat `/new`): the run-time subscriptions they created now name `to` as their creator, then each registered mover moves its own. A failing mover is logged and reported, and the others still run; a repeat moves nothing the first call moved.',
+        parameters: [{ name: 'from', description: 'Sessions whose bindings move; `to` itself is ignored.' }, { name: 'to', description: 'Session that takes them over.' }],
+        returns: 'what moved, by kind (kinds that moved nothing are left out), and which movers failed.',
+      },
+      {
         signature: 'archiveStatus(): ArchiveStatus',
         description: 'The auto-archive schedule, protectors, last sweep, and recently archived Sessions, for health and Settings.',
         parameters: [],
@@ -3448,6 +3460,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Update or delete one task and record the acting Agent\'s Session as involved; the Remote form omits that Session.\n\nAn update applies every patch field in one write and recomputes the next occurrence when the rule changes or the task resumes. A supplied `expectedUpdatedAt` that differs from the stored value returns `schedule_conflict`.',
         parameters: [{ name: 'request', description: 'Task identity and one update or delete operation.' }, { name: 'actorSessionId', description: 'Session of the acting Agent, or undefined for a human caller.' }, { name: 'signal', description: 'Cancellation checked before the durable write begins, including after FIFO waits.' }],
         returns: 'The updated task, the deletion outcome, or a non-mutating miss or conflict.',
+      },
+      {
+        signature: 'async handOverSessions(from: readonly SessionId[], to: SessionId, signal?: AbortSignal): Promise<ScheduleCatalogEntry[]>',
+        description: 'Move every task of some Sessions to another Session, for a conversation that continues in a new Session.\n\nEach active or paused task whose `session` target names a `from` Session delivers to `to` afterwards, and `to` replaces the `from` Sessions among the involved Sessions of every active or paused task. Ended tasks keep the Sessions they ran in. A moved task reads as updated: its revision advances, an in-flight delivery reservation is dropped like any retarget, and the live involved Sessions receive an `updated` notice. Tasks that involve no `from` Session are not written, so a repeated call writes nothing and returns an empty list.',
+        parameters: [{ name: 'from', description: 'Sessions whose tasks move; `to` itself is ignored.' }, { name: 'to', description: 'Destination Session; it must exist, must not be archived, and must not belong to a delegated child.' }, { name: 'signal', description: 'Cancellation checked before the durable writes begin, including after FIFO waits.' }],
+        returns: 'The moved tasks in catalog order.',
       },
     ],
   },
@@ -9442,6 +9460,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionHandleReadResult',
     declaration: 'export interface SessionHandleReadResult {\n    readonly eventState: SessionSeedEventState;\n    readonly events: readonly SessionEvent[];\n}',
+  },
+  {
+    name: 'SessionHandoverItem',
+    declaration: 'export interface SessionHandoverItem {\n    readonly id: string;\n    readonly label: string;\n}',
+  },
+  {
+    name: 'SessionHandoverMover',
+    declaration: 'export type SessionHandoverMover = (from: ReadonlySet<string>, to: string) => readonly SessionHandoverItem[] | Promise<readonly SessionHandoverItem[]>;',
+  },
+  {
+    name: 'SessionHandoverReport',
+    declaration: 'export interface SessionHandoverReport {\n    readonly moved: ReadonlyArray<{\n        readonly kind: string;\n        readonly items: readonly SessionHandoverItem[];\n    }>;\n    readonly failed: ReadonlyArray<{\n        readonly kind: string;\n        readonly error: string;\n    }>;\n}',
   },
   {
     name: 'SessionHeader',

@@ -1035,6 +1035,8 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   PersistentSessionView: 'fork-local persistent Session row is owned by packages/fork/fork-event-bus/README.md',
   ArchiveStatus: 'fork-local auto-archive status is owned by packages/fork/fork-event-bus/README.md',
   SweepReport: 'fork-local auto-archive sweep report is owned by packages/fork/fork-event-bus/README.md',
+  SessionHandoverMover: 'fork-local Session handover mover is owned by packages/fork/fork-event-bus/README.md',
+  SessionHandoverReport: 'fork-local Session handover report is owned by packages/fork/fork-event-bus/README.md',
   SessionProtector: 'fork-local auto-archive protector is owned by packages/fork/fork-event-bus/README.md',
   ProtectionDisposer: 'fork-local auto-archive protector disposer is owned by packages/fork/fork-event-bus/README.md',
   BiliHotComment: 'fork-local hot-comment row is owned by packages/fork/bili/README.md',
