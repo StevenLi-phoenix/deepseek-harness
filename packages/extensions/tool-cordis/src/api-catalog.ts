@@ -9660,7 +9660,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionRow',
-    declaration: 'export interface SessionRow {\n    readonly id: string;\n    readonly updatedAt: number;\n    readonly running: boolean;\n    readonly subagent: boolean;\n    readonly cwd?: string | undefined;\n    readonly title?: string | undefined;\n}',
+    declaration: 'export interface SessionRow {\n    readonly id: string;\n    readonly updatedAt: number;\n    readonly running: boolean;\n    readonly subagent: boolean;\n    readonly activityUnknown?: boolean | undefined;\n    readonly cwd?: string | undefined;\n    readonly title?: string | undefined;\n}',
   },
   {
     name: 'SessionSearchCursor',

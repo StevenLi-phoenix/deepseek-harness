@@ -24,7 +24,7 @@ export const ARCHIVE_CONFIG_EXCLUDE = [
 ] as const
 
 /** Skip reasons the Host names itself; any other reason is a plugin's label (`wechat`, `qq`) and shows as it is. */
-const KNOWN_SKIPS = new Set(['recent', 'persistent', 'subscription', 'running', 'pinned', 'subagent', 'active', 'overLimit'])
+const KNOWN_SKIPS = new Set(['recent', 'unknown', 'persistent', 'subscription', 'running', 'pinned', 'subagent', 'active', 'overLimit'])
 
 /** Which button is waiting for the Host. */
 export type ArchiveBusy = 'preview' | 'sweep' | null

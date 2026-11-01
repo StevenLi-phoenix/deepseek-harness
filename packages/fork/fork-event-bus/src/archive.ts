@@ -5,11 +5,12 @@
  * an archived Session is one click from the archive list in the Web UI.
  *
  * Which Sessions are left alone is decided here in a fixed order, so every skip lands in exactly one category:
- * `recent`, `subagent`, `running`, `pinned`, `persistent` (a subscription's persistent Session), `subscription` (a
- * Session whose agent created a run-time subscription or watch), then one category per registered protector
+ * `recent`, `unknown` (no activity metadata), `subagent`, `running`, `pinned`, `persistent` (a subscription's persistent
+ * Session), `subscription` (a Session whose agent created a run-time subscription or watch), then one category per registered protector
  * ({@link SessionArchiver.protect}, for example `wechat`, `qq`). A protector that throws protects the Session.
  */
 
+import { stat } from 'node:fs/promises'
 import z from '@deepseek-ai/schemastery'
 import { defineDomain, domainTable, type Domain } from '@deepseek-ai/dsh-storage-domain'
 import { z as zod } from 'zod'
@@ -101,6 +102,11 @@ export interface SessionRow {
   readonly running: boolean
   /** A subagent's Session; it belongs to its parent. */
   readonly subagent: boolean
+  /**
+   * The Host has no activity metadata for this Session (a cold listing without a cached projection), so `updatedAt`
+   * is only its creation time and says nothing about use. Such a Session is never archived.
+   */
+  readonly activityUnknown?: boolean | undefined
   readonly cwd?: string | undefined
   readonly title?: string | undefined
 }
@@ -214,6 +220,7 @@ export async function selectSessions(rows: readonly SessionRow[], options: {
   for (const row of [...rows].sort((a, b) => a.updatedAt - b.updatedAt)) {
     if (options.archived.has(row.id)) { alreadyArchived += 1; continue }
     if (options.now - row.updatedAt < options.inactiveMs) { skip('recent', row.id); continue }
+    if (row.activityUnknown === true) { skip('unknown', row.id); continue }
     if (row.subagent) { skip('subagent', row.id); continue }
     if (row.running) { skip('running', row.id); continue }
     if (options.pinned.has(row.id)) { skip('pinned', row.id); continue }
@@ -234,6 +241,27 @@ export async function selectSessions(rows: readonly SessionRow[], options: {
     candidates.push(row)
   }
   return { candidates, skipped, alreadyArchived }
+}
+
+/** The part of `ctx.sessionPersistence` the sweep reads: where a stored Session's log lives. */
+export interface LogLocator {
+  stat(id: string): Promise<{ readonly location?: { readonly path: string } } | undefined>
+}
+
+/**
+ * When a stored Session's log was last written, for a Session the Host lists without activity metadata (a cold row whose
+ * projection cache is empty): every event appends to the log, so the file's modification time is its last activity.
+ * @param persistence - `ctx.sessionPersistence`, or undefined without it.
+ * @param id - the Session.
+ * @returns the time in Unix epoch milliseconds, or undefined when the log cannot be located or read.
+ */
+export async function logModifiedAt(persistence: LogLocator | undefined, id: string): Promise<number | undefined> {
+  try {
+    const path = (await persistence?.stat(id))?.location?.path
+    return path === undefined ? undefined : (await stat(path)).mtimeMs
+  } catch {
+    return undefined
+  }
 }
 
 /** A registry refusal that means "something still runs in this Session". */
