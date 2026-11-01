@@ -312,6 +312,7 @@ describe('DigestRunner tools', () => {
       for (let i = 0; i < 6; i += 1) outcomes.push((await r.groupNote(session, 'g1', 'add', `话题${i}`)).ok)
       return '好'
     })
+    h.ctx.provide('lsyGuard', { check: async () => ({ ok: true }) } as never)
     r = asRunner(h, config({ maxToolCalls: 4 }))
     await r.runRound(['g1'], new AbortController().signal)
     expect(outcomes).toEqual([true, true, true, true, false, false])
@@ -339,6 +340,7 @@ describe('DigestRunner tools', () => {
       results.push(await r.groupNote(session, 'g1', 'add', '夜间活跃，爱发表情包'))
       return '好'
     })
+    h.ctx.provide('lsyGuard', { check: async () => ({ ok: true }) } as never)
     r = asRunner(h, config())
     await r.runRound(['g1'], new AbortController().signal)
     expect(results.map(result => result.ok)).toEqual([false, false, true, false])
@@ -470,14 +472,24 @@ describe('DigestRunner tools', () => {
       expect(check).not.toHaveBeenCalled()
     })
 
-    it('works without a guard service, on the local filter alone, and says so once', async () => {
+    it('refuses every added note without a guard service, with a clear result, warns once, and still lets the digest and removals through', async () => {
       fill('g1', 12)
+      store.addNote('g1', '旧笔记', 1)
       const logs: string[] = []
-      const h = harness(async (_prompt, id) => { await r.groupNote(id, 'g1', 'add', '话题甲'); await r.groupNote(id, 'g1', 'add', '话题乙'); return '好' })
+      const results: Array<{ ok: boolean; error?: string }> = []
+      const h = harness(async (_prompt, id) => {
+        results.push(await r.groupNote(id, 'g1', 'add', '话题甲'))
+        results.push(await r.groupNote(id, 'g1', 'add', '话题乙'))
+        results.push(await r.groupNote(id, 'g1', 'remove', '#1'))
+        return '好'
+      })
       h.ctx.logger.exporter({ levels: { default: 3 }, export: (m) => { logs.push(String(m.args[0])) } })
       r = asRunner(h, config())
       await r.runRound(['g1'], new AbortController().signal)
-      expect(store.notes('g1')).toHaveLength(2)
+      expect(results.map(result => result.ok)).toEqual([false, false, true])
+      expect(results[0]?.error).toContain('lsyGuard')
+      expect(results[0]?.error).toContain('not available')
+      expect(store.notes('g1')).toEqual([])
       expect(logs.filter(line => line.includes('no lsyGuard'))).toHaveLength(1)
     })
   })

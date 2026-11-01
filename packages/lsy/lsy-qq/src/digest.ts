@@ -316,7 +316,7 @@ export class DigestRunner {
   /**
    * `qq_group_note`: add or remove a note of the group the calling Session is digesting. A note describes the group,
    * never a person: the local filter refuses names, numbers, addresses, schools, and the like, and the shared guard
-   * (`ctx.lsyGuard`, which also runs a model check) must pass it too. A guard that fails refuses the note.
+   * (`ctx.lsyGuard`, which also runs a model check) must pass it too. A guard that fails, or is not mounted, refuses the note.
    * @param sessionId - the calling Session.
    * @param groupId - the group the model names; it must be the Session's own.
    * @param op - `add` or `remove`.
@@ -347,13 +347,13 @@ export class DigestRunner {
     return { ok: true, message: `note #${id} added` }
   }
 
-  /** Ask the shared guard about a note; without the service only the local filter applies. */
+  /** Ask the shared guard about a note; without the service the note is refused (the guard is mandatory). */
   private async guard(text: string, sessionId: string | undefined): Promise<{ ok: true } | { ok: false; error: string }> {
     const service = this.ctx.get('lsyGuard') as LsyGuard | undefined
     if (service === undefined) {
-      if (!this.guardWarned) this.ctx.logger.warn('lsy-qq: no lsyGuard service is mounted; group notes pass the local filter only')
+      if (!this.guardWarned) this.ctx.logger.warn('lsy-qq: no lsyGuard service is mounted; group notes are refused until it is')
       this.guardWarned = true
-      return { ok: true }
+      return { ok: false, error: 'note refused: the safety check (lsyGuard) is not available, so no note can be added; digests still work' }
     }
     try {
       const verdict = await service.check(text, { purpose: 'qq-group-note', audience: 'channel', ...sessionId === undefined ? {} : { sessionId } })
