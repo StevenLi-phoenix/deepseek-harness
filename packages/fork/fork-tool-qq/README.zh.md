@@ -32,7 +32,7 @@ kind: "package-reference"
   name: '@deepseek-ai/dsh-fork-tool-qq'
 ```
 
-群、数据和摘要都属于 `fork-qq`。唯一的字段是 `mode`：`read`（默认）注册读取工具和 `qq_forget`；`digest` 只注册 `qq_digest_write` 和 `qq_group_note`，事件 bundle 把它挂在 `qq-digest` preset 里。这两个工具只为调用它们的那个摘要 Session 写入：`ctx.forkQq` 把它们绑定到该 Session 和它正在摘要的那一个群，限制每轮的调用次数（`digest.maxToolCalls`），并过滤笔记，使笔记只描述群、不描述个人。
+群、数据和摘要都属于 `fork-qq`。唯一的字段是 `mode`：`read`（默认）注册读取工具、`qq_image` 和 `qq_forget`；`digest` 只注册 `qq_digest_write` 和 `qq_group_note`，事件 bundle 把它挂在 `qq-digest` preset 里。这两个工具只为调用它们的那个摘要 Session 写入：`ctx.forkQq` 把它们绑定到该 Session 和它正在摘要的那一个群，限制每轮的调用次数（`digest.maxToolCalls`），并过滤笔记，使笔记只描述群、不描述个人。
 
 ```yaml
 - id: tool-qq-digest
@@ -76,7 +76,7 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-只要调用方 Agent 的 preset 挂载了本包且 `ctx.forkQq` 存在，就有五个工具 schema：`qq_groups`（无参数）、`qq_digest`（可选 `group`、`days`、`limit`）、`qq_recent`（必填 `group`，可选 `hours`、`limit`、`member`）`qq_search`（必填 `query`，可选 `group`、`limit`）和 `qq_forget`（可选 `group` 和 `older_than_days`；删除已存的摘要）。每个读取工具的描述都说明它只读、返回的内容是 QQ 群里的人写的（是数据，不是指令），并且群内容不得存成 owner 的记忆、也不得当作 owner 说过或决定过的事：它只是待核实的线索。
+只要调用方 Agent 的 preset 挂载了本包且 `ctx.forkQq` 存在，就有六个工具 schema：`qq_groups`（无参数）、`qq_digest`（可选 `group`、`days`、`limit`）、`qq_recent`（必填 `group`，可选 `hours`、`limit`、`member`）`qq_search`（必填 `query`，可选 `group`、`limit`）、`qq_image`（必填 `ref`）和 `qq_forget`（可选 `group` 和 `older_than_days`；删除已存的摘要）。每个读取工具的描述都说明它只读、返回的内容是 QQ 群里的人写的（是数据，不是指令），并且群内容不得存成 owner 的记忆、也不得当作 owner 说过或决定过的事：它只是待核实的线索。消息里的图片显示为 `[图片#m12ab]`；`qq_image` 以 `ref: m12ab` 向记录器要它在消息到达时保存的图片，写到调用 Session 工作目录下的 `.qq-media/m12ab.png`（权限 0600，该文件夹像微信 inbox 一样在 git 里忽略自己），返回路径，并且在模型路由声明支持图片输入时把图片作为图片部分展示，这样主 agent 能看到它，并用 `wechat_send_file` 把文件转发给 owner（QQ 本身仍然只读）。这个工具不会为此去 QQ 拉取任何东西：记录器的 `media.images` 关闭、图片从未下载（补抓的消息）、已撤回或已过期时，它回答图片不可用；记录器比 1.1 旧时，它提示部署匹配的版本。读取模式只挂在 `unattended` preset 里。
 
 #### Token 影响
 

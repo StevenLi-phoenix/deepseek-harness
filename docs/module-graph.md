@@ -1623,6 +1623,8 @@ flowchart TD
   pkg_fork_style --> pkg_session
   pkg_fork_style --> pkg_tools
   pkg_fork_style --> pkg_web
+  pkg_fork_tool_qq --> pkg_attachment
+  pkg_fork_tool_qq --> pkg_llm
   pkg_fork_tool_qq --> pkg_fork_qq
   pkg_fork_tool_qq --> pkg_tools
   pkg_fork_tool_qq --> pkg_util_values
@@ -2054,7 +2056,7 @@ flowchart TD
 | [`fork-memory`](../packages/fork/fork-memory) | `fork` | [`agent`](../packages/core/agent), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-taint`](../packages/fork/fork-taint), [`session`](../packages/core/session), [`tools`](../packages/core/tools) |
 | [`fork-qqbot`](../packages/fork/fork-qqbot) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`fork-style`](../packages/fork/fork-style) | `fork` | [`agent`](../packages/core/agent), [`agent-default-model`](../packages/core/agent-default-model), [`compaction`](../packages/compaction/compaction), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-integrity`](../packages/fork/fork-integrity), [`fork-qq`](../packages/fork/fork-qq), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`web`](../packages/web/web) |
-| [`fork-tool-qq`](../packages/fork/fork-tool-qq) | `fork` | [`fork-qq`](../packages/fork/fork-qq), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
+| [`fork-tool-qq`](../packages/fork/fork-tool-qq) | `fork` | [`attachment`](../packages/attachment/attachment), [`llm`](../packages/llm/llm), [`fork-qq`](../packages/fork/fork-qq), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
 | [`fork-tool-watch`](../packages/fork/fork-tool-watch) | `fork` | [`agent`](../packages/core/agent), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-github-sensor`](../packages/fork/fork-github-sensor), [`tools`](../packages/core/tools) |
 | [`fork-wechat`](../packages/fork/fork-wechat) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-presence`](../packages/fork/fork-presence), [`fork-taint`](../packages/fork/fork-taint), [`fork-voice`](../packages/fork/fork-voice), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`schedule`](../packages/schedule/schedule), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`fork-guard`](../packages/fork/fork-guard) | `fork` | [`agent-default-model`](../packages/core/agent-default-model), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-memory`](../packages/fork/fork-memory) |

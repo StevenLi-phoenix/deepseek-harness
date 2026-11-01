@@ -2,10 +2,10 @@ import { mkdirSync, readFileSync, statSync } from 'node:fs'
 import { request } from 'node:http'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { PROTOCOL_HEADER, StatusDto, type RecorderEvent } from '../src/protocol.ts'
+import { MEDIA_HEADER, MediaHeaderDto, PROTOCOL_HEADER, StatusDto, type RecorderEvent } from '../src/protocol.ts'
 import { startRecorderServer, type RecorderServer } from '../src/server.ts'
 import { groupMessage } from './fake-onebot.ts'
-import { bootRecorder, connected, recorderConfig, shutdown, until, type Booted } from './recorder-harness.ts'
+import { bootRecorder, connected, recorderConfig, shutdown, until, vi, type Booted } from './recorder-harness.ts'
 
 const SECRET = 'recorder-token-fedcba9876543210'
 const GROUP = '123456789'
@@ -69,9 +69,9 @@ describe('qq-recorder server', () => {
     const h = await boot({ config: false })
     const answer = await call(h.socketPath, 'GET', '/v1/hello', { headers: { [PROTOCOL_HEADER]: 'qq-recorder/1.0' } })
     expect(answer.status).toBe(200)
-    expect(answer.body).toEqual({ protocol: { name: 'qq-recorder', major: 1, minor: 0 }, build: 'test-build', startedAt: h.recorder.startedAt })
-    expect(answer.headers[PROTOCOL_HEADER]).toBe('qq-recorder/1.0')
-    expect((await call(h.socketPath, 'GET', '/v1/status', { token: null })).headers[PROTOCOL_HEADER]).toBe('qq-recorder/1.0')
+    expect(answer.body).toEqual({ protocol: { name: 'qq-recorder', major: 1, minor: 1 }, build: 'test-build', startedAt: h.recorder.startedAt })
+    expect(answer.headers[PROTOCOL_HEADER]).toBe('qq-recorder/1.1')
+    expect((await call(h.socketPath, 'GET', '/v1/status', { token: null })).headers[PROTOCOL_HEADER]).toBe('qq-recorder/1.1')
   })
 
   it('refuses another major protocol with 426, and a request that is not valid with 400 and a structured error', async () => {
@@ -199,5 +199,33 @@ describe('qq-recorder server', () => {
   it('announces the minor it is told to, so tests can play an older recorder', async () => {
     const h = await boot({ config: false }, { protocolMinor: 0 })
     expect(((await call(h.socketPath, 'GET', '/v1/hello')).body as Booted | { protocol: { minor: number } })).toMatchObject({ protocol: { minor: 0 } })
+  })
+
+  it('serves a saved picture with its description in a header, answers 404 not-saved otherwise, and 400 for a bad reference', async () => {
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('pixels-0123456789')])
+    const h = await boot({ fetch: vi.fn(async () => new Response(png)) as never })
+    await connected(h)
+    h.fake.push(groupMessage(GROUP, '10001', [{ type: 'image', data: { url: 'https://gchat.qpic.cn/a.png', file: 'a.png' } }]))
+    await until(() => h.recorder.store.mediaOf(1).some(m => m.localPath !== null), 'the picture')
+    const ref = h.recorder.recent(GROUP, { sinceMs: 0, limit: 5 })[0]!.media[0]!.ref
+    const raw = await new Promise<{ status: number; type: string | undefined; header: string | undefined; body: Buffer }>((resolve,
+      reject) => {
+      const req = request({ socketPath: h.socketPath, path: `/v1/media/${ref}`, headers: { authorization: `Bearer ${SECRET}` } }, (res) => {
+        const chunks: Buffer[] = []
+        res.on('data', (chunk: Buffer) => chunks.push(chunk))
+        res.on('end', () => { resolve({ status: res.statusCode ?? 0, type: res.headers['content-type'], header: res.headers[MEDIA_HEADER] as string | undefined, body: Buffer.concat(chunks) }) })
+      })
+      req.on('error', reject)
+      req.end()
+    })
+    expect(raw.status).toBe(200)
+    expect(raw.type).toBe('image/png')
+    expect(MediaHeaderDto.parse(JSON.parse(raw.header!))).toEqual({ contentType: 'image/png', bytes: png.length, groupId: GROUP })
+    expect(raw.body).toEqual(png)
+    expect(await call(h.socketPath, 'GET', '/v1/media/m99999')).toMatchObject({ status: 404, body: { error: { code: 'not-saved' } } })
+    expect(await call(h.socketPath, 'GET', '/v1/media/m1', { token: null })).toMatchObject({ status: 401 })
+    expect(await call(h.socketPath, 'GET', '/v1/media/..%2Fetc')).toMatchObject({ status: 404 })
+    h.apply({ media: { images: false } })
+    expect(await call(h.socketPath, 'GET', `/v1/media/${ref}`)).toMatchObject({ status: 404, body: { error: { code: 'not-saved', message: expect.stringContaining('media.images') as string } } })
   })
 })

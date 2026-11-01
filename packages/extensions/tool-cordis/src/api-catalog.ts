@@ -2600,6 +2600,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the name, or the number when none is known yet.',
       },
       {
+        signature: 'async image(ref: string): Promise<{ bytes: Uint8Array; mediaType: \'image/png\' | \'image/jpeg\' | \'image/gif\' | \'image/webp\'; groupId: string }>',
+        description: 'A saved picture of a recorded group, for `qq_image` and the digest: the recorder serves the file it downloaded when the message arrived. Nothing is fetched from QQ.',
+        parameters: [{ name: 'ref', description: 'the `m…` reference in a message\'s `[图片#ref]` tag.' }],
+        returns: 'the bytes and their type.',
+        throws: ['{@link RecorderUnavailable} while the recorder is down; {@link ImageNotSaved} when it does not hold the picture (images off, never downloaded, aged out, recalled), and when the recorder is too old to serve pictures.'],
+      },
+      {
         signature: 'digestWrite(sessionId: string | undefined, groupId: string, text: string): ToolOutcome',
         description: '`qq_digest_write` for the tools of the digest preset: stage the calling Session\'s digest.',
         parameters: [{ name: 'sessionId', description: 'the calling Session.' }, { name: 'groupId', description: 'the group the model names; it must be the group the Session is digesting.' }, { name: 'text', description: 'the digest.' }],
@@ -7573,10 +7580,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ImageBlock',
     declaration: 'export interface ImageBlock {\n    type: \'image\';\n    attachment: ImageAttachmentRef;\n    offloaded?: true;\n}',
-  },
-  {
-    name: 'ImageMediaType',
-    declaration: 'export type ImageMediaType = \'image/png\' | \'image/jpeg\' | \'image/webp\' | \'image/gif\';',
   },
   {
     name: 'ImageRequestTarget',

@@ -342,6 +342,26 @@ export class QqStore {
     }
   }
 
+  /** Media rows of several messages, by message row, in segment order. */
+  mediaForMessages(rowIds: readonly number[]): Map<number, MediaRow[]> {
+    const found = new Map<number, MediaRow[]>()
+    for (let at = 0; at < rowIds.length; at += 500) {
+      const part = rowIds.slice(at, at + 500)
+      const rows = this.db.prepare(`SELECT * FROM media WHERE message_row IN (${part.map(() => '?').join(',')}) ORDER BY id`).all(...part) as Row[]
+      for (const row of rows) {
+        const media = this.mediaRow(row)
+        found.set(media.messageRow, [...found.get(media.messageRow) ?? [], media])
+      }
+    }
+    return found
+  }
+
+  /** One media row with the group of its message, or undefined. */
+  mediaById(mediaId: number): (MediaRow & { groupId: string }) | undefined {
+    const row = this.db.prepare('SELECT media.*, messages.group_id AS group_id FROM media JOIN messages ON messages.id = media.message_row WHERE media.id = ?').get(mediaId) as Row | undefined
+    return row === undefined ? undefined : { ...this.mediaRow(row), groupId: String(row['group_id']) }
+  }
+
   setMediaFile(mediaId: number, file: { localPath: string; sha256: string; bytes: number }): void {
     this.db.prepare('UPDATE media SET local_path = ?, sha256 = ?, bytes = ?, error = NULL WHERE id = ?').run(file.localPath, file.sha256, file.bytes, mediaId)
   }

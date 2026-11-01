@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, wri
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ConfigRejected } from '../src/recorder.ts'
+import { ConfigRejected, MediaNotSaved, mediaIdOf, mediaRef } from '../src/recorder.ts'
 import { FakeOneBot, groupMessage } from './fake-onebot.ts'
 import { TOKEN, bootRecorder, connected, recorderConfig, shutdown, sleep, until, type Booted } from './recorder-harness.ts'
 
@@ -459,5 +459,77 @@ describe('a recorder restart does not repeat the connection work', () => {
     h.fake.drop()
     await until(() => h.logs.some(line => line.text.includes('connection closed')), 'the drop')
     await until(() => (stateOf(h).lastAliveAt ?? 0) >= before, 'the note')
+  })
+})
+
+describe('QqRecorder serves the pictures it saved', () => {
+  const photo = (url = 'https://gchat.qpic.cn/a.png') => [{ type: 'text', data: { text: '看这个' } }, { type: 'image', data: { url, file: 'a.png' } }]
+  const saved = async (h: Booted) => {
+    h.fake.push(groupMessage(GROUP, USER, photo()))
+    await until(() => h.recorder.store.mediaOf(1).some(m => m.localPath !== null), 'the picture')
+    return h.recorder.recent(GROUP, ALL)[0]!.media[0]!
+  }
+
+  it('lists a message\'s media with a short stable reference, and says whether the file is held', async () => {
+    const h = await bootRecorder({ fetch: vi.fn(async () => new Response(PNG)) as never })
+    await connected(h)
+    const item = await saved(h)
+    expect(item).toMatchObject({ kind: 'image', saved: true })
+    expect(item.ref).toMatch(/^m[0-9a-z]{1,12}$/)
+    expect(mediaIdOf(item.ref)).toBe(h.recorder.store.mediaOf(1)[0]!.id)
+    expect(mediaRef(1)).toBe('m1')
+    expect(h.recorder.page(GROUP, undefined, 5).items[0]!.media).toEqual([item])
+    expect(h.recorder.search('看这个', { limit: 5 })[0]!.media).toEqual([item])
+    expect(h.recorder.lookup(GROUP, [rows(h)[0]!.messageId])[0]!.media).toEqual([item])
+    expect(mediaIdOf('../x')).toBeUndefined()
+    expect(mediaIdOf('m')).toBeUndefined()
+  })
+
+  it('hands out the file with its type and size, nothing fetched from QQ for it', async () => {
+    const fetched = vi.fn(async () => new Response(PNG))
+    const h = await bootRecorder({ fetch: fetched as never })
+    await connected(h)
+    const item = await saved(h)
+    const before = fetched.mock.calls.length
+    const file = await h.recorder.mediaFile(item.ref)
+    expect(file.bytes).toEqual(PNG)
+    expect(file.header).toEqual({ contentType: 'image/png', bytes: PNG.length, groupId: GROUP })
+    expect(fetched.mock.calls).toHaveLength(before)
+  })
+
+  it('answers not-saved when images are off, when the download failed, after a recall, and for a group no longer recorded', async () => {
+    const h = await bootRecorder({ fetch: vi.fn(async () => new Response(PNG)) as never })
+    await connected(h)
+    const item = await saved(h)
+    h.apply({ media: { images: false } })
+    await expect(h.recorder.mediaFile(item.ref)).rejects.toThrow('media.images is off')
+    h.apply({ media: { images: true } })
+    expect((await h.recorder.mediaFile(item.ref)).bytes).toEqual(PNG)
+    h.apply({ groups: [OTHER_GROUP] })
+    await expect(h.recorder.mediaFile(item.ref)).rejects.toBeInstanceOf(MediaNotSaved)
+    h.apply({ groups: [GROUP] })
+    await expect(h.recorder.mediaFile('mzzzzzz')).rejects.toBeInstanceOf(MediaNotSaved)
+    await expect(h.recorder.mediaFile('nope')).rejects.toBeInstanceOf(RangeError)
+    const event = groupMessage(GROUP, USER, photo(), { message_id: 424242 })
+    h.fake.push(event)
+    await until(() => h.recorder.lookup(GROUP, ['424242']).length === 1, 'the second picture')
+    h.fake.push({ post_type: 'notice', notice_type: 'group_recall', group_id: Number(GROUP), message_id: 424242, user_id: Number(USER), operator_id: Number(USER) })
+    await until(() => h.recorder.lookup(GROUP, ['424242'])[0]?.recalled === true, 'the recall')
+    expect(h.recorder.lookup(GROUP, ['424242'])[0]!.media).toEqual([])
+  })
+
+  it('does not hold a picture of a backfilled message, so it is never served, and never fetches one for it', async () => {
+    const fetched = vi.fn(async () => new Response(PNG))
+    const old = groupMessage(GROUP, USER, photo(), { message_id: 8001 })
+    const fake = new FakeOneBot(TOKEN)
+    await fake.listen()
+    fake.handlers.set('get_group_list', () => [])
+    fake.handlers.set('get_group_msg_history', () => ({ messages: [old] }))
+    const h = await bootRecorder({ fake, fetch: fetched as never })
+    await until(() => h.recorder.lookup(GROUP, ['8001']).length === 1, 'the backfilled message')
+    const [message] = h.recorder.lookup(GROUP, ['8001'])
+    expect(message!.media[0]).toMatchObject({ kind: 'image', saved: false })
+    expect(fetched).not.toHaveBeenCalled()
+    await expect(h.recorder.mediaFile(message!.media[0]!.ref)).rejects.toThrow('not fetched for a backfilled message')
   })
 })

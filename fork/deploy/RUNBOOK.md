@@ -220,7 +220,7 @@ Use a spare ("小号") account: NapCat is an unofficial client, and Tencent can 
        groups: ['<group number>']
    ```
    The backfill then fetches recent history, and new messages arrive as they are sent. Digests start once a group has `digest.minMessages` (15) new messages and a day has passed; set `digest.provider` and `digest.model` there to run them on a cheap model (otherwise the profile's default model runs).
-6. Optional switches in the same entry: `media.retainDays` ages out downloaded images, `media.maxTotalBytes` caps them (5 GiB). Voice transcription (`asr.enabled`) and sending (`send.enabled`) are not offered; turning either on fails the load.
+6. Optional switches in the same entry: `media.images: true` saves pictures as messages arrive (the digest's attached pictures and `qq_image` need it; backfilled messages never download theirs), `media.retainDays` ages out downloaded images, `media.maxTotalBytes` caps them (5 GiB). Voice transcription (`asr.enabled`) and sending (`send.enabled`) are not offered; turning either on fails the load.
 
 <a id="qq-recovery"></a>
 ### QQ 掉线恢复 (QQ recovery)

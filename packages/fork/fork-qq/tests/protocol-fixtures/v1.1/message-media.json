@@ -1,0 +1,21 @@
+{
+  "cursor": "c42",
+  "groupId": "123456789",
+  "messageId": "7001",
+  "at": 1790000000000,
+  "userId": "10001",
+  "nickname": "昵称",
+  "card": "名片",
+  "role": "member",
+  "text": "看这个[图片]",
+  "replyTo": null,
+  "kinds": "text,image",
+  "recalled": false,
+  "media": [
+    {
+      "ref": "m12ab",
+      "kind": "image",
+      "saved": true
+    }
+  ]
+}

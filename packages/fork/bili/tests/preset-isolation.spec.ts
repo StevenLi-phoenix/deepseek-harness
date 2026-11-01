@@ -136,8 +136,19 @@ describe('the qq-digest preset\'s tools', () => {
     const rows = digestRows().filter(row => row.name === '@deepseek-ai/dsh-fork-tool-qq')
     expect(rows.map(row => fieldsOf(row))).toEqual([{ mode: 'digest' }])
     // The digest-mode registration function names exactly the two write tools (no read, search, or forget tool).
-    const digestBody = toolQq.slice(toolQq.indexOf('function registerDigestTools'))
+    const digestBody = toolQq.slice(toolQq.indexOf('function registerDigestTools'), toolQq.indexOf('/** Folder in the Session\'s workspace'))
     expect([...digestBody.matchAll(/name: '(\w+)'/gu)].map(match => match[1])).toEqual(['qq_digest_write', 'qq_group_note'])
+  })
+
+  it('mounts the read tools, qq_image among them, only in the unattended preset, and registers qq_image only in read mode', () => {
+    const readers = [...presets].filter(([, preset]) => pluginsOf(preset).some(row => row.name === '@deepseek-ai/dsh-fork-tool-qq' && fieldsOf(row)['mode'] !== 'digest'))
+    expect(readers.map(([id]) => id)).toEqual(['unattended'])
+    // The picture tool is registered after the digest branch has returned, so a digest-mode mount never gets it.
+    const apply = toolQq.slice(toolQq.indexOf('export function apply'), toolQq.indexOf('/** A model-supplied argument as text'))
+    expect(apply.indexOf("config.mode === 'digest'")).toBeGreaterThan(-1)
+    expect(apply.indexOf('registerImageTool(scoped, observer)')).toBeGreaterThan(apply.indexOf('registerDigestTools(scoped, observer)'))
+    expect(toolQq).toContain("name: 'qq_image'")
+    expect(toolQq.match(/name: 'qq_image'/g)).toHaveLength(1)
   })
 
   it('may add style_note only through fork-style, and only that row', () => {

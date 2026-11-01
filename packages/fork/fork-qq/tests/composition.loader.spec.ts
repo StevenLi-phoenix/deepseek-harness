@@ -4,7 +4,7 @@
  * only NapCat is replaced by the fake protocol end. What a restart, a reload, or a stop of DSH does to the one OneBot
  * connection is the point of every case.
  */
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -13,7 +13,7 @@ import Loader from '@deepseek-ai/cordis-plugin-loader'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parse } from 'yaml'
 import * as ToolQq from '../../fork-tool-qq/src/index.ts'
 import * as QqLogin from '../../fork-qq-login/src/index.ts'
@@ -39,7 +39,7 @@ interface App {
   context: Context
   routes: Map<string, Route>
   claims: Set<string>
-  call(name: string, args: unknown): Promise<string>
+  call(name: string, args: unknown, options?: { cwd: string }): Promise<string>
   entry(name: string): { id: string }
 }
 
@@ -55,8 +55,8 @@ afterEach(async () => {
 })
 
 /** The real recorder and its real server, with NapCat faked. The recorder waits for DSH to push its settings. */
-async function startRig(options: { protocolMinor?: number; protocolMajor?: number } = {}): Promise<Rig> {
-  const h = await bootRecorder({ config: false })
+async function startRig(options: { protocolMinor?: number; protocolMajor?: number; fetch?: typeof fetch } = {}): Promise<Rig> {
+  const h = await bootRecorder({ config: false, ...options.fetch === undefined ? {} : { fetch: options.fetch } })
   h.fake.handlers.set('get_group_list', () => [
     { group_id: Number(GROUP), group_name: '技术群', member_count: 80 },
     { group_id: Number(NEW_GROUP), group_name: '闲聊群', member_count: 300 },
@@ -148,8 +148,9 @@ async function bootApp(rig: Rig, pool: MemoryMediaPool, extra: string[] = []): P
   const app: App = {
     root, logs, context, routes, claims,
     entry: name => [...context.loader.entries()].find(entry => entry.options.name === name)!,
-    call: async (name, args) => {
-      const batch = await context.tools.execute({ signal: new AbortController().signal, calls: [{ type: 'tool-call', id: ToolCallId(`${name}-call`), name, arguments: JSON.stringify(args) }] })
+    call: async (name, args, options) => {
+      const agent = options === undefined ? {} : { agent: { session: { id: 'main', header: { cwd: options.cwd }, requestHeader: () => undefined }, options: {} } as never }
+      const batch = await context.tools.execute({ signal: new AbortController().signal, ...agent, calls: [{ type: 'tool-call', id: ToolCallId(`${name}-call`), name, arguments: JSON.stringify(args) }] })
       const result = batch.results[0]!.result as { content?: { type: string; text: string }[] }
       return result.content?.map(part => part.text).join('') ?? ''
     },
@@ -263,7 +264,7 @@ describe('QQ channel through the real Loader and the real recorder', () => {
     const rig = await startRig({ protocolMinor: 0 })
     const app = await bootApp(rig, new MemoryMediaPool())
     await linked(app)
-    expect(app.context.forkQq.features()).toMatchObject({ events: true, members: false, legacyState: true })
+    expect(app.context.forkQq.features()).toMatchObject({ events: true, members: false, legacyState: true, media: false })
     expect(app.context.forkQq.connectionStatus().state).toBe('connected')
     rig.fake.push(live(GROUP, '10001', '旧版记录器照常读'))
     await until(() => rig.recorder.recent(GROUP, { sinceMs: 0, limit: 5 }).length === 1, 'the message')
@@ -279,6 +280,42 @@ describe('QQ channel through the real Loader and the real recorder', () => {
     // The pushed settings were never sent: a recorder that speaks another protocol is left alone.
     expect(rig.recorder.status().configRevision).toBeNull()
     expect(rig.fake.connections).toBe(0)
+  })
+
+  it('(h) qq_image fetches a saved picture through the recorder into the workspace; images off, and an older recorder, say so', { timeout: 40_000 }, async () => {
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('composition-pixels')])
+    const rig = await startRig({ fetch: vi.fn(async () => new Response(png)) as never })
+    const app = await bootApp(rig, new MemoryMediaPool())
+    await linked(app)
+    const workspace = mkdtempSync(join(tmpdir(), 'qq-image-ws-'))
+    try {
+      rig.fake.push(groupMessage(GROUP, '10001', [{ type: 'text', data: { text: '看这个' } }, { type: 'image', data: { url: 'https://gchat.qpic.cn/a.png', file: 'a.png' } }], { time: Math.floor(Date.now() / 1000) }))
+      await until(() => rig.recorder.store.mediaOf(1).some(m => m.localPath !== null), 'the picture')
+      const recent = await app.call('qq_recent', { group: GROUP })
+      const ref = /\[图片#(m[0-9a-z]+)\]/.exec(recent)?.[1]
+      expect(ref, recent).toBeDefined()
+      const saved = await app.call('qq_image', { ref }, { cwd: workspace })
+      const path = join(workspace, '.qq-media', `${ref!}.png`)
+      expect(saved).toContain(path)
+      expect(readFileSync(path)).toEqual(png)
+      expect(statSync(path).mode & 0o777).toBe(0o600)
+      // The owner switches images off: the recorder no longer hands the file out.
+      const entry = app.entry('@deepseek-ai/dsh-fork-qq')
+      await app.context.loader.update(entry.id, { config: { url: rig.fake.url, groups: [GROUP], media: { images: false }, recorder: { socket: rig.socketPath }, login: { enabled: false }, digest: { enabled: false, workspacePath: join(app.root, 'digest') } } })
+      await app.context.loader.await()
+      await until(() => rig.recorder.status().configRevision !== null && rig.logs.some(line => line.text.includes('config applied') && line.text.length > 0), 'the new settings')
+      await sleep(300)
+      expect(await app.call('qq_image', { ref }, { cwd: workspace })).toContain('media.images is off')
+      expect(existsSync(join(workspace, '.qq-media', 'nope.png'))).toBe(false)
+    } finally {
+      rmSync(workspace, { recursive: true, force: true })
+    }
+    // A recorder from before pictures: the tool says to deploy the matching one, and nothing is requested.
+    const old = await startRig({ protocolMinor: 0 })
+    const oldApp = await bootApp(old, new MemoryMediaPool())
+    await linked(oldApp)
+    expect(oldApp.context.forkQq.features()).toMatchObject({ media: false, events: true })
+    expect(await oldApp.call('qq_image', { ref: 'm1' }, { cwd: tmpdir() })).toContain('too old to serve pictures')
   })
 
   it('(g) disposing removes the routes, the event stream, and the archive claim', { timeout: 30_000 }, async () => {

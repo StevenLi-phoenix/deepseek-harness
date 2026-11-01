@@ -12,10 +12,11 @@ import { dirname } from 'node:path'
 import { z, ZodError } from 'zod'
 import {
   ConfigAppliedDto, ErrorDto, EventDto, GroupDto, HelloDto, LegacyDigestStateDto, LoginDto, LookupRequestDto, MembersDto,
-  MessageListDto, MessagePageDto, PATHS, PROTOCOL, PROTOCOL_HEADER, RecorderConfigDto, RefreshDto, SearchRequestDto, StatusDto,
+  MEDIA_HEADER, MediaHeaderDto, MessageListDto, MessagePageDto, PATHS, PROTOCOL, PROTOCOL_HEADER, RecorderConfigDto,
+  RefreshDto, SearchRequestDto, StatusDto,
   parseProtocolTag, protocolTag,
 } from './protocol.ts'
-import { ConfigRejected, type QqRecorder, type RecorderLogger } from './recorder.ts'
+import { ConfigRejected, MediaNotSaved, type QqRecorder, type RecorderLogger } from './recorder.ts'
 
 /** Longest request body accepted, in bytes. */
 const MAX_BODY_BYTES = 256 * 1024
@@ -218,6 +219,23 @@ export async function startRecorderServer(options: RecorderServerOptions): Promi
       only('POST')
       const body = LookupRequestDto.parse(await readBody(req))
       return send(res, 200, MessageListDto, recorder.lookup(body.groupId, body.messageIds))
+    }
+    const media = /^\/v1\/media\/(m[0-9a-z]{1,12})$/.exec(path)
+    if (media !== null) {
+      only('GET')
+      try {
+        const file = await recorder.mediaFile(media[1] ?? '')
+        res.writeHead(200, {
+          'content-type': file.header.contentType, 'content-length': file.bytes.length, [MEDIA_HEADER]: JSON.stringify(MediaHeaderDto.parse(file.header)),
+          [PROTOCOL_HEADER]: protocolTag({ major, minor }), 'cache-control': 'no-store',
+        })
+        res.end(file.bytes)
+        return true
+      } catch (error: unknown) {
+        if (error instanceof MediaNotSaved) throw new HttpError(404, 'not-saved', error.message)
+        if (error instanceof RangeError) throw new HttpError(400, 'invalid-ref', error.message)
+        throw error
+      }
     }
     const members = /^\/v1\/groups\/([0-9]{3,20})\/members$/.exec(path)
     if (members !== null) {

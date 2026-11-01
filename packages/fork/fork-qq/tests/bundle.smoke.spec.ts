@@ -96,7 +96,7 @@ describe('the built qq-recorder.mjs under plain node', () => {
     expect(await (await fetch(`http://127.0.0.1:${run.port}/healthz`)).json()).toEqual({ ok: true })
     const hello = await get(run.socket, '/v1/hello', { authorization: `Bearer ${TOKEN}`, [PROTOCOL_HEADER]: 'qq-recorder/1.0' })
     expect(hello.status).toBe(200)
-    expect(HelloDto.parse(JSON.parse(hello.body))).toMatchObject({ protocol: { name: 'qq-recorder', major: 1, minor: 0 }, build: 'smoke' })
+    expect(HelloDto.parse(JSON.parse(hello.body))).toMatchObject({ protocol: { name: 'qq-recorder', major: 1, minor: 1 }, build: 'smoke' })
     expect((await get(run.socket, '/v1/hello', {})).status).toBe(401)
     expect(statSync(run.socket).mode & 0o777).toBe(0o600)
     // Until DSH pushes the settings it waits and does not connect anywhere.
