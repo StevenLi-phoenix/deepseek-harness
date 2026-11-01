@@ -609,7 +609,7 @@ digestWrite(sessionId: string | undefined, groupId: string, text: string): ToolO
  * @param text - the note, or for `remove` its `#id` or exact text.
  * @returns what to tell the model.
  */
-groupNote(sessionId: string | undefined, groupId: string, op: string, text: string): ToolOutcome
+groupNote(sessionId: string | undefined, groupId: string, op: string, text: string): Promise<ToolOutcome>
 
 /**
  * The group a digest Session is digesting, for a tool that takes the group from the Session.

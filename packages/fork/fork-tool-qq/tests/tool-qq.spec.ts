@@ -163,7 +163,7 @@ describe('fork-tool-qq', () => {
 describe('digest mode', () => {
   const digestObserver = () => ({
     digestWrite: vi.fn((_session: string | undefined, group: string) => (group === '111111' ? { ok: true as const, message: 'digest saved' } : { ok: false as const, error: 'wrong group' })),
-    groupNote: vi.fn(() => ({ ok: true as const, message: 'note #1 added' })),
+    groupNote: vi.fn(() => Promise.resolve({ ok: true as const, message: 'note #1 added' })),
     ...stand(),
   })
 
