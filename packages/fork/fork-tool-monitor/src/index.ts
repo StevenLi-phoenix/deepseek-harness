@@ -13,6 +13,8 @@ import { homedir } from 'node:os'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
+// Type-only: ctx.forkEventBus, whose Session handover moves a conversation's monitors to its new Session.
+import type {} from '@deepseek-ai/dsh-fork-event-bus'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContextFormed } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
@@ -270,6 +272,22 @@ export function apply(ctx: Context): void {
       await domain?.close()
     }
   }, 'fork-tool-monitor: stop monitors')
+
+  // A conversation that continues in a new Session (WeChat /new) takes its running monitors along; the tools work without the bus.
+  ctx.inject(['forkEventBus'], (scoped) => {
+    scoped.effect(() => scoped.forkEventBus.registerHandover('monitor', (from, to) => {
+      const moved = registry.transfer(from, to)
+      for (const monitor of moved) {
+        ctx.logger.info('monitor %s moved from session %s to %s', monitor.id, [...from].join(', '), to)
+        write(`move monitor ${monitor.id}`, async (domain) => {
+          const table = domain.table('monitors')
+          const record = table.get(monitor.id)
+          if (record !== undefined) await table.put(monitor.id, { ...record, owner: to })
+        })
+      }
+      return moved.map(monitor => ({ id: monitor.id, label: monitor.description }))
+    }), 'fork-tool-monitor: session handover')
+  })
 
   ctx.tools.register(defineTool({
     name: 'monitor_start',

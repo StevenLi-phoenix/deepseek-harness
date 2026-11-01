@@ -227,6 +227,21 @@ export class MonitorRegistry {
     }
   }
 
+  /**
+   * Give the running monitors of some owners to another owner: their notices, `list`, and `owns` follow the new
+   * owner from now on. The per-owner cap applies only to starts, so the new owner may hold more than it.
+   * @returns the moved monitors.
+   */
+  transfer(from: ReadonlySet<string>, to: string): MonitorView[] {
+    const moved: MonitorView[] = []
+    for (const entry of this.live.values()) {
+      if (entry.view.status !== 'running' || entry.stopReason !== undefined || !from.has(entry.owner)) continue
+      entry.owner = to
+      moved.push(this.snapshot(entry))
+    }
+    return moved
+  }
+
   /** The owner's monitors, running first, then recently ended ones. */
   list(owner: string): MonitorView[] {
     const running = [...this.live.values()].filter(entry => entry.owner === owner).map(entry => this.snapshot(entry))

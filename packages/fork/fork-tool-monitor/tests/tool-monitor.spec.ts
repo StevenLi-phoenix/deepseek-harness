@@ -111,7 +111,7 @@ const until = async (predicate: () => boolean | Promise<boolean>, ms = 5000): Pr
  * Start one host process over `world`. No agent is loaded until something
  * resolves its Session through the Session controller, as after a restart.
  */
-async function mount(world: World, options: { storageDomain?: unknown; resolveDelayMs?: number } = {}) {
+async function mount(world: World, options: { storageDomain?: unknown; resolveDelayMs?: number; forkEventBus?: unknown } = {}) {
   const ctx = new Context()
   contexts.push(ctx)
   const logs: { type: string; text: string }[] = []
@@ -139,6 +139,7 @@ async function mount(world: World, options: { storageDomain?: unknown; resolveDe
       return { agent: session.agent }
     },
   } as never)
+  if (options.forkEventBus !== undefined) ctx.provide('forkEventBus', options.forkEventBus as never)
   if (options.storageDomain === undefined) await mountStorage(ctx, world.pool)
   else ctx.provide('storageDomain', options.storageDomain as never)
   await ctx.plugin(ToolRuntime)
@@ -347,5 +348,57 @@ describe('monitors across host restarts', () => {
     await host.call(owner, 'monitor_start', { command: 'echo hi; sleep 30', description: 'plain' })
     await until(() => owner.followups.length === 1)
     expect(textOf(owner.followups[0])).toContain('\nhi')
+  })
+})
+
+describe('monitors on a Session handover', () => {
+  /** `ctx.forkEventBus` double that keeps the registered movers. */
+  function fakeBus() {
+    const movers = new Map<string, (from: ReadonlySet<string>, to: string) => unknown>()
+    return {
+      movers,
+      registerHandover: (kind: string, move: (from: ReadonlySet<string>, to: string) => unknown) => {
+        movers.set(kind, move)
+        return () => { movers.delete(kind) }
+      },
+    }
+  }
+
+  it('moves the old Session\'s running monitors to the new one: list, stop, notices, and the stored owner', async () => {
+    const world = newWorld()
+    const before = addSession(world, 'chat-old')
+    const after = addSession(world, 'chat-new')
+    const other = addSession(world, 'other')
+    const bus = fakeBus()
+    const host = await mount(world, { forkEventBus: bus })
+    for (const session of [before, after, other]) host.loaded.set(session.id, session.agent)
+    const build = await host.call(before, 'monitor_start', { command: 'sleep 0.5; echo built; sleep 30', description: 'build log', persistent: true })
+    const theirs = await host.call(other, 'monitor_start', { command: 'sleep 30', description: 'not mine' })
+    const move = bus.movers.get('monitor')!
+
+    expect(await move(new Set(['chat-old']), 'chat-new')).toEqual([{ id: build['id'], label: 'build log' }])
+    expect(await move(new Set(['chat-old']), 'chat-new')).toEqual([])
+    expect(await host.listed(before)).toEqual([])
+    expect(await host.listed(after)).toEqual([expect.objectContaining({ id: build['id'], status: 'running' })])
+    expect(await host.listed(other)).toEqual([expect.objectContaining({ id: theirs['id'] })])
+    await until(() => after.followups.length === 1)
+    expect(textOf(after.followups[0])).toContain('\nbuilt')
+    expect(before.followups).toEqual([])
+    expect(host.logged(`monitor ${String(build['id'])} moved from session chat-old to chat-new`)).toBe(true)
+    expect(await host.call(after, 'monitor_stop', { id: build['id'] })).toEqual({ stopped: build['id'] })
+  })
+
+  it('stores the new owner, so a restart reports to the new Session, and withdraws the mover on disposal', async () => {
+    const world = newWorld()
+    const before = addSession(world, 'chat-old')
+    addSession(world, 'chat-new')
+    const bus = fakeBus()
+    const host = await mount(world, { forkEventBus: bus })
+    host.loaded.set(before.id, before.agent)
+    const kept = await host.call(before, 'monitor_start', { command: 'sleep 30', description: 'kept', persistent: true })
+    await bus.movers.get('monitor')!(new Set(['chat-old']), 'chat-new')
+    await host.ctx.fiber.dispose()
+    expect(bus.movers.has('monitor')).toBe(false)
+    expect(await withRecords(world, records => records.get(String(kept['id']))?.owner)).toBe('chat-new')
   })
 })

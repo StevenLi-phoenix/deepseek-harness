@@ -26,7 +26,8 @@ import {
 import { busDomain, type BatchRecord, type ForkEventRecord, type PersistentRecord, type SubscriptionRecord } from './storage.ts'
 import type {
   BatchEvent, BatchSummary, BusStats, ForkDeliveryEvent, ForkEventInput, ForkNotifier, PauseOutcome, PersistentSessionView, PublishOutcome,
-  SessionAction, SessionDelivery, Subscription, SubscriptionMeta, SubscriptionOrigin, SubscriptionView, SuppressConfig, UnsubscribeOutcome,
+  SessionAction, SessionDelivery, SessionHandoverMover, SessionHandoverReport, Subscription, SubscriptionMeta, SubscriptionOrigin,
+  SubscriptionView, SuppressConfig, UnsubscribeOutcome,
 } from './types.ts'
 import { ForkSubscriptionError, subscriptionProblem } from './validate.ts'
 
@@ -411,6 +412,8 @@ export class ForkEventBus extends Service {
   private chain: Promise<unknown> = Promise.resolve()
   private stopping = false
   private readonly archiver: SessionArchiver
+  /** Handover movers in registration order. */
+  private readonly movers: Array<{ kind: string; move: SessionHandoverMover }> = []
 
   /**
    * @param ctx - Host services owning timers, storage, and Session events.
@@ -666,6 +669,61 @@ export class ForkEventBus extends Service {
    */
   protectSessions(label: string, check: SessionProtector): ProtectionDisposer {
     return this.archiver.protect(label, check)
+  }
+
+  /**
+   * Register a mover that runs on every {@link handOverSessions}, for a plugin whose bindings name a Session
+   * (what it delivers to it, or records as created by it). Register inside an effect so a reload withdraws it:
+   * `ctx.inject(['forkEventBus'], scoped => { scoped.effect(() => scoped.forkEventBus.registerHandover('monitor', move)) })`.
+   * @param kind - binding kind reported with what the mover moved, for example `monitor`.
+   * @param move - the mover.
+   * @returns the disposer.
+   */
+  registerHandover(kind: string, move: SessionHandoverMover): () => void {
+    const entry = { kind, move }
+    this.movers.push(entry)
+    return () => {
+      const index = this.movers.indexOf(entry)
+      if (index >= 0) this.movers.splice(index, 1)
+    }
+  }
+
+  /**
+   * Move every binding of some Sessions to another Session, for a conversation that continues in a new Session
+   * (WeChat `/new`): the run-time subscriptions they created now name `to` as their creator, then each registered
+   * mover moves its own. A failing mover is logged and reported, and the others still run; a repeat moves nothing
+   * the first call moved.
+   * @param from - Sessions whose bindings move; `to` itself is ignored.
+   * @param to - Session that takes them over.
+   * @returns what moved, by kind (kinds that moved nothing are left out), and which movers failed.
+   */
+  async handOverSessions(from: readonly string[], to: string): Promise<SessionHandoverReport> {
+    const sources: ReadonlySet<string> = new Set(from.filter(id => id !== to))
+    if (sources.size === 0) return { moved: [], failed: [] }
+    const moved: Array<SessionHandoverReport['moved'][number]> = []
+    const failed: Array<SessionHandoverReport['failed'][number]> = []
+    const subscriptions = await this.serialize(async () => {
+      const table = (await this.ready).table('subscriptions')
+      const items = []
+      for (const record of this.storedSubscriptions()) {
+        if (record.createdBy === undefined || !sources.has(record.createdBy)) continue
+        await table.put(record.id, { ...record, createdBy: to })
+        items.push({ id: record.id, label: record.id })
+      }
+      return items
+    })
+    if (subscriptions.length > 0) moved.push({ kind: 'subscription', items: subscriptions })
+    for (const { kind, move } of [...this.movers]) {
+      try {
+        const items = await move(sources, to)
+        if (items.length > 0) moved.push({ kind, items: [...items] })
+      } catch (error: unknown) {
+        this.ctx.logger.warn(`fork-event-bus: handover mover ${kind} failed: ${errorText(error)}`)
+        failed.push({ kind, error: errorText(error) })
+      }
+    }
+    this.ctx.logger.info(`fork-event-bus: handed Session(s) ${[...sources].join(', ')} over to ${to}: ${moved.length === 0 ? 'nothing to move' : moved.map(part => `${part.items.length} ${part.kind}`).join(', ')}${failed.length === 0 ? '' : `; ${failed.length} mover(s) failed`}`)
+    return { moved, failed }
   }
 
   /**
