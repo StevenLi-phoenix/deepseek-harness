@@ -1,0 +1,45 @@
+# AMS declaration of the qq-recorder service (docs/service-declaration.md of agent-managed-services). deploy.sh fills
+# @BUNDLE@ (the pinned, fingerprinted copy of qq-recorder.mjs) and @BUILD@ (its fingerprint) and places the result at
+# /Users/dsh-runtime/.ams/services/qq-recorder/service.toml. AMS decides whether to restart from the sha256 of this file's
+# bytes, so a new bundle restarts the recorder and nothing else.
+id = "qq-recorder"
+name = "QQ recorder"
+# Values are set out of band: `ams secret set qq-recorder <NAME>` with the value on stdin (RUNBOOK, "qq-recorder").
+secrets = ["LSY_QQ_ONEBOT_TOKEN", "QQ_RECORDER_TOKEN"]
+
+[start]
+# Plain node, no dependency runtime: the bundle has everything inlined. The flag keeps node:sqlite's experimental notice
+# (if a node ever prints one) from reading as a warning to AMS.
+argv = ["/opt/homebrew/bin/node", "--disable-warning=ExperimentalWarning", "@BUNDLE@"]
+workdir = "/Users/dsh-runtime/.dsh/lsy-qq"
+
+[env]
+QQ_RECORDER_DATA_DIR = "/Users/dsh-runtime/.dsh/lsy-qq"
+QQ_RECORDER_SOCKET = "/Users/dsh-runtime/.dsh/run/qq-recorder.sock"
+QQ_RECORDER_BUILD = "@BUILD@"
+
+[ports]
+health = 0
+
+[runtime]
+kind = "none"
+
+[health]
+kind = "http"
+port = "health"
+path = "/healthz"
+interval_s = 10
+timeout_s = 5
+start_period_s = 30
+
+[stop]
+signal = "SIGTERM"
+timeout_s = 15
+
+[restart]
+policy = "always"
+backoff_s = 5
+backoff_max_s = 300
+
+[logging]
+format = "json"
