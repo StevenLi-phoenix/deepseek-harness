@@ -61,6 +61,28 @@ afterEach(() => {
 })
 
 describe('QqLoginSection', () => {
+  it('ends with the All settings card for lsy-qq minus the groups list, warns about reconnecting, and renders without the factory', () => {
+    const store = createQqStore()
+    store.update((draft) => { Object.assign(draft, { panel: panel(), checkedAt: NOW }) })
+    const formStore = createSnapshotStore<ConfigFormSnapshot<GroupsSection>>(READY)
+    const renderFactorySlot = vi.fn((_name: string, _props: object) => <div data-testid="plugin-config" />)
+    const props = {
+      close: () => {}, useQq: bindSnapshotSelector(store), useGroupsForm: bindSnapshotSelector(formStore),
+      refresh: vi.fn(), renewCode: vi.fn(), addGroup: vi.fn(), removeGroup: vi.fn(), t, renderFactorySlot,
+    } as unknown as QqLoginProps
+    const { container } = render(<QqLoginSection {...props} />)
+    expect(renderFactorySlot).toHaveBeenCalledWith('settings.plugin-config', {
+      entries: ['lsy-qq'],
+      exclude: ['groups'],
+      reloadWarning: zh['config.reloadWarning'],
+    })
+    expect(zh['config.reloadWarning']).toBe('保存会让 QQ 观察器重连协议端；频繁重连可能触发 QQ 风控，请攒齐改动一次保存')
+    expect(container.querySelector('section')?.lastElementChild).toBe(screen.getByTestId('plugin-config'))
+    cleanup()
+    mount({ panel: panel(), checkedAt: NOW })
+    expect(screen.queryByTestId('plugin-config')).toBeNull()
+  })
+
   it('reads on opening, every 3 s while open, and stops when closed', () => {
     vi.useFakeTimers()
     const { refresh, view, store, rerender } = mount({})

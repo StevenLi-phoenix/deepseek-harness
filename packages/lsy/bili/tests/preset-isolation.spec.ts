@@ -75,7 +75,12 @@ const ALLOWED: Record<(typeof OUTSIDE_PRESETS)[number], string[]> = {
     'cordis:group', '@deepseek-ai/dsh-compaction-basic', '@deepseek-ai/dsh-compaction-tool-result-pruner',
   ],
   // lsy-tool-qq reads only what the QQ observer recorded; it carries no owner memory and reaches no WeChat side.
-  'qq-digest': ['@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-lsy-tool-qq', 'cordis:group', '@deepseek-ai/dsh-compaction-basic'],
+  // `@deepseek-ai/dsh-lsy-style` is allowed if present: its `style_note` tool lands with the lsy-style branch, which keeps
+  // the digest Session's notes in the style layer (quoted-data samples, no owner memory); it is not mounted on every base.
+  'qq-digest': [
+    '@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-lsy-tool-qq', '@deepseek-ai/dsh-lsy-style',
+    'cordis:group', '@deepseek-ai/dsh-compaction-basic',
+  ],
 }
 
 describe('channel isolation of the event bundle\'s presets', () => {
@@ -122,6 +127,44 @@ describe('channel isolation of the event bundle\'s presets', () => {
   it('keeps the owner memory out of every root row, since root rows reach every preset', () => {
     expect(rootRows.filter(row => !row.id.startsWith('preset-')).map(row => row.name)).not.toContain('@deepseek-ai/dsh-lsy-memory')
     expect(rootRows.filter(row => !row.id.startsWith('preset-')).map(row => row.name)).not.toContain('@deepseek-ai/dsh-lsy-tool-wechat')
+  })
+})
+
+describe('the qq-digest preset\'s tools', () => {
+  const toolQq = readFileSync(join(ROOT, 'packages/lsy/lsy-tool-qq/src/index.ts'), 'utf8')
+  const digestRows = (): Row[] => pluginsOf(presets.get('qq-digest')!)
+
+  it('runs lsy-tool-qq in digest mode, whose only tools are qq_digest_write and qq_group_note', () => {
+    const rows = digestRows().filter(row => row.name === '@deepseek-ai/dsh-lsy-tool-qq')
+    expect(rows.map(row => fieldsOf(row))).toEqual([{ mode: 'digest' }])
+    // The digest-mode registration function names exactly the two write tools (no read, search, or forget tool).
+    const digestBody = toolQq.slice(toolQq.indexOf('function registerDigestTools'))
+    expect([...digestBody.matchAll(/name: '(\w+)'/gu)].map(match => match[1])).toEqual(['qq_digest_write', 'qq_group_note'])
+  })
+
+  it('may add style_note only through lsy-style, and only that row', () => {
+    // allowed-if-present: the base has no `style_note` yet; once lsy-style registers it, its row is the one that mounts it.
+    const style = digestRows().filter(row => row.name === '@deepseek-ai/dsh-lsy-style')
+    expect(style.length).toBeLessThanOrEqual(1)
+    const styleSource = readFileSync(join(ROOT, 'packages/lsy/lsy-style/src/index.ts'), 'utf8')
+    const registersStyleNote = /name: 'style_note'/u.test(styleSource)
+    if (!registersStyleNote) expect(style).toEqual([])
+  })
+
+  it('puts the long-lived Session\'s compaction in an isolated group of compaction rows only', () => {
+    const group = digestRows().find(row => row.name === 'cordis:group')
+    expect(group).toBeDefined()
+    expect(Array.isArray(group!.config)).toBe(true)
+    const inner = (group!.config as Row[]).map(row => row.name)
+    expect(inner.every(name => name?.startsWith('@deepseek-ai/dsh-compaction'))).toBe(true)
+    expect((group as unknown as { isolate?: { compaction?: boolean } }).isolate).toEqual({ compaction: true })
+  })
+
+  it.each(['qqbot', 'qq-digest'] as const)('never gives the %s preset the owner memory or its tools, in any row or group', (preset) => {
+    const mounted = names(preset)
+    for (const forbidden of ['@deepseek-ai/dsh-lsy-memory', '@deepseek-ai/dsh-lsy-taint', '@deepseek-ai/dsh-lsy-tool-wechat']) {
+      expect(mounted).not.toContain(forbidden)
+    }
   })
 })
 

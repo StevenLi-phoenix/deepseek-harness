@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-QQ 被踢下线后，用手机就能恢复，不用开终端。**设置 → QQ** 给出一句结论（「QQ 已连接」「需要扫码登录」「NapCat 没有响应」），下面写着下一步。需要扫码时，它画出大到能从另一块屏幕扫的登录二维码，并随 NapCat 轮换而更新；扫码、确认，几秒内结论变成「已连接」。第二张卡片列出连接状态（自何时起、第几次尝试、最近的错误）和 NapCat 的登录状态；第三张卡片用来编辑记录哪些群。
+QQ 被踢下线后，用手机就能恢复，不用开终端。**设置 → QQ** 给出一句结论（「QQ 已连接」「需要扫码登录」「NapCat 没有响应」），下面写着下一步。需要扫码时，它画出大到能从另一块屏幕扫的登录二维码，并随 NapCat 轮换而更新；扫码、确认，几秒内结论变成「已连接」。第二张卡片列出连接状态（自何时起、第几次尝试、最近的错误）和 NapCat 的登录状态；第三张卡片用来编辑记录哪些群；「全部设置」卡片包含 `lsy-qq` 的其余设置。
 
 ## 目录
 
@@ -25,7 +25,7 @@ QQ 被踢下线后，用手机就能恢复，不用开终端。**设置 → QQ**
 <a id="use-this-package"></a>
 ## 使用这个包
 
-把下面这一行挂在 QQ 观察者旁边；lsy event bundle 已经挂载了它。它需要 [`@deepseek-ai/dsh-lsy-qq`](../lsy-qq/README.zh.md)（`ctx.lsyQq`）、Host 上的 `connection` 服务，以及浏览器侧的设置外壳，后两者 Web bundles 都已组合好。它没有配置项。
+把下面这一行挂在 QQ 观察者旁边；lsy event bundle 已经挂载了它。它需要 [`@deepseek-ai/dsh-lsy-qq`](../lsy-qq/README.zh.md)（`ctx.lsyQq`）、Host 上的 `connection` 服务，以及浏览器侧的设置外壳，后两者 Web bundles 都已组合好。它没有配置项。页面还会渲染 [lsy-config](../lsy-config/README.zh.md) 的「全部设置」卡片，对象是 `lsy-qq` 条目（`groups` 归「记录的群」卡片管，所以全部设置卡片把它排除在外）；没有挂载 `lsy-config` 时，页面就在群名单卡片处结束。
 
 ```yaml
 - id: lsy-qq-login
@@ -44,9 +44,11 @@ QQ 被踢下线后，用手机就能恢复，不用开终端。**设置 → QQ**
 
 Host 部分在 connection 上注册 `GET /api/lsy.qq` 和 `POST /api/lsy.qq.refresh`，因此两者都受 `/api` 登录校验保护（只有 owner Peer 能访问，POST 同样经过 Host/Origin 围栏）。答案由 `ctx.lsyQq` 组装：连接状态、登录读数和记录的群数。NapCat 给出的登录链接在 Host 上用 `uqr` 编码成模块矩阵，只发送矩阵，浏览器据 `0`/`1` 行画出二维码，从不接触链接本身；二维码的任何内容都不写日志。`?fresh=1` 跳过观察者的共享读数（1.5 秒，QQ 已连接时为 1 分钟）；刷新路由请求扫码入口生成新码：QQ 已登录时以及登录后 10 分钟内一律拒绝，其余时候入口每 10 秒只放行一次（答案里的 `reason` 说明原因）。
 
-「记录的群」卡片是这个分区唯一会写入的地方。`lsy-qq` 的 `groups` 字段可热更新，所以卡片通过 `lsy-qq` 条目的插件设置表单（`ctx.configForms`）读取它，并用 `form.set('groups', …)` 写入整份新名单：Host 校验、按修订号加围栏（别处刚改过的名单会被拒绝而不是被覆盖）、保存到 profile patch，观察者无需重启即可跟随，并为新加的群补抓历史。卡片按名称列出名单里的群，列出账号所在的其他群（丢弃消息最多的排前面，来自面板，最多 60 个）供一键添加，接受手输的群号（3 到 20 位数字），移除前要确认。没有任何手工编辑文件。
+「记录的群」卡片是这个分区自己的代码唯一会写入的地方（「全部设置」卡片通过 lsy-config 写入）。`lsy-qq` 的 `groups` 字段可热更新，所以卡片通过 `lsy-qq` 条目的插件设置表单（`ctx.configForms`）读取它，并用 `form.set('groups', …)` 写入整份新名单：Host 校验、按修订号加围栏（别处刚改过的名单会被拒绝而不是被覆盖）、保存到 profile patch，观察者无需重启即可跟随，并为新加的群补抓历史。卡片按名称列出名单里的群，列出账号所在的其他群（丢弃消息最多的排前面，来自面板，最多 60 个）供一键添加，接受手输的群号（3 到 20 位数字），移除前要确认。没有任何手工编辑文件。
 
 浏览器部分通过 `ctx.slots.inject` 注册一个 `settings.section` 条目（`lsy-qq`，排在系统状态之后）。外壳只挂载当前打开的分区，所以这个分区在打开且页面可见时，有事要处理就每 3 秒请求一次相对于文档的 `api/lsy.qq`，QQ 已连接时每分钟一次（已连接的账号没有什么要盯的，而每次读取都会碰到账号所在的主机），关闭时停止。一个 `QqLoader` 共享进行中的请求；请求失败时保留上一次的答案，状态行会说明它的时间。结论由 `headline()` 决定：观察者自己的连接在线时以它为准，否则由 NapCat 的登录状态决定该做什么，扫码入口答不上来时则说明怎么把它拉起来。二维码是内联 SVG（一条由水平条组成的路径，带两个模块的静区），不论主题都是白底黑码，最宽 320 px。
+
+「全部设置」卡片是 `renderFactorySlot('settings.plugin-config', { entries: ['lsy-qq'], exclude: ['groups'], reloadWarning })`，并以仅类型方式导入 `@deepseek-ai/dsh-lsy-config/client`。保存会把整份 `lsy-qq` 配置写入 owner 补丁。`lsy-qq` 标为 `volatile` 的字段（补取历史、图片、语音、转写、保留期和撤回的开关与限额，以及离线通知）直接作用于运行中的观察者；其他字段（`url`、`tokenEnv`、`dataDir`、`send`、`digest`、`login`）会重载插件，从而断开 OneBot 连接再重连。频繁重连可能触发 QQ 风控，所以会重载的保存在复核时会显示本页的 `config.reloadWarning` 文案。
 
 | 文件 | 作用 |
 |---|---|
@@ -85,6 +87,7 @@ Host 部分在 connection 上注册 `GET /api/lsy.qq` 和 `POST /api/lsy.qq.refr
 
 <a id="known-limitations-and-deferred-work"></a>
 
+- **会重载的保存会让 QQ 重连**——在「全部设置」卡片里改 `url`、`send`、`digest` 或 `login` 会重启观察者的连接；请攒齐改动再保存一次。
 - **需要扫码入口**——没有它（`napcat.sh door`）就没有二维码可显示；分区会说明这一点，仍显示连接状态。
 - **屏幕扫不了自己**——在手机上看这一页时，先截屏，再在 QQ 的「扫一扫」→ 相册里选这张截图。
 - **编辑依赖设置表单**——`lsy-qq` 条目必须在可写的层里有唯一地址；Host 不提供它（或更高优先级的层覆盖了 `groups`）时，卡片会说明，名单仍在 profile patch 里设置。
