@@ -1,6 +1,7 @@
 /** Durable event bus: dedupe, loop suppression, config and run-time subscriptions, coalescing, rate limits, dispatch, and reports. */
 
 import { randomUUID } from 'node:crypto'
+import { mkdir } from 'node:fs/promises'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-timer'
 // Type-only: ctx.sessionController, ctx.workspaceRegistry, and the `compaction/summary` Session event.
@@ -77,6 +78,13 @@ export interface Config {
   maxNoteEvents: number
   /** Web UI link attached to Session result messages. */
   webUrl?: string
+  /**
+   * Archive a Session this bus started once its last batch is this many days old (0 never archives). A persistent
+   * Session archived this way is replaced at its next batch, seeded with its last compaction summary.
+   */
+  archiveIdleDays: number
+  /** Minutes between two idle-Session sweeps. */
+  archiveSweepMinutes: number
 }
 
 // Schemastery materializes a missing nested object as `{}`, so the fields a
@@ -91,8 +99,10 @@ const sessionActionSchema: z<SessionAction> = z.object({
   maxTextChars: z.natural().min(1).default(2000),
   trustedText: z.boolean().default(false),
   model: z.object({ provider: z.string(), model: z.string() }),
+  project: z.string(),
   persistent: z.object({
     enabled: z.boolean().default(false),
+    key: z.union(['subscription', 'subject'] as const).default('subscription'),
     rolloverDays: z.natural().min(1).default(30),
     maxSeedChars: z.natural().min(1).default(20_000),
   }),
@@ -123,6 +133,8 @@ export const Config: z<Config> = z.object({
   reportScheduledTurns: z.boolean().default(true),
   maxNoteEvents: z.natural().min(1).default(10),
   webUrl: z.string(),
+  archiveIdleDays: z.natural().default(7),
+  archiveSweepMinutes: z.natural().min(1).default(360),
 })
 
 /** Shape check for deliveries that come back through the webhook rule. */
@@ -160,12 +172,16 @@ interface TrackedSession {
 interface PendingDelivery {
   delivery: SessionDelivery
   carried?: CarriedOver
+  /** The persistent Session key's subject (`key: subject`). */
+  subject?: string
+  /** Fixed title of a persistent Session. */
+  title?: string
 }
 
 /** The stored Session of a persistent subscription, as the Host resolves it now. */
 type StoredSession =
   | { kind: 'agent'; agent: { followup(message: ReturnType<typeof createUserMessage>): void } }
-  /** Not found or archived: a new Session replaces it. */
+  /** Not found or archived: a new Session replaces it, seeded with its last compaction summary when there is one. */
   | { kind: 'gone'; reason: string }
   /** Exists but cannot take a turn now (busy writer, no controller): this batch gets a one-off Session. */
   | { kind: 'unavailable'; reason: string }
@@ -265,10 +281,43 @@ function summarize(batch: BatchRecord): BatchSummary {
   }
 }
 
+/**
+ * The `persistent` table key of a subscription's Session: the subscription id, or `<id>|<subject>` for `key: subject`.
+ * @param subscription - subscription id.
+ * @param subject - the events' subject, for `key: subject`.
+ * @returns the table key.
+ */
+export function persistentKey(subscription: string, subject?: string): string {
+  return subject === undefined ? subscription : `${subscription}|${subject}`
+}
+
+/** What {@link ensureProject} needs of `ctx.workspaceRegistry`. */
+export interface ProjectRegistry {
+  resolveByPath(path: string): Promise<{ readonly path: string; readonly title: string } | undefined>
+  create(path: string, title?: string): Promise<{ readonly path: string; readonly title: string }>
+}
+
+/**
+ * Make sure a directory exists and is a Web UI project (Workspace), so the Sessions that run there are grouped under it.
+ * An existing project keeps its title (the owner may have renamed it); a new one is titled `name`.
+ * @param registry - `ctx.workspaceRegistry`, or undefined to only create the directory.
+ * @param path - absolute directory.
+ * @param name - title of a new project.
+ * @returns `created`, `existing`, or `directory-only` when no registry is mounted.
+ */
+export async function ensureProject(registry: ProjectRegistry | undefined, path: string, name: string): Promise<'created' | 'existing' | 'directory-only'> {
+  await mkdir(path, { recursive: true })
+  if (registry === undefined) return 'directory-only'
+  if (await registry.resolveByPath(path) !== undefined) return 'existing'
+  await registry.create(path, name)
+  return 'created'
+}
+
 /** The public fields of a stored persistent Session. */
 function persistentView(record: PersistentRecord): PersistentSessionView {
   return {
     subscription: record.subscription,
+    ...(record.subject === undefined ? {} : { subject: record.subject }),
     sessionId: record.sessionId,
     createdAt: record.createdAt,
     batches: record.batches,
@@ -351,6 +400,7 @@ export class ForkEventBus extends Service {
   private readonly flushTimers = new Map<string, { at: number; dispose: () => void }>()
   private readonly tracked = new Map<string, TrackedSession>()
   private readonly deliveries = new Map<string, PendingDelivery>()
+  private readonly projects = new Map<string, Promise<void>>()
   private readonly reminders = new Map<string, TrackedReminder>()
   private readonly inflight = new Set<Promise<void>>()
   /** When a flush last met its subscription's hourly limit, for `stats()`; not stored. */
@@ -380,6 +430,9 @@ export class ForkEventBus extends Service {
         await domain.close()
       }, 'forkEventBus.lifecycle()')
       await this.restorePending()
+      if (config.archiveIdleDays > 0) {
+        ctx.effect(() => ctx.interval(() => { this.track(this.archiveIdle()) }, config.archiveSweepMinutes * 60_000), 'forkEventBus.archiveIdle()')
+      }
       return cleanup
     }, 'forkEventBus.init()')
 
@@ -489,6 +542,26 @@ export class ForkEventBus extends Service {
    */
   persistentSubscriptionOf(sessionId: string): string | undefined {
     return rowsOf(this.domain?.table('persistent')).find(record => record.sessionId === sessionId)?.subscription
+  }
+
+  /**
+   * {@link ensureProject} with this Host's Workspace registry, once per path and process.
+   * @param path - absolute directory.
+   * @param name - title of a new project.
+   * @returns resolves once the directory exists and is a project; a registry failure is logged, not thrown.
+   */
+  ensureProject(path: string, name: string): Promise<void> {
+    const known = this.projects.get(path)
+    if (known !== undefined) return known
+    const work = ensureProject(this.ctx.get('workspaceRegistry'), path, name).then(
+      (outcome) => { this.ctx.logger.info(`fork-event-bus: project ${JSON.stringify(name)} at ${path}: ${outcome}`) },
+      (error: unknown) => {
+        this.projects.delete(path)
+        this.ctx.logger.warn(`fork-event-bus: project ${JSON.stringify(name)} at ${path} not ensured: ${errorText(error)}`)
+      },
+    )
+    this.projects.set(path, work)
+    return work
   }
 
   /**
@@ -722,7 +795,7 @@ export class ForkEventBus extends Service {
 
     const now = Date.now()
     const recent = rowsOf(domain.table('batches'))
-      .filter(batch => batch.subscription === subscriptionId && batch.createdAt > now - HOUR_MS)
+      .filter(batch => batch.subscription === subscriptionId && batch.parent === undefined && batch.createdAt > now - HOUR_MS)
       .sort((a, b) => a.createdAt - b.createdAt)
     if (recent.length >= subscription.maxPerHour) {
       this.rateLimitHits.push(now)
@@ -785,14 +858,16 @@ export class ForkEventBus extends Service {
 
   /** Start a new Session for one batch through the webhook runtime. */
   private async dispatchSession(
-    { batch, events, subscription }: FlushedBatch, delivery: SessionDelivery, carried?: CarriedOver,
+    { batch, events, subscription }: FlushedBatch, delivery: SessionDelivery, extra: Omit<PendingDelivery, 'delivery'> = {},
   ): Promise<void> {
     const runtime = this.ctx.get('webhookRuntime')
     if (runtime === undefined) {
       await this.markBatch(batch.id, { status: 'failed', error: 'no webhookRuntime service is mounted', delivery })
       return
     }
-    this.deliveries.set(batch.id, { delivery, ...(carried === undefined ? {} : { carried }) })
+    const project = subscription.session?.project
+    if (project !== undefined && project !== '' && subscription.session !== undefined) await this.ensureProject(subscription.session.workspacePath, project)
+    this.deliveries.set(batch.id, { delivery, ...extra })
     try {
       runtime.dispatch({
         kind: FORK_EVENT_KIND,
@@ -810,41 +885,91 @@ export class ForkEventBus extends Service {
   }
 
   /**
-   * Deliver one batch of a persistent subscription: a new turn of its stored Session, a new Session when there is
-   * none or it is gone, a seeded new Session at a rollover, or a one-off Session when the stored one cannot take a turn.
+   * Deliver one batch of a persistent subscription. With `key: subject` the batch is split by event subject and each
+   * part goes to that subject's Session; the first part keeps the batch id, the others get child batch rows.
    */
   private async actuatePersistent(flushed: FlushedBatch, session: SessionAction): Promise<void> {
-    const { batch, events, subscription } = flushed
-    /* v8 ignore next -- actuate() checked enabled; schemastery materializes the defaults. */
-    const persistent = session.persistent ?? { enabled: true, rolloverDays: 30, maxSeedChars: 20_000 }
-    const domain = await this.ready
-    const stored = domain.table('persistent').get(subscription.id)
-    if (stored === undefined) {
-      this.ctx.logger.info(`fork-event-bus: ${subscription.id} has no persistent Session yet; batch ${batch.id} starts one`)
-      await this.dispatchSession(flushed, 'persistent-new')
+    if (session.persistent?.key !== 'subject') {
+      await this.deliverPersistent(flushed, session, undefined)
       return
     }
+    const groups = new Map<string, BatchEvent[]>()
+    for (const event of flushed.events) groups.set(event.subject, [...groups.get(event.subject) ?? [], event])
+    const parts = [...groups]
+    const prefix = session.titlePrefix ?? flushed.subscription.id
+    const batches = await this.serialize(async () => {
+      const domain = await this.ready
+      const table = domain.table('batches')
+      return Promise.all(parts.map(async ([subject, events], index) => {
+        const row: BatchRecord = {
+          ...flushed.batch,
+          id: index === 0 ? flushed.batch.id : `${flushed.batch.id}.${index}`,
+          title: batchTitle(prefix, events),
+          eventIds: events.map(event => event.id),
+          subject,
+          ...(index === 0 ? {} : { parent: flushed.batch.id }),
+        }
+        await table.put(row.id, row)
+        return row
+      }))
+    })
+    if (parts.length > 1) this.ctx.logger.info(`fork-event-bus: batch ${flushed.batch.id} of ${flushed.subscription.id} split by subject into ${parts.length}: ${parts.map(([subject, events]) => `${subject} (${events.length})`).join(', ')}`)
+    for (const [index, [subject, events]] of parts.entries()) {
+      // One row per part was written above.
+      const batch = batches[index] as BatchRecord
+      await this.deliverPersistent({ batch, events, subscription: flushed.subscription }, session, subject)
+    }
+  }
+
+  /**
+   * Deliver one batch to its persistent Session: a new turn of the stored Session, a new Session when there is none,
+   * a seeded new Session at a rollover or when the stored one is gone, or a one-off Session when it cannot take a turn.
+   */
+  private async deliverPersistent(flushed: FlushedBatch, session: SessionAction, subject: string | undefined): Promise<void> {
+    const { batch, events, subscription } = flushed
+    /* v8 ignore next -- actuate() checked enabled; schemastery materializes the defaults. */
+    const persistent = session.persistent ?? { enabled: true, key: 'subscription', rolloverDays: 30, maxSeedChars: 20_000 }
+    const key = persistentKey(subscription.id, subject)
+    const label = subject === undefined ? subscription.id : `${subscription.id} (${subject})`
+    const prefix = session.titlePrefix ?? subscription.id
+    const fresh = { ...(subject === undefined ? {} : { subject }), title: clip(subject === undefined ? prefix : `${prefix}: ${subject}`, 119) }
+    const domain = await this.ready
+    const stored = domain.table('persistent').get(key)
+    if (stored === undefined) {
+      this.ctx.logger.info(`fork-event-bus: ${label} has no persistent Session yet; batch ${batch.id} starts one`)
+      await this.dispatchSession(flushed, 'persistent-new', fresh)
+      return
+    }
+    const seed = (): CarriedOver => ({
+      sessionId: stored.sessionId,
+      summary: stored.lastSummary === undefined ? undefined : clip(stored.lastSummary, persistent.maxSeedChars),
+    })
     const ageDays = (Date.now() - stored.createdAt) / DAY_MS
     if (ageDays >= persistent.rolloverDays) {
-      const summary = stored.lastSummary === undefined ? undefined : clip(stored.lastSummary, persistent.maxSeedChars)
-      this.ctx.logger.info(`fork-event-bus: ${subscription.id} rolls over Session ${stored.sessionId} after ${ageDays.toFixed(1)} day(s) and ${stored.batches} batch(es); ${summary === undefined ? 'it left no compaction summary' : `its ${summary.length}-char compaction summary is carried over`}`)
-      await this.dispatchSession(flushed, 'rollover', { sessionId: stored.sessionId, summary })
+      const carried = seed()
+      this.ctx.logger.info(`fork-event-bus: ${label} rolls over Session ${stored.sessionId} after ${ageDays.toFixed(1)} day(s) and ${stored.batches} batch(es); ${carried.summary === undefined ? 'it left no compaction summary' : `its ${carried.summary.length}-char compaction summary is carried over`}`)
+      await this.dispatchSession(flushed, 'rollover', { ...fresh, carried })
       return
     }
     const resolved = await this.resolveStored(stored.sessionId)
     if (resolved.kind === 'gone') {
-      this.ctx.logger.info(`fork-event-bus: persistent Session ${stored.sessionId} of ${subscription.id} is ${resolved.reason}; batch ${batch.id} starts a new one`)
-      await this.serialize(async () => { await domain.table('persistent').delete(subscription.id) })
-      await this.dispatchSession(flushed, 'persistent-new')
+      if (stored.lastSummary !== undefined) {
+        this.ctx.logger.info(`fork-event-bus: persistent Session ${stored.sessionId} of ${label} is ${resolved.reason}; batch ${batch.id} starts a new one seeded with its last compaction summary`)
+        await this.dispatchSession(flushed, 'rollover', { ...fresh, carried: seed() })
+        return
+      }
+      this.ctx.logger.info(`fork-event-bus: persistent Session ${stored.sessionId} of ${label} is ${resolved.reason}; batch ${batch.id} starts a new one`)
+      await this.serialize(async () => { await domain.table('persistent').delete(key) })
+      await this.dispatchSession(flushed, 'persistent-new', fresh)
       return
     }
     if (resolved.kind === 'unavailable') {
-      this.ctx.logger.warn(`fork-event-bus: persistent Session ${stored.sessionId} of ${subscription.id} cannot take batch ${batch.id} now (${resolved.reason}); it gets a one-off Session`)
+      this.ctx.logger.warn(`fork-event-bus: persistent Session ${stored.sessionId} of ${label} cannot take batch ${batch.id} now (${resolved.reason}); it gets a one-off Session`)
       await this.dispatchSession(flushed, 'detached')
       return
     }
     const prompt = buildBatchPrompt(subscription.id, session, events)
-    this.deliveries.set(batch.id, { delivery: 'persistent' })
+    this.deliveries.set(batch.id, { delivery: 'persistent', ...(subject === undefined ? {} : { subject }) })
     try {
       resolved.agent.followup(createUserMessage({
         content: [{ type: 'text', text: prompt }],
@@ -857,7 +982,7 @@ export class ForkEventBus extends Service {
           deliveryId: batch.id as WebhookDeliveryId,
           ruleId: FORK_EVENT_RULE_ID as WebhookRuleId,
           form: 'notice',
-          summary: boundContextSummary(`${FORK_EVENT_KIND} batch of ${subscription.id} for its persistent Session`),
+          summary: boundContextSummary(`${FORK_EVENT_KIND} batch of ${label} for its persistent Session`),
         },
       }))
     } catch (error: unknown) {
@@ -868,13 +993,13 @@ export class ForkEventBus extends Service {
     }
     await this.markBatch(batch.id, { delivery: 'persistent', sessionId: stored.sessionId })
     const count = await this.serialize(async () => {
-      const current = domain.table('persistent').get(subscription.id)
+      const current = domain.table('persistent').get(key)
       /* v8 ignore next -- a rollover or replacement recorded between the follow-up and this count. */
       if (current?.sessionId !== stored.sessionId) return stored.batches + 1
-      await domain.table('persistent').put(subscription.id, { ...current, batches: current.batches + 1 })
+      await domain.table('persistent').put(key, { ...current, batches: current.batches + 1 })
       return current.batches + 1
     })
-    this.ctx.logger.info(`fork-event-bus: batch ${batch.id} (${events.length} event(s)) entered persistent Session ${stored.sessionId} of ${subscription.id} as its batch #${count} (${ageDays.toFixed(1)} day(s) old, rollover at ${persistent.rolloverDays})`)
+    this.ctx.logger.info(`fork-event-bus: batch ${batch.id} (${events.length} event(s)) entered persistent Session ${stored.sessionId} of ${label} as its batch #${count} (${ageDays.toFixed(1)} day(s) old, rollover at ${persistent.rolloverDays})`)
   }
 
   /** Resolve a persistent subscription's stored Session to its live Agent. */
@@ -897,14 +1022,16 @@ export class ForkEventBus extends Service {
    * Make a newly created Session its subscription's persistent Session, then archive the one it replaces
    * (the rollover's old Session, or one a concurrent batch created).
    */
-  private async adopt(subscriptionId: string, sessionId: string, delivery: SessionDelivery): Promise<void> {
+  private async adopt(subscriptionId: string, sessionId: string, delivery: SessionDelivery, subject: string | undefined): Promise<void> {
     const domain = await this.ready
+    const key = persistentKey(subscriptionId, subject)
     const adopted = await this.serialize(async () => {
       const table = domain.table('persistent')
-      const current = table.get(subscriptionId)
+      const current = table.get(key)
       if (current?.sessionId === sessionId) return undefined
-      await table.put(subscriptionId, {
+      await table.put(key, {
         subscription: subscriptionId,
+        ...(subject === undefined ? {} : { subject }),
         sessionId,
         createdAt: Date.now(),
         batches: 1,
@@ -915,8 +1042,9 @@ export class ForkEventBus extends Service {
     })
     if (adopted === undefined) return
     const { previous } = adopted
-    this.ctx.logger.info(`fork-event-bus: Session ${sessionId} is now the persistent Session of ${subscriptionId} (${delivery})${previous === undefined ? '' : `, replacing ${previous}`}`)
-    if (previous !== undefined) await this.archive(previous, subscriptionId)
+    const label = subject === undefined ? subscriptionId : `${subscriptionId} (${subject})`
+    this.ctx.logger.info(`fork-event-bus: Session ${sessionId} is now the persistent Session of ${label} (${delivery})${previous === undefined ? '' : `, replacing ${previous}`}`)
+    if (previous !== undefined) await this.archive(previous, label)
   }
 
   /** Archive a replaced persistent Session; its log stays readable in the Web UI's archive. */
@@ -941,13 +1069,40 @@ export class ForkEventBus extends Service {
       const table = domain.table('persistent')
       const current = rowsOf(table).find(record => record.sessionId === sessionId)
       if (current === undefined) return
-      await table.put(current.subscription, {
+      await table.put(persistentKey(current.subscription, current.subject), {
         ...current,
         compactions: current.compactions + 1,
         ...(summary === undefined ? {} : { lastSummary: summary }),
       })
       this.ctx.logger.info(`fork-event-bus: persistent Session ${sessionId} of ${current.subscription} compacted (#${current.compactions + 1}${summary === undefined ? ', no summary text' : `, ${summary.length}-char summary kept for the rollover`})`)
     })
+  }
+
+  /**
+   * Archive the Sessions this bus started (fresh, one-off, and persistent) whose last batch is `archiveIdleDays` old.
+   * A Session that is running is skipped and tried again at the next sweep; its log stays readable in the archive.
+   */
+  private async archiveIdle(): Promise<void> {
+    const registry = this.ctx.get('workspaceRegistry')
+    if (registry === undefined || this.stopping) return
+    const cutoff = Date.now() - this.config.archiveIdleDays * DAY_MS
+    const last = new Map<string, number>()
+    for (const batch of this.batches()) {
+      if (batch.sessionId !== undefined) last.set(batch.sessionId, Math.max(last.get(batch.sessionId) ?? 0, batch.createdAt))
+    }
+    const archived = new Set<string>(registry.archivedSessionIds)
+    const idle = [...last].filter(([sessionId, at]) => at < cutoff && !archived.has(sessionId) && !this.tracked.has(sessionId))
+    let done = 0
+    for (const [sessionId, at] of idle) {
+      try {
+        await registry.archiveSession(sessionId as SessionId)
+        done += 1
+        this.ctx.logger.info(`fork-event-bus: archived idle Session ${sessionId} (last batch ${new Date(at).toISOString()})`)
+      } catch (error: unknown) {
+        this.ctx.logger.info(`fork-event-bus: idle Session ${sessionId} not archived now: ${errorText(error)}`)
+      }
+    }
+    if (idle.length > 0) this.ctx.logger.info(`fork-event-bus: idle sweep archived ${done} of ${idle.length} Session(s) idle for ${this.config.archiveIdleDays} day(s)`)
   }
 
   /** Merge fields into one stored batch; a pruned batch is ignored. */
@@ -970,7 +1125,9 @@ export class ForkEventBus extends Service {
       this.ctx.logger.warn(`fork-event-bus: delivery ${delivery.deliveryId} carries a malformed event`)
       return null
     }
-    return buildSessionRequest(subscription.id, subscription.session, parsed.data.events, this.deliveries.get(delivery.deliveryId)?.carried)
+    const pending = this.deliveries.get(delivery.deliveryId)
+    const request = buildSessionRequest(subscription.id, subscription.session, parsed.data.events, pending?.carried)
+    return pending?.title === undefined ? request : { ...request, title: pending.title }
   }
 
   /** Follow bus-started Sessions and unattended reminder turns to their turn end and report the outcome. */
@@ -1005,7 +1162,7 @@ export class ForkEventBus extends Service {
           usage: undefined,
         })
         this.track(this.markBatch(source.deliveryId, { sessionId: session.id }))
-        if (delivery === 'persistent-new' || delivery === 'rollover') this.track(this.adopt(source.source, session.id, delivery))
+        if (delivery === 'persistent-new' || delivery === 'rollover') this.track(this.adopt(source.source, session.id, delivery, pending?.subject ?? batch?.subject))
         return
       }
       case 'tool/call': {

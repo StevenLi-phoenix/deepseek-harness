@@ -8,7 +8,7 @@ const DAY = 86_400_000
 const triage = sessionConfig.subscriptions[0]!
 const persistentSub: Subscription = {
   ...triage,
-  session: { ...triage.session!, persistent: { enabled: true, rolloverDays: 30, maxSeedChars: 40 } },
+  session: { ...triage.session!, persistent: { enabled: true, key: 'subscription', rolloverDays: 30, maxSeedChars: 40 } },
 }
 const config = withConfig(sessionConfig, { subscriptions: [persistentSub] })
 
@@ -52,7 +52,7 @@ async function mount(controller: FakeController = fakeController(), registry = f
 describe('persistent session subscriptions', () => {
   it('materializes the persistent defaults (off, 30-day rollover)', () => {
     const parsed = Config({ subscriptions: [{ id: 'a', action: 'session', session: { workspacePath: '/w', instructions: 'x' } }] } as never)
-    expect(parsed.subscriptions[0]!.session!.persistent).toEqual({ enabled: false, rolloverDays: 30, maxSeedChars: 20_000 })
+    expect(parsed.subscriptions[0]!.session!.persistent).toEqual({ enabled: false, key: 'subscription', rolloverDays: 30, maxSeedChars: 20_000 })
   })
 
   it('starts one Session through the webhook runtime, then sends later batches into it as new turns', async () => {

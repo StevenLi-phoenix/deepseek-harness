@@ -41,10 +41,16 @@ const batchRecordSchema = z.object({
   silent: z.boolean().optional(),
   /** How a `session` batch was delivered (absent on rows written before persistent Sessions). */
   delivery: z.enum(['fresh', 'persistent-new', 'persistent', 'rollover', 'detached']).optional(),
+  /** The events' subject of a batch delivered by subject (`persistent.key: subject`). */
+  subject: z.string().optional(),
+  /** The batch this one was split from by subject; such rows do not count against `maxPerHour`. */
+  parent: z.string().optional(),
 }).strict()
 
 const persistentRecordSchema = z.object({
   subscription: z.string().min(1),
+  /** The subject of a `key: subject` Session. */
+  subject: z.string().optional(),
   sessionId: z.string().min(1),
   createdAt: z.number(),
   batches: z.number().int().min(0),
@@ -89,7 +95,7 @@ export type PendingRecord = z.infer<typeof pendingRecordSchema>
 export type BatchRecord = z.infer<typeof batchRecordSchema>
 /** One subscription created at run time, keyed by its id. */
 export type SubscriptionRecord = z.infer<typeof subscriptionRecordSchema>
-/** The persistent Session of one subscription, keyed by subscription id. */
+/** The persistent Session of one subscription (keyed by its id) or one subject of it (`<id>|<subject>`). */
 export type PersistentRecord = z.infer<typeof persistentRecordSchema>
 
 /** Bus storage; malformed rows reject opening the domain. */
