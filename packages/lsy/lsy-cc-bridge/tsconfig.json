@@ -15,7 +15,7 @@
       "path": "../lsy-event-bus"
     },
     {
-      "path": "../lsy-wechat/tsconfig.host.json"
+      "path": "../lsy-wechat"
     },
     {
       "path": "../../core/tools"

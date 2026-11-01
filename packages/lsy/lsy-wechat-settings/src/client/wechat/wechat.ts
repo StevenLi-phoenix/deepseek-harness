@@ -4,9 +4,9 @@
  */
 
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import { LOGIN_OPEN, type LoginSnapshot, type WechatAction, type WechatAnswer, type WechatView } from '../view.ts'
+import { LOGIN_OPEN, type LoginSnapshot, type WechatAction, type WechatAnswer, type WechatView } from '../../wechat-view.ts'
 
-export type { LoginSnapshot, WechatAction, WechatAnswer, WechatView } from '../view.ts'
+export type { LoginSnapshot, WechatAction, WechatAnswer, WechatView } from '../../wechat-view.ts'
 
 /** How often the open section refreshes the status. */
 export const POLL_INTERVAL_MS = 5000

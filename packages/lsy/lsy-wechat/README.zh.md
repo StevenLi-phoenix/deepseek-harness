@@ -87,7 +87,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 
 挂载 [`@deepseek-ai/dsh-lsy-presence`](../lsy-presence/README.zh.md) 之后，你睡着时，对话 Session 的回复和不紧急的通知会等着：它们进入 outbox 并标为压下，你醒来时合成一条汇总发出（每行带它入队的时间），你先发消息的话则在那时发出，以先到者为准。通知紧急时（发送方标了紧急，或它报告的某个事件类型匹配 lsy-presence 的 `urgentKinds`）、你在最近 `awakeAfterMessageMs` 内发过消息时，以及频道提示、汇总和文件，都不会被压。每次压下和每次放出都记日志，只记数量和事件类型，不记正文。你醒来时如果回复窗口的名额已经用完，压下的文本就作为普通 outbox 文本留着，等你发消息。**设置 → 勿扰**显示状态、数出压下了多少，并可以按需发出。
 
-设置页的路由 `/api/lsy.wechat`（只要 Host 有 connection 服务就会注册，所以受它的登录保护）的回答和请求里都没有 bot token 和消息正文：id 做了遮挡，其余用时间、数量和代码表示。同一个包里的浏览器端把这一节（id `lsy-wechat`，顺序 52）加进设置导航，文案与其他 `lsy` 设置页一样有八种语言。
+设置页的路由 `/api/lsy.wechat`（只要 Host 有 connection 服务就会注册，所以受它的登录保护）的回答和请求里都没有 bot token 和消息正文：id 做了遮挡，其余用时间、数量和代码表示。页面本身，即分区 `lsy-wechat`（顺序 52，文案与其他 `lsy` 设置页一样有八种语言），在只含浏览器端的包 [`@deepseek-ai/dsh-lsy-wechat-settings`](../lsy-wechat-settings/README.zh.md) 里，这样本包不带浏览器面；它那份 `src/view.ts` 与这里逐字节相同，由测试检查。
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-lsy-wechat)是全部可用字段的权威来源。
 
@@ -108,8 +108,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 | [`src/login.ts`](src/login.ts) | 二维码登录状态机、终端登录命令、`saveLogin()`（两种登录共同写入的账号文件）、账号文件 |
 | [`src/login-session.ts`](src/login-session.ts) | 设置页驱动的那一个二维码登录：`waiting`、`scanned`、`needs-code`、`expired`、`done`、`failed`；转交验证数字；经 `saveLogin()` 写账号，并通知通道重读 |
 | [`src/settings.ts`](src/settings.ts) | 路由 `/api/lsy.wechat`：视图（绑定、通道健康、回复窗口、发件箱），经 schema 校验的 `login.start`、`login.poll`、`login.code`、`login.cancel`、`unbind`，每个都记录结果和耗时 |
-| [`src/view.ts`](src/view.ts) | Host 路由和浏览器端共用的类型、常量和 `maskId()` |
-| [`src/client/`](src/client) | 浏览器端：设置页（状态卡、回复窗口卡、带内嵌二维码面板的绑定卡、两步解绑）、它的 store 和轮询（状态每 5 秒，进行中的登录每 2 秒，页面隐藏时都暂停）和八种语言的词典 |
+| [`src/view.ts`](src/view.ts) | Host 路由和浏览器端共用的类型、常量和 `maskId()`（`lsy-wechat-settings` 保留一份逐字节相同的副本） |
 | [`src/text.ts`](src/text.ts) | 入站文本提取与引用时间、按 Markdown 结构拆分消息、摘要、时间戳、时间间隔提示与转来通知的文本、命令回复 |
 | [`src/typing.ts`](src/typing.ts) | “正在输入”提示：带退避的 ticket 缓存、5 秒保活、一小时上限、失败从不影响回复 |
 | [`src/media.ts`](src/media.ts) | CDN 下载与解密、图片类型识别、inbox、附件说明（含音频文件的转写）；外发的加密与上传（`getuploadurl`、CDN POST、`x-encrypted-param`） |

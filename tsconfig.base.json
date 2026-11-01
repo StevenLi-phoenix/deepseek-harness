@@ -507,6 +507,7 @@
       "@deepseek-ai/dsh-lsy-tool-wechat": ["./packages/lsy/lsy-tool-wechat/src"],
       "@deepseek-ai/dsh-lsy-voice": ["./packages/lsy/lsy-voice/src"],
       "@deepseek-ai/dsh-lsy-wechat": ["./packages/lsy/lsy-wechat/src"],
+      "@deepseek-ai/dsh-lsy-wechat-settings": ["./packages/lsy/lsy-wechat-settings/src"],
       "@deepseek-ai/dsh-mcp-client": ["./packages/mcp/mcp-client/src"],
       "@deepseek-ai/dsh-mcp-resources": ["./packages/mcp/mcp-resources/src"],
       "@deepseek-ai/dsh-message-feedback": ["./packages/feedback/message-feedback/src"],

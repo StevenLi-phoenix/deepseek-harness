@@ -3,14 +3,14 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
-import type { LoginSnapshot, WechatAnswer, WechatView } from '../src/view.ts'
-import { agoText, spanText } from '../src/client/format.ts'
-import { de, en, es, fr, ja, pt, ru, zh } from '../src/client/locales.ts'
-import { isWeixinLink, qrPath, qrViewSize } from '../src/client/qr.ts'
+import type { LoginSnapshot, WechatAnswer, WechatView } from '../src/wechat-view.ts'
+import { agoText, spanText } from '../src/client/wechat/format.ts'
+import { de, en, es, fr, ja, pt, ru, zh } from '../src/client/wechat/locales.ts'
+import { isWeixinLink, qrPath, qrViewSize } from '../src/client/wechat/qr.ts'
 import {
   LOGIN_POLL_INTERVAL_MS, POLL_INTERVAL_MS, WechatLoader, WechatRefused, createWechatStore, parseAnswer, startPolling, type WechatState,
-} from '../src/client/wechat.ts'
-import { WechatSection, type WechatProps } from '../src/client/WechatSection.tsx'
+} from '../src/client/wechat/wechat.ts'
+import { WechatSection, type WechatProps } from '../src/client/wechat/WechatSection.tsx'
 
 const t = makeTranslate(zh) as WechatProps['t']
 const NOW = Date.parse('2026-11-01T16:00:00Z')

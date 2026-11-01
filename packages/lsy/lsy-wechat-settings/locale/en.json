@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "WeChat settings",
+    "description": "Settings sections to bind the owner's WeChat bot by QR code, see the channel's health, unbind it, and control quiet hours."
+  }
+}

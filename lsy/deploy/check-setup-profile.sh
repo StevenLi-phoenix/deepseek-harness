@@ -46,6 +46,7 @@ done
 /usr/bin/grep -q "@deepseek-ai/dsh-lsy-tool-qq" "$WORK/fresh.yml" || fail "unattended preset lacks lsy-tool-qq"
 /usr/bin/grep -q "^- id: lsy-integrity$" "$WORK/fresh.yml" || fail "composition lacks lsy-integrity"
 /usr/bin/grep -q "^- id: lsy-presence$" "$WORK/fresh.yml" || fail "composition lacks lsy-presence"
+/usr/bin/grep -q "^- id: lsy-wechat-settings$" "$WORK/fresh.yml" || fail "composition lacks lsy-wechat-settings"
 
 if [ -d "$PREFIX/lsy/skills/autocut" ]; then
   [ -L "$FRESH/skills/autocut" ] && [ -f "$FRESH/skills/autocut/SKILL.md" ] || fail "autocut skill not linked into the home"

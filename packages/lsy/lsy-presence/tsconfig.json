@@ -1,11 +1,24 @@
 {
-  "files": [],
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
   "references": [
     {
-      "path": "./tsconfig.host.json"
+      "path": "../../../vendor/cordis"
     },
     {
-      "path": "./tsconfig.client.json"
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../lsy-event-bus"
+    },
+    {
+      "path": "../../storage/storage-domain"
     }
   ]
 }

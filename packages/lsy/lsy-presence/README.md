@@ -25,7 +25,7 @@ Stop the agent from buzzing your phone while you sleep. Your iPhone's Sleep Focu
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount the row next to `@deepseek-ai/dsh-lsy-wechat` and `@deepseek-ai/dsh-lsy-event-ingest`; the lsy event bundle mounts it. It needs the storage domain facility and, for the Settings page, the Host's `connection` service and the settings shell. It provides `ctx.lsyPresence`. Add the ingest source that carries the phone's signals, a *sink* source whose events go to this service and never to the event bus, so no subscription can start a Session or send a note because of them:
+Mount the row next to `@deepseek-ai/dsh-lsy-wechat` and `@deepseek-ai/dsh-lsy-event-ingest`; the lsy event bundle mounts it. It needs the storage domain facility and, for the Settings route, the Host's `connection` service; the page needs `@deepseek-ai/dsh-lsy-wechat-settings` and the settings shell. It provides `ctx.lsyPresence`. Add the ingest source that carries the phone's signals, a *sink* source whose events go to this service and never to the event bus, so no subscription can start a Session or send a note because of them:
 
 ```yaml
 - id: lsy-presence
@@ -71,7 +71,7 @@ The phone pushes `POST /hooks/lsy` with `Authorization: Bearer <token>` and the 
 
 The service implements `LsyIngestSink`. `lsy-event-ingest` gives a source that names `sink: lsyPresence` the validated event instead of publishing it, and answers `202 {"outcome":"asleep"|"awake"}`; any kind other than `presence.sleep.on` and `presence.sleep.off` is a `400`, and an unmounted service a `503`. The route `GET`/`POST /api/lsy.presence` sits under `/api`, so the connection's sign-in check guards it; each action (`sleep.now`, `wake.now`, `quiet.until`, `manual.clear`, `window.set`, `flush`) is checked against a schemastery schema and logged with its outcome and duration. No answer carries a token.
 
-The browser half registers the `settings.section` entry `lsy-presence` (order 53) with dictionaries in eight languages; it polls `api/lsy.presence` every 5 seconds while it is open and the page is visible.
+The Settings page is the section `lsy-presence` (order 53) of the browser-only package [`@deepseek-ai/dsh-lsy-wechat-settings`](../lsy-wechat-settings/README.md): eight languages, polling `api/lsy.presence` every 5 seconds while it is open and the page is visible. This package has no browser face; its `src/view.ts` and the copy in that package are byte-identical, and a test checks it.
 
 | File | Role |
 |---|---|
@@ -80,7 +80,6 @@ The browser half registers the `settings.section` entry `lsy-presence` (order 53
 | [`src/settings.ts`](src/settings.ts) | Route `/api/lsy.presence` and its actions |
 | [`src/storage.ts`](src/storage.ts) | The storage domain |
 | [`src/view.ts`](src/view.ts) | Types and constants shared by both halves |
-| [`src/client/`](src/client) | The Settings section, its store and poller, and the dictionaries |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 
