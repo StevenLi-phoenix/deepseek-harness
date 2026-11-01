@@ -24,7 +24,7 @@ export const dayTag = (day: string): string => `<style-samples day="${day}">`
 
 const bytes = (text: string): number => Buffer.byteLength(text, 'utf8')
 /** JSON quoting with angle brackets escaped, so no sample can open or close a tag. */
-const quote = (text: string): string => JSON.stringify(text).replaceAll('<', String.raw`<`).replaceAll('>', String.raw`>`)
+const quote = (text: string): string => JSON.stringify(text).replaceAll('<', '\\u003c').replaceAll('>', '\\u003e')
 
 function line(record: StyleRecord): string {
   const reply = quote(record.reply ?? '')
