@@ -116,7 +116,7 @@ describe('LsyEventBus agent subscriptions', () => {
     emit('w1', sessionEvents.assistant('Upgrade when convenient.'))
     emit('w1', sessionEvents.turnEnd())
     await vi.advanceTimersByTimeAsync(0)
-    expect(notes.at(-1)).toMatchObject({ title: '✅ octo-triage: octo/repo v7.0.0', body: 'Upgrade when convenient.' })
+    expect(notes.at(-1)).toMatchObject({ title: 'octo-triage: octo/repo v7.0.0', body: 'Upgrade when convenient.' })
   })
 })
 

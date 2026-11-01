@@ -5,6 +5,8 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 ## [Unreleased]
 
 ### Fixed
+- Bus result notes no longer start with ✅, which read as the event's verdict while it only meant the turn finished; a batch of several events is titled by subject and count (`CI: owner/repo (4 events)`) instead of its first event, so a note about a failed run is not headed by another run's success (2026-11-01).
+- The `ci` subscription tells the owner only what needs them: failures no code change fixes (secrets, quota, runners, outages), failed deployments or releases, and a default branch red twice in a row; branch and pull-request failures and successes answer NO_REPLY (2026-11-01).
 - `bili_channel_note` asks `ctx.lsyGuard` (purpose `bili-channel-note`, audience `channel`) after the local PII rules and refuses every note when the guard fails or is not mounted (2026-11-01); the persistent-Session idle archive of the bus is replaced by the shared sweep.
 - A long-lived Session whose recorded model left the profile (renamed or removed) continues on the configured default route and logs the switch, instead of ending every turn with `UNKNOWN_MODEL` (2026-11-01; the WeChat chat Session failed from 10/31 10:00 after `deepseek-v4.1-flash` became `opencode-go/deepseek-v4.1-flash`).
 - `lsy-integrity` no longer reports "定时任务（定义）被改动了" whenever a daily or weekly task runs: `scheduledAt` of a repeating task is its next run time and is left out of the digest; it still counts for one-shot `at` tasks (2026-11-01).

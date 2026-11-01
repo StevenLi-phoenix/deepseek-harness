@@ -72,7 +72,7 @@ describe('watch pipeline', () => {
     expect(deliveries).toHaveLength(2)
     expect(notes).toEqual([
       { title: '🆕 watch created: acme', body: 'target: GitHub repo acme/tool [releases]\naction: session\ninstructions: Decide whether to upgrade.\nSession: unknown' },
-      { title: '✅ acme: acme/tool v2.0.0', body: 'Upgrade: it fixes a bug you hit.', url: 'https://dsh.example/' },
+      { title: 'acme: acme/tool v2.0.0', body: 'Upgrade: it fixes a bug you hit.', url: 'https://dsh.example/' },
     ])
   })
 })
