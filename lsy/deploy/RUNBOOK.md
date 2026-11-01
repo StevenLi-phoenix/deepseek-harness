@@ -378,7 +378,8 @@ bili-svc is a separate private service on this Mac (`app.lishuyu.bili.svc`, `127
 1. Two tokens, both made on the Mac without printing them, written to the service `.env` (back it up first; restart afterwards):
    - `LSY_INGEST_TOKEN_BILI`: bili-svc pushes events to `/hooks/lsy` with it (the same value is in bili-svc's `ingest-token` file).
    - `BILI_SVC_TOKEN_UP`: bili-svc's `up` caller (scopes `read`, `reply`), made with `bili-svc token create --name up --scopes read,reply`.
-2. Check: `stdout.log` shows the `bili` source accepting events (`202`); a batch of new comments starts a `bili-up` Session; `up_status` in it reports the gate mode. The ledger and the brake live in bili-svc (`bili-svc ledger`, `bili-svc gate status`).
+2. Check: `stdout.log` shows the `bili` source accepting events (`202`); the first batch of new comments starts the `bili-up` Session, and later batches log `entered persistent Session <id> of bili-digest` and one `bili-digest batch … ended: …; context …; compaction …; tool calls …` line each; `up_status` in it reports the gate mode. Every 30 days the next batch starts a new Session and archives the old one (Web UI archive). The ledger and the brake live in bili-svc (`bili-svc ledger`, `bili-svc gate status`).
+   - Channel notes: `$DSH_HOME/lsy-tool-up/channel-notes.json` (read it, or delete it to clear every note). `evidence-salt` beside it keys viewers for lsy-style's evidence; deleting it changes every key.
 3. Stop: `bili-svc gate readonly` (replies stop at once, reads continue), or remove the `bili-digest` subscription. Only a person lifts a brake: `bili-svc gate release`, then `bili-svc gate mode auto`.
 
 ## 16b. The agent's own Bilibili account through bili-svc

@@ -3,26 +3,26 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/lsy/lsy-tool-up/README.md
 /:
-  en: a672c32e5dd63e05
-  zh: 3b37ebbaacab4607
+  en: 136ad5b109acad92
+  zh: e5cfbef39f221b36
 /deepseek-ai-dsh-lsy-tool-up:
   en: c616183ed9d130e7
   zh: 27ff9e499f7a58e8
 /deepseek-ai-dsh-lsy-tool-up/summary:
-  en: deb3f3590a656828
-  zh: d3748f382dfa4467
+  en: e6a72c30cc89633a
+  zh: 2cc49ba5bc97314f
 /deepseek-ai-dsh-lsy-tool-up/table-of-contents:
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
 /deepseek-ai-dsh-lsy-tool-up/use-this-package:
-  en: c1fe2645dc62ca7e
-  zh: ddb2d2653262b015
+  en: 8f1490f2035f3255
+  zh: 426d2d784d80e21b
 /deepseek-ai-dsh-lsy-tool-up/understand-the-implementation:
-  en: e15bcfde9778c9d8
-  zh: be9d84d167c10f1a
+  en: f495872fe2a41a8a
+  zh: 625c5cd1ba6fa934
 /deepseek-ai-dsh-lsy-tool-up/further-exploration:
-  en: 0210546747e2ca87
-  zh: 819cf7e0855927cb
+  en: 3657d3dd1f89ef5e
+  zh: dc7132eadecf3594
 /deepseek-ai-dsh-lsy-tool-up/model-experience:
   en: 215e7ba838619b7b
   zh: a311da3843709f90
@@ -50,9 +50,21 @@
 /deepseek-ai-dsh-lsy-tool-up/model-experience/reply-tools/kv-cache-effect:
   en: 2fbf2175168e8244
   zh: 933b34c34d2d1700
+/deepseek-ai-dsh-lsy-tool-up/model-experience/channel-notes:
+  en: 126bff355b13e27e
+  zh: 325a21d817f43b4c
+/deepseek-ai-dsh-lsy-tool-up/model-experience/channel-notes/what-the-model-sees:
+  en: 795382c7870015d3
+  zh: 21960f1fbda192f7
+/deepseek-ai-dsh-lsy-tool-up/model-experience/channel-notes/token-effect:
+  en: 3870b5a14ce92876
+  zh: 7d22b5b551123352
+/deepseek-ai-dsh-lsy-tool-up/model-experience/channel-notes/kv-cache-effect:
+  en: 4b8cd579e04eec3e
+  zh: 77bf986060cddf1a
 /deepseek-ai-dsh-lsy-tool-up/known-limitations-and-deferred-work:
-  en: 600212eb036f8ee3
-  zh: db8b876f2924107d
+  en: 73ba6690fd460521
+  zh: aa277506bc97ed0c
 /deepseek-ai-dsh-lsy-tool-up/known-limitations-and-deferred-work/dev-note:
   en: 201c08d81f6e9080
   zh: 9d9472cde4af73ac

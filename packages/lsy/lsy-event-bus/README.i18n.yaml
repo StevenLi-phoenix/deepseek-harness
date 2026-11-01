@@ -3,14 +3,14 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/lsy/lsy-event-bus/README.md
 /:
-  en: 06acf7bf4284e15e
-  zh: c1922682a47c26e6
+  en: 51b7e7d8bba38af2
+  zh: 8e611b5c8b456d55
 /deepseek-ai-dsh-lsy-event-bus:
   en: 20ef9611ef3013c9
   zh: 0ac7e4e9f4ee4c25
 /deepseek-ai-dsh-lsy-event-bus/summary:
-  en: e88d226a3a5f3c95
-  zh: ef5b5209459f6e4a
+  en: fe47a1517d5b7155
+  zh: a4a6ef8e9f8684ef
 /deepseek-ai-dsh-lsy-event-bus/table-of-contents:
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
@@ -21,20 +21,23 @@
   en: 816aa7cb41e2592d
   zh: 18c8c1bba8523d27
 /deepseek-ai-dsh-lsy-event-bus/use-this-package/minimal-configuration:
-  en: 5b7f074709363970
-  zh: 0aae456155e083f3
+  en: aca7cb1ed8fb0b30
+  zh: 7322d3d0976d4d4f
 /deepseek-ai-dsh-lsy-event-bus/use-this-package/run-time-subscriptions:
   en: b41e56162f37e80d
   zh: 263f172046836cbb
+/deepseek-ai-dsh-lsy-event-bus/use-this-package/persistent-sessions:
+  en: 8aa54e79d41d784d
+  zh: ca9db219dd516fe6
 /deepseek-ai-dsh-lsy-event-bus/use-this-package/result-reports:
-  en: bafb4a0f59e70a07
-  zh: 17cdb96a64d656c4
+  en: 6ef188ada61c6bae
+  zh: 3b322d494f7869df
 /deepseek-ai-dsh-lsy-event-bus/understand-the-implementation:
-  en: c6d13c53fd9c1b81
-  zh: 6007365e6dd68b8c
+  en: 156b8b15966c31be
+  zh: 20c5226e1a6f2dd0
 /deepseek-ai-dsh-lsy-event-bus/further-exploration:
-  en: 0f91b1fa6611c0df
-  zh: ae56c703dde0633e
+  en: fdbaf8d980245aa7
+  zh: 070b4a9e0ca5a670
 /deepseek-ai-dsh-lsy-event-bus/model-experience:
   en: 215e7ba838619b7b
   zh: a311da3843709f90
@@ -42,17 +45,17 @@
   en: 3296e9dd8138b0a0
   zh: 3296e9dd8138b0a0
 /deepseek-ai-dsh-lsy-event-bus/model-experience/session-prompt/what-the-model-sees:
-  en: a098e0ca6863b3cb
-  zh: 9dd6235fe5c51ff7
+  en: 1ec1972b1f96f92c
+  zh: 646f39c6a6033930
 /deepseek-ai-dsh-lsy-event-bus/model-experience/session-prompt/token-effect:
-  en: 15f1bd20208d87c7
-  zh: e0376ae862bd0a53
+  en: cd761bb6b373beda
+  zh: ae782765a1423ea4
 /deepseek-ai-dsh-lsy-event-bus/model-experience/session-prompt/kv-cache-effect:
-  en: 23469d9cad27fdf2
-  zh: 034706e03224cb28
+  en: 76a1a39f133968f7
+  zh: 0aa29005e3ee0fcb
 /deepseek-ai-dsh-lsy-event-bus/known-limitations-and-deferred-work:
-  en: 3becb1fd073621f7
-  zh: 4d821a8462fca61b
+  en: 09b6d03d3e4ff27b
+  zh: 3bf87a9c3aecbb64
 /deepseek-ai-dsh-lsy-event-bus/known-limitations-and-deferred-work/dev-note:
-  en: 134e4f14d9adec92
-  zh: 93d84264214171ed
+  en: 2b37c6cbf673f6fd
+  zh: cf08de597627eff2
