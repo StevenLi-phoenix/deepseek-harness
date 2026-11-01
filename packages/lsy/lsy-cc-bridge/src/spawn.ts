@@ -36,6 +36,11 @@ const SOCKET = 'dsh-cc'
 const NAME = /^[a-z0-9][a-z0-9-]{0,30}$/u
 const MODEL = /^[a-z0-9][a-z0-9.-]{0,40}$/u
 
+/** One shell word: single quotes around the text, each embedded quote closed, escaped, and reopened. */
+function shellQuote(text: string): string {
+  return `'${text.replaceAll('\'', '\'\\\'\'')}'`
+}
+
 export class Spawner {
   private readonly run: Run
 
@@ -53,14 +58,19 @@ export class Spawner {
     return result.code === 0 ? result.stdout.split('\n').map(s => s.trim()).filter(Boolean) : []
   }
 
-  /** Start a session named `name`; the caller waits for it to show up in the registry. */
-  async start(name: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  /**
+   * Start a session named `name`; the caller waits for it to show up in the registry.
+   * @param name - session name.
+   * @param task - first prompt, passed to Claude Code as its prompt argument, single-quoted for the shell; blank starts without one.
+   */
+  async start(name: string, task?: string): Promise<{ ok: true } | { ok: false; error: string }> {
     if (!NAME.test(name)) return { ok: false, error: 'name must be 1-31 characters: lower-case letters, digits, hyphens' }
     if (!MODEL.test(this.o.model)) return { ok: false, error: 'the configured model name is not valid' }
     const running = await this.running()
     if (running.includes(name)) return { ok: false, error: `a session named ${name} is already running` }
     if (running.length >= this.o.maxSessions) return { ok: false, error: `${String(running.length)} sessions are running; the limit is ${String(this.o.maxSessions)}. Stop one with cc_stop.` }
-    const command = `${this.o.command} --model ${this.o.model} --name ${name}`
+    const prompt = task?.trim() ?? ''
+    const command = `${this.o.command} --model ${this.o.model} --name ${name}${prompt === '' ? '' : ` -- ${shellQuote(prompt)}`}`
     const result = await this.tmux('new-session', '-d', '-s', name, '-x', '200', '-y', '50', '-c', this.o.workDir, command)
     return result.code === 0 ? { ok: true } : { ok: false, error: 'tmux could not start the session' }
   }
