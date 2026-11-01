@@ -38,8 +38,8 @@ kind: "package-group"
 | [`fork-qq/`](fork-qq/README.zh.md) | 基于 OneBot v11 协议端（NapCat）的 QQ 群观察者：记录名单里的群、按计划做摘要、默认从不发言 |
 | [`fork-qqbot/`](fork-qqbot/README.zh.md) | 官方 QQ 机器人通道，默认禁用：主人列入名单的私聊和 @ 消息各有一个对话 Session，回答经 `owner-relay` 送达 |
 | [`fork-qq-login/`](fork-qq-login/README.zh.md) | QQ 的设置分区：观察者的连接状态、NapCat 的登录状态，以及 QQ 把账号踢下线后用手机扫码重新登录的二维码 |
-| [`fork-style/`](fork-style/README.zh.md) | 从真人那里学说话方式：QQ 群和 B站的简短对话，不经模型过滤，每天一次作为引用数据给主 agent 看（`ctx.forkStyle`） |
-| [`fork-style-settings/`](fork-style-settings/README.zh.md) | 设置分区 说话风格：样本一键删除、审核、owner 自己的句子、收集计数和套话趋势 |
+| [`fork-style/`](fork-style/README.zh.md) | DSH 自己的说话风格：自己写的人设卡、从 QQ 群、B站和网页里学到的性格与热梗（挖掘器找出、搜索解释）和语气样本，给 unattended、up、bili、qqbot 看（`ctx.forkStyle`；`persona_update`、`style_note`、`meme_lookup`） |
+| [`fork-style-settings/`](fork-style-settings/README.zh.md) | 设置分区 说话风格：人设卡及其历史、带出处的热梗、可一键删除的语气样本、审核、挖掘器的上次运行、套话趋势和插件配置 |
 | [`fork-memory-admin/`](fork-memory-admin/README.zh.md) | 审阅智能体记忆的设置分区：待批准的写入、条目、带预览的回滚与彻底删除、人格反馈（它的 Host 路由是 `fork-memory` 的 `settings` 入口） |
 | [`fork-sysmon/`](fork-sysmon/README.zh.md) | 设置里显示 Host 机器 CPU、内存、功耗、温度与各卷磁盘用量的分区 |
 | [`fork-cc-admin/`](fork-cc-admin/README.zh.md) | 根服务 `ctx.forkClaudeCode`：服务账号的 Claude Code 会话，供设置页列出、带第一条任务启动和停止 |
