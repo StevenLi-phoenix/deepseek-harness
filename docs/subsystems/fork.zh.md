@@ -490,6 +490,13 @@ Source: [`packages/fork/fork-qqbot/src/index.ts`](../../packages/fork/fork-qqbot
 The samples, their collection, and the block: what the root row provides as `ctx.forkStyle`.
 
 ```ts cordis-catalog
+/**
+ * Counts for the Settings overview, without any sample text; refreshed whenever the panel is read, after each run,
+ * and on the schedule check.
+ * @returns active (`kept`) and pending samples, the review mode, the last run's start, and the stock-line trend.
+ */
+health(): StyleHealth
+
 /** Stop a run in progress (its Bilibili reads end). */
 dispose(): void
 

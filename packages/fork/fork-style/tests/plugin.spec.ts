@@ -132,6 +132,17 @@ describe('the style service (collect mode)', () => {
     expect((await style.panel()).lastRun).toMatchObject({ trigger: 'manual', seen: 0, qq: { status: 'off' }, bili: { status: 'off' } })
   })
 
+  it('reports counts without text through health(), and the stock-line direction', async () => {
+    const { style } = await mount()
+    await style.edit({ op: 'add', reply: '会的. 绝对会的' })
+    expect(style.health()).toEqual({ kept: 1, pending: 0, review: 'optional', lastRefreshAt: null, ticTrend: null })
+    expect(JSON.stringify(style.health())).not.toContain('会的')
+    const day = (withTics: number) => ({ day: 'd', answers: 10, withTics, mainAnswers: 0, meanChars: null })
+    expect(Style.ticTrend([day(5), day(5), day(5), day(1), day(1), day(1)])).toBe('down')
+    expect(Style.ticTrend([day(1), day(5)])).toBe('up')
+    expect(Style.ticTrend([day(3), day(3), day(3)])).toBe('flat')
+  })
+
   it('runs nothing and shows no next run while off', async () => {
     const { style } = await mount({ enabled: false })
     expect(await style.runIfDue()).toBeUndefined()
