@@ -344,6 +344,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-lsy-event-bus` | yes | Durable event bus for event-driven agent runs: dedupe, loop suppression, subscriptions, coalescing, rate limits, and dispatch to notify or Session actuators |
 | `@deepseek-ai/dsh-lsy-event-ingest` | yes | Authenticated POST route through which the owner's own services push events into the lsy event bus, one token per source |
 | `@deepseek-ai/dsh-lsy-github-sensor` | yes | GitHub polling sensor for the lsy event bus: releases, tags, commits, and notifications with conditional requests |
+| `@deepseek-ai/dsh-lsy-guard` | yes | One content validator for text that others can read: patterns, canaries, overlap with the owner's memory, and a model, any layer that cannot run refuses |
 | `@deepseek-ai/dsh-lsy-integrity` | yes | Integrity watch for the owner's main agent: hashes of the files that steer it, a WeChat notice when one changes, persona hashes per Session, and a count of the persona's forbidden stock lines |
 | `@deepseek-ai/dsh-lsy-memory` | yes | Owner memory across Sessions: a JSONL store the Host injects into each root Session, memory_search/memory_save/memory_forget tools, and a claude.ai export importer |
 | `@deepseek-ai/dsh-lsy-memory-admin` | no | Memory settings section: review, approve, undo, and erase what the agent remembers about the owner (browser half; the Host route is @deepseek-ai/dsh-lsy-memory/settings) |

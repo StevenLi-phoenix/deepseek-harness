@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Review and undo what the agent remembers without a terminal. **Settings → Memory** lists the writes waiting for you first, with where each came from and the Session behind it, to approve or discard. Below are the memories, searchable by text and category, with full text and history on demand, to undo or erase. A rollback card undoes one Session's changes or everything since a time: it previews first, and confirming applies exactly that preview. A last card holds your keep/delete verdicts on persona replies.
+Review and undo what the agent remembers without a terminal. **Settings → Memory** lists the writes waiting for you first, with their source and Session, to approve or discard. Below are the memories, searchable by text and category, with full text and history on demand, to undo or erase. A rollback card undoes one Session's changes or everything since a time, previewing first. A card holds your keep/delete verdicts on persona replies, and the page ends with the content guard's refusals of the last 24 hours and its settings.
 
 ## Table of Contents
 
@@ -34,7 +34,7 @@ This package is the page. Mount its row next to the Host route it talks to, `@de
   name: '@deepseek-ai/dsh-lsy-memory/settings'
 ```
 
-The page has no fields of its own. The Host row's optional `file` names the memory file (default `<DSH_HOME>/lsy-memory/memory.jsonl`, the file the agent's `lsy-memory` rows use).
+The page has no fields of its own (the guard's fields are the `lsy-guard` entry's). The Host row's optional `file` names the memory file (default `<DSH_HOME>/lsy-memory/memory.jsonl`, the file the agent's `lsy-memory` rows use).
 
 What each card does:
 
@@ -44,6 +44,7 @@ What each card does:
 | Entries | Memories, newest change first, with category counts; the opening of each text | Search, filter by category, page; open one for its full text and history; undo its latest change; erase it completely after seeing what goes |
 | Rollback | The Sessions that changed memory | Pick a Session or a time, preview the changes, confirm |
 | Reply feedback | Your keep/delete verdicts on persona replies | Remove one, or add one by hand |
+| Content guard | Texts checked and refused in the last 24 hours, refusals by rule name, the latest layer failure (from `GET /api/lsy.guard`, [`lsy-guard`](../lsy-guard/README.md); hidden where that route is not mounted) | Edit the `lsy-guard` entry in the All settings card below it ([`lsy-config`](../lsy-config/README.md)) |
 
 The same operations exist as the `memory-admin` command-line tool; it stays as the fallback (RUNBOOK section 15).
 

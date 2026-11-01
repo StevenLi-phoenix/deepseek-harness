@@ -16,6 +16,19 @@ export const MEMORY_PATH = '/api/lsy.memory'
 /** Document-relative form the browser fetches. */
 export const MEMORY_ROUTE = MEMORY_PATH.slice(1)
 
+/** Document-relative route of the content guard's overview (`@deepseek-ai/dsh-lsy-guard/settings`). */
+export const GUARD_ROUTE = 'api/lsy.guard'
+
+/** The guard's counts for the last 24 hours; rule names and numbers only, never a text. */
+export interface GuardOverview {
+  readonly checked: number
+  readonly rejected: number
+  readonly byRule: Readonly<Record<string, number>>
+  /** The latest failure of a layer (a model call, the canary file, the memory file). */
+  readonly lastError: { readonly at: number; readonly rule: string; readonly message: string } | null
+  readonly lastCheckAt: number | null
+}
+
 /** Entries the list shows per page. */
 export const PAGE_SIZE = 20
 /** Most entries one page may hold. */

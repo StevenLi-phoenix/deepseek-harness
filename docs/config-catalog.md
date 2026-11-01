@@ -2763,6 +2763,55 @@ export type RepoStream = 'releases' | 'commits' | 'tags'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-github-sensor -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-guard -->
+<a id="deepseek-aidsh-lsy-guard"></a>
+
+## `@deepseek-ai/dsh-lsy-guard`
+
+- `source`: [`packages/lsy/lsy-guard/src/index.ts:38`](../packages/lsy/lsy-guard/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Which layers run. The model layer ignores `false` for audience `public`. */
+  layers: {
+    /** Phone, email, ID, card, long-number, mention, address, and link patterns. */
+    patterns: boolean
+    /** The canary file and `extraCanaries`. */
+    canary: boolean
+    /** Overlap with the owner's memory entries. */
+    memory: boolean
+    /** The model's judgement; always runs for audience `public`. */
+    llm: boolean
+  }
+  /** Refuse any link, not only one that carries a token or an account id. */
+  blockLinks: boolean
+  /** Absolute path of the canary file, one string per line (`#` comments); defaults to `<DSH_HOME>/lsy-guard/canaries.txt`. */
+  canaryFile?: string
+  /** Canary strings from the configuration, on top of the file: honeypot tokens. */
+  extraCanaries: string[]
+  /** Absolute path of lsy-memory's memory file; defaults to `<DSH_HOME>/lsy-memory/memory.jsonl`. */
+  memoryFile?: string
+  /** Provider of the model layer's route; set together with `model`. Unset uses the profile's default model. */
+  provider?: string
+  /** Model id of the model layer's route; set together with `provider`. */
+  model?: string
+  /** Deadline of one model call, in milliseconds. */
+  timeoutMs: number
+  /** Output cap of one model call, in tokens. */
+  maxOutputTokens: number
+  /** Longest text checked, in characters; a longer one is refused. */
+  maxChars: number
+  /** Hours a model verdict is reused for the same text, purpose, and audience. */
+  cacheHours: number
+  /** Directory of `canaries.txt` and `raw/`; defaults to `<DSH_HOME>/lsy-guard`. */
+  dir?: string
+  /** Days the model's raw responses are kept. */
+  rawRetentionDays: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-guard -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-integrity -->
 <a id="deepseek-aidsh-lsy-integrity"></a>
 
@@ -2801,7 +2850,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-lsy-memory`
 
 - `inject`: `tools`
-- `source`: [`packages/lsy/lsy-memory/src/index.ts:62`](../packages/lsy/lsy-memory/src/index.ts)
+- `source`: [`packages/lsy/lsy-memory/src/index.ts:63`](../packages/lsy/lsy-memory/src/index.ts)
 
 ```ts config-catalog
 /** Memory file and context budget. */

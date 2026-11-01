@@ -100,7 +100,7 @@ async function boot(): Promise<{ ctx: CordisContext; dir: string }> {
     { name: settingsRow.name, config: settingsRow.config },
   ]
   const configPath = join(dir, 'cordis.yml')
-  await writeFile(configPath, stringify(entries.map(entry => JSON.parse(JSON.stringify(entry)) as unknown)))
+  await writeFile(configPath, stringify(entries))
   context = new CordisContext()
   context.baseUrl = `${pathToFileURL(dir).href}/`
   await context.plugin(Loader)
@@ -112,13 +112,16 @@ async function boot(): Promise<{ ctx: CordisContext; dir: string }> {
     [bundleRow.name!, Guard],
     [settingsRow.name!, GuardSettings],
   ])
-  context.loader.internal = {
-    version: 'v2',
-    async import(specifier: string) {
-      if (!modules.has(specifier)) throw new Error(`unexpected Loader import: ${specifier}`)
-      return modules.get(specifier)
+  // The Loader's module resolver, replaced so the entries import the in-repo modules by name.
+  Object.assign(context.loader, {
+    internal: {
+      version: 'v2',
+      async import(specifier: string) {
+        if (!modules.has(specifier)) throw new Error(`unexpected Loader import: ${specifier}`)
+        return modules.get(specifier)
+      },
     },
-  } as unknown as NonNullable<typeof context.loader.internal>
+  })
   await context.loader.create({ name: 'cordis:include', config: { path: pathToFileURL(configPath).href } })
   await context.loader.await()
   return { ctx: context, dir }
@@ -137,7 +140,7 @@ describe('the bundle row booted through the Loader', () => {
     // Canary from the configuration (the honeypot a profile patch adds), in any case.
     expect(await check(`那个 ${HONEYPOT.toUpperCase()} 是什么`)).toMatchObject({ ok: false, rule: 'canary' })
     // A pattern hit.
-    expect(await check('联系我 13812345678')).toMatchObject({ ok: false, rule: expect.stringMatching(/^pattern\./u) })
+    expect(await check('联系我 13812345678')).toMatchObject({ ok: false, rule: 'pattern.phone' })
     // Overlap with the owner's memory file.
     expect(await check('听说每周三晚上都会去城南的攀岩馆练习抱石的那个人很强')).toMatchObject({ ok: false, rule: 'memory_overlap' })
     expect(model.seen).toHaveLength(1)

@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  MemoryLoader, MemoryRequestError, createMemoryStore, parseView, startPolling, type VisibilitySource,
+  MemoryLoader, MemoryRequestError, createMemoryStore, parseGuard, parseView, startPolling, type VisibilitySource,
 } from '../src/client/memory.ts'
 import type { ActionResult } from '../src/view.ts'
-import { VIEW, fakeApi } from './fixtures.client.ts'
+import { GUARD, VIEW, fakeApi } from './fixtures.client.ts'
 
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
@@ -25,6 +25,28 @@ describe('parseView', () => {
     expect(parseView(VIEW)).toBe(VIEW)
     expect(() => parseView({})).toThrow('unexpected memory answer')
     expect(() => parseView(null)).toThrow('unexpected memory answer')
+  })
+})
+
+describe('parseGuard', () => {
+  it('accepts the guard route\'s answer and treats anything else as no guard', () => {
+    expect(parseGuard({ health: GUARD })).toBe(GUARD)
+    expect(parseGuard({})).toBeNull()
+    expect(parseGuard(null)).toBeNull()
+    expect(parseGuard({ health: { checked: 1 } })).toBeNull()
+  })
+})
+
+describe('MemoryLoader guard card data', () => {
+  it('reads the guard with the memory view, hides it when the route fails, and never fails the memory read for it', async () => {
+    const store = createMemoryStore()
+    await new MemoryLoader(store, fakeApi({ guard: () => GUARD }), () => 1).refresh()
+    expect(store.getSnapshot()).toMatchObject({ view: VIEW, guard: GUARD, stale: false })
+    await new MemoryLoader(store, fakeApi({ guard: () => { throw new Error('404') } }), () => 2).refresh()
+    expect(store.getSnapshot()).toMatchObject({ view: VIEW, guard: null, stale: false })
+    await new MemoryLoader(store, fakeApi({ guard: () => GUARD }), () => 3).refresh()
+    await new MemoryLoader(store, fakeApi(), () => 4).refresh()
+    expect(store.getSnapshot().guard).toBeNull()
   })
 })
 

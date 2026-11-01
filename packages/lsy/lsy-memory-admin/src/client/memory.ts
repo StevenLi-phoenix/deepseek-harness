@@ -8,10 +8,10 @@
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import {
   PAGE_SIZE,
-  type ActionResult, type DetailView, type MemoryAction, type MemoryQuery, type MemoryView,
+  type ActionResult, type DetailView, type GuardOverview, type MemoryAction, type MemoryQuery, type MemoryView,
 } from '../view.ts'
 
-export type { ActionResult, DetailView, MemoryAction, MemoryQuery, MemoryView } from '../view.ts'
+export type { ActionResult, DetailView, GuardOverview, MemoryAction, MemoryQuery, MemoryView } from '../view.ts'
 
 /** How often the open section refreshes. */
 export const POLL_INTERVAL_MS = 10_000
@@ -56,6 +56,8 @@ export interface ActionError {
 export interface MemoryState {
   /** The last view the Host answered; a failed refresh keeps it. */
   view: MemoryView | null
+  /** The content guard's counts; null while the Host has no guard route or the read failed. */
+  guard: GuardOverview | null
   /** The list's filter and page, which every read carries. */
   query: MemoryQuery
   /** Time of the last settled read, answered or not. */
@@ -76,6 +78,7 @@ export interface MemoryState {
 export function createMemoryStore(): SnapshotStore<MemoryState> {
   return createSnapshotStore<MemoryState>({
     view: null,
+    guard: null,
     query: { q: '', category: 'all', offset: 0, limit: PAGE_SIZE },
     checkedAt: null,
     stale: false,
@@ -102,6 +105,19 @@ export function parseView(body: unknown): MemoryView {
   return body as MemoryView
 }
 
+/**
+ * Check the guard overview's outer shape; anything else counts as no guard.
+ * @param body - the parsed JSON body of `GET api/lsy.guard`.
+ * @returns the counts, or null.
+ */
+export function parseGuard(body: unknown): GuardOverview | null {
+  const health = typeof body === 'object' && body !== null ? (body as { health?: unknown }).health : undefined
+  if (typeof health !== 'object' || health === null) return null
+  const fields = health as Partial<Record<keyof GuardOverview, unknown>>
+  if (typeof fields.checked !== 'number' || typeof fields.rejected !== 'number' || typeof fields.byRule !== 'object' || fields.byRule === null) return null
+  return health as GuardOverview
+}
+
 /** A Host refusal, with its code when it gave one. */
 export class MemoryRequestError extends Error {
   constructor(message: string, readonly code: string | null = null) {
@@ -109,9 +125,11 @@ export class MemoryRequestError extends Error {
   }
 }
 
-/** The three calls the loader makes. */
+/** The calls the loader makes. */
 export interface MemoryApi {
   read(query: MemoryQuery): Promise<MemoryView>
+  /** The guard's counts; absent where the guard's route is not mounted, which hides its card. */
+  guard?(): Promise<GuardOverview | null>
   detail(id: string): Promise<DetailView>
   post(action: MemoryAction): Promise<ActionResult>
 }
@@ -375,18 +393,22 @@ export class MemoryLoader implements MemoryActions {
     const generation = this.generation
     const asked = this.store.getSnapshot().query
     let view: MemoryView | undefined
+    // The guard's card is an extra: a missing route or a failed read hides it and never delays or fails the memory read.
+    const guardRead = (this.api.guard?.() ?? Promise.resolve(null)).catch(() => null)
     try {
       view = await this.api.read(asked)
     } catch {
       // Warn when the reading goes stale, not on every poll after that.
       if (!this.store.getSnapshot().stale) console.warn('[lsy-memory-admin] memory read failed')
     }
+    const guard = await guardRead
     if (generation !== this.generation) return
     const at = this.now()
     this.store.update((draft) => {
       draft.checkedAt = at
       draft.stale = view === undefined
       if (view !== undefined) draft.view = view
+      draft.guard = guard
     })
     // A page past the end (entries were removed) goes back to the last page that has any.
     if (view !== undefined && view.entries.items.length === 0 && view.entries.matched > 0) {

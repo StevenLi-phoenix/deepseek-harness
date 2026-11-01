@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Keep the owner's private life out of anything the agent writes for other people. Every plugin that stores or posts text strangers can read (a persona update, a style note, a QQ group note, a Bilibili channel note) asks one validator, `ctx.lsyGuard.check(text, { purpose, audience })`, instead of growing its own list of patterns. The answer is `{ ok: true }` or a refusal with a rule name and a generic reason that never repeats the text, so it can go back to the model that wrote it. Four layers run in order, and a layer that cannot run refuses as well.
+Keep the owner's private life out of anything the agent writes for other people. A plugin that stores or posts text strangers can read (a persona update, a style note, a group note) asks `ctx.lsyGuard.check(text, { purpose, audience })`. The answer is `{ ok: true }` or a refusal with a rule name and a generic reason that never repeats the text. Patterns, canary strings, overlap with the owner's memory, and a model run in order, and a layer that cannot run refuses as well.
 
 ## Table of Contents
 
@@ -25,19 +25,27 @@ Keep the owner's private life out of anything the agent writes for other people.
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount it once at the root; the lsy event bundle does. The service is Host-only and exposes no tool to any agent.
+Mount it once at the root; the lsy event bundle does, ahead of every writer of shared text. The service is Host-only and exposes no tool to any agent. A second row, `@deepseek-ai/dsh-lsy-guard/settings`, serves `GET /api/lsy.guard` (counts only) for the guard card in Settings → Memory, which also lists every field of the `lsy-guard` entry in the All settings card.
 
 ```yaml
 - id: lsy-guard
   name: '@deepseek-ai/dsh-lsy-guard'
   config:
     extraCanaries: ['a honeypot token']   # in the profile patch, not in the public bundle
+- id: lsy-guard-settings
+  name: '@deepseek-ai/dsh-lsy-guard/settings'
 ```
 
+A plugin that writes text others can read looks the service up when it writes, with `ctx.get`, and refuses the write when the guard is absent:
+
 ```ts
-const verdict = await ctx.lsyGuard.check(text, { purpose: 'persona_update', audience: 'public', sessionId })
+const guard = ctx.get('lsyGuard')
+if (guard === undefined) return 'refused: the content guard is not mounted'
+const verdict = await guard.check(text, { purpose: 'persona_update', audience: 'public', sessionId })
 if (!verdict.ok) return `refused (${verdict.rule}): ${verdict.publicReason}`
 ```
+
+The check never rejects, so no `try` is needed; a plugin without the guard in its dependency graph declares a local structural type for it instead of importing this package. A text is checked as written, so a caller checks the exact string it stores, once per write.
 
 `purpose` is a short identifier (`persona_update`, `style_note`, `qq_group_note`, `bili_channel_note`, lowercase letters, digits, `_`, `.`, `-`, at most 40 characters). `audience` is `public` for text anyone can read and `channel` for the readers of one QQ group or Bilibili account. The two differ in one thing: the model layer can be switched off for `channel` and never for `public`.
 
@@ -57,7 +65,7 @@ if (!verdict.ok) return `refused (${verdict.rule}): ${verdict.publicReason}`
 | `blockLinks` | `true` | Refuse any link; `false` refuses only a link that carries a token or an account id |
 | `canaryFile` | `<DSH_HOME>/lsy-guard/canaries.txt` | One string per line, `#` starts a comment, reloaded when the file changes; a missing file is an empty list |
 | `extraCanaries` | `[]` | Strings kept in the configuration, on top of the file |
-| `memoryFile` | `<DSH_HOME>/lsy-memory/memory.jsonl` | The memory file compared against (entries and waiting writes); a missing file shares nothing |
+| `memoryFile` | `<DSH_HOME>/lsy-memory/memory.jsonl` | The memory file compared against (entries and waiting writes); a missing file shares nothing, and the log says so once |
 | `provider`, `model` | profile default | Route of the model layer, set together; unset uses `ctx.agentDefaultModel`, the cheap route the event profile selects |
 | `timeoutMs`, `maxOutputTokens` | `20000`, `400` | Deadline and output cap of one model call |
 | `maxChars` | `20000` | Longest text checked |
@@ -65,6 +73,8 @@ if (!verdict.ok) return `refused (${verdict.rule}): ${verdict.publicReason}`
 | `dir`, `rawRetentionDays` | `<DSH_HOME>/lsy-guard`, `14` | Where `canaries.txt` and `raw/` live, and how long raw model responses stay |
 
 Canaries match without regard to case, width, spacing, or punctuation (`BSV-Honeypot-7F3A91` finds `bsv_honeypot_7f3a91`). A canary shorter than three characters, or two when it holds a Chinese, Japanese, or Korean character, is left out because it would match unrelated text.
+
+Settings → Memory shows the last 24 hours of refusals by rule on the guard card (counts and rule names, never a text), and its All settings card edits the layers, the model route, and the honeypot list; a save reloads the plugin.
 
 `ctx.lsyGuard.health()` answers counts for the last 24 hours (checks, refusals, refusals by rule), the most recent layer failure with a message cut to 200 characters, and the time of the latest check, never any text. Each check logs one line: purpose, audience, verdict, rule, the first 12 hex digits of the text's SHA-256, milliseconds, and cache hit or miss. Neither the text nor a canary is logged.
 
@@ -90,6 +100,7 @@ Only the model layer is cached, by SHA-256 of the text, purpose, audience, and p
 | [`src/canary.ts`](src/canary.ts) | The canary file and configured strings |
 | [`src/classifier.ts`](src/classifier.ts) | Prompt, answer parser, raw response store |
 | [`src/model.ts`](src/model.ts) | The model call over the LLM service |
+| [`src/settings.ts`](src/settings.ts) | `GET /api/lsy.guard`: the counts of `health()` for the Settings card |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 
@@ -109,11 +120,11 @@ This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 <a id="model-experience"></a>
 ## Model Experience
 
-None for the agents that write the text, as the guard registers no tool and adds nothing to their requests; the writer sees only the refusal's rule and generic reason when its plugin passes it on. The review itself is a separate one-shot request.
+None, as the guard registers no tool and adds nothing to the requests of the agents that write the text; a writer sees only a refusal's rule and generic reason when its plugin passes them on.
 
 #### KV Cache effect
 
-None for the main agent. The review request has a fixed system prompt, so the provider can reuse it across checks; the model layer's cache avoids repeat requests for the same text.
+None for the main agent. The review is a separate one-shot request with a fixed system prompt, so the provider can reuse it across checks, and the model layer's cache avoids repeat requests for the same text.
 
 ## Known Limitations and Deferred Work
 
@@ -123,6 +134,7 @@ None for the main agent. The review request has a fixed system prompt, so the pr
 - **A word list and a model, not a proof** — patterns miss spelled-out numbers and paraphrased facts; the model layer is the safety net, and it can be wrong in both directions. A refused text costs one rewrite.
 - **Short canaries are skipped** — a one-character name cannot be matched without refusing unrelated text.
 - **Common Chinese phrases can overlap** — a six-character span shared with a memory entry refuses even when the phrase is innocent.
+- **The memory layer reads the file, not the service** — it compares against `memoryFile` directly, so it works in a profile that mounts `lsy-memory` only in one preset; a profile whose memory lives elsewhere must set `memoryFile`, or the layer compares against nothing.
 - **The cache lives in memory** — a restart repeats the model call once per text.
 
 <a id="dev-note"></a>
