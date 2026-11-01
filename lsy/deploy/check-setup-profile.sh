@@ -36,6 +36,8 @@ done
 /usr/bin/grep -q "@deepseek-ai/dsh-lsy-tool-up" "$WORK/fresh.yml" || fail "up preset lacks lsy-tool-up"
 /usr/bin/grep -q "^- id: lsy-qq\$" "$WORK/fresh.yml" || fail "composition lacks lsy-qq"
 /usr/bin/grep -q "^- id: lsy-qq-login\$" "$WORK/fresh.yml" || fail "composition lacks lsy-qq-login"
+/usr/bin/grep -q "^- id: lsy-style\$" "$WORK/fresh.yml" || fail "composition lacks lsy-style"
+/usr/bin/grep -q "id: lsy-style-prompt" "$WORK/fresh.yml" || fail "unattended preset lacks lsy-style-prompt"
 /usr/bin/grep -q "^- id: preset-qq-digest\$" "$WORK/fresh.yml" || fail "composition lacks preset-qq-digest"
 /usr/bin/grep -q "^- id: preset-qqbot\$" "$WORK/fresh.yml" || fail "composition lacks preset-qqbot"
 /usr/bin/grep -q "@deepseek-ai/dsh-lsy-tool-qq" "$WORK/fresh.yml" || fail "unattended preset lacks lsy-tool-qq"

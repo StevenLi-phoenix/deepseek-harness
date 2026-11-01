@@ -1,0 +1,46 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/lsy-style/README.md
+/:
+  en: 63f2578ea4e02538
+  zh: 6f3bd75dc3f0e077
+/deepseek-ai-dsh-lsy-style:
+  en: ae2fb04867a2445e
+  zh: b47b08c4c3a72928
+/deepseek-ai-dsh-lsy-style/summary:
+  en: fd635325bb20a6aa
+  zh: f12bef16c073d335
+/deepseek-ai-dsh-lsy-style/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-lsy-style/use-this-package:
+  en: 6f43aa7b1306e355
+  zh: 081cb6c29451efaa
+/deepseek-ai-dsh-lsy-style/understand-the-implementation:
+  en: 0c48b3bc1d225460
+  zh: 3d479e121bf6092a
+/deepseek-ai-dsh-lsy-style/further-exploration:
+  en: 5f13af23b18fff62
+  zh: 53597f937f6bfb2d
+/deepseek-ai-dsh-lsy-style/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-lsy-style/model-experience/style-block:
+  en: 0b9fc8672e90b9db
+  zh: e3d84d4a793d7f56
+/deepseek-ai-dsh-lsy-style/model-experience/style-block/what-the-model-sees:
+  en: 4b318af0fbe04d59
+  zh: ad11f23a19e5811d
+/deepseek-ai-dsh-lsy-style/model-experience/style-block/token-effect:
+  en: 0aca86fa7b109126
+  zh: 3d8409dd5ea50b4a
+/deepseek-ai-dsh-lsy-style/model-experience/style-block/kv-cache-effect:
+  en: 5fd06a5d35cec523
+  zh: 61095e7b1b495369
+/deepseek-ai-dsh-lsy-style/known-limitations-and-deferred-work:
+  en: 4f2ecad8333926f2
+  zh: 3e3657f792c57e86
+/deepseek-ai-dsh-lsy-style/known-limitations-and-deferred-work/dev-note:
+  en: c6f817432603b5a9
+  zh: 9f39a479d8296432

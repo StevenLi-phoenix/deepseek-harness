@@ -1,0 +1,353 @@
+/* Settings-native, like the QQ and System status sections: theme tokens only, so light and dark both hold. On a
+   phone each sample wraps under its own text and the delete button stays at the right edge of the row. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 0;
+  font-size: 13px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.dot[data-tone='stale'] {
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+.card,
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px 16px 16px;
+  border: 0.5px solid var(--dsw-alias-settings-card-stroke);
+  border-radius: var(--dsw-radius-xl);
+  background: var(--dsw-alias-settings-card-fill);
+}
+
+.card[data-pending] {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 55%, transparent);
+}
+
+.hero {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.hero[data-tone='off'] {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 45%, transparent);
+}
+
+.mark {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-top: 8px;
+  border-radius: 50%;
+}
+
+.mark[data-tone='on'] { background: var(--dsw-alias-state-success-primary); }
+.mark[data-tone='empty'] { background: var(--dsw-alias-state-idle-primary); }
+.mark[data-tone='off'] { background: var(--dsw-alias-state-warn-primary); }
+
+.heroText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.verdict {
+  margin: 0;
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 510;
+}
+
+.next,
+.hint {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-top: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: var(--dsw-radius-md);
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 12%, transparent);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.secondary,
+.primary,
+.remove,
+.keep {
+  height: 30px;
+  padding: 0 14px;
+  border: 0.5px solid var(--dsw-alias-settings-card-stroke);
+  border-radius: var(--dsw-radius-md);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-weight: 510;
+  cursor: pointer;
+  transition: opacity 160ms ease;
+}
+
+.primary {
+  border-color: transparent;
+  background: var(--dsw-alias-state-business-primary);
+  color: #fff;
+}
+
+.remove,
+.keep {
+  height: 28px;
+  padding: 0 10px;
+  font-weight: 400;
+}
+
+.remove {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.keep {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.secondary:disabled,
+.primary:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.notice {
+  margin: 0;
+  padding: 0 4px;
+  color: var(--dsw-alias-state-warn-primary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.cardTitle {
+  font-weight: 510;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-top: 0.5px solid var(--dsw-alias-settings-card-stroke);
+}
+
+.row:first-child {
+  border-top: none;
+}
+
+.exchange {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.prompt {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.arrow {
+  margin: 0 6px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.reply {
+  color: var(--dsw-alias-label-primary);
+}
+
+.tag {
+  margin-left: 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.rowActions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+.fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.input {
+  flex: 1 1 160px;
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  border: 0.5px solid var(--dsw-alias-settings-card-stroke);
+  border-radius: var(--dsw-radius-md);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+}
+
+.rows {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 0;
+}
+
+.pair {
+  display: contents;
+}
+
+.rows dt {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.rows dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.empty {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.trend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trendRow {
+  display: grid;
+  grid-template-columns: 44px 80px 1fr;
+  align-items: center;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.trendDay {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.bar {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 18%, transparent);
+  overflow: hidden;
+}
+
+.barFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 3px;
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+.trendText {
+  min-width: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.section[data-stale] .verdict,
+.section[data-stale] .next {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+@media (max-width: 480px) {
+  .rows {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .rows dd {
+    margin-bottom: 6px;
+  }
+
+  .trendRow {
+    grid-template-columns: 40px 56px 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .secondary,
+  .primary,
+  .remove,
+  .keep { transition: none; }
+}
