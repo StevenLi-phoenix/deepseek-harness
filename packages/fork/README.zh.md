@@ -27,6 +27,8 @@ kind: "package-group"
 | [`bili/`](bili/README.zh.md) | agent 自己的 B站账号，作为 bili-svc 的客户端：读取和不发言的操作走 bili-svc 的门，owner 的私信经它的回复闸门回复，以及管理 bili-svc 的设置页（账号、扫码登录、闸门、急停、动作记录） |
 | [`fork-balance/`](fork-balance/README.zh.md) | 账号设置页里列出各供应商 key 余额或配额的卡片 |
 | [`fork-config/`](fork-config/README.zh.md) | 任何设置分区都能嵌入的“全部设置”卡片（`settings.plugin-config`）：插件条目的每个 Config 字段、所在层，以及一次复核后写入主人补丁的保存 |
+| [`fork-courses/`](fork-courses/README.zh.md) | 主人的课程记录（`ctx.forkCourses`）：courses 服务的客户端，以及按固定规则在微信上提醒 DDL、并在课程同步坏了时告诉主人的轮询器 |
+| [`fork-courses-settings/`](fork-courses-settings/README.zh.md) | 设置页课程 DDL：提醒开关、检查记录、课程同步健康、接下来的截止、最近发出的提醒和配置 |
 | [`fork-event-bus/`](fork-event-bus/README.zh.md) | 去重、回环抑制、订阅、合批、限流、通知与 Session 分发 |
 | [`fork-event-ingest/`](fork-event-ingest/README.zh.md) | `POST /hooks/events` 路由：主人自己的服务用每个来源一个的 bearer token 推送事件 |
 | [`fork-github-sensor/`](fork-github-sensor/README.zh.md) | 用条件请求轮询 GitHub 的 release、tag、提交与通知 |
@@ -46,6 +48,7 @@ kind: "package-group"
 | [`fork-console/`](fork-console/README.zh.md) | 设置里的服务健康总览、事件订阅与定时提醒、Claude Code 会话与语音试听分区 |
 | [`fork-taint/`](fork-taint/README.zh.md) | 回合来源：当前回合由谁发起、陌生人的话有没有进来；只在 owner 自己的回合里联系 Claude Code，其他回合建的提醒和监控要上报 |
 | [`fork-time-gap/`](fork-time-gap/README.zh.md) | 所有 Session 的时间说明：安静一段时间（5 分钟）之后到达的输入，带着当前时间、Session 安静了多久，以及“按它本身来读”的提示交给模型 |
+| [`fork-tool-courses/`](fork-tool-courses/README.zh.md) | `courses_deadlines`、`courses_find`、`courses_get`、`courses_set_progress`、`courses_save_memo` 工具：agent 按主人的课程记录回答并更新它们 |
 | [`fork-tool-monitor/`](fork-tool-monitor/README.zh.md) | `monitor_start`、`monitor_stop`、`monitor_list` 工具：命令输出的每一行都回到同一个 Session |
 | [`fork-tool-up/`](fork-tool-up/README.zh.md) | `up_*` 工具：agent 读取创作者号的评论、私信和稿件，并向 bili-svc 回复闸门申请回复；答案只有 `sent`、`held`、`blocked` |
 | [`fork-tool-voice/`](fork-tool-voice/README.zh.md) | `speak` 工具：agent 把文字合成语音，并把音频发给微信上的 owner |

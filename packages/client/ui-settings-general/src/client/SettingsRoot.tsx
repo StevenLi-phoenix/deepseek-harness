@@ -18,7 +18,8 @@ import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import {
   ConnectionIndicator, Tooltip, useModalLayer,
-  IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconClockOutlineMedium, IconCloseOutlineRegular, IconCodeOutlineMedium,
+  IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconChecklistOutlineMedium, IconClockOutlineMedium, IconCloseOutlineRegular,
+  IconCodeOutlineMedium,
   IconDatabaseOutlineMedium, IconDataOutlineMedium, IconEnhanceOutlineMedium, IconFlatListOutlineMedium, IconGaugeOutlineMedium,
   IconNewChatOutlineMedium, IconPersonalizationOutlineMedium, IconPlayOutlineMedium, IconQueueOutlineMedium, IconSettingsOutlineMedium,
   IconUserOutlineMedium, IconUsersOutlineMedium,
@@ -41,7 +42,8 @@ const NAV_ICONS: Readonly<Record<string, typeof IconSettingsOutlineMedium>> = {
   'plugins': IconPersonalizationOutlineMedium,
   'archived-sessions': IconArchiveOutlineMedium,
   // Fork-added sections (packages/fork), by the id each registers: service overview, subscriptions, and Claude Code
-  // agents (fork-console); the WeChat page, its presence page, and its speaking style; memory; System status; the Bilibili account; QQ.
+  // agents (fork-console); the WeChat page, its presence page, and its speaking style; memory; System status; the Bilibili account; QQ;
+  // course deadlines.
   'fork-overview': IconFlatListOutlineMedium,
   'fork-subscriptions': IconQueueOutlineMedium,
   'fork-agents': IconCodeOutlineMedium,
@@ -52,6 +54,7 @@ const NAV_ICONS: Readonly<Record<string, typeof IconSettingsOutlineMedium>> = {
   'fork-sysmon': IconGaugeOutlineMedium,
   'bili': IconPlayOutlineMedium,
   'fork-qq': IconUsersOutlineMedium,
+  'fork-courses': IconChecklistOutlineMedium,
 }
 
 function navIcon(id: string) {

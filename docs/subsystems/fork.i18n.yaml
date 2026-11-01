@@ -3,5 +3,5 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/subsystems/fork.md
 /fork-event-service-fork-local:
-  en: 10ef9284228fcdc5
-  zh: 2ee4a755a77d48fb
+  en: 9594b9e4002ed3be
+  zh: f85d516d7106b6af

@@ -27,6 +27,8 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`bili/`](bili/README.md) | The agent's own Bilibili account as a client of bili-svc: reads and non-speech actions through bili-svc's door, the owner's messages answered through its Reply Gate, and a Settings section that manages bili-svc (accounts, QR sign-in, gate, brake, ledger) |
 | [`fork-balance/`](fork-balance/README.md) | Account settings card with the balance or quota of every provider key |
 | [`fork-config/`](fork-config/README.md) | The All settings card (`settings.plugin-config`) any Settings section embeds: every Config field of a plugin entry, its layer, and one reviewed save to the owner's patch |
+| [`fork-courses/`](fork-courses/README.md) | The owner's course records (`ctx.forkCourses`): a client of the courses service and a deadline poller that reminds the owner on WeChat by fixed rules and tells when the course sync is broken |
+| [`fork-courses-settings/`](fork-courses-settings/README.md) | Settings section 课程 DDL: reminder switch, checks, the course sync's health, the next deadlines, the latest reminders, and the configuration |
 | [`fork-event-bus/`](fork-event-bus/README.md) | Dedupe, loop suppression, subscriptions, coalescing, rate limits, notify and Session dispatch |
 | [`fork-event-ingest/`](fork-event-ingest/README.md) | `POST /hooks/events` route: the owner's own services push events under one bearer token per source |
 | [`fork-github-sensor/`](fork-github-sensor/README.md) | Polls GitHub releases, tags, commits, and notifications with conditional requests |
@@ -46,6 +48,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`fork-console/`](fork-console/README.md) | Settings sections for a service health overview, event subscriptions and schedule reminders, and Claude Code sessions with a voice preview |
 | [`fork-taint/`](fork-taint/README.md) | Turn origin: who started the open turn and whether strangers' words reached it; Claude Code messaging only in the owner's own turns, reminders and watches from other turns reported |
 | [`fork-time-gap/`](fork-time-gap/README.md) | Time check for every Session: an input that arrives after a quiet spell (5 minutes) reaches the model with the time, how long the Session was quiet, and a reminder to read it on its own terms |
+| [`fork-tool-courses/`](fork-tool-courses/README.md) | `courses_deadlines`, `courses_find`, `courses_get`, `courses_set_progress`, `courses_save_memo` tools: the agent answers and updates the owner's course records |
 | [`fork-tool-monitor/`](fork-tool-monitor/README.md) | `monitor_start`, `monitor_stop`, `monitor_list` tools: a command's output lines come back to the same Session |
 | [`fork-tool-up/`](fork-tool-up/README.md) | `up_*` tools: the agent reads the creator account's comments, private messages and videos and asks bili-svc's Reply Gate for replies; the answer is `sent`, `held`, or `blocked` |
 | [`fork-tool-voice/`](fork-tool-voice/README.md) | `speak` tool: the agent turns text into speech and sends the audio to the owner on WeChat |

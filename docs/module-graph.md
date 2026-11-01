@@ -374,6 +374,8 @@ flowchart TD
     pkg_fork_cc_bridge["fork-cc-bridge"]
     pkg_fork_config["fork-config"]
     pkg_fork_console["fork-console"]
+    pkg_fork_courses["fork-courses"]
+    pkg_fork_courses_settings["fork-courses-settings"]
     pkg_fork_event_bus["fork-event-bus"]
     pkg_fork_event_ingest["fork-event-ingest"]
     pkg_fork_github_sensor["fork-github-sensor"]
@@ -390,6 +392,7 @@ flowchart TD
     pkg_fork_sysmon["fork-sysmon"]
     pkg_fork_taint["fork-taint"]
     pkg_fork_time_gap["fork-time-gap"]
+    pkg_fork_tool_courses["fork-tool-courses"]
     pkg_fork_tool_monitor["fork-tool-monitor"]
     pkg_fork_tool_qq["fork-tool-qq"]
     pkg_fork_tool_up["fork-tool-up"]
@@ -1596,6 +1599,10 @@ flowchart TD
   pkg_sdk_jsonrpc_server --> pkg_user_questions
   pkg_sdk_jsonrpc_server --> pkg_working_directory
   pkg_fork_cc_admin --> pkg_fork_cc_bridge
+  pkg_fork_courses --> pkg_credentials
+  pkg_fork_courses --> pkg_fork_event_bus
+  pkg_fork_courses --> pkg_fork_presence
+  pkg_fork_courses --> pkg_storage_domain
   pkg_fork_memory --> pkg_agent
   pkg_fork_memory --> pkg_home_paths
   pkg_fork_memory --> pkg_llm
@@ -1644,6 +1651,9 @@ flowchart TD
   pkg_fork_guard --> pkg_home_paths
   pkg_fork_guard --> pkg_llm
   pkg_fork_guard --> pkg_fork_memory
+  pkg_fork_tool_courses --> pkg_fork_courses
+  pkg_fork_tool_courses --> pkg_tools
+  pkg_fork_tool_courses --> pkg_util_values
   pkg_fork_wechat --> pkg_api_session_controller
   pkg_fork_wechat --> pkg_home_paths
   pkg_fork_wechat --> pkg_llm
@@ -1806,6 +1816,7 @@ flowchart TD
 | [`fork-balance`](../packages/fork/fork-balance) | `fork` | — |
 | [`fork-config`](../packages/fork/fork-config) | `fork` | — |
 | [`fork-console`](../packages/fork/fork-console) | `fork` | — |
+| [`fork-courses-settings`](../packages/fork/fork-courses-settings) | `fork` | — |
 | [`fork-memory-admin`](../packages/fork/fork-memory-admin) | `fork` | — |
 | [`fork-qq-login`](../packages/fork/fork-qq-login) | `fork` | — |
 | [`fork-style-settings`](../packages/fork/fork-style-settings) | `fork` | — |
@@ -2062,6 +2073,7 @@ flowchart TD
 | [`tool-schedule`](../packages/schedule/tool-schedule) | `schedule` | [`llm`](../packages/llm/llm), [`schedule`](../packages/schedule/schedule), [`subagent`](../packages/subagent/subagent), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`sdk-jsonrpc-server`](../packages/sdk/server) | `sdk` | [`agent`](../packages/core/agent), [`attachment`](../packages/attachment/attachment), [`commands`](../packages/interaction/commands), [`goal`](../packages/goal/goal), [`llm`](../packages/llm/llm), [`llm-deepseek-api-key`](../packages/llm/llm-deepseek-api-key), [`schedule`](../packages/schedule/schedule), [`scope`](../packages/core/scope), [`sdk-protocol`](../packages/sdk/protocol), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`user-approval`](../packages/interaction/user-approval), [`user-questions`](../packages/interaction/user-questions), [`working-directory`](../packages/session/working-directory) |
 | [`fork-cc-admin`](../packages/fork/fork-cc-admin) | `fork` | [`fork-cc-bridge`](../packages/fork/fork-cc-bridge) |
+| [`fork-courses`](../packages/fork/fork-courses) | `fork` | [`credentials`](../packages/credentials/credentials), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-presence`](../packages/fork/fork-presence), [`storage-domain`](../packages/storage/storage-domain) |
 | [`fork-memory`](../packages/fork/fork-memory) | `fork` | [`agent`](../packages/core/agent), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-taint`](../packages/fork/fork-taint), [`session`](../packages/core/session), [`tools`](../packages/core/tools) |
 | [`fork-qqbot`](../packages/fork/fork-qqbot) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`fork-style`](../packages/fork/fork-style) | `fork` | [`agent`](../packages/core/agent), [`agent-default-model`](../packages/core/agent-default-model), [`compaction`](../packages/compaction/compaction), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-integrity`](../packages/fork/fork-integrity), [`fork-qq`](../packages/fork/fork-qq), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`web`](../packages/web/web) |
@@ -2069,6 +2081,7 @@ flowchart TD
 | [`fork-tool-qq`](../packages/fork/fork-tool-qq) | `fork` | [`attachment`](../packages/attachment/attachment), [`llm`](../packages/llm/llm), [`fork-qq`](../packages/fork/fork-qq), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
 | [`fork-tool-watch`](../packages/fork/fork-tool-watch) | `fork` | [`agent`](../packages/core/agent), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-github-sensor`](../packages/fork/fork-github-sensor), [`tools`](../packages/core/tools) |
 | [`fork-guard`](../packages/fork/fork-guard) | `fork` | [`agent-default-model`](../packages/core/agent-default-model), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-memory`](../packages/fork/fork-memory) |
+| [`fork-tool-courses`](../packages/fork/fork-tool-courses) | `fork` | [`fork-courses`](../packages/fork/fork-courses), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
 | [`fork-wechat`](../packages/fork/fork-wechat) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-presence`](../packages/fork/fork-presence), [`fork-taint`](../packages/fork/fork-taint), [`fork-time-gap`](../packages/fork/fork-time-gap), [`fork-voice`](../packages/fork/fork-voice), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`schedule`](../packages/schedule/schedule), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`fork-tool-wechat`](../packages/fork/fork-tool-wechat) | `fork` | [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-wechat`](../packages/fork/fork-wechat), [`tools`](../packages/core/tools) |
 <!-- END GENERATED module-graph:packages -->

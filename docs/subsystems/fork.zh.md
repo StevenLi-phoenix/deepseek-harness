@@ -2,7 +2,7 @@
 
 [English](fork.md) | 中文
 
-事件驱动 agent 背后的 fork 本地服务：[`@deepseek-ai/dsh-fork-event-bus`](../../packages/fork/fork-event-bus/README.zh.md) 把传感器事件路由成通知或无人值守的 Session，[`@deepseek-ai/dsh-fork-github-sensor`](../../packages/fork/fork-github-sensor/README.zh.md) 轮询 GitHub，[`@deepseek-ai/dsh-fork-wechat`](../../packages/fork/fork-wechat/README.zh.md) 通过微信提供 `forkNotifier` 契约，[`@deepseek-ai/dsh-fork-qq`](../../packages/fork/fork-qq/README.zh.md) 潜伏在主人列出的 QQ 群里并做摘要，消息由 `qq-recorder` 服务提供（它是独占 QQ 唯一连接的 AMS 服务，所以重启 DSH 不会让 QQ 重连；它的设置 → QQ 页面 [`@deepseek-ai/dsh-fork-qq-login`](../../packages/fork/fork-qq-login/README.zh.md) 显示连接状态，以及被踢下线后用来扫码的登录二维码），[`@deepseek-ai/dsh-fork-style`](../../packages/fork/fork-style/README.zh.md) 保存各 agent 共享的人格层，学自 QQ 群和 B站公开文本（它的设置 → 人格与风格 页面是 [`@deepseek-ai/dsh-fork-style-settings`](../../packages/fork/fork-style-settings/README.zh.md)），[`@deepseek-ai/dsh-bili`](../../packages/fork/bili/README.zh.md) 是 agent 自己的 B站账号。行为、配置与限制见各包 README；[上游账本](../../packages/fork/UPSTREAM.md)记录 fork 如何跟踪上游。
+事件驱动 agent 背后的 fork 本地服务：[`@deepseek-ai/dsh-fork-event-bus`](../../packages/fork/fork-event-bus/README.zh.md) 把传感器事件路由成通知或无人值守的 Session，[`@deepseek-ai/dsh-fork-github-sensor`](../../packages/fork/fork-github-sensor/README.zh.md) 轮询 GitHub，[`@deepseek-ai/dsh-fork-wechat`](../../packages/fork/fork-wechat/README.zh.md) 通过微信提供 `forkNotifier` 契约，[`@deepseek-ai/dsh-fork-qq`](../../packages/fork/fork-qq/README.zh.md) 潜伏在主人列出的 QQ 群里并做摘要，消息由 `qq-recorder` 服务提供（它是独占 QQ 唯一连接的 AMS 服务，所以重启 DSH 不会让 QQ 重连；它的设置 → QQ 页面 [`@deepseek-ai/dsh-fork-qq-login`](../../packages/fork/fork-qq-login/README.zh.md) 显示连接状态，以及被踢下线后用来扫码的登录二维码），[`@deepseek-ai/dsh-fork-style`](../../packages/fork/fork-style/README.zh.md) 保存各 agent 共享的人格层，学自 QQ 群和 B站公开文本（它的设置 → 人格与风格 页面是 [`@deepseek-ai/dsh-fork-style-settings`](../../packages/fork/fork-style-settings/README.zh.md)），[`@deepseek-ai/dsh-bili`](../../packages/fork/bili/README.zh.md) 是 agent 自己的 B站账号，[`@deepseek-ai/dsh-fork-courses`](../../packages/fork/fork-courses/README.zh.md) 按 courses 服务里的记录、用固定规则提醒主人课程 DDL（它的设置 → 课程 DDL 页是 [`@deepseek-ai/dsh-fork-courses-settings`](../../packages/fork/fork-courses-settings/README.zh.md)）。行为、配置与限制见各包 README；[上游账本](../../packages/fork/UPSTREAM.md)记录 fork 如何跟踪上游。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -278,6 +278,38 @@ async stop(name: string): Promise<CcOutcome>
 ```
 
 Source: [`packages/fork/fork-cc-admin/src/index.ts`](../../packages/fork/fork-cc-admin/src/index.ts)
+
+<a id="ctxlsycourses--forkcourses"></a>
+
+### `ctx.forkCourses` — `ForkCourses`
+
+The courses client and the deadline poller.
+
+```ts cordis-catalog
+/**
+ * Whether reminders wait right now: the daily window, or the owner asleep when `followPresence` is on.
+ * @param now - Unix epoch milliseconds.
+ * @returns true while quiet.
+ */
+isQuiet(now: number = Date.now()): boolean
+
+/**
+ * Read the report once, send what is due, and record the outcome. Polls run one at a time; a manual poll while
+ * one runs waits for it and then runs.
+ * @param trigger - the timer or the Settings button.
+ * @returns the poll's record.
+ */
+poll(trigger: 'timer' | 'manual'): Promise<PollRecord>
+
+/**
+ * Everything Settings shows: the rules, the last poll, the sync health with the newest run's reason, the
+ * outage counter, the next reminders, and the latest messages (newest first).
+ * @returns a snapshot.
+ */
+status(): CoursesStatus
+```
+
+Source: [`packages/fork/fork-courses/src/index.ts`](../../packages/fork/fork-courses/src/index.ts)
 
 <a id="ctxlsyeventbus--forkeventbus"></a>
 

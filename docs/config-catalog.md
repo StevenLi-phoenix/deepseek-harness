@@ -2560,6 +2560,69 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-console -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-courses -->
+<a id="deepseek-aidsh-fork-courses"></a>
+
+## `@deepseek-ai/dsh-fork-courses`
+
+- `inject`: `storageDomain` · `credentials`
+- `source`: [`packages/fork/fork-courses/src/index.ts:46`](../packages/fork/fork-courses/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Send deadline and sync reminders; off keeps the client and the tools working and stops the poller. */
+  enabled: boolean
+  /** Courses API base, without a trailing slash. */
+  baseUrl: string
+  /** Name of the PAT (audience `courses`) in the credential store or `$DSH_HOME/.env`. */
+  tokenEnv: string
+  /** `X-Courses-Agent` value: how the service's history names writes from DSH. */
+  agentName: string
+  /** IANA zone deadlines are shown and quiet hours are read in. */
+  timeZone: string
+  /** Minutes between polls. */
+  pollMinutes: number
+  /** Seconds after start before the first poll. */
+  firstPollSeconds: number
+  /** Timeout of one call to the service, in milliseconds. */
+  requestTimeoutMs: number
+  /** Days ahead the poll reads; must cover the largest checkpoint. */
+  lookaheadDays: number
+  /** Hours before an on-time deadline at which the owner is reminded. */
+  beforeHours: number[]
+  /** Hours before the end of a late window at which the owner is reminded (the first notice of a missed deadline comes at once). */
+  lateBeforeHours: number[]
+  /** A reminder whose deadline is this many hours away goes out during quiet hours and while the owner sleeps; 0 never. */
+  urgentWithinHours: number
+  /** When reminders wait; the next poll after them sends what is still due. */
+  quietHours: {
+    /** Wait while `ctx.forkPresence` says the owner sleeps (Settings → 勿扰). */
+    followPresence: boolean
+    /** Also wait in the daily window below. */
+    enabled: boolean
+    /** Window start, `HH:MM`. */
+    start: string
+    /** Window end, `HH:MM`; earlier than `start` wraps midnight. */
+    end: string
+  }
+  /** Telling the owner that the course sync collectors are broken. */
+  sync: {
+    /** Send the alert and the recovery at all. */
+    alert: boolean
+    /** `report.coverage.health.status` values that count as broken. */
+    statuses: string[]
+    /** Hours since the last clean sync before the first alert. */
+    staleHours: number
+    /** Hours between alerts while it stays broken. */
+    repeatHours: number
+  }
+  /** Consecutive failed polls before the owner is told that reminders are paused. */
+  outageAlertAfter: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-courses -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-event-bus -->
 <a id="deepseek-aidsh-fork-event-bus"></a>
 
@@ -6257,9 +6320,11 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-llm` | — | [`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts) |
 | `@deepseek-ai/dsh-lsp` | — | [`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts) |
 | `@deepseek-ai/dsh-fork-config` | `connection` · `configEditor` | [`packages/fork/fork-config/src/index.ts`](../packages/fork/fork-config/src/index.ts) |
+| `@deepseek-ai/dsh-fork-courses-settings` | `connection` · `forkCourses` | [`packages/fork/fork-courses-settings/src/index.ts`](../packages/fork/fork-courses-settings/src/index.ts) |
 | `@deepseek-ai/dsh-fork-memory-admin` | — | [`packages/fork/fork-memory-admin/src/index.ts`](../packages/fork/fork-memory-admin/src/index.ts) |
 | `@deepseek-ai/dsh-fork-qq-login` | `connection` · `forkQq` | [`packages/fork/fork-qq-login/src/index.ts`](../packages/fork/fork-qq-login/src/index.ts) |
 | `@deepseek-ai/dsh-fork-style-settings` | `connection` | [`packages/fork/fork-style-settings/src/index.ts`](../packages/fork/fork-style-settings/src/index.ts) |
+| `@deepseek-ai/dsh-fork-tool-courses` | `tools` | [`packages/fork/fork-tool-courses/src/index.ts`](../packages/fork/fork-tool-courses/src/index.ts) |
 | `@deepseek-ai/dsh-fork-tool-monitor` | `tools` · `storageDomain` · `sessionController` · `sessionPersistence` | [`packages/fork/fork-tool-monitor/src/index.ts`](../packages/fork/fork-tool-monitor/src/index.ts) |
 | `@deepseek-ai/dsh-fork-tool-voice` | `tools` | [`packages/fork/fork-tool-voice/src/index.ts`](../packages/fork/fork-tool-voice/src/index.ts) |
 | `@deepseek-ai/dsh-fork-tool-wechat` | `tools` | [`packages/fork/fork-tool-wechat/src/index.ts`](../packages/fork/fork-tool-wechat/src/index.ts) |
