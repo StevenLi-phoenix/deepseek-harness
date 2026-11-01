@@ -19,7 +19,6 @@ import { OverviewSection, type OverviewInjected } from './Overview.tsx'
 import { de, en, es, fr, ja, pt, ru, zh } from './locales.ts'
 import { parseAgents, parseOverview, parseSubscriptions } from './parse.ts'
 import { ResourceLoader, createResourceStore, failureOf, requestJson } from './resource.ts'
-import { createSectionNav } from './sections.ts'
 import { optimisticPatch, requestKey } from './subs.ts'
 import { SubscriptionsSection, type SubscriptionsInjected } from './Subscriptions.tsx'
 
@@ -60,15 +59,14 @@ export function apply(ctx: ClientContext): void {
   const subscriptions = new ResourceLoader('subscriptions', subscriptionsStore, () => requestJson<unknown>(SUBSCRIPTIONS_ROUTE).then(parseSubscriptions))
   const agents = new ResourceLoader('agents', agentsStore, () => requestJson<unknown>(AGENTS_ROUTE).then(parseAgents))
 
-  const nav = createSectionNav(() => ctx.slots.entries('settings.section').map(entry => ({ id: entry.options.id ?? '', order: entry.options.order ?? 0 })))
+  const hasSection = (id: string): boolean => ctx.slots.entries('settings.section').some(entry => entry.options.id === id)
 
   // Stable functions for the registration's lifetime, so a section's polling effect never restarts on re-render.
   const refreshOverview = (): void => { void overview.refresh(); void balance.refresh() }
   const overviewInjected = (): OverviewInjected => ({
     hooks: { overview: overviewStore, balance: balanceStore },
     refresh: refreshOverview,
-    canManage: id => nav.has(id),
-    manage: (id) => { nav.select(id) },
+    canManage: hasSection,
   })
 
   const refreshSubscriptions = (): void => { void subscriptions.refresh() }

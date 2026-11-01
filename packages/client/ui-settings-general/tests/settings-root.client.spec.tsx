@@ -512,6 +512,17 @@ it('explicitly reopens one onboarding editor during an existing session', () => 
   expect(screen.queryByTestId('onboarding')).toBeNull()
 })
 
+it('hands the open section a select that switches the panel to another section', () => {
+  const { renderSlot } = mount()
+  openPanel()
+  const owner = () => renderSlot.mock.calls.filter(call => call[0] === 'settings.section').at(-1)![1] as { close: () => void; select: (id: string) => void }
+  expect(Object.keys(owner()).sort()).toEqual(['close', 'select'])
+  act(() => { owner().select('models') })
+  expect(screen.getByTestId('section-models')).toBeTruthy()
+  act(() => { owner().select('general') })
+  expect(screen.getByTestId('section-general')).toBeTruthy()
+})
+
 it('opens Account from the contributed sidebar launcher', () => {
   const { renderSlot } = mount({ rows: [{ id: 'account', order: -10, label: 'Account' }] })
   const launcher = renderSlot.mock.calls.find(call => call[0] === 'settings.launcher')!

@@ -35,8 +35,8 @@ function mount(
   const refresh = vi.fn()
   const manage = vi.fn()
   const props = {
-    close: () => {}, useOverview: bindSnapshotSelector(overviewStore), useBalance: bindSnapshotSelector(balanceStore),
-    refresh, canManage: (section: string) => registered.includes(section), manage, t,
+    close: () => {}, select: manage, useOverview: bindSnapshotSelector(overviewStore), useBalance: bindSnapshotSelector(balanceStore),
+    refresh, canManage: (section: string) => registered.includes(section), t,
   } as OverviewProps
   const view = render(<OverviewSection {...props} />)
   return { refresh, manage, overviewStore, view }
