@@ -5,6 +5,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 ## [Unreleased]
 
 ### Fixed
+- Settings → WeChat no longer shows a long-recovered poll failure as "Last error": a good long-poll clears a receive error and a good send clears a send error, while a failure of the other kind stays (2026-11-01).
 - The overview's Bilibili card is yellow (`svc_only`) when bili-svc answers but the DSH `bili` plugin is not mounted; it used to be green, which hid a plugin that failed to load (2026-11-01).
 - Bus result notes no longer start with ✅, which read as the event's verdict while it only meant the turn finished; a batch of several events is titled by subject and count (`CI: owner/repo (4 events)`) instead of its first event, so a note about a failed run is not headed by another run's success (2026-11-01).
 - The `ci` subscription tells the owner only what needs them: failures no code change fixes (secrets, quota, runners, outages), failed deployments or releases, and a default branch red twice in a row; branch and pull-request failures and successes answer NO_REPLY (2026-11-01).

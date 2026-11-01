@@ -1577,7 +1577,30 @@ describe('WechatChannel Settings route', () => {
     await vi.advanceTimersByTimeAsync(2000)
     h.ilink.updates([])
     await vi.advanceTimersByTimeAsync(0)
-    expect(h.channel.status().channel).toMatchObject({ link: 'connected', failures: 0, lastError: { where: 'poll' } })
+    expect(h.channel.status().channel).toMatchObject({ link: 'connected', failures: 0, lastError: null })
+  })
+
+  it('keeps a failed send in the status through a good poll, and drops it after the next send went out', async () => {
+    const h = await harness()
+    await h.ownerSays('hi')
+    h.ilink.reply('ilink/bot/sendmessage', new TypeError('socket hang up'))
+    await h.channel.send({ title: 'a' })
+    expect(h.channel.status().channel.lastError).toMatchObject({ where: 'send' })
+    // A poll that came back says nothing about sending.
+    h.ilink.updates([])
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.channel.status().channel).toMatchObject({ link: 'connected', failures: 0, lastError: { where: 'send' } })
+    await h.channel.send({ title: 'b' })
+    expect(h.channel.status().channel.lastError).toBeNull()
+  })
+
+  it('does not let a good send hide a poll failure', async () => {
+    const h = await harness()
+    await h.ownerSays('hi')
+    h.ilink.reply('ilink/bot/getupdates', new TypeError('fetch failed'))
+    await vi.advanceTimersByTimeAsync(0)
+    await h.channel.send({ title: 'a' })
+    expect(h.channel.status().channel).toMatchObject({ link: 'retrying', failures: 1, lastError: { where: 'poll' } })
   })
 
   it('shows a rejected token, and a failed send, as such', async () => {

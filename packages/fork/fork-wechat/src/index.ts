@@ -728,6 +728,21 @@ export class WechatChannel extends Service implements ForkNotifier {
     }
   }
 
+  /**
+   * A call of kind `where` worked again: the failure it left in {@link status} is stale and goes, a failure of the other kind stays.
+   * A good poll also resets the failure streak.
+   */
+  private recover(where: ChannelError['where'], update: { lastPollAt?: number } = {}): void {
+    const stale = this.health.lastError?.where === where
+    this.health = {
+      ...this.health,
+      ...update,
+      ...where === 'poll' ? { failures: 0 } : {},
+      ...stale ? { lastError: undefined } : {},
+    }
+    if (stale) this.ctx.logger.info(`fork-wechat: ${where} works again; cleared its last error from the status`)
+  }
+
   /** Run storage and send work one at a time; rejections reach the caller without breaking the chain. */
   private serialize<T>(work: () => Promise<T>): Promise<T> {
     const result = this.chain.then(work)
@@ -776,7 +791,7 @@ export class WechatChannel extends Service implements ForkNotifier {
         const cursor = domain.table('cursors').get(account.botId)
         const updates = await client.getUpdates(cursor?.buf ?? '', timeoutMs, AbortSignal.any([this.abort.signal, poll.signal]))
         failures = 0
-        this.health = { ...this.health, lastPollAt: Date.now(), failures: 0 }
+        this.recover('poll', { lastPollAt: Date.now() })
         timeoutMs = updates.nextTimeoutMs ?? this.config.longPollTimeoutMs
         if (updates.malformed > 0) this.ctx.logger.warn(`fork-wechat: dropped ${updates.malformed} malformed message(s)`)
         // At-most-once: the cursor moves before handling, so a crash in between drops messages rather than repeating prompts.
@@ -1265,6 +1280,7 @@ export class WechatChannel extends Service implements ForkNotifier {
     }
     const used = target.window.used + 1
     await this.putWindow(domain, target.key, { ...target.window, used })
+    this.recover('send')
     await this.recordActivity(domain, target.account.ownerUserId, { sentAt: Date.now(), sent: kind })
     if (typeof text === 'string') await this.rememberSent(domain, text, startedAt)
     this.ctx.logger.info(`fork-wechat: sent ${label} (${used}/${this.config.repliesPerToken} of this window)`)

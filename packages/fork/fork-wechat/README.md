@@ -33,7 +33,7 @@ Choose it when the agent should reach you on your phone and you want to answer f
 
 ### Minimal configuration
 
-Bind a bot first. The usual way is **Settings → WeChat** in the Web UI: choose "Scan to bind", scan the QR code with WeChat on your phone, and type the number WeChat may show into the field the page offers. The page writes the account file and the running service reads it at once. The same page shows whether a bot is bound (with its ids masked), the long-poll's health, when you and the bot last wrote, the replies left in the reply window, and the texts waiting in the outbox, and it can unbind the bot. Without a browser session, run the login from an installed build as the user the service runs as, scan the QR code in the terminal, and type the number WeChat may show:
+Bind a bot first. The usual way is **Settings → WeChat** in the Web UI: choose "Scan to bind", scan the QR code with WeChat on your phone, and type the number WeChat may show into the field the page offers. The page writes the account file and the running service reads it at once. The same page shows whether a bot is bound (with its ids masked), the long-poll's health (its last error shows until the same kind of call works again: a good poll clears a receive error, a good send clears a send error), when you and the bot last wrote, the replies left in the reply window, and the texts waiting in the outbox, and it can unbind the bot. Without a browser session, run the login from an installed build as the user the service runs as, scan the QR code in the terminal, and type the number WeChat may show:
 
 ```sh
 sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node /Users/Shared/fork-dsh/current/fork/deploy/wechat-login.mjs
