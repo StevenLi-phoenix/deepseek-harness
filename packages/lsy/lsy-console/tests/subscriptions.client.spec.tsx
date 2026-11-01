@@ -3,7 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
-import type { SubscriptionAction, SubscriptionsView } from '../src/views.ts'
+import type { ArchiveView, SubscriptionAction, SubscriptionsView } from '../src/views.ts'
 import { zh } from '../src/client/locales.ts'
 import { createResourceStore, type ResourceState } from '../src/client/resource.ts'
 import { SubscriptionsSection, type SubscriptionsProps } from '../src/client/Subscriptions.tsx'
@@ -11,8 +11,21 @@ import { SubscriptionsSection, type SubscriptionsProps } from '../src/client/Sub
 const t = makeTranslate(zh) as SubscriptionsProps['t']
 const NOW = new Date(2026, 10, 1, 12, 0, 0).getTime()
 
+const ARCHIVE: ArchiveView = {
+  enabled: true, dryRun: false, inactiveDays: 7, maxPerSweep: 50, sweepHours: 6, nextSweepAt: NOW + 3 * 3_600_000, protectors: ['wechat', 'qq'],
+  last: {
+    at: NOW - 600_000, trigger: 'timer', dryRun: false, scanned: 40, archived: 3, errors: 1, aborted: null, preview: [],
+    skipped: { recent: 30, persistent: 2, wechat: 1, overLimit: 4 },
+  },
+  recent: [
+    { id: 'aaaaaaaa-1111', title: 'Release notes chat', lastActiveAt: NOW - 9 * 86_400_000, archivedAt: NOW - 600_000 },
+    { id: 'bbbbbbbb-2222', title: null, lastActiveAt: NOW - 12 * 86_400_000, archivedAt: NOW - 600_000 },
+  ],
+}
+
 const VIEW: SubscriptionsView = {
   checkedAt: NOW,
+  archive: ARCHIVE,
   defaults: { coalesceSeconds: 60, notifyMaxPerHour: 12, sessionMaxPerHour: 4, agentPreset: 'unattended', workspacePath: '/Users/dsh-runtime/work' },
   subscriptions: [
     {
@@ -218,5 +231,89 @@ describe('create form', () => {
     expect(field('每小时最多批数').placeholder).toBe('4')
     fireEvent.click(screen.getAllByRole('button', { name: '取消' })[0]!)
     expect(screen.queryByLabelText('合并窗口（秒）')).toBeNull()
+  })
+})
+
+describe('SubscriptionsSection auto-archive card', () => {
+  const card = (): HTMLElement => document.querySelector('[data-scope="archive"]')!
+
+  it('shows the rule, the next check, who protects their own Sessions, the last sweep with its skips, and the recently archived Sessions', () => {
+    mount()
+    const text = card().textContent ?? ''
+    expect(text).toContain('会话自动归档')
+    expect(text).toContain('已开启')
+    expect(text).toContain('闲置超过 7 天 · 每次最多 50 个 · 每 6 小时检查一次')
+    expect(text).toContain('下次检查 3 小时后')
+    expect(text).toContain('这些插件保护自己的会话：wechat, qq')
+    expect(text).toContain('上次 10 分钟前')
+    expect(text).toContain('检查 40 个会话，归档 3 个')
+    // Recent Sessions are not a "skip" worth listing; the rest are, largest first, with the plugin labels as they are.
+    expect(text).toContain('跳过：超出本次上限 4 · 常驻会话 2 · wechat 1')
+    expect(text).not.toContain('近期活跃')
+    expect(text).toContain('1 个会话归档失败，详见日志。')
+    const recent = document.querySelector('[data-scope="archive-recent"]')!
+    expect(recent.textContent).toContain('Release notes chat')
+    expect(recent.textContent).toContain('最后活动 9 天前 · 归档于 10 分钟前')
+    expect(recent.textContent).toContain('未命名会话 bbbbbbbb')
+  })
+
+  it('says so when nothing was archived yet, when it is off, and when it is a dry run', () => {
+    mount({ data: { ...VIEW, archive: { ...ARCHIVE, recent: [], last: null, enabled: false, nextSweepAt: null } }, checkedAt: NOW })
+    expect(card().textContent).toContain('已关闭')
+    expect(card().textContent).toContain('还没有归档过会话。')
+    expect(card().textContent).not.toContain('下次检查')
+    expect(screen.getByRole('button', { name: '立即归档' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: '预览' }).hasAttribute('disabled')).toBe(false)
+    cleanup()
+    mount({ data: { ...VIEW, archive: { ...ARCHIVE, dryRun: true } }, checkedAt: NOW })
+    expect(card().textContent).toContain('试运行（只记录，不归档）')
+  })
+
+  it('sends a sweep or a preview at once and shows the waiting state on the button that was pressed', async () => {
+    const { act: send, store } = mount()
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '预览' })) })
+    expect(send).toHaveBeenLastCalledWith({ action: 'archive.sweep', dryRun: true })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '立即归档' })) })
+    expect(send).toHaveBeenLastCalledWith({ action: 'archive.sweep', dryRun: false })
+    act(() => { store.update((draft) => { draft.busy = { 'archive:sweep': true } }) })
+    const working = screen.getByRole('button', { name: '正在检查…' })
+    expect(working.hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: '预览' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('lists what a preview would archive, labeled as a preview', () => {
+    const preview = { ...ARCHIVE.last!, dryRun: true, archived: 1, preview: [{ id: 'cccccccc-3333', title: 'Old draft', lastActiveAt: NOW - 20 * 86_400_000, archivedAt: null }] }
+    mount({ data: { ...VIEW, archive: { ...ARCHIVE, last: preview } }, checkedAt: NOW })
+    expect(card().textContent).toContain('预览 10 分钟前')
+    expect(card().textContent).toContain('将归档 1 个')
+    const list = document.querySelector('[data-scope="archive-preview"]')!
+    expect(list.textContent).toContain('Old draft')
+    expect(list.textContent).toContain('最后活动 20 天前')
+  })
+
+  it('explains an aborted sweep, and an unmounted bus without any button', () => {
+    const aborted = { ...ARCHIVE.last!, aborted: 'could not list Sessions: db down', archived: 0 }
+    mount({ data: { ...VIEW, archive: { ...ARCHIVE, last: aborted } }, checkedAt: NOW })
+    expect(card().textContent).toContain('没有完成：could not list Sessions: db down')
+    cleanup()
+    mount({ data: { ...VIEW, archive: null }, checkedAt: NOW })
+    expect(card().textContent).toContain('自动归档依赖事件总线，它没有加载。')
+    expect(within(card()).queryByRole('button')).toBeNull()
+  })
+
+  it('renders the bus settings card for the auto-archive fields only, at the foot of the card', () => {
+    const renderFactorySlot = vi.fn((_name: string, _props: object) => <div data-testid="plugin-config" />)
+    const store = createResourceStore<SubscriptionsView>()
+    store.update((draft) => { Object.assign(draft, { data: VIEW, checkedAt: NOW }) })
+    const props = {
+      close: () => {}, useSubscriptions: bindSnapshotSelector(store), refresh: vi.fn(), act: vi.fn(), dismiss: vi.fn(), t,
+      renderFactorySlot,
+    } as unknown as SubscriptionsProps
+    render(<SubscriptionsSection {...props} />)
+    expect(renderFactorySlot).toHaveBeenCalledWith('settings.plugin-config', expect.objectContaining({ entries: ['lsy-event-bus'] }))
+    const { exclude } = renderFactorySlot.mock.calls[0]![1] as { exclude: string[] }
+    expect(exclude).toEqual(expect.arrayContaining(['subscriptions', 'suppress', 'webUrl']))
+    expect(exclude).not.toContain('autoArchive')
+    expect(card().lastElementChild).toBe(screen.getByTestId('plugin-config'))
   })
 })

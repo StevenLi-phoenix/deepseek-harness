@@ -7,12 +7,13 @@
 
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
-import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { InjectFace, PropsLocale, PropsRenderFactories, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the settings shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: registers the lsy.console locale namespace this component's `t` reads.
 import type {} from './locales.ts'
 import type { ScheduleRow, SubscriptionAction, SubscriptionRow, SubscriptionsView } from '../views.ts'
+import { ArchiveCard } from './Archive.tsx'
 import { ago, clock, stamp, until, type Translate } from './format.ts'
 import type { ConsoleKey } from './locales.ts'
 import { POLL_INTERVAL_MS, startPolling, type ResourceState } from './resource.ts'
@@ -35,6 +36,7 @@ export interface SubscriptionsInjected {
 
 /** Props delivered by the settings shell. */
 export type SubscriptionsProps = PropsRuntime<'settings.section'> & InjectFace<SubscriptionsInjected> & PropsLocale<'lsy.console'>
+  & Partial<PropsRenderFactories>
 
 const csv = (list: readonly string[], t: Translate): string => (list.length === 0 ? t('common.all') : list.join(', '))
 
@@ -240,7 +242,7 @@ function CreateForm({ defaults, busy, t, onCreate, onClose }: {
  * @param props - the store hook, callbacks, and copy.
  * @returns the section.
  */
-export function SubscriptionsSection({ useSubscriptions, refresh, act, dismiss, t }: SubscriptionsProps): ReactNode {
+export function SubscriptionsSection({ useSubscriptions, refresh, act, dismiss, t, renderFactorySlot }: SubscriptionsProps): ReactNode {
   const state = useSubscriptions(value => value)
   const [creating, setCreating] = useState(false)
   useEffect(() => startPolling(refresh, POLL_INTERVAL_MS), [refresh])
@@ -258,6 +260,7 @@ export function SubscriptionsSection({ useSubscriptions, refresh, act, dismiss, 
   const busyFor = (target: 'subscription' | 'schedule', id: string): boolean =>
     (['pause', 'resume', 'delete'] as const).some(action => busyKey({ action, target, id }))
   const failure = state.notice
+  const archiveBusy = busyKey({ action: 'archive.sweep', dryRun: true }) ? 'preview' : busyKey({ action: 'archive.sweep', dryRun: false }) ? 'sweep' : null
   return (
     <section className={css.section} aria-label={translate('title.subscriptions')} data-stale={state.stale ? '' : undefined}>
       <div className={css.header}>
@@ -325,6 +328,11 @@ export function SubscriptionsSection({ useSubscriptions, refresh, act, dismiss, 
         <span className={css.headingTitle}>{translate('subs.monitors.title')}</span>
       </div>
       <span className={css.hint}>{translate('subs.monitors.note')}</span>
+
+      <ArchiveCard
+        archive={view?.archive ?? null} now={now} t={translate} busy={archiveBusy}
+        onSweep={(dryRun) => { void act({ action: 'archive.sweep', dryRun }) }} renderFactorySlot={renderFactorySlot}
+      />
     </section>
   )
 }

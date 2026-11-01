@@ -28,6 +28,9 @@
     },
     {
       "path": "../../client/ui-slots"
+    },
+    {
+      "path": "../lsy-config/tsconfig.client.json"
     }
   ]
 }

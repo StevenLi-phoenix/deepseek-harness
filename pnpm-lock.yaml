@@ -13844,6 +13844,9 @@ importers:
       '@deepseek-ai/dsh-lsy-cc-admin':
         specifier: workspace:*
         version: link:../lsy-cc-admin
+      '@deepseek-ai/dsh-lsy-config':
+        specifier: workspace:*
+        version: link:../lsy-config
       '@deepseek-ai/dsh-lsy-event-bus':
         specifier: workspace:*
         version: link:../lsy-event-bus
@@ -13881,6 +13884,12 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis
+      '@deepseek-ai/cordis-plugin-include':
+        specifier: workspace:~
+        version: link:../../../vendor/include
+      '@deepseek-ai/cordis-plugin-loader':
+        specifier: workspace:~
+        version: link:../../../vendor/loader
       '@deepseek-ai/cordis-plugin-timer':
         specifier: workspace:~
         version: link:../../../vendor/timer

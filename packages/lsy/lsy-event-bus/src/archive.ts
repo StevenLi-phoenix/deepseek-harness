@@ -424,7 +424,7 @@ export class SessionArchiver {
     }
     const table = this.domain?.table('archived')
     if (table === undefined) {
-      this.recentMemory = [record, ...this.recentMemory.filter(entry => entry.sessionId !== row.id)].slice(0, MAX_RECENT_ARCHIVED)
+      this.recentMemory = [...this.recentMemory.filter(entry => entry.sessionId !== row.id), record].slice(-MAX_RECENT_ARCHIVED)
       return
     }
     try {
@@ -456,7 +456,8 @@ export class SessionArchiver {
       ...(this.nextAt === undefined ? {} : { nextSweepAt: this.nextAt }),
       protectors: [...new Set(this.protectors.map(entry => entry.label))],
       ...(this.last === undefined ? {} : { lastSweep: this.last }),
-      recent: [...recent].sort((a, b) => b.archivedAt - a.archivedAt),
+      // Newest first; Sessions archived in the same millisecond keep their reverse archive order.
+      recent: [...recent].reverse().sort((a, b) => b.archivedAt - a.archivedAt),
     }
   }
 }

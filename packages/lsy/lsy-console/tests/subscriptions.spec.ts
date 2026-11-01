@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { disposeAll, harness, release } from '../../lsy-event-bus/tests/harness.ts'
+import { disposeAll, fakeController, fakeRegistry, harness, release } from '../../lsy-event-bus/tests/harness.ts'
 import type { ActionError, SubscriptionsView } from '../src/views.ts'
 import { mountConsole } from './fixtures.ts'
 
@@ -14,14 +14,16 @@ afterEach(async () => {
   vi.useRealTimers()
 })
 
-async function setup(options: { schedule?: unknown; sensor?: unknown } = {}) {
-  const h = await harness()
+async function setup(options: { schedule?: unknown; sensor?: unknown; archive?: boolean } = {}) {
+  const controller = fakeController()
+  const registry = fakeRegistry()
+  const h = await harness(options.archive === true ? { controller, registry } : {})
   if (options.schedule !== undefined) h.ctx.provide('schedule' as never, options.schedule as never)
   if (options.sensor !== undefined) h.ctx.provide('lsyGithubSensor' as never, options.sensor as never)
   const mounted = await mountConsole({ ctx: h.ctx })
   const get = async (): Promise<SubscriptionsView> => await (await mounted.call(PATH)).json() as SubscriptionsView
   const post = (body: unknown, extra: { contentType?: string | null; raw?: string } = {}) => mounted.call(PATH, { method: 'POST', body, ...extra })
-  return { ...h, ...mounted, get, post }
+  return { ...h, ...mounted, get, post, controller, registry }
 }
 
 const notifyForm = { id: 'octo-tags', kinds: ['github.tag'], subjects: ['octo/repo'], mode: 'notify' }
@@ -224,5 +226,56 @@ describe('POST validation', () => {
     const { call } = await setup()
     const response = await call('/api/lsy.overview', { method: 'POST' })
     expect(response.status).toBe(405)
+  })
+})
+
+describe('auto-archive', () => {
+  const DAY = 86_400_000
+  const session = (id: string, days: number, extra: Record<string, unknown> = {}) => (
+    { sessionId: id, updatedAt: Date.now() - days * DAY, running: false, blank: false, ...extra }
+  )
+
+  it('reports the schedule, the rule, and the protectors with the view, and no archive before the first sweep', async () => {
+    const { get, bus } = await setup({ archive: true })
+    bus.protectSessions('wechat', () => false)
+    const { archive } = await get()
+    expect(archive).toEqual({
+      enabled: true, dryRun: false, inactiveDays: 7, maxPerSweep: 50, sweepHours: 6, nextSweepAt: Date.now() + 10 * 60_000,
+      protectors: ['wechat'], last: null, recent: [],
+    })
+  })
+
+  it('a preview lists what would be archived and archives nothing; a sweep archives it and lists it as recent', async () => {
+    const { post, controller, registry } = await setup({ archive: true })
+    controller.rows.push(session('old-1', 20, { cwd: '/w', projections: { values: { title: 'Old chat' } } }), session('old-2', 9), session('fresh', 1))
+    const preview = await (await post({ action: 'archive.sweep', dryRun: true })).json() as { ok: boolean } & SubscriptionsView
+    expect(preview.ok).toBe(true)
+    expect(registry.archivedSessionIds).toEqual([])
+    expect(preview.archive!.last).toMatchObject({
+      dryRun: true, trigger: 'manual', scanned: 3, archived: 2, skipped: { recent: 1 }, errors: 0, aborted: null,
+      preview: [{ id: 'old-1', title: 'Old chat', archivedAt: null }, { id: 'old-2', title: null }],
+    })
+    expect(preview.archive!.recent).toEqual([])
+
+    const swept = await (await post({ action: 'archive.sweep', dryRun: false })).json() as SubscriptionsView
+    expect(registry.archivedSessionIds).toEqual(['old-1', 'old-2'])
+    expect(swept.archive!.last).toMatchObject({ dryRun: false, archived: 2, preview: [] })
+    expect(swept.archive!.recent.map(row => [row.id, row.title])).toEqual([['old-2', null], ['old-1', 'Old chat']])
+  })
+
+  it('cuts a long title, logs the action by name, and never echoes the Session text', async () => {
+    const { post, controller, logs } = await setup({ archive: true })
+    controller.rows.push(session('long', 30, { projections: { values: { title: 'x'.repeat(200) } } }))
+    const body = await (await post({ action: 'archive.sweep', dryRun: true })).json() as SubscriptionsView
+    expect(Array.from(body.archive!.last!.preview[0]!.title!)).toHaveLength(80)
+    expect(logs.some(line => /^info lsy-console: archive\.preview sessions -> ok \(\d+ ms\)$/u.test(line))).toBe(true)
+  })
+
+  it('answers an aborted sweep as data, and refuses a malformed body', async () => {
+    const { post } = await setup()
+    const aborted = await (await post({ action: 'archive.sweep' })).json() as SubscriptionsView
+    expect(aborted.archive!.last).toMatchObject({ aborted: 'could not list Sessions: no sessionController service is mounted', archived: 0 })
+    const bad = await post({ action: 'archive.sweep', dryRun: 'yes' })
+    expect(bad.status).toBe(400)
   })
 })

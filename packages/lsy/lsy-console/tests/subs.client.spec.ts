@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SubscriptionsView } from '../src/views.ts'
+import { parseSubscriptions } from '../src/client/parse.ts'
 import { blankDraft, optimisticPatch, parseList, requestKey, toRequest, validateDraft } from '../src/client/subs.ts'
 
 const VIEW: SubscriptionsView = {
@@ -11,6 +12,7 @@ const VIEW: SubscriptionsView = {
     { id: 's1', title: 'T', rule: 'every', detail: '60 s', status: 'active', nextAt: 1, lastFiredAt: null },
     { id: 's2', title: 'U', rule: 'daily', detail: '', status: 'paused', nextAt: 2, lastFiredAt: null },
   ],
+  archive: null,
   defaults: { coalesceSeconds: 60, notifyMaxPerHour: 12, sessionMaxPerHour: 4, agentPreset: 'unattended', workspacePath: '/w' },
   checkedAt: 1,
 }
@@ -52,6 +54,12 @@ describe('requests', () => {
   it('keys a request by what it acts on', () => {
     expect(requestKey({ action: 'pause', target: 'subscription', id: 'b' })).toBe('pause:subscription:b')
     expect(requestKey({ action: 'create', subscription: { id: 'n', sources: [], kinds: ['k'], subjects: [], mode: 'notify' } })).toBe('create:n')
+    expect(requestKey({ action: 'archive.sweep', dryRun: true })).toBe('archive:preview')
+    expect(requestKey({ action: 'archive.sweep', dryRun: false })).toBe('archive:sweep')
+  })
+
+  it('has no optimistic patch for a sweep, whose effect only the Host knows', () => {
+    expect(optimisticPatch({ action: 'archive.sweep', dryRun: false })).toBeUndefined()
   })
 
   it('shows pause, resume, and delete on the rows before the Host answers', () => {
@@ -68,5 +76,14 @@ describe('requests', () => {
     const none = { ...VIEW, subscriptions: null, schedules: null }
     expect(optimisticPatch({ action: 'delete', target: 'subscription', id: 'a' })!(none)).toBe(none)
     expect(optimisticPatch({ action: 'delete', target: 'schedule', id: 'a' })!(none)).toBe(none)
+  })
+})
+
+describe('parseSubscriptions', () => {
+  it('reads a Host from before the auto-archive as having none, and refuses a malformed archive field', () => {
+    const { archive: _archive, ...older } = VIEW
+    expect(parseSubscriptions(older).archive).toBeNull()
+    expect(parseSubscriptions(VIEW)).toBe(VIEW)
+    expect(() => parseSubscriptions({ ...VIEW, archive: 'yes' })).toThrow('unexpected subscriptions answer')
   })
 })

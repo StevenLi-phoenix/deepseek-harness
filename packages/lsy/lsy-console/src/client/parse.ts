@@ -26,10 +26,12 @@ export function parseOverview(body: unknown): OverviewView {
  * @throws when the body is not a subscriptions answer.
  */
 export function parseSubscriptions(body: unknown): SubscriptionsView {
-  const { subscriptions, schedules, defaults, checkedAt } = fields(body)
+  const { subscriptions, schedules, defaults, checkedAt, archive } = fields(body)
   if (typeof checkedAt !== 'number' || typeof defaults !== 'object' || defaults === null) throw new Error('unexpected subscriptions answer')
   for (const list of [subscriptions, schedules]) if (list !== null && !Array.isArray(list)) throw new Error('unexpected subscriptions answer')
-  return body as SubscriptionsView
+  if (archive !== undefined && archive !== null && typeof archive !== 'object') throw new Error('unexpected subscriptions answer')
+  // A Host from before the auto-archive answers without the field.
+  return archive === undefined ? { ...(body as SubscriptionsView), archive: null } : body as SubscriptionsView
 }
 
 /**

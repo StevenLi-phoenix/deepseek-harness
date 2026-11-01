@@ -67,6 +67,7 @@ export function toRequest(draft: SubscriptionDraft): SubscriptionAction {
 
 /** The busy key of a request: what is acted on. */
 export function requestKey(request: SubscriptionAction): string {
+  if (request.action === 'archive.sweep') return request.dryRun ? 'archive:preview' : 'archive:sweep'
   return request.action === 'create' ? `create:${request.subscription.id}` : `${request.action}:${request.target}:${request.id}`
 }
 
@@ -76,7 +77,7 @@ export function requestKey(request: SubscriptionAction): string {
  * @returns a patch, or undefined for an action whose effect only the Host knows (create).
  */
 export function optimisticPatch(request: SubscriptionAction): ((view: SubscriptionsView) => SubscriptionsView) | undefined {
-  if (request.action === 'create') return undefined
+  if (request.action === 'create' || request.action === 'archive.sweep') return undefined
   const { action, target, id } = request
   return (view) => {
     if (target === 'subscription') {
