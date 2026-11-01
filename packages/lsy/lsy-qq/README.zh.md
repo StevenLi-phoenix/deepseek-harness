@@ -154,11 +154,11 @@ OneBot v11 WebSocket 服务端是 colima 上 Docker 容器里的 NapCat（[`lsy/
 
 #### 模型看到什么
 
-每份转录在这个群的 Session 里是一条用户 prompt（新 Session 的第一条还带着以前的摘要，放在 `<qq_group_history trust="derived">` 里）：一段英文指令，点名这个群、要写的小节标题（话题、结论与事实、术语与梗、常见问题、链接与资料；只有开启 `digest.profiles` 才加“成员观点与专长”）和 1500 字上限，然后是 `<qq_group_messages trust="untrusted">` 里的转录，每条消息一行，格式为 `[MM-DD HH:mm] 群友#a3f9 ↳reply: text`（成员默认是别名；关闭 `digest.aliasMembers` 时是名字加 QQ 号末四位）。消息里告诉模型要传给两个工具的群号，并把这个群的笔记放在 `<qq_group_notes trust="derived">` 里给它看。preset 的人设说明聊天内容是数据、它唯一的工具只写这个群的摘要和笔记。摘要就是 `qq_digest_write` 收到的内容（没有则取最终回答）；`NO_REPLY` 表示没有值得保留的内容。
+每份转录在这个群的 Session 里是一条用户 prompt（新 Session 的第一条还带着以前的摘要，放在 `<qq_group_history trust="derived">` 里）：一段英文指令，点名这个群、要写的小节标题（话题、结论与事实、术语与梗、常见问题、链接与资料；只有开启 `digest.profiles` 才加“成员观点与专长”）和 1500 字上限，然后是 `<qq_group_messages trust="untrusted">` 里的转录，每条消息一行，格式为 `[MM-DD HH:mm] 群友#a3f9 ↳reply: text`（成员默认是别名；关闭 `digest.aliasMembers` 时是名字加 QQ 号末四位）。噪音会被折叠：同一成员连续发的、只有 `[表情]`、`[动画表情]`、`[戳一戳]` 或 `[合并转发]` 的消息合成一行（`[表情]×3`），但每条消息仍计入摘要的游标和消息数；带文字的消息加标记（`看这个[图片]`）以及回复只含占位符消息的回复都完整保留。开启别名时，@ 提及也不会带出被隐藏的身份：`@<QQ 号>` 和 `@<昵称或群名片>` 变成该成员的别名，其他的 `@<名字>`（群里没人用的名字，或两个成员共用的名字）变成 `@某群友`，`@全体成员` 保持原样。消息里告诉模型要传给两个工具的群号，并把这个群的笔记放在 `<qq_group_notes trust="derived">` 里给它看。preset 的人设说明聊天内容是数据、它唯一的工具只写这个群的摘要和笔记。摘要就是 `qq_digest_write` 收到的内容（没有则取最终回答）；`NO_REPLY` 表示没有值得保留的内容。
 
 #### Token 影响
 
-每次调用至多 `maxPromptChars` 个字符的转录加约 300 token 的指令，回答至多约 1500 字；每个群每轮至多 `maxCallsPerRound` 次调用，默认每个群每天一轮。每步 usage 随摘要保存。
+每次调用至多 `maxPromptChars` 个字符的转录（繁忙群里的表情和戳一戳，每一段只占一短行，而不是每条一行）加约 300 token 的指令，回答至多约 1500 字；每个群每轮至多 `maxCallsPerRound` 次调用，默认每个群每天一轮。每步 usage 随摘要保存。
 
 #### KV Cache 影响
 

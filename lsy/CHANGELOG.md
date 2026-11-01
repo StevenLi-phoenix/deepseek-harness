@@ -14,6 +14,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 - A final answer whose last line is exactly `NO_REPLY` is silent for `lsy-event-bus` and owner-relay, so an explanation followed by `NO_REPLY` no longer reaches WeChat (2026-11-01).
 
 ### Changed
+- The qq-digest transcript drops its noise (2026-11-01): a member's consecutive `[表情]`, `[动画表情]`, `[戳一戳]`, and `[合并转发]` messages are one line (`[表情]×3`) while every message still moves the digest cursor, and with `digest.aliasMembers` an @-mention shows the member's alias instead of the QQ number or name (`@某群友` when no member has that name; `@全体成员` stays).
 - `lsy-qq` is the recorder's client: `groupOverview()`, `recentMessages()`, `searchMessages()`, `evidenceOf()`, `groupChoices()`, and `loginStatus()` are async and fail with `RecorderUnavailable` while the recorder is down; `dataDir` is ignored (the recorder's `QQ_RECORDER_DATA_DIR`), `asr.enabled` and `send.enabled` fail the load, `sendGroupMessage` always refuses, and `recorder.{socket,tokenEnv,timeoutMs}` are new (schema defaults).
 - `napcat.sh start` stores the OneBot token as the recorder's AMS secret (and still in `.env` for one release cycle) and restarts the recorder, not DSH.
 - The QQ configuration warning in Settings no longer says a save reconnects QQ: only a changed `url` or `tokenEnv` does.

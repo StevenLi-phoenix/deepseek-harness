@@ -134,26 +134,111 @@ export function formatLine(
 }
 
 /**
- * Cut a backlog into transcripts of at most `maxChars` characters each (a single longer line is cut).
- * @returns each chunk's lines and the cursors of the first and last message it covers.
+ * Placeholders that say a message had no words: a forwarded chat, a poke, a face, an animated sticker. A run of messages
+ * by one member that are nothing else is one line in the transcript.
+ */
+const FOLDABLE_MARKERS: ReadonlySet<string> = new Set(['[合并转发]', '[戳一戳]', '[表情]', '[动画表情]'])
+
+/** An entry of the transcript: one message, or a run of one member's placeholder-only messages. */
+interface Entry {
+  readonly first: MessageRow
+  last: MessageRow
+  count: number
+  /** The placeholders of a foldable run, with how often each came. */
+  readonly markers: Map<string, number> | undefined
+  readonly messages: MessageRow[]
+}
+
+/**
+ * Cut a backlog into transcripts of at most `maxChars` characters each (a single longer line is cut). Consecutive messages
+ * of one member that are only `[表情]`, `[动画表情]`, `[戳一戳]`, or `[合并转发]` become one line (`[表情]×3`); every message,
+ * folded or not, still counts toward the chunk's cursors and message count, so the digest cursor moves past all of them.
+ * @returns each chunk's lines, the cursors of the first and last message it covers, and its messages.
  */
 export function chunkTranscript(
   messages: readonly MessageRow[], line: (message: MessageRow) => string, maxChars: number,
 ): Array<{ text: string; fromCursor: string; toCursor: string; count: number; messages: MessageRow[] }> {
-  const chunks: Array<{ lines: string[]; size: number; fromCursor: string; toCursor: string; messages: MessageRow[] }> = []
+  const entries: Entry[] = []
   for (const message of messages) {
-    const text = Array.from(line(message)).slice(0, Math.max(200, Math.floor(maxChars / 4))).join('')
+    const marker = FOLDABLE_MARKERS.has(message.text.trim()) ? message.text.trim() : undefined
+    const previous = entries.at(-1)
+    if (marker !== undefined && previous?.markers !== undefined && previous.first.userId === message.userId) {
+      previous.markers.set(marker, (previous.markers.get(marker) ?? 0) + 1)
+      previous.last = message
+      previous.count += 1
+      previous.messages.push(message)
+    } else {
+      const markers = marker === undefined ? undefined : new Map([[marker, 1]])
+      entries.push({ first: message, last: message, count: 1, markers, messages: [message] })
+    }
+  }
+  const chunks: Array<{ lines: string[]; size: number; fromCursor: string; toCursor: string; count: number; messages: MessageRow[] }> = []
+  for (const entry of entries) {
+    const rendered = entry.count === 1 || entry.markers === undefined
+      ? line(entry.first)
+      : `${line({ ...entry.first, text: '', replyTo: null })}${[...entry.markers].map(([marker, n]) => (n === 1 ? marker : `${marker}×${n}`)).join(' ')}`
+    const text = Array.from(rendered).slice(0, Math.max(200, Math.floor(maxChars / 4))).join('')
     const last = chunks.at(-1)
     if (last === undefined || last.size + text.length + 1 > maxChars) {
-      chunks.push({ lines: [text], size: text.length, fromCursor: message.cursor, toCursor: message.cursor, messages: [message] })
+      chunks.push({
+        lines: [text], size: text.length, fromCursor: entry.first.cursor, toCursor: entry.last.cursor,
+        count: entry.count, messages: [...entry.messages],
+      })
     } else {
       last.lines.push(text)
       last.size += text.length + 1
-      last.toCursor = message.cursor
-      last.messages.push(message)
+      last.toCursor = entry.last.cursor
+      last.count += entry.count
+      last.messages.push(...entry.messages)
     }
   }
-  return chunks.map(chunk => ({ text: chunk.lines.join('\n'), fromCursor: chunk.fromCursor, toCursor: chunk.toCursor, count: chunk.lines.length, messages: chunk.messages }))
+  return chunks.map(chunk => ({ text: chunk.lines.join('\n'), fromCursor: chunk.fromCursor, toCursor: chunk.toCursor, count: chunk.count, messages: chunk.messages }))
+}
+
+/** Who a name in an @-mention is, for the members of one group. */
+export interface MentionNames {
+  /** Member name or card to QQ number; a name two members share maps to undefined. */
+  readonly byName: ReadonlyMap<string, string | undefined>
+}
+
+/**
+ * The names (nickname and card) the members of a group showed, each mapped to its member, for {@link scrubMentions}.
+ * @param members - the recorder's member list of the group.
+ */
+export function mentionNames(members: readonly Member[]): MentionNames {
+  const byName = new Map<string, string | undefined>()
+  for (const member of members) {
+    for (const name of [member.nickname.trim(), member.card.trim()]) {
+      if (name === '') continue
+      byName.set(name, byName.has(name) && byName.get(name) !== member.userId ? undefined : member.userId)
+    }
+  }
+  return { byName }
+}
+
+/**
+ * Make the @-mentions of a message safe to show with member aliases: `@<QQ number>` becomes that member's alias, `@<name>`
+ * the alias of the member who has that name in this group, and any other `@<name>` (a name nobody in the group shows, or
+ * one two members share) `@某群友`; `@全体成员` stays. The alias is `memberAlias(userId, salt)`.
+ * @param text - the stored one-line message text.
+ * @param names - the group's member names.
+ * @param salt - the alias salt.
+ */
+export function scrubMentions(text: string, names: MentionNames, salt: string): string {
+  if (!text.includes('@')) return text
+  const known = [...names.byName.keys()].sort((a, b) => b.length - a.length)
+  const escaped = known.map(name => name.replace(/[\\^$.*+?()[\]{}|/-]/g, '\\$&'))
+  const pattern = new RegExp(`@(?:(\\d{5,})|(全体成员)|(群友#[0-9a-f]{4}|某群友)${escaped.length === 0 ? '' : `|(${escaped.join('|')})`}|([^\\s@]+))`, 'gu')
+  return text.replace(pattern, (_whole, digits?: string, everyone?: string, done?: string, name?: string) => {
+    if (everyone !== undefined) return '@全体成员'
+    if (done !== undefined) return `@${done}`
+    if (digits !== undefined) return `@${memberAlias(digits, salt)}`
+    if (name !== undefined) {
+      const userId = names.byName.get(name)
+      return userId === undefined ? '@某群友' : `@${memberAlias(userId, salt)}`
+    }
+    return '@某群友'
+  })
 }
 
 /** The instruction and the transcript, as one prompt. */
@@ -390,6 +475,16 @@ export class DigestRunner {
     }
   }
 
+  /** The member names of a group; empty when the recorder cannot say (an @-name then reads as `@某群友`). */
+  private async membersOf(groupId: string): Promise<Member[]> {
+    try {
+      return await this.messages.members(groupId) ?? []
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`lsy-qq: could not read the member names of group ${groupId} for the digest: ${errorText(error)}`)
+      return []
+    }
+  }
+
   /** Every message after a cursor, in pages, up to the round's limit. */
   private async backlog(groupId: string, after: string | undefined): Promise<MessageRow[]> {
     const all: MessageRow[] = []
@@ -420,7 +515,12 @@ export class DigestRunner {
     const lookup = (id: string): MessageRow | undefined => known.get(id)
     const salt = await this.store.ensureSalt()
     const nameOf: NameOf = this.config.aliasMembers ? message => memberAlias(message.userId, salt) : realNames
-    const line = (message: MessageRow): string => formatLine(message, lookup, this.config.timeZone, nameOf)
+    // With aliases on, an @-mention must not bring back the number or the name the alias hides.
+    const names = this.config.aliasMembers ? mentionNames(await this.membersOf(groupId)) : undefined
+    const shown = (message: MessageRow): MessageRow => (
+      names === undefined ? message : { ...message, text: scrubMentions(message.text, names, salt) }
+    )
+    const line = (message: MessageRow): string => formatLine(shown(message), lookup, this.config.timeZone, nameOf)
     const chunks = chunkTranscript(messages, line, this.config.maxPromptChars)
     const name = this.messages.groupName(groupId)
     let stored = 0
@@ -429,7 +529,7 @@ export class DigestRunner {
       const started = this.now()
       const binding: RoundBinding = {
         groupId, calls: 0, digest: undefined, notesAdded: 0, notesRemoved: 0, refused: 0,
-        texts: chunk.messages.map(message => message.text),
+        texts: chunk.messages.map(message => shown(message).text),
       }
       const session = await this.sessionFor(groupId, name, this.now())
       const seeded = session.fresh && this.config.resident
