@@ -140,7 +140,9 @@ describe('bili_channel_note', () => {
     expect(await call({ op: 'add', text: '谐音梗' }, 'up-detached')).toMatchObject({ status: 'refused', reason: 'not_persistent_session' })
     await expect(stat(file)).rejects.toThrow()
     const noBus = await mount({ bus: false })
-    expect(await noBus.call({ op: 'add', text: '谐音梗' })).toMatchObject({ status: 'refused', reason: 'not_persistent_session', message: expect.stringContaining('lsy-event-bus is not running') })
+    const refused = await noBus.call({ op: 'add', text: '谐音梗' })
+    expect(refused).toMatchObject({ status: 'refused', reason: 'not_persistent_session' })
+    expect(refused['message']).toContain('lsy-event-bus is not running')
   })
 
   it('allows callsPerTurn calls per turn, counting refused ones, and starts over at the turn end', async () => {
