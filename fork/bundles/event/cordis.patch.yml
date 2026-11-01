@@ -342,6 +342,17 @@
           - /Users/dsh-runtime/work
           - /Users/dsh-runtime/bili
 
+    # Speaking style (Settings → 说话风格): once a day, short exchanges from the recorded QQ groups (ctx.forkQq) and
+    # from the comments under the owner's Bilibili videos (bili-svc's read API, token BILI_SVC_TOKEN_UP), filtered
+    # without a model, kept in $DSH_HOME/fork-style/samples.jsonl (at most 60 active, the owner's own pinned first). The
+    # `fork-style-prompt` row in the `unattended` preset shows them to the main agent as quoted data for length, rhythm,
+    # and register. Strangers' lines reach its prompt this way, outside fork-taint's turn tracking; the owner deletes a
+    # sample with one tap on the page. In the profile patch, `- id: fork-style` with `config.review: required` holds
+    # new samples until the owner keeps them, `config.enabled: false` turns the block off, and
+    # `config.identityMarkers` adds the owner's real name and other handles to the filter.
+    - id: fork-style
+      name: '@deepseek-ai/dsh-fork-style'
+
     # Bilibili preset: the account's Session reads public content and answers the owner's own Bilibili
     # messages, so it gets only its persona, the time, the Bilibili tools (reads and non-speech actions
     # through bili-svc; no comment, reply, dynamic, or message tool), and compaction (the Session is
@@ -655,6 +666,12 @@
             name: '@deepseek-ai/dsh-fork-memory'
             config:
               hold: false
+          # The day's speaking-style samples (from the root fork-style row) in front of each root Session, as quoted
+          # data; nothing when the root row is off.
+          - id: fork-style-prompt
+            name: '@deepseek-ai/dsh-fork-style'
+            config:
+              mode: prompt
           # Claude Code-style monitors: a command's new stdout lines come back to the same Session.
           - id: fork-tool-monitor
             name: '@deepseek-ai/dsh-fork-tool-monitor'
