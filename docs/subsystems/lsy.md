@@ -376,6 +376,27 @@ async setPaused(id: string, paused: boolean): Promise<PauseOutcome>
 protectSessions(label: string, check: SessionProtector): ProtectionDisposer
 
 /**
+ * Register a mover that runs on every {@link handOverSessions}, for a plugin whose bindings name a Session
+ * (what it delivers to it, or records as created by it). Register inside an effect so a reload withdraws it:
+ * `ctx.inject(['lsyEventBus'], scoped => { scoped.effect(() => scoped.lsyEventBus.registerHandover('monitor', move)) })`.
+ * @param kind - binding kind reported with what the mover moved, for example `monitor`.
+ * @param move - the mover.
+ * @returns the disposer.
+ */
+registerHandover(kind: string, move: SessionHandoverMover): () => void
+
+/**
+ * Move every binding of some Sessions to another Session, for a conversation that continues in a new Session
+ * (WeChat `/new`): the run-time subscriptions they created now name `to` as their creator, then each registered
+ * mover moves its own. A failing mover is logged and reported, and the others still run; a repeat moves nothing
+ * the first call moved.
+ * @param from - Sessions whose bindings move; `to` itself is ignored.
+ * @param to - Session that takes them over.
+ * @returns what moved, by kind (kinds that moved nothing are left out), and which movers failed.
+ */
+async handOverSessions(from: readonly string[], to: string): Promise<SessionHandoverReport>
+
+/**
  * The auto-archive schedule, protectors, last sweep, and recently archived Sessions, for health and Settings.
  * @returns snapshot.
  */

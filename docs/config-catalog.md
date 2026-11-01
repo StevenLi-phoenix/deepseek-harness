@@ -2566,7 +2566,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-lsy-event-bus`
 
 - `inject`: `timer` · `storageDomain`
-- `source`: [`packages/lsy/lsy-event-bus/src/index.ts:65`](../packages/lsy/lsy-event-bus/src/index.ts)
+- `source`: [`packages/lsy/lsy-event-bus/src/index.ts:66`](../packages/lsy/lsy-event-bus/src/index.ts)
 
 ```ts config-catalog
 /** Bus configuration. */
@@ -3602,7 +3602,7 @@ export type TtsProviderName = 'feiyu' | 'mac-mini'
 ## `@deepseek-ai/dsh-lsy-wechat`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/lsy/lsy-wechat/src/index.ts:75`](../packages/lsy/lsy-wechat/src/index.ts)
+- `source`: [`packages/lsy/lsy-wechat/src/index.ts:78`](../packages/lsy/lsy-wechat/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
