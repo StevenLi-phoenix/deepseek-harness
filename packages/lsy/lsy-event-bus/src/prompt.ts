@@ -136,7 +136,7 @@ export function formatBatchNote(subscription: string, events: readonly BatchEven
     if (event.url !== undefined) lines.push(`  ${event.url}`)
   }
   if (events.length > maxEvents) lines.push(`… and ${events.length - maxEvents} more`)
-  return { title: `${subscription}: ${events.length} event(s)`, body: clip(lines.join('\n'), MAX_NOTE_BODY_CHARS) }
+  return { title: `${subscription}: ${events.length} event(s)`, body: clip(lines.join('\n'), MAX_NOTE_BODY_CHARS), kinds: [...new Set(events.map(event => event.kind))] }
 }
 
 /** A failure reason is one line under a phone-sized message. */

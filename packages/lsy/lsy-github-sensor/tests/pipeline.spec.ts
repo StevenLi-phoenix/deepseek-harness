@@ -112,7 +112,7 @@ describe('GitHub event pipeline', () => {
 
     gh.set(REL, [release(2), release(1)])
     await vi.advanceTimersByTimeAsync(60_000 + 30_000)
-    expect(notes).toEqual([{ title: 'releases: 1 event(s)', body: '• octo/repo v2.0.0\n  https://github.com/octo/repo/releases/tag/v2.0.0' }])
+    expect(notes).toEqual([{ title: 'releases: 1 event(s)', body: '• octo/repo v2.0.0\n  https://github.com/octo/repo/releases/tag/v2.0.0', kinds: ['github.release'] }])
     expect(deliveries).toHaveLength(0)
   })
 

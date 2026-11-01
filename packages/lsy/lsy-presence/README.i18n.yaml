@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/lsy-presence/README.md
+/:
+  en: 5ffd932ccc1972e1
+  zh: b3d0aab141489df0
+/deepseek-ai-dsh-lsy-presence:
+  en: f7e55238137381e2
+  zh: 9dbbf405e8819f2c
+/deepseek-ai-dsh-lsy-presence/summary:
+  en: 111d8a956c48bb2e
+  zh: 4e2e922c1fc3bb01
+/deepseek-ai-dsh-lsy-presence/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-lsy-presence/use-this-package:
+  en: 1b5fb82a62b81c63
+  zh: 2af8744d98a7ffef
+/deepseek-ai-dsh-lsy-presence/understand-the-implementation:
+  en: 7cef28ebaa0540ae
+  zh: c2f9513a12bd47ee
+/deepseek-ai-dsh-lsy-presence/further-exploration:
+  en: ea1974f1c3cc2c3d
+  zh: 6bff30c606286ab3
+/deepseek-ai-dsh-lsy-presence/model-experience:
+  en: 8df0536ab835e2b0
+  zh: f06a8fa92790ee16
+/deepseek-ai-dsh-lsy-presence/model-experience/kv-cache-effect:
+  en: ca75c51c89c2c9b0
+  zh: 2dd3f298281cf138
+/deepseek-ai-dsh-lsy-presence/known-limitations-and-deferred-work:
+  en: 0f4fbe1af7e12495
+  zh: c28b536649ddc3a6
+/deepseek-ai-dsh-lsy-presence/known-limitations-and-deferred-work/dev-note:
+  en: 27c9730cc88d3a81
+  zh: 691cd4daeddeab41

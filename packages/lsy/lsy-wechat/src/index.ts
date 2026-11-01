@@ -15,6 +15,8 @@ import { untrustedRequestId } from '@deepseek-ai/dsh-lsy-taint'
 import type { RelayAnswer, RelayChannel, RelayDelivery } from '@deepseek-ai/dsh-owner-relay'
 // Type-only: ctx.lsyVoice, which reads the audio files the owner sends when transcription is on.
 import type {} from '@deepseek-ai/dsh-lsy-voice'
+// Type-only: ctx.lsyPresence, which tells whether the owner sleeps, so non-urgent messages wait for the morning.
+import type { DeferralHolder, LsyPresence } from '@deepseek-ai/dsh-lsy-presence'
 import type {} from '@deepseek-ai/dsh-permission-presets'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-title'
@@ -23,6 +25,7 @@ import z from '@deepseek-ai/schemastery'
 import { IlinkApiError, IlinkClient, ILINK_SEND_REJECTED, isStaleTokenError, ItemType, MESSAGE_TYPE_USER, type WeixinMessage } from './api.ts'
 import { accountFilePath, readAccountFile, type WechatAccount } from './login.ts'
 import { attachmentNote, describeMedia, downloadMedia, isPromptImage, mediaSpec, saveInboxFile, uploadMedia, type OutboundKind, type ReceivedMedia, type Transcription } from './media.ts'
+import { WechatSettings, type SettingsConnection } from './settings.ts'
 import { wechatDomain, type ActivityRecord, type OutboxRecord, type SentKind, type WindowRecord } from './storage.ts'
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
@@ -32,12 +35,15 @@ declare module '@deepseek-ai/dsh-llm' {
 
 import { agentMessageText, buildDigest, EARLIER_CHAT, fitText, formatGap, HELP_REPLY, inboundText, NEW_CHAT_REPLY, QUOTA_FOOTER, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES } from './text.ts'
 import { TypingIndicator } from './typing.ts'
+import type { ChannelError, ChannelLink, ChannelStatus, WindowClosed } from './view.ts'
 
 /** How long a mute file keeps the safety notices quiet, in milliseconds. */
 const SAFETY_MUTE_MS = 30 * 60_000
 
 export * from './api.ts'
 export * from './login.ts'
+export * from './login-session.ts'
+export * from './view.ts'
 export * from './text.ts'
 export type * from './storage.ts'
 
@@ -101,6 +107,11 @@ export interface Config {
    * 0 turns the note off.
    */
   timeGapMs: number
+  /**
+   * How long after the owner's latest message nothing is held back for sleep, in milliseconds: the owner is
+   * evidently awake, and what the chat Session answers in that time is a reply. 0 holds even replies.
+   */
+  awakeAfterMessageMs: number
 }
 
 /** Configuration schema. */
@@ -127,6 +138,7 @@ export const Config: z<Config> = z.object({
   maxMediaBytes: z.natural().min(1024).default(25 * 1024 * 1024),
   mediaTimeoutMs: z.natural().min(1000).default(60_000),
   timeGapMs: z.natural().default(1_800_000),
+  awakeAfterMessageMs: z.natural().default(1_800_000),
 })
 
 /** Name of the channel through which `ctx.ownerRelay` relays the chat Sessions' answers. */
@@ -173,6 +185,19 @@ interface Target {
   window: WindowRecord
 }
 
+/** An open reply window, or why there is none. */
+type WindowState = { open: Target } | { closed: WindowClosed; reason: string }
+
+/** The long-poll's health since the current account was loaded. */
+interface LongPollHealth {
+  lastPollAt: number | undefined
+  failures: number
+  lastError: ChannelError | undefined
+}
+
+/** Longest failure text kept for the Settings page. */
+const ERROR_TEXT_CHARS = 200
+
 /** Fail at load on configuration that cannot work. */
 function assertConfig(config: Config): void {
   if (config.accountFile !== undefined && !isAbsolute(config.accountFile)) {
@@ -195,6 +220,11 @@ function assertConfig(config: Config): void {
 /** Human-readable error text. */
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+/** Text with the account's bot token replaced, for logs and the Settings page. */
+function redact(text: string, account: WechatAccount): string {
+  return text.replaceAll(account.botToken, '***')
 }
 
 /** Storage key of an outbox row; zero-padded so keys sort like `seq`. */
@@ -239,6 +269,12 @@ export class WechatChannel extends Service implements LsyNotifier {
   private readonly working = new Set<string>()
   /** Stops typing when a forwarded message starts no chat turn. */
   private typingGrace: NodeJS.Timeout | undefined
+  /** The long-poll's health since the current account was loaded, for {@link status}. */
+  private health: LongPollHealth = { lastPollAt: undefined, failures: 0, lastError: undefined }
+  /** The running long-poll's controller; {@link reloadAccount} aborts it. */
+  private pollAbort: AbortController | undefined
+  /** Ends the current wait for the account file or the retry delay. */
+  private wake: (() => void) | undefined
 
   /**
    * @param ctx - Host services owning storage, Sessions, presets, and titles.
@@ -295,6 +331,32 @@ export class WechatChannel extends Service implements LsyNotifier {
         child.effect(() => this.joinRelay(child), 'lsyWechat.ownerRelay()')
       },
     })
+
+    // Presence tells when the owner sleeps; the channel works without it and then holds nothing back.
+    ctx.plugin({
+      name: 'lsy-wechat-presence',
+      inject: ['lsyPresence'],
+      apply: (child: Context) => {
+        child.effect(() => this.joinPresence(child.lsyPresence), 'lsyWechat.presence()')
+      },
+    })
+
+    // The Settings route mounts whenever the connection service is present; the channel works without it.
+    ctx.plugin({
+      name: 'lsy-wechat-settings-route',
+      inject: ['connection'],
+      apply: (child: Context) => {
+        const settings = new WechatSettings({
+          accountFile: this.accountFile,
+          timeZone: config.chat.timeZone,
+          channel: this,
+          logger: child.logger,
+        })
+        const connection = Reflect.get(child, 'connection') as SettingsConnection
+        child.effect(() => connection.fetch.register(settings.route()), 'lsyWechat.settings()')
+        child.effect(() => () => { settings.dispose() }, 'lsyWechat.settings.logins()')
+      },
+    })
   }
 
   /**
@@ -332,6 +394,61 @@ export class WechatChannel extends Service implements LsyNotifier {
   }
 
   /**
+   * Hold the texts presence says to hold, and send them as one digest when the owner wakes.
+   * @returns a disposer that stops listening and unregisters the holder.
+   */
+  private joinPresence(presence: LsyPresence): () => void {
+    const holder: DeferralHolder = {
+      name: 'wechat',
+      count: () => this.outbox().filter(row => row.deferred === true).length,
+      flush: () => this.releaseDeferred('flushed from Settings'),
+    }
+    const unregister = presence.registerHolder(holder)
+    const stop = presence.onChange((state) => {
+      if (state.asleep) return
+      this.track(this.releaseDeferred('the owner woke').then(() => undefined))
+    })
+    return () => {
+      stop()
+      unregister()
+    }
+  }
+
+  /**
+   * Send what the outbox can send now as digests, and let the texts that remain wait for the next
+   * reply window as ordinary outbox texts.
+   * @param why - what asked for it, for the log.
+   * @returns how many texts went out.
+   */
+  private releaseDeferred(why: string): Promise<number> {
+    return this.serialize(async () => {
+      const domain = await this.ready
+      const held = this.outbox().filter(row => row.deferred === true).length
+      if (held === 0) return 0
+      const sent = await this.flushOutbox(domain)
+      let kept = 0
+      for (const row of this.outbox()) {
+        if (row.deferred !== true) continue
+        kept += 1
+        await domain.table('outbox').put(outboxKey(row.seq), { seq: row.seq, text: row.text, queuedAt: row.queuedAt })
+      }
+      this.ctx.logger.info(`lsy-wechat: ${why}; ${held} held text(s): ${sent} sent, ${kept} left for the next reply window`)
+      return sent
+    })
+  }
+
+  /**
+   * Whether a text of this kind waits for the morning: the owner sleeps, the text is a reply or a note that is
+   * not urgent, and the owner has not written lately.
+   */
+  private holdsBack(domain: Domain<typeof wechatDomain>, kind: SentKind, urgent: boolean): boolean {
+    if (urgent || (kind !== 'reply' && kind !== 'note')) return false
+    if (this.ctx.get('lsyPresence')?.isAsleep() !== true) return false
+    const ownerAt = this.account === undefined ? undefined : domain.table('activity').get(this.account.ownerUserId)?.ownerAt
+    return ownerAt === undefined || Date.now() - ownerAt >= this.config.awakeAfterMessageMs
+  }
+
+  /**
    * Deliver a chat Session's answer that the relay handed over. A chat Session the owner left with
    * /new can still answer (its reminders and monitors live on): the current chat Session gets a
    * copy, since the owner's reply to it lands there.
@@ -362,7 +479,8 @@ export class WechatChannel extends Service implements LsyNotifier {
       return
     }
     const text = renderNote(note)
-    await this.deliver(text, 'note')
+    const urgent = this.ctx.get('lsyPresence')?.isUrgent(note) ?? false
+    await this.deliver(text, 'note', { urgent, events: note.kinds })
     await this.shareWithChat(text, note.origin)
   }
 
@@ -521,6 +639,66 @@ export class WechatChannel extends Service implements LsyNotifier {
     return table === undefined ? [] : [...table.entries()].map(([, row]) => row).sort((a, b) => a.seq - b.seq)
   }
 
+  /**
+   * The channel's health for the Settings page: the long-poll, the owner chat's latest traffic, the
+   * reply window, and the outbox. Counts, times, and codes only; no token, id, or message text.
+   * @returns a snapshot.
+   */
+  status(): ChannelStatus {
+    const account = this.account
+    const domain = this.domain
+    const activity = account === undefined ? undefined : domain?.table('activity').get(account.ownerUserId)
+    const stored = account === undefined ? undefined : domain?.table('windows').get(`${account.botId}/${account.ownerUserId}`)
+    const state = domain === undefined ? { closed: 'no-account' as const } : this.windowState(domain)
+    const rows = this.outbox()
+    let link: ChannelLink
+    if (account === undefined) link = 'idle'
+    else if (account.botToken === this.staleToken) link = 'stale'
+    else if (this.health.failures > 0) link = 'retrying'
+    else link = this.health.lastPollAt === undefined ? 'starting' : 'connected'
+    return {
+      channel: {
+        link,
+        lastPollAt: this.health.lastPollAt ?? null,
+        failures: this.health.failures,
+        lastError: this.health.lastError ?? null,
+        lastInboundAt: activity?.ownerAt ?? null,
+        lastOutboundAt: activity?.sentAt ?? null,
+        lastOutboundKind: activity?.sent ?? null,
+      },
+      window: {
+        open: 'open' in state,
+        closed: 'open' in state ? null : state.closed,
+        repliesLeft: stored === undefined ? null : stored.exhausted ? 0 : Math.max(0, this.config.repliesPerToken - stored.used),
+        repliesPerToken: this.config.repliesPerToken,
+        expiresAt: stored === undefined ? null : stored.receivedAt + this.config.contextTtlMs,
+      },
+      outbox: { count: rows.length, limit: this.config.outboxLimit, oldestAt: rows[0]?.queuedAt ?? null },
+    }
+  }
+
+  /**
+   * Read the account file again now instead of at the next check: ends the wait for a file, cuts the
+   * running long-poll (which belongs to the old account), and skips a retry delay. Called after the
+   * Settings page wrote or moved the file.
+   * @param reason - what changed, for the log.
+   */
+  reloadAccount(reason: string): void {
+    this.ctx.logger.info(`lsy-wechat: reading the account file again (${reason})`)
+    this.pollAbort?.abort(new Error(`lsy-wechat: account reload (${reason})`))
+    this.wake?.()
+  }
+
+  /** Remember the latest failure for {@link status}, with the account's token removed from the text. */
+  private noteError(where: ChannelError['where'], error: unknown, account: WechatAccount, failures?: number): void {
+    const text = redact(errorText(error), account).replaceAll(/\s+/gu, ' ').trim()
+    this.health = {
+      ...this.health,
+      ...failures === undefined ? {} : { failures },
+      lastError: { at: Date.now(), where, text: fitText(text, ERROR_TEXT_CHARS) },
+    }
+  }
+
   /** Run storage and send work one at a time; rejections reach the caller without breaking the chain. */
   private serialize<T>(work: () => Promise<T>): Promise<T> {
     const result = this.chain.then(work)
@@ -536,15 +714,17 @@ export class WechatChannel extends Service implements LsyNotifier {
     this.inflight.add(tracked)
   }
 
-  /** Resolve after `ms`, or as soon as the channel stops. */
+  /** Resolve after `ms`, or as soon as the channel stops or {@link reloadAccount} is called. */
   private pause(ms: number): Promise<void> {
     return new Promise((resolve) => {
       const done = (): void => {
         clearTimeout(timer)
         this.abort.signal.removeEventListener('abort', done)
+        if (this.wake === done) this.wake = undefined
         resolve()
       }
       const timer = setTimeout(done, ms)
+      this.wake = done
       this.abort.signal.addEventListener('abort', done, { once: true })
     })
   }
@@ -559,11 +739,15 @@ export class WechatChannel extends Service implements LsyNotifier {
         await this.pause(this.config.accountPollMs)
         continue
       }
+      // Created with no await since the account was read, so a reload either precedes the read or aborts this poll.
+      const poll = new AbortController()
+      this.pollAbort = poll
       try {
         const client = new IlinkClient({ baseUrl: account.baseUrl, token: account.botToken })
         const cursor = domain.table('cursors').get(account.botId)
-        const updates = await client.getUpdates(cursor?.buf ?? '', timeoutMs, this.abort.signal)
+        const updates = await client.getUpdates(cursor?.buf ?? '', timeoutMs, AbortSignal.any([this.abort.signal, poll.signal]))
         failures = 0
+        this.health = { ...this.health, lastPollAt: Date.now(), failures: 0 }
         timeoutMs = updates.nextTimeoutMs ?? this.config.longPollTimeoutMs
         if (updates.malformed > 0) this.ctx.logger.warn(`lsy-wechat: dropped ${updates.malformed} malformed message(s)`)
         // At-most-once: the cursor moves before handling, so a crash in between drops messages rather than repeating prompts.
@@ -572,13 +756,19 @@ export class WechatChannel extends Service implements LsyNotifier {
       } catch (error: unknown) {
         // oxlint-disable-next-line typescript/no-unnecessary-condition -- teardown sets it while getUpdates is awaited.
         if (this.stopping) return
+        if (poll.signal.aborted) {
+          // A reload cut the long-poll: read the account file again at once.
+          failures = 0
+          continue
+        }
         if (isStaleTokenError(error)) {
           this.markStale(account)
           continue
         }
         failures += 1
+        this.noteError('poll', error, account, failures)
         const wait = Math.min(FIRST_RETRY_MS * 2 ** (failures - 1), MAX_RETRY_MS)
-        this.ctx.logger.warn(`lsy-wechat: long-poll failed (${failures} in a row): ${errorText(error)}; retrying in ${wait / 1000}s`)
+        this.ctx.logger.warn(`lsy-wechat: long-poll failed (${failures} in a row): ${redact(errorText(error), account)}; retrying in ${wait / 1000}s`)
         await this.pause(wait)
       }
     }
@@ -598,6 +788,8 @@ export class WechatChannel extends Service implements LsyNotifier {
         this.ctx.logger.info(`lsy-wechat: bot ${read.account.botId} active for owner ${read.account.ownerUserId}`)
       }
       this.typing.forgetTicket()
+      this.health = { lastPollAt: undefined, failures: 0, lastError: undefined }
+      if (read.kind === 'missing') this.onlineState = ''
     }
     this.account = read.kind === 'ok' ? read.account : undefined
     if (read.kind === 'ok' && state !== this.onlineState) {
@@ -875,15 +1067,25 @@ export class WechatChannel extends Service implements LsyNotifier {
     return created.sessionId
   }
 
-  /** Split one text into messages and send or queue each in order. */
-  private deliver(raw: string, kind: SentKind): Promise<void> {
+  /**
+   * Split one text into messages and send or queue each in order; while the owner sleeps, a text that is
+   * not urgent is queued for the morning instead (the log names its kind and count, never its text).
+   */
+  private deliver(raw: string, kind: SentKind, options: { urgent?: boolean; events?: readonly string[] | undefined } = {}): Promise<void> {
     // An unpaired surrogate (a cut emoji in model output) makes sendmessage fail with ret -1.
     const text = raw.toWellFormed()
     return this.serialize(async () => {
       const domain = await this.ready
       const chars = this.config.maxMessageChars - Array.from(QUOTA_FOOTER).length
       const bytes = WECHAT_MAX_TEXT_BYTES - Buffer.byteLength(QUOTA_FOOTER, 'utf8')
-      for (const part of splitText(text, chars, this.config.maxReplyParts, bytes)) await this.deliverPart(domain, part, kind)
+      const parts = splitText(text, chars, this.config.maxReplyParts, bytes)
+      if (this.holdsBack(domain, kind, options.urgent === true)) {
+        for (const part of parts) await this.enqueue(domain, part, 'owner asleep', true)
+        const events = options.events === undefined || options.events.length === 0 ? '' : `, events ${options.events.join(' ')}`
+        this.ctx.logger.info(`lsy-wechat: held ${parts.length} ${kind} message(s) while the owner sleeps${events}; ${this.outbox().filter(row => row.deferred === true).length} held`)
+        return
+      }
+      for (const part of parts) await this.deliverPart(domain, part, kind)
     })
   }
 
@@ -901,15 +1103,21 @@ export class WechatChannel extends Service implements LsyNotifier {
 
   /** The open reply window, or why there is none. */
   private target(domain: Domain<typeof wechatDomain>): Target | string {
+    const state = this.windowState(domain)
+    return 'open' in state ? state.open : state.reason
+  }
+
+  /** The open reply window, or the code and reason it is closed. */
+  private windowState(domain: Domain<typeof wechatDomain>): WindowState {
     const account = this.account
-    if (account === undefined) return 'no bound account'
-    if (account.botToken === this.staleToken) return 'bot token is stale'
+    if (account === undefined) return { closed: 'no-account', reason: 'no bound account' }
+    if (account.botToken === this.staleToken) return { closed: 'stale-token', reason: 'bot token is stale' }
     const key = `${account.botId}/${account.ownerUserId}`
     const window = domain.table('windows').get(key)
-    if (window === undefined) return 'the owner has not written yet'
-    if (Date.now() - window.receivedAt > this.config.contextTtlMs) return 'reply window expired'
-    if (window.exhausted || window.used >= this.config.repliesPerToken) return 'reply quota used up'
-    return { account, key, window }
+    if (window === undefined) return { closed: 'owner-silent', reason: 'the owner has not written yet' }
+    if (Date.now() - window.receivedAt > this.config.contextTtlMs) return { closed: 'expired', reason: 'reply window expired' }
+    if (window.exhausted || window.used >= this.config.repliesPerToken) return { closed: 'used-up', reason: 'reply quota used up' }
+    return { open: { account, key, window } }
   }
 
   /** Send one text message and count it against the window; a failure returns why it was not sent. */
@@ -939,7 +1147,8 @@ export class WechatChannel extends Service implements LsyNotifier {
         this.markStale(target.account)
         return 'bot token is stale'
       }
-      this.ctx.logger.warn(`lsy-wechat: send failed: ${errorText(error)}`)
+      this.ctx.logger.warn(`lsy-wechat: send failed: ${redact(errorText(error), target.account)}`)
+      this.noteError('send', error, target.account)
       return 'send failed'
     }
     const used = target.window.used + 1
@@ -1010,29 +1219,35 @@ export class WechatChannel extends Service implements LsyNotifier {
   }
 
   /** Queue one text; a full outbox drops its oldest texts. */
-  private async enqueue(domain: Domain<typeof wechatDomain>, text: string, reason: string): Promise<void> {
+  private async enqueue(domain: Domain<typeof wechatDomain>, text: string, reason: string, deferred = false): Promise<void> {
     const outbox = domain.table('outbox')
     const rows = this.outbox()
     const victims = rows.slice(0, Math.max(0, rows.length - this.config.outboxLimit + 1))
     for (const row of victims) await outbox.delete(outboxKey(row.seq))
     if (victims.length > 0) this.ctx.logger.warn(`lsy-wechat: outbox full; dropped the ${victims.length} oldest text(s)`)
     const seq = (rows.at(-1)?.seq ?? 0) + 1
-    await outbox.put(outboxKey(seq), { seq, text, queuedAt: Date.now() })
+    await outbox.put(outboxKey(seq), { seq, text, queuedAt: Date.now(), ...deferred ? { deferred } : {} })
     this.ctx.logger.info(`lsy-wechat: queued ${text.length} chars (${reason}); ${outbox.size} waiting`)
   }
 
-  /** Send queued texts as digests while the window has more than one slot left; the last slot stays for the reply. */
-  private async flushOutbox(domain: Domain<typeof wechatDomain>): Promise<void> {
+  /**
+   * Send queued texts as digests while the window has more than one slot left; the last slot stays for the reply.
+   * @returns how many texts went out.
+   */
+  private async flushOutbox(domain: Domain<typeof wechatDomain>): Promise<number> {
     let rows = this.outbox()
+    let sent = 0
     while (rows.length > 0) {
       const target = this.target(domain)
-      if (typeof target === 'string' || target.window.used + 1 >= this.config.repliesPerToken) return
+      if (typeof target === 'string' || target.window.used + 1 >= this.config.repliesPerToken) return sent
       const digest = buildDigest(rows, this.config.maxMessageChars, this.config.chat.timeZone)
-      if (await this.transmit(domain, target, digest.text, 'digest') !== 'sent') return
+      if (await this.transmit(domain, target, digest.text, 'digest') !== 'sent') return sent
       for (const row of rows.slice(0, digest.count)) await domain.table('outbox').delete(outboxKey(row.seq))
       this.ctx.logger.info(`lsy-wechat: delivered ${digest.count} queued text(s) as one digest`)
+      sent += digest.count
       rows = rows.slice(digest.count)
     }
+    return sent
   }
 }
 

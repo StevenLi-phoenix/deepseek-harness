@@ -387,6 +387,95 @@ ownsSession?(sessionId: string): boolean
 
 Source: [`packages/lsy/lsy-event-bus/src/types.ts`](../../packages/lsy/lsy-event-bus/src/types.ts)
 
+<a id="ctxlsypresence--lsypresence"></a>
+
+### `ctx.lsyPresence` — `LsyPresence`
+
+Presence of the owner. Holds the latest Focus signal and Settings button in storage, evaluates the answer on demand and at every moment it can change by itself, and tells listeners when the owner falls asleep or wakes.
+
+```ts cordis-catalog
+/**
+ * Whether the owner is asleep right now.
+ * @returns true while a button, a fresh Focus signal, or the window says so.
+ */
+isAsleep(): boolean
+
+/**
+ * Whether a message must be sent even while the owner sleeps: the sender marked it urgent, or one of the
+ * event kinds it reports matches an urgent glob.
+ * @param note - the message; only `urgent` and `kinds` are read.
+ * @returns true when it must not wait.
+ */
+isUrgent(note: Pick<LsyNote, 'urgent' | 'kinds'>): boolean
+
+/**
+ * Listen for the owner falling asleep and waking, whatever the source.
+ * @param listener - called with the new state.
+ * @returns a function that stops listening.
+ */
+onChange(listener: PresenceListener): () => void
+
+/**
+ * Register a channel that holds messages back.
+ * @param holder - how to count and flush them.
+ * @returns a function that unregisters it.
+ */
+registerHolder(holder: DeferralHolder): () => void
+
+/**
+ * Send what the channels hold back, now.
+ * @returns how many messages went out.
+ */
+async flushNow(): Promise<number>
+
+/**
+ * Apply a Focus signal pushed by the phone (the `presence` ingest source). The Host's receipt time is
+ * the signal's time; the pusher's clock and key are ignored.
+ * @param event - `presence.sleep.on` or `presence.sleep.off`.
+ * @returns `asleep` or `awake`, as the signal says.
+ * @throws {Error} for any other kind.
+ */
+async ingest(event: LsyEventInput): Promise<string>
+
+/**
+ * Press "I am going to sleep" or "I am awake", optionally with an end.
+ * @param asleep - the state to hold.
+ * @param until - when it lapses, in Unix epoch milliseconds; omitted holds for `manualMaxHours` or until the next Focus signal.
+ */
+async setManual(asleep: boolean, until?: number): Promise<void>
+
+/**
+ * Quiet until a clock time: the next time the local clock reads `clock`.
+ * @param clock - `HH:MM`, 24-hour.
+ * @returns the end, in Unix epoch milliseconds.
+ */
+async quietUntil(clock: string): Promise<number>
+
+/** Drop the button, so the Focus signal or the window decides again. */
+async clearManual(): Promise<void>
+
+/**
+ * Replace the daily window; it survives restarts and replaces the configured one.
+ * @param window - the new window.
+ */
+async setWindow(window: QuietWindow): Promise<void>
+
+/**
+ * The state with everything Settings shows.
+ * @param deferred - messages held back, if the caller counts them.
+ * @returns the view.
+ */
+view(deferred: number = this.deferredCount()): PresenceView
+
+/**
+ * Count what the channels hold back.
+ * @returns messages the registered channels hold back.
+ */
+deferredCount(): number
+```
+
+Source: [`packages/lsy/lsy-presence/src/index.ts`](../../packages/lsy/lsy-presence/src/index.ts)
+
 <a id="ctxlsyqq--qqobserver"></a>
 
 ### `ctx.lsyQq` — `QqObserver`

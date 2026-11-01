@@ -216,6 +216,13 @@ export interface LsyNote {
    * these while the operator's mute switch is on, so a test never reaches the owner's phone; other notes are unaffected.
    */
   safety?: true | undefined
+  /**
+   * Kinds of the events this note reports (a notify subscription's batch), deduplicated. A channel that holds
+   * back messages while the owner sleeps matches them against its urgent kinds; absent for notes that report no event.
+   */
+  kinds?: readonly string[] | undefined
+  /** The sender marks the note urgent: a channel that holds back messages while the owner sleeps sends it at once. */
+  urgent?: true | undefined
 }
 
 /** A message another of the agent's Sessions sends the owner's main agent. */
@@ -259,6 +266,21 @@ export interface LsyNotifier {
    * @returns true when the channel created this Session.
    */
   ownsSession?(sessionId: string): boolean
+}
+
+/**
+ * A service that takes the events of one ingest source itself. `lsy-event-ingest` hands such a source's
+ * events to the sink and never publishes them on the bus, so no subscription can match them: no Session
+ * starts and no notification goes out because of them.
+ */
+export interface LsyIngestSink {
+  /**
+   * Apply one pushed event.
+   * @param event - the validated event; its kind starts with the source id.
+   * @returns what happened to it, for the log and the pusher's answer.
+   * @throws {Error} with a message safe to return to the pusher when the event cannot be applied (HTTP 400).
+   */
+  ingest(event: LsyEventInput): Promise<string>
 }
 
 /** JSON event of one `lsy-event` webhook delivery. */

@@ -70,6 +70,11 @@ describe('formatBatchNote', () => {
     expect(note.body).toContain('https://github.com/octo/repo/releases/v1.0.0')
     expect(note.body).toContain('… and 1 more')
   })
+
+  it('names the kinds of all its events, even those past the cap, once each', () => {
+    const note = formatBatchNote('releases', [...events, { ...events[0]!, id: 'x' }], 1)
+    expect(note.kinds).toEqual([...new Set(events.map(event => event.kind))])
+  })
 })
 
 describe('formatResultNote', () => {

@@ -159,6 +159,8 @@
     { "path": "./packages/lsy/lsy-style-settings/tsconfig.client.json" },
     { "path": "./packages/lsy/lsy-memory-admin/tsconfig.client.json" },
     { "path": "./packages/lsy/bili/tsconfig.client.json" },
+    { "path": "./packages/lsy/lsy-wechat/tsconfig.client.json" },
+    { "path": "./packages/lsy/lsy-presence/tsconfig.client.json" },
     { "path": "./packages/client/ui-trajectory/tsconfig.client.json" },
     { "path": "./packages/session-query/session-log-export/tsconfig.client.json" },
     { "path": "./packages/client/ui-open-in-app" },

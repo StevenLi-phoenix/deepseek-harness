@@ -40,6 +40,7 @@ export const PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackagePolic
   'packages/lsy/owner-relay': { category: 'optional', reason: 'Fork-local relay of Session answers to the owner\'s channels, mounted by the event profile bundle.' },
   'packages/lsy/lsy-memory': { category: 'optional', reason: 'Fork-local owner memory (context block and memory tools) mounted by the event profile preset.' },
   'packages/lsy/lsy-memory-admin': { category: 'optional', reason: 'Fork-local Memory settings section (browser half) for the owner\'s review of agent memory, mounted by the event profile bundle; its Host route is lsy-memory\'s settings entry.' },
+  'packages/lsy/lsy-presence': { category: 'optional', reason: 'Fork-local owner presence (Sleep Focus, daily window, quiet-hours Settings section) mounted by the event profile bundle.' },
   'packages/lsy/lsy-sysmon': { category: 'optional', reason: 'Fork-local System status settings section mounted by the event profile bundle.' },
   'packages/lsy/lsy-style': { category: 'optional', reason: 'Fork-local speaking-style samples (QQ groups and Bilibili comments) shown to the main agent, mounted by the event profile bundle; reads the QQ observer and bili-svc.' },
   'packages/lsy/lsy-style-settings': { category: 'optional', reason: 'Fork-local speaking-style settings section mounted by the event profile bundle; needs lsy-style.' },

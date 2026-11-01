@@ -2612,7 +2612,7 @@ export interface PersistentSessionAction {
 ## `@deepseek-ai/dsh-lsy-event-ingest`
 
 - `inject`: `webServer` · `credentials` · `lsyEventBus`
-- `source`: [`packages/lsy/lsy-event-ingest/src/index.ts:36`](../packages/lsy/lsy-event-ingest/src/index.ts)
+- `source`: [`packages/lsy/lsy-event-ingest/src/index.ts:41`](../packages/lsy/lsy-event-ingest/src/index.ts)
 
 ```ts config-catalog
 /** Route, sources, and body ceiling. */
@@ -2631,6 +2631,11 @@ export interface IngestSource {
   id: string
   /** Credential reference of this source's bearer token. */
   tokenEnv: string
+  /**
+   * Name of a Host service (an {@link LsyIngestSink}) that takes this source's events instead of the
+   * bus, e.g. `lsyPresence`. Such events are never published, so no subscription can match them.
+   */
+  sink?: string
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-event-ingest -->
@@ -2751,6 +2756,49 @@ export interface Config {
 export type FeedbackScope = typeof FEEDBACK_SCOPES[number]
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-memory -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-presence -->
+<a id="deepseek-aidsh-lsy-presence"></a>
+
+## `@deepseek-ai/dsh-lsy-presence`
+
+- `inject`: `storageDomain`
+- `source`: [`packages/lsy/lsy-presence/src/index.ts:35`](../packages/lsy/lsy-presence/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** IANA zone of the owner; the window and the manual times are read in it. */
+  timeZone: string
+  /** Daily fallback window, used when no Focus signal is fresh; the Settings page can replace it. */
+  window: QuietWindow
+  /** Hours an awake Focus signal outranks the window. */
+  focusFreshHours: number
+  /** Hours an asleep Focus signal holds when its off signal never arrives. */
+  sleepMaxHours: number
+  /** Hours a Settings button holds when it names no end. */
+  manualMaxHours: number
+  /** Globs of the event kinds that are sent while the owner sleeps. */
+  urgentKinds: string[]
+  /** Full URL of `lsy-event-ingest`'s route, shown in the Shortcut instructions. */
+  ingestUrl?: string
+  /** Path of that route. */
+  ingestPath: string
+  /** Name of the environment variable that holds the `presence` ingest token, shown in the instructions (the value is never read here). */
+  tokenEnv: string
+}
+
+/** Daily fallback window, in the owner's time zone; it wraps past midnight when `start` is later than `end`. */
+export interface QuietWindow {
+  /** Whether the window applies at all. */
+  readonly enabled: boolean
+  /** `HH:MM`, 24-hour. */
+  readonly start: string
+  /** `HH:MM`, 24-hour. */
+  readonly end: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-presence -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-qq -->
 <a id="deepseek-aidsh-lsy-qq"></a>
@@ -3298,7 +3346,7 @@ export type TtsProviderName = 'feiyu' | 'mac-mini'
 ## `@deepseek-ai/dsh-lsy-wechat`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/lsy/lsy-wechat/src/index.ts:69`](../packages/lsy/lsy-wechat/src/index.ts)
+- `source`: [`packages/lsy/lsy-wechat/src/index.ts:75`](../packages/lsy/lsy-wechat/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
@@ -3337,6 +3385,11 @@ export interface Config {
    * 0 turns the note off.
    */
   timeGapMs: number
+  /**
+   * How long after the owner's latest message nothing is held back for sleep, in milliseconds: the owner is
+   * evidently awake, and what the chat Session answers in that time is a reply. 0 holds even replies.
+   */
+  awakeAfterMessageMs: number
 }
 
 /** How the owner's chat Session is created. */

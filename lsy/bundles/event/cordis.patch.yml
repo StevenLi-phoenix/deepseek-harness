@@ -240,6 +240,11 @@
             tokenEnv: LSY_INGEST_TOKEN_AUTOCUT
           - id: bili
             tokenEnv: LSY_INGEST_TOKEN_BILI
+          # The phone's Sleep Focus (iOS Shortcut, RUNBOOK §18). A sink source: its events go to
+          # ctx.lsyPresence and never to the bus, so no subscription can start a Session or send a note.
+          - id: presence
+            tokenEnv: LSY_INGEST_TOKEN_PRESENCE
+            sink: lsyPresence
 
     - id: lsy-github-sensor
       name: '@deepseek-ai/dsh-lsy-github-sensor'
@@ -263,6 +268,18 @@
       name: '@deepseek-ai/dsh-lsy-memory-admin'
     - id: lsy-memory-settings
       name: '@deepseek-ai/dsh-lsy-memory/settings'
+
+    # Settings → 勿扰: whether the owner sleeps (the phone's Sleep Focus pushed through lsy-event-ingest's
+    # `presence` source, a daily 03:30-10:30 New York window when no Focus signal is fresh, buttons in
+    # Settings). While asleep lsy-wechat holds non-urgent messages and sends them as one digest on waking.
+    # Urgent kinds are the defaults (host.disk.full, host.*.critical, bili.risk.*, bili.gate.readonly).
+    # ingestUrl and tokenEnv only fill in the Shortcut instructions on the page; the token itself is
+    # LSY_INGEST_TOKEN_PRESENCE in $DSH_HOME/.env.
+    - id: lsy-presence
+      name: '@deepseek-ai/dsh-lsy-presence'
+      config:
+        timeZone: America/New_York
+        ingestUrl: https://dsh.tailc2559b.ts.net/hooks/lsy
 
     # Voice (ctx.lsyVoice): text to speech for the `speak` tool (feiyu on the laptop, no fallback;
     # the Mac mini TTS service was retired on 2026-10-31; the key is LSY_FEIYU_API_KEY in

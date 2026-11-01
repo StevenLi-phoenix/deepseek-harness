@@ -76,7 +76,7 @@ kind: "package-reference"
 | `maxTextChars` | `4000` | 每个事件不可信正文的存储字符上限 |
 | `notifySessionResult` | `true` | 把总线启动的 Session 第一轮的结果发给通知器 |
 | `reportScheduledTurns` | `true` | 把每个无人值守的 Host schedule 提醒轮次、以及每个被 `lsy-tool-monitor` 通知唤醒的轮次（标题为 📡 加监控名）的最终回答发给通知器 |
-| `maxNoteEvents` | `10` | 一条通知里列出的事件数 |
+| `maxNoteEvents` | `10` | 一条通知里列出的事件数；通知还带上这一批所有事件的类型（`LsyNote.kinds`），在主人睡觉时压消息的通道拿它去匹配自己的紧急类型 |
 | `webUrl` | 未设置 | 附在 Session 结果里的 Web UI 链接 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-lsy-event-bus)是全部可用字段的权威来源。
