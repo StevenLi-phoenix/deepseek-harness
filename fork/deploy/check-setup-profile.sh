@@ -52,6 +52,7 @@ done
 /usr/bin/grep -q "^- id: fork-wechat-settings$" "$WORK/fresh.yml" || fail "composition lacks fork-wechat-settings"
 /usr/bin/grep -q "^- id: fork-guard$" "$WORK/fresh.yml" || fail "composition lacks fork-guard"
 /usr/bin/grep -q "^- id: fork-guard-settings$" "$WORK/fresh.yml" || fail "composition lacks the fork-guard settings route"
+/usr/bin/grep -q "^- id: fork-time-gap$" "$WORK/fresh.yml" || fail "composition lacks fork-time-gap"
 
 if [ -d "$PREFIX/fork/skills/autocut" ]; then
   [ -L "$FRESH/skills/autocut" ] && [ -f "$FRESH/skills/autocut/SKILL.md" ] || fail "autocut skill not linked into the home"

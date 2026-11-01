@@ -122,6 +122,16 @@ describe('channel isolation of the event bundle\'s presets', () => {
     for (const preset of ['bili', 'qqbot', 'qq-digest'] as const) expect(names(preset)).not.toContain('@deepseek-ai/dsh-fork-memory')
   })
 
+  it('lets the time check reach every preset from the root because it carries only times and fixed wording', () => {
+    expect(rootRows.map(row => row.name)).toContain('@deepseek-ai/dsh-fork-time-gap')
+    for (const preset of [WECHAT_PRESET, ...OUTSIDE_PRESETS]) expect(names(preset)).not.toContain('@deepseek-ai/dsh-fork-time-gap')
+    // It reads Session times and message sources, never the owner memory or the WeChat side. fork-taint is a dependency
+    // only for its request-id prefix (a message another Session passed on); the taint plugin itself is not mounted.
+    const manifest = JSON.parse(readFileSync(join(ROOT, 'packages/fork/fork-time-gap/package.json'), 'utf8')) as { peerDependencies: Record<string, string>; dependencies: Record<string, string> }
+    const dependencies = [...Object.keys(manifest.peerDependencies), ...Object.keys(manifest.dependencies)]
+    expect(dependencies.filter(name => name !== '@deepseek-ai/dsh-fork-taint' && (name in WECHAT_SIDE || name === '@deepseek-ai/dsh-fork-wechat'))).toEqual([])
+  })
+
   it('keeps the owner memory out of every root row, since root rows reach every preset', () => {
     expect(rootRows.filter(row => !row.id.startsWith('preset-')).map(row => row.name)).not.toContain('@deepseek-ai/dsh-fork-memory')
     expect(rootRows.filter(row => !row.id.startsWith('preset-')).map(row => row.name)).not.toContain('@deepseek-ai/dsh-fork-tool-wechat')

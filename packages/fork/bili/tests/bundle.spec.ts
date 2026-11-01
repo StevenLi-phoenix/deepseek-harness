@@ -102,6 +102,12 @@ describe('event bundle', () => {
     for (const id of ['kaorou', 'autocut', 'operator']) expect(sessions[id]).not.toHaveProperty('persistent')
   })
 
+  it('mounts the time check once, at the root, with the plugin\'s defaults, so every preset\'s Sessions get it', () => {
+    expect(inserted.filter(entry => entry.name === '@deepseek-ai/dsh-fork-time-gap').map(entry => entry.id)).toEqual(['fork-time-gap'])
+    expect(inserted.find(entry => entry.id === 'fork-time-gap')!.config).toBeUndefined()
+    expect(composedRoot().get('fork-time-gap')).toEqual({ name: '@deepseek-ai/dsh-fork-time-gap', enabled: true })
+  })
+
   it('leaves no model tool at the profile root, where every preset, bili included, would inherit it', () => {
     const enabled = [...composedRoot()].filter(([, row]) => row.enabled && row.name?.startsWith('@deepseek-ai/dsh-tool-'))
     expect(enabled.map(([, row]) => row.name).filter(name => !ROOT_TOOL_ROWS_WITHOUT_TOOLS.has(name!))).toEqual([])

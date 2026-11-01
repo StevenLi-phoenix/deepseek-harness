@@ -71,6 +71,14 @@
     - id: owner-relay
       name: '@deepseek-ai/dsh-owner-relay'
 
+    # Time check for every Session (Web UI chats, channel Sessions, bus events, reminders): an input that starts a turn
+    # after `thresholdMs` (5 minutes) of silence reaches the model right after a notice with the time, how long the
+    # Session was quiet, and that it is to be read on its own terms. A root row on purpose: it reaches every preset and
+    # adds only times and fixed wording. The owner's WeChat messages keep fork-wechat's own check (`deferChannels`).
+    # Settings → 订阅与监控 edits it (All settings card); restate every field you set.
+    - id: fork-time-gap
+      name: '@deepseek-ai/dsh-fork-time-gap'
+
     # Routing state (agent-created subscriptions and repository watches) lives in storage;
     # these rows only carry deployment-wide settings.
     - id: fork-event-bus
