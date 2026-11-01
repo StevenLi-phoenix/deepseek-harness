@@ -24,10 +24,10 @@ export interface QqMessage {
   readonly nickname: string
 }
 
-/** The slice of the QQ observer (`ctx.forkQq`) collection reads. */
+/** The slice of the QQ observer (`ctx.forkQq`) collection reads; its answers come from the qq-recorder service and can fail while it is down. */
 export interface QqSource {
-  groupOverview(): ReadonlyArray<{ readonly groupId: string; readonly recorded: boolean }>
-  recentMessages(groupId: string, options: { hours: number; limit: number }): readonly QqMessage[]
+  groupOverview(): Promise<ReadonlyArray<{ readonly groupId: string; readonly recorded: boolean }>>
+  recentMessages(groupId: string, options: { hours: number; limit: number }): Promise<readonly QqMessage[]>
 }
 
 /** A Bilibili comment as bili-svc's read API answers it. */
@@ -358,15 +358,21 @@ export class StyleCollector {
     if (source !== undefined) {
       let groups = 0
       let messages = 0
-      for (const group of source.groupOverview().filter(candidate => candidate.recorded)) {
-        // The newest minutes wait for the next run, so a message its sender recalls in time never becomes a sample.
-        const rows = source.recentMessages(group.groupId, { hours: settings.qq.windowHours, limit: settings.qq.maxMessages })
-          .filter(row => row.at <= started - settings.qq.settleMs)
-        groups += 1
-        messages += rows.length
-        results.push(...qqPairs(group.groupId, rows, settings.qq.gapMs))
+      try {
+        for (const group of (await source.groupOverview()).filter(candidate => candidate.recorded)) {
+          // The newest minutes wait for the next run, so a message its sender recalls in time never becomes a sample.
+          const rows = (await source.recentMessages(group.groupId, { hours: settings.qq.windowHours, limit: settings.qq.maxMessages }))
+            .filter(row => row.at <= started - settings.qq.settleMs)
+          groups += 1
+          messages += rows.length
+          results.push(...qqPairs(group.groupId, rows, settings.qq.gapMs))
+        }
+        qq = { status: 'ok', groups, messages }
+      } catch (error: unknown) {
+        // The recorder is its own service: while it is down this run learns from the other sources.
+        logger.warn(`fork-style: could not read QQ: ${error instanceof Error ? error.message : String(error)}`)
+        qq = { status: 'unavailable', groups, messages }
       }
-      qq = { status: 'ok', groups, messages }
     }
 
     let bili: RunReport['bili'] = { status: 'off', comments: 0, threads: 0 }

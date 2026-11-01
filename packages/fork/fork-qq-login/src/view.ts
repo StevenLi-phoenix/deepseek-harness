@@ -18,9 +18,11 @@ export const QQ_GROUP_CANDIDATES = 60
 export interface QqConnection {
   /**
    * `connected`: the socket is up. `reconnecting`: it is down and being retried. `waiting-token`: the access token is
-   * not set, so no attempt is made. `starting`: the first attempt has not settled.
+   * not set, so no attempt is made. `starting`: the first attempt has not settled. `recorder-down`: the qq-recorder
+   * service does not answer. `protocol-mismatch`: it speaks another protocol version than DSH. `unknown`: a state only a
+   * newer recorder knows.
    */
-  readonly state: 'connected' | 'reconnecting' | 'waiting-token' | 'starting'
+  readonly state: 'connected' | 'reconnecting' | 'waiting-token' | 'starting' | 'recorder-down' | 'protocol-mismatch' | 'unknown'
   /** When the state began, in epoch milliseconds; null while starting. */
   readonly since: number | null
   /** Failed attempts in a row (0 while connected). */
@@ -50,9 +52,9 @@ export interface QqLogin {
   /**
    * `ok`: NapCat answered. `napcat-down`: the door is up but NapCat's WebUI is not. `unreachable`: the door is not
    * running. `unauthorized`: the door refused our token. `invalid`: the door answered something unexpected.
-   * `disabled`: `login.enabled` is false.
+   * `disabled`: `login.enabled` is false. `recorder-down`: the recorder, which asks the door, did not answer.
    */
-  readonly door: 'ok' | 'napcat-down' | 'unreachable' | 'unauthorized' | 'invalid' | 'disabled'
+  readonly door: 'ok' | 'napcat-down' | 'unreachable' | 'unauthorized' | 'invalid' | 'disabled' | 'recorder-down'
   readonly state: QqLoginState | null
   readonly uin: string | null
   readonly nickname: string | null

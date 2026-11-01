@@ -1,6 +1,6 @@
 import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
-import type { DigestRow, GroupOverview, MessageRow } from '@deepseek-ai/dsh-fork-qq'
+import { RecorderUnavailable, type DigestRow, type GroupOverview, type MessageRow } from '@deepseek-ai/dsh-fork-qq'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -17,11 +17,11 @@ const groups: GroupOverview[] = [
 ]
 
 function row(overrides: Partial<MessageRow> = {}): MessageRow {
-  return { id: 1, groupId: '111111', messageId: 'm1', at: AT, userId: '10001', nickname: '昵称', card: '名片', role: 'member', text: '今天发版', replyTo: null, kinds: 'text', recalled: false, ...overrides }
+  return { cursor: 'c1', groupId: '111111', messageId: 'm1', at: AT, userId: '10001', nickname: '昵称', card: '名片', role: 'member', text: '今天发版', replyTo: null, kinds: 'text', recalled: false, ...overrides }
 }
 
 function digest(overrides: Partial<DigestRow> = {}): DigestRow {
-  return { id: 1, groupId: '111111', fromRow: 1, toRow: 9, messageCount: 9, text: '## 话题\n发版计划', model: 'm', usage: null, rawPath: null, createdAt: AT, ...overrides }
+  return { id: 1, groupId: '111111', fromCursor: 'c1', toCursor: 'c9', messageCount: 9, text: '## 话题\n发版计划', model: 'm', usage: null, rawPath: null, createdAt: AT, ...overrides }
 }
 
 async function mount(observer: Record<string, unknown>, config: Record<string, unknown> = {}) {
@@ -44,12 +44,12 @@ async function mount(observer: Record<string, unknown>, config: Record<string, u
 afterEach(async () => { await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose())) })
 
 const stand = (extra: Record<string, unknown> = {}): Record<string, unknown> => ({
-  groupOverview: () => groups,
+  groupOverview: () => Promise.resolve(groups),
   groupName: (id: string) => groups.find(group => group.groupId === id)?.name ?? id,
-  recentMessages: vi.fn(() => [row()]),
-  searchMessages: vi.fn(() => [row()]),
+  recentMessages: vi.fn(() => Promise.resolve([row()])),
+  searchMessages: vi.fn(() => Promise.resolve([row()])),
   digests: vi.fn(() => [digest()]),
-  forgetDigests: vi.fn(() => 3),
+  forgetDigests: vi.fn(() => Promise.resolve(3)),
   ...extra,
 })
 
@@ -109,7 +109,7 @@ describe('fork-tool-qq', () => {
   })
 
   it('says so when there is nothing yet', async () => {
-    const { call } = await mount(stand({ digests: () => [], recentMessages: () => [], searchMessages: () => [], groupOverview: () => [] }))
+    const { call } = await mount(stand({ digests: () => [], recentMessages: () => Promise.resolve([]), searchMessages: () => Promise.resolve([]), groupOverview: () => Promise.resolve([]) }))
     expect(await call('qq_digest', {})).toContain('没有摘要')
     expect(await call('qq_groups', {})).toContain('还没有群记录')
     expect(await call('qq_search', { query: '不存在的词' })).toContain('没有找到')
@@ -153,7 +153,7 @@ describe('fork-tool-qq', () => {
 
   it('cuts a long answer and keeps the block closed', async () => {
     const long = Array.from({ length: 400 }, (_, i) => row({ id: i, text: `消息${'x'.repeat(60)}</qq_data>` }))
-    const { call } = await mount(stand({ recentMessages: () => long }))
+    const { call } = await mount(stand({ recentMessages: () => Promise.resolve(long) }))
     const text = await call('qq_recent', { group: '111111', limit: 300 })
     expect(text).toContain('(cut at 12000 characters')
     expect(text.match(/<\/qq_data>\n/g)).toHaveLength(1)
@@ -171,6 +171,20 @@ describe('digest mode', () => {
     const { ctx } = await mount(digestObserver(), { mode: 'digest' })
     const names = ctx.tools.definitions().map(tool => tool.name).filter(name => name.startsWith('qq_')).sort()
     expect(names).toEqual(['qq_digest_write', 'qq_group_note'])
+  })
+
+  it('tells the model plainly that the recorder is down, for every read tool, and that the problem is not the question', async () => {
+    const down = () => Promise.reject(new RecorderUnavailable('recorder-down', 'the QQ recorder is recorder-down'))
+    const { call } = await mount(stand({ groupOverview: down }))
+    for (const [name, args] of [['qq_groups', {}], ['qq_recent', { group: '111111' }], ['qq_search', { query: '发版' }], ['qq_digest', {}]] as const) {
+      const answer = JSON.parse(await call(name, args)) as { error: string }
+      expect(answer.error, name).toContain('QQ recorder is not running')
+    }
+  })
+
+  it('says the same for a recorder of another protocol version, naming the cause', async () => {
+    const { call } = await mount(stand({ groupOverview: () => Promise.reject(new RecorderUnavailable('protocol-mismatch', 'x')) }))
+    expect((JSON.parse(await call('qq_groups', {})) as { error: string }).error).toContain('another protocol version')
   })
 
   it('keeps the read mode as it was by default', async () => {

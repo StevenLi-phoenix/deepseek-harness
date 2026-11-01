@@ -14,10 +14,10 @@ function source(over: Partial<QqSource> = {}): QqSource & { loginStatus: Mock<Qq
   return {
     connectionStatus: () => ({ state: 'reconnecting', since: 1000, attempt: 4, lastError: 'socket hang up', selfId: null }),
     recordedGroups: () => 24,
-    groupChoices: () => [
+    groupChoices: () => Promise.resolve([
       { groupId: '111111', name: '技术群', memberCount: 80, recorded: true, seen: 0 },
       { groupId: '222222', name: '闲聊群', memberCount: 300, recorded: false, seen: 7 },
-    ],
+    ]),
     ...over,
     loginStatus: vi.fn(over.loginStatus ?? (() => Promise.resolve(reading))),
     refreshLogin: vi.fn(over.refreshLogin ?? (() => Promise.resolve({ login: reading, refreshed: true, reason: null }))),
@@ -82,10 +82,24 @@ describe('fork-qq-login Host routes', () => {
 
   it('offers every recorded group and only the busiest 60 of the others', async () => {
     const many = Array.from({ length: 200 }, (_unused, index) => ({ groupId: String(100000 + index), name: `群${index}`, memberCount: null, recorded: index < 3, seen: 200 - index }))
-    const { routes } = await mount(source({ groupChoices: () => many }))
+    const { routes } = await mount(source({ groupChoices: () => Promise.resolve(many) }))
     const body = await (await routes[0]!.fetch(new Request(`http://127.0.0.1${QQ_PATH}`))).json() as QqPanel
     expect(body.groups).toHaveLength(63)
     expect(body.groups.filter(group => group.recorded)).toHaveLength(3)
+  })
+
+  it('still answers when the recorder is down: the state, the configured group count, and no group list', async () => {
+    const reading = { door: 'recorder-down' as const, state: null, uin: null, nickname: null, error: null, qrUrl: null }
+    const { routes } = await mount(source({
+      connectionStatus: () => ({ state: 'recorder-down', since: 5, attempt: 3, lastError: 'the recorder is not listening', selfId: null }),
+      loginStatus: () => Promise.resolve(reading),
+      groupChoices: () => Promise.reject(new Error('the QQ recorder is recorder-down')),
+    }))
+    const body = await (await routes[0]!.fetch(new Request(`http://127.0.0.1${QQ_PATH}`))).json() as QqPanel
+    expect(body.connection.state).toBe('recorder-down')
+    expect(body.login.door).toBe('recorder-down')
+    expect(body.groupsRecorded).toBe(24)
+    expect(body.groups).toEqual([])
   })
 
   it('draws no code for a login with none, and none from a link that cannot be encoded', async () => {

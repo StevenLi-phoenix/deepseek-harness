@@ -111,9 +111,9 @@ interface QqConnectionView {
 }
 
 /**
- * The QQ card reads the observer's in-process state only: `connectionStatus()` and `recordedGroups()`. Neither reaches the
- * protocol end, and nothing else of the observer is called, so an open or polling page cannot cause a OneBot call or a
- * request to NapCat's login door (the account is under QQ risk control).
+ * The QQ card reads the observer's in-process state only: `connectionStatus()` (the recorder's last pushed status) and
+ * `recordedGroups()`. Neither makes a request, and nothing else of the observer is called, so an open or polling page
+ * cannot cause a call to the recorder, a OneBot call, or a request to NapCat's login door (the account is under QQ risk control).
  */
 function qqCard(ctx: Context): ServiceCard {
   const qq = service(ctx, 'forkQq')
@@ -130,6 +130,11 @@ function qqCard(ctx: Context): ServiceCard {
       return card('qq', 'warn', 'waiting_token')
     case 'starting':
       return card('qq', 'warn', 'starting')
+    // The recorder is its own service: when it does not answer, nothing is recorded and QQ's state is unknown.
+    case 'recorder-down':
+      return card('qq', 'down', 'recorder_down', { groups: recorded })
+    case 'protocol-mismatch':
+      return card('qq', 'down', 'protocol_mismatch', { groups: recorded })
     default:
       return card('qq', 'ok', 'mounted', { groups: recorded })
   }

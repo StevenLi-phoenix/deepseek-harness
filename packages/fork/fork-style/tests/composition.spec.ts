@@ -71,7 +71,7 @@ async function boot(options: { guard?: ReturnType<typeof fakeGuard> | 'absent'; 
       scope.provide('forkNotifier', { send: (note: { title: string }) => { notices.push(note); return Promise.resolve() } } as never)
       scope.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'mock', model: 'mock' }) } as never)
       scope.provide('forkQq', {
-        groupOverview: () => [], recentMessages: () => [],
+        groupOverview: () => Promise.resolve([]), recentMessages: () => Promise.resolve([]),
         recentTextOf: (sessionId: string) => (sessionId === 'digest' ? ['这也太典中典了吧', '才不是呢，我才没有在等'] : undefined),
       } as never)
     },

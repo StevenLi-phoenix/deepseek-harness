@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { QqPanel, QqRefreshAnswer } from '../src/view.ts'
 import { clock, detailRows, formatDuration, headline, qrPath, stamp, statusLine, type Translate } from '../src/client/cards.ts'
-import { en, ja, zh, type QqKey } from '../src/client/locales.ts'
+import { de, en, es, fr, ja, pt, ru, zh, type QqKey } from '../src/client/locales.ts'
 import { CALM_POLL_INTERVAL_MS, POLL_INTERVAL_MS, QqLoader, createQqStore, parsePanel, startPolling, type VisibilitySource } from '../src/client/qq.ts'
 
 const NOW = new Date(2026, 10, 1, 12, 0, 0).getTime()
@@ -67,7 +67,24 @@ describe('headline', () => {
     expect(verdict).toMatchObject({ kind, tone: 'bad' })
   })
 
-  it('points at the .env when the token is missing, and falls back to the retry count when login is off', () => {
+  it('says the recorder is not running before anything else, and what to do', () => {
+    const down = headline(panel({ connection: { state: 'recorder-down', attempt: 4, selfId: null, lastError: 'the recorder is not listening' }, login: { door: 'recorder-down', state: null, uin: null, nickname: null } }), NOW, t)
+    expect(down).toMatchObject({ kind: 'recorder-down', tone: 'bad', text: 'QQ 记录器没有运行' })
+    expect(down.detail).toContain('ams ctl restart qq-recorder')
+    const mismatch = headline(panel({ connection: { state: 'protocol-mismatch', selfId: null } }), NOW, t)
+    expect(mismatch).toMatchObject({ kind: 'protocol-mismatch', tone: 'bad' })
+    expect(mismatch.detail).toContain('upgrade.sh')
+  })
+
+  it('shows the recorder states in the connection row, never a missing key', () => {
+    for (const state of ['recorder-down', 'protocol-mismatch', 'unknown', 'starting', 'waiting-token'] as const) {
+      const rows = detailRows(panel({ connection: { state, selfId: null, since: NOW - 60_000 }, login: { door: 'recorder-down', state: null, uin: null, nickname: null } }), NOW, t)
+      expect(rows[0]!.value, state).not.toBe('')
+      expect(rows[0]!.value, state).not.toContain('detail.connection')
+    }
+  })
+
+  it('points at the secret when the token is missing, and falls back to the retry count when login is off', () => {
     expect(headline(panel({ connection: { state: 'waiting-token', selfId: null } }), NOW, t).kind).toBe('no-token')
     const off = headline(panel({ connection: { state: 'reconnecting', attempt: 7, since: NOW - 60_000, selfId: null }, login: { door: 'disabled', state: null, uin: null, nickname: null } }), NOW, t)
     expect(off).toMatchObject({ kind: 'disconnected', detail: '第 7 次重试 · 自 11:59 起' })
@@ -98,9 +115,15 @@ describe('formatting', () => {
 
   it('keeps the same keys in every language', () => {
     expect(Object.keys(en).sort()).toEqual(Object.keys(zh).sort())
-    expect(Object.keys(ja).sort()).toEqual(Object.keys(zh).sort())
     const placeholders = (text: string): string => (text.match(/\{\w+\}/g) ?? []).sort().join()
+    for (const dictionary of [ja, es, fr, de, ru, pt]) {
+      expect(Object.keys(dictionary).sort()).toEqual(Object.keys(zh).sort())
+      for (const key of Object.keys(zh) as QqKey[]) expect(placeholders((dictionary as Record<QqKey, string>)[key]), key).toBe(placeholders(zh[key]))
+    }
     for (const key of Object.keys(zh) as QqKey[]) expect(placeholders(en[key])).toBe(placeholders(zh[key]))
+    for (const dictionary of [zh, en, ja, es, fr, de, ru, pt]) {
+      for (const key of ['head.recorder-down', 'head.protocol-mismatch', 'detail.connection.recorder-down'] as const) expect((dictionary as Record<QqKey, string>)[key]).not.toBe('')
+    }
   })
 })
 

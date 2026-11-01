@@ -7,7 +7,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { stampIn, type DigestRow, type GroupOverview, type MessageRow, type QqObserver } from '@deepseek-ai/dsh-fork-qq'
+import { RecorderUnavailable, stampIn, type DigestRow, type GroupOverview, type MessageRow, type QqObserver } from '@deepseek-ai/dsh-fork-qq'
 import { defineTool, type ParameterSchemaSpec } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
@@ -98,6 +98,11 @@ function clamp(value: unknown, fallback: number, min: number, max: number): numb
 
 /** Human-readable error text. */
 function errorText(error: unknown): string {
+  if (error instanceof RecorderUnavailable) {
+    return error.reason === 'protocol-mismatch'
+      ? 'The QQ recorder speaks another protocol version than this DSH, so QQ data cannot be read until they match. Tell the owner; do not retry.'
+      : 'The QQ recorder is not running right now, so QQ data cannot be read. Tell the owner; do not retry in a loop.'
+  }
   return error instanceof Error ? error.message : String(error)
 }
 
@@ -121,7 +126,7 @@ export function apply(ctx: Context, config: Config = { mode: 'read' }): void {
       label: string
       parameters: ParameterSchemaSpec
       title: (args: Record<string, unknown>) => string
-      run: (args: Record<string, unknown>) => string
+      run: (args: Record<string, unknown>) => Promise<string> | string
     }): void => {
       scoped.tools.register(defineTool({
         name: spec.name,
@@ -136,7 +141,7 @@ export function apply(ctx: Context, config: Config = { mode: 'read' }): void {
         },
         async execute(args): Promise<JsonValue> {
           try {
-            return { text: spec.run(args as Record<string, unknown>) }
+            return { text: await spec.run(args as Record<string, unknown>) }
           } catch (error: unknown) {
             return { error: errorText(error) }
           }
@@ -153,8 +158,8 @@ export function apply(ctx: Context, config: Config = { mode: 'read' }): void {
       label: 'groups',
       parameters: {},
       title: () => 'QQ groups',
-      run: () => {
-        const groups = observer.groupOverview()
+      run: async () => {
+        const groups = await observer.groupOverview()
         return groups.length === 0 ? '（还没有群记录；QQ 协议端可能还没登录或没连上）' : groups.map(groupLine).join('\n')
       },
     })
@@ -169,8 +174,8 @@ export function apply(ctx: Context, config: Config = { mode: 'read' }): void {
         limit: { type: 'integer', description: 'Digests at most (default 8, at most 30).' },
       },
       title: args => `QQ digests${str(args['group']) === '' ? '' : ` of ${str(args['group'])}`}`,
-      run: (args) => {
-        const groups = observer.groupOverview()
+      run: async (args) => {
+        const groups = await observer.groupOverview()
         const group = str(args['group']) === '' ? undefined : resolveGroup(str(args['group']), groups)
         const rows = observer.digests({ ...group === undefined ? {} : { groupId: group.groupId }, days: clamp(args['days'], 7, 1, 90), limit: clamp(args['limit'], 8, 1, 30) })
         return rows.length === 0 ? '（这段时间没有摘要：群里消息不够，或还没到摘要时间）' : rows.map(row => digestBlock(row, observer.groupName(row.groupId))).join('\n\n')
@@ -188,10 +193,10 @@ export function apply(ctx: Context, config: Config = { mode: 'read' }): void {
         member: { type: 'string', description: 'Only this member\'s messages: their QQ number.' },
       },
       title: args => `QQ messages of ${str(args['group'])}`,
-      run: (args) => {
-        const group = resolveGroup(str(args['group']), observer.groupOverview())
+      run: async (args) => {
+        const group = resolveGroup(str(args['group']), await observer.groupOverview())
         const member = str(args['member']).trim()
-        const rows = observer.recentMessages(group.groupId, { hours: clamp(args['hours'], 24, 1, 720), limit: clamp(args['limit'], 100, 1, 300), ...member === '' ? {} : { userId: member } })
+        const rows = await observer.recentMessages(group.groupId, { hours: clamp(args['hours'], 24, 1, 720), limit: clamp(args['limit'], 100, 1, 300), ...member === '' ? {} : { userId: member } })
         const head = `${group.name}（${group.groupId}），${rows.length} 条`
         return rows.length === 0 ? `${head}：这段时间没有消息` : `${head}\n${rows.map(row => messageLine(row)).join('\n')}`
       },
@@ -207,12 +212,12 @@ export function apply(ctx: Context, config: Config = { mode: 'read' }): void {
         limit: { type: 'integer', description: 'Matches at most (default 20, at most 50).' },
       },
       title: args => `QQ search "${str(args['query'])}"`,
-      run: (args) => {
+      run: async (args) => {
         const query = str(args['query']).trim()
         if (query === '') throw new ToolProblem('give the words to search for')
-        const groups = observer.groupOverview()
+        const groups = await observer.groupOverview()
         const group = str(args['group']) === '' ? undefined : resolveGroup(str(args['group']), groups)
-        const rows = observer.searchMessages(query, { ...group === undefined ? {} : { groupId: group.groupId }, limit: clamp(args['limit'], 20, 1, 50) })
+        const rows = await observer.searchMessages(query, { ...group === undefined ? {} : { groupId: group.groupId }, limit: clamp(args['limit'], 20, 1, 50) })
         if (rows.length === 0) return `没有找到“${query}”`
         return `“${query}” ${rows.length} 条，新的在前\n${rows.map(row => messageLine(row, group === undefined ? observer.groupName(row.groupId) : undefined)).join('\n')}`
       },
@@ -228,10 +233,10 @@ export function apply(ctx: Context, config: Config = { mode: 'read' }): void {
       output: { schema: { type: 'json' }, render: (_args: unknown, value: unknown) => [{ type: 'text' as const, text: JSON.stringify(value) }] },
       async execute(args): Promise<JsonValue> {
         try {
-          const group = str(args['group']) === '' ? undefined : resolveGroup(str(args['group']), observer.groupOverview())
+          const group = str(args['group']) === '' ? undefined : resolveGroup(str(args['group']), await observer.groupOverview())
           const days = typeof args['older_than_days'] === 'number' ? clamp(args['older_than_days'], 1, 1, 3650) : undefined
           if (group === undefined && days === undefined) throw new ToolProblem('give a group, or older_than_days, or both')
-          const deleted = observer.forgetDigests({
+          const deleted = await observer.forgetDigests({
             ...group === undefined ? {} : { groupId: group.groupId },
             ...days === undefined ? {} : { beforeMs: Date.now() - days * 86_400_000 },
           })
