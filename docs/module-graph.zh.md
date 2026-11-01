@@ -372,7 +372,9 @@ flowchart TD
   subgraph group_fork["packages/fork"]
     pkg_bili["bili"]
     pkg_fork_balance["fork-balance"]
+    pkg_fork_cc_admin["fork-cc-admin"]
     pkg_fork_cc_bridge["fork-cc-bridge"]
+    pkg_fork_console["fork-console"]
     pkg_fork_event_bus["fork-event-bus"]
     pkg_fork_event_ingest["fork-event-ingest"]
     pkg_fork_github_sensor["fork-github-sensor"]
@@ -1222,6 +1224,7 @@ flowchart TD
   pkg_host_plugin_inventory --> pkg_agent_preset_registry
   pkg_host_plugin_inventory --> pkg_brand
   pkg_host_plugin_inventory --> pkg_typert_protocol
+  pkg_fork_cc_admin --> pkg_fork_cc_bridge
   pkg_fork_memory --> pkg_agent
   pkg_fork_memory --> pkg_home_paths
   pkg_fork_memory --> pkg_llm
@@ -1770,6 +1773,7 @@ flowchart TD
 | [`host-webserver`](../packages/host/webserver) | `host` | — |
 | [`bili`](../packages/fork/bili) | `fork` | — |
 | [`fork-balance`](../packages/fork/fork-balance) | `fork` | — |
+| [`fork-console`](../packages/fork/fork-console) | `fork` | — |
 | [`fork-memory-admin`](../packages/fork/fork-memory-admin) | `fork` | — |
 | [`fork-qq-login`](../packages/fork/fork-qq-login) | `fork` | — |
 | [`fork-style-settings`](../packages/fork/fork-style-settings) | `fork` | — |
@@ -1978,6 +1982,7 @@ flowchart TD
 | [`webhook`](../packages/experimental/webhook) | `experimental` | [`agent`](../packages/core/agent), [`agent-default-model`](../packages/core/agent-default-model), [`agent-preset-registry`](../packages/preset/agent-preset-registry), [`llm`](../packages/llm/llm), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`workspace`](../packages/workspace/workspace) |
 | [`tool-cordis`](../packages/extensions/tool-cordis) | `extensions` | [`agent`](../packages/core/agent), [`app-boot`](../packages/boot/app-boot), [`cordis-host-runner`](../packages/extensions/cordis-host-runner), [`tools`](../packages/core/tools) |
 | [`host-plugin-inventory`](../packages/host/plugin-inventory) | `host` | [`agent-preset-registry`](../packages/preset/agent-preset-registry), [`brand`](../packages/util/brand), [`typert-protocol`](../packages/typert/protocol) |
+| [`fork-cc-admin`](../packages/fork/fork-cc-admin) | `fork` | [`fork-cc-bridge`](../packages/fork/fork-cc-bridge) |
 | [`fork-memory`](../packages/fork/fork-memory) | `fork` | [`agent`](../packages/core/agent), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-taint`](../packages/fork/fork-taint), [`session`](../packages/core/session), [`tools`](../packages/core/tools) |
 | [`mcp-client`](../packages/mcp/mcp-client) | `mcp` | [`attachment`](../packages/attachment/attachment), [`llm`](../packages/llm/llm), [`mcp-resources`](../packages/mcp/mcp-resources), [`scope`](../packages/core/scope), [`subprocess`](../packages/subprocess/subprocess), [`system-prompt`](../packages/core/system-prompt), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools) |
 | [`agent-preset`](../packages/preset/agent-preset) | `preset` | [`agent-preset-registry`](../packages/preset/agent-preset-registry) |
