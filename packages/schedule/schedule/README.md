@@ -74,6 +74,8 @@ The `session` target reuses an existing, unarchived, non-delegated Session; unlo
 
 `list({ active?, limit?, offset? })`, `catalog()`, `view({ id })`, `history({ id, limit, before? })`, and `run({ id })` serve every Host task. Remote `create` and `edit` delegate to the same native methods. The package root and `/client` expose the same unprefixed types. Remote input failures use `schedule/input-invalid` with `details.code`.
 
+`handOverSessions(from, to, signal?)` moves the tasks of some Sessions to another Session, for a conversation that continues in a new Session: each active or paused task whose `session` target names a `from` Session delivers to `to`, and `to` replaces the `from` Sessions among the involved Sessions of every active or paused task, so archive admission, the Session clock mark, and change notices follow. `to` is validated like a `session` target. Ended tasks keep their Sessions. Each moved task's revision advances and its live involved Sessions receive an `updated` notice; a repeated call writes nothing and returns an empty list.
+
 `deleteInactive()` removes all ended tasks in one domain batch and preserves active and paused tasks. It returns the removed count; an empty ended set performs no write. A successful nonempty batch emits `schedule/changed` without Agent notices. A rejected batch also emits the event and rejects without a count; normal failure preserves all rows, while an `unknown-state` failure may have removed rows and quarantines the domain until reopening.
 
 <a id="storage-format"></a>

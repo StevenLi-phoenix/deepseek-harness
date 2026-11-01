@@ -45,6 +45,7 @@ kind: "package-reference"
 | 保留的 stderr | 最后 10 行，在监控结束时给出 |
 | 停止 | 先向进程组发 SIGTERM，5 秒后 SIGKILL |
 | host 重启 | 运行中的监控以相同的 id 重新启动，只计到原截止时间剩下的时间 |
+| Session 交接 | 挂载了 `fork-event-bus` 时，换到新 Session 里继续的对话（微信 `/new`）会带走它正在跑的监控：通知、`monitor_list` 和 `monitor_stop` 都改认新 Session，存下的归属也随之改变，重启后照样报到那里 |
 
 ### 何时选用
 
