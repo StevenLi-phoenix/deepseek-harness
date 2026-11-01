@@ -4,6 +4,11 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 
 ## [Unreleased]
 
+### Fixed
+- A long-lived Session whose recorded model left the profile (renamed or removed) continues on the configured default route and logs the switch, instead of ending every turn with `UNKNOWN_MODEL` (2026-11-01; the WeChat chat Session failed from 10/31 10:00 after `deepseek-v4.1-flash` became `opencode-go/deepseek-v4.1-flash`).
+- `lsy-integrity` no longer reports "定时任务（定义）被改动了" whenever a daily or weekly task runs: `scheduledAt` of a repeating task is its next run time and is left out of the digest; it still counts for one-shot `at` tasks (2026-11-01).
+- A final answer whose last line is exactly `NO_REPLY` is silent for `lsy-event-bus` and owner-relay, so an explanation followed by `NO_REPLY` no longer reaches WeChat (2026-11-01).
+
 ### Removed
 - Bilibili speech from DSH (2026-10-31): the tools `bili_comment`, `bili_reply`, `bili_dynamic`, and `bili_dm_owner`, share reports, messages to the owner on the account's own initiative, and inbox wakes that answered replies and mentions; replies to viewers are the `up` preset's, behind bili-svc's Reply Gate.
 - Bilibili scouting (2026-10-31): the body clock and wakes, Wake now, the watch floor, picks per day, keywords, interests, grades (`bili_verdict`, `bili_seen`), finds, taste notes (`bili_taste_write`), trends (`bili_trend_write`), off-peak pricing, and their Settings cards.
