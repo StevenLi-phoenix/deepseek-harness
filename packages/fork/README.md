@@ -31,6 +31,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`fork-github-sensor/`](fork-github-sensor/README.md) | Polls GitHub releases, tags, commits, and notifications with conditional requests |
 | [`fork-integrity/`](fork-integrity/README.md) | Integrity watch: digests of the files that steer the agent, a WeChat notice naming what changed, system prompt hashes, and a count of the persona's forbidden stock lines |
 | [`fork-memory/`](fork-memory/README.md) | Owner memory across Sessions: the memory block, `memory_search`, `memory_save`, `memory_forget`, and the claude.ai export importer |
+| [`fork-presence/`](fork-presence/README.md) | Whether the owner sleeps (the phone's Sleep Focus, a daily window, buttons in Settings → 勿扰); WeChat holds non-urgent messages meanwhile and sends them as one digest on waking |
 | [`fork-qq/`](fork-qq/README.md) | QQ group observer over a OneBot v11 protocol end (NapCat): records the listed groups, digests them on a schedule, never speaks by default |
 | [`fork-qqbot/`](fork-qqbot/README.md) | Official QQ bot channel, disabled by default: owner-listed private chats and @-mentions, one chat Session each, answers through `owner-relay` |
 | [`fork-qq-login/`](fork-qq-login/README.md) | Settings section for QQ: the observer's connection, NapCat's login state, and the login QR code to scan with the phone after QQ signs the account out |
@@ -47,7 +48,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`fork-tool-watch/`](fork-tool-watch/README.md) | `watch_create`, `watch_list`, `watch_delete` tools: the agent manages its own watches |
 | [`fork-tool-wechat/`](fork-tool-wechat/README.md) | `wechat_send_file` tool: the agent sends pictures, videos, and files to the owner |
 | [`fork-voice/`](fork-voice/README.md) | `ctx.forkVoice`: text to speech (feiyu, Mac mini TTS fallback) and speech to text for audio files (asr-service, off by default) |
-| [`fork-wechat/`](fork-wechat/README.md) | WeChat (iLink bot) channel: owner chat Session, its answers through `owner-relay`, and `ctx.forkNotifier` |
+| [`fork-wechat/`](fork-wechat/README.md) | WeChat (iLink bot) channel: owner chat Session, its answers through `owner-relay`, and `ctx.forkNotifier`; a Settings section to bind by QR code, see its health, and unbind |
 | [`owner-relay/`](owner-relay/README.md) | `ctx.ownerRelay`: one rule set for every claimed Session's final answer, handed to its channel (WeChat, Bilibili messages) with a labelled WeChat fallback |
 | [`tool-bili/`](tool-bili/README.md) | Bilibili tools of the `bili` preset: feeds, videos through subtitles, comments, inbox, likes, coins, follows, and saves through bili-svc, and a journal; no speech |
 

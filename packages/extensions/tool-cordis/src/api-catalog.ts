@@ -2376,6 +2376,83 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'forkPresence',
+    summary: 'Presence of the owner.',
+    description: 'Presence of the owner. Holds the latest Focus signal and Settings button in storage, evaluates the answer on demand and at every moment it can change by itself, and tells listeners when the owner falls asleep or wakes.',
+    methods: [
+      {
+        signature: 'isAsleep(): boolean',
+        description: 'Whether the owner is asleep right now.',
+        parameters: [],
+        returns: 'true while a button, a fresh Focus signal, or the window says so.',
+      },
+      {
+        signature: 'isUrgent(note: Pick<ForkNote, \'urgent\' | \'kinds\'>): boolean',
+        description: 'Whether a message must be sent even while the owner sleeps: the sender marked it urgent, or one of the event kinds it reports matches an urgent glob.',
+        parameters: [{ name: 'note', description: 'the message; only `urgent` and `kinds` are read.' }],
+        returns: 'true when it must not wait.',
+      },
+      {
+        signature: 'onChange(listener: PresenceListener): () => void',
+        description: 'Listen for the owner falling asleep and waking, whatever the source.',
+        parameters: [{ name: 'listener', description: 'called with the new state.' }],
+        returns: 'a function that stops listening.',
+      },
+      {
+        signature: 'registerHolder(holder: DeferralHolder): () => void',
+        description: 'Register a channel that holds messages back.',
+        parameters: [{ name: 'holder', description: 'how to count and flush them.' }],
+        returns: 'a function that unregisters it.',
+      },
+      {
+        signature: 'async flushNow(): Promise<number>',
+        description: 'Send what the channels hold back, now.',
+        parameters: [],
+        returns: 'how many messages went out.',
+      },
+      {
+        signature: 'async ingest(event: ForkEventInput): Promise<string>',
+        description: 'Apply a Focus signal pushed by the phone (the `presence` ingest source). The Host\'s receipt time is the signal\'s time; the pusher\'s clock and key are ignored.',
+        parameters: [{ name: 'event', description: '`presence.sleep.on` or `presence.sleep.off`.' }],
+        returns: '`asleep` or `awake`, as the signal says.',
+        throws: ['{Error} for any other kind.'],
+      },
+      {
+        signature: 'async setManual(asleep: boolean, until?: number): Promise<void>',
+        description: 'Press "I am going to sleep" or "I am awake", optionally with an end.',
+        parameters: [{ name: 'asleep', description: 'the state to hold.' }, { name: 'until', description: 'when it lapses, in Unix epoch milliseconds; omitted holds for `manualMaxHours` or until the next Focus signal.' }],
+      },
+      {
+        signature: 'async quietUntil(clock: string): Promise<number>',
+        description: 'Quiet until a clock time: the next time the local clock reads `clock`.',
+        parameters: [{ name: 'clock', description: '`HH:MM`, 24-hour.' }],
+        returns: 'the end, in Unix epoch milliseconds.',
+      },
+      {
+        signature: 'async clearManual(): Promise<void>',
+        description: 'Drop the button, so the Focus signal or the window decides again.',
+        parameters: [],
+      },
+      {
+        signature: 'async setWindow(window: QuietWindow): Promise<void>',
+        description: 'Replace the daily window; it survives restarts and replaces the configured one.',
+        parameters: [{ name: 'window', description: 'the new window.' }],
+      },
+      {
+        signature: 'view(deferred: number = this.deferredCount()): PresenceView',
+        description: 'The state with everything Settings shows.',
+        parameters: [{ name: 'deferred', description: 'messages held back, if the caller counts them.' }],
+        returns: 'the view.',
+      },
+      {
+        signature: 'deferredCount(): number',
+        description: 'Count what the channels hold back.',
+        parameters: [],
+        returns: 'messages the registered channels hold back.',
+      },
+    ],
+  },
+  {
     key: 'forkQq',
     summary: 'The observer.',
     description: 'The observer. Provides `ctx.forkQq`, whose read methods the agent tools use; its connection to the protocol end and its writes to the database are the only things it does on its own.',
@@ -6795,6 +6872,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type DeepSeekLlmApiJson = null | boolean | number | string | DeepSeekLlmApiJson[] | {\n    [key: string]: DeepSeekLlmApiJson;\n};',
   },
   {
+    name: 'DeferralHolder',
+    declaration: 'export interface DeferralHolder {\n    readonly name: string;\n    count(): number;\n    flush(): Promise<number>;\n}',
+  },
+  {
     name: 'DeliveryRetentionBounds',
     declaration: 'export interface DeliveryRetentionBounds {\n    readonly days: number;\n    readonly records: number;\n}',
   },
@@ -6989,6 +7070,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'FinishReasonMap',
     declaration: 'export interface FinishReasonMap {\n    \'stop\': {\n        kind: \'stop\';\n    };\n    \'tool-calls\': {\n        kind: \'tool-calls\';\n    };\n    \'max-tokens\': {\n        kind: \'max-tokens\';\n    };\n    \'aborted\': {\n        kind: \'aborted\';\n        failure: LlmFailure;\n    };\n    \'error\': {\n        kind: \'error\';\n        failure: LlmFailure;\n    };\n}',
+  },
+  {
+    name: 'FocusView',
+    declaration: 'export interface FocusView {\n    readonly asleep: boolean;\n    readonly at: number;\n}',
   },
   {
     name: 'Folder',
@@ -7684,7 +7769,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ForkNote',
-    declaration: 'export interface ForkNote {\n    title: string;\n    body?: string | undefined;\n    url?: string | undefined;\n    origin?: string | undefined;\n    safety?: true | undefined;\n}',
+    declaration: 'export interface ForkNote {\n    title: string;\n    body?: string | undefined;\n    url?: string | undefined;\n    origin?: string | undefined;\n    safety?: true | undefined;\n    kinds?: readonly string[] | undefined;\n    urgent?: true | undefined;\n}',
   },
   {
     name: 'ManagementError',
@@ -7693,6 +7778,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ManualCompactAgentContext',
     declaration: 'export interface ManualCompactAgentContext extends CompactionAgentContext {\n    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;\n}',
+  },
+  {
+    name: 'ManualView',
+    declaration: 'export interface ManualView {\n    readonly asleep: boolean;\n    readonly at: number;\n    readonly until: number;\n}',
   },
   {
     name: 'MarketCompatibility',
@@ -8247,6 +8336,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type PrepareSessionOptions = (CreateSessionOptions & {\n    readonly eventState?: undefined;\n}) | RestoredSessionOptions;',
   },
   {
+    name: 'PresenceListener',
+    declaration: 'export type PresenceListener = (state: PresenceState) => void;',
+  },
+  {
+    name: 'PresenceSource',
+    declaration: 'export type PresenceSource = \'focus\' | \'window\' | \'manual\';',
+  },
+  {
+    name: 'PresenceState',
+    declaration: 'export interface PresenceState {\n    asleep: boolean;\n    source: PresenceSource;\n    since: number | null;\n    until: number | null;\n}',
+  },
+  {
+    name: 'PresenceView',
+    declaration: 'export interface PresenceView {\n    readonly asleep: boolean;\n    readonly source: PresenceSource;\n    readonly since: number | null;\n    readonly until: number | null;\n    readonly manual: ManualView | null;\n    readonly lastFocus: FocusView | null;\n    readonly window: QuietWindow;\n    readonly deferred: number;\n    readonly urgentKinds: readonly string[];\n    readonly shortcut: ShortcutView;\n    readonly timeZone: string;\n}',
+  },
+  {
     name: 'PresetDefinition',
     declaration: 'export interface PresetDefinition {\n    readonly id: string;\n    readonly name?: string;\n    readonly description?: string;\n    readonly order?: number;\n    readonly plugins: readonly (Omit<EntryOptions, \'id\' | \'disabled\'> & {\n        id?: string;\n        disabled?: EntryOptions[\'disabled\'] | JsExpr;\n    })[];\n}',
   },
@@ -8429,6 +8534,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'QueueAction',
     declaration: 'export type QueueAction = {\n    readonly kind: \'edit\';\n    readonly content: readonly TextBlock[];\n} | {\n    readonly kind: \'remove\';\n} | {\n    readonly kind: \'steer\';\n};',
+  },
+  {
+    name: 'QuietWindow',
+    declaration: 'export interface QuietWindow {\n    readonly enabled: boolean;\n    readonly start: string;\n    readonly end: string;\n}',
   },
   {
     name: 'ReadFileLine',
@@ -9641,6 +9750,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ShellSandboxInfo',
     declaration: 'export interface ShellSandboxInfo {\n    mode: SandboxMode;\n    denied: boolean;\n    enforcement?: SandboxEnforcement;\n    runnerFailed?: boolean;\n}',
+  },
+  {
+    name: 'ShortcutView',
+    declaration: 'export interface ShortcutView {\n    readonly url: string | null;\n    readonly path: string;\n    readonly header: \'Authorization\';\n    readonly tokenEnv: string;\n    readonly bodyOn: string;\n    readonly bodyOff: string;\n}',
   },
   {
     name: 'SignInAttemptId',

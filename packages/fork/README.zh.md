@@ -31,6 +31,7 @@ kind: "package-group"
 | [`fork-github-sensor/`](fork-github-sensor/README.zh.md) | 用条件请求轮询 GitHub 的 release、tag、提交与通知 |
 | [`fork-integrity/`](fork-integrity/README.zh.md) | 完整性监控：操控 agent 的文件的摘要、点名告诉 owner 哪里变了的微信通知、系统 prompt 哈希，以及人格禁用口头禅的计数 |
 | [`fork-memory/`](fork-memory/README.zh.md) | 跨 Session 的主人记忆：记忆块、`memory_search`、`memory_save`、`memory_forget`，以及 claude.ai 导出导入器 |
+| [`fork-presence/`](fork-presence/README.zh.md) | 主人是否在睡觉（手机的睡眠专注、每日时段、设置 → 勿扰里的按钮）；这段时间微信压下不紧急的消息，醒来后合成一条发出 |
 | [`fork-qq/`](fork-qq/README.zh.md) | 基于 OneBot v11 协议端（NapCat）的 QQ 群观察者：记录名单里的群、按计划做摘要、默认从不发言 |
 | [`fork-qqbot/`](fork-qqbot/README.zh.md) | 官方 QQ 机器人通道，默认禁用：主人列入名单的私聊和 @ 消息各有一个对话 Session，回答经 `owner-relay` 送达 |
 | [`fork-qq-login/`](fork-qq-login/README.zh.md) | QQ 的设置分区：观察者的连接状态、NapCat 的登录状态，以及 QQ 把账号踢下线后用手机扫码重新登录的二维码 |
@@ -47,7 +48,7 @@ kind: "package-group"
 | [`fork-tool-watch/`](fork-tool-watch/README.zh.md) | `watch_create`、`watch_list`、`watch_delete` 工具：agent 自己管理监控 |
 | [`fork-tool-wechat/`](fork-tool-wechat/README.zh.md) | `wechat_send_file` 工具：agent 给 owner 发图片、视频和文件 |
 | [`fork-voice/`](fork-voice/README.zh.md) | `ctx.forkVoice`：文字转语音（feiyu，Mac mini TTS 兜底）与音频文件转文字（asr-service，默认关闭） |
-| [`fork-wechat/`](fork-wechat/README.zh.md) | 微信（iLink bot）通道：主人对话 Session、经 `owner-relay` 送达的回答，以及 `ctx.forkNotifier` |
+| [`fork-wechat/`](fork-wechat/README.zh.md) | 微信（iLink bot）通道：主人对话 Session、经 `owner-relay` 送达的回答，以及 `ctx.forkNotifier`；设置页可扫码绑定、查看通道健康和解绑 |
 | [`owner-relay/`](owner-relay/README.zh.md) | `ctx.ownerRelay`：所有被认领 Session 的最终回答走同一套规则，交给认领它的通道（微信、B站私信），发不出时带标签降级到微信 |
 | [`tool-bili/`](tool-bili/README.zh.md) | `bili` preset 的 B站工具：动态、借字幕看视频、评论、收件箱，经 bili-svc 点赞、投币、关注和收藏，以及日记；不发言 |
 

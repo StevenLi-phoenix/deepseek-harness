@@ -76,7 +76,7 @@ Choose it when external events should wake an agent or a human without a person 
 | `maxTextChars` | `4000` | Stored characters of each event's untrusted text |
 | `notifySessionResult` | `true` | Send each bus-started Session's first-turn result to the notifier |
 | `reportScheduledTurns` | `true` | Send the final answer of each unattended Host-schedule reminder turn, and of each turn a `fork-tool-monitor` notice wakes (titled 📡 with the monitor), to the notifier |
-| `maxNoteEvents` | `10` | Events listed in one notify message |
+| `maxNoteEvents` | `10` | Events listed in one notify message; the message also carries the kinds of all the batch's events (`ForkNote.kinds`), which a channel that holds back messages while the owner sleeps matches against its urgent kinds |
 | `webUrl` | unset | Web UI link attached to Session results |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-fork-event-bus) is the exhaustive source for every accepted field.

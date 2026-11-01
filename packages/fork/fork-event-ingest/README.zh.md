@@ -48,6 +48,7 @@ kind: "package-reference"
 | `sources` | `[]` | 允许推送的服务；为空时每个请求都得到 503 |
 | `sources[].id` | 必填 | 总线上的来源 id：小写字母、数字和连字符，最长 32 个字符，不能重复，不能是 `github` 或 `schedule` |
 | `sources[].tokenEnv` | 必填 | 保存该来源 bearer token 的凭据引用 |
+| `sources[].sink` | 未设置 | 由这个 Host 服务代替总线接收该来源事件的服务名（手机睡眠专注用 `forkPresence`）。这样的事件和别的事件一样先校验，再交给该服务的 `ingest()`，从不发布，所以没有任何订阅能匹配到它们；服务拒绝时回 400，服务没挂载时回 503 |
 | `maxBodyBytes` | `65536` | 接受的最大请求体，至少 1024 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-fork-event-ingest)是所有可接受字段的完整来源。

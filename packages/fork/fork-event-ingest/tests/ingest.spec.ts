@@ -17,7 +17,7 @@ type Route = { path: string; handler: (request: unknown, response: unknown) => P
 
 async function mount(tokens: Record<string, string | undefined>, config: Ingest.Config = {
   sources: [{ id: 'kaorou', tokenEnv: 'KAOROU_TOKEN' }, { id: 'globe', tokenEnv: 'GLOBE_TOKEN' }],
-}) {
+}, sink?: { ingest: (event: ForkEventInput) => Promise<string> }) {
   const ctx = new Context()
   contexts.push(ctx)
   const routes: Route[] = []
@@ -25,6 +25,7 @@ async function mount(tokens: Record<string, string | undefined>, config: Ingest.
   ctx.provide('webServer', { register: (route: Route) => { routes.push(route); return () => {} } } as never)
   ctx.provide('credentials', { resolve: (ref: string) => Promise.resolve(tokens[ref] === undefined ? undefined : { value: tokens[ref] }) } as never)
   ctx.provide('forkEventBus', { publish: (event: ForkEventInput) => { published.push(event); return Promise.resolve('accepted') } } as never)
+  if (sink !== undefined) ctx.provide('forkPresence', sink as never)
   await ctx.plugin(Ingest, config)
   const route = routes[0]
   if (route === undefined) throw new Error('no route registered')
@@ -104,5 +105,31 @@ describe('fork-event-ingest', () => {
     await expect(mount({}, { sources: [{ id: 'github', tokenEnv: 'X' }] })).rejects.toThrow('source id')
     await expect(mount({}, { sources: [{ id: 'a', tokenEnv: 'X' }, { id: 'a', tokenEnv: 'Y' }] })).rejects.toThrow('source id')
     await expect(mount({}, { path: '/api/fork', sources: [] })).rejects.toThrow('under /hooks/')
+  })
+
+  it('gives a sink source its events and never publishes them on the bus', async () => {
+    const taken: ForkEventInput[] = []
+    const { post, published } = await mount({ PRESENCE_TOKEN: 'p-secret', KAOROU_TOKEN: 'k-secret' }, {
+      sources: [{ id: 'presence', tokenEnv: 'PRESENCE_TOKEN', sink: 'forkPresence' }, { id: 'kaorou', tokenEnv: 'KAOROU_TOKEN' }],
+    }, { ingest: (event) => { taken.push(event); return Promise.resolve('applied') } })
+    const event = { kind: 'presence.sleep.on', key: '2026-11-02T03:30:00Z', subject: 'owner', title: 'sleep focus on' }
+    expect(await post(event, 'p-secret')).toEqual({ status: 202, body: { outcome: 'applied' } })
+    expect(taken).toEqual([{ source: 'presence', ...event }])
+    expect(published).toEqual([])
+    // Other sources keep using the bus, and the token still decides the source.
+    expect((await post(EVENT, 'k-secret')).status).toBe(202)
+    expect(published).toHaveLength(1)
+    expect((await post({ ...event, kind: 'kaorou.sleep.on' }, 'p-secret')).status).toBe(400)
+  })
+
+  it('answers 503 while the sink service is not mounted and 400 with the sink\'s own reason when it refuses', async () => {
+    const config = { sources: [{ id: 'presence', tokenEnv: 'PRESENCE_TOKEN', sink: 'forkPresence' }] }
+    const event = { kind: 'presence.sleep.on', key: 'k', subject: 'owner', title: 't' }
+    const unmounted = await mount({ PRESENCE_TOKEN: 'p-secret' }, config)
+    expect(await unmounted.post(event, 'p-secret')).toEqual({ status: 503, body: { error: 'forkPresence is not mounted' } })
+    expect(unmounted.published).toEqual([])
+    const refusing = await mount({ PRESENCE_TOKEN: 'p-secret' }, config, { ingest: () => Promise.reject(new Error('unknown presence kind')) })
+    expect(await refusing.post(event, 'p-secret')).toEqual({ status: 400, body: { error: 'unknown presence kind' } })
+    await expect(mount({}, { sources: [{ id: 'presence', tokenEnv: 'X', sink: 'not a service' }] })).rejects.toThrow('must be a service name')
   })
 })

@@ -35,7 +35,7 @@ describe('watch pipeline', () => {
     await vi.advanceTimersByTimeAsync(60_000 + 30_000)
     expect(notes).toEqual([
       { title: '🆕 watch created: acme', body: 'target: GitHub repo acme/tool [releases]\naction: notify\nSession: unknown' },
-      { title: 'acme: 1 event(s)', body: '• acme/tool v2.0.0\n  https://github.com/octo/repo/releases/tag/v2.0.0' },
+      { title: 'acme: 1 event(s)', body: '• acme/tool v2.0.0\n  https://github.com/octo/repo/releases/tag/v2.0.0', kinds: ['github.release'] },
     ])
 
     // After watch_delete the repository is no longer polled.

@@ -159,6 +159,8 @@
     { "path": "./packages/fork/fork-style-settings/tsconfig.client.json" },
     { "path": "./packages/fork/fork-memory-admin/tsconfig.client.json" },
     { "path": "./packages/fork/bili/tsconfig.client.json" },
+    { "path": "./packages/fork/fork-wechat/tsconfig.client.json" },
+    { "path": "./packages/fork/fork-presence/tsconfig.client.json" },
     { "path": "./packages/client/ui-trajectory/tsconfig.client.json" },
     { "path": "./packages/session-query/session-log-export/tsconfig.client.json" },
     { "path": "./packages/client/ui-open-in-app" },

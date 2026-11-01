@@ -48,6 +48,7 @@ Choose it when a service you run should wake the agent the moment it has news. A
 | `sources` | `[]` | Services allowed to push; with none, every request gets 503 |
 | `sources[].id` | required | Source id on the bus: lowercase letters, digits, and hyphens, at most 32 characters, unique, never `github` or `schedule` |
 | `sources[].tokenEnv` | required | Credential reference holding that source's bearer token |
+| `sources[].sink` | unset | Name of a Host service that takes this source's events instead of the bus (`forkPresence` for the phone's Sleep Focus). Such events are validated like any other, handed to the service's `ingest()`, and never published, so no subscription can match them; a refusal by the service is a 400 and an unmounted service a 503 |
 | `maxBodyBytes` | `65536` | Largest accepted body, at least 1024 |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-fork-event-ingest) is the exhaustive source for every accepted field.

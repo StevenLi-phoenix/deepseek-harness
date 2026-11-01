@@ -12,7 +12,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type {} from '@deepseek-ai/dsh-host-webserver'
-import type {} from '@deepseek-ai/dsh-fork-event-bus'
+import type { ForkEventInput, ForkIngestSink } from '@deepseek-ai/dsh-fork-event-bus'
 import z from '@deepseek-ai/schemastery'
 import { eventFrom, InvalidEvent } from './event.ts'
 
@@ -30,6 +30,11 @@ export interface IngestSource {
   id: string
   /** Credential reference of this source's bearer token. */
   tokenEnv: string
+  /**
+   * Name of a Host service (an {@link ForkIngestSink}) that takes this source's events instead of the
+   * bus, e.g. `forkPresence`. Such events are never published, so no subscription can match them.
+   */
+  sink?: string
 }
 
 /** Route, sources, and body ceiling. */
@@ -48,11 +53,13 @@ export const Config: z<Config> = z.object({
   sources: z.array(z.object({
     id: z.string().required(),
     tokenEnv: z.string().role('credential-ref').required(),
+    sink: z.string(),
   })).default([]),
   maxBodyBytes: z.natural().min(1024).default(65_536),
 })
 
 const SOURCE_ID = /^[a-z0-9][a-z0-9-]{0,31}$/u
+const SINK_NAME = /^[a-z][A-Za-z0-9]{0,40}$/u
 const RESERVED = new Set(['github', 'schedule'])
 
 class HttpError extends Error {
@@ -108,6 +115,7 @@ export function apply(ctx: Context, config: Config): void {
   if (!path.startsWith('/hooks/') || path.endsWith('/')) throw new Error(`fork-event-ingest: path must be under /hooks/, got ${path}`)
   const ids = new Set<string>()
   for (const source of sources) {
+    if (source.sink !== undefined && !SINK_NAME.test(source.sink)) throw new Error(`fork-event-ingest: sink ${JSON.stringify(source.sink)} of source ${source.id} must be a service name`)
     if (!SOURCE_ID.test(source.id) || RESERVED.has(source.id) || ids.has(source.id)) {
       throw new Error(`fork-event-ingest: source id ${JSON.stringify(source.id)} must be unique lowercase letters, digits, or hyphens, and not ${[...RESERVED].join(' or ')}`)
     }
@@ -126,6 +134,17 @@ export function apply(ctx: Context, config: Config): void {
     }
     if (!configured) throw new HttpError(503, 'no ingest token is configured')
     return match
+  }
+
+  /** Hand an event to the service that owns its source; the bus never sees it. */
+  const applyToSink = async (sink: string, event: ForkEventInput): Promise<string> => {
+    const target = (ctx.get as (name: string) => unknown)(sink) as ForkIngestSink | undefined
+    if (target === undefined) throw new HttpError(503, `${sink} is not mounted`)
+    try {
+      return await target.ingest(event)
+    } catch (error: unknown) {
+      throw new HttpError(400, error instanceof Error ? error.message : 'event refused')
+    }
   }
 
   ctx.effect(() => ctx.webServer.register({
@@ -159,7 +178,8 @@ export function apply(ctx: Context, config: Config): void {
           if (error instanceof InvalidEvent) throw new HttpError(400, error.message)
           throw error
         }
-        const outcome = await ctx.forkEventBus.publish(event)
+        const sink = sources.find(entry => entry.id === source)?.sink
+        const outcome = sink === undefined ? await ctx.forkEventBus.publish(event) : await applyToSink(sink, event)
         ctx.logger.info('%s %s (%s): %s', source, event.kind, event.key, outcome)
         reply(response, 202, { outcome })
       } catch (error: unknown) {

@@ -36,6 +36,8 @@ const outboxSchema = z.object({
   text: z.string(),
   /** Unix epoch milliseconds. */
   queuedAt: z.number(),
+  /** Held back because the owner was asleep, not because no reply window was open. */
+  deferred: z.boolean().optional(),
 }).strict()
 
 /** What the bot's latest message to the owner was. */

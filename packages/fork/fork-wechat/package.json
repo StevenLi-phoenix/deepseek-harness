@@ -18,11 +18,31 @@
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
     "./src/*": "./src/*",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ],
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "bundle": "tsdown",
+    "watch": "tsdown --watch"
   },
   "files": [
+    "locale/*.json",
     "lib/index.js",
+    "lib/client.js",
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
@@ -32,6 +52,7 @@
     "@deepseek-ai/dsh-home-paths": "workspace:*",
     "@deepseek-ai/dsh-llm": "workspace:*",
     "@deepseek-ai/dsh-fork-event-bus": "workspace:*",
+    "@deepseek-ai/dsh-fork-presence": "workspace:*",
     "@deepseek-ai/dsh-fork-taint": "workspace:*",
     "@deepseek-ai/dsh-fork-voice": "workspace:*",
     "@deepseek-ai/dsh-owner-relay": "workspace:*",
@@ -49,9 +70,16 @@
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/cordis-plugin-timer": "workspace:~",
     "@deepseek-ai/dsh-api-session-controller": "workspace:*",
+    "@deepseek-ai/dsh-client-locale": "workspace:*",
+    "@deepseek-ai/dsh-client-store": "workspace:*",
+    "@deepseek-ai/dsh-client-test-runtime": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-renderer": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-settings": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-slots": "workspace:*",
     "@deepseek-ai/dsh-home-paths": "workspace:*",
     "@deepseek-ai/dsh-llm": "workspace:*",
     "@deepseek-ai/dsh-fork-event-bus": "workspace:*",
+    "@deepseek-ai/dsh-fork-presence": "workspace:*",
     "@deepseek-ai/dsh-fork-taint": "workspace:*",
     "@deepseek-ai/dsh-fork-voice": "workspace:*",
     "@deepseek-ai/dsh-owner-relay": "workspace:*",
@@ -59,6 +87,9 @@
     "@deepseek-ai/dsh-session": "workspace:*",
     "@deepseek-ai/dsh-session-title": "workspace:*",
     "@deepseek-ai/dsh-storage": "workspace:*",
-    "@deepseek-ai/dsh-storage-domain": "workspace:*"
+    "@deepseek-ai/dsh-storage-domain": "workspace:*",
+    "@testing-library/react": "^16.3.3",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   }
 }

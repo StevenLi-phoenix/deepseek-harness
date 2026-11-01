@@ -94,10 +94,16 @@ export async function writeAccountFile(path: string, account: WechatAccount): Pr
   }
 }
 
+/** Why a login ended without credentials; the Settings page words each one itself. */
+export type LoginFailure = 'expired' | 'verify-blocked' | 'bound-elsewhere' | 'timeout' | 'poll-failed' | 'cancelled' | 'other'
+
 /** Login ended without credentials; the message is meant for the person at the terminal. */
 export class LoginError extends Error {
-  /** @param message - what happened and what to do next. */
-  constructor(message: string) {
+  /**
+   * @param message - what happened and what to do next.
+   * @param code - which kind of ending it was; `other` when no page wording exists for it.
+   */
+  constructor(message: string, readonly code: LoginFailure = 'other') {
     super(message)
     this.name = 'LoginError'
   }
@@ -114,6 +120,8 @@ export interface LoginOptions {
   readVerifyCode(retry: boolean): Promise<string>
   /** Progress for the person scanning: scanned, redirected, refreshed. */
   onProgress?(message: string): void
+  /** The owner scanned the current QR code (once per code); a refreshed code starts unscanned again. */
+  onScanned?(): void
   /** `fetch` replacement. */
   fetch?: typeof fetch
   /** Login API origin; defaults to {@link ILINK_BASE_URL}. */
@@ -223,7 +231,7 @@ export async function loginWithQr(options: LoginOptions): Promise<LoginResult> {
     } catch (error: unknown) {
       signal?.throwIfAborted()
       failures += 1
-      if (failures >= maxFailures) throw new LoginError(`checking the QR code failed ${failures} times in a row: ${errorText(error)}`)
+      if (failures >= maxFailures) throw new LoginError(`checking the QR code failed ${failures} times in a row: ${errorText(error)}`, 'poll-failed')
       await delay(pollDelayMs, signal)
       continue
     }
@@ -232,7 +240,10 @@ export async function loginWithQr(options: LoginOptions): Promise<LoginResult> {
         return confirmedResult(status, baseUrl)
       case 'scaned':
         verifyCode = undefined
-        if (!scanned) progress('已扫码，请在手机微信上确认。')
+        if (!scanned) {
+          progress('已扫码，请在手机微信上确认。')
+          options.onScanned?.()
+        }
         scanned = true
         break
       case 'scaned_but_redirect':
@@ -250,7 +261,7 @@ export async function loginWithQr(options: LoginOptions): Promise<LoginResult> {
         if (attempt >= maxQrCodes) {
           throw new LoginError(status.status === 'expired'
             ? `the QR code expired ${attempt} times; run the login again`
-            : 'too many wrong verification numbers; wait a while and run the login again')
+            : 'too many wrong verification numbers; wait a while and run the login again', status.status === 'expired' ? 'expired' : 'verify-blocked')
         }
         attempt += 1
         qr = await root.getBotQrcode(signal)
@@ -261,14 +272,29 @@ export async function loginWithQr(options: LoginOptions): Promise<LoginResult> {
         break
       }
       case 'binded_redirect':
-        throw new LoginError('this WeChat account already has the bot bound to another client; remove that binding in WeChat and run the login again')
+        throw new LoginError('this WeChat account already has the bot bound to another client; remove that binding in WeChat and run the login again', 'bound-elsewhere')
       default:
         // `wait` and statuses this client does not know keep polling.
         break
     }
     await delay(pollDelayMs, signal)
   }
-  throw new LoginError('timed out waiting for the QR code to be scanned and confirmed')
+  throw new LoginError('timed out waiting for the QR code to be scanned and confirmed', 'timeout')
+}
+
+/**
+ * Store a confirmed login as the account file the channel reads: the credentials plus the time of
+ * the login, written like {@link writeAccountFile} does (mode 0600, atomic). The terminal login and
+ * the Settings page both end here.
+ * @param path - account file.
+ * @param result - credentials of the confirmed login.
+ * @param now - time of the login.
+ * @returns the stored account.
+ */
+export async function saveLogin(path: string, result: LoginResult, now: Date = new Date()): Promise<WechatAccount> {
+  const account: WechatAccount = { ...result, boundAt: now.toISOString() }
+  await writeAccountFile(path, account)
+  return account
 }
 
 /** Minimal writable used for terminal output. */
@@ -341,7 +367,7 @@ export async function runLoginCli(options: LoginCliOptions = {}): Promise<number
       },
       onProgress: (message) => { stdout.write(`${message}\n`) },
     })
-    await writeAccountFile(path, { ...result, boundAt: new Date().toISOString() })
+    await saveLogin(path, result)
     stdout.write(`\n已绑定 bot ${result.botId}，owner ${result.ownerUserId}。\n账号已保存到 ${path}（仅本用户可读）。\n运行中的服务会在下一次检查时自动读取。\n`)
     return 0
   } catch (error: unknown) {

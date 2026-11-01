@@ -14,6 +14,7 @@ import WechatChannel, { Config, type ChatConfig } from '../src/index.ts'
 import { downloadMedia } from '../src/media.ts'
 import type { WechatAccount } from '../src/login.ts'
 import { wechatDomain } from '../src/storage.ts'
+import type { WechatAnswer } from '../src/view.ts'
 import { FakeIlink, imageMessage, textMessage } from './fake-ilink.ts'
 
 const OWNER = 'owner@im.wechat'
@@ -140,6 +141,8 @@ async function harness(options: {
   titles?: Record<string, string>
   /** A `ctx.forkVoice` double; omitted means fork-voice is not mounted. */
   voice?: unknown
+  /** A `ctx.forkPresence` double; omitted means fork-presence is not mounted. */
+  presence?: unknown
 } = {}) {
   const ilink = options.ilink ?? new FakeIlink()
   vi.stubGlobal('fetch', ilink.fetch)
@@ -177,6 +180,7 @@ async function harness(options: {
   const titles = { rename: vi.fn(), get: vi.fn(titleOf) }
   ctx.provide('sessionTitle', titles as never)
   if (options.voice !== undefined) ctx.provide('forkVoice', options.voice as never)
+  if (options.presence !== undefined) ctx.provide('forkPresence', options.presence as never)
   if (options.agents !== undefined) {
     const agents = options.agents
     ctx.provide('agents', { roots: () => [...agents], get: (id: string) => agents.find(agent => agent.session.id === id) } as never)
@@ -197,6 +201,7 @@ async function harness(options: {
     maxMediaBytes: 4096,
     mediaTimeoutMs: 60_000,
     timeGapMs: 1_800_000,
+    awakeAfterMessageMs: 1_800_000,
     ...rest,
   }
   // The relay carries the chat Sessions' answers to the channel, as the event bundle mounts it.
@@ -1259,6 +1264,311 @@ describe('WechatChannel long-poll', () => {
   })
 })
 
+/** A `ctx.forkPresence` double: the owner sleeps or not, the urgent kinds are `host.disk.full` and anything marked urgent. */
+function fakePresence(asleep = true) {
+  const state = { asleep }
+  const listeners = new Set<(next: { asleep: boolean }) => void>()
+  type Holder = { name: string; count(): number; flush(): Promise<number> }
+  const holders: Holder[] = []
+  const presence = {
+    isAsleep: () => state.asleep,
+    isUrgent: (note: { urgent?: boolean; kinds?: readonly string[] }) => note.urgent === true || (note.kinds ?? []).includes('host.disk.full'),
+    onChange: (listener: (next: { asleep: boolean }) => void) => { listeners.add(listener); return () => { listeners.delete(listener) } },
+    registerHolder: (holder: Holder) => {
+      holders.push(holder)
+      return () => { holders.splice(holders.indexOf(holder), 1) }
+    },
+  }
+  const set = async (next: boolean): Promise<void> => {
+    state.asleep = next
+    for (const listener of listeners) listener({ asleep: next })
+    await vi.advanceTimersByTimeAsync(0)
+  }
+  return { presence, holders, set, listeners }
+}
+
+describe('WechatChannel while the owner sleeps', () => {
+  it('holds a note for the morning, and says so in the log without its text', async () => {
+    const sleeping = fakePresence()
+    const h = await harness({ presence: sleeping.presence })
+    await h.ownerSays('night')
+    await vi.advanceTimersByTimeAsync(31 * 60_000)
+    h.ilink.sent.length = 0
+    await h.channel.send({ title: 'ci: 1 event(s)', body: 'secret detail', kinds: ['github.workflow_run.completed'] })
+    expect(h.ilink.sent).toEqual([])
+    expect(h.channel.outbox().map(row => row.deferred)).toEqual([true])
+    expect(sleeping.holders[0]!.count()).toBe(1)
+    const line = h.logs.find(entry => entry.text.startsWith('fork-wechat: held '))!
+    expect(line.text).toBe('fork-wechat: held 1 note message(s) while the owner sleeps, events github.workflow_run.completed; 1 held')
+    expect(h.logs.some(entry => entry.text.includes('secret detail'))).toBe(false)
+  })
+
+  it('sends an urgent note at once, whether the kind is urgent or the sender marked it', async () => {
+    const h = await harness({ presence: fakePresence().presence })
+    await h.ownerSays('night')
+    await vi.advanceTimersByTimeAsync(31 * 60_000)
+    h.ilink.sent.length = 0
+    await h.channel.send({ title: 'disk', kinds: ['host.disk.full'] })
+    await h.channel.send({ title: 'marked', urgent: true } as never)
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['disk', 'marked'])
+    expect(h.channel.outbox()).toEqual([])
+  })
+
+  it('never holds a reply to a message the owner just sent, but holds one that arrives long after it', async () => {
+    const h = await harness({ presence: fakePresence().presence })
+    await h.ownerSays('hello')
+    await h.finishTurn('chat-1', 'right away')
+    expect(h.ilink.sent.map(sent => sent.text)).toContain('right away')
+    expect(h.channel.outbox()).toEqual([])
+    // The same chat Session answers a reminder 40 minutes later: the owner is not known to be awake.
+    await vi.advanceTimersByTimeAsync(40 * 60_000)
+    await h.finishTurn('chat-1', 'a reminder fired')
+    expect(h.ilink.sent.map(sent => sent.text)).not.toContain('a reminder fired')
+    expect(h.channel.outbox().map(row => row.text)).toEqual(['a reminder fired'])
+  })
+
+  it('does not hold channel notices, and holds nothing when the owner is awake or presence is not mounted', async () => {
+    const h = await harness({ presence: fakePresence().presence })
+    await h.ownerSays('/help')
+    await vi.advanceTimersByTimeAsync(31 * 60_000)
+    await h.ownerSays('/new')
+    expect(h.channel.outbox()).toEqual([])
+    const awake = await harness({ presence: fakePresence(false).presence })
+    await awake.ownerSays('x')
+    await vi.advanceTimersByTimeAsync(31 * 60_000)
+    await awake.channel.send({ title: 'plain' })
+    expect(awake.ilink.sent.map(sent => sent.text)).toContain('plain')
+    const none = await harness()
+    await none.ownerSays('x')
+    await vi.advanceTimersByTimeAsync(31 * 60_000)
+    await none.channel.send({ title: 'plain' })
+    expect(none.ilink.sent.map(sent => sent.text)).toContain('plain')
+  })
+
+  it('sends everything held as one digest when the owner wakes, and logs the counts', async () => {
+    const sleeping = fakePresence()
+    const h = await harness({ presence: sleeping.presence })
+    await h.ownerSays('night')
+    await vi.advanceTimersByTimeAsync(31 * 60_000)
+    h.ilink.sent.length = 0
+    await h.channel.send({ title: 'first' })
+    await h.channel.send({ title: 'second' })
+    expect(h.ilink.sent).toEqual([])
+    await sleeping.set(false)
+    expect(h.ilink.sent).toHaveLength(1)
+    expect(h.ilink.sent[0]!.text).toContain('first')
+    expect(h.ilink.sent[0]!.text).toContain('second')
+    expect(h.channel.outbox()).toEqual([])
+    expect(sleeping.holders[0]!.count()).toBe(0)
+    expect(h.logs.some(entry => entry.text === 'fork-wechat: the owner woke; 2 held text(s): 2 sent, 0 left for the next reply window')).toBe(true)
+  })
+
+  it('keeps what cannot go out yet as ordinary outbox texts after the owner wakes', async () => {
+    const sleeping = fakePresence()
+    const h = await harness({ presence: sleeping.presence })
+    await h.ownerSays('night')
+    await vi.advanceTimersByTimeAsync(31 * 60_000)
+    await h.channel.send({ title: 'later' })
+    // The reply window has run out its quota.
+    h.ilink.reply('ilink/bot/sendmessage', { body: { ret: -2 } })
+    await sleeping.set(false)
+    expect(h.channel.outbox().map(row => [row.text, row.deferred])).toEqual([['later', undefined]])
+    expect(sleeping.holders[0]!.count()).toBe(0)
+    expect(h.logs.some(entry => entry.text === 'fork-wechat: the owner woke; 1 held text(s): 0 sent, 1 left for the next reply window')).toBe(true)
+  })
+
+  it('flushes on demand while the owner still sleeps, and flushes nothing when nothing is held', async () => {
+    const sleeping = fakePresence()
+    const h = await harness({ presence: sleeping.presence })
+    await h.ownerSays('night')
+    await vi.advanceTimersByTimeAsync(31 * 60_000)
+    expect(await sleeping.holders[0]!.flush()).toBe(0)
+    await h.channel.send({ title: 'wait' })
+    h.ilink.sent.length = 0
+    expect(await sleeping.holders[0]!.flush()).toBe(1)
+    expect(h.ilink.sent).toHaveLength(1)
+    expect(h.logs.some(entry => entry.text === 'fork-wechat: flushed from Settings; 1 held text(s): 1 sent, 0 left for the next reply window')).toBe(true)
+  })
+
+  it('delivers held texts together with the owner\'s next message flush, and stops listening when it stops', async () => {
+    const sleeping = fakePresence()
+    const h = await harness({ presence: sleeping.presence })
+    await h.ownerSays('night')
+    await vi.advanceTimersByTimeAsync(31 * 60_000)
+    await h.channel.send({ title: 'held' })
+    h.ilink.sent.length = 0
+    await h.ownerSays('I am up')
+    expect(h.ilink.sent.map(sent => sent.text).some(text => text.includes('held'))).toBe(true)
+    expect(h.channel.outbox()).toEqual([])
+    await h.ctx.fiber.dispose()
+    expect(sleeping.listeners.size).toBe(0)
+    expect(sleeping.holders).toEqual([])
+  })
+})
+
+/** @returns the answer a Settings route response carries. */
+function parseAnswer(text: string): WechatAnswer {
+  return JSON.parse(text) as WechatAnswer
+}
+
+/** A route registration the connection double kept. */
+interface Registered {
+  path: string
+  fetch: (request: Request) => Promise<Response>
+}
+
+/** Mount the Settings route of a harness's channel on a connection double and give back a caller. */
+async function settingsRoute(h: Awaited<ReturnType<typeof harness>>) {
+  const routes: Registered[] = []
+  h.ctx.provide('connection', { fetch: { register: (route: Registered) => { routes.push(route); return () => Promise.resolve() } } } as never)
+  await vi.advanceTimersByTimeAsync(0)
+  const route = routes.find(entry => entry.path === '/api/fork.wechat')
+  if (route === undefined) throw new Error('the Settings route was not registered')
+  const call = async (body?: unknown) => {
+    const response = await route.fetch(new Request('http://127.0.0.1/api/fork.wechat', body === undefined
+      ? {}
+      : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }))
+    return { status: response.status, text: await response.text() }
+  }
+  return { routes, call }
+}
+
+describe('WechatChannel Settings route', () => {
+  it('mounts on the connection service and answers the channel, window, and outbox without a token', async () => {
+    const h = await harness()
+    const { routes, call } = await settingsRoute(h)
+    expect(routes.map(route => route.path)).toEqual(['/api/fork.wechat'])
+    h.ilink.updates([])
+    await vi.advanceTimersByTimeAsync(0)
+    await h.ownerSays('hello', 'ctx-hello')
+    await h.finishTurn('chat-1', 'hi there')
+    const received = Date.now()
+    await h.channel.send({ title: 'note' })
+    const first = parseAnswer((await call()).text).view
+    expect(first.binding).toMatchObject({ state: 'bound', botId: 'b…@im.bot', ownerId: 'o…@im.wechat' })
+    expect(first.channel).toMatchObject({ link: 'connected', failures: 0, lastError: null, lastPollAt: received, lastInboundAt: received, lastOutboundAt: received, lastOutboundKind: 'note' })
+    expect(first.window).toEqual({ open: true, closed: null, repliesLeft: 8, repliesPerToken: 10, expiresAt: received + 84_600_000 })
+    expect(first.outbox).toEqual({ count: 0, limit: 50, oldestAt: null })
+    expect(first.timeZone).toBe('America/New_York')
+
+    // Exhaust the window: the rest waits in the outbox.
+    h.ilink.reply('ilink/bot/sendmessage', { body: { ret: -2 } })
+    await h.channel.send({ title: 'queued' })
+    const second = parseAnswer((await call()).text).view
+    expect(second.window).toMatchObject({ open: false, closed: 'used-up', repliesLeft: 0 })
+    expect(second.outbox).toEqual({ count: 1, limit: 50, oldestAt: received })
+  })
+
+  it('reports an idle channel, then a retrying one with the failure text cleaned of the token', async () => {
+    const idle = await harness({ account: false })
+    expect(idle.channel.status()).toEqual({
+      channel: { link: 'idle', lastPollAt: null, failures: 0, lastError: null, lastInboundAt: null, lastOutboundAt: null, lastOutboundKind: null },
+      window: { open: false, closed: 'no-account', repliesLeft: null, repliesPerToken: 10, expiresAt: null },
+      outbox: { count: 0, limit: 50, oldestAt: null },
+    })
+
+    const h = await harness()
+    expect(h.channel.status().channel.link).toBe('starting')
+    h.ilink.reply('ilink/bot/getupdates', new TypeError(`fetch failed for ${TOKEN}\n  at somewhere`))
+    await vi.advanceTimersByTimeAsync(0)
+    const { channel } = h.channel.status()
+    expect(channel).toMatchObject({ link: 'retrying', failures: 1 })
+    expect(channel.lastError).toEqual({ at: Date.now(), where: 'poll', text: 'iLink ilink/bot/getupdates: request failed: fetch failed for *** at somewhere' })
+    await vi.advanceTimersByTimeAsync(2000)
+    h.ilink.updates([])
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.channel.status().channel).toMatchObject({ link: 'connected', failures: 0, lastError: { where: 'poll' } })
+  })
+
+  it('shows a rejected token, and a failed send, as such', async () => {
+    const h = await harness()
+    await h.ownerSays('hi')
+    h.ilink.reply('ilink/bot/sendmessage', new TypeError(`socket hang up ${TOKEN}`))
+    await h.channel.send({ title: 'a' })
+    const failure = h.channel.status().channel.lastError
+    expect(failure?.where).toBe('send')
+    expect(failure?.text).not.toContain(TOKEN)
+    expect(failure?.text).toContain('socket hang up ***')
+    h.ilink.reply('ilink/bot/getupdates', { body: { ret: -14 } })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.channel.status().channel.link).toBe('stale')
+    expect(h.channel.status().window.closed).toBe('stale-token')
+  })
+
+  it('reads the account file again at once after a reload: a new token cuts the running long-poll', async () => {
+    const h = await harness()
+    await vi.advanceTimersByTimeAsync(0)
+    const polls = h.ilink.requestsTo('ilink/bot/getupdates').length
+    writeAccount(h.accountFile, { botToken: 'fresh-token', botId: 'bot2@im.bot', boundAt: '2026-11-01T00:00:00.000Z' })
+    h.channel.reloadAccount('test')
+    await vi.advanceTimersByTimeAsync(0)
+    const requests = h.ilink.requestsTo('ilink/bot/getupdates')
+    expect(requests).toHaveLength(polls + 1)
+    expect(requests.at(-1)!.headers['authorization']).toBe('Bearer fresh-token')
+    expect(h.logs.some(line => line.text === 'fork-wechat: bot bot2@im.bot active for owner owner@im.wechat')).toBe(true)
+    // No error was logged for the cut poll, and the next poll was not delayed.
+    expect(h.logs.filter(line => line.type === 'warn')).toEqual([])
+    expect(h.channel.status().channel.failures).toBe(0)
+  })
+
+  it('ends the wait for an account at once after a reload', async () => {
+    const h = await harness({ account: false })
+    await vi.advanceTimersByTimeAsync(0)
+    writeAccount(h.accountFile)
+    expect(h.ilink.requestsTo('ilink/bot/getupdates')).toEqual([])
+    h.channel.reloadAccount('test')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.ilink.requestsTo('ilink/bot/getupdates')[0]!.headers['authorization']).toBe(`Bearer ${TOKEN}`)
+  })
+
+  it('unbinds from Settings: the file is kept as a backup, the long-poll stops, and notifications queue', async () => {
+    const h = await harness()
+    const { call } = await settingsRoute(h)
+    await h.ownerSays('hi')
+    const polls = h.ilink.requestsTo('ilink/bot/getupdates').length
+    const answer = await call({ action: 'unbind', confirm: 'unbind' })
+    expect(answer.status).toBe(200)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(existsSync(h.accountFile)).toBe(false)
+    expect(readdirSync(dir).filter(name => name.startsWith('account.json.bak.'))).toHaveLength(1)
+    expect(h.channel.status().channel.link).toBe('idle')
+    // The cut poll is not retried against the old token; the loop waits for a new account.
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(h.ilink.requestsTo('ilink/bot/getupdates')).toHaveLength(polls)
+    await h.channel.send({ title: 'after unbind' })
+    expect(h.channel.outbox().map(row => row.text)).toEqual(['after unbind'])
+    expect(h.logs.some(line => /^fork-wechat: no account at /.test(line.text))).toBe(true)
+    expect(h.logs.some(line => /^fork-wechat: settings unbind ok \(\d+ ms\)$/.test(line.text))).toBe(true)
+  })
+
+  it('binds from Settings: the QR login writes the account and the channel starts polling it', async () => {
+    const h = await harness({ account: false })
+    const { call } = await settingsRoute(h)
+    const started = parseAnswer((await call({ action: 'login.start' })).text)
+    expect(started.login?.phase).toBe('waiting')
+    h.ilink.statuses({ status: 'confirmed', bot_token: 'new-token', ilink_bot_id: 'bot@im.bot', baseurl: 'https://idc.ilinkai.weixin.qq.com', ilink_user_id: OWNER })
+    // Writing the account file is real I/O, which fake timers do not advance.
+    let polled: WechatAnswer | undefined
+    await vi.waitFor(async () => {
+      polled = parseAnswer((await call({ action: 'login.poll', key: started.login!.key })).text)
+      expect(polled.login?.phase).toBe('done')
+    })
+    expect(polled?.view.binding.state).toBe('bound')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.ilink.requestsTo('ilink/bot/getupdates').at(-1)!.headers['authorization']).toBe('Bearer new-token')
+    expect(h.logs.some(line => line.text === `fork-wechat: bot bot@im.bot active for owner ${OWNER}`)).toBe(true)
+  })
+
+  it('ends an open login when the channel stops', async () => {
+    const h = await harness({ account: false })
+    const { call } = await settingsRoute(h)
+    await call({ action: 'login.start' })
+    expect(h.ilink.waiting('ilink/bot/get_qrcode_status')).toBe(1)
+    await h.ctx.fiber.dispose()
+    expect(h.ilink.waiting('ilink/bot/get_qrcode_status')).toBe(0)
+  })
+})
+
 describe('WechatChannel chat Session bookkeeping', () => {
   it('remembers at most 200 chat Sessions', async () => {
     const pool = new MemoryMediaPool()
@@ -1387,6 +1697,7 @@ describe('WechatChannel configuration', () => {
       maxMediaBytes: 25 * 1024 * 1024,
       mediaTimeoutMs: 60_000,
       timeGapMs: 1_800_000,
+      awakeAfterMessageMs: 1_800_000,
     })
     expect('memoryCommands' in resolveConfig({})).toBe(false)
     // A profile patch written before the commands were removed still sets the key: it must not stop the service.

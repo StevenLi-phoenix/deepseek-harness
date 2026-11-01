@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { accountFilePath, loginWithQr, LoginError, readAccountFile, runLoginCli, writeAccountFile, type LoginOptions, type WechatAccount } from '../src/login.ts'
+import { accountFilePath, loginWithQr, LoginError, readAccountFile, runLoginCli, saveLogin, writeAccountFile, type LoginOptions, type WechatAccount } from '../src/login.ts'
 import { FakeIlink } from './fake-ilink.ts'
 
 const CONFIRMED = { status: 'confirmed', bot_token: 'tok-secret', ilink_bot_id: 'bot@im.bot', baseurl: 'https://idc.ilinkai.weixin.qq.com', ilink_user_id: 'owner@im.wechat' }
@@ -89,11 +89,28 @@ describe('loginWithQr', () => {
     expect(ilink.requestsTo('ilink/bot/get_qrcode_status').map(request => request.query['verify_code'])).toEqual([undefined, '1234', '5678', undefined])
   })
 
+  it('tells the caller about each scanned code, and names why a login ended', async () => {
+    const ilink = new FakeIlink()
+    ilink.statuses({ status: 'scaned' }, { status: 'scaned' }, { status: 'expired' }, { status: 'scaned' }, CONFIRMED)
+    const scanned: string[] = []
+    const { opts } = options(ilink, { onScanned: () => { scanned.push('scanned') } })
+    await loginWithQr(opts)
+    expect(scanned).toEqual(['scanned', 'scanned'])
+    const endings: Array<[string, string]> = [['expired', 'expired'], ['verify_code_blocked', 'verify-blocked'], ['binded_redirect', 'bound-elsewhere']]
+    for (const [status, code] of endings) {
+      const fresh = new FakeIlink()
+      fresh.statuses({ status }, { status }, { status })
+      const error = await loginWithQr(options(fresh, { maxQrCodes: 1 }).opts).catch((caught: unknown) => caught)
+      expect(error).toBeInstanceOf(LoginError)
+      expect((error as LoginError).code).toBe(code)
+    }
+  })
+
   it('refreshes an expired QR code and gives up after three', async () => {
     const ilink = new FakeIlink()
     ilink.statuses({ status: 'expired' }, { status: 'scaned' }, { status: 'expired' }, { status: 'expired' })
     const { opts, shown, progress } = options(ilink)
-    await expect(loginWithQr(opts)).rejects.toThrow(new LoginError('the QR code expired 3 times; run the login again'))
+    await expect(loginWithQr(opts)).rejects.toThrow(new LoginError('the QR code expired 3 times; run the login again', 'expired'))
     expect(shown.map(([, attempt]) => attempt)).toEqual([1, 2, 3])
     expect(progress).toEqual(['二维码已过期，已刷新。', '已扫码，请在手机微信上确认。', '二维码已过期，已刷新。'])
     expect(ilink.requestsTo('ilink/bot/get_qrcode_status').map(request => request.query['qrcode'])).toEqual(['qr-1', 'qr-2', 'qr-2', 'qr-3'])
@@ -209,6 +226,16 @@ describe('account file', () => {
     writeFileSync(path, '"tok-secret"')
     expect(readAccountFile(path)).toEqual({ kind: 'invalid', reason: 'bad fields: (root)' })
     expect(readAccountFile(dir)).toEqual({ kind: 'invalid', reason: 'cannot read (EISDIR)' })
+  })
+})
+
+describe('saveLogin', () => {
+  it('stores the credentials with the login time like the terminal login does', async () => {
+    const path = join(dir, 'fork-wechat', 'account.json')
+    const account = await saveLogin(path, { botToken: 'tok-secret', botId: 'bot@im.bot', baseUrl: 'https://idc.ilinkai.weixin.qq.com', ownerUserId: 'owner@im.wechat' }, new Date('2026-11-01T12:00:00.000Z'))
+    expect(account.boundAt).toBe('2026-11-01T12:00:00.000Z')
+    expect(readAccountFile(path)).toEqual({ kind: 'ok', account })
+    expect(statSync(path).mode & 0o777).toBe(0o600)
   })
 })
 

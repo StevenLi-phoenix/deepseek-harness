@@ -240,6 +240,11 @@
             tokenEnv: FORK_INGEST_TOKEN_AUTOCUT
           - id: bili
             tokenEnv: FORK_INGEST_TOKEN_BILI
+          # The phone's Sleep Focus (iOS Shortcut, RUNBOOK §18). A sink source: its events go to
+          # ctx.forkPresence and never to the bus, so no subscription can start a Session or send a note.
+          - id: presence
+            tokenEnv: FORK_INGEST_TOKEN_PRESENCE
+            sink: forkPresence
 
     - id: fork-github-sensor
       name: '@deepseek-ai/dsh-fork-github-sensor'
@@ -263,6 +268,18 @@
       name: '@deepseek-ai/dsh-fork-memory-admin'
     - id: fork-memory-settings
       name: '@deepseek-ai/dsh-fork-memory/settings'
+
+    # Settings → 勿扰: whether the owner sleeps (the phone's Sleep Focus pushed through fork-event-ingest's
+    # `presence` source, a daily 03:30-10:30 New York window when no Focus signal is fresh, buttons in
+    # Settings). While asleep fork-wechat holds non-urgent messages and sends them as one digest on waking.
+    # Urgent kinds are the defaults (host.disk.full, host.*.critical, bili.risk.*, bili.gate.readonly).
+    # ingestUrl and tokenEnv only fill in the Shortcut instructions on the page; the token itself is
+    # FORK_INGEST_TOKEN_PRESENCE in $DSH_HOME/.env.
+    - id: fork-presence
+      name: '@deepseek-ai/dsh-fork-presence'
+      config:
+        timeZone: America/New_York
+        ingestUrl: https://dsh.tailc2559b.ts.net/hooks/events
 
     # Voice (ctx.forkVoice): text to speech for the `speak` tool (feiyu on the laptop, no fallback;
     # the Mac mini TTS service was retired on 2026-10-31; the key is FORK_FEIYU_API_KEY in
