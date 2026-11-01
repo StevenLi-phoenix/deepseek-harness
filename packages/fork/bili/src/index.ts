@@ -43,7 +43,13 @@ import { BILI_AGENT_ORIGIN, BILI_RELAY_CHANNEL, DmChannel, type DmOutcome } from
 import { biliDomain, seqKey } from './storage.ts'
 import { clean, codePoints, ownerPrompt } from './text.ts'
 import { dayKey, formatStamp, isTimeZone } from './time.ts'
-import { BILI_PATH, SESSION_STATES, type AccountView, type BiliView, type SessionState } from './view.ts'
+import { parseAction } from './actions.ts'
+import { DEFAULT_MANAGE_CREDENTIAL, LEDGER_MAX_ROWS, LEDGER_ROWS, ManageClient, ManageError, type ManageGate } from './manage.ts'
+import { ManageSettings, type ManageSnapshot } from './settings.ts'
+import {
+  BILI_PATH, SESSION_STATES,
+  type AccountView, type ActionResult, type BiliView, type GateView, type ManagedAccount, type SessionState,
+} from './view.ts'
 
 export {
   ACTION_TIMEOUT_MS, BiliApiError, BiliOutcomeError, BiliRefused, BiliRiskError, BiliSessionError, BiliTransportError, BiliVerifyError,
@@ -83,6 +89,11 @@ export interface Config {
   ownerMid?: number
   /** bili-svc's id of the agent's account: the `account` of every call. */
   account: string
+  /**
+   * Credential holding the bili-svc token of scope `manage`. Only the Settings route uses it: the
+   * sign-in, session, gate, and brake controls. Unset, Settings stays read-only and names this credential.
+   */
+  manageTokenEnv: string
   /** IANA time zone of the journal, the main-agent limit, and prompt times. */
   timeZone: string
   /** Messages the account's Session may send the owner's main agent per day (`bili_tell_main_agent`); 0 turns them off. */
@@ -97,6 +108,7 @@ export interface Config {
 export const Config: z<Config> = z.object({
   ownerMid: z.natural(),
   account: z.string().default('maomao'),
+  manageTokenEnv: z.string().role('credential-ref').default(DEFAULT_MANAGE_CREDENTIAL),
   timeZone: z.string().default('America/New_York'),
   mainAgentPerDay: z.natural().max(20).default(5),
   session: z.object({
@@ -122,6 +134,8 @@ const FAST_POLL_MS = 60_000
 const CONVERSATION_MS = 900_000
 /** A bili-svc status answer is reused for this long. */
 const STATUS_TTL_MS = 10_000
+/** The Reply Gate's speaker routes change by hand, so they are reused for this long. */
+const ROUTES_TTL_MS = 60_000
 /** Journal limits. */
 export const JOURNAL_LIMITS = { chars: 600, perDay: 8, pageSize: 10 } as const
 /** Code points of one message to the owner's main agent. */
@@ -185,12 +199,39 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/** The gate as the agent's own token reports it: no brake detail and no counters. */
+function minimalGate(gate: ServiceStatus['gate']): GateView | null {
+  return gate === undefined ? null : { mode: clean(gate.mode, 40), readonly: gate.readonly, brake: null, used: null, caps: null }
+}
+
+/** The gate as the manage token reports it. */
+function fullGate(gate: ManageGate | null): GateView | null {
+  return gate === null ? null : { mode: gate.mode, readonly: gate.readonly, brake: gate.brake, used: gate.used, caps: gate.caps }
+}
+
+/** The HTTP status the Settings route answers for a refused management call; the browser never sees bili-svc's 401/403. */
+function manageStatus(error: ManageError): number {
+  if (error.status === 404 || error.status === 409) return error.status
+  if (error.status === 400 || error.status === 422) return 400
+  return 502
+}
+
+/** The words of a refused management call: bili-svc's message, else a line for its code. */
+function manageMessage(error: ManageError): string {
+  if (error.status === 401 || error.code === 'forbidden') return 'bili-svc did not accept the manage token'
+  return error.detail === '' ? error.code : error.detail
+}
+
+/** The credential store's reference grammar: a POSIX shell identifier. */
+const CREDENTIAL_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
+
 /** Fail at load on configuration that cannot work. */
 function assertConfig(config: Config): void {
   if (!isAbsolute(config.session.workspacePath)) throw new Error('bili: session.workspacePath must be an absolute path')
   if (config.session.title.trim() === '') throw new Error('bili: session.title must be non-empty')
   if (!isTimeZone(config.timeZone)) throw new Error(`bili: timeZone "${config.timeZone}" is not a valid IANA time zone`)
   if (!/^[a-z0-9_-]{1,64}$/.test(config.account)) throw new Error(`bili: account "${config.account}" is not a bili-svc account id`)
+  if (!CREDENTIAL_NAME.test(config.manageTokenEnv)) throw new Error(`bili: manageTokenEnv "${config.manageTokenEnv}" is not a credential name (a shell identifier)`)
 }
 
 /** `1 coin`, `2 coins`. */
@@ -225,8 +266,8 @@ function tripleDetail(added: readonly TriplePart[], before: readonly TriplePart[
 }
 
 /** The account bili-svc answers for: the configured id, else the first with a working session. */
-function pickAccount(status: ServiceStatus, id: string): ServiceAccount | undefined {
-  return status.accounts.find(account => account.id === id) ?? status.accounts.find(account => account.session === 'ok')
+function pickAccount(accounts: readonly ServiceAccount[], id: string): ServiceAccount | undefined {
+  return accounts.find(account => account.id === id) ?? accounts.find(account => account.session === 'ok')
 }
 
 /** One action: what it is about, and the call that does it. */
@@ -260,6 +301,10 @@ export class BiliAccount extends Service {
   private feedIndex = 0
   /** The last status answer of bili-svc, reused for {@link STATUS_TTL_MS}. */
   private statusCache: { at: number; value: Promise<ServiceStatus> } | undefined
+  /** The Settings route's reads and actions through bili-svc's management API (the manage token). */
+  private readonly settings: ManageSettings
+  /** The comment speaker's account id, reused for {@link ROUTES_TTL_MS}. */
+  private routesCache: { at: number; id: Promise<string | null> } | undefined
   /** The account's channel of `ctx.ownerRelay`: answers to the owner's messages, through bili-svc's Reply Gate. */
   private readonly dm: DmChannel
   /** The owner's conversation keeps the fast message check until then. */
@@ -282,6 +327,21 @@ export class BiliAccount extends Service {
       token: () => this.token(),
       debug: (message) => { ctx.logger.debug(message) },
       info: (message) => { ctx.logger.info(message) },
+    })
+    // Checked by `assertConfig` against the store's reference grammar, so it is a valid reference without the runtime `credentialRef()`.
+    const manageRef = config.manageTokenEnv as CredentialRef
+    this.settings = new ManageSettings({
+      manage: new ManageClient({
+        baseUrl: (process.env['BILI_SVC_URL'] ?? DEFAULT_SERVICE_URL).replace(/\/+$/, ''),
+        token: async () => {
+          const resolved = await ctx.credentials.resolve(manageRef)
+          return resolved?.value === undefined || resolved.value === '' ? undefined : resolved.value
+        },
+        debug: (message) => { ctx.logger.debug(message) },
+      }),
+      info: (message) => { ctx.logger.info(message) },
+      warn: (message) => { ctx.logger.warn(message) },
+      now: () => Date.now(),
     })
     this.ready = ctx.storageDomain.open(biliDomain)
     this.dm = new DmChannel({
@@ -405,26 +465,40 @@ export class BiliAccount extends Service {
     return value
   }
 
+  /** The account that speaks for comments through the Reply Gate, read with the agent's own token; null when it cannot be read. */
+  private commentSpeaker(): Promise<string | null> {
+    const now = Date.now()
+    if (this.routesCache !== undefined && now - this.routesCache.at < ROUTES_TTL_MS) return this.routesCache.id
+    const id = this.client.replyRoutes(this.abort.signal).then(routes => routes.comment || null, (error: unknown): null => {
+      this.ctx.logger.debug(`bili: the reply routes were not read: ${errorText(error)}`)
+      return null
+    })
+    this.routesCache = { at: now, id }
+    return id
+  }
+
   /** The agent's account as bili-svc lists it, or why it cannot be read. */
-  private async accountView(): Promise<{ view: AccountView; gate: ServiceStatus['gate'] }> {
+  private async accountView(): Promise<{ view: AccountView; gate: ServiceStatus['gate']; status: ServiceStatus | undefined }> {
     const checkedAt = Date.now()
-    const id = this.config.account
     let status: ServiceStatus
     try {
       status = await this.status()
     } catch (error: unknown) {
-      return { view: { account: id, session: 'unreachable', error: errorText(error), checkedAt }, gate: undefined }
+      return { view: { account: this.config.account, session: 'unreachable', error: errorText(error), checkedAt }, gate: undefined, status: undefined }
     }
-    const account = pickAccount(status, id)
-    if (account === undefined) return { view: { account: id, session: 'unreachable', error: `bili-svc lists no account ${id}`, checkedAt }, gate: status.gate }
+    return { view: this.accountOf(status, checkedAt), gate: status.gate, status }
+  }
+
+  /** The agent's account in a status answer: the configured id, else the first with a working session. */
+  private accountOf(status: { readonly accounts: readonly ServiceAccount[] }, checkedAt: number): AccountView {
+    const id = this.config.account
+    const account = pickAccount(status.accounts, id)
+    if (account === undefined) return { account: id, session: 'unreachable', error: `bili-svc lists no account ${id}`, checkedAt }
     const session: SessionState = (SESSION_STATES as readonly string[]).includes(account.session) ? account.session as SessionState : 'missing'
     return {
-      view: {
-        account: account.id, session, checkedAt,
-        ...(account.mid > 0 ? { mid: account.mid } : {}),
-        ...(account.display === '' ? {} : { uname: account.display }),
-      },
-      gate: status.gate,
+      account: account.id, session, checkedAt,
+      ...(account.mid > 0 ? { mid: account.mid } : {}),
+      ...(account.display === '' ? {} : { uname: account.display }),
     }
   }
 
@@ -1196,17 +1270,48 @@ export class BiliAccount extends Service {
   // ── Settings route ─────────────────────────────────────────────────────
 
   /**
-   * What the Settings section shows: the account as bili-svc lists it, read-only, and the owner's
-   * main account. bili-svc's status names accounts and session states only, so no cookie or token
-   * can reach it.
+   * What the Settings section shows: every account bili-svc lists, its gate, brake, and ledger, QR
+   * sign-ins in progress, and the owner's main account. With the manage token the status comes from
+   * the management read; without it, from the agent's own token, read-only. bili-svc's answers carry
+   * no cookie or token, and the QR keys stay on the Host.
+   * @param result - what the action that led to this view did; null for a plain read.
+   * @param ledgerRows - ledger rows to read.
    * @returns the view.
    */
-  async view(): Promise<BiliView> {
+  async view(result: ActionResult | null = null, ledgerRows: number = LEDGER_ROWS): Promise<BiliView> {
     const domain = await this.ready
-    const { view, gate } = await this.accountView()
+    const manage = await this.settings.hasToken()
+    let snapshot: ManageSnapshot | undefined
+    let manageError: string | null = null
+    if (manage) {
+      try {
+        snapshot = await this.settings.read(ledgerRows, this.abort.signal)
+      } catch (error: unknown) {
+        manageError = errorText(error)
+        this.ctx.logger.warn(`bili: the manage read failed: ${manageError}`)
+      }
+    }
+    const agent = snapshot === undefined ? await this.accountView() : undefined
+    const checkedAt = Date.now()
+    const rows = snapshot?.status.accounts ?? agent?.status?.accounts.map(account => ({
+      ...account, session: (SESSION_STATES as readonly string[]).includes(account.session) ? account.session as SessionState : 'missing' as const,
+      refreshMode: null, login: false, refreshedAt: null, importedAt: null, deadReason: null,
+    })) ?? []
+    const accounts: ManagedAccount[] = rows.map(row => ({ ...row, agent: row.id === this.config.account }))
+    const speakerId = manage && manageError === null ? await this.commentSpeaker() : null
+    const speakerRow = speakerId === null ? undefined : accounts.find(row => row.id === speakerId)
+    const gate = snapshot === undefined ? minimalGate(agent?.gate) : fullGate(snapshot.status.gate)
     return {
-      account: view,
-      gate: gate === undefined ? null : { mode: clean(gate.mode, 40), readonly: gate.readonly },
+      account: agent?.view ?? this.accountOf(snapshot?.status ?? { accounts: [] }, checkedAt),
+      gate,
+      accounts,
+      speaker: speakerId === null ? null : { id: speakerId, display: speakerRow?.display === undefined || speakerRow.display === '' ? speakerId : speakerRow.display },
+      ledger: snapshot?.ledger ?? null,
+      logins: this.settings.logins(),
+      manage: manage && manageError === null,
+      manageEnv: this.config.manageTokenEnv,
+      manageError,
+      result,
       ownerMid: this.ownerMid() ?? 0,
       ownerUpdatedAt: domain.table('owner').get('main')?.updatedAt ?? null,
       timeZone: this.config.timeZone,
@@ -1216,26 +1321,40 @@ export class BiliAccount extends Service {
   /** `GET` answers the view; `POST` takes one owner action and answers the new view. */
   private async route(request: Request): Promise<Response> {
     const headers = { 'cache-control': 'no-store' }
-    if (request.method === 'POST') {
-      if (!(request.headers.get('content-type') ?? '').startsWith('application/json')) return Response.json({ error: 'expected application/json' }, { status: 415, headers })
-      let body: unknown
-      try {
-        body = await request.json()
-      } catch {
-        return Response.json({ error: 'body is not JSON' }, { status: 400, headers })
-      }
-      const action = (body as { action?: unknown } | null)?.action
-      if (action === 'owner') {
-        const mid = (body as { mid?: unknown }).mid
-        if (typeof mid !== 'number' || !Number.isSafeInteger(mid) || mid <= 0) return Response.json({ error: 'mid must be a positive integer UID' }, { status: 400, headers })
-        const { view } = await this.accountView()
-        if (mid === view.mid) return Response.json({ error: 'mid is this account itself, not the owner\'s main account' }, { status: 400, headers })
-        await this.setOwner(mid)
-      } else {
-        return Response.json({ error: 'unknown action' }, { status: 400, headers })
-      }
+    if (request.method !== 'POST') {
+      const asked = Number(new URL(request.url).searchParams.get('ledger'))
+      const rows = Number.isInteger(asked) && asked > 0 ? Math.min(asked, LEDGER_MAX_ROWS) : LEDGER_ROWS
+      return Response.json(await this.view(null, rows), { headers })
     }
-    return Response.json(await this.view(), { headers })
+    if (!(request.headers.get('content-type') ?? '').startsWith('application/json')) return Response.json({ error: 'expected application/json' }, { status: 415, headers })
+    let body: unknown
+    try {
+      body = await request.json()
+    } catch {
+      return Response.json({ error: 'body is not JSON' }, { status: 400, headers })
+    }
+    const parsed = parseAction(body)
+    if (!parsed.ok) return Response.json({ error: parsed.error }, { status: 400, headers })
+    const { action } = parsed
+    if (action.action === 'owner') {
+      const { view } = await this.accountView()
+      if (action.mid === view.mid) return Response.json({ error: 'mid is this account itself, not the owner\'s main account' }, { status: 400, headers })
+      await this.setOwner(action.mid)
+      return Response.json(await this.view(), { headers })
+    }
+    if (!await this.settings.hasToken()) {
+      return Response.json({ error: `the manage token is not set (credential ${this.config.manageTokenEnv})`, code: 'no_token' }, { status: 403, headers })
+    }
+    try {
+      const result = await this.settings.run(action, request.signal)
+      // The agent's own status answer may predate the change.
+      this.statusCache = undefined
+      return Response.json(await this.view(result, action.action === 'ledger' ? action.limit : LEDGER_ROWS), { headers })
+    } catch (error: unknown) {
+      this.statusCache = undefined
+      if (!(error instanceof ManageError)) throw error
+      return Response.json({ error: manageMessage(error), code: error.code }, { status: manageStatus(error), headers })
+    }
   }
 
   /**

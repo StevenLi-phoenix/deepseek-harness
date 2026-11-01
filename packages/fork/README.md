@@ -24,7 +24,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 
 | Package | Role |
 |---|---|
-| [`bili/`](bili/README.md) | The agent's own Bilibili account as a client of bili-svc: reads and non-speech actions through bili-svc's door, the owner's messages answered through its Reply Gate, and a read-only Settings card |
+| [`bili/`](bili/README.md) | The agent's own Bilibili account as a client of bili-svc: reads and non-speech actions through bili-svc's door, the owner's messages answered through its Reply Gate, and a Settings section that manages bili-svc (accounts, QR sign-in, gate, brake, ledger) |
 | [`fork-balance/`](fork-balance/README.md) | Account settings card with the balance or quota of every provider key |
 | [`fork-event-bus/`](fork-event-bus/README.md) | Dedupe, loop suppression, subscriptions, coalescing, rate limits, notify and Session dispatch |
 | [`fork-event-ingest/`](fork-event-ingest/README.md) | `POST /hooks/events` route: the owner's own services push events under one bearer token per source |

@@ -93,13 +93,10 @@
   line-height: 18px;
 }
 
-/* Account hero: avatar, name row with the session state, then the hint. */
-.hero {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
+/* Account card: avatar, name row with the session state, facts, then the controls. */
+.accountCard {
   justify-content: space-between;
-  gap: 16px;
+  gap: 14px;
   padding: 16px;
 }
 
@@ -124,7 +121,7 @@
   font-weight: 600;
 }
 
-.hero:not([data-account='ok']) .avatar {
+.accountCard:not([data-account='ok']) .avatar {
   background: var(--dsw-alias-border-l2);
   color: var(--dsw-alias-label-tertiary);
 }
@@ -166,6 +163,10 @@
 
 .pill[data-state='dead'],
 .pill[data-state='missing'],
+.pill[data-state='held'],
+.pill[data-state='blocked'],
+.pill[data-state='failed'],
+.pill[data-state='uncertain'],
 .pill[data-state='none'],
 .pill[data-state='unreachable'] {
   background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 18%, transparent);
@@ -183,7 +184,11 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
+}
+
+.accountCard .actions {
+  justify-content: flex-start;
 }
 
 .primary {
@@ -199,9 +204,52 @@
   transition: opacity 160ms ease, background 160ms ease;
 }
 
-.primary:disabled {
+.primary:disabled,
+.secondary:disabled,
+.danger:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+.primary[aria-busy='true'],
+.secondary[aria-busy='true'],
+.danger[aria-busy='true'] {
+  opacity: 0.75;
+  cursor: progress;
+}
+
+.secondary,
+.danger {
+  height: 30px;
+  padding: 0 12px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-md);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  cursor: pointer;
+  transition: opacity 160ms ease, background 160ms ease;
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--dsw-alias-border-l2);
+}
+
+.danger {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 55%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent);
+  color: var(--dsw-alias-state-error-primary);
+  font-weight: 510;
+}
+
+.tag {
+  padding: 0 8px;
+  border-radius: 999px;
+  corner-shape: round;
+  font-size: 11px;
+  line-height: 18px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  color: var(--dsw-alias-label-secondary);
 }
 
 /* Gate banner: bili-svc holds every action. */
@@ -233,6 +281,14 @@
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
   line-height: 18px;
+}
+
+.done {
+  padding: 8px 12px;
+  border-radius: var(--dsw-radius-md);
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent);
+  color: var(--dsw-alias-state-success-primary);
+  font-size: 12px;
 }
 
 .error {
@@ -268,7 +324,138 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* The brake: a warning block inside the gate card. */
+.brake {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 0.5px solid color-mix(in srgb, var(--dsw-alias-state-warn-primary) 45%, transparent);
+  border-radius: var(--dsw-radius-md);
+  background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 10%, transparent);
+}
+
+/* QR sign-in panel under an account card. */
+.login {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 0.5px dashed var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-md);
+}
+
+.loginBody {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.loginText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.qr {
+  flex: none;
+  width: 168px;
+  height: 168px;
+  border-radius: var(--dsw-radius-md);
+}
+
+.login[data-login='done'] [role='status'] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.login[data-login='expired'] [role='status'],
+.login[data-login='failed'] [role='status'] {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+/* Ledger: collapsed by default, one line per row, details on demand. */
+.ledger > summary,
+.row > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.ledger > summary::-webkit-details-marker,
+.row > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ledgerSummary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.chip {
+  padding: 0 8px;
+  border-radius: 999px;
+  corner-shape: round;
+  background: var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.row {
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  margin-top: 6px;
+  padding-top: 6px;
+}
+
+.rowSummary {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.target {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.rowDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0 2px;
+}
+
+.rowDetail {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.rowDetail dd,
+.rowDetail dt {
+  margin: 0;
+}
+
+.plain {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dot[data-tone='live'] { animation: none; }
-  .primary { transition: none; }
+  .primary, .secondary, .danger { transition: none; }
 }

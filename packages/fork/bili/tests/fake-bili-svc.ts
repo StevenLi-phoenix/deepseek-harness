@@ -45,6 +45,8 @@ export interface FakeVideo {
 
 /** The token every test uses. */
 export const SVC_TOKEN = 'svc-token-bili'
+/** The token of scope `manage`, which only the Settings route holds. */
+export const MANAGE_TOKEN = 'svc-token-manage'
 /** The base URL the plugin calls by default. */
 export const SVC_URL = 'http://127.0.0.1:8097'
 /** The door's speech endpoints, refused like bili-svc refuses them. */
@@ -52,17 +54,43 @@ const SPEECH = new Set(['replyAdd', 'dmSend', 'dynamicCreate', 'shareReport'])
 /** The door's actions. */
 const ACTIONS = new Set(['relationModify', 'favDeal', 'like', 'watchLaterAdd', 'watchLaterDel', 'coin', 'triple', 'watchReport'])
 
+/** One account as `GET /v1/status` lists it; the renewal fields are what a manage token sees. */
+interface FakeAccount {
+  id: string
+  mid: number
+  display: string
+  session: string
+  capabilities?: Record<string, unknown>
+  refresh_mode?: string
+  login?: boolean
+  refreshed_at?: number | null
+  imported_at?: number | null
+  dead_reason?: string | null
+}
+
 /** Serves `fetch` for bili-svc. */
 export class FakeBiliSvc {
   readonly requests: SvcRequest[] = []
   readonly calls: DoorCall[] = []
   /** Accounts `GET /v1/status` lists. */
-  accounts: { id: string; mid: number; display: string; session: string; capabilities?: Record<string, unknown> }[] = [
+  accounts: FakeAccount[] = [
     { id: 'maodeng', mid: 1_000_001, display: '猫灯魔女岚栖', session: 'ok' },
     { id: 'maomao', mid: 3_000_001, display: '魔女的猫猫', session: 'ok' },
   ]
   /** The gate `GET /v1/status` reports. */
   gate = { mode: 'auto', readonly: false, used_today: { comment: 0, dm: 0 }, daily_caps: { comment: 5, dm: 20 } }
+  /** The account `routes.reply_comment` and `routes.reply_dm` name. */
+  speaker = 'maomao'
+  /** The risk brake, as a manage token sees it. */
+  brake: { reason: string; detail: string; ts: number } | null = null
+  /** Ledger rows `GET /v1/manage/ledger` serves. */
+  ledger: Record<string, unknown>[] = []
+  /** QR states `GET .../login/qr` answers in order; `done` once empty. */
+  qrStates: ({ state: string; message?: string } | undefined)[] = []
+  /** Whether the last refresh renewed the session. */
+  refreshed = true
+  /** Management requests, as [method, path] (a QR key is replaced by `KEY`). */
+  readonly manageCalls: [string, string][] = []
   /** Replies the Reply Gate received. */
   readonly replies: { account: unknown; talker: unknown; message: unknown }[] = []
   /** What the Reply Gate answers, in order; `sent` once empty. */
@@ -131,7 +159,13 @@ export class FakeBiliSvc {
     this.requests.push(request)
     init?.signal?.throwIfAborted()
     if (url.origin !== SVC_URL) throw new TypeError(`fetch failed: ${url.origin} is not bili-svc`)
-    if (request.authorization !== `Bearer ${SVC_TOKEN}`) return json(401, { error: 'unauthorized' })
+    const managing = url.pathname.startsWith('/v1/manage/')
+    if (managing) {
+      if (request.authorization !== `Bearer ${MANAGE_TOKEN}`) return json(request.authorization === undefined ? 401 : 403, { error: 'forbidden', message: 'scope manage required' })
+      this.manageCalls.push([request.method, url.pathname + url.search.replace(/key=[^&]+/, 'key=KEY')])
+    } else if (request.authorization !== `Bearer ${SVC_TOKEN}` && !(url.pathname === '/v1/status' && request.authorization === `Bearer ${MANAGE_TOKEN}`)) {
+      return json(401, { error: 'unauthorized' })
+    }
     const door = url.pathname === '/v1/bili/call'
     if (door) this.calls.push(doorCall(body ?? {}))
     const key = door ? String(body?.['endpoint']) : url.pathname
@@ -139,7 +173,13 @@ export class FakeBiliSvc {
     if (canned !== undefined) return answerOf(canned, init?.signal)
     switch (`${request.method} ${url.pathname}`) {
       case 'GET /v1/status':
-        return json(200, { version: '0.3.0', accounts: this.accounts.map(account => ({ capabilities: {}, ...account })), gate: this.gate })
+        return json(200, {
+          version: '0.3.0',
+          accounts: this.accounts.map(account => ({ capabilities: {}, ...account })),
+          gate: request.authorization === `Bearer ${MANAGE_TOKEN}` ? { ...this.gate, brake: this.brake } : this.gate,
+        })
+      case 'GET /v1/accounts':
+        return json(200, { accounts: this.accounts, routes: { reply_comment: this.speaker, reply_dm: this.speaker, agent_account: 'maomao' } })
       case 'POST /v1/reply/dm': {
         this.replies.push({ account: body?.['account'], talker: body?.['talker'], message: body?.['message'] })
         const status = this.replyStatus.shift() ?? 'sent'
@@ -147,6 +187,56 @@ export class FakeBiliSvc {
       }
       case 'POST /v1/bili/call':
         return json(200, this.door(this.calls.at(-1)!))
+      default:
+        return managing ? this.manage(request.method, url, body) : json(404, { error: 'not_found' })
+    }
+  }
+
+  /** The management API: gate, brake, ledger, and the accounts' sessions. */
+  private manage(method: string, url: URL, body: Record<string, unknown> | undefined): Response {
+    const path = url.pathname
+    const account = /^\/v1\/manage\/accounts\/([^/]+)\/(.+)$/.exec(path)
+    const row = account === null ? undefined : this.accounts.find(entry => entry.id === decodeURIComponent(account[1]!))
+    if (account !== null && row === undefined) return json(404, { error: 'unknown_account' })
+    switch (`${method} ${account === null ? path : `/${account[2]!}`}`) {
+      case 'POST /v1/manage/gate/mode': {
+        if (body?.['mode'] === 'auto' && this.brake !== null) return json(409, { error: 'mode_refused', message: `the brake is set (${this.brake.reason}); release it first` })
+        this.gate = { ...this.gate, mode: String(body?.['mode']), readonly: body?.['mode'] !== 'auto' }
+        return json(200, { mode: this.gate.mode, brake: this.brake })
+      }
+      case 'POST /v1/manage/brake/release': {
+        const released = this.brake !== null
+        this.brake = null
+        return json(200, { released, mode: this.gate.mode, brake: null })
+      }
+      case 'GET /v1/manage/ledger': {
+        const limit = Number(url.searchParams.get('limit') ?? 50)
+        const summary = { day: '2026-10-31', comment: { states: {}, reasons: {} }, dm: { states: { sent: this.ledger.length }, reasons: { cap: 1 } } }
+        return json(200, { ledger: this.ledger.slice(0, limit), summary })
+      }
+      case 'POST /login/qr':
+        if (row?.refresh_mode === 'external') {
+          return json(409, { error: 'not_owner', message: 'another service owns this session' })
+        }
+        return json(200, {
+          key: 'qr-key-secret', url: 'https://passport.bilibili.com/h5-app/passport/login/scan?qrcode_key=qr-key-secret',
+          expires_at: Math.floor(Date.now() / 1000) + 180,
+        })
+      case 'GET /login/qr': {
+        if (url.searchParams.get('key') !== 'qr-key-secret') return json(404, { error: 'unknown_key' })
+        const next = this.qrStates.shift() ?? { state: 'done' }
+        if (next.state === 'done' && row !== undefined) row.session = 'ok'
+        return json(200, { ...next, ...next.state === 'done' ? { mid: row?.mid } : {} })
+      }
+      case 'POST /session/refresh':
+        return this.refreshed ? json(200, { refreshed: true, ticket: 'ticket-secret' }) : json(502, { error: 'refresh_failed', message: 'Bilibili refused the refresh token' })
+      case 'POST /session/check':
+        if (row?.session === 'missing') return json(422, { error: 'no_session' })
+        return json(200, { isLogin: row?.session === 'ok', mid: row?.mid, expires_in_days: row?.session === 'ok' ? 23 : null })
+      case 'POST /logout':
+        if (body?.['confirm'] !== row?.id) return json(422, { error: 'confirm_mismatch' })
+        row!.session = 'missing'
+        return json(200, { ok: true })
       default:
         return json(404, { error: 'not_found' })
     }

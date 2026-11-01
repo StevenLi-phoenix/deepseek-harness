@@ -185,12 +185,15 @@ async journalRead(page: number = 1): Promise<{ entries: { seq: number; day: stri
 async tellMainAgent(text: string): Promise<WriteOutcome>
 
 /**
- * What the Settings section shows: the account as bili-svc lists it, read-only, and the owner's
- * main account. bili-svc's status names accounts and session states only, so no cookie or token
- * can reach it.
+ * What the Settings section shows: every account bili-svc lists, its gate, brake, and ledger, QR
+ * sign-ins in progress, and the owner's main account. With the manage token the status comes from
+ * the management read; without it, from the agent's own token, read-only. bili-svc's answers carry
+ * no cookie or token, and the QR keys stay on the Host.
+ * @param result - what the action that led to this view did; null for a plain read.
+ * @param ledgerRows - ledger rows to read.
  * @returns the view.
  */
-async view(): Promise<BiliView>
+async view(result: ActionResult | null = null, ledgerRows: number = LEDGER_ROWS): Promise<BiliView>
 ```
 
 Source: [`packages/fork/bili/src/index.ts`](../../packages/fork/bili/src/index.ts)

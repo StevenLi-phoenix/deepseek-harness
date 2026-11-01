@@ -390,19 +390,22 @@ describe('SettingsPanel navigation', () => {
         { id: 'agent-presets', order: 20, label: 'Agent presets' },
         { id: 'plugins', order: 30, label: 'Plugins' },
         { id: 'archived-sessions', order: 40, label: 'Archived sessions' },
-        { id: 'contributed', order: 50, label: 'Contributed' },
+        { id: 'fork-sysmon', order: 41, label: 'System status' },
+        { id: 'bili', order: 45, label: 'Bilibili account' },
+        { id: 'fork-qq', order: 50, label: 'QQ' },
+        { id: 'contributed', order: 60, label: 'Contributed' },
       ],
     })
     openPanel()
     // Each product glyph names its sprite symbol id in data-icon.
-    const glyphs = ['General', 'Models', 'Agent presets', 'Plugins', 'Archived sessions', 'Contributed']
+    const glyphs = ['General', 'Models', 'Agent presets', 'Plugins', 'Archived sessions', 'System status', 'Bilibili account', 'QQ', 'Contributed']
       .map(name => screen.getByRole('button', { name }).querySelector('svg')?.getAttribute('data-icon'))
 
     expect(glyphs.every(glyph => glyph !== undefined && glyph !== '')).toBe(true)
-    // The four ids the shell names get their own glyph; every other section —
-    // including one this package never heard of — shares the gear.
-    expect(new Set(glyphs.slice(0, 5)).size).toBe(5)
-    expect(glyphs[5]).toBe(glyphs[0])
+    // The ids the shell names (the fork's System status, Bilibili account, and QQ among them) get their own
+    // glyph; every other section — including one this package never heard of — shares the gear.
+    expect(new Set(glyphs.slice(0, 8)).size).toBe(8)
+    expect(glyphs[8]).toBe(glyphs[0])
   })
 
   it('switches the rendered section on nav click', () => {

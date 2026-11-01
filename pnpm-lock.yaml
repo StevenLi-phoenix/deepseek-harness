@@ -13581,6 +13581,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      uqr:
+        specifier: 0.1.3
+        version: 0.1.3
       zod:
         specifier: 4.4.3
         version: 4.4.3

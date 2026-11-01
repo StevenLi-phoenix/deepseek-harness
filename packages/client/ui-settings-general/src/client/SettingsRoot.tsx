@@ -19,7 +19,8 @@ import clsx from 'clsx'
 import {
   ConnectionIndicator, Tooltip, useModalLayer,
   IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconCloseOutlineRegular, IconDataOutlineMedium,
-  IconPersonalizationOutlineMedium, IconSettingsOutlineMedium, IconUserOutlineMedium,
+  IconGaugeOutlineMedium, IconPersonalizationOutlineMedium, IconPlayOutlineMedium, IconSettingsOutlineMedium,
+  IconUserOutlineMedium, IconUsersOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConnectionIndicatorState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SettingsRootComponentProps, SettingsSectionRow } from './shell-contract.ts'
@@ -38,6 +39,10 @@ function navIcon(id: string) {
   if (id === 'agent-presets') return <IconAgentPresetOutlineMedium className={css.navIcon} size={16} />
   if (id === 'plugins') return <IconPersonalizationOutlineMedium className={css.navIcon} size={16} />
   if (id === 'archived-sessions') return <IconArchiveOutlineMedium className={css.navIcon} size={16} />
+  // Fork-added sections (packages/fork): System status, the Bilibili account, and QQ.
+  if (id === 'fork-sysmon') return <IconGaugeOutlineMedium className={css.navIcon} size={16} />
+  if (id === 'bili') return <IconPlayOutlineMedium className={css.navIcon} size={16} />
+  if (id === 'fork-qq') return <IconUsersOutlineMedium className={css.navIcon} size={16} />
   return <IconSettingsOutlineMedium className={css.navIcon} size={16} />
 }
 
