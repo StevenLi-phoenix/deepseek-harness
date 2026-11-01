@@ -261,7 +261,9 @@ describe('QQ owner notice across reloads', () => {
     h.observer.now = () => Date.now() + 3_600_000
     await check(h)
     expect(notifier.send).toHaveBeenCalledTimes(1)
-    expect(JSON.parse(readFileSync(noticeFile(), 'utf8'))).toEqual({ lastNoticeAt: expect.any(Number) })
+    const saved = JSON.parse(readFileSync(noticeFile(), 'utf8')) as { lastNoticeAt: number }
+    expect(Object.keys(saved)).toEqual(['lastNoticeAt'])
+    expect(Number.isFinite(saved.lastNoticeAt)).toBe(true)
   })
 
   it('stays quiet when an earlier process already told the owner within the repeat window', async () => {
