@@ -44,6 +44,49 @@ export const QQ_FORM: FieldNode[] = [
   },
   {
     'kind': 'group',
+    'key': 'recorder',
+    'path': [
+      'recorder',
+    ],
+    'children': [
+      {
+        'key': 'socket',
+        'path': [
+          'recorder',
+          'socket',
+        ],
+        'kind': 'string',
+        'required': false,
+        'layer': 'default',
+      },
+      {
+        'key': 'tokenEnv',
+        'path': [
+          'recorder',
+          'tokenEnv',
+        ],
+        'kind': 'credential-ref',
+        'required': false,
+        'layer': 'default',
+        'default': 'LSY_QQ_RECORDER_TOKEN',
+      },
+      {
+        'key': 'timeoutMs',
+        'path': [
+          'recorder',
+          'timeoutMs',
+        ],
+        'kind': 'number',
+        'required': false,
+        'layer': 'default',
+        'default': 10000,
+        'min': 500,
+        'step': 1,
+      },
+    ],
+  },
+  {
+    'kind': 'group',
     'key': 'media',
     'path': [
       'media',
@@ -493,6 +536,20 @@ export const QQ_FORM: FieldNode[] = [
         'layer': 'default',
         'default': 3000,
         'min': 500,
+        'step': 1,
+      },
+      {
+        'key': 'maxImages',
+        'path': [
+          'digest',
+          'maxImages',
+        ],
+        'kind': 'number',
+        'required': false,
+        'volatile': true,
+        'layer': 'default',
+        'default': 8,
+        'min': 0,
         'step': 1,
       },
       {
