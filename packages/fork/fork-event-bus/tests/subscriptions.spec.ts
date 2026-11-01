@@ -249,3 +249,79 @@ describe('subscriptionProblem', () => {
     expect(subscriptionProblem({ ...triage, session: { ...session, model: { provider: 'p', model: 'm' } } })).toBeUndefined()
   })
 })
+
+describe('ForkEventBus pause and resume', () => {
+  it('stops routing new events to a paused run-time subscription and resumes it', async () => {
+    const { bus, notes } = await harness()
+    await bus.subscribe(tags)
+    expect(await bus.setPaused('octo-tags', true)).toBe('ok')
+    expect(bus.listSubscriptions()[1]).toMatchObject({ id: 'octo-tags', paused: true })
+    expect(await bus.publish(tag('v1'))).toBe('unmatched')
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(notes).toHaveLength(0)
+
+    expect(await bus.setPaused('octo-tags', false)).toBe('ok')
+    expect(bus.listSubscriptions()[1]).not.toHaveProperty('paused')
+    expect(await bus.publish(tag('v2'))).toBe('accepted')
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(notes.map(note => note.title)).toEqual(['octo-tags: 1 event(s)'])
+  })
+
+  it('holds events already pending when paused until the subscription resumes', async () => {
+    const { bus, notes } = await harness()
+    await bus.subscribe(tags)
+    await bus.publish(tag('v1'))
+    await bus.setPaused('octo-tags', true)
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(notes).toHaveLength(0)
+    expect(bus.pendingCount()).toBe(1)
+    await bus.setPaused('octo-tags', false)
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(notes.map(note => note.title)).toEqual(['octo-tags: 1 event(s)'])
+  })
+
+  it('keeps the paused flag across a restart', async () => {
+    const first = await harness()
+    await first.bus.subscribe(tags)
+    await first.bus.setPaused('octo-tags', true)
+    await disposeAll()
+    const second = await harness({ pool: first.pool })
+    expect(second.bus.listSubscriptions()[1]).toMatchObject({ id: 'octo-tags', paused: true })
+  })
+
+  it('refuses config-owned and unknown ids', async () => {
+    const { bus } = await harness()
+    expect(await bus.setPaused('releases', true)).toBe('config_owned')
+    expect(await bus.setPaused('missing', true)).toBe('not_found')
+  })
+})
+
+describe('ForkEventBus stats', () => {
+  it('counts subscriptions, pending events, and the last hour of events and batches', async () => {
+    const { bus } = await harness()
+    await bus.subscribe(tags)
+    await bus.subscribe({ ...triage, id: 'octo-triage' })
+    await bus.setPaused('octo-triage', true)
+    await bus.publish(release(1))
+    await bus.publish(tag('v1'))
+    expect(bus.stats()).toEqual({
+      subscriptions: 3, paused: 1, pending: 2, eventsLastHour: 2, batchesLastHour: 0, rateLimitHitsLastHour: 0,
+    })
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(bus.stats()).toMatchObject({ pending: 0, eventsLastHour: 2, batchesLastHour: 2 })
+    await vi.advanceTimersByTimeAsync(HOUR)
+    expect(bus.stats()).toMatchObject({ eventsLastHour: 0, batchesLastHour: 0 })
+  })
+
+  it('counts a flush held back by the hourly limit', async () => {
+    const { bus } = await harness()
+    await bus.subscribe({ ...tags, maxPerHour: 1, coalesceMs: 1_000 })
+    await bus.publish(tag('v1'))
+    await vi.advanceTimersByTimeAsync(1_000)
+    await bus.publish(tag('v2'))
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(bus.stats()).toMatchObject({ batchesLastHour: 1, rateLimitHitsLastHour: 1, pending: 1 })
+    await vi.advanceTimersByTimeAsync(HOUR)
+    expect(bus.stats()).toMatchObject({ rateLimitHitsLastHour: 0 })
+  })
+})

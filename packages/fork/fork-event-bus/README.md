@@ -87,6 +87,8 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 
 - `subscribe(subscription, { createdBy? })` — validates the rule exactly like a configuration row, stores it with `createdAt` and the creating Session, and returns its view. It rejects with `ForkSubscriptionError` code `invalid_subscription`, or `duplicate_id` when the configuration or another stored subscription uses the id.
 - `unsubscribe(id)` — returns `removed`, `not_found`, or `config_owned`; removal also drops that subscription's pending events and flush timer.
+- `setPaused(id, paused)` — pauses or resumes a run-time subscription (`ok`, `not_found`, or `config_owned`). A paused one matches no new events (they are `unmatched` for it) and holds its pending events until it resumes; the view carries `paused: true` and the flag is stored. Settings → Subscriptions and monitors (`fork-console`) uses it.
+- `stats()` — subscription, paused, and pending counts, plus events and batches in the last hour and flushes held back by an hourly limit since the bus started.
 - `listSubscriptions()` — configuration rows first, then stored ones by creation time, each with `origin` (`config` or `agent`) and `status`: pending events, the armed flush time, batches in the last hour, and the last batch's time, status, Session outcome, and silent flag.
 
 Matching, flushing, restart recovery, and the webhook Session rule all use the merged set.

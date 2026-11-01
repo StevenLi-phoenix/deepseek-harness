@@ -186,11 +186,32 @@ export interface SubscriptionView extends Subscription {
   createdAt?: number
   /** Session whose agent created a run-time subscription. */
   createdBy?: string
+  /** Present while a run-time subscription is paused: new events no longer match it and its pending events wait. */
+  paused?: true
   status: SubscriptionStatus
 }
 
 /** Result of `ForkEventBus.unsubscribe()`. */
 export type UnsubscribeOutcome = 'removed' | 'not_found' | 'config_owned'
+
+/** Result of `ForkEventBus.setPaused()`. */
+export type PauseOutcome = 'ok' | 'not_found' | 'config_owned'
+
+/** Bus-wide counters from `ForkEventBus.stats()`. */
+export interface BusStats {
+  /** Configuration and run-time subscriptions. */
+  subscriptions: number
+  /** Paused run-time subscriptions. */
+  paused: number
+  /** Event/subscription pairs waiting for a batch. */
+  pending: number
+  /** Events the bus stored in the last rolling hour, whatever their outcome. */
+  eventsLastHour: number
+  /** Batches created in the last rolling hour. */
+  batchesLastHour: number
+  /** Flushes held back by a subscription's hourly limit in the last rolling hour (counted since the bus started). */
+  rateLimitHitsLastHour: number
+}
 
 /** Loop suppression: events the agent itself caused must not trigger it again. */
 export interface SuppressConfig {

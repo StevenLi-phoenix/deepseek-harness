@@ -87,6 +87,8 @@ kind: "package-reference"
 
 - `subscribe(subscription, { createdBy? })`——按配置行的同一套规则校验，连同 `createdAt` 和创建它的 Session 一起存储，返回它的视图。校验失败时以 `ForkSubscriptionError` 拒绝，code 为 `invalid_subscription`；id 已被配置或另一条已存储的订阅使用时 code 为 `duplicate_id`。
 - `unsubscribe(id)`——返回 `removed`、`not_found` 或 `config_owned`；删除时一并丢弃该订阅的待处理事件和 flush 计时器。
+- `setPaused(id, paused)`——暂停或恢复运行时订阅（返回 `ok`、`not_found` 或 `config_owned`）。暂停后不再匹配新事件（对它来说是 `unmatched`），已在排队的事件保留到恢复；视图带 `paused: true`，该标记会存储。设置 → 订阅与监控（`fork-console`）使用它。
+- `stats()`——订阅、已暂停和排队的数量，加上最近一小时的事件数、批次数，以及自总线启动起被每小时上限拦住的 flush 次数。
 - `listSubscriptions()`——先列配置行，再按创建时间列已存储的订阅，每条带 `origin`（`config` 或 `agent`）和 `status`：待处理事件数、已启动的 flush 时间、最近一小时的批次数，以及最后一批的时间、状态、Session 结局和静默标记。
 
 匹配、flush、重启恢复和 webhook Session rule 都使用合并后的集合。

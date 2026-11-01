@@ -77,6 +77,8 @@ const subscriptionRecordSchema = z.object({
   createdAt: z.number(),
   /** Session whose agent created the subscription. */
   createdBy: z.string().optional(),
+  /** Set by `setPaused()`: new events no longer match and pending ones wait. */
+  paused: z.literal(true).optional(),
 }).strict()
 
 /** One published, non-duplicate event and what the bus decided about it. */
