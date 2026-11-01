@@ -7,10 +7,12 @@
 
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, isAbsolute } from 'node:path'
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service, type Volatile } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { ForkNotifier } from '@deepseek-ai/dsh-fork-event-bus'
+// Type-only: the `loader/volatile-update` event the group list follows.
+import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-permission-presets'
 import type {} from '@deepseek-ai/dsh-session-title'
 import z from '@deepseek-ai/schemastery'
@@ -43,8 +45,11 @@ export interface Config {
   url: string
   /** Credential holding the protocol end's access token. */
   tokenEnv: string
-  /** Group numbers to record. Empty records nothing; messages of every other group are dropped on arrival. */
-  groups: string[]
+  /**
+   * Group numbers to record. Empty records nothing; messages of every other group are dropped on arrival. Volatile: the
+   * Settings page's QQ section adds and removes groups at run time and the observer follows without a restart.
+   */
+  groups: Volatile<string[]>
   /** Directory of the database and downloads; defaults to `<DSH_HOME>/fork-qq`. */
   dataDir?: string
   /** Image downloads: what is fetched, from where, and how much is kept. */
@@ -155,10 +160,10 @@ export interface Config {
 }
 
 /** Configuration schema. */
-export const Config: z<Config> = z.object({
+export const Config = z.object({
   url: z.string().default('ws://127.0.0.1:3001'),
   tokenEnv: z.string().role('credential-ref').default('FORK_QQ_ONEBOT_TOKEN'),
-  groups: z.array(z.string()).default([]),
+  groups: z.array(z.string()).default([]).volatile(),
   dataDir: z.string(),
   media: z.object({
     images: z.boolean().default(true),
@@ -249,7 +254,7 @@ function assertConfig(config: Config): void {
   if (!isPrivateAddress(config.login.url, ['http:', 'https:'])) throw new Error('fork-qq: login.url must be an http(s) address on this machine (127.0.0.1, localhost) or the tailnet (100.64.0.0/10, *.ts.net)')
   if (config.settingsUrl !== undefined && !/^https?:\/\//.test(config.settingsUrl)) throw new Error('fork-qq: settingsUrl must be an http(s) address')
   if (!isAbsolute(config.digest.workspacePath)) throw new Error('fork-qq: digest.workspacePath must be an absolute path')
-  for (const id of [...config.groups, ...config.send.groups]) {
+  for (const id of [...config.groups.get(), ...config.send.groups]) {
     if (!/^[0-9]{3,20}$/.test(id)) throw new Error(`fork-qq: ${JSON.stringify(id)} is not a group number (digits only)`)
   }
   try {
@@ -292,7 +297,7 @@ export class QqObserver extends Service {
   readonly store: QqStore
   private readonly abort = new AbortController()
   private readonly inflight = new Set<Promise<void>>()
-  private readonly recorded: ReadonlySet<string>
+  private recordedCache: { source: readonly string[]; ids: ReadonlySet<string> } | undefined
   private readonly digest: DigestRunner
   private client: OneBotClient | undefined
   private loop: Promise<void> | undefined
@@ -336,7 +341,6 @@ export class QqObserver extends Service {
     mkdirSync(this.dataDir, { recursive: true, mode: 0o700 })
     this.store = new QqStore(join(this.dataDir, 'qq.db'))
     this.loadNotice()
-    this.recorded = new Set(config.groups)
     const d = config.digest
     const digestConfig: DigestConfig = {
       enabled: d.enabled,
@@ -356,9 +360,16 @@ export class QqObserver extends Service {
       maxDigestChars: d.maxDigestChars,
     }
     this.digest = new DigestRunner(ctx, this.store, digestConfig, this.dataDir, id => this.store.groupName(id) ?? id, () => this.now())
-    ctx.logger.info(`fork-qq: recording ${config.groups.length} group(s)${config.groups.length === 0 ? ' (the list is empty: every message is dropped; add group numbers to groups)' : ''}; sending ${config.send.enabled ? `on for ${config.send.groups.length} group(s)` : 'off'}; voice transcription ${config.asr.enabled ? 'on' : 'off'}; digests ${d.enabled ? `every ${d.everyHours} h` : 'off'}; data in ${this.dataDir}`)
+    ctx.logger.info(`fork-qq: recording ${config.groups.get().length} group(s)${config.groups.get().length === 0 ? ' (the list is empty: every message is dropped; add group numbers to groups)' : ''}; sending ${config.send.enabled ? `on for ${config.send.groups.length} group(s)` : 'off'}; voice transcription ${config.asr.enabled ? 'on' : 'off'}; digests ${d.enabled ? `every ${d.everyHours} h` : 'off'}; data in ${this.dataDir}`)
 
     this.door = config.login.enabled ? new LoginDoor({ url: config.login.url, timeoutMs: config.login.timeoutMs }) : undefined
+    let listed = this.recordedIds
+    ctx.on('loader/volatile-update', () => {
+      const before = listed
+      listed = this.recordedIds
+      if (before !== listed) this.onGroupsChanged(before)
+    })
+
     ctx.effect(() => {
       this.loop = this.run()
       const schedule = this.schedule()
@@ -372,6 +383,52 @@ export class QqObserver extends Service {
     }, 'forkQq.lifecycle()')
   }
 
+  // ---- the group list ----
+
+  /** The groups on the list now; the list is volatile, so this follows the Settings page. */
+  private get recordedIds(): ReadonlySet<string> {
+    const source = this.config.groups.get()
+    if (this.recordedCache?.source !== source) this.recordedCache = { source, ids: new Set(source) }
+    return this.recordedCache.ids
+  }
+
+  /** The list changed while running: say what was added and removed, and fetch what an added group missed. */
+  private onGroupsChanged(before: ReadonlySet<string>): void {
+    const now = this.recordedIds
+    const added = [...now].filter(id => !before.has(id))
+    const removed = [...before].filter(id => !now.has(id))
+    for (const id of added) {
+      this.seenUnlisted.delete(id)
+      this.ctx.logger.info(`fork-qq: now recording group ${id}${this.store.groupName(id) === undefined ? '' : ` (${this.store.groupName(id)})`}`)
+    }
+    for (const id of removed) this.ctx.logger.info(`fork-qq: no longer recording group ${id}; what is stored ages out with retention`)
+    const client = this.client
+    if (client === undefined || !this.config.backfill.enabled) return
+    for (const id of added) {
+      this.track(this.backfill(id).catch((error: unknown) => {
+        this.ctx.logger.warn(`fork-qq: backfill of group ${id} failed: ${errorText(error)}`)
+      }))
+    }
+  }
+
+  /**
+   * Every group the account is in, as the Settings page's group list offers them: the recorded ones first, then the
+   * others by how many messages they showed since the observer started.
+   * @returns one entry per group, with the count of dropped messages (a number, nothing of them is kept).
+   */
+  groupChoices(): Array<{ groupId: string; name: string; memberCount: number | null; recorded: boolean; seen: number }> {
+    const seen = new Map(this.unlistedActivity().map(group => [group.groupId, group.messages]))
+    const known = new Map(this.store.groups().map(group => [group.groupId, group]))
+    for (const id of this.recordedIds) if (!known.has(id)) known.set(id, { groupId: id, name: id, memberCount: null, updatedAt: 0 })
+    return [...known.values()].map(group => ({
+      groupId: group.groupId,
+      name: group.name,
+      memberCount: group.memberCount,
+      recorded: this.recordedIds.has(group.groupId),
+      seen: seen.get(group.groupId) ?? 0,
+    })).sort((a, b) => Number(b.recorded) - Number(a.recorded) || b.seen - a.seen || a.name.localeCompare(b.name))
+  }
+
   // ---- reading, for the tools ----
 
   /**
@@ -381,11 +438,11 @@ export class QqObserver extends Service {
   groupOverview(): GroupOverview[] {
     const stats = new Map<string, GroupStats>(this.store.stats().map(stat => [stat.groupId, stat]))
     const known = new Map(this.store.groups().map(group => [group.groupId, group]))
-    for (const id of this.recorded) if (!known.has(id)) known.set(id, { groupId: id, name: id, memberCount: null, updatedAt: 0 })
+    for (const id of this.recordedIds) if (!known.has(id)) known.set(id, { groupId: id, name: id, memberCount: null, updatedAt: 0 })
     return [...known.values()].map((group) => {
       const stat = stats.get(group.groupId)
       return {
-        groupId: group.groupId, name: group.name, memberCount: group.memberCount, recorded: this.recorded.has(group.groupId),
+        groupId: group.groupId, name: group.name, memberCount: group.memberCount, recorded: this.recordedIds.has(group.groupId),
         messages: stat?.messages ?? 0,
         firstAt: stat?.firstAt ?? null,
         lastAt: stat?.lastAt ?? null,
@@ -419,7 +476,7 @@ export class QqObserver extends Service {
    * @returns true for a recorded group.
    */
   isRecorded(groupId: string): boolean {
-    return this.recorded.has(groupId)
+    return this.recordedIds.has(groupId)
   }
 
   /**
@@ -429,7 +486,7 @@ export class QqObserver extends Service {
    * @returns the messages.
    */
   recentMessages(groupId: string, options: { hours: number; limit: number; userId?: string }): MessageRow[] {
-    if (!this.recorded.has(groupId)) return []
+    if (!this.recordedIds.has(groupId)) return []
     const sinceMs = this.now() - options.hours * 3_600_000
     return this.store.recent(groupId, { sinceMs, limit: options.limit, ...options.userId === undefined ? {} : { userId: options.userId } })
   }
@@ -441,8 +498,8 @@ export class QqObserver extends Service {
    * @returns the matching messages.
    */
   searchMessages(query: string, options: { groupId?: string; limit: number }): MessageRow[] {
-    if (options.groupId !== undefined && !this.recorded.has(options.groupId)) return []
-    return this.store.search(query, options).filter(row => this.recorded.has(row.groupId))
+    if (options.groupId !== undefined && !this.recordedIds.has(options.groupId)) return []
+    return this.store.search(query, options).filter(row => this.recordedIds.has(row.groupId))
   }
 
   /**
@@ -451,10 +508,10 @@ export class QqObserver extends Service {
    * @returns the digests, newest first.
    */
   digests(options: { groupId?: string; days: number; limit: number }): DigestRow[] {
-    if (options.groupId !== undefined && !this.recorded.has(options.groupId)) return []
+    if (options.groupId !== undefined && !this.recordedIds.has(options.groupId)) return []
     const sinceMs = this.now() - options.days * 86_400_000
     return this.store.digests({ ...options.groupId === undefined ? {} : { groupId: options.groupId }, sinceMs, limit: options.limit })
-      .filter(row => this.recorded.has(row.groupId))
+      .filter(row => this.recordedIds.has(row.groupId))
   }
 
   // ---- sending (off by default) ----
@@ -519,7 +576,7 @@ export class QqObserver extends Service {
    * @returns the size of the configured `groups` list.
    */
   recordedGroups(): number {
-    return this.recorded.size
+    return this.recordedIds.size
   }
 
   /**
@@ -752,7 +809,7 @@ export class QqObserver extends Service {
     }
     await this.refreshGroups()
     if (this.config.backfill.enabled) {
-      for (const groupId of this.recorded) {
+      for (const groupId of this.recordedIds) {
         if (this.stopping || this.client !== client) break
         await this.backfill(groupId).catch((error: unknown) => {
           this.ctx.logger.warn(`fork-qq: backfill of group ${groupId} failed: ${errorText(error)}`)
@@ -771,8 +828,8 @@ export class QqObserver extends Service {
         const groupId = String(group.group_id)
         this.store.upsertGroup({ groupId, name: group.group_name ?? groupId, memberCount: group.member_count }, now)
       }
-      const missing = [...this.recorded].filter(id => !list.some(group => String(group.group_id) === id))
-      this.ctx.logger.info(`fork-qq: the account is in ${list.length} group(s); ${this.recorded.size - missing.length} of the ${this.recorded.size} listed one(s) found${missing.length === 0 ? '' : `; not a member of ${missing.join(', ')}`}`)
+      const missing = [...this.recordedIds].filter(id => !list.some(group => String(group.group_id) === id))
+      this.ctx.logger.info(`fork-qq: the account is in ${list.length} group(s); ${this.recordedIds.size - missing.length} of the ${this.recordedIds.size} listed one(s) found${missing.length === 0 ? '' : `; not a member of ${missing.join(', ')}`}`)
     } catch (error: unknown) {
       this.ctx.logger.warn(`fork-qq: get_group_list failed: ${errorText(error)}`)
     }
@@ -824,7 +881,7 @@ export class QqObserver extends Service {
   }
 
   private async onRecall(groupId: string, messageId: string): Promise<void> {
-    if (!this.recorded.has(groupId)) return
+    if (!this.recordedIds.has(groupId)) return
     const paths = this.store.recall(groupId, messageId)
     if (paths === undefined) return
     for (const path of paths) await removeMedia(path)
@@ -837,7 +894,7 @@ export class QqObserver extends Service {
     const userId = String(event.user_id ?? event.sender?.user_id ?? '')
     if (groupId === '' || userId === '' || event.message_id === undefined) return false
     if (userId === this.selfId && this.selfId !== '') return false
-    if (!this.recorded.has(groupId)) {
+    if (!this.recordedIds.has(groupId)) {
       this.counters.dropped += 1
       this.unlistedCounts.set(groupId, (this.unlistedCounts.get(groupId) ?? 0) + 1)
       if (!this.seenUnlisted.has(groupId)) {
@@ -966,7 +1023,7 @@ export class QqObserver extends Service {
     while (!this.stopping) {
       try {
         if (this.config.digest.enabled) {
-          const stored = await this.digest.runRound([...this.recorded], this.abort.signal)
+          const stored = await this.digest.runRound([...this.recordedIds], this.abort.signal)
           if (stored > 0) this.ctx.logger.info(`fork-qq: digest round stored ${stored} digest(s)`)
         }
         if (this.now() - lastRetention >= RETENTION_CHECK_MS) {

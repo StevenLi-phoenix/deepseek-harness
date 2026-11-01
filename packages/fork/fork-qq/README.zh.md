@@ -41,7 +41,7 @@ kind: "package-reference"
 |---|---|---|
 | `url` | `ws://127.0.0.1:3001` | 协议端的 WebSocket 地址；必须在本机（127.0.0.1、localhost）或 tailnet（100.64.0.0/10、`*.ts.net`）上 |
 | `tokenEnv` | `FORK_QQ_ONEBOT_TOKEN` | 存放协议端 access token 的凭据名；以 Bearer 头发送；缺失时观察者保持离线 |
-| `groups` | `[]` | 要记录的群号 |
+| `groups` | `[]` | 要记录的群号。可热更新：设置 → QQ 里增删群，观察者立即跟随，并保存到 profile patch（新加的群会补抓历史） |
 | `dataDir` | `<DSH_HOME>/fork-qq` | 数据库（`qq.db`）、下载（`media/`）和摘要的原始回答（`digest-raw/`）；以 0700 权限创建 |
 | `media.images` | `true` | 下载已记录消息里的图片 |
 | `media.maxImageBytes` | `15728640` | 下载的最大图片 |
@@ -78,7 +78,7 @@ kind: "package-reference"
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-fork-qq)是全部可接受字段的完整来源。
 
-**QQ 把账号踢下线时**，在 DSH 页面重新扫码：**设置 → QQ**（[`@deepseek-ai/dsh-fork-qq-login`](../fork-qq-login/README.zh.md)）显示连接状态、NapCat 的登录状态和登录二维码。二维码经*扫码入口*（login door）取得：它是 `napcat.sh start` 在 NapCat 旁边启动的一个小容器（`napcat.sh door` 可单独启动），监听 `127.0.0.1:3002`。NapCat 的 WebUI 能在容器里开 shell、读取 QQ 会话，所以服务用户从不持有它的令牌：令牌由扫码入口持有，它只回答 `GET /v1/login` 和 `POST /v1/login/refresh`，以调用方带来的 OneBot token 作为凭证，并且只转交类型明确、长度受限的字段（二维码链接必须是 https 的 `*.qq.com` 地址才放行）。观察者通过 `loginStatus()` 和 `refreshLogin()` 读取扫码入口，通过 `connectionStatus()` 报告自己的连接，并且在扫码入口说 NapCat 已登录、而自己还在退避等待时立刻重连。恢复步骤见运行手册第 13 节：[QQ 掉线恢复](../../../fork/deploy/RUNBOOK.md#qq-recovery)。
+**QQ 把账号踢下线时**，在 DSH 页面重新扫码：**设置 → QQ**（[`@deepseek-ai/dsh-fork-qq-login`](../fork-qq-login/README.zh.md)）显示连接状态、NapCat 的登录状态和登录二维码。二维码经*扫码入口*（login door）取得：它是 `napcat.sh start` 在 NapCat 旁边启动的一个小容器（`napcat.sh door` 可单独启动），监听 `127.0.0.1:3002`。NapCat 的 WebUI 能在容器里开 shell、读取 QQ 会话，所以服务用户从不持有它的令牌：令牌由扫码入口持有，它只回答 `GET /v1/login` 和 `POST /v1/login/refresh`，以调用方带来的 OneBot token 作为凭证，并且只转交类型明确、长度受限的字段（二维码链接必须是 https 的 `*.qq.com` 地址才放行）。观察者通过 `loginStatus()` 和 `refreshLogin()` 读取扫码入口，通过 `connectionStatus()` 报告自己的连接，并且在扫码入口说 NapCat 已登录、而自己还在退避等待时立刻重连。**`dsh-runtime` 对 NapCat 能做什么、不能做什么**：它持有 OneBot token（`127.0.0.1:3001` 上的 OneBot API，本包只读取）；通过扫码入口，它能读取 QQ 是否已登录、在需要扫码时读取登录二维码链接，并请求新的二维码（每 10 秒一次）。它不能访问 NapCat 的 WebUI（配置、文件、容器里的 shell、退出登录、重启）、docker socket，也不能读保存 QQ 会话的卷。恢复步骤见运行手册第 13 节：[QQ 掉线恢复](../../../fork/deploy/RUNBOOK.md#qq-recovery)。
 
 摘要是观察者学到的知识，带着来源（`qq-group:<群号>`、摘要编号、日期）；它们不受 30 天限制，`forgetDigests({ groupId?, beforeMs? })`（即 `qq_forget` 工具）按群或日期删除。读取由服务负责：`groupOverview()`、`recentMessages()`、`searchMessages()`、`digests()` 和 `groupName()` 只对已记录的群作答。`sendGroupMessage(groupId, text)` 留给以后的代码，除非 `send.enabled` 为 true 且该群在 `send.groups` 里，否则一律拒绝；本包和工具里没有任何地方调用它。
 

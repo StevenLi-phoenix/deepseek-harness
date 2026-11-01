@@ -2735,7 +2735,8 @@ export type FeedbackScope = typeof FEEDBACK_SCOPES[number]
 ## `@deepseek-ai/dsh-fork-qq`
 
 - `inject`: `sessionController` · `permissionPresets` · `sessionTitle` · `credentials`
-- `source`: [`packages/fork/fork-qq/src/index.ts:41`](../packages/fork/fork-qq/src/index.ts)
+- `refs`: `Volatile` (`@deepseek-ai/cordis`)
+- `source`: [`packages/fork/fork-qq/src/index.ts:43`](../packages/fork/fork-qq/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
@@ -2744,8 +2745,11 @@ export interface Config {
   url: string
   /** Credential holding the protocol end's access token. */
   tokenEnv: string
-  /** Group numbers to record. Empty records nothing; messages of every other group are dropped on arrival. */
-  groups: string[]
+  /**
+   * Group numbers to record. Empty records nothing; messages of every other group are dropped on arrival. Volatile: the
+   * Settings page's QQ section adds and removes groups at run time and the observer follows without a restart.
+   */
+  groups: Volatile<string[]>
   /** Directory of the database and downloads; defaults to `<DSH_HOME>/fork-qq`. */
   dataDir?: string
   /** Image downloads: what is fetched, from where, and how much is kept. */

@@ -11,6 +11,9 @@ export const QQ_REFRESH_PATH = '/api/fork.qq.refresh'
 export const QQ_ROUTE = QQ_PATH.slice(1)
 export const QQ_REFRESH_ROUTE = QQ_REFRESH_PATH.slice(1)
 
+/** How many unrecorded groups the answer offers as candidates. */
+export const QQ_GROUP_CANDIDATES = 60
+
 /** The observer's connection to the protocol end (NapCat's OneBot server). */
 export interface QqConnection {
   /**
@@ -58,6 +61,17 @@ export interface QqLogin {
   readonly qr: QqQrMatrix | null
 }
 
+/** One group the account is in, as the whitelist offers it. */
+export interface QqGroup {
+  readonly groupId: string
+  readonly name: string
+  readonly memberCount: number | null
+  /** Whether the group is on the observer's `groups` list. */
+  readonly recorded: boolean
+  /** Messages of an unrecorded group dropped since the observer started: a count, nothing of them is kept. */
+  readonly seen: number
+}
+
 /** What `GET /api/fork.qq` answers. */
 export interface QqPanel {
   /** When the Host built this answer. */
@@ -66,6 +80,11 @@ export interface QqPanel {
   readonly login: QqLogin
   /** How many groups the observer records (from its configuration). */
   readonly groupsRecorded: number
+  /**
+   * The groups the account is in (every recorded one, and the busiest {@link QQ_GROUP_CANDIDATES} of the others) for the
+   * whitelist card; the list itself is edited through the plugin-settings form of the `fork-qq` entry.
+   */
+  readonly groups: readonly QqGroup[]
 }
 
 /** What `POST /api/fork.qq.refresh` answers: the panel after asking NapCat for a fresh code. */

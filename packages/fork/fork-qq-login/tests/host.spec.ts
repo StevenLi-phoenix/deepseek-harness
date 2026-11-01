@@ -14,6 +14,10 @@ function source(over: Partial<QqSource> = {}): QqSource & { loginStatus: Mock<Qq
   return {
     connectionStatus: () => ({ state: 'reconnecting', since: 1000, attempt: 4, lastError: 'socket hang up', selfId: null }),
     recordedGroups: () => 24,
+    groupChoices: () => [
+      { groupId: '111111', name: '技术群', memberCount: 80, recorded: true, seen: 0 },
+      { groupId: '222222', name: '闲聊群', memberCount: 300, recorded: false, seen: 7 },
+    ],
     ...over,
     loginStatus: vi.fn(over.loginStatus ?? (() => Promise.resolve(reading))),
     refreshLogin: vi.fn(over.refreshLogin ?? (() => Promise.resolve({ login: reading, refreshed: true }))),
@@ -48,6 +52,7 @@ describe('fork-qq-login Host routes', () => {
     const body = await response.json() as QqPanel
     expect(body.connection).toEqual({ state: 'reconnecting', since: 1000, attempt: 4, lastError: 'socket hang up', selfId: null })
     expect(body.groupsRecorded).toBe(24)
+    expect(body.groups.map(group => [group.groupId, group.recorded, group.seen])).toEqual([['111111', true, 0], ['222222', false, 7]])
     const expected = encode(QR_URL, { ecc: 'M' })
     expect(body.login).toEqual({
       door: 'ok', state: 'qr', uin: null, nickname: null, error: null,
@@ -72,6 +77,14 @@ describe('fork-qq-login Host routes', () => {
     expect(answer.refreshed).toBe(true)
     expect(answer.login.qr?.size).toBeGreaterThan(20)
     expect(qq.refreshLogin.mock.calls).toHaveLength(1)
+  })
+
+  it('offers every recorded group and only the busiest 60 of the others', async () => {
+    const many = Array.from({ length: 200 }, (_unused, index) => ({ groupId: String(100000 + index), name: `群${index}`, memberCount: null, recorded: index < 3, seen: 200 - index }))
+    const { routes } = await mount(source({ groupChoices: () => many }))
+    const body = await (await routes[0]!.fetch(new Request(`http://127.0.0.1${QQ_PATH}`))).json() as QqPanel
+    expect(body.groups).toHaveLength(63)
+    expect(body.groups.filter(group => group.recorded)).toHaveLength(3)
   })
 
   it('draws no code for a login with none, and none from a link that cannot be encoded', async () => {

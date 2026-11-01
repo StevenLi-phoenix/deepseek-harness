@@ -11,6 +11,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { QQ_REFRESH_ROUTE, QQ_ROUTE } from '../view.ts'
+import { GROUP_ID, withGroup, withoutGroup, type GroupsSection } from './groups.ts'
 import { QqLoader, createQqStore, parsePanel } from './qq.ts'
 import { QqLoginSection, type QqLoginInjected } from './QqLogin.tsx'
 import { de, en, es, fr, ja, pt, ru, zh } from './locales.ts'
@@ -21,11 +22,14 @@ export type { QqKey } from './locales.ts'
 /** Dictionary namespace owned by this plugin. */
 const NS = 'fork.qq'
 
+/** The settings namespace: the profile entry id of the QQ observer, whose volatile `groups` the whitelist card edits. */
+const GROUPS_NAMESPACE = 'fork-qq'
+
 /** Settings navigation position: just after System status. */
 const SECTION_ORDER = 45
 
 /** Required services: the slot registry and locale. */
-export const inject = ['slots', 'locale']
+export const inject = ['slots', 'locale', 'configForms']
 
 /**
  * Register the dictionaries and the Settings section over one shared store.
@@ -53,7 +57,21 @@ export function apply(ctx: ClientContext): void {
   // Functions stable for the registration's lifetime, so the section's polling effect never restarts on re-render.
   const refresh = (): void => { void loader.refresh() }
   const renewCode = (): void => { void loader.renewCode() }
-  const injected = (): QqLoginInjected => ({ hooks: { qq: store }, refresh, renewCode })
+  const form = ctx.configForms.get<GroupsSection>(GROUPS_NAMESPACE)
+  // Read-modify-write against the form's latest accepted list. The form fences the write by revision, so a list
+  // changed elsewhere is refused, not overwritten.
+  const writeGroups = async (change: (current: string[]) => string[]): Promise<boolean> => {
+    const current = form.getSnapshot().value?.groups
+    if (current === undefined) return false
+    const accepted = await form.set('groups', change(current))
+    if (accepted) void loader.refresh()
+    return accepted
+  }
+  const addGroup = (id: string): Promise<boolean> => (
+    GROUP_ID.test(id) ? writeGroups(current => withGroup(current, id)) : Promise.resolve(false)
+  )
+  const removeGroup = (id: string): Promise<boolean> => writeGroups(current => withoutGroup(current, id))
+  const injected = (): QqLoginInjected => ({ hooks: { qq: store, groupsForm: form }, refresh, renewCode, addGroup, removeGroup })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'fork-qq', order: SECTION_ORDER, label: () => t('nav'), locale: NS, inject: injected,
   }, QqLoginSection))

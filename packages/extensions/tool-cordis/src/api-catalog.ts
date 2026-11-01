@@ -2360,6 +2360,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [],
       },
       {
+        signature: 'groupChoices(): Array<{ groupId: string; name: string; memberCount: number | null; recorded: boolean; seen: number }>',
+        description: 'Every group the account is in, as the Settings page\'s group list offers them: the recorded ones first, then the others by how many messages they showed since the observer started.',
+        parameters: [],
+        returns: 'one entry per group, with the count of dropped messages (a number, nothing of them is kept).',
+      },
+      {
         signature: 'groupOverview(): GroupOverview[]',
         description: 'Every group the account is in, with what is recorded of it.',
         parameters: [],

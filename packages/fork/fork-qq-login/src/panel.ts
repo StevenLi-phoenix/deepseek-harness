@@ -4,7 +4,7 @@
  */
 
 import { encode } from 'uqr'
-import type { QqConnection, QqLogin, QqPanel, QqQrMatrix, QqRefreshAnswer } from './view.ts'
+import { QQ_GROUP_CANDIDATES, type QqConnection, type QqGroup, type QqLogin, type QqPanel, type QqQrMatrix, type QqRefreshAnswer } from './view.ts'
 
 /** The slice of the QQ observer (`ctx.forkQq`) this section reads. */
 export interface QqSource {
@@ -12,6 +12,7 @@ export interface QqSource {
   loginStatus(options?: { fresh?: boolean }): Promise<Omit<QqLogin, 'qr'> & { qrUrl: string | null }>
   refreshLogin(): Promise<{ login: Omit<QqLogin, 'qr'> & { qrUrl: string | null }; refreshed: boolean }>
   recordedGroups(): number
+  groupChoices(): readonly QqGroup[]
 }
 
 /**
@@ -28,6 +29,12 @@ export function qrMatrix(link: string): QqQrMatrix | null {
   }
 }
 
+/** Every recorded group, and the busiest of the others, so the answer stays small for an account in hundreds of groups. */
+function groupsOf(source: QqSource): QqGroup[] {
+  const all = source.groupChoices()
+  return [...all.filter(group => group.recorded), ...all.filter(group => !group.recorded).slice(0, QQ_GROUP_CANDIDATES)]
+}
+
 function toLogin(reading: Omit<QqLogin, 'qr'> & { qrUrl: string | null }): QqLogin {
   const { qrUrl, ...rest } = reading
   return { ...rest, qr: qrUrl === null ? null : qrMatrix(qrUrl) }
@@ -41,7 +48,7 @@ function toLogin(reading: Omit<QqLogin, 'qr'> & { qrUrl: string | null }): QqLog
  */
 export async function buildPanel(source: QqSource, options: { fresh?: boolean } = {}, now: () => number = Date.now): Promise<QqPanel> {
   const login = toLogin(await source.loginStatus(options))
-  return { at: now(), connection: source.connectionStatus(), login, groupsRecorded: source.recordedGroups() }
+  return { at: now(), connection: source.connectionStatus(), login, groupsRecorded: source.recordedGroups(), groups: groupsOf(source) }
 }
 
 /**
@@ -52,5 +59,12 @@ export async function buildPanel(source: QqSource, options: { fresh?: boolean } 
  */
 export async function buildRefresh(source: QqSource, now: () => number = Date.now): Promise<QqRefreshAnswer> {
   const { login, refreshed } = await source.refreshLogin()
-  return { at: now(), connection: source.connectionStatus(), login: toLogin(login), groupsRecorded: source.recordedGroups(), refreshed }
+  return {
+    at: now(),
+    connection: source.connectionStatus(),
+    login: toLogin(login),
+    groupsRecorded: source.recordedGroups(),
+    groups: groupsOf(source),
+    refreshed,
+  }
 }
