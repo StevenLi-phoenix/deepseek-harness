@@ -75,6 +75,14 @@ describe('overview cards', () => {
     for (const forbidden of [bili, ams, feiyu, asr, '127.0.0.1', 'sk-ant', 'http://']) expect(text).not.toContain(forbidden)
   })
 
+  it('warns when bili-svc answers but the DSH bili plugin is not mounted, and stays green once it is', async () => {
+    const bili = await serve({ '/healthz': 200 })
+    const missing = await overview({ config: { bili: { url: bili } } })
+    expect(missing.byId('bili')).toMatchObject({ tone: 'warn', state: 'svc_only', facts: { plugin: false } })
+    const mounted = await overview({ config: { bili: { url: bili } } }, { bili: {} })
+    expect(mounted.byId('bili')).toMatchObject({ tone: 'ok', state: 'up' })
+  })
+
   it('turns a service that refuses connections red and leaves the other cards alone', async () => {
     const { byId } = await overview({ config: { bili: { url: await closedUrl() } } }, { lsyEventBus: fakeBus() })
     expect(byId('bili')).toMatchObject({ tone: 'down', state: 'down' })
