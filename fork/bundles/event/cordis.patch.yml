@@ -22,6 +22,12 @@
 - id: ui-open-in-app
   disabled: true
 
+# Sidebar 会话类型 filter: Sessions of the channel-bot presets count as automated (they prompt through the
+# user path on behalf of others); Sessions no person prompted (schedule deliveries, bus events) count anyway.
+- id: ui-workspace
+  config:
+    automatedAgentPresets: [bili, qqbot, qq-digest, up]
+
 # Root rows reach every preset, including `bili`, whose Session reads public Bilibili content:
 # the base bundle's root working_directory tool moves into the `unattended` preset instead.
 # packages/fork/bili/tests/bundle.spec.ts fails if any model tool is left at the root.

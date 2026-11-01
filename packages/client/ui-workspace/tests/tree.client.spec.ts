@@ -10,7 +10,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { SessionProjectionSnapshot } from '@deepseek-ai/dsh-api-session-controller/client'
 import {
-  type ArchivedFilter,
+  type ArchivedFilter, type SessionKindFilter, automatedSessionIds,
   deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, owningGroupKey, owningParentFolder,
   pinCurrentBlank, reconcileManualOrder, sessionMemberIds, visibleSessionIds, workspaceLabel, UNGROUPED_KEY,
 } from '../src/client/tree.ts'
@@ -93,10 +93,13 @@ const rowState = (options: {
   pinned?: readonly string[]
   archived?: readonly string[]
   archivedFilter?: ArchivedFilter
+  kindFilter?: SessionKindFilter
+  automated?: ReadonlySet<SessionId>
 } = {}) => ({
   pinnedSessionIds: (options.pinned ?? []).map(sid),
   archivedSessionIds: (options.archived ?? []).map(sid),
   archivedFilter: options.archivedFilter ?? 'default' as const,
+  sessionKind: { filter: options.kindFilter ?? 'all' as const, automatedSessionIds: options.automated ?? new Set<SessionId>() },
 })
 const noRows = rowState()
 
@@ -831,6 +834,65 @@ describe('deriveSearchResults', () => {
   })
 })
 
+describe('session type filter', () => {
+  const traced = (id: string, updatedAt: number, values: Record<string, JsonValue>): SessionSummary => ({
+    ...summary(id, updatedAt), projectionValues: projectionValues(values),
+  })
+  // The owner typed in it; a schedule delivery and an event started the next; a channel bot prompts as a user.
+  const owner = traced('owner', 4, { sessionListMetadata: { blank: false, lastPromptAt: 4 }, agentPreset: 'unattended' })
+  const scheduled = traced('scheduled', 3, { sessionListMetadata: { blank: false, lastPromptAt: null }, agentPreset: 'standard' })
+  const bot = traced('bot', 2, { sessionListMetadata: { blank: false, lastPromptAt: 2 }, agentPreset: 'bili' })
+  // A cold row without projection hints is not known to be automated.
+  const cold = summary('cold', 1)
+  const sessions = list(owner, scheduled, bot, cold)
+  const automated = automatedSessionIds(sessions, ['bili'])
+  const ids = sessions.ids
+  const flat = (kindFilter: SessionKindFilter) =>
+    deriveFlat(sessions, ids, rowState({ kindFilter, automated }), noAttention).map(node => node.id)
+
+  it('counts Sessions no person prompted and Sessions of an automated preset as automated', () => {
+    expect([...automated].toSorted()).toEqual(['bot', 'scheduled'])
+    expect([...automatedSessionIds(sessions, [])]).toEqual(['scheduled'])
+    // A blank Session has not run at all.
+    const blank = { ...traced('blank', 5, { sessionListMetadata: { blank: true, lastPromptAt: null } }), blank: true }
+    expect(automatedSessionIds(list(blank), []).size).toBe(0)
+  })
+
+  it('filters the flat list', () => {
+    expect(flat('all')).toEqual(['owner', 'scheduled', 'bot', 'cold'])
+    expect(flat('automated')).toEqual(['scheduled', 'bot'])
+    expect(flat('manual')).toEqual(['owner', 'cold'])
+  })
+
+  it('filters Workspace groups, and the automated view drops groups without automated Sessions', () => {
+    const workspaces = [workspace('work', ['owner', 'scheduled']), workspace('empty', [])]
+    const groups = (kindFilter: SessionKindFilter) => deriveGroups(
+      sessions, workspaces, rowState({ kindFilter, automated }), noAttention, view(['work', 'empty', UNGROUPED_KEY]),
+    ).map(group => [group.key, group.sessions.map(node => node.id)])
+    expect(groups('automated')).toEqual([['work', ['scheduled']], [UNGROUPED_KEY, ['bot']]])
+    expect(groups('manual')).toEqual([['work', ['owner']], ['empty', []], [UNGROUPED_KEY, ['cold']]])
+  })
+
+  it('applies to search and to the visible ids, together with the archived filter', () => {
+    const search = (kindFilter: SessionKindFilter, archivedFilter: ArchivedFilter = 'default') => deriveSearchResults(
+      sessions, [], 'o', archived('cold'), archivedFilter, noAttention, { items: [], hasMore: false }, 10,
+      { filter: kindFilter, automatedSessionIds: automated },
+    ).items.map(item => item.id)
+    expect(search('all', 'show')).toEqual(['owner', 'bot', 'cold'])
+    expect(search('manual')).toEqual(['owner'])
+    expect(search('manual', 'only')).toEqual(['cold'])
+    expect(search('automated')).toEqual(['bot'])
+    expect(visibleSessionIds(sessions, noArchive, 'default', { filter: 'automated', automatedSessionIds: automated })).toEqual(['scheduled', 'bot'])
+  })
+
+  it('keeps the selected New Session row under every filter', () => {
+    const blank = { ...summary('new', 9), blank: true }
+    const withBlank = withMain(list(blank, ...sessions.ids.map(id => sessions.byId[id]!)), blank.id)
+    expect(deriveFlat(withBlank, withBlank.ids, rowState({ kindFilter: 'automated', automated }), noAttention).map(node => node.id))
+      .toEqual(['new', 'scheduled', 'bot'])
+  })
+})
+
 describe('createWorkspaceViewStore', () => {
   it('stores view preferences and selects Manual when saving a drag order', () => {
     const store = createWorkspaceViewStore().create()
@@ -909,6 +971,15 @@ describe('createWorkspaceViewStore', () => {
     store.actions.setSessionOrder('alpha', ['b', 'a', 'c'], {})
     store.actions.pinSessionOrder('c', ['alpha'], source)
     expect(store.getSnapshot().sessionOrderByAccount.alpha).toEqual(['c', 'b', 'a'])
+  })
+
+  it('stores the session type filter, which earlier snapshots omit', () => {
+    const store = createWorkspaceViewStore().create()
+    expect(store.getSnapshot().sessionKindFilter).toBe('all')
+    store.actions.setSessionKindFilter('automated')
+    expect(store.getSnapshot().sessionKindFilter).toBe('automated')
+    store.actions.setSessionKindFilter('manual')
+    expect(store.getSnapshot()).toMatchObject({ sessionKindFilter: 'manual', archivedFilter: 'default' })
   })
 
   it('removes view state outside the retained Workspace key set', () => {
