@@ -236,7 +236,9 @@ describe('reopening the Reply Gate', () => {
   })
 
   it('with a brake: switching is off until it is released, then the same confirmation follows', () => {
-    const { actions, store } = mount({ view: { ...READONLY, gate: { ...READONLY.gate!, brake: BRAKE } }, checkedAt: NOW })
+    const readonlyGate = READONLY.gate
+    if (readonlyGate === undefined) throw new Error('the READONLY fixture has no gate')
+    const { actions, store } = mount({ view: { ...READONLY, gate: { ...readonlyGate, brake: BRAKE } }, checkedAt: NOW })
     const gate = card('操作闸门')
     expect(gate.textContent).toContain('已急停：risk_352')
     expect(gate.textContent).toContain('急停还没解除：先解除急停，再切到自动。')

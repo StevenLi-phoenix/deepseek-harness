@@ -281,4 +281,28 @@ describe('persistent session subscriptions', () => {
     expect(bus.persistentSessions()).toMatchObject([{ sessionId: 's1', batches: 1 }])
     expect(logs.filter(line => line.includes('is now the persistent Session'))).toHaveLength(1)
   })
+
+  it('a paused run-time subscription starts no persistent turn, new or into the stored Session, until it resumes', async () => {
+    const controller = fakeController()
+    const runtime = fakeRuntime()
+    const empty = withConfig(sessionConfig, { subscriptions: [] })
+    const { bus } = await harness({ config: empty, controller, registry: fakeRegistry(), runtime })
+    await bus.subscribe({ ...persistentSub, id: 'octo-persist', sources: ['github'] })
+    expect(await bus.setPaused('octo-persist', true)).toBe('ok')
+    expect(await bus.publish(release(1))).toBe('unmatched')
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(runtime.deliveries).toHaveLength(0)
+    expect(bus.persistentSessions()).toEqual([])
+
+    // Events held before the pause also wait: no turn starts while paused.
+    await bus.setPaused('octo-persist', false)
+    expect(await bus.publish(release(2))).toBe('accepted')
+    await bus.setPaused('octo-persist', true)
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(runtime.deliveries).toHaveLength(0)
+    expect(bus.pendingCount()).toBe(1)
+    await bus.setPaused('octo-persist', false)
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(runtime.deliveries).toHaveLength(1)
+  })
 })
