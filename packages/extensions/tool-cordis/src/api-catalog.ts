@@ -7496,14 +7496,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface GroupOverview {\n    groupId: string;\n    name: string;\n    memberCount: number | null;\n    recorded: boolean;\n    messages: number;\n    firstAt: number | null;\n    lastAt: number | null;\n    lastDigestAt: number | null;\n}',
   },
   {
-    name: 'GuardAudience',
-    declaration: 'export type GuardAudience = \'public\' | \'channel\';',
-  },
-  {
-    name: 'GuardCheckOptions',
-    declaration: 'export interface GuardCheckOptions {\n    readonly purpose: string;\n    readonly audience: GuardAudience;\n    readonly sessionId?: string | undefined;\n}',
-  },
-  {
     name: 'GuardHealth',
     declaration: 'export interface GuardHealth {\n    readonly checked: number;\n    readonly rejected: number;\n    readonly byRule: Readonly<Record<string, number>>;\n    readonly lastError: {\n        readonly at: number;\n        readonly rule: string;\n        readonly message: string;\n    } | null;\n    readonly lastCheckAt: number | null;\n}',
   },
