@@ -15,7 +15,6 @@ import * as TimeGap from '../src/index.ts'
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
     'schedule': { kind: 'schedule' } & ContextFormed
-    'webhook': { kind: 'webhook' } & ContextFormed
     'lsy-wechat': { kind: 'lsy-wechat' } & ContextFormed
   }
 }

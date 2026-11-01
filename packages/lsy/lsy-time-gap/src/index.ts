@@ -55,7 +55,7 @@ export interface Config {
 }
 
 /** Schemastery validation for {@link Config}. */
-export const Config: z<Config> = z.object({
+export const Config: z<Partial<Config>, Config> = z.object({
   enabled: z.boolean().default(true).description('Add the time check before an input that arrives after a quiet spell.'),
   thresholdMs: z.natural().min(1).default(300_000).description('Shortest silence in milliseconds (300000 = 5 minutes) that counts as a quiet spell.'),
   timeZone: z.string().default('America/New_York').description('IANA time zone of the times in the notice.'),
