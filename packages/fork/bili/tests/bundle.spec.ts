@@ -83,6 +83,25 @@ describe('event bundle', () => {
     expect(bili.config).not.toHaveProperty('model')
   })
 
+  it('groups the bus subscriptions\' Sessions into Web UI projects, keeps the CI Session per repository and the channel Session fixed-titled', () => {
+    const bus = inserted.find(entry => entry.id === 'fork-event-bus')!
+    type Session = { workspacePath: string; project?: string; titlePrefix?: string; persistent?: { enabled: boolean; key?: string } }
+    type Subscription = { id: string; action: string; session?: Session }
+    const subscriptions = (bus.config as { subscriptions: Subscription[] }).subscriptions
+    const sessions = Object.fromEntries(subscriptions.filter(subscription => subscription.action === 'session').map(subscription => [subscription.id, subscription.session!]))
+    expect(Object.fromEntries(Object.entries(sessions).map(([id, session]) => [id, [session.workspacePath, session.project]]))).toEqual({
+      'kaorou': ['/Users/dsh-runtime/work/events', '事件'],
+      'autocut': ['/Users/dsh-runtime/work/events', '事件'],
+      'operator': ['/Users/dsh-runtime/work/events', '事件'],
+      'bili-digest': ['/Users/dsh-runtime/work/bili', 'B站'],
+      'ci': ['/Users/dsh-runtime/work/ci', 'CI'],
+    })
+    expect(sessions['ci']).toMatchObject({ titlePrefix: 'CI', persistent: { enabled: true, key: 'subject' } })
+    expect(sessions['bili-digest']).toMatchObject({ titlePrefix: 'B站评论与私信', persistent: { enabled: true, key: 'subscription' } })
+    // One-off Sessions stay one per batch.
+    for (const id of ['kaorou', 'autocut', 'operator']) expect(sessions[id]).not.toHaveProperty('persistent')
+  })
+
   it('leaves no model tool at the profile root, where every preset, bili included, would inherit it', () => {
     const enabled = [...composedRoot()].filter(([, row]) => row.enabled && row.name?.startsWith('@deepseek-ai/dsh-tool-'))
     expect(enabled.map(([, row]) => row.name).filter(name => !ROOT_TOOL_ROWS_WITHOUT_TOOLS.has(name!))).toEqual([])

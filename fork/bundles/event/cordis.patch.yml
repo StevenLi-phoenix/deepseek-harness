@@ -87,7 +87,8 @@
             coalesceMs: 60000
             maxPerHour: 4
             session:
-              workspacePath: /Users/dsh-runtime/work
+              workspacePath: /Users/dsh-runtime/work/events
+              project: 事件
               agentPreset: unattended
               permissionPreset: danger-full-access
               titlePrefix: kaorou
@@ -108,7 +109,8 @@
             coalesceMs: 2000
             maxPerHour: 30
             session:
-              workspacePath: /Users/dsh-runtime/work
+              workspacePath: /Users/dsh-runtime/work/events
+              project: 事件
               agentPreset: unattended
               permissionPreset: danger-full-access
               titlePrefix: autocut
@@ -133,7 +135,8 @@
             coalesceMs: 1000
             maxPerHour: 10
             session:
-              workspacePath: /Users/dsh-runtime/work
+              workspacePath: /Users/dsh-runtime/work/events
+              project: 事件
               agentPreset: unattended
               permissionPreset: danger-full-access
               titlePrefix: operator
@@ -178,12 +181,14 @@
             coalesceMs: 300000
             maxPerHour: 3
             session:
-              workspacePath: /Users/dsh-runtime/work
+              workspacePath: /Users/dsh-runtime/work/bili
+              project: B站
               agentPreset: up
               permissionPreset: danger-full-access
-              titlePrefix: bili-up
+              titlePrefix: B站评论与私信
               persistent:
                 enabled: true
+                key: subscription
                 rolloverDays: 30
               instructions: >-
                 New comments or private messages arrived for the creator account. The events below carry
@@ -203,10 +208,18 @@
             coalesceMs: 300000
             maxPerHour: 4
             session:
-              workspacePath: /Users/dsh-runtime/work
+              workspacePath: /Users/dsh-runtime/work/ci
+              project: CI
               agentPreset: unattended
               permissionPreset: danger-full-access
-              titlePrefix: ci
+              titlePrefix: CI
+              # One Session per repository (the event subject), so a repository's runs share its history; each
+              # Session is titled "CI: <owner/repo>". A persistent Session is left out of the auto-archive sweep;
+              # it is archived when it rolls over after `rolloverDays`.
+              persistent:
+                enabled: true
+                key: subject
+                rolloverDays: 30
               # Canary (2026-10-31, 24 h): this subscription's Sessions run on the route `opencode`, which
               # the owner's profile patch points at the Cloudflare edge copy of llmgateway with the key
               # LLMGW_EDGE_CANARY_KEY (the route is named `opencode` because pi-ai sends the
