@@ -104,6 +104,18 @@ describe('QQ groups follow the Settings form', () => {
     ])
   })
 
+  it('ignores an entry that is not a group number when the list changes at run time, and says so once', async () => {
+    const h = await boot([A])
+    h.move([A, B, 'abc', '12', '9'.repeat(21), ' 123456 '])
+    expect(h.observer.recordedGroups()).toBe(2)
+    expect(h.observer.isRecorded('abc')).toBe(false)
+    expect(h.observer.groupChoices().filter(group => group.recorded).map(group => group.groupId).sort()).toEqual([A, B].sort())
+    h.move([A, B, 'abc', '12', '9'.repeat(21), ' 123456 '])
+    const warned = h.logs.filter(line => line.includes('ignoring') && line.includes('not a group number'))
+    expect(warned).toHaveLength(1)
+    expect(warned[0]).toContain('abc')
+  })
+
   it('reads the list live for everything that checks a group', async () => {
     const h = await boot([A])
     expect(h.observer.isRecorded(B)).toBe(false)
