@@ -1,3 +1,4 @@
+import z from '@deepseek-ai/schemastery'
 import { IconEditOutlineRegular, IconTrashOutlineRegular, IconPinFillRegular, IconPinOutlineRegular, IconUnarchiveOutlineRegular, IconArchiveOutlineRegular, IconBranchOutlineRegular, IconCopyOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SessionMenu } from './session-actions/SessionMenu.tsx'
 import type {} from '@deepseek-ai/dsh-client-ui-context-menu/client'
@@ -100,6 +101,21 @@ const NS = 'workspace'
  * provides a waitable service. apply therefore depends on each slot
  * declaration through `slots.inject()` instead of assuming order.
  */
+/** Client configuration of the workspace browser. */
+export interface Config {
+  /**
+   * Agent preset ids whose Sessions the sidebar's session-type choice counts
+   * as automated, for channels that prompt through the user path on behalf of
+   * others; Sessions no person prompted count as automated regardless.
+   */
+  automatedAgentPresets?: string[]
+}
+
+/** Configuration schema. */
+export const Config: z<Config> = z.object({
+  automatedAgentPresets: z.array(z.string()).default([]),
+})
+
 export const inject = ['contextMenus',
   'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'layout', 'shortcuts', 'remoteAccess',
 ]
@@ -109,8 +125,10 @@ export const inject = ['contextMenus',
  * ledger. Inject factories return plain callbacks; data reads use the
  * framework's global hooks.
  * @param ctx - client root context.
+ * @param config - the browser's configuration.
  */
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config: Config = Config({})): void {
+  const automatedAgentPresets: readonly string[] = [...config.automatedAgentPresets ?? []]
   const sessions = ctx.get('sessions') as ISessions
   const workspaces = ctx.get('workspaces') as IWorkspaces
   // One viewing-store instance, created here as ui-layout does for its layout
@@ -305,6 +323,7 @@ export function apply(ctx: Context): void {
     open: openSession,
     searchSessions,
     searchResultLimit: sessions.searchResultLimit,
+    automatedAgentPresets,
     requestSessionRename,
     notifyArchivedNotOpenable: () => { notify({ kind: 'archivedNotOpenable' }) },
     renameWorkspace: async (workspaceId, title) => { await workspaces.rename(workspaceId, title) },

@@ -140,6 +140,7 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     open: vi.fn(),
     searchSessions: vi.fn(async () => ({ items: [], hasMore: false })),
     searchResultLimit: 20,
+    automatedAgentPresets: [],
     notifyArchivedNotOpenable: vi.fn(),
     renameWorkspace: vi.fn(async () => {}),
     deleteWorkspace: vi.fn(async () => {}),
@@ -157,6 +158,13 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     const storedTitle = props.useWorkspaces(state => state.items.find(row => row.workspaceId === workspaceId)?.title ?? displayTitle)
     act(() => { request.set({ action, workspaceId, displayTitle, storedTitle }) })
   } }
+}
+
+/** Titles of the visible Session rows (tree items that are not group headers), top to bottom. */
+function sessionRowTitles(): Array<string | null | undefined> {
+  return screen.getAllByRole('treeitem')
+    .filter(row => row.getAttribute('aria-expanded') === null)
+    .map(row => row.querySelector('[class*="title"]')?.textContent)
 }
 
 /** Re-render with (possibly) changed props — WorkspaceBrowser has no side channel. */
@@ -482,9 +490,10 @@ describe('WorkspaceBrowser', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
     expect(screen.getByText('分组方式')).toBeTruthy() // the menu heading label
-    expect(screen.getAllByRole('separator')).toHaveLength(2)
+    expect(screen.getAllByRole('separator')).toHaveLength(3)
     expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
       '按工作区', '按工作区树', '单列表', '手动排序', '最近更新', '隐藏已归档', '全部对话（显示已归档）', '仅显示已归档',
+      '全部会话', '仅自动化', '仅非自动化',
     ])
     expect(screen.getByRole('menuitem', { name: '按工作区' }).querySelector('svg')).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: '手动排序' }).querySelector('svg')).toBeTruthy()
@@ -1150,6 +1159,67 @@ describe('WorkspaceBrowser', () => {
     expect(screen.getAllByRole('treeitem').slice(1)[0]?.textContent).toContain('two')
   })
 
+  describe('session type filter', () => {
+    const traced = (id: string, updatedAt: number, lastPromptAt: number | null, agentPreset = 'unattended') =>
+      summary(id, updatedAt, { projectionValues: { sessionListMetadata: { blank: false, lastPromptAt }, agentPreset } })
+    const rows = [traced('owner-chat', 4, 4), traced('reminder-run', 3, null), traced('bili-dm', 2, 2, 'bili'), summary('cold', 1)]
+    const titles = sessionRowTitles
+    const pick = (name: string): void => {
+      fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
+      fireEvent.click(screen.getByRole('menuitem', { name }))
+    }
+
+    it('lists the choices under 会话类型 with 全部会话 selected, and applies a pick at once in every grouping', () => {
+      const b = mount({
+        useSessions: hook(sessionState(rows)),
+        useWorkspaces: hook(workspaceState([workspace('alpha', ['owner-chat', 'reminder-run']), workspace('quiet', [])])),
+        automatedAgentPresets: ['bili'],
+      })
+      fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
+      expect(screen.getByText('会话类型')).toBeTruthy()
+      expect(screen.getByRole('menuitem', { name: '全部会话' }).className).toMatch(/selected/)
+      expect(screen.getByRole('menuitem', { name: '仅自动化' }).className).not.toMatch(/selected/)
+      fireEvent.click(screen.getByRole('menuitem', { name: '仅自动化' }))
+      expect(b.store.getSnapshot().sessionKindFilter).toBe('automated')
+      fireEvent.click(screen.getByText('alpha'))
+      fireEvent.click(screen.getByText('未分组'))
+      // The automated view drops a Workspace without automated Sessions.
+      expect(screen.queryByText('quiet')).toBeNull()
+      expect(titles()).toEqual(['reminder-run', 'bili-dm'])
+      pick('仅非自动化')
+      expect(screen.getByText('quiet')).toBeTruthy()
+      expect(titles()).toEqual(['owner-chat', 'cold'])
+      pick('单列表')
+      expect(titles()).toEqual(['owner-chat', 'cold'])
+      pick('仅自动化')
+      expect(titles()).toEqual(['reminder-run', 'bili-dm'])
+      pick('全部会话')
+      expect(titles()).toEqual(['owner-chat', 'reminder-run', 'bili-dm', 'cold'])
+    })
+
+    it('narrows search the same way', async () => {
+      const b = mount({ useSessions: hook(sessionState(rows)), automatedAgentPresets: ['bili'] })
+      act(() => { b.store.actions.setSessionKindFilter('manual') })
+      fireEvent.click(screen.getByRole('button', { name: '搜索会话' }))
+      fireEvent.change(screen.getByPlaceholderText('搜索会话名称'), { target: { value: 'r' } })
+      await act(async () => { await Promise.resolve() })
+      const tree = screen.getByRole('tree', { name: '搜索结果' })
+      expect(within(tree).getByText('owner-chat')).toBeTruthy()
+      expect(within(tree).queryByText('reminder-run')).toBeNull()
+      expect(within(tree).queryByText('bili-dm')).toBeNull()
+    })
+
+    it('names an empty type and offers every type again', () => {
+      const b = mount({ useSessions: hook(sessionState([traced('owner-chat', 4, 4)])) })
+      act(() => { b.store.actions.setGroupBy('flat') })
+      act(() => { b.store.actions.setSessionKindFilter('automated') })
+      expect(screen.getByText('暂无自动化会话')).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: '显示全部会话' }))
+      expect(b.store.getSnapshot().sessionKindFilter).toBe('all')
+      expect(titles()).toEqual(['owner-chat'])
+    })
+  })
+
   it('hides archived rows in both modes once the archive set carries them', () => {
     const b = mount({
       useSessions: hook(sessionState([summary('kept-s', 2), summary('gone-s', 1)])),
@@ -1186,9 +1256,7 @@ describe('WorkspaceBrowser', () => {
           [sid('p'), sid('q')],
         )),
       })
-      const names = () => screen.getAllByRole('treeitem')
-        .filter(row => row.getAttribute('aria-expanded') === null)
-        .map(row => row.querySelector('[class*="title"]')?.textContent)
+      const names = sessionRowTitles
       expect(names()).toEqual(['p', 'q', 'a', 'b', 'c'])
       expect(b.store.getSnapshot().sessionOrderByAccount[account]).toEqual(saved)
 

@@ -11,6 +11,8 @@ import type {
   SessionStatusSnapshot,
 } from '@deepseek-ai/dsh-client-ui-session/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+// Type-only: the `agentPreset` summary projection value read by the session type filter.
+import type {} from '@deepseek-ai/dsh-agent-preset-registry/types'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { workspaceTitleOf } from '@deepseek-ai/dsh-util-workspace-path'
 
@@ -221,19 +223,81 @@ export function pinCurrentBlank(
 export type ArchivedFilter = 'default' | 'show' | 'only'
 
 /**
+ * Session-type choice: every Session, only automated Sessions, or only the
+ * Sessions a person writes in (see {@link automatedSessionIds}).
+ */
+export type SessionKindFilter = 'all' | 'automated' | 'manual'
+
+/** The session-type choice with the automated Sessions it selects by. */
+export interface SessionKindView {
+  readonly filter: SessionKindFilter
+  /** Sessions {@link automatedSessionIds} counts as automated. */
+  readonly automatedSessionIds: ReadonlySet<SessionId>
+}
+
+/** The session-type view that filters nothing. */
+export const ALL_SESSION_KINDS: SessionKindView = { filter: 'all', automatedSessionIds: new Set() }
+
+/**
+ * Select the automated Sessions: those that ran but whose log holds no
+ * human-authored prompt (the `sessionListMetadata` summary value has no
+ * `lastPromptAt`: every turn came from a schedule delivery, a webhook, or
+ * another non-user source), and those whose agent preset is listed (channel
+ * bots that prompt through the user path on behalf of strangers). A row
+ * without these summary values is not known to be automated and counts as
+ * not automated, so the owner's own conversations never disappear from the
+ * not-automated view.
+ * @param list - sessions list snapshot.
+ * @param automatedPresets - agent preset ids whose Sessions count as automated.
+ * @returns automated Session ids.
+ */
+export function automatedSessionIds(list: SessionListState, automatedPresets: readonly string[]): Set<SessionId> {
+  const presets = new Set(automatedPresets)
+  const automated = new Set<SessionId>()
+  for (const id of list.ids) {
+    const session = list.byId[id]
+    if (session === undefined || session.blank) continue
+    const values = session.projectionValues
+    const metadata = values?.sessionListMetadata
+    const preset = values?.agentPreset
+    if ((metadata !== undefined && !metadata.blank && metadata.lastPromptAt === null)
+      || (typeof preset === 'string' && presets.has(preset))) automated.add(id)
+  }
+  return automated
+}
+
+/** Whether a non-blank Session passes the session-type choice. */
+function kindVisible(session: SessionSummary, kind: SessionKindView): boolean {
+  switch (kind.filter) {
+    case 'all':
+      return true
+    case 'automated':
+      return kind.automatedSessionIds.has(session.id)
+    case 'manual':
+      return !kind.automatedSessionIds.has(session.id)
+    /* v8 ignore next 2 -- closed-union backstop; only reached if the filter is forged */
+    default:
+      return assertNever(kind.filter)
+  }
+}
+
+/**
  * Ordinary sessions are visible; among blank sessions, only the current one
- * is visible. Subagent children use their parent header catalog; archived
- * sessions follow the archived filter, while their accounting slots remain
- * either way so unarchiving restores position.
+ * is visible, whatever the session-type choice. Subagent children use their
+ * parent header catalog; archived sessions follow the archived filter, while
+ * their accounting slots remain either way so unarchiving restores position.
+ * Other Sessions also pass the session-type choice.
  */
 function sessionVisible(
   session: SessionSummary,
   current: SessionId | undefined,
   archived: ReadonlySet<SessionId>,
   archivedFilter: ArchivedFilter,
+  kind: SessionKindView,
 ): boolean {
   if (session.origin === 'subagent') return false
   if (session.blank && session.id !== current) return false
+  if (!session.blank && !kindVisible(session, kind)) return false
   switch (archivedFilter) {
     case 'default':
       return !archived.has(session.id)
@@ -255,6 +319,8 @@ export interface SessionRowState {
   archivedSessionIds: readonly SessionId[]
   /** Archived-row visibility choice applied to lists and search alike. */
   archivedFilter: ArchivedFilter
+  /** Session-type choice applied to lists and search alike. */
+  sessionKind: SessionKindView
 }
 
 /**
@@ -327,6 +393,7 @@ function groupByWorkspace(
   workspaces: readonly WorkspaceView[],
   archived: ReadonlySet<SessionId>,
   archivedFilter: ArchivedFilter,
+  kind: SessionKindView,
   ungroupedOrder: readonly string[] | undefined,
 ): Group[] {
   const current = mainSessionId(list)
@@ -338,12 +405,12 @@ function groupByWorkspace(
       const summary = list.byId[id]
       if (summary === undefined) continue // account may lead the list pull; the row appears when the summary lands
       accounted.add(id)
-      if (!sessionVisible(summary, current, archived, archivedFilter)) continue
+      if (!sessionVisible(summary, current, archived, archivedFilter, kind)) continue
       members.push(summary)
     }
-    // The archived-only view lists archives, not the Workspace inventory, so
-    // a Workspace without archived Sessions contributes no group.
-    if (archivedFilter === 'only' && members.length === 0) continue
+    // The archived-only and automated-only views list Sessions, not the
+    // Workspace inventory, so a Workspace without such Sessions contributes no group.
+    if ((archivedFilter === 'only' || kind.filter === 'automated') && members.length === 0) continue
     groups.push(buildGroup(
       workspace.workspaceId, workspace.workspaceId, workspace.path,
       Date.parse(workspace.createdAt), workspace.title, members,
@@ -352,7 +419,7 @@ function groupByWorkspace(
   const stray = list.ids
     .map(id => list.byId[id])
     .filter((s): s is SessionSummary =>
-      s !== undefined && !accounted.has(s.id) && sessionVisible(s, current, archived, archivedFilter))
+      s !== undefined && !accounted.has(s.id) && sessionVisible(s, current, archived, archivedFilter, kind))
   if (stray.length > 0) {
     groups.push(buildGroup(
       UNGROUPED_KEY,
@@ -440,7 +507,7 @@ export function deriveGroups(
     ? undefined
     : owningGroupKey(workspaces, current)
   const groups: GroupNode[] = []
-  for (const g of groupByWorkspace(list, workspaces, archived, rowState.archivedFilter, view.ungroupedOrder)) {
+  for (const g of groupByWorkspace(list, workspaces, archived, rowState.archivedFilter, rowState.sessionKind, view.ungroupedOrder)) {
     const expanded = expandedGroups.has(g.key)
     groups.push({
       key: g.key,
@@ -466,7 +533,7 @@ export function deriveGroups(
  * @returns known ordinary Session ids, including archives and only the current blank.
  */
 export function sessionMemberIds(list: SessionListState): SessionId[] {
-  return visibleSessionIds(list, [], 'show')
+  return visibleSessionIds(list, [], 'show', ALL_SESSION_KINDS)
 }
 
 /**
@@ -474,18 +541,20 @@ export function sessionMemberIds(list: SessionListState): SessionId[] {
  * @param list - sessions list snapshot.
  * @param archivedSessionIds - registry-global archive set.
  * @param archivedFilter - archived-row visibility choice.
+ * @param sessionKind - session-type choice; omitted, every type is visible.
  * @returns known visible Session ids in list order, including ordinary forks and only the current blank.
  */
 export function visibleSessionIds(
   list: SessionListState,
   archivedSessionIds: readonly SessionId[],
   archivedFilter: ArchivedFilter,
+  sessionKind: SessionKindView = ALL_SESSION_KINDS,
 ): SessionId[] {
   const archived = new Set(archivedSessionIds)
   const current = mainSessionId(list)
   return list.ids.filter((id) => {
     const s = list.byId[id]
-    return s !== undefined && sessionVisible(s, current, archived, archivedFilter)
+    return s !== undefined && sessionVisible(s, current, archived, archivedFilter, sessionKind)
   })
 }
 
@@ -509,7 +578,7 @@ export function deriveFlat(
   const current = mainSessionId(list)
   const members = sessionIds.flatMap((id) => {
     const session = list.byId[id]
-    return session !== undefined && sessionVisible(session, current, archived, rowState.archivedFilter)
+    return session !== undefined && sessionVisible(session, current, archived, rowState.archivedFilter, rowState.sessionKind)
       ? [session]
       : []
   })
@@ -529,6 +598,7 @@ export function deriveFlat(
  * @param statuses - unified UI status by Session.
  * @param content - ranked Host content-search page.
  * @param limit - protocol-owned maximum merged row count.
+ * @param sessionKind - session-type choice; search follows it, and omitted, every type matches.
  * @returns bounded deduplicated flat rows and a refine-query hint bit.
  */
 export function deriveSearchResults(
@@ -540,6 +610,7 @@ export function deriveSearchResults(
   statuses: SessionStatuses,
   content: { items: readonly SessionSearchResultItem[]; hasMore: boolean },
   limit: number,
+  sessionKind: SessionKindView = ALL_SESSION_KINDS,
 ): SearchResultSet {
   const q = query.trim().toLowerCase()
   if (q === '') return { items: [], hasMore: false }
@@ -564,7 +635,7 @@ export function deriveSearchResults(
     const summary = list.byId[id]
     // Blank placeholders never match a query (their canonical title displays
     // localized, so matching it would tie search to one language).
-    if (summary === undefined || summary.blank || !sessionVisible(summary, current, archived, archivedFilter)) continue
+    if (summary === undefined || summary.blank || !sessionVisible(summary, current, archived, archivedFilter, sessionKind)) continue
     if (
       sessionTitle(summary).toLowerCase().includes(q)
       || labelOf(summary).toLowerCase().includes(q)
@@ -587,7 +658,7 @@ export function deriveSearchResults(
   for (const summary of orderedLocal) include(summary)
   for (const item of content.items) {
     const summary = list.byId[item.sessionId]
-    if (summary !== undefined && !summary.blank && sessionVisible(summary, current, archived, archivedFilter)) include(summary)
+    if (summary !== undefined && !summary.blank && sessionVisible(summary, current, archived, archivedFilter, sessionKind)) include(summary)
   }
 
   return {

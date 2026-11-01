@@ -286,6 +286,12 @@ export type WorkspaceBrowserInjected = {
   ) => Promise<{ items: readonly SessionSearchResultItem[]; hasMore: boolean }>
   /** Maximum number of merged rows rendered for one search. */
   searchResultLimit: number
+  /**
+   * Agent preset ids whose Sessions the session-type choice counts as
+   * automated besides Sessions no person prompted (the `automatedAgentPresets`
+   * configuration).
+   */
+  automatedAgentPresets: readonly string[]
   /** Open the Session rename dialog (a row title double-click); the rename action entry raises the same request. */
   requestSessionRename: (sessionId: SessionId, currentTitle: string) => void
   /** Tell the user an archived row cannot be opened (a click on it). */
