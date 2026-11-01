@@ -81,7 +81,7 @@ kind: "package-reference"
 | `maxNoteEvents` | `10` | 一条通知里列出的事件数；通知还带上这一批所有事件的类型（`LsyNote.kinds`），在主人睡觉时压消息的通道拿它去匹配自己的紧急类型 |
 | `webUrl` | 未设置 | 附在 Session 结果里的 Web UI 链接 |
 | `autoArchive.enabled` | `true` | 归档闲置已久的对话 Session（见[自动归档](#auto-archive)）；只归档，不删除 |
-| `autoArchive.inactiveDays` | `7` | Session 最后一条消息过了多少天才到期 |
+| `autoArchive.inactiveDays` | `7` | Session 最后一次提示过了多少天才到期 |
 | `autoArchive.dryRun` | `false` | 只筛选并记日志，不归档 |
 | `autoArchive.maxPerSweep` | `50` | 一次检查最多归档的 Session 数，其余等下一次 |
 | `autoArchive.firstSweepMinutes` / `sweepHours` | `10` / `6` | 启动后多少分钟做第一次检查，之后每隔多少小时一次 |
@@ -115,9 +115,9 @@ kind: "package-reference"
 <a id="auto-archive"></a>
 ### 自动归档
 
-每隔 `sweepHours` 小时，总线列出 Host 的 Session（`ctx.sessionController.list()`），把最后一条消息早于 `inactiveDays` 天的 Session 通过 `ctx.workspaceRegistry.archiveSession()` 归档。这是 Host 自己的归档：它先问每个 `workspace/session-activity` 提供方，有正在运行的轮次、智能体、任务或定时提醒的 Session 会被拒绝（记为 `active`）；它从不删除，归档的 Session 在 Web UI 里一键就能恢复。每次检查都会记日志，写明各项计数、归档的 id 和按原因分类的跳过数，并保留上一次的报告和最近 200 个归档的 Session（存在 `lsy_event_bus_archive` domain 里），供 `archiveStatus()` 和设置 → 订阅与监控使用。
+每隔 `sweepHours` 小时，总线列出 Host 的 Session（`ctx.sessionController.list()`），把最后一次提示早于 `inactiveDays` 天的 Session（列表里没有活动元数据的冷 Session 按它日志文件的最后写入时间算）通过 `ctx.workspaceRegistry.archiveSession()` 归档。这是 Host 自己的归档：它先问每个 `workspace/session-activity` 提供方，有正在运行的轮次、智能体、任务或定时提醒的 Session 会被拒绝（记为 `active`）；它从不删除，归档的 Session 在 Web UI 里一键就能恢复。每次检查都会记日志，写明各项计数、归档的 id 和按原因分类的跳过数，并保留上一次的报告和最近 200 个归档的 Session（存在 `lsy_event_bus_archive` domain 里），供 `archiveStatus()` 和设置 → 订阅与监控使用。
 
-下列 Session 不会被动，并按原因计数：`recent`（近期活跃）、`subagent` 的、`running`（运行中）、`pinned`（置顶）、订阅的 `persistent` 常驻 Session、运行时订阅或 watch 的创建者（`subscription`），以及被插件认领的。插件用 `protectSessions(label, check)` 认领自己的 Session；`check({ id, updatedAt, cwd, title })` 返回 `true`（或一个原因）即保留，抛错也保留，返回的函数撤回认领。`lsy-wechat` 认领 owner 当前的聊天 Session（`wechat`），`lsy-qqbot` 认领各对端当前的聊天 Session（`qqbot`），`lsy-qq` 认领各群的常驻摘要 Session（`qq`）。要在注入了 `lsyEventBus` 的 effect 里注册，这样总线或插件重载时认领会随之撤回。
+下列 Session 不会被动，并按原因计数：`recent`（近期活跃）、`unknown`（Host 列出它时没有活动元数据，它的日志最后写入时间也读不到）、`subagent` 的、`running`（运行中）、`pinned`（置顶）、订阅的 `persistent` 常驻 Session、运行时订阅或 watch 的创建者（`subscription`），以及被插件认领的。插件用 `protectSessions(label, check)` 认领自己的 Session；`check({ id, updatedAt, cwd, title })` 返回 `true`（或一个原因）即保留，抛错也保留，返回的函数撤回认领。`lsy-wechat` 认领 owner 当前的聊天 Session（`wechat`），`lsy-qqbot` 认领各对端当前的聊天 Session（`qqbot`），`lsy-qq` 认领各群的常驻摘要 Session（`qq`）。要在注入了 `lsyEventBus` 的 effect 里注册，这样总线或插件重载时认领会随之撤回。
 
 - `archiveStatus()`——设置、`nextSweepAt`、保护方标签、上一次检查的报告，以及最近归档的 Session（新的在前）。
 - `sweepArchive({ dryRun? })`——立刻检查一次（设置页的按钮）；已有检查在跑时会加入它，`dryRun` 只列出会归档什么。

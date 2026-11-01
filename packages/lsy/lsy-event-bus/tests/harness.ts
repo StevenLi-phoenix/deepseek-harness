@@ -44,8 +44,18 @@ export interface FakeController {
   failures: Map<string, string>
   known: Set<string>
   /** Session list rows served by `list()`. */
-  rows: Array<{ sessionId: string; updatedAt: number; running: boolean; blank: boolean; origin?: 'subagent'; cwd?: string; projections?: { values: { title?: string | null } } }>
-  list(request: unknown, signal: AbortSignal): Promise<{ items: FakeController['rows'] }>
+  rows: Array<{
+    sessionId: string
+    updatedAt: number
+    running: boolean
+    blank: boolean
+    origin?: 'subagent'
+    cwd?: string
+    /** Omit the Host's list-metadata projection, as a cold row with an empty cache does. */
+    cold?: boolean
+    projections?: { values: { title?: string | null } }
+  }>
+  list(request: unknown, signal: AbortSignal): Promise<{ items: unknown[] }>
   resolveAgent(sessionId: string): Promise<{ agent: { followup(message: Followup): void } } | { error: { code: string; message: string } }>
 }
 
@@ -56,7 +66,19 @@ export function fakeController(...known: string[]): FakeController {
     failures: new Map(),
     known: new Set(known),
     rows: [],
-    async list() { return { items: controller.rows } },
+    async list() {
+      return {
+        items: controller.rows.map(({ cold, projections, ...row }) => ({
+          ...row,
+          projections: {
+            values: {
+              ...cold === true ? {} : { sessionListMetadata: { blank: row.blank, lastPromptAt: row.updatedAt } },
+              ...projections?.values,
+            },
+          },
+        })),
+      }
+    },
     async resolveAgent(sessionId) {
       const failure = controller.failures.get(sessionId)
       if (failure !== undefined) return { error: { code: failure, message: `${failure} for ${sessionId}` } }

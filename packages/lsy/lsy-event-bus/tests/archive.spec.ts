@@ -1,3 +1,6 @@
+import { mkdtemp, rm, utimes, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   AUTO_ARCHIVE_DEFAULTS, MAX_RECENT_ARCHIVED, resolveAutoArchive, selectSessions,
@@ -290,6 +293,39 @@ describe('LsyEventBus auto-archive', () => {
     expect(off.bus.archiveStatus()).toMatchObject({ enabled: false })
     expect(off.bus.archiveStatus().nextSweepAt).toBeUndefined()
     expect(registry2.archivedSessionIds).toEqual([])
+  })
+
+  it('never archives a cold Session without activity metadata unless its log shows it idle', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lsy-bus-log-'))
+    try {
+      const touched = async (name: string, daysAgo: number): Promise<string> => {
+        const path = join(dir, `${name}.jsonl`)
+        await writeFile(path, '{}\n')
+        const at = new Date(Date.now() - daysAgo * DAY)
+        await utimes(path, at, at)
+        return path
+      }
+      const logs = new Map([['idle-log', await touched('idle-log', 30)], ['busy-log', await touched('busy-log', 1)]])
+      const controller = fakeController()
+      // Created long ago; the list has only creation times for them.
+      for (const id of ['idle-log', 'busy-log', 'no-log', 'unreadable', 'warm']) controller.rows.push(listed(id, 40, { cold: id !== 'warm' }))
+      const registry = fakeRegistry()
+      const { bus, ctx } = await harness({ config: archiveConfig(), controller, registry })
+      ctx.provide('sessionPersistence' as never, {
+        stat: async (id: string) => {
+          if (id === 'unreadable') return { location: { path: join(dir, 'missing.jsonl') } }
+          const path = logs.get(id)
+          return path === undefined ? undefined : { location: { path } }
+        },
+      } as never)
+      const report = await bus.sweepArchive()
+      expect(registry.archivedSessionIds.sort()).toEqual(['idle-log', 'warm'])
+      expect(report.skipped).toEqual({ unknown: 2, recent: 1 })
+      expect(report.skippedIds['unknown']!.sort()).toEqual(['no-log', 'unreadable'])
+      expect(report.skippedIds['recent']).toEqual(['busy-log'])
+    } finally {
+      await rm(dir, { recursive: true })
+    }
   })
 
   it('reports an aborted sweep instead of throwing when the Host services are missing', async () => {

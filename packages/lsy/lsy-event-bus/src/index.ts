@@ -16,7 +16,7 @@ import z from '@deepseek-ai/schemastery'
 import { z as zod } from 'zod'
 import {
   archiveDomain, autoArchiveSchema, resolveAutoArchive, SessionArchiver, type ArchiveHost, type ArchiveStatus, type AutoArchiveConfig,
-  type ProtectionDisposer, type SessionProtector, type SessionRow, type SweepReport,
+  logModifiedAt, type LogLocator, type ProtectionDisposer, type SessionProtector, type SessionRow, type SweepReport,
 } from './archive.ts'
 import { matchesSubscription, suppressionReason } from './match.ts'
 import {
@@ -696,17 +696,25 @@ export class LsyEventBus extends Service {
         const controller = ctx.get('sessionController')
         if (controller === undefined) throw new Error('no sessionController service is mounted')
         const { items } = await controller.list({}, signal)
-        return items.map((item): SessionRow => {
+        const persistence = (ctx.get.bind(ctx) as (name: string) => unknown)('sessionPersistence') as LogLocator | undefined
+        const rows: SessionRow[] = []
+        for (const item of items) {
           const title = item.projections?.values.title
-          return {
+          // Without the list-metadata projection, updatedAt is the creation time and tells nothing about use: read the log's
+          // last write instead, and when that is unavailable too the Session is never archived.
+          const known = item.projections?.values.sessionListMetadata !== undefined
+          const written = known ? undefined : await logModifiedAt(persistence, item.sessionId)
+          rows.push({
             id: item.sessionId,
-            updatedAt: item.updatedAt,
+            updatedAt: written === undefined ? item.updatedAt : Math.max(item.updatedAt, written),
             running: item.running,
             subagent: item.origin === 'subagent',
+            activityUnknown: !known && written === undefined,
             ...(item.cwd === undefined ? {} : { cwd: item.cwd }),
             ...(typeof title === 'string' && title !== '' ? { title } : {}),
-          }
-        })
+          })
+        }
+        return rows
       },
       archive: async (id) => {
         const registry = ctx.get('workspaceRegistry')
