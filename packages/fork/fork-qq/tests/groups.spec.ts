@@ -33,7 +33,7 @@ async function until(check: () => boolean, what: string, ms = 4000): Promise<voi
 }
 
 /** Boot an observer whose `groups` reference the test can move, as the Settings form does. */
-async function boot(initial: string[]) {
+async function boot(initial: string[], history: () => unknown = () => ({ messages: [] })) {
   const fake = new FakeOneBot(TOKEN)
   servers.push(fake)
   await fake.listen()
@@ -43,11 +43,18 @@ async function boot(initial: string[]) {
     { group_id: Number(B), group_name: '闲聊群', member_count: 300 },
     { group_id: Number(C), group_name: '安静群', member_count: 12 },
   ])
-  fake.handlers.set('get_group_msg_history', () => ({ messages: [] }))
+  fake.handlers.set('get_group_msg_history', history)
   const ctx = new Context()
   contexts.push(ctx)
   const logs: string[] = []
-  ctx.logger.exporter({ levels: { default: 3 }, export: (m) => { logs.push(String(m.args[0])) } })
+  const warnings: string[] = []
+  ctx.logger.exporter({
+    levels: { default: 3 },
+    export: (m) => {
+      logs.push(String(m.args[0]))
+      if (m.type === 'warn') warnings.push(String(m.args[0]))
+    },
+  })
   ctx.provide('credentials', { resolve: () => Promise.resolve({ value: TOKEN }) } as never)
   ctx.provide('sessionController', { create: vi.fn(), resolveAgent: vi.fn(), prompt: vi.fn(), selectModel: vi.fn() } as never)
   ctx.provide('permissionPresets', { resolve: vi.fn(), set: vi.fn() } as never)
@@ -62,7 +69,7 @@ async function boot(initial: string[]) {
     updateVolatile(live, createVolatile(groups))
     ctx.emit('loader/volatile-update' as never)
   }
-  return { ctx, observer: ctx.forkQq, fake, logs, move }
+  return { ctx, observer: ctx.forkQq, fake, logs, warnings, move }
 }
 
 describe('QQ groups follow the Settings form', () => {
@@ -122,5 +129,18 @@ describe('QQ groups follow the Settings form', () => {
     h.move([A, B])
     expect(h.observer.isRecorded(B)).toBe(true)
     expect(h.observer.groupOverview().find(group => group.groupId === B)?.recorded).toBe(true)
+  })
+
+  it('does not call a group without history a failed backfill', async () => {
+    const empty = () => { throw new Error('消息undefined不存在') }
+    const h = await boot([A], empty)
+    await until(() => h.fake.callsOf('get_group_msg_history').length >= 1, 'the backfill')
+    await until(() => h.logs.some(line => line.includes('has no history to backfill')), 'the note')
+    expect(h.warnings.filter(line => line.includes('backfill of group'))).toEqual([])
+  })
+
+  it('still warns when the backfill fails for any other reason', async () => {
+    const h = await boot([A], () => { throw new Error('网络错误') })
+    await until(() => h.warnings.some(line => line.includes(`backfill of group ${A} failed`)), 'the warning')
   })
 })
