@@ -13778,6 +13778,9 @@ importers:
       '@deepseek-ai/dsh-lsy-event-bus':
         specifier: workspace:*
         version: link:../lsy-event-bus
+      '@deepseek-ai/dsh-lsy-style':
+        specifier: workspace:*
+        version: link:../lsy-style
       '@deepseek-ai/dsh-lsy-voice':
         specifier: workspace:*
         version: link:../lsy-voice

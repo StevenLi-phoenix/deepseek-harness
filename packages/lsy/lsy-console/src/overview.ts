@@ -12,6 +12,7 @@ import { TIMED_OUT, httpProbe, isHealthy, isReachable, within } from './probe.ts
 import type { Fact, OverviewView, ServiceCard, ServiceId, Tone } from './views.ts'
 import type {} from '@deepseek-ai/dsh-lsy-event-bus'
 import type {} from '@deepseek-ai/dsh-lsy-voice'
+import type { StyleHealth } from '@deepseek-ai/dsh-lsy-style'
 
 /** What a service may report about itself: `health()` is optional, so each service adds it when it has more to say than "mounted". */
 export interface HealthReport {
@@ -133,8 +134,8 @@ function qqCard(ctx: Context): ServiceCard {
   }
 }
 
-/** What `ctx.lsyStyle.health()` answers: counts and times only, never sample text. */
-function styleHealth(value: unknown): { kept: number; pending: number; review: 'optional' | 'required'; lastRefreshAt: number | null; ticTrend: 'up' | 'flat' | 'down' | null } | undefined {
+/** Check the shape of what `ctx.lsyStyle.health()` answered (`StyleHealth` of `lsy-style`: counts and times only, never sample text). */
+function styleHealth(value: unknown): StyleHealth | undefined {
   if (typeof value !== 'object' || value === null) return undefined
   const { kept, pending, review, lastRefreshAt, ticTrend } = value as Record<string, unknown>
   const count = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0
@@ -144,14 +145,13 @@ function styleHealth(value: unknown): { kept: number; pending: number; review: '
   return { kept, pending, review, lastRefreshAt, ticTrend }
 }
 
-/** The speaking-style page's service (`ctx.lsyStyle`); absent on a deployment that has not installed it. */
+/** The speaking-style service (`ctx.lsyStyle` of `lsy-style`); absent on a deployment that has not installed it. */
 function styleCard(ctx: Context): ServiceCard {
-  const style = service(ctx, 'lsyStyle')
+  const style = ctx.get('lsyStyle')
   if (style === undefined) return absent('style')
-  if (typeof style['health'] !== 'function') return card('style', 'ok', 'mounted')
   let answer: unknown
   try {
-    answer = (style['health'] as () => unknown).call(style)
+    answer = style.health()
   } catch {
     return card('style', 'down', 'error')
   }

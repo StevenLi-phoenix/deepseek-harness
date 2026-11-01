@@ -29,6 +29,9 @@
       "path": "../lsy-event-bus"
     },
     {
+      "path": "../lsy-style"
+    },
+    {
       "path": "../lsy-voice"
     },
     {

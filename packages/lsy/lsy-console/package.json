@@ -53,6 +53,7 @@
     "@deepseek-ai/dsh-client-ui-slots": "workspace:*",
     "@deepseek-ai/dsh-lsy-cc-admin": "workspace:*",
     "@deepseek-ai/dsh-lsy-event-bus": "workspace:*",
+    "@deepseek-ai/dsh-lsy-style": "workspace:*",
     "@deepseek-ai/dsh-lsy-voice": "workspace:*",
     "@deepseek-ai/dsh-schedule": "workspace:*",
     "@testing-library/react": "^16.3.3",
