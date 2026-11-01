@@ -14,6 +14,10 @@ import type { VerifiedWebhookDelivery, WebhookDeliveryId, WebhookRule, WebhookRu
 import type {} from '@deepseek-ai/dsh-workspace'
 import z from '@deepseek-ai/schemastery'
 import { z as zod } from 'zod'
+import {
+  archiveDomain, autoArchiveSchema, resolveAutoArchive, SessionArchiver, type ArchiveHost, type ArchiveStatus, type AutoArchiveConfig,
+  type ProtectionDisposer, type SessionProtector, type SessionRow, type SweepReport,
+} from './archive.ts'
 import { matchesSubscription, suppressionReason } from './match.ts'
 import {
   FORK_SILENT_REPLY, batchTitle, buildBatchPrompt, buildSessionRequest, clip, failureDetail, formatBatchNote, formatReminderNote,
@@ -29,6 +33,8 @@ import { ForkSubscriptionError, subscriptionProblem } from './validate.ts'
 export * from './match.ts'
 export * from './prompt.ts'
 export * from './validate.ts'
+export { AUTO_ARCHIVE_DEFAULTS, MAX_RECENT_ARCHIVED, resolveAutoArchive, selectSessions } from './archive.ts'
+export type { ArchivedRecord, ArchiveStatus, AutoArchiveConfig, ProtectedSession, ProtectionDisposer, SessionProtector, SessionRow, SweepReport } from './archive.ts'
 export type * from './storage.ts'
 export type * from './types.ts'
 
@@ -78,6 +84,11 @@ export interface Config {
   maxNoteEvents: number
   /** Web UI link attached to Session result messages. */
   webUrl?: string
+  /**
+   * Archive chat Sessions nobody touched for `inactiveDays` (archive only, never delete). A plain object without this
+   * block keeps it off; the schema fills in the defaults.
+   */
+  autoArchive?: AutoArchiveConfig
 }
 
 // Schemastery materializes a missing nested object as `{}`, so the fields a
@@ -126,6 +137,7 @@ export const Config: z<Config> = z.object({
   reportScheduledTurns: z.boolean().default(true),
   maxNoteEvents: z.natural().min(1).default(10),
   webUrl: z.string(),
+  autoArchive: autoArchiveSchema,
 })
 
 /** Shape check for deliveries that come back through the webhook rule. */
@@ -398,6 +410,7 @@ export class ForkEventBus extends Service {
   private readonly rateLimitHits: number[] = []
   private chain: Promise<unknown> = Promise.resolve()
   private stopping = false
+  private readonly archiver: SessionArchiver
 
   /**
    * @param ctx - Host services owning timers, storage, and Session events.
@@ -408,6 +421,10 @@ export class ForkEventBus extends Service {
     assertConfig(config)
     this.configSubscriptions = new Map(config.subscriptions.map(subscription => [subscription.id, subscription]))
     this.ready = ctx.storageDomain.open(busDomain)
+    this.archiver = new SessionArchiver(
+      resolveAutoArchive(config.autoArchive), this.archiveHost(), ctx.logger,
+      (callback, ms) => ctx.timeout(callback, ms), () => ctx.storageDomain.open(archiveDomain),
+    )
 
     ctx.effect(async () => {
       const domain = await this.ready
@@ -416,11 +433,13 @@ export class ForkEventBus extends Service {
         this.stopping = true
         for (const timer of this.flushTimers.values()) timer.dispose()
         this.flushTimers.clear()
+        await this.archiver.stop()
         await Promise.allSettled([...this.inflight])
         await this.chain // serialize() keeps the chain itself non-rejecting.
         await domain.close()
       }, 'forkEventBus.lifecycle()')
       await this.restorePending()
+      await this.archiver.start()
       return cleanup
     }, 'forkEventBus.init()')
 
@@ -632,6 +651,75 @@ export class ForkEventBus extends Service {
       this.ctx.logger.info(`fork-event-bus: ${paused ? 'paused' : 'resumed'} ${id}`)
       return 'ok'
     })
+  }
+
+  /**
+   * Keep a plugin's Sessions out of the auto-archive sweep (for example the QQ resident group Sessions or the WeChat chat
+   * Session). `check` runs only for Sessions that are otherwise due; return `true` (or a short reason) to keep one. A throw keeps it.
+   * Register inside an effect so a reload withdraws the claim:
+   * `ctx.inject(['forkEventBus'], scoped => { scoped.effect(() => scoped.forkEventBus.protectSessions('qq', check), 'qq.archiveProtection()') })`.
+   * @param label - skip category name shown in the sweep log and Settings, for example `qq`.
+   * @param check - the claim.
+   * @returns the disposer; the bus drops every claim when it stops.
+   */
+  protectSessions(label: string, check: SessionProtector): ProtectionDisposer {
+    return this.archiver.protect(label, check)
+  }
+
+  /**
+   * The auto-archive schedule, protectors, last sweep, and recently archived Sessions, for health and Settings.
+   * @returns snapshot.
+   */
+  archiveStatus(): ArchiveStatus {
+    return this.archiver.status()
+  }
+
+  /**
+   * Run an auto-archive sweep now (Settings "sweep now"); joins a sweep already running.
+   * @param options - `dryRun: true` lists what a sweep would archive without archiving.
+   * @returns the sweep report.
+   */
+  sweepArchive(options: { dryRun?: boolean } = {}): Promise<SweepReport> {
+    return this.archiver.sweep('manual', options)
+  }
+
+  /** What the sweep reads from the Host, and which Sessions the bus itself keeps out of it. */
+  private archiveHost(): ArchiveHost {
+    const ctx = this.ctx
+    return {
+      now: () => Date.now(),
+      archivedIds: () => new Set(ctx.get('workspaceRegistry')?.archivedSessionIds ?? []),
+      pinnedIds: () => new Set(ctx.get('workspaceRegistry')?.pinnedSessionIds ?? []),
+      list: async (signal): Promise<readonly SessionRow[]> => {
+        const controller = ctx.get('sessionController')
+        if (controller === undefined) throw new Error('no sessionController service is mounted')
+        const { items } = await controller.list({}, signal)
+        return items.map((item): SessionRow => {
+          const title = (item.projections?.values as { title?: string | null } | undefined)?.title
+          return {
+            id: item.sessionId,
+            updatedAt: item.updatedAt,
+            running: item.running,
+            subagent: item.origin === 'subagent',
+            ...(item.cwd === undefined ? {} : { cwd: item.cwd }),
+            ...(typeof title === 'string' && title !== '' ? { title } : {}),
+          }
+        })
+      },
+      archive: async (id) => {
+        const registry = ctx.get('workspaceRegistry')
+        if (registry === undefined) throw new Error('no workspaceRegistry service is mounted')
+        await registry.archiveSession(id as SessionId)
+      },
+      builtinProtected: () => {
+        const kept = new Map<string, string>()
+        for (const id of this.tracked.keys()) kept.set(id, 'running')
+        for (const id of this.reminders.keys()) kept.set(id, 'running')
+        for (const view of this.persistentSessions()) kept.set(view.sessionId, 'persistent')
+        for (const record of this.storedSubscriptions()) if (record.createdBy !== undefined) kept.set(record.createdBy, 'subscription')
+        return kept
+      },
+    }
   }
 
   /**

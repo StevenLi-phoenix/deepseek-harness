@@ -43,6 +43,9 @@ export interface FakeController {
   followups: Map<string, Followup[]>
   failures: Map<string, string>
   known: Set<string>
+  /** Session list rows served by `list()`. */
+  rows: Array<{ sessionId: string; updatedAt: number; running: boolean; blank: boolean; origin?: 'subagent'; cwd?: string; projections?: { values: { title?: string | null } } }>
+  list(request: unknown, signal: AbortSignal): Promise<{ items: FakeController['rows'] }>
   resolveAgent(sessionId: string): Promise<{ agent: { followup(message: Followup): void } } | { error: { code: string; message: string } }>
 }
 
@@ -52,6 +55,8 @@ export function fakeController(...known: string[]): FakeController {
     followups: new Map(),
     failures: new Map(),
     known: new Set(known),
+    rows: [],
+    async list() { return { items: controller.rows } },
     async resolveAgent(sessionId) {
       const failure = controller.failures.get(sessionId)
       if (failure !== undefined) return { error: { code: failure, message: `${failure} for ${sessionId}` } }
@@ -68,6 +73,9 @@ export function fakeController(...known: string[]): FakeController {
 /** Workspace registry double recording archives and projects. */
 export interface FakeRegistry {
   archivedSessionIds: string[]
+  pinnedSessionIds: string[]
+  /** Sessions whose archive is refused with the Host's active-Session error. */
+  active: Set<string>
   projects: Map<string, string>
   archiveSession(sessionId: string): Promise<void>
   resolveByPath(path: string): Promise<{ path: string; title: string } | undefined>
@@ -78,9 +86,12 @@ export interface FakeRegistry {
 export function fakeRegistry(refuse?: string): FakeRegistry {
   const registry: FakeRegistry = {
     archivedSessionIds: [],
+    pinnedSessionIds: [],
+    active: new Set(),
     projects: new Map(),
     async archiveSession(sessionId) {
       if (refuse !== undefined) throw new Error(refuse)
+      if (registry.active.has(sessionId)) throw Object.assign(new Error(`cannot archive session '${sessionId}': the session is active (turn)`), { name: 'WorkspaceActiveSessionError' })
       registry.archivedSessionIds.push(sessionId)
     },
     async resolveByPath(path) {
