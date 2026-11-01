@@ -3,20 +3,20 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/fork/fork-presence/README.md
 /:
-  en: 5ffd932ccc1972e1
-  zh: b3d0aab141489df0
+  en: 01eb9449aaafd31e
+  zh: 889bab579bd71cb4
 /deepseek-ai-dsh-fork-presence:
   en: f7e55238137381e2
   zh: 9dbbf405e8819f2c
 /deepseek-ai-dsh-fork-presence/summary:
-  en: 111d8a956c48bb2e
-  zh: 4e2e922c1fc3bb01
+  en: 93c2c015b8f08c46
+  zh: f9ac48961d63842f
 /deepseek-ai-dsh-fork-presence/table-of-contents:
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
 /deepseek-ai-dsh-fork-presence/use-this-package:
-  en: 456cebe9574c388f
-  zh: c8e1270feae9fac1
+  en: ce7c041f98b76a60
+  zh: 35c00b0a0bb6008f
 /deepseek-ai-dsh-fork-presence/understand-the-implementation:
   en: d7d75d68c788341e
   zh: d62d855bf347f470
@@ -30,8 +30,8 @@
   en: ca75c51c89c2c9b0
   zh: 2dd3f298281cf138
 /deepseek-ai-dsh-fork-presence/known-limitations-and-deferred-work:
-  en: 0f4fbe1af7e12495
-  zh: c28b536649ddc3a6
+  en: 94705b0c55a523aa
+  zh: 72d4397849a279a0
 /deepseek-ai-dsh-fork-presence/known-limitations-and-deferred-work/dev-note:
-  en: 27c9730cc88d3a81
-  zh: 691cd4daeddeab41
+  en: dabc09c244e5188e
+  zh: 82a3e7a5927e0226

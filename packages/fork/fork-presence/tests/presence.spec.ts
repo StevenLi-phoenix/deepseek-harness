@@ -23,8 +23,13 @@ afterEach(async () => {
   vi.useRealTimers()
 })
 
-function event(kind: string, source = 'presence'): ForkEventInput {
-  return { source, kind, key: String(Date.now()), subject: 'owner', title: kind }
+function event(kind: string, source = 'presence', key = `sleep-${String(Date.now())}`): ForkEventInput {
+  return { source, kind, key, subject: 'owner', title: kind }
+}
+
+/** A heartbeat of focus-watch: the same kinds, with a `heartbeat-` key. */
+function heartbeat(kind: 'presence.sleep.on' | 'presence.sleep.off'): ForkEventInput {
+  return event(kind, 'presence', `heartbeat-${String(Math.floor(Date.now() / 1_800_000))}`)
 }
 
 /** Mount presence over memory storage; `pool` carries the stored state across restarts. */
@@ -54,24 +59,21 @@ async function mount(options: { pool?: MemoryMediaPool; config?: Record<string, 
 }
 
 describe('configuration', () => {
-  it('defaults to a 03:30-10:30 window in New York, the lead\'s Focus holding times, and urgent kinds for disk and Bilibili risk', () => {
+  it('defaults to a 03:30-10:30 window in New York, a 2 h hold for a signal the 30 min heartbeat refreshes, and urgent kinds for disk and Bilibili risk', () => {
     expect(Config({} as never)).toEqual({
       timeZone: 'America/New_York',
       window: { enabled: true, start: '03:30', end: '10:30' },
-      focusFreshHours: 20,
+      focusFreshHours: 2,
       sleepMaxHours: 14,
       manualMaxHours: 12,
       urgentKinds: [...DEFAULT_URGENT_KINDS],
-      ingestPath: '/hooks/events',
-      tokenEnv: 'FORK_INGEST_TOKEN_PRESENCE',
     })
     expect(DEFAULT_URGENT_KINDS).toEqual(['host.disk.full', 'host.*.critical', 'bili.risk.*', 'bili.gate.readonly'])
   })
 
-  it('fails at load on a zone that does not exist, an empty window, or a URL that is not one', async () => {
+  it('fails at load on a zone that does not exist, an empty window, or a window that is empty', async () => {
     await expect(mount({ config: { timeZone: 'Mars/Olympus' } })).rejects.toThrow('not a valid IANA time zone')
     await expect(mount({ config: { window: { start: '04:00', end: '04:00' } } })).rejects.toThrow('start and end must differ')
-    await expect(mount({ config: { ingestUrl: 'nope' } })).rejects.toThrow('ingestUrl must be a URL')
     expect(() => Config({ window: { start: '3:30' } } as never)).toThrow()
   })
 })
@@ -98,7 +100,8 @@ describe('state', () => {
     expect(presence.view()).toMatchObject({ asleep: false, source: 'focus', since: at('10:05'), lastFocus: { asleep: false, at: at('10:05') } })
     await vi.advanceTimersByTimeAsync(at('19:00') - Date.now())
     await presence.ingest(event('presence.sleep.on'))
-    expect(flips).toEqual([false, true])
+    // The off signal held 2 h, then the window took over (asleep) until it closed at 10:30 EST, then Focus on.
+    expect(flips).toEqual([false, true, false, true])
     expect(logs.filter(line => line.startsWith('info fork-presence: asleep by focus'))).toHaveLength(2)
   })
 
@@ -129,6 +132,89 @@ describe('state', () => {
     await vi.advanceTimersByTimeAsync(2000)
     expect(presence.isAsleep()).toBe(false)
     expect(flips).toEqual([true, false])
+  })
+})
+
+describe('heartbeat', () => {
+  it('keeps the state without waking listeners, flushing, or moving its start: repeats change nothing', async () => {
+    vi.setSystemTime(at('08:00'))
+    const { presence, flips, logs } = await mount({ config: { window: { enabled: false } } })
+    const held = { flush: vi.fn(() => Promise.resolve(0)), count: () => 0, name: 'x' }
+    presence.registerHolder(held)
+    await presence.ingest(event('presence.sleep.on', 'presence', 'sleep-on-1'))
+    const first = presence.view()
+    expect(flips).toEqual([true])
+    const lines = logs.length
+    for (let n = 0; n < 4; n += 1) {
+      await vi.advanceTimersByTimeAsync(30 * 60_000)
+      expect(await presence.ingest(heartbeat('presence.sleep.on'))).toBe('asleep')
+    }
+    expect(flips).toEqual([true])
+    expect(held.flush).not.toHaveBeenCalled()
+    expect(logs.slice(lines)).toEqual([])
+    const view = presence.view()
+    expect(view).toMatchObject({ asleep: true, source: 'focus', since: first.since, lastFocus: { asleep: true, since: first.since, at: Date.now(), heartbeatAt: Date.now() } })
+    expect(view.until).toBe(Date.now() + hours(14))
+  })
+
+  it('refreshes the hold: awake outlasts focusFreshHours while heartbeats come, and lapses 2 h after they stop', async () => {
+    vi.setSystemTime(at('17:00'))
+    const { presence, flips } = await mount()
+    await presence.ingest(event('presence.sleep.off', 'presence', 'sleep-off-1'))
+    for (let n = 0; n < 6; n += 1) {
+      await vi.advanceTimersByTimeAsync(30 * 60_000)
+      await presence.ingest(heartbeat('presence.sleep.off'))
+    }
+    // Three hours on: past the 2 h hold of the change itself, still by the focus.
+    expect(presence.view()).toMatchObject({ asleep: false, source: 'focus', since: at('17:00') })
+    expect(presence.view().lastFocus).toMatchObject({ since: at('17:00'), at: at('20:00'), heartbeatAt: at('20:00') })
+    await vi.advanceTimersByTimeAsync(2 * 3_600_000 + 1000)
+    expect(presence.view()).toMatchObject({ source: 'window', asleep: false })
+    expect(flips).toEqual([])
+  })
+
+  it('a heartbeat off while awake by any source changes nothing; a heartbeat that flips the state is a change', async () => {
+    vi.setSystemTime(at('17:00'))
+    const { presence, flips } = await mount()
+    await presence.ingest(heartbeat('presence.sleep.off'))
+    expect(flips).toEqual([])
+    expect(presence.view()).toMatchObject({ asleep: false, source: 'focus', since: at('17:00') })
+    await vi.advanceTimersByTimeAsync(30 * 60_000)
+    await presence.ingest(heartbeat('presence.sleep.off'))
+    expect(presence.view().since).toBe(at('17:00'))
+    // A missed change shows up as a heartbeat of the other state.
+    await vi.advanceTimersByTimeAsync(30 * 60_000)
+    await presence.ingest(heartbeat('presence.sleep.on'))
+    expect(flips).toEqual([true])
+    expect(presence.view()).toMatchObject({ asleep: true, since: at('18:00') })
+  })
+
+  it('leaves a button alone, but a change ends it', async () => {
+    vi.setSystemTime(at('17:00'))
+    const { presence } = await mount()
+    await presence.ingest(event('presence.sleep.off', 'presence', 'sleep-off-1'))
+    await presence.setManual(true)
+    await vi.advanceTimersByTimeAsync(30 * 60_000)
+    await presence.ingest(heartbeat('presence.sleep.off'))
+    expect(presence.view()).toMatchObject({ asleep: true, source: 'manual' })
+    await presence.ingest(event('presence.sleep.on', 'presence', 'sleep-on-2'))
+    expect(presence.view()).toMatchObject({ asleep: true, source: 'focus', manual: null })
+    await presence.ingest(event('presence.sleep.off', 'presence', 'sleep-off-2'))
+    expect(presence.view()).toMatchObject({ asleep: false, source: 'focus' })
+  })
+
+  it('says the watcher is silent after an hour without a signal, or before the first, and survives a restart with the heartbeat time', async () => {
+    vi.setSystemTime(at('17:00'))
+    const first = await mount()
+    expect(first.presence.view()).toMatchObject({ signalSilent: true, lastFocus: null, focusFreshHours: 2 })
+    await first.presence.ingest(heartbeat('presence.sleep.off'))
+    expect(first.presence.view().signalSilent).toBe(false)
+    await vi.advanceTimersByTimeAsync(3_600_000 + 1000)
+    expect(first.presence.view().signalSilent).toBe(true)
+    await first.presence.ingest(heartbeat('presence.sleep.off'))
+    await first.ctx.fiber.dispose()
+    const second = await mount({ pool: first.pool })
+    expect(second.presence.view()).toMatchObject({ signalSilent: false, lastFocus: { asleep: false, since: at('17:00'), heartbeatAt: Date.now() } })
   })
 })
 
@@ -180,7 +266,7 @@ describe('persistence', () => {
     await first.ctx.fiber.dispose()
     vi.setSystemTime(at('18:00'))
     const second = await mount({ pool: first.pool })
-    expect(second.presence.view()).toMatchObject({ asleep: false, source: 'manual', manual: { asleep: false, until: at('20:00') }, lastFocus: { asleep: true, at: at('17:00') } })
+    expect(second.presence.view()).toMatchObject({ asleep: false, source: 'manual', manual: { asleep: false, until: at('20:00') }, lastFocus: { asleep: true, at: at('17:00'), since: at('17:00'), heartbeatAt: null } })
     expect(second.logs.some(line => line.startsWith('info fork-presence: awake by manual; window 03:30-10:30 America/New_York'))).toBe(true)
   })
 

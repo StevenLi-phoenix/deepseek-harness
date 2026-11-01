@@ -240,7 +240,7 @@
             tokenEnv: FORK_INGEST_TOKEN_AUTOCUT
           - id: bili
             tokenEnv: FORK_INGEST_TOKEN_BILI
-          # The phone's Sleep Focus (iOS Shortcut, RUNBOOK §18). A sink source: its events go to
+          # The Sleep Focus signal from focus-watch on this Mac (RUNBOOK §18). A sink source: its events go to
           # ctx.forkPresence and never to the bus, so no subscription can start a Session or send a note.
           - id: presence
             tokenEnv: FORK_INGEST_TOKEN_PRESENCE
@@ -269,17 +269,18 @@
     - id: fork-memory-settings
       name: '@deepseek-ai/dsh-fork-memory/settings'
 
-    # Settings → 勿扰: whether the owner sleeps (the phone's Sleep Focus pushed through fork-event-ingest's
-    # `presence` source, a daily 03:30-10:30 New York window when no Focus signal is fresh, buttons in
-    # Settings). While asleep fork-wechat holds non-urgent messages and sends them as one digest on waking.
-    # Urgent kinds are the defaults (host.disk.full, host.*.critical, bili.risk.*, bili.gate.readonly).
-    # ingestUrl and tokenEnv only fill in the Shortcut instructions on the page; the token itself is
-    # FORK_INGEST_TOKEN_PRESENCE in $DSH_HOME/.env.
+    # Settings → 勿扰: whether the owner sleeps. The signal is the Sleep Focus that iCloud syncs from the
+    # phone: focus-watch (a signed binary on this Mac under the owner's user, RUNBOOK §18) reads it and
+    # pushes presence.sleep.on/off to fork-event-ingest's `presence` source on every change and as a
+    # heartbeat every 30 minutes. A daily 03:30-10:30 New York window decides when no signal is fresh
+    # (2 h), and buttons in Settings override both. While asleep fork-wechat holds non-urgent messages
+    # and sends them as one digest on waking. Urgent kinds are the defaults (host.disk.full,
+    # host.*.critical, bili.risk.*, bili.gate.readonly). The token is FORK_INGEST_TOKEN_PRESENCE in
+    # $DSH_HOME/.env, and the same value in focus-watch's token file.
     - id: fork-presence
       name: '@deepseek-ai/dsh-fork-presence'
       config:
         timeZone: America/New_York
-        ingestUrl: https://dsh.tailc2559b.ts.net/hooks/events
 
     # The browser half of Settings → WeChat (微信, /api/fork.wechat) and Settings → 勿扰 (/api/fork.presence).
     # Their Host routes are served by the fork-wechat and fork-presence rows; this package only delivers the pages.

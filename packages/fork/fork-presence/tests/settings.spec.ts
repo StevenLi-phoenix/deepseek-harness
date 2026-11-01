@@ -9,11 +9,12 @@ const VIEW: PresenceView = {
   since: 1,
   until: 2,
   manual: null,
-  lastFocus: { asleep: true, at: 1 },
+  lastFocus: { asleep: true, at: 3, since: 1, heartbeatAt: 3 },
   window: { enabled: true, start: '03:30', end: '10:30' },
   deferred: 2,
   urgentKinds: ['host.disk.full'],
-  shortcut: { url: 'https://dsh.example/hooks/events', path: '/hooks/events', header: 'Authorization', tokenEnv: 'FORK_INGEST_TOKEN_PRESENCE', bodyOn: '{}', bodyOff: '{}' },
+  signalSilent: false,
+  focusFreshHours: 2,
   timeZone: 'America/New_York',
 }
 

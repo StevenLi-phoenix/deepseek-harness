@@ -1,5 +1,5 @@
 ---
-description: "Owner presence for the event service: asleep or awake from the phone's Sleep Focus (an iOS Shortcut), a daily fallback window, and buttons in Settings; WeChat holds non-urgent messages while the owner sleeps and sends them as one digest on waking."
+description: "Owner presence for the event service: asleep or awake from the Sleep Focus that focus-watch on the Mac mini reads from iCloud, a daily fallback window, and buttons in Settings; WeChat holds non-urgent messages while the owner sleeps and sends them as one digest on waking."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Stop the agent from buzzing your phone while you sleep. Your iPhone's Sleep Focus tells it when you fall asleep and wake, a daily window (03:30-10:30 New York) covers days without a signal, and **Settings → 勿扰** has buttons that win over both. While you sleep, WeChat holds every message that is not urgent and sends them as one digest when you wake; disk-full and Bilibili-risk alerts, and answers to something you just wrote, still arrive at once. The page also shows what is waiting, the latest Focus signal, and the iPhone Shortcut steps.
+Stop the agent from buzzing your phone while you sleep. The Mac mini reads your Sleep Focus from iCloud (`focus-watch`) and reports every change plus a heartbeat every 30 minutes, a daily window (03:30-10:30 New York) takes over when it goes quiet, and **Settings → 勿扰** has buttons that win over both. While you sleep, WeChat holds every message that is not urgent and sends them as one digest when you wake; disk-full and Bilibili-risk alerts, and answers to something you just wrote, still arrive at once. The page shows what is waiting and the latest signal and heartbeat.
 
 ## Table of Contents
 
@@ -25,14 +25,13 @@ Stop the agent from buzzing your phone while you sleep. Your iPhone's Sleep Focu
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount the row next to `@deepseek-ai/dsh-fork-wechat` and `@deepseek-ai/dsh-fork-event-ingest`; the fork event bundle mounts it. It needs the storage domain facility and, for the Settings route, the Host's `connection` service; the page needs `@deepseek-ai/dsh-fork-wechat-settings` and the settings shell. It provides `ctx.forkPresence`. Add the ingest source that carries the phone's signals, a *sink* source whose events go to this service and never to the event bus, so no subscription can start a Session or send a note because of them:
+Mount the row next to `@deepseek-ai/dsh-fork-wechat` and `@deepseek-ai/dsh-fork-event-ingest`; the fork event bundle mounts it. It needs the storage domain facility and, for the Settings route, the Host's `connection` service; the page needs `@deepseek-ai/dsh-fork-wechat-settings` and the settings shell. It provides `ctx.forkPresence`. Add the ingest source that carries `focus-watch`'s signals, a *sink* source whose events go to this service and never to the event bus, so no subscription can start a Session or send a note because of them:
 
 ```yaml
 - id: fork-presence
   name: '@deepseek-ai/dsh-fork-presence'
   config:
     timeZone: America/New_York
-    ingestUrl: https://dsh.tailc2559b.ts.net/hooks/events
 - id: fork-event-ingest
   config:
     sources:
@@ -45,17 +44,16 @@ Mount the row next to `@deepseek-ai/dsh-fork-wechat` and `@deepseek-ai/dsh-fork-
 |---|---|---|
 | `timeZone` | `America/New_York` | The owner's IANA zone; the window and the "quiet until" times are read in it |
 | `window` | on, `03:30` to `10:30` | Daily fallback window, used when no Focus signal is fresh. It wraps past midnight when `start` is later than `end`. The Settings page can replace it, and what it saves wins over this default |
-| `focusFreshHours` | `20` | How long a Focus-off signal outranks the window |
-| `sleepMaxHours` | `14` | How long a Focus-on signal holds when its off signal never comes (a dead phone), so one lost signal cannot silence the day |
+| `focusFreshHours` | `2` | How long a Focus signal holds without a newer one before the window decides again; the 30-minute heartbeat keeps refreshing it, so it lapses about two hours after `focus-watch` stops |
+| `sleepMaxHours` | `14` | How long a Focus-on signal holds without a newer one; a heartbeat refreshes it, so a watcher that dies at night cannot silence the day |
 | `manualMaxHours` | `12` | How long a Settings button holds when it names no end |
 | `urgentKinds` | `host.disk.full`, `host.*.critical`, `bili.risk.*`, `bili.gate.readonly` | Globs of the event kinds sent even while you sleep |
-| `ingestUrl` | unset | Full URL of the ingest route, shown in the Shortcut instructions |
-| `ingestPath` | `/hooks/events` | Path of that route |
-| `tokenEnv` | `FORK_INGEST_TOKEN_PRESENCE` | Name of the variable that holds the ingest token, shown in the instructions (the page never reads or shows the value) |
 
-The phone pushes `POST /hooks/events` with `Authorization: Bearer <token>` and the body `{"kind":"presence.sleep.on","key":"<date>","subject":"owner","title":"Sleep Focus on"}` (or `presence.sleep.off`). The Settings page shows the exact URL, header, and bodies, and the seven Shortcut steps; [RUNBOOK §18](../../../fork/deploy/RUNBOOK.md) covers creating the token on the Mac mini.
+`focus-watch` (a signed binary on the Mac mini under the owner's user, with Full Disk Access to read the Focus database iCloud syncs from the phone) pushes `POST http://127.0.0.1:3081/hooks/events` with `Authorization: Bearer <token>`. A change is `{"kind":"presence.sleep.on","key":"sleep-on-<ts>","subject":"owner","title":…}` (or `presence.sleep.off`, key `sleep-off-<ts>`); every 30 minutes it repeats the current state with a key that starts with `heartbeat`. [RUNBOOK §18](../../../fork/deploy/RUNBOOK.md) covers the token and the install.
 
-**Which answer wins.** A button that is still in force, then a fresh Focus signal, then the daily window. A Focus signal that arrives after a button ends the button. The Host's receipt time is the signal's time; the phone's clock and key are not used.
+**Heartbeats are idempotent.** A signal that repeats the state already held, which every heartbeat does, only refreshes how long the state holds and when the latest signal and heartbeat arrived. It does not move the state's start, end a Settings button, call the `onChange` listeners, or flush; a heartbeat `presence.sleep.off` while awake changes nothing. Only a signal that flips the state, or the first one, begins a new state and ends a button.
+
+**Which answer wins.** A button that is still in force, then a fresh Focus signal, then the daily window. A Focus change that arrives after a button ends the button; a repeat of the held state does not. The Host's receipt time is the signal's time; the watcher's clock is not used, and the key only tells a heartbeat from a change.
 
 **What is held.** Only the WeChat channel holds anything today ([`fork-wechat`](../fork-wechat/README.md#quiet-hours)). It calls `ctx.forkPresence.isAsleep()` and `isUrgent(note)`, registers a holder (`registerHolder`) so the page can count and flush what is waiting, and listens with `onChange` to send the digest when you wake. A message is urgent when its sender marked it (`ForkNote.urgent`) or one of the event kinds it reports (`ForkNote.kinds`, set by the event bus for a notify subscription's batch) matches `urgentKinds`.
 
@@ -113,8 +111,8 @@ None; this package neither assembles nor sends a provider request.
 - **Only WeChat holds messages** — the QQ bot channel and the Bilibili direct messages ignore presence.
 - **Files are not held** — `wechat_send_file` goes out through the open reply window at once, since a file cannot wait in the text outbox.
 - **A held note is already in the chat** — the copy of a note that the channel leaves in the owner's chat Session says it was sent at its original time, though the owner reads it in the morning's digest.
-- **The phone must reach the Host** — the Shortcut needs the iPhone connected to Tailscale; a signal the phone cannot send is lost, and the daily window then decides after `focusFreshHours`.
-- **Time-zone changes** — the window follows `timeZone`, not the phone's location; travelling means changing the setting.
+- **The signal comes from one Mac** — `focus-watch` needs the Mac mini signed into iCloud and its Full Disk Access; when it stops, the state holds for `focusFreshHours` (asleep: up to `sleepMaxHours`) and then the daily window decides. The page says so after an hour without a signal.
+- **Time-zone changes** — the window follows `timeZone`, not where the phone is; travelling means changing the setting.
 - **Thirty minutes, fixed in WeChat** — what counts as "just wrote" is `awakeAfterMessageMs` of `fork-wechat` (30 minutes); the text on the page names that default.
 
 <a id="dev-note"></a>
@@ -125,7 +123,7 @@ None; this package neither assembles nor sends a provider request.
 
 This Dev Note is non-authoritative working context: undecided directions and notes for maintainers. Shipped behavior and accepted rationale live in the sections above, the package code, and the linked Agent Notes.
 
-- The laptop also receives the Focus state (`~/Library/DoNotDisturb/DB/Assertions.json`, mode `com.apple.sleep.sleep-mode`), but it is not always on and the Mac mini has no iCloud account, so the phone's own Shortcut is the source.
+- The laptop also receives the Focus state (`~/Library/DoNotDisturb/DB/Assertions.json`, mode `com.apple.sleep.sleep-mode`) but is not always on; the Mac mini is signed into iCloud and always on, so it hosts the watcher. An iOS Shortcut that posted from the phone was dropped because its automations sync and interfere.
 - Making the urgent kinds editable from the page would need a stored override beside the configured list; today they are configuration only.
 
 </details>

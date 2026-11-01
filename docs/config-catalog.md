@@ -2761,7 +2761,7 @@ export type FeedbackScope = typeof FEEDBACK_SCOPES[number]
 ## `@deepseek-ai/dsh-fork-presence`
 
 - `inject`: `storageDomain`
-- `source`: [`packages/fork/fork-presence/src/index.ts:35`](../packages/fork/fork-presence/src/index.ts)
+- `source`: [`packages/fork/fork-presence/src/index.ts:36`](../packages/fork/fork-presence/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -2770,7 +2770,7 @@ export interface Config {
   timeZone: string
   /** Daily fallback window, used when no Focus signal is fresh; the Settings page can replace it. */
   window: QuietWindow
-  /** Hours an awake Focus signal outranks the window. */
+  /** Hours a Focus signal holds without a newer one before the window decides again (the watcher sends a heartbeat every 30 minutes). */
   focusFreshHours: number
   /** Hours an asleep Focus signal holds when its off signal never arrives. */
   sleepMaxHours: number
@@ -2778,12 +2778,6 @@ export interface Config {
   manualMaxHours: number
   /** Globs of the event kinds that are sent while the owner sleeps. */
   urgentKinds: string[]
-  /** Full URL of `fork-event-ingest`'s route, shown in the Shortcut instructions. */
-  ingestUrl?: string
-  /** Path of that route. */
-  ingestPath: string
-  /** Name of the environment variable that holds the `presence` ingest token, shown in the instructions (the value is never read here). */
-  tokenEnv: string
 }
 
 /** Daily fallback window, in the owner's time zone; it wraps past midnight when `start` is later than `end`. */

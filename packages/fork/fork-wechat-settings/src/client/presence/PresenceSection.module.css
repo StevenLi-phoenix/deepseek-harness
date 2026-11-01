@@ -218,45 +218,6 @@
   color: var(--dsw-alias-state-warn-primary);
 }
 
-/* Status facts: label and value pairs under the identity. */
-.facts {
-  display: grid;
-  flex: 1 1 280px;
-  grid-template-columns: auto 1fr;
-  gap: 2px 16px;
-  min-width: 0;
-  margin: 0;
-}
-
-.fact {
-  display: contents;
-}
-
-.fact dt {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
-  line-height: 20px;
-}
-
-.fact dd {
-  min-width: 0;
-  margin: 0;
-  overflow-wrap: anywhere;
-  font-variant-numeric: tabular-nums;
-}
-
-.factError dd {
-  color: var(--dsw-alias-state-warn-primary);
-}
-
-.queue {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-top: 8px;
-  border-top: 0.5px solid var(--dsw-alias-border-l2);
-}
-
 .secondary {
   height: 30px;
   padding: 0 14px;
@@ -327,42 +288,10 @@
   background: var(--dsw-alias-border-l2);
 }
 
-.code,
-.pre,
 .chips code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   line-height: 18px;
-}
-
-.code {
-  display: block;
-  overflow-wrap: anywhere;
-  user-select: all;
-}
-
-.pre {
-  margin: 0;
-  padding: 8px 10px;
-  border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-border-l2);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  user-select: all;
-}
-
-.steps {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0;
-  padding-left: 20px;
-}
-
-.facts dd {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
 }
 
 .input[type='time'] {

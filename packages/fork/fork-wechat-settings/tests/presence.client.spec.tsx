@@ -18,21 +18,15 @@ const VIEW: PresenceView = {
   since: Date.parse('2026-11-03T04:10:00Z'),
   until: Date.parse('2026-11-03T18:10:00Z'),
   manual: null,
-  lastFocus: { asleep: true, at: NOW - 6 * 3_600_000 },
+  lastFocus: { asleep: true, at: NOW - 60_000, since: NOW - 6 * 3_600_000, heartbeatAt: NOW - 60_000 },
   window: { enabled: true, start: '03:30', end: '10:30' },
   deferred: 3,
   urgentKinds: ['host.disk.full', 'bili.risk.*'],
-  shortcut: {
-    url: 'https://dsh.example/hooks/events',
-    path: '/hooks/events',
-    header: 'Authorization',
-    tokenEnv: 'FORK_INGEST_TOKEN_PRESENCE',
-    bodyOn: '{"kind":"presence.sleep.on","key":"<date>","subject":"owner","title":"Sleep Focus on"}',
-    bodyOff: '{"kind":"presence.sleep.off","key":"<date>","subject":"owner","title":"Sleep Focus off"}',
-  },
+  signalSilent: false,
+  focusFreshHours: 2,
   timeZone: 'America/New_York',
 }
-const AWAKE: PresenceView = { ...VIEW, asleep: false, source: 'window', since: null, until: null, lastFocus: null, deferred: 0 }
+const AWAKE: PresenceView = { ...VIEW, asleep: false, source: 'window', since: null, until: null, lastFocus: null, deferred: 0, signalSilent: true }
 
 function mount(state: Partial<PresenceState>) {
   const store = createPresenceStore()
@@ -54,26 +48,24 @@ afterEach(() => {
 })
 
 describe('PresenceSection state', () => {
-  it('shows asleep with its source, times, held count, and the latest Focus signal', () => {
+  it('shows asleep with its source, times, and held count', () => {
     vi.useFakeTimers()
     vi.setSystemTime(NOW)
     mount({ view: VIEW, checkedAt: NOW })
     const hero = screen.getByRole('region', { name: '现在' })
     expect(hero.textContent).toContain('睡眠中')
-    expect(hero.textContent).toContain('来源：手机的睡眠专注')
+    expect(hero.textContent).toContain('来源：睡眠专注模式（Mac mini 读取 iCloud 同步）')
     expect(hero.textContent).toContain('自 11-02 23:10')
     expect(hero.textContent).toContain('约 11-03 13:10 结束')
     expect(hero.textContent).toContain('3 条消息在等你醒来')
-    expect(hero.textContent).toContain('最近一次 Focus 信号：6 小时前（睡眠专注开启）')
   })
 
-  it('shows awake from the window, with nothing held and a nudge to set up the Shortcut', () => {
+  it('shows awake from the window, with nothing held', () => {
     mount({ view: AWAKE, checkedAt: NOW })
     const hero = screen.getByRole('region', { name: '现在' })
     expect(hero.textContent).toContain('醒着')
     expect(hero.textContent).toContain('来源：每日时段')
     expect(hero.textContent).toContain('没有被压下的消息')
-    expect(hero.textContent).toContain('还没收到过 Focus 信号')
   })
 
   it('names a manual override with its end and hands the decision back', () => {
@@ -159,7 +151,7 @@ describe('PresenceSection window', () => {
   })
 })
 
-describe('PresenceSection Shortcut and urgent kinds', () => {
+describe('PresenceSection signal and urgent kinds', () => {
   it('lists the urgent kinds and where to change them', () => {
     mount({ view: VIEW, checkedAt: NOW })
     const card = screen.getByRole('region', { name: '紧急事件' })
@@ -167,26 +159,36 @@ describe('PresenceSection Shortcut and urgent kinds', () => {
     expect(card.textContent).toContain('urgentKinds')
   })
 
-  it('gives the exact URL, header, token variable name, both bodies, and seven steps, and never a token', () => {
+  it('names the source, the latest signal with its heartbeat and when the state began, and says nothing is wrong while signals come', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOW)
     mount({ view: VIEW, checkedAt: NOW })
-    const card = screen.getByRole('region', { name: 'iPhone 快捷指令' })
-    expect(card.textContent).toContain('https://dsh.example/hooks/events')
-    expect(card.textContent).toContain('Authorization: Bearer …')
-    expect(card.textContent).toContain('FORK_INGEST_TOKEN_PRESENCE')
-    expect(card.textContent).toContain('Content-Type = application/json')
-    expect(card.textContent).toContain(VIEW.shortcut.bodyOn)
-    expect(card.textContent).toContain(VIEW.shortcut.bodyOff)
-    expect(within(card).getAllByRole('listitem')).toHaveLength(7)
-    expect(card.textContent).toContain('创建个人自动化')
-    expect(card.textContent).toContain('只勾「已开启」')
-    expect(card.textContent).toContain('只勾「已关闭」')
-    expect(card.textContent).toContain('立即运行')
-    expect(card.textContent).toContain('最近一次 Focus 信号')
+    const card = screen.getByRole('region', { name: '睡眠信号' })
+    expect(card.textContent).toContain('Mac mini 读取 iCloud 同步的睡眠专注模式 (focus-watch)')
+    expect(card.textContent).toContain('最近一次 Focus 信号：1 分钟前（睡眠专注开启）')
+    expect(card.textContent).toContain('最近一次心跳：1 分钟前')
+    expect(card.textContent).toContain('当前状态自 11-02 23:00')
+    expect(within(card).queryByRole('status')).toBeNull()
+    expect(screen.queryByText(/快捷指令|iPhone|Tailscale/)).toBeNull()
   })
 
-  it('says where the address goes when the deployment does not name it', () => {
-    mount({ view: { ...VIEW, shortcut: { ...VIEW.shortcut, url: null } }, checkedAt: NOW })
-    expect(screen.getByRole('region', { name: 'iPhone 快捷指令' }).textContent).toContain('你的 DSH 地址 + /hooks/events')
+  it('says the heartbeat has not come yet, and that no signal has ever come', () => {
+    mount({ view: { ...VIEW, lastFocus: { asleep: false, at: NOW, since: NOW, heartbeatAt: null } }, checkedAt: NOW })
+    expect(screen.getByRole('region', { name: '睡眠信号' }).textContent).toContain('还没有收到过心跳')
+    cleanup()
+    mount({ view: AWAKE, checkedAt: NOW })
+    expect(screen.getByRole('region', { name: '睡眠信号' }).textContent).toContain('还没收到过 Focus 信号：mini 上的 focus-watch 装好后会自动开始发。')
+  })
+
+  it('tells the owner how to check the watcher when no signal has come for over an hour', () => {
+    mount({ view: { ...VIEW, signalSilent: true }, checkedAt: NOW })
+    const hint = within(screen.getByRole('region', { name: '睡眠信号' })).getByRole('status')
+    expect(hint.textContent).toBe('focus-watch 没在发信号：在 mini 上运行 `~/.local/libexec/focus-watch/focus-watch status` 查看')
+  })
+
+  it('names the hold time of a signal in the window card', () => {
+    mount({ view: { ...VIEW, focusFreshHours: 2 }, checkedAt: NOW })
+    expect(screen.getByRole('region', { name: '每日时段' }).textContent).toContain('只在最近 2 小时没有收到 Focus 信号时才用它，时间按 America/New_York。')
   })
 })
 

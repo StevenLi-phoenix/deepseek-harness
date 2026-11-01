@@ -1,5 +1,5 @@
 ---
-description: "Browser half of Settings → WeChat (bind the owner's bot by QR code, channel health, reply window, unbind) and Settings → 勿扰 (quiet hours: Sleep Focus, daily window, buttons, iPhone Shortcut steps); the Host routes are served by fork-wechat and fork-presence."
+description: "Browser half of Settings → WeChat (bind the owner's bot by QR code, channel health, reply window, unbind) and Settings → 勿扰 (quiet hours: Sleep Focus signal, daily window, buttons); the Host routes are served by fork-wechat and fork-presence."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Manage the owner's WeChat channel and quiet hours from any browser. **Settings → WeChat** binds the bot by QR code, shows whether it is bound, the long-poll's health, the reply window and the outbox, and unbinds after a second click. **Settings → 勿扰** shows whether you count as asleep and why, holds non-urgent messages until you wake, and carries the iPhone Shortcut setup. Both pages poll every few seconds while open and pause while the page is hidden.
+Manage the owner's WeChat channel and quiet hours from any browser. **Settings → WeChat** binds the bot by QR code, shows whether it is bound, the long-poll's health, the reply window and the outbox, and unbinds after a second click. **Settings → 勿扰** shows whether you count as asleep and why, holds non-urgent messages until you wake, and shows the latest signal from `focus-watch`, the Mac mini's reader of your Sleep Focus. Both pages poll every few seconds while open and pause while the page is hidden.
 
 ## Table of Contents
 
@@ -44,7 +44,7 @@ The package has no configuration. Its sections are `fork-wechat` (order 52) and 
 
 The Host half is an empty `apply`, so the plugin appears in the Loader and the browser half (`exports["./client"]`, found through `dsh.client` in `package.json`) is delivered. The routes are not here because they need the live channel and the presence service, which a package with a browser face may not import at runtime; the Host packages keep them and stay host-only. The wire types the routes answer (`src/wechat-view.ts`, `src/presence-view.ts`) are copies of `fork-wechat/src/view.ts` and `fork-presence/src/view.ts`; a test in each Host package fails when the copy differs by one byte.
 
-Each page has one store and one loader that share a request in flight, keep the last view when a request fails, and post the page's actions to the same route. The WeChat page also polls an open QR login every 2 seconds, draws the code from the module rows the Host sends (an SVG path on a white card, so it scans in a dark theme too), and offers the link only when it is an HTTPS link on a WeChat domain. Neither page shows a token or a message text: the Host masks ids and answers times, counts, and codes, and the Shortcut instructions name the environment variable that holds the ingest token, never its value.
+Each page has one store and one loader that share a request in flight, keep the last view when a request fails, and post the page's actions to the same route. The WeChat page also polls an open QR login every 2 seconds, draws the code from the module rows the Host sends (an SVG path on a white card, so it scans in a dark theme too), and offers the link only when it is an HTTPS link on a WeChat domain. Neither page shows a token or a message text: the Host masks ids and answers times, counts, and codes, and nothing on the pages can carry the ingest token.
 
 | File | Role |
 |---|---|
