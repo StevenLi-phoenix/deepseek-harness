@@ -143,6 +143,11 @@ export interface Config {
     maxToolCalls: number
     /** Archive each digest Session when its turn ends, so it does not fill the sidebar (its log stays). True by default. */
     archiveSessions: boolean
+    /**
+     * Keep one Session per recorded group across rounds, condensed by the preset's compaction, and replace it every
+     * `retention.textDays` days; false runs a new one-shot Session per round. True by default.
+     */
+    resident: boolean
     /** Provider route of the digest Session's model; the profile's default when omitted. */
     provider?: string
     /** Model id on that route; the profile's default when omitted. */
@@ -231,6 +236,7 @@ export const Config = z.object({
     maxDigestChars: z.natural().min(500).default(3000),
     maxToolCalls: z.natural().min(1).default(12),
     archiveSessions: z.boolean().default(true),
+    resident: z.boolean().default(true),
     provider: z.string(),
     model: z.string(),
     agentPreset: z.string().default('qq-digest'),
@@ -419,8 +425,13 @@ export class QqObserver extends Service {
       maxDigestChars: d.maxDigestChars,
       maxToolCalls: d.maxToolCalls,
       archiveSessions: d.archiveSessions,
+      resident: d.resident,
     }
-    this.digest = new DigestRunner(ctx, this.store, digestConfig, this.dataDir, id => this.store.groupName(id) ?? id, () => this.now())
+    this.digest = new DigestRunner(
+      ctx, this.store, digestConfig, this.dataDir, id => this.store.groupName(id) ?? id, () => this.now(),
+      // A resident digest Session is replaced when it is as old as the raw messages are kept.
+      () => this.live.retention.textDays * 86_400_000,
+    )
     ctx.logger.info(`lsy-qq: recording ${config.groups.get().length} group(s)${config.groups.get().length === 0 ? ' (the list is empty: every message is dropped; add group numbers to groups)' : ''}; sending ${config.send.enabled ? `on for ${config.send.groups.length} group(s)` : 'off'}; voice transcription ${config.asr.enabled.get() ? 'on' : 'off'}; digests ${d.enabled ? `every ${d.everyHours} h` : 'off'}; data in ${this.dataDir}`)
 
     this.door = config.login.enabled ? new LoginDoor({ url: config.login.url, timeoutMs: config.login.timeoutMs }) : undefined

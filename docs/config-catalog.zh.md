@@ -2844,6 +2844,11 @@ export interface Config {
     maxToolCalls: number
     /** Archive each digest Session when its turn ends, so it does not fill the sidebar (its log stays). True by default. */
     archiveSessions: boolean
+    /**
+     * Keep one Session per recorded group across rounds, condensed by the preset's compaction, and replace it every
+     * `retention.textDays` days; false runs a new one-shot Session per round. True by default.
+     */
+    resident: boolean
     /** Provider route of the digest Session's model; the profile's default when omitted. */
     provider?: string
     /** Model id on that route; the profile's default when omitted. */

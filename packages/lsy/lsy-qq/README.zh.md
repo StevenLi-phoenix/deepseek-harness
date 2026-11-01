@@ -72,7 +72,8 @@ kind: "package-reference"
 | `digest.profiles` | `false` | 同时要求写“成员观点与专长”一节（按别名）；默认关闭：不做逐人画像 |
 | `digest.keepPerGroup`、`digest.maxDigestChars` | `200`、`3000` | 每个群保留的摘要数（存新摘要时删最旧的）和单份摘要的最大字数 |
 | `digest.provider`、`digest.model` | 未设置 | 摘要 Session 的模型（provider 路由和模型 id），例如便宜的模型；不设置就用 profile 的默认模型 |
-| `digest.archiveSessions` | `true` | 一轮结束就把摘要 Session 归档，免得占满侧边栏；日志仍保留（DSH 没有删除已存储 Session 的办法） |
+| `digest.resident` | `true` | 每个群一个常驻 Session，每轮恢复同一个，由 preset 的 compaction 压缩历史，每隔 `retention.textDays` 天替换；`false` 表示每轮新建一个 Session |
+| `digest.archiveSessions` | `true` | 一次性摘要 Session 在一轮结束时归档，常驻的在被替换时归档，免得占满侧边栏；日志仍保留（DSH 没有删除已存储 Session 的办法） |
 | `digest.maxToolCalls` | `12` | 一个摘要 Session 至多调用工具的次数，被拒绝的也算 |
 | `digest.agentPreset`、`digest.permissionPreset` | `qq-digest`、`read-only` | 事件 bundle 的 `qq-digest` preset 有人设和两个窄工具 `qq_digest_write`、`qq_group_note`（没有 shell、文件、网页或记忆工具） |
 | `digest.workspacePath`、`digest.timeZone`、`digest.timeoutMs` | `/Users/dsh-runtime/work/qq`、`Asia/Shanghai`、`900000` | 工作目录（摘要 Session 在这里，标题是 `QQ: <群名>`）、转录里时间所用的时区，以及等待一次模型调用的期限 |
@@ -106,7 +107,7 @@ kind: "package-reference"
 
 一条群消息经解析（[`src/text.ts`](src/text.ts)）成一行文字（`@name`、`[图片]`、`[语音]`、`[文件:name]`、`[卡片:title url]` 等）、被引用的消息 id 和它的媒体。[`src/store.ts`](src/store.ts) 以群号加 QQ 消息 id 为唯一键把它写入 SQLite（`node:sqlite`，WAL），所以重连和补抓不会产生重复行；FTS5 索引使用 trigram 分词器，支持中英文子串检索（不足三个字符的查询退回 `LIKE`）。图片只从 `media.hostSuffixes` 里的域名抓取，走 HTTPS、不跟随重定向、有大小上限、同时两个，存到 `media/<group>/<YYYYMM>/<sha256>.<ext>`（权限 0600；内容相同的字节共用一个文件）。语音消息经 `get_record` 取成 MP3（退而求其次用它的链接），同样保存，开启 `asr.enabled` 时由 lsy-voice 转写，转写文字会追加到消息文字和检索索引里。撤回通知会丢掉该消息的文字、原始片段、媒体行和文件。
 
-每轮 `digest`（每十分钟检查一次）挑出上次摘要已满 `everyHours`、且有 `minMessages` 条新消息的群，把积压切成每份至多 `maxPromptChars` 的转录，对每份在 `qq-digest` preset 的新 Session 里跑一轮（权限 `read-only`、配置的模型）。模型用 `qq_digest_write` 交摘要，用 `qq_group_note` 维护这个群的笔记；两个工具都绑定在这个 Session 和它正在摘要的那一个群上（给别的群的调用、第二份摘要、超过 `digest.maxToolCalls` 的调用、别的 Session 的调用，一律被拒绝），一轮结束时由 runner 带着窗口、模型和 usage 入库。模型若跳过工具、把摘要写在回答里，仍会被保留。它交上来的内容和最终回答先写进 `digest-raw/` 再入库；`NO_REPLY` 的回答存一个占位，让游标往前走。每一轮都记日志：工具调用次数、被拒绝的次数、增删的笔记数、Session 被压缩的次数。转录被框成不可信数据，也无法关闭自己的块。
+每轮 `digest`（每十分钟检查一次）挑出上次摘要已满 `everyHours`、且有 `minMessages` 条新消息的群，把积压切成每份至多 `maxPromptChars` 的转录，对每份在这个群自己的 `qq-digest` preset Session 里跑一轮（权限 `read-only`、配置的模型）。这个 Session 是常驻的（`digest.resident`，默认开启）：每轮恢复同一个，只看到上次摘要之后的消息；preset 会在上下文到模型窗口的四分之一时自己压缩历史（compaction，在事件 bundle 里调参），不让它涨向整个窗口，那样每轮更贵、注意力也更差。每隔 `retention.textDays` 天（默认 30；0 表示不替换）换一个新 Session，新 Session 的第一条 prompt 带上这个群最近五份摘要作为背景，群笔记照常带上，旧 Session 归档（从侧边栏隐藏）而不是删除。恢复不了的 Session 也按同样方式替换。关闭 `digest.resident` 时，每轮在新的一次性 Session 里跑，轮次结束即归档。模型用 `qq_digest_write` 交摘要，用 `qq_group_note` 维护这个群的笔记；两个工具都绑定在这个 Session 和它正在摘要的那一个群上（给别的群的调用、第二份摘要、超过 `digest.maxToolCalls` 的调用、别的 Session 的调用，一律被拒绝），一轮结束时由 runner 带着窗口、模型和 usage 入库。模型若跳过工具、把摘要写在回答里，仍会被保留。它交上来的内容和最终回答先写进 `digest-raw/` 再入库；`NO_REPLY` 的回答存一个占位，让游标往前走。每一轮都记日志：工具调用次数、被拒绝的次数、增删的笔记数、Session 被压缩的次数。转录被框成不可信数据，也无法关闭自己的块。
 
 群笔记是 QQ 频道自己的记忆（存在这里，不进 lsy-memory）：这个群常聊什么、黑话和氛围，每群至多 30 条、每条至多 40 字，下一轮以 `#id 内容` 的形式给模型看，方便它删掉某一条。笔记只描述群，不描述个人：过滤器拒绝长数字、邮箱、`@`、成员别名、地址、学校和单位，以及这个群成员出现过的任何名字或群名片。`groupNotes(groupId)` 读取笔记。`evidenceOf(groupId, messageIds)` 对群里仍保留的每条消息（已记录、未撤回、在 `retention.textDays` 内）返回发送者键、时间和存下来的单行文字，调用方可以据此逐字核验引文。发送者键是由群号和成员加盐哈希得到的 16 位十六进制，在群内稳定、在别的群里不同，从不是 QQ 号。`groupOfSession(sessionId)` 和 `recentTextOf(sessionId)` 让工具从调用它的摘要 Session 取得群号和模型看到的消息（只在该 Session 的这一轮运行期间有答案）。
 
@@ -145,7 +146,7 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-每份转录在新 Session 里是一条用户 prompt：一段英文指令，点名这个群、要写的小节标题（话题、结论与事实、术语与梗、常见问题、链接与资料；只有开启 `digest.profiles` 才加“成员观点与专长”）和 1500 字上限，然后是 `<qq_group_messages trust="untrusted">` 里的转录，每条消息一行，格式为 `[MM-DD HH:mm] 群友#a3f9 ↳reply: text`（成员默认是别名；关闭 `digest.aliasMembers` 时是名字加 QQ 号末四位）。消息里告诉模型要传给两个工具的群号，并把这个群的笔记放在 `<qq_group_notes trust="derived">` 里给它看。preset 的人设说明聊天内容是数据、它唯一的工具只写这个群的摘要和笔记。摘要就是 `qq_digest_write` 收到的内容（没有则取最终回答）；`NO_REPLY` 表示没有值得保留的内容。
+每份转录在这个群的 Session 里是一条用户 prompt（新 Session 的第一条还带着以前的摘要，放在 `<qq_group_history trust="derived">` 里）：一段英文指令，点名这个群、要写的小节标题（话题、结论与事实、术语与梗、常见问题、链接与资料；只有开启 `digest.profiles` 才加“成员观点与专长”）和 1500 字上限，然后是 `<qq_group_messages trust="untrusted">` 里的转录，每条消息一行，格式为 `[MM-DD HH:mm] 群友#a3f9 ↳reply: text`（成员默认是别名；关闭 `digest.aliasMembers` 时是名字加 QQ 号末四位）。消息里告诉模型要传给两个工具的群号，并把这个群的笔记放在 `<qq_group_notes trust="derived">` 里给它看。preset 的人设说明聊天内容是数据、它唯一的工具只写这个群的摘要和笔记。摘要就是 `qq_digest_write` 收到的内容（没有则取最终回答）；`NO_REPLY` 表示没有值得保留的内容。
 
 #### Token 影响
 
@@ -153,7 +154,7 @@ kind: "package-reference"
 
 #### KV Cache 影响
 
-每次调用都是带自己短前缀的新 Session；摘要之间不共享任何内容。
+一个群的各轮共用一个 Session，人设、工具和早先的轮次构成稳定的前缀，provider 可以缓存；上下文到窗口的四分之一时，压缩会改写最旧的部分。
 
 ## 已知限制与延后工作
 
@@ -166,6 +167,7 @@ kind: "package-reference"
 - **文字、图片和语音**——视频和群文件只记录元数据；合并转发的聊天记录记为 `[合并转发]`。
 - **图片链接会过期**——下载失败或被跳过的图片只剩占位。
 - **语音依赖协议端的解码器**——`get_record` 必须以 base64 返回音频，否则只存原始链接、不转写。
+- **群聊原文留在 Session 日志里**——DSH 没有删除已存储 Session 的 API，所以摘要 Session 读过的转录，在本包自己的存储按 `retention.textDays` 删除消息之后，仍留在它的日志里（被替换的 Session 和一次性 Session 的旧日志也留着，只是归档了）；压缩也不会把它们删掉。清理要在 Mac mini 上离线做，这里没有任何代码做这件事。
 - **崩溃时至多一次**——进程挂掉期间到达的消息，补抓只能找回到 `backfill.maxMessages` 为止。
 - **没有对着真实 QQ 验证过**——观察者只对本地的 NapCat 替身测试过；第一次真实登录要盯着日志。
 
