@@ -2840,6 +2840,8 @@ export interface Config {
     maxDigestChars: number
     /** Tool calls (`qq_digest_write`, `qq_group_note`) one digest Session may make, refused ones included. 12 by default. */
     maxToolCalls: number
+    /** Archive each digest Session when its turn ends, so it does not fill the sidebar (its log stays). True by default. */
+    archiveSessions: boolean
     /** Provider route of the digest Session's model; the profile's default when omitted. */
     provider?: string
     /** Model id on that route; the profile's default when omitted. */

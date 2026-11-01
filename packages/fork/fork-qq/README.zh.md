@@ -72,9 +72,10 @@ kind: "package-reference"
 | `digest.profiles` | `false` | 同时要求写“成员观点与专长”一节（按别名）；默认关闭：不做逐人画像 |
 | `digest.keepPerGroup`、`digest.maxDigestChars` | `200`、`3000` | 每个群保留的摘要数（存新摘要时删最旧的）和单份摘要的最大字数 |
 | `digest.provider`、`digest.model` | 未设置 | 摘要 Session 的模型（provider 路由和模型 id），例如便宜的模型；不设置就用 profile 的默认模型 |
+| `digest.archiveSessions` | `true` | 一轮结束就把摘要 Session 归档，免得占满侧边栏；日志仍保留（DSH 没有删除已存储 Session 的办法） |
 | `digest.maxToolCalls` | `12` | 一个摘要 Session 至多调用工具的次数，被拒绝的也算 |
 | `digest.agentPreset`、`digest.permissionPreset` | `qq-digest`、`read-only` | 事件 bundle 的 `qq-digest` preset 有人设和两个窄工具 `qq_digest_write`、`qq_group_note`（没有 shell、文件、网页或记忆工具） |
-| `digest.workspacePath`、`digest.timeZone`、`digest.timeoutMs` | `/Users/dsh-runtime/qq-digest`、`Asia/Shanghai`、`900000` | 工作目录、转录里时间所用的时区，以及等待一次模型调用的期限 |
+| `digest.workspacePath`、`digest.timeZone`、`digest.timeoutMs` | `/Users/dsh-runtime/work/qq`、`Asia/Shanghai`、`900000` | 工作目录（摘要 Session 在这里，标题是 `QQ: <群名>`）、转录里时间所用的时区，以及等待一次模型调用的期限 |
 | `offlineNoticeMs` | `600000` | 协议端这么久连不上、或报告账号下线时，经 `ctx.forkNotifier` 通知 owner；`0` 关闭。每次中断只通知一次：已通知的事记在 `<dataDir>/outage-notice.json`，直到连接恢复才清除，所以中断期间重载或部署不会重复通知 |
 | `reconnectQuietMs` | `600000` | 距上一次连接最后存活不到这么久就连上时，不取群列表、不补抓，插件重启时同样有效（时间记在 `<dataDir>/connection-state.json`，连接期间每分钟刷新）；`0` 表示从不跳过。群列表无论如何每小时最多取一次 |
 | `offlineRepeatMs` | `86400000` | 中断持续期间，隔这么久（24 小时）再提醒 owner 一次；`0` 不重复 |
@@ -107,7 +108,7 @@ kind: "package-reference"
 
 每轮 `digest`（每十分钟检查一次）挑出上次摘要已满 `everyHours`、且有 `minMessages` 条新消息的群，把积压切成每份至多 `maxPromptChars` 的转录，对每份在 `qq-digest` preset 的新 Session 里跑一轮（权限 `read-only`、配置的模型）。模型用 `qq_digest_write` 交摘要，用 `qq_group_note` 维护这个群的笔记；两个工具都绑定在这个 Session 和它正在摘要的那一个群上（给别的群的调用、第二份摘要、超过 `digest.maxToolCalls` 的调用、别的 Session 的调用，一律被拒绝），一轮结束时由 runner 带着窗口、模型和 usage 入库。模型若跳过工具、把摘要写在回答里，仍会被保留。它交上来的内容和最终回答先写进 `digest-raw/` 再入库；`NO_REPLY` 的回答存一个占位，让游标往前走。每一轮都记日志：工具调用次数、被拒绝的次数、增删的笔记数、Session 被压缩的次数。转录被框成不可信数据，也无法关闭自己的块。
 
-群笔记是 QQ 频道自己的记忆（存在这里，不进 fork-memory）：这个群常聊什么、黑话和氛围，每群至多 30 条、每条至多 40 字，下一轮以 `#id 内容` 的形式给模型看，方便它删掉某一条。笔记只描述群，不描述个人：过滤器拒绝长数字、邮箱、`@`、成员别名、地址、学校和单位，以及这个群成员出现过的任何名字或群名片。`groupNotes(groupId)` 读取笔记。`evidenceOf(groupId, messageIds)` 对群里仍保留的每条消息（已记录、未撤回、在 `retention.textDays` 内）返回发送者键和时间：由群号和成员加盐哈希得到的 16 位十六进制，在群内稳定、在别的群里不同，从不是 QQ 号。
+群笔记是 QQ 频道自己的记忆（存在这里，不进 fork-memory）：这个群常聊什么、黑话和氛围，每群至多 30 条、每条至多 40 字，下一轮以 `#id 内容` 的形式给模型看，方便它删掉某一条。笔记只描述群，不描述个人：过滤器拒绝长数字、邮箱、`@`、成员别名、地址、学校和单位，以及这个群成员出现过的任何名字或群名片。`groupNotes(groupId)` 读取笔记。`evidenceOf(groupId, messageIds)` 对群里仍保留的每条消息（已记录、未撤回、在 `retention.textDays` 内）返回发送者键、时间和存下来的单行文字，调用方可以据此逐字核验引文。发送者键是由群号和成员加盐哈希得到的 16 位十六进制，在群内稳定、在别的群里不同，从不是 QQ 号。`groupOfSession(sessionId)` 和 `recentTextOf(sessionId)` 让工具从调用它的摘要 Session 取得群号和模型看到的消息（只在该 Session 的这一轮运行期间有答案）。
 
 | 文件 | 作用 |
 |---|---|

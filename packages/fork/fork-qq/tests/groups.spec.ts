@@ -163,6 +163,8 @@ describe('QQ groups follow the Settings form', () => {
       expect(found[0]!.senderKey).toMatch(/^[0-9a-f]{16}$/)
       expect(JSON.stringify(found)).not.toContain('10001')
       expect(found.every(entry => typeof entry.at === 'number')).toBe(true)
+      // The stored one-line text comes with it, for a caller that checks a quotation word for word.
+      expect(found.map(entry => entry.text)).toEqual(['消息7001', '消息7002', '消息7003'])
       // The same member has another key in another group, so keys cannot be joined across groups.
       expect(h.observer.evidenceOf(B, ['7004'])[0]!.senderKey).not.toBe(found[0]!.senderKey)
     })

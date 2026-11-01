@@ -2396,14 +2396,26 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'what to tell the model.',
       },
       {
+        signature: 'groupOfSession(sessionId: string | undefined): string | undefined',
+        description: 'The group a digest Session is digesting, for a tool that takes the group from the Session.',
+        parameters: [{ name: 'sessionId', description: 'the calling Session.' }],
+        returns: 'the group number while the Session\'s turn runs; otherwise undefined.',
+      },
+      {
+        signature: 'recentTextOf(sessionId: string | undefined): readonly string[] | undefined',
+        description: 'The text of the messages the calling digest Session was shown this turn, for a tool that checks a quotation word for word.',
+        parameters: [{ name: 'sessionId', description: 'the calling Session.' }],
+        returns: 'the stored one-line texts while the turn runs; otherwise undefined.',
+      },
+      {
         signature: 'groupNotes(groupId: string): GroupNote[]',
         description: 'The notes of a recorded group: what the QQ channel remembers of its habits.',
         parameters: [{ name: 'groupId', description: 'group number; an unrecorded group yields nothing.' }],
         returns: 'the notes, oldest first.',
       },
       {
-        signature: 'evidenceOf(groupId: string, messageIds: readonly string[]): Array<{ messageId: string; senderKey: string; at: number }>',
-        description: 'Evidence for a claim about a group\'s chat, without exposing who said what: for each message id the group still holds, a stable sender key (a salted hash of the member within this group, never the QQ number) and its time.',
+        signature: 'evidenceOf(groupId: string, messageIds: readonly string[]): Array<{ messageId: string; senderKey: string; at: number; text: string }>',
+        description: 'Evidence for a claim about a group\'s chat, without exposing who said what: for each message id the group still holds, a stable sender key (a salted hash of the member within this group, never the QQ number), its time, and its stored one-line text, so a caller can check a quotation word for word.',
         parameters: [{ name: 'groupId', description: 'group number; an unrecorded group yields nothing.' }, { name: 'messageIds', description: 'OneBot message ids, at most 200 are looked at.' }],
         returns: 'one entry per message found: recorded, not recalled, and still inside the retention window.',
       },
