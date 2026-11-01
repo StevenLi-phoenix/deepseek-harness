@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Dienst für Claude-Code-Sitzungen",
+    "description": "Listet, startet und beendet die Claude-Code-Sitzungen des Dienstkontos für die Einstellungsseite."
+  }
+}

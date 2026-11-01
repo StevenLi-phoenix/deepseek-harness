@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Console de configurações",
+    "description": "Adiciona às configurações seções com visão dos serviços, assinaturas e lembretes de eventos, e sessões do Claude Code com o serviço de voz."
+  }
+}
