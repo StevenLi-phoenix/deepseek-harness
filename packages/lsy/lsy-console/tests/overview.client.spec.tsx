@@ -70,7 +70,7 @@ describe('OverviewSection', () => {
     expect(dsh.textContent).toContain('版本 0.2.2 · 构建 0a1b2c3d4e · 已运行 60 分钟'.replace('60 分钟', '1 小时 0 分'))
     expect(screen.getByRole('region', { name: 'B站服务' }).textContent).toContain('bili-svc 没有响应')
     expect(screen.getByRole('region', { name: '事件总线' }).textContent).toContain('被限流 2 次')
-    expect(screen.getByRole('region', { name: 'QQ 观察器' }).textContent).toContain('未加载')
+    expect(screen.getByRole('region', { name: 'QQ 观察器' }).textContent).toContain('未安装')
     expect(screen.getByRole('region', { name: 'Claude Code 桥' }).textContent).toContain('1 / 3 个会话 · 仅推理 token')
     expect(screen.getByRole('region', { name: '模型路由与额度' }).textContent).toContain('最高已用 41%')
   })

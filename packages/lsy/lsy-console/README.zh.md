@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用这个包
 
-把下面这一行挂在 Web bundles 旁边；lsy event bundle 已经挂载了它。它需要设置外壳（`@deepseek-ai/dsh-client-ui-settings-general`，声明了 `settings.section` 列表），Host 上还需要 `connection` 服务，Web bundles 都已组合好。其余服务都是可选的：没挂载的服务，它的卡片写“未加载”。Claude Code 需要 [`lsy-cc-admin`](../lsy-cc-admin/README.zh.md)，event bundle 把它挂在本包旁边。
+把下面这一行挂在 Web bundles 旁边；lsy event bundle 已经挂载了它。它需要设置外壳（`@deepseek-ai/dsh-client-ui-settings-general`，声明了 `settings.section` 列表），Host 上还需要 `connection` 服务，Web bundles 都已组合好。其余服务都是可选的：没挂载的服务，它的卡片写“未安装”（说话风格页 `ctx.lsyStyle` 在发布前就是其中之一）。Claude Code 需要 [`lsy-cc-admin`](../lsy-cc-admin/README.zh.md)，event bundle 把它挂在本包旁边。
 
 ```yaml
 - id: lsy-console
@@ -40,7 +40,7 @@ kind: "package-reference"
 | `subscriptions.*` | 与 `watch_create` 相同 | `workspacePath`、`agentPreset`、`permissionPreset`、`coalesceSeconds`、`notifyMaxPerHour`、`sessionMaxPerHour`：用表单建的订阅按什么运行 |
 | `previewText` | 一句简短的中文 | 语音试听说的那句话（不超过语音服务的 `tts.maxChars`） |
 
-**总览。**分区打开且页面可见时，卡片每 10 秒刷新一次。只有目标分区已注册时，卡片才会链接到 `bili`、`lsy-qq`、`lsy-wechat`、`lsy-sysmon`、`lsy-subscriptions`、`lsy-agents` 或 `account`。服务想给自己的卡片补充细节，可以提供一个可选的 `health()`，返回 `{ state: 'ok' | 'warn' | 'down', detail? }`；`bili`、`lsyQq` 和 `lsyNotifier` 有它就按它读。
+**总览。**分区打开且页面可见时，卡片每 10 秒刷新一次。只有目标分区已注册时，卡片才会链接到 `bili`、`lsy-qq`、`lsy-wechat`、`lsy-style`、`lsy-sysmon`、`lsy-subscriptions`、`lsy-agents` 或 `account`。服务想给自己的卡片补充细节，可以提供一个可选的 `health()`，返回 `{ state: 'ok' | 'warn' | 'down', detail? }`；`bili`、`lsyQq` 和 `lsyNotifier` 有它就按它读。
 
 **订阅。**在总线配置里定义的订阅显示“来自配置”，没有按钮。`watch_create` 或表单建的订阅可以暂停（不再匹配新事件，已在排队的事件保留）、恢复，或在第二次点击后删除；删除监视时也会停掉它的仓库轮询，和 `watch_delete` 一致。表单需要名称、来源/类型/对象 glob（至少一项）、通知或会话模式，会话模式还要任务说明；会话订阅按配置的预设和工作区运行。定时提醒（`schedule_create`）可以暂停、恢复和删除；改时间请对智能体说。
 
@@ -113,7 +113,7 @@ Claude Code 会话来自 `ctx.lsyClaudeCode`（[`lsy-cc-admin`](../lsy-cc-admin/
 - **不列出监控**——`monitor_start` 的登记属于各个预设挂载；请让启动它的对话执行 `monitor_list` 或 `monitor_stop`。
 - **触发次数受保留数量限制**——次数是总线还保留着的批次数（`retainBatches`，默认 1000），“上次触发”是其中最新的一批。
 - **听写只读**——它属于配置，而补丁条目的 `config` 会替换整个条目，所以卡片展示补丁而不是替你保存。
-- **QQ 和微信的卡片在它们报告健康前只显示“已加载”**——服务可以通过增加 `health()` 报告更多；没有它时，卡片只显示记录的群数或排队的通知数。
+- **微信和说话风格的卡片在它们报告健康前信息很少**——服务可以通过增加 `health()` 报告更多；QQ 卡片有 `connectionStatus()` 和 `recordedGroups()` 时就读它们。
 - **“管理”链接依赖外壳的标记**——它按位置点击导航按钮；外壳去掉 `data-shortcut-modal="settings"` 或改动行的顺序时，要同步更新 `sections.ts`。
 - **试听要等语音模型**——闲置后的第一句在 feiyu 上约需 45 秒；同一时间只跑一个试听。
 

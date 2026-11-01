@@ -9,7 +9,8 @@ const OWN_STATES: Readonly<Record<ServiceId, readonly string[]>> = {
   dsh: ['up'],
   bus: ['up', 'limited'],
   bili: ['up', 'svc_only', 'down'],
-  qq: ['mounted', 'up'],
+  qq: ['mounted', 'up', 'reconnecting', 'waiting_token', 'starting'],
+  style: ['mounted', 'up'],
   wechat: ['up', 'queued'],
   voice: ['up', 'tts_off', 'tts_down', 'asr_down'],
   cc: ['up', 'nologin', 'disabled'],
@@ -48,8 +49,14 @@ export function factLines(card: ServiceCard, t: Translate): string[] {
       const limited = typeof facts.limited === 'number' && facts.limited > 0 ? ` · ${text('fact.busLimited')}` : ''
       return [`${text('fact.bus')}${limited}`]
     }
-    case 'qq':
-      return typeof facts.groups === 'number' ? [text('fact.groups')] : detail(card)
+    case 'qq': {
+      const lines = [
+        typeof facts.account === 'string' ? text('fact.qqAccount') : null,
+        typeof facts.groups === 'number' ? text('fact.groups') : null,
+        card.state === 'reconnecting' ? text('fact.qqAttempts') : null,
+      ].filter(line => line !== null)
+      return lines.length === 0 ? detail(card) : [lines.join(' · ')]
+    }
     case 'wechat':
       return card.state === 'queued' ? [text('fact.queued')] : detail(card)
     case 'voice':

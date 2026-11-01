@@ -8,7 +8,7 @@
 export type Tone = 'ok' | 'warn' | 'down' | 'off'
 
 /** Services the overview shows, in order. */
-export const SERVICE_IDS = ['dsh', 'bus', 'bili', 'qq', 'wechat', 'voice', 'cc', 'ams', 'llm'] as const
+export const SERVICE_IDS = ['dsh', 'bus', 'bili', 'qq', 'wechat', 'style', 'voice', 'cc', 'ams', 'llm'] as const
 /** One of {@link SERVICE_IDS}. */
 export type ServiceId = typeof SERVICE_IDS[number]
 
