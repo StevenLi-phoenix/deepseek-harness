@@ -62,7 +62,7 @@ Host 部分在 connection 上注册 `GET /api/lsy.overview`、`GET`/`POST /api/l
 
 Claude Code 会话来自 `ctx.lsyClaudeCode`（[`lsy-cc-admin`](../lsy-cc-admin/README.zh.md)），通过一个很小的结构类型读取，所以这个带浏览器部分的包不会运行时导入任何对等包的值。语音和总线的错误同理，Host 部分按名字识别它们。
 
-浏览器部分通过 `ctx.slots.inject` 注册三个 `settings.section` 条目（`lsy-overview` 顺序 35、`lsy-subscriptions` 58、`lsy-agents` 60）。设置外壳只给分区一个 `close`，所以“管理”链接去点外壳自己的目标分区导航按钮，按它在按 `order` 排序的列表里的位置找到。模型路由卡片在浏览器里由 `api/lsy.balance` 构建。
+浏览器部分通过 `ctx.slots.inject` 注册三个 `settings.section` 条目（`lsy-overview` 顺序 35、`lsy-subscriptions` 58、`lsy-agents` 60）。“管理”链接调用设置外壳交给每个分区的 `select(id)`（与 `close` 并列），并且只在目标分区已注册时显示。模型路由卡片在浏览器里由 `api/lsy.balance` 构建。
 
 | 文件 | 作用 |
 |---|---|
@@ -76,7 +76,7 @@ Claude Code 会话来自 `ctx.lsyClaudeCode`（[`lsy-cc-admin`](../lsy-cc-admin/
 | [`src/client/index.ts`](src/client/index.ts) | 浏览器入口：词典、loader、三个分区注册、试听播放器 |
 | [`src/client/resource.ts`](src/client/resource.ts) | store、带乐观动作的 loader，以及感知页面可见性的轮询 |
 | [`src/client/Overview.tsx`](src/client/Overview.tsx)、[`Subscriptions.tsx`](src/client/Subscriptions.tsx)、[`Agents.tsx`](src/client/Agents.tsx) | 三个分区 |
-| [`src/client/cards.ts`](src/client/cards.ts)、[`balance.ts`](src/client/balance.ts)、[`sections.ts`](src/client/sections.ts)、[`subs.ts`](src/client/subs.ts) | 卡片文字、模型路由卡片、分区链接、表单规则 |
+| [`src/client/cards.ts`](src/client/cards.ts)、[`balance.ts`](src/client/balance.ts)、[`subs.ts`](src/client/subs.ts) | 卡片文字、模型路由卡片、表单规则 |
 
 这是 fork 本地包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。
 
@@ -114,7 +114,6 @@ Claude Code 会话来自 `ctx.lsyClaudeCode`（[`lsy-cc-admin`](../lsy-cc-admin/
 - **触发次数受保留数量限制**——次数是总线还保留着的批次数（`retainBatches`，默认 1000），“上次触发”是其中最新的一批。
 - **听写只读**——它属于配置，而补丁条目的 `config` 会替换整个条目，所以卡片展示补丁而不是替你保存。
 - **微信和说话风格的卡片在它们报告健康前信息很少**——服务可以通过增加 `health()` 报告更多；QQ 卡片有 `connectionStatus()` 和 `recordedGroups()` 时就读它们。
-- **“管理”链接依赖外壳的标记**——它按位置点击导航按钮；外壳去掉 `data-shortcut-modal="settings"` 或改动行的顺序时，要同步更新 `sections.ts`。
 - **试听要等语音模型**——闲置后的第一句在 feiyu 上约需 45 秒；同一时间只跑一个试听。
 
 <a id="dev-note"></a>
@@ -125,7 +124,7 @@ Claude Code 会话来自 `ctx.lsyClaudeCode`（[`lsy-cc-admin`](../lsy-cc-admin/
 
 本开发备注是不具权威性的工作上下文：尚未决定的探索方向与维护者备注。已交付的行为与既定理由以上文、包代码和相关 Agent Note 为准。
 
-- 通过 `SettingsSectionOwnerProps` 给分区传一个 `select(id)` 就能取代导航点击；这需要在 `ui-settings-general` 和插槽契约里各改两行。
+- `select` 属性是对 `ui-settings-general` 和插槽契约的 fork 修改（见 `packages/lsy/UPSTREAM.md`）；没有分区注册的 id 会显示外壳的第一个分区，所以链接先做检查。
 - 触达监控需要 `unattended` 预设往隔离域里发布一个服务，而预设注册表的挂载审计只允许按挂载逐个这样做。
 
 </details>

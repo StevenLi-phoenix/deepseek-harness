@@ -44,18 +44,16 @@ export interface OverviewInjected {
   refresh: () => void
   /** Whether a section is registered, so only live links show. */
   canManage: (section: string) => boolean
-  /** Switch the Settings panel to a section. */
-  manage: (section: string) => void
 }
 
 /** Props delivered by the settings shell. */
 export type OverviewProps = PropsRuntime<'settings.section'> & InjectFace<OverviewInjected> & PropsLocale<'lsy.console'>
 
-function ServiceCardView({ card, t, canManage, manage }: {
+function ServiceCardView({ card, t, canManage, select }: {
   card: ServiceCard
   t: Translate
   canManage: (section: string) => boolean
-  manage: (section: string) => void
+  select: ((section: string) => void) | undefined
 }): ReactNode {
   const id = useId()
   const target = MANAGE_SECTION[card.id]
@@ -73,7 +71,7 @@ function ServiceCardView({ card, t, canManage, manage }: {
       {target !== undefined && canManage(target)
         ? (
           <div className={css.cardFooter}>
-            <button type="button" className={css.button} onClick={() => { manage(target) }}>{t('common.manage')}</button>
+            <button type="button" className={css.button} onClick={() => { select?.(target) }}>{t('common.manage')}</button>
           </div>
         )
         : null}
@@ -86,7 +84,7 @@ function ServiceCardView({ card, t, canManage, manage }: {
  * @param props - the store hooks, callbacks, and copy.
  * @returns the section.
  */
-export function OverviewSection({ useOverview, useBalance, refresh, canManage, manage, t }: OverviewProps): ReactNode {
+export function OverviewSection({ useOverview, useBalance, refresh, canManage, select, t }: OverviewProps): ReactNode {
   const state = useOverview(value => value)
   const balance = useBalance(value => value)
   useEffect(() => startPolling(refresh, POLL_INTERVAL_MS), [refresh])
@@ -113,7 +111,7 @@ export function OverviewSection({ useOverview, useBalance, refresh, canManage, m
         ? null
         : (
           <div className={css.grid}>
-            {cards.map(card => <ServiceCardView key={card.id} card={card} t={translate} canManage={canManage} manage={manage} />)}
+            {cards.map(card => <ServiceCardView key={card.id} card={card} t={translate} canManage={canManage} select={select} />)}
           </div>
         )}
     </section>

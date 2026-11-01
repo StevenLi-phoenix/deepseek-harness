@@ -122,10 +122,14 @@ export interface SettingsHeaderOwnerProps {
  * stores. `close` is the one shell affordance a section receives, for flows
  * that leave settings altogether (starting a session from a section) — the
  * onboarding coordinator's `openSection`/`complete` precedent, inverted.
+ * `select` switches the open panel to another registered section (a link from
+ * one page to another); an id no entry registered shows the first section.
  */
 export interface SettingsSectionOwnerProps {
   /** Close the settings panel (the shell owns the open state). */
   close: () => void
+  /** Switch the open panel to the section with this id; the shell always supplies it (optional so a test double need not). */
+  select?: (id: string) => void
 }
 
 /** Owner share of the currently active settings-backed onboarding step. */

@@ -53,6 +53,7 @@ describe('lsy-console browser entry', () => {
     expect(Object.keys((overview!.hooks as object))).toEqual(['overview', 'balance'])
     expect(Object.keys((subscriptions!.hooks as object))).toEqual(['subscriptions'])
     expect(Object.keys((agents!.hooks as object))).toEqual(['agents'])
+    expect(overview).not.toHaveProperty('manage')
     expect((overview!.canManage as (id: string) => boolean)('bili')).toBe(true)
     expect((overview!.canManage as (id: string) => boolean)('lsy-qq')).toBe(false)
     const again = registered[0]!.options.inject() as Record<string, unknown>

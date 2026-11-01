@@ -62,7 +62,7 @@ Subscriptions use the bus's own API: `listSubscriptions()`, `batches()` (for the
 
 Claude Code sessions come from `ctx.lsyClaudeCode` ([`lsy-cc-admin`](../lsy-cc-admin/README.md)), read through a small structural type so this package, which ships a browser half, imports no runtime value from a peer package. The same goes for the voice and bus errors, which the Host half tells by name.
 
-The browser half registers three `settings.section` entries (`lsy-overview` order 35, `lsy-subscriptions` 58, `lsy-agents` 60) through `ctx.slots.inject`. The settings shell hands a section only `close`, so the Manage link clicks the shell's own navigation button for the target section, found by its position in the `order`-sorted list. The model route card is built in the browser from `api/lsy.balance`.
+The browser half registers three `settings.section` entries (`lsy-overview` order 35, `lsy-subscriptions` 58, `lsy-agents` 60) through `ctx.slots.inject`. The Manage link calls the `select(id)` the settings shell hands every section (next to `close`), and shows only when the target section is registered. The model route card is built in the browser from `api/lsy.balance`.
 
 | File | Role |
 |---|---|
@@ -76,7 +76,7 @@ The browser half registers three `settings.section` entries (`lsy-overview` orde
 | [`src/client/index.ts`](src/client/index.ts) | Browser entry: dictionaries, loaders, the three section registrations, the preview player |
 | [`src/client/resource.ts`](src/client/resource.ts) | Store, loader with optimistic actions, and the visibility-aware poller |
 | [`src/client/Overview.tsx`](src/client/Overview.tsx), [`Subscriptions.tsx`](src/client/Subscriptions.tsx), [`Agents.tsx`](src/client/Agents.tsx) | The sections |
-| [`src/client/cards.ts`](src/client/cards.ts), [`balance.ts`](src/client/balance.ts), [`sections.ts`](src/client/sections.ts), [`subs.ts`](src/client/subs.ts) | Card text, the model route card, section links, form rules |
+| [`src/client/cards.ts`](src/client/cards.ts), [`balance.ts`](src/client/balance.ts), [`subs.ts`](src/client/subs.ts) | Card text, the model route card, form rules |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 
@@ -114,7 +114,6 @@ None; this package neither assembles nor sends a provider request.
 - **Fire counts are bounded by retention** — the count is the batches the bus still holds (`retainBatches`, 1000 by default), and "last fired" is the newest of them.
 - **Transcription is read-only** — it is configuration, and a patch entry's `config` replaces the whole entry, so the card shows the patch instead of saving one.
 - **WeChat and speaking-style cards say little until they report health** — a service reports more by adding `health()`; the QQ card reads `connectionStatus()` and `recordedGroups()` of the observer when it has them.
-- **The Manage link follows the shell's markup** — it clicks the navigation button by position; a shell that drops `data-shortcut-modal="settings"` or reorders its rows needs `sections.ts` updated.
 - **Preview waits for the voice model** — the first sentence after idle takes about 45 seconds on feiyu; one preview runs at a time.
 
 <a id="dev-note"></a>
@@ -125,7 +124,7 @@ None; this package neither assembles nor sends a provider request.
 
 This Dev Note is non-authoritative working context: undecided directions and notes for maintainers. Shipped behavior and accepted rationale live in the sections above, the package code, and the linked Agent Notes.
 
-- Passing a section a `select(id)` through `SettingsSectionOwnerProps` would replace the navigation click; it needs a two-line edit in `ui-settings-general` and the slot contract.
+- The `select` prop is a fork edit of `ui-settings-general` and the slot contract (`packages/lsy/UPSTREAM.md`); an id no section registered shows the shell's first section, which is why the link checks first.
 - Reaching monitors would need a service the `unattended` preset publishes into an isolate realm, which the preset registry's mount audit allows only per mount.
 
 </details>
