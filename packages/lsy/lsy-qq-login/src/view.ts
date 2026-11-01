@@ -34,7 +34,8 @@ export interface QqConnection {
 /**
  * NapCat's own login, as the login door reports it. `online`: logged in. `offline`: the session ended and NapCat
  * wants a new login. `qr`: a code is waiting for a scan. `scanned`/`logging-in`: the scan was taken and QQ is
- * completing it. `preparing`: a code is being made. `restarting`: NapCat's login service is restarting.
+ * completing it. `preparing`: a code is being made. `restarting`: QQ is reconnecting to Tencent's servers
+ * (NapCat's `reconnecting` phase, which follows a scan for a minute or more).
  */
 export type QqLoginState = 'online' | 'offline' | 'qr' | 'scanned' | 'logging-in' | 'preparing' | 'restarting' | 'unknown'
 

@@ -121,6 +121,27 @@ describe('QQ login status', () => {
     expect(door.requests.at(-1)).toEqual({ method: 'GET', path: '/v1/login', authorization: `Bearer ${TOKEN}` })
   })
 
+  it.each(['restarting', 'logging-in', 'preparing', 'unknown'] as const)(
+    'shows NapCat as online while the OneBot socket is up, though its own login phase says %s', async (phase) => {
+      const door = new FakeDoor()
+      door.body = { v: 1, napcat: 'up', login: phase, phase: 'reconnecting', uin: null, nickname: null, qrUrl: null, error: null, at: 1 }
+      const h = await boot({ door })
+      await connected(h)
+      // The socket is the more direct evidence: it only exists when QQ is logged in.
+      expect(await h.observer.loginStatus({ fresh: true })).toMatchObject({ door: 'ok', state: 'online', uin: '99999', qrUrl: null })
+    },
+  )
+
+  it('keeps what the door says while the socket is down, and keeps a waiting code even when the socket is up', async () => {
+    const door = new FakeDoor()
+    door.body = { v: 1, napcat: 'up', login: 'restarting', phase: 'reconnecting', uin: null, nickname: null, qrUrl: null, error: null, at: 1 }
+    const h = await boot({ door, oneBot: 'down' })
+    expect(await h.observer.loginStatus({ fresh: true })).toMatchObject({ state: 'restarting' })
+    const up = await boot()
+    await connected(up)
+    expect(await up.observer.loginStatus({ fresh: true })).toMatchObject({ state: 'qr', qrUrl: QR_URL })
+  })
+
   it('passes on the waiting QR link, and nothing of it reaches a log line', async () => {
     const h = await boot({ oneBot: 'down' })
     expect(await h.observer.loginStatus({ fresh: true })).toMatchObject({ door: 'ok', state: 'qr', qrUrl: QR_URL })

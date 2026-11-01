@@ -218,6 +218,12 @@ export const Config = z.object({
   }),
 })
 
+/** NapCat login states that the open OneBot socket overrides. */
+const STALE_PHASES: ReadonlySet<string> = new Set(['restarting', 'logging-in', 'preparing', 'unknown'])
+
+/** What NapCat answers to the first history page of a group that has no message to anchor on. */
+const NO_HISTORY = /消息undefined不存在/
+
 /** A QQ group number: 3 to 20 digits. */
 const GROUP_ID = /^[0-9]{3,20}$/
 
@@ -597,7 +603,12 @@ export class QqObserver extends Service {
    * @returns the reading; `door` says why there is no `state` when the door could not answer.
    */
   async loginStatus(options: { fresh?: boolean } = {}): Promise<QqLoginReading> {
-    const login = await this.loginView(options.fresh === true)
+    let login = await this.loginView(options.fresh === true)
+    // NapCat's own phase can lag or flap (its `reconnecting` is QQ re-linking to Tencent, which lasts a minute or more
+    // after a scan); the open OneBot socket exists only while QQ is logged in, so it is the more direct evidence.
+    if (this.connState === 'connected' && login.door === 'ok' && login.state !== null && STALE_PHASES.has(login.state)) {
+      login = { ...login, state: 'online', uin: login.uin ?? (this.selfId === '' ? null : this.selfId), qrUrl: null }
+    }
     if (login.state === 'online' && (this.connState === 'reconnecting' || this.connState === 'starting') && this.now() - this.lastWakeAt >= WAKE_GAP_MS) {
       this.lastWakeAt = this.now()
       this.ctx.logger.info('lsy-qq: NapCat is logged in; reconnecting now')
@@ -661,7 +672,7 @@ export class QqObserver extends Service {
       scanned: 'scanned, completing',
       'logging-in': 'logging in',
       preparing: 'preparing a QR code',
-      restarting: 'restarting its login service',
+      restarting: 'reconnecting to Tencent',
       unknown: 'in a state this version does not know',
     }
     this.ctx.logger.info(`lsy-qq: NapCat login: ${wording[login.state ?? 'unknown'] ?? 'unknown'}`)
@@ -853,7 +864,15 @@ export class QqObserver extends Service {
     let fetched = 0
     let added = 0
     while (fetched < this.config.backfill.maxMessages && this.client === client) {
-      const data = await client.call<{ messages?: OneBotEvent[] }>('get_group_msg_history', { group_id: Number(groupId), count: 50, ...seq === undefined ? {} : { message_seq: Number(seq) } })
+      let data: { messages?: OneBotEvent[] }
+      try {
+        data = await client.call<{ messages?: OneBotEvent[] }>('get_group_msg_history', { group_id: Number(groupId), count: 50, ...seq === undefined ? {} : { message_seq: Number(seq) } })
+      } catch (error: unknown) {
+        // No anchor for the first page means the group has no message to fetch: nothing to backfill, not a failure.
+        if (seq !== undefined || !NO_HISTORY.test(errorText(error))) throw error
+        this.ctx.logger.info(`lsy-qq: group ${groupId} has no history to backfill`)
+        return
+      }
       const messages = data.messages ?? []
       if (messages.length === 0) break
       let known = false
