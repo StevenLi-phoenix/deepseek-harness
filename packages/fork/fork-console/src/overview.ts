@@ -98,7 +98,8 @@ async function biliCard({ ctx, config, env = LIVE_ENV }: OverviewSources): Promi
   const mounted = service(ctx, 'bili')
   if (!isHealthy(status)) return card('bili', 'down', 'down', { plugin: mounted !== undefined })
   const report = mounted === undefined ? undefined : await reported(mounted)
-  if (report === undefined) return card('bili', 'ok', mounted === undefined ? 'svc_only' : 'up', {})
+  // bili-svc answering while the DSH plugin is not mounted means the Sessions that talk to it are gone: that is not healthy.
+  if (report === undefined) return mounted === undefined ? card('bili', 'warn', 'svc_only', { plugin: false }) : card('bili', 'ok', 'up', {})
   return card('bili', report.state === 'ok' ? 'ok' : report.state, report.state === 'ok' ? 'up' : report.state, { detail: report.detail ?? null })
 }
 
