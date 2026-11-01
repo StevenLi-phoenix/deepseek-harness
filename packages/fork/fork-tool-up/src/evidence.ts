@@ -95,11 +95,9 @@ export function parseComment(value: unknown): CachedComment | undefined {
  */
 export function commentsOf(body: unknown): CachedComment[] {
   const fields = record(body)
-  const list = [
-    ...Array.isArray(fields['comments']) ? fields['comments'] : [],
-    ...fields['root'] === undefined || fields['root'] === null ? [] : [fields['root']],
-    ...Array.isArray(fields['replies']) ? fields['replies'] : [],
-  ]
+  const items = (value: unknown): readonly unknown[] => (Array.isArray(value) ? value : [])
+  const root = fields['root']
+  const list: unknown[] = [...items(fields['comments']), ...root === undefined || root === null ? [] : [root], ...items(fields['replies'])]
   return list.map(parseComment).filter(comment => comment !== undefined)
 }
 
