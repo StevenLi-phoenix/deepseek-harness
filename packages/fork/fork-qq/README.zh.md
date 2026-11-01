@@ -72,7 +72,8 @@ kind: "package-reference"
 | `digest.profiles` | `false` | 同时要求写“成员观点与专长”一节（按别名）；默认关闭：不做逐人画像 |
 | `digest.keepPerGroup`、`digest.maxDigestChars` | `200`、`3000` | 每个群保留的摘要数（存新摘要时删最旧的）和单份摘要的最大字数 |
 | `digest.provider`、`digest.model` | 未设置 | 摘要 Session 的模型（provider 路由和模型 id），例如便宜的模型；不设置就用 profile 的默认模型 |
-| `digest.agentPreset`、`digest.permissionPreset` | `qq-digest`、`read-only` | 事件 bundle 的 `qq-digest` preset 只有人设、没有工具 |
+| `digest.maxToolCalls` | `12` | 一个摘要 Session 至多调用工具的次数，被拒绝的也算 |
+| `digest.agentPreset`、`digest.permissionPreset` | `qq-digest`、`read-only` | 事件 bundle 的 `qq-digest` preset 有人设和两个窄工具 `qq_digest_write`、`qq_group_note`（没有 shell、文件、网页或记忆工具） |
 | `digest.workspacePath`、`digest.timeZone`、`digest.timeoutMs` | `/Users/dsh-runtime/qq-digest`、`Asia/Shanghai`、`900000` | 工作目录、转录里时间所用的时区，以及等待一次模型调用的期限 |
 | `offlineNoticeMs` | `600000` | 协议端这么久连不上、或报告账号下线时，经 `ctx.forkNotifier` 通知 owner；`0` 关闭。每次中断只通知一次：已通知的事记在 `<dataDir>/outage-notice.json`，直到连接恢复才清除，所以中断期间重载或部署不会重复通知 |
 | `reconnectQuietMs` | `600000` | 距上一次连接最后存活不到这么久就连上时，不取群列表、不补抓，插件重启时同样有效（时间记在 `<dataDir>/connection-state.json`，连接期间每分钟刷新）；`0` 表示从不跳过。群列表无论如何每小时最多取一次 |
@@ -104,7 +105,9 @@ kind: "package-reference"
 
 一条群消息经解析（[`src/text.ts`](src/text.ts)）成一行文字（`@name`、`[图片]`、`[语音]`、`[文件:name]`、`[卡片:title url]` 等）、被引用的消息 id 和它的媒体。[`src/store.ts`](src/store.ts) 以群号加 QQ 消息 id 为唯一键把它写入 SQLite（`node:sqlite`，WAL），所以重连和补抓不会产生重复行；FTS5 索引使用 trigram 分词器，支持中英文子串检索（不足三个字符的查询退回 `LIKE`）。图片只从 `media.hostSuffixes` 里的域名抓取，走 HTTPS、不跟随重定向、有大小上限、同时两个，存到 `media/<group>/<YYYYMM>/<sha256>.<ext>`（权限 0600；内容相同的字节共用一个文件）。语音消息经 `get_record` 取成 MP3（退而求其次用它的链接），同样保存，开启 `asr.enabled` 时由 fork-voice 转写，转写文字会追加到消息文字和检索索引里。撤回通知会丢掉该消息的文字、原始片段、媒体行和文件。
 
-每轮 `digest`（每十分钟检查一次）挑出上次摘要已满 `everyHours`、且有 `minMessages` 条新消息的群，把积压切成每份至多 `maxPromptChars` 的转录，对每份在 `qq-digest` preset 的新 Session 里跑一轮（没有工具、权限 `read-only`、配置的模型）。Session 的最终文字先写进 `digest-raw/` 再入库；`NO_REPLY` 的回答存一个占位，让游标往前走；每步的 usage 随摘要存储并记入日志。转录被框成不可信数据，也无法关闭自己的块。
+每轮 `digest`（每十分钟检查一次）挑出上次摘要已满 `everyHours`、且有 `minMessages` 条新消息的群，把积压切成每份至多 `maxPromptChars` 的转录，对每份在 `qq-digest` preset 的新 Session 里跑一轮（权限 `read-only`、配置的模型）。模型用 `qq_digest_write` 交摘要，用 `qq_group_note` 维护这个群的笔记；两个工具都绑定在这个 Session 和它正在摘要的那一个群上（给别的群的调用、第二份摘要、超过 `digest.maxToolCalls` 的调用、别的 Session 的调用，一律被拒绝），一轮结束时由 runner 带着窗口、模型和 usage 入库。模型若跳过工具、把摘要写在回答里，仍会被保留。它交上来的内容和最终回答先写进 `digest-raw/` 再入库；`NO_REPLY` 的回答存一个占位，让游标往前走。每一轮都记日志：工具调用次数、被拒绝的次数、增删的笔记数、Session 被压缩的次数。转录被框成不可信数据，也无法关闭自己的块。
+
+群笔记是 QQ 频道自己的记忆（存在这里，不进 fork-memory）：这个群常聊什么、黑话和氛围，每群至多 30 条、每条至多 40 字，下一轮以 `#id 内容` 的形式给模型看，方便它删掉某一条。笔记只描述群，不描述个人：过滤器拒绝长数字、邮箱、`@`、成员别名、地址、学校和单位，以及这个群成员出现过的任何名字或群名片。`groupNotes(groupId)` 读取笔记。`evidenceOf(groupId, messageIds)` 对群里仍保留的每条消息（已记录、未撤回、在 `retention.textDays` 内）返回发送者键和时间：由群号和成员加盐哈希得到的 16 位十六进制，在群内稳定、在别的群里不同，从不是 QQ 号。
 
 | 文件 | 作用 |
 |---|---|
@@ -115,6 +118,7 @@ kind: "package-reference"
 | [`src/text.ts`](src/text.ts) | 消息片段到文字和媒体 |
 | [`src/store.ts`](src/store.ts) | SQLite 表结构、FTS5 检索、保留期与摘要查询 |
 | [`src/media.ts`](src/media.ts) | 地址白名单、有上限的抓取、类型识别、按内容命名的文件 |
+| [`src/pii.ts`](src/pii.ts) | 群笔记要过的过滤器：不含个人、号码、地址、学校或成员名 |
 | [`src/digest.ts`](src/digest.ts) | 转录切块、摘要提示词，以及经 Session 的模型调用 |
 
 这是 fork 本地的包；[`../UPSTREAM.md`](../UPSTREAM.md) 说明 `fork` 组如何跟踪上游。协议端是 NapCat：它在腾讯自己的 Linux QQ 客户端里加载插件，所以这里没有重新实现任何 QQ 协议。LLBot 的 macOS CLI 被否决，因为它用闭源原生模块给数据包签名，而这些模块会调用厂商的 token 服务；官方 QQ 开放平台机器人先做过又放弃了，因为机器人在群里只能看到 @ 它的消息，不能作为一个读取全部消息的成员。数据留在这台机器的 `dataDir` 下；离开这里的文字只有发给摘要模型的转录和 agent 经工具读到的内容。
@@ -140,7 +144,7 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-每份转录在新 Session 里是一条用户 prompt：一段英文指令，点名这个群、要写的小节标题（话题、结论与事实、术语与梗、常见问题、链接与资料；只有开启 `digest.profiles` 才加“成员观点与专长”）和 1500 字上限，然后是 `<qq_group_messages trust="untrusted">` 里的转录，每条消息一行，格式为 `[MM-DD HH:mm] 群友#a3f9 ↳reply: text`（成员默认是别名；关闭 `digest.aliasMembers` 时是名字加 QQ 号末四位）。preset 的人设说明聊天内容是数据、Session 没有工具。最终文字就是摘要；`NO_REPLY` 表示没有值得保留的内容。
+每份转录在新 Session 里是一条用户 prompt：一段英文指令，点名这个群、要写的小节标题（话题、结论与事实、术语与梗、常见问题、链接与资料；只有开启 `digest.profiles` 才加“成员观点与专长”）和 1500 字上限，然后是 `<qq_group_messages trust="untrusted">` 里的转录，每条消息一行，格式为 `[MM-DD HH:mm] 群友#a3f9 ↳reply: text`（成员默认是别名；关闭 `digest.aliasMembers` 时是名字加 QQ 号末四位）。消息里告诉模型要传给两个工具的群号，并把这个群的笔记放在 `<qq_group_notes trust="derived">` 里给它看。preset 的人设说明聊天内容是数据、它唯一的工具只写这个群的摘要和笔记。摘要就是 `qq_digest_write` 收到的内容（没有则取最终回答）；`NO_REPLY` 表示没有值得保留的内容。
 
 #### Token 影响
 

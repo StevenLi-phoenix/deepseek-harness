@@ -2736,7 +2736,7 @@ export type FeedbackScope = typeof FEEDBACK_SCOPES[number]
 
 - `inject`: `sessionController` · `permissionPresets` · `sessionTitle` · `credentials`
 - `refs`: `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/fork/fork-qq/src/index.ts:43`](../packages/fork/fork-qq/src/index.ts)
+- `source`: [`packages/fork/fork-qq/src/index.ts:44`](../packages/fork/fork-qq/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
@@ -2838,6 +2838,8 @@ export interface Config {
     keepPerGroup: number
     /** Longest digest stored, in characters. */
     maxDigestChars: number
+    /** Tool calls (`qq_digest_write`, `qq_group_note`) one digest Session may make, refused ones included. 12 by default. */
+    maxToolCalls: number
     /** Provider route of the digest Session's model; the profile's default when omitted. */
     provider?: string
     /** Model id on that route; the profile's default when omitted. */
@@ -3081,6 +3083,27 @@ export interface Config {
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-taint -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-qq -->
+<a id="deepseek-aidsh-fork-tool-qq"></a>
+
+## `@deepseek-ai/dsh-fork-tool-qq`
+
+- `inject`: `tools`
+- `source`: [`packages/fork/fork-tool-qq/src/index.ts:21`](../packages/fork/fork-tool-qq/src/index.ts)
+
+```ts config-catalog
+/** Which tools the plugin registers. */
+export interface Config {
+  /**
+   * `read` (the default): the read tools and `qq_forget`, for the main agent. `digest`: only `qq_digest_write` and
+   * `qq_group_note`, for the `qq-digest` preset, whose Session writes the digest and the notes of the one group it is
+   * digesting; the observer binds both to that Session and that group, so they can touch nothing else.
+   */
+  mode: 'read' | 'digest'
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-qq -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-watch -->
 <a id="deepseek-aidsh-fork-tool-watch"></a>
@@ -5825,7 +5848,6 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-fork-qq-login` | `connection` · `forkQq` | [`packages/fork/fork-qq-login/src/index.ts`](../packages/fork/fork-qq-login/src/index.ts) |
 | `@deepseek-ai/dsh-fork-style-settings` | `connection` | [`packages/fork/fork-style-settings/src/index.ts`](../packages/fork/fork-style-settings/src/index.ts) |
 | `@deepseek-ai/dsh-fork-tool-monitor` | `tools` · `storageDomain` · `sessionController` · `sessionPersistence` | [`packages/fork/fork-tool-monitor/src/index.ts`](../packages/fork/fork-tool-monitor/src/index.ts) |
-| `@deepseek-ai/dsh-fork-tool-qq` | `tools` | [`packages/fork/fork-tool-qq/src/index.ts`](../packages/fork/fork-tool-qq/src/index.ts) |
 | `@deepseek-ai/dsh-fork-tool-up` | `tools` · `credentials` | [`packages/fork/fork-tool-up/src/index.ts`](../packages/fork/fork-tool-up/src/index.ts) |
 | `@deepseek-ai/dsh-fork-tool-voice` | `tools` | [`packages/fork/fork-tool-voice/src/index.ts`](../packages/fork/fork-tool-voice/src/index.ts) |
 | `@deepseek-ai/dsh-fork-tool-wechat` | `tools` | [`packages/fork/fork-tool-wechat/src/index.ts`](../packages/fork/fork-tool-wechat/src/index.ts) |

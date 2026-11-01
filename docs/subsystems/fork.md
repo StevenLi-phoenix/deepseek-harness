@@ -387,6 +387,41 @@ unlistedActivity(): Array<{ groupId: string; name: string; messages: number }>
 groupName(groupId: string): string
 
 /**
+ * `qq_digest_write` for the tools of the digest preset: stage the calling Session's digest.
+ * @param sessionId - the calling Session.
+ * @param groupId - the group the model names; it must be the group the Session is digesting.
+ * @param text - the digest.
+ * @returns what to tell the model.
+ */
+digestWrite(sessionId: string | undefined, groupId: string, text: string): ToolOutcome
+
+/**
+ * `qq_group_note` for the tools of the digest preset: add or remove a note of the group the calling Session is digesting.
+ * @param sessionId - the calling Session.
+ * @param groupId - the group the model names; it must be the group the Session is digesting.
+ * @param op - `add` or `remove`.
+ * @param text - the note, or for `remove` its `#id` or exact text.
+ * @returns what to tell the model.
+ */
+groupNote(sessionId: string | undefined, groupId: string, op: string, text: string): ToolOutcome
+
+/**
+ * The notes of a recorded group: what the QQ channel remembers of its habits.
+ * @param groupId - group number; an unrecorded group yields nothing.
+ * @returns the notes, oldest first.
+ */
+groupNotes(groupId: string): GroupNote[]
+
+/**
+ * Evidence for a claim about a group's chat, without exposing who said what: for each message id the group still
+ * holds, a stable sender key (a salted hash of the member within this group, never the QQ number) and its time.
+ * @param groupId - group number; an unrecorded group yields nothing.
+ * @param messageIds - OneBot message ids, at most 200 are looked at.
+ * @returns one entry per message found: recorded, not recalled, and still inside the retention window.
+ */
+evidenceOf(groupId: string, messageIds: readonly string[]): Array<{ messageId: string; senderKey: string; at: number }>
+
+/**
  * Whether a group is on the `groups` list.
  * @param groupId - group number.
  * @returns true for a recorded group.

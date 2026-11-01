@@ -1014,6 +1014,8 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   QqConnection: 'fork-local QQ connection state is owned by packages/fork/fork-qq/README.md',
   QqLoginReading: 'fork-local NapCat login reading is owned by packages/fork/fork-qq/README.md',
   RefreshRefusal: 'fork-local fresh-code refusal reason is owned by packages/fork/fork-qq/README.md',
+  ToolOutcome: 'fork-local digest-tool answer is owned by packages/fork/fork-qq/README.md',
+  GroupNote: 'fork-local group note is owned by packages/fork/fork-qq/README.md',
   MessageRow: 'fork-local stored message is owned by packages/fork/fork-qq/README.md',
   DigestRow: 'fork-local stored digest is owned by packages/fork/fork-qq/README.md',
   ForkAgentMessage: 'fork-local message for the main agent is owned by packages/fork/fork-event-bus/README.md',

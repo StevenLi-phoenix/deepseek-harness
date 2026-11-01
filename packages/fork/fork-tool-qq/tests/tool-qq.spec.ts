@@ -24,16 +24,17 @@ function digest(overrides: Partial<DigestRow> = {}): DigestRow {
   return { id: 1, groupId: '111111', fromRow: 1, toRow: 9, messageCount: 9, text: '## 话题\n发版计划', model: 'm', usage: null, rawPath: null, createdAt: AT, ...overrides }
 }
 
-async function mount(observer: Record<string, unknown>) {
+async function mount(observer: Record<string, unknown>, config: Record<string, unknown> = {}) {
   const ctx = new Context()
   contexts.push(ctx)
   ctx.provide('systemPrompt', { tools: () => () => {} } as never)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(NativeToolExecutor)
   ctx.provide('forkQq', observer as never)
-  await ctx.plugin(ToolQq)
-  const call = async (name: string, args: unknown): Promise<string> => {
-    const batch = await ctx.tools.execute({ signal: new AbortController().signal, calls: [{ type: 'tool-call', id: ToolCallId(`${name}-call`), name, arguments: JSON.stringify(args) }] })
+  await ctx.plugin(ToolQq, config as never)
+  const call = async (name: string, args: unknown, session?: string): Promise<string> => {
+    const agent = session === undefined ? {} : { agent: { session: { id: session } } as never }
+    const batch = await ctx.tools.execute({ signal: new AbortController().signal, ...agent, calls: [{ type: 'tool-call', id: ToolCallId(`${name}-call`), name, arguments: JSON.stringify(args) }] })
     const result = batch.results[0]!.result as { content?: { type: string; text: string }[] }
     return result.content?.map(part => part.text).join('') ?? ''
   }
@@ -156,5 +157,42 @@ describe('fork-tool-qq', () => {
     const text = await call('qq_recent', { group: '111111', limit: 300 })
     expect(text).toContain('(cut at 12000 characters')
     expect(text.match(/<\/qq_data>\n/g)).toHaveLength(1)
+  })
+})
+
+describe('digest mode', () => {
+  const digestObserver = () => ({
+    digestWrite: vi.fn((_session: string | undefined, group: string) => (group === '111111' ? { ok: true as const, message: 'digest saved' } : { ok: false as const, error: 'wrong group' })),
+    groupNote: vi.fn(() => ({ ok: true as const, message: 'note #1 added' })),
+    ...stand(),
+  })
+
+  it('registers the two digest tools and none of the read tools', async () => {
+    const { ctx } = await mount(digestObserver(), { mode: 'digest' })
+    const names = ctx.tools.definitions().map(tool => tool.name).filter(name => name.startsWith('qq_')).sort()
+    expect(names).toEqual(['qq_digest_write', 'qq_group_note'])
+  })
+
+  it('keeps the read mode as it was by default', async () => {
+    const { ctx } = await mount(stand())
+    const names = ctx.tools.definitions().map(tool => tool.name).filter(name => name.startsWith('qq_')).sort()
+    expect(names).toEqual(['qq_digest', 'qq_forget', 'qq_groups', 'qq_recent', 'qq_search'])
+  })
+
+  it('hands the calling Session and the arguments to the observer, which binds them to the group', async () => {
+    const observer = digestObserver()
+    const { call } = await mount(observer, { mode: 'digest' })
+    expect(JSON.parse(await call('qq_digest_write', { groupId: '111111', text: '摘要' }, 'sess-1'))).toEqual({ ok: true, message: 'digest saved' })
+    expect(observer.digestWrite).toHaveBeenCalledWith('sess-1', '111111', '摘要')
+    expect(JSON.parse(await call('qq_digest_write', { groupId: '222222', text: '摘要' }, 'sess-1'))).toEqual({ ok: false, error: 'wrong group' })
+    expect(JSON.parse(await call('qq_group_note', { groupId: '111111', op: 'add', text: '常聊显卡' }, 'sess-1'))).toEqual({ ok: true, message: 'note #1 added' })
+    expect(observer.groupNote).toHaveBeenCalledWith('sess-1', '111111', 'add', '常聊显卡')
+  })
+
+  it('passes no Session when called outside an agent, so the observer refuses', async () => {
+    const observer = digestObserver()
+    const { call } = await mount(observer, { mode: 'digest' })
+    await call('qq_group_note', { groupId: '111111', op: 'add', text: '常聊显卡' })
+    expect(observer.groupNote).toHaveBeenCalledWith(undefined, '111111', 'add', '常聊显卡')
   })
 })

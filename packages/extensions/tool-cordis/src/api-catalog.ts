@@ -2384,6 +2384,30 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the name the account last saw, or the number.',
       },
       {
+        signature: 'digestWrite(sessionId: string | undefined, groupId: string, text: string): ToolOutcome',
+        description: '`qq_digest_write` for the tools of the digest preset: stage the calling Session\'s digest.',
+        parameters: [{ name: 'sessionId', description: 'the calling Session.' }, { name: 'groupId', description: 'the group the model names; it must be the group the Session is digesting.' }, { name: 'text', description: 'the digest.' }],
+        returns: 'what to tell the model.',
+      },
+      {
+        signature: 'groupNote(sessionId: string | undefined, groupId: string, op: string, text: string): ToolOutcome',
+        description: '`qq_group_note` for the tools of the digest preset: add or remove a note of the group the calling Session is digesting.',
+        parameters: [{ name: 'sessionId', description: 'the calling Session.' }, { name: 'groupId', description: 'the group the model names; it must be the group the Session is digesting.' }, { name: 'op', description: '`add` or `remove`.' }, { name: 'text', description: 'the note, or for `remove` its `#id` or exact text.' }],
+        returns: 'what to tell the model.',
+      },
+      {
+        signature: 'groupNotes(groupId: string): GroupNote[]',
+        description: 'The notes of a recorded group: what the QQ channel remembers of its habits.',
+        parameters: [{ name: 'groupId', description: 'group number; an unrecorded group yields nothing.' }],
+        returns: 'the notes, oldest first.',
+      },
+      {
+        signature: 'evidenceOf(groupId: string, messageIds: readonly string[]): Array<{ messageId: string; senderKey: string; at: number }>',
+        description: 'Evidence for a claim about a group\'s chat, without exposing who said what: for each message id the group still holds, a stable sender key (a salted hash of the member within this group, never the QQ number) and its time.',
+        parameters: [{ name: 'groupId', description: 'group number; an unrecorded group yields nothing.' }, { name: 'messageIds', description: 'OneBot message ids, at most 200 are looked at.' }],
+        returns: 'one entry per message found: recorded, not recalled, and still inside the retention window.',
+      },
+      {
         signature: 'isRecorded(groupId: string): boolean',
         description: 'Whether a group is on the `groups` list.',
         parameters: [{ name: 'groupId', description: 'group number.' }],
@@ -7173,6 +7197,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface GrantRecord {\n    readonly kind: \'grant\';\n    readonly payload: unknown;\n}',
   },
   {
+    name: 'GroupNote',
+    declaration: 'export interface GroupNote {\n    id: number;\n    text: string;\n    createdAt: number;\n}',
+  },
+  {
     name: 'GroupOverview',
     declaration: 'export interface GroupOverview {\n    groupId: string;\n    name: string;\n    memberCount: number | null;\n    recorded: boolean;\n    messages: number;\n    firstAt: number | null;\n    lastAt: number | null;\n    lastDigestAt: number | null;\n}',
   },
@@ -10263,6 +10291,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ToolModelInput',
     declaration: 'export type ToolModelInput = Pick<ToolProviderResult, \'schemas\' | \'knownNames\'>;',
+  },
+  {
+    name: 'ToolOutcome',
+    declaration: 'export type ToolOutcome = {\n    ok: true;\n    message: string;\n} | {\n    ok: false;\n    error: string;\n};',
   },
   {
     name: 'ToolOutputDefinition',

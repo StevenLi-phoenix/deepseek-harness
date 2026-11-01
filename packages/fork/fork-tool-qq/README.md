@@ -32,7 +32,14 @@ Add the row to the plugin list of the agent preset that should read QQ, in a pro
   name: '@deepseek-ai/dsh-fork-tool-qq'
 ```
 
-The plugin has no configuration; the groups, the data, and the digests belong to `fork-qq`.
+The groups, the data, and the digests belong to `fork-qq`. The one field is `mode`: `read` (the default) registers the read tools and `qq_forget`; `digest` registers only `qq_digest_write` and `qq_group_note`, which the event bundle mounts in the `qq-digest` preset. Both write only for the digest Session that calls them: `ctx.forkQq` binds them to that Session and to the one group it is digesting, caps the calls per turn (`digest.maxToolCalls`), and filters notes so they describe the group, never a person.
+
+```yaml
+- id: tool-qq-digest
+  name: '@deepseek-ai/dsh-fork-tool-qq'
+  config:
+    mode: digest
+```
 
 -----
 
