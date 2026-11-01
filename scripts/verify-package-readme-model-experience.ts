@@ -174,6 +174,7 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/client/ui-directory-picker-browse': { kind: 'none', reason: 'Browser-side directory-browsing surface; registers nothing model-facing.' },
   'packages/lsy/lsy-balance': { kind: 'none', reason: 'Account settings card reading provider balances; registers nothing model-facing.' },
   'packages/lsy/lsy-sysmon': { kind: 'none', reason: 'Settings section reading the Host machine status; registers nothing model-facing.' },
+  'packages/lsy/lsy-style-settings': { kind: 'none', reason: 'Settings section showing the speaking-style samples; registers nothing model-facing (the samples reach the model through lsy-style).' },
   'packages/lsy/lsy-qq-login': { kind: 'none', reason: 'Settings section showing the QQ connection and login QR code; registers nothing model-facing, and the code never enters a model request.' },
   'packages/lsy/lsy-integrity': { kind: 'none', reason: 'Reads files and Session events and notifies the owner; adds nothing to model requests.' },
   'packages/client/ui-directory-picker-native': { kind: 'none', reason: 'Browser-side surface driving the local Desktop or Host OS chooser; registers nothing model-facing.' },

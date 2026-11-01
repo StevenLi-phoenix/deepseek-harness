@@ -1,16 +1,7 @@
 /**
- * What the Host style route answers, shared by both halves as types and constants only (no Node imports: the browser
- * half reads this file too).
+ * The samples, runs, and trend as the style service hands them to the Settings section (lsy-style-settings, which
+ * declares the same fields for its browser half).
  */
-
-/** Absolute Host registration paths: the panel (GET), the owner's edits (POST), and a collection run on demand (POST). */
-export const STYLE_PATH = '/api/lsy.style'
-export const STYLE_EDIT_PATH = '/api/lsy.style.edit'
-export const STYLE_COLLECT_PATH = '/api/lsy.style.collect'
-/** Document-relative forms the browser fetches. */
-export const STYLE_ROUTE = STYLE_PATH.slice(1)
-export const STYLE_EDIT_ROUTE = STYLE_EDIT_PATH.slice(1)
-export const STYLE_COLLECT_ROUTE = STYLE_COLLECT_PATH.slice(1)
 
 /**
  * Where a sample came from. `qq-group`: a QQ group member's message and another member's reply. `bili-viewer`: a
@@ -80,7 +71,7 @@ export interface TrendDay {
   readonly meanChars: number | null
 }
 
-/** What `GET /api/lsy.style` answers. */
+/** Everything the Settings section shows. */
 export interface StylePanel {
   /** The block reaches the main agent; `false` in the configuration turns it off. */
   readonly enabled: boolean
@@ -95,7 +86,7 @@ export interface StylePanel {
   readonly trend: readonly TrendDay[]
 }
 
-/** What `POST /api/lsy.style.edit` takes. */
+/** One edit by the owner. */
 export type StyleEdit =
   | { readonly op: 'remove'; readonly id: string }
   | { readonly op: 'keep'; readonly id: string }

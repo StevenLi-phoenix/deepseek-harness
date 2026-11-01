@@ -381,6 +381,8 @@ flowchart TD
     pkg_lsy_qq["lsy-qq"]
     pkg_lsy_qq_login["lsy-qq-login"]
     pkg_lsy_qqbot["lsy-qqbot"]
+    pkg_lsy_style["lsy-style"]
+    pkg_lsy_style_settings["lsy-style-settings"]
     pkg_lsy_sysmon["lsy-sysmon"]
     pkg_lsy_taint["lsy-taint"]
     pkg_lsy_tool_monitor["lsy-tool-monitor"]
@@ -1586,6 +1588,14 @@ flowchart TD
   pkg_subagent_dsh_sdk --> pkg_session
   pkg_subagent_dsh_sdk --> pkg_subagent
   pkg_subagent_dsh_sdk --> pkg_subprocess
+  pkg_lsy_style --> pkg_agent
+  pkg_lsy_style --> pkg_compaction
+  pkg_lsy_style --> pkg_credentials
+  pkg_lsy_style --> pkg_home_paths
+  pkg_lsy_style --> pkg_llm
+  pkg_lsy_style --> pkg_lsy_integrity
+  pkg_lsy_style --> pkg_lsy_qq
+  pkg_lsy_style --> pkg_session
   pkg_lsy_tool_qq --> pkg_lsy_qq
   pkg_lsy_tool_qq --> pkg_tools
   pkg_lsy_tool_qq --> pkg_util_values
@@ -1755,6 +1765,7 @@ flowchart TD
 | [`bili`](../packages/lsy/bili) | `lsy` | — |
 | [`lsy-balance`](../packages/lsy/lsy-balance) | `lsy` | — |
 | [`lsy-qq-login`](../packages/lsy/lsy-qq-login) | `lsy` | — |
+| [`lsy-style-settings`](../packages/lsy/lsy-style-settings) | `lsy` | — |
 | [`lsy-sysmon`](../packages/lsy/lsy-sysmon) | `lsy` | — |
 | [`message-quotes`](../packages/session/message-quotes) | `session` | — |
 | [`session-format`](../packages/session/session-format) | `session` | — |
@@ -2007,6 +2018,7 @@ flowchart TD
 | [`sdk-client`](../packages/sdk/client) | `sdk` | [`llm`](../packages/llm/llm), [`sdk-protocol`](../packages/sdk/protocol), [`session`](../packages/core/session) |
 | [`client-test-runtime`](../packages/test-support/client-runtime) | `test-support` | [`api-gateway`](../packages/api/gateway), [`api-session-controller`](../packages/api/session-controller), [`api-workspace-controller`](../packages/api/workspace-controller), [`attachment`](../packages/attachment/attachment), [`client-connection`](../packages/client/connection), [`client-hmr`](../packages/client/hmr), [`client-modules`](../packages/client/modules), [`client-store`](../packages/client/store), [`client-ui-chat`](../packages/client/ui-chat), [`client-ui-context-menu`](../packages/client/ui-context-menu), [`client-ui-conversation`](../packages/client/ui-conversation), [`client-ui-renderer`](../packages/client/ui-renderer), [`client-ui-session`](../packages/client/ui-session), [`client-ui-settings`](../packages/client/ui-settings), [`client-ui-slots`](../packages/client/ui-slots), [`client-web`](../packages/client/web), [`remote-mock`](../packages/test-support/remote-mock), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`typert-protocol`](../packages/typert/protocol) |
 | [`subagent-dsh-sdk`](../packages/subagent/subagent-dsh-sdk) | `subagent` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`sdk-client`](../packages/sdk/client), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`subprocess`](../packages/subprocess/subprocess) |
+| [`lsy-style`](../packages/lsy/lsy-style) | `lsy` | [`agent`](../packages/core/agent), [`compaction`](../packages/compaction/compaction), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`lsy-integrity`](../packages/lsy/lsy-integrity), [`lsy-qq`](../packages/lsy/lsy-qq), [`session`](../packages/core/session) |
 | [`lsy-tool-qq`](../packages/lsy/lsy-tool-qq) | `lsy` | [`lsy-qq`](../packages/lsy/lsy-qq), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
 | [`lsy-tool-wechat`](../packages/lsy/lsy-tool-wechat) | `lsy` | [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-wechat`](../packages/lsy/lsy-wechat), [`tools`](../packages/core/tools) |
 | [`tool-schedule`](../packages/schedule/tool-schedule) | `schedule` | [`llm`](../packages/llm/llm), [`schedule`](../packages/schedule/schedule), [`subagent`](../packages/subagent/subagent), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |

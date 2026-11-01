@@ -2940,6 +2940,93 @@ export interface SessionConfig {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-qqbot -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-style -->
+<a id="deepseek-aidsh-lsy-style"></a>
+
+## `@deepseek-ai/dsh-lsy-style`
+
+- `source`: [`packages/lsy/lsy-style/src/index.ts:63`](../packages/lsy/lsy-style/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** `collect` (at the root): collection, the store, the Settings routes, and the block. `prompt` (inside a preset): injection only. */
+  mode: 'collect' | 'prompt'
+  /** Collect mode: `false` stops collection and keeps the block out of every prompt; the samples stay and the page still opens. */
+  enabled: boolean
+  /** Collect mode: directory of `samples.jsonl`, `state.json`, and `answers.json`; defaults to `<DSH_HOME>/lsy-style`. */
+  dir?: string
+  /**
+   * `optional`: strangers' samples that pass the filters go active and the owner deletes bad ones. `required`: they wait as
+   * pending until the owner keeps them.
+   */
+  review: 'optional' | 'required'
+  /** Hours between scheduled collection runs. */
+  everyHours: number
+  /** Longest side of a collected exchange, in characters. */
+  maxChars: number
+  /** Longest side of a line the owner types on the page. */
+  ownerMaxChars: number
+  /** Active samples in all. */
+  maxActive: number
+  /** Active samples of the owner's own, pinned ahead of the rest. */
+  maxOwner: number
+  /** Pending samples kept while review is required. */
+  maxPending: number
+  /** Strangers' samples one run adds at most. */
+  perRun: number
+  /** Strangers' samples one run takes from one group or comment thread at most. */
+  perGroup: number
+  /** Strangers' samples said longer ago than this many days are retired (QQ keeps raw messages 30 days). */
+  maxAgeDays: number
+  /** Words that identify the owner (a real name, other handles) on top of the built-in list; a line containing one is left out. */
+  identityMarkers: string[]
+  /** Blocked words on top of the built-in slur list. */
+  blocklist: string[]
+  /** QQ groups (through `ctx.lsyQq`). */
+  qq: {
+    /** Read the recorded groups at all. */
+    enabled: boolean
+    /** Hours of messages read per group in one run. */
+    windowHours: number
+    /** Messages read per group at most. */
+    maxMessages: number
+    /** Longest gap, in seconds, between a message and an unquoted answer by another member. */
+    gapSec: number
+    /** Messages newer than this many minutes wait for the next run (a sender can recall a message for 2 minutes). */
+    settleMinutes: number
+  }
+  /** Comments under the owner's Bilibili videos (through bili-svc's read API). */
+  bili: {
+    /** Read the comments at all. */
+    enabled: boolean
+    /** bili-svc's address; unset uses `BILI_SVC_URL` or `http://127.0.0.1:8097`. */
+    url?: string
+    /** Credential holding a bili-svc token with the `read` scope. */
+    tokenEnv: string
+    /** bili-svc's id of the owner's own account (猫灯): its hand-written replies become `owner-bili`. */
+    ownerAccount: string
+    /** Newest comments read per run. */
+    comments: number
+    /** Comment threads read per run (each is one live read through bili-svc). */
+    maxThreads: number
+    /** Deadline of one read, in milliseconds. */
+    timeoutMs: number
+  }
+  /** Agent presets whose root Sessions get the block. */
+  presets: string[]
+  /** Cap on the block, in bytes. */
+  maxBytes: number
+  /** Exchanges shown in the block at most. */
+  maxShown: number
+  /** IANA zone of the day the block rotates on. */
+  timeZone: string
+  /** lsy-integrity's per-day stock-line counts; defaults to `<DSH_HOME>/lsy-integrity/tics.json`. */
+  ticsFile?: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-style -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-sysmon -->
 <a id="deepseek-aidsh-lsy-sysmon"></a>
 
@@ -5736,6 +5823,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-llm` | — | [`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts) |
 | `@deepseek-ai/dsh-lsp` | — | [`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-qq-login` | `connection` · `lsyQq` | [`packages/lsy/lsy-qq-login/src/index.ts`](../packages/lsy/lsy-qq-login/src/index.ts) |
+| `@deepseek-ai/dsh-lsy-style-settings` | `connection` | [`packages/lsy/lsy-style-settings/src/index.ts`](../packages/lsy/lsy-style-settings/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-tool-monitor` | `tools` · `storageDomain` · `sessionController` · `sessionPersistence` | [`packages/lsy/lsy-tool-monitor/src/index.ts`](../packages/lsy/lsy-tool-monitor/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-tool-qq` | `tools` | [`packages/lsy/lsy-tool-qq/src/index.ts`](../packages/lsy/lsy-tool-qq/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-tool-up` | `tools` · `credentials` | [`packages/lsy/lsy-tool-up/src/index.ts`](../packages/lsy/lsy-tool-up/src/index.ts) |

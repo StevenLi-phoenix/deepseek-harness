@@ -1,7 +1,8 @@
 /**
  * Speaking style learned from real people, as data. The root plugin collects short conversational exchanges from the
  * recorded QQ groups and from the comments under the owner's Bilibili videos (deterministic filters, no model), keeps
- * them in a bounded file the owner sees and edits in Settings → 说话风格, and renders a small block of them. The same
+ * them in a bounded file the owner sees and edits in Settings → 说话风格 (`ctx.lsyStyle`, read by lsy-style-settings),
+ * and renders a small block of them. The same
  * plugin mounted in a preset with `mode: prompt` puts that block in front of each root Session of the listed
  * presets, once a day, as quoted data that only calibrates length, rhythm, and register.
  *
@@ -32,7 +33,7 @@ import { StyleCollector, type BiliReader, type CollectSettings, type QqSource } 
 import { localDay, renderStyleBlock } from './render.ts'
 import { StyleError, StyleStore } from './store.ts'
 import { AnswerLog, readTrend } from './trend.ts'
-import { STYLE_COLLECT_PATH, STYLE_EDIT_PATH, STYLE_PATH, type StyleEditAnswer, type StylePanel } from './view.ts'
+import type { RunReport, StyleEditAnswer, StylePanel } from './view.ts'
 
 export { biliPairs, pickForRun, qqPairs, screenPairs, StyleCollector, type Accepted, type BiliComment, type BiliReader, type Pair, type QqMessage, type QqSource } from './collect.ts'
 export { createBiliReader, parseComment } from './bili.ts'
@@ -41,6 +42,13 @@ export { dayTag, localDay, renderStyleBlock, STYLE_INTRO } from './render.ts'
 export { sampleId, StyleError, StyleStore, type Candidate, type StoreLimits, type StyleRecord } from './store.ts'
 export { AnswerLog, readTrend } from './trend.ts'
 export * from './view.ts'
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** The speaking-style samples: the day's block for the prompt rows, and the Settings section's reads and edits. */
+    lsyStyle: StyleService
+  }
+}
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
@@ -88,6 +96,7 @@ export interface Config {
   blocklist: string[]
   /** QQ groups (through `ctx.lsyQq`). */
   qq: {
+    /** Read the recorded groups at all. */
     enabled: boolean
     /** Hours of messages read per group in one run. */
     windowHours: number
@@ -100,6 +109,7 @@ export interface Config {
   }
   /** Comments under the owner's Bilibili videos (through bili-svc's read API). */
   bili: {
+    /** Read the comments at all. */
     enabled: boolean
     /** bili-svc's address; unset uses `BILI_SVC_URL` or `http://127.0.0.1:8097`. */
     url?: string
@@ -111,6 +121,7 @@ export interface Config {
     comments: number
     /** Comment threads read per run (each is one live read through bili-svc). */
     maxThreads: number
+    /** Deadline of one read, in milliseconds. */
     timeoutMs: number
   }
   /** Agent presets whose root Sessions get the block. */
@@ -168,21 +179,6 @@ export const Config: z<Config> = z.object({
 /** Default bili-svc address; `BILI_SVC_URL` in the service environment overrides it. */
 export const DEFAULT_BILI_URL = 'http://127.0.0.1:8097'
 
-/**
- * What the root plugin offers the prompt-mode instances (registered as the `lsyStyle` service value; a plain
- * interface, not a typed Context property, because only this package reads it).
- */
-export interface StyleBlockSource {
-  /**
-   * The block for a day, or undefined when it is off or empty.
-   * @param day - `YYYY-MM-DD`, the rotation seed.
-   */
-  block(day: string): Promise<{ text: string; shown: number; owner: number } | undefined>
-  /** The configured rotation zone. */
-  readonly timeZone: string
-}
-
-const SERVICE = 'lsyStyle'
 /** Seconds after start before the first scheduled run. */
 const FIRST_RUN_DELAY_MS = 120_000
 const SCHEDULE_CHECK_MS = 10 * 60_000
@@ -203,6 +199,160 @@ function assertConfig(config: Config): void {
 function textOf(message: { content?: unknown }): string {
   if (!Array.isArray(message.content)) return ''
   return (message.content as Array<{ type?: string; text?: string }>).filter(block => block.type === 'text').map(block => block.text ?? '').join('\n')
+}
+
+/** The samples, their collection, and the block: what the root row provides as `ctx.lsyStyle`. */
+export class StyleService {
+  /** The rotation zone of the block. */
+  readonly timeZone: string
+  private readonly store: StyleStore
+  private readonly collector: StyleCollector
+  private readonly abort = new AbortController()
+
+  /**
+   * @param ctx - the root context: logger, `ctx.lsyQq`, and `ctx.credentials`, each read when a run needs it.
+   * @param config - resolved configuration.
+   * @param paths - the data directory and lsy-integrity's stock-line counts.
+   */
+  constructor(
+    private readonly ctx: Context,
+    private readonly config: Config,
+    private readonly paths: { readonly dir: string; readonly ticsFile: string },
+  ) {
+    this.timeZone = config.timeZone
+    this.store = new StyleStore(join(paths.dir, 'samples.jsonl'), { maxActive: config.maxActive, maxOwner: config.maxOwner, maxPending: config.maxPending, maxTombstones: 3000 })
+    const settings: CollectSettings = {
+      rules: { maxChars: config.maxChars, identityMarkers: config.identityMarkers, blocklist: config.blocklist },
+      qq: {
+        enabled: config.qq.enabled, windowHours: config.qq.windowHours, maxMessages: config.qq.maxMessages,
+        gapMs: config.qq.gapSec * 1000, settleMs: config.qq.settleMinutes * 60_000,
+      },
+      bili: {
+        enabled: config.bili.enabled, ownerAccount: config.bili.ownerAccount,
+        comments: config.bili.comments, maxThreads: config.bili.maxThreads,
+      },
+      maxAgeMs: config.maxAgeDays * 86_400_000,
+      perRun: config.perRun,
+      perKey: config.perGroup,
+      review: config.review,
+    }
+    const biliUrl = config.bili.url ?? process.env['BILI_SVC_URL'] ?? DEFAULT_BILI_URL
+    this.collector = new StyleCollector({
+      store: this.store, settings, logger: ctx.logger, stateFile: join(paths.dir, 'state.json'),
+      qq: (): QqSource | undefined => ctx.get('lsyQq'),
+      bili: async (): Promise<BiliReader | 'no-token'> => {
+        const credentials = ctx.get('credentials')
+        const token = credentials === undefined ? undefined : (await credentials.resolve(credentialRef(config.bili.tokenEnv)))?.value
+        if (token === undefined || token === '') return 'no-token'
+        return createBiliReader({ baseUrl: biliUrl, token, timeoutMs: config.bili.timeoutMs, fetch: (...args) => fetch(...args) })
+      },
+    })
+  }
+
+  /** Stop a run in progress (its Bilibili reads end). */
+  dispose(): void {
+    this.abort.abort()
+  }
+
+  /**
+   * The block for a day.
+   * @param day - `YYYY-MM-DD`, the rotation seed.
+   * @returns the block, or undefined when collection is off or nothing is active.
+   */
+  async block(day: string): Promise<{ text: string; shown: number; owner: number } | undefined> {
+    if (!this.config.enabled) return undefined
+    return renderStyleBlock(await this.store.all(), { day, maxBytes: this.config.maxBytes, maxShown: this.config.maxShown })
+  }
+
+  /**
+   * When the next scheduled run is due.
+   * @returns epoch milliseconds; undefined while collection is off.
+   */
+  async nextRunAt(): Promise<number | undefined> {
+    if (!this.config.enabled) return undefined
+    return ((await this.collector.lastRun())?.at ?? 0) + this.config.everyHours * 3_600_000
+  }
+
+  /**
+   * Run a collection when one is due and none is running.
+   * @returns the run's report, or undefined when nothing ran.
+   */
+  async runIfDue(): Promise<RunReport | undefined> {
+    const at = await this.nextRunAt()
+    if (at === undefined || Date.now() < at || this.collector.busy) return undefined
+    return await this.collector.run('schedule', this.abort.signal)
+  }
+
+  /**
+   * Everything the Settings section shows.
+   * @returns the samples, limits, the last run, the next run, and the trend.
+   */
+  async panel(): Promise<StylePanel> {
+    const [records, lastRun, trend, next] = await Promise.all([
+      this.store.live(), this.collector.lastRun(), readTrend(this.paths.ticsFile, join(this.paths.dir, 'answers.json')), this.nextRunAt(),
+    ])
+    return {
+      enabled: this.config.enabled,
+      review: this.config.review,
+      limits: { maxActive: this.config.maxActive, maxOwner: this.config.maxOwner, maxChars: this.config.ownerMaxChars },
+      samples: records.map(record => ({
+        id: record.id, source: record.source, status: record.status === 'pending' ? 'pending' : 'active', addedAt: record.addedAt,
+        ...record.prompt === undefined ? {} : { prompt: record.prompt }, reply: record.reply ?? '',
+      })),
+      running: this.collector.busy,
+      lastRun: lastRun ?? null,
+      nextRunAt: next ?? null,
+      trend,
+    }
+  }
+
+  /**
+   * Apply one edit the owner made on the Settings page.
+   * @param input - `{ op: 'remove' | 'keep', id }` or `{ op: 'add', reply, prompt? }`, as the page sent it; validated here.
+   * @returns the panel after the edit, or the refusal (`not_found`, `invalid_input`) with the unchanged panel.
+   */
+  async edit(input: unknown): Promise<StyleEditAnswer> {
+    const body = typeof input === 'object' && input !== null ? input as Record<string, unknown> : {}
+    const id = typeof body['id'] === 'string' ? body['id'] : ''
+    try {
+      switch (body['op']) {
+        case 'remove': {
+          const record = await this.store.remove(id)
+          this.ctx.logger.info('lsy-style: the owner removed %s (%s)', record.id, record.source)
+          break
+        }
+        case 'keep': {
+          const record = await this.store.keep(id)
+          this.ctx.logger.info('lsy-style: the owner kept %s (%s)', record.id, record.source)
+          break
+        }
+        case 'add': {
+          const record = await this.store.addManual({ prompt: body['prompt'], reply: body['reply'] }, this.config.ownerMaxChars)
+          this.ctx.logger.info('lsy-style: the owner added %s (%d chars)', record.id, Array.from(record.reply ?? '').length)
+          break
+        }
+        default:
+          return { ok: false, error: 'invalid_input', panel: await this.panel() }
+      }
+    } catch (error: unknown) {
+      if (!(error instanceof StyleError)) throw error
+      return { ok: false, error: error.code, panel: await this.panel() }
+    }
+    return { ok: true, panel: await this.panel() }
+  }
+
+  /**
+   * Start a collection run without waiting for it; the panel says `running` until it ends. Nothing runs while
+   * collection is off.
+   * @returns the panel right after the start.
+   */
+  async collect(): Promise<StylePanel> {
+    if (this.config.enabled) {
+      void this.collector.run('manual', this.abort.signal)
+        .catch((error: unknown) => { this.ctx.logger.warn('lsy-style: manual run failed: %s', error instanceof Error ? error.message : String(error)) })
+    }
+    return await this.panel()
+  }
 }
 
 /**
@@ -233,7 +383,7 @@ function applyPrompt(ctx: Context, config: Config): void {
       || session.header.origin === 'subagent'
       || !presets.has(session.header.agentPreset ?? '')
       || (step === 1 && decision.messages.length === 0)) return decision
-    const source = ctx.get(SERVICE) as StyleBlockSource | undefined
+    const source = ctx.get('lsyStyle')
     if (source === undefined) {
       if (!warned) ctx.logger.warn('lsy-style: prompt mode without the root lsy-style plugin; no style block is added')
       warned = true
@@ -241,7 +391,7 @@ function applyPrompt(ctx: Context, config: Config): void {
     }
     const day = localDay(new Date(), source.timeZone)
     if (shown.get(session.id) === day) return decision
-    let block: Awaited<ReturnType<StyleBlockSource['block']>>
+    let block: Awaited<ReturnType<StyleService['block']>>
     try {
       block = await source.block(day)
     } catch (error: unknown) {
@@ -256,69 +406,23 @@ function applyPrompt(ctx: Context, config: Config): void {
   })
 }
 
-/** The slice of the connection service this plugin uses. */
-interface StyleConnection {
-  readonly fetch: {
-    register(route: {
-      readonly path: string
-      readonly methods: readonly ('GET' | 'POST')[]
-      readonly requestBody: 'buffered'
-      readonly fetch: (request: Request) => Promise<Response>
-    }): () => Promise<void>
-  }
-}
-
 /**
- * Collect mode: the store, scheduled and on-demand collection, the answer-length log, the block source, and the
- * Settings routes.
+ * Collect mode: the service, the schedule, and the answer-length log.
  * @param ctx - the root context.
  * @param config - resolved configuration.
  */
 function applyCollect(ctx: Context, config: Config): void {
   const home = resolveDshHome()
   const dir = config.dir ?? join(home, 'lsy-style')
-  const ticsFile = config.ticsFile ?? join(home, 'lsy-integrity', 'tics.json')
-  const store = new StyleStore(join(dir, 'samples.jsonl'), { maxActive: config.maxActive, maxOwner: config.maxOwner, maxPending: config.maxPending, maxTombstones: 3000 })
-  const answers = new AnswerLog(join(dir, 'answers.json'))
-  const settings: CollectSettings = {
-    rules: { maxChars: config.maxChars, identityMarkers: config.identityMarkers, blocklist: config.blocklist },
-    qq: {
-      enabled: config.qq.enabled, windowHours: config.qq.windowHours, maxMessages: config.qq.maxMessages,
-      gapMs: config.qq.gapSec * 1000, settleMs: config.qq.settleMinutes * 60_000,
-    },
-    bili: {
-      enabled: config.bili.enabled, ownerAccount: config.bili.ownerAccount,
-      comments: config.bili.comments, maxThreads: config.bili.maxThreads,
-    },
-    maxAgeMs: config.maxAgeDays * 86_400_000,
-    perRun: config.perRun,
-    perKey: config.perGroup,
-    review: config.review,
-  }
-  const biliUrl = config.bili.url ?? process.env['BILI_SVC_URL'] ?? DEFAULT_BILI_URL
-  const collector = new StyleCollector({
-    store, settings, logger: ctx.logger, stateFile: join(dir, 'state.json'),
-    qq: (): QqSource | undefined => ctx.get('lsyQq'),
-    bili: async (): Promise<BiliReader | 'no-token'> => {
-      const credentials = ctx.get('credentials')
-      const token = credentials === undefined ? undefined : (await credentials.resolve(credentialRef(config.bili.tokenEnv)))?.value
-      if (token === undefined || token === '') return 'no-token'
-      return createBiliReader({ baseUrl: biliUrl, token, timeoutMs: config.bili.timeoutMs, fetch: (...args) => fetch(...args) })
-    },
-  })
+  const service = new StyleService(ctx, config, { dir, ticsFile: config.ticsFile ?? join(home, 'lsy-integrity', 'tics.json') })
   ctx.logger.info('lsy-style: collect mode, %s, review %s, every %d h, samples in %s', config.enabled ? 'on' : 'off (no collection, no block)', config.review, config.everyHours, dir)
-
-  // ctx.provide is itself an effect: the value goes when this plugin unloads.
-  ctx.provide(SERVICE, {
-    timeZone: config.timeZone,
-    async block(day: string) {
-      if (!config.enabled) return undefined
-      return renderStyleBlock(await store.all(), { day, maxBytes: config.maxBytes, maxShown: config.maxShown })
-    },
-  } satisfies StyleBlockSource)
+  // ctx.provide is itself an effect: the service goes when this plugin unloads.
+  ctx.provide('lsyStyle', service)
+  ctx.effect(() => () => { service.dispose() }, 'lsy-style: stop collection')
 
   // Answer lengths of the presets that get the block, for the page's trend: the turn's last assistant text, counted
   // when the turn ends.
+  const answers = new AnswerLog(join(dir, 'answers.json'))
   const presets = new Set(config.presets)
   const lastAnswer = new Map<string, string>()
   ctx.on('session/event', (session, event) => {
@@ -334,19 +438,8 @@ function applyCollect(ctx: Context, config: Config): void {
   })
 
   // Scheduled runs: a check every ten minutes, the first two minutes after start.
-  const abort = new AbortController()
-  ctx.effect(() => () => { abort.abort() }, 'lsy-style: stop collection')
-  const due = async (): Promise<number | undefined> => {
-    if (!config.enabled) return undefined
-    const last = await collector.lastRun()
-    return (last?.at ?? 0) + config.everyHours * 3_600_000
-  }
   const check = (): void => {
-    void (async () => {
-      const at = await due()
-      if (at === undefined || Date.now() < at || collector.busy) return
-      await collector.run('schedule', abort.signal)
-    })().catch((error: unknown) => { ctx.logger.warn('lsy-style: scheduled run failed: %s', error instanceof Error ? error.message : String(error)) })
+    void service.runIfDue().catch((error: unknown) => { ctx.logger.warn('lsy-style: scheduled run failed: %s', error instanceof Error ? error.message : String(error)) })
   }
   ctx.effect(() => {
     const first = setTimeout(check, FIRST_RUN_DELAY_MS)
@@ -358,77 +451,6 @@ function applyCollect(ctx: Context, config: Config): void {
       clearInterval(timer)
     }
   }, 'lsy-style: schedule')
-
-  const panel = async (): Promise<StylePanel> => {
-    const [records, lastRun, trend, next] = await Promise.all([store.live(), collector.lastRun(), readTrend(ticsFile, join(dir, 'answers.json')), due()])
-    return {
-      enabled: config.enabled,
-      review: config.review,
-      limits: { maxActive: config.maxActive, maxOwner: config.maxOwner, maxChars: config.ownerMaxChars },
-      samples: records.map(record => ({
-        id: record.id, source: record.source, status: record.status === 'pending' ? 'pending' : 'active', addedAt: record.addedAt,
-        ...record.prompt === undefined ? {} : { prompt: record.prompt }, reply: record.reply ?? '',
-      })),
-      running: collector.busy,
-      lastRun: lastRun ?? null,
-      nextRunAt: next ?? null,
-      trend,
-    }
-  }
-  const json = (body: unknown, status = 200): Response => Response.json(body, { status, headers: { 'cache-control': 'no-store' } })
-  const edit = async (request: Request): Promise<Response> => {
-    let body: Record<string, unknown>
-    try {
-      const parsed: unknown = await request.json()
-      body = typeof parsed === 'object' && parsed !== null ? parsed as Record<string, unknown> : {}
-    } catch {
-      return json({ ok: false, error: 'invalid_input', panel: await panel() } satisfies StyleEditAnswer, 400)
-    }
-    const id = typeof body['id'] === 'string' ? body['id'] : ''
-    try {
-      switch (body['op']) {
-        case 'remove': {
-          const record = await store.remove(id)
-          ctx.logger.info('lsy-style: the owner removed %s (%s)', record.id, record.source)
-          break
-        }
-        case 'keep': {
-          const record = await store.keep(id)
-          ctx.logger.info('lsy-style: the owner kept %s (%s)', record.id, record.source)
-          break
-        }
-        case 'add': {
-          const record = await store.addManual({ prompt: body['prompt'], reply: body['reply'] }, config.ownerMaxChars)
-          ctx.logger.info('lsy-style: the owner added %s (%d chars)', record.id, Array.from(record.reply ?? '').length)
-          break
-        }
-        default:
-          return json({ ok: false, error: 'invalid_input', panel: await panel() } satisfies StyleEditAnswer, 400)
-      }
-    } catch (error: unknown) {
-      if (!(error instanceof StyleError)) throw error
-      return json({ ok: false, error: error.code, panel: await panel() } satisfies StyleEditAnswer, error.code === 'not_found' ? 404 : 400)
-    }
-    return json({ ok: true, panel: await panel() } satisfies StyleEditAnswer)
-  }
-
-  ctx.inject(['connection'], (scope) => {
-    const connection = Reflect.get(scope, 'connection') as StyleConnection
-    scope.effect(() => connection.fetch.register({
-      path: STYLE_PATH, methods: ['GET'], requestBody: 'buffered', fetch: async () => json(await panel()),
-    }), `lsy-style: ${STYLE_PATH}`)
-    scope.effect(() => connection.fetch.register({
-      path: STYLE_EDIT_PATH, methods: ['POST'], requestBody: 'buffered', fetch: edit,
-    }), `lsy-style: ${STYLE_EDIT_PATH}`)
-    scope.effect(() => connection.fetch.register({
-      path: STYLE_COLLECT_PATH, methods: ['POST'], requestBody: 'buffered',
-      fetch: async () => {
-        // The page does not wait for the run: it answers at once and the panel shows `running` until it ends.
-        if (config.enabled) void collector.run('manual', abort.signal).catch((error: unknown) => { ctx.logger.warn('lsy-style: manual run failed: %s', error instanceof Error ? error.message : String(error)) })
-        return json(await panel())
-      },
-    }), `lsy-style: ${STYLE_COLLECT_PATH}`)
-  })
 }
 
 /**

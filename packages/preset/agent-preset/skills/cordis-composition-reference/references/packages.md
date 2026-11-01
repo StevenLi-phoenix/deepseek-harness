@@ -346,6 +346,8 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-lsy-qq` | yes | QQ group observer over a OneBot v11 protocol end: records listed groups, downloads images, transcribes voice on request, digests on a schedule, and never speaks by default |
 | `@deepseek-ai/dsh-lsy-qq-login` | no | QQ settings section: the QQ observer's connection, NapCat's login state, and the login QR code to scan from the phone when QQ was signed out |
 | `@deepseek-ai/dsh-lsy-qqbot` | yes | QQ channel over the official QQ Open Platform Bot API: allowlisted private chats and group @ mentions reach per-peer chat Sessions |
+| `@deepseek-ai/dsh-lsy-style` | yes | Speaking style from real people's words: short QQ group and Bilibili exchanges, filtered without a model, kept in a bounded file the owner edits, and shown to the main agent once a day as quoted data |
+| `@deepseek-ai/dsh-lsy-style-settings` | no | Speaking style settings section: the real QQ and Bilibili exchanges that tune the main agent's voice, one-tap deletion, review, lines of the owner's own, and the stock-line trend |
 | `@deepseek-ai/dsh-lsy-sysmon` | yes | System status settings section: the Host machine's CPU, memory, power, temperature, and disk usage per volume |
 | `@deepseek-ai/dsh-lsy-taint` | yes | Turn origin for the owner's main agent: who started the current turn (the owner, a relayed message, an event, a reminder), which tools read strangers' words in it, and the rules that follow |
 | `@deepseek-ai/dsh-lsy-tool-monitor` | no | Model-facing monitor tools: a bash command whose stdout lines come back to the same Session as they appear, like Claude Code's Monitor |

@@ -2459,6 +2459,59 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'lsyStyle',
+    summary: 'The samples, their collection, and the block: what the root row provides as `ctx.lsyStyle`.',
+    description: 'The samples, their collection, and the block: what the root row provides as `ctx.lsyStyle`.',
+    methods: [
+      {
+        signature: 'readonly timeZone: string',
+        description: 'The rotation zone of the block.',
+        parameters: [],
+      },
+      {
+        signature: 'dispose(): void',
+        description: 'Stop a run in progress (its Bilibili reads end).',
+        parameters: [],
+      },
+      {
+        signature: 'async block(day: string): Promise<{ text: string; shown: number; owner: number } | undefined>',
+        description: 'The block for a day.',
+        parameters: [{ name: 'day', description: '`YYYY-MM-DD`, the rotation seed.' }],
+        returns: 'the block, or undefined when collection is off or nothing is active.',
+      },
+      {
+        signature: 'async nextRunAt(): Promise<number | undefined>',
+        description: 'When the next scheduled run is due.',
+        parameters: [],
+        returns: 'epoch milliseconds; undefined while collection is off.',
+      },
+      {
+        signature: 'async runIfDue(): Promise<RunReport | undefined>',
+        description: 'Run a collection when one is due and none is running.',
+        parameters: [],
+        returns: 'the run\'s report, or undefined when nothing ran.',
+      },
+      {
+        signature: 'async panel(): Promise<StylePanel>',
+        description: 'Everything the Settings section shows.',
+        parameters: [],
+        returns: 'the samples, limits, the last run, the next run, and the trend.',
+      },
+      {
+        signature: 'async edit(input: unknown): Promise<StyleEditAnswer>',
+        description: 'Apply one edit the owner made on the Settings page.',
+        parameters: [{ name: 'input', description: '`{ op: \'remove\' | \'keep\', id }` or `{ op: \'add\', reply, prompt? }`, as the page sent it; validated here.' }],
+        returns: 'the panel after the edit, or the refusal (`not_found`, `invalid_input`) with the unchanged panel.',
+      },
+      {
+        signature: 'async collect(): Promise<StylePanel>',
+        description: 'Start a collection run without waiting for it; the panel says `running` until it ends. Nothing runs while collection is off.',
+        parameters: [],
+        returns: 'the panel right after the start.',
+      },
+    ],
+  },
+  {
     key: 'lsyVoice',
     summary: 'Service behind `ctx.lsyVoice`.',
     description: 'Service behind `ctx.lsyVoice`.',

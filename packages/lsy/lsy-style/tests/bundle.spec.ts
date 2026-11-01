@@ -28,6 +28,10 @@ describe('event bundle', () => {
     expect(config.identityMarkers).toEqual([])
   })
 
+  it('mounts the Settings section at the root', () => {
+    expect(inserted.find(row => row.id === 'lsy-style-settings')?.name).toBe('@deepseek-ai/dsh-lsy-style-settings')
+  })
+
   it('shows the block in the unattended preset only', () => {
     const mounted = presets.map(preset => [preset.config?.id, styleRows(preset.config?.plugins ?? []).map(row => row.config?.['mode'])])
     expect(mounted.filter(([, modes]) => (modes as unknown[]).length > 0)).toEqual([['unattended', ['prompt']]])

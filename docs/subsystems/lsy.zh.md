@@ -2,7 +2,7 @@
 
 [English](lsy.md) | 中文
 
-事件驱动 agent 背后的 fork 本地服务：[`@deepseek-ai/dsh-lsy-event-bus`](../../packages/lsy/lsy-event-bus/README.zh.md) 把传感器事件路由成通知或无人值守的 Session，[`@deepseek-ai/dsh-lsy-github-sensor`](../../packages/lsy/lsy-github-sensor/README.zh.md) 轮询 GitHub，[`@deepseek-ai/dsh-lsy-wechat`](../../packages/lsy/lsy-wechat/README.zh.md) 通过微信提供 `lsyNotifier` 契约，[`@deepseek-ai/dsh-lsy-qq`](../../packages/lsy/lsy-qq/README.zh.md) 潜伏在主人列出的 QQ 群里并做摘要（它的设置 → QQ 页面 [`@deepseek-ai/dsh-lsy-qq-login`](../../packages/lsy/lsy-qq-login/README.zh.md) 显示连接状态，以及被踢下线后用来扫码的登录二维码），[`@deepseek-ai/dsh-bili`](../../packages/lsy/bili/README.zh.md) 是 agent 自己的 B站账号。行为、配置与限制见各包 README；[上游账本](../../packages/lsy/UPSTREAM.md)记录 fork 如何跟踪上游。
+事件驱动 agent 背后的 fork 本地服务：[`@deepseek-ai/dsh-lsy-event-bus`](../../packages/lsy/lsy-event-bus/README.zh.md) 把传感器事件路由成通知或无人值守的 Session，[`@deepseek-ai/dsh-lsy-github-sensor`](../../packages/lsy/lsy-github-sensor/README.zh.md) 轮询 GitHub，[`@deepseek-ai/dsh-lsy-wechat`](../../packages/lsy/lsy-wechat/README.zh.md) 通过微信提供 `lsyNotifier` 契约，[`@deepseek-ai/dsh-lsy-qq`](../../packages/lsy/lsy-qq/README.zh.md) 潜伏在主人列出的 QQ 群里并做摘要（它的设置 → QQ 页面 [`@deepseek-ai/dsh-lsy-qq-login`](../../packages/lsy/lsy-qq-login/README.zh.md) 显示连接状态，以及被踢下线后用来扫码的登录二维码），[`@deepseek-ai/dsh-lsy-style`](../../packages/lsy/lsy-style/README.zh.md) 保存给主 agent 校准语气的 QQ 和 B站简短对话（它的设置 → 说话风格 页面是 [`@deepseek-ai/dsh-lsy-style-settings`](../../packages/lsy/lsy-style-settings/README.zh.md)），[`@deepseek-ai/dsh-bili`](../../packages/lsy/bili/README.zh.md) 是 agent 自己的 B站账号。行为、配置与限制见各包 README；[上游账本](../../packages/lsy/UPSTREAM.md)记录 fork 如何跟踪上游。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -482,6 +482,58 @@ ownsSession(sessionId: string): boolean
 ```
 
 Source: [`packages/lsy/lsy-qqbot/src/index.ts`](../../packages/lsy/lsy-qqbot/src/index.ts)
+
+<a id="ctxlsystyle--styleservice"></a>
+
+### `ctx.lsyStyle` — `StyleService`
+
+The samples, their collection, and the block: what the root row provides as `ctx.lsyStyle`.
+
+```ts cordis-catalog
+/** Stop a run in progress (its Bilibili reads end). */
+dispose(): void
+
+/**
+ * The block for a day.
+ * @param day - `YYYY-MM-DD`, the rotation seed.
+ * @returns the block, or undefined when collection is off or nothing is active.
+ */
+async block(day: string): Promise<{ text: string; shown: number; owner: number } | undefined>
+
+/**
+ * When the next scheduled run is due.
+ * @returns epoch milliseconds; undefined while collection is off.
+ */
+async nextRunAt(): Promise<number | undefined>
+
+/**
+ * Run a collection when one is due and none is running.
+ * @returns the run's report, or undefined when nothing ran.
+ */
+async runIfDue(): Promise<RunReport | undefined>
+
+/**
+ * Everything the Settings section shows.
+ * @returns the samples, limits, the last run, the next run, and the trend.
+ */
+async panel(): Promise<StylePanel>
+
+/**
+ * Apply one edit the owner made on the Settings page.
+ * @param input - `{ op: 'remove' | 'keep', id }` or `{ op: 'add', reply, prompt? }`, as the page sent it; validated here.
+ * @returns the panel after the edit, or the refusal (`not_found`, `invalid_input`) with the unchanged panel.
+ */
+async edit(input: unknown): Promise<StyleEditAnswer>
+
+/**
+ * Start a collection run without waiting for it; the panel says `running` until it ends. Nothing runs while
+ * collection is off.
+ * @returns the panel right after the start.
+ */
+async collect(): Promise<StylePanel>
+```
+
+Source: [`packages/lsy/lsy-style/src/index.ts`](../../packages/lsy/lsy-style/src/index.ts)
 
 <a id="ctxlsyvoice--lsyvoice"></a>
 
