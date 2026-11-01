@@ -332,6 +332,18 @@ export class WechatChannel extends Service implements LsyNotifier {
       },
     })
 
+    // The event bus's auto-archive sweep leaves the owner's current chat Session alone; the channel works without the bus.
+    ctx.plugin({
+      name: 'lsy-wechat-archive-protection',
+      inject: ['lsyEventBus'],
+      apply: (child: Context) => {
+        child.effect(
+          () => child.lsyEventBus.protectSessions('wechat', session => this.isCurrentChat(session.id)),
+          'lsyWechat.archiveProtection()',
+        )
+      },
+    })
+
     // Presence tells when the owner sleeps; the channel works without it and then holds nothing back.
     ctx.plugin({
       name: 'lsy-wechat-presence',
@@ -357,6 +369,16 @@ export class WechatChannel extends Service implements LsyNotifier {
         child.effect(() => () => { settings.dispose() }, 'lsyWechat.settings.logins()')
       },
     })
+  }
+
+  /**
+   * Whether this is the owner's current chat Session (not an earlier one a new chat replaced).
+   * @param sessionId - Session to check.
+   * @returns true for the Session each owner's chat currently runs in.
+   */
+  private isCurrentChat(sessionId: string): boolean {
+    const chats = this.domain?.table('chats')
+    return chats !== undefined && [...chats.entries()].some(([, chat]) => chat.sessionId === sessionId)
   }
 
   /**
