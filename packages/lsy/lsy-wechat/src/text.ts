@@ -13,11 +13,62 @@ export const NEW_CHAT_REPLY = '已开始新对话。'
 export const HELP_REPLY = [
   '可用命令：',
   '/stop  立刻停下所有正在运行的任务（这里的对话和后台任务），并清掉排队的消息',
-  '/new   开始新对话（旧对话还在网页里）',
+  '/new   开始新对话（定时提醒和监控跟到新对话，旧对话还在网页里）',
   '/help  显示这份说明',
   '',
   '其他内容都直接交给 agent：文字、语音、图片、文件和视频都行。',
 ].join('\n')
+/** Bindings of one kind that moved from the earlier chat Sessions to the current one, by label. */
+export interface HandoverPart {
+  /** `schedule`, `monitor`, `subscription`, or a kind another plugin registered with the bus. */
+  readonly kind: string
+  readonly labels: readonly string[]
+}
+
+/** Owner-facing count unit of each known binding kind. */
+const HANDOVER_UNITS: Readonly<Record<string, string>> = { schedule: '条定时提醒', monitor: '个监控', subscription: '个 watch' }
+/** Model-facing name of each known binding kind. */
+const HANDOVER_NAMES: Readonly<Record<string, string>> = { schedule: 'schedule tasks', monitor: 'monitors', subscription: 'watches' }
+/** Labels shown per kind in the owner's message; more read as 等. */
+const HANDOVER_LABELS = 3
+
+/**
+ * What moved, for the owner: `上一个对话的 1 条定时提醒（…）和 1 个监控（…）已转到新对话。`
+ * @param parts - moved bindings, each kind with at least one label.
+ * @param where - `new` right after `/new`, `current` when an earlier chat still held work.
+ * @returns one sentence.
+ */
+export function handoverText(parts: readonly HandoverPart[], where: 'new' | 'current'): string {
+  const phrases = parts.map((part) => {
+    const shown = part.labels.slice(0, HANDOVER_LABELS).join('、')
+    const more = part.labels.length > HANDOVER_LABELS ? ' 等' : ''
+    return `${part.labels.length} ${HANDOVER_UNITS[part.kind] ?? `项 ${part.kind}`}（${shown}${more}）`
+  })
+  const list = phrases.length > 1 ? `${phrases.slice(0, -1).join('、')}和 ${phrases.at(-1) ?? ''}` : phrases[0] ?? ''
+  return `上一个对话的 ${list}已转到${where === 'new' ? '新对话' : '当前对话'}。`
+}
+
+/**
+ * The same, for the current chat Session's model, queued as a notice. Labels were written by agents, so they are quoted.
+ * @param parts - moved bindings.
+ * @param where - `new` right after `/new`, `current` when an earlier chat still held work.
+ * @returns the notice text.
+ */
+export function handoverNotice(parts: readonly HandoverPart[], where: 'new' | 'current'): string {
+  const lead = where === 'new' ? 'The owner started a new chat with /new.' : 'An earlier WeChat chat Session of the owner still held work.'
+  const list = parts.map(part => `${HANDOVER_NAMES[part.kind] ?? part.kind} ${part.labels.map(label => JSON.stringify(label)).join(', ')}`).join('; ')
+  return `${lead} What the earlier chat Session set up now belongs to this conversation, delivers here, and is managed from here: ${list}.`
+}
+
+/**
+ * Owner-facing line for kinds that could not be moved; the next message retries them.
+ * @param failed - kind and error message of each failure.
+ * @returns one line.
+ */
+export function handoverFailureText(failed: ReadonlyArray<{ readonly kind: string; readonly error: string }>): string {
+  return `⚠️ 有些没能转过去（${failed.map(entry => `${entry.kind}：${fitText(entry.error, 100)}`).join('；')}），下一条消息时再试。`
+}
+
 /** Sent when the channel stops while a chat turn runs, so the owner's question does not vanish silently. */
 export const RESTART_CUT_REPLY = '⚠️ dsh 正在重启，这一轮被打断了，没有完成。重启后（约半分钟）需要的话再发一次。'
 /** Answer to `/stop` when nothing runs. */

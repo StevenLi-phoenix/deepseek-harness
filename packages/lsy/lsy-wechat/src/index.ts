@@ -18,6 +18,8 @@ import type {} from '@deepseek-ai/dsh-lsy-voice'
 // Type-only: ctx.lsyPresence, which tells whether the owner sleeps, so non-urgent messages wait for the morning.
 import type { DeferralHolder, LsyPresence } from '@deepseek-ai/dsh-lsy-presence'
 import type {} from '@deepseek-ai/dsh-permission-presets'
+// Type-only: ctx.schedule, whose tasks follow the owner from an earlier chat Session into the current one.
+import type {} from '@deepseek-ai/dsh-schedule'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-title'
 import type { Domain } from '@deepseek-ai/dsh-storage-domain'
@@ -33,7 +35,8 @@ declare module '@deepseek-ai/dsh-llm' {
   }
 }
 
-import { agentMessageText, buildDigest, EARLIER_CHAT, fitText, formatGap, HELP_REPLY, inboundText, NEW_CHAT_REPLY, QUOTA_FOOTER, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES } from './text.ts'
+import type { HandoverPart } from './text.ts'
+import { agentMessageText, buildDigest, EARLIER_CHAT, fitText, formatGap, handoverFailureText, handoverNotice, handoverText, HELP_REPLY, inboundText, NEW_CHAT_REPLY, QUOTA_FOOTER, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES } from './text.ts'
 import { TypingIndicator } from './typing.ts'
 import type { ChannelError, ChannelLink, ChannelStatus, WindowClosed } from './view.ts'
 
@@ -275,6 +278,8 @@ export class WechatChannel extends Service implements LsyNotifier {
   private pollAbort: AbortController | undefined
   /** Ends the current wait for the account file or the retry delay. */
   private wake: (() => void) | undefined
+  /** The chat Session every earlier chat Session was last handed over to without a failure, in this process. */
+  private handedOverTo: string | undefined
 
   /**
    * @param ctx - Host services owning storage, Sessions, presets, and titles.
@@ -472,8 +477,9 @@ export class WechatChannel extends Service implements LsyNotifier {
 
   /**
    * Deliver a chat Session's answer that the relay handed over. A chat Session the owner left with
-   * /new can still answer (its reminders and monitors live on): the current chat Session gets a
-   * copy, since the owner's reply to it lands there.
+   * /new can still answer (a turn it was running, or a background job it started; its reminders and
+   * monitors moved to the new chat): the current chat Session gets a copy, since the owner's reply
+   * to it lands there.
    * @returns `sent` once the text was sent or durably queued.
    */
   private async relayAnswer(answer: RelayAnswer): Promise<RelayDelivery> {
@@ -857,10 +863,7 @@ export class WechatChannel extends Service implements LsyNotifier {
     if (text === '') return
     const command = text.trim().toLowerCase()
     if (command === NEW_CHAT_COMMAND) {
-      await this.serialize(async () => {
-        if (await domain.table('chats').delete(account.ownerUserId)) this.ctx.logger.info('lsy-wechat: owner started a new chat')
-      })
-      await this.deliver(NEW_CHAT_REPLY, 'notice')
+      await this.deliver(await this.startNewChat(domain, account), 'notice')
       return
     }
     if (command === HELP_COMMAND) {
@@ -884,6 +887,78 @@ export class WechatChannel extends Service implements LsyNotifier {
       this.ctx.logger.warn(`lsy-wechat: forwarding the owner message failed: ${errorText(error)}`)
       await this.deliver(`⚠️ 消息没能交给 agent：${fitText(errorText(error), 300)}`, 'notice')
     }
+  }
+
+  /**
+   * `/new`: retire the current chat Session, create the next one at once, and hand the earlier chats over to it, so
+   * the reply can say what moved. With no chat yet, the next message creates one as usual.
+   * @returns the reply for the owner.
+   */
+  private async startNewChat(domain: Domain<typeof wechatDomain>, account: WechatAccount): Promise<string> {
+    const had = await this.serialize(() => domain.table('chats').delete(account.ownerUserId))
+    if (!had) return NEW_CHAT_REPLY
+    this.ctx.logger.info('lsy-wechat: owner started a new chat')
+    let sessionId: SessionId
+    try {
+      mkdirSync(this.config.chat.workspacePath, { recursive: true })
+      sessionId = await this.createChatSession(domain, account)
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`lsy-wechat: the new chat Session could not be created now; the next message tries again: ${errorText(error)}`)
+      return `${NEW_CHAT_REPLY}\n⚠️ 新对话还没建好（${fitText(errorText(error), 200)}），下一条消息时再建。`
+    }
+    const { parts, failed } = await this.handOver(domain, sessionId, 'new')
+    const moved = parts.length === 0 ? NEW_CHAT_REPLY : `${NEW_CHAT_REPLY}${handoverText(parts, 'new')}`
+    return failed.length === 0 ? moved : `${moved}\n${handoverFailureText(failed)}`
+  }
+
+  /**
+   * Move what the earlier chat Sessions own to the current one: schedule tasks through `ctx.schedule`, then the
+   * subscriptions they created and every binding registered with `ctx.lsyEventBus` (monitors). The current chat
+   * Session gets a notice of what it now owns. Idempotent; after a failure the next message tries again.
+   * @param to - the current chat Session.
+   * @param where - `new` right after `/new`, `current` when an earlier chat still held work.
+   * @returns what moved, by kind, and what failed.
+   */
+  private async handOver(
+    domain: Domain<typeof wechatDomain>, to: SessionId, where: 'new' | 'current',
+  ): Promise<{ parts: HandoverPart[]; failed: Array<{ kind: string; error: string }> }> {
+    const from = [...domain.table('sessions').keys()].filter(id => id !== to)
+    const parts: HandoverPart[] = []
+    const failed: Array<{ kind: string; error: string }> = []
+    if (from.length === 0) {
+      this.handedOverTo = to
+      return { parts, failed }
+    }
+    const schedule = this.ctx.get('schedule')
+    if (schedule !== undefined) {
+      try {
+        const moved = await schedule.handOverSessions(from as SessionId[], to)
+        if (moved.length > 0) parts.push({ kind: 'schedule', labels: moved.map(task => task.title) })
+      } catch (error: unknown) {
+        failed.push({ kind: 'schedule', error: errorText(error) })
+      }
+    }
+    const bus = this.ctx.get('lsyEventBus')
+    if (bus !== undefined) {
+      try {
+        const report = await bus.handOverSessions(from, to)
+        for (const part of report.moved) parts.push({ kind: part.kind, labels: part.items.map(item => item.label) })
+        failed.push(...report.failed)
+      } catch (error: unknown) {
+        failed.push({ kind: 'lsy-event-bus', error: errorText(error) })
+      }
+    }
+    const summary = parts.length === 0 ? 'nothing to move' : parts.map(part => `${part.labels.length} ${part.kind}`).join(', ')
+    const failures = failed.length === 0 ? '' : `; failed: ${failed.map(entry => `${entry.kind} (${entry.error})`).join(', ')}, retried with the next message`
+    const log = `lsy-wechat: handed earlier chat Session(s) ${from.join(', ')} over to ${to}: ${summary}${failures}`
+    if (failed.length === 0) {
+      this.ctx.logger.info(log)
+      this.handedOverTo = to
+    } else {
+      this.ctx.logger.warn(log)
+    }
+    if (parts.length > 0) await this.injectNotice(to, handoverNotice(parts, where), 'the earlier chat was handed over')
+    return { parts, failed }
   }
 
   /**
@@ -1046,8 +1121,22 @@ export class WechatChannel extends Service implements LsyNotifier {
     if (this.ctx.get('ownerRelay') === undefined) this.ctx.logger.warn('lsy-wechat: no ownerRelay is mounted, so the answer will not reach WeChat')
   }
 
-  /** The owner's chat Session: the stored one while it resolves, otherwise a new one. */
+  /**
+   * The owner's chat Session: the stored one while it resolves, otherwise a new one. The first time in this process,
+   * and after a handover failed, the earlier chat Sessions are handed over to it first, and the owner hears what moved.
+   */
   private async chatSession(domain: Domain<typeof wechatDomain>, account: WechatAccount): Promise<SessionId> {
+    const sessionId = await this.resolveChatSession(domain, account)
+    if (this.handedOverTo !== sessionId) {
+      const { parts, failed } = await this.handOver(domain, sessionId, 'current')
+      const lines = [...parts.length === 0 ? [] : [handoverText(parts, 'current')], ...failed.length === 0 ? [] : [handoverFailureText(failed)]]
+      if (lines.length > 0) await this.deliver(lines.join('\n'), 'notice')
+    }
+    return sessionId
+  }
+
+  /** The stored chat Session while it resolves, otherwise a new one. */
+  private async resolveChatSession(domain: Domain<typeof wechatDomain>, account: WechatAccount): Promise<SessionId> {
     const stored = domain.table('chats').get(account.ownerUserId)
     if (stored !== undefined) {
       const sessionId = stored.sessionId as SessionId
