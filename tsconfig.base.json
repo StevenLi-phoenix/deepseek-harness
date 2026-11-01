@@ -493,6 +493,7 @@
       "@deepseek-ai/dsh-lsy-qq": ["./packages/lsy/lsy-qq/src"],
       "@deepseek-ai/dsh-lsy-qq-login": ["./packages/lsy/lsy-qq-login/src"],
       "@deepseek-ai/dsh-lsy-qqbot": ["./packages/lsy/lsy-qqbot/src"],
+      "@deepseek-ai/dsh-lsy-style": ["./packages/lsy/lsy-style/src"],
       "@deepseek-ai/dsh-lsy-sysmon": ["./packages/lsy/lsy-sysmon/src"],
       "@deepseek-ai/dsh-lsy-taint": ["./packages/lsy/lsy-taint/src"],
       "@deepseek-ai/dsh-lsy-tool-monitor": ["./packages/lsy/lsy-tool-monitor/src"],
