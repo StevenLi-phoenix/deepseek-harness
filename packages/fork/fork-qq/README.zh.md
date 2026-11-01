@@ -85,7 +85,7 @@ kind: "package-reference"
 | `login.url` | `http://127.0.0.1:3002` | 扫码入口（`napcat.sh door`）的地址；必须在本机或 tailnet 上 |
 | `login.timeoutMs` | `5000` | 单次调用扫码入口的期限 |
 
-**哪些改动会重启插件。** profile 重载会重启插件（并断开 OneBot 连接），除非改动只涉及可热更新字段：`groups`、`backfill.*`、`media.*`、`voice.*`、`asr.enabled`、`retention.textDays`、`honorRecall`、`offlineNoticeMs`、`offlineRepeatMs`、`reconnectQuietMs` 和 `settingsUrl` 每次使用时现读，改动无需重启即生效。`url`、`tokenEnv`、`dataDir`、`digest.*`、`send.*` 和 `login.*` 在插件启动时固定（摘要执行器和发送器会复制它们），所以改它们会重启。
+**哪些改动会重启插件。** profile 重载会重启插件（并断开 OneBot 连接），除非改动只涉及可热更新字段：`groups`、`backfill.*`、`media.*`、`voice.*`、`asr.enabled`、`retention.textDays`、`honorRecall`、`offlineNoticeMs`、`offlineRepeatMs`、`reconnectQuietMs` 和 `settingsUrl` 每次使用时现读，改动无需重启即生效。`url`、`tokenEnv`、`dataDir`、`digest.*`、`send.*` 和 `login.*` 在插件启动时固定（摘要执行器和发送器会复制它们），所以改它们会重启。设置 → QQ 的「全部设置」卡片会列出每个字段（记录的群有自己的卡片，排在它上面）；会重载插件的保存在复核时提示协议端会重连、频繁重连可能触发 QQ 风控，请攒齐改动再保存一次。补取历史、图片、语音和转写的开关由 owner 在那里切换，都属于可热更新字段。
 
 补抓的消息只存文字：不下载图片和语音（对应行会注明），实时消息不受影响。
 

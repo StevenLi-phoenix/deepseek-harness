@@ -7,9 +7,11 @@
 
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
-import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { InjectFace, PropsLocale, PropsRenderFactories, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the settings shell's SlotMap merge (the 'settings.section' entry).
 import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+// Type-only: declares the 'settings.plugin-config' factory this section renders at its foot.
+import type {} from '@deepseek-ai/dsh-fork-config/client'
 // Type-only: registers the fork.qq locale namespace this component's `t` reads.
 import type {} from './locales.ts'
 import { detailRows, headline, qrPath, statusLine, type Translate } from './cards.ts'
@@ -36,8 +38,15 @@ export interface QqLoginInjected {
   removeGroup: (id: string) => Promise<boolean>
 }
 
+/** The plugin entries whose settings the page lists under the QQ cards. */
+const CONFIG_ENTRIES = ['fork-qq'] as const
+
+/** Fields the recorded-groups card owns (volatile, edited in place), so the All settings card leaves them alone. */
+const CONFIG_EXCLUDE = ['groups'] as const
+
 /** Props delivered by the settings shell. */
 export type QqLoginProps = PropsRuntime<'settings.section'> & InjectFace<QqLoginInjected> & PropsLocale<'fork.qq'>
+  & Partial<PropsRenderFactories>
 
 function QrCard({ matrix, state, translate, renewCode }: {
   matrix: NonNullable<QqState['panel']>['login']['qr']
@@ -78,7 +87,9 @@ function QrCard({ matrix, state, translate, renewCode }: {
  * @param props - the store hook, callbacks, and copy.
  * @returns the section.
  */
-export function QqLoginSection({ useQq, useGroupsForm, refresh, renewCode, addGroup, removeGroup, t }: QqLoginProps): ReactNode {
+export function QqLoginSection(
+  { useQq, useGroupsForm, refresh, renewCode, addGroup, removeGroup, renderFactorySlot, t }: QqLoginProps,
+): ReactNode {
   const state = useQq(value => value)
   const form = useGroupsForm(value => value)
   // Connected: read once a minute. Anything else (a scan to take, a link coming back): every few seconds.
@@ -126,6 +137,12 @@ export function QqLoginSection({ useQq, useGroupsForm, refresh, renewCode, addGr
           </>
         )}
       <QqGroupsCard form={form} groups={panel?.groups ?? []} translate={translate} addGroup={addGroup} removeGroup={removeGroup} />
+      {/* The recorded-groups list has its own card above; every other fork-qq setting is listed here. */}
+      {renderFactorySlot?.('settings.plugin-config', {
+        entries: CONFIG_ENTRIES,
+        exclude: CONFIG_EXCLUDE,
+        reloadWarning: translate('config.reloadWarning'),
+      })}
     </section>
   )
 }
