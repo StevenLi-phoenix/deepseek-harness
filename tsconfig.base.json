@@ -503,6 +503,7 @@
       "@deepseek-ai/dsh-lsy-style-settings": ["./packages/lsy/lsy-style-settings/src"],
       "@deepseek-ai/dsh-lsy-sysmon": ["./packages/lsy/lsy-sysmon/src"],
       "@deepseek-ai/dsh-lsy-taint": ["./packages/lsy/lsy-taint/src"],
+      "@deepseek-ai/dsh-lsy-time-gap": ["./packages/lsy/lsy-time-gap/src"],
       "@deepseek-ai/dsh-lsy-tool-monitor": ["./packages/lsy/lsy-tool-monitor/src"],
       "@deepseek-ai/dsh-lsy-tool-qq": ["./packages/lsy/lsy-tool-qq/src"],
       "@deepseek-ai/dsh-lsy-tool-up": ["./packages/lsy/lsy-tool-up/src"],
