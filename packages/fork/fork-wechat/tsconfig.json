@@ -49,6 +49,9 @@
     },
     {
       "path": "../fork-presence"
+    },
+    {
+      "path": "../../schedule/schedule"
     }
   ]
 }

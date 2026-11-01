@@ -10,7 +10,7 @@ import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
-import WechatChannel, { Config, type ChatConfig } from '../src/index.ts'
+import WechatChannel, { Config, handoverText, type ChatConfig } from '../src/index.ts'
 import { downloadMedia } from '../src/media.ts'
 import type { WechatAccount } from '../src/login.ts'
 import { wechatDomain } from '../src/storage.ts'
@@ -143,6 +143,10 @@ async function harness(options: {
   voice?: unknown
   /** A `ctx.forkPresence` double; omitted means fork-presence is not mounted. */
   presence?: unknown
+  /** A `ctx.schedule` double; omitted means no schedule service is mounted. */
+  schedule?: unknown
+  /** A `ctx.forkEventBus` double; omitted means the bus is not mounted. */
+  bus?: unknown
 } = {}) {
   const ilink = options.ilink ?? new FakeIlink()
   vi.stubGlobal('fetch', ilink.fetch)
@@ -181,6 +185,8 @@ async function harness(options: {
   ctx.provide('sessionTitle', titles as never)
   if (options.voice !== undefined) ctx.provide('forkVoice', options.voice as never)
   if (options.presence !== undefined) ctx.provide('forkPresence', options.presence as never)
+  if (options.schedule !== undefined) ctx.provide('schedule', options.schedule as never)
+  if (options.bus !== undefined) ctx.provide('forkEventBus', options.bus as never)
   if (options.agents !== undefined) {
     const agents = options.agents
     ctx.provide('agents', { roots: () => [...agents], get: (id: string) => agents.find(agent => agent.session.id === id) } as never)
@@ -551,6 +557,99 @@ describe('WechatChannel chat', () => {
     expect(h.channel.ownsSession('chat-1')).toBe(true)
     await h.finishTurn('chat-1', 'late answer')
     expect(h.ilink.sent.at(-1)!.text).toBe('late answer')
+  })
+
+  describe('/new hands the earlier chat over', () => {
+    /** `ctx.schedule` double: moves `titles` once, from the first call that names a Session holding them. */
+    function fakeSchedule(holder: string, titles: string[]) {
+      let left = titles
+      const handOverSessions = vi.fn(async (from: readonly string[], _to: string) => {
+        if (!from.includes(holder)) return []
+        const moved = left.map((title, index) => ({ id: `schedule-${index}`, title }))
+        left = []
+        return moved
+      })
+      return { handOverSessions }
+    }
+    /** `ctx.forkEventBus` double answering each call with the next report, then with nothing. */
+    function fakeBus(...reports: unknown[]) {
+      const handOverSessions = vi.fn(async () => reports.shift() ?? { moved: [], failed: [] })
+      return { handOverSessions }
+    }
+
+    it('creates the new chat Session at once, moves the reminders and monitors, and says what moved', async () => {
+      const schedule = fakeSchedule('chat-1', ['TCH 数据科学 bootcamp 周作业'])
+      const bus = fakeBus({ moved: [{ kind: 'monitor', items: [{ id: 'mon-1', label: 'build log' }] }], failed: [] })
+      const h = await harness({ schedule, bus })
+      await h.ownerSays('one')
+      // A single chat has nothing earlier to hand over.
+      expect(schedule.handOverSessions).not.toHaveBeenCalled()
+      await h.ownerSays('/new')
+      expect(h.sessions.created).toHaveLength(2)
+      expect(schedule.handOverSessions).toHaveBeenCalledWith(['chat-1'], 'chat-2')
+      expect(bus.handOverSessions).toHaveBeenCalledWith(['chat-1'], 'chat-2')
+      expect(h.ilink.sent.at(-1)!.text).toBe('已开始新对话。上一个对话的 1 条定时提醒（TCH 数据科学 bootcamp 周作业）和 1 个监控（build log）已转到新对话。')
+      // The new chat Session learns what it now owns before the owner's next message.
+      expect(h.sessions.injected).toHaveLength(1)
+      const [sessionId, notice] = h.sessions.injected[0]!
+      expect(sessionId).toBe('chat-2')
+      expect(notice).toBe('The owner started a new chat with /new. What the earlier chat Session set up now belongs to this conversation, '
+        + 'delivers here, and is managed from here: schedule tasks "TCH 数据科学 bootcamp 周作业"; monitors "build log".')
+      expect(h.logs.some(line => line.text === 'fork-wechat: handed earlier chat Session(s) chat-1 over to chat-2: 1 schedule, 1 monitor')).toBe(true)
+      // The earlier chat keeps relaying a turn it still runs, and nothing is handed over again.
+      await h.ownerSays('two')
+      expect(h.sessions.prompts.map(prompt => prompt.sessionId)).toEqual(['chat-1', 'chat-2'])
+      expect(schedule.handOverSessions).toHaveBeenCalledTimes(1)
+      expect(h.channel.ownsSession('chat-1')).toBe(true)
+    })
+
+    it('says only that a new chat started when nothing moved', async () => {
+      const schedule = fakeSchedule('nobody', [])
+      const h = await harness({ schedule, bus: fakeBus() })
+      await h.ownerSays('one')
+      await h.ownerSays('/new')
+      expect(h.ilink.sent.at(-1)!.text).toBe('已开始新对话。')
+      expect(h.sessions.injected).toEqual([])
+      expect(h.logs.some(line => line.text === 'fork-wechat: handed earlier chat Session(s) chat-1 over to chat-2: nothing to move')).toBe(true)
+    })
+
+    it('reports a failed move and retries it with the next message', async () => {
+      const bus = fakeBus(
+        { moved: [], failed: [{ kind: 'monitor', error: 'store closed' }] },
+        { moved: [{ kind: 'monitor', items: [{ id: 'mon-1', label: 'build log' }] }], failed: [] },
+      )
+      const h = await harness({ bus })
+      await h.ownerSays('one')
+      await h.ownerSays('/new')
+      expect(h.ilink.sent.at(-1)!.text).toBe('已开始新对话。\n⚠️ 有些没能转过去（monitor：store closed），下一条消息时再试。')
+      await h.ownerSays('two')
+      expect(bus.handOverSessions).toHaveBeenCalledTimes(2)
+      // The retry's result reaches the owner before the message is forwarded.
+      expect(h.ilink.sent.map(sent => sent.text)).toContain('上一个对话的 1 个监控（build log）已转到当前对话。')
+      expect(h.sessions.prompts.map(prompt => prompt.sessionId)).toEqual(['chat-1', 'chat-2'])
+      await h.ownerSays('three')
+      expect(bus.handOverSessions).toHaveBeenCalledTimes(2)
+    })
+
+    it('hands an earlier chat over on the first message after a start, for work left there before this version', async () => {
+      const pool = new MemoryMediaPool()
+      const sessions = fakeSessions()
+      const before = await harness({ pool, sessions })
+      await before.ownerSays('one')
+      await before.ownerSays('/new')
+      await before.ctx.fiber.dispose()
+      const schedule = fakeSchedule('chat-1', ['TCH 数据科学 bootcamp 周作业'])
+      const after = await harness({ pool, sessions, schedule })
+      await after.ownerSays('hello again')
+      expect(schedule.handOverSessions).toHaveBeenCalledWith(['chat-1'], 'chat-2')
+      expect(after.ilink.sent.map(sent => sent.text)).toContain('上一个对话的 1 条定时提醒（TCH 数据科学 bootcamp 周作业）已转到当前对话。')
+      expect(sessions.state.prompts.at(-1)!.sessionId).toBe('chat-2')
+    })
+
+    it('lists at most three labels of a kind', () => {
+      expect(handoverText([{ kind: 'schedule', labels: ['a', 'b', 'c', 'd'] }, { kind: 'subscription', labels: ['w'] }, { kind: 'jobs', labels: ['j'] }], 'new'))
+        .toBe('上一个对话的 4 条定时提醒（a、b、c 等）、1 个 watch（w）和 1 项 jobs（j）已转到新对话。')
+    })
   })
 
   it('stays silent for NO_REPLY and empty turns and reports unfinished ones', async () => {

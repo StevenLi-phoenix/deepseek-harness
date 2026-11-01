@@ -37,6 +37,7 @@
     "@deepseek-ai/dsh-fork-voice": "workspace:*",
     "@deepseek-ai/dsh-owner-relay": "workspace:*",
     "@deepseek-ai/dsh-permission-presets": "workspace:*",
+    "@deepseek-ai/dsh-schedule": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",
     "@deepseek-ai/dsh-session-title": "workspace:*",
     "@deepseek-ai/dsh-storage-domain": "workspace:*"
@@ -58,6 +59,7 @@
     "@deepseek-ai/dsh-fork-voice": "workspace:*",
     "@deepseek-ai/dsh-owner-relay": "workspace:*",
     "@deepseek-ai/dsh-permission-presets": "workspace:*",
+    "@deepseek-ai/dsh-schedule": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",
     "@deepseek-ai/dsh-session-title": "workspace:*",
     "@deepseek-ai/dsh-storage": "workspace:*",
