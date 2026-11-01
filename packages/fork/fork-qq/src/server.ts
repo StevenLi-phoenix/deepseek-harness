@@ -98,7 +98,7 @@ export async function startRecorderServer(options: RecorderServerOptions): Promi
   rmSync(socketPath, { force: true })
 
   const streams = new Set<ServerResponse>()
-  const active = new Set<Promise<void>>()
+  const active = new Set<Promise<unknown>>()
 
   const send = <T extends z.ZodType>(res: ServerResponse, status: number, schema: T, value: z.input<T>): Handled => {
     // The recorder's own answers are checked too: a drift between the schema and the code fails here, not in DSH.

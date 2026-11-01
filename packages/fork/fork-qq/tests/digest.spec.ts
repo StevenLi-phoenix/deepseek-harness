@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { chunkTranscript, DigestRunner, digestPrompt, formatLine, memberAlias, stampIn, type DigestConfig } from '../src/digest.ts'
+import { chunkTranscript, DigestRunner, digestPrompt, formatLine, memberAlias, mentionNames, scrubMentions, stampIn, type DigestConfig } from '../src/digest.ts'
 import type { Message as MessageRow } from '../src/protocol.ts'
 import type { DigestStore } from '../src/digest-storage.ts'
 import { FakeLog, memoryStore } from './digest-harness.ts'
@@ -634,5 +634,109 @@ describe('DigestRunner tools', () => {
       expect(line).toContain('context 9000 tokens')
       expect(line).toContain('compacted 0x')
     })
+  })
+})
+
+let r: DigestRunner
+
+describe('a transcript without noise', () => {
+  const say = (userId: string, text: string, extra: Partial<MessageRow> = {}): MessageRow => log.insert({ groupId: 'g1', userId, text, nickname: `昵称${userId}`, card: `名片${userId}`, ...extra })
+  const lineOf = (message: MessageRow): string => `${message.userId}：${message.text}`
+
+  it('folds a member\'s consecutive placeholder-only messages into one line, and keeps every message in the chunk\'s cursors', () => {
+    const rows = [
+      say('1', '[表情]'), say('1', '[表情]'), say('1', '[戳一戳]'), say('1', '[表情]'),
+      say('2', '[合并转发]'), say('1', '[表情]'), say('1', '看这个[图片]'), say('1', '[动画表情]'),
+    ]
+    const [chunk] = chunkTranscript(rows, lineOf, 10_000)
+    expect(chunk!.text.split('\n')).toEqual(['1：[表情]×3 [戳一戳]', '2：[合并转发]', '1：[表情]', '1：看这个[图片]', '1：[动画表情]'])
+    expect(chunk).toMatchObject({ fromCursor: rows[0]!.cursor, toCursor: rows[7]!.cursor, count: 8 })
+    expect(chunk!.messages).toHaveLength(8)
+  })
+
+  it('does not fold across members, across words, or messages that are not placeholders only', () => {
+    const rows = [say('1', '[表情]'), say('2', '[表情]'), say('1', '[表情]'), say('1', '好[表情]'), say('1', '[表情]'), say('1', '[语音]'), say('1', '[语音]')]
+    const [chunk] = chunkTranscript(rows, lineOf, 10_000)
+    expect(chunk!.text.split('\n')).toEqual(['1：[表情]', '2：[表情]', '1：[表情]', '1：好[表情]', '1：[表情]', '1：[语音]', '1：[语音]'])
+  })
+
+  it('keeps the cursors right when a folded run is split across chunks, and moves the digest cursor past all of it', async () => {
+    fill('g1', 6)
+    const stickers = Array.from({ length: 30 }, () => log.insert({ groupId: 'g1', userId: '10009', text: '[表情]' }))
+    fill('g1', 6)
+    const h = harness('摘要')
+    r = new DigestRunner(h.ctx, store, log, config({ minMessages: 5 }), join(dir, 'raw'), () => NOW)
+    expect(await r.runRound(['g1'], new AbortController().signal)).toBe(1)
+    expect(h.prompts[0]).toContain('[表情]×30')
+    expect(store.digestedUpTo('g1')).toBe(log.rows.at(-1)!.cursor)
+    expect(store.digests({ groupId: 'g1', limit: 1 })[0]).toMatchObject({ messageCount: 42, fromCursor: log.rows[0]!.cursor })
+    expect(stickers).toHaveLength(30)
+  })
+
+  it('still names whom a reply answered when the quoted message was only a placeholder', async () => {
+    const quoted = log.insert({ groupId: 'g1', userId: '10005', text: '[合并转发]', messageId: 'quoted-1', at: NOW - 6 * HOUR })
+    fill('g1', 8)
+    log.insert({ groupId: 'g1', userId: '10006', text: '这是什么', replyTo: quoted.messageId, at: NOW - 4 * HOUR })
+    const h = harness('摘要')
+    const run = new DigestRunner(h.ctx, store, log, config({ aliasMembers: true }), join(dir, 'raw'), () => NOW)
+    await run.runRound(['g1'], new AbortController().signal)
+    const salt = store.salt()!
+    expect(h.prompts[0]).toContain(`${memberAlias('10006', salt)} ↳回复${memberAlias('10005', salt)}：这是什么`)
+    expect(h.prompts[0]).not.toContain('回复某条旧消息')
+  })
+})
+
+describe('mentions with aliases on', () => {
+  const salt = 'salt-for-mentions'
+  const members = [
+    { userId: '20001', nickname: '甲同学', card: '甲群名片' },
+    { userId: '20002', nickname: '乙同学', card: '' },
+    { userId: '20003', nickname: '重名', card: '' },
+    { userId: '20004', nickname: '重名', card: '' },
+  ]
+  const names = mentionNames(members)
+
+  it('turns @<QQ number> into that member\'s alias, and @<name> into the alias of whoever has that name or card in the group', () => {
+    expect(scrubMentions('@3184239488 现在已经没了', names, salt)).toBe(`@${memberAlias('3184239488', salt)} 现在已经没了`)
+    expect(scrubMentions('@甲同学 看看，@甲群名片 也看看', names, salt)).toBe(`@${memberAlias('20001', salt)} 看看，@${memberAlias('20001', salt)} 也看看`)
+    expect(scrubMentions('@乙同学', names, salt)).toBe(`@${memberAlias('20002', salt)}`)
+  })
+
+  it('turns a name nobody in the group shows, or two members share, into @某群友, and keeps @全体成员', () => {
+    expect(scrubMentions('@陌生人 在吗 @重名 @全体成员 开会', names, salt)).toBe('@某群友 在吗 @某群友 @全体成员 开会')
+    expect(scrubMentions('@12345', mentionNames([]), salt)).toBe(`@${memberAlias('12345', salt)}`)
+    expect(scrubMentions('@任何人', mentionNames([]), salt)).toBe('@某群友')
+  })
+
+  it('leaves text without a mention alone, and an alias already written as it is', () => {
+    expect(scrubMentions('没有提到谁，邮箱 a@b.cn 除外', mentionNames([]), salt)).toContain('没有提到谁')
+    expect(scrubMentions(`@${memberAlias('20001', salt)} 好`, names, salt)).toBe(`@${memberAlias('20001', salt)} 好`)
+  })
+
+  it('sends neither a long number nor a member\'s name or card to the model in the prompt, in the transcript lines or the texts a tool may quote', async () => {
+    fill('g1', 10)
+    log.insert({ groupId: 'g1', userId: '10001', nickname: '甲同学', card: '甲群名片', text: '@3184239488 现在已经没了' })
+    log.insert({ groupId: 'g1', userId: '10002', nickname: '乙同学', card: '', text: '@甲同学 你看 @甲群名片 @全体成员 @没见过的人', replyTo: log.rows[0]!.messageId })
+    const h = harness((_prompt, session) => {
+      expect(r.recentTextOf(session)!.join('\n')).not.toMatch(/\d{5,}|甲同学|甲群名片|乙同学/)
+      return '好'
+    })
+    r = new DigestRunner(h.ctx, store, log, config({ aliasMembers: true }), join(dir, 'raw'), () => NOW)
+    expect(await r.runRound(['g1'], new AbortController().signal)).toBe(1)
+    const transcript = /<qq_group_messages[^>]*>\n([\s\S]*)\n<\/qq_group_messages>/.exec(h.prompts[0]!)![1]!
+    expect(transcript).not.toMatch(/\d{5,}/)
+    for (const name of ['甲同学', '甲群名片', '乙同学', '昵称10001', '成员0']) expect(transcript).not.toContain(name)
+    expect(transcript).toContain('@全体成员')
+    expect(transcript).toContain('@某群友')
+    expect(transcript).toContain(`@${memberAlias('3184239488', store.salt()!)}`)
+  })
+
+  it('does not rewrite mentions when aliases are off', async () => {
+    fill('g1', 10)
+    log.insert({ groupId: 'g1', userId: '10001', text: '@3184239488 在吗' })
+    const h = harness('好')
+    r = new DigestRunner(h.ctx, store, log, config({ aliasMembers: false }), join(dir, 'raw'), () => NOW)
+    await r.runRound(['g1'], new AbortController().signal)
+    expect(h.prompts[0]).toContain('@3184239488 在吗')
   })
 })
