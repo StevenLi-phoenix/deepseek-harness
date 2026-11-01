@@ -302,7 +302,7 @@ describe('SubscriptionsSection auto-archive card', () => {
   })
 
   it('renders the bus settings card for the auto-archive fields only, at the foot of the card', () => {
-    const renderFactorySlot = vi.fn((_name: string, _props: object) => <div data-testid="plugin-config" />)
+    const renderFactorySlot = vi.fn((_name: string, props: { entries: readonly string[] }) => <div data-testid={props.entries[0] === 'lsy-event-bus' ? 'plugin-config' : 'other-config'} />)
     const store = createResourceStore<SubscriptionsView>()
     store.update((draft) => { Object.assign(draft, { data: VIEW, checkedAt: NOW }) })
     const props = {
@@ -311,9 +311,26 @@ describe('SubscriptionsSection auto-archive card', () => {
     } as SubscriptionsProps
     render(<SubscriptionsSection {...props} />)
     expect(renderFactorySlot).toHaveBeenCalledWith('settings.plugin-config', expect.objectContaining({ entries: ['lsy-event-bus'] }))
-    const { exclude } = renderFactorySlot.mock.calls[0]![1] as { exclude: string[] }
+    // The section's own time-check card renders in the same pass; pick the bus card's call.
+    const { exclude } = renderFactorySlot.mock.calls.find(([, props]) => (props as { entries: string[] }).entries[0] === 'lsy-event-bus')![1] as { exclude: string[] }
     expect(exclude).toEqual(expect.arrayContaining(['subscriptions', 'suppress', 'webUrl']))
     expect(exclude).not.toContain('autoArchive')
     expect(card().lastElementChild).toBe(screen.getByTestId('plugin-config'))
+  })
+
+  it('ends the section with the time check and its settings card', () => {
+    const renderFactorySlot = vi.fn((name: string, props: { entries: readonly string[] }) => <div data-testid={`config-${props.entries.join(',')}`} data-name={name} />)
+    const store = createResourceStore<SubscriptionsView>()
+    store.update((draft) => { Object.assign(draft, { data: VIEW, checkedAt: NOW }) })
+    const props = {
+      close: () => {}, useSubscriptions: bindSnapshotSelector(store), refresh: vi.fn(), act: vi.fn(), dismiss: vi.fn(), t,
+      renderFactorySlot: renderFactorySlot as never,
+    } as SubscriptionsProps
+    const { container } = render(<SubscriptionsSection {...props} />)
+    expect(renderFactorySlot).toHaveBeenCalledWith('settings.plugin-config', { entries: ['lsy-time-gap'] })
+    expect(screen.getByText('时间间隔提示')).toBeTruthy()
+    expect(screen.getByText(/会话安静一段时间之后才到达时/u)).toBeTruthy()
+    const section = container.querySelector('section')!
+    expect(section.lastElementChild).toBe(screen.getByTestId('config-lsy-time-gap'))
   })
 })

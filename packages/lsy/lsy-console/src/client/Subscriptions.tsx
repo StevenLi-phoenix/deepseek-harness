@@ -237,6 +237,9 @@ function CreateForm({ defaults, busy, t, onCreate, onClose }: {
   )
 }
 
+/** lsy-time-gap's row: its settings (threshold, zone, excluded presets) are edited at the foot of this page. */
+export const TIME_GAP_CONFIG_ENTRIES = ['lsy-time-gap'] as const
+
 /**
  * Render the Subscriptions and monitors section.
  * @param props - the store hook, callbacks, and copy.
@@ -333,6 +336,12 @@ export function SubscriptionsSection({ useSubscriptions, refresh, act, dismiss, 
         archive={view?.archive ?? null} now={now} t={translate} busy={archiveBusy}
         onSweep={(dryRun) => { void act({ action: 'archive.sweep', dryRun }) }} renderFactorySlot={renderFactorySlot}
       />
+
+      <div className={css.heading}>
+        <span className={css.headingTitle}>{translate('subs.timeGap.title')}</span>
+      </div>
+      <span className={css.hint}>{translate('subs.timeGap.hint')}</span>
+      {renderFactorySlot?.('settings.plugin-config', { entries: TIME_GAP_CONFIG_ENTRIES })}
     </section>
   )
 }
