@@ -234,3 +234,19 @@ describe('round trip', () => {
     expect(heard.text.replace(/[，。,.\s]/g, '')).toContain('天气很好')
   }, 300_000)
 })
+
+describe('describe', () => {
+  it('reports the switches and the provider endpoints to probe, and no key', async () => {
+    const { voice } = await mount({ asr: { enabled: true, engine: 'whisper' } })
+    expect(voice.describe()).toEqual({
+      tts: { enabled: true, provider: 'feiyu', fallback: 'mac-mini', format: 'wav', maxChars: 200, url: `${url}/feiyu` },
+      asr: { enabled: true, engine: 'whisper', url: `${url}/asr` },
+    })
+    expect(JSON.stringify(voice.describe())).not.toContain('feiyu-key')
+  })
+
+  it('names the selected provider\'s endpoint', async () => {
+    const { voice } = await mount({ tts: { provider: 'mac-mini', fallback: 'none', enabled: false } })
+    expect(voice.describe().tts).toMatchObject({ enabled: false, provider: 'mac-mini', url: `${url}/mini` })
+  })
+})
