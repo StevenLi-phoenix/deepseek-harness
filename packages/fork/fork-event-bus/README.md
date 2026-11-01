@@ -1,5 +1,5 @@
 ---
-description: "Durable event bus for event-driven agent runs: dedupe, loop suppression, subscriptions from configuration or created by the agent at run time, coalescing windows, hourly rate limits, dispatch to a notifier or to new webhook Sessions, and reports of unattended reminder turns."
+description: "Durable event bus for event-driven agent runs: dedupe, loop suppression, subscriptions from configuration or created at run time, coalescing, hourly rate limits, dispatch to a notifier, to new webhook Sessions, or to one persistent Session per subscription, and reports of unattended turns."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Route events from sensors to a phone notification or a new unattended agent Session, through subscriptions that you write in the configuration or that the agent creates itself with `watch_create`. The bus drops duplicates and events the agent caused itself. It groups bursts into one batch and caps batches per hour, so a noisy repository never floods your phone or your model budget. State, including agent-created subscriptions, survives restarts. Session results and unattended reminder turns come back as one message with the final answer, and an answer of `NO_REPLY` sends nothing.
+Route events from sensors to a phone notification or a new unattended agent Session, through subscriptions that you write in the configuration or that the agent creates itself with `watch_create`. The bus drops duplicates and events the agent caused itself. It batches bursts and caps batches per hour, so a noisy repository never floods your phone or model budget. State survives restarts. A subscription can keep one persistent Session that each batch continues, renewed monthly from its summary. Session results and unattended reminder turns come back as one message with the final answer, and an answer of `NO_REPLY` sends nothing.
 
 ## Table of Contents
 
@@ -68,6 +68,9 @@ Choose it when external events should wake an agent or a human without a person 
 | `subscriptions[].coalesceMs` | `60000` | Window after the first pending event that later events join |
 | `subscriptions[].maxPerHour` | `12` | Batches per rolling hour; later ones wait |
 | `subscriptions[].session` | required for `session` | Absolute `workspacePath`, `instructions`, presets, prompt bounds |
+| `subscriptions[].session.persistent.enabled` | `false` | One Session for every batch of the subscription instead of one per batch (configuration rows only) |
+| `subscriptions[].session.persistent.rolloverDays` | `30` | Days after which the next batch starts a new Session seeded with the old one's last compaction summary, and the old one is archived |
+| `subscriptions[].session.persistent.maxSeedChars` | `20000` | Characters of the carried-over summary |
 | `suppress.actors` / `suppress.markers` | `[]` | Agent identities and output markers whose events are dropped; prefer identities, which the host sets, over markers, which depend on what the model writes |
 | `retainEvents` / `retainBatches` | `5000` / `1000` | Stored history; the oldest settled rows are pruned |
 | `maxTextChars` | `4000` | Stored characters of each event's untrusted text |
@@ -88,9 +91,19 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 
 Matching, flushing, restart recovery, and the webhook Session rule all use the merged set.
 
+### Persistent Sessions
+
+With `session.persistent.enabled`, the first batch creates the subscription's Session through the webhook runtime as usual, and the bus stores its id in the `persistent` table once the Session's first message arrives. Each later batch enters that Session as a new turn (`Agent.followup()` through `ctx.sessionController.resolveAgent()`), with the same prompt text and the same message source a new Session's first message has (`webhook`, provider `fork-event`, the batch id as delivery id), so turn-origin checks such as fork-taint's treat both alike. The preset owns compaction (`dsh-compaction-basic`'s `thresholdRatio`); the bus keeps the text of the Session's latest `compaction/summary` and counts compactions.
+
+- **Gone** — a stored Session that is not found or is archived is forgotten, and the batch starts a new one.
+- **Unavailable** — when the Session cannot take a turn now (a writer is held, the controller is missing), the batch gets a one-off Session (`detached`) and the stored one stays.
+- **Rollover** — once the stored Session is `rolloverDays` old, the next batch starts a new Session whose first message carries the last compaction summary as `previous_summary_json`, labeled untrusted-derived data. When that Session's first message arrives it becomes the subscription's Session, and the old one is archived with `ctx.workspaceRegistry.archiveSession()`: DSH has no Session deletion, and the archive keeps the log readable and blocks further model steps.
+
+`persistentSessions()` lists each subscription's Session (id, start time, batches, compactions, the Session it replaced), and `persistentSubscriptionOf(sessionId)` names the subscription whose current Session that is; fork-tool-up asks it before a channel note or an evidence lookup. Each batch's record carries `delivery`: `fresh`, `persistent-new`, `persistent`, `rollover`, or `detached`.
+
 ### Result reports
 
-When a bus-started Session ends its first turn, the bus records the outcome on the batch and sends the final assistant text to `ctx.forkNotifier`. When a Host-schedule reminder (`source.kind: schedule`) starts a turn in a Session that no channel of [`ctx.ownerRelay`](../owner-relay/README.md) claimed (`ownerOf(sessionId)` is `undefined`), the bus sends that turn's final answer titled `⏰ <first line of the reminder prompt>`. In both cases a final answer of exactly `NO_REPLY` (`FORK_SILENT_REPLY`) sends nothing; a batch records `silent: true`. A turn the owner stopped (ended `aborted` with cause `user`, from the Web UI or WeChat `/stop`) is recorded but not reported, since whoever stopped it already knows.
+When a bus-started Session ends its first turn, or a persistent Session ends a batch's turn, the bus records the outcome on the batch, logs the subscription, Session, delivery, the last request's input tokens, whether compaction ran, and the turn's tool calls by name, and sends the final assistant text to `ctx.forkNotifier`. When a Host-schedule reminder (`source.kind: schedule`) starts a turn in a Session that no channel of [`ctx.ownerRelay`](../owner-relay/README.md) claimed (`ownerOf(sessionId)` is `undefined`), the bus sends that turn's final answer titled `⏰ <first line of the reminder prompt>`. In both cases a final answer of exactly `NO_REPLY` (`FORK_SILENT_REPLY`) sends nothing; a batch records `silent: true`. A turn the owner stopped (ended `aborted` with cause `user`, from the Web UI or WeChat `/stop`) is recorded but not reported, since whoever stopped it already knows.
 
 -----
 
@@ -108,7 +121,7 @@ When a bus-started Session ends its first turn, the bus records the outcome on t
 | [`src/validate.ts`](src/validate.ts) | Subscription validation shared by configuration and `subscribe()` |
 | [`src/match.ts`](src/match.ts) | Glob matching and loop suppression |
 | [`src/prompt.ts`](src/prompt.ts) | Session request, batch, result, and reminder message rendering; the silent reply |
-| [`src/storage.ts`](src/storage.ts) | Storage-domain tables for events, pending rows, batches, and run-time subscriptions |
+| [`src/storage.ts`](src/storage.ts) | Storage-domain tables for events, pending rows, batches, run-time subscriptions, and persistent Sessions |
 
 This is a fork-local package; [`../UPSTREAM.md`](../UPSTREAM.md) describes how the `fork` group tracks upstream. `@deepseek-ai/dsh-owner-relay` imports `isSilentReply()` and `failureDetail()`, and `@deepseek-ai/dsh-fork-tool-watch` calls `ForkNotifier.ownsSession()`, so they stay stable. Because the relay depends on this package, the bus reads `ctx.ownerRelay` through a structural `ownerOf()` view instead of importing it. A note's optional `origin` names its sender for the channel's copy in the owner's chat Session and is never shown to the owner; a message for the main agent has its own optional `origin` token (`bili`, `cc`) that goes into the request id of the prompt the channel queues, so the Host can tell the turn it starts from one the owner started. `ForkNotifier.tellMainAgent()` is optional and the bus never calls it: a channel with a chat Session (fork-wechat) implements it so that another Session (dsh-bili's) can hand the owner's main agent a message.
 
@@ -121,6 +134,8 @@ This is a fork-local package; [`../UPSTREAM.md`](../UPSTREAM.md) describes how t
 
 - [Watch tools](../fork-tool-watch/README.md) — the agent creates and deletes subscriptions
 - [Webhook runtime](../../experimental/webhook/README.md) — creates the Sessions
+- [Basic compaction](../../compaction/compaction-basic/README.md) — compacts a persistent Session; its summary seeds the next one
+- [Creator tools](../fork-tool-up/README.md) — the tools of the persistent `bili-digest` Session
 - [Storage domain](../../storage/storage-domain/README.md) — durable tables
 - [Permission presets](../../interaction/permission-presets/README.md) — unattended access levels
 
@@ -133,15 +148,15 @@ This is a fork-local package; [`../UPSTREAM.md`](../UPSTREAM.md) describes how t
 
 #### What the model sees
 
-Each Session started by a `session` subscription receives one user message: the subscription's trusted `instructions`, a sentence that labels the event data as untrusted (or, when the subscription's `session.trustedText` is set because only the owner can publish to its sources, one that presents each event's text as the owner's request), the subscription id, the event count, and one line of JSON with at most `maxPromptEvents` events whose text is cut to `maxTextChars`. The bus adds nothing to reminder turns; it only reads their final answer. A configuration row may also set `session.model` (`{ provider, model }`, a registered `llm-pi-ai` route) to run its Sessions on that route instead of the profile's default; the Session then runs without the default's reasoning effort, and run-time subscriptions made with `subscribe()` cannot set it.
+Each Session started by a `session` subscription receives one user message: the subscription's trusted `instructions`, a sentence that labels the event data as untrusted (or, when the subscription's `session.trustedText` is set because only the owner can publish to its sources, one that presents each event's text as the owner's request), the subscription id, the event count, and one line of JSON with at most `maxPromptEvents` events whose text is cut to `maxTextChars`. The bus adds nothing to reminder turns; it only reads their final answer. A configuration row may also set `session.model` (`{ provider, model }`, a registered `llm-pi-ai` route) to run its Sessions on that route instead of the profile's default; the Session then runs without the default's reasoning effort, and run-time subscriptions made with `subscribe()` cannot set it. A persistent subscription sends the same message as each later batch's turn; the first message after a rollover also carries the old Session's last compaction summary as one JSON line labeled untrusted-derived data, before the events.
 
 #### Token effect
 
-One data-dependent user message per started Session, bounded by the two limits above.
+One data-dependent user message per batch, bounded by the two limits above, plus at most `maxSeedChars` of summary after a rollover. A persistent Session grows with every batch until its preset compacts it.
 
 #### KV Cache effect
 
-The message opens a new Session, so it establishes rather than invalidates that Session's reusable prefix.
+A message that opens a new Session establishes its reusable prefix; a batch turn of a persistent Session is appended after the existing prefix and does not invalidate it.
 
 ## Known Limitations and Deferred Work
 
@@ -149,6 +164,8 @@ The message opens a new Session, so it establishes rather than invalidates that 
 
 - **At-most-once dispatch** — a crash between recording a batch and calling its actuator drops that batch.
 - **Turn reports are in memory** — a restart while a bus-started Session or a reminder turn runs loses that turn's report.
+- **No Session deletion** — a rolled-over persistent Session is archived, not deleted; its log stays on disk until the owner deletes it.
+- **Rollover seed** — a Session that never compacted hands over nothing but its id; the summary of a compaction that ran while the bus was not running is not seen.
 - **Reminder names come from the Host framing** — if the schedule message format changes, reports fall back to `⏰ Session <id>`.
 - **No Web link to one Session** — results link to the Web root; the client has no per-Session URL.
 - **Whole-domain rewrites** — the JSON storage backend rewrites the domain on each write; keep retention bounded.
@@ -161,6 +178,6 @@ The message opens a new Session, so it establishes rather than invalidates that 
 
 This Dev Note is non-authoritative working context: undecided directions and notes for maintainers. Shipped behavior and accepted rationale live in the sections above, the package code, and the linked Agent Notes.
 
-- Only the first turn of a bus-started Session, unattended reminder turns, and turns a monitor wakes are reported; other later turns of the same Session reach the owner only through the Web UI.
+- Only the first turn of a bus-started Session, the batch turns of a persistent Session, unattended reminder turns, and turns a monitor wakes are reported; other later turns of the same Session reach the owner only through the Web UI.
 
 </details>
