@@ -55,7 +55,7 @@ for (const name of ['@deepseek-ai/dsh-webhook', '@deepseek-ai/dsh-webhook-github
   '@deepseek-ai/dsh-lsy-event-ingest', '@deepseek-ai/dsh-lsy-tool-monitor', '@deepseek-ai/dsh-lsy-cc-bridge', '@deepseek-ai/dsh-lsy-sysmon', '@deepseek-ai/dsh-lsy-config', '@deepseek-ai/dsh-lsy-console', '@deepseek-ai/dsh-lsy-cc-admin', '@deepseek-ai/dsh-lsy-presence', '@deepseek-ai/dsh-lsy-wechat-settings', '@deepseek-ai/dsh-bili',
   '@deepseek-ai/dsh-lsy-voice', '@deepseek-ai/dsh-lsy-tool-voice', '@deepseek-ai/dsh-lsy-tool-up',
   '@deepseek-ai/dsh-tool-bili', '@deepseek-ai/dsh-owner-relay', '@deepseek-ai/dsh-lsy-qq', '@deepseek-ai/dsh-lsy-qq-login', '@deepseek-ai/dsh-lsy-tool-qq', '@deepseek-ai/dsh-lsy-qqbot',
-  '@deepseek-ai/dsh-lsy-taint', '@deepseek-ai/dsh-lsy-integrity', '@deepseek-ai/dsh-lsy-style', '@deepseek-ai/dsh-lsy-style-settings', '@deepseek-ai/dsh-lsy-guard']) {
+  '@deepseek-ai/dsh-lsy-taint', '@deepseek-ai/dsh-lsy-integrity', '@deepseek-ai/dsh-lsy-style', '@deepseek-ai/dsh-lsy-style-settings', '@deepseek-ai/dsh-lsy-guard', '@deepseek-ai/dsh-lsy-time-gap']) {
   link(name, join(prefix, 'node_modules', name))
 }
 link('@deepseek-ai/dsh-lsy-event-bundle', bundleDir)

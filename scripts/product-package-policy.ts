@@ -27,6 +27,7 @@ export const PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackagePolic
   'packages/lsy/lsy-tool-qq': { category: 'optional', reason: 'Fork-local read-only QQ tools mounted by the event profile preset.' },
   'packages/lsy/lsy-taint': { category: 'optional', reason: 'Fork-local turn origin for the owner\'s main agent; mounted by the event profile preset.' },
   'packages/lsy/lsy-integrity': { category: 'optional', reason: 'Fork-local integrity watch for the owner\'s main agent; mounted by the event profile.' },
+  'packages/lsy/lsy-time-gap': { category: 'optional', reason: 'Fork-local time check before an input that ends a quiet spell in a Session; mounted by the event profile bundle.' },
   'packages/lsy/lsy-wechat': { category: 'optional', reason: 'Fork-local WeChat channel; requires a QR-bound iLink bot account.' },
   'packages/lsy/lsy-tool-wechat': { category: 'optional', reason: 'Fork-local WeChat file tool mounted by the event profile preset.' },
   'packages/lsy/lsy-voice': { category: 'optional', reason: 'Fork-local voice service (speech and transcription through the owner\'s own services) mounted by the event profile bundle.' },
