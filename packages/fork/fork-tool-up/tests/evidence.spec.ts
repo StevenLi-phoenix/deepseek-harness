@@ -57,7 +57,7 @@ async function mount(options: { persistent?: string; callsPerTurn?: number } = {
   ctx.provide('forkEventBus', { persistentSubscriptionOf: (id: string) => (id === (options.persistent ?? 'up-1') ? 'bili-digest' : undefined) } as never)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(NativeToolExecutor)
-  await ctx.plugin(ToolUp, { notes: { file: join(dir, 'notes.json') }, evidence: { saltFile: join(dir, 'salt') }, ...options.callsPerTurn === undefined ? {} : { callsPerTurn: options.callsPerTurn } })
+  await ctx.plugin(ToolUp, ToolUp.Config({ notes: { file: join(dir, 'notes.json') }, evidence: { saltFile: join(dir, 'salt') }, ...options.callsPerTurn === undefined ? {} : { callsPerTurn: options.callsPerTurn } } as never))
   const read = async (name: string, args: unknown) => ctx.tools.execute({ signal: new AbortController().signal, calls: [{ type: 'tool-call', id: ToolCallId(`${name}-x`), name, arguments: JSON.stringify(args) }] })
   return { ctx, dir, read, evidence: ctx.biliEvidence }
 }

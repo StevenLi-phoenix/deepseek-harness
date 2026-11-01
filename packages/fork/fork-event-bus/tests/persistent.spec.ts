@@ -51,7 +51,7 @@ async function mount(controller: FakeController = fakeController(), registry = f
 
 describe('persistent session subscriptions', () => {
   it('materializes the persistent defaults (off, 30-day rollover)', () => {
-    const parsed = Config({ subscriptions: [{ id: 'a', action: 'session', session: { workspacePath: '/w', instructions: 'x' } }] })
+    const parsed = Config({ subscriptions: [{ id: 'a', action: 'session', session: { workspacePath: '/w', instructions: 'x' } }] } as never)
     expect(parsed.subscriptions[0]!.session!.persistent).toEqual({ enabled: false, rolloverDays: 30, maxSeedChars: 20_000 })
   })
 
