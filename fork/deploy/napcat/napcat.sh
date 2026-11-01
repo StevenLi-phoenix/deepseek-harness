@@ -9,14 +9,18 @@
 #   napcat.sh qr [FILE]       copy the current login QR code out of the container (default /tmp/napcat-qr.png); the Settings page shows the same code
 #   napcat.sh status | logs [N] | logs door [N] | stop
 #
-# Boundary: dsh-runtime (the event service) holds the OneBot token and nothing else of NapCat. Through the OneBot API it
+# Boundary: the qq-recorder service (an AMS service of dsh-runtime) holds the OneBot token and nothing else of NapCat;
+# DSH never connects to NapCat, it asks the recorder. Through the OneBot API the recorder
 # reads the groups it is told to; through the login door (127.0.0.1:3002) it can read whether QQ is logged in, read the
 # login QR link while a scan is needed, and ask for a fresh code (refused while QQ is logged in and for ten minutes after, otherwise once per 10 s). It cannot reach NapCat's WebUI (config,
 # files, a shell in the container, logout, restart), the docker socket, or the volumes that hold the QQ session: the door
 # alone holds the WebUI token, and the door's only two endpoints are the ones above.
 #
-# The OneBot access token is generated here (openssl) and written to $DSH_ENV as FORK_QQ_ONEBOT_TOKEN; it is
-# never printed. Re-running `start` keeps the existing token.
+# The OneBot access token is generated here (openssl) and stored as the AMS secret FORK_QQ_ONEBOT_TOKEN of the service
+# qq-recorder (`ams secret set`, the value on stdin); it is never printed. For one release cycle it is also written to
+# $DSH_ENV, which the previous build reads, so a rollback finds it. Re-running `start` keeps the existing token; a token
+# that is in $DSH_ENV but not yet a secret is copied into the secret, not regenerated. A new token restarts the recorder
+# (not DSH).
 set -euo pipefail
 export PATH="/opt/homebrew/bin:/usr/bin:/bin:$PATH"
 
@@ -32,6 +36,8 @@ DOOR_NAME="napcat-login"
 DOOR_PORT="${NAPCAT_DOOR_PORT:-3002}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 DSH_ENV="${DSH_ENV:-/Users/dsh-runtime/.dsh/.env}"
+AMS_BIN="${AMS_BIN:-/Users/dsh-runtime/ams/.venv/bin/ams}"
+AMS_STATE="${AMS_STATE:-/Users/dsh-runtime/.ams}"
 
 die() { echo "napcat.sh: $*" >&2; exit 1; }
 
@@ -65,21 +71,37 @@ door() {
   echo "started $DOOR_NAME on 127.0.0.1:$DOOR_PORT (the Settings page's QQ section reads NapCat's login through it)"
 }
 
-token_exists() { sudo -n -u dsh-runtime /usr/bin/grep -q '^FORK_QQ_ONEBOT_TOKEN=.' "$DSH_ENV"; }
+# AMS, as dsh-runtime (it owns the state directory): the recorder's secrets and its process.
+ams() { (cd / && sudo -n -u dsh-runtime env AMS_STATE_DIR="$AMS_STATE" "$AMS_BIN" "$@"); }
+secret_exists() { ams secret list qq-recorder 2>/dev/null | /usr/bin/grep -qx 'FORK_QQ_ONEBOT_TOKEN'; }
+env_token_exists() { sudo -n -u dsh-runtime /usr/bin/grep -q '^FORK_QQ_ONEBOT_TOKEN=.' "$DSH_ENV"; }
+token_exists() { secret_exists || env_token_exists; }
+# Restart the recorder so it reads a changed secret; it may not be declared yet (first install), which is not an error.
+restart_recorder() {
+  if ams ctl restart qq-recorder >/dev/null 2>&1; then echo "restarted the qq-recorder (it reads the new token)"
+  else echo "the qq-recorder is not running here; after it starts it reads the token"; fi
+}
 
 start() {
   local uin="${1:-}"
   docker image inspect "$IMAGE" >/dev/null 2>&1 || die "no image: run build first"
   docker volume create napcat-config >/dev/null
   docker volume create napcat-qq >/dev/null
+  if token_exists && ! secret_exists; then
+    # Migration: the token predates the recorder; copy it into the secret (stdin to stdin, never printed).
+    sudo -n -u dsh-runtime /usr/bin/grep '^FORK_QQ_ONEBOT_TOKEN=' "$DSH_ENV" | /usr/bin/cut -d= -f2- | ams secret set qq-recorder FORK_QQ_ONEBOT_TOKEN
+    echo "copied the OneBot token from $DSH_ENV into the qq-recorder's secrets"
+  fi
   if ! token_exists || ! docker run --rm -v napcat-config:/cfg --entrypoint test "$IMAGE" -f /cfg/onebot11.json; then
     local t; t=$(openssl rand -hex 24); export t
     docker run --rm -e t -v napcat-config:/cfg --entrypoint bash "$IMAGE" -c \
       'jq --arg t "$t" ".network.websocketServers[0].token = \$t | .network.websocketServers[0].host = \"0.0.0.0\"" /app/templates/ws.json > /cfg/onebot11.json'
     cd / && printf '%s' "$t" | sudo -n -u dsh-runtime /bin/zsh -fc \
       "umask 077; f=$DSH_ENV; /bin/cp -p \$f \$f.bak.\$(date +%Y%m%d%H%M%S); read -r v; { print -r -- \"FORK_QQ_ONEBOT_TOKEN=\$v\"; /usr/bin/grep -v '^FORK_QQ_ONEBOT_TOKEN=' \$f; } >| \$f.new && /bin/mv -f \$f.new \$f"
+    printf '%s' "$t" | ams secret set qq-recorder FORK_QQ_ONEBOT_TOKEN
     unset t
-    echo "wrote a new OneBot token to $DSH_ENV (not shown); restart the dsh service so it reads it"
+    echo "wrote a new OneBot token to the qq-recorder's secrets and to $DSH_ENV (not shown)"
+    NEW_TOKEN=1
   fi
   # NapCat logs every received group message (group, nickname, text) at info level, and docker keeps that
   # output: log only warnings and errors, and keep no log file. The login QR code is announced at warn level.
@@ -103,6 +125,8 @@ start() {
     ${account[@]+"${account[@]}"} "$IMAGE" >/dev/null
   echo "started $NAME on 127.0.0.1:$PORT${uin:+ (quick login $uin)}"
   door
+  [ "${NEW_TOKEN:-0}" = 1 ] && restart_recorder
+  return 0
 }
 
 case "${1:-}" in

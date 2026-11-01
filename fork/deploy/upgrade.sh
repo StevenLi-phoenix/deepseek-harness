@@ -44,12 +44,22 @@ if [ -n "$PREVIOUS" ] && [ "$PREVIOUS" != "$PREFIX" ]; then
   "$ROOT/fork/deploy/check-prune-builds.sh"
   "$ROOT/fork/deploy/prune-builds.sh" "$APPS" "$PREFIX" "$PREVIOUS"
 fi
+# The QQ recorder is an AMS service of its own and holds QQ's one connection. Its bundle is built and pinned here, before
+# the DSH switch below is printed, so a recorder is never older than the DSH that talks to it (a newer recorder serves an
+# older DSH; the protocol only adds). On an upgrade deploy.sh reloads AMS, which restarts the recorder alone; on a first
+# install it only places the declaration and says how to start it.
+QQ_OUT=$(mktemp -d)
+QQ_RECORDER_OUT="$QQ_OUT" pnpm exec tsdown -c fork/deploy/qq-recorder/tsdown.config.ts
+"$ROOT/fork/deploy/qq-recorder/deploy.sh" "$QQ_OUT/qq-recorder.mjs"
+rm -rf "${QQ_OUT:?}"
 cat <<NEXT
 
 Finish the switch (passwordless with /etc/sudoers.d/dsh-events):
   sudo -n -u dsh-runtime /usr/bin/env PATH=/opt/homebrew/bin:/usr/bin:/bin $APPS/current/fork/deploy/setup-profile.sh /Users/dsh-runtime/.dsh $APPS/current
   sudo -n /bin/launchctl kickstart -k system/app.lishuyu.dsh-events
-Roll back: ln -sfn ${PREVIOUS:-$BUILDS/<previous sha>} $APPS/current, then the same two lines.
+Roll back: stop the recorder first (two processes must never hold QQ's connection):
+  cd / && sudo -n -u dsh-runtime env AMS_STATE_DIR=/Users/dsh-runtime/.ams /Users/dsh-runtime/ams/.venv/bin/ams ctl stop qq-recorder
+then ln -sfn ${PREVIOUS:-$BUILDS/<previous sha>} $APPS/current, and the same two lines (RUNBOOK, "qq-recorder").
 If the previous build is still directly under $APPS (the layout before builds.noindex), move it once nothing runs from it:
   $ROOT/fork/deploy/prune-builds.sh --relocate $APPS <that build>
 NEXT
