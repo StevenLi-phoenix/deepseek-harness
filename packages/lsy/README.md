@@ -30,6 +30,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`lsy-event-bus/`](lsy-event-bus/README.md) | Dedupe, loop suppression, subscriptions, coalescing, rate limits, notify and Session dispatch |
 | [`lsy-event-ingest/`](lsy-event-ingest/README.md) | `POST /hooks/lsy` route: the owner's own services push events under one bearer token per source |
 | [`lsy-github-sensor/`](lsy-github-sensor/README.md) | Polls GitHub releases, tags, commits, and notifications with conditional requests |
+| [`lsy-guard/`](lsy-guard/README.md) | `ctx.lsyGuard.check`: one validator for text that others can read; patterns, canary strings, overlap with the owner's memory, and a model, any layer that cannot run refusing |
 | [`lsy-integrity/`](lsy-integrity/README.md) | Integrity watch: digests of the files that steer the agent, a WeChat notice naming what changed, system prompt hashes, and a count of the persona's forbidden stock lines |
 | [`lsy-memory/`](lsy-memory/README.md) | Owner memory across Sessions: the memory block, `memory_search`, `memory_save`, `memory_forget`, and the claude.ai export importer |
 | [`lsy-wechat-settings/`](lsy-wechat-settings/README.md) | Browser half of Settings → WeChat (bind by QR code, channel health, unbind) and Settings → 勿扰 (quiet hours) |

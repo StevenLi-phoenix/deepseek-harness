@@ -30,6 +30,7 @@ kind: "package-group"
 | [`lsy-event-bus/`](lsy-event-bus/README.zh.md) | 去重、回环抑制、订阅、合批、限流、通知与 Session 分发 |
 | [`lsy-event-ingest/`](lsy-event-ingest/README.zh.md) | `POST /hooks/lsy` 路由：主人自己的服务用每个来源一个的 bearer token 推送事件 |
 | [`lsy-github-sensor/`](lsy-github-sensor/README.zh.md) | 用条件请求轮询 GitHub 的 release、tag、提交与通知 |
+| [`lsy-guard/`](lsy-guard/README.zh.md) | `ctx.lsyGuard.check`：给别人能读到的文字用的统一校验器；正则模式、金丝雀字符串、与 owner 记忆的重合、再加一个模型，任何一层跑不起来就拒绝 |
 | [`lsy-integrity/`](lsy-integrity/README.zh.md) | 完整性监控：操控 agent 的文件的摘要、点名告诉 owner 哪里变了的微信通知、系统 prompt 哈希，以及人格禁用口头禅的计数 |
 | [`lsy-memory/`](lsy-memory/README.zh.md) | 跨 Session 的主人记忆：记忆块、`memory_search`、`memory_save`、`memory_forget`，以及 claude.ai 导出导入器 |
 | [`lsy-wechat-settings/`](lsy-wechat-settings/README.zh.md) | 设置 → 微信（扫码绑定、通道健康、解绑）和设置 → 勿扰的浏览器端 |

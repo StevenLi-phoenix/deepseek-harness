@@ -42,6 +42,7 @@ export const PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackagePolic
   'packages/lsy/lsy-memory-admin': { category: 'optional', reason: 'Fork-local Memory settings section (browser half) for the owner\'s review of agent memory, mounted by the event profile bundle; its Host route is lsy-memory\'s settings entry.' },
   'packages/lsy/lsy-wechat-settings': { category: 'optional', reason: 'Fork-local WeChat and quiet-hours settings sections (browser half) mounted by the event profile bundle; their Host routes are served by lsy-wechat and lsy-presence.' },
   'packages/lsy/lsy-presence': { category: 'optional', reason: 'Fork-local owner presence (Sleep Focus, daily window, quiet-hours Settings section) mounted by the event profile bundle.' },
+  'packages/lsy/lsy-guard': { category: 'optional', reason: 'Fork-local content validator (patterns, canaries, memory overlap, model) for text others can read, mounted by the event profile bundle; reads the owner memory file and the profile default model.' },
   'packages/lsy/lsy-sysmon': { category: 'optional', reason: 'Fork-local System status settings section mounted by the event profile bundle.' },
   'packages/lsy/lsy-style': { category: 'optional', reason: 'Fork-local speaking-style samples (QQ groups and Bilibili comments) shown to the main agent, mounted by the event profile bundle; reads the QQ observer and bili-svc.' },
   'packages/lsy/lsy-style-settings': { category: 'optional', reason: 'Fork-local speaking-style settings section mounted by the event profile bundle; needs lsy-style.' },

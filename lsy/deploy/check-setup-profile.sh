@@ -50,6 +50,8 @@ done
 /usr/bin/grep -q "^- id: lsy-integrity$" "$WORK/fresh.yml" || fail "composition lacks lsy-integrity"
 /usr/bin/grep -q "^- id: lsy-presence$" "$WORK/fresh.yml" || fail "composition lacks lsy-presence"
 /usr/bin/grep -q "^- id: lsy-wechat-settings$" "$WORK/fresh.yml" || fail "composition lacks lsy-wechat-settings"
+/usr/bin/grep -q "^- id: lsy-guard$" "$WORK/fresh.yml" || fail "composition lacks lsy-guard"
+/usr/bin/grep -q "^- id: lsy-guard-settings$" "$WORK/fresh.yml" || fail "composition lacks the lsy-guard settings route"
 
 if [ -d "$PREFIX/lsy/skills/autocut" ]; then
   [ -L "$FRESH/skills/autocut" ] && [ -f "$FRESH/skills/autocut/SKILL.md" ] || fail "autocut skill not linked into the home"

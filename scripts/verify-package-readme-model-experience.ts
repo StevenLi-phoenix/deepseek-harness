@@ -176,6 +176,7 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/lsy/lsy-memory-admin': { kind: 'none', reason: 'Settings section for reviewing agent memory; registers no tool and adds nothing to model requests.' },
   'packages/lsy/lsy-wechat-settings': { kind: 'none', reason: 'Settings sections for the WeChat channel and quiet hours; register no tool and add nothing to model requests.' },
   'packages/lsy/lsy-presence': { kind: 'none', reason: 'Tells the channels whether the owner sleeps and holds back their messages; adds nothing to model requests.' },
+  'packages/lsy/lsy-guard': { kind: 'none', reason: 'Host-side validator called by other plugins; registers no tool and adds nothing to the main agent\'s requests (its own review request is a separate one-shot call with the text fenced).' },
   'packages/lsy/lsy-sysmon': { kind: 'none', reason: 'Settings section reading the Host machine status; registers nothing model-facing.' },
   'packages/lsy/lsy-style-settings': { kind: 'none', reason: 'Settings section showing the speaking-style samples; registers nothing model-facing (the samples reach the model through lsy-style).' },
   'packages/lsy/lsy-config': { kind: 'none', reason: 'Settings card editing plugin configuration; registers nothing model-facing.' },

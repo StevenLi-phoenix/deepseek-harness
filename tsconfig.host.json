@@ -575,6 +575,7 @@
     { "path": "./packages/lsy/lsy-tool-voice" },
     { "path": "./packages/lsy/lsy-github-sensor" },
     { "path": "./packages/lsy/lsy-memory" },
+    { "path": "./packages/lsy/lsy-guard" },
     { "path": "./packages/lsy/lsy-event-ingest" },
     { "path": "./packages/lsy/lsy-tool-monitor" },
     { "path": "./packages/lsy/lsy-cc-bridge" },
