@@ -203,11 +203,82 @@ describe('persistent session subscriptions', () => {
     expect(controller.followups.get('s1')).toHaveLength(1)
   })
 
-  it('ignores compactions of Sessions that are no subscription\'s persistent Session', async () => {
+  it('marks a batch failed when the stored Session refuses the turn, and treats a throwing controller as unavailable', async () => {
+    const controller = fakeController()
+    const { bus, batch, arrive, logs } = await mount(controller)
+    await arrive('s1', await batch())
+    const resolve = controller.resolveAgent.bind(controller)
+    controller.resolveAgent = async () => ({ agent: { followup: () => { throw new Error('agent disposed') } } })
+    const refused = await batch()
+    expect(bus.batches().find(row => row.id === refused)).toMatchObject({ status: 'failed', error: 'agent disposed', delivery: 'persistent' })
+    expect(logs.some(line => line.includes(`batch ${refused} did not enter persistent Session s1: agent disposed`))).toBe(true)
+    controller.resolveAgent = async () => { throw new Error('controller down') }
+    await batch()
+    expect(bus.batches().at(-1)).toMatchObject({ delivery: 'detached' })
+    controller.resolveAgent = resolve
+    expect(bus.persistentSessions()).toMatchObject([{ sessionId: 's1', batches: 1 }])
+  })
+
+  it('logs context without cache reads, and a rollover without a Workspace registry keeps the old Session unarchived', async () => {
+    const logs: string[] = []
+    const controller = fakeController()
+    const runtime = fakeRuntime()
+    const { bus, emit } = await harness({ config, controller, runtime, logs })
+    await bus.publish(release(1))
+    await vi.advanceTimersByTimeAsync(1_000)
+    controller.known.add('s1')
+    emit('s1', userMessage(bus.batches()[0]!.id))
+    emit('s1', { type: 'assistant/message', seq: 2, data: { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: 'NO_REPLY' }] }, usage: { inputTokens: 900, outputTokens: 1 } } })
+    emit('s1', { type: 'turn/end', seq: 3, data: { turn: 1, reason: { kind: 'completed' } } })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(logs.some(line => line.includes('context 900 input tokens; compaction did not run'))).toBe(true)
+    vi.setSystemTime(Date.now() + 31 * DAY)
+    await bus.publish(release(2))
+    await vi.advanceTimersByTimeAsync(1_000)
+    emit('s2', userMessage(bus.batches()[1]!.id))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(bus.persistentSessions()).toMatchObject([{ sessionId: 's2', previous: 's1' }])
+    expect(logs.some(line => line.includes('replaced Session s1 of triage is not archived: no workspaceRegistry service is mounted'))).toBe(true)
+  })
+
+  it('ignores compactions and tool calls of Sessions that are no subscription\'s persistent Session', async () => {
     const { bus, emit, batch, arrive } = await mount()
     await arrive('s1', await batch())
     emit('other', { type: 'compaction/summary', seq: 2, data: { summary: [{ type: 'text', text: 'x' }] } })
+    emit('other', { type: 'tool/call', seq: 3, data: { turn: 1, step: 1, callId: 'c', name: 'up_status', arguments: '{}' } })
     await vi.advanceTimersByTimeAsync(0)
     expect(bus.persistentSessions()[0]).toMatchObject({ compactions: 0 })
+  })
+
+  it('reports a Session whose batch the bus no longer knows as fresh and adopts nothing', async () => {
+    const { bus, emit, logs } = await mount()
+    emit('s7', userMessage('triage-gone'))
+    emit('s7', { type: 'turn/end', seq: 2, data: { turn: 1, reason: { kind: 'completed' } } })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(logs.some(line => line.includes('triage batch triage-gone in Session s7 (fresh) ended: completed'))).toBe(true)
+    expect(bus.persistentSessions()).toEqual([])
+  })
+
+  it('counts a compaction without summary text and keeps the previous summary', async () => {
+    const { bus, emit, batch, arrive, logs } = await mount()
+    await arrive('s1', await batch())
+    emit('s1', { type: 'compaction/summary', seq: 2, data: { summary: [{ type: 'text', text: 'kept' }] } })
+    emit('s1', { type: 'compaction/summary', seq: 3, data: { summary: [{ type: 'image' }] } })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(bus.persistentSessions()[0]).toMatchObject({ compactions: 2 })
+    expect(logs.some(line => line.includes('compacted (#2, no summary text)'))).toBe(true)
+  })
+
+  it('adopts a Session once even when its first message is seen again after the delivery was forgotten', async () => {
+    const { bus, emit, batch, arrive, logs } = await mount()
+    const first = await batch()
+    await arrive('s1', first)
+    emit('s1', { type: 'turn/end', seq: 2, data: { turn: 1, reason: { kind: 'completed' } } })
+    await vi.advanceTimersByTimeAsync(0)
+    // The batch row still says persistent-new; the second sighting must not reset the Session's counters.
+    emit('s1', userMessage(first))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(bus.persistentSessions()).toMatchObject([{ sessionId: 's1', batches: 1 }])
+    expect(logs.filter(line => line.includes('is now the persistent Session'))).toHaveLength(1)
   })
 })
