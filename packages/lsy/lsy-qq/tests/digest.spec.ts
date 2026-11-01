@@ -101,7 +101,7 @@ describe('transcript helpers', () => {
   })
 
   it('formats a line with the card, the last four digits of the number, and the quoted member', () => {
-    const base = { cursor: 'c1', groupId: 'g1', messageId: 'm2', at: NOW, userId: '123456789', nickname: '昵称', card: '名片', role: '', text: '同意\n第二行', replyTo: 'm1', kinds: '', recalled: false } satisfies MessageRow
+    const base = { cursor: 'c1', groupId: 'g1', messageId: 'm2', at: NOW, userId: '123456789', nickname: '昵称', card: '名片', role: '', text: '同意\n第二行', replyTo: 'm1', kinds: '', recalled: false, media: [] } satisfies MessageRow
     const quoted: MessageRow = { ...base, cursor: 'c0', messageId: 'm1', userId: '5', card: '', nickname: '小明', replyTo: null }
     expect(formatLine(base, id => (id === 'm1' ? quoted : undefined), 'Asia/Shanghai')).toBe('[10-31 20:00] 名片(6789) ↳回复小明(5)：同意 ⏎ 第二行')
     expect(formatLine(base, () => undefined, 'Asia/Shanghai')).toContain('↳回复某条旧消息')
@@ -738,5 +738,112 @@ describe('mentions with aliases on', () => {
     r = new DigestRunner(h.ctx, store, log, config({ aliasMembers: false }), join(dir, 'raw'), () => NOW)
     await r.runRound(['g1'], new AbortController().signal)
     expect(h.prompts[0]).toContain('@3184239488 在吗')
+  })
+})
+
+describe('pictures in the digest', () => {
+  const PNG = Buffer.from('png-bytes-for-the-test')
+  const photo = (ref: string, saved = true, text = '看这个[图片]'): Partial<MessageRow> & { groupId: string; text: string } => ({
+    groupId: 'g1', userId: '10001', text, media: [{ ref, kind: 'image', saved }],
+  })
+  const harnessWithPictures = (images: number, options: { reject?: boolean } = {}) => {
+    const h = harness('摘要')
+    const sent: Array<Array<{ type: string; mediaType?: string; data?: string }>> = []
+    type Controller = { prompt: (request: { content: Array<{ type: string }> }) => Promise<unknown> }
+    const controller = (h.ctx as unknown as { sessionController: Controller }).sessionController
+    const original = controller.prompt.bind(controller)
+    controller.prompt = async (request) => {
+      sent.push(request.content as never)
+      if (options.reject === true && request.content.some(part => part.type === 'image')) {
+        throw Object.assign(new Error('Model does not support image input.'), { code: 'session/attachment-invalid' })
+      }
+      return original(request as never)
+    }
+    const run = new DigestRunner(h.ctx, store, log, config(), join(dir, 'raw'), () => NOW, () => 0, () => images)
+    return { h, run, sent }
+  }
+
+  it('tags each picture with its reference, in the transcript and in what a tool may quote', async () => {
+    fill('g1', 10)
+    log.insert(photo('m1ab'))
+    log.insert({ groupId: 'g1', userId: '10002', text: '[图片][动画表情][图片]', media: [{ ref: 'm1ac', kind: 'image', saved: true }, { ref: 'm1ad', kind: 'image', saved: true }, { ref: 'm1ae', kind: 'image', saved: false }] })
+    const { h, run } = harnessWithPictures(0)
+    await run.runRound(['g1'], new AbortController().signal)
+    expect(h.prompts[0]).toContain('看这个[图片#m1ab]')
+    // The animated sticker is the second image segment: it is not tagged, and the next picture keeps its own reference.
+    expect(h.prompts[0]).toContain('[图片#m1ac][动画表情][图片#m1ae]')
+    expect(h.prompts[0]).not.toContain('attached to this message')
+  })
+
+  it('does not fold a picture into a run, and still folds the stickers around it', () => {
+    const rows = [
+      log.insert({ groupId: 'g1', userId: '1', text: '[表情]' }), log.insert({ groupId: 'g1', userId: '1', text: '[表情]' }),
+      log.insert({ groupId: 'g1', userId: '1', text: '[图片#m1ab]', media: [{ ref: 'm1ab', kind: 'image', saved: true }] }),
+    ]
+    const [chunk] = chunkTranscript(rows, row => `${row.userId}：${row.text}`, 10_000)
+    expect(chunk!.text.split('\n')).toEqual(['1：[表情]×2', '1：[图片#m1ab]'])
+  })
+
+  it('attaches the newest saved pictures, up to maxImages, as image parts named by their tags, and keeps them out of the digest', async () => {
+    fill('g1', 10)
+    for (const ref of ['m1', 'm2', 'm3', 'm4']) {
+      log.pictures.set(ref, Buffer.concat([PNG, Buffer.from(ref)]))
+      log.insert(photo(ref))
+    }
+    log.insert(photo('m5', false))
+    const { h, run, sent } = harnessWithPictures(2)
+    expect(await run.runRound(['g1'], new AbortController().signal)).toBe(1)
+    const parts = sent[0]!
+    expect(parts.map(part => part.type)).toEqual(['text', 'image', 'image'])
+    expect(parts.slice(1).map(part => Buffer.from(part.data!, 'base64').toString())).toEqual([`${PNG.toString()}m3`, `${PNG.toString()}m4`])
+    expect(parts[1]).toMatchObject({ mediaType: 'image/png' })
+    expect(h.prompts[0]).toContain('2 of the pictures in the messages are attached to this message, in the order of their tags: [图片#m3] [图片#m4]')
+    expect(log.asked).toEqual(['m3', 'm4'])
+    // Pictures reach the model only: neither the stored digest nor the raw answer holds them.
+    const [digest] = store.digests({ groupId: 'g1', limit: 1 })
+    expect(JSON.stringify(digest)).not.toContain(Buffer.from('m3').toString('base64'))
+    expect(JSON.stringify(digest)).not.toContain(PNG.toString('base64'))
+  })
+
+  it('attaches nothing when maxImages is 0', async () => {
+    fill('g1', 10)
+    log.pictures.set('m1', PNG)
+    log.insert(photo('m1'))
+    const off = harnessWithPictures(0)
+    await off.run.runRound(['g1'], new AbortController().signal)
+    expect(off.sent[0]!.map(part => part.type)).toEqual(['text'])
+    expect(log.asked).toEqual([])
+  })
+
+  it('attaches nothing, and still tags, when the recorder cannot serve pictures', async () => {
+    fill('g1', 10)
+    log.pictures.set('m1', PNG)
+    log.insert(photo('m1'))
+    const noMedia = { page: log.page.bind(log), lookup: log.lookup.bind(log), members: log.members.bind(log),
+      groupName: log.groupName.bind(log) }
+    const h = harness('摘要')
+    const run = new DigestRunner(h.ctx, store, noMedia, config(), join(dir, 'raw'), () => NOW, () => 0, () => 8)
+    expect(await run.runRound(['g1'], new AbortController().signal)).toBe(1)
+    expect(h.prompts[0]).toContain('[图片#m1]')
+    expect(h.prompts[0]).not.toContain('attached to this message')
+    expect(log.asked).toEqual([])
+  })
+
+  it('goes on as text, tags and all, when the route does not read pictures', async () => {
+    fill('g1', 10)
+    log.pictures.set('m1', PNG)
+    log.insert(photo('m1'))
+    const { h, run, sent } = harnessWithPictures(8, { reject: true })
+    expect(await run.runRound(['g1'], new AbortController().signal)).toBe(1)
+    expect(sent.map(parts => parts.map(part => part.type))).toEqual([['text', 'image'], ['text']])
+    expect(h.prompts[0]).toContain('[图片#m1]')
+  })
+
+  it('leaves a picture out and says so in the log when the recorder no longer holds it', async () => {
+    fill('g1', 10)
+    log.insert(photo('m9'))
+    const { run, sent } = harnessWithPictures(8)
+    expect(await run.runRound(['g1'], new AbortController().signal)).toBe(1)
+    expect(sent[0]!.map(part => part.type)).toEqual(['text'])
   })
 })

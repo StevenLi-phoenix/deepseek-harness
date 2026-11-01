@@ -668,6 +668,16 @@ async groupOverview(): Promise<GroupOverview[]>
 groupName(groupId: string): string
 
 /**
+ * A saved picture of a recorded group, for `qq_image` and the digest: the recorder serves the file it downloaded when the
+ * message arrived. Nothing is fetched from QQ.
+ * @param ref - the `m…` reference in a message's `[图片#ref]` tag.
+ * @returns the bytes and their type.
+ * @throws {@link RecorderUnavailable} while the recorder is down; {@link ImageNotSaved} when it does not hold the picture
+ * (images off, never downloaded, aged out, recalled), and when the recorder is too old to serve pictures.
+ */
+async image(ref: string): Promise<{ bytes: Uint8Array; mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; groupId: string }>
+
+/**
  * `qq_digest_write` for the tools of the digest preset: stage the calling Session's digest.
  * @param sessionId - the calling Session.
  * @param groupId - the group the model names; it must be the group the Session is digesting.

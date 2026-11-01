@@ -18,6 +18,12 @@
       "path": "../lsy-qq"
     },
     {
+      "path": "../../attachment/attachment"
+    },
+    {
+      "path": "../../llm/llm"
+    },
+    {
       "path": "../../core/tools"
     },
     {

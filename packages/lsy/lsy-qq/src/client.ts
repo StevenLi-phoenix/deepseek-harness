@@ -9,9 +9,11 @@
 import { request, type IncomingMessage } from 'node:http'
 import { z } from 'zod'
 import {
-  ConfigAppliedDto, ErrorDto, EventDto, FEATURE_MINOR, GroupDto, HelloDto, LegacyDigestStateDto, LoginDto, MembersDto,
+  ConfigAppliedDto, ErrorDto, EventDto, FEATURE_MINOR, GroupDto, HelloDto, LegacyDigestStateDto, LoginDto, MEDIA_HEADER,
+  MediaHeaderDto, MembersDto,
   MessageListDto, MessagePageDto, PATHS, PROTOCOL, PROTOCOL_HEADER, RefreshDto, StatusDto, protocolTag,
-  type ConfigApplied, type Group, type Hello, type LegacyDigestState, type Login, type Member, type Message, type MessagePage,
+  type ConfigApplied, type Group, type Hello, type MediaHeader, type LegacyDigestState, type Login, type Member, type Message,
+  type MessagePage,
   type RecorderConfig, type RecorderEvent, type Refresh, type Status,
 } from './protocol.ts'
 import type { QqConnection } from './status.ts'
@@ -353,39 +355,12 @@ export class RecorderClient {
   private async call<S extends z.ZodType>(
     method: 'GET' | 'POST' | 'PUT', path: string, schema: S, options: { body?: unknown; link?: boolean } = {},
   ): Promise<z.output<S>> {
-    if (options.link !== false && this.state !== 'ok') {
-      throw new RecorderUnavailable(this.state === 'protocol-mismatch' ? 'protocol-mismatch' : 'recorder-down', `the QQ recorder is ${this.state}`)
-    }
-    const token = await this.options.token()
-    this.tokenSync = token
-    if (token === undefined) throw new RecorderUnavailable('recorder-down', 'the recorder token is not set')
-    const payload = options.body === undefined ? undefined : JSON.stringify(options.body)
-    const { status, text, tag } = await new Promise<{ status: number; text: string; tag: string | undefined }>((resolve, reject) => {
-      const req = request({
-        socketPath: this.options.socketPath, path, method, timeout: this.timeoutMs,
-        headers: {
-          authorization: `Bearer ${token}`, [PROTOCOL_HEADER]: protocolTag(),
-          ...payload === undefined ? {} : { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) },
-        },
-      }, (res) => {
-        const chunks: Buffer[] = []
-        res.on('data', (chunk: Buffer) => chunks.push(chunk))
-        res.once('end', () => { resolve({ status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString('utf8'), tag: res.headers[PROTOCOL_HEADER] as string | undefined }) })
-        res.once('error', reject)
-      })
-      req.once('timeout', () => { req.destroy(new Error('the recorder did not answer in time')) })
-      req.once('error', reject)
-      req.end(payload)
-    }).catch((error: unknown) => {
-      const code = (error as { code?: string }).code
-      const reason = code === 'ENOENT' || code === 'ECONNREFUSED' ? 'the recorder is not listening' : error instanceof Error ? error.message : String(error)
-      if (options.link !== false && this.state === 'ok') {
-        this.setState('recorder-down', reason)
-        this.stream?.destroy()
-        this.wake?.()
-      }
-      throw new RecorderUnavailable('recorder-down', reason)
-    })
+    const { status, body: raw, tag } = await this.exchange(method, path, options)
+    return this.parse(status, raw.toString('utf8'), tag, path, schema)
+  }
+
+  /** Check an answer: protocol mismatch, error bodies, then the schema. */
+  private parse<S extends z.ZodType>(status: number, text: string, tag: string | undefined, path: string, schema: S): z.output<S> {
     if (status === 426) throw new RecorderUnavailable('protocol-mismatch', `the recorder speaks ${tag ?? 'another protocol'}`)
     let body: unknown
     try {
@@ -402,6 +377,68 @@ export class RecorderClient {
       throw new RecorderError(status, 'invalid-response', `the recorder's answer for ${path} does not match protocol ${protocolTag()}: ${parsed.error.issues[0]?.path.join('.') ?? ''}`)
     }
     return parsed.data
+  }
+
+  /** One HTTP exchange over the socket; transport trouble is {@link RecorderUnavailable} and moves the link to `recorder-down`. */
+  private async exchange(
+    method: 'GET' | 'POST' | 'PUT', path: string, options: { body?: unknown; link?: boolean },
+  ): Promise<{ status: number; body: Buffer; tag: string | undefined; headers: IncomingMessage['headers'] }> {
+    if (options.link !== false && this.state !== 'ok') {
+      throw new RecorderUnavailable(this.state === 'protocol-mismatch' ? 'protocol-mismatch' : 'recorder-down', `the QQ recorder is ${this.state}`)
+    }
+    const token = await this.options.token()
+    this.tokenSync = token
+    if (token === undefined) throw new RecorderUnavailable('recorder-down', 'the recorder token is not set')
+    const payload = options.body === undefined ? undefined : JSON.stringify(options.body)
+    return new Promise<{ status: number; body: Buffer; tag: string | undefined; headers: IncomingMessage['headers'] }>((resolve, reject) => {
+      const req = request({
+        socketPath: this.options.socketPath, path, method, timeout: this.timeoutMs,
+        headers: {
+          authorization: `Bearer ${token}`, [PROTOCOL_HEADER]: protocolTag(),
+          ...payload === undefined ? {} : { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) },
+        },
+      }, (res) => {
+        const chunks: Buffer[] = []
+        res.on('data', (chunk: Buffer) => chunks.push(chunk))
+        res.once('end', () => {
+          resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks), tag: res.headers[PROTOCOL_HEADER] as string | undefined,
+            headers: res.headers })
+        })
+        res.once('error', reject)
+      })
+      req.once('timeout', () => { req.destroy(new Error('the recorder did not answer in time')) })
+      req.once('error', reject)
+      req.end(payload)
+    }).catch((error: unknown) => {
+      const code = (error as { code?: string }).code
+      const reason = code === 'ENOENT' || code === 'ECONNREFUSED' ? 'the recorder is not listening' : error instanceof Error ? error.message : String(error)
+      if (options.link !== false && this.state === 'ok') {
+        this.setState('recorder-down', reason)
+        this.stream?.destroy()
+        this.wake?.()
+      }
+      throw new RecorderUnavailable('recorder-down', reason)
+    })
+  }
+
+  /**
+   * A saved image of the recorder (1.1). Nothing is fetched from QQ for this: the recorder serves the file it downloaded.
+   * @param ref - the reference from a message's `media`.
+   * @returns the bytes with the recorder's description of them.
+   * @throws {@link RecorderError} with code `not-saved` when the recorder does not hold the image.
+   */
+  async media(ref: string): Promise<{ bytes: Buffer; header: MediaHeader }> {
+    const answer = await this.exchange('GET', PATHS.media(ref), {})
+    if (answer.status !== 200) {
+      this.parse(answer.status, answer.body.toString('utf8'), answer.tag, PATHS.media(ref), z.never())
+      throw new RecorderError(answer.status, 'error', `HTTP ${answer.status}`)
+    }
+    const raw = answer.headers[MEDIA_HEADER]
+    const described = MediaHeaderDto.safeParse(typeof raw === 'string' ? JSON.parse(raw) as unknown : undefined)
+    if (!described.success || described.data.bytes !== answer.body.length) {
+      throw new RecorderError(200, 'invalid-response', 'the recorder\'s description of the image does not match the file')
+    }
+    return { bytes: answer.body, header: described.data }
   }
 
   // ---- the API ----

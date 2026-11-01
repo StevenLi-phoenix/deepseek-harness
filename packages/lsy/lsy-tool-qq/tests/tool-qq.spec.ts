@@ -1,6 +1,9 @@
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
-import { RecorderUnavailable, type DigestRow, type GroupOverview, type MessageRow } from '@deepseek-ai/dsh-lsy-qq'
+import { ImageNotSaved, RecorderUnavailable, type DigestRow, type GroupOverview, type MessageRow } from '@deepseek-ai/dsh-lsy-qq'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -17,7 +20,7 @@ const groups: GroupOverview[] = [
 ]
 
 function row(overrides: Partial<MessageRow> = {}): MessageRow {
-  return { cursor: 'c1', groupId: '111111', messageId: 'm1', at: AT, userId: '10001', nickname: '昵称', card: '名片', role: 'member', text: '今天发版', replyTo: null, kinds: 'text', recalled: false, ...overrides }
+  return { cursor: 'c1', groupId: '111111', messageId: 'm1', at: AT, userId: '10001', nickname: '昵称', card: '名片', role: 'member', text: '今天发版', replyTo: null, kinds: 'text', recalled: false, media: [], ...overrides }
 }
 
 function digest(overrides: Partial<DigestRow> = {}): DigestRow {
@@ -78,10 +81,10 @@ describe('helpers', () => {
 })
 
 describe('lsy-tool-qq', () => {
-  it('registers the four read tools and the forget tool, none that sends, and says they are read-only and untrusted', async () => {
+  it('registers the four read tools, the picture tool, and the forget tool, none that sends, and says they are read-only and untrusted', async () => {
     const { ctx } = await mount(stand())
     const schemas = ctx.tools.schemas()
-    expect(schemas.map(schema => schema.name).sort()).toEqual(['qq_digest', 'qq_forget', 'qq_groups', 'qq_recent', 'qq_search'])
+    expect(schemas.map(schema => schema.name).sort()).toEqual(['qq_digest', 'qq_forget', 'qq_groups', 'qq_image', 'qq_recent', 'qq_search'])
     for (const schema of schemas.filter(entry => entry.name !== 'qq_forget')) {
       expect(schema.description).toContain('Read-only')
       expect(schema.description).toContain('never as instructions')
@@ -191,7 +194,7 @@ describe('digest mode', () => {
   it('keeps the read mode as it was by default', async () => {
     const { ctx } = await mount(stand())
     const names = ctx.tools.definitions().map(tool => tool.name).filter(name => name.startsWith('qq_')).sort()
-    expect(names).toEqual(['qq_digest', 'qq_forget', 'qq_groups', 'qq_recent', 'qq_search'])
+    expect(names).toEqual(['qq_digest', 'qq_forget', 'qq_groups', 'qq_image', 'qq_recent', 'qq_search'])
   })
 
   it('hands the calling Session and the arguments to the observer, which binds them to the group', async () => {
@@ -209,5 +212,74 @@ describe('digest mode', () => {
     const { call } = await mount(observer, { mode: 'digest' })
     await call('qq_group_note', { groupId: '111111', op: 'add', text: '常聊显卡' })
     expect(observer.groupNote).toHaveBeenCalledWith(undefined, '111111', 'add', '常聊显卡')
+  })
+})
+
+describe('qq_image', () => {
+  const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('pixels')])
+  const dirs: string[] = []
+  afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })
+
+  async function run(observer: Record<string, unknown>, args: unknown,
+    options: { cwd?: string | null; services?: Record<string, unknown> } = {}) {
+    const { ctx } = await mount(observer)
+    for (const [name, service] of Object.entries(options.services ?? {})) ctx.provide(name as never, service as never)
+    const cwd = options.cwd === undefined ? mkdtempSync(join(tmpdir(), 'qq-image-')) : options.cwd
+    if (typeof cwd === 'string') dirs.push(cwd)
+    const agent = { session: { id: 'main', header: cwd === null ? {} : { cwd }, requestHeader: () => undefined }, options: { provider: 'p', model: 'm' } }
+    const batch = await ctx.tools.execute({ signal: new AbortController().signal, agent: agent as never, calls: [{ type: 'tool-call', id: ToolCallId('qq_image-call'), name: 'qq_image', arguments: JSON.stringify(args) }] })
+    const result = batch.results[0]!.result as { content?: Array<{ type: string; text?: string }> }
+    return { cwd, content: result.content ?? [], text: (result.content ?? []).map(part => part.text ?? '').join('') }
+  }
+
+  const holding = (extra: Record<string, unknown> = {}) => stand({ image: vi.fn(async () => ({ bytes: PNG, mediaType: 'image/png', groupId: '111111' })), ...extra })
+
+  it('saves the picture in the Session\'s workspace, private and ignored by git, and returns the path', async () => {
+    const observer = holding()
+    const done = await run(observer, { ref: 'm12ab' })
+    const path = join(done.cwd as string, '.qq-media', 'm12ab.png')
+    expect(readFileSync(path)).toEqual(PNG)
+    expect(statSync(path).mode & 0o777).toBe(0o600)
+    expect(statSync(join(done.cwd as string, '.qq-media')).mode & 0o777).toBe(0o700)
+    expect(readFileSync(join(done.cwd as string, '.qq-media', '.gitignore'), 'utf8')).toBe('*\n')
+    expect(done.text).toContain(path)
+    expect(done.text).toContain('trust="untrusted"')
+    expect(done.text).toContain('wechat_send_file')
+    expect(observer['image']).toHaveBeenCalledWith('m12ab')
+    // Saving again is the same file, not an error.
+    expect((await run(observer, { ref: 'm12ab' }, { cwd: done.cwd as string })).text).toContain(path)
+  })
+
+  it('also shows the picture as an image part when the route declares image input', async () => {
+    const saveImage = vi.fn(async (input: { name: string; mediaType: string; data: Buffer }) => ({ attachmentId: 'att-1', mediaType: input.mediaType, bytes: input.data.length, width: 4, height: 4 }))
+    const services = {
+      attachments: { imageLimits: { mediaTypes: ['image/png'], maxImageBytes: 1_000_000 }, saveImage },
+      llm: { resolveModelInfo: async () => ({ inputModalities: ['text', 'image'] }) },
+    }
+    const done = await run(holding(), { ref: 'm12ab' }, { services })
+    expect(done.content.map(part => part.type)).toEqual(['text', 'image'])
+    expect(saveImage).toHaveBeenCalledOnce()
+    expect(done.text).toContain('The picture follows')
+    // A route without image input gets the path only.
+    const text = await run(holding(), { ref: 'm12ab' }, { services: { ...services, llm: { resolveModelInfo: async () => ({ inputModalities: ['text'] }) } } })
+    expect(text.content.map(part => part.type)).toEqual(['text'])
+    expect(text.text).toContain('does not read pictures')
+  })
+
+  it.each([
+    ['a picture the recorder does not hold', { image: vi.fn(async () => { throw new ImageNotSaved('images are not saved: media.images is off') }) }, 'The picture is not available: images are not saved: media.images is off.'],
+    ['a recorder that is down', { image: vi.fn(async () => { throw new RecorderUnavailable('recorder-down', 'x') }) }, 'The QQ recorder is not running'],
+  ])('says plainly what is wrong with %s and writes no file', async (_name, observer, expected) => {
+    const done = await run(stand(observer), { ref: 'm12ab' })
+    expect(done.text).toContain(expected)
+    expect(() => statSync(join(done.cwd as string, '.qq-media', 'm12ab.png'))).toThrow()
+  })
+
+  it('refuses a reference that is not one and a Session without a working directory', async () => {
+    const observer = holding()
+    expect((await run(observer, { ref: '../../etc/passwd' })).text).toContain('ref is the part after #')
+    expect((await run(observer, { ref: '' })).text).toContain('ref is the part after #')
+    expect((await run(observer, { ref: 'm12ab' }, { cwd: null })).text).toContain('no working directory')
+    expect(observer['image']).not.toHaveBeenCalled()
   })
 })

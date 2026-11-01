@@ -39,6 +39,10 @@ export class FakeLog implements MessageReader {
   readonly names = new Map<string, string>()
   /** Set to make `members` fail or say it cannot know. */
   membersAnswer: Member[] | 'unavailable' | 'error' | undefined
+  /** The pictures the recorder holds, by media reference. */
+  readonly pictures = new Map<string, Buffer>()
+  /** References asked for, in order. */
+  readonly asked: string[] = []
   private serial = 0
 
   /** Append a message. @returns it. */
@@ -46,7 +50,7 @@ export class FakeLog implements MessageReader {
     this.serial += 1
     const row: Message = {
       cursor: `c${this.serial}`, messageId: `${message.groupId}-${this.serial}`, at: 1_000 + this.serial, userId: '10001', nickname: '', card: '', role: 'member',
-      replyTo: null, kinds: 'text', recalled: false, ...message,
+      replyTo: null, kinds: 'text', recalled: false, media: [], ...message,
     }
     this.rows.push(row)
     return row
@@ -71,5 +75,12 @@ export class FakeLog implements MessageReader {
 
   groupName(groupId: string): string {
     return this.names.get(groupId) ?? groupId
+  }
+
+  async media(ref: string): Promise<{ bytes: Buffer; mediaType: 'image/png'; name: string }> {
+    this.asked.push(ref)
+    const bytes = this.pictures.get(ref)
+    if (bytes === undefined) throw new Error('not saved')
+    return { bytes, mediaType: 'image/png', name: `${ref}.png` }
   }
 }

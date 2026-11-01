@@ -21,7 +21,7 @@ import type {} from '@deepseek-ai/dsh-session-title'
 import type {} from '@deepseek-ai/dsh-storage-domain'
 import z from '@deepseek-ai/schemastery'
 import { DEFAULT_MEDIA_HOST_SUFFIXES, isPrivateAddress, isPrivateUrl } from './address.ts'
-import { RecorderClient, RecorderUnavailable } from './client.ts'
+import { RecorderClient, RecorderError, RecorderUnavailable } from './client.ts'
 import { DigestStore, qqDomain, type DigestRecord } from './digest-storage.ts'
 import { DigestRunner, senderKey, type DigestConfig, type MessageReader, type ToolOutcome } from './digest.ts'
 import { FEATURE_MINOR, type Group, type Login, type Message, type RecorderConfig } from './protocol.ts'
@@ -149,6 +149,11 @@ export interface Config {
     keepPerGroup: number
     /** Longest digest stored, in characters. */
     maxDigestChars: number
+    /**
+     * Pictures of one transcript chunk attached to the digest prompt at most (the newest ones, when the route reads images;
+     * otherwise their `[图片#ref]` tags stay as text); 0 attaches none. They go to the model only and are never stored.
+     */
+    maxImages: Volatile<number>
     /** Tool calls (`qq_digest_write`, `qq_group_note`) one digest Session may make, refused ones included. 12 by default. */
     maxToolCalls: number
     /** Archive each digest Session when its turn ends, so it does not fill the sidebar (its log stays). True by default. */
@@ -248,6 +253,7 @@ export const Config = z.object({
     profiles: z.boolean().default(false),
     keepPerGroup: z.natural().min(1).default(200),
     maxDigestChars: z.natural().min(500).default(3000),
+    maxImages: z.natural().default(8).volatile(),
     maxToolCalls: z.natural().min(1).default(12),
     archiveSessions: z.boolean().default(true),
     resident: z.boolean().default(true),
@@ -304,6 +310,11 @@ function assertConfig(config: Config): void {
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
+
+/** The recorder does not hold the picture asked for; the message says why. */
+export class ImageNotSaved extends Error {}
+
+const EXTENSIONS = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp' } as const
 
 /** A send the channel refused. */
 export class SendRefused extends Error {}
@@ -387,6 +398,7 @@ export class QqObserver extends Service {
         ctx, store, this.reader(), digestConfig, join(resolveDshHome(undefined, process.env), 'lsy-qq-digest', 'raw'), () => this.now(),
         // A resident digest Session is replaced when it is as old as the raw messages are kept.
         () => this.live.retention.textDays * 86_400_000,
+        () => d.maxImages.get(),
       )
       const saved = Number(store.getMeta('outage-notice-at') ?? '')
       if (Number.isFinite(saved) && store.getMeta('outage-notice-at') !== undefined) this.lastNoticeAt = saved
@@ -476,6 +488,10 @@ export class QqObserver extends Service {
       lookup: (groupId, ids) => this.client.lookup(groupId, ids),
       members: async groupId => (this.client.supports('members') ? this.client.members(groupId) : undefined),
       groupName: groupId => this.groupName(groupId),
+      media: async (ref) => {
+        const file = await this.image(ref)
+        return { bytes: file.bytes, mediaType: file.mediaType, name: `${ref}${EXTENSIONS[file.mediaType]}` }
+      },
     }
   }
 
@@ -541,6 +557,27 @@ export class QqObserver extends Service {
    */
   groupName(groupId: string): string {
     return this.names.get(groupId) ?? groupId
+  }
+
+  /**
+   * A saved picture of a recorded group, for `qq_image` and the digest: the recorder serves the file it downloaded when the
+   * message arrived. Nothing is fetched from QQ.
+   * @param ref - the `m…` reference in a message's `[图片#ref]` tag.
+   * @returns the bytes and their type.
+   * @throws {@link RecorderUnavailable} while the recorder is down; {@link ImageNotSaved} when it does not hold the picture
+   * (images off, never downloaded, aged out, recalled), and when the recorder is too old to serve pictures.
+   */
+  async image(ref: string): Promise<{ bytes: Uint8Array; mediaType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; groupId: string }> {
+    if (!this.client.supports('media')) throw new ImageNotSaved('this recorder is too old to serve pictures: deploy the matching qq-recorder')
+    try {
+      const file = await this.client.media(ref)
+      if (!this.recordedIds.has(file.header.groupId)) throw new ImageNotSaved('that picture belongs to a group that is not recorded')
+      const mediaType = file.header.contentType === 'unknown' ? 'image/png' : file.header.contentType
+      return { bytes: file.bytes, mediaType, groupId: file.header.groupId }
+    } catch (error: unknown) {
+      if (error instanceof RecorderError && (error.code === 'not-saved' || error.code === 'invalid-ref')) throw new ImageNotSaved(error.message)
+      throw error
+    }
   }
 
   /**

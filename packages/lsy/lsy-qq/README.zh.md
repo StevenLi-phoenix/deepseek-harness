@@ -43,7 +43,7 @@ OneBot v11 WebSocket 服务端是 colima 上 Docker 容器里的 NapCat（[`lsy/
 | `tokenEnv` | `LSY_QQ_ONEBOT_TOKEN` | 存放协议端 access token 的记录器 AMS secret 名（必须以 `LSY_QQ_` 开头）；由记录器以 Bearer 头发送；缺失时记录器保持离线 |
 | `groups` | `[]` | 要记录的群号。可热更新：设置 → QQ 里增删群，观察者立即跟随，并保存到 profile patch（新加的群会补抓历史） |
 | `dataDir` | 未设置 | 被忽略，日志会警告：数据库（`qq.db`）、下载（`media/`）和状态文件归记录器，位于它声明里的 `QQ_RECORDER_DATA_DIR`（`/Users/dsh-runtime/.dsh/lsy-qq`）；DSH 自己的摘要原始回答写到 `<DSH_HOME>/lsy-qq-digest/raw/` |
-| `media.images` | `true` | 下载已记录消息里的图片 |
+| `media.images` | `true` | 在消息到达时下载已记录消息里的图片（补抓的消息从不下载）。记录器只提供它下载过的图片：摘要里附带的图片和 `qq_image` 都要求它开着，关闭时回答「不可用」 |
 | `media.maxImageBytes` | `15728640` | 下载的最大图片 |
 | `media.maxTotalBytes` | `5368709120` | 下载总量达到这个值（5 GiB）就停止；日志每小时警告一次 |
 | `media.retainDays` | `30` | 删除早于这么多天的消息的下载；`0` 为保留 |
@@ -75,6 +75,7 @@ OneBot v11 WebSocket 服务端是 colima 上 Docker 容器里的 NapCat（[`lsy/
 | `digest.resident` | `true` | 每个群一个常驻 Session，每轮恢复同一个，由 preset 的 compaction 压缩历史，每隔 `retention.textDays` 天替换；`false` 表示每轮新建一个 Session |
 | `digest.archiveSessions` | `true` | 一次性摘要 Session 在一轮结束时归档，常驻的在被替换时归档，免得占满侧边栏；日志仍保留（DSH 没有删除已存储 Session 的办法） |
 | `digest.maxToolCalls` | `12` | 一个摘要 Session 至多调用工具的次数，被拒绝的也算 |
+| `digest.maxImages` | `8` | 一份转录的摘要 prompt 最多附带的图片数（最新的已保存图片；它们的 `[图片#ref]` 标签指明是哪几张）。可热更新；`0` 表示不附带。摘要路由不读图片时，标签保持为文字。图片只给模型看，从不存进摘要或笔记 |
 | `digest.agentPreset`、`digest.permissionPreset` | `qq-digest`、`read-only` | 事件 bundle 的 `qq-digest` preset 有人设和两个窄工具 `qq_digest_write`、`qq_group_note`（没有 shell、文件、网页或记忆工具） |
 | `digest.workspacePath`、`digest.timeZone`、`digest.timeoutMs` | `/Users/dsh-runtime/work/qq`、`Asia/Shanghai`、`900000` | 工作目录（摘要 Session 在这里，标题是 `QQ: <群名>`）、转录里时间所用的时区，以及等待一次模型调用的期限 |
 | `offlineNoticeMs` | `600000` | 协议端这么久连不上、或报告账号下线时（记录器只报告事实，由 DSH 决定告诉 owner 什么；记录器停了属于告警链的事，不走这条通知），经 `ctx.lsyNotifier` 通知 owner；`0` 关闭。每次中断只通知一次：已通知的事记在本插件的 storage domain `lsy_qq`，直到连接恢复才清除，所以中断期间重载或部署不会重复通知 |
@@ -154,15 +155,15 @@ OneBot v11 WebSocket 服务端是 colima 上 Docker 容器里的 NapCat（[`lsy/
 
 #### 模型看到什么
 
-每份转录在这个群的 Session 里是一条用户 prompt（新 Session 的第一条还带着以前的摘要，放在 `<qq_group_history trust="derived">` 里）：一段英文指令，点名这个群、要写的小节标题（话题、结论与事实、术语与梗、常见问题、链接与资料；只有开启 `digest.profiles` 才加“成员观点与专长”）和 1500 字上限，然后是 `<qq_group_messages trust="untrusted">` 里的转录，每条消息一行，格式为 `[MM-DD HH:mm] 群友#a3f9 ↳reply: text`（成员默认是别名；关闭 `digest.aliasMembers` 时是名字加 QQ 号末四位）。噪音会被折叠：同一成员连续发的、只有 `[表情]`、`[动画表情]`、`[戳一戳]` 或 `[合并转发]` 的消息合成一行（`[表情]×3`），但每条消息仍计入摘要的游标和消息数；带文字的消息加标记（`看这个[图片]`）以及回复只含占位符消息的回复都完整保留。开启别名时，@ 提及也不会带出被隐藏的身份：`@<QQ 号>` 和 `@<昵称或群名片>` 变成该成员的别名，其他的 `@<名字>`（群里没人用的名字，或两个成员共用的名字）变成 `@某群友`，`@全体成员` 保持原样。消息里告诉模型要传给两个工具的群号，并把这个群的笔记放在 `<qq_group_notes trust="derived">` 里给它看。preset 的人设说明聊天内容是数据、它唯一的工具只写这个群的摘要和笔记。摘要就是 `qq_digest_write` 收到的内容（没有则取最终回答）；`NO_REPLY` 表示没有值得保留的内容。
+每份转录在这个群的 Session 里是一条用户 prompt（新 Session 的第一条还带着以前的摘要，放在 `<qq_group_history trust="derived">` 里）：一段英文指令，点名这个群、要写的小节标题（话题、结论与事实、术语与梗、常见问题、链接与资料；只有开启 `digest.profiles` 才加“成员观点与专长”）和 1500 字上限，然后是 `<qq_group_messages trust="untrusted">` 里的转录，每条消息一行，格式为 `[MM-DD HH:mm] 群友#a3f9 ↳reply: text`（成员默认是别名；关闭 `digest.aliasMembers` 时是名字加 QQ 号末四位）。噪音会被折叠：同一成员连续发的、只有 `[表情]`、`[动画表情]`、`[戳一戳]` 或 `[合并转发]` 的消息合成一行（`[表情]×3`），但每条消息仍计入摘要的游标和消息数；带文字的消息加标记（`看这个[图片]`）以及回复只含占位符消息的回复都完整保留。开启别名时，@ 提及也不会带出被隐藏的身份：`@<QQ 号>` 和 `@<昵称或群名片>` 变成该成员的别名，其他的 `@<名字>`（群里没人用的名字，或两个成员共用的名字）变成 `@某群友`，`@全体成员` 保持原样。消息里告诉模型要传给两个工具的群号，并把这个群的笔记放在 `<qq_group_notes trust="derived">` 里给它看。preset 的人设说明聊天内容是数据、它唯一的工具只写这个群的摘要和笔记。摘要就是 `qq_digest_write` 收到的内容（没有则取最终回答）；`NO_REPLY` 表示没有值得保留的内容。每张图片显示为 `[图片#m12ab]`，这是一个简短且不变的引用；其中已保存的（最新的 `digest.maxImages` 张）在路由能读图片时按标签顺序作为图片附在 prompt 上，并有一行说明它们是别人的内容。拒绝图片的路由收到的是同一轮的纯文字版本，标签仍在其中。`qq_image` 接受同样的引用。
 
 #### Token 影响
 
-每次调用至多 `maxPromptChars` 个字符的转录（繁忙群里的表情和戳一戳，每一段只占一短行，而不是每条一行）加约 300 token 的指令，回答至多约 1500 字；每个群每轮至多 `maxCallsPerRound` 次调用，默认每个群每天一轮。每步 usage 随摘要保存。
+每次调用至多 `maxPromptChars` 个字符的转录（繁忙群里的表情和戳一戳，每一段只占一短行，而不是每条一行）加约 300 token 的指令，回答至多约 1500 字；每个群每轮至多 `maxCallsPerRound` 次调用，默认每个群每天一轮。每步 usage 随摘要保存。每张附带的图片会增加提供方的图片 token：DeepSeek 路由上每张至多 1,024（它的视觉网格，其他路由不同），所以 `digest.maxImages` 为 8 时每次调用最多多约 8,200 个输入 token，外加一行说明附件的短文字。常驻 Session 会把带图片的 prompt 留在历史里直到压缩，所以一张图片在之后每一轮都要付出这些 token，直到被压缩；把 `digest.maxImages` 设为 `0` 就不附带。
 
 #### KV Cache 影响
 
-一个群的各轮共用一个 Session，人设、工具和早先的轮次构成稳定的前缀，provider 可以缓存；上下文到窗口的四分之一时，压缩会改写最旧的部分。
+一个群的各轮共用一个 Session，人设、工具和早先的轮次构成稳定的前缀，provider 可以缓存；上下文到窗口的四分之一时，压缩会改写最旧的部分。发出去的带图片的 prompt 也成为前缀的一部分，所以改动 `digest.maxImages` 或某张图片没取到，只会改变最新一轮，不会改变更早的几轮。
 
 ## 已知限制与延后工作
 
@@ -174,7 +175,7 @@ OneBot v11 WebSocket 服务端是 colima 上 Docker 容器里的 NapCat（[`lsy/
 - **非官方客户端，有封号风险**——NapCat 不是官方机器人：腾讯可能让账号下线或限制它。请用备用小号、保持只读，不要在很多地方登录。
 - **只能看账号所在的群**——得有人先把这个号拉进每个群。
 - **文字、图片和语音**——视频和群文件只记录元数据；合并转发的聊天记录记为 `[合并转发]`。
-- **图片链接会过期**——下载失败或被跳过的图片只剩占位。
+- **图片链接会过期**——下载失败或被跳过的图片只剩占位，`qq_image` 和摘要都拿不出它；补抓消息里的图片从不下载（重新登录后批量拉取正是 QQ 风控盯着的行为）。
 - **语音依赖协议端的解码器**——`get_record` 必须以 base64 返回音频，否则只存原始链接、不转写。
 - **群聊原文留在 Session 日志里**——DSH 没有删除已存储 Session 的 API，所以摘要 Session 读过的转录，在本包自己的存储按 `retention.textDays` 删除消息之后，仍留在它的日志里（被替换的 Session 和一次性 Session 的旧日志也留着，只是归档了）；压缩也不会把它们删掉。清理要在 Mac mini 上离线做，这里没有任何代码做这件事。
 - **崩溃时至多一次**——进程挂掉期间到达的消息，补抓只能找回到 `backfill.maxMessages` 为止。

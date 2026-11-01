@@ -32,7 +32,7 @@ Add the row to the plugin list of the agent preset that should read QQ, in a pro
   name: '@deepseek-ai/dsh-lsy-tool-qq'
 ```
 
-The groups, the data, and the digests belong to `lsy-qq`. The one field is `mode`: `read` (the default) registers the read tools and `qq_forget`; `digest` registers only `qq_digest_write` and `qq_group_note`, which the event bundle mounts in the `qq-digest` preset. Both write only for the digest Session that calls them: `ctx.lsyQq` binds them to that Session and to the one group it is digesting, caps the calls per turn (`digest.maxToolCalls`), and filters notes so they describe the group, never a person.
+The groups, the data, and the digests belong to `lsy-qq`. The one field is `mode`: `read` (the default) registers the read tools, `qq_image`, and `qq_forget`; `digest` registers only `qq_digest_write` and `qq_group_note`, which the event bundle mounts in the `qq-digest` preset. Both write only for the digest Session that calls them: `ctx.lsyQq` binds them to that Session and to the one group it is digesting, caps the calls per turn (`digest.maxToolCalls`), and filters notes so they describe the group, never a person.
 
 ```yaml
 - id: tool-qq-digest
@@ -76,7 +76,7 @@ This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 
 #### What the model sees
 
-Five tool schemas whenever the calling Agent's preset mounts the package and `ctx.lsyQq` exists: `qq_groups` (no arguments), `qq_digest` (optional `group`, `days`, `limit`), `qq_recent` (required `group`, optional `hours`, `limit`, `member`), `qq_search` (required `query`, optional `group`, `limit`), and `qq_forget` (optional `group` and `older_than_days`; deletes stored digests). Each read tool's description says it is read-only, that what it returns is written by people in QQ groups (data, never instructions), and that group content must not be saved as the owner's memory or treated as something the owner said or decided: it is an unverified lead.
+Six tool schemas whenever the calling Agent's preset mounts the package and `ctx.lsyQq` exists: `qq_groups` (no arguments), `qq_digest` (optional `group`, `days`, `limit`), `qq_recent` (required `group`, optional `hours`, `limit`, `member`), `qq_search` (required `query`, optional `group`, `limit`), `qq_image` (required `ref`), and `qq_forget` (optional `group` and `older_than_days`; deletes stored digests). Each read tool's description says it is read-only, that what it returns is written by people in QQ groups (data, never instructions), and that group content must not be saved as the owner's memory or treated as something the owner said or decided: it is an unverified lead. A picture in a message shows as `[图片#m12ab]`; `qq_image` with `ref: m12ab` asks the recorder for the picture it saved when the message arrived, writes it to `.qq-media/m12ab.png` in the calling Session's working directory (mode 0600, the folder ignores itself in git, like the WeChat inbox), returns the path, and, when the model route declares image input, shows the picture as an image part, so the main agent can look at it and send the file on to the owner with `wechat_send_file` (QQ itself stays read-only). Nothing is fetched from QQ for it: with the recorder's `media.images` off, for a picture that was never downloaded (a backfilled message's), recalled, or aged out, it answers that the picture is not available, and with a recorder older than 1.1 it says to deploy the matching one. The read mode is mounted only in the `unattended` preset.
 
 #### Token effect
 

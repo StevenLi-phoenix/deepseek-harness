@@ -11,16 +11,17 @@
  */
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { readFile } from 'node:fs/promises'
+import { extname, join } from 'node:path'
 import { detectExtension, fetchCapped, isAllowedMediaUrl, removeMedia, saveMedia } from './media.ts'
 import { LoginDoor, type DoorResult } from './login.ts'
 import { isPrivateAddress, isPrivateUrl, OneBotClient, type OneBotEvent } from './onebot.ts'
 import {
   RecorderConfigDto, type ConfigApplied, type Group, type LegacyDigestState, type Login, type Member, type Message, type Refresh,
-  type RecorderConfig, type RecorderEvent, type Status,
+  type MediaHeader, type RecorderConfig, type RecorderEvent, type Status,
 } from './protocol.ts'
 import { displayName, parseMessage } from './text.ts'
-import { QqStore, type MessageRow } from './store.ts'
+import { QqStore, type MediaRow, type MessageRow } from './store.ts'
 
 /** The recorder's log sink; JSON lines in production. */
 export interface RecorderLogger {
@@ -94,11 +95,36 @@ export function rowOf(cursor: string): number | undefined {
   return match === null ? undefined : Number(match[1])
 }
 
+/** The short reference of a media row. */
+export function mediaRef(mediaId: number): string {
+  return `m${mediaId.toString(36)}`
+}
+
+/** The media row a reference names, or undefined when it is not one of ours. */
+export function mediaIdOf(ref: string): number | undefined {
+  const match = /^m([0-9a-z]{1,12})$/.exec(ref)
+  const id = match === null ? Number.NaN : Number.parseInt(match[1] ?? '', 36)
+  return Number.isSafeInteger(id) && id > 0 ? id : undefined
+}
+
+/** A file the recorder cannot hand out; the server answers 404 `not-saved`. */
+export class MediaNotSaved extends Error {}
+
+const IMAGE_TYPES: Readonly<Record<string, MediaHeader['contentType']>> = {
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
+}
+
+/** The protocol's name for a stored media kind; anything unforeseen is a file. */
+function mediaKind(kind: string): 'image' | 'voice' | 'video' | 'file' {
+  return kind === 'image' || kind === 'voice' || kind === 'video' ? kind : 'file'
+}
+
 /** A stored message as the protocol shows it. */
-export function toMessage(row: MessageRow): Message {
+export function toMessage(row: MessageRow, media: readonly MediaRow[] = []): Message {
   return {
     cursor: cursorOf(row.id), groupId: row.groupId, messageId: row.messageId, at: row.at, userId: row.userId,
     nickname: row.nickname, card: row.card, role: row.role, text: row.text, replyTo: row.replyTo, kinds: row.kinds, recalled: row.recalled,
+    media: media.map(item => ({ ref: mediaRef(item.id), kind: mediaKind(item.kind), saved: item.localPath !== null })),
   }
 }
 
@@ -346,8 +372,15 @@ export class QqRecorder {
   /** @returns recent messages of a recorded group, oldest first; nothing for a group not on the list. */
   recent(groupId: string, options: { sinceMs: number; limit: number; userId?: string }): Message[] {
     if (!this.recordedIds.has(groupId)) return []
-    return this.store.recent(groupId,
-      { sinceMs: options.sinceMs, limit: options.limit, ...options.userId === undefined ? {} : { userId: options.userId } }).map(toMessage)
+    const rows = this.store.recent(groupId,
+      { sinceMs: options.sinceMs, limit: options.limit, ...options.userId === undefined ? {} : { userId: options.userId } })
+    return this.withMedia(rows)
+  }
+
+  /** The protocol form of stored messages, with their media items (one query for all of them). */
+  private withMedia(rows: readonly MessageRow[]): Message[] {
+    const media = this.store.mediaForMessages(rows.map(row => row.id))
+    return rows.map(row => toMessage(row, media.get(row.id)))
   }
 
   /** @returns messages of a recorded group after a cursor, in log order. */
@@ -355,25 +388,54 @@ export class QqRecorder {
     const row = after === undefined ? 0 : rowOf(after)
     if (row === undefined) throw new RangeError('after is not a cursor of this recorder')
     if (!this.recordedIds.has(groupId)) return { items: [], nextCursor: null }
-    const items = this.store.after(groupId, row, limit).map(toMessage)
+    const items = this.withMedia(this.store.after(groupId, row, limit))
     return { items, nextCursor: items.length >= limit ? items.at(-1)?.cursor ?? null : null }
   }
 
   /** @returns matches in the recorded groups, newest first. */
   search(query: string, options: { groupId?: string; limit: number }): Message[] {
     if (options.groupId !== undefined && !this.recordedIds.has(options.groupId)) return []
-    return this.store.search(query, options).filter(row => this.recordedIds.has(row.groupId)).map(toMessage)
+    return this.withMedia(this.store.search(query, options).filter(row => this.recordedIds.has(row.groupId)))
   }
 
   /** @returns the stored messages of a recorded group by their OneBot ids (recalled ones included, text emptied). */
   lookup(groupId: string, messageIds: readonly string[]): Message[] {
     if (!this.recordedIds.has(groupId)) return []
-    const found: Message[] = []
+    const rows: MessageRow[] = []
     for (const id of messageIds.slice(0, 200)) {
       const row = this.store.byMessageId(groupId, id)
-      if (row !== undefined) found.push(toMessage(row))
+      if (row !== undefined) rows.push(row)
     }
-    return found
+    return this.withMedia(rows)
+  }
+
+  /**
+   * The saved image behind a media reference, for `GET /v1/media/{ref}`. Nothing is fetched from QQ here: the file was
+   * downloaded when its message arrived (never for a backfilled one), so serving it cannot start a download.
+   * @param ref - a reference from a message's `media`.
+   * @throws {@link MediaNotSaved} when the recorder does not hold that image (images are off, the download failed or was
+   * skipped, the file aged out, the message was recalled, or the group is no longer recorded).
+   * @throws {@link RangeError} when the reference is not one of this recorder's.
+   */
+  async mediaFile(ref: string): Promise<{ bytes: Buffer; header: MediaHeader }> {
+    const id = mediaIdOf(ref)
+    if (id === undefined) throw new RangeError('not a media reference of this recorder')
+    const config = this.live
+    if (!config.media.images) throw new MediaNotSaved('images are not saved: media.images is off')
+    const item = this.store.mediaById(id)
+    if (item === undefined || item.kind !== 'image') throw new MediaNotSaved('there is no saved image with that reference')
+    if (!this.recordedIds.has(item.groupId)) throw new MediaNotSaved('that group is no longer recorded')
+    if (item.localPath === null) throw new MediaNotSaved(item.error ?? 'the image was not downloaded')
+    const contentType = IMAGE_TYPES[extname(item.localPath).toLowerCase()]
+    if (contentType === undefined) throw new MediaNotSaved('the saved file is not a picture a model can read')
+    let bytes: Buffer
+    try {
+      bytes = await readFile(item.localPath)
+    } catch {
+      throw new MediaNotSaved('the saved file is gone')
+    }
+    if (bytes.length === 0 || bytes.length > config.media.maxImageBytes) throw new MediaNotSaved('the saved file is larger than media.maxImageBytes')
+    return { bytes, header: { contentType, bytes: bytes.length, groupId: item.groupId } }
   }
 
   /** @returns the distinct member names a recorded group's messages show. */

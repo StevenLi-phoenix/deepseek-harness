@@ -1,0 +1,9 @@
+{
+  "protocol": {
+    "name": "qq-recorder",
+    "major": 1,
+    "minor": 1
+  },
+  "build": "3f9a1c0d7b2e",
+  "startedAt": 1790000000000
+}

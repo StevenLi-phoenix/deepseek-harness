@@ -3058,6 +3058,11 @@ export interface Config {
     keepPerGroup: number
     /** Longest digest stored, in characters. */
     maxDigestChars: number
+    /**
+     * Pictures of one transcript chunk attached to the digest prompt at most (the newest ones, when the route reads images;
+     * otherwise their `[图片#ref]` tags stay as text); 0 attaches none. They go to the model only and are never stored.
+     */
+    maxImages: Volatile<number>
     /** Tool calls (`qq_digest_write`, `qq_group_note`) one digest Session may make, refused ones included. 12 by default. */
     maxToolCalls: number
     /** Archive each digest Session when its turn ends, so it does not fill the sidebar (its log stays). True by default. */
@@ -3426,7 +3431,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-lsy-tool-qq`
 
 - `inject`: `tools`
-- `source`: [`packages/lsy/lsy-tool-qq/src/index.ts:21`](../packages/lsy/lsy-tool-qq/src/index.ts)
+- `source`: [`packages/lsy/lsy-tool-qq/src/index.ts:25`](../packages/lsy/lsy-tool-qq/src/index.ts)
 
 ```ts config-catalog
 /** Which tools the plugin registers. */

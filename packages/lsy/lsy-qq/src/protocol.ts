@@ -12,7 +12,7 @@
 import { z } from 'zod'
 
 /** Protocol identity. Both ends send `X-Lsy-Protocol: qq-recorder/<major>.<minor>` on every request and response. */
-export const PROTOCOL = { name: 'qq-recorder', major: 1, minor: 0 } as const
+export const PROTOCOL = { name: 'qq-recorder', major: 1, minor: 1 } as const
 
 /** Header carrying {@link PROTOCOL} as `qq-recorder/1.0`. */
 export const PROTOCOL_HEADER = 'x-lsy-protocol'
@@ -43,6 +43,8 @@ export const FEATURE_MINOR: Record<string, number> = {
   members: 0,
   /** `GET /v1/legacy/digest-state`: the one-time import of the digest state the plugin used to keep in `qq.db`. */
   legacyState: 0,
+  /** 1.1: `media` on every message, and `GET /v1/media/{ref}` for a saved image. */
+  media: 1,
 }
 
 /** Paths of protocol v1. */
@@ -58,6 +60,7 @@ export const PATHS = {
   login: '/v1/login',
   loginRefresh: '/v1/login/refresh',
   legacy: '/v1/legacy/digest-state',
+  media: (ref: string): string => `/v1/media/${encodeURIComponent(ref)}`,
   members: (groupId: string): string => `/v1/groups/${encodeURIComponent(groupId)}/members`,
 } as const
 
@@ -128,6 +131,31 @@ export const GroupDto = z.object({
 /** {@link GroupDto}. */
 export type Group = z.infer<typeof GroupDto>
 
+/** Header of `GET /v1/media/{ref}` that carries the file's description (JSON), since the body is the file itself. */
+export const MEDIA_HEADER = 'x-lsy-media'
+
+/** Opaque short reference to one media item of a message (`m12ab`); stable for the life of the item. */
+export const MediaRefDto = z.string().regex(/^m[0-9a-z]{1,12}$/)
+
+/** One media item of a message. 1.1 */
+export const MediaItemDto = z.object({
+  ref: MediaRefDto,
+  kind: openEnum(['image', 'voice', 'video', 'file'] as const),
+  /** Whether the recorder holds the file (images only when `media.images` is on and the download worked). */
+  saved: z.boolean(),
+})
+/** {@link MediaItemDto}. */
+export type MediaItem = z.infer<typeof MediaItemDto>
+
+/** Description of a served file, in the {@link MEDIA_HEADER} header of `GET /v1/media/{ref}`. 1.1 */
+export const MediaHeaderDto = z.object({
+  contentType: openEnum(['image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const),
+  bytes: z.number().int().positive(),
+  groupId,
+})
+/** {@link MediaHeaderDto}. */
+export type MediaHeader = z.infer<typeof MediaHeaderDto>
+
 /** One recorded message. */
 export const MessageDto = z.object({
   cursor: CursorDto,
@@ -142,6 +170,8 @@ export const MessageDto = z.object({
   replyTo: z.string().max(40).nullable(),
   kinds: z.string().max(200),
   recalled: z.boolean(),
+  /** The media the message carried, in segment order; empty from a recorder older than 1.1. 1.1 */
+  media: z.array(MediaItemDto).max(50).default([]),
 })
 /** {@link MessageDto}. */
 export type Message = z.infer<typeof MessageDto>

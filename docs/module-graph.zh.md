@@ -1625,6 +1625,8 @@ flowchart TD
   pkg_lsy_style --> pkg_session
   pkg_lsy_style --> pkg_tools
   pkg_lsy_style --> pkg_web
+  pkg_lsy_tool_qq --> pkg_attachment
+  pkg_lsy_tool_qq --> pkg_llm
   pkg_lsy_tool_qq --> pkg_lsy_qq
   pkg_lsy_tool_qq --> pkg_tools
   pkg_lsy_tool_qq --> pkg_util_values
@@ -2056,7 +2058,7 @@ flowchart TD
 | [`lsy-memory`](../packages/lsy/lsy-memory) | `lsy` | [`agent`](../packages/core/agent), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-taint`](../packages/lsy/lsy-taint), [`session`](../packages/core/session), [`tools`](../packages/core/tools) |
 | [`lsy-qqbot`](../packages/lsy/lsy-qqbot) | `lsy` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`owner-relay`](../packages/lsy/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`lsy-style`](../packages/lsy/lsy-style) | `lsy` | [`agent`](../packages/core/agent), [`agent-default-model`](../packages/core/agent-default-model), [`compaction`](../packages/compaction/compaction), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-integrity`](../packages/lsy/lsy-integrity), [`lsy-qq`](../packages/lsy/lsy-qq), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`web`](../packages/web/web) |
-| [`lsy-tool-qq`](../packages/lsy/lsy-tool-qq) | `lsy` | [`lsy-qq`](../packages/lsy/lsy-qq), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
+| [`lsy-tool-qq`](../packages/lsy/lsy-tool-qq) | `lsy` | [`attachment`](../packages/attachment/attachment), [`llm`](../packages/llm/llm), [`lsy-qq`](../packages/lsy/lsy-qq), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
 | [`lsy-tool-watch`](../packages/lsy/lsy-tool-watch) | `lsy` | [`agent`](../packages/core/agent), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-github-sensor`](../packages/lsy/lsy-github-sensor), [`tools`](../packages/core/tools) |
 | [`lsy-wechat`](../packages/lsy/lsy-wechat) | `lsy` | [`api-session-controller`](../packages/api/session-controller), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-presence`](../packages/lsy/lsy-presence), [`lsy-taint`](../packages/lsy/lsy-taint), [`lsy-voice`](../packages/lsy/lsy-voice), [`owner-relay`](../packages/lsy/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`schedule`](../packages/schedule/schedule), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`lsy-guard`](../packages/lsy/lsy-guard) | `lsy` | [`agent-default-model`](../packages/core/agent-default-model), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`lsy-memory`](../packages/lsy/lsy-memory) |
