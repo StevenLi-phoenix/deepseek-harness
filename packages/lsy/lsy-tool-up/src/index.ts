@@ -61,6 +61,7 @@ export interface Config {
   subscription: string
   /** Calls per turn of `bili_channel_note`, and separately of `ctx.biliEvidence.evidenceOf`. */
   callsPerTurn: number
+  /** The channel notes file and its limits. */
   notes: {
     /** Absolute path of the notes file; defaults to `<DSH_HOME>/lsy-tool-up/channel-notes.json`. */
     file?: string
@@ -69,6 +70,7 @@ export interface Config {
     /** Longest note, in characters. */
     maxChars: number
   }
+  /** The evidence verifier's sender-key salt, comment cache, and per-call id limit. */
   evidence: {
     /** Absolute path of the sender-key salt; defaults to `<DSH_HOME>/lsy-tool-up/evidence-salt`, created on first use. */
     saltFile?: string

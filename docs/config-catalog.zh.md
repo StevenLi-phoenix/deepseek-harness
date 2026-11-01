@@ -2491,7 +2491,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-lsy-event-bus`
 
 - `inject`: `timer` · `storageDomain`
-- `source`: [`packages/lsy/lsy-event-bus/src/index.ts:49`](../packages/lsy/lsy-event-bus/src/index.ts)
+- `source`: [`packages/lsy/lsy-event-bus/src/index.ts:58`](../packages/lsy/lsy-event-bus/src/index.ts)
 
 ```ts config-catalog
 /** Bus configuration. */
@@ -2581,6 +2581,27 @@ export interface SessionAction {
     /** Provider-owned model id. */
     model: string
   }
+  /**
+   * One Session for the whole subscription instead of one per batch. Configuration rows only;
+   * omitted, or `enabled: false`, starts a new Session per batch.
+   */
+  persistent?: PersistentSessionAction
+}
+
+/**
+ * How a `session` subscription keeps one Session across batches. The first batch creates it through
+ * the webhook runtime; later batches enter it as new turns with the same prompt framing. A stored
+ * Session that is gone or archived is replaced by a new one. After `rolloverDays` the next batch starts
+ * a new Session whose first message carries the old Session's last compaction summary, and the old
+ * Session is archived (DSH has no Session deletion; the archive keeps its log).
+ */
+export interface PersistentSessionAction {
+  /** Reuse one Session for this subscription. */
+  enabled: boolean
+  /** Days after which the next batch starts a new Session and archives the old one. */
+  rolloverDays: number
+  /** Characters of the carried-over compaction summary kept in the new Session's first message. */
+  maxSeedChars: number
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-event-bus -->
@@ -3113,6 +3134,43 @@ export interface Config {
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-tool-qq -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-tool-up -->
+<a id="deepseek-aidsh-lsy-tool-up"></a>
+
+## `@deepseek-ai/dsh-lsy-tool-up`
+
+- `inject`: `tools` · `credentials`
+- `source`: [`packages/lsy/lsy-tool-up/src/index.ts:59`](../packages/lsy/lsy-tool-up/src/index.ts)
+
+```ts config-catalog
+/** Notes, evidence, and the Session they belong to. */
+export interface Config {
+  /** The bus subscription whose persistent Session may write notes and verify evidence; any other Session is refused. */
+  subscription: string
+  /** Calls per turn of `bili_channel_note`, and separately of `ctx.biliEvidence.evidenceOf`. */
+  callsPerTurn: number
+  /** The channel notes file and its limits. */
+  notes: {
+    /** Absolute path of the notes file; defaults to `<DSH_HOME>/lsy-tool-up/channel-notes.json`. */
+    file?: string
+    /** Notes kept. */
+    maxEntries: number
+    /** Longest note, in characters. */
+    maxChars: number
+  }
+  /** The evidence verifier's sender-key salt, comment cache, and per-call id limit. */
+  evidence: {
+    /** Absolute path of the sender-key salt; defaults to `<DSH_HOME>/lsy-tool-up/evidence-salt`, created on first use. */
+    saltFile?: string
+    /** Comments remembered from the Session's reads, by rpid. */
+    cacheSize: number
+    /** Ids looked up per call; the rest are left out. */
+    maxIds: number
+  }
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-tool-up -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-tool-watch -->
 <a id="deepseek-aidsh-lsy-tool-watch"></a>
@@ -5857,7 +5915,6 @@ export interface Config {
 | `@deepseek-ai/dsh-lsy-qq-login` | `connection` · `lsyQq` | [`packages/lsy/lsy-qq-login/src/index.ts`](../packages/lsy/lsy-qq-login/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-style-settings` | `connection` | [`packages/lsy/lsy-style-settings/src/index.ts`](../packages/lsy/lsy-style-settings/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-tool-monitor` | `tools` · `storageDomain` · `sessionController` · `sessionPersistence` | [`packages/lsy/lsy-tool-monitor/src/index.ts`](../packages/lsy/lsy-tool-monitor/src/index.ts) |
-| `@deepseek-ai/dsh-lsy-tool-up` | `tools` · `credentials` | [`packages/lsy/lsy-tool-up/src/index.ts`](../packages/lsy/lsy-tool-up/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-tool-voice` | `tools` | [`packages/lsy/lsy-tool-voice/src/index.ts`](../packages/lsy/lsy-tool-voice/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-tool-wechat` | `tools` | [`packages/lsy/lsy-tool-wechat/src/index.ts`](../packages/lsy/lsy-tool-wechat/src/index.ts) |
 | `@deepseek-ai/dsh-mcp-resources` | `tools` | [`packages/mcp/mcp-resources/src/index.ts`](../packages/mcp/mcp-resources/src/index.ts) |
