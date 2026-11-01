@@ -10,7 +10,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-schedule'
 import { readAgents, runAgentsAction } from './agents.ts'
-import { ClaudeCode } from './claude-code.ts'
 import { Config } from './config.ts'
 import { collectOverview } from './overview.ts'
 import { Refusal, readJson } from './request.ts'
@@ -67,16 +66,6 @@ function refusalResponse(refusal: Refusal): Response {
  * @param config - resolved configuration.
  */
 export function apply(ctx: Context, config: Config): void {
-  mount(ctx, config, new ClaudeCode(config.claudeCode))
-}
-
-/**
- * Register the routes over a given Claude Code adapter; tests pass one with a fake tmux runner.
- * @param ctx - Host context with the connection service.
- * @param config - resolved configuration.
- * @param claudeCode - the Claude Code adapter.
- */
-export function mount(ctx: Context, config: Config, claudeCode: ClaudeCode): void {
   const connection = Reflect.get(ctx, 'connection') as ConsoleConnection
   const log = ctx.logger
 
@@ -100,7 +89,7 @@ export function mount(ctx: Context, config: Config, claudeCode: ClaudeCode): voi
     ctx.effect(() => connection.fetch.register({ path, methods, requestBody: 'buffered', fetch }), `fork-console: ${path}`)
   }
 
-  register(OVERVIEW_PATH, ['GET'], handle(() => collectOverview({ ctx, config, claudeCode }), undefined))
+  register(OVERVIEW_PATH, ['GET'], handle(() => collectOverview({ ctx, config }), undefined))
   register(SUBSCRIPTIONS_PATH, ['GET', 'POST'], handle(
     () => listSubscriptions(ctx, config),
     async (body) => {
@@ -109,11 +98,11 @@ export function mount(ctx: Context, config: Config, claudeCode: ClaudeCode): voi
     },
   ))
   register(AGENTS_PATH, ['GET', 'POST'], handle(
-    () => readAgents(ctx, config, claudeCode),
+    () => readAgents(ctx, config),
     async (body) => {
-      const result = await runAgentsAction(ctx, config, claudeCode, log, body)
+      const result = await runAgentsAction(ctx, config, log, body)
       if (result.kind === 'audio') return new Response(result.bytes as BodyInit, { headers: { 'content-type': result.type, ...NO_STORE } })
-      return Response.json({ ok: true, ...await readAgents(ctx, config, claudeCode) }, { headers: NO_STORE })
+      return Response.json({ ok: true, ...await readAgents(ctx, config) }, { headers: NO_STORE })
     },
   ))
 }

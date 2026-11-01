@@ -7,8 +7,7 @@
 import { readFile } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { VoiceError } from '@deepseek-ai/dsh-fork-voice'
-import type { CcOutcome, ClaudeCode } from './claude-code.ts'
+import { claudeCodeOf, type CcOutcome } from './claude-code.ts'
 import type { Config } from './config.ts'
 import { logAction, type Log } from './log.ts'
 import { httpProbe, isReachable } from './probe.ts'
@@ -71,16 +70,16 @@ async function voiceView(ctx: Context, config: Config, fetchImpl: typeof fetch):
  * Read both cards.
  * @param ctx - Host context.
  * @param config - settings.
- * @param claudeCode - the Claude Code adapter.
  * @param fetchImpl - replaceable in tests.
  * @param now - clock.
  * @returns the view; a card is null when its service is not available.
  */
 export async function readAgents(
-  ctx: Context, config: Config, claudeCode: ClaudeCode, fetchImpl: typeof fetch = fetch, now: () => number = Date.now,
+  ctx: Context, config: Config, fetchImpl: typeof fetch = fetch, now: () => number = Date.now,
 ): Promise<AgentsView> {
+  const claudeCode = claudeCodeOf(ctx)
   const [cc, voice] = await Promise.all([
-    claudeCode.enabled ? claudeCode.view().catch((error: unknown) => {
+    claudeCode?.enabled === true ? claudeCode.view().catch((error: unknown) => {
       ctx.logger.warn(`fork-console: reading Claude Code sessions failed: ${error instanceof Error ? error.name : 'error'}`)
       return null
     }) : Promise.resolve(null),
@@ -102,7 +101,8 @@ async function preview(ctx: Context, config: Config): Promise<AgentsResult> {
     const spoken = await voice.speak(config.previewText)
     return { kind: 'audio', bytes: await readFile(spoken.path), type: spoken.format === 'mp3' ? 'audio/mpeg' : 'audio/wav' }
   } catch (error: unknown) {
-    if (error instanceof VoiceError) throw new Refusal('speech_failed', clip(error.message))
+    // `VoiceError` is told by name: this package imports no runtime value from the voice package.
+    if (error instanceof Error && error.name === 'VoiceError') throw new Refusal('speech_failed', clip(error.message))
     throw error
   } finally {
     previewing = false
@@ -113,19 +113,17 @@ async function preview(ctx: Context, config: Config): Promise<AgentsResult> {
  * Run one POST action.
  * @param ctx - Host context.
  * @param config - settings.
- * @param claudeCode - the Claude Code adapter.
  * @param log - logger.
  * @param body - parsed JSON body.
  * @returns an acknowledgement, or the preview audio.
  * @throws {Refusal} for anything the request or the services refuse.
  */
-export async function runAgentsAction(
-  ctx: Context, config: Config, claudeCode: ClaudeCode, log: Log, body: unknown,
-): Promise<AgentsResult> {
+export async function runAgentsAction(ctx: Context, config: Config, log: Log, body: unknown): Promise<AgentsResult> {
   const requested = typeof body === 'object' && body !== null ? (body as { action?: unknown }).action : undefined
   if (requested === 'voice.preview') return logAction(log, 'voice.preview', '', () => preview(ctx, config))
   if (requested !== 'cc.start' && requested !== 'cc.stop') throw new Refusal('invalid_request', 'action')
-  if (!claudeCode.enabled) throw new Refusal('unavailable', 'cc')
+  const claudeCode = claudeCodeOf(ctx)
+  if (claudeCode?.enabled !== true) throw new Refusal('unavailable', 'cc')
   if (requested === 'cc.start') {
     const { name, task } = parseBody(startSchema, body)
     if ((task?.length ?? 0) > MAX_TASK_CHARS) throw new Refusal('invalid_request', 'task')

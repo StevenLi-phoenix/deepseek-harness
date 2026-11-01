@@ -287,6 +287,19 @@
     - id: fork-wechat-settings
       name: '@deepseek-ai/dsh-fork-wechat-settings'
 
+    # Settings → Service overview, Subscriptions and monitors, Claude Code and voice: one health card per
+    # integrated service, the event bus subscriptions and schedule reminders (pause, resume, delete, create),
+    # and the service account's Claude Code sessions with the voice preview. The defaults match this Mac mini:
+    # bili-svc on 127.0.0.1:8097 and the AMS intake on 127.0.0.1:18090.
+    - id: fork-console
+      name: '@deepseek-ai/dsh-fork-console'
+
+    # ctx.forkClaudeCode: the service account's Claude Code sessions (list, start with a first task, stop) for the page
+    # above. fork-cc-bridge's tools live in the unattended preset mount, which nothing outside it can reach, so the page
+    # goes through this root service; its defaults are the bridge's own.
+    - id: fork-cc-admin
+      name: '@deepseek-ai/dsh-fork-cc-admin'
+
     # Voice (ctx.forkVoice): text to speech for the `speak` tool (feiyu on the laptop, no fallback;
     # the Mac mini TTS service was retired on 2026-10-31; the key is FORK_FEIYU_API_KEY in
     # $DSH_HOME/.env) and speech to text for audio files the owner sends on WeChat. Transcription is OFF: to turn it on, add

@@ -1,11 +1,8 @@
-import { writeFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { OverviewView, ServiceCard } from '../src/views.ts'
-import { FakeService, closedUrl, mountConsole, tempHome } from './fixtures.ts'
+import { FakeClaudeCode, FakeService, closedUrl, mountConsole } from './fixtures.ts'
 
 const services: FakeService[] = []
-const cleanups: Array<() => void> = []
 
 async function serve(answers: Record<string, number | 'hang'>): Promise<string> {
   const service = new FakeService(answers)
@@ -15,7 +12,6 @@ async function serve(answers: Record<string, number | 'hang'>): Promise<string> 
 
 afterEach(async () => {
   await Promise.all(services.splice(0).map(service => service.stop()))
-  for (const cleanup of cleanups.splice(0)) cleanup()
   vi.restoreAllMocks()
 })
 
@@ -41,9 +37,8 @@ describe('overview cards', () => {
     const ams = await serve({ '/': 404 })
     const feiyu = await serve({ '/health': 200 })
     const asr = await serve({ '/health': 404 })
-    const { home, cleanup } = tempHome()
-    cleanups.push(cleanup)
-    writeFileSync(join(home, '.config', 'claude-code', 'oauth_token'), 'sk-ant-oat01-SECRET-VALUE')
+    const claudeCode = new FakeClaudeCode()
+    claudeCode.view_ = { ...claudeCode.view_, login: 'token', sessions: [{ name: 'review-1', pid: 7, status: 'idle', cwd: null, updatedAt: null, managed: true }] }
     const voice = {
       describe: () => ({
         tts: { enabled: true, provider: 'feiyu', fallback: 'none', format: 'mp3', maxChars: 200, url: feiyu },
@@ -51,8 +46,9 @@ describe('overview cards', () => {
       }),
     }
     const { view, byId, text } = await overview(
-      { home, config: { bili: { url: bili }, ams: { url: ams } } },
+      { config: { bili: { url: bili }, ams: { url: ams } } },
       {
+        forkClaudeCode: claudeCode,
         forkEventBus: fakeBus(),
         forkVoice: voice,
         forkNotifier: { send: async () => {}, outbox: () => [] },
@@ -74,8 +70,8 @@ describe('overview cards', () => {
     expect(byId('bus').facts).toEqual({ subscriptions: 4, paused: 1, pending: 2, events: 30, batches: 5, limited: 0 })
     expect(byId('qq').facts).toEqual({ groups: 2 })
     expect(byId('voice').facts).toEqual({ provider: 'feiyu', asr: true, engine: 'whisper' })
-    expect(byId('cc').facts).toEqual({ sessions: 0, max: 3, login: 'token' })
-    for (const forbidden of [bili, ams, feiyu, asr, '127.0.0.1', 'SECRET-VALUE', 'sk-ant', 'http://']) expect(text).not.toContain(forbidden)
+    expect(byId('cc').facts).toEqual({ sessions: 1, max: 3, login: 'token' })
+    for (const forbidden of [bili, ams, feiyu, asr, '127.0.0.1', 'sk-ant', 'http://']) expect(text).not.toContain(forbidden)
   })
 
   it('turns a service that refuses connections red and leaves the other cards alone', async () => {
@@ -109,7 +105,7 @@ describe('overview cards', () => {
 
   it('marks services that are not mounted as off, not as failures', async () => {
     const { byId } = await overview({ config: { bili: { url: await closedUrl() } } })
-    for (const id of ['bus', 'qq', 'wechat', 'voice']) expect(byId(id)).toMatchObject({ tone: 'off', state: 'absent' })
+    for (const id of ['bus', 'qq', 'wechat', 'voice', 'cc']) expect(byId(id)).toMatchObject({ tone: 'off', state: 'absent' })
   })
 
   it('leaves the AMS card out unless it is configured', async () => {
@@ -135,6 +131,7 @@ describe('overview cards', () => {
           stats: () => ({ subscriptions: 1, paused: 0, pending: 3, eventsLastHour: 9, batchesLastHour: 4, rateLimitHitsLastHour: 2 }),
         }),
         forkNotifier: { send: async () => {}, outbox: () => [{}, {}] },
+        forkClaudeCode: Object.assign(new FakeClaudeCode(), { view_: { enabled: true, login: 'none', sessions: [], maxSessions: 3, started: [] } }),
       },
     )
     expect(byId('bus')).toMatchObject({ tone: 'warn', state: 'limited', facts: { limited: 2 } })
@@ -173,7 +170,8 @@ describe('overview cards', () => {
   })
 
   it('says Claude Code is off when the bridge is disabled, without reading any session', async () => {
-    const { byId } = await overview({ config: { bili: { url: await closedUrl() }, claudeCode: { enabled: false } } })
+    const claudeCode = Object.assign(new FakeClaudeCode(), { enabled: false, view: () => Promise.reject(new Error('read nothing')) })
+    const { byId } = await overview({ config: { bili: { url: await closedUrl() } } }, { forkClaudeCode: claudeCode })
     expect(byId('cc')).toMatchObject({ tone: 'off', state: 'disabled' })
   })
 

@@ -13707,6 +13707,19 @@ importers:
         specifier: ^18.2.0
         version: 18.3.1(react@18.3.1)
 
+  packages/fork/fork-cc-admin:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-fork-cc-bridge':
+        specifier: workspace:*
+        version: link:../fork-cc-bridge
+
   packages/fork/fork-cc-bridge:
     dependencies:
       '@deepseek-ai/schemastery':
@@ -13759,9 +13772,6 @@ importers:
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: workspace:*
         version: link:../../client/ui-slots
-      '@deepseek-ai/dsh-fork-cc-bridge':
-        specifier: workspace:*
-        version: link:../fork-cc-bridge
       '@deepseek-ai/dsh-fork-event-bus':
         specifier: workspace:*
         version: link:../fork-event-bus

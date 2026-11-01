@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Settings console",
+    "description": "Adds Settings sections for a service overview, event subscriptions and reminders, and Claude Code sessions with the voice service."
+  }
+}

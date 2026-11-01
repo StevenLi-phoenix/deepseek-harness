@@ -68,7 +68,7 @@ chat Session --cc_start--> tmux -L dsh-cc --> claude-dsh --> a new session
 | [`src/index.ts`](src/index.ts) | 插件入口：选项、四个工具、入站交接及其每小时上限 |
 | [`src/hub.ts`](src/hub.ts) | 收件 socket、发送、限制、未送达入站消息的重试、peer 记录 |
 | [`src/registry.ts`](src/registry.ts) | 这个账号下在线的会话，以及名字如何解析 |
-| [`src/spawn.ts`](src/spawn.ts) | 基于 tmux 的 `cc_start` 与 `cc_stop` |
+| [`src/spawn.ts`](src/spawn.ts) | 基于 tmux 的 `cc_start` 与 `cc_stop`；`start(name, task?)` 把第一条任务作为 Claude Code 的 prompt 参数传入，设置 → Claude Code 与语音（[`fork-console`](../fork-console/README.zh.md)）用的就是它 |
 | [`src/wire.ts`](src/wire.ts) | Claude Code 的内部消息格式 |
 
 这是 fork 本地包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。

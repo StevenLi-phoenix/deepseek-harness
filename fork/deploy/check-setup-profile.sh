@@ -31,6 +31,8 @@ done
 /usr/bin/grep -q "@deepseek-ai/dsh-fork-sysmon" "$WORK/fresh.yml" || fail "composition lacks fork-sysmon"
 /usr/bin/grep -q "@deepseek-ai/dsh-fork-memory-admin" "$WORK/fresh.yml" || fail "composition lacks fork-memory-admin"
 /usr/bin/grep -q "@deepseek-ai/dsh-fork-memory/settings" "$WORK/fresh.yml" || fail "composition lacks the fork-memory settings route"
+/usr/bin/grep -q "@deepseek-ai/dsh-fork-console" "$WORK/fresh.yml" || fail "composition lacks fork-console"
+/usr/bin/grep -q "^- id: fork-cc-admin$" "$WORK/fresh.yml" || fail "composition lacks fork-cc-admin"
 /usr/bin/grep -q "^- id: owner-relay\$" "$WORK/fresh.yml" || fail "composition lacks owner-relay"
 /usr/bin/grep -q "^- id: bili\$" "$WORK/fresh.yml" || fail "composition lacks bili"
 /usr/bin/grep -q "^- id: preset-bili\$" "$WORK/fresh.yml" || fail "composition lacks preset-bili"

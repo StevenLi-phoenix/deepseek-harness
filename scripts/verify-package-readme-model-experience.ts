@@ -179,6 +179,8 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/fork/fork-sysmon': { kind: 'none', reason: 'Settings section reading the Host machine status; registers nothing model-facing.' },
   'packages/fork/fork-style-settings': { kind: 'none', reason: 'Settings section showing the speaking-style samples; registers nothing model-facing (the samples reach the model through fork-style).' },
   'packages/fork/fork-qq-login': { kind: 'none', reason: 'Settings section showing the QQ connection and login QR code; registers nothing model-facing, and the code never enters a model request.' },
+  'packages/fork/fork-cc-admin': { kind: 'none', reason: 'Lists and starts Claude Code sessions for a settings page; registers nothing model-facing.' },
+  'packages/fork/fork-console': { kind: 'none', reason: 'Settings sections over service state, subscriptions, Claude Code sessions, and a voice preview; registers nothing model-facing.' },
   'packages/fork/fork-integrity': { kind: 'none', reason: 'Reads files and Session events and notifies the owner; adds nothing to model requests.' },
   'packages/client/ui-directory-picker-native': { kind: 'none', reason: 'Browser-side surface driving the local Desktop or Host OS chooser; registers nothing model-facing.' },
   'packages/client/ui-theme': { kind: 'none', reason: 'Browser-side UI plugin layer; registers nothing model-facing.' },

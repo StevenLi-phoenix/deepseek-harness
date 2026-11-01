@@ -26,9 +26,6 @@
       "path": "../../../vendor/schemastery"
     },
     {
-      "path": "../fork-cc-bridge"
-    },
-    {
       "path": "../fork-event-bus"
     },
     {

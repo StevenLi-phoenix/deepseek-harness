@@ -40,6 +40,8 @@ kind: "package-group"
 | [`fork-style-settings/`](fork-style-settings/README.zh.md) | 设置分区 说话风格：样本一键删除、审核、owner 自己的句子、收集计数和套话趋势 |
 | [`fork-memory-admin/`](fork-memory-admin/README.zh.md) | 审阅智能体记忆的设置分区：待批准的写入、条目、带预览的回滚与彻底删除、人格反馈（它的 Host 路由是 `fork-memory` 的 `settings` 入口） |
 | [`fork-sysmon/`](fork-sysmon/README.zh.md) | 设置里显示 Host 机器 CPU、内存、功耗、温度与各卷磁盘用量的分区 |
+| [`fork-cc-admin/`](fork-cc-admin/README.zh.md) | 根服务 `ctx.forkClaudeCode`：服务账号的 Claude Code 会话，供设置页列出、带第一条任务启动和停止 |
+| [`fork-console/`](fork-console/README.zh.md) | 设置里的服务健康总览、事件订阅与定时提醒、Claude Code 会话与语音试听分区 |
 | [`fork-taint/`](fork-taint/README.zh.md) | 回合来源：当前回合由谁发起、陌生人的话有没有进来；只在 owner 自己的回合里联系 Claude Code，其他回合建的提醒和监控要上报 |
 | [`fork-tool-monitor/`](fork-tool-monitor/README.zh.md) | `monitor_start`、`monitor_stop`、`monitor_list` 工具：命令输出的每一行都回到同一个 Session |
 | [`fork-tool-up/`](fork-tool-up/README.zh.md) | `up_*` 工具：agent 读取创作者号的评论、私信和稿件，并向 bili-svc 回复闸门申请回复；答案只有 `sent`、`held`、`blocked` |

@@ -6,8 +6,8 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { ForkSubscriptionError, type Subscription, type SubscriptionView } from '@deepseek-ai/dsh-fork-event-bus'
-import { ScheduleId, type ScheduleCatalogEntry } from '@deepseek-ai/dsh-schedule'
+import type { Subscription, SubscriptionView } from '@deepseek-ai/dsh-fork-event-bus'
+import type { ScheduleCatalogEntry } from '@deepseek-ai/dsh-schedule'
 import type { Config } from './config.ts'
 import { logAction, type Log } from './log.ts'
 import { Refusal, parseBody } from './request.ts'
@@ -204,7 +204,8 @@ async function change(ctx: Context, body: ChangeBody): Promise<void> {
   }
   const schedule = ctx.get('schedule')
   if (schedule === undefined) throw new Refusal('unavailable', 'schedule')
-  const scheduleId = ScheduleId(id)
+  // The id is the schedule service's own opaque string; an unknown one answers `schedule_not_found`.
+  const scheduleId = id as ScheduleCatalogEntry['id']
   const result = action === 'delete'
     ? await schedule.edit({ id: scheduleId, action: 'delete' })
     : await schedule.edit({ id: scheduleId, action: 'update', patch: { active: action === 'resume' } })
@@ -218,7 +219,10 @@ async function create(ctx: Context, config: Config, form: CreateForm): Promise<v
   try {
     await bus.subscribe(subscription, { createdBy: CREATED_BY_SETTINGS })
   } catch (error: unknown) {
-    if (error instanceof ForkSubscriptionError) throw new Refusal(error.code)
+    // `ForkSubscriptionError` is told by name and code: this package imports no runtime value from the bus package.
+    if (error instanceof Error && error.name === 'ForkSubscriptionError') {
+      throw new Refusal((error as Error & { code?: unknown }).code === 'duplicate_id' ? 'duplicate_id' : 'invalid_subscription')
+    }
     throw error
   }
 }

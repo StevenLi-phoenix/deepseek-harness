@@ -2444,6 +2444,34 @@ export type BalanceSourceKind = 'deepseek' | 'opencode-go'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-balance -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-cc-admin -->
+<a id="deepseek-aidsh-fork-cc-admin"></a>
+
+## `@deepseek-ai/dsh-fork-cc-admin`
+
+- `source`: [`packages/fork/fork-cc-admin/src/index.ts:28`](../packages/fork/fork-cc-admin/src/index.ts)
+
+```ts config-catalog
+/** Settings; every default is the bridge's. */
+export interface Config {
+  /** Turn the service off: the Settings page then shows the bridge as off. */
+  enabled: boolean
+  /** Claude Code's session registry for this account; empty means `~/.claude/sessions`. */
+  sessionsDir: string
+  /** The tmux binary that hosts started sessions. */
+  tmux: string
+  /** The launcher that sets HOME and the token file, then execs Claude Code. */
+  command: string
+  /** Where started sessions work. */
+  workDir: string
+  /** The model a started session uses. */
+  model: string
+  /** Most started sessions running at once. */
+  maxSessions: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-cc-admin -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-cc-bridge -->
 <a id="deepseek-aidsh-fork-cc-bridge"></a>
 
@@ -2482,6 +2510,50 @@ export interface Config {
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-cc-bridge -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-console -->
+<a id="deepseek-aidsh-fork-console"></a>
+
+## `@deepseek-ai/dsh-fork-console`
+
+- `inject`: `connection`
+- `source`: [`packages/fork/fork-console/src/config.ts:6`](../packages/fork/fork-console/src/config.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** bili-svc, the Bilibili service. */
+  bili: {
+    /** Base URL; the card probes `<url>/healthz`. */
+    url: string
+  }
+  /** The AMS intake receiver of other machines' warnings. */
+  ams: {
+    /** Base URL; any answer below 500 counts as reachable. Empty leaves its card out. */
+    url: string
+  }
+  /** Deadline of every probe, in milliseconds. */
+  probeTimeoutMs: number
+  /** What the create form fills in for a subscription; the defaults are those of `watch_create`. */
+  subscriptions: {
+    /** Absolute Workspace of the Sessions a `session` subscription starts. */
+    workspacePath: string
+    /** Agent preset of those Sessions. */
+    agentPreset: string
+    /** Permission preset of those Sessions. */
+    permissionPreset: string
+    /** Seconds after the first event during which later events join the same batch. */
+    coalesceSeconds: number
+    /** Batches per rolling hour of a `notify` subscription. */
+    notifyMaxPerHour: number
+    /** Batches per rolling hour of a `session` subscription. */
+    sessionMaxPerHour: number
+  }
+  /** The sentence the voice preview speaks; at most the voice service's `tts.maxChars` characters. */
+  previewText: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-console -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-event-bus -->
 <a id="deepseek-aidsh-fork-event-bus"></a>

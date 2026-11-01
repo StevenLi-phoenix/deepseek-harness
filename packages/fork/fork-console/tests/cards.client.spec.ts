@@ -47,7 +47,7 @@ describe('statusText', () => {
 
 describe('factLines', () => {
   it('shows the build, version, and uptime of the event service, leaving out what is unknown', () => {
-    expect(factLines(card('dsh', 'up', { version: '0.2.2', sha: '2595c4b887', uptime: 90_061 }), t)).toEqual(['版本 0.2.2 · 构建 2595c4b887 · 已运行 1 天 1 小时'])
+    expect(factLines(card('dsh', 'up', { version: '0.2.2', sha: '0a1b2c3d4e', uptime: 90_061 }), t)).toEqual(['版本 0.2.2 · 构建 0a1b2c3d4e · 已运行 1 天 1 小时'])
     expect(factLines(card('dsh', 'up', { version: null, sha: null, uptime: 59 }), t)).toEqual(['已运行 0 分钟'])
   })
 

@@ -68,7 +68,7 @@ chat Session --cc_start--> tmux -L dsh-cc --> claude-dsh --> a new session
 | [`src/index.ts`](src/index.ts) | Plugin entry: options, the four tools, the inbound hand-over and its hourly cap |
 | [`src/hub.ts`](src/hub.ts) | Inbox, sending, limits, retry of undelivered inbound messages, the peer record |
 | [`src/registry.ts`](src/registry.ts) | Live sessions of this account and how a name resolves |
-| [`src/spawn.ts`](src/spawn.ts) | `cc_start` and `cc_stop` over tmux |
+| [`src/spawn.ts`](src/spawn.ts) | `cc_start` and `cc_stop` over tmux; `start(name, task?)` passes a first task as Claude Code's prompt argument, which Settings → Claude Code and voice ([`fork-console`](../fork-console/README.md)) uses |
 | [`src/wire.ts`](src/wire.ts) | Claude Code's internal message format |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
