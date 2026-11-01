@@ -60,8 +60,6 @@ kind: "package-reference"
 | `backfill.gapMs` | `5000` | 两个群的补抓之间的停顿，另加最多一半的随机抖动 |
 | `backfill.skipWithinMs` | `1800000` | 距上一次断线不到这么久就重连时不补抓，免得连接抖动时反复冲击账号；`0` 表示从不跳过 |
 | `backfill.minIntervalMs` | `1800000` | 补抓最多隔这么久做一次，插件重启时同样有效（`<dataDir>/connection-state.json`）；`0` 表示不限 |
-
-补抓的消息只存文字：不下载图片和语音（对应行会注明），实时消息不受影响。
 | `send.enabled` | `false` | 是否允许 `sendGroupMessage` |
 | `send.groups` | `[]` | 在 `send.enabled` 之外，允许发送的群 |
 | `send.minIntervalSec`、`send.maxPerDay` | `60`、`10` | 对同一个群两次发送至少相隔这么久，每天至多这么多条 |
@@ -85,6 +83,8 @@ kind: "package-reference"
 | `login.timeoutMs` | `5000` | 单次调用扫码入口的期限 |
 
 **哪些改动会重启插件。** profile 重载会重启插件（并断开 OneBot 连接），除非改动只涉及可热更新字段：`groups`、`backfill.*`、`media.*`、`voice.*`、`asr.enabled`、`retention.textDays`、`honorRecall`、`offlineNoticeMs`、`offlineRepeatMs`、`reconnectQuietMs` 和 `settingsUrl` 每次使用时现读，改动无需重启即生效。`url`、`tokenEnv`、`dataDir`、`digest.*`、`send.*` 和 `login.*` 在插件启动时固定（摘要执行器和发送器会复制它们），所以改它们会重启。
+
+补抓的消息只存文字：不下载图片和语音（对应行会注明），实时消息不受影响。
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-fork-qq)是全部可接受字段的完整来源。
 
