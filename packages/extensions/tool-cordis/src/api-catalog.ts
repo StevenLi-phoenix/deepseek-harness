@@ -738,6 +738,20 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'biliEvidence',
+    summary: '`ctx.biliEvidence`: the Bilibili evidence verifier, provided by `@deepseek-ai/dsh-fork-tool-up` inside the `up` preset\'s isolated group, so only rows in that group see it.',
+    description: '`ctx.biliEvidence`: the Bilibili evidence verifier, provided by `@deepseek-ai/dsh-fork-tool-up` inside the `up` preset\'s isolated group, so only rows in that group see it.',
+    methods: [
+      {
+        signature: 'evidenceOf(ids: readonly string[], caller: BiliEvidenceCaller): Promise<BiliEvidenceItem[]>',
+        description: 'Look up the comments a proposal cites.',
+        parameters: [{ name: 'ids', description: 'comment rpids as decimal strings; duplicates and malformed ids are ignored.' }, { name: 'caller', description: 'the calling Session.' }],
+        returns: 'the comments found, in the order asked; an id that cannot be verified is left out, never invented.',
+        throws: ['{BiliEvidenceRefusedError} when the caller is not the persistent `bili-digest` Session, or its turn already used its calls.'],
+      },
+    ],
+  },
+  {
     key: 'browserUse',
     summary: 'Owns one optional provider registration in the shared browser-use service.',
     description: 'Owns one optional provider registration in the shared browser-use service.',
@@ -2251,6 +2265,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Number of event/subscription pairs waiting for a batch.',
         parameters: [],
         returns: 'pending row count.',
+      },
+      {
+        signature: 'persistentSessions(): PersistentSessionView[]',
+        description: 'The persistent Sessions of subscriptions with `session.persistent.enabled`.',
+        parameters: [],
+        returns: 'one row per subscription that has one; empty before the storage domain opens.',
+      },
+      {
+        signature: 'persistentSubscriptionOf(sessionId: string): string | undefined',
+        description: 'The subscription whose current persistent Session this is. Tools that may run only in that Session (for example the `up` preset\'s note tool) ask this.',
+        parameters: [{ name: 'sessionId', description: 'Session to check.' }],
+        returns: 'the subscription id, or undefined when the Session is no subscription\'s current persistent Session.',
       },
       {
         signature: 'async subscribe(subscription: Subscription, meta: SubscriptionMeta = {}): Promise<SubscriptionView>',
@@ -6282,7 +6308,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'BatchSummary',
-    declaration: 'export interface BatchSummary {\n    id: string;\n    createdAt: number;\n    eventCount: number;\n    status: \'dispatched\' | \'delivered\' | \'completed\' | \'failed\';\n    error?: string;\n    sessionId?: string;\n    outcome?: string;\n    silent?: boolean;\n}',
+    declaration: 'export interface BatchSummary {\n    id: string;\n    createdAt: number;\n    eventCount: number;\n    status: \'dispatched\' | \'delivered\' | \'completed\' | \'failed\';\n    error?: string;\n    sessionId?: string;\n    outcome?: string;\n    silent?: boolean;\n    delivery?: SessionDelivery;\n}',
+  },
+  {
+    name: 'BiliEvidenceCaller',
+    declaration: 'export interface BiliEvidenceCaller {\n    readonly sessionId: string;\n}',
+  },
+  {
+    name: 'BiliEvidenceItem',
+    declaration: 'export interface BiliEvidenceItem {\n    readonly id: string;\n    readonly senderKey: string;\n    readonly at: number;\n    readonly text: string;\n}',
   },
   {
     name: 'BiliView',
@@ -8061,6 +8095,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface PermissionCatalog {\n    options: PresetOption[];\n    defaultOptions: PresetOption[];\n    defaultPreset: string;\n}',
   },
   {
+    name: 'PersistentSessionAction',
+    declaration: 'export interface PersistentSessionAction {\n    enabled: boolean;\n    rolloverDays: number;\n    maxSeedChars: number;\n}',
+  },
+  {
+    name: 'PersistentSessionView',
+    declaration: 'export interface PersistentSessionView {\n    subscription: string;\n    sessionId: string;\n    createdAt: number;\n    batches: number;\n    compactions: number;\n    previous?: string;\n}',
+  },
+  {
     name: 'PiAiRequestHeaderContext',
     declaration: 'export interface PiAiRequestHeaderContext extends Readonly<Pick<GenerateOptions<string>, \'provider\' | \'model\' | \'sessionId\' | \'purpose\'>> {\n    readonly baseURL: string;\n}',
   },
@@ -8862,7 +8904,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionAction',
-    declaration: 'export interface SessionAction {\n    workspacePath: string;\n    agentPreset: string;\n    permissionPreset: string;\n    instructions: string;\n    titlePrefix?: string;\n    maxPromptEvents: number;\n    maxTextChars: number;\n    trustedText?: boolean;\n    model?: {\n        provider: string;\n        model: string;\n    };\n}',
+    declaration: 'export interface SessionAction {\n    workspacePath: string;\n    agentPreset: string;\n    permissionPreset: string;\n    instructions: string;\n    titlePrefix?: string;\n    maxPromptEvents: number;\n    maxTextChars: number;\n    trustedText?: boolean;\n    model?: {\n        provider: string;\n        model: string;\n    };\n    persistent?: PersistentSessionAction;\n}',
   },
   {
     name: 'SessionActivity',
@@ -8943,6 +8985,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionCreateValue',
     declaration: 'export interface SessionCreateValue {\n    readonly sessionId: SessionId;\n    readonly agentPreset?: string;\n}',
+  },
+  {
+    name: 'SessionDelivery',
+    declaration: 'export type SessionDelivery = \'fresh\' | \'persistent-new\' | \'persistent\' | \'rollover\' | \'detached\';',
   },
   {
     name: 'SessionEndInput',

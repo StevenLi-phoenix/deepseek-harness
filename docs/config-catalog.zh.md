@@ -2491,7 +2491,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-fork-event-bus`
 
 - `inject`: `timer` · `storageDomain`
-- `source`: [`packages/fork/fork-event-bus/src/index.ts:49`](../packages/fork/fork-event-bus/src/index.ts)
+- `source`: [`packages/fork/fork-event-bus/src/index.ts:58`](../packages/fork/fork-event-bus/src/index.ts)
 
 ```ts config-catalog
 /** Bus configuration. */
@@ -2581,6 +2581,27 @@ export interface SessionAction {
     /** Provider-owned model id. */
     model: string
   }
+  /**
+   * One Session for the whole subscription instead of one per batch. Configuration rows only;
+   * omitted, or `enabled: false`, starts a new Session per batch.
+   */
+  persistent?: PersistentSessionAction
+}
+
+/**
+ * How a `session` subscription keeps one Session across batches. The first batch creates it through
+ * the webhook runtime; later batches enter it as new turns with the same prompt framing. A stored
+ * Session that is gone or archived is replaced by a new one. After `rolloverDays` the next batch starts
+ * a new Session whose first message carries the old Session's last compaction summary, and the old
+ * Session is archived (DSH has no Session deletion; the archive keeps its log).
+ */
+export interface PersistentSessionAction {
+  /** Reuse one Session for this subscription. */
+  enabled: boolean
+  /** Days after which the next batch starts a new Session and archives the old one. */
+  rolloverDays: number
+  /** Characters of the carried-over compaction summary kept in the new Session's first message. */
+  maxSeedChars: number
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-event-bus -->
@@ -3113,6 +3134,43 @@ export interface Config {
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-qq -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-up -->
+<a id="deepseek-aidsh-fork-tool-up"></a>
+
+## `@deepseek-ai/dsh-fork-tool-up`
+
+- `inject`: `tools` · `credentials`
+- `source`: [`packages/fork/fork-tool-up/src/index.ts:59`](../packages/fork/fork-tool-up/src/index.ts)
+
+```ts config-catalog
+/** Notes, evidence, and the Session they belong to. */
+export interface Config {
+  /** The bus subscription whose persistent Session may write notes and verify evidence; any other Session is refused. */
+  subscription: string
+  /** Calls per turn of `bili_channel_note`, and separately of `ctx.biliEvidence.evidenceOf`. */
+  callsPerTurn: number
+  /** The channel notes file and its limits. */
+  notes: {
+    /** Absolute path of the notes file; defaults to `<DSH_HOME>/fork-tool-up/channel-notes.json`. */
+    file?: string
+    /** Notes kept. */
+    maxEntries: number
+    /** Longest note, in characters. */
+    maxChars: number
+  }
+  /** The evidence verifier's sender-key salt, comment cache, and per-call id limit. */
+  evidence: {
+    /** Absolute path of the sender-key salt; defaults to `<DSH_HOME>/fork-tool-up/evidence-salt`, created on first use. */
+    saltFile?: string
+    /** Comments remembered from the Session's reads, by rpid. */
+    cacheSize: number
+    /** Ids looked up per call; the rest are left out. */
+    maxIds: number
+  }
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-up -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-watch -->
 <a id="deepseek-aidsh-fork-tool-watch"></a>
@@ -5857,7 +5915,6 @@ export interface Config {
 | `@deepseek-ai/dsh-fork-qq-login` | `connection` · `forkQq` | [`packages/fork/fork-qq-login/src/index.ts`](../packages/fork/fork-qq-login/src/index.ts) |
 | `@deepseek-ai/dsh-fork-style-settings` | `connection` | [`packages/fork/fork-style-settings/src/index.ts`](../packages/fork/fork-style-settings/src/index.ts) |
 | `@deepseek-ai/dsh-fork-tool-monitor` | `tools` · `storageDomain` · `sessionController` · `sessionPersistence` | [`packages/fork/fork-tool-monitor/src/index.ts`](../packages/fork/fork-tool-monitor/src/index.ts) |
-| `@deepseek-ai/dsh-fork-tool-up` | `tools` · `credentials` | [`packages/fork/fork-tool-up/src/index.ts`](../packages/fork/fork-tool-up/src/index.ts) |
 | `@deepseek-ai/dsh-fork-tool-voice` | `tools` | [`packages/fork/fork-tool-voice/src/index.ts`](../packages/fork/fork-tool-voice/src/index.ts) |
 | `@deepseek-ai/dsh-fork-tool-wechat` | `tools` | [`packages/fork/fork-tool-wechat/src/index.ts`](../packages/fork/fork-tool-wechat/src/index.ts) |
 | `@deepseek-ai/dsh-mcp-resources` | `tools` | [`packages/mcp/mcp-resources/src/index.ts`](../packages/mcp/mcp-resources/src/index.ts) |

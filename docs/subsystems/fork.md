@@ -195,6 +195,26 @@ async view(): Promise<BiliView>
 
 Source: [`packages/fork/bili/src/index.ts`](../../packages/fork/bili/src/index.ts)
 
+<a id="ctxbilievidence--bilievidence"></a>
+
+### `ctx.biliEvidence` — `BiliEvidence`
+
+`ctx.biliEvidence`: the Bilibili evidence verifier, provided by `@deepseek-ai/dsh-fork-tool-up` inside the `up` preset's isolated group, so only rows in that group see it.
+
+```ts cordis-catalog
+/**
+ * Look up the comments a proposal cites.
+ * @param ids - comment rpids as decimal strings; duplicates and malformed ids are ignored.
+ * @param caller - the calling Session.
+ * @returns the comments found, in the order asked; an id that cannot be verified is left out, never invented.
+ * @throws {BiliEvidenceRefusedError} when the caller is not the persistent `bili-digest` Session, or its turn
+ * already used its calls.
+ */
+evidenceOf(ids: readonly string[], caller: BiliEvidenceCaller): Promise<BiliEvidenceItem[]>
+```
+
+Source: [`packages/fork/fork-tool-up/src/evidence.ts`](../../packages/fork/fork-tool-up/src/evidence.ts)
+
 <a id="ctxlsyeventbus--forkeventbus"></a>
 
 ### `ctx.forkEventBus` — `ForkEventBus`
@@ -227,6 +247,20 @@ batches(): BatchRecord[]
  * @returns pending row count.
  */
 pendingCount(): number
+
+/**
+ * The persistent Sessions of subscriptions with `session.persistent.enabled`.
+ * @returns one row per subscription that has one; empty before the storage domain opens.
+ */
+persistentSessions(): PersistentSessionView[]
+
+/**
+ * The subscription whose current persistent Session this is. Tools that may run only in that Session
+ * (for example the `up` preset's note tool) ask this.
+ * @param sessionId - Session to check.
+ * @returns the subscription id, or undefined when the Session is no subscription's current persistent Session.
+ */
+persistentSubscriptionOf(sessionId: string): string | undefined
 
 /**
  * Add a routing rule at run time. It is stored durably and survives restarts.

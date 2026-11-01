@@ -165,9 +165,12 @@
             action: notify
             coalesceMs: 600000
             maxPerHour: 4
-          # New comments or private messages start one reply session of the `up` preset (read tools and two
-          # reply tools, nothing else). Every reply it asks for passes bili-svc's Reply Gate; this session
-          # cannot widen the gate's limits. Batched for at least five minutes, at most three runs an hour.
+          # New comments or private messages go to the reply Session of the `up` preset (read tools, two reply
+          # tools, the channel notes, nothing else). Every reply it asks for passes bili-svc's Reply Gate; this
+          # Session cannot widen the gate's limits. Batched for at least five minutes, at most three runs an hour.
+          # `persistent`: one Session for every batch, each batch a new turn of it; the `up` preset compacts it
+          # near 256k tokens. After `rolloverDays` the next batch starts a new Session whose first message carries
+          # the last compaction summary, and the old Session is archived (still readable in the Web UI).
           - id: bili-digest
             sources: [bili]
             kinds: ['bili.comment.digest', 'bili.dm.new']
@@ -179,12 +182,17 @@
               agentPreset: up
               permissionPreset: danger-full-access
               titlePrefix: bili-up
+              persistent:
+                enabled: true
+                rolloverDays: 30
               instructions: >-
                 New comments or private messages arrived for the creator account. The events below carry
                 counts only. Start with up_status: if replies are not allowed right now (read-only) or the
                 login is not ok, stop. Otherwise read what waits with up_comments and up_dm_sessions (and
                 up_dm_messages for a conversation), decide which are worth a short reply, and send those
-                with up_reply_comment and up_reply_dm. Your final answer must be exactly NO_REPLY.
+                with up_reply_comment and up_reply_dm. When you notice something about the audience as a
+                whole (a recurring topic, joke, or mood; never one viewer), keep it with bili_channel_note.
+                Your final answer must be exactly NO_REPLY.
           # Finished GitHub Actions runs of the owner's repositories (App webhook workflow_run; the title
           # ends with the conclusion). Success is the common case and stays silent.
           - id: ci
@@ -540,10 +548,12 @@
                   thresholdRatio: 0.25
                   retainRatio: 0.05
 
-    # Creator-account reply preset (`up`): started by the `bili-digest` subscription. It has the persona,
-    # the time, and the up_* tools: reads of the creator account's comments, private messages, videos and
-    # statistics, and the two reply tools, which only ask bili-svc's Reply Gate. No shell, files, web,
-    # schedules, monitors, subagents, owner memory, `bili_*`, approvals, or any way to change the gate.
+    # Creator-account reply preset (`up`): the persistent Session of the `bili-digest` subscription. It has the
+    # persona, the time, the up_* tools (reads of the creator account's comments, private messages, videos and
+    # statistics, and the two reply tools, which only ask bili-svc's Reply Gate), bili_channel_note (person-free
+    # notes about the channel in fork-tool-up's own file, shown back as data), and compaction. No shell, files,
+    # web, schedules, monitors, subagents, owner memory, the account tools of tool-bili, approvals, or any way to
+    # change the gate.
     - id: preset-up
       name: '@deepseek-ai/dsh-agent-preset'
       config:
@@ -591,8 +601,16 @@
                 NO_REPLY.
           - id: time-context
             name: '@deepseek-ai/dsh-time-context'
-          - id: tool-up
-            name: '@deepseek-ai/dsh-fork-tool-up'
+          # fork-tool-up provides ctx.biliEvidence (comments verified by rpid, senders as salted keys) to the
+          # rows of this isolated group only; fork-style's style_propose row joins this group when it ships.
+          - id: bili-channel
+            name: cordis:group
+            group: true
+            isolate:
+              biliEvidence: true
+            config:
+              - id: tool-up
+                name: '@deepseek-ai/dsh-fork-tool-up'
           # The owner's keep/delete verdicts on this persona's earlier replies (memory-admin feedback add,
           # called by bili-svc): read-only examples of tone in front of each Session, no memory tools and no
           # owner memory.
@@ -600,6 +618,26 @@
             name: '@deepseek-ai/dsh-fork-memory'
             config:
               feedbackScope: up
+          # The persistent Session compacts at about 256k tokens: thresholdRatio 0.256 of the default route's
+          # 1,000,000-token window (fork/profiles/event/cordis.patch.yml), long before the window fills, because
+          # every batch turn sends the whole context again.
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+                config:
+                  thresholdRatio: 0.256
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024
 
     # Unattended agent preset: `standard` minus interactive-only tools (command-goal, tool-goal,
     # planning, tool-ask-user, tool-plugin-manager, tool-plugin-market), plus the watch tools.
