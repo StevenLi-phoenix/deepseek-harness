@@ -62,6 +62,7 @@ describe('overview cards', () => {
       ['bili', 'ok', 'up'],
       ['qq', 'ok', 'mounted'],
       ['wechat', 'ok', 'up'],
+      ['style', 'off', 'absent'],
       ['voice', 'ok', 'up'],
       ['cc', 'ok', 'up'],
       ['ams', 'ok', 'up'],
@@ -105,7 +106,7 @@ describe('overview cards', () => {
 
   it('marks services that are not mounted as off, not as failures', async () => {
     const { byId } = await overview({ config: { bili: { url: await closedUrl() } } })
-    for (const id of ['bus', 'qq', 'wechat', 'voice', 'cc']) expect(byId(id)).toMatchObject({ tone: 'off', state: 'absent' })
+    for (const id of ['bus', 'qq', 'wechat', 'style', 'voice', 'cc']) expect(byId(id)).toMatchObject({ tone: 'off', state: 'absent' })
   })
 
   it('leaves the AMS card out unless it is configured', async () => {
@@ -152,6 +153,27 @@ describe('overview cards', () => {
     expect(byId('qq')).toMatchObject({ tone: 'down', state: 'down', facts: { detail: 'protocol end offline for 12 min' } })
     expect(byId('bili')).toMatchObject({ tone: 'warn', state: 'warn', facts: { detail: 'gate is read-only' } })
     expect(byId('wechat')).toMatchObject({ tone: 'down', facts: { detail: 'token stale' } })
+  })
+
+  it('reads the QQ observer\'s connection and recorded groups, and still works with an observer that only lists groups', async () => {
+    const base = { config: { bili: { url: await closedUrl() } } }
+    const qq = (connection: Record<string, unknown>) => ({ connectionStatus: () => connection, recordedGroups: () => 4 })
+    expect((await overview(base, { forkQq: qq({ state: 'connected', attempt: 0, selfId: '12345' }) })).byId('qq'))
+      .toMatchObject({ tone: 'ok', state: 'up', facts: { groups: 4, account: '12345' } })
+    expect((await overview(base, { forkQq: qq({ state: 'reconnecting', attempt: 3, selfId: null }) })).byId('qq'))
+      .toMatchObject({ tone: 'down', state: 'reconnecting', facts: { attempt: 3 } })
+    expect((await overview(base, { forkQq: qq({ state: 'waiting-token' }) })).byId('qq')).toMatchObject({ tone: 'warn', state: 'waiting_token' })
+    expect((await overview(base, { forkQq: qq({ state: 'starting' }) })).byId('qq')).toMatchObject({ tone: 'warn', state: 'starting' })
+    expect((await overview(base, { forkQq: { groupOverview: () => [{ recorded: true }] } })).byId('qq'))
+      .toMatchObject({ tone: 'ok', state: 'mounted', facts: { groups: 1 } })
+  })
+
+  it('shows the speaking-style page as not installed until its service is mounted, then as installed or by its own report', async () => {
+    const base = { config: { bili: { url: await closedUrl() } } }
+    expect((await overview(base)).byId('style')).toMatchObject({ tone: 'off', state: 'absent' })
+    expect((await overview(base, { forkStyle: {} })).byId('style')).toMatchObject({ tone: 'ok', state: 'mounted' })
+    expect((await overview(base, { forkStyle: { health: () => ({ state: 'warn', detail: 'no samples yet' }) } })).byId('style'))
+      .toMatchObject({ tone: 'warn', state: 'warn', facts: { detail: 'no samples yet' } })
   })
 
   it('reports speech off, a down TTS provider, and a down ASR service', async () => {

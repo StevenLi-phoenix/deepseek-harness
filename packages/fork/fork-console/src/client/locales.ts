@@ -58,7 +58,7 @@ export const zh = {
   'state.ok': '正常',
   'state.warn': '需要留意',
   'state.down': '无响应',
-  'state.absent': '未加载',
+  'state.absent': '未安装',
   'state.timeout': '检查超时',
   'state.error': '检查出错',
   'state.loading': '正在读取…',
@@ -184,6 +184,14 @@ export const zh = {
   'agents.voice.playing': '正在播放…',
   'agents.voice.previewHint': '只在浏览器里播放一句固定的话（{chars} 字），不会发到微信。第一次可能要等约 45 秒让声音模型加载。',
   'agents.voice.asrHint': '听写由配置决定，这里只读。要开启：在 profiles/event/cordis.patch.yml 里加',
+  'card.style.title': '说话风格',
+  'card.style.mounted': '已安装',
+  'card.style.up': '正常',
+  'card.qq.reconnecting': '与 NapCat 断开，正在重连',
+  'card.qq.waiting_token': '等待 OneBot 访问令牌',
+  'card.qq.starting': '正在连接 NapCat',
+  'fact.qqAccount': '账号 {account}',
+  'fact.qqAttempts': '已失败 {attempt} 次',
 } satisfies Record<string, string>
 
 /** The console namespace key union. */
@@ -254,7 +262,7 @@ export const en: Record<ConsoleKey, string> = {
   'state.ok': 'OK',
   'state.warn': 'Needs attention',
   'state.down': 'Not responding',
-  'state.absent': 'Not loaded',
+  'state.absent': 'Not installed',
   'state.timeout': 'Check timed out',
   'state.error': 'Check failed',
   'state.loading': 'Reading…',
@@ -380,6 +388,14 @@ export const en: Record<ConsoleKey, string> = {
   'agents.voice.playing': 'Playing…',
   'agents.voice.previewHint': 'Plays one fixed sentence ({chars} characters) here in the browser; nothing is sent to WeChat. The first one may wait about 45 s while the voice model loads.',
   'agents.voice.asrHint': 'Transcription is set in the configuration and is read-only here. To turn it on, add this to profiles/event/cordis.patch.yml:',
+  'card.style.title': 'Speaking style',
+  'card.style.mounted': 'Installed',
+  'card.style.up': 'OK',
+  'card.qq.reconnecting': 'Disconnected from NapCat, reconnecting',
+  'card.qq.waiting_token': 'Waiting for the OneBot access token',
+  'card.qq.starting': 'Connecting to NapCat',
+  'fact.qqAccount': 'account {account}',
+  'fact.qqAttempts': '{attempt} failed attempt(s)',
 } satisfies Record<ConsoleKey, string>
 
 /** Japanese dictionary. */
@@ -440,7 +456,7 @@ export const ja: Record<ConsoleKey, string> = {
   'state.ok': '正常',
   'state.warn': '要確認',
   'state.down': '応答なし',
-  'state.absent': '未読み込み',
+  'state.absent': '未インストール',
   'state.timeout': 'チェックがタイムアウト',
   'state.error': 'チェックに失敗',
   'state.loading': '読み込み中…',
@@ -566,6 +582,14 @@ export const ja: Record<ConsoleKey, string> = {
   'agents.voice.playing': '再生中…',
   'agents.voice.previewHint': '固定の1文（{chars}文字）をこのブラウザ内で再生します。WeChat には送られません。初回は音声モデルの読み込みで約45秒かかることがあります。',
   'agents.voice.asrHint': '文字起こしは設定で決まり、ここでは読み取り専用です。有効にするには profiles/event/cordis.patch.yml に次を追加します:',
+  'card.style.title': '話し方',
+  'card.style.mounted': 'インストール済み',
+  'card.style.up': '正常',
+  'card.qq.reconnecting': 'NapCat と切断され、再接続中',
+  'card.qq.waiting_token': 'OneBot アクセストークン待ち',
+  'card.qq.starting': 'NapCat に接続中',
+  'fact.qqAccount': 'アカウント {account}',
+  'fact.qqAttempts': '失敗 {attempt} 回',
 } satisfies Record<ConsoleKey, string>
 
 /** Spanish dictionary. */
@@ -626,7 +650,7 @@ export const es: Record<ConsoleKey, string> = {
   'state.ok': 'Correcto',
   'state.warn': 'Requiere atención',
   'state.down': 'Sin respuesta',
-  'state.absent': 'No cargado',
+  'state.absent': 'No instalado',
   'state.timeout': 'La comprobación agotó el tiempo',
   'state.error': 'Falló la comprobación',
   'state.loading': 'Leyendo…',
@@ -752,6 +776,14 @@ export const es: Record<ConsoleKey, string> = {
   'agents.voice.playing': 'Reproduciendo…',
   'agents.voice.previewHint': 'Reproduce aquí una frase fija ({chars} caracteres); no se envía a WeChat. La primera puede tardar unos 45 s mientras carga el modelo.',
   'agents.voice.asrHint': 'La transcripción se define en la configuración y aquí es de solo lectura. Para activarla, añada a profiles/event/cordis.patch.yml:',
+  'card.style.title': 'Estilo de habla',
+  'card.style.mounted': 'Instalado',
+  'card.style.up': 'Correcto',
+  'card.qq.reconnecting': 'Desconectado de NapCat, reconectando',
+  'card.qq.waiting_token': 'Esperando el token de acceso de OneBot',
+  'card.qq.starting': 'Conectando a NapCat',
+  'fact.qqAccount': 'cuenta {account}',
+  'fact.qqAttempts': '{attempt} intento(s) fallido(s)',
 } satisfies Record<ConsoleKey, string>
 
 /** French dictionary. */
@@ -812,7 +844,7 @@ export const fr: Record<ConsoleKey, string> = {
   'state.ok': 'OK',
   'state.warn': 'À surveiller',
   'state.down': 'Ne répond pas',
-  'state.absent': 'Non chargé',
+  'state.absent': 'Non installé',
   'state.timeout': 'Délai de vérification dépassé',
   'state.error': 'Échec de la vérification',
   'state.loading': 'Lecture…',
@@ -938,6 +970,14 @@ export const fr: Record<ConsoleKey, string> = {
   'agents.voice.playing': 'Lecture…',
   'agents.voice.previewHint': 'Joue ici une phrase fixe ({chars} caractères) ; rien n’est envoyé à WeChat. La première peut attendre ~45 s le temps du chargement du modèle.',
   'agents.voice.asrHint': 'La transcription dépend de la configuration et est en lecture seule ici. Pour l’activer, ajoutez à profiles/event/cordis.patch.yml :',
+  'card.style.title': 'Style de parole',
+  'card.style.mounted': 'Installé',
+  'card.style.up': 'OK',
+  'card.qq.reconnecting': 'Déconnecté de NapCat, reconnexion',
+  'card.qq.waiting_token': 'En attente du jeton d’accès OneBot',
+  'card.qq.starting': 'Connexion à NapCat',
+  'fact.qqAccount': 'compte {account}',
+  'fact.qqAttempts': '{attempt} échec(s)',
 } satisfies Record<ConsoleKey, string>
 
 /** German dictionary. */
@@ -998,7 +1038,7 @@ export const de: Record<ConsoleKey, string> = {
   'state.ok': 'OK',
   'state.warn': 'Beachtung nötig',
   'state.down': 'Antwortet nicht',
-  'state.absent': 'Nicht geladen',
+  'state.absent': 'Nicht installiert',
   'state.timeout': 'Prüfung abgelaufen',
   'state.error': 'Prüfung fehlgeschlagen',
   'state.loading': 'Wird gelesen…',
@@ -1124,6 +1164,14 @@ export const de: Record<ConsoleKey, string> = {
   'agents.voice.playing': 'Wiedergabe…',
   'agents.voice.previewHint': 'Spielt hier im Browser einen festen Satz ({chars} Zeichen) ab; nichts geht an WeChat. Der erste kann ca. 45 s warten, bis das Modell geladen ist.',
   'agents.voice.asrHint': 'Die Transkription wird in der Konfiguration gesetzt und ist hier nur lesbar. Zum Einschalten in profiles/event/cordis.patch.yml ergänzen:',
+  'card.style.title': 'Sprechstil',
+  'card.style.mounted': 'Installiert',
+  'card.style.up': 'OK',
+  'card.qq.reconnecting': 'Von NapCat getrennt, verbindet neu',
+  'card.qq.waiting_token': 'Wartet auf das OneBot-Zugriffstoken',
+  'card.qq.starting': 'Verbindet mit NapCat',
+  'fact.qqAccount': 'Konto {account}',
+  'fact.qqAttempts': '{attempt} Fehlversuch(e)',
 } satisfies Record<ConsoleKey, string>
 
 /** Russian dictionary. */
@@ -1184,7 +1232,7 @@ export const ru: Record<ConsoleKey, string> = {
   'state.ok': 'Норма',
   'state.warn': 'Требует внимания',
   'state.down': 'Не отвечает',
-  'state.absent': 'Не загружен',
+  'state.absent': 'Не установлен',
   'state.timeout': 'Время проверки истекло',
   'state.error': 'Ошибка проверки',
   'state.loading': 'Чтение…',
@@ -1310,6 +1358,14 @@ export const ru: Record<ConsoleKey, string> = {
   'agents.voice.playing': 'Воспроизведение…',
   'agents.voice.previewHint': 'Проигрывает здесь, в браузере, одну фиксированную фразу ({chars} симв.); в WeChat ничего не уходит. Первая может ждать ~45 с, пока загрузится модель.',
   'agents.voice.asrHint': 'Расшифровка задаётся конфигурацией и здесь только для чтения. Чтобы включить, добавьте в profiles/event/cordis.patch.yml:',
+  'card.style.title': 'Манера речи',
+  'card.style.mounted': 'Установлен',
+  'card.style.up': 'Норма',
+  'card.qq.reconnecting': 'Связь с NapCat потеряна, переподключение',
+  'card.qq.waiting_token': 'Ожидание токена доступа OneBot',
+  'card.qq.starting': 'Подключение к NapCat',
+  'fact.qqAccount': 'аккаунт {account}',
+  'fact.qqAttempts': 'неудачных попыток: {attempt}',
 } satisfies Record<ConsoleKey, string>
 
 /** Portuguese dictionary. */
@@ -1370,7 +1426,7 @@ export const pt: Record<ConsoleKey, string> = {
   'state.ok': 'OK',
   'state.warn': 'Requer atenção',
   'state.down': 'Sem resposta',
-  'state.absent': 'Não carregado',
+  'state.absent': 'Não instalado',
   'state.timeout': 'A verificação expirou',
   'state.error': 'A verificação falhou',
   'state.loading': 'Lendo…',
@@ -1496,4 +1552,12 @@ export const pt: Record<ConsoleKey, string> = {
   'agents.voice.playing': 'Reproduzindo…',
   'agents.voice.previewHint': 'Toca aqui no navegador uma frase fixa ({chars} caracteres); nada vai ao WeChat. A primeira pode esperar ~45 s enquanto o modelo carrega.',
   'agents.voice.asrHint': 'A transcrição é definida na configuração e aqui é somente leitura. Para ligar, adicione a profiles/event/cordis.patch.yml:',
+  'card.style.title': 'Estilo de fala',
+  'card.style.mounted': 'Instalado',
+  'card.style.up': 'OK',
+  'card.qq.reconnecting': 'Desconectado do NapCat, reconectando',
+  'card.qq.waiting_token': 'Aguardando o token de acesso do OneBot',
+  'card.qq.starting': 'Conectando ao NapCat',
+  'fact.qqAccount': 'conta {account}',
+  'fact.qqAttempts': '{attempt} tentativa(s) falha(s)',
 } satisfies Record<ConsoleKey, string>

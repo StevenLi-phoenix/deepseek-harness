@@ -25,7 +25,7 @@ Run the event service from the browser instead of an SSH session. **Settings →
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount the row next to the Web bundles; the fork event bundle mounts it. It needs the settings shell (`@deepseek-ai/dsh-client-ui-settings-general`, which declares the `settings.section` list) and, on the Host, the `connection` service, both of which the Web bundles compose. Every other service is optional: a card says "not loaded" for one that is not mounted. Claude Code needs [`fork-cc-admin`](../fork-cc-admin/README.md), which the event bundle mounts next to this package.
+Mount the row next to the Web bundles; the fork event bundle mounts it. It needs the settings shell (`@deepseek-ai/dsh-client-ui-settings-general`, which declares the `settings.section` list) and, on the Host, the `connection` service, both of which the Web bundles compose. Every other service is optional: a card says "not installed" for one that is not mounted (the speaking-style page, `ctx.forkStyle`, is one of them until it ships). Claude Code needs [`fork-cc-admin`](../fork-cc-admin/README.md), which the event bundle mounts next to this package.
 
 ```yaml
 - id: fork-console
@@ -40,7 +40,7 @@ Mount the row next to the Web bundles; the fork event bundle mounts it. It needs
 | `subscriptions.*` | those of `watch_create` | `workspacePath`, `agentPreset`, `permissionPreset`, `coalesceSeconds`, `notifyMaxPerHour`, `sessionMaxPerHour`: what a subscription made from the form runs with |
 | `previewText` | a short Chinese sentence | The sentence the voice preview speaks (at most the voice service's `tts.maxChars`) |
 
-**Overview.** The cards poll every 10 seconds while the section is open and the page is visible. A card links to `bili`, `fork-qq`, `fork-wechat`, `fork-sysmon`, `fork-subscriptions`, `fork-agents`, or `account` only when that section is registered. A service can add detail to its card by exposing an optional `health()` that returns `{ state: 'ok' | 'warn' | 'down', detail? }`; `bili`, `forkQq`, and `forkNotifier` are read that way when they have one.
+**Overview.** The cards poll every 10 seconds while the section is open and the page is visible. A card links to `bili`, `fork-qq`, `fork-wechat`, `fork-style`, `fork-sysmon`, `fork-subscriptions`, `fork-agents`, or `account` only when that section is registered. A service can add detail to its card by exposing an optional `health()` that returns `{ state: 'ok' | 'warn' | 'down', detail? }`; `bili`, `forkQq`, and `forkNotifier` are read that way when they have one.
 
 **Subscriptions.** Subscriptions defined in the bus configuration show "From configuration" and have no buttons. A subscription made by `watch_create` or from the form can be paused (it matches no new events and holds the ones already waiting), resumed, or deleted after a second click; deleting a watch also stops its repository poll, as `watch_delete` does. The form takes a name, source, kind, and subject globs (at least one), notify or session mode, and, for a session, the instructions; a session subscription runs with the configured preset and workspace. Schedule reminders (`schedule_create`) can be paused, resumed, and deleted; their times are changed by asking the agent.
 
@@ -113,7 +113,7 @@ None; this package neither assembles nor sends a provider request.
 - **Monitors are not listed** — `monitor_start` registries belong to each preset mount; ask the conversation that started one to `monitor_list` or `monitor_stop`.
 - **Fire counts are bounded by retention** — the count is the batches the bus still holds (`retainBatches`, 1000 by default), and "last fired" is the newest of them.
 - **Transcription is read-only** — it is configuration, and a patch entry's `config` replaces the whole entry, so the card shows the patch instead of saving one.
-- **QQ and WeChat cards say "mounted" until they report health** — a service reports more by adding `health()`; without it the card shows the recorded groups or the queued notices only.
+- **WeChat and speaking-style cards say little until they report health** — a service reports more by adding `health()`; the QQ card reads `connectionStatus()` and `recordedGroups()` of the observer when it has them.
 - **The Manage link follows the shell's markup** — it clicks the navigation button by position; a shell that drops `data-shortcut-modal="settings"` or reorders its rows needs `sections.ts` updated.
 - **Preview waits for the voice model** — the first sentence after idle takes about 45 seconds on feiyu; one preview runs at a time.
 

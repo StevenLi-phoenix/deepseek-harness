@@ -26,6 +26,7 @@ export const MANAGE_SECTION: Readonly<Partial<Record<ServiceId, string>>> = {
   bili: 'bili',
   qq: 'fork-qq',
   wechat: 'fork-wechat',
+  style: 'fork-style',
   voice: 'fork-agents',
   cc: 'fork-agents',
   llm: 'account',

@@ -95,13 +95,45 @@ async function biliCard({ ctx, config, env = LIVE_ENV }: OverviewSources): Promi
   return card('bili', report.state === 'ok' ? 'ok' : report.state, report.state === 'ok' ? 'up' : report.state, { detail: report.detail ?? null })
 }
 
+/** What `forkQq.connectionStatus()` reports, when the observer has it. */
+interface QqConnectionView {
+  readonly state?: unknown
+  readonly attempt?: unknown
+  readonly selfId?: unknown
+}
+
 async function qqCard(ctx: Context): Promise<ServiceCard> {
   const qq = service(ctx, 'forkQq')
   if (qq === undefined) return absent('qq')
   const report = await reported(qq)
   if (report !== undefined) return card('qq', report.state, report.state === 'ok' ? 'up' : report.state, { detail: report.detail ?? null })
-  const groups = await ask<{ recorded: boolean }[]>(qq, 'groupOverview')
-  return card('qq', 'ok', 'mounted', { groups: groups?.filter(group => group.recorded).length ?? null })
+  const groups = await ask<number>(qq, 'recordedGroups')
+  const connection = await ask<QqConnectionView>(qq, 'connectionStatus')
+  const recorded = typeof groups === 'number' ? groups : null
+  switch (connection?.state) {
+    case 'connected':
+      return card('qq', 'ok', 'up', { groups: recorded, account: typeof connection.selfId === 'string' ? connection.selfId : null })
+    case 'reconnecting':
+      return card('qq', 'down', 'reconnecting', { attempt: typeof connection.attempt === 'number' ? connection.attempt : 0 })
+    case 'waiting-token':
+      return card('qq', 'warn', 'waiting_token')
+    case 'starting':
+      return card('qq', 'warn', 'starting')
+    default: {
+      // An observer without `connectionStatus()` only tells how many groups it records.
+      const overview = await ask<{ recorded: boolean }[]>(qq, 'groupOverview')
+      return card('qq', 'ok', 'mounted', { groups: recorded ?? overview?.filter(group => group.recorded).length ?? null })
+    }
+  }
+}
+
+/** The speaking-style page's service (`ctx.forkStyle`); absent on a deployment that has not installed it. */
+async function styleCard(ctx: Context): Promise<ServiceCard> {
+  const style = service(ctx, 'forkStyle')
+  if (style === undefined) return absent('style')
+  const report = await reported(style)
+  if (report === undefined) return card('style', 'ok', 'mounted')
+  return card('style', report.state, report.state === 'ok' ? 'up' : report.state, { detail: report.detail ?? null })
 }
 
 async function wechatCard(ctx: Context): Promise<ServiceCard> {
@@ -173,6 +205,7 @@ export async function collectOverview(sources: OverviewSources): Promise<Overvie
     guard('bili', () => biliCard({ ...sources, env })),
     guard('qq', () => qqCard(ctx)),
     guard('wechat', () => wechatCard(ctx)),
+    guard('style', () => styleCard(ctx)),
     guard('voice', () => voiceCard({ ...sources, env })),
     guard('cc', () => ccCard(sources)),
     guard('ams', () => amsCard({ ...sources, env })),
