@@ -29,6 +29,9 @@
       "path": "../fork-event-bus"
     },
     {
+      "path": "../fork-style"
+    },
+    {
       "path": "../fork-voice"
     },
     {

@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import ClaudeCodeAdmin, { Config } from '@deepseek-ai/dsh-fork-cc-admin'
+import * as Style from '@deepseek-ai/dsh-fork-style'
+import { StyleStore } from '@deepseek-ai/dsh-fork-style/src/store.ts'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { AgentsView } from '../src/views.ts'
 import { mountConsole } from './fixtures.ts'
@@ -68,5 +70,38 @@ exit 0
     const { call } = await mountConsole({ ctx })
     const overview = await (await call('/api/fork.overview')).json() as { cards: { id: string; tone: string; state: string }[] }
     expect(overview.cards.find(card => card.id === 'cc')).toMatchObject({ tone: 'warn', state: 'nologin' })
+  })
+})
+
+describe('the overview over the real fork-style service', () => {
+  async function mountStyle(review: 'optional' | 'required', pending: boolean) {
+    const dir = mkdtempSync(join(tmpdir(), 'fork-console-style-'))
+    dirs.push(dir)
+    writeFileSync(join(dir, 'tics.json'), JSON.stringify({ days: {} }))
+    if (pending) {
+      await new StyleStore(join(dir, 'samples.jsonl'), { maxActive: 60, maxOwner: 20, maxPending: 40, maxTombstones: 100 })
+        .ingest([{ source: 'qq-group', at: Date.now(), prompt: '周末去哪', reply: '宅着' }], review)
+    }
+    const ctx = new Context()
+    contexts.push(ctx)
+    await ctx.plugin(Style, { dir, ticsFile: join(dir, 'tics.json'), qq: { enabled: false }, bili: { enabled: false }, review } as Style.Config)
+    return mountConsole({ ctx })
+  }
+  const card = async (mounted: Awaited<ReturnType<typeof mountStyle>>) => {
+    const view = await (await mounted.call('/api/fork.overview')).json() as { cards: { id: string }[] }
+    return view.cards.find(entry => entry.id === 'style')
+  }
+
+  it('is green with the real health() shape, and carries counts only', async () => {
+    const mounted = await mountStyle('optional', false)
+    expect(await card(mounted)).toMatchObject({ tone: 'ok', state: 'up', facts: { kept: 0, pending: 0, review: 'optional', lastRefreshAt: null, ticTrend: null } })
+  })
+
+  it('is yellow when review is required and samples wait', async () => {
+    const mounted = await mountStyle('required', true)
+    // health() reports the counts of the last refresh; reading the panel (or a scheduled check) takes one.
+    await mounted.ctx.get('forkStyle')!.panel()
+    expect(await card(mounted)).toMatchObject({ tone: 'warn', state: 'pending', facts: { kept: 0, pending: 1, review: 'required' } })
+    expect(JSON.stringify(await card(mounted))).not.toContain('宅着')
   })
 })

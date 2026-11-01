@@ -12,6 +12,7 @@ import { TIMED_OUT, httpProbe, isHealthy, isReachable, within } from './probe.ts
 import type { Fact, OverviewView, ServiceCard, ServiceId, Tone } from './views.ts'
 import type {} from '@deepseek-ai/dsh-fork-event-bus'
 import type {} from '@deepseek-ai/dsh-fork-voice'
+import type { StyleHealth } from '@deepseek-ai/dsh-fork-style'
 
 /** What a service may report about itself: `health()` is optional, so each service adds it when it has more to say than "mounted". */
 export interface HealthReport {
@@ -133,8 +134,8 @@ function qqCard(ctx: Context): ServiceCard {
   }
 }
 
-/** What `ctx.forkStyle.health()` answers: counts and times only, never sample text. */
-function styleHealth(value: unknown): { kept: number; pending: number; review: 'optional' | 'required'; lastRefreshAt: number | null; ticTrend: 'up' | 'flat' | 'down' | null } | undefined {
+/** Check the shape of what `ctx.forkStyle.health()` answered (`StyleHealth` of `fork-style`: counts and times only, never sample text). */
+function styleHealth(value: unknown): StyleHealth | undefined {
   if (typeof value !== 'object' || value === null) return undefined
   const { kept, pending, review, lastRefreshAt, ticTrend } = value as Record<string, unknown>
   const count = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0
@@ -144,14 +145,13 @@ function styleHealth(value: unknown): { kept: number; pending: number; review: '
   return { kept, pending, review, lastRefreshAt, ticTrend }
 }
 
-/** The speaking-style page's service (`ctx.forkStyle`); absent on a deployment that has not installed it. */
+/** The speaking-style service (`ctx.forkStyle` of `fork-style`); absent on a deployment that has not installed it. */
 function styleCard(ctx: Context): ServiceCard {
-  const style = service(ctx, 'forkStyle')
+  const style = ctx.get('forkStyle')
   if (style === undefined) return absent('style')
-  if (typeof style['health'] !== 'function') return card('style', 'ok', 'mounted')
   let answer: unknown
   try {
-    answer = (style['health'] as () => unknown).call(style)
+    answer = style.health()
   } catch {
     return card('style', 'down', 'error')
   }

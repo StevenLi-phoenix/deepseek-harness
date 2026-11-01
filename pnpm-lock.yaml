@@ -13778,6 +13778,9 @@ importers:
       '@deepseek-ai/dsh-fork-event-bus':
         specifier: workspace:*
         version: link:../fork-event-bus
+      '@deepseek-ai/dsh-fork-style':
+        specifier: workspace:*
+        version: link:../fork-style
       '@deepseek-ai/dsh-fork-voice':
         specifier: workspace:*
         version: link:../fork-voice

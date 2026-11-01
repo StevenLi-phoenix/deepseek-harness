@@ -189,10 +189,9 @@ describe('overview cards', () => {
     expect(view.cards.find(entry => entry.id === 'qq')).toMatchObject({ tone: 'ok', state: 'up', facts: { groups: 2, account: '1' } })
   })
 
-  it('shows the speaking-style page as not installed until its service is mounted, then as installed or by its own report', async () => {
+  it('shows the speaking-style card as not installed until its service is mounted', async () => {
     const base = { config: { bili: { url: await closedUrl() } } }
     expect((await overview(base)).byId('style')).toMatchObject({ tone: 'off', state: 'absent' })
-    expect((await overview(base, { forkStyle: {} })).byId('style')).toMatchObject({ tone: 'ok', state: 'mounted' })
   })
 
   it('reads the speaking-style counts: green when it answers, yellow when review is required and samples wait, red when it throws or answers nonsense', async () => {

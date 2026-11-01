@@ -40,7 +40,7 @@ kind: "package-reference"
 | `subscriptions.*` | 与 `watch_create` 相同 | `workspacePath`、`agentPreset`、`permissionPreset`、`coalesceSeconds`、`notifyMaxPerHour`、`sessionMaxPerHour`：用表单建的订阅按什么运行 |
 | `previewText` | 一句简短的中文 | 语音试听说的那句话（不超过语音服务的 `tts.maxChars`） |
 
-**总览。**分区打开且页面可见时，卡片每 10 秒刷新一次。只有目标分区已注册时，卡片才会链接到 `bili`、`fork-qq`、`fork-wechat`、`fork-style`、`fork-sysmon`、`fork-subscriptions`、`fork-agents` 或 `account`。服务想给自己的卡片补充细节，可以提供一个可选的 `health()`，返回 `{ state: 'ok' | 'warn' | 'down', detail? }`；`bili` 和 `forkNotifier` 有它就按它读。说话风格卡片读 `ctx.forkStyle.health()`（保留和待审样本数、审核模式、上次更新、口癖趋势；只有计数）：有应答为绿，需要审核且有样本在等为黄，抛错或返回意外形状为红。
+**总览。**分区打开且页面可见时，卡片每 10 秒刷新一次。只有目标分区已注册时，卡片才会链接到 `bili`、`fork-qq`、`fork-wechat`、`fork-style`、`fork-sysmon`、`fork-subscriptions`、`fork-agents` 或 `account`。服务想给自己的卡片补充细节，可以提供一个可选的 `health()`，返回 `{ state: 'ok' | 'warn' | 'down', detail? }`；`bili` 和 `forkNotifier` 有它就按它读。说话风格卡片读 [`fork-style`](../fork-style/README.zh.md) 的 `ctx.forkStyle.health()`（`StyleHealth`，收到后再校验一遍；保留和待审样本数、审核模式、上次更新、口癖趋势；只有计数）：有应答为绿，需要审核且有样本在等为黄，抛错或返回意外形状为红。
 
 **订阅。**在总线配置里定义的订阅显示“来自配置”，没有按钮。`watch_create` 或表单建的订阅可以暂停（不再匹配新事件，已在排队的事件保留）、恢复，或在第二次点击后删除；删除监视时也会停掉它的仓库轮询，和 `watch_delete` 一致。表单需要名称、来源/类型/对象 glob（至少一项）、通知或会话模式，会话模式还要任务说明；会话订阅按配置的预设和工作区运行。定时提醒（`schedule_create`）可以暂停、恢复和删除；改时间请对智能体说。
 
