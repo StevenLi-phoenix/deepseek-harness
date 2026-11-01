@@ -93,6 +93,7 @@ export interface Config {
   }
   /** Voice transcription. The recorder does not transcribe yet; `enabled` is refused at load. */
   asr: {
+    /** Transcribe voice messages. Refused at load: the recorder keeps the audio and does not transcribe it. */
     enabled: Volatile<boolean>
   }
   /** How long raw messages are kept. Digests are not affected and can be deleted by group or date. */
@@ -119,9 +120,13 @@ export interface Config {
   }
   /** Sending to a group. Refused: the recorder has no send endpoint, so `enabled` fails the load. */
   send: {
+    /** Allow sending at all. Refused at load. */
     enabled: boolean
+    /** Groups sending would be allowed in. Unused while sending is refused. */
     groups: string[]
+    /** Seconds between two sends to one group. Unused while sending is refused. */
     minIntervalSec: number
+    /** Sends per group per day. Unused while sending is refused. */
     maxPerDay: number
   }
   /** Scheduled digests of the recorded groups, made by one-turn Sessions. */

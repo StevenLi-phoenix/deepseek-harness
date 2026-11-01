@@ -3,23 +3,23 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/fork/fork-qq/README.md
 /:
-  en: ec0f3c8d123c5fc8
-  zh: a5add5883ddbd3e2
+  en: d24e4594a4a29dae
+  zh: 150fcd8a1f1a377a
 /deepseek-ai-dsh-fork-qq:
   en: 09ea753ac22ec0dc
   zh: 49e52a2ad78880b3
 /deepseek-ai-dsh-fork-qq/summary:
-  en: 1758c571caa4c955
-  zh: 7bcaeb3c76728efb
+  en: f027990621b012bc
+  zh: 2944242c77bf8b9f
 /deepseek-ai-dsh-fork-qq/table-of-contents:
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
 /deepseek-ai-dsh-fork-qq/use-this-package:
-  en: b9737a117cbdc126
-  zh: 2691e1d4e3e9a601
+  en: ec73358dba0177bf
+  zh: 005001ed0e4651cf
 /deepseek-ai-dsh-fork-qq/understand-the-implementation:
-  en: 26f7b49f8b73d321
-  zh: fadb962bfa17d28d
+  en: c972355a08bddc5a
+  zh: 39bff8de05f0b250
 /deepseek-ai-dsh-fork-qq/further-exploration:
   en: 997bb24766271bfe
   zh: fe794c4412bf8df0
@@ -39,8 +39,8 @@
   en: 97d70e8b0bc6321a
   zh: f3af08ce02f6ecb4
 /deepseek-ai-dsh-fork-qq/known-limitations-and-deferred-work:
-  en: 45aaebf3d660bada
-  zh: 9272d71d6c082348
+  en: 6a4a7f72571fcb86
+  zh: 1dd3fc70dfb74e10
 /deepseek-ai-dsh-fork-qq/known-limitations-and-deferred-work/dev-note:
   en: fad15e9a181ec6b8
   zh: d8deba71a7ad3028

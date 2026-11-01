@@ -116,7 +116,7 @@ Claude Code 会话来自 `ctx.forkClaudeCode`（[`fork-cc-admin`](../fork-cc-adm
 - **触发次数受保留数量限制**——次数是总线还保留着的批次数（`retainBatches`，默认 1000），“上次触发”是其中最新的一批。
 - **听写只读**——它属于配置，而补丁条目的 `config` 会替换整个条目，所以卡片展示补丁而不是替你保存。
 - **微信和 bili 的卡片在它们报告健康前信息很少**——服务可以通过增加 `health()` 报告更多。
-- **QQ 卡片从不触达 QQ**——它只调用观察器内存里的 `connectionStatus()` 和 `recordedGroups()`（调用其他任何成员，测试都会失败），因为这个账号处于 QQ 风控下；本包的任何页面都不会调用协议端或 NapCat 的登录门。
+- **QQ 卡片从不触达 QQ**——它只调用观察器内存里的 `connectionStatus()`（记录器最近推送的状态，可能是红色的 `recorder-down` 或 `protocol-mismatch`）和 `recordedGroups()`（调用其他任何成员，测试都会失败，两者都不发请求），因为这个账号处于 QQ 风控下；本包的任何页面都不会调用协议端或 NapCat 的登录门。
 - **试听要等语音模型**——闲置后的第一句在 feiyu 上约需 45 秒；同一时间只跑一个试听。
 
 <a id="dev-note"></a>

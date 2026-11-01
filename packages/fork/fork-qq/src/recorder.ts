@@ -120,7 +120,6 @@ export class QqRecorder {
   private config: RecorderConfig | undefined
   private readonly abort = new AbortController()
   private readonly inflight = new Set<Promise<void>>()
-  private readonly warnedInvalid = new Set<string>()
   private client: OneBotClient | undefined
   private connAbort: AbortController | undefined
   private reconfigured = false

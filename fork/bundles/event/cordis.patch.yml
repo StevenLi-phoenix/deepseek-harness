@@ -381,18 +381,25 @@
 
     # The QQ observer (ctx.forkQq): a personal QQ account, reached through NapCat on this Mac
     # (fork/deploy/napcat/napcat.sh, a container on colima bound to 127.0.0.1:3001), lurks in the groups
-    # listed under `groups` and never speaks. It records their messages and images in
-    # $DSH_HOME/fork-qq, transcribes voice messages only when `asr.enabled` is set (needs fork-voice with
-    # transcription on), and digests each recorded group on a schedule with the cheap model of the `qq-digest`
-    # preset (below). The agent reads it all with qq_groups, qq_digest, qq_recent, and qq_search. `groups`
-    # starts empty, so nothing is recorded until the owner lists group numbers in the profile patch
-    # ($DSH_HOME/profiles/event/cordis.patch.yml: `- id: fork-qq` with `config.groups: ['<number>']`; the log
-    # says `not recording group <number> (<name>)` for each group the account is in). Sending is off
-    # (`send.enabled`), and a group must also be in `send.groups`. The OneBot token is FORK_QQ_ONEBOT_TOKEN in
-    # $DSH_HOME/.env, written by napcat.sh; without it the observer stays offline. Settings → QQ shows the
-    # connection and, when QQ was signed out, the login QR code to scan from the phone; it reads NapCat's login
-    # through the login door (napcat.sh door, 127.0.0.1:3002, `login.url`) with the same token, and the offline
-    # notice quotes `settingsUrl` (the event service's address) when it is set in the profile patch.
+    # listed under `groups` and never speaks. The CONNECTION and the recording belong to the qq-recorder, an
+    # AMS service of its own process (fork/deploy/qq-recorder, RUNBOOK "qq-recorder"): it holds the one OneBot
+    # connection, records messages and images in /Users/dsh-runtime/.dsh/fork-qq, and survives DSH restarts, so
+    # neither a deploy nor a settings save reconnects QQ. This plugin is its client: it pushes the settings
+    # below to the recorder (PUT /v1/config on the socket $DSH_HOME/run/qq-recorder.sock, token
+    # FORK_QQ_RECORDER_TOKEN in $DSH_HOME/.env), reads the recorded messages through its API, keeps the digests
+    # and group notes in its own storage domain `fork_qq`, and digests each recorded group on a schedule with
+    # the cheap model of the `qq-digest` preset (below). The agent reads it all with qq_groups, qq_digest,
+    # qq_recent, and qq_search. `groups` starts empty, so nothing is recorded until the owner lists group
+    # numbers in the profile patch ($DSH_HOME/profiles/event/cordis.patch.yml: `- id: fork-qq` with
+    # `config.groups: ['<number>']`; the recorder's log says `not recording group <number> (<name>)` for each
+    # group the account is in). Sending and voice transcription are not offered (`send.enabled` and
+    # `asr.enabled` fail the load). The OneBot token is the recorder's AMS secret FORK_QQ_ONEBOT_TOKEN, written by
+    # napcat.sh; without it the recorder stays offline. The `recorder.*` keys have schema defaults, so a profile
+    # patch that replaces this block still finds the recorder. Settings → QQ shows the connection (or
+    # `recorder-down`) and, when QQ was signed out, the login QR code to scan from the phone; the recorder reads
+    # NapCat's login through the login door (napcat.sh door, 127.0.0.1:3002, `login.url`) with the OneBot
+    # token, and the offline notice (DSH's, not the recorder's) quotes `settingsUrl` when it is set in the
+    # profile patch.
     - id: fork-qq
       name: '@deepseek-ai/dsh-fork-qq'
 
