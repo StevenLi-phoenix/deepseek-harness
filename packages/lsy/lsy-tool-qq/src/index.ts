@@ -6,6 +6,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import { stampIn, type DigestRow, type GroupOverview, type MessageRow, type QqObserver } from '@deepseek-ai/dsh-lsy-qq'
 import { defineTool, type ParameterSchemaSpec } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
@@ -15,6 +16,21 @@ export const name = 'lsy-tool-qq'
 
 /** Mounted inside an agent preset's scope, like other tool plugins. */
 export const inject = ['tools']
+
+/** Which tools the plugin registers. */
+export interface Config {
+  /**
+   * `read` (the default): the read tools and `qq_forget`, for the main agent. `digest`: only `qq_digest_write` and
+   * `qq_group_note`, for the `qq-digest` preset, whose Session writes the digest and the notes of the one group it is
+   * digesting; the observer binds both to that Session and that group, so they can touch nothing else.
+   */
+  mode: 'read' | 'digest'
+}
+
+/** Configuration schema. */
+export const Config: z<Config> = z.object({
+  mode: z.union(['read', 'digest'] as const).default('read'),
+})
 
 /** Characters of one answer. */
 export const MAX_BLOCK_CHARS = 12_000
@@ -88,10 +104,16 @@ function errorText(error: unknown): string {
 /**
  * Register the QQ tools once the observer is mounted.
  * @param ctx - the preset scope's context.
+ * @param config - which tools to register.
  */
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config: Config = { mode: 'read' }): void {
   ctx.inject(['lsyQq'], (scoped) => {
     const observer: QqObserver = scoped.lsyQq
+
+    if (config.mode === 'digest') {
+      registerDigestTools(scoped, observer)
+      return
+    }
 
     const read = (spec: {
       name: string
@@ -221,4 +243,44 @@ export function apply(ctx: Context): void {
       presentCall: args => ({ card: 'generic', title: `Forget QQ digests${str(args['group']) === '' ? '' : ` of ${str(args['group'])}`}`, kind: 'other' }),
     }))
   })
+}
+
+/** A model-supplied argument as text; anything else is empty. */
+function asText(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+/** The tools of the `qq-digest` preset: write the digest and the notes of the group the Session is digesting. */
+function registerDigestTools(scoped: Context, observer: QqObserver): void {
+  const answer = (value: unknown): Array<{ type: 'text'; text: string }> => [{ type: 'text' as const, text: JSON.stringify(value) }]
+  const outcome = (result: { ok: boolean; message?: string; error?: string }): JsonValue => (result.ok ? { ok: true, message: result.message ?? '' } : { ok: false, error: result.error ?? '' })
+
+  scoped.tools.register(defineTool({
+    name: 'qq_digest_write',
+    description: 'Hand in the digest of the QQ group you are digesting, once per turn. `groupId` must be the group number the user message names; any other group is refused. `text` is the digest, plain Chinese text with the section headings the message asks for. If nothing is worth keeping, do not call this and answer NO_REPLY.',
+    parameters: {
+      groupId: { type: 'string', required: true, description: 'The group number the user message names.' },
+      text: { type: 'string', required: true, description: 'The digest.' },
+    },
+    output: { schema: { type: 'json' }, render: (_args: unknown, value: unknown) => answer(value) },
+    async execute(args, exec): Promise<JsonValue> {
+      return outcome(observer.digestWrite(exec.agent?.session.id, asText(args['groupId']), asText(args['text'])))
+    },
+    presentCall: args => ({ card: 'generic', title: `Write QQ digest of ${asText(args['groupId'])}`, kind: 'edit' }),
+  }))
+
+  scoped.tools.register(defineTool({
+    name: 'qq_group_note',
+    description: 'Keep or drop a short note about the QQ group you are digesting: its usual topics, slang, or mood, in at most 40 characters. A note describes the group, never a person: names, QQ numbers, phone numbers, emails, addresses, schools, and organisations are refused, and a group holds 30 notes at most. `op` is add (text is the note) or remove (text is the note\'s #id or its exact text). `groupId` must be the group number the user message names.',
+    parameters: {
+      groupId: { type: 'string', required: true, description: 'The group number the user message names.' },
+      op: { type: 'string', required: true, enum: ['add', 'remove'], description: 'add or remove.' },
+      text: { type: 'string', required: true, description: 'The note to add; for remove, its #id or exact text.' },
+    },
+    output: { schema: { type: 'json' }, render: (_args: unknown, value: unknown) => answer(value) },
+    async execute(args, exec): Promise<JsonValue> {
+      return outcome(observer.groupNote(exec.agent?.session.id, asText(args['groupId']), asText(args['op']), asText(args['text'])))
+    },
+    presentCall: args => ({ card: 'generic', title: `${asText(args['op'])} QQ group note`, kind: 'edit' }),
+  }))
 }

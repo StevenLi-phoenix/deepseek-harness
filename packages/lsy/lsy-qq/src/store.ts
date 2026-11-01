@@ -111,7 +111,17 @@ export interface GroupStats {
   lastDigestAt: number | null
 }
 
-const SCHEMA_VERSION = 1
+/** Notes one group may hold. */
+export const MAX_NOTES_PER_GROUP = 30
+
+/** One note of a group: the QQ channel's own memory of what the group talks about. */
+export interface GroupNote {
+  id: number
+  text: string
+  createdAt: number
+}
+
+const SCHEMA_VERSION = 2
 
 type Row = Record<string, unknown>
 
@@ -171,6 +181,10 @@ export class QqStore {
         text TEXT NOT NULL, model TEXT NOT NULL, usage TEXT, raw_path TEXT, created_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS digests_group ON digests (group_id, created_at);
+      CREATE TABLE IF NOT EXISTS group_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, group_id TEXT NOT NULL, text TEXT NOT NULL, created_at INTEGER NOT NULL,
+        UNIQUE (group_id, text)
+      );
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       PRAGMA user_version = ${SCHEMA_VERSION};
     `)
@@ -459,6 +473,43 @@ export class QqStore {
   lastDigestAt(groupId: string): number {
     const row = this.db.prepare('SELECT MAX(created_at) AS at FROM digests WHERE group_id = ?').get(groupId) as Row
     return row['at'] === null ? 0 : Number(row['at'])
+  }
+
+  // ---- group notes ----
+
+  /** Notes of a group, oldest first. */
+  notes(groupId: string): GroupNote[] {
+    const rows = this.db.prepare('SELECT id, text, created_at FROM group_notes WHERE group_id = ? ORDER BY id').all(groupId) as Row[]
+    return rows.map(row => ({ id: Number(row['id']), text: String(row['text']), createdAt: Number(row['created_at']) }))
+  }
+
+  /**
+   * Add a note.
+   * @returns its id; undefined when the group already has that note or has {@link MAX_NOTES_PER_GROUP}.
+   */
+  addNote(groupId: string, text: string, now: number): number | undefined {
+    const count = Number((this.db.prepare('SELECT COUNT(*) AS n FROM group_notes WHERE group_id = ?').get(groupId) as Row)['n'])
+    if (count >= MAX_NOTES_PER_GROUP) return undefined
+    const result = this.db.prepare('INSERT OR IGNORE INTO group_notes (group_id, text, created_at) VALUES (?, ?, ?)').run(groupId, text, now)
+    return Number(result.changes) === 0 ? undefined : Number(result.lastInsertRowid)
+  }
+
+  /** Remove a note of a group by its id (`7` or `#7`) or by its exact text. */
+  removeNote(groupId: string, which: string): boolean {
+    const id = /^#?(\d+)$/.exec(which.trim())
+    const result = id === null
+      ? this.db.prepare('DELETE FROM group_notes WHERE group_id = ? AND text = ?').run(groupId, which.trim())
+      : this.db.prepare('DELETE FROM group_notes WHERE group_id = ? AND id = ?').run(groupId, Number(id[1]))
+    return Number(result.changes) > 0
+  }
+
+  /** Names and cards members of a group showed in recorded messages. */
+  memberNames(groupId: string): string[] {
+    const rows = this.db.prepare(`
+      SELECT nickname AS name FROM messages WHERE group_id = ? AND nickname <> ''
+      UNION SELECT card AS name FROM messages WHERE group_id = ? AND card <> ''
+    `).all(groupId, groupId) as Row[]
+    return rows.map(row => String(row['name']))
   }
 
   // ---- meta ----

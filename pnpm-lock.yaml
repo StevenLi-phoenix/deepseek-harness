@@ -14225,6 +14225,10 @@ importers:
         version: link:../../core/tools
 
   packages/lsy/lsy-tool-qq:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~

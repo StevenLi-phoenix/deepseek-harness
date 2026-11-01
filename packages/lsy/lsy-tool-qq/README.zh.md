@@ -32,7 +32,14 @@ kind: "package-reference"
   name: '@deepseek-ai/dsh-lsy-tool-qq'
 ```
 
-这个插件没有配置；群、数据和摘要都属于 `lsy-qq`。
+群、数据和摘要都属于 `lsy-qq`。唯一的字段是 `mode`：`read`（默认）注册读取工具和 `qq_forget`；`digest` 只注册 `qq_digest_write` 和 `qq_group_note`，事件 bundle 把它挂在 `qq-digest` preset 里。这两个工具只为调用它们的那个摘要 Session 写入：`ctx.lsyQq` 把它们绑定到该 Session 和它正在摘要的那一个群，限制每轮的调用次数（`digest.maxToolCalls`），并过滤笔记，使笔记只描述群、不描述个人。
+
+```yaml
+- id: tool-qq-digest
+  name: '@deepseek-ai/dsh-lsy-tool-qq'
+  config:
+    mode: digest
+```
 
 -----
 

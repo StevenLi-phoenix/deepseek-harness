@@ -27,14 +27,14 @@ function config(overrides: Partial<DigestConfig> = {}): DigestConfig {
   return {
     enabled: true, everyHours: 24, minMessages: 5, maxPromptChars: 60_000, maxCallsPerRound: 5, agentPreset: 'qq-digest', permissionPreset: 'read-only',
     workspacePath: join(dir, 'ws'), timeZone: 'Asia/Shanghai', timeoutMs: 2000,
-    aliasMembers: false, profiles: false, keepPerGroup: 200, maxDigestChars: 3000, ...overrides,
+    aliasMembers: false, profiles: false, keepPerGroup: 200, maxDigestChars: 3000, maxToolCalls: 12, ...overrides,
   }
 }
 
 /** Sessions that answer each prompt with `answer`, through the Host's event stream. */
 type HarnessOptions = { kind?: string; usage?: Record<string, number>; silent?: boolean }
 
-function harness(answer: string | ((prompt: string) => string), options: HarnessOptions = {}) {
+function harness(answer: string | ((prompt: string, sessionId: string) => string), options: HarnessOptions = {}) {
   const ctx = new Context()
   const created: unknown[] = []
   const prompts: string[] = []
@@ -56,7 +56,7 @@ function harness(answer: string | ((prompt: string) => string), options: Harness
         const session = { id: request.sessionId }
         let reply: string
         try {
-          reply = typeof answer === 'function' ? answer(text) : answer
+          reply = typeof answer === 'function' ? answer(text, request.sessionId) : answer
         } catch {
           ;(ctx.emit as (...args: unknown[]) => void)('session/event', session, { type: 'turn/end', seq: 2, data: { reason: { kind: 'failed' } } })
           return
@@ -234,5 +234,129 @@ describe('memberAlias', () => {
     expect(memberAlias('10001', 's')).not.toBe(memberAlias('10002', 's'))
     expect(memberAlias('10001', 's')).not.toBe(memberAlias('10001', 't'))
     expect(memberAlias('10001', 's')).toMatch(/^群友#[0-9a-f]{4}$/)
+  })
+})
+
+describe('DigestRunner tools', () => {
+  const asRunner = (h: ReturnType<typeof harness>, cfg: DigestConfig) => runner(h, cfg)
+  let r: DigestRunner
+
+  it('stores what qq_digest_write handed in, not the final answer, and keeps both on disk', async () => {
+    fill('g1', 12)
+    const h = harness((_prompt, session) => {
+      expect(r.writeDigest(session, 'g1', '## 话题\n工具写入的摘要')).toEqual({ ok: true, message: 'digest saved' })
+      return '写好了。'
+    })
+    r = asRunner(h, config())
+    expect(await r.runRound(['g1'], new AbortController().signal)).toBe(1)
+    const [digest] = store.digests({ groupId: 'g1', limit: 5 })
+    expect(digest?.text).toBe('## 话题\n工具写入的摘要')
+    const raw = readFileSync(digest!.rawPath!, 'utf8')
+    expect(raw).toContain('工具写入的摘要')
+    expect(raw).toContain('--- final answer ---\n写好了。')
+  })
+
+  it('still keeps a digest the model wrote as its answer, when it skipped the tool', async () => {
+    fill('g1', 12)
+    const h = harness('## 话题\n直接作答的摘要')
+    r = asRunner(h, config())
+    expect(await r.runRound(['g1'], new AbortController().signal)).toBe(1)
+    expect(store.digests({ groupId: 'g1', limit: 5 })[0]?.text).toBe('## 话题\n直接作答的摘要')
+  })
+
+  it('tells the model the group number and shows the notes the group has, by id', async () => {
+    fill('g1', 12)
+    store.addNote('g1', '常聊显卡', 1)
+    const h = harness('## 话题\nx')
+    r = asRunner(h, config())
+    await r.runRound(['g1'], new AbortController().signal)
+    expect(h.prompts[0]).toContain('groupId "g1"')
+    expect(h.prompts[0]).toMatch(/<qq_group_notes trust="derived">\n#1 常聊显卡\n<\/qq_group_notes>/)
+  })
+
+  it('refuses a tool call for another group, and a second digest in one turn', async () => {
+    fill('g1', 12)
+    const results: unknown[] = []
+    const h = harness((_prompt, session) => {
+      results.push(r.writeDigest(session, 'g2', '别的群'))
+      results.push(r.groupNote(session, 'g2', 'add', '别的群笔记'))
+      results.push(r.writeDigest(session, 'g1', '第一份'))
+      results.push(r.writeDigest(session, 'g1', '第二份'))
+      return '好'
+    })
+    r = asRunner(h, config())
+    await r.runRound(['g1'], new AbortController().signal)
+    expect(results).toEqual([
+      { ok: false, error: expect.stringContaining('groupId must be g1') },
+      { ok: false, error: expect.stringContaining('groupId must be g1') },
+      { ok: true, message: 'digest saved' },
+      { ok: false, error: 'the digest was already written for this turn' },
+    ])
+    expect(store.digests({ groupId: 'g1', limit: 5 })[0]?.text).toBe('第一份')
+    expect(store.notes('g2')).toEqual([])
+  })
+
+  it('caps the calls of one turn, refused ones included', async () => {
+    fill('g1', 12)
+    const outcomes: boolean[] = []
+    const h = harness((_prompt, session) => {
+      for (let i = 0; i < 6; i += 1) outcomes.push(r.groupNote(session, 'g1', 'add', `话题${i}`).ok)
+      return '好'
+    })
+    r = asRunner(h, config({ maxToolCalls: 4 }))
+    await r.runRound(['g1'], new AbortController().signal)
+    expect(outcomes).toEqual([true, true, true, true, false, false])
+    expect(store.notes('g1')).toHaveLength(4)
+  })
+
+  it('works only inside a digest turn: not with an unknown session, and not after the turn ended', async () => {
+    fill('g1', 12)
+    let ended = ''
+    const h = harness((_prompt, session) => { ended = session; return '好' })
+    r = asRunner(h, config())
+    expect(r.writeDigest('nobody', 'g1', 'x')).toEqual({ ok: false, error: expect.stringContaining('only inside a QQ digest turn') })
+    expect(r.writeDigest(undefined, 'g1', 'x').ok).toBe(false)
+    await r.runRound(['g1'], new AbortController().signal)
+    expect(r.groupNote(ended, 'g1', 'add', '话题').ok).toBe(false)
+  })
+
+  it('adds a note only after the filter passes it, saying why when it does not', async () => {
+    fill('g1', 12)
+    const results: Array<{ ok: boolean; error?: string }> = []
+    const h = harness((_prompt, session) => {
+      results.push(r.groupNote(session, 'g1', 'add', '成员0 总是半夜发言'))
+      results.push(r.groupNote(session, 'g1', 'add', '联系 13812345678'))
+      results.push(r.groupNote(session, 'g1', 'add', '夜间活跃，爱发表情包'))
+      results.push(r.groupNote(session, 'g1', 'add', '夜间活跃，爱发表情包'))
+      return '好'
+    })
+    r = asRunner(h, config())
+    await r.runRound(['g1'], new AbortController().signal)
+    expect(results.map(result => result.ok)).toEqual([false, false, true, false])
+    expect(results[0]?.error).toContain('name of a member')
+    expect(store.notes('g1').map(note => note.text)).toEqual(['夜间活跃，爱发表情包'])
+  })
+
+  it('removes a note by id or text, and logs the turn with tool calls and notes', async () => {
+    fill('g1', 12)
+    store.addNote('g1', '旧笔记甲', 1)
+    store.addNote('g1', '旧笔记乙', 2)
+    const logs: string[] = []
+    const h = harness((_prompt, session) => {
+      expect(r.groupNote(session, 'g1', 'remove', '#1').ok).toBe(true)
+      expect(r.groupNote(session, 'g1', 'remove', '旧笔记乙').ok).toBe(true)
+      expect(r.groupNote(session, 'g1', 'remove', '不存在').ok).toBe(false)
+      expect(r.groupNote(session, 'g1', 'rename', 'x').ok).toBe(false)
+      r.writeDigest(session, 'g1', '摘要')
+      return '好'
+    })
+    h.ctx.logger.exporter({ levels: { default: 3 }, export: (m) => { logs.push(String(m.args[0])) } })
+    r = asRunner(h, config())
+    await r.runRound(['g1'], new AbortController().signal)
+    expect(store.notes('g1')).toEqual([])
+    const line = logs.find(entry => entry.includes('digested'))
+    expect(line).toContain('via qq_digest_write')
+    expect(line).toContain('tool calls 5 (2 refused), notes +0/-2')
+    expect(line).toContain('compacted 0x')
   })
 })

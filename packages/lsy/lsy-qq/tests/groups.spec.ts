@@ -143,4 +143,47 @@ describe('QQ groups follow the Settings form', () => {
     const h = await boot([A], () => { throw new Error('网络错误') })
     await until(() => h.warnings.some(line => line.includes(`backfill of group ${A} failed`)), 'the warning')
   })
+
+  describe('evidenceOf', () => {
+    const post = async (h: Awaited<ReturnType<typeof boot>>, group: string, user: string, id: number) => {
+      h.fake.push(groupMessage(group, user, `消息${id}`, { message_id: id, time: Math.floor(Date.now() / 1000) }))
+      await until(() => h.observer.store.byMessageId(group, String(id)) !== undefined, `message ${id}`)
+    }
+
+    it('answers with a stable sender key and the time, never the QQ number, only for messages the group holds', async () => {
+      const h = await boot([A, B])
+      await post(h, A, '10001', 7001)
+      await post(h, A, '10002', 7002)
+      await post(h, A, '10001', 7003)
+      await post(h, B, '10001', 7004)
+      const found = h.observer.evidenceOf(A, ['7001', '7002', '7003', '7004', '9999'])
+      expect(found.map(entry => entry.messageId)).toEqual(['7001', '7002', '7003'])
+      expect(found[0]!.senderKey).toBe(found[2]!.senderKey)
+      expect(found[0]!.senderKey).not.toBe(found[1]!.senderKey)
+      expect(found[0]!.senderKey).toMatch(/^[0-9a-f]{16}$/)
+      expect(JSON.stringify(found)).not.toContain('10001')
+      expect(found.every(entry => typeof entry.at === 'number')).toBe(true)
+      // The same member has another key in another group, so keys cannot be joined across groups.
+      expect(h.observer.evidenceOf(B, ['7004'])[0]!.senderKey).not.toBe(found[0]!.senderKey)
+    })
+
+    it('answers nothing for a group that is not recorded, a recalled message, or a message past retention', async () => {
+      const h = await boot([A])
+      await post(h, A, '10001', 7101)
+      expect(h.observer.evidenceOf(C, ['7101'])).toEqual([])
+      h.observer.store.recall(A, '7101')
+      expect(h.observer.evidenceOf(A, ['7101'])).toEqual([])
+      await post(h, A, '10001', 7102)
+      expect(h.observer.evidenceOf(A, ['7102'])).toHaveLength(1)
+      h.observer.now = () => Date.now() + 31 * 86_400_000
+      expect(h.observer.evidenceOf(A, ['7102'])).toEqual([])
+    })
+
+    it('looks at 200 ids at most', async () => {
+      const h = await boot([A])
+      await post(h, A, '10001', 7201)
+      const ids = [...Array.from({ length: 200 }, (_unused, index) => `none${index}`), '7201']
+      expect(h.observer.evidenceOf(A, ids)).toEqual([])
+    })
+  })
 })

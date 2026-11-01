@@ -2736,7 +2736,7 @@ export type FeedbackScope = typeof FEEDBACK_SCOPES[number]
 
 - `inject`: `sessionController` · `permissionPresets` · `sessionTitle` · `credentials`
 - `refs`: `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/lsy/lsy-qq/src/index.ts:43`](../packages/lsy/lsy-qq/src/index.ts)
+- `source`: [`packages/lsy/lsy-qq/src/index.ts:44`](../packages/lsy/lsy-qq/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
@@ -2838,6 +2838,8 @@ export interface Config {
     keepPerGroup: number
     /** Longest digest stored, in characters. */
     maxDigestChars: number
+    /** Tool calls (`qq_digest_write`, `qq_group_note`) one digest Session may make, refused ones included. 12 by default. */
+    maxToolCalls: number
     /** Provider route of the digest Session's model; the profile's default when omitted. */
     provider?: string
     /** Model id on that route; the profile's default when omitted. */
@@ -3081,6 +3083,27 @@ export interface Config {
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-taint -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-tool-qq -->
+<a id="deepseek-aidsh-lsy-tool-qq"></a>
+
+## `@deepseek-ai/dsh-lsy-tool-qq`
+
+- `inject`: `tools`
+- `source`: [`packages/lsy/lsy-tool-qq/src/index.ts:21`](../packages/lsy/lsy-tool-qq/src/index.ts)
+
+```ts config-catalog
+/** Which tools the plugin registers. */
+export interface Config {
+  /**
+   * `read` (the default): the read tools and `qq_forget`, for the main agent. `digest`: only `qq_digest_write` and
+   * `qq_group_note`, for the `qq-digest` preset, whose Session writes the digest and the notes of the one group it is
+   * digesting; the observer binds both to that Session and that group, so they can touch nothing else.
+   */
+  mode: 'read' | 'digest'
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-tool-qq -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-lsy-tool-watch -->
 <a id="deepseek-aidsh-lsy-tool-watch"></a>
@@ -5825,7 +5848,6 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-lsy-qq-login` | `connection` · `lsyQq` | [`packages/lsy/lsy-qq-login/src/index.ts`](../packages/lsy/lsy-qq-login/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-style-settings` | `connection` | [`packages/lsy/lsy-style-settings/src/index.ts`](../packages/lsy/lsy-style-settings/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-tool-monitor` | `tools` · `storageDomain` · `sessionController` · `sessionPersistence` | [`packages/lsy/lsy-tool-monitor/src/index.ts`](../packages/lsy/lsy-tool-monitor/src/index.ts) |
-| `@deepseek-ai/dsh-lsy-tool-qq` | `tools` | [`packages/lsy/lsy-tool-qq/src/index.ts`](../packages/lsy/lsy-tool-qq/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-tool-up` | `tools` · `credentials` | [`packages/lsy/lsy-tool-up/src/index.ts`](../packages/lsy/lsy-tool-up/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-tool-voice` | `tools` | [`packages/lsy/lsy-tool-voice/src/index.ts`](../packages/lsy/lsy-tool-voice/src/index.ts) |
 | `@deepseek-ai/dsh-lsy-tool-wechat` | `tools` | [`packages/lsy/lsy-tool-wechat/src/index.ts`](../packages/lsy/lsy-tool-wechat/src/index.ts) |

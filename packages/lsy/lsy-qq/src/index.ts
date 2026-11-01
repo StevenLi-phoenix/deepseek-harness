@@ -16,18 +16,19 @@ import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-permission-presets'
 import type {} from '@deepseek-ai/dsh-session-title'
 import z from '@deepseek-ai/schemastery'
-import { DigestRunner, type DigestConfig } from './digest.ts'
+import { DigestRunner, senderKey, type DigestConfig, type ToolOutcome } from './digest.ts'
 import { DEFAULT_MEDIA_HOST_SUFFIXES, detectExtension, fetchCapped, isAllowedMediaUrl, removeMedia, saveMedia } from './media.ts'
 import { LoginDoor, type DoorResult } from './login.ts'
 import { isPrivateAddress, isPrivateUrl, OneBotClient, type OneBotEvent } from './onebot.ts'
 import type { QqConnection, QqLoginReading, RefreshRefusal } from './status.ts'
 import { displayName, parseMessage } from './text.ts'
-import { QqStore, type DigestRow, type GroupStats, type MessageRow } from './store.ts'
+import { QqStore, type DigestRow, type GroupNote, type GroupStats, type MessageRow } from './store.ts'
 
 export * from './digest.ts'
 export * from './login.ts'
 export * from './media.ts'
 export * from './onebot.ts'
+export * from './pii.ts'
 export * from './status.ts'
 export * from './store.ts'
 export * from './text.ts'
@@ -138,6 +139,8 @@ export interface Config {
     keepPerGroup: number
     /** Longest digest stored, in characters. */
     maxDigestChars: number
+    /** Tool calls (`qq_digest_write`, `qq_group_note`) one digest Session may make, refused ones included. 12 by default. */
+    maxToolCalls: number
     /** Provider route of the digest Session's model; the profile's default when omitted. */
     provider?: string
     /** Model id on that route; the profile's default when omitted. */
@@ -224,6 +227,7 @@ export const Config = z.object({
     profiles: z.boolean().default(false),
     keepPerGroup: z.natural().min(1).default(200),
     maxDigestChars: z.natural().min(500).default(3000),
+    maxToolCalls: z.natural().min(1).default(12),
     provider: z.string(),
     model: z.string(),
     agentPreset: z.string().default('qq-digest'),
@@ -410,9 +414,10 @@ export class QqObserver extends Service {
       profiles: d.profiles,
       keepPerGroup: d.keepPerGroup,
       maxDigestChars: d.maxDigestChars,
+      maxToolCalls: d.maxToolCalls,
     }
     this.digest = new DigestRunner(ctx, this.store, digestConfig, this.dataDir, id => this.store.groupName(id) ?? id, () => this.now())
-    ctx.logger.info(`lsy-qq: recording ${config.groups.get().length} group(s)${config.groups.get().length === 0 ? ' (the list is empty: every message is dropped; add group numbers to groups)' : ''}; sending ${config.send.enabled ? `on for ${config.send.groups.length} group(s)` : 'off'}; voice transcription ${config.asr.enabled ? 'on' : 'off'}; digests ${d.enabled ? `every ${d.everyHours} h` : 'off'}; data in ${this.dataDir}`)
+    ctx.logger.info(`lsy-qq: recording ${config.groups.get().length} group(s)${config.groups.get().length === 0 ? ' (the list is empty: every message is dropped; add group numbers to groups)' : ''}; sending ${config.send.enabled ? `on for ${config.send.groups.length} group(s)` : 'off'}; voice transcription ${config.asr.enabled.get() ? 'on' : 'off'}; digests ${d.enabled ? `every ${d.everyHours} h` : 'off'}; data in ${this.dataDir}`)
 
     this.door = config.login.enabled ? new LoginDoor({ url: config.login.url, timeoutMs: config.login.timeoutMs }) : undefined
     let listed = this.recordedIds
@@ -560,6 +565,59 @@ export class QqObserver extends Service {
    */
   groupName(groupId: string): string {
     return this.store.groupName(groupId) ?? groupId
+  }
+
+  /**
+   * `qq_digest_write` for the tools of the digest preset: stage the calling Session's digest.
+   * @param sessionId - the calling Session.
+   * @param groupId - the group the model names; it must be the group the Session is digesting.
+   * @param text - the digest.
+   * @returns what to tell the model.
+   */
+  digestWrite(sessionId: string | undefined, groupId: string, text: string): ToolOutcome {
+    return this.digest.writeDigest(sessionId, groupId, text)
+  }
+
+  /**
+   * `qq_group_note` for the tools of the digest preset: add or remove a note of the group the calling Session is digesting.
+   * @param sessionId - the calling Session.
+   * @param groupId - the group the model names; it must be the group the Session is digesting.
+   * @param op - `add` or `remove`.
+   * @param text - the note, or for `remove` its `#id` or exact text.
+   * @returns what to tell the model.
+   */
+  groupNote(sessionId: string | undefined, groupId: string, op: string, text: string): ToolOutcome {
+    return this.digest.groupNote(sessionId, groupId, op, text)
+  }
+
+  /**
+   * The notes of a recorded group: what the QQ channel remembers of its habits.
+   * @param groupId - group number; an unrecorded group yields nothing.
+   * @returns the notes, oldest first.
+   */
+  groupNotes(groupId: string): GroupNote[] {
+    return this.recordedIds.has(groupId) ? this.store.notes(groupId) : []
+  }
+
+  /**
+   * Evidence for a claim about a group's chat, without exposing who said what: for each message id the group still
+   * holds, a stable sender key (a salted hash of the member within this group, never the QQ number) and its time.
+   * @param groupId - group number; an unrecorded group yields nothing.
+   * @param messageIds - OneBot message ids, at most 200 are looked at.
+   * @returns one entry per message found: recorded, not recalled, and still inside the retention window.
+   */
+  evidenceOf(groupId: string, messageIds: readonly string[]): Array<{ messageId: string; senderKey: string; at: number }> {
+    if (!this.recordedIds.has(groupId)) return []
+    const { textDays } = this.live.retention
+    const since = textDays > 0 ? this.now() - textDays * 86_400_000 : 0
+    const salt = this.store.getMeta('alias-salt')
+    const found: Array<{ messageId: string; senderKey: string; at: number }> = []
+    for (const messageId of messageIds.slice(0, 200)) {
+      const row = this.store.byMessageId(groupId, messageId)
+      if (row === undefined || row.recalled || row.at < since) continue
+      found.push({ messageId, senderKey: senderKey(groupId, row.userId, salt ?? this.digest.ensureSalt()), at: row.at })
+    }
+    return found
   }
 
   /**
