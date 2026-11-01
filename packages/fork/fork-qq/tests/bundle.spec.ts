@@ -42,7 +42,7 @@ describe('event bundle', () => {
     const preset = inserted.find(entry => entry.id === 'preset-qq-digest')!
     expect(preset.config?.['id']).toBe('qq-digest')
     const plugins = preset.config?.plugins ?? []
-    expect(plugins.map(plugin => plugin.name)).toEqual(['@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-fork-tool-qq', 'cordis:group'])
+    expect(plugins.map(plugin => plugin.name)).toEqual(['@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-fork-tool-qq', 'cordis:group', '@deepseek-ai/dsh-fork-style'])
     // The tool plugin runs in digest mode: only qq_digest_write and qq_group_note, bound to the Session's own group.
     expect(plugins[1]?.config).toEqual({ mode: 'digest' })
     const persona = (plugins[0]?.config as { prefix: string }).prefix

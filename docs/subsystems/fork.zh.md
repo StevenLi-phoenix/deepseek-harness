@@ -2,7 +2,7 @@
 
 [English](fork.md) | 中文
 
-事件驱动 agent 背后的 fork 本地服务：[`@deepseek-ai/dsh-fork-event-bus`](../../packages/fork/fork-event-bus/README.zh.md) 把传感器事件路由成通知或无人值守的 Session，[`@deepseek-ai/dsh-fork-github-sensor`](../../packages/fork/fork-github-sensor/README.zh.md) 轮询 GitHub，[`@deepseek-ai/dsh-fork-wechat`](../../packages/fork/fork-wechat/README.zh.md) 通过微信提供 `forkNotifier` 契约，[`@deepseek-ai/dsh-fork-qq`](../../packages/fork/fork-qq/README.zh.md) 潜伏在主人列出的 QQ 群里并做摘要（它的设置 → QQ 页面 [`@deepseek-ai/dsh-fork-qq-login`](../../packages/fork/fork-qq-login/README.zh.md) 显示连接状态，以及被踢下线后用来扫码的登录二维码），[`@deepseek-ai/dsh-fork-style`](../../packages/fork/fork-style/README.zh.md) 保存给主 agent 校准语气的 QQ 和 B站简短对话（它的设置 → 说话风格 页面是 [`@deepseek-ai/dsh-fork-style-settings`](../../packages/fork/fork-style-settings/README.zh.md)），[`@deepseek-ai/dsh-bili`](../../packages/fork/bili/README.zh.md) 是 agent 自己的 B站账号。行为、配置与限制见各包 README；[上游账本](../../packages/fork/UPSTREAM.md)记录 fork 如何跟踪上游。
+事件驱动 agent 背后的 fork 本地服务：[`@deepseek-ai/dsh-fork-event-bus`](../../packages/fork/fork-event-bus/README.zh.md) 把传感器事件路由成通知或无人值守的 Session，[`@deepseek-ai/dsh-fork-github-sensor`](../../packages/fork/fork-github-sensor/README.zh.md) 轮询 GitHub，[`@deepseek-ai/dsh-fork-wechat`](../../packages/fork/fork-wechat/README.zh.md) 通过微信提供 `forkNotifier` 契约，[`@deepseek-ai/dsh-fork-qq`](../../packages/fork/fork-qq/README.zh.md) 潜伏在主人列出的 QQ 群里并做摘要（它的设置 → QQ 页面 [`@deepseek-ai/dsh-fork-qq-login`](../../packages/fork/fork-qq-login/README.zh.md) 显示连接状态，以及被踢下线后用来扫码的登录二维码），[`@deepseek-ai/dsh-fork-style`](../../packages/fork/fork-style/README.zh.md) 保存各 agent 共享的人格层，学自 QQ 群和 B站公开文本（它的设置 → 人格与风格 页面是 [`@deepseek-ai/dsh-fork-style-settings`](../../packages/fork/fork-style-settings/README.zh.md)），[`@deepseek-ai/dsh-bili`](../../packages/fork/bili/README.zh.md) 是 agent 自己的 B站账号。行为、配置与限制见各包 README；[上游账本](../../packages/fork/UPSTREAM.md)记录 fork 如何跟踪上游。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -801,25 +801,32 @@ Source: [`packages/fork/fork-qqbot/src/index.ts`](../../packages/fork/fork-qqbot
 
 ### `ctx.forkStyle` — `StyleService`
 
-The samples, their collection, and the block: what the root row provides as `ctx.forkStyle`.
+DSH's speaking style: what the root row provides as `ctx.forkStyle`.
 
 ```ts cordis-catalog
 /**
- * Counts for the Settings overview, without any sample text; refreshed whenever the panel is read, after each run,
- * and on the schedule check.
- * @returns active (`kept`) and pending samples, the review mode, the last run's start, and the stock-line trend.
+ * Remember the text of a web search or fetch a Session just ran, for the miner (when mining is on).
+ * @param text - the tool result's text; the query and URL never reach this.
  */
-health(): StyleHealth
+async feedWeb(text: string): Promise<void>
 
 /** Stop a run in progress (its Bilibili reads end). */
 dispose(): void
 
 /**
+ * Counts for the Settings overview, without any text; refreshed whenever the panel is read, after each run, and on the
+ * schedule check.
+ * @returns active and pending tone samples, the review mode, the last run's start, and the stock-line trend.
+ */
+health(): StyleHealth
+
+/**
  * The block for a day.
  * @param day - `YYYY-MM-DD`, the rotation seed.
- * @returns the block, or undefined when collection is off or nothing is active.
+ * @param invite - invite the agent to write a card when there is none (its preset mounts `persona_update`).
+ * @returns the block, its counts, and the card version it shows, or undefined when it is off or empty.
  */
-async block(day: string): Promise<{ text: string; shown: number; owner: number } | undefined>
+async block(day: string, invite: boolean): Promise<StyleBlock | undefined>
 
 /**
  * When the next scheduled run is due.
@@ -828,30 +835,66 @@ async block(day: string): Promise<{ text: string; shown: number; owner: number }
 async nextRunAt(): Promise<number | undefined>
 
 /**
- * Run a collection when one is due and none is running.
- * @returns the run's report, or undefined when nothing ran.
+ * Run a collection and the meme miner when one is due and none is running.
+ * @returns the tone collection's report, or undefined when nothing ran.
  */
 async runIfDue(): Promise<RunReport | undefined>
 
 /**
+ * One meme-mining run over the public text of the last hours: QQ groups, Bilibili hot comments and hot-search words
+ * (`ctx.biliHot`, absent until the bili package provides it), and the pages the main agent searched or fetched.
+ * Nothing runs while mining is off or another run is going.
+ * @returns the run's counts, or undefined when nothing ran.
+ */
+async mine(): Promise<MineReport | undefined>
+
+/**
  * Everything the Settings section shows.
- * @returns the samples, limits, the last run, the next run, and the trend.
+ * @returns the samples, notes, HotWatch's index, card versions, the last runs, the next run, and the trend.
  */
 async panel(): Promise<StylePanel>
 
 /**
- * Apply one edit the owner made on the Settings page.
- * @param input - `{ op: 'remove' | 'keep', id }` or `{ op: 'add', reply, prompt? }`, as the page sent it; validated here.
- * @returns the panel after the edit, or the refusal (`not_found`, `invalid_input`) with the unchanged panel.
+ * Apply one edit the owner made on the Settings page. An owner's card edit, rollback, or deletion becomes the new
+ * baseline and restarts the agent's revision wait.
+ * @param input - `{ op: 'remove' | 'keep', id }`, `{ op: 'block', term }`, `{ op: 'card', card }`,
+ * `{ op: 'rollback', version }`, or `{ op: 'deleteVersion', version }`, as the page sent it; validated here.
+ * @returns the panel after the edit, or the refusal (`not_found`, `invalid_input`, `current_version`) with the unchanged panel.
  */
 async edit(input: unknown): Promise<StyleEditAnswer>
 
 /**
- * Start a collection run without waiting for it; the panel says `running` until it ends. Nothing runs while
- * collection is off.
+ * Start a tone collection and then a meme-mining run without waiting for them; the panel says `running` until they
+ * end. Nothing runs while off.
  * @returns the panel right after the start.
  */
 async collect(): Promise<StylePanel>
+
+/**
+ * A `style_note` call: the platform comes from the calling Session's preset, the example must appear verbatim in what
+ * that Session just read (QQ messages shown to a digest Session, or the results of the public-text tools in its log),
+ * every field passes the note filter, and the guard allows the whole note.
+ * @param input - the calling Session (and its log) and preset, the kind, the term, the meaning, the example, and related memes.
+ * @returns `recorded`, `refreshed`, or `rejected` with a reason code.
+ */
+async note(input: StyleNoteInput): Promise<WriteAnswer>
+
+/**
+ * A `meme_lookup` call: the groups' own memes first, then HotWatch.
+ * @param term - the meme as the index lists it (or one of its `related` terms).
+ * @returns the meaning and where it came from, or `found: false`.
+ */
+async lookup(term: string): Promise<LookupAnswer>
+
+/**
+ * A `persona_update` call: at most `persona.maxChars` characters, the note filter, the guard, and at least
+ * `persona.minIntervalHours` since the last version (the agent's or the owner's; an owner edit on the Settings page
+ * is never limited). The owner is told which version it became and how much changed, never the text, through
+ * `ctx.forkNotifier`, whose channel holds the notice while the owner sleeps.
+ * @param input - the whole card, a one-line reason, and the writing Session.
+ * @returns `recorded`, or `rejected` with a reason code.
+ */
+async updateCard(input: { readonly card: string; readonly reason: string; readonly sessionId?: string }): Promise<WriteAnswer>
 ```
 
 Source: [`packages/fork/fork-style/src/index.ts`](../../packages/fork/fork-style/src/index.ts)

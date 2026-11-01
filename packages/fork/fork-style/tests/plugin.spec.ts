@@ -37,14 +37,17 @@ describe('prompt mode in the real agent loop', () => {
   async function harness(script: ConstructorParameters<typeof MockAdapter>[0], options: { enabled?: boolean } = {}) {
     const dir = await tmp()
     await new StyleStore(join(dir, 'samples.jsonl'), { maxActive: 60, maxOwner: 20, maxPending: 40, maxTombstones: 100 })
-      .ingest([{ source: 'owner-bili', at: Date.now(), prompt: '下期什么时候', reply: '刚剪完' }, { source: 'qq-group', at: Date.now(), prompt: '周末去哪', reply: '宅着' }], 'optional')
+      .ingest([
+        { source: 'bili', owner: true, origin: { platform: 'bili', groups: 1, speakers: 2, days: 1 }, at: Date.now(), prompt: '下期什么时候', reply: '刚剪完' },
+        { source: 'qq', origin: { platform: 'qq', groups: 1, speakers: 2, days: 1 }, at: Date.now(), prompt: '周末去哪', reply: '宅着' },
+      ], 'optional')
     const adapter = new MockAdapter(script)
     const ctx = new Context()
     contexts.push(ctx)
     await mountAgentLoopTestDependencies(ctx)
     await ctx.plugin(AgentLoop, { agents: [] })
-    await ctx.plugin(Style, { dir, ticsFile: join(dir, 'tics.json'), enabled: options.enabled ?? true, ...OFF_SOURCES } as Style.Config)
-    // The preset's own instance, as the bundle mounts it inside `unattended`.
+    await ctx.plugin(Style, { dir, ticsFile: join(dir, 'tics.json'), enabled: options.enabled ?? true, ...OFF_SOURCES, hotwatch: { enabled: false } } as Style.Config)
+    // The presets' own instance, as the bundle mounts it inside unattended, up, bili, and qqbot.
     await ctx.plugin({ name: 'preset-scope', apply: async (scope: Context) => { await scope.plugin(Style, { mode: 'prompt' } as Style.Config) } })
     ctx.llm.registerAdapter(['mock'], adapter)
     return { ctx, adapter, dir }
@@ -80,11 +83,14 @@ describe('prompt mode in the real agent loop', () => {
     expect(raw).not.toContain('好的呀')
   })
 
-  it('leaves other presets alone', async () => {
-    const { ctx, adapter } = await harness([textResponse('NO_REPLY')])
-    const agent = await ctx.agentLoop.create(SessionId('up'), { provider: 'mock', model: 'mock' }, { agentPreset: 'up' } as never)
-    await turn(ctx, agent, 'comments arrived')
-    expect(JSON.stringify(adapter.requests[0]!.messages)).not.toContain(Style.STYLE_INTRO)
+  it('shares the block with the up preset by default and leaves presets outside the list alone', async () => {
+    const { ctx, adapter } = await harness([textResponse('NO_REPLY'), textResponse('NO_REPLY')])
+    const up = await ctx.agentLoop.create(SessionId('up'), { provider: 'mock', model: 'mock' }, { agentPreset: 'up' } as never)
+    await turn(ctx, up, 'comments arrived')
+    expect(JSON.stringify(adapter.requests[0]!.messages)).toContain(Style.BLOCK_INTRO)
+    const digest = await ctx.agentLoop.create(SessionId('digest'), { provider: 'mock', model: 'mock' }, { agentPreset: 'qq-digest' } as never)
+    await turn(ctx, digest, 'transcript')
+    expect(JSON.stringify(adapter.requests[1]!.messages)).not.toContain(Style.BLOCK_INTRO)
   })
 
   it('adds nothing while the root plugin is off', async () => {
@@ -101,28 +107,30 @@ describe('the style service (collect mode)', () => {
     await writeFile(join(dir, 'tics.json'), JSON.stringify({ days: { '2026-10-31': { answers: 10, answersWithHits: 4, hits: 5, perLine: {} } } }))
     const ctx = new Context()
     contexts.push(ctx)
-    await ctx.plugin(Style, { dir, ticsFile: join(dir, 'tics.json'), ...OFF_SOURCES, ...config } as Style.Config)
+    await ctx.plugin(Style, { dir, ticsFile: join(dir, 'tics.json'), ...OFF_SOURCES, hotwatch: { enabled: false }, ...config } as Style.Config)
     return { ctx, style: ctx.get('forkStyle')!, dir }
   }
 
   it('answers the panel with samples, limits, and the stock-line trend', async () => {
     const { style } = await mount({ review: 'required' })
     const answer = await style.panel()
-    expect(answer).toMatchObject({ enabled: true, review: 'required', samples: [], running: false, lastRun: null, limits: { maxActive: 60, maxOwner: 20, maxChars: 60 } })
+    expect(answer).toMatchObject({
+      enabled: true, review: 'required', samples: [], notes: [], hot: [], cards: [], running: false, lastRun: null,
+      parts: { tone: true, memes: true, traits: true, persona: true },
+      limits: { maxActive: 60, maxOwner: 20, maxMemes: 40, maxTraits: 10, cardChars: 600 },
+    })
     expect(answer.trend).toEqual([{ day: '2026-10-31', answers: 10, withTics: 4, mainAnswers: 0, meanChars: null }])
   })
 
-  it('adds the owner\'s line, removes a sample, and refuses bad edits with the panel attached', async () => {
-    const { style } = await mount()
-    const added = await style.edit({ op: 'add', reply: '会的. 绝对会的' })
-    expect(added.ok).toBe(true)
-    expect(added.panel.samples).toMatchObject([{ source: 'owner-manual', reply: '会的. 绝对会的', status: 'active' }])
-    const id = added.panel.samples[0]!.id
+  it('removes a sample, refuses bad edits with the panel attached, and offers no way to add text by hand', async () => {
+    const { style, dir } = await mount()
+    await new StyleStore(join(dir, 'samples.jsonl'), { maxActive: 60, maxOwner: 20, maxPending: 40, maxTombstones: 100 })
+      .ingest([{ source: 'qq', origin: { platform: 'qq', groups: 1, speakers: 2, days: 1 }, at: Date.now(), prompt: '在吗', reply: '在' }], 'optional')
+    const id = (await style.panel()).samples[0]!.id
     expect(await style.edit({ op: 'remove', id })).toMatchObject({ ok: true, panel: { samples: [] } })
     expect(await style.edit({ op: 'remove', id })).toMatchObject({ ok: false, error: 'not_found' })
-    expect(await style.edit({ op: 'add', reply: '' })).toMatchObject({ ok: false, error: 'invalid_input' })
+    expect(await style.edit({ op: 'add', reply: '会的' })).toMatchObject({ ok: false, error: 'invalid_input' })
     expect(await style.edit('nonsense')).toMatchObject({ ok: false, error: 'invalid_input' })
-    expect(await style.edit({ op: 'explode' })).toMatchObject({ ok: false, error: 'invalid_input' })
   })
 
   it('starts a run on demand without waiting for it, and reports it in the panel', async () => {
@@ -133,8 +141,10 @@ describe('the style service (collect mode)', () => {
   })
 
   it('reports counts without text through health(), and the stock-line direction', async () => {
-    const { style } = await mount()
-    await style.edit({ op: 'add', reply: '会的. 绝对会的' })
+    const { style, dir } = await mount()
+    await new StyleStore(join(dir, 'samples.jsonl'), { maxActive: 60, maxOwner: 20, maxPending: 40, maxTombstones: 100 })
+      .ingest([{ source: 'qq', origin: { platform: 'qq', groups: 1, speakers: 2, days: 1 }, at: Date.now(), prompt: '在吗', reply: '会的' }], 'optional')
+    await style.panel()
     expect(style.health()).toEqual({ kept: 1, pending: 0, review: 'optional', lastRefreshAt: null, ticTrend: null })
     expect(JSON.stringify(style.health())).not.toContain('会的')
     const day = (withTics: number) => ({ day: 'd', answers: 10, withTics, mainAnswers: 0, meanChars: null })
@@ -143,11 +153,19 @@ describe('the style service (collect mode)', () => {
     expect(Style.ticTrend([day(3), day(3), day(3)])).toBe('flat')
   })
 
+  it('refuses a miner route that names a provider without a model', async () => {
+    const dir = await tmp()
+    const ctx = new Context()
+    contexts.push(ctx)
+    await expect(ctx.plugin(Style, { dir, ticsFile: join(dir, 'tics.json'), ...OFF_SOURCES, miner: { provider: 'mock' } } as Style.Config))
+      .rejects.toThrow(/miner\.provider and miner\.model/u)
+  })
+
   it('runs nothing and shows no next run while off', async () => {
     const { style } = await mount({ enabled: false })
     expect(await style.runIfDue()).toBeUndefined()
     expect((await style.collect()).running).toBe(false)
     expect((await style.panel()).nextRunAt).toBeNull()
-    expect(await style.block('2026-11-01')).toBeUndefined()
+    expect(await style.block('2026-11-01', true)).toBeUndefined()
   })
 })

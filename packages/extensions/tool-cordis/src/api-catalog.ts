@@ -2704,8 +2704,8 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   },
   {
     key: 'forkStyle',
-    summary: 'The samples, their collection, and the block: what the root row provides as `ctx.forkStyle`.',
-    description: 'The samples, their collection, and the block: what the root row provides as `ctx.forkStyle`.',
+    summary: 'DSH\'s speaking style: what the root row provides as `ctx.forkStyle`.',
+    description: 'DSH\'s speaking style: what the root row provides as `ctx.forkStyle`.',
     methods: [
       {
         signature: 'readonly timeZone: string',
@@ -2713,10 +2713,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [],
       },
       {
-        signature: 'health(): StyleHealth',
-        description: 'Counts for the Settings overview, without any sample text; refreshed whenever the panel is read, after each run, and on the schedule check.',
-        parameters: [],
-        returns: 'active (`kept`) and pending samples, the review mode, the last run\'s start, and the stock-line trend.',
+        signature: 'async feedWeb(text: string): Promise<void>',
+        description: 'Remember the text of a web search or fetch a Session just ran, for the miner (when mining is on).',
+        parameters: [{ name: 'text', description: 'the tool result\'s text; the query and URL never reach this.' }],
       },
       {
         signature: 'dispose(): void',
@@ -2724,10 +2723,16 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [],
       },
       {
-        signature: 'async block(day: string): Promise<{ text: string; shown: number; owner: number } | undefined>',
+        signature: 'health(): StyleHealth',
+        description: 'Counts for the Settings overview, without any text; refreshed whenever the panel is read, after each run, and on the schedule check.',
+        parameters: [],
+        returns: 'active and pending tone samples, the review mode, the last run\'s start, and the stock-line trend.',
+      },
+      {
+        signature: 'async block(day: string, invite: boolean): Promise<StyleBlock | undefined>',
         description: 'The block for a day.',
-        parameters: [{ name: 'day', description: '`YYYY-MM-DD`, the rotation seed.' }],
-        returns: 'the block, or undefined when collection is off or nothing is active.',
+        parameters: [{ name: 'day', description: '`YYYY-MM-DD`, the rotation seed.' }, { name: 'invite', description: 'invite the agent to write a card when there is none (its preset mounts `persona_update`).' }],
+        returns: 'the block, its counts, and the card version it shows, or undefined when it is off or empty.',
       },
       {
         signature: 'async nextRunAt(): Promise<number | undefined>',
@@ -2737,27 +2742,51 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async runIfDue(): Promise<RunReport | undefined>',
-        description: 'Run a collection when one is due and none is running.',
+        description: 'Run a collection and the meme miner when one is due and none is running.',
         parameters: [],
-        returns: 'the run\'s report, or undefined when nothing ran.',
+        returns: 'the tone collection\'s report, or undefined when nothing ran.',
+      },
+      {
+        signature: 'async mine(): Promise<MineReport | undefined>',
+        description: 'One meme-mining run over the public text of the last hours: QQ groups, Bilibili hot comments and hot-search words (`ctx.biliHot`, absent until the bili package provides it), and the pages the main agent searched or fetched. Nothing runs while mining is off or another run is going.',
+        parameters: [],
+        returns: 'the run\'s counts, or undefined when nothing ran.',
       },
       {
         signature: 'async panel(): Promise<StylePanel>',
         description: 'Everything the Settings section shows.',
         parameters: [],
-        returns: 'the samples, limits, the last run, the next run, and the trend.',
+        returns: 'the samples, notes, HotWatch\'s index, card versions, the last runs, the next run, and the trend.',
       },
       {
         signature: 'async edit(input: unknown): Promise<StyleEditAnswer>',
-        description: 'Apply one edit the owner made on the Settings page.',
-        parameters: [{ name: 'input', description: '`{ op: \'remove\' | \'keep\', id }` or `{ op: \'add\', reply, prompt? }`, as the page sent it; validated here.' }],
-        returns: 'the panel after the edit, or the refusal (`not_found`, `invalid_input`) with the unchanged panel.',
+        description: 'Apply one edit the owner made on the Settings page. An owner\'s card edit, rollback, or deletion becomes the new baseline and restarts the agent\'s revision wait.',
+        parameters: [{ name: 'input', description: '`{ op: \'remove\' | \'keep\', id }`, `{ op: \'block\', term }`, `{ op: \'card\', card }`, `{ op: \'rollback\', version }`, or `{ op: \'deleteVersion\', version }`, as the page sent it; validated here.' }],
+        returns: 'the panel after the edit, or the refusal (`not_found`, `invalid_input`, `current_version`) with the unchanged panel.',
       },
       {
         signature: 'async collect(): Promise<StylePanel>',
-        description: 'Start a collection run without waiting for it; the panel says `running` until it ends. Nothing runs while collection is off.',
+        description: 'Start a tone collection and then a meme-mining run without waiting for them; the panel says `running` until they end. Nothing runs while off.',
         parameters: [],
         returns: 'the panel right after the start.',
+      },
+      {
+        signature: 'async note(input: StyleNoteInput): Promise<WriteAnswer>',
+        description: 'A `style_note` call: the platform comes from the calling Session\'s preset, the example must appear verbatim in what that Session just read (QQ messages shown to a digest Session, or the results of the public-text tools in its log), every field passes the note filter, and the guard allows the whole note.',
+        parameters: [{ name: 'input', description: 'the calling Session (and its log) and preset, the kind, the term, the meaning, the example, and related memes.' }],
+        returns: '`recorded`, `refreshed`, or `rejected` with a reason code.',
+      },
+      {
+        signature: 'async lookup(term: string): Promise<LookupAnswer>',
+        description: 'A `meme_lookup` call: the groups\' own memes first, then HotWatch.',
+        parameters: [{ name: 'term', description: 'the meme as the index lists it (or one of its `related` terms).' }],
+        returns: 'the meaning and where it came from, or `found: false`.',
+      },
+      {
+        signature: 'async updateCard(input: { readonly card: string; readonly reason: string; readonly sessionId?: string }): Promise<WriteAnswer>',
+        description: 'A `persona_update` call: at most `persona.maxChars` characters, the note filter, the guard, and at least `persona.minIntervalHours` since the last version (the agent\'s or the owner\'s; an owner edit on the Settings page is never limited). The owner is told which version it became and how much changed, never the text, through `ctx.forkNotifier`, whose channel holds the notice while the owner sleeps.',
+        parameters: [{ name: 'input', description: 'the whole card, a one-line reason, and the writing Session.' }],
+        returns: '`recorded`, or `rejected` with a reason code.',
       },
     ],
   },
@@ -7875,6 +7904,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface LoginView {\n    readonly account: string;\n    readonly state: LoginState;\n    readonly qr: readonly string[] | null;\n    readonly expiresAt: number;\n    readonly message: string | null;\n}',
   },
   {
+    name: 'LookupAnswer',
+    declaration: 'export type LookupAnswer = {\n    readonly found: true;\n    readonly from: \'groups\' | \'hotwatch\';\n    readonly term: string;\n    readonly meaning: string;\n    readonly example?: string;\n    readonly related?: string[];\n    readonly source?: string;\n    readonly meaningSource?: string;\n} | {\n    readonly found: false;\n};',
+  },
+  {
     name: 'LspHover',
     declaration: 'export interface LspHover {\n    readonly contents: string;\n    readonly range?: LspRange;\n}',
   },
@@ -9455,6 +9488,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionLocation {\n    readonly kind: string;\n    readonly path: string;\n}',
   },
   {
+    name: 'SessionLog',
+    declaration: 'export type SessionLog = Pick<Session, \'seq\' | \'eventAt\'>;',
+  },
+  {
     name: 'SessionLogOffset',
     declaration: 'export type SessionLogOffset = BrandedNumber<\'SessionLogOffset\'>;',
   },
@@ -10147,8 +10184,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface StreamStatus {\n    stream: RepoStream;\n    id: string;\n    baseline: boolean;\n    lastPoll?: PollStatus;\n}',
   },
   {
+    name: 'StyleBlock',
+    declaration: 'export interface StyleBlock {\n    readonly text: string;\n    readonly shown: number;\n    readonly owner: number;\n    readonly memes: number;\n    readonly card: number;\n}',
+  },
+  {
     name: 'StyleHealth',
     declaration: 'export interface StyleHealth {\n    readonly kept: number;\n    readonly pending: number;\n    readonly review: \'optional\' | \'required\';\n    readonly lastRefreshAt: number | null;\n    readonly ticTrend: \'up\' | \'flat\' | \'down\' | null;\n}',
+  },
+  {
+    name: 'StyleNoteInput',
+    declaration: 'export interface StyleNoteInput {\n    readonly sessionId: string;\n    readonly preset: string;\n    readonly kind: \'meme\' | \'trait\';\n    readonly term: string;\n    readonly meaning?: string;\n    readonly example: string;\n    readonly related?: readonly string[];\n    readonly session?: SessionLog;\n}',
   },
   {
     name: 'SubagentActivation',
@@ -11293,6 +11338,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WorkspaceView',
     declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
+  },
+  {
+    name: 'WriteAnswer',
+    declaration: 'export type WriteAnswer = {\n    readonly status: \'recorded\' | \'refreshed\';\n} | {\n    readonly status: \'rejected\';\n    readonly reason: string;\n};',
   },
   {
     name: 'WriteOutcome',

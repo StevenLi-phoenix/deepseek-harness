@@ -142,6 +142,7 @@ describe('event bundle', () => {
       '@deepseek-ai/dsh-persona',
       '@deepseek-ai/dsh-time-context',
       '@deepseek-ai/dsh-tool-bili',
+      '@deepseek-ai/dsh-fork-style',
       '@deepseek-ai/dsh-compaction-basic',
       '@deepseek-ai/dsh-compaction-tool-result-pruner',
     ])

@@ -59,7 +59,8 @@ describe('up preset and bili events in the event bundle', () => {
   it('gives the up preset only its persona, the time, the up tools, the owner\'s verdicts on its replies (read-only, no memory tools), and compaction', () => {
     expect(conf(preset)['id']).toBe('up')
     expect(presetPlugins.map(plugin => plugin.name)).toEqual([
-      '@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context', '@deepseek-ai/dsh-fork-tool-up', '@deepseek-ai/dsh-fork-memory',
+      '@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context', '@deepseek-ai/dsh-fork-tool-up', '@deepseek-ai/dsh-fork-style',
+      '@deepseek-ai/dsh-fork-memory',
       '@deepseek-ai/dsh-compaction-basic', '@deepseek-ai/dsh-compaction-tool-result-pruner',
     ])
     const feedback = presetPlugins.find(plugin => plugin.name === '@deepseek-ai/dsh-fork-memory')!

@@ -1,0 +1,11 @@
+{
+  "content": "网友说海水过滤器是某款手游广告里的道具。",
+  "sources": [
+    {
+      "url": "https://example.invalid/c",
+      "title": "手游广告道具",
+      "snippet": "该广告里的道具，名字被反复念叨。"
+    }
+  ],
+  "truncated": false
+}

@@ -426,19 +426,25 @@
     - id: fork-guard-settings
       name: '@deepseek-ai/dsh-fork-guard/settings'
 
-    # Speaking style (Settings → 说话风格): once a day, short exchanges from the recorded QQ groups (ctx.forkQq) and
-    # from the comments under the owner's Bilibili videos (bili-svc's read API, token BILI_SVC_TOKEN_UP), filtered
-    # without a model, kept in $DSH_HOME/fork-style/samples.jsonl (at most 60 active, the owner's own pinned first). The
-    # `fork-style-prompt` row in the `unattended` preset shows them to the main agent as quoted data for length, rhythm,
-    # and register. Strangers' lines reach its prompt this way, outside fork-taint's turn tracking; the owner deletes a
-    # sample with one tap on the page. In the profile patch, `- id: fork-style` with `config.review: required` holds
-    # new samples until the owner keeps them, `config.enabled: false` turns the block off, and
-    # `config.identityMarkers` adds the owner's real name and other handles to the filter.
+    # DSH's speaking style (Settings → 说话风格): its own persona card (written with persona_update), traits of the
+    # groups' overall tone and memes (written with style_note by the Sessions that read the QQ groups, the Bilibili
+    # comments, or the web, examples checked verbatim against what that Session read), a meme miner that runs after
+    # each collection (Bilibili hot comments and hot-search words, the QQ groups, and pages the main agent searched;
+    # a cheap model proposes, code confirms, a search explains), HotWatch's meme domain in the index (meme_lookup
+    # explains on demand), and tone samples collected daily without a model from the recorded QQ groups (ctx.forkQq)
+    # and public Bilibili comments (bili-svc's read API, token BILI_SVC_TOKEN_UP). Inputs are QQ, Bilibili, and
+    # public web pages only, never memory, WeChat, or the owner's messages. Every public write (card, note, mined meme)
+    # is checked by ctx.forkGuard and refused while it is not mounted. The `fork-style-prompt` rows put the block in the
+    # unattended, up, bili, and qqbot presets as quoted style reference, outside fork-taint's turn tracking; the owner
+    # edits or deletes everything on the page. In the profile patch, `- id: fork-style` with `config.review: required`
+    # holds new tone samples, `config.enabled: false` turns it all off, `tone`/`memes`/`traits`/`persona`/`hotwatch`/
+    # `miner` `.enabled` switch the parts, and `config.identityMarkers` adds the owner's real name and other handles
+    # to the filter.
     - id: fork-style
       name: '@deepseek-ai/dsh-fork-style'
 
-    # Settings → 说话风格: the samples by source with one-tap deletion, pending ones to keep, a field for the owner's
-    # own lines, the last run's counts, and the stock-line trend (data from fork-style; nothing to configure).
+    # Settings → 说话风格: the persona card (edit, history, rollback), traits, memes, and tone samples with deletion,
+    # pending samples to keep, the last run's counts, and the stock-line trend (data from fork-style; nothing to configure).
     - id: fork-style-settings
       name: '@deepseek-ai/dsh-fork-style-settings'
 
@@ -519,6 +525,12 @@
             name: '@deepseek-ai/dsh-time-context'
           - id: tool-bili
             name: '@deepseek-ai/dsh-tool-bili'
+          # DSH's speaking style (persona card, traits, meme index, tone samples; from the root fork-style row) as quoted
+          # style reference, and meme_lookup; no memory and nothing from WeChat.
+          - id: fork-style-prompt
+            name: '@deepseek-ai/dsh-fork-style'
+            config:
+              mode: prompt
           - id: compaction
             name: cordis:group
             group: true
@@ -567,6 +579,12 @@
                 of you; answer exactly NO_REPLY when there is nothing to say and nothing is sent.
           - id: time-context
             name: '@deepseek-ai/dsh-time-context'
+          # DSH's speaking style (persona card, traits, meme index, tone samples; from the root fork-style row) as quoted
+          # style reference, and meme_lookup; no memory and nothing from WeChat.
+          - id: fork-style-prompt
+            name: '@deepseek-ai/dsh-fork-style'
+            config:
+              mode: prompt
           - id: compaction
             name: cordis:group
             group: true
@@ -623,6 +641,14 @@
                 config:
                   thresholdRatio: 0.25
                   retainRatio: 0.05
+          # style_note (memes and the group's overall tone, each example copied exactly from the chat this turn read)
+          # and persona_update for DSH's speaking style; no style block here, so digests do not learn from their own notes.
+          - id: fork-style-prompt
+            name: '@deepseek-ai/dsh-fork-style'
+            config:
+              mode: prompt
+              block: false
+              tools: [style_note, persona_update]
 
     # Creator-account reply preset (`up`): the persistent Session of the `bili-digest` subscription. It has the
     # persona, the time, the up_* tools (reads of the creator account's comments, private messages, videos and
@@ -678,7 +704,7 @@
           - id: time-context
             name: '@deepseek-ai/dsh-time-context'
           # fork-tool-up provides ctx.biliEvidence (comments verified by rpid, senders as salted keys) to the
-          # rows of this isolated group only; fork-style's style_propose row joins this group when it ships.
+          # rows of this isolated group only.
           - id: bili-channel
             name: cordis:group
             group: true
@@ -687,6 +713,13 @@
             config:
               - id: tool-up
                 name: '@deepseek-ai/dsh-fork-tool-up'
+          # DSH's speaking style as quoted style reference, meme_lookup, and the writers: style_note (memes and the
+          # tone of the comments, verbatim examples) and persona_update (its own persona card); no memory, nothing from WeChat.
+          - id: fork-style-prompt
+            name: '@deepseek-ai/dsh-fork-style'
+            config:
+              mode: prompt
+              tools: [meme_lookup, style_note, persona_update]
           # The owner's keep/delete verdicts on this persona's earlier replies (memory-admin feedback add,
           # called by bili-svc): read-only examples of tone in front of each Session, no memory tools and no
           # owner memory.
@@ -808,12 +841,14 @@
             name: '@deepseek-ai/dsh-fork-memory'
             config:
               hold: false
-          # The day's speaking-style samples (from the root fork-style row) in front of each root Session, as quoted
-          # data; nothing when the root row is off.
+          # DSH's speaking style (its persona card, traits, meme index, tone samples; from the root fork-style row) in
+          # front of each root Session, as quoted style reference; meme_lookup, style_note (examples checked against the
+          # pages this Session searched or fetched), and persona_update. Nothing when the root row is off.
           - id: fork-style-prompt
             name: '@deepseek-ai/dsh-fork-style'
             config:
               mode: prompt
+              tools: [meme_lookup, style_note, persona_update]
           # Claude Code-style monitors: a command's new stdout lines come back to the same Session.
           - id: fork-tool-monitor
             name: '@deepseek-ai/dsh-fork-tool-monitor'

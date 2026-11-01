@@ -37,6 +37,18 @@
     },
     {
       "path": "../fork-qq"
+    },
+    {
+      "path": "../fork-event-bus"
+    },
+    {
+      "path": "../../core/tools"
+    },
+    {
+      "path": "../../core/agent-default-model"
+    },
+    {
+      "path": "../../web/web"
     }
   ]
 }
