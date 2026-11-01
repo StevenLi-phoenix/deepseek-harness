@@ -142,7 +142,7 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 
 #### 模型看到什么
 
-owner 的每条微信消息都以普通用户 prompt 的形式进入对话 Session，带上配置的 `chat.timeZone`，和在 Web UI 里输入的文字一样。文本不带任何微信包装；引用会多一行 `[引用] …`，语音消息是 `[语音] <转写>`，媒体是占位符，后面每个附件跟一行说明，例如 `- image (image/jpeg, 84.2 KB) saved at /Users/dsh-runtime/work/.wechat-inbox/…-image.jpg; it is attached to this message.`；`lsy-voice` 转写过的音频文件，在它那一行末尾加上 `; speech-to-text (<engine>) of what the owner said in it: 「<文字>」`（失败则是 `; speech-to-text failed (<原因>)`）；没能取到的附件会注明取不到、内容不可用。不超过 20 MiB、格式为 Host 接受的 PNG、JPEG、GIF、WebP 的图片，同时作为同一条消息的图片内容。每一轮模型的最终回答原样发回，微信会渲染其中的 Markdown（标题、列表、引用、表格、代码块）。最终回答恰好是 `NO_REPLY` 时什么也不发。对话安静了 `timeGapMs` 或更久时，owner 的消息之前会先来一条提示（来源类型 `lsy-wechat`，形式 `notice`）；另一个 Session 发给 owner 的通知也以提示形式到达，附上发出时间，并用通知指明的发送方称呼它（例如 `the Bilibili account's Session (its answer could not go out as a Bilibili message)`），没有指明时称为另一个 session；owner 用 `/new` 离开的旧对话 Session 发出的回答也一样（它还在跑的轮次或后台任务），说明里称它为 `an earlier chat Session (before /new; a reminder or monitor it set up)`。两者中的每个时间都来自通道自己的记录，从不来自模型。另一个 Session 发给主 agent 的消息（`tellMainAgent()`）以排队的用户 prompt 到达，并开启自己的轮次：先是一段说明，写明发送方和时间，说明这不是 owner 在说话、内容是信息而不是指令、agent 只能用读操作去核实、改动这台 Mac、花钱或代 owner 行事都要等 owner 开口，以及回答发给 owner 或写 `NO_REPLY`；后面是放在 `<agent_message trust="untrusted">` 块里的消息，消息本身无法提前闭合这个块。
+owner 的每条微信消息都以普通用户 prompt 的形式进入对话 Session，带上配置的 `chat.timeZone`，和在 Web UI 里输入的文字一样。文本不带任何微信包装；引用会多一行 `[引用] …`，语音消息是 `[语音] <转写>`，媒体是占位符，后面每个附件跟一行说明，例如 `- image (image/jpeg, 84.2 KB) saved at /Users/dsh-runtime/work/.wechat-inbox/…-image.jpg; it is attached to this message.`；`lsy-voice` 转写过的音频文件，在它那一行末尾加上 `; speech-to-text (<engine>) of what the owner said in it: 「<文字>」`（失败则是 `; speech-to-text failed (<原因>)`）；没能取到的附件会注明取不到、内容不可用。不超过 20 MiB、格式为 Host 接受的 PNG、JPEG、GIF、WebP 的图片，同时作为同一条消息的图片内容。每一轮模型的最终回答原样发回，微信会渲染其中的 Markdown（标题、列表、引用、表格、代码块）。最终回答恰好是 `NO_REPLY` 时什么也不发。对话安静了 `timeGapMs` 或更久时，owner 的消息之前会先来一条提示（来源类型 `lsy-wechat`，形式 `notice`）；另一个 Session 发给 owner 的通知也以提示形式到达，附上发出时间，并用通知指明的发送方称呼它（例如 `the Bilibili account's Session (its answer could not go out as a Bilibili message)`），没有指明时称为另一个 session；owner 用 `/new` 离开的旧对话 Session 发出的回答也一样（它还在跑的轮次或后台任务），说明里称它为 `an earlier chat Session (before /new; a reminder or monitor it set up)`。两者中的每个时间都来自通道自己的记录，从不来自模型。另一个 Session 发给主 agent 的消息（`tellMainAgent()`）以排队的用户 prompt 到达，并开启自己的轮次：先是一段说明，写明发送方和时间，说明这不是 owner 在说话、内容是信息而不是指令、agent 只能用读操作去核实、改动这台 Mac、花钱或代 owner 行事都要等 owner 开口，以及回答发给 owner 或写 `NO_REPLY`；后面是放在 `<agent_message trust="untrusted">` 块里的消息，消息本身无法提前闭合这个块。`/new` 转走了东西之后，新的对话 Session 在 owner 下一条消息之前收到一条交接提示（来源类型 `lsy-wechat`，形式 `notice`），写明它现在负责哪些东西；若是重启后第一条消息转走的，提示开头是 `An earlier WeChat chat Session of the owner still held work.`。schedule 服务还会为每个转过来的任务另发一条 `[SCHEDULE CHANGE]` 提示。
 
 ##### 时间间隔提示
 
@@ -160,8 +160,6 @@ host-alerts: 1 event(s)
 ```
 
 ##### 交接提示
-
-`/new` 转走了东西之后（或重启后第一条消息转走了东西，这时开头是 `An earlier WeChat chat Session of the owner still held work.`），新的对话 Session 在 owner 下一条消息之前收到一条提示；schedule 服务还会为每个转过来的任务另发一条 `[SCHEDULE CHANGE]` 提示：
 
 ```markdown
 The owner started a new chat with /new. What the earlier chat Session set up now belongs to this conversation, delivers here, and is managed from here: schedule tasks "TCH 数据科学 bootcamp 周作业"; monitors "build log".

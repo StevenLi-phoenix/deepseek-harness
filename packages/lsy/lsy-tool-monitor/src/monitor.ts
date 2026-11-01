@@ -230,6 +230,8 @@ export class MonitorRegistry {
   /**
    * Give the running monitors of some owners to another owner: their notices, `list`, and `owns` follow the new
    * owner from now on. The per-owner cap applies only to starts, so the new owner may hold more than it.
+   * @param from - owners whose running monitors move.
+   * @param to - the owner that takes them.
    * @returns the moved monitors.
    */
   transfer(from: ReadonlySet<string>, to: string): MonitorView[] {
