@@ -25,6 +25,20 @@ describe('Spawner', () => {
     expect(call[call.indexOf('-c') + 1]).toBe('/Users/dsh-runtime/work/cc')
   })
 
+  it('passes a first task as the launcher\'s prompt argument, quoted so the shell sees one word', async () => {
+    const { spawner, calls } = fake()
+    expect(await spawner.start('review-1', 'read it; echo \'$HOME\' `id`\nthen stop')).toEqual({ ok: true })
+    expect(calls.at(-1)!.at(-1)).toBe(
+      '/Users/dsh-runtime/bin/claude-dsh --model sonnet --name review-1 -- \'read it; echo \'\\\'\'$HOME\'\\\'\' `id`\nthen stop\'',
+    )
+  })
+
+  it('starts without a prompt argument when the task is blank', async () => {
+    const { spawner, calls } = fake()
+    await spawner.start('review-1', '  \n ')
+    expect(calls.at(-1)!.at(-1)).toBe('/Users/dsh-runtime/bin/claude-dsh --model sonnet --name review-1')
+  })
+
   it('refuses names that could carry shell syntax, duplicates, and more than the limit', async () => {
     const { spawner } = fake()
     expect(await spawner.start('a b; rm -rf /')).toMatchObject({ ok: false })
