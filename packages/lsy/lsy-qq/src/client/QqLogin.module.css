@@ -1,0 +1,230 @@
+/* Settings-native: the card, row rhythm, and type follow the Account page and the System status section; every
+   colour is a theme token, so light and dark both hold. The QR code itself is always black on white: scanners
+   need the contrast whatever the theme. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 0;
+  font-size: 13px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  corner-shape: round;
+  background: var(--dsw-alias-state-idle-primary);
+}
+
+.dot[data-tone='live'] {
+  background: var(--dsw-alias-state-success-primary);
+  animation: pulse 2.4s ease-in-out infinite;
+}
+
+.dot[data-tone='stale'] {
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.card,
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px 16px 16px;
+  border: 0.5px solid var(--dsw-alias-settings-card-stroke);
+  border-radius: var(--dsw-radius-xl);
+  background: var(--dsw-alias-settings-card-fill);
+}
+
+/* The one-glance answer: a tone mark, the verdict, and the next step. */
+.hero {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.hero[data-tone='action'] {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 55%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 8%, var(--dsw-alias-settings-card-fill));
+}
+
+.hero[data-tone='bad'] {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 45%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 7%, var(--dsw-alias-settings-card-fill));
+}
+
+.mark {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-top: 8px;
+  border-radius: 50%;
+  corner-shape: round;
+}
+
+.mark[data-tone='ok'] { background: var(--dsw-alias-state-success-primary); }
+.mark[data-tone='action'] { background: var(--dsw-alias-state-business-primary); }
+.mark[data-tone='wait'] { background: var(--dsw-alias-state-warn-primary); animation: pulse 1.6s ease-in-out infinite; }
+.mark[data-tone='bad'] { background: var(--dsw-alias-state-error-primary); }
+
+.heroText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.verdict {
+  margin: 0;
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 510;
+}
+
+.next {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* The code: as large as the column allows up to 320px, centred, with its own white quiet zone. */
+.qrBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.qr {
+  display: block;
+  width: min(100%, 320px);
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: var(--dsw-radius-md);
+  background: #fff;
+}
+
+.qrMods {
+  fill: #000;
+}
+
+.hint {
+  margin: 0;
+  max-width: 36em;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.secondary {
+  height: 30px;
+  padding: 0 14px;
+  border: 0.5px solid var(--dsw-alias-settings-card-stroke);
+  border-radius: var(--dsw-radius-md);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-weight: 510;
+  cursor: pointer;
+  transition: opacity 160ms ease;
+}
+
+.secondary:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.notice {
+  margin: 0;
+  color: var(--dsw-alias-state-warn-primary);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.cardTitle {
+  font-weight: 510;
+}
+
+.rows {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 0;
+}
+
+.rows dt {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.rows dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+/* A reading the Host has not refreshed: the verdict dims. */
+.section[data-stale] .verdict,
+.section[data-stale] .next {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+@media (max-width: 480px) {
+  .rows {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .rows dd {
+    margin-bottom: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot[data-tone='live'],
+  .mark[data-tone='wait'] { animation: none; }
+  .secondary { transition: none; }
+}

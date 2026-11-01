@@ -12,7 +12,7 @@
       "path": "../../../vendor/cordis"
     },
     {
-      "path": "../lsy-qq"
+      "path": "../lsy-qq/tsconfig.host.json"
     },
     {
       "path": "../../core/tools"
