@@ -61,7 +61,7 @@ afterEach(() => {
 })
 
 describe('QqLoginSection', () => {
-  it('ends with the All settings card for lsy-qq minus the groups list, warns about reconnecting, and renders without the factory', () => {
+  it('ends with the All settings card for lsy-qq minus the groups list, explains that the connection stays up, and renders without the factory', () => {
     const store = createQqStore()
     store.update((draft) => { Object.assign(draft, { panel: panel(), checkedAt: NOW }) })
     const formStore = createSnapshotStore<ConfigFormSnapshot<GroupsSection>>(READY)
@@ -76,7 +76,7 @@ describe('QqLoginSection', () => {
       exclude: ['groups'],
       reloadWarning: zh['config.reloadWarning'],
     })
-    expect(zh['config.reloadWarning']).toBe('保存会让 QQ 观察器重连协议端；频繁重连可能触发 QQ 风控，请攒齐改动一次保存')
+    expect(zh['config.reloadWarning']).toBe('保存只会重新加载 DSH 里的 QQ 观察器；与 QQ 的连接由记录器保持，只有改了地址或令牌名才会重连。')
     expect(container.querySelector('section')?.lastElementChild).toBe(screen.getByTestId('plugin-config'))
     cleanup()
     mount({ panel: panel(), checkedAt: NOW })

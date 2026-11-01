@@ -12,7 +12,7 @@ export interface QqSource {
   loginStatus(options?: { fresh?: boolean }): Promise<Omit<QqLogin, 'qr'> & { qrUrl: string | null }>
   refreshLogin(): Promise<{ login: Omit<QqLogin, 'qr'> & { qrUrl: string | null }; refreshed: boolean; reason: QqRefreshAnswer['reason'] }>
   recordedGroups(): number
-  groupChoices(): readonly QqGroup[]
+  groupChoices(): Promise<readonly QqGroup[]>
 }
 
 /**
@@ -30,8 +30,9 @@ export function qrMatrix(link: string): QqQrMatrix | null {
 }
 
 /** Every recorded group, and the busiest of the others, so the answer stays small for an account in hundreds of groups. */
-function groupsOf(source: QqSource): QqGroup[] {
-  const all = source.groupChoices()
+async function groupsOf(source: QqSource): Promise<QqGroup[]> {
+  // The group list comes from the recorder; while it is down the page still answers, with the state and no list.
+  const all = await source.groupChoices().catch((): readonly QqGroup[] => [])
   return [...all.filter(group => group.recorded), ...all.filter(group => !group.recorded).slice(0, QQ_GROUP_CANDIDATES)]
 }
 
@@ -48,7 +49,7 @@ function toLogin(reading: Omit<QqLogin, 'qr'> & { qrUrl: string | null }): QqLog
  */
 export async function buildPanel(source: QqSource, options: { fresh?: boolean } = {}, now: () => number = Date.now): Promise<QqPanel> {
   const login = toLogin(await source.loginStatus(options))
-  return { at: now(), connection: source.connectionStatus(), login, groupsRecorded: source.recordedGroups(), groups: groupsOf(source) }
+  return { at: now(), connection: source.connectionStatus(), login, groupsRecorded: source.recordedGroups(), groups: await groupsOf(source) }
 }
 
 /**
@@ -64,7 +65,7 @@ export async function buildRefresh(source: QqSource, now: () => number = Date.no
     connection: source.connectionStatus(),
     login: toLogin(login),
     groupsRecorded: source.recordedGroups(),
-    groups: groupsOf(source),
+    groups: await groupsOf(source),
     refreshed,
     reason,
   }

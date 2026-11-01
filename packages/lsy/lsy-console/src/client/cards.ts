@@ -9,7 +9,7 @@ const OWN_STATES: Readonly<Record<ServiceId, readonly string[]>> = {
   dsh: ['up'],
   bus: ['up', 'limited'],
   bili: ['up', 'svc_only', 'down'],
-  qq: ['mounted', 'up', 'reconnecting', 'waiting_token', 'starting'],
+  qq: ['mounted', 'up', 'reconnecting', 'waiting_token', 'starting', 'recorder_down', 'protocol_mismatch'],
   style: ['mounted', 'up', 'pending'],
   wechat: ['up', 'queued'],
   voice: ['up', 'tts_off', 'tts_down', 'asr_down'],

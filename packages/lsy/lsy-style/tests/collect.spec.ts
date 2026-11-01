@@ -149,8 +149,8 @@ describe('StyleCollector', () => {
   // Newer than the settle time: waits for the next run.
   const fresh = msg('3', '@1 我也宅', T0 + 3_600_000 - 60_000, { replyTo: a.messageId, kinds: 'reply,at,text' })
   const qq: QqSource = {
-    groupOverview: () => [{ groupId: '1', recorded: true }, { groupId: '2', recorded: false }],
-    recentMessages: groupId => (groupId === '1' ? [a, b, fresh] : [msg('9', '不该读到', T0)]),
+    groupOverview: () => Promise.resolve([{ groupId: '1', recorded: true }, { groupId: '2', recorded: false }]),
+    recentMessages: groupId => Promise.resolve(groupId === '1' ? [a, b, fresh] : [msg('9', '不该读到', T0)]),
   }
 
   it('stores accepted exchanges, reports counts by reason, logs no text at info, and keeps state', async () => {
@@ -184,6 +184,14 @@ describe('StyleCollector', () => {
     expect(report.added).toBe(1)
     expect(logger.warn).not.toHaveBeenCalled()
     expect(second.logger.warn).toHaveBeenCalledWith(expect.stringMatching(/Bilibili collection failed/u))
+  })
+
+  it('reports QQ as unavailable and goes on with the other sources while the recorder is down', async () => {
+    const down: QqSource = { groupOverview: () => Promise.reject(new Error('The QQ recorder is not running')), recentMessages: () => Promise.resolve([]) }
+    const { collector, logger } = await setup({ qq: down })
+    const report = await collector.run('manual')
+    expect(report.qq).toMatchObject({ status: 'unavailable', groups: 0, messages: 0 })
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringMatching(/could not read QQ: The QQ recorder is not running/u))
   })
 
   it('stores strangers\' samples as pending under review required', async () => {

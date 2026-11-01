@@ -70,9 +70,9 @@ export async function gatherInputs(sources: {
   const { qq, hot, window, now } = sources
   if (qq !== undefined) {
     try {
-      for (const group of qq.groupOverview()) {
+      for (const group of await qq.groupOverview()) {
         if (!group.recorded) continue
-        for (const message of qq.recentMessages(group.groupId, { hours: window.hours, limit: window.limit })) {
+        for (const message of await qq.recentMessages(group.groupId, { hours: window.hours, limit: window.limit })) {
           if (message.at > now - window.settleMs) continue
           const clean = cleanQqText(message.text, message.kinds)
           if ('reason' in clean || clean.text.trim() === '') continue

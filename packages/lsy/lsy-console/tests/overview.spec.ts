@@ -170,6 +170,8 @@ describe('overview cards', () => {
       .toMatchObject({ tone: 'down', state: 'reconnecting', facts: { attempt: 3 } })
     expect((await overview(base, { lsyQq: qq({ state: 'waiting-token' }) })).byId('qq')).toMatchObject({ tone: 'warn', state: 'waiting_token' })
     expect((await overview(base, { lsyQq: qq({ state: 'starting' }) })).byId('qq')).toMatchObject({ tone: 'warn', state: 'starting' })
+    expect((await overview(base, { lsyQq: qq({ state: 'recorder-down' }) })).byId('qq')).toMatchObject({ tone: 'down', state: 'recorder_down', facts: { groups: 4 } })
+    expect((await overview(base, { lsyQq: qq({ state: 'protocol-mismatch' }) })).byId('qq')).toMatchObject({ tone: 'down', state: 'protocol_mismatch' })
     expect((await overview(base, { lsyQq: { recordedGroups: () => 1 } })).byId('qq'))
       .toMatchObject({ tone: 'ok', state: 'mounted', facts: { groups: 1 } })
   })

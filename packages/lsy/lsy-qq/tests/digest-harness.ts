@@ -10,6 +10,11 @@ import type { Member, Message } from '../src/protocol.ts'
 /** Mount the storage domain facility on `ctx` over an in-memory backend, as a deployment's storage plugin would. */
 export async function mountMemoryStorage(ctx: Context, pool: MemoryMediaPool = new MemoryMediaPool()): Promise<void> {
   await ctx.plugin(Storage)
+  mountFacility(ctx, pool)
+}
+
+/** The facility half of {@link mountMemoryStorage}, for a context where the storage service is already mounted. */
+export function mountFacility(ctx: Context, pool: MemoryMediaPool): void {
   const backend = new MemoryStorageBackend(pool)
   ctx.effect(() => ctx.storage.backend.register('fixture', backend))
   const facility = new DomainFacility(ctx, { backend: 'fixture' })

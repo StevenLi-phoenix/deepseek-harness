@@ -24,7 +24,7 @@ import { DEFAULT_MEDIA_HOST_SUFFIXES, isPrivateAddress, isPrivateUrl } from './a
 import { RecorderClient, RecorderUnavailable } from './client.ts'
 import { DigestStore, qqDomain, type DigestRecord } from './digest-storage.ts'
 import { DigestRunner, senderKey, type DigestConfig, type MessageReader, type ToolOutcome } from './digest.ts'
-import type { Group, Login, Message, RecorderConfig } from './protocol.ts'
+import { FEATURE_MINOR, type Group, type Login, type Message, type RecorderConfig } from './protocol.ts'
 import type { QqConnection, QqLoginReading, RefreshRefusal } from './status.ts'
 
 export * from './address.ts'
@@ -34,7 +34,6 @@ export * from './digest.ts'
 export * from './pii.ts'
 export * from './protocol.ts'
 export * from './status.ts'
-export * from './text.ts'
 
 /** A stored message, as the recorder reports it. */
 export type MessageRow = Message
@@ -679,6 +678,15 @@ export class QqObserver extends Service {
   private settingsHint(): string {
     const url = this.live.settingsUrl
     return `在 DSH 网页端「设置 → QQ」扫码重新登录${url === undefined ? '' : `：${url}`}`
+  }
+
+  /**
+   * Which optional capabilities of the recorder in front of this DSH are available: a recorder of an older minor version
+   * lacks some, and only those features degrade.
+   * @returns each feature of the protocol and whether the recorder offers it.
+   */
+  features(): Record<string, boolean> {
+    return Object.fromEntries(Object.keys(FEATURE_MINOR).map(feature => [feature, this.client.supports(feature)]))
   }
 
   /**

@@ -18,7 +18,7 @@ export type Tone = 'ok' | 'action' | 'wait' | 'bad'
 export interface Headline {
   /** Which situation this is; the section shows the QR card for `scan` only. */
   readonly kind: 'connected' | 'connecting' | 'scan' | 'scanned' | 'logging-in' | 'preparing' | 'offline' | 'restarting' | 'unknown'
-    | 'napcat-down' | 'door-down' | 'door-denied' | 'door-invalid' | 'no-token' | 'disconnected'
+    | 'napcat-down' | 'door-down' | 'door-denied' | 'door-invalid' | 'no-token' | 'disconnected' | 'recorder-down' | 'protocol-mismatch'
   readonly tone: Tone
   readonly text: string
   readonly detail: string
@@ -55,6 +55,8 @@ const TONES: Record<Headline['kind'], Tone> = {
   'door-invalid': 'bad',
   'no-token': 'bad',
   'disconnected': 'bad',
+  'recorder-down': 'bad',
+  'protocol-mismatch': 'bad',
 }
 
 /**
@@ -116,6 +118,9 @@ export function headline(panel: QqPanel, now: number, t: Translate): Headline {
   const make = (kind: Headline['kind'], params: Record<string, string | number> = {}): Headline => ({
     kind, tone: TONES[kind], text: t(`head.${kind}`, params), detail: t(`head.${kind}.detail`, params),
   })
+  // Without the recorder nothing is known about QQ: the door and the socket are the recorder's to read.
+  if (connection.state === 'recorder-down') return make('recorder-down')
+  if (connection.state === 'protocol-mismatch') return make('protocol-mismatch')
   if (connection.state === 'connected') {
     return make('connected', { account: account(panel), duration: formatDuration(connection.since === null ? 0 : (now - connection.since) / 1000, t) })
   }
@@ -151,9 +156,7 @@ export function detailRows(panel: QqPanel, now: number, t: Translate): DetailRow
   const rows: DetailRow[] = [{
     key: 'connection',
     label: t('detail.connection'),
-    value: connection.state === 'reconnecting'
-      ? t('detail.connection.reconnecting', { attempt: connection.attempt, since })
-      : connection.state === 'connected' ? t('detail.connection.connected', { since }) : t(`detail.connection.${connection.state}`),
+    value: t(`detail.connection.${connection.state}`, { attempt: connection.attempt, since }),
   }]
   rows.push({
     key: 'login',

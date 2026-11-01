@@ -97,8 +97,8 @@ export async function mountStyle(options: MountOptions = {}) {
     messageId: String(index), userId: `u${String(index)}`, at: Date.now() - 3_600_000, text, replyTo: null, kinds: 'text', card: '', nickname: '',
   }))
   ctx.provide('lsyQq', {
-    groupOverview: () => [{ groupId: 'g1', recorded: messages.length > 0 }],
-    recentMessages: () => messages,
+    groupOverview: () => Promise.resolve([{ groupId: 'g1', recorded: messages.length > 0 }]),
+    recentMessages: () => Promise.resolve(messages),
     recentTextOf: (sessionId: string) => shown[sessionId],
   } as never)
   const adapter = options.adapter ?? new MockAdapter([])

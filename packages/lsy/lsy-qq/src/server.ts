@@ -37,6 +37,8 @@ export interface RecorderServerOptions {
   pingMs?: number
   /** The minor version this server announces; tests lower it to play an older recorder. */
   protocolMinor?: number
+  /** The major version this server announces; tests raise it to play a recorder from the future. */
+  protocolMajor?: number
 }
 
 /** A running API server. */
@@ -44,6 +46,8 @@ export interface RecorderServer {
   readonly socketPath: string
   /** The port of the health listener, when there is one. */
   readonly healthPort: number | undefined
+  /** How many event streams are open. */
+  streamCount(): number
   /** Stop accepting, end the event streams, and wait for requests in flight. */
   close(): Promise<void>
 }
@@ -83,6 +87,7 @@ function listen(server: Server, ...args: [string] | [number, string]): Promise<v
 export async function startRecorderServer(options: RecorderServerOptions): Promise<RecorderServer> {
   const { recorder, logger, socketPath } = options
   const minor = options.protocolMinor ?? PROTOCOL.minor
+  const major = options.protocolMajor ?? PROTOCOL.major
   const expected = digest(options.token)
   mkdirSync(dirname(socketPath), { recursive: true, mode: 0o700 })
   chmodSync(dirname(socketPath), 0o700)
@@ -102,12 +107,12 @@ export async function startRecorderServer(options: RecorderServerOptions): Promi
       sendError(res, 500, 'internal', 'the answer did not match its schema')
       return
     }
-    res.writeHead(status, { 'content-type': 'application/json', [PROTOCOL_HEADER]: protocolTag({ major: PROTOCOL.major, minor }), 'cache-control': 'no-store' })
+    res.writeHead(status, { 'content-type': 'application/json', [PROTOCOL_HEADER]: protocolTag({ major, minor }), 'cache-control': 'no-store' })
     res.end(body)
   }
   const sendError = (res: ServerResponse, status: number, code: string, message: string): void => {
     if (res.headersSent) { res.end(); return }
-    res.writeHead(status, { 'content-type': 'application/json', [PROTOCOL_HEADER]: protocolTag({ major: PROTOCOL.major, minor }), 'cache-control': 'no-store' })
+    res.writeHead(status, { 'content-type': 'application/json', [PROTOCOL_HEADER]: protocolTag({ major, minor }), 'cache-control': 'no-store' })
     res.end(JSON.stringify(ErrorDto.parse({ error: { code, message } })))
   }
 
@@ -138,7 +143,7 @@ export async function startRecorderServer(options: RecorderServerOptions): Promi
   const LoginQuery = z.object({ fresh: z.enum(['1', '0']).optional() })
 
   const events = (req: IncomingMessage, res: ServerResponse): void => {
-    res.writeHead(200, { 'content-type': 'application/x-ndjson', [PROTOCOL_HEADER]: protocolTag({ major: PROTOCOL.major, minor }), 'cache-control': 'no-store' })
+    res.writeHead(200, { 'content-type': 'application/x-ndjson', [PROTOCOL_HEADER]: protocolTag({ major, minor }), 'cache-control': 'no-store' })
     streams.add(res)
     const write = (event: z.input<typeof EventDto>): void => {
       if (res.writableEnded) return
@@ -160,8 +165,8 @@ export async function startRecorderServer(options: RecorderServerOptions): Promi
     const supplied = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1]
     if (supplied === undefined || !timingSafeEqual(digest(supplied), expected)) throw new HttpError(401, 'unauthorized', 'a valid bearer token is required')
     const client = parseProtocolTag(req.headers[PROTOCOL_HEADER] as string | undefined)
-    if (req.headers[PROTOCOL_HEADER] !== undefined && (client === undefined || client.major !== PROTOCOL.major)) {
-      throw new HttpError(426, 'protocol-mismatch', `this recorder speaks ${protocolTag({ major: PROTOCOL.major, minor })}`)
+    if (req.headers[PROTOCOL_HEADER] !== undefined && (client === undefined || client.major !== major)) {
+      throw new HttpError(426, 'protocol-mismatch', `this recorder speaks ${protocolTag({ major, minor })}`)
     }
     const only = (allowed: string): void => {
       if (method !== allowed) throw new HttpError(405, 'method-not-allowed', `${path} takes ${allowed}`)
@@ -169,7 +174,7 @@ export async function startRecorderServer(options: RecorderServerOptions): Promi
 
     if (path === PATHS.hello) {
       only('GET')
-      return send(res, 200, HelloDto, { protocol: { name: PROTOCOL.name, major: PROTOCOL.major, minor }, build: options.build ?? 'dev', startedAt: recorder.startedAt })
+      return send(res, 200, HelloDto, { protocol: { name: PROTOCOL.name, major, minor }, build: options.build ?? 'dev', startedAt: recorder.startedAt })
     }
     if (path === PATHS.status) {
       only('GET')
@@ -273,11 +278,12 @@ export async function startRecorderServer(options: RecorderServerOptions): Promi
     const address = health.address()
     healthPort = typeof address === 'object' && address !== null ? address.port : undefined
   }
-  logger.info(`qq-recorder: listening on ${socketPath}${healthPort === undefined ? '' : `; health on 127.0.0.1:${healthPort}`}; protocol ${protocolTag({ major: PROTOCOL.major, minor })}`)
+  logger.info(`qq-recorder: listening on ${socketPath}${healthPort === undefined ? '' : `; health on 127.0.0.1:${healthPort}`}; protocol ${protocolTag({ major, minor })}`)
 
   return {
     socketPath,
     healthPort,
+    streamCount: () => streams.size,
     async close() {
       for (const stream of streams) stream.end()
       streams.clear()
