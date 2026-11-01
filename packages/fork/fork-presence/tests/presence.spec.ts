@@ -27,9 +27,10 @@ function event(kind: string, source = 'presence', key = `sleep-${String(Date.now
   return { source, kind, key, subject: 'owner', title: kind }
 }
 
-/** A heartbeat of focus-watch: the same kinds, with a `heartbeat-` key. */
+/** A heartbeat of focus-watch 0.1.0: the same kinds, with the key `sleep-<on|off>-hb-<30-minute bucket>`. */
 function heartbeat(kind: 'presence.sleep.on' | 'presence.sleep.off'): ForkEventInput {
-  return event(kind, 'presence', `heartbeat-${String(Math.floor(Date.now() / 1_800_000))}`)
+  const state = kind === 'presence.sleep.on' ? 'on' : 'off'
+  return event(kind, 'presence', `sleep-${state}-hb-${String(Math.floor(Date.now() / 1_800_000))}`)
 }
 
 /** Mount presence over memory storage; `pool` carries the stored state across restarts. */
@@ -338,5 +339,13 @@ describe('ingest door', () => {
     expect(status).toBe(202)
     expect(presence.view()).toMatchObject({ asleep: true, source: 'focus' })
     expect(published).toEqual([])
+  })
+})
+
+describe('focus-watch keys', () => {
+  it('reads the keys focus-watch 0.1.0 sends: -hb-<bucket> is a heartbeat, sleep-on-<ts> and sleep-off-<ts> are changes', async () => {
+    const { HEARTBEAT_KEY } = await import('../src/view.ts')
+    for (const key of ['sleep-on-hb-1011', 'sleep-off-hb-1011', 'heartbeat-5']) expect(HEARTBEAT_KEY.test(key), key).toBe(true)
+    for (const key of ['sleep-on-1793700000', 'sleep-off-1793700000', 'sleep-on-hb', 'sleep-on-hb-12x']) expect(HEARTBEAT_KEY.test(key), key).toBe(false)
   })
 })
