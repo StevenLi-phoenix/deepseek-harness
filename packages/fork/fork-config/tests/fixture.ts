@@ -8,6 +8,7 @@ import z from '@deepseek-ai/schemastery'
 import { boot, initProfile, readProfilePatches, type ProfileContext } from '@deepseek-ai/dsh-app-boot'
 import ConfigEditor from '@deepseek-ai/dsh-config-editor'
 import Settings from '@deepseek-ai/dsh-settings'
+import { Config as QqConfig } from '@deepseek-ai/dsh-fork-qq'
 import * as plugin from '../src/index.ts'
 import type { ConfigDescribe, ConfigSaveResult } from '../src/view.ts'
 
@@ -57,6 +58,7 @@ export async function configFixture(options: FixtureOptions = {}) {
     { id: 'fork-config', name: 'cordis:forkconfig' },
     { id: 'sample', name: 'cordis:probe', config: options.bundle ?? { url: 'ws://bundle:1', password: 'private-value', media: { maxBytes: 4096 } } },
     { id: 'other', name: 'cordis:probe', config: { password: 'x', media: {} } },
+    { id: 'fork-qq', name: 'cordis:qqprobe', config: {} },
     { id: 'bare', name: 'cordis:bare' },
     { id: 'off', name: 'cordis:probe', disabled: true },
   ] }]))
@@ -71,6 +73,7 @@ export async function configFixture(options: FixtureOptions = {}) {
   const routes: Route[] = []
   const logs: string[] = []
   const applied: unknown[] = []
+  const appliedQq: unknown[] = []
   const Probe = { Config: SAMPLE, apply: (_ctx: Context, config: unknown) => { applied.push(config) } }
   const ctx = await boot('test', join(dir, 'cordis.yml'), readProfilePatches('test', profile), (root) => {
     root.logger.exporter({ levels: { default: 3 }, export: (message) => { logs.push(`${message.type} ${String(message.args[0])}`) } })
@@ -78,7 +81,11 @@ export async function configFixture(options: FixtureOptions = {}) {
     root.provide('appReady', { onReady: (listener: () => void) => { listener(); return () => {} } })
     root.provide('connection', { fetch: { register: (route: Route) => { routes.push(route); return () => Promise.resolve() } } } as never)
     Object.assign(root.loader.builtins, {
-      editor: ConfigEditor, settings: Settings, probe: Probe, bare: { apply: () => {} }, forkconfig: plugin,
+      editor: ConfigEditor,
+      settings: Settings,
+      probe: Probe,
+      qqprobe: { Config: QqConfig, apply: (_ctx: Context, config: unknown) => { appliedQq.push(config) } },
+      bare: { apply: () => {} }, forkconfig: plugin,
     })
   })
   onTestFinished(async () => { await ctx.fiber.dispose() })
@@ -96,7 +103,7 @@ export async function configFixture(options: FixtureOptions = {}) {
     const response = await route().fetch(new Request('http://127.0.0.1/api/fork.config', { method: 'POST', body: JSON.stringify(body) }))
     return { status: response.status, body: await response.json() as ConfigSaveResult }
   }
-  return { ctx, profile, home, routes, logs, applied, get, post }
+  return { ctx, profile, home, routes, logs, applied, appliedQq, get, post }
 }
 
 function expect200(response: Response): void {

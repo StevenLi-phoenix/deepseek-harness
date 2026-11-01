@@ -303,3 +303,41 @@ describe('volatile fields', () => {
     expect(logs.some(line => line.includes('changed=[groups,url] reload=true'))).toBe(true)
   })
 })
+
+describe('fork-qq with a partial owner patch that switched features off', () => {
+  const owner = [{
+    id: 'fork-qq', name: 'cordis:qqprobe',
+    config: { groups: ['1001', '1002'], backfill: { enabled: false }, media: { images: false }, voice: { download: false } },
+  }]
+  const OFF = ['backfill.enabled', 'media.images', 'voice.download']
+
+  it('shows the patch\'s false, not the default true, and marks it as the owner patch\'s', async () => {
+    const { get } = await configFixture({ owner })
+    const entry = await entryOf(() => get('fork-qq', 'groups'), 'fork-qq')
+    for (const path of OFF) {
+      expect(leaf(entry, path)).toMatchObject({ kind: 'boolean', value: false, default: true, layer: 'owner', volatile: true })
+    }
+    expect(leavesOf(entry.fields).map(item => item.path.join('.'))).not.toContain('groups')
+  })
+
+  it('re-enables one at a time into the patch\'s own entry, keeping groups and the others, with no plugin re-apply', async () => {
+    const { get, post, profile, appliedQq } = await configFixture({ owner })
+    const applied = appliedQq.length
+    for (const [index, path] of OFF.entries()) {
+      const entry = await entryOf(() => get('fork-qq', 'groups'), 'fork-qq')
+      const keys = path.split('.')
+      const saved = await post({ id: 'fork-qq', revision: entry.revision, exclude: ['groups'], ops: [{ op: 'set', path: keys, value: true }] })
+      expect(saved).toMatchObject({ status: 200, body: { ok: true, changed: [path], reload: false } })
+      const [row] = ownerPatch(profile) as Array<{ id: string; config: Record<string, Record<string, boolean>> & { groups: string[] } }>
+      expect(row?.id).toBe('fork-qq')
+      expect(row?.config.groups).toEqual(['1001', '1002'])
+      const stillOff = OFF.slice(index + 1).filter(other => other.split('.').reduce<unknown>(
+        (node, key) => (node as Record<string, unknown>)[key], row?.config) === false)
+      expect(stillOff).toEqual(OFF.slice(index + 1))
+    }
+    // Only volatile fields changed: the observer was never re-applied, so OneBot was never reconnected.
+    expect(appliedQq.length).toBe(applied)
+    const after = await entryOf(() => get('fork-qq', 'groups'), 'fork-qq')
+    for (const path of OFF) expect(leaf(after, path)).toMatchObject({ value: true })
+  })
+})
