@@ -281,7 +281,7 @@ export interface CollectLogger {
 /** Runs collection over the live sources, one run at a time. */
 export class StyleCollector {
   private running: Promise<RunReport> | undefined
-  private state: CollectState | undefined
+  private state: Promise<CollectState> | undefined
 
   /**
    * @param deps - the store, the sources (resolved per run, so a source mounted later is used), the state file, settings, logger, clock.
@@ -307,15 +307,17 @@ export class StyleCollector {
     return (await this.loadState()).lastRun
   }
 
-  private async loadState(): Promise<CollectState> {
-    if (this.state !== undefined) return this.state
-    try {
-      const parsed = JSON.parse(await readFile(this.deps.stateFile, 'utf8')) as { threads?: unknown; lastRun?: RunReport }
-      const threads = typeof parsed.threads === 'object' && parsed.threads !== null ? parsed.threads as Record<string, number> : {}
-      this.state = { threads, ...parsed.lastRun === undefined ? {} : { lastRun: parsed.lastRun } }
-    } catch {
-      this.state = { threads: {} }
-    }
+  /** The state file, read once; concurrent first callers share the read. */
+  private loadState(): Promise<CollectState> {
+    this.state ??= (async (): Promise<CollectState> => {
+      try {
+        const parsed = JSON.parse(await readFile(this.deps.stateFile, 'utf8')) as { threads?: unknown; lastRun?: RunReport }
+        const threads = typeof parsed.threads === 'object' && parsed.threads !== null ? parsed.threads as Record<string, number> : {}
+        return { threads, ...parsed.lastRun === undefined ? {} : { lastRun: parsed.lastRun } }
+      } catch {
+        return { threads: {} }
+      }
+    })()
     return this.state
   }
 
