@@ -52,7 +52,7 @@ describe('overview cards', () => {
         forkEventBus: fakeBus(),
         forkVoice: voice,
         forkNotifier: { send: async () => {}, outbox: () => [] },
-        forkQq: { groupOverview: () => [{ recorded: true }, { recorded: true }, { recorded: false }] },
+        forkQq: { recordedGroups: () => 2 },
         bili: {},
       },
     )
@@ -140,17 +140,15 @@ describe('overview cards', () => {
     expect(byId('cc')).toMatchObject({ tone: 'warn', state: 'nologin' })
   })
 
-  it('takes a service\'s own health() report when it has one', async () => {
+  it('takes bili-svc\'s and the WeChat channel\'s own health() report when they have one', async () => {
     const bili = await serve({ '/healthz': 200 })
     const { byId } = await overview(
       { config: { bili: { url: bili } } },
       {
-        forkQq: { health: () => Promise.resolve({ state: 'down', detail: 'protocol end offline for 12 min' }) },
         bili: { health: () => ({ state: 'warn', detail: 'gate is read-only' }) },
         forkNotifier: { send: async () => {}, health: () => ({ state: 'down', detail: 'token stale' }) },
       },
     )
-    expect(byId('qq')).toMatchObject({ tone: 'down', state: 'down', facts: { detail: 'protocol end offline for 12 min' } })
     expect(byId('bili')).toMatchObject({ tone: 'warn', state: 'warn', facts: { detail: 'gate is read-only' } })
     expect(byId('wechat')).toMatchObject({ tone: 'down', facts: { detail: 'token stale' } })
   })
@@ -164,16 +162,57 @@ describe('overview cards', () => {
       .toMatchObject({ tone: 'down', state: 'reconnecting', facts: { attempt: 3 } })
     expect((await overview(base, { forkQq: qq({ state: 'waiting-token' }) })).byId('qq')).toMatchObject({ tone: 'warn', state: 'waiting_token' })
     expect((await overview(base, { forkQq: qq({ state: 'starting' }) })).byId('qq')).toMatchObject({ tone: 'warn', state: 'starting' })
-    expect((await overview(base, { forkQq: { groupOverview: () => [{ recorded: true }] } })).byId('qq'))
+    expect((await overview(base, { forkQq: { recordedGroups: () => 1 } })).byId('qq'))
       .toMatchObject({ tone: 'ok', state: 'mounted', facts: { groups: 1 } })
+  })
+
+  it('touches nothing of the QQ observer but its two in-memory readers, however often the page polls', async () => {
+    // QQ risk control fired on this account: no page may cause a OneBot call or a request to NapCat.
+    const touched: string[] = []
+    const observer = new Proxy({ connectionStatus: () => ({ state: 'connected', attempt: 0, selfId: '1' }), recordedGroups: () => 2 }, {
+      get: (target, key) => {
+        // The service container's own bookkeeping reads symbols; only named members are the page's doing.
+        if (typeof key === 'symbol') return Reflect.get(target, key) as unknown
+        touched.push(key)
+        if (key === 'connectionStatus' || key === 'recordedGroups') return Reflect.get(target, key)
+        throw new Error(`the overview touched forkQq.${key}`)
+      },
+    })
+    const mounted = await mountConsole({ config: { bili: { url: await closedUrl() } } })
+    mounted.ctx.provide('forkQq' as never, observer as never)
+    for (const path of ['/api/fork.overview', '/api/fork.overview', '/api/fork.subscriptions', '/api/fork.agents']) {
+      expect((await mounted.call(path)).status).toBe(200)
+    }
+    expect(new Set(touched)).toEqual(new Set(['connectionStatus', 'recordedGroups']))
+    // A card that threw would show red instead: this one is healthy because nothing else was read.
+    const view = await (await mounted.call('/api/fork.overview')).json() as OverviewView
+    expect(view.cards.find(entry => entry.id === 'qq')).toMatchObject({ tone: 'ok', state: 'up', facts: { groups: 2, account: '1' } })
   })
 
   it('shows the speaking-style page as not installed until its service is mounted, then as installed or by its own report', async () => {
     const base = { config: { bili: { url: await closedUrl() } } }
     expect((await overview(base)).byId('style')).toMatchObject({ tone: 'off', state: 'absent' })
     expect((await overview(base, { forkStyle: {} })).byId('style')).toMatchObject({ tone: 'ok', state: 'mounted' })
-    expect((await overview(base, { forkStyle: { health: () => ({ state: 'warn', detail: 'no samples yet' }) } })).byId('style'))
-      .toMatchObject({ tone: 'warn', state: 'warn', facts: { detail: 'no samples yet' } })
+  })
+
+  it('reads the speaking-style counts: green when it answers, yellow when review is required and samples wait, red when it throws or answers nonsense', async () => {
+    const base = { config: { bili: { url: await closedUrl() } } }
+    const health = (overrides: Record<string, unknown> = {}) => ({
+      forkStyle: { health: () => ({ kept: 12, pending: 0, review: 'required', lastRefreshAt: 1_700_000_000_000, ticTrend: 'down', ...overrides }) },
+    })
+    expect((await overview(base, health())).byId('style'))
+      .toMatchObject({ tone: 'ok', state: 'up', facts: { kept: 12, pending: 0, review: 'required', lastRefreshAt: 1_700_000_000_000, ticTrend: 'down' } })
+    expect((await overview(base, health({ pending: 3 }))).byId('style')).toMatchObject({ tone: 'warn', state: 'pending', facts: { pending: 3 } })
+    expect((await overview(base, health({ pending: 3, review: 'optional' }))).byId('style')).toMatchObject({ tone: 'ok', state: 'up' })
+    expect((await overview(base, health({ lastRefreshAt: null, ticTrend: null }))).byId('style'))
+      .toMatchObject({ tone: 'ok', facts: { lastRefreshAt: null, ticTrend: null } })
+    const throwing = await overview(base, { forkStyle: { health: () => { throw new TypeError('secret /Users/x') } } })
+    expect(throwing.byId('style')).toMatchObject({ tone: 'down', state: 'error', facts: {} })
+    expect(throwing.text).not.toContain('/Users/x')
+    for (const bad of [{ kept: -1 }, { kept: '3' }, { review: 'maybe' }, { ticTrend: 'sideways' }, { lastRefreshAt: 'yesterday' }, { pending: Number.NaN }]) {
+      expect((await overview(base, health(bad))).byId('style'), JSON.stringify(bad)).toMatchObject({ tone: 'down', state: 'error' })
+    }
+    expect((await overview(base, { forkStyle: { health: () => 'fine' } })).byId('style')).toMatchObject({ tone: 'down', state: 'error' })
   })
 
   it('reports speech off, a down TTS provider, and a down ASR service', async () => {

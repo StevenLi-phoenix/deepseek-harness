@@ -1,7 +1,7 @@
 /** Overview card text: the status line and the facts line, from a card's state and facts. */
 
 import type { Fact, ServiceCard, ServiceId } from '../views.ts'
-import { duration, type Translate } from './format.ts'
+import { ago, duration, type Translate } from './format.ts'
 import type { ConsoleKey } from './locales.ts'
 
 /** States that have their own copy under `card.<id>.<state>`. */
@@ -10,7 +10,7 @@ const OWN_STATES: Readonly<Record<ServiceId, readonly string[]>> = {
   bus: ['up', 'limited'],
   bili: ['up', 'svc_only', 'down'],
   qq: ['mounted', 'up', 'reconnecting', 'waiting_token', 'starting'],
-  style: ['mounted', 'up'],
+  style: ['mounted', 'up', 'pending'],
   wechat: ['up', 'queued'],
   voice: ['up', 'tts_off', 'tts_down', 'asr_down'],
   cc: ['up', 'nologin', 'disabled'],
@@ -33,7 +33,7 @@ function params(facts: Readonly<Record<string, Fact>>): Record<string, string | 
 }
 
 /** The short facts under the status line, for example the version and the sessions. */
-export function factLines(card: ServiceCard, t: Translate): string[] {
+export function factLines(card: ServiceCard, t: Translate, now: number = Date.now()): string[] {
   const { facts } = card
   const text = (key: ConsoleKey, extra: Record<string, string | number> = {}): string => t(key, { ...params(facts), ...extra })
   switch (card.id) {
@@ -65,6 +65,12 @@ export function factLines(card: ServiceCard, t: Translate): string[] {
     case 'cc':
       if (!('login' in facts)) return []
       return [[text('fact.sessions'), t(`fact.login.${String(facts.login)}` as ConsoleKey)].join(' · ')]
+    case 'style': {
+      if (typeof facts.kept !== 'number') return []
+      const refreshed = typeof facts.lastRefreshAt === 'number' ? text('fact.styleRefresh', { when: ago(facts.lastRefreshAt, now, t) }) : t('fact.styleNever')
+      const trend = facts.ticTrend === 'up' || facts.ticTrend === 'flat' || facts.ticTrend === 'down' ? t(`fact.styleTrend.${facts.ticTrend}`) : null
+      return [[text('fact.styleCounts'), refreshed, trend].filter(line => line !== null).join(' · ')]
+    }
     case 'llm':
       return typeof facts.percent === 'number' ? [text('fact.llmQuota')] : []
     default:

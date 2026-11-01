@@ -192,6 +192,13 @@ export const zh = {
   'card.qq.starting': '正在连接 NapCat',
   'fact.qqAccount': '账号 {account}',
   'fact.qqAttempts': '已失败 {attempt} 次',
+  'card.style.pending': '{pending} 条样本等待你审核',
+  'fact.styleCounts': '保留 {kept} 条 · 待审 {pending} 条',
+  'fact.styleRefresh': '上次更新 {when}',
+  'fact.styleNever': '尚未更新',
+  'fact.styleTrend.up': '口癖趋势上升',
+  'fact.styleTrend.flat': '口癖趋势持平',
+  'fact.styleTrend.down': '口癖趋势下降',
 } satisfies Record<string, string>
 
 /** The console namespace key union. */
@@ -396,6 +403,13 @@ export const en: Record<ConsoleKey, string> = {
   'card.qq.starting': 'Connecting to NapCat',
   'fact.qqAccount': 'account {account}',
   'fact.qqAttempts': '{attempt} failed attempt(s)',
+  'card.style.pending': '{pending} sample(s) waiting for your review',
+  'fact.styleCounts': '{kept} kept · {pending} pending',
+  'fact.styleRefresh': 'refreshed {when}',
+  'fact.styleNever': 'not refreshed yet',
+  'fact.styleTrend.up': 'tic trend rising',
+  'fact.styleTrend.flat': 'tic trend flat',
+  'fact.styleTrend.down': 'tic trend falling',
 } satisfies Record<ConsoleKey, string>
 
 /** Japanese dictionary. */
@@ -590,6 +604,13 @@ export const ja: Record<ConsoleKey, string> = {
   'card.qq.starting': 'NapCat に接続中',
   'fact.qqAccount': 'アカウント {account}',
   'fact.qqAttempts': '失敗 {attempt} 回',
+  'card.style.pending': '{pending} 件のサンプルがレビュー待ち',
+  'fact.styleCounts': '保持 {kept} 件 · 保留中 {pending} 件',
+  'fact.styleRefresh': '更新 {when}',
+  'fact.styleNever': '未更新',
+  'fact.styleTrend.up': '口癖は増加傾向',
+  'fact.styleTrend.flat': '口癖は横ばい',
+  'fact.styleTrend.down': '口癖は減少傾向',
 } satisfies Record<ConsoleKey, string>
 
 /** Spanish dictionary. */
@@ -784,6 +805,13 @@ export const es: Record<ConsoleKey, string> = {
   'card.qq.starting': 'Conectando a NapCat',
   'fact.qqAccount': 'cuenta {account}',
   'fact.qqAttempts': '{attempt} intento(s) fallido(s)',
+  'card.style.pending': '{pending} muestra(s) esperan su revisión',
+  'fact.styleCounts': '{kept} guardadas · {pending} pendientes',
+  'fact.styleRefresh': 'actualizado {when}',
+  'fact.styleNever': 'sin actualizar aún',
+  'fact.styleTrend.up': 'las muletillas aumentan',
+  'fact.styleTrend.flat': 'las muletillas se mantienen',
+  'fact.styleTrend.down': 'las muletillas disminuyen',
 } satisfies Record<ConsoleKey, string>
 
 /** French dictionary. */
@@ -978,6 +1006,13 @@ export const fr: Record<ConsoleKey, string> = {
   'card.qq.starting': 'Connexion à NapCat',
   'fact.qqAccount': 'compte {account}',
   'fact.qqAttempts': '{attempt} échec(s)',
+  'card.style.pending': '{pending} échantillon(s) en attente de votre relecture',
+  'fact.styleCounts': '{kept} gardés · {pending} en attente',
+  'fact.styleRefresh': 'mis à jour {when}',
+  'fact.styleNever': 'pas encore mis à jour',
+  'fact.styleTrend.up': 'tics en hausse',
+  'fact.styleTrend.flat': 'tics stables',
+  'fact.styleTrend.down': 'tics en baisse',
 } satisfies Record<ConsoleKey, string>
 
 /** German dictionary. */
@@ -1172,6 +1207,13 @@ export const de: Record<ConsoleKey, string> = {
   'card.qq.starting': 'Verbindet mit NapCat',
   'fact.qqAccount': 'Konto {account}',
   'fact.qqAttempts': '{attempt} Fehlversuch(e)',
+  'card.style.pending': '{pending} Probe(n) warten auf Ihre Prüfung',
+  'fact.styleCounts': '{kept} behalten · {pending} offen',
+  'fact.styleRefresh': 'aktualisiert {when}',
+  'fact.styleNever': 'noch nicht aktualisiert',
+  'fact.styleTrend.up': 'Tics nehmen zu',
+  'fact.styleTrend.flat': 'Tics bleiben gleich',
+  'fact.styleTrend.down': 'Tics nehmen ab',
 } satisfies Record<ConsoleKey, string>
 
 /** Russian dictionary. */
@@ -1366,6 +1408,13 @@ export const ru: Record<ConsoleKey, string> = {
   'card.qq.starting': 'Подключение к NapCat',
   'fact.qqAccount': 'аккаунт {account}',
   'fact.qqAttempts': 'неудачных попыток: {attempt}',
+  'card.style.pending': 'Образцов ждёт проверки: {pending}',
+  'fact.styleCounts': 'сохранено {kept} · на проверке {pending}',
+  'fact.styleRefresh': 'обновлено {when}',
+  'fact.styleNever': 'ещё не обновлялось',
+  'fact.styleTrend.up': 'привычные фразы учащаются',
+  'fact.styleTrend.flat': 'привычные фразы без изменений',
+  'fact.styleTrend.down': 'привычные фразы редеют',
 } satisfies Record<ConsoleKey, string>
 
 /** Portuguese dictionary. */
@@ -1560,4 +1609,11 @@ export const pt: Record<ConsoleKey, string> = {
   'card.qq.starting': 'Conectando ao NapCat',
   'fact.qqAccount': 'conta {account}',
   'fact.qqAttempts': '{attempt} tentativa(s) falha(s)',
+  'card.style.pending': '{pending} amostra(s) aguardando sua revisão',
+  'fact.styleCounts': '{kept} mantidas · {pending} pendentes',
+  'fact.styleRefresh': 'atualizado {when}',
+  'fact.styleNever': 'ainda não atualizado',
+  'fact.styleTrend.up': 'cacoetes em alta',
+  'fact.styleTrend.flat': 'cacoetes estáveis',
+  'fact.styleTrend.down': 'cacoetes em queda',
 } satisfies Record<ConsoleKey, string>

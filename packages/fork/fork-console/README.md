@@ -40,7 +40,7 @@ Mount the row next to the Web bundles; the fork event bundle mounts it. It needs
 | `subscriptions.*` | those of `watch_create` | `workspacePath`, `agentPreset`, `permissionPreset`, `coalesceSeconds`, `notifyMaxPerHour`, `sessionMaxPerHour`: what a subscription made from the form runs with |
 | `previewText` | a short Chinese sentence | The sentence the voice preview speaks (at most the voice service's `tts.maxChars`) |
 
-**Overview.** The cards poll every 10 seconds while the section is open and the page is visible. A card links to `bili`, `fork-qq`, `fork-wechat`, `fork-style`, `fork-sysmon`, `fork-subscriptions`, `fork-agents`, or `account` only when that section is registered. A service can add detail to its card by exposing an optional `health()` that returns `{ state: 'ok' | 'warn' | 'down', detail? }`; `bili`, `forkQq`, and `forkNotifier` are read that way when they have one.
+**Overview.** The cards poll every 10 seconds while the section is open and the page is visible. A card links to `bili`, `fork-qq`, `fork-wechat`, `fork-style`, `fork-sysmon`, `fork-subscriptions`, `fork-agents`, or `account` only when that section is registered. A service can add detail to its card by exposing an optional `health()` that returns `{ state: 'ok' | 'warn' | 'down', detail? }`; `bili` and `forkNotifier` are read that way when they have one. The speaking-style card reads `ctx.forkStyle.health()` (kept and pending sample counts, review mode, last refresh, tic trend; counts only): green when it answers, yellow when review is required and samples wait, red when it throws or answers an unexpected shape.
 
 **Subscriptions.** Subscriptions defined in the bus configuration show "From configuration" and have no buttons. A subscription made by `watch_create` or from the form can be paused (it matches no new events and holds the ones already waiting), resumed, or deleted after a second click; deleting a watch also stops its repository poll, as `watch_delete` does. The form takes a name, source, kind, and subject globs (at least one), notify or session mode, and, for a session, the instructions; a session subscription runs with the configured preset and workspace. Schedule reminders (`schedule_create`) can be paused, resumed, and deleted; their times are changed by asking the agent.
 
@@ -113,7 +113,8 @@ None; this package neither assembles nor sends a provider request.
 - **Monitors are not listed** — `monitor_start` registries belong to each preset mount; ask the conversation that started one to `monitor_list` or `monitor_stop`.
 - **Fire counts are bounded by retention** — the count is the batches the bus still holds (`retainBatches`, 1000 by default), and "last fired" is the newest of them.
 - **Transcription is read-only** — it is configuration, and a patch entry's `config` replaces the whole entry, so the card shows the patch instead of saving one.
-- **WeChat and speaking-style cards say little until they report health** — a service reports more by adding `health()`; the QQ card reads `connectionStatus()` and `recordedGroups()` of the observer when it has them.
+- **WeChat and bili cards say little until they report health** — a service reports more by adding `health()`.
+- **The QQ card never reaches QQ** — it calls only the observer's in-memory `connectionStatus()` and `recordedGroups()` (a test fails on any other member), because the account is under QQ risk control; no page of this package calls the protocol end or NapCat's login door.
 - **Preview waits for the voice model** — the first sentence after idle takes about 45 seconds on feiyu; one preview runs at a time.
 
 <a id="dev-note"></a>
