@@ -416,6 +416,19 @@
     - id: lsy-qq-login
       name: '@deepseek-ai/dsh-lsy-qq-login'
 
+    # The owner's course records (ctx.lsyCourses): a client of the courses service
+    # (https://api.lishuyu.app/courses, REST with the PAT LSY_COURSES_PAT of audience `courses` from $DSH_HOME/.env)
+    # and a deadline poller (every 15 minutes). Fixed rules decide whether a reminder goes out, never a model:
+    # checkpoints before each deadline, a missed deadline told at once while its late window is open, submitted or
+    # completed tasks skipped, one message per task and checkpoint across restarts, quiet while the owner sleeps
+    # (lsy-presence), and urgent within 2 hours. A broken course sync (report.coverage.health) is told once, then at
+    # most daily, and its recovery once. DSH only reads the records' sync health; the sync agents run elsewhere.
+    # Settings → 课程 DDL (lsy-courses-settings) shows the checks and edits this row's config.
+    - id: lsy-courses
+      name: '@deepseek-ai/dsh-lsy-courses'
+    - id: lsy-courses-settings
+      name: '@deepseek-ai/dsh-lsy-courses-settings'
+
     # The official QQ bot channel (ctx.lsyQqBot), DISABLED by default (`disabled: true`). It answers owner-listed
     # openids on the QQ Open Platform bot in private chats and in groups where the bot is @-mentioned, one chat
     # Session each (preset `qqbot`, below), through owner-relay's `qqbot` channel. It is not the QQ observer
@@ -848,6 +861,10 @@
           # Read-only access to what the QQ observer recorded and digested.
           - id: lsy-tool-qq
             name: '@deepseek-ai/dsh-lsy-tool-qq'
+          # The owner's course records: what is due, a search, one task, and the owner's progress and memos
+          # (courses_set_progress, courses_save_memo); the submission status stays the platform sync's.
+          - id: lsy-tool-courses
+            name: '@deepseek-ai/dsh-lsy-tool-courses'
           # speak: text to speech, sent to the owner on WeChat as an audio file.
           - id: lsy-tool-voice
             name: '@deepseek-ai/dsh-lsy-tool-voice'

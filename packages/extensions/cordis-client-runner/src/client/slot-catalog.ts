@@ -3621,6 +3621,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
       'lsy-console OverviewSection id \'lsy-overview\'',
       'lsy-console SubscriptionsSection id \'lsy-subscriptions\'',
       'lsy-console AgentsSection id \'lsy-agents\'',
+      'lsy-courses-settings CoursesSection id \'lsy-courses\'',
       'lsy-memory-admin MemorySection id \'lsy-memory\'',
       'lsy-qq-login QqLoginSection id \'lsy-qq\'',
       'lsy-style-settings StyleSection id \'lsy-style\'',

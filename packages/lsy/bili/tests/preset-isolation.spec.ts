@@ -53,6 +53,7 @@ const WECHAT_SIDE: Record<string, string> = {
   '@deepseek-ai/dsh-lsy-tool-watch': 'creates watches that report into the WeChat chat Session',
   '@deepseek-ai/dsh-lsy-tool-monitor': 'monitors whose output returns to a Session with the owner\'s context',
   '@deepseek-ai/dsh-lsy-tool-voice': 'speaks to the owner through the WeChat notifier',
+  '@deepseek-ai/dsh-lsy-tool-courses': 'reads and writes the owner\'s course records (deadlines, progress, memos)',
   '@deepseek-ai/dsh-lsy-taint': 'only meaningful beside the memory and bridge tools',
   '@deepseek-ai/dsh-tool-schedule': 'reminders that start turns in the owner\'s Sessions',
   '@deepseek-ai/dsh-agent-instructions': 'reads the workspace instruction files, which hold what the owner told the main agent',
@@ -130,6 +131,14 @@ describe('channel isolation of the event bundle\'s presets', () => {
     const manifest = JSON.parse(readFileSync(join(ROOT, 'packages/lsy/lsy-time-gap/package.json'), 'utf8')) as { peerDependencies: Record<string, string>; dependencies: Record<string, string> }
     const dependencies = [...Object.keys(manifest.peerDependencies), ...Object.keys(manifest.dependencies)]
     expect(dependencies.filter(name => name !== '@deepseek-ai/dsh-lsy-taint' && (name in WECHAT_SIDE || name === '@deepseek-ai/dsh-lsy-wechat'))).toEqual([])
+  })
+
+  it('mounts the course tools in the WeChat preset only; the root course service registers no tool', () => {
+    expect(names(WECHAT_PRESET).filter(name => name === '@deepseek-ai/dsh-lsy-tool-courses')).toHaveLength(1)
+    expect(rootRows.map(row => row.name)).not.toContain('@deepseek-ai/dsh-lsy-tool-courses')
+    expect(rootRows.map(row => row.name)).toEqual(expect.arrayContaining(['@deepseek-ai/dsh-lsy-courses', '@deepseek-ai/dsh-lsy-courses-settings']))
+    const source = readFileSync(join(ROOT, 'packages/lsy/lsy-courses/src/index.ts'), 'utf8')
+    expect(source).not.toContain('tools.register')
   })
 
   it('keeps the owner memory out of every root row, since root rows reach every preset', () => {

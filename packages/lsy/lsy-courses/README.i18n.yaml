@@ -1,0 +1,49 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/lsy-courses/README.md
+/:
+  en: 4cf825cc01ed0066
+  zh: e3459575ac1c2a21
+/deepseek-ai-dsh-lsy-courses:
+  en: 18d1a4307194b045
+  zh: c3e38f25823c66f0
+/deepseek-ai-dsh-lsy-courses/summary:
+  en: afbc0d5919a9549d
+  zh: abfb48152db2901c
+/deepseek-ai-dsh-lsy-courses/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-lsy-courses/use-this-package:
+  en: ddcfc342fad951d2
+  zh: d182a0fdcafdf7af
+/deepseek-ai-dsh-lsy-courses/use-this-package/rules:
+  en: b299750093ab9bd9
+  zh: fd6941e00dcf3d5c
+/deepseek-ai-dsh-lsy-courses/understand-the-implementation:
+  en: 5baf1673994e7b55
+  zh: 39c79f823b88950c
+/deepseek-ai-dsh-lsy-courses/further-exploration:
+  en: 19d305caf8c8be80
+  zh: ffb3e3c716ed9f90
+/deepseek-ai-dsh-lsy-courses/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-lsy-courses/model-experience/reminder-copy-in-the-chat-session:
+  en: 6196b79f406c45c3
+  zh: 36a04274fdd54354
+/deepseek-ai-dsh-lsy-courses/model-experience/reminder-copy-in-the-chat-session/what-the-model-sees:
+  en: e638937afdf7b3dc
+  zh: d658963bd0d780c3
+/deepseek-ai-dsh-lsy-courses/model-experience/reminder-copy-in-the-chat-session/token-effect:
+  en: 7de7f78247334d28
+  zh: 4f3d3b61c47334a7
+/deepseek-ai-dsh-lsy-courses/model-experience/reminder-copy-in-the-chat-session/kv-cache-effect:
+  en: 7a48f9c3a3e24b09
+  zh: 1b043bae7e8f5db7
+/deepseek-ai-dsh-lsy-courses/known-limitations-and-deferred-work:
+  en: 39ce856671737047
+  zh: 14a1a3535206db08
+/deepseek-ai-dsh-lsy-courses/known-limitations-and-deferred-work/dev-note:
+  en: 16aea5991c780c01
+  zh: 66cd7cbbd496202b

@@ -2,7 +2,7 @@
 
 English | [中文](lsy.zh.md)
 
-The fork-local services behind the event-driven agent: [`@deepseek-ai/dsh-lsy-event-bus`](../../packages/lsy/lsy-event-bus/README.md) routes sensor events to notifications or unattended Sessions, [`@deepseek-ai/dsh-lsy-github-sensor`](../../packages/lsy/lsy-github-sensor/README.md) polls GitHub, [`@deepseek-ai/dsh-lsy-wechat`](../../packages/lsy/lsy-wechat/README.md) provides the `lsyNotifier` contract over WeChat, [`@deepseek-ai/dsh-lsy-qq`](../../packages/lsy/lsy-qq/README.md) lurks in the QQ groups the owner lists and digests them, reading the messages from the `qq-recorder` service (an AMS service that holds the one QQ connection, so a DSH restart never reconnects QQ; its Settings → QQ page, [`@deepseek-ai/dsh-lsy-qq-login`](../../packages/lsy/lsy-qq-login/README.md), shows the connection and the login QR code to scan after a sign-out), [`@deepseek-ai/dsh-lsy-style`](../../packages/lsy/lsy-style/README.md) keeps the persona layer the agents share, learned from QQ groups and public Bilibili text (its Settings → 人格与风格 page is [`@deepseek-ai/dsh-lsy-style-settings`](../../packages/lsy/lsy-style-settings/README.md)), and [`@deepseek-ai/dsh-bili`](../../packages/lsy/bili/README.md) is the agent's own Bilibili account. Behavior, configuration, and limitations are on each package README; the [upstream ledger](../../packages/lsy/UPSTREAM.md) records how the fork tracks upstream.
+The fork-local services behind the event-driven agent: [`@deepseek-ai/dsh-lsy-event-bus`](../../packages/lsy/lsy-event-bus/README.md) routes sensor events to notifications or unattended Sessions, [`@deepseek-ai/dsh-lsy-github-sensor`](../../packages/lsy/lsy-github-sensor/README.md) polls GitHub, [`@deepseek-ai/dsh-lsy-wechat`](../../packages/lsy/lsy-wechat/README.md) provides the `lsyNotifier` contract over WeChat, [`@deepseek-ai/dsh-lsy-qq`](../../packages/lsy/lsy-qq/README.md) lurks in the QQ groups the owner lists and digests them, reading the messages from the `qq-recorder` service (an AMS service that holds the one QQ connection, so a DSH restart never reconnects QQ; its Settings → QQ page, [`@deepseek-ai/dsh-lsy-qq-login`](../../packages/lsy/lsy-qq-login/README.md), shows the connection and the login QR code to scan after a sign-out), [`@deepseek-ai/dsh-lsy-style`](../../packages/lsy/lsy-style/README.md) keeps the persona layer the agents share, learned from QQ groups and public Bilibili text (its Settings → 人格与风格 page is [`@deepseek-ai/dsh-lsy-style-settings`](../../packages/lsy/lsy-style-settings/README.md)), [`@deepseek-ai/dsh-bili`](../../packages/lsy/bili/README.md) is the agent's own Bilibili account, and [`@deepseek-ai/dsh-lsy-courses`](../../packages/lsy/lsy-courses/README.md) reminds the owner of course deadlines by fixed rules over the courses service (its Settings → 课程 DDL page is [`@deepseek-ai/dsh-lsy-courses-settings`](../../packages/lsy/lsy-courses-settings/README.md)). Behavior, configuration, and limitations are on each package README; the [upstream ledger](../../packages/lsy/UPSTREAM.md) records how the fork tracks upstream.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -278,6 +278,38 @@ async stop(name: string): Promise<CcOutcome>
 ```
 
 Source: [`packages/lsy/lsy-cc-admin/src/index.ts`](../../packages/lsy/lsy-cc-admin/src/index.ts)
+
+<a id="ctxlsycourses--lsycourses"></a>
+
+### `ctx.lsyCourses` — `LsyCourses`
+
+The courses client and the deadline poller.
+
+```ts cordis-catalog
+/**
+ * Whether reminders wait right now: the daily window, or the owner asleep when `followPresence` is on.
+ * @param now - Unix epoch milliseconds.
+ * @returns true while quiet.
+ */
+isQuiet(now: number = Date.now()): boolean
+
+/**
+ * Read the report once, send what is due, and record the outcome. Polls run one at a time; a manual poll while
+ * one runs waits for it and then runs.
+ * @param trigger - the timer or the Settings button.
+ * @returns the poll's record.
+ */
+poll(trigger: 'timer' | 'manual'): Promise<PollRecord>
+
+/**
+ * Everything Settings shows: the rules, the last poll, the sync health with the newest run's reason, the
+ * outage counter, the next reminders, and the latest messages (newest first).
+ * @returns a snapshot.
+ */
+status(): CoursesStatus
+```
+
+Source: [`packages/lsy/lsy-courses/src/index.ts`](../../packages/lsy/lsy-courses/src/index.ts)
 
 <a id="ctxlsyeventbus--lsyeventbus"></a>
 

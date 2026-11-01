@@ -489,6 +489,16 @@ The status, by hand (the token never leaves the shell): `sudo -n -u dsh-runtime 
 
 The pushed settings live in `/Users/dsh-runtime/.dsh/lsy-qq/recorder-config.json` (0600); the old digest tables inside `qq.db` stay frozen and are never deleted.
 
+<a id="course-deadlines"></a>
+## 20. Course deadlines (lsy-courses)
+
+`lsy-courses` reads the owner's course records from the courses service (`https://api.lishuyu.app/courses`) every 15 minutes and messages the owner on WeChat before each deadline, at once when an on-time deadline passed while late submissions are open, and when the course sync stays broken. The agent answers "我还有什么 DDL" and "交了" with the `courses_*` tools. DSH reads the records and their sync health only; the sync agents run on other machines.
+
+1. Mint a PAT for the service user with the audience (scope) `courses`, never `admin`, and append it to `/Users/dsh-runtime/.dsh/.env` as `LSY_COURSES_PAT` without printing it (back up the file first, as in step 19); check it with `sudo -n -u dsh-runtime /bin/zsh -fc 't=$(/usr/bin/grep "^LSY_COURSES_PAT=" /Users/dsh-runtime/.dsh/.env | /usr/bin/cut -d= -f2-); /usr/bin/curl -s -o /dev/null -w "%{http_code}\n" https://api.lishuyu.app/courses/v1/me -H "Authorization: Bearer $t"'`, which answers `200`. A new `.env` line needs a restart.
+2. The bundle mounts `lsy-courses`, `lsy-courses-settings`, and `lsy-tool-courses` (unattended preset) with their defaults; owner values (checkpoints, quiet window, the switch) are edited in **Settings → 课程 DDL** and saved to the profile patch.
+3. Check: the log shows `lsy-courses: reminders on, every 15 min, …` at start and `lsy-courses: poll (timer) ok in … ms: N open task(s), M reminder(s) …, sync <status>` every poll; **Settings → 课程 DDL** shows the last check, the sync health, and the next deadlines. **立即检查** runs one poll (it sends what is due).
+4. Stop: turn **enabled** off in the page's settings card (the tools keep working), or `disabled: true` on the `lsy-courses` row in the profile patch. Sent reminders are in the storage domain `lsy_courses` (key per task, deadline, and checkpoint); deleting it re-sends the current checkpoint of every open task once.
+
 ## Operate
 
 Patch edits (`$DSH_HOME/cordis.patch.yml`, the profile patch) reload live; `.env` edits and new builds need a restart. The composition is the `@deepseek-ai/dsh-lsy-event-bundle` layer linked from the build; the profile patch `profiles/event/cordis.patch.yml` is the owner's layer, where Web UI settings save, and upgrades keep it. A home patch entry replaces that entry's whole `config`, so override only entries whose config it restates in full, and the Web UI refuses to save an entry the home patch sets ("Configuration for … is overridden by a home patch").

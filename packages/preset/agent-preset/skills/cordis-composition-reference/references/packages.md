@@ -341,6 +341,8 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-lsy-cc-bridge` | yes | Model-facing cc_list_sessions and cc_send tools: the agent talks to the owner's Claude Code sessions on the same Mac through a relay, and their replies reach the main agent |
 | `@deepseek-ai/dsh-lsy-config` | no | All settings card: every Config field of a plugin entry, the layer that set it, and one explicit save to the owner patch, embeddable in any Settings section |
 | `@deepseek-ai/dsh-lsy-console` | yes | Settings sections for the event service: a service overview, subscriptions and schedule reminders, and Claude Code sessions with the voice service |
+| `@deepseek-ai/dsh-lsy-courses` | yes | The owner's course records in DSH: a client of the courses service and a deadline poller that reminds the owner on WeChat by fixed rules (checkpoints, late windows, quiet hours) and tells when the course sync is broken |
+| `@deepseek-ai/dsh-lsy-courses-settings` | no | Settings section for course deadline reminders: on or off, the last and next check with a button to check now, the course sync's health, the next deadlines, the latest reminders, and the plugin's configuration |
 | `@deepseek-ai/dsh-lsy-event-bus` | yes | Durable event bus for event-driven agent runs: dedupe, loop suppression, subscriptions, coalescing, rate limits, and dispatch to notify or Session actuators |
 | `@deepseek-ai/dsh-lsy-event-ingest` | yes | Authenticated POST route through which the owner's own services push events into the lsy event bus, one token per source |
 | `@deepseek-ai/dsh-lsy-github-sensor` | yes | GitHub polling sensor for the lsy event bus: releases, tags, commits, and notifications with conditional requests |
@@ -357,6 +359,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-lsy-sysmon` | yes | System status settings section: the Host machine's CPU, memory, power, temperature, and disk usage per volume |
 | `@deepseek-ai/dsh-lsy-taint` | yes | Turn origin for the owner's main agent: who started the current turn (the owner, a relayed message, an event, a reminder), which tools read strangers' words in it, and the rules that follow |
 | `@deepseek-ai/dsh-lsy-time-gap` | yes | Time check for every Session: an input that arrives after a quiet spell reaches the model with the current time, how long the Session was quiet, and a reminder to read it on its own terms |
+| `@deepseek-ai/dsh-lsy-tool-courses` | no | Course tools of the owner's main agent: courses_deadlines, courses_find, courses_get, and the writes courses_set_progress and courses_save_memo over the owner's course records |
 | `@deepseek-ai/dsh-lsy-tool-monitor` | no | Model-facing monitor tools: a bash command whose stdout lines come back to the same Session as they appear, like Claude Code's Monitor |
 | `@deepseek-ai/dsh-lsy-tool-qq` | yes | Read-only qq_groups, qq_digest, qq_recent, and qq_search tools: the agent reads what the QQ observer recorded and digested |
 | `@deepseek-ai/dsh-lsy-tool-up` | yes | Model-facing up_* tools for the creator account's reads and Reply Gate replies (bili-svc) |

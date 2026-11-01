@@ -2287,6 +2287,36 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'lsyCourses',
+    summary: 'The courses client and the deadline poller.',
+    description: 'The courses client and the deadline poller.',
+    methods: [
+      {
+        signature: 'readonly api: CoursesApi',
+        description: 'The courses service; the tools call it too.',
+        parameters: [],
+      },
+      {
+        signature: 'isQuiet(now: number = Date.now()): boolean',
+        description: 'Whether reminders wait right now: the daily window, or the owner asleep when `followPresence` is on.',
+        parameters: [{ name: 'now', description: 'Unix epoch milliseconds.' }],
+        returns: 'true while quiet.',
+      },
+      {
+        signature: 'poll(trigger: \'timer\' | \'manual\'): Promise<PollRecord>',
+        description: 'Read the report once, send what is due, and record the outcome. Polls run one at a time; a manual poll while one runs waits for it and then runs.',
+        parameters: [{ name: 'trigger', description: 'the timer or the Settings button.' }],
+        returns: 'the poll\'s record.',
+      },
+      {
+        signature: 'status(): CoursesStatus',
+        description: 'Everything Settings shows: the rules, the last poll, the sync health with the newest run\'s reason, the outage counter, the next reminders, and the latest messages (newest first).',
+        parameters: [],
+        returns: 'a snapshot.',
+      },
+    ],
+  },
+  {
     key: 'lsyEventBus',
     summary: 'Durable event bus.',
     description: 'Durable event bus. Sensors publish; subscriptions from the configuration or created at run time decide which events reach which actuator; the bus owns dedupe, loop suppression, coalescing, and rate limits so actuators never see raw sensor traffic.',
@@ -6930,6 +6960,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface CotTranslationSnapshot {\n    maxTextChars: number;\n    preferences: CotTranslationPreferences;\n    availableProviders: readonly TranslationProvider[];\n}',
   },
   {
+    name: 'CoursesApi',
+    declaration: 'export class CoursesApi {\n    constructor(private readonly options: CoursesApiOptions);\n    async call(operation: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<unknown>;\n}',
+  },
+  {
+    name: 'CoursesApiOptions',
+    declaration: 'export interface CoursesApiOptions {\n    readonly baseUrl: string;\n    readonly agent: string;\n    readonly timeoutMs: number;\n    readonly token: () => Promise<string | undefined>;\n    readonly fetch?: typeof fetch;\n}',
+  },
+  {
+    name: 'CoursesStatus',
+    declaration: 'export interface CoursesStatus {\n    readonly enabled: boolean;\n    readonly timeZone: string;\n    readonly rules: ReminderRules & {\n        readonly urgentWithinHours: number;\n    };\n    readonly quietHours: Config[\'quietHours\'];\n    readonly quietNow: boolean;\n    readonly lastPoll: PollRecord | null;\n    readonly nextPollAt: number | null;\n    readonly polling: boolean;\n    readonly sync: (SyncHealth & {\n        readonly reason: string | null;\n        readonly alerting: boolean;\n    }) | null;\n    readonly outage: OutageRecord;\n    readonly upcoming: readonly UpcomingReminder[];\n    readonly notes: readonly NoteRecord[];\n}',
+  },
+  {
     name: 'CreateAgentOptions',
     declaration: 'export interface CreateAgentOptions {\n    readonly sessionId: SessionId;\n    readonly parentAgent?: Agent;\n    readonly meta?: {\n        readonly cwd?: string;\n        readonly parentSession?: SessionId;\n        readonly isSeeded?: boolean;\n        readonly origin?: \'subagent\';\n        readonly delegationDepth?: number;\n        readonly agentPreset?: string;\n    };\n    readonly inheritedEventCount?: SessionLogOffset;\n    readonly seed?: readonly SessionEvent[];\n    readonly agentOptions?: AgentOptions;\n    readonly signal?: AbortSignal;\n    readonly setup?: AgentSetup;\n}',
   },
@@ -8314,6 +8356,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type OTelEventScalar = string | number | boolean;',
   },
   {
+    name: 'OutageRecord',
+    declaration: 'export type OutageRecord = z.infer<typeof outageSchema>;',
+  },
+  {
     name: 'OwnerIdentityRequest',
     declaration: 'export interface OwnerIdentityRequest {\n    readonly relay?: string;\n}',
   },
@@ -8512,6 +8558,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'PluginVersionList',
     declaration: 'export type PluginVersionList = {\n    readonly status: \'listed\';\n    readonly installed: string;\n    readonly registry: Registry;\n    readonly attempts: readonly RegistryAttempt[];\n    readonly versions: readonly PluginVersion[];\n    readonly omitted: number;\n} | {\n    readonly status: \'refused\';\n    readonly problem: \'not-updatable\' | \'not-found\' | \'network\' | \'unknown\';\n    readonly reason: string;\n    readonly attempts: readonly RegistryAttempt[];\n};',
+  },
+  {
+    name: 'PollRecord',
+    declaration: 'export type PollRecord = z.infer<typeof pollSchema>;',
   },
   {
     name: 'PollStatus',
@@ -8828,6 +8878,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'Reload',
     declaration: 'export interface Reload {\n    filename: string;\n    modules: ReloadModules;\n    runtime?: Plugin.Runtime | undefined;\n}',
+  },
+  {
+    name: 'ReminderPhase',
+    declaration: 'export type ReminderPhase = \'due\' | \'late\';',
+  },
+  {
+    name: 'ReminderRules',
+    declaration: 'export interface ReminderRules {\n    readonly beforeHours: readonly number[];\n    readonly lateBeforeHours: readonly number[];\n}',
   },
   {
     name: 'RemoteAccessAction',
@@ -10418,6 +10476,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SweepReport {\n    at: number;\n    durationMs: number;\n    trigger: \'timer\' | \'manual\';\n    dryRun: boolean;\n    scanned: number;\n    alreadyArchived: number;\n    due: number;\n    archived: string[];\n    wouldArchive: Array<{\n        id: string;\n        title?: string;\n        lastActiveAt: number;\n    }>;\n    skipped: Record<string, number>;\n    skippedIds: Record<string, string[]>;\n    errors: string[];\n    aborted?: string;\n}',
   },
   {
+    name: 'SyncHealth',
+    declaration: 'export interface SyncHealth {\n    readonly status: string;\n    readonly latestRunAt: number | null;\n    readonly lastCleanAt: number | null;\n    readonly failedRuns: number;\n    readonly latestRunId: string | null;\n}',
+  },
+  {
     name: 'SystemMessage',
     declaration: 'export interface SystemMessage extends MessageBase {\n    readonly role: \'system\';\n    readonly source: MessageSourceMap[\'system-prompt\'];\n}',
   },
@@ -10440,6 +10502,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TableValueOf',
     declaration: 'export type TableValueOf<S extends DomainSpec, N extends keyof S[\'tables\']> = S[\'tables\'][N] extends DomainTableSpec<string, infer V> ? V : never;',
+  },
+  {
+    name: 'TaskSummary',
+    declaration: 'export interface TaskSummary {\n    readonly id: string;\n    readonly version: number;\n    readonly title: string;\n    readonly courseId: string | null;\n    readonly course: string;\n    readonly parentId: string | null;\n    readonly parentTitle: string | null;\n    readonly partsDone: number | null;\n    readonly partsTotal: number | null;\n    readonly dueAt: number | null;\n    readonly lateAt: number | null;\n    readonly closesAt: number | null;\n    readonly certainty: string;\n    readonly progress: string;\n    readonly percent: number | null;\n    readonly submission: string;\n    readonly submissionVerified: boolean;\n    readonly remainingWork: string | null;\n    readonly checkedAt: number | null;\n    readonly links: ReadonlyArray<{\n        readonly label: string;\n        readonly url: string;\n    }>;\n}',
   },
   {
     name: 'TeamId',
@@ -10992,6 +11058,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'UnsubscribeOutcome',
     declaration: 'export type UnsubscribeOutcome = \'removed\' | \'not_found\' | \'config_owned\';',
+  },
+  {
+    name: 'UpcomingReminder',
+    declaration: 'export interface UpcomingReminder {\n    readonly task: TaskSummary;\n    readonly phase: ReminderPhase;\n    readonly deadline: number;\n    readonly nextAt: number | null;\n}',
   },
   {
     name: 'UpdateBundleOptions',

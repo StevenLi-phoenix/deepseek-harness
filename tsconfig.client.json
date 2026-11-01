@@ -157,6 +157,7 @@
     { "path": "./packages/lsy/lsy-sysmon/tsconfig.client.json" },
     { "path": "./packages/lsy/lsy-config/tsconfig.client.json" },
     { "path": "./packages/lsy/lsy-qq-login/tsconfig.client.json" },
+    { "path": "./packages/lsy/lsy-courses-settings/tsconfig.client.json" },
     { "path": "./packages/lsy/lsy-style-settings/tsconfig.client.json" },
     { "path": "./packages/lsy/lsy-memory-admin/tsconfig.client.json" },
     { "path": "./packages/lsy/lsy-console/tsconfig.client.json" },

@@ -18,7 +18,8 @@ import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import {
   ConnectionIndicator, Tooltip, useModalLayer,
-  IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconClockOutlineMedium, IconCloseOutlineRegular, IconCodeOutlineMedium,
+  IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconChecklistOutlineMedium, IconClockOutlineMedium, IconCloseOutlineRegular,
+  IconCodeOutlineMedium,
   IconDatabaseOutlineMedium, IconDataOutlineMedium, IconEnhanceOutlineMedium, IconFlatListOutlineMedium, IconGaugeOutlineMedium,
   IconNewChatOutlineMedium, IconPersonalizationOutlineMedium, IconPlayOutlineMedium, IconQueueOutlineMedium, IconSettingsOutlineMedium,
   IconUserOutlineMedium, IconUsersOutlineMedium,
@@ -41,7 +42,8 @@ const NAV_ICONS: Readonly<Record<string, typeof IconSettingsOutlineMedium>> = {
   'plugins': IconPersonalizationOutlineMedium,
   'archived-sessions': IconArchiveOutlineMedium,
   // Fork-added sections (packages/lsy), by the id each registers: service overview, subscriptions, and Claude Code
-  // agents (lsy-console); the WeChat page, its presence page, and its speaking style; memory; System status; the Bilibili account; QQ.
+  // agents (lsy-console); the WeChat page, its presence page, and its speaking style; memory; System status; the Bilibili account; QQ;
+  // course deadlines.
   'lsy-overview': IconFlatListOutlineMedium,
   'lsy-subscriptions': IconQueueOutlineMedium,
   'lsy-agents': IconCodeOutlineMedium,
@@ -52,6 +54,7 @@ const NAV_ICONS: Readonly<Record<string, typeof IconSettingsOutlineMedium>> = {
   'lsy-sysmon': IconGaugeOutlineMedium,
   'bili': IconPlayOutlineMedium,
   'lsy-qq': IconUsersOutlineMedium,
+  'lsy-courses': IconChecklistOutlineMedium,
 }
 
 function navIcon(id: string) {

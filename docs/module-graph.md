@@ -374,6 +374,8 @@ flowchart TD
     pkg_lsy_cc_bridge["lsy-cc-bridge"]
     pkg_lsy_config["lsy-config"]
     pkg_lsy_console["lsy-console"]
+    pkg_lsy_courses["lsy-courses"]
+    pkg_lsy_courses_settings["lsy-courses-settings"]
     pkg_lsy_event_bus["lsy-event-bus"]
     pkg_lsy_event_ingest["lsy-event-ingest"]
     pkg_lsy_github_sensor["lsy-github-sensor"]
@@ -390,6 +392,7 @@ flowchart TD
     pkg_lsy_sysmon["lsy-sysmon"]
     pkg_lsy_taint["lsy-taint"]
     pkg_lsy_time_gap["lsy-time-gap"]
+    pkg_lsy_tool_courses["lsy-tool-courses"]
     pkg_lsy_tool_monitor["lsy-tool-monitor"]
     pkg_lsy_tool_qq["lsy-tool-qq"]
     pkg_lsy_tool_up["lsy-tool-up"]
@@ -1596,6 +1599,10 @@ flowchart TD
   pkg_sdk_jsonrpc_server --> pkg_user_questions
   pkg_sdk_jsonrpc_server --> pkg_working_directory
   pkg_lsy_cc_admin --> pkg_lsy_cc_bridge
+  pkg_lsy_courses --> pkg_credentials
+  pkg_lsy_courses --> pkg_lsy_event_bus
+  pkg_lsy_courses --> pkg_lsy_presence
+  pkg_lsy_courses --> pkg_storage_domain
   pkg_lsy_memory --> pkg_agent
   pkg_lsy_memory --> pkg_home_paths
   pkg_lsy_memory --> pkg_llm
@@ -1644,6 +1651,9 @@ flowchart TD
   pkg_lsy_guard --> pkg_home_paths
   pkg_lsy_guard --> pkg_llm
   pkg_lsy_guard --> pkg_lsy_memory
+  pkg_lsy_tool_courses --> pkg_lsy_courses
+  pkg_lsy_tool_courses --> pkg_tools
+  pkg_lsy_tool_courses --> pkg_util_values
   pkg_lsy_wechat --> pkg_api_session_controller
   pkg_lsy_wechat --> pkg_home_paths
   pkg_lsy_wechat --> pkg_llm
@@ -1806,6 +1816,7 @@ flowchart TD
 | [`lsy-balance`](../packages/lsy/lsy-balance) | `lsy` | — |
 | [`lsy-config`](../packages/lsy/lsy-config) | `lsy` | — |
 | [`lsy-console`](../packages/lsy/lsy-console) | `lsy` | — |
+| [`lsy-courses-settings`](../packages/lsy/lsy-courses-settings) | `lsy` | — |
 | [`lsy-memory-admin`](../packages/lsy/lsy-memory-admin) | `lsy` | — |
 | [`lsy-qq-login`](../packages/lsy/lsy-qq-login) | `lsy` | — |
 | [`lsy-style-settings`](../packages/lsy/lsy-style-settings) | `lsy` | — |
@@ -2062,6 +2073,7 @@ flowchart TD
 | [`tool-schedule`](../packages/schedule/tool-schedule) | `schedule` | [`llm`](../packages/llm/llm), [`schedule`](../packages/schedule/schedule), [`subagent`](../packages/subagent/subagent), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`sdk-jsonrpc-server`](../packages/sdk/server) | `sdk` | [`agent`](../packages/core/agent), [`attachment`](../packages/attachment/attachment), [`commands`](../packages/interaction/commands), [`goal`](../packages/goal/goal), [`llm`](../packages/llm/llm), [`llm-deepseek-api-key`](../packages/llm/llm-deepseek-api-key), [`schedule`](../packages/schedule/schedule), [`scope`](../packages/core/scope), [`sdk-protocol`](../packages/sdk/protocol), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`user-approval`](../packages/interaction/user-approval), [`user-questions`](../packages/interaction/user-questions), [`working-directory`](../packages/session/working-directory) |
 | [`lsy-cc-admin`](../packages/lsy/lsy-cc-admin) | `lsy` | [`lsy-cc-bridge`](../packages/lsy/lsy-cc-bridge) |
+| [`lsy-courses`](../packages/lsy/lsy-courses) | `lsy` | [`credentials`](../packages/credentials/credentials), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-presence`](../packages/lsy/lsy-presence), [`storage-domain`](../packages/storage/storage-domain) |
 | [`lsy-memory`](../packages/lsy/lsy-memory) | `lsy` | [`agent`](../packages/core/agent), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-taint`](../packages/lsy/lsy-taint), [`session`](../packages/core/session), [`tools`](../packages/core/tools) |
 | [`lsy-qqbot`](../packages/lsy/lsy-qqbot) | `lsy` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`owner-relay`](../packages/lsy/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`lsy-style`](../packages/lsy/lsy-style) | `lsy` | [`agent`](../packages/core/agent), [`agent-default-model`](../packages/core/agent-default-model), [`compaction`](../packages/compaction/compaction), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-integrity`](../packages/lsy/lsy-integrity), [`lsy-qq`](../packages/lsy/lsy-qq), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`web`](../packages/web/web) |
@@ -2069,6 +2081,7 @@ flowchart TD
 | [`lsy-tool-qq`](../packages/lsy/lsy-tool-qq) | `lsy` | [`attachment`](../packages/attachment/attachment), [`llm`](../packages/llm/llm), [`lsy-qq`](../packages/lsy/lsy-qq), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
 | [`lsy-tool-watch`](../packages/lsy/lsy-tool-watch) | `lsy` | [`agent`](../packages/core/agent), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-github-sensor`](../packages/lsy/lsy-github-sensor), [`tools`](../packages/core/tools) |
 | [`lsy-guard`](../packages/lsy/lsy-guard) | `lsy` | [`agent-default-model`](../packages/core/agent-default-model), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`lsy-memory`](../packages/lsy/lsy-memory) |
+| [`lsy-tool-courses`](../packages/lsy/lsy-tool-courses) | `lsy` | [`lsy-courses`](../packages/lsy/lsy-courses), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
 | [`lsy-wechat`](../packages/lsy/lsy-wechat) | `lsy` | [`api-session-controller`](../packages/api/session-controller), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-presence`](../packages/lsy/lsy-presence), [`lsy-taint`](../packages/lsy/lsy-taint), [`lsy-time-gap`](../packages/lsy/lsy-time-gap), [`lsy-voice`](../packages/lsy/lsy-voice), [`owner-relay`](../packages/lsy/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`schedule`](../packages/schedule/schedule), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`lsy-tool-wechat`](../packages/lsy/lsy-tool-wechat) | `lsy` | [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-wechat`](../packages/lsy/lsy-wechat), [`tools`](../packages/core/tools) |
 <!-- END GENERATED module-graph:packages -->
