@@ -493,6 +493,7 @@
       "@deepseek-ai/dsh-fork-qq": ["./packages/fork/fork-qq/src"],
       "@deepseek-ai/dsh-fork-qq-login": ["./packages/fork/fork-qq-login/src"],
       "@deepseek-ai/dsh-fork-qqbot": ["./packages/fork/fork-qqbot/src"],
+      "@deepseek-ai/dsh-fork-style": ["./packages/fork/fork-style/src"],
       "@deepseek-ai/dsh-fork-sysmon": ["./packages/fork/fork-sysmon/src"],
       "@deepseek-ai/dsh-fork-taint": ["./packages/fork/fork-taint/src"],
       "@deepseek-ai/dsh-fork-tool-monitor": ["./packages/fork/fork-tool-monitor/src"],
