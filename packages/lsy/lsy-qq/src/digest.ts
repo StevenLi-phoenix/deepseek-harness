@@ -13,11 +13,15 @@ import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-permission-presets'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-title'
+import type { Message as MessageRow, Member } from './protocol.ts'
 import { checkNote } from './pii.ts'
-import { MAX_NOTES_PER_GROUP, type GroupNote, type MessageRow, type QqStore } from './store.ts'
+import { MAX_NOTES_PER_GROUP, type DigestStore, type NoteRecord as GroupNote } from './digest-storage.ts'
 
 /** Digests that seed a new resident Session. */
 const SEED_DIGESTS = 5
+/** Messages read per request, and most messages one round takes up. */
+const PAGE_SIZE = 2000
+const BACKLOG_LIMIT = 20_000
 
 /** Digest settings, a slice of the channel's configuration. */
 export interface DigestConfig {
@@ -131,24 +135,25 @@ export function formatLine(
 
 /**
  * Cut a backlog into transcripts of at most `maxChars` characters each (a single longer line is cut).
- * @returns each chunk's lines and the first and last message row it covers.
+ * @returns each chunk's lines and the cursors of the first and last message it covers.
  */
 export function chunkTranscript(
   messages: readonly MessageRow[], line: (message: MessageRow) => string, maxChars: number,
-): Array<{ text: string; fromRow: number; toRow: number; count: number }> {
-  const chunks: Array<{ lines: string[]; size: number; fromRow: number; toRow: number }> = []
+): Array<{ text: string; fromCursor: string; toCursor: string; count: number; messages: MessageRow[] }> {
+  const chunks: Array<{ lines: string[]; size: number; fromCursor: string; toCursor: string; messages: MessageRow[] }> = []
   for (const message of messages) {
     const text = Array.from(line(message)).slice(0, Math.max(200, Math.floor(maxChars / 4))).join('')
     const last = chunks.at(-1)
     if (last === undefined || last.size + text.length + 1 > maxChars) {
-      chunks.push({ lines: [text], size: text.length, fromRow: message.id, toRow: message.id })
+      chunks.push({ lines: [text], size: text.length, fromCursor: message.cursor, toCursor: message.cursor, messages: [message] })
     } else {
       last.lines.push(text)
       last.size += text.length + 1
-      last.toRow = message.id
+      last.toCursor = message.cursor
+      last.messages.push(message)
     }
   }
-  return chunks.map(chunk => ({ text: chunk.lines.join('\n'), fromRow: chunk.fromRow, toRow: chunk.toRow, count: chunk.lines.length }))
+  return chunks.map(chunk => ({ text: chunk.lines.join('\n'), fromCursor: chunk.fromCursor, toCursor: chunk.toCursor, count: chunk.lines.length, messages: chunk.messages }))
 }
 
 /** The instruction and the transcript, as one prompt. */
@@ -218,6 +223,18 @@ interface TurnSession {
   resident: boolean
 }
 
+/** How the runner reads the recorded messages: the recorder's API, as far as digests use it. */
+export interface MessageReader {
+  /** A page of a group's messages after a cursor, in log order. */
+  page(groupId: string, after: string | undefined, limit: number): Promise<{ items: MessageRow[]; nextCursor: string | null }>
+  /** The messages of a group by their OneBot ids. */
+  lookup(groupId: string, messageIds: readonly string[]): Promise<MessageRow[]>
+  /** The member names a group's messages show; undefined when this recorder cannot say. */
+  members(groupId: string): Promise<Member[] | undefined>
+  /** The group's display name, or its number. */
+  groupName(groupId: string): string
+}
+
 /** The digest runner. */
 export class DigestRunner {
   /** The Sessions that are digesting right now, by id: what their tools may touch. */
@@ -226,10 +243,11 @@ export class DigestRunner {
 
   constructor(
     private readonly ctx: Context,
-    private readonly store: QqStore,
+    private readonly store: DigestStore,
+    private readonly messages: MessageReader,
     private readonly config: DigestConfig,
-    private readonly dataDir: string,
-    private readonly groupName: (groupId: string) => string,
+    /** Directory the model's raw answers are written to. */
+    private readonly rawDir: string,
     private readonly now: () => number = Date.now,
     /** How long a resident Session lives before it is replaced, in milliseconds; 0 keeps it. */
     private readonly rolloverMs: () => number = () => 0,
@@ -332,16 +350,24 @@ export class DigestRunner {
       return { ok: false, error }
     }
     if (op === 'remove') {
-      if (!this.store.removeNote(groupId, text)) return refuse('no such note in this group (name it as #id or give its exact text)')
+      if (!await this.store.removeNote(groupId, text)) return refuse('no such note in this group (name it as #id or give its exact text)')
       binding.notesRemoved += 1
       return { ok: true, message: 'note removed' }
     }
     if (op !== 'add') return refuse('op must be add or remove')
-    const verdict = checkNote(text, this.store.memberNames(groupId))
+    // The names a note must not contain come from the recorder; without them the check cannot be made, so no note is added.
+    let names: Member[] | undefined
+    try {
+      names = await this.messages.members(groupId)
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`lsy-qq: could not read the member names of group ${groupId}: ${errorText(error)}`)
+    }
+    if (names === undefined) return refuse('note refused: the member names of this group cannot be read right now, so the note cannot be checked; try again next round')
+    const verdict = checkNote(text, names.flatMap(member => [member.nickname, member.card]).filter(name => name !== ''))
     if (!verdict.ok) return refuse(`note refused: ${verdict.reason}`)
     const guarded = await this.guard(verdict.text, sessionId)
     if (!guarded.ok) return refuse(guarded.error)
-    const id = this.store.addNote(groupId, verdict.text, this.now())
+    const id = await this.store.addNote(groupId, verdict.text, this.now())
     if (id === undefined) return refuse(`not added: the group already has this note or the maximum of ${MAX_NOTES_PER_GROUP} (remove one first)`)
     binding.notesAdded += 1
     return { ok: true, message: `note #${id} added` }
@@ -364,40 +390,45 @@ export class DigestRunner {
     }
   }
 
-  /** The per-install salt of member aliases, created on first use. */
-  ensureSalt(): string {
-    return this.salt()
-  }
-
-  private salt(): string {
-    let salt = this.store.getMeta('alias-salt')
-    if (salt === undefined) {
-      salt = randomUUID()
-      this.store.setMeta('alias-salt', salt)
+  /** Every message after a cursor, in pages, up to the round's limit. */
+  private async backlog(groupId: string, after: string | undefined): Promise<MessageRow[]> {
+    const all: MessageRow[] = []
+    let cursor = after
+    while (all.length < BACKLOG_LIMIT) {
+      const page = await this.messages.page(groupId, cursor, PAGE_SIZE)
+      all.push(...page.items)
+      if (page.nextCursor === null || page.items.length === 0) break
+      cursor = page.nextCursor
     }
-    return salt
+    return all
   }
 
   private async digestGroup(groupId: string, signal: AbortSignal): Promise<number> {
     const now = this.now()
     const last = this.store.lastDigestAt(groupId)
     if (last > 0 && now - last < this.config.everyHours * 3_600_000) return 0
-    const upTo = this.store.digestedUpTo(groupId)
-    const messages = this.store.after(groupId, upTo, 20_000)
+    const messages = await this.backlog(groupId, this.store.digestedUpTo(groupId))
     if (messages.length < this.config.minMessages) return 0
-    const lookup = (id: string): MessageRow | undefined => this.store.byMessageId(groupId, id)
-    const salt = this.salt()
+    // The messages a transcript quotes may lie outside the backlog; one lookup fetches them.
+    const inBacklog = new Set(messages.map(message => message.messageId))
+    const quoted = [...new Set(messages.flatMap(message => (message.replyTo !== null && !inBacklog.has(message.replyTo) ? [message.replyTo] : [])))]
+    const known = new Map(messages.map(message => [message.messageId, message]))
+    for (let at = 0; at < quoted.length; at += 200) {
+      for (const message of await this.messages.lookup(groupId, quoted.slice(at, at + 200))) known.set(message.messageId, message)
+    }
+    const lookup = (id: string): MessageRow | undefined => known.get(id)
+    const salt = await this.store.ensureSalt()
     const nameOf: NameOf = this.config.aliasMembers ? message => memberAlias(message.userId, salt) : realNames
     const line = (message: MessageRow): string => formatLine(message, lookup, this.config.timeZone, nameOf)
     const chunks = chunkTranscript(messages, line, this.config.maxPromptChars)
-    const name = this.groupName(groupId)
+    const name = this.messages.groupName(groupId)
     let stored = 0
     for (const chunk of chunks.slice(0, this.config.maxCallsPerRound)) {
       if (signal.aborted) break
       const started = this.now()
       const binding: RoundBinding = {
         groupId, calls: 0, digest: undefined, notesAdded: 0, notesRemoved: 0, refused: 0,
-        texts: messages.filter(message => message.id >= chunk.fromRow && message.id <= chunk.toRow).map(message => message.text),
+        texts: chunk.messages.map(message => message.text),
       }
       const session = await this.sessionFor(groupId, name, this.now())
       const seeded = session.fresh && this.config.resident
@@ -407,22 +438,21 @@ export class DigestRunner {
       const result = await this.callModel(session, prompt, signal, binding)
       session.fresh = false
       // The raw answer goes to disk before it is interpreted: what the model handed in with the tool, then its final text.
-      const rawDir = join(this.dataDir, 'digest-raw')
-      await mkdir(rawDir, { recursive: true, mode: 0o700 })
-      const rawPath = join(rawDir, `${groupId}-${chunk.fromRow}-${chunk.toRow}-${started}.md`)
+      await mkdir(this.rawDir, { recursive: true, mode: 0o700 })
+      const rawPath = join(this.rawDir, `${groupId}-${chunk.fromCursor}-${chunk.toCursor}-${started}.md`)
       const viaTool = binding.digest !== undefined
       await writeFile(rawPath, viaTool ? `${binding.digest}\n\n--- final answer ---\n${result.text}` : result.text, { mode: 0o600 })
       // The tool's digest wins; a model that skipped the tool and wrote the digest as its answer is still kept.
       const answer = (binding.digest ?? result.text).trim()
       const text = answer === '' || answer === 'NO_REPLY' ? '（这一段没有值得记录的内容）' : Array.from(answer).slice(0, this.config.maxDigestChars).join('')
-      this.store.insertDigest({
-        groupId, fromRow: chunk.fromRow, toRow: chunk.toRow, messageCount: chunk.count, text, model: result.model,
-        usage: result.usage, rawPath, createdAt: this.now(),
+      await this.store.insertDigest({
+        groupId, fromCursor: chunk.fromCursor, toCursor: chunk.toCursor, messageCount: chunk.count, text, model: result.model,
+        usage: result.usage ?? null, rawPath, createdAt: this.now(),
       })
       stored += 1
-      const dropped = this.store.capDigests(groupId, this.config.keepPerGroup)
+      const dropped = await this.store.capDigests(groupId, this.config.keepPerGroup)
       if (dropped > 0) this.ctx.logger.info(`lsy-qq: dropped ${dropped} oldest digest(s) of group ${groupId} (digest.keepPerGroup ${this.config.keepPerGroup})`)
-      this.ctx.logger.info(`lsy-qq: digested ${chunk.count} messages of group ${groupId} (rows ${chunk.fromRow}-${chunk.toRow}) with ${result.model}: ${Array.from(text).length} chars in ${this.now() - started} ms${result.usage === undefined ? '' : `; usage ${result.usage}`}; via ${viaTool ? 'qq_digest_write' : 'the final answer'}; Session ${session.sessionId} (generation ${session.generation}); context ${result.contextTokens ?? 'unknown'} tokens; tool calls ${binding.calls} (${binding.refused} refused), notes +${binding.notesAdded}/-${binding.notesRemoved}; compacted ${result.compacted ?? 0}x; raw ${rawPath}`)
+      this.ctx.logger.info(`lsy-qq: digested ${chunk.count} messages of group ${groupId} (${chunk.fromCursor}-${chunk.toCursor}) with ${result.model}: ${Array.from(text).length} chars in ${this.now() - started} ms${result.usage === undefined ? '' : `; usage ${result.usage}`}; via ${viaTool ? 'qq_digest_write' : 'the final answer'}; Session ${session.sessionId} (generation ${session.generation}); context ${result.contextTokens ?? 'unknown'} tokens; tool calls ${binding.calls} (${binding.refused} refused), notes +${binding.notesAdded}/-${binding.notesRemoved}; compacted ${result.compacted ?? 0}x; raw ${rawPath}`)
     }
     if (chunks.length > this.config.maxCallsPerRound) {
       this.ctx.logger.info(`lsy-qq: group ${groupId} has ${chunks.length - this.config.maxCallsPerRound} more transcript chunk(s) for the next round`)
@@ -455,7 +485,7 @@ export class DigestRunner {
     }
     const generation = (known?.generation ?? 0) + 1
     const sessionId = await this.createSession(generation === 1 ? `QQ: ${name}` : `QQ: ${name} · ${this.monthOf(at)}`)
-    this.store.setGroupSession(groupId, { sessionId, createdAt: at, generation })
+    await this.store.setGroupSession(groupId, { sessionId, createdAt: at, generation })
     if (known !== undefined && expired) {
       this.ctx.logger.info(`lsy-qq: group ${groupId} moves to a new digest Session (generation ${generation}); ${known.sessionId} is archived, its log stays`)
       await this.archive(known.sessionId)

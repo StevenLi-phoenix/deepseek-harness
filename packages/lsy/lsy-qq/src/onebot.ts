@@ -5,6 +5,8 @@
  */
 import WebSocket from 'ws'
 
+export { isPrivateAddress, isPrivateUrl } from './address.ts'
+
 /** One message segment: `{ type: 'text', data: { text } }`, `{ type: 'image', data: { url, file } }`, and so on. */
 export interface OneBotSegment {
   type: string
@@ -83,29 +85,6 @@ export class OneBotError extends Error {
 /** Strip a token from text that may quote the URL or a header. */
 export function scrubToken(text: string, token: string): string {
   return token === '' ? text : text.split(token).join('***')
-}
-
-/** Whether the URL points at this machine or the tailnet, the only places the protocol end may live. */
-export function isPrivateUrl(raw: string): boolean {
-  return isPrivateAddress(raw, ['ws:', 'wss:'])
-}
-
-/**
- * Whether a URL of one of the given schemes points at this machine or the tailnet: the same rule as
- * {@link isPrivateUrl}, for the login door's HTTP address.
- * @param raw - the address.
- * @param protocols - accepted schemes, with the colon.
- * @returns true for localhost, loopback, a tailnet address (100.64.0.0/10), or a `*.ts.net` name.
- */
-export function isPrivateAddress(raw: string, protocols: readonly string[]): boolean {
-  const url = URL.parse(raw)
-  if (url === null || !protocols.includes(url.protocol)) return false
-  const host = url.hostname.replace(/^\[|\]$/g, '')
-  if (host === 'localhost' || host === '::1') return true
-  const parts = host.split('.').map(Number)
-  if (parts.length !== 4 || parts.some(part => !Number.isInteger(part) || part < 0 || part > 255)) return host.endsWith('.ts.net')
-  const [first = 0, second = 0] = parts
-  return first === 127 || (first === 100 && second >= 64 && second <= 127)
 }
 
 /** A client of the protocol end. */

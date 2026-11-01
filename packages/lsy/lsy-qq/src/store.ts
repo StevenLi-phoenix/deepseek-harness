@@ -1,6 +1,7 @@
 /**
- * The collector's database: one SQLite file (`node:sqlite`) holding the recorded groups' messages, their media,
- * and the digests made from them. Writes are incremental and idempotent: a message is unique by group and QQ
+ * The recorder's database: one SQLite file (`node:sqlite`) holding the recorded groups' messages and their media. Only the
+ * qq-recorder process opens it (DSH reaches the data through the recorder's API). The digest, note, and Session tables
+ * of the schema are frozen: nothing writes them any more, and `legacy*` reads them once for DSH's import. Writes are incremental and idempotent: a message is unique by group and QQ
  * message id, so a reconnect or a backfill never doubles a row. Text search runs on an FTS5 index with the
  * trigram tokenizer, which finds any three-character run of Chinese or English text.
  */
@@ -75,9 +76,8 @@ export interface MediaRow {
   error: string | null
 }
 
-/** A digest of a run of messages. */
-export interface DigestRow {
-  id: number
+/** A digest the plugin stored before the digest state moved to DSH. */
+export interface LegacyDigestRow {
   groupId: string
   fromRow: number
   toRow: number
@@ -89,45 +89,12 @@ export interface DigestRow {
   createdAt: number
 }
 
-/** A digest to record. */
-export interface NewDigest {
-  groupId: string
-  fromRow: number
-  toRow: number
-  messageCount: number
-  text: string
-  model: string
-  usage?: string | undefined
-  rawPath?: string | undefined
-  createdAt: number
-}
-
 /** Per-group counts for the group list. */
 export interface GroupStats {
   groupId: string
   messages: number
   firstAt: number | null
   lastAt: number | null
-  lastDigestAt: number | null
-}
-
-/** Notes one group may hold. */
-export const MAX_NOTES_PER_GROUP = 30
-
-/** The resident digest Session of a group. */
-export interface GroupSession {
-  sessionId: string
-  /** When this Session was made; a Session older than the retention window is replaced. */
-  createdAt: number
-  /** 1 for the first Session of the group, one more at each rollover. */
-  generation: number
-}
-
-/** One note of a group: the QQ channel's own memory of what the group talks about. */
-export interface GroupNote {
-  id: number
-  text: string
-  createdAt: number
 }
 
 const SCHEMA_VERSION = 3
@@ -346,14 +313,12 @@ export class QqStore {
 
   stats(): GroupStats[] {
     const rows = this.db.prepare(`
-      SELECT m.group_id AS group_id, COUNT(*) AS messages, MIN(m.at) AS first_at, MAX(m.at) AS last_at,
-        (SELECT MAX(d.created_at) FROM digests d WHERE d.group_id = m.group_id) AS last_digest
+      SELECT m.group_id AS group_id, COUNT(*) AS messages, MIN(m.at) AS first_at, MAX(m.at) AS last_at
       FROM messages m WHERE m.recalled = 0 GROUP BY m.group_id
     `).all() as Row[]
     return rows.map(row => ({
       groupId: String(row['group_id']), messages: Number(row['messages']),
       firstAt: row['first_at'] === null ? null : Number(row['first_at']), lastAt: row['last_at'] === null ? null : Number(row['last_at']),
-      lastDigestAt: row['last_digest'] === null ? null : Number(row['last_digest']),
     }))
   }
 
@@ -422,127 +387,33 @@ export class QqStore {
     })
   }
 
-  // ---- digests ----
+  // ---- frozen digest state (read once for DSH's import) ----
 
-  insertDigest(digest: NewDigest): number {
-    const result = this.db.prepare(`
-      INSERT INTO digests (group_id, from_row, to_row, message_count, text, model, usage, raw_path, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(digest.groupId, digest.fromRow, digest.toRow, digest.messageCount, digest.text, digest.model, digest.usage ?? null, digest.rawPath ?? null, digest.createdAt)
-    return Number(result.lastInsertRowid)
-  }
-
-  /** Newest digests, newest first. */
-  digests(options: { groupId?: string; sinceMs?: number; limit: number }): DigestRow[] {
-    const params: SQLInputValue[] = [options.sinceMs ?? 0]
-    let group = ''
-    if (options.groupId !== undefined) {
-      group = ' AND group_id = ?'
-      params.push(options.groupId)
-    }
-    params.push(options.limit)
-    return (this.db.prepare(`SELECT * FROM digests WHERE created_at >= ?${group} ORDER BY created_at DESC, id DESC LIMIT ?`).all(...params) as Row[]).map(row => ({
-      id: Number(row['id']), groupId: String(row['group_id']), fromRow: Number(row['from_row']), toRow: Number(row['to_row']), messageCount: Number(row['message_count']),
+  /** Every digest the plugin stored here before the digest state moved to DSH, oldest first. */
+  legacyDigests(): LegacyDigestRow[] {
+    return (this.db.prepare('SELECT * FROM digests ORDER BY id').all() as Row[]).map(row => ({
+      groupId: String(row['group_id']), fromRow: Number(row['from_row']), toRow: Number(row['to_row']), messageCount: Number(row['message_count']),
       text: String(row['text']), model: String(row['model']), usage: row['usage'] === null ? null : String(row['usage']),
       rawPath: row['raw_path'] === null ? null : String(row['raw_path']), createdAt: Number(row['created_at']),
     }))
   }
 
-  /**
-   * Delete digests, optionally of one group and/or made before `beforeMs`.
-   * @returns how many were deleted.
-   */
-  deleteDigests(options: { groupId?: string; beforeMs?: number }): number {
-    const params: SQLInputValue[] = []
-    const where: string[] = []
-    if (options.groupId !== undefined) {
-      where.push('group_id = ?')
-      params.push(options.groupId)
-    }
-    if (options.beforeMs !== undefined) {
-      where.push('created_at < ?')
-      params.push(options.beforeMs)
-    }
-    if (where.length === 0) throw new Error('deleteDigests needs a group or a date')
-    return Number(this.db.prepare(`DELETE FROM digests WHERE ${where.join(' AND ')}`).run(...params).changes)
+  /** Every group note stored before the move, oldest first. */
+  legacyNotes(): Array<{ groupId: string; text: string; createdAt: number }> {
+    return (this.db.prepare('SELECT group_id, text, created_at FROM group_notes ORDER BY id').all() as Row[])
+      .map(row => ({ groupId: String(row['group_id']), text: String(row['text']), createdAt: Number(row['created_at']) }))
   }
 
-  /** Keep the newest `keep` digests of a group and delete the rest. @returns how many were deleted. */
-  capDigests(groupId: string, keep: number): number {
-    const result = this.db.prepare(`
-      DELETE FROM digests WHERE group_id = ? AND id NOT IN (
-        SELECT id FROM digests WHERE group_id = ? ORDER BY created_at DESC, id DESC LIMIT ?
-      )
-    `).run(groupId, groupId, keep)
-    return Number(result.changes)
+  /** Every resident digest Session stored before the move. */
+  legacySessions(): Array<{ groupId: string; sessionId: string; createdAt: number; generation: number }> {
+    return (this.db.prepare('SELECT group_id, session_id, created_at, generation FROM group_sessions').all() as Row[])
+      .map(row => ({ groupId: String(row['group_id']), sessionId: String(row['session_id']), createdAt: Number(row['created_at']), generation: Number(row['generation']) }))
   }
 
-  /** Row id the latest digest of a group reached, or 0. */
-  digestedUpTo(groupId: string): number {
-    const row = this.db.prepare('SELECT MAX(to_row) AS id FROM digests WHERE group_id = ?').get(groupId) as Row
-    return row['id'] === null ? 0 : Number(row['id'])
-  }
-
-  lastDigestAt(groupId: string): number {
-    const row = this.db.prepare('SELECT MAX(created_at) AS at FROM digests WHERE group_id = ?').get(groupId) as Row
-    return row['at'] === null ? 0 : Number(row['at'])
-  }
-
-  // ---- resident Sessions ----
-
-  /** The resident digest Session of a group, if it has one. */
-  groupSession(groupId: string): GroupSession | undefined {
-    const row = this.db.prepare('SELECT session_id, created_at, generation FROM group_sessions WHERE group_id = ?').get(groupId) as Row | undefined
-    return row === undefined ? undefined : { sessionId: String(row['session_id']), createdAt: Number(row['created_at']), generation: Number(row['generation']) }
-  }
-
-  /** Whether a Session is some group's current resident digest Session. */
-  isResidentSession(sessionId: string): boolean {
-    return this.db.prepare('SELECT 1 AS found FROM group_sessions WHERE session_id = ?').get(sessionId) !== undefined
-  }
-
-  /** Record the resident digest Session of a group, replacing the previous one. */
-  setGroupSession(groupId: string, session: GroupSession): void {
-    this.db.prepare(`
-      INSERT INTO group_sessions (group_id, session_id, created_at, generation) VALUES (?, ?, ?, ?)
-      ON CONFLICT (group_id) DO UPDATE SET session_id = excluded.session_id, created_at = excluded.created_at, generation = excluded.generation
-    `).run(groupId, session.sessionId, session.createdAt, session.generation)
-  }
-
-  // ---- group notes ----
-
-  /** Notes of a group, oldest first. */
-  notes(groupId: string): GroupNote[] {
-    const rows = this.db.prepare('SELECT id, text, created_at FROM group_notes WHERE group_id = ? ORDER BY id').all(groupId) as Row[]
-    return rows.map(row => ({ id: Number(row['id']), text: String(row['text']), createdAt: Number(row['created_at']) }))
-  }
-
-  /**
-   * Add a note.
-   * @returns its id; undefined when the group already has that note or has {@link MAX_NOTES_PER_GROUP}.
-   */
-  addNote(groupId: string, text: string, now: number): number | undefined {
-    const count = Number((this.db.prepare('SELECT COUNT(*) AS n FROM group_notes WHERE group_id = ?').get(groupId) as Row)['n'])
-    if (count >= MAX_NOTES_PER_GROUP) return undefined
-    const result = this.db.prepare('INSERT OR IGNORE INTO group_notes (group_id, text, created_at) VALUES (?, ?, ?)').run(groupId, text, now)
-    return Number(result.changes) === 0 ? undefined : Number(result.lastInsertRowid)
-  }
-
-  /** Remove a note of a group by its id (`7` or `#7`) or by its exact text. */
-  removeNote(groupId: string, which: string): boolean {
-    const id = /^#?(\d+)$/.exec(which.trim())
-    const result = id === null
-      ? this.db.prepare('DELETE FROM group_notes WHERE group_id = ? AND text = ?').run(groupId, which.trim())
-      : this.db.prepare('DELETE FROM group_notes WHERE group_id = ? AND id = ?').run(groupId, Number(id[1]))
-    return Number(result.changes) > 0
-  }
-
-  /** Names and cards members of a group showed in recorded messages. */
-  memberNames(groupId: string): string[] {
-    const rows = this.db.prepare(`
-      SELECT nickname AS name FROM messages WHERE group_id = ? AND nickname <> ''
-      UNION SELECT card AS name FROM messages WHERE group_id = ? AND card <> ''
-    `).all(groupId, groupId) as Row[]
-    return rows.map(row => String(row['name']))
+  /** Every distinct (member, nickname, card) combination the group's recorded messages carry. */
+  members(groupId: string): Array<{ userId: string; nickname: string; card: string }> {
+    const rows = this.db.prepare('SELECT DISTINCT user_id, nickname, card FROM messages WHERE group_id = ? AND (nickname <> \'\' OR card <> \'\')').all(groupId) as Row[]
+    return rows.map(row => ({ userId: String(row['user_id']), nickname: String(row['nickname']), card: String(row['card']) }))
   }
 
   // ---- meta ----
