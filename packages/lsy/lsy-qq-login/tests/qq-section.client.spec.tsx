@@ -77,6 +77,23 @@ describe('QqLoginSection', () => {
     expect(refresh).toHaveBeenCalledTimes(2)
   })
 
+  it('reads once a minute while connected and every 3 seconds as soon as it is not', () => {
+    vi.useFakeTimers()
+    const { refresh, store, rerender } = mount({ panel: panel(), checkedAt: NOW })
+    expect(refresh).toHaveBeenCalledTimes(1)
+    act(() => { vi.advanceTimersByTime(59_999) })
+    expect(refresh).toHaveBeenCalledTimes(1)
+    act(() => { vi.advanceTimersByTime(1) })
+    expect(refresh).toHaveBeenCalledTimes(2)
+    // The link drops: the reading that follows decides, and from then on the period is short.
+    act(() => { store.update((draft) => { draft.panel = waiting() }) })
+    rerender()
+    act(() => { vi.advanceTimersByTime(60_000) })
+    expect(refresh).toHaveBeenCalledTimes(3)
+    act(() => { vi.advanceTimersByTime(3_000) })
+    expect(refresh).toHaveBeenCalledTimes(4)
+  })
+
   it('shows one calm verdict and the details when QQ is connected, and no code', () => {
     mount({ panel: panel(), checkedAt: NOW })
     expect(screen.getByRole('heading', { name: 'QQ 已连接' })).toBeTruthy()

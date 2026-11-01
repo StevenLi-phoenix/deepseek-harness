@@ -20,7 +20,7 @@ function source(over: Partial<QqSource> = {}): QqSource & { loginStatus: Mock<Qq
     ],
     ...over,
     loginStatus: vi.fn(over.loginStatus ?? (() => Promise.resolve(reading))),
-    refreshLogin: vi.fn(over.refreshLogin ?? (() => Promise.resolve({ login: reading, refreshed: true }))),
+    refreshLogin: vi.fn(over.refreshLogin ?? (() => Promise.resolve({ login: reading, refreshed: true, reason: null }))),
   }
 }
 
@@ -75,6 +75,7 @@ describe('lsy-qq-login Host routes', () => {
     const { routes } = await mount(qq)
     const answer = await (await routes[1]!.fetch(new Request(`http://127.0.0.1${QQ_REFRESH_PATH}`, { method: 'POST' }))).json() as QqRefreshAnswer
     expect(answer.refreshed).toBe(true)
+    expect(answer.reason).toBeNull()
     expect(answer.login.qr?.size).toBeGreaterThan(20)
     expect(qq.refreshLogin.mock.calls).toHaveLength(1)
   })

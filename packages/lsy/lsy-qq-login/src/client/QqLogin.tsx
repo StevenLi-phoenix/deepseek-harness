@@ -5,7 +5,7 @@
  * hidden. A failed refresh keeps the last answer and says so quietly in the status line.
  */
 
-import { useEffect, useId, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the settings shell's SlotMap merge (the 'settings.section' entry).
@@ -15,7 +15,7 @@ import type {} from './locales.ts'
 import { detailRows, headline, qrPath, statusLine, type Translate } from './cards.ts'
 import { QqGroupsCard } from './QqGroups.tsx'
 import type { GroupsSection } from './groups.ts'
-import { POLL_INTERVAL_MS, startPolling, type QqState } from './qq.ts'
+import { CALM_POLL_INTERVAL_MS, POLL_INTERVAL_MS, startPolling, type QqState } from './qq.ts'
 import css from './QqLogin.module.css'
 
 /** The section's injected face (slot `inject`). */
@@ -81,7 +81,10 @@ function QrCard({ matrix, state, translate, renewCode }: {
 export function QqLoginSection({ useQq, useGroupsForm, refresh, renewCode, addGroup, removeGroup, t }: QqLoginProps): ReactNode {
   const state = useQq(value => value)
   const form = useGroupsForm(value => value)
-  useEffect(() => startPolling(refresh, POLL_INTERVAL_MS), [refresh])
+  // Connected: read once a minute. Anything else (a scan to take, a link coming back): every few seconds.
+  const calm = useRef(false)
+  calm.current = state.panel?.connection.state === 'connected'
+  useEffect(() => startPolling(refresh, () => (calm.current ? CALM_POLL_INTERVAL_MS : POLL_INTERVAL_MS)), [refresh])
 
   const translate = t as Translate
   const status = statusLine(state, translate)

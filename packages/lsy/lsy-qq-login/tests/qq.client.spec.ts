@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { QqPanel } from '../src/view.ts'
+import type { QqPanel, QqRefreshAnswer } from '../src/view.ts'
 import { clock, detailRows, formatDuration, headline, qrPath, stamp, statusLine, type Translate } from '../src/client/cards.ts'
 import { en, ja, zh, type QqKey } from '../src/client/locales.ts'
-import { POLL_INTERVAL_MS, QqLoader, createQqStore, parsePanel, startPolling, type VisibilitySource } from '../src/client/qq.ts'
+import { CALM_POLL_INTERVAL_MS, POLL_INTERVAL_MS, QqLoader, createQqStore, parsePanel, startPolling, type VisibilitySource } from '../src/client/qq.ts'
 
 const NOW = new Date(2026, 10, 1, 12, 0, 0).getTime()
 
@@ -148,14 +148,14 @@ describe('QqLoader', () => {
 
   it('asks for a fresh code once at a time, adopts the answer, and remembers a refusal', async () => {
     const store = createQqStore()
-    let settle: (value: QqPanel & { refreshed: boolean }) => void = () => {}
-    const renew = vi.fn(() => new Promise<QqPanel & { refreshed: boolean }>((resolve) => { settle = resolve }))
+    let settle: (value: QqRefreshAnswer) => void = () => {}
+    const renew = vi.fn(() => new Promise<QqRefreshAnswer>((resolve) => { settle = resolve }))
     const loader = new QqLoader(store, vi.fn(), renew, () => 5)
     const first = loader.renewCode()
     void loader.renewCode()
     expect(store.getSnapshot().codeRequested).toBe(true)
     expect(renew).toHaveBeenCalledTimes(1)
-    settle({ ...panel({ login: { state: 'qr', qr: QR } }), refreshed: false })
+    settle({ ...panel({ login: { state: 'qr', qr: QR } }), refreshed: false, reason: 'too-soon' })
     await first
     expect(store.getSnapshot()).toMatchObject({ codeRequested: false, codeDeclined: true, checkedAt: 5 })
     expect(store.getSnapshot().panel?.login.qr).toEqual(QR)
@@ -220,7 +220,25 @@ describe('startPolling', () => {
     expect(doc.listeners).toBe(0)
   })
 
-  it('polls every 3 seconds, so a scan shows within seconds', () => {
+  it('polls every 3 seconds while something needs attention, and once a minute while connected', () => {
     expect(POLL_INTERVAL_MS).toBe(3000)
+    expect(CALM_POLL_INTERVAL_MS).toBe(60_000)
+  })
+
+  it('asks for the next period after every refresh', () => {
+    vi.useFakeTimers()
+    const refresh = vi.fn()
+    let calm = false
+    const stop = startPolling(refresh, () => (calm ? CALM_POLL_INTERVAL_MS : POLL_INTERVAL_MS), page('visible'))
+    vi.advanceTimersByTime(POLL_INTERVAL_MS)
+    expect(refresh).toHaveBeenCalledTimes(2)
+    calm = true
+    vi.advanceTimersByTime(POLL_INTERVAL_MS)
+    expect(refresh).toHaveBeenCalledTimes(3)
+    vi.advanceTimersByTime(CALM_POLL_INTERVAL_MS - 1)
+    expect(refresh).toHaveBeenCalledTimes(3)
+    vi.advanceTimersByTime(1)
+    expect(refresh).toHaveBeenCalledTimes(4)
+    stop()
   })
 })

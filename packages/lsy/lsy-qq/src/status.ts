@@ -29,6 +29,9 @@ export interface QqConnection {
  */
 export type QqLoginState = 'online' | 'offline' | 'qr' | 'scanned' | 'logging-in' | 'preparing' | 'restarting' | 'unknown'
 
+/** Why the login door did not ask NapCat for a fresh code. */
+export type RefreshRefusal = 'logged-in' | 'recently-logged-in' | 'too-soon' | 'napcat-refused' | 'unreachable'
+
 /** What asking the login door came to, for one reading of NapCat's login. */
 export interface QqLoginReading {
   /**

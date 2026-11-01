@@ -1008,6 +1008,7 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   GroupOverview: 'fork-local group summary is owned by packages/lsy/lsy-qq/README.md',
   QqConnection: 'fork-local QQ connection state is owned by packages/lsy/lsy-qq/README.md',
   QqLoginReading: 'fork-local NapCat login reading is owned by packages/lsy/lsy-qq/README.md',
+  RefreshRefusal: 'fork-local fresh-code refusal reason is owned by packages/lsy/lsy-qq/README.md',
   MessageRow: 'fork-local stored message is owned by packages/lsy/lsy-qq/README.md',
   DigestRow: 'fork-local stored digest is owned by packages/lsy/lsy-qq/README.md',
   LsyAgentMessage: 'fork-local message for the main agent is owned by packages/lsy/lsy-event-bus/README.md',

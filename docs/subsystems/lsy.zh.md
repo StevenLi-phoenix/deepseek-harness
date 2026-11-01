@@ -448,10 +448,12 @@ recordedGroups(): number
 async loginStatus(options: { fresh?: boolean } = {}): Promise<QqLoginReading>
 
 /**
- * Ask NapCat for a fresh login QR code (it renews the code by itself about every two minutes).
- * @returns the reading after the request, and whether the door passed the request on (it declines a second one within seconds).
+ * Ask NapCat for a fresh login QR code (it renews the code by itself about every two minutes). Refused while QQ is
+ * logged in and for ten minutes after the connection came up: a new code then only invites the account to be signed
+ * out, so nothing is asked of NapCat.
+ * @returns the reading after the request, whether the door passed the request on, and why not when it did not.
  */
-async refreshLogin(): Promise<{ login: QqLoginReading; refreshed: boolean }>
+async refreshLogin(): Promise<{ login: QqLoginReading; refreshed: boolean; reason: RefreshRefusal | null }>
 
 /**
  * Delete stored digests: the observer's learned knowledge. Raw messages age out by themselves.

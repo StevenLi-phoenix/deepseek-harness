@@ -20,12 +20,13 @@ class FakeDoor {
   body: Record<string, unknown> = { v: 1, napcat: 'up', login: 'qr', phase: 'waiting_qrcode', uin: null, nickname: null, qrUrl: QR_URL, error: null, at: 1 }
   status = 200
   refreshed = true
+  reason: string | undefined
   constructor() {
     this.server = createServer((request, response) => {
       this.requests.push({ method: request.method ?? '', path: request.url ?? '', authorization: request.headers.authorization })
       response.statusCode = this.status
       response.setHeader('content-type', 'application/json')
-      response.end(JSON.stringify(request.method === 'POST' ? { ...this.body, refreshed: this.refreshed } : this.body))
+      response.end(JSON.stringify(request.method === 'POST' ? { ...this.body, refreshed: this.refreshed, ...this.reason === undefined ? {} : { reason: this.reason } } : this.body))
     })
   }
 
@@ -207,6 +208,50 @@ describe('QQ login status', () => {
     door.refreshed = false
     expect((await h.observer.refreshLogin()).refreshed).toBe(false)
     expect(h.logs.filter(line => line.text.includes('asked NapCat for a fresh login QR'))).toHaveLength(2)
+  })
+
+  it('does not ask for a fresh code while the socket is up, nor within ten minutes of it coming up', async () => {
+    const door = new FakeDoor()
+    const h = await boot({ door })
+    await connected(h)
+    expect(await h.observer.refreshLogin()).toMatchObject({ refreshed: false, reason: 'logged-in' })
+    h.fake.drop()
+    await until(() => h.observer.connectionStatus().state === 'reconnecting', 'the drop')
+    expect(await h.observer.refreshLogin()).toMatchObject({ refreshed: false, reason: 'recently-logged-in' })
+    expect(door.requests.filter(request => request.method === 'POST')).toEqual([])
+    h.observer.now = () => Date.now() + 11 * 60_000
+    expect(await h.observer.refreshLogin()).toMatchObject({ refreshed: true, reason: null })
+    expect(door.requests.filter(request => request.method === 'POST')).toHaveLength(1)
+  })
+
+  it('carries the door\'s reason when it declines', async () => {
+    const door = new FakeDoor()
+    door.refreshed = false
+    ;(door as unknown as { reason: string }).reason = 'too-soon'
+    const h = await boot({ door, oneBot: 'down' })
+    expect(await h.observer.refreshLogin()).toMatchObject({ refreshed: false, reason: 'too-soon' })
+  })
+
+  it('asks the door about a connected account once a minute, and about an unconnected one every 1.5 s', async () => {
+    const door = new FakeDoor()
+    const h = await boot({ door })
+    await connected(h)
+    const base = Date.now()
+    h.observer.now = () => base
+    await h.observer.loginStatus()
+    h.observer.now = () => base + 30_000
+    await h.observer.loginStatus()
+    expect(door.requests).toHaveLength(1)
+    h.observer.now = () => base + 61_000
+    await h.observer.loginStatus()
+    expect(door.requests).toHaveLength(2)
+    const down = await boot({ door: new FakeDoor(), oneBot: 'down' })
+    const t0 = Date.now()
+    down.observer.now = () => t0
+    await down.observer.loginStatus()
+    down.observer.now = () => t0 + 2000
+    await down.observer.loginStatus()
+    expect((down.door as FakeDoor).requests).toHaveLength(2)
   })
 
   it('logs login state changes, once each, without the code', async () => {

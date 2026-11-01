@@ -33,6 +33,11 @@ BIND = os.environ.get("DOOR_BIND", "0.0.0.0")
 PORT = int(os.environ.get("DOOR_PORT", "3002"))
 # Status answers are shared for this long, so open pages cost NapCat at most one round of calls per interval.
 CACHE_S = float(os.environ.get("DOOR_CACHE_S", "1.5"))
+# While QQ is logged in nothing on the page changes, so NapCat is asked this rarely.
+CACHE_ONLINE_S = float(os.environ.get("DOOR_CACHE_ONLINE_S", "60"))
+# A fresh code is not asked for while QQ is logged in, nor this soon after it logged in: a new code then only
+# invites the account to be signed out.
+RECENT_LOGIN_S = float(os.environ.get("DOOR_RECENT_LOGIN_S", "600"))
 # A WebUI credential is valid for an hour; renew before that.
 CREDENTIAL_S = 50 * 60
 # NapCat renews its code by itself every ~2 minutes; a manual refresh is allowed this often.
@@ -192,6 +197,7 @@ class Door:
         self._lock = threading.Lock()
         self._last_state = None
         self._auth_logged = 0.0
+        self._online_since = None
 
     def _note(self, state):
         if state != self._last_state:
@@ -200,12 +206,15 @@ class Door:
 
     def status(self, fresh=False):
         with self._lock:
-            if not fresh and self._cached is not None and time.time() - self._cached_at < CACHE_S:
+            ttl = CACHE_ONLINE_S if self._cached is not None and self._cached.get("login") == "online" else CACHE_S
+            if not fresh and self._cached is not None and time.time() - self._cached_at < ttl:
                 return self._cached
             try:
                 check = self.upstream.call("POST", "/QQLogin/CheckLoginStatus", {})
                 info = self.upstream.call("POST", "/QQLogin/GetQQLoginInfo", {}) if check.get("isLogin") is True or check.get("isOffline") is True else {}
                 body = shape(check, info)
+                if body["login"] == "online" and (self._cached or {}).get("login") != "online":
+                    self._online_since = time.time()
                 self._note(f"napcat up, login {body['login']}")
             except UpstreamError as error:
                 body = {"v": 1, "napcat": "down", "reason": error.kind, "at": int(time.time() * 1000)}
@@ -214,20 +223,38 @@ class Door:
             return body
 
     def refresh(self):
-        with self._lock:
-            allowed = time.time() - self._last_refresh >= REFRESH_GAP_S
-            if allowed:
-                self._last_refresh = time.time()
+        """Ask NapCat for a new code, unless QQ is logged in or just was, or a code was asked for a moment ago."""
+        current = self.status()
+        reason = None
+        if current.get("napcat") != "up":
+            reason = "unreachable"
+        elif current.get("login") == "online":
+            reason = "logged-in"
+        elif self._online_since is not None and time.time() - self._online_since < RECENT_LOGIN_S:
+            reason = "recently-logged-in"
+        else:
+            with self._lock:
+                if time.time() - self._last_refresh < REFRESH_GAP_S:
+                    reason = "too-soon"
+                else:
+                    self._last_refresh = time.time()
         refreshed = False
-        if allowed:
+        if reason is None:
             try:
                 answer = self.upstream.call("POST", "/QQLogin/RefreshQRcode", {})
                 refreshed = "__error" not in answer
+                if not refreshed:
+                    reason = "napcat-refused"
                 log("QR refresh requested" + ("" if refreshed else " (NapCat refused)"))
             except UpstreamError as error:
+                reason = "unreachable"
                 log(f"QR refresh failed ({error.kind})")
-        body = dict(self.status(fresh=True))
+        else:
+            log(f"QR refresh not asked: {reason}")
+        body = dict(self.status(fresh=True) if refreshed else current)
         body["refreshed"] = refreshed
+        if reason is not None:
+            body["reason"] = reason
         return body
 
     def auth_failed(self):
