@@ -7479,10 +7479,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface GuardHealth {\n    readonly checked: number;\n    readonly rejected: number;\n    readonly byRule: Readonly<Record<string, number>>;\n    readonly lastError: {\n        readonly at: number;\n        readonly rule: string;\n        readonly message: string;\n    } | null;\n    readonly lastCheckAt: number | null;\n}',
   },
   {
-    name: 'GuardVerdict',
-    declaration: 'export type GuardVerdict = {\n    readonly ok: true;\n} | {\n    readonly ok: false;\n    readonly rule: string;\n    readonly publicReason: string;\n};',
-  },
-  {
     name: 'HookBudget',
     declaration: 'export interface HookBudget {\n    readonly ms: number;\n    readonly remainingMs: number;\n}',
   },
