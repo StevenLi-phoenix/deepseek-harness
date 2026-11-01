@@ -7,13 +7,13 @@ import { leavesOf } from '../src/view.ts'
 
 /** Every Config field of `fork-qq`, as dotted paths; a new field in its schema must appear here and in the card. */
 const QQ_FIELDS = [
-  'url', 'tokenEnv', 'groups', 'dataDir',
+  'url', 'tokenEnv', 'groups', 'dataDir', 'recorder.socket', 'recorder.tokenEnv', 'recorder.timeoutMs',
   'media.images', 'media.maxImageBytes', 'media.maxTotalBytes', 'media.retainDays', 'media.hostSuffixes', 'media.timeoutMs',
   'voice.download', 'voice.maxBytes', 'asr.enabled', 'retention.textDays', 'honorRecall',
   'backfill.enabled', 'backfill.maxMessages', 'backfill.maxGroups', 'backfill.gapMs', 'backfill.skipWithinMs', 'backfill.minIntervalMs',
   'send.enabled', 'send.groups', 'send.minIntervalSec', 'send.maxPerDay',
   'digest.enabled', 'digest.everyHours', 'digest.minMessages', 'digest.maxPromptChars', 'digest.maxCallsPerRound',
-  'digest.aliasMembers', 'digest.profiles', 'digest.keepPerGroup', 'digest.maxDigestChars', 'digest.provider', 'digest.model',
+  'digest.aliasMembers', 'digest.profiles', 'digest.keepPerGroup', 'digest.maxDigestChars', 'digest.maxImages', 'digest.provider', 'digest.model',
   'digest.agentPreset', 'digest.permissionPreset', 'digest.workspacePath', 'digest.timeZone', 'digest.timeoutMs', 'digest.maxToolCalls', 'digest.archiveSessions', 'digest.resident',
   'offlineNoticeMs', 'reconnectQuietMs', 'offlineRepeatMs', 'settingsUrl',
   'login.enabled', 'login.url', 'login.timeoutMs',
@@ -25,7 +25,7 @@ describe('the fork-qq schema as a form', () => {
 
   it('has a leaf for every Config field and a group for every nested object', () => {
     expect(leaves.map(leaf => leaf.path.join('.')).sort()).toEqual([...QQ_FIELDS].sort())
-    expect(fields.filter(node => node.kind === 'group').map(node => node.key)).toEqual(['media', 'voice', 'asr', 'retention', 'backfill', 'send', 'digest', 'login'])
+    expect(fields.filter(node => node.kind === 'group').map(node => node.key)).toEqual(['recorder', 'media', 'voice', 'asr', 'retention', 'backfill', 'send', 'digest', 'login'])
   })
 
   it('edits each field by its type, and shows the credential reference by name only', () => {
