@@ -3,7 +3,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
-import type { QqPanel } from '../src/panel-view.ts'
+import type { QqPanel } from '../src/view.ts'
 import { createQqStore, type QqState } from '../src/client/qq.ts'
 import { QqLoginSection, type QqLoginProps } from '../src/client/QqLogin.tsx'
 import { zh } from '../src/client/locales.ts'
@@ -91,11 +91,11 @@ describe('QqLoginSection', () => {
 
   it('disables the button while a fresh code is pending and says when it was declined', () => {
     const { store, rerender } = mount({ panel: waiting(), checkedAt: NOW, codeRequested: true })
-    const button = screen.getByRole('button', { name: '正在刷新…' }) as HTMLButtonElement
+    const button = screen.getByRole<HTMLButtonElement>('button', { name: '正在刷新…' })
     expect(button.disabled).toBe(true)
     act(() => { store.update((draft) => { draft.codeRequested = false; draft.codeDeclined = true }) })
     rerender()
-    expect((screen.getByRole('button', { name: '刷新二维码' }) as HTMLButtonElement).disabled).toBe(false)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '刷新二维码' }).disabled).toBe(false)
     expect(screen.getByText(/这次没有刷新/)).toBeTruthy()
   })
 

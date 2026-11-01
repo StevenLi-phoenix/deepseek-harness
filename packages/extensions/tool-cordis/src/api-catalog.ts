@@ -2408,6 +2408,30 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         throws: ['{@link SendRefused} when a rule says no, or the protocol end is not connected.'],
       },
       {
+        signature: 'connectionStatus(): QqConnection',
+        description: 'The observer\'s connection to the protocol end, for the Settings page\'s QQ section: whether the socket is up, since when, how many attempts have failed in a row, and why the last one did.',
+        parameters: [],
+        returns: 'the connection state; `selfId` is the logged-in account only while connected.',
+      },
+      {
+        signature: 'recordedGroups(): number',
+        description: 'How many groups the observer records, for the Settings page\'s QQ section.',
+        parameters: [],
+        returns: 'the size of the configured `groups` list.',
+      },
+      {
+        signature: 'async loginStatus(options: { fresh?: boolean } = {}): Promise<QqLoginReading>',
+        description: 'NapCat\'s login as the login door reports it, for the Settings page\'s QQ section. When NapCat turns out to be logged in while the observer is still backing off, the observer reconnects at once, so a scan on the page ends in "connected" within seconds. Answers are shared for 1.5 s.',
+        parameters: [{ name: 'options', description: '`fresh` skips the shared answer.' }],
+        returns: 'the reading; `door` says why there is no `state` when the door could not answer.',
+      },
+      {
+        signature: 'async refreshLogin(): Promise<{ login: QqLoginReading; refreshed: boolean }>',
+        description: 'Ask NapCat for a fresh login QR code (it renews the code by itself about every two minutes).',
+        parameters: [],
+        returns: 'the reading after the request, and whether the door passed the request on (it declines a second one within seconds).',
+      },
+      {
         signature: 'forgetDigests(options: { groupId?: string; beforeMs?: number }): number',
         description: 'Delete stored digests: the observer\'s learned knowledge. Raw messages age out by themselves.',
         parameters: [{ name: 'options', description: 'one group and/or those made before `beforeMs`; at least one is required.' }],
@@ -8250,6 +8274,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'PublishOutcome',
     declaration: 'export type PublishOutcome = \'accepted\' | \'duplicate\' | \'suppressed\' | \'unmatched\';',
+  },
+  {
+    name: 'QqLoginReading',
+    declaration: 'export interface QqLoginReading {\n    readonly door: \'ok\' | \'napcat-down\' | \'unreachable\' | \'unauthorized\' | \'invalid\' | \'disabled\';\n    readonly state: QqLoginState | null;\n    readonly uin: string | null;\n    readonly nickname: string | null;\n    readonly error: string | null;\n    readonly qrUrl: string | null;\n}',
   },
   {
     name: 'QueueAction',

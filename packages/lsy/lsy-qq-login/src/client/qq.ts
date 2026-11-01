@@ -5,9 +5,9 @@
  */
 
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { QqPanel, QqRefreshAnswer } from '../panel-view.ts'
+import type { QqPanel, QqRefreshAnswer } from '../view.ts'
 
-export type { QqPanel, QqRefreshAnswer } from '../panel-view.ts'
+export type { QqPanel, QqRefreshAnswer } from '../view.ts'
 
 /** How often the open section refreshes: short, because a scan should show up within seconds. */
 export const POLL_INTERVAL_MS = 3000

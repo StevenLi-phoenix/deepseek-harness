@@ -7,7 +7,7 @@
   },
   "include": [
     "src/client",
-    "src/panel-view.ts",
+    "src/view.ts",
     "src/css-modules.d.ts"
   ],
   "references": [

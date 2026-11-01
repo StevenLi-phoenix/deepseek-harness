@@ -305,9 +305,17 @@
     # ($DSH_HOME/profiles/event/cordis.patch.yml: `- id: lsy-qq` with `config.groups: ['<number>']`; the log
     # says `not recording group <number> (<name>)` for each group the account is in). Sending is off
     # (`send.enabled`), and a group must also be in `send.groups`. The OneBot token is LSY_QQ_ONEBOT_TOKEN in
-    # $DSH_HOME/.env, written by napcat.sh; without it the observer stays offline.
+    # $DSH_HOME/.env, written by napcat.sh; without it the observer stays offline. Settings → QQ shows the
+    # connection and, when QQ was signed out, the login QR code to scan from the phone; it reads NapCat's login
+    # through the login door (napcat.sh door, 127.0.0.1:3002, `login.url`) with the same token, and the offline
+    # notice quotes `settingsUrl` (the event service's address) when it is set in the profile patch.
     - id: lsy-qq
       name: '@deepseek-ai/dsh-lsy-qq'
+
+    # Settings → QQ: the observer's connection, NapCat's login state, and the login QR code to scan with the
+    # phone when QQ was signed out (data from lsy-qq, which asks the login door; nothing to configure).
+    - id: lsy-qq-login
+      name: '@deepseek-ai/dsh-lsy-qq-login'
 
     # The official QQ bot channel (ctx.lsyQqBot), DISABLED by default (`disabled: true`). It answers owner-listed
     # openids on the QQ Open Platform bot in private chats and in groups where the bot is @-mentioned, one chat

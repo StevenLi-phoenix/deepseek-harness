@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { QqPanel } from '../src/panel-view.ts'
+import type { QqPanel } from '../src/view.ts'
 import { clock, detailRows, formatDuration, headline, qrPath, stamp, statusLine, type Translate } from '../src/client/cards.ts'
 import { en, ja, zh, type QqKey } from '../src/client/locales.ts'
 import { POLL_INTERVAL_MS, QqLoader, createQqStore, parsePanel, startPolling, type VisibilitySource } from '../src/client/qq.ts'

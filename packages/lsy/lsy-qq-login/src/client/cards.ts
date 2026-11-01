@@ -4,7 +4,7 @@
  * formatting they share.
  */
 
-import type { QqPanel, QqQrMatrix } from '../panel-view.ts'
+import type { QqPanel, QqQrMatrix } from '../view.ts'
 import type { QqKey } from './locales.ts'
 import type { QqState } from './qq.ts'
 

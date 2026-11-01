@@ -379,6 +379,7 @@ flowchart TD
     pkg_lsy_integrity["lsy-integrity"]
     pkg_lsy_memory["lsy-memory"]
     pkg_lsy_qq["lsy-qq"]
+    pkg_lsy_qq_login["lsy-qq-login"]
     pkg_lsy_qqbot["lsy-qqbot"]
     pkg_lsy_sysmon["lsy-sysmon"]
     pkg_lsy_taint["lsy-taint"]
@@ -1753,6 +1754,7 @@ flowchart TD
 | [`host-webserver`](../packages/host/webserver) | `host` | — |
 | [`bili`](../packages/lsy/bili) | `lsy` | — |
 | [`lsy-balance`](../packages/lsy/lsy-balance) | `lsy` | — |
+| [`lsy-qq-login`](../packages/lsy/lsy-qq-login) | `lsy` | — |
 | [`lsy-sysmon`](../packages/lsy/lsy-sysmon) | `lsy` | — |
 | [`message-quotes`](../packages/session/message-quotes) | `session` | — |
 | [`session-format`](../packages/session/session-format) | `session` | — |
