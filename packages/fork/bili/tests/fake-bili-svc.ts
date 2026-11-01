@@ -112,7 +112,7 @@ export class FakeBiliSvc {
   replyItems: Record<string, unknown>[] = []
   atItems: Record<string, unknown>[] = []
   ownerMessages: { sender: number; text: string; key: string; at: number }[] = []
-  readonly comments: { rpid: string; oid: string; root: string; mid: number; uname: string; message: string }[] = []
+  readonly comments: { rpid: string; oid: string; root: string; mid: number; uname: string; message: string; like?: number }[] = []
 
   private readonly canned = new Map<string, Canned[]>()
   /** Targets of actions bili-svc keeps to once (coin and triple ever, watch per day). */
@@ -401,7 +401,7 @@ export class FakeBiliSvc {
   private row(row: FakeBiliSvc['comments'][number]): Record<string, unknown> {
     return {
       rpid: Number(row.rpid), rpid_str: row.rpid, oid: Number(row.oid), root: Number(row.root), mid: row.mid, ctime: 1_790_000_000,
-      like: 1, rcount: 0, member: { mid: String(row.mid), uname: row.uname }, content: { message: row.message }, state: 0,
+      like: row.like ?? 1, rcount: 0, member: { mid: String(row.mid), uname: row.uname }, content: { message: row.message }, state: 0,
     }
   }
 }

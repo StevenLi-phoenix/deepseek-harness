@@ -40,6 +40,7 @@ import {
   DEFAULT_SERVICE_URL, RemoteBiliClient, TOKEN_CREDENTIAL, type ServiceAccount, type ServiceStatus,
 } from './client.ts'
 import { BILI_AGENT_ORIGIN, BILI_RELAY_CHANNEL, DmChannel, type DmOutcome } from './dm.ts'
+import { HotStore, type BiliHot } from './hot.ts'
 import { biliDomain, seqKey } from './storage.ts'
 import { clean, codePoints, ownerPrompt } from './text.ts'
 import { dayKey, formatStamp, isTimeZone } from './time.ts'
@@ -56,6 +57,7 @@ export {
   DEFAULT_SERVICE_URL, READ_TIMEOUT_MS, RemoteBiliClient, TOKEN_CREDENTIAL, allowedEndpoint, parseJson,
   type BiliCaller, type CallOptions, type CallResult, type ServiceStatus,
 } from './client.ts'
+export { HOT_COMMENT_CHARS, HOT_MAX_COMMENTS, HOT_MAX_WORDS, HOT_MIN_LIKES, HOT_TTL_MS, HotStore, hotText, type BiliHot, type BiliHotComment } from './hot.ts'
 export { ENDPOINTS, isEndpointName, type Endpoint, type EndpointName } from './endpoints.ts'
 export { COVERAGE, LIMITS, type CommentView, type FeedPost, type Folder, type HotSearch, type InboxItem, type OwnerMessage, type SearchOrder, type SubtitleView, type VideoCard, type VideoDetail } from './api.ts'
 export { REPLY_CHARS, UNTRUSTED_NOTE, UNTRUSTED_TAG, clean, untrusted } from './text.ts'
@@ -65,6 +67,8 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     /** The agent's own Bilibili account. */
     bili: BiliAccount
+    /** Hot comments and hot-search words the account's public reads showed, for the meme miner. */
+    biliHot: BiliHot
   }
 }
 
@@ -305,6 +309,8 @@ export class BiliAccount extends Service {
   private readonly settings: ManageSettings
   /** The comment speaker's account id, reused for {@link ROUTES_TTL_MS}. */
   private routesCache: { at: number; id: Promise<string | null> } | undefined
+  /** The hot comments and words recent reads showed (`ctx.biliHot`). */
+  private readonly hot: HotStore
   /** The account's channel of `ctx.ownerRelay`: answers to the owner's messages, through bili-svc's Reply Gate. */
   private readonly dm: DmChannel
   /** The owner's conversation keeps the fast message check until then. */
@@ -344,6 +350,8 @@ export class BiliAccount extends Service {
       now: () => Date.now(),
     })
     this.ready = ctx.storageDomain.open(biliDomain)
+    this.hot = new HotStore({ ready: this.ready, now: () => Date.now(), logger: ctx.logger })
+    ctx.provide('biliHot', this.hot)
     this.dm = new DmChannel({
       replyOwner: text => this.replyOwner(text),
       hold: work => this.hold(work),
@@ -1073,7 +1081,11 @@ export class BiliAccount extends Service {
    * @returns up to 30 keywords, each with the label the search box shows when it differs.
    */
   async hotSearches(): Promise<HotSearch[]> {
-    return this.reading(() => hotSearches(this.client, HOT_SEARCHES))
+    return this.reading(async () => {
+      const list = await hotSearches(this.client, HOT_SEARCHES)
+      this.track(this.hot.noteWords(list))
+      return list
+    })
   }
 
   /** Feed entries without the owner's own uploads and posts: the owner has seen them. */
@@ -1099,6 +1111,7 @@ export class BiliAccount extends Service {
       const subtitle = await subtitles(this.client, bvid, cid, options.subtitlePage ?? 1)
       const top = await comments(this.client, video.aid, { order: 'hot' }, this.config.timeZone)
       if (subtitle.reached !== undefined) this.track(this.reportWatchOf(video, cid, subtitle.reached))
+      this.track(this.hot.noteComments(video.bvid, top.comments))
       return { video, subtitle: subtitle.view, topComments: top.comments.slice(0, 5) }
     })
   }
@@ -1119,7 +1132,9 @@ export class BiliAccount extends Service {
         const result = await thread(this.client, { type: VIDEO_AREA, oid: video.aid, root: options.root }, page, this.config.timeZone)
         return { comments: result.replies, ...(result.root === undefined ? {} : { root: result.root }) }
       }
-      return comments(this.client, video.aid, { order: options.order ?? 'hot', ...(options.offset === undefined ? {} : { offset: options.offset }) }, this.config.timeZone)
+      const page = await comments(this.client, video.aid, { order: options.order ?? 'hot', ...(options.offset === undefined ? {} : { offset: options.offset }) }, this.config.timeZone)
+      this.track(this.hot.noteComments(video.bvid, page.comments))
+      return page
     })
   }
 
