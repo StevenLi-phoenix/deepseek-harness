@@ -205,6 +205,25 @@ function stamp(now: Date): string {
   return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
 }
 
+/** What {@link ForkVoice.describe} reports: switches and the endpoint of each service, without keys. */
+export interface VoiceSummary {
+  tts: {
+    enabled: boolean
+    provider: TtsProviderName
+    fallback: TtsProviderName | 'none'
+    format: 'mp3' | 'wav'
+    maxChars: number
+    /** Base URL of the selected provider, for reachability probes. */
+    url: string
+  }
+  asr: {
+    enabled: boolean
+    engine: 'funasr' | 'whisper'
+    /** Base URL of the asr-service. */
+    url: string
+  }
+}
+
 /** Service behind `ctx.forkVoice`. */
 export class ForkVoice extends Service {
   static inject = ['credentials']
@@ -238,6 +257,21 @@ export class ForkVoice extends Service {
   /** Whether `transcribe` is turned on. */
   get asrEnabled(): boolean {
     return this.config.asr.enabled
+  }
+
+  /**
+   * The switches and the endpoint of each service, for status pages. Keys and credential references are not included.
+   * @returns snapshot of the configuration.
+   */
+  describe(): VoiceSummary {
+    const { tts, asr } = this.config
+    return {
+      tts: {
+        enabled: tts.enabled, provider: tts.provider, fallback: tts.fallback, format: tts.format, maxChars: tts.maxChars,
+        url: tts.provider === 'feiyu' ? tts.feiyu.baseUrl : tts.macMini.baseUrl,
+      },
+      asr: { enabled: asr.enabled, engine: asr.engine, url: asr.baseUrl },
+    }
   }
 
   /**

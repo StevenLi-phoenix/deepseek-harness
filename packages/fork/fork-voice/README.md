@@ -71,7 +71,7 @@ From then on, an audio file (`.m4a`, `.mp3`, `.wav`, `.flac`, `.ogg`, `.wma`, `.
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-`speak` runs one call at a time: the feiyu GPU takes one job, and a burst should not pile up retries. A call tries `tts.provider`, then `tts.fallback`; each provider writes its raw answer before anything else happens: `<name>.job.json` (feiyu's final job record) and `<name>.wav` in `audio/`, named by time, a hash of the text, and the provider. The deliverable is that WAV or its MP3 conversion (written as `.mp3.part` and renamed). `transcribe` reads the file, posts it to `/transcribe`, and writes the raw JSON to `asr/<time>-<hash of the audio>.json` before reading `full_text`. Logs carry lengths, providers, timings, and paths, never the spoken text or the key.
+`speak` runs one call at a time: the feiyu GPU takes one job, and a burst should not pile up retries. A call tries `tts.provider`, then `tts.fallback`; each provider writes its raw answer before anything else happens: `<name>.job.json` (feiyu's final job record) and `<name>.wav` in `audio/`, named by time, a hash of the text, and the provider. The deliverable is that WAV or its MP3 conversion (written as `.mp3.part` and renamed). `transcribe` reads the file, posts it to `/transcribe`, and writes the raw JSON to `asr/<time>-<hash of the audio>.json` before reading `full_text`. Logs carry lengths, providers, timings, and paths, never the spoken text or the key. `describe()` reports the switches and the endpoint of each service (never a key) for the Settings overview in [`fork-console`](../fork-console/README.md).
 
 | File | Role |
 |---|---|
