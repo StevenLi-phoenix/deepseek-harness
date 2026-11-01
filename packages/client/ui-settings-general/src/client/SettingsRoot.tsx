@@ -19,9 +19,9 @@ import clsx from 'clsx'
 import {
   ConnectionIndicator, Tooltip, useModalLayer,
   IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconClockOutlineMedium, IconCloseOutlineRegular, IconCodeOutlineMedium,
-  IconDatabaseOutlineMedium, IconDataOutlineMedium, IconFlatListOutlineMedium, IconGaugeOutlineMedium, IconNewChatOutlineMedium,
-  IconPersonalizationOutlineMedium, IconPlayOutlineMedium, IconQueueOutlineMedium, IconSettingsOutlineMedium, IconUserOutlineMedium,
-  IconUsersOutlineMedium,
+  IconDatabaseOutlineMedium, IconDataOutlineMedium, IconEnhanceOutlineMedium, IconFlatListOutlineMedium, IconGaugeOutlineMedium,
+  IconNewChatOutlineMedium, IconPersonalizationOutlineMedium, IconPlayOutlineMedium, IconQueueOutlineMedium, IconSettingsOutlineMedium,
+  IconUserOutlineMedium, IconUsersOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConnectionIndicatorState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SettingsRootComponentProps, SettingsSectionRow } from './shell-contract.ts'
@@ -41,12 +41,13 @@ const NAV_ICONS: Readonly<Record<string, typeof IconSettingsOutlineMedium>> = {
   'plugins': IconPersonalizationOutlineMedium,
   'archived-sessions': IconArchiveOutlineMedium,
   // Fork-added sections (packages/lsy), by the id each registers: service overview, subscriptions, and Claude Code
-  // agents (lsy-console); the WeChat page and its presence page; memory; System status; the Bilibili account; QQ.
+  // agents (lsy-console); the WeChat page, its presence page, and its speaking style; memory; System status; the Bilibili account; QQ.
   'lsy-overview': IconFlatListOutlineMedium,
   'lsy-subscriptions': IconQueueOutlineMedium,
   'lsy-agents': IconCodeOutlineMedium,
   'lsy-wechat': IconNewChatOutlineMedium,
   'lsy-presence': IconClockOutlineMedium,
+  'lsy-style': IconEnhanceOutlineMedium,
   'lsy-memory': IconDatabaseOutlineMedium,
   'lsy-sysmon': IconGaugeOutlineMedium,
   'bili': IconPlayOutlineMedium,

@@ -730,9 +730,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: '`sent` with what is left today, or `refused` with the reason.',
       },
       {
-        signature: 'async view(): Promise<BiliView>',
-        description: 'What the Settings section shows: the account as bili-svc lists it, read-only, and the owner\'s main account. bili-svc\'s status names accounts and session states only, so no cookie or token can reach it.',
-        parameters: [],
+        signature: 'async view(result: ActionResult | null = null, ledgerRows: number = LEDGER_ROWS): Promise<BiliView>',
+        description: 'What the Settings section shows: every account bili-svc lists, its gate, brake, and ledger, QR sign-ins in progress, and the owner\'s main account. With the manage token the status comes from the management read; without it, from the agent\'s own token, read-only. bili-svc\'s answers carry no cookie or token, and the QR keys stay on the Host.',
+        parameters: [{ name: 'result', description: 'what the action that led to this view did; null for a plain read.' }, { name: 'ledgerRows', description: 'ledger rows to read.' }],
         returns: 'the view.',
       },
     ],
@@ -6446,7 +6446,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'BiliView',
-    declaration: 'export interface BiliView {\n    readonly account: AccountView;\n    readonly gate: GateView | null;\n    readonly ownerMid: number;\n    readonly ownerUpdatedAt: number | null;\n    readonly timeZone: string;\n}',
+    declaration: 'export interface BiliView {\n    readonly account: AccountView;\n    readonly gate: GateView | null;\n    readonly accounts: readonly ManagedAccount[];\n    readonly ledger: LedgerView | null;\n    readonly logins: readonly LoginView[];\n    readonly speaker: {\n        readonly id: string;\n        readonly display: string;\n    } | null;\n    readonly manage: boolean;\n    readonly manageEnv: string;\n    readonly manageError: string | null;\n    readonly result: ActionResult | null;\n    readonly ownerMid: number;\n    readonly ownerUpdatedAt: number | null;\n    readonly timeZone: string;\n}',
   },
   {
     name: 'BindingOrigin',
@@ -6455,6 +6455,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'BoxProps',
     declaration: 'export interface BoxProps {\n    readonly flexDirection?: \'row\' | \'column\' | undefined;\n    readonly paddingX?: number | undefined;\n    readonly paddingY?: number | undefined;\n    readonly padding?: number | undefined;\n    readonly gap?: number | undefined;\n    readonly border?: boolean | string | undefined;\n    readonly borderColor?: string | undefined;\n    readonly children?: UiNode | undefined;\n}',
+  },
+  {
+    name: 'BrakeView',
+    declaration: 'export interface BrakeView {\n    readonly reason: string;\n    readonly detail: string;\n    readonly ts: number | null;\n}',
   },
   {
     name: 'Branded',
@@ -7322,7 +7326,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'GateView',
-    declaration: 'export interface GateView {\n    readonly mode: string;\n    readonly readonly: boolean;\n}',
+    declaration: 'export interface GateView {\n    readonly mode: string;\n    readonly readonly: boolean;\n    readonly brake: BrakeView | null;\n    readonly used: UsageCounts | null;\n    readonly caps: UsageCounts | null;\n}',
   },
   {
     name: 'GenerateOptions',
@@ -7661,6 +7665,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface KvUnitDescriptor {\n    readonly name: string;\n    readonly version: number;\n    readonly tables: readonly string[];\n    readonly hasGlobal: boolean;\n    readonly layout?: \'single\' | \'per-record\';\n    readonly compatibleVersions?: readonly number[];\n}',
   },
   {
+    name: 'LedgerRow',
+    declaration: 'export interface LedgerRow {\n    readonly ts: number | null;\n    readonly kind: string;\n    readonly target: string;\n    readonly state: string;\n    readonly reason: string;\n    readonly caller: string;\n    readonly draft: string;\n    readonly verdict: string;\n}',
+  },
+  {
+    name: 'LedgerView',
+    declaration: 'export interface LedgerView {\n    readonly rows: readonly LedgerRow[];\n    readonly summary: Readonly<Record<string, string | number>>;\n}',
+  },
+  {
     name: 'ListVersionsOptions',
     declaration: 'export interface ListVersionsOptions {\n    readonly registry?: Registry;\n}',
   },
@@ -7769,6 +7781,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type LogExporterOptions = Omit<OTLPExporterNodeConfigBase, \'selfObsMeterProvider\'> & {\n    url: string;\n};',
   },
   {
+    name: 'LoginState',
+    declaration: 'export type LoginState = typeof LOGIN_STATES[number];',
+  },
+  {
+    name: 'LoginView',
+    declaration: 'export interface LoginView {\n    readonly account: string;\n    readonly state: LoginState;\n    readonly qr: readonly string[] | null;\n    readonly expiresAt: number;\n    readonly message: string | null;\n}',
+  },
+  {
     name: 'LspHover',
     declaration: 'export interface LspHover {\n    readonly contents: string;\n    readonly range?: LspRange;\n}',
   },
@@ -7823,6 +7843,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'LsyNote',
     declaration: 'export interface LsyNote {\n    title: string;\n    body?: string | undefined;\n    url?: string | undefined;\n    origin?: string | undefined;\n    safety?: true | undefined;\n    kinds?: readonly string[] | undefined;\n    urgent?: true | undefined;\n}',
+  },
+  {
+    name: 'ManagedAccount',
+    declaration: 'export interface ManagedAccount {\n    readonly id: string;\n    readonly mid: number;\n    readonly display: string;\n    readonly session: SessionState;\n    readonly refreshMode: RefreshMode | null;\n    readonly login: boolean;\n    readonly agent: boolean;\n    readonly refreshedAt: number | null;\n    readonly importedAt: number | null;\n    readonly deadReason: string | null;\n}',
   },
   {
     name: 'ManagementError',
@@ -8627,6 +8651,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RedactedSecret',
     declaration: 'export interface RedactedSecret {\n    path: string[];\n    set: boolean;\n}',
+  },
+  {
+    name: 'RefreshMode',
+    declaration: 'export type RefreshMode = typeof REFRESH_MODES[number];',
   },
   {
     name: 'RefreshRefusal',
@@ -10803,6 +10831,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'UpdateTeamTaskRequest',
     declaration: 'export interface UpdateTeamTaskRequest {\n    readonly taskId: TeamTaskId;\n    readonly expectedRevision: number;\n    readonly action: TeamTaskAction;\n    readonly subject?: string;\n    readonly description?: string;\n    readonly blockedBy?: readonly TeamTaskId[];\n    readonly writeScopes?: readonly string[];\n    readonly owner?: string;\n}',
+  },
+  {
+    name: 'UsageCounts',
+    declaration: 'export interface UsageCounts {\n    readonly comment: number;\n    readonly dm: number;\n}',
   },
   {
     name: 'UserMessage',
