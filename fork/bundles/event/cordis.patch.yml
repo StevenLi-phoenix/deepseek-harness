@@ -421,7 +421,7 @@
     # and a deadline poller (every 15 minutes). Fixed rules decide whether a reminder goes out, never a model:
     # checkpoints before each deadline, a missed deadline told at once while its late window is open, submitted or
     # completed tasks skipped, one message per task and checkpoint across restarts, quiet while the owner sleeps
-    # (fork-presence), and urgent within 2 hours. A broken course sync (report.coverage.health) is told once, then at
+    # (fork-presence), and urgent within 3 hours. A broken course sync (report.coverage.health) is told once, then at
     # most daily, and its recovery once. DSH only reads the records' sync health; the sync agents run elsewhere.
     # Settings → 课程 DDL (fork-courses-settings) shows the checks and edits this row's config.
     - id: fork-courses

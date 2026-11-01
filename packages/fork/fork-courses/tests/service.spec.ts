@@ -97,10 +97,10 @@ async function mount(options: MountOptions = {}) {
 }
 
 describe('configuration', () => {
-  it('defaults to New York, a 15-minute poll, 72/24/6/2 h checkpoints, 24/6/2 h in the late window, and the PAT FORK_COURSES_PAT', () => {
+  it('defaults to New York, a 15-minute poll, 48/24/3 h checkpoints, 12/3 h in the late window, and the PAT FORK_COURSES_PAT', () => {
     expect(Config({} as never)).toMatchObject({
       enabled: true, baseUrl: 'https://api.lishuyu.app/courses', tokenEnv: 'FORK_COURSES_PAT', timeZone: 'America/New_York', pollMinutes: 15,
-      beforeHours: [72, 24, 6, 2], lateBeforeHours: [24, 6, 2], urgentWithinHours: 2, lookaheadDays: 7,
+      beforeHours: [48, 24, 3], lateBeforeHours: [12, 3], urgentWithinHours: 3, lookaheadDays: 7,
       quietHours: { followPresence: true, enabled: false, start: '01:00', end: '09:00' },
       sync: { alert: true, statuses: ['failing', 'missing'], staleHours: 24, repeatHours: 24 },
     })
