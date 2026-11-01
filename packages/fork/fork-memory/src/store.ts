@@ -22,6 +22,7 @@ import {
   type PendingEntry,
   type WriteMeta,
 } from './entries.ts'
+import { sharesSpan, spanKeys } from './overlap.ts'
 
 /** Most entries one file holds; a save beyond it is refused. */
 export const MAX_ENTRIES = 1000
@@ -595,6 +596,21 @@ export class MemoryStore {
         || right.entry.date.localeCompare(left.entry.date)
         || right.order - left.order)
     return { entries: scored.slice(0, options.limit).map(candidate => candidate.entry), more: Math.max(0, scored.length - options.limit) }
+  }
+
+  /**
+   * Whether a text repeats a distinctive span (6 consecutive CJK characters, or 3 consecutive non-filler words) of any
+   * entry or waiting write. Only the yes or no leaves the store.
+   * @param text - the text to compare, for example one the agent is about to publish.
+   * @returns true when any span is shared; a missing file is empty and shares nothing. A corrupt file throws.
+   */
+  async containsSpanOf(text: string): Promise<boolean> {
+    const wanted = spanKeys(text)
+    if (wanted.size === 0) return false
+    for (const entry of [...await this.list(), ...await this.listPending()]) {
+      if (sharesSpan(wanted, spanKeys(entry.text))) return true
+    }
+    return false
   }
 
   /** Ids and categories of every entry and every waiting write: what the owner reviews without reading text. */

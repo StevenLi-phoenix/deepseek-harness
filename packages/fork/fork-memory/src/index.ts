@@ -38,6 +38,7 @@ export {
   type PurgePlan, type ReviewOp, type ReviewResult, type RollbackItem,
 } from './admin.ts'
 export { parseClaudeExport } from './export.ts'
+export { CJK_SPAN, sharesSpan, spanKeys, WORD_SPAN } from './overlap.ts'
 export { memoryNotice, type NoticeItem } from './notice.ts'
 export { renderMemoryBlock } from './render.ts'
 export {
