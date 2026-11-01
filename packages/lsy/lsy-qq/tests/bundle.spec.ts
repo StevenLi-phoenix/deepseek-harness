@@ -26,6 +26,9 @@ describe('event bundle', () => {
     expect(config.send).toEqual({ enabled: false, groups: [], minIntervalSec: 60, maxPerDay: 10 })
     expect(config.asr.enabled.get()).toBe(false)
     expect(config.url).toBe('ws://127.0.0.1:3001')
+    // DSH reaches the recorder service by a socket under $DSH_HOME/run (the default is derived at load) with its own token.
+    expect(config.recorder).toEqual({ socket: undefined, tokenEnv: 'LSY_QQ_RECORDER_TOKEN', timeoutMs: 10_000 })
+    expect(row.config ?? {}).not.toHaveProperty('dataDir')
     // The token is the name of a $DSH_HOME/.env entry, never a value.
     expect(config.tokenEnv).toBe('LSY_QQ_ONEBOT_TOKEN')
     // The Settings page's login section asks the door napcat.sh starts next to NapCat, on this machine only.

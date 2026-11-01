@@ -341,6 +341,26 @@ describe('DigestRunner tools', () => {
     expect((await r.groupNote(ended, 'g1', 'add', '话题')).ok).toBe(false)
   })
 
+  it.each(['unavailable', 'error'] as const)('refuses every added note while the member names cannot be read (%s), but lets the digest and removals through', async (mode) => {
+    fill('g1', 12)
+    log.membersAnswer = mode
+    await store.addNote('g1', '旧笔记', 1)
+    const results: Array<{ ok: boolean; error?: string }> = []
+    const h = harness(async (_prompt, session) => {
+      results.push(await r.groupNote(session, 'g1', 'add', '夜间活跃，爱发表情包'))
+      results.push(r.writeDigest(session, 'g1', '## 话题\n仍然写得出摘要'))
+      results.push(await r.groupNote(session, 'g1', 'remove', '旧笔记'))
+      return '好'
+    })
+    h.ctx.provide('lsyGuard', { check: async () => ({ ok: true }) } as never)
+    r = asRunner(h, config())
+    expect(await r.runRound(['g1'], new AbortController().signal)).toBe(1)
+    expect(results[0]).toEqual({ ok: false, error: expect.stringContaining('member names of this group cannot be read') })
+    expect(results.slice(1).map(entry => entry.ok)).toEqual([true, true])
+    expect(store.notes('g1')).toEqual([])
+    expect(store.digests({ groupId: 'g1', limit: 1 })[0]?.text).toBe('## 话题\n仍然写得出摘要')
+  })
+
   it('adds a note only after the filter passes it, saying why when it does not', async () => {
     fill('g1', 12)
     const results: Array<{ ok: boolean; error?: string }> = []
