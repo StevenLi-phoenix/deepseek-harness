@@ -59,6 +59,7 @@ kind: "package-reference"
 | `backfill.maxGroups` | `5` | 每次连接补抓的群数；下一次连接接着补后面的群 |
 | `backfill.gapMs` | `5000` | 两个群的补抓之间的停顿，另加最多一半的随机抖动 |
 | `backfill.skipWithinMs` | `1800000` | 距上一次断线不到这么久就重连时不补抓，免得连接抖动时反复冲击账号；`0` 表示从不跳过 |
+| `backfill.minIntervalMs` | `1800000` | 补抓最多隔这么久做一次，插件重启时同样有效（`<dataDir>/connection-state.json`）；`0` 表示不限 |
 
 补抓的消息只存文字：不下载图片和语音（对应行会注明），实时消息不受影响。
 | `send.enabled` | `false` | 是否允许 `sendGroupMessage` |

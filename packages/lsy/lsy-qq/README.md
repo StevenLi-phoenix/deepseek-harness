@@ -59,6 +59,7 @@ Until a group number is listed nothing is recorded: messages of every other grou
 | `backfill.maxGroups` | `5` | Groups caught up per connection; the next connection continues with the following ones |
 | `backfill.gapMs` | `5000` | Pause between two groups' backfills, plus up to half as much again of jitter |
 | `backfill.skipWithinMs` | `1800000` | A connection made less than this long after the previous one dropped fetches nothing, so a flapping link does not hammer the account; `0` never skips |
+| `backfill.minIntervalMs` | `1800000` | A backfill runs at most this often, also across plugin restarts (`<dataDir>/connection-state.json`); `0` never holds one back |
 
 Backfilled messages are stored as text only: their images and voice are not downloaded (the rows say so), and live messages are unaffected.
 | `send.enabled` | `false` | Allow `sendGroupMessage` at all |

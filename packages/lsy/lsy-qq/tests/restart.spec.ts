@@ -35,7 +35,7 @@ const seed = (state: Record<string, number>) => {
   mkdirSync(join(dir, 'data'), { recursive: true })
   writeFileSync(stateFile(), JSON.stringify(state))
 }
-const readState = () => JSON.parse(readFileSync(stateFile(), 'utf8')) as { lastAliveAt?: number; lastGroupListAt?: number }
+const readState = () => JSON.parse(readFileSync(stateFile(), 'utf8')) as { lastAliveAt?: number; lastGroupListAt?: number; lastBackfillAt?: number }
 
 /** Boot the observer, as a plugin restart would: the data directory may already hold what the last process left. */
 async function boot(config: Record<string, unknown> = {}) {
@@ -71,6 +71,7 @@ describe('a plugin restart does not repeat the connection work', () => {
     const state = readState()
     expect(state.lastAliveAt).toBeGreaterThanOrEqual(before)
     expect(state.lastGroupListAt).toBeGreaterThanOrEqual(before)
+    expect(state.lastBackfillAt).toBeGreaterThanOrEqual(before)
   })
 
   it('skips the group list and the backfill when the last process was connected under ten minutes ago', async () => {
@@ -87,6 +88,23 @@ describe('a plugin restart does not repeat the connection work', () => {
     const h = await boot()
     expect(h.fake.callsOf('get_group_list')).toHaveLength(1)
     expect(h.fake.callsOf('get_group_msg_history')).toHaveLength(1)
+  })
+
+  it('skips the backfill when the last one ran under thirty minutes ago, though the last connection is old', async () => {
+    const old = Date.now() - 2 * 60 * MINUTE
+    seed({ lastAliveAt: old, lastGroupListAt: old, lastBackfillAt: Date.now() - 10 * MINUTE })
+    const h = await boot()
+    expect(h.fake.callsOf('get_group_list')).toHaveLength(1)
+    expect(h.fake.callsOf('get_group_msg_history')).toEqual([])
+    expect(h.logs.some(line => line.includes('the last backfill was') && line.includes('min ago; not backfilling'))).toBe(true)
+  })
+
+  it('backfills again once the last backfill is older than backfill.minIntervalMs, and remembers when it ran', async () => {
+    const before = Date.now()
+    seed({ lastAliveAt: Date.now() - 2 * 60 * MINUTE, lastBackfillAt: Date.now() - 31 * MINUTE })
+    const h = await boot()
+    expect(h.fake.callsOf('get_group_msg_history')).toHaveLength(1)
+    expect(readState().lastBackfillAt).toBeGreaterThanOrEqual(before)
   })
 
   it('never asks for the group list more than once an hour, even when the history is due', async () => {

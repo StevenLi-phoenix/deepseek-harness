@@ -52,7 +52,7 @@ async function boot(backfill: Record<string, unknown>, history: (params: Record<
   ctx.provide('sessionTitle', { rename: vi.fn(), get: vi.fn() } as never)
   await ctx.plugin(Observer, {
     url: fake.url, groups: GROUPS, dataDir: join(dir, 'data'), digest: { enabled: false, workspacePath: join(dir, 'digest') },
-    login: { enabled: false }, reconnectQuietMs: 0, backfill: { gapMs: 0, ...backfill },
+    login: { enabled: false }, reconnectQuietMs: 0, backfill: { gapMs: 0, minIntervalMs: 0, ...backfill },
   })
   return { ctx, observer: ctx.lsyQq, fake, calls, logs }
 }
@@ -73,8 +73,9 @@ describe('backfill is gentle by default', () => {
   it('asks for one small page per group, a few groups per connection, with a pause between them', () => {
     const config = Config({ dataDir: join(dir, 'x'), digest: { workspacePath: join(dir, 'd') } })
     const { backfill } = config
-    const values = [backfill.enabled, backfill.maxMessages, backfill.maxGroups, backfill.gapMs, backfill.skipWithinMs]
-    expect(values.map(value => value.get())).toEqual([true, 20, 5, 5000, 30 * 60_000])
+    const { enabled, maxMessages, maxGroups, gapMs, skipWithinMs, minIntervalMs } = backfill
+    const values = [enabled, maxMessages, maxGroups, gapMs, skipWithinMs, minIntervalMs]
+    expect(values.map(value => value.get())).toEqual([true, 20, 5, 5000, 30 * 60_000, 30 * 60_000])
   })
 
   it('requests no more messages than maxMessages in one page', async () => {
