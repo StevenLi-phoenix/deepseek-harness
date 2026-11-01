@@ -42,7 +42,7 @@ describe('event bundle', () => {
     const preset = inserted.find(entry => entry.id === 'preset-qq-digest')!
     expect(preset.config?.['id']).toBe('qq-digest')
     const plugins = preset.config?.plugins ?? []
-    expect(plugins.map(plugin => plugin.name)).toEqual(['@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-fork-tool-qq'])
+    expect(plugins.map(plugin => plugin.name)).toEqual(['@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-fork-tool-qq', 'cordis:group'])
     // The tool plugin runs in digest mode: only qq_digest_write and qq_group_note, bound to the Session's own group.
     expect(plugins[1]?.config).toEqual({ mode: 'digest' })
     const persona = (plugins[0]?.config as { prefix: string }).prefix
@@ -50,6 +50,17 @@ describe('event bundle', () => {
     expect(persona).toContain('Your only tools are qq_digest_write and qq_group_note')
     // No shell, file, web, memory, or read-the-chat tool: those would let group text reach further than a digest.
     expect(JSON.stringify(preset)).not.toMatch(/tool-shell|tool-fs|tool-web|fork-memory|bash/)
+  })
+
+  it('has the qq-digest preset condense its own history at a quarter of the window, keeping the newest 5%', () => {
+    const preset = inserted.find(entry => entry.id === 'preset-qq-digest')!
+    const group = (preset.config?.plugins ?? []).find(plugin => plugin.name === 'cordis:group') as unknown as { isolate: unknown; config: Row[] }
+    // Isolated, so the preset's compaction settings do not touch the other presets' Sessions.
+    expect(group.isolate).toEqual({ compaction: true })
+    expect(group.config).toEqual([{ id: 'compaction-basic', name: '@deepseek-ai/dsh-compaction-basic', config: { thresholdRatio: 0.25, retainRatio: 0.05 } }])
+    // The ratios are valid together: the retained share is below the trigger.
+    const ratios = group.config[0]!.config as { retainRatio: number; thresholdRatio: number }
+    expect(ratios.retainRatio).toBeLessThan(ratios.thresholdRatio)
   })
 
   it('mounts the read tools in the unattended preset and no tool that sends to QQ anywhere', () => {

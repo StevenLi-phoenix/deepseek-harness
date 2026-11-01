@@ -114,6 +114,15 @@ export interface GroupStats {
 /** Notes one group may hold. */
 export const MAX_NOTES_PER_GROUP = 30
 
+/** The resident digest Session of a group. */
+export interface GroupSession {
+  sessionId: string
+  /** When this Session was made; a Session older than the retention window is replaced. */
+  createdAt: number
+  /** 1 for the first Session of the group, one more at each rollover. */
+  generation: number
+}
+
 /** One note of a group: the QQ channel's own memory of what the group talks about. */
 export interface GroupNote {
   id: number
@@ -121,7 +130,7 @@ export interface GroupNote {
   createdAt: number
 }
 
-const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 3
 
 type Row = Record<string, unknown>
 
@@ -184,6 +193,9 @@ export class QqStore {
       CREATE TABLE IF NOT EXISTS group_notes (
         id INTEGER PRIMARY KEY AUTOINCREMENT, group_id TEXT NOT NULL, text TEXT NOT NULL, created_at INTEGER NOT NULL,
         UNIQUE (group_id, text)
+      );
+      CREATE TABLE IF NOT EXISTS group_sessions (
+        group_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, created_at INTEGER NOT NULL, generation INTEGER NOT NULL
       );
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       PRAGMA user_version = ${SCHEMA_VERSION};
@@ -473,6 +485,22 @@ export class QqStore {
   lastDigestAt(groupId: string): number {
     const row = this.db.prepare('SELECT MAX(created_at) AS at FROM digests WHERE group_id = ?').get(groupId) as Row
     return row['at'] === null ? 0 : Number(row['at'])
+  }
+
+  // ---- resident Sessions ----
+
+  /** The resident digest Session of a group, if it has one. */
+  groupSession(groupId: string): GroupSession | undefined {
+    const row = this.db.prepare('SELECT session_id, created_at, generation FROM group_sessions WHERE group_id = ?').get(groupId) as Row | undefined
+    return row === undefined ? undefined : { sessionId: String(row['session_id']), createdAt: Number(row['created_at']), generation: Number(row['generation']) }
+  }
+
+  /** Record the resident digest Session of a group, replacing the previous one. */
+  setGroupSession(groupId: string, session: GroupSession): void {
+    this.db.prepare(`
+      INSERT INTO group_sessions (group_id, session_id, created_at, generation) VALUES (?, ?, ?, ?)
+      ON CONFLICT (group_id) DO UPDATE SET session_id = excluded.session_id, created_at = excluded.created_at, generation = excluded.generation
+    `).run(groupId, session.sessionId, session.createdAt, session.generation)
   }
 
   // ---- group notes ----

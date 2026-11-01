@@ -499,7 +499,8 @@
                   headChars: 4096
                   tailChars: 1024
 
-    # QQ digest preset: one turn per transcript chunk, started by fork-qq. It gets a persona and two narrow
+    # QQ digest preset: one turn per transcript chunk in the group's own long Session, started by fork-qq. It gets a
+    # persona, compaction, and two narrow
     # tools (no shell, files, web, memory, or time-context): qq_digest_write and qq_group_note, which fork-qq
     # binds to the Session and to the one group it digests, with a cap on calls per turn. What it reads is
     # other people's chat, so whatever a message says can steer nothing but the wording of one group's digest
@@ -524,6 +525,20 @@
             name: '@deepseek-ai/dsh-fork-tool-qq'
             config:
               mode: digest
+          # Each group keeps one long Session (fork-qq, `digest.resident`), so it condenses its own history: at a
+          # quarter of the model's window (256k of the 1M window), keeping the newest 5% verbatim. A longer
+          # context costs more every round and is attended to worse. Change the two ratios here to tune it.
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+                config:
+                  thresholdRatio: 0.25
+                  retainRatio: 0.05
 
     # Creator-account reply preset (`up`): started by the `bili-digest` subscription. It has the persona,
     # the time, and the up_* tools: reads of the creator account's comments, private messages, videos and

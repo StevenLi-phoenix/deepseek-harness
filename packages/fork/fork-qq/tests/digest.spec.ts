@@ -27,12 +27,19 @@ function config(overrides: Partial<DigestConfig> = {}): DigestConfig {
   return {
     enabled: true, everyHours: 24, minMessages: 5, maxPromptChars: 60_000, maxCallsPerRound: 5, agentPreset: 'qq-digest', permissionPreset: 'read-only',
     workspacePath: join(dir, 'ws'), timeZone: 'Asia/Shanghai', timeoutMs: 2000,
-    aliasMembers: false, profiles: false, keepPerGroup: 200, maxDigestChars: 3000, maxToolCalls: 12, archiveSessions: true, ...overrides,
+    aliasMembers: false, profiles: false, keepPerGroup: 200, maxDigestChars: 3000, maxToolCalls: 12, archiveSessions: true,
+    resident: false, ...overrides,
   }
 }
 
 /** Sessions that answer each prompt with `answer`, through the Host's event stream. */
-type HarnessOptions = { kind?: string; usage?: Record<string, number>; silent?: boolean; archive?: (id: string) => Promise<void> }
+type HarnessOptions = {
+  kind?: string
+  usage?: Record<string, number>
+  silent?: boolean
+  archive?: (id: string) => Promise<void>
+  lost?: Set<string>
+}
 
 function harness(answer: string | ((prompt: string, sessionId: string) => string), options: HarnessOptions = {}) {
   const ctx = new Context()
@@ -48,7 +55,7 @@ function harness(answer: string | ((prompt: string, sessionId: string) => string
   let counter = 0
   ctx.provide('sessionController', {
     create: async (request: unknown) => { created.push(request); counter += 1; return { sessionId: `digest-${counter}` } },
-    resolveAgent: async (sessionId: string) => ({ agent: { session: { id: sessionId } } }),
+    resolveAgent: async (sessionId: string) => (options.lost?.has(sessionId) === true ? { error: new Error('session/not-found') } : { agent: { session: { id: sessionId } } }),
     selectModel: async (request: unknown) => { selected.push(request); return {} },
     prompt: async (request: { sessionId: string; content: Array<{ text: string }> }) => {
       const text = request.content[0]!.text
@@ -404,5 +411,116 @@ describe('DigestRunner tools', () => {
     expect(r.groupOfSession('digest-1')).toBeUndefined()
     expect(r.recentTextOf('digest-1')).toBeUndefined()
     expect(r.groupOfSession(undefined)).toBeUndefined()
+  })
+
+  describe('resident Sessions', () => {
+    const DAY = 24 * HOUR
+    let clock = NOW
+    const resident = (h: ReturnType<typeof harness>, overrides: Partial<DigestConfig> = {}, rolloverDays = 30) => (
+      new DigestRunner(h.ctx, store, config({ resident: true, ...overrides }), join(dir, 'data'), id => (id === 'g1' ? '技术群' : id), () => clock, () => rolloverDays * DAY)
+    )
+    const round = (run: DigestRunner) => run.runRound(['g1'], new AbortController().signal)
+    beforeEach(() => { clock = NOW })
+
+    it('keeps one Session per group across rounds, feeding only the messages since the last digest', async () => {
+      fill('g1', 12)
+      const h = harness('## 话题\n第一轮')
+      const run = resident(h)
+      expect(await round(run)).toBe(1)
+      expect(store.groupSession('g1')).toMatchObject({ sessionId: 'digest-1', generation: 1 })
+      expect(h.titles.rename).toHaveBeenCalledWith({ id: 'digest-1' }, 'QQ: 技术群')
+      clock = NOW + 25 * HOUR
+      fill('g1', 8, NOW + 20 * HOUR)
+      expect(await round(run)).toBe(1)
+      expect(h.created).toHaveLength(1)
+      expect(h.prompts).toHaveLength(2)
+      expect(h.prompts[0]).toContain('Below are 12 messages')
+      expect(h.prompts[1]).toContain('Below are 8 messages')
+      expect(h.titles.rename).toHaveBeenCalledTimes(1)
+      expect(h.archived).toEqual([])
+    })
+
+    it('does not run before the group is due or has enough new messages, like the one-shot mode', async () => {
+      fill('g1', 12)
+      const h = harness('## 话题\nx')
+      const run = resident(h)
+      await round(run)
+      clock = NOW + 2 * HOUR
+      fill('g1', 20, NOW + HOUR)
+      expect(await round(run)).toBe(0)
+      expect(h.prompts).toHaveLength(1)
+    })
+
+    it('rolls over after the retention window: a new Session seeded with the notes and the last digests, the old one archived', async () => {
+      fill('g1', 12)
+      const h = harness('## 话题\n旧摘要内容')
+      const run = resident(h)
+      await round(run)
+      store.addNote('g1', '常聊显卡', 1)
+      clock = NOW + 31 * DAY
+      fill('g1', 10, NOW + 30 * DAY)
+      await round(run)
+      expect(h.created).toHaveLength(2)
+      expect(store.groupSession('g1')).toMatchObject({ sessionId: 'digest-2', generation: 2 })
+      expect(h.archived).toEqual(['digest-1'])
+      expect(h.titles.rename).toHaveBeenLastCalledWith({ id: 'digest-2' }, expect.stringMatching(/^QQ: 技术群 · \d{4}-\d{2}$/))
+      expect(h.prompts[1]).toContain('<qq_group_history trust="derived">')
+      expect(h.prompts[1]).toContain('旧摘要内容')
+      expect(h.prompts[1]).toContain('#1 常聊显卡')
+    })
+
+    it('never rolls over when the retention window is off (0 days)', async () => {
+      fill('g1', 12)
+      const h = harness('## 话题\nx')
+      const run = resident(h, {}, 0)
+      await round(run)
+      clock = NOW + 400 * DAY
+      fill('g1', 10, NOW + 399 * DAY)
+      await round(run)
+      expect(h.created).toHaveLength(1)
+      expect(h.archived).toEqual([])
+    })
+
+    it('starts a fresh Session, seeded, when the stored one cannot be resumed', async () => {
+      fill('g1', 12)
+      const lost = new Set<string>()
+      const h = harness('## 话题\n摘要', { lost })
+      const run = resident(h)
+      await round(run)
+      lost.add('digest-1')
+      clock = NOW + 25 * HOUR
+      fill('g1', 8, NOW + 20 * HOUR)
+      await round(run)
+      expect(h.created).toHaveLength(2)
+      expect(store.groupSession('g1')?.sessionId).toBe('digest-2')
+      expect(h.prompts[1]).toContain('<qq_group_history trust="derived">')
+      expect(h.archived).toEqual([])
+    })
+
+    it('binds the tools to the group on each turn of a reused Session, and only during the turn', async () => {
+      fill('g1', 12)
+      const outcomes: boolean[] = []
+      let session = ''
+      const h = harness((_prompt, id) => { session = id; outcomes.push(run.writeDigest(id, 'g1', '摘要').ok, run.writeDigest(id, 'g2', 'x').ok); return '好' })
+      const run = resident(h)
+      await round(run)
+      clock = NOW + 25 * HOUR
+      fill('g1', 8, NOW + 20 * HOUR)
+      await round(run)
+      expect(outcomes).toEqual([true, false, true, false])
+      expect(run.writeDigest(session, 'g1', 'late').ok).toBe(false)
+    })
+
+    it('logs the context size and whether the Session was condensed', async () => {
+      fill('g1', 12)
+      const logs: string[] = []
+      const h = harness('## 话题\nx', { usage: { inputTokens: 9000, outputTokens: 50 } })
+      h.ctx.logger.exporter({ levels: { default: 3 }, export: (m) => { logs.push(String(m.args[0])) } })
+      await round(resident(h))
+      const line = logs.find(entry => entry.includes('digested'))
+      expect(line).toContain('Session digest-1 (generation 1)')
+      expect(line).toContain('context 9000 tokens')
+      expect(line).toContain('compacted 0x')
+    })
   })
 })
