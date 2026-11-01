@@ -116,7 +116,7 @@ None; this package neither assembles nor sends a provider request.
 - **Fire counts are bounded by retention** — the count is the batches the bus still holds (`retainBatches`, 1000 by default), and "last fired" is the newest of them.
 - **Transcription is read-only** — it is configuration, and a patch entry's `config` replaces the whole entry, so the card shows the patch instead of saving one.
 - **WeChat and bili cards say little until they report health** — a service reports more by adding `health()`.
-- **The QQ card never reaches QQ** — it calls only the observer's in-memory `connectionStatus()` and `recordedGroups()` (a test fails on any other member), because the account is under QQ risk control; no page of this package calls the protocol end or NapCat's login door.
+- **The QQ card never reaches QQ** — it calls only the observer's in-memory `connectionStatus()` (the recorder's last pushed status, which may be `recorder-down` or `protocol-mismatch`, shown red) and `recordedGroups()` (a test fails on any other member, and neither makes a request), because the account is under QQ risk control; no page of this package calls the protocol end or NapCat's login door.
 - **Preview waits for the voice model** — the first sentence after idle takes about 45 seconds on feiyu; one preview runs at a time.
 
 <a id="dev-note"></a>

@@ -5,12 +5,18 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 ## [Unreleased]
 
 ### Fixed
+- The overview's Bilibili card is yellow (`svc_only`) when bili-svc answers but the DSH `bili` plugin is not mounted; it used to be green, which hid a plugin that failed to load (2026-11-01).
 - Bus result notes no longer start with ✅, which read as the event's verdict while it only meant the turn finished; a batch of several events is titled by subject and count (`CI: owner/repo (4 events)`) instead of its first event, so a note about a failed run is not headed by another run's success (2026-11-01).
 - The `ci` subscription tells the owner only what needs them: failures no code change fixes (secrets, quota, runners, outages), failed deployments or releases, and a default branch red twice in a row; branch and pull-request failures and successes answer NO_REPLY (2026-11-01).
 - `bili_channel_note` asks `ctx.lsyGuard` (purpose `bili-channel-note`, audience `channel`) after the local PII rules and refuses every note when the guard fails or is not mounted (2026-11-01); the persistent-Session idle archive of the bus is replaced by the shared sweep.
 - A long-lived Session whose recorded model left the profile (renamed or removed) continues on the configured default route and logs the switch, instead of ending every turn with `UNKNOWN_MODEL` (2026-11-01; the WeChat chat Session failed from 10/31 10:00 after `deepseek-v4.1-flash` became `opencode-go/deepseek-v4.1-flash`).
 - `lsy-integrity` no longer reports "定时任务（定义）被改动了" whenever a daily or weekly task runs: `scheduledAt` of a repeating task is its next run time and is left out of the digest; it still counts for one-shot `at` tasks (2026-11-01).
 - A final answer whose last line is exactly `NO_REPLY` is silent for `lsy-event-bus` and owner-relay, so an explanation followed by `NO_REPLY` no longer reaches WeChat (2026-11-01).
+
+### Changed
+- `lsy-qq` is the recorder's client: `groupOverview()`, `recentMessages()`, `searchMessages()`, `evidenceOf()`, `groupChoices()`, and `loginStatus()` are async and fail with `RecorderUnavailable` while the recorder is down; `dataDir` is ignored (the recorder's `QQ_RECORDER_DATA_DIR`), `asr.enabled` and `send.enabled` fail the load, `sendGroupMessage` always refuses, and `recorder.{socket,tokenEnv,timeoutMs}` are new (schema defaults).
+- `napcat.sh start` stores the OneBot token as the recorder's AMS secret (and still in `.env` for one release cycle) and restarts the recorder, not DSH.
+- The QQ configuration warning in Settings no longer says a save reconnects QQ: only a changed `url` or `tokenEnv` does.
 
 ### Removed
 - Bilibili speech from DSH (2026-10-31): the tools `bili_comment`, `bili_reply`, `bili_dynamic`, and `bili_dm_owner`, share reports, messages to the owner on the account's own initiative, and inbox wakes that answered replies and mentions; replies to viewers are the `up` preset's, behind bili-svc's Reply Gate.
@@ -19,6 +25,9 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 - The `warn` ingest source (`LSY_INGEST_TOKEN_WARN`), its `warn` subscription and `lsy/tools/warn` (2026-10-31): the senders moved to the AMS repository and deliver to the AMS intake.
 
 ### Added
+- `qq-recorder` (2026-11-01): the OneBot connection, `qq.db`, the downloads, and the login-door calls of `lsy-qq` move into an AMS service of their own (`lsy/deploy/qq-recorder`: `main.ts` bundled to one file with `tsdown`, `service.toml.in`, `deploy.sh`, pinned by the bundle's hash), so a DSH restart, a deploy, or a settings save no longer reconnects QQ. DSH talks to it over a unix socket (bearer token, `X-Lsy-Protocol`, NDJSON events) with the zod DTOs of `packages/lsy/lsy-qq/src/protocol.ts` (additive within a major, `hello` handshake, frozen `v1.0` fixtures); nothing in DSH opens the recorder's files, and `tests/isolation.spec.ts` enforces it. Recorder first, DSH second: `upgrade.sh` builds and pins the recorder, and on a first install only places the declaration and prints how to start it (RUNBOOK §19, with the owner's one-time commands, acceptance, recover, and rollback).
+- Settings → QQ, the overview's QQ card, and the QQ tools report `recorder-down` and `protocol-mismatch` in all eight languages; `lsy-qq` pushes its settings with `PUT /v1/config` at start and on every change, and the recorder keeps them in `recorder-config.json`.
+- `lsy-qq` keeps its digests, notes, resident Sessions, alias salt, and the owner-notice memory in the storage domain `lsy_qq`; the first connection to the recorder imports what the old `qq.db` tables held, once (the old tables stay).
 - WeChat `/new` hands the earlier chat over (2026-11-01): the new chat Session is created at once and takes the earlier chats' active and paused reminders (target and involved Sessions, so the clock mark, change notices, and archive check follow), the watches they created, and their running monitors; the reply says what moved (`已开始新对话。上一个对话的 1 条定时提醒（…）已转到新对话。`), a failed move is retried with the next message, and the first message after a restart moves what an earlier chat still holds.
 - `ctx.lsyEventBus.handOverSessions(from, to)` and `registerHandover(kind, move)` (2026-11-01): moves the subscriptions the old Sessions created and every registered binding; `lsy-tool-monitor` registers its running monitors.
 - Upstream `ScheduleService.handOverSessions(from, to)` (2026-11-01): retargets active and paused tasks and replaces the old Sessions among their involved Sessions, with `updated` notices.

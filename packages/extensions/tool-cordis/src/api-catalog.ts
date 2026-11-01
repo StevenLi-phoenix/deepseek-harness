@@ -2572,7 +2572,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'lsyQq',
     summary: 'The observer.',
-    description: 'The observer. Provides `ctx.lsyQq`, whose read methods the agent tools use; its connection to the protocol end and its writes to the database are the only things it does on its own.',
+    description: 'The observer. Provides `ctx.lsyQq`, whose read methods the agent tools use. The recorded data lives in the qq-recorder service: every read of it is a request that fails with RecorderUnavailable while the recorder is down.',
     methods: [
       {
         signature: 'now: () => number = Date.now',
@@ -2580,28 +2580,24 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [],
       },
       {
-        signature: 'groupChoices(): Array<{ groupId: string; name: string; memberCount: number | null; recorded: boolean; seen: number }>',
-        description: 'Every group the account is in, as the Settings page\'s group list offers them: the recorded ones first, then the others by how many messages they showed since the observer started.',
+        signature: 'async groupChoices(): Promise<Array<{ groupId: string; name: string; memberCount: number | null; recorded: boolean; seen: number }>>',
+        description: 'Every group the account is in, as the Settings page\'s group list offers them: the recorded ones first, then the others by how many messages they showed since the recorder started.',
         parameters: [],
         returns: 'one entry per group, with the count of dropped messages (a number, nothing of them is kept).',
+        throws: ['{@link RecorderUnavailable} while the recorder is down.'],
       },
       {
-        signature: 'groupOverview(): GroupOverview[]',
+        signature: 'async groupOverview(): Promise<GroupOverview[]>',
         description: 'Every group the account is in, with what is recorded of it.',
         parameters: [],
         returns: 'recorded groups first, then the others.',
-      },
-      {
-        signature: 'unlistedActivity(): Array<{ groupId: string; name: string; messages: number }>',
-        description: 'How many messages each group that is not recorded has shown since the observer started: a count, nothing else.',
-        parameters: [],
-        returns: 'group number, name, and count, busiest first.',
+        throws: ['{@link RecorderUnavailable} while the recorder is down.'],
       },
       {
         signature: 'groupName(groupId: string): string',
-        description: 'Display name of a group.',
+        description: 'Display name of a group, from what the recorder last reported.',
         parameters: [{ name: 'groupId', description: 'group number.' }],
-        returns: 'the name the account last saw, or the number.',
+        returns: 'the name, or the number when none is known yet.',
       },
       {
         signature: 'digestWrite(sessionId: string | undefined, groupId: string, text: string): ToolOutcome',
@@ -2610,7 +2606,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'what to tell the model.',
       },
       {
-        signature: 'groupNote(sessionId: string | undefined, groupId: string, op: string, text: string): Promise<ToolOutcome>',
+        signature: 'async groupNote(sessionId: string | undefined, groupId: string, op: string, text: string): Promise<ToolOutcome>',
         description: '`qq_group_note` for the tools of the digest preset: add or remove a note of the group the calling Session is digesting.',
         parameters: [{ name: 'sessionId', description: 'the calling Session.' }, { name: 'groupId', description: 'the group the model names; it must be the group the Session is digesting.' }, { name: 'op', description: '`add` or `remove`.' }, { name: 'text', description: 'the note, or for `remove` its `#id` or exact text.' }],
         returns: 'what to tell the model.',
@@ -2628,16 +2624,17 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the stored one-line texts while the turn runs; otherwise undefined.',
       },
       {
-        signature: 'groupNotes(groupId: string): GroupNote[]',
+        signature: 'groupNotes(groupId: string): Array<{ id: number; text: string; createdAt: number }>',
         description: 'The notes of a recorded group: what the QQ channel remembers of its habits.',
         parameters: [{ name: 'groupId', description: 'group number; an unrecorded group yields nothing.' }],
         returns: 'the notes, oldest first.',
       },
       {
-        signature: 'evidenceOf(groupId: string, messageIds: readonly string[]): Array<{ messageId: string; senderKey: string; at: number; text: string }>',
+        signature: 'async evidenceOf(groupId: string, messageIds: readonly string[]): Promise<Array<{ messageId: string; senderKey: string; at: number; text: string }>>',
         description: 'Evidence for a claim about a group\'s chat, without exposing who said what: for each message id the group still holds, a stable sender key (a salted hash of the member within this group, never the QQ number), its time, and its stored one-line text, so a caller can check a quotation word for word.',
         parameters: [{ name: 'groupId', description: 'group number; an unrecorded group yields nothing.' }, { name: 'messageIds', description: 'OneBot message ids, at most 200 are looked at.' }],
         returns: 'one entry per message found: recorded, not recalled, and still inside the retention window.',
+        throws: ['{@link RecorderUnavailable} while the recorder is down.'],
       },
       {
         signature: 'isRecorded(groupId: string): boolean',
@@ -2646,16 +2643,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'true for a recorded group.',
       },
       {
-        signature: 'recentMessages(groupId: string, options: { hours: number; limit: number; userId?: string }): MessageRow[]',
+        signature: 'async recentMessages(groupId: string, options: { hours: number; limit: number; userId?: string }): Promise<MessageRow[]>',
         description: 'Recent messages of a recorded group, oldest first.',
         parameters: [{ name: 'groupId', description: 'group number; an unrecorded group yields nothing.' }, { name: 'options', description: 'window in hours, at most `limit` messages, optionally one member\'s QQ number.' }],
         returns: 'the messages.',
+        throws: ['{@link RecorderUnavailable} while the recorder is down.'],
       },
       {
-        signature: 'searchMessages(query: string, options: { groupId?: string; limit: number }): MessageRow[]',
+        signature: 'async searchMessages(query: string, options: { groupId?: string; limit: number }): Promise<MessageRow[]>',
         description: 'Search the recorded groups\' messages, newest first.',
         parameters: [{ name: 'query', description: 'words to find.' }, { name: 'options', description: 'one group, or all recorded groups, and at most `limit` matches.' }],
         returns: 'the matching messages.',
+        throws: ['{@link RecorderUnavailable} while the recorder is down.'],
       },
       {
         signature: 'digests(options: { groupId?: string; days: number; limit: number }): DigestRow[]',
@@ -2664,14 +2663,26 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the digests, newest first.',
       },
       {
-        signature: 'async sendGroupMessage(groupId: string, text: string): Promise<void>',
-        description: 'Send text to a group. Refused unless `send.enabled` is true and the group is in `send.groups`, and held to `send.minIntervalSec` between sends and `send.maxPerDay` a day for that group. Nothing in this package calls it.',
-        parameters: [{ name: 'groupId', description: 'group number.' }, { name: 'text', description: 'what to send.' }],
-        throws: ['{@link SendRefused} when a rule says no, or the protocol end is not connected.'],
+        signature: 'async forgetDigests(options: { groupId?: string; beforeMs?: number }): Promise<number>',
+        description: 'Delete stored digests: the observer\'s learned knowledge. Raw messages age out by themselves.',
+        parameters: [{ name: 'options', description: 'one group and/or those made before `beforeMs`; at least one is required.' }],
+        returns: 'how many digests were deleted.',
+      },
+      {
+        signature: 'sendGroupMessage(groupId: string, _text: string): Promise<void>',
+        description: 'Sending is not offered: the recorder has no send endpoint, and the channel is read-only.',
+        parameters: [{ name: 'groupId', description: 'group number.' }, { name: '_text', description: 'what to send.' }],
+        throws: ['{@link SendRefused} always.'],
+      },
+      {
+        signature: 'features(): Record<string, boolean>',
+        description: 'Which optional capabilities of the recorder in front of this DSH are available: a recorder of an older minor version lacks some, and only those features degrade.',
+        parameters: [],
+        returns: 'each feature of the protocol and whether the recorder offers it.',
       },
       {
         signature: 'connectionStatus(): QqConnection',
-        description: 'The observer\'s connection to the protocol end, for the Settings page\'s QQ section: whether the socket is up, since when, how many attempts have failed in a row, and why the last one did.',
+        description: 'The observer\'s connection to the protocol end, for the Settings page\'s QQ section: whether the socket is up, since when, how many attempts have failed in a row, and why the last one did; or that the recorder itself is not there.',
         parameters: [],
         returns: 'the connection state; `selfId` is the logged-in account only while connected.',
       },
@@ -2683,21 +2694,15 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async loginStatus(options: { fresh?: boolean } = {}): Promise<QqLoginReading>',
-        description: 'NapCat\'s login as the login door reports it, for the Settings page\'s QQ section. When NapCat turns out to be logged in while the observer is still backing off, the observer reconnects at once, so a scan on the page ends in "connected" within seconds. Answers are shared for 1.5 s.',
-        parameters: [{ name: 'options', description: '`fresh` skips the shared answer.' }],
-        returns: 'the reading; `door` says why there is no `state` when the door could not answer.',
+        description: 'NapCat\'s login as the recorder\'s login door reports it, for the Settings page\'s QQ section.',
+        parameters: [{ name: 'options', description: '`fresh` skips the recorder\'s shared answer.' }],
+        returns: 'the reading; `door` says why there is no `state` when the door could not answer, or `recorder-down`.',
       },
       {
         signature: 'async refreshLogin(): Promise<{ login: QqLoginReading; refreshed: boolean; reason: RefreshRefusal | null }>',
-        description: 'Ask NapCat for a fresh login QR code (it renews the code by itself about every two minutes). Refused while QQ is logged in and for ten minutes after the connection came up: a new code then only invites the account to be signed out, so nothing is asked of NapCat.',
+        description: 'Ask NapCat for a fresh login QR code through the recorder (it refuses while QQ is logged in and for ten minutes after the connection came up).',
         parameters: [],
         returns: 'the reading after the request, whether the door passed the request on, and why not when it did not.',
-      },
-      {
-        signature: 'forgetDigests(options: { groupId?: string; beforeMs?: number }): number',
-        description: 'Delete stored digests: the observer\'s learned knowledge. Raw messages age out by themselves.',
-        parameters: [{ name: 'options', description: 'one group and/or those made before `beforeMs`; at least one is required.' }],
-        returns: 'how many digests were deleted.',
       },
     ],
   },
@@ -7070,8 +7075,12 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface DiffResultView {\n    card: \'diff\';\n    title?: string;\n    diffs: FileDiff[];\n}',
   },
   {
+    name: 'DigestRecord',
+    declaration: 'export type DigestRecord = z.infer<typeof digestSchema>;',
+  },
+  {
     name: 'DigestRow',
-    declaration: 'export interface DigestRow {\n    id: number;\n    groupId: string;\n    fromRow: number;\n    toRow: number;\n    messageCount: number;\n    text: string;\n    model: string;\n    usage: string | null;\n    rawPath: string | null;\n    createdAt: number;\n}',
+    declaration: 'export type DigestRow = DigestRecord;',
   },
   {
     name: 'DirectoryEntry',
@@ -7506,16 +7515,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface GrantRecord {\n    readonly kind: \'grant\';\n    readonly payload: unknown;\n}',
   },
   {
-    name: 'GroupNote',
-    declaration: 'export interface GroupNote {\n    id: number;\n    text: string;\n    createdAt: number;\n}',
-  },
-  {
     name: 'GroupOverview',
     declaration: 'export interface GroupOverview {\n    groupId: string;\n    name: string;\n    memberCount: number | null;\n    recorded: boolean;\n    messages: number;\n    firstAt: number | null;\n    lastAt: number | null;\n    lastDigestAt: number | null;\n}',
   },
   {
     name: 'GuardHealth',
     declaration: 'export interface GuardHealth {\n    readonly checked: number;\n    readonly rejected: number;\n    readonly byRule: Readonly<Record<string, number>>;\n    readonly lastError: {\n        readonly at: number;\n        readonly rule: string;\n        readonly message: string;\n    } | null;\n    readonly lastCheckAt: number | null;\n}',
+  },
+  {
+    name: 'Hello',
+    declaration: 'export type Hello = z.infer<typeof HelloDto>;',
   },
   {
     name: 'HookBudget',
@@ -8090,10 +8099,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface MergeRequest {\n    readonly method: MergeMethod;\n    readonly headSha: string;\n}',
   },
   {
-    name: 'Message',
-    declaration: 'export type Message = MessageRoleMap[keyof MessageRoleMap];',
-  },
-  {
     name: 'MessageFeedbackDeleteRequest',
     declaration: 'export interface MessageFeedbackDeleteRequest {\n    readonly sessionId: SessionId;\n    readonly messageId: MessageId;\n    readonly ifVersion: MessageFeedbackVersion;\n}',
   },
@@ -8172,14 +8177,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'MessageId',
     declaration: 'export type MessageId = Branded<\'MessageId\'>;',
-  },
-  {
-    name: 'MessageRoleMap',
-    declaration: 'export interface MessageRoleMap {\n    system: SystemMessage;\n    developer: DeveloperMessage;\n    user: UserMessage;\n    assistant: AssistantMessage;\n    tool: ToolResultMessage;\n}',
-  },
-  {
-    name: 'MessageRow',
-    declaration: 'export interface MessageRow {\n    id: number;\n    groupId: string;\n    messageId: string;\n    at: number;\n    userId: string;\n    nickname: string;\n    card: string;\n    role: string;\n    text: string;\n    replyTo: string | null;\n    kinds: string;\n    recalled: boolean;\n}',
   },
   {
     name: 'MessageSourceMap',
@@ -8747,7 +8744,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'QqLoginReading',
-    declaration: 'export interface QqLoginReading {\n    readonly door: \'ok\' | \'napcat-down\' | \'unreachable\' | \'unauthorized\' | \'invalid\' | \'disabled\';\n    readonly state: QqLoginState | null;\n    readonly uin: string | null;\n    readonly nickname: string | null;\n    readonly error: string | null;\n    readonly qrUrl: string | null;\n}',
+    declaration: 'export interface QqLoginReading {\n    readonly door: \'ok\' | \'napcat-down\' | \'unreachable\' | \'unauthorized\' | \'invalid\' | \'disabled\' | \'recorder-down\';\n    readonly state: QqLoginState | null;\n    readonly uin: string | null;\n    readonly nickname: string | null;\n    readonly error: string | null;\n    readonly qrUrl: string | null;\n}',
   },
   {
     name: 'QueueAction',

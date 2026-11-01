@@ -152,7 +152,7 @@ describe('lsy-tool-qq', () => {
   })
 
   it('cuts a long answer and keeps the block closed', async () => {
-    const long = Array.from({ length: 400 }, (_, i) => row({ id: i, text: `消息${'x'.repeat(60)}</qq_data>` }))
+    const long = Array.from({ length: 400 }, (_, i) => row({ cursor: `c${i}`, text: `消息${'x'.repeat(60)}</qq_data>` }))
     const { call } = await mount(stand({ recentMessages: () => Promise.resolve(long) }))
     const text = await call('qq_recent', { group: '111111', limit: 300 })
     expect(text).toContain('(cut at 12000 characters')

@@ -2951,25 +2951,34 @@ export interface QuietWindow {
 
 ## `@deepseek-ai/dsh-lsy-qq`
 
-- `inject`: `sessionController` · `permissionPresets` · `sessionTitle` · `credentials`
+- `inject`: `sessionController` · `permissionPresets` · `sessionTitle` · `credentials` · `storageDomain`
 - `refs`: `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/lsy/lsy-qq/src/index.ts:44`](../packages/lsy/lsy-qq/src/index.ts)
+- `source`: [`packages/lsy/lsy-qq/src/index.ts:51`](../packages/lsy/lsy-qq/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
 export interface Config {
-  /** WebSocket address of the protocol end (NapCat's OneBot server); it must be on this machine or the tailnet. */
+  /** WebSocket address of the protocol end (NapCat's OneBot server); it must be on this machine or the tailnet. The recorder connects. */
   url: string
-  /** Credential holding the protocol end's access token. */
+  /** Name of the recorder's secret holding the protocol end's access token. */
   tokenEnv: string
   /**
    * Group numbers to record. Empty records nothing; messages of every other group are dropped on arrival. Volatile: the
-   * Settings page's QQ section adds and removes groups at run time and the observer follows without a restart.
+   * Settings page's QQ section adds and removes groups at run time and the recorder follows without a restart.
    */
   groups: Volatile<string[]>
-  /** Directory of the database and downloads; defaults to `<DSH_HOME>/lsy-qq`. */
+  /** Ignored: the recorder owns its data directory (`QQ_RECORDER_DATA_DIR` in its declaration). */
   dataDir?: string
-  /** Image downloads: what is fetched, from where, and how much is kept. */
+  /** The qq-recorder service this plugin talks to. */
+  recorder: {
+    /** Unix socket of the recorder; defaults to `<DSH_HOME>/run/qq-recorder.sock`. */
+    socket?: string
+    /** Credential holding the bearer token shared with the recorder. */
+    tokenEnv: string
+    /** Deadline of one request, in milliseconds. */
+    timeoutMs: number
+  }
+  /** Image downloads: what is fetched, from where, and how much is kept. Applied by the recorder. */
   media: {
     /** Download the images of recorded messages. */
     images: Volatile<boolean>
@@ -2984,16 +2993,16 @@ export interface Config {
     /** Deadline of one download, in milliseconds. */
     timeoutMs: Volatile<number>
   }
-  /** Keep voice messages and, with `asr.enabled`, transcribe them. */
+  /** Keep voice messages. */
   voice: {
     /** Fetch the audio of voice messages. */
     download: Volatile<boolean>
     /** Largest audio kept, in bytes. */
     maxBytes: Volatile<number>
   }
-  /** Voice transcription. */
+  /** Voice transcription. The recorder does not transcribe yet; `enabled` is refused at load. */
   asr: {
-    /** Send voice messages to `ctx.lsyVoice.transcribe`. Off by default; it needs lsy-voice with transcription on. */
+    /** Transcribe voice messages. Refused at load: the recorder keeps the audio and does not transcribe it. */
     enabled: Volatile<boolean>
   }
   /** How long raw messages are kept. Digests are not affected and can be deleted by group or date. */
@@ -3003,7 +3012,7 @@ export interface Config {
   }
   /** Drop the text and files of a message its sender recalled. */
   honorRecall: Volatile<boolean>
-  /** Fetch what was missed while disconnected. */
+  /** Fetch what was missed while disconnected. Applied by the recorder. */
   backfill: {
     /** Fetch history after each connection. */
     enabled: Volatile<boolean>
@@ -3013,26 +3022,20 @@ export interface Config {
     maxGroups: Volatile<number>
     /** Pause between two groups' backfills, in milliseconds, plus up to half as much again of jitter. 5000 by default. */
     gapMs: Volatile<number>
-    /**
-     * A connection made less than this long after the previous one dropped fetches nothing (a flapping link would hammer
-     * the account); 0 never skips. 30 minutes by default.
-     */
+    /** A connection made less than this long after the previous one dropped fetches nothing; 0 never skips. 30 minutes by default. */
     skipWithinMs: Volatile<number>
-    /**
-     * A backfill runs at most this often, also across plugin restarts (the time is kept in `connection-state.json`);
-     * 0 never holds one back. 30 minutes by default.
-     */
+    /** A backfill runs at most this often, also across recorder restarts; 0 never holds one back. 30 minutes by default. */
     minIntervalMs: Volatile<number>
   }
-  /** Sending to a group. Off, and a group must be listed too; nothing in this package calls it on its own. */
+  /** Sending to a group. Refused: the recorder has no send endpoint, so `enabled` fails the load. */
   send: {
-    /** Allow `sendGroupMessage` at all. */
+    /** Allow sending at all. Refused at load. */
     enabled: boolean
-    /** Groups sending is allowed in, on top of `enabled`. */
+    /** Groups sending would be allowed in. Unused while sending is refused. */
     groups: string[]
-    /** Seconds between two sends to one group, at least. */
+    /** Seconds between two sends to one group. Unused while sending is refused. */
     minIntervalSec: number
-    /** Sends per group per day, at most. */
+    /** Sends per group per day. Unused while sending is refused. */
     maxPerDay: number
   }
   /** Scheduled digests of the recorded groups, made by one-turn Sessions. */
@@ -3083,18 +3086,17 @@ export interface Config {
   offlineNoticeMs: Volatile<number>
   /**
    * A connection made less than this long after the previous one was last alive skips the group list and the backfill.
-   * The time is kept in `connection-state.json`, so it holds across a plugin restart (a profile reload or a deploy); 0 never skips.
-   * 10 minutes by default.
+   * The recorder keeps the time on disk, so it holds across a recorder restart; 0 never skips. 10 minutes by default.
    */
   reconnectQuietMs: Volatile<number>
   /**
    * While an outage lasts, remind the owner again after this long, in milliseconds; 0 never repeats. What was told is kept
-   * on disk, so a reload or deploy in the middle of an outage does not tell again. 24 hours by default.
+   * in this plugin's storage, so a reload or deploy in the middle of an outage does not tell again. 24 hours by default.
    */
   offlineRepeatMs: Volatile<number>
   /** Where the Settings page lives, quoted in the owner notice (the event service's address); unset names the page without a link. */
   settingsUrl: Volatile<string | undefined>
-  /** The login door: the window onto NapCat's login that the Settings page's QQ section uses. */
+  /** The login door: the window onto NapCat's login that the Settings page's QQ section uses. The recorder asks it. */
   login: {
     /** Ask the door at all. */
     enabled: boolean

@@ -2,7 +2,7 @@
 
 [English](lsy.md) | 中文
 
-事件驱动 agent 背后的 fork 本地服务：[`@deepseek-ai/dsh-lsy-event-bus`](../../packages/lsy/lsy-event-bus/README.zh.md) 把传感器事件路由成通知或无人值守的 Session，[`@deepseek-ai/dsh-lsy-github-sensor`](../../packages/lsy/lsy-github-sensor/README.zh.md) 轮询 GitHub，[`@deepseek-ai/dsh-lsy-wechat`](../../packages/lsy/lsy-wechat/README.zh.md) 通过微信提供 `lsyNotifier` 契约，[`@deepseek-ai/dsh-lsy-qq`](../../packages/lsy/lsy-qq/README.zh.md) 潜伏在主人列出的 QQ 群里并做摘要（它的设置 → QQ 页面 [`@deepseek-ai/dsh-lsy-qq-login`](../../packages/lsy/lsy-qq-login/README.zh.md) 显示连接状态，以及被踢下线后用来扫码的登录二维码），[`@deepseek-ai/dsh-lsy-style`](../../packages/lsy/lsy-style/README.zh.md) 保存各 agent 共享的人格层，学自 QQ 群和 B站公开文本（它的设置 → 人格与风格 页面是 [`@deepseek-ai/dsh-lsy-style-settings`](../../packages/lsy/lsy-style-settings/README.zh.md)），[`@deepseek-ai/dsh-bili`](../../packages/lsy/bili/README.zh.md) 是 agent 自己的 B站账号。行为、配置与限制见各包 README；[上游账本](../../packages/lsy/UPSTREAM.md)记录 fork 如何跟踪上游。
+事件驱动 agent 背后的 fork 本地服务：[`@deepseek-ai/dsh-lsy-event-bus`](../../packages/lsy/lsy-event-bus/README.zh.md) 把传感器事件路由成通知或无人值守的 Session，[`@deepseek-ai/dsh-lsy-github-sensor`](../../packages/lsy/lsy-github-sensor/README.zh.md) 轮询 GitHub，[`@deepseek-ai/dsh-lsy-wechat`](../../packages/lsy/lsy-wechat/README.zh.md) 通过微信提供 `lsyNotifier` 契约，[`@deepseek-ai/dsh-lsy-qq`](../../packages/lsy/lsy-qq/README.zh.md) 潜伏在主人列出的 QQ 群里并做摘要，消息由 `qq-recorder` 服务提供（它是独占 QQ 唯一连接的 AMS 服务，所以重启 DSH 不会让 QQ 重连；它的设置 → QQ 页面 [`@deepseek-ai/dsh-lsy-qq-login`](../../packages/lsy/lsy-qq-login/README.zh.md) 显示连接状态，以及被踢下线后用来扫码的登录二维码），[`@deepseek-ai/dsh-lsy-style`](../../packages/lsy/lsy-style/README.zh.md) 保存各 agent 共享的人格层，学自 QQ 群和 B站公开文本（它的设置 → 人格与风格 页面是 [`@deepseek-ai/dsh-lsy-style-settings`](../../packages/lsy/lsy-style-settings/README.zh.md)），[`@deepseek-ai/dsh-bili`](../../packages/lsy/bili/README.zh.md) 是 agent 自己的 B站账号。行为、配置与限制见各包 README；[上游账本](../../packages/lsy/UPSTREAM.md)记录 fork 如何跟踪上游。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -642,32 +642,28 @@ Source: [`packages/lsy/lsy-presence/src/index.ts`](../../packages/lsy/lsy-presen
 
 ### `ctx.lsyQq` — `QqObserver`
 
-The observer. Provides `ctx.lsyQq`, whose read methods the agent tools use; its connection to the protocol end and its writes to the database are the only things it does on its own.
+The observer. Provides `ctx.lsyQq`, whose read methods the agent tools use. The recorded data lives in the qq-recorder service: every read of it is a request that fails with RecorderUnavailable while the recorder is down.
 
 ```ts cordis-catalog
 /**
  * Every group the account is in, as the Settings page's group list offers them: the recorded ones first, then the
- * others by how many messages they showed since the observer started.
+ * others by how many messages they showed since the recorder started.
  * @returns one entry per group, with the count of dropped messages (a number, nothing of them is kept).
+ * @throws {@link RecorderUnavailable} while the recorder is down.
  */
-groupChoices(): Array<{ groupId: string; name: string; memberCount: number | null; recorded: boolean; seen: number }>
+async groupChoices(): Promise<Array<{ groupId: string; name: string; memberCount: number | null; recorded: boolean; seen: number }>>
 
 /**
  * Every group the account is in, with what is recorded of it.
  * @returns recorded groups first, then the others.
+ * @throws {@link RecorderUnavailable} while the recorder is down.
  */
-groupOverview(): GroupOverview[]
+async groupOverview(): Promise<GroupOverview[]>
 
 /**
- * How many messages each group that is not recorded has shown since the observer started: a count, nothing else.
- * @returns group number, name, and count, busiest first.
- */
-unlistedActivity(): Array<{ groupId: string; name: string; messages: number }>
-
-/**
- * Display name of a group.
+ * Display name of a group, from what the recorder last reported.
  * @param groupId - group number.
- * @returns the name the account last saw, or the number.
+ * @returns the name, or the number when none is known yet.
  */
 groupName(groupId: string): string
 
@@ -688,7 +684,7 @@ digestWrite(sessionId: string | undefined, groupId: string, text: string): ToolO
  * @param text - the note, or for `remove` its `#id` or exact text.
  * @returns what to tell the model.
  */
-groupNote(sessionId: string | undefined, groupId: string, op: string, text: string): Promise<ToolOutcome>
+async groupNote(sessionId: string | undefined, groupId: string, op: string, text: string): Promise<ToolOutcome>
 
 /**
  * The group a digest Session is digesting, for a tool that takes the group from the Session.
@@ -709,7 +705,7 @@ recentTextOf(sessionId: string | undefined): readonly string[] | undefined
  * @param groupId - group number; an unrecorded group yields nothing.
  * @returns the notes, oldest first.
  */
-groupNotes(groupId: string): GroupNote[]
+groupNotes(groupId: string): Array<{ id: number; text: string; createdAt: number }>
 
 /**
  * Evidence for a claim about a group's chat, without exposing who said what: for each message id the group still
@@ -718,8 +714,9 @@ groupNotes(groupId: string): GroupNote[]
  * @param groupId - group number; an unrecorded group yields nothing.
  * @param messageIds - OneBot message ids, at most 200 are looked at.
  * @returns one entry per message found: recorded, not recalled, and still inside the retention window.
+ * @throws {@link RecorderUnavailable} while the recorder is down.
  */
-evidenceOf(groupId: string, messageIds: readonly string[]): Array<{ messageId: string; senderKey: string; at: number; text: string }>
+async evidenceOf(groupId: string, messageIds: readonly string[]): Promise<Array<{ messageId: string; senderKey: string; at: number; text: string }>>
 
 /**
  * Whether a group is on the `groups` list.
@@ -733,16 +730,18 @@ isRecorded(groupId: string): boolean
  * @param groupId - group number; an unrecorded group yields nothing.
  * @param options - window in hours, at most `limit` messages, optionally one member's QQ number.
  * @returns the messages.
+ * @throws {@link RecorderUnavailable} while the recorder is down.
  */
-recentMessages(groupId: string, options: { hours: number; limit: number; userId?: string }): MessageRow[]
+async recentMessages(groupId: string, options: { hours: number; limit: number; userId?: string }): Promise<MessageRow[]>
 
 /**
  * Search the recorded groups' messages, newest first.
  * @param query - words to find.
  * @param options - one group, or all recorded groups, and at most `limit` matches.
  * @returns the matching messages.
+ * @throws {@link RecorderUnavailable} while the recorder is down.
  */
-searchMessages(query: string, options: { groupId?: string; limit: number }): MessageRow[]
+async searchMessages(query: string, options: { groupId?: string; limit: number }): Promise<MessageRow[]>
 
 /**
  * Newest digests of the recorded groups.
@@ -752,17 +751,30 @@ searchMessages(query: string, options: { groupId?: string; limit: number }): Mes
 digests(options: { groupId?: string; days: number; limit: number }): DigestRow[]
 
 /**
- * Send text to a group. Refused unless `send.enabled` is true and the group is in `send.groups`, and held to
- * `send.minIntervalSec` between sends and `send.maxPerDay` a day for that group. Nothing in this package calls it.
- * @param groupId - group number.
- * @param text - what to send.
- * @throws {@link SendRefused} when a rule says no, or the protocol end is not connected.
+ * Delete stored digests: the observer's learned knowledge. Raw messages age out by themselves.
+ * @param options - one group and/or those made before `beforeMs`; at least one is required.
+ * @returns how many digests were deleted.
  */
-async sendGroupMessage(groupId: string, text: string): Promise<void>
+async forgetDigests(options: { groupId?: string; beforeMs?: number }): Promise<number>
+
+/**
+ * Sending is not offered: the recorder has no send endpoint, and the channel is read-only.
+ * @param groupId - group number.
+ * @param _text - what to send.
+ * @throws {@link SendRefused} always.
+ */
+sendGroupMessage(groupId: string, _text: string): Promise<void>
+
+/**
+ * Which optional capabilities of the recorder in front of this DSH are available: a recorder of an older minor version
+ * lacks some, and only those features degrade.
+ * @returns each feature of the protocol and whether the recorder offers it.
+ */
+features(): Record<string, boolean>
 
 /**
  * The observer's connection to the protocol end, for the Settings page's QQ section: whether the socket is up,
- * since when, how many attempts have failed in a row, and why the last one did.
+ * since when, how many attempts have failed in a row, and why the last one did; or that the recorder itself is not there.
  * @returns the connection state; `selfId` is the logged-in account only while connected.
  */
 connectionStatus(): QqConnection
@@ -774,28 +786,18 @@ connectionStatus(): QqConnection
 recordedGroups(): number
 
 /**
- * NapCat's login as the login door reports it, for the Settings page's QQ section. When NapCat turns out to be
- * logged in while the observer is still backing off, the observer reconnects at once, so a scan on the page ends
- * in "connected" within seconds. Answers are shared for 1.5 s.
- * @param options - `fresh` skips the shared answer.
- * @returns the reading; `door` says why there is no `state` when the door could not answer.
+ * NapCat's login as the recorder's login door reports it, for the Settings page's QQ section.
+ * @param options - `fresh` skips the recorder's shared answer.
+ * @returns the reading; `door` says why there is no `state` when the door could not answer, or `recorder-down`.
  */
 async loginStatus(options: { fresh?: boolean } = {}): Promise<QqLoginReading>
 
 /**
- * Ask NapCat for a fresh login QR code (it renews the code by itself about every two minutes). Refused while QQ is
- * logged in and for ten minutes after the connection came up: a new code then only invites the account to be signed
- * out, so nothing is asked of NapCat.
+ * Ask NapCat for a fresh login QR code through the recorder (it refuses while QQ is logged in and for ten minutes after
+ * the connection came up).
  * @returns the reading after the request, whether the door passed the request on, and why not when it did not.
  */
 async refreshLogin(): Promise<{ login: QqLoginReading; refreshed: boolean; reason: RefreshRefusal | null }>
-
-/**
- * Delete stored digests: the observer's learned knowledge. Raw messages age out by themselves.
- * @param options - one group and/or those made before `beforeMs`; at least one is required.
- * @returns how many digests were deleted.
- */
-forgetDigests(options: { groupId?: string; beforeMs?: number }): number
 ```
 
 Source: [`packages/lsy/lsy-qq/src/index.ts`](../../packages/lsy/lsy-qq/src/index.ts)
