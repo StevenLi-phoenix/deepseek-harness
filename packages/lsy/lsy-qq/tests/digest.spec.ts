@@ -27,12 +27,12 @@ function config(overrides: Partial<DigestConfig> = {}): DigestConfig {
   return {
     enabled: true, everyHours: 24, minMessages: 5, maxPromptChars: 60_000, maxCallsPerRound: 5, agentPreset: 'qq-digest', permissionPreset: 'read-only',
     workspacePath: join(dir, 'ws'), timeZone: 'Asia/Shanghai', timeoutMs: 2000,
-    aliasMembers: false, profiles: false, keepPerGroup: 200, maxDigestChars: 3000, maxToolCalls: 12, ...overrides,
+    aliasMembers: false, profiles: false, keepPerGroup: 200, maxDigestChars: 3000, maxToolCalls: 12, archiveSessions: true, ...overrides,
   }
 }
 
 /** Sessions that answer each prompt with `answer`, through the Host's event stream. */
-type HarnessOptions = { kind?: string; usage?: Record<string, number>; silent?: boolean }
+type HarnessOptions = { kind?: string; usage?: Record<string, number>; silent?: boolean; archive?: (id: string) => Promise<void> }
 
 function harness(answer: string | ((prompt: string, sessionId: string) => string), options: HarnessOptions = {}) {
   const ctx = new Context()
@@ -41,6 +41,8 @@ function harness(answer: string | ((prompt: string, sessionId: string) => string
   const selected: unknown[] = []
   const presets = { resolve: vi.fn(), set: vi.fn() }
   const titles = { rename: vi.fn() }
+  const archived: string[] = []
+  ctx.provide('workspaceRegistry', { archiveSession: options.archive ?? (async (id: string) => { archived.push(id) }) } as never)
   ctx.provide('permissionPresets', presets as never)
   ctx.provide('sessionTitle', titles as never)
   let counter = 0
@@ -69,7 +71,7 @@ function harness(answer: string | ((prompt: string, sessionId: string) => string
       return { accepted: true }
     },
   } as never)
-  return { ctx, created, prompts, selected, presets, titles }
+  return { ctx, created, prompts, selected, presets, titles, archived }
 }
 
 const runner = (h: ReturnType<typeof harness>, cfg: DigestConfig) => new DigestRunner(h.ctx, store, cfg, join(dir, 'data'), id => (id === 'g1' ? '技术群' : id), () => NOW)
@@ -358,5 +360,49 @@ describe('DigestRunner tools', () => {
     expect(line).toContain('via qq_digest_write')
     expect(line).toContain('tool calls 5 (2 refused), notes +0/-2')
     expect(line).toContain('compacted 0x')
+  })
+
+  it('names the Session after the group alone, so the sidebar holds one title per group, not one per day', async () => {
+    fill('g1', 12)
+    const h = harness('## 话题\nx')
+    r = asRunner(h, config())
+    await r.runRound(['g1'], new AbortController().signal)
+    expect(h.titles.rename).toHaveBeenCalledWith({ id: 'digest-1' }, 'QQ: 技术群')
+  })
+
+  it('archives the Session once its digest is stored, so it leaves the sidebar, and not when archiving is off', async () => {
+    fill('g1', 12)
+    const h = harness('## 话题\nx')
+    r = asRunner(h, config())
+    await r.runRound(['g1'], new AbortController().signal)
+    expect(h.archived).toEqual(['digest-1'])
+    const off = harness('## 话题\nx')
+    await asRunner(off, config({ archiveSessions: false })).runRound(['g1'], new AbortController().signal)
+    expect(off.archived).toEqual([])
+  })
+
+  it('archives a Session whose turn failed too, and a failed archive does not fail the round', async () => {
+    fill('g1', 12)
+    const failing = harness('x', { kind: 'failed' })
+    r = asRunner(failing, config())
+    expect(await r.runRound(['g1'], new AbortController().signal)).toBe(0)
+    expect(failing.archived).toEqual(['digest-1'])
+    const broken = harness('## 话题\nx', { archive: () => Promise.reject(new Error('registry busy')) })
+    expect(await asRunner(broken, config()).runRound(['g1'], new AbortController().signal)).toBe(1)
+  })
+
+  it('tells the tools which group a Session digests and what it read, only while its turn runs', async () => {
+    fill('g1', 12)
+    const seen: unknown[] = []
+    const h = harness((_prompt, session) => {
+      seen.push(r.groupOfSession(session), r.recentTextOf(session)?.length, r.recentTextOf(session)?.[0])
+      return '好'
+    })
+    r = asRunner(h, config())
+    await r.runRound(['g1'], new AbortController().signal)
+    expect(seen).toEqual(['g1', 12, '第0条讨论内容'])
+    expect(r.groupOfSession('digest-1')).toBeUndefined()
+    expect(r.recentTextOf('digest-1')).toBeUndefined()
+    expect(r.groupOfSession(undefined)).toBeUndefined()
   })
 })

@@ -141,6 +141,8 @@ export interface Config {
     maxDigestChars: number
     /** Tool calls (`qq_digest_write`, `qq_group_note`) one digest Session may make, refused ones included. 12 by default. */
     maxToolCalls: number
+    /** Archive each digest Session when its turn ends, so it does not fill the sidebar (its log stays). True by default. */
+    archiveSessions: boolean
     /** Provider route of the digest Session's model; the profile's default when omitted. */
     provider?: string
     /** Model id on that route; the profile's default when omitted. */
@@ -228,11 +230,12 @@ export const Config = z.object({
     keepPerGroup: z.natural().min(1).default(200),
     maxDigestChars: z.natural().min(500).default(3000),
     maxToolCalls: z.natural().min(1).default(12),
+    archiveSessions: z.boolean().default(true),
     provider: z.string(),
     model: z.string(),
     agentPreset: z.string().default('qq-digest'),
     permissionPreset: z.string().default('read-only'),
-    workspacePath: z.string().default('/Users/dsh-runtime/qq-digest'),
+    workspacePath: z.string().default('/Users/dsh-runtime/work/qq'),
     timeZone: z.string().default('Asia/Shanghai'),
     timeoutMs: z.natural().min(10_000).default(15 * 60_000),
   }),
@@ -415,6 +418,7 @@ export class QqObserver extends Service {
       keepPerGroup: d.keepPerGroup,
       maxDigestChars: d.maxDigestChars,
       maxToolCalls: d.maxToolCalls,
+      archiveSessions: d.archiveSessions,
     }
     this.digest = new DigestRunner(ctx, this.store, digestConfig, this.dataDir, id => this.store.groupName(id) ?? id, () => this.now())
     ctx.logger.info(`lsy-qq: recording ${config.groups.get().length} group(s)${config.groups.get().length === 0 ? ' (the list is empty: every message is dropped; add group numbers to groups)' : ''}; sending ${config.send.enabled ? `on for ${config.send.groups.length} group(s)` : 'off'}; voice transcription ${config.asr.enabled.get() ? 'on' : 'off'}; digests ${d.enabled ? `every ${d.everyHours} h` : 'off'}; data in ${this.dataDir}`)
@@ -591,6 +595,24 @@ export class QqObserver extends Service {
   }
 
   /**
+   * The group a digest Session is digesting, for a tool that takes the group from the Session.
+   * @param sessionId - the calling Session.
+   * @returns the group number while the Session's turn runs; otherwise undefined.
+   */
+  groupOfSession(sessionId: string | undefined): string | undefined {
+    return this.digest.groupOfSession(sessionId)
+  }
+
+  /**
+   * The text of the messages the calling digest Session was shown this turn, for a tool that checks a quotation word for word.
+   * @param sessionId - the calling Session.
+   * @returns the stored one-line texts while the turn runs; otherwise undefined.
+   */
+  recentTextOf(sessionId: string | undefined): readonly string[] | undefined {
+    return this.digest.recentTextOf(sessionId)
+  }
+
+  /**
    * The notes of a recorded group: what the QQ channel remembers of its habits.
    * @param groupId - group number; an unrecorded group yields nothing.
    * @returns the notes, oldest first.
@@ -601,21 +623,22 @@ export class QqObserver extends Service {
 
   /**
    * Evidence for a claim about a group's chat, without exposing who said what: for each message id the group still
-   * holds, a stable sender key (a salted hash of the member within this group, never the QQ number) and its time.
+   * holds, a stable sender key (a salted hash of the member within this group, never the QQ number), its time, and its
+   * stored one-line text, so a caller can check a quotation word for word.
    * @param groupId - group number; an unrecorded group yields nothing.
    * @param messageIds - OneBot message ids, at most 200 are looked at.
    * @returns one entry per message found: recorded, not recalled, and still inside the retention window.
    */
-  evidenceOf(groupId: string, messageIds: readonly string[]): Array<{ messageId: string; senderKey: string; at: number }> {
+  evidenceOf(groupId: string, messageIds: readonly string[]): Array<{ messageId: string; senderKey: string; at: number; text: string }> {
     if (!this.recordedIds.has(groupId)) return []
     const { textDays } = this.live.retention
     const since = textDays > 0 ? this.now() - textDays * 86_400_000 : 0
     const salt = this.store.getMeta('alias-salt')
-    const found: Array<{ messageId: string; senderKey: string; at: number }> = []
+    const found: Array<{ messageId: string; senderKey: string; at: number; text: string }> = []
     for (const messageId of messageIds.slice(0, 200)) {
       const row = this.store.byMessageId(groupId, messageId)
       if (row === undefined || row.recalled || row.at < since) continue
-      found.push({ messageId, senderKey: senderKey(groupId, row.userId, salt ?? this.digest.ensureSalt()), at: row.at })
+      found.push({ messageId, senderKey: senderKey(groupId, row.userId, salt ?? this.digest.ensureSalt()), at: row.at, text: row.text })
     }
     return found
   }

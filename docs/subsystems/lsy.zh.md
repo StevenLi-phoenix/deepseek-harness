@@ -406,6 +406,20 @@ digestWrite(sessionId: string | undefined, groupId: string, text: string): ToolO
 groupNote(sessionId: string | undefined, groupId: string, op: string, text: string): ToolOutcome
 
 /**
+ * The group a digest Session is digesting, for a tool that takes the group from the Session.
+ * @param sessionId - the calling Session.
+ * @returns the group number while the Session's turn runs; otherwise undefined.
+ */
+groupOfSession(sessionId: string | undefined): string | undefined
+
+/**
+ * The text of the messages the calling digest Session was shown this turn, for a tool that checks a quotation word for word.
+ * @param sessionId - the calling Session.
+ * @returns the stored one-line texts while the turn runs; otherwise undefined.
+ */
+recentTextOf(sessionId: string | undefined): readonly string[] | undefined
+
+/**
  * The notes of a recorded group: what the QQ channel remembers of its habits.
  * @param groupId - group number; an unrecorded group yields nothing.
  * @returns the notes, oldest first.
@@ -414,12 +428,13 @@ groupNotes(groupId: string): GroupNote[]
 
 /**
  * Evidence for a claim about a group's chat, without exposing who said what: for each message id the group still
- * holds, a stable sender key (a salted hash of the member within this group, never the QQ number) and its time.
+ * holds, a stable sender key (a salted hash of the member within this group, never the QQ number), its time, and its
+ * stored one-line text, so a caller can check a quotation word for word.
  * @param groupId - group number; an unrecorded group yields nothing.
  * @param messageIds - OneBot message ids, at most 200 are looked at.
  * @returns one entry per message found: recorded, not recalled, and still inside the retention window.
  */
-evidenceOf(groupId: string, messageIds: readonly string[]): Array<{ messageId: string; senderKey: string; at: number }>
+evidenceOf(groupId: string, messageIds: readonly string[]): Array<{ messageId: string; senderKey: string; at: number; text: string }>
 
 /**
  * Whether a group is on the `groups` list.

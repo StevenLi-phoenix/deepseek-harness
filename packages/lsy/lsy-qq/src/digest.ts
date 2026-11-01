@@ -46,6 +46,8 @@ export interface DigestConfig {
   maxDigestChars: number
   /** Tool calls one digest Session may make, refused ones included. */
   maxToolCalls: number
+  /** Archive each digest Session when its turn ends, so it does not fill the sidebar. */
+  archiveSessions: boolean
 }
 
 /** What a digest Session's tools may do, bound to the group it digests. */
@@ -59,6 +61,8 @@ interface RoundBinding {
   notesRemoved: number
   /** Calls the tools refused (wrong group, over the cap, a note the filter refused). */
   refused: number
+  /** The text of the messages this turn was shown, for a tool that checks a quotation word for word. */
+  texts: readonly string[]
 }
 
 /** What a tool answers the model. */
@@ -215,6 +219,24 @@ export class DigestRunner {
     return stored
   }
 
+  /**
+   * The group a digest Session is digesting, so a tool can take the group from the Session instead of an argument.
+   * @param sessionId - the calling Session.
+   * @returns the group number while the Session's turn runs; otherwise undefined.
+   */
+  groupOfSession(sessionId: string | undefined): string | undefined {
+    return sessionId === undefined ? undefined : this.bindings.get(sessionId)?.groupId
+  }
+
+  /**
+   * The text of the messages the digest Session was shown this turn.
+   * @param sessionId - the calling Session.
+   * @returns the stored one-line texts while the turn runs; otherwise undefined.
+   */
+  recentTextOf(sessionId: string | undefined): readonly string[] | undefined {
+    return sessionId === undefined ? undefined : this.bindings.get(sessionId)?.texts
+  }
+
   /** Look up the binding of the calling Session and count the call; the tools share these checks. */
   private enter(sessionId: string | undefined, groupId: string): { binding: RoundBinding } | { error: string } {
     const binding = sessionId === undefined ? undefined : this.bindings.get(sessionId)
@@ -318,9 +340,12 @@ export class DigestRunner {
     for (const chunk of chunks.slice(0, this.config.maxCallsPerRound)) {
       if (signal.aborted) break
       const started = this.now()
-      const binding: RoundBinding = { groupId, calls: 0, digest: undefined, notesAdded: 0, notesRemoved: 0, refused: 0 }
+      const binding: RoundBinding = {
+        groupId, calls: 0, digest: undefined, notesAdded: 0, notesRemoved: 0, refused: 0,
+        texts: messages.filter(message => message.id >= chunk.fromRow && message.id <= chunk.toRow).map(message => message.text),
+      }
       const prompt = digestPrompt(name, chunk.text, chunk.count, this.config.profiles, { groupId, notes: this.store.notes(groupId) })
-      const result = await this.callModel(`QQ 摘要 ${name} ${stampIn(started, this.config.timeZone)}`, prompt, signal, binding)
+      const result = await this.callModel(`QQ: ${name}`, prompt, signal, binding)
       // The raw answer goes to disk before it is interpreted: what the model handed in with the tool, then its final text.
       const rawDir = join(this.dataDir, 'digest-raw')
       await mkdir(rawDir, { recursive: true, mode: 0o700 })
@@ -377,6 +402,7 @@ export class DigestRunner {
     } catch (error: unknown) {
       outcome.cancel()
       this.bindings.delete(created.sessionId)
+      await this.archive(created.sessionId)
       throw error
     }
     let result: Awaited<typeof outcome.done>
@@ -384,8 +410,21 @@ export class DigestRunner {
       result = await outcome.done
     } finally {
       this.bindings.delete(created.sessionId)
+      await this.archive(created.sessionId)
     }
     return { ...result, model: config.model === undefined ? 'profile default' : `${config.model.provider}/${config.model.model}` }
+  }
+
+  /** Archive a finished digest Session so it leaves the sidebar; its log stays. A failure only costs a clean sidebar. */
+  private async archive(sessionId: string): Promise<void> {
+    if (!this.config.archiveSessions) return
+    const registry = this.ctx.get('workspaceRegistry') as { archiveSession(id: string): Promise<void> } | undefined
+    if (registry === undefined) return
+    try {
+      await registry.archiveSession(sessionId)
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`lsy-qq: could not archive digest Session ${sessionId}: ${errorText(error)}`)
+    }
   }
 
   /** Follow a Session until its turn ends, keeping the last assistant text and the summed usage. */
