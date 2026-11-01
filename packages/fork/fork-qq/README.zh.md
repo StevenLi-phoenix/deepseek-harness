@@ -69,7 +69,8 @@ kind: "package-reference"
 | `digest.provider`、`digest.model` | 未设置 | 摘要 Session 的模型（provider 路由和模型 id），例如便宜的模型；不设置就用 profile 的默认模型 |
 | `digest.agentPreset`、`digest.permissionPreset` | `qq-digest`、`read-only` | 事件 bundle 的 `qq-digest` preset 只有人设、没有工具 |
 | `digest.workspacePath`、`digest.timeZone`、`digest.timeoutMs` | `/Users/dsh-runtime/qq-digest`、`Asia/Shanghai`、`900000` | 工作目录、转录里时间所用的时区，以及等待一次模型调用的期限 |
-| `offlineNoticeMs` | `600000` | 协议端这么久连不上、或报告账号下线时，经 `ctx.forkNotifier` 通知 owner；`0` 关闭。每次中断只通知一次：发出后要等连接恢复才会重新待命 |
+| `offlineNoticeMs` | `600000` | 协议端这么久连不上、或报告账号下线时，经 `ctx.forkNotifier` 通知 owner；`0` 关闭。每次中断只通知一次：已通知的事记在 `<dataDir>/outage-notice.json`，直到连接恢复才清除，所以中断期间重载或部署不会重复通知 |
+| `offlineRepeatMs` | `86400000` | 中断持续期间，隔这么久（24 小时）再提醒 owner 一次；`0` 不重复 |
 | `settingsUrl` | 未设置 | 事件服务的地址，写进该通知里「设置 → QQ」的旁边；不设置则只提页面名、不带链接 |
 | `login.enabled` | `true` | 向扫码入口询问 NapCat 的登录状态（设置里的 QQ 分区） |
 | `login.url` | `http://127.0.0.1:3002` | 扫码入口（`napcat.sh door`）的地址；必须在本机或 tailnet 上 |

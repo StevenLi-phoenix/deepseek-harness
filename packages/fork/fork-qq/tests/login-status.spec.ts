@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -243,6 +243,62 @@ describe('QQ owner notices', () => {
     await (h.observer as unknown as { checkOutage(): Promise<void> }).checkOutage()
     expect(JSON.stringify(notifier.send.mock.calls[0])).toContain('设置')
     expect(JSON.stringify(notifier.send.mock.calls[0])).not.toContain('napcat.sh')
+  })
+})
+
+describe('QQ owner notice across reloads', () => {
+  const noticeFile = () => join(dir, 'data', 'outage-notice.json')
+  const seed = (lastNoticeAt: number) => {
+    mkdirSync(join(dir, 'data'), { recursive: true })
+    writeFileSync(noticeFile(), JSON.stringify({ lastNoticeAt }))
+  }
+  const check = (h: Awaited<ReturnType<typeof boot>>) => (h.observer as unknown as { checkOutage(): Promise<void> }).checkOutage()
+
+  it('remembers on disk that the owner was told, so a reload or deploy mid-outage does not tell again', async () => {
+    const notifier = { send: vi.fn(async () => {}) }
+    const h = await boot({ notifier, oneBot: 'down' })
+    await until(() => h.logs.some(line => line.text.includes('reconnecting in')), 'the first failure')
+    h.observer.now = () => Date.now() + 3_600_000
+    await check(h)
+    expect(notifier.send).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(readFileSync(noticeFile(), 'utf8'))).toEqual({ lastNoticeAt: expect.any(Number) })
+  })
+
+  it('stays quiet when an earlier process already told the owner within the repeat window', async () => {
+    seed(Date.now() - 3_600_000)
+    const notifier = { send: vi.fn(async () => {}) }
+    const h = await boot({ notifier, oneBot: 'down' })
+    await until(() => h.logs.some(line => line.text.includes('reconnecting in')), 'the first failure')
+    h.observer.now = () => Date.now() + 3_600_000
+    await check(h)
+    expect(notifier.send).not.toHaveBeenCalled()
+  })
+
+  it('reminds again once the outage has outlived the repeat window', async () => {
+    seed(Date.now() - 2 * 86_400_000)
+    const notifier = { send: vi.fn(async () => {}) }
+    const h = await boot({ notifier, oneBot: 'down' })
+    await until(() => h.logs.some(line => line.text.includes('reconnecting in')), 'the first failure')
+    h.observer.now = () => Date.now() + 3_600_000
+    await check(h)
+    expect(notifier.send).toHaveBeenCalledTimes(1)
+  })
+
+  it('never reminds within an outage when the repeat window is 0', async () => {
+    seed(Date.now() - 2 * 86_400_000)
+    const notifier = { send: vi.fn(async () => {}) }
+    const h = await boot({ notifier, oneBot: 'down', config: { offlineRepeatMs: 0 } })
+    await until(() => h.logs.some(line => line.text.includes('reconnecting in')), 'the first failure')
+    h.observer.now = () => Date.now() + 3_600_000
+    await check(h)
+    expect(notifier.send).not.toHaveBeenCalled()
+  })
+
+  it('forgets the notice when the connection comes back, so the next outage is told', async () => {
+    seed(Date.now() - 3_600_000)
+    const h = await boot()
+    await connected(h)
+    expect(existsSync(noticeFile())).toBe(false)
   })
 })
 

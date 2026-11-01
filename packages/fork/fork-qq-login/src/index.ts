@@ -33,7 +33,7 @@ interface QqConnectionRoutes {
  */
 export function apply(ctx: Context): void {
   const connection = Reflect.get(ctx, 'connection') as QqConnectionRoutes
-  const source = (): QqSource => Reflect.get(ctx, 'forkQq') as QqSource
+  const source = (): QqSource => ctx.forkQq
   ctx.effect(() => connection.fetch.register({
     path: QQ_PATH,
     methods: ['GET'],

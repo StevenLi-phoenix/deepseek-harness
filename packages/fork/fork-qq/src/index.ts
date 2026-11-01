@@ -5,7 +5,7 @@
  * sending is off, and turns on only per group, for code that asks for it. Nothing is a chat entrance for the agent.
  */
 
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, isAbsolute } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
@@ -136,6 +136,11 @@ export interface Config {
   }
   /** Tell the owner when the protocol end has been unreachable this long, in milliseconds; 0 turns it off. */
   offlineNoticeMs: number
+  /**
+   * While an outage lasts, remind the owner again after this long, in milliseconds; 0 never repeats. What was told is kept
+   * on disk, so a reload or deploy in the middle of an outage does not tell again. 24 hours by default.
+   */
+  offlineRepeatMs: number
   /** Where the Settings page lives, quoted in the owner notice (the event service's address); unset names the page without a link. */
   settingsUrl?: string
   /** The login door: the window onto NapCat's login that the Settings page's QQ section uses. */
@@ -199,6 +204,7 @@ export const Config: z<Config> = z.object({
     timeoutMs: z.natural().min(10_000).default(15 * 60_000),
   }),
   offlineNoticeMs: z.natural().default(10 * 60_000),
+  offlineRepeatMs: z.natural().default(24 * 3_600_000),
   settingsUrl: z.string(),
   login: z.object({
     enabled: z.boolean().default(true),
@@ -303,7 +309,8 @@ export class QqObserver extends Service {
   private readonly downloadQueue: Array<() => Promise<void>> = []
   private budgetWarnedAt = 0
   private disconnectedSince: number | undefined
-  private outageNoticed = false
+  /** When the owner was last told of the current outage; kept in `outage-notice.json`, cleared when the connection comes back. */
+  private lastNoticeAt: number | undefined
   private connState: QqConnection['state'] = 'starting'
   private connSince: number | undefined
   private attempt = 0
@@ -328,6 +335,7 @@ export class QqObserver extends Service {
     this.dataDir = config.dataDir ?? join(resolveDshHome(undefined, process.env), 'fork-qq')
     mkdirSync(this.dataDir, { recursive: true, mode: 0o700 })
     this.store = new QqStore(join(this.dataDir, 'qq.db'))
+    this.loadNotice()
     this.recorded = new Set(config.groups)
     const d = config.digest
     const digestConfig: DigestConfig = {
@@ -648,7 +656,7 @@ export class QqObserver extends Service {
           open: () => {
             upAt = this.now()
             this.disconnectedSince = undefined
-            this.outageNoticed = false
+            this.clearNotice()
             this.attempt = 0
             this.lastError = undefined
             this.setConnection('connected')
@@ -682,13 +690,45 @@ export class QqObserver extends Service {
   /** Tell the owner once when the protocol end stays unreachable. */
   private async checkOutage(): Promise<void> {
     const since = this.disconnectedSince
-    if (since === undefined || this.outageNoticed || this.config.offlineNoticeMs === 0) return
+    if (since === undefined || this.config.offlineNoticeMs === 0) return
     if (this.now() - since < this.config.offlineNoticeMs) return
     await this.notifyOwner('QQ 协议端连不上', `fork-qq 已有 ${Math.round((this.now() - since) / 60_000)} 分钟连不上协议端，多半是 QQ 被踢下线了。${this.settingsHint()}`)
   }
 
+  /** Whether the owner may be told now: never told of this outage, or told long enough ago to remind. */
+  private noticeDue(): boolean {
+    if (this.lastNoticeAt === undefined) return true
+    return this.config.offlineRepeatMs > 0 && this.now() - this.lastNoticeAt >= this.config.offlineRepeatMs
+  }
+
+  private get noticeFile(): string {
+    return join(this.dataDir, 'outage-notice.json')
+  }
+
+  /** Read what an earlier process told the owner, if the outage it was about is the one still going on. */
+  private loadNotice(): void {
+    try {
+      const saved = JSON.parse(readFileSync(this.noticeFile, 'utf8')) as { lastNoticeAt?: unknown }
+      if (typeof saved.lastNoticeAt === 'number' && Number.isFinite(saved.lastNoticeAt)) this.lastNoticeAt = saved.lastNoticeAt
+    } catch {
+      // No earlier notice, or an unreadable file: the owner may be told.
+    }
+  }
+
+  private clearNotice(): void {
+    if (this.lastNoticeAt === undefined) return
+    this.lastNoticeAt = undefined
+    rmSync(this.noticeFile, { force: true })
+  }
+
   private async notifyOwner(title: string, body: string): Promise<void> {
-    this.outageNoticed = true
+    if (!this.noticeDue()) return
+    this.lastNoticeAt = this.now()
+    try {
+      writeFileSync(this.noticeFile, JSON.stringify({ lastNoticeAt: this.lastNoticeAt }), { mode: 0o600 })
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`fork-qq: could not remember the owner notice: ${errorText(error)}`)
+    }
     const notifier = this.ctx.get('forkNotifier') as ForkNotifier | undefined
     if (notifier === undefined) return
     try {

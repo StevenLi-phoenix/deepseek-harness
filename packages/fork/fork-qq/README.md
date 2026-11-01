@@ -69,7 +69,8 @@ Until a group number is listed nothing is recorded: messages of every other grou
 | `digest.provider`, `digest.model` | unset | The digest Session's model (provider route and model id), such as a cheap model; unset uses the profile's default |
 | `digest.agentPreset`, `digest.permissionPreset` | `qq-digest`, `read-only` | The event bundle's `qq-digest` preset has a persona and no tools |
 | `digest.workspacePath`, `digest.timeZone`, `digest.timeoutMs` | `/Users/dsh-runtime/qq-digest`, `Asia/Shanghai`, `900000` | Working directory, the zone of the transcript's times, and the wait for one model call |
-| `offlineNoticeMs` | `600000` | Tell the owner (through `ctx.forkNotifier`) when the protocol end has been unreachable this long, or reports the account offline; `0` turns it off. One notice per outage: it is sent once and re-armed only when the connection has come back |
+| `offlineNoticeMs` | `600000` | Tell the owner (through `ctx.forkNotifier`) when the protocol end has been unreachable this long, or reports the account offline; `0` turns it off. One notice per outage: what was told is kept in `<dataDir>/outage-notice.json` until the connection comes back, so a reload or deploy mid-outage does not tell again |
+| `offlineRepeatMs` | `86400000` | While an outage lasts, remind the owner again after this long (24 h); `0` never repeats |
 | `settingsUrl` | unset | The event service's address, quoted in that notice next to "Settings → QQ"; unset names the page without a link |
 | `login.enabled` | `true` | Ask the login door for NapCat's login state (the Settings QQ section) |
 | `login.url` | `http://127.0.0.1:3002` | The login door's address (`napcat.sh door`); it must be on this machine or the tailnet |
