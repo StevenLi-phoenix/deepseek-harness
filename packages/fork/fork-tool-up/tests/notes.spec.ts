@@ -31,7 +31,7 @@ async function tmp(): Promise<string> {
 const LIMITS = { maxEntries: 30, maxChars: 40 }
 
 /** Mount the plugin with a bus double that names `persistent` as the bili-digest Session. */
-async function mount(options: { persistent?: string; bus?: boolean; config?: Partial<ToolUp.Config> } = {}) {
+async function mount(options: { persistent?: string; bus?: boolean; guard?: false | ToolUp.TextGuard['check']; config?: Partial<ToolUp.Config> } = {}) {
   const dir = await tmp()
   const file = join(dir, 'channel-notes.json')
   const ctx = new Context()
@@ -42,6 +42,12 @@ async function mount(options: { persistent?: string; bus?: boolean; config?: Par
   ctx.provide('credentials', { resolve: async () => ({ value: 't' }) } as never)
   if (options.bus !== false) {
     ctx.provide('forkEventBus', { persistentSubscriptionOf: (id: string) => (id === (options.persistent ?? 'up-1') ? 'bili-digest' : undefined) } as never)
+  }
+  // The text guard is optional; the default double accepts every text and records what it was asked.
+  const asked: Array<{ text: string; purpose: unknown }> = []
+  if (options.guard !== false) {
+    const check = options.guard ?? (async () => ({ ok: true as const }))
+    ctx.provide('forkGuard' as never, { check: async (text: string, purpose: never) => { asked.push({ text, purpose }); return check(text, purpose) } } as never)
   }
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(NativeToolExecutor)
@@ -59,7 +65,7 @@ async function mount(options: { persistent?: string; bus?: boolean; config?: Par
   const turnEnd = (sessionId = 'up-1'): void => {
     (ctx.emit as (...args: unknown[]) => void)('session/event', { id: sessionId }, { type: 'turn/end', seq: 9, data: { turn: 1, reason: { kind: 'completed' } } })
   }
-  return { ctx, call, file, dir, logs, turnEnd }
+  return { ctx, call, file, dir, logs, turnEnd, asked }
 }
 
 describe('channel note PII filter', () => {
@@ -160,6 +166,43 @@ describe('bili_channel_note', () => {
     const { call, file } = await mount()
     await mkdir(file, { recursive: true })
     expect(await call({ op: 'add', text: '谐音梗' })).toMatchObject({ status: 'refused', reason: 'store_error' })
+  })
+
+  it('asks forkGuard about a note that passed the local rules, as a channel note of the Session, and keeps a clean one', async () => {
+    const { call, asked, file } = await mount()
+    expect(await call({ op: 'add', text: '观众爱看红石教程' })).toMatchObject({ status: 'added', count: 1 })
+    expect(asked).toEqual([{ text: '观众爱看红石教程', purpose: { purpose: 'bili-channel-note', audience: 'channel', sessionId: 'up-1' } }])
+    // The local filter still answers first: a note with a handle never reaches the guard.
+    expect(await call({ op: 'add', text: '@某某 很活跃' })).toMatchObject({ status: 'refused', reason: 'pii' })
+    expect(asked).toHaveLength(1)
+    expect(JSON.parse(await readFile(file, 'utf8')) as { notes: unknown[] }).toMatchObject({ notes: [{ text: '观众爱看红石教程' }] })
+  })
+
+  it('refuses a note the guard rejects, shows the model only the public reason, and logs the rule on the host', async () => {
+    const { call, file, logs } = await mount({ guard: async () => ({ ok: false, rule: 'canary:memory-span', publicReason: 'the note repeats private text' }) })
+    const result = await call({ op: 'add', text: '观众常聊期末考试' })
+    expect(result).toEqual({ status: 'refused', reason: 'guard', message: 'the note repeats private text', count: 0 })
+    expect(JSON.stringify(result)).not.toContain('canary')
+    await expect(stat(file)).rejects.toThrow()
+    expect(logs.some(line => line.includes('forkGuard refused a channel note of Session up-1 (rule canary:memory-span)'))).toBe(true)
+  })
+
+  it('refuses every note when the guard throws or is not mounted (fail closed), and still lets a note be removed', async () => {
+    const broken = await mount({ guard: async () => { throw new Error('classifier down') } })
+    expect(await broken.call({ op: 'add', text: '观众爱看红石教程' })).toMatchObject({ status: 'refused', reason: 'guard_unavailable', count: 0 })
+    expect(broken.logs.some(line => line.includes('forkGuard failed on a channel note') && line.includes('classifier down'))).toBe(true)
+    await expect(stat(broken.file)).rejects.toThrow()
+
+    const absent = await mount({ guard: false })
+    const result = await absent.call({ op: 'add', text: '观众爱看红石教程' })
+    expect(result).toMatchObject({ status: 'refused', reason: 'guard_unavailable', count: 0 })
+    expect(result['message']).toContain('text guard is not available')
+    expect(absent.logs.filter(line => line.includes('no forkGuard service is mounted; channel notes are refused'))).toHaveLength(1)
+    await absent.call({ op: 'add', text: '谐音梗' })
+    expect(absent.logs.filter(line => line.includes('no forkGuard service is mounted; channel notes are refused'))).toHaveLength(1)
+    await expect(stat(absent.file)).rejects.toThrow()
+    // Removal needs no guard.
+    expect(await absent.call({ op: 'remove', text: '不存在' })).toMatchObject({ status: 'refused', reason: 'not_found' })
   })
 
   it('defaults to five calls a turn, 30 notes of 40 characters', () => {

@@ -402,15 +402,15 @@ export function apply(ctx: Context, config: Config): void {
   })
 
   let warnedNoGuard = false
-  /** The guard check of a note, or undefined (local PII rules only, warned once) without fork-guard. */
-  const guardGate = (sessionId: string): NoteGate | undefined => {
+  /** The guard check of a note. Without fork-guard every note is refused (fail closed), warned once. */
+  const guardGate = (sessionId: string): NoteGate => {
     const guard = guardOf(ctx)
     if (guard === undefined) {
       if (!warnedNoGuard) {
         warnedNoGuard = true
-        ctx.logger.warn('fork-tool-up: no forkGuard service is mounted; channel notes pass only the local PII rules')
+        ctx.logger.warn('fork-tool-up: no forkGuard service is mounted; channel notes are refused until it is')
       }
-      return undefined
+      return () => Promise.reject(new Error('no forkGuard service is mounted'))
     }
     return async (text) => {
       let verdict: GuardVerdict
@@ -474,6 +474,7 @@ export function apply(ctx: Context, config: Config): void {
             ...('pii' in outcome ? { pii: outcome.pii } : {}),
             // The guard's public reason only; the rule that fired stays in the host log.
             ...('publicReason' in outcome ? { message: outcome.publicReason } : {}),
+            ...(outcome.reason === 'guard_unavailable' ? { message: 'the text guard is not available right now, so no note was kept; try again later' } : {}),
             count: outcome.count,
           }
         default:
