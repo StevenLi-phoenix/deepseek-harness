@@ -99,7 +99,7 @@ export class HotStore implements BiliHot {
     try {
       const at = this.deps.now()
       const dropped = await this.serialize(async (domain) => {
-        const table = domain.table('hotComments')
+        const table = domain.table('hot_comments')
         for (const row of keep) {
           const known = table.get(row.rpid)
           await table.put(row.rpid, { text: row.text, likes: Math.max(row.likes, known?.likes ?? 0), bvid, at })
@@ -122,7 +122,7 @@ export class HotStore implements BiliHot {
     try {
       const at = this.deps.now()
       const dropped = await this.serialize(async (domain) => {
-        const table = domain.table('hotWords')
+        const table = domain.table('hot_words')
         for (const word of words) await table.put(word, { at })
         return prune(table, at, HOT_MAX_WORDS)
       })
@@ -134,7 +134,7 @@ export class HotStore implements BiliHot {
 
   comments(options: { since?: number } = {}): Promise<BiliHotComment[]> {
     const floor = Math.max(options.since ?? 0, this.deps.now() - HOT_TTL_MS)
-    return this.serialize(domain => Promise.resolve([...domain.table('hotComments').entries()]
+    return this.serialize(domain => Promise.resolve([...domain.table('hot_comments').entries()]
       .map(([, row]) => row)
       .filter(row => row.at >= floor && row.likes >= HOT_MIN_LIKES)
       .sort((a, b) => b.at - a.at || b.likes - a.likes)))
@@ -142,7 +142,7 @@ export class HotStore implements BiliHot {
 
   words(options: { since?: number } = {}): Promise<string[]> {
     const floor = Math.max(options.since ?? 0, this.deps.now() - HOT_TTL_MS)
-    return this.serialize(domain => Promise.resolve([...domain.table('hotWords').entries()]
+    return this.serialize(domain => Promise.resolve([...domain.table('hot_words').entries()]
       .filter(([, row]) => row.at >= floor)
       .sort((a, b) => b[1].at - a[1].at)
       .map(([word]) => word)))
