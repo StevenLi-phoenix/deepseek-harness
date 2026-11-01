@@ -14488,6 +14488,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: workspace:*
         version: link:../../llm/llm
+      '@deepseek-ai/dsh-lsy-event-bus':
+        specifier: workspace:*
+        version: link:../lsy-event-bus
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../core/session

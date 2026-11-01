@@ -37,6 +37,9 @@
     },
     {
       "path": "../../storage/storage-domain"
+    },
+    {
+      "path": "../lsy-event-bus"
     }
   ]
 }

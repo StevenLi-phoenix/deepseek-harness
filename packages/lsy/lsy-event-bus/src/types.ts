@@ -147,6 +147,29 @@ export interface SubscriptionMeta {
   createdBy?: string
 }
 
+/** One binding a Session handover moved: its id and a short label the owner recognises. */
+export interface SessionHandoverItem {
+  readonly id: string
+  readonly label: string
+}
+
+/**
+ * Moves one plugin's bindings (what it delivers to, or records as created by, a Session) from some Sessions to
+ * another, for a conversation that continues in a new Session. It must be idempotent: a binding already on `to`
+ * is not reported again. A throw or rejection is reported for this mover alone.
+ */
+export type SessionHandoverMover = (
+  from: ReadonlySet<string>, to: string,
+) => readonly SessionHandoverItem[] | Promise<readonly SessionHandoverItem[]>
+
+/** What `ctx.lsyEventBus.handOverSessions()` moved, by binding kind, and which movers failed. */
+export interface SessionHandoverReport {
+  /** Kinds that moved at least one binding, in registration order after the bus's own `subscription`. */
+  readonly moved: ReadonlyArray<{ readonly kind: string; readonly items: readonly SessionHandoverItem[] }>
+  /** Movers that threw, with the error message. */
+  readonly failed: ReadonlyArray<{ readonly kind: string; readonly error: string }>
+}
+
 /** Live routing state of one subscription. */
 export interface SubscriptionStatus {
   /** Events waiting for the next batch. */
