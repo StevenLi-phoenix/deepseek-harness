@@ -10,26 +10,32 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { normalizeLine } from './filter.ts'
-import { isOwnerSource, SAMPLE_SOURCES, SAMPLE_STATUSES, type SampleSource, type SampleStatus } from './view.ts'
+import { SAMPLE_SOURCES, SAMPLE_STATUSES, type Origin, type SampleSource, type SampleStatus } from './view.ts'
 
 /** A stored record. A removed or retired record has no text. */
 export interface StyleRecord {
   readonly id: string
   readonly source: SampleSource
+  /** A reply the owner's public Bilibili account wrote by hand: pinned first, tone only. */
+  readonly owner: boolean
   readonly status: SampleStatus
   /** ISO time it entered the store. */
   readonly addedAt: string
   /** ISO time of the last status change, for removed and retired records. */
   readonly changedAt?: string
-  /** Epoch milliseconds the exchange was said; absent for a line the owner typed. */
+  /** Epoch milliseconds the exchange was said. */
   readonly at?: number
   readonly prompt?: string
   readonly reply?: string
+  /** How widely it was seen, as counts; kept on tombstones too. */
+  readonly origin: Origin
 }
 
 /** A sample that passed the filters, before the store sees it. */
 export interface Candidate {
   readonly source: SampleSource
+  readonly owner?: boolean
+  readonly origin: Origin
   readonly at?: number
   readonly prompt?: string
   readonly reply: string
@@ -65,16 +71,33 @@ export function sampleId(prompt: string | undefined, reply: string): string {
   return createHash('sha256').update(`${normalizeLine(prompt ?? '')}\u0000${normalizeLine(reply)}`).digest('hex').slice(0, 12)
 }
 
+/**
+ * Sources of the first release of this file (before samples carried an origin), mapped to today's: a record from it
+ * keeps its place with the least spread it could have had. A line the owner typed (`owner-manual`) has no place any more.
+ */
+const LEGACY_SOURCES: Readonly<Record<string, { readonly source: SampleSource; readonly owner: boolean } | undefined>> = {
+  'qq-group': { source: 'qq', owner: false },
+  'bili-viewer': { source: 'bili', owner: false },
+  'owner-bili': { source: 'bili', owner: true },
+}
+
 function recordFrom(value: unknown): StyleRecord | undefined {
   if (typeof value !== 'object' || value === null) return undefined
-  const { id, source, status, addedAt, changedAt, at, prompt, reply } = value as Record<string, unknown>
+  const fields = value as Record<string, unknown>
+  const legacy = typeof fields['source'] === 'string' ? LEGACY_SOURCES[fields['source']] : undefined
+  const { id, source, owner, status, addedAt, changedAt, at, prompt, reply, origin } = legacy === undefined ? fields : {
+    ...fields, source: legacy.source, owner: legacy.owner,
+    origin: { platform: legacy.source, groups: 1, speakers: 2, days: 1 },
+  }
   if (typeof id !== 'string' || !/^[0-9a-f]{12}$/u.test(id) || typeof addedAt !== 'string') return undefined
   if (!(SAMPLE_SOURCES as readonly unknown[]).includes(source)) return undefined
   if (!(SAMPLE_STATUSES as readonly unknown[]).includes(status)) return undefined
   const live = status === 'active' || status === 'pending'
   if (live && (typeof reply !== 'string' || reply === '')) return undefined
+  const parsed = originFrom(origin, source as SampleSource)
+  if (parsed === undefined) return undefined
   return {
-    id, source: source as SampleSource, status: status as SampleStatus, addedAt,
+    id, source: source as SampleSource, owner: owner === true && source === 'bili', status: status as SampleStatus, addedAt, origin: parsed,
     ...typeof changedAt === 'string' ? { changedAt } : {},
     ...typeof at === 'number' && Number.isFinite(at) ? { at } : {},
     ...live && typeof prompt === 'string' && prompt !== '' ? { prompt } : {},
@@ -82,8 +105,23 @@ function recordFrom(value: unknown): StyleRecord | undefined {
   }
 }
 
+/**
+ * An origin read back from disk; its platform must be the record's source.
+ * @param value - the stored field.
+ * @param source - the record's source.
+ * @returns the origin, or undefined when it is malformed.
+ */
+export function originFrom(value: unknown, source: SampleSource): Origin | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const { platform, groups, speakers, days } = value as Record<string, unknown>
+  const count = (field: unknown): field is number => typeof field === 'number' && Number.isInteger(field) && field >= 0
+  if (platform !== source || !count(groups) || !count(speakers) || !count(days)) return undefined
+  return { platform: source, groups, speakers, days }
+}
+
 const tombstone = (record: StyleRecord, status: 'removed' | 'retired', at: string): StyleRecord => ({
-  id: record.id, source: record.source, status, addedAt: record.addedAt, changedAt: at, ...record.at === undefined ? {} : { at: record.at },
+  id: record.id, source: record.source, owner: record.owner, status, addedAt: record.addedAt, changedAt: at, origin: record.origin,
+  ...record.at === undefined ? {} : { at: record.at },
 })
 
 const newestFirst = (a: StyleRecord, b: StyleRecord): number => b.addedAt.localeCompare(a.addedAt) || (b.at ?? 0) - (a.at ?? 0)
@@ -144,9 +182,9 @@ export class StyleStore {
   private capped(records: readonly StyleRecord[]): { records: StyleRecord[]; retired: number } {
     const at = this.now().toISOString()
     const sorted = records.toSorted(newestFirst)
-    const owner = sorted.filter(record => record.status === 'active' && isOwnerSource(record.source))
+    const owner = sorted.filter(record => record.status === 'active' && record.owner)
     const keptOwner = new Set(owner.slice(0, this.limits.maxOwner).map(record => record.id))
-    const others = sorted.filter(record => record.status === 'active' && !isOwnerSource(record.source))
+    const others = sorted.filter(record => record.status === 'active' && !record.owner)
     const keptOthers = new Set(others.slice(0, Math.max(0, this.limits.maxActive - keptOwner.size)).map(record => record.id))
     const pending = sorted.filter(record => record.status === 'pending')
     const keptPending = new Set(pending.slice(0, this.limits.maxPending).map(record => record.id))
@@ -192,7 +230,8 @@ export class StyleStore {
           continue
         }
         const record: StyleRecord = {
-          id, source: candidate.source, status: review === 'required' && !isOwnerSource(candidate.source) ? 'pending' : 'active', addedAt: at,
+          id, source: candidate.source, owner: candidate.owner === true && candidate.source === 'bili', origin: candidate.origin,
+          status: review === 'required' && candidate.owner !== true ? 'pending' : 'active', addedAt: at,
           ...candidate.at === undefined ? {} : { at: candidate.at },
           ...candidate.prompt === undefined ? {} : { prompt: normalizeLine(candidate.prompt) },
           reply: normalizeLine(candidate.reply),
@@ -218,7 +257,7 @@ export class StyleStore {
       const at = this.now().toISOString()
       let count = 0
       const next = records.map((record) => {
-        if ((record.status === 'active' || record.status === 'pending') && !isOwnerSource(record.source) && record.at !== undefined && record.at < beforeMs) {
+        if ((record.status === 'active' || record.status === 'pending') && !record.owner && record.at !== undefined && record.at < beforeMs) {
           count += 1
           return tombstone(record, 'retired', at)
         }
@@ -258,36 +297,6 @@ export class StyleStore {
       const kept: StyleRecord = { ...found, status: 'active', addedAt: this.now().toISOString() }
       await this.write(this.capped(records.map(record => (record.id === id ? kept : record))).records)
       return kept
-    })
-  }
-
-  /**
-   * Add a line the owner typed: active at once and pinned with the owner's other samples.
-   * @param input - the owner's line, and optionally what it answers.
-   * @param maxChars - the longest side accepted.
-   * @returns the stored record.
-   */
-  async addManual(input: { prompt?: unknown; reply: unknown }, maxChars: number): Promise<StyleRecord> {
-    const side = (field: string, value: unknown, required: boolean): string | undefined => {
-      if (value === undefined || value === null || (typeof value === 'string' && normalizeLine(value) === '')) {
-        if (required) throw new StyleError('invalid_input', `${field} is empty`)
-        return undefined
-      }
-      if (typeof value !== 'string') throw new StyleError('invalid_input', `${field} must be text`)
-      const text = normalizeLine(value)
-      if (Array.from(text).length > maxChars) throw new StyleError('invalid_input', `${field} is longer than ${String(maxChars)} characters`)
-      return text
-    }
-    const reply = side('reply', input.reply, true) as string
-    const prompt = side('prompt', input.prompt, false)
-    return await this.serialized(async () => {
-      const records = await this.all()
-      const id = sampleId(prompt, reply)
-      const at = this.now().toISOString()
-      const record: StyleRecord = { id, source: 'owner-manual', status: 'active', addedAt: at, ...prompt === undefined ? {} : { prompt }, reply }
-      // The owner typing a line again brings it back, even one they deleted before.
-      await this.write(this.capped([...records.filter(other => other.id !== id), record]).records)
-      return record
     })
   }
 }

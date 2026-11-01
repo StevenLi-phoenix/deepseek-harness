@@ -3,44 +3,68 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/lsy/lsy-style/README.md
 /:
-  en: 63f2578ea4e02538
-  zh: 6f3bd75dc3f0e077
+  en: db67c6e10602bbb4
+  zh: 8d6ab07eceeb231e
 /deepseek-ai-dsh-lsy-style:
   en: ae2fb04867a2445e
   zh: b47b08c4c3a72928
 /deepseek-ai-dsh-lsy-style/summary:
-  en: fd635325bb20a6aa
-  zh: f12bef16c073d335
+  en: d22c874d5e275fcb
+  zh: b5e8d8519b2da1e4
 /deepseek-ai-dsh-lsy-style/table-of-contents:
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
 /deepseek-ai-dsh-lsy-style/use-this-package:
-  en: d52e8c53a5c350e3
-  zh: 39a2027be1c31a57
+  en: 55f2ddd2de88089d
+  zh: 082b4f8af7458dc2
 /deepseek-ai-dsh-lsy-style/understand-the-implementation:
-  en: 3728b02b1db35545
-  zh: 71093faeb0853aa4
+  en: b2f00daddd3b2745
+  zh: c4f8df389142c8c7
 /deepseek-ai-dsh-lsy-style/further-exploration:
-  en: 5f13af23b18fff62
-  zh: 53597f937f6bfb2d
+  en: fd75ffa36d41735c
+  zh: 8bc298470b01322c
 /deepseek-ai-dsh-lsy-style/model-experience:
   en: 215e7ba838619b7b
   zh: a311da3843709f90
 /deepseek-ai-dsh-lsy-style/model-experience/style-block:
   en: 0b9fc8672e90b9db
-  zh: e3d84d4a793d7f56
+  zh: a3a6eabbf96f0b71
 /deepseek-ai-dsh-lsy-style/model-experience/style-block/what-the-model-sees:
-  en: 4b318af0fbe04d59
-  zh: ad11f23a19e5811d
+  en: 44e33b04c1ea34cb
+  zh: 0ab03d09281ebcfd
 /deepseek-ai-dsh-lsy-style/model-experience/style-block/token-effect:
-  en: 0aca86fa7b109126
-  zh: 3d8409dd5ea50b4a
+  en: 6e41aa4c70e75c73
+  zh: 62e39715f690a9ed
 /deepseek-ai-dsh-lsy-style/model-experience/style-block/kv-cache-effect:
   en: 5fd06a5d35cec523
-  zh: 61095e7b1b495369
+  zh: 2908b1fd7d2ddc83
+/deepseek-ai-dsh-lsy-style/model-experience/tools:
+  en: 72ee1234c12b966a
+  zh: e5bbfa1985c64fca
+/deepseek-ai-dsh-lsy-style/model-experience/tools/what-the-model-sees:
+  en: c4288ef43cab72e9
+  zh: eb31461d99ea8fda
+/deepseek-ai-dsh-lsy-style/model-experience/tools/token-effect:
+  en: d3b06a053feb3c26
+  zh: 9a6d835de718cf9a
+/deepseek-ai-dsh-lsy-style/model-experience/tools/kv-cache-effect:
+  en: 44574f4487e48b3e
+  zh: 5af2107448c78ee5
+/deepseek-ai-dsh-lsy-style/model-experience/meme-miner:
+  en: c6add4a91b990b5b
+  zh: dddaab2478186651
+/deepseek-ai-dsh-lsy-style/model-experience/meme-miner/what-the-model-sees:
+  en: 0154549817db442d
+  zh: 4034b119c47ce772
+/deepseek-ai-dsh-lsy-style/model-experience/meme-miner/token-effect:
+  en: 8dcc08fbbbe1686f
+  zh: 9446040a8e8602ad
+/deepseek-ai-dsh-lsy-style/model-experience/meme-miner/kv-cache-effect:
+  en: 08dc2696c38d022b
+  zh: 482bcbac96607dcb
 /deepseek-ai-dsh-lsy-style/known-limitations-and-deferred-work:
-  en: 4f2ecad8333926f2
-  zh: 3e3657f792c57e86
+  en: 0105852b581376c7
+  zh: cd03bd69894ffe59
 /deepseek-ai-dsh-lsy-style/known-limitations-and-deferred-work/dev-note:
   en: c6f817432603b5a9
-  zh: 9f39a479d8296432
+  zh: 8983c057efac59a2

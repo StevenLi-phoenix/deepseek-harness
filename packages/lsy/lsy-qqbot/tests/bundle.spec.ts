@@ -50,6 +50,7 @@ describe('event bundle', () => {
     expect(names).toEqual([
       '@deepseek-ai/dsh-persona',
       '@deepseek-ai/dsh-time-context',
+      '@deepseek-ai/dsh-lsy-style',
       '@deepseek-ai/dsh-compaction-basic',
       '@deepseek-ai/dsh-compaction-tool-result-pruner',
     ])

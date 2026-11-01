@@ -58,29 +58,27 @@ const WECHAT_SIDE: Record<string, string> = {
   '@deepseek-ai/dsh-agent-instructions': 'reads the workspace instruction files, which hold what the owner told the main agent',
 }
 
+/** DSH's speaking style (persona card, memes, tone): the one layer every channel shares. */
+const STYLE = '@deepseek-ai/dsh-lsy-style'
+
 /** Everything an outside preset may mount today. A new row must be added here on purpose. */
 const ALLOWED: Record<(typeof OUTSIDE_PRESETS)[number], string[]> = {
   'bili': [
-    '@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context', '@deepseek-ai/dsh-tool-bili',
+    '@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context', '@deepseek-ai/dsh-tool-bili', STYLE,
     'cordis:group', '@deepseek-ai/dsh-compaction-basic', '@deepseek-ai/dsh-compaction-tool-result-pruner',
   ],
   // `lsy-feedback` below is the one memory-package row an outside preset may have: see the dedicated test.
   // The group rows and compaction plugins are the persistent Session's compaction mount, as in `qqbot`.
   'up': [
-    '@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context', '@deepseek-ai/dsh-lsy-tool-up', '@deepseek-ai/dsh-lsy-memory',
+    '@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context', '@deepseek-ai/dsh-lsy-tool-up', '@deepseek-ai/dsh-lsy-memory', STYLE,
     'cordis:group', '@deepseek-ai/dsh-compaction-basic', '@deepseek-ai/dsh-compaction-tool-result-pruner',
   ],
   'qqbot': [
-    '@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context',
+    '@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context', STYLE,
     'cordis:group', '@deepseek-ai/dsh-compaction-basic', '@deepseek-ai/dsh-compaction-tool-result-pruner',
   ],
   // lsy-tool-qq reads only what the QQ observer recorded; it carries no owner memory and reaches no WeChat side.
-  // `@deepseek-ai/dsh-lsy-style` is allowed if present: its `style_note` tool lands with the lsy-style branch, which keeps
-  // the digest Session's notes in the style layer (quoted-data samples, no owner memory); it is not mounted on every base.
-  'qq-digest': [
-    '@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-lsy-tool-qq', '@deepseek-ai/dsh-lsy-style',
-    'cordis:group', '@deepseek-ai/dsh-compaction-basic',
-  ],
+  'qq-digest': ['@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-lsy-tool-qq', STYLE, 'cordis:group', '@deepseek-ai/dsh-compaction-basic'],
 }
 
 describe('channel isolation of the event bundle\'s presets', () => {
@@ -165,6 +163,42 @@ describe('the qq-digest preset\'s tools', () => {
     for (const forbidden of ['@deepseek-ai/dsh-lsy-memory', '@deepseek-ai/dsh-lsy-taint', '@deepseek-ai/dsh-lsy-tool-wechat']) {
       expect(mounted).not.toContain(forbidden)
     }
+  })
+})
+
+describe('the speaking-style tools by preset', () => {
+  /** The tools a preset's `lsy-style-prompt` row mounts (the plugin's default is `meme_lookup` alone). */
+  const styleTools = (preset: string): string[] => {
+    const rows = pluginsOf(presets.get(preset)!).filter(row => row.name === STYLE)
+    expect(rows.map(row => row.id)).toEqual(['lsy-style-prompt'])
+    expect(fieldsOf(rows[0]!)['mode']).toBe('prompt')
+    return (fieldsOf(rows[0]!)['tools'] as string[] | undefined) ?? ['meme_lookup']
+  }
+  const MEMORY_TOOLS = ['memory_search', 'memory_save', 'memory_forget']
+
+  it('gives the unattended preset meme_lookup, style_note, and persona_update, beside the owner memory', () => {
+    expect(styleTools(WECHAT_PRESET)).toEqual(['meme_lookup', 'style_note', 'persona_update'])
+  })
+
+  it('gives the outside presets the style tools they need and never an owner-memory tool', () => {
+    expect(Object.fromEntries(OUTSIDE_PRESETS.map(preset => [preset, styleTools(preset)]))).toEqual({
+      'bili': ['meme_lookup'],
+      'up': ['meme_lookup', 'style_note', 'persona_update'],
+      'qqbot': ['meme_lookup'],
+      'qq-digest': ['style_note', 'persona_update'],
+    })
+    for (const preset of OUTSIDE_PRESETS) expect(styleTools(preset).filter(tool => MEMORY_TOOLS.includes(tool))).toEqual([])
+  })
+
+  it('mounts persona_update in qq-digest, up, and unattended only', () => {
+    const withCard = [WECHAT_PRESET, ...OUTSIDE_PRESETS].filter(preset => styleTools(preset).includes('persona_update'))
+    expect(withCard.toSorted()).toEqual(['qq-digest', 'unattended', 'up'])
+  })
+
+  it('collects at the root once, so the stores and the guard check have one owner', () => {
+    const roots = rootRows.filter(row => row.name === STYLE)
+    expect(roots.map(row => row.id)).toEqual(['lsy-style'])
+    expect(fieldsOf(roots[0]!)['mode']).toBeUndefined()
   })
 })
 

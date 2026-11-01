@@ -3173,16 +3173,20 @@ export interface SessionConfig {
 
 ## `@deepseek-ai/dsh-lsy-style`
 
-- `source`: [`packages/lsy/lsy-style/src/index.ts:63`](../packages/lsy/lsy-style/src/index.ts)
+- `source`: [`packages/lsy/lsy-style/src/index.ts:100`](../packages/lsy/lsy-style/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
 export interface Config {
-  /** `collect` (at the root): collection, the store, the Settings routes, and the block. `prompt` (inside a preset): injection only. */
+  /** `collect` (at the root): the stores, collection, `ctx.lsyStyle`. `prompt` (inside a preset): the block and the listed tools. */
   mode: 'collect' | 'prompt'
-  /** Collect mode: `false` stops collection and keeps the block out of every prompt; the samples stay and the page still opens. */
+  /** Prompt mode: put the style block in front of root Sessions (qq-digest turns it off, so digests do not learn from their own notes). */
+  block: boolean
+  /** Prompt mode: the tools this preset mounts. */
+  tools: StyleTool[]
+  /** Collect mode: `false` stops collection, refuses notes and card updates, and keeps the block out of every prompt; the data stays. */
   enabled: boolean
-  /** Collect mode: directory of `samples.jsonl`, `state.json`, and `answers.json`; defaults to `<DSH_HOME>/lsy-style`. */
+  /** Collect mode: directory of `samples.jsonl`, `notes.json`, `state.json`, and `answers.json`; defaults to `<DSH_HOME>/lsy-style`. */
   dir?: string
   /**
    * `optional`: strangers' samples that pass the filters go active and the owner deletes bad ones. `required`: they wait as
@@ -3193,8 +3197,6 @@ export interface Config {
   everyHours: number
   /** Longest side of a collected exchange, in characters. */
   maxChars: number
-  /** Longest side of a line the owner types on the page. */
-  ownerMaxChars: number
   /** Active samples in all. */
   maxActive: number
   /** Active samples of the owner's own, pinned ahead of the rest. */
@@ -3232,7 +3234,7 @@ export interface Config {
     url?: string
     /** Credential holding a bili-svc token with the `read` scope. */
     tokenEnv: string
-    /** bili-svc's id of the owner's own account (猫灯): its hand-written replies become `owner-bili`. */
+    /** bili-svc's id of the owner's own account (猫灯): its hand-written replies become tone samples marked `owner`. */
     ownerAccount: string
     /** Newest comments read per run. */
     comments: number
@@ -3241,17 +3243,125 @@ export interface Config {
     /** Deadline of one read, in milliseconds. */
     timeoutMs: number
   }
-  /** Agent presets whose root Sessions get the block. */
+  /** Tone samples in the block. */
+  tone: {
+    /** Show tone samples at all; collection keeps running. */
+    enabled: boolean
+    /** Exchanges shown at most. */
+    maxShown: number
+    /** Characters of the shown exchanges at most. */
+    maxChars: number
+  }
+  /** Memes: the index in the block, `meme_lookup`, and the meme notes. */
+  memes: {
+    /** Put the meme index in the block, answer `meme_lookup`, and take meme notes. */
+    enabled: boolean
+    /** Names in the index at most. */
+    maxIndex: number
+    /** Meme notes kept at most, most recently seen first. */
+    maxStored: number
+    /** A meme not seen for this many days expires. */
+    expireDays: number
+  }
+  /** Traits of the groups' overall tone. */
+  traits: {
+    /** Show traits in the block and take trait notes. */
+    enabled: boolean
+    /** Traits kept and shown at most. */
+    max: number
+  }
+  /** The persona card the agent writes for itself. */
+  persona: {
+    /** Show the card in the block and take `persona_update`. */
+    enabled: boolean
+    /** Longest card, in characters. */
+    maxChars: number
+    /** Hours between two of the agent's revisions; an owner edit restarts the wait. */
+    minIntervalHours: number
+    /** Card versions kept. */
+    maxVersions: number
+  }
+  /** The meme miner: runs after each collection and by hand. */
+  miner: {
+    /** Mine at all; needs `memes.enabled`. */
+    enabled: boolean
+    /** Provider of the miner's model calls; with `model`, replaces the profile's default route. */
+    provider?: string
+    /** Model of the miner's calls. */
+    model?: string
+    /** Output tokens per call at most. */
+    maxOutputTokens: number
+    /** Texts sent to the model at most. */
+    maxInputs: number
+    /** New memes one run keeps at most. */
+    maxNew: number
+    /** Web searches one run makes at most (the meaning of a new meme, when no page the main agent read explains it). */
+    maxSearches: number
+    /** Likes that make one Bilibili hot comment evidence on its own. */
+    minLikes: number
+    /** A term in more than this share of the texts (from `commonFrom` texts on) is an ordinary word. */
+    commonShare: number
+    /** Texts needed before `commonShare` applies. */
+    commonFrom: number
+    /** Hours of Bilibili hot rows and QQ messages one run reads. */
+    windowHours: number
+    /** QQ messages read per group at most. */
+    qqMessages: number
+    /** Longest one-line meaning of a mined meme, in characters. */
+    meaningChars: number
+    /** Raw model and search responses kept on disk. */
+    rawKept: number
+    /** Pages the main agent searched or fetched, kept for the miner (result text only, never the query). */
+    inbox: {
+      /** Pages kept at most. */
+      items: number
+      /** Characters kept per page. */
+      chars: number
+      /** Days a page is kept. */
+      days: number
+    }
+  }
+  /** `style_note`: which preset writes for which platform, the longest fields, and the calls per turn. */
+  notes: {
+    /** Preset of the calling Session → the platform of what it reads (`web`: pages the Session searched or fetched). */
+    sources: Record<string, NoteSource>
+    /** Longest term, in characters. */
+    termChars: number
+    /** Longest meaning or example, in characters. */
+    textChars: number
+    /** Calls one Session may make in one turn. */
+    perTurn: number
+  }
+  /** HotWatch, the trending-topics service: its `meme` domain supplements the meme index. */
+  hotwatch: {
+    /** Ask HotWatch at all. */
+    enabled: boolean
+    /** Address, on the tailnet. */
+    url: string
+    /** Titles fetched, by heat. */
+    limit: number
+    /** Of them, names put in the index at most. */
+    maxIndex: number
+    /** How long a list or a summary is kept, in milliseconds. */
+    ttlMs: number
+    /** Deadline of one call, in milliseconds. */
+    timeoutMs: number
+  }
+  /** Agent presets whose root Sessions get the block (the prompt row checks the Session's preset). */
   presets: string[]
-  /** Cap on the block, in bytes. */
-  maxBytes: number
-  /** Exchanges shown in the block at most. */
-  maxShown: number
+  /** Presets whose answer lengths the page's trend counts. */
+  answerPresets: string[]
   /** IANA zone of the day the block rotates on. */
   timeZone: string
   /** lsy-integrity's per-day stock-line counts; defaults to `<DSH_HOME>/lsy-integrity/tics.json`. */
   ticsFile?: string
 }
+
+/** One of {@link STYLE_TOOLS}. */
+export type StyleTool = typeof STYLE_TOOLS[number]
+
+/** One of {@link NOTE_SOURCES}. */
+export type NoteSource = typeof NOTE_SOURCES[number]
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-style -->
 

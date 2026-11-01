@@ -1,6 +1,6 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { sampleId, StyleError, StyleStore, type Candidate } from '../src/store.ts'
 
@@ -18,8 +18,10 @@ async function open(limits: Partial<{ maxActive: number; maxOwner: number; maxPe
   return { file, store: new StyleStore(file, { maxActive: 4, maxOwner: 2, maxPending: 2, maxTombstones: 100, ...limits }, now) }
 }
 
-const qq = (reply: string, prompt = '在吗'): Candidate => ({ source: 'qq-group', at: 1000, prompt, reply })
-const owner = (reply: string): Candidate => ({ source: 'owner-bili', at: 1, prompt: '更新了', reply })
+const QQ = { platform: 'qq', groups: 1, speakers: 2, days: 1 } as const
+const BILI = { platform: 'bili', groups: 1, speakers: 2, days: 1 } as const
+const qq = (reply: string, prompt = '在吗'): Candidate => ({ source: 'qq', origin: QQ, at: 1000, prompt, reply })
+const owner = (reply: string): Candidate => ({ source: 'bili', owner: true, origin: BILI, at: 1, prompt: '更新了', reply })
 
 describe('StyleStore', () => {
   it('stores candidates active, newest first, in a private file', async () => {
@@ -32,12 +34,26 @@ describe('StyleStore', () => {
     expect(sampleId('在吗', '在')).toMatch(/^[0-9a-f]{12}$/u)
   })
 
+  it('reads the first release\'s records (old source names, no origin) and drops a line the owner typed', async () => {
+    const { store, file } = await open()
+    const row = (id: string, source: string, reply: string) => JSON.stringify({ id, source, status: 'active', addedAt: '2026-11-01T00:00:00.000Z', prompt: '在吗', reply })
+    await mkdir(dirname(file), { recursive: true })
+    await writeFile(file, [
+      row('aaaaaaaaaaaa', 'qq-group', '在'), row('bbbbbbbbbbbb', 'bili-viewer', '刚醒'), row('cccccccccccc', 'owner-bili', '刚剪完'),
+      row('dddddddddddd', 'owner-manual', '会的'),
+    ].join('\n'))
+    expect((await store.live()).map(record => [record.reply, record.source, record.owner])).toEqual([
+      ['在', 'qq', false], ['刚醒', 'bili', false], ['刚剪完', 'bili', true],
+    ])
+    expect((await store.live()).every(record => record.origin.groups === 1)).toBe(true)
+  })
+
   it('caps the active samples, pinning the owner\'s own up to their cap (earlier candidates preferred), and retires the rest as ids only', async () => {
     const { store, file } = await open()
     await store.ingest([owner('一'), owner('二'), owner('三')], 'optional')
     await store.ingest([qq('a'), qq('b'), qq('c')], 'optional')
     const live = await store.live()
-    expect(live.filter(record => record.source === 'owner-bili').map(record => record.reply)).toEqual(['一', '二'])
+    expect(live.filter(record => record.owner).map(record => record.reply)).toEqual(['一', '二'])
     expect(live).toHaveLength(4)
     const raw = await readFile(file, 'utf8')
     expect(raw).not.toContain('"三"')
@@ -66,21 +82,20 @@ describe('StyleStore', () => {
     await expect(store.keep(pending.id)).rejects.toThrow(/no pending sample/u)
   })
 
-  it('adds the owner\'s typed line with limits, and a deleted typed line can be typed again', async () => {
-    const { store } = await open()
-    const record = await store.addManual({ reply: ' 会的. 绝对会的 ' }, 60)
-    expect(record).toMatchObject({ source: 'owner-manual', status: 'active', reply: '会的. 绝对会的' })
-    expect(record.prompt).toBeUndefined()
-    await expect(store.addManual({ reply: '' }, 60)).rejects.toThrow(/reply is empty/u)
-    await expect(store.addManual({ reply: 'x'.repeat(61) }, 60)).rejects.toThrow(/longer than 60/u)
-    await expect(store.addManual({ reply: 3 }, 60)).rejects.toThrow(/must be text/u)
-    await store.remove(record.id)
-    expect((await store.addManual({ reply: '会的. 绝对会的' }, 60)).status).toBe('active')
+  it('keeps every record\'s source to qq or bili with its origin counts, and drops anything else on reading', async () => {
+    const { store, file } = await open()
+    await store.ingest([qq('在'), owner('刚剪完')], 'optional')
+    for (const record of await store.all()) {
+      expect(['qq', 'bili']).toContain(record.source)
+      expect(record.origin.platform).toBe(record.source)
+    }
+    await writeFile(file, `${await readFile(file, 'utf8')}${JSON.stringify({ id: 'aaaaaaaaaaaa', source: 'wechat', owner: false, status: 'active', addedAt: 'x', reply: 'y', origin: { ...QQ, platform: 'wechat' } })}\n`)
+    expect((await store.all()).map(record => record.source).toSorted()).toEqual(['bili', 'qq'])
   })
 
   it('retires strangers\' samples by age and leaves the owner\'s', async () => {
     const { store } = await open()
-    await store.ingest([{ source: 'qq-group', at: 100, prompt: '旧', reply: '旧的' }, { source: 'owner-bili', at: 100, prompt: '旧', reply: '我的' }, qq('新')], 'optional')
+    await store.ingest([{ source: 'qq', origin: QQ, at: 100, prompt: '旧', reply: '旧的' }, { source: 'bili', owner: true, origin: BILI, at: 100, prompt: '旧', reply: '我的' }, qq('新')], 'optional')
     expect(await store.expire(50)).toBe(0)
     expect(await store.expire(200)).toBe(1)
     expect((await store.live()).map(record => record.reply).toSorted()).toEqual(['我的', '新'])

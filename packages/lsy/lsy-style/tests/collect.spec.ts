@@ -22,7 +22,7 @@ describe('qqPairs', () => {
   it('pairs a quoting reply with what it quotes and strips QQ\'s mention of the quoted member', () => {
     const a = msg('1001', '今晚开黑吗', T0)
     const b = msg('1002', '@1001 来', T0 + 5 * 60_000, { replyTo: a.messageId, kinds: 'reply,at,text' })
-    expect(qqPairs('g1', [a, b], 60_000)).toEqual([{ source: 'qq-group', key: 'qq:g1', how: 'reply', at: b.at, prompt: '今晚开黑吗', reply: '来' }])
+    expect(qqPairs('g1', [a, b], 60_000)).toEqual([{ source: 'qq', owner: false, key: 'qq:g1', how: 'reply', at: b.at, prompt: '今晚开黑吗', reply: '来' }])
   })
 
   it('takes an unquoted answer only inside a back-and-forth within the gap', () => {
@@ -56,11 +56,11 @@ describe('biliPairs', () => {
   })
   const ids = { ownerMid: OWNER, ownMids: new Set([OWNER, CAT]) }
 
-  it('labels the owner\'s hand-written reply owner-bili and a viewer exchange bili-viewer', () => {
+  it('marks the owner\'s hand-written reply as the owner\'s and a viewer exchange as not, both from bili', () => {
     const thread = { root: c(1, 7, '这期好看', 0), replies: [c(2, OWNER, '谢谢喜欢', 1, false), c(3, 8, '回复 @路人 :同感[doge]', 1)] }
     expect(biliPairs(thread, ids)).toEqual([
-      { source: 'owner-bili', key: 'bili:1', how: 'reply', at: T0, prompt: '这期好看', reply: '谢谢喜欢' },
-      { source: 'bili-viewer', key: 'bili:1', how: 'reply', at: T0, prompt: '这期好看', reply: '同感' },
+      { source: 'bili', owner: true, key: 'bili:1', how: 'reply', at: T0, prompt: '这期好看', reply: '谢谢喜欢' },
+      { source: 'bili', owner: false, key: 'bili:1', how: 'reply', at: T0, prompt: '这期好看', reply: '同感' },
     ])
   })
 
@@ -71,14 +71,14 @@ describe('biliPairs', () => {
 })
 
 describe('screenPairs and pickForRun', () => {
-  const pair = (key: string, how: 'reply' | 'next', at: number, reply: string, source: Accepted['source'] = 'qq-group'): Accepted => ({ source, key, how, at, prompt: '在吗', reply, id: reply })
+  const pair = (key: string, how: 'reply' | 'next', at: number, reply: string, owner = false): Accepted => ({ source: owner ? 'bili' : 'qq', owner, key, how, at, prompt: '在吗', reply, id: reply })
 
   it('counts refusals by reason, folds duplicates, and drops old exchanges', () => {
     const { accepted, filtered } = screenPairs([
-      { source: 'qq-group', key: 'qq:g', how: 'reply', at: T0, prompt: '在吗', reply: '在' },
-      { source: 'qq-group', key: 'qq:h', how: 'reply', at: T0, prompt: '在吗', reply: '在' },
-      { source: 'qq-group', key: 'qq:g', how: 'reply', at: T0 - 100, prompt: '在吗', reply: '不在' },
-      { source: 'qq-group', key: 'qq:g', how: 'reply', at: T0, prompt: '看 www.x.com', reply: '好' },
+      { source: 'qq', owner: false, key: 'qq:g', how: 'reply', at: T0, prompt: '在吗', reply: '在' },
+      { source: 'qq', owner: false, key: 'qq:h', how: 'reply', at: T0, prompt: '在吗', reply: '在' },
+      { source: 'qq', owner: false, key: 'qq:g', how: 'reply', at: T0 - 100, prompt: '在吗', reply: '不在' },
+      { source: 'qq', owner: false, key: 'qq:g', how: 'reply', at: T0, prompt: '看 www.x.com', reply: '好' },
       { reason: 'media' },
     ], rules, T0 - 10)
     expect(accepted.map(item => item.reply)).toEqual(['在'])
@@ -92,7 +92,7 @@ describe('screenPairs and pickForRun', () => {
       pair('qq:a', 'reply', T0 + 2, 'a-r2'),
       pair('qq:a', 'reply', T0 + 3, 'a-r3'),
       pair('qq:b', 'reply', T0 + 1, 'b-r1'),
-      pair('bili:1', 'reply', T0, 'owner', 'owner-bili'),
+      pair('bili:1', 'reply', T0, 'owner', true),
     ], { max: 4, perKey: 2 })
     expect(picked.map(item => item.reply)).toEqual(['owner', 'a-r3', 'b-r1', 'a-r2'])
   })
@@ -161,8 +161,8 @@ describe('StyleCollector', () => {
     }
     const { store, logger, collector, dir } = await setup({ qq, bili })
     const report = await collector.run('manual')
-    expect(report).toMatchObject({ seen: 2, accepted: 2, added: 2, qq: { status: 'ok', groups: 1, messages: 2 }, bili: { status: 'ok', comments: 1, threads: 1 }, bySource: { 'qq-group': 1, 'owner-bili': 1 } })
-    expect((await store.live()).map(record => [record.source, record.prompt, record.reply])).toEqual(expect.arrayContaining([['qq-group', '周末去哪', '宅着'], ['owner-bili', '更新了', '刚剪完']]))
+    expect(report).toMatchObject({ seen: 2, accepted: 2, added: 2, qq: { status: 'ok', groups: 1, messages: 2 }, bili: { status: 'ok', comments: 1, threads: 1 }, bySource: { qq: 1, 'bili-owner': 1 } })
+    expect((await store.live()).map(record => [record.source, record.owner, record.prompt, record.reply])).toEqual(expect.arrayContaining([['qq', false, '周末去哪', '宅着'], ['bili', true, '更新了', '刚剪完']]))
     const info = JSON.stringify(logger.info.mock.calls)
     expect(info).toMatch(/manual run: 2 exchanges seen/u)
     expect(info).not.toContain('宅着')

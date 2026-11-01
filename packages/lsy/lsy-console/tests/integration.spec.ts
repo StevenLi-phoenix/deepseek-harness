@@ -80,7 +80,7 @@ describe('the overview over the real lsy-style service', () => {
     writeFileSync(join(dir, 'tics.json'), JSON.stringify({ days: {} }))
     if (pending) {
       await new StyleStore(join(dir, 'samples.jsonl'), { maxActive: 60, maxOwner: 20, maxPending: 40, maxTombstones: 100 })
-        .ingest([{ source: 'qq-group', at: Date.now(), prompt: '周末去哪', reply: '宅着' }], review)
+        .ingest([{ source: 'qq', origin: { platform: 'qq', groups: 1, speakers: 2, days: 1 }, at: Date.now(), prompt: '周末去哪', reply: '宅着' }], review)
     }
     const ctx = new Context()
     contexts.push(ctx)

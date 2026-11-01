@@ -37,6 +37,18 @@
     },
     {
       "path": "../lsy-qq"
+    },
+    {
+      "path": "../lsy-event-bus"
+    },
+    {
+      "path": "../../core/tools"
+    },
+    {
+      "path": "../../core/agent-default-model"
+    },
+    {
+      "path": "../../web/web"
     }
   ]
 }

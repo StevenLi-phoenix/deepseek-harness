@@ -58,7 +58,9 @@ export interface BiliReader {
 
 /** Two cleaned lines that form an exchange, before the filters. */
 export interface Pair {
-  readonly source: Exclude<SampleSource, 'owner-manual'>
+  readonly source: SampleSource
+  /** The reply is the owner's own hand-written Bilibili reply (tone only). */
+  readonly owner: boolean
   /** Round-robin key: one group, or one comment thread. */
   readonly key: string
   /** `reply`: the reply quotes or answers its prompt; `next`: it followed within the gap. */
@@ -94,7 +96,7 @@ export function qqPairs(groupId: string, messages: readonly QqMessage[], gapMs: 
     if ('reason' in promptText) return promptText
     const replyText = cleanQqText(reply.text, reply.kinds, how === 'reply' ? mentionNames(prompt) : [])
     if ('reason' in replyText) return replyText
-    return { source: 'qq-group', key: `qq:${groupId}`, how, at: reply.at, prompt: promptText.text, reply: replyText.text }
+    return { source: 'qq', owner: false, key: `qq:${groupId}`, how, at: reply.at, prompt: promptText.text, reply: replyText.text }
   }
   for (const message of messages) {
     if (message.replyTo === null) continue
@@ -117,7 +119,7 @@ export function qqPairs(groupId: string, messages: readonly QqMessage[], gapMs: 
 
 /** Who wrote what, by Bilibili member id. */
 export interface BiliIdentities {
-  /** The owner's own account (猫灯): its hand-written replies are `owner-bili`. */
+  /** The owner's own account (猫灯): its hand-written replies are marked `owner`. */
   readonly ownerMid: number | null
   /** Every account bili-svc holds (the owner's and the agent's): their words are never a stranger's. */
   readonly ownMids: ReadonlySet<number>
@@ -125,7 +127,7 @@ export interface BiliIdentities {
 
 /**
  * Exchanges in one Bilibili thread: each reply and the comment it answers. A reply by the owner's account is
- * `owner-bili` only when bili-svc says the Reply Gate did not post it; a line by any other account bili-svc holds,
+ * the owner's only when bili-svc says the Reply Gate did not post it; a line by any other account bili-svc holds,
  * or by the Gate, is the agent's own and never a sample.
  * @param thread - the root comment and its replies.
  * @param ids - the owner's and the agent's member ids.
@@ -165,7 +167,7 @@ export function biliPairs(
       continue
     }
     out.push({
-      source: by[1] === 'owner' ? 'owner-bili' : 'bili-viewer', key, how: 'reply', at: reply.ctime * 1000,
+      source: 'bili', owner: by[1] === 'owner', key, how: 'reply', at: reply.ctime * 1000,
       prompt: cleanBiliText(prompt.text), reply: cleanBiliText(reply.text),
     })
   }
@@ -224,13 +226,17 @@ export function screenPairs(
  * @returns the candidates, in the order of preference.
  */
 export function pickForRun(accepted: readonly Accepted[], limits: { readonly max: number; readonly perKey: number }): Candidate[] {
-  const toCandidate = (pair: Accepted): Candidate => ({ source: pair.source, at: pair.at, ...pair.prompt === '' ? {} : { prompt: pair.prompt }, reply: pair.reply })
-  const owner = accepted.filter(pair => pair.source === 'owner-bili').toSorted((a, b) => b.at - a.at)
+  // One exchange: one group or thread, two speakers, one day.
+  const toCandidate = (pair: Accepted): Candidate => ({
+    source: pair.source, owner: pair.owner, origin: { platform: pair.source, groups: 1, speakers: 2, days: 1 }, at: pair.at,
+    ...pair.prompt === '' ? {} : { prompt: pair.prompt }, reply: pair.reply,
+  })
+  const owner = accepted.filter(pair => pair.owner).toSorted((a, b) => b.at - a.at)
   const taken = new Map<string, number>()
   const strangers: Accepted[] = []
   for (const how of ['reply', 'next'] as const) {
     const queues = new Map<string, Accepted[]>()
-    for (const pair of accepted.filter(candidate => candidate.source !== 'owner-bili' && candidate.how === how).toSorted((a, b) => b.at - a.at)) {
+    for (const pair of accepted.filter(candidate => !candidate.owner && candidate.how === how).toSorted((a, b) => b.at - a.at)) {
       queues.set(pair.key, [...queues.get(pair.key) ?? [], pair])
     }
     const order = [...queues.values()].toSorted((a, b) => (b[0]?.at ?? 0) - (a[0]?.at ?? 0))
@@ -406,7 +412,10 @@ export class StyleCollector {
     filtered.removed += stored.removed
     const expired = await store.expire(started - settings.maxAgeMs)
     const bySource: Record<string, number> = {}
-    for (const record of stored.added) bySource[record.source] = (bySource[record.source] ?? 0) + 1
+    for (const record of stored.added) {
+      const key = record.owner ? 'bili-owner' : record.source
+      bySource[key] = (bySource[key] ?? 0) + 1
+    }
     for (const record of stored.added) logger.debug(`lsy-style: added ${record.id} (${record.source}, ${record.status}): ${JSON.stringify(record.prompt ?? '')} -> ${JSON.stringify(record.reply ?? '')}`)
     const report: RunReport = {
       at: started, ms: now() - started, trigger, qq, bili,
