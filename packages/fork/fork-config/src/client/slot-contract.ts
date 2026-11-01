@@ -16,6 +16,17 @@ import type {} from '@deepseek-ai/dsh-client-ui-slots'
 export interface PluginConfigInput {
   /** Plugin entry ids (`id` in the profile patch) whose every Config field the card lists. Ids the Host does not run show nothing. */
   readonly entries: readonly string[]
+  /**
+   * Dotted field paths (`groups`, `media.images`; a group excludes everything below it) the card neither shows nor
+   * writes, for fields a dedicated editor on the same page owns. A save leaves them as they are stored at that moment
+   * and is not made stale by the dedicated editor changing them.
+   */
+  readonly exclude?: readonly string[]
+  /**
+   * Localized text shown in the review before a save that reloads the plugin, such as a warning that the reload
+   * reconnects a protocol end. Not shown for a save that changes only `volatile` fields.
+   */
+  readonly reloadWarning?: string
 }
 
 /** The card's injected face. */
@@ -27,9 +38,9 @@ export interface PluginConfigInjected {
     locale: ObservableSnapshot<{ readonly active: string }>
   }
   /** Read the entries; a read in progress is not repeated. */
-  load: (ids: readonly string[]) => void
+  load: (ids: readonly string[], exclude: readonly string[]) => void
   /** Save one entry's staged edits; resolves to whether they are in force and the plugin answers again. */
-  save: (id: string, revision: string, ops: readonly ConfigOp[]) => Promise<boolean>
+  save: (id: string, exclude: readonly string[], revision: string, ops: readonly ConfigOp[]) => Promise<boolean>
 }
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {

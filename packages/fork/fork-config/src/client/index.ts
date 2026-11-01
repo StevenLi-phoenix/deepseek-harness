@@ -37,8 +37,9 @@ export const inject = ['slots', 'locale']
  */
 function httpTransport(): ConfigTransport {
   return {
-    read: async (ids) => {
-      const response = await fetch(`${CONFIG_ROUTE}?entries=${encodeURIComponent(ids.join(','))}`, { credentials: 'same-origin', cache: 'no-store' })
+    read: async (ids, exclude) => {
+      const query = `entries=${encodeURIComponent(ids.join(','))}${exclude.length === 0 ? '' : `&exclude=${encodeURIComponent(exclude.join(','))}`}`
+      const response = await fetch(`${CONFIG_ROUTE}?${query}`, { credentials: 'same-origin', cache: 'no-store' })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       return await response.json() as ConfigDescribe
     },
@@ -64,8 +65,8 @@ export function apply(ctx: ClientContext): void {
   const store = createConfigStore()
   const loader = new ConfigLoader(store, httpTransport())
   // Functions stable for the registration's lifetime, so the card's effect never restarts on re-render.
-  const load = (ids: readonly string[]): void => { void loader.load(ids) }
-  const save: PluginConfigInjected['save'] = (id, revision, ops) => loader.save(id, revision, ops)
+  const load: PluginConfigInjected['load'] = (ids, exclude) => { void loader.load(ids, exclude) }
+  const save: PluginConfigInjected['save'] = (id, exclude, revision, ops) => loader.save(id, exclude, revision, ops)
   const injected = (): PluginConfigInjected => ({ hooks: { pluginConfig: store, locale: ctx.locale }, load, save })
   ctx.effect(
     () => ctx.slots.registerFactory({ name: 'settings.plugin-config', scope: 'root', locale: NS, inject: injected }, PluginConfigCard),

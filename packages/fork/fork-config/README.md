@@ -48,7 +48,27 @@ export type MySectionProps = /* … */ & Partial<PropsRenderFactories>
 {renderFactorySlot?.('settings.plugin-config', { entries: ['fork-qq', 'fork-qq-login'] })}
 ```
 
-Props: `entries: readonly string[]`, one to sixteen entry ids. Add the package to the section package's `devDependencies` (`"@deepseek-ai/dsh-fork-config": "workspace:*"`) and a reference to `../fork-config/tsconfig.client.json` in its `tsconfig.client.json`. The import is type-only, so the browser bundles stay separate. Where this package is not loaded the call renders nothing, and an id the Host does not run (or whose plugin has no fields) shows nothing, so a section can name entries that only some deployments compose.
+Props:
+
+| Prop | Meaning |
+|---|---|
+| `entries` | `readonly string[]`, one to sixteen entry ids |
+| `exclude` | Optional dotted field paths (`groups`, `media.images`; a group excludes everything below it) that the card neither shows nor writes, for fields a dedicated editor on the same page owns |
+| `reloadWarning` | Optional localized text shown in the review before a save that reloads the plugin |
+
+Add the package to the section package's `devDependencies` (`"@deepseek-ai/dsh-fork-config": "workspace:*"`) and a reference to `../fork-config/tsconfig.client.json` in its `tsconfig.client.json`. The import is type-only, so the browser bundles stay separate. Where this package is not loaded the call renders nothing, and an id the Host does not run (or whose plugin has no fields) shows nothing, so a section can name entries that only some deployments compose.
+
+A section with a dedicated editor of some fields passes `exclude`, for example the QQ page:
+
+```tsx
+{renderFactorySlot?.('settings.plugin-config', {
+  entries: ['fork-qq'],
+  exclude: ['groups'],
+  reloadWarning: t('config.reloadWarning'),
+})}
+```
+
+An excluded field is left as it is stored when the card saves, and the dedicated editor changing it after the card was read does not make the card's save stale (the revision ignores excluded fields). A change to any other field still does. Both the card and the upstream settings forms write through `ctx.configEditor.edit`, which runs one write at a time and is revision-fenced on each side, so whichever writes second after the other changed the entry is rejected and re-reads instead of overwriting.
 
 ### What the card shows
 
@@ -68,10 +88,11 @@ Read-only fields: an entry the home patch sets (change the home patch instead), 
 
 ### Saving
 
-1. Edit fields. Nothing is written yet; a value a field does not accept is marked and blocks **Save**.
-2. **Save** lists each change (`field: old → new`) and says which plugin will reload.
+1. Edit fields. Nothing is written yet and nothing is saved on its own: not on typing, not on leaving a field, not after a wait. A value a field does not accept is marked and blocks **Save**.
+2. **Save** lists each change (`field: old → new`) and says which plugin will reload, followed by the section's `reloadWarning` when the save reloads the plugin.
 3. **Confirm save** sends all edits at once. The form shows **Reloading…** until the new plugin instance answers with the saved revision, keeps what it showed meanwhile, and then says **Saved**. If the plugin does not answer within about 30 seconds the form says so and offers **Retry**.
-4. A refusal is named: the configuration changed since the form was read (it is read again), the home patch sets the entry, or the plugin rejected the values. Nothing is written in those cases.
+4. A field the schema marks `volatile` applies to the running plugin without a reload; the review says so, and a save that changes only such fields neither shows the warning nor waits for a reload.
+5. A refusal is named: the configuration changed since the form was read (it is read again), the home patch sets the entry, or the plugin rejected the values. Nothing is written in those cases.
 
 -----
 
@@ -81,11 +102,11 @@ Read-only fields: an entry the home patch sets (change the home patch instead), 
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-**Why not the upstream settings forms.** Upstream's plugin-settings seam (`settings.describe` and `mutate`, behind `ctx.configForms`) serves only the fields a schema marks `volatile`, because those apply without remounting the plugin. A plugin such as `fork-qq` marks one field, so the other forty are out of its reach. This package reads the whole schema and writes through the same save path upstream uses, `ctx.configEditor.edit`, which validates the next config against the schema, writes the owner's patch atomically, and reloads the plugin. It reuses the shared form chrome (`SettingsForm`, `Switch`, `Tag`) from `ui-primitives`.
+**Why not the upstream settings forms.** Upstream's plugin-settings seam (`settings.describe` and `mutate`, behind `ctx.configForms`) serves only the fields a schema marks `volatile`, because those apply without remounting the plugin. A plugin marks only some fields (`fork-qq` marks its recorded groups and most limits, not the connection, sending, digest, or login settings), so the rest are out of its reach. This package reads the whole schema and writes through the same save path upstream uses, `ctx.configEditor.edit`, which validates the next config against the schema, writes the owner's patch atomically, and reloads the plugin. It reuses the shared form chrome (`SettingsForm`, `Switch`, `Tag`) from `ui-primitives`.
 
-**Host half.** `GET /api/fork.config?entries=a,b` answers, for each running entry, a tree built from the entry's live Config schema and its stored layers (`src/fields.ts`): groups for nested objects and leaves of kind `string`, `credential-ref`, `number`, `boolean`, `select`, `string-list`, `json` (any other shape), or `secret`. A leaf carries the value in force, the schema default, the layer that set it, and the bundle's value where your patch changed it. The layer is a comparison of the config in force with the config the bundle layer alone gives (`ctx.configEditor.configuration()`), and the home patch is detected when the config in force equals neither your patch's nor the bundle's. Credential leaves carry only `set`. `POST /api/fork.config` takes `{ id, revision, ops }` with ops `set`, `unset` (back to the bundle's value) and `clear` (remove the field, so the schema default applies). It checks the `revision` (a hash of the config in force and the bundle's), applies the ops to the config in force (`src/edit.ts`), refuses credential fields, unknown paths, groups, and fields under a `!!js` expression, and hands the result to `configEditor.edit`. A save that changes nothing writes nothing and reloads nothing. Both routes sit under `/api`, so the connection's sign-in check guards them.
+**Host half.** `GET /api/fork.config?entries=a,b&exclude=x,y.z` answers, for each running entry, a tree built from the entry's live Config schema and its stored layers (`src/fields.ts`): groups for nested objects and leaves of kind `string`, `credential-ref`, `number`, `boolean`, `select`, `string-list`, `json` (any other shape), or `secret`. A leaf carries the value in force, the schema default, the layer that set it, and the bundle's value where your patch changed it. The layer is a comparison of the config in force with the config the bundle layer alone gives (`ctx.configEditor.configuration()`), and the home patch is detected when the config in force equals neither your patch's nor the bundle's. Credential leaves carry only `set`. `POST /api/fork.config` takes `{ id, revision, ops, exclude }` with ops `set`, `unset` (back to the bundle's value) and `clear` (remove the field, so the schema default applies). It checks the `revision` (a hash of the config in force and the bundle's, without the excluded fields), applies the ops to the config in force (`src/edit.ts`), refuses credential fields, excluded fields, unknown paths, groups, and fields under a `!!js` expression, and hands the result to `configEditor.edit`. A save that changes nothing writes nothing and reloads nothing, and the answer says `reload: false` when every changed field is `volatile`: the Loader applies those to the running plugin and the plugin is not re-applied. Both routes sit under `/api`, so the connection's sign-in check guards them.
 
-**Logging.** Each save logs `fork-config: saved <entry> changed=[paths] outcome=ok in <ms>ms`, or `save of <entry> edits=[paths] outcome=<reason> in <ms>ms` when refused. Only entry ids and field paths are logged, never values. The browser logs the same facts to the console.
+**Logging.** Each save logs `fork-config: saved <entry> changed=[paths] reload=<bool> outcome=ok in <ms>ms`, or `save of <entry> edits=[paths] outcome=<reason> in <ms>ms` when refused. Only entry ids and field paths are logged, never values. The browser logs the same facts to the console.
 
 **Browser half.** The package registers the factory with `ctx.slots.registerFactory`, so any section reaches it with `renderFactorySlot` and a type-only import; this keeps the client bundle purity gate satisfied and leaves the section unchanged when the package is absent. `ConfigLoader` (`src/client/store.ts`) holds each entry's last description and phase (`loading`, `ready`, `saving`, `reloading`, `unreachable`), and after a save waits for the plugin by reading the entry until it answers with the saved revision. A save whose answer is lost, which happens when the Host reloads, counts as landed when the revision has moved. `src/client/model.ts` holds the drafts, parsing, and the review lines as pure functions.
 

@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { PluginConfigCard, type PluginConfigCardProps, type PluginConfigTranslate } from '../src/client/PluginConfigCard.tsx'
-import { createConfigStore, type EntryState } from '../src/client/store.ts'
+import { createConfigStore, entryKey, type EntryState } from '../src/client/store.ts'
 import { zh } from '../src/client/locales.ts'
 import { leavesOf, type ConfigEntryView, type FieldNode, type ConfigValue } from '../src/view.ts'
 import { QQ_FORM } from './qq-form.client.ts'
@@ -22,18 +22,22 @@ function withValues(nodes: readonly FieldNode[]): FieldNode[] {
 
 const t = makeTranslate(zh) as PluginConfigTranslate
 
-function mount(entries: string[], states: Record<string, Partial<EntryState> & { view: ConfigEntryView | null }>) {
+function mount(
+  entries: string[],
+  states: Record<string, Partial<EntryState> & { view: ConfigEntryView | null }>,
+  extra: { exclude?: string[]; reloadWarning?: string } = {},
+) {
   const store = createConfigStore()
   store.update((draft) => {
     for (const [id, state] of Object.entries(states)) {
-      (draft.entries as Record<string, EntryState>)[id] = { phase: 'ready', refused: null, savedAt: null, ...state }
+      (draft.entries as Record<string, EntryState>)[entryKey(id, extra.exclude)] = { phase: 'ready', refused: null, savedAt: null, ...state }
     }
   })
   const load = vi.fn()
   const save = vi.fn((..._args: unknown[]) => Promise.resolve(true))
   const locale = { getSnapshot: () => ({ active: 'zh' }), subscribe: () => () => {} }
   const props = {
-    entries, t, load, save,
+    entries, t, load, save, ...extra,
     usePluginConfig: bindSnapshotSelector(store), useLocale: bindSnapshotSelector(locale),
   } as unknown as PluginConfigCardProps
   const view = render(<PluginConfigCard {...props} />)
@@ -60,7 +64,7 @@ const row = (path: string): HTMLElement => document.querySelector<HTMLElement>(`
 describe('PluginConfigCard', () => {
   it('asks the Host for the named entries when it appears', () => {
     const { load } = mount(['fork-qq', 'fork-qq-login'], {})
-    expect(load).toHaveBeenCalledWith(['fork-qq', 'fork-qq-login'])
+    expect(load).toHaveBeenCalledWith(['fork-qq', 'fork-qq-login'], [])
     expect(screen.getByRole('status').textContent).toBe('正在读取…')
   })
 
@@ -83,11 +87,11 @@ describe('PluginConfigCard', () => {
     const view = entryView('fork-qq', withValues(QQ_FORM))
     mount(['fork-qq'], { 'fork-qq': { view } })
     open('fork-qq')
-    expect(document.querySelectorAll('[data-path]')).toHaveLength(43)
+    expect(document.querySelectorAll('[data-path]')).toHaveLength(48)
     expect(control(within(row('groups')).getByRole('textbox')).value).toBe('1001')
     expect(control(within(row('media.retainDays')).getByRole('textbox')).value).toBe('7')
     expect(within(row('tokenEnv')).getByText('环境变量名；这里只显示名字，不读取它的值')).toBeTruthy()
-    expect(screen.getByText('43 个字段')).toBeTruthy()
+    expect(screen.getByText('48 个字段')).toBeTruthy()
   })
 
   it('shows a credential as set or not, never a value', () => {
@@ -129,7 +133,7 @@ describe('PluginConfigCard', () => {
     expect(save).not.toHaveBeenCalled()
     await act(async () => { fireEvent.click(within(review).getByRole('button', { name: '确认保存' })) })
     expect(save).toHaveBeenCalledTimes(1)
-    expect(save).toHaveBeenCalledWith('sample', 'r1', [
+    expect(save).toHaveBeenCalledWith('sample', [], 'r1', [
       { op: 'set', path: ['url'], value: 'ws://b' },
       { op: 'set', path: ['media', 'images'], value: false },
       { op: 'set', path: ['media', 'maxBytes'], value: 8192 },
@@ -156,7 +160,7 @@ describe('PluginConfigCard', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
     expect(screen.getByText('url：恢复为 ws://bundle')).toBeTruthy()
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: '确认保存' })) })
-    expect(save).toHaveBeenCalledWith('sample', 'r1', [{ op: 'unset', path: ['url'] }])
+    expect(save).toHaveBeenCalledWith('sample', [], 'r1', [{ op: 'unset', path: ['url'] }])
   })
 
   it('says reloading, and disables the form, until the plugin answers', () => {
@@ -165,7 +169,7 @@ describe('PluginConfigCard', () => {
     open('sample')
     expect(screen.getByRole('status').textContent).toBe('正在重新载入…')
     expect(control(within(row('url')).getByRole('textbox')).disabled).toBe(true)
-    act(() => { store.update((draft) => { (draft.entries as Record<string, EntryState>)['sample'] = { view, phase: 'ready', refused: null, savedAt: 1 } }) })
+    act(() => { store.update((draft) => { (draft.entries as Record<string, EntryState>)[entryKey('sample')] = { view, phase: 'ready', refused: null, savedAt: 1 } }) })
     expect(screen.queryByText('正在重新载入…')).toBeNull()
     expect(control(within(row('url')).getByRole('textbox')).disabled).toBe(false)
   })
@@ -181,7 +185,7 @@ describe('PluginConfigCard', () => {
     const { load } = mount(['sample'], { sample: { view, phase: 'unreachable' } })
     load.mockClear()
     fireEvent.click(screen.getByRole('button', { name: '重试' }))
-    expect(load).toHaveBeenCalledWith(['sample'])
+    expect(load).toHaveBeenCalledWith(['sample'], [])
   })
 
   it('renders nothing for entries the Host does not run, and says so for one that is not active', () => {
@@ -192,5 +196,72 @@ describe('PluginConfigCard', () => {
     const stopped: ConfigEntryView = { ...missing, id: 'bili', found: true }
     mount(['bili'], { bili: { view: stopped } })
     expect(screen.getByText('bili: 这个插件当前没有运行，读不到它的设置。')).toBeTruthy()
+  })
+
+  it('never saves on its own: typing, blurring and waiting write nothing until the review is confirmed', () => {
+    vi.useFakeTimers()
+    const view = entryView('sample', sampleForm())
+    const { save } = mount(['sample'], { sample: { view } })
+    open('sample')
+    const url = within(row('url')).getByRole('textbox')
+    fireEvent.change(url, { target: { value: 'ws://typed' } })
+    fireEvent.blur(url)
+    fireEvent.click(within(row('media.images')).getByRole('switch'))
+    act(() => { vi.advanceTimersByTime(10 * 60_000) })
+    expect(save).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    act(() => { vi.advanceTimersByTime(10 * 60_000) })
+    // The review is open and still nothing is written; going back keeps the drafts and writes nothing either.
+    expect(save).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '返回修改' }))
+    expect(control(within(row('url')).getByRole('textbox')).value).toBe('ws://typed')
+    expect(save).not.toHaveBeenCalled()
+    vi.useRealTimers()
+  })
+
+  it('shows the reload warning in the review of a save that reloads the plugin, and only there', () => {
+    const view = entryView('sample', sampleForm())
+    mount(['sample'], { sample: { view } }, { reloadWarning: '保存会让观察器重连；请攒齐改动一次保存' })
+    open('sample')
+    expect(screen.queryByText('保存会让观察器重连；请攒齐改动一次保存')).toBeNull()
+    fireEvent.change(within(row('url')).getByRole('textbox'), { target: { value: 'ws://b' } })
+    expect(screen.queryByText('保存会让观察器重连；请攒齐改动一次保存')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    const review = screen.getByRole('group', { name: '将要保存的改动' })
+    expect(within(review).getByText('保存会让观察器重连；请攒齐改动一次保存')).toBeTruthy()
+    expect(within(review).getByText('保存会写入你的配置补丁，并重新载入“sample”。')).toBeTruthy()
+  })
+
+  it('leaves the warning out, and says nothing reloads, when only volatile fields change', () => {
+    const view = entryView('sample', sampleForm())
+    mount(['sample'], { sample: { view } }, { reloadWarning: '保存会让观察器重连' })
+    open('sample')
+    fireEvent.change(within(row('groups')).getByRole('textbox'), { target: { value: '1\n2' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    const review = screen.getByRole('group', { name: '将要保存的改动' })
+    expect(within(review).queryByText('保存会让观察器重连')).toBeNull()
+    expect(within(review).getByText('保存会写入你的配置补丁；这些改动立即生效，“sample”不会重新载入。')).toBeTruthy()
+  })
+
+  it('renders without a warning when the section passes none', () => {
+    const view = entryView('sample', sampleForm())
+    mount(['sample'], { sample: { view } })
+    open('sample')
+    fireEvent.change(within(row('url')).getByRole('textbox'), { target: { value: 'ws://b' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    expect(screen.queryByRole('note')).toBeNull()
+  })
+
+  it('reads, shows, and saves under the excluded fields it was given, and does not show them', async () => {
+    const form = sampleForm().filter(node => node.key !== 'groups')
+    const view = entryView('sample', form)
+    const { load, save } = mount(['sample'], { sample: { view } }, { exclude: ['groups'] })
+    open('sample')
+    expect(load).toHaveBeenCalledWith(['sample'], ['groups'])
+    expect(row('groups')).toBeNull()
+    fireEvent.change(within(row('url')).getByRole('textbox'), { target: { value: 'ws://b' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '确认保存' })) })
+    expect(save).toHaveBeenCalledWith('sample', ['groups'], 'r1', [{ op: 'set', path: ['url'], value: 'ws://b' }])
   })
 })

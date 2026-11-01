@@ -13795,6 +13795,9 @@ importers:
       '@deepseek-ai/dsh-fork-qq':
         specifier: workspace:*
         version: link:../fork-qq
+      '@deepseek-ai/dsh-settings':
+        specifier: workspace:*
+        version: link:../../settings/settings
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery

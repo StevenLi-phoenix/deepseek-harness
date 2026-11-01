@@ -14,6 +14,9 @@ export const CONFIG_ROUTE = CONFIG_PATH.slice(1)
 /** Most entries one read names. */
 export const MAX_ENTRIES = 16
 
+/** Most field paths one read or save excludes. */
+export const MAX_EXCLUDE = 64
+
 /** Most edits one save carries. */
 export const MAX_OPS = 200
 
@@ -65,6 +68,8 @@ export interface LeafField extends FieldBase {
   /** Only where the owner's patch sets the field: what the bundle layer gives, which a reset returns to; absent if it sets nothing. */
   readonly base?: ConfigValue
   readonly required: boolean
+  /** The schema marks the field `volatile`: a change applies to the running plugin without reloading it. */
+  readonly volatile?: true
   /** A credential slot: whether it holds a value. Only on `secret`. */
   readonly set?: boolean
   readonly min?: number
@@ -115,6 +120,8 @@ export interface ConfigSaveRequest {
   readonly id: string
   readonly revision: string
   readonly ops: readonly ConfigOp[]
+  /** Dotted field paths the form did not show (a dedicated editor owns them); they are neither written nor part of the revision. */
+  readonly exclude?: readonly string[]
 }
 
 /** Why a save did not land. */
@@ -122,7 +129,13 @@ export type ConfigSaveFailure = 'bad-request' | 'not-found' | 'conflict' | 'home
 
 /** The save's answer. */
 export type ConfigSaveResult =
-  | { readonly ok: true; readonly revision: string; readonly changed: readonly string[] }
+  | {
+    readonly ok: true
+    readonly revision: string
+    readonly changed: readonly string[]
+    /** The plugin reloads: a changed field is not `volatile`. */
+    readonly reload: boolean
+  }
   | { readonly ok: false; readonly reason: ConfigSaveFailure; readonly message: string }
 
 /**

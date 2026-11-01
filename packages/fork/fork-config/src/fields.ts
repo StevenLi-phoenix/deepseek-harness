@@ -15,6 +15,29 @@ export interface FormState {
   readonly inherited: unknown
   /** The home patch sets this entry's config. */
   readonly locked: boolean
+  /** Dotted paths of fields and groups left out of the form. */
+  readonly exclude?: readonly string[]
+}
+
+/** @returns whether a path is, or lies below, one of the excluded dotted paths. */
+export function isExcluded(exclude: readonly string[] | undefined, path: readonly string[]): boolean {
+  const dotted = path.join('.')
+  return (exclude ?? []).some(entry => dotted === entry || dotted.startsWith(`${entry}.`))
+}
+
+/**
+ * @param config - a stored config.
+ * @param exclude - dotted paths to leave out.
+ * @returns a detached copy without those fields.
+ */
+export function withoutPaths(config: unknown, exclude: readonly string[] | undefined): unknown {
+  const walkValue = (value: unknown, path: readonly string[]): unknown => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value) || isExpression(value)) return value
+    return Object.fromEntries(Object.entries(value)
+      .filter(([key]) => !isExcluded(exclude, [...path, key]))
+      .map(([key, child]) => [key, walkValue(child, [...path, key])]))
+  }
+  return walkValue(config, [])
 }
 
 /** Marks a place under a `!!js` expression, whose value is not known without running it. */
@@ -100,11 +123,13 @@ function layerOf(state: FormState, path: readonly string[], stored: unknown): Co
   return stored === undefined ? 'default' : 'bundle'
 }
 
-function leafOf(node: z, path: readonly string[], fallback: unknown, state: FormState): LeafField {
+function leafOf(node: z, path: readonly string[], fallback: unknown, state: FormState, volatile: boolean): LeafField {
   const kind = leafKind(node)
   const key = path.at(-1) as string
   const { meta } = node
-  const base = { key, path: [...path], kind, required: meta.required === true, ...descriptionOf(node) }
+  const base = {
+    key, path: [...path], kind, required: meta.required === true, ...volatile ? { volatile: true as const } : {}, ...descriptionOf(node),
+  }
   if (kind === 'secret') {
     const stored = readAt(state.effective, path)
     return { ...base, layer: state.locked ? 'home' : 'default', set: stored !== undefined, readOnly: 'secret' }
@@ -134,16 +159,17 @@ function leafOf(node: z, path: readonly string[], fallback: unknown, state: Form
   }
 }
 
-function walk(fields: Record<string, z>, path: readonly string[], defaults: unknown, state: FormState): FieldNode[] {
+function walk(fields: Record<string, z>, path: readonly string[], defaults: unknown, state: FormState, volatile: boolean): FieldNode[] {
   return Object.entries(fields).flatMap(([key, node]): FieldNode[] => {
-    if (node.meta.hidden === true) return []
     const here = [...path, key]
+    if (node.meta.hidden === true || isExcluded(state.exclude, here)) return []
+    const below = volatile || node.meta.volatile === true
     const fallback = typeof defaults === 'object' && defaults !== null ? Reflect.get(defaults, key) as unknown : undefined
     const children = objectFields(node)
-    if (children === undefined) return [leafOf(node, here, fallback, state)]
+    if (children === undefined) return [leafOf(node, here, fallback, state, below)]
     return [{
       kind: 'group', key, path: here, ...descriptionOf(node),
-      children: walk(children, here, node.meta.default ?? fallback, state),
+      children: walk(children, here, node.meta.default ?? fallback, state, below),
     }]
   })
 }
@@ -156,7 +182,25 @@ function walk(fields: Record<string, z>, path: readonly string[], defaults: unkn
  */
 export function buildFields(schema: z, state: FormState): FieldNode[] {
   const fields = objectFields(schema)
-  return fields === undefined ? [] : walk(fields, [], schema.meta.default, state)
+  return fields === undefined ? [] : walk(fields, [], schema.meta.default, state, schema.meta.volatile === true)
+}
+
+/**
+ * @param schema - the plugin's Config schema.
+ * @param path - field path.
+ * @returns whether the field, or an object above it, is `volatile`, so a change applies without reloading the plugin.
+ */
+export function isVolatileAt(schema: z, path: readonly string[]): boolean {
+  let node: z | undefined = schema
+  if (node.meta.volatile === true) return true
+  let fields = objectFields(schema)
+  for (const key of path) {
+    node = fields !== undefined && Object.hasOwn(fields, key) ? fields[key] : undefined
+    if (node === undefined) return false
+    if (node.meta.volatile === true) return true
+    fields = objectFields(node)
+  }
+  return false
 }
 
 /**

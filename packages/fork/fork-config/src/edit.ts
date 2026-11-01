@@ -6,7 +6,7 @@
 import { createHash } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 import type z from '@deepseek-ai/schemastery'
-import { EXPRESSION, containsSecret, leafKind, leafSchemaAt, readAt } from './fields.ts'
+import { EXPRESSION, containsSecret, isExcluded, isVolatileAt, leafKind, leafSchemaAt, readAt, withoutPaths } from './fields.ts'
 import { pathLabel, type ConfigOp, type ConfigSaveFailure } from './view.ts'
 
 /** A save the Host refuses before writing anything. */
@@ -27,13 +27,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Fingerprint of what a save is staged against: the config in force and the bundle layer's.
+ * Fingerprint of what a save is staged against: the config in force and the bundle layer's, without the excluded
+ * fields, so a dedicated editor changing those does not make a form that never showed them stale.
  * @param effective - the config in force.
  * @param inherited - the config the bundle layer alone gives.
+ * @param exclude - dotted paths of fields the form leaves out.
  * @returns twelve hex digits.
  */
-export function revisionOf(effective: unknown, inherited: unknown): string {
-  return createHash('sha1').update(JSON.stringify([effective ?? null, inherited ?? null])).digest('hex').slice(0, 12)
+export function revisionOf(effective: unknown, inherited: unknown, exclude?: readonly string[]): string {
+  const view = [withoutPaths(effective, exclude) ?? null, withoutPaths(inherited, exclude) ?? null]
+  return createHash('sha1').update(JSON.stringify(view)).digest('hex').slice(0, 12)
 }
 
 function withValue(root: Record<string, unknown>, path: readonly string[], value: unknown): Record<string, unknown> {
@@ -60,8 +63,9 @@ function pruned(root: Record<string, unknown>, inherited: unknown, path: readonl
   return root
 }
 
-function check(schema: z, current: unknown, op: ConfigOp): void {
+function check(schema: z, current: unknown, op: ConfigOp, exclude: readonly string[] | undefined): void {
   const label = pathLabel(op.path)
+  if (isExcluded(exclude, op.path)) throw new ConfigEditError('bad-request', `"${label}" is edited elsewhere, not in this form`)
   const node = leafSchemaAt(schema, op.path)
   if (node === undefined) throw new ConfigEditError('bad-request', `"${label}" is not a field of this plugin`)
   if (leafKind(node) === 'secret' || containsSecret(node)) {
@@ -78,16 +82,18 @@ function check(schema: z, current: unknown, op: ConfigOp): void {
  * @param current - the config in force, as stored.
  * @param inherited - the config the bundle layer alone gives.
  * @param ops - the edits, in order; a later edit of a path wins.
- * @returns the next stored config and the dotted paths whose stored value changed.
+ * @param exclude - dotted paths of fields this form does not edit; an edit of one is refused.
+ * @returns the next stored config, the dotted paths whose stored value changed, and whether the plugin reloads.
  * @throws ConfigEditError - for a path that is not a plain field, holds a credential, or sits under an expression.
  */
 export function applyOps(
   schema: z, current: Record<string, unknown>, inherited: Record<string, unknown>, ops: readonly ConfigOp[],
-): { next: Record<string, unknown>; changed: string[] } {
+  exclude?: readonly string[],
+): { next: Record<string, unknown>; changed: string[]; reload: boolean } {
   let next = current
   const touched = new Map<string, readonly string[]>()
   for (const op of ops) {
-    check(schema, next, op)
+    check(schema, next, op, exclude)
     if (op.op === 'set') {
       next = withValue(next, op.path, op.value)
     } else {
@@ -99,6 +105,6 @@ export function applyOps(
     }
     touched.set(pathLabel(op.path), op.path)
   }
-  const changed = [...touched].filter(([, path]) => !isDeepStrictEqual(readAt(current, path), readAt(next, path))).map(([label]) => label)
-  return { next, changed }
+  const moved = [...touched].filter(([, path]) => !isDeepStrictEqual(readAt(current, path), readAt(next, path)))
+  return { next, changed: moved.map(([label]) => label), reload: moved.some(([, path]) => !isVolatileAt(schema, path)) }
 }

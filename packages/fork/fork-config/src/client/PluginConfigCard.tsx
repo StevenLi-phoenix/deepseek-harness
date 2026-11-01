@@ -15,7 +15,7 @@ import {
   type Draft, type Drafts, type Plan,
 } from './model.ts'
 import type {} from './slot-contract.ts'
-import type { EntryState } from './store.ts'
+import { entryKey, type EntryState } from './store.ts'
 import { leavesOf, type ConfigEntryView, type FieldNode, type LeafField } from '../view.ts'
 import css from './PluginConfigCard.module.css'
 
@@ -143,12 +143,14 @@ interface ReviewProps {
   plan: Plan
   entry: string
   busy: boolean
+  /** Text for a save that reloads the plugin. */
+  warning: string | undefined
   t: Translate
   onConfirm: () => void
   onBack: () => void
 }
 
-function Review({ plan, entry, busy, t, onConfirm, onBack }: ReviewProps): ReactNode {
+function Review({ plan, entry, busy, warning, t, onConfirm, onBack }: ReviewProps): ReactNode {
   const none = t('review.none')
   return (
     <div className={css.review} role="group" aria-label={t('review.title')}>
@@ -162,7 +164,8 @@ function Review({ plan, entry, busy, t, onConfirm, onBack }: ReviewProps): React
           return <li key={change.key}>{t(key, { field, before, after })}</li>
         })}
       </ul>
-      <p className={css.note}>{t('review.note', { entry })}</p>
+      <p className={css.note}>{t(plan.reload ? 'review.note' : 'review.noteLive', { entry })}</p>
+      {plan.reload && warning !== undefined && warning !== '' ? <p className={css.warning} role="note">{warning}</p> : null}
       <div className={css.reviewActions}>
         <button type="button" className={css.primary} disabled={busy} onClick={onConfirm}>{t('review.confirm')}</button>
         <button type="button" className={css.secondary} disabled={busy} onClick={onBack}>{t('review.back')}</button>
@@ -190,6 +193,8 @@ function Status({ state, saved, retry, t }: { state: EntryState; saved: boolean;
 
 interface EntryFormProps {
   id: string
+  exclude: readonly string[]
+  reloadWarning: string | undefined
   state: EntryState
   locale: string
   t: Translate
@@ -197,7 +202,7 @@ interface EntryFormProps {
   save: PluginConfigCardProps['save']
 }
 
-function EntryForm({ id, state, locale, t, load, save }: EntryFormProps): ReactNode {
+function EntryForm({ id, exclude, reloadWarning, state, locale, t, load, save }: EntryFormProps): ReactNode {
   const view = state.view as ConfigEntryView
   const [drafts, setDrafts] = useState<Drafts>(new Map())
   const [reviewing, setReviewing] = useState(false)
@@ -220,7 +225,7 @@ function EntryForm({ id, state, locale, t, load, save }: EntryFormProps): ReactN
   const form: FormContext = { t, locale, drafts, disabled: busy || view.locked || reviewing, invalid, edit }
   const confirm = (): void => {
     setReviewing(false)
-    void save(id, view.revision, plan.ops).then((landed) => {
+    void save(id, exclude, view.revision, plan.ops).then((landed) => {
       if (!landed) return
       setDrafts(new Map())
       setSaved(true)
@@ -251,8 +256,15 @@ function EntryForm({ id, state, locale, t, load, save }: EntryFormProps): ReactN
         onDiscard={() => { setDrafts(new Map()) }}
       >
         <Nodes nodes={view.fields} form={form} />
-        {reviewing ? <Review plan={plan} entry={id} busy={busy} t={t} onConfirm={confirm} onBack={() => { setReviewing(false) }} /> : null}
-        <Status state={state} saved={saved} retry={() => { load([id]) }} t={t} />
+        {reviewing
+          ? (
+            <Review
+              plan={plan} entry={id} busy={busy} warning={reloadWarning} t={t}
+              onConfirm={confirm} onBack={() => { setReviewing(false) }}
+            />
+          )
+          : null}
+        <Status state={state} saved={saved} retry={() => { load([id], exclude) }} t={t} />
       </SettingsForm>
     </details>
   )
@@ -263,13 +275,17 @@ function EntryForm({ id, state, locale, t, load, save }: EntryFormProps): ReactN
  * @param props - the entries, the store hook, the loader callbacks, and copy.
  * @returns the card, or nothing while no named entry has a form to show.
  */
-export function PluginConfigCard({ entries, usePluginConfig, useLocale, load, save, t }: PluginConfigCardProps): ReactNode {
+export function PluginConfigCard(
+  { entries, exclude: excluded, reloadWarning, usePluginConfig, useLocale, load, save, t }: PluginConfigCardProps,
+): ReactNode {
   const key = entries.join(',')
+  const excludeKey = (excluded ?? []).join(',')
+  const exclude = useMemo(() => excludeKey.split(',').filter(path => path !== ''), [excludeKey])
   const states = usePluginConfig(value => value.entries)
   const locale = useLocale(value => value.active)
-  useEffect(() => { load(key.split(',').filter(id => id !== '')) }, [key, load])
+  useEffect(() => { load(key.split(',').filter(id => id !== ''), exclude) }, [key, exclude, load])
 
-  const stateOf = (id: string): EntryState | undefined => states[id]
+  const stateOf = (id: string): EntryState | undefined => states[entryKey(id, exclude)]
   const shown = entries.filter((id) => {
     const view = stateOf(id)?.view
     return view !== null && view !== undefined && view.found && leavesOf(view.fields).length > 0
@@ -290,7 +306,10 @@ export function PluginConfigCard({ entries, usePluginConfig, useLocale, load, sa
       {shown.length === 0 && reading ? <p className={css.note} role="status">{t('entry.loading')}</p> : null}
       {inactive.map(id => <p key={id} className={css.note}>{`${id}: ${t('entry.inactive')}`}</p>)}
       {shown.map(id => (
-        <EntryForm key={id} id={id} state={states[id] as EntryState} locale={locale} t={t} load={load} save={save} />
+        <EntryForm
+          key={id} id={id} exclude={exclude} reloadWarning={reloadWarning} state={stateOf(id) as EntryState}
+          locale={locale} t={t} load={load} save={save}
+        />
       ))}
     </section>
   )

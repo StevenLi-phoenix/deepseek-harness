@@ -10,12 +10,12 @@ const QQ_FIELDS = [
   'url', 'tokenEnv', 'groups', 'dataDir',
   'media.images', 'media.maxImageBytes', 'media.maxTotalBytes', 'media.retainDays', 'media.hostSuffixes', 'media.timeoutMs',
   'voice.download', 'voice.maxBytes', 'asr.enabled', 'retention.textDays', 'honorRecall',
-  'backfill.enabled', 'backfill.maxMessages',
+  'backfill.enabled', 'backfill.maxMessages', 'backfill.maxGroups', 'backfill.gapMs', 'backfill.skipWithinMs', 'backfill.minIntervalMs',
   'send.enabled', 'send.groups', 'send.minIntervalSec', 'send.maxPerDay',
   'digest.enabled', 'digest.everyHours', 'digest.minMessages', 'digest.maxPromptChars', 'digest.maxCallsPerRound',
   'digest.aliasMembers', 'digest.profiles', 'digest.keepPerGroup', 'digest.maxDigestChars', 'digest.provider', 'digest.model',
   'digest.agentPreset', 'digest.permissionPreset', 'digest.workspacePath', 'digest.timeZone', 'digest.timeoutMs',
-  'offlineNoticeMs', 'offlineRepeatMs', 'settingsUrl',
+  'offlineNoticeMs', 'reconnectQuietMs', 'offlineRepeatMs', 'settingsUrl',
   'login.enabled', 'login.url', 'login.timeoutMs',
 ]
 
@@ -36,6 +36,14 @@ describe('the fork-qq schema as a form', () => {
     expect(kind('media.maxImageBytes')).toMatchObject({ kind: 'number', min: 1024, step: 1 })
     expect(kind('digest.provider')).toMatchObject({ kind: 'string', required: false })
     expect(leaves.every(leaf => leaf.readOnly === undefined)).toBe(true)
+  })
+
+  it('marks the fields that apply without a reload, and only those', () => {
+    const volatile = leaves.filter(leaf => leaf.volatile === true).map(leaf => leaf.path.join('.'))
+    expect(volatile).toEqual(expect.arrayContaining(['groups', 'media.images', 'backfill.gapMs', 'offlineNoticeMs', 'reconnectQuietMs', 'settingsUrl']))
+    for (const connection of ['url', 'tokenEnv', 'dataDir', 'login.url', 'digest.enabled', 'send.enabled']) {
+      expect(volatile).not.toContain(connection)
+    }
   })
 })
 

@@ -7,6 +7,7 @@ import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { boot, initProfile, readProfilePatches, type ProfileContext } from '@deepseek-ai/dsh-app-boot'
 import ConfigEditor from '@deepseek-ai/dsh-config-editor'
+import Settings from '@deepseek-ai/dsh-settings'
 import * as plugin from '../src/index.ts'
 import type { ConfigDescribe, ConfigSaveResult } from '../src/view.ts'
 
@@ -52,6 +53,7 @@ export async function configFixture(options: FixtureOptions = {}) {
   writeFileSync(join(bundle, 'package.json'), JSON.stringify({ name: 'test-bundle', version: '1.0.0', dsh: { bundle: { patch: 'cordis.patch.yml' } } }))
   writeFileSync(join(bundle, 'cordis.patch.yml'), JSON.stringify([{ insert: [
     { id: 'config-editor', name: 'cordis:editor' },
+    { id: 'settings', name: 'cordis:settings' },
     { id: 'fork-config', name: 'cordis:forkconfig' },
     { id: 'sample', name: 'cordis:probe', config: options.bundle ?? { url: 'ws://bundle:1', password: 'private-value', media: { maxBytes: 4096 } } },
     { id: 'other', name: 'cordis:probe', config: { password: 'x', media: {} } },
@@ -75,7 +77,9 @@ export async function configFixture(options: FixtureOptions = {}) {
     root.provide('profileContext', profile)
     root.provide('appReady', { onReady: (listener: () => void) => { listener(); return () => {} } })
     root.provide('connection', { fetch: { register: (route: Route) => { routes.push(route); return () => Promise.resolve() } } } as never)
-    Object.assign(root.loader.builtins, { editor: ConfigEditor, probe: Probe, bare: { apply: () => {} }, forkconfig: plugin })
+    Object.assign(root.loader.builtins, {
+      editor: ConfigEditor, settings: Settings, probe: Probe, bare: { apply: () => {} }, forkconfig: plugin,
+    })
   })
   onTestFinished(async () => { await ctx.fiber.dispose() })
   const route = (): Route => {
@@ -83,8 +87,8 @@ export async function configFixture(options: FixtureOptions = {}) {
     if (found === undefined) throw new Error('route not registered')
     return found
   }
-  const get = async (ids = 'sample'): Promise<ConfigDescribe> => {
-    const response = await route().fetch(new Request(`http://127.0.0.1/api/fork.config?entries=${ids}`))
+  const get = async (ids = 'sample', exclude = ''): Promise<ConfigDescribe> => {
+    const response = await route().fetch(new Request(`http://127.0.0.1/api/fork.config?entries=${ids}&exclude=${exclude}`))
     expect200(response)
     return await response.json() as ConfigDescribe
   }
