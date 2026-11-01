@@ -308,6 +308,20 @@ export class RemoteBiliClient implements BiliCaller {
   }
 
   /**
+   * The accounts that speak for the Reply Gate (`GET /v1/accounts`, scope `read`): the Settings view names the
+   * comment speaker before the owner lets the Gate reply in public.
+   * @param signal - cancellation.
+   * @returns the ids of the comment and message speakers; empty when bili-svc named none.
+   */
+  async replyRoutes(signal?: AbortSignal): Promise<{ comment: string; dm: string }> {
+    const { status, answer } = await this.request('accounts', 'GET', '/v1/accounts', undefined, READ_TIMEOUT_MS, signal)
+    if (status === 401 || status === 403) throw new BiliRefused(`bili-svc did not accept the token for /v1/accounts (HTTP ${status})`)
+    if (status !== 200) throw new BiliTransportError('accounts', `bili-svc answered HTTP ${status}`)
+    const routes = typeof answer['routes'] === 'object' && answer['routes'] !== null ? answer['routes'] as Record<string, unknown> : {}
+    return { comment: line(routes['reply_comment'], 64), dm: line(routes['reply_dm'], 64) }
+  }
+
+  /**
    * Answer the owner's private message through bili-svc's Reply Gate (`POST /v1/reply/dm`).
    * @param talker - the owner's main account.
    * @param message - the reply, at most 500 characters.

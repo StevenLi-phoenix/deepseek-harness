@@ -392,8 +392,17 @@ bili-svc is a separate private service on this Mac (`app.lishuyu.bili.svc`, `127
 
 1. In bili-svc's configuration: `[accounts.maomao]` with `refresh_mode = "owner"` and the account's `mid`, `routes.agent_account = "maomao"`, and the owner's main UID in `gate.owner_mids` (the Gate answers the owner without its classifier, cap, or time window). Import the session once, from the record DSH kept (`bili/account` in `/Users/dsh-runtime/.dsh/.credentials.yaml`), piped straight into `bili-svc session import maomao` (JSON `{ "cookies": {…}, "refresh_token": "…" }` on stdin; nothing is echoed); then `bili-svc session status maomao` shows its mid and fingerprint. From then on only bili-svc refreshes it: delete the `bili/account` record (back the file up first), since a second refresher would invalidate bili-svc's refresh token.
 2. A token for DSH, made on the Mac without printing it, written to the service `.env` (back it up first; restart afterwards): `BILI_SVC_TOKEN_BILI` from `bili-svc token create --name bili --scopes bili,read,reply --accounts maomao`.
+2b. A second token for the Settings page, scope `manage`, made on the Mac mini in `~/services/bili-svc` and appended to the service `.env` by shell substitution, never printed (back up the `.env` first; the token is read only by the Settings route and never by an agent tool):
+   ```sh
+   cd ~/services/bili-svc
+   t=$(.venv/bin/python -m bili_svc token create --name dsh-settings --scopes manage)   # the command prints the token once
+   env_file=/Users/dsh-runtime/.dsh/.env
+   printf '%s' "$t" | sudo -n -u dsh-runtime /bin/zsh -fc "umask 077; f=$env_file; /bin/cp -p \$f \$f.bak.\$(date +%Y%m%d%H%M%S); read -r v; { print -r -- \"BILI_SVC_TOKEN_MANAGE=\$v\"; /usr/bin/grep -v '^BILI_SVC_TOKEN_MANAGE=' \$f; } >| \$f.new && /bin/mv -f \$f.new \$f"
+   unset t
+   ```
+   Without it, Settings → B站账号 stays read-only and says which credential is missing (`manageTokenEnv`, default `BILI_SVC_TOKEN_MANAGE`). Restart afterwards (`.env` edits need a restart).
 3. Install the build and restart (step 7 and Operate). `BILI_SVC_URL` changes the address from `http://127.0.0.1:8097` if bili-svc moves.
-4. Check: Settings → B站账号 shows 魔女的猫猫 with its UID and 在线, read from bili-svc's `/v1/status`; a message from the owner's main account to the account is answered as a Bilibili message within ten minutes, and `bili-svc ledger` lists it as a DM reply; `bili_like` in the `bili` Session appears in `bili-svc ledger` as `like`. Without the token, `stdout.log` shows `BILI_SVC_TOKEN_BILI is not set` on the first call and nothing reaches Bilibili.
+4. Check: Settings → B站账号 shows 魔女的猫猫 with its UID and 在线, read from bili-svc's `/v1/status`; with the manage token it also lists maodeng (its session is kept by kaorou: no write control), the gate with today's counters, and the ledger, and 扫码登录 on 魔女的猫猫 shows a QR code that turns 已扫码 and then closes when scanned; a message from the owner's main account to the account is answered as a Bilibili message within ten minutes, and `bili-svc ledger` lists it as a DM reply; `bili_like` in the `bili` Session appears in `bili-svc ledger` as `like`. Without the token, `stdout.log` shows `BILI_SVC_TOKEN_BILI is not set` on the first call and nothing reaches Bilibili.
 5. Stop: `bili-svc gate readonly` holds every action and reply of both accounts at once (an answer to the owner then comes on WeChat with `held`); only a person lifts a brake: `bili-svc gate release`, then `bili-svc gate mode auto`.
 
 ## 17. Unified warning intake (AMS)

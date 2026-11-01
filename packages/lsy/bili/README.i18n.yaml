@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/lsy/bili/README.md
 /:
-  en: 40e65eb75c865166
-  zh: 2f279b39471897ae
+  en: 8bb0e26b3ba0a1b2
+  zh: d2dbd439f7cc5317
 /deepseek-ai-dsh-bili:
   en: f3b1301eff6b2d4d
   zh: 934e02fa61f51d0b
@@ -21,14 +21,14 @@
   en: 9c67eeb646ec906f
   zh: 8257edf03f6c2d92
 /deepseek-ai-dsh-bili/use-this-package/minimal-configuration:
-  en: 715695164da27725
-  zh: 6fcaa657ecc7dbec
+  en: 1d2348ce53b71c52
+  zh: 57497f26feb19a01
 /deepseek-ai-dsh-bili/use-this-package/what-the-owner-sees:
-  en: b3928f424be54c98
-  zh: 94e0e56c9b76e45f
+  en: 065da73f53c55e8e
+  zh: e4fb155df9a566c5
 /deepseek-ai-dsh-bili/understand-the-implementation:
-  en: 7c1500658af75d18
-  zh: 481cbd364d0eb43b
+  en: c0ee658223ffcabb
+  zh: 4238bc51d0d10263
 /deepseek-ai-dsh-bili/further-exploration:
   en: badf7e6432b0f493
   zh: 43702f533253f51c
@@ -51,8 +51,8 @@
   en: 92dc0969f8640b4a
   zh: 6be246822f234c6a
 /deepseek-ai-dsh-bili/known-limitations-and-deferred-work:
-  en: b3652d64f1ac64f1
-  zh: c26c7697bcdb578a
+  en: f3e805d27b6a8281
+  zh: cb746b6f49081a54
 /deepseek-ai-dsh-bili/known-limitations-and-deferred-work/dev-note:
   en: 43e6b98d4ac97ba4
   zh: fee88781ab710fe9

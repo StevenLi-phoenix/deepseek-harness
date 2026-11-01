@@ -36,3 +36,27 @@ export function agoText(ms: number, now: number, t: Translate): string {
   if (minutes < 2880) return t('ago.hours', { n: Math.floor(minutes / 60) })
   return t('ago.days', { n: Math.floor(minutes / 1440) })
 }
+
+/**
+ * Path data of a QR code: one unit square per dark module.
+ * @param modules - rows of `0`/`1`.
+ */
+export function qrPath(modules: readonly string[]): string {
+  let path = ''
+  modules.forEach((row, y) => {
+    for (let x = 0; x < row.length; x += 1) {
+      if (row[x] === '1') path += `M${x} ${y}h1v1h-1z`
+    }
+  })
+  return path
+}
+
+/**
+ * `m:ss` left until an instant, never negative.
+ * @param until - the instant.
+ * @param now - the current instant.
+ */
+export function countdown(until: number, now: number): string {
+  const seconds = Math.max(0, Math.ceil((until - now) / 1000))
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+}

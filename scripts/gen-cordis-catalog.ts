@@ -1052,6 +1052,7 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   InboxView: 'fork-local inbox view is owned by packages/lsy/bili/README.md',
   MeView: 'fork-local account card is owned by packages/lsy/bili/README.md',
   BiliView: 'fork-local Settings view is owned by packages/lsy/bili/README.md',
+  ActionResult: 'fork-local Settings action outcome is owned by packages/lsy/bili/README.md',
   DanmakuLine: 'fork-local danmaku line is owned by packages/lsy/bili/README.md',
   SearchOrder: 'fork-local search order is owned by packages/lsy/bili/README.md',
   Grade: 'fork-local video grade is owned by packages/lsy/bili/README.md',

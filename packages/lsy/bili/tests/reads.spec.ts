@@ -146,7 +146,18 @@ describe('journal, account card, and Settings', () => {
     const h = await harness({ svc, workspace: dir })
     expect(await h.view()).toEqual({
       account: { account: 'maomao', session: 'ok', mid: 3_000_001, uname: '魔女的猫猫', checkedAt: Date.now() },
-      gate: { mode: 'auto', readonly: false },
+      gate: { mode: 'auto', readonly: false, brake: null, used: null, caps: null },
+      accounts: [
+        { id: 'maodeng', mid: 1_000_001, display: '猫灯魔女岚栖', session: 'ok', refreshMode: null, login: false, agent: false, refreshedAt: null, importedAt: null, deadReason: null },
+        { id: 'maomao', mid: 3_000_001, display: '魔女的猫猫', session: 'ok', refreshMode: null, login: false, agent: true, refreshedAt: null, importedAt: null, deadReason: null },
+      ],
+      speaker: null,
+      ledger: null,
+      logins: [],
+      manage: false,
+      manageEnv: 'BILI_SVC_TOKEN_MANAGE',
+      manageError: null,
+      result: null,
       ownerMid: 200000001,
       ownerUpdatedAt: null,
       timeZone: 'America/New_York',

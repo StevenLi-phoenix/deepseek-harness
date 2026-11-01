@@ -24,7 +24,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 
 | Package | Role |
 |---|---|
-| [`bili/`](bili/README.md) | The agent's own Bilibili account as a client of bili-svc: reads and non-speech actions through bili-svc's door, the owner's messages answered through its Reply Gate, and a read-only Settings card |
+| [`bili/`](bili/README.md) | The agent's own Bilibili account as a client of bili-svc: reads and non-speech actions through bili-svc's door, the owner's messages answered through its Reply Gate, and a Settings section that manages bili-svc (accounts, QR sign-in, gate, brake, ledger) |
 | [`lsy-balance/`](lsy-balance/README.md) | Account settings card with the balance or quota of every provider key |
 | [`lsy-event-bus/`](lsy-event-bus/README.md) | Dedupe, loop suppression, subscriptions, coalescing, rate limits, notify and Session dispatch |
 | [`lsy-event-ingest/`](lsy-event-ingest/README.md) | `POST /hooks/lsy` route: the owner's own services push events under one bearer token per source |

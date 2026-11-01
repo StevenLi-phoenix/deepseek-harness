@@ -458,7 +458,7 @@ export type Config = LocalConfig
 ## `@deepseek-ai/dsh-bili`
 
 - `inject`: `timer` · `storageDomain` · `credentials` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/lsy/bili/src/index.ts:78`](../packages/lsy/bili/src/index.ts)
+- `source`: [`packages/lsy/bili/src/index.ts:84`](../packages/lsy/bili/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -470,6 +470,11 @@ export interface Config {
   ownerMid?: number
   /** bili-svc's id of the agent's account: the `account` of every call. */
   account: string
+  /**
+   * Credential holding the bili-svc token of scope `manage`. Only the Settings route uses it: the
+   * sign-in, session, gate, and brake controls. Unset, Settings stays read-only and names this credential.
+   */
+  manageTokenEnv: string
   /** IANA time zone of the journal, the main-agent limit, and prompt times. */
   timeZone: string
   /** Messages the account's Session may send the owner's main agent per day (`bili_tell_main_agent`); 0 turns them off. */

@@ -24,7 +24,7 @@ kind: "package-group"
 
 | 包 | 作用 |
 |---|---|
-| [`bili/`](bili/README.zh.md) | agent 自己的 B站账号，作为 bili-svc 的客户端：读取和不发言的操作走 bili-svc 的门，owner 的私信经它的回复闸门回复，以及只读的设置页卡片 |
+| [`bili/`](bili/README.zh.md) | agent 自己的 B站账号，作为 bili-svc 的客户端：读取和不发言的操作走 bili-svc 的门，owner 的私信经它的回复闸门回复，以及管理 bili-svc 的设置页（账号、扫码登录、闸门、急停、动作记录） |
 | [`lsy-balance/`](lsy-balance/README.zh.md) | 账号设置页里列出各供应商 key 余额或配额的卡片 |
 | [`lsy-event-bus/`](lsy-event-bus/README.zh.md) | 去重、回环抑制、订阅、合批、限流、通知与 Session 分发 |
 | [`lsy-event-ingest/`](lsy-event-ingest/README.zh.md) | `POST /hooks/lsy` 路由：主人自己的服务用每个来源一个的 bearer token 推送事件 |

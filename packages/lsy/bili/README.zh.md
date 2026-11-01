@@ -1,5 +1,5 @@
 ---
-description: "agent 自己的 B站账号（ctx.bili），作为 bili-svc 的客户端：读取和不发言的操作（点赞、投币、三连、关注、收藏、稍后再看、观看心跳）都走 bili-svc 的门；owner 本人的 B站私信经 bili-svc 的回复闸门回复，发不出去时改发微信；日记、给主 agent 递消息，以及设置页里只读的账号会话状态卡。"
+description: "agent 自己的 B站账号（ctx.bili），作为 bili-svc 的客户端：读取和不发言的操作（点赞、投币、三连、关注、收藏、稍后再看、观看心跳）都走 bili-svc 的门；owner 本人的 B站私信经 bili-svc 的回复闸门回复，发不出去时改发微信；日记、给主 agent 递消息，以及管理 bili-svc 的设置页：账号、扫码登录、会话、闸门与急停、动作记录。"
 kind: "package-reference"
 ---
 
@@ -44,11 +44,12 @@ kind: "package-reference"
           agentPreset: bili
 ```
 
-把 bili-svc 的 bearer 令牌以 `BILI_SVC_TOKEN_BILI` 放进凭据存储（权限 `bili`、`read`、`reply`，只限这个账号）。然后打开 **设置 → B站账号**，在 **主号** 里填你自己账号的 UID（`space.bilibili.com/` 后面那串数字）；它只存在运行时的存储里，提交的文件里不会出现 owner。账号卡只读显示 bili-svc 的 `GET /v1/status` 对这个号的说法：昵称、UID 和会话状态（`ok`、`dead`、`missing`、`none`，或连不上 bili-svc），bili-svc 扣住所有操作时还有一条横幅。这里不能登录：重新登录是 bili-svc 命令行里的一步。
+把 bili-svc 的 bearer 令牌以 `BILI_SVC_TOKEN_BILI` 放进凭据存储（权限 `bili`、`read`、`reply`，只限这个账号）。然后打开 **设置 → B站账号**，在 **主号** 里填你自己账号的 UID（`space.bilibili.com/` 后面那串数字）；它只存在运行时的存储里，提交的文件里不会出现 owner。设置页列出 bili-svc 保管的每个账号和它的会话状态（`ok`、`dead`、`missing`、`none`，或连不上 bili-svc）。要在这里扫码登录、续期、用闸门，需要给服务再配一个 `manage` 权限的令牌 `BILI_SVC_TOKEN_MANAGE`（[RUNBOOK §16b](../../../lsy/deploy/RUNBOOK.md)）；没有它，设置页保持只读，并写明缺哪个凭据。
 
 | 字段 | 默认值 | 含义 |
 |---|---|---|
 | `account` | `maomao` | bili-svc 里 agent 账号的 id：每次调用的 `account`。设置页显示这个 id 的账号，没有时显示第一个会话正常的账号 |
+| `manageTokenEnv` | `BILI_SVC_TOKEN_MANAGE` | 存放 `manage` 权限 bili-svc 令牌的凭据。只有设置页的路由读它，任何工具都不读；`tests/remote-client.spec.ts` 会在工具提到它或 `/v1/manage` 路由时失败 |
 | `ownerMid` | 未设 | owner 的主账号（UID）；Session 只回复这个号发来的私信。设置页里填的 UID 优先；两者都没有时，不读也不回任何私信 |
 | `timeZone` | `America/New_York` | 日记的日期、主 agent 额度和提示词时间所用的时区 |
 | `mainAgentPerDay` | `5` | 账号的 Session 每个本地日用 `bili_tell_main_agent` 给 owner 的主 agent 发消息的条数（最多 20）；只有微信通道排进队的才算，`0` 关掉这个工具的发送 |
@@ -65,7 +66,7 @@ kind: "package-reference"
 - **在 B站上**——owner 的主号私信 agent 的账号时，它的 Session 回答，回答以这个号的私信送达，除非恰好是 `NO_REPLY`。它经 bili-svc 的回复闸门（`POST /v1/reply/dm`）发出；闸门回复 owner 时不过分类器、不计每日额度、不受时段限制，但仍守它的规则（不 @、长度、链接、联系方式）和刹车。长回答最多拆成两条 500 字的私信，其余用 `…` 截断。owner 在 Web UI 里开的一轮留在那里，提醒或监视器的一轮也一样：账号通道认领的 Session，事件总线不会上报。owner 发来私信后，账号在最后一条之后的 15 分钟内每分钟查一次私信。
 - **在微信上**——闸门没有发出的回答（`held`、`blocked`，或 bili-svc 没有应答），标题是 `📺 B站：这条没能用 B站私信发出，改发微信`，结尾一行写原因（`原因：bili-svc's Reply Gate answered held (r-12)`）。微信聊天 Session 保存的副本把发送者写成 `the Bilibili account's Session (its answer could not go out as a Bilibili message)`，在那里回复时有上下文。关于会话、风控和闸门的通知来自 bili-svc 自己的事件，不来自这个包。
 - **来自主 agent**——owner 让这个号转告主 agent 时，Session 用 `bili_tell_main_agent` 发出：`ctx.lsyNotifier.tellMainAgent()` 把它作为不可信数据排进微信聊天 Session，主 agent 的回答在微信上送达 owner。这个号自己的回答仍以 B站私信送达。
-- **在设置页里**——账号卡（昵称、UID、会话状态、上次问 bili-svc 的时间、连不上时的原因）、bili-svc 闸门扣住所有操作时的横幅，以及主号 UID。路由是 `GET`/`POST /api/bili`，和所有 `/api` 路由一样要先通过连接的登录；它读 bili-svc 的状态（10 秒内复用），从不读任何 Cookie 或令牌。
+- **在设置页里**——有 manage 令牌时：闸门（模式、急停和它的原因、今天各项用量对上限；**解除急停**、一键**切到只读**；急停还在时**切到自动**是灰的，并写明顺序（先解除急停）；否则要再点一次明确确认，确认文字会说明回复闸门之后会以 bili-svc 的 `reply_comment` 路由所指账号的名义，在创作者视频下回评论、也回私信，受今日额度限制；bili-svc 拒绝时原话显示在卡片里）；每个账号一张卡（昵称、UID、状态、谁负责续期、上次续期或导入、失效原因），带**扫码登录**（二维码会变成“已扫码”，成功后自动关闭）、**刷新会话**、**检查**和**退出登录**（再点一次才生效）；会话归别的服务管的账号（`refresh_mode` 为 `external`，比如猫灯）不显示任何操作按钮；一个默认折叠的最近 20 条动作记录（可以再加载更多），草稿和判定都按纯文本显示；以及主号 UID。每个按钮点下去立刻显示忙碌状态。没有 manage 令牌时只剩只读卡片和主号 UID，并提示 `manageTokenEnv`。路由是 `GET`/`POST /api/bili`（`GET` 可带 `?ledger=<行数>`），和所有 `/api` 路由一样要先通过连接的登录。Host 校验每个操作的请求体（账号 id、退出登录必须重复账号 id、数值有上限），把每次操作连同账号、结果和耗时写进日志（从不写令牌、二维码 key 或 URL），bili-svc 拒绝时把它的原话和一个代码（`mode_refused`、`not_owner`、`refresh_failed`）交给页面解释。
 
 -----
 
@@ -81,12 +82,15 @@ kind: "package-reference"
 
 查私信（不经过模型）读 `dmUnread`，有未读时（或第一次看时，只记一个基线）再经 `dmMessages` 读和 owner 的对话；新私信持久排队，在 Session 空闲时提示它（用配置的 preset、权限预设和标题创建；解析不到时重建）。提示前先给 `bili-dm` 通道做标记；`session/event` 的回合结束时由 relay 决定（`NO_REPLY` 和 owner 中止的一轮什么都不发），`deliver` 把回答一段一段地经 `POST /v1/reply/dm` `{ account, talker: ownerMid, message }` 发出；除 `sent` 以外的结果都附原因改发微信。不是 owner 私信开启的一轮，回答留在 Session 里。`bili_inbox` 给模型读同样的消息，并把它显示过的 owner 私信记为已交付；别人的回复和 @ 只供阅读。
 
-设置页的视图来自 `GET /v1/status`：id 为 `account` 的账号，否则第一个会话为 `ok` 的账号，带它的 mid、显示名和会话状态，以及闸门的模式。owner 的 UID 存在 `bili` 存储域里，和日记、今天发给主 agent 的消息、私信游标与队列、它创建的 Session 放在一起；已退役的巡视、登录和写守卫的表不再声明，存着的行也不会再加载。
+设置页的视图在 manage 令牌下来自 `GET /v1/status`（每个账号的 `refresh_mode`、`login`、续期时间和失效原因；闸门的急停和用量）和 `GET /v1/manage/ledger?limit=`；`ctx.bili` 的账号卡是 id 为 `account` 的账号，否则第一个会话为 `ok` 的账号。没有 manage 令牌时，状态来自 agent 自己的令牌，只读。`ManageClient`（`src/manage.ts`）是唯一持有 manage 令牌、唯一调用 `/v1/manage/*` 的代码；它逐字段解析每个回答并截短每段文字，因为草稿和判定里转述的是第三方的话。扫码登录从 Host 开始（`ManageSettings`，`src/settings.ts`）：key 和 URL 留在 Host，浏览器只拿到用 `uqr` 画出的二维码模块，页面每两秒问一次 `login.poll`，结束的尝试 8 秒后从视图里消失。bili-svc 的时间是 epoch 秒，转换成毫秒。owner 的 UID 存在 `bili` 存储域里，和日记、今天发给主 agent 的消息、私信游标与队列、它创建的 Session 放在一起；已退役的巡视、登录和写守卫的表不再声明，存着的行也不会再加载。
 
 | 文件 | 作用 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | `BiliAccount`（`ctx.bili`）：配置、生命周期、查私信、relay 注册、读取、操作、日记、给主 agent 的消息、设置页路由 |
 | [`src/client.ts`](src/client.ts) | `RemoteBiliClient`：门、`/v1/status`、`/v1/reply/dm`、令牌、限时、结果映射、无损 JSON |
+| [`src/manage.ts`](src/manage.ts) | `ManageClient`：manage 令牌下 bili-svc 的管理接口、回答解析、二维码模块 |
+| [`src/settings.ts`](src/settings.ts) | `ManageSettings`：管理读取和 owner 的操作、扫码尝试、操作日志 |
+| [`src/actions.ts`](src/actions.ts) | 设置页路由 `POST` 请求体的校验 |
 | [`src/dm.ts`](src/dm.ts) | `DmChannel`，`ctx.ownerRelay` 的 `bili-dm` 通道：回复 owner 的私信，最多拆两条，以及微信兜底 |
 | [`src/endpoints.ts`](src/endpoints.ts) | 本包可以调用的接口名，分读取和操作 |
 | [`src/api.ts`](src/api.ts) | 有类型的读取（有长度上限）和单次调用的操作 |
@@ -150,6 +154,7 @@ Your final answer is your reply to the owner's message: it goes back to them as 
 <a id="known-limitations-and-deferred-work"></a>
 
 - **离不开 bili-svc**——没有它（或没有 `BILI_SVC_TOKEN_BILI`）时，每次读取和操作都带原因失败，owner 的私信读不到，设置页显示连不上 bili-svc；不会退回直接访问 B站。
+- **设置页的按钮需要 manage 令牌**——`BILI_SVC_TOKEN_MANAGE` 过期或被撤销时，设置页退回只读视图并显示 bili-svc 的原话；bili-svc 在扫码前重启会丢掉待扫的登录（它只在内存里保存），页面随后给出新的二维码。
 - **非官方网页 API**——接口和代码依据社区资料和实测，不是公开的约定；大多数变化由 bili-svc 吸收，其余以 `api_error` 拒绝的形式出现。
 - **看就是读**——agent 通过字幕（大多是机器转写）、简介、评论和一部分弹幕了解视频；它看不到画面，也听不到声音。
 - **私信需要互相关注**——B站只在互相关注的账号之间投递私信；owner 的主号和 agent 的账号必须互相关注，否则闸门发送失败，回答改发微信。

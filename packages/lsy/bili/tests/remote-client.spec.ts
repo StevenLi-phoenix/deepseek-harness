@@ -7,6 +7,7 @@ import {
   READ_TIMEOUT_MS, RemoteBiliClient, allowedEndpoint,
 } from '../src/client.ts'
 import { ENDPOINTS, type EndpointName } from '../src/endpoints.ts'
+import BiliAccount from '../src/index.ts'
 import { FakeBiliSvc, SVC_TOKEN, SVC_URL } from './fake-bili-svc.ts'
 
 let svc: FakeBiliSvc
@@ -162,6 +163,13 @@ describe('RemoteBiliClient', () => {
   })
 })
 
+/** Every `.ts` and `.tsx` source under a directory. */
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true, recursive: true })
+    .filter(entry => entry.isFile() && /\.tsx?$/.test(entry.name))
+    .map(entry => join(entry.parentPath, entry.name))
+}
+
 describe('no speech', () => {
   it('lists no endpoint that comments, replies, posts, shares, or messages, so no code here can name one', () => {
     for (const name of ['replyAdd', 'dmSend', 'dynamicCreate', 'shareReport']) expect(Object.hasOwn(ENDPOINTS, name)).toBe(false)
@@ -170,9 +178,7 @@ describe('no speech', () => {
   })
 
   it('has no source in this package or its tools that names a speech endpoint or path, or calls fetch outside the client', () => {
-    const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true, recursive: true })
-      .filter(entry => entry.isFile() && /\.tsx?$/.test(entry.name))
-      .map(entry => join(entry.parentPath, entry.name))
+    const files = sourceFiles
     const sources = [...files(join(import.meta.dirname, '../src')), ...files(join(import.meta.dirname, '../../tool-bili/src'))]
     expect(sources.length).toBeGreaterThan(10)
     for (const file of sources) {
@@ -180,7 +186,40 @@ describe('no speech', () => {
       for (const needle of ['replyAdd', 'dmSend', 'dynamicCreate', 'shareReport', '/x/v2/reply/add', 'send_msg', 'create/dyn', 'share/add', '/v1/reply/comment']) {
         expect(text.includes(needle), `${file} names ${needle}`).toBe(false)
       }
-      if (!file.endsWith(join('src', 'client.ts')) && !file.endsWith(join('client', 'index.ts'))) expect(/\bfetch\(/.test(text), `${file} calls fetch`).toBe(false)
+      if (!file.endsWith(join('src', 'client.ts')) && !file.endsWith(join('src', 'manage.ts')) && !file.endsWith(join('client', 'index.ts'))) expect(/\bfetch\(/.test(text), `${file} calls fetch`).toBe(false)
+    }
+  })
+})
+
+describe('the manage token', () => {
+  it('is named by no tool and no agent-facing source: only the Settings route\'s client uses it', () => {
+    const files = sourceFiles
+    const agentFacing = [
+      ...files(join(import.meta.dirname, '../../tool-bili/src')),
+      ...files(join(import.meta.dirname, '../../lsy-tool-up/src')),
+      join(import.meta.dirname, '../src/client.ts'),
+      join(import.meta.dirname, '../src/api.ts'),
+      join(import.meta.dirname, '../src/dm.ts'),
+    ]
+    expect(agentFacing.length).toBeGreaterThan(4)
+    for (const file of agentFacing) {
+      const text = readFileSync(file, 'utf8')
+      for (const needle of ['/v1/manage', 'ManageClient', 'ManageSettings', 'BILI_SVC_TOKEN_MANAGE', 'manageTokenEnv']) {
+        expect(text.includes(needle), `${file} names ${needle}`).toBe(false)
+      }
+    }
+    // Inside this package only the Settings route's modules and the plugin that mounts them name the client.
+    for (const file of files(join(import.meta.dirname, '../src')).filter(path => !path.includes(join('src', 'client') + '/'))) {
+      const owner = ['index.ts', 'manage.ts', 'settings.ts', 'actions.ts', 'view.ts'].some(name => file.endsWith(join('src', name)))
+      if (!owner) expect(readFileSync(file, 'utf8').includes('ManageClient'), `${file} names ManageClient`).toBe(false)
+    }
+  })
+
+  it('is not reachable from the public methods of ctx.bili', () => {
+    const methods = Object.getOwnPropertyNames(BiliAccount.prototype).filter(name => !name.startsWith('_'))
+    for (const name of methods) {
+      if (typeof Reflect.get(BiliAccount.prototype, name) !== 'function') continue
+      expect(name, 'a public method that takes the manage token').not.toMatch(/manage|login|logout|brake|gate/i)
     }
   })
 })

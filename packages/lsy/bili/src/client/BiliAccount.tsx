@@ -1,10 +1,9 @@
 /**
- * The Bilibili account Settings section: a read-only account card with the
- * session state bili-svc reports (bili-svc holds and renews the login; there is
- * no sign-in here), a banner while bili-svc holds every action, and the owner's
- * main account. It polls while mounted and pauses while the page is hidden.
- * Nothing it shows can be a cookie or token: bili-svc's status names accounts
- * and session states only.
+ * The Bilibili account Settings section: the gate with its brake, one card per account bili-svc
+ * holds (with QR sign-in, refresh, check, and sign-out when the Host has the manage token), the
+ * recent action ledger, and the owner's main account. It polls while mounted and pauses while the
+ * page is hidden; a QR code waiting for a scan is asked every two seconds. Nothing it shows can be
+ * a cookie or token: bili-svc's answers name accounts and states only, and QR keys stay on the Host.
  */
 
 import { useId, useEffect, useState, type ReactNode } from 'react'
@@ -12,10 +11,16 @@ import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the settings shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
-import type { BiliAction, BiliView } from '../view.ts'
-import { POLL_INTERVAL_MS, startPolling, type BiliState } from './bili.ts'
-import { agoText, dateTime, stampTime, type Translate } from './format.ts'
+import type { ActionResult, BiliAction, BiliView } from '../view.ts'
+import { Accounts } from './Accounts.tsx'
+import { LOGIN_POLL_MS, POLL_INTERVAL_MS, startPolling, type BiliState } from './bili.ts'
+import { dateTime, stampTime, type Translate } from './format.ts'
+import { Gate } from './Gate.tsx'
+import { Ledger } from './Ledger.tsx'
 import css from './BiliAccount.module.css'
+
+/** How long the line that says what an action did stays up. */
+const RESULT_MS = 6000
 
 /** The section's injected face (slot `inject`). */
 export interface BiliAccountInjected {
@@ -27,6 +32,8 @@ export interface BiliAccountInjected {
   refresh: () => void
   /** One owner action. */
   act: (action: BiliAction) => void
+  /** One background action (a QR sign-in's poll): no busy state, no error banner. */
+  poll: (action: BiliAction) => void
 }
 
 /** Props delivered by the settings shell. */
@@ -41,46 +48,6 @@ function Card({ title, meta, children }: { title: string; meta?: string; childre
         {meta === undefined ? null : <span className={css.meta}>{meta}</span>}
       </div>
       {children}
-    </section>
-  )
-}
-
-function AccountCard({ view, now, t }: { view: BiliView; now: number; t: Translate }): ReactNode {
-  const { account } = view
-  const initial = Array.from(account.uname ?? 'B')[0] ?? 'B'
-  return (
-    <section className={`${css.card} ${css.wide} ${css.hero}`} aria-label={t('account.title')} data-account={account.session}>
-      <div className={css.identity}>
-        <span className={css.avatar} aria-hidden="true">{initial}</span>
-        <div className={css.who}>
-          <div className={css.nameRow}>
-            <span className={css.name}>{account.uname ?? t('account.unknown')}</span>
-            <span className={css.pill} data-state={account.session}>{t(`account.state.${account.session}`)}</span>
-          </div>
-          <span className={css.meta}>
-            {[
-              account.mid === undefined ? undefined : t('account.uid', { mid: account.mid }),
-              t('account.id', { id: account.account }),
-              t('account.checked', { ago: agoText(account.checkedAt, now, t) }),
-            ].filter(Boolean).join(' · ')}
-          </span>
-          {account.error === undefined ? null : <span className={css.reason}>{t('account.error', { error: account.error })}</span>}
-          <span className={css.hint}>{t('account.hint')}</span>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-/** Shown while bili-svc holds every action (its mode is not automatic, or its brake is set). */
-function GateBanner({ view, t }: { view: BiliView; t: Translate }): ReactNode {
-  if (view.gate?.readonly !== true) return null
-  return (
-    <section className={css.banner} role="status" data-scope="gate">
-      <div className={css.bannerText}>
-        <span className={css.bannerTitle}>{t('gate.held', { mode: view.gate.mode === '' ? '—' : view.gate.mode })}</span>
-        <span className={css.bannerHint}>{t('gate.hint')}</span>
-      </div>
     </section>
   )
 }
@@ -126,23 +93,66 @@ function OwnerCard({ view, act, busy, t }: { view: BiliView; act: (action: BiliA
   )
 }
 
+/** The line that says what an action did, or null. */
+function resultText(result: ActionResult, t: Translate): string | null {
+  const account = result.account ?? ''
+  switch (result.action) {
+    case 'gate.mode':
+      return t('result.mode', { mode: result.outcome === 'auto' ? t('gate.mode.auto') : result.outcome === 'readonly' ? t('gate.mode.readonly') : result.outcome })
+    case 'brake.release':
+      return result.outcome === 'released' ? t('result.released') : t('result.noBrake')
+    case 'session.refresh':
+      return result.outcome === 'refreshed' ? t('result.refreshed', { account }) : t('result.unchanged', { account })
+    case 'session.check':
+      if (result.outcome === 'invalid') return t('result.checkInvalid', { account })
+      return result.days === null ? t('result.checkValid', { account }) : t('result.checkExpires', { account, days: result.days })
+    case 'logout':
+      return t('result.loggedOut', { account })
+    case 'login.poll':
+      return result.outcome === 'done' ? t('result.loginDone', { account }) : null
+    default:
+      return null
+  }
+}
+
+/** Words for a failed action: a known code gets its own line. */
+function errorText(error: string, code: string | null, t: Translate): string {
+  switch (code) {
+    case 'mode_refused': return t('error.mode_refused')
+    case 'not_owner': return t('error.not_owner')
+    case 'no_token': return t('error.no_token')
+    case 'refresh_failed': return t('error.refresh_failed', { error })
+    case 'no_session':
+    case 'session_unavailable': return t('error.no_session')
+    default: return t('error.action', { error })
+  }
+}
+
 /**
  * Render the Bilibili account section.
  * @param props - the store hook, refresh and action callbacks, and copy.
  * @returns the section.
  */
-export function BiliAccountSection({ useBili, refresh, act, t }: BiliAccountProps): ReactNode {
+export function BiliAccountSection({ useBili, refresh, act, poll, t }: BiliAccountProps): ReactNode {
   const state = useBili(value => value)
   const translate = t as Translate
   const view = state.view
   useEffect(() => startPolling(refresh, POLL_INTERVAL_MS), [refresh])
+  // A QR code waiting for a scan is asked every two seconds, until it settles.
+  const waiting = view?.logins.find(login => login.state === 'waiting' || login.state === 'scanned')?.account ?? null
+  useEffect(() => {
+    if (waiting === null) return undefined
+    return startPolling(() => { poll({ action: 'login.poll', account: waiting }) }, LOGIN_POLL_MS)
+  }, [waiting, poll])
   const now = Date.now()
-  const busy = state.busy !== null
+  // A refused switch to automatic is shown inside the gate card, where the owner is looking.
+  const refusedMode = state.errorCode === 'mode_refused'
 
   let status: { tone: 'live' | 'stale' | 'idle'; text: string }
   if (view === null) status = state.stale ? { tone: 'stale', text: translate('status.failed') } : { tone: 'idle', text: translate('status.loading') }
   else if (state.stale) status = { tone: 'stale', text: translate('status.stale', { time: stampTime(state.checkedAt ?? now) }) }
   else status = { tone: 'live', text: translate('status.live', { time: stampTime(state.checkedAt ?? now) }) }
+  const done = state.result !== null && now - state.result.at < RESULT_MS ? resultText(state.result.value, translate) : null
 
   return (
     <section className={css.section} aria-label={translate('title')} data-stale={state.stale ? '' : undefined}>
@@ -152,18 +162,35 @@ export function BiliAccountSection({ useBili, refresh, act, t }: BiliAccountProp
           {status.text}
         </span>
       </div>
-      {state.error === null ? null : <div className={css.error} role="alert">{translate('error.action', { error: state.error })}</div>}
+      {state.error === null || refusedMode ? null : <div className={css.error} role="alert">{errorText(state.error, state.errorCode, translate)}</div>}
+      {done === null ? null : <div className={css.done} role="status">{done}</div>}
       {view === null
         ? null
         : (
           <>
-            <GateBanner view={view} t={translate} />
+            <ManageNotice view={view} t={translate} />
+            <Gate view={view} now={now} t={translate} busy={state.busy} act={act} refusal={refusedMode ? { message: state.error ?? '' } : null} />
             <div className={css.grid}>
-              <AccountCard view={view} now={now} t={translate} />
-              <OwnerCard view={view} act={act} busy={busy} t={translate} />
+              <Accounts view={view} now={now} t={translate} busy={state.busy} act={act} />
+              <OwnerCard view={view} act={act} busy={state.busy !== null} t={translate} />
             </div>
+            <Ledger view={view} now={now} t={translate} busy={state.busy} act={act} limit={state.ledgerLimit} />
           </>
         )}
+    </section>
+  )
+}
+
+/** Why the controls are missing: no manage token, or bili-svc refused it. */
+function ManageNotice({ view, t }: { view: BiliView; t: Translate }): ReactNode {
+  if (view.manage) return null
+  return (
+    <section className={css.banner} role="status" data-scope="manage">
+      <div className={css.bannerText}>
+        <span className={css.bannerTitle}>{t('manage.off.title')}</span>
+        <span className={css.bannerHint}>{t('manage.off.hint', { env: view.manageEnv })}</span>
+        {view.manageError === null ? null : <span className={css.bannerHint}>{t('manage.error', { error: view.manageError })}</span>}
+      </div>
     </section>
   )
 }
