@@ -142,6 +142,17 @@ describe('GET', () => {
     expect((await get()).sessions.map(session => session.id)).toEqual(['s2', 's1'])
   })
 
+  it('lists Sessions newest first, and when two changes share one millisecond the later write is the newer', async () => {
+    const { file, get } = await mount()
+    // A frozen clock: the history times of both writes are equal, as they can be under load on a real clock.
+    const frozen = new MemoryStore(file, () => '2026-10-24', () => new Date('2026-10-24T12:00:00.000Z'))
+    await frozen.save({ text: 'first', category: 'projects' }, { session: 's1' })
+    await frozen.save({ text: 'second', category: 'projects' }, { session: 's2' })
+    await frozen.save({ text: 'third', category: 'projects' }, { session: 's3' })
+    await frozen.save({ text: 'first again', category: 'career' }, { session: 's1' })
+    expect((await get()).sessions.map(session => session.id)).toEqual(['s1', 's3', 's2'])
+  })
+
   it('rejects a malformed query and unsupported methods', async () => {
     const { route } = await mount()
     expect((await route.fetch(new Request(`http://127.0.0.1${MEMORY_PATH}?limit=9999`))).status).toBe(400)
