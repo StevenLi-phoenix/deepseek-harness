@@ -118,7 +118,8 @@ describe('formatting', () => {
     const placeholders = (text: string): string => (text.match(/\{\w+\}/g) ?? []).sort().join()
     for (const dictionary of [ja, es, fr, de, ru, pt]) {
       expect(Object.keys(dictionary).sort()).toEqual(Object.keys(zh).sort())
-      for (const key of Object.keys(zh) as QqKey[]) expect(placeholders((dictionary as Record<QqKey, string>)[key]), key).toBe(placeholders(zh[key]))
+      for (const key of Object.keys(zh) as QqKey[]) expect(placeholders((dictionary as Record<QqKey, string>)[key]),
+        key).toBe(placeholders(zh[key]))
     }
     for (const key of Object.keys(zh) as QqKey[]) expect(placeholders(en[key])).toBe(placeholders(zh[key]))
     for (const dictionary of [zh, en, ja, es, fr, de, ru, pt]) {

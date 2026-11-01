@@ -52,6 +52,9 @@ export interface RecorderServer {
   close(): Promise<void>
 }
 
+/** What a handler returns once it has answered. */
+type Handled = true
+
 /** Failure with an HTTP status and a stable code. */
 class HttpError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) {
@@ -97,7 +100,7 @@ export async function startRecorderServer(options: RecorderServerOptions): Promi
   const streams = new Set<ServerResponse>()
   const active = new Set<Promise<void>>()
 
-  const send = <T extends z.ZodType>(res: ServerResponse, status: number, schema: T, value: z.input<T>): void => {
+  const send = <T extends z.ZodType>(res: ServerResponse, status: number, schema: T, value: z.input<T>): Handled => {
     // The recorder's own answers are checked too: a drift between the schema and the code fails here, not in DSH.
     let body: string
     try {
@@ -105,10 +108,11 @@ export async function startRecorderServer(options: RecorderServerOptions): Promi
     } catch (error: unknown) {
       logger.error(`qq-recorder: an answer did not match its schema: ${error instanceof ZodError ? error.issues[0]?.path.join('.') ?? '' : String(error)}`)
       sendError(res, 500, 'internal', 'the answer did not match its schema')
-      return
+      return true
     }
     res.writeHead(status, { 'content-type': 'application/json', [PROTOCOL_HEADER]: protocolTag({ major, minor }), 'cache-control': 'no-store' })
     res.end(body)
+    return true
   }
   const sendError = (res: ServerResponse, status: number, code: string, message: string): void => {
     if (res.headersSent) { res.end(); return }
@@ -142,7 +146,7 @@ export async function startRecorderServer(options: RecorderServerOptions): Promi
   const PageQuery = GroupQuery.extend({ after: z.string().max(40).optional(), limit: z.coerce.number().int().min(1).max(5000) })
   const LoginQuery = z.object({ fresh: z.enum(['1', '0']).optional() })
 
-  const events = (req: IncomingMessage, res: ServerResponse): void => {
+  const events = (req: IncomingMessage, res: ServerResponse): Handled => {
     res.writeHead(200, { 'content-type': 'application/x-ndjson', [PROTOCOL_HEADER]: protocolTag({ major, minor }), 'cache-control': 'no-store' })
     streams.add(res)
     const write = (event: z.input<typeof EventDto>): void => {
@@ -156,9 +160,10 @@ export async function startRecorderServer(options: RecorderServerOptions): Promi
     const done = (): void => { clearInterval(timer); off(); streams.delete(res) }
     req.on('close', done)
     res.on('close', done)
+    return true
   }
 
-  const route = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+  const route = async (req: IncomingMessage, res: ServerResponse): Promise<Handled> => {
     const url = new URL(req.url ?? '/', 'http://recorder')
     const path = url.pathname
     const method = req.method ?? 'GET'
@@ -192,7 +197,8 @@ export async function startRecorderServer(options: RecorderServerOptions): Promi
       only('GET')
       if (url.searchParams.has('sinceMs')) {
         const q = query(url, ListQuery)
-        return send(res, 200, MessageListDto, recorder.recent(q.groupId, { sinceMs: q.sinceMs, limit: q.limit, ...q.userId === undefined ? {} : { userId: q.userId } }))
+        return send(res, 200, MessageListDto,
+          recorder.recent(q.groupId, { sinceMs: q.sinceMs, limit: q.limit, ...q.userId === undefined ? {} : { userId: q.userId } }))
       }
       const q = query(url, PageQuery)
       try {
@@ -205,7 +211,8 @@ export async function startRecorderServer(options: RecorderServerOptions): Promi
     if (path === PATHS.search) {
       only('POST')
       const body = SearchRequestDto.parse(await readBody(req))
-      return send(res, 200, MessageListDto, recorder.search(body.query, { ...body.groupId === undefined ? {} : { groupId: body.groupId }, limit: body.limit }))
+      return send(res, 200, MessageListDto,
+        recorder.search(body.query, { ...body.groupId === undefined ? {} : { groupId: body.groupId }, limit: body.limit }))
     }
     if (path === PATHS.lookup) {
       only('POST')

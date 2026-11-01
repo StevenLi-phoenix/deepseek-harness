@@ -69,7 +69,7 @@ async function start() {
   let stderr = ''
   child.stdout?.on('data', (chunk: Buffer) => { stdout += String(chunk) })
   child.stderr?.on('data', (chunk: Buffer) => { stderr += String(chunk) })
-  const exited = new Promise<number | null>(done => child.once('exit', code => { done(code) }))
+  const exited = new Promise<number | null>(done => child.once('exit', (code) => { done(code) }))
   const deadline = Date.now() + 10_000
   for (;;) {
     try {
@@ -124,7 +124,7 @@ describe('the built qq-recorder.mjs under plain node', () => {
     const child = spawn(process.execPath, [bundle], { env: { PATH: process.env['PATH'] ?? '', QQ_RECORDER_DATA_DIR: dir, QQ_RECORDER_SOCKET: join(dir, 's.sock') }, stdio: ['ignore', 'pipe', 'pipe'] })
     let stderr = ''
     child.stderr.on('data', (chunk: Buffer) => { stderr += String(chunk) })
-    const code = await new Promise<number | null>((done) => { child.once('exit', c => { done(c) }) })
+    const code = await new Promise<number | null>((done) => { child.once('exit', (c) => { done(c) }) })
     expect(code).toBe(1)
     expect(stderr).toContain('QQ_RECORDER_TOKEN is not set')
   })

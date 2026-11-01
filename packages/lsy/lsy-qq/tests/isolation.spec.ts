@@ -60,7 +60,11 @@ describe('DSH never touches the recorder\'s data', () => {
       }
       for (const file of sources(src)) {
         const text = code(file)
-        if (/dsh-lsy-qq\/src\/(store|recorder|server|onebot|media|login|text)\.ts|\bQqStore\b|\bQqRecorder\b|qq\.db|recorder-config\.json|lsy-qq\/media/.test(text)) offenders.push(relative(LSY, file))
+        const touches = new RegExp([
+          'dsh-lsy-qq/src/(store|recorder|server|onebot|media|login|text)\\.ts', '\\bQqStore\\b', '\\bQqRecorder\\b',
+          'qq\\.db', 'recorder-config\\.json', 'lsy-qq/media',
+        ].join('|'))
+        if (touches.test(text)) offenders.push(relative(LSY, file))
       }
     }
     expect(offenders).toEqual([])

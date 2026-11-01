@@ -36,13 +36,15 @@ async function rig(options: { prepare?: (dataDir: string) => void; online?: bool
   options.prepare?.(join(dir, 'data'))
   const h = await bootRecorder({ dir, config: false })
   const socketPath = join(dir, 'run', 'qq-recorder.sock')
-  const server = await startRecorderServer({ recorder: h.recorder, logger: { debug() {}, info() {}, error() {} }, socketPath, token: RECORDER_TOKEN })
+  const server = await startRecorderServer({ recorder: h.recorder, logger: { debug() {}, info() {}, error() {} }, socketPath,
+    token: RECORDER_TOKEN })
   servers.push(server)
   return Object.assign(h, { server, socketPath, url: h.fake.url })
 }
 
 /** DSH's observer over `r`, with in-memory storage that may be shared between boots. */
-async function boot(r: Rig, options: { config?: Record<string, unknown>; pool?: MemoryMediaPool; notifier?: { send: ReturnType<typeof vi.fn> }; url?: string } = {}) {
+async function boot(r: Rig,
+  options: { config?: Record<string, unknown>; pool?: MemoryMediaPool; notifier?: { send: ReturnType<typeof vi.fn> }; url?: string } = {}) {
   const ctx = new Context()
   contexts.push(ctx)
   const logs: Array<{ type: string; text: string }> = []
@@ -195,7 +197,8 @@ describe('QqObserver takes over the old digest state', () => {
 })
 
 describe('QqObserver owner notices', () => {
-  const check = (h: { observer: QqObserver }) => (h.observer as unknown as { checkOutage(botOffline: boolean): Promise<void> }).checkOutage(false)
+  type Checker = { checkOutage(botOffline: boolean): Promise<void> }
+  const check = (h: { observer: QqObserver }) => (h.observer as unknown as Checker).checkOutage(false)
 
   async function down() {
     const notifier = { send: vi.fn(async () => {}) }
@@ -205,7 +208,8 @@ describe('QqObserver owner notices', () => {
   }
 
   /** Boot against a recorder whose protocol end never answers (its address is closed). */
-  async function bootDown(r: Rig, options: { notifier?: { send: ReturnType<typeof vi.fn> }; pool?: MemoryMediaPool; config?: Record<string, unknown> }) {
+  async function bootDown(r: Rig,
+    options: { notifier?: { send: ReturnType<typeof vi.fn> }; pool?: MemoryMediaPool; config?: Record<string, unknown> }) {
     const url = r.url
     await r.fake.close().catch(() => {})
     const ctx = new Context()

@@ -49,7 +49,8 @@ function toLogin(reading: Omit<QqLogin, 'qr'> & { qrUrl: string | null }): QqLog
  */
 export async function buildPanel(source: QqSource, options: { fresh?: boolean } = {}, now: () => number = Date.now): Promise<QqPanel> {
   const login = toLogin(await source.loginStatus(options))
-  return { at: now(), connection: source.connectionStatus(), login, groupsRecorded: source.recordedGroups(), groups: await groupsOf(source) }
+  return { at: now(), connection: source.connectionStatus(), login, groupsRecorded: source.recordedGroups(),
+    groups: await groupsOf(source) }
 }
 
 /**

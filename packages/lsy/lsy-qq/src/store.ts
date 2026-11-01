@@ -1,9 +1,9 @@
 /**
  * The recorder's database: one SQLite file (`node:sqlite`) holding the recorded groups' messages and their media. Only the
  * qq-recorder process opens it (DSH reaches the data through the recorder's API). The digest, note, and Session tables
- * of the schema are frozen: nothing writes them any more, and `legacy*` reads them once for DSH's import. Writes are incremental and idempotent: a message is unique by group and QQ
- * message id, so a reconnect or a backfill never doubles a row. Text search runs on an FTS5 index with the
- * trigram tokenizer, which finds any three-character run of Chinese or English text.
+ * of the schema are frozen: nothing writes them any more, and `legacy*` reads them once for DSH's import. Writes are
+ * incremental and idempotent: a message is unique by group and QQ message id, so a reconnect or a backfill never doubles
+ * a row. Text search runs on an FTS5 index with the trigram tokenizer, which finds any three-character run of Chinese or English text.
  */
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'

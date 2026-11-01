@@ -109,7 +109,8 @@ describe('lsy-tool-qq', () => {
   })
 
   it('says so when there is nothing yet', async () => {
-    const { call } = await mount(stand({ digests: () => [], recentMessages: () => Promise.resolve([]), searchMessages: () => Promise.resolve([]), groupOverview: () => Promise.resolve([]) }))
+    const { call } = await mount(stand({ digests: () => [], recentMessages: () => Promise.resolve([]),
+      searchMessages: () => Promise.resolve([]), groupOverview: () => Promise.resolve([]) }))
     expect(await call('qq_digest', {})).toContain('没有摘要')
     expect(await call('qq_groups', {})).toContain('还没有群记录')
     expect(await call('qq_search', { query: '不存在的词' })).toContain('没有找到')

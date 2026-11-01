@@ -363,7 +363,7 @@ export class QqObserver extends Service {
         const value = credential?.value.trim() ?? ''
         return value === '' ? undefined : value
       },
-      logger: { debug: m => { log.debug(m) }, info: m => { log.info(m) }, warn: m => { log.warn(m) } },
+      logger: { debug: (m) => { log.debug(m) }, info: (m) => { log.info(m) }, warn: (m) => { log.warn(m) } },
       now: () => this.now(),
     })
     if (config.dataDir !== undefined) ctx.logger.warn('lsy-qq: dataDir is ignored: the qq-recorder owns the QQ database and downloads; remove it from the configuration')
@@ -474,7 +474,7 @@ export class QqObserver extends Service {
     return {
       page: (groupId, after, limit) => this.client.page(groupId, after, limit),
       lookup: (groupId, ids) => this.client.lookup(groupId, ids),
-      members: async (groupId) => (this.client.supports('members') ? this.client.members(groupId) : undefined),
+      members: async groupId => (this.client.supports('members') ? this.client.members(groupId) : undefined),
       groupName: groupId => this.groupName(groupId),
     }
   }
@@ -509,7 +509,11 @@ export class QqObserver extends Service {
     const groups = await this.client.groups()
     this.learn(groups)
     return groups.map(group => ({
-      groupId: group.groupId, name: group.name, memberCount: group.memberCount, recorded: this.recordedIds.has(group.groupId), seen: group.unlistedSeen,
+      groupId: group.groupId,
+      name: group.name,
+      memberCount: group.memberCount,
+      recorded: this.recordedIds.has(group.groupId),
+      seen: group.unlistedSeen,
     }))
   }
 
@@ -598,7 +602,8 @@ export class QqObserver extends Service {
    * @returns one entry per message found: recorded, not recalled, and still inside the retention window.
    * @throws {@link RecorderUnavailable} while the recorder is down.
    */
-  async evidenceOf(groupId: string, messageIds: readonly string[]): Promise<Array<{ messageId: string; senderKey: string; at: number; text: string }>> {
+  async evidenceOf(groupId: string,
+    messageIds: readonly string[]): Promise<Array<{ messageId: string; senderKey: string; at: number; text: string }>> {
     if (!this.recordedIds.has(groupId) || this.store === undefined) return []
     const { textDays } = this.live.retention
     const since = textDays > 0 ? this.now() - textDays * 86_400_000 : 0
@@ -626,7 +631,9 @@ export class QqObserver extends Service {
    */
   async recentMessages(groupId: string, options: { hours: number; limit: number; userId?: string }): Promise<MessageRow[]> {
     if (!this.recordedIds.has(groupId)) return []
-    return this.client.recent(groupId, { sinceMs: this.now() - options.hours * 3_600_000, limit: options.limit, ...options.userId === undefined ? {} : { userId: options.userId } })
+    return this.client.recent(groupId,
+      { sinceMs: this.now() - options.hours * 3_600_000, limit: options.limit,
+        ...options.userId === undefined ? {} : { userId: options.userId } })
   }
 
   /**
@@ -650,7 +657,8 @@ export class QqObserver extends Service {
   digests(options: { groupId?: string; days: number; limit: number }): DigestRow[] {
     if (options.groupId !== undefined && !this.recordedIds.has(options.groupId)) return []
     const sinceMs = this.now() - options.days * 86_400_000
-    return (this.store?.digests({ ...options.groupId === undefined ? {} : { groupId: options.groupId }, sinceMs, limit: options.limit }) ?? [])
+    return (this.store?.digests({ ...options.groupId === undefined ? {} : { groupId: options.groupId }, sinceMs,
+      limit: options.limit }) ?? [])
       .filter(row => this.recordedIds.has(row.groupId))
   }
 

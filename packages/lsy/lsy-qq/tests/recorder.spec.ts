@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, statSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ConfigRejected } from '../src/recorder.ts'
@@ -65,7 +66,8 @@ describe('QqRecorder recording', () => {
 
   it('downloads images from QQ hosts into content-addressed private files, and refuses other hosts', async () => {
     const fetched: string[] = []
-    const h = await bootRecorder({ fetch: vi.fn(async (url: string) => { fetched.push(url); return new Response(PNG, { status: 200 }) }) as never })
+    const h = await bootRecorder({ fetch: vi.fn(async (url: string) => { fetched.push(url); return new Response(PNG,
+      { status: 200 }) }) as never })
     await connected(h)
     h.fake.push(groupMessage(GROUP, USER, [
       { type: 'image', data: { url: 'https://multimedia.nt.qq.com.cn/a/b.png', file: 'b.png' } },
@@ -83,7 +85,8 @@ describe('QqRecorder recording', () => {
   })
 
   it('keeps an image it cannot fetch as a row with its reason, and stops at the size cap', async () => {
-    const h = await bootRecorder({ fetch: vi.fn(async () => new Response(Buffer.alloc(5000), { status: 200 })) as never, config: { media: { maxImageBytes: 2048 } } })
+    const h = await bootRecorder({ fetch: vi.fn(async () => new Response(Buffer.alloc(5000), { status: 200 })) as never,
+      config: { media: { maxImageBytes: 2048 } } })
     await connected(h)
     h.fake.push(groupMessage(GROUP, USER, [{ type: 'image', data: { url: 'https://gchat.qpic.cn/a.jpg' } }]))
     await until(() => h.recorder.store.mediaOf(1).some(m => m.error !== null), 'the failure')
@@ -188,7 +191,7 @@ describe('QqRecorder connection', () => {
     const h = await bootRecorder()
     await connected(h)
     const events: string[] = []
-    h.recorder.subscribe(event => { events.push(event.type) })
+    h.recorder.subscribe((event) => { events.push(event.type) })
     h.fake.push({ post_type: 'notice', notice_type: 'bot_offline', user_id: 99999, tag: 'KickedOffLine' })
     await until(() => events.includes('bot-offline'), 'the event')
     expect(h.recorder.status().outage.botOfflineAt).toBeGreaterThan(0)
@@ -257,7 +260,8 @@ describe('QqRecorder applies configuration without dropping the connection', () 
   it('reconnects only when the address or the token variable changes', async () => {
     const h = await bootRecorder()
     await connected(h)
-    expect(h.apply({ backfill: { enabled: false }, media: { images: false }, retention: { textDays: 7 }, honorRecall: false, reconnectQuietMs: 0 })).toMatchObject({ reconnect: false })
+    expect(h.apply({ backfill: { enabled: false }, media: { images: false }, retention: { textDays: 7 }, honorRecall: false,
+      reconnectQuietMs: 0 })).toMatchObject({ reconnect: false })
     expect(h.apply({ login: { enabled: true, url: 'http://127.0.0.1:3009', timeoutMs: 1000 } })).toMatchObject({ reconnect: false })
     await sleep(150)
     expect(h.fake.connections).toBe(1)
@@ -284,14 +288,14 @@ describe('QqRecorder applies configuration without dropping the connection', () 
   })
 
   it('reads the saved configuration only when it is usable', async () => {
-    const dir = await import('node:fs').then(fs => fs.mkdtempSync(join(require('node:os').tmpdir(), 'lsy-qq-badcfg-')))
+    const dir = mkdtempSync(join(tmpdir(), 'lsy-qq-badcfg-'))
     mkdirSync(join(dir, 'data'), { recursive: true })
     writeFileSync(join(dir, 'data', 'recorder-config.json'), JSON.stringify({ revision: 'x', url: 'ws://192.168.9.9:1' }))
     const h = await bootRecorder({ dir, config: false })
     expect(h.recorder.status().configRevision).toBeNull()
     expect(h.logs.some(line => line.type === 'error' && line.text.includes('unusable'))).toBe(true)
     await h.recorder.stop()
-    await import('node:fs').then(fs => { fs.rmSync(dir, { recursive: true, force: true }) })
+    rmSync(dir, { recursive: true, force: true })
   })
 })
 
@@ -306,7 +310,8 @@ describe('QqRecorder backfill is gentle', () => {
       calls.push({ at: Date.now(), group: Number(params['group_id']), count: params['count'] })
       return history(params)
     })
-    const h = await bootRecorder({ fake, config: { groups: GROUPS, reconnectQuietMs: 0, backfill: { gapMs: 0, minIntervalMs: 0, ...backfill } as never } })
+    const h = await bootRecorder({ fake,
+      config: { groups: GROUPS, reconnectQuietMs: 0, backfill: { gapMs: 0, minIntervalMs: 0, ...backfill } as never } })
     await Promise.resolve()
     return Object.assign(h, { calls })
   }

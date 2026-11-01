@@ -135,7 +135,8 @@ export class DigestStore {
   async deleteDigests(options: { groupId?: string; beforeMs?: number }): Promise<number> {
     if (options.groupId === undefined && options.beforeMs === undefined) throw new Error('deleteDigests needs a group or a date')
     const doomed = [...this.domain.table('digests').entries()].filter(([, row]) =>
-      (options.groupId === undefined || row.groupId === options.groupId) && (options.beforeMs === undefined || row.createdAt < options.beforeMs))
+      (options.groupId === undefined || row.groupId === options.groupId)
+      && (options.beforeMs === undefined || row.createdAt < options.beforeMs))
     return this.domain.table('digests').deleteMany(doomed.map(([id]) => id))
   }
 

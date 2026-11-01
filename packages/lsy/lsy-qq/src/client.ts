@@ -347,7 +347,8 @@ export class RecorderClient {
   /**
    * One request.
    * @param link - false for the loop's own requests, which run while the link is down.
-   * @throws {@link RecorderUnavailable} when the recorder cannot be reached or the link is down; {@link RecorderError} for its error answers.
+   * @throws {@link RecorderUnavailable} when the recorder cannot be reached or the link is down.
+   * @throws {@link RecorderError} for the recorder's error answers.
    */
   private async call<S extends z.ZodType>(
     method: 'GET' | 'POST' | 'PUT', path: string, schema: S, options: { body?: unknown; link?: boolean } = {},
@@ -412,7 +413,8 @@ export class RecorderClient {
 
   /** @returns recent messages of a recorded group, oldest first. */
   recent(groupId: string, options: { sinceMs: number; limit: number; userId?: string }): Promise<Message[]> {
-    const q = new URLSearchParams({ groupId, sinceMs: String(Math.max(0, Math.round(options.sinceMs))), limit: String(options.limit), ...options.userId === undefined ? {} : { userId: options.userId } })
+    const q = new URLSearchParams({ groupId, sinceMs: String(Math.max(0, Math.round(options.sinceMs))), limit: String(options.limit),
+      ...options.userId === undefined ? {} : { userId: options.userId } })
     return this.call('GET', `${PATHS.messages}?${q.toString()}`, MessageListDto)
   }
 
