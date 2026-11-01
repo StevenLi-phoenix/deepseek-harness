@@ -7,7 +7,7 @@ import { createMemoryStore, type MemoryActions, type MemoryState } from '../src/
 import { de, en, es, fr, ja, pt, ru, zh } from '../src/client/locales.ts'
 import { isoFromLocal } from '../src/client/RollbackCard.tsx'
 import { MemorySection, type MemoryProps } from '../src/client/MemorySettings.tsx'
-import { DETAIL, VIEW } from './fixtures.client.ts'
+import { DETAIL, GUARD, VIEW } from './fixtures.client.ts'
 
 const t = makeTranslate(zh) as MemoryProps['t']
 
@@ -285,6 +285,39 @@ describe('MemorySection status and errors', () => {
   it('words a stale preview in its own language instead of the Host\'s English', () => {
     mount({ error: { code: 'stale_preview', message: 'memory changed since the preview; preview again.' } })
     expect(screen.getByRole('alert').textContent).toContain('记忆在预览之后变了')
+  })
+})
+
+describe('MemorySection content guard', () => {
+  it('shows the last 24 hours by rule without any text, and the failure of a layer', () => {
+    mount({ guard: GUARD })
+    const card = screen.getByRole('region', { name: '内容守卫' })
+    expect(card.textContent).toContain('检查 9 次 · 拒绝 3 次')
+    expect(within(card).getByText('canary')).toBeTruthy()
+    expect(within(card).getByText('llm.unsure').parentElement?.textContent).toContain('2')
+    expect(card.textContent).toContain('llm.unavailable')
+    expect(card.textContent).toContain('gateway down')
+  })
+
+  it('says so when nothing was refused, and shows no card where the Host has no guard', () => {
+    mount({ guard: { ...GUARD, rejected: 0, byRule: {}, lastError: null } })
+    expect(screen.getByRole('region', { name: '内容守卫' }).textContent).toContain('没有被拒绝的文字')
+    cleanup()
+    mount({ guard: null })
+    expect(screen.queryByRole('region', { name: '内容守卫' })).toBeNull()
+  })
+
+  it('renders the All settings card for fork-guard last, and nothing where the factory is not loaded', () => {
+    const store = createMemoryStore()
+    store.update((draft) => { Object.assign(draft, { view: VIEW, checkedAt: Date.now(), guard: GUARD }) })
+    const renderFactorySlot = vi.fn((_name: string, _props: object) => <div data-testid="plugin-config" />)
+    const props = { close: () => {}, useMemory: bindSnapshotSelector(store), actions: spies(), t, renderFactorySlot } as MemoryProps
+    const { container } = render(<MemorySection {...props} />)
+    expect(renderFactorySlot).toHaveBeenCalledWith('settings.plugin-config', { entries: ['fork-guard'] })
+    expect(container.querySelector('section')?.lastElementChild).toBe(screen.getByTestId('plugin-config'))
+    cleanup()
+    mount({ guard: GUARD })
+    expect(screen.queryByTestId('plugin-config')).toBeNull()
   })
 })
 

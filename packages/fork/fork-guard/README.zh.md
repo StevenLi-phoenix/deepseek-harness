@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-让 owner 的私人生活不出现在 agent 写给别人看的任何文字里。凡是会存下或发出陌生人能读到的文字的插件（人设更新、说话风格笔记、QQ 群笔记、B 站频道笔记），都问同一个校验器 `ctx.forkGuard.check(text, { purpose, audience })`，不再各自维护一堆正则。回答要么是 `{ ok: true }`，要么是带规则名和一句通用理由的拒绝，理由里不会复述原文，可以直接交还给写这段文字的模型。四层按顺序运行，哪一层跑不起来同样算拒绝。
+让 owner 的私人生活不出现在 agent 写给别人看的任何文字里。会存下或发出陌生人能读到的文字的插件（人设更新、说话风格笔记、群笔记）都问 `ctx.forkGuard.check(text, { purpose, audience })`。回答要么是 `{ ok: true }`，要么是带规则名和一句通用理由的拒绝，理由里不会复述原文。正则、金丝雀字符串、与 owner 记忆的重合、模型四层按顺序运行，哪一层跑不起来同样算拒绝。
 
 ## 目录
 
@@ -25,19 +25,27 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用这个包
 
-在根上挂一次，fork event bundle 已经挂好。服务只在 Host 里用，不给任何 agent 暴露工具。
+在根上挂一次，fork event bundle 已经挂好，排在所有写共享文字的插件之前。服务只在 Host 里用，不给任何 agent 暴露工具。第二行 `@deepseek-ai/dsh-fork-guard/settings` 提供 `GET /api/fork.guard`（只有计数），供「设置 → 记忆」里的守卫卡片使用；同一页的「全部设置」卡片会列出 `fork-guard` 条目的每个字段。
 
 ```yaml
 - id: fork-guard
   name: '@deepseek-ai/dsh-fork-guard'
   config:
     extraCanaries: ['a honeypot token']   # in the profile patch, not in the public bundle
+- id: fork-guard-settings
+  name: '@deepseek-ai/dsh-fork-guard/settings'
 ```
 
+写入他人可读文字的插件在写入时用 `ctx.get` 取这个服务，守卫不存在就拒绝这次写入：
+
 ```ts
-const verdict = await ctx.forkGuard.check(text, { purpose: 'persona_update', audience: 'public', sessionId })
+const guard = ctx.get('forkGuard')
+if (guard === undefined) return 'refused: the content guard is not mounted'
+const verdict = await guard.check(text, { purpose: 'persona_update', audience: 'public', sessionId })
 if (!verdict.ok) return `refused (${verdict.rule}): ${verdict.publicReason}`
 ```
+
+`check` 永远不会 reject，所以不需要 `try`；依赖图里没有守卫的插件声明一个本地的结构类型，而不是导入这个包。文字按写入时的样子检查，所以调用方检查它实际存下的那个字符串，每次写入检查一次。
 
 `purpose` 是简短的标识符（`persona_update`、`style_note`、`qq_group_note`、`bili_channel_note`，小写字母、数字、`_`、`.`、`-`，最多 40 个字符）。`audience` 为 `public` 表示任何人都能读，`channel` 表示某个 QQ 群或 B 站账号的读者。两者只差一点：模型层对 `channel` 可以关，对 `public` 永远关不掉。
 
@@ -57,7 +65,7 @@ if (!verdict.ok) return `refused (${verdict.rule}): ${verdict.publicReason}`
 | `blockLinks` | `true` | 拒绝任何链接；`false` 时只拒绝带 token 或账号 id 的链接 |
 | `canaryFile` | `<DSH_HOME>/fork-guard/canaries.txt` | 每行一个字符串，`#` 开头为注释，文件变化后自动重新加载；文件不存在等于空列表 |
 | `extraCanaries` | `[]` | 写在配置里的字符串，叠加在文件之上 |
-| `memoryFile` | `<DSH_HOME>/fork-memory/memory.jsonl` | 比对用的记忆文件（条目和待批准的写入）；文件不存在则没有重合 |
+| `memoryFile` | `<DSH_HOME>/fork-memory/memory.jsonl` | 比对用的记忆文件（条目和待批准的写入）；文件不存在则没有重合，日志里说一次 |
 | `provider`、`model` | profile 默认 | 模型层的路由，必须成对设置；不设则用 `ctx.agentDefaultModel`，即 event profile 选的便宜路由 |
 | `timeoutMs`、`maxOutputTokens` | `20000`、`400` | 一次模型调用的时限和输出上限 |
 | `maxChars` | `20000` | 校验的最长文字 |
@@ -65,6 +73,8 @@ if (!verdict.ok) return `refused (${verdict.rule}): ${verdict.publicReason}`
 | `dir`、`rawRetentionDays` | `<DSH_HOME>/fork-guard`、`14` | `canaries.txt` 和 `raw/` 所在目录，以及模型原始响应保留天数 |
 
 金丝雀比对不分大小写、全半角、空格和标点（`BSV-Honeypot-7F3A91` 能命中 `bsv_honeypot_7f3a91`）。短于三个字符的金丝雀会被忽略，含中日韩字符的短于两个字符也忽略，否则会误伤无关文字。
+
+「设置 → 记忆」里的守卫卡片显示过去 24 小时按规则统计的拒绝次数（只有计数和规则名，没有文字），卡片下的「全部设置」可以编辑各层、模型路线和蜜罐列表；保存后插件重新加载。
 
 `ctx.forkGuard.health()` 返回最近 24 小时的计数（校验次数、拒绝次数、按规则的拒绝次数）、最近一次层故障（消息截断到 200 个字符）和最近一次校验的时间，从不含任何文字。每次校验记一行日志：purpose、audience、结论、规则、文字 SHA-256 的前 12 位十六进制、毫秒数、缓存命中与否。文字和金丝雀都不会写进日志。
 
@@ -90,6 +100,7 @@ if (!verdict.ok) return `refused (${verdict.rule}): ${verdict.publicReason}`
 | [`src/canary.ts`](src/canary.ts) | 金丝雀文件和配置里的字符串 |
 | [`src/classifier.ts`](src/classifier.ts) | prompt、答案解析、原始响应存储 |
 | [`src/model.ts`](src/model.ts) | 经由 LLM 服务发起的模型调用 |
+| [`src/settings.ts`](src/settings.ts) | `GET /api/fork.guard`：`health()` 的计数，供设置卡片使用 |
 
 这是 fork 本地的包，见 [`../UPSTREAM.md`](../UPSTREAM.md)。
 
@@ -109,11 +120,11 @@ if (!verdict.ok) return `refused (${verdict.rule}): ${verdict.publicReason}`
 <a id="model-experience"></a>
 ## 模型体验
 
-对写这段文字的 agent 没有影响：guard 不注册工具，也不往它们的请求里加东西；写入方的插件转交拒绝时，它只会看到规则名和一句通用理由。审查本身是另一个独立的一次性请求。
+无，因为 guard 不注册工具，也不往写这段文字的 agent 的请求里加东西；写入方的插件转交拒绝时，它只会看到规则名和一句通用理由。
 
 #### KV Cache 影响
 
-对主 agent 没有影响。审查请求的系统 prompt 固定，提供方可以跨多次校验复用；模型层的缓存避免对同一段文字重复发请求。
+对主 agent 没有影响。审查是另一个独立的一次性请求，系统 prompt 固定，提供方可以跨多次校验复用；模型层的缓存避免对同一段文字重复发请求。
 
 ## 已知限制与延后工作
 
@@ -123,6 +134,7 @@ if (!verdict.ok) return `refused (${verdict.rule}): ${verdict.publicReason}`
 - **词表加模型，不是证明** — 正则抓不到用文字拼出来的数字和改写过的事实；模型层是兜底，两个方向都可能判错。被拒绝的文字只需要重写一次。
 - **短金丝雀被跳过** — 单字姓名无法匹配，否则会误伤无关文字。
 - **常见中文短语可能重合** — 与某条记忆共享六个字的片段就会被拒绝，即使这句话本身无害。
+- **记忆层读文件，不走服务** — 它直接和 `memoryFile` 比对，所以在只把 `fork-memory` 挂在某个预设里的配置中也能用；记忆放在别处的配置必须设置 `memoryFile`，否则这一层什么也比不到。
 - **缓存在内存里** — 重启后同一段文字会再调用一次模型。
 
 <a id="dev-note"></a>

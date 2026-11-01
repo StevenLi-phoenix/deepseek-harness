@@ -104,6 +104,12 @@ export const zh = {
   'feedback.save': '保存',
   'feedback.remove': '移除',
   'feedback.cancel': '取消',
+  'guard.title': '内容守卫',
+  'guard.window': '过去 24 小时',
+  'guard.summary': '检查 {checked} 次 · 拒绝 {rejected} 次',
+  'guard.none': '过去 24 小时没有被拒绝的文字。',
+  'guard.error': '最近一次检查层出错：{rule} · {time}　{message}',
+  'guard.hint': '公开或频道可见的文字（人格、说话风格、群备注）写入前都要经过它；它拒绝时只记下规则名，不记文字。',
 } satisfies Record<string, string>
 
 /** The Memory namespace key union. */
@@ -220,6 +226,12 @@ export const en: Record<MemoryKey, string> = {
   'feedback.save': 'Save',
   'feedback.remove': 'Remove',
   'feedback.cancel': 'Cancel',
+  'guard.title': 'Content guard',
+  'guard.window': 'last 24 hours',
+  'guard.summary': '{checked} checked · {rejected} refused',
+  'guard.none': 'No text was refused in the last 24 hours.',
+  'guard.error': 'Latest layer failure: {rule} · {time}  {message}',
+  'guard.hint': 'Text that others can read (persona, speaking style, group notes) passes it before it is written. A refusal records the rule name, never the text.',
 } satisfies Record<MemoryKey, string>
 
 /** Japanese dictionary. */
@@ -326,6 +338,12 @@ export const ja: Record<MemoryKey, string> = {
   'feedback.save': '保存',
   'feedback.remove': '削除',
   'feedback.cancel': 'キャンセル',
+  'guard.title': 'コンテンツガード',
+  'guard.window': '過去 24 時間',
+  'guard.summary': '{checked} 件検査 · {rejected} 件拒否',
+  'guard.none': '過去 24 時間に拒否された文章はありません。',
+  'guard.error': '直近の検査層の失敗：{rule} · {time}　{message}',
+  'guard.hint': '他の人が読める文章（人格、話し方、グループメモ）は書き込み前にここを通ります。拒否したときはルール名だけを記録し、文章は記録しません。',
 } satisfies Record<MemoryKey, string>
 
 /** Spanish dictionary. */
@@ -432,6 +450,12 @@ export const es: Record<MemoryKey, string> = {
   'feedback.save': 'Guardar',
   'feedback.remove': 'Quitar',
   'feedback.cancel': 'Cancelar',
+  'guard.title': 'Guardia de contenido',
+  'guard.window': 'últimas 24 horas',
+  'guard.summary': '{checked} revisados · {rejected} rechazados',
+  'guard.none': 'No se rechazó ningún texto en las últimas 24 horas.',
+  'guard.error': 'Último fallo de una capa: {rule} · {time}  {message}',
+  'guard.hint': 'El texto que otros pueden leer (personalidad, estilo de habla, notas de grupo) pasa por aquí antes de escribirse. Un rechazo registra el nombre de la regla, nunca el texto.',
 } satisfies Record<MemoryKey, string>
 
 /** French dictionary. */
@@ -538,6 +562,12 @@ export const fr: Record<MemoryKey, string> = {
   'feedback.save': 'Enregistrer',
   'feedback.remove': 'Retirer',
   'feedback.cancel': 'Annuler',
+  'guard.title': 'Garde de contenu',
+  'guard.window': 'dernières 24 heures',
+  'guard.summary': '{checked} vérifiés · {rejected} refusés',
+  'guard.none': "Aucun texte n'a été refusé ces dernières 24 heures.",
+  'guard.error': "Dernier échec d'une couche : {rule} · {time}  {message}",
+  'guard.hint': "Le texte que d'autres peuvent lire (personnalité, style, notes de groupe) passe ici avant d'être écrit. Un refus note le nom de la règle, jamais le texte.",
 } satisfies Record<MemoryKey, string>
 
 /** German dictionary. */
@@ -644,6 +674,12 @@ export const de: Record<MemoryKey, string> = {
   'feedback.save': 'Speichern',
   'feedback.remove': 'Entfernen',
   'feedback.cancel': 'Abbrechen',
+  'guard.title': 'Inhaltswächter',
+  'guard.window': 'letzte 24 Stunden',
+  'guard.summary': '{checked} geprüft · {rejected} abgelehnt',
+  'guard.none': 'In den letzten 24 Stunden wurde kein Text abgelehnt.',
+  'guard.error': 'Letzter Fehler einer Ebene: {rule} · {time}  {message}',
+  'guard.hint': 'Text, den andere lesen können (Persona, Sprechstil, Gruppennotizen), läuft vor dem Schreiben hier durch. Eine Ablehnung hält den Regelnamen fest, nie den Text.',
 } satisfies Record<MemoryKey, string>
 
 /** Russian dictionary. */
@@ -750,6 +786,12 @@ export const ru: Record<MemoryKey, string> = {
   'feedback.save': 'Сохранить',
   'feedback.remove': 'Убрать',
   'feedback.cancel': 'Отмена',
+  'guard.title': 'Контроль содержимого',
+  'guard.window': 'последние 24 часа',
+  'guard.summary': 'проверено {checked} · отклонено {rejected}',
+  'guard.none': 'За последние 24 часа ни один текст не был отклонён.',
+  'guard.error': 'Последний сбой слоя: {rule} · {time}  {message}',
+  'guard.hint': 'Текст, который могут прочитать другие (персона, стиль речи, заметки групп), проходит здесь перед записью. При отказе сохраняется имя правила, но не текст.',
 } satisfies Record<MemoryKey, string>
 
 /** Portuguese dictionary. */
@@ -856,4 +898,10 @@ export const pt: Record<MemoryKey, string> = {
   'feedback.save': 'Salvar',
   'feedback.remove': 'Remover',
   'feedback.cancel': 'Cancelar',
+  'guard.title': 'Guarda de conteúdo',
+  'guard.window': 'últimas 24 horas',
+  'guard.summary': '{checked} verificados · {rejected} recusados',
+  'guard.none': 'Nenhum texto foi recusado nas últimas 24 horas.',
+  'guard.error': 'Última falha de uma camada: {rule} · {time}  {message}',
+  'guard.hint': 'O texto que outros podem ler (persona, estilo de fala, notas de grupo) passa aqui antes de ser escrito. Uma recusa registra o nome da regra, nunca o texto.',
 } satisfies Record<MemoryKey, string>

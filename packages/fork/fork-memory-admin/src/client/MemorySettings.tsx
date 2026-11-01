@@ -8,18 +8,24 @@
 
 import { useEffect, type ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
-import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { InjectFace, PropsLocale, PropsRenderFactories, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the settings shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+// Type-only: declares the 'settings.plugin-config' factory (the All settings card).
+import type {} from '@deepseek-ai/dsh-fork-config/client'
 // Type-only: registers the fork.memory locale namespace this component's `t` reads.
 import type {} from './locales.ts'
 import { EntriesCard } from './EntriesCard.tsx'
 import { FeedbackCard } from './FeedbackCard.tsx'
+import { GuardCard } from './GuardCard.tsx'
 import { POLL_INTERVAL_MS, startPolling, type MemoryActions, type MemoryState } from './memory.ts'
 import { Button, type Translate } from './parts.tsx'
 import { PendingCard } from './PendingCard.tsx'
 import { RollbackCard } from './RollbackCard.tsx'
 import css from './Memory.module.css'
+
+/** Plugin entries whose configuration the All settings card lists on this page: the content guard's. */
+const CONFIG_ENTRIES = ['fork-guard'] as const
 
 /** The section's injected face (slot `inject`). */
 export interface MemoryInjected {
@@ -32,7 +38,7 @@ export interface MemoryInjected {
 }
 
 /** Props delivered by the settings shell. */
-export type MemoryProps = PropsRuntime<'settings.section'> & InjectFace<MemoryInjected> & PropsLocale<'fork.memory'>
+export type MemoryProps = PropsRuntime<'settings.section'> & InjectFace<MemoryInjected> & PropsLocale<'fork.memory'> & Partial<PropsRenderFactories>
 
 /** What the header says about the last read. */
 function statusLine(state: MemoryState, t: Translate): { text: string; tone: 'live' | 'stale' | 'idle' } {
@@ -47,7 +53,7 @@ function statusLine(state: MemoryState, t: Translate): { text: string; tone: 'li
  * @param props - the store hook, the actions, and copy.
  * @returns the section.
  */
-export function MemorySection({ useMemory, actions, t }: MemoryProps): ReactNode {
+export function MemorySection({ useMemory, actions, renderFactorySlot, t }: MemoryProps): ReactNode {
   const state = useMemory(value => value)
   useEffect(() => startPolling(() => { void actions.refresh() }, POLL_INTERVAL_MS), [actions])
   const translate = t as Translate
@@ -81,6 +87,8 @@ export function MemorySection({ useMemory, actions, t }: MemoryProps): ReactNode
             <FeedbackCard state={state} actions={actions} t={translate} />
           </>
         )}
+      <GuardCard state={state} t={translate} />
+      {renderFactorySlot?.('settings.plugin-config', { entries: CONFIG_ENTRIES })}
     </section>
   )
 }

@@ -1,4 +1,4 @@
-import type { ActionResult, DetailView, MemoryAction, MemoryQuery, MemoryView } from '../src/view.ts'
+import type { ActionResult, DetailView, GuardOverview, MemoryAction, MemoryQuery, MemoryView } from '../src/view.ts'
 import type { MemoryApi } from '../src/client/memory.ts'
 
 /** A view with one waiting write (tainted), two entries, one Session, and one verdict. */
@@ -22,6 +22,11 @@ export const VIEW: MemoryView = {
   feedback: [{ id: 'dddddd', scope: 'up', verdict: 'delete', kind: 'comment', text: 'too long a reply', at: '2026-10-29T08:00:00.000Z', note: 'tone' }],
 }
 
+/** The guard's counts: two refusals by two rules and one failed model call. */
+export const GUARD: GuardOverview = {
+  checked: 9, rejected: 3, byRule: { canary: 1, 'llm.unsure': 2 }, lastError: { at: Date.UTC(2026, 10, 1, 12), rule: 'llm.unavailable', message: 'gateway down' }, lastCheckAt: 1,
+}
+
 export const DETAIL: DetailView = {
   entry: { ...VIEW.entries.items[0]!, text: 'reply in Chinese, full text' },
   waiting: false,
@@ -32,6 +37,7 @@ export const DETAIL: DetailView = {
 export function fakeApi(handlers: {
   read?: (query: MemoryQuery) => Promise<MemoryView> | MemoryView
   detail?: (id: string) => Promise<DetailView> | DetailView
+  guard?: () => Promise<GuardOverview | null> | GuardOverview | null
   post?: (action: MemoryAction) => Promise<ActionResult> | ActionResult
 } = {}): MemoryApi & { reads: MemoryQuery[]; posts: MemoryAction[]; details: string[] } {
   const reads: MemoryQuery[] = []
@@ -40,6 +46,7 @@ export function fakeApi(handlers: {
   return {
     reads, posts, details,
     read: async (query) => { reads.push(query); return await (handlers.read?.(query) ?? VIEW) },
+    ...handlers.guard === undefined ? {} : { guard: async () => await handlers.guard!() },
     detail: async (id) => { details.push(id); return await (handlers.detail?.(id) ?? DETAIL) },
     post: async (action) => { posts.push(action); return await (handlers.post?.(action) ?? { action: 'feedback.forget', id: 'x' }) },
   }

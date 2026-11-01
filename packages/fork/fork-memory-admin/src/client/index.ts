@@ -9,8 +9,8 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the settings shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
-import { MEMORY_ROUTE, type ActionResult, type DetailView, type MemoryAction, type MemoryQuery } from '../view.ts'
-import { MemoryLoader, MemoryRequestError, createMemoryStore, parseView, type MemoryActions, type MemoryApi } from './memory.ts'
+import { GUARD_ROUTE, MEMORY_ROUTE, type ActionResult, type DetailView, type MemoryAction, type MemoryQuery } from '../view.ts'
+import { MemoryLoader, MemoryRequestError, createMemoryStore, parseGuard, parseView, type MemoryActions, type MemoryApi } from './memory.ts'
 import { MemorySection, type MemoryInjected } from './MemorySettings.tsx'
 import { de, en, es, fr, ja, pt, ru, zh } from './locales.ts'
 
@@ -47,6 +47,10 @@ const api: MemoryApi = {
     const params = new URLSearchParams({ category: query.category, offset: String(query.offset), limit: String(query.limit) })
     if (query.q !== '') params.set('q', query.q)
     return parseView(await request(`?${params.toString()}`))
+  },
+  async guard() {
+    const response = await fetch(GUARD_ROUTE, { credentials: 'same-origin', cache: 'no-store' })
+    return response.ok ? parseGuard(await response.json().catch(() => null)) : null
   },
   async detail(id: string) {
     return await request(`?id=${encodeURIComponent(id)}`) as DetailView
