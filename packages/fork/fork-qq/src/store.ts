@@ -495,6 +495,11 @@ export class QqStore {
     return row === undefined ? undefined : { sessionId: String(row['session_id']), createdAt: Number(row['created_at']), generation: Number(row['generation']) }
   }
 
+  /** Whether a Session is some group's current resident digest Session. */
+  isResidentSession(sessionId: string): boolean {
+    return this.db.prepare('SELECT 1 AS found FROM group_sessions WHERE session_id = ?').get(sessionId) !== undefined
+  }
+
   /** Record the resident digest Session of a group, replacing the previous one. */
   setGroupSession(groupId: string, session: GroupSession): void {
     this.db.prepare(`

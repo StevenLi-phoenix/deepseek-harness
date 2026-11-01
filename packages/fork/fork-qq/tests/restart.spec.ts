@@ -160,3 +160,25 @@ describe('a settings change does not restart the plugin, and so does not drop th
     expect(same(change)).toBe(false)
   })
 })
+
+describe('auto-archive protection', () => {
+  it('asks the event bus to keep the groups\' resident digest Sessions out of the sweep, and withdraws the claim on dispose', async () => {
+    const h = await boot()
+    const claims = new Map<string, (session: { id: string }) => boolean>()
+    h.ctx.provide('forkEventBus' as never, {
+      protectSessions: (label: string, check: (session: { id: string }) => boolean) => {
+        claims.set(label, check)
+        return () => { claims.delete(label) }
+      },
+    } as never)
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect([...claims.keys()]).toEqual(['qq'])
+    type Resident = { sessionId: string; createdAt: number; generation: number }
+    const { store } = h.observer as unknown as { store: { setGroupSession(group: string, session: Resident): void } }
+    store.setGroupSession(GROUP, { sessionId: 'digest-7', createdAt: 1, generation: 1 })
+    expect(claims.get('qq')!({ id: 'digest-7' })).toBe(true)
+    expect(claims.get('qq')!({ id: 'one-shot' })).toBe(false)
+    await h.ctx.fiber.dispose()
+    expect(claims.size).toBe(0)
+  })
+})

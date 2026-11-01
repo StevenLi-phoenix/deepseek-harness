@@ -442,6 +442,18 @@ export class QqObserver extends Service {
       if (before !== listed) this.onGroupsChanged(before)
     })
 
+    // The event bus's auto-archive sweep leaves the groups' resident digest Sessions alone; the observer works without the bus.
+    ctx.plugin({
+      name: 'fork-qq-archive-protection',
+      inject: ['forkEventBus'],
+      apply: (child: Context) => {
+        child.effect(
+          () => child.forkEventBus.protectSessions('qq', session => this.store.isResidentSession(session.id)),
+          'forkQq.archiveProtection()',
+        )
+      },
+    })
+
     ctx.effect(() => {
       this.loop = this.run()
       const schedule = this.schedule()

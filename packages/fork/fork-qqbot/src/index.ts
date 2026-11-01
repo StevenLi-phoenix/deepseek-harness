@@ -220,6 +220,28 @@ export class QqBotChannel extends Service {
         child.effect(() => this.joinRelay(child), 'forkQqBot.ownerRelay()')
       },
     })
+
+    // The event bus's auto-archive sweep leaves the peers' current chat Sessions alone; the channel works without the bus.
+    ctx.plugin({
+      name: 'fork-qqbot-archive-protection',
+      inject: ['forkEventBus'],
+      apply: (child: Context) => {
+        child.effect(
+          () => child.forkEventBus.protectSessions('qqbot', session => this.isCurrentChat(session.id)),
+          'forkQqBot.archiveProtection()',
+        )
+      },
+    })
+  }
+
+  /**
+   * Whether this is a peer's current chat Session (not an earlier one a new chat replaced).
+   * @param sessionId - Session to check.
+   * @returns true for the Session each private chat and group currently runs in.
+   */
+  private isCurrentChat(sessionId: string): boolean {
+    const chats = this.domain?.table('chats')
+    return chats !== undefined && [...chats.entries()].some(([, chat]) => chat.sessionId === sessionId)
   }
 
   /**

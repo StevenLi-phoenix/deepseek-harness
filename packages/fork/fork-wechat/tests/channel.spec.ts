@@ -1588,6 +1588,36 @@ describe('WechatChannel chat Session bookkeeping', () => {
     expect(h.channel.ownsSession('old-1')).toBe(true)
   })
 
+  it('keeps only the current chat Session out of the bus auto-archive sweep, and withdraws the claim on dispose', async () => {
+    const pool = new MemoryMediaPool()
+    const seedCtx = new Context()
+    const facility = await mountStorage(seedCtx, pool)
+    await vi.advanceTimersByTimeAsync(0)
+    const domain = await facility.open(wechatDomain)
+    await domain.table('sessions').put('old-0', { ownerUserId: OWNER, createdAt: 0 })
+    await domain.close()
+    await seedCtx.fiber.dispose()
+
+    const h = await harness({ pool })
+    const claims = new Map<string, (session: { id: string }) => boolean>()
+    h.ctx.provide('forkEventBus' as never, {
+      protectSessions: (label: string, check: (session: { id: string }) => boolean) => {
+        claims.set(label, check)
+        return () => { claims.delete(label) }
+      },
+    } as never)
+    await vi.advanceTimersByTimeAsync(0)
+    expect([...claims.keys()]).toEqual(['wechat'])
+    await h.ownerSays('hi')
+    const check = claims.get('wechat')!
+    expect(check({ id: 'chat-1' })).toBe(true)
+    // An earlier chat Session the channel still remembers, and any other Session, can be archived.
+    expect(check({ id: 'old-0' })).toBe(false)
+    expect(check({ id: 'other' })).toBe(false)
+    await h.ctx.fiber.dispose()
+    expect(claims.size).toBe(0)
+  })
+
   it('claims its chat Sessions with the relay, again after a restart, and releases those it forgets', async () => {
     const pool = new MemoryMediaPool()
     const seedCtx = new Context()

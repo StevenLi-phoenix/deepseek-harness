@@ -152,6 +152,27 @@ afterEach(async () => {
   expect(allLogs.splice(0).filter(line => line.text.includes(APP_SECRET))).toEqual([])
 })
 
+describe('QqBotChannel auto-archive protection', () => {
+  it('keeps the peers\' current chat Sessions out of the bus sweep, and withdraws the claim on dispose', async () => {
+    const h = await harness()
+    const claims = new Map<string, (session: { id: string }) => boolean>()
+    h.ctx.provide('forkEventBus' as never, {
+      protectSessions: (label: string, check: (session: { id: string }) => boolean) => {
+        claims.set(label, check)
+        return () => { claims.delete(label) }
+      },
+    } as never)
+    await vi.advanceTimersByTimeAsync(0)
+    expect([...claims.keys()]).toEqual(['qqbot'])
+    h.qq.deliver(privateMessage(USER, '你好'))
+    await h.settle()
+    expect(claims.get('qqbot')!({ id: 'qq-1' })).toBe(true)
+    expect(claims.get('qqbot')!({ id: 'other' })).toBe(false)
+    await h.ctx.fiber.dispose()
+    expect(claims.size).toBe(0)
+  })
+})
+
 describe('QqBotChannel private chat', () => {
   it('forwards an allowlisted message into a new chat Session and answers by quoting it', async () => {
     const h = await harness()
