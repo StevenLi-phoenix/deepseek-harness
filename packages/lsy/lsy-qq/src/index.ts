@@ -16,13 +16,17 @@ import type {} from '@deepseek-ai/dsh-session-title'
 import z from '@deepseek-ai/schemastery'
 import { DigestRunner, type DigestConfig } from './digest.ts'
 import { DEFAULT_MEDIA_HOST_SUFFIXES, detectExtension, fetchCapped, isAllowedMediaUrl, removeMedia, saveMedia } from './media.ts'
-import { isPrivateUrl, OneBotClient, type OneBotEvent } from './onebot.ts'
+import { LoginDoor, qrMatrix, type DoorResult } from './login.ts'
+import { isPrivateAddress, isPrivateUrl, OneBotClient, type OneBotEvent } from './onebot.ts'
+import { QQ_PATH, QQ_REFRESH_PATH, type QqConnection, type QqLogin, type QqPanel, type QqRefreshAnswer } from './panel-view.ts'
 import { displayName, parseMessage } from './text.ts'
 import { QqStore, type DigestRow, type GroupStats, type MessageRow } from './store.ts'
 
 export * from './digest.ts'
+export * from './login.ts'
 export * from './media.ts'
 export * from './onebot.ts'
+export * from './panel-view.ts'
 export * from './store.ts'
 export * from './text.ts'
 
@@ -132,6 +136,17 @@ export interface Config {
   }
   /** Tell the owner when the protocol end has been unreachable this long, in milliseconds; 0 turns it off. */
   offlineNoticeMs: number
+  /** Where the Settings page lives, quoted in the owner notice (the event service's address); unset names the page without a link. */
+  settingsUrl?: string
+  /** The login door: the window onto NapCat's login that the Settings page's QQ section uses. */
+  login: {
+    /** Ask the door at all. */
+    enabled: boolean
+    /** The door's address; it must be on this machine or the tailnet. */
+    url: string
+    /** Deadline of one call to the door, in milliseconds. */
+    timeoutMs: number
+  }
 }
 
 /** Configuration schema. */
@@ -184,6 +199,12 @@ export const Config: z<Config> = z.object({
     timeoutMs: z.natural().min(10_000).default(15 * 60_000),
   }),
   offlineNoticeMs: z.natural().default(10 * 60_000),
+  settingsUrl: z.string(),
+  login: z.object({
+    enabled: z.boolean().default(true),
+    url: z.string().default('http://127.0.0.1:3002'),
+    timeoutMs: z.natural().min(500).default(5000),
+  }),
 })
 
 /** First retry delay after a failed connection; doubles up to {@link MAX_RETRY_MS}. */
@@ -198,6 +219,10 @@ const DIGEST_CHECK_MS = 10 * 60_000
 const RETENTION_CHECK_MS = 6 * 3_600_000
 /** Downloads running at once. */
 const MEDIA_CONCURRENCY = 2
+/** The login half of a panel answer is shared this long, so open pages cost the door at most one call each. */
+const LOGIN_CACHE_MS = 1500
+/** NapCat logged in while the observer is still backing off: reconnect at once, but not more often than this. */
+const WAKE_GAP_MS = 10_000
 
 /** What a media download needs to know about its message. */
 interface MediaJob {
@@ -215,6 +240,8 @@ interface MediaJob {
 function assertConfig(config: Config): void {
   if (!isPrivateUrl(config.url)) throw new Error('lsy-qq: url must be a ws:// or wss:// address on this machine (127.0.0.1, localhost) or the tailnet (100.64.0.0/10, *.ts.net)')
   if (config.dataDir !== undefined && !isAbsolute(config.dataDir)) throw new Error('lsy-qq: dataDir must be an absolute path')
+  if (!isPrivateAddress(config.login.url, ['http:', 'https:'])) throw new Error('lsy-qq: login.url must be an http(s) address on this machine (127.0.0.1, localhost) or the tailnet (100.64.0.0/10, *.ts.net)')
+  if (config.settingsUrl !== undefined && !/^https?:\/\//.test(config.settingsUrl)) throw new Error('lsy-qq: settingsUrl must be an http(s) address')
   if (!isAbsolute(config.digest.workspacePath)) throw new Error('lsy-qq: digest.workspacePath must be an absolute path')
   for (const id of [...config.groups, ...config.send.groups]) {
     if (!/^[0-9]{3,20}$/.test(id)) throw new Error(`lsy-qq: ${JSON.stringify(id)} is not a group number (digits only)`)
@@ -277,6 +304,16 @@ export class QqObserver extends Service {
   private budgetWarnedAt = 0
   private disconnectedSince: number | undefined
   private outageNoticed = false
+  private connState: QqConnection['state'] = 'starting'
+  private connSince: number | undefined
+  private attempt = 0
+  private lastError: string | undefined
+  private readonly door: LoginDoor | undefined
+  private loginCache: { at: number; login: QqLogin } | undefined
+  private loginInFlight: Promise<QqLogin> | undefined
+  private lastLoginKey = ''
+  private lastWakeAt = 0
+  private wakeRetry: (() => void) | undefined
   private readonly counters = { messages: 0, media: 0, voices: 0, dropped: 0, private: 0 }
   /** Replaced by tests. */
   now: () => number = Date.now
@@ -312,6 +349,18 @@ export class QqObserver extends Service {
     }
     this.digest = new DigestRunner(ctx, this.store, digestConfig, this.dataDir, id => this.store.groupName(id) ?? id, () => this.now())
     ctx.logger.info(`lsy-qq: recording ${config.groups.length} group(s)${config.groups.length === 0 ? ' (the list is empty: every message is dropped; add group numbers to groups)' : ''}; sending ${config.send.enabled ? `on for ${config.send.groups.length} group(s)` : 'off'}; voice transcription ${config.asr.enabled ? 'on' : 'off'}; digests ${d.enabled ? `every ${d.everyHours} h` : 'off'}; data in ${this.dataDir}`)
+
+    this.door = config.login.enabled ? new LoginDoor({ url: config.login.url, timeoutMs: config.login.timeoutMs }) : undefined
+    ctx.inject(['connection'], (scope) => {
+      scope.effect(() => scope.connection.fetch.register({
+        path: QQ_PATH, methods: ['GET'], requestBody: 'buffered',
+        fetch: async request => Response.json(await this.panel({ fresh: new URL(request.url).searchParams.get('fresh') === '1' }), { headers: { 'cache-control': 'no-store' } }),
+      }), `lsy-qq: ${QQ_PATH}`)
+      scope.effect(() => scope.connection.fetch.register({
+        path: QQ_REFRESH_PATH, methods: ['POST'], requestBody: 'buffered',
+        fetch: async () => Response.json(await this.refreshLoginQr(), { headers: { 'cache-control': 'no-store' } }),
+      }), `lsy-qq: ${QQ_REFRESH_PATH}`)
+    })
 
     ctx.effect(() => {
       this.loop = this.run()
@@ -437,6 +486,114 @@ export class QqObserver extends Service {
     this.ctx.logger.info(`lsy-qq: sent ${Array.from(text).length} chars to group ${groupId} (${count + 1} today)`)
   }
 
+  // ---- the Settings page's QQ section ----
+
+  /** Change the connection state; the time it began is kept while the state stays the same. */
+  private setConnection(state: QqConnection['state']): void {
+    if (state === this.connState) return
+    this.connState = state
+    this.connSince = this.now()
+  }
+
+  /** The closing sentence of an owner notice: where to log in again. */
+  private settingsHint(): string {
+    const url = this.config.settingsUrl
+    return `在 DSH 网页端「设置 → QQ」扫码重新登录${url === undefined ? '' : `：${url}`}`
+  }
+
+  /** @returns the observer's connection to the protocol end, as the Settings page shows it. */
+  connectionStatus(): QqConnection {
+    const up = this.connState === 'connected'
+    return {
+      state: this.connState,
+      since: this.connSince ?? null,
+      attempt: up ? 0 : this.attempt,
+      lastError: up ? null : this.lastError ?? null,
+      selfId: up && this.selfId !== '' ? this.selfId : null,
+    }
+  }
+
+  /**
+   * What the Settings page's QQ section shows: the observer's connection, and NapCat's login as the login door
+   * reports it. When NapCat turns out to be logged in while the observer is still backing off, the observer
+   * reconnects at once, so a scan on the page ends in "connected" within seconds.
+   * @param options - `fresh` skips the shared answer of the last 1.5 s.
+   * @returns the panel.
+   */
+  async panel(options: { fresh?: boolean } = {}): Promise<QqPanel> {
+    const login = await this.loginView(options.fresh === true)
+    if (login.state === 'online' && (this.connState === 'reconnecting' || this.connState === 'starting') && this.now() - this.lastWakeAt >= WAKE_GAP_MS) {
+      this.lastWakeAt = this.now()
+      this.ctx.logger.info('lsy-qq: NapCat is logged in; reconnecting now')
+      this.wakeRetry?.()
+    }
+    return { at: this.now(), connection: this.connectionStatus(), login, groupsRecorded: this.recorded.size }
+  }
+
+  /**
+   * Ask NapCat for a fresh login QR code (it renews the code by itself about every two minutes).
+   * @returns the panel after the request, and whether the door passed it on.
+   */
+  async refreshLoginQr(): Promise<QqRefreshAnswer> {
+    const token = this.door === undefined ? undefined : await this.token()
+    let refreshed = false
+    if (this.door !== undefined && token !== undefined) {
+      const answer = await this.door.refresh(token)
+      refreshed = answer.refreshed
+      this.loginCache = { at: this.now(), login: this.toLogin(answer.result) }
+      this.noteLogin(this.loginCache.login)
+    }
+    this.ctx.logger.info(`lsy-qq: asked NapCat for a fresh login QR from the settings page (${refreshed ? 'done' : 'not done'})`)
+    return { ...await this.panel(), refreshed }
+  }
+
+  private loginView(fresh: boolean): Promise<QqLogin> {
+    if (this.door === undefined) return Promise.resolve({ door: 'disabled', state: null, uin: null, nickname: null, error: null, qr: null })
+    const cached = this.loginCache
+    if (!fresh && cached !== undefined && this.now() - cached.at < LOGIN_CACHE_MS) return Promise.resolve(cached.login)
+    if (!fresh && this.loginInFlight !== undefined) return this.loginInFlight
+    const door = this.door
+    const read = (async (): Promise<QqLogin> => {
+      const token = await this.token()
+      const login = this.toLogin(token === undefined ? { kind: 'unauthorized' } : await door.status(token))
+      this.loginCache = { at: this.now(), login }
+      this.noteLogin(login)
+      return login
+    })().finally(() => { if (this.loginInFlight === read) this.loginInFlight = undefined })
+    this.loginInFlight = read
+    return read
+  }
+
+  private toLogin(result: DoorResult): QqLogin {
+    if (result.kind !== 'ok') return { door: result.kind, state: null, uin: null, nickname: null, error: null, qr: null }
+    return {
+      door: 'ok', state: result.login, uin: result.uin, nickname: result.nickname, error: result.error,
+      qr: result.qrUrl === null ? null : qrMatrix(result.qrUrl),
+    }
+  }
+
+  /** Log a change of the login picture once, by state name only: never the code or the link. */
+  private noteLogin(login: QqLogin): void {
+    const key = login.door === 'ok' ? `login:${login.state}` : `door:${login.door}`
+    if (key === this.lastLoginKey) return
+    this.lastLoginKey = key
+    if (login.door !== 'ok') {
+      this.ctx.logger.info(`lsy-qq: login door: ${login.door}`)
+      return
+    }
+    const wording: Record<string, string> = {
+      online: `logged in${login.uin === null ? '' : ` as ${login.uin}`}`,
+      offline: 'offline, needs a new login',
+      qr: 'waiting for a scan',
+      scanned: 'scanned, completing',
+      'logging-in': 'logging in',
+      preparing: 'preparing a QR code',
+      restarting: 'restarting its login service',
+      unknown: 'in a state this version does not know',
+    }
+    this.ctx.logger.info(`lsy-qq: NapCat login: ${wording[login.state ?? 'unknown'] ?? 'unknown'}`)
+  }
+
   // ---- plumbing ----
 
   private track(work: Promise<void>): void {
@@ -451,9 +608,11 @@ export class QqObserver extends Service {
       const done = (): void => {
         clearTimeout(timer)
         this.abort.signal.removeEventListener('abort', done)
+        if (this.wakeRetry === done) this.wakeRetry = undefined
         resolve()
       }
       const timer = setTimeout(done, ms)
+      this.wakeRetry = done
       this.abort.signal.addEventListener('abort', done, { once: true })
     })
   }
@@ -478,6 +637,7 @@ export class QqObserver extends Service {
     while (!this.stopping) {
       const token = await this.token()
       if (token === undefined) {
+        this.setConnection('waiting-token')
         await this.pause(30_000)
         continue
       }
@@ -491,14 +651,21 @@ export class QqObserver extends Service {
             upAt = this.now()
             this.disconnectedSince = undefined
             this.outageNoticed = false
+            this.attempt = 0
+            this.lastError = undefined
+            this.setConnection('connected')
             this.ctx.logger.info(`lsy-qq: connected to the protocol end at ${this.config.url}`)
             this.track(this.onOpen())
           },
-          close: (reason) => { this.ctx.logger.warn(`lsy-qq: the protocol end connection closed (${reason})`) },
+          close: (reason) => {
+            this.lastError = `the connection closed (${reason})`
+            this.ctx.logger.warn(`lsy-qq: the protocol end connection closed (${reason})`)
+          },
         }, this.abort.signal)
         if (this.stopping) return
       } catch (error: unknown) {
         if (this.stopping) return
+        this.lastError = errorText(error)
         this.ctx.logger.warn(`lsy-qq: could not reach the protocol end: ${errorText(error)}`)
       } finally {
         this.client = undefined
@@ -506,6 +673,8 @@ export class QqObserver extends Service {
       this.disconnectedSince ??= this.now()
       this.track(this.checkOutage())
       failures = upAt !== undefined && this.now() - upAt >= STABLE_MS ? 1 : failures + 1
+      this.attempt = failures
+      this.setConnection('reconnecting')
       const wait = Math.min(FIRST_RETRY_MS * 2 ** (failures - 1), MAX_RETRY_MS)
       this.ctx.logger.info(`lsy-qq: reconnecting in ${wait / 1000} s (attempt ${failures})`)
       await this.pause(wait)
@@ -517,7 +686,7 @@ export class QqObserver extends Service {
     const since = this.disconnectedSince
     if (since === undefined || this.outageNoticed || this.config.offlineNoticeMs === 0) return
     if (this.now() - since < this.config.offlineNoticeMs) return
-    await this.notifyOwner('QQ 协议端连不上', `lsy-qq 已有 ${Math.round((this.now() - since) / 60_000)} 分钟连不上 ${this.config.url}；检查 NapCat 容器是否在跑、QQ 是否被踢下线需要重新扫码。`)
+    await this.notifyOwner('QQ 协议端连不上', `lsy-qq 已有 ${Math.round((this.now() - since) / 60_000)} 分钟连不上协议端，多半是 QQ 被踢下线了。${this.settingsHint()}`)
   }
 
   private async notifyOwner(title: string, body: string): Promise<void> {
@@ -526,6 +695,7 @@ export class QqObserver extends Service {
     if (notifier === undefined) return
     try {
       await notifier.send({ title, body, origin: 'the QQ observer (a notice, not the owner)' })
+      this.ctx.logger.info(`lsy-qq: told the owner (${title}); no further notice until the connection has come back`)
     } catch (error: unknown) {
       this.ctx.logger.warn(`lsy-qq: could not tell the owner: ${errorText(error)}`)
     }
@@ -611,7 +781,7 @@ export class QqObserver extends Service {
       await this.onRecall(String(event.group_id ?? ''), String(event.message_id ?? ''))
     } else if (event.notice_type === 'bot_offline') {
       this.ctx.logger.warn('lsy-qq: the protocol end reports the account went offline')
-      await this.notifyOwner('QQ 号掉线了', 'NapCat 报告这个 QQ 号下线（被踢或登录失效）。需要重新扫码登录。')
+      await this.notifyOwner('QQ 号掉线了', `NapCat 报告这个 QQ 号下线（被踢或登录失效）。${this.settingsHint()}`)
     }
   }
 

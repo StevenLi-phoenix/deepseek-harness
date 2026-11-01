@@ -87,8 +87,19 @@ export function scrubToken(text: string, token: string): string {
 
 /** Whether the URL points at this machine or the tailnet, the only places the protocol end may live. */
 export function isPrivateUrl(raw: string): boolean {
+  return isPrivateAddress(raw, ['ws:', 'wss:'])
+}
+
+/**
+ * Whether a URL of one of the given schemes points at this machine or the tailnet: the same rule as
+ * {@link isPrivateUrl}, for the login door's HTTP address.
+ * @param raw - the address.
+ * @param protocols - accepted schemes, with the colon.
+ * @returns true for localhost, loopback, a tailnet address (100.64.0.0/10), or a `*.ts.net` name.
+ */
+export function isPrivateAddress(raw: string, protocols: readonly string[]): boolean {
   const url = URL.parse(raw)
-  if (url === null || (url.protocol !== 'ws:' && url.protocol !== 'wss:')) return false
+  if (url === null || !protocols.includes(url.protocol)) return false
   const host = url.hostname.replace(/^\[|\]$/g, '')
   if (host === 'localhost' || host === '::1') return true
   const parts = host.split('.').map(Number)
