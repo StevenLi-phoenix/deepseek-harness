@@ -158,6 +158,7 @@
     { "path": "./packages/lsy/lsy-qq-login/tsconfig.client.json" },
     { "path": "./packages/lsy/lsy-style-settings/tsconfig.client.json" },
     { "path": "./packages/lsy/lsy-memory-admin/tsconfig.client.json" },
+    { "path": "./packages/lsy/lsy-console/tsconfig.client.json" },
     { "path": "./packages/lsy/bili/tsconfig.client.json" },
     { "path": "./packages/lsy/lsy-wechat-settings/tsconfig.client.json" },
     { "path": "./packages/client/ui-trajectory/tsconfig.client.json" },

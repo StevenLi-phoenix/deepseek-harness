@@ -585,6 +585,7 @@
     { "path": "./packages/lsy/lsy-memory-admin/tsconfig.host.json" },
     { "path": "./packages/lsy/lsy-presence" },
     { "path": "./packages/lsy/lsy-wechat-settings/tsconfig.host.json" },
+    { "path": "./packages/lsy/lsy-console/tsconfig.host.json" },
     { "path": "./packages/lsy/bili/tsconfig.host.json" },
     { "path": "./packages/lsy/tool-bili" },
     { "path": "./packages/todo/tool-todo" },
