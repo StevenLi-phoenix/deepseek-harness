@@ -89,24 +89,38 @@ function lastByEntry(history: readonly HistoryRecord[]): Map<string, HistoryReco
 const canRevert = (record: HistoryRecord | undefined): boolean => record !== undefined && record.op !== 'revert' && record.op !== 'rollback'
 
 function sessionViews(history: readonly HistoryRecord[]): SessionView[] {
-  const bySession = new Map<string, { changes: number; ids: Set<string>; firstAt: string; lastAt: string; origin: string | undefined }>()
-  for (const record of history) {
+  const bySession = new Map<string, {
+    changes: number
+    ids: Set<string>
+    firstAt: string
+    lastAt: string
+    /** Position in the history of the newest record; breaks a tie when two changes share a millisecond. */
+    lastIndex: number
+    origin: string | undefined
+  }>()
+  for (const [index, record] of history.entries()) {
     if (record.session === undefined) continue
     const found = bySession.get(record.session)
     if (found === undefined) {
-      bySession.set(record.session, { changes: 1, ids: new Set([record.id]), firstAt: record.at, lastAt: record.at, origin: record.origin })
+      bySession.set(record.session, {
+        changes: 1, ids: new Set([record.id]), firstAt: record.at, lastAt: record.at, lastIndex: index, origin: record.origin,
+      })
     } else {
       found.changes += 1
       found.ids.add(record.id)
       if (record.at < found.firstAt) found.firstAt = record.at
-      if (record.at >= found.lastAt) { found.lastAt = record.at; found.origin = record.origin ?? found.origin }
+      if (record.at >= found.lastAt) {
+        found.lastAt = record.at
+        found.lastIndex = index
+        found.origin = record.origin ?? found.origin
+      }
     }
   }
   return [...bySession]
+    .toSorted(([, left], [, right]) => right.lastAt.localeCompare(left.lastAt) || right.lastIndex - left.lastIndex)
     .map(([id, value]): SessionView => ({
       id, changes: value.changes, entries: value.ids.size, firstAt: value.firstAt, lastAt: value.lastAt, ...optional('origin', value.origin),
     }))
-    .toSorted((left, right) => right.lastAt.localeCompare(left.lastAt))
     .slice(0, SESSIONS_SHOWN)
 }
 
