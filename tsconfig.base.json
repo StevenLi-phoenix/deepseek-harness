@@ -503,6 +503,7 @@
       "@deepseek-ai/dsh-fork-style-settings": ["./packages/fork/fork-style-settings/src"],
       "@deepseek-ai/dsh-fork-sysmon": ["./packages/fork/fork-sysmon/src"],
       "@deepseek-ai/dsh-fork-taint": ["./packages/fork/fork-taint/src"],
+      "@deepseek-ai/dsh-fork-time-gap": ["./packages/fork/fork-time-gap/src"],
       "@deepseek-ai/dsh-fork-tool-monitor": ["./packages/fork/fork-tool-monitor/src"],
       "@deepseek-ai/dsh-fork-tool-qq": ["./packages/fork/fork-tool-qq/src"],
       "@deepseek-ai/dsh-fork-tool-up": ["./packages/fork/fork-tool-up/src"],

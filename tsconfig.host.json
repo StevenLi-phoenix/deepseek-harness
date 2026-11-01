@@ -567,6 +567,7 @@
     { "path": "./packages/fork/fork-tool-qq" },
     { "path": "./packages/fork/fork-taint" },
     { "path": "./packages/fork/fork-integrity" },
+    { "path": "./packages/fork/fork-time-gap" },
     { "path": "./packages/fork/fork-wechat" },
     { "path": "./packages/fork/fork-tool-watch" },
     { "path": "./packages/fork/fork-tool-wechat" },
