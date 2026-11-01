@@ -32,7 +32,16 @@ const RECORDER_TOKEN = 'recorder-token-0123456789abcdef'
 const ONEBOT = 'onebot-token-0123456789abcdef'
 
 interface Rig extends Booted { server: RecorderServer; socketPath: string }
-interface App { root: string; logs: string[]; context: Context; routes: Map<string, (request: Request) => Promise<Response>>; claims: Set<string>; call(name: string, args: unknown): Promise<string>; entry(name: string): { id: string } }
+type Route = (request: Request) => Promise<Response>
+interface App {
+  root: string
+  logs: string[]
+  context: Context
+  routes: Map<string, Route>
+  claims: Set<string>
+  call(name: string, args: unknown): Promise<string>
+  entry(name: string): { id: string }
+}
 
 const rigs: Rig[] = []
 const apps: App[] = []
@@ -101,7 +110,8 @@ async function bootApp(rig: Rig, pool: MemoryMediaPool, extra: string[] = []): P
       ctx.provide('permissionPresets', {} as never)
       ctx.provide('sessionTitle', {} as never)
       ctx.provide('connection', {
-        fetch: { register: (route: { path: string; fetch: (request: Request) => Promise<Response> }) => { routes.set(route.path, route.fetch); return () => { routes.delete(route.path); return Promise.resolve() } } },
+        fetch: { register: (route: { path: string; fetch: (request: Request) => Promise<Response> }) => { routes.set(route.path,
+          route.fetch); return () => { routes.delete(route.path); return Promise.resolve() } } },
       } as never)
       ctx.provide('forkEventBus', { protectSessions: (label: string) => { claims.add(label); return () => { claims.delete(label) } } } as never)
     },
@@ -241,7 +251,8 @@ describe('QQ channel through the real Loader and the real recorder', () => {
     expect(await app.call('qq_recent', { group: GROUP })).toContain('QQ recorder is not running')
     // The recorder itself is not stopped by this: the connection to QQ is still the same one.
     expect(rig.fake.connections).toBe(1)
-    const again = await startRecorderServer({ recorder: rig.recorder, logger: { debug() {}, info() {}, error() {} }, socketPath: rig.socketPath, token: RECORDER_TOKEN })
+    const again = await startRecorderServer({ recorder: rig.recorder, logger: { debug() {}, info() {}, error() {} },
+      socketPath: rig.socketPath, token: RECORDER_TOKEN })
     rig.server = again
     await until(() => app.context.forkQq.connectionStatus().state === 'connected', 'DSH to find the recorder again', 20_000)
     expect(await app.call('qq_groups', {})).toContain('技术群')

@@ -411,7 +411,8 @@ export class DigestRunner {
     if (messages.length < this.config.minMessages) return 0
     // The messages a transcript quotes may lie outside the backlog; one lookup fetches them.
     const inBacklog = new Set(messages.map(message => message.messageId))
-    const quoted = [...new Set(messages.flatMap(message => (message.replyTo !== null && !inBacklog.has(message.replyTo) ? [message.replyTo] : [])))]
+    const quoted = [...new Set(messages.flatMap(message => (message.replyTo !== null && !inBacklog.has(message.replyTo)
+      ? [message.replyTo] : [])))]
     const known = new Map(messages.map(message => [message.messageId, message]))
     for (let at = 0; at < quoted.length; at += 200) {
       for (const message of await this.messages.lookup(groupId, quoted.slice(at, at + 200))) known.set(message.messageId, message)

@@ -278,7 +278,8 @@ const LegacyDigestDto = z.object({
 export const LegacyDigestStateDto = z.object({
   digests: z.array(LegacyDigestDto).max(100_000),
   notes: z.array(z.object({ groupId, text: shortText, createdAt: epochMs })).max(100_000),
-  groupSessions: z.array(z.object({ groupId, sessionId: z.string().max(100), createdAt: epochMs, generation: z.number().int().positive() })).max(10_000),
+  groupSessions: z.array(z.object({ groupId, sessionId: z.string().max(100), createdAt: epochMs,
+    generation: z.number().int().positive() })).max(10_000),
   aliasSalt: z.string().max(100).nullable(),
   /** When the owner was last told of an outage, from the old `outage-notice.json`. */
   outageNoticeAt: epochMs.nullable(),

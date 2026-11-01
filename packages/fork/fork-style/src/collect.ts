@@ -24,7 +24,7 @@ export interface QqMessage {
   readonly nickname: string
 }
 
-/** The slice of the QQ observer (`ctx.forkQq`) collection reads; its answers come from the qq-recorder service and can fail while it is down. */
+/** The slice of the QQ observer (`ctx.forkQq`) collection reads; its answers come from the qq-recorder and fail while it is down. */
 export interface QqSource {
   groupOverview(): Promise<ReadonlyArray<{ readonly groupId: string; readonly recorded: boolean }>>
   recentMessages(groupId: string, options: { hours: number; limit: number }): Promise<readonly QqMessage[]>

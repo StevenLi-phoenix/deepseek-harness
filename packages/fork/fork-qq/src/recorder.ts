@@ -237,7 +237,8 @@ export class QqRecorder {
 
   private setDoor(config: RecorderConfig): void {
     this.door = config.login.enabled
-      ? new LoginDoor({ url: config.login.url, timeoutMs: config.login.timeoutMs, ...this.deps.fetch === undefined ? {} : { fetch: this.deps.fetch } })
+      ? new LoginDoor({ url: config.login.url, timeoutMs: config.login.timeoutMs,
+        ...this.deps.fetch === undefined ? {} : { fetch: this.deps.fetch } })
       : undefined
     this.loginCache = undefined
   }
@@ -257,7 +258,9 @@ export class QqRecorder {
     this.config = next
     this.recordedCacheSource = undefined
     this.saveConfig(next)
-    if (prev === undefined || prev.login.enabled !== next.login.enabled || prev.login.url !== next.login.url || prev.login.timeoutMs !== next.login.timeoutMs) this.setDoor(next)
+    const doorChanged = prev === undefined || prev.login.enabled !== next.login.enabled
+      || prev.login.url !== next.login.url || prev.login.timeoutMs !== next.login.timeoutMs
+    if (doorChanged) this.setDoor(next)
     const reconnect = prev !== undefined && (prev.url !== next.url || prev.tokenEnv !== next.tokenEnv)
     this.deps.logger.info(`qq-recorder: config applied ${next.revision} reconnect=${String(reconnect)}; recording ${next.groups.length} group(s)`)
     if (prev === undefined) {
@@ -336,13 +339,15 @@ export class QqRecorder {
         messages: stat?.messages ?? 0, firstAt: stat?.firstAt ?? null, lastAt: stat?.lastAt ?? null,
         unlistedSeen: this.unlistedCounts.get(group.groupId) ?? 0,
       }
-    }).sort((a, b) => Number(b.recorded) - Number(a.recorded) || b.unlistedSeen - a.unlistedSeen || b.messages - a.messages || a.name.localeCompare(b.name))
+    }).sort((a, b) => Number(b.recorded) - Number(a.recorded) || b.unlistedSeen - a.unlistedSeen
+      || b.messages - a.messages || a.name.localeCompare(b.name))
   }
 
   /** @returns recent messages of a recorded group, oldest first; nothing for a group not on the list. */
   recent(groupId: string, options: { sinceMs: number; limit: number; userId?: string }): Message[] {
     if (!this.recordedIds.has(groupId)) return []
-    return this.store.recent(groupId, { sinceMs: options.sinceMs, limit: options.limit, ...options.userId === undefined ? {} : { userId: options.userId } }).map(toMessage)
+    return this.store.recent(groupId,
+      { sinceMs: options.sinceMs, limit: options.limit, ...options.userId === undefined ? {} : { userId: options.userId } }).map(toMessage)
   }
 
   /** @returns messages of a recorded group after a cursor, in log order. */

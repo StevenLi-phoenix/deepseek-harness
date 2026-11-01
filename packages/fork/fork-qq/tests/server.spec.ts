@@ -26,7 +26,8 @@ async function boot(options: Parameters<typeof bootRecorder>[0] = {}, server: { 
 
 interface Answer { status: number; body: unknown; headers: Record<string, string | string[] | undefined> }
 
-function call(socketPath: string, method: string, path: string, options: { token?: string | null; body?: unknown; headers?: Record<string, string> } = {}): Promise<Answer> {
+function call(socketPath: string, method: string, path: string,
+  options: { token?: string | null; body?: unknown; headers?: Record<string, string> } = {}): Promise<Answer> {
   return new Promise((resolve, reject) => {
     const payload = options.body === undefined ? undefined : JSON.stringify(options.body)
     const req = request({
@@ -168,7 +169,8 @@ describe('qq-recorder server', () => {
     await expect(startRecorderServer({ recorder: h.recorder, logger: { debug() {}, info() {}, error() {} }, socketPath: h.socketPath, token: SECRET })).rejects.toThrow('already listens')
     await h.running.close()
     mkdirSync(join(h.dir, 'run'), { recursive: true })
-    const again = await startRecorderServer({ recorder: h.recorder, logger: { debug() {}, info() {}, error() {} }, socketPath: h.socketPath, token: SECRET })
+    const again = await startRecorderServer({ recorder: h.recorder, logger: { debug() {}, info() {}, error() {} },
+      socketPath: h.socketPath, token: SECRET })
     servers.push(again)
     expect((await call(h.socketPath, 'GET', '/v1/status')).status).toBe(200)
   })
