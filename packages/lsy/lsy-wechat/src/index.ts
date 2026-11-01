@@ -107,7 +107,8 @@ export interface Config {
   /**
    * Chat silence, in milliseconds, after which the owner's next message reaches the chat Session
    * with a note of when it was sent, how long the chat was quiet, and what the last message was.
-   * 0 turns the note off.
+   * Defaults to lsy-time-gap's 5 minutes, which leaves the owner's WeChat messages to this check
+   * (its `deferChannels`). 0 turns the note off.
    */
   timeGapMs: number
   /**
@@ -140,7 +141,7 @@ export const Config: z<Config> = z.object({
   cdnBaseUrl: z.string().default('https://novac2c.cdn.weixin.qq.com/c2c'),
   maxMediaBytes: z.natural().min(1024).default(25 * 1024 * 1024),
   mediaTimeoutMs: z.natural().min(1000).default(60_000),
-  timeGapMs: z.natural().default(1_800_000),
+  timeGapMs: z.natural().default(300_000),
   awakeAfterMessageMs: z.natural().default(1_800_000),
 })
 

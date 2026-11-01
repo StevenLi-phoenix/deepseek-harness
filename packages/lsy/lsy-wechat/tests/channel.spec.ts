@@ -10,7 +10,8 @@ import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
-import WechatChannel, { Config, handoverText, type ChatConfig } from '../src/index.ts'
+import * as TimeGap from '@deepseek-ai/dsh-lsy-time-gap'
+import WechatChannel, { Config, handoverText, WECHAT_RELAY_CHANNEL, type ChatConfig } from '../src/index.ts'
 import { downloadMedia } from '../src/media.ts'
 import type { WechatAccount } from '../src/login.ts'
 import { wechatDomain } from '../src/storage.ts'
@@ -1825,7 +1826,7 @@ describe('WechatChannel configuration', () => {
       cdnBaseUrl: 'https://novac2c.cdn.weixin.qq.com/c2c',
       maxMediaBytes: 25 * 1024 * 1024,
       mediaTimeoutMs: 60_000,
-      timeGapMs: 1_800_000,
+      timeGapMs: 300_000,
       awakeAfterMessageMs: 1_800_000,
     })
     expect('memoryCommands' in resolveConfig({})).toBe(false)
@@ -1833,6 +1834,12 @@ describe('WechatChannel configuration', () => {
     expect(() => resolveConfig({ memoryCommands: false, memoryFile: '/x' })).not.toThrow()
     expect(() => resolveConfig({ repliesPerToken: 1 })).toThrow()
     expect(() => resolveConfig({ maxMessageChars: 50 })).toThrow()
+  })
+
+  it('is the channel lsy-time-gap leaves the owner\'s messages to, with the same 5-minute threshold, so a chat message gets one time check', () => {
+    const shared = TimeGap.Config({})
+    expect(shared.deferChannels).toContain(WECHAT_RELAY_CHANNEL)
+    expect(resolveConfig({}).timeGapMs).toBe(shared.thresholdMs)
   })
 
   it.each([
