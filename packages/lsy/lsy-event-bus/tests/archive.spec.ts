@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  AUTO_ARCHIVE_DEFAULTS, MAX_RECENT_ARCHIVED, resolveAutoArchive, selectSessions, type AutoArchiveConfig, type SessionProtector, type SessionRow,
+  AUTO_ARCHIVE_DEFAULTS, MAX_RECENT_ARCHIVED, resolveAutoArchive, selectSessions,
+  type AutoArchiveConfig, type SessionProtector, type SessionRow,
 } from '../src/index.ts'
 import { SessionArchiver, type ArchiveHost } from '../src/archive.ts'
 import { baseConfig, disposeAll, fakeController, fakeRegistry, harness, withConfig, type FakeController } from './harness.ts'
@@ -77,7 +78,9 @@ describe('resolveAutoArchive', () => {
   it('stays off without a block and fills the defaults of a partial one', () => {
     expect(resolveAutoArchive(undefined).enabled).toBe(false)
     expect(resolveAutoArchive({ inactiveDays: 3 })).toEqual({ ...AUTO_ARCHIVE_DEFAULTS, inactiveDays: 3 })
-    expect(AUTO_ARCHIVE_DEFAULTS).toMatchObject({ enabled: true, inactiveDays: 7, dryRun: false, maxPerSweep: 50, firstSweepMinutes: 10, sweepHours: 6 })
+    expect(AUTO_ARCHIVE_DEFAULTS).toMatchObject({
+      enabled: true, inactiveDays: 7, dryRun: false, maxPerSweep: 50, firstSweepMinutes: 10, sweepHours: 6,
+    })
   })
 })
 
@@ -158,7 +161,7 @@ describe('SessionArchiver', () => {
   it('reports an aborted sweep when the Session list fails, and joins a sweep already running', async () => {
     const { host } = fakeHost([])
     let release!: () => void
-    const gate = new Promise<void>(resolve => { release = resolve })
+    const gate = new Promise<void>((resolve) => { release = resolve })
     let listed = 0
     const slow: ArchiveHost = { ...host, list: async () => { listed += 1; await gate; if (listed === 1) throw new Error('db down'); return [] } }
     const archiver = new SessionArchiver(config(), slow, logger().logger, fakeTimeout().timeout)

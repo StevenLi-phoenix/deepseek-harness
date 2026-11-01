@@ -401,7 +401,7 @@ export class SessionArchiver {
       } catch (error: unknown) {
         if (isActiveRefusal(error)) {
           report.skipped.active = (report.skipped.active ?? 0) + 1
-          ;(report.skippedIds.active ??= []).push(row.id)
+          report.skippedIds.active = [...report.skippedIds.active ?? [], row.id]
         } else {
           report.errors.push(`${row.id}: ${errorText(error)}`)
         }
@@ -431,7 +431,8 @@ export class SessionArchiver {
       await table.put(row.id, record)
       const excess = table.size - MAX_RECENT_ARCHIVED
       if (excess > 0) {
-        const oldest = [...table.entries()].map(([key, value]) => ({ key, at: value.archivedAt })).sort((a, b) => a.at - b.at).slice(0, excess)
+        const oldest = [...table.entries()].map(([key, value]) => ({ key, at: value.archivedAt }))
+          .sort((a, b) => a.at - b.at).slice(0, excess)
         for (const victim of oldest) await table.delete(victim.key)
       }
     } catch (error: unknown) {
