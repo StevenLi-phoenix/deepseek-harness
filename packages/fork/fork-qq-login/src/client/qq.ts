@@ -9,8 +9,10 @@ import type { QqPanel, QqRefreshAnswer } from '../view.ts'
 
 export type { QqPanel, QqRefreshAnswer } from '../view.ts'
 
-/** How often the open section refreshes: short, because a scan should show up within seconds. */
+/** How often the open section refreshes while something needs attention: short, because a scan should show up within seconds. */
 export const POLL_INTERVAL_MS = 3000
+/** How often it refreshes while QQ is connected: nothing changes then, and every read reaches the account's host. */
+export const CALM_POLL_INTERVAL_MS = 60_000
 
 /** What the section renders. */
 export interface QqState {
@@ -125,24 +127,33 @@ function currentPage(): VisibilitySource | null {
 }
 
 /**
- * Refresh now and every `intervalMs` while the page is visible; a hidden page stops the timer and showing it
- * again refreshes at once.
+ * Refresh now and then again after each interval while the page is visible; a hidden page stops the timer and showing
+ * it again refreshes at once.
  * @param refresh - one refresh; the loader shares a request in flight.
- * @param intervalMs - polling period.
+ * @param interval - the period, or a function asked for the next period after each refresh.
  * @param page - visibility source; null polls without one.
  * @returns a stop function.
  */
-export function startPolling(refresh: () => void, intervalMs: number, page: VisibilitySource | null = currentPage()): () => void {
-  let timer: ReturnType<typeof setInterval> | undefined
-  const run = (): void => {
-    if (timer !== undefined) return
+export function startPolling(
+  refresh: () => void,
+  interval: number | (() => number),
+  page: VisibilitySource | null = currentPage(),
+): () => void {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let running = false
+  const tick = (): void => {
     refresh()
-    timer = setInterval(refresh, intervalMs)
+    timer = setTimeout(tick, typeof interval === 'number' ? interval : interval())
+  }
+  const run = (): void => {
+    if (running) return
+    running = true
+    tick()
   }
   const pause = (): void => {
-    if (timer === undefined) return
-    clearInterval(timer)
+    if (timer !== undefined) clearTimeout(timer)
     timer = undefined
+    running = false
   }
   const onVisibility = (): void => {
     if (page?.visibilityState === 'hidden') pause()

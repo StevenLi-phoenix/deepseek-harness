@@ -11,7 +11,7 @@
 #
 # Boundary: dsh-runtime (the event service) holds the OneBot token and nothing else of NapCat. Through the OneBot API it
 # reads the groups it is told to; through the login door (127.0.0.1:3002) it can read whether QQ is logged in, read the
-# login QR link while a scan is needed, and ask for a fresh code (once per 10 s). It cannot reach NapCat's WebUI (config,
+# login QR link while a scan is needed, and ask for a fresh code (refused while QQ is logged in and for ten minutes after, otherwise once per 10 s). It cannot reach NapCat's WebUI (config,
 # files, a shell in the container, logout, restart), the docker socket, or the volumes that hold the QQ session: the door
 # alone holds the WebUI token, and the door's only two endpoints are the ones above.
 #

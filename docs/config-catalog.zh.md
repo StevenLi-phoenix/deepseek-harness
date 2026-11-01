@@ -2792,8 +2792,14 @@ export interface Config {
   backfill: {
     /** Fetch history after each connection. */
     enabled: boolean
-    /** Messages fetched per group at most. */
+    /** Messages fetched per group at most. 20 by default: one small page. */
     maxMessages: number
+    /** Groups caught up per connection at most; the next connection continues with the following ones. 5 by default. */
+    maxGroups: number
+    /** Pause between two groups' backfills, in milliseconds, plus up to half as much again of jitter. 5000 by default. */
+    gapMs: number
+    /** A connection made less than this long after the previous one dropped fetches nothing (a flapping link would hammer the account); 0 never skips. 30 minutes by default. */
+    skipWithinMs: number
   }
   /** Sending to a group. Off, and a group must be listed too; nothing in this package calls it on its own. */
   send: {

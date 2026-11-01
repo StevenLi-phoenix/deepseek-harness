@@ -2432,10 +2432,10 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the reading; `door` says why there is no `state` when the door could not answer.',
       },
       {
-        signature: 'async refreshLogin(): Promise<{ login: QqLoginReading; refreshed: boolean }>',
-        description: 'Ask NapCat for a fresh login QR code (it renews the code by itself about every two minutes).',
+        signature: 'async refreshLogin(): Promise<{ login: QqLoginReading; refreshed: boolean; reason: RefreshRefusal | null }>',
+        description: 'Ask NapCat for a fresh login QR code (it renews the code by itself about every two minutes). Refused while QQ is logged in and for ten minutes after the connection came up: a new code then only invites the account to be signed out, so nothing is asked of NapCat.',
         parameters: [],
-        returns: 'the reading after the request, and whether the door passed the request on (it declines a second one within seconds).',
+        returns: 'the reading after the request, whether the door passed the request on, and why not when it did not.',
       },
       {
         signature: 'forgetDigests(options: { groupId?: string; beforeMs?: number }): number',
@@ -8320,6 +8320,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RedactedSecret',
     declaration: 'export interface RedactedSecret {\n    path: string[];\n    set: boolean;\n}',
+  },
+  {
+    name: 'RefreshRefusal',
+    declaration: 'export type RefreshRefusal = \'logged-in\' | \'recently-logged-in\' | \'too-soon\' | \'napcat-refused\' | \'unreachable\';',
   },
   {
     name: 'RegistryAttempt',

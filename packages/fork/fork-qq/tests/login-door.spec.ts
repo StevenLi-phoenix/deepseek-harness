@@ -83,7 +83,7 @@ async function startDoor(env: Record<string, string> = {}): Promise<void> {
   const upstreamPort = await fake.listen()
   const port = await freePort()
   child = spawn('python3', ['-I', SCRIPT], {
-    env: { PATH: process.env['PATH'] ?? '', DOOR_CFG: dir, DOOR_UPSTREAM: `http://127.0.0.1:${upstreamPort}`, DOOR_BIND: '127.0.0.1', DOOR_PORT: String(port), DOOR_CACHE_S: '0', DOOR_REFRESH_GAP_S: '0.3', ...env },
+    env: { PATH: process.env['PATH'] ?? '', DOOR_CFG: dir, DOOR_UPSTREAM: `http://127.0.0.1:${upstreamPort}`, DOOR_BIND: '127.0.0.1', DOOR_PORT: String(port), DOOR_CACHE_S: '0', DOOR_CACHE_ONLINE_S: '0', DOOR_REFRESH_GAP_S: '0.3', ...env },
     stdio: ['ignore', 'ignore', 'pipe'],
   })
   child.stderr?.on('data', (chunk: Buffer) => { stderr += chunk.toString() })
@@ -194,10 +194,44 @@ describe.skipIf(!hasPython)('login door', () => {
     expect((await (await post()).json() as { refreshed: boolean }).refreshed).toBe(true)
   })
 
+  it('says why a refresh was not asked for: a second one too soon', async () => {
+    await startDoor()
+    await post()
+    expect(await (await post()).json()).toMatchObject({ refreshed: false, reason: 'too-soon' })
+  })
+
+  it('never asks NapCat for a fresh code while QQ is logged in', async () => {
+    fake.check = { isLogin: true, isOffline: false, loginPhase: 'ready', qrcodeurl: '', loginError: '' }
+    await startDoor()
+    const answer = await (await post()).json() as { refreshed: boolean; reason: string; login: string }
+    expect(answer).toMatchObject({ refreshed: false, reason: 'logged-in', login: 'online' })
+    expect(fake.calls.filter(call => call.endsWith('RefreshQRcode'))).toEqual([])
+  })
+
+  it('refuses for ten minutes after QQ logged in, even once NapCat reports offline, and allows it later', async () => {
+    fake.check = { isLogin: true, isOffline: false, loginPhase: 'ready', qrcodeurl: '', loginError: '' }
+    await startDoor({ DOOR_RECENT_LOGIN_S: '1' })
+    await get()
+    fake.check = { isLogin: false, isOffline: true, loginPhase: 'offline', qrcodeurl: '', loginError: '' }
+    expect(await (await post()).json()).toMatchObject({ refreshed: false, reason: 'recently-logged-in' })
+    expect(fake.calls.filter(call => call.endsWith('RefreshQRcode'))).toEqual([])
+    await new Promise(resolve => setTimeout(resolve, 1100))
+    expect(await (await post()).json()).toMatchObject({ refreshed: true })
+  })
+
+  it('asks NapCat about a logged-in account at most once a minute, but about a waiting code every time', async () => {
+    fake.check = { isLogin: true, isOffline: false, loginPhase: 'ready', qrcodeurl: '', loginError: '' }
+    await startDoor({ DOOR_CACHE_ONLINE_S: '60', DOOR_CACHE_S: '0' })
+    await get()
+    await get()
+    await get()
+    expect(fake.calls.filter(call => call.endsWith('CheckLoginStatus'))).toHaveLength(1)
+  })
+
   it('does not call it refreshed when NapCat refuses', async () => {
     fake.refreshAnswer = { code: -1, message: 'QQ Is Logined' }
     await startDoor()
-    expect(await (await post()).json()).toMatchObject({ refreshed: false })
+    expect(await (await post()).json()).toMatchObject({ refreshed: false, reason: 'napcat-refused' })
   })
 
   it('logs state changes only', async () => {

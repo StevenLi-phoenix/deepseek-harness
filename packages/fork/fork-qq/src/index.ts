@@ -20,7 +20,7 @@ import { DigestRunner, type DigestConfig } from './digest.ts'
 import { DEFAULT_MEDIA_HOST_SUFFIXES, detectExtension, fetchCapped, isAllowedMediaUrl, removeMedia, saveMedia } from './media.ts'
 import { LoginDoor, type DoorResult } from './login.ts'
 import { isPrivateAddress, isPrivateUrl, OneBotClient, type OneBotEvent } from './onebot.ts'
-import type { QqConnection, QqLoginReading } from './status.ts'
+import type { QqConnection, QqLoginReading, RefreshRefusal } from './status.ts'
 import { displayName, parseMessage } from './text.ts'
 import { QqStore, type DigestRow, type GroupStats, type MessageRow } from './store.ts'
 
@@ -90,8 +90,17 @@ export interface Config {
   backfill: {
     /** Fetch history after each connection. */
     enabled: boolean
-    /** Messages fetched per group at most. */
+    /** Messages fetched per group at most. 20 by default: one small page. */
     maxMessages: number
+    /** Groups caught up per connection at most; the next connection continues with the following ones. 5 by default. */
+    maxGroups: number
+    /** Pause between two groups' backfills, in milliseconds, plus up to half as much again of jitter. 5000 by default. */
+    gapMs: number
+    /**
+     * A connection made less than this long after the previous one dropped fetches nothing (a flapping link would hammer
+     * the account); 0 never skips. 30 minutes by default.
+     */
+    skipWithinMs: number
   }
   /** Sending to a group. Off, and a group must be listed too; nothing in this package calls it on its own. */
   send: {
@@ -182,7 +191,10 @@ export const Config = z.object({
   honorRecall: z.boolean().default(true),
   backfill: z.object({
     enabled: z.boolean().default(true),
-    maxMessages: z.natural().min(1).default(300),
+    maxMessages: z.natural().min(1).default(20),
+    maxGroups: z.natural().min(1).default(5),
+    gapMs: z.natural().default(5000),
+    skipWithinMs: z.natural().default(30 * 60_000),
   }),
   send: z.object({
     enabled: z.boolean().default(false),
@@ -241,6 +253,10 @@ const RETENTION_CHECK_MS = 6 * 3_600_000
 const MEDIA_CONCURRENCY = 2
 /** The login half of a panel answer is shared this long, so open pages cost the door at most one call each. */
 const LOGIN_CACHE_MS = 1500
+/** While QQ is logged in nothing on the page changes, so the door is asked this rarely. */
+const ONLINE_CACHE_MS = 60_000
+/** A fresh login code is not asked for this soon after the connection came up. */
+const RECENT_LOGIN_MS = 10 * 60_000
 /** NapCat logged in while the observer is still backing off: reconnect at once, but not more often than this. */
 const WAKE_GAP_MS = 10_000
 
@@ -335,6 +351,13 @@ export class QqObserver extends Service {
   private loginInFlight: Promise<QqLoginReading> | undefined
   private lastLoginKey = ''
   private lastWakeAt = 0
+  /** When the connection last came up, and when a connection that had been up last dropped. */
+  private openedAt: number | undefined
+  private lastDisconnectAt: number | undefined
+  /** Where the next connection's backfill continues in the list, so every group gets its turn over several connections. */
+  private backfillCursor = 0
+  private backfillTail: Promise<void> = Promise.resolve()
+  private lastBackfillEnd = 0
   private wakeRetry: (() => void) | undefined
   private readonly counters = { messages: 0, media: 0, voices: 0, dropped: 0, private: 0 }
   /** Replaced by tests. */
@@ -420,11 +443,7 @@ export class QqObserver extends Service {
     for (const id of removed) this.ctx.logger.info(`fork-qq: no longer recording group ${id}; what is stored ages out with retention`)
     const client = this.client
     if (client === undefined || !this.config.backfill.enabled) return
-    for (const id of added) {
-      this.track(this.backfill(id).catch((error: unknown) => {
-        this.ctx.logger.warn(`fork-qq: backfill of group ${id} failed: ${errorText(error)}`)
-      }))
-    }
+    if (added.length > 0) this.track(this.queueBackfill(added, client))
   }
 
   /**
@@ -618,26 +637,33 @@ export class QqObserver extends Service {
   }
 
   /**
-   * Ask NapCat for a fresh login QR code (it renews the code by itself about every two minutes).
-   * @returns the reading after the request, and whether the door passed the request on (it declines a second one within seconds).
+   * Ask NapCat for a fresh login QR code (it renews the code by itself about every two minutes). Refused while QQ is
+   * logged in and for ten minutes after the connection came up: a new code then only invites the account to be signed
+   * out, so nothing is asked of NapCat.
+   * @returns the reading after the request, whether the door passed the request on, and why not when it did not.
    */
-  async refreshLogin(): Promise<{ login: QqLoginReading; refreshed: boolean }> {
-    const token = this.door === undefined ? undefined : await this.token()
+  async refreshLogin(): Promise<{ login: QqLoginReading; refreshed: boolean; reason: RefreshRefusal | null }> {
+    let refusal: RefreshRefusal | null = null
+    if (this.connState === 'connected') refusal = 'logged-in'
+    else if (this.openedAt !== undefined && this.now() - this.openedAt < RECENT_LOGIN_MS) refusal = 'recently-logged-in'
+    const token = refusal !== null || this.door === undefined ? undefined : await this.token()
     let refreshed = false
-    if (this.door !== undefined && token !== undefined) {
+    if (refusal === null && this.door !== undefined && token !== undefined) {
       const answer = await this.door.refresh(token)
       refreshed = answer.refreshed
+      refusal = answer.refreshed ? null : answer.reason ?? 'unreachable'
       this.loginCache = { at: this.now(), login: this.toLogin(answer.result) }
       this.noteLogin(this.loginCache.login)
     }
-    this.ctx.logger.info(`fork-qq: asked NapCat for a fresh login QR from the settings page (${refreshed ? 'done' : 'not done'})`)
-    return { login: await this.loginStatus(), refreshed }
+    this.ctx.logger.info(`fork-qq: asked NapCat for a fresh login QR from the settings page (${refreshed ? 'done' : `not done: ${refusal ?? 'no door'}`})`)
+    return { login: await this.loginStatus(), refreshed, reason: refusal }
   }
 
   private loginView(fresh: boolean): Promise<QqLoginReading> {
     if (this.door === undefined) return Promise.resolve({ door: 'disabled', state: null, uin: null, nickname: null, error: null, qrUrl: null })
     const cached = this.loginCache
-    if (!fresh && cached !== undefined && this.now() - cached.at < LOGIN_CACHE_MS) return Promise.resolve(cached.login)
+    const ttl = this.connState === 'connected' || cached?.login.state === 'online' ? ONLINE_CACHE_MS : LOGIN_CACHE_MS
+    if (!fresh && cached !== undefined && this.now() - cached.at < ttl) return Promise.resolve(cached.login)
     if (!fresh && this.loginInFlight !== undefined) return this.loginInFlight
     const door = this.door
     const read = (async (): Promise<QqLoginReading> => {
@@ -737,6 +763,7 @@ export class QqObserver extends Service {
             this.clearNotice()
             this.attempt = 0
             this.lastError = undefined
+            this.openedAt = this.now()
             this.setConnection('connected')
             this.ctx.logger.info(`fork-qq: connected to the protocol end at ${this.config.url}`)
             this.track(this.onOpen())
@@ -754,6 +781,7 @@ export class QqObserver extends Service {
       } finally {
         this.client = undefined
       }
+      if (upAt !== undefined) this.lastDisconnectAt = this.now()
       this.disconnectedSince ??= this.now()
       this.track(this.checkOutage())
       failures = upAt !== undefined && this.now() - upAt >= STABLE_MS ? 1 : failures + 1
@@ -829,14 +857,68 @@ export class QqObserver extends Service {
       this.ctx.logger.warn(`fork-qq: get_login_info failed: ${errorText(error)}`)
     }
     await this.refreshGroups()
-    if (this.config.backfill.enabled) {
-      for (const groupId of this.recordedIds) {
-        if (this.stopping || this.client !== client) break
+    if (this.config.backfill.enabled) await this.backfillOnOpen(client)
+  }
+
+  /**
+   * Catch up on what was missed, gently: not after a connection that follows the previous drop closely (a flapping link
+   * would repeat it), at most `maxGroups` groups per connection (the next connection continues with the following
+   * ones), one small page per group, and a pause between groups.
+   */
+  private async backfillOnOpen(client: OneBotClient): Promise<void> {
+    const { skipWithinMs, maxGroups } = this.config.backfill
+    if (skipWithinMs > 0 && this.lastDisconnectAt !== undefined && this.now() - this.lastDisconnectAt < skipWithinMs) {
+      this.ctx.logger.info(`fork-qq: the previous connection dropped ${Math.round((this.now() - this.lastDisconnectAt) / 60_000)} min ago; not backfilling this time`)
+      return
+    }
+    const ids = [...this.recordedIds]
+    if (ids.length === 0) return
+    const start = this.backfillCursor % ids.length
+    const turn = [...ids.slice(start), ...ids.slice(0, start)].slice(0, maxGroups)
+    this.backfillCursor = (start + turn.length) % ids.length
+    if (turn.length < ids.length) this.ctx.logger.info(`fork-qq: backfilling ${turn.length} of ${ids.length} group(s) now; the others follow on later connections`)
+    await this.queueBackfill(turn, client)
+  }
+
+  /** Backfill groups one at a time, behind any backfill already running, with a pause (and jitter) between two groups. */
+  private queueBackfill(ids: readonly string[], client: OneBotClient): Promise<void> {
+    const run = async (): Promise<void> => {
+      for (const groupId of ids) {
+        if (this.superseded(client)) return
+        const wait = this.lastBackfillEnd + this.backfillGap() - Date.now()
+        if (this.lastBackfillEnd > 0 && wait > 0) await this.delay(wait)
+        if (this.superseded(client)) return
         await this.backfill(groupId).catch((error: unknown) => {
           this.ctx.logger.warn(`fork-qq: backfill of group ${groupId} failed: ${errorText(error)}`)
         })
+        this.lastBackfillEnd = Date.now()
       }
     }
+    this.backfillTail = this.backfillTail.then(run, run)
+    return this.backfillTail
+  }
+
+  /** Whether the plugin stopped or the connection this work began on is gone. */
+  private superseded(client: OneBotClient): boolean {
+    return this.stopping || this.client !== client
+  }
+
+  private backfillGap(): number {
+    const gap = this.config.backfill.gapMs
+    return gap + Math.random() * gap / 2
+  }
+
+  /** A pause that ends early when the plugin stops (unlike {@link pause}, a login wake does not cut it short). */
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      const done = (): void => {
+        clearTimeout(timer)
+        this.abort.signal.removeEventListener('abort', done)
+        resolve()
+      }
+      const timer = setTimeout(done, ms)
+      this.abort.signal.addEventListener('abort', done, { once: true })
+    })
   }
 
   private async refreshGroups(): Promise<void> {
@@ -866,7 +948,7 @@ export class QqObserver extends Service {
     while (fetched < this.config.backfill.maxMessages && this.client === client) {
       let data: { messages?: OneBotEvent[] }
       try {
-        data = await client.call<{ messages?: OneBotEvent[] }>('get_group_msg_history', { group_id: Number(groupId), count: 50, ...seq === undefined ? {} : { message_seq: Number(seq) } })
+        data = await client.call<{ messages?: OneBotEvent[] }>('get_group_msg_history', { group_id: Number(groupId), count: Math.min(50, this.config.backfill.maxMessages - fetched), ...seq === undefined ? {} : { message_seq: Number(seq) } })
       } catch (error: unknown) {
         // No anchor for the first page means the group has no message to fetch: nothing to backfill, not a failure.
         if (seq !== undefined || !NO_HISTORY.test(errorText(error))) throw error
@@ -948,7 +1030,9 @@ export class QqObserver extends Service {
         rowId: row, groupId, at, mediaId: media.id, kind: media.kind,
         url: media.url ?? undefined, file: media.file ?? undefined, name: media.name ?? undefined,
       }
-      this.enqueue(() => this.fetchMedia(item))
+      // A backfilled message is old: its files are not fetched (that is more traffic to the CDN and the account), only noted.
+      if (backfilled) this.store.setMediaError(media.id, 'not fetched for a backfilled message')
+      else this.enqueue(() => this.fetchMedia(item))
     }
     return true
   }

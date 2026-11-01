@@ -54,7 +54,13 @@ kind: "package-reference"
 | `voice.maxBytes` | `10485760` | 保留的最大音频 |
 | `asr.enabled` | `false` | 用 `ctx.forkVoice.transcribe` 转写语音消息；需要 fork-voice 的 `asr.enabled` |
 | `honorRecall` | `true` | 发送者撤回的消息会丢掉文字、原始片段和文件 |
-| `backfill.enabled`、`backfill.maxMessages` | `true`、`300` | 连接后补抓漏掉的消息（历史页向后翻，直到遇到已存的消息） |
+| `backfill.enabled` | `true` | 连接后补抓漏掉的消息 |
+| `backfill.maxMessages` | `20` | 每个群最多补抓的消息数（一页就是这个数；往前翻页也只到这个总数为止） |
+| `backfill.maxGroups` | `5` | 每次连接补抓的群数；下一次连接接着补后面的群 |
+| `backfill.gapMs` | `5000` | 两个群的补抓之间的停顿，另加最多一半的随机抖动 |
+| `backfill.skipWithinMs` | `1800000` | 距上一次断线不到这么久就重连时不补抓，免得连接抖动时反复冲击账号；`0` 表示从不跳过 |
+
+补抓的消息只存文字：不下载图片和语音（对应行会注明），实时消息不受影响。
 | `send.enabled` | `false` | 是否允许 `sendGroupMessage` |
 | `send.groups` | `[]` | 在 `send.enabled` 之外，允许发送的群 |
 | `send.minIntervalSec`、`send.maxPerDay` | `60`、`10` | 对同一个群两次发送至少相隔这么久，每天至多这么多条 |
@@ -78,7 +84,7 @@ kind: "package-reference"
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-fork-qq)是全部可接受字段的完整来源。
 
-**QQ 把账号踢下线时**，在 DSH 页面重新扫码：**设置 → QQ**（[`@deepseek-ai/dsh-fork-qq-login`](../fork-qq-login/README.zh.md)）显示连接状态、NapCat 的登录状态和登录二维码。二维码经*扫码入口*（login door）取得：它是 `napcat.sh start` 在 NapCat 旁边启动的一个小容器（`napcat.sh door` 可单独启动），监听 `127.0.0.1:3002`。NapCat 的 WebUI 能在容器里开 shell、读取 QQ 会话，所以服务用户从不持有它的令牌：令牌由扫码入口持有，它只回答 `GET /v1/login` 和 `POST /v1/login/refresh`，以调用方带来的 OneBot token 作为凭证，并且只转交类型明确、长度受限的字段（二维码链接必须是 https 的 `*.qq.com` 地址才放行）。观察者通过 `loginStatus()` 和 `refreshLogin()` 读取扫码入口，通过 `connectionStatus()` 报告自己的连接，并且在扫码入口说 NapCat 已登录、而自己还在退避等待时立刻重连。**`dsh-runtime` 对 NapCat 能做什么、不能做什么**：它持有 OneBot token（`127.0.0.1:3001` 上的 OneBot API，本包只读取）；通过扫码入口，它能读取 QQ 是否已登录、在需要扫码时读取登录二维码链接，并请求新的二维码（每 10 秒一次）。它不能访问 NapCat 的 WebUI（配置、文件、容器里的 shell、退出登录、重启）、docker socket，也不能读保存 QQ 会话的卷。恢复步骤见运行手册第 13 节：[QQ 掉线恢复](../../../fork/deploy/RUNBOOK.md#qq-recovery)。
+**QQ 把账号踢下线时**，在 DSH 页面重新扫码：**设置 → QQ**（[`@deepseek-ai/dsh-fork-qq-login`](../fork-qq-login/README.zh.md)）显示连接状态、NapCat 的登录状态和登录二维码。二维码经*扫码入口*（login door）取得：它是 `napcat.sh start` 在 NapCat 旁边启动的一个小容器（`napcat.sh door` 可单独启动），监听 `127.0.0.1:3002`。NapCat 的 WebUI 能在容器里开 shell、读取 QQ 会话，所以服务用户从不持有它的令牌：令牌由扫码入口持有，它只回答 `GET /v1/login` 和 `POST /v1/login/refresh`，以调用方带来的 OneBot token 作为凭证，并且只转交类型明确、长度受限的字段（二维码链接必须是 https 的 `*.qq.com` 地址才放行）。观察者通过 `loginStatus()` 和 `refreshLogin()` 读取扫码入口，通过 `connectionStatus()` 报告自己的连接，并且在扫码入口说 NapCat 已登录、而自己还在退避等待时立刻重连。**`dsh-runtime` 对 NapCat 能做什么、不能做什么**：它持有 OneBot token（`127.0.0.1:3001` 上的 OneBot API，本包只读取）；通过扫码入口，它能读取 QQ 是否已登录、在需要扫码时读取登录二维码链接，并请求新的二维码（QQ 已登录时以及登录后 10 分钟内拒绝，其余时候每 10 秒一次）。它不能访问 NapCat 的 WebUI（配置、文件、容器里的 shell、退出登录、重启）、docker socket，也不能读保存 QQ 会话的卷。恢复步骤见运行手册第 13 节：[QQ 掉线恢复](../../../fork/deploy/RUNBOOK.md#qq-recovery)。
 
 摘要是观察者学到的知识，带着来源（`qq-group:<群号>`、摘要编号、日期）；它们不受 30 天限制，`forgetDigests({ groupId?, beforeMs? })`（即 `qq_forget` 工具）按群或日期删除。读取由服务负责：`groupOverview()`、`recentMessages()`、`searchMessages()`、`digests()` 和 `groupName()` 只对已记录的群作答。`sendGroupMessage(groupId, text)` 留给以后的代码，除非 `send.enabled` 为 true 且该群在 `send.groups` 里，否则一律拒绝；本包和工具里没有任何地方调用它。
 

@@ -60,7 +60,7 @@ async function boot(initial: string[], history: () => unknown = () => ({ message
   ctx.provide('permissionPresets', { resolve: vi.fn(), set: vi.fn() } as never)
   ctx.provide('sessionTitle', { rename: vi.fn(), get: vi.fn() } as never)
   await ctx.plugin(Observer, {
-    url: fake.url, groups: initial, dataDir: join(dir, 'data'), digest: { enabled: false, workspacePath: join(dir, 'digest') }, login: { enabled: false },
+    url: fake.url, groups: initial, dataDir: join(dir, 'data'), digest: { enabled: false, workspacePath: join(dir, 'digest') }, login: { enabled: false }, backfill: { gapMs: 0 },
   })
   await until(() => logs.some(line => line.includes('logged in as')) && logs.some(line => line.includes('the account is in')), 'the connection')
   // What the loader does when the Settings form saves a volatile field: commit the new value into the running reference, then emit.

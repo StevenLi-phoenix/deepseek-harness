@@ -10,7 +10,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the settings shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
-import { QQ_REFRESH_ROUTE, QQ_ROUTE } from '../view.ts'
+import { QQ_REFRESH_ROUTE, QQ_ROUTE, type QqRefreshAnswer } from '../view.ts'
 import { GROUP_ID, withGroup, withoutGroup, type GroupsSection } from './groups.ts'
 import { QqLoader, createQqStore, parsePanel } from './qq.ts'
 import { QqLoginSection, type QqLoginInjected } from './QqLogin.tsx'
@@ -51,7 +51,8 @@ export function apply(ctx: ClientContext): void {
       const response = await fetch(QQ_REFRESH_ROUTE, { method: 'POST', credentials: 'same-origin', cache: 'no-store' })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const body: unknown = await response.json()
-      return { ...parsePanel(body), refreshed: (body as { refreshed?: unknown }).refreshed === true }
+      const fields = body as { refreshed?: unknown; reason?: unknown }
+      return { ...parsePanel(body), refreshed: fields.refreshed === true, reason: typeof fields.reason === 'string' ? fields.reason as QqRefreshAnswer['reason'] : null }
     },
   )
   // Functions stable for the registration's lifetime, so the section's polling effect never restarts on re-render.

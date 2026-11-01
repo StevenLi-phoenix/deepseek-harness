@@ -221,7 +221,8 @@ describe('QqObserver recording', () => {
     await until(() => dataOf(h.observer).recent(GROUP, { limit: 10 }).length === 5, 'the backfill')
     expect(h.observer.store.recent(GROUP, { limit: 10 }).map(m => m.text)).toEqual(['历史消息1', '历史消息2', '历史消息3', '历史消息4', '历史消息5'])
     const calls = fake.callsOf('get_group_msg_history')
-    expect(calls.slice(0, 2)).toEqual([{ group_id: Number(GROUP), count: 50 }, { group_id: Number(GROUP), count: 50, message_seq: 103 }])
+    // A page never asks for more than the messages still wanted (maxMessages 20 by default: 20, then 17).
+    expect(calls.slice(0, 2)).toEqual([{ group_id: Number(GROUP), count: 20 }, { group_id: Number(GROUP), count: 17, message_seq: 103 }])
     // The page before the oldest one is all known, so the walk ends there.
     expect(calls).toHaveLength(3)
   })

@@ -10,7 +10,7 @@ import { QQ_GROUP_CANDIDATES, type QqConnection, type QqGroup, type QqLogin, typ
 export interface QqSource {
   connectionStatus(): QqConnection
   loginStatus(options?: { fresh?: boolean }): Promise<Omit<QqLogin, 'qr'> & { qrUrl: string | null }>
-  refreshLogin(): Promise<{ login: Omit<QqLogin, 'qr'> & { qrUrl: string | null }; refreshed: boolean }>
+  refreshLogin(): Promise<{ login: Omit<QqLogin, 'qr'> & { qrUrl: string | null }; refreshed: boolean; reason: QqRefreshAnswer['reason'] }>
   recordedGroups(): number
   groupChoices(): readonly QqGroup[]
 }
@@ -58,7 +58,7 @@ export async function buildPanel(source: QqSource, options: { fresh?: boolean } 
  * @returns what `POST /api/fork.qq.refresh` answers.
  */
 export async function buildRefresh(source: QqSource, now: () => number = Date.now): Promise<QqRefreshAnswer> {
-  const { login, refreshed } = await source.refreshLogin()
+  const { login, refreshed, reason } = await source.refreshLogin()
   return {
     at: now(),
     connection: source.connectionStatus(),
@@ -66,5 +66,6 @@ export async function buildRefresh(source: QqSource, now: () => number = Date.no
     groupsRecorded: source.recordedGroups(),
     groups: groupsOf(source),
     refreshed,
+    reason,
   }
 }

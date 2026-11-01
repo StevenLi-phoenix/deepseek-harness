@@ -5,7 +5,7 @@
  * answers is checked field by field again here.
  */
 
-import type { QqLoginState } from './status.ts'
+import type { QqLoginState, RefreshRefusal } from './status.ts'
 
 /** What asking the door came to. */
 export type DoorResult =
@@ -15,6 +15,7 @@ export type DoorResult =
   | { kind: 'unauthorized' }
   | { kind: 'invalid' }
 
+const REFUSALS: ReadonlySet<string> = new Set<RefreshRefusal>(['logged-in', 'recently-logged-in', 'too-soon', 'napcat-refused', 'unreachable'])
 const LOGIN_STATES: ReadonlySet<string> = new Set<QqLoginState>(['online', 'offline', 'qr', 'scanned', 'logging-in', 'preparing', 'restarting', 'unknown'])
 
 /** A short single-line string, or null. */
@@ -93,11 +94,11 @@ export class LoginDoor {
    * @param token - the OneBot access token.
    * @returns the state after the request, and whether the door passed the request on (it declines a second one within seconds).
    */
-  refresh(token: string): Promise<{ result: DoorResult; refreshed: boolean }> {
+  refresh(token: string): Promise<{ result: DoorResult; refreshed: boolean; reason?: RefreshRefusal }> {
     return this.send('POST', '/v1/login/refresh', token)
   }
 
-  private async send(method: 'GET' | 'POST', path: string, token: string): Promise<{ result: DoorResult; refreshed: boolean }> {
+  private async send(method: 'GET' | 'POST', path: string, token: string): Promise<{ result: DoorResult; refreshed: boolean; reason?: RefreshRefusal }> {
     let response: Response
     try {
       response = await this.request(this.base + path, {
@@ -117,7 +118,8 @@ export class LoginDoor {
     } catch {
       return { result: { kind: 'invalid' }, refreshed: false }
     }
-    const refreshed = typeof body === 'object' && body !== null && (body as Record<string, unknown>)['refreshed'] === true
-    return { result: parseDoorAnswer(body), refreshed }
+    const fields = typeof body === 'object' && body !== null ? body as Record<string, unknown> : {}
+    const reason = REFUSALS.has(String(fields['reason'])) ? fields['reason'] as RefreshRefusal : undefined
+    return { result: parseDoorAnswer(body), refreshed: fields['refreshed'] === true, ...reason === undefined ? {} : { reason } }
   }
 }

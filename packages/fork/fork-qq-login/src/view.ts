@@ -90,6 +90,8 @@ export interface QqPanel {
 
 /** What `POST /api/fork.qq.refresh` answers: the panel after asking NapCat for a fresh code. */
 export interface QqRefreshAnswer extends QqPanel {
-  /** False when the door declined (too soon, NapCat refused, or the door is unreachable). */
+  /** False when no fresh code was asked for. */
   readonly refreshed: boolean
+  /** Why not: QQ is logged in or just was, a code was asked for a moment ago, NapCat refused, or the door is unreachable. */
+  readonly reason: 'logged-in' | 'recently-logged-in' | 'too-soon' | 'napcat-refused' | 'unreachable' | null
 }
