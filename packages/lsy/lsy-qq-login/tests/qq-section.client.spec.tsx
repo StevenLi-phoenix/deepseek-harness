@@ -4,6 +4,9 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { QqPanel } from '../src/view.ts'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { GroupsSection } from '../src/client/groups.ts'
 import { createQqStore, type QqState } from '../src/client/qq.ts'
 import { QqLoginSection, type QqLoginProps } from '../src/client/QqLogin.tsx'
 import { zh } from '../src/client/locales.ts'
@@ -15,6 +18,11 @@ function panel(over: { connection?: Partial<QqPanel['connection']>; login?: Part
   return {
     at: NOW,
     groupsRecorded: 24,
+    groups: [
+      { groupId: '111111', name: '技术群', memberCount: 80, recorded: true, seen: 0 },
+      { groupId: '222222', name: '闲聊群', memberCount: 300, recorded: false, seen: 7 },
+      { groupId: '333333', name: '安静群', memberCount: 12, recorded: false, seen: 0 },
+    ],
     connection: { state: 'connected', since: NOW - 3_600_000, attempt: 0, lastError: null, selfId: '2153925085', ...over.connection },
     login: { door: 'ok', state: 'online', uin: '2153925085', nickname: '小号', error: null, qr: null, ...over.login },
   }
@@ -25,16 +33,26 @@ const waiting = (): QqPanel => panel({
   login: { state: 'qr', uin: null, nickname: null, qr: { size: 3, rows: ['101', '010', '111'] } },
 })
 
-function mount(state: Partial<QqState>) {
+const READY: ConfigFormSnapshot<GroupsSection> = { status: 'ready', value: { groups: ['111111'] }, base: undefined, user: undefined, revision: 3, writable: true }
+
+function mount(state: Partial<QqState>, form: Partial<ConfigFormSnapshot<GroupsSection>> = {}) {
   const store = createQqStore()
   store.update((draft) => { Object.assign(draft, state) })
+  const formStore = createSnapshotStore<ConfigFormSnapshot<GroupsSection>>({ ...READY, ...form })
   const refresh = vi.fn()
   const renewCode = vi.fn()
+  const addGroup = vi.fn(() => Promise.resolve(true))
+  const removeGroup = vi.fn(() => Promise.resolve(true))
   // The shell's global standard hooks are not read by this section.
-  const props = { close: () => {}, useQq: bindSnapshotSelector(store), refresh, renewCode, t } as QqLoginProps
+  const props = {
+    close: () => {},
+    useQq: bindSnapshotSelector(store),
+    useGroupsForm: bindSnapshotSelector(formStore),
+    refresh, renewCode, addGroup, removeGroup, t,
+  } as QqLoginProps
   const element = () => <QqLoginSection {...props} />
   const view = render(element())
-  return { store, refresh, renewCode, view, rerender: () => { view.rerender(element()) } }
+  return { store, formStore, refresh, renewCode, addGroup, removeGroup, view, rerender: () => { view.rerender(element()) } }
 }
 
 afterEach(() => {
@@ -121,5 +139,75 @@ describe('QqLoginSection', () => {
     mount({ panel: panel(), checkedAt: NOW, stale: true })
     expect(screen.getByRole('status').textContent).toMatch(/未能刷新/)
     expect(screen.getByRole('heading', { name: 'QQ 已连接' })).toBeTruthy()
+  })
+
+  it('lists the recorded groups by name and offers the other groups, busiest first, each with one tap to add', () => {
+    const { addGroup } = mount({ panel: panel(), checkedAt: NOW })
+    const recorded = screen.getByRole('list', { name: '记录的群' })
+    expect(recorded.textContent).toContain('技术群')
+    expect(recorded.textContent).toContain('111111')
+    const candidates = screen.getByRole('list', { name: '账号所在的其他群' })
+    expect([...candidates.querySelectorAll('li')].map(item => item.textContent)).toEqual([
+      expect.stringContaining('闲聊群'),
+      expect.stringContaining('安静群'),
+    ])
+    expect(candidates.textContent).toContain('已丢弃 7 条消息')
+    fireEvent.click(candidates.querySelectorAll('button')[0]!)
+    expect(addGroup).toHaveBeenCalledWith('222222')
+  })
+
+  it('removes a group only after a second tap', () => {
+    const { removeGroup } = mount({ panel: panel(), checkedAt: NOW })
+    const row = screen.getByRole('list', { name: '记录的群' })
+    fireEvent.click(row.querySelector('button')!)
+    expect(removeGroup).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '确认移除' }))
+    expect(removeGroup).toHaveBeenCalledWith('111111')
+  })
+
+  it('cancels a pending removal', () => {
+    const { removeGroup } = mount({ panel: panel(), checkedAt: NOW })
+    fireEvent.click(screen.getByRole('list', { name: '记录的群' }).querySelector('button')!)
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(screen.queryByRole('button', { name: '确认移除' })).toBeNull()
+    expect(removeGroup).not.toHaveBeenCalled()
+  })
+
+  it('adds a typed group number, and refuses what is not one without calling the Host', () => {
+    const { addGroup } = mount({ panel: panel(), checkedAt: NOW })
+    const input = screen.getByPlaceholderText('群号（数字）')
+    fireEvent.change(input, { target: { value: 'abc' } })
+    fireEvent.submit(input.closest('form')!)
+    expect(screen.getByRole('alert').textContent).toBe('群号是 3 到 20 位数字。')
+    expect(addGroup).not.toHaveBeenCalled()
+    fireEvent.change(input, { target: { value: ' 444555666 ' } })
+    fireEvent.submit(input.closest('form')!)
+    expect(addGroup).toHaveBeenCalledWith('444555666')
+  })
+
+  it('says so when the Host refused the write, and keeps the buttons usable', async () => {
+    const { addGroup } = mount({ panel: panel(), checkedAt: NOW })
+    addGroup.mockResolvedValueOnce(false)
+    await act(async () => { fireEvent.click(screen.getByRole('list', { name: '账号所在的其他群' }).querySelector('button')!) })
+    expect(screen.getByRole('alert').textContent).toMatch(/没有保存/)
+    expect(screen.getAllByRole<HTMLButtonElement>('button', { name: '添加' })[0]!.disabled).toBe(false)
+  })
+
+  it('shows the list as read-only when a higher layer owns it, and explains when the Host does not serve it', () => {
+    mount({ panel: panel(), checkedAt: NOW }, { writable: false })
+    expect(screen.getByText(/更高优先级的层/)).toBeTruthy()
+    for (const button of screen.getAllByRole<HTMLButtonElement>('button', { name: '移除' })) expect(button.disabled).toBe(true)
+    cleanup()
+    mount({ panel: panel(), checkedAt: NOW }, { status: 'unavailable', value: undefined })
+    expect(screen.getByText(/没有开放在页面上编辑群名单/)).toBeTruthy()
+    expect(screen.queryByPlaceholderText('群号（数字）')).toBeNull()
+  })
+
+  it('falls back to the number for a group the account has not named, and shows an empty list plainly', () => {
+    mount({ panel: panel(), checkedAt: NOW }, { value: { groups: ['999999'] } })
+    expect(screen.getByRole('list', { name: '记录的群' }).textContent).toContain('999999')
+    cleanup()
+    mount({ panel: panel(), checkedAt: NOW }, { value: { groups: [] } })
+    expect(screen.getByText('名单是空的：现在什么都不记录。')).toBeTruthy()
   })
 })

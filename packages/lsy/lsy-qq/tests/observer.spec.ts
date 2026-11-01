@@ -73,10 +73,11 @@ async function boot(options: {
   ctx.provide('sessionTitle', { rename: vi.fn(), get: vi.fn() } as never)
   if (options.notifier !== undefined) ctx.provide('lsyNotifier', options.notifier as never)
   if (options.voice !== undefined) ctx.provide('lsyVoice', options.voice as never)
-  const config = Config({
+  // The loader parses the config itself (the group list is a volatile reference), so the plugin gets the raw object.
+  const config = {
     url: fake.url, groups: [GROUP], dataDir: join(dir, 'data'), digest: { enabled: false, workspacePath: join(dir, 'digest') },
     ...options.config,
-  } as never)
+  } as never
   await ctx.plugin(Observer, config)
   const observer = ctx.lsyQq
   if (options.connect !== false) await until(() => fake.connections > 0 && logs.some(line => line.text.includes('logged in as')), 'the connection')

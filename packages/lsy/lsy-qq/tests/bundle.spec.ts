@@ -21,7 +21,7 @@ describe('event bundle', () => {
     expect(row.name).toBe('@deepseek-ai/dsh-lsy-qq')
     const config = Config((row.config ?? {}) as never)
     // The owner lists group numbers in the profile patch; this public repository carries none.
-    expect(config.groups).toEqual([])
+    expect(config.groups.get()).toEqual([])
     expect(row.config ?? {}).not.toHaveProperty('groups')
     expect(config.send).toEqual({ enabled: false, groups: [], minIntervalSec: 60, maxPerDay: 10 })
     expect(config.asr.enabled).toBe(false)

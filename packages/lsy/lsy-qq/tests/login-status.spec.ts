@@ -94,11 +94,12 @@ async function boot(options: {
   ctx.provide('permissionPresets', { resolve: vi.fn(), set: vi.fn() } as never)
   ctx.provide('sessionTitle', { rename: vi.fn(), get: vi.fn() } as never)
   if (options.notifier !== undefined) ctx.provide('lsyNotifier', options.notifier as never)
-  const config = Config({
+  // The loader parses the config itself (the group list is a volatile reference), so the plugin gets the raw object.
+  const config = {
     url, groups: ['123456789'], dataDir: join(dir, 'data'), digest: { enabled: false, workspacePath: join(dir, 'digest') },
     login: { url: doorUrl, ...options.login },
     ...options.config,
-  } as never)
+  } as never
   await ctx.plugin(Observer, config)
   const observer = ctx.lsyQq
   return { ctx, observer, fake, door, logs, url }
@@ -306,7 +307,7 @@ describe('QQ owner notice across reloads', () => {
 
 describe('QQ panel configuration', () => {
   it('refuses a door address that is not on this machine or the tailnet', () => {
-    const make = (login: Record<string, unknown>) => () => new QqObserver(new Context(), Config({ dataDir: join(dir, 'x'), digest: { workspacePath: join(dir, 'd') }, login } as never))
+    const make = (login: Record<string, unknown>) => () => new QqObserver(new Context(), Config({ dataDir: join(dir, 'x'), digest: { workspacePath: join(dir, 'd') }, login }))
     expect(make({ url: 'http://192.168.1.50:3002' })).toThrow('login.url')
     expect(make({ url: 'ftp://127.0.0.1:3002' })).toThrow('login.url')
     expect(isPrivateAddress('http://127.0.0.1:3002', ['http:', 'https:'])).toBe(true)
@@ -314,7 +315,7 @@ describe('QQ panel configuration', () => {
   })
 
   it('refuses a settings address that is not http(s)', () => {
-    const make = (settingsUrl: string) => () => new QqObserver(new Context(), Config({ dataDir: join(dir, 'x'), digest: { workspacePath: join(dir, 'd') }, settingsUrl } as never))
+    const make = (settingsUrl: string) => () => new QqObserver(new Context(), Config({ dataDir: join(dir, 'x'), digest: { workspacePath: join(dir, 'd') }, settingsUrl }))
     expect(make('javascript:alert(1)')).toThrow('settingsUrl')
   })
 })

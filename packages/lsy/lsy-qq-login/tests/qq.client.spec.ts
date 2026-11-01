@@ -13,6 +13,7 @@ function panel(over: { connection?: Partial<QqPanel['connection']>; login?: Part
   return {
     at: NOW,
     groupsRecorded: 24,
+    groups: [],
     connection: { state: 'connected', since: NOW - 3 * 3_600_000, attempt: 0, lastError: null, selfId: '2153925085', ...over.connection },
     login: { door: 'ok', state: 'online', uin: '2153925085', nickname: '小号', error: null, qr: null, ...over.login },
   }

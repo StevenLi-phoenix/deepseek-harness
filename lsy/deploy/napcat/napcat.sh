@@ -9,6 +9,12 @@
 #   napcat.sh qr [FILE]       copy the current login QR code out of the container (default /tmp/napcat-qr.png); the Settings page shows the same code
 #   napcat.sh status | logs [N] | logs door [N] | stop
 #
+# Boundary: dsh-runtime (the event service) holds the OneBot token and nothing else of NapCat. Through the OneBot API it
+# reads the groups it is told to; through the login door (127.0.0.1:3002) it can read whether QQ is logged in, read the
+# login QR link while a scan is needed, and ask for a fresh code (once per 10 s). It cannot reach NapCat's WebUI (config,
+# files, a shell in the container, logout, restart), the docker socket, or the volumes that hold the QQ session: the door
+# alone holds the WebUI token, and the door's only two endpoints are the ones above.
+#
 # The OneBot access token is generated here (openssl) and written to $DSH_ENV as LSY_QQ_ONEBOT_TOKEN; it is
 # never printed. Re-running `start` keeps the existing token.
 set -euo pipefail

@@ -9,10 +9,12 @@ import { useEffect, useId, type ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the settings shell's SlotMap merge (the 'settings.section' entry).
-import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: registers the lsy.qq locale namespace this component's `t` reads.
 import type {} from './locales.ts'
 import { detailRows, headline, qrPath, statusLine, type Translate } from './cards.ts'
+import { QqGroupsCard } from './QqGroups.tsx'
+import type { GroupsSection } from './groups.ts'
 import { POLL_INTERVAL_MS, startPolling, type QqState } from './qq.ts'
 import css from './QqLogin.module.css'
 
@@ -21,11 +23,17 @@ export interface QqLoginInjected {
   hooks: {
     /** The shared QQ store. */
     qq: ObservableSnapshot<QqState>
+    /** The settings form of the `lsy-qq` entry, which holds the recorded-groups list. */
+    groupsForm: ObservableSnapshot<ConfigFormSnapshot<GroupsSection>>
   }
   /** One status refresh; a request in flight is shared. */
   refresh: () => void
   /** Ask NapCat for a fresh login code. */
   renewCode: () => void
+  /** Add a group to the recorded list through the settings form. */
+  addGroup: (id: string) => Promise<boolean>
+  /** Remove a group from the recorded list through the settings form. */
+  removeGroup: (id: string) => Promise<boolean>
 }
 
 /** Props delivered by the settings shell. */
@@ -70,8 +78,9 @@ function QrCard({ matrix, state, translate, renewCode }: {
  * @param props - the store hook, callbacks, and copy.
  * @returns the section.
  */
-export function QqLoginSection({ useQq, refresh, renewCode, t }: QqLoginProps): ReactNode {
+export function QqLoginSection({ useQq, useGroupsForm, refresh, renewCode, addGroup, removeGroup, t }: QqLoginProps): ReactNode {
   const state = useQq(value => value)
+  const form = useGroupsForm(value => value)
   useEffect(() => startPolling(refresh, POLL_INTERVAL_MS), [refresh])
 
   const translate = t as Translate
@@ -113,6 +122,7 @@ export function QqLoginSection({ useQq, refresh, renewCode, t }: QqLoginProps): 
             </section>
           </>
         )}
+      <QqGroupsCard form={form} groups={panel?.groups ?? []} translate={translate} addGroup={addGroup} removeGroup={removeGroup} />
     </section>
   )
 }
