@@ -70,6 +70,15 @@ The page ends with the [All settings](../lsy-config/README.md) card for the `bil
 - **From the main agent** — when the owner asks the account to tell the main agent something, the Session sends it with `bili_tell_main_agent`: `ctx.lsyNotifier.tellMainAgent()` queues it in the WeChat chat Session as untrusted data, and the main agent's answer reaches the owner on WeChat. The account's own answer still comes as a Bilibili message.
 - **In Settings** — with the manage token: the gate (mode, the brake and its reason, today's counters against the caps; **Release brake**, **Switch to read-only** in one click; **Switch to automatic** is off while a brake is set, with the order spelled out (release the brake first), and otherwise asks a second, explicit click whose text says the Reply Gate will then answer comments under the creator's videos and messages in public as the account of bili-svc's `reply_comment` route, within today's caps; a refusal by bili-svc shows inside the card); one card per account (name, UID, state, who renews the session, last renewal or import, why it ended) with **Sign in with QR** (a code that turns "scanned" and closes on success), **Refresh session**, **Check**, and **Sign out** (a second click confirms); an account another service owns (`refresh_mode` `external`, like maodeng) shows no control; a collapsed list of the last 20 ledger actions, with more on request, whose drafts and verdicts show as plain text; and the main-account UID. Every control shows its busy state at once. Without the manage token only the read-only cards and the main-account UID remain, with a note naming `manageTokenEnv`. The route is `GET`/`POST /api/bili` (`?ledger=<rows>` on `GET`), behind the connection's sign-in like every `/api` route. The Host validates every action body (account ids, a sign-out repeating the account id, bounded numbers), logs each action with its account, outcome, and time (never a token, QR key, or URL), and answers a bili-svc refusal with its words and a code (`mode_refused`, `not_owner`, `refresh_failed`) the page explains.
 
+### What other plugins can read
+
+`ctx.biliHot` hands a consumer such as `lsy-style` the site's current slang, from reads the account already makes and never from a new request: the hot comments (at least 20 likes) that `bili_video` and `bili_comments` returned, and the keywords of `bili_hot_searches`.
+
+- `comments({ since? })` — `{ text, likes, bvid, at }[]`, newest read first. A comment is kept as text, likes, video, and read time only: no UID, nickname, link to a person, or `@`; a reply's `回复 @name :` prefix is cut and a text with an `@` is dropped.
+- `words({ since? })` — the keywords as strings, most recently listed first.
+
+The store is bounded to 2000 comments and 500 words, rows expire after 14 days (checked on every write and read), and a storage failure is logged without failing the read it came from. The text is strangers' public words: the consumer filters it and quotes it as data.
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -98,6 +107,7 @@ The Settings view comes from `GET /v1/status` under the manage token (accounts w
 | [`src/api.ts`](src/api.ts) | Typed reads (bounded) and single-call actions |
 | [`src/text.ts`](src/text.ts) | Bounding, the untrusted wrapper, the owner-message prompt, message splitting |
 | [`src/time.ts`](src/time.ts) | Day keys and stamps in one zone |
+| [`src/hot.ts`](src/hot.ts) | `ctx.biliHot`: the bounded, expiring store of hot comments and hot-search words |
 | [`src/storage.ts`](src/storage.ts) | The `bili` storage domain |
 | [`src/view.ts`](src/view.ts), [`src/client/`](src/client/) | The Settings view contract and the browser section |
 
@@ -161,6 +171,7 @@ Prompts are appended to one Session, so each reuses the cached prefix of the con
 - **Watching is reading** — the agent knows a video through its subtitles (mostly machine transcription), description, comments, and a sample of danmaku; it sees no frames and hears no audio.
 - **Messages need mutual follows** — Bilibili delivers messages only between accounts that follow each other; the owner's main account and the agent's must follow each other, or the Gate's send fails and the answer comes on WeChat.
 - **Messages are plain text** — Bilibili shows no Markdown in messages, and an answer longer than two 500-character messages is cut.
+- **Hot slang only follows the agent's reads** — `ctx.biliHot` holds what `bili_video`, `bili_comments`, and `bili_hot_searches` returned in the last 14 days, so it is empty until the agent has read; it makes no request of its own.
 - **Held answers carry no reason** — bili-svc tells a non-admin token only `held` or `blocked`, so the WeChat fallback says which, not why.
 
 <a id="dev-note"></a>

@@ -752,6 +752,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'biliHot',
+    summary: '`ctx.biliHot`: the hot comments and hot-search words recent public reads showed.',
+    description: '`ctx.biliHot`: the hot comments and hot-search words recent public reads showed.',
+    methods: [
+      {
+        signature: 'comments(options?: { since?: number }): Promise<BiliHotComment[]>',
+        description: 'Hot comments (at least HOT_MIN_LIKES likes) read since a time.',
+        parameters: [{ name: 'options', description: '`since` in Unix epoch milliseconds; omitted, every kept comment.' }],
+        returns: 'comments, newest read first; expired rows are never returned.',
+      },
+      {
+        signature: 'words(options?: { since?: number }): Promise<string[]>',
+        description: 'Hot-search keywords seen since a time.',
+        parameters: [{ name: 'options', description: '`since` in Unix epoch milliseconds; omitted, every kept word.' }],
+        returns: 'the words, most recently listed first; expired rows are never returned.',
+      },
+    ],
+  },
+  {
     key: 'browserUse',
     summary: 'Owns one optional provider registration in the shared browser-use service.',
     description: 'Owns one optional provider registration in the shared browser-use service.',
@@ -2310,6 +2329,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the subscription id, or undefined when the Session is no subscription\'s current persistent Session.',
       },
       {
+        signature: 'ensureProject(path: string, name: string): Promise<void>',
+        description: 'ensureProject with this Host\'s Workspace registry, once per path and process.',
+        parameters: [{ name: 'path', description: 'absolute directory.' }, { name: 'name', description: 'title of a new project.' }],
+        returns: 'resolves once the directory exists and is a project; a registry failure is logged, not thrown.',
+      },
+      {
         signature: 'async subscribe(subscription: Subscription, meta: SubscriptionMeta = {}): Promise<SubscriptionView>',
         description: 'Add a routing rule at run time. It is stored durably and survives restarts.',
         parameters: [{ name: 'subscription', description: 'rule; validated like a configuration row.' }, { name: 'meta', description: 'who created the subscription, e.g. the creating Session.' }],
@@ -2327,6 +2352,24 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Pause or resume a run-time subscription. A paused subscription stops matching new events (they are `unmatched` for it) and holds the events already pending; resuming flushes those after the usual coalesce window. The flag is stored, so it survives restarts.',
         parameters: [{ name: 'id', description: 'subscription id.' }, { name: 'paused', description: 'true to pause, false to resume.' }],
         returns: '`ok`, `not_found`, or `config_owned` for an id the configuration owns.',
+      },
+      {
+        signature: 'protectSessions(label: string, check: SessionProtector): ProtectionDisposer',
+        description: 'Keep a plugin\'s Sessions out of the auto-archive sweep (for example the QQ resident group Sessions or the WeChat chat Session). `check` runs only for Sessions that are otherwise due; return `true` (or a short reason) to keep one. A throw keeps it. Register inside an effect so a reload withdraws the claim: `ctx.inject([\'lsyEventBus\'], scoped => { scoped.effect(() => scoped.lsyEventBus.protectSessions(\'qq\', check), \'qq.archiveProtection()\') })`.',
+        parameters: [{ name: 'label', description: 'skip category name shown in the sweep log and Settings, for example `qq`.' }, { name: 'check', description: 'the claim.' }],
+        returns: 'the disposer; the bus drops every claim when it stops.',
+      },
+      {
+        signature: 'archiveStatus(): ArchiveStatus',
+        description: 'The auto-archive schedule, protectors, last sweep, and recently archived Sessions, for health and Settings.',
+        parameters: [],
+        returns: 'snapshot.',
+      },
+      {
+        signature: 'sweepArchive(options: { dryRun?: boolean } = {}): Promise<SweepReport>',
+        description: 'Run an auto-archive sweep now (Settings "sweep now"); joins a sweep already running.',
+        parameters: [{ name: 'options', description: '`dryRun: true` lists what a sweep would archive without archiving.' }],
+        returns: 'the sweep report.',
       },
       {
         signature: 'stats(): BusStats',
@@ -6296,8 +6339,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ApprovalRequestEvent {\n    readonly agent: Agent;\n    readonly toolName: string;\n    readonly callId?: ToolCallId;\n    readonly reason?: string;\n    readonly displayReason?: {\n        readonly en: string;\n        readonly [locale: string]: string;\n    };\n    readonly signal?: AbortSignal;\n}',
   },
   {
+    name: 'ArchivedRecord',
+    declaration: 'export type ArchivedRecord = zod.infer<typeof archivedRecordSchema>;',
+  },
+  {
     name: 'ArchiveSessionOptions',
     declaration: 'export interface ArchiveSessionOptions {\n    readonly stopActivity?: boolean;\n}',
+  },
+  {
+    name: 'ArchiveStatus',
+    declaration: 'export interface ArchiveStatus {\n    enabled: boolean;\n    dryRun: boolean;\n    inactiveDays: number;\n    maxPerSweep: number;\n    sweepHours: number;\n    nextSweepAt?: number;\n    protectors: string[];\n    lastSweep?: SweepReport;\n    recent: ArchivedRecord[];\n}',
   },
   {
     name: 'AskOptions',
@@ -6462,6 +6513,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'BiliEvidenceItem',
     declaration: 'export interface BiliEvidenceItem {\n    readonly id: string;\n    readonly senderKey: string;\n    readonly at: number;\n    readonly text: string;\n}',
+  },
+  {
+    name: 'BiliHotComment',
+    declaration: 'export interface BiliHotComment {\n    text: string;\n    likes: number;\n    bvid: string;\n    at: number;\n}',
   },
   {
     name: 'BiliView',
@@ -8301,11 +8356,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'PersistentSessionAction',
-    declaration: 'export interface PersistentSessionAction {\n    enabled: boolean;\n    rolloverDays: number;\n    maxSeedChars: number;\n}',
+    declaration: 'export interface PersistentSessionAction {\n    enabled: boolean;\n    key: \'subscription\' | \'subject\';\n    rolloverDays: number;\n    maxSeedChars: number;\n}',
   },
   {
     name: 'PersistentSessionView',
-    declaration: 'export interface PersistentSessionView {\n    subscription: string;\n    sessionId: string;\n    createdAt: number;\n    batches: number;\n    compactions: number;\n    previous?: string;\n}',
+    declaration: 'export interface PersistentSessionView {\n    subscription: string;\n    subject?: string;\n    sessionId: string;\n    createdAt: number;\n    batches: number;\n    compactions: number;\n    previous?: string;\n}',
   },
   {
     name: 'PiAiRequestHeaderContext',
@@ -8586,6 +8641,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'PromptSubmitResult',
     declaration: 'export type PromptSubmitResult = {\n    text: string;\n    context?: readonly string[];\n    drop?: undefined;\n} | {\n    drop: string;\n    text?: undefined;\n    context?: undefined;\n};',
+  },
+  {
+    name: 'ProtectedSession',
+    declaration: 'export type ProtectedSession = Pick<SessionRow, \'id\' | \'updatedAt\' | \'cwd\' | \'title\'>;',
+  },
+  {
+    name: 'ProtectionDisposer',
+    declaration: 'export type ProtectionDisposer = () => void;',
   },
   {
     name: 'ProviderRequestId',
@@ -9133,7 +9196,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionAction',
-    declaration: 'export interface SessionAction {\n    workspacePath: string;\n    agentPreset: string;\n    permissionPreset: string;\n    instructions: string;\n    titlePrefix?: string;\n    maxPromptEvents: number;\n    maxTextChars: number;\n    trustedText?: boolean;\n    model?: {\n        provider: string;\n        model: string;\n    };\n    persistent?: PersistentSessionAction;\n}',
+    declaration: 'export interface SessionAction {\n    workspacePath: string;\n    agentPreset: string;\n    permissionPreset: string;\n    instructions: string;\n    titlePrefix?: string;\n    maxPromptEvents: number;\n    maxTextChars: number;\n    trustedText?: boolean;\n    model?: {\n        provider: string;\n        model: string;\n    };\n    persistent?: PersistentSessionAction;\n    project?: string;\n}',
   },
   {
     name: 'SessionActivity',
@@ -9560,6 +9623,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionPromptValue {\n    readonly accepted: true;\n}',
   },
   {
+    name: 'SessionProtector',
+    declaration: 'export type SessionProtector = (session: ProtectedSession) => boolean | string | undefined | Promise<boolean | string | undefined>;',
+  },
+  {
     name: 'SessionReferenceCandidate',
     declaration: 'export interface SessionReferenceCandidate {\n    sessionId: SessionId;\n    label: string;\n    displayTitle?: string;\n    cwd?: string;\n    sameWorkspace: boolean;\n    createdAt: number;\n}',
   },
@@ -9590,6 +9657,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionResultRange',
     declaration: 'export interface SessionResultRange {\n    from?: number;\n    to?: number;\n}',
+  },
+  {
+    name: 'SessionRow',
+    declaration: 'export interface SessionRow {\n    readonly id: string;\n    readonly updatedAt: number;\n    readonly running: boolean;\n    readonly subagent: boolean;\n    readonly cwd?: string | undefined;\n    readonly title?: string | undefined;\n}',
   },
   {
     name: 'SessionSearchCursor',
@@ -10278,6 +10349,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SurfaceSnapshot',
     declaration: 'export interface SurfaceSnapshot {\n    readonly generation: number;\n    readonly tree: readonly SerializedNode[] | null;\n}',
+  },
+  {
+    name: 'SweepReport',
+    declaration: 'export interface SweepReport {\n    at: number;\n    durationMs: number;\n    trigger: \'timer\' | \'manual\';\n    dryRun: boolean;\n    scanned: number;\n    alreadyArchived: number;\n    due: number;\n    archived: string[];\n    wouldArchive: Array<{\n        id: string;\n        title?: string;\n        lastActiveAt: number;\n    }>;\n    skipped: Record<string, number>;\n    skippedIds: Record<string, string[]>;\n    errors: string[];\n    aborted?: string;\n}',
   },
   {
     name: 'SystemMessage',

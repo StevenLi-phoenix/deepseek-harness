@@ -218,6 +218,30 @@ evidenceOf(ids: readonly string[], caller: BiliEvidenceCaller): Promise<BiliEvid
 
 Source: [`packages/lsy/lsy-tool-up/src/evidence.ts`](../../packages/lsy/lsy-tool-up/src/evidence.ts)
 
+<a id="ctxbilihot--bilihot"></a>
+
+### `ctx.biliHot` — `BiliHot`
+
+`ctx.biliHot`: the hot comments and hot-search words recent public reads showed.
+
+```ts cordis-catalog
+/**
+ * Hot comments (at least {@link HOT_MIN_LIKES} likes) read since a time.
+ * @param options - `since` in Unix epoch milliseconds; omitted, every kept comment.
+ * @returns comments, newest read first; expired rows are never returned.
+ */
+comments(options?: { since?: number }): Promise<BiliHotComment[]>
+
+/**
+ * Hot-search keywords seen since a time.
+ * @param options - `since` in Unix epoch milliseconds; omitted, every kept word.
+ * @returns the words, most recently listed first; expired rows are never returned.
+ */
+words(options?: { since?: number }): Promise<string[]>
+```
+
+Source: [`packages/lsy/bili/src/hot.ts`](../../packages/lsy/bili/src/hot.ts)
+
 <a id="ctxlsyclaudecode--claudecodeadmin"></a>
 
 ### `ctx.lsyClaudeCode` — `ClaudeCodeAdmin`
@@ -303,6 +327,14 @@ persistentSessions(): PersistentSessionView[]
 persistentSubscriptionOf(sessionId: string): string | undefined
 
 /**
+ * {@link ensureProject} with this Host's Workspace registry, once per path and process.
+ * @param path - absolute directory.
+ * @param name - title of a new project.
+ * @returns resolves once the directory exists and is a project; a registry failure is logged, not thrown.
+ */
+ensureProject(path: string, name: string): Promise<void>
+
+/**
  * Add a routing rule at run time. It is stored durably and survives restarts.
  * @param subscription - rule; validated like a configuration row.
  * @param meta - who created the subscription, e.g. the creating Session.
@@ -329,6 +361,32 @@ async unsubscribe(id: string): Promise<UnsubscribeOutcome>
  * @returns `ok`, `not_found`, or `config_owned` for an id the configuration owns.
  */
 async setPaused(id: string, paused: boolean): Promise<PauseOutcome>
+
+/**
+ * Keep a plugin's Sessions out of the auto-archive sweep (for example the QQ resident group Sessions or the WeChat chat
+ * Session). `check` runs only for Sessions that are otherwise due; return `true` (or a short reason) to keep one. A throw keeps it.
+ * Register inside an effect so a reload withdraws the claim:
+ * `ctx.inject(['lsyEventBus'], scoped => {
+ *   scoped.effect(() => scoped.lsyEventBus.protectSessions('qq', check), 'qq.archiveProtection()')
+ * })`.
+ * @param label - skip category name shown in the sweep log and Settings, for example `qq`.
+ * @param check - the claim.
+ * @returns the disposer; the bus drops every claim when it stops.
+ */
+protectSessions(label: string, check: SessionProtector): ProtectionDisposer
+
+/**
+ * The auto-archive schedule, protectors, last sweep, and recently archived Sessions, for health and Settings.
+ * @returns snapshot.
+ */
+archiveStatus(): ArchiveStatus
+
+/**
+ * Run an auto-archive sweep now (Settings "sweep now"); joins a sweep already running.
+ * @param options - `dryRun: true` lists what a sweep would archive without archiving.
+ * @returns the sweep report.
+ */
+sweepArchive(options: { dryRun?: boolean } = {}): Promise<SweepReport>
 
 /**
  * Counters for the last rolling hour and the current queue, for status pages.

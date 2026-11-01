@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Route events from sensors to a phone notification or a new unattended agent Session, through subscriptions that you write in the configuration or that the agent creates itself with `watch_create`. The bus drops duplicates and events the agent caused itself. It batches bursts and caps batches per hour, so a noisy repository never floods your phone or model budget. State survives restarts. A subscription can keep one persistent Session that each batch continues, renewed monthly from its summary. Session results and unattended reminder turns come back as one message with the final answer, and an answer of `NO_REPLY` sends nothing.
+Route events from sensors to a phone notification or a new unattended agent Session, through subscriptions that you write in the configuration or that the agent creates itself with `watch_create`. The bus drops duplicates and events the agent caused itself. It batches bursts and caps batches per hour, so a noisy repository never floods your phone or model budget. State survives restarts. Chat Sessions idle for a week are archived, never deleted; running, pinned, persistent, and owner-channel Sessions are left alone. A subscription can keep one persistent Session that each batch continues, renewed monthly from its summary. Session results and unattended reminder turns come back as one message with the final answer, and an answer of `NO_REPLY` sends nothing.
 
 ## Table of Contents
 
@@ -71,6 +71,8 @@ Choose it when external events should wake an agent or a human without a person 
 | `subscriptions[].session.persistent.enabled` | `false` | One Session for every batch of the subscription instead of one per batch (configuration rows only) |
 | `subscriptions[].session.persistent.rolloverDays` | `30` | Days after which the next batch starts a new Session seeded with the old one's last compaction summary, and the old one is archived |
 | `subscriptions[].session.persistent.maxSeedChars` | `20000` | Characters of the carried-over summary |
+| `subscriptions[].session.persistent.key` | `subscription` | `subscription` keeps one Session for the subscription; `subject` keeps one per event subject (a repository, a video), each titled `<titlePrefix>: <subject>`, and splits a batch by subject |
+| `subscriptions[].session.project` | unset | Web UI project title of `workspacePath`: before a Session starts there, the bus creates the directory and registers it as a project, unless one exists (an existing project keeps its title) |
 | `suppress.actors` / `suppress.markers` | `[]` | Agent identities and output markers whose events are dropped; prefer identities, which the host sets, over markers, which depend on what the model writes |
 | `retainEvents` / `retainBatches` | `5000` / `1000` | Stored history; the oldest settled rows are pruned |
 | `maxTextChars` | `4000` | Stored characters of each event's untrusted text |
@@ -78,6 +80,11 @@ Choose it when external events should wake an agent or a human without a person 
 | `reportScheduledTurns` | `true` | Send the final answer of each unattended Host-schedule reminder turn, and of each turn a `lsy-tool-monitor` notice wakes (titled 📡 with the monitor), to the notifier |
 | `maxNoteEvents` | `10` | Events listed in one notify message; the message also carries the kinds of all the batch's events (`LsyNote.kinds`), which a channel that holds back messages while the owner sleeps matches against its urgent kinds |
 | `webUrl` | unset | Web UI link attached to Session results |
+| `autoArchive.enabled` | `true` | Archive chat Sessions that nobody touched for a while (see [Auto-archive](#auto-archive)); archive only, never delete |
+| `autoArchive.inactiveDays` | `7` | Days since a Session's last message before it is due |
+| `autoArchive.dryRun` | `false` | Select and log, but archive nothing |
+| `autoArchive.maxPerSweep` | `50` | Most Sessions one sweep archives; the rest wait for the next |
+| `autoArchive.firstSweepMinutes` / `sweepHours` | `10` / `6` | Minutes from start to the first sweep, then hours between sweeps |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-lsy-event-bus) is the exhaustive source for every accepted field.
 
@@ -101,7 +108,19 @@ With `session.persistent.enabled`, the first batch creates the subscription's Se
 - **Unavailable** — when the Session cannot take a turn now (a writer is held, the controller is missing), the batch gets a one-off Session (`detached`) and the stored one stays.
 - **Rollover** — once the stored Session is `rolloverDays` old, the next batch starts a new Session whose first message carries the last compaction summary as `previous_summary_json`, labeled untrusted-derived data. When that Session's first message arrives it becomes the subscription's Session, and the old one is archived with `ctx.workspaceRegistry.archiveSession()`: DSH has no Session deletion, and the archive keeps the log readable and blocks further model steps.
 
+With `key: subject` the bus keeps one Session per event subject instead: it splits a batch by subject into child batch rows (which do not count against `maxPerHour`), each continuing its subject's Session, stored under `<subscription>|<subject>` and titled `<titlePrefix>: <subject>`. A persistent Session's title is fixed (`titlePrefix`, or the subscription id), not rebuilt from the events of each batch. `ensureProject(path, name)` creates a project directory and registers it in the Web UI once; the bus calls it for `session.project`, and other plugins may call it through `ctx.lsyEventBus.ensureProject()`.
+
 `persistentSessions()` lists each subscription's Session (id, start time, batches, compactions, the Session it replaced), and `persistentSubscriptionOf(sessionId)` names the subscription whose current Session that is; lsy-tool-up asks it before a channel note or an evidence lookup. Each batch's record carries `delivery`: `fresh`, `persistent-new`, `persistent`, `rollover`, or `detached`.
+
+<a id="auto-archive"></a>
+### Auto-archive
+
+Every `sweepHours` hours the bus lists the Host's Sessions (`ctx.sessionController.list()`) and archives those whose last message is older than `inactiveDays`, through `ctx.workspaceRegistry.archiveSession()`. That is the Host's own archive: it asks every `workspace/session-activity` provider first and refuses a Session with a running turn, agent, job, or scheduled reminder (counted as `active`), it never deletes, and an archived Session comes back with one click in the Web UI. Each sweep logs its counts, the archived ids, and the skips by reason, and keeps the last report and the 200 most recently archived Sessions (stored in the `lsy_event_bus_archive` domain) for `archiveStatus()` and Settings → Subscriptions and monitors.
+
+A Session is left alone, and counted under that reason, when it is `recent`, a `subagent`'s, `running`, `pinned`, a subscription's `persistent` Session, the creator of a run-time subscription or watch (`subscription`), or claimed by a plugin. Plugins claim their own Sessions with `protectSessions(label, check)`; `check({ id, updatedAt, cwd, title })` returns `true` (or a reason) to keep one, a throw keeps it, and the returned function withdraws the claim. `lsy-wechat` claims the owner's current chat Session (`wechat`), `lsy-qqbot` its peers' current chat Sessions (`qqbot`), and `lsy-qq` the groups' resident digest Sessions (`qq`). Register inside an effect that injects `lsyEventBus`, so a reload of the bus or the plugin withdraws the claim.
+
+- `archiveStatus()` — the settings, `nextSweepAt`, the protector labels, the last sweep's report, and the recently archived Sessions (newest first).
+- `sweepArchive({ dryRun? })` — one sweep now (the Settings buttons); it joins a sweep that is already running, and `dryRun` only lists what would be archived.
 
 ### Result reports
 
@@ -124,6 +143,7 @@ When a bus-started Session ends its first turn, or a persistent Session ends a b
 | [`src/match.ts`](src/match.ts) | Glob matching and loop suppression |
 | [`src/prompt.ts`](src/prompt.ts) | Session request, batch, result, and reminder message rendering; the silent reply |
 | [`src/storage.ts`](src/storage.ts) | Storage-domain tables for events, pending rows, batches, run-time subscriptions, and persistent Sessions |
+| [`src/archive.ts`](src/archive.ts) | Auto-archive: the sweep timer, the selection rules, the protector registry, and the recently archived table |
 
 This is a fork-local package; [`../UPSTREAM.md`](../UPSTREAM.md) describes how the `lsy` group tracks upstream. `@deepseek-ai/dsh-owner-relay` imports `isSilentReply()` and `failureDetail()`, and `@deepseek-ai/dsh-lsy-tool-watch` calls `LsyNotifier.ownsSession()`, so they stay stable. Because the relay depends on this package, the bus reads `ctx.ownerRelay` through a structural `ownerOf()` view instead of importing it. A note's optional `origin` names its sender for the channel's copy in the owner's chat Session and is never shown to the owner; a message for the main agent has its own optional `origin` token (`bili`, `cc`) that goes into the request id of the prompt the channel queues, so the Host can tell the turn it starts from one the owner started. `LsyNotifier.tellMainAgent()` is optional and the bus never calls it: a channel with a chat Session (lsy-wechat) implements it so that another Session (dsh-bili's) can hand the owner's main agent a message.
 
@@ -167,6 +187,8 @@ A message that opens a new Session establishes its reusable prefix; a batch turn
 - **At-most-once dispatch** — a crash between recording a batch and calling its actuator drops that batch.
 - **Turn reports are in memory** — a restart while a bus-started Session or a reminder turn runs loses that turn's report.
 - **No Session deletion** — a rolled-over persistent Session is archived, not deleted; its log stays on disk until the owner deletes it.
+- **Auto-archive reads every Session summary** — a sweep lists all Sessions the Host knows; with tens of thousands it takes seconds, which is why it runs every six hours rather than often.
+- **Persistent Sessions are never swept** — a subscription's persistent Session (one per subject with `key: subject`) stays until its rollover; a repository that never runs CI again keeps its Session in the sidebar.
 - **Rollover seed** — a Session that never compacted hands over nothing but its id; the summary of a compaction that ran while the bus was not running is not seen.
 - **Reminder names come from the Host framing** — if the schedule message format changes, reports fall back to `⏰ Session <id>`.
 - **No Web link to one Session** — results link to the Web root; the client has no per-Session URL.

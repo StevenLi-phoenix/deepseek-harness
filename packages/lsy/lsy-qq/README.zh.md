@@ -111,6 +111,8 @@ kind: "package-reference"
 
 群笔记是 QQ 频道自己的记忆（存在这里，不进 lsy-memory）：这个群常聊什么、黑话和氛围，每群至多 30 条、每条至多 40 字，下一轮以 `#id 内容` 的形式给模型看，方便它删掉某一条。笔记只描述群，不描述个人：过滤器拒绝长数字、邮箱、`@`、成员别名、地址、学校和单位，以及这个群成员出现过的任何名字或群名片。通过后的笔记还要交给共享的守卫（`ctx.lsyGuard.check`，purpose 为 `qq-group-note`，audience 为 `channel`，带上调用的 Session），守卫也必须放行：它拒绝时把对外原因返回给模型，守卫自己出错则拒绝这条笔记。没有这个服务时每条新增笔记都会被拒绝，并给出明确的结果，同时记一条警告（只记一次；删除笔记和摘要不受影响）。`groupNotes(groupId)` 读取笔记。`evidenceOf(groupId, messageIds)` 对群里仍保留的每条消息（已记录、未撤回、在 `retention.textDays` 内）返回发送者键、时间和存下来的单行文字，调用方可以据此逐字核验引文。发送者键是由群号和成员加盐哈希得到的 16 位十六进制，在群内稳定、在别的群里不同，从不是 QQ 号。`groupOfSession(sessionId)` 和 `recentTextOf(sessionId)` 让工具从调用它的摘要 Session 取得群号和模型看到的消息（只在该 Session 的这一轮运行期间有答案）。
 
+挂载了 `ctx.lsyEventBus` 时，观察者用 `protectSessions('qq', …)` 认领每个群的常驻摘要 Session，总线的自动归档永远不会归档它；被替换掉的旧一代由摘要自己归档，任一插件重载时认领随之撤回。
+
 | 文件 | 作用 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 服务、配置、连接循环、事件处理、媒体下载、定时任务、读取和受限的发送 |

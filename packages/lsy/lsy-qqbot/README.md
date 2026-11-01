@@ -89,6 +89,8 @@ Each inbound message is checked in this order: the allowlist (a group message ne
 
 The relay hands each turn's final answer (nothing for `NO_REPLY`) to the channel, which splits it and sends each part quoting the peer's latest message while its window is open and fewer than five replies went out, otherwise as a proactive message. A part QQ refuses throws, and the relay falls back to `ctx.lsyNotifier` with the label `a QQ chat Session (its answer could not go out on QQ)`. All sends and storage writes run one at a time.
 
+When `ctx.lsyEventBus` is mounted, the channel claims each peer's current chat Session with `protectSessions('qqbot', …)`, so the bus's auto-archive sweep never archives it; Sessions a reset replaced stay archivable, and the claim is withdrawn when either plugin reloads.
+
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Service, configuration, connection loop, allowlist, chat Sessions, the `qqbot` relay channel, delivery |
