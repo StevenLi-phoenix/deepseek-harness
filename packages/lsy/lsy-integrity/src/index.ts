@@ -17,9 +17,10 @@ import { dirname, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type {} from '@deepseek-ai/dsh-lsy-event-bus'
+import type {} from '@deepseek-ai/dsh-schedule'
 import type {} from '@deepseek-ai/dsh-session'
 import z from '@deepseek-ai/schemastery'
-import { ABSENT, digestOf, targetsFor, type Target } from './scan.ts'
+import { ABSENT, diffTasks, digestOf, scheduleState, targetsFor, type Target } from './scan.ts'
 import { ticHits, TICS } from './tics.ts'
 
 export { ABSENT, digestOf, INSTRUCTION_FILES, targetsFor, type Target, type TargetKind } from './scan.ts'
@@ -63,12 +64,36 @@ export const Config: z<Config> = z.object({
   memoryFile: z.string(),
 })
 
+const trustedOf = (digest: string, tasks: Record<string, string> | undefined): TrustedSchedule => (
+  { at: new Date().toISOString(), digest, ...tasks === undefined ? {} : { tasks } }
+)
+
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex')
 
 /** What the baseline file holds. */
 interface Baseline {
   at: string
   digests: Record<string, string>
+  /** The definition digest of each scheduled task at the last scan, to count what a direct edit changed. */
+  scheduleTasks?: Record<string, string>
+}
+
+/**
+ * The scheduled tasks as the schedule service last wrote them. Every `schedule/changed` event follows a
+ * durable write of the service, so the file as it stood then is legitimate; a file that differs from it
+ * was edited behind the service's back.
+ */
+export interface TrustedSchedule {
+  at: string
+  digest: string
+  tasks?: Record<string, string>
+}
+
+/** How many tasks a direct edit of the schedule file added, removed, and changed. */
+export interface TaskCounts {
+  readonly added: number
+  readonly removed: number
+  readonly changed: number
 }
 
 /** One change between the baseline and now. */
@@ -76,6 +101,8 @@ export interface Change {
   readonly target: string
   readonly label: string
   readonly kind: 'changed' | 'added' | 'removed'
+  /** For the schedule file: how many tasks differ (counts only), when the earlier state is known. */
+  readonly counts?: TaskCounts
 }
 
 /** Per-day counters of the forbidden stock lines. */
@@ -124,19 +151,37 @@ async function lastHistorySha(memoryFile: string): Promise<string | undefined> {
  * @param targets - what to watch.
  * @param baseline - digests from the last scan; absent on the first run.
  * @param memoryFile - the memory file, checked against its history.
- * @returns the new digests and the changes (none when there is no baseline).
+ * @param trusted - the schedule file as the schedule service last wrote it; a schedule file equal to it is not a change.
+ * @returns the new digests, the task digests of the schedule file, and the changes (none when there is no baseline).
  */
 export async function scan(
-  targets: readonly Target[], baseline: Baseline | undefined, memoryFile: string,
-): Promise<{ digests: Record<string, string>; changes: Change[] }> {
+  targets: readonly Target[], baseline: Baseline | undefined, memoryFile: string, trusted?: TrustedSchedule,
+): Promise<{ digests: Record<string, string>; scheduleTasks?: Record<string, string>; changes: Change[] }> {
   const digests: Record<string, string> = {}
   const changes: Change[] = []
+  let scheduleTasks: Record<string, string> | undefined
   const compare = (target: string, label: string, was: string | undefined, now: string): void => {
     digests[target] = now
     if (was === undefined || was === now) return
     changes.push({ target, label, kind: was === ABSENT ? 'added' : now === ABSENT ? 'removed' : 'changed' })
   }
-  for (const target of targets) compare(target.name, target.label, baseline?.digests[target.name], await digestOf(target))
+  for (const target of targets) {
+    if (target.kind !== 'schedule') {
+      compare(target.name, target.label, baseline?.digests[target.name], await digestOf(target))
+      continue
+    }
+    // The schedule changes all day through the schedule service; it is a change only when it is not what the service last wrote.
+    const state = await scheduleState(target.path)
+    scheduleTasks = state.tasks
+    const was = baseline?.digests[target.name]
+    digests[target.name] = state.digest
+    if (was === undefined || was === state.digest || trusted?.digest === state.digest) continue
+    const earlier = trusted?.tasks ?? baseline?.scheduleTasks
+    changes.push({
+      target: target.name, label: target.label, kind: was === ABSENT ? 'added' : state.digest === ABSENT ? 'removed' : 'changed',
+      ...earlier !== undefined && state.tasks !== undefined ? { counts: diffTasks(earlier, state.tasks) } : {},
+    })
+  }
   // The memory file changes legitimately all day; it is a change only when it is not what the memory history last wrote.
   let memory = ABSENT
   try {
@@ -147,7 +192,7 @@ export async function scan(
   const expected = await lastHistorySha(memoryFile) ?? baseline?.digests['memory']
   digests['memory'] = memory
   if (expected !== undefined && expected !== memory && baseline !== undefined) changes.push({ target: 'memory', label: '记忆文件 memory.jsonl（不是经记忆工具改的）', kind: 'changed' })
-  return { digests, changes }
+  return { digests, ...scheduleTasks === undefined ? {} : { scheduleTasks }, changes }
 }
 
 /**
@@ -156,11 +201,25 @@ export async function scan(
  */
 export function integrityNotice(changes: readonly Change[]): { title: string; body?: string } {
   const verb = { changed: '被改动', added: '新出现', removed: '被删除' } as const
+  const bypass = { changed: '直接改动', added: '直接新建', removed: '直接删除' } as const
+  const countsOf = (change: Change): string | undefined => {
+    const counts = change.counts
+    return counts === undefined ? undefined : `新增 ${String(counts.added)} 条、删除 ${String(counts.removed)} 条、修改 ${String(counts.changed)} 条`
+  }
+  const line = (change: Change): string => {
+    if (change.target !== 'schedule') return `· ${change.label}：${verb[change.kind]}`
+    const counts = countsOf(change)
+    return `· 定时任务文件被绕过 DSH ${bypass[change.kind]}${counts === undefined ? '' : `：${counts}`}`
+  }
   const [only] = changes
-  if (changes.length === 1 && only !== undefined) return { title: `${only.label} ${verb[only.kind]}了（不显示内容）` }
+  if (changes.length === 1 && only !== undefined) {
+    if (only.target !== 'schedule') return { title: `${only.label} ${verb[only.kind]}了（不显示内容）` }
+    const counts = countsOf(only)
+    return { title: `定时任务文件被绕过 DSH ${bypass[only.kind]}了（不显示内容）`, ...counts === undefined ? {} : { body: counts } }
+  }
   return {
     title: `有 ${String(changes.length)} 处受监控的文件被改动（不显示内容）`,
-    body: [...changes.slice(0, 8).map(change => `· ${change.label}：${verb[change.kind]}`), ...changes.length > 8 ? [`…另有 ${String(changes.length - 8)} 处`] : []].join('\n'),
+    body: [...changes.slice(0, 8).map(line), ...changes.length > 8 ? [`…另有 ${String(changes.length - 8)} 处`] : []].join('\n'),
   }
 }
 
@@ -185,25 +244,66 @@ export function apply(ctx: Context, config: Config): void {
   const memoryFile = config.memoryFile ?? join(home, 'lsy-memory', 'memory.jsonl')
   const targets = targetsFor(home, config.workspaces ?? [], homedir())
   const baselineFile = join(stateDir, 'baseline.json')
+  const trustedFile = join(stateDir, 'schedule-trusted.json')
+  const scheduleTarget = targets.find(target => target.kind === 'schedule')
   const intervalMs = (config.intervalSec ?? 300) * 1000
   const minGapMs = (config.minGapSec ?? 1800) * 1000
   const perDay = config.noticesPerDay ?? 6
   let lastNoticeAt = 0
   let sentToday = { day: '', count: 0 }
   let scanning: Promise<void> = Promise.resolve()
+  // The schedule service announces every durable write; the file as it stands then is the legitimate state.
+  let trusting: Promise<void> = Promise.resolve()
+  let trustVersion = 0
+  const trustSchedule = async (): Promise<void> => {
+    if (scheduleTarget === undefined) return
+    const state = await scheduleState(scheduleTarget.path)
+    if (state.digest === 'unreadable') {
+      ctx.logger.warn('lsy-integrity: schedule file unreadable right after a schedule change; the last trusted state stays')
+      return
+    }
+    await writeJson(trustedFile, trustedOf(state.digest, state.tasks))
+    ctx.logger.info('lsy-integrity: schedule written through the service: %d task(s), digest %s', Object.keys(state.tasks ?? {}).length, state.digest.slice(0, 12))
+  }
+  if (scheduleTarget !== undefined) {
+    ctx.on('schedule/changed', () => {
+      trustVersion += 1
+      trusting = trusting.then(trustSchedule).catch((error: unknown) => {
+        ctx.logger.warn('lsy-integrity: recording the schedule state failed: %s', error instanceof Error ? error.message : String(error))
+      })
+    })
+  }
 
   const runScan = async (): Promise<void> => {
     const baseline = await readJson<Baseline>(baselineFile)
-    const { digests, changes } = await scan(targets, baseline, memoryFile)
+    let found: Awaited<ReturnType<typeof scan>>
+    let trusted: TrustedSchedule | undefined
+    // A schedule write that lands while the scan reads the file is announced a moment later: look again once it is recorded.
+    for (let attempt = 0; ; attempt += 1) {
+      await trusting
+      const version = trustVersion
+      trusted = await readJson<TrustedSchedule>(trustedFile)
+      found = await scan(targets, baseline, memoryFile, trusted)
+      if (version === trustVersion || attempt >= 2) break
+    }
+    const { digests, scheduleTasks, changes } = found
+    const stored = (): Baseline => ({ at: new Date().toISOString(), digests, ...scheduleTasks === undefined ? {} : { scheduleTasks } })
+    // A schedule state nobody has reported yet is accepted as the trusted one: the first baseline, or a scan that found nothing new.
+    const seedTrusted = async (): Promise<void> => {
+      if (scheduleTarget === undefined || trusted !== undefined) return
+      await writeJson(trustedFile, trustedOf(digests[scheduleTarget.name] ?? ABSENT, scheduleTasks))
+    }
     if (baseline === undefined) {
-      await writeJson(baselineFile, { at: new Date().toISOString(), digests } satisfies Baseline)
+      await writeJson(baselineFile, stored())
+      await seedTrusted()
       ctx.logger.info('lsy-integrity: baseline of %d target(s) written', Object.keys(digests).length)
       return
     }
     if (changes.length === 0) {
-      if (JSON.stringify(digests) !== JSON.stringify(baseline.digests)) {
-        await writeJson(baselineFile, { at: new Date().toISOString(), digests } satisfies Baseline)
-      }
+      const moved = JSON.stringify(digests) !== JSON.stringify(baseline.digests)
+        || JSON.stringify(scheduleTasks) !== JSON.stringify(baseline.scheduleTasks)
+      if (moved) await writeJson(baselineFile, stored())
+      await seedTrusted()
       return
     }
     ctx.logger.warn('lsy-integrity: %d target(s) changed: %s', changes.length, changes.map(change => `${change.target} (${change.kind})`).join(', '))
@@ -229,7 +329,7 @@ export function apply(ctx: Context, config: Config): void {
         return
       }
     }
-    await writeJson(baselineFile, { at: new Date().toISOString(), digests } satisfies Baseline)
+    await writeJson(baselineFile, stored())
   }
 
   const schedule = (): void => {

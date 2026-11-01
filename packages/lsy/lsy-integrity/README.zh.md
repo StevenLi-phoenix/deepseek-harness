@@ -47,7 +47,7 @@ kind: "package-reference"
 | `stateDir` | `<DSH_HOME>/lsy-integrity` | 基线、人格哈希和计数的存放处 |
 | `memoryFile` | `<DSH_HOME>/lsy-memory/memory.jsonl` | 摘要要与记忆历史对照的记忆文件 |
 
-一直在监控的有：家目录层 patch `<DSH_HOME>/cordis.patch.yml`、owner 层 `<DSH_HOME>/profiles/event/cordis.patch.yml`、`<DSH_HOME>/AGENTS.md` 及同类文件、`<DSH_HOME>/skills`、`~/.agents/skills`、`storages/schedule.json` 里定时任务的定义（不含触发历史），以及记忆文件。第一次扫描静默写下 `baseline.json`。此后目标被修改、新出现或被删除，就发一条 `🔐 完整性：N 处被改动（不显示内容）`，并把它记为新的基线。记忆文件一天里经由记忆工具不停地变，所以拿它与记忆历史最后一次记录的 SHA-256 对照；只有不是工具所做的变化才会报告。
+一直在监控的有：家目录层 patch `<DSH_HOME>/cordis.patch.yml`、owner 层 `<DSH_HOME>/profiles/event/cordis.patch.yml`、`<DSH_HOME>/AGENTS.md` 及同类文件、`<DSH_HOME>/skills`、`~/.agents/skills`、`storages/schedule.json` 里定时任务的定义（不含触发历史），以及记忆文件。第一次扫描静默写下 `baseline.json`。此后目标被修改、新出现或被删除，就发一条 `🔐 完整性：N 处被改动（不显示内容）`，并把它记为新的基线。记忆文件一天里经由记忆工具不停地变，所以拿它与记忆历史最后一次记录的 SHA-256 对照；只有不是工具所做的变化才会报告。定时任务同理：定时任务服务每次写入都会发出 `schedule/changed`，监控随即把当时文件里各任务定义的摘要记进 `schedule-trusted.json`。定时任务文件与这份记录一致就不算改动，所以经 agent 或 Remote API 新建、修改、删除任务都不会告警（这些写入本来就有定时任务变更通知发给 owner）。只有绕过服务直接改文件才会发出 `定时任务文件被绕过 DSH 直接改动了（不显示内容）`，正文给出新增、删除、修改的任务条数，不给内容。这份记录跨重启保留，所以重启不会误报。
 
 `<stateDir>/tics.json` 按天记录：owner 收到几条回答、几条含禁用口头禅，以及每条口头禅的计数（用它在人格清单里的序号）。`persona.json` 记录每个 preset 最近一次的系统 prompt 哈希。
 
@@ -61,13 +61,13 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-`scan.ts` 给每个目标算摘要：文件用字节的 SHA-256（超过 4 MiB 的文件用大小和修改时间），目录用排序后的相对路径加文件摘要（跳过 `node_modules` 和 `.git`，最多 2000 个文件），定时任务用任务 id 加每个任务定义的摘要。目标不存在和读不了各有自己的值，所以出现、消失和权限问题都算变化。`index.ts` 每 `intervalSec` 秒与基线比对；被间隔或每日上限压住的变化不进基线，下一次扫描会再次发现，被压住的变化就这样合并。发送失败会重试。
+`scan.ts` 给每个目标算摘要：文件用字节的 SHA-256（超过 4 MiB 的文件用大小和修改时间），目录用排序后的相对路径加文件摘要（跳过 `node_modules` 和 `.git`，最多 2000 个文件），定时任务用任务 id 加每个任务定义的摘要（每个任务的摘要存在基线和 `schedule-trusted.json` 里，以便数出直接改动了几条）。目标不存在和读不了各有自己的值，所以出现、消失和权限问题都算变化。`index.ts` 每 `intervalSec` 秒与基线比对；被间隔或每日上限压住的变化不进基线，下一次扫描会再次发现，被压住的变化就这样合并。发送失败会重试。
 
 Session 钩子监听 `session/event`。`system/message` 被哈希（SHA-256 的前 12 位十六进制）并连同 Session 的 preset 记入日志；同一个 preset 的哈希变了，会记一条警告，升级或换模型后出现是正常的（人格里写了模型名），仅此而已。被检查的 preset 在 `turn/end` 时，拿回合最后一条 assistant 消息与 `src/tics.ts` 匹配；`NO_REPLY` 的回合跳过。`tics.ts` 是把人格黑名单抄出来的一份；有一个测试读取 bundle，两份在任一个人格 preset 里不一致就失败。
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 插件：扫描循环、通知、系统 prompt 哈希、口头禅计数 |
+| [`src/index.ts`](src/index.ts) | 插件：扫描循环、通知、系统 prompt 哈希、口头禅计数、定时任务可信记录 |
 | [`src/scan.ts`](src/scan.ts) | 监控目标及其摘要 |
 | [`src/tics.ts`](src/tics.ts) | 禁用口头禅及其匹配器 |
 
