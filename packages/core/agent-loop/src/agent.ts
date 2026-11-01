@@ -333,7 +333,7 @@ export class ReactLoopAgent implements Agent {
     } catch (error: unknown) {
       if (!(error instanceof LlmError) || error.code !== 'UNKNOWN_MODEL') return selection
       const fallback: ModelSelection = { provider, model, ...reasoningEffort === undefined ? {} : { reasoningEffort } }
-      this.ctx.logger.warn(`agent "${this.id}": recorded route ${selection.provider}/${selection.model} is gone (${errorChain(error)}); continuing with the configured route ${provider}/${model}`)
+      this.ctx.logger.warn(`agent "${this.id}": recorded model "${selection.model}" of provider "${selection.provider}" is gone (${errorChain(error)}); continuing with the configured model "${model}" of provider "${provider}"`)
       this.model.select(fallback)
       return fallback
     }
