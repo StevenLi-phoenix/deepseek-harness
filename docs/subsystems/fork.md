@@ -218,6 +218,43 @@ evidenceOf(ids: readonly string[], caller: BiliEvidenceCaller): Promise<BiliEvid
 
 Source: [`packages/fork/fork-tool-up/src/evidence.ts`](../../packages/fork/fork-tool-up/src/evidence.ts)
 
+<a id="ctxlsyclaudecode--claudecodeadmin"></a>
+
+### `ctx.forkClaudeCode` — `ClaudeCodeAdmin`
+
+Service behind `ctx.forkClaudeCode`.
+
+```ts cordis-catalog
+/**
+ * How the service account is signed in, from file existence only.
+ * @returns the login state.
+ */
+login(): CcLogin
+
+/**
+ * Live sessions and the tmux sessions the bridge started.
+ * @returns the view.
+ */
+async view(): Promise<CcView>
+
+/**
+ * Start a session, optionally with a first task.
+ * @param name - lower-case letters, digits, and hyphens, at most 31 characters.
+ * @param task - the first prompt, at most {@link MAX_TASK_CHARS} characters.
+ * @returns the outcome; the limit is a code of its own so a page can word it.
+ */
+async start(name: string, task: string | undefined): Promise<CcOutcome>
+
+/**
+ * Stop a session the bridge started.
+ * @param name - the name it was started with.
+ * @returns the outcome.
+ */
+async stop(name: string): Promise<CcOutcome>
+```
+
+Source: [`packages/fork/fork-cc-admin/src/index.ts`](../../packages/fork/fork-cc-admin/src/index.ts)
+
 <a id="ctxlsyeventbus--forkeventbus"></a>
 
 ### `ctx.forkEventBus` — `ForkEventBus`
@@ -282,6 +319,22 @@ async subscribe(subscription: Subscription, meta: SubscriptionMeta = {}): Promis
  * @returns `removed`, `not_found`, or `config_owned` for an id the configuration owns.
  */
 async unsubscribe(id: string): Promise<UnsubscribeOutcome>
+
+/**
+ * Pause or resume a run-time subscription. A paused subscription stops matching new events (they are
+ * `unmatched` for it) and holds the events already pending; resuming flushes those after the usual
+ * coalesce window. The flag is stored, so it survives restarts.
+ * @param id - subscription id.
+ * @param paused - true to pause, false to resume.
+ * @returns `ok`, `not_found`, or `config_owned` for an id the configuration owns.
+ */
+async setPaused(id: string, paused: boolean): Promise<PauseOutcome>
+
+/**
+ * Counters for the last rolling hour and the current queue, for status pages.
+ * @returns snapshot; before the storage domain opens, only the configuration rows are counted.
+ */
+stats(): BusStats
 
 /**
  * Every subscription, configuration first and then run-time ones by creation time, with live status.
@@ -728,6 +781,12 @@ Source: [`packages/fork/fork-style/src/index.ts`](../../packages/fork/fork-style
 Service behind `ctx.forkVoice`.
 
 ```ts cordis-catalog
+/**
+ * The switches and the endpoint of each service, for status pages. Keys and credential references are not included.
+ * @returns snapshot of the configuration.
+ */
+describe(): VoiceSummary
+
 /**
  * Whether `transcribe` would take this file: transcription is on and the extension is a format the asr-service reads.
  * @param path - file name or path.

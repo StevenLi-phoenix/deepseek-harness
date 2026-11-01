@@ -65,7 +65,11 @@ const ALLOWED: Record<(typeof OUTSIDE_PRESETS)[number], string[]> = {
     'cordis:group', '@deepseek-ai/dsh-compaction-basic', '@deepseek-ai/dsh-compaction-tool-result-pruner',
   ],
   // `fork-feedback` below is the one memory-package row an outside preset may have: see the dedicated test.
-  'up': ['@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context', '@deepseek-ai/dsh-fork-tool-up', '@deepseek-ai/dsh-fork-memory'],
+  // The group rows and compaction plugins are the persistent Session's compaction mount, as in `qqbot`.
+  'up': [
+    '@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context', '@deepseek-ai/dsh-fork-tool-up', '@deepseek-ai/dsh-fork-memory',
+    'cordis:group', '@deepseek-ai/dsh-compaction-basic', '@deepseek-ai/dsh-compaction-tool-result-pruner',
+  ],
   'qqbot': [
     '@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context',
     'cordis:group', '@deepseek-ai/dsh-compaction-basic', '@deepseek-ai/dsh-compaction-tool-result-pruner',
