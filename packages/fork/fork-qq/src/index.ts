@@ -224,6 +224,18 @@ const LOGIN_CACHE_MS = 1500
 /** NapCat logged in while the observer is still backing off: reconnect at once, but not more often than this. */
 const WAKE_GAP_MS = 10_000
 
+/** The slice of the connection service the QQ section's routes use. */
+interface QqRoutes {
+  readonly fetch: {
+    register(route: {
+      readonly path: string
+      readonly methods: readonly ('GET' | 'POST')[]
+      readonly requestBody: 'buffered'
+      readonly fetch: (request: Request) => Promise<Response>
+    }): () => Promise<void>
+  }
+}
+
 /** What a media download needs to know about its message. */
 interface MediaJob {
   rowId: number
@@ -352,11 +364,12 @@ export class QqObserver extends Service {
 
     this.door = config.login.enabled ? new LoginDoor({ url: config.login.url, timeoutMs: config.login.timeoutMs }) : undefined
     ctx.inject(['connection'], (scope) => {
-      scope.effect(() => scope.connection.fetch.register({
+      const connection = Reflect.get(scope, 'connection') as QqRoutes
+      scope.effect(() => connection.fetch.register({
         path: QQ_PATH, methods: ['GET'], requestBody: 'buffered',
         fetch: async request => Response.json(await this.panel({ fresh: new URL(request.url).searchParams.get('fresh') === '1' }), { headers: { 'cache-control': 'no-store' } }),
       }), `fork-qq: ${QQ_PATH}`)
-      scope.effect(() => scope.connection.fetch.register({
+      scope.effect(() => connection.fetch.register({
         path: QQ_REFRESH_PATH, methods: ['POST'], requestBody: 'buffered',
         fetch: async () => Response.json(await this.refreshLoginQr(), { headers: { 'cache-control': 'no-store' } }),
       }), `fork-qq: ${QQ_REFRESH_PATH}`)
