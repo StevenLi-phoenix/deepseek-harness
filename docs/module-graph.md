@@ -379,6 +379,8 @@ flowchart TD
     pkg_fork_qq["fork-qq"]
     pkg_fork_qq_login["fork-qq-login"]
     pkg_fork_qqbot["fork-qqbot"]
+    pkg_fork_style["fork-style"]
+    pkg_fork_style_settings["fork-style-settings"]
     pkg_fork_sysmon["fork-sysmon"]
     pkg_fork_taint["fork-taint"]
     pkg_fork_tool_monitor["fork-tool-monitor"]
@@ -1584,6 +1586,14 @@ flowchart TD
   pkg_subagent_dsh_sdk --> pkg_session
   pkg_subagent_dsh_sdk --> pkg_subagent
   pkg_subagent_dsh_sdk --> pkg_subprocess
+  pkg_fork_style --> pkg_agent
+  pkg_fork_style --> pkg_compaction
+  pkg_fork_style --> pkg_credentials
+  pkg_fork_style --> pkg_home_paths
+  pkg_fork_style --> pkg_llm
+  pkg_fork_style --> pkg_fork_integrity
+  pkg_fork_style --> pkg_fork_qq
+  pkg_fork_style --> pkg_session
   pkg_fork_tool_qq --> pkg_fork_qq
   pkg_fork_tool_qq --> pkg_tools
   pkg_fork_tool_qq --> pkg_util_values
@@ -1753,6 +1763,7 @@ flowchart TD
 | [`bili`](../packages/fork/bili) | `fork` | — |
 | [`fork-balance`](../packages/fork/fork-balance) | `fork` | — |
 | [`fork-qq-login`](../packages/fork/fork-qq-login) | `fork` | — |
+| [`fork-style-settings`](../packages/fork/fork-style-settings) | `fork` | — |
 | [`fork-sysmon`](../packages/fork/fork-sysmon) | `fork` | — |
 | [`message-quotes`](../packages/session/message-quotes) | `session` | — |
 | [`session-format`](../packages/session/session-format) | `session` | — |
@@ -2005,6 +2016,7 @@ flowchart TD
 | [`sdk-client`](../packages/sdk/client) | `sdk` | [`llm`](../packages/llm/llm), [`sdk-protocol`](../packages/sdk/protocol), [`session`](../packages/core/session) |
 | [`client-test-runtime`](../packages/test-support/client-runtime) | `test-support` | [`api-gateway`](../packages/api/gateway), [`api-session-controller`](../packages/api/session-controller), [`api-workspace-controller`](../packages/api/workspace-controller), [`attachment`](../packages/attachment/attachment), [`client-connection`](../packages/client/connection), [`client-hmr`](../packages/client/hmr), [`client-modules`](../packages/client/modules), [`client-store`](../packages/client/store), [`client-ui-chat`](../packages/client/ui-chat), [`client-ui-context-menu`](../packages/client/ui-context-menu), [`client-ui-conversation`](../packages/client/ui-conversation), [`client-ui-renderer`](../packages/client/ui-renderer), [`client-ui-session`](../packages/client/ui-session), [`client-ui-settings`](../packages/client/ui-settings), [`client-ui-slots`](../packages/client/ui-slots), [`client-web`](../packages/client/web), [`remote-mock`](../packages/test-support/remote-mock), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`typert-protocol`](../packages/typert/protocol) |
 | [`subagent-dsh-sdk`](../packages/subagent/subagent-dsh-sdk) | `subagent` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`sdk-client`](../packages/sdk/client), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`subprocess`](../packages/subprocess/subprocess) |
+| [`fork-style`](../packages/fork/fork-style) | `fork` | [`agent`](../packages/core/agent), [`compaction`](../packages/compaction/compaction), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-integrity`](../packages/fork/fork-integrity), [`fork-qq`](../packages/fork/fork-qq), [`session`](../packages/core/session) |
 | [`fork-tool-qq`](../packages/fork/fork-tool-qq) | `fork` | [`fork-qq`](../packages/fork/fork-qq), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
 | [`fork-tool-wechat`](../packages/fork/fork-tool-wechat) | `fork` | [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-wechat`](../packages/fork/fork-wechat), [`tools`](../packages/core/tools) |
 | [`tool-schedule`](../packages/schedule/tool-schedule) | `schedule` | [`llm`](../packages/llm/llm), [`schedule`](../packages/schedule/schedule), [`subagent`](../packages/subagent/subagent), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |

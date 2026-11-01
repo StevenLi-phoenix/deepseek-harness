@@ -38,6 +38,7 @@ done
 /usr/bin/grep -q "^- id: fork-qq-login\$" "$WORK/fresh.yml" || fail "composition lacks fork-qq-login"
 /usr/bin/grep -q "^- id: fork-style\$" "$WORK/fresh.yml" || fail "composition lacks fork-style"
 /usr/bin/grep -q "id: fork-style-prompt" "$WORK/fresh.yml" || fail "unattended preset lacks fork-style-prompt"
+/usr/bin/grep -q "^- id: fork-style-settings\$" "$WORK/fresh.yml" || fail "composition lacks fork-style-settings"
 /usr/bin/grep -q "^- id: preset-qq-digest\$" "$WORK/fresh.yml" || fail "composition lacks preset-qq-digest"
 /usr/bin/grep -q "^- id: preset-qqbot\$" "$WORK/fresh.yml" || fail "composition lacks preset-qqbot"
 /usr/bin/grep -q "@deepseek-ai/dsh-fork-tool-qq" "$WORK/fresh.yml" || fail "unattended preset lacks fork-tool-qq"

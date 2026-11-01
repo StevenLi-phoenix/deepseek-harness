@@ -1,11 +1,42 @@
 {
-  "files": [],
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
   "references": [
     {
-      "path": "./tsconfig.host.json"
+      "path": "../../../vendor/cordis"
     },
     {
-      "path": "./tsconfig.client.json"
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../compaction/compaction"
+    },
+    {
+      "path": "../../core/agent"
+    },
+    {
+      "path": "../../core/session"
+    },
+    {
+      "path": "../../credentials/credentials"
+    },
+    {
+      "path": "../../llm/llm"
+    },
+    {
+      "path": "../../util/home-paths"
+    },
+    {
+      "path": "../fork-integrity"
+    },
+    {
+      "path": "../fork-qq"
     }
   ]
 }

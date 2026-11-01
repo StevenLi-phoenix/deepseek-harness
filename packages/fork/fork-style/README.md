@@ -25,7 +25,7 @@ Make the main agent talk like a person in a chat instead of explaining itself. E
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount it twice: once at the root (collection, the store, the Settings section and its routes) and once inside each preset whose Sessions should get the block, with `mode: prompt`. The fork event bundle mounts the second row in `unattended` only, so the WeChat main agent gets it and the `bili`, `up`, and `qq-digest` presets do not.
+Mount it twice: once at the root (collection, the store, and `ctx.forkStyle`, which [fork-style-settings](../fork-style-settings/README.md) shows as Settings → 说话风格) and once inside each preset whose Sessions should get the block, with `mode: prompt`. The fork event bundle mounts the second row in `unattended` only, so the WeChat main agent gets it and the `bili`, `up`, and `qq-digest` presets do not.
 
 ```yaml
 - id: fork-style
@@ -77,16 +77,15 @@ Each run logs one line of counts (`fork-style: schedule run: N exchanges seen �
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Plugin: configuration, the two modes, the schedule, the answer-length counter, the block source (`forkStyle`, read by the prompt rows), and the `/api/fork.style*` routes |
+| [`src/index.ts`](src/index.ts) | Plugin: configuration, the two modes, the schedule, the answer-length counter, and `StyleService` (`ctx.forkStyle`: the block for the prompt rows, the Settings section's panel, edits, and runs) |
 | [`src/collect.ts`](src/collect.ts) | QQ and Bilibili pairing, screening, the choice of what one run stores, and `StyleCollector` |
 | [`src/filter.ts`](src/filter.ts) | The line rules and the QQ and Bilibili text cleaning |
 | [`src/bili.ts`](src/bili.ts) | bili-svc's read API over HTTP, validated field by field |
 | [`src/store.ts`](src/store.ts) | `samples.jsonl`: caps, pinning, pending, tombstones, the owner's typed lines |
 | [`src/render.ts`](src/render.ts) | The block and its daily rotation |
 | [`src/trend.ts`](src/trend.ts) | `answers.json` and the trend the page shows |
-| [`src/client/`](src/client/) | The Settings section (`fork-style`), its store, and the dictionaries |
 
-The prompt row adds the block as a `user/message` with source kind `fork-style` right after the turn's claimed messages, once per Session per day: it remembers the day from the committed events, forgets it after a compaction, and forgets everything on restart, so a restart repeats the day's block once per Session. The root row offers the block through the `forkStyle` service value; a prompt row without it logs one warning and adds nothing.
+The prompt row adds the block as a `user/message` with source kind `fork-style` right after the turn's claimed messages, once per Session per day: it remembers the day from the committed events, forgets it after a compaction, and forgets everything on restart, so a restart repeats the day's block once per Session. The prompt row reads the block from `ctx.forkStyle`; without the root row it logs one warning and adds nothing.
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 

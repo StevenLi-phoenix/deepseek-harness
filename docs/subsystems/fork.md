@@ -2,7 +2,7 @@
 
 English | [中文](fork.zh.md)
 
-The fork-local services behind the event-driven agent: [`@deepseek-ai/dsh-fork-event-bus`](../../packages/fork/fork-event-bus/README.md) routes sensor events to notifications or unattended Sessions, [`@deepseek-ai/dsh-fork-github-sensor`](../../packages/fork/fork-github-sensor/README.md) polls GitHub, [`@deepseek-ai/dsh-fork-wechat`](../../packages/fork/fork-wechat/README.md) provides the `forkNotifier` contract over WeChat, [`@deepseek-ai/dsh-fork-qq`](../../packages/fork/fork-qq/README.md) lurks in the QQ groups the owner lists and digests them (its Settings → QQ page, [`@deepseek-ai/dsh-fork-qq-login`](../../packages/fork/fork-qq-login/README.md), shows the connection and the login QR code to scan after a sign-out), and [`@deepseek-ai/dsh-bili`](../../packages/fork/bili/README.md) is the agent's own Bilibili account. Behavior, configuration, and limitations are on each package README; the [upstream ledger](../../packages/fork/UPSTREAM.md) records how the fork tracks upstream.
+The fork-local services behind the event-driven agent: [`@deepseek-ai/dsh-fork-event-bus`](../../packages/fork/fork-event-bus/README.md) routes sensor events to notifications or unattended Sessions, [`@deepseek-ai/dsh-fork-github-sensor`](../../packages/fork/fork-github-sensor/README.md) polls GitHub, [`@deepseek-ai/dsh-fork-wechat`](../../packages/fork/fork-wechat/README.md) provides the `forkNotifier` contract over WeChat, [`@deepseek-ai/dsh-fork-qq`](../../packages/fork/fork-qq/README.md) lurks in the QQ groups the owner lists and digests them (its Settings → QQ page, [`@deepseek-ai/dsh-fork-qq-login`](../../packages/fork/fork-qq-login/README.md), shows the connection and the login QR code to scan after a sign-out), [`@deepseek-ai/dsh-fork-style`](../../packages/fork/fork-style/README.md) keeps short QQ and Bilibili exchanges that tune the main agent's voice (its Settings → 说话风格 page is [`@deepseek-ai/dsh-fork-style-settings`](../../packages/fork/fork-style-settings/README.md)), and [`@deepseek-ai/dsh-bili`](../../packages/fork/bili/README.md) is the agent's own Bilibili account. Behavior, configuration, and limitations are on each package README; the [upstream ledger](../../packages/fork/UPSTREAM.md) records how the fork tracks upstream.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -482,6 +482,58 @@ ownsSession(sessionId: string): boolean
 ```
 
 Source: [`packages/fork/fork-qqbot/src/index.ts`](../../packages/fork/fork-qqbot/src/index.ts)
+
+<a id="ctxlsystyle--styleservice"></a>
+
+### `ctx.forkStyle` — `StyleService`
+
+The samples, their collection, and the block: what the root row provides as `ctx.forkStyle`.
+
+```ts cordis-catalog
+/** Stop a run in progress (its Bilibili reads end). */
+dispose(): void
+
+/**
+ * The block for a day.
+ * @param day - `YYYY-MM-DD`, the rotation seed.
+ * @returns the block, or undefined when collection is off or nothing is active.
+ */
+async block(day: string): Promise<{ text: string; shown: number; owner: number } | undefined>
+
+/**
+ * When the next scheduled run is due.
+ * @returns epoch milliseconds; undefined while collection is off.
+ */
+async nextRunAt(): Promise<number | undefined>
+
+/**
+ * Run a collection when one is due and none is running.
+ * @returns the run's report, or undefined when nothing ran.
+ */
+async runIfDue(): Promise<RunReport | undefined>
+
+/**
+ * Everything the Settings section shows.
+ * @returns the samples, limits, the last run, the next run, and the trend.
+ */
+async panel(): Promise<StylePanel>
+
+/**
+ * Apply one edit the owner made on the Settings page.
+ * @param input - `{ op: 'remove' | 'keep', id }` or `{ op: 'add', reply, prompt? }`, as the page sent it; validated here.
+ * @returns the panel after the edit, or the refusal (`not_found`, `invalid_input`) with the unchanged panel.
+ */
+async edit(input: unknown): Promise<StyleEditAnswer>
+
+/**
+ * Start a collection run without waiting for it; the panel says `running` until it ends. Nothing runs while
+ * collection is off.
+ * @returns the panel right after the start.
+ */
+async collect(): Promise<StylePanel>
+```
+
+Source: [`packages/fork/fork-style/src/index.ts`](../../packages/fork/fork-style/src/index.ts)
 
 <a id="ctxlsyvoice--forkvoice"></a>
 

@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-fork-style",
-  "description": "Speaking style from real people's words: short QQ group and Bilibili exchanges, filtered and kept in a bounded file the owner edits in Settings, shown to the main agent as quoted data",
+  "description": "Speaking style from real people's words: short QQ group and Bilibili exchanges, filtered without a model, kept in a bounded file the owner edits, and shown to the main agent once a day as quoted data",
   "version": "0.2.2-alpha.2",
   "publishConfig": {
     "access": "public"
@@ -18,26 +18,8 @@
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
-    "./client": {
-      "types": "./lib/types/client/index.d.ts",
-      "default": "./lib/client.js"
-    },
     "./src/*": "./src/*",
-    "./package.json": "./package.json",
-    "./locale/*.json": "./locale/*.json"
-  },
-  "dsh": {
-    "client": {
-      "inject": [
-        "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-ui-settings"
-      ],
-      "platform": "web"
-    }
-  },
-  "scripts": {
-    "bundle": "tsdown",
-    "watch": "tsdown --watch"
+    "./package.json": "./package.json"
   },
   "license": "MIT",
   "peerDependencies": {
@@ -59,12 +41,6 @@
     "@deepseek-ai/dsh-agent": "workspace:*",
     "@deepseek-ai/dsh-agent-loop": "workspace:*",
     "@deepseek-ai/dsh-agent-loop-testkit": "workspace:*",
-    "@deepseek-ai/dsh-client-locale": "workspace:*",
-    "@deepseek-ai/dsh-client-store": "workspace:*",
-    "@deepseek-ai/dsh-client-test-runtime": "workspace:*",
-    "@deepseek-ai/dsh-client-ui-renderer": "workspace:*",
-    "@deepseek-ai/dsh-client-ui-settings": "workspace:*",
-    "@deepseek-ai/dsh-client-ui-slots": "workspace:*",
     "@deepseek-ai/dsh-compaction": "workspace:*",
     "@deepseek-ai/dsh-credentials": "workspace:*",
     "@deepseek-ai/dsh-home-paths": "workspace:*",
@@ -73,15 +49,10 @@
     "@deepseek-ai/dsh-fork-qq": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",
     "@deepseek-ai/dsh-tool-executor-native": "workspace:*",
-    "@testing-library/react": "^16.3.3",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
     "yaml": "^2.9.0"
   },
   "files": [
-    "locale/*.json",
     "lib/index.js",
-    "lib/client.js",
     "lib/types/**/*.d.ts"
   ]
 }

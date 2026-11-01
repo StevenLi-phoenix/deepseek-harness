@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/fork/fork-style-settings/README.md
+/:
+  en: 698414b0d261b03c
+  zh: 021ea96c7c7ecaa8
+/deepseek-ai-dsh-fork-style-settings:
+  en: 76689d39fdb4fe31
+  zh: ae1c3c84ce0fbfd8
+/deepseek-ai-dsh-fork-style-settings/summary:
+  en: a6d97a1fda550c4d
+  zh: de1e16330d0815b8
+/deepseek-ai-dsh-fork-style-settings/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-fork-style-settings/use-this-package:
+  en: 26bd1cffaf326cc4
+  zh: 9fb3a7116fe4807c
+/deepseek-ai-dsh-fork-style-settings/understand-the-implementation:
+  en: 0088240101e3ee5e
+  zh: a04bc7de0cfc8879
+/deepseek-ai-dsh-fork-style-settings/further-exploration:
+  en: fae976a09a6ae882
+  zh: 65b83c0aeeb1bcf6
+/deepseek-ai-dsh-fork-style-settings/model-experience:
+  en: 06db0e43bab6ac05
+  zh: d2ca1b741572a5bb
+/deepseek-ai-dsh-fork-style-settings/model-experience/kv-cache-effect:
+  en: ca75c51c89c2c9b0
+  zh: 0a4a6dba5e6904a5
+/deepseek-ai-dsh-fork-style-settings/known-limitations-and-deferred-work:
+  en: 57aab4f21372189a
+  zh: 7751d859e294cb9d
+/deepseek-ai-dsh-fork-style-settings/known-limitations-and-deferred-work/dev-note:
+  en: 1fc5ec988b297abb
+  zh: aa71ec4067c44774

@@ -3622,6 +3622,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
       'client-ui-settings-plugins PluginsSettingsSection id \'plugins\'',
       'bili BiliAccountSection id \'bili\'',
       'fork-qq-login QqLoginSection id \'fork-qq\'',
+      'fork-style-settings StyleSection id \'fork-style\'',
       'fork-sysmon SystemStatusSection id \'fork-sysmon\'',
     ],
     replaceRisk: 'none',

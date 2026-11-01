@@ -353,6 +353,11 @@
     - id: fork-style
       name: '@deepseek-ai/dsh-fork-style'
 
+    # Settings → 说话风格: the samples by source with one-tap deletion, pending ones to keep, a field for the owner's
+    # own lines, the last run's counts, and the stock-line trend (data from fork-style; nothing to configure).
+    - id: fork-style-settings
+      name: '@deepseek-ai/dsh-fork-style-settings'
+
     # Bilibili preset: the account's Session reads public content and answers the owner's own Bilibili
     # messages, so it gets only its persona, the time, the Bilibili tools (reads and non-speech actions
     # through bili-svc; no comment, reply, dynamic, or message tool), and compaction (the Session is

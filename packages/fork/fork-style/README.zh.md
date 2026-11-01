@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用这个包
 
-挂两次：一次在根部（收集、存储、设置页及其路由），一次以 `mode: prompt` 挂在每个需要这块内容的 preset 里。fork 事件 bundle 只在 `unattended` 里挂第二行，所以微信主 agent 能看到，`bili`、`up`、`qq-digest` preset 看不到。
+挂两次：一次在根部（收集、存储，以及 `ctx.forkStyle`，由 [fork-style-settings](../fork-style-settings/README.zh.md) 显示为 设置 → 说话风格），一次以 `mode: prompt` 挂在每个需要这块内容的 preset 里。fork 事件 bundle 只在 `unattended` 里挂第二行，所以微信主 agent 能看到，`bili`、`up`、`qq-digest` preset 看不到。
 
 ```yaml
 - id: fork-style
@@ -77,16 +77,15 @@ QQ 的一段对话是一条消息和引用它的回复（回复开头 QQ 自动�
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 插件：配置、两种模式、定时、回答长度计数、给 prompt 行读取的内容来源（`forkStyle`），以及 `/api/fork.style*` 路由 |
+| [`src/index.ts`](src/index.ts) | 插件：配置、两种模式、定时、回答长度计数，以及 `StyleService`（`ctx.forkStyle`：给 prompt 行的内容块，设置分区的面板、编辑和收集） |
 | [`src/collect.ts`](src/collect.ts) | QQ 和 B站的配对、过筛、一次收集存什么，以及 `StyleCollector` |
 | [`src/filter.ts`](src/filter.ts) | 每行的规则，以及 QQ 和 B站文本的清理 |
 | [`src/bili.ts`](src/bili.ts) | 经 HTTP 读 bili-svc，逐字段校验 |
 | [`src/store.ts`](src/store.ts) | `samples.jsonl`：上限、置顶、挂起、墓碑、owner 手写的句子 |
 | [`src/render.ts`](src/render.ts) | 这块内容及其每日轮换 |
 | [`src/trend.ts`](src/trend.ts) | `answers.json` 和页面上的趋势 |
-| [`src/client/`](src/client/) | 设置页（`fork-style`）、它的 store 和词典 |
 
-prompt 行把这块内容作为 source kind 为 `fork-style` 的 `user/message` 放在本回合认领的消息之后，每个 Session 每天一次：它从已提交的事件里记住日期，压缩后忘掉，重启后全部忘掉，所以重启会让每个 Session 再收到一次当天的内容。根部这一行通过 `forkStyle` 服务值提供这块内容；缺少它的 prompt 行记一条警告，什么也不加。
+prompt 行把这块内容作为 source kind 为 `fork-style` 的 `user/message` 放在本回合认领的消息之后，每个 Session 每天一次：它从已提交的事件里记住日期，压缩后忘掉，重启后全部忘掉，所以重启会让每个 Session 再收到一次当天的内容。prompt 行从 `ctx.forkStyle` 读取这块内容；没有根部这一行时记一条警告，什么也不加。
 
 这是 fork 本地的包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。
 
