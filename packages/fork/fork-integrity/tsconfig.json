@@ -18,6 +18,9 @@
       "path": "../../core/session"
     },
     {
+      "path": "../../schedule/schedule"
+    },
+    {
       "path": "../../util/home-paths"
     },
     {

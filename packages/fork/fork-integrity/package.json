@@ -30,6 +30,7 @@
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-home-paths": "workspace:*",
     "@deepseek-ai/dsh-fork-event-bus": "workspace:*",
+    "@deepseek-ai/dsh-schedule": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*"
   },
   "dependencies": {
@@ -40,6 +41,7 @@
     "@deepseek-ai/dsh-home-paths": "workspace:*",
     "@deepseek-ai/dsh-llm": "workspace:*",
     "@deepseek-ai/dsh-fork-event-bus": "workspace:*",
+    "@deepseek-ai/dsh-schedule": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",
     "yaml": "^2.9.0"
   }

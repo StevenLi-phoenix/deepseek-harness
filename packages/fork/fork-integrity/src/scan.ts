@@ -63,11 +63,45 @@ function definitionOf(record: unknown): unknown {
   return rest.kind === 'at' ? { ...rest, scheduledAt } : rest
 }
 
-/** The scheduled tasks by id and definition; delivery history and next-run times change on every run and are left out. */
-async function scheduleDigest(path: string): Promise<string> {
-  const parsed = JSON.parse(await readFile(path, 'utf8')) as { tables?: { tasks?: Record<string, { record?: unknown }> } }
-  const tasks = parsed.tables?.tasks ?? {}
-  return sha(Object.keys(tasks).toSorted().map(id => `${id}\0${sha(JSON.stringify(definitionOf(tasks[id]?.record)))}`).join('\n'))
+/** The state of the schedule file: one digest of all definitions and the digest of each task's definition. */
+export interface ScheduleState {
+  readonly digest: string
+  /** Task id to the digest of its definition; absent when the file is missing or unreadable. */
+  readonly tasks?: Record<string, string>
+}
+
+/** Digest of a set of task digests. */
+export function digestOfTasks(tasks: Readonly<Record<string, string>>): string {
+  return sha(Object.entries(tasks).toSorted(([a], [b]) => a.localeCompare(b)).map(([id, digest]) => `${id}\0${digest}`).join('\n'))
+}
+
+/** How many tasks a set of task digests gained, lost, and changed against another. */
+export function diffTasks(
+  from: Readonly<Record<string, string>>, to: Readonly<Record<string, string>>,
+): { added: number; removed: number; changed: number } {
+  let added = 0
+  let changed = 0
+  for (const [id, digest] of Object.entries(to)) {
+    if (from[id] === undefined) added += 1
+    else if (from[id] !== digest) changed += 1
+  }
+  return { added, removed: Object.keys(from).filter(id => to[id] === undefined).length, changed }
+}
+
+/**
+ * Read the scheduled tasks by id and definition; delivery history and next-run times change on every run and are left out.
+ * @param path - `storages/schedule.json`.
+ * @returns the digest of each task's definition by id; a missing, unreadable, or malformed file has only a plain digest.
+ */
+export async function scheduleState(path: string): Promise<ScheduleState> {
+  try {
+    const parsed = JSON.parse(await readFile(path, 'utf8')) as { tables?: { tasks?: Record<string, { record?: unknown }> } }
+    const rows = parsed.tables?.tasks ?? {}
+    const tasks = Object.fromEntries(Object.keys(rows).map(id => [id, sha(JSON.stringify(definitionOf(rows[id]?.record)))]))
+    return { digest: digestOfTasks(tasks), tasks }
+  } catch (error: unknown) {
+    return { digest: (error as NodeJS.ErrnoException).code === 'ENOENT' ? ABSENT : 'unreadable' }
+  }
 }
 
 /**
@@ -80,7 +114,7 @@ export async function digestOf(target: Target): Promise<string> {
     switch (target.kind) {
       case 'file': return await fileDigest(target.path)
       case 'dir': return await dirDigest(target.path)
-      case 'schedule': return await scheduleDigest(target.path)
+      case 'schedule': return (await scheduleState(target.path)).digest
     }
   } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return ABSENT

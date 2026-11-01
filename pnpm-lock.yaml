@@ -14093,6 +14093,9 @@ importers:
       '@deepseek-ai/dsh-fork-event-bus':
         specifier: workspace:*
         version: link:../fork-event-bus
+      '@deepseek-ai/dsh-schedule':
+        specifier: workspace:*
+        version: link:../../schedule/schedule
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../core/session
