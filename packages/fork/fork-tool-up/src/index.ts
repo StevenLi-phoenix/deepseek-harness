@@ -1,5 +1,6 @@
 /**
- * `up_*` tools: the creator account's reads and its two reply tools, mounted in the `up` preset.
+ * `up_*` tools: the creator account's reads and its two reply tools, mounted in the `up` preset; the channel notes
+ * (`bili_channel_note`) and the Bilibili evidence verifier (`ctx.biliEvidence`) of its persistent Session.
  *
  * Everything goes through bili-svc (`http://127.0.0.1:8097`, bearer token `BILI_SVC_TOKEN_UP` from the
  * credential store). Reads return Bilibili content wrapped as untrusted data and cut to a fixed length. The
@@ -10,17 +11,92 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
+// Type-only: the `compaction/summary` Session event.
+import type {} from '@deepseek-ai/dsh-compaction'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 // Type-only: ctx.credentials.
 import type {} from '@deepseek-ai/dsh-credentials'
+import { createUserMessage, type ContextFormed } from '@deepseek-ai/dsh-llm'
+// Type-only: ctx.forkEventBus.
+import type {} from '@deepseek-ai/dsh-fork-event-bus'
+import type {} from '@deepseek-ai/dsh-session'
 import { defineTool, type ParameterSchemaSpec } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
+import z from '@deepseek-ai/schemastery'
+import {
+  BiliEvidenceRefusedError, CommentCache, commentsOf, defaultSaltFile, loadSalt, ownMidsOf, senderKey,
+  type BiliEvidence, type BiliEvidenceItem,
+} from './evidence.ts'
+import { ChannelNotes, defaultNotesFile, renderNotesBlock, type NoteOutcome } from './notes.ts'
 
-/** Plugin name. */
+export {
+  BiliEvidenceRefusedError, CommentCache, commentsOf, defaultSaltFile, loadSalt, ownMidsOf, parseComment, senderKey,
+  type BiliEvidence, type BiliEvidenceCaller, type BiliEvidenceItem, type BiliEvidenceRefusal, type CachedComment,
+} from './evidence.ts'
+export { ChannelNotes, defaultNotesFile, normalizeNote, renderNotesBlock, type ChannelNote, type NoteLimits, type NoteOutcome } from './notes.ts'
+export { PII_KINDS, piiKind, type PiiKind } from './pii.ts'
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    biliEvidence: BiliEvidence
+  }
+}
+
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'fork-tool-up': { kind: 'fork-tool-up' } & ContextFormed
+  }
+}
+
+/** Plugin name; also the source kind of the channel-notes block. */
 export const name = 'fork-tool-up'
 
 /** Mounted inside an agent preset's scope, like other tool plugins. */
 export const inject = ['tools', 'credentials']
+
+/** Notes, evidence, and the Session they belong to. */
+export interface Config {
+  /** The bus subscription whose persistent Session may write notes and verify evidence; any other Session is refused. */
+  subscription: string
+  /** Calls per turn of `bili_channel_note`, and separately of `ctx.biliEvidence.evidenceOf`. */
+  callsPerTurn: number
+  notes: {
+    /** Absolute path of the notes file; defaults to `<DSH_HOME>/fork-tool-up/channel-notes.json`. */
+    file?: string
+    /** Notes kept. */
+    maxEntries: number
+    /** Longest note, in characters. */
+    maxChars: number
+  }
+  evidence: {
+    /** Absolute path of the sender-key salt; defaults to `<DSH_HOME>/fork-tool-up/evidence-salt`, created on first use. */
+    saltFile?: string
+    /** Comments remembered from the Session's reads, by rpid. */
+    cacheSize: number
+    /** Ids looked up per call; the rest are left out. */
+    maxIds: number
+  }
+}
+
+/** Schemastery validation for {@link Config}. */
+export const Config: z<Config> = z.object({
+  subscription: z.string().default('bili-digest'),
+  callsPerTurn: z.natural().min(1).default(5),
+  notes: z.object({
+    file: z.string(),
+    maxEntries: z.natural().min(1).default(30),
+    maxChars: z.natural().min(1).default(40),
+  }),
+  evidence: z.object({
+    saltFile: z.string(),
+    cacheSize: z.natural().min(1).default(2000),
+    maxIds: z.natural().min(1).default(20),
+  }),
+})
+
+/** How long the creator's own account ids from `/v1/status` are trusted before they are read again. */
+const OWN_MIDS_TTL_MS = 10 * 60_000
 
 /** Default bili-svc address; `BILI_SVC_URL` in the service environment overrides it. */
 export const DEFAULT_BASE_URL = 'http://127.0.0.1:8097'
@@ -106,16 +182,48 @@ async function call(env: Env, token: string, method: 'GET' | 'POST', path: strin
 }
 
 /**
- * Register the `up_*` tools.
+ * Register the `up_*` tools and `bili_channel_note`, inject the channel notes, and provide `ctx.biliEvidence`.
  * @param ctx - the preset scope's context.
+ * @param config - notes, evidence, and the persistent Session they belong to.
  */
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config: Config): void {
   // The global fetch is looked up per call, so a test can stub it.
   const env: Env = { fetch: (...args) => fetch(...args), baseUrl: process.env['BILI_SVC_URL'] ?? DEFAULT_BASE_URL }
   const token = async (): Promise<string> => {
     const resolved = await ctx.credentials.resolve(credentialRef(TOKEN_ENV))
     if (resolved?.value === undefined || resolved.value === '') throw new Error(`${TOKEN_ENV} is not set`)
     return resolved.value
+  }
+  const comments = new CommentCache(config.evidence.cacheSize)
+  const own = { mids: new Set<number>(), at: 0 }
+  const learnOwn = (body: unknown): void => {
+    const mids = ownMidsOf(body)
+    if (mids.length === 0) return
+    own.mids = new Set(mids)
+    own.at = Date.now()
+  }
+  /** What each Session's open turn already used: notes and evidence calls. Cleared at its turn end. */
+  const used = new Map<string, { notes: number; evidence: number }>()
+  /** Notes revision last shown to each Session; dropped when a compaction may have shadowed it. */
+  const shown = new Map<string, number>()
+  ctx.on('session/event', (session, event) => {
+    if (event.type === 'turn/end') used.delete(session.id)
+    else if (event.type === 'compaction/summary') shown.delete(session.id)
+  })
+  /** Count one call of `kind` in the Session's turn; false once the turn used `callsPerTurn`. */
+  const take = (sessionId: string, kind: 'notes' | 'evidence'): boolean => {
+    const counts = used.get(sessionId) ?? { notes: 0, evidence: 0 }
+    used.set(sessionId, counts)
+    if (counts[kind] >= config.callsPerTurn) return false
+    counts[kind] += 1
+    return true
+  }
+  /** Why a Session may not write notes or verify evidence, or undefined when it is the configured persistent Session. */
+  const refusal = (sessionId: string | undefined): string | undefined => {
+    if (sessionId === undefined) return 'the call runs outside a Session'
+    const bus = ctx.get('forkEventBus')
+    if (bus === undefined) return 'fork-event-bus is not running, so the persistent Session is unknown'
+    return bus.persistentSubscriptionOf(sessionId) === config.subscription ? undefined : `only the persistent ${config.subscription} Session may do this`
   }
 
   const read = (spec: {
@@ -142,6 +250,8 @@ export function apply(ctx: Context): void {
         try {
           const answer = await call(env, await token(), 'GET', spec.path(args as Record<string, unknown>), undefined, READ_TIMEOUT_MS, exec.signal)
           if (answer.status !== 200) return { error: `bili-svc answered HTTP ${answer.status}${errorCode(answer.body)}` }
+          if (spec.name === 'up_comments' || spec.name === 'up_comment_thread') comments.put(commentsOf(answer.body))
+          else if (spec.name === 'up_status') learnOwn(answer.body)
           return answer.body as JsonValue
         } catch (error: unknown) {
           ctx.logger.warn(`fork-tool-up: ${spec.name} failed: ${errorText(error)}`)
@@ -286,6 +396,138 @@ export function apply(ctx: Context): void {
     body: args => ({ talker: int(args['talker'], 0), message: str(args['message']) }),
     title: args => `Reply to ${String(args['talker'])}`,
   })
+
+  const notes = new ChannelNotes(config.notes.file ?? defaultNotesFile(), {
+    maxEntries: config.notes.maxEntries,
+    maxChars: config.notes.maxChars,
+  })
+
+  ctx.tools.register(defineTool({
+    name: 'bili_channel_note',
+    description: [
+      `Keep a short note about this Bilibili channel: its audience, the vibe of the comments, recurring topics and jokes (at most ${config.notes.maxEntries} notes of ${config.notes.maxChars} characters).`,
+      'Notes are about the channel as a whole, never about one viewer: no names, nicknames, @handles, UIDs, contact details, schools, employers, or where someone lives; such a note is refused.',
+      'op add stores the text; op remove deletes the note with that text (or id). Your notes are shown to you at the start of later turns as data.',
+      `At most ${config.callsPerTurn} calls per turn, and only in the channel's persistent Session.`,
+    ].join(' '),
+    parameters: {
+      op: { type: 'string', required: true, enum: ['add', 'remove'], description: 'add or remove.' },
+      text: { type: 'string', required: true, description: `The note (add), or the note's text or id (remove); at most ${config.notes.maxChars} characters.` },
+    },
+    output: { schema: JSON_SCHEMA, render: (_args: unknown, value: unknown) => [{ type: 'text' as const, text: JSON.stringify(value) }] },
+    async execute(args, exec): Promise<JsonValue> {
+      const sessionId = exec.agent?.session.id
+      const refused = refusal(sessionId)
+      if (refused !== undefined || sessionId === undefined) {
+        ctx.logger.info(`fork-tool-up: bili_channel_note refused in Session ${sessionId ?? '(none)'}: ${refused ?? 'no Session'}`)
+        return { status: 'refused', reason: 'not_persistent_session', message: refused ?? 'no Session' }
+      }
+      if (!take(sessionId, 'notes')) {
+        ctx.logger.info(`fork-tool-up: bili_channel_note refused in Session ${sessionId}: ${config.callsPerTurn} calls this turn already`)
+        return { status: 'refused', reason: 'turn_cap', message: `at most ${config.callsPerTurn} note calls per turn` }
+      }
+      let outcome: NoteOutcome
+      try {
+        outcome = args.op === 'remove' ? await notes.remove(str(args.text)) : await notes.add(str(args.text))
+      } catch (error: unknown) {
+        ctx.logger.warn(`fork-tool-up: bili_channel_note ${str(args.op)} failed in Session ${sessionId}: ${errorText(error)}`)
+        return { status: 'refused', reason: 'store_error', message: errorText(error) }
+      }
+      ctx.logger.info(`fork-tool-up: bili_channel_note ${str(args.op)} in Session ${sessionId}: ${outcome.status}${outcome.status === 'refused' ? ` (${outcome.reason}${'pii' in outcome ? `: ${outcome.pii}` : ''})` : ''}; ${outcome.count}/${config.notes.maxEntries} notes`)
+      switch (outcome.status) {
+        case 'added':
+        case 'removed':
+          return { status: outcome.status, id: outcome.note.id, count: outcome.count }
+        case 'refused':
+          return { status: 'refused', reason: outcome.reason, ...('pii' in outcome ? { pii: outcome.pii } : {}), count: outcome.count }
+        default:
+          return assertNever(outcome)
+      }
+    },
+    presentCall: args => ({ card: 'generic', title: `Channel note: ${str(args.op)}`, kind: 'other' }),
+  }))
+
+  // The notes reach the Session as data: at its first request, again after a compaction, and at the start of a turn once they changed.
+  ctx.on('agent/pre-step', async ({ agent, messages, step, signal }, next): Promise<PreStepDecision> => {
+    const decision = await next()
+    if (decision.kind === 'reject' || signal.aborted
+      || agent.session.header.origin === 'subagent'
+      || (step === 1 && decision.messages.length === 0)) return decision
+    const sessionId = agent.session.id
+    const last = shown.get(sessionId)
+    if (last !== undefined && step !== 1) return decision
+    let state: Awaited<ReturnType<ChannelNotes['read']>>
+    try {
+      state = await notes.read()
+    } catch (error: unknown) {
+      ctx.logger.warn(`fork-tool-up: channel notes not loaded for Session ${sessionId}: ${errorText(error)}`)
+      return decision
+    }
+    if (last === state.rev) return decision
+    shown.set(sessionId, state.rev)
+    const text = renderNotesBlock(state.notes)
+    if (text === undefined) return decision
+    ctx.logger.info(`fork-tool-up: channel notes (${state.notes.length}, revision ${state.rev}) entered Session ${sessionId}`)
+    const block = createUserMessage({
+      content: [{ type: 'text', text }],
+      source: { kind: name, form: 'notice', summary: `${state.notes.length} channel note(s)` },
+    })
+    const lastClaimed = decision.messages.findLastIndex(message => messages.includes(message))
+    return { ...decision, messages: decision.messages.toSpliced(lastClaimed + 1, 0, block) }
+  })
+
+  let salt: Promise<string> | undefined
+  const ownMids = async (): Promise<boolean> => {
+    if (own.at > 0 && Date.now() - own.at < OWN_MIDS_TTL_MS) return true
+    try {
+      const answer = await call(env, await token(), 'GET', '/v1/status', undefined, READ_TIMEOUT_MS)
+      if (answer.status === 200) learnOwn(answer.body)
+    } catch (error: unknown) {
+      ctx.logger.warn(`fork-tool-up: /v1/status for the evidence check failed: ${errorText(error)}`)
+    }
+    return own.at > 0
+  }
+  const evidence: BiliEvidence = {
+    async evidenceOf(ids, caller): Promise<BiliEvidenceItem[]> {
+      const refused = refusal(caller.sessionId)
+      if (refused !== undefined) {
+        ctx.logger.info(`fork-tool-up: evidence refused for Session ${caller.sessionId}: ${refused}`)
+        throw new BiliEvidenceRefusedError('not_persistent_session', refused)
+      }
+      if (!take(caller.sessionId, 'evidence')) {
+        ctx.logger.info(`fork-tool-up: evidence refused for Session ${caller.sessionId}: ${config.callsPerTurn} calls this turn already`)
+        throw new BiliEvidenceRefusedError('turn_cap', `at most ${config.callsPerTurn} evidence calls per turn`)
+      }
+      const wanted = [...new Set(ids.filter(id => /^[1-9]\d{0,18}$/.test(id)))].slice(0, config.evidence.maxIds).map(Number)
+      salt ??= loadSalt(config.evidence.saltFile ?? defaultSaltFile())
+      const key = await salt
+      const ownKnown = await ownMids()
+      const found: BiliEvidenceItem[] = []
+      let read = 0
+      for (const rpid of wanted) {
+        if (comments.get(rpid) === undefined) {
+          read += 1
+          try {
+            const answer = await call(env, await token(), 'GET', `/v1/comments/${rpid}/thread`, undefined, READ_TIMEOUT_MS)
+            if (answer.status === 200) comments.put(commentsOf(answer.body))
+          } catch (error: unknown) {
+            ctx.logger.warn(`fork-tool-up: evidence read of comment ${rpid} failed: ${errorText(error)}`)
+          }
+        }
+        const comment = comments.get(rpid)
+        if (comment === undefined || !ownKnown || own.mids.has(comment.mid)) continue
+        found.push({ id: String(rpid), senderKey: senderKey(key, comment.mid), at: comment.ctime * 1000, text: comment.text })
+      }
+      ctx.logger.info(`fork-tool-up: evidence for Session ${caller.sessionId}: ${ids.length} id(s) asked, ${found.length} verified, ${read} read from bili-svc${ownKnown ? '' : ', none kept because the creator\'s own accounts are unknown'}`)
+      return found
+    },
+  }
+  ctx.provide('biliEvidence', evidence)
+}
+
+/** Exhaustiveness guard for closed unions. */
+function assertNever(value: never): never {
+  throw new Error(`unexpected value ${JSON.stringify(value)}`)
 }
 
 /** ` (error code)` of a bili-svc error body, for log lines. */
