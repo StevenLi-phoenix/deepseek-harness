@@ -2,7 +2,7 @@
 
 [English](lsy.md) | 中文
 
-事件驱动 agent 背后的 fork 本地服务：[`@deepseek-ai/dsh-lsy-event-bus`](../../packages/lsy/lsy-event-bus/README.zh.md) 把传感器事件路由成通知或无人值守的 Session，[`@deepseek-ai/dsh-lsy-github-sensor`](../../packages/lsy/lsy-github-sensor/README.zh.md) 轮询 GitHub，[`@deepseek-ai/dsh-lsy-wechat`](../../packages/lsy/lsy-wechat/README.zh.md) 通过微信提供 `lsyNotifier` 契约，[`@deepseek-ai/dsh-lsy-qq`](../../packages/lsy/lsy-qq/README.zh.md) 潜伏在主人列出的 QQ 群里并做摘要，[`@deepseek-ai/dsh-bili`](../../packages/lsy/bili/README.zh.md) 是 agent 自己的 B站账号。行为、配置与限制见各包 README；[上游账本](../../packages/lsy/UPSTREAM.md)记录 fork 如何跟踪上游。
+事件驱动 agent 背后的 fork 本地服务：[`@deepseek-ai/dsh-lsy-event-bus`](../../packages/lsy/lsy-event-bus/README.zh.md) 把传感器事件路由成通知或无人值守的 Session，[`@deepseek-ai/dsh-lsy-github-sensor`](../../packages/lsy/lsy-github-sensor/README.zh.md) 轮询 GitHub，[`@deepseek-ai/dsh-lsy-wechat`](../../packages/lsy/lsy-wechat/README.zh.md) 通过微信提供 `lsyNotifier` 契约，[`@deepseek-ai/dsh-lsy-qq`](../../packages/lsy/lsy-qq/README.zh.md) 潜伏在主人列出的 QQ 群里并做摘要（它的设置 → QQ 页面 [`@deepseek-ai/dsh-lsy-qq-login`](../../packages/lsy/lsy-qq-login/README.zh.md) 显示连接状态，以及被踢下线后用来扫码的登录二维码），[`@deepseek-ai/dsh-bili`](../../packages/lsy/bili/README.zh.md) 是 agent 自己的 B站账号。行为、配置与限制见各包 README；[上游账本](../../packages/lsy/UPSTREAM.md)记录 fork 如何跟踪上游。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 

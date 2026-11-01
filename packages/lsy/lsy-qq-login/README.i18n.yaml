@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/lsy/lsy-qq-login/README.md
+/:
+  en: 9100d20420de893a
+  zh: defd7bdd35d7d912
+/deepseek-ai-dsh-lsy-qq-login:
+  en: 2ac46e50493c3cde
+  zh: 7d5ef6e457f5d45a
+/deepseek-ai-dsh-lsy-qq-login/summary:
+  en: 80bbf7a82c8d8011
+  zh: 97da8d4450ebe3d0
+/deepseek-ai-dsh-lsy-qq-login/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-lsy-qq-login/use-this-package:
+  en: 1e848d25600924e2
+  zh: a4d8ad692081c551
+/deepseek-ai-dsh-lsy-qq-login/understand-the-implementation:
+  en: 67c716c838ffdffd
+  zh: ecdfec24abbbffa7
+/deepseek-ai-dsh-lsy-qq-login/further-exploration:
+  en: e78489f92da5ede6
+  zh: c2e51add718ba744
+/deepseek-ai-dsh-lsy-qq-login/model-experience:
+  en: 17c85568abf874e0
+  zh: 173ee8a6821e3eba
+/deepseek-ai-dsh-lsy-qq-login/model-experience/kv-cache-effect:
+  en: ca75c51c89c2c9b0
+  zh: a18013b9ffbc0b06
+/deepseek-ai-dsh-lsy-qq-login/known-limitations-and-deferred-work:
+  en: 272000be90480a3e
+  zh: ae15cd777043a178
+/deepseek-ai-dsh-lsy-qq-login/known-limitations-and-deferred-work/dev-note:
+  en: 87b1a21ffc2c3264
+  zh: 33bc37affba1d67e

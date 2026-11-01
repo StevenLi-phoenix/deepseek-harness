@@ -33,6 +33,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`lsy-memory/`](lsy-memory/README.md) | Owner memory across Sessions: the memory block, `memory_search`, `memory_save`, `memory_forget`, and the claude.ai export importer |
 | [`lsy-qq/`](lsy-qq/README.md) | QQ group observer over a OneBot v11 protocol end (NapCat): records the listed groups, digests them on a schedule, never speaks by default |
 | [`lsy-qqbot/`](lsy-qqbot/README.md) | Official QQ bot channel, disabled by default: owner-listed private chats and @-mentions, one chat Session each, answers through `owner-relay` |
+| [`lsy-qq-login/`](lsy-qq-login/README.md) | Settings section for QQ: the observer's connection, NapCat's login state, and the login QR code to scan with the phone after QQ signs the account out |
 | [`lsy-sysmon/`](lsy-sysmon/README.md) | Settings section with the Host machine's CPU, memory, power, temperature, and disk usage per volume |
 | [`lsy-taint/`](lsy-taint/README.md) | Turn origin: who started the open turn and whether strangers' words reached it; Claude Code messaging only in the owner's own turns, reminders and watches from other turns reported |
 | [`lsy-tool-monitor/`](lsy-tool-monitor/README.md) | `monitor_start`, `monitor_stop`, `monitor_list` tools: a command's output lines come back to the same Session |

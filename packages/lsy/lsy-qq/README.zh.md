@@ -69,9 +69,15 @@ kind: "package-reference"
 | `digest.provider`、`digest.model` | 未设置 | 摘要 Session 的模型（provider 路由和模型 id），例如便宜的模型；不设置就用 profile 的默认模型 |
 | `digest.agentPreset`、`digest.permissionPreset` | `qq-digest`、`read-only` | 事件 bundle 的 `qq-digest` preset 只有人设、没有工具 |
 | `digest.workspacePath`、`digest.timeZone`、`digest.timeoutMs` | `/Users/dsh-runtime/qq-digest`、`Asia/Shanghai`、`900000` | 工作目录、转录里时间所用的时区，以及等待一次模型调用的期限 |
-| `offlineNoticeMs` | `600000` | 协议端这么久连不上、或报告账号下线时，经 `ctx.lsyNotifier` 通知 owner；`0` 关闭 |
+| `offlineNoticeMs` | `600000` | 协议端这么久连不上、或报告账号下线时，经 `ctx.lsyNotifier` 通知 owner；`0` 关闭。每次中断只通知一次：发出后要等连接恢复才会重新待命 |
+| `settingsUrl` | 未设置 | 事件服务的地址，写进该通知里「设置 → QQ」的旁边；不设置则只提页面名、不带链接 |
+| `login.enabled` | `true` | 向扫码入口询问 NapCat 的登录状态（设置里的 QQ 分区） |
+| `login.url` | `http://127.0.0.1:3002` | 扫码入口（`napcat.sh door`）的地址；必须在本机或 tailnet 上 |
+| `login.timeoutMs` | `5000` | 单次调用扫码入口的期限 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-lsy-qq)是全部可接受字段的完整来源。
+
+**QQ 把账号踢下线时**，在 DSH 页面重新扫码：**设置 → QQ**（[`@deepseek-ai/dsh-lsy-qq-login`](../lsy-qq-login/README.zh.md)）显示连接状态、NapCat 的登录状态和登录二维码。二维码经*扫码入口*（login door）取得：它是 `napcat.sh start` 在 NapCat 旁边启动的一个小容器（`napcat.sh door` 可单独启动），监听 `127.0.0.1:3002`。NapCat 的 WebUI 能在容器里开 shell、读取 QQ 会话，所以服务用户从不持有它的令牌：令牌由扫码入口持有，它只回答 `GET /v1/login` 和 `POST /v1/login/refresh`，以调用方带来的 OneBot token 作为凭证，并且只转交类型明确、长度受限的字段（二维码链接必须是 https 的 `*.qq.com` 地址才放行）。观察者通过 `loginStatus()` 和 `refreshLogin()` 读取扫码入口，通过 `connectionStatus()` 报告自己的连接，并且在扫码入口说 NapCat 已登录、而自己还在退避等待时立刻重连。恢复步骤见运行手册第 13 节：[QQ 掉线恢复](../../../lsy/deploy/RUNBOOK.md#qq-recovery)。
 
 摘要是观察者学到的知识，带着来源（`qq-group:<群号>`、摘要编号、日期）；它们不受 30 天限制，`forgetDigests({ groupId?, beforeMs? })`（即 `qq_forget` 工具）按群或日期删除。读取由服务负责：`groupOverview()`、`recentMessages()`、`searchMessages()`、`digests()` 和 `groupName()` 只对已记录的群作答。`sendGroupMessage(groupId, text)` 留给以后的代码，除非 `send.enabled` 为 true 且该群在 `send.groups` 里，否则一律拒绝；本包和工具里没有任何地方调用它。
 
@@ -93,6 +99,8 @@ kind: "package-reference"
 |---|---|
 | [`src/index.ts`](src/index.ts) | 服务、配置、连接循环、事件处理、媒体下载、定时任务、读取和受限的发送 |
 | [`src/onebot.ts`](src/onebot.ts) | OneBot v11 客户端和地址检查 |
+| [`src/login.ts`](src/login.ts) | 扫码入口的客户端：逐字段检查每个答案 |
+| [`src/status.ts`](src/status.ts) | 设置分区用的连接与登录读数类型 |
 | [`src/text.ts`](src/text.ts) | 消息片段到文字和媒体 |
 | [`src/store.ts`](src/store.ts) | SQLite 表结构、FTS5 检索、保留期与摘要查询 |
 | [`src/media.ts`](src/media.ts) | 地址白名单、有上限的抓取、类型识别、按内容命名的文件 |
@@ -136,6 +144,7 @@ kind: "package-reference"
 <a id="known-limitations-and-deferred-work"></a>
 
 - **保留期**——原始消息和下载在 30 天后删除；摘要里或消息文字里引用的名字，仍可能带着成员自己写的关于自己的信息。
+- **登录二维码由扫码入口提供**——扫码入口（`napcat.sh door`）没在运行时，设置页显示不出二维码，并会说明怎么启动它；协议端连接本身不依赖它。
 - **非官方客户端，有封号风险**——NapCat 不是官方机器人：腾讯可能让账号下线或限制它。请用备用小号、保持只读，不要在很多地方登录。
 - **只能看账号所在的群**——得有人先把这个号拉进每个群。
 - **文字、图片和语音**——视频和群文件只记录元数据；合并转发的聊天记录记为 `[合并转发]`。

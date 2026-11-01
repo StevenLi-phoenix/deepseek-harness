@@ -69,9 +69,15 @@ Until a group number is listed nothing is recorded: messages of every other grou
 | `digest.provider`, `digest.model` | unset | The digest Session's model (provider route and model id), such as a cheap model; unset uses the profile's default |
 | `digest.agentPreset`, `digest.permissionPreset` | `qq-digest`, `read-only` | The event bundle's `qq-digest` preset has a persona and no tools |
 | `digest.workspacePath`, `digest.timeZone`, `digest.timeoutMs` | `/Users/dsh-runtime/qq-digest`, `Asia/Shanghai`, `900000` | Working directory, the zone of the transcript's times, and the wait for one model call |
-| `offlineNoticeMs` | `600000` | Tell the owner (through `ctx.lsyNotifier`) when the protocol end has been unreachable this long, or reports the account offline; `0` turns it off |
+| `offlineNoticeMs` | `600000` | Tell the owner (through `ctx.lsyNotifier`) when the protocol end has been unreachable this long, or reports the account offline; `0` turns it off. One notice per outage: it is sent once and re-armed only when the connection has come back |
+| `settingsUrl` | unset | The event service's address, quoted in that notice next to "Settings → QQ"; unset names the page without a link |
+| `login.enabled` | `true` | Ask the login door for NapCat's login state (the Settings QQ section) |
+| `login.url` | `http://127.0.0.1:3002` | The login door's address (`napcat.sh door`); it must be on this machine or the tailnet |
+| `login.timeoutMs` | `5000` | Deadline of one call to the door |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-lsy-qq) is the exhaustive source for every accepted field.
+
+**When QQ signs the account out**, scan again from the DSH page: **Settings → QQ** ([`@deepseek-ai/dsh-lsy-qq-login`](../lsy-qq-login/README.md)) shows the connection, NapCat's login state, and the login QR code. The code comes through the *login door*, a small container `napcat.sh start` runs next to NapCat (`napcat.sh door` starts it alone) on `127.0.0.1:3002`. NapCat's WebUI can open a shell in its container and read the QQ session, so the service user never holds its token: the door holds it, answers only `GET /v1/login` and `POST /v1/login/refresh`, accepts the OneBot token as the caller's proof, and passes on typed, capped fields (the QR link only if it is an https `*.qq.com` address). The observer reads the door through `loginStatus()` and `refreshLogin()`, reports its own connection through `connectionStatus()`, and reconnects at once when the door says NapCat is logged in while it is still backing off. Recovery steps: RUNBOOK §13, [QQ 掉线恢复](../../../lsy/deploy/RUNBOOK.md#qq-recovery).
 
 Digests are the observer's learned knowledge and carry their source (`qq-group:<number>`, digest number, date); they keep past the 30 days, and `forgetDigests({ groupId?, beforeMs? })` (the `qq_forget` tool) deletes them by group or date. Reading is the service's job: `groupOverview()`, `recentMessages()`, `searchMessages()`, `digests()`, and `groupName()` answer only for recorded groups. `sendGroupMessage(groupId, text)` exists for future code and refuses unless `send.enabled` is true and the group is in `send.groups`; nothing in this package or in the tools calls it.
 
@@ -93,6 +99,8 @@ Every `digest` round (a check every ten minutes) picks the groups whose last dig
 |---|---|
 | [`src/index.ts`](src/index.ts) | Service, configuration, connection loop, event handling, media downloads, schedules, reads, gated sending |
 | [`src/onebot.ts`](src/onebot.ts) | OneBot v11 client and the address check |
+| [`src/login.ts`](src/login.ts) | Client of the login door: checks each answer field by field |
+| [`src/status.ts`](src/status.ts) | Connection and login reading types for the Settings section |
 | [`src/text.ts`](src/text.ts) | Segments to text and media |
 | [`src/store.ts`](src/store.ts) | SQLite schema, FTS5 search, retention and digest queries |
 | [`src/media.ts`](src/media.ts) | Address allowlist, capped fetch, type detection, content-addressed files |
@@ -136,6 +144,7 @@ Each call is a new Session with its own short prefix; nothing is shared between 
 <a id="known-limitations-and-deferred-work"></a>
 
 - **Retention** — raw messages and downloads are deleted after 30 days; a digest or a quoted name inside message text can still carry what a member wrote about themselves.
+- **The login code is the door's** — if the door is not running (`napcat.sh door`), the Settings page cannot show a code and says how to start it; the protocol-end connection itself does not depend on it.
 - **Unofficial client, ban risk** — NapCat is not an official bot: Tencent can sign the account out or restrict it. Use a spare account, keep it read-only, and do not log it in from many places.
 - **Only the groups the account is in** — someone has to add the account to each group first.
 - **Text, images, and voice** — video and group files are recorded as metadata only; a forwarded chat is recorded as `[合并转发]`.
