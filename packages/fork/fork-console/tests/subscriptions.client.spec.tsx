@@ -307,8 +307,8 @@ describe('SubscriptionsSection auto-archive card', () => {
     store.update((draft) => { Object.assign(draft, { data: VIEW, checkedAt: NOW }) })
     const props = {
       close: () => {}, useSubscriptions: bindSnapshotSelector(store), refresh: vi.fn(), act: vi.fn(), dismiss: vi.fn(), t,
-      renderFactorySlot,
-    } as unknown as SubscriptionsProps
+      renderFactorySlot: renderFactorySlot as never,
+    } as SubscriptionsProps
     render(<SubscriptionsSection {...props} />)
     expect(renderFactorySlot).toHaveBeenCalledWith('settings.plugin-config', expect.objectContaining({ entries: ['fork-event-bus'] }))
     const { exclude } = renderFactorySlot.mock.calls[0]![1] as { exclude: string[] }

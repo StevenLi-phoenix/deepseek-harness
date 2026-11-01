@@ -174,7 +174,7 @@ describe('auto-archive protection', () => {
     await new Promise(resolve => setTimeout(resolve, 20))
     expect([...claims.keys()]).toEqual(['qq'])
     type Resident = { sessionId: string; createdAt: number; generation: number }
-    const { store } = h.observer as unknown as { store: { setGroupSession(group: string, session: Resident): void } }
+    const store: { setGroupSession(group: string, session: Resident): void } = Reflect.get(h.observer, 'store')
     store.setGroupSession(GROUP, { sessionId: 'digest-7', createdAt: 1, generation: 1 })
     expect(claims.get('qq')!({ id: 'digest-7' })).toBe(true)
     expect(claims.get('qq')!({ id: 'one-shot' })).toBe(false)

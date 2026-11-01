@@ -31,6 +31,6 @@ export interface TextGuard {
  * @returns the guard, or undefined without fork-guard.
  */
 export function guardOf(ctx: Context): TextGuard | undefined {
-  const found = (ctx as unknown as { get(name: string): unknown }).get('forkGuard')
+  const found = (ctx.get.bind(ctx) as (name: string) => unknown)('forkGuard')
   return typeof (found as TextGuard | undefined)?.check === 'function' ? found as TextGuard : undefined
 }

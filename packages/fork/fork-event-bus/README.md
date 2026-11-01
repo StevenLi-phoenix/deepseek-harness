@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Route events from sensors to a phone notification or a new unattended agent Session, through subscriptions that you write in the configuration or that the agent creates itself with `watch_create`. The bus drops duplicates and events the agent caused itself. It batches bursts and caps batches per hour, so a noisy repository never floods your phone or model budget. State survives restarts. Chat Sessions idle for a week are archived, never deleted; running, pinned, persistent, and owner-channel Sessions are left alone. A subscription can keep one persistent Session that each batch continues, renewed monthly from its summary. Session results and unattended reminder turns come back as one message with the final answer, and an answer of `NO_REPLY` sends nothing.
+Route events from sensors to a phone notification or a new unattended agent Session, through subscriptions written in the configuration or created by the agent with `watch_create`. The bus drops duplicates and events the agent caused itself, batches bursts, and caps batches per hour. State survives restarts. A subscription can keep one persistent Session, per subscription or per subject, renewed monthly from its summary. Session results and unattended reminder turns return as one message, and `NO_REPLY` sends nothing. Chat Sessions idle for a week are archived, never deleted; running, pinned, persistent, and owner-channel Sessions stay.
 
 ## Table of Contents
 

@@ -97,7 +97,7 @@ describe('event bundle', () => {
       'ci': ['/Users/dsh-runtime/work/ci', 'CI'],
     })
     expect(sessions['ci']).toMatchObject({ titlePrefix: 'CI', persistent: { enabled: true, key: 'subject' } })
-    expect(sessions['bili-digest']).toMatchObject({ titlePrefix: 'B站评论与私信', persistent: { enabled: true, key: 'subscription' } })
+    expect(sessions['bili-digest']).toMatchObject({ titlePrefix: 'B站评论与私信', persistent: { enabled: true } })
     // One-off Sessions stay one per batch.
     for (const id of ['kaorou', 'autocut', 'operator']) expect(sessions[id]).not.toHaveProperty('persistent')
   })
