@@ -2755,49 +2755,52 @@ export interface Config {
   /** Image downloads: what is fetched, from where, and how much is kept. */
   media: {
     /** Download the images of recorded messages. */
-    images: boolean
+    images: Volatile<boolean>
     /** Largest image downloaded, in bytes. */
-    maxImageBytes: number
+    maxImageBytes: Volatile<number>
     /** Stop downloading once the downloads together reach this many bytes. */
-    maxTotalBytes: number
+    maxTotalBytes: Volatile<number>
     /** Delete downloads of messages older than this many days; 0 keeps them. 30 by default. */
-    retainDays: number
+    retainDays: Volatile<number>
     /** Hosts media may be fetched from, as suffixes. */
-    hostSuffixes: string[]
+    hostSuffixes: Volatile<string[]>
     /** Deadline of one download, in milliseconds. */
-    timeoutMs: number
+    timeoutMs: Volatile<number>
   }
   /** Keep voice messages and, with `asr.enabled`, transcribe them. */
   voice: {
     /** Fetch the audio of voice messages. */
-    download: boolean
+    download: Volatile<boolean>
     /** Largest audio kept, in bytes. */
-    maxBytes: number
+    maxBytes: Volatile<number>
   }
   /** Voice transcription. */
   asr: {
     /** Send voice messages to `ctx.forkVoice.transcribe`. Off by default; it needs fork-voice with transcription on. */
-    enabled: boolean
+    enabled: Volatile<boolean>
   }
   /** How long raw messages are kept. Digests are not affected and can be deleted by group or date. */
   retention: {
     /** Delete messages (text, raw segments, media rows) older than this many days; 0 keeps them. 30 by default. */
-    textDays: number
+    textDays: Volatile<number>
   }
   /** Drop the text and files of a message its sender recalled. */
-  honorRecall: boolean
+  honorRecall: Volatile<boolean>
   /** Fetch what was missed while disconnected. */
   backfill: {
     /** Fetch history after each connection. */
-    enabled: boolean
+    enabled: Volatile<boolean>
     /** Messages fetched per group at most. 20 by default: one small page. */
-    maxMessages: number
+    maxMessages: Volatile<number>
     /** Groups caught up per connection at most; the next connection continues with the following ones. 5 by default. */
-    maxGroups: number
+    maxGroups: Volatile<number>
     /** Pause between two groups' backfills, in milliseconds, plus up to half as much again of jitter. 5000 by default. */
-    gapMs: number
-    /** A connection made less than this long after the previous one dropped fetches nothing (a flapping link would hammer the account); 0 never skips. 30 minutes by default. */
-    skipWithinMs: number
+    gapMs: Volatile<number>
+    /**
+     * A connection made less than this long after the previous one dropped fetches nothing (a flapping link would hammer
+     * the account); 0 never skips. 30 minutes by default.
+     */
+    skipWithinMs: Volatile<number>
   }
   /** Sending to a group. Off, and a group must be listed too; nothing in this package calls it on its own. */
   send: {
@@ -2846,14 +2849,20 @@ export interface Config {
     timeoutMs: number
   }
   /** Tell the owner when the protocol end has been unreachable this long, in milliseconds; 0 turns it off. */
-  offlineNoticeMs: number
+  offlineNoticeMs: Volatile<number>
+  /**
+   * A connection made less than this long after the previous one was last alive skips the group list and the backfill.
+   * The time is kept in `connection-state.json`, so it holds across a plugin restart (a profile reload or a deploy); 0 never skips.
+   * 10 minutes by default.
+   */
+  reconnectQuietMs: Volatile<number>
   /**
    * While an outage lasts, remind the owner again after this long, in milliseconds; 0 never repeats. What was told is kept
    * on disk, so a reload or deploy in the middle of an outage does not tell again. 24 hours by default.
    */
-  offlineRepeatMs: number
+  offlineRepeatMs: Volatile<number>
   /** Where the Settings page lives, quoted in the owner notice (the event service's address); unset names the page without a link. */
-  settingsUrl?: string
+  settingsUrl: Volatile<string | undefined>
   /** The login door: the window onto NapCat's login that the Settings page's QQ section uses. */
   login: {
     /** Ask the door at all. */

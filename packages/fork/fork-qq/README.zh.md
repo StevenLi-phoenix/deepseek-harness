@@ -76,11 +76,14 @@ kind: "package-reference"
 | `digest.agentPreset`、`digest.permissionPreset` | `qq-digest`、`read-only` | 事件 bundle 的 `qq-digest` preset 只有人设、没有工具 |
 | `digest.workspacePath`、`digest.timeZone`、`digest.timeoutMs` | `/Users/dsh-runtime/qq-digest`、`Asia/Shanghai`、`900000` | 工作目录、转录里时间所用的时区，以及等待一次模型调用的期限 |
 | `offlineNoticeMs` | `600000` | 协议端这么久连不上、或报告账号下线时，经 `ctx.forkNotifier` 通知 owner；`0` 关闭。每次中断只通知一次：已通知的事记在 `<dataDir>/outage-notice.json`，直到连接恢复才清除，所以中断期间重载或部署不会重复通知 |
+| `reconnectQuietMs` | `600000` | 距上一次连接最后存活不到这么久就连上时，不取群列表、不补抓，插件重启时同样有效（时间记在 `<dataDir>/connection-state.json`，连接期间每分钟刷新）；`0` 表示从不跳过。群列表无论如何每小时最多取一次 |
 | `offlineRepeatMs` | `86400000` | 中断持续期间，隔这么久（24 小时）再提醒 owner 一次；`0` 不重复 |
 | `settingsUrl` | 未设置 | 事件服务的地址，写进该通知里「设置 → QQ」的旁边；不设置则只提页面名、不带链接 |
 | `login.enabled` | `true` | 向扫码入口询问 NapCat 的登录状态（设置里的 QQ 分区） |
 | `login.url` | `http://127.0.0.1:3002` | 扫码入口（`napcat.sh door`）的地址；必须在本机或 tailnet 上 |
 | `login.timeoutMs` | `5000` | 单次调用扫码入口的期限 |
+
+**哪些改动会重启插件。** profile 重载会重启插件（并断开 OneBot 连接），除非改动只涉及可热更新字段：`groups`、`backfill.*`、`media.*`、`voice.*`、`asr.enabled`、`retention.textDays`、`honorRecall`、`offlineNoticeMs`、`offlineRepeatMs`、`reconnectQuietMs` 和 `settingsUrl` 每次使用时现读，改动无需重启即生效。`url`、`tokenEnv`、`dataDir`、`digest.*`、`send.*` 和 `login.*` 在插件启动时固定（摘要执行器和发送器会复制它们），所以改它们会重启。
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-fork-qq)是全部可接受字段的完整来源。
 

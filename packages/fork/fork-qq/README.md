@@ -76,11 +76,14 @@ Backfilled messages are stored as text only: their images and voice are not down
 | `digest.agentPreset`, `digest.permissionPreset` | `qq-digest`, `read-only` | The event bundle's `qq-digest` preset has a persona and no tools |
 | `digest.workspacePath`, `digest.timeZone`, `digest.timeoutMs` | `/Users/dsh-runtime/qq-digest`, `Asia/Shanghai`, `900000` | Working directory, the zone of the transcript's times, and the wait for one model call |
 | `offlineNoticeMs` | `600000` | Tell the owner (through `ctx.forkNotifier`) when the protocol end has been unreachable this long, or reports the account offline; `0` turns it off. One notice per outage: what was told is kept in `<dataDir>/outage-notice.json` until the connection comes back, so a reload or deploy mid-outage does not tell again |
+| `reconnectQuietMs` | `600000` | A connection made less than this long after the previous one was last alive skips the group list and the backfill, also across a plugin restart (the time is kept in `<dataDir>/connection-state.json`, refreshed every minute while connected); `0` never skips. The group list is fetched at most once an hour either way |
 | `offlineRepeatMs` | `86400000` | While an outage lasts, remind the owner again after this long (24 h); `0` never repeats |
 | `settingsUrl` | unset | The event service's address, quoted in that notice next to "Settings → QQ"; unset names the page without a link |
 | `login.enabled` | `true` | Ask the login door for NapCat's login state (the Settings QQ section) |
 | `login.url` | `http://127.0.0.1:3002` | The login door's address (`napcat.sh door`); it must be on this machine or the tailnet |
 | `login.timeoutMs` | `5000` | Deadline of one call to the door |
+
+**Which changes restart the plugin.** A profile reload restarts the plugin (and drops the OneBot connection) unless the change touches only volatile fields: `groups`, `backfill.*`, `media.*`, `voice.*`, `asr.enabled`, `retention.textDays`, `honorRecall`, `offlineNoticeMs`, `offlineRepeatMs`, `reconnectQuietMs`, and `settingsUrl` are read afresh at each use and apply without a restart. `url`, `tokenEnv`, `dataDir`, `digest.*`, `send.*`, and `login.*` are fixed when the plugin starts (the digest runner and the sender copy them), so changing them restarts it.
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-fork-qq) is the exhaustive source for every accepted field.
 
