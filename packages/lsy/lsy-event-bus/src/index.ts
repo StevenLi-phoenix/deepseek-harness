@@ -3,17 +3,25 @@
 import { randomUUID } from 'node:crypto'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-timer'
-import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
+// Type-only: ctx.sessionController, ctx.workspaceRegistry, and the `compaction/summary` Session event.
+import type {} from '@deepseek-ai/dsh-api-session-controller'
+import type {} from '@deepseek-ai/dsh-compaction'
+import { boundContextSummary, createUserMessage, type TokenUsage } from '@deepseek-ai/dsh-llm'
+import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import type { Domain, KvTable } from '@deepseek-ai/dsh-storage-domain'
 import type { VerifiedWebhookDelivery, WebhookDeliveryId, WebhookRule, WebhookRuleId, WebhookSessionRequest, WebhookSourceId } from '@deepseek-ai/dsh-webhook'
+import type {} from '@deepseek-ai/dsh-workspace'
 import z from '@deepseek-ai/schemastery'
 import { z as zod } from 'zod'
 import { matchesSubscription, suppressionReason } from './match.ts'
-import { LSY_SILENT_REPLY, batchTitle, buildSessionRequest, clip, failureDetail, formatBatchNote, formatReminderNote, formatResultNote, isSilentReply, monitorLabel, reminderLabel } from './prompt.ts'
-import { busDomain, type BatchRecord, type LsyEventRecord, type SubscriptionRecord } from './storage.ts'
+import {
+  LSY_SILENT_REPLY, batchTitle, buildBatchPrompt, buildSessionRequest, clip, failureDetail, formatBatchNote, formatReminderNote,
+  formatResultNote, isSilentReply, monitorLabel, reminderLabel, type CarriedOver,
+} from './prompt.ts'
+import { busDomain, type BatchRecord, type LsyEventRecord, type PersistentRecord, type SubscriptionRecord } from './storage.ts'
 import type {
-  BatchEvent, BatchSummary, LsyDeliveryEvent, LsyEventInput, LsyNotifier, PublishOutcome, SessionAction, Subscription,
-  SubscriptionMeta, SubscriptionOrigin, SubscriptionView, SuppressConfig, UnsubscribeOutcome,
+  BatchEvent, BatchSummary, LsyDeliveryEvent, LsyEventInput, LsyNotifier, PersistentSessionView, PublishOutcome, SessionAction,
+  SessionDelivery, Subscription, SubscriptionMeta, SubscriptionOrigin, SubscriptionView, SuppressConfig, UnsubscribeOutcome,
 } from './types.ts'
 import { LsySubscriptionError, subscriptionProblem } from './validate.ts'
 
@@ -42,6 +50,7 @@ export const LSY_EVENT_KIND = 'lsy-event'
 export const LSY_EVENT_RULE_ID = 'lsy-event-bus'
 
 const HOUR_MS = 3_600_000
+const DAY_MS = 86_400_000
 /** Titles are labels; anything longer is a sensor bug, not content. */
 const MAX_TITLE_CHARS = 300
 
@@ -82,6 +91,11 @@ const sessionActionSchema: z<SessionAction> = z.object({
   maxTextChars: z.natural().min(1).default(2000),
   trustedText: z.boolean().default(false),
   model: z.object({ provider: z.string(), model: z.string() }),
+  persistent: z.object({
+    enabled: z.boolean().default(false),
+    rolloverDays: z.natural().min(1).default(30),
+    maxSeedChars: z.natural().min(1).default(20_000),
+  }),
 })
 
 const subscriptionSchema: z<Subscription> = z.object({
@@ -127,13 +141,34 @@ const deliveryEventSchema = zod.object({
   })),
 })
 
-/** A bus-started Session waiting for the end of its first turn. */
+/** A bus-started turn waiting for its end: the first turn of a new Session, or a batch's turn in a persistent one. */
 interface TrackedSession {
   batchId: string
   subscription: string
   title: string
   text: string | undefined
+  delivery: SessionDelivery
+  /** Tool calls of the turn by tool name. */
+  toolCalls: Map<string, number>
+  /** Compactions that ran during the turn. */
+  compactions: number
+  /** Usage of the turn's last model call. */
+  usage: TokenUsage | undefined
 }
+
+/** A `session` batch handed to the webhook runtime, until its Session's first user message arrives. */
+interface PendingDelivery {
+  delivery: SessionDelivery
+  carried?: CarriedOver
+}
+
+/** The stored Session of a persistent subscription, as the Host resolves it now. */
+type StoredSession =
+  | { kind: 'agent'; agent: { followup(message: ReturnType<typeof createUserMessage>): void } }
+  /** Not found or archived: a new Session replaces it. */
+  | { kind: 'gone'; reason: string }
+  /** Exists but cannot take a turn now (busy writer, no controller): this batch gets a one-off Session. */
+  | { kind: 'unavailable'; reason: string }
 
 /** A Session running a turn started by a Host-schedule reminder. */
 interface TrackedReminder {
@@ -226,7 +261,31 @@ function summarize(batch: BatchRecord): BatchSummary {
     ...(batch.sessionId === undefined ? {} : { sessionId: batch.sessionId }),
     ...(batch.outcome === undefined ? {} : { outcome: batch.outcome }),
     ...(batch.silent === undefined ? {} : { silent: batch.silent }),
+    ...(batch.delivery === undefined ? {} : { delivery: batch.delivery }),
   }
+}
+
+/** The public fields of a stored persistent Session. */
+function persistentView(record: PersistentRecord): PersistentSessionView {
+  return {
+    subscription: record.subscription,
+    sessionId: record.sessionId,
+    createdAt: record.createdAt,
+    batches: record.batches,
+    compactions: record.compactions,
+    ...(record.previous === undefined ? {} : { previous: record.previous }),
+  }
+}
+
+/** `up_comments×2, up_reply_comment×1`, or `none`. */
+function formatToolCalls(calls: ReadonlyMap<string, number>): string {
+  return calls.size === 0 ? 'none' : [...calls].map(([name, count]) => `${name}×${count}`).join(', ')
+}
+
+/** Context size of a turn's last model call, or `unknown` without usage. */
+function formatContext(usage: TokenUsage | undefined): string {
+  if (usage === undefined) return 'unknown'
+  return usage.cacheReadTokens === undefined ? `${usage.inputTokens} input tokens` : `${usage.inputTokens} input tokens (${usage.cacheReadTokens} cache read)`
 }
 
 /** Fail on events a sensor should never produce. */
@@ -291,6 +350,7 @@ export class LsyEventBus extends Service {
   private readonly configSubscriptions: ReadonlyMap<string, Subscription>
   private readonly flushTimers = new Map<string, { at: number; dispose: () => void }>()
   private readonly tracked = new Map<string, TrackedSession>()
+  private readonly deliveries = new Map<string, PendingDelivery>()
   private readonly reminders = new Map<string, TrackedReminder>()
   private readonly inflight = new Set<Promise<void>>()
   private chain: Promise<unknown> = Promise.resolve()
@@ -408,6 +468,24 @@ export class LsyEventBus extends Service {
    */
   pendingCount(): number {
     return this.domain?.table('pending').size ?? 0
+  }
+
+  /**
+   * The persistent Sessions of subscriptions with `session.persistent.enabled`.
+   * @returns one row per subscription that has one; empty before the storage domain opens.
+   */
+  persistentSessions(): PersistentSessionView[] {
+    return rowsOf(this.domain?.table('persistent')).map(persistentView)
+  }
+
+  /**
+   * The subscription whose current persistent Session this is. Tools that may run only in that Session
+   * (for example the `up` preset's note tool) ask this.
+   * @param sessionId - Session to check.
+   * @returns the subscription id, or undefined when the Session is no subscription's current persistent Session.
+   */
+  persistentSubscriptionOf(sessionId: string): string | undefined {
+    return rowsOf(this.domain?.table('persistent')).find(record => record.sessionId === sessionId)?.subscription
   }
 
   /**
@@ -638,11 +716,24 @@ export class LsyEventBus extends Service {
       return
     }
 
-    const runtime = this.ctx.get('webhookRuntime')
-    if (runtime === undefined) {
-      await this.markBatch(batch.id, { status: 'failed', error: 'no webhookRuntime service is mounted' })
+    const session = subscription.session
+    if (session?.persistent?.enabled === true) {
+      await this.actuatePersistent({ batch, events, subscription }, session)
       return
     }
+    await this.dispatchSession({ batch, events, subscription }, 'fresh')
+  }
+
+  /** Start a new Session for one batch through the webhook runtime. */
+  private async dispatchSession(
+    { batch, events, subscription }: FlushedBatch, delivery: SessionDelivery, carried?: CarriedOver,
+  ): Promise<void> {
+    const runtime = this.ctx.get('webhookRuntime')
+    if (runtime === undefined) {
+      await this.markBatch(batch.id, { status: 'failed', error: 'no webhookRuntime service is mounted', delivery })
+      return
+    }
+    this.deliveries.set(batch.id, { delivery, ...(carried === undefined ? {} : { carried }) })
     try {
       runtime.dispatch({
         kind: LSY_EVENT_KIND,
@@ -651,14 +742,154 @@ export class LsyEventBus extends Service {
         event: { subscription: subscription.id, events },
         receivedAt: batch.createdAt,
       })
+      await this.markBatch(batch.id, { delivery })
     } catch (error: unknown) {
+      this.deliveries.delete(batch.id)
       this.ctx.logger.warn(`lsy-event-bus: session dispatch ${batch.id} failed: ${errorText(error)}`)
-      await this.markBatch(batch.id, { status: 'failed', error: errorText(error) })
+      await this.markBatch(batch.id, { status: 'failed', error: errorText(error), delivery })
     }
   }
 
+  /**
+   * Deliver one batch of a persistent subscription: a new turn of its stored Session, a new Session when there is
+   * none or it is gone, a seeded new Session at a rollover, or a one-off Session when the stored one cannot take a turn.
+   */
+  private async actuatePersistent(flushed: FlushedBatch, session: SessionAction): Promise<void> {
+    const { batch, events, subscription } = flushed
+    /* v8 ignore next -- actuate() checked enabled; schemastery materializes the defaults. */
+    const persistent = session.persistent ?? { enabled: true, rolloverDays: 30, maxSeedChars: 20_000 }
+    const domain = await this.ready
+    const stored = domain.table('persistent').get(subscription.id)
+    if (stored === undefined) {
+      this.ctx.logger.info(`lsy-event-bus: ${subscription.id} has no persistent Session yet; batch ${batch.id} starts one`)
+      await this.dispatchSession(flushed, 'persistent-new')
+      return
+    }
+    const ageDays = (Date.now() - stored.createdAt) / DAY_MS
+    if (ageDays >= persistent.rolloverDays) {
+      const summary = stored.lastSummary === undefined ? undefined : clip(stored.lastSummary, persistent.maxSeedChars)
+      this.ctx.logger.info(`lsy-event-bus: ${subscription.id} rolls over Session ${stored.sessionId} after ${ageDays.toFixed(1)} day(s) and ${stored.batches} batch(es); ${summary === undefined ? 'it left no compaction summary' : `its ${summary.length}-char compaction summary is carried over`}`)
+      await this.dispatchSession(flushed, 'rollover', { sessionId: stored.sessionId, summary })
+      return
+    }
+    const resolved = await this.resolveStored(stored.sessionId)
+    if (resolved.kind === 'gone') {
+      this.ctx.logger.info(`lsy-event-bus: persistent Session ${stored.sessionId} of ${subscription.id} is ${resolved.reason}; batch ${batch.id} starts a new one`)
+      await this.serialize(async () => { await domain.table('persistent').delete(subscription.id) })
+      await this.dispatchSession(flushed, 'persistent-new')
+      return
+    }
+    if (resolved.kind === 'unavailable') {
+      this.ctx.logger.warn(`lsy-event-bus: persistent Session ${stored.sessionId} of ${subscription.id} cannot take batch ${batch.id} now (${resolved.reason}); it gets a one-off Session`)
+      await this.dispatchSession(flushed, 'detached')
+      return
+    }
+    const prompt = buildBatchPrompt(subscription.id, session, events)
+    this.deliveries.set(batch.id, { delivery: 'persistent' })
+    try {
+      resolved.agent.followup(createUserMessage({
+        content: [{ type: 'text', text: prompt }],
+        // The same source the webhook runtime gives a new Session's first message, so turn-origin checks
+        // (lsy-taint: `event`) and this bus's own tracking treat both alike.
+        source: {
+          kind: 'webhook',
+          provider: LSY_EVENT_KIND,
+          source: subscription.id as WebhookSourceId,
+          deliveryId: batch.id as WebhookDeliveryId,
+          ruleId: LSY_EVENT_RULE_ID as WebhookRuleId,
+          form: 'notice',
+          summary: boundContextSummary(`${LSY_EVENT_KIND} batch of ${subscription.id} for its persistent Session`),
+        },
+      }))
+    } catch (error: unknown) {
+      this.deliveries.delete(batch.id)
+      this.ctx.logger.warn(`lsy-event-bus: batch ${batch.id} did not enter persistent Session ${stored.sessionId}: ${errorText(error)}`)
+      await this.markBatch(batch.id, { status: 'failed', error: errorText(error), delivery: 'persistent' })
+      return
+    }
+    await this.markBatch(batch.id, { delivery: 'persistent', sessionId: stored.sessionId })
+    const count = await this.serialize(async () => {
+      const current = domain.table('persistent').get(subscription.id)
+      if (current?.sessionId !== stored.sessionId) return stored.batches + 1
+      await domain.table('persistent').put(subscription.id, { ...current, batches: current.batches + 1 })
+      return current.batches + 1
+    })
+    this.ctx.logger.info(`lsy-event-bus: batch ${batch.id} (${events.length} event(s)) entered persistent Session ${stored.sessionId} of ${subscription.id} as its batch #${count} (${ageDays.toFixed(1)} day(s) old, rollover at ${persistent.rolloverDays})`)
+  }
+
+  /** Resolve a persistent subscription's stored Session to its live Agent. */
+  private async resolveStored(sessionId: string): Promise<StoredSession> {
+    const controller = this.ctx.get('sessionController')
+    if (controller === undefined) return { kind: 'unavailable', reason: 'no sessionController service is mounted' }
+    if (this.ctx.get('workspaceRegistry')?.archivedSessionIds.includes(sessionId as SessionId) === true) return { kind: 'gone', reason: 'archived' }
+    try {
+      const result = await controller.resolveAgent(sessionId as SessionId)
+      if ('agent' in result) return { kind: 'agent', agent: result.agent }
+      return result.error.code === 'session/not-found'
+        ? { kind: 'gone', reason: 'not found' }
+        : { kind: 'unavailable', reason: `${result.error.code}: ${result.error.message}` }
+    } catch (error: unknown) {
+      return { kind: 'unavailable', reason: errorText(error) }
+    }
+  }
+
+  /**
+   * Make a newly created Session its subscription's persistent Session, then archive the one it replaces
+   * (the rollover's old Session, or one a concurrent batch created).
+   */
+  private async adopt(subscriptionId: string, sessionId: string, delivery: SessionDelivery): Promise<void> {
+    const domain = await this.ready
+    const previous = await this.serialize(async () => {
+      const table = domain.table('persistent')
+      const current = table.get(subscriptionId)
+      if (current?.sessionId === sessionId) return undefined
+      await table.put(subscriptionId, {
+        subscription: subscriptionId,
+        sessionId,
+        createdAt: Date.now(),
+        batches: 1,
+        compactions: 0,
+        ...(current === undefined ? {} : { previous: current.sessionId }),
+      })
+      return current?.sessionId
+    })
+    this.ctx.logger.info(`lsy-event-bus: Session ${sessionId} is now the persistent Session of ${subscriptionId} (${delivery})${previous === undefined ? '' : `, replacing ${previous}`}`)
+    if (previous !== undefined) await this.archive(previous, subscriptionId)
+  }
+
+  /** Archive a replaced persistent Session; its log stays readable in the Web UI's archive. */
+  private async archive(sessionId: string, subscriptionId: string): Promise<void> {
+    const registry = this.ctx.get('workspaceRegistry')
+    if (registry === undefined) {
+      this.ctx.logger.warn(`lsy-event-bus: replaced Session ${sessionId} of ${subscriptionId} is not archived: no workspaceRegistry service is mounted`)
+      return
+    }
+    try {
+      await registry.archiveSession(sessionId as SessionId)
+      this.ctx.logger.info(`lsy-event-bus: archived replaced Session ${sessionId} of ${subscriptionId}`)
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`lsy-event-bus: replaced Session ${sessionId} of ${subscriptionId} is not archived: ${errorText(error)}`)
+    }
+  }
+
+  /** Keep the latest compaction summary of a persistent Session for its rollover, and count compactions. */
+  private async recordCompaction(sessionId: string, summary: string | undefined): Promise<void> {
+    const domain = await this.ready
+    await this.serialize(async () => {
+      const table = domain.table('persistent')
+      const current = rowsOf(table).find(record => record.sessionId === sessionId)
+      if (current === undefined) return
+      await table.put(current.subscription, {
+        ...current,
+        compactions: current.compactions + 1,
+        ...(summary === undefined ? {} : { lastSummary: summary }),
+      })
+      this.ctx.logger.info(`lsy-event-bus: persistent Session ${sessionId} of ${current.subscription} compacted (#${current.compactions + 1}${summary === undefined ? ', no summary text' : `, ${summary.length}-char summary kept for the rollover`})`)
+    })
+  }
+
   /** Merge fields into one stored batch; a pruned batch is ignored. */
-  private markBatch(id: string, patch: Partial<Pick<BatchRecord, 'status' | 'error' | 'sessionId' | 'outcome' | 'silent'>>): Promise<void> {
+  private markBatch(id: string, patch: Partial<Pick<BatchRecord, 'status' | 'error' | 'sessionId' | 'outcome' | 'silent' | 'delivery'>>): Promise<void> {
     return this.serialize(async () => {
       const domain = await this.ready
       const batches = domain.table('batches')
@@ -677,7 +908,7 @@ export class LsyEventBus extends Service {
       this.ctx.logger.warn(`lsy-event-bus: delivery ${delivery.deliveryId} carries a malformed event`)
       return null
     }
-    return buildSessionRequest(subscription.id, subscription.session, parsed.data.events)
+    return buildSessionRequest(subscription.id, subscription.session, parsed.data.events, this.deliveries.get(delivery.deliveryId)?.carried)
   }
 
   /** Follow bus-started Sessions and unattended reminder turns to their turn end and report the outcome. */
@@ -698,19 +929,40 @@ export class LsyEventBus extends Service {
         }
         if (source.kind !== 'webhook' || source.provider !== LSY_EVENT_KIND || this.tracked.has(session.id)) return
         const batch = this.domain?.table('batches').get(source.deliveryId)
+        const pending = this.deliveries.get(source.deliveryId)
+        this.deliveries.delete(source.deliveryId)
+        const delivery = pending?.delivery ?? batch?.delivery ?? 'fresh'
         this.tracked.set(session.id, {
           batchId: source.deliveryId,
           subscription: source.source,
           title: batch?.title ?? source.source,
           text: undefined,
+          delivery,
+          toolCalls: new Map(),
+          compactions: 0,
+          usage: undefined,
         })
         this.track(this.markBatch(source.deliveryId, { sessionId: session.id }))
+        if (delivery === 'persistent-new' || delivery === 'rollover') this.track(this.adopt(source.source, session.id, delivery))
+        return
+      }
+      case 'tool/call': {
+        const tracked = this.tracked.get(session.id)
+        if (tracked !== undefined) tracked.toolCalls.set(event.data.name, (tracked.toolCalls.get(event.data.name) ?? 0) + 1)
+        return
+      }
+      case 'compaction/summary': {
+        const tracked = this.tracked.get(session.id)
+        if (tracked !== undefined) tracked.compactions += 1
+        const summary = event.data.summary.filter(isTextPart).map(part => part.text).join('\n').trim()
+        this.track(this.recordCompaction(session.id, summary === '' ? undefined : summary))
         return
       }
       case 'assistant/message': {
         const tracked = this.tracked.get(session.id)
         const reminder = this.reminders.get(session.id)
         if (tracked === undefined && reminder === undefined) return
+        if (tracked !== undefined && event.data.usage !== undefined) tracked.usage = event.data.usage
         const text = messageText(event.data.message.content)
         if (text === undefined) return
         if (tracked !== undefined) tracked.text = text
@@ -729,7 +981,7 @@ export class LsyEventBus extends Service {
         const stoppedByOwner = event.data.reason.kind === 'aborted' && event.data.reason.reason.kind === 'user'
         // The first-turn result of a bus-started Session already carries a reminder that joined that turn.
         if (tracked !== undefined) {
-          this.ctx.logger.info(`lsy-event-bus: Session ${session.id} of ${tracked.batchId} ended its first turn: ${ended}`)
+          this.ctx.logger.info(`lsy-event-bus: ${tracked.subscription} batch ${tracked.batchId} in Session ${session.id} (${tracked.delivery}) ended: ${ended}; context ${formatContext(tracked.usage)}; compaction ${tracked.compactions === 0 ? 'did not run' : `ran ${tracked.compactions} time(s)`}; tool calls ${formatToolCalls(tracked.toolCalls)}`)
           this.track(this.reportResult(tracked, outcome, detail, stoppedByOwner))
         } else if (reminder !== undefined) {
           this.ctx.logger.info(`lsy-event-bus: reminder turn of Session ${session.id} ended: ${ended}`)

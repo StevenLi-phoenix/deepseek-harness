@@ -75,7 +75,41 @@ export interface SessionAction {
     /** Provider-owned model id. */
     model: string
   }
+  /**
+   * One Session for the whole subscription instead of one per batch. Configuration rows only;
+   * omitted, or `enabled: false`, starts a new Session per batch.
+   */
+  persistent?: PersistentSessionAction
 }
+
+/**
+ * How a `session` subscription keeps one Session across batches. The first batch creates it through
+ * the webhook runtime; later batches enter it as new turns with the same prompt framing. A stored
+ * Session that is gone or archived is replaced by a new one. After `rolloverDays` the next batch starts
+ * a new Session whose first message carries the old Session's last compaction summary, and the old
+ * Session is archived (DSH has no Session deletion; the archive keeps its log).
+ */
+export interface PersistentSessionAction {
+  /** Reuse one Session for this subscription. */
+  enabled: boolean
+  /** Days after which the next batch starts a new Session and archives the old one. */
+  rolloverDays: number
+  /** Characters of the carried-over compaction summary kept in the new Session's first message. */
+  maxSeedChars: number
+}
+
+/** How the bus delivered one `session` batch. */
+export type SessionDelivery =
+  /** A new Session per batch (not persistent). */
+  | 'fresh'
+  /** The first Session of a persistent subscription, or its replacement after the stored one vanished. */
+  | 'persistent-new'
+  /** A new turn of the stored persistent Session. */
+  | 'persistent'
+  /** A new persistent Session seeded from the old one, which is archived. */
+  | 'rollover'
+  /** A one-off Session because the stored one could not take a turn right now; the stored one stays. */
+  | 'detached'
 
 /** One routing rule, from the bus configuration or created at run time through `LsyEventBus.subscribe()`. */
 export interface Subscription {
@@ -128,6 +162,21 @@ export interface BatchSummary {
   sessionId?: string
   outcome?: string
   silent?: boolean
+  delivery?: SessionDelivery
+}
+
+/** The persistent Session of one subscription, as `LsyEventBus.persistentSessions()` reports it. */
+export interface PersistentSessionView {
+  subscription: string
+  sessionId: string
+  /** When the Session became the subscription's Session, in Unix epoch milliseconds. */
+  createdAt: number
+  /** Batches delivered to it. */
+  batches: number
+  /** Compactions observed in it. */
+  compactions: number
+  /** The Session it replaced at a rollover, if any. */
+  previous?: string
 }
 
 /** One subscription as `LsyEventBus.listSubscriptions()` reports it. */

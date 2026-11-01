@@ -1,4 +1,4 @@
-/** Shared bus test fixtures: memory storage, notifier, owner relay, and webhook runtime doubles, and Session event emission. */
+/** Bus test fixtures: memory storage, service doubles (notifier, relay, webhook, Session controller, Workspaces), Session events. */
 import { Context } from '@deepseek-ai/cordis'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
 import Storage from '@deepseek-ai/dsh-storage'
@@ -30,6 +30,57 @@ export function fakeRuntime(): FakeRuntime {
     dispatch(delivery) { runtime.deliveries.push(delivery) },
   }
   return runtime
+}
+
+/** A message a persistent subscription sent into a stored Session. */
+export interface Followup {
+  content: Array<{ type: string; text?: string }>
+  source: Record<string, unknown>
+}
+
+/** Session controller double: Sessions it knows take follow-ups; `failures` answer with an error code instead. */
+export interface FakeController {
+  followups: Map<string, Followup[]>
+  failures: Map<string, string>
+  known: Set<string>
+  resolveAgent(sessionId: string): Promise<{ agent: { followup(message: Followup): void } } | { error: { code: string; message: string } }>
+}
+
+/** A Session controller double that knows `known`. */
+export function fakeController(...known: string[]): FakeController {
+  const controller: FakeController = {
+    followups: new Map(),
+    failures: new Map(),
+    known: new Set(known),
+    async resolveAgent(sessionId) {
+      const failure = controller.failures.get(sessionId)
+      if (failure !== undefined) return { error: { code: failure, message: `${failure} for ${sessionId}` } }
+      if (!controller.known.has(sessionId)) return { error: { code: 'session/not-found', message: `session "${sessionId}" not found` } }
+      const followup = (message: Followup): void => {
+        controller.followups.set(sessionId, [...controller.followups.get(sessionId) ?? [], message])
+      }
+      return { agent: { followup } }
+    },
+  }
+  return controller
+}
+
+/** Workspace registry double recording archives. */
+export interface FakeRegistry {
+  archivedSessionIds: string[]
+  archiveSession(sessionId: string): Promise<void>
+}
+
+/** A Workspace registry double; `refuse` makes archiving reject. */
+export function fakeRegistry(refuse?: string): FakeRegistry {
+  const registry: FakeRegistry = {
+    archivedSessionIds: [],
+    async archiveSession(sessionId) {
+      if (refuse !== undefined) throw new Error(refuse)
+      registry.archivedSessionIds.push(sessionId)
+    },
+  }
+  return registry
 }
 
 export const baseConfig: Config = {
@@ -87,6 +138,10 @@ export interface HarnessOptions {
   /** Claiming channel per Session, served as `ctx.ownerRelay.ownerOf()`; omitted mounts no relay. */
   claims?: ReadonlyMap<string, string>
   runtime?: FakeRuntime | false
+  controller?: FakeController
+  registry?: FakeRegistry
+  /** Collects `info` and `warn` log lines. */
+  logs?: string[]
 }
 
 /**
@@ -97,6 +152,8 @@ export interface HarnessOptions {
 export async function harness(options: HarnessOptions = {}) {
   const ctx = new Context()
   contexts.push(ctx)
+  const logs = options.logs
+  if (logs !== undefined) ctx.logger.exporter({ levels: { default: 3 }, export: (message) => { logs.push(`${message.type}: ${String(message.args[0])}`) } })
   await ctx.plugin(Timer)
   await ctx.plugin(Storage)
   const pool = options.pool ?? new MemoryMediaPool()
@@ -117,6 +174,8 @@ export async function harness(options: HarnessOptions = {}) {
   if (claims !== undefined) ctx.provide('ownerRelay' as never, { ownerOf: (id: string) => claims.get(id) } as never)
   const runtime = options.runtime === false ? fakeRuntime() : options.runtime ?? fakeRuntime()
   if (options.runtime !== false) ctx.provide('webhookRuntime', runtime as never)
+  if (options.controller !== undefined) ctx.provide('sessionController', options.controller as never)
+  if (options.registry !== undefined) ctx.provide('workspaceRegistry', options.registry as never)
   await ctx.plugin(LsyEventBus, options.config ?? baseConfig)
   await vi.advanceTimersByTimeAsync(0)
   const emit = (sessionId: string, event: unknown): void => {
