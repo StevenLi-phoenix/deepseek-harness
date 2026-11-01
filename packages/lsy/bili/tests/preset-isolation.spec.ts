@@ -141,12 +141,8 @@ describe('the qq-digest preset\'s tools', () => {
   })
 
   it('may add style_note only through lsy-style, and only that row', () => {
-    // allowed-if-present: the base has no `style_note` yet; once lsy-style registers it, its row is the one that mounts it.
-    const style = digestRows().filter(row => row.name === '@deepseek-ai/dsh-lsy-style')
-    expect(style.length).toBeLessThanOrEqual(1)
-    const styleSource = readFileSync(join(ROOT, 'packages/lsy/lsy-style/src/index.ts'), 'utf8')
-    const registersStyleNote = /name: 'style_note'/u.test(styleSource)
-    if (!registersStyleNote) expect(style).toEqual([])
+    // The row's exact tools are pinned in "the speaking-style tools by preset" below.
+    expect(digestRows().filter(row => row.name === '@deepseek-ai/dsh-lsy-style').map(row => row.id)).toEqual(['lsy-style-prompt'])
   })
 
   it('puts the long-lived Session\'s compaction in an isolated group of compaction rows only', () => {
