@@ -55,52 +55,52 @@ export interface Config {
   /** Image downloads: what is fetched, from where, and how much is kept. */
   media: {
     /** Download the images of recorded messages. */
-    images: boolean
+    images: Volatile<boolean>
     /** Largest image downloaded, in bytes. */
-    maxImageBytes: number
+    maxImageBytes: Volatile<number>
     /** Stop downloading once the downloads together reach this many bytes. */
-    maxTotalBytes: number
+    maxTotalBytes: Volatile<number>
     /** Delete downloads of messages older than this many days; 0 keeps them. 30 by default. */
-    retainDays: number
+    retainDays: Volatile<number>
     /** Hosts media may be fetched from, as suffixes. */
-    hostSuffixes: string[]
+    hostSuffixes: Volatile<string[]>
     /** Deadline of one download, in milliseconds. */
-    timeoutMs: number
+    timeoutMs: Volatile<number>
   }
   /** Keep voice messages and, with `asr.enabled`, transcribe them. */
   voice: {
     /** Fetch the audio of voice messages. */
-    download: boolean
+    download: Volatile<boolean>
     /** Largest audio kept, in bytes. */
-    maxBytes: number
+    maxBytes: Volatile<number>
   }
   /** Voice transcription. */
   asr: {
     /** Send voice messages to `ctx.lsyVoice.transcribe`. Off by default; it needs lsy-voice with transcription on. */
-    enabled: boolean
+    enabled: Volatile<boolean>
   }
   /** How long raw messages are kept. Digests are not affected and can be deleted by group or date. */
   retention: {
     /** Delete messages (text, raw segments, media rows) older than this many days; 0 keeps them. 30 by default. */
-    textDays: number
+    textDays: Volatile<number>
   }
   /** Drop the text and files of a message its sender recalled. */
-  honorRecall: boolean
+  honorRecall: Volatile<boolean>
   /** Fetch what was missed while disconnected. */
   backfill: {
     /** Fetch history after each connection. */
-    enabled: boolean
+    enabled: Volatile<boolean>
     /** Messages fetched per group at most. 20 by default: one small page. */
-    maxMessages: number
+    maxMessages: Volatile<number>
     /** Groups caught up per connection at most; the next connection continues with the following ones. 5 by default. */
-    maxGroups: number
+    maxGroups: Volatile<number>
     /** Pause between two groups' backfills, in milliseconds, plus up to half as much again of jitter. 5000 by default. */
-    gapMs: number
+    gapMs: Volatile<number>
     /**
      * A connection made less than this long after the previous one dropped fetches nothing (a flapping link would hammer
      * the account); 0 never skips. 30 minutes by default.
      */
-    skipWithinMs: number
+    skipWithinMs: Volatile<number>
   }
   /** Sending to a group. Off, and a group must be listed too; nothing in this package calls it on its own. */
   send: {
@@ -149,14 +149,20 @@ export interface Config {
     timeoutMs: number
   }
   /** Tell the owner when the protocol end has been unreachable this long, in milliseconds; 0 turns it off. */
-  offlineNoticeMs: number
+  offlineNoticeMs: Volatile<number>
+  /**
+   * A connection made less than this long after the previous one was last alive skips the group list and the backfill.
+   * The time is kept in `connection-state.json`, so it holds across a plugin restart (a profile reload or a deploy); 0 never skips.
+   * 10 minutes by default.
+   */
+  reconnectQuietMs: Volatile<number>
   /**
    * While an outage lasts, remind the owner again after this long, in milliseconds; 0 never repeats. What was told is kept
    * on disk, so a reload or deploy in the middle of an outage does not tell again. 24 hours by default.
    */
-  offlineRepeatMs: number
+  offlineRepeatMs: Volatile<number>
   /** Where the Settings page lives, quoted in the owner notice (the event service's address); unset names the page without a link. */
-  settingsUrl?: string
+  settingsUrl: Volatile<string | undefined>
   /** The login door: the window onto NapCat's login that the Settings page's QQ section uses. */
   login: {
     /** Ask the door at all. */
@@ -175,26 +181,26 @@ export const Config = z.object({
   groups: z.array(z.string()).default([]).volatile(),
   dataDir: z.string(),
   media: z.object({
-    images: z.boolean().default(true),
-    maxImageBytes: z.natural().min(1024).default(15 * 1024 * 1024),
-    maxTotalBytes: z.natural().min(1024).default(5 * 1024 ** 3),
-    retainDays: z.natural().default(30),
-    hostSuffixes: z.array(z.string()).default([...DEFAULT_MEDIA_HOST_SUFFIXES]),
-    timeoutMs: z.natural().min(1000).default(30_000),
+    images: z.boolean().default(true).volatile(),
+    maxImageBytes: z.natural().min(1024).default(15 * 1024 * 1024).volatile(),
+    maxTotalBytes: z.natural().min(1024).default(5 * 1024 ** 3).volatile(),
+    retainDays: z.natural().default(30).volatile(),
+    hostSuffixes: z.array(z.string()).default([...DEFAULT_MEDIA_HOST_SUFFIXES]).volatile(),
+    timeoutMs: z.natural().min(1000).default(30_000).volatile(),
   }),
   voice: z.object({
-    download: z.boolean().default(true),
-    maxBytes: z.natural().min(1024).default(10 * 1024 * 1024),
+    download: z.boolean().default(true).volatile(),
+    maxBytes: z.natural().min(1024).default(10 * 1024 * 1024).volatile(),
   }),
-  asr: z.object({ enabled: z.boolean().default(false) }),
-  retention: z.object({ textDays: z.natural().default(30) }),
-  honorRecall: z.boolean().default(true),
+  asr: z.object({ enabled: z.boolean().default(false).volatile() }),
+  retention: z.object({ textDays: z.natural().default(30).volatile() }),
+  honorRecall: z.boolean().default(true).volatile(),
   backfill: z.object({
-    enabled: z.boolean().default(true),
-    maxMessages: z.natural().min(1).default(20),
-    maxGroups: z.natural().min(1).default(5),
-    gapMs: z.natural().default(5000),
-    skipWithinMs: z.natural().default(30 * 60_000),
+    enabled: z.boolean().default(true).volatile(),
+    maxMessages: z.natural().min(1).default(20).volatile(),
+    maxGroups: z.natural().min(1).default(5).volatile(),
+    gapMs: z.natural().default(5000).volatile(),
+    skipWithinMs: z.natural().default(30 * 60_000).volatile(),
   }),
   send: z.object({
     enabled: z.boolean().default(false),
@@ -220,9 +226,10 @@ export const Config = z.object({
     timeZone: z.string().default('Asia/Shanghai'),
     timeoutMs: z.natural().min(10_000).default(15 * 60_000),
   }),
-  offlineNoticeMs: z.natural().default(10 * 60_000),
-  offlineRepeatMs: z.natural().default(24 * 3_600_000),
-  settingsUrl: z.string(),
+  offlineNoticeMs: z.natural().default(10 * 60_000).volatile(),
+  reconnectQuietMs: z.natural().default(10 * 60_000).volatile(),
+  offlineRepeatMs: z.natural().default(24 * 3_600_000).volatile(),
+  settingsUrl: z.string().volatile(),
   login: z.object({
     enabled: z.boolean().default(true),
     url: z.string().default('http://127.0.0.1:3002'),
@@ -277,7 +284,7 @@ function assertConfig(config: Config): void {
   if (!isPrivateUrl(config.url)) throw new Error('lsy-qq: url must be a ws:// or wss:// address on this machine (127.0.0.1, localhost) or the tailnet (100.64.0.0/10, *.ts.net)')
   if (config.dataDir !== undefined && !isAbsolute(config.dataDir)) throw new Error('lsy-qq: dataDir must be an absolute path')
   if (!isPrivateAddress(config.login.url, ['http:', 'https:'])) throw new Error('lsy-qq: login.url must be an http(s) address on this machine (127.0.0.1, localhost) or the tailnet (100.64.0.0/10, *.ts.net)')
-  if (config.settingsUrl !== undefined && !/^https?:\/\//.test(config.settingsUrl)) throw new Error('lsy-qq: settingsUrl must be an http(s) address')
+  if (config.settingsUrl.get() !== undefined && !/^https?:\/\//.test(config.settingsUrl.get() ?? '')) throw new Error('lsy-qq: settingsUrl must be an http(s) address')
   if (!isAbsolute(config.digest.workspacePath)) throw new Error('lsy-qq: digest.workspacePath must be an absolute path')
   for (const id of [...config.groups.get(), ...config.send.groups]) {
     if (!GROUP_ID.test(id)) throw new Error(`lsy-qq: ${JSON.stringify(id)} is not a group number (digits only)`)
@@ -351,6 +358,11 @@ export class QqObserver extends Service {
   private loginInFlight: Promise<QqLoginReading> | undefined
   private lastLoginKey = ''
   private lastWakeAt = 0
+  /** What the last process left in `connection-state.json`: when the connection was last alive, and the group list last fetched. */
+  private connectionState: { lastAliveAt?: number; lastGroupListAt?: number } = {}
+  private connectionStateWarned = false
+  /** This connection follows the previous one so closely that the group list and the backfill are skipped. */
+  private quietOpen = false
   /** When the connection last came up, and when a connection that had been up last dropped. */
   private openedAt: number | undefined
   private lastDisconnectAt: number | undefined
@@ -374,6 +386,7 @@ export class QqObserver extends Service {
     mkdirSync(this.dataDir, { recursive: true, mode: 0o700 })
     this.store = new QqStore(join(this.dataDir, 'qq.db'))
     this.loadNotice()
+    this.loadConnectionState()
     const d = config.digest
     const digestConfig: DigestConfig = {
       enabled: d.enabled,
@@ -406,7 +419,11 @@ export class QqObserver extends Service {
     ctx.effect(() => {
       this.loop = this.run()
       const schedule = this.schedule()
+      // While connected, note once a minute that the connection is alive: a restart then knows how long ago it was.
+      const alive = setInterval(() => { if (this.client?.connected === true) this.touchAlive() }, 60_000)
+      alive.unref()
       return async () => {
+        clearInterval(alive)
         this.stopping = true
         this.abort.abort(new Error('lsy-qq is stopping'))
         await Promise.allSettled([this.loop, schedule])
@@ -414,6 +431,39 @@ export class QqObserver extends Service {
         this.store.close()
       }
     }, 'lsyQq.lifecycle()')
+  }
+
+  /**
+   * The settings the Settings page and the profile patch may change without a restart (and so without dropping the OneBot
+   * connection), read afresh at each use. Everything not read here is fixed when the plugin starts.
+   */
+  private get live() {
+    const { media, voice, asr, retention, backfill } = this.config
+    return {
+      media: {
+        images: media.images.get(),
+        maxImageBytes: media.maxImageBytes.get(),
+        maxTotalBytes: media.maxTotalBytes.get(),
+        retainDays: media.retainDays.get(),
+        hostSuffixes: [...media.hostSuffixes.get()],
+        timeoutMs: media.timeoutMs.get(),
+      },
+      voice: { download: voice.download.get(), maxBytes: voice.maxBytes.get() },
+      asr: { enabled: asr.enabled.get() },
+      retention: { textDays: retention.textDays.get() },
+      honorRecall: this.config.honorRecall.get(),
+      backfill: {
+        enabled: backfill.enabled.get(),
+        maxMessages: backfill.maxMessages.get(),
+        maxGroups: backfill.maxGroups.get(),
+        gapMs: backfill.gapMs.get(),
+        skipWithinMs: backfill.skipWithinMs.get(),
+      },
+      offlineNoticeMs: this.config.offlineNoticeMs.get(),
+      offlineRepeatMs: this.config.offlineRepeatMs.get(),
+      reconnectQuietMs: this.config.reconnectQuietMs.get(),
+      settingsUrl: this.config.settingsUrl.get(),
+    }
   }
 
   // ---- the group list ----
@@ -442,7 +492,7 @@ export class QqObserver extends Service {
     }
     for (const id of removed) this.ctx.logger.info(`lsy-qq: no longer recording group ${id}; what is stored ages out with retention`)
     const client = this.client
-    if (client === undefined || !this.config.backfill.enabled) return
+    if (client === undefined || !this.live.backfill.enabled) return
     if (added.length > 0) this.track(this.queueBackfill(added, client))
   }
 
@@ -586,7 +636,7 @@ export class QqObserver extends Service {
 
   /** The closing sentence of an owner notice: where to log in again. */
   private settingsHint(): string {
-    const url = this.config.settingsUrl
+    const url = this.live.settingsUrl
     return `在 DSH 网页端「设置 → QQ」扫码重新登录${url === undefined ? '' : `：${url}`}`
   }
 
@@ -781,7 +831,10 @@ export class QqObserver extends Service {
       } finally {
         this.client = undefined
       }
-      if (upAt !== undefined) this.lastDisconnectAt = this.now()
+      if (upAt !== undefined) {
+        this.lastDisconnectAt = this.now()
+        this.touchAlive()
+      }
       this.disconnectedSince ??= this.now()
       this.track(this.checkOutage())
       failures = upAt !== undefined && this.now() - upAt >= STABLE_MS ? 1 : failures + 1
@@ -796,15 +849,15 @@ export class QqObserver extends Service {
   /** Tell the owner once when the protocol end stays unreachable. */
   private async checkOutage(): Promise<void> {
     const since = this.disconnectedSince
-    if (since === undefined || this.config.offlineNoticeMs === 0) return
-    if (this.now() - since < this.config.offlineNoticeMs) return
+    if (since === undefined || this.live.offlineNoticeMs === 0) return
+    if (this.now() - since < this.live.offlineNoticeMs) return
     await this.notifyOwner('QQ 协议端连不上', `lsy-qq 已有 ${Math.round((this.now() - since) / 60_000)} 分钟连不上协议端，多半是 QQ 被踢下线了。${this.settingsHint()}`)
   }
 
   /** Whether the owner may be told now: never told of this outage, or told long enough ago to remind. */
   private noticeDue(): boolean {
     if (this.lastNoticeAt === undefined) return true
-    return this.config.offlineRepeatMs > 0 && this.now() - this.lastNoticeAt >= this.config.offlineRepeatMs
+    return this.live.offlineRepeatMs > 0 && this.now() - this.lastNoticeAt >= this.live.offlineRepeatMs
   }
 
   private get noticeFile(): string {
@@ -825,6 +878,36 @@ export class QqObserver extends Service {
     if (this.lastNoticeAt === undefined) return
     this.lastNoticeAt = undefined
     rmSync(this.noticeFile, { force: true })
+  }
+
+  private get connectionStateFile(): string {
+    return join(this.dataDir, 'connection-state.json')
+  }
+
+  private loadConnectionState(): void {
+    try {
+      const saved = JSON.parse(readFileSync(this.connectionStateFile, 'utf8')) as Record<string, unknown>
+      for (const key of ['lastAliveAt', 'lastGroupListAt'] as const) {
+        const value = saved[key]
+        if (typeof value === 'number' && Number.isFinite(value)) this.connectionState[key] = value
+      }
+    } catch {
+      // A first start, or an unreadable file: nothing is known, so nothing is skipped.
+    }
+  }
+
+  private saveConnectionState(): void {
+    try {
+      writeFileSync(this.connectionStateFile, JSON.stringify(this.connectionState), { mode: 0o600 })
+    } catch (error: unknown) {
+      if (!this.connectionStateWarned) this.ctx.logger.warn(`lsy-qq: could not remember the connection state: ${errorText(error)}`)
+      this.connectionStateWarned = true
+    }
+  }
+
+  private touchAlive(): void {
+    this.connectionState.lastAliveAt = this.now()
+    this.saveConnectionState()
   }
 
   private async notifyOwner(title: string, body: string): Promise<void> {
@@ -849,6 +932,13 @@ export class QqObserver extends Service {
   private async onOpen(): Promise<void> {
     const client = this.client
     if (client === undefined) return
+    const { reconnectQuietMs } = this.live
+    const last = this.connectionState.lastAliveAt
+    this.quietOpen = reconnectQuietMs > 0 && last !== undefined && this.now() - last < reconnectQuietMs
+    if (this.quietOpen && last !== undefined) {
+      this.ctx.logger.info(`lsy-qq: the last connection was connected ${Math.round((this.now() - last) / 60_000)} min ago; not backfilling and not fetching the group list this time`)
+    }
+    this.touchAlive()
     try {
       const me = await client.call<{ user_id?: number | string; nickname?: string }>('get_login_info')
       this.selfId = String(me.user_id ?? '')
@@ -856,8 +946,8 @@ export class QqObserver extends Service {
     } catch (error: unknown) {
       this.ctx.logger.warn(`lsy-qq: get_login_info failed: ${errorText(error)}`)
     }
-    await this.refreshGroups()
-    if (this.config.backfill.enabled) await this.backfillOnOpen(client)
+    if (!this.quietOpen) await this.refreshGroups()
+    if (this.live.backfill.enabled && !this.quietOpen) await this.backfillOnOpen(client)
   }
 
   /**
@@ -866,7 +956,7 @@ export class QqObserver extends Service {
    * ones), one small page per group, and a pause between groups.
    */
   private async backfillOnOpen(client: OneBotClient): Promise<void> {
-    const { skipWithinMs, maxGroups } = this.config.backfill
+    const { skipWithinMs, maxGroups } = this.live.backfill
     if (skipWithinMs > 0 && this.lastDisconnectAt !== undefined && this.now() - this.lastDisconnectAt < skipWithinMs) {
       this.ctx.logger.info(`lsy-qq: the previous connection dropped ${Math.round((this.now() - this.lastDisconnectAt) / 60_000)} min ago; not backfilling this time`)
       return
@@ -904,7 +994,7 @@ export class QqObserver extends Service {
   }
 
   private backfillGap(): number {
-    const gap = this.config.backfill.gapMs
+    const gap = this.live.backfill.gapMs
     return gap + Math.random() * gap / 2
   }
 
@@ -924,6 +1014,9 @@ export class QqObserver extends Service {
   private async refreshGroups(): Promise<void> {
     const client = this.client
     if (client === undefined) return
+    // At most once an hour, across restarts too: the list rarely changes and every ask reaches the account's host.
+    const last = this.connectionState.lastGroupListAt
+    if (last !== undefined && this.now() - last < GROUP_REFRESH_MS) return
     try {
       const list = await client.call<Array<{ group_id: number | string; group_name?: string; member_count?: number }>>('get_group_list')
       const now = this.now()
@@ -931,6 +1024,8 @@ export class QqObserver extends Service {
         const groupId = String(group.group_id)
         this.store.upsertGroup({ groupId, name: group.group_name ?? groupId, memberCount: group.member_count }, now)
       }
+      this.connectionState.lastGroupListAt = now
+      this.saveConnectionState()
       const missing = [...this.recordedIds].filter(id => !list.some(group => String(group.group_id) === id))
       this.ctx.logger.info(`lsy-qq: the account is in ${list.length} group(s); ${this.recordedIds.size - missing.length} of the ${this.recordedIds.size} listed one(s) found${missing.length === 0 ? '' : `; not a member of ${missing.join(', ')}`}`)
     } catch (error: unknown) {
@@ -945,10 +1040,10 @@ export class QqObserver extends Service {
     let seq: string | undefined
     let fetched = 0
     let added = 0
-    while (fetched < this.config.backfill.maxMessages && this.client === client) {
+    while (fetched < this.live.backfill.maxMessages && this.client === client) {
       let data: { messages?: OneBotEvent[] }
       try {
-        data = await client.call<{ messages?: OneBotEvent[] }>('get_group_msg_history', { group_id: Number(groupId), count: Math.min(50, this.config.backfill.maxMessages - fetched), ...seq === undefined ? {} : { message_seq: Number(seq) } })
+        data = await client.call<{ messages?: OneBotEvent[] }>('get_group_msg_history', { group_id: Number(groupId), count: Math.min(50, this.live.backfill.maxMessages - fetched), ...seq === undefined ? {} : { message_seq: Number(seq) } })
       } catch (error: unknown) {
         // No anchor for the first page means the group has no message to fetch: nothing to backfill, not a failure.
         if (seq !== undefined || !NO_HISTORY.test(errorText(error))) throw error
@@ -983,7 +1078,7 @@ export class QqObserver extends Service {
       return
     }
     if (event.post_type !== 'notice') return
-    if (event.notice_type === 'group_recall' && this.config.honorRecall) {
+    if (event.notice_type === 'group_recall' && this.live.honorRecall) {
       await this.onRecall(String(event.group_id ?? ''), String(event.message_id ?? ''))
     } else if (event.notice_type === 'bot_offline') {
       this.ctx.logger.warn('lsy-qq: the protocol end reports the account went offline')
@@ -1054,17 +1149,17 @@ export class QqObserver extends Service {
   }
 
   private overBudget(): boolean {
-    if (this.store.mediaBytes() < this.config.media.maxTotalBytes) return false
+    if (this.store.mediaBytes() < this.live.media.maxTotalBytes) return false
     if (this.now() - this.budgetWarnedAt > 3_600_000) {
       this.budgetWarnedAt = this.now()
-      this.ctx.logger.warn(`lsy-qq: downloads reached media.maxTotalBytes (${this.config.media.maxTotalBytes}); new media is not downloaded`)
+      this.ctx.logger.warn(`lsy-qq: downloads reached media.maxTotalBytes (${this.live.media.maxTotalBytes}); new media is not downloaded`)
     }
     return true
   }
 
   private async fetchMedia(item: MediaJob): Promise<void> {
     const { rowId, groupId, at, mediaId, kind, url, name } = item
-    const media = this.config.media
+    const media = this.live.media
     try {
       if (kind === 'image') {
         if (!media.images || url === undefined || this.overBudget()) return
@@ -1088,7 +1183,7 @@ export class QqObserver extends Service {
   /** Fetch a voice message as MP3 through the protocol end (which decodes QQ's SILK), keep it, and transcribe it if asked. */
   private async fetchVoice(item: MediaJob): Promise<void> {
     const { rowId, groupId, at, mediaId, url, file, name } = item
-    if (!this.config.voice.download || this.overBudget()) return
+    if (!this.live.voice.download || this.overBudget()) return
     let bytes: Buffer | undefined
     const client = this.client
     if (client !== undefined && file !== undefined) {
@@ -1099,21 +1194,21 @@ export class QqObserver extends Service {
         this.ctx.logger.debug(`lsy-qq: get_record failed for message row ${rowId}: ${errorText(error)}`)
       }
     }
-    if (bytes === undefined && url !== undefined && isAllowedMediaUrl(url, this.config.media.hostSuffixes)) {
-      bytes = await fetchCapped(url, this.config.voice.maxBytes, this.config.media.timeoutMs)
+    if (bytes === undefined && url !== undefined && isAllowedMediaUrl(url, this.live.media.hostSuffixes)) {
+      bytes = await fetchCapped(url, this.live.voice.maxBytes, this.live.media.timeoutMs)
     }
     if (bytes === undefined) {
       this.store.setMediaError(mediaId, 'the protocol end gave no audio')
       return
     }
-    if (bytes.length > this.config.voice.maxBytes) {
-      this.store.setMediaError(mediaId, `audio exceeds ${this.config.voice.maxBytes} bytes`)
+    if (bytes.length > this.live.voice.maxBytes) {
+      this.store.setMediaError(mediaId, `audio exceeds ${this.live.voice.maxBytes} bytes`)
       return
     }
     const saved = await saveMedia(this.dataDir, groupId, at, bytes, detectExtension(bytes, 'voice', name))
     this.store.setMediaFile(mediaId, { localPath: saved.path, sha256: saved.sha256, bytes: saved.bytes })
     this.counters.voices += 1
-    if (!this.config.asr.enabled) return
+    if (!this.live.asr.enabled) return
     const voice = this.ctx.get('lsyVoice') as { canTranscribe(path: string): boolean; transcribe(path: string): Promise<{ text: string }> } | undefined
     if (voice === undefined || !voice.canTranscribe(saved.path)) {
       this.ctx.logger.debug(`lsy-qq: voice of message row ${rowId} not transcribed: lsy-voice is missing, off, or does not read this format`)
@@ -1169,7 +1264,7 @@ export class QqObserver extends Service {
 
   /** Apply the retention windows: raw messages older than `retention.textDays`, downloads older than `media.retainDays`. */
   private async prune(): Promise<void> {
-    const { retainDays } = this.config.media
+    const { retainDays } = this.live.media
     if (retainDays > 0) {
       const expired = this.store.expiredMedia(this.now() - retainDays * 86_400_000)
       for (const item of expired) {
@@ -1178,7 +1273,7 @@ export class QqObserver extends Service {
       }
       if (expired.length > 0) this.ctx.logger.info(`lsy-qq: removed ${expired.length} download(s) older than ${retainDays} day(s)`)
     }
-    const { textDays } = this.config.retention
+    const { textDays } = this.live.retention
     if (textDays > 0) {
       const gone = this.store.pruneMessages(this.now() - textDays * 86_400_000)
       for (const path of gone.files) await removeMedia(path)

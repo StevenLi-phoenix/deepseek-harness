@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
+import { createVolatile, updateVolatile } from '@deepseek-ai/cosmokit'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Config, QqObserver as Observer } from '../src/index.ts'
 import { FakeOneBot, groupMessage } from './fake-onebot.ts'
@@ -51,7 +52,7 @@ async function boot(backfill: Record<string, unknown>, history: (params: Record<
   ctx.provide('sessionTitle', { rename: vi.fn(), get: vi.fn() } as never)
   await ctx.plugin(Observer, {
     url: fake.url, groups: GROUPS, dataDir: join(dir, 'data'), digest: { enabled: false, workspacePath: join(dir, 'digest') },
-    login: { enabled: false }, backfill: { gapMs: 0, ...backfill },
+    login: { enabled: false }, reconnectQuietMs: 0, backfill: { gapMs: 0, ...backfill },
   })
   return { ctx, observer: ctx.lsyQq, fake, calls, logs }
 }
@@ -71,7 +72,9 @@ async function dropAndWait(h: Awaited<ReturnType<typeof boot>>, ms: number): Pro
 describe('backfill is gentle by default', () => {
   it('asks for one small page per group, a few groups per connection, with a pause between them', () => {
     const config = Config({ dataDir: join(dir, 'x'), digest: { workspacePath: join(dir, 'd') } })
-    expect(config.backfill).toEqual({ enabled: true, maxMessages: 20, maxGroups: 5, gapMs: 5000, skipWithinMs: 30 * 60_000 })
+    const { backfill } = config
+    const values = [backfill.enabled, backfill.maxMessages, backfill.maxGroups, backfill.gapMs, backfill.skipWithinMs]
+    expect(values.map(value => value.get())).toEqual([true, 20, 5, 5000, 30 * 60_000])
   })
 
   it('requests no more messages than maxMessages in one page', async () => {
@@ -134,5 +137,23 @@ describe('backfill is gentle by default', () => {
     expect(fetch).not.toHaveBeenCalled()
     h.fake.push(groupMessage('111111', '10001', image, { message_id: 7002 }))
     await until(() => fetch.mock.calls.length > 0, 'the live download attempt')
+  })
+
+  it('follows a switch changed at run time without a restart', async () => {
+    const h = await boot({})
+    await until(() => h.calls.length === 3, 'the first backfill')
+    type Ref = Parameters<typeof updateVolatile>[0]
+    const config = (h.observer as unknown as { config: { backfill: { enabled: Ref }; groups: Ref } }).config
+    updateVolatile(config.backfill.enabled, createVolatile(false))
+    updateVolatile(config.groups, createVolatile([...GROUPS, '444444']))
+    h.ctx.emit('loader/volatile-update' as never)
+    await new Promise(resolve => setTimeout(resolve, 300))
+    expect(h.calls).toHaveLength(3)
+    updateVolatile(config.backfill.enabled, createVolatile(true))
+    updateVolatile(config.groups, createVolatile([...GROUPS, '444444', '555555']))
+    h.ctx.emit('loader/volatile-update' as never)
+    await until(() => h.calls.length === 4, 'the backfill of the added group')
+    expect(h.calls.at(-1)?.group).toBe(555555)
+    expect(h.fake.connections).toBe(1)
   })
 })

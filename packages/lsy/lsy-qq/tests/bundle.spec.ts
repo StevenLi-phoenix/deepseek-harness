@@ -24,18 +24,18 @@ describe('event bundle', () => {
     expect(config.groups.get()).toEqual([])
     expect(row.config ?? {}).not.toHaveProperty('groups')
     expect(config.send).toEqual({ enabled: false, groups: [], minIntervalSec: 60, maxPerDay: 10 })
-    expect(config.asr.enabled).toBe(false)
+    expect(config.asr.enabled.get()).toBe(false)
     expect(config.url).toBe('ws://127.0.0.1:3001')
     // The token is the name of a $DSH_HOME/.env entry, never a value.
     expect(config.tokenEnv).toBe('LSY_QQ_ONEBOT_TOKEN')
     // The Settings page's login section asks the door napcat.sh starts next to NapCat, on this machine only.
     expect(config.login).toEqual({ enabled: true, url: 'http://127.0.0.1:3002', timeoutMs: 5000 })
-    expect(config.settingsUrl).toBeUndefined()
-    expect(config.honorRecall).toBe(true)
+    expect(config.settingsUrl.get()).toBeUndefined()
+    expect(config.honorRecall.get()).toBe(true)
     expect(config.digest).toMatchObject({ enabled: true, agentPreset: 'qq-digest', permissionPreset: 'read-only', aliasMembers: true, profiles: false })
     // Raw messages and downloads are kept 30 days; digests stay until deleted.
-    expect(config.retention.textDays).toBe(30)
-    expect(config.media.retainDays).toBe(30)
+    expect(config.retention.textDays.get()).toBe(30)
+    expect(config.media.retainDays.get()).toBe(30)
   })
 
   it('gives the qq-digest preset a persona and nothing else: no tool a chat message could steer', () => {
