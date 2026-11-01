@@ -105,9 +105,9 @@ export const Config: z<Config> = z.object({
   firstPollSeconds: z.natural().default(60).description('Seconds after start before the first poll.'),
   requestTimeoutMs: z.natural().min(1000).default(20_000).description('Timeout of one call to the courses service, in milliseconds.'),
   lookaheadDays: z.natural().min(1).default(7).description('Days ahead the poll reads; must cover the largest checkpoint.'),
-  beforeHours: z.array(z.number().min(0.25)).default([72, 24, 6, 2]).description('Hours before an on-time deadline at which the owner is reminded.'),
-  lateBeforeHours: z.array(z.number().min(0.25)).default([24, 6, 2]).description('Hours before a late window ends at which the owner is reminded; a missed deadline is told at once.'),
-  urgentWithinHours: z.number().min(0).default(2).description('A deadline this close (hours) is sent during quiet hours and sleep; 0 never.'),
+  beforeHours: z.array(z.number().min(0.25)).default([48, 24, 3]).description('Hours before an on-time deadline at which the owner is reminded.'),
+  lateBeforeHours: z.array(z.number().min(0.25)).default([12, 3]).description('Hours before a late window ends at which the owner is reminded; a missed deadline is told at once.'),
+  urgentWithinHours: z.number().min(0).default(3).description('A deadline this close (hours) is sent during quiet hours and sleep; 0 never.'),
   quietHours: z.object({
     followPresence: z.boolean().default(true).description('Wait while the owner sleeps (Settings → 勿扰).'),
     enabled: z.boolean().default(false).description('Also wait in the daily window below.'),

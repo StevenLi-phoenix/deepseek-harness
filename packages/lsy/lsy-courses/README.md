@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Never miss a course deadline: DSH reads your course records every 15 minutes and messages you on WeChat 72, 24, 6, and 2 hours before each deadline, and at once when a deadline passed while late submissions are still open. Finished work is left alone, each reminder goes out once even across restarts, and reminders wait while you sleep unless the deadline is under 2 hours away. A broken course sync is told once a day with the last good sync and the reason, and once when it recovers. Code decides what is sent; the agent only answers your replies.
+Never miss a course deadline: DSH reads your course records every 15 minutes and messages you on WeChat 48, 24, and 3 hours before each deadline, and at once when a deadline passed while late submissions are still open. Finished work is left alone, each reminder goes out once even across restarts, and reminders wait while you sleep unless the deadline is under 3 hours away. A broken course sync is told once a day with the last good sync and the reason, and once when it recovers. Code decides what is sent; the agent only answers your replies.
 
 ## Table of Contents
 
@@ -39,9 +39,9 @@ Mount it at the root of a process that also mounts the storage domain facility, 
 | `timeZone` | `America/New_York` | Zone of the times in messages and of the quiet window |
 | `pollMinutes` / `firstPollSeconds` / `requestTimeoutMs` | `15` / `60` / `20000` | Poll period, first poll after start, timeout of one call |
 | `lookaheadDays` | `7` | Days the poll reads ahead; a checkpoint larger than this fails the load |
-| `beforeHours` | `[72, 24, 6, 2]` | Hours before an on-time deadline at which the owner is reminded |
-| `lateBeforeHours` | `[24, 6, 2]` | Hours before a late window ends; the missed deadline itself is told at once |
-| `urgentWithinHours` | `2` | A deadline this close goes out during quiet hours and sleep, marked urgent; `0` never |
+| `beforeHours` | `[48, 24, 3]` | Hours before an on-time deadline at which the owner is reminded |
+| `lateBeforeHours` | `[12, 3]` | Hours before a late window ends; the missed deadline itself is told at once |
+| `urgentWithinHours` | `3` | A deadline this close goes out during quiet hours and sleep, marked urgent; `0` never |
 | `quietHours.followPresence` | `true` | Wait while `ctx.lsyPresence` says the owner sleeps (Settings → 勿扰) |
 | `quietHours.enabled` / `start` / `end` | `false` / `01:00` / `09:00` | An extra daily quiet window of its own |
 | `sync.alert` / `statuses` | `true` / `['failing', 'missing']` | Tell the owner when the sync health has one of these statuses |
