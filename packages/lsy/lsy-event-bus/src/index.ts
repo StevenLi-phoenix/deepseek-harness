@@ -20,8 +20,8 @@ import {
 } from './prompt.ts'
 import { busDomain, type BatchRecord, type LsyEventRecord, type PersistentRecord, type SubscriptionRecord } from './storage.ts'
 import type {
-  BatchEvent, BatchSummary, LsyDeliveryEvent, LsyEventInput, LsyNotifier, PersistentSessionView, PublishOutcome, SessionAction,
-  SessionDelivery, Subscription, SubscriptionMeta, SubscriptionOrigin, SubscriptionView, SuppressConfig, UnsubscribeOutcome,
+  BatchEvent, BatchSummary, BusStats, LsyDeliveryEvent, LsyEventInput, LsyNotifier, PauseOutcome, PersistentSessionView, PublishOutcome,
+  SessionAction, SessionDelivery, Subscription, SubscriptionMeta, SubscriptionOrigin, SubscriptionView, SuppressConfig, UnsubscribeOutcome,
 } from './types.ts'
 import { LsySubscriptionError, subscriptionProblem } from './validate.ts'
 
@@ -353,6 +353,8 @@ export class LsyEventBus extends Service {
   private readonly deliveries = new Map<string, PendingDelivery>()
   private readonly reminders = new Map<string, TrackedReminder>()
   private readonly inflight = new Set<Promise<void>>()
+  /** When a flush last met its subscription's hourly limit, for `stats()`; not stored. */
+  private readonly rateLimitHits: number[] = []
   private chain: Promise<unknown> = Promise.resolve()
   private stopping = false
 
@@ -414,8 +416,9 @@ export class LsyEventBus extends Service {
 
       const now = Date.now()
       const reason = suppressionReason(this.config.suppress, input)
+      const paused = this.pausedIds()
       const matching = reason === undefined
-        ? this.allSubscriptions().filter(subscription => matchesSubscription(subscription, input))
+        ? this.allSubscriptions().filter(subscription => !paused.has(subscription.id) && matchesSubscription(subscription, input))
         : []
       const matched = matching.map(subscription => subscription.id)
       const outcome = reason !== undefined ? 'suppressed' : matched.length === 0 ? 'unmatched' : 'accepted'
@@ -542,6 +545,53 @@ export class LsyEventBus extends Service {
   }
 
   /**
+   * Pause or resume a run-time subscription. A paused subscription stops matching new events (they are
+   * `unmatched` for it) and holds the events already pending; resuming flushes those after the usual
+   * coalesce window. The flag is stored, so it survives restarts.
+   * @param id - subscription id.
+   * @param paused - true to pause, false to resume.
+   * @returns `ok`, `not_found`, or `config_owned` for an id the configuration owns.
+   */
+  async setPaused(id: string, paused: boolean): Promise<PauseOutcome> {
+    if (this.configSubscriptions.has(id)) return 'config_owned'
+    return this.serialize(async () => {
+      const domain = await this.ready
+      const table = domain.table('subscriptions')
+      const record = table.get(id)
+      if (record === undefined) return 'not_found'
+      if ((record.paused === true) === paused) return 'ok'
+      const { paused: _was, ...rest } = record
+      await table.put(id, paused ? { ...rest, paused: true } : rest)
+      if (paused) {
+        this.flushTimers.get(id)?.dispose()
+        this.flushTimers.delete(id)
+      } else if ([...domain.table('pending').entries()].some(([, row]) => row.subscription === id)) {
+        this.scheduleFlush(id, Date.now() + record.coalesceMs)
+      }
+      this.ctx.logger.info(`lsy-event-bus: ${paused ? 'paused' : 'resumed'} ${id}`)
+      return 'ok'
+    })
+  }
+
+  /**
+   * Counters for the last rolling hour and the current queue, for status pages.
+   * @returns snapshot; before the storage domain opens, only the configuration rows are counted.
+   */
+  stats(): BusStats {
+    const since = Date.now() - HOUR_MS
+    const stored = this.storedSubscriptions()
+    while (this.rateLimitHits.length > 0 && (this.rateLimitHits[0] ?? since) <= since) this.rateLimitHits.shift()
+    return {
+      subscriptions: this.config.subscriptions.length + stored.length,
+      paused: stored.filter(record => record.paused === true).length,
+      pending: this.pendingCount(),
+      eventsLastHour: this.events().filter(event => event.receivedAt > since).length,
+      batchesLastHour: this.batches().filter(batch => batch.createdAt > since).length,
+      rateLimitHitsLastHour: this.rateLimitHits.length,
+    }
+  }
+
+  /**
    * Every subscription, configuration first and then run-time ones by creation time, with live status.
    * @returns snapshot; before the storage domain opens, only configuration rows with empty status.
    */
@@ -552,6 +602,11 @@ export class LsyEventBus extends Service {
   /** Stored run-time subscriptions, oldest first. */
   private storedSubscriptions(): SubscriptionRecord[] {
     return rowsOf(this.domain?.table('subscriptions')).sort((a, b) => a.createdAt - b.createdAt)
+  }
+
+  /** Ids of paused run-time subscriptions. */
+  private pausedIds(): ReadonlySet<string> {
+    return new Set(this.storedSubscriptions().filter(record => record.paused === true).map(record => record.id))
   }
 
   /** Configuration and run-time subscriptions, in matching order. */
@@ -583,6 +638,7 @@ export class LsyEventBus extends Service {
         origin,
         ...(record === undefined ? {} : { createdAt: record.createdAt }),
         ...(record?.createdBy === undefined ? {} : { createdBy: record.createdBy }),
+        ...(record?.paused === true ? { paused: true as const } : {}),
         status: {
           pending: pending.get(subscription.id) ?? 0,
           batchesLastHour: history.filter(batch => batch.createdAt > now - HOUR_MS).length,
@@ -655,6 +711,8 @@ export class LsyEventBus extends Service {
     /* v8 ignore next -- a flush queued behind teardown or behind the unsubscribe() that removed its subscription. */
     if (subscription === undefined || this.stopping) return undefined
     const domain = await this.ready
+    // A paused subscription keeps its pending rows; resuming arms the flush again.
+    if (domain.table('subscriptions').get(subscriptionId)?.paused === true) return undefined
     const pending = domain.table('pending')
     const rows = [...pending.entries()]
       .filter(([, row]) => row.subscription === subscriptionId)
@@ -667,6 +725,7 @@ export class LsyEventBus extends Service {
       .filter(batch => batch.subscription === subscriptionId && batch.createdAt > now - HOUR_MS)
       .sort((a, b) => a.createdAt - b.createdAt)
     if (recent.length >= subscription.maxPerHour) {
+      this.rateLimitHits.push(now)
       // The batch whose expiry brings the window back under the limit; it exists because recent.length >= maxPerHour.
       /* v8 ignore next */
       const reopensAt = (recent.at(-subscription.maxPerHour)?.createdAt ?? now) + HOUR_MS
