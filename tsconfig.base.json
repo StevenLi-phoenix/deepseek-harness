@@ -485,6 +485,7 @@
       "@deepseek-ai/dsh-lsp-stdio": ["./packages/lsp/lsp-stdio/src"],
       "@deepseek-ai/dsh-fork-balance": ["./packages/fork/fork-balance/src"],
       "@deepseek-ai/dsh-fork-cc-bridge": ["./packages/fork/fork-cc-bridge/src"],
+      "@deepseek-ai/dsh-fork-console": ["./packages/fork/fork-console/src"],
       "@deepseek-ai/dsh-fork-event-bus": ["./packages/fork/fork-event-bus/src"],
       "@deepseek-ai/dsh-fork-event-ingest": ["./packages/fork/fork-event-ingest/src"],
       "@deepseek-ai/dsh-fork-github-sensor": ["./packages/fork/fork-github-sensor/src"],

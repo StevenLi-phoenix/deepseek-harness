@@ -158,6 +158,7 @@
     { "path": "./packages/fork/fork-qq-login/tsconfig.client.json" },
     { "path": "./packages/fork/fork-style-settings/tsconfig.client.json" },
     { "path": "./packages/fork/fork-memory-admin/tsconfig.client.json" },
+    { "path": "./packages/fork/fork-console/tsconfig.client.json" },
     { "path": "./packages/fork/bili/tsconfig.client.json" },
     { "path": "./packages/fork/fork-wechat-settings/tsconfig.client.json" },
     { "path": "./packages/client/ui-trajectory/tsconfig.client.json" },

@@ -40,7 +40,9 @@ describe('GET /api/fork.subscriptions', () => {
     ])
     expect(view.subscriptions![1]!.lastFiredAt).toBeGreaterThan(view.subscriptions![1]!.createdAt!)
     expect(view.schedules).toBeNull()
-    expect(view.defaults).toEqual({ coalesceSeconds: 60, notifyMaxPerHour: 12, sessionMaxPerHour: 4 })
+    expect(view.defaults).toEqual({
+      coalesceSeconds: 60, notifyMaxPerHour: 12, sessionMaxPerHour: 4, agentPreset: 'unattended', workspacePath: '/Users/dsh-runtime/work',
+    })
   })
 
   it('lists Host schedule reminders without their prompts', async () => {
@@ -104,7 +106,7 @@ describe('POST create', () => {
     const { post, bus } = await setup()
     const response = await post({ action: 'create', subscription })
     expect(response.status).toBe(error === 'invalid_request' ? 400 : 422)
-    expect(await response.json()).toEqual({ error, detail } satisfies ActionError)
+    expect(await response.json()).toEqual({ error, detail } as ActionError)
     expect(bus.listSubscriptions()).toHaveLength(1)
   })
 

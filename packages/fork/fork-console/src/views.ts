@@ -79,6 +79,9 @@ export interface SubscriptionsView {
     readonly coalesceSeconds: number
     readonly notifyMaxPerHour: number
     readonly sessionMaxPerHour: number
+    /** Preset and workspace a `session` subscription made from the form runs with. */
+    readonly agentPreset: string
+    readonly workspacePath: string
   }
   readonly checkedAt: number
 }

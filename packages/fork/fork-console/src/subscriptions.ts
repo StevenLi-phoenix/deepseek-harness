@@ -144,6 +144,8 @@ export async function listSubscriptions(ctx: Context, config: Config, now: () =>
       coalesceSeconds: config.subscriptions.coalesceSeconds,
       notifyMaxPerHour: config.subscriptions.notifyMaxPerHour,
       sessionMaxPerHour: config.subscriptions.sessionMaxPerHour,
+      agentPreset: config.subscriptions.agentPreset,
+      workspacePath: config.subscriptions.workspacePath,
     },
     checkedAt: now(),
   }
