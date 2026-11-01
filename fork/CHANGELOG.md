@@ -5,6 +5,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 ## [Unreleased]
 
 ### Fixed
+- `fork-integrity` no longer reports tasks created, edited, or deleted through the schedule service as a tampered file: it records the file's definition digests at every `schedule/changed` (`schedule-trusted.json`, survives restarts) and alerts only on an edit made behind the service, titled "定时任务文件被绕过 DSH 直接改动了" with the counts of tasks added, removed, and changed (2026-11-01).
 - Settings → WeChat no longer shows a long-recovered poll failure as "Last error": a good long-poll clears a receive error and a good send clears a send error, while a failure of the other kind stays (2026-11-01).
 - The overview's Bilibili card is yellow (`svc_only`) when bili-svc answers but the DSH `bili` plugin is not mounted; it used to be green, which hid a plugin that failed to load (2026-11-01).
 - Bus result notes no longer start with ✅, which read as the event's verdict while it only meant the turn finished; a batch of several events is titled by subject and count (`CI: owner/repo (4 events)`) instead of its first event, so a note about a failed run is not headed by another run's success (2026-11-01).
@@ -15,6 +16,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 - A final answer whose last line is exactly `NO_REPLY` is silent for `fork-event-bus` and owner-relay, so an explanation followed by `NO_REPLY` no longer reaches WeChat (2026-11-01).
 
 ### Changed
+- Course deadline reminders end with an outlook of the other unfinished tasks due within 72 hours (late windows included, ⚠️ for a missed on-time deadline, at most 6 rows then "另有 N 项"), so a reminder for one task no longer hides a closer deadline; the outlook does not count as reminded (2026-11-01).
 - The qq-digest transcript now tags each picture `[图片#m12ab]` and attaches the newest `digest.maxImages` (8, volatile, `0` = none) saved ones to the prompt as image parts when the route reads images (the same turn goes out as text when it refuses them); pictures reach the model only and are never stored (2026-11-01).
 - The qq-digest transcript drops its noise (2026-11-01): a member's consecutive `[表情]`, `[动画表情]`, `[戳一戳]`, and `[合并转发]` messages are one line (`[表情]×3`) while every message still moves the digest cursor, and with `digest.aliasMembers` an @-mention shows the member's alias instead of the QQ number or name (`@某群友` when no member has that name; `@全体成员` stays).
 - `fork-qq` is the recorder's client: `groupOverview()`, `recentMessages()`, `searchMessages()`, `evidenceOf()`, `groupChoices()`, and `loginStatus()` are async and fail with `RecorderUnavailable` while the recorder is down; `dataDir` is ignored (the recorder's `QQ_RECORDER_DATA_DIR`), `asr.enabled` and `send.enabled` fail the load, `sendGroupMessage` always refuses, and `recorder.{socket,tokenEnv,timeoutMs}` are new (schema defaults).

@@ -8,6 +8,9 @@
  *   reported once as missed (`open`), then at the late checkpoints before that end.
  * - A task whose submission is `submitted` or whose progress is `completed` is never reminded.
  * - The key is phase, task, deadline, and checkpoint, so a moved deadline starts its checkpoints again.
+ * - A message lists what it reminds of first, then an outlook: the other unfinished tasks due within
+ *   {@link OUTLOOK_HOURS} (late windows included), soonest first, so the owner always sees what is most urgent.
+ *   The outlook is context; it never marks anything as reminded.
  */
 import type { SyncHealth, TaskSummary } from './records.ts'
 import { hours, span, stamp } from './time.ts'
@@ -146,8 +149,13 @@ const PROGRESS_LABEL: Readonly<Record<string, string>> = {
   reopened: '重新打开',
 }
 
+/** The outlook lists tasks due within this many hours. */
+export const OUTLOOK_HOURS = 72
+/** The outlook lists at most this many tasks; the rest are counted. */
+export const OUTLOOK_ROWS = 6
+
 /** One task's line: course, title, open parts, progress, and the deadline with the time left. */
-function line(reminder: PlannedReminder, parts: readonly TaskSummary[], now: number, timeZone: string): string {
+function line(reminder: PlannedReminder, parts: readonly TaskSummary[], now: number, timeZone: string, bullet = '•'): string {
   const { task } = reminder
   const name = task.parentTitle !== null && parts.length === 0 ? `${task.parentTitle} · ${task.title}` : task.title
   const head = task.course === '' ? name : `${task.course} · ${name}`
@@ -159,7 +167,7 @@ function line(reminder: PlannedReminder, parts: readonly TaskSummary[], now: num
   const when = reminder.phase === 'late'
     ? `准时截止 ${stamp(task.dueAt ?? reminder.deadline, timeZone)} 已过，迟交截止 ${stamp(reminder.deadline, timeZone)}，还剩 ${left}`
     : `${stamp(reminder.deadline, timeZone)} 截止${tentative}，还剩 ${left}`
-  return `• ${head}${open} — ${when}${progress}`
+  return `${bullet} ${head}${open} — ${when}${progress}`
 }
 
 /** A message for the owner's channel. */
@@ -180,6 +188,41 @@ export interface RenderContext {
   readonly urgentWithinHours: number
   /** Sync health; a status other than `ok` adds a line saying how old the records may be. */
   readonly health: SyncHealth | null
+  /** Every open task, for the outlook after the reminders; without it the message has no outlook. */
+  readonly tasks?: readonly TaskSummary[]
+}
+
+/**
+ * The tasks to list after a message's own reminders: unfinished, due (or, in a late window, closing) within
+ * {@link OUTLOOK_HOURS}, not among the reminded ones, soonest first. A part whose parent is listed at the same
+ * deadline is folded into the parent.
+ * @param tasks - every open task.
+ * @param reminded - the tasks the message reminds of, parts included.
+ * @param now - Unix epoch milliseconds.
+ * @returns the rows in deadline order, each as a reminder-shaped step (never sent, so never keyed).
+ */
+export function outlook(tasks: readonly TaskSummary[], reminded: ReadonlySet<string>, now: number): PlannedReminder[] {
+  const rows: PlannedReminder[] = []
+  for (const task of tasks) {
+    if (isDone(task) || task.dueAt === null || reminded.has(task.id)) continue
+    const late = now >= task.dueAt
+    const deadline = late ? lateWindowEnd(task, now) : task.dueAt
+    if (deadline === null || deadline > now + hours(OUTLOOK_HOURS)) continue
+    const phase: ReminderPhase = late ? 'late' : 'due'
+    rows.push({ key: reminderKey(phase, task.id, deadline, 'open'), phase, checkpoint: 'open', deadline, task })
+  }
+  const listed = new Set(rows.map(row => `${row.task.id}|${row.deadline}`))
+  return rows.filter(row => row.task.parentId === null || !listed.has(`${row.task.parentId}|${row.deadline}`)).sort((a, b) => a.deadline - b.deadline)
+}
+
+/** The outlook section: a header, at most {@link OUTLOOK_ROWS} lines (⚠️ for a missed on-time deadline), and the count of the rest. */
+function outlookSection(rows: readonly PlannedReminder[], now: number, timeZone: string): string | undefined {
+  if (rows.length === 0) return undefined
+  return [
+    `接下来 ${OUTLOOK_HOURS} 小时内还有（按截止时间）：`,
+    ...rows.slice(0, OUTLOOK_ROWS).map(row => line(row, [], now, timeZone, row.phase === 'late' ? '⚠️' : '•')),
+    ...rows.length > OUTLOOK_ROWS ? [`另有 ${rows.length - OUTLOOK_ROWS} 项`] : [],
+  ].join('\n')
 }
 
 /**
@@ -207,6 +250,10 @@ export function renderReminders(planned: readonly PlannedReminder[], context: Re
   const sections: string[] = []
   if (late.length > 0) sections.push(['⚠️ 准时截止已过，迟交还来得及：', ...late.map(reminder => line(reminder, folded.get(reminder) ?? [], now, timeZone))].join('\n'))
   if (due.length > 0) sections.push(['⏰ 快到截止：', ...due.map(reminder => line(reminder, folded.get(reminder) ?? [], now, timeZone))].join('\n'))
+  if (context.tasks !== undefined) {
+    const section = outlookSection(outlook(context.tasks, new Set(planned.map(reminder => reminder.task.id)), now), now, timeZone)
+    if (section !== undefined) sections.push(section)
+  }
   const health = context.health
   if (health !== null && health.status !== 'ok') sections.push(freshnessLine(health, timeZone))
   sections.push('交了或做完了直接告诉我，我来更新记录。')

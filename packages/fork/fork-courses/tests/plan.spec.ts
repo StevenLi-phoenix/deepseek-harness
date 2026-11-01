@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  currentStep, failureReason, lateWindowEnd, parseHealth, parseTasks, planReminders, planSyncNotice, renderReminders,
+  currentStep, failureReason, lateWindowEnd, outlook, OUTLOOK_ROWS, parseHealth, parseTasks, planReminders, planSyncNotice, renderReminders,
   renderSyncFailing, renderSyncRecovered, reminderKey, span, stamp, upcoming, type SyncHealth, type TaskSummary,
 } from '../src/index.ts'
 
@@ -98,6 +98,64 @@ describe('reminder message', () => {
     const planned = planReminders([task()], NOW, RULES, () => false)
     const note = renderReminders(planned, { now: NOW, timeZone: ZONE, urgentWithinHours: 2, health })
     expect(note.body).toContain('（课程记录可能过时：最近一次成功同步在 10/28 周三 18:16，之后 14 次同步失败；新作业和提交状态可能没更新。）')
+  })
+})
+
+describe('outlook after the reminders', () => {
+  const named = (id: string, title: string, overrides: Partial<TaskSummary> = {}): TaskSummary => task({ id, title, ...overrides })
+  const render = (tasks: TaskSummary[], reminded: TaskSummary[]) => renderReminders(
+    planReminders(reminded, NOW, RULES, () => false), { now: NOW, timeZone: ZONE, urgentWithinHours: 2, health: null, tasks },
+  )
+
+  it('lists the other unfinished tasks due within 72 hours after the triggered one, soonest first, late windows marked', () => {
+    const trigger = named('trigger', 'Playtest', { course: 'Game Course', dueAt: NOW + 20 * H })
+    const tonight = named('tonight', 'Quiz', { course: 'Language Course', dueAt: NOW + 12 * H })
+    const missed = named('missed', 'HW3', { course: 'Learning Course', dueAt: NOW - 14 * H, lateAt: NOW + 34 * H })
+    const later = named('later', 'Essay', { course: 'Game Course', dueAt: NOW + 70 * H })
+    const tooFar = named('far', 'Project', { dueAt: NOW + 73 * H })
+    const done = named('done', 'Done', { dueAt: NOW + 5 * H, submission: 'submitted' })
+    const closed = named('closed', 'Closed', { dueAt: NOW - 30 * H })
+    const undated = named('undated', 'Undated', { dueAt: null })
+    const note = render([trigger, tonight, missed, later, tooFar, done, closed, undated], [trigger])
+    expect(note.title).toBe('⏰ 课程 DDL 提醒：1 项快到截止')
+    const sections = note.body.split('\n\n')
+    expect(sections[0]).toContain('Game Course · Playtest')
+    expect(sections[0]).not.toContain('Quiz')
+    expect(sections[1]).toBe([
+      '接下来 72 小时内还有（按截止时间）：',
+      `• Language Course · Quiz — ${stamp(NOW + 12 * H, ZONE)} 截止，还剩 12 小时`,
+      `⚠️ Learning Course · HW3 — 准时截止 ${stamp(NOW - 14 * H, ZONE)} 已过，迟交截止 ${stamp(NOW + 34 * H, ZONE)}，还剩 34 小时`,
+      `• Game Course · Essay — ${stamp(NOW + 70 * H, ZONE)} 截止，还剩 2 天 22 小时`,
+    ].join('\n'))
+    expect(sections.at(-1)).toBe('交了或做完了直接告诉我，我来更新记录。')
+  })
+
+  it('shows at most six rows and counts the rest', () => {
+    const trigger = named('trigger', 'Trigger', { dueAt: NOW + 20 * H })
+    const others = Array.from({ length: 9 }, (_, n) => named(`o${n}`, `Other ${n}`, { dueAt: NOW + (21 + n) * H }))
+    const section = render([trigger, ...others], [trigger]).body.split('\n\n')[1]!.split('\n')
+    expect(OUTLOOK_ROWS).toBe(6)
+    expect(section).toHaveLength(1 + 6 + 1)
+    expect(section[1]).toContain('Other 0')
+    expect(section[6]).toContain('Other 5')
+    expect(section.at(-1)).toBe('另有 3 项')
+  })
+
+  it('leaves the outlook out when nothing else is open, and never lists a reminded task or its folded parts again', () => {
+    const parent = named('hw', 'Homework', { dueAt: NOW + 20 * H })
+    const part = named('hw-w', 'Written', { dueAt: NOW + 20 * H, parentId: 'hw', parentTitle: 'Homework' })
+    const note = render([parent, part], [parent, part])
+    expect(note.body).not.toContain('接下来')
+    const other = named('other', 'Other', { dueAt: NOW + 30 * H })
+    const otherPart = named('other-p', 'Part', { dueAt: NOW + 30 * H, parentId: 'other', parentTitle: 'Other' })
+    expect(outlook([parent, part, other, otherPart], new Set(['hw', 'hw-w']), NOW).map(row => row.task.id)).toEqual(['other'])
+  })
+
+  it('is not counted as reminded: the listed tasks keep their own checkpoints', () => {
+    const trigger = named('trigger', 'Trigger', { dueAt: NOW + 20 * H })
+    const listed = named('listed', 'Listed', { dueAt: NOW + 30 * H })
+    expect(outlook([trigger, listed], new Set(['trigger']), NOW).map(row => row.task.id)).toEqual(['listed'])
+    expect(planReminders([listed], NOW + 8 * H, RULES, () => false).map(reminder => reminder.task.id)).toEqual(['listed'])
   })
 })
 

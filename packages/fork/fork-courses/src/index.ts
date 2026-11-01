@@ -302,7 +302,7 @@ export class ForkCourses extends Service {
       outcome = 'none'
       if (planned.length > 0) {
         const note = renderReminders(planned, {
-          now: started, timeZone: this.config.timeZone, urgentWithinHours: this.config.urgentWithinHours, health,
+          now: started, timeZone: this.config.timeZone, urgentWithinHours: this.config.urgentWithinHours, health, tasks,
         })
         if (this.isQuiet(started) && !note.urgent) {
           outcome = 'held'

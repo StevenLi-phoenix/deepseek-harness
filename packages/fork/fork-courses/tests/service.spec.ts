@@ -134,13 +134,16 @@ describe('polling', () => {
 
   it('sends one message per checkpoint and never repeats it, across polls and restarts', async () => {
     const service = fakeService()
-    service.items = [taskRow('a', START + 5 * H), taskRow('b', START + 100 * H), taskRow('c', START + 3 * H, { submission_status: 'submitted' })]
+    service.items = [taskRow('a', START + 5 * H), taskRow('b', START + 60 * H), taskRow('c', START + 3 * H, { submission_status: 'submitted' })]
     const first = await mount()
     expect(await first.courses.poll('manual')).toMatchObject({ ok: true, openTasks: 3, reminders: 1, outcome: 'sent' })
     expect(first.sent).toHaveLength(1)
     expect(first.sent[0]).toMatchObject({ title: '⏰ 课程 DDL 提醒：1 项快到截止', kinds: ['courses.deadline.due'] })
     expect(first.sent[0]?.origin).toContain('fork-courses')
     expect(first.sent[0]?.body).toContain('Task a')
+    expect(first.sent[0]?.body).toContain('接下来')
+    expect(first.sent[0]?.body).toContain('Task b')
+    expect(first.sent[0]?.body).not.toContain('Task c')
     expect(await first.courses.poll('manual')).toMatchObject({ reminders: 0, outcome: 'none' })
     await first.ctx.fiber.dispose()
 
