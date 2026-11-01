@@ -2801,6 +2801,11 @@ export interface Config {
      * the account); 0 never skips. 30 minutes by default.
      */
     skipWithinMs: Volatile<number>
+    /**
+     * A backfill runs at most this often, also across plugin restarts (the time is kept in `connection-state.json`);
+     * 0 never holds one back. 30 minutes by default.
+     */
+    minIntervalMs: Volatile<number>
   }
   /** Sending to a group. Off, and a group must be listed too; nothing in this package calls it on its own. */
   send: {

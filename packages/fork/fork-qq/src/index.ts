@@ -101,6 +101,11 @@ export interface Config {
      * the account); 0 never skips. 30 minutes by default.
      */
     skipWithinMs: Volatile<number>
+    /**
+     * A backfill runs at most this often, also across plugin restarts (the time is kept in `connection-state.json`);
+     * 0 never holds one back. 30 minutes by default.
+     */
+    minIntervalMs: Volatile<number>
   }
   /** Sending to a group. Off, and a group must be listed too; nothing in this package calls it on its own. */
   send: {
@@ -201,6 +206,7 @@ export const Config = z.object({
     maxGroups: z.natural().min(1).default(5).volatile(),
     gapMs: z.natural().default(5000).volatile(),
     skipWithinMs: z.natural().default(30 * 60_000).volatile(),
+    minIntervalMs: z.natural().default(30 * 60_000).volatile(),
   }),
   send: z.object({
     enabled: z.boolean().default(false),
@@ -359,7 +365,7 @@ export class QqObserver extends Service {
   private lastLoginKey = ''
   private lastWakeAt = 0
   /** What the last process left in `connection-state.json`: when the connection was last alive, and the group list last fetched. */
-  private connectionState: { lastAliveAt?: number; lastGroupListAt?: number } = {}
+  private connectionState: { lastAliveAt?: number; lastGroupListAt?: number; lastBackfillAt?: number } = {}
   private connectionStateWarned = false
   /** This connection follows the previous one so closely that the group list and the backfill are skipped. */
   private quietOpen = false
@@ -458,6 +464,7 @@ export class QqObserver extends Service {
         maxGroups: backfill.maxGroups.get(),
         gapMs: backfill.gapMs.get(),
         skipWithinMs: backfill.skipWithinMs.get(),
+        minIntervalMs: backfill.minIntervalMs.get(),
       },
       offlineNoticeMs: this.config.offlineNoticeMs.get(),
       offlineRepeatMs: this.config.offlineRepeatMs.get(),
@@ -887,7 +894,7 @@ export class QqObserver extends Service {
   private loadConnectionState(): void {
     try {
       const saved = JSON.parse(readFileSync(this.connectionStateFile, 'utf8')) as Record<string, unknown>
-      for (const key of ['lastAliveAt', 'lastGroupListAt'] as const) {
+      for (const key of ['lastAliveAt', 'lastGroupListAt', 'lastBackfillAt'] as const) {
         const value = saved[key]
         if (typeof value === 'number' && Number.isFinite(value)) this.connectionState[key] = value
       }
@@ -961,8 +968,16 @@ export class QqObserver extends Service {
       this.ctx.logger.info(`fork-qq: the previous connection dropped ${Math.round((this.now() - this.lastDisconnectAt) / 60_000)} min ago; not backfilling this time`)
       return
     }
+    const { minIntervalMs } = this.live.backfill
+    const lastBackfill = this.connectionState.lastBackfillAt
+    if (minIntervalMs > 0 && lastBackfill !== undefined && this.now() - lastBackfill < minIntervalMs) {
+      this.ctx.logger.info(`fork-qq: the last backfill was ${Math.round((this.now() - lastBackfill) / 60_000)} min ago; not backfilling this time`)
+      return
+    }
     const ids = [...this.recordedIds]
     if (ids.length === 0) return
+    this.connectionState.lastBackfillAt = this.now()
+    this.saveConnectionState()
     const start = this.backfillCursor % ids.length
     const turn = [...ids.slice(start), ...ids.slice(0, start)].slice(0, maxGroups)
     this.backfillCursor = (start + turn.length) % ids.length
