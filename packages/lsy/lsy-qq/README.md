@@ -60,8 +60,6 @@ Until a group number is listed nothing is recorded: messages of every other grou
 | `backfill.gapMs` | `5000` | Pause between two groups' backfills, plus up to half as much again of jitter |
 | `backfill.skipWithinMs` | `1800000` | A connection made less than this long after the previous one dropped fetches nothing, so a flapping link does not hammer the account; `0` never skips |
 | `backfill.minIntervalMs` | `1800000` | A backfill runs at most this often, also across plugin restarts (`<dataDir>/connection-state.json`); `0` never holds one back |
-
-Backfilled messages are stored as text only: their images and voice are not downloaded (the rows say so), and live messages are unaffected.
 | `send.enabled` | `false` | Allow `sendGroupMessage` at all |
 | `send.groups` | `[]` | Groups sending is allowed in, on top of `send.enabled` |
 | `send.minIntervalSec`, `send.maxPerDay` | `60`, `10` | At least this long between two sends to one group, and at most this many a day |
@@ -85,6 +83,8 @@ Backfilled messages are stored as text only: their images and voice are not down
 | `login.timeoutMs` | `5000` | Deadline of one call to the door |
 
 **Which changes restart the plugin.** A profile reload restarts the plugin (and drops the OneBot connection) unless the change touches only volatile fields: `groups`, `backfill.*`, `media.*`, `voice.*`, `asr.enabled`, `retention.textDays`, `honorRecall`, `offlineNoticeMs`, `offlineRepeatMs`, `reconnectQuietMs`, and `settingsUrl` are read afresh at each use and apply without a restart. `url`, `tokenEnv`, `dataDir`, `digest.*`, `send.*`, and `login.*` are fixed when the plugin starts (the digest runner and the sender copy them), so changing them restarts it.
+
+Backfilled messages are stored as text only: their images and voice are not downloaded (the rows say so), and live messages are unaffected.
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-lsy-qq) is the exhaustive source for every accepted field.
 
