@@ -55,6 +55,12 @@ function ask<T>(owner: Record<string, unknown>, method: string): Promise<T | und
   return typeof fn === 'function' ? (fn as () => T).call(owner) : undefined
 }
 
+/** Call a method a duck-typed service may have, when its answer is plain data rather than a promise. */
+function callSync(owner: Record<string, unknown>, method: string): unknown {
+  const fn = owner[method]
+  return typeof fn === 'function' ? (fn as () => unknown).call(owner) : undefined
+}
+
 function card(id: ServiceId, tone: Tone, state: string, facts: Record<string, Fact> = {}): ServiceCard {
   return { id, tone, state, facts }
 }
@@ -102,13 +108,16 @@ interface QqConnectionView {
   readonly selfId?: unknown
 }
 
-async function qqCard(ctx: Context): Promise<ServiceCard> {
+/**
+ * The QQ card reads the observer's in-process state only: `connectionStatus()` and `recordedGroups()`. Neither reaches the
+ * protocol end, and nothing else of the observer is called, so an open or polling page cannot cause a OneBot call or a
+ * request to NapCat's login door (the account is under QQ risk control).
+ */
+function qqCard(ctx: Context): ServiceCard {
   const qq = service(ctx, 'lsyQq')
   if (qq === undefined) return absent('qq')
-  const report = await reported(qq)
-  if (report !== undefined) return card('qq', report.state, report.state === 'ok' ? 'up' : report.state, { detail: report.detail ?? null })
-  const groups = await ask<number>(qq, 'recordedGroups')
-  const connection = await ask<QqConnectionView>(qq, 'connectionStatus')
+  const groups = callSync(qq, 'recordedGroups')
+  const connection = callSync(qq, 'connectionStatus') as QqConnectionView | undefined
   const recorded = typeof groups === 'number' ? groups : null
   switch (connection?.state) {
     case 'connected':
@@ -119,21 +128,37 @@ async function qqCard(ctx: Context): Promise<ServiceCard> {
       return card('qq', 'warn', 'waiting_token')
     case 'starting':
       return card('qq', 'warn', 'starting')
-    default: {
-      // An observer without `connectionStatus()` only tells how many groups it records.
-      const overview = await ask<{ recorded: boolean }[]>(qq, 'groupOverview')
-      return card('qq', 'ok', 'mounted', { groups: recorded ?? overview?.filter(group => group.recorded).length ?? null })
-    }
+    default:
+      return card('qq', 'ok', 'mounted', { groups: recorded })
   }
 }
 
+/** What `ctx.lsyStyle.health()` answers: counts and times only, never sample text. */
+function styleHealth(value: unknown): { kept: number; pending: number; review: 'optional' | 'required'; lastRefreshAt: number | null; ticTrend: 'up' | 'flat' | 'down' | null } | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const { kept, pending, review, lastRefreshAt, ticTrend } = value as Record<string, unknown>
+  const count = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0
+  if (!count(kept) || !count(pending) || (review !== 'optional' && review !== 'required')) return undefined
+  if (lastRefreshAt !== null && !count(lastRefreshAt)) return undefined
+  if (ticTrend !== null && ticTrend !== 'up' && ticTrend !== 'flat' && ticTrend !== 'down') return undefined
+  return { kept, pending, review, lastRefreshAt, ticTrend }
+}
+
 /** The speaking-style page's service (`ctx.lsyStyle`); absent on a deployment that has not installed it. */
-async function styleCard(ctx: Context): Promise<ServiceCard> {
+function styleCard(ctx: Context): ServiceCard {
   const style = service(ctx, 'lsyStyle')
   if (style === undefined) return absent('style')
-  const report = await reported(style)
-  if (report === undefined) return card('style', 'ok', 'mounted')
-  return card('style', report.state, report.state === 'ok' ? 'up' : report.state, { detail: report.detail ?? null })
+  if (typeof style['health'] !== 'function') return card('style', 'ok', 'mounted')
+  let answer: unknown
+  try {
+    answer = (style['health'] as () => unknown).call(style)
+  } catch {
+    return card('style', 'down', 'error')
+  }
+  const health = styleHealth(answer)
+  if (health === undefined) return card('style', 'down', 'error')
+  const waiting = health.review === 'required' && health.pending > 0
+  return card('style', waiting ? 'warn' : 'ok', waiting ? 'pending' : 'up', { ...health })
 }
 
 async function wechatCard(ctx: Context): Promise<ServiceCard> {

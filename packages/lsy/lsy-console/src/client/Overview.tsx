@@ -49,15 +49,16 @@ export interface OverviewInjected {
 /** Props delivered by the settings shell. */
 export type OverviewProps = PropsRuntime<'settings.section'> & InjectFace<OverviewInjected> & PropsLocale<'lsy.console'>
 
-function ServiceCardView({ card, t, canManage, select }: {
+function ServiceCardView({ card, t, canManage, select, now }: {
   card: ServiceCard
+  now: number
   t: Translate
   canManage: (section: string) => boolean
   select: ((section: string) => void) | undefined
 }): ReactNode {
   const id = useId()
   const target = MANAGE_SECTION[card.id]
-  const facts = factLines(card, t)
+  const facts = factLines(card, t, now)
   return (
     <section className={css.card} aria-labelledby={id} data-service={card.id} data-tone={card.tone}>
       <div className={css.cardHeader}>
@@ -111,7 +112,9 @@ export function OverviewSection({ useOverview, useBalance, refresh, canManage, s
         ? null
         : (
           <div className={css.grid}>
-            {cards.map(card => <ServiceCardView key={card.id} card={card} t={translate} canManage={canManage} select={select} />)}
+            {cards.map(card => (
+              <ServiceCardView key={card.id} card={card} t={translate} canManage={canManage} select={select} now={view?.checkedAt ?? 0} />
+            ))}
           </div>
         )}
     </section>

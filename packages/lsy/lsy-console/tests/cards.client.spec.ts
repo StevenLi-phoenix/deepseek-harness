@@ -66,6 +66,11 @@ describe('factLines', () => {
     expect(factLines(card('voice', 'tts_off', { asr: false }, 'off'), t)).toEqual([])
     expect(factLines(card('cc', 'up', { sessions: 2, max: 3, login: 'full' }), t)).toEqual(['2 / 3 个会话 · 完整登录'])
     expect(factLines(card('cc', 'disabled', {}, 'off'), t)).toEqual([])
+    const style = { kept: 12, pending: 2, review: 'required', lastRefreshAt: Date.now() - 3_600_000, ticTrend: 'down' } as const
+    expect(factLines(card('style', 'pending', style, 'warn'), t)).toEqual(['保留 12 条 · 待审 2 条 · 上次更新 1 小时前 · 口癖趋势下降'])
+    expect(factLines(card('style', 'up', { ...style, pending: 0, lastRefreshAt: null, ticTrend: null }), t)).toEqual(['保留 12 条 · 待审 0 条 · 尚未更新'])
+    expect(factLines(card('style', 'mounted'), t)).toEqual([])
+    expect(statusText(card('style', 'pending', style, 'warn'), t)).toBe('2 条样本等待你审核')
     expect(factLines(card('qq', 'mounted', { groups: 3 }), t)).toEqual(['记录 3 个群'])
     expect(factLines(card('qq', 'up', { groups: 3, account: '12345' }), t)).toEqual(['账号 12345 · 记录 3 个群'])
     expect(factLines(card('qq', 'reconnecting', { attempt: 4 }, 'down'), t)).toEqual(['已失败 4 次'])
