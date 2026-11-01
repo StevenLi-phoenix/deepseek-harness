@@ -29,6 +29,8 @@ done
 /usr/bin/grep -q "@deepseek-ai/dsh-fork-cc-bridge" "$WORK/fresh.yml" || fail "unattended preset lacks fork-cc-bridge"
 /usr/bin/grep -q "^- id: fork-event-ingest$" "$WORK/fresh.yml" || fail "composition lacks fork-event-ingest"
 /usr/bin/grep -q "@deepseek-ai/dsh-fork-sysmon" "$WORK/fresh.yml" || fail "composition lacks fork-sysmon"
+/usr/bin/grep -q "@deepseek-ai/dsh-fork-memory-admin" "$WORK/fresh.yml" || fail "composition lacks fork-memory-admin"
+/usr/bin/grep -q "@deepseek-ai/dsh-fork-memory/settings" "$WORK/fresh.yml" || fail "composition lacks the fork-memory settings route"
 /usr/bin/grep -q "^- id: owner-relay\$" "$WORK/fresh.yml" || fail "composition lacks owner-relay"
 /usr/bin/grep -q "^- id: bili\$" "$WORK/fresh.yml" || fail "composition lacks bili"
 /usr/bin/grep -q "^- id: preset-bili\$" "$WORK/fresh.yml" || fail "composition lacks preset-bili"

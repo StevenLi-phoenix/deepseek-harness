@@ -2719,7 +2719,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-fork-memory`
 
 - `inject`: `tools`
-- `source`: [`packages/fork/fork-memory/src/index.ts:57`](../packages/fork/fork-memory/src/index.ts)
+- `source`: [`packages/fork/fork-memory/src/index.ts:62`](../packages/fork/fork-memory/src/index.ts)
 
 ```ts config-catalog
 /** Memory file and context budget. */
@@ -5910,6 +5910,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-host-plugin-inventory` | `loader` | [`packages/host/plugin-inventory/src/index.ts`](../packages/host/plugin-inventory/src/index.ts) |
 | `@deepseek-ai/dsh-llm` | — | [`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts) |
 | `@deepseek-ai/dsh-lsp` | — | [`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts) |
+| `@deepseek-ai/dsh-fork-memory-admin` | — | [`packages/fork/fork-memory-admin/src/index.ts`](../packages/fork/fork-memory-admin/src/index.ts) |
 | `@deepseek-ai/dsh-fork-qq-login` | `connection` · `forkQq` | [`packages/fork/fork-qq-login/src/index.ts`](../packages/fork/fork-qq-login/src/index.ts) |
 | `@deepseek-ai/dsh-fork-style-settings` | `connection` | [`packages/fork/fork-style-settings/src/index.ts`](../packages/fork/fork-style-settings/src/index.ts) |
 | `@deepseek-ai/dsh-fork-tool-monitor` | `tools` · `storageDomain` · `sessionController` · `sessionPersistence` | [`packages/fork/fork-tool-monitor/src/index.ts`](../packages/fork/fork-tool-monitor/src/index.ts) |

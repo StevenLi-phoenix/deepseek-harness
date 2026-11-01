@@ -376,6 +376,7 @@ flowchart TD
     pkg_fork_github_sensor["fork-github-sensor"]
     pkg_fork_integrity["fork-integrity"]
     pkg_fork_memory["fork-memory"]
+    pkg_fork_memory_admin["fork-memory-admin"]
     pkg_fork_qq["fork-qq"]
     pkg_fork_qq_login["fork-qq-login"]
     pkg_fork_qqbot["fork-qqbot"]
@@ -1762,6 +1763,7 @@ flowchart TD
 | [`host-webserver`](../packages/host/webserver) | `host` | — |
 | [`bili`](../packages/fork/bili) | `fork` | — |
 | [`fork-balance`](../packages/fork/fork-balance) | `fork` | — |
+| [`fork-memory-admin`](../packages/fork/fork-memory-admin) | `fork` | — |
 | [`fork-qq-login`](../packages/fork/fork-qq-login) | `fork` | — |
 | [`fork-style-settings`](../packages/fork/fork-style-settings) | `fork` | — |
 | [`fork-sysmon`](../packages/fork/fork-sysmon) | `fork` | — |

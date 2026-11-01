@@ -36,6 +36,7 @@ kind: "package-group"
 | [`fork-qq-login/`](fork-qq-login/README.zh.md) | QQ 的设置分区：观察者的连接状态、NapCat 的登录状态，以及 QQ 把账号踢下线后用手机扫码重新登录的二维码 |
 | [`fork-style/`](fork-style/README.zh.md) | 从真人那里学说话方式：QQ 群和 B站的简短对话，不经模型过滤，每天一次作为引用数据给主 agent 看（`ctx.forkStyle`） |
 | [`fork-style-settings/`](fork-style-settings/README.zh.md) | 设置分区 说话风格：样本一键删除、审核、owner 自己的句子、收集计数和套话趋势 |
+| [`fork-memory-admin/`](fork-memory-admin/README.zh.md) | 审阅智能体记忆的设置分区：待批准的写入、条目、带预览的回滚与彻底删除、人格反馈（它的 Host 路由是 `fork-memory` 的 `settings` 入口） |
 | [`fork-sysmon/`](fork-sysmon/README.zh.md) | 设置里显示 Host 机器 CPU、内存、功耗、温度与各卷磁盘用量的分区 |
 | [`fork-taint/`](fork-taint/README.zh.md) | 回合来源：当前回合由谁发起、陌生人的话有没有进来；只在 owner 自己的回合里联系 Claude Code，其他回合建的提醒和监控要上报 |
 | [`fork-tool-monitor/`](fork-tool-monitor/README.zh.md) | `monitor_start`、`monitor_stop`、`monitor_list` 工具：命令输出的每一行都回到同一个 Session |

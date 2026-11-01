@@ -254,6 +254,16 @@
     - id: fork-sysmon
       name: '@deepseek-ai/dsh-fork-sysmon'
 
+    # Settings → Memory: waiting writes to approve or discard, entries to search, undo, or erase, a
+    # Session's changes to roll back, and the keep/delete verdicts on persona replies. The page is
+    # fork-memory-admin (browser half); its Host route /api/fork.memory is fork-memory-settings, which reads
+    # the file the fork-memory rows below use (<DSH_HOME>/fork-memory/memory.jsonl). The route sits under
+    # the Web UI sign-in and registers no tool, so no agent can reach it.
+    - id: fork-memory-admin
+      name: '@deepseek-ai/dsh-fork-memory-admin'
+    - id: fork-memory-settings
+      name: '@deepseek-ai/dsh-fork-memory/settings'
+
     # Voice (ctx.forkVoice): text to speech for the `speak` tool (feiyu on the laptop, no fallback;
     # the Mac mini TTS service was retired on 2026-10-31; the key is FORK_FEIYU_API_KEY in
     # $DSH_HOME/.env) and speech to text for audio files the owner sends on WeChat. Transcription is OFF: to turn it on, add

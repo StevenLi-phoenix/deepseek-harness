@@ -33,12 +33,16 @@ export {
   CATEGORIES, CATEGORY_DISPLAY, isProtected, MAX_TEXT_CHARS, PROTECTED_CATEGORIES, SOURCES,
   type MemoryCategory, type MemoryDraft, type MemoryEntry, type MemorySource, type PendingEntry, type WriteMeta,
 } from './entries.ts'
+export {
+  CLI_ORIGIN, describeRollback, planPurge, purgeConfirmed, purgeToken, REVIEW_OPS, reviewWrite, rollbackConfirmed, rollbackToken,
+  type PurgePlan, type ReviewOp, type ReviewResult, type RollbackItem,
+} from './admin.ts'
 export { parseClaudeExport } from './export.ts'
 export { memoryNotice, type NoticeItem } from './notice.ts'
 export { renderMemoryBlock } from './render.ts'
 export {
-  defaultMemoryFile, localDate, MAX_ENTRIES, MAX_PENDING, MemoryError, MemoryStore,
-  type HistoryRecord, type RollbackFilter, type RollbackResult,
+  defaultMemoryFile, localDate, matchesRollback, MAX_ENTRIES, MAX_PENDING, MemoryError, MemoryStore, PENDING_DAYS,
+  type HistoryRecord, type PurgeOptions, type PurgeResult, type RollbackFilter, type RollbackOptions, type RollbackResult,
 } from './store.ts'
 export {
   defaultFeedbackFile, FEEDBACK_KINDS, FEEDBACK_SCOPES, FEEDBACK_VERDICTS, FeedbackError, FeedbackStore,
@@ -46,6 +50,7 @@ export {
   type FeedbackEntry, type FeedbackInput, type FeedbackKind, type FeedbackScope, type FeedbackVerdict,
 } from './feedback.ts'
 export { runAdminCli, runImportCli } from './cli.ts'
+export { isCategory, isEntryId } from './entries.ts'
 
 /** Plugin name; also the source kind of the memory message. */
 export const name = 'fork-memory'

@@ -39,6 +39,7 @@ export const PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackagePolic
   'packages/fork/fork-cc-bridge': { category: 'optional', reason: 'Fork-local tools for the service user\'s own Claude Code sessions, mounted by the event profile preset; needs Claude Code provisioned for the service user.' },
   'packages/fork/owner-relay': { category: 'optional', reason: 'Fork-local relay of Session answers to the owner\'s channels, mounted by the event profile bundle.' },
   'packages/fork/fork-memory': { category: 'optional', reason: 'Fork-local owner memory (context block and memory tools) mounted by the event profile preset.' },
+  'packages/fork/fork-memory-admin': { category: 'optional', reason: 'Fork-local Memory settings section (browser half) for the owner\'s review of agent memory, mounted by the event profile bundle; its Host route is fork-memory\'s settings entry.' },
   'packages/fork/fork-sysmon': { category: 'optional', reason: 'Fork-local System status settings section mounted by the event profile bundle.' },
   'packages/fork/fork-style': { category: 'optional', reason: 'Fork-local speaking-style samples (QQ groups and Bilibili comments) shown to the main agent, mounted by the event profile bundle; reads the QQ observer and bili-svc.' },
   'packages/fork/fork-style-settings': { category: 'optional', reason: 'Fork-local speaking-style settings section mounted by the event profile bundle; needs fork-style.' },
