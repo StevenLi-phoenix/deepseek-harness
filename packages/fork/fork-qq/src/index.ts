@@ -218,6 +218,9 @@ export const Config = z.object({
   }),
 })
 
+/** A QQ group number: 3 to 20 digits. */
+const GROUP_ID = /^[0-9]{3,20}$/
+
 /** First retry delay after a failed connection; doubles up to {@link MAX_RETRY_MS}. */
 const FIRST_RETRY_MS = 2000
 const MAX_RETRY_MS = 120_000
@@ -255,7 +258,7 @@ function assertConfig(config: Config): void {
   if (config.settingsUrl !== undefined && !/^https?:\/\//.test(config.settingsUrl)) throw new Error('fork-qq: settingsUrl must be an http(s) address')
   if (!isAbsolute(config.digest.workspacePath)) throw new Error('fork-qq: digest.workspacePath must be an absolute path')
   for (const id of [...config.groups.get(), ...config.send.groups]) {
-    if (!/^[0-9]{3,20}$/.test(id)) throw new Error(`fork-qq: ${JSON.stringify(id)} is not a group number (digits only)`)
+    if (!GROUP_ID.test(id)) throw new Error(`fork-qq: ${JSON.stringify(id)} is not a group number (digits only)`)
   }
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: config.digest.timeZone })
@@ -297,6 +300,7 @@ export class QqObserver extends Service {
   readonly store: QqStore
   private readonly abort = new AbortController()
   private readonly inflight = new Set<Promise<void>>()
+  private readonly warnedInvalid = new Set<string>()
   private recordedCache: { source: readonly string[]; ids: ReadonlySet<string> } | undefined
   private readonly digest: DigestRunner
   private client: OneBotClient | undefined
@@ -388,7 +392,13 @@ export class QqObserver extends Service {
   /** The groups on the list now; the list is volatile, so this follows the Settings page. */
   private get recordedIds(): ReadonlySet<string> {
     const source = this.config.groups.get()
-    if (this.recordedCache?.source !== source) this.recordedCache = { source, ids: new Set(source) }
+    if (this.recordedCache?.source !== source) {
+      // The schema only says string[]; startup refuses a bad entry (assertConfig), but a run-time save does not pass there.
+      const bad = source.filter(id => !GROUP_ID.test(id) && !this.warnedInvalid.has(id))
+      for (const id of bad) this.warnedInvalid.add(id)
+      if (bad.length > 0) this.ctx.logger.warn(`fork-qq: ignoring ${bad.map(id => JSON.stringify(id.slice(0, 24))).join(', ')} in groups: not a group number (3 to 20 digits)`)
+      this.recordedCache = { source, ids: new Set(source.filter(id => GROUP_ID.test(id))) }
+    }
     return this.recordedCache.ids
   }
 
