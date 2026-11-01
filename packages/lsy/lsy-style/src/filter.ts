@@ -22,7 +22,7 @@ export const BUILTIN_IDENTITY_MARKERS: readonly string[] = ['猫灯', 'maodeng',
 export const BUILTIN_SLURS: readonly string[] = [
   '傻逼', '傻b', '煞笔', '沙比', '傻屌', '操你', '草你', '肏', '草泥马', '你妈', '尼玛', '死妈', '妈的', 'nmsl', 'cnm', 'tmd',
   '脑残', '智障', '弱智', '废物', '贱人', '婊', '屌', '鸡巴', '狗日', '黑鬼', '支那', '畜生', '滚蛋', '去死', 'fuck', 'shit', 'bitch',
-  '福利姬', '约炮', '色图', '涩图', '黄图', '裸照', '做爱', '撸管', '自慰', '奶子', 'porn',
+  '福利姬', '约炮', '色图', '涩图', '黄图', '裸照', '做爱', '撸管', '自慰', '奶子', '娇喘', '涩涩', '色色', '性器官', 'porn',
 ]
 
 /** Rules that vary per deployment. */

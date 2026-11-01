@@ -36,6 +36,7 @@ describe('screenLine', () => {
     ['李某某来了', 'identity'],
     ['你个傻逼', 'slur'],
     ['这是禁词', 'slur'],
+    ['靠小妹快娇喘！', 'slur'],
     ['？？？', 'no-words'],
     ['666', 'no-words'],
     ['我记住了', 'tic'],
