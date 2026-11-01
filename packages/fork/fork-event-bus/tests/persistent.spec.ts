@@ -356,7 +356,9 @@ describe('persistent.key: subject', () => {
     expect(batches.map(row => row.subject).sort()).toEqual(['octo/a', 'octo/b'])
     expect(batches.filter(row => row.parent !== undefined)).toHaveLength(1)
     expect(logs.some(line => line.includes('split by subject into 2'))).toBe(true)
-    const requests = await Promise.all(runtime.deliveries.map(delivery => runtime.rules[0]!.run(delivery, new AbortController().signal)))
+    const requests = await Promise.all(runtime.deliveries.map(async (delivery) => {
+      return runtime.rules[0]!.run(delivery, new AbortController().signal)
+    }))
     expect(requests.map(request => request!.title).sort()).toEqual(['CI: octo/a', 'CI: octo/b'])
     for (const [index, row] of batches.entries()) {
       controller.known.add(`s${index}`)

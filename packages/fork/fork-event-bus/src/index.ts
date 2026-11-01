@@ -657,7 +657,9 @@ export class ForkEventBus extends Service {
    * Keep a plugin's Sessions out of the auto-archive sweep (for example the QQ resident group Sessions or the WeChat chat
    * Session). `check` runs only for Sessions that are otherwise due; return `true` (or a short reason) to keep one. A throw keeps it.
    * Register inside an effect so a reload withdraws the claim:
-   * `ctx.inject(['forkEventBus'], scoped => { scoped.effect(() => scoped.forkEventBus.protectSessions('qq', check), 'qq.archiveProtection()') })`.
+   * `ctx.inject(['forkEventBus'], scoped => {
+   *   scoped.effect(() => scoped.forkEventBus.protectSessions('qq', check), 'qq.archiveProtection()')
+   * })`.
    * @param label - skip category name shown in the sweep log and Settings, for example `qq`.
    * @param check - the claim.
    * @returns the disposer; the bus drops every claim when it stops.
@@ -695,7 +697,7 @@ export class ForkEventBus extends Service {
         if (controller === undefined) throw new Error('no sessionController service is mounted')
         const { items } = await controller.list({}, signal)
         return items.map((item): SessionRow => {
-          const title = (item.projections?.values as { title?: string | null } | undefined)?.title
+          const title = item.projections?.values.title
           return {
             id: item.sessionId,
             updatedAt: item.updatedAt,
