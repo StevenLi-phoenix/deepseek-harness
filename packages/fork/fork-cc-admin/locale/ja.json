@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Claude Code セッションサービス",
+    "description": "設定ページ向けに、サービスアカウントの Claude Code セッションを一覧表示・開始・停止します。"
+  }
+}

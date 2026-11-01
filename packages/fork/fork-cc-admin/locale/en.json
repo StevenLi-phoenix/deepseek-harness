@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Claude Code sessions service",
+    "description": "Lists, starts, and stops the service account's Claude Code sessions for the Settings page."
+  }
+}
