@@ -1,7 +1,7 @@
 /**
  * Durable state of the account's DSH side: the owner-message cursor and queue, the journal,
  * today's messages to the owner's main agent, the owner's main account as set in Settings, and
- * the Sessions this plugin created. No session, cookie, ledger, cap, or pause lives here: bili-svc
+ * the Sessions this plugin created, and the hot comments and words for `ctx.biliHot`. No session, cookie, ledger, cap, or pause lives here: bili-svc
  * owns all of them.
  *
  * Tables of the retired scouting, sign-in, and write guard (`account`, `pause`, `backoff`, `ledger`,
@@ -55,6 +55,20 @@ const sessionSchema = z.object({
   createdAt: z.number(),
 }).strict()
 
+const hotCommentSchema = z.object({
+  /** A public comment's text, without any name or `@`. */
+  text: z.string(),
+  likes: z.number().int().nonnegative(),
+  bvid: z.string(),
+  /** When it was last read, Unix epoch milliseconds. */
+  at: z.number(),
+}).strict()
+
+const hotWordSchema = z.object({
+  /** When the word was last on the hot-search list, Unix epoch milliseconds. */
+  at: z.number(),
+}).strict()
+
 /** Owner-message ids already handed over. */
 export type InboxRecord = z.infer<typeof inboxSchema>
 /** One owner message waiting for its turn. */
@@ -65,12 +79,17 @@ export type JournalRecord = z.infer<typeof journalSchema>
 export type ToldRecord = z.infer<typeof toldSchema>
 /** The owner's main account, as set in Settings. */
 export type OwnerRecord = z.infer<typeof ownerSchema>
+/** A hot comment read under a video (`ctx.biliHot`); no UID or nickname. */
+export type HotCommentRecord = z.infer<typeof hotCommentSchema>
+/** A hot-search word (`ctx.biliHot`). */
+export type HotWordRecord = z.infer<typeof hotWordSchema>
 /** A Session this plugin created. */
 export type SessionRecord = z.infer<typeof sessionSchema>
 
 /**
  * Account storage. `inbox` by kind (`dm`); `pending` by `<kind>:<id>`; `journal` and `told` (today's
- * only) by zero-padded `seq`; `owner` by `main`; `sessions` by Session id, and `current` names the live one.
+ * only) by zero-padded `seq`; `owner` by `main`; `sessions` by Session id, and `current` names the live one;
+ * `hotComments` by rpid and `hotWords` by word (`ctx.biliHot`, bounded and expiring).
  */
 export const biliDomain = {
   name: 'bili',
@@ -83,6 +102,8 @@ export const biliDomain = {
     owner: table<OwnerRecord>(ownerSchema),
     sessions: table<SessionRecord>(sessionSchema),
     current: table<SessionRecord>(sessionSchema),
+    hotComments: table<HotCommentRecord>(hotCommentSchema),
+    hotWords: table<HotWordRecord>(hotWordSchema),
   },
 } as const satisfies DomainSpec
 

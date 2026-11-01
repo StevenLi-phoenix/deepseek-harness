@@ -41,6 +41,15 @@ export type NoteOutcome =
   | { readonly status: 'removed'; readonly note: ChannelNote; readonly count: number }
   | { readonly status: 'refused'; readonly reason: 'empty' | 'too_long' | 'duplicate' | 'full' | 'not_found'; readonly count: number }
   | { readonly status: 'refused'; readonly reason: 'pii'; readonly pii: PiiKind; readonly count: number }
+  /** The guard refused the text (`publicReason` is safe to show the model) or could not be asked (fail closed). */
+  | { readonly status: 'refused'; readonly reason: 'guard'; readonly publicReason: string; readonly count: number }
+  | { readonly status: 'refused'; readonly reason: 'guard_unavailable'; readonly count: number }
+
+/**
+ * A second check of a note's text that passed the local rules: the shared guard service. It answers refuse with a
+ * public reason; a throw refuses the note (fail closed).
+ */
+export type NoteGate = (text: string) => Promise<{ readonly ok: true } | { readonly ok: false; readonly publicReason: string }>
 
 /**
  * Default notes file.
@@ -104,9 +113,10 @@ export class ChannelNotes {
   /**
    * Add one note unless it is empty, too long, carries personal information, repeats a note, or the list is full.
    * @param text - the note as the model wrote it.
+   * @param gate - asked last, for a note the local rules accept; a throw refuses the note.
    * @returns what happened and how many notes there are now.
    */
-  add(text: string): Promise<NoteOutcome> {
+  add(text: string, gate?: NoteGate): Promise<NoteOutcome> {
     return this.serialized(async () => {
       const { rev, notes } = await this.read()
       const normalized = normalizeNote(text)
@@ -117,6 +127,15 @@ export class ChannelNotes {
       if (pii !== undefined) return { status: 'refused', reason: 'pii', pii, count }
       if (notes.some(note => note.text === normalized)) return { status: 'refused', reason: 'duplicate', count }
       if (count >= this.limits.maxEntries) return { status: 'refused', reason: 'full', count }
+      if (gate !== undefined) {
+        let verdict: Awaited<ReturnType<NoteGate>>
+        try {
+          verdict = await gate(normalized)
+        } catch {
+          return { status: 'refused', reason: 'guard_unavailable', count }
+        }
+        if (!verdict.ok) return { status: 'refused', reason: 'guard', publicReason: verdict.publicReason, count }
+      }
       const note: ChannelNote = { id: randomBytes(4).toString('hex'), text: normalized, at: this.now().toISOString() }
       await this.write({ v: 1, rev: rev + 1, notes: [...notes, note] })
       return { status: 'added', note, count: count + 1 }

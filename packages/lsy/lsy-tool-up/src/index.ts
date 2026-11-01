@@ -28,13 +28,15 @@ import {
   BiliEvidenceRefusedError, CommentCache, commentsOf, defaultSaltFile, loadSalt, ownMidsOf, senderKey,
   type BiliEvidence, type BiliEvidenceItem,
 } from './evidence.ts'
-import { ChannelNotes, defaultNotesFile, renderNotesBlock, type NoteOutcome } from './notes.ts'
+import { guardOf, type GuardVerdict } from './guard.ts'
+import { ChannelNotes, defaultNotesFile, renderNotesBlock, type NoteGate, type NoteOutcome } from './notes.ts'
 
 export {
   BiliEvidenceRefusedError, CommentCache, commentsOf, defaultSaltFile, loadSalt, ownMidsOf, parseComment, senderKey,
   type BiliEvidence, type BiliEvidenceCaller, type BiliEvidenceItem, type BiliEvidenceRefusal, type CachedComment,
 } from './evidence.ts'
-export { ChannelNotes, defaultNotesFile, normalizeNote, renderNotesBlock, type ChannelNote, type NoteLimits, type NoteOutcome } from './notes.ts'
+export { guardOf, type GuardPurpose, type GuardVerdict, type TextGuard } from './guard.ts'
+export { ChannelNotes, defaultNotesFile, normalizeNote, renderNotesBlock, type ChannelNote, type NoteGate, type NoteLimits, type NoteOutcome } from './notes.ts'
 export { PII_KINDS, piiKind, type PiiKind } from './pii.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -399,6 +401,30 @@ export function apply(ctx: Context, config: Config): void {
     title: args => `Reply to ${String(args['talker'])}`,
   })
 
+  let warnedNoGuard = false
+  /** The guard check of a note, or undefined (local PII rules only, warned once) without lsy-guard. */
+  const guardGate = (sessionId: string): NoteGate | undefined => {
+    const guard = guardOf(ctx)
+    if (guard === undefined) {
+      if (!warnedNoGuard) {
+        warnedNoGuard = true
+        ctx.logger.warn('lsy-tool-up: no lsyGuard service is mounted; channel notes pass only the local PII rules')
+      }
+      return undefined
+    }
+    return async (text) => {
+      let verdict: GuardVerdict
+      try {
+        verdict = await guard.check(text, { purpose: 'bili-channel-note', audience: 'channel', sessionId })
+      } catch (error: unknown) {
+        ctx.logger.warn(`lsy-tool-up: lsyGuard failed on a channel note of Session ${sessionId}; the note is refused: ${errorText(error)}`)
+        throw error
+      }
+      if (!verdict.ok) ctx.logger.info(`lsy-tool-up: lsyGuard refused a channel note of Session ${sessionId} (rule ${verdict.rule})`)
+      return verdict.ok ? { ok: true } : { ok: false, publicReason: verdict.publicReason }
+    }
+  }
+
   const notes = new ChannelNotes(config.notes.file ?? defaultNotesFile(), {
     maxEntries: config.notes.maxEntries,
     maxChars: config.notes.maxChars,
@@ -429,8 +455,9 @@ export function apply(ctx: Context, config: Config): void {
         return { status: 'refused', reason: 'turn_cap', message: `at most ${config.callsPerTurn} note calls per turn` }
       }
       let outcome: NoteOutcome
+      const gate = guardGate(sessionId)
       try {
-        outcome = args.op === 'remove' ? await notes.remove(str(args.text)) : await notes.add(str(args.text))
+        outcome = args.op === 'remove' ? await notes.remove(str(args.text)) : await notes.add(str(args.text), gate)
       } catch (error: unknown) {
         ctx.logger.warn(`lsy-tool-up: bili_channel_note ${str(args.op)} failed in Session ${sessionId}: ${errorText(error)}`)
         return { status: 'refused', reason: 'store_error', message: errorText(error) }
@@ -441,7 +468,14 @@ export function apply(ctx: Context, config: Config): void {
         case 'removed':
           return { status: outcome.status, id: outcome.note.id, count: outcome.count }
         case 'refused':
-          return { status: 'refused', reason: outcome.reason, ...('pii' in outcome ? { pii: outcome.pii } : {}), count: outcome.count }
+          return {
+            status: 'refused',
+            reason: outcome.reason,
+            ...('pii' in outcome ? { pii: outcome.pii } : {}),
+            // The guard's public reason only; the rule that fired stays in the host log.
+            ...('publicReason' in outcome ? { message: outcome.publicReason } : {}),
+            count: outcome.count,
+          }
         default:
           return assertNever(outcome)
       }
