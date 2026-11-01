@@ -1,6 +1,6 @@
 /**
  * The 说话风格 section's store and its loader: one panel read at a time, kept through failures; the owner's edits
- * applied to the page at once (a deleted sample disappears before the Host answers) and then replaced by the Host's
+ * applied to the page at once (a deleted sample, note, or meme title disappears before the Host answers) and then replaced by the Host's
  * panel, which also undoes an edit the Host refused; and a collection run started on demand.
  */
 
@@ -54,15 +54,31 @@ export function parseEditAnswer(body: unknown): StyleEditAnswer {
 }
 
 /** The page applied before the Host answers. */
-function optimistic(panel: StylePanel, edit: StyleEdit): StylePanel {
+function optimistic(panel: StylePanel, edit: StyleEdit, now: number): StylePanel {
   switch (edit.op) {
     case 'remove':
-      return { ...panel, samples: panel.samples.filter(sample => sample.id !== edit.id) }
+      return {
+        ...panel, samples: panel.samples.filter(sample => sample.id !== edit.id), notes: panel.notes.filter(note => note.id !== edit.id),
+      }
     case 'keep':
       return { ...panel, samples: panel.samples.map(sample => (sample.id === edit.id ? { ...sample, status: 'active' as const } : sample)) }
-    case 'add':
-      return panel
+    case 'block':
+      return { ...panel, hot: panel.hot.filter(item => item.title !== edit.term) }
+    case 'card':
+      return withOwnerCard(panel, edit.card, 'edited on the Settings page', now)
+    case 'rollback': {
+      const target = panel.cards.find(card => card.version === edit.version)
+      return target === undefined ? panel : withOwnerCard(panel, target.card, `rolled back to version ${String(target.version)}`, now)
+    }
+    case 'deleteVersion':
+      return { ...panel, cards: panel.cards.filter(card => card.version !== edit.version || card.version === panel.cards.at(-1)?.version) }
   }
+}
+
+/** The panel with the owner's new card version on top, as the Host will record it. */
+function withOwnerCard(panel: StylePanel, card: string, reason: string, now: number): StylePanel {
+  const version = (panel.cards.at(-1)?.version ?? 0) + 1
+  return { ...panel, cards: [...panel.cards, { version, card, author: 'owner' as const, reason, at: now }] }
 }
 
 /** Reads and edits the panel through the Host routes. */
@@ -118,7 +134,7 @@ export class StyleLoader {
     this.store.update((draft) => {
       draft.saving = true
       draft.error = null
-      if (draft.panel !== null) draft.panel = optimistic(draft.panel, edit)
+      if (draft.panel !== null) draft.panel = optimistic(draft.panel, edit, this.now())
     })
     let answer: StyleEditAnswer | undefined
     try {

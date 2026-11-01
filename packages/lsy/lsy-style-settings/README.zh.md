@@ -1,5 +1,5 @@
 ---
-description: "说话风格设置分区：给主 agent 校准语气的 QQ 群和 B站真人对话，按来源分组、一键删除，审核挂起的样本，加入 owner 自己的句子，上次收集情况，以及套话趋势。"
+description: "说话风格设置分区：人设卡及其历史（编辑、回滚、删除）、性格、带释义和出处的热梗、可一键删除的语气样本、热梗挖掘器的上次运行、套话趋势，以及插件自己的配置。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-在手机上就能看清并纠正主 agent 从哪里学语气。设置 → 说话风格 列出 [lsy-style](../lsy-style/README.zh.md) 保存的每一条说话风格样本：你自己的话在最前，然后是 QQ 群和 B站评论区，每条都有删除按钮，删了立即生效，也不会再回来。审核开启时还会显示待审核的样本供你留或删，可以写一句自己的话加进去，能看到上次收集读了多少、按原因筛掉了多少，以及每天还有多少回答带着禁用套话。
+在手机上看清并纠正 DSH 的声音。设置 → 说话风格 显示人设卡及其历史，以及 [lsy-style](../lsy-style/README.zh.md) 保存的性格、热梗和语气样本，每条都有立即生效的删除按钮。热梗标出在哪里读到、释义从哪来。还显示待审核样本、上次收集和热梗挖掘的运行情况、套话趋势和插件配置。
 
 ## 目录
 
@@ -32,7 +32,7 @@ kind: "package-reference"
   name: '@deepseek-ai/dsh-lsy-style-settings'
 ```
 
-Host 一半在 `/api` 下注册三条路由，所以由连接的登录检查保护：`GET /api/lsy.style`（面板）、`POST /api/lsy.style.edit`，内容是 `{ "op": "remove" | "keep", "id" }` 或 `{ "op": "add", "reply", "prompt"? }`，以及 `POST /api/lsy.style.collect`（开始一次收集并立即返回）。它们每次请求时读取 `ctx.lsyStyle`，lsy-style 没挂载时返回 503。浏览器一半是设置分区 `lsy-style`（标签 说话风格）：一张结论卡片显示样本数、审核方式和「立即收集」；待审核样本带「留」和「删」；你自己的、QQ 的和 B站的样本带「删」；添加输入框；上次收集及按过滤原因的计数；以及趋势。删除或保留会在 Host 回答之前就显示在页面上，Host 拒绝时撤回。
+Host 一半在 `/api` 下注册三条路由，所以由连接的 owner 检查保护（其他 Peer 得到 403；有测试经真实连接跑过）：`GET /api/lsy.style`（面板）、`POST /api/lsy.style.edit`，内容是 `{ "op": "remove" | "keep", "id" }`、`{ "op": "block", "term" }`、`{ "op": "card", "card" }`、`{ "op": "rollback", "version" }` 或 `{ "op": "deleteVersion", "version" }`，以及 `POST /api/lsy.style.collect`（开始一次收集和一次挖掘并立即返回）。它们每次请求时读取 `ctx.lsyStyle`，lsy-style 没挂载时返回 503。浏览器一半是设置分区 `lsy-style`（标签 说话风格）：一张结论卡片显示条目数、审核方式和「立即收集」；待审核样本带「留」和「删」；人设卡带「编辑」「删除」和历史（每个版本和前一版对照，每个历史版本带「回滚到这版」和「删」）；性格、热梗（各群的黑话，标出每个梗的出处、释义来源和同族说法，再列 HotWatch 的标题）、语气样本（猫灯手写的回复在最前）三栏，每条带「删」；上次收集及按过滤原因的计数；热梗挖掘器的上次运行（按类别的读取文本数、新增、刷新、提议、模型调用、搜索，以及按规则的拒绝）；趋势；页脚是 `lsy-style` 条目的「全部设置」卡片（[lsy-config](../lsy-config/README.zh.md)，预设行字段 `mode`、`block`、`tools`、`dir`、`ticsFile` 不显示）。删除、保留、改卡、回滚或删历史版本都会在 Host 回答之前就显示在页面上，Host 拒绝时撤回。两种审核方式都能用：`required` 下新的语气样本会在待审核卡片里等着。
 
 -----
 
@@ -61,6 +61,7 @@ Host 一半在 `/api` 下注册三条路由，所以由连接的登录检查保�
 
 - [说话风格](../lsy-style/README.zh.md) — 收集、过滤、存储，以及主 agent 读到的内容块
 - [QQ 分区](../lsy-qq-login/README.zh.md) — 本分区参照的同类设置分区
+- [全部设置卡片](../lsy-config/README.zh.md) — 页脚的配置编辑器
 
 -----
 
@@ -78,7 +79,8 @@ Host 一半在 `/api` 下注册三条路由，所以由连接的登录检查保�
 <a id="known-limitations-and-deferred-work"></a>
 
 - **只有 owner 能用** — 路由只回应已登录的 owner Peer，和 DSH 页面其他部分一样。
-- **开关在 profile patch 里** — 页面显示内容块是否开启和审核方式；要改它们，改根部 `lsy-style` 行的 `enabled` 和 `review`。
+- **开关在配置卡片里** — 页面显示内容块是否开启和审核方式；要改它们，改根部 `lsy-style` 行的 `enabled` 和 `review`，页脚的卡片会把它保存进 owner 的 patch（随后插件重载）。
+- **除人设卡外没有手写入口** — 其余每条数据的来源只能是 QQ、B站或 agent 读过的网页，所以页面没有添加梗或样本的输入框；人设卡是 owner 唯一自己写的文字。
 
 <a id="dev-note"></a>
 ### 开发备注

@@ -1,8 +1,10 @@
 /**
- * Speaking style plugin, browser half: a Settings section ("说话风格") over this package's Host routes
- * (`api/lsy.style`, `api/lsy.style.edit`, `api/lsy.style.collect`). The owner sees which real exchanges tune the main
- * agent's voice, deletes bad ones with one tap, keeps pending ones when review is required, adds lines of their own,
- * and watches the stock-line trend. The section registers into `settings.section` like the upstream pages.
+ * Speaking style plugin, browser half: a Settings section ("说话风格", id `lsy-style`) over this package's Host routes
+ * (`api/lsy.style`, `api/lsy.style.edit`, `api/lsy.style.collect`). The owner sees DSH's persona card and its history,
+ * the traits, memes, and tone samples the agents share, edits the card, rolls it back, deletes bad items with one tap,
+ * keeps pending ones when review is required, reads the meme miner's last run, watches the stock-line trend, and edits
+ * the plugin's configuration in the All settings card at the foot. The section registers into `settings.section` like
+ * the upstream pages.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).

@@ -1,12 +1,17 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createStyleStore, parseEditAnswer, parsePanel, pollWhileVisible, StyleLoader, type StylePanel } from '../src/client/style.ts'
 
+const ORIGIN = { platform: 'qq', groups: 1, speakers: 2, days: 1 } as const
 const panel = (over: Partial<StylePanel> = {}): StylePanel => ({
-  enabled: true, review: 'optional', limits: { maxActive: 60, maxOwner: 20, maxChars: 60 }, running: false, lastRun: null, nextRunAt: null, trend: [],
+  enabled: true, review: 'optional', limits: { maxActive: 60, maxOwner: 20, maxMemes: 40, maxTraits: 10, cardChars: 600 }, running: false, lastRun: null, lastMine: null, nextRunAt: null, trend: [],
   samples: [
-    { id: 'a', source: 'qq-group', status: 'active', addedAt: 'x', prompt: '周末去哪', reply: '宅着' },
-    { id: 'b', source: 'qq-group', status: 'pending', addedAt: 'x', prompt: '在吗', reply: '在' },
+    { id: 'a', source: 'qq', owner: false, status: 'active', addedAt: 'x', prompt: '周末去哪', reply: '宅着', origin: ORIGIN },
+    { id: 'b', source: 'qq', owner: false, status: 'pending', addedAt: 'x', prompt: '在吗', reply: '在', origin: ORIGIN },
   ],
+  parts: { tone: true, memes: true, traits: true, persona: true, miner: true },
+  notes: [{ id: 'm1', kind: 'meme', term: '典中典', meaning: '老套到成了经典', example: '典中典', source: 'qq', firstSeen: 1, lastSeen: 2 }],
+  hot: [{ title: '某某热梗', heat: 90 }],
+  cards: [],
   ...over,
 })
 
@@ -31,6 +36,35 @@ describe('StyleLoader', () => {
     expect(store.getSnapshot()).toMatchObject({ saving: false, error: null, panel: { samples: [] } })
   })
 
+  it('removes a note and blocks a HotWatch title on the page at once', async () => {
+    const store = createStyleStore()
+    store.update((draft) => { draft.panel = panel() })
+    const never = (): Promise<never> => new Promise(() => {})
+    const loader = new StyleLoader(store, { read: () => Promise.resolve(panel()), edit: never, collect: () => Promise.resolve(panel()) })
+    void loader.edit({ op: 'remove', id: 'm1' })
+    expect(store.getSnapshot().panel!.notes).toEqual([])
+  })
+
+  it('shows the owner\'s card edit, rollback, and a deleted history version on the page at once', async () => {
+    const store = createStyleStore()
+    const cards = [
+      { version: 1, card: '第一版', author: 'agent' as const, reason: 'a', at: 1 },
+      { version: 2, card: '第二版', author: 'agent' as const, reason: 'b', at: 2 },
+    ]
+    store.update((draft) => { draft.panel = panel({ cards }) })
+    const never = (): Promise<never> => new Promise(() => {})
+    const loader = new StyleLoader(store, { read: () => Promise.resolve(panel()), edit: never, collect: never }, () => 9)
+    void loader.edit({ op: 'card', card: '魔女的版本' })
+    expect(store.getSnapshot().panel!.cards.at(-1)).toMatchObject({ version: 3, card: '魔女的版本', author: 'owner', at: 9 })
+    void loader.edit({ op: 'rollback', version: 1 })
+    expect(store.getSnapshot().panel!.cards.at(-1)).toMatchObject({ version: 4, card: '第一版', author: 'owner' })
+    void loader.edit({ op: 'deleteVersion', version: 2 })
+    expect(store.getSnapshot().panel!.cards.map(card => card.version)).toEqual([1, 3, 4])
+    // The current version is never dropped from the page.
+    void loader.edit({ op: 'deleteVersion', version: 4 })
+    expect(store.getSnapshot().panel!.cards.map(card => card.version)).toEqual([1, 3, 4])
+  })
+
   it('marks a kept sample active at once, and restores the page when the Host cannot be reached', async () => {
     const store = createStyleStore()
     store.update((draft) => { draft.panel = panel() })
@@ -51,7 +85,7 @@ describe('StyleLoader', () => {
       edit: () => Promise.resolve({ ok: false, error: 'invalid_input', panel: panel() }),
       collect: () => Promise.resolve(panel({ running: true })),
     })
-    expect(await loader.edit({ op: 'add', reply: '' })).toBe(false)
+    expect(await loader.edit({ op: 'remove', id: 'zz' })).toBe(false)
     expect(store.getSnapshot()).toMatchObject({ error: 'invalid_input', panel: { enabled: true } })
     await loader.collect()
     expect(store.getSnapshot()).toMatchObject({ error: null, panel: { running: true } })
