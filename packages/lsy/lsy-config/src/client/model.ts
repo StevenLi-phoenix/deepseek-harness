@@ -25,6 +25,8 @@ export interface Change {
   readonly before: string
   /** The value after the save, as text; empty when none. */
   readonly after: string
+  /** The field applies without reloading the plugin. */
+  readonly volatile: boolean
 }
 
 /** What a save would do. */
@@ -33,6 +35,8 @@ export interface Plan {
   readonly changes: readonly Change[]
   /** Paths whose draft is not a value the field accepts. */
   readonly invalid: readonly string[]
+  /** A field the save changes is not `volatile`, so the plugin reloads. */
+  readonly reload: boolean
 }
 
 /** Longest value the review prints before cutting it. */
@@ -131,12 +135,13 @@ function sameValue(a: ConfigValue | undefined, b: ConfigValue | undefined): bool
 
 function plan1(leaf: LeafField, draft: Draft): { change: Change; op: ConfigOp } | 'same' | 'invalid' {
   const key = pathKey(leaf.path)
+  const volatile = leaf.volatile === true
   const before = shownValue(leaf)
   if (draft.kind === 'reset') {
     if (leaf.layer !== 'owner') return 'same'
     return {
       op: { op: 'unset', path: leaf.path },
-      change: { key, path: leaf.path, action: 'reset', before: brief(before), after: brief(leaf.base ?? leaf.default) },
+      change: { key, path: leaf.path, action: 'reset', before: brief(before), after: brief(leaf.base ?? leaf.default), volatile },
     }
   }
   if (draft.kind === 'bool') {
@@ -144,7 +149,7 @@ function plan1(leaf: LeafField, draft: Draft): { change: Change; op: ConfigOp } 
       ? 'same'
       : {
         op: { op: 'set', path: leaf.path, value: draft.value },
-        change: { key, path: leaf.path, action: 'set', before: String(before === true), after: String(draft.value) },
+        change: { key, path: leaf.path, action: 'set', before: String(before === true), after: String(draft.value), volatile },
       }
   }
   if (draft.text === initialText(leaf)) return 'same'
@@ -153,13 +158,13 @@ function plan1(leaf: LeafField, draft: Draft): { change: Change; op: ConfigOp } 
   if (parsed.op === 'clear') {
     return {
       op: { op: 'clear', path: leaf.path },
-      change: { key, path: leaf.path, action: 'clear', before: brief(before), after: brief(leaf.default) },
+      change: { key, path: leaf.path, action: 'clear', before: brief(before), after: brief(leaf.default), volatile },
     }
   }
   if (sameValue(parsed.value, before)) return 'same'
   return {
     op: { op: 'set', path: leaf.path, value: parsed.value },
-    change: { key, path: leaf.path, action: 'set', before: brief(before), after: brief(parsed.value) },
+    change: { key, path: leaf.path, action: 'set', before: brief(before), after: brief(parsed.value), volatile },
   }
 }
 
@@ -182,7 +187,7 @@ export function planEdits(entry: ConfigEntryView, drafts: Drafts): Plan {
       changes.push(result.change)
     }
   }
-  return { ops, changes, invalid }
+  return { ops, changes, invalid, reload: changes.some(change => !change.volatile) }
 }
 
 /** @returns how many leaves a node holds, and how many of them the owner's patch sets. */

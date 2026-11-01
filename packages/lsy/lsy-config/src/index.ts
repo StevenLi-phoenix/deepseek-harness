@@ -14,7 +14,7 @@ import type {} from '@deepseek-ai/dsh-config-editor'
 import { ConfigEditError, applyOps, revisionOf } from './edit.ts'
 import { buildFields, objectFields } from './fields.ts'
 import {
-  CONFIG_PATH, ENTRY_ID, MAX_ENTRIES, MAX_OPS, leavesOf, pathLabel,
+  CONFIG_PATH, ENTRY_ID, MAX_ENTRIES, MAX_EXCLUDE, MAX_OPS, leavesOf, pathLabel,
   type ConfigDescribe, type ConfigEntryView, type ConfigOp, type ConfigSaveFailure, type ConfigSaveResult, type ConfigValue,
 } from './view.ts'
 
@@ -62,16 +62,16 @@ function lockedBy(effective: Record<string, unknown>, row: Row): boolean {
   return !isDeepStrictEqual(effective, row.override) && !isDeepStrictEqual(effective, row.inherited)
 }
 
-function describeEntry(id: string, row: Row | undefined): ConfigEntryView {
+function describeEntry(id: string, row: Row | undefined, exclude: readonly string[]): ConfigEntryView {
   const absent = { id, found: false, active: false, locked: false, revision: '', overrides: 0, fields: [] } as const
   if (row === undefined) return absent
   const effective = effectiveOf(row.entry)
   const locked = lockedBy(effective, row)
-  const revision = revisionOf(effective, row.inherited)
+  const revision = revisionOf(effective, row.inherited, exclude)
   if (row.entry.fiber?.state !== FiberState.ACTIVE) return { ...absent, found: true, locked, revision }
   // A running plugin without a Config schema has no fields to show.
   const schema = schemaOf(row.entry)
-  const fields = schema === undefined ? [] : buildFields(schema, { effective, inherited: row.inherited, locked })
+  const fields = schema === undefined ? [] : buildFields(schema, { effective, inherited: row.inherited, locked, exclude })
   return {
     id, found: true, active: true, locked, revision, fields,
     overrides: leavesOf(fields).filter(leaf => leaf.layer === 'owner').length,
@@ -82,6 +82,13 @@ function parseIds(request: Request): string[] | undefined {
   const ids = (new URL(request.url).searchParams.get('entries') ?? '').split(',').filter(id => id !== '')
   if (ids.length === 0 || ids.length > MAX_ENTRIES || !ids.every(id => ENTRY_ID.test(id))) return undefined
   return [...new Set(ids)]
+}
+
+/** @returns the dotted field paths a request leaves out, or undefined when they are malformed or too many. */
+function parseExclude(value: unknown): string[] | undefined {
+  const list = value === undefined || value === '' ? [] : typeof value === 'string' ? value.split(',') : value
+  if (!Array.isArray(list) || list.length > MAX_EXCLUDE) return undefined
+  return list.every(entry => typeof entry === 'string' && /^[^\s,.][^\s,]*$/.test(entry)) ? list as string[] : undefined
 }
 
 function parseOps(value: unknown): ConfigOp[] | undefined {
@@ -119,16 +126,16 @@ export function apply(ctx: Context): void {
   const connection = Reflect.get(ctx, 'connection') as ConfigConnection
   const rows = (): Row[] => ctx.configEditor.configuration()
 
-  const describe = (ids: readonly string[]): ConfigDescribe => {
+  const describe = (ids: readonly string[], exclude: readonly string[]): ConfigDescribe => {
     const started = Date.now()
     const all = rows()
-    const entries = ids.map(id => describeEntry(id, all.find(row => row.entry.options.id === id)))
+    const entries = ids.map(id => describeEntry(id, all.find(row => row.entry.options.id === id), exclude))
     const fieldCount = entries.reduce((sum, entry) => sum + leavesOf(entry.fields).length, 0)
     ctx.logger.debug(`lsy-config: read ${ids.join(',')} (${fieldCount} fields) in ${Date.now() - started}ms`)
     return { entries }
   }
 
-  const save = async (id: string, revision: string, ops: readonly ConfigOp[]): Promise<ConfigSaveResult> => {
+  const save = async (id: string, revision: string, ops: readonly ConfigOp[], exclude: readonly string[]): Promise<ConfigSaveResult> => {
     const row = rows().find(candidate => candidate.entry.options.id === id)
     if (row === undefined) return { ok: false, reason: 'not-found', message: `no plugin entry "${id}"` }
     const schema = schemaOf(row.entry)
@@ -139,41 +146,45 @@ export function apply(ctx: Context): void {
       return { ok: false, reason: 'home-locked', message: 'the home patch sets this entry, so a save here would be shadowed' }
     }
     let changed: string[] = []
+    let reload = false
     await ctx.configEditor.edit(row.entry, (current, inherited) => {
-      if (revisionOf(current, inherited) !== revision) throw new ConfigEditError('conflict', 'the configuration changed since this form was read')
-      const result = applyOps(schema, current, inherited, ops)
+      if (revisionOf(current, inherited, exclude) !== revision) throw new ConfigEditError('conflict', 'the configuration changed since this form was read')
+      const result = applyOps(schema, current, inherited, ops, exclude)
       changed = result.changed
+      reload = result.reload
       return result.next
     })
     const after = rows().find(candidate => candidate.entry.options.id === id)
-    return { ok: true, revision: after === undefined ? '' : revisionOf(effectiveOf(after.entry), after.inherited), changed }
+    return { ok: true, revision: after === undefined ? '' : revisionOf(effectiveOf(after.entry), after.inherited, exclude), changed, reload }
   }
 
   const answer = async (request: Request): Promise<Response> => {
     const headers = { 'cache-control': 'no-store' }
     if (request.method === 'GET') {
       const ids = parseIds(request)
-      return ids === undefined
-        ? Response.json({ ok: false, reason: 'bad-request', message: 'entries must name 1 to 16 plugin entry ids' }, { status: 400, headers })
-        : Response.json(describe(ids), { headers })
+      const exclude = parseExclude(new URL(request.url).searchParams.get('exclude') ?? undefined)
+      return ids === undefined || exclude === undefined
+        ? Response.json({ ok: false, reason: 'bad-request', message: 'entries must name 1 to 16 plugin entry ids; exclude, dotted field paths' }, { status: 400, headers })
+        : Response.json(describe(ids, exclude), { headers })
     }
     const body: unknown = await request.json().catch((_notJson: unknown) => undefined)
-    const fields = typeof body === 'object' && body !== null ? body as { id?: unknown; revision?: unknown; ops?: unknown } : {}
+    const fields = typeof body === 'object' && body !== null ? body as { id?: unknown; revision?: unknown; ops?: unknown; exclude?: unknown } : {}
     const ops = parseOps(fields.ops)
-    if (typeof fields.id !== 'string' || !ENTRY_ID.test(fields.id) || typeof fields.revision !== 'string' || ops === undefined) {
+    const exclude = parseExclude(fields.exclude)
+    if (typeof fields.id !== 'string' || !ENTRY_ID.test(fields.id) || typeof fields.revision !== 'string' || ops === undefined || exclude === undefined) {
       return Response.json({ ok: false, reason: 'bad-request', message: `a save names an entry, its revision and 1 to ${MAX_OPS} edits` }, { status: 400, headers })
     }
     const started = Date.now()
     const paths = ops.map(op => pathLabel(op.path))
     let result: ConfigSaveResult
     try {
-      result = await save(fields.id, fields.revision, ops)
+      result = await save(fields.id, fields.revision, ops, exclude)
     } catch (error) {
       result = { ok: false, reason: classify(error), message: messageOf(error) }
     }
     const ms = Date.now() - started
     if (result.ok) {
-      ctx.logger.info(`lsy-config: saved ${fields.id} changed=[${result.changed.join(',')}] outcome=ok in ${ms}ms`)
+      ctx.logger.info(`lsy-config: saved ${fields.id} changed=[${result.changed.join(',')}] reload=${result.reload} outcome=ok in ${ms}ms`)
     } else {
       // Paths and the refusal class only: a message may quote a field of the config, so it stays out of the log.
       ctx.logger.warn(`lsy-config: save of ${fields.id} edits=[${paths.join(',')}] outcome=${result.reason} in ${ms}ms`)

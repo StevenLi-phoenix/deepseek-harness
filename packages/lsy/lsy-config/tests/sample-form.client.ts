@@ -17,7 +17,7 @@ export function sampleForm(patches: Record<string, Patch> = {}, locked = false):
     make('string', ['url'], { layer: 'bundle', value: 'ws://a', default: 'ws://127.0.0.1:3001' }),
     make('credential-ref', ['tokenEnv'], { default: 'SAMPLE_TOKEN' }),
     make('secret', ['password'], { set: true, readOnly: 'secret' }),
-    make('string-list', ['groups'], { default: [] }),
+    make('string-list', ['groups'], { default: [], volatile: true }),
     {
       kind: 'group', key: 'media', path: ['media'], children: [
         make('boolean', ['media', 'images'], { default: true }),

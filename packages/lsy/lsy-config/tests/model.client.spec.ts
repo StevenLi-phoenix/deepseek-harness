@@ -72,6 +72,16 @@ describe('planEdits', () => {
     expect(plan.invalid).toEqual([])
   })
 
+  it('reloads the plugin only when a changed field is not volatile', () => {
+    const live = entryOf([
+      leaf({ kind: 'number', key: 'n', value: 1, volatile: true }),
+      leaf({ kind: 'string', key: 'url', value: 'a' }),
+    ])
+    expect(planEdits(live, drafts([['n'], { kind: 'text', text: '2' }])).reload).toBe(false)
+    expect(planEdits(live, drafts([['n'], { kind: 'text', text: '2' }], [['url'], { kind: 'text', text: 'b' }])).reload).toBe(true)
+    expect(planEdits(live, new Map()).reload).toBe(false)
+  })
+
   it('reports a draft the field does not accept, and sends nothing for it', () => {
     const plan = planEdits(entry, drafts([['n'], { kind: 'text', text: '0' }]))
     expect(plan).toMatchObject({ ops: [], invalid: [pathKey(['n'])] })

@@ -259,6 +259,16 @@ details[open] > .groupSummary::before {
   overflow-wrap: anywhere;
 }
 
+.warning {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-4);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-primary);
+}
+
 .reviewActions {
   display: flex;
   align-items: center;

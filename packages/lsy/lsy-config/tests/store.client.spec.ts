@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ConfigLoader, createConfigStore, type ConfigTransport } from '../src/client/store.ts'
+import { ConfigLoader, createConfigStore, entryKey, type ConfigTransport } from '../src/client/store.ts'
 import type { ConfigDescribe, ConfigEntryView, ConfigSaveRequest, ConfigSaveResult } from '../src/view.ts'
 
 const view = (revision: string, over: Partial<ConfigEntryView> = {}): ConfigEntryView => ({
@@ -14,7 +14,7 @@ function setup(reads: Array<ConfigDescribe | Error>, write: (request: ConfigSave
   const asked: string[][] = []
   let index = 0
   const transport: ConfigTransport = {
-    read: (ids) => {
+    read: (ids, _exclude) => {
       asked.push([...ids])
       const next = reads[Math.min(index++, reads.length - 1)]!
       return next instanceof Error ? Promise.reject(next) : Promise.resolve(next)
@@ -54,10 +54,10 @@ describe('ConfigLoader.save', () => {
     vi.spyOn(console, 'info').mockImplementation(() => {})
     const { loader, phases, state, asked } = setup(
       [describe1(view('a')), new Error('connection reset'), describe1(view('a', { active: false })), describe1(view('b', { overrides: 1 }))],
-      () => Promise.resolve({ ok: true, revision: 'b', changed: ['url'] }),
+      () => Promise.resolve({ ok: true, revision: 'b', changed: ['url'], reload: true }),
     )
     await loader.load(['e'])
-    const landed = await loader.save('e', 'a', [{ op: 'clear', path: ['url'] }])
+    const landed = await loader.save('e', [], 'a', [{ op: 'clear', path: ['url'] }])
     expect(landed).toBe(true)
     expect(phases).toContain('saving')
     expect(phases).toContain('reloading')
@@ -68,9 +68,9 @@ describe('ConfigLoader.save', () => {
 
   it('reports a plugin that does not answer in time as unreachable, keeping the form', async () => {
     vi.spyOn(console, 'info').mockImplementation(() => {})
-    const { loader, state } = setup([describe1(view('a')), describe1(view('a', { active: false }))], () => Promise.resolve({ ok: true, revision: 'b', changed: ['url'] }))
+    const { loader, state } = setup([describe1(view('a')), describe1(view('a', { active: false }))], () => Promise.resolve({ ok: true, revision: 'b', changed: ['url'], reload: true }))
     await loader.load(['e'])
-    expect(await loader.save('e', 'a', [{ op: 'clear', path: ['url'] }])).toBe(false)
+    expect(await loader.save('e', [], 'a', [{ op: 'clear', path: ['url'] }])).toBe(false)
     expect(state()).toMatchObject({ phase: 'unreachable', view: { revision: 'a' } })
   })
 
@@ -80,11 +80,11 @@ describe('ConfigLoader.save', () => {
     const lost = () => Promise.reject(new Error('socket closed'))
     const moved = setup([describe1(view('a')), describe1(view('b'))], lost)
     await moved.loader.load(['e'])
-    expect(await moved.loader.save('e', 'a', [{ op: 'clear', path: ['url'] }])).toBe(true)
+    expect(await moved.loader.save('e', [], 'a', [{ op: 'clear', path: ['url'] }])).toBe(true)
     expect(moved.state()).toMatchObject({ phase: 'ready', view: { revision: 'b' } })
     const same = setup([describe1(view('a'))], lost)
     await same.loader.load(['e'])
-    expect(await same.loader.save('e', 'a', [{ op: 'clear', path: ['url'] }])).toBe(false)
+    expect(await same.loader.save('e', [], 'a', [{ op: 'clear', path: ['url'] }])).toBe(false)
     expect(same.state()).toMatchObject({ phase: 'ready', refused: { reason: 'failed' } })
   })
 
@@ -95,24 +95,68 @@ describe('ConfigLoader.save', () => {
       () => Promise.resolve({ ok: false, reason: 'conflict', message: 'changed' }),
     )
     await loader.load(['e'])
-    expect(await loader.save('e', 'a', [{ op: 'clear', path: ['url'] }])).toBe(false)
+    expect(await loader.save('e', [], 'a', [{ op: 'clear', path: ['url'] }])).toBe(false)
     expect(state()).toMatchObject({ phase: 'ready', refused: { reason: 'conflict' }, view: { revision: 'c' } })
     expect(asked).toHaveLength(2)
   })
 
   it('does not wait for a reload when nothing changed', async () => {
-    const { loader, state, asked } = setup([describe1(view('a'))], () => Promise.resolve({ ok: true, revision: 'a', changed: [] }))
+    const { loader, state, asked } = setup([describe1(view('a'))], () => Promise.resolve({ ok: true, revision: 'a', changed: [], reload: false }))
     await loader.load(['e'])
-    expect(await loader.save('e', 'a', [{ op: 'clear', path: ['url'] }])).toBe(true)
+    expect(await loader.save('e', [], 'a', [{ op: 'clear', path: ['url'] }])).toBe(true)
     expect(state().phase).toBe('ready')
     expect(asked).toHaveLength(2)
   })
 
+  it('does not wait for a reload after a save of volatile fields only, and says nothing about reloading', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {})
+    const { loader, state, phases, asked } = setup(
+      [describe1(view('a')), describe1(view('b'))],
+      () => Promise.resolve({ ok: true, revision: 'b', changed: ['groups'], reload: false }),
+    )
+    await loader.load(['e'])
+    expect(await loader.save('e', [], 'a', [{ op: 'set', path: ['groups'], value: ['1'] }])).toBe(true)
+    expect(phases).not.toContain('reloading')
+    expect(state()).toMatchObject({ phase: 'ready', view: { revision: 'b' } })
+    expect(asked).toHaveLength(2)
+  })
+
+  it('reads and saves with the fields a dedicated editor owns left out, under a key of their own', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {})
+    const store = createConfigStore()
+    const reads: Array<readonly string[]> = []
+    const writes: ConfigSaveRequest[] = []
+    const transport: ConfigTransport = {
+      read: (_ids, exclude) => { reads.push(exclude); return Promise.resolve(describe1(view('a'))) },
+      write: (request) => { writes.push(request); return Promise.resolve({ ok: true, revision: 'a', changed: ['url'], reload: false }) },
+    }
+    const loader = new ConfigLoader(store, transport, POLICY, () => Promise.resolve(), () => 1)
+    await loader.load(['e'], ['groups'])
+    await loader.load(['e'])
+    expect(Object.keys(store.getSnapshot().entries).sort()).toEqual(['e', entryKey('e', ['groups'])].sort())
+    await loader.save('e', ['groups'], 'a', [{ op: 'clear', path: ['url'] }])
+    expect(writes).toEqual([{ id: 'e', revision: 'a', ops: [{ op: 'clear', path: ['url'] }], exclude: ['groups'] }])
+    expect(reads[0]).toEqual(['groups'])
+  })
+
+  it('writes nothing until save is called: loading, and reading again, never write', async () => {
+    const writes: ConfigSaveRequest[] = []
+    const store = createConfigStore()
+    const transport: ConfigTransport = {
+      read: () => Promise.resolve(describe1(view('a'))),
+      write: (request) => { writes.push(request); return Promise.reject(new Error('unused')) },
+    }
+    const loader = new ConfigLoader(store, transport, POLICY, () => Promise.resolve(), () => 1)
+    await loader.load(['e'])
+    await loader.load(['e'])
+    expect(writes).toEqual([])
+  })
+
   it('logs the entry and field paths of a save, never a value', async () => {
     const info = vi.spyOn(console, 'info').mockImplementation(() => {})
-    const { loader } = setup([describe1(view('a')), describe1(view('b'))], () => Promise.resolve({ ok: true, revision: 'b', changed: ['digest.model'] }))
+    const { loader } = setup([describe1(view('a')), describe1(view('b'))], () => Promise.resolve({ ok: true, revision: 'b', changed: ['digest.model'], reload: true }))
     await loader.load(['e'])
-    await loader.save('e', 'a', [{ op: 'set', path: ['digest', 'model'], value: 'secret-looking-value' }])
+    await loader.save('e', [], 'a', [{ op: 'set', path: ['digest', 'model'], value: 'secret-looking-value' }])
     expect(info).toHaveBeenCalledWith('[lsy-config] save of e [digest.model] outcome=ok in 0ms')
     expect(info.mock.calls.flat().join(' ')).not.toContain('secret-looking-value')
   })
