@@ -46,6 +46,8 @@ Choose it when the agent should keep a presence of its own on Bilibili, separate
 
 Put the bili-svc bearer token in the credential store as `BILI_SVC_TOKEN_BILI` (scopes `bili`, `read`, `reply`, limited to the account). Then open **Settings → Bilibili account** (B站账号) and, under **Main account**, enter the UID of your own account (the number after `space.bilibili.com/`); it stays in the runtime's storage, so no committed file names the owner. The section lists every account bili-svc holds with its session state (`ok`, `dead`, `missing`, `none`, or bili-svc unreachable). To sign accounts in, renew them, and use the gate, give the service a second token of scope `manage` as `BILI_SVC_TOKEN_MANAGE` ([RUNBOOK §16b](../../../fork/deploy/RUNBOOK.md)); without it the section stays read-only and names the credential it misses.
 
+The page ends with the [All settings](../fork-config/README.md) card for the `bili` and `tool-bili` entries, which lists every configuration field of the account (time zone, daily limit, Session, poll period) and saves edits to your own patch.
+
 | Field | Default | Meaning |
 |---|---|---|
 | `account` | `maomao` | bili-svc's id of the agent's account: the `account` of every call. Settings shows the account with this id, else the first one with a working session |

@@ -28,6 +28,9 @@
     },
     {
       "path": "../../client/ui-slots"
+    },
+    {
+      "path": "../fork-config/tsconfig.client.json"
     }
   ]
 }

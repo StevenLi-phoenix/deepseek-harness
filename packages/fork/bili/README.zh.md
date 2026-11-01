@@ -46,6 +46,8 @@ kind: "package-reference"
 
 把 bili-svc 的 bearer 令牌以 `BILI_SVC_TOKEN_BILI` 放进凭据存储（权限 `bili`、`read`、`reply`，只限这个账号）。然后打开 **设置 → B站账号**，在 **主号** 里填你自己账号的 UID（`space.bilibili.com/` 后面那串数字）；它只存在运行时的存储里，提交的文件里不会出现 owner。设置页列出 bili-svc 保管的每个账号和它的会话状态（`ok`、`dead`、`missing`、`none`，或连不上 bili-svc）。要在这里扫码登录、续期、用闸门，需要给服务再配一个 `manage` 权限的令牌 `BILI_SVC_TOKEN_MANAGE`（[RUNBOOK §16b](../../../fork/deploy/RUNBOOK.md)）；没有它，设置页保持只读，并写明缺哪个凭据。
 
+页面末尾有 `bili` 与 `tool-bili` 条目的[全部设置](../fork-config/README.zh.md)卡片，列出账号的每个配置字段（时区、每日上限、Session、轮询周期），并把改动保存到你自己的补丁。
+
 | 字段 | 默认值 | 含义 |
 |---|---|---|
 | `account` | `maomao` | bili-svc 里 agent 账号的 id：每次调用的 `account`。设置页显示这个 id 的账号，没有时显示第一个会话正常的账号 |

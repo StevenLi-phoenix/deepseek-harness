@@ -8,9 +8,11 @@
 
 import { useId, useEffect, useState, type ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
-import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { InjectFace, PropsLocale, PropsRenderFactories, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the settings shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+// Type-only: declares the 'settings.plugin-config' factory this section renders at its foot.
+import type {} from '@deepseek-ai/dsh-fork-config/client'
 import type { ActionResult, BiliAction, BiliView } from '../view.ts'
 import { Accounts } from './Accounts.tsx'
 import { LOGIN_POLL_MS, POLL_INTERVAL_MS, startPolling, type BiliState } from './bili.ts'
@@ -36,8 +38,12 @@ export interface BiliAccountInjected {
   poll: (action: BiliAction) => void
 }
 
+/** The plugin entries whose every setting the page lists under the account cards; one that is not composed shows nothing. */
+const CONFIG_ENTRIES = ['bili', 'tool-bili'] as const
+
 /** Props delivered by the settings shell. */
 export type BiliAccountProps = PropsRuntime<'settings.section'> & InjectFace<BiliAccountInjected> & PropsLocale<'bili'>
+  & Partial<PropsRenderFactories>
 
 function Card({ title, meta, children }: { title: string; meta?: string; children: ReactNode }): ReactNode {
   const id = useId()
@@ -133,7 +139,7 @@ function errorText(error: string, code: string | null, t: Translate): string {
  * @param props - the store hook, refresh and action callbacks, and copy.
  * @returns the section.
  */
-export function BiliAccountSection({ useBili, refresh, act, poll, t }: BiliAccountProps): ReactNode {
+export function BiliAccountSection({ useBili, refresh, act, poll, renderFactorySlot, t }: BiliAccountProps): ReactNode {
   const state = useBili(value => value)
   const translate = t as Translate
   const view = state.view
@@ -177,6 +183,7 @@ export function BiliAccountSection({ useBili, refresh, act, poll, t }: BiliAccou
             <Ledger view={view} now={now} t={translate} busy={state.busy} act={act} limit={state.ledgerLimit} />
           </>
         )}
+      {renderFactorySlot?.('settings.plugin-config', { entries: CONFIG_ENTRIES })}
     </section>
   )
 }

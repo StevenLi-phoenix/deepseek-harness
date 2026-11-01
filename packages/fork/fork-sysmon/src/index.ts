@@ -28,12 +28,12 @@ export interface Config {
 
 /** Configuration schema. */
 export const Config: z<Config> = z.object({
-  macmonPath: z.string(),
+  macmonPath: z.string().description('Absolute path of the macmon binary; unset tries <home>/bin/macmon, then /opt/homebrew/bin/macmon.'),
   mounts: z.array(z.object({
     mount: z.string(),
     label: z.string(),
-  })).default(DEFAULT_MOUNTS.map(mount => ({ ...mount }))),
-  cacheMs: z.natural().default(2000),
+  })).default(DEFAULT_MOUNTS.map(mount => ({ ...mount }))).description('Volumes to show, in order: [{ mount: absolute path, label }].'),
+  cacheMs: z.natural().default(2000).description('How long a snapshot is served from cache, in milliseconds.'),
 })
 
 /** Required Host services. */

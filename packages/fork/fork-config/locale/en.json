@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "All settings",
+    "description": "Shows every configuration field of a plugin entry in Settings, the layer that set it, and saves edits to the owner patch in one write."
+  }
+}

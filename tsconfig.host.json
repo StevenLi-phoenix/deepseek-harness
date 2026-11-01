@@ -580,6 +580,7 @@
     { "path": "./packages/fork/fork-cc-bridge" },
     { "path": "./packages/fork/fork-cc-admin" },
     { "path": "./packages/fork/fork-sysmon/tsconfig.host.json" },
+    { "path": "./packages/fork/fork-config/tsconfig.host.json" },
     { "path": "./packages/fork/fork-qq-login/tsconfig.host.json" },
     { "path": "./packages/fork/fork-style" },
     { "path": "./packages/fork/fork-style-settings/tsconfig.host.json" },

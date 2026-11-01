@@ -1,0 +1,305 @@
+/* The All settings card: a Settings-native card of collapsible entries, each a form of rows. Row rhythm, inputs and
+   badges follow the shared settings form (ui-primitives settings-form fields); every colour is a theme token. */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 16px 14px;
+  border: 0.5px solid var(--dsw-alias-settings-card-stroke);
+  border-radius: var(--dsw-radius-xl);
+  background: var(--dsw-alias-settings-card-fill);
+  font-size: 13px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.cardTitle {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.hint,
+.note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.entry {
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  padding-top: 4px;
+}
+
+.entrySummary,
+.groupSummary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.entrySummary::-webkit-details-marker,
+.groupSummary::-webkit-details-marker {
+  display: none;
+}
+
+.entrySummary::before,
+.groupSummary::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--dsw-alias-label-tertiary);
+  border-bottom: 1.5px solid var(--dsw-alias-label-tertiary);
+  transform: rotate(-45deg);
+  transition: transform 120ms ease;
+}
+
+details[open] > .entrySummary::before,
+details[open] > .groupSummary::before {
+  transform: rotate(45deg);
+}
+
+.entryName {
+  font-weight: 500;
+}
+
+.groupName {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.meta {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.group {
+  margin: 4px 0 0 4px;
+  padding-left: 12px;
+  border-left: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0;
+}
+
+.field + .field {
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  color: var(--dsw-alias-label-primary);
+}
+
+.badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reset,
+.link {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .reset:hover:not(:disabled),
+  .link:hover:not(:disabled) {
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+.reset:disabled,
+.link:disabled {
+  cursor: default;
+}
+
+.input,
+.textarea,
+.select {
+  min-width: 0;
+  padding: 0 12px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-3);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-primary);
+}
+
+.input,
+.select {
+  height: 34px;
+}
+
+.textarea {
+  padding: 8px 12px;
+  font-family: var(--dsw-font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  resize: vertical;
+}
+
+.input:focus-visible,
+.textarea:focus-visible,
+.select:focus-visible {
+  outline: none;
+  border-color: var(--dsw-alias-state-business-primary);
+}
+
+.input:disabled,
+.textarea:disabled,
+.select:disabled {
+  color: var(--dsw-alias-label-tertiary);
+  cursor: default;
+}
+
+.input[aria-invalid='true'],
+.textarea[aria-invalid='true'] {
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+/* A coarse pointer gets a 16px face, which keeps iOS Safari from zooming a focused field. */
+@media (pointer: coarse) {
+  .input,
+  .textarea,
+  .select {
+    font-size: 16px;
+  }
+}
+
+.help {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-tertiary);
+  overflow-wrap: anywhere;
+}
+
+.invalid {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-error);
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.status[data-tone='error'] {
+  color: var(--dsw-alias-label-error);
+}
+
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-3);
+}
+
+.reviewTitle {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.reviewList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.reviewActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.primary,
+.secondary {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: var(--dsw-radius-md);
+  padding: 5px 14px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.primary {
+  background: var(--dsw-alias-label-primary);
+  color: var(--dsw-alias-bg-layer-3);
+}
+
+.secondary {
+  border-color: var(--dsw-alias-border-l4);
+  background: none;
+  color: var(--dsw-alias-label-primary);
+}
+
+.primary:disabled,
+.secondary:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.primary:focus-visible,
+.secondary:focus-visible,
+.reset:focus-visible,
+.link:focus-visible,
+.entrySummary:focus-visible,
+.groupSummary:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}

@@ -76,6 +76,7 @@
     "yaml": "^2.9.0",
     "@deepseek-ai/dsh-owner-relay": "workspace:*",
     "@deepseek-ai/dsh-fork-wechat": "workspace:*",
-    "@deepseek-ai/dsh-credentials": "workspace:*"
+    "@deepseek-ai/dsh-credentials": "workspace:*",
+    "@deepseek-ai/dsh-fork-config": "workspace:*"
   }
 }

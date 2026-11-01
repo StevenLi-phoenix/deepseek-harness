@@ -26,6 +26,7 @@ kind: "package-group"
 |---|---|
 | [`bili/`](bili/README.zh.md) | agent 自己的 B站账号，作为 bili-svc 的客户端：读取和不发言的操作走 bili-svc 的门，owner 的私信经它的回复闸门回复，以及管理 bili-svc 的设置页（账号、扫码登录、闸门、急停、动作记录） |
 | [`fork-balance/`](fork-balance/README.zh.md) | 账号设置页里列出各供应商 key 余额或配额的卡片 |
+| [`fork-config/`](fork-config/README.zh.md) | 任何设置分区都能嵌入的“全部设置”卡片（`settings.plugin-config`）：插件条目的每个 Config 字段、所在层，以及一次复核后写入主人补丁的保存 |
 | [`fork-event-bus/`](fork-event-bus/README.zh.md) | 去重、回环抑制、订阅、合批、限流、通知与 Session 分发 |
 | [`fork-event-ingest/`](fork-event-ingest/README.zh.md) | `POST /hooks/events` 路由：主人自己的服务用每个来源一个的 bearer token 推送事件 |
 | [`fork-github-sensor/`](fork-github-sensor/README.zh.md) | 用条件请求轮询 GitHub 的 release、tag、提交与通知 |

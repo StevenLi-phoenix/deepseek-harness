@@ -45,6 +45,7 @@ export const PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackagePolic
   'packages/fork/fork-sysmon': { category: 'optional', reason: 'Fork-local System status settings section mounted by the event profile bundle.' },
   'packages/fork/fork-style': { category: 'optional', reason: 'Fork-local speaking-style samples (QQ groups and Bilibili comments) shown to the main agent, mounted by the event profile bundle; reads the QQ observer and bili-svc.' },
   'packages/fork/fork-style-settings': { category: 'optional', reason: 'Fork-local speaking-style settings section mounted by the event profile bundle; needs fork-style.' },
+  'packages/fork/fork-config': { category: 'optional', reason: 'Fork-local All settings card for Settings sections, mounted by the event profile bundle.' },
   'packages/fork/fork-qq-login': { category: 'optional', reason: 'Fork-local QQ settings section (observer connection, NapCat login, login QR code) mounted by the event profile bundle; needs the QQ observer.' },
   'packages/fork/fork-cc-admin': { category: 'optional', reason: 'Fork-local Claude Code session service for the settings console, mounted by the event profile bundle.' },
   'packages/fork/fork-console': { category: 'optional', reason: 'Fork-local settings sections (service overview, subscriptions and reminders, Claude Code and voice) mounted by the event profile bundle.' },

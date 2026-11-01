@@ -40,6 +40,8 @@ kind: "package-reference"
 
 给服务运行所用的用户安装 macmon：`brew install macmon`，或把发布版二进制放进该用户的 `~/bin`。没有它时，分区仍显示 CPU、磁盘和近似的内存数字（总量减空闲页，会把 macOS 的文件缓存算作已用）。
 
+页面末尾有这个插件 `fork-sysmon` 条目的[全部设置](../fork-config/README.zh.md)卡片，上面这些字段可以直接在页面里修改。
+
 -----
 
 <a id="understand-the-implementation"></a>

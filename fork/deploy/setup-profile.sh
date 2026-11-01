@@ -52,7 +52,7 @@ function link(name, directory) {
 // GitHub adapter, and the console logger are profile plugins here, linked like the fork packages.
 for (const name of ['@deepseek-ai/dsh-webhook', '@deepseek-ai/dsh-webhook-github', '@deepseek-ai/cordis-plugin-logger-console', '@deepseek-ai/dsh-fork-event-bus', '@deepseek-ai/dsh-fork-github-sensor',
   '@deepseek-ai/dsh-fork-wechat', '@deepseek-ai/dsh-fork-tool-watch', '@deepseek-ai/dsh-fork-tool-wechat', '@deepseek-ai/dsh-fork-balance', '@deepseek-ai/dsh-fork-memory', '@deepseek-ai/dsh-fork-memory-admin',
-  '@deepseek-ai/dsh-fork-event-ingest', '@deepseek-ai/dsh-fork-tool-monitor', '@deepseek-ai/dsh-fork-cc-bridge', '@deepseek-ai/dsh-fork-sysmon', '@deepseek-ai/dsh-fork-console', '@deepseek-ai/dsh-fork-cc-admin', '@deepseek-ai/dsh-fork-presence', '@deepseek-ai/dsh-fork-wechat-settings', '@deepseek-ai/dsh-bili',
+  '@deepseek-ai/dsh-fork-event-ingest', '@deepseek-ai/dsh-fork-tool-monitor', '@deepseek-ai/dsh-fork-cc-bridge', '@deepseek-ai/dsh-fork-sysmon', '@deepseek-ai/dsh-fork-config', '@deepseek-ai/dsh-fork-console', '@deepseek-ai/dsh-fork-cc-admin', '@deepseek-ai/dsh-fork-presence', '@deepseek-ai/dsh-fork-wechat-settings', '@deepseek-ai/dsh-bili',
   '@deepseek-ai/dsh-fork-voice', '@deepseek-ai/dsh-fork-tool-voice', '@deepseek-ai/dsh-fork-tool-up',
   '@deepseek-ai/dsh-tool-bili', '@deepseek-ai/dsh-owner-relay', '@deepseek-ai/dsh-fork-qq', '@deepseek-ai/dsh-fork-qq-login', '@deepseek-ai/dsh-fork-tool-qq', '@deepseek-ai/dsh-fork-qqbot',
   '@deepseek-ai/dsh-fork-taint', '@deepseek-ai/dsh-fork-integrity', '@deepseek-ai/dsh-fork-style', '@deepseek-ai/dsh-fork-style-settings']) {

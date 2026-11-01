@@ -486,6 +486,7 @@
       "@deepseek-ai/dsh-fork-balance": ["./packages/fork/fork-balance/src"],
       "@deepseek-ai/dsh-fork-cc-admin": ["./packages/fork/fork-cc-admin/src"],
       "@deepseek-ai/dsh-fork-cc-bridge": ["./packages/fork/fork-cc-bridge/src"],
+      "@deepseek-ai/dsh-fork-config": ["./packages/fork/fork-config/src"],
       "@deepseek-ai/dsh-fork-console": ["./packages/fork/fork-console/src"],
       "@deepseek-ai/dsh-fork-event-bus": ["./packages/fork/fork-event-bus/src"],
       "@deepseek-ai/dsh-fork-event-ingest": ["./packages/fork/fork-event-ingest/src"],

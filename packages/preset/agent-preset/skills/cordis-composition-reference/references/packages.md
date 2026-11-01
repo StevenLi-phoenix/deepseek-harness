@@ -339,6 +339,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-fork-balance` | yes | Account settings card with the balance or quota of every provider key the Host holds |
 | `@deepseek-ai/dsh-fork-cc-admin` | yes | Claude Code sessions of the service account as a root service: list, start with a first task, and stop, for the Settings page |
 | `@deepseek-ai/dsh-fork-cc-bridge` | yes | Model-facing cc_list_sessions and cc_send tools: the agent talks to the owner's Claude Code sessions on the same Mac through a relay, and their replies reach the main agent |
+| `@deepseek-ai/dsh-fork-config` | no | All settings card: every Config field of a plugin entry, the layer that set it, and one explicit save to the owner patch, embeddable in any Settings section |
 | `@deepseek-ai/dsh-fork-console` | yes | Settings sections for the event service: a service overview, subscriptions and schedule reminders, and Claude Code sessions with the voice service |
 | `@deepseek-ai/dsh-fork-event-bus` | yes | Durable event bus for event-driven agent runs: dedupe, loop suppression, subscriptions, coalescing, rate limits, and dispatch to notify or Session actuators |
 | `@deepseek-ai/dsh-fork-event-ingest` | yes | Authenticated POST route through which the owner's own services push events into the fork event bus, one token per source |

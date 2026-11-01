@@ -432,3 +432,20 @@ describe('BiliLoader', () => {
     }
   })
 })
+
+describe('All settings card', () => {
+  it('ends the page with the card for the bili and tool-bili entries, and renders without the card factory', () => {
+    const store = createBiliStore()
+    store.update((draft) => { Object.assign(draft, { view: VIEW, checkedAt: NOW }) })
+    const renderFactorySlot = vi.fn((_name: string, _props: object) => <div data-testid="plugin-config" />)
+    const props = {
+      close: () => {}, useBili: bindSnapshotSelector(store), refresh: vi.fn(), act: vi.fn(), poll: vi.fn(), t, renderFactorySlot,
+    } as unknown as BiliAccountProps
+    const { container } = render(<BiliAccountSection {...props} />)
+    expect(renderFactorySlot).toHaveBeenCalledWith('settings.plugin-config', { entries: ['bili', 'tool-bili'] })
+    expect(container.querySelector('section')?.lastElementChild).toBe(screen.getByTestId('plugin-config'))
+    cleanup()
+    mount({ view: VIEW, checkedAt: NOW })
+    expect(screen.queryByTestId('plugin-config')).toBeNull()
+  })
+})
