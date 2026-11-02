@@ -107,11 +107,14 @@ start() {
   # output: log only warnings and errors, and keep no log file. The login QR code is announced at warn level.
   # The default file seeds new accounts, but each logged-in account has its own napcat_<uin>.json made on its first login
   # (info level), and that one wins: patch every one of them.
+  # NapCat.Shell.zip ships every native bypass switched off (its schema defaults them on); while they were off QQ invalidated
+  # the login every few hours (KickedOffLine "登录已失效", three times on 2026-11-01), so turn them all on.
   docker run --rm -v napcat-config:/cfg --entrypoint bash "$IMAGE" -c \
     '[ -f /cfg/napcat.json ] || cp /app/napcat/config/napcat.json /cfg/napcat.json 2>/dev/null || echo "{}" > /cfg/napcat.json
      for f in /cfg/napcat.json /cfg/napcat_[0-9]*.json; do
        [ -f "$f" ] || continue
-       jq ".consoleLogLevel = \"warn\" | .fileLogLevel = \"warn\" | .fileLog = false" "$f" > "$f.new" && mv "$f.new" "$f"
+       jq ".consoleLogLevel = \"warn\" | .fileLogLevel = \"warn\" | .fileLog = false
+           | .bypass = {hook: true, window: true, module: true, process: true, container: true, js: true}" "$f" > "$f.new" && mv "$f.new" "$f"
      done'
   docker rm -f "$NAME" >/dev/null 2>&1 || true
   local account=()
