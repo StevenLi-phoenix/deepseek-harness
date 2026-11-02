@@ -2908,7 +2908,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-fork-integrity`
 
-- `source`: [`packages/fork/fork-integrity/src/index.ts:33`](../packages/fork/fork-integrity/src/index.ts)
+- `source`: [`packages/fork/fork-integrity/src/index.ts:30`](../packages/fork/fork-integrity/src/index.ts)
 
 ```ts config-catalog
 /** Settings. */
