@@ -69,7 +69,7 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-调用方 Agent 的 preset 挂载了这个包且 `ctx.forkCourses` 存在时，有五个工具 schema。`courses_deadlines`（可选 `days`、`course`、`include_overdue`）列出往后要截止的未完成任务，过期的连同迟交窗口一起列，并要求模型说“last update <时间>”，同步失败时告诉主人从何时开始。`courses_find`（必填 `text`，可选 `course`）搜索任务，包括已完成的。`courses_get`（必填 `id`）显示一个任务和它的版本。`courses_set_progress`（必填 `id`、`expected_version`、`status`、`evidence`；可选主人说出的 `percent`、`completed_work`、`remaining_work`、`request_id`）说明它从不改提交状态、已提交的任务设为 `completed`、分部分完成的任务按部分算进度，以及完成的任务不再提醒。`courses_save_memo`（必填 `title`；可选 `body`、`category`、`course`、`task_id`、`planned_at`、`id`、`expected_version`、`request_id`）保存一条备忘。
+调用方 Agent 的 preset 挂载了这个包且 `ctx.forkCourses` 存在时，有五个工具 schema。`courses_deadlines`（可选 `days`、`course`、`include_overdue`）列出往后要截止的未完成任务，过期的连同迟交窗口一起列，并要求模型说“last update <时间>”，同步失败时告诉主人从何时开始；它还说明截止提醒不需要定时任务，而提到课程任务的定时任务在触发时要用 `courses_get` 复核，到时已完成的任务不再提。`courses_find`（必填 `text`，可选 `course`）搜索任务，包括已完成的。`courses_get`（必填 `id`）显示一个任务和它的版本。`courses_set_progress`（必填 `id`、`expected_version`、`status`、`evidence`；可选主人说出的 `percent`、`completed_work`、`remaining_work`、`request_id`）说明它从不改提交状态、已提交的任务设为 `completed`、分部分完成的任务按部分算进度，以及完成的任务不再提醒。`courses_save_memo`（必填 `title`；可选 `body`、`category`、`course`、`task_id`、`planned_at`、`id`、`expected_version`、`request_id`）保存一条备忘。
 
 #### Token 影响
 

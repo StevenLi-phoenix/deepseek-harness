@@ -55,6 +55,14 @@ describe('course tools', () => {
     expect(ctx.tools.schemas().map(schema => schema.name).filter(name => name.startsWith('courses_')).sort()).toEqual(['courses_deadlines', 'courses_find', 'courses_get', 'courses_save_memo', 'courses_set_progress'])
   })
 
+  it('tells the model that a schedule naming a course task rechecks the task when it fires', async () => {
+    const { ctx } = await mount(() => ({}))
+    const description = ctx.tools.schemas().find(schema => schema.name === 'courses_deadlines')?.description ?? ''
+    expect(description).toContain('Deadline reminders need no schedule')
+    expect(description).toContain('read the task with courses_get when it fires')
+    expect(description).toContain('when a scheduled prompt names a course task, read it with courses_get before you mention it')
+  })
+
   it('lists deadlines as one line each, with the sync health and the undated count, from a bounded report', async () => {
     const { run, api } = await mount(() => ({
       items: [taskRow('t1'), taskRow('t2', { due_at: '2026-10-31T23:00:00-04:00', late_at: '2026-11-02T22:00:00-05:00', parent_task_id: 'p', parent_title: 'Homework 3' })],
