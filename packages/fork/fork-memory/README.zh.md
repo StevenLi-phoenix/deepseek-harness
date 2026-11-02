@@ -115,7 +115,13 @@ echo '{"scope":"up","verdict":"keep","kind":"comment","text":"哈哈这个梗我
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 插件入口：pre-step 注入与三个工具 |
+| [`src/index.ts`](src/index.ts) | 插件入口：接通通知队列、记忆块与工具；重新导出公开 API |
+| [`src/config.ts`](src/config.ts) | 插件配置与 `FORK_MEMORY_HOLD` 开关 |
+| [`src/session-block.ts`](src/session-block.ts) | 两种模式共用的 pre-step 注入：每个根 Session 一个块，紧跟在被认领的提示之后 |
+| [`src/memory-block.ts`](src/memory-block.ts) | 主人记忆模式：读文件并渲染记忆块 |
+| [`src/feedback-mode.ts`](src/feedback-mode.ts) | 人设预设的反馈模式：把某个范围的评价放在每个根 Session 前面 |
+| [`src/tools.ts`](src/tools.ts) | `memory_search`、`memory_save`、`memory_forget`，以及扣留依据的回合来源判断 |
+| [`src/notice-queue.ts`](src/notice-queue.ts) | 把一个回合的通知排队到回合结束、按天限量，再经通知器发出 |
 | [`src/store.ts`](src/store.ts) | JSONL 存储：列出、保存、扣下、批准、撤销、回滚、抹除、导入、搜索，以及历史和快照 |
 | [`src/notice.ts`](src/notice.ts) | 一个回合的保护类变动对应的微信通知 |
 | [`src/render.ts`](src/render.ts) | 记忆块与字节预算 |
@@ -124,7 +130,10 @@ echo '{"scope":"up","verdict":"keep","kind":"comment","text":"哈哈这个梗我
 | [`src/export.ts`](src/export.ts) | claude.ai 导出解析器 |
 | [`src/admin.ts`](src/admin.ts) | CLI 与设置路由共用的审阅函数：批准、丢弃、撤销，以及带令牌的预览式回滚和彻底删除 |
 | [`src/settings.ts`](src/settings.ts) | `/api/fork.memory` 路由（`@deepseek-ai/dsh-fork-memory/settings`）；[`src/settings/`](src/settings) 放它的读取模型、请求处理和线上数据类型 |
-| [`src/cli.ts`](src/cli.ts) | `memory-import`（通过 [`fork/deploy/memory-import.mjs`](../../../fork/deploy/memory-import.mjs) 运行）和 `memory-admin`（[`fork/deploy/memory-admin.mjs`](../../../fork/deploy/memory-admin.mjs)） |
+| [`src/cli.ts`](src/cli.ts) | `memory-import`（通过 [`fork/deploy/memory-import.mjs`](../../../fork/deploy/memory-import.mjs) 运行）；并重新导出 `memory-admin` |
+| [`src/admin-cli.ts`](src/admin-cli.ts) | `memory-admin`（[`fork/deploy/memory-admin.mjs`](../../../fork/deploy/memory-admin.mjs)）：参数解析与分发 |
+| [`src/admin-commands.ts`](src/admin-commands.ts) | `memory-admin` 的各个命令与用法文本 |
+| [`src/cli-io.ts`](src/cli-io.ts) | 两个 CLI 共用的输出流、环境与 stdin 读取 |
 
 这是 fork 本地包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。
 
