@@ -26,6 +26,8 @@ import type {} from '@deepseek-ai/dsh-permission-presets'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-title'
 import type { Domain } from '@deepseek-ai/dsh-storage-domain'
+// Type-only: ctx.workspaceRegistry, whose archived Session ids the account's Session is checked against.
+import type {} from '@deepseek-ai/dsh-workspace'
 import z from '@deepseek-ai/schemastery'
 import {
   addWatchLater, bvidOf, coinsGiven, comments, dailyRewards, dealFavorite, folders, followingFeed,
@@ -559,10 +561,15 @@ export class BiliAccount extends Service {
     const stored = domain.table('current').get('session')
     if (stored !== undefined) {
       const sessionId = stored.sessionId as SessionId
-      const resolved = await this.ctx.sessionController.resolveAgent(sessionId)
-      if ('agent' in resolved) return sessionId
-      if (TRANSIENT_RESOLVE_CODES.has(resolved.error.code)) throw resolved.error
-      this.ctx.logger.info(`bili: Session ${sessionId} is unavailable (${resolved.error.code}); starting a new one`)
+      // An archived Session still resolves, but its turns end `blocked` before any model call (the archived-session gate), so the owner's messages would get a placeholder answer.
+      if (this.ctx.get('workspaceRegistry')?.archivedSessionIds.includes(sessionId) === true) {
+        this.ctx.logger.info(`bili: Session ${sessionId} is archived; starting a new one`)
+      } else {
+        const resolved = await this.ctx.sessionController.resolveAgent(sessionId)
+        if ('agent' in resolved) return sessionId
+        if (TRANSIENT_RESOLVE_CODES.has(resolved.error.code)) throw resolved.error
+        this.ctx.logger.info(`bili: Session ${sessionId} is unavailable (${resolved.error.code}); starting a new one`)
+      }
     }
     const session = this.config.session
     // Fails on an unknown preset before a Session exists.
