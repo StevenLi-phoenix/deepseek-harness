@@ -1,14 +1,18 @@
 /**
  * The event service's data flow as a graph: where an event comes from, what it passes through, and where an answer goes.
- * The topology is written down here (it mirrors `lsy/bundles/event/cordis.patch.yml` and `lsy/AGENTS.md`); the Flow page lays
- * it out from the edges alone, so a new edge moves the nodes by itself and a cycle fails `flow-graph.client.spec.ts`.
- * Pure data and arithmetic: no DOM, no Host call.
+ * The topology is written down here, drawn in the flow editor and exported from it (`nodes` and `edges` of its JSON); it is
+ * the owner's picture of the flow, so a box may name something not wired yet. A diamond-shaped `cond` box asks a question and
+ * its arrows carry the answer. The Flow page lays it out from the edges alone, so a new edge moves the nodes by itself and a
+ * cycle fails `flow-graph.client.spec.ts`. Pure data and arithmetic: no DOM, no Host call.
  */
 
 import type { ServiceId } from '../views.ts'
 
-/** How a node sits in the flow, for its accent colour. */
-export type NodeRole = 'source' | 'core' | 'agent' | 'out'
+/** How a node sits in the flow, for its accent colour; `cond` is a question whose arrows are its answers. */
+export type NodeRole = 'source' | 'core' | 'agent' | 'out' | 'cond'
+
+/** The answer an arrow out of a `cond` box stands for. */
+export type Branch = 'yes' | 'no'
 
 /** What an edge carries: a pushed event, something the agent pulls through a tool, an outgoing message, or a call. */
 export type EdgeKind = 'event' | 'pull' | 'send' | 'call'
@@ -17,6 +21,8 @@ export type EdgeKind = 'event' | 'pull' | 'send' | 'call'
 export interface FlowNode {
   readonly id: string
   readonly role: NodeRole
+  /** Name in the box when the dictionary has none (`flow.node.<id>`); such a box has no description either. */
+  readonly title?: string
   /** The overview card that gives this box its health dot; boxes inside the event service use `dsh`, boxes with no probe use none. */
   readonly service?: ServiceId
   /** Settings section the Manage button opens, when one exists. */
@@ -30,6 +36,8 @@ export interface FlowEdge {
   readonly from: string
   readonly to: string
   readonly kind: EdgeKind
+  /** Which answer of a `cond` box this arrow is. */
+  readonly branch?: Branch
 }
 
 /** Every box, in the order that breaks ties inside a column. */
@@ -44,16 +52,29 @@ export const NODES: readonly FlowNode[] = [
   { id: 'operator', role: 'source' },
   { id: 'schedule', role: 'source', manage: 'lsy-courses' },
   { id: 'presence', role: 'source' },
-  { id: 'ingest', role: 'core', service: 'dsh' },
-  { id: 'bus', role: 'core', service: 'bus', manage: 'lsy-subscriptions' },
+  { id: 'speech', role: 'source', title: '语音输出' },
+  { id: 'personaIn', role: 'source', title: 'Persona', service: 'style', manage: 'lsy-style' },
+  { id: 'uploadLocal', role: 'source', title: 'bilibili upload from local' },
   { id: 'dnd', role: 'core', service: 'dsh', manage: 'lsy-presence' },
-  { id: 'main', role: 'agent', service: 'dsh', manage: 'lsy-agents', minRank: 3 },
-  { id: 'sessions', role: 'agent', service: 'dsh', manage: 'lsy-agents' },
+  { id: 'merge', role: 'core', title: 'merge 定时任务 + 勿扰状态' },
+  { id: 'deferQ', role: 'core', title: 'defer delay?' },
+  { id: 'githubSessions', role: 'agent', title: 'Github Sessions Group By repo', service: 'dsh', manage: 'lsy-agents' },
+  { id: 'notifySession', role: 'agent', title: '通知消息 session', service: 'bus', manage: 'lsy-subscriptions' },
+  { id: 'qqSessions', role: 'agent', title: 'QQ sessions group by ids', service: 'dsh', manage: 'lsy-agents' },
+  { id: 'amsGroup', role: 'agent', title: 'AMS msg group', service: 'dsh', manage: 'lsy-agents' },
+  { id: 'repairQ', role: 'cond', title: '自动修复' },
+  { id: 'repair', role: 'agent', title: '自动修复', service: 'dsh', manage: 'lsy-agents' },
+  { id: 'qqMain', role: 'agent', title: 'shared QQ main session (iso)', service: 'dsh', manage: 'lsy-agents' },
+  { id: 'autocutQ', role: 'cond', title: 'Autocut?' },
+  { id: 'autocut', role: 'agent', title: 'autocut' },
+  { id: 'main', role: 'agent', service: 'dsh', manage: 'lsy-agents' },
   { id: 'up', role: 'agent', service: 'dsh', manage: 'lsy-agents' },
-  { id: 'relay', role: 'core', service: 'dsh' },
   { id: 'gate', role: 'out', service: 'bili', manage: 'bili' },
-  { id: 'cc', role: 'out', service: 'cc', manage: 'lsy-agents', minRank: 4 },
-  { id: 'voice', role: 'out', service: 'voice', manage: 'lsy-agents', minRank: 4 },
+  { id: 'cc', role: 'out', service: 'cc', manage: 'lsy-agents' },
+  { id: 'voice', role: 'out', service: 'voice', manage: 'lsy-agents' },
+  { id: 'persona', role: 'out', title: 'Persona', service: 'style', manage: 'lsy-style' },
+  { id: 'qqOut', role: 'out', title: 'QQ onebot', service: 'qq', manage: 'lsy-qq' },
+  { id: 'autocutOut', role: 'out', title: 'autocut' },
   { id: 'wechatOut', role: 'out', service: 'wechat', manage: 'lsy-wechat' },
   { id: 'biliOut', role: 'out', service: 'bili', manage: 'bili' },
 ]
@@ -61,30 +82,49 @@ export const NODES: readonly FlowNode[] = [
 /** Every arrow. */
 export const EDGES: readonly FlowEdge[] = [
   { from: 'wechatIn', to: 'main', kind: 'event' },
-  { from: 'qq', to: 'main', kind: 'pull' },
-  { from: 'ams', to: 'main', kind: 'event' },
-  { from: 'schedule', to: 'main', kind: 'event' },
-  { from: 'schedule', to: 'wechatOut', kind: 'send' },
-  { from: 'bili', to: 'ingest', kind: 'event' },
-  { from: 'pipelines', to: 'ingest', kind: 'event' },
-  { from: 'host', to: 'ingest', kind: 'event' },
-  { from: 'operator', to: 'ingest', kind: 'event' },
-  { from: 'presence', to: 'ingest', kind: 'event' },
-  { from: 'github', to: 'bus', kind: 'event' },
-  { from: 'ingest', to: 'bus', kind: 'event' },
-  { from: 'ingest', to: 'dnd', kind: 'event' },
-  { from: 'bus', to: 'sessions', kind: 'event' },
-  { from: 'bus', to: 'up', kind: 'event' },
-  { from: 'bus', to: 'wechatOut', kind: 'send' },
-  { from: 'dnd', to: 'wechatOut', kind: 'send' },
-  { from: 'main', to: 'relay', kind: 'send' },
-  { from: 'sessions', to: 'relay', kind: 'send' },
-  { from: 'up', to: 'gate', kind: 'send' },
-  { from: 'relay', to: 'wechatOut', kind: 'send' },
+  { from: 'up', to: 'gate', kind: 'pull' },
   { from: 'gate', to: 'biliOut', kind: 'send' },
   { from: 'main', to: 'cc', kind: 'call' },
-  { from: 'main', to: 'voice', kind: 'call' },
-  { from: 'voice', to: 'wechatOut', kind: 'send' },
+  { from: 'github', to: 'githubSessions', kind: 'event' },
+  { from: 'presence', to: 'notifySession', kind: 'event' },
+  { from: 'qq', to: 'qqSessions', kind: 'event' },
+  { from: 'qqSessions', to: 'persona', kind: 'pull' },
+  { from: 'bili', to: 'persona', kind: 'pull' },
+  { from: 'notifySession', to: 'main', kind: 'event' },
+  { from: 'qqSessions', to: 'main', kind: 'event' },
+  { from: 'host', to: 'notifySession', kind: 'event' },
+  { from: 'operator', to: 'main', kind: 'event' },
+  { from: 'main', to: 'voice', kind: 'event' },
+  { from: 'speech', to: 'main', kind: 'event' },
+  { from: 'main', to: 'wechatOut', kind: 'event' },
+  { from: 'personaIn', to: 'up', kind: 'event' },
+  { from: 'bili', to: 'up', kind: 'event' },
+  { from: 'ams', to: 'amsGroup', kind: 'event' },
+  { from: 'amsGroup', to: 'repairQ', kind: 'event' },
+  { from: 'repairQ', to: 'repair', kind: 'event', branch: 'yes' },
+  { from: 'repair', to: 'notifySession', kind: 'event' },
+  { from: 'personaIn', to: 'qqSessions', kind: 'event' },
+  { from: 'personaIn', to: 'qqMain', kind: 'event' },
+  { from: 'qqSessions', to: 'qqMain', kind: 'event' },
+  { from: 'qqMain', to: 'qqOut', kind: 'pull' },
+  { from: 'repairQ', to: 'notifySession', kind: 'event', branch: 'no' },
+  { from: 'schedule', to: 'merge', kind: 'event' },
+  { from: 'dnd', to: 'merge', kind: 'event' },
+  { from: 'merge', to: 'main', kind: 'event' },
+  { from: 'main', to: 'deferQ', kind: 'event' },
+  { from: 'deferQ', to: 'wechatOut', kind: 'event' },
+  { from: 'voice', to: 'wechatOut', kind: 'event' },
+  { from: 'githubSessions', to: 'repairQ', kind: 'event' },
+  { from: 'autocut', to: 'notifySession', kind: 'event' },
+  { from: 'main', to: 'autocutOut', kind: 'event' },
+  { from: 'pipelines', to: 'amsGroup', kind: 'event' },
+  { from: 'uploadLocal', to: 'autocutQ', kind: 'event' },
+  { from: 'autocutQ', to: 'autocut', kind: 'event', branch: 'yes' },
+  { from: 'autocut', to: 'biliOut', kind: 'event' },
+  { from: 'autocutQ', to: 'biliOut', kind: 'event', branch: 'no' },
+  { from: 'autocut', to: 'amsGroup', kind: 'send' },
+  { from: 'autocut', to: 'voice', kind: 'pull' },
+  { from: 'qqMain', to: 'voice', kind: 'pull' },
 ]
 
 /** Box size and spacing, in canvas units. */
@@ -204,6 +244,13 @@ export function edgePath(from: string, to: string): string {
   const y2 = b.y + NODE_H / 2
   const reach = Math.max(36, (x2 - x1) / 2)
   return `M${x1} ${y1} C${x1 + reach} ${y1} ${x2 - reach} ${y2} ${x2} ${y2}`
+}
+
+/** The middle of an arrow, where its answer is written. */
+export function edgeMid(from: string, to: string): { readonly x: number; readonly y: number } {
+  const a = spot(from)
+  const b = spot(to)
+  return { x: (a.x + NODE_W + b.x) / 2, y: (a.y + b.y + NODE_H) / 2 }
 }
 
 /** What a box is connected to. */

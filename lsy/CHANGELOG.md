@@ -5,7 +5,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 ## [Unreleased]
 
 ### Added
-- Settings → Data flow (`lsy-flow`, after the overview): the event service as a graph from sources through the `/hooks/lsy` entry, the bus, and the agent Sessions to the owner-facing channels, each box coloured by its service's overview card, with the paths through a chosen box lit and its feeds and destinations listed; no new route or service (2026-11-02).
+- Settings → Data flow (`lsy-flow`, after the overview): the event service as a graph from sources through grouped Sessions and condition boxes (yes/no arrows) to the owner-facing channels, drawn in the flow editor and exported into `flow-graph.ts`, each box coloured by its service's overview card, with the paths through a chosen box lit and its feeds and destinations listed; no new route or service (2026-11-02).
 
 ### Fixed
 - The main agent no longer calls a course date stale because the latest sync runs failed (2026-11-02): `courses_deadlines` says a failed run does not make earlier readings old and that "last update" is when a task's own page was read; the new `courses_sync` tool shows what each recent run read, area by area (a run that read the assignment list had confirmed the Design Project due date the evening before, while the task's own last update still read 10/31); `courses_save_memo` says never to save a guess that a date is old; and the agent says plainly that it cannot open Brightspace.
