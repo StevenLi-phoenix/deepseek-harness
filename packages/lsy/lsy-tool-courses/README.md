@@ -46,7 +46,12 @@ The plugin has no configuration; the service, the token, and the zone belong to 
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Plugin entry: the six tool definitions, request ids, write answers |
+| [`src/index.ts`](src/index.ts) | Plugin entry: registers the six tools once the courses service is mounted |
+| [`src/read-tools.ts`](src/read-tools.ts) | The four read tools: text for the model and the calls they make |
+| [`src/write-tools.ts`](src/write-tools.ts) | The two write tools: text for the model and the request each builds |
+| [`src/register.ts`](src/register.ts) | Turns a read or write tool into a registered one: output shape, logging, failure answers, request ids |
+| [`src/write-outcome.ts`](src/write-outcome.ts) | The derived request id and the answer of a write (saved, or a conflict to reconcile) |
+| [`src/tool-args.ts`](src/tool-args.ts) | Model-supplied arguments as text and numbers, and the text of a failure |
 | [`src/format.ts`](src/format.ts) | Task lines, the sync line, and the untrusted-data wrapper |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
