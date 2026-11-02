@@ -75,6 +75,20 @@ describe('replies to the owner', () => {
     expect(new Set(svc.requests.map(request => request.path))).toEqual(new Set(['/v1/bili/call', '/v1/reply/dm']))
   })
 
+  it('starts a new Session when the account\'s one is archived, since an archived Session ends every turn blocked', async () => {
+    const h = await conversing()
+    h.ownerSays('hi')
+    await vi.advanceTimersByTimeAsync(600_000)
+    expect(h.sessions.prompts.map(prompt => prompt.sessionId)).toEqual(['bili-1'])
+    await h.answer('在')
+    h.ctx.provide('workspaceRegistry', { archivedSessionIds: ['bili-1'] } as never)
+    h.ownerSays('还在吗')
+    await vi.advanceTimersByTimeAsync(65_000)
+    expect(h.sessions.created).toHaveLength(2)
+    expect(h.sessions.prompts.map(prompt => prompt.sessionId)).toEqual(['bili-1', 'bili-2'])
+    expect(h.logs.some(line => line.text === 'bili: Session bili-1 is archived; starting a new one')).toBe(true)
+  })
+
   it('sends what the Reply Gate held or blocked to WeChat, with the reason, labelled as the account\'s', async () => {
     const h = await conversing()
     svc.replyStatus = ['held']
