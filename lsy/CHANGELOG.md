@@ -5,6 +5,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 ## [Unreleased]
 
 ### Fixed
+- `napcat.sh start` turns on all of NapCat's native bypasses (`bypass.hook`/`window`/`module`/`process`/`container`/`js`), which NapCat.Shell.zip ships off, in `napcat.json` and every `napcat_<QQ number>.json`; while they were off QQ invalidated the login every few hours (2026-11-01; whether this stops it is being watched).
 - `lsy-integrity` no longer reports tasks created, edited, or deleted through the schedule service as a tampered file: it records the file's definition digests at every `schedule/changed` (`schedule-trusted.json`, survives restarts) and alerts only on an edit made behind the service, titled "定时任务文件被绕过 DSH 直接改动了" with the counts of tasks added, removed, and changed (2026-11-01).
 - Settings → WeChat no longer shows a long-recovered poll failure as "Last error": a good long-poll clears a receive error and a good send clears a send error, while a failure of the other kind stays (2026-11-01).
 - The overview's Bilibili card is yellow (`svc_only`) when bili-svc answers but the DSH `bili` plugin is not mounted; it used to be green, which hid a plugin that failed to load (2026-11-01).
