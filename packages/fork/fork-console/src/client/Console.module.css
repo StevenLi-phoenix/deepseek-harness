@@ -426,6 +426,7 @@
 
 .flowNode[data-role='agent'] .flowBox { stroke: var(--dsw-alias-state-business-primary); }
 .flowNode[data-role='core'] .flowBox { fill: var(--dsw-alias-bg-skeleton); }
+.flowNode[data-role='cond'] .flowBox { fill: var(--dsw-alias-bg-skeleton); stroke: var(--dsw-alias-state-warn-primary); }
 .flowNode[data-tone='down'] .flowBox { stroke: var(--dsw-alias-state-error-primary); }
 .flowNode[data-tone='warn'] .flowBox { stroke: var(--dsw-alias-state-warn-primary); }
 .flowNode:hover .flowBox,
@@ -434,6 +435,19 @@
   stroke: var(--dsw-alias-label-primary);
   stroke-width: 1.75;
 }
+
+.flowLabel {
+  fill: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: var(--dsw-alias-settings-card-fill);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+  transition: opacity 120ms ease;
+}
+
+.flowLabel[data-dim] { opacity: 0.1; }
 
 .flowDot { fill: var(--dsw-alias-state-idle-primary); }
 .flowDot[data-tone='ok'] { fill: var(--dsw-alias-state-success-primary); }
@@ -453,5 +467,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .flowEdge,
+  .flowLabel,
   .flowNode { transition: none; }
 }

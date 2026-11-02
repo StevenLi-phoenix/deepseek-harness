@@ -60,31 +60,53 @@ describe('FlowSection', () => {
     expect(screen.getByRole('status').textContent).toBe('正在读取…')
     expect(document.querySelectorAll('[data-node]')).toHaveLength(NODES.length)
     expect(document.querySelectorAll('[data-edge]')).toHaveLength(EDGES.length)
-    expect(node('bus').getAttribute('data-tone')).toBe('off')
+    expect(node('notifySession').getAttribute('data-tone')).toBe('off')
   })
 
   it('takes each node\'s tone from its service card, and leaves a node with no probe plain', () => {
     mount({ data: VIEW, checkedAt: 1 })
     expect(screen.getByRole('status').textContent).toBe('09:30:15 更新')
-    expect(node('bus').getAttribute('data-tone')).toBe('warn')
+    expect(node('notifySession').getAttribute('data-tone')).toBe('warn')
     expect(node('bili').getAttribute('data-tone')).toBe('down')
     expect(node('gate').getAttribute('data-tone')).toBe('down')
-    expect(node('ingest').getAttribute('data-tone')).toBe('ok')
+    expect(node('main').getAttribute('data-tone')).toBe('ok')
     expect(node('qq').getAttribute('data-tone')).toBe('off')
     expect(node('github').getAttribute('data-tone')).toBe('none')
+    expect(node('repairQ').getAttribute('data-tone')).toBe('none')
+  })
+
+  it('draws a question as a hexagon and writes each answer on its arrow', () => {
+    mount({})
+    expect(node('repairQ').querySelector('polygon')).not.toBeNull()
+    expect(node('main').querySelector('polygon')).toBeNull()
+    const labels = [...document.querySelectorAll('[data-label]')]
+    expect(labels).toHaveLength(EDGES.filter(edge => edge.branch !== undefined).length)
+    expect(document.querySelector('[data-label="repairQ>repair"]')?.textContent).toBe('是')
+    expect(document.querySelector('[data-label="repairQ>notifySession"]')?.textContent).toBe('否')
+    expect(document.querySelector('[data-label="autocutQ>autocut"]')?.textContent).toBe('是')
+  })
+
+  it('breaks a long title over two lines at a space and keeps the whole name for assistive tech', () => {
+    mount({})
+    const lines = [...node('githubSessions').querySelectorAll('text')].map(text => text.textContent)
+    expect(lines).toEqual(['Github Sessions', 'Group By repo'])
+    expect(node('githubSessions').getAttribute('aria-label')).toBe('Github Sessions Group By repo')
   })
 
   it('lights up the paths through a node when it is chosen and clears them when it is chosen again', () => {
     mount({ data: VIEW, checkedAt: 1 })
-    fireEvent.click(node('bus'))
-    expect(node('bus').getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(node('repairQ'))
+    expect(node('repairQ').getAttribute('aria-pressed')).toBe('true')
     expect(node('github').getAttribute('data-dim')).toBeNull()
     expect(node('wechatOut').getAttribute('data-dim')).toBeNull()
     expect(node('wechatIn').getAttribute('data-dim')).toBe('')
-    expect(edge('github>bus').getAttribute('data-dim')).toBeNull()
+    expect(edge('github>githubSessions').getAttribute('data-dim')).toBeNull()
     expect(edge('wechatIn>main').getAttribute('data-dim')).toBe('')
-    fireEvent.click(node('bus'))
-    expect(node('wechatIn').getAttribute('data-dim')).toBeNull()
+    expect(document.querySelector('[data-label="repairQ>repair"]')?.getAttribute('data-dim')).toBeNull()
+    fireEvent.click(node('wechatIn'))
+    expect(document.querySelector('[data-label="repairQ>repair"]')?.getAttribute('data-dim')).toBe('')
+    fireEvent.click(node('wechatIn'))
+    expect(node('github').getAttribute('data-dim')).toBeNull()
     expect(edge('wechatIn>main').getAttribute('data-dim')).toBeNull()
   })
 
@@ -96,28 +118,37 @@ describe('FlowSection', () => {
     expect(node('main').getAttribute('aria-pressed')).toBe('false')
   })
 
-  it('describes the chosen node: its job, its state, what feeds it and where it goes, and offers Manage where the section exists', () => {
+  it('describes the chosen node: its state, what feeds it and where it goes, and offers Manage where the section exists', () => {
     const { select } = mount({ data: VIEW, checkedAt: 1 }, ['fork-subscriptions'])
     expect(screen.getByTestId('flow-detail').textContent).toContain('点一个节点')
-    fireEvent.click(node('bus'))
+    fireEvent.click(node('notifySession'))
     const detail = screen.getByTestId('flow-detail')
-    expect(detail.textContent).toContain('事件总线')
+    expect(detail.textContent).toContain('通知消息 session')
     expect(detail.textContent).toContain('被限流')
-    expect(detail.textContent).toContain('来自：GitHub、事件入口')
-    expect(detail.textContent).toContain('去向：事件会话、B站回复会话、微信（主人）')
+    expect(detail.textContent).toContain('来自：勿扰信号、主机事件、自动修复、自动修复、autocut')
+    expect(detail.textContent).toContain('去向：微信主智能体')
     fireEvent.click(within(detail).getByRole('button', { name: '管理' }))
     expect(select).toHaveBeenCalledWith('fork-subscriptions')
   })
 
+  it('describes a node the dictionary knows with its job, and one it does not with its title alone', () => {
+    mount({ data: VIEW, checkedAt: 1 })
+    fireEvent.click(node('main'))
+    expect(screen.getByTestId('flow-detail').textContent).toContain('唯一的聊天会话')
+    fireEvent.click(node('repairQ'))
+    expect(screen.getByTestId('flow-detail').textContent).toContain('自动修复')
+    expect(screen.getByTestId('flow-detail').textContent).not.toContain('唯一的聊天会话')
+  })
+
   it('offers no Manage button for a node whose section is not registered', () => {
     mount({ data: VIEW, checkedAt: 1 }, [])
-    fireEvent.click(node('bus'))
+    fireEvent.click(node('notifySession'))
     expect(within(screen.getByTestId('flow-detail')).queryByRole('button')).toBeNull()
   })
 
   it('keeps the last picture with a quiet stale line', () => {
     mount({ data: VIEW, checkedAt: 2, stale: true })
     expect(screen.getByRole('status').textContent).toBe('未能刷新 · 显示 09:30:15 的数据')
-    expect(node('bus').getAttribute('data-tone')).toBe('warn')
+    expect(node('notifySession').getAttribute('data-tone')).toBe('warn')
   })
 })

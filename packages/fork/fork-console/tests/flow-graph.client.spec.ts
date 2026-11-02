@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EDGES, LAYOUT, NODES, NODE_H, NODE_W, edgePath, relatives } from '../src/client/flow-graph.ts'
+import { EDGES, LAYOUT, NODES, NODE_H, NODE_W, edgeMid, edgePath, relatives } from '../src/client/flow-graph.ts'
 import { SERVICE_IDS } from '../src/views.ts'
 import { zh } from '../src/client/locales.ts'
 
@@ -36,19 +36,43 @@ describe('flow topology', () => {
     for (const node of NODES) if (node.service !== undefined) expect(SERVICE_IDS).toContain(node.service)
   })
 
-  it('has a title and a description in the dictionary for every node', () => {
+  it('names every node: a title of its own, or a title and a description in the dictionary', () => {
     for (const node of NODES) {
+      if (node.title !== undefined) { expect(node.title, node.id).not.toBe(''); continue }
       expect(zh, node.id).toHaveProperty(`flow.node.${node.id}`)
       expect(zh, node.id).toHaveProperty(`flow.node.${node.id}.desc`)
     }
   })
+
+  it('keeps no dictionary entry for a box the graph no longer has', () => {
+    const named = new Set(Object.keys(zh).filter(key => key.startsWith('flow.node.')).map(key => key.split('.')[2]))
+    for (const id of named) expect(ids, `flow.node.${id}`).toContain(id)
+  })
+
+  it('draws a question as a cond box whose every arrow out carries its own answer, and only such arrows carry one', () => {
+    const conds = NODES.filter(node => node.role === 'cond').map(node => node.id)
+    expect(conds.length).toBeGreaterThan(0)
+    for (const id of conds) {
+      const branches = EDGES.filter(edge => edge.from === id).map(edge => edge.branch)
+      expect(branches.length, id).toBeGreaterThanOrEqual(2)
+      expect(new Set(branches).size, id).toBe(branches.length)
+      for (const branch of branches) expect(branch, id).toBeDefined()
+      expect(EDGES.some(edge => edge.to === id), id).toBe(true)
+    }
+    for (const edge of EDGES) if (edge.branch !== undefined) expect(conds, `${edge.from}>${edge.to}`).toContain(edge.from)
+  })
+
+  it('has an answer in the dictionary for each branch', () => {
+    expect(zh).toHaveProperty('flow.branch.yes')
+    expect(zh).toHaveProperty('flow.branch.no')
+  })
 })
 
 describe('flow layout', () => {
-  it('puts the entry before the bus and the owner-facing outputs last', () => {
-    expect(LAYOUT.rank.bili).toBe(0)
-    expect(LAYOUT.rank.ingest).toBeGreaterThan(LAYOUT.rank.bili!)
-    expect(LAYOUT.rank.bus).toBeGreaterThan(LAYOUT.rank.ingest!)
+  it('puts a question after what feeds it and the owner\'s WeChat last', () => {
+    expect(LAYOUT.rank.repairQ).toBeGreaterThan(LAYOUT.rank.amsGroup!)
+    expect(LAYOUT.rank.repair).toBeGreaterThan(LAYOUT.rank.repairQ!)
+    expect(LAYOUT.rank.main).toBeGreaterThan(LAYOUT.rank.notifySession!)
     expect(LAYOUT.rank.wechatOut).toBe(LAYOUT.ranks - 1)
   })
 
@@ -58,11 +82,6 @@ describe('flow layout', () => {
       if (EDGES.some(edge => edge.to === node.id) || out.length === 0) continue
       expect(LAYOUT.rank[node.id]!, node.id).toBe(Math.min(...out) - 1)
     }
-  })
-
-  it('keeps every arrow short except the few that skip to an owner-facing channel', () => {
-    const long = EDGES.filter(edge => LAYOUT.rank[edge.to]! - LAYOUT.rank[edge.from]! > 2).map(edge => `${edge.from}>${edge.to}`)
-    expect(long.sort()).toEqual(['bus>wechatOut', 'dnd>wechatOut', 'schedule>wechatOut'])
   })
 
   it('gives every node a spot on the canvas and keeps nodes in a rank from overlapping', () => {
@@ -80,30 +99,41 @@ describe('flow layout', () => {
   })
 
   it('draws an edge from the right side of its source to the left side of its target', () => {
-    const from = LAYOUT.at.ingest!
-    const to = LAYOUT.at.bus!
-    const path = edgePath('ingest', 'bus')
+    const from = LAYOUT.at.amsGroup!
+    const to = LAYOUT.at.repairQ!
+    const path = edgePath('amsGroup', 'repairQ')
     expect(path.startsWith(`M${from.x + NODE_W} ${from.y + NODE_H / 2}`)).toBe(true)
     expect(path.endsWith(`${to.x} ${to.y + NODE_H / 2}`)).toBe(true)
+  })
+
+  it('writes an answer in the middle of its arrow', () => {
+    const from = LAYOUT.at.repairQ!
+    const to = LAYOUT.at.repair!
+    const mid = edgeMid('repairQ', 'repair')
+    expect(mid.x).toBeGreaterThan(from.x + NODE_W)
+    expect(mid.x).toBeLessThan(to.x)
+    expect(mid.y).toBeCloseTo((from.y + to.y) / 2 + NODE_H / 2)
   })
 })
 
 describe('relatives', () => {
   it('collects everything upstream and downstream of a node, and the edges between them', () => {
-    const { nodes, edges } = relatives('bus')
-    expect(nodes.has('bus')).toBe(true)
-    expect(nodes.has('ingest')).toBe(true)
+    const { nodes, edges } = relatives('repairQ')
+    expect(nodes.has('repairQ')).toBe(true)
+    expect(nodes.has('amsGroup')).toBe(true)
+    expect(nodes.has('ams')).toBe(true)
     expect(nodes.has('github')).toBe(true)
     expect(nodes.has('wechatOut')).toBe(true)
     expect(nodes.has('wechatIn')).toBe(false)
-    expect(edges.has('ingest>bus')).toBe(true)
-    expect(edges.has('github>bus')).toBe(true)
+    expect(edges.has('amsGroup>repairQ')).toBe(true)
+    expect(edges.has('repairQ>repair')).toBe(true)
     expect(edges.has('wechatIn>main')).toBe(false)
   })
 
   it('keeps a source to its own descendants', () => {
     const { nodes } = relatives('wechatIn')
     expect(nodes.has('main')).toBe(true)
+    expect(nodes.has('wechatOut')).toBe(true)
     expect(nodes.has('github')).toBe(false)
   })
 })
