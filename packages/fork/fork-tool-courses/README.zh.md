@@ -46,7 +46,12 @@ kind: "package-reference"
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 插件入口：六个工具定义、request id、写入回答 |
+| [`src/index.ts`](src/index.ts) | 插件入口：课程服务挂载后注册六个工具 |
+| [`src/read-tools.ts`](src/read-tools.ts) | 四个读工具：给模型看的文字与发出的调用 |
+| [`src/write-tools.ts`](src/write-tools.ts) | 两个写工具：给模型看的文字与各自构造的请求 |
+| [`src/register.ts`](src/register.ts) | 把读写工具注册成真正的工具：输出形状、日志、失败回答、request id |
+| [`src/write-outcome.ts`](src/write-outcome.ts) | 派生的 request id 与写入回答（已保存，或待协调的冲突） |
+| [`src/tool-args.ts`](src/tool-args.ts) | 把模型传入的参数读成文本和数字，以及失败的文字 |
 | [`src/format.ts`](src/format.ts) | 任务行、同步行和不可信数据包裹 |
 
 这是 fork 本地包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。
