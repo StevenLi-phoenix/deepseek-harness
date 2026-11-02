@@ -67,7 +67,12 @@ The Session hooks listen to `session/event`. A `system/message` is hashed (first
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Plugin: the scan loop, the notice, the system prompt hashes, the stock-line counter, the schedule trust record |
+| [`src/index.ts`](src/index.ts) | Plugin entry: the configuration and the wiring of the scanner and the Session watch |
+| [`src/scanner.ts`](src/scanner.ts) | The scan loop, the notice and its gap and daily limits, and the baseline |
+| [`src/compare.ts`](src/compare.ts) | Comparing the targets with the baseline, and the text of the notice |
+| [`src/schedule-trust.ts`](src/schedule-trust.ts) | The schedule file as the schedule service last wrote it |
+| [`src/session-watch.ts`](src/session-watch.ts) | The system prompt hashes and the stock-line counter, from the Sessions' events |
+| [`src/files.ts`](src/files.ts) | Reading and writing the state files, and the memory history's last digest |
 | [`src/scan.ts`](src/scan.ts) | The targets and their digests |
 | [`src/tics.ts`](src/tics.ts) | The forbidden stock lines and their matcher |
 
