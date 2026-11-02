@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/fork/fork-tool-courses/README.md
 /:
-  en: 75d001e210c130be
-  zh: e6852e2553496387
+  en: 6c8802f28bb58b57
+  zh: c002900f281af209
 /deepseek-ai-dsh-fork-tool-courses:
   en: 445f7c7b1ddc6daa
   zh: 4eb6e71954ca5ac1
@@ -18,8 +18,8 @@
   en: 788d2e3c4435aa85
   zh: 3273db5f6a36231f
 /deepseek-ai-dsh-fork-tool-courses/understand-the-implementation:
-  en: 52845450a8b6b64d
-  zh: c716f77783bfe2e3
+  en: 8c3d05c92c5fba9a
+  zh: 2860675f44263759
 /deepseek-ai-dsh-fork-tool-courses/further-exploration:
   en: 4a5c699de9b019f4
   zh: 5dd4b3e599aefdeb
@@ -30,8 +30,8 @@
   en: 41c39ec13eaad826
   zh: 10e439ed644a8d55
 /deepseek-ai-dsh-fork-tool-courses/model-experience/course-tools/what-the-model-sees:
-  en: 491737908bae7bfd
-  zh: e37fc110e7cacf7e
+  en: 6d01df4922b538c0
+  zh: 07b4599263c8a33d
 /deepseek-ai-dsh-fork-tool-courses/model-experience/course-tools/token-effect:
   en: 9b6fea54ebf84b5a
   zh: 0cfa524a6c076636

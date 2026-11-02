@@ -52,7 +52,39 @@ export function taskLine(task: TaskSummary, now: number, timeZone: string): stri
 export function healthLine(health: SyncHealth, timeZone: string): string {
   if (health.status === 'ok') return `Sync: ok (latest run ${health.latestRunAt === null ? 'unknown' : stamp(health.latestRunAt, timeZone)}).`
   const clean = health.lastCleanAt === null ? 'no clean sync on record' : `last clean sync ${stamp(health.lastCleanAt, timeZone)}`
-  return `Sync: ${health.status}, ${clean}, ${health.failedRuns} failed run(s) since. Tell the owner the records may be out of date since then.`
+  return `Sync: ${health.status}, ${clean}, ${health.failedRuns} failed run(s) since. A failed run does not make what earlier runs read old: what a task shows was read when its "last update" says, and courses_sync tells which pages each recent run did read.`
+}
+
+/** One area of a sync run's coverage. */
+export interface CoverageRow { area: string; status: string; detail: string }
+
+/**
+ * The coverage rows of a sync run record (`get` with `detail: full`).
+ * @param record - the run record.
+ * @returns the rows, empty when the record has none.
+ */
+export function coverageRows(record: unknown): CoverageRow[] {
+  const data = typeof record === 'object' && record !== null ? (record as { data?: { coverage?: unknown } }).data : undefined
+  const rows = Array.isArray(data?.coverage) ? data.coverage : []
+  return rows.flatMap((row: unknown) => {
+    const item = typeof row === 'object' && row !== null ? row as Record<string, unknown> : {}
+    return typeof item['status'] === 'string' ? [{ area: typeof item['area'] === 'string' ? item['area'] : '?', status: item['status'], detail: typeof item['detail'] === 'string' ? clip(item['detail'], 240) : '' }] : []
+  })
+}
+
+/**
+ * One sync run: when it ran, then one line per area it checked, failed on, or skipped.
+ * @param id - the run id.
+ * @param at - Unix epoch milliseconds the run observed, or null.
+ * @param rows - its coverage.
+ * @param timeZone - IANA zone.
+ * @returns the lines.
+ */
+export function runLines(id: string, at: number | null, rows: CoverageRow[], timeZone: string): string[] {
+  return [
+    `- run ${id}${at === null ? '' : ` at ${stamp(at, timeZone)}`}${rows.length === 0 ? ' (no coverage recorded)' : ':'}`,
+    ...rows.map(row => `    ${row.status} ${row.area}${row.detail === '' ? '' : `: ${row.detail}`}`),
+  ]
 }
 
 /** Tag around course record text, which sync agents copied from course pages. */
