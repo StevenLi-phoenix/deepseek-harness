@@ -11,17 +11,31 @@ import type { PropsRuntime, PropsLocale, InjectFace } from '@deepseek-ai/dsh-cli
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: registers the fork.console locale namespace this component's `t` reads.
 import type {} from './locales.ts'
-import type { ServiceCard, Tone } from '../views.ts'
-import { balanceCard } from './balance.ts'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import type { OverviewView, ServiceCard, Tone } from '../views.ts'
 import { factLines, statusText } from './cards.ts'
 import { EDGES, LAYOUT, columnX, NODES, NODE_H, NODE_W, edgePath, neighbours, relatives, spot, type FlowNode } from './flow-graph.ts'
 import { clock, type Translate } from './format.ts'
-import type { OverviewInjected } from './Overview.tsx'
-import { POLL_INTERVAL_MS, startPolling } from './resource.ts'
+import { POLL_INTERVAL_MS, startPolling, type ResourceState } from './resource.ts'
 import css from './Console.module.css'
 
-/** Props delivered by the settings shell: the overview's faces, since the boxes read the same cards. */
-export type FlowProps = PropsRuntime<'settings.section'> & InjectFace<OverviewInjected> & PropsLocale<'fork.console'>
+/**
+ * The section's injected face: the overview's store, since the boxes read the same cards. Model routing is shared
+ * infrastructure, not a step of the flow, so the balance route is left out.
+ */
+export interface FlowInjected {
+  hooks: {
+    /** The shared overview store. */
+    overview: ObservableSnapshot<ResourceState<OverviewView>>
+  }
+  /** One refresh; a request in flight is shared. */
+  refresh: () => void
+  /** Whether a section is registered, so only live links show. */
+  canManage: (section: string) => boolean
+}
+
+/** Props delivered by the settings shell. */
+export type FlowProps = PropsRuntime<'settings.section'> & InjectFace<FlowInjected> & PropsLocale<'fork.console'>
 
 /** What a box shows: its service's tone, `off` while nothing is read, `none` for a box nobody probes. */
 type BoxTone = Tone | 'none'
@@ -81,20 +95,18 @@ function Box({ node, tone, subtitle, selected, dim, title, onChoose }: {
 
 /**
  * Render the Data flow section.
- * @param props - the overview's store hooks and callbacks, and copy.
+ * @param props - the overview store hook, callbacks, and copy.
  * @returns the section.
  */
-export function FlowSection({ useOverview, useBalance, refresh, canManage, select, t }: FlowProps): ReactNode {
+export function FlowSection({ useOverview, refresh, canManage, select, t }: FlowProps): ReactNode {
   const state = useOverview(value => value)
-  const balance = useBalance(value => value)
   const [chosen, setChosen] = useState<string | null>(null)
   const arrow = useId().replaceAll(':', '')
   useEffect(() => startPolling(refresh, POLL_INTERVAL_MS), [refresh])
 
   const translate = t as Translate
   const view = state.data
-  const all = view === null ? [] : [...view.cards, balanceCard(balance.data, balance.stale)]
-  const cards = new Map<string, ServiceCard>(all.map(card => [card.id, card]))
+  const cards = new Map<string, ServiceCard>((view?.cards ?? []).map(card => [card.id, card]))
   const now = view?.checkedAt ?? 0
   const lit = chosen === null ? null : relatives(chosen)
   const choose = (id: string): void => {

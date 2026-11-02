@@ -54,7 +54,7 @@ describe('fork-console browser entry', () => {
     expect(Object.keys((overview!.hooks as object))).toEqual(['overview', 'balance'])
     expect(Object.keys((subscriptions!.hooks as object))).toEqual(['subscriptions'])
     expect(Object.keys((agents!.hooks as object))).toEqual(['agents'])
-    expect(Object.keys((flow!.hooks as object))).toEqual(['overview', 'balance'])
+    expect(Object.keys((flow!.hooks as object))).toEqual(['overview'])
     expect(overview).not.toHaveProperty('manage')
     expect((overview!.canManage as (id: string) => boolean)('bili')).toBe(true)
     expect((overview!.canManage as (id: string) => boolean)('fork-qq')).toBe(false)

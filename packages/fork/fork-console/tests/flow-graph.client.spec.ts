@@ -23,6 +23,11 @@ describe('flow topology', () => {
     for (const edge of EDGES) expect(LAYOUT.rank[edge.from]!, `${edge.from} -> ${edge.to}`).toBeLessThan(LAYOUT.rank[edge.to]!)
   })
 
+  it('leaves shared infrastructure out: model routing is not a step of the message flow', () => {
+    expect(ids).not.toContain('llm')
+    expect(NODES.some(node => node.service === 'llm')).toBe(false)
+  })
+
   it('leaves no node alone', () => {
     for (const id of ids) expect(EDGES.some(edge => edge.from === id || edge.to === id), id).toBe(true)
   })

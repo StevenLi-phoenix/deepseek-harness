@@ -15,7 +15,7 @@ import {
 } from '../views.ts'
 import { AgentsSection, type AgentsInjected, type PreviewOutcome } from './Agents.tsx'
 import { readBalance } from './balance.ts'
-import { FlowSection } from './Flow.tsx'
+import { FlowSection, type FlowInjected } from './Flow.tsx'
 import { OverviewSection, type OverviewInjected } from './Overview.tsx'
 import { de, en, es, fr, ja, pt, ru, zh } from './locales.ts'
 import { parseAgents, parseOverview, parseSubscriptions } from './parse.ts'
@@ -24,7 +24,7 @@ import { optimisticPatch, requestKey } from './subs.ts'
 import { SubscriptionsSection, type SubscriptionsInjected } from './Subscriptions.tsx'
 
 export type { AgentsInjected, AgentsProps } from './Agents.tsx'
-export type { FlowProps } from './Flow.tsx'
+export type { FlowInjected, FlowProps } from './Flow.tsx'
 export type { OverviewInjected, OverviewProps } from './Overview.tsx'
 export type { SubscriptionsInjected, SubscriptionsProps } from './Subscriptions.tsx'
 export type { ConsoleKey } from './locales.ts'
@@ -140,9 +140,11 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'fork-overview', order: OVERVIEW_ORDER, label: () => t('nav.overview'), locale: NS, inject: overviewInjected,
   }, OverviewSection))
-  // The graph reads the overview's cards, so it shares the overview's store, poll, and Manage check.
+  // The graph reads the overview's cards, so it shares the overview's store and Manage check; the balance route stays the overview's.
+  const refreshFlow = (): void => { void overview.refresh() }
+  const flowInjected = (): FlowInjected => ({ hooks: { overview: overviewStore }, refresh: refreshFlow, canManage: hasSection })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section', id: 'fork-flow', order: FLOW_ORDER, label: () => t('nav.flow'), locale: NS, inject: overviewInjected,
+    name: 'settings.section', id: 'fork-flow', order: FLOW_ORDER, label: () => t('nav.flow'), locale: NS, inject: flowInjected,
   }, FlowSection))
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'fork-subscriptions', order: SUBSCRIPTIONS_ORDER, label: () => t('nav.subscriptions'), locale: NS, inject: subscriptionsInjected,

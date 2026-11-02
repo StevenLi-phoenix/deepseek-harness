@@ -50,7 +50,6 @@ export const NODES: readonly FlowNode[] = [
   { id: 'main', role: 'agent', service: 'dsh', manage: 'fork-agents', minRank: 3 },
   { id: 'sessions', role: 'agent', service: 'dsh', manage: 'fork-agents' },
   { id: 'up', role: 'agent', service: 'dsh', manage: 'fork-agents' },
-  { id: 'llm', role: 'out', service: 'llm', manage: 'account' },
   { id: 'relay', role: 'core', service: 'dsh' },
   { id: 'gate', role: 'out', service: 'bili', manage: 'bili' },
   { id: 'cc', role: 'out', service: 'cc', manage: 'fork-agents', minRank: 4 },
@@ -86,9 +85,6 @@ export const EDGES: readonly FlowEdge[] = [
   { from: 'main', to: 'cc', kind: 'call' },
   { from: 'main', to: 'voice', kind: 'call' },
   { from: 'voice', to: 'wechatOut', kind: 'send' },
-  { from: 'main', to: 'llm', kind: 'call' },
-  { from: 'sessions', to: 'llm', kind: 'call' },
-  { from: 'up', to: 'llm', kind: 'call' },
 ]
 
 /** Box size and spacing, in canvas units. */
