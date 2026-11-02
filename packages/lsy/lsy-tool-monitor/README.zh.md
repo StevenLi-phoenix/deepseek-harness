@@ -95,7 +95,7 @@ Host 把每个运行中的监控存进存储域 `lsy_tool_monitor`：它的 id�
 
 插件挂载在 agent preset 的作用域内，并为该作用域创建一个 `MonitorRegistry`。agent preset 注册表在 host 启动、preset 注册时就挂载它的插件，而不是等到第一个 Agent 出现，所以插件在 host 启动时打开存储域并恢复存储的监控。插件被销毁时，每个监控的进程组都会被杀掉，不发通知，存储的记录保留。`monitor_start` 先校验参数，然后注册表用 `detached: true` 启动 `/bin/bash -c`，这样停止操作能触及脚本启动的每一个进程。stdout 被切成行（不完整的行等待它的换行符），每行都会被截断，空行会被跳过。第一条待发送的行启动一个 500 ms 的计时器；计时器触发时，这一批成为一条通知。
 
-通知发出之前，注册表会忘掉该监控超过一小时的通知记录并检查预算。`src/index.ts` 里的 `deliver` 为 Session 的 agent 构造一条来源为 `{ kind: 'lsy-tool-monitor', form: 'notice' }` 的用户消息。空闲的 agent 通过 `followup()` 收到它，这会唤醒 agent；忙碌的 agent 通过 `inject()` 收到，并在下一步读到。注册表为 `monitor_list` 保留最近结束的 20 个监控。
+通知发出之前，注册表会忘掉该监控超过一小时的通知记录并检查预算。`src/delivery.ts` 里的 `createDelivery` 为 Session 的 agent 构造一条来源为 `{ kind: 'lsy-tool-monitor', form: 'notice' }` 的用户消息。空闲的 agent 通过 `followup()` 收到它，这会唤醒 agent；忙碌的 agent 通过 `inject()` 收到，并在下一步读到。注册表为 `monitor_list` 保留最近结束的 20 个监控。
 
 重启之后 Session 是惰性恢复的：在有人解析某个 Session 之前，`ctx.agents` 里没有它的 agent。owner 的 agent 未加载时，`deliver` 先问 Session 持久化层（`stat`）这个 Session 是否还存在，再通过 `ctx.sessionController.resolveAgent` 解析它，这会恢复该 Session；同一个 Session 之后的通知按顺序等待。只有确定的答案才会停掉监控：持久化层已没有这个 Session、它是 subagent 的 Session（只有其父级的 subagent 运行时会恢复它），或控制器回答 `session/not-found`。其他失败，例如 `session/agent-busy` 或 `session/writer-held`，会丢弃这一条通知并记一条警告，监控继续运行。每 60 秒一次的清扫用同样的规则，所以 agent 只是未加载的 Session 会保留它的监控。
 
@@ -103,7 +103,12 @@ Host 把每个运行中的监控存进存储域 `lsy_tool_monitor`：它的 id�
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 插件入口：三个工具定义、参数校验、向 agent 投递 |
+| [`src/index.ts`](src/index.ts) | 插件入口：接通注册表、投递、存储、交接与工具；清扫与释放 |
+| [`src/tools.ts`](src/tools.ts) | 三个工具定义，以及 `monitor_start` 的参数校验 |
+| [`src/delivery.ts`](src/delivery.ts) | 向 agent 投递通知（唤醒空闲的、加载未加载的）与清扫用的存活检查 |
+| [`src/persistence.ts`](src/persistence.ts) | 按序写入存储，以及主机重启后静默恢复已存监控 |
+| [`src/handover.ts`](src/handover.ts) | 把一段对话正在运行的监控移到新 Session |
+| [`src/error-text.ts`](src/error-text.ts) | 日志里的错误消息文本 |
 | [`src/monitor.ts`](src/monitor.ts) | `MonitorRegistry`：进程、合批、预算、截止时间、恢复和通知文本 |
 | [`src/storage.ts`](src/storage.ts) | `lsy_tool_monitor` 存储域：每个运行中的监控一条记录 |
 
