@@ -6,6 +6,10 @@ import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-tes
 import type { OverviewView } from '../src/views.ts'
 import { EDGES, NODES } from '../src/client/flow-graph.ts'
 import { FlowSection, type FlowProps } from '../src/client/Flow.tsx'
+import { FlowCanvas } from '../src/client/FlowCanvas.tsx'
+import { clip, wrapTitle } from '../src/client/FlowBox.tsx'
+import { buildGraph } from '../src/client/flow-model.ts'
+import type { Translate } from '../src/client/format.ts'
 import { zh } from '../src/client/locales.ts'
 import { createResourceStore, type ResourceState } from '../src/client/resource.ts'
 
@@ -150,5 +154,35 @@ describe('FlowSection', () => {
     mount({ data: VIEW, checkedAt: 2, stale: true })
     expect(screen.getByRole('status').textContent).toBe('未能刷新 · 显示 09:30:15 的数据')
     expect(node('notifySession').getAttribute('data-tone')).toBe('warn')
+  })
+})
+
+describe('wrapTitle', () => {
+  it('keeps a short title on one line', () => {
+    expect(wrapTitle('微信主智能体')).toEqual(['微信主智能体'])
+  })
+
+  it('breaks a long title at the last space within reach, even two characters past the limit', () => {
+    expect(wrapTitle('Github Sessions Group By repo')).toEqual(['Github Sessions', 'Group By repo'])
+    expect(wrapTitle('bilibili upload from local')).toEqual(['bilibili upload', 'from local'])
+  })
+
+  it('cuts at the limit when there is no space to break at, and clips what overflows the second line', () => {
+    expect(wrapTitle('一二三四五六七八九十一二三四五六七八')).toEqual(['一二三四五六七八九十一二三四', '五六七八'])
+    expect(wrapTitle('x'.repeat(40))[1]).toBe(clip('x'.repeat(26)))
+    expect(clip('x'.repeat(40))).toHaveLength(14)
+  })
+})
+
+describe('FlowCanvas', () => {
+  it('draws whatever graph it is given, with no part of the event service built in', () => {
+    const graph = buildGraph(
+      [{ id: 'in', role: 'source', title: 'In' }, { id: 'q', role: 'cond', title: 'Ok?' }, { id: 'out', role: 'out', title: 'Out' }],
+      [{ from: 'in', to: 'q', kind: 'event' }, { from: 'q', to: 'out', kind: 'send', branch: 'yes' }],
+    )
+    render(<FlowCanvas graph={graph} cards={new Map()} chosen={null} onChoose={() => {}} onClear={() => {}} translate={t as Translate} />)
+    expect([...document.querySelectorAll('[data-node]')].map(el => el.getAttribute('data-node'))).toEqual(['in', 'q', 'out'])
+    expect(document.querySelector('[data-label="q>out"]')?.textContent).toBe('是')
+    expect(document.querySelector('[data-node="bus"]')).toBeNull()
   })
 })
