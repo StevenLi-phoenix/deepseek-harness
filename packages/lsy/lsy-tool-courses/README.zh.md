@@ -1,5 +1,5 @@
 ---
-description: "主人主 agent 的课程工具，基于 ctx.lsyCourses：courses_deadlines、courses_find、courses_get，以及写操作 courses_set_progress 和 courses_save_memo；每个任务一行，每次写都带 expected_version，同样的重试用同一个 request id。"
+description: "主人主 agent 的课程工具，基于 ctx.lsyCourses：courses_deadlines、courses_find、courses_get、courses_sync，以及写操作 courses_set_progress 和 courses_save_memo；每个任务一行，每次写都带 expected_version，同样的重试用同一个 request id。"
 kind: "package-reference"
 ---
 
@@ -42,11 +42,11 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-`courses_deadlines` 调用 `report`（`view: deadlines`，最多 30 行，`coverage_limit: 1`），`courses_find` 调用 `query`（`kind: task`，最多 10 条），`courses_get` 调用 `get`，写操作经 `ctx.lsyCourses.api` 调用 `set_progress` 和 `save_memo`。结果用 `lsy-courses` 的线路解析器解析，由 [`src/format.ts`](src/format.ts) 输出。没有 `request_id` 的写操作得到 `dsh-<operation>-<参数的 sha256>`，所以回答丢失后原样重试会重放第一次的结果，不会写两次；冲突回答只保留当前版本和改动的字段。每次调用都记录工具名、回答大小或写入结果，失败记为警告。
+`courses_deadlines` 调用 `report`（`view: deadlines`，最多 30 行，`coverage_limit: 1`），`courses_find` 调用 `query`（`kind: task`，最多 10 条），`courses_get` 调用 `get`，`courses_sync` 调用 `query`（`kind: sync`，最多 6 次运行）再对每次运行调用 `get`，写操作经 `ctx.lsyCourses.api` 调用 `set_progress` 和 `save_memo`。结果用 `lsy-courses` 的线路解析器解析，由 [`src/format.ts`](src/format.ts) 输出。没有 `request_id` 的写操作得到 `dsh-<operation>-<参数的 sha256>`，所以回答丢失后原样重试会重放第一次的结果，不会写两次；冲突回答只保留当前版本和改动的字段。每次调用都记录工具名、回答大小或写入结果，失败记为警告。
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 插件入口：五个工具定义、request id、写入回答 |
+| [`src/index.ts`](src/index.ts) | 插件入口：六个工具定义、request id、写入回答 |
 | [`src/format.ts`](src/format.ts) | 任务行、同步行和不可信数据包裹 |
 
 这是 fork 本地包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。
@@ -69,7 +69,7 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-调用方 Agent 的 preset 挂载了这个包且 `ctx.lsyCourses` 存在时，有五个工具 schema。`courses_deadlines`（可选 `days`、`course`、`include_overdue`）列出往后要截止的未完成任务，过期的连同迟交窗口一起列，并要求模型说“last update <时间>”，同步失败时告诉主人从何时开始；它还说明截止提醒不需要定时任务，而提到课程任务的定时任务在触发时要用 `courses_get` 复核，到时已完成的任务不再提。`courses_find`（必填 `text`，可选 `course`）搜索任务，包括已完成的。`courses_get`（必填 `id`）显示一个任务和它的版本。`courses_set_progress`（必填 `id`、`expected_version`、`status`、`evidence`；可选主人说出的 `percent`、`completed_work`、`remaining_work`、`request_id`）说明它从不改提交状态、已提交的任务设为 `completed`、分部分完成的任务按部分算进度，以及完成的任务不再提醒。`courses_save_memo`（必填 `title`；可选 `body`、`category`、`course`、`task_id`、`planned_at`、`id`、`expected_version`、`request_id`）保存一条备忘。
+调用方 Agent 的 preset 挂载了这个包且 `ctx.lsyCourses` 存在时，有六个工具 schema。`courses_deadlines`（可选 `days`、`course`、`include_overdue`）列出往后要截止的未完成任务，过期的连同迟交窗口一起列，并要求模型说“last update <时间>”（该任务自己的页面上次被读取的时间），同步失败时告诉主人从何时开始但不把更早的读数说成过期，说日期或状态过期之前先调 `courses_sync`，并说明自己打不开 Brightspace；它还说明截止提醒不需要定时任务，而提到课程任务的定时任务在触发时要用 `courses_get` 复核，到时已完成的任务不再提。`courses_find`（必填 `text`，可选 `course`）搜索任务，包括已完成的。`courses_get`（必填 `id`）显示一个任务和它的版本。`courses_sync`（可选 `runs`，默认 3）按区域列出最近几次同步各读了什么（checked、not_checked、failed，带那次运行写下的说明），新鲜度问题据此回答，不看任务自己的 last-update 时间。`courses_set_progress`（必填 `id`、`expected_version`、`status`、`evidence`；可选主人说出的 `percent`、`completed_work`、`remaining_work`、`request_id`）说明它从不改提交状态、已提交的任务设为 `completed`、分部分完成的任务按部分算进度，以及完成的任务不再提醒。`courses_save_memo`（说明不得把“日期过期了”这类猜测存成备忘；必填 `title`；可选 `body`、`category`、`course`、`task_id`、`planned_at`、`id`、`expected_version`、`request_id`）保存一条备忘。
 
 #### Token 影响
 

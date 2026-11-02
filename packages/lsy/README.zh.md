@@ -48,7 +48,7 @@ kind: "package-group"
 | [`lsy-console/`](lsy-console/README.zh.md) | 设置里的服务健康总览、事件订阅与定时提醒、Claude Code 会话与语音试听分区 |
 | [`lsy-taint/`](lsy-taint/README.zh.md) | 回合来源：当前回合由谁发起、陌生人的话有没有进来；只在 owner 自己的回合里联系 Claude Code，其他回合建的提醒和监控要上报 |
 | [`lsy-time-gap/`](lsy-time-gap/README.zh.md) | 所有 Session 的时间说明：安静一段时间（5 分钟）之后到达的输入，带着当前时间、Session 安静了多久，以及“按它本身来读”的提示交给模型 |
-| [`lsy-tool-courses/`](lsy-tool-courses/README.zh.md) | `courses_deadlines`、`courses_find`、`courses_get`、`courses_set_progress`、`courses_save_memo` 工具：agent 按主人的课程记录回答并更新它们 |
+| [`lsy-tool-courses/`](lsy-tool-courses/README.zh.md) | `courses_deadlines`、`courses_find`、`courses_get`、`courses_sync`、`courses_set_progress`、`courses_save_memo` 工具：agent 按主人的课程记录回答并更新它们 |
 | [`lsy-tool-monitor/`](lsy-tool-monitor/README.zh.md) | `monitor_start`、`monitor_stop`、`monitor_list` 工具：命令输出的每一行都回到同一个 Session |
 | [`lsy-tool-up/`](lsy-tool-up/README.zh.md) | `up_*` 工具：agent 读取创作者号的评论、私信和稿件，并向 bili-svc 回复闸门申请回复；答案只有 `sent`、`held`、`blocked` |
 | [`lsy-tool-voice/`](lsy-tool-voice/README.zh.md) | `speak` 工具：agent 把文字合成语音，并把音频发给微信上的 owner |

@@ -50,9 +50,9 @@ function textOf(result: unknown): string {
 }
 
 describe('course tools', () => {
-  it('registers the five tools and nothing that syncs or sends', async () => {
+  it('registers the six tools and nothing that syncs or sends', async () => {
     const { ctx } = await mount(() => ({}))
-    expect(ctx.tools.schemas().map(schema => schema.name).filter(name => name.startsWith('courses_')).sort()).toEqual(['courses_deadlines', 'courses_find', 'courses_get', 'courses_save_memo', 'courses_set_progress'])
+    expect(ctx.tools.schemas().map(schema => schema.name).filter(name => name.startsWith('courses_')).sort()).toEqual(['courses_deadlines', 'courses_find', 'courses_get', 'courses_save_memo', 'courses_set_progress', 'courses_sync'])
   })
 
   it('tells the model that a schedule naming a course task rechecks the task when it fires', async () => {
@@ -77,6 +77,46 @@ describe('course tools', () => {
     expect(text).toContain('Undated or tentative tasks: 3')
     expect(text).toContain('Sync: failing, last clean sync 10/28 周三 18:16, 14 failed run(s) since.')
     expect(text).not.toContain('Read chapter 3')
+  })
+
+  it('does not call a failing sync a reason to doubt earlier readings, and points to courses_sync', async () => {
+    const { ctx, run } = await mount(() => ({
+      items: [], total: 0, undated: { total: 0, items: [] },
+      coverage: { health: { status: 'failing', latest_run_at: '2026-11-02T14:04:23Z', last_clean_run_at: '2026-11-02T00:15:00Z', failed_runs_since_clean: 2 }, items: [{ id: 'r' }] },
+    }))
+    const text = textOf(await run('courses_deadlines', {}))
+    expect(text).toContain('Sync: failing, last clean sync 11/1 周日 19:15, 2 failed run(s) since.')
+    expect(text).toContain('A failed run does not make what earlier runs read old')
+    expect(text).toContain('courses_sync')
+    const description = ctx.tools.schemas().find(schema => schema.name === 'courses_deadlines')?.description ?? ''
+    expect(description).toContain('which is when that task\'s own page was last read')
+    expect(description).toContain('call courses_sync before you tell the owner a date or status is out of date')
+  })
+
+  it('shows what each recent sync run read, area by area, newest first, from the run records', async () => {
+    const { run, api } = await mount((operation, args) => {
+      if (operation === 'query') return { records: [{ id: 'run-b', kind: 'sync', observed_at: '2026-11-02T14:04:23Z' }, { id: 'run-a', kind: 'sync', observed_at: '2026-11-02T00:15:00Z' }], total: 2 }
+      return args['id'] === 'run-a'
+        ? { id: 'run-a', kind: 'sync', data: { coverage: [
+          { area: 'assignments', status: 'checked', detail: 'Design Project list: A13 initial code Nov 3 09:30 Not Submitted; list only.' },
+          { area: 'quizzes', status: 'not_checked', detail: 'All seven courses.' },
+        ] } }
+        : { id: 'run-b', kind: 'sync', data: { coverage: [{ area: 'announcements', status: 'failed', detail: 'Browser unavailable.' }] } }
+    })
+    const text = textOf(await run('courses_sync', { runs: 2 }))
+    expect(api.call.mock.calls[0]).toEqual(['query', expect.objectContaining({ kind: 'sync', sort: 'updated_desc', limit: 2 }), expect.anything()])
+    expect(text.indexOf('run-b')).toBeLessThan(text.indexOf('run-a'))
+    expect(text).toContain('11/2 周一 09:04')
+    expect(text).toContain('checked assignments: Design Project list: A13 initial code Nov 3 09:30 Not Submitted; list only.')
+    expect(text).toContain('not_checked quizzes: All seven courses.')
+    expect(text).toContain('failed announcements: Browser unavailable.')
+    expect(text).toContain('The courses service does not open Brightspace live')
+  })
+
+  it('does not let a memo be saved with a freshness guess the records do not support', async () => {
+    const { ctx } = await mount(() => ({}))
+    const description = ctx.tools.schemas().find(schema => schema.name === 'courses_save_memo')?.description ?? ''
+    expect(description).toContain('Never write a guess that a date is old')
   })
 
   it('shows one task with its version, remaining work, and an excerpt wrapped as data that cannot close its tag', async () => {

@@ -1,5 +1,5 @@
 ---
-description: "Course tools of the owner's main agent over ctx.lsyCourses: courses_deadlines, courses_find, courses_get, and the writes courses_set_progress and courses_save_memo, with one line per task, expected_version on every write, and a request id that repeats for an identical retry."
+description: "Course tools of the owner's main agent over ctx.lsyCourses: courses_deadlines, courses_find, courses_get, courses_sync, and the writes courses_set_progress and courses_save_memo, with one line per task, expected_version on every write, and a request id that repeats for an identical retry."
 kind: "package-reference"
 ---
 
@@ -42,11 +42,11 @@ The plugin has no configuration; the service, the token, and the zone belong to 
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-`courses_deadlines` calls `report` (`view: deadlines`, at most 30 rows, `coverage_limit: 1`), `courses_find` calls `query` (`kind: task`, at most 10), `courses_get` calls `get`, and the writes call `set_progress` and `save_memo` through `ctx.lsyCourses.api`. Results are parsed with `lsy-courses`'s wire parsers and printed by [`src/format.ts`](src/format.ts). A write without `request_id` gets `dsh-<operation>-<sha256 of its arguments>`, so the identical retry of a write whose answer was lost replays the first outcome instead of writing twice; a conflict answer keeps only the current version and the changed fields. Every call logs its tool, the answer's size or the write's outcome, and failures as warnings.
+`courses_deadlines` calls `report` (`view: deadlines`, at most 30 rows, `coverage_limit: 1`), `courses_find` calls `query` (`kind: task`, at most 10), `courses_get` calls `get`, `courses_sync` calls `query` (`kind: sync`, at most 6 runs) and then `get` per run, and the writes call `set_progress` and `save_memo` through `ctx.lsyCourses.api`. Results are parsed with `lsy-courses`'s wire parsers and printed by [`src/format.ts`](src/format.ts). A write without `request_id` gets `dsh-<operation>-<sha256 of its arguments>`, so the identical retry of a write whose answer was lost replays the first outcome instead of writing twice; a conflict answer keeps only the current version and the changed fields. Every call logs its tool, the answer's size or the write's outcome, and failures as warnings.
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Plugin entry: the five tool definitions, request ids, write answers |
+| [`src/index.ts`](src/index.ts) | Plugin entry: the six tool definitions, request ids, write answers |
 | [`src/format.ts`](src/format.ts) | Task lines, the sync line, and the untrusted-data wrapper |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
@@ -69,7 +69,7 @@ This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 
 #### What the model sees
 
-Five tool schemas whenever the calling Agent's preset mounts the package and `ctx.lsyCourses` exists. `courses_deadlines` (optional `days`, `course`, `include_overdue`) lists open tasks due ahead, overdue ones with their late window, asks the model to say "last update <time>" and to tell the owner since when the sync fails, and says deadline reminders need no schedule, while a schedule that names a course task rechecks it with `courses_get` when it fires and leaves out a task done by then. `courses_find` (required `text`, optional `course`) searches tasks, done ones included. `courses_get` (required `id`) shows one task and its version. `courses_set_progress` (required `id`, `expected_version`, `status`, `evidence`; optional `percent` the owner stated, `completed_work`, `remaining_work`, `request_id`) says it never changes the submission status, that a submitted task is set `completed`, that a task done in parts takes its progress from its parts, and that reminders stop for a completed task. `courses_save_memo` (required `title`; optional `body`, `category`, `course`, `task_id`, `planned_at`, `id`, `expected_version`, `request_id`) keeps a note.
+Six tool schemas whenever the calling Agent's preset mounts the package and `ctx.lsyCourses` exists. `courses_deadlines` (optional `days`, `course`, `include_overdue`) lists open tasks due ahead, overdue ones with their late window, asks the model to say "last update <time>" (when that task's own page was last read) and to tell the owner since when the sync fails without calling earlier readings old, to call `courses_sync` before saying a date is out of date, and that it cannot open Brightspace itself, and says deadline reminders need no schedule, while a schedule that names a course task rechecks it with `courses_get` when it fires and leaves out a task done by then. `courses_find` (required `text`, optional `course`) searches tasks, done ones included. `courses_get` (required `id`) shows one task and its version. `courses_sync` (optional `runs`, default 3) shows what each recent sync run read, area by area (checked, not_checked, failed, with the run's own detail), so a freshness question is answered from the run that read the page, not from a task's own last-update time. `courses_set_progress` (required `id`, `expected_version`, `status`, `evidence`; optional `percent` the owner stated, `completed_work`, `remaining_work`, `request_id`) says it never changes the submission status, that a submitted task is set `completed`, that a task done in parts takes its progress from its parts, and that reminders stop for a completed task. `courses_save_memo` (says never to save a guess that a date is old; required `title`; optional `body`, `category`, `course`, `task_id`, `planned_at`, `id`, `expected_version`, `request_id`) keeps a note.
 
 #### Token effect
 

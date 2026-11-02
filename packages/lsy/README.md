@@ -48,7 +48,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`lsy-console/`](lsy-console/README.md) | Settings sections for a service health overview, event subscriptions and schedule reminders, and Claude Code sessions with a voice preview |
 | [`lsy-taint/`](lsy-taint/README.md) | Turn origin: who started the open turn and whether strangers' words reached it; Claude Code messaging only in the owner's own turns, reminders and watches from other turns reported |
 | [`lsy-time-gap/`](lsy-time-gap/README.md) | Time check for every Session: an input that arrives after a quiet spell (5 minutes) reaches the model with the time, how long the Session was quiet, and a reminder to read it on its own terms |
-| [`lsy-tool-courses/`](lsy-tool-courses/README.md) | `courses_deadlines`, `courses_find`, `courses_get`, `courses_set_progress`, `courses_save_memo` tools: the agent answers and updates the owner's course records |
+| [`lsy-tool-courses/`](lsy-tool-courses/README.md) | `courses_deadlines`, `courses_find`, `courses_get`, `courses_sync`, `courses_set_progress`, `courses_save_memo` tools: the agent answers and updates the owner's course records |
 | [`lsy-tool-monitor/`](lsy-tool-monitor/README.md) | `monitor_start`, `monitor_stop`, `monitor_list` tools: a command's output lines come back to the same Session |
 | [`lsy-tool-up/`](lsy-tool-up/README.md) | `up_*` tools: the agent reads the creator account's comments, private messages and videos and asks bili-svc's Reply Gate for replies; the answer is `sent`, `held`, or `blocked` |
 | [`lsy-tool-voice/`](lsy-tool-voice/README.md) | `speak` tool: the agent turns text into speech and sends the audio to the owner on WeChat |

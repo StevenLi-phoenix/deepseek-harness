@@ -12,7 +12,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { CoursesApiError, parseHealth, parseTasks, stamp, type LsyCourses } from '@deepseek-ai/dsh-lsy-courses'
 import { defineTool, type ParameterSchemaSpec } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
-import { clip, dataBlock, healthLine, taskLine } from './format.ts'
+import { clip, coverageRows, dataBlock, healthLine, runLines, taskLine } from './format.ts'
 
 export { clip, dataBlock, healthLine, taskLine } from './format.ts'
 
@@ -153,7 +153,7 @@ export function apply(ctx: Context): void {
 
     read({
       name: 'courses_deadlines',
-      description: 'What the owner still has to do for their courses: open tasks with a deadline up to `days` ahead, soonest first, overdue ones included (a missed deadline may still take late submissions; the line says until when). Done work (completed, or a submission seen on the platform) is left out. Each line has the record id and version (for courses_set_progress), course, title, dates in New York time, progress, submission, and when the record was last updated; say "last update <time>" when you answer instead of calling a record current. The Sync line says whether the course records are being kept up to date; when it is not ok, tell the owner since when. Deadline reminders need no schedule: they go out by themselves before each deadline and stop once a task is done. A schedule you add that names a course task is fixed text and goes stale (the owner may finish the task first), so write into its prompt to read the task with courses_get when it fires and to leave out a task that is completed or submitted by then; when a scheduled prompt names a course task, read it with courses_get before you mention it.',
+      description: 'What the owner still has to do for their courses: open tasks with a deadline up to `days` ahead, soonest first, overdue ones included (a missed deadline may still take late submissions; the line says until when). Done work (completed, or a submission seen on the platform) is left out. Each line has the record id and version (for courses_set_progress), course, title, dates in New York time, progress, submission, and "last update", which is when that task\'s own page was last read; say "last update <time>" when you answer instead of calling a record current. The Sync line says whether the sync runs are healthy; when it is not ok, tell the owner since when, but a failed run does not make earlier readings old (a run that read the assignment list may have left each task\'s own "last update" untouched), so call courses_sync before you tell the owner a date or status is out of date. These records are the sync\'s notes, not a live view of Brightspace: you cannot open the course pages; say so plainly when asked, and offer the owner the task\'s source link. Deadline reminders need no schedule: they go out by themselves before each deadline and stop once a task is done. A schedule you add that names a course task is fixed text and goes stale (the owner may finish the task first), so write into its prompt to read the task with courses_get when it fires and to leave out a task that is completed or submitted by then; when a scheduled prompt names a course task, read it with courses_get before you mention it.',
       parameters: {
         days: { type: 'integer', description: 'How many days ahead (default 14, at most 60).' },
         course: { type: 'string', description: 'Only one course: its id or a short name such as "bio" or "1234".' },
@@ -225,6 +225,29 @@ export function apply(ctx: Context): void {
       },
     })
 
+    read({
+      name: 'courses_sync',
+      description: 'What the recent sync runs actually read, newest first: per run, its time and one line per area (announcements, assignments, quizzes, content, grades, gradescope…) saying checked, not_checked, or failed with the detail the run wrote (for example which assignment list it read and the dates it saw). Use it when the owner asks how fresh a date or status is, or says the records look old: a task\'s "last update" only tells when its own page was last read, while a run that read the assignment list still confirms the due dates on that list. The courses service does not open Brightspace live, and you cannot either.',
+      parameters: { runs: { type: 'integer', description: 'How many recent runs (default 3, at most 6).' } },
+      title: () => 'Recent course sync runs',
+      run: async (args, signal) => {
+        const count = clamp(args['runs'], 3, 1, 6)
+        const listed = await courses.api.call('query', { kind: 'sync', sort: 'updated_desc', limit: count }, signal)
+        const records = Array.isArray((listed as { records?: unknown })?.records) ? (listed as { records: unknown[] }).records : []
+        const lines: string[] = [`The ${records.length} most recent sync run(s), newest first (times in ${zone}):`]
+        for (const record of records) {
+          const row = typeof record === 'object' && record !== null ? record as Record<string, unknown> : {}
+          const id = typeof row['id'] === 'string' ? row['id'] : ''
+          if (id === '') continue
+          const observed = typeof row['observed_at'] === 'string' ? Date.parse(row['observed_at']) : Number.NaN
+          const full = await courses.api.call('get', { id, detail: 'full' }, signal)
+          lines.push(...runLines(id, Number.isFinite(observed) ? observed : null, coverageRows(full), zone))
+        }
+        lines.push('The courses service does not open Brightspace live: these lines are what each run wrote down.')
+        return lines.join('\n')
+      },
+    })
+
     write({
       name: 'courses_set_progress',
       operation: 'set_progress',
@@ -259,7 +282,7 @@ export function apply(ctx: Context): void {
     write({
       name: 'courses_save_memo',
       operation: 'save_memo',
-      description: 'Keep a note for the owner\'s courses: an idea, plan, question, decision, or note, optionally tied to a course or a task, with an optional personal planned time (not a deadline). A new memo uses expected_version 0 and no id; to edit one, pass its id and current version.',
+      description: 'Keep a note for the owner\'s courses: an idea, plan, question, decision, or note, optionally tied to a course or a task, with an optional personal planned time (not a deadline). Never write a guess that a date is old or wrong into a memo: record what the owner said and what courses_sync shows, as separate facts. A new memo uses expected_version 0 and no id; to edit one, pass its id and current version.',
       parameters: {
         title: { type: 'string', required: true, description: 'Short title.' },
         body: { type: 'string', description: 'The note.' },
