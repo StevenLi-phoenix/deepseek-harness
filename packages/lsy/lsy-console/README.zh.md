@@ -1,5 +1,5 @@
 ---
-description: "管理事件服务运行内容的设置分区：每个已集成服务的健康总览，事件总线订阅和定时提醒的暂停、恢复、删除与新建，以及服务账号的 Claude Code 会话和语音试听。"
+description: "管理事件服务运行内容的设置分区：每个已集成服务的健康总览、事件在服务里流转的数据流图，事件总线订阅和定时提醒的暂停、恢复、删除与新建，以及服务账号的 Claude Code 会话和语音试听。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-在浏览器里管理事件服务，不用再开 SSH。**设置 → 服务总览**为每个已集成的服务显示一张健康卡片，带一个跳到该服务自己分区的“管理”链接。**设置 → 订阅与监控**列出事件总线订阅和定时提醒，可以暂停、恢复、删除或新建；来自配置的保持只读。**设置 → Claude Code 与语音**列出、启动和停止服务账号的 Claude Code 会话，并在你的浏览器里播放一句语音试听。
+在浏览器里管理事件服务，不用再开 SSH。**设置 → 服务总览**为每个已集成的服务显示一张健康卡片，带一个跳到该服务自己分区的“管理”链接。**设置 → 数据流**画出事件在服务里的流转，每个节点带着健康状态。**设置 → 订阅与监控**列出事件总线订阅和定时提醒，可以暂停、恢复、删除或新建；来自配置的保持只读。**设置 → Claude Code 与语音**列出、启动和停止服务账号的 Claude Code 会话，并在你的浏览器里播放一句语音试听。
 
 ## 目录
 
@@ -42,6 +42,8 @@ kind: "package-reference"
 
 **总览。**分区打开且页面可见时，卡片每 10 秒刷新一次。只有目标分区已注册时，卡片才会链接到 `bili`、`lsy-qq`、`lsy-wechat`、`lsy-style`、`lsy-sysmon`、`lsy-subscriptions`、`lsy-agents` 或 `account`。服务想给自己的卡片补充细节，可以提供一个可选的 `health()`，返回 `{ state: 'ok' | 'warn' | 'down', detail? }`；`bili` 和 `lsyNotifier` 有它就按它读。说话风格卡片读 [`lsy-style`](../lsy-style/README.zh.md) 的 `ctx.lsyStyle.health()`（`StyleHealth`，收到后再校验一遍；保留和待审样本数、审核模式、上次更新、口癖趋势；只有计数）：有应答为绿，需要审核且有样本在等为黄，抛错或返回意外形状为红。
 
+**数据流。**这个页面不加 Host 路由，也不加服务：它读和总览同一份 `api/lsy.overview` 卡片（以及余额路由），用同一个 store 和同样的 10 秒轮询。拓扑本身写在 [`src/client/flow-graph.ts`](src/client/flow-graph.ts)，对照 `lsy/bundles/event/cordis.patch.yml` 里的订阅和 `lsy/AGENTS.md` 里的架构说明：来源（微信、QQ、B站、GitHub、流水线、主机与 AMS 告警、主人自己的 Claude Code、定时与课程、勿扰信号）、`/hooks/lsy` 入口、事件总线、三类智能体会话、主人通道转发、B站回复闸门、Claude Code 桥、语音工具，以及两个面向主人的渠道。列由边自己决定（从来源起的最长路径，再用 `minRank` 让智能体对齐），所以新增一条边，节点会自己挪位置；出现环或悬空的边会让 `tests/flow-graph.client.spec.ts` 失败。节点的健康点取自它的 `service` 对应的卡片（事件服务内部的节点用 `dsh` 卡片，不显示状态行；没人探测的节点不显示圆点）。点击或按 Enter 选中一个节点，会淡化不在它上下游的一切，并在下方卡片里写出它的作用、状态、谁给它供数、结果去哪，目标分区已注册时还有“管理”链接；按 Esc 或点背景取消。箭头按类型画：实线是推送的事件，虚线是智能体通过工具主动查询，点线是调用，蓝色是发出的消息。它们表示数据能去哪里，不是实时流量。
+
 **订阅。**在总线配置里定义的订阅显示“来自配置”，没有按钮。`watch_create` 或表单建的订阅可以暂停（不再匹配新事件，已在排队的事件保留）、恢复，或在第二次点击后删除；删除监视时也会停掉它的仓库轮询，和 `watch_delete` 一致。表单需要名称、来源/类型/对象 glob（至少一项）、通知或会话模式，会话模式还要任务说明；会话订阅按配置的预设和工作区运行。定时提醒（`schedule_create`）可以暂停、恢复和删除；改时间请对智能体说。分区最后是**时间间隔提示**，即 [`lsy-time-gap`](../lsy-time-gap/README.zh.md) 的“全部设置”卡片（阈值、时区、排除的预设），它给安静一段时间后才到达的输入加上说明。
 
 **会话自动归档。**同一分区在监控说明下面显示总线是否归档闲置已久的对话 Session（`lsy-event-bus` 的 `autoArchive`）：规则（闲置天数、每次上限、间隔）、下次检查、保护自己 Session 的插件、上一次检查（检查和归档的 Session 数，以及按原因分类的跳过）和最近归档的 30 个 Session。**预览**列出一次检查会归档什么但不归档；**立即归档**真的跑一次。两个按钮点下去立刻变成“正在检查…”，Host 回答之前保持禁用。底部的设置卡片只列 `lsy-event-bus` 的 `autoArchive` 字段，所以改动（天数、试运行、上限）是一次明确的保存，会重载总线。
@@ -64,7 +66,7 @@ Host 部分在 connection 上注册 `GET /api/lsy.overview`、`GET`/`POST /api/l
 
 Claude Code 会话来自 `ctx.lsyClaudeCode`（[`lsy-cc-admin`](../lsy-cc-admin/README.zh.md)），通过一个很小的结构类型读取，所以这个带浏览器部分的包不会运行时导入任何对等包的值。语音和总线的错误同理，Host 部分按名字识别它们。
 
-浏览器部分通过 `ctx.slots.inject` 注册三个 `settings.section` 条目（`lsy-overview` 顺序 35、`lsy-subscriptions` 58、`lsy-agents` 60）。“管理”链接调用设置外壳交给每个分区的 `select(id)`（与 `close` 并列），并且只在目标分区已注册时显示。模型路由卡片在浏览器里由 `api/lsy.balance` 构建。
+浏览器部分通过 `ctx.slots.inject` 注册四个 `settings.section` 条目（`lsy-overview` 顺序 35、`lsy-flow` 36、`lsy-subscriptions` 58、`lsy-agents` 60）。“管理”链接调用设置外壳交给每个分区的 `select(id)`（与 `close` 并列），并且只在目标分区已注册时显示。模型路由卡片在浏览器里由 `api/lsy.balance` 构建。
 
 | 文件 | 作用 |
 |---|---|
@@ -75,9 +77,10 @@ Claude Code 会话来自 `ctx.lsyClaudeCode`（[`lsy-cc-admin`](../lsy-cc-admin/
 | [`src/claude-code.ts`](src/claude-code.ts) | 本页用到的 `ctx.lsyClaudeCode` 的形状 |
 | [`src/request.ts`](src/request.ts)、[`src/log.ts`](src/log.ts)、[`src/probe.ts`](src/probe.ts)、[`src/build-info.ts`](src/build-info.ts) | 请求体解析与拒绝、动作日志、期限、构建标识 |
 | [`src/views.ts`](src/views.ts) | 两部分共用的类型与路由路径 |
-| [`src/client/index.ts`](src/client/index.ts) | 浏览器入口：词典、loader、三个分区注册、试听播放器 |
+| [`src/client/index.ts`](src/client/index.ts) | 浏览器入口：词典、loader、四个分区注册、试听播放器 |
 | [`src/client/resource.ts`](src/client/resource.ts) | store、带乐观动作的 loader，以及感知页面可见性的轮询 |
 | [`src/client/Overview.tsx`](src/client/Overview.tsx)、[`Subscriptions.tsx`](src/client/Subscriptions.tsx)、[`Agents.tsx`](src/client/Agents.tsx) | 三个分区 |
+| [`src/client/Flow.tsx`](src/client/Flow.tsx)、[`flow-graph.ts`](src/client/flow-graph.ts) | 数据流分区，以及它的拓扑、布局和路径遍历 |
 | [`src/client/cards.ts`](src/client/cards.ts)、[`balance.ts`](src/client/balance.ts)、[`subs.ts`](src/client/subs.ts) | 卡片文字、模型路由卡片、表单规则 |
 
 这是 fork 本地包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。

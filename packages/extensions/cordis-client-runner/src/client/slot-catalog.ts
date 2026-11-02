@@ -3619,6 +3619,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
       'client-ui-settings-plugins PluginsSettingsSection id \'plugins\'',
       'bili BiliAccountSection id \'bili\'',
       'lsy-console OverviewSection id \'lsy-overview\'',
+      'lsy-console FlowSection id \'lsy-flow\'',
       'lsy-console SubscriptionsSection id \'lsy-subscriptions\'',
       'lsy-console AgentsSection id \'lsy-agents\'',
       'lsy-courses-settings CoursesSection id \'lsy-courses\'',

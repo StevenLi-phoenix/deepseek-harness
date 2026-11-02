@@ -1,8 +1,8 @@
 /**
- * Settings console, browser half: three Settings sections over this package's Host routes, registered into `settings.section`
- * like the upstream pages so they follow the settings shell's lifetime. "Service overview" (服务总览, order 35) comes before
- * "System status", "Subscriptions and monitors" (订阅与监控, order 58) and "Claude Code and voice" (order 60) come after the
- * other lsy pages.
+ * Settings console, browser half: four Settings sections over this package's Host routes, registered into `settings.section`
+ * like the upstream pages so they follow the settings shell's lifetime. "Service overview" (服务总览, order 35) and "Data flow"
+ * (数据流, order 36, the same overview route drawn as a graph) come before "System status", "Subscriptions and monitors"
+ * (订阅与监控, order 58) and "Claude Code and voice" (order 60) come after the other lsy pages.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
@@ -15,6 +15,7 @@ import {
 } from '../views.ts'
 import { AgentsSection, type AgentsInjected, type PreviewOutcome } from './Agents.tsx'
 import { readBalance } from './balance.ts'
+import { FlowSection } from './Flow.tsx'
 import { OverviewSection, type OverviewInjected } from './Overview.tsx'
 import { de, en, es, fr, ja, pt, ru, zh } from './locales.ts'
 import { parseAgents, parseOverview, parseSubscriptions } from './parse.ts'
@@ -23,6 +24,7 @@ import { optimisticPatch, requestKey } from './subs.ts'
 import { SubscriptionsSection, type SubscriptionsInjected } from './Subscriptions.tsx'
 
 export type { AgentsInjected, AgentsProps } from './Agents.tsx'
+export type { FlowProps } from './Flow.tsx'
 export type { OverviewInjected, OverviewProps } from './Overview.tsx'
 export type { SubscriptionsInjected, SubscriptionsProps } from './Subscriptions.tsx'
 export type { ConsoleKey } from './locales.ts'
@@ -32,6 +34,7 @@ const NS = 'lsy.console'
 
 /** Settings navigation positions: the overview before System status (40), the others after Bilibili (45) and the QQ and WeChat pages. */
 const OVERVIEW_ORDER = 35
+const FLOW_ORDER = 36
 const SUBSCRIPTIONS_ORDER = 58
 const AGENTS_ORDER = 60
 
@@ -137,6 +140,10 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'lsy-overview', order: OVERVIEW_ORDER, label: () => t('nav.overview'), locale: NS, inject: overviewInjected,
   }, OverviewSection))
+  // The graph reads the overview's cards, so it shares the overview's store, poll, and Manage check.
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section', id: 'lsy-flow', order: FLOW_ORDER, label: () => t('nav.flow'), locale: NS, inject: overviewInjected,
+  }, FlowSection))
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'lsy-subscriptions', order: SUBSCRIPTIONS_ORDER, label: () => t('nav.subscriptions'), locale: NS, inject: subscriptionsInjected,
   }, SubscriptionsSection))
