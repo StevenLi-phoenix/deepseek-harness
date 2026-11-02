@@ -4,14 +4,12 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { OverviewView } from '../src/views.ts'
-import type { BalanceSummary } from '../src/client/balance.ts'
 import { EDGES, NODES } from '../src/client/flow-graph.ts'
-import { FlowSection } from '../src/client/Flow.tsx'
-import type { OverviewProps } from '../src/client/Overview.tsx'
+import { FlowSection, type FlowProps } from '../src/client/Flow.tsx'
 import { zh } from '../src/client/locales.ts'
 import { createResourceStore, type ResourceState } from '../src/client/resource.ts'
 
-const t = makeTranslate(zh) as OverviewProps['t']
+const t = makeTranslate(zh) as FlowProps['t']
 const CHECKED = new Date(2026, 10, 2, 9, 30, 15).getTime()
 
 const VIEW: OverviewView = {
@@ -27,13 +25,12 @@ const VIEW: OverviewView = {
 function mount(overview: Partial<ResourceState<OverviewView>>, registered: string[] = []) {
   const overviewStore = createResourceStore<OverviewView>()
   overviewStore.update((draft) => { Object.assign(draft, overview) })
-  const balanceStore = createResourceStore<BalanceSummary>()
   const refresh = vi.fn()
   const select = vi.fn()
   const props = {
-    close: () => {}, select, useOverview: bindSnapshotSelector(overviewStore), useBalance: bindSnapshotSelector(balanceStore),
+    close: () => {}, select, useOverview: bindSnapshotSelector(overviewStore),
     refresh, canManage: (section: string) => registered.includes(section), t,
-  } as OverviewProps
+  } as FlowProps
   const view = render(<FlowSection {...props} />)
   return { refresh, select, view }
 }
