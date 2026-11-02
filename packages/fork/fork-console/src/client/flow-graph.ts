@@ -93,8 +93,8 @@ export const NODE_H = 46
 const COLUMN_GAP = 76
 const ROW_GAP = 14
 const PAD_X = 16
-/** Room above the first row for the column headings. */
-const HEAD = 34
+/** Room above the first row. */
+const HEAD = 16
 const PAD_BOTTOM = 16
 
 /** Left edge of a column. */
@@ -102,7 +102,10 @@ export const columnX = (rank: number): number => PAD_X + rank * (NODE_W + COLUMN
 
 /** Where the boxes go. */
 export interface Layout {
-  /** Column of each box: one more than its latest-placed upstream box, but not before its `minRank`; 0 for a source. */
+  /**
+   * Column of each box: one more than its latest-placed upstream box, but not before its `minRank`; a source sits right before
+   * the first box it feeds.
+   */
   readonly rank: Readonly<Record<string, number>>
   readonly ranks: number
   /** Top-left corner of each box. */
@@ -135,6 +138,11 @@ export function layout(nodes: readonly FlowNode[], edges: readonly FlowEdge[]): 
     return rank[id]
   }
   for (const node of nodes) place(node.id)
+  // A source sits right before the first box it feeds, not at the far left, so its arrows stay short.
+  for (const node of nodes) {
+    const feeds = (outgoing.get(node.id) ?? []).map(id => rank[id] ?? 0)
+    if ((incoming.get(node.id) ?? []).length === 0 && feeds.length > 0) rank[node.id] = Math.min(...feeds) - 1
+  }
   const ranks = Math.max(...Object.values(rank)) + 1
 
   const columns: string[][] = Array.from({ length: ranks }, () => [])

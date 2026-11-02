@@ -14,7 +14,7 @@ import type {} from './locales.ts'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { OverviewView, ServiceCard, Tone } from '../views.ts'
 import { factLines, statusText } from './cards.ts'
-import { EDGES, LAYOUT, columnX, NODES, NODE_H, NODE_W, edgePath, neighbours, relatives, spot, type FlowNode } from './flow-graph.ts'
+import { EDGES, LAYOUT, NODES, NODE_H, NODE_W, edgePath, neighbours, relatives, spot, type FlowNode } from './flow-graph.ts'
 import { clock, type Translate } from './format.ts'
 import { POLL_INTERVAL_MS, startPolling, type ResourceState } from './resource.ts'
 import css from './Console.module.css'
@@ -161,11 +161,6 @@ export function FlowSection({ useOverview, refresh, canManage, select, t }: Flow
               <path className={css.flowHead} d="M0 0.5 L7 4 L0 7.5 Z" />
             </marker>
           </defs>
-          {Array.from({ length: LAYOUT.ranks }, (_, rank) => (
-            <text key={rank} className={css.flowRank} x={columnX(rank)} y={16}>
-              {translate(`flow.rank.${rank}` as never)}
-            </text>
-          ))}
           <g>
             {EDGES.map((edge) => {
               const key = `${edge.from}>${edge.to}`

@@ -393,11 +393,6 @@
   font-family: inherit;
 }
 
-.flowRank {
-  fill: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
-}
-
 .flowEdge {
   fill: none;
   stroke: var(--dsw-alias-label-tertiary);

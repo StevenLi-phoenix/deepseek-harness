@@ -36,22 +36,33 @@ describe('flow topology', () => {
     for (const node of NODES) if (node.service !== undefined) expect(SERVICE_IDS).toContain(node.service)
   })
 
-  it('has a title and a description in the dictionary for every node, and a heading for every rank', () => {
+  it('has a title and a description in the dictionary for every node', () => {
     for (const node of NODES) {
       expect(zh, node.id).toHaveProperty(`flow.node.${node.id}`)
       expect(zh, node.id).toHaveProperty(`flow.node.${node.id}.desc`)
     }
-    for (let rank = 0; rank < LAYOUT.ranks; rank += 1) expect(zh, `rank ${rank}`).toHaveProperty(`flow.rank.${rank}`)
   })
 })
 
 describe('flow layout', () => {
-  it('puts the sources first and the owner-facing outputs last', () => {
-    expect(LAYOUT.rank.wechatIn).toBe(0)
-    expect(LAYOUT.rank.github).toBe(0)
-    expect(LAYOUT.rank.ingest).toBeGreaterThan(LAYOUT.rank.github!)
+  it('puts the entry before the bus and the owner-facing outputs last', () => {
+    expect(LAYOUT.rank.bili).toBe(0)
+    expect(LAYOUT.rank.ingest).toBeGreaterThan(LAYOUT.rank.bili!)
     expect(LAYOUT.rank.bus).toBeGreaterThan(LAYOUT.rank.ingest!)
     expect(LAYOUT.rank.wechatOut).toBe(LAYOUT.ranks - 1)
+  })
+
+  it('sets a source right before the first box it feeds, so no arrow from a source crosses the page', () => {
+    for (const node of NODES) {
+      const out = EDGES.filter(edge => edge.from === node.id).map(edge => LAYOUT.rank[edge.to]!)
+      if (EDGES.some(edge => edge.to === node.id) || out.length === 0) continue
+      expect(LAYOUT.rank[node.id]!, node.id).toBe(Math.min(...out) - 1)
+    }
+  })
+
+  it('keeps every arrow short except the few that skip to an owner-facing channel', () => {
+    const long = EDGES.filter(edge => LAYOUT.rank[edge.to]! - LAYOUT.rank[edge.from]! > 2).map(edge => `${edge.from}>${edge.to}`)
+    expect(long.sort()).toEqual(['bus>wechatOut', 'dnd>wechatOut', 'schedule>wechatOut'])
   })
 
   it('gives every node a spot on the canvas and keeps nodes in a rank from overlapping', () => {
