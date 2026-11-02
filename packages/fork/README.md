@@ -45,7 +45,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`fork-memory-admin/`](fork-memory-admin/README.md) | Settings section for reviewing agent memory: waiting writes, entries, previewed rollback and erase, persona feedback (its Host route is `fork-memory`'s `settings` entry) |
 | [`fork-sysmon/`](fork-sysmon/README.md) | Settings section with the Host machine's CPU, memory, power, temperature, and disk usage per volume |
 | [`fork-cc-admin/`](fork-cc-admin/README.md) | Root service `ctx.forkClaudeCode`: the service account's Claude Code sessions, listed, started with a first task, and stopped, for the Settings page |
-| [`fork-console/`](fork-console/README.md) | Settings sections for a service health overview, event subscriptions and schedule reminders, and Claude Code sessions with a voice preview |
+| [`fork-console/`](fork-console/README.md) | Settings sections for a service health overview, a data-flow graph of the event service, event subscriptions and schedule reminders, and Claude Code sessions with a voice preview |
 | [`fork-taint/`](fork-taint/README.md) | Turn origin: who started the open turn and whether strangers' words reached it; Claude Code messaging only in the owner's own turns, reminders and watches from other turns reported |
 | [`fork-time-gap/`](fork-time-gap/README.md) | Time check for every Session: an input that arrives after a quiet spell (5 minutes) reaches the model with the time, how long the Session was quiet, and a reminder to read it on its own terms |
 | [`fork-tool-courses/`](fork-tool-courses/README.md) | `courses_deadlines`, `courses_find`, `courses_get`, `courses_sync`, `courses_set_progress`, `courses_save_memo` tools: the agent answers and updates the owner's course records |

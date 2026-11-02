@@ -18,7 +18,8 @@ import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import {
   ConnectionIndicator, Tooltip, useModalLayer,
-  IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconChecklistOutlineMedium, IconClockOutlineMedium, IconCloseOutlineRegular,
+  IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconBranchOutlineMedium, IconChecklistOutlineMedium, IconClockOutlineMedium,
+  IconCloseOutlineRegular,
   IconCodeOutlineMedium,
   IconDatabaseOutlineMedium, IconDataOutlineMedium, IconEnhanceOutlineMedium, IconFlatListOutlineMedium, IconGaugeOutlineMedium,
   IconNewChatOutlineMedium, IconPersonalizationOutlineMedium, IconPlayOutlineMedium, IconQueueOutlineMedium, IconSettingsOutlineMedium,
@@ -41,10 +42,11 @@ const NAV_ICONS: Readonly<Record<string, typeof IconSettingsOutlineMedium>> = {
   'agent-presets': IconAgentPresetOutlineMedium,
   'plugins': IconPersonalizationOutlineMedium,
   'archived-sessions': IconArchiveOutlineMedium,
-  // Fork-added sections (packages/fork), by the id each registers: service overview, subscriptions, and Claude Code
+  // Fork-added sections (packages/fork), by the id each registers: service overview, data flow, subscriptions, and Claude Code
   // agents (fork-console); the WeChat page, its presence page, and its speaking style; memory; System status; the Bilibili account; QQ;
   // course deadlines.
   'fork-overview': IconFlatListOutlineMedium,
+  'fork-flow': IconBranchOutlineMedium,
   'fork-subscriptions': IconQueueOutlineMedium,
   'fork-agents': IconCodeOutlineMedium,
   'fork-wechat': IconNewChatOutlineMedium,

@@ -1,5 +1,5 @@
 ---
-description: "Settings sections that manage what the event service runs: a health overview of every integrated service, the event bus subscriptions and schedule reminders with pause, resume, delete, and create, and the service account's Claude Code sessions with a voice preview."
+description: "Settings sections that manage what the event service runs: a health overview of every integrated service, a data-flow graph of how events travel through the service, the event bus subscriptions and schedule reminders with pause, resume, delete, and create, and the service account's Claude Code sessions with a voice preview."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Run the event service from the browser instead of an SSH session. **Settings → Service overview** shows a health card for each integrated service, with a Manage link to its own section. **Settings → Subscriptions and monitors** lists the event bus subscriptions and the schedule reminders and lets you pause, resume, delete, or create them; configuration ones stay read-only. **Settings → Claude Code and voice** lists, starts, and stops the service account's Claude Code sessions and plays a voice test sentence in your browser.
+Run the event service from the browser instead of an SSH session. **Settings → Service overview** shows a health card for each integrated service, with a Manage link to its own section. **Settings → Data flow** draws how events travel through the service, each box showing its health. **Settings → Subscriptions and monitors** lists the event bus subscriptions and the schedule reminders and lets you pause, resume, delete, or create them; configuration ones stay read-only. **Settings → Claude Code and voice** lists, starts, and stops the service account's Claude Code sessions and plays a voice test sentence in your browser.
 
 ## Table of Contents
 
@@ -42,6 +42,8 @@ Mount the row next to the Web bundles; the fork event bundle mounts it. It needs
 
 **Overview.** The cards poll every 10 seconds while the section is open and the page is visible. A card links to `bili`, `fork-qq`, `fork-wechat`, `fork-style`, `fork-sysmon`, `fork-subscriptions`, `fork-agents`, or `account` only when that section is registered. A service can add detail to its card by exposing an optional `health()` that returns `{ state: 'ok' | 'warn' | 'down', detail? }`; `bili` and `forkNotifier` are read that way when they have one. The speaking-style card reads `ctx.forkStyle.health()` of [`fork-style`](../fork-style/README.md) (`StyleHealth`, checked again on arrival; kept and pending sample counts, review mode, last refresh, tic trend; counts only): green when it answers, yellow when review is required and samples wait, red when it throws or answers an unexpected shape.
 
+**Data flow.** The page adds no Host route and no service: it reads the same `api/fork.overview` cards (and the balance route) as the overview, in the same store with the same 10-second poll. The topology itself is written down in [`src/client/flow-graph.ts`](src/client/flow-graph.ts), mirroring the subscriptions in `fork/bundles/event/cordis.patch.yml` and the architecture notes in `fork/AGENTS.md`: sources (WeChat, QQ, Bilibili, GitHub, the pipelines, host and AMS alerts, the owner's Claude Code, schedules and courses, the do-not-disturb signal), the `/hooks/events` entry, the event bus, the three kinds of agent Session, the relay, the Reply Gate, the Claude Code bridge, the voice tool, and the two owner-facing channels. Columns come from the edges (the longest path from a source, with a `minRank` that lines the agents up), so adding an edge moves the boxes by itself; a cycle or a dangling edge fails `tests/flow-graph.client.spec.ts`. A box takes its health dot from the card of its `service` (boxes inside the event service use the `dsh` card and show no status line; a box nobody probes shows no dot). Choosing a box, by click or by Enter, dims everything that is not upstream or downstream of it and fills the card below with what it does, its status, what feeds it and where it goes, plus the Manage link when that section is registered; Escape or a click on the background clears it. Arrows are drawn by kind: solid for a pushed event, dashed for something the agent looks up through a tool, dotted for a call, blue for an outgoing message. They show where data can go, not live traffic.
+
 **Subscriptions.** Subscriptions defined in the bus configuration show "From configuration" and have no buttons. A subscription made by `watch_create` or from the form can be paused (it matches no new events and holds the ones already waiting), resumed, or deleted after a second click; deleting a watch also stops its repository poll, as `watch_delete` does. The form takes a name, source, kind, and subject globs (at least one), notify or session mode, and, for a session, the instructions; a session subscription runs with the configured preset and workspace. Schedule reminders (`schedule_create`) can be paused, resumed, and deleted; their times are changed by asking the agent. The section ends with **Time check**, the All settings card of [`fork-time-gap`](../fork-time-gap/README.md) (threshold, zone, excluded presets), which marks inputs that arrive after a quiet spell.
 
 **Session auto-archive.** Below the monitors, the same section shows whether the bus archives chat Sessions that nobody touched for a while (`autoArchive` of `fork-event-bus`): the rule (idle days, per-sweep limit, interval), the next check, the plugins that protect their own Sessions, the last sweep (Sessions checked and archived, and what it skipped, by reason), and the 30 most recently archived Sessions. **Preview** lists what a sweep would archive without archiving; **Archive now** runs one. Both buttons turn into "Checking…" at once and stay disabled until the Host answers. The settings card at the foot lists only the `autoArchive` fields of `fork-event-bus`, so a change (days, dry run, limits) is one explicit save, which reloads the bus.
@@ -64,7 +66,7 @@ Subscriptions use the bus's own API: `listSubscriptions()`, `batches()` (for the
 
 Claude Code sessions come from `ctx.forkClaudeCode` ([`fork-cc-admin`](../fork-cc-admin/README.md)), read through a small structural type so this package, which ships a browser half, imports no runtime value from a peer package. The same goes for the voice and bus errors, which the Host half tells by name.
 
-The browser half registers three `settings.section` entries (`fork-overview` order 35, `fork-subscriptions` 58, `fork-agents` 60) through `ctx.slots.inject`. The Manage link calls the `select(id)` the settings shell hands every section (next to `close`), and shows only when the target section is registered. The model route card is built in the browser from `api/fork.balance`.
+The browser half registers four `settings.section` entries (`fork-overview` order 35, `fork-flow` 36, `fork-subscriptions` 58, `fork-agents` 60) through `ctx.slots.inject`. The Manage link calls the `select(id)` the settings shell hands every section (next to `close`), and shows only when the target section is registered. The model route card is built in the browser from `api/fork.balance`.
 
 | File | Role |
 |---|---|
@@ -75,9 +77,10 @@ The browser half registers three `settings.section` entries (`fork-overview` ord
 | [`src/claude-code.ts`](src/claude-code.ts) | The shape of `ctx.forkClaudeCode` this page uses |
 | [`src/request.ts`](src/request.ts), [`src/log.ts`](src/log.ts), [`src/probe.ts`](src/probe.ts), [`src/build-info.ts`](src/build-info.ts) | Body parsing and refusals, action logging, deadlines, build identity |
 | [`src/views.ts`](src/views.ts) | Types and route paths shared by both halves |
-| [`src/client/index.ts`](src/client/index.ts) | Browser entry: dictionaries, loaders, the three section registrations, the preview player |
+| [`src/client/index.ts`](src/client/index.ts) | Browser entry: dictionaries, loaders, the four section registrations, the preview player |
 | [`src/client/resource.ts`](src/client/resource.ts) | Store, loader with optimistic actions, and the visibility-aware poller |
 | [`src/client/Overview.tsx`](src/client/Overview.tsx), [`Subscriptions.tsx`](src/client/Subscriptions.tsx), [`Agents.tsx`](src/client/Agents.tsx) | The sections |
+| [`src/client/Flow.tsx`](src/client/Flow.tsx), [`flow-graph.ts`](src/client/flow-graph.ts) | The Data flow section, and its topology, layout, and path walking |
 | [`src/client/cards.ts`](src/client/cards.ts), [`balance.ts`](src/client/balance.ts), [`subs.ts`](src/client/subs.ts) | Card text, the model route card, form rules |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).

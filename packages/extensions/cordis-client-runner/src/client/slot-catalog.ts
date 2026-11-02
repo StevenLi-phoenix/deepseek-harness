@@ -3619,6 +3619,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
       'client-ui-settings-plugins PluginsSettingsSection id \'plugins\'',
       'bili BiliAccountSection id \'bili\'',
       'fork-console OverviewSection id \'fork-overview\'',
+      'fork-console FlowSection id \'fork-flow\'',
       'fork-console SubscriptionsSection id \'fork-subscriptions\'',
       'fork-console AgentsSection id \'fork-agents\'',
       'fork-courses-settings CoursesSection id \'fork-courses\'',
