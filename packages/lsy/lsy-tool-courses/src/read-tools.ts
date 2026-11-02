@@ -113,7 +113,8 @@ export function syncTool(courses: LsyCourses): ReadSpec {
     run: async (args, signal) => {
       const count = clamp(args['runs'], 3, 1, 6)
       const listed = await courses.api.call('query', { kind: 'sync', sort: 'updated_desc', limit: count }, signal)
-      const records = Array.isArray((listed as { records?: unknown })?.records) ? (listed as { records: unknown[] }).records : []
+      const listing = typeof listed === 'object' && listed !== null ? listed as { records?: unknown } : {}
+      const records = Array.isArray(listing.records) ? listing.records as unknown[] : []
       const lines: string[] = [`The ${records.length} most recent sync run(s), newest first (times in ${zone}):`]
       for (const record of records) {
         const row = typeof record === 'object' && record !== null ? record as Record<string, unknown> : {}

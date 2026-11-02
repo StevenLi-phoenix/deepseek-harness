@@ -93,6 +93,15 @@ describe('course tools', () => {
     expect(description).toContain('call courses_sync before you tell the owner a date or status is out of date')
   })
 
+  it('reads a sync listing that is empty, null, or not a list of records as no runs', async () => {
+    for (const listing of [null, {}, { records: 'none' }, { records: [] }]) {
+      const { run } = await mount(() => listing)
+      const text = textOf(await run('courses_sync', {}))
+      expect(text).toContain('The 0 most recent sync run(s), newest first')
+      expect(text).toContain('The courses service does not open Brightspace live')
+    }
+  })
+
   it('shows what each recent sync run read, area by area, newest first, from the run records', async () => {
     const { run, api } = await mount((operation, args) => {
       if (operation === 'query') return { records: [{ id: 'run-b', kind: 'sync', observed_at: '2026-11-02T14:04:23Z' }, { id: 'run-a', kind: 'sync', observed_at: '2026-11-02T00:15:00Z' }], total: 2 }
