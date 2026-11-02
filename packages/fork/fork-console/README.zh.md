@@ -42,7 +42,7 @@ kind: "package-reference"
 
 **总览。**分区打开且页面可见时，卡片每 10 秒刷新一次。只有目标分区已注册时，卡片才会链接到 `bili`、`fork-qq`、`fork-wechat`、`fork-style`、`fork-sysmon`、`fork-subscriptions`、`fork-agents` 或 `account`。服务想给自己的卡片补充细节，可以提供一个可选的 `health()`，返回 `{ state: 'ok' | 'warn' | 'down', detail? }`；`bili` 和 `forkNotifier` 有它就按它读。说话风格卡片读 [`fork-style`](../fork-style/README.zh.md) 的 `ctx.forkStyle.health()`（`StyleHealth`，收到后再校验一遍；保留和待审样本数、审核模式、上次更新、口癖趋势；只有计数）：有应答为绿，需要审核且有样本在等为黄，抛错或返回意外形状为红。
 
-**数据流。**这个页面不加 Host 路由，也不加服务：它读和总览同一份 `api/fork.overview` 卡片，用同一个 store 和同样的 10 秒轮询（模型路由卡片不在其中：模型路由是公共基础设施，不是消息流的一环）。拓扑本身写在 [`src/client/flow-graph.ts`](src/client/flow-graph.ts)：它是主人画出来的流程图，在流程编辑器里画好、导出成 JSON，所以一个节点可以写还没接通的东西。里面有来源（微信、QQ、B站、GitHub、流水线、主机与 AMS 告警、主人自己的 Claude Code、定时与课程、勿扰信号、语音输出、Persona、本地上传）、把它们归拢的会话（GitHub 按仓库、QQ 按群、AMS 消息、通知）、中间的判断（自动修复、Autocut、延后）、主智能体，以及答复离开的渠道。自带 `title` 的节点不需要词典条目，其余的读 `flow.node.<id>` 和 `.desc`。`cond` 节点画成六边形，从它出去的每条箭头写着自己的答案（`branch: 'yes' | 'no'`）。列由边自己决定（从来源起的最长路径，可选 `minRank`，来源放在它喂的第一个节点前一列，让箭头保持短），所以新增一条边，节点会自己挪位置；出现环、悬空的边，或者缺一个答案的判断，会让 `tests/flow-graph.client.spec.ts` 失败。节点的健康点取自它的 `service` 对应的卡片（事件服务内部的节点用 `dsh` 卡片，不显示状态行；没人探测的节点不显示圆点）。点击或按 Enter 选中一个节点，会淡化不在它上下游的一切，并在下方卡片里写出它的作用、状态、谁给它供数、结果去哪，目标分区已注册时还有“管理”链接；按 Esc 或点背景取消。箭头按类型画：实线是推送的事件，虚线是智能体通过工具主动查询，点线是调用，蓝色是发出的消息。它们表示数据能去哪里，不是实时流量。
+**数据流。**这个页面不加 Host 路由，也不加服务：它读和总览同一份 `api/fork.overview` 卡片，用同一个 store 和同样的 10 秒轮询（模型路由卡片不在其中：模型路由是公共基础设施，不是消息流的一环）。拓扑本身写在 [`src/client/flow-graph.ts`](src/client/flow-graph.ts)：它是主人画出来的流程图，在流程编辑器里画好、导出成 JSON，所以一个节点可以写还没接通的东西。里面有来源（微信、QQ、B站、GitHub、流水线、主机与 AMS 告警、主人自己的 Claude Code、定时与课程、勿扰信号、语音输出、Persona、本地上传）、把它们归拢的会话（GitHub 按仓库、QQ 按群、AMS 消息、通知）、中间的判断（自动修复、Autocut、延后）、主智能体，以及答复离开的渠道。自带 `title` 的节点不需要词典条目，其余的读 `flow.node.<id>` 和 `.desc`。`cond` 节点画成六边形，从它出去的每条箭头写着自己的答案（`branch: 'yes' | 'no'`）。布局是 [`src/client/flow-model.ts`](src/client/flow-model.ts) 里的纯计算，它不认识任何具体的图：列由边自己决定（从来源起的最长路径，可选 `minRank`，来源放在它喂的第一个节点前一列，让箭头保持短），所以新增一条边，节点会自己挪位置。同一个文件里的 `problems()` 会报告环、悬空或重复的箭头、没有任何箭头的节点，以及缺一个答案的判断，`tests/flow-graph.client.spec.ts` 遇到其中任何一种都会失败。节点的健康点取自它的 `service` 对应的卡片（事件服务内部的节点用 `dsh` 卡片，不显示状态行；没人探测的节点不显示圆点）。点击或按 Enter 选中一个节点，会淡化不在它上下游的一切，并在下方卡片里写出它的作用、状态、谁给它供数、结果去哪，目标分区已注册时还有“管理”链接；按 Esc 或点背景取消。箭头按类型画：实线是推送的事件，虚线是智能体通过工具主动查询，点线是调用，蓝色是发出的消息。它们表示数据能去哪里，不是实时流量。
 
 **订阅。**在总线配置里定义的订阅显示“来自配置”，没有按钮。`watch_create` 或表单建的订阅可以暂停（不再匹配新事件，已在排队的事件保留）、恢复，或在第二次点击后删除；删除监视时也会停掉它的仓库轮询，和 `watch_delete` 一致。表单需要名称、来源/类型/对象 glob（至少一项）、通知或会话模式，会话模式还要任务说明；会话订阅按配置的预设和工作区运行。定时提醒（`schedule_create`）可以暂停、恢复和删除；改时间请对智能体说。分区最后是**时间间隔提示**，即 [`fork-time-gap`](../fork-time-gap/README.zh.md) 的“全部设置”卡片（阈值、时区、排除的预设），它给安静一段时间后才到达的输入加上说明。
 
@@ -80,7 +80,8 @@ Claude Code 会话来自 `ctx.forkClaudeCode`（[`fork-cc-admin`](../fork-cc-adm
 | [`src/client/index.ts`](src/client/index.ts) | 浏览器入口：词典、loader、四个分区注册、试听播放器 |
 | [`src/client/resource.ts`](src/client/resource.ts) | store、带乐观动作的 loader，以及感知页面可见性的轮询 |
 | [`src/client/Overview.tsx`](src/client/Overview.tsx)、[`Subscriptions.tsx`](src/client/Subscriptions.tsx)、[`Agents.tsx`](src/client/Agents.tsx) | 三个分区 |
-| [`src/client/Flow.tsx`](src/client/Flow.tsx)、[`flow-graph.ts`](src/client/flow-graph.ts) | 数据流分区，以及它的拓扑、布局和路径遍历 |
+| [`src/client/Flow.tsx`](src/client/Flow.tsx)、[`FlowCanvas.tsx`](src/client/FlowCanvas.tsx)、[`FlowBox.tsx`](src/client/FlowBox.tsx)、[`FlowDetail.tsx`](src/client/FlowDetail.tsx)、[`flow-view.ts`](src/client/flow-view.ts) | 数据流分区：页面外壳、图、单个节点、详情卡，以及节点对自己的说法 |
+| [`src/client/flow-graph.ts`](src/client/flow-graph.ts)、[`flow-model.ts`](src/client/flow-model.ts) | 数据流的拓扑（只有数据），以及适用于任何图的布局、路径遍历和检查 |
 | [`src/client/cards.ts`](src/client/cards.ts)、[`balance.ts`](src/client/balance.ts)、[`subs.ts`](src/client/subs.ts) | 卡片文字、模型路由卡片、表单规则 |
 
 这是 fork 本地包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。
