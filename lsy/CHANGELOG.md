@@ -5,6 +5,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 ## [Unreleased]
 
 ### Added
+- A notification desk (2026-11-02): the `notify-funnel` subscription gives host notices that are not urgent (`host.*.warn`, `host.*.info`) and failed autocut runs to one long, tool-less Session (preset `notify`, the `ci` route) that merges repeats and answers `NO_REPLY` unless the owner has something to do; `host-alerts` keeps only the urgent kinds (`host.disk.full`, `host.*.critical`) and still goes straight to WeChat, because a Session's result note is not marked urgent.
 - Settings → Data flow (`lsy-flow`, after the overview): the event service as a graph from sources through grouped Sessions and condition boxes (yes/no arrows) to the owner-facing channels, drawn in the flow editor and exported into `flow-graph.ts`, each box coloured by its service's overview card, with the paths through a chosen box lit and its feeds and destinations listed; no new route or service (2026-11-02).
 
 ### Fixed
