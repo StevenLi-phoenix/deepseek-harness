@@ -85,6 +85,14 @@ export function FlowSection({ useOverview, refresh, canManage, select, t }: Flow
             {translate(`flow.legend.${kind}`)}
           </span>
         ))}
+        {(['partial', 'planned'] as const).map(wiring => (
+          <span key={wiring} className={css.flowKey}>
+            <svg width="28" height="14" viewBox="0 0 28 14">
+              <rect className={css.flowBox} data-wired={wiring} x="1" y="2" width="26" height="10" rx="3" />
+            </svg>
+            {translate(`flow.wired.${wiring}`)}
+          </span>
+        ))}
       </div>
       <div className={css.flowScroll}>
         <FlowCanvas graph={GRAPH} cards={cards} chosen={chosen} onChoose={choose} onClear={clear} translate={translate} />

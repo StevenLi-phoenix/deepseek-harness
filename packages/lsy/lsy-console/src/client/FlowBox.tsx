@@ -1,10 +1,11 @@
 /**
  * One box of the Data flow graph: a rounded rectangle, or a hexagon for a question, with its name, its service's health dot, and
- * a status line when the service has one. Memoised, so choosing a box redraws only the boxes whose lighting changed.
+ * a status line when the service has one. A box the running service wires only in part has a dotted border, and one that is not
+ * built yet a dashed one. Memoised, so choosing a box redraws only the boxes whose lighting changed.
  */
 
 import { memo, type KeyboardEvent, type ReactNode } from 'react'
-import { NODE_H, NODE_W, type FlowNode, type CanvasPoint } from './flow-model.ts'
+import { NODE_H, NODE_W, type FlowNode, type CanvasPoint, type Wiring } from './flow-model.ts'
 import type { BoxTone } from './flow-view.ts'
 import css from './Console.module.css'
 
@@ -45,6 +46,10 @@ export interface FlowBoxProps {
   selected: boolean
   dim: boolean
   title: string
+  /** How far the running service matches the box. */
+  wiring: Wiring
+  /** The word for a `partial` or `planned` box, read out with its name; empty for a live one. */
+  wiringWord: string
   onChoose: (id: string) => void
 }
 
@@ -53,7 +58,9 @@ export interface FlowBoxProps {
  * @param props - the box, where it sits, how it is lit, and what it says.
  * @returns the SVG group.
  */
-export const FlowBox = memo(function FlowBox({ node, at, tone, subtitle, selected, dim, title, onChoose }: FlowBoxProps): ReactNode {
+export const FlowBox = memo(function FlowBox({
+  node, at, tone, subtitle, selected, dim, title, wiring, wiringWord, onChoose,
+}: FlowBoxProps): ReactNode {
   const question = node.role === 'cond'
   const lines = wrapTitle(title)
   const left = question ? CUT + 4 : 12
@@ -70,7 +77,7 @@ export const FlowBox = memo(function FlowBox({ node, at, tone, subtitle, selecte
       role="button"
       tabIndex={0}
       aria-pressed={selected}
-      aria-label={subtitle === '' ? title : `${title}, ${subtitle}`}
+      aria-label={[title, subtitle, wiringWord].filter(part => part !== '').join(', ')}
       data-node={node.id}
       data-role={node.role}
       data-tone={tone}
@@ -79,8 +86,8 @@ export const FlowBox = memo(function FlowBox({ node, at, tone, subtitle, selecte
       onKeyDown={onKeyDown}
     >
       {question
-        ? <polygon className={css.flowBox} points={HEXAGON} />
-        : <rect className={css.flowBox} width={NODE_W} height={NODE_H} rx={9} />}
+        ? <polygon className={css.flowBox} points={HEXAGON} data-wired={wiring} />
+        : <rect className={css.flowBox} width={NODE_W} height={NODE_H} rx={9} data-wired={wiring} />}
       {tone === 'none' ? null : <circle className={css.flowDot} cx={NODE_W - (question ? 20 : 12)} cy={13} r={3.5} data-tone={tone} />}
       {subtitle === ''
         ? lines.map((line, i) => (

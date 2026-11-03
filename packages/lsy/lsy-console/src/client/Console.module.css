@@ -424,6 +424,8 @@
   stroke-width: 1;
 }
 
+.flowBox[data-wired='partial'] { stroke-dasharray: 1.5 3; stroke-linecap: round; stroke-width: 1.5; }
+.flowBox[data-wired='planned'] { stroke-dasharray: 5 3; }
 .flowNode[data-role='agent'] .flowBox { stroke: var(--dsw-alias-state-business-primary); }
 .flowNode[data-role='core'] .flowBox { fill: var(--dsw-alias-bg-skeleton); }
 .flowNode[data-role='cond'] .flowBox { fill: var(--dsw-alias-bg-skeleton); stroke: var(--dsw-alias-state-warn-primary); }

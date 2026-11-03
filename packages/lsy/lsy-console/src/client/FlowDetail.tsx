@@ -6,7 +6,7 @@
 import type { ReactNode } from 'react'
 import { factLines, statusText } from './cards.ts'
 import type { FlowGraph, FlowNode } from './flow-model.ts'
-import { noteOf, ownCard, titleOf, toneOf, type Cards } from './flow-view.ts'
+import { noteOf, ownCard, titleOf, toneOf, wiringOf, type Cards } from './flow-view.ts'
 import type { Translate } from './format.ts'
 import css from './Console.module.css'
 
@@ -47,7 +47,8 @@ export function FlowDetail({ graph, node, cards, now, canManage, onManage, trans
   const tone = toneOf(node, cards)
   const card = ownCard(node, cards)
   const note = noteOf(node, translate)
-  const { manage } = node
+  const wiring = wiringOf(node)
+  const { manage, via, gap } = node
   return (
     <div className={css.card} data-testid="flow-detail" aria-live="polite">
       <div className={css.cardHeader}>
@@ -60,6 +61,11 @@ export function FlowDetail({ graph, node, cards, now, canManage, onManage, trans
           : null}
       </div>
       {note === undefined ? null : <span className={css.line}>{note}</span>}
+      <div className={css.facts} data-wired={wiring}>
+        <span>{translate(`flow.wired.${wiring}`)}</span>
+        {via === undefined ? null : <span>{translate('flow.via', { list: via })}</span>}
+        {gap === undefined ? null : <span>{gap}</span>}
+      </div>
       {card === undefined
         ? null
         : (
