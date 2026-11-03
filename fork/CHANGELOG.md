@@ -22,6 +22,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 - A final answer whose last line is exactly `NO_REPLY` is silent for `fork-event-bus` and owner-relay, so an explanation followed by `NO_REPLY` no longer reaches WeChat (2026-11-01).
 
 ### Changed
+- Settings → Data flow marks each box live, partly wired (dotted border), or planned (dashed), says what carries it and how the running service differs from the drawing, and draws the do-not-disturb path as it works (it holds outgoing messages) instead of a merge into the main agent (2026-11-02).
 - Course deadline reminders end with an outlook of the other unfinished tasks due within 72 hours (late windows included, ⚠️ for a missed on-time deadline, at most 6 rows then "另有 N 项"), so a reminder for one task no longer hides a closer deadline; the outlook does not count as reminded (2026-11-01).
 - The qq-digest transcript now tags each picture `[图片#m12ab]` and attaches the newest `digest.maxImages` (8, volatile, `0` = none) saved ones to the prompt as image parts when the route reads images (the same turn goes out as text when it refuses them); pictures reach the model only and are never stored (2026-11-01).
 - The qq-digest transcript drops its noise (2026-11-01): a member's consecutive `[表情]`, `[动画表情]`, `[戳一戳]`, and `[合并转发]` messages are one line (`[表情]×3`) while every message still moves the digest cursor, and with `digest.aliasMembers` an @-mention shows the member's alias instead of the QQ number or name (`@某群友` when no member has that name; `@全体成员` stays).

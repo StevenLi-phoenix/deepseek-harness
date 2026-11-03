@@ -12,6 +12,12 @@ export type NodeRole = 'source' | 'core' | 'agent' | 'out' | 'cond'
 /** The answer an arrow out of a `cond` box stands for. */
 export type Branch = 'yes' | 'no'
 
+/**
+ * How far the running service matches a box: `live` is wired the way the box draws it, `partial` is wired differently or only in
+ * part, and `planned` is drawn but not built.
+ */
+export type Wiring = 'live' | 'partial' | 'planned'
+
 /** What an edge carries: a pushed event, something the agent pulls through a tool, an outgoing message, or a call. */
 export type EdgeKind = 'event' | 'pull' | 'send' | 'call'
 
@@ -27,6 +33,12 @@ export interface FlowNode {
   readonly manage?: string
   /** Earliest column, so boxes with one job line up even when their inputs would put them further left. */
   readonly minRank?: number
+  /** Whether the running service is wired the way the box draws it; a box that says nothing is read as `live`. */
+  readonly wired?: Wiring
+  /** What carries the box in the running service, as plain identifiers: a subscription, a plugin, a service. */
+  readonly via?: string
+  /** For a `partial` or `planned` box: how the running service differs from the drawing, in the owner's words like a title of its own. */
+  readonly gap?: string
 }
 
 /** One arrow. */

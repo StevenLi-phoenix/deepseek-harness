@@ -7,7 +7,7 @@ import { memo, useId, useMemo, type ReactNode } from 'react'
 import type { ServiceCard } from '../views.ts'
 import { statusText } from './cards.ts'
 import { edgeKey, type FlowEdge, type FlowGraph } from './flow-model.ts'
-import { ownCard, titleOf, toneOf, type Cards } from './flow-view.ts'
+import { ownCard, titleOf, toneOf, wiringOf, type Cards } from './flow-view.ts'
 import { FlowBox } from './FlowBox.tsx'
 import type { Translate } from './format.ts'
 import css from './Console.module.css'
@@ -99,6 +99,7 @@ export function FlowCanvas({ graph, cards, chosen, onChoose, onClear, translate 
       <g>
         {graph.nodes.map((node) => {
           const card: ServiceCard | undefined = ownCard(node, cards)
+          const wiring = wiringOf(node)
           return (
             <FlowBox
               key={node.id}
@@ -109,6 +110,8 @@ export function FlowCanvas({ graph, cards, chosen, onChoose, onClear, translate 
               selected={chosen === node.id}
               dim={lit !== null && !lit.nodes.has(node.id)}
               title={titleOf(node, translate)}
+              wiring={wiring}
+              wiringWord={wiring === 'live' ? '' : translate(`flow.wired.${wiring}`)}
               onChoose={onChoose}
             />
           )

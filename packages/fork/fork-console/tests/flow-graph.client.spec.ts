@@ -43,6 +43,36 @@ describe('flow topology', () => {
   })
 })
 
+describe('flow wiring', () => {
+  const wiringOf = (node: (typeof NODES)[number]): string => node.wired ?? 'live'
+
+  it('says for every box how far the running service matches it, and what carries it', () => {
+    for (const node of NODES) {
+      expect(['live', 'partial', 'planned'], node.id).toContain(node.wired ?? 'live')
+      if (wiringOf(node) !== 'planned') expect(node.via, `${node.id} runs as something`).toBeTruthy()
+      if (wiringOf(node) !== 'live') expect(node.gap, `${node.id} says how it differs`).toBeTruthy()
+    }
+  })
+
+  it('keeps a probe\'s health dot off a box that is not built', () => {
+    for (const node of NODES.filter(box => box.wired === 'planned')) {
+      expect(node.service, node.id).toBeUndefined()
+      expect(node.via, node.id).toBeUndefined()
+    }
+  })
+
+  it('has the words for each state and for what carries a box, in every language', () => {
+    for (const key of ['flow.wired.live', 'flow.wired.partial', 'flow.wired.planned', 'flow.via']) expect(zh).toHaveProperty(key)
+  })
+
+  it('draws the do-not-disturb state as it works: it holds outgoing messages, and nothing merges into the main agent', () => {
+    expect(ids).not.toContain('merge')
+    const arrows = new Set(EDGES.map(edge => `${edge.from}>${edge.to}`))
+    for (const arrow of ['presence>dnd', 'dnd>deferQ', 'main>deferQ', 'deferQ>wechatOut', 'schedule>main']) expect(arrows.has(arrow), arrow).toBe(true)
+    expect(arrows.has('presence>notifySession')).toBe(false)
+  })
+})
+
 describe('flow layout', () => {
   it('puts a question after what feeds it and the owner\'s WeChat last', () => {
     expect(GRAPH.layout.rank.repairQ).toBeGreaterThan(GRAPH.layout.rank.amsGroup!)

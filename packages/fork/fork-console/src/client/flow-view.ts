@@ -5,7 +5,7 @@
 
 import type { ServiceCard, Tone } from '../views.ts'
 import type { Translate } from './format.ts'
-import type { FlowNode } from './flow-model.ts'
+import type { FlowNode, Wiring } from './flow-model.ts'
 
 /** What a box shows: its service's tone, `off` while nothing is read, `none` for a box nobody probes. */
 export type BoxTone = Tone | 'none'
@@ -53,4 +53,13 @@ export function titleOf(node: FlowNode, t: Translate): string {
  */
 export function noteOf(node: FlowNode, t: Translate): string | undefined {
   return node.title === undefined ? t(`flow.node.${node.id}.desc` as never) : undefined
+}
+
+/**
+ * How far the running service matches a box.
+ * @param node - the box.
+ * @returns its wiring; a box that says nothing is `live`.
+ */
+export function wiringOf(node: FlowNode): Wiring {
+  return node.wired ?? 'live'
 }

@@ -23,6 +23,7 @@ const VIEW: OverviewView = {
     { id: 'bus', tone: 'warn', state: 'limited', facts: { subscriptions: 3, paused: 0, pending: 1, events: 9, batches: 4, limited: 2 } },
     { id: 'bili', tone: 'down', state: 'down', facts: { plugin: true } },
     { id: 'qq', tone: 'off', state: 'absent', facts: {} },
+    { id: 'wechat', tone: 'warn', state: 'queued', facts: {} },
   ],
 }
 
@@ -64,19 +65,20 @@ describe('FlowSection', () => {
     expect(screen.getByRole('status').textContent).toBe('正在读取…')
     expect(document.querySelectorAll('[data-node]')).toHaveLength(NODES.length)
     expect(document.querySelectorAll('[data-edge]')).toHaveLength(EDGES.length)
-    expect(node('notifySession').getAttribute('data-tone')).toBe('off')
+    expect(node('wechatOut').getAttribute('data-tone')).toBe('off')
   })
 
   it('takes each node\'s tone from its service card, and leaves a node with no probe plain', () => {
     mount({ data: VIEW, checkedAt: 1 })
     expect(screen.getByRole('status').textContent).toBe('09:30:15 更新')
-    expect(node('notifySession').getAttribute('data-tone')).toBe('warn')
+    expect(node('wechatOut').getAttribute('data-tone')).toBe('warn')
     expect(node('bili').getAttribute('data-tone')).toBe('down')
     expect(node('gate').getAttribute('data-tone')).toBe('down')
     expect(node('main').getAttribute('data-tone')).toBe('ok')
     expect(node('qq').getAttribute('data-tone')).toBe('off')
     expect(node('github').getAttribute('data-tone')).toBe('none')
     expect(node('repairQ').getAttribute('data-tone')).toBe('none')
+    expect(node('notifySession').getAttribute('data-tone')).toBe('none')
   })
 
   it('draws a question as a hexagon and writes each answer on its arrow', () => {
@@ -94,7 +96,7 @@ describe('FlowSection', () => {
     mount({})
     const lines = [...node('githubSessions').querySelectorAll('text')].map(text => text.textContent)
     expect(lines).toEqual(['Github Sessions', 'Group By repo'])
-    expect(node('githubSessions').getAttribute('aria-label')).toBe('Github Sessions Group By repo')
+    expect(node('githubSessions').getAttribute('aria-label')).toBe('Github Sessions Group By repo, 部分接通')
   })
 
   it('lights up the paths through a node when it is chosen and clears them when it is chosen again', () => {
@@ -123,16 +125,16 @@ describe('FlowSection', () => {
   })
 
   it('describes the chosen node: its state, what feeds it and where it goes, and offers Manage where the section exists', () => {
-    const { select } = mount({ data: VIEW, checkedAt: 1 }, ['fork-subscriptions'])
+    const { select } = mount({ data: VIEW, checkedAt: 1 }, ['fork-wechat'])
     expect(screen.getByTestId('flow-detail').textContent).toContain('点一个节点')
-    fireEvent.click(node('notifySession'))
+    fireEvent.click(node('wechatOut'))
     const detail = screen.getByTestId('flow-detail')
-    expect(detail.textContent).toContain('通知消息 session')
-    expect(detail.textContent).toContain('被限流')
-    expect(detail.textContent).toContain('来自：勿扰信号、主机事件、自动修复、自动修复、autocut')
-    expect(detail.textContent).toContain('去向：微信主智能体')
+    expect(detail.textContent).toContain('微信（主人）')
+    expect(detail.textContent).toContain('有通知在等你回复后发出')
+    expect(detail.textContent).toContain('来自：微信主智能体、defer delay?、tools 语音')
+    expect(detail.textContent).not.toContain('去向')
     fireEvent.click(within(detail).getByRole('button', { name: '管理' }))
-    expect(select).toHaveBeenCalledWith('fork-subscriptions')
+    expect(select).toHaveBeenCalledWith('fork-wechat')
   })
 
   it('describes a node the dictionary knows with its job, and one it does not with its title alone', () => {
@@ -146,14 +148,53 @@ describe('FlowSection', () => {
 
   it('offers no Manage button for a node whose section is not registered', () => {
     mount({ data: VIEW, checkedAt: 1 }, [])
-    fireEvent.click(node('notifySession'))
+    fireEvent.click(node('wechatOut'))
     expect(within(screen.getByTestId('flow-detail')).queryByRole('button')).toBeNull()
   })
 
   it('keeps the last picture with a quiet stale line', () => {
     mount({ data: VIEW, checkedAt: 2, stale: true })
     expect(screen.getByRole('status').textContent).toBe('未能刷新 · 显示 09:30:15 的数据')
-    expect(node('notifySession').getAttribute('data-tone')).toBe('warn')
+    expect(node('wechatOut').getAttribute('data-tone')).toBe('warn')
+  })
+})
+
+describe('wiring', () => {
+  it('borders a box by how far the running service matches it, and reads the state out with its name', () => {
+    mount({})
+    const border = (id: string): string | null => node(id).querySelector('[data-wired]')!.getAttribute('data-wired')
+    expect(border('main')).toBe('live')
+    expect(border('githubSessions')).toBe('partial')
+    expect(border('notifySession')).toBe('planned')
+    expect(border('repairQ')).toBe('planned')
+    expect(node('main').getAttribute('aria-label')).toBe('微信主智能体')
+    expect(node('notifySession').getAttribute('aria-label')).toBe('通知消息 session, 尚未实现')
+  })
+
+  it('explains the border in the legend', () => {
+    mount({})
+    const keys = [...document.querySelectorAll('rect[data-wired]')].filter(rect => rect.closest('[data-node]') === null)
+    expect(keys.map(rect => rect.getAttribute('data-wired'))).toEqual(['partial', 'planned'])
+    expect(document.body.textContent).toContain('部分接通')
+    expect(document.body.textContent).toContain('尚未实现')
+  })
+
+  it('tells in the detail card what carries a live box, and how a partial or planned one differs', () => {
+    mount({ data: VIEW, checkedAt: 1 })
+    fireEvent.click(node('main'))
+    let detail = screen.getByTestId('flow-detail').textContent ?? ''
+    expect(detail).toContain('已接通')
+    expect(detail).toContain('实际承载：fork-wechat chat Session')
+    fireEvent.click(node('githubSessions'))
+    detail = screen.getByTestId('flow-detail').textContent ?? ''
+    expect(detail).toContain('部分接通')
+    expect(detail).toContain('实际承载：subscription ci (one Session per repo)')
+    expect(detail).toContain('只接 workflow_run.completed 一种事件')
+    fireEvent.click(node('notifySession'))
+    detail = screen.getByTestId('flow-detail').textContent ?? ''
+    expect(detail).toContain('尚未实现')
+    expect(detail).not.toContain('实际承载')
+    expect(detail).toContain('主机告警现在不经模型')
   })
 })
 
