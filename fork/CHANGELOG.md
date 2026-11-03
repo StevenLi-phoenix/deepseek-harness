@@ -5,6 +5,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 ## [Unreleased]
 
 ### Added
+- `defer_deliver` (`fork-tool-wechat`, 2026-11-02): the agent holds a text for the owner until a time (`until`, ISO 8601 with a UTC offset, at most 7 days ahead) or until the owner wakes, whichever is first; `WechatChannel.holdDelivery()` keeps it in the outbox with a release time, one timer for the earliest (armed again after a restart), and the owner's own messages do not release it early.
 - A notification desk (2026-11-02): the `notify-funnel` subscription gives host notices that are not urgent (`host.*.warn`, `host.*.info`) and failed autocut runs to one long, tool-less Session (preset `notify`, the `ci` route) that merges repeats and answers `NO_REPLY` unless the owner has something to do; `host-alerts` keeps only the urgent kinds (`host.disk.full`, `host.*.critical`) and still goes straight to WeChat, because a Session's result note is not marked urgent.
 - Settings → Data flow (`fork-flow`, after the overview): the event service as a graph from sources through grouped Sessions and condition boxes (yes/no arrows) to the owner-facing channels, drawn in the flow editor and exported into `flow-graph.ts`, each box coloured by its service's overview card, with the paths through a chosen box lit and its feeds and destinations listed; no new route or service (2026-11-02).
 

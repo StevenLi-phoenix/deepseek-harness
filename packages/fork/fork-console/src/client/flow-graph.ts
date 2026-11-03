@@ -40,10 +40,7 @@ export const NODES: readonly FlowNode[] = [
     gap: '还没有本地上传的来源；视频现在由 kaorou 或主人在微信里给链接开始。',
   },
   { id: 'dnd', role: 'core', service: 'dsh', manage: 'fork-presence', via: 'fork-presence' },
-  {
-    id: 'deferQ', role: 'core', title: 'defer delay?', wired: 'partial', via: 'fork-wechat outbox · fork-presence',
-    gap: '现在由勿扰状态按紧急 kind 自动扣住；还没有 defer_deliver 工具。',
-  },
+  { id: 'deferQ', role: 'core', title: 'defer delay?', via: 'defer_deliver tool · fork-wechat outbox · fork-presence' },
   {
     id: 'githubSessions', role: 'agent', title: 'Github Sessions Group By repo', service: 'dsh', manage: 'fork-agents', wired: 'partial',
     via: 'subscription ci (one Session per repo)', gap: '只接 workflow_run.completed 一种事件；发布、提交不起 Session。',
