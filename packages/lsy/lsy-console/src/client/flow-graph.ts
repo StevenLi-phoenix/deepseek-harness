@@ -36,8 +36,9 @@ export const NODES: readonly FlowNode[] = [
     via: 'lsy-style · persona preset', gap: '说话风格靠各 preset 里的 persona 组件带进 Session，不是推送的事件。',
   },
   {
-    id: 'uploadLocal', role: 'source', title: 'bilibili upload from local', wired: 'planned',
-    gap: '还没有本地上传的来源；视频现在由 kaorou 或主人在微信里给链接开始。',
+    id: 'uploadLocal', role: 'source', title: 'bilibili upload from local', wired: 'partial',
+    via: 'ingest source upload · subscription upload-local',
+    gap: '接收端和 Session 已就绪；在另一台机器上发 upload.local.ready 的脚本要主人自己放（RUNBOOK §22）。',
   },
   { id: 'dnd', role: 'core', service: 'dsh', manage: 'lsy-presence', via: 'lsy-presence' },
   { id: 'deferQ', role: 'core', title: 'defer delay?', via: 'defer_deliver tool · lsy-wechat outbox · lsy-presence' },
@@ -58,16 +59,25 @@ export const NODES: readonly FlowNode[] = [
     id: 'amsGroup', role: 'agent', title: 'AMS msg group', service: 'dsh', manage: 'lsy-agents', wired: 'partial',
     via: 'ga-watch journal Monitor', gap: '分组在 Monitor 的闸门里（新问题、12 小时后复发、抖动），不是 DSH 里的 Session。',
   },
-  { id: 'repairQ', role: 'cond', title: '自动修复', wired: 'planned', gap: '没有对应的判断；现在是主智能体读到告警后自己决定。' },
-  { id: 'repair', role: 'agent', title: '自动修复', manage: 'lsy-agents', wired: 'planned', gap: '没有专门的修复智能体；主智能体可以用 cc_start 起 Claude Code。' },
+  {
+    id: 'repairQ', role: 'cond', title: '自动修复', wired: 'partial', via: 'skill ams-repair (the main agent judges)',
+    gap: '判断由主智能体按技能做，不是固定规则；技能随 setup-profile 链接进 DSH_HOME 之后才生效。',
+  },
+  {
+    id: 'repair', role: 'agent', title: '自动修复', manage: 'lsy-agents', wired: 'partial', via: 'cc_start · lsy-cc-bridge · skill ams-repair',
+    gap: '只修到分支为止，测试通过后汇报；部署和重启要主人点头。',
+  },
   {
     id: 'qqMain', role: 'agent', title: 'shared QQ main session (iso)', manage: 'lsy-agents', wired: 'planned',
-    gap: '还没有跨群共用、与微信隔离的 QQ 主会话。',
+    gap: '它的出口是 QQ onebot（尚未实现）；只收摘要不开口的会话白耗 token，所以先不建。摘要现在由 lsy-qq 每群的会话写。',
   },
-  { id: 'autocutQ', role: 'cond', title: 'Autocut?', wired: 'planned', gap: '没有“剪不剪”的判断。' },
+  {
+    id: 'autocutQ', role: 'cond', title: 'Autocut?', wired: 'partial', via: 'subscription upload-local (the Session judges)',
+    gap: '“剪不剪”由该会话自己判断；“否”这一支只问主人是否上传，主人说好才交给烤肉。',
+  },
   {
     id: 'autocut', role: 'agent', title: 'autocut', wired: 'partial', via: 'subscription autocut · autocut skill',
-    gap: '事件进专用 Session；失败另汇入通知消息 session；没有“剪不剪”的判断。',
+    gap: '事件进专用 Session；失败另汇入通知消息 session；“剪不剪”的判断在 upload-local。',
   },
   { id: 'main', role: 'agent', service: 'dsh', manage: 'lsy-agents', via: 'lsy-wechat chat Session' },
   { id: 'up', role: 'agent', service: 'dsh', manage: 'lsy-agents', via: 'subscription bili-digest · preset up' },
