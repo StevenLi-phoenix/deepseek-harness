@@ -87,6 +87,8 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 
 挂载 [`@deepseek-ai/dsh-lsy-presence`](../lsy-presence/README.zh.md) 之后，你睡着时，对话 Session 的回复和不紧急的通知会等着：它们进入 outbox 并标为压下，你醒来时合成一条汇总发出（每行带它入队的时间），你先发消息的话则在那时发出，以先到者为准。通知紧急时（发送方标了紧急，或它报告的某个事件类型匹配 lsy-presence 的 `urgentKinds`）、你在最近 `awakeAfterMessageMs` 内发过消息时，以及频道提示、汇总和文件，都不会被压。每次压下和每次放出都记日志，只记数量和事件类型，不记正文。你醒来时如果回复窗口的名额已经用完，压下的文本就作为普通 outbox 文本留着，等你发消息。**设置 → 勿扰**显示状态、数出压下了多少，并可以按需发出。
 
+`holdDelivery(text, until?)` 是 agent 自己的扣留，对应 [`@deepseek-ai/dsh-lsy-tool-wechat`](../lsy-tool-wechat/README.zh.md) 的 `defer_deliver` 工具：它把文字作为压下的文本入队并带一个释放时间（`releaseAt`，最多 7 天以内），再为最早的一条挂一个定时器。到点时，已到期的压下文本会合成一条汇总发出，即使你还在睡（时间是 agent 选的）；你先醒的话，醒来会连同其他压下的文本一起放出；你自己发消息不会提前放出它们。不带 `until` 时你此刻必须在睡，否则不入队，结果会告诉 agent 把文字放进它的答复。到点时回复窗口接不住的文本留作普通 outbox 文本。日志只记数量和时间，不记正文；重启后定时器从存下来的行重新挂上。
+
 设置页的路由 `/api/lsy.wechat`（只要 Host 有 connection 服务就会注册，所以受它的登录保护）的回答和请求里都没有 bot token 和消息正文：id 做了遮挡，其余用时间、数量和代码表示。页面本身，即分区 `lsy-wechat`（顺序 52，文案与其他 `lsy` 设置页一样有八种语言），在只含浏览器端的包 [`@deepseek-ai/dsh-lsy-wechat-settings`](../lsy-wechat-settings/README.zh.md) 里，这样本包不带浏览器面；它那份 `src/view.ts` 与这里逐字节相同，由测试检查。
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-lsy-wechat)是全部可用字段的权威来源。

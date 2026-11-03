@@ -15,8 +15,10 @@ async function mount(notifier: unknown) {
   await ctx.plugin(NativeToolExecutor)
   ctx.provide('lsyNotifier', notifier as never)
   await ctx.plugin(ToolWechat)
-  const call = async (args: unknown) => (await ctx.tools.execute({ signal: new AbortController().signal, calls: [{ type: 'tool-call', id: ToolCallId('send-call'), name: 'wechat_send_file', arguments: JSON.stringify(args) }] })).results[0]!.result
-  return { ctx, call }
+  const run = async (name: string, args: unknown) => (await ctx.tools.execute({ signal: new AbortController().signal, calls: [{ type: 'tool-call', id: ToolCallId('send-call'), name, arguments: JSON.stringify(args) }] })).results[0]!.result
+  const call = (args: unknown) => run('wechat_send_file', args)
+  const defer = (args: unknown) => run('defer_deliver', args)
+  return { ctx, call, defer }
 }
 
 afterEach(async () => {
@@ -45,5 +47,51 @@ describe('wechat_send_file', () => {
     const result = await call({})
     expect(result).not.toHaveProperty('value')
     expect(sendFile).not.toHaveBeenCalled()
+  })
+})
+
+describe('defer_deliver', () => {
+  const UNTIL = '2026-11-03T09:00:00-05:00'
+
+  it('passes the text and the parsed time to the channel and gives the held time back as ISO text', async () => {
+    const holdDelivery = vi.fn((_text: string, until?: number) => (
+      Promise.resolve({ held: 1, ...until === undefined ? {} : { until }, wakes: false })
+    ))
+    const { ctx, defer } = await mount({ send: vi.fn(), ownsSession: () => false, holdDelivery })
+    expect(ctx.tools.schemas().map(schema => schema.name)).toContain('defer_deliver')
+    expect(await defer({ text: 'good morning', until: UNTIL })).toMatchObject({ value: { held: 1, until: '2026-11-03T14:00:00.000Z', wakes: false } })
+    expect(holdDelivery).toHaveBeenCalledWith('good morning', Date.parse(UNTIL))
+    expect(ctx.tools.get('defer_deliver')!.presentCall!({ text: 'good morning' })).toEqual({
+      card: 'generic', title: 'Hold a message for the owner', kind: 'other', rawInput: 'good morning',
+    })
+  })
+
+  it('holds until the owner wakes when no time is given', async () => {
+    const holdDelivery = vi.fn(() => Promise.resolve({ held: 1, wakes: true }))
+    const { defer } = await mount({ send: vi.fn(), ownsSession: () => false, holdDelivery })
+    expect(await defer({ text: 'later' })).toMatchObject({ value: { held: 1, wakes: true } })
+    expect(holdDelivery).toHaveBeenCalledWith('later', undefined)
+  })
+
+  it('returns the channel\'s reason when it holds nothing', async () => {
+    const holdDelivery = vi.fn(() => Promise.resolve({ notHeld: 'the owner is awake: put the text in your answer, or give a time with until' }))
+    const { defer } = await mount({ send: vi.fn(), ownsSession: () => false, holdDelivery })
+    expect(JSON.stringify(await defer({ text: 'now' }))).toContain('the owner is awake')
+  })
+
+  it('refuses a time that is not ISO 8601 with a UTC offset, before the channel hears of it', async () => {
+    const holdDelivery = vi.fn()
+    const { defer } = await mount({ send: vi.fn(), ownsSession: () => false, holdDelivery })
+    for (const until of ['tomorrow 9am', '2026-11-03T09:00:00', '2026-13-45T25:00:00Z']) {
+      expect(JSON.stringify(await defer({ text: 'x', until })), until).toContain('ISO 8601')
+    }
+    expect(holdDelivery).not.toHaveBeenCalled()
+  })
+
+  it('says so when the notifier is not the WeChat channel, and lets the registry refuse a call without text', async () => {
+    const { defer } = await mount({ send: vi.fn(), ownsSession: () => false })
+    expect(await defer({ text: 'x' })).toMatchObject({ value: { notHeld: 'the WeChat channel is not mounted' } })
+    const refused = await defer({})
+    expect(refused).not.toHaveProperty('value')
   })
 })

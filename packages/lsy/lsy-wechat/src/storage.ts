@@ -38,6 +38,8 @@ const outboxSchema = z.object({
   queuedAt: z.number(),
   /** Held back because the owner was asleep, not because no reply window was open. */
   deferred: z.boolean().optional(),
+  /** Unix epoch milliseconds before which an agent asked to hold the text (`holdDelivery`); a wake releases it earlier. */
+  releaseAt: z.number().optional(),
 }).strict()
 
 /** What the bot's latest message to the owner was. */

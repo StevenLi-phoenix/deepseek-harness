@@ -1506,6 +1506,99 @@ describe('WechatChannel while the owner sleeps', () => {
   })
 })
 
+describe('WechatChannel holdDelivery', () => {
+  const HOUR = 3_600_000
+
+  /** A harness whose owner wrote half an hour ago, so a reply window is open and nothing is a reply to a fresh message. */
+  async function open(presence?: unknown, pool?: MemoryMediaPool) {
+    const h = await harness({ ...presence === undefined ? {} : { presence }, ...pool === undefined ? {} : { pool } })
+    await h.ownerSays('night')
+    await vi.advanceTimersByTimeAsync(31 * 60_000)
+    h.ilink.sent.length = 0
+    return h
+  }
+
+  it('holds a text until the given time and then sends it, logging counts and never the text', async () => {
+    const h = await open()
+    const until = Date.now() + HOUR
+    expect(await h.channel.holdDelivery('good news at nine', until)).toEqual({ held: 1, until, wakes: false })
+    expect(h.channel.outbox().map(row => [row.text, row.deferred, row.releaseAt])).toEqual([['good news at nine', true, until]])
+    await vi.advanceTimersByTimeAsync(59 * 60_000)
+    expect(h.ilink.sent).toEqual([])
+    await vi.advanceTimersByTimeAsync(2 * 60_000)
+    expect(h.ilink.sent).toHaveLength(1)
+    expect(h.ilink.sent[0]!.text).toContain('good news at nine')
+    expect(h.channel.outbox()).toEqual([])
+    expect(h.logs.some(entry => entry.text === 'lsy-wechat: held 1 message(s) the agent asked to defer, until 2026-10-21T19:31:00.000Z')).toBe(true)
+    expect(h.logs.some(entry => entry.text === 'lsy-wechat: 1 deferred text(s) came due: 1 sent, 0 left for the next reply window')).toBe(true)
+    expect(h.logs.some(entry => entry.text.includes('good news'))).toBe(false)
+  })
+
+  it('keeps a held text back when the owner writes before its time', async () => {
+    const h = await open()
+    await h.channel.holdDelivery('not yet', Date.now() + HOUR)
+    h.ilink.sent.length = 0
+    await h.ownerSays('are you there')
+    expect(h.ilink.sent.map(sent => sent.text).some(text => text.includes('not yet'))).toBe(false)
+    expect(h.channel.outbox().map(row => row.text)).toEqual(['not yet'])
+    await vi.advanceTimersByTimeAsync(HOUR)
+    expect(h.ilink.sent.map(sent => sent.text).some(text => text.includes('not yet'))).toBe(true)
+  })
+
+  it('sends a text held until a time as soon as the owner wakes, when that comes first', async () => {
+    const sleeping = fakePresence()
+    const h = await open(sleeping.presence)
+    expect(await h.channel.holdDelivery('morning note', Date.now() + 8 * HOUR)).toMatchObject({ held: 1, wakes: true })
+    await sleeping.set(false)
+    expect(h.ilink.sent).toHaveLength(1)
+    expect(h.ilink.sent[0]!.text).toContain('morning note')
+    expect(h.channel.outbox()).toEqual([])
+    await vi.advanceTimersByTimeAsync(9 * HOUR)
+    expect(h.ilink.sent).toHaveLength(1)
+  })
+
+  it('holds a text with no time until the owner wakes, and only while the owner sleeps', async () => {
+    const sleeping = fakePresence()
+    const h = await open(sleeping.presence)
+    expect(await h.channel.holdDelivery('later')).toEqual({ held: 1, wakes: true })
+    expect(sleeping.holders[0]!.count()).toBe(1)
+    await sleeping.set(false)
+    expect(h.ilink.sent.map(sent => sent.text).some(text => text.includes('later'))).toBe(true)
+    expect(await h.channel.holdDelivery('again')).toEqual({ notHeld: 'the owner is awake: put the text in your answer, or give a time with until' })
+    const none = await open()
+    expect(await none.channel.holdDelivery('x')).toEqual({ notHeld: 'the owner is awake: put the text in your answer, or give a time with until' })
+  })
+
+  it('refuses an empty text, a time that has passed, and a time more than a week away', async () => {
+    const h = await open()
+    expect(await h.channel.holdDelivery('  ', Date.now() + HOUR)).toEqual({ notHeld: 'the text is empty' })
+    expect(await h.channel.holdDelivery('x', Date.now() - 1)).toEqual({ notHeld: 'until is not in the future' })
+    expect(await h.channel.holdDelivery('x', Date.now() + 8 * 24 * HOUR)).toEqual({ notHeld: 'until is more than 7 days away' })
+    expect(h.channel.outbox()).toEqual([])
+  })
+
+  it('leaves a text whose time came as an ordinary outbox text when the reply window cannot take it', async () => {
+    const h = await open()
+    await h.channel.holdDelivery('too late', Date.now() + HOUR)
+    h.ilink.reply('ilink/bot/sendmessage', { body: { ret: -2 } })
+    await vi.advanceTimersByTimeAsync(HOUR + 1000)
+    expect(h.channel.outbox().map(row => [row.text, row.deferred, row.releaseAt])).toEqual([['too late', undefined, undefined]])
+    expect(h.logs.some(entry => entry.text === 'lsy-wechat: 1 deferred text(s) came due: 0 sent, 1 left for the next reply window')).toBe(true)
+  })
+
+  it('is armed again after a restart', async () => {
+    const pool = new MemoryMediaPool()
+    const first = await open(undefined, pool)
+    await first.channel.holdDelivery('across a restart', Date.now() + HOUR)
+    await first.ctx.fiber.dispose()
+    const second = await harness({ pool, ilink: first.ilink })
+    expect(second.channel.outbox().map(row => row.text)).toEqual(['across a restart'])
+    first.ilink.sent.length = 0
+    await vi.advanceTimersByTimeAsync(HOUR + 1000)
+    expect(first.ilink.sent.map(sent => sent.text).some(text => text.includes('across a restart'))).toBe(true)
+  })
+})
+
 /** @returns the answer a Settings route response carries. */
 function parseAnswer(text: string): WechatAnswer {
   return JSON.parse(text) as WechatAnswer

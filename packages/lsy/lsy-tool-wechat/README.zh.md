@@ -1,5 +1,5 @@
 ---
-description: "面向模型的 wechat_send_file 工具：agent 经 lsy 微信通道把宿主上的图片、视频或文件发给 owner，所有规则由通道执行，不由模型决定。"
+description: "面向模型的微信工具：wechat_send_file 把宿主上的图片、视频或文件发给 owner，defer_deliver 把一段文字留到指定时间或 owner 醒来再发，所有规则由通道执行，不由模型决定。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-在微信上让 agent 发一张截图、一份报告或一段视频，它会以真正的图片、文件或视频出现在对话里，而不是文字回复里的一个路径。agent 用宿主上的文件调用 `wechat_send_file`；图片内容发成图片，`.mp4`、`.mov`、`.m4v` 发成视频，其余发成文件附件。规则写在宿主代码里：收件人永远是你，只有在你最近一条消息打开的回复窗口内才会发出。结果会告诉 agent 发了什么，或为什么没发。
+在微信上让 agent 发一张截图、一份报告或一段视频，它会以真正的图片、文件或视频出现在对话里，而不是文字回复里的一个路径。agent 用宿主上的文件调用 `wechat_send_file`；图片内容发成图片，`.mp4`、`.mov`、`.m4v` 发成视频，其余发成文件附件。`defer_deliver` 把一段文字先扣住，到 agent 指定的时间或你醒来时再送到。规则写在宿主代码里：收件人永远是你，只有在你最近一条消息打开的回复窗口内才会发出。结果会告诉 agent 发了什么，或为什么没发。
 
 ## 目录
 
@@ -42,11 +42,11 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-挂载的作用域解析出 `ctx.lsyNotifier` 后，插件注册一个 `defineTool` 定义，工具体把路径交给 `WechatChannel.sendFile()`，原样返回结果。通道检查路径是绝对路径、指向 `maxMediaBytes` 以内的非空普通文件，占用当前回复窗口（最后一个名额留给文字回复），用新生成的 AES-128 密钥加密文件、上传到微信 CDN，再经与文字回复相同的串行路径给 owner 发一个图片、视频或文件条目。不进任何队列；每次发送都记录类型、名称、大小和路径。
+挂载的作用域解析出 `ctx.lsyNotifier` 后，插件注册两个 `defineTool` 定义。`wechat_send_file` 把路径交给 `WechatChannel.sendFile()`，原样返回结果；`defer_deliver` 先检查 `until` 是带 UTC 偏移的 ISO 8601（不带偏移的时间会被按宿主所在时区解读，而模型看不到这个时区），再把文字和解析出的时间交给 `WechatChannel.holdDelivery()`，并把扣住的时间以 ISO 文本返回。通道把文字连同释放时间存进发件箱，并为最早的一条挂一个定时器；醒来会提前释放，owner 自己发消息不会。发文件时，通道检查路径是绝对路径、指向 `maxMediaBytes` 以内的非空普通文件，占用当前回复窗口（最后一个名额留给文字回复），用新生成的 AES-128 密钥加密文件、上传到微信 CDN，再经与文字回复相同的串行路径给 owner 发一个图片、视频或文件条目。不进任何队列；每次发送都记录类型、名称、大小和路径。
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 插件入口：工具定义 |
+| [`src/index.ts`](src/index.ts) | 插件入口：两个工具定义 |
 
 这是 fork 本地包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。
 
@@ -78,6 +78,34 @@ preset 挂载了这个包的 Agent，每次请求都有固定的 schema 开销�
 
 工具定义与可见性不变时前缀稳定；挂载或卸载可能让第一个变化的 schema token 之后的缓存复用失效。
 
+### 延后工具
+
+#### 模型看到什么
+
+第二个 schema `defer_deliver`：必填字符串 `text`（“What to tell the owner, as you would write it in a message.”）和可选字符串 `until`（带 UTC 偏移的 ISO 8601，最多 7 天以内；不填就等 owner 醒来）。描述说明：文字会在 `until` 到达或 owner 醒来时发出，先到者为准；不填 `until` 时 owner 此刻必须在睡；不要在最终答复里重复这段文字（如果这就是全部要说的，就只答 `NO_REPLY`）；发送需要一个打开的微信回复窗口。
+
+#### Token 影响
+
+挂载该包的 preset 下的 Agent，每次请求多一份约 300 token 的固定 schema 成本。
+
+#### KV Cache 影响
+
+工具定义和可见性不变时前缀稳定；挂载或卸载可能让从第一个变化的 schema token 起的复用失效。
+
+### 延后结果
+
+#### 模型看到什么
+
+每次调用一个 JSON 文本块：`{ "held": <条数>, "until": "<ISO 时间>"?, "wakes": true | false }`（owner 此刻在睡时 `wakes` 为 true，醒来可能先把它放出）；或 `{ "notHeld": "<原因>" }`，原因如 `the text is empty`、`until is not in the future`、`until is more than 7 days away`、`until is not an ISO 8601 time with a UTC offset, …`、`the owner is awake: put the text in your answer, or give a time with until`。
+
+#### Token 影响
+
+每次调用几十个 token，留在 Session 历史里直到压缩。
+
+#### KV Cache 影响
+
+只追加；新可见内容接在可复用的请求前缀之后，不会让已有 KV Cache 条目失效。
+
 ### 发送结果
 
 #### 模型看到什么
@@ -98,6 +126,8 @@ preset 挂载了这个包的 Agent，每次请求都有固定的 schema 开销�
 
 - **只发给 owner，只在窗口内**——文件不能发给别人，也不能像文字那样等到下一个窗口。
 - **不发语音**——音频文件以文件附件发出，不是语音消息。
+- **扣住的文字在到点时需要一个窗口**——`until` 到达时回复窗口已关闭或额度用完，这段文字就像别的文字一样留在发件箱，随 owner 的下一条消息发出。
+- **不能撤回**——agent 不能收回已扣住的文字；owner 可以在设置 → 勿扰里一次把扣住的全部发出。
 
 <a id="dev-note"></a>
 ### 开发备注
