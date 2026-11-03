@@ -78,7 +78,7 @@ describe('FlowSection', () => {
     expect(node('qq').getAttribute('data-tone')).toBe('off')
     expect(node('github').getAttribute('data-tone')).toBe('none')
     expect(node('repairQ').getAttribute('data-tone')).toBe('none')
-    expect(node('notifySession').getAttribute('data-tone')).toBe('none')
+    expect(node('notifySession').getAttribute('data-tone')).toBe('warn')
   })
 
   it('draws a question as a hexagon and writes each answer on its arrow', () => {
@@ -165,10 +165,10 @@ describe('wiring', () => {
     const border = (id: string): string | null => node(id).querySelector('[data-wired]')!.getAttribute('data-wired')
     expect(border('main')).toBe('live')
     expect(border('githubSessions')).toBe('partial')
-    expect(border('notifySession')).toBe('planned')
+    expect(border('notifySession')).toBe('partial')
     expect(border('repairQ')).toBe('planned')
     expect(node('main').getAttribute('aria-label')).toBe('微信主智能体')
-    expect(node('notifySession').getAttribute('aria-label')).toBe('通知消息 session, 尚未实现')
+    expect(node('qqMain').getAttribute('aria-label')).toBe('shared QQ main session (iso), 尚未实现')
   })
 
   it('explains the border in the legend', () => {
@@ -190,11 +190,11 @@ describe('wiring', () => {
     expect(detail).toContain('部分接通')
     expect(detail).toContain('实际承载：subscription ci (one Session per repo)')
     expect(detail).toContain('只接 workflow_run.completed 一种事件')
-    fireEvent.click(node('notifySession'))
+    fireEvent.click(node('repairQ'))
     detail = screen.getByTestId('flow-detail').textContent ?? ''
     expect(detail).toContain('尚未实现')
     expect(detail).not.toContain('实际承载')
-    expect(detail).toContain('主机告警现在不经模型')
+    expect(detail).toContain('现在是主智能体读到告警后自己决定')
   })
 })
 

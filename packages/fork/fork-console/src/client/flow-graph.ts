@@ -22,7 +22,7 @@ export const NODES: readonly FlowNode[] = [
     id: 'pipelines', role: 'source', wired: 'partial', via: 'ingest source kaorou · subscription kaorou',
     gap: '图上连向 AMS 分组；实际由 kaorou 订阅每批起一个 Session，不经 AMS。',
   },
-  { id: 'host', role: 'source', via: 'ingest source host · subscription host-alerts' },
+  { id: 'host', role: 'source', via: 'ingest source host · subscriptions host-alerts, notify-funnel' },
   { id: 'ams', role: 'source', service: 'ams', via: 'AMS escalation journal' },
   {
     id: 'operator', role: 'source', wired: 'partial', via: 'ingest source operator · subscription operator',
@@ -49,8 +49,9 @@ export const NODES: readonly FlowNode[] = [
     via: 'subscription ci (one Session per repo)', gap: '只接 workflow_run.completed 一种事件；发布、提交不起 Session。',
   },
   {
-    id: 'notifySession', role: 'agent', title: '通知消息 session', manage: 'fork-subscriptions', wired: 'planned',
-    gap: '还没有这个筛选汇总的 Session；主机告警现在不经模型，直接发微信。',
+    id: 'notifySession', role: 'agent', title: '通知消息 session', service: 'bus', manage: 'fork-subscriptions', wired: 'partial',
+    via: 'subscription notify-funnel · preset notify',
+    gap: '只接主机的非紧急通知和 autocut 失败；自动修复和 AMS 的分支还没接进来；紧急的主机告警（磁盘满）仍直接发微信。',
   },
   {
     id: 'qqSessions', role: 'agent', title: 'QQ sessions group by ids', service: 'dsh', manage: 'fork-agents', wired: 'partial',
@@ -69,7 +70,7 @@ export const NODES: readonly FlowNode[] = [
   { id: 'autocutQ', role: 'cond', title: 'Autocut?', wired: 'planned', gap: '没有“剪不剪”的判断。' },
   {
     id: 'autocut', role: 'agent', title: 'autocut', wired: 'partial', via: 'subscription autocut · autocut skill',
-    gap: '事件进专用 Session；没有“剪不剪”的判断，也不汇入通知消息 session。',
+    gap: '事件进专用 Session；失败另汇入通知消息 session；没有“剪不剪”的判断。',
   },
   { id: 'main', role: 'agent', service: 'dsh', manage: 'fork-agents', via: 'fork-wechat chat Session' },
   { id: 'up', role: 'agent', service: 'dsh', manage: 'fork-agents', via: 'subscription bili-digest · preset up' },
