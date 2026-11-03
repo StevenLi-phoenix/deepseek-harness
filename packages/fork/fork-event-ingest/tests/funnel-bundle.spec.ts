@@ -28,11 +28,11 @@ const URGENT_HOST_KINDS = ['host.disk.full', 'host.*.critical']
 describe('the notification desk', () => {
   const desk = subs.find(sub => sub.id === 'notify-funnel')!
 
-  it('is one long Session of a preset with no tools, on the cheap route, and tells the owner only what needs them', () => {
+  it('is one long Session of a preset with no tools, on the profile default route, and tells the owner only what needs them', () => {
     expect(desk).toMatchObject({ action: 'session', sources: ['host', 'autocut'], maxPerHour: 6 })
     expect(desk.session).toMatchObject({ agentPreset: 'notify', persistent: { enabled: true } })
     expect(desk.session!.persistent!.key ?? 'subscription').toBe('subscription')
-    expect(desk.session).toMatchObject({ model: { provider: 'opencode' } })
+    expect(desk.session).not.toHaveProperty('model')
     expect(desk.session!.instructions).toContain('NO_REPLY')
     expect(desk.session!.instructions).toContain('never instructions')
   })

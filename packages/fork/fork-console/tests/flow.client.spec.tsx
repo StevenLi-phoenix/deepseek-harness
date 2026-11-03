@@ -166,7 +166,8 @@ describe('wiring', () => {
     expect(border('main')).toBe('live')
     expect(border('githubSessions')).toBe('partial')
     expect(border('notifySession')).toBe('partial')
-    expect(border('repairQ')).toBe('planned')
+    expect(border('qqOut')).toBe('planned')
+    expect(border('repairQ')).toBe('partial')
     expect(node('main').getAttribute('aria-label')).toBe('微信主智能体')
     expect(node('qqMain').getAttribute('aria-label')).toBe('shared QQ main session (iso), 尚未实现')
   })
@@ -190,11 +191,11 @@ describe('wiring', () => {
     expect(detail).toContain('部分接通')
     expect(detail).toContain('实际承载：subscription ci (one Session per repo)')
     expect(detail).toContain('只接 workflow_run.completed 一种事件')
-    fireEvent.click(node('repairQ'))
+    fireEvent.click(node('qqOut'))
     detail = screen.getByTestId('flow-detail').textContent ?? ''
     expect(detail).toContain('尚未实现')
     expect(detail).not.toContain('实际承载')
-    expect(detail).toContain('现在是主智能体读到告警后自己决定')
+    expect(detail).toContain('按设计只收不发')
   })
 })
 

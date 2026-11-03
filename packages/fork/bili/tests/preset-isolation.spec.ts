@@ -44,6 +44,11 @@ const fieldsOf = (row: Row): Record<string, unknown> => (Array.isArray(row.confi
 const WECHAT_PRESET = 'unattended'
 /** Presets that face Bilibili or QQ: strangers' text goes in, the persona's answer comes out. */
 const OUTSIDE_PRESETS = ['bili', 'up', 'qqbot', 'qq-digest'] as const
+/**
+ * Every preset that must carry no owner memory and no WeChat-side tool: the outside presets and `notify`, the notification
+ * desk (host and autocut events in, one short note to the owner out, no tools, and no speaking-style layer).
+ */
+const NO_MEMORY_PRESETS = [...OUTSIDE_PRESETS, 'notify'] as const
 
 /** Plugins that carry the owner's memory or reach the WeChat side, and why none may run in an outside preset. */
 const WECHAT_SIDE: Record<string, string> = {
@@ -63,7 +68,7 @@ const WECHAT_SIDE: Record<string, string> = {
 const STYLE = '@deepseek-ai/dsh-fork-style'
 
 /** Everything an outside preset may mount today. A new row must be added here on purpose. */
-const ALLOWED: Record<(typeof OUTSIDE_PRESETS)[number], string[]> = {
+const ALLOWED: Record<(typeof NO_MEMORY_PRESETS)[number], string[]> = {
   'bili': [
     '@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context', '@deepseek-ai/dsh-tool-bili', STYLE,
     'cordis:group', '@deepseek-ai/dsh-compaction-basic', '@deepseek-ai/dsh-compaction-tool-result-pruner',
@@ -80,14 +85,19 @@ const ALLOWED: Record<(typeof OUTSIDE_PRESETS)[number], string[]> = {
   ],
   // fork-tool-qq reads only what the QQ observer recorded; it carries no owner memory and reaches no WeChat side.
   'qq-digest': ['@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-fork-tool-qq', STYLE, 'cordis:group', '@deepseek-ai/dsh-compaction-basic'],
+  // The notification desk: a persona, the time, and compaction. Nothing that acts, nothing of the owner's memory.
+  'notify': [
+    '@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context',
+    'cordis:group', '@deepseek-ai/dsh-compaction-basic', '@deepseek-ai/dsh-compaction-tool-result-pruner',
+  ],
 }
 
 describe('channel isolation of the event bundle\'s presets', () => {
   it('composes the presets this test knows, so a new one is looked at', () => {
-    expect([...presets.keys()].toSorted()).toEqual([WECHAT_PRESET, ...OUTSIDE_PRESETS].toSorted())
+    expect([...presets.keys()].toSorted()).toEqual([WECHAT_PRESET, ...NO_MEMORY_PRESETS].toSorted())
   })
 
-  it.each(OUTSIDE_PRESETS)('the %s preset mounts nothing that carries the owner memory or reaches the WeChat side', (preset) => {
+  it.each(NO_MEMORY_PRESETS)('the %s preset mounts nothing that carries the owner memory or reaches the WeChat side', (preset) => {
     const mounted = pluginsOf(presets.get(preset)!).filter(row => row.name !== undefined && row.name in WECHAT_SIDE)
     // `up` mounts the memory package once, in feedback mode; every other row here is a failure with its reason.
     const offenders = mounted
@@ -96,7 +106,7 @@ describe('channel isolation of the event bundle\'s presets', () => {
     expect(offenders).toEqual([])
   })
 
-  it.each(OUTSIDE_PRESETS)('the %s preset mounts only the plugins reviewed for it', (preset) => {
+  it.each(NO_MEMORY_PRESETS)('the %s preset mounts only the plugins reviewed for it', (preset) => {
     const unreviewed = names(preset).filter(name => !ALLOWED[preset].includes(name))
     // No shell, file, web, job, or subagent tool means no way to call the Host's own HTTP routes from the model.
     expect(unreviewed).toEqual([])
@@ -125,7 +135,7 @@ describe('channel isolation of the event bundle\'s presets', () => {
 
   it('lets the time check reach every preset from the root because it carries only times and fixed wording', () => {
     expect(rootRows.map(row => row.name)).toContain('@deepseek-ai/dsh-fork-time-gap')
-    for (const preset of [WECHAT_PRESET, ...OUTSIDE_PRESETS]) expect(names(preset)).not.toContain('@deepseek-ai/dsh-fork-time-gap')
+    for (const preset of [WECHAT_PRESET, ...NO_MEMORY_PRESETS]) expect(names(preset)).not.toContain('@deepseek-ai/dsh-fork-time-gap')
     // It reads Session times and message sources, never the owner memory or the WeChat side. fork-taint is a dependency
     // only for its request-id prefix (a message another Session passed on); the taint plugin itself is not mounted.
     const manifest = JSON.parse(readFileSync(join(ROOT, 'packages/fork/fork-time-gap/package.json'), 'utf8')) as { peerDependencies: Record<string, string>; dependencies: Record<string, string> }

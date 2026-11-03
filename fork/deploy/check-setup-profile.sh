@@ -56,9 +56,11 @@ done
 /usr/bin/grep -q "^- id: fork-courses$" "$WORK/fresh.yml" || fail "composition lacks fork-courses"
 /usr/bin/grep -q "^- id: fork-courses-settings$" "$WORK/fresh.yml" || fail "composition lacks fork-courses-settings"
 
-if [ -d "$PREFIX/fork/skills/autocut" ]; then
-  [ -L "$FRESH/skills/autocut" ] && [ -f "$FRESH/skills/autocut/SKILL.md" ] || fail "autocut skill not linked into the home"
-fi
+for skill in "$PREFIX"/fork/skills/*/; do
+  [ -d "$skill" ] || continue
+  name=$(basename "$skill")
+  [ -L "$FRESH/skills/$name" ] && [ -f "$FRESH/skills/$name/SKILL.md" ] || fail "$name skill not linked into the home"
+done
 
 OLD="$WORK/old"; mkdir -p "$OLD/profiles/event"
 { echo '# fork event profile — composition layer (code-owned).'; echo '[]'; } > "$OLD/profiles/event/cordis.patch.yml"
