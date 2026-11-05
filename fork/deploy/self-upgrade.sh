@@ -226,7 +226,7 @@ hot_deploy() {
       printf '%s\n' "$SHA" >"$APPS/current/.hot-sha"
       prune_dist
       if [ -n "$names" ]; then
-        notify "DSH 已热更新到 ${SHA}：替换了 ${names}，进程没重启，进行中的对话没断。"
+        notify "DSH 已热更新到 ${SHA}：替换了 ${names}，进程没重启。"
       else
         notify "DSH 已热更新到 ${SHA}：这次没有插件代码变化，进程没动。"
       fi

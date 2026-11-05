@@ -511,18 +511,33 @@ Deploy rsyncs use `-rlpc`, not `-a`: the copies hold files of both users, and on
 
 Only the `unattended` preset has a shell, so only the WeChat main agent can use this; `up`, `bili`, `qqbot`, and `qq-digest` cannot (`packages/fork/bili/tests/preset-isolation.spec.ts`). `fork-taint` guards `cc_send` and `cc_start` only: `tool-bash` also runs in turns that are not clean, where the skill's rule that strangers' words are data is an instruction, not an enforcement. The owner's own services (`chrome-cookie-proxy`, `claude-rc-launcher`) are outside the grant.
 
-**DSH itself.** The agent pushes to `fork/main`, writes `fork/main` or a commit into `/Users/dsh-runtime/.ams/services/dsh-upgrade/request`, and runs `ams ctl start dsh-upgrade`. The service runs in AMS because the restart ends everything under DSH and because AMS holds the volume grant for the build directory `/Volumes/MiniSSD/dsh-self` (checkout `wt`, `dist`, `pnpm-store`, `logs`). `deploy/self-upgrade.sh` runs `upgrade.sh`, including `vitest run packages/fork`, then `setup-profile.sh`, then TERMs the process, which launchd restarts because of `KeepAlive`, so no root is involved. A new process that does not answer and stay the same process for 60 s is rolled back; a build that fails leaves `current` alone. The outcome reaches the main agent as `operator.dsh-upgrade`, and a failure also exits non-zero for AMS. The recorder stays on its newer build through a rollback, which the protocol allows. One-time setup, in a session with the volume grant:
+**DSH itself.** The agent pushes to `fork/main`, writes `fork/main` or a commit into `/Users/dsh-runtime/.ams/services/dsh-upgrade/request`, and runs `ams ctl start dsh-upgrade`. The service runs in AMS because the restart ends everything under DSH and because AMS holds the volume grant for the build directory `/Volumes/MiniSSD/dsh-self` (checkout `wt`, `dist`, `pnpm-store`, `logs`). On its restart path `deploy/self-upgrade.sh` runs `upgrade.sh`, including `vitest run packages/fork`, then `setup-profile.sh`, then TERMs the process, which launchd restarts because of `KeepAlive`, so no root is involved. A new process that does not answer and stay the same process for 60 s is rolled back; a build that fails leaves `current` alone. The outcome reaches the main agent as `operator.dsh-upgrade`, and a failure also exits non-zero for AMS. The recorder stays on its newer build through a rollback, which the protocol allows. One-time setup, in a session with the volume grant:
 
 ```sh
 mkdir -p /Volumes/MiniSSD/dsh-self
 chmod +a "dsh-runtime allow list,add_file,search,add_subdirectory,delete_child,readattr,writeattr,readextattr,writeextattr,readsecurity,writesecurity,delete,file_inherit,directory_inherit" /Volumes/MiniSSD/dsh-self
 ```
 
-Then, as `dsh-runtime`, copy `deploy/dsh-upgrade/{service.toml,start.sh}` to `/Users/dsh-runtime/.ams/services/dsh-upgrade/` and run `ams ctl reload`. `deploy/check-self-upgrade.sh` checks the switch and the rollback with the build faked.
+Then, as `dsh-runtime`, copy `deploy/dsh-upgrade/{service.toml,start.sh}` to `/Users/dsh-runtime/.ams/services/dsh-upgrade/` and run `ams ctl reload`. `deploy/check-self-upgrade.sh` checks both paths below with the build, the restart, and the reconcile faked.
+
+`self-upgrade.sh` chooses by `git diff` against the commit that runs (`<current>/.hot-sha`, else the build directory's name):
+
+- **Hot.** Every changed path is a plugin's own file under `packages/fork` (not its `package.json`), or under `fork/` other than `deploy/setup-profile.sh`, `profiles/`, and `bundles/`. It builds and tests with `FORK_DSH_BUILD_ONLY=1`, which installs no new prefix, backs up to `/Volumes/MiniSSD/dsh-self/hot-backup`, replaces the changed plugins' files in the running build, and calls `pluginManager/setBundleEnabled` on the bundle that is already selected. That reconciles the profile with disk: the framework's HMR restarts the changed plugins and nothing else, and the process stays. `current` keeps its name, and `.hot-sha` records what it now runs. A plugin that fails to start gets its old files back, reconciled the same way.
+- **Restart.** Anything else, including a plugin a live agent holds, for which the reconcile answers `restart-required` (`unmanaged-plugin`). It waits until no Session has a running turn (`session/list`, at most 30 minutes, then restarts anyway and says so), then TERMs the process. Background jobs and monitors are not counted and end with the restart.
+
+What the framework can replace live, measured with a model stream held open across each replacement:
+
+| | Plugins |
+|---|---|
+| Hot | `fork-wechat`, `owner-relay`, `fork-voice`, `fork-presence`, `fork-guard`, `fork-event-ingest`, `fork-balance`, `fork-sysmon`, `fork-time-gap`, `fork-config`, `fork-console`, `fork-cc-admin`, `fork-qq-login`, `fork-memory-admin`, and the `*-settings` pages |
+| Restart: in the `unattended` preset, so an agent runs them | `fork-tool-*`, `tool-bili`, `fork-memory`, `fork-taint`, `fork-cc-bridge`, `fork-style` |
+| Restart: such a plugin imports code from them | `fork-event-bus`, `fork-qq`, `bili`, `fork-courses`, `fork-github-sensor`, `fork-integrity` |
+
+A resumed Session's agent stays alive until the process ends and nothing can release it, so these do not become hot by waiting. The reconcile decides at deploy time, so this table only says what to expect.
 
 ## Operate
 
-Patch edits (`$DSH_HOME/cordis.patch.yml`, the profile patch) reload live; `.env` edits and new builds need a restart. The composition is the `@deepseek-ai/dsh-fork-event-bundle` layer linked from the build; the profile patch `profiles/event/cordis.patch.yml` is the owner's layer, where Web UI settings save, and upgrades keep it. A home patch entry replaces that entry's whole `config`, so override only entries whose config it restates in full, and the Web UI refuses to save an entry the home patch sets ("Configuration for … is overridden by a home patch").
+Patch edits (`$DSH_HOME/cordis.patch.yml`, the profile patch) reload live; `.env` edits need a restart; a new build hot-reloads or restarts as "DSH itself" describes. The composition is the `@deepseek-ai/dsh-fork-event-bundle` layer linked from the build; the profile patch `profiles/event/cordis.patch.yml` is the owner's layer, where Web UI settings save, and upgrades keep it. A home patch entry replaces that entry's whole `config`, so override only entries whose config it restates in full, and the Web UI refuses to save an entry the home patch sets ("Configuration for … is overridden by a home patch").
 
 | Task | Command |
 |---|---|

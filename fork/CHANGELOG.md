@@ -8,6 +8,9 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 - QQ digests no longer fail for every group with a hyphen in a member's name: `scrubMentions` escaped `-`, which a `u` regular expression refuses outside a class, so the whole digest threw `Invalid regular expression`.
 
 ### Added
+- `deploy/self-upgrade.sh` deploys a change confined to plugins by hot reload: it replaces their files in the running build and reconciles through the plugin manager, so the process and running turns stay; a plugin that fails to start gets its old files back (RUNBOOK "DSH itself").
+- A deploy that needs a restart waits until no turn runs, for at most 30 minutes, and says so when it cut one.
+- `fork-balance` logs its route and source count when it starts, which also shows in the log that a hot reload took effect.
 - The main agent can deploy DSH itself: the one-shot AMS service `dsh-upgrade` runs `deploy/self-upgrade.sh` (build, tests, switch, restart by TERM under launchd's KeepAlive), rolls back a build that does not stay up, and reports the outcome in a new turn (RUNBOOK §21).
 - The main agent may change and deploy the AMS services' code: `deploy/grant-service-code.sh` (`apply`, `check`, `revoke`) moves the source repos to `/Users/Shared/ams-src` and grants `dsh-runtime` through ACLs, the skill `service-code` is its map, and its Claude Code may edit there and run `git`, `uv`, `pnpm`, and `pytest` (RUNBOOK §21).
 

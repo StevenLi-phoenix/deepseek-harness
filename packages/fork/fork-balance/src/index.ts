@@ -93,6 +93,7 @@ export function apply(ctx: Context, config: Config): void {
     return inFlight
   }
 
+  ctx.logger.info(`fork-balance: serving ${BALANCE_PATH} for ${String(config.sources.length)} source(s)`)
   const connection = Reflect.get(ctx, 'connection') as BalanceConnection
   ctx.effect(() => connection.fetch.register({
     path: BALANCE_PATH,
