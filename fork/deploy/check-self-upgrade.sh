@@ -2,8 +2,8 @@
 # Regression check for self-upgrade.sh in a throwaway apps directory, with the build, the restart, and the health check faked:
 # a healthy build stays, a build that does not come up is rolled back, a failed build leaves current alone, and a build that is
 # already current restarts nothing. The hot path runs for real on files in a throwaway repository and build, with only the
-# reconcile faked: a plugin change replaces the running files and keeps the process, anything else takes the restart, and a
-# replacement that does not hold puts the old files back.
+# reconcile faked: a plugin change replaces the running files and keeps the process, anything else takes the restart, a
+# replacement that does not hold is reported and keeps no old copy, and deploying the old commit then goes back.
 # usage: check-self-upgrade.sh
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -15,6 +15,7 @@ cat >"$WORK/hooks.sh" <<'HOOKS'
 run_upgrade() { echo upgrade >>"$CALLS"; eval "$FAKE_UPGRADE"; }
 setup_profile() { echo "setup $(basename "$(readlink "$APPS/current")")" >>"$CALLS"; }
 restart_dsh() { echo restart >>"$CALLS"; }
+prune_builds() { echo "prune $(basename "$1")" >>"$CALLS"; }
 dsh_pid() { echo 1; }
 turns_running() { echo drain >>"$CALLS"; echo 0; }
 wait_healthy() { echo health >>"$CALLS"; [ "$(basename "$(readlink "$APPS/current")")" != "$FAKE_BROKEN" ]; }
@@ -40,21 +41,28 @@ run healthy 'ln -sfn "$APPS/new" "$APPS/current"' none
 [ "$(now)" = new ] || fail "a healthy build must stay current"
 called 'setup new' && called restart && called 'notify DSH 已部署' || fail "a healthy build must set up, restart, and report"
 [ "$(/usr/bin/grep -n drain "$CALLS" | head -1 | cut -d: -f1)" -lt "$(/usr/bin/grep -n restart "$CALLS" | head -1 | cut -d: -f1)" ] || fail "a restart must wait for running turns first"
+called 'prune new' || fail "a healthy build must remove the build it replaced"
+[ "$(/usr/bin/grep -n health "$CALLS" | head -1 | cut -d: -f1)" -lt "$(/usr/bin/grep -n prune "$CALLS" | head -1 | cut -d: -f1)" ] || fail "the old build must stay until the new process is up"
+called '上一版' && fail "a healthy build must not name a rollback build that is gone"
 
 run broken 'ln -sfn "$APPS/new" "$APPS/current"' new
 [ "$RC" != 0 ] || fail "a rollback must exit non-zero, so AMS escalates"
 [ "$(now)" = old ] || fail "a build that does not come up must be rolled back"
 called 'setup old' && called '自动回滚' || fail "a rollback must set up the old build and report"
+called 'prune old' || fail "a rollback must remove the build that did not come up"
+called 'prune new' && fail "a rollback must keep the build it went back to"
 
 run failed 'ln -sfn "$APPS/new" "$APPS/current"; false' none
 [ "$RC" != 0 ] || fail "a failed build must exit non-zero"
 [ "$(now)" = old ] || fail "a failed build must leave current as it was"
 called restart && fail "a failed build must not restart DSH"
 called '线上版本没动' || fail "a failed build must report"
+called 'prune old' || fail "a failed build must remove what it installed"
 
 run same ':' none
 [ "$RC" = 0 ] || fail "a build that is already current must exit 0"
 called restart && fail "a build that is already current must not restart DSH"
+called prune && fail "a build that is already current must remove nothing"
 
 cat >"$WORK/hot-hooks.sh" <<'HOOKS'
 run_upgrade() { echo upgrade >>"$CALLS"; ln -sfn "$APPS/builds.noindex/cold" "$APPS/current"; }
@@ -70,6 +78,7 @@ run_build() {
 }
 setup_profile() { echo setup >>"$CALLS"; }
 restart_dsh() { echo restart >>"$CALLS"; }
+prune_builds() { echo "prune $(basename "$1")" >>"$CALLS"; }
 dsh_pid() { echo "$FAKE_PIDS" | cut -d' ' -f"$(cat "$CALLS.pids")"; echo $(($(cat "$CALLS.pids") + 1)) >"$CALLS.pids"; }
 answers() { :; }
 # The running-turn counts the deploy sees, one per call; the last repeats. "x" means the count could not be read.
@@ -116,7 +125,7 @@ hot() {
   git -C "$REPO" -c user.name=c -c user.email=c@localhost commit -q -m change
   BUILD="$APPS/builds.noindex/$BASE"
   PLUGIN="$BUILD/node_modules/@deepseek-ai/dsh-fork-demo"
-  mkdir -p "$WORK/dist/0000000" "$PLUGIN/lib" "$PLUGIN/node_modules/dep" "$BUILD/fork/skills/demo" "$APPS/builds.noindex/cold"
+  mkdir -p "$PLUGIN/lib" "$PLUGIN/node_modules/dep" "$BUILD/fork/skills/demo" "$APPS/builds.noindex/cold"
   echo old >"$PLUGIN/lib/index.js"
   echo removed-by-the-new-build >"$PLUGIN/lib/stale.js"
   echo '{"name":"@deepseek-ai/dsh-fork-demo"}' >"$PLUGIN/package.json"
@@ -146,8 +155,8 @@ called upgrade && fail "a plugin change must not install a whole build"
 called 'setup' || fail "a plugin change must relink the skills"
 called 'notify .*热更新' || fail "a plugin change must report the hot path"
 called turns && fail "a plugin change must not wait for turns: it does not interrupt them"
-[ ! -e "$WORK/dist/0000000" ] || fail "a hot deploy must remove older tarballs"
-[ -d "$WORK/dist/$(git -C "$REPO" rev-parse --short HEAD)" ] || fail "a hot deploy must keep its own tarballs"
+[ ! -e "$WORK/hot-backup" ] || fail "a hot deploy must not copy the old files"
+called prune && fail "a hot deploy leaves no other build to remove"
 
 # The next deploy compares against what runs, not against the build's name: the same commit again does nothing.
 RC=0
@@ -162,6 +171,7 @@ called '已经是' || fail "the commit that already runs must report"
 hot hot-framework packages/boot/hmr/src/index.ts
 called upgrade && called restart || fail "a framework change must take the whole build and the restart"
 called reconcile && fail "a framework change must not reconcile"
+called 'prune cold' || fail "a framework change must remove the build it replaced"
 [ "$(lib)" = old ] || fail "a framework change must leave the running build's files"
 
 HOT_TURNS='2 1 0' hot hot-drain packages/boot/hmr/src/index.ts
@@ -192,38 +202,44 @@ hot hot-build-fails "$PLUGIN_SRC" FAKE_BUILD_FAILS=1
 called reconcile && fail "a failed build must not reconcile"
 called '线上版本没动' || fail "a failed build must report"
 
-hot hot-rejected "$PLUGIN_SRC" FAKE_RECONCILE='failed applied'
+hot hot-rejected "$PLUGIN_SRC" FAKE_RECONCILE=failed
 [ "$RC" != 0 ] || fail "a replacement that fails must exit non-zero"
-[ "$(lib)" = old ] || fail "a replacement that fails must put the old file back"
-[ "$(cat "$PLUGIN/lib/stale.js")" = removed-by-the-new-build ] || fail "a replacement that fails must restore a dropped file"
-[ "$(cat "$BUILD/fork/skills/demo/SKILL.md")" = old-skill ] || fail "a replacement that fails must restore the skills"
-[ ! -e "$BUILD/.hot-sha" ] || fail "a replacement that fails must not record the commit"
-called 'reconcile applied old' || fail "the old files must be reconciled back"
-called restart && fail "a reconcile that restores the old code must not restart"
-called '已恢复' || fail "a replacement that fails must report"
+[ "$(lib)" = new ] || fail "a replacement that fails stays on the new file: there is no old copy"
+[ ! -e "$WORK/hot-backup" ] || fail "a replacement must not copy the old files"
+called restart && fail "a replacement that fails must not restart"
+called '失败' || fail "a replacement that fails must report"
+[ "$(cat "$BUILD/.hot-sha")" = "$(git -C "$REPO" rev-parse --short HEAD)" ] || fail "a replacement that fails must record what the disk now holds"
 
-hot hot-stuck "$PLUGIN_SRC" FAKE_RECONCILE=failed
-[ "$RC" != 0 ] || fail "a replacement that cannot be undone live must exit non-zero"
-[ "$(lib)" = old ] || fail "a replacement that cannot be undone live must still restore the files"
-called restart || fail "old files that cannot be reconciled back must take the restart"
+# After that the old commit deploys like any other: the same commit as the failed one would do nothing.
+git -C "$REPO" checkout -q "$BASE"
+RC=0
+: >"$CALLS"
+echo 1 >"$CALLS.pids"
+( cd "$REPO" && env APPS="$APPS" CALLS="$CALLS" WORK="$WORK" FAKE_LIB=old FAKE_MANIFEST='{"name":"@deepseek-ai/dsh-fork-demo"}' FAKE_PIDS='7 7' FAKE_RECONCILE=applied FAKE_UNHEALTHY= FAKE_BUILD_FAILS= \
+    DSH_UPGRADE_APPS="$APPS" DSH_UPGRADE_WORK="$WORK" DSH_UPGRADE_SETTLE_S=0 DSH_UPGRADE_TEST_HOOKS="$WORK/hot-hooks.sh" "$HERE/self-upgrade.sh" >/dev/null 2>&1 ) || RC=$?
+[ "$RC" = 0 ] || fail "deploying the old commit after a failed replacement must exit 0"
+[ "$(lib)" = old ] || fail "deploying the old commit must bring its file back"
+called 'reconcile applied old' || fail "deploying the old commit must reconcile"
+[ "$(cat "$BUILD/.hot-sha")" = "$BASE" ] || fail "deploying the old commit must record it"
 
 hot hot-pending "$PLUGIN_SRC" FAKE_RECONCILE=pending
 [ "$RC" = 0 ] || fail "a replacement that waits for a restart must finish by restarting"
 [ "$(lib)" = new ] || fail "a replacement that waits for a restart keeps the new files"
+[ "$(cat "$BUILD/.hot-sha")" = "$(git -C "$REPO" rev-parse --short HEAD)" ] || fail "a replacement that waits for a restart must record the commit"
 called restart || fail "a replacement that waits for a restart must restart"
 called '重启' || fail "a replacement that waits for a restart must say it restarted"
 called turns || fail "a replacement that waits for a restart must wait for running turns"
 
 HOT_TURNS=1 hot hot-died-busy "$PLUGIN_SRC" FAKE_PIDS='7 8 8 8'
-called turns && fail "undoing a replacement must not wait: the process is already in trouble"
+called turns && fail "a process that died must not wait for turns: it is already in trouble"
 
 hot hot-pending-broken "$PLUGIN_SRC" FAKE_RECONCILE=pending FAKE_UNHEALTHY=1
 [ "$RC" != 0 ] || fail "a new build that does not come up must exit non-zero"
-[ "$(lib)" = old ] || fail "a new build that does not come up must restore the files"
+called '失败' || fail "a new build that does not come up must report"
 
 hot hot-died "$PLUGIN_SRC" FAKE_PIDS='7 8 8 8'
 [ "$RC" != 0 ] || fail "a process that died after the replacement must exit non-zero"
-[ "$(lib)" = old ] || fail "a process that died after the replacement must get the old files back"
-called restart || fail "a process that died after the replacement must restart on the old files"
+called '失败' || fail "a process that died after the replacement must report"
+called restart && fail "launchd restarts a process that died; the deploy must not"
 
 echo "check-self-upgrade: ok"

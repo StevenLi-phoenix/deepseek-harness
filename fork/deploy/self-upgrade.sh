@@ -3,8 +3,10 @@
 # that runs:
 #   hot      only fork plugins' own files, skills, scripts, or docs: build and test, replace the changed plugins' files in the
 #            running build, and have the framework's HMR restart just those plugins. The process, and every turn in it, stays.
+#            No copy of the old files is made: a plugin that does not load stays down until a commit with good files is deployed.
 #   restart  anything else, and plugins a live agent holds: wait until no turn runs, then TERM the process, which launchd restarts
-#            (KeepAlive). A build that does not stay up is rolled back by itself.
+#            (KeepAlive). A build that does not stay up is rolled back by itself, while the old build is still on disk.
+# Afterwards only the build that runs is left; going back means deploying the old commit.
 # The main agent hears the outcome in a new turn. Runs from the AMS service dsh-upgrade (dsh-upgrade/start.sh), since a restart
 # ends every process under DSH. Overridable for check-self-upgrade.sh.
 set -euo pipefail
@@ -21,7 +23,6 @@ DSH_LOG=${DSH_UPGRADE_LOG:-/Users/dsh-runtime/logs/stdout.log}
 RECONCILE_BUNDLE=${DSH_UPGRADE_RECONCILE_BUNDLE:-@deepseek-ai/dsh-fork-event-bundle}
 HERE=$(cd "$(dirname "$0")" && pwd)
 STAGE=$WORK/hot-stage
-BACKUP=$WORK/hot-backup
 
 log() { printf '%s dsh-upgrade: %s\n' "$(date '+%F %T')" "$*"; }
 
@@ -42,6 +43,9 @@ restart_dsh() {
 }
 
 answers() { curl -s -m 5 -o /dev/null "$URL/"; }
+
+# Nothing runs from the other builds any more, and a failure to remove them does not change how the deploy went.
+prune_builds() { "$HERE/prune-builds.sh" "$APPS" "$1" || log "could not remove the other builds"; }
 
 # Up means: another process than `old` answers, and is still the same process after SETTLE_S, so a crash loop does not pass.
 wait_healthy() {
@@ -168,17 +172,6 @@ stage_plugins() {
   done
 }
 
-backup_running() {
-  local name unpacked
-  rm -rf "${BACKUP:?}"
-  mkdir -p "$BACKUP/plugins"
-  while read -r name unpacked; do
-    mkdir -p "$BACKUP/plugins/$name"
-    /usr/bin/rsync -rlp --exclude node_modules "$APPS/current/node_modules/$name/" "$BACKUP/plugins/$name/"
-  done <"$STAGE/changed"
-  [ ! -d "$APPS/current/fork" ] || /usr/bin/rsync -rlp "$APPS/current/fork/" "$BACKUP/fork/"
-}
-
 replace_running() {
   local name unpacked
   # A plugin imports only when the reconcile starts it, so a file swapped ahead of that is not half-read.
@@ -189,25 +182,12 @@ replace_running() {
   "$HERE/install-fork-files.sh" "$(git rev-parse --show-toplevel)" "$APPS/current"
 }
 
-restore_running() {
-  local name unpacked
-  while read -r name unpacked; do
-    log "restoring $name"
-    /usr/bin/rsync -rlpc --delete --exclude node_modules "$BACKUP/plugins/$name/" "$APPS/current/node_modules/$name/"
-  done <"$STAGE/changed"
-  [ ! -d "$BACKUP/fork" ] || /usr/bin/rsync -rlpc --delete "$BACKUP/fork/" "$APPS/current/fork/"
-}
-
-# Keep the tarballs of this build only: hot deploys add one directory each, and any commit rebuilds from git.
-prune_dist() {
-  local dir
-  for dir in "$WORK/dist"/*/; do
-    [ -d "$dir" ] || continue
-    dir=${dir%/}
-    [[ $(basename "$dir") =~ ^[0-9a-f]{7,40}$ ]] && [ "$(basename "$dir")" != "$SHA" ] || continue
-    log "removing old tarballs ${dir:?}"
-    rm -rf "${dir:?}"
-  done
+# Report a hot deploy that did not hold, and stop. HMR does not bring back a version it stopped and no old files are kept, so the
+# way out is another deploy, of a fix or of the old commit. usage: hot_failed <what went wrong>
+hot_failed() {
+  log "the hot deploy of $SHA failed: $1"
+  notify "DSH 热更新 ${SHA} 失败：$1。修好后再部署，或部署 ${RUNNING} 回到旧代码。日志在 ${WORK}/logs。"
+  exit 1
 }
 
 # The hot path past the build; exits with the outcome.
@@ -216,15 +196,14 @@ hot_deploy() {
   names=$(cut -d' ' -f1 "$STAGE/changed" | sed 's#@deepseek-ai/dsh-##' | tr '\n' ' ' | sed 's/ $//')
   log "hot path: replacing [${names}]"
   old=$(dsh_pid)
-  backup_running
   replace_running
+  # The disk holds this commit from here on, whatever happens next; the next deploy compares against that.
+  printf '%s\n' "$SHA" >"$APPS/current/.hot-sha"
   setup_profile
   if [ -s "$STAGE/changed" ]; then reconcile || rc=$?; fi
   if [ "$rc" = 0 ]; then
     sleep "$SETTLE_S"
     if [ "$(dsh_pid)" = "$old" ] && answers; then
-      printf '%s\n' "$SHA" >"$APPS/current/.hot-sha"
-      prune_dist
       if [ -n "$names" ]; then
         notify "DSH 已热更新到 ${SHA}：替换了 ${names}，进程没重启。"
       else
@@ -233,8 +212,7 @@ hot_deploy() {
       log "done, still pid $old"
       exit 0
     fi
-    log "pid $old did not survive the replacement"
-    hot_undo_by_restart "它在替换后退出了"
+    hot_failed "进程在替换后退出了"
   fi
   if [ "$rc" = 2 ]; then
     log "the change waits for a restart; restarting on the new files once no turn runs"
@@ -242,39 +220,13 @@ hot_deploy() {
     old=$(dsh_pid)
     restart_dsh
     if wait_healthy "$old"; then
-      printf '%s\n' "$SHA" >"$APPS/current/.hot-sha"
       notify "DSH 已部署到 ${SHA}：这次改动有活着的 agent 在用，没法热更新，等回合结束后重启了进程，运行正常。${DRAINED}"
       log "done"
       exit 0
     fi
-    hot_undo_by_restart "重启后起不来"
+    hot_failed "重启后起不来"
   fi
-  log "the replacement failed; putting the old files back"
-  restore_running
-  setup_profile
-  rc=0
-  reconcile || rc=$?
-  if [ "$rc" = 0 ]; then
-    notify "DSH 热更新 ${SHA} 失败：新插件起不来，已恢复原来的代码，进程没重启。日志在 ${WORK}/logs。"
-    exit 1
-  fi
-  hot_undo_by_restart "旧代码也没能热加载回去"
-}
-
-# Put the old files back and restart on them. usage: hot_undo_by_restart <what went wrong>
-hot_undo_by_restart() {
-  local old
-  log "restoring the old files and restarting: $1"
-  restore_running
-  setup_profile
-  old=$(dsh_pid)
-  restart_dsh
-  if wait_healthy "$old"; then
-    notify "DSH 热更新 ${SHA} 失败（$1）：已恢复原来的代码并重启。日志在 ${WORK}/logs。"
-  else
-    log "the old files did not come up either"
-  fi
-  exit 1
+  hot_failed "新插件没能加载，修好之前它不运行"
 }
 
 [ -z "${DSH_UPGRADE_TEST_HOOKS:-}" ] || . "$DSH_UPGRADE_TEST_HOOKS"
@@ -305,6 +257,7 @@ log "restart path: $REASON"
 
 if ! run_upgrade; then
   [ "$(readlink "$APPS/current")" = "$PREVIOUS" ] || ln -sfn "$PREVIOUS" "$APPS/current"
+  prune_builds "$PREVIOUS"
   log "build of $SHA failed; the running DSH was not touched"
   notify "DSH 部署 ${SHA} 失败：构建或测试没过，线上版本没动。日志在 ${WORK}/logs。"
   exit 1
@@ -320,7 +273,8 @@ drain_turns
 OLD_PID=$(dsh_pid)
 restart_dsh
 if wait_healthy "$OLD_PID"; then
-  notify "DSH 已部署到 ${SHA}，重启了进程（${REASON}），运行正常。回滚用的上一版是 $(basename "$PREVIOUS")。${DRAINED}"
+  prune_builds "$(readlink "$APPS/current")"
+  notify "DSH 已部署到 ${SHA}，重启了进程（${REASON}），运行正常。${DRAINED}"
   log "done"
   exit 0
 fi
@@ -331,6 +285,7 @@ ln -sfn "$PREVIOUS" "$APPS/current"
 setup_profile
 restart_dsh
 if wait_healthy "$OLD_PID"; then
+  prune_builds "$PREVIOUS"
   notify "DSH 部署 ${SHA} 失败：新版本起不来，已自动回滚到 $(basename "$PREVIOUS")。日志在 ${WORK}/logs。"
 else
   log "the rollback did not come up either"

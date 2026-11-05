@@ -79,13 +79,13 @@ describe('deploy.sh', () => {
     expect(two).not.toBe(one)
     expect(readFileSync(decl(), 'utf8')).toContain(`QQ_RECORDER_BUILD = "${two}"`)
     expect(amsCalls()).toEqual([`${join(dir, 'ams-state')} ctl reload`])
-    // The build it replaced stays for a rollback.
-    expect(readdirSync(pinned()).sort()).toEqual([one, two].sort())
+    // Only the build that runs stays.
+    expect(readdirSync(pinned())).toEqual([two])
   })
 
-  it('removes builds older than the current and the previous one', () => {
+  it('removes every build but the current one', () => {
     const fps = ['one', 'two', 'three'].map(name => fingerprint(deploy(bundle(`console.log("${name}")`)).out))
-    expect(readdirSync(pinned()).sort()).toEqual([fps[1]!, fps[2]!].sort())
+    expect(readdirSync(pinned())).toEqual([fps[2]!])
     expect(amsCalls()).toHaveLength(2)
   })
 

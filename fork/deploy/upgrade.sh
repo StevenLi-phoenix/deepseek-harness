@@ -25,6 +25,9 @@ if [ ! -d "$DIST/dsh" ]; then
   pnpm run release:pack --family vendor --out "$DIST/vendor"
   pnpm run release:pack --family dsh --out "$DIST/dsh"
 fi
+"$ROOT/fork/deploy/check-prune-builds.sh"
+# Only this commit's tarballs stay: every deploy adds a directory, and any commit rebuilds from git.
+"$ROOT/fork/deploy/prune-builds.sh" --dist "${DIST%/*}" "$SHA"
 if [ -z "$BUILD_ONLY" ]; then
   if [ ! -d "$PREFIX" ]; then
     "$ROOT/fork/deploy/install-app.sh" "$DIST" "$PREFIX"
@@ -36,11 +39,10 @@ if [ -z "$BUILD_ONLY" ]; then
   PREVIOUS=$(readlink "$APPS/current" || true)
   ln -sfn "$PREFIX" "$APPS/current"
   echo "upgrade: $APPS/current -> $PREFIX"
-  # Keep this build and the one current pointed at before (the rollback); delete older ones
+  # Keep this build and the one the service still runs from until it restarts; delete the rest
   # outright. Each is ~1.6 GB of node_modules on the internal disk and rebuilds from git; moved
   # to the Trash they kept their space, which filled the disk on 2026-10-22.
   if [ -n "$PREVIOUS" ] && [ "$PREVIOUS" != "$PREFIX" ]; then
-    "$ROOT/fork/deploy/check-prune-builds.sh"
     "$ROOT/fork/deploy/prune-builds.sh" "$APPS" "$PREFIX" "$PREVIOUS"
   fi
 fi
@@ -58,9 +60,7 @@ cat <<NEXT
 Finish the switch (passwordless with /etc/sudoers.d/dsh-events):
   sudo -n -u dsh-runtime /usr/bin/env PATH=/opt/homebrew/bin:/usr/bin:/bin $APPS/current/fork/deploy/setup-profile.sh /Users/dsh-runtime/.dsh $APPS/current
   sudo -n /bin/launchctl kickstart -k system/app.lishuyu.dsh-events
-Roll back: stop the recorder first (two processes must never hold QQ's connection):
-  cd / && sudo -n -u dsh-runtime env AMS_STATE_DIR=/Users/dsh-runtime/.ams /Users/dsh-runtime/ams/.venv/bin/ams ctl stop qq-recorder
-then ln -sfn ${PREVIOUS:-$BUILDS/<previous sha>} $APPS/current, and the same two lines (RUNBOOK, "qq-recorder").
-If the previous build is still directly under $APPS (the layout before builds.noindex), move it once nothing runs from it:
-  $ROOT/fork/deploy/prune-builds.sh --relocate $APPS <that build>
+Once the service answers on the new build, remove the one it replaced:
+  $ROOT/fork/deploy/prune-builds.sh $APPS $PREFIX
+Before that, ln -sfn ${PREVIOUS:-<the replaced build>} $APPS/current and the same two lines go back; after it, deploy the old commit.
 NEXT
