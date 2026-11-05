@@ -1,10 +1,44 @@
 {
   "remoteControlAtStartup": true,
   "enableRemoteControl": true,
-  "env": { "DISABLE_AUTOUPDATER": "1" },
+  "env": {
+    "DISABLE_AUTOUPDATER": "1"
+  },
   "permissions": {
     "defaultMode": "dontAsk",
-    "allow": ["Read", "Glob", "Grep", "SendMessage", "ListAgents", "Bash(ls:*)", "Bash(git status:*)", "Bash(git log:*)", "Bash(git diff:*)"],
-    "deny": ["Read(/Users/dsh-runtime/.dsh/**)", "Read(/Users/dsh-runtime/.config/**)", "Read(/Users/dsh-runtime/.ssh/**)", "Read(**/.env)", "Read(**/.env.*)", "Read(**/*.pem)", "Read(**/*.key)", "WebFetch", "WebSearch"]
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "SendMessage",
+      "ListAgents",
+      "Bash(ls:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Edit(//Users/Shared/ams-src/**)",
+      "Edit(//Users/dsh-runtime/src/**)",
+      "Write(//Users/Shared/ams-src/**)",
+      "Write(//Users/dsh-runtime/src/**)",
+      "Bash(git:*)",
+      "Bash(uv:*)",
+      "Bash(pnpm:*)",
+      "Bash(pytest:*)"
+    ],
+    "deny": [
+      "Read(//Users/dsh-runtime/.dsh/**)",
+      "Read(//Users/dsh-runtime/.config/**)",
+      "Read(//Users/dsh-runtime/.ssh/**)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "WebFetch",
+      "WebSearch"
+    ],
+    "additionalDirectories": [
+      "/Users/Shared/ams-src",
+      "/Users/dsh-runtime/src"
+    ]
   }
 }
