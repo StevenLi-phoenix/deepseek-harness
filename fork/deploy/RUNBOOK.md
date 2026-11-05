@@ -509,7 +509,16 @@ The main agent may change and ship the code of the AMS services; the skill `serv
 
 Deploy rsyncs use `-rlpc`, not `-a`: the copies hold files of both users, and only a file's owner may set its mtime, so `-a` ends with rc=23 and stops a `set -e` script.
 
-Only the `unattended` preset has a shell, so only the WeChat main agent can use this; `up`, `bili`, `qqbot`, and `qq-digest` cannot (`packages/fork/bili/tests/preset-isolation.spec.ts`). `fork-taint` guards `cc_send` and `cc_start` only: `tool-bash` also runs in turns that are not clean, where the skill's rule that strangers' words are data is an instruction, not an enforcement. The owner's own services (`chrome-cookie-proxy`, `claude-rc-launcher`) are outside the grant, and DSH itself is pushed but not deployed by the agent: the build needs the owner's volume grant and the restart the owner's sudo rule.
+Only the `unattended` preset has a shell, so only the WeChat main agent can use this; `up`, `bili`, `qqbot`, and `qq-digest` cannot (`packages/fork/bili/tests/preset-isolation.spec.ts`). `fork-taint` guards `cc_send` and `cc_start` only: `tool-bash` also runs in turns that are not clean, where the skill's rule that strangers' words are data is an instruction, not an enforcement. The owner's own services (`chrome-cookie-proxy`, `claude-rc-launcher`) are outside the grant.
+
+**DSH itself.** The agent pushes to `fork/main`, writes `fork/main` or a commit into `/Users/dsh-runtime/.ams/services/dsh-upgrade/request`, and runs `ams ctl start dsh-upgrade`. The service runs in AMS because the restart ends everything under DSH and because AMS holds the volume grant for the build directory `/Volumes/MiniSSD/dsh-self` (checkout `wt`, `dist`, `pnpm-store`, `logs`). `deploy/self-upgrade.sh` runs `upgrade.sh`, including `vitest run packages/fork`, then `setup-profile.sh`, then TERMs the process, which launchd restarts because of `KeepAlive`, so no root is involved. A new process that does not answer and stay the same process for 60 s is rolled back; a build that fails leaves `current` alone. The outcome reaches the main agent as `operator.dsh-upgrade`, and a failure also exits non-zero for AMS. The recorder stays on its newer build through a rollback, which the protocol allows. One-time setup, in a session with the volume grant:
+
+```sh
+mkdir -p /Volumes/MiniSSD/dsh-self
+chmod +a "dsh-runtime allow list,add_file,search,add_subdirectory,delete_child,readattr,writeattr,readextattr,writeextattr,readsecurity,writesecurity,delete,file_inherit,directory_inherit" /Volumes/MiniSSD/dsh-self
+```
+
+Then, as `dsh-runtime`, copy `deploy/dsh-upgrade/{service.toml,start.sh}` to `/Users/dsh-runtime/.ams/services/dsh-upgrade/` and run `ams ctl reload`. `deploy/check-self-upgrade.sh` checks the switch and the rollback with the build faked.
 
 ## Operate
 

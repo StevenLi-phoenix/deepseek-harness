@@ -18,7 +18,7 @@ description: 修改并上线 mini 上服务的代码：发现或被告知 bili-s
 | `kaorou-potoken` | `/Users/Shared/ams-src/bgutil-ytdlp-pot-provider`（第三方上游） | `rsync -rlpc --delete server/ /Users/Shared/ams-apps/bgutil-pot/server/`，再重启 |
 | `global-awareness` | `/Users/dsh-runtime/services/globalAwarness`（无 GitHub） | `pnpm -C apps/web build:check && pnpm -C apps/server build:node`，再重启 |
 | `intake` 和 AMS 本身 | `/Users/dsh-runtime/ams`（GitHub `agent-managed-services`） | `git pull --ff-only`；只重启 `intake`，harness 不重启 |
-| `disk-watch` `qq-recorder` DSH 本身 | GitHub `StevenLi-phoenix/deepseek-harness` 的 `fork/main`，规则读 `fork/AGENTS.md` | 只推代码，部署交给主人或 Claude Code：构建要主人的磁盘授权，重启 DSH 要主人的 sudo |
+| `disk-watch` `qq-recorder` DSH 本身 | GitHub `StevenLi-phoenix/deepseek-harness` 的 `fork/main`，规则读 `fork/AGENTS.md` | 见下方“部署 DSH 自己” |
 
 `service.toml` 在 `/Users/dsh-runtime/.ams/services/<id>/service.toml`，配置写这里，密钥用 `ams secret set`。各仓库 RUNBOOK 里的 `~/services/x`、`~/Codes/x` 对你来说就是 `/Users/Shared/ams-src/x`。
 
@@ -52,6 +52,17 @@ cd /Users/Shared/ams-apps/bili-svc && UV_PYTHON_INSTALL_DIR=/Users/Shared/ams-ap
 ams ctl restart bili-svc
 curl -s 127.0.0.1:8097/healthz
 ```
+
+### 部署 DSH 自己
+
+先把修复推到 `fork/main`，发起前在微信说一声，再执行：
+
+```sh
+echo fork/main > /Users/dsh-runtime/.ams/services/dsh-upgrade/request
+ams ctl start dsh-upgrade
+```
+
+它在 AMS 里跑，构建加测试约十几分钟，之后 DSH 重启，你当前的回合会结束。新版本起不来会自动回滚。结果以 `operator.dsh-upgrade` 事件开新回合告诉你。日志在 `/Volumes/MiniSSD/dsh-self/logs`，你的 shell 进不去，要看就让 Claude Code 或主人读。
 
 ## 边界
 
