@@ -40,7 +40,7 @@ The `event` profile composes, in order: the base and Web bundles; `@deepseek-ai/
 - A patch entry's `config` replaces that entry's whole `config`; restate every field the lower layer set.
 - The Web UI refuses to save any entry the home patch sets, so the home patch holds only deployment fixtures the UI does not edit.
 - `setup-profile.sh` never replaces the owner's layer; it merges the manifest and relinks plugins and the bundle.
-- Patch edits reload live; `.env` edits and new builds need a restart.
+- Patch edits reload live, and `deploy/self-upgrade.sh` hot-replaces plugins no live agent holds; `.env` edits and every other build need a restart.
 - Verify a layering change with `DSH_HOME=<home> node <prefix>/node_modules/@deepseek-ai/dsh/lib/bin.js event --dump-config` (from source: `pnpm dsh event --dump-config`); each row names the layer that set it.
 
 ## Checks and regeneration

@@ -62,7 +62,16 @@ echo lsy/main > /Users/dsh-runtime/.ams/services/dsh-upgrade/request
 ams ctl start dsh-upgrade
 ```
 
-它在 AMS 里跑，构建加测试约十几分钟，之后 DSH 重启，你当前的回合会结束。新版本起不来会自动回滚。结果以 `operator.dsh-upgrade` 事件开新回合告诉你。日志在 `/Volumes/MiniSSD/dsh-self/logs`，你的 shell 进不去，要看就让 Claude Code 或主人读。
+它在 AMS 里跑，构建加测试要几分钟到十几分钟，这期间你可以继续做别的。结果以 `operator.dsh-upgrade` 事件开新回合告诉你。
+
+它看改了什么来决定怎么上线：
+
+- **热更新**：只改了能热替换的插件（`lsy-wechat`、`owner-relay`、`lsy-voice`、`lsy-presence`、`lsy-guard`、`lsy-console`、设置页等）、skill、脚本或文档。进程不重启，你的回合和其他会话都不断。新插件起不来会自动换回旧代码。
+- **等回合结束后重启**：其他改动，包括框架、依赖、bundle 配置，以及 agent 正在用的插件（`lsy-tool-*`、`lsy-memory`、`lsy-event-bus`、`lsy-qq`、`bili` 等）。它会等所有回合结束再重启，最多等 30 分钟；新版本起不来会自动回滚。后台 job 和 monitor 不算在内，重启时会结束，有在跑的先处理掉。
+
+所以发起部署后，尽快结束当前回合，别让重启一直等你。
+
+日志在 `/Volumes/MiniSSD/dsh-self/logs`，你的 shell 进不去，要看就让 Claude Code 或主人读。
 
 ## 边界
 
