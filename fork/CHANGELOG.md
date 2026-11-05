@@ -4,6 +4,9 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 
 ## [Unreleased]
 
+### Added
+- The main agent may change and deploy the AMS services' code: `deploy/grant-service-code.sh` (`apply`, `check`, `revoke`) moves the source repos to `/Users/Shared/ams-src` and grants `dsh-runtime` through ACLs, the skill `service-code` is its map, and its Claude Code may edit there and run `git`, `uv`, `pnpm`, and `pytest` (RUNBOOK §21).
+
 ### Fixed
 - The Bilibili account starts a new Session when its stored one is archived (2026-11-02): an archived Session still resolves, but its turns end `blocked` before any model call, so the owner's Bilibili messages were answered with the placeholder `⚠️ 本轮未完成（blocked）`; `accountSession()` now checks `ctx.workspaceRegistry.archivedSessionIds` and creates a Session, as it already did for a Session that no longer resolves.
 - The main agent no longer calls a course date stale because the latest sync runs failed (2026-11-02): `courses_deadlines` says a failed run does not make earlier readings old and that "last update" is when a task's own page was read; the new `courses_sync` tool shows what each recent run read, area by area (a run that read the assignment list had confirmed the Design Project due date the evening before, while the task's own last update still read 10/31); `courses_save_memo` says never to save a guess that a date is old; and the agent says plainly that it cannot open Brightspace.

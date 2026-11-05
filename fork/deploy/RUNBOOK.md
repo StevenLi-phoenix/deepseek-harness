@@ -285,7 +285,7 @@ sudo -n -u dsh-runtime /Users/dsh-runtime/bin/claude-dsh -p "reply with exactly:
 
 The file must hold the bare `sk-ant-oat01-…` value (mode 0600, directory 0700). `claude-dsh` exports it as `CLAUDE_CODE_OAUTH_TOKEN` for the one process it execs. The first interactive start asks for a theme and to trust `/Users/dsh-runtime/work/cc` once; run `sudo -n -u dsh-runtime /opt/homebrew/bin/tmux -L dsh-cc-setup new-session -s setup -c /Users/dsh-runtime/work/cc /Users/dsh-runtime/bin/claude-dsh` from a terminal, answer both (choose "Yes, I trust this folder"), and exit.
 
-What a started session may do (`/Users/dsh-runtime/.claude/settings.json`, `dontAsk`: whatever is not allowed is refused, because nobody can answer a prompt): read and search files, run `ls` and `git status|log|diff`, send and list peer messages. It cannot edit files, run other commands, or use the web, and it cannot read `~/.dsh`, `~/.config`, `~/.ssh`, `.env`, `*.pem`, or `*.key`. Loosen the allow list in that file if a task needs more; it is the owner's layer and `install.sh` never replaces it.
+What a started session may do (`/Users/dsh-runtime/.claude/settings.json`, `dontAsk`: whatever is not allowed is refused, because nobody can answer a prompt): read and search files, edit under `/Users/Shared/ams-src` and `/Users/dsh-runtime/src`, run `ls`, `git`, `uv`, `pnpm`, and `pytest`, send and list peer messages. It cannot edit elsewhere, run other commands, or use the web, and it cannot read `~/.dsh`, `~/.config`, `~/.ssh`, `.env`, `*.pem`, or `*.key`. Loosen the allow list in that file if a task needs more; it is the owner's layer and `install.sh` never replaces it.
 
 Verify the bridge end to end: `cc_start` a session named `probe` from the chat (or start one by hand in tmux), see `cc-bridge: cc_start "probe" is up` in `stdout.log`, `cc_send` it a line, have it `SendMessage` to `dsh-agent`, and see `cc-bridge: passed … chars from "probe"`. Stop it with `cc_stop`. After a Claude Code update (copy the new binary with `install.sh <version>`), repeat the round trip: the peer message format is internal and may change.
 
@@ -498,6 +498,18 @@ The pushed settings live in `/Users/dsh-runtime/.dsh/fork-qq/recorder-config.jso
 2. The bundle mounts `fork-courses`, `fork-courses-settings`, and `fork-tool-courses` (unattended preset) with their defaults; owner values (checkpoints, quiet window, the switch) are edited in **Settings → 课程 DDL** and saved to the profile patch.
 3. Check: the log shows `fork-courses: reminders on, every 15 min, …` at start and `fork-courses: poll (timer) ok in … ms: N open task(s), M reminder(s) …, sync <status>` every poll; **Settings → 课程 DDL** shows the last check, the sync health, and the next deadlines. **立即检查** runs one poll (it sends what is due).
 4. Stop: turn **enabled** off in the page's settings card (the tools keep working), or `disabled: true` on the `fork-courses` row in the profile patch. Sent reminders are in the storage domain `fork_courses` (key per task, deadline, and checkpoint); deleting it re-sends the current checkpoint of every open task once.
+
+## 21. Service code
+
+The main agent may change and ship the code of the AMS services; the skill `service-code` (`fork/skills/service-code`) is its map of sources, tests, deploys, and rollbacks. `deploy/grant-service-code.sh` sets this up, as the owner, without root:
+
+- `apply` moves the source repos to `/Users/Shared/ams-src` (a symlink stays at the old path), starts a git history where there was none, and grants `dsh-runtime` read and write through ACLs there and on the deploy copies in `/Users/Shared/ams-apps`. Files named like credentials (`.env*`, `worker.env`, `.registry-secret`, `cookies.json*`, `message_token.txt`) get a deny entry. The owner's home stays 0700, because it holds world-readable `.env` files.
+- `check` proves as `dsh-runtime` that it can clone, commit, push, and write the deploy copies, and that it reads no such file and cannot enter the owner's home.
+- `revoke` removes the ACLs and moves the repos back. Files `dsh-runtime` created stay owned by it.
+
+Deploy rsyncs use `-rlpc`, not `-a`: the copies hold files of both users, and only a file's owner may set its mtime, so `-a` ends with rc=23 and stops a `set -e` script.
+
+Only the `unattended` preset has a shell, so only the WeChat main agent can use this; `up`, `bili`, `qqbot`, and `qq-digest` cannot (`packages/fork/bili/tests/preset-isolation.spec.ts`). `fork-taint` guards `cc_send` and `cc_start` only: `tool-bash` also runs in turns that are not clean, where the skill's rule that strangers' words are data is an instruction, not an enforcement. The owner's own services (`chrome-cookie-proxy`, `claude-rc-launcher`) are outside the grant, and DSH itself is pushed but not deployed by the agent: the build needs the owner's volume grant and the restart the owner's sudo rule.
 
 ## Operate
 
