@@ -8,7 +8,7 @@
 # 3. Otherwise the declaration is written (as dsh-runtime). On a FIRST install the script stops there and prints the command
 #    that starts the service; DSH must be switched to the client build first (see upgrade.sh). On an upgrade it reloads AMS,
 #    which restarts the qq-recorder only (AMS compares declarations by their bytes).
-# 4. Bundles older than the current and the previous one are removed.
+# 4. Every other bundle is removed; going back means deploying the old commit.
 #
 # Environment (all for tests, with the production defaults):
 #   QQ_RECORDER_AS      command prefix that runs a command as dsh-runtime (default: sudo -n -u dsh-runtime)
@@ -47,14 +47,12 @@ sed -e "s#@BUNDLE@#$TARGET#g" -e "s#@BUILD@#$FP#g" "$HERE/service.toml.in" >"$NE
 if grep -q '@[A-Z]*@' "$NEW"; then echo "deploy: the template has an unfilled placeholder" >&2; exit 1; fi
 
 HAD_DECL=no
-OLD_FP=
 if "${AS[@]}" test -f "$DECL"; then
   HAD_DECL=yes
   if "${AS[@]}" cat "$DECL" | cmp -s - "$NEW"; then
     echo "deploy: the declaration already runs build $FP; nothing to do"
     exit 0
   fi
-  OLD_FP=$("${AS[@]}" cat "$DECL" | sed -n 's#^QQ_RECORDER_BUILD = "\([0-9a-f]\{12\}\)"$#\1#p' | head -1)
 fi
 
 "${AS[@]}" mkdir -p "$(dirname "$DECL")"
@@ -73,13 +71,13 @@ else
   "${RELOAD[@]}"
 fi
 
-# Keep this build and the one the replaced declaration named (the rollback); remove the rest.
+# Only this build stays: the recorder is one bundled file, which it has read by the time it runs.
 for dir in "$SHARED"/*; do
   [ -d "$dir" ] || continue
   name=$(basename "$dir")
   case "$name" in *[!0-9a-f]* | "") continue ;; esac
   [ ${#name} -eq 12 ] || continue
-  if [ "$name" != "$FP" ] && [ "$name" != "$OLD_FP" ]; then
+  if [ "$name" != "$FP" ]; then
     rm -rf "${SHARED:?}/${name:?}"
     echo "deploy: removed old build $name"
   fi

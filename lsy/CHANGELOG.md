@@ -4,6 +4,13 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 
 ## [Unreleased]
 
+### Changed
+- A deploy keeps no old version: `self-upgrade.sh` makes no copy of the files a hot deploy replaces, removes the old build once the new process is up, and removes the failed build after a rollback; `upgrade.sh` keeps only this commit's tarballs, and the recorder keeps only its current bundle.
+- A hot deploy that does not hold is reported and stays on the new files, since the framework's HMR does not restore a stopped plugin; deploying a fix or the old commit recovers it, and `.hot-sha` now records what the disk holds.
+
+### Removed
+- `prune-builds.sh --relocate`, and the recorder's manual rollback steps: they needed a previous build on disk.
+
 ### Fixed
 - QQ digests no longer fail for every group with a hyphen in a member's name: `scrubMentions` escaped `-`, which a `u` regular expression refuses outside a class, so the whole digest threw `Invalid regular expression`.
 

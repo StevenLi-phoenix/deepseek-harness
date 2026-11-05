@@ -64,4 +64,4 @@ sudo -n -u dsh-runtime /usr/bin/env PATH=/opt/homebrew/bin:/usr/bin:/bin /Users/
 sudo -n /bin/launchctl kickstart -k system/app.lishuyu.dsh-events
 ```
 
-Keep the previous build for rollback. Service secrets live in `/Users/dsh-runtime/.dsh/.env` and `.credentials.yaml`; use them only through shell substitution. The harness strips variables named like `*KEY*`, `*PASSWORD*`, `*SECRET*`, or `*TOKEN*` from agent shells, so the service user's `git push` authenticates through its own `gh` login.
+Only the build that runs stays on disk; go back by deploying the old commit. Service secrets live in `/Users/dsh-runtime/.dsh/.env` and `.credentials.yaml`; use them only through shell substitution. The harness strips variables named like `*KEY*`, `*PASSWORD*`, `*SECRET*`, or `*TOKEN*` from agent shells, so the service user's `git push` authenticates through its own `gh` login.

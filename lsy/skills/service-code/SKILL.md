@@ -66,8 +66,8 @@ ams ctl start dsh-upgrade
 
 它看改了什么来决定怎么上线：
 
-- **热更新**：只改了能热替换的插件（`lsy-wechat`、`owner-relay`、`lsy-voice`、`lsy-presence`、`lsy-guard`、`lsy-console`、设置页等）、skill、脚本或文档。进程不重启，你的回合和其他会话都不断。新插件起不来会自动换回旧代码。
-- **等回合结束后重启**：其他改动，包括框架、依赖、bundle 配置，以及 agent 正在用的插件（`lsy-tool-*`、`lsy-memory`、`lsy-event-bus`、`lsy-qq`、`bili` 等）。它会等所有回合结束再重启，最多等 30 分钟；新版本起不来会自动回滚。后台 job 和 monitor 不算在内，重启时会结束，有在跑的先处理掉。
+- **热更新**：只改了能热替换的插件（`lsy-wechat`、`owner-relay`、`lsy-voice`、`lsy-presence`、`lsy-guard`、`lsy-console`、设置页等）、skill、脚本或文档。进程不重启，你的回合和其他会话都不断。新插件起不来不会换回旧代码：它一直停着，直到你部署修好的 commit，或部署旧 commit 回去。
+- **等回合结束后重启**：其他改动，包括框架、依赖、bundle 配置，以及 agent 正在用的插件（`lsy-tool-*`、`lsy-memory`、`lsy-event-bus`、`lsy-qq`、`bili` 等）。它会等所有回合结束再重启，最多等 30 分钟；新版本起不来会自动回滚，正常起来后旧版本就删了。后台 job 和 monitor 不算在内，重启时会结束，有在跑的先处理掉。
 
 所以发起部署后，尽快结束当前回合，别让重启一直等你。
 
