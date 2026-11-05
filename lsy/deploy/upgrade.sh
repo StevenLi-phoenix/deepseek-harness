@@ -1,6 +1,6 @@
 #!/bin/bash
 # Build, pack, and install the current lsy/main checkout as a new release of the event service.
-# Runs as the operator (no sudo). Prints the two privileged commands that finish the switch.
+# Runs as the operator (no sudo), or as the service user through self-upgrade.sh. Prints the two commands that finish the switch.
 # usage: lsy/deploy/upgrade.sh            (from the repository root)
 set -euo pipefail
 export PATH="/opt/homebrew/bin:$HOME/.local/bin:$PATH"
@@ -8,7 +8,7 @@ ROOT=$(git rev-parse --show-toplevel)
 cd "$ROOT"
 [ -z "$(git status --porcelain)" ] || { echo "upgrade: commit or stash local changes first" >&2; exit 1; }
 SHA=$(git rev-parse --short HEAD)
-DIST=/Volumes/MiniSSD/lsy-dsh-dist/$SHA
+DIST=${LSY_DSH_DIST_ROOT:-/Volumes/MiniSSD/lsy-dsh-dist}/$SHA
 APPS=/Users/Shared/lsy-dsh
 # Builds sit in a *.noindex directory so Spotlight leaves their node_modules alone (see prune-builds.sh);
 # <apps>/current stays the stable path the LaunchDaemon and the sudoers rules use.

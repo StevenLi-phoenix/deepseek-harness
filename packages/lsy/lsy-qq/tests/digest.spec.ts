@@ -708,6 +708,15 @@ describe('mentions with aliases on', () => {
     expect(scrubMentions('@任何人', mentionNames([]), salt)).toBe('@某群友')
   })
 
+  it('takes member names with regex punctuation, hyphens among them', () => {
+    const odd = mentionNames([
+      { userId: '30001', nickname: 't-BuLi', card: '' },
+      { userId: '30002', nickname: '七度(-_-)zzz', card: '' },
+      { userId: '30003', nickname: 'a/b.c', card: '' },
+    ])
+    expect(scrubMentions('@t-BuLi @七度(-_-)zzz @a/b.c', odd, salt)).toBe(`@${memberAlias('30001', salt)} @${memberAlias('30002', salt)} @${memberAlias('30003', salt)}`)
+  })
+
   it('leaves text without a mention alone, and an alias already written as it is', () => {
     expect(scrubMentions('没有提到谁，邮箱 a@b.cn 除外', mentionNames([]), salt)).toContain('没有提到谁')
     expect(scrubMentions(`@${memberAlias('20001', salt)} 好`, names, salt)).toBe(`@${memberAlias('20001', salt)} 好`)

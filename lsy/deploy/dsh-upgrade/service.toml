@@ -1,0 +1,19 @@
+# One-shot AMS service that builds and switches DSH on request (RUNBOOK §21). It lives in AMS because a DSH restart must not
+# take it down and because AMS holds the removable-volume grant the build directory needs. Installed at
+# /Users/dsh-runtime/.ams/services/dsh-upgrade/ with start.sh beside it. A reload starts it, and with no request it exits 0.
+id = "dsh-upgrade"
+name = "DSH self-upgrade (one-shot, on request)"
+
+[start]
+argv = ["/bin/bash", "/Users/dsh-runtime/.ams/services/dsh-upgrade/start.sh"]
+workdir = "/Users/dsh-runtime"
+
+[runtime]
+kind = "none"
+
+[stop]
+signal = "SIGTERM"
+timeout_s = 30
+
+[restart]
+policy = "never"

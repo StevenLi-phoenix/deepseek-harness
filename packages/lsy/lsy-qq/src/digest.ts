@@ -245,7 +245,7 @@ export function mentionNames(members: readonly Member[]): MentionNames {
 export function scrubMentions(text: string, names: MentionNames, salt: string): string {
   if (!text.includes('@')) return text
   const known = [...names.byName.keys()].sort((a, b) => b.length - a.length)
-  const escaped = known.map(name => name.replace(/[\\^$.*+?()[\]{}|/-]/g, '\\$&'))
+  const escaped = known.map(name => name.replace(/[\\^$.*+?()[\]{}|/]/g, '\\$&'))
   const pattern = new RegExp(`@(?:(\\d{5,})|(全体成员)|(群友#[0-9a-f]{4}|某群友)${escaped.length === 0 ? '' : `|(${escaped.join('|')})`}|([^\\s@]+))`, 'gu')
   return text.replace(pattern, (_whole, digits?: string, everyone?: string, done?: string, name?: string) => {
     if (everyone !== undefined) return '@全体成员'
