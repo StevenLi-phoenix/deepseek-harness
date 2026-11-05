@@ -18,8 +18,6 @@
       "Bash(git diff:*)",
       "Edit(//Users/Shared/ams-src/**)",
       "Edit(//Users/dsh-runtime/src/**)",
-      "Write(//Users/Shared/ams-src/**)",
-      "Write(//Users/dsh-runtime/src/**)",
       "Bash(git:*)",
       "Bash(uv:*)",
       "Bash(pnpm:*)",
