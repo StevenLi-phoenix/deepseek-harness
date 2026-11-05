@@ -1,7 +1,11 @@
 #!/bin/bash
-# Build the current checkout and switch DSH to it, as the service user and without root: upgrade.sh, setup-profile.sh, then
-# TERM the running process, which launchd restarts (KeepAlive). A build that does not stay up is rolled back by itself, and the
-# main agent hears the outcome in a new turn. Runs from the AMS service dsh-upgrade (dsh-upgrade/start.sh), since the restart
+# Deploy the current checkout to DSH, as the service user and without root. Two paths, chosen by what changed since the commit
+# that runs:
+#   hot      only lsy plugins' own files, skills, scripts, or docs: build and test, replace the changed plugins' files in the
+#            running build, and have the framework's HMR restart just those plugins. The process, and every turn in it, stays.
+#   restart  anything else, and plugins a live agent holds: wait until no turn runs, then TERM the process, which launchd restarts
+#            (KeepAlive). A build that does not stay up is rolled back by itself.
+# The main agent hears the outcome in a new turn. Runs from the AMS service dsh-upgrade (dsh-upgrade/start.sh), since a restart
 # ends every process under DSH. Overridable for check-self-upgrade.sh.
 set -euo pipefail
 APPS=${DSH_UPGRADE_APPS:-/Users/Shared/lsy-dsh}
@@ -10,10 +14,20 @@ DSH_HOME=${DSH_UPGRADE_HOME:-/Users/dsh-runtime/.dsh}
 URL=${DSH_UPGRADE_URL:-http://127.0.0.1:3081}
 WAIT_S=${DSH_UPGRADE_WAIT_S:-180}
 SETTLE_S=${DSH_UPGRADE_SETTLE_S:-60}
+DRAIN_S=${DSH_UPGRADE_DRAIN_S:-1800}
+DRAIN_POLL_S=${DSH_UPGRADE_DRAIN_POLL_S:-10}
+DSH_LOG=${DSH_UPGRADE_LOG:-/Users/dsh-runtime/logs/stdout.log}
+# The reconcile needs a selected bundle to name; the selection itself does not change.
+RECONCILE_BUNDLE=${DSH_UPGRADE_RECONCILE_BUNDLE:-@deepseek-ai/dsh-lsy-event-bundle}
+HERE=$(cd "$(dirname "$0")" && pwd)
+STAGE=$WORK/hot-stage
+BACKUP=$WORK/hot-backup
 
 log() { printf '%s dsh-upgrade: %s\n' "$(date '+%F %T')" "$*"; }
 
-run_upgrade() { LSY_DSH_DIST_ROOT="$WORK/dist" QQ_RECORDER_AS=env lsy/deploy/upgrade.sh; }
+run_upgrade() { LSY_DSH_APPS="$APPS" LSY_DSH_DIST_ROOT="$WORK/dist" QQ_RECORDER_AS=env lsy/deploy/upgrade.sh; }
+
+run_build() { LSY_DSH_BUILD_ONLY=1 LSY_DSH_APPS="$APPS" LSY_DSH_DIST_ROOT="$WORK/dist" QQ_RECORDER_AS=env lsy/deploy/upgrade.sh; }
 
 setup_profile() { "$APPS/current/lsy/deploy/setup-profile.sh" "$DSH_HOME" "$APPS/current"; }
 
@@ -52,11 +66,242 @@ notify() {
   curl -s -m 15 -o /dev/null -X POST "$URL/hooks/lsy" -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d "$body" || log "notify failed"
 }
 
+# Call a Remote of the running process and print the JSON answer. The token stays off the command line, where any local user
+# could read it. usage: api <service/method> <args as JSON>
+api() {
+  local token jar rc=0
+  token=$(/usr/bin/grep -a 'dsh web:' "$DSH_LOG" | tail -1 | sed -E 's/.*token=([^ &]+).*/\1/') || true
+  [ -n "$token" ] || { log "no web token in $DSH_LOG" >&2; return 1; }
+  jar=$(mktemp)
+  printf 'url = "%s/connect?token=%s"\n' "$URL" "$token" | curl -s -m 15 -K - -o /dev/null -c "$jar" \
+    && curl -s -m 300 -b "$jar" -X POST "$URL/api/$1" -H 'Content-Type: application/json' \
+      -d "{\"type\":\"client-request\",\"rpcId\":\"self-upgrade\",\"method\":\"$1\",\"payload\":{\"args\":$2}}" || rc=$?
+  rm -f "${jar:?}"
+  return "$rc"
+}
+
+# Ask the running process to reload what changed on disk, through the plugin manager: selecting the bundle that is already
+# selected changes nothing and reconciles the profile with disk. Returns 0 when it applied, 2 when the change waits for a restart,
+# 1 when it failed or could not be asked.
+reconcile() {
+  local response
+  response=$(api pluginManager/setBundleEnabled "{\"name\":\"$RECONCILE_BUNDLE\",\"enabled\":true}") || { log "the reconcile request failed"; return 1; }
+  printf '%s' "$response" | /usr/bin/python3 -I -c '
+import json, sys
+try:
+    result = json.load(sys.stdin)["result"]
+except (ValueError, KeyError, TypeError):
+    print("reconcile: unreadable answer"); sys.exit(1)
+if not result.get("ok"):
+    print("reconcile: refused:", str(result.get("error"))[:500]); sys.exit(1)
+change = result.get("value") or {}
+print("reconcile:", str({k: change.get(k) for k in ("application", "restartReason", "warnings", "failure", "error") if change.get(k)})[:800])
+sys.exit(0 if change.get("application") == "applied" and not change.get("restartReason") else 2 if change.get("application") == "restart-required" else 1)'
+}
+
+# How many Sessions have a running turn; fails when the process cannot say.
+turns_running() {
+  api session/list '{"_request":{}}' | /usr/bin/python3 -I -c '
+import json, sys
+print(sum(1 for item in json.load(sys.stdin)["result"]["value"]["items"] if item.get("running")))'
+}
+
+# Hold a restart until no turn runs, so it ends none. Bounded: a turn that never ends must not hold a deploy forever, and DRAINED
+# says what happened for the report.
+drain_turns() {
+  local deadline=$((SECONDS + DRAIN_S)) count
+  DRAINED=
+  while :; do
+    count=$(turns_running) || { log "cannot read the running turns; restarting without waiting"; return 0; }
+    [ "$count" != 0 ] || { log "no turn is running"; return 0; }
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      log "$count turn(s) still running after ${DRAIN_S}s; restarting anyway"
+      DRAINED="等了 $((DRAIN_S / 60)) 分钟仍有 ${count} 个回合没结束，被这次重启打断。"
+      return 0
+    fi
+    log "waiting for $count running turn(s)"
+    sleep "$DRAIN_POLL_S"
+  done
+}
+
+# The commit the running build runs: a hot deploy keeps the build directory, so its name stops telling.
+running_commit() { cat "$APPS/current/.hot-sha" 2>/dev/null || basename "$(readlink "$APPS/current")"; }
+
+# Whether a changed path reaches the process only through a plugin's own files, or not at all.
+hot_path() {
+  case "$1" in
+    packages/lsy/*/package.json | lsy/deploy/setup-profile.sh | lsy/profiles/* | lsy/bundles/*) return 1 ;;
+    packages/lsy/* | lsy/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Prints why this change needs the restart path, or nothing when it can be replaced live.
+restart_reason() {
+  local path
+  git cat-file -e "$1^{commit}" 2>/dev/null || { echo "$1 is not in this checkout's history"; return 0; }
+  git diff --no-renames --name-only "$1" HEAD >"$WORK/hot-paths"
+  while IFS= read -r path; do
+    hot_path "$path" || { echo "$path changed"; return 0; }
+  done <"$WORK/hot-paths"
+}
+
+# Unpack this build's plugin tarballs and list in $STAGE/changed the ones that differ from what runs, as <name> <unpacked dir>.
+# Fails, with the reason in REASON, when a difference cannot be replaced live.
+stage_plugins() {
+  local tarball unpacked name target
+  rm -rf "${STAGE:?}"
+  mkdir -p "$STAGE"
+  : >"$STAGE/changed"
+  for tarball in "$WORK/dist/$SHA/dsh"/deepseek-ai-dsh-lsy-*.tgz "$WORK/dist/$SHA/dsh"/deepseek-ai-dsh-bili-*.tgz \
+      "$WORK/dist/$SHA/dsh"/deepseek-ai-dsh-tool-bili-*.tgz "$WORK/dist/$SHA/dsh"/deepseek-ai-dsh-owner-relay-*.tgz; do
+    [ -f "$tarball" ] || continue
+    unpacked="$STAGE/$(basename "$tarball" .tgz)"
+    mkdir -p "$unpacked"
+    /usr/bin/tar -xzf "$tarball" -C "$unpacked"
+    name=$(/usr/bin/python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["name"])' "$unpacked/package/package.json")
+    target="$APPS/current/node_modules/$name"
+    [ -d "$target" ] || { REASON="$name is new"; return 1; }
+    /usr/bin/diff -rq -x node_modules "$unpacked/package" "$target" >/dev/null && continue
+    cmp -s "$unpacked/package/package.json" "$target/package.json" || { REASON="the manifest of $name changed"; return 1; }
+    printf '%s %s\n' "$name" "$unpacked" >>"$STAGE/changed"
+  done
+}
+
+backup_running() {
+  local name unpacked
+  rm -rf "${BACKUP:?}"
+  mkdir -p "$BACKUP/plugins"
+  while read -r name unpacked; do
+    mkdir -p "$BACKUP/plugins/$name"
+    /usr/bin/rsync -rlp --exclude node_modules "$APPS/current/node_modules/$name/" "$BACKUP/plugins/$name/"
+  done <"$STAGE/changed"
+  [ ! -d "$APPS/current/lsy" ] || /usr/bin/rsync -rlp "$APPS/current/lsy/" "$BACKUP/lsy/"
+}
+
+replace_running() {
+  local name unpacked
+  # A plugin imports only when the reconcile starts it, so a file swapped ahead of that is not half-read.
+  while read -r name unpacked; do
+    log "replacing $name"
+    /usr/bin/rsync -rlpc --delete --exclude node_modules "$unpacked/package/" "$APPS/current/node_modules/$name/"
+  done <"$STAGE/changed"
+  "$HERE/install-lsy-files.sh" "$(git rev-parse --show-toplevel)" "$APPS/current"
+}
+
+restore_running() {
+  local name unpacked
+  while read -r name unpacked; do
+    log "restoring $name"
+    /usr/bin/rsync -rlpc --delete --exclude node_modules "$BACKUP/plugins/$name/" "$APPS/current/node_modules/$name/"
+  done <"$STAGE/changed"
+  [ ! -d "$BACKUP/lsy" ] || /usr/bin/rsync -rlpc --delete "$BACKUP/lsy/" "$APPS/current/lsy/"
+}
+
+# Keep the tarballs of this build only: hot deploys add one directory each, and any commit rebuilds from git.
+prune_dist() {
+  local dir
+  for dir in "$WORK/dist"/*/; do
+    [ -d "$dir" ] || continue
+    dir=${dir%/}
+    [[ $(basename "$dir") =~ ^[0-9a-f]{7,40}$ ]] && [ "$(basename "$dir")" != "$SHA" ] || continue
+    log "removing old tarballs ${dir:?}"
+    rm -rf "${dir:?}"
+  done
+}
+
+# The hot path past the build; exits with the outcome.
+hot_deploy() {
+  local names old rc=0
+  names=$(cut -d' ' -f1 "$STAGE/changed" | sed 's#@deepseek-ai/dsh-##' | tr '\n' ' ' | sed 's/ $//')
+  log "hot path: replacing [${names}]"
+  old=$(dsh_pid)
+  backup_running
+  replace_running
+  setup_profile
+  if [ -s "$STAGE/changed" ]; then reconcile || rc=$?; fi
+  if [ "$rc" = 0 ]; then
+    sleep "$SETTLE_S"
+    if [ "$(dsh_pid)" = "$old" ] && answers; then
+      printf '%s\n' "$SHA" >"$APPS/current/.hot-sha"
+      prune_dist
+      if [ -n "$names" ]; then
+        notify "DSH 已热更新到 ${SHA}：替换了 ${names}，进程没重启，进行中的对话没断。"
+      else
+        notify "DSH 已热更新到 ${SHA}：这次没有插件代码变化，进程没动。"
+      fi
+      log "done, still pid $old"
+      exit 0
+    fi
+    log "pid $old did not survive the replacement"
+    hot_undo_by_restart "它在替换后退出了"
+  fi
+  if [ "$rc" = 2 ]; then
+    log "the change waits for a restart; restarting on the new files once no turn runs"
+    drain_turns
+    old=$(dsh_pid)
+    restart_dsh
+    if wait_healthy "$old"; then
+      printf '%s\n' "$SHA" >"$APPS/current/.hot-sha"
+      notify "DSH 已部署到 ${SHA}：这次改动有活着的 agent 在用，没法热更新，等回合结束后重启了进程，运行正常。${DRAINED}"
+      log "done"
+      exit 0
+    fi
+    hot_undo_by_restart "重启后起不来"
+  fi
+  log "the replacement failed; putting the old files back"
+  restore_running
+  setup_profile
+  rc=0
+  reconcile || rc=$?
+  if [ "$rc" = 0 ]; then
+    notify "DSH 热更新 ${SHA} 失败：新插件起不来，已恢复原来的代码，进程没重启。日志在 ${WORK}/logs。"
+    exit 1
+  fi
+  hot_undo_by_restart "旧代码也没能热加载回去"
+}
+
+# Put the old files back and restart on them. usage: hot_undo_by_restart <what went wrong>
+hot_undo_by_restart() {
+  local old
+  log "restoring the old files and restarting: $1"
+  restore_running
+  setup_profile
+  old=$(dsh_pid)
+  restart_dsh
+  if wait_healthy "$old"; then
+    notify "DSH 热更新 ${SHA} 失败（$1）：已恢复原来的代码并重启。日志在 ${WORK}/logs。"
+  else
+    log "the old files did not come up either"
+  fi
+  exit 1
+}
+
 [ -z "${DSH_UPGRADE_TEST_HOOKS:-}" ] || . "$DSH_UPGRADE_TEST_HOOKS"
 
 SHA=$(git rev-parse --short HEAD)
 PREVIOUS=$(readlink "$APPS/current")
-log "upgrading to $SHA from $(basename "$PREVIOUS")"
+RUNNING=$(running_commit)
+log "upgrading to $SHA from $RUNNING"
+mkdir -p "$WORK"
+
+if [ "$(git rev-parse -q --verify "$RUNNING^{commit}" 2>/dev/null || true)" = "$(git rev-parse HEAD)" ]; then
+  log "$SHA is already running"
+  notify "DSH 已经是 ${SHA}，这次部署什么也没做。"
+  exit 0
+fi
+
+REASON=$(restart_reason "$RUNNING")
+if [ -z "$REASON" ]; then
+  log "only plugin files changed since $RUNNING; building for the hot path"
+  if ! run_build; then
+    log "build of $SHA failed; the running DSH was not touched"
+    notify "DSH 部署 ${SHA} 失败：构建或测试没过，线上版本没动。日志在 ${WORK}/logs。"
+    exit 1
+  fi
+  stage_plugins && hot_deploy
+fi
+log "restart path: $REASON"
 
 if ! run_upgrade; then
   [ "$(readlink "$APPS/current")" = "$PREVIOUS" ] || ln -sfn "$PREVIOUS" "$APPS/current"
@@ -70,11 +315,12 @@ if [ "$(readlink "$APPS/current")" = "$PREVIOUS" ]; then
   exit 0
 fi
 
-OLD_PID=$(dsh_pid)
 setup_profile
+drain_turns
+OLD_PID=$(dsh_pid)
 restart_dsh
 if wait_healthy "$OLD_PID"; then
-  notify "DSH 已部署到 ${SHA}，运行正常。回滚用的上一版是 $(basename "$PREVIOUS")。"
+  notify "DSH 已部署到 ${SHA}，重启了进程（${REASON}），运行正常。回滚用的上一版是 $(basename "$PREVIOUS")。${DRAINED}"
   log "done"
   exit 0
 fi
