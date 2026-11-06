@@ -31,7 +31,8 @@ export function parseFlowActivity(body: unknown): FlowActivityView {
     throw new Error('unexpected flow answer')
   }
   // A Host from before run-time routes answers without them.
-  return { routes: [], changes: [], ...(body as object) } as FlowActivityView
+  const view = body as Partial<FlowActivityView> & Omit<FlowActivityView, 'routes' | 'changes'>
+  return { ...view, routes: view.routes ?? [], changes: view.changes ?? [] }
 }
 
 /**
