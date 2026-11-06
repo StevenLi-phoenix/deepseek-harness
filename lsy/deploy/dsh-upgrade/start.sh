@@ -2,9 +2,9 @@
 # Entry of the AMS service dsh-upgrade: take the request, bring the build checkout to it, and run that checkout's
 # self-upgrade.sh. To request an upgrade: write `lsy/main` or a commit into the request file, then `ams ctl start dsh-upgrade`.
 set -euo pipefail
-REQUEST=/Users/dsh-runtime/.ams/services/dsh-upgrade/request
-WORK=/Volumes/MiniSSD/dsh-self
-REPO=https://github.com/StevenLi-phoenix/deepseek-harness
+REQUEST=${DSH_UPGRADE_REQUEST:-/Users/dsh-runtime/.ams/services/dsh-upgrade/request}
+WORK=${DSH_UPGRADE_WORK:-/Volumes/MiniSSD/dsh-self}
+REPO=${DSH_UPGRADE_REPO:-https://github.com/StevenLi-phoenix/deepseek-harness}
 [ -f "$REQUEST" ] || { echo "dsh-upgrade: no request"; exit 0; }
 TARGET=$(cat "$REQUEST")
 rm "$REQUEST"
@@ -20,10 +20,13 @@ mkdir -p "$WORK/logs"
 LOG="$WORK/logs/upgrade-$(date +%Y%m%d%H%M%S).log"
 echo "dsh-upgrade: $TARGET, log $LOG"
 # Under AMS every stderr line can become an escalation; the build's noise stays in the log, and the exit code reports.
-exec >>"$LOG" 2>&1
+# A request that cannot start says so on the real stderr: self-upgrade.sh, which reports everything later, has not run yet.
+exec 3>&2 >>"$LOG" 2>&1
+refuse() { echo "dsh-upgrade: $1" | tee /dev/fd/3; exit 1; }
 [ -d "$WORK/wt/.git" ] || git clone -q --filter=blob:none --branch lsy/main "$REPO" "$WORK/wt"
 cd "$WORK/wt"
-git fetch -q origin lsy/main
+git fetch -q origin lsy/main || refuse "cannot fetch origin lsy/main; nothing was deployed"
+git merge-base --is-ancestor "$REV" origin/lsy/main 2>/dev/null || refuse "$TARGET is not on lsy/main; nothing was deployed. Push it first."
 git checkout -q --force --detach "$REV"
 git clean -fdq
-exec lsy/deploy/self-upgrade.sh
+exec lsy/deploy/self-upgrade.sh 3>&-

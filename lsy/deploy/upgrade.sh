@@ -1,7 +1,8 @@
 #!/bin/bash
 # Build, pack, and install the current lsy/main checkout as a new release of the event service.
-# Runs as the operator (no sudo), or as the service user through self-upgrade.sh. Prints the two commands that finish the switch.
-# With LSY_DSH_BUILD_ONLY=1 it stops at the packed, tested tarballs and the recorder: self-upgrade.sh then replaces plugins in the
+# Runs through self-upgrade.sh, as the service user. A deploy starts with lsy/deploy/deploy-dsh.sh, not here: by hand this is for a
+# first install, or when the service dsh-upgrade cannot run. It then prints the two commands that finish the switch.
+# With LSY_DSH_BUILD_ONLY=1 it stops at the tested plugin tarballs and the recorder: self-upgrade.sh then replaces plugins in the
 # running build, and neither a new prefix nor a switch happens.
 # usage: lsy/deploy/upgrade.sh            (from the repository root)
 set -euo pipefail
@@ -21,7 +22,9 @@ echo "upgrade: building $SHA"
 pnpm install --frozen-lockfile
 pnpm run build:official
 pnpm exec vitest run packages/lsy
-if [ ! -d "$DIST/dsh" ]; then
+if [ -n "$BUILD_ONLY" ]; then
+  "$ROOT/lsy/deploy/pack-hot-plugins.sh" "$DIST/hot"
+elif [ ! -d "$DIST/dsh" ]; then
   pnpm run release:pack --family vendor --out "$DIST/vendor"
   pnpm run release:pack --family dsh --out "$DIST/dsh"
 fi

@@ -1,8 +1,9 @@
 #!/bin/bash
 # Deploy the current checkout to DSH, as the service user and without root. Two paths, chosen by what changed since the commit
 # that runs:
-#   hot      only lsy plugins' own files, skills, scripts, or docs: build and test, replace the changed plugins' files in the
-#            running build, and have the framework's HMR restart just those plugins. The process, and every turn in it, stays.
+#   hot      only lsy plugins' own files, skills, scripts, or docs: build and test (no build when only docs, skills, or scripts
+#            changed), replace the changed plugins' files in the running build, and have the framework's HMR restart just those
+#            plugins. The process, and every turn in it, stays.
 #            No copy of the old files is made: a plugin that does not load stays down until a commit with good files is deployed.
 #   restart  anything else, and plugins a live agent holds: wait until no turn runs, then TERM the process, which launchd restarts
 #            (KeepAlive). A build that does not stay up is rolled back by itself, while the old build is still on disk.
@@ -22,7 +23,9 @@ DSH_LOG=${DSH_UPGRADE_LOG:-/Users/dsh-runtime/logs/stdout.log}
 # The reconcile needs a selected bundle to name; the selection itself does not change.
 RECONCILE_BUNDLE=${DSH_UPGRADE_RECONCILE_BUNDLE:-@deepseek-ai/dsh-lsy-event-bundle}
 HERE=$(cd "$(dirname "$0")" && pwd)
+. "$HERE/deploy-paths.sh"
 STAGE=$WORK/hot-stage
+PATHS=$WORK/hot-paths
 
 log() { printf '%s dsh-upgrade: %s\n' "$(date '+%F %T')" "$*"; }
 
@@ -131,25 +134,6 @@ drain_turns() {
 # The commit the running build runs: a hot deploy keeps the build directory, so its name stops telling.
 running_commit() { cat "$APPS/current/.hot-sha" 2>/dev/null || basename "$(readlink "$APPS/current")"; }
 
-# Whether a changed path reaches the process only through a plugin's own files, or not at all.
-hot_path() {
-  case "$1" in
-    packages/lsy/*/package.json | lsy/deploy/setup-profile.sh | lsy/profiles/* | lsy/bundles/*) return 1 ;;
-    packages/lsy/* | lsy/*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-# Prints why this change needs the restart path, or nothing when it can be replaced live.
-restart_reason() {
-  local path
-  git cat-file -e "$1^{commit}" 2>/dev/null || { echo "$1 is not in this checkout's history"; return 0; }
-  git diff --no-renames --name-only "$1" HEAD >"$WORK/hot-paths"
-  while IFS= read -r path; do
-    hot_path "$path" || { echo "$path changed"; return 0; }
-  done <"$WORK/hot-paths"
-}
-
 # Unpack this build's plugin tarballs and list in $STAGE/changed the ones that differ from what runs, as <name> <unpacked dir>.
 # Fails, with the reason in REASON, when a difference cannot be replaced live.
 stage_plugins() {
@@ -157,8 +141,7 @@ stage_plugins() {
   rm -rf "${STAGE:?}"
   mkdir -p "$STAGE"
   : >"$STAGE/changed"
-  for tarball in "$WORK/dist/$SHA/dsh"/deepseek-ai-dsh-lsy-*.tgz "$WORK/dist/$SHA/dsh"/deepseek-ai-dsh-bili-*.tgz \
-      "$WORK/dist/$SHA/dsh"/deepseek-ai-dsh-tool-bili-*.tgz "$WORK/dist/$SHA/dsh"/deepseek-ai-dsh-owner-relay-*.tgz; do
+  for tarball in "$WORK/dist/$SHA/hot"/*.tgz; do
     [ -f "$tarball" ] || continue
     unpacked="$STAGE/$(basename "$tarball" .tgz)"
     mkdir -p "$unpacked"
@@ -202,7 +185,8 @@ hot_deploy() {
   setup_profile
   if [ -s "$STAGE/changed" ]; then reconcile || rc=$?; fi
   if [ "$rc" = 0 ]; then
-    sleep "$SETTLE_S"
+    # Nothing was reloaded, so nothing can have gone wrong since: there is no reason to watch the process for a minute.
+    [ -z "$names" ] || sleep "$SETTLE_S"
     if [ "$(dsh_pid)" = "$old" ] && answers; then
       if [ -n "$names" ]; then
         notify "DSH 已热更新到 ${SHA}：替换了 ${names}，进程没重启。"
@@ -243,8 +227,15 @@ if [ "$(git rev-parse -q --verify "$RUNNING^{commit}" 2>/dev/null || true)" = "$
   exit 0
 fi
 
-REASON=$(restart_reason "$RUNNING")
+REASON=$(restart_reason "$RUNNING" HEAD "$PATHS")
 if [ -z "$REASON" ]; then
+  if ! needs_build "$PATHS"; then
+    log "only docs, skills, or scripts changed since $RUNNING; no build"
+    rm -rf "${STAGE:?}"
+    mkdir -p "$STAGE"
+    : >"$STAGE/changed"
+    hot_deploy
+  fi
   log "only plugin files changed since $RUNNING; building for the hot path"
   if ! run_build; then
     log "build of $SHA failed; the running DSH was not touched"
