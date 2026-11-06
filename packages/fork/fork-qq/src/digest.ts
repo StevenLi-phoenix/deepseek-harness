@@ -358,6 +358,16 @@ interface Picture {
 export type ImageMediaType = 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'
 
 /** The digest runner. */
+/** One stored digest with something in it, as the runner tells its listener. */
+export interface StoredDigest {
+  groupId: string
+  groupName: string
+  fromCursor: string
+  toCursor: string
+  messageCount: number
+  text: string
+}
+
 export class DigestRunner {
   /** The Sessions that are digesting right now, by id: what their tools may touch. */
   private readonly bindings = new Map<string, RoundBinding>()
@@ -375,6 +385,8 @@ export class DigestRunner {
     private readonly rolloverMs: () => number = () => 0,
     /** Pictures of one transcript chunk attached to the prompt at most; 0 attaches none. Read at each round. */
     private readonly maxImages: () => number = () => 0,
+    /** Told of each digest with something in it; a failure here costs the digest nothing. */
+    private readonly onDigest?: (digest: StoredDigest) => Promise<void> | void,
   ) {}
 
   /**
@@ -615,6 +627,15 @@ export class DigestRunner {
         usage: result.usage ?? null, rawPath, createdAt: this.now(),
       })
       stored += 1
+      if (answer !== '' && answer !== 'NO_REPLY') {
+        try {
+          await this.onDigest?.({
+            groupId, groupName: name, fromCursor: chunk.fromCursor, toCursor: chunk.toCursor, messageCount: chunk.count, text,
+          })
+        } catch (error: unknown) {
+          this.ctx.logger.warn(`fork-qq: the digest listener failed for group ${groupId}: ${errorText(error)}`)
+        }
+      }
       const dropped = await this.store.capDigests(groupId, this.config.keepPerGroup)
       if (dropped > 0) this.ctx.logger.info(`fork-qq: dropped ${dropped} oldest digest(s) of group ${groupId} (digest.keepPerGroup ${this.config.keepPerGroup})`)
       this.ctx.logger.info(`fork-qq: digested ${chunk.count} messages of group ${groupId} (${chunk.fromCursor}-${chunk.toCursor}) with ${result.model}: ${Array.from(text).length} chars in ${this.now() - started} ms${result.usage === undefined ? '' : `; usage ${result.usage}`}; via ${viaTool ? 'qq_digest_write' : 'the final answer'}; Session ${session.sessionId} (generation ${session.generation}); context ${result.contextTokens ?? 'unknown'} tokens; tool calls ${binding.calls} (${binding.refused} refused), notes +${binding.notesAdded}/-${binding.notesRemoved}; compacted ${result.compacted ?? 0}x; raw ${rawPath}`)

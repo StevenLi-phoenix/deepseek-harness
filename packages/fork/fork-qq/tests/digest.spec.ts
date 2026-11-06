@@ -162,6 +162,27 @@ describe('DigestRunner', () => {
     expect(store.digests({ groupId: 'g1', limit: 5 }).map(d => [d.fromCursor, d.toCursor])).toEqual([['c14', 'c33'], ['c1', 'c13']])
   })
 
+  it('tells the listener of each stored digest, and a listener that throws costs the digest nothing', async () => {
+    fill('g1', 8)
+    const h = harness('群里在聊期末安排')
+    const heard: unknown[] = []
+    const listening = new DigestRunner(h.ctx, store, log, config(), join(dir, 'raw'), () => NOW, () => 0, () => 0, async (digest) => {
+      heard.push(digest)
+      throw new Error('bus is down')
+    })
+    expect(await listening.runRound(['g1'], new AbortController().signal)).toBe(1)
+    expect(heard).toEqual([expect.objectContaining({ groupId: 'g1', fromCursor: 'c1', toCursor: 'c8', text: '群里在聊期末安排' })])
+    expect(store.digestedUpTo('g1')).toBe('c8')
+  })
+
+  it('tells the listener nothing about a stretch with nothing worth recording', async () => {
+    fill('g1', 8)
+    const heard: unknown[] = []
+    const listening = new DigestRunner(harness('NO_REPLY').ctx, store, log, config(), join(dir, 'raw'), () => NOW, () => 0, () => 0, (digest) => { heard.push(digest) })
+    expect(await listening.runRound(['g1'], new AbortController().signal)).toBe(1)
+    expect(heard).toEqual([])
+  })
+
   it('stores a placeholder for NO_REPLY so the cursor moves on, and keeps the raw answer', async () => {
     fill('g1', 8)
     const h = harness('NO_REPLY')

@@ -63,7 +63,7 @@ Until a group number is listed nothing is recorded: messages of every other grou
 | `send.enabled` | `false` | Sending is not offered (the recorder has no send endpoint); `true` fails the load |
 | `send.groups` | `[]` | Unused while sending is refused |
 | `send.minIntervalSec`, `send.maxPerDay` | `60`, `10` | Unused while sending is refused |
-| `digest.enabled` | `true` | Digest each recorded group on a schedule |
+| `digest.enabled` | `true` | Digest each recorded group on a schedule; a digest with something in it is also published to the event bus as `qq.digest.new` |
 | `digest.everyHours` | `24` | Hours between digests of one group |
 | `digest.minMessages` | `15` | A group with fewer new messages waits for the next round |
 | `digest.maxPromptChars` | `60000` | Transcript characters per model call; a larger backlog is split |

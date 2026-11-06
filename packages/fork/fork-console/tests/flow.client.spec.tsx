@@ -169,7 +169,8 @@ describe('wiring', () => {
     expect(border('qqOut')).toBe('planned')
     expect(border('repairQ')).toBe('partial')
     expect(node('main').getAttribute('aria-label')).toBe('微信主智能体')
-    expect(node('qqMain').getAttribute('aria-label')).toBe('shared QQ main session (iso), 尚未实现')
+    expect(border('qqMain')).toBe('partial')
+    expect(node('qqMain').getAttribute('aria-label')).toBe('shared QQ main session (iso), 部分接通')
   })
 
   it('explains the border in the legend', () => {

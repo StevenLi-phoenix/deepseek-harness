@@ -103,6 +103,7 @@ const sessionActionSchema: z<SessionAction> = z.object({
   maxPromptEvents: z.natural().min(1).default(50),
   maxTextChars: z.natural().min(1).default(2000),
   trustedText: z.boolean().default(false),
+  quietResult: z.boolean().default(false),
   model: z.object({ provider: z.string(), model: z.string() }),
   project: z.string(),
   persistent: z.object({
@@ -1375,6 +1376,10 @@ export class ForkEventBus extends Service {
     }
     if (silent) {
       this.ctx.logger.info(`fork-event-bus: Session of ${tracked.batchId} answered ${FORK_SILENT_REPLY}; nothing sent`)
+      return
+    }
+    if (this.subscriptionById(tracked.subscription)?.session?.quietResult === true) {
+      this.ctx.logger.info(`fork-event-bus: Session of ${tracked.batchId} belongs to a quiet subscription; nothing sent`)
       return
     }
     if (!this.config.notifySessionResult) return

@@ -63,7 +63,7 @@ OneBot v11 WebSocket 服务端是 colima 上 Docker 容器里的 NapCat（[`fork
 | `send.enabled` | `false` | 不提供发送（记录器没有发送端点）；设为 `true` 会让加载失败 |
 | `send.groups` | `[]` | 发送被拒绝期间不使用 |
 | `send.minIntervalSec`、`send.maxPerDay` | `60`、`10` | 发送被拒绝期间不使用 |
-| `digest.enabled` | `true` | 按计划给每个已记录的群做摘要 |
+| `digest.enabled` | `true` | 按计划给每个已记录的群做摘要；有内容的摘要同时以 `qq.digest.new` 发到事件总线 |
 | `digest.everyHours` | `24` | 同一个群两次摘要之间的小时数 |
 | `digest.minMessages` | `15` | 新消息少于这个数的群等下一轮 |
 | `digest.maxPromptChars` | `60000` | 每次模型调用的转录字符数；积压更多就拆开 |

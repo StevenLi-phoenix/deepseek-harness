@@ -13,7 +13,7 @@ import { isAbsolute, join } from 'node:path'
 import { Context, Service, type Volatile } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
-import type { ForkNotifier } from '@deepseek-ai/dsh-fork-event-bus'
+import type { ForkEventBus, ForkNotifier } from '@deepseek-ai/dsh-fork-event-bus'
 // Type-only: the `loader/volatile-update` event the group list follows.
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-permission-presets'
@@ -399,6 +399,18 @@ export class QqObserver extends Service {
         // A resident digest Session is replaced when it is as old as the raw messages are kept.
         () => this.live.retention.textDays * 86_400_000,
         () => d.maxImages.get(),
+        // The shared QQ main Session hears of each digest through the bus; the observer works without the bus.
+        async (digest) => {
+          const bus = ctx.get('forkEventBus') as ForkEventBus | undefined
+          await bus?.publish({
+            source: 'qq',
+            kind: 'qq.digest.new',
+            key: `${digest.groupId}:${digest.fromCursor}-${digest.toCursor}`,
+            subject: digest.groupId,
+            title: `${digest.groupName}: ${digest.messageCount} messages`,
+            text: digest.text,
+          })
+        },
       )
       const saved = Number(store.getMeta('outage-notice-at') ?? '')
       if (Number.isFinite(saved) && store.getMeta('outage-notice-at') !== undefined) this.lastNoticeAt = saved
