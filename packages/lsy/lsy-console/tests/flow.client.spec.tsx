@@ -19,7 +19,7 @@ const translate = t as Translate
 const NOW = new Date(2026, 10, 6, 9, 30, 15).getTime()
 
 const window = (overrides: Partial<FlowWindowActivity> = {}): FlowWindowActivity => ({
-  funnel: { events: 0, batches: 0, sent: 0, silent: 0, failed: 0 }, sources: {}, subscriptions: {}, ...overrides,
+  funnel: { events: 0, batches: 0, sent: 0, silent: 0, failed: 0 }, sources: {}, subscriptions: {}, ignored: 0, ...overrides,
 })
 
 const OVERVIEW: OverviewView = {
@@ -43,6 +43,7 @@ const ACTIVITY: FlowActivityView = {
     '1h': window({ funnel: { events: 2, batches: 1, sent: 1, silent: 0, failed: 0 } }),
     '24h': window({
       funnel: { events: 40, batches: 6, sent: 3, silent: 3, failed: 2 },
+      ignored: 28,
       sources: { github: { count: 12, lastAt: NOW - 60_000 } },
       subscriptions: { ci: { count: 5, lastAt: NOW - 60_000, sent: 2, silent: 3, failed: 0 } },
     }),
@@ -200,6 +201,13 @@ describe('FlowPage', () => {
       expect(node('bili').hasAttribute('data-dim')).toBe(true)
       fireEvent.click(row)
       expect(document.querySelectorAll('[data-run]')).toHaveLength(0)
+    })
+
+    it('says how many it leaves out, for the chosen span, and nothing when none were', () => {
+      mount(loaded())
+      expect(within(side()).getByText('另有 28 件事没有订阅，这里不列出')).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: '1 小时' }))
+      expect(within(side()).queryByText(/没有订阅/u)).toBeNull()
     })
 
     it('says so when nothing happened', () => {

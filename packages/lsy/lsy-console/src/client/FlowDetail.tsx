@@ -40,6 +40,8 @@ export interface FlowSideProps {
   node: FlowNode | undefined
   fact: BoxFact | undefined
   recent: readonly FlowRecentItem[]
+  /** Events of the span the list leaves out, because nothing took them. */
+  ignored: number
   /** The row being followed, by id. */
   followed: string | null
   now: number
@@ -57,7 +59,7 @@ export interface FlowSideProps {
  * @returns the side panel.
  */
 export function FlowSide({
-  graph, node, fact, recent, followed, now, canManage, onManage, onFollow, onBack, translate,
+  graph, node, fact, recent, ignored, followed, now, canManage, onManage, onFollow, onBack, translate,
 }: FlowSideProps): ReactNode {
   const list = (items: readonly FlowRecentItem[]): ReactNode => (
     <div className={css.flowFeed}>
@@ -72,6 +74,7 @@ export function FlowSide({
         <h2 className={css.flowSideTitle}>{translate('flow.feed.title')}</h2>
         <p className={css.flowSideNote}>{translate('flow.feed.hint')}</p>
         {recent.length === 0 ? <p className={css.flowSideNote}>{translate('flow.feed.empty')}</p> : list(recent)}
+        {ignored > 0 ? <p className={css.flowFeedRest}>{translate('flow.feed.ignored', { count: ignored })}</p> : null}
       </aside>
     )
   }

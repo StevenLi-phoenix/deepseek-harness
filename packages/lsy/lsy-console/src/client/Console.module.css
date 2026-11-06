@@ -745,6 +745,8 @@
 .flowRowOutcome[data-tone='bad'] { color: var(--dsw-alias-state-error-primary); }
 .flowRowOutcome[data-tone='busy'] { color: var(--dsw-alias-state-warn-primary); }
 
+.flowFeedRest { margin: 6px 0 0; color: var(--dsw-alias-label-tertiary); font-size: 12px; }
+
 .flowWiring { margin-top: 12px; color: var(--dsw-alias-label-tertiary); font-size: 12px; }
 .flowWiring summary { cursor: pointer; }
 .flowWiring p { margin-top: 4px; font-size: 12px; overflow-wrap: anywhere; }

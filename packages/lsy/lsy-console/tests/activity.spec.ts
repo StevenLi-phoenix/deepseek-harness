@@ -48,14 +48,30 @@ describe('flow activity', () => {
   it('lists what happened, newest first, with what became of it and without any message body', () => {
     const view = collectActivity(fakeCtx(BUS), NOW)
     expect(view.recent.map(item => [item.id, item.outcome])).toEqual([
-      ['f', 'waiting'], ['e', 'unmatched'], ['d', 'failed'], ['c', 'sent'], ['b', 'sent'], ['a', 'silent'], ['old', 'silent'],
+      ['f', 'waiting'], ['d', 'failed'], ['c', 'sent'], ['b', 'sent'], ['a', 'silent'], ['old', 'silent'],
     ])
-    expect(view.recent[3]).toMatchObject({ source: 'host', title: 'title c', subscriptions: ['host-alerts'], at: NOW - 10 * 60_000 })
+    expect(view.recent[2]).toMatchObject({ source: 'host', title: 'title c', subscriptions: ['host-alerts'], at: NOW - 10 * 60_000 })
     expect(JSON.stringify(view)).not.toContain('private body')
   })
 
+  it('leaves out of the list what nothing took, and counts it per window', () => {
+    const view = collectActivity(fakeCtx(BUS), NOW)
+    expect(view.recent.map(item => item.id)).not.toContain('e')
+    expect(view.windows['24h'].ignored).toBe(1)
+    const busy = {
+      events: () => [
+        ...Array.from({ length: 60 }, (_, index) => event(`u${index}`, 'github', 1 + index, [])),
+        event('taken', 'github', 100 * 60_000, ['ci']),
+      ],
+      batches: () => [],
+    }
+    const crowded = collectActivity(fakeCtx(busy), NOW)
+    expect(crowded.recent.map(item => item.id)).toEqual(['taken'])
+    expect(crowded.windows['24h'].ignored).toBe(60)
+  })
+
   it('cuts a long title, and answers with empty windows when the bus is not mounted', () => {
-    const long = { events: () => [{ ...event('x', 'qq', 1, []), title: '长'.repeat(200) }], batches: () => [] }
+    const long = { events: () => [{ ...event('x', 'qq', 1, ['qq-main']), title: '长'.repeat(200) }], batches: () => [] }
     expect(Array.from(collectActivity(fakeCtx(long), NOW).recent[0]!.title).length).toBe(80)
     const none = collectActivity(fakeCtx(undefined), NOW)
     expect(none.windows['24h'].funnel.events).toBe(0)
