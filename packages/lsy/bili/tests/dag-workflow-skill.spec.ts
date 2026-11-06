@@ -11,7 +11,7 @@ const skill = readFileSync(join(import.meta.dirname, '../../../../lsy/skills/dag
 /** The helper exactly as the agent reads it: the fenced block tagged `js dag-helper`. */
 const helper = /```js dag-helper\n([\s\S]*?)```/.exec(skill)?.[1]
 
-interface Started { prompt: string, finish: (result: ChildResult) => void }
+interface Started { prompt: string; finish: (result: ChildResult) => void }
 
 /** Run a script body through the real workflow guest; child completion is the test's to decide. */
 function run(body: string, childResult?: (request: ChildStartRequest, callId: number) => Promise<ChildResult>) {
@@ -42,7 +42,7 @@ const done = (text: string): ChildResult => ({ output: [{ type: 'text', text }],
 describe('dag-workflow skill', () => {
   it('ships a helper block and a description the skill catalog can show', () => {
     expect(helper).toBeDefined()
-    const front = parse(/^---\n([\s\S]*?)\n---/.exec(skill)![1]!) as { name: string, description: string }
+    const front = parse(/^---\n([\s\S]*?)\n---/.exec(skill)![1]!) as { name: string; description: string }
     expect(front.name).toBe('dag-workflow')
     expect(front.description).toContain('workflow')
   })
@@ -120,10 +120,10 @@ describe('dag-workflow skill', () => {
   })
 
   it.each([
-    ['a cycle', `{ a: { needs: ['b'], run() {} }, b: { after: ['a'], run() {} } }`, 'cycle'],
-    ['a self edge', `{ a: { needs: ['a'], run() {} } }`, 'cycle'],
-    ['an unknown dependency', `{ a: { needs: ['nope'], run() {} } }`, 'nope'],
-    ['a node without run', `{ a: { needs: [] } }`, 'run'],
+    ['a cycle', '{ a: { needs: [\'b\'], run() {} }, b: { after: [\'a\'], run() {} } }', 'cycle'],
+    ['a self edge', '{ a: { needs: [\'a\'], run() {} } }', 'cycle'],
+    ['an unknown dependency', '{ a: { needs: [\'nope\'], run() {} } }', 'nope'],
+    ['a node without run', '{ a: { needs: [] } }', 'run'],
   ])('rejects %s before any agent starts', async (_name, nodes, message) => {
     const { result, requests } = run(`return await dag(${nodes})`)
     const settled = await result
