@@ -115,7 +115,7 @@ describe('FlowPage', () => {
   describe('whether anything is broken', () => {
     it('says so in one line when nothing is', () => {
       mount(loaded())
-      expect(screen.getByRole('status').textContent).toBe('一切正常')
+      expect(screen.getByRole('status').textContent).toBe('全部正常')
     })
 
     it('names what is broken and what it touches, and marks the box and those it starves', () => {
@@ -124,7 +124,7 @@ describe('FlowPage', () => {
       expect(verdict.textContent).toContain('QQ 观察器')
       expect(verdict.textContent).toContain('QQ 群摘要')
       expect(verdict.textContent).toContain('QQ 主会话')
-      expect(verdict.textContent).toContain('其余都正常')
+      expect(verdict.textContent).toContain('其余正常')
       expect(node('qq').getAttribute('data-state')).toBe('bad')
       expect(node('qq').querySelector('rect')).not.toBeNull()
       expect(node('qqSessions').getAttribute('data-state')).toBe('hit')
@@ -182,7 +182,7 @@ describe('FlowPage', () => {
     it('counts what waits for the owner to wake only when something does', () => {
       mount({ ...loaded(), activity: { data: { ...ACTIVITY, presence: { asleep: true, deferred: 4 } }, checkedAt: NOW } })
       expect(screen.getByText(zh['flow.funnel.held'])).toBeTruthy()
-      expect(node('dnd').textContent).toContain('现在在睡')
+      expect(node('dnd').textContent).toContain('勿扰中')
     })
   })
 
@@ -190,7 +190,7 @@ describe('FlowPage', () => {
     it('lists what just happened and draws the way of a followed row, one arrow after another', () => {
       mount(loaded())
       const row = within(side()).getByRole('button', { name: /main 构建失败/u })
-      expect(row.textContent).toContain('发给你了')
+      expect(row.textContent).toContain('已发送')
       fireEvent.click(row)
       const runs = Array.from(document.querySelectorAll<SVGPathElement>('[data-run]'))
       expect(runs.length).toBeGreaterThan(1)
@@ -205,14 +205,14 @@ describe('FlowPage', () => {
 
     it('says how many it leaves out, for the chosen span, and nothing when none were', () => {
       mount(loaded())
-      expect(within(side()).getByText('另有 28 件事没有订阅，这里不列出')).toBeTruthy()
+      expect(within(side()).getByText('另有 28 条事件无订阅，未列出')).toBeTruthy()
       fireEvent.click(screen.getByRole('button', { name: '1 小时' }))
-      expect(within(side()).queryByText(/没有订阅/u)).toBeNull()
+      expect(within(side()).queryByText(/无订阅/u)).toBeNull()
     })
 
     it('says so when nothing happened', () => {
       mount()
-      expect(within(side()).getByText('这段时间什么也没发生')).toBeTruthy()
+      expect(within(side()).getByText('这段时间没有事件')).toBeTruthy()
     })
   })
 
@@ -238,7 +238,7 @@ describe('FlowPage', () => {
       expect(edge(edgeKey(pull))!.hasAttribute('data-lit')).toBe(true)
       fireEvent.keyDown(node(pull.to), { key: 'Escape' })
       expect(edge(edgeKey(pull))).toBeNull()
-      expect(within(side()).getByText('最近发生了什么')).toBeTruthy()
+      expect(within(side()).getByText('最近事件')).toBeTruthy()
     })
 
     it('works from the keyboard, and a second press lets go', () => {
@@ -254,7 +254,7 @@ describe('FlowPage', () => {
       fireEvent.click(node('wechatOut'))
       fireEvent.click(within(side()).getByRole('button', { name: '管理' }))
       expect(openSettings).toHaveBeenCalledWith('lsy-wechat')
-      fireEvent.click(within(side()).getByRole('button', { name: '← 看全部' }))
+      fireEvent.click(within(side()).getByRole('button', { name: '← 返回' }))
       expect(node('wechatOut').getAttribute('aria-pressed')).toBe('false')
       fireEvent.click(node('github'))
       expect(within(side()).queryByRole('button', { name: '管理' })).toBeNull()
@@ -347,11 +347,11 @@ describe('factOf', () => {
   it('counts a source\'s events with the time of the latest', () => {
     const fact = factOf(GRAPH.node('github')!, sources())
     expect(fact).toMatchObject({ state: 'plain', count: 12, lastAt: NOW - 60_000 })
-    expect(fact.text).toMatch(/^12 件 · /u)
+    expect(fact.text).toMatch(/^12 条 · /u)
   })
 
   it('counts a Session\'s batches and how many reached the owner', () => {
-    expect(factOf(GRAPH.node('githubSessions')!, sources()).text).toBe('5 批 · 2 条告诉你')
+    expect(factOf(GRAPH.node('githubSessions')!, sources()).text).toBe('5 批 · 发送 2 条')
   })
 
   it('says a box saw nothing, for the chosen span', () => {
@@ -359,8 +359,8 @@ describe('factOf', () => {
   })
 
   it('reads the sent count on the owner\'s WeChat and the sleep state on do-not-disturb', () => {
-    expect(factOf(GRAPH.node('wechatOut')!, sources()).text).toBe('3 条发给你')
-    expect(factOf(GRAPH.node('dnd')!, sources()).text).toBe('现在醒着')
+    expect(factOf(GRAPH.node('wechatOut')!, sources()).text).toBe('已发送 3 条')
+    expect(factOf(GRAPH.node('dnd')!, sources()).text).toBe('未开启勿扰')
   })
 
   it('says nothing about a healthy box the bus does not know', () => {
