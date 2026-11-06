@@ -141,6 +141,24 @@ describe('FlowPage', () => {
       expect(within(side()).getByRole('heading', { level: 2 }).textContent).toBe(zh['flow.node.qq'])
     })
 
+    it('gives a warning the line when nothing is down, without red, and links to its section', () => {
+      const limited: OverviewView = { ...OVERVIEW, cards: [...OVERVIEW.cards.filter(card => card.id !== 'bus'), {
+        id: 'bus', tone: 'warn', state: 'limited', facts: { subscriptions: 3, paused: 0, pending: 1, events: 9, batches: 4, limited: 2 },
+      }] }
+      const { openSettings } = mount({ ...loaded(limited), registered: ['fork-subscriptions'] })
+      const verdict = screen.getByRole('status')
+      expect(verdict.getAttribute('data-state')).toBe('warn')
+      expect(verdict.textContent).toContain(zh['card.bus.title'])
+      fireEvent.click(within(verdict).getByRole('button', { name: '去处理' }))
+      expect(openSettings).toHaveBeenCalledWith('fork-subscriptions')
+      expect(node('notifySession').getAttribute('data-state')).not.toBe('warn')
+    })
+
+    it('lets down outrank a warning', () => {
+      mount(loaded({ ...QQ_DOWN, cards: [...QQ_DOWN.cards, { id: 'style', tone: 'warn', state: 'limited', facts: {} }] }))
+      expect(screen.getByRole('status').getAttribute('data-state')).toBe('bad')
+    })
+
     it('offers no fix for a section that is not registered', () => {
       mount(loaded(QQ_DOWN))
       expect(screen.queryByRole('button', { name: '去处理' })).toBeNull()
@@ -271,6 +289,20 @@ describe('FlowCanvas', () => {
     expect(edge('a>b')!.getAttribute('data-state')).toBe('broken')
   })
 
+  it('writes the words above the columns of a graph on fixed cells, and shrinks to fit only so far', () => {
+    render(
+      <FlowCanvas
+        graph={pair} facts={facts({})} chosen={null} walk={[]} walkKey="" now={NOW} onChoose={() => {}} onClear={() => {}}
+        translate={translate} lanes={[{ column: 0, label: '从哪来' }]}
+      />,
+    )
+    expect(screen.getByText('从哪来').tagName.toLowerCase()).toBe('text')
+    const svg = document.querySelector('svg')!
+    expect(svg.style.width).toBe('100%')
+    expect(Number.parseFloat(svg.style.minWidth)).toBeLessThan(pair.layout.width)
+    expect(Number.parseFloat(svg.style.maxWidth)).toBe(pair.layout.width)
+  })
+
   it('never runs more than ten dots', () => {
     const ids = Array.from({ length: 12 }, (_, index) => `n${index}`)
     const graph = buildGraph([box('hub'), ...ids.map(box)], ids.map(id => ({ from: 'hub', to: id, kind: 'event' as const })))
@@ -301,7 +333,7 @@ describe('factOf', () => {
     expect(factOf(GRAPH.node('qq')!, sources({ cards: down })).state).toBe('bad')
     const hit = factOf(GRAPH.node('qqMain')!, sources({ cards: down }))
     expect(hit.state).toBe('hit')
-    expect(hit.text).toBe('QQ 观察器断开，没有新内容')
+    expect(hit.text).toBe('QQ 观察器断开')
   })
 
   it('counts a source\'s events with the time of the latest', () => {
@@ -351,11 +383,11 @@ describe('stopsOf', () => {
 
 describe('clip', () => {
   it('keeps a line that fits', () => {
-    expect(clip('十二个字十二个字十二个字')).toBe('十二个字十二个字十二个字')
+    expect(clip('十二个字十二个字', 8)).toBe('十二个字十二个字')
   })
 
   it('cuts a longer line with an ellipsis, counting a Latin character as half', () => {
-    expect(clip('十三个字十三个字十三个字十')).toBe('十三个字十三个字十三个字…')
-    expect(clip('abcdefghijklmnopqrstuvwxyz')).toBe('abcdefghijklmnopqrstu…')
+    expect(clip('十三个字十三个字十', 8)).toBe('十三个字十三个字…')
+    expect(clip('abcdefghijklmnopqrstuvwxyz', 8)).toBe('abcdefghijklmn…')
   })
 })

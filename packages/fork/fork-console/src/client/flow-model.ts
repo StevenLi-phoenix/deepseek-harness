@@ -57,14 +57,21 @@ export interface FlowEdge {
 }
 
 /** Box size and spacing, in canvas units. */
-export const NODE_W = 152
-export const NODE_H = 48
-const COLUMN_GAP = 40
-const ROW_GAP = 10
-const PAD_X = 16
+export const NODE_W = 136
+export const NODE_H = 44
+const COLUMN_GAP = 30
+const ROW_GAP = 8
+const PAD_X = 12
 /** Room above the first row. */
-const HEAD = 16
-const PAD_BOTTOM = 16
+const HEAD = 26
+const PAD_BOTTOM = 12
+
+/**
+ * The left edge of a column of a graph on fixed cells.
+ * @param column - the column.
+ * @returns its x on the canvas.
+ */
+export const columnX = (column: number): number => PAD_X + column * (NODE_W + COLUMN_GAP)
 
 /** A spot on the canvas. */
 export interface CanvasPoint {
@@ -227,7 +234,7 @@ function gridLayout(nodes: readonly FlowNode[]): Layout {
   for (const node of nodes) {
     const [column, row] = node.cell ?? [0, 0]
     rank[node.id] = column
-    at[node.id] = { x: PAD_X + column * (NODE_W + COLUMN_GAP), y: HEAD + row * (NODE_H + ROW_GAP) }
+    at[node.id] = { x: columnX(column), y: HEAD + row * (NODE_H + ROW_GAP) }
     ranks = Math.max(ranks, column + 1)
     rows = Math.max(rows, row + 1)
   }

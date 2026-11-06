@@ -12,25 +12,12 @@ import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-cli
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: registers the fork.console locale namespace this component's `t` reads.
 import type {} from './locales.ts'
-import type { OverviewView, ServiceCard, ServiceId } from '../views.ts'
+import type { OverviewView, ServiceCard } from '../views.ts'
 import { balanceCard, type BalanceSummary } from './balance.ts'
-import { factLines, statusText } from './cards.ts'
+import { MANAGE_SECTION, factLines, statusText } from './cards.ts'
 import { clock, type Translate } from './format.ts'
 import { POLL_INTERVAL_MS, startPolling, type ResourceState } from './resource.ts'
 import css from './Console.module.css'
-
-/** Settings section each service's Manage link goes to. */
-export const MANAGE_SECTION: Readonly<Partial<Record<ServiceId, string>>> = {
-  dsh: 'fork-sysmon',
-  bus: 'fork-subscriptions',
-  bili: 'bili',
-  qq: 'fork-qq',
-  wechat: 'fork-wechat',
-  style: 'fork-style',
-  voice: 'fork-agents',
-  cc: 'fork-agents',
-  llm: 'account',
-}
 
 /** The section's injected face (slot `inject`). */
 export interface OverviewInjected {

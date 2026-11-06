@@ -5,7 +5,7 @@
  */
 
 import { memo, useMemo, type ReactNode } from 'react'
-import { edgeKey, type FlowEdge, type FlowGraph } from './flow-model.ts'
+import { columnX, edgeKey, type FlowEdge, type FlowGraph } from './flow-model.ts'
 import { titleOf, type BoxFact } from './flow-view.ts'
 import { FlowBox } from './FlowBox.tsx'
 import type { Translate } from './format.ts'
@@ -17,6 +17,8 @@ const LIVE_MS = 15 * 60_000
 const MAX_DOTS = 10
 /** Each arrow of a walked way starts this much after the one before it. */
 const STEP_MS = 170
+/** How far the picture may shrink to fit before the page scrolls sideways instead: below this its words are too small to read. */
+const MIN_FIT = 0.8
 
 interface FlowArrowProps {
   d: string
@@ -80,6 +82,8 @@ export interface FlowCanvasProps {
   /** Called on a click on the background or Escape. */
   onClear: () => void
   translate: Translate
+  /** Words above the columns, for a graph on fixed cells. */
+  lanes?: readonly { readonly column: number; readonly label: string }[]
 }
 
 /** 1 for an unused arrow, up to 3.25 for a busy one. */
@@ -90,7 +94,9 @@ const weightOf = (count: number): number => Math.min(3.25, 1 + Math.log10(count 
  * @param props - the graph, what each box says, the choice, and the callbacks.
  * @returns the SVG.
  */
-export function FlowCanvas({ graph, facts, chosen, walk, walkKey, now, onChoose, onClear, translate }: FlowCanvasProps): ReactNode {
+export function FlowCanvas({
+  graph, facts, chosen, walk, walkKey, now, onChoose, onClear, translate, lanes = [],
+}: FlowCanvasProps): ReactNode {
   const lit = useMemo(() => chosen === null ? null : graph.relatives(chosen), [graph, chosen])
   const walked = useMemo(() => {
     const boxes = new Set(walk.flatMap(edge => [edge.from, edge.to]))
@@ -102,14 +108,14 @@ export function FlowCanvas({ graph, facts, chosen, walk, walkKey, now, onChoose,
   return (
     <svg
       className={css.flowSvg}
-      width={width}
-      height={height}
+      style={{ width: '100%', maxWidth: width, minWidth: Math.round(width * MIN_FIT) }}
       viewBox={`0 0 ${width} ${height}`}
       role="group"
       aria-label={translate('title.flow')}
       onClick={onClear}
       onKeyDown={(event) => { if (event.key === 'Escape') onClear() }}
     >
+      {lanes.map(lane => <text key={lane.column} className={css.flowLane} x={columnX(lane.column)} y={15}>{lane.label}</text>)}
       <g>
         {graph.edges.map((edge, index) => {
           const key = edgeKey(edge)

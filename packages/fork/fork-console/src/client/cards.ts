@@ -82,3 +82,16 @@ export function factLines(card: ServiceCard, t: Translate, now: number = Date.no
 function detail(card: ServiceCard): string[] {
   return typeof card.facts.detail === 'string' && card.facts.detail !== '' ? [card.facts.detail] : []
 }
+
+/** Settings section each service's Manage link goes to. */
+export const MANAGE_SECTION: Readonly<Partial<Record<ServiceId, string>>> = {
+  dsh: 'fork-sysmon',
+  bus: 'fork-subscriptions',
+  bili: 'bili',
+  qq: 'fork-qq',
+  wechat: 'fork-wechat',
+  style: 'fork-style',
+  voice: 'fork-agents',
+  cc: 'fork-agents',
+  llm: 'account',
+}

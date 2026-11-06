@@ -9,8 +9,9 @@ import { NODE_H, NODE_W, type FlowNode, type CanvasPoint } from './flow-model.ts
 import type { BoxState } from './flow-view.ts'
 import css from './Console.module.css'
 
-/** Longest line a box shows, in CJK-wide characters. */
-const LINE_MAX = 12
+/** Longest lines a box shows, in CJK-wide characters. */
+const TITLE_MAX = 8.8
+const FACT_MAX = 9.8
 
 /** Half a width for a narrow Latin character, a whole one for a wide one. */
 const widthOf = (char: string): number => /[ -ɏ]/u.test(char) ? 0.55 : 1
@@ -18,14 +19,15 @@ const widthOf = (char: string): number => /[ -ɏ]/u.test(char) ? 0.55 : 1
 /**
  * Shorten a line to what a box can show.
  * @param text - the line.
+ * @param limit - how many CJK-wide characters fit.
  * @returns the line, with an ellipsis when it was cut.
  */
-export function clip(text: string): string {
+export function clip(text: string, limit: number = FACT_MAX): string {
   let used = 0
   const kept: string[] = []
   for (const char of Array.from(text)) {
     used += widthOf(char)
-    if (used > LINE_MAX) return `${kept.join('')}…`
+    if (used > limit) return `${kept.join('')}…`
     kept.push(char)
   }
   return text
@@ -59,6 +61,7 @@ export const FlowBox = memo(function FlowBox({ node, at, state, fact, selected, 
       onChoose(node.id)
     }
   }
+  const label = [title, fact].filter(part => part !== '').join(', ')
   const hub = node.id === 'main' || node.id === 'wechatOut'
   return (
     <g
@@ -67,7 +70,7 @@ export const FlowBox = memo(function FlowBox({ node, at, state, fact, selected, 
       role="button"
       tabIndex={0}
       aria-pressed={selected}
-      aria-label={[title, fact].filter(part => part !== '').join(', ')}
+      aria-label={label}
       data-node={node.id}
       data-role={node.role}
       data-state={state}
@@ -77,14 +80,15 @@ export const FlowBox = memo(function FlowBox({ node, at, state, fact, selected, 
       onClick={(event) => { event.stopPropagation(); onChoose(node.id) }}
       onKeyDown={onKeyDown}
     >
+      <title>{label}</title>
       {state === 'bad' ? <rect className={css.flowHalo} x={-3} y={-3} width={NODE_W + 6} height={NODE_H + 6} rx={12} /> : null}
       <rect className={css.flowBox} width={NODE_W} height={NODE_H} rx={node.role === 'cond' ? NODE_H / 2 : 9} />
       {fact === ''
-        ? <text className={css.flowTitle} x={14} y={NODE_H / 2 + 4.5}>{clip(title)}</text>
+        ? <text className={css.flowTitle} x={12} y={NODE_H / 2 + 4.5}>{clip(title, TITLE_MAX)}</text>
         : (
           <>
-            <text className={css.flowTitle} x={14} y={20}>{clip(title)}</text>
-            <text className={css.flowSub} x={14} y={36}>{clip(fact)}</text>
+            <text className={css.flowTitle} x={12} y={18}>{clip(title, TITLE_MAX)}</text>
+            <text className={css.flowSub} x={12} y={33}>{clip(fact)}</text>
           </>
         )}
     </g>
