@@ -177,9 +177,9 @@ describe('the time-gap notice in a real agent loop', () => {
     await b.send(digest, start, message({ kind: 'webhook' } as never))
     await b.send(digest, start + 86_400_000, message({ kind: 'webhook' } as never))
     expect(notices(digest)).toEqual([])
-    const parent = await b.agent('parent')
+    await b.agent('parent')
     const child = (await b.ctx.agents.create({
-      sessionId: SessionId('child'), parentAgent: parent,
+      sessionId: SessionId('child'),
       meta: { origin: 'subagent', parentSession: SessionId('parent'), delegationDepth: 1 },
       agentOptions: { provider: 'mock', model: 'mock' },
     })).agent
