@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-fork-style",
   "description": "Speaking style from real people's words: short QQ group and Bilibili exchanges, filtered without a model, kept in a bounded file the owner edits, and shown to the main agent once a day as quoted data",
-  "version": "0.2.2-alpha.2",
+  "version": "0.2.2-rc.1",
   "publishConfig": {
     "access": "public"
   },

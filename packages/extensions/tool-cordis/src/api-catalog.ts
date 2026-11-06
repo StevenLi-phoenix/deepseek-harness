@@ -554,6 +554,184 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'bili',
+    summary: 'The agent\'s own Bilibili account, through bili-svc: reads, actions, the owner-message check, the DM channel of the owner relay, the journal, messages to the main agent, and the Settings route.',
+    description: 'The agent\'s own Bilibili account, through bili-svc: reads, actions, the owner-message check, the DM channel of the owner relay, the journal, messages to the main agent, and the Settings route.',
+    methods: [
+      {
+        signature: 'ownsSession(sessionId: string): boolean',
+        description: 'Whether this plugin created a Session; each one is claimed by the DM channel.',
+        parameters: [{ name: 'sessionId', description: 'Session to check.' }],
+        returns: 'true for every Session this plugin created.',
+      },
+      {
+        signature: 'async coin(bvid: string, count?: number): Promise<WriteOutcome>',
+        description: 'Give a video coins, never with a like. Bilibili takes at most 2 coins per video from one account for an original and 1 otherwise; `count` defaults to that most. bili-svc allows one coin write per video ever; the balance limits the rest.',
+        parameters: [{ name: 'bvid', description: 'BV id.' }, { name: 'count', description: '1 or 2; default the most the video takes.' }],
+        returns: 'the outcome.',
+      },
+      {
+        signature: 'async triple(bvid: string): Promise<WriteOutcome>',
+        description: '一键三连: like, coins (2 for an original, 1 otherwise), and a favorite in the default folder, in one request. Parts already done are reported; all three done answers `already` without a call. bili-svc allows one triple per video ever and counts it against its caps.',
+        parameters: [{ name: 'bvid', description: 'BV id.' }],
+        returns: 'the outcome.',
+      },
+      {
+        signature: 'async follow(mid: number): Promise<WriteOutcome>',
+        description: 'Follow an account.',
+        parameters: [{ name: 'mid', description: 'its user id.' }],
+        returns: 'the outcome.',
+      },
+      {
+        signature: 'async unfollow(mid: number): Promise<WriteOutcome>',
+        description: 'Unfollow an account; the owner\'s account stays followed.',
+        parameters: [{ name: 'mid', description: 'its user id.' }],
+        returns: 'the outcome.',
+      },
+      {
+        signature: 'async favorite(bvid: string, options: { remove?: boolean; folderId?: number } = {}): Promise<WriteOutcome>',
+        description: 'Add a video to a favorite folder (the default one unless named), or remove it.',
+        parameters: [{ name: 'bvid', description: 'BV id.' }, { name: 'options', description: '`remove`, and a folder id from `me()`.' }],
+        returns: 'the outcome.',
+      },
+      {
+        signature: 'async like(bvid: string): Promise<WriteOutcome>',
+        description: 'Like a video.',
+        parameters: [{ name: 'bvid', description: 'BV id.' }],
+        returns: 'the outcome.',
+      },
+      {
+        signature: 'async watchLater(bvid: string, remove: boolean = false): Promise<WriteOutcome>',
+        description: 'Add a video to watch later, or remove it.',
+        parameters: [{ name: 'bvid', description: 'BV id.' }, { name: 'remove', description: 'remove instead of add.' }],
+        returns: 'the outcome.',
+      },
+      {
+        signature: 'async homeFeed(): Promise<VideoCard[]>',
+        description: 'The next batch of the home feed.',
+        parameters: [],
+        returns: 'about 12 bounded video cards.',
+      },
+      {
+        signature: 'async ranking(): Promise<VideoCard[]>',
+        description: 'The site leaderboard (排行榜) across all zones.',
+        parameters: [],
+        returns: 'up to 30 bounded video cards, top first.',
+      },
+      {
+        signature: 'async danmaku(bvid: string, part?: number): Promise<{ bvid: string; lines: DanmakuLine[] }>',
+        description: 'A sample of a video\'s danmaku: the jokes and reactions of its own viewers.',
+        parameters: [{ name: 'bvid', description: 'BV id.' }, { name: 'part', description: 'part number of a multi-part video.' }],
+        returns: 'up to 40 lines across the video, each with its second.',
+      },
+      {
+        signature: 'async followingFeed(offset?: string): Promise<{ items: FeedPost[]; next?: string }>',
+        description: 'What followed accounts posted, without the owner\'s own posts.',
+        parameters: [{ name: 'offset', description: '`next` of the previous page.' }],
+        returns: 'bounded posts, newest first, and the `next` offset when there are more.',
+      },
+      {
+        signature: 'async popular(page: number = 1): Promise<VideoCard[]>',
+        description: 'Popular videos.',
+        parameters: [{ name: 'page', description: 'from 1.' }],
+        returns: 'bounded video cards.',
+      },
+      {
+        signature: 'async search(keyword: string, page: number = 1, order: SearchOrder = \'relevance\'): Promise<VideoCard[]>',
+        description: 'Search videos.',
+        parameters: [{ name: 'keyword', description: 'search words.' }, { name: 'page', description: 'from 1.' }, { name: 'order', description: '`relevance` (default) or `newest` first.' }],
+        returns: 'bounded video cards.',
+      },
+      {
+        signature: 'async hotSearches(): Promise<HotSearch[]>',
+        description: 'The hot-search list (热搜): what the whole site searches for right now.',
+        parameters: [],
+        returns: 'up to 30 keywords, each with the label the search box shows when it differs.',
+      },
+      {
+        signature: 'async video( bvid: string, options: { subtitlePage?: number; part?: number } = {}, ): Promise<{ video: VideoDetail; subtitle: SubtitleView; topComments: CommentView[] }>',
+        description: 'A video: facts, one page of subtitles (with coverage notes), and top comments. A video whose subtitles were read is reported as watched that far (bili-svc keeps it to once a day).',
+        parameters: [{ name: 'bvid', description: 'BV id.' }, { name: 'options', description: 'subtitle page and part.' }],
+        returns: 'the facts, one subtitle page or the reason there is none, and up to five top comments.',
+      },
+      {
+        signature: 'async comments(bvid: string, options: { order?: \'hot\' | \'new\'; offset?: string; root?: string; page?: number } = {}): Promise<{ comments: CommentView[]; next?: string; root?: CommentView }>',
+        description: 'Comments of a video, or one thread when `root` is given.',
+        parameters: [{ name: 'bvid', description: 'BV id.' }, { name: 'options', description: 'order, `next` offset, root comment id, and thread page.' }],
+        returns: 'bounded comments and the `next` offset, or a thread with its root.',
+      },
+      {
+        signature: 'async inbox(): Promise<InboxView>',
+        description: 'Unread counts, the newest replies and mentions, and the owner\'s latest messages; the owner\'s messages it shows count as handed over.',
+        parameters: [],
+        returns: 'unread counts, up to ten replies and mentions, and the owner\'s latest messages.',
+      },
+      {
+        signature: 'async me(): Promise<MeView>',
+        description: 'The account, its folders, its level and coins, and whether bili-svc holds actions.',
+        parameters: [],
+        returns: 'the account facts, or `signedIn: false`.',
+      },
+      {
+        signature: 'async journalWrite(text: string): Promise<{ saved: true; seq: number; leftToday: number } | { refused: string }>',
+        description: 'Keep one dated journal entry.',
+        parameters: [{ name: 'text', description: 'at most 600 characters; at most 8 entries a day.' }],
+        returns: 'the stored entry\'s number and what is left today, or why it was refused.',
+      },
+      {
+        signature: 'async journalRead(page: number = 1): Promise<{ entries: { seq: number; day: string; text: string }[]; page: number; pages: number }>',
+        description: 'Recent journal entries, newest first.',
+        parameters: [{ name: 'page', description: 'from 1.' }],
+        returns: 'up to ten entries and the page count.',
+      },
+      {
+        signature: 'async tellMainAgent(text: string): Promise<WriteOutcome>',
+        description: 'Send one message to the owner\'s main agent (`bili_tell_main_agent`): the WeChat channel queues it in the owner\'s chat Session as untrusted data, and that Session\'s answer goes to the owner on WeChat. Bounded per day by `mainAgentPerDay`; only messages that were queued count.',
+        parameters: [{ name: 'text', description: 'at most {@link MAIN_AGENT_MAX_CHARS} characters.' }],
+        returns: '`sent` with what is left today, or `refused` with the reason.',
+      },
+      {
+        signature: 'async view(result: ActionResult | null = null, ledgerRows: number = LEDGER_ROWS): Promise<BiliView>',
+        description: 'What the Settings section shows: every account bili-svc lists, its gate, brake, and ledger, QR sign-ins in progress, and the owner\'s main account. With the manage token the status comes from the management read; without it, from the agent\'s own token, read-only. bili-svc\'s answers carry no cookie or token, and the QR keys stay on the Host.',
+        parameters: [{ name: 'result', description: 'what the action that led to this view did; null for a plain read.' }, { name: 'ledgerRows', description: 'ledger rows to read.' }],
+        returns: 'the view.',
+      },
+    ],
+  },
+  {
+    key: 'biliEvidence',
+    summary: '`ctx.biliEvidence`: the Bilibili evidence verifier, provided by `@deepseek-ai/dsh-fork-tool-up` inside the `up` preset\'s isolated group, so only rows in that group see it.',
+    description: '`ctx.biliEvidence`: the Bilibili evidence verifier, provided by `@deepseek-ai/dsh-fork-tool-up` inside the `up` preset\'s isolated group, so only rows in that group see it.',
+    methods: [
+      {
+        signature: 'evidenceOf(ids: readonly string[], caller: BiliEvidenceCaller): Promise<BiliEvidenceItem[]>',
+        description: 'Look up the comments a proposal cites.',
+        parameters: [{ name: 'ids', description: 'comment rpids as decimal strings; duplicates and malformed ids are ignored.' }, { name: 'caller', description: 'the calling Session.' }],
+        returns: 'the comments found, in the order asked; an id that cannot be verified is left out, never invented.',
+        throws: ['{BiliEvidenceRefusedError} when the caller is not the persistent `bili-digest` Session, or its turn already used its calls.'],
+      },
+    ],
+  },
+  {
+    key: 'biliHot',
+    summary: '`ctx.biliHot`: the hot comments and hot-search words recent public reads showed.',
+    description: '`ctx.biliHot`: the hot comments and hot-search words recent public reads showed.',
+    methods: [
+      {
+        signature: 'comments(options?: { since?: number }): Promise<BiliHotComment[]>',
+        description: 'Hot comments (at least HOT_MIN_LIKES likes) read since a time.',
+        parameters: [{ name: 'options', description: '`since` in Unix epoch milliseconds; omitted, every kept comment.' }],
+        returns: 'comments, newest read first; expired rows are never returned.',
+      },
+      {
+        signature: 'words(options?: { since?: number }): Promise<string[]>',
+        description: 'Hot-search keywords seen since a time.',
+        parameters: [{ name: 'options', description: '`since` in Unix epoch milliseconds; omitted, every kept word.' }],
+        returns: 'the words, most recently listed first; expired rows are never returned.',
+      },
+    ],
+  },
+  {
     key: 'browserUse',
     summary: 'Owns one optional provider registration in the shared browser-use service.',
     description: 'Owns one optional provider registration in the shared browser-use service.',
@@ -1014,8 +1192,14 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       {
         signature: 'abstract startSignIn(client: AccountClientMetadata, callbackOrigin: string, loginSource: \'web\' | \'desktop\'): Promise<AccountView>',
         description: 'Join an active attempt or start browser authorization.',
-        parameters: [{ name: 'client', description: 'identity of the requesting UI; a new attempt captures it, and joining retains the original attempt\'s identity.' }, { name: 'callbackOrigin', description: 'browser-accessible loopback HTTP origin, including any SSH local port.' }, { name: 'loginSource', description: 'initiating UI, used to return from a failed exchange.' }],
+        parameters: [{ name: 'client', description: 'identity of the requesting UI; a new attempt captures it, and joining retains the original attempt\'s identity.' }, { name: 'callbackOrigin', description: 'origin of the initiating page: a loopback HTTP origin (including any SSH local port) receives the browser callback; any other HTTP(S) origin starts an attempt completed by `completeSignIn`.' }, { name: 'loginSource', description: 'initiating UI, used to return from a failed exchange.' }],
         returns: 'the initial snapshot without waiting for browser approval.',
+      },
+      {
+        signature: 'abstract completeSignIn(id: SignInAttemptId, callbackUrl: string): Promise<AccountView>',
+        description: 'Finish an attempt from the callback address the browser ended on, for pages that cannot receive the callback.',
+        parameters: [{ name: 'id', description: 'attempt the address belongs to.' }, { name: 'callbackUrl', description: 'full callback address copied from the browser; a missing `http://` is assumed.' }],
+        returns: 'state after the exchange settles; rejects without ending the attempt when the address does not match it.',
       },
       {
         signature: 'abstract cancelSignIn(id: SignInAttemptId): Promise<AccountView>',
@@ -2040,6 +2224,633 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'forkClaudeCode',
+    summary: 'Service behind `ctx.forkClaudeCode`.',
+    description: 'Service behind `ctx.forkClaudeCode`.',
+    methods: [
+      {
+        signature: 'login(): CcLogin',
+        description: 'How the service account is signed in, from file existence only.',
+        parameters: [],
+        returns: 'the login state.',
+      },
+      {
+        signature: 'async view(): Promise<CcView>',
+        description: 'Live sessions and the tmux sessions the bridge started.',
+        parameters: [],
+        returns: 'the view.',
+      },
+      {
+        signature: 'async start(name: string, task: string | undefined): Promise<CcOutcome>',
+        description: 'Start a session, optionally with a first task.',
+        parameters: [{ name: 'name', description: 'lower-case letters, digits, and hyphens, at most 31 characters.' }, { name: 'task', description: 'the first prompt, at most {@link MAX_TASK_CHARS} characters.' }],
+        returns: 'the outcome; the limit is a code of its own so a page can word it.',
+      },
+      {
+        signature: 'async stop(name: string): Promise<CcOutcome>',
+        description: 'Stop a session the bridge started.',
+        parameters: [{ name: 'name', description: 'the name it was started with.' }],
+        returns: 'the outcome.',
+      },
+    ],
+  },
+  {
+    key: 'forkCourses',
+    summary: 'The courses client and the deadline poller.',
+    description: 'The courses client and the deadline poller.',
+    methods: [
+      {
+        signature: 'readonly api: CoursesApi',
+        description: 'The courses service; the tools call it too.',
+        parameters: [],
+      },
+      {
+        signature: 'isQuiet(now: number = Date.now()): boolean',
+        description: 'Whether reminders wait right now: the daily window, or the owner asleep when `followPresence` is on.',
+        parameters: [{ name: 'now', description: 'Unix epoch milliseconds.' }],
+        returns: 'true while quiet.',
+      },
+      {
+        signature: 'poll(trigger: \'timer\' | \'manual\'): Promise<PollRecord>',
+        description: 'Read the report once, send what is due, and record the outcome. Polls run one at a time; a manual poll while one runs waits for it and then runs.',
+        parameters: [{ name: 'trigger', description: 'the timer or the Settings button.' }],
+        returns: 'the poll\'s record.',
+      },
+      {
+        signature: 'status(): CoursesStatus',
+        description: 'Everything Settings shows: the rules, the last poll, the sync health with the newest run\'s reason, the outage counter, the next reminders, and the latest messages (newest first).',
+        parameters: [],
+        returns: 'a snapshot.',
+      },
+    ],
+  },
+  {
+    key: 'forkEventBus',
+    summary: 'Durable event bus.',
+    description: 'Durable event bus. Sensors publish; subscriptions from the configuration or created at run time decide which events reach which actuator; the bus owns dedupe, loop suppression, coalescing, and rate limits so actuators never see raw sensor traffic.',
+    methods: [
+      {
+        signature: 'async publish(input: ForkEventInput): Promise<PublishOutcome>',
+        description: 'Publish one sensor observation.',
+        parameters: [{ name: 'input', description: 'event; `source` + `key` identify it for dedupe.' }],
+        returns: '`accepted` (queued for at least one subscription), `duplicate`, `suppressed`, or `unmatched`.',
+        throws: ['when a required field is empty.'],
+      },
+      {
+        signature: 'events(): ForkEventRecord[]',
+        description: 'Stored events, oldest first.',
+        parameters: [],
+        returns: 'snapshot of the events table.',
+      },
+      {
+        signature: 'batches(): BatchRecord[]',
+        description: 'Stored batches, oldest first.',
+        parameters: [],
+        returns: 'snapshot of the batches table.',
+      },
+      {
+        signature: 'pendingCount(): number',
+        description: 'Number of event/subscription pairs waiting for a batch.',
+        parameters: [],
+        returns: 'pending row count.',
+      },
+      {
+        signature: 'persistentSessions(): PersistentSessionView[]',
+        description: 'The persistent Sessions of subscriptions with `session.persistent.enabled`.',
+        parameters: [],
+        returns: 'one row per subscription that has one; empty before the storage domain opens.',
+      },
+      {
+        signature: 'persistentSubscriptionOf(sessionId: string): string | undefined',
+        description: 'The subscription whose current persistent Session this is. Tools that may run only in that Session (for example the `up` preset\'s note tool) ask this.',
+        parameters: [{ name: 'sessionId', description: 'Session to check.' }],
+        returns: 'the subscription id, or undefined when the Session is no subscription\'s current persistent Session.',
+      },
+      {
+        signature: 'ensureProject(path: string, name: string): Promise<void>',
+        description: 'ensureProject with this Host\'s Workspace registry, once per path and process.',
+        parameters: [{ name: 'path', description: 'absolute directory.' }, { name: 'name', description: 'title of a new project.' }],
+        returns: 'resolves once the directory exists and is a project; a registry failure is logged, not thrown.',
+      },
+      {
+        signature: 'async subscribe(subscription: Subscription, meta: SubscriptionMeta = {}): Promise<SubscriptionView>',
+        description: 'Add a routing rule at run time. It is stored durably and survives restarts.',
+        parameters: [{ name: 'subscription', description: 'rule; validated like a configuration row.' }, { name: 'meta', description: 'who created the subscription, e.g. the creating Session.' }],
+        returns: 'the stored subscription with its (empty) status.',
+        throws: ['{ForkSubscriptionError} `invalid_subscription` for a rule the bus cannot route, or `duplicate_id` for an id the configuration or another stored subscription already uses.'],
+      },
+      {
+        signature: 'async unsubscribe(id: string): Promise<UnsubscribeOutcome>',
+        description: 'Remove a run-time subscription, its pending events, and its flush timer. Batches already created stay in the history.',
+        parameters: [{ name: 'id', description: 'subscription id.' }],
+        returns: '`removed`, `not_found`, or `config_owned` for an id the configuration owns.',
+      },
+      {
+        signature: 'async setPaused(id: string, paused: boolean): Promise<PauseOutcome>',
+        description: 'Pause or resume a run-time subscription. A paused subscription stops matching new events (they are `unmatched` for it) and holds the events already pending; resuming flushes those after the usual coalesce window. The flag is stored, so it survives restarts.',
+        parameters: [{ name: 'id', description: 'subscription id.' }, { name: 'paused', description: 'true to pause, false to resume.' }],
+        returns: '`ok`, `not_found`, or `config_owned` for an id the configuration owns.',
+      },
+      {
+        signature: 'protectSessions(label: string, check: SessionProtector): ProtectionDisposer',
+        description: 'Keep a plugin\'s Sessions out of the auto-archive sweep (for example the QQ resident group Sessions or the WeChat chat Session). `check` runs only for Sessions that are otherwise due; return `true` (or a short reason) to keep one. A throw keeps it. Register inside an effect so a reload withdraws the claim: `ctx.inject([\'forkEventBus\'], scoped => { scoped.effect(() => scoped.forkEventBus.protectSessions(\'qq\', check), \'qq.archiveProtection()\') })`.',
+        parameters: [{ name: 'label', description: 'skip category name shown in the sweep log and Settings, for example `qq`.' }, { name: 'check', description: 'the claim.' }],
+        returns: 'the disposer; the bus drops every claim when it stops.',
+      },
+      {
+        signature: 'registerHandover(kind: string, move: SessionHandoverMover): () => void',
+        description: 'Register a mover that runs on every handOverSessions, for a plugin whose bindings name a Session (what it delivers to it, or records as created by it). Register inside an effect so a reload withdraws it: `ctx.inject([\'forkEventBus\'], scoped => { scoped.effect(() => scoped.forkEventBus.registerHandover(\'monitor\', move)) })`.',
+        parameters: [{ name: 'kind', description: 'binding kind reported with what the mover moved, for example `monitor`.' }, { name: 'move', description: 'the mover.' }],
+        returns: 'the disposer.',
+      },
+      {
+        signature: 'async handOverSessions(from: readonly string[], to: string): Promise<SessionHandoverReport>',
+        description: 'Move every binding of some Sessions to another Session, for a conversation that continues in a new Session (WeChat `/new`): the run-time subscriptions they created now name `to` as their creator, then each registered mover moves its own. A failing mover is logged and reported, and the others still run; a repeat moves nothing the first call moved.',
+        parameters: [{ name: 'from', description: 'Sessions whose bindings move; `to` itself is ignored.' }, { name: 'to', description: 'Session that takes them over.' }],
+        returns: 'what moved, by kind (kinds that moved nothing are left out), and which movers failed.',
+      },
+      {
+        signature: 'archiveStatus(): ArchiveStatus',
+        description: 'The auto-archive schedule, protectors, last sweep, and recently archived Sessions, for health and Settings.',
+        parameters: [],
+        returns: 'snapshot.',
+      },
+      {
+        signature: 'sweepArchive(options: { dryRun?: boolean } = {}): Promise<SweepReport>',
+        description: 'Run an auto-archive sweep now (Settings "sweep now"); joins a sweep already running.',
+        parameters: [{ name: 'options', description: '`dryRun: true` lists what a sweep would archive without archiving.' }],
+        returns: 'the sweep report.',
+      },
+      {
+        signature: 'stats(): BusStats',
+        description: 'Counters for the last rolling hour and the current queue, for status pages.',
+        parameters: [],
+        returns: 'snapshot; before the storage domain opens, only the configuration rows are counted.',
+      },
+      {
+        signature: 'listSubscriptions(): SubscriptionView[]',
+        description: 'Every subscription, configuration first and then run-time ones by creation time, with live status.',
+        parameters: [],
+        returns: 'snapshot; before the storage domain opens, only configuration rows with empty status.',
+      },
+    ],
+  },
+  {
+    key: 'forkGithubSensor',
+    summary: 'Polls GitHub on a fixed period with conditional requests and publishes what is new since the previous poll.',
+    description: 'Polls GitHub on a fixed period with conditional requests and publishes what is new since the previous poll. The first successful poll of a stream only records a baseline. Repositories come from the configuration and from watches created at run time; a stream several watches name is polled once.',
+    methods: [
+      {
+        signature: 'cursor(stream: string): StreamCursor | undefined',
+        description: 'Stored cursor of one stream.',
+        parameters: [{ name: 'stream', description: 'stream id, see {@link streamId}, or `notifications`.' }],
+        returns: 'cursor, or undefined before the first poll.',
+      },
+      {
+        signature: 'pollStatus(stream: string): PollStatus | undefined',
+        description: 'Outcome of the latest poll of one stream in this process.',
+        parameters: [{ name: 'stream', description: 'stream id, see {@link streamId}, or `notifications`.' }],
+        returns: 'status, or undefined before the first poll since start or after the stream was forgotten.',
+      },
+      {
+        signature: 'async watch(ref: string, spec: RepoWatch): Promise<WatchedRepo>',
+        description: 'Watch a repository at run time. The watch is stored durably; a poll starts right away so the existing items become the baseline, and only later items are published. A watch with the same ref is replaced.',
+        parameters: [{ name: 'ref', description: 'watch id, e.g. the bus subscription that routes its events.' }, { name: 'spec', description: '`owner/name`, a non-empty subset of streams, and an optional commits branch.' }],
+        returns: 'the stored watch with its stream status.',
+        throws: ['{TypeError} when the ref, repository, streams, or branch is invalid.'],
+      },
+      {
+        signature: 'async unwatch(ref: string): Promise<boolean>',
+        description: 'Stop a run-time watch. Cursors of streams nobody polls anymore are deleted, so watching the repository again records a fresh baseline.',
+        parameters: [{ name: 'ref', description: 'watch id.' }],
+        returns: 'true when the watch existed.',
+      },
+      {
+        signature: 'watchedRepos(): WatchedRepo[]',
+        description: 'Every polled repository, configuration first and then run-time watches by creation time.',
+        parameters: [],
+        returns: 'snapshot with per-stream baseline and latest poll.',
+      },
+      {
+        signature: 'async probe(repo: string, signal?: AbortSignal): Promise<RepoProbe>',
+        description: 'Check that a repository exists and the repository token can read it. Never throws.',
+        parameters: [{ name: 'repo', description: '`owner/name`.' }, { name: 'signal', description: 'optional caller cancellation.' }],
+        returns: 'canonical name, visibility, and default branch, or the HTTP status (0 without a response) and a message.',
+      },
+      {
+        signature: 'async credentialStatus(): Promise<CredentialStatus>',
+        description: 'Report which tokens resolve. Token values never leave the credential store.',
+        parameters: [],
+        returns: 'per-reference status and whether notification polling is on.',
+      },
+    ],
+  },
+  {
+    key: 'forkGuard',
+    summary: 'The validator.',
+    description: 'The validator.',
+    methods: [
+      {
+        signature: 'async check(text: string, options: GuardCheckOptions): Promise<GuardVerdict>',
+        description: 'Check a text before it is written where others can read it.',
+        parameters: [{ name: 'text', description: 'the text as it would be written.' }, { name: 'options', description: 'purpose, audience, and the Session that wrote it.' }],
+        returns: '`{ ok: true }`, or the rule that refused it and a reason that never repeats the text. Never rejects.',
+      },
+      {
+        signature: 'health(): GuardHealth',
+        description: 'Counts for the Settings overview, last 24 hours, without any text.',
+        parameters: [],
+        returns: 'checks, refusals by rule, the last layer failure, and the latest check.',
+      },
+    ],
+  },
+  {
+    key: 'forkNotifier',
+    summary: 'Notification actuator contract; a channel plugin provides it as `ctx.forkNotifier`.',
+    description: 'Notification actuator contract; a channel plugin provides it as `ctx.forkNotifier`.',
+    methods: [
+      {
+        signature: 'send(note: ForkNote): Promise<void>',
+        description: 'Deliver one message.',
+        parameters: [{ name: 'note', description: 'title, optional body, optional link, and optional origin.' }],
+        returns: 'resolves once the channel accepted the message; rejects on failure.',
+      },
+      {
+        signature: 'tellMainAgent?(message: ForkAgentMessage): Promise<string>',
+        description: 'Pass a message from another of the agent\'s Sessions to the owner\'s main agent: the channel\'s chat Session, which takes it up in a turn of its own once it is idle. That turn\'s answer reaches the owner like any other chat answer. Channels without a chat Session omit it.',
+        parameters: [{ name: 'message', description: 'the text and who sent it.' }],
+        returns: 'the chat Session the message was queued in.',
+        throws: ['when there is no chat to pass it to or the Session refused the prompt.'],
+      },
+      {
+        signature: 'ownsSession?(sessionId: string): boolean',
+        description: 'Whether the channel created this Session (e.g. its chat Session). Kept for callers outside the bus; the bus asks `ctx.ownerRelay.ownerOf()` which Sessions a relay channel delivers itself.',
+        parameters: [{ name: 'sessionId', description: 'Session to check.' }],
+        returns: 'true when the channel created this Session.',
+      },
+    ],
+  },
+  {
+    key: 'forkPresence',
+    summary: 'Presence of the owner.',
+    description: 'Presence of the owner. Holds the latest Focus signal and Settings button in storage, evaluates the answer on demand and at every moment it can change by itself, and tells listeners when the owner falls asleep or wakes.',
+    methods: [
+      {
+        signature: 'isAsleep(): boolean',
+        description: 'Whether the owner is asleep right now.',
+        parameters: [],
+        returns: 'true while a button, a fresh Focus signal, or the window says so.',
+      },
+      {
+        signature: 'isUrgent(note: Pick<ForkNote, \'urgent\' | \'kinds\'>): boolean',
+        description: 'Whether a message must be sent even while the owner sleeps: the sender marked it urgent, or one of the event kinds it reports matches an urgent glob.',
+        parameters: [{ name: 'note', description: 'the message; only `urgent` and `kinds` are read.' }],
+        returns: 'true when it must not wait.',
+      },
+      {
+        signature: 'onChange(listener: PresenceListener): () => void',
+        description: 'Listen for the owner falling asleep and waking, whatever the source.',
+        parameters: [{ name: 'listener', description: 'called with the new state.' }],
+        returns: 'a function that stops listening.',
+      },
+      {
+        signature: 'registerHolder(holder: DeferralHolder): () => void',
+        description: 'Register a channel that holds messages back.',
+        parameters: [{ name: 'holder', description: 'how to count and flush them.' }],
+        returns: 'a function that unregisters it.',
+      },
+      {
+        signature: 'async flushNow(): Promise<number>',
+        description: 'Send what the channels hold back, now.',
+        parameters: [],
+        returns: 'how many messages went out.',
+      },
+      {
+        signature: 'async ingest(event: ForkEventInput): Promise<string>',
+        description: 'Apply a Focus signal pushed by `focus-watch` (the `presence` ingest source). The Host\'s receipt time is the signal\'s time; the pusher\'s clock is ignored, and its key only tells a heartbeat (`sleep-on-hb-<bucket>`) from a change. A signal that repeats the state already held, which every heartbeat does, refreshes how long the state holds and nothing else: no change of `since`, no end to a button, no listener call, no flush. Only a signal that flips the state (or the first one) begins a new state and ends a button.',
+        parameters: [{ name: 'event', description: '`presence.sleep.on` or `presence.sleep.off`.' }],
+        returns: '`asleep` or `awake`, as the signal says.',
+        throws: ['{Error} for any other kind.'],
+      },
+      {
+        signature: 'async setManual(asleep: boolean, until?: number): Promise<void>',
+        description: 'Press "I am going to sleep" or "I am awake", optionally with an end.',
+        parameters: [{ name: 'asleep', description: 'the state to hold.' }, { name: 'until', description: 'when it lapses, in Unix epoch milliseconds; omitted holds for `manualMaxHours` or until the next Focus signal.' }],
+      },
+      {
+        signature: 'async quietUntil(clock: string): Promise<number>',
+        description: 'Quiet until a clock time: the next time the local clock reads `clock`.',
+        parameters: [{ name: 'clock', description: '`HH:MM`, 24-hour.' }],
+        returns: 'the end, in Unix epoch milliseconds.',
+      },
+      {
+        signature: 'async clearManual(): Promise<void>',
+        description: 'Drop the button, so the Focus signal or the window decides again.',
+        parameters: [],
+      },
+      {
+        signature: 'async setWindow(window: QuietWindow): Promise<void>',
+        description: 'Replace the daily window; it survives restarts and replaces the configured one.',
+        parameters: [{ name: 'window', description: 'the new window.' }],
+      },
+      {
+        signature: 'view(deferred: number = this.deferredCount()): PresenceView',
+        description: 'The state with everything Settings shows.',
+        parameters: [{ name: 'deferred', description: 'messages held back, if the caller counts them.' }],
+        returns: 'the view.',
+      },
+      {
+        signature: 'deferredCount(): number',
+        description: 'Count what the channels hold back.',
+        parameters: [],
+        returns: 'messages the registered channels hold back.',
+      },
+    ],
+  },
+  {
+    key: 'forkQq',
+    summary: 'The observer.',
+    description: 'The observer. Provides `ctx.forkQq`, whose read methods the agent tools use. The recorded data lives in the qq-recorder service: every read of it is a request that fails with RecorderUnavailable while the recorder is down.',
+    methods: [
+      {
+        signature: 'now: () => number = Date.now',
+        description: 'Replaced by tests.',
+        parameters: [],
+      },
+      {
+        signature: 'async groupChoices(): Promise<Array<{ groupId: string; name: string; memberCount: number | null; recorded: boolean; seen: number }>>',
+        description: 'Every group the account is in, as the Settings page\'s group list offers them: the recorded ones first, then the others by how many messages they showed since the recorder started.',
+        parameters: [],
+        returns: 'one entry per group, with the count of dropped messages (a number, nothing of them is kept).',
+        throws: ['{@link RecorderUnavailable} while the recorder is down.'],
+      },
+      {
+        signature: 'async groupOverview(): Promise<GroupOverview[]>',
+        description: 'Every group the account is in, with what is recorded of it.',
+        parameters: [],
+        returns: 'recorded groups first, then the others.',
+        throws: ['{@link RecorderUnavailable} while the recorder is down.'],
+      },
+      {
+        signature: 'groupName(groupId: string): string',
+        description: 'Display name of a group, from what the recorder last reported.',
+        parameters: [{ name: 'groupId', description: 'group number.' }],
+        returns: 'the name, or the number when none is known yet.',
+      },
+      {
+        signature: 'async image(ref: string): Promise<{ bytes: Uint8Array; mediaType: \'image/png\' | \'image/jpeg\' | \'image/gif\' | \'image/webp\'; groupId: string }>',
+        description: 'A saved picture of a recorded group, for `qq_image` and the digest: the recorder serves the file it downloaded when the message arrived. Nothing is fetched from QQ.',
+        parameters: [{ name: 'ref', description: 'the `m…` reference in a message\'s `[图片#ref]` tag.' }],
+        returns: 'the bytes and their type.',
+        throws: ['{@link RecorderUnavailable} while the recorder is down; {@link ImageNotSaved} when it does not hold the picture (images off, never downloaded, aged out, recalled), and when the recorder is too old to serve pictures.'],
+      },
+      {
+        signature: 'digestWrite(sessionId: string | undefined, groupId: string, text: string): ToolOutcome',
+        description: '`qq_digest_write` for the tools of the digest preset: stage the calling Session\'s digest.',
+        parameters: [{ name: 'sessionId', description: 'the calling Session.' }, { name: 'groupId', description: 'the group the model names; it must be the group the Session is digesting.' }, { name: 'text', description: 'the digest.' }],
+        returns: 'what to tell the model.',
+      },
+      {
+        signature: 'async groupNote(sessionId: string | undefined, groupId: string, op: string, text: string): Promise<ToolOutcome>',
+        description: '`qq_group_note` for the tools of the digest preset: add or remove a note of the group the calling Session is digesting.',
+        parameters: [{ name: 'sessionId', description: 'the calling Session.' }, { name: 'groupId', description: 'the group the model names; it must be the group the Session is digesting.' }, { name: 'op', description: '`add` or `remove`.' }, { name: 'text', description: 'the note, or for `remove` its `#id` or exact text.' }],
+        returns: 'what to tell the model.',
+      },
+      {
+        signature: 'groupOfSession(sessionId: string | undefined): string | undefined',
+        description: 'The group a digest Session is digesting, for a tool that takes the group from the Session.',
+        parameters: [{ name: 'sessionId', description: 'the calling Session.' }],
+        returns: 'the group number while the Session\'s turn runs; otherwise undefined.',
+      },
+      {
+        signature: 'recentTextOf(sessionId: string | undefined): readonly string[] | undefined',
+        description: 'The text of the messages the calling digest Session was shown this turn, for a tool that checks a quotation word for word.',
+        parameters: [{ name: 'sessionId', description: 'the calling Session.' }],
+        returns: 'the stored one-line texts while the turn runs; otherwise undefined.',
+      },
+      {
+        signature: 'groupNotes(groupId: string): Array<{ id: number; text: string; createdAt: number }>',
+        description: 'The notes of a recorded group: what the QQ channel remembers of its habits.',
+        parameters: [{ name: 'groupId', description: 'group number; an unrecorded group yields nothing.' }],
+        returns: 'the notes, oldest first.',
+      },
+      {
+        signature: 'async evidenceOf(groupId: string, messageIds: readonly string[]): Promise<Array<{ messageId: string; senderKey: string; at: number; text: string }>>',
+        description: 'Evidence for a claim about a group\'s chat, without exposing who said what: for each message id the group still holds, a stable sender key (a salted hash of the member within this group, never the QQ number), its time, and its stored one-line text, so a caller can check a quotation word for word.',
+        parameters: [{ name: 'groupId', description: 'group number; an unrecorded group yields nothing.' }, { name: 'messageIds', description: 'OneBot message ids, at most 200 are looked at.' }],
+        returns: 'one entry per message found: recorded, not recalled, and still inside the retention window.',
+        throws: ['{@link RecorderUnavailable} while the recorder is down.'],
+      },
+      {
+        signature: 'isRecorded(groupId: string): boolean',
+        description: 'Whether a group is on the `groups` list.',
+        parameters: [{ name: 'groupId', description: 'group number.' }],
+        returns: 'true for a recorded group.',
+      },
+      {
+        signature: 'async recentMessages(groupId: string, options: { hours: number; limit: number; userId?: string }): Promise<MessageRow[]>',
+        description: 'Recent messages of a recorded group, oldest first.',
+        parameters: [{ name: 'groupId', description: 'group number; an unrecorded group yields nothing.' }, { name: 'options', description: 'window in hours, at most `limit` messages, optionally one member\'s QQ number.' }],
+        returns: 'the messages.',
+        throws: ['{@link RecorderUnavailable} while the recorder is down.'],
+      },
+      {
+        signature: 'async searchMessages(query: string, options: { groupId?: string; limit: number }): Promise<MessageRow[]>',
+        description: 'Search the recorded groups\' messages, newest first.',
+        parameters: [{ name: 'query', description: 'words to find.' }, { name: 'options', description: 'one group, or all recorded groups, and at most `limit` matches.' }],
+        returns: 'the matching messages.',
+        throws: ['{@link RecorderUnavailable} while the recorder is down.'],
+      },
+      {
+        signature: 'digests(options: { groupId?: string; days: number; limit: number }): DigestRow[]',
+        description: 'Newest digests of the recorded groups.',
+        parameters: [{ name: 'options', description: 'one group, or all recorded groups, a window in days, and at most `limit` digests.' }],
+        returns: 'the digests, newest first.',
+      },
+      {
+        signature: 'async forgetDigests(options: { groupId?: string; beforeMs?: number }): Promise<number>',
+        description: 'Delete stored digests: the observer\'s learned knowledge. Raw messages age out by themselves.',
+        parameters: [{ name: 'options', description: 'one group and/or those made before `beforeMs`; at least one is required.' }],
+        returns: 'how many digests were deleted.',
+      },
+      {
+        signature: 'sendGroupMessage(groupId: string, _text: string): Promise<void>',
+        description: 'Sending is not offered: the recorder has no send endpoint, and the channel is read-only.',
+        parameters: [{ name: 'groupId', description: 'group number.' }, { name: '_text', description: 'what to send.' }],
+        throws: ['{@link SendRefused} always.'],
+      },
+      {
+        signature: 'features(): Record<string, boolean>',
+        description: 'Which optional capabilities of the recorder in front of this DSH are available: a recorder of an older minor version lacks some, and only those features degrade.',
+        parameters: [],
+        returns: 'each feature of the protocol and whether the recorder offers it.',
+      },
+      {
+        signature: 'connectionStatus(): QqConnection',
+        description: 'The observer\'s connection to the protocol end, for the Settings page\'s QQ section: whether the socket is up, since when, how many attempts have failed in a row, and why the last one did; or that the recorder itself is not there.',
+        parameters: [],
+        returns: 'the connection state; `selfId` is the logged-in account only while connected.',
+      },
+      {
+        signature: 'recordedGroups(): number',
+        description: 'How many groups the observer records, for the Settings page\'s QQ section.',
+        parameters: [],
+        returns: 'the size of the configured `groups` list.',
+      },
+      {
+        signature: 'async loginStatus(options: { fresh?: boolean } = {}): Promise<QqLoginReading>',
+        description: 'NapCat\'s login as the recorder\'s login door reports it, for the Settings page\'s QQ section.',
+        parameters: [{ name: 'options', description: '`fresh` skips the recorder\'s shared answer.' }],
+        returns: 'the reading; `door` says why there is no `state` when the door could not answer, or `recorder-down`.',
+      },
+      {
+        signature: 'async refreshLogin(): Promise<{ login: QqLoginReading; refreshed: boolean; reason: RefreshRefusal | null }>',
+        description: 'Ask NapCat for a fresh login QR code through the recorder (it refuses while QQ is logged in and for ten minutes after the connection came up).',
+        parameters: [],
+        returns: 'the reading after the request, whether the door passed the request on, and why not when it did not.',
+      },
+    ],
+  },
+  {
+    key: 'forkQqBot',
+    summary: 'QQ channel.',
+    description: 'QQ channel. Connects the official bot to the QQ Open Platform, answers only the openids in `allow`, gives each private chat and each group its own chat Session, and delivers each turn\'s final answer that `ctx.ownerRelay` hands its `qqbot` channel. QQ lets a bot reply to a message within a window (about an hour in private chats, minutes in groups) and at most five times; later answers go out as proactive messages, and an answer QQ refuses falls back to `ctx.forkNotifier` through the relay.',
+    methods: [
+      {
+        signature: 'ownsSession(sessionId: string): boolean',
+        description: 'Whether this channel created a Session: true for every chat Session it remembers, all of which it claims with `ctx.ownerRelay`.',
+        parameters: [{ name: 'sessionId', description: 'Session to check.' }],
+        returns: 'true for the current and earlier chat Sessions of every peer.',
+      },
+    ],
+  },
+  {
+    key: 'forkStyle',
+    summary: 'DSH\'s speaking style: what the root row provides as `ctx.forkStyle`.',
+    description: 'DSH\'s speaking style: what the root row provides as `ctx.forkStyle`.',
+    methods: [
+      {
+        signature: 'readonly timeZone: string',
+        description: 'The rotation zone of the block.',
+        parameters: [],
+      },
+      {
+        signature: 'async feedWeb(text: string): Promise<void>',
+        description: 'Remember the text of a web search or fetch a Session just ran, for the miner (when mining is on).',
+        parameters: [{ name: 'text', description: 'the tool result\'s text; the query and URL never reach this.' }],
+      },
+      {
+        signature: 'dispose(): void',
+        description: 'Stop a run in progress (its Bilibili reads end).',
+        parameters: [],
+      },
+      {
+        signature: 'health(): StyleHealth',
+        description: 'Counts for the Settings overview, without any text; refreshed whenever the panel is read, after each run, and on the schedule check.',
+        parameters: [],
+        returns: 'active and pending tone samples, the review mode, the last run\'s start, and the stock-line trend.',
+      },
+      {
+        signature: 'async block(day: string, invite: boolean): Promise<StyleBlock | undefined>',
+        description: 'The block for a day.',
+        parameters: [{ name: 'day', description: '`YYYY-MM-DD`, the rotation seed.' }, { name: 'invite', description: 'invite the agent to write a card when there is none (its preset mounts `persona_update`).' }],
+        returns: 'the block, its counts, and the card version it shows, or undefined when it is off or empty.',
+      },
+      {
+        signature: 'async nextRunAt(): Promise<number | undefined>',
+        description: 'When the next scheduled run is due.',
+        parameters: [],
+        returns: 'epoch milliseconds; undefined while collection is off.',
+      },
+      {
+        signature: 'async runIfDue(): Promise<RunReport | undefined>',
+        description: 'Run a collection and the meme miner when one is due and none is running.',
+        parameters: [],
+        returns: 'the tone collection\'s report, or undefined when nothing ran.',
+      },
+      {
+        signature: 'async mine(): Promise<MineReport | undefined>',
+        description: 'One meme-mining run over the public text of the last hours: QQ groups, Bilibili hot comments and hot-search words (`ctx.biliHot`, absent until the bili package provides it), and the pages the main agent searched or fetched. Nothing runs while mining is off or another run is going.',
+        parameters: [],
+        returns: 'the run\'s counts, or undefined when nothing ran.',
+      },
+      {
+        signature: 'async panel(): Promise<StylePanel>',
+        description: 'Everything the Settings section shows.',
+        parameters: [],
+        returns: 'the samples, notes, HotWatch\'s index, card versions, the last runs, the next run, and the trend.',
+      },
+      {
+        signature: 'async edit(input: unknown): Promise<StyleEditAnswer>',
+        description: 'Apply one edit the owner made on the Settings page. An owner\'s card edit, rollback, or deletion becomes the new baseline and restarts the agent\'s revision wait.',
+        parameters: [{ name: 'input', description: '`{ op: \'remove\' | \'keep\', id }`, `{ op: \'block\', term }`, `{ op: \'card\', card }`, `{ op: \'rollback\', version }`, or `{ op: \'deleteVersion\', version }`, as the page sent it; validated here.' }],
+        returns: 'the panel after the edit, or the refusal (`not_found`, `invalid_input`, `current_version`) with the unchanged panel.',
+      },
+      {
+        signature: 'async collect(): Promise<StylePanel>',
+        description: 'Start a tone collection and then a meme-mining run without waiting for them; the panel says `running` until they end. Nothing runs while off.',
+        parameters: [],
+        returns: 'the panel right after the start.',
+      },
+      {
+        signature: 'async note(input: StyleNoteInput): Promise<WriteAnswer>',
+        description: 'A `style_note` call: the platform comes from the calling Session\'s preset, the example must appear verbatim in what that Session just read (QQ messages shown to a digest Session, or the results of the public-text tools in its log), every field passes the note filter, and the guard allows the whole note.',
+        parameters: [{ name: 'input', description: 'the calling Session (and its log) and preset, the kind, the term, the meaning, the example, and related memes.' }],
+        returns: '`recorded`, `refreshed`, or `rejected` with a reason code.',
+      },
+      {
+        signature: 'async lookup(term: string): Promise<LookupAnswer>',
+        description: 'A `meme_lookup` call: the groups\' own memes first, then HotWatch.',
+        parameters: [{ name: 'term', description: 'the meme as the index lists it (or one of its `related` terms).' }],
+        returns: 'the meaning and where it came from, or `found: false`.',
+      },
+      {
+        signature: 'async updateCard(input: { readonly card: string; readonly reason: string; readonly sessionId?: string }): Promise<WriteAnswer>',
+        description: 'A `persona_update` call: at most `persona.maxChars` characters, the note filter, the guard, and at least `persona.minIntervalHours` since the last version (the agent\'s or the owner\'s; an owner edit on the Settings page is never limited). The owner is told which version it became and how much changed, never the text, through `ctx.forkNotifier`, whose channel holds the notice while the owner sleeps.',
+        parameters: [{ name: 'input', description: 'the whole card, a one-line reason, and the writing Session.' }],
+        returns: '`recorded`, or `rejected` with a reason code.',
+      },
+    ],
+  },
+  {
+    key: 'forkVoice',
+    summary: 'Service behind `ctx.forkVoice`.',
+    description: 'Service behind `ctx.forkVoice`.',
+    methods: [
+      {
+        signature: 'now: () => Date = () => new Date()',
+        description: 'Replaced by tests.',
+        parameters: [],
+      },
+      {
+        signature: 'describe(): VoiceSummary',
+        description: 'The switches and the endpoint of each service, for status pages. Keys and credential references are not included.',
+        parameters: [],
+        returns: 'snapshot of the configuration.',
+      },
+      {
+        signature: 'canTranscribe(path: string): boolean',
+        description: 'Whether `transcribe` would take this file: transcription is on and the extension is a format the asr-service reads.',
+        parameters: [{ name: 'path', description: 'file name or path.' }],
+        returns: 'true when `transcribe` would accept the file.',
+      },
+      {
+        signature: 'speak(text: string, options: { signal?: AbortSignal } = {}): Promise<SpeakResult>',
+        description: 'Turn a text into an audio file under the data directory. The provider\'s answer is written first (`<name>.wav`, plus `<name>.job.json` when the provider has job metadata); the delivered file is that WAV, or its MP3 conversion.',
+        parameters: [{ name: 'text', description: 'what to say.' }, { name: 'options', description: '`signal` cancels the call.' }],
+        returns: 'the file and who made it.',
+        throws: ['VoiceError when speech is off, the text is unusable, or every provider failed.'],
+      },
+      {
+        signature: 'async transcribe(path: string, options: { signal?: AbortSignal } = {}): Promise<TranscribeResult>',
+        description: 'Transcribe an audio file. The service\'s raw answer is written to `<dataDir>/asr/` before it is parsed.',
+        parameters: [{ name: 'path', description: 'absolute path of an audio file the asr-service reads (m4a, mp3, wav, flac, ogg, wma, aac, webm).' }, { name: 'options', description: '`signal` cancels the call.' }],
+        returns: 'the text and where the raw answer lives.',
+        throws: ['VoiceError when transcription is off, the file is unusable, or the service failed.'],
+      },
+    ],
+  },
+  {
     key: 'mcpManager',
     summary: 'The manager service.',
     description: 'The manager service. Reconciliation and `restart` serialize instance replacement. Probes run independently and are cancelled before replacement or disposal waits for their cleanup.',
@@ -2169,6 +2980,37 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Create an independent byte-bounded Session-log channel. Authorization and redaction precede reporting; the consumer owns shutdown and its outer deadline.',
         parameters: [{ name: 'options', description: 'transport, scope, resource, queue, and diagnostic settings selected by the consumer.' }],
         returns: 'the caller-owned channel, preserving complete accepted events within the request byte ceiling.',
+      },
+    ],
+  },
+  {
+    key: 'ownerRelay',
+    summary: 'The relay.',
+    description: 'The relay. Claims live in memory: each channel claims its stored Sessions again when it registers, and unregistering releases them. Every decision is logged at info level with the Session id and the reason, never the text.',
+    methods: [
+      {
+        signature: 'registerChannel(channel: RelayChannel): () => void',
+        description: 'Add a channel.',
+        parameters: [{ name: 'channel', description: 'name, delivery, hooks, and fallback label.' }],
+        returns: 'a disposer that removes the channel and releases every Session it claimed.',
+        throws: ['when a channel of the same name is registered.'],
+      },
+      {
+        signature: 'claim(sessionId: string, channelName: string): void',
+        description: 'Relay a Session\'s turns through one channel from now on.',
+        parameters: [{ name: 'sessionId', description: 'Session to claim; a claim by another channel moves to this one.' }, { name: 'channelName', description: 'the claiming channel\'s name.' }],
+      },
+      {
+        signature: 'release(sessionId: string): boolean',
+        description: 'Stop relaying a Session.',
+        parameters: [{ name: 'sessionId', description: 'Session to release.' }],
+        returns: 'whether it was claimed.',
+      },
+      {
+        signature: 'ownerOf(sessionId: string): string | undefined',
+        description: 'The channel that relays a Session\'s turns.',
+        parameters: [{ name: 'sessionId', description: 'Session to check.' }],
+        returns: 'the channel name, or undefined when no channel claimed the Session.',
       },
     ],
   },
@@ -2673,6 +3515,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Update or delete one task and record the acting Agent\'s Session as involved; the Remote form omits that Session.\n\nAn update applies every patch field in one write and recomputes the next occurrence when the rule changes or the task resumes. A supplied `expectedUpdatedAt` that differs from the stored value returns `schedule_conflict`.',
         parameters: [{ name: 'request', description: 'Task identity and one update or delete operation.' }, { name: 'actorSessionId', description: 'Session of the acting Agent, or undefined for a human caller.' }, { name: 'signal', description: 'Cancellation checked before the durable write begins, including after FIFO waits.' }],
         returns: 'The updated task, the deletion outcome, or a non-mutating miss or conflict.',
+      },
+      {
+        signature: 'async handOverSessions(from: readonly SessionId[], to: SessionId, signal?: AbortSignal): Promise<ScheduleCatalogEntry[]>',
+        description: 'Move every task of some Sessions to another Session, for a conversation that continues in a new Session.\n\nEach active or paused task whose `session` target names a `from` Session delivers to `to` afterwards, and `to` replaces the `from` Sessions among the involved Sessions of every active or paused task. Ended tasks keep the Sessions they ran in. A moved task reads as updated: its revision advances, an in-flight delivery reservation is dropped like any retarget, and the live involved Sessions receive an `updated` notice. Tasks that involve no `from` Session are not written, so a repeated call writes nothing and returns an empty list.',
+        parameters: [{ name: 'from', description: 'Sessions whose tasks move; `to` itself is ignored.' }, { name: 'to', description: 'Destination Session; it must exist, must not be archived, and must not belong to a delegated child.' }, { name: 'signal', description: 'Cancellation checked before the durable writes begin, including after FIFO waits.' }],
+        returns: 'The moved tasks in catalog order.',
       },
     ],
   },
@@ -5456,20 +6304,12 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface AccountDetails {\n    readonly profile: {\n        readonly status: \'ready\';\n        readonly value: AccountProfile;\n    } | {\n        readonly status: \'failed\';\n    };\n    readonly balance: {\n        readonly status: \'ready\';\n        readonly value: readonly AccountWallet[];\n        readonly bonusWallets: readonly AccountWallet[];\n    } | {\n        readonly status: \'failed\';\n    };\n}',
   },
   {
-    name: 'AccountLinks',
-    declaration: 'export interface AccountLinks {\n    readonly usageUrl: string;\n    readonly topUpUrl: string;\n}',
-  },
-  {
     name: 'AccountProfile',
     declaration: 'export interface AccountProfile {\n    readonly id: AccountUserId | null;\n    readonly name: string | null;\n    readonly contact: string | null;\n    readonly avatarUrl?: string | null;\n}',
   },
   {
     name: 'AccountUserId',
     declaration: 'export type AccountUserId = Branded<\'AccountUserId\'>;',
-  },
-  {
-    name: 'AccountView',
-    declaration: 'export interface AccountView {\n    readonly status: \'signed-out\' | \'credential-stored\';\n    readonly links: AccountLinks;\n    readonly attempt: SignInAttemptView | null;\n}',
   },
   {
     name: 'AccountWallet',
@@ -5624,8 +6464,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ApprovalRequestEvent {\n    readonly agent: Agent;\n    readonly toolName: string;\n    readonly callId?: ToolCallId;\n    readonly reason?: string;\n    readonly displayReason?: {\n        readonly en: string;\n        readonly [locale: string]: string;\n    };\n    readonly signal?: AbortSignal;\n}',
   },
   {
+    name: 'ArchivedRecord',
+    declaration: 'export type ArchivedRecord = zod.infer<typeof archivedRecordSchema>;',
+  },
+  {
     name: 'ArchiveSessionOptions',
     declaration: 'export interface ArchiveSessionOptions {\n    readonly stopActivity?: boolean;\n}',
+  },
+  {
+    name: 'ArchiveStatus',
+    declaration: 'export interface ArchiveStatus {\n    enabled: boolean;\n    dryRun: boolean;\n    inactiveDays: number;\n    maxPerSweep: number;\n    sweepHours: number;\n    nextSweepAt?: number;\n    protectors: string[];\n    lastSweep?: SweepReport;\n    recent: ArchivedRecord[];\n}',
   },
   {
     name: 'AskOptions',
@@ -5776,12 +6624,40 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface BashEnvVariableInfo extends BashEnvVariable {\n    contributor: string;\n    key: DshEnvironmentKey;\n}',
   },
   {
+    name: 'BatchRecord',
+    declaration: 'export type BatchRecord = z.infer<typeof batchRecordSchema>;',
+  },
+  {
+    name: 'BatchSummary',
+    declaration: 'export interface BatchSummary {\n    id: string;\n    createdAt: number;\n    eventCount: number;\n    status: \'dispatched\' | \'delivered\' | \'completed\' | \'failed\';\n    error?: string;\n    sessionId?: string;\n    outcome?: string;\n    silent?: boolean;\n    delivery?: SessionDelivery;\n}',
+  },
+  {
+    name: 'BiliEvidenceCaller',
+    declaration: 'export interface BiliEvidenceCaller {\n    readonly sessionId: string;\n}',
+  },
+  {
+    name: 'BiliEvidenceItem',
+    declaration: 'export interface BiliEvidenceItem {\n    readonly id: string;\n    readonly senderKey: string;\n    readonly at: number;\n    readonly text: string;\n}',
+  },
+  {
+    name: 'BiliHotComment',
+    declaration: 'export interface BiliHotComment {\n    text: string;\n    likes: number;\n    bvid: string;\n    at: number;\n}',
+  },
+  {
+    name: 'BiliView',
+    declaration: 'export interface BiliView {\n    readonly account: AccountView;\n    readonly gate: GateView | null;\n    readonly accounts: readonly ManagedAccount[];\n    readonly ledger: LedgerView | null;\n    readonly logins: readonly LoginView[];\n    readonly speaker: {\n        readonly id: string;\n        readonly display: string;\n    } | null;\n    readonly manage: boolean;\n    readonly manageEnv: string;\n    readonly manageError: string | null;\n    readonly result: ActionResult | null;\n    readonly ownerMid: number;\n    readonly ownerUpdatedAt: number | null;\n    readonly timeZone: string;\n}',
+  },
+  {
     name: 'BindingOrigin',
     declaration: 'export type BindingOrigin = \'created\' | \'referenced\' | \'discovered\' | \'tracked\';',
   },
   {
     name: 'BoxProps',
     declaration: 'export interface BoxProps {\n    readonly flexDirection?: \'row\' | \'column\' | undefined;\n    readonly paddingX?: number | undefined;\n    readonly paddingY?: number | undefined;\n    readonly padding?: number | undefined;\n    readonly gap?: number | undefined;\n    readonly border?: boolean | string | undefined;\n    readonly borderColor?: string | undefined;\n    readonly children?: UiNode | undefined;\n}',
+  },
+  {
+    name: 'BrakeView',
+    declaration: 'export interface BrakeView {\n    readonly reason: string;\n    readonly detail: string;\n    readonly ts: number | null;\n}',
   },
   {
     name: 'Branded',
@@ -5806,6 +6682,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'BundleRowInfo',
     declaration: 'export interface BundleRowInfo {\n    rowId: string;\n    moduleName: string;\n    meta?: PluginLocalizedMeta;\n    entryId?: PluginEntryId;\n}',
+  },
+  {
+    name: 'BusStats',
+    declaration: 'export interface BusStats {\n    subscriptions: number;\n    paused: number;\n    pending: number;\n    eventsLastHour: number;\n    batchesLastHour: number;\n    rateLimitHitsLastHour: number;\n}',
   },
   {
     name: 'ButtonProps',
@@ -5918,6 +6798,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'CommandSubmitAttachment',
     declaration: 'export type CommandSubmitAttachment = ({\n    readonly type: \'image\';\n} & EncodedImageAttachment) | {\n    readonly type: \'file\';\n    readonly receiptId: string;\n};',
+  },
+  {
+    name: 'CommentView',
+    declaration: 'export interface CommentView {\n    rpid: string;\n    author: string;\n    authorMid?: number;\n    text: string;\n    likes?: number;\n    replies?: number;\n    at?: string;\n    preview?: CommentView[];\n}',
   },
   {
     name: 'CompactionAgentContext',
@@ -6112,6 +6996,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface CotTranslationSnapshot {\n    maxTextChars: number;\n    preferences: CotTranslationPreferences;\n    availableProviders: readonly TranslationProvider[];\n}',
   },
   {
+    name: 'CoursesApi',
+    declaration: 'export class CoursesApi {\n    constructor(private readonly options: CoursesApiOptions);\n    async call(operation: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<unknown>;\n}',
+  },
+  {
+    name: 'CoursesApiOptions',
+    declaration: 'export interface CoursesApiOptions {\n    readonly baseUrl: string;\n    readonly agent: string;\n    readonly timeoutMs: number;\n    readonly token: () => Promise<string | undefined>;\n    readonly fetch?: typeof fetch;\n}',
+  },
+  {
+    name: 'CoursesStatus',
+    declaration: 'export interface CoursesStatus {\n    readonly enabled: boolean;\n    readonly timeZone: string;\n    readonly rules: ReminderRules & {\n        readonly urgentWithinHours: number;\n    };\n    readonly quietHours: Config[\'quietHours\'];\n    readonly quietNow: boolean;\n    readonly lastPoll: PollRecord | null;\n    readonly nextPollAt: number | null;\n    readonly polling: boolean;\n    readonly sync: (SyncHealth & {\n        readonly reason: string | null;\n        readonly alerting: boolean;\n    }) | null;\n    readonly outage: OutageRecord;\n    readonly upcoming: readonly UpcomingReminder[];\n    readonly notes: readonly NoteRecord[];\n}',
+  },
+  {
     name: 'CreateAgentOptions',
     declaration: 'export interface CreateAgentOptions {\n    readonly sessionId: SessionId;\n    readonly meta?: {\n        readonly cwd?: string;\n        readonly parentSession?: SessionId;\n        readonly isSeeded?: boolean;\n        readonly origin?: \'subagent\';\n        readonly delegationDepth?: number;\n        readonly agentPreset?: string;\n    };\n    readonly inheritedEventCount?: SessionLogOffset;\n    readonly seed?: readonly SessionEvent[];\n    readonly agentOptions?: AgentOptions;\n    readonly signal?: AbortSignal;\n    readonly setup?: AgentSetup;\n}',
   },
@@ -6176,6 +7072,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type CredentialRef = Branded<\'CredentialRef\'>;',
   },
   {
+    name: 'CredentialStatus',
+    declaration: 'export interface CredentialStatus {\n    token: TokenStatus;\n    notificationsToken: TokenStatus;\n    notifications: boolean;\n}',
+  },
+  {
     name: 'CronInput',
     declaration: 'export interface CronInput {\n    readonly expression: string;\n    readonly time_zone: string;\n}',
   },
@@ -6212,8 +7112,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface DailyInput {\n    readonly time: string;\n    readonly time_zone: string;\n}',
   },
   {
+    name: 'DailyRewards',
+    declaration: 'export interface DailyRewards {\n    login: boolean;\n    watch: boolean;\n    share: boolean;\n    coinExp: number;\n}',
+  },
+  {
     name: 'DailyScheduleRecord',
     declaration: 'export interface DailyScheduleRecord {\n    readonly id: ScheduleId;\n    readonly kind: \'daily\';\n    readonly title: string;\n    readonly prompt: string;\n    readonly time: string;\n    readonly timeZone: string;\n    readonly scheduledAt: string;\n}',
+  },
+  {
+    name: 'DanmakuLine',
+    declaration: 'export interface DanmakuLine {\n    at: number;\n    text: string;\n}',
   },
   {
     name: 'DeepSeekLlmApiExtensionMap',
@@ -6232,6 +7140,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type DeepSeekLlmApiJson = null | boolean | number | string | DeepSeekLlmApiJson[] | {\n    [key: string]: DeepSeekLlmApiJson;\n};',
   },
   {
+    name: 'DeferralHolder',
+    declaration: 'export interface DeferralHolder {\n    readonly name: string;\n    count(): number;\n    flush(): Promise<number>;\n}',
+  },
+  {
     name: 'DeliveryRetentionBounds',
     declaration: 'export interface DeliveryRetentionBounds {\n    readonly days: number;\n    readonly records: number;\n}',
   },
@@ -6246,6 +7158,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'DiffResultView',
     declaration: 'export interface DiffResultView {\n    card: \'diff\';\n    title?: string;\n    diffs: FileDiff[];\n}',
+  },
+  {
+    name: 'DigestRecord',
+    declaration: 'export type DigestRecord = z.infer<typeof digestSchema>;',
+  },
+  {
+    name: 'DigestRow',
+    declaration: 'export type DigestRow = DigestRecord;',
   },
   {
     name: 'DirectoryEntry',
@@ -6380,6 +7300,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type FeedbackCategory = \'task-result\' | \'instruction-following\' | \'product-interaction\' | \'service-stability\' | \'resource-cost\' | \'security-privacy-permission\' | \'other\';',
   },
   {
+    name: 'FeedPost',
+    declaration: 'export interface FeedPost {\n    kind: \'video\' | \'post\' | \'forward\' | \'other\';\n    id: string;\n    author: string;\n    authorMid?: number;\n    at?: string;\n    text?: string;\n    video?: VideoCard;\n    quoted?: string;\n}',
+  },
+  {
     name: 'FiberState',
     declaration: 'export const enum FiberState {\n    PENDING,\n    LOADING,\n    ACTIVE,\n    FAILED,\n    DISPOSED,\n    UNLOADING\n}',
   },
@@ -6418,6 +7342,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'FinishReasonMap',
     declaration: 'export interface FinishReasonMap {\n    \'stop\': {\n        kind: \'stop\';\n    };\n    \'tool-calls\': {\n        kind: \'tool-calls\';\n    };\n    \'max-tokens\': {\n        kind: \'max-tokens\';\n    };\n    \'aborted\': {\n        kind: \'aborted\';\n        failure: LlmFailure;\n    };\n    \'error\': {\n        kind: \'error\';\n        failure: LlmFailure;\n    };\n}',
+  },
+  {
+    name: 'FocusView',
+    declaration: 'export interface FocusView {\n    readonly asleep: boolean;\n    readonly at: number;\n    readonly since: number;\n    readonly heartbeatAt: number | null;\n}',
+  },
+  {
+    name: 'Folder',
+    declaration: 'export interface Folder {\n    id: number;\n    title: string;\n    count: number;\n    isDefault: boolean;\n    contains?: boolean;\n}',
   },
   {
     name: 'ForgeActionFailure',
@@ -6620,6 +7552,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface FsWriteOutcome {\n    operation: \'create\' | \'update\';\n    version: FsVersion;\n    before: string | null;\n    after: string;\n}',
   },
   {
+    name: 'GateView',
+    declaration: 'export interface GateView {\n    readonly mode: string;\n    readonly readonly: boolean;\n    readonly brake: BrakeView | null;\n    readonly used: UsageCounts | null;\n    readonly caps: UsageCounts | null;\n}',
+  },
+  {
     name: 'GenerateOptions',
     declaration: 'export interface GenerateOptions<Purpose extends string = LlmRequestPurpose> {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: RequestMessage[];\n    system?: string;\n    tools?: ToolSchema[];\n    toolHistory?: ToolHistory;\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    purpose?: Purpose;\n}',
   },
@@ -6676,6 +7612,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface GrantRecord {\n    readonly kind: \'grant\';\n    readonly payload: unknown;\n}',
   },
   {
+    name: 'GroupOverview',
+    declaration: 'export interface GroupOverview {\n    groupId: string;\n    name: string;\n    memberCount: number | null;\n    recorded: boolean;\n    messages: number;\n    firstAt: number | null;\n    lastAt: number | null;\n    lastDigestAt: number | null;\n}',
+  },
+  {
+    name: 'GuardHealth',
+    declaration: 'export interface GuardHealth {\n    readonly checked: number;\n    readonly rejected: number;\n    readonly byRule: Readonly<Record<string, number>>;\n    readonly lastError: {\n        readonly at: number;\n        readonly rule: string;\n        readonly message: string;\n    } | null;\n    readonly lastCheckAt: number | null;\n}',
+  },
+  {
+    name: 'Hello',
+    declaration: 'export type Hello = z.infer<typeof HelloDto>;',
+  },
+  {
     name: 'HookBudget',
     declaration: 'export interface HookBudget {\n    readonly ms: number;\n    readonly remainingMs: number;\n}',
   },
@@ -6708,6 +7656,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface HostConnectionRpc {\n    handle(channel: string, handler: ConnectionRpcHandler): () => Promise<void>;\n    intercept(channel: \'/api\', matches: ConnectionRpcEndpointMatcher, handler: ConnectionRpcHandler): () => Promise<void>;\n}',
   },
   {
+    name: 'HotSearch',
+    declaration: 'export interface HotSearch {\n    keyword: string;\n    label?: string;\n}',
+  },
+  {
     name: 'ImageAttachmentLimits',
     declaration: 'export interface ImageAttachmentLimits {\n    maxImageBytes: number;\n    maxImagesPerMessage: number;\n    maxMessageImageBytes: number;\n    maxImagePixels: number;\n    maxImageDimension: number;\n    mediaTypes: readonly ImageMediaType[];\n}',
   },
@@ -6720,10 +7672,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ImageBlock {\n    type: \'image\';\n    attachment: ImageAttachmentRef;\n    offloaded?: true;\n}',
   },
   {
-    name: 'ImageMediaType',
-    declaration: 'export type ImageMediaType = \'image/png\' | \'image/jpeg\' | \'image/webp\' | \'image/gif\';',
-  },
-  {
     name: 'ImageRequestTarget',
     declaration: 'export interface ImageRequestTarget {\n    width: number;\n    height: number;\n    maxBytes: number;\n}',
   },
@@ -6734,6 +7682,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ImageVariantId',
     declaration: 'export type ImageVariantId = Branded<\'ImageVariantId\'>;',
+  },
+  {
+    name: 'InboxItem',
+    declaration: 'export interface InboxItem {\n    id: string;\n    at: number;\n    from: string;\n    fromMid: number;\n    text: string;\n    about: string;\n    type: number;\n    oid: string;\n    rpid: string;\n    root: string;\n}',
+  },
+  {
+    name: 'InboxView',
+    declaration: 'export interface InboxView {\n    unread: {\n        replies: number;\n        mentions: number;\n        messages: number;\n    };\n    replies: Omit<InboxItem, \'type\' | \'oid\' | \'root\'>[];\n    mentions: Omit<InboxItem, \'type\' | \'oid\' | \'root\'>[];\n    ownerMessages: OwnerMessage[];\n}',
   },
   {
     name: 'IncompatiblePlugin',
@@ -6940,6 +7896,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface KvUnitDescriptor {\n    readonly name: string;\n    readonly version: number;\n    readonly tables: readonly string[];\n    readonly hasGlobal: boolean;\n    readonly layout?: \'single\' | \'per-record\';\n    readonly compatibleVersions?: readonly number[];\n}',
   },
   {
+    name: 'LedgerRow',
+    declaration: 'export interface LedgerRow {\n    readonly ts: number | null;\n    readonly kind: string;\n    readonly target: string;\n    readonly state: string;\n    readonly reason: string;\n    readonly caller: string;\n    readonly draft: string;\n    readonly verdict: string;\n}',
+  },
+  {
+    name: 'LedgerView',
+    declaration: 'export interface LedgerView {\n    readonly rows: readonly LedgerRow[];\n    readonly summary: Readonly<Record<string, string | number>>;\n}',
+  },
+  {
     name: 'ListVersionsOptions',
     declaration: 'export interface ListVersionsOptions {\n    readonly registry?: Registry;\n}',
   },
@@ -7048,6 +8012,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type LogExporterOptions = Omit<OTLPExporterNodeConfigBase, \'selfObsMeterProvider\'> & {\n    url: string;\n};',
   },
   {
+    name: 'LoginState',
+    declaration: 'export type LoginState = typeof LOGIN_STATES[number];',
+  },
+  {
+    name: 'LoginView',
+    declaration: 'export interface LoginView {\n    readonly account: string;\n    readonly state: LoginState;\n    readonly qr: readonly string[] | null;\n    readonly expiresAt: number;\n    readonly message: string | null;\n}',
+  },
+  {
+    name: 'LookupAnswer',
+    declaration: 'export type LookupAnswer = {\n    readonly found: true;\n    readonly from: \'groups\' | \'hotwatch\';\n    readonly term: string;\n    readonly meaning: string;\n    readonly example?: string;\n    readonly related?: string[];\n    readonly source?: string;\n    readonly meaningSource?: string;\n} | {\n    readonly found: false;\n};',
+  },
+  {
     name: 'LspHover',
     declaration: 'export interface LspHover {\n    readonly contents: string;\n    readonly range?: LspRange;\n}',
   },
@@ -7088,12 +8064,36 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface LspRange {\n    readonly start: LspPosition;\n    readonly end: LspPosition;\n}',
   },
   {
+    name: 'ForkAgentMessage',
+    declaration: 'export interface ForkAgentMessage {\n    text: string;\n    from: string;\n    origin?: string | undefined;\n}',
+  },
+  {
+    name: 'ForkEventInput',
+    declaration: 'export interface ForkEventInput {\n    readonly source: string;\n    readonly kind: string;\n    readonly key: string;\n    readonly subject: string;\n    readonly title: string;\n    readonly url?: string | undefined;\n    readonly actor?: string | undefined;\n    readonly text?: string | undefined;\n    readonly occurredAt?: number | undefined;\n}',
+  },
+  {
+    name: 'ForkEventRecord',
+    declaration: 'export type ForkEventRecord = z.infer<typeof eventRecordSchema>;',
+  },
+  {
+    name: 'ForkNote',
+    declaration: 'export interface ForkNote {\n    title: string;\n    body?: string | undefined;\n    url?: string | undefined;\n    origin?: string | undefined;\n    safety?: true | undefined;\n    kinds?: readonly string[] | undefined;\n    urgent?: true | undefined;\n}',
+  },
+  {
+    name: 'ManagedAccount',
+    declaration: 'export interface ManagedAccount {\n    readonly id: string;\n    readonly mid: number;\n    readonly display: string;\n    readonly session: SessionState;\n    readonly refreshMode: RefreshMode | null;\n    readonly login: boolean;\n    readonly agent: boolean;\n    readonly refreshedAt: number | null;\n    readonly importedAt: number | null;\n    readonly deadReason: string | null;\n}',
+  },
+  {
     name: 'ManagementError',
     declaration: 'export interface ManagementError {\n    code: ReadOnlyReason | \'unknown-plugin\' | \'invalid-spec\' | \'already-installed\' | \'ambiguous-install\' | \'not-bundle\' | \'not-removable\' | \'stop-profile\' | \'bundle-in-use\' | \'stale-approval\' | \'incompatible-version\' | \'unsupported-platform\' | \'operation-error\';\n    diagnostic?: string;\n    incompatible?: IncompatiblePlugin[];\n}',
   },
   {
     name: 'ManualCompactAgentContext',
     declaration: 'export interface ManualCompactAgentContext extends CompactionAgentContext {\n    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;\n}',
+  },
+  {
+    name: 'ManualView',
+    declaration: 'export interface ManualView {\n    readonly asleep: boolean;\n    readonly at: number;\n    readonly until: number;\n}',
   },
   {
     name: 'MarketCompatibility',
@@ -7236,10 +8236,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface MergeRequest {\n    readonly method: MergeMethod;\n    readonly headSha: string;\n}',
   },
   {
-    name: 'Message',
-    declaration: 'export type Message = MessageRoleMap[keyof MessageRoleMap];',
-  },
-  {
     name: 'MessageFeedbackDeleteRequest',
     declaration: 'export interface MessageFeedbackDeleteRequest {\n    readonly sessionId: SessionId;\n    readonly messageId: MessageId;\n    readonly ifVersion: MessageFeedbackVersion;\n}',
   },
@@ -7320,12 +8316,12 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type MessageId = Branded<\'MessageId\'>;',
   },
   {
-    name: 'MessageRoleMap',
-    declaration: 'export interface MessageRoleMap {\n    system: SystemMessage;\n    developer: DeveloperMessage;\n    user: UserMessage;\n    assistant: AssistantMessage;\n    tool: ToolResultMessage;\n}',
-  },
-  {
     name: 'MessageSourceMap',
     declaration: 'export interface MessageSourceMap {\n    user: {\n        kind: \'user\';\n    };\n    model: ModelMessageSource;\n    tool: ToolMessageSource;\n    \'system-prompt\': SystemPromptMessageSource;\n}',
+  },
+  {
+    name: 'MeView',
+    declaration: 'export interface MeView {\n    signedIn: boolean;\n    mid?: number;\n    uname?: string;\n    level?: number;\n    following?: number;\n    followers?: number;\n    folders?: Folder[];\n    exp?: {\n        current: number;\n        min: number;\n        next: number | null;\n    };\n    coins?: number;\n    rewards?: DailyRewards;\n    limits: string;\n    pause?: string;\n}',
   },
   {
     name: 'ModDefinition',
@@ -7452,6 +8448,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type OTelEventScalar = string | number | boolean;',
   },
   {
+    name: 'OutageRecord',
+    declaration: 'export type OutageRecord = z.infer<typeof outageSchema>;',
+  },
+  {
     name: 'OwnerIdentityRequest',
     declaration: 'export interface OwnerIdentityRequest {\n    readonly relay?: string;\n}',
   },
@@ -7462,6 +8462,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'OwnerIdentityStatus',
     declaration: 'export interface OwnerIdentityStatus {\n    readonly state: OwnerIdentityState;\n    readonly relay: string;\n    readonly displayName?: string;\n    readonly subjectId?: string;\n    readonly avatarUrl?: string;\n    readonly expiresAt?: string;\n    readonly renewed?: boolean;\n    readonly claim?: ClaimOutcome;\n}',
+  },
+  {
+    name: 'OwnerMessage',
+    declaration: 'export interface OwnerMessage {\n    id: string;\n    at: number;\n    text: string;\n}',
   },
   {
     name: 'OwnerRelayState',
@@ -7500,6 +8504,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface PatchHunk {\n    lineNumber: number;\n    context?: string;\n    oldLines: string[];\n    newLines: string[];\n    isEndOfFile: boolean;\n}',
   },
   {
+    name: 'PauseOutcome',
+    declaration: 'export type PauseOutcome = \'ok\' | \'not_found\' | \'config_owned\';',
+  },
+  {
     name: 'PeerAdmission',
     declaration: 'export type PeerAdmission = {\n    readonly peer: PeerScope;\n} | {\n    readonly rejection: 401 | 403;\n};',
   },
@@ -7522,6 +8530,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'PermissionCatalog',
     declaration: 'export interface PermissionCatalog {\n    options: PresetOption[];\n    defaultOptions: PresetOption[];\n    defaultPreset: string;\n}',
+  },
+  {
+    name: 'PersistentSessionAction',
+    declaration: 'export interface PersistentSessionAction {\n    enabled: boolean;\n    key: \'subscription\' | \'subject\';\n    rolloverDays: number;\n    maxSeedChars: number;\n}',
+  },
+  {
+    name: 'PersistentSessionView',
+    declaration: 'export interface PersistentSessionView {\n    subscription: string;\n    subject?: string;\n    sessionId: string;\n    createdAt: number;\n    batches: number;\n    compactions: number;\n    previous?: string;\n}',
   },
   {
     name: 'PiAiRequestHeaderContext',
@@ -7636,6 +8652,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type PluginVersionList = {\n    readonly status: \'listed\';\n    readonly installed: string;\n    readonly registry: Registry;\n    readonly attempts: readonly RegistryAttempt[];\n    readonly versions: readonly PluginVersion[];\n    readonly omitted: number;\n} | {\n    readonly status: \'refused\';\n    readonly problem: \'not-updatable\' | \'not-found\' | \'network\' | \'unknown\';\n    readonly reason: string;\n    readonly attempts: readonly RegistryAttempt[];\n};',
   },
   {
+    name: 'PollRecord',
+    declaration: 'export type PollRecord = z.infer<typeof pollSchema>;',
+  },
+  {
+    name: 'PollStatus',
+    declaration: 'export interface PollStatus {\n    at: number;\n    ok: boolean;\n    detail?: string;\n}',
+  },
+  {
     name: 'PostToolDecision',
     declaration: 'export type PostToolDecision = {\n    kind: \'accept\';\n    content?: ContentBlock[];\n    value?: never;\n    additionalContexts?: UserMessage[];\n} | {\n    kind: \'accept\';\n    value: JsonValue;\n    content?: never;\n    additionalContexts?: UserMessage[];\n} | {\n    kind: \'block\';\n    feedback: ContentBlock[];\n    additionalContexts?: UserMessage[];\n};',
   },
@@ -7662,6 +8686,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'PrepareSessionOptions',
     declaration: 'export type PrepareSessionOptions = (CreateSessionOptions & {\n    readonly eventState?: undefined;\n}) | RestoredSessionOptions;',
+  },
+  {
+    name: 'PresenceListener',
+    declaration: 'export type PresenceListener = (state: PresenceState) => void;',
+  },
+  {
+    name: 'PresenceSource',
+    declaration: 'export type PresenceSource = \'focus\' | \'window\' | \'manual\';',
+  },
+  {
+    name: 'PresenceState',
+    declaration: 'export interface PresenceState {\n    asleep: boolean;\n    source: PresenceSource;\n    since: number | null;\n    until: number | null;\n}',
+  },
+  {
+    name: 'PresenceView',
+    declaration: 'export interface PresenceView {\n    readonly asleep: boolean;\n    readonly source: PresenceSource;\n    readonly since: number | null;\n    readonly until: number | null;\n    readonly manual: ManualView | null;\n    readonly lastFocus: FocusView | null;\n    readonly window: QuietWindow;\n    readonly deferred: number;\n    readonly urgentKinds: readonly string[];\n    readonly signalSilent: boolean;\n    readonly focusFreshHours: number;\n    readonly timeZone: string;\n}',
   },
   {
     name: 'PresetDefinition',
@@ -7788,6 +8828,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type PromptSubmitResult = {\n    text: string;\n    context?: readonly string[];\n    drop?: undefined;\n} | {\n    drop: string;\n    text?: undefined;\n    context?: undefined;\n};',
   },
   {
+    name: 'ProtectedSession',
+    declaration: 'export type ProtectedSession = Pick<SessionRow, \'id\' | \'updatedAt\' | \'cwd\' | \'title\'>;',
+  },
+  {
+    name: 'ProtectionDisposer',
+    declaration: 'export type ProtectionDisposer = () => void;',
+  },
+  {
     name: 'ProviderRequestId',
     declaration: 'export type ProviderRequestId = Branded<\'ProviderRequestId\'>;',
   },
@@ -7840,8 +8888,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface PtcRunSpec extends PtcRunRequest {\n    cwd: string;\n    timeoutMs: number | null;\n}',
   },
   {
+    name: 'PublishOutcome',
+    declaration: 'export type PublishOutcome = \'accepted\' | \'duplicate\' | \'suppressed\' | \'unmatched\';',
+  },
+  {
+    name: 'QqLoginReading',
+    declaration: 'export interface QqLoginReading {\n    readonly door: \'ok\' | \'napcat-down\' | \'unreachable\' | \'unauthorized\' | \'invalid\' | \'disabled\' | \'recorder-down\';\n    readonly state: QqLoginState | null;\n    readonly uin: string | null;\n    readonly nickname: string | null;\n    readonly error: string | null;\n    readonly qrUrl: string | null;\n}',
+  },
+  {
     name: 'QueueAction',
     declaration: 'export type QueueAction = {\n    readonly kind: \'edit\';\n    readonly content: readonly TextBlock[];\n} | {\n    readonly kind: \'remove\';\n} | {\n    readonly kind: \'steer\';\n};',
+  },
+  {
+    name: 'QuietWindow',
+    declaration: 'export interface QuietWindow {\n    readonly enabled: boolean;\n    readonly start: string;\n    readonly end: string;\n}',
   },
   {
     name: 'ReadFileLine',
@@ -7876,16 +8936,36 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface RedactedSecret {\n    path: string[];\n    set: boolean;\n}',
   },
   {
-    name: 'Registry',
-    declaration: 'export type Registry = string | null;',
+    name: 'RefreshMode',
+    declaration: 'export type RefreshMode = typeof REFRESH_MODES[number];',
+  },
+  {
+    name: 'RefreshRefusal',
+    declaration: 'export type RefreshRefusal = \'logged-in\' | \'recently-logged-in\' | \'too-soon\' | \'napcat-refused\' | \'unreachable\';',
   },
   {
     name: 'RegistryAttempt',
     declaration: 'export interface RegistryAttempt {\n    readonly registry: Registry;\n    readonly problem?: \'not-found\' | \'network\' | \'unknown\';\n    readonly reason?: string;\n}',
   },
   {
+    name: 'RelayAnswer',
+    declaration: 'export interface RelayAnswer {\n    readonly sessionId: string;\n    readonly text: string;\n    readonly outcome: string;\n    readonly detail?: string | undefined;\n}',
+  },
+  {
+    name: 'RelayChannel',
+    declaration: 'export interface RelayChannel {\n    readonly name: string;\n    readonly fallbackLabel?: string;\n    deliver(answer: RelayAnswer): Promise<RelayDelivery>;\n    onTurnStart?(sessionId: string): void;\n    onTurnEnd?(sessionId: string, ended: RelayDecision[\'kind\']): void;\n    onTurnSettled?(sessionId: string): void;\n}',
+  },
+  {
     name: 'RelayConnectivityView',
     declaration: 'export interface RelayConnectivityView {\n    readonly ok: boolean;\n    readonly httpReachable: boolean;\n    readonly blocking: boolean;\n    readonly error?: string;\n}',
+  },
+  {
+    name: 'RelayDecision',
+    declaration: 'export type RelayDecision = {\n    readonly kind: \'stopped\';\n} | {\n    readonly kind: \'silent\';\n} | {\n    readonly kind: \'empty\';\n} | {\n    readonly kind: \'answer\';\n    readonly text: string;\n    readonly outcome: string;\n    readonly detail?: string;\n};',
+  },
+  {
+    name: 'RelayDelivery',
+    declaration: 'export type RelayDelivery = \'sent\' | \'kept\';',
   },
   {
     name: 'RelayPublishView',
@@ -7894,6 +8974,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'Reload',
     declaration: 'export interface Reload {\n    filename: string;\n    modules: ReloadModules;\n    runtime?: Plugin.Runtime | undefined;\n}',
+  },
+  {
+    name: 'ReminderPhase',
+    declaration: 'export type ReminderPhase = \'due\' | \'late\';',
+  },
+  {
+    name: 'ReminderRules',
+    declaration: 'export interface ReminderRules {\n    readonly beforeHours: readonly number[];\n    readonly lateBeforeHours: readonly number[];\n}',
   },
   {
     name: 'RemoteAccessAction',
@@ -7986,6 +9074,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ReplayEnvelope',
     declaration: 'export interface ReplayEnvelope {\n    response: unknown;\n    blocks?: readonly unknown[];\n}',
+  },
+  {
+    name: 'RepoProbe',
+    declaration: 'export type RepoProbe = {\n    ok: true;\n    fullName: string;\n    private: boolean;\n    defaultBranch: string;\n} | {\n    ok: false;\n    status: number;\n    message: string;\n};',
+  },
+  {
+    name: 'RepoStream',
+    declaration: 'export type RepoStream = \'releases\' | \'commits\' | \'tags\';',
+  },
+  {
+    name: 'RepoWatch',
+    declaration: 'export interface RepoWatch {\n    repo: string;\n    watch: RepoStream[];\n    branch?: string;\n}',
   },
   {
     name: 'RequestContext',
@@ -8248,6 +9348,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SearchMatchesResultView {\n    card: \'search\';\n    shape: \'matches\';\n    title?: string;\n    files: SearchFileMatches[];\n    truncated: boolean;\n    total: number;\n}',
   },
   {
+    name: 'SearchOrder',
+    declaration: 'export type SearchOrder = \'relevance\' | \'newest\';',
+  },
+  {
     name: 'SearchPathsResultView',
     declaration: 'export interface SearchPathsResultView {\n    card: \'search\';\n    shape: \'paths\';\n    title?: string;\n    paths: string[];\n    truncated: boolean;\n    total: number;\n}',
   },
@@ -8274,6 +9378,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionAccess',
     declaration: 'export type SessionAccess = \'read\' | \'write\';',
+  },
+  {
+    name: 'SessionAction',
+    declaration: 'export interface SessionAction {\n    workspacePath: string;\n    agentPreset: string;\n    permissionPreset: string;\n    instructions: string;\n    titlePrefix?: string;\n    maxPromptEvents: number;\n    maxTextChars: number;\n    trustedText?: boolean;\n    model?: {\n        provider: string;\n        model: string;\n    };\n    persistent?: PersistentSessionAction;\n    project?: string;\n}',
   },
   {
     name: 'SessionActivity',
@@ -8354,6 +9462,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionCreateValue',
     declaration: 'export interface SessionCreateValue {\n    readonly sessionId: SessionId;\n    readonly agentPreset?: string;\n}',
+  },
+  {
+    name: 'SessionDelivery',
+    declaration: 'export type SessionDelivery = \'fresh\' | \'persistent-new\' | \'persistent\' | \'rollover\' | \'detached\';',
   },
   {
     name: 'SessionEndInput',
@@ -8496,6 +9608,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionHandleReadResult {\n    readonly eventState: SessionSeedEventState;\n    readonly events: readonly SessionEvent[];\n}',
   },
   {
+    name: 'SessionHandoverItem',
+    declaration: 'export interface SessionHandoverItem {\n    readonly id: string;\n    readonly label: string;\n}',
+  },
+  {
+    name: 'SessionHandoverMover',
+    declaration: 'export type SessionHandoverMover = (from: ReadonlySet<string>, to: string) => readonly SessionHandoverItem[] | Promise<readonly SessionHandoverItem[]>;',
+  },
+  {
+    name: 'SessionHandoverReport',
+    declaration: 'export interface SessionHandoverReport {\n    readonly moved: ReadonlyArray<{\n        readonly kind: string;\n        readonly items: readonly SessionHandoverItem[];\n    }>;\n    readonly failed: ReadonlyArray<{\n        readonly kind: string;\n        readonly error: string;\n    }>;\n}',
+  },
+  {
     name: 'SessionHeader',
     declaration: 'export interface SessionHeader {\n    readonly version: typeof SESSION_FORMAT_VERSION;\n    readonly id: SessionId;\n    readonly createdAt: number;\n    readonly cwd?: string;\n    readonly parentSession?: SessionId;\n    readonly isSeeded: boolean;\n    readonly origin?: \'subagent\';\n    readonly delegationDepth?: number;\n    readonly agentPreset?: string;\n}',
   },
@@ -8530,6 +9654,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionLocation',
     declaration: 'export interface SessionLocation {\n    readonly kind: string;\n    readonly path: string;\n}',
+  },
+  {
+    name: 'SessionLog',
+    declaration: 'export type SessionLog = Pick<Session, \'seq\' | \'eventAt\'>;',
   },
   {
     name: 'SessionLogOffset',
@@ -8602,10 +9730,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionPageRequest',
     declaration: 'export interface SessionPageRequest {\n    readonly address: SessionAddress;\n    readonly throughSeq?: number;\n    readonly beforeSeq?: number;\n    readonly maxMessages?: number;\n    readonly turnWindow?: {\n        readonly minMessages: number;\n        readonly minTurns: number;\n    };\n}',
-  },
-  {
-    name: 'SessionPendingInput',
-    declaration: 'export type SessionPendingInput = \'approval\' | \'question\' | \'other\';',
   },
   {
     name: 'SessionPersistenceCreateOptions',
@@ -8700,12 +9824,8 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionPromptValue {\n    readonly accepted: true;\n}',
   },
   {
-    name: 'SessionQueuedItem',
-    declaration: 'export interface SessionQueuedItem {\n    readonly id: MessageId;\n    readonly placement: \'queued\' | \'steering\' | \'context\';\n    readonly rpcId?: SessionRequestId;\n    readonly content: readonly JsonValue[];\n}',
-  },
-  {
-    name: 'SessionRecord',
-    declaration: 'export interface SessionRecord {\n    header: SessionHeader;\n    live: boolean;\n    persisted: boolean;\n    formatStatus?: \'current\' | \'migration-required\';\n}',
+    name: 'SessionProtector',
+    declaration: 'export type SessionProtector = (session: ProtectedSession) => boolean | string | undefined | Promise<boolean | string | undefined>;',
   },
   {
     name: 'SessionReferenceCandidate',
@@ -8738,6 +9858,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionResultRange',
     declaration: 'export interface SessionResultRange {\n    from?: number;\n    to?: number;\n}',
+  },
+  {
+    name: 'SessionRow',
+    declaration: 'export interface SessionRow {\n    readonly id: string;\n    readonly updatedAt: number;\n    readonly running: boolean;\n    readonly subagent: boolean;\n    readonly activityUnknown?: boolean | undefined;\n    readonly cwd?: string | undefined;\n    readonly title?: string | undefined;\n}',
   },
   {
     name: 'SessionSearchCursor',
@@ -8794,10 +9918,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionStartSource',
     declaration: 'export type SessionStartSource = \'startup\' | \'resume\' | \'clear\' | \'compact\';',
-  },
-  {
-    name: 'SessionState',
-    declaration: 'export interface SessionState {\n    readonly cursor: number;\n    readonly active: boolean;\n    readonly running: boolean;\n    readonly queue: readonly SessionQueuedItem[] | null;\n    readonly pendingInput: readonly SessionPendingInput[];\n}',
   },
   {
     name: 'SessionStateRequest',
@@ -9028,14 +10148,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type SignInAttemptId = Branded<\'SignInAttemptId\'>;',
   },
   {
-    name: 'SignInAttemptView',
-    declaration: 'export interface SignInAttemptView {\n    readonly id: SignInAttemptId;\n    readonly phase: \'initializing\' | \'waiting-browser\' | \'exchanging\' | \'committing\' | \'succeeded\' | \'cancelled\' | \'expired\' | \'failed\';\n    readonly authorizeUrl?: string;\n    readonly expiresAt?: number;\n    readonly errorCode?: SignInErrorCode;\n}',
-  },
-  {
-    name: 'SignInErrorCode',
-    declaration: 'export type SignInErrorCode = \'no-response\' | \'network\' | \'protocol\' | \'expired\' | \'storage\';',
-  },
-  {
     name: 'SkillCandidate',
     declaration: 'export interface SkillCandidate extends SkillSummary {\n    readonly rank: number;\n    readonly locator: unknown;\n    readonly metadata?: Readonly<Record<string, unknown>>;\n}',
   },
@@ -9098,6 +10210,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SkillViewOptions',
     declaration: 'export interface SkillViewOptions extends SkillLookupOptions {\n    readonly scope?: ScopeKey | undefined;\n}',
+  },
+  {
+    name: 'SpeakResult',
+    declaration: 'export interface SpeakResult {\n    path: string;\n    format: \'mp3\' | \'wav\';\n    bytes: number;\n    provider: TtsProviderName;\n    cached?: boolean;\n    fellBackFrom?: string;\n    elapsedMs: number;\n}',
   },
   {
     name: 'SpeechCatalog',
@@ -9218,6 +10334,26 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'StreamChunk',
     declaration: 'export type StreamChunk = {\n    type: \'block-start\';\n    index: number;\n    blockType: ContentBlockType;\n} | {\n    type: \'text-delta\';\n    index: number;\n    text: string;\n} | {\n    type: \'reasoning-delta\';\n    index: number;\n    text: string;\n} | {\n    type: \'tool-call-delta\';\n    index: number;\n    id: ToolCallId;\n    name?: string;\n    argumentsDelta: string;\n} | {\n    type: \'block-end\';\n    index: number;\n    block: ContentBlock;\n} | {\n    type: \'usage\';\n    usage: TokenUsage;\n} | {\n    type: \'finish\';\n    reason: FinishReason;\n    replayState?: ReplayEnvelope;\n};',
+  },
+  {
+    name: 'StreamCursor',
+    declaration: 'export type StreamCursor = z.infer<typeof cursorSchema>;',
+  },
+  {
+    name: 'StreamStatus',
+    declaration: 'export interface StreamStatus {\n    stream: RepoStream;\n    id: string;\n    baseline: boolean;\n    lastPoll?: PollStatus;\n}',
+  },
+  {
+    name: 'StyleBlock',
+    declaration: 'export interface StyleBlock {\n    readonly text: string;\n    readonly shown: number;\n    readonly owner: number;\n    readonly memes: number;\n    readonly card: number;\n}',
+  },
+  {
+    name: 'StyleHealth',
+    declaration: 'export interface StyleHealth {\n    readonly kept: number;\n    readonly pending: number;\n    readonly review: \'optional\' | \'required\';\n    readonly lastRefreshAt: number | null;\n    readonly ticTrend: \'up\' | \'flat\' | \'down\' | null;\n}',
+  },
+  {
+    name: 'StyleNoteInput',
+    declaration: 'export interface StyleNoteInput {\n    readonly sessionId: string;\n    readonly preset: string;\n    readonly kind: \'meme\' | \'trait\';\n    readonly term: string;\n    readonly meaning?: string;\n    readonly example: string;\n    readonly related?: readonly string[];\n    readonly session?: SessionLog;\n}',
   },
   {
     name: 'SubagentActivation',
@@ -9380,6 +10516,26 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SubprocessTerminalSpawnSpec {\n    argv: readonly string[];\n    cwd: string;\n    env?: Record<string, string> | undefined;\n    rows: number;\n    cols: number;\n    terminalType: string;\n    shellActivity?: boolean | undefined;\n    graceMs: number;\n    signal?: AbortSignal | undefined;\n}',
   },
   {
+    name: 'Subscription',
+    declaration: 'export interface Subscription {\n    id: string;\n    sources: string[];\n    kinds: string[];\n    subjects: string[];\n    action: \'notify\' | \'session\';\n    coalesceMs: number;\n    maxPerHour: number;\n    session?: SessionAction;\n}',
+  },
+  {
+    name: 'SubscriptionMeta',
+    declaration: 'export interface SubscriptionMeta {\n    createdBy?: string;\n}',
+  },
+  {
+    name: 'SubscriptionStatus',
+    declaration: 'export interface SubscriptionStatus {\n    pending: number;\n    batchesLastHour: number;\n    nextFlushAt?: number;\n    lastBatch?: BatchSummary;\n}',
+  },
+  {
+    name: 'SubscriptionView',
+    declaration: 'export interface SubscriptionView extends Subscription {\n    origin: SubscriptionOrigin;\n    createdAt?: number;\n    createdBy?: string;\n    paused?: true;\n    status: SubscriptionStatus;\n}',
+  },
+  {
+    name: 'SubtitleView',
+    declaration: 'export type SubtitleView = {\n    available: true;\n    language: string;\n    machine: boolean;\n    page: number;\n    pages: number;\n    text: string;\n    coverage: string;\n} | {\n    available: false;\n    coverage: string;\n};',
+  },
+  {
     name: 'SurfaceEvent',
     declaration: 'export type SurfaceEvent = SessionEvent<SurfaceEventType>;',
   },
@@ -9398,6 +10554,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SurfaceSnapshot',
     declaration: 'export interface SurfaceSnapshot {\n    readonly generation: number;\n    readonly tree: readonly SerializedNode[] | null;\n}',
+  },
+  {
+    name: 'SweepReport',
+    declaration: 'export interface SweepReport {\n    at: number;\n    durationMs: number;\n    trigger: \'timer\' | \'manual\';\n    dryRun: boolean;\n    scanned: number;\n    alreadyArchived: number;\n    due: number;\n    archived: string[];\n    wouldArchive: Array<{\n        id: string;\n        title?: string;\n        lastActiveAt: number;\n    }>;\n    skipped: Record<string, number>;\n    skippedIds: Record<string, string[]>;\n    errors: string[];\n    aborted?: string;\n}',
+  },
+  {
+    name: 'SyncHealth',
+    declaration: 'export interface SyncHealth {\n    readonly status: string;\n    readonly latestRunAt: number | null;\n    readonly lastCleanAt: number | null;\n    readonly failedRuns: number;\n    readonly latestRunId: string | null;\n}',
   },
   {
     name: 'SystemMessage',
@@ -9422,6 +10586,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TableValueOf',
     declaration: 'export type TableValueOf<S extends DomainSpec, N extends keyof S[\'tables\']> = S[\'tables\'][N] extends DomainTableSpec<string, infer V> ? V : never;',
+  },
+  {
+    name: 'TaskSummary',
+    declaration: 'export interface TaskSummary {\n    readonly id: string;\n    readonly version: number;\n    readonly title: string;\n    readonly courseId: string | null;\n    readonly course: string;\n    readonly parentId: string | null;\n    readonly parentTitle: string | null;\n    readonly partsDone: number | null;\n    readonly partsTotal: number | null;\n    readonly dueAt: number | null;\n    readonly lateAt: number | null;\n    readonly closesAt: number | null;\n    readonly certainty: string;\n    readonly progress: string;\n    readonly percent: number | null;\n    readonly submission: string;\n    readonly submissionVerified: boolean;\n    readonly remainingWork: string | null;\n    readonly checkedAt: number | null;\n    readonly links: ReadonlyArray<{\n        readonly label: string;\n        readonly url: string;\n    }>;\n}',
   },
   {
     name: 'TeamTaskAction',
@@ -9568,6 +10736,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type TokenMeasurementBaseline = {\n    readonly kind: \'none\';\n    readonly tokens: 0;\n} | {\n    readonly kind: \'estimated\';\n    readonly tokens: number;\n} | {\n    readonly kind: \'usage\';\n    readonly tokens: number;\n    readonly usage: Readonly<TokenUsage>;\n};',
   },
   {
+    name: 'TokenStatus',
+    declaration: 'export interface TokenStatus {\n    ref: string;\n    configured: boolean;\n}',
+  },
+  {
     name: 'TokenSurfaceNode',
     declaration: 'export interface TokenSurfaceNode {\n    readonly seq: SessionSeq;\n    readonly tokens: number;\n    readonly heuristicTokens: number;\n}',
   },
@@ -9676,6 +10848,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type ToolModelInput = Pick<ToolProviderResult, \'schemas\' | \'knownNames\'>;',
   },
   {
+    name: 'ToolOutcome',
+    declaration: 'export type ToolOutcome = {\n    ok: true;\n    message: string;\n} | {\n    ok: false;\n    error: string;\n};',
+  },
+  {
     name: 'ToolOutputDefinition',
     declaration: 'export interface ToolOutputDefinition {\n    readonly schema: JsonSchemaNode;\n    render(args: unknown, value: JsonValue): ContentBlock[];\n    presentationMeta?(args: unknown, value: JsonValue): JsonValue;\n}',
   },
@@ -9736,8 +10912,8 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ToolUseSummary {\n    tool_use_id: string;\n    tool: string;\n    input: Record<string, unknown>;\n}',
   },
   {
-    name: 'Transcript',
-    declaration: 'export interface Transcript {\n    readonly text: string;\n    readonly audioSeconds: number;\n    readonly inferenceSeconds: number;\n}',
+    name: 'TranscribeResult',
+    declaration: 'export interface TranscribeResult {\n    text: string;\n    engine: string;\n    durationS?: number;\n    rawPath: string;\n    elapsedMs: number;\n}',
   },
   {
     name: 'TranscriptionRequest',
@@ -9754,6 +10930,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TranslationSpec',
     declaration: 'export type TranslationSpec = AnonymousTranslationSpec | PaidTranslationSpec;',
+  },
+  {
+    name: 'TtsProviderName',
+    declaration: 'export type TtsProviderName = \'feiyu\' | \'mac-mini\';',
   },
   {
     name: 'TurnBoundaryProjection',
@@ -9944,6 +11124,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type UiRenderResult = UiNode;',
   },
   {
+    name: 'UnsubscribeOutcome',
+    declaration: 'export type UnsubscribeOutcome = \'removed\' | \'not_found\' | \'config_owned\';',
+  },
+  {
+    name: 'UpcomingReminder',
+    declaration: 'export interface UpcomingReminder {\n    readonly task: TaskSummary;\n    readonly phase: ReminderPhase;\n    readonly deadline: number;\n    readonly nextAt: number | null;\n}',
+  },
+  {
     name: 'UpdateBundleOptions',
     declaration: 'export interface UpdateBundleOptions {\n    readonly registry?: Registry;\n    readonly requestId?: PluginInstallRequestId;\n}',
   },
@@ -9956,6 +11144,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface UpdateTeamTaskRequest {\n    readonly taskId: TeamTaskId;\n    readonly expectedRevision: number;\n    readonly action: TeamTaskAction;\n    readonly subject?: string;\n    readonly description?: string;\n    readonly blockedBy?: readonly TeamTaskId[];\n    readonly writeScopes?: readonly string[];\n    readonly owner?: SessionId;\n}',
   },
   {
+    name: 'UsageCounts',
+    declaration: 'export interface UsageCounts {\n    readonly comment: number;\n    readonly dm: number;\n}',
+  },
+  {
     name: 'UserMessage',
     declaration: 'export interface UserMessage extends MessageBase {\n    readonly role: \'user\';\n}',
   },
@@ -9964,12 +11156,32 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface VerifiedWebhookDelivery<K extends string = string> {\n    readonly kind: K;\n    readonly source: WebhookSourceId;\n    readonly deliveryId: WebhookDeliveryId;\n    readonly event: WebhookEventOf<K>;\n    readonly receivedAt: number;\n}',
   },
   {
+    name: 'VideoCard',
+    declaration: 'export interface VideoCard {\n    bvid: string;\n    title: string;\n    author: string;\n    authorMid?: number;\n    duration?: string;\n    views?: number;\n    likes?: number;\n    published?: string;\n    desc?: string;\n    reason?: string;\n}',
+  },
+  {
+    name: 'VideoDetail',
+    declaration: 'export interface VideoDetail extends VideoCard {\n    aid: string;\n    cid: number;\n    category?: string;\n    favorites?: number;\n    coins?: number;\n    comments?: number;\n    danmaku?: number;\n    parts: VideoPart[];\n    seconds?: number;\n    original: boolean;\n}',
+  },
+  {
+    name: 'VideoPart',
+    declaration: 'export interface VideoPart {\n    page: number;\n    cid: number;\n    title: string;\n    duration?: string;\n}',
+  },
+  {
     name: 'ViewerPluginAccess',
     declaration: 'export type ViewerPluginAccess = \'all\' | \'none\' | \'custom\';',
   },
   {
     name: 'ViewerPluginPolicy',
     declaration: 'export interface ViewerPluginPolicy {\n    readonly plugin: string;\n    readonly mode: \'all\' | \'none\' | \'selected\';\n    readonly endpoints?: readonly string[];\n}',
+  },
+  {
+    name: 'VoiceSummary',
+    declaration: 'export interface VoiceSummary {\n    tts: {\n        enabled: boolean;\n        provider: TtsProviderName;\n        fallback: TtsProviderName | \'none\';\n        format: \'mp3\' | \'wav\';\n        maxChars: number;\n        url: string;\n    };\n    asr: {\n        enabled: boolean;\n        engine: \'funasr\' | \'whisper\';\n        url: string;\n    };\n}',
+  },
+  {
+    name: 'WatchedRepo',
+    declaration: 'export interface WatchedRepo extends RepoWatch {\n    origin: \'config\' | \'agent\';\n    ref?: string;\n    createdAt?: number;\n    streams: StreamStatus[];\n}',
   },
   {
     name: 'WebBootBatch',
@@ -10302,6 +11514,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WorkspaceView',
     declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
+  },
+  {
+    name: 'WriteAnswer',
+    declaration: 'export type WriteAnswer = {\n    readonly status: \'recorded\' | \'refreshed\';\n} | {\n    readonly status: \'rejected\';\n    readonly reason: string;\n};',
+  },
+  {
+    name: 'WriteOutcome',
+    declaration: 'export type WriteOutcome = {\n    readonly outcome: \'sent\';\n    readonly detail: string;\n    readonly receipt?: string;\n} | {\n    readonly outcome: \'already\';\n    readonly detail: string;\n} | {\n    readonly outcome: \'refused\';\n    readonly detail: string;\n    readonly verification?: string;\n} | {\n    readonly outcome: \'uncertain\';\n    readonly detail: string;\n};',
   },
 ]
 

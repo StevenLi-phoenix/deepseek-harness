@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-fork-wechat-settings",
   "description": "WeChat and quiet-hours (勿扰) settings sections: bind the owner's WeChat bot by QR code, see the channel's health, unbind, and control when the owner counts as asleep (browser half; the Host routes are served by @deepseek-ai/dsh-fork-wechat and @deepseek-ai/dsh-fork-presence)",
-  "version": "0.2.2-alpha.2",
+  "version": "0.2.2-rc.1",
   "publishConfig": {
     "access": "public"
   },

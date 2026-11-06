@@ -529,6 +529,12 @@ What the framework can replace live, measured with a model stream held open acro
 
 A resumed Session's agent stays alive until the process ends and nothing can release it, so these do not become hot by waiting. The reconcile decides at deploy time, so this table only says what to expect.
 
+## 22. DAG workflows
+
+The skill `dag-workflow` (`fork/skills/dag-workflow`) lets the main agent choose the `workflow` tool on its own when work has real dependencies. It adds no plugin or tool: `workflow-ptc` and `tool-workflow` were already in the `unattended` preset, and `setup-profile.sh` links the skill into `$DSH_HOME/skills`. Other presets have no `workflow` tool. Runs appear in the chat as workflow cards and in the job list when backgrounded. Each child spends the route's daily limit. `packages/fork/bili/tests/dag-workflow-skill.spec.ts` runs the helper from `SKILL.md` through the real workflow guest.
+
+Going back to a build older than the 2026-11-06 upstream sync: a Session that created a subagent on the newer build carries `subagent/catalog` version 3, which older releases refuse to open, so start a new Session for those chats.
+
 ## Operate
 
 Patch edits (`$DSH_HOME/cordis.patch.yml`, the profile patch) reload live; `.env` edits need a restart; a new build hot-reloads or restarts as "DSH itself" describes. The composition is the `@deepseek-ai/dsh-fork-event-bundle` layer linked from the build; the profile patch `profiles/event/cordis.patch.yml` is the owner's layer, where Web UI settings save, and upgrades keep it. A home patch entry replaces that entry's whole `config`, so override only entries whose config it restates in full, and the Web UI refuses to save an entry the home patch sets ("Configuration for … is overridden by a home patch").

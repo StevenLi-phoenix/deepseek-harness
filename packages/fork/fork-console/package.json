@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-fork-console",
   "description": "Settings sections for the event service: a service overview, subscriptions and schedule reminders, and Claude Code sessions with the voice service",
-  "version": "0.2.2-alpha.2",
+  "version": "0.2.2-rc.1",
   "publishConfig": {
     "access": "public"
   },

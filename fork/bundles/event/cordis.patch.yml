@@ -34,6 +34,23 @@
 - id: tool-working-directory
   disabled: true
 
+# Upstream defaults this service keeps at their previous values (packages/fork/bili/tests/bundle.spec.ts).
+# Read-before-write for write and edit (upgrade guide v0.2.2-alpha.2/fs-observation-policy-default-off).
+- id: fs-observation-policy
+  disabled: false
+# Search through the Messages route (upgrade guide v0.2.2-alpha.2/web-search-default-provider).
+- id: web
+  config:
+    searchProvider: deepseek-official
+    fetchProvider: http
+# Agent Teams stay out: root rows reach every preset, and the Web menu switch would do nothing without the tools.
+- id: agent-team
+  disabled: true
+- id: tool-agent-team
+  disabled: true
+- id: ui-agent-team
+  disabled: true
+
 - insert:
     # Runtime logs to stdout (launchd captures them). 2 = info, 3 = debug. A logger is named after
     # its plugin's class, hyphenated (BiliAccount → bili-account). New plugins log at debug until
@@ -957,5 +974,7 @@
             config:
               fetch: true
               searchTimeoutMs: 60000
+              searchMaxQueries: 4
+              searchMaxResults: 8
           - id: present
             name: '@deepseek-ai/dsh-tool-present'

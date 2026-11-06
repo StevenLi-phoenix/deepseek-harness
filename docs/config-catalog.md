@@ -477,7 +477,7 @@ export type Config = LocalConfig
 ## `@deepseek-ai/dsh-bili`
 
 - `inject`: `timer` · `storageDomain` · `credentials` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/bili/src/index.ts:88`](../packages/fork/bili/src/index.ts)
+- `source`: [`packages/fork/bili/src/index.ts:90`](../packages/fork/bili/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -2912,7 +2912,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-fork-integrity`
 
-- `source`: [`packages/fork/fork-integrity/src/index.ts:32`](../packages/fork/fork-integrity/src/index.ts)
+- `source`: [`packages/fork/fork-integrity/src/index.ts:33`](../packages/fork/fork-integrity/src/index.ts)
 
 ```ts config-catalog
 /** Settings. */

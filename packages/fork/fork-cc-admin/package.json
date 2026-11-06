@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-fork-cc-admin",
   "description": "Claude Code sessions of the service account as a root service: list, start with a first task, and stop, for the Settings page",
-  "version": "0.2.2-alpha.2",
+  "version": "0.2.2-rc.1",
   "publishConfig": {
     "access": "public"
   },
