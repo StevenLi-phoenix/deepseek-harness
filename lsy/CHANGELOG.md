@@ -4,7 +4,12 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 
 ## [Unreleased]
 
+### Added
+- Skill `dag-workflow`: the main agent may orchestrate subagents as a loose dependency graph through the `workflow` tool without being asked by name, with a `dag()` helper offering hard (`needs`) and soft (`after`) dependencies.
+
 ### Changed
+- Synced upstream master `fcc0ad4621` (`dsh-v0.2.2-rc.1` plus later fixes).
+- The event bundle pins defaults upstream changed: read-before-write stays on, web search stays on `deepseek-official` with 4 queries and 8 results, and Agent Teams (service, task tools, menu switch) stays out.
 - A deploy keeps no old version: `self-upgrade.sh` makes no copy of the files a hot deploy replaces, removes the old build once the new process is up, and removes the failed build after a rollback; `upgrade.sh` keeps only this commit's tarballs, and the recorder keeps only its current bundle.
 - A hot deploy that does not hold is reported and stays on the new files, since the framework's HMR does not restore a stopped plugin; deploying a fix or the old commit recovers it, and `.hot-sha` now records what the disk holds.
 

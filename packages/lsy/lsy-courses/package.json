@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-lsy-courses",
   "description": "The owner's course records in DSH: a client of the courses service and a deadline poller that reminds the owner on WeChat by fixed rules (checkpoints, late windows, quiet hours) and tells when the course sync is broken",
-  "version": "0.2.2-alpha.2",
+  "version": "0.2.2-rc.1",
   "publishConfig": {
     "access": "public"
   },

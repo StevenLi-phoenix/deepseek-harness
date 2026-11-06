@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-lsy-style-settings",
   "description": "Speaking style settings section: the real QQ and Bilibili exchanges that tune the main agent's voice, one-tap deletion, review, lines of the owner's own, and the stock-line trend",
-  "version": "0.2.2-alpha.2",
+  "version": "0.2.2-rc.1",
   "publishConfig": {
     "access": "public"
   },

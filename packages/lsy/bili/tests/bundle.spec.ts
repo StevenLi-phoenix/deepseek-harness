@@ -46,6 +46,19 @@ const ROOT_TOOL_ROWS_WITHOUT_TOOLS = new Set([
 ])
 
 describe('event bundle', () => {
+  it('keeps what this service did before upstream changed its defaults', () => {
+    const edit = (id: string) => bundle.find(row => row.id === id && row.insert === undefined) as (Row & { disabled?: unknown }) | undefined
+    const root = composedRoot()
+    // Read-before-write, legacy web search, and the search limits stay as the agents have them.
+    expect(root.get('fs-observation-policy')?.enabled).toBe(true)
+    expect(edit('web')?.config).toEqual({ searchProvider: 'deepseek-official', fetchProvider: 'http' })
+    const unattended = inserted.find(row => row.id === 'preset-unattended')!
+    const toolWeb = unattended.config!.plugins!.find(row => row.id === 'tool-web')!
+    expect(toolWeb.config).toMatchObject({ searchMaxQueries: 4, searchMaxResults: 8 })
+    // Agent Teams stays out: no task tools, no per-Session switch in the menu.
+    for (const id of ['agent-team', 'tool-agent-team', 'ui-agent-team']) expect(root.get(id)?.enabled, id).toBe(false)
+  })
+
   it('mounts the account at the root as a client of bili-svc, with a valid configuration and without the owner\'s UID', () => {
     const row = inserted.find(entry => entry.id === 'bili')!
     expect(row.name).toBe('@deepseek-ai/dsh-bili')

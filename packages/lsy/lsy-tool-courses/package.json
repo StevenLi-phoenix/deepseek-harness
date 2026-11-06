@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-lsy-tool-courses",
   "description": "Course tools of the owner's main agent: courses_deadlines, courses_find, courses_get, and the writes courses_set_progress and courses_save_memo over the owner's course records",
-  "version": "0.2.2-alpha.2",
+  "version": "0.2.2-rc.1",
   "publishConfig": {
     "access": "public"
   },

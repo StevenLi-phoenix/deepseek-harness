@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-lsy-tool-up",
   "description": "Model-facing up_* tools for the creator account's reads and Reply Gate replies (bili-svc)",
-  "version": "0.2.2-alpha.2",
+  "version": "0.2.2-rc.1",
   "publishConfig": {
     "access": "public"
   },

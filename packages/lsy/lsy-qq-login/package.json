@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-lsy-qq-login",
   "description": "QQ settings section: the QQ observer's connection, NapCat's login state, and the login QR code to scan from the phone when QQ was signed out",
-  "version": "0.2.2-alpha.2",
+  "version": "0.2.2-rc.1",
   "publishConfig": {
     "access": "public"
   },

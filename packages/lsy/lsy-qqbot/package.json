@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-lsy-qqbot",
   "description": "QQ channel over the official QQ Open Platform Bot API: allowlisted private chats and group @ mentions reach per-peer chat Sessions",
-  "version": "0.2.2-alpha.2",
+  "version": "0.2.2-rc.1",
   "publishConfig": {
     "access": "public"
   },

@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-lsy-presence",
   "description": "Owner presence for the event service: asleep or awake from the phone's Sleep Focus, a daily fallback window, and manual overrides; channels hold back non-urgent messages while the owner sleeps (the Settings page is @deepseek-ai/dsh-lsy-wechat-settings)",
-  "version": "0.2.2-alpha.2",
+  "version": "0.2.2-rc.1",
   "publishConfig": {
     "access": "public"
   },
