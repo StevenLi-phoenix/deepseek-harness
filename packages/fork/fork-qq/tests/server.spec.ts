@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, statSync } from 'node:fs'
 import { request } from 'node:http'
 import { join } from 'node:path'
-import { createServer as createNetServer } from 'node:net'
+import { createServer as createNetServer, Server as NetServer } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ZodError } from 'zod'
 import { MEDIA_HEADER, MediaHeaderDto, PROTOCOL_HEADER, StatusDto, type RecorderEvent, type Status } from '../src/protocol.ts'
@@ -356,9 +356,15 @@ describe('qq-recorder server', () => {
 
   it('reports a socket that cannot be bound instead of starting half way', async () => {
     const h = await bootRecorder({ config: false })
-    const socketPath = join(h.dir, 'run', `${'long-'.repeat(30)}.sock`)
+    // Injected: whether an over-long socket path fails to bind depends on the platform and the temp directory.
+    const refused = vi.spyOn(NetServer.prototype, 'listen').mockImplementationOnce(function (this: NetServer) {
+      process.nextTick(() => { this.emit('error', new Error('bind refused')) })
+      return this
+    })
+    const socketPath = join(h.dir, 'run', 'bound.sock')
     await expect(startRecorderServer({ recorder: h.recorder, logger: { debug() {}, info() {}, error() {} }, socketPath, token: SECRET }))
-      .rejects.toThrow(/ENAMETOOLONG|name too long|EINVAL/i)
+      .rejects.toThrow('bind refused')
+    expect(refused).toHaveBeenCalledTimes(1)
   })
 
   it('reports a health port that is taken', async () => {
