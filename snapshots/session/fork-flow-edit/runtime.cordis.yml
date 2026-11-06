@@ -1,0 +1,14 @@
+# The notification flow as the model reads and changes it: the bus with one deployment route, and the tools.
+- insert:
+    - id: fork-event-bus
+      name: '@deepseek-ai/dsh-fork-event-bus'
+      config:
+        subscriptions:
+          - id: ci
+            sources: [github]
+            kinds: ['github.workflow_run.completed']
+            action: notify
+            coalesceMs: 300000
+            maxPerHour: 4
+    - id: fork-tool-watch
+      name: '@deepseek-ai/dsh-fork-tool-watch'
