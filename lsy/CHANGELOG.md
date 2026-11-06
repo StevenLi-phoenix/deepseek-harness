@@ -13,6 +13,8 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 - A message flow page with its own sidebar entry (`lsy-flow`, 2026-11-06): one line names what is broken and what it touches with the way to fix it, a funnel counts what came in and what reached the owner over an hour, a day, or a week (`GET /api/lsy.flow`), each box says what passed it, arrows thicken with use and run a dot when recent, and the latest 50 events can be followed through the picture; drawn from the owner's flow editor export (`flow-graph.ts`), with unbuilt boxes behind a switch.
 
 ### Changed
+- The owner turned off the WeChat notices for memory writes and for changes to watched files (`notify: false` on the `lsy-memory` and `lsy-integrity` bundle rows, 2026-11-06); both stay in the log and the memory history.
+- Skill `service-code` says how DSH changes its own settings: root rows through the profile patch, preset rows through `lsy/main` and a deploy, never the build output (2026-11-06).
 - Synced upstream master `fcc0ad4621` (`dsh-v0.2.2-rc.1` plus later fixes).
 - The event bundle pins defaults upstream changed: read-before-write stays on, web search stays on `deepseek-official` with 4 queries and 8 results, and Agent Teams (service, task tools, menu switch) stays out.
 - A deploy keeps no old version: `self-upgrade.sh` makes no copy of the files a hot deploy replaces, removes the old build once the new process is up, and removes the failed build after a rollback; `upgrade.sh` keeps only this commit's tarballs, and the recorder keeps only its current bundle.
