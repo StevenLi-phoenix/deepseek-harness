@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Let your agent lurk in QQ groups and learn from them. A personal QQ account, logged in once by scanning a code, sits in the groups you choose. A small service of its own, the qq-recorder, holds the account's one connection and records each group's messages, images, and voice notes on this machine; this package asks it for them, writes a digest of every group on a schedule (topics, settled facts, jargon, frequent questions, who knows what, links), and lets the agent search and read it all. Because the connection lives in the recorder, restarting or redeploying DSH, or saving settings, never reconnects QQ. It never speaks, adds friends, or reacts: sending is refused, and the QQ side is only ever read.
+Let your agent lurk in QQ groups and learn from them. A personal QQ account, logged in once by scanning a code, sits in the groups you choose. A small service, the qq-recorder, holds the account's one connection and records each group's messages, images, and voice notes on this machine; this package asks it for them, writes a digest of every group on a schedule, and lets the agent search and read it all. Restarting DSH never reconnects QQ. It never speaks, adds friends, or reacts: the QQ side is only ever read.
 
 ## Table of Contents
 

@@ -126,7 +126,7 @@ export function entryFrom(value: unknown): MemoryEntry | undefined {
   const { id, category, date, text, source, session, origin } = record
   if (!isEntryId(id) || !isCategory(category) || typeof date !== 'string' || !DATE.test(date)) return undefined
   if (typeof text !== 'string' || text.length === 0 || text.length > MAX_TEXT_CHARS || normalizeText(text) !== text) return undefined
-  // Provenance is advisory: a field that does not parse reads as absent instead of making the file unreadable.
+  // `source`, `session`, and `origin` are advisory: a field that does not parse reads as absent instead of making the file unreadable.
   return {
     id, category, date, text,
     ...isSource(source) ? { source } : {},

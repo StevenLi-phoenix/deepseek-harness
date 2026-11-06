@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Get QQ back after a sign-out from your phone, with no terminal. **Settings → QQ** gives one verdict ("QQ is connected", "Scan to log in", "NapCat is not answering") with the next step under it. When a scan is needed it draws the login QR code large enough to scan from another screen and follows NapCat's rotation; scan, confirm, and the verdict turns to "connected" within seconds. When the QQ recorder itself is not running or speaks another protocol version, the verdict says that instead ("The QQ recorder is not running", with the command to restart it), in all eight languages. A second card lists the connection (since when, which attempt, last error) and NapCat's login; a third edits which groups are recorded; an **All settings** card holds the rest of `fork-qq`'s settings.
+Get QQ back after a sign-out from your phone, with no terminal. **Settings → QQ** gives one verdict ("QQ is connected", "Scan to log in", "NapCat is not answering", "The QQ recorder is not running") with the next step under it. When a scan is needed it draws the login QR code large enough to scan from another screen and follows NapCat's rotation; scan, confirm, and the verdict turns to "connected" within seconds. Further cards show the connection and NapCat's login, edit which groups are recorded, and hold the rest of `fork-qq`'s settings.
 
 ## Table of Contents
 
