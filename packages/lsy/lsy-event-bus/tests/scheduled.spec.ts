@@ -151,4 +151,23 @@ describe('LsyEventBus silent Session results', () => {
     expect(bus.batches()[0]).toMatchObject({ status: 'completed', outcome: 'completed', sessionId: 'w1', silent: true })
     expect(bus.listSubscriptions()[0]!.status.lastBatch).toMatchObject({ silent: true, outcome: 'completed' })
   })
+
+  it('records the outcome of a quiet subscription\'s Session and sends nothing, whatever it answered', async () => {
+    const notes: LsyNote[] = []
+    const quiet = {
+      ...sessionConfig,
+      subscriptions: sessionConfig.subscriptions.map(subscription => ({
+        ...subscription, session: { ...subscription.session, quietResult: true },
+      })),
+    }
+    const { bus, emit } = await harness({ config: quiet, notifier: { send: async (note: LsyNote) => { notes.push(note) } } })
+    await bus.publish(release(1))
+    await vi.advanceTimersByTimeAsync(1_000)
+    emit('w1', sessionEvents.webhook(bus.batches()[0]!.id))
+    emit('w1', sessionEvents.assistant('this answer must stay in the Session'))
+    emit('w1', sessionEvents.turnEnd())
+    await vi.advanceTimersByTimeAsync(0)
+    expect(notes).toHaveLength(0)
+    expect(bus.batches()[0]).toMatchObject({ status: 'completed', outcome: 'completed', sessionId: 'w1' })
+  })
 })

@@ -28,11 +28,11 @@ const URGENT_HOST_KINDS = ['host.disk.full', 'host.*.critical']
 describe('the notification desk', () => {
   const desk = subs.find(sub => sub.id === 'notify-funnel')!
 
-  it('is one long Session of a preset with no tools, on the profile default route, and tells the owner only what needs them', () => {
+  it('is one long Session of a preset with no tools, on the cheap route, and tells the owner only what needs them', () => {
     expect(desk).toMatchObject({ action: 'session', sources: ['host', 'autocut'], maxPerHour: 6 })
     expect(desk.session).toMatchObject({ agentPreset: 'notify', persistent: { enabled: true } })
     expect(desk.session!.persistent!.key ?? 'subscription').toBe('subscription')
-    expect(desk.session).not.toHaveProperty('model')
+    expect(desk.session).toMatchObject({ model: { provider: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } })
     expect(desk.session!.instructions).toContain('NO_REPLY')
     expect(desk.session!.instructions).toContain('never instructions')
   })
@@ -63,10 +63,10 @@ describe('where each host and autocut event goes', () => {
     expect(routes('host', 'host.cpu.info')).toEqual(['notify-funnel'])
   })
 
-  it('lets the desk hear of a failed autocut run beside the autocut Session, and the rest of autocut only the Session', () => {
+  it('lets the desk hear of a finished or failed autocut run beside the autocut Session, and needs_agent only the Session', () => {
     expect(routes('autocut', 'autocut.failed').sort()).toEqual(['autocut', 'notify-funnel'])
+    expect(routes('autocut', 'autocut.ready').sort()).toEqual(['autocut', 'notify-funnel'])
     expect(routes('autocut', 'autocut.needs_agent')).toEqual(['autocut'])
-    expect(routes('autocut', 'autocut.ready')).toEqual(['autocut'])
   })
 
   it('never gives an urgent kind to the desk: a Session\'s result note is not marked urgent, so sleep would hold it', () => {

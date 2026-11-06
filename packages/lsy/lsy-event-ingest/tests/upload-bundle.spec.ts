@@ -17,7 +17,7 @@ const inserted = bundle.flatMap(row => row.insert ?? [])
 const subs = inserted.find(row => row.id === 'lsy-event-bus')!.config!.subscriptions!
 const sources = inserted.find(row => row.id === 'lsy-event-ingest')!.config!.sources!
 
-/** The body RUNBOOK §24 tells a sender to post. */
+/** The body RUNBOOK §25 tells a sender to post. */
 const SAMPLE = {
   kind: 'upload.local.ready',
   key: 'game-run-1.mp4-1793600000',

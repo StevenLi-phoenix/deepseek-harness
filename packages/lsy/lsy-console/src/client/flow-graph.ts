@@ -38,7 +38,7 @@ export const NODES: readonly FlowNode[] = [
   {
     id: 'uploadLocal', role: 'source', title: 'bilibili upload from local', wired: 'partial',
     via: 'ingest source upload · subscription upload-local',
-    gap: '接收端和 Session 已就绪；在另一台机器上发 upload.local.ready 的脚本要主人自己放（RUNBOOK §24）。',
+    gap: '接收端和 Session 已就绪；在另一台机器上发 upload.local.ready 的脚本要主人自己放（RUNBOOK §25）。',
   },
   { id: 'dnd', role: 'core', service: 'dsh', manage: 'lsy-presence', via: 'lsy-presence' },
   { id: 'deferQ', role: 'core', title: 'defer delay?', via: 'defer_deliver tool · lsy-wechat outbox · lsy-presence' },
@@ -49,7 +49,7 @@ export const NODES: readonly FlowNode[] = [
   {
     id: 'notifySession', role: 'agent', title: '通知消息 session', service: 'bus', manage: 'lsy-subscriptions', wired: 'partial',
     via: 'subscription notify-funnel · preset notify',
-    gap: '只接主机的非紧急通知和 autocut 失败；自动修复和 AMS 的分支还没接进来；紧急的主机告警（磁盘满）仍直接发微信。',
+    gap: '接主机的非紧急通知和 autocut 待确认、失败，走便宜路由；自动修复和 AMS 的分支还没接进来；紧急的主机告警（磁盘满）仍直接发微信。',
   },
   {
     id: 'qqSessions', role: 'agent', title: 'QQ sessions group by ids', service: 'dsh', manage: 'lsy-agents', wired: 'partial',
@@ -68,8 +68,9 @@ export const NODES: readonly FlowNode[] = [
     gap: '只修到分支为止，测试通过后汇报；部署和重启要主人点头。',
   },
   {
-    id: 'qqMain', role: 'agent', title: 'shared QQ main session (iso)', manage: 'lsy-agents', wired: 'planned',
-    gap: '它的出口是 QQ onebot（尚未实现）；只收摘要不开口的会话白耗 token，所以先不建。摘要现在由 lsy-qq 每群的会话写。',
+    id: 'qqMain', role: 'agent', title: 'shared QQ main session (iso)', service: 'bus', manage: 'lsy-subscriptions', wired: 'partial',
+    via: 'subscription qq-main · preset qq-main',
+    gap: '读各群摘要并保持跨群上下文；出口 QQ onebot 尚未实现，所以它不开口，回答也不进微信。',
   },
   {
     id: 'autocutQ', role: 'cond', title: 'Autocut?', wired: 'partial', via: 'subscription upload-local (the Session judges)',

@@ -63,6 +63,8 @@ export interface SessionAction {
    * untrusted data. Only set it on subscriptions whose sources no outsider can publish to.
    */
   trustedText?: boolean
+  /** Keep the Session's answer in the Session: the outcome is recorded and no result note goes to the notifier. */
+  quietResult?: boolean
   /**
    * A model route for this subscription's Sessions instead of the profile's default, as
    * `{ provider, model }` (the provider is a registered `llm-pi-ai` route). Configuration rows only;

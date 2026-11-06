@@ -84,13 +84,13 @@ describe('event bundle', () => {
     expect(logger?.config).toEqual({ levels: { 'default': 2, 'bili-account': 3, 'tool-bili': 3, 'owner-relay': 3 } })
   })
 
-  it('runs only the ci subscription on the edge-gateway canary route, and no other Session', () => {
+  it('runs ci, the notification desk, and the QQ main Session on the cheap edge-gateway route, and no other Session', () => {
     const bus = inserted.find(entry => entry.id === 'lsy-event-bus')!
     type Subscription = { id: string; session?: { model?: { provider: string; model: string } } }
     const subscriptions = (bus.config as { subscriptions: Subscription[] }).subscriptions
     const pinned = subscriptions.filter(subscription => subscription.session?.model !== undefined)
-    expect(pinned.map(subscription => subscription.id)).toEqual(['ci'])
-    expect(pinned[0]!.session!.model).toEqual({ provider: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' })
+    expect(pinned.map(subscription => subscription.id).sort()).toEqual(['ci', 'notify-funnel', 'qq-main'])
+    for (const subscription of pinned) expect(subscription.session!.model).toEqual({ provider: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' })
     // The chat agent and the Bilibili Sessions follow the profile default.
     const bili = inserted.find(entry => entry.id === 'bili')!
     expect(bili.config).not.toHaveProperty('model')
@@ -110,11 +110,14 @@ describe('event bundle', () => {
       'notify-funnel': ['/Users/dsh-runtime/work/events', '事件'],
       'bili-digest': ['/Users/dsh-runtime/work/bili', 'B站'],
       'ci': ['/Users/dsh-runtime/work/ci', 'CI'],
+      'qq-main': ['/Users/dsh-runtime/work/qq', 'QQ'],
     })
     expect(sessions['ci']).toMatchObject({ titlePrefix: 'CI', persistent: { enabled: true, key: 'subject' } })
     expect(sessions['bili-digest']).toMatchObject({ titlePrefix: 'B站评论与私信', persistent: { enabled: true } })
     // The notification desk is one long Session, so it remembers earlier batches and merges repeats.
     expect(sessions['notify-funnel']).toMatchObject({ titlePrefix: '通知', persistent: { enabled: true } })
+    // The QQ main Session is one long Session that reads every group's digests, with no tools and no way to WeChat.
+    expect(sessions['qq-main']).toMatchObject({ agentPreset: 'qq-main', titlePrefix: 'QQ 主会话', persistent: { enabled: true }, quietResult: true })
     // One-off Sessions stay one per batch.
     for (const id of ['kaorou', 'autocut', 'operator', 'upload-local']) expect(sessions[id]).not.toHaveProperty('persistent')
   })

@@ -48,7 +48,7 @@ const OUTSIDE_PRESETS = ['bili', 'up', 'qqbot', 'qq-digest'] as const
  * Every preset that must carry no owner memory and no WeChat-side tool: the outside presets and `notify`, the notification
  * desk (host and autocut events in, one short note to the owner out, no tools, and no speaking-style layer).
  */
-const NO_MEMORY_PRESETS = [...OUTSIDE_PRESETS, 'notify'] as const
+const NO_MEMORY_PRESETS = [...OUTSIDE_PRESETS, 'notify', 'qq-main'] as const
 
 /** Plugins that carry the owner's memory or reach the WeChat side, and why none may run in an outside preset. */
 const WECHAT_SIDE: Record<string, string> = {
@@ -87,6 +87,10 @@ const ALLOWED: Record<(typeof NO_MEMORY_PRESETS)[number], string[]> = {
   'qq-digest': ['@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-lsy-tool-qq', STYLE, 'cordis:group', '@deepseek-ai/dsh-compaction-basic'],
   // The notification desk: a persona, the time, and compaction. Nothing that acts, nothing of the owner's memory.
   'notify': [
+    '@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context',
+    'cordis:group', '@deepseek-ai/dsh-compaction-basic', '@deepseek-ai/dsh-compaction-tool-result-pruner',
+  ],
+  'qq-main': [
     '@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context',
     'cordis:group', '@deepseek-ai/dsh-compaction-basic', '@deepseek-ai/dsh-compaction-tool-result-pruner',
   ],
