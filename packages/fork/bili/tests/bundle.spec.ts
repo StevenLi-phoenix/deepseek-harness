@@ -47,7 +47,7 @@ const ROOT_TOOL_ROWS_WITHOUT_TOOLS = new Set([
 
 describe('event bundle', () => {
   it('keeps what this service did before upstream changed its defaults', () => {
-    const edit = (id: string) => bundle.find(row => row.id === id && row.insert === undefined) as (Row & { disabled?: unknown }) | undefined
+    const edit = (id: string) => bundle.find(row => row.id === id && row.insert === undefined)
     const root = composedRoot()
     // Read-before-write, legacy web search, and the search limits stay as the agents have them.
     expect(root.get('fs-observation-policy')?.enabled).toBe(true)
