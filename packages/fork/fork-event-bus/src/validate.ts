@@ -1,4 +1,5 @@
 /** Subscription validation shared by the configuration and run-time `subscribe()`. */
+import { ROUTE_RESULTS } from './flow.ts'
 
 /** Narrow to a plain record. */
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -32,6 +33,9 @@ function sessionProblem(id: string, session: unknown): string | undefined {
   if (!isIntegerAtLeast(session.maxPromptEvents, 1)) return `${label}: session.maxPromptEvents must be a positive integer`
   if (!isIntegerAtLeast(session.maxTextChars, 1)) return `${label}: session.maxTextChars must be a positive integer`
   if (session.titlePrefix !== undefined && typeof session.titlePrefix !== 'string') return `${label}: session.titlePrefix must be a string`
+  if (session.result !== undefined && !(ROUTE_RESULTS as readonly unknown[]).includes(session.result)) {
+    return `${label}: session.result must be one of ${ROUTE_RESULTS.join(', ')}`
+  }
   const model = session.model
   if (model !== undefined) {
     // Schemastery hands an unset `model` over as `{}`: both fields absent means none.
@@ -59,6 +63,22 @@ export function subscriptionProblem(value: unknown): string | undefined {
   if (!isIntegerAtLeast(value.coalesceMs, 0)) return `subscription "${id}": coalesceMs must be a non-negative integer`
   if (!isIntegerAtLeast(value.maxPerHour, 1)) return `subscription "${id}": maxPerHour must be a positive integer`
   return value.action === 'session' ? sessionProblem(id, value.session) : undefined
+}
+
+/** Why `editFlow()` refused a change. */
+export type ForkFlowErrorCode = 'invalid_route' | 'not_found' | 'not_config' | 'cycle'
+
+/** Rejection of a change of the notification flow. */
+export class ForkFlowError extends Error {
+  override readonly name = 'ForkFlowError'
+
+  /**
+   * @param code - why it was refused.
+   * @param message - what to do about it.
+   */
+  constructor(readonly code: ForkFlowErrorCode, message: string) {
+    super(message)
+  }
 }
 
 /** Why `subscribe()` refused a subscription. */

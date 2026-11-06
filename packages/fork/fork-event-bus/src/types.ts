@@ -41,6 +41,13 @@ export interface BatchEvent {
   readonly occurredAt?: number | undefined
 }
 
+/**
+ * Where a `session` route's answer goes: `notify` a message for the owner, `urgent` the same past the do-not-disturb hold, `main` the
+ * owner's main agent, `quiet` nowhere, and `event` an event of kind `flow.<route id>.result` that other routes can take. The silent
+ * reply sends nothing on any of them, so a route filters by answering it.
+ */
+export type RouteResult = 'notify' | 'urgent' | 'main' | 'quiet' | 'event'
+
 /** How a `session` subscription turns one batch into a new agent Session. */
 export interface SessionAction {
   /** Absolute Workspace directory the Session runs in. */
@@ -65,6 +72,8 @@ export interface SessionAction {
   trustedText?: boolean
   /** Keep the Session's answer in the Session: the outcome is recorded and no result note goes to the notifier. */
   quietResult?: boolean
+  /** Where the Session's answer goes; overrides `quietResult`. Omitted: `quietResult` decides, otherwise the notifier. */
+  result?: RouteResult
   /**
    * A model route for this subscription's Sessions instead of the profile's default, as
    * `{ provider, model }` (the provider is a registered `llm-pi-ai` route). Configuration rows only;
@@ -220,9 +229,78 @@ export interface SubscriptionView extends Subscription {
   createdAt?: number
   /** Session whose agent created a run-time subscription. */
   createdBy?: string
-  /** Present while a run-time subscription is paused: new events no longer match it and its pending events wait. */
+  /** Present while a subscription is paused: new events no longer match it and its pending events wait. */
   paused?: true
+  /** The latest run-time change of a configuration route. */
+  changed?: { at: number; by?: string }
   status: SubscriptionStatus
+}
+
+/** The fields of a route a run-time change may set; `trustedText` stays with the deployment. */
+export interface RoutePatch {
+  sources?: string[]
+  kinds?: string[]
+  subjects?: string[]
+  action?: 'notify' | 'session'
+  coalesceMs?: number
+  maxPerHour?: number
+  session?: Partial<Pick<
+    SessionAction,
+    | 'workspacePath' | 'agentPreset' | 'permissionPreset' | 'instructions' | 'titlePrefix' | 'maxPromptEvents' | 'maxTextChars'
+    | 'result' | 'model' | 'persistent' | 'project'
+  >>
+}
+
+/** One change of the notification flow. */
+export type FlowEdit =
+  /** Change a route, or create it when the id is new. */
+  | { op: 'set'; id: string; patch: RoutePatch }
+  /** Take a route out; a configuration route can come back with `reset`. */
+  | { op: 'remove'; id: string }
+  /** Put a configuration route back as the deployment wrote it. */
+  | { op: 'reset'; id: string }
+  /** Stop a route taking new events; those already pending wait. */
+  | { op: 'pause'; id: string }
+  /** Let a paused route take events again. */
+  | { op: 'resume'; id: string }
+
+/** Who made a change and why. */
+export interface FlowEditMeta {
+  /** The Session whose agent made the change. */
+  by?: string
+  /** The reason, as the agent gave it. */
+  note?: string
+}
+
+/** One entry of the flow's change history. */
+export interface FlowChange {
+  id: string
+  at: number
+  op: FlowEdit['op']
+  route: string
+  by?: string
+  note?: string
+  /** The route before and after, as JSON; absent where it did not exist. */
+  before?: string
+  after?: string
+}
+
+/** One route of the flow, as `ForkEventBus.flowRoutes()` reports it. */
+export interface FlowRouteView extends SubscriptionView {
+  /** A configuration route taken out; it takes no events until `reset`. */
+  removed?: true
+  /** Where a `session` route's answer goes. */
+  result?: RouteResult
+  /** The routes that take its answer. */
+  downstream: string[]
+}
+
+/** What `ForkEventBus.editFlow()` did. */
+export interface FlowEditResult {
+  /** The route as it stands now; null once a run-time route is gone. */
+  route: FlowRouteView | null
+  change: FlowChange
+  warnings: string[]
 }
 
 /** Result of `ForkEventBus.unsubscribe()`. */
