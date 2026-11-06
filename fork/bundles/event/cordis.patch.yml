@@ -552,12 +552,12 @@
 
     # Integrity watch: digests of what steers the agent (both profile patches, the instruction files and
     # skill directories of its workspaces, the memory file against its history, the scheduled tasks). A change
-    # reaches the owner on WeChat as the target's name, never its content, merged and at most a few a day. It
-    # also logs a hash of each Session's system prompt and counts the persona's forbidden stock lines per day
+    # goes to the log only: the owner turned the WeChat notice off (`notify: false`). It also logs a hash of each Session's system prompt and counts the persona's forbidden stock lines per day
     # ($DSH_HOME/fork-integrity/tics.json, counts only).
     - id: fork-integrity
       name: '@deepseek-ai/dsh-fork-integrity'
       config:
+        notify: false
         workspaces:
           - /Users/dsh-runtime/me
           - /Users/dsh-runtime/work
@@ -1056,11 +1056,13 @@
           # preferences, identity) made in a turn the owner did not start alone is held until the owner
           # answers it with the memory-admin CLI over SSH (RUNBOOK 15). Observing only until the owner decides
           # (2026-10-31): `hold: false` writes through and logs `[would be held]`. Turning it on takes
-          # `hold: true` here and removing FORK_MEMORY_HOLD=0 from $DSH_HOME/.env.
+          # `hold: true` here and removing FORK_MEMORY_HOLD=0 from $DSH_HOME/.env. The owner turned the WeChat
+          # notice of each write off (`notify: false`); the history keeps every change.
           - id: fork-memory
             name: '@deepseek-ai/dsh-fork-memory'
             config:
               hold: false
+              notify: false
           # DSH's speaking style (its persona card, traits, meme index, tone samples; from the root fork-style row) in
           # front of each root Session, as quoted style reference; meme_lookup, style_note (examples checked against the
           # pages this Session searched or fetched), and persona_update. Nothing when the root row is off.
