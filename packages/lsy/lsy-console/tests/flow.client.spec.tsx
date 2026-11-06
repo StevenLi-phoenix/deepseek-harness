@@ -38,6 +38,8 @@ const ITEM: FlowRecentItem = { id: 'e1', at: NOW - 60_000, source: 'github', kin
 const ACTIVITY: FlowActivityView = {
   checkedAt: NOW,
   presence: { asleep: false, deferred: 0 },
+  routes: [],
+  changes: [],
   recent: [ITEM, { ...ITEM, id: 'e2', source: 'host', kind: 'host.test.info', title: '磁盘检查', subscriptions: ['notify-funnel'], outcome: 'silent' }],
   windows: {
     '1h': window({ funnel: { events: 2, batches: 1, sent: 1, silent: 0, failed: 0 } }),
