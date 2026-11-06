@@ -45,7 +45,7 @@ describe('the notification desk', () => {
   })
 
   it('passes the bus\'s own configuration check, with every subscription id once', () => {
-    const { subscriptions } = BusConfig(busConfig)
+    const { subscriptions } = BusConfig(busConfig as never)
     for (const sub of subscriptions) expect(subscriptionProblem(sub), sub.id).toBeUndefined()
     expect(new Set(subscriptions.map(sub => sub.id)).size).toBe(subscriptions.length)
     expect(subscriptionProblem({ ...desk, session: undefined })).toContain('notify-funnel')

@@ -157,7 +157,7 @@ describe('ForkEventBus silent Session results', () => {
     const quiet = {
       ...sessionConfig,
       subscriptions: sessionConfig.subscriptions.map(subscription => ({
-        ...subscription, session: { ...subscription.session, quietResult: true },
+        ...subscription, session: { ...subscription.session!, quietResult: true },
       })),
     }
     const { bus, emit } = await harness({ config: quiet, notifier: { send: async (note: ForkNote) => { notes.push(note) } } })
