@@ -1,0 +1,8 @@
+version: 1
+scenario: lsy-flow-edit
+profile: headless
+composition: default
+recording: authored
+header:
+  class: lsy-flow-edit
+  pin: true

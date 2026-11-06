@@ -1,0 +1,14 @@
+# The notification flow as the model reads and changes it: the bus with one deployment route, and the tools.
+- insert:
+    - id: lsy-event-bus
+      name: '@deepseek-ai/dsh-lsy-event-bus'
+      config:
+        subscriptions:
+          - id: ci
+            sources: [github]
+            kinds: ['github.workflow_run.completed']
+            action: notify
+            coalesceMs: 300000
+            maxPerHour: 4
+    - id: lsy-tool-watch
+      name: '@deepseek-ai/dsh-lsy-tool-watch'
