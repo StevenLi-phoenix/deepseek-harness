@@ -9,7 +9,8 @@ import { createUserMessage, type ContextFormed, type GenerateOptions, type UserM
 import { untrustedRequestId } from '@deepseek-ai/dsh-lsy-taint'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { MockAdapter, textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
+import { defineContentToolFixture } from '@deepseek-ai/dsh-tool-testkit'
+import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 import * as TimeGap from '../src/index.ts'
 
 declare module '@deepseek-ai/dsh-llm' {
@@ -41,14 +42,18 @@ interface Bench {
   send(agent: Agent, at: number, ...messages: UserMessage[]): Promise<void>
 }
 
-async function bench(config: Partial<TimeGap.Config> = {}, claims: Record<string, string> = {}): Promise<Bench> {
+async function bench(
+  config: Partial<TimeGap.Config> = {},
+  claims: Record<string, string> = {},
+  responses: ReturnType<typeof textResponse>[] = Array.from({ length: 20 }, (_, index) => textResponse(`reply ${index}`)),
+): Promise<Bench> {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(start)
   const ctx = new Context()
   contexts.push(ctx)
   await mountAgentLoopTestDependencies(ctx)
   await ctx.plugin(AgentLoop, { agents: [] })
-  const adapter = new MockAdapter(Array.from({ length: 20 }, (_, index) => textResponse(`reply ${index}`)))
+  const adapter = new MockAdapter(responses)
   ctx.llm.registerAdapter(['mock'], adapter)
   ctx.provide('ownerRelay', { ownerOf: (id: string) => claims[id] } as never)
   const logs: string[] = []
@@ -206,6 +211,68 @@ describe('the time-gap notice in a real agent loop', () => {
     expect(notices(agent)).toEqual([])
     await b.send(agent, start + 25 * MIN, message(OWNER, 'later'))
     expect(lastRequestTexts(b.adapter).find(text => text.startsWith('Time check'))).toContain('after 16 min of silence')
+  })
+
+  it('names "none" in the start-up log when no preset, sender preset or channel is listed', async () => {
+    const b = await bench({ excludePresets: [], senderPresets: [], deferChannels: [] })
+    expect(b.logs).toContain('info lsy-time-gap: notice after 5 min of silence (America/New_York); presets excluded: none; sender presets: none; channels with their own check: none')
+  })
+
+  it('keeps the earlier time when two inputs arrive at the same instant, and gives one notice for the later turn', async () => {
+    const b = await bench()
+    const agent = await b.agent('web-chat')
+    await b.send(agent, start, message(OWNER, 'one'), message(OWNER, 'two'))
+    await b.send(agent, start + 2 * 3_600_000, message(OWNER, 'later'))
+    expect(notices(agent)).toHaveLength(1)
+    expect(lastRequestTexts(b.adapter).find(text => text.startsWith('Time check'))).toContain('after 2 h of silence')
+  })
+
+  it('adds the notice only to the first step of a turn, not to the step after a tool call', async () => {
+    const b = await bench({}, {}, [
+      textResponse('first reply'),
+      toolCallResponse('call-1', 'probe', {}),
+      textResponse('done'),
+    ])
+    b.ctx.tools.register(defineContentToolFixture({
+      name: 'probe',
+      description: 'returns at once',
+      parameters: {},
+      async execute() { return [{ type: 'text', text: 'probed' }] },
+    }))
+    const agent = await b.agent('web-chat')
+    await b.send(agent, start, message(OWNER, 'first'))
+    await b.send(agent, start + 2 * 3_600_000, message(OWNER, 'use the probe'))
+    expect(b.adapter.requests).toHaveLength(3)
+    expect(notices(agent)).toHaveLength(1)
+    expect(b.logs.filter(line => line.includes('input after'))).toEqual(['info lsy-time-gap: Session web-chat, owner input after 2 h of silence'])
+  })
+
+  it('passes a step another listener rejected through without a notice', async () => {
+    const b = await bench()
+    const agent = await b.agent('web-chat')
+    await b.send(agent, start, message(OWNER, 'first'))
+    b.ctx.on('agent/pre-step', async ({ messages }, next) => (messages.some(item => item.content.some(block => block.type === 'text' && block.text === 'rejected'))
+      ? { kind: 'reject' as const }
+      : next()))
+    const before = b.adapter.requests.length
+    await b.send(agent, start + 2 * 3_600_000, message(OWNER, 'rejected'))
+    expect(b.adapter.requests).toHaveLength(before)
+    expect(notices(agent)).toEqual([])
+    expect(b.logs.filter(line => line.includes('input after'))).toEqual([])
+  })
+
+  it('adds no second notice when the step already carries one', async () => {
+    const b = await bench()
+    const agent = await b.agent('web-chat')
+    await b.send(agent, start, message(OWNER, 'first'))
+    const own = createUserMessage({ content: [{ type: 'text', text: 'already noted' }], source: { kind: 'lsy-time-gap', form: 'notice', summary: 'x' } })
+    b.ctx.on('agent/pre-step', async (_event, next) => {
+      const decision = await next()
+      return decision.kind === 'reject' ? decision : { ...decision, messages: [own, ...decision.messages] }
+    })
+    await b.send(agent, start + 2 * 3_600_000, message(OWNER, 'later'))
+    expect(lastRequestTexts(b.adapter).filter(text => text.startsWith('Time check'))).toEqual([])
+    expect(b.logs.filter(line => line.includes('input after'))).toEqual([])
   })
 
   it('refuses a time zone the runtime does not know', async () => {

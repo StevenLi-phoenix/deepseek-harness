@@ -3,10 +3,25 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, w
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { LoginSessions } from '../src/login-session.ts'
 import { readAccountFile, type WechatAccount } from '../src/login.ts'
 import { WechatSettings, type SettingsChannel } from '../src/settings.ts'
 import { maskId, WECHAT_PATH, type ChannelStatus, type WechatAnswer, type WechatView } from '../src/view.ts'
 import { FakeIlink } from './fake-ilink.ts'
+
+/** Faults the real file system cannot produce: an error with no `code`. */
+const fsFaults = vi.hoisted(() => ({ rename: undefined as Error | undefined }))
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>()
+  return {
+    ...actual,
+    rename: async (...args: Parameters<typeof actual.rename>) => {
+      if (fsFaults.rename !== undefined) throw fsFaults.rename
+      return actual.rename(...args)
+    },
+  }
+})
 
 const TOKEN = 'bot-token-secret'
 const CONFIRMED = { status: 'confirmed', bot_token: TOKEN, ilink_bot_id: 'botabcdef123@im.bot', baseurl: 'https://idc.ilinkai.weixin.qq.com', ilink_user_id: 'owneruser456@im.wechat' }
@@ -26,6 +41,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  fsFaults.rename = undefined
   for (const settings of open.splice(0)) settings.dispose()
   rmSync(dir, { recursive: true, force: true })
   vi.restoreAllMocks()
@@ -112,6 +128,8 @@ describe('Settings route: reads', () => {
     expect(maskId('ab@im.bot')).toBe('a…@im.bot')
     expect(maskId('abcdefgh@im.bot')).toBe('abc…gh@im.bot')
     expect(maskId('plain')).toBe('p…')
+    expect(maskId('@im.bot')).toBe('…@im.bot')
+    expect(maskId('')).toBe('…')
   })
 })
 
@@ -348,5 +366,102 @@ describe('wire types', () => {
     const host = await readFile(new URL('../src/view.ts', import.meta.url), 'utf8')
     const client = await readFile(new URL('../../lsy-wechat-settings/src/wechat-view.ts', import.meta.url), 'utf8')
     expect(host).toBe(client)
+  })
+})
+
+describe('Settings route: account file edge cases', () => {
+  it('answers no bound time for a time it cannot read', async () => {
+    writeBound({ boundAt: 'not a time' })
+    const { call } = mount()
+    expect((await call()).json.view.binding).toMatchObject({ state: 'bound', boundAt: null })
+  })
+
+  it('refuses a POST that declares no content type', async () => {
+    const { route } = mount()
+    const request = new Request(`http://127.0.0.1${WECHAT_PATH}`, { method: 'POST', body: new Uint8Array([0x7b, 0x7d]) })
+    const response = await route.fetch(request)
+    expect(response.status).toBe(415)
+    expect(await response.json()).toEqual({ error: 'expected application/json' })
+  })
+
+  it('keeps the account and reports the code when the file cannot be moved aside', async () => {
+    // The backup suffix pushes this name past the 255-byte name limit, so the rename fails for real.
+    accountFile = join(dir, 'a'.repeat(240))
+    writeBound()
+    const { call, logs, reloads } = mount()
+    const answer = await call({ action: 'unbind', confirm: 'unbind' })
+    expect(answer).toMatchObject({ status: 500, json: { error: 'the account file could not be moved' } })
+    expect(logs).toContain('warn lsy-wechat: settings unbind failed to move the account file (ENAMETOOLONG)')
+    expect(existsSync(accountFile)).toBe(true)
+    expect(reloads).toEqual([])
+  })
+
+  it('logs a failed move plainly when the error names no code', async () => {
+    writeBound()
+    const { call, logs } = mount()
+    fsFaults.rename = new Error('odd failure')
+    expect((await call({ action: 'unbind', confirm: 'unbind' })).status).toBe(500)
+    expect(logs).toContain('warn lsy-wechat: settings unbind failed to move the account file (error)')
+  })
+
+  it('logs a confirmed login whose save failed plainly when the error names no code', async () => {
+    const { call, ilink, logs } = mount()
+    fsFaults.rename = new Error('odd failure')
+    ilink.statuses(CONFIRMED)
+    const key = (await call({ action: 'login.start' })).json.login!.key
+    expect((await until(call, key, phase => phase === 'failed')).json.login).toMatchObject({ phase: 'failed', failure: 'save-failed' })
+    expect(logs).toContain('warn lsy-wechat: settings login confirmed but the account file was not written (error)')
+  })
+})
+
+describe('LoginSessions on its own', () => {
+  /** Sessions with no clock override, over the iLink double. */
+  function sessions(onBound: () => void, fetch?: typeof globalThis.fetch) {
+    const ilink = new FakeIlink()
+    const logs: string[] = []
+    const logins = new LoginSessions({
+      accountFile,
+      onBound,
+      logger: { info: (message) => { logs.push(message) }, warn: (message) => { logs.push(message) } },
+      login: { fetch: fetch ?? ilink.fetch, baseUrl: 'https://ilink.test', pollDelayMs: 0 },
+    })
+    return { ilink, logs, logins }
+  }
+
+  it('binds on the real clock when no clock is given', async () => {
+    const bound: string[] = []
+    const { ilink, logins, logs } = sessions(() => { bound.push('bound') })
+    ilink.statuses(CONFIRMED)
+    const { key } = await logins.start()
+    await vi.waitFor(() => { expect(logins.poll(key)?.phase).toBe('done') })
+    expect(bound).toEqual(['bound'])
+    expect(logs.some(line => /^lsy-wechat: settings login bound bot botabcdef123@im\.bot \(\d+ ms\)$/.test(line))).toBe(true)
+  })
+
+  it('keeps a saved login done when the bound hook throws, and logs the hook\'s failure', async () => {
+    const { ilink, logins, logs } = sessions(() => { throw 'the channel refused' })
+    ilink.statuses(CONFIRMED)
+    const { key } = await logins.start()
+    await vi.waitFor(() => { expect(logs).toContain('lsy-wechat: the channel did not take the new account (the channel refused)') })
+    expect(logins.poll(key)?.phase).toBe('done')
+    expect(readAccountFile(accountFile).kind).toBe('ok')
+  })
+
+  it('ends at once when the status answer asking for a number arrives after a cancel', async () => {
+    let onStatus = (): void => {}
+    const relay: typeof globalThis.fetch = async (input, init) => {
+      const response = await double.ilink.fetch(input, init)
+      if ((input instanceof Request ? input.url : String(input)).includes('get_qrcode_status')) onStatus()
+      return response
+    }
+    const double = sessions(() => { throw new Error('a cancelled login must not bind') }, relay)
+    const { key } = await double.logins.start()
+    onStatus = () => { double.logins.cancel(key) }
+    double.ilink.statuses({ status: 'need_verifycode' })
+    const ended = 'lsy-wechat: settings login did not bind (cancelled: cancelled from Settings)'
+    await vi.waitFor(() => { expect(double.logs).toContain(ended) })
+    expect(double.logins.poll(key)).toMatchObject({ phase: 'failed', failure: 'cancelled' })
+    expect(double.logins.code(key, '12')).toBe('not-waiting')
+    expect(existsSync(accountFile)).toBe(false)
   })
 })

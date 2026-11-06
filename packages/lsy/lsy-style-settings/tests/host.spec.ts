@@ -59,6 +59,14 @@ describe('lsy-style-settings Host routes', () => {
     expect(await (await route(STYLE_COLLECT_PATH).fetch(post(STYLE_COLLECT_PATH))).json()).toMatchObject({ running: true })
   })
 
+  it('answers 400 with the service\'s panel for an edit it refuses as invalid', async () => {
+    const edit = vi.fn(() => Promise.resolve({ ok: false, error: 'invalid_input', panel: PANEL }))
+    const { route } = await mount({ panel: () => Promise.resolve(PANEL), edit, collect: vi.fn() })
+    const refused = await route(STYLE_EDIT_PATH).fetch(post(STYLE_EDIT_PATH, JSON.stringify({ op: 'card', card: '' })))
+    expect(refused.status).toBe(400)
+    expect(await refused.json()).toEqual({ ok: false, error: 'invalid_input', panel: PANEL })
+  })
+
   it('answers 503 while lsy-style is not mounted', async () => {
     const { route } = await mount()
     expect((await route(STYLE_PATH).fetch(new Request('http://h/api/lsy.style'))).status).toBe(503)

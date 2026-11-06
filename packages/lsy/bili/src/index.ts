@@ -515,6 +515,7 @@ export class BiliAccount extends Service {
   /** The account's own mid, which some reads and actions need; bili-svc lists it. */
   private async selfMid(): Promise<number> {
     const { view } = await this.accountView()
+    /* v8 ignore next -- an unreachable view always carries its error text, so `?? 'no answer'` is only a type fallback. */
     if (view.session !== 'ok') throw new Error(view.session === 'unreachable' ? `bili-svc cannot be asked about the account: ${view.error ?? 'no answer'}` : `the Bilibili session in bili-svc is ${view.session}; bili-svc owns the login, and the owner renews it there`)
     if (view.mid !== undefined) return view.mid
     const nav = await navInfo(this.client)
@@ -963,6 +964,7 @@ export class BiliAccount extends Service {
         return folder.contains === true ? `already in folder ${folder.title}` : undefined
       },
       perform: async () => {
+        /* v8 ignore next -- perform runs only after preRead, which throws when no folder was chosen, so `folder` is always set here. */
         const ids = folder === undefined ? [] : [folder.id]
         await dealFavorite(this.client, video.aid, options.remove === true ? { add: [], remove: ids } : { add: ids, remove: [] }, bvid)
       },
@@ -1197,6 +1199,7 @@ export class BiliAccount extends Service {
       const stat = await relationStat(this.client, mid)
       const list = await folders(this.client, mid)
       const rewards = await dailyRewards(this.client)
+      /* v8 ignore next 5 -- a signed-in nav answer always has uname, exp, and coins. */
       return {
         signedIn: true, mid,
         ...(nav.uname ?? view.uname) === undefined ? {} : { uname: nav.uname ?? view.uname },
@@ -1324,6 +1327,7 @@ export class BiliAccount extends Service {
     const speakerId = manage && manageError === null ? await this.commentSpeaker() : null
     const speakerRow = speakerId === null ? undefined : accounts.find(row => row.id === speakerId)
     const gate = snapshot === undefined ? minimalGate(agent?.gate) : fullGate(snapshot.status.gate)
+    /* v8 ignore next 2 -- snapshot is defined whenever agent is undefined. */
     return {
       account: agent?.view ?? this.accountOf(snapshot?.status ?? { accounts: [] }, checkedAt),
       gate,

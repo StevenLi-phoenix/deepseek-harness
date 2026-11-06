@@ -1,10 +1,12 @@
 import { createCipheriv } from 'node:crypto'
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ItemType } from '../src/api.ts'
-import { describeMedia, downloadMedia, mediaSpec, outboundKind, parseMediaKey, saveInboxFile, sniffImageType, uploadMedia } from '../src/media.ts'
+import {
+  attachmentNote, describeMedia, downloadMedia, mediaSpec, outboundKind, parseMediaKey, saveInboxFile, sniffImageType, uploadMedia,
+} from '../src/media.ts'
 
 const KEY = Buffer.from('00112233445566778899aabbccddeeff', 'hex')
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('rest of a png')])
@@ -191,5 +193,172 @@ describe('uploadMedia', () => {
       .rejects.toThrow(/^CDN upload failed with HTTP 500$/)
     await expect(uploadMedia(client({ uploadParam: 'p' }), 'o', 'a.png', PNG, { cdnBaseUrl: CDN, timeoutMs: 5000, fetch: uploadCdn({ omitParam: true }).fetch }))
       .rejects.toThrow(/^CDN upload returned no download parameter$/)
+  })
+})
+
+/** A file item whose key is the base64 of the raw AES key. */
+function fileItem(name: string, param: string) {
+  return { type: ItemType.FILE, file_item: { file_name: name, media: { encrypt_query_param: param, aes_key: KEY.toString('base64') } } }
+}
+
+/** A CDN item any failing transport can be pointed at. */
+const CDN_FILE = fileItem('a.txt', 'x')
+
+/** A fetch that never answers until its signal aborts, then rejects with the signal's reason. */
+const hangingFetch: typeof fetch = async (_input, init) => new Promise((_resolve, reject) => {
+  init?.signal?.addEventListener('abort', () => { reject(init.signal?.reason as Error) })
+})
+
+describe('mediaSpec of items short of parts', () => {
+  it('gives no spec for text and voice items, and downloadMedia refuses them', async () => {
+    expect(mediaSpec({ type: ItemType.TEXT })).toBeUndefined()
+    await expect(downloadMedia({ type: ItemType.TEXT }, options(cdn({}).fetch))).rejects.toThrow(/^not a media item$/)
+  })
+
+  it('reads an image, file, or video item without its body as having no reference and no key', () => {
+    expect(mediaSpec({ type: ItemType.IMAGE })).toEqual({ kind: 'image', ref: undefined, key: undefined, name: 'image' })
+    expect(mediaSpec({ type: ItemType.FILE })).toEqual({ kind: 'file', ref: undefined, key: undefined, name: 'file.bin' })
+    expect(mediaSpec({ type: ItemType.VIDEO })).toEqual({ kind: 'video', ref: undefined, key: undefined, name: 'video.mp4' })
+  })
+
+  it('reads a body without media as having no reference and no key', () => {
+    const empty = { media: null }
+    expect(mediaSpec({ type: ItemType.IMAGE, image_item: empty })).toMatchObject({ ref: undefined, key: undefined })
+    expect(mediaSpec({ type: ItemType.FILE, file_item: empty })).toMatchObject({ ref: undefined, key: undefined })
+    expect(mediaSpec({ type: ItemType.VIDEO, video_item: empty })).toMatchObject({ ref: undefined, key: undefined })
+  })
+
+  it('falls back to a safe name when the file name holds only path dots', () => {
+    expect(mediaSpec({ type: ItemType.FILE, file_item: { file_name: '..' } })?.name).toBe('file.bin')
+    expect(mediaSpec({ type: ItemType.FILE, file_item: { file_name: 'a/b/.' } })?.name).toBe('file.bin')
+  })
+})
+
+describe('downloadMedia typing and limits', () => {
+  it('types a video as mp4 whatever its bytes are', async () => {
+    const server = cdn({ clip: encrypt(Buffer.from('frames')) })
+    const item = { type: ItemType.VIDEO, video_item: { media: { encrypt_query_param: 'clip', aes_key: KEY.toString('base64') } } }
+    const media = await downloadMedia(item, options(server.fetch))
+    expect(media).toMatchObject({ kind: 'video', name: 'video.mp4', mediaType: 'video/mp4' })
+    expect(media.data.toString()).toBe('frames')
+  })
+
+  it('types a file from its extension, and one it does not know as opaque', async () => {
+    const server = cdn({ doc: encrypt(Buffer.from('%PDF')), odd: encrypt(Buffer.from('?')) })
+    const typed = (name: string, param: string) => downloadMedia(fileItem(name, param), options(server.fetch))
+    await expect(typed('a.PDF', 'doc')).resolves.toMatchObject({ kind: 'file', mediaType: 'application/pdf' })
+    await expect(typed('a.xyz', 'odd')).resolves.toMatchObject({ mediaType: 'application/octet-stream' })
+  })
+
+  it('refuses a declared length over the limit before reading the body', async () => {
+    let cancelled = false
+    const body = new ReadableStream({ cancel() { cancelled = true } })
+    const fetch: typeof globalThis.fetch = () => Promise.resolve(new Response(body, { headers: { 'content-length': '5000' } }))
+    await expect(downloadMedia(fileItem('a.txt', 'x'), options(fetch))).rejects.toThrow(/^media exceeds 1024 bytes$/)
+    expect(cancelled).toBe(true)
+  })
+
+  it('refuses a body whose plaintext passes the limit though its ciphertext fits the padding allowance', async () => {
+    const server = cdn({ edge: encrypt(Buffer.alloc(17)) })
+    await expect(downloadMedia(fileItem('a.txt', 'edge'), options(server.fetch, 16))).rejects.toThrow(/^media exceeds 16 bytes$/)
+  })
+
+  it('reports a body that is not valid ciphertext as undecryptable', async () => {
+    const server = cdn({ torn: Buffer.from('seven b') })
+    await expect(downloadMedia(fileItem('a.txt', 'torn'), options(server.fetch))).rejects.toThrow(/^media could not be decrypted$/)
+  })
+})
+
+describe('CDN transport failures', () => {
+  const failed = (cause: unknown): Error => new TypeError('fetch failed https://cdn.test/secret', { cause })
+  const unreachable = (cause: unknown): typeof fetch => () => Promise.reject(failed(cause))
+  const refused = Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })
+  const uploadClient = { getUploadUrl: () => Promise.resolve({ uploadParam: 'p' }) }
+  const upload = (fetch: typeof globalThis.fetch, extra: { timeoutMs?: number; signal?: AbortSignal } = {}) =>
+    uploadMedia(uploadClient, 'o', 'a.txt', Buffer.from('x'), { cdnBaseUrl: CDN, timeoutMs: 5000, fetch, ...extra })
+
+  it('names the network error code of a failed download, never the URL', async () => {
+    await expect(downloadMedia(CDN_FILE, options(unreachable(refused)))).rejects.toThrow(/^CDN request failed \(ECONNREFUSED\)$/)
+  })
+
+  it('reports a failed download with no code, no cause, or no Error plainly', async () => {
+    await expect(downloadMedia(CDN_FILE, options(unreachable(new Error('no code'))))).rejects.toThrow(/^CDN request failed$/)
+    await expect(downloadMedia(CDN_FILE, options(unreachable('not an error')))).rejects.toThrow(/^CDN request failed$/)
+    await expect(downloadMedia(CDN_FILE, options(() => Promise.reject(new Error('bare'))))).rejects.toThrow(/^CDN request failed$/)
+    await expect(downloadMedia(CDN_FILE, options(async () => { throw 'not an error' }))).rejects.toThrow(/^CDN request failed$/)
+  })
+
+  it('reports a download that outlives its deadline as timed out', async () => {
+    await expect(downloadMedia(CDN_FILE, { ...options(hangingFetch), timeoutMs: 1 })).rejects.toThrow(/^CDN request timed out$/)
+  })
+
+  it('passes on the caller\'s own abort of a download unchanged', async () => {
+    const stop = new AbortController()
+    const reason = new Error('the channel is stopping')
+    const pending = downloadMedia(CDN_FILE, { ...options(hangingFetch), signal: stop.signal })
+    stop.abort(reason)
+    await expect(pending).rejects.toBe(reason)
+  })
+
+  it('reports a failed upload by its network error code, and one with none plainly', async () => {
+    await expect(upload(unreachable(refused))).rejects.toThrow(/^CDN request failed \(ECONNREFUSED\)$/)
+    await expect(upload(() => Promise.reject(new Error('bare')))).rejects.toThrow(/^CDN request failed$/)
+  })
+
+  it('reports an upload that outlives its deadline as timed out', async () => {
+    await expect(upload(hangingFetch, { timeoutMs: 1 })).rejects.toThrow(/^CDN request timed out$/)
+  })
+
+  it('passes on the caller\'s own abort of an upload unchanged', async () => {
+    const stop = new AbortController()
+    const reason = new Error('the channel is stopping')
+    const fetch: typeof globalThis.fetch = (input, init) => {
+      const answer = hangingFetch(input, init)
+      stop.abort(reason)
+      return answer
+    }
+    await expect(upload(fetch, { signal: stop.signal })).rejects.toBe(reason)
+  })
+
+  it('builds the upload URL from an empty parameter when the client names neither', async () => {
+    const urls: string[] = []
+    const fetch: typeof globalThis.fetch = (input) => {
+      urls.push(input instanceof Request ? input.url : String(input))
+      return Promise.resolve(new Response(null, { status: 200, headers: { 'x-encrypted-param': 'dl' } }))
+    }
+    const client = { getUploadUrl: () => Promise.resolve({}) }
+    await uploadMedia(client, 'o', 'a.txt', Buffer.from('x'), { cdnBaseUrl: CDN, timeoutMs: 5000, fetch })
+    expect(urls[0]).toMatch(/^https:\/\/cdn\.test\/c2c\/upload\?encrypted_query_param=&filekey=[0-9a-f]{32}$/)
+  })
+})
+
+describe('saveInboxFile failures', () => {
+  it('passes on a .gitignore that cannot be written, and writes no attachment', async () => {
+    const inbox = join(dir, 'inbox')
+    await saveInboxFile(inbox, { kind: 'file', name: 'first.txt', mediaType: 'text/plain', data: Buffer.from('1') })
+    const saved = readdirSync(inbox)
+    rmSync(join(inbox, '.gitignore'))
+    chmodSync(inbox, 0o500)
+    try {
+      const second = { kind: 'file', name: 'second.txt', mediaType: 'text/plain', data: Buffer.from('2') } as const
+      await expect(saveInboxFile(inbox, second)).rejects.toMatchObject({ code: 'EACCES' })
+    } finally {
+      chmodSync(inbox, 0o700)
+    }
+    expect(readdirSync(inbox)).toEqual(saved.filter(name => name !== '.gitignore'))
+  })
+})
+
+describe('attachmentNote of a failed file', () => {
+  it('names the file that could not be received, and only the kind of anything else', () => {
+    const note = attachmentNote([
+      { failed: 'file', name: 'report.pdf', reason: 'CDN request timed out' },
+      { failed: 'video', name: 'video.mp4', reason: 'CDN request failed' },
+    ], false)
+    expect(note.split('\n')).toEqual([
+      'WeChat attachments:',
+      '- file "report.pdf" could not be received (CDN request timed out); its content is unavailable, so do not look for it on disk.',
+      '- video could not be received (CDN request failed); its content is unavailable, so do not look for it on disk.',
+    ])
   })
 })

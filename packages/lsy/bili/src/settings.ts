@@ -153,6 +153,7 @@ export class ManageSettings {
         return { outcome: 'logged-out' }
       case 'ledger':
         return { outcome: 'ok' }
+      /* v8 ignore next 2 -- ManageActionBody is a closed union and every action has a case above. */
       default:
         return assertNever(action)
     }
@@ -168,6 +169,7 @@ export class ManageSettings {
 }
 
 /** Fail at compile time when an action has no case. */
+/* v8 ignore next 3 -- only reachable through the closed-union default above. */
 function assertNever(value: never): never {
   throw new Error(`unhandled action ${JSON.stringify(value)}`)
 }

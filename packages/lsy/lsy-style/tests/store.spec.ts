@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { sampleId, StyleError, StyleStore, type Candidate } from '../src/store.ts'
+import { originFrom, sampleId, StyleError, StyleStore, type Candidate } from '../src/store.ts'
 
 const dirs: string[] = []
 afterEach(async () => {
@@ -112,5 +112,78 @@ describe('StyleStore', () => {
     const { store } = await open({ maxActive: 50 })
     await Promise.all(Array.from({ length: 10 }, async (_, index) => await store.ingest([qq(`第${String(index)}句`)], 'optional')))
     expect(await store.live()).toHaveLength(10)
+  })
+
+  it('gives a reply without a prompt an id of its own and stores it without a prompt', async () => {
+    const { store } = await open()
+    expect(sampleId(undefined, '在')).toMatch(/^[0-9a-f]{12}$/u)
+    expect(sampleId(undefined, '在')).not.toBe(sampleId('在吗', '在'))
+    const { added } = await store.ingest([{ source: 'qq', origin: QQ, reply: '在' }], 'optional')
+    expect(added[0]).not.toHaveProperty('prompt')
+    expect(added[0]).not.toHaveProperty('at')
+    expect((await store.live())[0]).toMatchObject({ reply: '在', status: 'active' })
+  })
+
+  it('reads back only well-formed records: object lines, a known status, a reply for a live one, and a valid origin', async () => {
+    const { store, file } = await open()
+    const base = { id: 'aaaaaaaaaaaa', source: 'qq', owner: false, status: 'active', addedAt: 'x', reply: 'y', origin: QQ }
+    const lines = [
+      '5', 'null', '"text"',
+      JSON.stringify({ ...base, id: '7'.repeat(12), source: 5 }),
+      JSON.stringify({ ...base, id: 'b'.repeat(12), status: 'sleeping' }),
+      JSON.stringify({ ...base, id: 'c'.repeat(12), reply: '' }),
+      JSON.stringify({ ...base, id: 'd'.repeat(12), reply: 5 }),
+      JSON.stringify({ ...base, id: 'e'.repeat(12), origin: 'qq' }),
+      JSON.stringify({ ...base, id: 'f'.repeat(12), origin: { ...QQ, platform: 'bili' } }),
+      JSON.stringify({ ...base, id: '1'.repeat(12), origin: { ...QQ, groups: -1 } }),
+      JSON.stringify({ ...base, id: '2'.repeat(12), origin: { ...QQ, speakers: 1.5 } }),
+      JSON.stringify({ ...base, id: '3'.repeat(12), origin: { ...QQ, days: '1' } }),
+      JSON.stringify({ ...base, id: '4'.repeat(12), status: 'removed', reply: undefined, changedAt: '2026-11-01T00:00:00.000Z' }),
+      JSON.stringify(base),
+    ]
+    await mkdir(dirname(file), { recursive: true })
+    await writeFile(file, lines.join('\n'))
+    expect((await store.all()).map(record => [record.id, record.status]).toSorted()).toEqual([['4'.repeat(12), 'removed'], ['aaaaaaaaaaaa', 'active']])
+  })
+
+  it('checks an origin against its record\'s source', () => {
+    expect(originFrom({ platform: 'qq', groups: 2, speakers: 3, days: 1 }, 'qq')).toEqual({ platform: 'qq', groups: 2, speakers: 3, days: 1 })
+    expect(originFrom(undefined, 'qq')).toBeUndefined()
+    expect(originFrom(null, 'qq')).toBeUndefined()
+    expect(originFrom({ platform: 'bili', groups: 1, speakers: 1, days: 1 }, 'qq')).toBeUndefined()
+  })
+
+  it('fails loudly when the file cannot be read for any reason but being absent', async () => {
+    const { store, file } = await open()
+    await mkdir(file, { recursive: true })
+    await expect(store.all()).rejects.toMatchObject({ code: 'EISDIR' })
+  })
+
+  it('retires pending samples beyond the pending cap', async () => {
+    const { store } = await open({ maxPending: 2 })
+    const result = await store.ingest([qq('一'), qq('二'), qq('三')], 'required')
+    expect(result.retired).toBe(1)
+    expect(result.added).toHaveLength(2)
+    expect((await store.live()).every(record => record.status === 'pending')).toBe(true)
+    expect((await store.all()).filter(record => record.status === 'retired')).toHaveLength(1)
+  })
+
+  it('keeps the newest tombstones, ordering those without a change time by when they were added', async () => {
+    const { store, file } = await open({ maxTombstones: 1 })
+    const dead = (id: string, addedAt: string) => JSON.stringify({ id, source: 'qq', owner: false, status: 'removed', addedAt, origin: QQ })
+    await mkdir(dirname(file), { recursive: true })
+    await writeFile(file, [dead('a'.repeat(12), '2026-10-01T00:00:00.000Z'), dead('b'.repeat(12), '2026-10-02T00:00:00.000Z')].join('\n'))
+    await store.ingest([qq('新')], 'optional')
+    expect((await store.all()).filter(record => record.status === 'removed').map(record => record.id)).toEqual(['b'.repeat(12)])
+  })
+
+  it('leaves the other samples untouched when one is removed, and keeps a tombstone without a time as it was', async () => {
+    const { store } = await open()
+    const { added } = await store.ingest([{ source: 'qq', origin: QQ, prompt: '在吗', reply: '在' }, qq('不在')], 'optional')
+    await store.remove(added[0]!.id)
+    expect((await store.live()).map(record => record.reply)).toEqual(['不在'])
+    const removed = (await store.all()).find(record => record.id === added[0]!.id)!
+    expect(removed).not.toHaveProperty('at')
+    expect(removed).not.toHaveProperty('reply')
   })
 })

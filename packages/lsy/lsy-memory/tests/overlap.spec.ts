@@ -35,6 +35,7 @@ describe('spanKeys', () => {
   it('shares a span only when a key is common', () => {
     expect(sharesSpan(spanKeys('住在布鲁克林的一栋楼'), spanKeys('他住在布鲁克林的一间房'))).toBe(true)
     expect(sharesSpan(spanKeys('住在布鲁克林的一栋楼'), spanKeys('住在纽约的一栋楼里面'))).toBe(false)
+    expect(sharesSpan(spanKeys('他住在布鲁克林的一间房'), spanKeys('住在布鲁克林的一栋楼'))).toBe(true)
   })
 })
 

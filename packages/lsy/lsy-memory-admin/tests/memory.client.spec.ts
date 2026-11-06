@@ -230,6 +230,69 @@ describe('MemoryLoader feedback', () => {
   })
 })
 
+describe('MemoryLoader failures and unexpected answers', () => {
+  it('words a plain Error and a thrown string as the action error', async () => {
+    const store = createMemoryStore()
+    await new MemoryLoader(store, fakeApi({ post: () => { throw new Error('boom') } })).review('discard', ['aaaaaa'])
+    expect(store.getSnapshot().error).toEqual({ code: null, message: 'boom' })
+    // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the non-Error rejection is the scenario.
+    await new MemoryLoader(store, fakeApi({ post: () => Promise.reject('plain text') })).review('discard', ['aaaaaa'])
+    expect(store.getSnapshot().error).toEqual({ code: null, message: 'plain text' })
+  })
+
+  it('names the entry id when a refused item carries no reason, and ignores a reply of another action', async () => {
+    const store = createMemoryStore()
+    const refused = new MemoryLoader(store, fakeApi({ post: () => ({ action: 'approve', results: [{ id: 'aaaaaa', ok: false }] }) }))
+    await refused.review('approve', ['aaaaaa'])
+    expect(store.getSnapshot().error).toEqual({ code: null, message: 'aaaaaa' })
+    const other = new MemoryLoader(store, fakeApi())
+    await other.review('approve', ['aaaaaa'])
+    expect(store.getSnapshot().error).toBeNull()
+  })
+
+  it('treats a rollback reply of the wrong action or stage as a failed rollback', async () => {
+    const store = createMemoryStore()
+    await new MemoryLoader(store, fakeApi({ post: () => ({ action: 'feedback.forget', id: 'x' }) })).rollbackPreview({ session: 's' })
+    expect(store.getSnapshot()).toMatchObject({ rollback: null, error: { message: 'unexpected rollback answer' } })
+    const loader = new MemoryLoader(store, fakeApi({ post: () => PREVIEW }))
+    await loader.rollbackPreview({ session: 's' })
+    await loader.rollbackApply()
+    expect(store.getSnapshot()).toMatchObject({ rollback: null, error: { message: 'unexpected rollback answer' } })
+  })
+
+  it('clears the erase flow and shows the reason when the preview, the wrong reply, or the erase fails', async () => {
+    const store = createMemoryStore()
+    const refusing = fakeApi({ post: () => { throw new MemoryRequestError('nope', 'invalid_input') } })
+    await new MemoryLoader(store, refusing).purgePreview(['bbbbbb'])
+    expect(store.getSnapshot()).toMatchObject({ purge: null, error: { code: 'invalid_input' } })
+    await new MemoryLoader(store, fakeApi({ post: () => PREVIEW })).purgePreview(['bbbbbb'])
+    expect(store.getSnapshot()).toMatchObject({ purge: null, error: { message: 'unexpected erase answer' } })
+    const loader = new MemoryLoader(store, fakeApi({
+      post: (action) => {
+        if (action.action === 'forget' && action.confirm !== undefined) throw new MemoryRequestError('changed', 'stale_preview')
+        return { action: 'forget', stage: 'preview', token: 'b'.repeat(64), items: [] }
+      },
+    }))
+    await loader.purgePreview(['bbbbbb'])
+    await loader.purgeApply()
+    expect(store.getSnapshot()).toMatchObject({ purge: null, error: { code: 'stale_preview' } })
+  })
+
+  it('shows the reason and frees the row when removing a verdict fails', async () => {
+    const store = createMemoryStore()
+    const loader = new MemoryLoader(store, fakeApi({ post: () => { throw new MemoryRequestError('gone', 'not_found') } }))
+    await loader.feedbackForget('dddddd')
+    expect(store.getSnapshot()).toMatchObject({ busy: [], error: { code: 'not_found', message: 'gone' } })
+  })
+
+  it('keeps the page when the Host reports an empty page with matches before it, and no step back is needed', async () => {
+    const store = createMemoryStore()
+    const api = fakeApi({ read: () => ({ ...VIEW, entries: { items: [], matched: 3 } }) })
+    await new MemoryLoader(store, api).refresh()
+    expect(api.reads).toHaveLength(1)
+  })
+})
+
 describe('startPolling', () => {
   function page(initial: DocumentVisibilityState) {
     const listeners = new Set<() => void>()
@@ -258,5 +321,39 @@ describe('startPolling', () => {
     stop()
     vi.advanceTimersByTime(5000)
     expect(refresh).toHaveBeenCalledTimes(4)
+  })
+
+  it('ignores a second visible or hidden event and polls without a page when there is no document', () => {
+    vi.useFakeTimers()
+    const refresh = vi.fn()
+    const doc = page('visible')
+    const stop = startPolling(refresh, 1000, doc)
+    doc.show('visible')
+    expect(refresh).toHaveBeenCalledTimes(1)
+    doc.show('hidden')
+    doc.show('hidden')
+    stop()
+  })
+
+  it('polls without a visibility source when there is no document', () => {
+    vi.useFakeTimers()
+    const bare = vi.fn()
+    const stopBare = startPolling(bare, 1000)
+    vi.advanceTimersByTime(2000)
+    expect(bare).toHaveBeenCalledTimes(3)
+    stopBare()
+  })
+
+  it('reads the browser document by default', () => {
+    vi.useFakeTimers()
+    const refresh = vi.fn()
+    const doc = page('hidden')
+    vi.stubGlobal('document', doc)
+    const stop = startPolling(refresh, 1000)
+    expect(refresh).not.toHaveBeenCalled()
+    doc.show('visible')
+    expect(refresh).toHaveBeenCalledTimes(1)
+    stop()
+    vi.unstubAllGlobals()
   })
 })

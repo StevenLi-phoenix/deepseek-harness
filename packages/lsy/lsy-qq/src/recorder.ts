@@ -119,6 +119,7 @@ export function mediaRef(mediaId: number): string {
  */
 export function mediaIdOf(ref: string): number | undefined {
   const match = /^m([0-9a-z]{1,12})$/.exec(ref)
+  /* v8 ignore next -- the pattern has one mandatory group, so a match always has match[1]; `?? ''` only satisfies the index type */
   const id = match === null ? Number.NaN : Number.parseInt(match[1] ?? '', 36)
   return Number.isSafeInteger(id) && id > 0 ? id : undefined
 }
@@ -269,6 +270,7 @@ export class QqRecorder {
     const parsed = RecorderConfigDto.safeParse(saved)
     const problem = parsed.success ? configProblem(parsed.data) : parsed.error.message.slice(0, 300)
     if (!parsed.success || problem !== undefined) {
+      /* v8 ignore next -- `problem` is always set here: a failed parse sets it to the error text, a parsed one only gets here with one */
       this.deps.logger.error(`qq-recorder: the saved configuration in recorder-config.json is unusable (${problem ?? 'invalid'}); waiting for DSH to push one`)
       return
     }
@@ -647,6 +649,7 @@ export class QqRecorder {
       restarting: 'reconnecting to Tencent',
       unknown: 'in a state this version does not know',
     }
+    /* v8 ignore next -- an `ok` answer always carries one of the eight states `wording` lists, so neither fallback can be taken */
     this.deps.logger.info(`qq-recorder: NapCat login: ${wording[login.state ?? 'unknown'] ?? 'unknown'}`)
   }
 
@@ -672,6 +675,7 @@ export class QqRecorder {
       const done = (): void => {
         clearTimeout(timer)
         this.abort.signal.removeEventListener('abort', done)
+        /* v8 ignore else -- `run()` waits on one pause at a time and `done` runs once, so `wakeRetry` is still this pause's `done` */
         if (this.wakeRetry === done) this.wakeRetry = undefined
         resolve()
       }
@@ -699,10 +703,12 @@ export class QqRecorder {
   /** The protocol end's token; undefined while it is missing. Never logged. */
   private token(): string | undefined {
     const name = this.config?.tokenEnv
+    /* v8 ignore next -- `token()` runs only after a configuration exists (the loop and the login door both need one), so `name` is set */
     const value = name === undefined ? '' : this.deps.secret(name)?.trim() ?? ''
     const state = value === '' ? 'missing' : 'present'
     if (state !== this.credentialState) {
       this.credentialState = state
+      /* v8 ignore next 3 -- `name` is always set when `token()` runs (see above), so the `name ??` fallback cannot be taken */
       this.deps.logger.info(state === 'missing'
         ? `qq-recorder: ${name ?? 'the token variable'} is not set; QQ stays offline and re-checks every 30 s`
         : 'qq-recorder: the OneBot access token was found')
@@ -744,6 +750,7 @@ export class QqRecorder {
             this.lastError = undefined
             this.openedAt = this.now()
             this.setConnection('connected')
+            /* v8 ignore next -- the connection loop started this client from a configuration, which stays set */
             this.deps.logger.info(`qq-recorder: connected to the protocol end at ${this.config?.url ?? ''}`)
             this.track(this.onOpen())
           },
@@ -817,6 +824,7 @@ export class QqRecorder {
   /** After a connection opens: who we are, which groups, and what was missed. */
   private async onOpen(): Promise<void> {
     const client = this.client
+    /* v8 ignore next -- `open` fires while `client.run` is pending, and `this.client` is cleared only after it settles */
     if (client === undefined) return
     const { reconnectQuietMs } = this.live
     const last = this.connectionState.lastAliveAt
@@ -914,6 +922,7 @@ export class QqRecorder {
   /** Fetch a group's history backwards until it meets a message already stored, or the cap. */
   private async backfill(groupId: string): Promise<void> {
     const client = this.client
+    /* v8 ignore next -- the caller has just checked `superseded(client)` and nothing awaits in between, so the client is still current */
     if (client === undefined) return
     let seq: string | undefined
     let fetched = 0
@@ -1021,6 +1030,7 @@ export class QqRecorder {
   private pump(): void {
     while (this.downloadsRunning < MEDIA_CONCURRENCY && this.downloadQueue.length > 0) {
       const job = this.downloadQueue.shift()
+      /* v8 ignore next -- the loop condition has just checked that the queue is not empty, so `shift()` returns a job */
       if (job === undefined) break
       this.downloadsRunning += 1
       this.track(job().finally(() => { this.downloadsRunning -= 1; this.pump() }))

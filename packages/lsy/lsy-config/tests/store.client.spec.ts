@@ -161,3 +161,77 @@ describe('ConfigLoader.save', () => {
     expect(info.mock.calls.flat().join(' ')).not.toContain('secret-looking-value')
   })
 })
+
+describe('ConfigLoader corners', () => {
+  it('names a read failure that is not an Error by its text', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const store = createConfigStore()
+    const transport: ConfigTransport = { read: async () => { throw 'offline' }, write: () => Promise.reject(new Error('unused')) }
+    await new ConfigLoader(store, transport, POLICY, () => Promise.resolve(), () => 1).load(['e'])
+    expect(warn).toHaveBeenCalledWith('[lsy-config] read of e failed: offline')
+    expect(store.getSnapshot().entries['e']).toMatchObject({ phase: 'unreachable', view: null })
+  })
+
+  it('leaves the phase of an entry alone while a save is in flight, and publishes the view when the save settles', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {})
+    let answer!: (result: ConfigSaveResult) => void
+    const { loader, state, phases } = setup(
+      [describe1(view('a')), describe1(view('a')), describe1(view('b'))],
+      () => new Promise<ConfigSaveResult>((resolve) => { answer = resolve }),
+    )
+    await loader.load(['e'])
+    const saving = loader.save('e', [], 'a', [{ op: 'clear', path: ['url'] }])
+    expect(state().phase).toBe('saving')
+    await loader.load(['e'])
+    expect(state().phase).toBe('saving')
+    answer({ ok: true, revision: 'b', changed: ['url'], reload: true })
+    expect(await saving).toBe(true)
+    expect(state()).toMatchObject({ phase: 'ready', view: { revision: 'b' } })
+    // The load that overlapped the save never moved the phase away from `saving`.
+    expect(phases.slice(phases.indexOf('saving'))).toEqual(['saving', 'saving', 'reloading', 'ready'])
+  })
+
+  it('names a lost answer that was not an Error by its text', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'info').mockImplementation(() => {})
+    const { loader } = setup([describe1(view('a'))], async () => { throw 'socket closed' })
+    await loader.load(['e'])
+    expect(await loader.save('e', [], 'a', [{ op: 'clear', path: ['url'] }])).toBe(false)
+    expect(warn).toHaveBeenCalledWith('[lsy-config] save of e [url] got no answer: socket closed')
+  })
+
+  it('reads again after a refusal by the home patch, and not after any other refusal', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const refusing = (reason: 'home-locked' | 'invalid') =>
+      setup([describe1(view('a')), describe1(view('a', { locked: true }))], () => Promise.resolve({ ok: false, reason, message: 'no' }))
+    const locked = refusing('home-locked')
+    await locked.loader.load(['e'])
+    expect(await locked.loader.save('e', [], 'a', [{ op: 'clear', path: ['url'] }])).toBe(false)
+    expect(locked.asked).toHaveLength(2)
+    expect(locked.state()).toMatchObject({ refused: { reason: 'home-locked' }, view: { locked: true } })
+    const invalid = refusing('invalid')
+    await invalid.loader.load(['e'])
+    expect(await invalid.loader.save('e', [], 'a', [{ op: 'clear', path: ['url'] }])).toBe(false)
+    expect(invalid.asked).toHaveLength(1)
+    expect(invalid.state()).toMatchObject({ refused: { reason: 'invalid' }, view: { locked: false } })
+  })
+
+  it('waits with the real clock and Date.now unless told otherwise', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.spyOn(console, 'info').mockImplementation(() => {})
+      const store = createConfigStore()
+      const transport: ConfigTransport = {
+        read: () => Promise.resolve(describe1(view('b'))),
+        write: () => Promise.resolve({ ok: true, revision: 'b', changed: ['url'], reload: true }),
+      }
+      vi.setSystemTime(5_000)
+      const saving = new ConfigLoader(store, transport, { attempts: 2, intervalMs: 750 }).save('e', [], 'a', [{ op: 'clear', path: ['url'] }])
+      await vi.advanceTimersByTimeAsync(750)
+      expect(await saving).toBe(true)
+      expect(store.getSnapshot().entries['e']).toMatchObject({ phase: 'ready', savedAt: 5_750 })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

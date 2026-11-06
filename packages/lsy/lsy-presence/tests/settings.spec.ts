@@ -72,6 +72,14 @@ describe('Settings route', () => {
     expect(calls).toEqual([['flushNow']])
   })
 
+  it('refuses a POST that names no content type', async () => {
+    const { route, calls } = mount()
+    const response = await route.fetch(new Request(`http://127.0.0.1${PRESENCE_PATH}`, { method: 'POST', body: new Blob(['{"action":"sleep.now"}']) }))
+    expect(response.status).toBe(415)
+    expect(await response.json()).toMatchObject({ error: 'expected application/json' })
+    expect(calls).toEqual([])
+  })
+
   it('refuses bad requests without touching the service or repeating the body', async () => {
     const { call, calls, logs } = mount()
     expect((await call(undefined, { raw: 'nope' })).status).toBe(400)

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -48,6 +48,14 @@ describe('qqPairs', () => {
   })
 })
 
+describe('qqPairs media on the reply side', () => {
+  it('refuses a quoting reply that is a picture, after the quoted text passed', () => {
+    const question = msg('1', '看看这个', T0)
+    const picture = msg('2', '[图片]', T0 + 1000, { replyTo: question.messageId, kinds: 'reply,image' })
+    expect(qqPairs('g', [question, picture], 60_000)).toEqual([{ reason: 'media' }])
+  })
+})
+
 describe('biliPairs', () => {
   const OWNER = 401
   const CAT = 402
@@ -67,6 +75,25 @@ describe('biliPairs', () => {
   it('never takes the agent\'s words: the cat\'s account, the Gate, or the owner\'s account when bili-svc does not say who wrote it', () => {
     const thread = { root: c(1, 7, '这期好看', 0), replies: [c(2, CAT, '喵', 1), c(3, OWNER, '谢谢', 1, true), c(4, OWNER, '谢谢', 1), c(5, 9, '对', 4)] }
     expect(biliPairs(thread, ids)).toEqual([{ reason: 'own-account' }, { reason: 'own-account' }, { reason: 'owner-unverified' }, { reason: 'owner-unverified' }])
+  })
+})
+
+describe('biliPairs threads without a root, and exchanges that cannot be paired', () => {
+  const c = (rpid: number, mid: number, text: string, root: number, parent: number): BiliComment =>
+    ({ rpid, mid, ctime: T0 / 1000, root, parent, text })
+  const ids = { ownerMid: null, ownMids: new Set<number>() }
+
+  it('keys a thread by the root its first reply names when the root comment is not stored, and answers to the root when a reply has no parent', () => {
+    const pairs = biliPairs({ root: null, replies: [c(2, 7, '路过', 1, 0)] }, ids)
+    expect(pairs).toEqual([{ reason: 'parent-missing' }])
+    const withRoot = biliPairs({ root: c(1, 8, '这期好看', 0, 0), replies: [c(2, 7, '同感', 1, 0)] }, ids)
+    expect(withRoot).toEqual([{ source: 'bili', owner: false, key: 'bili:1', how: 'reply', at: T0, prompt: '这期好看', reply: '同感' }])
+    expect(biliPairs({ root: null, replies: [] }, ids)).toEqual([])
+  })
+
+  it('refuses a reply to a comment that is missing, to itself, and by the same viewer', () => {
+    const thread = { root: c(1, 8, '这期好看', 0, 0), replies: [c(2, 7, '嗯', 1, 99), c(3, 7, '自己', 1, 3), c(4, 8, '补充', 1, 1)] }
+    expect(biliPairs(thread, ids)).toEqual([{ reason: 'parent-missing' }, { reason: 'parent-missing' }, { reason: 'same-speaker' }])
   })
 })
 
@@ -95,6 +122,14 @@ describe('screenPairs and pickForRun', () => {
       pair('bili:1', 'reply', T0, 'owner', true),
     ], { max: 4, perKey: 2 })
     expect(picked.map(item => item.reply)).toEqual(['owner', 'a-r3', 'b-r1', 'a-r2'])
+  })
+
+  it('puts the owner\'s newest exchange first, and leaves the prompt out of an exchange that has none', () => {
+    const lone = { ...pair('bili:2', 'reply', T0 + 5, '新的', true), prompt: '' }
+    const picked = pickForRun([pair('bili:1', 'reply', T0, '旧的', true), lone], { max: 4, perKey: 2 })
+    expect(picked.map(item => item.reply)).toEqual(['新的', '旧的'])
+    expect(picked[0]).not.toHaveProperty('prompt')
+    expect(picked[1]).toMatchObject({ prompt: '在吗', origin: { platform: 'bili', groups: 1, speakers: 2, days: 1 } })
   })
 })
 
@@ -208,5 +243,64 @@ describe('StyleCollector', () => {
     expect(collector.run('schedule')).toBe(first)
     await first
     expect(collector.busy).toBe(false)
+  })
+
+  it('reports QQ as unavailable when the observer is not mounted, and when it fails with something that is not an Error', async () => {
+    const unmounted = await setup({})
+    expect((await unmounted.collector.run('manual')).qq).toEqual({ status: 'unavailable', groups: 0, messages: 0 })
+    const closing: QqSource = { groupOverview: async () => { throw 'socket closed' }, recentMessages: () => Promise.resolve([]) }
+    const { collector, logger } = await setup({ qq: closing })
+    expect((await collector.run('manual')).qq.status).toBe('unavailable')
+    expect(logger.warn).toHaveBeenCalledWith('lsy-style: could not read QQ: socket closed')
+  })
+
+  it('reports an unreachable bili-svc that fails with something that is not an Error', async () => {
+    const broken: BiliReader = { accounts: async () => { throw 'refused' }, comments: () => Promise.resolve([]), thread: () => Promise.reject(new Error('x')) }
+    const { collector } = await setup({ qq, bili: broken })
+    expect((await collector.run('manual')).bili).toMatchObject({ status: 'unavailable', error: 'refused' })
+  })
+
+  it('reads each thread through its newest stored comment, newest thread first, skips threads read since, and forgets old ones', async () => {
+    const C = T0 / 1000
+    const threadsAsked: number[] = []
+    const bili: BiliReader = {
+      accounts: () => Promise.resolve([{ id: 'other', mid: null }, { id: 'maomao', mid: 5 }]),
+      comments: () => Promise.resolve([
+        { rpid: 20, mid: 7, ctime: C, root: 0, parent: 0, text: '一' },
+        { rpid: 22, mid: 7, ctime: C - 10, root: 20, parent: 20, text: '更早的回复' },
+        { rpid: 21, mid: 7, ctime: C + 10, root: 20, parent: 20, text: '更晚的回复' },
+        { rpid: 30, mid: 7, ctime: C + 5, root: 0, parent: 0, text: '二' },
+        { rpid: 40, mid: 7, ctime: C + 1, root: 0, parent: 0, text: '三' },
+      ]),
+      thread: (rpid) => {
+        threadsAsked.push(rpid)
+        return Promise.resolve({
+          root: { rpid: 20, mid: 7, ctime: C, root: 0, parent: 0, text: '这期好看' },
+          replies: rpid === 21 ? [{ rpid: 21, mid: 5, ctime: C, root: 20, parent: 20, text: '喵' }] : [],
+        })
+      },
+    }
+    const { collector, dir } = await setup({ qq, bili })
+    const nowSeconds = Math.floor((T0 + 3_600_000) / 1000)
+    await writeFile(join(dir, 'state.json'), JSON.stringify({ threads: { 40: nowSeconds + 10, 99: nowSeconds - 91 * 86_400, 98: nowSeconds - 10 } }))
+    const report = await collector.run('manual')
+    expect(threadsAsked).toEqual([21, 30])
+    expect(report.bili).toEqual({ status: 'ok', comments: 5, threads: 2 })
+    expect(report.filtered).toMatchObject({ 'own-account': 1 })
+    const state = JSON.parse(await readFile(join(dir, 'state.json'), 'utf8')) as { threads: Record<string, number> }
+    expect(state.threads).toEqual({ 20: nowSeconds, 30: nowSeconds, 40: nowSeconds + 10, 98: nowSeconds - 10 })
+  })
+
+  it('recalls the last run from the state file, and starts clean from a state file it cannot use', async () => {
+    const { collector, dir } = await setup({ qq })
+    const lastRun = { at: 1, ms: 2, trigger: 'schedule', qq: { status: 'off', groups: 0, messages: 0 }, bili: { status: 'off', comments: 0, threads: 0 }, seen: 0, accepted: 0, added: 0, retired: 0, filtered: {}, bySource: {} }
+    await writeFile(join(dir, 'state.json'), JSON.stringify({ threads: 'broken', lastRun }))
+    expect(await collector.lastRun()).toEqual(lastRun)
+    const second = await setup({ qq })
+    await writeFile(join(second.dir, 'state.json'), JSON.stringify({ threads: {} }))
+    expect(await second.collector.lastRun()).toBeUndefined()
+    const third = await setup({ qq })
+    await writeFile(join(third.dir, 'state.json'), '{torn')
+    expect(await third.collector.lastRun()).toBeUndefined()
   })
 })

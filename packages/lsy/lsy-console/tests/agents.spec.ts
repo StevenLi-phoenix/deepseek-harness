@@ -35,6 +35,15 @@ describe('Claude Code card', () => {
     expect((await get()).cc).toEqual(claudeCode.view_)
   })
 
+  it('names a failure that is not an Error as a plain error class', async () => {
+    const claudeCode = new FakeClaudeCode()
+    claudeCode.view = async () => { throw 'plain text /Users/x' }
+    const { get, logs } = await setup({}, {}, claudeCode)
+    expect((await get()).cc).toBeNull()
+    expect(logs.join('\n')).toContain('reading Claude Code sessions failed: error')
+    expect(logs.join('\n')).not.toContain('/Users/x')
+  })
+
   it('is null when the service is absent or switched off', async () => {
     expect((await (await setup({}, {}, null)).get()).cc).toBeNull()
     const off = new FakeClaudeCode()
@@ -106,6 +115,14 @@ describe('cc.start and cc.stop', () => {
     expect((await (await setup({}, {}, off)).post({ action: 'cc.stop', name: 'x' })).status).toBe(503)
   })
 
+  it('refuses a body that is not an object', async () => {
+    const { post } = await setup()
+    for (const body of ['cc.start', 5, null]) {
+      const response = await post(body)
+      expect([response.status, await response.json()]).toEqual([400, { error: 'invalid_request', detail: 'action' }])
+    }
+  })
+
   it('refuses an unknown action', async () => {
     const { post } = await setup()
     expect(await (await post({ action: 'cc.explode', name: 'x' })).json()).toEqual({ error: 'invalid_request', detail: 'action' })
@@ -135,6 +152,25 @@ describe('voice card', () => {
       available: true, ttsEnabled: true, provider: 'feiyu', format: 'mp3', ttsUp: true, asrEnabled: true, engine: 'whisper', asrUp: false, previewChars: Array.from('你好，我是魔女的猫猫。这是一条语音试听。').length,
     })
     expect(JSON.stringify(view)).not.toContain('127.0.0.1')
+  })
+})
+
+describe('voice card providers that are switched off', () => {
+  it('reports no reachability for a provider that is off, and does not probe it', async () => {
+    const feiyu = new FakeService({ '/health': 200 })
+    const url = await feiyu.start()
+    cleanups.push(() => feiyu.stop())
+    const voice = {
+      describe: () => ({
+        tts: { enabled: false, provider: 'feiyu', fallback: 'none', format: 'wav', maxChars: 200, url },
+        asr: { enabled: true, engine: 'whisper', url },
+      }),
+    }
+    const { get } = await setup({}, { lsyVoice: voice })
+    expect((await get()).voice).toMatchObject({ ttsEnabled: false, ttsUp: null, asrEnabled: true, asrUp: true })
+    expect(feiyu.seen).toEqual(['GET /health'])
+    const bothOff = await setup({}, { lsyVoice: { describe: () => ({ tts: { enabled: false, provider: 'feiyu', fallback: 'none', format: 'wav', maxChars: 1, url }, asr: { enabled: false, engine: 'whisper', url } }) } })
+    expect((await bothOff.get()).voice).toMatchObject({ ttsUp: null, asrUp: null })
   })
 })
 

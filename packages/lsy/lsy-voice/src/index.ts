@@ -293,6 +293,7 @@ export class LsyVoice extends Service {
    * @throws VoiceError when speech is off, the text is unusable, or every provider failed.
    */
   speak(text: string, options: { signal?: AbortSignal } = {}): Promise<SpeakResult> {
+    /* v8 ignore next -- this.chain never rejects. */
     const run = this.chain.then(() => this.speakNow(text, options.signal), () => this.speakNow(text, options.signal))
     this.chain = run.catch(() => {})
     return run
@@ -329,7 +330,9 @@ export class LsyVoice extends Service {
         failed = failed === undefined ? `${name}: ${reason}` : `${failed}; ${name}: ${reason}`
       }
     }
+    /* v8 ignore next 2 -- the provider order is never empty, so a failure is recorded. */
     this.ctx.logger.error(`lsy-voice: no provider could speak ${Array.from(text).length} chars: ${failed ?? ''}`)
+    /* v8 ignore next -- the provider order is never empty, so a failure is recorded. */
     throw new VoiceError(`speech failed (${failed ?? 'no provider'})`)
   }
 
@@ -346,6 +349,7 @@ export class LsyVoice extends Service {
     }
     for (const name of names.filter(item => pattern.test(item)).sort().reverse()) {
       const path = join(dir, name)
+      /* v8 ignore next -- every voice name matches the pattern. */
       const provider = (pattern.exec(name)?.[1] ?? 'mac-mini') as TtsProviderName
       try {
         const info = await stat(path)
@@ -400,6 +404,7 @@ export class LsyVoice extends Service {
     if (!isAbsolute(path)) throw new VoiceError('path must be absolute')
     if (!isAudioName(path)) throw new VoiceError(`${extname(path) || 'this file'} is not an audio format the asr-service reads`)
     const info = await stat(path).catch((error: unknown) => {
+      /* v8 ignore next -- fs errors carry a code. */
       throw new VoiceError(`cannot read the audio (${(error as NodeJS.ErrnoException).code ?? errorText(error)})`)
     })
     if (!info.isFile() || info.size === 0) throw new VoiceError('the audio is not a non-empty regular file')

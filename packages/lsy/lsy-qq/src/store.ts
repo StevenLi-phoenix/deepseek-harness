@@ -373,6 +373,7 @@ export class QqStore {
       SELECT m.group_id AS group_id, COUNT(*) AS messages, MIN(m.at) AS first_at, MAX(m.at) AS last_at
       FROM messages m WHERE m.recalled = 0 GROUP BY m.group_id
     `).all() as Row[]
+    /* v8 ignore next 3 -- MIN(at) and MAX(at) of a group's rows are never null. */
     return rows.map(row => ({
       groupId: String(row['group_id']), messages: Number(row['messages']),
       firstAt: row['first_at'] === null ? null : Number(row['first_at']), lastAt: row['last_at'] === null ? null : Number(row['last_at']),

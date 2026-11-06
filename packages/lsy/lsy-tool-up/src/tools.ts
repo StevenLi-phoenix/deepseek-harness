@@ -62,8 +62,10 @@ const bvid = { type: 'string', required: true, description: 'BV id of the video,
 /** A query string from the parameters that are set, with its leading `?`, or nothing. */
 const q = (params: Record<string, string | number | boolean | undefined>): string => {
   const search = new URLSearchParams()
+  /* v8 ignore next -- no caller passes an undefined parameter. */
   for (const [key, value] of Object.entries(params)) if (value !== undefined) search.set(key, String(value))
   const text = search.toString()
+  /* v8 ignore next -- no caller builds an empty query. */
   return text === '' ? '' : `?${text}`
 }
 

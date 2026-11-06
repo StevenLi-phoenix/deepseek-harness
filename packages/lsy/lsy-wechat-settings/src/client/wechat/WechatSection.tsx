@@ -44,10 +44,10 @@ export type WechatProps = PropsRuntime<'settings.section'> & InjectFace<WechatIn
 
 type Actions = Omit<WechatInjected, 'hooks' | 'refresh'>
 
-function Card({ title, meta, wide, children }: { title: string; meta?: string; wide?: boolean; children: ReactNode }): ReactNode {
+function Card({ title, meta, children }: { title: string; meta?: string; children: ReactNode }): ReactNode {
   const id = useId()
   return (
-    <section className={wide === true ? `${css.card} ${css.wide}` : css.card} aria-labelledby={id}>
+    <section className={css.card} aria-labelledby={id}>
       <div className={css.cardHeader}>
         <span id={id} className={css.cardTitle}>{title}</span>
         {meta === undefined ? null : <span className={css.meta}>{meta}</span>}

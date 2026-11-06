@@ -175,13 +175,14 @@ function streamEvents({ recorder, respond, streams, pingMs }: RouteDeps, { req, 
     if (res.writableEnded) return
     res.write(`${JSON.stringify(EventDto.parse(event))}\n`)
   }
-  write({ type: 'status', status: recorder.status() })
   const off = recorder.subscribe(write)
   const timer = setInterval(() => { write({ type: 'ping', at: Date.now() }) }, pingMs)
   timer.unref()
   const done = (): void => { clearInterval(timer); off(); streams.delete(res) }
   req.on('close', done)
   res.on('close', done)
+  // Last: a first event the schema refuses still leaves the stream cleaned up when it closes.
+  write({ type: 'status', status: recorder.status() })
   return true
 }
 
@@ -204,6 +205,7 @@ function listMessages({ recorder, respond }: RouteDeps, { res, url }: RouteConte
 /** A saved picture: the bytes, with its description in a header. */
 async function serveMedia({ recorder, respond }: RouteDeps, { res, match }: RouteContext): Promise<Handled> {
   try {
+    /* v8 ignore next -- the route's pattern has one mandatory group, so `match[1]` is always set when this runs */
     const file = await recorder.mediaFile(match?.[1] ?? '')
     res.writeHead(200, {
       'content-type': file.header.contentType, 'content-length': file.bytes.length, [MEDIA_HEADER]: JSON.stringify(MediaHeaderDto.parse(file.header)),
@@ -275,6 +277,7 @@ function buildRoutes(deps: RouteDeps): Routes {
     {
       pattern: /^\/v1\/groups\/([0-9]{3,20})\/members$/,
       method: 'GET' as const,
+      /* v8 ignore next -- the route's pattern has one mandatory group, so `match[1]` is always set when this runs */
       run: ({ res, match }: RouteContext) => respond.send(res, 200, MembersDto, recorder.members(match?.[1] ?? '')),
     },
   ]
@@ -303,8 +306,10 @@ export async function startRecorderServer(options: RecorderServerOptions): Promi
   const routes = buildRoutes({ recorder, respond, streams, major, minor, build: options.build ?? 'dev', pingMs: options.pingMs ?? PING_MS })
 
   const route = async (req: IncomingMessage, res: ServerResponse): Promise<Handled> => {
+    /* v8 ignore next -- a server-side request always has a url; `?? '/'` only satisfies the optional type */
     const url = new URL(req.url ?? '/', 'http://recorder')
     const path = url.pathname
+    /* v8 ignore next -- a server-side request always has a method; `?? 'GET'` only satisfies the optional type */
     const method = req.method ?? 'GET'
     const supplied = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1]
     if (supplied === undefined || !timingSafeEqual(digest(supplied), expected)) throw new HttpError(401, 'unauthorized', 'a valid bearer token is required')
@@ -347,6 +352,7 @@ export async function startRecorderServer(options: RecorderServerOptions): Promi
     process.umask(previousMask)
   }
   chmodSync(socketPath, 0o600)
+  /* v8 ignore next -- `chmodSync` on the line above just set the mode, so only a file system that ignores modes could differ */
   if ((statSync(socketPath).mode & 0o777) !== 0o600) throw new Error(`${socketPath} is not mode 0600`)
 
   let health: Server | undefined
@@ -362,6 +368,7 @@ export async function startRecorderServer(options: RecorderServerOptions): Promi
     })
     await listen(health, options.healthPort, '127.0.0.1')
     const address = health.address()
+    /* v8 ignore next -- a server listening on a TCP port always reports an address object */
     healthPort = typeof address === 'object' && address !== null ? address.port : undefined
   }
   logger.info(`qq-recorder: listening on ${socketPath}${healthPort === undefined ? '' : `; health on 127.0.0.1:${healthPort}`}; protocol ${respond.tag}`)

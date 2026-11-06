@@ -11,12 +11,14 @@ interface Route {
 
 const KEYS: Record<string, string> = { LLMGW_DSH_API_KEY: 'sk-gw-secret', DEEPSEEK_API_KEY: 'sk-ds-secret' }
 
-async function mount(config: Record<string, unknown> = {}) {
+type Resolve = (ref: string) => Promise<{ value: string; source: string } | undefined>
+
+async function mount(config: Record<string, unknown> = {}, resolve?: Resolve) {
   const ctx = new Context()
   const routes: Route[] = []
   const logs: string[] = []
   ctx.logger.exporter({ levels: { default: 3 }, export: (message) => { logs.push(`${message.type} ${String(message.args[0])}`) } })
-  ctx.provide('credentials', { resolve: vi.fn((ref: string) => Promise.resolve(KEYS[ref] === undefined ? undefined : { value: KEYS[ref], source: 'file' })) } as never)
+  ctx.provide('credentials', { resolve: vi.fn(resolve ?? ((ref: string) => Promise.resolve(KEYS[ref] === undefined ? undefined : { value: KEYS[ref], source: 'file' }))) } as never)
   ctx.provide('connection', { fetch: { register: (route: Route) => { routes.push(route); return () => Promise.resolve() } } } as never)
   await ctx.plugin(plugin, plugin.Config(config as never))
   const get = async (query = ''): Promise<BalanceRouteBody> => {
@@ -103,5 +105,11 @@ describe('lsy-balance Host route', () => {
   it('honors configured sources and their labels', async () => {
     const { get } = await mount({ sources: [{ kind: 'opencode-go', keyRef: 'LLMGW_DSH_API_KEY', label: 'GW' }] })
     expect((await get()).readings.map(reading => reading.label)).toEqual(['GW'])
+  })
+
+  it('shows a failed row, once per read, when the credential service throws', async () => {
+    const { get } = await mount({ sources: [{ kind: 'deepseek', keyRef: 'BROKEN_REF', label: 'Broken' }] }, () => Promise.reject(new Error('vault locked')))
+    expect(await get()).toEqual({ readings: [{ source: 'deepseek', label: 'Broken', status: 'failed', reason: 'credential unavailable' }] })
+    expect(upstream).not.toHaveBeenCalled()
   })
 })

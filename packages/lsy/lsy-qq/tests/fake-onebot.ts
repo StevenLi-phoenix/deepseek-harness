@@ -38,10 +38,17 @@ export class FakeOneBot {
           socket.send(JSON.stringify({ status: 'failed', retcode: 1404, wording: `no handler for ${request.action}`, echo: request.echo }))
           return
         }
+        // A handler may answer later (return a promise); a connection closed meanwhile gets no answer.
+        const answer = (frame: Record<string, unknown>): void => {
+          if (socket.readyState === socket.OPEN) socket.send(JSON.stringify({ ...frame, echo: request.echo }))
+        }
+        const fail = (error: unknown): void => {
+          answer({ status: 'failed', retcode: 1200, wording: error instanceof Error ? error.message : 'failed' })
+        }
         try {
-          socket.send(JSON.stringify({ status: 'ok', retcode: 0, data: handler(request.params), echo: request.echo }))
+          Promise.resolve(handler(request.params)).then((data) => { answer({ status: 'ok', retcode: 0, data }) }, fail)
         } catch (error: unknown) {
-          socket.send(JSON.stringify({ status: 'failed', retcode: 1200, wording: error instanceof Error ? error.message : 'failed', echo: request.echo }))
+          fail(error)
         }
       })
     })

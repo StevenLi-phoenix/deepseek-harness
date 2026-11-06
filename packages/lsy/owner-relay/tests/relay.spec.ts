@@ -188,6 +188,39 @@ describe('OwnerRelay claims', () => {
     expect(first.answers).toEqual([])
   })
 
+  it('keeps a claim and its log quiet when the same channel claims a Session again', async () => {
+    const h = await mount()
+    h.relay.registerChannel(recorder('wechat').channel)
+    h.relay.claim('s1', 'wechat')
+    h.relay.claim('s1', 'wechat')
+    expect(h.relay.ownerOf('s1')).toBe('wechat')
+    expect(h.logs.filter(line => line.text.includes('Session s1'))).toEqual([
+      { type: 'debug', text: 'owner-relay: wechat claims Session s1' },
+    ])
+  })
+
+  it('releases only its own claims when a channel goes away, and ignores a second disposal of it', async () => {
+    const h = await mount()
+    const dispose = h.relay.registerChannel(recorder('wechat').channel)
+    const bili = recorder('bili-dm')
+    h.relay.registerChannel(bili.channel)
+    h.relay.claim('chat-1', 'wechat')
+    h.relay.claim('bili-1', 'bili-dm')
+    dispose()
+    expect(h.relay.ownerOf('chat-1')).toBeUndefined()
+    expect(h.relay.ownerOf('bili-1')).toBe('bili-dm')
+    expect(h.logs.filter(line => line.text.includes('wechat removed'))).toHaveLength(1)
+    // A stale disposer must not remove a channel that registered under the name since.
+    const replacement = recorder('wechat')
+    h.relay.registerChannel(replacement.channel)
+    h.relay.claim('chat-2', 'wechat')
+    dispose()
+    expect(h.relay.ownerOf('chat-2')).toBe('wechat')
+    await turn(h.emit, 'chat-2', 'still routed')
+    expect(replacement.answers.map(answer => answer.text)).toEqual(['still routed'])
+    expect(h.logs.filter(line => line.text.includes('wechat removed'))).toHaveLength(1)
+  })
+
   it('relays nothing for a Session whose channel is not registered, and says so', async () => {
     const h = await mount()
     h.relay.claim('s1', 'bili-dm')
@@ -273,5 +306,15 @@ describe('OwnerRelay delivery', () => {
     await turn(h.emit, 'chat-1', 'still relayed')
     expect(answers).toEqual(['still relayed'])
     expect(h.logs.some(line => line.type === 'warn' && line.text === 'owner-relay: wechat onTurnStart failed for Session chat-1: typing broke')).toBe(true)
+  })
+
+  it('logs a non-Error rejection of deliver by its string form', async () => {
+    const h = await mount()
+    // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the non-Error arm is the case under test.
+    const wechat = recorder('wechat', { deliver: () => Promise.reject('plain string failure') })
+    h.relay.registerChannel(wechat.channel)
+    h.relay.claim('chat-1', 'wechat')
+    await turn(h.emit, 'chat-1', 'answer')
+    expect(h.logs.some(line => line.type === 'warn' && line.text === 'owner-relay: wechat could not deliver the answer of Session chat-1: plain string failure')).toBe(true)
   })
 })

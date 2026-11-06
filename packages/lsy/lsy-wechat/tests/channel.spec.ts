@@ -18,6 +18,20 @@ import { wechatDomain } from '../src/storage.ts'
 import type { WechatAnswer } from '../src/view.ts'
 import { FakeIlink, imageMessage, textMessage } from './fake-ilink.ts'
 
+/** Faults the real file system cannot produce: an error with no `code`. */
+const fsFaults = vi.hoisted(() => ({ stat: undefined as Error | undefined }))
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>()
+  return {
+    ...actual,
+    stat: async (...args: Parameters<typeof actual.stat>) => {
+      if (fsFaults.stat !== undefined) throw fsFaults.stat
+      return actual.stat(...args)
+    },
+  }
+})
+
 const OWNER = 'owner@im.wechat'
 const TOKEN = 'bot-token-secret'
 const CDN = 'https://cdn.test/c2c'
@@ -56,6 +70,10 @@ function fakeSessions(onPrompt: () => void = () => {}) {
     promptErrorsOnce: [] as unknown[],
     /** Prompts wait for their abort signal. */
     holdPrompts: false,
+    /** Resolved agents offer no `inject`. */
+    noInject: false,
+    /** Thrown by `inject`. */
+    injectError: noError,
     onPrompt,
   }
   const controller = {
@@ -67,12 +85,14 @@ function fakeSessions(onPrompt: () => void = () => {}) {
     },
     resolveAgent: async (sessionId: string) => {
       const code = state.errors.get(sessionId) ?? (state.live.has(sessionId) ? undefined : 'session/not-found')
+      const inject = (message: { content: { type: string; text?: string }[] }) => {
+        if (state.injectError !== undefined) throw state.injectError
+        const text = message.content[0]?.text ?? ''
+        state.injected.push([sessionId, text])
+        state.order.push(`inject:${text}`)
+      }
       return code === undefined
-        ? { agent: { session: { id: sessionId }, inject: (message: { content: { type: string; text?: string }[] }) => {
-          const text = message.content[0]?.text ?? ''
-          state.injected.push([sessionId, text])
-          state.order.push(`inject:${text}`)
-        } } }
+        ? { agent: { session: { id: sessionId }, ...state.noInject ? {} : { inject } } }
         : { error: Object.assign(new Error(`${code}: ${sessionId}`), { code }) }
     },
     prompt: async (request: SessionPromptRequest, signal: AbortSignal) => {
@@ -149,6 +169,10 @@ async function harness(options: {
   schedule?: unknown
   /** A `ctx.lsyEventBus` double; omitted means the bus is not mounted. */
   bus?: unknown
+  /** Leave the owner relay unmounted. */
+  noRelay?: boolean
+  /** Replace how the storage domain opens, for faults and delays. */
+  openDomain?: (facility: DomainFacility) => void
 } = {}) {
   const ilink = options.ilink ?? new FakeIlink()
   vi.stubGlobal('fetch', ilink.fetch)
@@ -167,7 +191,8 @@ async function harness(options: {
     },
   })
   const pool = options.pool ?? new MemoryMediaPool()
-  await mountStorage(ctx, pool)
+  const facility = await mountStorage(ctx, pool)
+  options.openDomain?.(facility)
   const sentAtPrompt: number[] = []
   const sessions = options.sessions ?? fakeSessions()
   sessions.state.onPrompt = () => { sentAtPrompt.push(ilink.sent.length) }
@@ -213,7 +238,8 @@ async function harness(options: {
     ...rest,
   }
   // The relay carries the chat Sessions' answers to the channel, as the event bundle mounts it.
-  await ctx.plugin(OwnerRelay)
+  const relay = options.noRelay === true ? undefined : ctx.plugin(OwnerRelay)
+  await relay
   await ctx.plugin(WechatChannel, config)
   await vi.advanceTimersByTimeAsync(0)
   const channel = ctx.lsyNotifier as WechatChannel
@@ -231,6 +257,7 @@ async function harness(options: {
   }
   return {
     ctx, channel, ilink, sessions: sessions.state, presets, titles, logs, emit, ownerSays, finishTurn, accountFile, pool, sentAtPrompt,
+    relay,
   }
 }
 
@@ -256,6 +283,7 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
+  fsFaults.stat = undefined
   await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose()))
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
@@ -1362,6 +1390,9 @@ describe('WechatChannel long-poll', () => {
     const channel = ctx.lsyNotifier as WechatChannel
     expect(channel.ownsSession('chat-1')).toBe(false)
     expect(channel.outbox()).toEqual([])
+    expect(channel.status()).toMatchObject({
+      channel: { link: 'idle' }, window: { open: false, closed: 'no-account', repliesLeft: null }, outbox: { count: 0 },
+    })
   })
 })
 
@@ -1970,5 +2001,402 @@ describe('WechatChannel configuration', () => {
     const base = resolveConfig({ accountFile: '/tmp/account.json' })
     const config = Object.assign({}, base, overrides, { chat: Object.assign({}, base.chat, overrides['chat']) }) as Config
     expect(() => new WechatChannel(new Context(), config)).toThrow(message)
+  })
+})
+
+/** A promise the test settles by hand. */
+function gate(): { wait: Promise<void>; open(): void } {
+  let open = (): void => {}
+  const wait = new Promise<void>((resolve) => { open = resolve })
+  return { wait, open }
+}
+
+/** Whether a log line equals `text`. */
+function logged(h: { logs: LogLine[] }, text: string): boolean {
+  return h.logs.some(line => line.text === text)
+}
+
+/** Whether a warning starts with `prefix`. */
+function warned(logs: LogLine[], prefix: string): boolean {
+  return logs.some(line => line.type === 'warn' && line.text.startsWith(prefix))
+}
+
+/** Make the storage domain open only after `opening` does. */
+function delayOpen(opening: { wait: Promise<void> }): (facility: DomainFacility) => void {
+  return (facility) => {
+    const open = facility.open.bind(facility)
+    vi.spyOn(facility, 'open').mockImplementation(async (domain) => {
+      await opening.wait
+      return open(domain)
+    })
+  }
+}
+
+describe('WechatChannel storage opening', () => {
+  it('claims nothing with a relay that left before storage opened', async () => {
+    const opening = gate()
+    const h = await harness({ openDomain: delayOpen(opening) })
+    await h.relay!.dispose()
+    await vi.advanceTimersByTimeAsync(0)
+    opening.open()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.logs.some(line => line.text.startsWith('lsy-wechat: the relay carries'))).toBe(false)
+  })
+
+  it('queues a note sent before storage opened, once it does', async () => {
+    const opening = gate()
+    const h = await harness({ account: false, openDomain: delayOpen(opening) })
+    const sending = h.channel.send({ title: 'early' })
+    expect(h.channel.outbox()).toEqual([])
+    opening.open()
+    await sending
+    expect(h.channel.outbox().map(row => row.text)).toEqual(['early'])
+  })
+
+  it('logs that chat Sessions stay unclaimed when storage cannot open', async () => {
+    const ctx = new Context()
+    const logs: LogLine[] = []
+    ctx.logger.exporter({
+      levels: { default: 3 },
+      export: (message) => { logs.push({ type: message.type, text: String(message.args[0]) }) },
+    })
+    ctx.provide('storageDomain', { open: () => Promise.reject(new Error('disk gone')) } as never)
+    for (const name of ['sessionController', 'permissionPresets', 'sessionTitle']) ctx.provide(name, {} as never)
+    const claim = vi.fn()
+    ctx.provide('ownerRelay', { registerChannel: () => () => {}, claim } as never)
+    const config = resolveConfig({ accountFile: join(dir, 'account.json'), chat: { workspacePath: dir } })
+    await Promise.resolve(ctx.plugin(WechatChannel, config)).catch(() => undefined)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(warned(logs, 'lsy-wechat: chat Sessions not claimed with the relay: disk gone')).toBe(true)
+    expect(claim).not.toHaveBeenCalled()
+  })
+})
+
+describe('WechatChannel typing edge cases', () => {
+  it('says typing is unavailable when the server gives no ticket, and still forwards the message', async () => {
+    const ilink = new FakeIlink()
+    ilink.reply('ilink/bot/getconfig', { body: { ret: 0 } })
+    const h = await harness({ ilink })
+    await h.ownerSays('hi')
+    expect(warned(h.logs, 'lsy-wechat: typing unavailable: no typing ticket (the server gave no typing ticket);')).toBe(true)
+    expect(h.ilink.typing).toEqual([])
+    expect(h.sessions.prompts).toHaveLength(1)
+  })
+
+  it('keeps typing until the last of two running chat turns ends', async () => {
+    const h = await harness()
+    await h.ownerSays('one')
+    await h.ownerSays('/new')
+    h.emit('chat-1', { type: 'turn/start', seq: 2, data: { turn: 1 } })
+    h.emit('chat-2', { type: 'turn/start', seq: 2, data: { turn: 1 } })
+    await vi.advanceTimersByTimeAsync(0)
+    await h.finishTurn('chat-1', undefined)
+    expect(h.ilink.typing).toEqual([1])
+    await h.finishTurn('chat-2', undefined)
+    expect(h.ilink.typing).toEqual([1, 2])
+  })
+})
+
+describe('WechatChannel holding edge cases', () => {
+  const HOUR = 3_600_000
+
+  it('does nothing when presence says the owner fell asleep', async () => {
+    const sleeping = fakePresence()
+    const h = await harness({ presence: sleeping.presence })
+    await h.ownerSays('night')
+    await vi.advanceTimersByTimeAsync(31 * 60_000)
+    await h.channel.send({ title: 'held' })
+    await sleeping.set(true)
+    expect(sleeping.holders[0]!.count()).toBe(1)
+    expect(h.logs.some(line => line.text.startsWith('lsy-wechat: the owner woke'))).toBe(false)
+  })
+
+  it('leaves a held text and an ordinary one waiting when no reply window is open at the wake', async () => {
+    const sleeping = fakePresence()
+    const h = await harness({ presence: sleeping.presence })
+    await h.channel.send({ title: 'urgent, but nobody wrote yet', urgent: true } as never)
+    await h.channel.send({ title: 'plain' })
+    expect(h.channel.outbox().map(row => row.deferred)).toEqual([undefined, true])
+    await sleeping.set(false)
+    expect(logged(h, 'lsy-wechat: the owner woke; 1 held text(s): 0 sent, 1 left for the next reply window')).toBe(true)
+    expect(h.channel.outbox().map(row => row.deferred)).toEqual([undefined, undefined])
+    expect(h.ilink.sent).toEqual([])
+  })
+
+  it('holds a note while the owner sleeps and no account is bound', async () => {
+    const h = await harness({ account: false, presence: fakePresence().presence })
+    await h.channel.send({ title: 'no account yet' })
+    expect(h.channel.outbox().map(row => [row.text, row.deferred])).toEqual([['no account yet', true]])
+  })
+
+  it('logs background work that fails, here a write while the owner wakes', async () => {
+    const sleeping = fakePresence()
+    const h = await harness({ presence: sleeping.presence })
+    await h.ownerSays('night')
+    await vi.advanceTimersByTimeAsync(31 * 60_000)
+    await h.channel.send({ title: 'held' })
+    h.pool.failNextWrites = 1
+    await sleeping.set(false)
+    await vi.waitFor(() => { expect(warned(h.logs, 'lsy-wechat: background work failed:')).toBe(true) })
+  })
+
+  it('finds nothing due when a full outbox already dropped the text held until that time', async () => {
+    const h = await harness({ config: { outboxLimit: 2 } })
+    await h.channel.holdDelivery('dropped later', Date.now() + HOUR)
+    await h.channel.send({ title: 'second' })
+    await h.channel.send({ title: 'third' })
+    expect(h.channel.outbox().map(row => row.text)).toEqual(['second', 'third'])
+    await vi.advanceTimersByTimeAsync(HOUR + 1000)
+    expect(h.ilink.sent).toEqual([])
+    expect(h.logs.some(line => line.text.includes('came due'))).toBe(false)
+    expect(h.channel.outbox().map(row => row.text)).toEqual(['second', 'third'])
+  })
+
+  it('arms no timer for a later text when the channel stops during a delivery', async () => {
+    const h = await harness()
+    await h.ownerSays('hi')
+    h.ilink.sent.length = 0
+    await h.channel.holdDelivery('soon', Date.now() + HOUR)
+    await h.channel.holdDelivery('later', Date.now() + 2 * HOUR)
+    const sending = gate()
+    vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
+      if ((input instanceof Request ? input.url : String(input)).endsWith('/sendmessage')) await sending.wait
+      return h.ilink.fetch(input, init)
+    })
+    await vi.advanceTimersByTimeAsync(HOUR)
+    const disposing = contexts.splice(0).at(0)!.fiber.dispose()
+    await vi.advanceTimersByTimeAsync(0)
+    sending.open()
+    await disposing
+    expect(h.logs.some(line => line.text.includes('1 deferred text(s) came due'))).toBe(true)
+    expect(vi.getTimerCount()).toBe(0)
+    const requests = h.ilink.requestsTo('ilink/bot/sendmessage').length
+    await vi.advanceTimersByTimeAsync(2 * HOUR)
+    expect(h.ilink.requestsTo('ilink/bot/sendmessage')).toHaveLength(requests)
+  })
+})
+
+describe('WechatChannel notify senders', () => {
+  const from = 'somebody'
+
+  it.each([
+    ['cc', 'Claude Code', 'cc'],
+    ['peer', '另一个 Session', 'peer'],
+    [undefined, '另一个 Session', 'peer'],
+  ] as const)('names origin %s as %s to the owner', async (origin, label, logName) => {
+    const h = await harness({ config: { chat: { agentMessage: 'notify' } } })
+    await h.ownerSays('hi')
+    await h.channel.tellMainAgent({ text: 'a find', from, ...origin === undefined ? {} : { origin } })
+    expect(h.ilink.sent.at(-1)!.text).toContain(`📨 ${label}给主 agent 递了话（没有开始处理）`)
+    expect(logged(h, `lsy-wechat: told the owner about a 6-char message from another Session (${logName}); no turn started`)).toBe(true)
+  })
+
+  it('fails when the message could not be left in the chat Session', async () => {
+    const h = await harness({ config: { chat: { agentMessage: 'notify' } } })
+    await h.ownerSays('hi')
+    h.sessions.noInject = true
+    await expect(h.channel.tellMainAgent({ text: 'a find', from })).rejects.toThrow('the message could not be left in the chat Session')
+  })
+})
+
+describe('WechatChannel copies for the chat Session', () => {
+  it('leaves a note in the newest chat when an earlier owner\'s chat is still stored', async () => {
+    const other = 'other@im.wechat'
+    const h = await harness()
+    await h.ownerSays('hi')
+    await vi.advanceTimersByTimeAsync(1000)
+    writeAccount(h.accountFile, { ownerUserId: other })
+    h.channel.reloadAccount('another owner')
+    await vi.advanceTimersByTimeAsync(0)
+    h.ilink.updates([textMessage(other, 'hello', 'ctx-other')])
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.sessions.created).toHaveLength(2)
+    await h.channel.send({ title: 'a note' })
+    expect(h.sessions.injected.at(-1)![0]).toBe('chat-2')
+  })
+
+  it('still delivers a note when the chat Session no longer resolves, and claims no copy', async () => {
+    const h = await harness()
+    await h.ownerSays('hi')
+    h.sessions.errors.set('chat-1', 'session/not-found')
+    await h.channel.send({ title: 'a note' })
+    expect(h.ilink.sent.map(sent => sent.text)).toContain('a note')
+    expect(h.sessions.injected).toEqual([])
+    expect(h.logs.some(line => line.text.startsWith('lsy-wechat: shared a'))).toBe(false)
+  })
+
+  it('still delivers a note when the copy cannot be queued, and logs why', async () => {
+    const h = await harness()
+    await h.ownerSays('hi')
+    h.sessions.injectError = new Error('queue closed')
+    await h.channel.send({ title: 'a note' })
+    expect(h.ilink.sent.map(sent => sent.text)).toContain('a note')
+    expect(warned(h.logs, 'lsy-wechat: could not pass a notice (another Session messaged the owner) to chat Session chat-1:')).toBe(true)
+    expect(h.logs.some(line => line.text.endsWith(': queue closed'))).toBe(true)
+  })
+})
+
+describe('WechatChannel sendFile refusals', () => {
+  it('reports a file WeChat rejected, naming the item in the log', async () => {
+    const h = await harness()
+    await h.ownerSays('图')
+    const path = join(dir, 'a.png')
+    writeFileSync(path, PNG)
+    h.ilink.reply('ilink/bot/sendmessage', { body: { ret: -2 } })
+    expect(await h.channel.sendFile(path)).toEqual({ notSent: 'rejected by WeChat (ret -2)' })
+    const line = `lsy-wechat: WeChat rejected a send (ret -2) of image a.png (${PNG.byteLength} bytes) from ${path},`
+    expect(h.logs.some(entry => entry.text.startsWith(line))).toBe(true)
+  })
+
+  it('words a read failure that names no code by its message', async () => {
+    const h = await harness()
+    await h.ownerSays('图')
+    fsFaults.stat = new Error('odd failure')
+    expect(await h.channel.sendFile(join(dir, 'a.png'))).toEqual({ notSent: 'cannot read the file (odd failure)' })
+  })
+})
+
+describe('WechatChannel /new and /stop failures', () => {
+  it('still confirms /new when the new chat Session cannot be created, and says the next message tries again', async () => {
+    const h = await harness()
+    await h.ownerSays('one')
+    h.sessions.brokenCreate = true
+    await h.ownerSays('/new')
+    expect(h.ilink.sent.at(-1)!.text).toBe('已开始新对话。\n⚠️ 新对话还没建好（session/not-found: chat-2），下一条消息时再建。')
+    expect(warned(h.logs, 'lsy-wechat: the new chat Session could not be created now; the next message tries again:')).toBe(true)
+  })
+
+  it('reports schedule tasks that could not move on /new', async () => {
+    const schedule = { handOverSessions: vi.fn(() => Promise.reject(new Error('schedule store closed'))) }
+    const h = await harness({ schedule })
+    await h.ownerSays('one')
+    await h.ownerSays('/new')
+    expect(h.ilink.sent.at(-1)!.text).toBe('已开始新对话。\n⚠️ 有些没能转过去（schedule：schedule store closed），下一条消息时再试。')
+  })
+
+  it('names a running Session that has no title by its id on /stop', async () => {
+    const agent = fakeAgent('job-7', 'running')
+    const h = await harness({ agents: [agent] })
+    await h.ownerSays('/stop')
+    expect(agent.cancel).toHaveBeenCalledWith({ kind: 'user' })
+    expect(h.ilink.sent.at(-1)!.text).toContain('• Session job-7')
+  })
+})
+
+describe('WechatChannel attachments while stopping', () => {
+  /** A CDN that never answers a download until its signal aborts; everything else reaches the double. */
+  function holdDownloads(ilink: FakeIlink): Promise<void> {
+    const asked = gate()
+    vi.stubGlobal('fetch', (input: string | URL | Request, init?: RequestInit) => {
+      if (!new URL(input instanceof Request ? input.url : String(input)).pathname.endsWith('/download')) return ilink.fetch(input, init)
+      asked.open()
+      return new Promise((_resolve, reject) => { init?.signal?.addEventListener('abort', () => { reject(init.signal?.reason as Error) }) })
+    })
+    return asked.wait
+  }
+
+  it('drops a message whose download the stop cut, without blaming the download', async () => {
+    const h = await harness()
+    const asked = holdDownloads(h.ilink)
+    h.ilink.updates([imageMessage(OWNER, 'pic', MEDIA_KEY.toString('hex'))])
+    await vi.waitFor(() => asked)
+    await contexts.splice(0).at(0)!.fiber.dispose()
+    expect(h.sessions.prompts).toEqual([])
+    expect(h.logs.some(line => line.text.includes('could not receive'))).toBe(false)
+  })
+
+  it('drops a message whose transcription the stop cut, without blaming the transcription', async () => {
+    const started = gate()
+    const voice = {
+      asrEnabled: true,
+      canTranscribe: () => true,
+      transcribe: (_path: string, options: { signal: AbortSignal }) => new Promise((_resolve, reject) => {
+        started.open()
+        options.signal.addEventListener('abort', () => { reject(options.signal.reason as Error) })
+      }),
+    }
+    const h = await harness({ voice })
+    h.ilink.cdn.set('note', encryptMedia(Buffer.from('audio')))
+    const fileKey = Buffer.from(MEDIA_KEY.toString('hex')).toString('base64')
+    h.ilink.updates([{
+      from_user_id: OWNER, message_type: 1, context_token: 'ctx-note',
+      item_list: [{ type: 4, file_item: { file_name: 'note.mp3', media: { encrypt_query_param: 'note', aes_key: fileKey } } }],
+    }])
+    await vi.waitFor(() => started.wait)
+    await contexts.splice(0).at(0)!.fiber.dispose()
+    expect(h.sessions.prompts).toEqual([])
+    expect(h.logs.some(line => line.text.includes('could not transcribe'))).toBe(false)
+  })
+})
+
+describe('WechatChannel without the owner relay', () => {
+  it('warns that the answer will not reach WeChat', async () => {
+    const h = await harness({ noRelay: true })
+    await h.ownerSays('hi')
+    expect(h.sessions.prompts).toHaveLength(1)
+    expect(logged(h, 'lsy-wechat: no ownerRelay is mounted, so the answer will not reach WeChat')).toBe(true)
+  })
+})
+
+describe('WechatChannel reading quotes back', () => {
+  const quoteOf = (at: number) => ({ from_user_id: OWNER, message_type: 1, context_token: `ctx-${at}`, item_list: [
+    { type: 1, text_item: { text: '这个' }, ref_msg: { message_item: { type: 8, create_time_ms: at } } },
+  ] })
+  const lastPrompt = (h: Awaited<ReturnType<typeof harness>>) => h.sessions.prompts.at(-1)!.content[0]
+
+  it('reads back the sent text closest to the quoted time', async () => {
+    const h = await harness()
+    await h.ownerSays('hi')
+    const first = Date.now()
+    await h.finishTurn('chat-1', 'first answer')
+    await vi.advanceTimersByTimeAsync(1000)
+    const second = Date.now()
+    await h.finishTurn('chat-1', 'second answer')
+
+    h.ilink.updates([quoteOf(second)])
+    await vi.advanceTimersByTimeAsync(0)
+    expect(lastPrompt(h)).toEqual({ type: 'text', text: '[引用] second answer\n这个' })
+    expect(logged(h, 'lsy-wechat: read back the text of a quoted bot message')).toBe(true)
+
+    h.ilink.updates([quoteOf(first)])
+    await vi.advanceTimersByTimeAsync(0)
+    expect(lastPrompt(h)).toEqual({ type: 'text', text: '[引用] first answer\n这个' })
+  })
+
+  it('forgets a sent text after 30 days, and then says the quote is unavailable', async () => {
+    const h = await harness()
+    await h.ownerSays('hi')
+    const sentAt = Date.now()
+    await h.finishTurn('chat-1', 'an old answer')
+    vi.setSystemTime(sentAt + 31 * 86_400_000)
+    await h.ownerSays('back')
+    await h.finishTurn('chat-1', 'a new answer')
+
+    h.ilink.updates([quoteOf(sentAt)])
+    await vi.advanceTimersByTimeAsync(0)
+    expect(lastPrompt(h)).toEqual({ type: 'text', text: '[引用] （一条较早的消息，内容取不到）\n这个' })
+    expect(logged(h, 'lsy-wechat: read back the text of a quoted bot message')).toBe(false)
+  })
+})
+
+describe('WechatChannel restart notice failures', () => {
+  it('stays quiet and says so when a restart cuts a turn and no reply window is open', async () => {
+    const h = await harness()
+    await h.ownerSays('hi')
+    h.emit('chat-1', { type: 'turn/start', seq: 2, data: { turn: 1 } })
+    vi.setSystemTime(Date.now() + 90_000_000)
+    await contexts.splice(0).at(0)!.fiber.dispose()
+    expect(h.ilink.sent).toEqual([])
+    expect(logged(h, 'lsy-wechat: stopping during a chat turn (chat-1); no open window to tell the owner')).toBe(true)
+  })
+
+  it('logs a restart notice it could not send', async () => {
+    const h = await harness()
+    await h.ownerSays('hi')
+    h.emit('chat-1', { type: 'turn/start', seq: 2, data: { turn: 1 } })
+    h.ilink.reply('ilink/bot/sendmessage', new Error('offline'))
+    await contexts.splice(0).at(0)!.fiber.dispose()
+    expect(h.ilink.sent).toEqual([])
+    expect(warned(h.logs, 'lsy-wechat: could not tell the owner about the restart:')).toBe(true)
   })
 })

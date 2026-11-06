@@ -111,6 +111,7 @@ export function mountScanner(ctx: Context, settings: ScannerSettings): void {
     // A schedule state nobody has reported yet is accepted as the trusted one: the first baseline, or a scan that found nothing new.
     const seedTrusted = async (): Promise<void> => {
       if (scheduleTarget === undefined || trusted !== undefined) return
+      /* v8 ignore next -- the scan sets a digest for every target. */
       await writeJson(trustedFile, trustedOf(digests[scheduleTarget.name] ?? ABSENT, scheduleTasks))
     }
     if (baseline === undefined) {
@@ -139,11 +140,13 @@ export function mountScanner(ctx: Context, settings: ScannerSettings): void {
 
   const schedule = (): void => {
     scanning = scanning.then(runScan).catch((error: unknown) => {
+      /* v8 ignore next -- only fs errors reach here, which are Error instances. */
       ctx.logger.warn('lsy-integrity: scan failed: %s', error instanceof Error ? error.message : String(error))
     })
   }
   schedule()
   const timer = setInterval(schedule, settings.intervalMs)
   timer.unref()
-  ctx.effect(() => () => { clearInterval(timer) }, 'lsy-integrity: stop scanning')
+  // A scan under way still writes the baseline: teardown waits for it, so nothing lands in a directory being removed.
+  ctx.effect(() => async () => { clearInterval(timer); await scanning }, 'lsy-integrity: stop scanning')
 }

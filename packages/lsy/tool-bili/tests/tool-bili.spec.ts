@@ -153,4 +153,106 @@ describe('tool-bili', () => {
     await call('bili_search', { keyword: '大肥鱼', page: 2 })
     expect(search).toHaveBeenLastCalledWith('大肥鱼', 2, 'relevance')
   })
+
+  it('maps every read tool\'s arguments onto the account call and titles the call for the card', async () => {
+    const ok = (value: unknown) => vi.fn(() => Promise.resolve(value))
+    const account = {
+      homeFeed: ok([]), followingFeed: ok({ items: [] }), popular: ok([]), search: ok([]), ranking: ok([]), hotSearches: ok([]),
+      danmaku: ok([]), video: ok({}), comments: ok({}), inbox: ok({}), me: ok({}), journalRead: ok({}),
+    }
+    const { ctx, call } = await mount(account)
+    const title = (name: string, args: unknown) => ctx.tools.get(name)!.presentCall!(args)!
+
+    await call('bili_home_feed', {})
+    expect(account.homeFeed).toHaveBeenCalledTimes(1)
+    expect(title('bili_home_feed', {})).toEqual({ card: 'generic', title: 'Bilibili home feed', kind: 'read' })
+
+    await call('bili_following_feed', {})
+    expect(account.followingFeed).toHaveBeenLastCalledWith(undefined)
+    await call('bili_following_feed', { next: 'cursor-9' })
+    expect(account.followingFeed).toHaveBeenLastCalledWith('cursor-9')
+    expect(title('bili_following_feed', {}).title).toBe('Bilibili following feed')
+
+    expect(title('bili_popular', {}).title).toBe('Bilibili popular')
+    expect(title('bili_search', { keyword: '猫' }).title).toBe('Search Bilibili: 猫')
+
+    await call('bili_ranking', {})
+    expect(account.ranking).toHaveBeenCalledTimes(1)
+    expect(title('bili_ranking', {}).title).toBe('Bilibili leaderboard')
+
+    await call('bili_hot_searches', {})
+    expect(account.hotSearches).toHaveBeenCalledTimes(1)
+    expect(title('bili_hot_searches', {}).title).toBe('Bilibili hot searches')
+
+    await call('bili_danmaku', { bvid: 'BV1aa4y1X7aa' })
+    expect(account.danmaku).toHaveBeenLastCalledWith('BV1aa4y1X7aa', undefined)
+    await call('bili_danmaku', { bvid: 'BV1aa4y1X7aa', part: 2 })
+    expect(account.danmaku).toHaveBeenLastCalledWith('BV1aa4y1X7aa', 2)
+    expect(title('bili_danmaku', { bvid: 'BV1aa4y1X7aa' }).title).toBe('Danmaku of BV1aa4y1X7aa')
+
+    await call('bili_video', { bvid: 'BV1aa4y1X7aa' })
+    expect(account.video).toHaveBeenLastCalledWith('BV1aa4y1X7aa', { subtitlePage: 1 })
+    await call('bili_video', { bvid: 'BV1aa4y1X7aa', subtitle_page: 3, part: 2 })
+    expect(account.video).toHaveBeenLastCalledWith('BV1aa4y1X7aa', { subtitlePage: 3, part: 2 })
+    expect(title('bili_video', { bvid: 'BV1aa4y1X7aa' }).title).toBe('Watch BV1aa4y1X7aa')
+
+    await call('bili_comments', { bvid: 'BV1aa4y1X7aa' })
+    expect(account.comments).toHaveBeenLastCalledWith('BV1aa4y1X7aa', {})
+    await call('bili_comments', { bvid: 'BV1aa4y1X7aa', order: 'new', next: 'off-1', root: '555', page: 2 })
+    expect(account.comments).toHaveBeenLastCalledWith('BV1aa4y1X7aa', { order: 'new', offset: 'off-1', root: '555', page: 2 })
+    expect(title('bili_comments', { bvid: 'BV1aa4y1X7aa' }).title).toBe('Comments on BV1aa4y1X7aa')
+
+    await call('bili_inbox', {})
+    expect(account.inbox).toHaveBeenCalledTimes(1)
+    expect(title('bili_inbox', {}).title).toBe('Bilibili inbox')
+
+    await call('bili_me', {})
+    expect(account.me).toHaveBeenCalledTimes(1)
+    expect(title('bili_me', {}).title).toBe('Bilibili account')
+
+    await call('bili_journal_read', { page: 4 })
+    expect(account.journalRead).toHaveBeenLastCalledWith(4)
+    expect(title('bili_journal_read', {}).title).toBe('Read the Bilibili journal')
+  })
+
+  it('titles every action call and passes the remaining action arguments through', async () => {
+    const sent = { outcome: 'sent', detail: 'ok' }
+    const account = {
+      follow: vi.fn(() => Promise.resolve(sent)), unfollow: vi.fn(() => Promise.resolve(sent)),
+      favorite: vi.fn(() => Promise.resolve(sent)),
+      like: vi.fn(() => Promise.resolve(sent)), coin: vi.fn(() => Promise.resolve(sent)), triple: vi.fn(() => Promise.resolve(sent)),
+      watchLater: vi.fn(() => Promise.resolve(sent)), journalWrite: vi.fn(() => Promise.resolve({ saved: true })),
+    }
+    const { ctx, call } = await mount(account)
+    const title = (name: string, args: unknown) => ctx.tools.get(name)!.presentCall!(args)!
+
+    await call('bili_follow', { mid: 7 })
+    expect(account.follow).toHaveBeenCalledWith(7)
+    await call('bili_unfollow', { mid: 8 })
+    expect(account.unfollow).toHaveBeenCalledWith(8)
+    await call('bili_favorite', { bvid: 'BV1aa4y1X7aa' })
+    expect(account.favorite).toHaveBeenCalledWith('BV1aa4y1X7aa', {})
+    await call('bili_watchlater', { bvid: 'BV1aa4y1X7aa' })
+    expect(account.watchLater).toHaveBeenCalledWith('BV1aa4y1X7aa', false)
+    await call('bili_coin', { bvid: 'BV1aa4y1X7aa', count: 2 })
+    expect(account.coin).toHaveBeenCalledWith('BV1aa4y1X7aa', 2)
+
+    expect(title('bili_follow', { mid: 7 })).toEqual({ card: 'generic', title: 'Follow 7', kind: 'other' })
+    expect(title('bili_unfollow', { mid: 8 }).title).toBe('Unfollow 8')
+    expect(title('bili_favorite', { bvid: 'BV1aa4y1X7aa' }).title).toBe('Favorite BV1aa4y1X7aa')
+    expect(title('bili_favorite', { bvid: 'BV1aa4y1X7aa', remove: true }).title).toBe('Unfavorite BV1aa4y1X7aa')
+    expect(title('bili_like', { bvid: 'BV1aa4y1X7aa' }).title).toBe('Like BV1aa4y1X7aa')
+    expect(title('bili_coin', { bvid: 'BV1aa4y1X7aa' }).title).toBe('Coin BV1aa4y1X7aa')
+    expect(title('bili_triple', { bvid: 'BV1aa4y1X7aa' }).title).toBe('Triple BV1aa4y1X7aa')
+    expect(title('bili_watchlater', { bvid: 'BV1aa4y1X7aa' }).title).toBe('Watch later BV1aa4y1X7aa')
+    expect(title('bili_journal_write', { text: 'x' })).toEqual({ card: 'generic', title: 'Write in the Bilibili journal', kind: 'other' })
+  })
+
+  it('answers a read that rejects with a non-Error value using its text, and renders a null answer as untrusted data', async () => {
+    // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the non-Error rejection is the scenario.
+    const { call } = await mount({ homeFeed: () => Promise.reject('plain failure'), ranking: () => Promise.resolve(null) })
+    expect((await call('bili_home_feed', {})).value).toEqual({ error: 'plain failure' })
+    const ranking = await call('bili_ranking', {})
+    expect(ranking.content![0]!.text.startsWith('<bilibili_data source="leaderboard" trust="untrusted">\nnull')).toBe(true)
+  })
 })

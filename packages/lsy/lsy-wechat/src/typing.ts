@@ -101,11 +101,14 @@ export class TypingIndicator {
     const ticket = await this.currentTicket()
     if (ticket === undefined || generation !== this.generation) return
     if (!await this.sendTyping(ticket, generation)) return
+    // stop() may land while this resumes: an interval armed now would outlive it.
+    if (generation !== this.generation) return
     this.keepalive = setInterval(() => { void this.sendTyping(ticket, generation) }, TYPING_KEEPALIVE_MS)
   }
 
   /** Send one typing status; a failure ends this activation's keepalive and drops the ticket. */
   private async sendTyping(ticket: string, generation: number): Promise<boolean> {
+    /* v8 ignore next -- stop clears the keepalive, and show checked the generation just before. */
     if (generation !== this.generation) return false
     try {
       await this.io.send(ticket, TypingStatus.TYPING)
@@ -151,6 +154,7 @@ export class TypingIndicator {
 
   private clearTimers(): void {
     if (this.keepalive !== undefined) clearInterval(this.keepalive)
+    /* v8 ignore else -- clearTimers runs only while active, and start sets the deadline. */
     if (this.deadline !== undefined) clearTimeout(this.deadline)
     this.keepalive = undefined
     this.deadline = undefined

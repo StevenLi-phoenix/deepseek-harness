@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   currentStep, failureReason, lateWindowEnd, outlook, OUTLOOK_ROWS, parseHealth, parseTasks, planReminders, planSyncNotice, renderReminders,
-  renderSyncFailing, renderSyncRecovered, reminderKey, span, stamp, upcoming, type SyncHealth, type TaskSummary,
+  inWindow, renderSyncFailing, renderSyncRecovered, reminderKey, shortCourse, span, stamp, upcoming, type SyncHealth, type TaskSummary,
 } from '../src/index.ts'
 
 const ZONE = 'America/New_York'
@@ -245,5 +245,108 @@ describe('wire parsing', () => {
     expect(failureReason({ data: { coverage: [{ status: 'not_checked', detail: 'fall-x: Browser is not available.' }] } })).toBe('Browser is not available.')
     expect(failureReason({ data: { coverage: [{ status: 'checked' }] } })).toBeNull()
     expect(failureReason(null)).toBeNull()
+  })
+})
+
+describe('reminder message variants', () => {
+  const NO_HEALTH = { now: NOW, timeZone: ZONE, urgentWithinHours: 2, health: null }
+
+  it('reads a late-only message without a due section or a due count, with the course left out when it has none', () => {
+    const planned = planReminders([task({ course: '', title: 'Quiz', dueAt: NOW - H, lateAt: NOW + 10 * H })], NOW, RULES, () => false)
+    const note = renderReminders(planned, NO_HEALTH)
+    expect(note.title).toBe('⚠️ 课程 DDL：1 项已过准时截止，迟交窗口还开着')
+    expect(note.kinds).toEqual(['courses.deadline.late'])
+    expect(note.body).not.toContain('⏰ 快到截止')
+    expect(note.body).toContain(`• Quiz — 准时截止 ${stamp(NOW - H, ZONE)} 已过`)
+  })
+
+  it('shows the progress label without a percentage when none is recorded', () => {
+    const planned = planReminders([task({ progress: 'in_progress', percent: null })], NOW, RULES, () => false)
+    expect(renderReminders(planned, NO_HEALTH).body).toContain('，进度：进行中\n')
+  })
+
+  it('falls back to the deadline for the on-time time of an undated late reminder handed in directly', () => {
+    const reminder = { key: 'k', phase: 'late' as const, checkpoint: 'open' as const, deadline: NOW + 5 * H, task: task({ dueAt: null }) }
+    expect(renderReminders([reminder], NO_HEALTH).body).toContain(`准时截止 ${stamp(NOW + 5 * H, ZONE)} 已过，迟交截止 ${stamp(NOW + 5 * H, ZONE)}`)
+  })
+
+  it('says there was never a clean sync, without a failure count when none failed', () => {
+    const health: SyncHealth = { status: 'missing', latestRunAt: null, lastCleanAt: null, failedRuns: 0, latestRunId: null }
+    const note = renderReminders(planReminders([task()], NOW, RULES, () => false), { ...NO_HEALTH, health })
+    expect(note.body).toContain('（课程记录可能过时：还没有过成功的同步；新作业和提交状态可能没更新。）')
+  })
+})
+
+describe('upcoming list without a late window', () => {
+  it('leaves out an overdue task whose late window is over', () => {
+    const rows = upcoming([task({ id: 'over', dueAt: NOW - H }), task({ id: 'next', dueAt: NOW + H })], NOW, RULES, 10)
+    expect(rows.map(row => row.task.id)).toEqual(['next'])
+  })
+})
+
+describe('sync messages without timestamps', () => {
+  it('writes a failing alert for a sync that never succeeded, with no last run and no reason', () => {
+    const health: SyncHealth = { status: 'missing', latestRunAt: null, lastCleanAt: null, failedRuns: 0, latestRunId: null }
+    const note = renderSyncFailing(health, null, NOW, ZONE)
+    expect(note.title).toBe('⚠️ 课程同步还没有成功过')
+    expect(note.body).toBe(['最近一次成功同步：没有记录。', '之后失败 0 次。', 'DDL 提醒照旧按现有记录发，但新作业和提交状态可能没更新。'].join('\n'))
+  })
+
+  it('writes the recovery from the latest run when there is no clean run, and without a time when there is neither', () => {
+    const health: SyncHealth = { status: 'ok', latestRunAt: NOW, lastCleanAt: null, failedRuns: 0, latestRunId: null }
+    expect(renderSyncRecovered(health, ZONE).body).toBe(`${stamp(NOW, ZONE)} 同步成功，课程记录又能更新了。`)
+    expect(renderSyncRecovered({ ...health, latestRunAt: null }, ZONE).body).toBe('课程记录又能更新了。')
+  })
+})
+
+describe('daily windows', () => {
+  const at = (clock: string): number => Date.parse(`2026-11-02T${clock}:00-05:00`)
+
+  it('holds a window that wraps midnight on both sides of it and releases it in the day', () => {
+    const window = { start: '22:00', end: '06:00' }
+    expect(inWindow(at('23:30'), window, ZONE)).toBe(true)
+    expect(inWindow(at('05:59'), window, ZONE)).toBe(true)
+    expect(inWindow(at('06:00'), window, ZONE)).toBe(false)
+    expect(inWindow(at('12:00'), window, ZONE)).toBe(false)
+  })
+
+  it('holds a same-day window from its start up to, not including, its end', () => {
+    const window = { start: '09:00', end: '17:00' }
+    const inside = [at('08:59'), at('09:00'), at('16:59'), at('17:00')].map(time => inWindow(time, window, ZONE))
+    expect(inside).toEqual([false, true, true, false])
+  })
+})
+
+describe('wire parsing edge cases', () => {
+  it('shortens a course name to the text before the catalogue suffix and tolerates a missing or empty name', () => {
+    expect(shortCourse('Intro — CS-UY 1 A')).toBe('Intro')
+    expect(shortCourse('Plain')).toBe('Plain')
+    expect(shortCourse(' — CS-UY 1 A')).toBe('— CS-UY 1 A')
+    expect(shortCourse(null)).toBe('')
+    expect(shortCourse(undefined)).toBe('')
+  })
+
+  it('fills the defaults of a task row that carries only its required fields', () => {
+    const [row] = parseTasks([{ kind: 'task', id: 't', version: 1, title: 'Bare' }])
+    expect(row).toEqual({
+      id: 't', version: 1, title: 'Bare', courseId: null, course: '', parentId: null, parentTitle: null, partsDone: null, partsTotal: null,
+      dueAt: null, lateAt: null, closesAt: null, certainty: 'unknown', progress: 'not_started', percent: null, submission: 'unknown',
+      submissionVerified: false, remainingWork: null, checkedAt: null, links: [],
+    })
+  })
+
+  it('reads a health row without a failure count or run list as zero failures and no run id', () => {
+    expect(parseHealth({ health: { status: 'ok' } }))
+      .toEqual({ status: 'ok', latestRunAt: null, lastCleanAt: null, failedRuns: 0, latestRunId: null })
+    expect(parseHealth({ health: { status: 'ok' }, items: [{ id: 7 }] }).latestRunId).toBeNull()
+    expect(parseHealth({ health: null }).status).toBe('missing')
+  })
+
+  it('gives no reason for a coverage that does not parse, or whose entries carry no detail', () => {
+    expect(failureReason({ data: { coverage: [{ status: 5 }] } })).toBeNull()
+    expect(failureReason({ data: { coverage: [{ status: 'failed' }, { status: 'not_checked', detail: '' }] } })).toBeNull()
+    expect(failureReason({ data: {} })).toBeNull()
+    const coverage = [{ status: 'failed' }, { status: 'not_checked' }, { status: 'not_checked', detail: 'x:  two\n lines' }]
+    expect(failureReason({ data: { coverage } })).toBe('two lines')
   })
 })

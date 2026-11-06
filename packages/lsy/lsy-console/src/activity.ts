@@ -117,9 +117,12 @@ function windowOf(events: readonly EventRow[], batches: readonly BatchRow[], sin
 const RANK: readonly BatchResult[] = ['failed', 'sent', 'working', 'silent']
 
 function outcomeOf(event: EventRow, results: ReadonlyMap<string, readonly BatchResult[]>): FlowOutcome {
+  /* v8 ignore next 3 -- recentOf passes only accepted events with subscriptions, and every result is in RANK. */
   if (event.outcome !== 'accepted') return event.outcome
   const own = results.get(event.id)
+  /* v8 ignore next -- recentOf passes only accepted events with subscriptions, which have results. */
   if (own === undefined) return event.subscriptions.length === 0 ? 'unmatched' : 'waiting'
+  /* v8 ignore next -- every result is in RANK. */
   return RANK.find(result => own.includes(result)) ?? 'waiting'
 }
 

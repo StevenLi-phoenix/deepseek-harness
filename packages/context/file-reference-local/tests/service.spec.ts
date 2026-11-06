@@ -210,4 +210,16 @@ describe('LocalFileReferenceService', () => {
     })
     await expect(fiber.dispose()).resolves.toBeUndefined()
   })
+
+  it('tolerates a prompt fiber its agent\'s scope already disposed, whose repeat dispose returns nothing', async () => {
+    const ctx = await harness()
+    const fiber = ctx.plugin(LocalFileReferenceService)
+    await fiber
+    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
+    vi.spyOn(ctx, 'inject').mockReturnValueOnce({ dispose: () => undefined } as never)
+    const { dispose } = await stubAgent(ctx, 'cleanup-spent')
+    await dispose()
+    expect(warn.mock.calls.flat().filter(line => String(line).includes('listener threw'))).toEqual([])
+    await expect(fiber.dispose()).resolves.toBeUndefined()
+  })
 })

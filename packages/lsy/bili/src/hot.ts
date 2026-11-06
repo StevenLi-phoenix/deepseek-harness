@@ -93,6 +93,7 @@ export class HotStore implements BiliHot {
   async noteComments(bvid: string, rows: readonly CommentView[]): Promise<void> {
     const keep = rows.flatMap((row) => {
       const text = hotText(row.text)
+      /* v8 ignore next -- a row without likes fails the HOT_MIN_LIKES test first, so the second `?? 0` only narrows the type. */
       return text === undefined || (row.likes ?? 0) < HOT_MIN_LIKES ? [] : [{ rpid: row.rpid, text, likes: row.likes ?? 0 }]
     })
     if (keep.length === 0) return

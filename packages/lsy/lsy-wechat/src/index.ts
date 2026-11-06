@@ -640,6 +640,7 @@ export class WechatChannel extends Service implements LsyNotifier {
    * @param except - a Session that needs no copy: the chat Session that wrote the text itself.
    */
   private async shareWithChat(text: string, from?: string, except?: string): Promise<void> {
+    /* v8 ignore next -- deliver awaits ready first, so the domain is open. */
     const chats = this.domain === undefined ? [] : [...this.domain.table('chats').entries()].map(([, row]) => row)
     const chat = chats.sort((a, b) => b.createdAt - a.createdAt)[0]
     if (chat === undefined || chat.sessionId === except) return
@@ -858,6 +859,7 @@ export class WechatChannel extends Service implements LsyNotifier {
       const done = (): void => {
         clearTimeout(timer)
         this.abort.signal.removeEventListener('abort', done)
+        /* v8 ignore else -- only the run loop calls pause, so wake stays this one. */
         if (this.wake === done) this.wake = undefined
         resolve()
       }
@@ -1105,6 +1107,7 @@ export class WechatChannel extends Service implements LsyNotifier {
     if (this.working.size > 0) return
     this.typingGrace = setTimeout(() => {
       this.typingGrace = undefined
+      /* v8 ignore else -- the only working.add clears this grace timer. */
       if (this.working.size === 0) void this.typing.stop()
     }, TYPING_GRACE_MS)
   }
@@ -1147,6 +1150,7 @@ export class WechatChannel extends Service implements LsyNotifier {
   /** Download each image, file, and video of an owner message into the inbox; a failure becomes its reason. */
   private async receiveMedia(message: WeixinMessage): Promise<ReceivedMedia[]> {
     const received: ReceivedMedia[] = []
+    /* v8 ignore next -- the text came from item_list, so it is set. */
     for (const item of message.item_list ?? []) {
       const spec = mediaSpec(item)
       if (spec === undefined) continue

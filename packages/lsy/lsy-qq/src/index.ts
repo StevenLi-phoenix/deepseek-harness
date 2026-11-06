@@ -292,6 +292,7 @@ function assertConfig(config: Config): void {
   if (!RECORDER_SECRET.test(config.tokenEnv)) throw new Error('lsy-qq: tokenEnv must name one of the recorder\'s secrets (LSY_QQ_ followed by capitals, digits, and underscores)')
   if (config.recorder.socket !== undefined && !isAbsolute(config.recorder.socket)) throw new Error('lsy-qq: recorder.socket must be an absolute path')
   if (!isPrivateAddress(config.login.url, ['http:', 'https:'])) throw new Error('lsy-qq: login.url must be an http(s) address on this machine (127.0.0.1, localhost) or the tailnet (100.64.0.0/10, *.ts.net)')
+  /* v8 ignore next -- get() was just checked to be defined. */
   if (config.settingsUrl.get() !== undefined && !/^https?:\/\//.test(config.settingsUrl.get() ?? '')) throw new Error('lsy-qq: settingsUrl must be an http(s) address')
   if (!isAbsolute(config.digest.workspacePath)) throw new Error('lsy-qq: digest.workspacePath must be an absolute path')
   if (config.asr.enabled.get()) throw new Error('lsy-qq: asr.enabled is not supported while the qq-recorder owns the voice files; set it to false')

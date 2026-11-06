@@ -80,6 +80,8 @@ export function OverviewSection({ useOverview, useBalance, refresh, canManage, s
   const translate = t as Translate
   const view = state.data
   const cards = view === null ? [] : [...view.cards, balanceCard(balance.data, balance.stale)]
+  /* v8 ignore next -- the cards that use it exist only with a view. */
+  const now = view?.checkedAt ?? 0
   const tone = state.checkedAt === null ? 'loading' : state.stale ? 'stale' : 'live'
   const text = state.checkedAt === null
     ? translate('status.loading')
@@ -100,7 +102,7 @@ export function OverviewSection({ useOverview, useBalance, refresh, canManage, s
         : (
           <div className={css.grid}>
             {cards.map(card => (
-              <ServiceCardView key={card.id} card={card} t={translate} canManage={canManage} select={select} now={view?.checkedAt ?? 0} />
+              <ServiceCardView key={card.id} card={card} t={translate} canManage={canManage} select={select} now={now} />
             ))}
           </div>
         )}

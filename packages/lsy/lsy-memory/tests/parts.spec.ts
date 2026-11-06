@@ -7,6 +7,7 @@ import { parseAdminArgs } from '../src/admin-cli.ts'
 import { NOTICE_LINGER_MS, mountNotices } from '../src/notice-queue.ts'
 import type { NoticeItem } from '../src/notice.ts'
 import { publicEntry, turnOriginOf } from '../src/tools.ts'
+import { entryFrom, pendingFrom } from '../src/entries.ts'
 
 const contexts: Context[] = []
 
@@ -127,6 +128,22 @@ describe('notice queue', () => {
     expect(sent).toHaveLength(2)
   })
 
+  it.each([
+    [new Error('channel down'), 'channel down'],
+    ['plain refusal', 'plain refusal'],
+  ])('logs why a notice could not be sent and goes on (%s)', async (reason, text) => {
+    vi.useFakeTimers()
+    const ctx = new Context()
+    contexts.push(ctx)
+    // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the non-Error arm is the case under test.
+    ctx.provide('lsyNotifier', { send: () => Promise.reject(reason) } as never)
+    const warn = vi.spyOn(ctx.logger, 'warn')
+    const enqueue = mountNotices(ctx, { notify: true, noticesPerDay: 12 })
+    enqueue('chat', item('likes tea'))
+    await vi.advanceTimersByTimeAsync(NOTICE_LINGER_MS + 1)
+    expect(warn).toHaveBeenCalledWith('memory notice for session %s failed: %s', 'chat', text)
+  })
+
   it('goes on without a channel and drops the queue when the scope is disposed', async () => {
     vi.useFakeTimers()
     const quiet = mount({ notifier: false })
@@ -142,5 +159,38 @@ describe('notice queue', () => {
     expect(vi.getTimerCount()).toBe(before)
     await vi.advanceTimersByTimeAsync(NOTICE_LINGER_MS + 1)
     expect(disposed.sent).toHaveLength(0)
+  })
+})
+
+describe('entry records', () => {
+  const base = { id: 'abcdef', category: 'projects', date: '2026-11-01', text: 'DSH refactor' }
+
+  it('reads a well-formed record and nothing else', () => {
+    expect(entryFrom(base)).toEqual(base)
+    expect(entryFrom(null)).toBeUndefined()
+    expect(entryFrom('abcdef')).toBeUndefined()
+  })
+
+  it('rejects a record with a bad id, category, or date', () => {
+    expect(entryFrom({ ...base, id: 'ABCDEF' })).toBeUndefined()
+    expect(entryFrom({ ...base, category: 'secrets' })).toBeUndefined()
+    expect(entryFrom({ ...base, date: '1 Nov 2026' })).toBeUndefined()
+    expect(entryFrom({ ...base, date: 20261101 })).toBeUndefined()
+  })
+
+  it('rejects a record whose text is missing, empty, too long, or not on one normalized line', () => {
+    expect(entryFrom({ ...base, text: undefined })).toBeUndefined()
+    expect(entryFrom({ ...base, text: '' })).toBeUndefined()
+    expect(entryFrom({ ...base, text: 'x'.repeat(2001) })).toBeUndefined()
+    expect(entryFrom({ ...base, text: 'two  spaces' })).toBeUndefined()
+  })
+
+  it('reads a waiting write only with a known op, and a replacement only with a valid target', () => {
+    expect(pendingFrom({ ...base, op: 'add' })).toEqual({ ...base, op: 'add' })
+    expect(pendingFrom({ ...base, op: 'replace', target: '012345' })).toEqual({ ...base, op: 'replace', target: '012345' })
+    expect(pendingFrom({ ...base, id: 'nope', op: 'add' })).toBeUndefined()
+    expect(pendingFrom({ ...base, op: 'delete' })).toBeUndefined()
+    expect(pendingFrom({ ...base, op: 'replace', target: 'nope' })).toBeUndefined()
+    expect(pendingFrom({ ...base, op: 'replace' })).toBeUndefined()
   })
 })

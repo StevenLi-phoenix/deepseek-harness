@@ -65,6 +65,7 @@ export interface TaskSummary {
  * @returns the short name, or the whole name when it has no suffix.
  */
 export function shortCourse(name: string | null | undefined): string {
+  /* v8 ignore next -- split() always yields a first element; ?? only satisfies noUncheckedIndexedAccess. */
   const head = (name ?? '').split(' — ')[0]?.trim() ?? ''
   return head === '' ? (name ?? '').trim() : head
 }
@@ -161,6 +162,7 @@ export function failureReason(record: unknown): string | null {
   const pick = parsed.data.find(row => row.status === 'failed' && (row.detail ?? '') !== '')
     ?? parsed.data.find(row => row.status === 'not_checked' && (row.detail ?? '') !== '')
   if (pick === undefined) return null
+  /* v8 ignore next -- pick was chosen for a non-empty detail; ?? only satisfies the optional type. */
   const text = (pick.detail ?? '').replace(/^[\w-]+:\s+/u, '').replace(/\s+/gu, ' ').trim()
   return Array.from(text).length > MAX_REASON_CHARS ? `${Array.from(text).slice(0, MAX_REASON_CHARS - 1).join('')}…` : text
 }

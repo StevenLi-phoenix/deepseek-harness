@@ -58,6 +58,7 @@ function triggerOf(source: unknown): string | undefined {
   switch (record.kind) {
     case 'user': {
       if (typeof record.rpcId === 'string' && record.rpcId.startsWith(UNTRUSTED_REQUEST_PREFIX)) {
+        /* v8 ignore next -- split always yields a first element. */
         const origin = record.rpcId.slice(UNTRUSTED_REQUEST_PREFIX.length).split(':')[0] ?? ''
         return `peer:${origin === '' ? 'peer' : origin}`
       }

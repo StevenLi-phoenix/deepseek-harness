@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { parse } from 'yaml'
 import type {} from '@deepseek-ai/dsh-settings'
 import { configFixture } from './fixture.ts'
@@ -339,5 +339,70 @@ describe('lsy-qq with a partial owner patch that switched features off', () => {
     expect(appliedQq.length).toBe(applied)
     const after = await entryOf(() => get('lsy-qq', 'groups'), 'lsy-qq')
     for (const path of OFF) expect(leaf(after, path)).toMatchObject({ value: true })
+  })
+})
+
+describe('malformed and failing requests', () => {
+  const save = { id: 'sample', revision: 'x', ops: [{ op: 'unset', path: ['url'] }] }
+
+  it('refuses a read that names no entries parameter at all', async () => {
+    const { routes } = await configFixture()
+    expect((await routes[0]!.fetch(new Request('http://127.0.0.1/api/lsy.config'))).status).toBe(400)
+  })
+
+  it('refuses an exclude list that is not a list of paths, or is too long', async () => {
+    const { post } = await configFixture()
+    expect(await post({ ...save, exclude: 5 })).toMatchObject({ status: 400 })
+    expect(await post({ ...save, exclude: Array.from({ length: 65 }, (_, index) => `f${index}`) })).toMatchObject({ status: 400 })
+    expect(await post({ ...save, exclude: ['a b'] })).toMatchObject({ status: 400 })
+    // A comma-separated string is a valid list; the request then fails on its stale revision, not on its shape.
+    expect(await post({ ...save, exclude: 'groups,media' })).toMatchObject({ status: 409, body: { reason: 'conflict' } })
+  })
+
+  it('refuses edits that are not a list of well-formed edits', async () => {
+    const { post } = await configFixture()
+    for (const ops of [
+      [5], [null], [{ op: 'set', path: 'url', value: 1 }], [{ op: 'set', path: [], value: 1 }], [{ op: 'set', path: [''], value: 1 }],
+      [{ op: 'set', path: ['url'] }], [{ op: 'rename', path: ['url'] }], 'not a list', Array.from({ length: 201 }, () => ({ op: 'unset', path: ['url'] })),
+    ]) {
+      expect(await post({ id: 'sample', revision: 'x', ops })).toMatchObject({ status: 400, body: { ok: false, reason: 'bad-request' } })
+    }
+  })
+
+  it('says a running plugin without settings, or a disabled entry, has nothing to edit', async () => {
+    const { post } = await configFixture()
+    for (const id of ['bare', 'off']) {
+      expect(await post({ ...save, id })).toMatchObject({ status: 404, body: { ok: false, reason: 'not-found', message: `plugin entry "${id}" has no settings to edit` } })
+    }
+  })
+
+  it('classifies a failing write: a home patch, a plain failure, and a thrown value that is not an Error', async () => {
+    const { ctx, get, post, logs } = await configFixture()
+    const entry = await entryOf(() => get())
+    const body = { id: 'sample', revision: entry.revision, ops: [{ op: 'set', path: ['url'], value: 'ws://x:1' }] }
+    const edit = vi.spyOn(ctx.configEditor, 'edit')
+    edit.mockRejectedValueOnce(new Error('entry is overridden by a home patch\nsecond line'))
+    expect(await post(body)).toMatchObject({ status: 409, body: { ok: false, reason: 'home-locked', message: 'entry is overridden by a home patch' } })
+    edit.mockRejectedValueOnce(new Error('disk full'))
+    expect(await post(body)).toMatchObject({ status: 500, body: { ok: false, reason: 'failed', message: 'disk full' } })
+    edit.mockRejectedValueOnce('plain text')
+    expect(await post(body)).toMatchObject({ status: 500, body: { ok: false, reason: 'failed', message: 'plain text' } })
+    expect(logs.filter(line => line.startsWith('warn lsy-config: save of sample')).map(line => line.replace(/\d+ms$/, 'Nms'))).toEqual([
+      'warn lsy-config: save of sample edits=[url] outcome=home-locked in Nms',
+      'warn lsy-config: save of sample edits=[url] outcome=failed in Nms',
+      'warn lsy-config: save of sample edits=[url] outcome=failed in Nms',
+    ])
+    edit.mockRestore()
+  })
+
+  it('answers an empty revision when the entry is gone after the write', async () => {
+    const { ctx, get, post } = await configFixture()
+    const entry = await entryOf(() => get())
+    const configuration = ctx.configEditor.configuration.bind(ctx.configEditor)
+    let written = false
+    vi.spyOn(ctx.configEditor, 'edit').mockImplementation(async () => { written = true })
+    vi.spyOn(ctx.configEditor, 'configuration').mockImplementation(() => written ? [] : configuration())
+    expect(await post({ id: 'sample', revision: entry.revision, ops: [{ op: 'set', path: ['url'], value: 'ws://x:1' }] }))
+      .toMatchObject({ status: 200, body: { ok: true, revision: '', changed: [], reload: false } })
   })
 })

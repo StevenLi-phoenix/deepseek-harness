@@ -169,6 +169,26 @@ describe('course tools', () => {
     expect(refused.error?.message).toContain('expected_version')
   })
 
+  it('uses the request id the caller gives instead of deriving one', async () => {
+    const { run, api, logs } = await mount(() => ({ id: 't1', kind: 'task', version: 5 }))
+    await run('courses_set_progress', { id: 't1', expected_version: 4, status: 'completed', evidence: 'done', request_id: 'mine-1' })
+    expect(api.call.mock.calls[0]?.[1]['request_id']).toBe('mine-1')
+    expect(logs.some(line => line.includes('set_progress t1 (mine-1)'))).toBe(true)
+  })
+
+  it('describes each call for the transcript: reads as reads, writes as edits', async () => {
+    const { ctx } = await mount(() => ({}))
+    expect(ctx.tools.get('courses_find')?.presentCall?.({ text: 'lab' })).toEqual({ card: 'generic', title: 'Find course task "lab"', kind: 'read' })
+    expect(ctx.tools.get('courses_set_progress')?.presentCall?.({ id: 't1', expected_version: 4, status: 'completed', evidence: 'done' }))
+      .toEqual({ card: 'generic', title: 'Set course progress of t1 to completed', kind: 'edit' })
+  })
+
+  it('answers a write that fails with the error text and logs the failure', async () => {
+    const { run, logs } = await mount(() => { throw new CoursesApiError('auth', 'refused', 401) })
+    expect(textOf(await run('courses_save_memo', { title: 'T' }))).toContain('refused the token')
+    expect(logs.some(line => line.startsWith('warn: lsy-tool-courses: save_memo failed'))).toBe(true)
+  })
+
   it('tells the model not to retry when the token is missing', async () => {
     const { run, logs } = await mount(() => { throw new CoursesApiError('not-configured', 'the courses token is not set') })
     expect(textOf(await run('courses_find', { text: 'lab' }))).toContain('do not retry')

@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
+import { agentEvents } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { ToolCallId, createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -11,6 +12,8 @@ import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MockAdapter, textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 import * as ToolUp from '../src/index.ts'
+import { mountNotes } from '../src/notes-tool.ts'
+import type { SessionGate } from '../src/session-gate.ts'
 import { ChannelNotes, piiKind, renderNotesBlock, type PiiKind } from '../src/index.ts'
 
 const contexts: Context[] = []
@@ -131,6 +134,19 @@ describe('channel notes store', () => {
   })
 })
 
+describe('channel notes file validation', () => {
+  it.each([
+    ['null', 'null', /not a notes file/],
+    ['a string', '"notes"', /not a notes file/],
+    ['a note that is not an object', JSON.stringify({ v: 1, rev: 1, notes: [5] }), /note 0 is malformed/],
+    ['a note without a text', JSON.stringify({ v: 1, rev: 1, notes: [{ id: 'a', at: 'x' }] }), /note 0 is malformed/],
+  ])('rejects a file holding %s', async (_name, content, message) => {
+    const file = join(await tmp(), 'channel-notes.json')
+    await writeFile(file, content)
+    await expect(new ChannelNotes(file, LIMITS).read()).rejects.toThrow(message)
+  })
+})
+
 describe('bili_channel_note', () => {
   it('stores a note in its own file and answers status, id, and count', async () => {
     const { call, file, logs } = await mount()
@@ -205,6 +221,40 @@ describe('bili_channel_note', () => {
     expect(await absent.call({ op: 'remove', text: '不存在' })).toMatchObject({ status: 'refused', reason: 'not_found' })
   })
 
+  it('titles the call by its operation', async () => {
+    const { ctx } = await mount()
+    expect(ctx.tools.get('bili_channel_note')!.presentCall!({ op: 'remove', text: 'x' }))
+      .toEqual({ card: 'generic', title: 'Channel note: remove', kind: 'other' })
+  })
+
+  it('refuses a call that runs outside any Session and names it in the log', async () => {
+    const { ctx, file, logs } = await mount()
+    const batch = await ctx.tools.execute({
+      signal: new AbortController().signal,
+      calls: [{ type: 'tool-call', id: ToolCallId('outside'), name: 'bili_channel_note', arguments: JSON.stringify({ op: 'add', text: '谐音梗' }) }],
+    })
+    expect((batch.results[0]!.result as { value: unknown }).value)
+      .toEqual({ status: 'refused', reason: 'not_persistent_session', message: 'the call runs outside a Session' })
+    expect(logs.some(line => line.includes('bili_channel_note refused in Session (none): the call runs outside a Session'))).toBe(true)
+    await expect(stat(file)).rejects.toThrow()
+  })
+
+  it('refuses with a generic message when a gate admits a call that has no Session', async () => {
+    const ctx = new Context()
+    contexts.push(ctx)
+    ctx.provide('systemPrompt', { tools: () => () => {} } as never)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(NativeToolExecutor)
+    const gate: SessionGate = { refusal: () => undefined, take: () => true }
+    mountNotes(ctx, { callsPerTurn: 5, notes: { file: join(await tmp(), 'notes.json'), maxEntries: 30, maxChars: 40 } }, gate)
+    const batch = await ctx.tools.execute({
+      signal: new AbortController().signal,
+      calls: [{ type: 'tool-call', id: ToolCallId('no-session'), name: 'bili_channel_note', arguments: JSON.stringify({ op: 'add', text: '谐音梗' }) }],
+    })
+    expect((batch.results[0]!.result as { value: unknown }).value)
+      .toEqual({ status: 'refused', reason: 'not_persistent_session', message: 'no Session' })
+  })
+
   it('defaults to five calls a turn, 30 notes of 40 characters', () => {
     expect(ToolUp.Config({} as never)).toMatchObject({ subscription: 'bili-digest', callsPerTurn: 5, notes: { maxEntries: 30, maxChars: 40 }, evidence: { cacheSize: 2000, maxIds: 20 } })
   })
@@ -242,5 +292,68 @@ describe('channel notes in the up Session', () => {
 
   it('adds no block without notes', async () => {
     expect(await run([])).not.toContain('bili_channel_notes')
+  })
+})
+
+describe('channel notes at each step of the up Session', () => {
+  const SIGNAL = () => new AbortController().signal
+  const prompt = createUserMessage({ content: [{ type: 'text', text: 'comments arrived' }], source: { kind: 'user', rpcId: 'evt-1' } as never })
+  type Decision = { kind: 'enter'; messages: unknown[] } | { kind: 'reject' }
+
+  /** Run one pre-step of a fake agent in Session `up-1`, the way the loop dispatches it. */
+  interface StepOptions { step?: number; origin?: string; signal?: AbortSignal; base?: Decision; messages?: unknown[] }
+  async function step(ctx: Context, options: StepOptions = {}) {
+    const agent = { id: 'up-1', session: { id: 'up-1', header: { origin: options.origin ?? 'root' } }, ctx: new Context() }
+    const base = options.base ?? { kind: 'enter', messages: [prompt] }
+    return agentEvents(ctx, agent as never).waterfall(
+      'agent/pre-step',
+      {
+        messages: (options.messages ?? [prompt]) as never,
+        turn: 1,
+        step: options.step ?? 1,
+        signal: options.signal ?? SIGNAL(),
+        modelSelection: { provider: 'test', model: 'test' },
+      },
+      () => Promise.resolve(base as never),
+    )
+  }
+  const kinds = (decision: Awaited<ReturnType<typeof step>>) => decision.kind === 'enter' ? decision.messages.map(message => message.source.kind) : ['reject']
+
+  async function seeded(texts: string[]) {
+    const mounted = await mount()
+    const notes = new ChannelNotes(mounted.file, LIMITS)
+    for (const text of texts) await notes.add(text)
+    return { ...mounted, notes }
+  }
+
+  it('shows the notes once per turn, again after they changed, and after a compaction summary', async () => {
+    const { ctx, notes, logs } = await seeded(['观众爱看红石教程'])
+    expect(kinds(await step(ctx))).toEqual(['user', 'lsy-tool-up'])
+    expect(logs.some(line => line.includes('channel notes (1, revision 1) entered Session up-1'))).toBe(true)
+    // Later steps of the turn, and a later turn with the same notes, add nothing.
+    expect(kinds(await step(ctx, { step: 2 }))).toEqual(['user'])
+    expect(kinds(await step(ctx))).toEqual(['user'])
+    await notes.add('评论区常玩谐音梗')
+    expect(kinds(await step(ctx))).toEqual(['user', 'lsy-tool-up'])
+    // A compaction summary may have shadowed the block, so the next step shows it again.
+    ;(ctx.emit as (...args: unknown[]) => void)('session/event', { id: 'up-1' }, { type: 'compaction/summary', seq: 5, data: {} })
+    expect(kinds(await step(ctx, { step: 2 }))).toEqual(['user', 'lsy-tool-up'])
+  })
+
+  it('leaves the decision alone for a rejected step, an aborted step, a sub-agent, and an empty first step', async () => {
+    const { ctx } = await seeded(['观众爱看红石教程'])
+    expect(kinds(await step(ctx, { base: { kind: 'reject' } }))).toEqual(['reject'])
+    const aborted = new AbortController()
+    aborted.abort()
+    expect(kinds(await step(ctx, { signal: aborted.signal }))).toEqual(['user'])
+    expect(kinds(await step(ctx, { origin: 'subagent' }))).toEqual(['user'])
+    expect(kinds(await step(ctx, { base: { kind: 'enter', messages: [] }, messages: [] }))).toEqual([])
+  })
+
+  it('goes on without the notes and warns when the notes file cannot be read', async () => {
+    const { ctx, file, logs } = await mount()
+    await mkdir(file, { recursive: true })
+    expect(kinds(await step(ctx))).toEqual(['user'])
+    expect(logs.some(line => line.includes('channel notes not loaded for Session up-1'))).toBe(true)
   })
 })

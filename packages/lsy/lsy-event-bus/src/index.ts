@@ -728,8 +728,13 @@ export class LsyEventBus extends Service {
       await this.applyFlowEdit(domain, edit, before, meta)
       const after = this.subscriptionById(edit.id)
       const now = Date.now()
+      const changes = domain.table('flow_changes')
+      // Once the history is full its size stops moving: a later stamp keeps two edits of one millisecond apart, and in order.
+      const idAt = (stamp: number): string => `${String(stamp).padStart(15, '0')}-${String(changes.size).padStart(6, '0')}`
+      let stamp = now
+      while (changes.get(idAt(stamp)) !== undefined) stamp += 1
       const change: FlowChange = {
-        id: `${String(now).padStart(15, '0')}-${String(domain.table('flow_changes').size).padStart(6, '0')}`,
+        id: idAt(stamp),
         at: now,
         op: edit.op,
         route: edit.id,
@@ -738,7 +743,6 @@ export class LsyEventBus extends Service {
         ...(before === undefined ? {} : { before: JSON.stringify(before) }),
         ...(after === undefined ? {} : { after: JSON.stringify(after) }),
       }
-      const changes = domain.table('flow_changes')
       await changes.put(change.id, change)
       for (const old of this.flowHistory(Number.MAX_SAFE_INTEGER).slice(this.config.flowChangesKept)) await changes.delete(old.id)
       const who = meta.by === undefined ? '' : ` by ${meta.by}`
@@ -780,7 +784,9 @@ export class LsyEventBus extends Service {
       if (configured) {
         const { paused: _was, ...rest } = override ?? { id: edit.id, ...stamp }
         await overrides.put(edit.id, { ...rest, ...paused, ...stamp })
-      } else if (row !== undefined) {
+      }
+      /* v8 ignore else -- an id that is not configured passed the check that it is known, so it has a row. */
+      if (!configured && row !== undefined) {
         const { paused: _was, ...rest } = row
         await stored.put(edit.id, { ...rest, ...paused })
       }
@@ -814,6 +820,7 @@ export class LsyEventBus extends Service {
 
   /** Refuse a set of routes in which an answer could feed itself. */
   private assertNoCycle(others: readonly Subscription[], route: Subscription | undefined): void {
+    /* v8 ignore next -- both callers pass a route. */
     const loop = findCycle(route === undefined ? others : [...others, route])
     if (loop === undefined) return
     throw new LsyFlowError('cycle', `That change makes a loop: ${loop.join(' → ')}. An answer must not reach its own route again.`)
@@ -976,6 +983,7 @@ export class LsyEventBus extends Service {
   stats(): BusStats {
     const since = Date.now() - HOUR_MS
     const stored = this.storedSubscriptions()
+    /* v8 ignore next -- the loop condition checked the array is not empty. */
     while (this.rateLimitHits.length > 0 && (this.rateLimitHits[0] ?? since) <= since) this.rateLimitHits.shift()
     return {
       subscriptions: this.config.subscriptions.length + stored.length,

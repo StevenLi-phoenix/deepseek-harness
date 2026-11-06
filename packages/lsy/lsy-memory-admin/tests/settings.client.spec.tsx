@@ -6,6 +6,11 @@ import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-tes
 import { createMemoryStore, type MemoryActions, type MemoryState } from '../src/client/memory.ts'
 import { de, en, es, fr, ja, pt, ru, zh } from '../src/client/locales.ts'
 import { isoFromLocal } from '../src/client/RollbackCard.tsx'
+import { Card, shortSession, when } from '../src/client/parts.tsx'
+import { EntriesCard } from '../src/client/EntriesCard.tsx'
+import { FeedbackCard } from '../src/client/FeedbackCard.tsx'
+import { PendingCard } from '../src/client/PendingCard.tsx'
+import { RollbackCard } from '../src/client/RollbackCard.tsx'
 import { MemorySection, type MemoryProps } from '../src/client/MemorySettings.tsx'
 import { DETAIL, GUARD, VIEW } from './fixtures.client.ts'
 
@@ -318,6 +323,252 @@ describe('MemorySection content guard', () => {
     cleanup()
     mount({ guard: GUARD })
     expect(screen.queryByTestId('plugin-config')).toBeNull()
+  })
+})
+
+/** Cards rendered on their own, before the first reading has arrived (the section shows none of them then). */
+describe('cards before the first reading', () => {
+  function bare(): { state: MemoryState; actions: ReturnType<typeof spies> } {
+    return { state: createMemoryStore().getSnapshot(), actions: spies() }
+  }
+
+  it('entries still list the categories and the search box, count nothing, and offer "all"', () => {
+    const { state, actions } = bare()
+    render(<EntriesCard state={state} actions={actions} t={t} />)
+    const card = screen.getByRole('region', { name: '记忆条目' })
+    expect(within(card).getByRole('button', { name: '指令 0' })).toBeTruthy()
+    expect(card.textContent).not.toContain('/ 2')
+    expect(within(card).getByText('没有符合条件的条目。')).toBeTruthy()
+    fireEvent.click(within(card).getByRole('button', { name: '全部' }))
+    expect(actions.setQuery).toHaveBeenCalledWith({ category: 'all' })
+  })
+
+  it('waiting writes say there are none', () => {
+    const { state, actions } = bare()
+    render(<PendingCard state={state} actions={actions} t={t} />)
+    expect(screen.getByText('没有等待你审批的写入。')).toBeTruthy()
+  })
+
+  it('rollback offers no preview, and feedback says there is none', () => {
+    const { state, actions } = bare()
+    render(<RollbackCard state={state} actions={actions} t={t} />)
+    expect(screen.getByRole('button', { name: '预览' }).hasAttribute('disabled')).toBe(true)
+    cleanup()
+    render(<FeedbackCard state={state} actions={actions} t={t} />)
+    expect(screen.getByText('还没有反馈。')).toBeTruthy()
+  })
+})
+
+const PLAIN_ENTRY = VIEW.entries.items[0]!
+
+describe('MemorySection entries in detail', () => {
+  it('marks an entry a stranger wrote and shows the Session and origin that wrote it', () => {
+    const tainted = { ...PLAIN_ENTRY, source: 'tainted-turn' as const, session: 'sess-abcdefghij', origin: 'peer:wechat' }
+    mount({ view: { ...VIEW, entries: { items: [tainted], matched: 1 } } })
+    const row = screen.getByText('reply in Chinese').closest('li')!
+    expect(within(row).getByText('非本人发起')).toBeTruthy()
+    fireEvent.click(within(row).getByRole('button', { expanded: false }))
+    expect(row.textContent).toContain('会话 sess-abc')
+    expect(row.textContent).toContain('来源 peer:wechat')
+  })
+
+  it('closes an opened entry without asking the Host again, and says when its detail cannot be read', () => {
+    const { actions, store } = mount()
+    const row = screen.getByText('reply in Chinese').closest('li')!
+    fireEvent.click(within(row).getByRole('button', { expanded: false }))
+    act(() => { store.update((draft) => { draft.details['bbbbbb'] = { status: 'error' } }) })
+    expect(row.textContent).toContain('读不到这条的详情。')
+    fireEvent.click(within(row).getByRole('button', { expanded: true }))
+    expect(actions.loadDetail).toHaveBeenCalledTimes(1)
+    expect(row.textContent).toContain('reply in Chinese')
+  })
+
+  it('says an entry has no history, and lists a change that names neither Session nor origin', () => {
+    const { store } = mount()
+    const row = screen.getByText('reply in Chinese').closest('li')!
+    fireEvent.click(within(row).getByRole('button', { expanded: false }))
+    act(() => { store.update((draft) => { draft.details['bbbbbb'] = { status: 'ready', detail: { ...DETAIL, history: [] } } }) })
+    expect(row.textContent).toContain('没有记录。')
+    act(() => {
+      store.update((draft) => {
+        draft.details['bbbbbb'] = { status: 'ready', detail: { ...DETAIL, history: [{ at: '2026-10-31T09:00:00.000Z', op: 'add' }] } }
+      })
+    })
+    const line = row.querySelector('ul li')!
+    expect(line.textContent).not.toContain('会话')
+    expect(line.textContent).not.toContain('来源')
+  })
+
+  it('shows an erase that is still being previewed, and one whose entry is gone', () => {
+    const working = mount({ purge: { ids: ['bbbbbb'], stage: 'previewing' } })
+    fireEvent.click(within(screen.getByText('reply in Chinese').closest('li')!).getByRole('button', { expanded: false }))
+    expect(screen.getByRole('alertdialog').textContent).toContain('正在处理…')
+    expect(screen.queryByRole('button', { name: '取消' })).toBeNull()
+    working.view.unmount()
+    const gone = { id: 'bbbbbb', found: false, history: 0, snapshots: 0, pending: 0 }
+    mount({
+      purge: { ids: ['bbbbbb'], stage: 'ready', preview: { action: 'forget', stage: 'preview', token: 'b'.repeat(64), items: [gone] } },
+    })
+    fireEvent.click(within(screen.getByText('reply in Chinese').closest('li')!).getByRole('button', { expanded: false }))
+    expect(screen.getByRole('alertdialog').textContent).toContain('找不到这条记忆')
+  })
+
+  it('shows an erase preview that lists nothing for the entry, and keeps the erase panel off other entries', () => {
+    mount({
+      purge: { ids: ['bbbbbb'], stage: 'ready', preview: { action: 'forget', stage: 'preview', token: 'b'.repeat(64), items: [] } },
+    })
+    fireEvent.click(within(screen.getByText('reply in Chinese').closest('li')!).getByRole('button', { expanded: false }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(dialog.textContent).toContain('找不到这条记忆')
+    expect(dialog.textContent).not.toContain('历史 ')
+    const other = screen.getByText('building dsh').closest('li')!
+    fireEvent.click(within(other).getByRole('button', { expanded: false }))
+    expect(within(other).queryByRole('alertdialog')).toBeNull()
+  })
+})
+
+describe('MemorySection waiting writes in detail', () => {
+  it('shows a replacement with the text it replaces, and a non-stranger write by its source', () => {
+    const replace = {
+      ...VIEW.pending[0]!, id: 'ffffff', op: 'replace' as const, target: 'bbbbbb', replaces: 'old text', tainted: false,
+      source: 'owner-turn' as const, session: 'abc', origin: 'owner',
+    }
+    mount({ view: { ...VIEW, pending: [replace] } })
+    const card = screen.getByRole('region', { name: '待审批' })
+    expect(card.textContent).toContain('old text')
+    expect(card.textContent).toContain('替换 bbbbbb')
+    expect(card.textContent).toContain('会话 abc')
+    expect(card.textContent).not.toContain('非本人发起')
+    expect(card.querySelector('li')?.hasAttribute('data-tainted')).toBe(false)
+  })
+
+  it('treats a replace without a target and an add alike: no replacement tag', () => {
+    const noTarget = { ...VIEW.pending[0]!, op: 'replace' as const }
+    mount({ view: { ...VIEW, pending: [noTarget] } })
+    expect(screen.getByRole('region', { name: '待审批' }).textContent).not.toContain('替换')
+    cleanup()
+    const add = { ...VIEW.pending[0]!, tainted: true }
+    const { target: _target, replaces: _replaces, session: _session, origin: _origin, ...bare } = add as typeof add & {
+      target?: string
+      replaces?: string
+      session?: string
+      origin?: string
+    }
+    mount({ view: { ...VIEW, pending: [bare] } })
+    const card = screen.getByRole('region', { name: '待审批' })
+    expect(card.textContent).not.toContain('会话')
+    expect(card.textContent).not.toContain('来源')
+  })
+})
+
+describe('MemorySection rollback in detail', () => {
+  it('says there is nothing to roll back by Session when no Session changed memory', () => {
+    mount({ view: { ...VIEW, sessions: [] } })
+    const card = screen.getByRole('region', { name: '回滚' })
+    expect(card.textContent).toContain('还没有会话改过记忆。')
+    expect(within(card).getByRole('button', { name: '预览' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('previews the Session the owner picked, and closes the preview when the pick or the mode changes', () => {
+    const second = { ...VIEW.sessions[0]!, id: 'sess-other-0000', changes: 5 }
+    const { actions } = mount({ view: { ...VIEW, sessions: [VIEW.sessions[0]!, second] } })
+    const card = screen.getByRole('region', { name: '回滚' })
+    fireEvent.change(within(card).getByRole('combobox'), { target: { value: 'sess-other-0000' } })
+    expect(actions.rollbackCancel).toHaveBeenCalledTimes(1)
+    fireEvent.click(within(card).getByRole('button', { name: '预览' }))
+    expect(actions.rollbackPreview).toHaveBeenCalledWith({ session: 'sess-other-0000' })
+    fireEvent.click(within(card).getByRole('button', { name: '按时间' }))
+    fireEvent.click(within(card).getByRole('button', { name: '按会话' }))
+    expect(actions.rollbackCancel).toHaveBeenCalledTimes(3)
+  })
+
+  it('shows a running preview, and lists every kind of change with only the text that exists', () => {
+    mount({ rollback: { target: { session: 's' }, stage: 'previewing' } })
+    expect(screen.getByRole('button', { name: '正在计算…' }).hasAttribute('disabled')).toBe(true)
+    cleanup()
+    mount({
+      rollback: {
+        target: { session: 's' }, stage: 'ready',
+        preview: {
+          action: 'rollback', stage: 'preview', matched: 3, restored: 1, removed: 1, token: 'a'.repeat(64),
+          items: [
+            { id: 'cccccc', change: 'none' },
+            { id: 'bbbbbb', change: 'revise', then: 'kept text' },
+          ],
+        },
+      },
+    })
+    const items = screen.getByRole('region', { name: '回滚' }).querySelectorAll('li[data-change]')
+    expect([...items].map(item => item.getAttribute('data-change'))).toEqual(['none', 'revise'])
+    expect(items[0]!.textContent).toBe('不变cccccc')
+    expect(items[1]!.textContent).toContain('kept text')
+  })
+
+  it('reports a finished rollback with zero counts when the Host gave none, and closes it', () => {
+    const { actions } = mount({ rollback: { target: { session: 's' }, stage: 'done' } })
+    expect(screen.getByText('已回滚：恢复 0 条，移除 0 条。')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }))
+    expect(actions.rollbackCancel).toHaveBeenCalled()
+  })
+})
+
+describe('MemorySection feedback in detail', () => {
+  it('shows a keep verdict without a note, and says so when there are none', () => {
+    const { note: _note, ...rest } = VIEW.feedback[0]!
+    const keep = { ...rest, verdict: 'keep' as const }
+    mount({ view: { ...VIEW, feedback: [keep] } })
+    const card = screen.getByRole('region', { name: '回复反馈' })
+    expect(card.textContent).not.toContain('tone')
+    cleanup()
+    mount({ view: { ...VIEW, feedback: [] } })
+    expect(screen.getByText('还没有反馈。')).toBeTruthy()
+  })
+
+  it('shows a verdict whose time cannot be read as it came, and a short Session id whole', () => {
+    expect(when('not a time')).toBe('not a time')
+    expect(shortSession('abc')).toBe('abc')
+    mount({ view: { ...VIEW, feedback: [{ ...VIEW.feedback[0]!, at: 'garbage' }] } })
+    expect(screen.getByRole('region', { name: '回复反馈' }).textContent).toContain('garbage')
+  })
+
+  it('sends the verdict, the scope, the kind and the note the owner chose', async () => {
+    const { actions } = mount()
+    const card = screen.getByRole('region', { name: '回复反馈' })
+    fireEvent.click(within(card).getByRole('button', { name: '添加反馈' }))
+    const [verdict, scope, kind] = within(card).getAllByRole('combobox')
+    fireEvent.change(verdict!, { target: { value: 'delete' } })
+    fireEvent.change(scope!, { target: { value: 'bili' } })
+    fireEvent.change(kind!, { target: { value: 'dm' } })
+    fireEvent.change(within(card).getByLabelText('回复内容'), { target: { value: 'too stiff' } })
+    fireEvent.change(within(card).getByLabelText('备注（可选）'), { target: { value: ' why ' } })
+    await act(async () => { fireEvent.click(within(card).getByRole('button', { name: '保存' })) })
+    expect(actions.feedbackAdd).toHaveBeenCalledWith({
+      action: 'feedback.add', scope: 'bili', verdict: 'delete', kind: 'dm', text: 'too stiff', note: 'why',
+    })
+  })
+
+  it('closes the add form on cancel', () => {
+    mount()
+    const card = screen.getByRole('region', { name: '回复反馈' })
+    fireEvent.click(within(card).getByRole('button', { name: '添加反馈' }))
+    fireEvent.click(within(card).getByRole('button', { name: '取消' }))
+    expect(within(card).getByRole('button', { name: '添加反馈' })).toBeTruthy()
+  })
+})
+
+describe('MemorySection guard ordering and shared parts', () => {
+  it('lists rules with equal counts in name order, after the busier ones', () => {
+    mount({ guard: { ...GUARD, byRule: { zeta: 1, alpha: 1, busy: 4 } } })
+    const items = screen.getByRole('region', { name: '内容守卫' }).querySelectorAll('li')
+    const rules = [...items].map(item => item.getAttribute('data-rule'))
+    expect(rules).toEqual(['busy', 'alpha', 'zeta'])
+  })
+
+  it('renders a card without an id and without a meta line', () => {
+    const { container } = render(<Card title="plain">body</Card>)
+    const section = container.querySelector('section')!
+    expect(section.hasAttribute('data-card')).toBe(false)
+    expect(section.textContent).toBe('plainbody')
   })
 })
 

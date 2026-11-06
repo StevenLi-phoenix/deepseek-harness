@@ -92,4 +92,70 @@ describe('readSource', () => {
     ])
     expect(JSON.stringify(failed)).not.toContain(KEY)
   })
+
+  it('reports a timeout, an unparsable body, and a refused request each with its own fixed phrase', async () => {
+    const timeout = Object.assign(new Error('The operation timed out'), { name: 'TimeoutError' })
+    const aborted = Object.assign(new Error('aborted'), { name: 'AbortError' })
+    const garbled: typeof globalThis.fetch = () => Promise.resolve(new Response('<html>', { status: 200 }))
+    const reasons = await Promise.all([
+      readSource(source('deepseek'), KEY, { fetch: server({ 'https://api.deepseek.com/user/balance': timeout }).fetch, timeoutMs: 1000 }),
+      readSource(source('opencode-go'), KEY, { fetch: server({ [GATEWAY_QUOTA]: aborted }).fetch, timeoutMs: 1000 }),
+      readSource(source('deepseek'), KEY, { fetch: garbled, timeoutMs: 1000 }),
+    ])
+    expect(reasons.map(reading => reading.status === 'failed' ? reading.reason : undefined)).toEqual(['timed out', 'timed out', 'unexpected response'])
+  })
+
+  it('queries with the global fetch and a deadline when no transport is injected', async () => {
+    const calls: RequestInit[] = []
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => {
+      calls.push(init ?? {})
+      return Promise.resolve(new Response(JSON.stringify({ balance_infos: [] }), { status: 200 }))
+    }))
+    try {
+      expect(await readSource(source('deepseek'), KEY, { timeoutMs: 1000 })).toMatchObject({ status: 'ready', kind: 'wallets', wallets: [] })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+    expect(calls[0]!.redirect).toBe('error')
+    expect(calls[0]!.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('rejects a DeepSeek body whose rows or amounts are not the documented shape', async () => {
+    const bad = (body: unknown) => readSource(source('deepseek'), KEY, {
+      fetch: server({ 'https://api.deepseek.com/user/balance': { body } }).fetch, timeoutMs: 1000,
+    })
+    const row = { currency: 'CNY', total_balance: '1', granted_balance: '0', topped_up_balance: '1' }
+    const results = await Promise.all([
+      bad(['not a record']),
+      bad({ balance_infos: ['x'] }),
+      bad({ balance_infos: [{ ...row, currency: 'EUR' }] }),
+      bad({ balance_infos: [{ ...row, total_balance: 12 }] }),
+      bad({ balance_infos: [{ ...row, granted_balance: 'twelve' }] }),
+    ])
+    expect(results.map(reading => reading.status === 'failed' ? reading.reason : 'ready')).toEqual(Array(5).fill('unexpected response'))
+  })
+
+  it('rejects a quota body whose usage, windows, or key block are not the documented shape', async () => {
+    const window = { percent: 1, resetsAt: null }
+    const bad = (body: unknown) => readSource(source('opencode-go'), KEY, { fetch: server({ [GATEWAY_QUOTA]: { body } }).fetch, timeoutMs: 1000 })
+    const results = await Promise.all([
+      bad('text'),
+      bad({ usage: [] }),
+      bad({ usage: { rolling: 'x' } }),
+      bad({ usage: { rolling: { ...window, percent: 'high' } } }),
+      bad({ usage: {}, key: 'x' }),
+      bad({ usage: {}, key: { spend_usd: 1, period: 'daily' } }),
+      bad({ usage: {}, key: { spend_usd: 1, period: { kind: 7 } } }),
+    ])
+    expect(results.map(reading => reading.status === 'failed' ? reading.reason : 'ready')).toEqual(Array(7).fill('unexpected response'))
+  })
+
+  it('reads a window without a reset time as unknown, and a window with one verbatim', async () => {
+    const s = server({ [GATEWAY_QUOTA]: { body: { usage: { rolling: { percent: 1 }, weekly: { percent: 2, resetsAt: '2026-01-01T00:00:00Z' }, monthly: { percent: 3, resetsAt: 5 } } } } })
+    expect(await readSource(source('opencode-go'), KEY, { fetch: s.fetch, timeoutMs: 1000 })).toMatchObject({ windows: [
+      { name: 'rolling', percent: 1, resetsAt: null },
+      { name: 'weekly', percent: 2, resetsAt: '2026-01-01T00:00:00Z' },
+      { name: 'monthly', percent: 3, resetsAt: null },
+    ] })
+  })
 })

@@ -1,8 +1,8 @@
 import { createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { ContextFormed } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
-import { describe, expect, it } from 'vitest'
-import { describeOrigin, turnOrigin, untrustedRequestId, UNTRUSTED_REQUEST_PREFIX } from '../src/origin.ts'
+import { describe, expect, it, vi } from 'vitest'
+import { describeOrigin, originZh, turnOrigin, untrustedRequestId, UNTRUSTED_REQUEST_PREFIX } from '../src/origin.ts'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
@@ -128,6 +128,64 @@ describe('turnOrigin', () => {
     const found = (id: string): Session | undefined => (id === 'parent' ? parent : undefined)
     expect(turnOrigin(child, { parent: found })).toMatchObject({ owner: false, triggers: ['subagent', 'peer:qq'] })
     expect(turnOrigin(child)).toMatchObject({ owner: false, triggers: ['subagent'] })
+  })
+})
+
+describe('turnOrigin edge cases', () => {
+  it('ignores a user message whose source is not an object', () => {
+    const origin = turnOrigin(openTurn(['plain text' as never, owner]))
+    expect(origin).toMatchObject({ owner: true, triggers: ['owner'] })
+  })
+
+  it('names a peer prompt with an empty origin slug `peer:peer`', () => {
+    const origin = turnOrigin(openTurn([{ kind: 'user', rpcId: UNTRUSTED_REQUEST_PREFIX } as never]))
+    expect(origin.triggers).toEqual(['peer:peer'])
+  })
+
+  it('skips an event the Session cannot return and reads the rest of the turn', () => {
+    const session = openTurn([owner], ['web_fetch'])
+    const spy = vi.spyOn(session, 'eventAt')
+    spy.mockReturnValueOnce(undefined)
+    expect(turnOrigin(session)).toMatchObject({ owner: true, clean: true, triggers: ['owner'], contaminated: [] })
+    expect(spy).toHaveBeenCalled()
+  })
+
+  it('treats a subagent without a parent session as not the owner', () => {
+    const orphan = Session.create(SessionId('orphan'), undefined, {
+      version: SESSION_FORMAT_VERSION, id: SessionId('orphan'), createdAt: 0, isSeeded: false, origin: 'subagent',
+    })
+    orphan.append('turn/start', { turn: 1 })
+    user(orphan, owner)
+    expect(turnOrigin(orphan, { parent: () => openTurn([owner], [], 'unused') })).toMatchObject({ owner: false, triggers: ['subagent'] })
+  })
+
+  it('carries the tools its parent\'s turn read into a subagent without repeating its own', () => {
+    const parent = openTurn([owner], ['web_fetch', 'qq_recent'], 'parent2')
+    const child = Session.create(SessionId('child2'), undefined, {
+      version: SESSION_FORMAT_VERSION, id: SessionId('child2'), createdAt: 0, isSeeded: false, origin: 'subagent', parentSession: SessionId('parent2'),
+    })
+    child.append('turn/start', { turn: 1 })
+    call(child, 'web_fetch')
+    const origin = turnOrigin(child, { parent: id => (id === 'parent2' ? parent : undefined) })
+    expect(origin).toMatchObject({ owner: true, clean: false, triggers: ['subagent', 'owner'], contaminated: ['web_fetch', 'qq_recent'] })
+  })
+})
+
+describe('originZh', () => {
+  it.each([
+    ['owner', '你的消息'],
+    ['peer:bili', 'B站猫猫的传话'],
+    ['peer:qq', 'qq 的传话'],
+    ['mystery', 'mystery'],
+    ['unknown', '来源不明的回合'],
+    ['unknown+web_fetch', '来源不明的回合，且读过 web_fetch 的内容'],
+  ])('says %j as %s', (label, zh) => {
+    expect(originZh(label)).toBe(zh)
+  })
+
+  it('adds the tools whose content the turn read, leaving out origin labels', () => {
+    expect(originZh('peer:bili+owner+web_fetch+qq_recent')).toBe('B站猫猫的传话，且读过 web_fetch、qq_recent 的内容')
+    expect(originZh('owner+event')).toBe('你的消息')
   })
 })
 

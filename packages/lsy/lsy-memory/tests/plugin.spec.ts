@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -9,9 +9,12 @@ import type { ContextFormed } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId, SessionSeq, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as Memory from '../src/index.ts'
-import { MemoryStore } from '../src/store.ts'
+import { applyFeedback } from '../src/feedback-mode.ts'
+import { FeedbackStore } from '../src/feedback.ts'
+import { mountMemoryBlock } from '../src/memory-block.ts'
+import { defaultMemoryFile, MemoryStore } from '../src/store.ts'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
@@ -23,6 +26,7 @@ const contexts: Context[] = []
 const dirs: string[] = []
 
 afterEach(async () => {
+  vi.unstubAllEnvs()
   await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose()))
   await Promise.all(dirs.splice(0).map(async (dir) => { await rm(dir, { recursive: true, force: true }) }))
 })
@@ -181,5 +185,126 @@ describe('memory block', () => {
     const { appendFile } = await import('node:fs/promises')
     await appendFile(store.file, 'broken\n')
     expect(await step(ctx, agentOn(Session.create(SessionId('broken'))))).toEqual(['lsy-memory-test'])
+  })
+})
+
+describe('memory tools beyond the plain path', () => {
+  it('searches inside a category only, and shows the owner a card for each tool call', async () => {
+    const { ctx, call, store } = await mount()
+    await store.save({ text: 'pnpm for work', category: 'instructions' })
+    await store.save({ text: 'pnpm for fun', category: 'projects' })
+    expect(await call('memory_search', { query: 'pnpm', category: 'projects' })).toEqual({ entries: [expect.objectContaining({ text: 'pnpm for fun' })], more: 0 })
+    expect(await call('memory_search', { query: 'pnpm' })).toMatchObject({ entries: [expect.anything(), expect.anything()] })
+    expect(ctx.tools.get('memory_search')?.presentCall?.({ query: 'roommate' })).toEqual({ card: 'generic', title: 'Search memory: roommate', kind: 'search', rawInput: 'roommate' })
+    expect(ctx.tools.get('memory_save')?.presentCall?.({ text: 'x', category: 'identity' })).toMatchObject({ title: 'Remember', kind: 'edit', rawInput: 'x' })
+    expect(ctx.tools.get('memory_save')?.presentCall?.({ id: 'abcdef', text: 'y', category: 'identity' })).toMatchObject({ title: 'Update memory abcdef' })
+    expect(ctx.tools.get('memory_forget')?.presentCall?.({ id: 'abcdef' })).toEqual({ card: 'generic', title: 'Forget memory abcdef', kind: 'delete', rawInput: 'abcdef' })
+  })
+
+  it('fails the call, instead of answering with a code, when the memory file cannot be read', async () => {
+    const { ctx, store } = await mount()
+    await mkdir(store.file, { recursive: true })
+    const batch = await ctx.tools.execute({
+      signal: new AbortController().signal,
+      agent: turnAgent(),
+      calls: [{ type: 'tool-call', id: ToolCallId('search-call'), name: 'memory_search', arguments: JSON.stringify({ query: 'x' }) }],
+    })
+    expect(batch.results[0]!.result.isError).toBe(true)
+  })
+
+  it('forgets for a call that belongs to no Agent, recording no Session', async () => {
+    const { ctx, store } = await mount()
+    const kept = (await store.save({ text: 'forget me', category: 'projects' })).entry
+    const batch = await ctx.tools.execute({
+      signal: new AbortController().signal,
+      calls: [{ type: 'tool-call', id: ToolCallId('forget-call'), name: 'memory_forget', arguments: JSON.stringify({ id: kept.id }) }],
+    })
+    expect(batch.results[0]!.result.isError).toBe(false)
+    expect(await store.list()).toEqual([])
+    expect((await store.history()).at(-1)).toMatchObject({ op: 'forget', id: kept.id })
+    expect((await store.history()).at(-1)).not.toHaveProperty('session')
+  })
+
+  it('lets a subagent save under the origin of the turn of the Session that started it', async () => {
+    const { ctx, call, store } = await mount()
+    const parent = turnAgent()
+    ctx.provide('sessions', { get: (id: string) => id === parent.session.id ? parent.session : undefined } as never)
+    const child = Session.create(SessionId('child'), undefined, {
+      version: SESSION_FORMAT_VERSION, id: SessionId('child'), createdAt: 0, isSeeded: false, origin: 'subagent', parentSession: parent.session.id,
+    })
+    child.append('turn/start', { turn: 1 })
+    expect(await call('memory_save', { text: 'rule from a subagent', category: 'instructions' }, agentOn(child))).toMatchObject({ outcome: 'added' })
+    expect((await store.list()).map(entry => entry.text)).toEqual(['rule from a subagent'])
+  })
+})
+
+describe('blocks that cannot load', () => {
+  async function bare(): Promise<Context> {
+    const ctx = new Context()
+    contexts.push(ctx)
+    await ctx.plugin(AgentRegistry)
+    return ctx
+  }
+
+  class Unreadable extends MemoryStore {
+    // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the non-Error arm is the case under test.
+    override list(): Promise<never> { return Promise.reject('disk gone') }
+  }
+
+  it('lets the request go without memory and logs a failure that is not an Error with its text', async () => {
+    const ctx = await bare()
+    const warn = vi.spyOn(ctx.logger, 'warn')
+    mountMemoryBlock(ctx, new Unreadable('/nonexistent/memory.jsonl'), 1024)
+    expect(await step(ctx, agentOn(Session.create(SessionId('s'))))).toEqual(['lsy-memory-test'])
+    expect(warn).toHaveBeenCalledWith('memory not loaded for session %s: %s', 's', 'disk gone')
+  })
+
+  it('serves feedback from the default file beside the default memory file, and keeps the block within 8192 bytes', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lsy-memory-feedback-mode-'))
+    dirs.push(dir)
+    vi.stubEnv('DSH_HOME', dir)
+    await new FeedbackStore(join(defaultMemoryFile().replace(/memory\.jsonl$/u, ''), 'feedback.jsonl')).add({ scope: 'up', verdict: 'keep', kind: 'comment', text: 'a reply to match' })
+    const ctx = await bare()
+    applyFeedback(ctx, {}, 'up')
+    const session = Session.create(SessionId('feedback'))
+    expect(await step(ctx, agentOn(session))).toEqual(['lsy-memory-test', 'lsy-memory'])
+    expect(memoryTexts(session)[0]).toContain('a reply to match')
+    expect(Buffer.byteLength(memoryTexts(session)[0]!)).toBeLessThanOrEqual(8192)
+  })
+
+  it('lets the request go without feedback and logs the reason, whether an Error or not', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lsy-memory-feedback-mode-'))
+    dirs.push(dir)
+    const ctx = await bare()
+    const warn = vi.spyOn(ctx.logger, 'warn')
+    applyFeedback(ctx, { file: join(dir, 'memory.jsonl') }, 'up')
+    await mkdir(join(dir, 'feedback.jsonl'))
+    expect(await step(ctx, agentOn(Session.create(SessionId('one'))))).toEqual(['lsy-memory-test'])
+    expect(warn).toHaveBeenCalledWith('feedback not loaded for session %s: %s', 'one', expect.stringContaining('EISDIR'))
+    const other = await bare()
+    const otherWarn = vi.spyOn(other.logger, 'warn')
+    applyFeedback(other, { file: join(dir, 'x', 'memory.jsonl') }, 'bili')
+    vi.spyOn(FeedbackStore.prototype, 'list').mockRejectedValueOnce('queue broke')
+    expect(await step(other, agentOn(Session.create(SessionId('two'))))).toEqual(['lsy-memory-test'])
+    expect(otherWarn).toHaveBeenCalledWith('feedback not loaded for session %s: %s', 'two', 'queue broke')
+  })
+})
+
+describe('plugin defaults', () => {
+  it('reads the default memory file of the DSH home and loads the block within the default budget when nothing is configured', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lsy-memory-defaults-'))
+    dirs.push(dir)
+    vi.stubEnv('DSH_HOME', dir)
+    await new MemoryStore(defaultMemoryFile()).save({ text: 'in the default file', category: 'instructions' })
+    const ctx = new Context()
+    contexts.push(ctx)
+    ctx.provide('systemPrompt', { tools: () => () => {} } as never)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(NativeToolExecutor)
+    await ctx.plugin(AgentRegistry)
+    Memory.apply(ctx, {})
+    const session = Session.create(SessionId('defaults'))
+    expect(await step(ctx, agentOn(session))).toEqual(['lsy-memory-test', 'lsy-memory'])
+    expect(memoryTexts(session)[0]).toContain('in the default file')
   })
 })

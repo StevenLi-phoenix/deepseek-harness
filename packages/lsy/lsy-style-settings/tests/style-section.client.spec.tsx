@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { createStyleStore, type StyleState } from '../src/client/style.ts'
-import { StyleSection, type StyleSectionProps } from '../src/client/StyleSection.tsx'
+import { cardDiff, StyleSection, type StyleSectionProps } from '../src/client/StyleSection.tsx'
 import { zh } from '../src/client/locales.ts'
 import type { StylePanel } from '../src/view.ts'
 
@@ -182,5 +182,150 @@ describe('StyleSection', () => {
     expect(screen.getByRole('heading', { name: '已关闭：没有 agent 看得到这些人格数据' })).toBeTruthy()
     expect(screen.getByRole('alert').textContent).toBe('这条已经不在了。')
     expect(screen.getByRole('button', { name: '立即收集' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('shows a quiet failure while nothing has loaded and the last read failed', () => {
+    mount({ stale: true })
+    expect(screen.getByRole('status').textContent).toBe('暂时读不到，稍后自动重试。')
+  })
+
+  it('shows an empty, switched-off, stale page with its empty states', () => {
+    const parts = { tone: false, memes: false, traits: false, persona: false, miner: false }
+    mount({
+      panel: panel({
+        parts, samples: [], notes: [], hot: [], cards: [], lastRun: null, lastMine: null, nextRunAt: null, trend: [], running: true,
+      }),
+      stale: true,
+    })
+    const section = screen.getByRole('region', { name: '说话风格' })
+    expect(section.hasAttribute('data-stale')).toBe(true)
+    expect(screen.getByRole('status').textContent).toMatch(/^未能刷新 · 显示 \d{2}-\d{2} \d{2}:\d{2} 的数据$/u)
+    expect(screen.getByRole('heading', { name: '还没有片段' })).toBeTruthy()
+    expect(screen.getByText('人设卡 （已关闭）')).toBeTruthy()
+    expect(screen.getByText('还没有人设卡。')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '删除' })).toBeNull()
+    expect(screen.queryByText(/修订历史/u)).toBeNull()
+    expect(screen.getByText('性格（0/10） （已关闭）')).toBeTruthy()
+    expect(screen.getByText('热梗（0） （已关闭）')).toBeTruthy()
+    expect(screen.getByText('语气样本（0） （已关闭）')).toBeTruthy()
+    expect(screen.getAllByText('还没有')).toHaveLength(3)
+    expect(screen.getByText('还没收集过')).toBeTruthy()
+    expect(screen.getByText('已停止')).toBeTruthy()
+    expect(screen.getByText('还没有数据')).toBeTruthy()
+    expect(screen.queryByText('筛掉的')).toBeNull()
+    const collecting = screen.getByRole('button', { name: '收集中…' })
+    expect(collecting.hasAttribute('disabled')).toBe(true)
+  })
+
+  it('stamps a live page that never recorded a check time with the current time', () => {
+    mount({ panel: panel(), checkedAt: null })
+    expect(screen.getByRole('status').textContent).toMatch(/\d{2}-\d{2} \d{2}:\d{2} 更新$/u)
+  })
+
+  it('shows a stale page with its data and a stale dot', () => {
+    mount({ panel: panel(), checkedAt: NOW, stale: true })
+    expect(screen.getByRole('status').textContent).toMatch(/^未能刷新 · 显示 /u)
+    expect(document.querySelector('[data-tone="stale"]')).not.toBeNull()
+    expect(document.querySelector('[data-tone="live"]')).toBeNull()
+  })
+
+  it('shows a sample without a prompt by its reply alone', () => {
+    const { edit } = mount({ panel: panel({ samples: [{ id: 'r1', source: 'bili', owner: true, status: 'active', addedAt: 'x', reply: '直接说话', origin: ONE('bili') }] }), checkedAt: NOW })
+    expect(screen.getByText('B站 · 猫灯手写')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '删掉：直接说话' }))
+    expect(edit).toHaveBeenCalledWith({ op: 'remove', id: 'r1' })
+  })
+
+  it('lists memes without HotWatch titles, and HotWatch titles without memes, each under its own subhead', () => {
+    const notes = panel().notes
+    mount({ panel: panel({ hot: [] }), checkedAt: NOW })
+    expect(screen.getByText('圈内黑话')).toBeTruthy()
+    expect(screen.queryByText('全网热梗（HotWatch，补充）')).toBeNull()
+    cleanup()
+    mount({ panel: panel({ notes: notes.filter(note => note.kind === 'trait') }), checkedAt: NOW })
+    expect(screen.queryByText('圈内黑话')).toBeNull()
+    expect(screen.getByText('全网热梗（HotWatch，补充）')).toBeTruthy()
+    expect(screen.getByText('热梗（1）')).toBeTruthy()
+  })
+
+  it('reports what the observers did when they were off, unreachable, or read nothing', () => {
+    const run = panel().lastRun!
+    mount({
+      panel: panel({ lastRun: { ...run, qq: { status: 'unavailable', groups: 0, messages: 0 }, bili: { status: 'unavailable', comments: 0, threads: 0, error: '超时' } } }),
+      checkedAt: NOW,
+    })
+    expect(screen.getByText('QQ 观察器没在运行')).toBeTruthy()
+    expect(screen.getByText('读取失败：超时')).toBeTruthy()
+    cleanup()
+    mount({ panel: panel({ lastRun: { ...run, qq: { status: 'off', groups: 0, messages: 0 }, bili: { status: 'unavailable', comments: 0, threads: 0 } } }), checkedAt: NOW })
+    expect(screen.getByText('读取失败：')).toBeTruthy()
+    expect(screen.getByText('关闭')).toBeTruthy()
+    cleanup()
+    mount({ panel: panel({ lastRun: { ...run, bili: { status: 'ok', comments: 9, threads: 4 } } }), checkedAt: NOW })
+    expect(screen.getByText('9 条评论，读了 4 个楼')).toBeTruthy()
+  })
+
+  it('names every kind of failed edit, and falls back to the invalid-input text for an unknown one', () => {
+    const expected: Array<[string, string]> = [
+      ['network', '没连上，改动没有保存。'],
+      ['current_version', '当前版本不能从历史里删。'],
+      ['invalid_input', '内容不合要求（空的或太长）。'],
+      ['something_new', '内容不合要求（空的或太长）。'],
+    ]
+    for (const [error, text] of expected) {
+      mount({ panel: panel(), checkedAt: NOW, error })
+      expect(screen.getByRole('alert').textContent).toBe(text)
+      cleanup()
+    }
+  })
+
+  it('shows a day without answers as an empty bar with no length', () => {
+    mount({ panel: panel({ trend: [{ day: '2026-11-01', answers: 0, withTics: 0, mainAnswers: 0, meanChars: null }] }), checkedAt: NOW })
+    expect(screen.getByText('0/0 带套话')).toBeTruthy()
+    expect(screen.queryByText(/平均 \d+ 字/u)).toBeNull()
+    expect((document.querySelector('[style*="width"]') as HTMLElement).style.width).toBe('0%')
+  })
+
+  it('shows what each card version changed, including lines it removed and a deletion', () => {
+    mount({
+      panel: panel({
+        cards: [
+          { version: 1, card: '甲\n乙', author: 'agent', reason: '初稿', at: NOW - 3000 },
+          { version: 2, card: '甲\n丙', author: 'owner', reason: '改一行', at: NOW - 2000 },
+          { version: 3, card: '', author: 'owner', reason: '删了', at: NOW - 1000 },
+        ],
+      }),
+      checkedAt: NOW,
+    })
+    const diffs = [...document.querySelectorAll('pre')].map(node => node.textContent)
+    expect(diffs).toEqual(['− （删除）', '− 乙\n+ 丙', '+ 甲\n+ 乙'])
+    expect(screen.getByText('还没有人设卡。')).toBeTruthy()
+  })
+
+  it('cancels a card edit without saving, and keeps the draft when the Host refuses it', async () => {
+    const { edit } = mount({ panel: panel(), checkedAt: NOW })
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(edit).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    edit.mockResolvedValueOnce(false)
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '保存' })) })
+    expect(edit).toHaveBeenCalledWith({ op: 'card', card: '傲娇猫娘\n句尾带喵' })
+    expect(screen.getByRole('textbox', { name: '人设卡' })).toBeTruthy()
+  })
+
+  it('starts a blank card draft when there is no card yet', () => {
+    mount({ panel: panel({ cards: [] }), checkedAt: NOW })
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: '人设卡' }).value).toBe('')
+  })
+})
+
+describe('cardDiff', () => {
+  it('lists removed lines before added ones, and treats an empty card as no lines', () => {
+    expect(cardDiff('甲\n乙', '甲\n丙')).toEqual([{ sign: '−', line: '乙' }, { sign: '+', line: '丙' }])
+    expect(cardDiff('甲\n乙', '')).toEqual([{ sign: '−', line: '甲' }, { sign: '−', line: '乙' }])
+    expect(cardDiff('', '甲')).toEqual([{ sign: '+', line: '甲' }])
   })
 })

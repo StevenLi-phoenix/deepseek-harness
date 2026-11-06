@@ -122,6 +122,7 @@ export class PresenceSettings {
         return this.answer()
       case 'flush':
         return this.answer(await presence.flushNow())
+      /* v8 ignore next 2 -- actionSchema has already refused every action outside this union, so no request reaches the default */
       default:
         return failure(400, 'unknown action')
     }

@@ -249,4 +249,43 @@ describe('QqLoginSection', () => {
     mount({ panel: panel(), checkedAt: NOW }, { value: { groups: [] } })
     expect(screen.getByText('名单是空的：现在什么都不记录。')).toBeTruthy()
   })
+
+  it('draws no code and shows the reason when a scan is wanted but NapCat sent no code yet', () => {
+    mount({
+      panel: panel({
+        connection: { state: 'reconnecting', attempt: 1, selfId: null },
+        login: { state: 'qr', uin: null, nickname: null, qr: null, error: 'qr expired' },
+      }),
+      checkedAt: NOW,
+    })
+    expect(screen.getByRole('heading', { name: '需要扫码登录' })).toBeTruthy()
+    expect(screen.queryByRole('img', { name: 'QQ 登录二维码' })).toBeNull()
+    expect(screen.getByText(/qr expired/)).toBeTruthy()
+  })
+
+  it('shows no groups card until the form has a list, and keeps polling', () => {
+    const { refresh } = mount({ panel: panel(), checkedAt: NOW }, { status: 'loading', value: undefined })
+    expect(screen.queryByRole('list', { name: '记录的群' })).toBeNull()
+    expect(screen.queryByPlaceholderText('群号（数字）')).toBeNull()
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('says the write was refused when the Host call throws', async () => {
+    const { addGroup } = mount({ panel: panel(), checkedAt: NOW })
+    addGroup.mockRejectedValueOnce(new Error('network down'))
+    await act(async () => { fireEvent.click(screen.getByRole('list', { name: '账号所在的其他群' }).querySelector('button')!) })
+    expect(screen.getByRole('alert').textContent).toMatch(/没有保存/)
+  })
+
+  it('shows eight candidates first and the rest after "show more"', () => {
+    const many = { ...panel(), groups: Array.from({ length: 12 }, (_v, index) => (
+      { groupId: String(500 + index), name: `群${index}`, memberCount: null, recorded: false, seen: 0 }
+    )) }
+    mount({ panel: many, checkedAt: NOW })
+    const candidates = () => screen.getByRole('list', { name: '账号所在的其他群' }).querySelectorAll('li')
+    expect(candidates()).toHaveLength(8)
+    fireEvent.click(screen.getByRole('button', { name: /再显示 4 个/ }))
+    expect(candidates()).toHaveLength(12)
+    expect(screen.queryByRole('button', { name: /再显示/ })).toBeNull()
+  })
 })

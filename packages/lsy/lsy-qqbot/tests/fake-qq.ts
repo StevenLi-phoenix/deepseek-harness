@@ -11,6 +11,8 @@ export class FakeQq implements QqTransport {
   runs = 0
   /** Errors the next `run` calls reject with, one each. */
   runErrors: Error[] = []
+  /** Reject, rather than resolve, when the channel stops the connection. */
+  rejectOnAbort = false
   /** Errors the next `send` calls throw, one each. */
   sendErrors: Error[] = []
   private handlers: QqHandlers | undefined
@@ -21,9 +23,9 @@ export class FakeQq implements QqTransport {
     const error = this.runErrors.shift()
     if (error !== undefined) return Promise.reject(error)
     this.handlers = handlers
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       this.release = resolve
-      signal.addEventListener('abort', () => { resolve() }, { once: true })
+      signal.addEventListener('abort', () => { if (this.rejectOnAbort) reject(new Error('connection aborted')); else resolve() }, { once: true })
     })
   }
 
@@ -36,6 +38,9 @@ export class FakeQq implements QqTransport {
 
   /** The gateway accepted the bot. */
   ready(): void { this.handlers?.ready() }
+
+  /** The gateway closed the connection but the client keeps trying. */
+  disconnect(reason: string): void { this.handlers?.disconnected(reason) }
 
   /** The connection ended without a stop. */
   drop(): void { this.release?.() }

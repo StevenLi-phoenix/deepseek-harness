@@ -113,3 +113,40 @@ describe('routes of the flow', () => {
     expect(view.windows['24h'].funnel).toMatchObject({ events: 1, batches: 1, sent: 0, silent: 1 })
   })
 })
+
+describe('flow activity corners', () => {
+  const ctx = (bus: object) => ({ get: (name: string) => name === 'lsyEventBus' ? bus : undefined }) as never
+
+  it('shows a dispatched batch as still working, counted as a batch but not yet as a result', () => {
+    const view = collectActivity(ctx({
+      events: () => [event('w', 'github', 60_000, ['ci'])],
+      batches: () => [batch('b-w', 'ci', 30_000, ['w'], { status: 'dispatched' })],
+      flowRoutes: () => [],
+      flowHistory: () => [],
+    }), NOW)
+    expect(view.recent.map(item => [item.id, item.outcome])).toEqual([['w', 'working']])
+    expect(view.windows['1h'].funnel).toEqual({ events: 1, batches: 1, sent: 0, silent: 0, failed: 0 })
+    expect(view.windows['1h'].subscriptions['ci']).toEqual({ count: 1, lastAt: NOW - 30_000, sent: 0, silent: 0, failed: 0 })
+  })
+
+  it('names the answer of a session route that sets none as a notification, and a change without a note as having none', () => {
+    const view = collectActivity(ctx({
+      events: () => [],
+      batches: () => [],
+      flowRoutes: () => [{ id: 'desk', origin: 'agent', action: 'session', sources: ['host'], kinds: [], subjects: [], downstream: [], session: { instructions: 'Look.' } }],
+      flowHistory: () => [{ id: 'c2', at: 9, op: 'pause', route: 'desk', before: '{}', after: '{}' }],
+    }), NOW)
+    expect(view.routes[0]).toMatchObject({ id: 'desk', result: 'notify', instructions: 'Look.', changedAt: null, removed: false })
+    expect(view.changes).toEqual([{ id: 'c2', at: 9, op: 'pause', route: 'desk', note: null }])
+  })
+
+  it('shows a route that sets a result by that result, and a route without a bus as none', () => {
+    const view = collectActivity(ctx({
+      events: () => [],
+      batches: () => [],
+      flowRoutes: () => [{ id: 'desk', origin: 'agent', action: 'session', sources: [], kinds: ['host.*'], subjects: [], downstream: [], result: 'quiet', removed: true }],
+      flowHistory: () => [],
+    }), NOW)
+    expect(view.routes[0]).toMatchObject({ result: 'quiet', removed: true, instructions: null })
+  })
+})

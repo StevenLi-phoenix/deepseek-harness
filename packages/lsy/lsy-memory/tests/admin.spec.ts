@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { planPurge, purgeConfirmed, purgeToken, reviewWrite, rollbackConfirmed, rollbackToken } from '../src/admin.ts'
+import { describeRollback, planPurge, purgeConfirmed, purgeToken, reviewWrite, rollbackConfirmed, rollbackToken } from '../src/admin.ts'
 import { MemoryError, MemoryStore } from '../src/store.ts'
 
 const dirs: string[] = []
@@ -96,5 +96,31 @@ describe('purge token', () => {
     await memory.save({ id: secret.id, text: 'private thing v2', category: 'identity' })
     expect(await code(purgeConfirmed(memory, [secret.id], token))).toBe('stale_preview')
     expect(await memory.list()).toHaveLength(1)
+  })
+})
+
+describe('describeRollback', () => {
+  it('says per entry whether a rollback removes it, restores it, revises it, or changes nothing', async () => {
+    const memory = await store()
+    const added = (await memory.save({ text: 'planted', category: 'instructions' }, { session: 'bad' })).entry
+    const gone = (await memory.save({ text: 'planted then forgotten', category: 'instructions' }, { session: 'bad' })).entry
+    await memory.forget(gone.id, { session: 'bad' })
+    const forgotten = (await memory.save({ text: 'good, forgotten by mistake', category: 'identity' }, { session: 'good' })).entry
+    await memory.forget(forgotten.id, { session: 'bad' })
+    const revised = (await memory.save({ text: 'original', category: 'preferences' }, { session: 'good' })).entry
+    await memory.save({ id: revised.id, text: 'altered', category: 'preferences' }, { session: 'bad' })
+    const same = (await memory.save({ text: 'unchanged', category: 'career' }, { session: 'good' })).entry
+    await memory.save({ id: same.id, text: 'unchanged, briefly', category: 'career' }, { session: 'bad' })
+    await memory.save({ id: same.id, text: 'unchanged', category: 'career' }, { session: 'good' })
+    const items = await describeRollback(memory, { session: 'bad' })
+    const byId = new Map(items.map(item => [item.id, item]))
+    expect(byId.get(added.id)).toMatchObject({ change: 'remove', now: { text: 'planted' } })
+    expect(byId.get(added.id)).not.toHaveProperty('then')
+    expect(byId.get(gone.id)).toEqual({ id: gone.id, change: 'none' })
+    expect(byId.get(forgotten.id)).toMatchObject({ change: 'restore', then: { text: 'good, forgotten by mistake' } })
+    expect(byId.get(forgotten.id)).not.toHaveProperty('now')
+    expect(byId.get(revised.id)).toMatchObject({ change: 'revise', now: { text: 'altered' }, then: { text: 'original' } })
+    expect(byId.get(same.id)).toMatchObject({ change: 'none' })
+    expect(await describeRollback(memory, { session: 'nobody' })).toEqual([])
   })
 })

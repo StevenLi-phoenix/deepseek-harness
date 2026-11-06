@@ -34,6 +34,7 @@ export function mountNotices(ctx: Context, options: NoticeOptions): Enqueue {
 
   const flush = async (sessionId: string): Promise<void> => {
     const entry = queued.get(sessionId)
+    /* v8 ignore next -- flush deletes the entry and clears its timer together. */
     if (entry === undefined) return
     queued.delete(sessionId)
     clearTimeout(entry.timer)

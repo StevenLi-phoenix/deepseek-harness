@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { HOT_MAX_COMMENTS, HOT_MIN_LIKES, HOT_TTL_MS, hotText, type HotStore } from '../src/hot.ts'
+import { HOT_MAX_COMMENTS, HOT_MAX_WORDS, HOT_MIN_LIKES, HOT_TTL_MS, hotText, type HotStore } from '../src/hot.ts'
 import { FakeBiliSvc } from './fake-bili-svc.ts'
 import { allLogs, contexts, harness } from './harness.ts'
 
@@ -116,6 +116,17 @@ describe('ctx.biliHot', () => {
     await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose()))
     const again = await harness({ svc, workspace: dir, pool: h.pool })
     expect(await again.ctx.biliHot.comments()).toHaveLength(HOT_MAX_COMMENTS)
+  })
+
+  it('drops hot-search words after 14 days and says how many went when it lists new ones', async () => {
+    const h = await harness({ svc, workspace: dir })
+    const store = h.ctx.biliHot as HotStore
+    await store.noteWords([{ keyword: '旧梗' }])
+    expect(h.logs.some(line => line.text === 'bili: hot words: 1 listed')).toBe(true)
+    vi.setSystemTime(Date.now() + HOT_TTL_MS + DAY)
+    await store.noteWords([{ keyword: '新梗' }])
+    expect(await store.words()).toEqual(['新梗'])
+    expect(h.logs.some(line => line.text === `bili: hot words: 1 listed; dropped 1 expired or over the ${HOT_MAX_WORDS} cap`)).toBe(true)
   })
 
   it('reads still work when the store fails, and the failure is logged', async () => {

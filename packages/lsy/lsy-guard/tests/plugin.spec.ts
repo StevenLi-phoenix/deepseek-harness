@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
-import { afterEach, describe, expect, it } from 'vitest'
-import { MockAdapter, textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { MockAdapter, maxTokensResponse, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 import * as Guard from '../src/index.ts'
 
 const contexts: Context[] = []
@@ -16,16 +16,30 @@ afterEach(async () => {
 
 const CLEAN_CARD = "傲娇猫娘，嘴硬心软，句尾爱带'喵'，被夸会否认"
 
-async function mount(script: ConstructorParameters<typeof MockAdapter>[0], config: Partial<Guard.Config> = {}, defaultModel = true) {
+const DEFAULT_REASONING = { efforts: [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }], defaultEffort: 'high' }
+
+interface MountOptions {
+  /** What the mock adapter reports for the model's reasoning; `none` reports nothing. */
+  reasoning?: typeof DEFAULT_REASONING | 'none'
+  /** Leave the LLM service unmounted. */
+  withoutLlm?: boolean
+}
+
+async function mount(
+  script: ConstructorParameters<typeof MockAdapter>[0],
+  config: Partial<Guard.Config> = {},
+  defaultModel = true,
+  options: MountOptions = {},
+) {
   const dir = await mkdtemp(join(tmpdir(), 'lsy-guard-plugin-'))
   dirs.push(dir)
   const ctx = new Context()
   contexts.push(ctx)
   const logs: string[] = []
   ctx.logger.exporter({ levels: { default: 3 }, export: (message) => { logs.push(`${message.type} ${String(message.args[0])}`) } })
-  await ctx.plugin(LlmRuntime)
-  const adapter = new MockAdapter(script, { efforts: [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }], defaultEffort: 'high' } as never)
-  ctx.llm.registerAdapter(['mock', 'other'], adapter)
+  if (options.withoutLlm !== true) await ctx.plugin(LlmRuntime)
+  const adapter = new MockAdapter(script, options.reasoning === 'none' ? undefined : (options.reasoning ?? DEFAULT_REASONING) as never)
+  if (options.withoutLlm !== true) ctx.llm.registerAdapter(['mock', 'other'], adapter)
   if (defaultModel) ctx.provide('agentDefaultModel', { currentSelection: () => ({ provider: 'mock', model: 'cheap', reasoningEffort: 'low' }) } as never)
   const fiber = await ctx.plugin(Guard, Guard.Config({ dir, memoryFile: join(dir, 'memory.jsonl'), ...config } as never))
   return { ctx, adapter, dir, logs, fiber }
@@ -70,6 +84,38 @@ describe('plugin', () => {
     expect(await readdir(join(dir, 'raw'))).toHaveLength(1)
   })
 
+  it('refuses as llm.unavailable when the LLM service is not mounted', async () => {
+    const { ctx } = await mount([], {}, true, { withoutLlm: true })
+    expect(await ctx.lsyGuard.check('a note', { purpose: 'style_note', audience: 'public' })).toMatchObject({ ok: false, rule: 'llm.unavailable' })
+    expect(ctx.lsyGuard.health().lastError?.message).toContain('LLM service is not mounted')
+  })
+
+  it('asks for no reasoning effort when the configured model reports none', async () => {
+    const { ctx, adapter } = await mount([textResponse('{"label":"clear","categories":[]}')], { provider: 'other', model: 'tiny' }, true, { reasoning: 'none' })
+    expect(await ctx.lsyGuard.check('a note', { purpose: 'style_note', audience: 'channel' })).toEqual({ ok: true })
+    expect(adapter.requests[0]).toMatchObject({ provider: 'other', model: 'tiny' })
+    expect(adapter.requests[0]).not.toHaveProperty('reasoningEffort')
+  })
+
+  it('leaves the effort to the model\'s own default when it offers no light one', async () => {
+    const { ctx, adapter } = await mount([textResponse('{"label":"clear","categories":[]}')], { provider: 'other', model: 'tiny' }, true, {
+      reasoning: { efforts: [{ id: 'high', name: 'High' }], defaultEffort: 'high' },
+    })
+    expect(await ctx.lsyGuard.check('a note', { purpose: 'style_note', audience: 'channel' })).toEqual({ ok: true })
+    expect(adapter.requests[0]).toMatchObject({ reasoningEffort: 'high' })
+  })
+
+  it('reads an answer that was cut at the output limit', async () => {
+    const { ctx } = await mount([maxTokensResponse('{"label":"pii","categories":["health"]}')])
+    expect(await ctx.lsyGuard.check('a note', { purpose: 'style_note', audience: 'public' })).toMatchObject({ ok: false, rule: 'llm.health' })
+  })
+
+  it('refuses as llm.unavailable when the model ends on a tool call, naming only the finish kind', async () => {
+    const { ctx } = await mount([toolCallResponse('call-1', 'noop', {})])
+    expect(await ctx.lsyGuard.check('a note', { purpose: 'style_note', audience: 'public' })).toMatchObject({ ok: false, rule: 'llm.unavailable' })
+    expect(ctx.lsyGuard.health().lastError?.message).toBe('the model call ended with tool-calls (tool-calls)')
+  })
+
   it('reads the canary file at its default place under the directory', async () => {
     const { ctx, dir } = await mount([])
     await writeFile(join(dir, 'canaries.txt'), 'secret-owner-name\n')
@@ -86,6 +132,38 @@ describe('plugin', () => {
   it('logs its layers and route once at start, with no text', async () => {
     const { logs } = await mount([])
     expect(logs.some(line => line.includes('lsy-guard: layers patterns=%s canary=%s memory=%s llm=%s'))).toBe(true)
+  })
+})
+
+describe('directory and pruning', () => {
+  it('keeps its data under the Dsh home when no directory is configured', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'lsy-guard-home-'))
+    dirs.push(home)
+    vi.stubEnv('DSH_HOME', home)
+    try {
+      const ctx = new Context()
+      contexts.push(ctx)
+      const logs: string[] = []
+      ctx.logger.exporter({ levels: { default: 3 }, export: (message) => { logs.push(message.args.map(String).join(' ')) } })
+      Guard.apply(ctx, Guard.Config({ canaryFile: join(home, 'c.txt'), provider: 'p', model: 'm' } as never))
+      expect(logs.find(line => line.includes('lsy-guard: layers'))).toContain(join(home, 'lsy-guard', 'raw'))
+      expect(logs.find(line => line.includes('lsy-guard: layers'))).toContain('p/m')
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('warns instead of failing the load when pruning the raw responses fails', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lsy-guard-prune-'))
+    dirs.push(dir)
+    await writeFile(join(dir, 'raw'), 'not a directory')
+    const ctx = new Context()
+    contexts.push(ctx)
+    const logs: string[] = []
+    ctx.logger.exporter({ levels: { default: 3 }, export: (message) => { logs.push(`${message.type} ${message.args.map(String).join(' ')}`) } })
+    Guard.apply(ctx, Guard.Config({ dir, memoryFile: join(dir, 'm.jsonl') } as never))
+    await vi.waitFor(() => { expect(logs.some(line => line.startsWith('warn') && line.includes('pruning raw responses failed'))).toBe(true) })
+    expect(logs.find(line => line.includes('pruning raw responses failed'))).toMatch(/ENOTDIR|not a directory/iu)
   })
 })
 

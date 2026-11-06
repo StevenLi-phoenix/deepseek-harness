@@ -21,6 +21,7 @@ export function stampTime(ms: number): string {
  */
 export function dateTime(ms: number, timeZone?: string): string {
   const parts = new Intl.DateTimeFormat('en-GB', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', ...(timeZone === undefined ? {} : { timeZone }) }).formatToParts(ms)
+  /* v8 ignore next -- the formatter always yields month, day, hour, and minute parts; `?? ''` only satisfies the index type. */
   const part = (type: Intl.DateTimeFormatPartTypes): string => parts.find(entry => entry.type === type)?.value ?? ''
   return `${part('month')}-${part('day')} ${part('hour')}:${part('minute')}`
 }

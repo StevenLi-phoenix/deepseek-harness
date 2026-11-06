@@ -53,6 +53,7 @@ function errorText(error: unknown): string {
 /** @returns what an aborted signal stopped for: a login error here, or an error made from whatever else was given. */
 function abortError(signal: AbortSignal): Error {
   const reason: unknown = signal.reason
+  /* v8 ignore next -- the private controller aborts only with a LoginError. */
   return reason instanceof Error ? reason : new LoginError(String(reason), 'cancelled')
 }
 
@@ -101,6 +102,7 @@ export class LoginSessions {
     const timeoutMs = this.options.timeoutMs ?? 480_000
     entry.timer = setTimeout(() => { entry.controller.abort(new LoginError('timed out waiting for the QR code to be scanned and confirmed', 'timeout')) }, timeoutMs)
     entry.timer.unref()
+    /* v8 ignore next -- the Promise executor on the next line replaces this placeholder before anything can call it. */
     let firstCode: () => void = () => {}
     const first = new Promise<void>((resolve) => { firstCode = resolve })
     this.options.logger.info('lsy-wechat: settings login started')
@@ -228,7 +230,12 @@ export class LoginSessions {
       }
       this.settle(entry, 'done', null)
       this.options.logger.info(`lsy-wechat: settings login bound bot ${account.botId} (${(this.options.now ?? Date.now)() - started} ms)`)
-      this.options.onBound(account)
+      // The login is done and saved: a hook that fails afterwards does not turn it into a failed one.
+      try {
+        this.options.onBound(account)
+      } catch (error: unknown) {
+        this.options.logger.warn(`lsy-wechat: the channel did not take the new account (${errorText(error)})`)
+      }
     } catch (error: unknown) {
       const code = error instanceof LoginError ? error.code : undefined
       if (code === 'expired') this.settle(entry, 'expired', null)

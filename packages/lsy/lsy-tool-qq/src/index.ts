@@ -282,6 +282,7 @@ export function apply(ctx: Context, config: Config = { mode: 'read' }): void {
 
 /** A model-supplied argument as text; anything else is empty. */
 function asText(value: unknown): string {
+  /* v8 ignore next -- defineTool refuses a non-string argument first. */
   return typeof value === 'string' ? value : ''
 }
 

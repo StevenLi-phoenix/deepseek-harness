@@ -117,4 +117,18 @@ describe('SystemStatusSection', () => {
     expect(screen.getByRole('status').textContent).toBe('暂时读不到系统状态，稍后自动重试。')
     expect(screen.queryAllByRole('meter')).toEqual([])
   })
+
+  it('draws an empty bar without a CPU reading, names a failed macmon without the install command, and leaves out the storage card without volumes', () => {
+    mount({
+      snapshot: { ...SNAPSHOT, cpu: { ...SNAPSHOT.cpu, usage: null }, power: null, temperature: null, disks: [], sources: { macmon: 'failed' } },
+      checkedAt: 1,
+    })
+    const cpuMeter = screen.getByRole('meter', { name: 'CPU' })
+    expect(cpuMeter.getAttribute('aria-valuenow')).toBe('0')
+    expect(cpuMeter.firstElementChild).toBeNull()
+    const power = screen.getByRole('region', { name: '功耗' })
+    expect(power.querySelector('[data-notice="failed"]')).not.toBeNull()
+    expect(power.querySelector('code')).toBeNull()
+    expect(document.querySelector('[data-mount]')).toBeNull()
+  })
 })

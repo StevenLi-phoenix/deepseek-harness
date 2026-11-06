@@ -130,6 +130,7 @@ export async function readSource(source: BalanceSource, key: string, options: Re
         return { ...base, status: 'ready', kind: 'quota', ...parseOpencode(body) }
     }
   } catch (error) {
+    /* v8 ignore next -- both parsers throw only ShapeError. */
     if (!(error instanceof ShapeError)) throw error
     return { ...base, status: 'failed', reason: 'unexpected response' }
   }

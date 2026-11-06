@@ -400,6 +400,7 @@ export class MemoryStore {
         next = [...entries, entry]
       }
       const made = next.find(candidate => candidate.id === resultId)
+      /* v8 ignore next -- next always holds resultId. */
       if (made === undefined) throw new MemoryError('corrupt', `entry ${resultId} was not made.`)
       await this.writePending(pending.filter(candidate => candidate.id !== id))
       return { entries: next, result: made, op: 'approve' }
@@ -700,6 +701,7 @@ export class MemoryStore {
         const was = byId.get(id)
         const now = after.get(id)
         if (sameEntry(was, now)) continue
+        /* v8 ignore next 2 -- an add always uses a fresh id. */
         const record: HistoryRecord = {
           at, op: op === 'add' && was !== undefined ? 'replace' : op, id, ...was === undefined ? {} : { before: was }, ...now === undefined ? {} : { after: now }, ...meta, sha,
         }

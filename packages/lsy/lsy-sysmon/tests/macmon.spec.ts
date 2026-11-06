@@ -89,4 +89,22 @@ describe('runMacmon', () => {
     ])
     expect(JSON.stringify(outcomes)).not.toContain('secret')
   })
+
+  it('reads a sample that carries power but no temperature or memory block', () => {
+    expect(parseMacmon(JSON.stringify({ sys_power: 5 })))
+      .toEqual({ power: { system: 5, cpu: null, gpu: null, ane: null }, temperature: null, memory: null })
+  })
+
+  it('drops the memory block when the total is not positive or the usage is missing or negative', () => {
+    const memory = (block: object) => parseMacmon(JSON.stringify({ sys_power: 5, memory: block }))?.memory
+    expect(memory({ ram_total: 0, ram_usage: 1 })).toBeNull()
+    expect(memory({ ram_total: 8 })).toBeNull()
+    expect(memory({ ram_total: 8, ram_usage: -1 })).toBeNull()
+  })
+
+  it('maps a rejection that is not an error object to a generic phrase', async () => {
+    // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the non-Error arm is the case under test.
+    const rejecting: ExecFile = () => Promise.reject('plain string')
+    expect(await runMacmon(rejecting, '/tmp/macmon')).toEqual({ status: 'failed', reason: 'could not run' })
+  })
 })

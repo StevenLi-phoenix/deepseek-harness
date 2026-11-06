@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as Ingest from '../../lsy-event-ingest/src/index.ts'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 import LsyPresence, { Config, DEFAULT_URGENT_KINDS, hours, type DeferralHolder } from '../src/index.ts'
+import type { SettingsConnection, SettingsRoute } from '../src/settings.ts'
+import { PRESENCE_PATH } from '../src/view.ts'
 
 /** 2026-11-03 in New York is EST (UTC-5). */
 const at = (hhmm: string, day = 3): number => Date.parse(`2026-11-${String(day).padStart(2, '0')}T${hhmm}:00Z`)
@@ -34,7 +36,7 @@ function heartbeat(kind: 'presence.sleep.on' | 'presence.sleep.off'): LsyEventIn
 }
 
 /** Mount presence over memory storage; `pool` carries the stored state across restarts. */
-async function mount(options: { pool?: MemoryMediaPool; config?: Record<string, unknown> } = {}) {
+async function mount(options: { pool?: MemoryMediaPool; config?: Record<string, unknown>; connection?: SettingsConnection } = {}) {
   const ctx = new Context()
   contexts.push(ctx)
   const logs: string[] = []
@@ -51,6 +53,7 @@ async function mount(options: { pool?: MemoryMediaPool; config?: Record<string, 
     ctx.provide('storageDomain', facility)
     return async () => { await facility.closeAll(); unmount() }
   })
+  if (options.connection !== undefined) ctx.provide('connection', options.connection as never)
   await ctx.plugin(LsyPresence, Config(options.config as never ?? {}))
   await vi.advanceTimersByTimeAsync(0)
   const presence = ctx.lsyPresence
@@ -271,6 +274,34 @@ describe('persistence', () => {
     expect(second.logs.some(line => line.startsWith('info lsy-presence: awake by manual; window 03:30-10:30 America/New_York'))).toBe(true)
   })
 
+  it('reads a Focus row stored before heartbeats existed, taking its time as the start and no heartbeat', async () => {
+    const first = await mount()
+    await first.presence.ingest(event('presence.sleep.off'))
+    await first.ctx.fiber.dispose()
+    const medium = [...first.pool.media.entries()].find(([unit]) => unit.includes('lsy_presence'))?.[1]
+    medium?.tables.get('inputs')?.set('owner', { focus: { asleep: false, at: at('16:00') } })
+    const second = await mount({ pool: first.pool })
+    expect(second.presence.view().lastFocus).toEqual({ asleep: false, at: at('16:00'), since: at('16:00'), heartbeatAt: null })
+  })
+
+  it('keeps the new state in memory and logs when storing it fails, then goes on storing', async () => {
+    const { presence, pool, logs } = await mount()
+    pool.failNextWrites = 1
+    await presence.setManual(true)
+    expect(presence.isAsleep()).toBe(true)
+    expect(logs).toContain('warn lsy-presence: the new state is kept in memory only; storing it failed: injected write failure')
+    await presence.setManual(false)
+    expect(logs.filter(line => line.includes('kept in memory only'))).toHaveLength(1)
+  })
+
+  it('rejects a window that could not be stored and still takes the next change', async () => {
+    const { presence, pool } = await mount()
+    pool.failNextWrites = 1
+    await expect(presence.setWindow({ enabled: true, start: '23:00', end: '07:00' })).rejects.toThrow('injected write failure')
+    await presence.setWindow({ enabled: true, start: '22:00', end: '06:00' })
+    expect(presence.view().window).toEqual({ enabled: true, start: '22:00', end: '06:00' })
+  })
+
   it('starts with the window while nothing is stored', async () => {
     const { logs } = await mount()
     expect(logs.some(line => line.endsWith('no Focus signal yet'))).toBe(true)
@@ -309,6 +340,24 @@ describe('holders', () => {
     expect(presence.deferredCount()).toBe(1)
   })
 
+  it('names a holder that rejects with a plain string by that string', async () => {
+    const { presence, logs } = await mount()
+    // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the non-Error arm is the case under test.
+    presence.registerHolder({ name: 'odd', count: () => 0, flush: () => Promise.reject('plain failure') })
+    expect(await presence.flushNow()).toBe(0)
+    expect(logs).toContain('warn lsy-presence: odd could not flush: plain failure')
+  })
+
+  it('stops calling a listener once it is removed', async () => {
+    const { presence } = await mount()
+    const seen: boolean[] = []
+    const stop = presence.onChange(state => seen.push(state.asleep))
+    await presence.setManual(true)
+    stop()
+    await presence.setManual(false)
+    expect(seen).toEqual([true])
+  })
+
   it('keeps a listener that throws from stopping the others', async () => {
     const { presence, logs } = await mount()
     const seen: boolean[] = []
@@ -317,6 +366,22 @@ describe('holders', () => {
     await presence.setManual(true)
     expect(seen).toEqual([true])
     expect(logs).toContain('warn lsy-presence: a listener failed: boom')
+  })
+})
+
+describe('settings route', () => {
+  it('registers the route with the connection service when it is present, and removes it with the plugin', async () => {
+    const registered: SettingsRoute[] = []
+    let removed = 0
+    const connection: SettingsConnection = {
+      fetch: { register: (route) => { registered.push(route); return () => { removed += 1; return Promise.resolve() } } },
+    }
+    const { ctx, presence } = await mount({ connection })
+    expect(registered.map(route => route.path)).toEqual([PRESENCE_PATH])
+    const response = await registered[0]!.fetch(new Request(`http://127.0.0.1${PRESENCE_PATH}`))
+    expect(((await response.json()) as { view: { asleep: boolean } }).view.asleep).toBe(presence.isAsleep())
+    await ctx.fiber.dispose()
+    expect(removed).toBe(1)
   })
 })
 

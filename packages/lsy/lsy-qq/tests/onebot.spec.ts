@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { WebSocket } from 'ws'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { isPrivateUrl, OneBotClient, OneBotError, scrubToken, type OneBotEvent } from '../src/onebot.ts'
 import { FakeOneBot, groupMessage } from './fake-onebot.ts'
 
@@ -92,5 +93,125 @@ describe('OneBotClient', () => {
     await client.run({ event: () => {}, open: () => {}, close: (r) => { reasons.push(r) } }, new AbortController().signal)
     expect(reasons).toHaveLength(1)
     expect(reasons[0]).toMatch(/^closed with code/)
+  })
+
+  const quiet = { event: () => {}, open: () => {}, close: () => {} }
+
+  it('rejects with the error text, token scrubbed, when the socket cannot even be created', async () => {
+    const client = new OneBotClient({ url: 'ws://x', token: TOKEN, connect: () => { throw new Error(`bad url ws://x?access_token=${TOKEN}`) } })
+    const error = await client.run(quiet, new AbortController().signal).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(OneBotError)
+    expect((error as Error).message).toBe('bad url ws://x?access_token=***')
+    expect(client.connected).toBe(false)
+  })
+
+  it('names a socket-creation failure that is not an Error by its text', async () => {
+    const client = new OneBotClient({
+      url: 'ws://x',
+      token: '',
+      connect: () => { throw 'refused' },
+    })
+    await expect(client.run(quiet, new AbortController().signal)).rejects.toThrow('refused')
+  })
+
+  it('opens the socket through the connect option with the Bearer header, and sends no header without a token', async () => {
+    const fake = await server()
+    const seen: Array<Record<string, string>> = []
+    const connect = (url: string, headers: Record<string, string>): WebSocket => {
+      seen.push(headers)
+      return new WebSocket(url, { headers })
+    }
+    const controller = new AbortController()
+    let opened = false
+    const client = new OneBotClient({ url: fake.url, token: TOKEN, connect })
+    const running = client.run({ ...quiet, open: () => { opened = true } }, controller.signal)
+    await until(() => opened, 'open')
+    controller.abort()
+    await running
+    expect(seen).toEqual([{ authorization: `Bearer ${TOKEN}` }])
+    const anonymous = await server()
+    await new OneBotClient({ url: anonymous.url, token: '', connect }).run(quiet, new AbortController().signal).catch(() => undefined)
+    expect(seen[1]).toEqual({})
+  })
+
+  it('ignores a frame that is not JSON and keeps serving calls', async () => {
+    const fake = await server()
+    fake.handlers.set('get_login_info', () => ({ user_id: 1 }))
+    const client = new OneBotClient({ url: fake.url, token: TOKEN })
+    const controller = new AbortController()
+    let opened = false
+    const events: OneBotEvent[] = []
+    const running = client.run({ ...quiet, open: () => { opened = true }, event: (e) => { events.push(e) } }, controller.signal)
+    await until(() => opened, 'open')
+    fake.socket!.send('this is not json')
+    expect(await client.call('get_login_info')).toEqual({ user_id: 1 })
+    expect(events).toEqual([])
+    controller.abort()
+    await running
+  })
+
+  it('fails a call, with the token scrubbed, when the socket cannot send', async () => {
+    const fake = await server()
+    let socket: WebSocket | undefined
+    const connect = (url: string, headers: Record<string, string>): WebSocket => { socket = new WebSocket(url, { headers }); return socket }
+    const client = new OneBotClient({ url: fake.url, token: TOKEN, connect, requestTimeoutMs: 5000 })
+    const controller = new AbortController()
+    let opened = false
+    const running = client.run({ ...quiet, open: () => { opened = true } }, controller.signal)
+    await until(() => opened, 'open')
+    vi.spyOn(socket!, 'send').mockImplementation((_data, callback) => {
+      if (typeof callback === 'function') (callback as (error: Error) => void)(new Error(`write failed for ${TOKEN}`))
+    })
+    await expect(client.call('get_login_info')).rejects.toMatchObject({ message: 'write failed for ***' })
+    controller.abort()
+    await running
+  })
+
+  it.each([
+    ['a wording', { status: 'failed', retcode: 7, wording: 'no such group', message: 'ignored' }, 'a failed: no such group'],
+    ['only a message', { status: 'failed', retcode: 7, message: 'plain message' }, 'a failed: plain message'],
+    ['no explanation', { status: 'failed', retcode: 7 }, 'a failed: unknown error'],
+  ])('reports a failed call that carries %s', async (_name, answer, expected) => {
+    const fake = await server()
+    const client = new OneBotClient({ url: fake.url, token: TOKEN })
+    const controller = new AbortController()
+    let opened = false
+    const running = client.run({ ...quiet, open: () => { opened = true } }, controller.signal)
+    await until(() => opened, 'open')
+    fake.socket!.removeAllListeners('message')
+    fake.socket!.on('message', (raw) => {
+      const request = JSON.parse((raw as Buffer).toString()) as { echo: string }
+      fake.socket!.send(JSON.stringify({ ...answer, echo: request.echo }))
+    })
+    await expect(client.call('a')).rejects.toMatchObject({ message: expected, retcode: 7 })
+    controller.abort()
+    await running
+  })
+
+  it('ignores a frame that is neither an answer nor an event, and an error raised after the socket opened', async () => {
+    const fake = await server()
+    let socket: WebSocket | undefined
+    const connect = (url: string, headers: Record<string, string>): WebSocket => { socket = new WebSocket(url, { headers }); return socket }
+    const client = new OneBotClient({ url: fake.url, token: TOKEN, connect })
+    const controller = new AbortController()
+    const events: OneBotEvent[] = []
+    const reasons: string[] = []
+    let opened = false
+    const handlers = {
+      event: (e: OneBotEvent) => { events.push(e) },
+      open: () => { opened = true },
+      close: (r: string) => { reasons.push(r) },
+    }
+    const running = client.run(handlers, controller.signal)
+    await until(() => opened, 'open')
+    fake.socket!.send(JSON.stringify({ unrelated: true }))
+    fake.socket!.send(JSON.stringify({ post_type: 'notice', notice_type: 'poke' }))
+    await until(() => events.length === 1, 'the notice')
+    socket!.emit('error', new Error('late socket error'))
+    expect(client.connected).toBe(true)
+    expect(events.map(e => e.post_type)).toEqual(['notice'])
+    controller.abort()
+    await running
+    expect(reasons).toHaveLength(1)
   })
 })

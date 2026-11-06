@@ -1,8 +1,11 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Config, findCycle, flowResultKind, LsyFlowError } from '../src/index.ts'
 import type { LsyNote, Subscription } from '../src/types.ts'
 import { MemoryMediaPool } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
-import { baseConfig, disposeAll, harness, release, sessionEvents, withConfig } from './harness.ts'
+import { baseConfig, disposeAll, fakeRegistry, harness, release, sessionEvents, sessionConfig, withConfig } from './harness.ts'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -75,6 +78,24 @@ describe('editFlow', () => {
     expect(route).toMatchObject({ kinds: ['github.release'] })
     expect(route?.changed).toBeUndefined()
     expect(await bus.publish(release(2))).toBe('accepted')
+  })
+
+  it('sums successive changes of a configuration route, field by field, across a restart', async () => {
+    const pool = new MemoryMediaPool()
+    const { bus, ctx } = await harness({ config, pool })
+    await bus.editFlow({ op: 'set', id: 'ci', patch: { kinds: ['github.tag'] } })
+    await bus.editFlow({ op: 'set', id: 'ci', patch: { maxPerHour: 3 } })
+    await bus.editFlow({ op: 'set', id: 'ci', patch: { session: { instructions: 'Two.' } } })
+    await bus.editFlow({ op: 'set', id: 'ci', patch: { coalesceMs: 5 } })
+    await bus.editFlow({ op: 'set', id: 'ci', patch: { session: { maxPromptEvents: 7 } } })
+    const expected = {
+      kinds: ['github.tag'], maxPerHour: 3, coalesceMs: 5,
+      session: { instructions: 'Two.', maxPromptEvents: 7, agentPreset: 'unattended', workspacePath: '/work' },
+    }
+    expect(bus.flowRoutes().find(row => row.id === 'ci')).toMatchObject(expected)
+    await ctx.fiber.dispose()
+    const { bus: again } = await harness({ config, pool })
+    expect(again.flowRoutes().find(row => row.id === 'ci')).toMatchObject(expected)
   })
 
   it('pauses a configuration route so it takes no new events', async () => {
@@ -214,5 +235,229 @@ describe('where an answer goes', () => {
     await answer(setup, 's1', 'Nobody home.')
     expect(setup.notes.at(-1)?.body).toContain('Nobody home.')
     expect(setup.bus.batches().at(-1)?.notSent).toBeUndefined()
+  })
+})
+
+const runtimeRoute = (id: string, extra: Partial<Subscription> = {}) => ({
+  op: 'set' as const, id, patch: { sources: ['ops'], kinds: ['ops.x'], action: 'notify' as const, coalesceMs: 1_000, maxPerHour: 5, ...extra },
+})
+
+describe('route bookkeeping', () => {
+  it('reports no answer destination for a notify route', async () => {
+    const { bus } = await harness({ config: withConfig(config, { subscriptions: [ci, { ...desk, id: 'plain', action: 'notify' }] }) })
+    const routes = bus.flowRoutes()
+    expect(routes.find(row => row.id === 'ci')?.result).toBe('notify')
+    expect(routes.find(row => row.id === 'plain')).not.toHaveProperty('result')
+  })
+
+  it('forgets a taken-out configuration route that a later configuration no longer has', async () => {
+    const pool = new MemoryMediaPool()
+    const first = await harness({ config, pool })
+    await first.bus.editFlow({ op: 'remove', id: 'ci' })
+    expect(first.bus.flowRoutes().find(row => row.id === 'ci')?.removed).toBe(true)
+    await first.ctx.fiber.dispose()
+    const second = await harness({ config: withConfig(config, { subscriptions: [desk] }), pool })
+    expect(second.bus.flowRoutes().map(row => row.id)).toEqual(['desk'])
+  })
+
+  it('keeps only the newest flowChangesKept entries of the change history', async () => {
+    const { bus } = await harness({ config: withConfig(config, { flowChangesKept: 2 }) })
+    for (const note of ['one', 'two', 'three', 'four']) {
+      await bus.editFlow({ op: 'set', id: 'ci', patch: { maxPerHour: 5 } }, { note })
+      await vi.advanceTimersByTimeAsync(1)
+    }
+    expect(bus.flowHistory().map(change => change.note)).toEqual(['four', 'three'])
+    expect(bus.flowHistory(Number.MAX_SAFE_INTEGER)).toHaveLength(2)
+  })
+
+  it('keeps every edit of one millisecond apart and in order once the history is full', async () => {
+    const { bus } = await harness({ config: withConfig(config, { flowChangesKept: 2 }) })
+    for (const note of ['one', 'two', 'three', 'four']) await bus.editFlow({ op: 'set', id: 'ci', patch: { maxPerHour: 5 } }, { note })
+    expect(bus.flowHistory().map(change => change.note)).toEqual(['four', 'three'])
+  })
+
+  it('records a new run-time route without a creator when the change names none, and keeps the creator of an existing one', async () => {
+    const { bus } = await harness({ config })
+    await bus.editFlow(runtimeRoute('anon'))
+    await bus.editFlow(runtimeRoute('mine'), { by: 's1' })
+    await bus.editFlow({ op: 'set', id: 'mine', patch: { maxPerHour: 9 } }, { by: 's2' })
+    const routes = bus.flowRoutes()
+    expect(routes.find(row => row.id === 'anon')).not.toHaveProperty('createdBy')
+    expect(routes.find(row => row.id === 'mine')).toMatchObject({ createdBy: 's1', maxPerHour: 9 })
+  })
+
+  it('keeps a session route\'s project when a run-time route is stored', async () => {
+    const { bus } = await harness({ config })
+    const { route } = await bus.editFlow({
+      op: 'set',
+      id: 'proj',
+      patch: { sources: ['ops'], kinds: ['ops.x'], action: 'session', session: { ...sessionConfig.subscriptions[0]!.session!, project: '事件' } },
+    })
+    expect(route?.session).toMatchObject({ project: '事件' })
+  })
+})
+
+describe('pausing and removing routes while events wait', () => {
+  it('holds the events of a paused run-time route and flushes them after resume, keeping the pause through other edits', async () => {
+    const { bus, notes } = await harness({ config })
+    await bus.editFlow(runtimeRoute('held'))
+    await bus.publish({ source: 'ops', kind: 'ops.x', key: 'k1', subject: 's', title: 'waiting' })
+    await bus.editFlow({ op: 'pause', id: 'held' })
+    await bus.editFlow({ op: 'set', id: 'held', patch: { maxPerHour: 6 } })
+    expect(bus.flowRoutes().find(row => row.id === 'held')).toMatchObject({ paused: true, maxPerHour: 6 })
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(notes).toHaveLength(0)
+    await bus.editFlow({ op: 'resume', id: 'held' })
+    expect(bus.flowRoutes().find(row => row.id === 'held')).not.toHaveProperty('paused')
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(notes).toHaveLength(1)
+    expect(notes[0]?.body).toContain('waiting')
+  })
+
+  it('does not flush a batch whose route was paused while its flush was already queued', async () => {
+    const { bus, notes } = await harness({ config })
+    await bus.editFlow(runtimeRoute('racing'))
+    await bus.publish({ source: 'ops', kind: 'ops.x', key: 'k1', subject: 's', title: 'waiting' })
+    // The pause takes its place in the storage chain first; the timer fires before the pause reaches the route.
+    const pausing = bus.editFlow({ op: 'pause', id: 'racing' })
+    vi.advanceTimersByTime(1_000)
+    await pausing
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(notes).toHaveLength(0)
+    expect(bus.batches()).toEqual([])
+    expect(bus.flowRoutes().find(row => row.id === 'racing')?.status.pending).toBe(1)
+  })
+
+  it('drops the waiting events of a removed route and leaves the other routes\' events alone', async () => {
+    const { bus, notes } = await harness({ config })
+    await bus.editFlow(runtimeRoute('gone'))
+    await bus.editFlow({ op: 'set', id: 'stays', patch: { sources: ['ops'], kinds: ['ops.y'], action: 'notify', coalesceMs: 1_000, maxPerHour: 5 } })
+    await bus.publish({ source: 'ops', kind: 'ops.x', key: 'k1', subject: 's', title: 'for the removed route' })
+    await bus.publish({ source: 'ops', kind: 'ops.y', key: 'k2', subject: 's', title: 'for the other route' })
+    await bus.editFlow({ op: 'remove', id: 'gone' })
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(notes).toHaveLength(1)
+    expect(notes[0]?.body).toContain('for the other route')
+    expect(notes[0]?.body).not.toContain('for the removed route')
+  })
+
+  it('resumes a configuration route that was taken out without bringing it back', async () => {
+    const { bus } = await harness({ config })
+    await bus.editFlow({ op: 'remove', id: 'ci' })
+    const { route } = await bus.editFlow({ op: 'resume', id: 'ci' })
+    expect(route).toMatchObject({ id: 'ci', removed: true })
+    expect(await bus.publish(release(1))).toBe('unmatched')
+  })
+
+  it('tells setPaused to leave a subscription already in the requested state alone', async () => {
+    const logs: string[] = []
+    const { bus } = await harness({ logs })
+    await bus.subscribe({ id: 'w', sources: ['github'], kinds: [], subjects: [], action: 'notify', coalesceMs: 1_000, maxPerHour: 1 })
+    expect(await bus.setPaused('w', false)).toBe('ok')
+    expect(await bus.setPaused('w', true)).toBe('ok')
+    expect(await bus.setPaused('w', true)).toBe('ok')
+    expect(await bus.setPaused('w', false)).toBe('ok')
+    expect(logs.filter(line => line.includes('paused w') || line.includes('resumed w'))).toEqual([
+      'info: lsy-event-bus: paused w', 'info: lsy-event-bus: resumed w',
+    ])
+  })
+})
+
+describe('what happens to a running batch', () => {
+  /** Start the `ci` batch and attach Session `s1` to it; resolves with the mounted bus. */
+  async function running(options: Parameters<typeof harness>[0] = {}) {
+    const setup = await harness({ config, ...options })
+    await setup.bus.publish(release(1))
+    await vi.advanceTimersByTimeAsync(1)
+    setup.emit('s1', sessionEvents.webhook(String(setup.runtime.deliveries.at(-1)?.deliveryId), 'ci'))
+    return setup
+  }
+
+  it('still tells the owner the answer of a Session whose route was removed meanwhile', async () => {
+    const setup = await running()
+    await setup.bus.editFlow({ op: 'remove', id: 'ci' })
+    setup.emit('s1', sessionEvents.assistant('Done anyway.'))
+    setup.emit('s1', sessionEvents.turnEnd())
+    await vi.advanceTimersByTimeAsync(1)
+    expect(setup.notes.at(-1)?.body).toContain('Done anyway.')
+  })
+
+  it('passes an answer that has no text on under the batch title, and the route after it runs', async () => {
+    const setup = await running()
+    await setup.bus.editFlow({ op: 'set', id: 'ci', patch: { session: { result: 'event' } } })
+    await setup.bus.editFlow({ op: 'set', id: 'desk', patch: { sources: ['flow'], kinds: [flowResultKind('ci')] } })
+    setup.emit('s1', sessionEvents.turnEnd())
+    await vi.advanceTimersByTimeAsync(1)
+    const event = setup.bus.events().at(-1)
+    expect(event).toMatchObject({ source: 'flow', kind: 'flow.ci.result', title: setup.bus.batches()[0]?.title, subscriptions: ['desk'] })
+    expect(event?.text).toBe('')
+    expect(setup.notes).toHaveLength(0)
+  })
+
+  it('falls back to the owner when the notifier has no main agent, and hands main an empty answer as an empty text', async () => {
+    const plain = await running()
+    await plain.bus.editFlow({ op: 'set', id: 'ci', patch: { session: { result: 'main' } } })
+    plain.emit('s1', sessionEvents.assistant('For main.'))
+    plain.emit('s1', sessionEvents.turnEnd())
+    await vi.advanceTimersByTimeAsync(1)
+    expect(plain.notes.at(-1)?.body).toContain('For main.')
+
+    const told: string[] = []
+    const withMain = await running({ notifier: { send: async () => {}, tellMainAgent: async (message) => { told.push(message.text); return 'chat' } } })
+    await withMain.bus.editFlow({ op: 'set', id: 'ci', patch: { session: { result: 'main' } } })
+    withMain.emit('s1', sessionEvents.turnEnd())
+    await vi.advanceTimersByTimeAsync(1)
+    expect(told).toEqual([''])
+  })
+
+  it('tells the owner when the main agent refuses with something that is not an Error', async () => {
+    const logs: string[] = []
+    const setup = await running({ logs, notifier: { send: async () => {}, tellMainAgent: async () => { throw 'busy' } } })
+    await setup.bus.editFlow({ op: 'set', id: 'ci', patch: { session: { result: 'main' } } })
+    setup.emit('s1', sessionEvents.assistant('Still for you.'))
+    setup.emit('s1', sessionEvents.turnEnd())
+    await vi.advanceTimersByTimeAsync(1)
+    expect(logs.some(line => line.includes('main agent refused the answer') && line.endsWith('busy'))).toBe(true)
+  })
+})
+
+describe('sessions of routes made at run time', () => {
+  it('titles the Sessions of a per-subject route with the route id when it names no prefix', async () => {
+    const { bus } = await harness({ config })
+    const base = sessionConfig.subscriptions[0]!.session!
+    await bus.editFlow({
+      op: 'set',
+      id: 'per-repo',
+      patch: {
+        sources: ['ops'], kinds: ['ops.x'], action: 'session', coalesceMs: 100, maxPerHour: 10,
+        session: { ...base, persistent: { enabled: true, key: 'subject', rolloverDays: 30, maxSeedChars: 100 } },
+      },
+    })
+    await bus.publish({ source: 'ops', kind: 'ops.x', key: 'a', subject: 'octo/one', title: 'one' })
+    await bus.publish({ source: 'ops', kind: 'ops.x', key: 'b', subject: 'octo/two', title: 'two' })
+    await vi.advanceTimersByTimeAsync(200)
+    const titles = bus.batches().map(batch => batch.title)
+    expect(titles).toHaveLength(2)
+    for (const title of titles) expect(title.startsWith('per-repo')).toBe(true)
+  })
+
+  it('warns that a project could not be ensured and tries again on the next batch', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'lsy-bus-project-'))
+    try {
+      const blocker = join(root, 'file')
+      await writeFile(blocker, 'x')
+      const logs: string[] = []
+      const sub: Subscription = { ...ci, session: { ...session, workspacePath: join(blocker, 'sub'), project: '事件' } }
+      const { bus } = await harness({ config: withConfig(config, { subscriptions: [sub] }), registry: fakeRegistry(), logs })
+      const warned = (): number => logs.filter(line => line.startsWith('warn: lsy-event-bus: project "事件"') && line.includes('not ensured')).length
+      await bus.publish(release(1))
+      await vi.advanceTimersByTimeAsync(1)
+      await vi.waitFor(() => { expect(warned()).toBe(1) })
+      await bus.publish(release(2))
+      await vi.advanceTimersByTimeAsync(1)
+      await vi.waitFor(() => { expect(warned()).toBe(2) })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 })

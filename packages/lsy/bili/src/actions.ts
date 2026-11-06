@@ -46,8 +46,10 @@ export function parseAction(body: unknown): ParsedAction {
     // The schema's signature types its input as the output; the body is checked here, which is why it is parsed.
     const checked = schema(body as BiliAction)
     // The schema passes unknown fields through; the action keeps only its own.
+    /* v8 ignore next -- every SCHEMAS entry is z.object, which always has a dict. */
     action = Object.fromEntries(Object.keys(schema.dict ?? {}).map(key => [key, Reflect.get(checked, key)])) as BiliAction
   } catch (error: unknown) {
+    /* v8 ignore next -- schemastery throws Error instances only. */
     return { ok: false, error: `invalid ${name} request: ${error instanceof Error ? error.message : 'bad fields'}` }
   }
   if (action.action === 'logout' && action.confirm !== action.account) return { ok: false, error: 'logout must repeat the account id as confirm' }

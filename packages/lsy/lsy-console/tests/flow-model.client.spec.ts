@@ -216,3 +216,20 @@ describe('edgeKey', () => {
     expect(edgeKey({ from: 'a', to: 'b' })).toBe('a>b')
   })
 })
+
+describe('lookups for a box the graph does not have', () => {
+  const graph = buildGraph(DIAMOND.nodes, DIAMOND.edges)
+
+  it('has no neighbours and no relatives for it', () => {
+    expect(graph.neighbours('ghost')).toEqual({ before: [], after: [] })
+    const { nodes, edges } = graph.relatives('ghost')
+    expect([...nodes]).toEqual(['ghost'])
+    expect([...edges]).toEqual([])
+  })
+
+  it('walks nowhere from a stop it does not have, and from no stops at all', () => {
+    expect(graph.route(['ghost', 'd'])).toEqual([])
+    expect(graph.route([])).toEqual([])
+    expect(graph.route(['a'])).toEqual([])
+  })
+})

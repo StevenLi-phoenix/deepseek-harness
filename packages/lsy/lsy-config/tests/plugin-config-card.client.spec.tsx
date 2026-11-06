@@ -10,6 +10,7 @@ import type {} from '../src/client/slot-contract.ts'
 import { leavesOf, type ConfigEntryView, type FieldNode, type ConfigValue } from '../src/view.ts'
 import { QQ_FORM } from './qq-form.client.ts'
 import { entryView, sampleForm } from './sample-form.client.ts'
+import type { LeafField } from '../src/view.ts'
 
 /** The fixture form with a few stored values, as a Host answer would carry them. */
 function withValues(nodes: readonly FieldNode[]): FieldNode[] {
@@ -264,5 +265,129 @@ describe('PluginConfigCard', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: '确认保存' })) })
     expect(save).toHaveBeenCalledWith('sample', ['groups'], 'r1', [{ op: 'set', path: ['url'], value: 'ws://b' }])
+  })
+})
+
+const leafOf = (kind: LeafField['kind'], path: string[], over: Partial<LeafField> = {}): LeafField => ({
+  kind, key: path.at(-1) as string, path, layer: 'default', required: false, ...over,
+})
+
+describe('PluginConfigCard rows', () => {
+  it('shows an unset credential as not set', () => {
+    const view = entryView('e', [leafOf('secret', ['password'], { set: false, readOnly: 'secret' })])
+    mount(['e'], { e: { view } })
+    open('e')
+    expect(within(row('password')).getByText('未设置')).toBeTruthy()
+  })
+
+  it('returns a staged reset of a switch to the layer below, and shows a staged switch position', () => {
+    const view = entryView('e', [
+      leafOf('boolean', ['on'], { layer: 'owner', value: false, base: true, default: false }),
+      leafOf('boolean', ['plain'], { layer: 'owner', value: true, default: false }),
+    ])
+    mount(['e'], { e: { view } })
+    open('e')
+    expect(within(row('on')).getByRole('switch').getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(within(row('on')).getByRole('button', { name: '恢复默认' }))
+    expect(within(row('on')).getByRole('switch').getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(within(row('plain')).getByRole('button', { name: '恢复默认' }))
+    expect(within(row('plain')).getByRole('switch').getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(within(row('plain')).getByRole('switch'))
+    expect(within(row('plain')).getByRole('switch').getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('stages a chosen option, offers a stored value no option matches, and prints object options as JSON', () => {
+    const view = entryView('e', [
+      leafOf('select', ['mode'], { value: 'fast', default: 'fast', options: ['fast', 'slow'] }),
+      leafOf('select', ['legacy'], { value: 'old', options: ['new'] }),
+      leafOf('select', ['shape'], { value: { a: 1 }, options: [{ a: 1 }, { a: 2 }] }),
+      leafOf('select', ['empty'], {}),
+      leafOf('select', ['optionless'], { value: 'x' }),
+    ])
+    const { save } = mount(['e'], { e: { view } })
+    open('e')
+    const select = (path: string): HTMLSelectElement => within(row(path)).getByRole('combobox') as HTMLSelectElement
+    const optionTexts = (path: string): string[] => [...select(path).options].map(option => option.textContent ?? '')
+    expect(optionTexts('mode')).toEqual(['fast', 'slow'])
+    expect(optionTexts('legacy')).toEqual(['"old"', 'new'])
+    expect(optionTexts('shape')).toEqual(['{"a":1}', '{"a":2}'])
+    expect(optionTexts('empty')).toEqual([])
+    expect(optionTexts('optionless')).toEqual(['"x"'])
+    fireEvent.change(select('mode'), { target: { value: '"slow"' } })
+    expect(select('mode').value).toBe('"slow"')
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    expect(screen.getByText('mode：fast → slow')).toBeTruthy()
+    expect(save).not.toHaveBeenCalled()
+  })
+
+  it('prints a staged clear and a reset in the review, with "none" for an empty side', async () => {
+    const view = entryView('e', [
+      leafOf('string', ['name'], { value: 'old' }),
+      leafOf('string', ['fresh'], {}),
+      leafOf('string', ['mine'], { layer: 'owner', value: 'mine' }),
+    ])
+    const { save } = mount(['e'], { e: { view } })
+    open('e')
+    fireEvent.change(within(row('name')).getByRole('textbox'), { target: { value: '' } })
+    fireEvent.change(within(row('fresh')).getByRole('textbox'), { target: { value: 'new' } })
+    fireEvent.click(within(row('mine')).getByRole('button', { name: '恢复默认' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    const review = screen.getByRole('group', { name: '将要保存的改动' })
+    expect(within(review).getAllByRole('listitem')[0]!.textContent).toBe('name：清除，改用默认 （未设置）')
+    expect(within(review).getAllByRole('listitem')[1]!.textContent).toBe('fresh：（未设置） → new')
+    expect(within(review).getAllByRole('listitem')[2]!.textContent).toBe('mine：恢复为 （未设置）')
+    await act(async () => { fireEvent.click(within(review).getByRole('button', { name: '确认保存' })) })
+    expect(save).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens a group that holds owner overrides, counts them, and shows the group description', () => {
+    const view = entryView('e', [
+      { kind: 'group', key: 'g', path: ['g'], description: 'About the group', children: [leafOf('string', ['g', 'x'], { layer: 'owner', value: 'v' })] },
+    ])
+    mount(['e'], { e: { view } })
+    const group = document.querySelector<HTMLDetailsElement>('[data-group="g"]')!
+    expect(group.hasAttribute('open')).toBe(true)
+    expect(within(group).getByText('1 项已改')).toBeTruthy()
+    expect(within(group).getByText('About the group')).toBeTruthy()
+  })
+})
+
+describe('PluginConfigCard status and saving', () => {
+  it('says saving while the write is in flight', () => {
+    const view = entryView('sample', sampleForm())
+    mount(['sample'], { sample: { view, phase: 'saving' } })
+    expect(screen.getByRole('status').textContent).toBe('保存中…')
+  })
+
+  it('says the plugin did not come back, with a retry, after a timeout', () => {
+    const view = entryView('sample', sampleForm())
+    mount(['sample'], { sample: { view, phase: 'unreachable' } })
+    expect(screen.getByRole('status').textContent).toContain('改动已写入，但插件还没有重新响应。')
+  })
+
+  it('keeps the staged edits and shows no saved note when the save did not land', async () => {
+    const view = entryView('sample', sampleForm())
+    const { save } = mount(['sample'], { sample: { view } })
+    save.mockResolvedValueOnce(false)
+    open('sample')
+    fireEvent.change(within(row('url')).getByRole('textbox'), { target: { value: 'ws://b' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '确认保存' })) })
+    expect(save).toHaveBeenCalledTimes(1)
+    expect(control(within(row('url')).getByRole('textbox')).value).toBe('ws://b')
+    expect(screen.queryByText('已保存，插件已重新载入。')).toBeNull()
+  })
+
+  it('shows the loading note while an entry has never been read, and the form of an entry that is already read', () => {
+    const view = entryView('sample', sampleForm())
+    mount(['pending', 'sample'], { pending: { view: null, phase: 'loading' }, sample: { view } })
+    expect(screen.queryByText('正在读取…')).toBeNull()
+    expect(document.querySelector('[data-entry="sample"]')).not.toBeNull()
+    cleanup()
+    mount(['pending'], { pending: { view: null, phase: 'loading' } })
+    expect(screen.getByRole('status').textContent).toBe('正在读取…')
+    cleanup()
+    mount(['gone'], { gone: { view: null, phase: 'unreachable' } })
+    expect(document.body.textContent).toBe('')
   })
 })

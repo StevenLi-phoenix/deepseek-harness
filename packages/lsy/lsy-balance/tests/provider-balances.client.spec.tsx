@@ -78,4 +78,15 @@ describe('ProviderBalances', () => {
     expect(screen.getByRole('button', { name: '刷新其他供应商余额' }).hasAttribute('disabled')).toBe(true)
     expect(screen.getByRole('status').textContent).toBe('正在刷新…')
   })
+
+  it('styles an exhausted wallet and an unavailable provider, and draws no bars for them', () => {
+    mount({ checkedAt: 0, providers: [
+      { source: 'deepseek', label: 'DeepSeek API', status: 'ready', kind: 'wallets', wallets: [{ currency: 'CNY', total: '0', toppedUp: '0', granted: '0' }] },
+      { source: 'opencode-go', label: 'OpenCode Go', status: 'failed', reason: 'HTTP 503' },
+    ] })
+    const classes = [...document.querySelectorAll('[data-balance-source]')].map(block => block.querySelector('[class*="value"]')!.className)
+    expect(classes[0]).toMatch(/exhausted/)
+    expect(classes[1]).toMatch(/stale/)
+    expect(screen.queryAllByRole('meter')).toHaveLength(0)
+  })
 })

@@ -160,11 +160,14 @@ function adjacency(nodes: readonly FlowNode[], edges: readonly FlowEdge[]): Adja
 
 /** The boxes in an order where every arrow points forward, and the boxes a cycle keeps out of it. */
 function sortForward(nodes: readonly FlowNode[], { into, out }: Adjacency): { order: string[]; stuck: string[] } {
+  /* v8 ignore next -- every node id has an entry. */
   const waiting = new Map(nodes.map((node): [string, number] => [node.id, into.get(node.id)?.length ?? 0]))
   const order = nodes.filter(node => waiting.get(node.id) === 0).map(node => node.id)
   // The queue grows while it is walked; a for-of over an array also visits what is pushed meanwhile.
   for (const id of order) {
+    /* v8 ignore next -- every node id has an entry. */
     for (const edge of out.get(id) ?? []) {
+      /* v8 ignore next -- every node id has an entry. */
       const left = (waiting.get(edge.to) ?? 0) - 1
       waiting.set(edge.to, left)
       if (left === 0) order.push(edge.to)
@@ -181,12 +184,16 @@ function assignRanks(nodes: readonly FlowNode[], adj: Adjacency): Record<string,
   const minRank = new Map(nodes.map((node): [string, number] => [node.id, node.minRank ?? 0]))
   const rank: Record<string, number> = {}
   for (const id of order) {
+    /* v8 ignore next 2 -- every node id has an entry and a rank. */
     const before = (adj.into.get(id) ?? []).map(edge => rank[edge.from] ?? 0)
+    /* v8 ignore next -- every node id has a minimum rank. */
     rank[id] = Math.max((minRank.get(id) ?? 0) - 1, ...before) + 1
   }
   // A source sits right before the first box it feeds, not at the far left, so its arrows stay short.
   for (const node of nodes) {
+    /* v8 ignore next 2 -- every node id has an entry and a rank. */
     const feeds = (adj.out.get(node.id) ?? []).map(edge => rank[edge.to] ?? 0)
+    /* v8 ignore next -- every node id has an entry. */
     if ((adj.into.get(node.id) ?? []).length === 0 && feeds.length > 0) rank[node.id] = Math.min(...feeds) - 1
   }
   return rank
@@ -194,14 +201,18 @@ function assignRanks(nodes: readonly FlowNode[], adj: Adjacency): Record<string,
 
 /** Reorder each column in place to cut crossings: a few barycentre sweeps, each box going to the average row of its neighbours. */
 function orderColumns(columns: string[][], adj: Adjacency): void {
+  /* v8 ignore next 2 -- every node id has an entry. */
   const before = (id: string): string[] => (adj.into.get(id) ?? []).map(edge => edge.from)
+  /* v8 ignore next -- every node id has an entry. */
   const after = (id: string): string[] => (adj.out.get(id) ?? []).map(edge => edge.to)
   const row = new Map<string, number>()
+  /* v8 ignore next -- every node id has a row. */
   const rowOf = (id: string): number => row.get(id) ?? 0
   const number = (column: readonly string[]): void => { column.forEach((id, i) => { row.set(id, i) }) }
   columns.forEach(number)
   const sweep = (near: (id: string) => string[], order: readonly number[]): void => {
     for (const r of order) {
+      /* v8 ignore next -- the index is within the columns. */
       const column = columns[r] ?? []
       const score = (id: string): number => {
         const others = near(id)
@@ -239,6 +250,7 @@ function gridLayout(nodes: readonly FlowNode[]): Layout {
   let ranks = 0
   let rows = 0
   for (const node of nodes) {
+    /* v8 ignore next -- a graph on fixed cells gives every node a cell. */
     const [column, row] = node.cell ?? [0, 0]
     rank[node.id] = column
     at[node.id] = { x: columnX(column), y: HEAD + row * (NODE_H + ROW_GAP) }
@@ -256,6 +268,7 @@ function computeLayout(nodes: readonly FlowNode[], adj: Adjacency): Layout {
   const rank = assignRanks(nodes, adj)
   const ranks = nodes.length === 0 ? 0 : Math.max(...Object.values(rank)) + 1
   const columns: string[][] = Array.from({ length: ranks }, () => [])
+  /* v8 ignore next -- every node id has a rank within the columns. */
   for (const node of nodes) columns[rank[node.id] ?? 0]?.push(node.id)
   orderColumns(columns, adj)
   return { rank, ranks, ...place(columns) }
@@ -380,7 +393,9 @@ export function problems(nodes: readonly FlowNode[], edges: readonly FlowEdge[])
   const adj = adjacency(nodes, edges)
   const role = new Map(nodes.map((node): [string, NodeRole] => [node.id, node.role]))
   for (const node of nodes) {
+    /* v8 ignore next 2 -- every node id has an entry. */
     const ins = adj.into.get(node.id) ?? []
+    /* v8 ignore next -- every node id has an entry. */
     const outs = adj.out.get(node.id) ?? []
     if (ins.length + outs.length === 0) found.push(`box ${node.id} has no arrow`)
     if (node.role !== 'cond') continue

@@ -34,7 +34,7 @@ describe('formatting', () => {
   })
 
   it('formats percent, watts, degrees, durations, and clock time', () => {
-    expect([0.374, 0, 1, 1.4, -0.2].map(formatPercent)).toEqual(['37%', '0%', '100%', '100%', '0%'])
+    expect([0.374, 0, 1, 1.4, -0.2, Number.NaN].map(formatPercent)).toEqual(['37%', '0%', '100%', '100%', '0%', '0%'])
     expect([7.78, 0.06, 0, 25.4, null].map(watts => formatWatts(watts, t))).toEqual(['7.8 W', '0.1 W', '0 W', '25 W', '—'])
     expect([49.6, null].map(celsius => formatCelsius(celsius, t))).toEqual(['50 °C', '—'])
     expect([SNAPSHOT.uptime, 3 * 3600 + 7 * 60, 59, -1].map(seconds => formatDuration(seconds, t)))

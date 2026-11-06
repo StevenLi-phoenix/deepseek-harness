@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { GRAPH_BUILT } from '../src/client/flow-graph.ts'
+import { buildGraph } from '../src/client/flow-model.ts'
 import { liveGraph, routeSignature } from '../src/client/flow-live.ts'
 import { factOf } from '../src/client/flow-view.ts'
 import type { FlowActivityView, FlowRoute } from '../src/views.ts'
@@ -64,6 +65,38 @@ describe('liveGraph', () => {
     const node = graph.node('githubSessions')
     if (node === undefined) throw new Error('missing box')
     expect(factOf(node, { cards: new Map(), activity, span: '24h', now: 0, t: (key: string) => key }).text).toBe('flow.fact.removed')
+  })
+})
+
+describe('liveGraph corners', () => {
+  it('draws a route that sends its answer straight to the owner as a core box', () => {
+    const graph = liveGraph(GRAPH_BUILT, [route('plain', { origin: 'agent', sources: ['host'], result: 'direct' })])
+    expect(graph.node('route:plain')?.role).toBe('core')
+    expect(graph.node('route:new')).toBeUndefined()
+  })
+
+  it('takes the arrows a touched route sends out of the drawing, kind send as well as event', () => {
+    const graph = liveGraph(GRAPH_BUILT, [route('autocut', { sources: ['autocut'], changedAt: 1, result: 'quiet' })])
+    expect(GRAPH_BUILT.edges.some(edge => edge.from === 'autocut' && edge.kind === 'send')).toBe(true)
+    expect(graph.edges.some(edge => edge.from === 'autocut' && edge.kind === 'send')).toBe(false)
+    expect(graph.edges.some(edge => edge.from === 'autocut' && edge.to === 'notifySession')).toBe(false)
+  })
+
+  it('leaves out an arrow to a route the service does not list', () => {
+    const graph = liveGraph(GRAPH_BUILT, [route('first', { origin: 'agent', sources: ['host'], result: 'event', downstream: ['ghost'] })])
+    expect(graph.node('route:first')).toBeDefined()
+    expect(graph.node('route:ghost')).toBeUndefined()
+    expect(graph.edges.filter(edge => edge.from === 'route:first')).toEqual([])
+  })
+
+  it('skips an arrow to an exit the drawing does not have', () => {
+    const base = buildGraph(
+      [{ id: 'src', role: 'source', cell: [0, 0], tracks: { sources: ['host'] } }],
+      [],
+    )
+    const graph = liveGraph(base, [route('mine', { origin: 'agent', sources: ['host'], result: 'main' })])
+    expect(graph.node('route:mine')).toBeDefined()
+    expect(graph.edges.map(edge => [edge.from, edge.to])).toEqual([['src', 'route:mine']])
   })
 })
 

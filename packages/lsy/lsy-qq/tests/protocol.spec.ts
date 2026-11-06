@@ -109,4 +109,9 @@ describe('evolution rules', () => {
       expect(Number.isInteger(minor) && minor >= 0 && minor <= protocol.PROTOCOL.minor, feature).toBe(true)
     }
   })
+
+  it('writes the media and member routes with the identifier escaped as one path segment', () => {
+    expect(protocol.PATHS.media('a/b c')).toBe('/v1/media/a%2Fb%20c')
+    expect(protocol.PATHS.members('123 456')).toBe('/v1/groups/123%20456/members')
+  })
 })

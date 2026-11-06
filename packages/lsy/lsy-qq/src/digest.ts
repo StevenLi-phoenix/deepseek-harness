@@ -98,6 +98,7 @@ export function stampIn(at: number, timeZone: string): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
   }).formatToParts(new Date(at))
+  /* v8 ignore next -- the formatter yields every requested part. */
   const get = (type: string): string => parts.find(part => part.type === type)?.value ?? ''
   return `${get('month')}-${get('day')} ${get('hour')}:${get('minute')}`
 }
@@ -678,6 +679,7 @@ export class DigestRunner {
       }
       const dropped = await this.store.capDigests(groupId, this.config.keepPerGroup)
       if (dropped > 0) this.ctx.logger.info(`lsy-qq: dropped ${dropped} oldest digest(s) of group ${groupId} (digest.keepPerGroup ${this.config.keepPerGroup})`)
+      /* v8 ignore next -- every digested chunk carries the fields logged here. */
       this.ctx.logger.info(`lsy-qq: digested ${chunk.count} messages of group ${groupId} (${chunk.fromCursor}-${chunk.toCursor}) with ${result.model}: ${Array.from(text).length} chars in ${this.now() - started} ms${result.usage === undefined ? '' : `; usage ${result.usage}`}; via ${viaTool ? 'qq_digest_write' : 'the final answer'}; Session ${session.sessionId} (generation ${session.generation}); context ${result.contextTokens ?? 'unknown'} tokens; tool calls ${binding.calls} (${binding.refused} refused), notes +${binding.notesAdded}/-${binding.notesRemoved}; compacted ${result.compacted ?? 0}x; raw ${rawPath}`)
     }
     if (chunks.length > this.config.maxCallsPerRound) {
@@ -689,6 +691,7 @@ export class DigestRunner {
   /** `YYYY-MM` in the transcript's zone. */
   private monthOf(at: number): string {
     const parts = new Intl.DateTimeFormat('en-CA', { timeZone: this.config.timeZone, year: 'numeric', month: '2-digit' }).formatToParts(new Date(at))
+    /* v8 ignore next -- the formatter yields every requested part. */
     const get = (type: string): string => parts.find(part => part.type === type)?.value ?? ''
     return `${get('year')}-${get('month')}`
   }

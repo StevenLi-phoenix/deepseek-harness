@@ -1,4 +1,5 @@
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { DEFAULT_LIMITS, MonitorRegistry, noticeText, type MonitorNotice, type MonitorView } from '../src/monitor.ts'
 
@@ -128,6 +129,65 @@ describe('MonitorRegistry', () => {
   })
 })
 
+describe('MonitorRegistry processes', () => {
+  it('reports a command killed by a signal with the signal name', async () => {
+    const { registry, received, until } = setup()
+    start(registry, 'kill -9 $$')
+    await until(() => received.some(entry => entry.notice.kind === 'ended'))
+    expect(received.at(-1)?.notice).toEqual({ kind: 'ended', reason: 'killed by SIGKILL', stderr: [] })
+  })
+
+  it('kills a command that ignores SIGTERM once the grace period passes', async () => {
+    const { registry, ended, until } = setup({ killGraceMs: 100 })
+    const view = start(registry, 'trap "" TERM; echo ready; sleep 30')
+    await until(() => registry.list('s1')[0]?.lines === 1)
+    expect(registry.stop(view.id)).toBe(true)
+    await until(() => registry.list('s1')[0]?.status === 'ended')
+    expect(registry.list('s1')[0]?.ended).toBe('stopped by monitor_stop')
+    expect(ended).toEqual([{ id: view.id, reason: 'stopped by monitor_stop' }])
+  })
+
+  it('ends a monitor whose command cannot start, once, and tells the owner', async () => {
+    const { registry, received, ended, until } = setup()
+    const view = registry.start({ owner: 's1', command: 'true', description: 'test', cwd: join(tmpdir(), 'lsy-monitor-missing-dir') })
+    await until(() => received.some(entry => entry.notice.kind === 'ended'))
+    const reason = registry.list('s1')[0]?.ended
+    expect(reason).toMatch(/^could not start: .*ENOENT/u)
+    expect(ended).toEqual([{ id: view.id, reason }])
+    expect(received.filter(entry => entry.notice.kind === 'ended')).toHaveLength(1)
+  })
+
+  it('stops a command that has not started yet without signalling anything', async () => {
+    const { registry, ended, until } = setup()
+    const view = registry.start({ owner: 's1', command: 'true', description: 'test', cwd: join(tmpdir(), 'lsy-monitor-missing-dir') })
+    // The spawn failure arrives on a later tick; the child has no pid yet.
+    expect(registry.stop(view.id)).toBe(true)
+    expect(ended).toEqual([{ id: view.id, reason: 'stopped by monitor_stop' }])
+    await until(() => registry.list('s1')[0]?.status === 'ended')
+    expect(registry.list('s1')[0]?.ended).toMatch(/^could not start: /u)
+    expect(ended).toHaveLength(1)
+  })
+
+  it('splits a line that never ends once it passes four times the line limit', async () => {
+    const { registry, received, until } = setup({ maxLineChars: 5 })
+    start(registry, `printf '${'a'.repeat(40)}'; sleep 0.3; echo tail; sleep 30`)
+    await until(() => received.flatMap(entry => entry.notice.kind === 'lines' ? entry.notice.lines : []).length === 2)
+    const lines = received.flatMap(entry => entry.notice.kind === 'lines' ? entry.notice.lines : [])
+    expect(lines).toEqual(['aaaaa…', 'tail'])
+  })
+
+  it('works with the default limits, clock, and ended hook', async () => {
+    const received: MonitorNotice[] = []
+    const registry = new MonitorRegistry((_owner, _monitor, notice) => { received.push(notice); return true })
+    registries.push(registry)
+    const view = registry.start({ owner: 's1', command: 'echo hi', description: 'test', cwd: tmpdir() })
+    expect(view.deadline).toBeUndefined()
+    const deadline = Date.now() + 5000
+    while (!received.some(notice => notice.kind === 'ended') && Date.now() < deadline) await new Promise((resolve) => { setTimeout(resolve, 20) })
+    expect(received.at(-1)).toEqual({ kind: 'ended', reason: 'exited with code 0', stderr: [] })
+  })
+})
+
 describe('MonitorRegistry.restore', () => {
   it('runs a stored monitor under its id, start time, and deadline, timing out on the original schedule', async () => {
     const { registry, received, ended, until } = setup()
@@ -164,6 +224,20 @@ describe('MonitorRegistry.sweep', () => {
     expect(registry.list('gone')[0]?.ended).toBe('its session is gone')
     expect(registry.list('here')[0]?.status).toBe('running')
     expect(received).toEqual([])
+  })
+})
+
+describe('MonitorRegistry.sweep races', () => {
+  it('leaves a monitor that ended while its owner was being looked up', async () => {
+    const { registry, received, ended, until } = setup()
+    const view = start(registry, 'true', { owner: 'late' })
+    await registry.sweep(async () => {
+      await until(() => registry.list('late')[0]?.status === 'ended')
+      return false
+    })
+    expect(registry.list('late')).toEqual([expect.objectContaining({ id: view.id, status: 'ended', ended: 'exited with code 0' })])
+    expect(ended).toEqual([{ id: view.id, reason: 'exited with code 0' }])
+    expect(received.map(entry => entry.notice.kind)).toEqual(['ended'])
   })
 })
 

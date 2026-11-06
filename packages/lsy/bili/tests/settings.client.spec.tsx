@@ -4,9 +4,9 @@ import { act as reactAct, cleanup, fireEvent, render, screen, within } from '@te
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { BiliAction, BiliView, LoginView, ManagedAccount } from '../src/view.ts'
-import { BiliLoader, RouteError, createBiliStore, parseView, type BiliState } from '../src/client/bili.ts'
+import { BiliLoader, RouteError, createBiliStore, parseView, startPolling, type BiliState } from '../src/client/bili.ts'
 import { BiliAccountSection, type BiliAccountProps } from '../src/client/BiliAccount.tsx'
-import { agoText, countdown, qrPath } from '../src/client/format.ts'
+import { agoText, countdown, dateTime, qrPath, stampTime } from '../src/client/format.ts'
 import { de, en, es, fr, ja, pt, ru, zh } from '../src/client/locales.ts'
 
 const t = makeTranslate(zh) as BiliAccountProps['t']
@@ -414,6 +414,8 @@ describe('BiliLoader', () => {
 
   it('checks the answer shape, formats times and QR paths, and keeps every dictionary on the same keys', () => {
     expect(() => parseView({})).toThrow('unexpected Bilibili account answer')
+    expect(() => parseView(null)).toThrow('unexpected Bilibili account answer')
+    expect(() => parseView('account')).toThrow('unexpected Bilibili account answer')
     expect(() => parseView({ account: {}, ownerMid: 1, timeZone: 'UTC' })).toThrow('unexpected Bilibili account answer')
     expect(parseView(VIEW)).toBe(VIEW)
     expect(agoText(NOW - 30_000, NOW, t as never)).toBe('刚刚')
@@ -449,5 +451,272 @@ describe('All settings card', () => {
     cleanup()
     mount({ view: VIEW, checkedAt: NOW })
     expect(screen.queryByTestId('plugin-config')).toBeNull()
+  })
+})
+
+describe('account cards in unusual states', () => {
+  it('names an account by its id when bili-svc has no display name, and leaves out facts it does not know', () => {
+    mount({ view: { ...VIEW, accounts: [{ ...MAODENG, display: '', mid: 0, refreshedAt: null, importedAt: null }] }, checkedAt: NOW })
+    const account = card('maodeng')
+    expect(account.textContent).toContain(t('account.id', { id: 'maodeng' }))
+    expect(account.textContent).not.toContain('UID')
+    expect(account.textContent).not.toContain(t('account.refreshed', { ago: '' }).trim())
+    expect(account.querySelector('[aria-hidden="true"]')?.textContent).toBe('m')
+  })
+
+  it('renders nothing for the cards when bili-svc lists no account', () => {
+    mount({ view: { ...VIEW, accounts: [] }, checkedAt: NOW })
+    expect(screen.queryByRole('region', { name: '魔女的猫猫' })).toBeNull()
+  })
+
+  it('shows what the clicked sign-out and sign-in controls are doing', () => {
+    const { view } = mount({ view: VIEW, checkedAt: NOW })
+    fireEvent.click(within(card('魔女的猫猫')).getByRole('button', { name: '退出登录' }))
+    view.unmount()
+    // Busy while the confirmed sign-out runs: the same card in its confirming state.
+    const mao = { ...VIEW }
+    const { store } = mount({ view: mao, checkedAt: NOW })
+    fireEvent.click(within(card('魔女的猫猫')).getByRole('button', { name: '退出登录' }))
+    reactAct(() => { store.update((draft) => { draft.busy = { action: 'logout', account: 'maomao' } }) })
+    const confirm = within(card('魔女的猫猫')).getByRole('button', { name: t('busy.logout') })
+    expect(confirm.getAttribute('aria-busy')).toBe('true')
+    expect((confirm as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('words a failed sign-in without a reason, and shows the retry button busy while the new code is fetched', () => {
+    const { store } = mount({ view: { ...VIEW, logins: [login({ state: 'failed', qr: null, message: null })] }, checkedAt: NOW })
+    const panel = screen.getByRole('group', { name: /扫码登录/ })
+    expect(within(panel).getByRole('status').textContent).toBe(t('login.failed'))
+    reactAct(() => { store.update((draft) => { draft.busy = { action: 'login.start', account: 'maomao' } }) })
+    expect(within(panel).getByRole('button', { name: t('busy.login') })).toBeTruthy()
+  })
+})
+
+describe('the gate card in unusual states', () => {
+  const GATE = VIEW.gate!
+
+  it('labels a mode it does not know by its name, and an empty one with a dash', () => {
+    const { view } = mount({ view: { ...VIEW, gate: { ...GATE, mode: 'maintenance', readonly: true } }, checkedAt: NOW })
+    expect(card('操作闸门').textContent).toContain(t('gate.mode', { mode: 'maintenance' }))
+    view.unmount()
+    mount({ view: { ...VIEW, gate: { ...GATE, mode: '', readonly: true } }, checkedAt: NOW })
+    expect(card('操作闸门').textContent).toContain(t('gate.mode', { mode: '—' }))
+  })
+
+  it('shows a brake without a reason, detail, or time as just the brake, and no counters bili-svc did not send', () => {
+    mount({ view: { ...VIEW, gate: { ...GATE, mode: 'readonly', readonly: true, brake: { reason: '', detail: '', ts: null }, used: null, caps: null } }, checkedAt: NOW })
+    const gate = card('操作闸门')
+    expect(within(gate).getByRole('status').textContent).toBe(t('gate.brake', { reason: '—' }))
+    expect(gate.textContent).not.toContain('今日已用')
+  })
+
+  it('shows the time of a brake with the full time as its title', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOW)
+    mount({ view: { ...VIEW, gate: { ...GATE, mode: 'readonly', readonly: true, brake: { reason: 'risk', detail: '', ts: NOW - 3_600_000 } } }, checkedAt: NOW })
+    const at = within(card('操作闸门')).getByTitle(/^\d\d-\d\d \d\d:\d\d$/)
+    expect(at.textContent).toContain(t('ago.hours', { n: 1 }))
+  })
+
+  it('marks the brake release, the stop, and the confirmed switch busy while they run', () => {
+    const braked = { ...VIEW, gate: { ...GATE, mode: 'readonly', readonly: true, brake: { reason: 'risk', detail: '', ts: null } } }
+    const first = mount({ view: braked, checkedAt: NOW, busy: { action: 'brake.release', account: null } })
+    expect(within(card('操作闸门')).getByRole('button', { name: t('busy.brake') }).getAttribute('aria-busy')).toBe('true')
+    first.view.unmount()
+    const stop = mount({ view: VIEW, checkedAt: NOW, busy: { action: 'gate.mode', account: null } })
+    expect(within(card('操作闸门')).getByRole('button', { name: t('busy.mode') }).getAttribute('aria-busy')).toBe('true')
+    stop.view.unmount()
+    const readonly = { ...VIEW, gate: { ...GATE, mode: 'readonly', readonly: true } }
+    const confirming = mount({ view: readonly, checkedAt: NOW })
+    fireEvent.click(within(card('操作闸门')).getByRole('button', { name: '切到自动' }))
+    reactAct(() => { confirming.store.update((draft) => { draft.busy = { action: 'gate.mode', account: null } }) })
+    expect(within(card('操作闸门')).getByRole('button', { name: t('busy.mode') }).getAttribute('aria-busy')).toBe('true')
+  })
+
+  it('shows a refusal that has no words of bili-svc\'s as the fixed line alone', () => {
+    mount({ view: { ...VIEW, gate: { ...GATE, mode: 'readonly', readonly: true } }, checkedAt: NOW, error: null, errorCode: 'mode_refused' })
+    expect(within(card('操作闸门')).getByRole('alert').textContent).toBe(t('error.mode_refused'))
+  })
+})
+
+describe('the ledger card in unusual states', () => {
+  const row = (patch: Partial<NonNullable<BiliView['ledger']>['rows'][number]> = {}) => ({
+    ts: NOW - 60_000, kind: 'dm', target: '1', state: 'sent', reason: '', caller: '', draft: '', verdict: '', ...patch,
+  })
+
+  it('shows a row without a time as a dash, a row without details as its summary alone, and an empty ledger as empty', () => {
+    const { view } = mount({ view: { ...VIEW, ledger: { rows: [row({ ts: null })], summary: {} } }, checkedAt: NOW })
+    const ledger = screen.getByText('最近动作').closest('details')!
+    expect(ledger.querySelector('summary + details summary, details details summary')?.textContent).toContain('—')
+    expect(ledger.querySelector('dl')).toBeNull()
+    expect(ledger.querySelector('.chips')).toBeNull()
+    view.unmount()
+    mount({ view: { ...VIEW, ledger: { rows: [], summary: {} } }, checkedAt: NOW })
+    expect(screen.getByText(t('ledger.empty'))).toBeTruthy()
+  })
+
+  it('marks the load-more button busy while it loads', () => {
+    mount({ view: VIEW, checkedAt: NOW, ledgerLimit: 2, busy: { action: 'ledger', account: null } })
+    const more = screen.getByRole('button', { name: t('busy.more') })
+    expect(more.getAttribute('aria-busy')).toBe('true')
+  })
+})
+
+describe('the owner card and the status line in unusual states', () => {
+  it('shows when the main account was saved, and follows a UID saved elsewhere unless the draft was edited', () => {
+    const { store } = mount({ view: { ...VIEW, ownerMid: 100, ownerUpdatedAt: NOW - 60_000 }, checkedAt: NOW })
+    const owner = card('主号')
+    expect(owner.textContent).toContain(t('owner.saved', { time: '' }).replace(/\s*$/, '').slice(0, 2))
+    const input = within(owner).getByRole('textbox') as HTMLInputElement
+    expect(input.value).toBe('100')
+    reactAct(() => { store.update((draft) => { draft.view = { ...VIEW, ownerMid: 200, ownerUpdatedAt: NOW } } ) })
+    expect(within(card('主号')).getByRole<HTMLInputElement>('textbox').value).toBe('200')
+    fireEvent.change(within(card('主号')).getByRole('textbox'), { target: { value: '12' } })
+    reactAct(() => { store.update((draft) => { draft.view = { ...VIEW, ownerMid: 300, ownerUpdatedAt: NOW } } ) })
+    expect(within(card('主号')).getByRole<HTMLInputElement>('textbox').value).toBe('12')
+  })
+
+  it('says it is loading before the first answer, and shows the age of a stale view', () => {
+    const loading = mount({ view: null, checkedAt: null })
+    expect(screen.getByRole('status').textContent).toContain(t('status.loading'))
+    loading.view.unmount()
+    mount({ view: VIEW, stale: true, checkedAt: null })
+    expect(screen.getAllByRole('status')[0]!.textContent).toMatch(/\d\d:\d\d:\d\d/)
+  })
+
+  it('shows a live status with the time of the last answer, or the time now when none was recorded', () => {
+    const answered = mount({ view: VIEW, checkedAt: NOW })
+    expect(screen.getAllByRole('status')[0]!.textContent).toContain(t('status.live', { time: '' }).replace(/\s*$/, '').slice(0, 2))
+    answered.view.unmount()
+    mount({ view: VIEW, checkedAt: null })
+    expect(screen.getAllByRole('status')[0]!.textContent).toMatch(/\d\d:\d\d:\d\d/)
+  })
+
+  it.each([
+    [{ action: 'gate.mode', account: null, outcome: 'auto', days: null }, 'result.mode', { mode: '自动' }],
+    [{ action: 'gate.mode', account: null, outcome: 'readonly', days: null }, 'result.mode', { mode: '只读' }],
+    [{ action: 'gate.mode', account: null, outcome: 'weird', days: null }, 'result.mode', { mode: 'weird' }],
+    [{ action: 'brake.release', account: null, outcome: 'released', days: null }, 'result.released', {}],
+    [{ action: 'brake.release', account: null, outcome: 'none', days: null }, 'result.noBrake', {}],
+    [{ action: 'session.refresh', account: 'maomao', outcome: 'unchanged', days: null }, 'result.unchanged', { account: 'maomao' }],
+    [{ action: 'session.check', account: 'maomao', outcome: 'valid', days: null }, 'result.checkValid', { account: 'maomao' }],
+    [{ action: 'logout', account: 'maomao', outcome: 'logged-out', days: null }, 'result.loggedOut', { account: 'maomao' }],
+    [{ action: 'login.poll', account: 'maomao', outcome: 'done', days: null }, 'result.loginDone', { account: 'maomao' }],
+  ] as const)('says what %j did', (result, key, params) => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOW)
+    mount({ view: VIEW, checkedAt: NOW, result: { value: result, at: NOW - 1000 } })
+    expect(screen.getAllByRole('status').some(node => node.textContent === t(key, params))).toBe(true)
+  })
+
+  it('says nothing for results that need no words, and for a result without an account', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOW)
+    const polled = mount({ view: VIEW, checkedAt: NOW, result: { value: { action: 'login.poll', account: 'maomao', outcome: 'waiting', days: null }, at: NOW } })
+    expect(polled.view.container.querySelector('[class*="done"]')).toBeNull()
+    polled.view.unmount()
+    const ledger = mount({ view: VIEW, checkedAt: NOW, result: { value: { action: 'ledger', account: null, outcome: 'ok', days: null }, at: NOW } })
+    expect(ledger.view.container.querySelector('[class*="done"]')).toBeNull()
+    ledger.view.unmount()
+    mount({ view: VIEW, checkedAt: NOW, result: { value: { action: 'logout', account: null, outcome: 'logged-out', days: null }, at: NOW } })
+    expect(screen.getAllByRole('status').some(node => node.textContent === t('result.loggedOut', { account: '' }))).toBe(true)
+  })
+
+  it.each([
+    ['not_owner', 'error.not_owner'],
+    ['no_token', 'error.no_token'],
+    ['session_unavailable', 'error.no_session'],
+  ] as const)('explains the failure code %s', (code, key) => {
+    mount({ view: VIEW, checkedAt: NOW, error: 'x', errorCode: code })
+    expect(screen.getByRole('alert').textContent).toBe(t(key))
+  })
+})
+
+describe('BiliLoader in unusual states', () => {
+  it('keeps a thrown value that is not an Error as the failure text, and tells an account action apart in the busy state', async () => {
+    const store = createBiliStore()
+    store.update((draft) => { draft.view = VIEW })
+    // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the non-Error arm is the case under test.
+    const post = vi.fn((_action: BiliAction) => Promise.reject('offline'))
+    const loader = new BiliLoader(store, () => Promise.resolve(VIEW), post, () => 1)
+    const pending = loader.act({ action: 'session.check', account: 'maomao' })
+    expect(store.getSnapshot().busy).toEqual({ action: 'session.check', account: 'maomao' })
+    await pending
+    expect(store.getSnapshot()).toMatchObject({ error: 'offline', errorCode: null, busy: null })
+  })
+
+  it('keeps the view as it was when an action fails before any view was read', async () => {
+    const store = createBiliStore()
+    const loader = new BiliLoader(store, () => Promise.resolve(VIEW), () => Promise.reject(new RouteError('no way', 'x')), () => 1)
+    await loader.act({ action: 'gate.mode', mode: 'readonly' })
+    expect(store.getSnapshot()).toMatchObject({ view: null, error: 'no way', errorCode: 'x' })
+  })
+
+  it('does not warn twice for a view that stays stale', async () => {
+    const store = createBiliStore()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const loader = new BiliLoader(store, () => Promise.reject(new Error('offline')), () => Promise.resolve(VIEW), () => 1)
+    await loader.refresh()
+    await loader.refresh()
+    expect(warn).toHaveBeenCalledTimes(1)
+    vi.restoreAllMocks()
+  })
+
+  it('keeps a background result that is not a finished sign-in out of the result line', async () => {
+    const store = createBiliStore()
+    const loader = new BiliLoader(store, () => Promise.resolve(VIEW), () => Promise.resolve({ ...VIEW, result: null }), () => 1)
+    await loader.quiet({ action: 'login.poll', account: 'maomao' })
+    expect(store.getSnapshot().result).toBeNull()
+    expect(store.getSnapshot().view).toEqual({ ...VIEW, result: null })
+  })
+})
+
+describe('the polling of a visible page', () => {
+  it('refreshes at once and on each period, pauses while the page is hidden, and resumes when it shows again', () => {
+    vi.useFakeTimers()
+    const listeners = new Set<() => void>()
+    const page = {
+      visibilityState: 'visible' as DocumentVisibilityState,
+      addEventListener: (_type: 'visibilitychange', listener: () => void) => { listeners.add(listener) },
+      removeEventListener: (_type: 'visibilitychange', listener: () => void) => { listeners.delete(listener) },
+    }
+    const refresh = vi.fn()
+    const stop = startPolling(refresh, 1000, page)
+    expect(refresh).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(2000)
+    expect(refresh).toHaveBeenCalledTimes(3)
+    // Showing an already visible page changes nothing; hiding it twice stops once.
+    for (const listener of listeners) listener()
+    expect(refresh).toHaveBeenCalledTimes(3)
+    page.visibilityState = 'hidden'
+    for (const listener of listeners) listener()
+    for (const listener of listeners) listener()
+    vi.advanceTimersByTime(5000)
+    expect(refresh).toHaveBeenCalledTimes(3)
+    page.visibilityState = 'visible'
+    for (const listener of listeners) listener()
+    expect(refresh).toHaveBeenCalledTimes(4)
+    stop()
+    expect(listeners.size).toBe(0)
+    vi.advanceTimersByTime(5000)
+    expect(refresh).toHaveBeenCalledTimes(4)
+  })
+
+  it('polls without a page to watch', () => {
+    vi.useFakeTimers()
+    const refresh = vi.fn()
+    const stop = startPolling(refresh, 1000, null)
+    vi.advanceTimersByTime(1000)
+    expect(refresh).toHaveBeenCalledTimes(2)
+    stop()
+  })
+})
+
+describe('time helpers', () => {
+  it('writes minutes ago, and the time of a date in the runtime\'s zone when none is given', () => {
+    expect(agoText(NOW - 5 * 60_000, NOW, t as never)).toBe('5 分钟前')
+    expect(dateTime(NOW, 'America/New_York')).toBe('10-31 14:00')
+    expect(dateTime(NOW)).toMatch(/^\d\d-\d\d \d\d:\d\d$/)
+    expect(stampTime(NOW)).toMatch(/^\d\d:\d\d:\d\d$/)
   })
 })

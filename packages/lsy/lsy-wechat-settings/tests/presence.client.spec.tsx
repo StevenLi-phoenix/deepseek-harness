@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act as flushReact, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { PresenceAnswer, PresenceView } from '../src/presence-view.ts'
-import { agoText } from '../src/client/presence/format.ts'
+import { agoText, dateTime, stampTime } from '../src/client/presence/format.ts'
 import { de, en, es, fr, ja, pt, ru, zh } from '../src/client/presence/locales.ts'
 import { POLL_INTERVAL_MS, PresenceLoader, createPresenceStore, parseAnswer, startPolling, type PresenceState } from '../src/client/presence/presence.ts'
 import { PresenceSection, type PresenceProps } from '../src/client/presence/PresenceSection.tsx'
@@ -84,6 +84,33 @@ describe('PresenceSection state', () => {
   })
 })
 
+describe('PresenceSection status line', () => {
+  it('says it is reading until the first answer, and draws no card', () => {
+    mount({ view: null })
+    expect(screen.getByText('正在读取…')).toBeTruthy()
+    expect(screen.queryByRole('region', { name: '现在' })).toBeNull()
+  })
+
+  it('dates the line from the last check, or from now before any check settled', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOW)
+    const checked = NOW - 3_600_000
+    mount({ view: VIEW, stale: true, checkedAt: checked })
+    expect(screen.getByText(`未能刷新 · 显示 ${stampTime(checked)} 的数据`)).toBeTruthy()
+    cleanup()
+    mount({ view: VIEW, stale: true, checkedAt: null })
+    expect(screen.getByText(`未能刷新 · 显示 ${stampTime(NOW)} 的数据`)).toBeTruthy()
+    cleanup()
+    mount({ view: VIEW, checkedAt: null })
+    expect(screen.getByText(`${stampTime(NOW)} 更新`)).toBeTruthy()
+  })
+
+  it('shows a failed button', () => {
+    mount({ view: VIEW, checkedAt: NOW, error: 'the window must not start and end at the same time' })
+    expect(screen.getByRole('alert').textContent).toBe('操作没有完成：the window must not start and end at the same time')
+  })
+})
+
 describe('PresenceSection buttons', () => {
   it('sends the buttons, and quiet-until with the chosen time', () => {
     const { actions } = mount({ view: AWAKE, checkedAt: NOW })
@@ -148,6 +175,19 @@ describe('PresenceSection window', () => {
     const { store } = mount({ view: AWAKE, checkedAt: NOW })
     store.update((draft) => { draft.view = { ...AWAKE, window: { enabled: true, start: '02:00', end: '09:00' } } })
     return vi.waitFor(() => { expect(screen.getByLabelText<HTMLInputElement>('开始').value).toBe('02:00') })
+  })
+})
+
+describe('PresenceSection window draft', () => {
+  it('keeps an edited draft when the stored window moves underneath it', () => {
+    const { store, actions } = mount({ view: AWAKE, checkedAt: NOW })
+    const card = screen.getByRole('region', { name: '每日时段' })
+    fireEvent.change(within(card).getByLabelText('开始'), { target: { value: '23:00' } })
+    flushReact(() => { store.update((draft) => { draft.view = { ...AWAKE, window: { enabled: true, start: '02:00', end: '09:00' } } }) })
+    expect(within(card).getByLabelText<HTMLInputElement>('开始').value).toBe('23:00')
+    expect(within(card).getByLabelText<HTMLInputElement>('结束').value).toBe('10:30')
+    fireEvent.click(within(card).getByRole('button', { name: '保存' }))
+    expect(actions).toEqual([{ action: 'window.set', enabled: true, start: '23:00', end: '10:30' }])
   })
 })
 
@@ -220,16 +260,64 @@ describe('PresenceLoader', () => {
     await loader.act({ action: 'window.set', enabled: true, start: '04:00', end: '04:00' })
     expect(store.getSnapshot()).toMatchObject({ busy: null, error: 'the window must not start and end at the same time' })
   })
+
+  it('shows a rejection that is not an Error as its text', async () => {
+    const store = createPresenceStore()
+    const loader = new PresenceLoader(store, () => Promise.resolve(answer(VIEW)), async () => { throw 'gateway said no' })
+    await loader.act({ action: 'sleep.now' })
+    expect(store.getSnapshot()).toMatchObject({ busy: null, error: 'gateway said no' })
+  })
+
+  it('warns once when the view goes stale, and again only after it recovered', async () => {
+    const store = createPresenceStore()
+    const read = vi.fn<() => Promise<PresenceAnswer>>(() => Promise.resolve(answer(VIEW)))
+    const loader = new PresenceLoader(store, read, () => Promise.resolve(answer(VIEW)), () => 42)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    read.mockRejectedValueOnce(new Error('offline')).mockRejectedValueOnce(new Error('offline'))
+    await loader.refresh()
+    await loader.refresh()
+    expect(store.getSnapshot().stale).toBe(true)
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith('[lsy-presence] status read failed')
+    await loader.refresh()
+    expect(store.getSnapshot().stale).toBe(false)
+    read.mockRejectedValueOnce(new Error('offline'))
+    await loader.refresh()
+    expect(warn).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('helpers', () => {
   it('checks the answer fields', () => {
     expect(() => parseAnswer({})).toThrow('unexpected quiet-hours answer')
+    expect(() => parseAnswer(null)).toThrow('unexpected quiet-hours answer')
+    expect(() => parseAnswer('not an object')).toThrow('unexpected quiet-hours answer')
     expect(() => parseAnswer({ view: { ...VIEW, window: null }, flushed: null })).toThrow('unexpected quiet-hours answer')
     const ok = answer(VIEW)
     expect(parseAnswer(ok)).toBe(ok)
     expect(agoText(NOW - 30_000, NOW, t as never)).toBe('30 秒前')
     expect(agoText(NOW - 3 * 86_400_000, NOW, t as never)).toBe('3 天前')
+  })
+
+  it('says how long ago in the largest whole unit', () => {
+    expect(agoText(NOW - 2000, NOW, t as never)).toBe('刚刚')
+    expect(agoText(NOW + 60_000, NOW, t as never)).toBe('刚刚')
+    expect(agoText(NOW - 5 * 60_000, NOW, t as never)).toBe('5 分钟前')
+    expect(agoText(NOW - 5 * 3_600_000, NOW, t as never)).toBe('5 小时前')
+    expect(agoText(NOW - 47 * 3_600_000, NOW, t as never)).toBe('47 小时前')
+    expect(agoText(NOW - 48 * 3_600_000, NOW, t as never)).toBe('2 天前')
+  })
+
+  it('dates an instant in the zone it is given, and in the local zone without one', () => {
+    expect(dateTime(NOW, 'America/New_York')).toBe('11-03 05:00')
+    const local = new Date(NOW)
+    const pad = (value: number): string => String(value).padStart(2, '0')
+    expect(dateTime(NOW)).toBe(`${pad(local.getMonth() + 1)}-${pad(local.getDate())} ${pad(local.getHours())}:${pad(local.getMinutes())}`)
+  })
+
+  it('leaves a part blank when the formatter does not give it', () => {
+    vi.spyOn(Intl.DateTimeFormat.prototype, 'formatToParts').mockReturnValue([{ type: 'month', value: '11' }])
+    expect(dateTime(NOW, 'America/New_York')).toBe('11- :')
   })
 
   it('keeps every dictionary on the same keys and placeholders', () => {
@@ -263,5 +351,29 @@ describe('helpers', () => {
     expect(refresh).toHaveBeenCalledTimes(3)
     stop()
     expect(listeners.size).toBe(0)
+  })
+
+  it('stays paused on a page that starts hidden, and keeps one timer through repeated events', () => {
+    vi.useFakeTimers()
+    const listeners = new Set<() => void>()
+    const page = {
+      visibilityState: 'hidden' as DocumentVisibilityState,
+      addEventListener: (_type: 'visibilitychange', listener: () => void) => { listeners.add(listener) },
+      removeEventListener: (_type: 'visibilitychange', listener: () => void) => { listeners.delete(listener) },
+    }
+    const refresh = vi.fn()
+    const stop = startPolling(refresh, POLL_INTERVAL_MS, page)
+    for (const listener of listeners) listener()
+    vi.advanceTimersByTime(POLL_INTERVAL_MS)
+    expect(refresh).not.toHaveBeenCalled()
+    page.visibilityState = 'visible'
+    for (const listener of listeners) listener()
+    for (const listener of listeners) listener()
+    expect(refresh).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(POLL_INTERVAL_MS)
+    expect(refresh).toHaveBeenCalledTimes(2)
+    stop()
+    vi.advanceTimersByTime(POLL_INTERVAL_MS)
+    expect(refresh).toHaveBeenCalledTimes(2)
   })
 })

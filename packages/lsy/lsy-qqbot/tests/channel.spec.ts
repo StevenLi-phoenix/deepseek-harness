@@ -9,7 +9,8 @@ import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
-import QqBotChannel, { Config } from '../src/index.ts'
+import QqBotChannel, { Config, peerKeyOf } from '../src/index.ts'
+import type { SdkTransportOptions } from '../src/transport.ts'
 import { FakeQq, groupMessage, privateMessage } from './fake-qq.ts'
 
 const APP_ID = '1020304050'
@@ -21,6 +22,19 @@ const MEMBER = '9F8E7D6C5B4A39281706F5E4D3C2B1A0'
 
 interface LogLine { type: string; text: string }
 
+/** Lets a test stand in for the official SDK transport the channel builds when no double is mounted. */
+const sdkTransport = vi.hoisted(() => ({ factory: undefined as undefined | ((options: unknown) => unknown) }))
+
+vi.mock('../src/transport.ts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../src/transport.ts')>()
+  return {
+    ...original,
+    createSdkTransport: (options: SdkTransportOptions) => (
+      sdkTransport.factory === undefined ? original.createSdkTransport(options) : sdkTransport.factory(options)
+    ),
+  }
+})
+
 /** Session Controller double: Sessions are live once created unless told otherwise. */
 function fakeSessions() {
   const state = {
@@ -28,7 +42,9 @@ function fakeSessions() {
     prompts: [] as SessionPromptRequest[],
     live: new Set<string>(),
     errors: new Map<string, string>(),
-    promptError: undefined as Error | undefined,
+    promptError: undefined as Error | string | undefined,
+    /** Prompts wait for the caller's signal and fail with its reason. */
+    hangPrompts: false,
   }
   const controller = {
     create: async (request: SessionCreateRequest) => {
@@ -43,8 +59,11 @@ function fakeSessions() {
         ? { agent: { session: { id: sessionId } } }
         : { error: Object.assign(new Error(`${code}: ${sessionId}`), { code }) }
     },
-    prompt: async (request: SessionPromptRequest) => {
+    prompt: async (request: SessionPromptRequest, signal?: AbortSignal) => {
       state.prompts.push(request)
+      if (state.hangPrompts && signal !== undefined) {
+        await new Promise<never>((_resolve, reject) => { signal.addEventListener('abort', () => { reject(signal.reason instanceof Error ? signal.reason : new Error('aborted')) }, { once: true }) })
+      }
       if (state.promptError !== undefined) throw state.promptError
       return { accepted: true }
     },
@@ -56,10 +75,15 @@ let dir: string
 const contexts: Context[] = []
 const allLogs: LogLine[] = []
 
-async function mountStorage(ctx: Context, pool: MemoryMediaPool): Promise<DomainFacility> {
+async function mountStorage(ctx: Context, pool: MemoryMediaPool, gate?: Promise<void>): Promise<DomainFacility> {
   await ctx.plugin(Timer)
   await ctx.plugin(Storage)
   const backend = new MemoryStorageBackend(pool)
+  if (gate !== undefined) {
+    // Opening the channel's domain waits for the test to let storage through.
+    const open = backend.kv.open.bind(backend.kv)
+    vi.spyOn(backend.kv, 'open').mockImplementation(async (descriptor) => { await gate; return open(descriptor) })
+  }
   ctx.effect(() => ctx.storage.backend.register('fixture', backend))
   ctx.effect(() => async () => { await backend.close() })
   const facility = new DomainFacility(ctx, { backend: 'fixture' })
@@ -81,6 +105,10 @@ async function harness(options: {
   credentials?: Record<string, string>
   notifier?: { send: ReturnType<typeof vi.fn> } | false
   relay?: boolean
+  /** Do not mount the transport double: the channel builds the SDK transport itself. */
+  sdk?: boolean
+  /** Storage opens only after this settles. */
+  storageGate?: Promise<void>
 } = {}) {
   const qq = options.qq ?? new FakeQq()
   const ctx = new Context()
@@ -95,7 +123,7 @@ async function harness(options: {
     },
   })
   const pool = options.pool ?? new MemoryMediaPool()
-  await mountStorage(ctx, pool)
+  await mountStorage(ctx, pool, options.storageGate)
   const sessions = options.sessions ?? fakeSessions()
   ctx.provide('sessionController', sessions.controller as never)
   const presets = {
@@ -110,7 +138,7 @@ async function harness(options: {
   ctx.provide('sessionTitle', titles as never)
   const credentials = options.credentials ?? { LSY_QQBOT_APP_ID: APP_ID, LSY_QQBOT_APP_SECRET: APP_SECRET }
   ctx.provide('credentials', { resolve: (ref: string) => Promise.resolve(credentials[ref] === undefined ? undefined : { value: credentials[ref] }) } as never)
-  ctx.provide('lsyQqBotBotTransport', qq as never)
+  if (options.sdk !== true) ctx.provide('lsyQqBotBotTransport', qq as never)
   const notifier = options.notifier === false ? undefined : options.notifier ?? { send: vi.fn(async () => {}) }
   if (notifier !== undefined) ctx.provide('lsyNotifier', notifier as never)
   const config = Config({
@@ -490,5 +518,284 @@ describe('QqBotChannel connection', () => {
     const ctx = new Context()
     contexts.push(ctx)
     expect(() => new QqBotChannel(ctx, Config({ allow: {}, session: { workspacePath: 'relative/dir' } } as never))).toThrow('absolute path')
+  })
+})
+
+describe('QqBotChannel configuration', () => {
+  it('refuses a blank title prefix and a time zone that does not exist', () => {
+    const make = (session: Record<string, unknown>) => () => {
+      const scope = new Context()
+      contexts.push(scope)
+      return new QqBotChannel(scope, Config({ allow: {}, session: { workspacePath: join(dir, 'qq'), ...session } } as never))
+    }
+    expect(make({ titlePrefix: '  ' })).toThrow('session.titlePrefix must be non-empty')
+    expect(make({ timeZone: 'Mars/Olympus' })).toThrow('session.timeZone "Mars/Olympus" is not a valid IANA time zone')
+  })
+
+  it('keys a group message without a group id as the empty group', () => {
+    expect(peerKeyOf({ scope: 'group', senderId: USER })).toBe('group:')
+    expect(peerKeyOf({ scope: 'c2c', senderId: USER })).toBe(`c2c:${USER}`)
+  })
+})
+
+describe('QqBotChannel edge cases', () => {
+  it('drops a group message that carries no group id, naming the empty group', async () => {
+    const h = await harness()
+    h.qq.deliver(groupMessage(GROUP, MEMBER, 'hi', { groupId: undefined }))
+    await h.settle()
+    expect(h.logs.some(line => line.text === `lsy-qqbot: dropped a group message from member ${MEMBER} of group , not on allow.groups`)).toBe(true)
+    expect(h.sessions.created).toEqual([])
+  })
+
+  it('tells the peer why when the prompt fails with something that is not an Error', async () => {
+    const h = await harness()
+    h.sessions.promptError = 'plain failure'
+    h.qq.deliver(privateMessage(USER, 'hi'))
+    await h.settle()
+    expect(h.qq.sent.at(-1)?.[1]).toBe('⚠️ 消息没能交给 agent：plain failure')
+  })
+
+  it('does nothing on /new before the peer has a chat, but still confirms', async () => {
+    const h = await harness()
+    h.qq.deliver(privateMessage(USER, '/new'))
+    await h.settle()
+    expect(h.qq.sent.at(-1)?.[1]).toBe('好，换个新话题。')
+    expect(h.sessions.created).toEqual([])
+    expect(h.logs.some(line => line.text.includes('started a new chat'))).toBe(false)
+  })
+
+  it('keeps the answer of a replaced Session in that Session, and of one it never created', async () => {
+    const h = await harness()
+    h.qq.deliver(privateMessage(USER, 'one'))
+    await h.settle()
+    h.sessions.live.delete('qq-1')
+    h.qq.deliver(privateMessage(USER, 'two'))
+    await h.settle()
+    await h.finishTurn('qq-1', 'from the old chat')
+    h.ctx.ownerRelay.claim('stranger', 'qqbot')
+    await h.finishTurn('stranger', 'from nowhere')
+    expect(h.qq.sent.map(([, text]) => text)).not.toContain('from the old chat')
+    expect(h.qq.sent.map(([, text]) => text)).not.toContain('from nowhere')
+    for (const id of ['qq-1', 'stranger']) {
+      expect(h.logs.some(line => line.text === `lsy-qqbot: Session ${id} is not a peer's current chat; its answer stays in the Session`)).toBe(true)
+    }
+  })
+
+  it('says without a relay that answers cannot reach QQ, and forwards anyway', async () => {
+    const h = await harness({ relay: false })
+    h.qq.deliver(privateMessage(USER, 'hi'))
+    await h.settle()
+    expect(h.sessions.prompts).toHaveLength(1)
+    expect(h.logs.some(line => line.type === 'warn' && line.text === 'lsy-qqbot: no ownerRelay is mounted, so answers will not reach QQ')).toBe(true)
+  })
+
+  it('tells the peer when the new chat Session cannot be resolved, and stores nothing', async () => {
+    const h = await harness()
+    h.sessions.errors.set('qq-1', 'session/not-found')
+    h.qq.deliver(privateMessage(USER, 'hi'))
+    await h.settle()
+    expect(h.qq.sent.at(-1)?.[1]).toBe('⚠️ 消息没能交给 agent：session/not-found: qq-1')
+    expect(h.channel.ownsSession('qq-1')).toBe(false)
+    expect(h.sessions.prompts).toEqual([])
+  })
+
+  it('forgets the oldest chat Sessions past 200 and releases them from the relay', async () => {
+    const users = Array.from({ length: 201 }, (_unused, index) => `USER-${index}`)
+    const h = await harness({ config: { allow: { users }, perPeerPerMinute: 5 } })
+    const release = vi.spyOn(h.ctx.ownerRelay, 'release')
+    for (const user of users) {
+      h.qq.deliver(privateMessage(user, 'hi'))
+      await vi.advanceTimersByTimeAsync(1)
+    }
+    await h.settle()
+    expect(h.sessions.created).toHaveLength(201)
+    expect(h.channel.ownsSession('qq-1')).toBe(false)
+    expect(h.channel.ownsSession('qq-2')).toBe(true)
+    expect(h.channel.ownsSession('qq-201')).toBe(true)
+    expect(release).toHaveBeenCalledWith('qq-1')
+    expect(release).toHaveBeenCalledTimes(1)
+  })
+
+  it('logs and survives a failure of background work', async () => {
+    const pool = new MemoryMediaPool()
+    const h = await harness({ pool })
+    pool.failNextWrites = 1
+    h.qq.deliver(privateMessage(USER, 'hi'))
+    await h.settle()
+    expect(h.logs.some(line => line.type === 'warn' && line.text === 'lsy-qqbot: background work failed: injected write failure')).toBe(true)
+    h.qq.deliver(privateMessage(USER, 'again'))
+    await h.settle()
+    expect(h.sessions.prompts).toHaveLength(1)
+  })
+
+  it('does not tell the peer about a forward that failed because the channel is stopping', async () => {
+    const sessions = fakeSessions()
+    sessions.state.hangPrompts = true
+    const h = await harness({ sessions })
+    h.qq.deliver(privateMessage(USER, 'hi'))
+    await h.settle()
+    expect(sessions.state.prompts).toHaveLength(1)
+    await h.ctx.fiber.dispose()
+    expect(h.qq.sent).toEqual([])
+    expect(h.logs.some(line => line.text.includes('forwarding the'))).toBe(false)
+  })
+
+  it('logs a failed fixed reply instead of throwing', async () => {
+    const h = await harness()
+    h.qq.sendErrors.push(new Error('QQ API 40034027'))
+    h.qq.deliver(privateMessage(USER, '/help'))
+    await h.settle()
+    expect(h.logs.some(line => line.text === `lsy-qqbot: reply to c2c:${USER} failed: QQ API 40034027`)).toBe(true)
+  })
+
+  it('names a failed proactive send as proactive, not as a reply', async () => {
+    const h = await harness()
+    h.qq.deliver(privateMessage(USER, 'slow'))
+    await h.settle()
+    await vi.advanceTimersByTimeAsync(56 * 60_000)
+    h.qq.sendErrors.push(new Error('QQ API 22009'))
+    await h.finishTurn('qq-1', 'late')
+    expect(h.logs.some(line => line.text === 'lsy-qqbot: sending 4 chars to c2c:' + USER + ' as a proactive message failed: QQ API 22009')).toBe(true)
+  })
+})
+
+describe('QqBotChannel unlisted senders', () => {
+  it('stays quiet when no notifier is mounted', async () => {
+    const h = await harness({ notifier: false })
+    h.qq.deliver(privateMessage(OTHER, 'hello'))
+    await h.settle()
+    expect(h.logs.some(line => line.text.includes('dropped a c2c message'))).toBe(true)
+    expect(h.qq.sent).toEqual([])
+  })
+
+  it('names the group and its speaker, with no preview for an empty text, and logs a notifier that fails', async () => {
+    const notifier = { send: vi.fn(async (_note: { title: string; body: string }) => { throw new Error('push down') }) }
+    const h = await harness({ notifier })
+    h.qq.deliver(groupMessage('OTHERGROUP', MEMBER, ''))
+    await h.settle()
+    const note = notifier.send.mock.calls[0]![0]
+    expect(note.title).toContain('一个未放行的群')
+    expect(note.body).toContain('allow.groups')
+    expect(note.body).toContain('OTHERGROUP\n（发言成员 ' + MEMBER + '）')
+    expect(note.body).not.toContain('内容开头')
+    expect(h.logs.some(line => line.text === 'lsy-qqbot: could not tell the owner about an unlisted sender: push down')).toBe(true)
+  })
+})
+
+describe('QqBotChannel credentials', () => {
+  it.each([
+    ['no id', { LSY_QQBOT_APP_SECRET: APP_SECRET }, 'no-id:secret'],
+    ['a blank id and a blank secret', { LSY_QQBOT_APP_ID: '  ', LSY_QQBOT_APP_SECRET: ' ' }, 'no-id:no-secret'],
+  ])('stays offline with %s and logs the state once', async (_name, credentials, state) => {
+    const h = await harness({ credentials })
+    expect(h.qq.runs).toBe(0)
+    expect(h.logs.filter(line => line.text.includes(`(${state})`))).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(90_000)
+    expect(h.logs.filter(line => line.text.includes(`(${state})`))).toHaveLength(1)
+  })
+})
+
+describe('QqBotChannel connection lifecycle', () => {
+  it('logs a gateway disconnect with its reason', async () => {
+    const h = await harness()
+    h.qq.disconnect('4009 session timed out')
+    expect(h.logs.some(line => line.type === 'warn' && line.text === 'lsy-qqbot: disconnected from the QQ gateway: 4009 session timed out')).toBe(true)
+  })
+
+  it('does not report a connection failure that stopping the channel caused', async () => {
+    const qq = new FakeQq()
+    qq.rejectOnAbort = true
+    const h = await harness({ qq })
+    await h.ctx.fiber.dispose()
+    expect(h.logs.some(line => line.text.includes('the QQ connection failed'))).toBe(false)
+  })
+
+  it('starts the retry delay over after a connection that stayed up for a minute', async () => {
+    const qq = new FakeQq()
+    qq.runErrors.push(new Error('first'), new Error('second'))
+    const h = await harness({ qq })
+    await vi.advanceTimersByTimeAsync(2000 + 4000)
+    expect(qq.runs).toBe(3)
+    qq.ready()
+    await vi.advanceTimersByTimeAsync(61_000)
+    qq.drop()
+    await vi.advanceTimersByTimeAsync(0)
+    const waits = h.logs.filter(line => line.text.startsWith('lsy-qqbot: reconnecting in')).map(line => line.text)
+    expect(waits).toEqual([
+      'lsy-qqbot: reconnecting in 2s (attempt 1)',
+      'lsy-qqbot: reconnecting in 4s (attempt 2)',
+      'lsy-qqbot: reconnecting in 2s (attempt 1)',
+    ])
+  })
+
+  it('builds the official SDK transport when no double is mounted, and routes its log lines to the channel log', async () => {
+    const qq = new FakeQq()
+    let received: SdkTransportOptions | undefined
+    sdkTransport.factory = (options) => { received = options as SdkTransportOptions; return qq }
+    try {
+      const h = await harness({ sdk: true, qq })
+      expect(received).toMatchObject({ appId: APP_ID, appSecret: APP_SECRET })
+      received!.log.debug('gateway open')
+      received!.log.warn('heartbeat late')
+      expect(h.logs.some(line => line.type === 'debug' && line.text === 'lsy-qqbot: sdk: gateway open')).toBe(true)
+      expect(h.logs.some(line => line.type === 'warn' && line.text === 'lsy-qqbot: sdk: heartbeat late')).toBe(true)
+      h.qq.deliver(privateMessage(USER, 'hi'))
+      await h.settle()
+      expect(h.sessions.prompts).toHaveLength(1)
+    } finally {
+      sdkTransport.factory = undefined
+    }
+  })
+})
+
+describe('QqBotChannel relay lifecycle', () => {
+  const fakeRelay = () => {
+    const calls: string[] = []
+    return {
+      calls,
+      relay: {
+        registerChannel: () => { calls.push('register'); return () => { calls.push('unregister') } },
+        claim: (id: string) => { calls.push(`claim ${id}`) },
+        release: () => {},
+      },
+    }
+  }
+
+  it('claims the stored Sessions once the relay appears and says how many', async () => {
+    const h = await harness({ relay: false })
+    h.qq.deliver(privateMessage(USER, 'hi'))
+    await h.settle()
+    const { relay, calls } = fakeRelay()
+    h.ctx.provide('ownerRelay', relay as never)
+    await h.settle()
+    expect(calls).toEqual(['register', 'claim qq-1'])
+    expect(h.logs.some(line => line.text === 'lsy-qqbot: the relay carries 1 chat Session(s) through channel qqbot')).toBe(true)
+  })
+
+  it('claims nothing for a relay that left before storage opened', async () => {
+    let open!: () => void
+    const h = await harness({ relay: false, storageGate: new Promise<void>((resolve) => { open = resolve }) })
+    const { relay, calls } = fakeRelay()
+    try {
+      const withdraw = h.ctx.provide('ownerRelay', relay as never)
+      await h.settle()
+      expect(calls).toEqual(['register'])
+      withdraw()
+      await h.settle()
+      expect(calls).toEqual(['register', 'unregister'])
+    } finally {
+      open()
+    }
+    await h.settle()
+    expect(calls).toEqual(['register', 'unregister'])
+    expect(h.logs.some(line => line.text.includes('the relay carries'))).toBe(false)
+  })
+
+  it('warns that chat Sessions were not claimed when storage cannot be opened', async () => {
+    const pool = new MemoryMediaPool()
+    pool.versions.set('lsy_qqbot', 99)
+    const h = await harness({ pool })
+    await h.settle()
+    expect(h.logs.some(line => line.type === 'warn' && line.text.startsWith('lsy-qqbot: chat Sessions not claimed with the relay: '))).toBe(true)
   })
 })

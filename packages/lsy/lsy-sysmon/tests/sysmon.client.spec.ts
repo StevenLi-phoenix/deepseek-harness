@@ -120,4 +120,16 @@ describe('startPolling', () => {
     expect(headless).toHaveBeenCalledTimes(4)
     stopHeadless()
   })
+
+  it('polls without a visibility source when the runtime has no document', () => {
+    vi.useFakeTimers()
+    expect('document' in globalThis).toBe(false)
+    const refresh = vi.fn()
+    const stop = startPolling(refresh, 1000)
+    vi.advanceTimersByTime(2_000)
+    expect(refresh).toHaveBeenCalledTimes(3)
+    stop()
+    vi.advanceTimersByTime(5_000)
+    expect(refresh).toHaveBeenCalledTimes(3)
+  })
 })

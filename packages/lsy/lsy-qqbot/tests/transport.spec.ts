@@ -19,6 +19,11 @@ describe('toInbound', () => {
       scope: 'group', senderId: MEMBER, groupId: GROUP, messageId: 'g1', text: '', at: 7, attachments: 0,
     })
   })
+  it('reads a message with no timestamp, no text and no attachment list as empty, stamped now', () => {
+    expect(toInbound({ kind: 'c2c', senderId: USER, messageId: 'm2', content: 5, attachments: 'x' }, 9)).toEqual({
+      scope: 'c2c', senderId: USER, messageId: 'm2', text: '', at: 9, attachments: 0,
+    })
+  })
   it('refuses guild messages, guild DMs, and malformed events', () => {
     expect(toInbound({ kind: 'guild', senderId: 'u', messageId: 'm', content: 'x' })).toBeUndefined()
     expect(toInbound({ kind: 'dm', senderId: 'u', messageId: 'm', content: 'x' })).toBeUndefined()
@@ -32,6 +37,9 @@ describe('scrub', () => {
   it('removes the secret and bearer tokens from SDK log text', () => {
     expect(scrub(`secret ${APP_SECRET} header QQBot abcdefghijklmnop1234`, APP_SECRET)).toBe('secret *** header QQBot ***')
     expect(scrub('{"access_token": "abcdefghijklmnop1234"}', APP_SECRET)).toBe('{"access_token": "***"}')
+  })
+  it('still removes bearer tokens when there is no secret to strip', () => {
+    expect(scrub('header QQBot abcdefghijklmnop1234 and more', '')).toBe('header QQBot *** and more')
   })
 })
 

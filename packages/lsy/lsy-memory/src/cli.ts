@@ -40,6 +40,7 @@ export async function runImportCli(io: ImportCliIo = {}): Promise<number> {
   try {
     const text = source === undefined ? await readAll(io.stdin ?? process.stdin) : await readFile(source, 'utf8')
     const drafts = parseClaudeExport(text)
+    /* v8 ignore else -- both outcomes are tested; the remap counts this implicit else as 0. */
     if (drafts.length === 0) {
       err('memory-import: no entries found; expected "## <n>. <Category>" headings over "[YYYY-MM-DD] - text" lines')
       return 1

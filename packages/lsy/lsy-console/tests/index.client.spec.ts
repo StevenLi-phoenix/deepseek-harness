@@ -120,6 +120,27 @@ describe('lsy-console browser entry', () => {
     expect(calls.sort()).toEqual(['api/lsy.flow', 'api/lsy.overview'])
   })
 
+  it('lets the owner dismiss the notice of a refused subscriptions or agents action', async () => {
+    vi.stubGlobal('fetch', () => Promise.resolve(Response.json({ error: 'not_found' }, { status: 404 })))
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { ctx, registered } = fakeContext()
+    apply(ctx as never)
+    type Face = {
+      hooks: Record<string, { getSnapshot: () => { notice: unknown } }>
+      act: (request: unknown) => Promise<boolean>
+      dismiss: () => void
+    }
+    const [, subscriptions, agents] = sections(registered).map(entry => entry.options.inject() as Face)
+    expect(await subscriptions!.act({ action: 'delete', target: 'subscription', id: 'x' })).toBe(false)
+    expect(subscriptions!.hooks['subscriptions']!.getSnapshot().notice).not.toBeNull()
+    subscriptions!.dismiss()
+    expect(subscriptions!.hooks['subscriptions']!.getSnapshot().notice).toBeNull()
+    expect(await agents!.act({ action: 'cc.stop', name: 'one' })).toBe(false)
+    expect(agents!.hooks['agents']!.getSnapshot().notice).not.toBeNull()
+    agents!.dismiss()
+    expect(agents!.hooks['agents']!.getSnapshot().notice).toBeNull()
+  })
+
   it('opens a Settings section through the settings shell when it is there, and does nothing when it is not', () => {
     const openSection = vi.fn()
     const mounted = fakeContext([], { settingsNavigation: { openSection } })
@@ -181,6 +202,54 @@ describe('lsy-console browser entry', () => {
       vi.stubGlobal('Audio', FakeAudio)
       vi.stubGlobal('fetch', () => Promise.resolve(new Response(new Blob(['ID3']), { headers: { 'content-type': 'audio/mpeg' } })))
       expect(await face.preview(() => {})).toEqual({ ok: false, code: 'speech_failed', detail: 'playback' })
+    })
+
+    it('reports audio that fails while playing, and runs the voice preview action through the agents store', async () => {
+      FakeAudio.playResult = 'ok'
+      vi.stubGlobal('Audio', FakeAudio)
+      vi.spyOn(console, 'info').mockImplementation(() => {})
+      vi.stubGlobal('fetch', () => Promise.resolve(new Response(new Blob(['ID3']), { headers: { 'content-type': 'audio/mpeg' } })))
+      const face = previewFace()
+      const onPlaying = vi.fn()
+      const done = face.preview(onPlaying)
+      await vi.waitFor(() => { expect(onPlaying).toHaveBeenCalled() })
+      FakeAudio.last!.listeners.get('error')!()
+      expect(await done).toEqual({ ok: false, code: 'speech_failed', detail: 'playback' })
+      expect(FakeAudio.last!.paused).toBe(true)
+    })
+
+    it('lets a replaced preview end without stopping the one that replaced it', async () => {
+      FakeAudio.playResult = 'ok'
+      vi.stubGlobal('Audio', FakeAudio)
+      vi.spyOn(console, 'info').mockImplementation(() => {})
+      vi.stubGlobal('fetch', () => Promise.resolve(new Response(new Blob(['ID3']), { headers: { 'content-type': 'audio/mpeg' } })))
+      const face = previewFace()
+      const firstPlaying = vi.fn()
+      const first = face.preview(firstPlaying)
+      await vi.waitFor(() => { expect(firstPlaying).toHaveBeenCalled() })
+      const older = FakeAudio.last!
+      const secondPlaying = vi.fn()
+      void face.preview(secondPlaying)
+      await vi.waitFor(() => { expect(secondPlaying).toHaveBeenCalled() })
+      const newer = FakeAudio.last!
+      expect(older.paused).toBe(true)
+      older.listeners.get('ended')!()
+      expect(await first).toEqual({ ok: true })
+      expect(newer.paused).toBe(false)
+    })
+
+    it('runs the preview action through the agents store like any other agents action', async () => {
+      const bodies: string[] = []
+      vi.stubGlobal('fetch', (_url: string, init?: RequestInit) => {
+        bodies.push(JSON.stringify(init?.body))
+        return Promise.resolve(Response.json({ cc: null, voice: null, checkedAt: 1 }))
+      })
+      vi.spyOn(console, 'info').mockImplementation(() => {})
+      const { ctx, registered } = fakeContext()
+      apply(ctx as never)
+      const agents = sections(registered)[2]!.options.inject() as { act: (request: unknown) => Promise<boolean> }
+      expect(await agents.act({ action: 'voice.preview' })).toBe(true)
+      expect(bodies).toEqual([JSON.stringify('{"action":"voice.preview"}')])
     })
 
     it('stops a preview that is playing', async () => {

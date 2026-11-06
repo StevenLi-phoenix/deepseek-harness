@@ -4,8 +4,8 @@ import { join } from 'node:path'
 import { format } from 'node:util'
 import { MemoryStore } from '@deepseek-ai/dsh-lsy-memory'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CanarySet } from '../src/canary.ts'
-import { GUARD_PROMPT_VERSION, RawStore, parseGuardAnswer, type GuardModel } from '../src/classifier.ts'
+import { CanarySet, parseCanaries } from '../src/canary.ts'
+import { GUARD_PROMPT_VERSION, RawStore, parseGuardAnswer, rawId, type GuardModel } from '../src/classifier.ts'
 import { GuardService, type GuardSettings } from '../src/service.ts'
 import type { GuardAudience, GuardVerdict } from '../src/types.ts'
 
@@ -36,6 +36,12 @@ async function harness(options: {
   canaryLines?: string[]
   parse?: (text: string) => ReturnType<typeof parseGuardAnswer>
   fail?: Error
+  /** Replaces the raw store. */
+  raw?: (dir: string, now: () => Date) => RawStore
+  /** Replaces the whole settings object, e.g. with one whose reads fail. */
+  settingsObject?: GuardSettings
+  /** Replaces the model call. */
+  model?: GuardModel
 } = {}): Promise<Harness> {
   const dir = await mkdtemp(join(tmpdir(), 'lsy-guard-'))
   dirs.push(dir)
@@ -43,22 +49,22 @@ async function harness(options: {
   const clock = { now: Date.parse('2026-11-01T12:00:00Z') }
   if (options.canaryLines !== undefined) await writeFile(join(dir, 'canaries.txt'), options.canaryLines.join('\n'))
   let calls = 0
-  const model = vi.fn<GuardModel>(async () => {
+  const model = vi.fn<GuardModel>(options.model ?? (async () => {
     calls += 1
     if (options.fail !== undefined) throw options.fail
     return answer(await (options.reply ?? (() => label('clear')))(calls))
-  })
+  }))
   const memory = new MemoryStore(join(dir, 'memory', 'memory.jsonl'), () => '2026-11-01')
   const settings: GuardSettings = {
     layers: { patterns: true, canary: true, memory: true, llm: true, ...options.layers },
     blockLinks: true, timeoutMs: 5000, maxChars: 20_000, cacheMs: 24 * 3_600_000, ...options.settings,
   }
   const guard = new GuardService({
-    settings,
+    settings: options.settingsObject ?? settings,
     canaries: new CanarySet(join(dir, 'canaries.txt'), [HONEYPOT]),
     memory,
     model,
-    raw: new RawStore(dir, 14, () => new Date(clock.now)),
+    raw: options.raw?.(dir, () => new Date(clock.now)) ?? new RawStore(dir, 14, () => new Date(clock.now)),
     logger: { info: (...args) => { logs.push(format(...args as [string])) }, warn: (...args) => { logs.push(`WARN ${format(...args as [string])}`) } },
     now: () => clock.now,
     ...options.parse === undefined ? {} : { parse: options.parse },
@@ -332,5 +338,168 @@ describe('logging and health', () => {
     expect(guard.health()).toMatchObject({ checked: 3, rejected: 2, byRule: { 'llm.real_name': 1, 'pattern.phone': 1 }, lastError: null, lastCheckAt: clock.now })
     clock.now += 25 * 3_600_000
     expect(guard.health()).toMatchObject({ checked: 0, rejected: 0, byRule: {} })
+  })
+})
+
+/** Throws a bare string, which is what a misbehaving dependency may do. */
+function throwText(): never {
+  throw 'plain text failure'
+}
+
+/** Settings whose read of one field fails. */
+function brokenSettings(field: 'maxChars' | 'blockLinks', fail: () => never): GuardSettings {
+  const base: GuardSettings = {
+    layers: { patterns: true, canary: true, memory: true, llm: true }, blockLinks: true, timeoutMs: 5000, maxChars: 20_000, cacheMs: 1000,
+  }
+  return Object.defineProperty({ ...base }, field, { get: fail, enumerable: true })
+}
+
+describe('a layer that breaks', () => {
+  it('holds the text back as guard.error when reading the settings throws, and keeps the message', async () => {
+    const { guard, logs } = await harness({ settingsObject: brokenSettings('maxChars', () => { throw new Error('settings\n  unreadable') }) })
+    const verdict = await check(guard, CLEAN_CARD)
+    expectRefused(verdict, 'guard.error')
+    expect(verdict.ok ? '' : verdict.publicReason).toBe('The check could not run, so the text is held back.')
+    expect(guard.health().lastError).toMatchObject({ rule: 'guard.error', message: 'settings unreadable' })
+    expect(logs).toContain('WARN lsy-guard: guard.error: settings unreadable')
+  })
+
+  it('records a non-Error failure by its text', async () => {
+    const { guard } = await harness({ settingsObject: brokenSettings('maxChars', throwText) })
+    expectRefused(await check(guard, CLEAN_CARD), 'guard.error')
+    expect(guard.health().lastError).toMatchObject({ rule: 'guard.error', message: 'plain text failure' })
+  })
+
+  it('holds the text back as pattern.error when the pattern layer throws', async () => {
+    const { guard, model } = await harness({ settingsObject: brokenSettings('blockLinks', () => { throw new Error('bad links setting') }) })
+    expectRefused(await check(guard, CLEAN_CARD), 'pattern.error')
+    expect(guard.health().lastError).toMatchObject({ rule: 'pattern.error', message: 'bad links setting' })
+    expect(model).not.toHaveBeenCalled()
+  })
+})
+
+describe('memory layer switch', () => {
+  it('does not compare with the memory when the layer is off, and does not warn about a missing file', async () => {
+    const { guard, memory, logs } = await harness({ layers: { memory: false } })
+    await memory.save({ text: '主人小时候养了一只叫团子的橘猫，后来走丢了', category: 'identity' })
+    expect((await check(guard, '猫娘说她养了一只叫团子的橘猫')).ok).toBe(true)
+    expect(logs.filter(line => line.includes('no memory file'))).toEqual([])
+  })
+})
+
+describe('model failures that are not Errors', () => {
+  it('refuses as llm.unavailable with the thrown text', async () => {
+    const { guard } = await harness({ model: () => Promise.resolve().then(throwText) })
+    expectRefused(await check(guard, CLEAN_CARD), 'llm.unavailable')
+    expect(guard.health().lastError).toMatchObject({ rule: 'llm.unavailable', message: 'plain text failure' })
+  })
+})
+
+describe('raw store faults', () => {
+  class FailingRaw extends RawStore {
+    constructor(dir: string, private readonly failure: () => never) { super(dir, 14) }
+    override save(): Promise<string> { return Promise.resolve().then(this.failure) }
+  }
+
+  it('keeps the verdict and warns when the raw response cannot be written', async () => {
+    const { guard, logs } = await harness({ raw: dir => new FailingRaw(dir, () => { throw new Error('disk full') }) })
+    expect(await check(guard, CLEAN_CARD)).toEqual({ ok: true })
+    expect(logs).toContain('WARN lsy-guard: raw response not saved: disk full')
+  })
+
+  it('warns with the thrown text when the failure is not an Error', async () => {
+    const { guard, logs } = await harness({ raw: dir => new FailingRaw(dir, throwText) })
+    expect(await check(guard, CLEAN_CARD)).toEqual({ ok: true })
+    expect(logs).toContain('WARN lsy-guard: raw response not saved: plain text failure')
+  })
+
+  it('writes a file whose name carries the clock reading', () => {
+    expect(rawId(new Date(1_700_000_000_000))).toMatch(/^1700000000000-[0-9a-f]{6}$/u)
+  })
+
+  it('prune refuses to hide a read failure: raw is not a directory', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lsy-guard-rawfile-'))
+    dirs.push(dir)
+    await writeFile(join(dir, 'raw'), 'a file')
+    await expect(new RawStore(dir, 14).prune()).rejects.toMatchObject({ code: 'ENOTDIR' })
+  })
+
+  it('prune answers 0 when there is no raw directory yet', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lsy-guard-noraw-'))
+    dirs.push(dir)
+    expect(await new RawStore(dir, 14).prune()).toBe(0)
+  })
+
+  it('a failed background prune does not fail the save', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lsy-guard-bgprune-'))
+    dirs.push(dir)
+    const store = new RawStore(dir, 14, () => new Date(2026, 10, 1, 12))
+    const prune = vi.spyOn(store, 'prune').mockRejectedValue(new Error('prune failed'))
+    const path = await store.save({
+      id: 'a-1', at: 'now', promptVersion: GUARD_PROMPT_VERSION, purpose: 'p', audience: 'public', textSha256: 'x', model: 'm', response: {},
+    })
+    await vi.waitFor(() => { expect(prune).toHaveBeenCalledTimes(1) })
+    expect(JSON.parse(await readFile(path, 'utf8'))).toMatchObject({ id: 'a-1' })
+  })
+})
+
+describe('parseGuardAnswer', () => {
+  it.each([
+    ['a string', '"clear"'],
+    ['null', 'null'],
+    ['an array', '[{"label":"clear"}]'],
+    ['no label', '{"categories":[]}'],
+    ['not JSON', 'clear'],
+  ])('rejects %s', (_name, text) => {
+    expect(parseGuardAnswer(text)).toBeUndefined()
+  })
+
+  it('takes no categories when the field is not a list', () => {
+    expect(parseGuardAnswer('{"label":"pii","categories":"health"}')).toEqual({ label: 'pii', categories: [] })
+  })
+})
+
+describe('canary file edge cases', () => {
+  it('leaves out lines too short to compare and counts them', () => {
+    expect(parseCanaries(['ab', '李', '李小', '', '# note', 'abc'])).toEqual({ canaries: ['李小', 'abc'], tooShort: 2 })
+  })
+
+  it('reports how many canaries are active, how many were too short, and whether the file exists', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lsy-guard-canary-'))
+    dirs.push(dir)
+    const set = new CanarySet(join(dir, 'canaries.txt'), [HONEYPOT, 'xy'])
+    expect(await set.counts()).toEqual({ active: 1, tooShort: 1, fileFound: false })
+    await writeFile(join(dir, 'canaries.txt'), 'real name\nzz\n')
+    expect(await set.counts()).toEqual({ active: 2, tooShort: 2, fileFound: true })
+  })
+
+  it('never matches empty or punctuation-only text', async () => {
+    const set = new CanarySet('/nonexistent-lsy-guard-dir/canaries.txt', [HONEYPOT])
+    expect(await set.matches('')).toBe(false)
+    expect(await set.matches(' -- ')).toBe(false)
+  })
+
+  it('rethrows a stat failure that is not a missing file', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lsy-guard-canary-'))
+    dirs.push(dir)
+    await writeFile(join(dir, 'plain'), 'x')
+    const set = new CanarySet(join(dir, 'plain', 'canaries.txt'), [])
+    await expect(set.counts()).rejects.toMatchObject({ code: 'ENOTDIR' })
+  })
+})
+
+describe('verdict cache bound', () => {
+  class NullRaw extends RawStore {
+    override save(): Promise<string> { return Promise.resolve('') }
+  }
+
+  it('forgets the oldest verdict once 2000 are held', async () => {
+    const { guard, model } = await harness({ raw: dir => new NullRaw(dir, 14), layers: { patterns: false, canary: false, memory: false } })
+    for (let index = 0; index <= 2000; index += 1) await check(guard, `note number ${String(index)}`)
+    expect(model).toHaveBeenCalledTimes(2001)
+    await check(guard, 'note number 2000')
+    expect(model).toHaveBeenCalledTimes(2001)
+    await check(guard, 'note number 0')
+    expect(model).toHaveBeenCalledTimes(2002)
   })
 })

@@ -124,6 +124,7 @@ export function FlowSide({
   const names = (ids: readonly string[]): string => ids
     .flatMap((id) => {
       const other = graph.node(id)
+      /* v8 ignore next -- a neighbour of a box is always in the graph. */
       return other === undefined ? [] : [titleOf(other, translate)]
     })
     .join(translate('flow.sep'))

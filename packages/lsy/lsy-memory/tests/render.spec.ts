@@ -62,4 +62,14 @@ describe('renderMemoryBlock', () => {
     expect(shown).toBeGreaterThan(0)
     expect(text).toContain(`(${String(200 - shown)} more entries did not fit; memory_search finds them.)`)
   })
+
+  it('leaves out an identity count that does not fit, and one that follows an omitted entry', () => {
+    const rules = Array.from({ length: 200 }, (_, index) => entry(index.toString(16).padStart(6, '0'), 'instructions', `规则 ${String(index)} ${'字'.repeat(40)}`))
+    const crowded = renderMemoryBlock([...rules, entry('ffffff', 'identity', 'Roommate 某某')], 4096) ?? ''
+    expect(crowded).not.toContain('## Identity')
+    expect(crowded).toContain('more entries did not fit')
+    const tight = renderMemoryBlock([entry('ffffff', 'identity', 'Roommate 某某')], 10) ?? ''
+    expect(tight).not.toContain('## Identity')
+    expect(tight.endsWith('</system-reminder>')).toBe(true)
+  })
 })

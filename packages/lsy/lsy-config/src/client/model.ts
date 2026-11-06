@@ -127,6 +127,7 @@ export function parseText(leaf: LeafField, text: string): Parsed {
     case 'boolean':
     case 'secret':
       return { ok: false }
+    /* v8 ignore next 4 -- exhaustiveness guard: every member of the closed LeafKind union has a case above. */
     default: {
       const unreachable: never = leaf.kind
       return unreachable
@@ -148,6 +149,7 @@ export function brief(value: ConfigValue | undefined): string {
 }
 
 function sameValue(a: ConfigValue | undefined, b: ConfigValue | undefined): boolean {
+  /* v8 ignore next -- a is a set value at each caller. */
   return JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
 }
 
@@ -228,6 +230,7 @@ export function countLeaves(nodes: readonly FieldNode[]): { total: number; owner
 export function pickDescription(text: DescriptionText | undefined, locale: string): string {
   if (text === undefined) return ''
   if (typeof text === 'string') return text
+  /* v8 ignore next -- split always yields a first element. */
   const language = locale.split('-')[0] ?? locale
   return text[locale] ?? text[language] ?? text['en'] ?? text[''] ?? Object.values(text)[0] ?? ''
 }

@@ -71,6 +71,7 @@ function AccountCard({ account, login, props }: { account: ManagedAccount; login
   const { view, now, t, busy, act } = props
   const [confirming, setConfirming] = useState(false)
   const name = account.display === '' ? account.id : account.display
+  /* v8 ignore next -- `name` is the display or a bili-svc id, never empty, so `?? 'B'` only satisfies the index type. */
   const initial = Array.from(name)[0] ?? 'B'
   const owned = view.manage && account.login
   const mine = (action: keyof typeof BUSY_LABEL): boolean => busy?.action === action && busy.account === account.id
