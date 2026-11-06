@@ -532,7 +532,7 @@ A resumed Session's agent stays alive until the process ends and nothing can rel
 
 ## 22. DAG workflows
 
-The skill `dag-workflow` (`lsy/skills/dag-workflow`) lets the main agent choose the `workflow` tool on its own when work has real dependencies. It adds no plugin or tool: `workflow-ptc` and `tool-workflow` were already in the `unattended` preset, and `setup-profile.sh` links the skill into `$DSH_HOME/skills`. Other presets have no `workflow` tool. Runs appear in the chat as workflow cards and in the job list when backgrounded. Each child spends the route's daily limit. `packages/lsy/bili/tests/dag-workflow-skill.spec.ts` runs the helper from `SKILL.md` through the real workflow guest.
+The skill `dag-workflow` (`lsy/skills/dag-workflow`) tells the main agent how to use the `workflow` tool when the owner asks for it: order and parallelism come from the script body, with no scheduler helper in the prompt. It adds no plugin or tool: `workflow-ptc` and `tool-workflow` were already in the `unattended` preset, and `setup-profile.sh` links the skill into `$DSH_HOME/skills`. Other presets have no `workflow` tool. Runs appear in the chat as workflow cards and in the job list when backgrounded. Each child spends the route's daily limit. `packages/lsy/bili/tests/dag-workflow-skill.spec.ts` runs the example from `SKILL.md` through the real workflow guest.
 
 Going back to a build older than the 2026-11-06 upstream sync: a Session that created a subagent on the newer build carries `subagent/catalog` version 3, which older releases refuse to open, so start a new Session for those chats.
 

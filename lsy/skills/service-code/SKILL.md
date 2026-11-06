@@ -18,7 +18,7 @@ description: 修改并上线 mini 上服务的代码：发现或被告知 bili-s
 | `kaorou-potoken` | `/Users/Shared/ams-src/bgutil-ytdlp-pot-provider`（第三方上游） | `rsync -rlpc --delete server/ /Users/Shared/ams-apps/bgutil-pot/server/`，再重启 |
 | `global-awareness` | `/Users/dsh-runtime/services/globalAwarness`（无 GitHub） | `pnpm -C apps/web build:check && pnpm -C apps/server build:node`，再重启 |
 | `intake` 和 AMS 本身 | `/Users/dsh-runtime/ams`（GitHub `agent-managed-services`） | `git pull --ff-only`；只重启 `intake`，harness 不重启 |
-| `disk-watch` `qq-recorder` DSH 本身 | GitHub `StevenLi-phoenix/deepseek-harness` 的 `lsy/main`，规则读 `lsy/AGENTS.md` | 见下方“部署 DSH 自己” |
+| `disk-watch` `qq-recorder` DSH 本身 | `/Users/dsh-runtime/src/deepseek-harness`（你自己的 clone，`lsy/main`，`gh` 已登录，能直接 push），规则读 `lsy/AGENTS.md` | 见下方“部署 DSH 自己” |
 
 `service.toml` 在 `/Users/dsh-runtime/.ams/services/<id>/service.toml`，配置写这里，密钥用 `ams secret set`。各仓库 RUNBOOK 里的 `~/services/x`、`~/Codes/x` 对你来说就是 `/Users/Shared/ams-src/x`。
 
@@ -83,7 +83,7 @@ ams ctl start dsh-upgrade
 | 根上的条目（`cordis_inspect_list` 列得出来的，比如 `lsy-integrity`、`lsy-qq`） | 先备份，再改 `/Users/dsh-runtime/.dsh/profiles/event/cordis.patch.yml`，按 `id` 写。`config` 会整段替换下层，下层设过的字段要一起写上 | 保存后自动重载 |
 | preset 里的条目（`preset-unattended` 下的 `lsy-memory` 这类，profile patch 按 id 够不到） | 改 `lsy/main` 上的 `lsy/bundles/event/cordis.patch.yml`，推送后按“部署 DSH 自己”上线 | 等回合结束后重启 |
 
-`/Users/Shared/lsy-dsh/current` 是构建产物，下次部署会整个换掉，改那里的文件都留不住。源码用自己 clone 的 `lsy/main`，`/Volumes/MiniSSD` 你的 shell 进不去。
+`/Users/Shared/lsy-dsh/current` 是构建产物，skill、bundle 和配置改在那里，下次部署就被盖回去。要留住就改 `/Users/dsh-runtime/src/deepseek-harness`，推到 `lsy/main` 再部署：只改 skill、脚本或文档时几秒就好。`/Volumes/MiniSSD` 你的 shell 进不去，也用不着，不需要为它加服务或扩权。
 
 ## 边界
 
