@@ -38,6 +38,7 @@ export function mountScheduleTrust(ctx: Context, scheduleTarget: Target | undefi
   let trusting: Promise<void> = Promise.resolve()
   let trustVersion = 0
   const trustSchedule = async (): Promise<void> => {
+    /* v8 ignore next -- the handler is registered only when the target is defined. */
     if (scheduleTarget === undefined) return
     const state = await scheduleState(scheduleTarget.path)
     if (state.digest === 'unreadable') {
@@ -51,6 +52,7 @@ export function mountScheduleTrust(ctx: Context, scheduleTarget: Target | undefi
     ctx.on('schedule/changed', () => {
       trustVersion += 1
       trusting = trusting.then(trustSchedule).catch((error: unknown) => {
+        /* v8 ignore next -- only fs errors reach here, which are Error instances. */
         ctx.logger.warn('fork-integrity: recording the schedule state failed: %s', error instanceof Error ? error.message : String(error))
       })
     })

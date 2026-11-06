@@ -67,4 +67,16 @@ describe('ForkEventBus session handover', () => {
     expect(await bus.handOverSessions(['new'], 'new')).toEqual({ moved: [], failed: [] })
     expect(mover).not.toHaveBeenCalled()
   })
+
+  it('says nothing moved when no subscription and no mover had anything, and a mover can be withdrawn twice', async () => {
+    const logs: string[] = []
+    const { bus } = await harness({ logs })
+    const withdraw = bus.registerHandover('idle', () => [])
+    expect(await bus.handOverSessions(['old'], 'new')).toEqual({ moved: [], failed: [] })
+    expect(logs).toContain('info: fork-event-bus: handed Session(s) old over to new: nothing to move')
+    withdraw()
+    withdraw()
+    bus.registerHandover('later', () => [{ id: 'z', label: 'z' }])
+    expect((await bus.handOverSessions(['old'], 'new')).moved).toEqual([{ kind: 'later', items: [{ id: 'z', label: 'z' }] }])
+  })
 })

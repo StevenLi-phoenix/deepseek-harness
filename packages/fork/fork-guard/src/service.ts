@@ -123,6 +123,7 @@ export class GuardService {
   private trim(now: number): void {
     const cutoff = now - DAY_MS
     let drop = 0
+    /* v8 ignore next -- drop < length guarantees the element. */
     while (drop < this.events.length && (this.events[drop]?.at ?? Infinity) < cutoff) drop += 1
     if (drop > 0) this.events.splice(0, drop)
   }
@@ -243,6 +244,7 @@ export class GuardService {
   private remember(key: string, verdict: GuardVerdict): void {
     if (this.cache.size >= MAX_CACHE) {
       const oldest = this.cache.keys().next()
+      /* v8 ignore else -- the cache holds entries whenever this runs. */
       if (!oldest.done) this.cache.delete(oldest.value)
     }
     this.cache.set(key, { verdict, until: this.now() + this.deps.settings.cacheMs })

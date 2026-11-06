@@ -297,6 +297,7 @@ export class ForkPresence extends Service implements ForkIngestSink {
     const rules = this.rules
     const { manual, focus } = this.inputs
     const active = manual !== undefined && state.source === 'manual'
+    /* v8 ignore next 3 -- a manual state always has a numeric until, so the `??` fallback only satisfies the type */
     const manualView: ManualView | null = active
       ? { asleep: manual.asleep, at: manual.at, until: state.until ?? manual.at + rules.manualMaxMs }
       : null

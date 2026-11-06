@@ -46,6 +46,21 @@ describe('transcribeAudio', () => {
     host.asrRaw = undefined
   })
 
+  it('names a file without an extension in the refusal', async () => {
+    await expect(transcribeAudio('voicenote', Buffer.from('x'), options(), async () => {})).rejects.toThrow('this is not an audio format')
+  })
+
+  it('falls back to the requested engine and omits the duration when the service reports neither', async () => {
+    host.asrRaw = '{"full_text":"  hello  "}'
+    expect(await transcribeAudio('a.wav', wavBytes(), options({ engine: 'whisper' }), async () => {})).toEqual({ text: 'hello', engine: 'whisper' })
+    host.asrRaw = undefined
+  })
+
+  it('leaves the language out when it is empty', async () => {
+    await transcribeAudio('a.wav', wavBytes(), options({ language: '' }), async () => {})
+    expect(host.requests('/asr/transcribe')[0]!.body.toString('latin1')).not.toContain('name="language"')
+  })
+
   it('recognises the formats the service reads', () => {
     expect(isAudioName('A.M4A')).toBe(true)
     expect(isAudioName('a.silk')).toBe(false)

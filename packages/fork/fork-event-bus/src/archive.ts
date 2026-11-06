@@ -384,6 +384,7 @@ export class SessionArchiver {
         this.logger.info(`fork-event-bus: auto-archive sweep (${trigger}${dryRun ? ', dry run' : ''}): scanned ${report.scanned}, already archived ${report.alreadyArchived}, due ${report.due}, ${dryRun ? `would archive ${report.wouldArchive.length}` : `archived ${report.archived.length}`}, skipped ${skippedText}${report.errors.length > 0 ? `, errors ${report.errors.length}` : ''} in ${report.durationMs} ms${report.archived.length > 0 ? `; archived ${report.archived.join(', ')}` : ''}`)
         for (const [category, ids] of Object.entries(report.skippedIds)) {
           if (category === 'recent') continue
+          /* v8 ignore next -- a category with skipped ids has a count. */
           this.logger.debug(`fork-event-bus: auto-archive skipped ${category}: ${ids.join(', ')}${(report.skipped[category] ?? 0) > ids.length ? ', …' : ''}`)
         }
         for (const line of report.errors) this.logger.warn(`fork-event-bus: auto-archive could not archive ${line}`)

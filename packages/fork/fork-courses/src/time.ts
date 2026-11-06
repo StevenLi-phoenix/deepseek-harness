@@ -9,6 +9,7 @@ function parts(at: number, timeZone: string): { month: number; day: number; week
   const formatted = new Intl.DateTimeFormat('en-US', {
     timeZone, month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
   }).formatToParts(at)
+  /* v8 ignore next -- Intl returns every part requested above, so find() always hits; ?? only satisfies the types. */
   const get = (type: Intl.DateTimeFormatPartTypes): string => formatted.find(part => part.type === type)?.value ?? ''
   const weekday = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(get('weekday'))
   return { month: Number(get('month')), day: Number(get('day')), weekday, hour: Number(get('hour')), minute: Number(get('minute')) }
@@ -22,6 +23,7 @@ function parts(at: number, timeZone: string): { month: number; day: number; week
  */
 export function stamp(at: number, timeZone: string): string {
   const p = parts(at, timeZone)
+  /* v8 ignore next -- indexOf over the fixed en-US names gives 0 to 6; ?? only satisfies noUncheckedIndexedAccess. */
   return `${p.month}/${p.day} ${WEEKDAYS[p.weekday] ?? ''} ${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`
 }
 

@@ -77,9 +77,11 @@ export function readAt(root: unknown, path: readonly string[]): unknown {
  * @returns the fields by key, or undefined when the node is not an object.
  */
 export function objectFields(node: z): Record<string, z> | undefined {
+  /* v8 ignore next -- schemastery always sets dict on an object. */
   if (node.type === 'object') return node.dict ?? {}
   if (node.type !== 'intersect') return undefined
   const merged: Record<string, z> = {}
+  /* v8 ignore next -- schemastery always sets list on a union. */
   for (const member of node.list ?? []) {
     const fields = objectFields(member)
     if (fields === undefined) return undefined
@@ -130,6 +132,7 @@ export function leafKind(node: z): LeafKind {
     case 'boolean': return 'boolean'
     case 'array': return node.inner?.type === 'string' && !containsSecret(node.inner) ? 'string-list' : 'json'
     case 'union':
+      /* v8 ignore next -- schemastery always sets list on a union. */
       return (node.list ?? []).length > 0 && (node.list ?? []).every(member => member.type === 'const') ? 'select' : 'json'
     default: return 'json'
   }
@@ -163,6 +166,7 @@ function leafOf(node: z, path: readonly string[], fallback: unknown, state: Form
   else if (expression) readOnly = 'expression'
   else if (hasSecret) readOnly = 'secret'
   const lower = layer === 'owner' && !expression && !hasSecret ? jsonOf(readAt(state.inherited, path)) : undefined
+  /* v8 ignore next -- schemastery always sets list on a union. */
   const options = kind === 'select' ? (node.list ?? []).flatMap(member => jsonOf(member.value) ?? []) : undefined
   return {
     ...base,

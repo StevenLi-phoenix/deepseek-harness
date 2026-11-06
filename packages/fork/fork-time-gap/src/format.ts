@@ -10,6 +10,7 @@ export function formatStamp(ms: number, timeZone: string): string {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone, weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
   }).formatToParts(ms)
+  /* v8 ignore next -- Intl returns every part requested above, so find() always hits and the empty fallback only satisfies the types */
   const part = (type: Intl.DateTimeFormatPartTypes): string => parts.find(item => item.type === type)?.value ?? ''
   return `${part('weekday')} ${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}`
 }

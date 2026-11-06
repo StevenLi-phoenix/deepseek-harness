@@ -151,6 +151,35 @@ describe('startPolling', () => {
     expect(refresh).toHaveBeenCalledTimes(3)
   })
 
+  it('keeps one timer when the page is shown twice, and ignores a second hide and a stop after a hide', () => {
+    vi.useFakeTimers()
+    const refresh = vi.fn()
+    const doc = page('visible')
+    const stop = startPolling(refresh, 1000, doc)
+    doc.show('visible')
+    expect(refresh).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(1000)
+    expect(refresh).toHaveBeenCalledTimes(2)
+    doc.show('hidden')
+    doc.show('hidden')
+    stop()
+    vi.advanceTimersByTime(5000)
+    expect(refresh).toHaveBeenCalledTimes(2)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('polls without a page when the environment has no document and none is given', () => {
+    vi.useFakeTimers()
+    expect('document' in globalThis).toBe(false)
+    const refresh = vi.fn()
+    const stop = startPolling(refresh, 1000)
+    vi.advanceTimersByTime(2000)
+    expect(refresh).toHaveBeenCalledTimes(3)
+    stop()
+    vi.advanceTimersByTime(2000)
+    expect(refresh).toHaveBeenCalledTimes(3)
+  })
+
   it('polls without a page', () => {
     vi.useFakeTimers()
     const refresh = vi.fn()

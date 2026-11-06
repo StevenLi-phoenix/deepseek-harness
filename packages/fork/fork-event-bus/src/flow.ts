@@ -52,6 +52,7 @@ export function findCycle(routes: readonly Subscription[]): string[] | undefined
     const at = path.indexOf(id)
     if (at !== -1) return [...path.slice(at), id]
     if (done.has(id)) return undefined
+    /* v8 ignore next -- every route id has an entry. */
     for (const target of next.get(id) ?? []) {
       const loop = visit(target, [...path, id])
       if (loop !== undefined) return loop

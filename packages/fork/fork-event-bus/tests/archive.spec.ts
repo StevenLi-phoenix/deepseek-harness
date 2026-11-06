@@ -7,7 +7,7 @@ import {
   type AutoArchiveConfig, type SessionProtector, type SessionRow,
 } from '../src/index.ts'
 import { SessionArchiver, type ArchiveHost } from '../src/archive.ts'
-import { baseConfig, disposeAll, fakeController, fakeRegistry, harness, withConfig, type FakeController } from './harness.ts'
+import { baseConfig, disposeAll, fakeController, fakeRegistry, harness, release, sessionConfig, sessionEvents, withConfig, type FakeController } from './harness.ts'
 
 const DAY = 86_400_000
 const HOUR = 3_600_000
@@ -219,6 +219,124 @@ describe('SessionArchiver', () => {
   })
 })
 
+describe('SessionArchiver failure paths', () => {
+  it('keeps the recent list in memory and says so when the table cannot be opened, whatever was thrown', async () => {
+    for (const failure of [new Error('disk gone'), 'plain text']) {
+      const { host } = fakeHost([row('a', 10)])
+      const { lines, logger: out } = logger()
+      const text = failure instanceof Error ? failure.message : failure
+      const archiver = new SessionArchiver(config(), host, out, fakeTimeout().timeout, async () => { throw failure })
+      await archiver.start()
+      expect(lines).toContain(`WARN fork-event-bus: auto-archive table unavailable (${text}); the recent list is kept in memory`)
+      await archiver.sweep()
+      expect(archiver.status().recent.map(entry => entry.sessionId)).toEqual(['a'])
+      await archiver.stop()
+    }
+  })
+
+  it('warns and still archives the rest when the archived table refuses a record', async () => {
+    const { host, log } = fakeHost([row('a', 20), row('b', 10)])
+    const { lines, logger: out } = logger()
+    const table = { put: async (): Promise<void> => { throw new Error('table full') }, size: 0, entries: () => [], delete: async () => true }
+    const domain = { table: () => table, close: async (): Promise<void> => {} }
+    const archiver = new SessionArchiver(config(), host, out, fakeTimeout().timeout, async () => domain as never)
+    await archiver.start()
+    const report = await archiver.sweep()
+    expect(log).toEqual(['a', 'b'])
+    expect(report.archived).toEqual(['a', 'b'])
+    expect(lines).toContain('WARN fork-event-bus: could not record archived Session a (table full)')
+    expect(lines).toContain('WARN fork-event-bus: could not record archived Session b (table full)')
+    await archiver.stop()
+  })
+
+  it('names a protector that throws and keeps the Session', async () => {
+    const { host, log } = fakeHost([row('a', 10)])
+    const { lines, logger: out } = logger()
+    const archiver = new SessionArchiver(config(), host, out, fakeTimeout().timeout)
+    archiver.protect('flaky', () => { throw new Error('boom') })
+    await archiver.sweep()
+    expect(log).toEqual([])
+    expect(lines).toContain('WARN fork-event-bus: auto-archive protector "flaky" failed for a (boom); the Session is kept')
+  })
+
+  it('lists at most twenty skipped ids per category in the debug log and marks the rest', async () => {
+    const rows = Array.from({ length: 22 }, (_, index) => row(`p${index}`, 10 + index))
+    const { host } = fakeHost(rows)
+    const { lines, logger: out } = logger()
+    const archiver = new SessionArchiver(config(), host, out, fakeTimeout().timeout)
+    archiver.protect('pinned-by-plugin', () => true)
+    const report = await archiver.sweep()
+    expect(report.skipped).toEqual({ 'pinned-by-plugin': 22 })
+    expect(report.skippedIds['pinned-by-plugin']).toHaveLength(20)
+    const debug = lines.find(line => line.startsWith('DEBUG fork-event-bus: auto-archive skipped pinned-by-plugin'))
+    expect(debug).toMatch(/, …$/)
+    // Oldest first: the twenty oldest are named, the two most recent are not.
+    expect(debug).toContain('p21, p20, ')
+    expect(debug).not.toMatch(/p1[,:]|p0[,:]/)
+  })
+
+  it('logs and survives a timer sweep that throws, then arms the next one', async () => {
+    const { host } = fakeHost([row('a', 10)])
+    const { lines, logger: out } = logger()
+    const clock = fakeTimeout()
+    const failing: ArchiveHost = { ...host, pinnedIds: () => { throw 'registry down' } }
+    const archiver = new SessionArchiver(config({ firstSweepMinutes: 1 }), failing, out, clock.timeout)
+    await archiver.start()
+    clock.armed[0]!.fire()
+    await vi.waitFor(() => { expect(clock.armed).toHaveLength(2) })
+    expect(lines).toContain('WARN fork-event-bus: auto-archive sweep failed: registry down')
+    await archiver.stop()
+  })
+
+  it('waits for a sweep that fails while stopping, and arms no timer once stopped', async () => {
+    const { host } = fakeHost([row('a', 10)])
+    const clock = fakeTimeout()
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const signals: AbortSignal[] = []
+    const slow: ArchiveHost = {
+      ...host,
+      list: async (signal) => { signals.push(signal); await gate; return [] },
+      pinnedIds: () => { throw new Error('registry down') },
+    }
+    const archiver = new SessionArchiver(config({ firstSweepMinutes: 1 }), slow, logger().logger, clock.timeout)
+    await archiver.start()
+    clock.armed[0]!.fire()
+    await vi.waitFor(() => { expect(signals).toHaveLength(1) })
+    const stopping = archiver.stop()
+    expect(signals[0]!.aborted).toBe(true)
+    release()
+    await stopping
+    // The failed timer sweep's follow-up arm() finds the archiver stopped.
+    await vi.advanceTimersByTimeAsync(0)
+    expect(clock.armed).toHaveLength(1)
+    expect(archiver.status().nextSweepAt).toBeUndefined()
+  })
+
+  it('stops archiving the remaining Sessions once stop() is called mid-sweep', async () => {
+    const { host, log } = fakeHost([row('a', 30), row('b', 20), row('c', 10)])
+    const { lines, logger: out } = logger()
+    const clock = fakeTimeout()
+    // eslint-disable-next-line prefer-const -- assigned after the host that refers to it exists
+    let archiver: SessionArchiver
+    const stoppingHost: ArchiveHost = {
+      ...host,
+      archive: async (id) => { await host.archive(id); if (id === 'a') void archiver.stop() },
+    }
+    archiver = new SessionArchiver(config(), stoppingHost, out, clock.timeout)
+    const report = await archiver.sweep()
+    expect(log).toEqual(['a'])
+    expect(report).toMatchObject({ archived: ['a'], aborted: 'stopped' })
+    expect(lines).toContain('WARN fork-event-bus: auto-archive sweep aborted: stopped')
+  })
+
+  it('answers a failing Session list with the error text of a bare value', async () => {
+    const { host } = fakeHost([])
+    const archiver = new SessionArchiver(config(), { ...host, list: async () => { throw 'db down' } }, logger().logger, fakeTimeout().timeout)
+    expect((await archiver.sweep()).aborted).toBe('could not list Sessions: db down')
+  })
+})
+
 /** A Session list row as `sessionController.list` serves it. */
 function listed(id: string, days: number, extra: Partial<FakeController['rows'][number]> = {}): FakeController['rows'][number] {
   return { sessionId: id, updatedAt: NOW - days * DAY, running: false, blank: false, ...extra }
@@ -352,5 +470,40 @@ describe('ForkEventBus auto-archive', () => {
     await vi.advanceTimersByTimeAsync(24 * HOUR)
     expect(registry.archivedSessionIds).toEqual([])
     expect(mounted.bus.archiveStatus().nextSweepAt).toBeUndefined()
+  })
+
+  it('keeps only the newest MAX_RECENT_ARCHIVED archived Sessions in the stored table and drops the oldest', async () => {
+    const total = MAX_RECENT_ARCHIVED + 3
+    const controller = fakeController()
+    for (let index = 0; index < total; index += 1) controller.rows.push(listed(`s${index}`, 10 + index))
+    const registry = fakeRegistry()
+    const { bus } = await harness({ config: archiveConfig({ maxPerSweep: total }), controller, registry })
+    // Each archive lands in its own millisecond so the oldest is well defined.
+    const archive = registry.archiveSession.bind(registry)
+    registry.archiveSession = async (id) => { await archive(id); await vi.advanceTimersByTimeAsync(1) }
+    const report = await bus.sweepArchive()
+    expect(report.archived).toHaveLength(total)
+    const recent = bus.archiveStatus().recent.map(entry => entry.sessionId)
+    expect(recent).toHaveLength(MAX_RECENT_ARCHIVED)
+    // The idlest Sessions are archived first, so the three archived first are the ones dropped.
+    expect(recent[0]).toBe('s0')
+    for (const dropped of [total - 1, total - 2, total - 3]) expect(recent).not.toContain(`s${dropped}`)
+    expect(recent).toContain(`s${total - 4}`)
+  })
+
+  it('keeps the Sessions of a running batch, a running reminder turn, and a subscription without a creator out of the sweep', async () => {
+    const controller = fakeController()
+    for (const id of ['batch-session', 'reminder-session', 'idle']) controller.rows.push(listed(id, 30))
+    const registry = fakeRegistry()
+    const { bus, runtime, emit } = await harness({ config: withConfig(sessionConfig, { autoArchive: config() }), controller, registry })
+    await bus.subscribe({ id: 'anon', sources: ['github'], kinds: [], subjects: [], action: 'notify', coalesceMs: 1000, maxPerHour: 1 })
+    await bus.publish(release(1))
+    await vi.advanceTimersByTimeAsync(1_000)
+    emit('batch-session', sessionEvents.webhook(String(runtime.deliveries.at(-1)?.deliveryId), 'triage'))
+    emit('reminder-session', sessionEvents.schedule('check the build'))
+    const report = await bus.sweepArchive()
+    expect(report.skipped).toEqual({ running: 2 })
+    expect(report.skippedIds['running']!.sort()).toEqual(['batch-session', 'reminder-session'])
+    expect(registry.archivedSessionIds).toEqual(['idle'])
   })
 })

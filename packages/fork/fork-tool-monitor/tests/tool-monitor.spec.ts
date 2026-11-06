@@ -1,4 +1,6 @@
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
@@ -23,7 +25,7 @@ interface FakeSession {
   readonly id: string
   readonly agent: {
     status: 'idle' | 'running'
-    session: { id: string; header: { cwd: string; origin?: 'subagent' } }
+    session: { id: string; header: { cwd?: string; origin?: 'subagent' } }
     followup: (message: UserMessage) => void
     inject: (message: UserMessage) => void
   }
@@ -40,14 +42,14 @@ interface World {
 const newWorld = (): World => ({ pool: new MemoryMediaPool(), sessions: new Map() })
 
 /** Store a Session in the world, as Session persistence would. */
-function addSession(world: World, id: string, origin?: 'subagent'): FakeSession {
+function addSession(world: World, id: string, origin?: 'subagent', options: { withoutCwd?: boolean } = {}): FakeSession {
   const followups: UserMessage[] = []
   const injected: UserMessage[] = []
   const session: FakeSession = {
     id,
     agent: {
       status: 'idle',
-      session: { id, header: { cwd: tmpdir(), ...origin === undefined ? {} : { origin } } },
+      session: { id, header: { ...options.withoutCwd === true ? {} : { cwd: tmpdir() }, ...origin === undefined ? {} : { origin } } },
       followup: (message) => { followups.push(message) },
       inject: (message) => { injected.push(message) },
     },
@@ -111,7 +113,10 @@ const until = async (predicate: () => boolean | Promise<boolean>, ms = 5000): Pr
  * Start one host process over `world`. No agent is loaded until something
  * resolves its Session through the Session controller, as after a restart.
  */
-async function mount(world: World, options: { storageDomain?: unknown; resolveDelayMs?: number; forkEventBus?: unknown } = {}) {
+async function mount(
+  world: World,
+  options: { storageDomain?: unknown; resolveDelayMs?: number; forkEventBus?: unknown; statError?: Error; statGate?: Promise<void> } = {},
+) {
   const ctx = new Context()
   contexts.push(ctx)
   const logs: { type: string; text: string }[] = []
@@ -124,9 +129,11 @@ async function mount(world: World, options: { storageDomain?: unknown; resolveDe
   ctx.provide('systemPrompt', { tools: () => () => {} } as never)
   ctx.provide('agents', { get: (id: string) => loaded.get(id) } as never)
   ctx.provide('sessionPersistence', {
-    stat: (id: string) => {
+    stat: async (id: string) => {
+      await options.statGate
+      if (options.statError !== undefined) throw options.statError
       const session = world.sessions.get(id)
-      return Promise.resolve(session === undefined ? undefined : { header: session.agent.session.header, revision: 1 })
+      return session === undefined ? undefined : { header: session.agent.session.header, revision: 1 }
     },
   } as never)
   ctx.provide('sessionController', {
@@ -400,5 +407,201 @@ describe('monitors on a Session handover', () => {
     await host.ctx.fiber.dispose()
     expect(bus.movers.has('monitor')).toBe(false)
     expect(await withRecords(world, records => records.get(String(kept['id']))?.owner)).toBe('chat-new')
+  })
+})
+
+describe('monitor tools edge cases', () => {
+  it('runs in the home directory when the Session has no working directory', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'fork-monitor-home-'))
+    const previous = process.env['HOME']
+    process.env['HOME'] = home
+    try {
+      const world = newWorld()
+      const owner = addSession(world, 'session-1', undefined, { withoutCwd: true })
+      const host = await mount(world)
+      host.loaded.set(owner.id, owner.agent)
+      await host.call(owner, 'monitor_start', { command: 'sleep 30', description: 'homeless', persistent: true })
+      await host.ctx.fiber.dispose()
+      expect(await withRecords(world, records => [...records.values()].map(record => record.cwd))).toEqual([home])
+    } finally {
+      if (previous === undefined) delete process.env['HOME']
+      else process.env['HOME'] = previous
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses a start past the per-session cap and says to stop one first', async () => {
+    const world = newWorld()
+    const owner = addSession(world, 'session-1')
+    const host = await mount(world)
+    host.loaded.set(owner.id, owner.agent)
+    for (let index = 0; index < 10; index += 1) {
+      expect(await host.call(owner, 'monitor_start', { command: 'sleep 30', description: `m${String(index)}` })).toMatchObject({ status: 'running' })
+    }
+    expect(await host.call(owner, 'monitor_start', { command: 'sleep 30', description: 'one too many' }))
+      .toEqual({ error: '10 monitors are already running; stop one with monitor_stop first.' })
+    expect(await host.listed(owner)).toHaveLength(10)
+  })
+
+  it('does not hide a start that fails for any other reason', async () => {
+    const world = newWorld()
+    const owner = addSession(world, 'session-1')
+    const host = await mount(world)
+    host.loaded.set(owner.id, owner.agent)
+    const batch = await host.ctx.tools.execute({
+      signal: new AbortController().signal,
+      calls: [{ type: 'tool-call', id: ToolCallId('nul'), name: 'monitor_start', arguments: JSON.stringify({ command: 'echo a\u0000b', description: 'nul' }) }],
+      agent: owner.agent as never,
+    })
+    const result = batch.results[0]!.result
+    expect(result.isError).toBe(true)
+    expect(JSON.stringify(result.content)).toContain('null bytes')
+    expect(await host.listed(owner)).toEqual([])
+  })
+
+  it('lists nothing without a session', async () => {
+    const host = await mount(newWorld())
+    expect(await host.call(undefined, 'monitor_list', {})).toEqual({ monitors: [] })
+  })
+
+  it('describes each call for the transcript', async () => {
+    const { ctx } = await mount(newWorld())
+    expect(ctx.tools.get('monitor_start')?.presentCall?.({ command: 'tail -F app.log', description: 'app log' }))
+      .toEqual({ card: 'generic', title: 'Monitor: app log', kind: 'execute', rawInput: 'tail -F app.log' })
+    expect(ctx.tools.get('monitor_stop')?.presentCall?.({ id: 'mon-abc123' }))
+      .toEqual({ card: 'generic', title: 'Stop monitor mon-abc123', kind: 'other', rawInput: 'mon-abc123' })
+    expect(ctx.tools.get('monitor_list')?.presentCall?.({})).toEqual({ card: 'generic', title: 'List monitors', kind: 'other' })
+  })
+})
+
+describe('monitor restore edge cases', () => {
+  const stored = (description: string, extra: Partial<MonitorRecord> = {}): MonitorRecord =>
+    ({ owner: 'session-1', command: 'sleep 30', description, cwd: tmpdir(), startedAt: Date.now() - 1000, ...extra })
+
+  it('restores a monitor when Session persistence cannot say whether its Session exists', async () => {
+    const world = newWorld()
+    const owner = addSession(world, 'session-1')
+    await withRecords(world, (records) => { records.set('mon-unsure', stored('unsure')) })
+    const host = await mount(world, { statError: new Error('index offline') })
+    await until(() => host.logged('monitor mon-unsure restored for session session-1: unsure (persistent)'))
+    expect(host.logged('monitor mon-unsure: cannot tell whether session session-1 exists, restoring it: index offline')).toBe(true)
+    expect(await host.listed(owner)).toEqual([expect.objectContaining({ id: 'mon-unsure', status: 'running' })])
+  })
+
+  it('counts a single remaining minute in the singular', async () => {
+    const world = newWorld()
+    const owner = addSession(world, 'session-1')
+    await withRecords(world, (records) => { records.set('mon-soon', stored('soon', { deadline: Date.now() + 30_000 })) })
+    const host = await mount(world)
+    await until(() => host.logged('monitor mon-soon restored for session session-1: soon (1 minute left)'))
+    expect(await host.listed(owner)).toEqual([expect.objectContaining({ id: 'mon-soon', status: 'running' })])
+  })
+
+  it('drops the stored monitors past the per-session cap and forgets them', async () => {
+    const world = newWorld()
+    const owner = addSession(world, 'session-1')
+    await withRecords(world, (records) => {
+      for (let index = 0; index < 11; index += 1) records.set(`mon-${String(index).padStart(2, '0')}`, stored(`m${String(index)}`))
+    })
+    const host = await mount(world)
+    await until(() => host.logs.filter(line => / (restored|dropped)/u.test(line.text)).length === 11)
+    const dropped = host.logs.filter(line => line.text.includes(' dropped: '))
+    expect(dropped).toHaveLength(1)
+    expect(dropped[0]?.text).toContain('10 monitors are already running; stop one with monitor_stop first.')
+    expect(await host.listed(owner)).toHaveLength(10)
+    await host.ctx.fiber.dispose()
+    expect(await storedIds(world)).toHaveLength(10)
+  })
+
+  it('stops restoring when disposal begins while it asks whether a Session exists', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const world = newWorld()
+    addSession(world, 'session-1')
+    await withRecords(world, (records) => { records.set('mon-late', stored('late')) })
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const host = await mount(world, { statGate: gate })
+    const timers = vi.getTimerCount()
+    const disposing = host.ctx.fiber.dispose()
+    // The sweep timer is cleared in the same step that marks the plugin as stopping.
+    await until(() => vi.getTimerCount() < timers)
+    release()
+    await disposing
+    expect(host.logs.some(line => line.text.includes('restored') || line.text.includes('dropped'))).toBe(false)
+    expect(await storedIds(world)).toEqual(['mon-late'])
+  })
+
+  /** A store double whose table records what was written; `entries` and `put` can be made to fail. */
+  function fakeStore(options: { entries?: () => [string, MonitorRecord][]; put?: () => Promise<void>; remove?: () => Promise<void> } = {}) {
+    const puts: [string, MonitorRecord][] = []
+    const deleted: string[] = []
+    const closed = vi.fn()
+    const table = {
+      entries: options.entries ?? (() => []),
+      get: () => undefined,
+      put: (id: string, record: MonitorRecord) => { puts.push([id, record]); return options.put?.() ?? Promise.resolve() },
+      delete: (id: string) => { deleted.push(id); return options.remove?.() ?? Promise.resolve() },
+    }
+    const opened = { table: () => table, close: () => { closed(); return Promise.resolve() } }
+    return { puts, deleted, closed, domain: { open: () => Promise.resolve(opened) } }
+  }
+
+  it('runs monitors and says so when the store does not open', async () => {
+    const world = newWorld()
+    const owner = addSession(world, 'session-1')
+    const host = await mount(world, { storageDomain: { open: () => Promise.reject(new Error('disk gone')) } })
+    host.loaded.set(owner.id, owner.agent)
+    await until(() => host.logs.some(line => line.type === 'warn'))
+    expect(host.logs.filter(line => line.type === 'warn').map(line => line.text)).toEqual([
+      'monitor store did not open, so monitors are not restored after a host restart: disk gone',
+    ])
+    expect(await host.call(owner, 'monitor_start', { command: 'sleep 30', description: 'plain' })).toMatchObject({ status: 'running' })
+  })
+
+  it('warns when a dropped monitor cannot be removed from the store', async () => {
+    const world = newWorld()
+    addSession(world, 'session-1')
+    const store = fakeStore({
+      entries: () => [['mon-old', stored('old', { deadline: Date.now() - 1000 })]],
+      remove: () => Promise.reject(new Error('disk full')),
+    })
+    const host = await mount(world, { storageDomain: store.domain })
+    await until(() => host.logged('monitor store: could not forget monitor mon-old: disk full'))
+    expect(host.logged('monitor mon-old of session session-1 dropped: its deadline passed')).toBe(true)
+    expect(store.deleted).toEqual(['mon-old'])
+  })
+
+  it('warns, keeps working, and closes the store when restoring fails outright', async () => {
+    const world = newWorld()
+    const owner = addSession(world, 'session-1')
+    const store = fakeStore({ entries: () => { throw new Error('table unreadable') } })
+    const host = await mount(world, { storageDomain: store.domain })
+    host.loaded.set(owner.id, owner.agent)
+    await until(() => host.logged('monitor store: restoring stopped early: table unreadable'))
+    expect(await host.call(owner, 'monitor_start', { command: 'sleep 30', description: 'still works' })).toMatchObject({ status: 'running' })
+    await host.ctx.fiber.dispose()
+    expect(store.closed).toHaveBeenCalledOnce()
+  })
+
+  it('warns about a write the store refuses, and leaves a moved monitor alone when it has no stored record', async () => {
+    const world = newWorld()
+    const before = addSession(world, 'chat-old')
+    addSession(world, 'chat-new')
+    const store = fakeStore({ put: () => Promise.reject(new Error('disk full')) })
+    const movers = new Map<string, (from: ReadonlySet<string>, to: string) => unknown>()
+    const bus = {
+      registerHandover: (kind: string, move: (from: ReadonlySet<string>, to: string) => unknown) => {
+        movers.set(kind, move)
+        return () => {}
+      },
+    }
+    const host = await mount(world, { storageDomain: store.domain, forkEventBus: bus })
+    host.loaded.set(before.id, before.agent)
+    const started = await host.call(before, 'monitor_start', { command: 'sleep 30', description: 'unsaved', persistent: true })
+    await movers.get('monitor')!(new Set(['chat-old']), 'chat-new')
+    await host.ctx.fiber.dispose()
+    expect(host.logged(`monitor store: could not save monitor ${String(started['id'])}: disk full`)).toBe(true)
+    // Only the failed save reached the table; the move found nothing to update.
+    expect(store.puts.map(([id]) => id)).toEqual([started['id']])
   })
 })

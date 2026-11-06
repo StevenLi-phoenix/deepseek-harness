@@ -3,13 +3,15 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
-import type { FlowActivityView, FlowRecentItem, FlowWindowActivity, OverviewView } from '../src/views.ts'
+import type { FlowActivityView, FlowRecentItem, FlowRoute, FlowWindowActivity, OverviewView } from '../src/views.ts'
 import { GRAPH, GRAPH_BUILT, PLANNED_COUNT } from '../src/client/flow-graph.ts'
 import { FlowPage, type FlowPageProps, type FlowProps } from '../src/client/Flow.tsx'
 import { clip } from '../src/client/FlowBox.tsx'
 import { FlowCanvas } from '../src/client/FlowCanvas.tsx'
+import { FlowSide, type FlowSideProps } from '../src/client/FlowDetail.tsx'
 import { buildGraph, edgeKey } from '../src/client/flow-model.ts'
 import { factOf, rowsThrough, stopsOf, type BoxFact } from '../src/client/flow-view.ts'
+import { FlowPanelIcon } from '../src/client/FlowPanelIcon.tsx'
 import type { Translate } from '../src/client/format.ts'
 import { zh } from '../src/client/locales.ts'
 import { createResourceStore, type ResourceState } from '../src/client/resource.ts'
@@ -75,7 +77,7 @@ function mount({ overview = {}, activity = {}, registered = [] }: Reads = {}) {
     t,
   }
   const view = render(<FlowPage {...props} />)
-  return { refresh, openSettings, view }
+  return { refresh, openSettings, view, overviewStore, activityStore }
 }
 
 const loaded = (overview: OverviewView = OVERVIEW): Reads => ({
@@ -399,5 +401,193 @@ describe('clip', () => {
   it('cuts a longer line with an ellipsis, counting a Latin character as half', () => {
     expect(clip('十三个字十三个字十', 8)).toBe('十三个字十三个字…')
     expect(clip('abcdefghijklmnopqrstuvwxyz', 8)).toBe('abcdefghijklmn…')
+  })
+})
+
+describe('FlowPanelIcon', () => {
+  it('draws the sidebar icon at the size it is asked for', () => {
+    const props = { size: 20 } as Parameters<typeof FlowPanelIcon>[0]
+    const view = render(<FlowPanelIcon {...props} />)
+    const icon = view.container.querySelector('svg')!
+    expect(icon).not.toBeNull()
+    expect(icon.getAttribute('width')).toBe('20')
+  })
+})
+
+
+describe('factOf corners', () => {
+  const route = (id: string, fields: Partial<FlowRoute> = {}): FlowRoute => ({
+    id, origin: 'config', sources: [], kinds: [], subjects: [], paused: false, removed: false, changedAt: null, result: 'notify',
+    downstream: [], instructions: null, ...fields,
+  })
+  const sources = (overrides: Partial<Parameters<typeof factOf>[1]> = {}): Parameters<typeof factOf>[1] => ({
+    cards: new Map(OVERVIEW.cards.map(card => [card.id, card])), activity: ACTIVITY, span: '24h', now: NOW, t: translate, ...overrides,
+  })
+
+  it('says a paused or removed route is idle, whatever its numbers', () => {
+    const paused = { ...ACTIVITY, routes: [route('ci', { paused: true })] }
+    expect(factOf(GRAPH.node('githubSessions')!, sources({ activity: paused }))).toMatchObject({ state: 'idle', text: '已暂停' })
+    const removed = { ...ACTIVITY, routes: [route('ci', { removed: true })] }
+    expect(factOf(GRAPH.node('githubSessions')!, sources({ activity: removed })).text).toBe('已移除')
+  })
+
+  it('warns with the service\'s own status line when a card is amber', () => {
+    const cards = new Map([...OVERVIEW.cards, { id: 'qq' as const, tone: 'warn' as const, state: 'starting', facts: {} }].map(card => [card.id, card]))
+    expect(factOf(GRAPH.node('qq')!, sources({ cards }))).toMatchObject({ state: 'warn' })
+  })
+
+  it('reads the owner\'s sleep state and how many messages wait for them', () => {
+    const asleep = { ...ACTIVITY, presence: { asleep: true, deferred: 3 } }
+    expect(factOf(GRAPH.node('dnd')!, sources({ activity: asleep })).text).toBe('勿扰中')
+    expect(factOf(GRAPH.node('deferQ')!, sources({ activity: asleep }))).toMatchObject({ state: 'plain', count: 3, text: '延后 3 条' })
+    expect(factOf(GRAPH.node('deferQ')!, sources()).text).toBe('')
+    expect(factOf(GRAPH.node('deferQ')!, sources({ activity: { ...ACTIVITY, presence: null } })).text).toBe('')
+    expect(factOf(GRAPH.node('dnd')!, sources({ activity: { ...ACTIVITY, presence: null } })).text).toBe('')
+  })
+
+  it('says nothing before the first reading, and counts nothing sent on the WeChat box then', () => {
+    expect(factOf(GRAPH.node('github')!, sources({ activity: null }))).toEqual({ state: 'plain', text: '', count: 0, lastAt: null })
+    expect(factOf(GRAPH.node('wechatOut')!, sources({ activity: null }))).toMatchObject({ text: '已发送 0 条', count: 0 })
+  })
+
+  it('counts a box that only has batches, with and without a message to the owner, and one that has events but no time', () => {
+    const quiet = { ...ACTIVITY, windows: { ...ACTIVITY.windows, '24h': window({ subscriptions: { ci: { count: 4, lastAt: NOW - 60_000, sent: 0, silent: 4, failed: 0 } } }) } }
+    expect(factOf(GRAPH.node('githubSessions')!, sources({ activity: quiet }))).toMatchObject({ text: '4 批 · 未发送', count: 4, lastAt: NOW - 60_000 })
+    const nowhere = { ...ACTIVITY, windows: { ...ACTIVITY.windows, '24h': window({ sources: { github: { count: 2, lastAt: null } } }) } }
+    expect(factOf(GRAPH.node('github')!, sources({ activity: nowhere }))).toMatchObject({ count: 2, lastAt: null })
+    const unknownTime = { ...ACTIVITY, windows: { ...ACTIVITY.windows, '24h': window({ subscriptions: { ci: { count: 2, lastAt: null, sent: 0, silent: 2, failed: 0 } } }) } }
+    expect(factOf(GRAPH.node('githubSessions')!, sources({ activity: unknownTime }))).toMatchObject({ count: 2, lastAt: null })
+    const mixed = { ...ACTIVITY, windows: { ...ACTIVITY.windows, '24h': window({
+      sources: { kaorou: { count: 1, lastAt: NOW - 1_000 } },
+      subscriptions: { kaorou: { count: 2, lastAt: NOW - 500, sent: 1, silent: 1, failed: 0 } },
+    }) } }
+    expect(factOf(GRAPH.node('pipelines')!, sources({ activity: mixed }))).toMatchObject({ count: 1 })
+  })
+
+  it('cuts the time to a relative one for events older than today', () => {
+    const old = { ...ACTIVITY, windows: { ...ACTIVITY.windows, '24h': window({ sources: { github: { count: 1, lastAt: NOW - 2 * 86_400_000 } } }) } }
+    expect(factOf(GRAPH.node('github')!, sources({ activity: old })).text).toBe('1 条 · 2 天前')
+  })
+})
+
+describe('FlowPage corners', () => {
+  const countOf = (label: string): string => within(screen.getByText(label).parentElement!).getByText(/^\d+$/u).textContent
+
+  it('runs a figure to its new value instead of jumping, and lands on it', () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('matchMedia', () => ({ matches: false }))
+    const { activityStore } = mount(loaded())
+    expect(figures().slice(0, 3)).toEqual(['40', '6', '3'])
+    act(() => {
+      activityStore.update((draft) => {
+        if (draft.data !== null) draft.data = { ...draft.data, windows: { ...draft.data.windows, '24h': window({ funnel: { events: 10, batches: 6, sent: 3, silent: 3, failed: 2 } }) } }
+      })
+    })
+    act(() => { vi.advanceTimersByTime(100) })
+    const midway = Number(figures()[0])
+    expect(midway).toBeGreaterThan(10)
+    expect(midway).toBeLessThan(40)
+    act(() => { vi.advanceTimersByTime(1000) })
+    expect(figures()[0]).toBe('10')
+    expect(countOf(zh['flow.funnel.events'])).toBe('10')
+  })
+
+  it('stops running a figure when the page closes mid-run', () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('matchMedia', () => ({ matches: false }))
+    const { activityStore, view } = mount(loaded())
+    act(() => {
+      activityStore.update((draft) => {
+        if (draft.data !== null) draft.data = { ...draft.data, windows: { ...draft.data.windows, '24h': window({ funnel: { events: 5, batches: 6, sent: 3, silent: 3, failed: 2 } }) } }
+      })
+    })
+    view.unmount()
+    expect(() => { act(() => { vi.advanceTimersByTime(1000) }) }).not.toThrow()
+  })
+
+  it('jumps straight to the new value for an owner who asked for reduced motion', () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true }))
+    const { activityStore } = mount(loaded())
+    act(() => {
+      activityStore.update((draft) => {
+        if (draft.data !== null) draft.data = { ...draft.data, windows: { ...draft.data.windows, '24h': window({ funnel: { events: 7, batches: 6, sent: 3, silent: 3, failed: 2 } }) } }
+      })
+    })
+    expect(figures()[0]).toBe('7')
+  })
+
+  it('counts the other things that are wrong after the first', () => {
+    const many: OverviewView = { ...QQ_DOWN, cards: [...QQ_DOWN.cards, { id: 'bili', tone: 'down', state: 'down', facts: {} }] }
+    mount(loaded(many))
+    expect(screen.getByRole('status').textContent).toContain('还有 1 处')
+  })
+
+  it('does not open a broken service that has no box, though the verdict still names it', () => {
+    const noBox: OverviewView = { ...OVERVIEW, cards: [...OVERVIEW.cards.filter(card => card.id !== 'bus'), { id: 'bus', tone: 'down', state: 'down', facts: {} }] }
+    mount(loaded(noBox))
+    const body = within(screen.getByRole('status')).getAllByRole('button')[0] as HTMLButtonElement
+    expect(body.disabled).toBe(true)
+    fireEvent.click(body)
+    expect(node('github').getAttribute('aria-pressed')).toBe('false')
+  })
+})
+
+describe('FlowSide', () => {
+  const NOTE_DAY = new Date(2026, 10, 6, 9, 30, 15).getTime()
+  const route = (id: string, fields: Partial<FlowRoute> = {}): FlowRoute => ({
+    id, origin: 'agent', sources: ['github'], kinds: ['workflow_run.*'], subjects: ['octo/*'], paused: false, removed: false, changedAt: null,
+    result: 'event', downstream: ['desk', 'qq-main'], instructions: null, ...fields,
+  })
+  const props = (over: Partial<FlowSideProps> = {}): FlowSideProps => ({
+    graph: GRAPH, node: undefined, fact: undefined, recent: [], routes: [], changes: [], ignored: 0, followed: null, now: NOTE_DAY,
+    canManage: () => false, onManage: () => {}, onFollow: () => {}, onBack: () => {}, translate, ...over,
+  })
+
+  it('shows a row of an earlier day with how long ago it was, and one of today with its time', () => {
+    const older: FlowRecentItem = { ...ITEM, id: 'old', at: NOTE_DAY - 3 * 86_400_000 }
+    render(<FlowSide {...props({ recent: [ITEM, older] })} />)
+    const rows = within(side()).getAllByRole('button')
+    expect(rows[0]!.querySelector('time')!.textContent).toBe('09:29:15')
+    expect(rows[1]!.querySelector('time')!.textContent).toBe('3 天前')
+  })
+
+  it('shows the rule of the route a box stands for, with its instructions behind a disclosure', () => {
+    const ruled = route('ci', { instructions: 'Say what failed.' })
+    render(<FlowSide {...props({ node: GRAPH.node('githubSessions'), routes: [ruled] })} />)
+    expect(within(side()).getByText('当前规则')).toBeTruthy()
+    expect(within(side()).getByText('接收：github、workflow_run.*、octo/*')).toBeTruthy()
+    expect(within(side()).getByText('结果：交给 desk、qq-main')).toBeTruthy()
+    const details = within(side()).getByText('处理说明').closest('details')!
+    expect(details.textContent).toContain('Say what failed.')
+  })
+
+  it('shows a rule without instructions and without a disclosure', () => {
+    render(<FlowSide {...props({ node: GRAPH.node('githubSessions'), routes: [route('ci', { result: 'quiet', downstream: [] })] })} />)
+    expect(within(side()).getByText('结果：不发送')).toBeTruthy()
+    expect(within(side()).queryByText('处理说明')).toBeNull()
+  })
+
+  it('lists the latest changes of the flow, with the owner\'s note when there is one', () => {
+    const changes = [
+      { id: 'c1', at: NOTE_DAY - 60_000, op: 'set' as const, route: 'ci', note: '加上标签' },
+      { id: 'c2', at: NOTE_DAY - 2 * 86_400_000, op: 'remove' as const, route: 'desk', note: null },
+    ]
+    render(<FlowSide {...props({ changes })} />)
+    expect(within(side()).getByText('流程改动')).toBeTruthy()
+    expect(within(side()).getByText('09:29:15 修改 ci：加上标签')).toBeTruthy()
+    expect(within(side()).getByText('2 天前 移除 desk')).toBeTruthy()
+  })
+
+  it('leaves out the wiring lines a box does not have, and the fact a box has nothing to say about', () => {
+    const planned = GRAPH.node('speech')!
+    render(<FlowSide {...props({ node: planned, fact: { state: 'planned', text: '', count: 0, lastAt: null } })} />)
+    const wiring = side().querySelector('details')!
+    expect(wiring.textContent).not.toContain('实际承载')
+    expect(wiring.textContent).toContain(planned.gap)
+    expect(side().querySelector('[data-state="planned"]')).toBeNull()
+    cleanup()
+    render(<FlowSide {...props({ node: GRAPH.node('dnd') })} />)
+    expect(side().querySelector('details')!.textContent).toContain('实际承载')
+    expect(side().querySelector('details')!.textContent).not.toContain('图上')
   })
 })

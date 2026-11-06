@@ -258,3 +258,53 @@ describe('IlinkClient defaults', () => {
     expect(clientVersion('x')).toBe(0)
   })
 })
+
+describe('IlinkClient upload URLs', () => {
+  const request = { filekey: 'k', media_type: 1, to_user_id: 'owner', rawsize: 1, rawfilemd5: 'm', filesize: 16, aeskey: 'a' } as const
+
+  it('answers the complete upload URL alone, trimmed, when the server gave only that', async () => {
+    const ilink = new FakeIlink()
+    ilink.reply('ilink/bot/getuploadurl', { body: { upload_full_url: ' https://cdn.test/upload?x=1 ' } })
+    await expect(client(ilink).getUploadUrl(request)).resolves.toEqual({ uploadFullUrl: 'https://cdn.test/upload?x=1' })
+  })
+
+  it('answers the upload parameter alone when the server gave only that', async () => {
+    const ilink = new FakeIlink()
+    ilink.reply('ilink/bot/getuploadurl', { body: { ret: 0, upload_param: 'param' } })
+    await expect(client(ilink).getUploadUrl(request)).resolves.toEqual({ uploadParam: 'param' })
+  })
+
+  it('fails an answer that names no way to upload', async () => {
+    const ilink = new FakeIlink()
+    ilink.reply('ilink/bot/getuploadurl', { body: { ret: 0, upload_full_url: '   ' } })
+    await expect(client(ilink).getUploadUrl(request)).rejects.toThrow('iLink ilink/bot/getuploadurl: no upload URL in the answer')
+  })
+
+  it('fails an upload URL request that outlives its deadline', async () => {
+    const hanging = new IlinkClient({ baseUrl: 'https://ilink.test', fetch: hangingFetch, timeoutMs: 2000 })
+    const pending = hanging.getUploadUrl(request).catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(await pending).toMatchObject({ name: 'IlinkError', message: 'iLink ilink/bot/getuploadurl: timed out after 2000ms' })
+  })
+})
+
+describe('IlinkClient answers without ret', () => {
+  it('reads a config answer without ret as success', async () => {
+    const ilink = new FakeIlink()
+    ilink.reply('ilink/bot/getconfig', { body: { typing_ticket: 'ticket' } })
+    await expect(client(ilink).getConfig('owner', undefined)).resolves.toEqual({ typingTicket: 'ticket' })
+  })
+
+  it('reads a typing answer without ret as success', async () => {
+    const ilink = new FakeIlink()
+    ilink.reply('ilink/bot/sendtyping', { body: {} })
+    await expect(client(ilink).sendTyping('owner', 'ticket', TypingStatus.TYPING)).resolves.toBeUndefined()
+  })
+
+  it('fails a config call that outlives its deadline', async () => {
+    const hanging = new IlinkClient({ baseUrl: 'https://ilink.test', fetch: hangingFetch, timeoutMs: 2000 })
+    const pending = hanging.getConfig('owner', undefined).catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(await pending).toMatchObject({ name: 'IlinkError', message: 'iLink ilink/bot/getconfig: timed out after 2000ms' })
+  })
+})

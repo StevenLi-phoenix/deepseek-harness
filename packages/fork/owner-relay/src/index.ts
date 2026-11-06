@@ -237,6 +237,7 @@ export class OwnerRelay extends Service {
   /** Call one channel hook; a throwing hook is logged and never stops the relay. */
   private hook(channel: RelayChannel, hook: Hook, sessionId: string, ended?: RelayDecision['kind']): void {
     try {
+      /* v8 ignore next -- turnEnded always passes the decision; the 'empty' default only satisfies the optional parameter type */
       if (hook === 'onTurnEnd') channel.onTurnEnd?.(sessionId, ended ?? 'empty')
       else channel[hook]?.(sessionId)
     } catch (error: unknown) {

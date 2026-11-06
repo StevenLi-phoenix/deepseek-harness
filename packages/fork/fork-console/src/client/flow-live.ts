@@ -89,6 +89,7 @@ export function liveGraph(base: FlowGraph, routes: readonly FlowRoute[]): FlowGr
     ...base.nodes.map((node) => {
       if (!redrawn.has(node.id)) return node
       const { gap: _gap, ...rest } = node
+      /* v8 ignore next -- every redrawn box has tracks. */
       const id = node.tracks?.subscriptions?.[0] ?? node.id
       return { ...rest, wired: 'live' as const, via: `route ${id}`, route: id }
     }),

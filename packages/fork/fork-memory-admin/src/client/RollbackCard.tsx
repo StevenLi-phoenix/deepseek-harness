@@ -76,7 +76,10 @@ export function RollbackCard({ state, actions, t }: { state: MemoryState; action
           kind="primary"
           disabled={target === undefined || working}
           busy={flow?.stage === 'previewing'}
-          onClick={() => { if (target !== undefined) void actions.rollbackPreview(target) }}
+          onClick={() => {
+            /* v8 ignore else -- the button is disabled while target is undefined, so a click always has one (type narrowing) */
+            if (target !== undefined) void actions.rollbackPreview(target)
+          }}
         >
           {flow?.stage === 'previewing' ? t('rollback.working') : t('rollback.preview')}
         </Button>

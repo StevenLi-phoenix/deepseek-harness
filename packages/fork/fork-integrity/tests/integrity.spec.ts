@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { Context } from '@deepseek-ai/cordis'
 import { createAssistantMessage, createSystemMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId, SESSION_FORMAT_VERSION, type SessionEvent } from '@deepseek-ai/dsh-session'
@@ -387,5 +387,91 @@ describe('the bundle\'s persona', () => {
       const section = prefix.slice(start, prefix.indexOf('Say the plain thing', start))
       expect([...section.matchAll(/「([^」]+)」/gu)].map(match => match[1])).toEqual([...TICS])
     }
+  })
+})
+
+describe('defaults and failures of the watch', () => {
+  /** Mount with a notifier of the test's own and every log line captured. */
+  async function mountWith(
+    config: Partial<Integrity.Config>, send: (note: { title: string; body?: string }) => Promise<void>, raw = false,
+  ): Promise<{ ctx: Context; logs: string[] }> {
+    const ctx = new Context()
+    contexts.push(ctx)
+    const logs: string[] = []
+    Object.assign(ctx.logger, {
+      info: (format: string, ...args: unknown[]) => { logs.push(`info ${format} ${args.map(String).join(' ')}`) },
+      warn: (format: string, ...args: unknown[]) => { logs.push(`warn ${format} ${args.map(String).join(' ')}`) },
+    })
+    ctx.provide('forkNotifier', { send } as never)
+    if (raw) await ctx.plugin({ name: 'fork-integrity-raw', apply: (inner: Context) => { Integrity.apply(inner, config) } })
+    else await ctx.plugin(Integrity, config)
+    return { ctx, logs }
+  }
+
+  it('scans every five minutes, tells the owner, and counts stock lines for the default presets when given no settings', async () => {
+    const { home: dir } = await home()
+    vi.stubEnv('HOME', dir)
+    const notices: Array<{ title: string; body?: string }> = []
+    const { ctx } = await mountWith({}, (note) => { notices.push(note); return Promise.resolve() }, true)
+    await settle()
+    await writeFile(join(dir, 'AGENTS.md'), 'x')
+    await vi.advanceTimersByTimeAsync(299_000)
+    await settle()
+    expect(notices).toEqual([])
+    await vi.advanceTimersByTimeAsync(1000)
+    await until(() => notices.length === 1)
+    expect(notices[0]).toMatchObject({ title: 'DSH_HOME/AGENTS.md 新出现了（不显示内容）', safety: true })
+    const chat = Session.create(SessionId('s-default'), undefined, {
+      version: SESSION_FORMAT_VERSION, id: SessionId('s-default'), createdAt: 0, isSeeded: false, agentPreset: 'bili',
+    })
+    chat.append('turn/start', { turn: 1 })
+    chat.append('assistant/message', { turn: 1, step: 1, message: assistantMessage('这话我记下了') } as never, { surfaceOp: 'append' })
+    ctx.emit('session/event', chat, { seq: chat.seq, time: 0, type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } } as never)
+    await until(() => existsSync(join(dir, 'fork-integrity', 'tics.json')))
+    const stored = JSON.parse(await readFile(join(dir, 'fork-integrity', 'tics.json'), 'utf8')) as { days: Record<string, { answersWithHits: number }> }
+    expect(Object.values(stored.days)[0]).toMatchObject({ answersWithHits: 1 })
+    vi.unstubAllEnvs()
+  })
+
+  it('keeps the change pending and retries when the notice cannot be sent, whatever the failure is', async () => {
+    const { home: dir } = await home()
+    vi.stubEnv('HOME', dir)
+    let failure: 'error' | 'text' | 'none' = 'error'
+    const notices: Array<{ title: string }> = []
+    // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- A bare string rejection is the case under test.
+    const rejectText = (): Promise<void> => Promise.reject('line busy')
+    const { logs } = await mountWith({ intervalSec: 60, minGapSec: 0 }, (note) => {
+      if (failure === 'error') return Promise.reject(new Error('wechat down'))
+      if (failure === 'text') return rejectText()
+      notices.push(note)
+      return Promise.resolve()
+    })
+    await settle()
+    await writeFile(join(dir, 'AGENTS.md'), 'x')
+    await vi.advanceTimersByTimeAsync(60_000)
+    await until(() => logs.some(line => line.includes('notice failed, will retry: %s wechat down')))
+    failure = 'text'
+    await vi.advanceTimersByTimeAsync(60_000)
+    await until(() => logs.some(line => line.includes('notice failed, will retry: %s line busy')))
+    failure = 'none'
+    await vi.advanceTimersByTimeAsync(60_000)
+    await until(() => notices.length === 1)
+    expect(notices).toHaveLength(1)
+    expect(notices[0]).toMatchObject({ title: 'DSH_HOME/AGENTS.md 新出现了（不显示内容）', safety: true })
+    vi.unstubAllEnvs()
+  })
+
+  it('logs a scan that fails, and scans again at the next interval', async () => {
+    const { home: dir } = await home()
+    vi.stubEnv('HOME', dir)
+    await writeFile(join(dir, 'blocker'), 'a file where the state directory should be')
+    const { logs } = await mountWith({ intervalSec: 60, stateDir: join(dir, 'blocker', 'state') }, () => Promise.resolve())
+    await until(() => logs.some(line => line.startsWith('warn fork-integrity: scan failed: %s')))
+    expect(logs.find(line => line.startsWith('warn fork-integrity: scan failed')) ?? '').toMatch(/EEXIST|ENOTDIR/u)
+    const failures = logs.filter(line => line.startsWith('warn fork-integrity: scan failed')).length
+    await vi.advanceTimersByTimeAsync(60_000)
+    await until(() => logs.filter(line => line.startsWith('warn fork-integrity: scan failed')).length > failures)
+    expect(logs.filter(line => line.startsWith('warn fork-integrity: scan failed')).length).toBeGreaterThan(failures)
+    vi.unstubAllEnvs()
   })
 })

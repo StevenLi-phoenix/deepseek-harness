@@ -89,6 +89,7 @@ export function wrapMessage(text: string, from: string, fromName: string, mode: 
 export function parseWrapper(content: string): Wrapper | undefined {
   const m = WRAPPER.exec(content)
   if (m === null) return undefined
+  /* v8 ignore next 5 -- group 7 of the wrapper pattern is mandatory. */
   return {
     ...m[1] === undefined ? {} : { from: m[1] },
     ...m[4] === undefined ? {} : { fromName: m[4] },

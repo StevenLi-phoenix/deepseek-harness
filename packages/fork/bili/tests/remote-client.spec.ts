@@ -163,6 +163,137 @@ describe('RemoteBiliClient', () => {
   })
 })
 
+/** Replace fetch by a stub that answers every request with `status` and the text `raw` (a string is sent as is, anything else as JSON). */
+function answering(status: number, raw: unknown) {
+  const stub = vi.fn((_url: string, _init: RequestInit) => Promise.resolve(new Response(typeof raw === 'string' ? raw : JSON.stringify(raw), { status })))
+  vi.stubGlobal('fetch', stub)
+  return stub
+}
+
+describe('RemoteBiliClient over answers bili-svc could give', () => {
+  it('names the bili-svc id and base URL it was built with', () => {
+    expect(client('maodeng').account).toBe('maodeng')
+    expect(client().baseUrl).toBe(SVC_URL)
+  })
+
+  it('sends the json body, path suffix, referer, and anonymity of a call, and only those it was given', async () => {
+    const stub = answering(200, { ok: true, data: 1 })
+    await client().call('nav', { json: { a: 1 }, path: '/x.json', referer: 'https://www.bilibili.com/', anonymous: true })
+    expect(JSON.parse(stub.mock.calls[0]![1].body as string)).toEqual({
+      endpoint: 'nav', account: 'maomao', json: { a: 1 }, path: '/x.json', referer: 'https://www.bilibili.com/', anonymous: true,
+    })
+    await client().call('nav', { anonymous: false })
+    expect(JSON.parse(stub.mock.calls[1]![1].body as string)).toEqual({ endpoint: 'nav', account: 'maomao' })
+  })
+
+  it('words an outcome by what bili-svc said: the code alone, the reason, the message, or nothing', async () => {
+    answering(200, { ok: false, outcome: 'risk', code: -352 })
+    await expect(client().call('nav')).rejects.toMatchObject({ reason: 'code -352' })
+    answering(200, { ok: false, outcome: 'risk' })
+    await expect(client().call('nav')).rejects.toMatchObject({ reason: 'risk control' })
+    answering(200, { ok: false, outcome: 'refused', message: 'closed for the night' })
+    await expect(client().call('nav')).rejects.toMatchObject({ outcome: 'refused', reason: 'closed for the night' })
+    answering(200, { ok: false, outcome: 'held' })
+    await expect(client().call('nav')).rejects.toThrow(new BiliOutcomeError('nav', 'held', ''))
+    answering(200, { ok: false, outcome: 'api_error' })
+    await expect(client().call('nav')).rejects.toThrow(new BiliApiError('nav', 0, ''))
+    answering(200, { ok: false, outcome: 'verify' })
+    await expect(client().call('nav')).rejects.toMatchObject({ code: 0, detail: '' })
+    expect(logs).toContain('info bili: nav answered risk')
+    expect(logs).toContain('info bili: nav answered refused (closed for the night)')
+  })
+
+  it('treats an answer with no outcome or an unknown outcome as an unknown result, and a non-object body as empty', async () => {
+    answering(200, { ok: false })
+    await expect(client().call('nav')).rejects.toThrow('nav: bili-svc answered an unknown outcome ""')
+    expect(logs).toContain('info bili: nav answered no outcome')
+    answering(200, { ok: false, outcome: 'teleported' })
+    await expect(client().call('nav')).rejects.toThrow('nav: bili-svc answered an unknown outcome "teleported"')
+    answering(200, '[1,2]')
+    await expect(client().call('nav')).rejects.toThrow('unknown outcome ""')
+    answering(200, '')
+    await expect(client().call('nav')).rejects.toThrow('unknown outcome ""')
+  })
+
+  it('answers a server error as an unknown result of the call, and says why a refusal had no error text', async () => {
+    answering(500, {})
+    await expect(client().call('nav')).rejects.toThrow('nav: bili-svc answered HTTP 500')
+    answering(403, {})
+    await expect(client().call('nav')).rejects.toThrow('bili-svc did not accept the token for nav (HTTP 403)')
+    answering(422, {})
+    await expect(client().call('nav')).rejects.toThrow('bili-svc refused the request as malformed (HTTP 422)')
+    answering(422, { error: 'bad_form' })
+    await expect(client().call('nav')).rejects.toThrow('bili-svc refused the request as malformed (HTTP 422: bad_form)')
+  })
+
+  it('refuses an answer that is too large, and names a failure that is not an Error as unknown', async () => {
+    answering(200, 'x'.repeat(8 * 1024 * 1024 + 1))
+    await expect(client().call('nav')).rejects.toThrow('nav: bili-svc answer too large')
+    // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the non-Error arm is the case under test.
+    vi.stubGlobal('fetch', vi.fn(() => Promise.reject('closed')))
+    await expect(client().call('nav')).rejects.toThrow('nav: bili-svc is unreachable (unknown)')
+  })
+
+  it('stops with the caller\'s own abort, before and during the request', async () => {
+    const stub = answering(200, {})
+    const aborted = new AbortController()
+    aborted.abort(new Error('caller stopped'))
+    await expect(client().call('nav', { signal: aborted.signal })).rejects.toThrow('caller stopped')
+    expect(stub).not.toHaveBeenCalled()
+    const live = new AbortController()
+    vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init.signal?.addEventListener('abort', () => { reject(new Error('fetch aborted')) })
+    })))
+    const pending = client().call('nav', { signal: live.signal })
+    const settled = expect(pending).rejects.toThrow('caller stopped')
+    live.abort(new Error('caller stopped'))
+    await settled
+  })
+
+  it('reads /v1/status as far as it is complete: no accounts, rows without an id, and a gate only when sent', async () => {
+    answering(200, { accounts: 'x' })
+    expect(await client().status()).toEqual({ accounts: [], gate: undefined })
+    answering(200, { accounts: ['x', { mid: 5 }, { id: 'a', session: '' }, { id: 'b', mid: 7, display: 'B', session: 'dead' }], gate: { mode: 'auto' } })
+    expect(await client().status()).toEqual({
+      accounts: [{ id: 'a', mid: 0, display: '', session: 'none' }, { id: 'b', mid: 7, display: 'B', session: 'dead' }],
+      gate: { mode: 'auto', readonly: false },
+    })
+    answering(401, {})
+    await expect(client().status()).rejects.toThrow('bili-svc did not accept the token for /v1/status (HTTP 401)')
+    answering(503, {})
+    await expect(client().status()).rejects.toThrow('status: bili-svc answered HTTP 503')
+  })
+
+  it('reads who speaks for the Reply Gate from /v1/accounts', async () => {
+    const stub = answering(200, { routes: { reply_comment: 'maomao', reply_dm: 'maodeng' } })
+    expect(await client().replyRoutes()).toEqual({ comment: 'maomao', dm: 'maodeng' })
+    expect(stub.mock.calls[0]![0]).toBe(`${SVC_URL}/v1/accounts`)
+    answering(200, { routes: null })
+    expect(await client().replyRoutes()).toEqual({ comment: '', dm: '' })
+    answering(403, {})
+    await expect(client().replyRoutes()).rejects.toThrow('bili-svc did not accept the token for /v1/accounts (HTTP 403)')
+    answering(500, {})
+    await expect(client().replyRoutes()).rejects.toThrow('accounts: bili-svc answered HTTP 500')
+  })
+
+  it('answers a reply without an id as just its status, and refuses any other HTTP answer', async () => {
+    answering(200, { status: 'sent' })
+    expect(await client().replyDm(200000001, 'hi')).toEqual({ status: 'sent' })
+    answering(502, {})
+    await expect(client().replyDm(200000001, 'hi')).rejects.toThrow('reply/dm: bili-svc answered HTTP 502')
+  })
+
+  it('finds an endpoint only for an https URL without credentials or a port', () => {
+    const url = 'https://aisubtitle.hdslb.com/bfs/ai_subtitle/prod/101abc'
+    expect(allowedEndpoint('GET', 'not a url')).toBeUndefined()
+    expect(allowedEndpoint('GET', url.replace('https', 'http'))).toBeUndefined()
+    expect(allowedEndpoint('GET', url.replace('https://', 'https://user@'))).toBeUndefined()
+    expect(allowedEndpoint('GET', url.replace('https://', 'https://user:secret@'))).toBeUndefined()
+    expect(allowedEndpoint('GET', url.replace('.com', '.com:8443'))).toBeUndefined()
+    expect(allowedEndpoint('GET', url)).toBe('subtitleAi')
+  })
+})
+
 /** Every `.ts` and `.tsx` source under a directory. */
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true, recursive: true })

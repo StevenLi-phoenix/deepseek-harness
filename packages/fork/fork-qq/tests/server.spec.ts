@@ -1,11 +1,13 @@
 import { mkdirSync, readFileSync, statSync } from 'node:fs'
 import { request } from 'node:http'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { createServer as createNetServer } from 'node:net'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ZodError } from 'zod'
 import { MEDIA_HEADER, MediaHeaderDto, PROTOCOL_HEADER, StatusDto, type RecorderEvent, type Status } from '../src/protocol.ts'
 import { startRecorderServer, type RecorderServer } from '../src/server.ts'
 import { groupMessage } from './fake-onebot.ts'
-import { bootRecorder, connected, recorderConfig, shutdown, until, vi, type Booted } from './recorder-harness.ts'
+import { bootRecorder, connected, recorderConfig, shutdown, until, type Booted } from './recorder-harness.ts'
 
 const SECRET = 'recorder-token-fedcba9876543210'
 const GROUP = '123456789'
@@ -27,9 +29,9 @@ async function boot(options: Parameters<typeof bootRecorder>[0] = {}, server: { 
 interface Answer { status: number; body: unknown; headers: Record<string, string | string[] | undefined> }
 
 function call(socketPath: string, method: string, path: string,
-  options: { token?: string | null; body?: unknown; headers?: Record<string, string> } = {}): Promise<Answer> {
+  options: { token?: string | null; body?: unknown; raw?: string; headers?: Record<string, string> } = {}): Promise<Answer> {
   return new Promise((resolve, reject) => {
-    const payload = options.body === undefined ? undefined : JSON.stringify(options.body)
+    const payload = options.raw ?? (options.body === undefined ? undefined : JSON.stringify(options.body))
     const req = request({
       socketPath, path, method,
       headers: {
@@ -244,5 +246,133 @@ describe('qq-recorder server', () => {
     expect(await call(h.socketPath, 'GET', '/v1/media/..%2Fetc')).toMatchObject({ status: 404 })
     h.apply({ media: { images: false } })
     expect(await call(h.socketPath, 'GET', `/v1/media/${ref}`)).toMatchObject({ status: 404, body: { error: { code: 'not-saved', message: expect.stringContaining('media.images') as string } } })
+  })
+
+  it('refuses a body over 256 KB with 413, and a body that is not JSON with 400', async () => {
+    const h = await boot({ config: false })
+    expect(await call(h.socketPath, 'PUT', '/v1/config', { raw: 'x'.repeat(300_000) })).toMatchObject({ status: 413, body: { error: { code: 'too-large' } } })
+    expect(await call(h.socketPath, 'PUT', '/v1/config', { raw: 'not json' })).toMatchObject({ status: 400, body: { error: { code: 'invalid-json' } } })
+    expect(h.recorder.status().configRevision).toBeNull()
+  })
+
+  it('names the request itself when the error is about its whole body, and the field when it is about one', async () => {
+    const h = await boot({ config: false })
+    expect(await call(h.socketPath, 'POST', '/v1/messages/search', { body: 5 })).toMatchObject({
+      status: 400, body: { error: { code: 'invalid-request', message: expect.stringMatching(/^request: /) as string } },
+    })
+    vi.spyOn(h.recorder, 'lookup').mockImplementation(() => { throw new ZodError([]) })
+    expect(await call(h.socketPath, 'POST', '/v1/messages/lookup', { body: { groupId: GROUP, messageIds: ['1'] } })).toMatchObject({
+      status: 400, body: { error: { code: 'invalid-request', message: 'request: invalid' } },
+    })
+  })
+
+  it('narrows recent messages to one sender, searches inside one group, and refreshes the login code', async () => {
+    const h = await boot()
+    await connected(h)
+    h.fake.push(groupMessage(GROUP, '10001', '甲的话'))
+    h.fake.push(groupMessage(GROUP, '10002', '乙的话'))
+    await until(() => h.recorder.recent(GROUP, { sinceMs: 0, limit: 10 }).length === 2, 'the rows')
+    const recent = (await call(h.socketPath, 'GET', `/v1/messages?groupId=${GROUP}&sinceMs=0&limit=10&userId=10002`)).body as Array<{ text: string }>
+    expect(recent.map(m => m.text)).toEqual(['乙的话'])
+    const found = (await call(h.socketPath, 'POST', '/v1/messages/search', { body: { query: '的话', groupId: GROUP, limit: 5 } })).body as unknown[]
+    expect(found).toHaveLength(2)
+    expect(await call(h.socketPath, 'POST', '/v1/login/refresh')).toMatchObject({
+      status: 200, body: { refreshed: false, reason: 'logged-in', login: { door: 'disabled' } },
+    })
+  })
+
+  it('answers 500 and logs when the recorder fails in a way the protocol has no word for', async () => {
+    const h = await boot({ config: false })
+    vi.spyOn(h.recorder, 'page').mockImplementation(() => { throw new Error('database locked') })
+    vi.spyOn(h.recorder, 'mediaFile').mockRejectedValue(new Error('disk gone'))
+    vi.spyOn(h.recorder, 'applyConfig').mockImplementation(() => { throw new Error('cannot save') })
+    vi.spyOn(h.recorder, 'groups').mockImplementation(() => { throw 'plain failure' })
+    const internal = { status: 500, body: { error: { code: 'internal', message: 'the recorder failed to answer' } } }
+    expect(await call(h.socketPath, 'GET', `/v1/messages?groupId=${GROUP}&limit=5`)).toMatchObject(internal)
+    expect(await call(h.socketPath, 'GET', '/v1/media/m1')).toMatchObject(internal)
+    expect(await call(h.socketPath, 'PUT', '/v1/config', { body: recorderConfig('ws://127.0.0.1:1') })).toMatchObject(internal)
+    expect(await call(h.socketPath, 'GET', '/v1/groups')).toMatchObject(internal)
+    expect(h.logs.filter(line => line.type === 'error').map(line => line.text)).toEqual([
+      'qq-recorder: request failed: database locked', 'qq-recorder: request failed: disk gone',
+      'qq-recorder: request failed: cannot save', 'qq-recorder: request failed: plain failure',
+    ])
+  })
+
+  it('answers 400 for a media reference that is no reference of this recorder', async () => {
+    const h = await boot({ config: false })
+    expect(await call(h.socketPath, 'GET', '/v1/media/m0')).toMatchObject({ status: 400, body: { error: { code: 'invalid-ref' } } })
+  })
+
+  it('logs why an answer failed its own schema, whatever the error was', async () => {
+    const h = await boot({ config: false })
+    const failing = (error: Error): Status => Object.defineProperty({}, 'connection', { get: () => { throw error }, enumerable: true }) as Status
+    const status = vi.spyOn(h.recorder, 'status')
+    status.mockReturnValue(failing(new Error('boom')))
+    expect((await call(h.socketPath, 'GET', '/v1/status')).status).toBe(500)
+    status.mockReturnValue(failing(new ZodError([])))
+    expect((await call(h.socketPath, 'GET', '/v1/status')).status).toBe(500)
+    expect(h.logs.filter(line => line.type === 'error').map(line => line.text)).toEqual([
+      'qq-recorder: an answer did not match its schema: Error: boom',
+      'qq-recorder: an answer did not match its schema: ',
+    ])
+  })
+
+  it('ends a stream whose first event cannot be written, with the protocol tag and no body', async () => {
+    const h = await boot({ config: false })
+    vi.spyOn(h.recorder, 'status').mockReturnValue({} as Status)
+    const answer = await new Promise<{ status: number; body: string }>((resolve, reject) => {
+      const req = request({ socketPath: h.socketPath, path: '/v1/events', headers: { authorization: `Bearer ${SECRET}` } }, (res) => {
+        let body = ''
+        res.setEncoding('utf8')
+        res.on('data', (chunk: string) => { body += chunk })
+        res.on('end', () => { resolve({ status: res.statusCode ?? 0, body }) })
+      })
+      req.on('error', reject)
+      req.end()
+    })
+    expect(answer).toEqual({ status: 200, body: '' })
+    await until(() => h.running.streamCount() === 0, 'the refused stream to be forgotten')
+  })
+
+  it('writes nothing to a stream that has already ended when a late event arrives', async () => {
+    const h = await boot({ config: false })
+    const subscribe = vi.spyOn(h.recorder, 'subscribe')
+    const received: string[] = []
+    await new Promise<void>((resolve) => {
+      const req = request({ socketPath: h.socketPath, path: '/v1/events', headers: { authorization: `Bearer ${SECRET}` } }, (res) => {
+        res.setEncoding('utf8')
+        res.on('data', (chunk: string) => { received.push(chunk) })
+        resolve()
+      })
+      req.on('error', () => {})
+      req.end()
+    })
+    await until(() => received.length === 1 && h.running.streamCount() === 1, 'the first event')
+    const [listener] = subscribe.mock.calls[0]!
+    await h.running.close()
+    listener({ type: 'ping', at: 1 })
+    expect(received).toHaveLength(1)
+  })
+
+  it('reports a socket that cannot be bound instead of starting half way', async () => {
+    const h = await bootRecorder({ config: false })
+    const socketPath = join(h.dir, 'run', `${'long-'.repeat(30)}.sock`)
+    await expect(startRecorderServer({ recorder: h.recorder, logger: { debug() {}, info() {}, error() {} }, socketPath, token: SECRET }))
+      .rejects.toThrow(/ENAMETOOLONG|name too long|EINVAL/i)
+  })
+
+  it('reports a health port that is taken', async () => {
+    const h = await bootRecorder({ config: false })
+    const taken = createNetServer()
+    await new Promise<void>(resolve => taken.listen(0, '127.0.0.1', resolve))
+    const port = (taken.address() as { port: number }).port
+    const socketPath = join(h.dir, 'run', 'taken.sock')
+    try {
+      const quiet = { debug() {}, info() {}, error() {} }
+      await expect(startRecorderServer({ recorder: h.recorder, logger: quiet, socketPath, token: SECRET, healthPort: port }))
+        .rejects.toThrow(/EADDRINUSE/)
+    } finally {
+      await new Promise<void>(resolve => taken.close(() => { resolve() }))
+    }
   })
 })

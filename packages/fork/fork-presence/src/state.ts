@@ -69,6 +69,7 @@ export function clockMinutes(clock: string): number {
  */
 export function localSeconds(ms: number, timeZone: string): number {
   const parts = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23', timeZone }).formatToParts(ms)
+  /* v8 ignore next -- Intl returns every part requested above, so find() always hits and the 0 only satisfies the types */
   const part = (type: Intl.DateTimeFormatPartTypes): number => Number(parts.find(entry => entry.type === type)?.value ?? 0)
   return part('hour') * 3600 + part('minute') * 60 + part('second')
 }

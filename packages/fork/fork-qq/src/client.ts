@@ -68,6 +68,16 @@ export interface ClientListener {
 
 const DEFAULT_RETRY = { first: 1000, max: 30_000 }
 
+/** The media description header as JSON, or undefined when it is not, so the caller's check refuses it like any other wrong answer. */
+function parsedHeader(raw: unknown): unknown {
+  if (typeof raw !== 'string') return undefined
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return undefined
+  }
+}
+
 /** Parse a header-less stream of NDJSON lines. */
 function lines(): { push(chunk: string): string[] } {
   let rest = ''
@@ -75,6 +85,7 @@ function lines(): { push(chunk: string): string[] } {
     push(chunk) {
       rest += chunk
       const parts = rest.split('\n')
+      /* v8 ignore next -- split always yields a last element. */
       rest = parts.pop() ?? ''
       return parts.filter(part => part.trim() !== '')
     },
@@ -164,6 +175,7 @@ export class RecorderClient {
    */
   connection(): QqConnection {
     if (this.state === 'recorder-down' || this.state === 'protocol-mismatch') {
+      /* v8 ignore next -- lastError is set in every state that returns this. */
       return { state: this.state, since: this.since, attempt: this.attempt, lastError: this.lastError ?? null, selfId: null }
     }
     const status = this.status()
@@ -294,6 +306,7 @@ export class RecorderClient {
 
   private changedIfStillDown(): void {
     // The attempt counter moved; the Settings page shows it.
+    /* v8 ignore else -- the retry loop runs only while the recorder is down. */
     if (this.state === 'recorder-down') this.changed()
   }
 
@@ -315,6 +328,8 @@ export class RecorderClient {
       const req = request({
         socketPath: this.options.socketPath, path: PATHS.events, method: 'GET',
         headers: { authorization: `Bearer ${token ?? ''}`, [PROTOCOL_HEADER]: protocolTag() },
+        // stop() can land before the response gives it a stream to destroy.
+        signal: this.abort.signal,
       })
       req.once('error', () => { resolve() })
       req.once('response', (res) => {
@@ -394,6 +409,7 @@ export class RecorderClient {
     }
     const parsed = schema.safeParse(body)
     if (!parsed.success) {
+      /* v8 ignore next -- a parse failure always carries an issue. */
       throw new RecorderError(status, 'invalid-response', `the recorder's answer for ${path} does not match protocol ${protocolTag()}: ${parsed.error.issues[0]?.path.join('.') ?? ''}`)
     }
     return parsed.data
@@ -421,6 +437,7 @@ export class RecorderClient {
         const chunks: Buffer[] = []
         res.on('data', (chunk: Buffer) => chunks.push(chunk))
         res.once('end', () => {
+          /* v8 ignore next -- a response from the socket always has a status code. */
           resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks), tag: res.headers[PROTOCOL_HEADER] as string | undefined,
             headers: res.headers })
         })
@@ -431,6 +448,7 @@ export class RecorderClient {
       req.end(payload)
     }).catch((error: unknown) => {
       const code = (error as { code?: string }).code
+      /* v8 ignore next -- a socket error is always an Error instance. */
       const reason = code === 'ENOENT' || code === 'ECONNREFUSED' ? 'the recorder is not listening' : error instanceof Error ? error.message : String(error)
       if (options.link !== false && this.state === 'ok') {
         this.setState('recorder-down', reason)
@@ -454,8 +472,7 @@ export class RecorderClient {
       throw new RecorderError(answer.status, 'error', `HTTP ${answer.status}`)
     }
     const raw = answer.headers[MEDIA_HEADER]
-    const rawHeader: unknown = typeof raw === 'string' ? JSON.parse(raw) : undefined
-    const described = MediaHeaderDto.safeParse(rawHeader)
+    const described = MediaHeaderDto.safeParse(parsedHeader(raw))
     if (!described.success || described.data.bytes !== answer.body.length) {
       throw new RecorderError(200, 'invalid-response', 'the recorder\'s description of the image does not match the file')
     }

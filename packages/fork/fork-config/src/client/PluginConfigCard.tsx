@@ -40,7 +40,7 @@ interface FormContext {
   readonly drafts: Drafts
   readonly disabled: boolean
   readonly invalid: ReadonlySet<string>
-  readonly edit: (leaf: LeafField, draft: Draft | undefined) => void
+  readonly edit: (leaf: LeafField, draft: Draft) => void
 }
 
 function Row({ leaf, form }: { leaf: LeafField; form: FormContext }): ReactNode {
@@ -184,6 +184,7 @@ function Status({ state, saved, retry, t }: { state: EntryState; saved: boolean;
   if (state.phase === 'saving') return <p className={css.status} role="status">{t('saving')}</p>
   if (state.phase === 'reloading') return <p className={css.status} role="status">{t('reloading')}</p>
   if (state.phase === 'unreachable') {
+    /* v8 ignore next 3 -- EntryForm renders only with a view, so state.view is set. */
     return (
       <p className={css.status} role="status" data-tone="error">
         {t(state.view === null ? 'entry.unreachable' : 'reload.timeout')}
@@ -218,13 +219,12 @@ function EntryForm({ id, exclude, reloadWarning, state, locale, t, load, save }:
   const counts = countLeaves(view.fields)
   const invalid = useMemo(() => new Set(plan.invalid), [plan])
 
-  const edit = (leaf: LeafField, draft: Draft | undefined): void => {
+  const edit = (leaf: LeafField, draft: Draft): void => {
     setSaved(false)
     setReviewing(false)
     setDrafts((previous) => {
       const next = new Map(previous)
-      if (draft === undefined) next.delete(pathKey(leaf.path))
-      else next.set(pathKey(leaf.path), draft)
+      next.set(pathKey(leaf.path), draft)
       return next
     })
   }

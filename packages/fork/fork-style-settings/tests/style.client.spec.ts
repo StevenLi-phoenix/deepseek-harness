@@ -103,7 +103,81 @@ describe('StyleLoader', () => {
   })
 })
 
+describe('StyleLoader edge cases', () => {
+  const idle = {
+    read: () => Promise.resolve(panel()),
+    edit: () => Promise.resolve({ ok: true as const, panel: panel() }),
+    collect: () => Promise.resolve(panel()),
+  }
+
+  it('blocks a HotWatch title on the page at once', () => {
+    const store = createStyleStore()
+    store.update((draft) => { draft.panel = panel() })
+    const loader = new StyleLoader(store, { ...idle, edit: () => new Promise(() => {}) })
+    void loader.edit({ op: 'block', term: '某某热梗' })
+    expect(store.getSnapshot().panel!.hot).toEqual([])
+    expect(store.getSnapshot().panel!.notes).toHaveLength(1)
+  })
+
+  it('leaves the page alone for a rollback to a version that is not there, and numbers the first card 1', () => {
+    const store = createStyleStore()
+    store.update((draft) => { draft.panel = panel() })
+    const loader = new StyleLoader(store, { ...idle, edit: () => new Promise(() => {}) }, () => 3)
+    void loader.edit({ op: 'rollback', version: 7 })
+    expect(store.getSnapshot().panel!.cards).toEqual([])
+    void loader.edit({ op: 'card', card: '第一张' })
+    expect(store.getSnapshot().panel!.cards).toEqual([{ version: 1, card: '第一张', author: 'owner', reason: 'edited on the Settings page', at: 3 }])
+  })
+
+  it('applies an edit before any panel is loaded without inventing one', async () => {
+    const store = createStyleStore()
+    const loader = new StyleLoader(store, { ...idle, edit: () => Promise.resolve({ ok: false, error: 'not_found', panel: panel() }) })
+    expect(await loader.edit({ op: 'remove', id: 'a' })).toBe(false)
+    expect(store.getSnapshot()).toMatchObject({ saving: false, error: 'not_found', panel: { enabled: true } })
+  })
+
+  it('shares one read among concurrent callers', async () => {
+    const store = createStyleStore()
+    const read = vi.fn(() => Promise.resolve(panel()))
+    const loader = new StyleLoader(store, { ...idle, read })
+    const first = loader.refresh()
+    const second = loader.refresh()
+    expect(second).toBe(first)
+    await first
+    expect(read).toHaveBeenCalledTimes(1)
+    await loader.refresh()
+    expect(read).toHaveBeenCalledTimes(2)
+  })
+
+  it('warns once while reads keep failing', async () => {
+    const store = createStyleStore()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const loader = new StyleLoader(store, { ...idle, read: () => Promise.reject(new Error('down')) })
+    await loader.refresh()
+    await loader.refresh()
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(store.getSnapshot()).toMatchObject({ stale: true, panel: null })
+    warn.mockRestore()
+  })
+
+  it('does not replace the page with a read that lands while an edit is saving', async () => {
+    const store = createStyleStore()
+    store.update((draft) => { draft.panel = panel({ enabled: false }) })
+    const loader = new StyleLoader(store, { ...idle, edit: () => new Promise(() => {}) })
+    void loader.edit({ op: 'keep', id: 'b' })
+    await loader.refresh()
+    expect(store.getSnapshot()).toMatchObject({ saving: true, stale: false, panel: { enabled: false } })
+  })
+})
+
 describe('parsing', () => {
+  it('refuses a body that is not an object, and keeps the Host\'s error name', () => {
+    expect(() => parsePanel(null)).toThrow(/unexpected/u)
+    expect(() => parsePanel('panel')).toThrow(/unexpected/u)
+    expect(() => parseEditAnswer(null)).toThrow(/unexpected/u)
+    expect(parseEditAnswer({ ok: false, panel: panel(), error: 'not_found' })).toMatchObject({ ok: false, error: 'not_found' })
+  })
+
   it('accepts the Host\'s answers and refuses anything else', () => {
     expect(parsePanel(panel()).enabled).toBe(true)
     expect(() => parsePanel({ error: 'unauthorized' })).toThrow(/unexpected/u)
@@ -113,6 +187,51 @@ describe('parsing', () => {
 })
 
 describe('pollWhileVisible', () => {
+  it('stays idle while the page starts hidden, ignores repeated events, and starts when shown', () => {
+    vi.useFakeTimers()
+    const listeners: Array<() => void> = []
+    const page = { visibilityState: 'hidden' as DocumentVisibilityState, addEventListener: (_: string, listener: () => void) => { listeners.push(listener) }, removeEventListener: vi.fn() }
+    const refresh = vi.fn()
+    const stop = pollWhileVisible(refresh, 1000, page)
+    vi.advanceTimersByTime(3000)
+    expect(refresh).not.toHaveBeenCalled()
+    listeners[0]!()
+    expect(refresh).not.toHaveBeenCalled()
+    page.visibilityState = 'visible'
+    listeners[0]!()
+    listeners[0]!()
+    expect(refresh).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(1000)
+    expect(refresh).toHaveBeenCalledTimes(2)
+    stop()
+    expect(page.removeEventListener).toHaveBeenCalledWith('visibilitychange', listeners[0])
+    vi.useRealTimers()
+  })
+
+  it('stops cleanly while hidden, when no timer is running', () => {
+    vi.useFakeTimers()
+    const page = { visibilityState: 'hidden' as DocumentVisibilityState, addEventListener: vi.fn(), removeEventListener: vi.fn() }
+    const refresh = vi.fn()
+    pollWhileVisible(refresh, 1000, page)()
+    vi.advanceTimersByTime(3000)
+    expect(refresh).not.toHaveBeenCalled()
+    expect(page.removeEventListener).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
+  })
+
+  it('polls without a page object when the browser document is absent', () => {
+    vi.useFakeTimers()
+    const refresh = vi.fn()
+    const stop = pollWhileVisible(refresh, 1000)
+    expect(refresh).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(2000)
+    expect(refresh).toHaveBeenCalledTimes(3)
+    stop()
+    vi.advanceTimersByTime(5000)
+    expect(refresh).toHaveBeenCalledTimes(3)
+    vi.useRealTimers()
+  })
+
   it('refreshes on a timer while visible and stops while hidden', () => {
     vi.useFakeTimers()
     const listeners: Array<() => void> = []

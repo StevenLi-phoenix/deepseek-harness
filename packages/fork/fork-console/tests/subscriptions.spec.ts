@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { disposeAll, fakeController, fakeRegistry, harness, release } from '../../fork-event-bus/tests/harness.ts'
+import { baseConfig, disposeAll, fakeController, fakeRegistry, harness, release, withConfig } from '../../fork-event-bus/tests/harness.ts'
 import type { ActionError, SubscriptionsView } from '../src/views.ts'
 import { mountConsole } from './fixtures.ts'
 
@@ -277,5 +277,83 @@ describe('auto-archive', () => {
     expect(aborted.archive!.last).toMatchObject({ aborted: 'could not list Sessions: no sessionController service is mounted', archived: 0 })
     const bad = await post({ action: 'archive.sweep', dryRun: 'yes' })
     expect(bad.status).toBe(400)
+  })
+})
+
+describe('reminder rules', () => {
+  it('shortens every kind of rule, and shows a time the service cannot parse as unknown', async () => {
+    const entry = (id: string, rule: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({
+      id, title: id, prompt: 'PRIVATE', scheduledAt: '2026-11-02T01:00:00.000Z', status: 'active', target: {}, involvedSessionIds: [], ...rule, ...extra,
+    })
+    const schedule = {
+      catalog: () => Promise.resolve([
+        entry('a', { kind: 'after', afterSeconds: 90 }),
+        entry('b', { kind: 'at' }),
+        entry('c', { kind: 'cron', expression: '0 9 * * 1', timeZone: 'UTC' }),
+        entry('d', { kind: 'rrule', rrule: `FREQ=WEEKLY;\n  BYDAY=MO   ${'X'.repeat(100)}` }),
+        entry('e', { kind: 'every', everySeconds: 60 }, { scheduledAt: 'not a time', lastDelivery: { deliveredAt: 'also not a time' } }),
+      ]),
+    }
+    const { get } = await setup({ schedule })
+    const rows = (await get()).schedules!
+    expect(rows.map(row => [row.id, row.rule, row.detail])).toEqual([
+      ['a', 'after', '90 s'], ['b', 'at', ''], ['c', 'cron', '0 9 * * 1 UTC'], ['d', 'rrule', `FREQ=WEEKLY; BYDAY=MO ${'X'.repeat(80 - 'FREQ=WEEKLY; BYDAY=MO '.length)}`],
+      ['e', 'every', '60 s'],
+    ])
+    expect(rows[4]).toMatchObject({ nextAt: null, lastFiredAt: null })
+    expect(rows[3]!.detail).toHaveLength(80)
+  })
+
+  it('refuses a reminder change the service answers with another refusal as an invalid request', async () => {
+    const schedule = { catalog: () => Promise.resolve([]), edit: () => Promise.resolve({ id: 's1', code: 'schedule_invalid_patch' }) }
+    const { post } = await setup({ schedule })
+    const response = await post({ action: 'pause', target: 'schedule', id: 's1' })
+    expect([response.status, await response.json()]).toEqual([400, { error: 'invalid_request' }])
+  })
+})
+
+describe('create corners', () => {
+  it('refuses a session subscription with no instructions field at all, and gives one without a limit the session default', async () => {
+    const { post, bus } = await setup()
+    const missing = await post({ action: 'create', subscription: { id: 'x', kinds: ['a.b'], mode: 'session' } })
+    expect([missing.status, await missing.json()]).toEqual([422, { error: 'invalid_subscription', detail: 'instructions' }])
+    expect((await post({ action: 'create', subscription: { id: 'y', kinds: ['a.b'], mode: 'session', instructions: 'Look.' } })).status).toBe(200)
+    expect(bus.listSubscriptions().find(row => row.id === 'y')).toMatchObject({ maxPerHour: 4, coalesceMs: 60_000 })
+  })
+
+  it('refuses what the bus refuses as invalid, and passes any other failure on as an internal error', async () => {
+    const { post, bus, logs } = await setup()
+    const subscribe = vi.spyOn(bus, 'subscribe')
+    subscribe.mockRejectedValueOnce(Object.assign(new Error('too many'), { name: 'ForkSubscriptionError', code: 'limit_reached' }))
+    const refused = await post({ action: 'create', subscription: notifyForm })
+    expect([refused.status, await refused.json()]).toEqual([422, { error: 'invalid_subscription' }])
+    subscribe.mockRejectedValueOnce(new TypeError('storage closed'))
+    const failed = await post({ action: 'create', subscription: notifyForm })
+    expect([failed.status, await failed.json()]).toEqual([500, { error: 'internal_error' }])
+    expect(logs.some(line => line.includes('subscription.create octo-tags -> error TypeError'))).toBe(true)
+  })
+
+  it('reads the archive of a bus whose auto-archive is off as having no next sweep', async () => {
+    const h = await harness({ config: withConfig(baseConfig, { autoArchive: { enabled: false } as never }) })
+    const mounted = await mountConsole({ ctx: h.ctx })
+    const view = await (await mounted.call(PATH)).json() as SubscriptionsView
+    expect(view.archive).toMatchObject({ enabled: false, nextSweepAt: null })
+  })
+})
+
+describe('without the event bus', () => {
+  it('lists nothing and says unavailable for every action that needs the bus', async () => {
+    const mounted = await mountConsole()
+    const post = (body: unknown) => mounted.call(PATH, { method: 'POST', body })
+    const view = await (await mounted.call(PATH)).json() as SubscriptionsView
+    expect([view.subscriptions, view.schedules, view.archive]).toEqual([null, null, null])
+    for (const body of [
+      { action: 'create', subscription: notifyForm },
+      { action: 'pause', target: 'subscription', id: 'x' },
+      { action: 'archive.sweep', dryRun: true },
+    ]) {
+      const response = await post(body)
+      expect([response.status, await response.json()], JSON.stringify(body)).toEqual([503, { error: 'unavailable', detail: 'bus' }])
+    }
   })
 })

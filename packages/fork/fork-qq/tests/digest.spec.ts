@@ -50,6 +50,12 @@ type HarnessOptions = {
   silent?: boolean
   archive?: (id: string) => Promise<void>
   lost?: Set<string>
+  /** No workspace registry is mounted. */
+  noRegistry?: boolean
+  /** `selectModel` rejects with this. */
+  selectError?: Error
+  /** `prompt` rejects with this. */
+  promptError?: Error
 }
 
 function harness(answer: string | ((prompt: string, sessionId: string) => string | Promise<string>), options: HarnessOptions = {}) {
@@ -60,17 +66,22 @@ function harness(answer: string | ((prompt: string, sessionId: string) => string
   const presets = { resolve: vi.fn(), set: vi.fn() }
   const titles = { rename: vi.fn() }
   const archived: string[] = []
-  ctx.provide('workspaceRegistry', { archiveSession: options.archive ?? (async (id: string) => { archived.push(id) }) } as never)
+  if (options.noRegistry !== true) ctx.provide('workspaceRegistry', { archiveSession: options.archive ?? (async (id: string) => { archived.push(id) }) } as never)
   ctx.provide('permissionPresets', presets as never)
   ctx.provide('sessionTitle', titles as never)
   let counter = 0
   ctx.provide('sessionController', {
     create: async (request: unknown) => { created.push(request); counter += 1; return { sessionId: `digest-${counter}` } },
     resolveAgent: async (sessionId: string) => (options.lost?.has(sessionId) === true ? { error: new Error('session/not-found') } : { agent: { session: { id: sessionId } } }),
-    selectModel: async (request: unknown) => { selected.push(request); return {} },
+    selectModel: async (request: unknown) => {
+      if (options.selectError !== undefined) throw options.selectError
+      selected.push(request)
+      return {}
+    },
     prompt: async (request: { sessionId: string; content: Array<{ text: string }> }) => {
       const text = request.content[0]!.text
       prompts.push(text)
+      if (options.promptError !== undefined) throw options.promptError
       if (options.silent === true) return { accepted: true }
       queueMicrotask(() => { void (async () => {
         const session = { id: request.sessionId }
@@ -438,7 +449,8 @@ describe('DigestRunner tools', () => {
     await r.runRound(['g1'], new AbortController().signal)
     expect(h.archived).toEqual(['digest-1'])
     const off = harness('## 话题\nx')
-    await asRunner(off, config({ archiveSessions: false })).runRound(['g1'], new AbortController().signal)
+    fill('g2', 12)
+    expect(await asRunner(off, config({ archiveSessions: false })).runRound(['g2'], new AbortController().signal)).toBe(1)
     expect(off.archived).toEqual([])
   })
 
@@ -875,5 +887,200 @@ describe('pictures in the digest', () => {
     const { run, sent } = harnessWithPictures(8)
     expect(await run.runRound(['g1'], new AbortController().signal)).toBe(1)
     expect(sent[0]!.map(part => part.type)).toEqual(['text'])
+  })
+})
+
+describe('digest edge cases', () => {
+  const logsOf = (h: ReturnType<typeof harness>): Array<{ type: string; text: string }> => {
+    const lines: Array<{ type: string; text: string }> = []
+    h.ctx.logger.exporter({ levels: { default: 3 }, export: (m) => { lines.push({ type: m.type, text: String(m.args[0]) }) } })
+    return lines
+  }
+  const emit = (h: ReturnType<typeof harness>, session: string, event: unknown): void => {
+    (h.ctx.emit as (...args: unknown[]) => void)('session/event', { id: session }, event)
+  }
+  const signal = (): AbortSignal => new AbortController().signal
+
+  it('names a member-list failure that is not an Error by its text', async () => {
+    fill('g1', 12)
+    const h = harness('## 话题\nx')
+    const lines = logsOf(h)
+    log.members = async () => { throw 'plain failure' }
+    expect(await runner(h, config({ aliasMembers: true })).runRound(['g1'], signal())).toBe(1)
+    expect(lines.some(line => line.type === 'warn' && line.text === 'fork-qq: could not read the member names of group g1 for the digest: plain failure')).toBe(true)
+  })
+
+  it('goes on without member names when the recorder cannot say or fails, and still hides the members', async () => {
+    for (const answer of ['unavailable', 'error'] as const) {
+      fill('g1', 12)
+      log.membersAnswer = answer
+      const h = harness('## 话题\nx')
+      const lines = logsOf(h)
+      expect(await runner(h, config({ aliasMembers: true })).runRound(['g1'], signal())).toBe(1)
+      expect(h.prompts[0]).not.toContain('昵称0')
+      const warned = lines.some(line => line.text === 'fork-qq: could not read the member names of group g1 for the digest: the recorder did not answer')
+      expect(warned).toBe(answer === 'error')
+      await store.deleteDigests({ groupId: 'g1' })
+    }
+  })
+
+  it('stops before the first group when the round was already cancelled', async () => {
+    fill('g1', 12)
+    const h = harness('x')
+    const controller = new AbortController()
+    controller.abort()
+    expect(await runner(h, config()).runRound(['g1'], controller.signal)).toBe(0)
+    expect(h.prompts).toEqual([])
+  })
+
+  it('stops before the next chunk when the round is cancelled after a digest was stored', async () => {
+    fill('g1', 40)
+    const h = harness('一段摘要')
+    const controller = new AbortController()
+    const cancelling = new DigestRunner(h.ctx, store, log, config({ maxPromptChars: 400, maxCallsPerRound: 5 }), join(dir, 'raw'), () => NOW,
+      () => 0, () => 0, () => { controller.abort() })
+    expect(await cancelling.runRound(['g1'], controller.signal)).toBe(1)
+    expect(h.prompts).toHaveLength(1)
+  })
+
+  it('reads a backlog of more than one page of the log', async () => {
+    fill('g1', 2005)
+    const h = harness('一段摘要')
+    expect(await runner(h, config()).runRound(['g1'], signal())).toBeGreaterThanOrEqual(1)
+    const counts = store.digests({ groupId: 'g1', limit: 9 }).map(row => row.messageCount)
+    expect(counts.reduce((sum, count) => sum + count, 0)).toBe(2005)
+    expect(store.digestedUpTo('g1')).toBe('c2005')
+  })
+
+  it('names whom a reply answered when the quoted message came before the digested stretch', async () => {
+    log.insert({ groupId: 'g1', messageId: 'old1', at: NOW - 30 * HOUR, userId: '20001', nickname: '老成员', card: '', text: '旧消息' })
+    await store.insertDigest({ groupId: 'g1', fromCursor: 'c1', toCursor: 'c1', messageCount: 1, text: '旧', model: 'm', usage: null, rawPath: null,
+      createdAt: NOW - 30 * HOUR })
+    fill('g1', 8)
+    log.insert({ groupId: 'g1', messageId: 'new1', at: NOW - HOUR, userId: '10001', card: '成员', text: '同意', replyTo: 'old1' })
+    const h = harness('## 话题\nx')
+    expect(await runner(h, config()).runRound(['g1'], signal())).toBe(1)
+    expect(h.prompts[0]).toContain('↳回复老成员(0001)')
+  })
+
+  it('refuses an empty digest from the tool and keeps the turn open for a real one', async () => {
+    fill('g1', 12)
+    const holder: { runner?: DigestRunner } = {}
+    const results: unknown[] = []
+    const h = harness((_prompt, session) => {
+      results.push(holder.runner!.writeDigest(session, 'g1', '   '))
+      results.push(holder.runner!.writeDigest(session, 'g1', '真正的摘要'))
+      return '好'
+    })
+    const run = runner(h, config())
+    holder.runner = run
+    await run.runRound(['g1'], signal())
+    expect(results).toEqual([
+      { ok: false, error: 'the digest is empty; if nothing is worth keeping, answer NO_REPLY instead' },
+      { ok: true, message: 'digest saved' },
+    ])
+    expect(store.digests({ groupId: 'g1', limit: 1 })[0]?.text).toBe('真正的摘要')
+  })
+
+  it('has no recent text for a call outside any Session', () => {
+    const r = runner(harness('x'), config())
+    expect(r.recentTextOf(undefined)).toBeUndefined()
+    expect(r.recentTextOf('nobody')).toBeUndefined()
+  })
+
+  it('asks the guard without a Session id when there is none', async () => {
+    const check = vi.fn(async () => ({ ok: true as const }))
+    const h = harness('x')
+    h.ctx.provide('forkGuard', { check } as never)
+    const r = runner(h, config())
+    expect(await r['guard']('常聊显卡', undefined)).toEqual({ ok: true })
+    expect(check).toHaveBeenCalledWith('常聊显卡', { purpose: 'qq-group-note', audience: 'channel' })
+  })
+
+  it('fails the group before any prompt when the created Session cannot be resolved', async () => {
+    fill('g1', 12)
+    const h = harness('x', { lost: new Set(['digest-1']) })
+    const lines = logsOf(h)
+    expect(await runner(h, config()).runRound(['g1'], signal())).toBe(0)
+    expect(lines.some(line => line.type === 'warn' && line.text === 'fork-qq: digest of group g1 failed: session/not-found')).toBe(true)
+    expect(h.prompts).toEqual([])
+  })
+
+  it('runs with the profile default model, and says so, when the configured one cannot be selected', async () => {
+    fill('g1', 12)
+    const h = harness('## 话题\nx', { selectError: new Error('unknown model') })
+    const lines = logsOf(h)
+    expect(await runner(h, config({ model: { provider: 'p', model: 'm' } })).runRound(['g1'], signal())).toBe(1)
+    expect(lines.some(line => line.type === 'warn' && line.text === 'fork-qq: digest model p/m could not be selected (unknown model); the profile default runs')).toBe(true)
+  })
+
+  it('fails the group and archives the Session when the prompt is refused, keeping the cursor', async () => {
+    fill('g1', 12)
+    const h = harness('x', { promptError: new Error('agent busy') })
+    const lines = logsOf(h)
+    expect(await runner(h, config()).runRound(['g1'], signal())).toBe(0)
+    expect(lines.some(line => line.type === 'warn' && line.text === 'fork-qq: digest of group g1 failed: agent busy')).toBe(true)
+    expect(h.archived).toEqual(['digest-1'])
+    expect(store.digestedUpTo('g1')).toBeUndefined()
+  })
+
+  it('leaves the Session alone when no workspace registry is mounted', async () => {
+    fill('g1', 12)
+    const h = harness('## 话题\nx', { noRegistry: true })
+    expect(await runner(h, config()).runRound(['g1'], signal())).toBe(1)
+    expect(h.archived).toEqual([])
+  })
+
+  it('never rolls a resident Session over when no rollover period is given', async () => {
+    fill('g1', 12)
+    const h = harness('## 话题\nx')
+    const run = new DigestRunner(h.ctx, store, log, config({ resident: true }), join(dir, 'raw'), () => NOW + 400 * 24 * HOUR)
+    expect(await run.runRound(['g1'], signal())).toBe(1)
+    fill('g1', 8, NOW + 390 * 24 * HOUR)
+    const later = new DigestRunner(h.ctx, store, log, config({ resident: true }), join(dir, 'raw'), () => NOW + 430 * 24 * HOUR)
+    expect(await later.runRound(['g1'], signal())).toBe(1)
+    expect(h.created).toHaveLength(1)
+  })
+
+  it('follows only its own Session\'s turn: counts condensing, skips events without text, and sums the answer', async () => {
+    fill('g1', 12)
+    const h = harness('unused', { silent: true })
+    const lines = logsOf(h)
+    const running = runner(h, config()).runRound(['g1'], signal())
+    await vi.waitFor(() => { expect(h.prompts).toHaveLength(1) })
+    emit(h, 'other-session', { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '别的会话' }] } } })
+    emit(h, 'digest-1', { type: 'context/compacted' })
+    emit(h, 'digest-1', { type: 'assistant/message' })
+    emit(h, 'digest-1', { type: 'tool/call', data: {} })
+    emit(h, 'digest-1', { type: 'assistant/message', data: { message: { content: [{ type: 'text' }, { type: 'image' }] }, usage: { inputTokens: 7, label: 'x' } } })
+    emit(h, 'digest-1', { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '## 话题\n自己的会话' }] } } })
+    emit(h, 'digest-1', { type: 'turn/end', data: { reason: { kind: 'completed' } } })
+    expect(await running).toBe(1)
+    expect(store.digests({ groupId: 'g1', limit: 1 })[0]?.text).toBe('## 话题\n自己的会话')
+    expect(lines.some(line => line.text.includes('compacted 1x'))).toBe(true)
+    expect(store.digests({ groupId: 'g1', limit: 1 })[0]?.usage).toBe('{"inputTokens":7}')
+  })
+
+  it('fails the group when the turn ends without saying why', async () => {
+    fill('g1', 12)
+    const h = harness('unused', { silent: true })
+    const lines = logsOf(h)
+    const running = runner(h, config()).runRound(['g1'], signal())
+    await vi.waitFor(() => { expect(h.prompts).toHaveLength(1) })
+    emit(h, 'digest-1', { type: 'turn/end' })
+    expect(await running).toBe(0)
+    expect(lines.some(line => line.text === 'fork-qq: digest of group g1 failed: the digest turn ended without completing (unknown)')).toBe(true)
+  })
+
+  it('fails the group when the round is cancelled while the turn runs', async () => {
+    fill('g1', 12)
+    const h = harness('unused', { silent: true })
+    const lines = logsOf(h)
+    const controller = new AbortController()
+    const running = runner(h, config()).runRound(['g1'], controller.signal)
+    await vi.waitFor(() => { expect(h.prompts).toHaveLength(1) })
+    controller.abort()
+    expect(await running).toBe(0)
+    expect(lines.some(line => line.text === 'fork-qq: digest of group g1 failed: the digest was cancelled')).toBe(true)
   })
 })

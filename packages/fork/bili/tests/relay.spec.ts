@@ -149,6 +149,16 @@ describe('replies to the owner', () => {
     expect(svc.replies.map(reply => reply.message)).toEqual(['a'.repeat(450), 'b'.repeat(450)])
   })
 
+  it('cuts a long answer after the last sentence mark in the second half of the window, or at the limit when there is none', () => {
+    // A sentence mark at or after half the window ends the first part there; its own character stays with it.
+    const sentence = splitMessage(`${'甲'.repeat(70)}。${'乙'.repeat(60)}`, 100, 2)
+    expect(sentence).toEqual([`${'甲'.repeat(70)}。`, '乙'.repeat(60)])
+    // A mark in the first half is too early to cut at, and a line break there is too early too.
+    const early = splitMessage(`${'甲'.repeat(10)}。\n${'乙'.repeat(200)}`, 100, 3)
+    expect(early.map(part => Array.from(part).length)).toEqual([100, 100, 12])
+    expect(early[0]!.startsWith(`${'甲'.repeat(10)}。`)).toBe(true)
+  })
+
   it('sends nothing for NO_REPLY, for a turn the owner stopped, or for a turn the owner\'s messages did not start', async () => {
     const h = await conversing()
     h.ownerSays('嗯')

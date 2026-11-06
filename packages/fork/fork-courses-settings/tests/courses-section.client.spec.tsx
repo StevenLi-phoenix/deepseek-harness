@@ -57,4 +57,62 @@ describe('CoursesSection', () => {
     mount({ view: VIEW, checking: true })
     expect(screen.getByRole<HTMLButtonElement>('button', { name: '正在检查…' }).disabled).toBe(true)
   })
+
+  it('says the read failed when nothing was ever loaded', () => {
+    mount({ stale: true })
+    expect(screen.getByRole('status').textContent).toBe(t('status.failed'))
+  })
+
+  it('keeps the old cards under a notice when a later read failed', () => {
+    mount({ view: VIEW, stale: true })
+    expect(screen.getByText(t('status.failed'))).toBeTruthy()
+    expect(screen.getByRole('region', { name: t('title') }).hasAttribute('data-stale')).toBe(true)
+  })
+
+  it('shows an off, quiet-free section with empty lists, no next check, and a failed last check marked as a warning', () => {
+    mount({
+      view: {
+        ...VIEW, enabled: false, quietNow: false, nextPollAt: null, upcoming: [], notes: [], sync: null,
+        lastPoll: { at: AT, trigger: 'timer', durationMs: 5, ok: false, error: 'HTTP 500', openTasks: null, reminders: null, outcome: null },
+      },
+    })
+    expect(screen.getByRole('status').textContent).toBe(t('state.off'))
+    expect(screen.getByText(t('upcoming.empty'))).toBeTruthy()
+    expect(screen.getByText(t('notes.empty'))).toBeTruthy()
+    expect(screen.queryByText(/下次检查/u)).toBeNull()
+    expect(screen.getByText(t('sync.unknown'))).toBeTruthy()
+    expect(screen.getByText('上次检查 11/2 22:00 失败：HTTP 500').closest('section')?.getAttribute('data-tone')).toBe('warn')
+  })
+
+  it('shows an outage with its start, or a dash when the start is unknown, and marks a late row and a failed note without an error', () => {
+    mount({
+      view: {
+        ...VIEW, lastPoll: null, outage: { failures: 3, since: null, alerted: true },
+        upcoming: [{ id: 'l', course: '', title: 'Essay', phase: 'late', deadline: AT, nextAt: null }],
+        notes: [{ at: AT, title: 'Quiet one', body: 'b', outcome: 'sent', error: null }, { at: AT + 1, title: 'Lost', body: 'c', outcome: 'failed', error: null }],
+      },
+    })
+    expect(screen.getByText(t('outage', { count: 3, time: '—' }))).toBeTruthy()
+    const row = screen.getByText('Essay').closest('li')!
+    expect(row.getAttribute('data-phase')).toBe('late')
+    expect(screen.getByText('Essay').textContent).toBe('Essay')
+    expect(screen.getByText(t('notes.failed', { error: '' }))).toBeTruthy()
+    expect(screen.queryByText(t('notes.failed', { error: 'no channel' }))).toBeNull()
+  })
+
+  it('shows an outage with the time it started', () => {
+    mount({ view: { ...VIEW, outage: { failures: 2, since: AT, alerted: false } } })
+    expect(screen.getByText(t('outage', { count: 2, time: '11/2 22:00' }))).toBeTruthy()
+  })
+
+  it('shows the sync reason and the alert line of a failing sync in warning text', () => {
+    mount({ view: { ...VIEW, sync: { status: 'failing', latestRunAt: AT, lastCleanAt: null, failedRuns: 4, reason: 'Browser down', alerting: true } } })
+    expect(screen.getByText(t('sync.reason', { reason: 'Browser down' }))).toBeTruthy()
+    expect(screen.getByText(t('sync.alerting'))).toBeTruthy()
+  })
+
+  it('shows a working button for a poll the Host runs by itself', () => {
+    mount({ view: { ...VIEW, polling: true } })
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: t('poll.running') }).disabled).toBe(true)
+  })
 })

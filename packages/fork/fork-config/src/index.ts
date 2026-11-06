@@ -107,6 +107,7 @@ function parseOps(value: unknown): ConfigOp[] | undefined {
 
 function messageOf(error: unknown): string {
   const text = error instanceof Error ? error.message : String(error)
+  /* v8 ignore next -- split always yields a first element. */
   return (text.split('\n')[0] ?? '').slice(0, 200)
 }
 

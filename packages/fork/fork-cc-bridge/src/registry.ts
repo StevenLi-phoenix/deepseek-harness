@@ -85,7 +85,7 @@ export class Registry {
       const str = (key: string): string | undefined => typeof rec[key] === 'string' ? rec[key] : undefined
       const num = (key: string): number | undefined => typeof rec[key] === 'number' ? rec[key] : undefined
       const cwd = str('cwd')
-      const name = str('name') ?? (cwd === undefined ? `pid-${String(pid)}` : cwd.split('/').pop() ?? `pid-${String(pid)}`)
+      const name = str('name') ?? (cwd === undefined ? `pid-${String(pid)}` : cwd.split('/').findLast(part => part !== '') ?? `pid-${String(pid)}`)
       const sessionId = str('sessionId')
       const status = str('status')
       const version = str('version')

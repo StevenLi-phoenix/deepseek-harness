@@ -13,6 +13,7 @@ describe('deliveryEvents', () => {
     expect(events('release', { action: 'published', release })).toEqual([releaseEvent('octo/repo', release, 2000)])
     expect(events('release', { action: 'published', release })[0]!.key).toBe('octo/repo:release:7')
     expect(events('release', { action: 'edited', release })).toEqual([])
+    expect(events('release', { action: 'published', release: { id: 'not a release' } })).toEqual([])
   })
 
   it('reports a created tag and ignores created branches', () => {
@@ -31,6 +32,9 @@ describe('deliveryEvents', () => {
       { source: 'github', kind: 'github.commit', key: 'octo/repo:commit:a1b2c3d', subject: 'octo/repo', title: 'Fix the thing', url: commits[0]!.url, actor: 'alice', text: 'Fix the thing\n\nLonger body', occurredAt: Date.parse('2026-10-22T20:01:00Z') },
       { source: 'github', kind: 'github.commit', key: 'octo/repo:commit:e4f5a6b', subject: 'octo/repo', title: 'commit e4f5a6b', url: commits[1]!.url, actor: 'Bob' },
     ])
+    expect(events('push', { ref: 'refs/heads/main' })).toEqual([])
+    expect(events('push', { ref: 'refs/heads/main', commits: [{ id: 'c0ffee1234', message: 'No author', url: 'https://github.com/octo/repo/commit/c0ffee1234' }] }))
+      .toEqual([{ source: 'github', kind: 'github.commit', key: 'octo/repo:commit:c0ffee1234', subject: 'octo/repo', title: 'No author', url: 'https://github.com/octo/repo/commit/c0ffee1234', text: 'No author' }])
     expect(events('push', { ref: 'refs/heads/feature', deleted: false, commits })).toEqual([])
     expect(events('push', { ref: 'refs/heads/main', deleted: true, commits: [] })).toEqual([])
   })
@@ -50,7 +54,27 @@ describe('deliveryEvents', () => {
     expect(events('workflow_run', { action: 'requested', workflow_run: { name: 'CI', conclusion: null, head_branch: 'main', html_url: 'w' } })).toEqual([])
   })
 
+  it('falls back to placeholders when a pull request, issue, comment, review, or run payload omits its details', () => {
+    expect(events('pull_request', {})[0]).toMatchObject({ kind: 'github.pull_request', title: 'PR #? updated:', url: 'https://github.com/octo/repo' })
+    expect(events('pull_request', { action: 'edited', pull_request: { number: 3, title: 'T' } })[0]).toMatchObject({ title: 'PR #3 edited: T' })
+    expect(events('issues', {})[0]).toMatchObject({ title: 'issue #? updated:', url: 'https://github.com/octo/repo' })
+    expect(events('issue_comment', { action: 'created' })[0]).toMatchObject({ title: 'comment on #?:', url: 'https://github.com/octo/repo' })
+    expect(events('issue_comment', { action: 'created', issue: { number: 4, html_url: 'https://github.com/octo/repo/issues/4' } })[0])
+      .toMatchObject({ title: 'comment on #4:', url: 'https://github.com/octo/repo/issues/4' })
+    expect(events('pull_request_review', { action: 'dismissed' })[0]).toMatchObject({ title: 'review dismissed on PR #?:', url: 'https://github.com/octo/repo' })
+    expect(events('pull_request_review', {})[0]).toMatchObject({ title: 'review  on PR #?:' })
+    expect(events('pull_request_review', { action: 'submitted', pull_request: { html_url: 'https://github.com/octo/repo/pull/2' } })[0])
+      .toMatchObject({ url: 'https://github.com/octo/repo/pull/2' })
+    expect(events('workflow_run', { action: 'completed', workflow_run: { name: null, conclusion: 'success', head_branch: null } })[0])
+      .toMatchObject({ title: 'workflow success', url: 'https://github.com/octo/repo' })
+    expect(events('workflow_run', { action: 'completed' })).toEqual([])
+    expect(events('pull_request', { action: 'opened', number: 'twelve' })[0]).toMatchObject({ title: 'PR #? opened:' })
+  })
+
   it('names other repository events generically and drops app housekeeping and repository-less deliveries', () => {
+    expect(events('star', {})[0]).toEqual({ source: 'github', kind: 'github.star', key: 'octo/repo:star:d-1', subject: 'octo/repo', title: 'star', url: 'https://github.com/octo/repo', actor: 'alice' })
+    expect(deliveryEvents({ name: 'star', payload: { repository: { full_name: 'octo/repo' }, action: 'created' } }, 'd-4', 2000)[0])
+      .toEqual({ source: 'github', kind: 'github.star.created', key: 'octo/repo:star:d-4', subject: 'octo/repo', title: 'star created', url: undefined })
     expect(events('star', { action: 'created' })[0]).toMatchObject({ kind: 'github.star.created', title: 'star created', url: 'https://github.com/octo/repo' })
     expect(events('ping', { zen: 'Keep it logically awesome.' })).toEqual([])
     expect(events('workflow_job', { action: 'queued' })).toEqual([])
@@ -70,8 +94,12 @@ describe('webhook rule', () => {
     try {
       const rules: { id: string; kind: string; run: (delivery: unknown, signal: AbortSignal) => unknown }[] = []
       const disposed = vi.fn()
+      const info = vi.fn()
       const h = await harness(new FakeGitHub(), {
-        beforeSensor: (ctx) => { ctx.provide('webhookRuntime', { register: (rule: (typeof rules)[number]) => { rules.push(rule); return disposed } } as never) },
+        beforeSensor: (ctx) => {
+          vi.spyOn(ctx.logger, 'info').mockImplementation(info)
+          ctx.provide('webhookRuntime', { register: (rule: (typeof rules)[number]) => { rules.push(rule); return disposed } } as never)
+        },
       })
       expect(rules.map(rule => [rule.id, rule.kind])).toEqual([['fork-github-sensor', 'github']])
       const result = await rules[0]!.run({
@@ -80,6 +108,12 @@ describe('webhook rule', () => {
       }, new AbortController().signal)
       expect(result).toBeNull()
       expect(h.published.map(event => event.key)).toEqual(['octo/repo:tag:v2'])
+      expect(info).toHaveBeenCalledWith('fork-github-sensor: webhook create d-9: 1 event(s) (1 accepted)')
+      expect(await rules[0]!.run({
+        kind: 'github', source: 'github-app', deliveryId: 'd-10', receivedAt: 0, event: { name: 'ping', payload: { repository } },
+      }, new AbortController().signal)).toBeNull()
+      expect(info).toHaveBeenCalledWith('fork-github-sensor: webhook ping d-10: 0 event(s)')
+      expect(h.published).toHaveLength(1)
       await h.ctx.fiber.dispose()
       expect(disposed).toHaveBeenCalled()
     } finally {

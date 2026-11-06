@@ -1,5 +1,6 @@
 /** Test doubles for the DSH side: an in-memory `fork_qq` domain and a message log that answers like the recorder. */
 import { Context } from '@deepseek-ai/cordis'
+import { vi } from 'vitest'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
@@ -8,14 +9,19 @@ import type { MessageReader } from '../src/digest.ts'
 import type { Member, Message } from '../src/protocol.ts'
 
 /** Mount the storage domain facility on `ctx` over an in-memory backend, as a deployment's storage plugin would. */
-export async function mountMemoryStorage(ctx: Context, pool: MemoryMediaPool = new MemoryMediaPool()): Promise<void> {
+export async function mountMemoryStorage(ctx: Context, pool: MemoryMediaPool = new MemoryMediaPool(), gate?: Promise<void>): Promise<void> {
   await ctx.plugin(Storage)
-  mountFacility(ctx, pool)
+  mountFacility(ctx, pool, gate)
 }
 
 /** The facility half of {@link mountMemoryStorage}, for a context where the storage service is already mounted. */
-export function mountFacility(ctx: Context, pool: MemoryMediaPool): void {
+export function mountFacility(ctx: Context, pool: MemoryMediaPool, gate?: Promise<void>): void {
   const backend = new MemoryStorageBackend(pool)
+  if (gate !== undefined) {
+    // Opening a domain waits for the test to let storage through.
+    const open = backend.kv.open.bind(backend.kv)
+    vi.spyOn(backend.kv, 'open').mockImplementation(async (descriptor) => { await gate; return open(descriptor) })
+  }
   ctx.effect(() => ctx.storage.backend.register('fixture', backend))
   const facility = new DomainFacility(ctx, { backend: 'fixture' })
   ctx.effect(() => {

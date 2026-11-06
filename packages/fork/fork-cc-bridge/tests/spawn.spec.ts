@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Spawner, type Run } from '../src/spawn.ts'
+import { Spawner, runProgram, type Run } from '../src/spawn.ts'
 
 function fake(sessions: string[] = []) {
   const calls: string[][] = []
@@ -54,5 +54,41 @@ describe('Spawner', () => {
     expect(await spawner.stop('other')).toMatchObject({ ok: false })
     expect(await spawner.stop('one')).toEqual({ ok: true })
     expect(calls.at(-1)).toContain('kill-session')
+  })
+
+  it('refuses to start when the configured model name could carry shell syntax', async () => {
+    const calls: string[][] = []
+    const run: Run = (_file, args) => { calls.push(args); return Promise.resolve({ code: 0, stdout: '' }) }
+    const spawner = new Spawner({ tmux: 't', command: 'c', workDir: '/w', model: 'sonnet; id', maxSessions: 2, home: '/h', run })
+    expect(await spawner.start('review-1')).toEqual({ ok: false, error: 'the configured model name is not valid' })
+    expect(calls).toEqual([])
+  })
+
+  it('reports tmux failing to create or kill a session', async () => {
+    const run: Run = (_file, args) =>
+      Promise.resolve(args.includes('list-sessions') ? { code: 0, stdout: 'one\n' } : { code: 1, stdout: '' })
+    const spawner = new Spawner({ tmux: 't', command: 'c', workDir: '/w', model: 'sonnet', maxSessions: 2, home: '/h', run })
+    expect(await spawner.start('two')).toEqual({ ok: false, error: 'tmux could not start the session' })
+    expect(await spawner.stop('one')).toEqual({ ok: false, error: 'tmux could not stop the session' })
+  })
+
+  it('refuses to stop a name that could not have been started, without asking tmux', async () => {
+    const { spawner, calls } = fake(['one'])
+    expect(await spawner.stop('Not Valid')).toEqual({ ok: false, error: 'no session named Not Valid was started by cc_start' })
+    expect(calls).toEqual([])
+  })
+})
+
+describe('runProgram', () => {
+  it('runs with only a minimal PATH and returns the output', async () => {
+    expect(await runProgram('/bin/sh', ['-c', 'printf %s "$PATH"'])).toEqual({ code: 0, stdout: '/usr/bin:/bin' })
+  })
+
+  it('returns the exit code of a failing program', async () => {
+    expect(await runProgram('/bin/sh', ['-c', 'printf partial; exit 3'])).toEqual({ code: 3, stdout: 'partial' })
+  })
+
+  it('resolves with code 1 when the program cannot run at all', async () => {
+    expect(await runProgram('/nonexistent/program', [])).toEqual({ code: 1, stdout: '' })
   })
 })

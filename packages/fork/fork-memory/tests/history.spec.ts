@@ -1,8 +1,8 @@
-import { mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { MemoryError, MemoryStore, MAX_PENDING, SNAPSHOTS_KEPT } from '../src/store.ts'
+import { MAX_ENTRIES, MemoryError, MemoryStore, MAX_PENDING, SNAPSHOTS_KEPT } from '../src/store.ts'
 
 const dirs: string[] = []
 let day = '2026-10-23'
@@ -218,6 +218,19 @@ describe('rollback', () => {
 })
 
 describe('purge', () => {
+  it('keeps a snapshot line it cannot read when it erases an entry', async () => {
+    const memory = await store()
+    const secret = (await memory.save({ text: 'private thing', category: 'identity' })).entry
+    day = '2026-10-24'
+    await memory.save({ id: secret.id, text: 'private thing v2', category: 'identity' })
+    const snapshot = join(memory.snapshotDir, 'memory-2026-10-24.jsonl')
+    await writeFile(snapshot, `${await readFile(snapshot, 'utf8')}{not json\n`)
+    await memory.purge(secret.id)
+    const left = await readFile(snapshot, 'utf8').catch(() => '')
+    expect(left).toContain('{not json')
+    expect(left).not.toContain(secret.id)
+  })
+
   it('erases an entry from the file, the history, every snapshot, and the waiting writes', async () => {
     const memory = await store()
     const secret = (await memory.save({ text: 'private thing', category: 'identity' })).entry
@@ -237,5 +250,118 @@ describe('purge', () => {
     expect(await memory.listPending()).toEqual([])
     expect((await memory.list()).map(entry => entry.text)).toEqual(['keep me'])
     expect(waiting.target).toBe(secret.id)
+  })
+})
+
+/** A memory file already holding `count` distinct entries, written by hand. */
+async function fill(memory: MemoryStore, count: number): Promise<void> {
+  const lines = Array.from({ length: count }, (_, index) => JSON.stringify({
+    id: index.toString(16).padStart(6, '0'), category: 'projects', date: '2026-10-01', text: `bulk ${String(index)}`,
+  }))
+  await mkdir(join(memory.file, '..'), { recursive: true })
+  await writeFile(memory.file, `${lines.join('\n')}\n`)
+}
+
+describe('refusals and faults', () => {
+  it('reports a read fault other than a missing file instead of treating the file as empty', async () => {
+    const memory = await store()
+    await mkdir(memory.file, { recursive: true })
+    await expect(memory.list()).rejects.toMatchObject({ code: 'EISDIR' })
+  })
+
+  it('refuses to replace an id that is not in the file', async () => {
+    const memory = await store()
+    expect(await code(memory.save({ id: 'abcdef', text: 'x', category: 'projects' }))).toBe('not_found')
+    expect(await code(memory.savePending({ id: 'xyz', text: 'x', category: 'projects' }))).toBe('invalid_id')
+  })
+
+  it('refuses a malformed id before reading anything, on every id-taking operation', async () => {
+    const memory = await store()
+    expect(await code(memory.approve('nope'))).toBe('invalid_id')
+    expect(await code(memory.discard('nope'))).toBe('invalid_id')
+    expect(await code(memory.revert('nope'))).toBe('invalid_id')
+    expect(await code(memory.purge('nope'))).toBe('invalid_id')
+  })
+
+  it('skips a torn line of the waiting writes and keeps the readable ones', async () => {
+    const memory = await store()
+    const waiting = await memory.savePending({ text: 'kept', category: 'identity' })
+    await appendFile(memory.pendingFile, '{torn\n')
+    expect(await memory.listPending()).toEqual([waiting])
+  })
+
+  it('labels an approval as the owner when the answering turn names no origin', async () => {
+    const memory = await store()
+    const waiting = await memory.savePending({ text: 'from a peer', category: 'identity' }, { source: 'tainted-turn', origin: 'peer:bili' })
+    expect(await memory.approve(waiting.id)).toMatchObject({ origin: 'owner via peer:bili' })
+  })
+
+  it('refuses an approval, a revert, and an import that would pass the entry limit', async () => {
+    const memory = await store()
+    const waiting = await memory.savePending({ text: 'one more', category: 'identity' })
+    const gone = (await memory.save({ text: 'soon gone', category: 'identity' })).entry
+    await memory.forget(gone.id)
+    await fill(memory, MAX_ENTRIES)
+    expect(await code(memory.approve(waiting.id))).toBe('full')
+    expect(await code(memory.revert(gone.id))).toBe('full')
+    expect(await code(memory.importDrafts([{ category: 'identity', date: '2026-10-01', text: 'over the limit' }]))).toBe('full')
+    expect(await memory.list()).toHaveLength(MAX_ENTRIES)
+  })
+
+  it('cannot revert an entry that a hand edit removed, since its last recorded change was not a removal', async () => {
+    const memory = await store()
+    const entry = (await memory.save({ text: 'hand removed', category: 'identity' })).entry
+    await writeFile(memory.file, '')
+    expect(await code(memory.revert(entry.id))).toBe('nothing_to_revert')
+  })
+
+  it('reverts one entry and leaves its neighbours as they are', async () => {
+    const memory = await store()
+    const first = (await memory.save({ text: 'first', category: 'identity' })).entry
+    const second = (await memory.save({ text: 'second', category: 'identity' })).entry
+    await memory.save({ id: first.id, text: 'first, edited', category: 'identity' })
+    expect(await memory.revert(first.id)).toMatchObject({ outcome: 'restored', entry: { text: 'first' } })
+    expect(await memory.list()).toEqual([first, second])
+  })
+
+  it('refuses an erase whose preview no longer holds, and writes nothing', async () => {
+    const memory = await store()
+    const entry = (await memory.save({ text: 'private', category: 'identity' })).entry
+    expect(await code(memory.purge(entry.id, { expect: () => false }))).toBe('stale_preview')
+    expect(await memory.list()).toEqual([entry])
+  })
+
+  it('erases only the places that hold the id: a waiting write alone leaves file and history untouched', async () => {
+    const memory = await store()
+    const kept = (await memory.save({ text: 'kept', category: 'identity' })).entry
+    const waiting = await memory.savePending({ id: kept.id, text: 'kept, edited', category: 'identity' })
+    const historyBefore = await readFile(memory.historyFile, 'utf8')
+    const result = await memory.purge(waiting.id)
+    expect(result).toEqual({ entries: 0, history: 0, snapshots: 0, pending: 1 })
+    expect(await memory.listPending()).toEqual([])
+    expect(await memory.list()).toEqual([kept])
+    expect(await readFile(memory.historyFile, 'utf8')).toBe(historyBefore)
+  })
+
+  it('reports a snapshot directory that cannot be listed', async () => {
+    const memory = await store()
+    await writeFile(memory.snapshotDir, 'not a directory')
+    await expect(memory.purge('abcdef')).rejects.toMatchObject({ code: 'ENOTDIR' })
+  })
+
+  it('writes no history for a rollback that only reorders identical entries', async () => {
+    const memory = await store()
+    const mk = (id: string): Record<string, string> => ({ id, category: 'identity', date: '2026-10-01', text: `entry ${id}` })
+    await writeFile(memory.file, `${JSON.stringify(mk('aaaaaa'))}\n${JSON.stringify(mk('bbbbbb'))}\n`)
+    const at = '2026-10-23T10:00:00.000Z'
+    await writeFile(memory.historyFile, [
+      { at, op: 'forget', id: 'aaaaaa', before: mk('aaaaaa'), sha: 'x' },
+      { at, op: 'add', id: 'aaaaaa', after: mk('aaaaaa'), sha: 'y' },
+    ].map(record => JSON.stringify(record)).join('\n') + '\n')
+    const historyBefore = await readFile(memory.historyFile, 'utf8')
+    const result = await memory.rollback({ since: at })
+    expect(result).toMatchObject({ matched: 2, restored: 1, removed: 1 })
+    expect((await memory.list()).map(entry => entry.id)).toEqual(['bbbbbb', 'aaaaaa'])
+    expect(await readFile(memory.historyFile, 'utf8')).toBe(historyBefore)
   })
 })

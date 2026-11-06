@@ -164,6 +164,7 @@ export class NotesStore {
       const at = this.now()
       const earlier = state.notes.find(note => note.kind === input.kind && termKey(note.term) === key)
       const related = (input.related ?? earlier?.related ?? []).filter(term => termKey(term) !== key).slice(0, MAX_RELATED)
+      /* v8 ignore next 2 -- a kind is never empty. */
       const note: Note = {
         id: `${input.kind[0] ?? 'n'}${createHash('sha256').update(`${input.kind}:${key}`).digest('hex').slice(0, 11)}`,
         kind: input.kind, term: input.term, ...input.meaning === undefined ? {} : { meaning: input.meaning },

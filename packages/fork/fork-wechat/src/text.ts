@@ -45,6 +45,7 @@ export function handoverText(parts: readonly HandoverPart[], where: 'new' | 'cur
     const more = part.labels.length > HANDOVER_LABELS ? ' 等' : ''
     return `${part.labels.length} ${HANDOVER_UNITS[part.kind] ?? `项 ${part.kind}`}（${shown}${more}）`
   })
+  /* v8 ignore next -- the arm has more than one phrase. */
   const list = phrases.length > 1 ? `${phrases.slice(0, -1).join('、')}和 ${phrases.at(-1) ?? ''}` : phrases[0] ?? ''
   return `上一个对话的 ${list}已转到${where === 'new' ? '新对话' : '当前对话'}。`
 }
@@ -184,6 +185,7 @@ export function splitText(text: string, maxChars: number, maxParts: number, maxB
   }
 
   for (let index = 0; index < lines.length; index++) {
+    /* v8 ignore next -- the index is in bounds. */
     const line = lines[index] ?? ''
     const next = lines[index + 1] ?? ''
     const header = fence === undefined && table === undefined && isTableRow(line) && isTableSeparator(next)

@@ -31,6 +31,7 @@ export function parseClaudeExport(text: string): MemoryDraft[] {
   for (const [index, line] of text.split(/\r?\n/u).entries()) {
     const section = HEADING.exec(line)
     if (section !== null) {
+      /* v8 ignore next -- the pattern's group is mandatory. */
       heading = section[1] ?? ''
       category = SECTION_CATEGORY[heading.toLowerCase()]
       continue
@@ -40,6 +41,7 @@ export function parseClaudeExport(text: string): MemoryDraft[] {
     if (category === undefined) {
       throw new Error(`line ${String(index + 1)}: entry under ${heading === undefined ? 'no heading' : `unknown heading "${heading}"`}`)
     }
+    /* v8 ignore next -- the pattern's groups are mandatory. */
     drafts.push({ category, date: entry[1] ?? '', text: normalizeText(entry[2] ?? '') })
   }
   return drafts

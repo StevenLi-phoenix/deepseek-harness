@@ -194,3 +194,49 @@ describe('notices and staleness', () => {
     expect(screen.getByRole('status').textContent).toBe('未能刷新 · 显示 12:00:00 的数据')
   })
 })
+
+describe('Claude Code card corners', () => {
+  it('leaves a missing status and an unknown start time out of the line, and shows a stop in flight as busy', () => {
+    const cc = { ...VIEW.cc!, sessions: [{ name: 'quiet', pid: 5, status: null, cwd: null, updatedAt: null, managed: true }] }
+    mount({ data: { ...VIEW, cc }, checkedAt: NOW, busy: { 'cc.stop:quiet': true } })
+    const row = document.querySelector<HTMLElement>('[data-session="quiet"]')!
+    expect(within(row).getByText('pid 5')).toBeTruthy()
+    expect(row.hasAttribute('data-busy')).toBe(true)
+    expect(within(row).getByRole('button', { name: '停止' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('shows a full login in green and says so when no session runs', () => {
+    mount({ data: { ...VIEW, cc: { ...VIEW.cc!, login: 'full', sessions: [], started: [] } }, checkedAt: NOW })
+    expect(document.querySelector('[data-tone="ok"]')).not.toBeNull()
+    expect(screen.getByText(zh['agents.cc.empty'])).toBeTruthy()
+  })
+
+  it('keeps what was typed when the Host refuses the start', async () => {
+    mount(undefined, { act: () => Promise.resolve(false) })
+    fireEvent.change(screen.getByLabelText(/名称（/u), { target: { value: 'research-2' } })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '启动会话' })) })
+    expect(input(/名称（/u).value).toBe('research-2')
+  })
+})
+
+describe('voice and notices corners', () => {
+  it('shows a failed preview without a reason as the bare message', async () => {
+    mount(undefined, { preview: () => Promise.resolve({ ok: false, code: 'network' }) })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '试听' })) })
+    expect(screen.getByRole('alert').textContent).toBe(zh['error.network'])
+  })
+
+  it('shows a refused action with its reason, and says the reading failed when the Host never answered with data', () => {
+    mount({ data: VIEW, checkedAt: NOW, notice: { kind: 'error', code: 'start_failed', detail: 'tmux missing' } })
+    expect(screen.getByRole('alert').textContent).toContain('(tmux missing)')
+    cleanup()
+    mount({ data: null, checkedAt: NOW })
+    expect(screen.getByRole('status').textContent).toBe(zh['status.failed'])
+  })
+
+  it('shows data that carries no reading time with the time at zero', () => {
+    mount({ data: VIEW, checkedAt: null })
+    expect(screen.getByRole('status').textContent).toBe(zh['status.loading'])
+    expect(document.querySelector('[data-session="review-1"]')!.textContent).toContain('pid 111')
+  })
+})

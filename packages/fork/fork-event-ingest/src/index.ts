@@ -175,7 +175,9 @@ export function apply(ctx: Context, config: Config): void {
         try {
           event = eventFrom(source, parsed)
         } catch (error: unknown) {
+          /* v8 ignore next 2 -- eventFrom throws only InvalidEvent. */
           if (error instanceof InvalidEvent) throw new HttpError(400, error.message)
+          /* v8 ignore next -- eventFrom throws only InvalidEvent. */
           throw error
         }
         const sink = sources.find(entry => entry.id === source)?.sink

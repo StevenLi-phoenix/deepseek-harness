@@ -128,11 +128,13 @@ export function apply(ctx: Context, config: Config): void {
     raw,
     logger: ctx.logger,
   })
+  /* v8 ignore next 4 -- assertConfig sets provider and model together. */
   ctx.logger.info(
     'fork-guard: layers patterns=%s canary=%s memory=%s llm=%s (always for public), model %s, raw responses in %s kept %d days',
     config.layers.patterns, config.layers.canary, config.layers.memory, config.layers.llm,
     config.provider === undefined ? 'the profile default' : `${config.provider}/${config.model ?? ''}`, join(dir, 'raw'), config.rawRetentionDays,
   )
+  /* v8 ignore next -- prune rejects only with fs errors, which are Error instances. */
   void raw.prune().catch((error: unknown) => { ctx.logger.warn('fork-guard: pruning raw responses failed: %s', error instanceof Error ? error.message : String(error)) })
   // ctx.provide is itself an effect: the service goes when this plugin unloads.
   ctx.provide('forkGuard', service)

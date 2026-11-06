@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { format } from 'node:util'
@@ -7,7 +7,7 @@ import { runAdminCli } from '../src/cli.ts'
 import { CATEGORIES as MEMORY_CATEGORIES } from '../src/entries.ts'
 import { FeedbackStore } from '../src/feedback.ts'
 import { MemoryStore } from '../src/store.ts'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as plugin from '../src/settings.ts'
 import { CATEGORIES, MEMORY_PATH, type ActionResult, type DetailView, type MemoryView } from '../src/settings/view.ts'
 
@@ -21,6 +21,7 @@ interface Route {
 const dirs: string[] = []
 
 afterEach(async () => {
+  vi.unstubAllEnvs()
   await Promise.all(dirs.splice(0).map(async (dir) => { await rm(dir, { recursive: true, force: true }) }))
 })
 
@@ -359,5 +360,119 @@ describe('logging', () => {
     const line = logs.find(entry => entry.includes('approve ids'))
     expect(line).toMatch(new RegExp(`^info fork-memory-settings: approve ids ${waiting.id}; 1 ok, 0 failed in \\d+ms$`, 'u'))
     expect(logs.join('\n')).not.toContain('SECRET-ENTRY-TEXT')
+  })
+})
+
+describe('what the route reports beyond the happy path', () => {
+  const url = (query = ''): string => `http://127.0.0.1${MEMORY_PATH}${query}`
+
+  it('shows a replacement with the text it replaces, and each history line with its source and what it removed', async () => {
+    const { store, get, route } = await mount()
+    const entry = (await store.save({ text: 'original text', category: 'preferences' }, { source: 'owner-turn', session: 's1' })).entry
+    const waiting = await store.savePending({ id: entry.id, text: 'replacement text', category: 'preferences' }, tainted)
+    expect((await get()).pending).toEqual([expect.objectContaining({ id: waiting.id, op: 'replace', target: entry.id, replaces: 'original text' })])
+    await store.forget(entry.id, { session: 's1' })
+    await store.revert(entry.id, { session: 's1' })
+    const detail = await (await route.fetch(new Request(url(`?id=${entry.id}`)))).json() as DetailView
+    expect(detail.history.map(line => [line.op, line.source, line.before, line.after])).toEqual([
+      ['revert', undefined, undefined, 'original text'],
+      ['forget', undefined, 'original text', undefined],
+      ['add', 'owner-turn', undefined, 'original text'],
+    ])
+  })
+
+  it('orders a Session by its history times even when the history was written out of order', async () => {
+    const { store, get } = await mount()
+    const mk = (id: string): Record<string, string> => ({ id, category: 'projects', date: '2026-10-01', text: `entry ${id}` })
+    await store.save({ text: 'placeholder', category: 'projects' })
+    await mkdir(join(store.file, '..'), { recursive: true })
+    await writeFile(store.historyFile, [
+      { at: '2026-10-02T00:00:00.000Z', op: 'add', id: 'aaaaaa', after: mk('aaaaaa'), session: 's', sha: 'x' },
+      { at: '2026-10-01T00:00:00.000Z', op: 'add', id: 'bbbbbb', after: mk('bbbbbb'), session: 's', sha: 'x' },
+      { at: '2026-10-03T00:00:00.000Z', op: 'add', id: 'cccccc', after: mk('cccccc'), session: 's', origin: 'peer:x', sha: 'x' },
+      { at: '2026-10-02T12:00:00.000Z', op: 'add', id: 'dddddd', after: mk('dddddd'), session: 's', sha: 'x' },
+    ].map(record => JSON.stringify(record)).join('\n') + '\n')
+    expect((await get()).sessions).toEqual([{ id: 's', changes: 4, entries: 4, firstAt: '2026-10-01T00:00:00.000Z', lastAt: '2026-10-03T00:00:00.000Z', origin: 'peer:x' }])
+  })
+
+  it('searches entries that were written by hand and have no history', async () => {
+    const { store, get } = await mount()
+    await mkdir(join(store.file, '..'), { recursive: true })
+    await writeFile(store.file, `${JSON.stringify({ id: 'aaaaaa', category: 'projects', date: '2026-10-01', text: 'by hand' })}\n`)
+    expect((await get('?q=hand')).entries.items.map(item => item.id)).toEqual(['aaaaaa'])
+  })
+
+  it('previews a rollback with what each entry would become, and nothing for text that does not exist', async () => {
+    const { act, store } = await mount()
+    const added = (await store.save({ text: 'planted', category: 'instructions' }, { session: 'bad' })).entry
+    const gone = (await store.save({ text: 'planted, then forgotten', category: 'instructions' }, { session: 'bad' })).entry
+    await store.forget(gone.id, { session: 'bad' })
+    const forgotten = (await store.save({ text: 'good, forgotten by mistake', category: 'identity' }, { session: 'good' })).entry
+    await store.forget(forgotten.id, { session: 'bad' })
+    const preview = await act({ action: 'rollback', session: 'bad' })
+    if (preview.action !== 'rollback' || preview.stage !== 'preview') throw new Error('expected a preview')
+    const byId = new Map(preview.items.map(item => [item.id, item]))
+    expect(byId.get(added.id)).toEqual({ id: added.id, change: 'remove', category: 'instructions', now: 'planted' })
+    expect(byId.get(gone.id)).toEqual({ id: gone.id, change: 'none' })
+    expect(byId.get(forgotten.id)).toEqual({ id: forgotten.id, change: 'restore', category: 'identity', then: 'good, forgotten by mistake' })
+  })
+
+  it('refuses a non-numeric page offset, a body without content type, and a body that is not an object', async () => {
+    const { route } = await mount()
+    expect((await route.fetch(new Request(url('?offset=abc')))).status).toBe(400)
+    const untyped = await route.fetch(new Request(url(), { method: 'POST', body: new Uint8Array([123, 125]) }))
+    expect(untyped.status).toBe(415)
+    for (const body of ['42', 'null']) {
+      const response = await route.fetch(new Request(url(), { method: 'POST', headers: { 'content-type': 'application/json' }, body }))
+      expect(response.status).toBe(400)
+      expect(await response.json()).toEqual({ error: 'unknown action' })
+    }
+  })
+
+  it('answers 500 without detail and logs the reason when the memory file cannot be read', async () => {
+    const { route, logs, file } = await mount()
+    await mkdir(file, { recursive: true })
+    const response = await route.fetch(new Request(url()))
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'the memory could not be read or changed; see the Host log' })
+    expect(logs.some(line => /^warn fork-memory-settings: GET failed: EISDIR/u.test(line))).toBe(true)
+  })
+
+  it('logs a failure that is not an Error with its text, and lets an unexpected failure of one item fail the request', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'fork-memory-settings-'))
+    dirs.push(dir)
+    const file = join(dir, 'memory.jsonl')
+    class Failing extends MemoryStore {
+      // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the non-Error arm is the case under test.
+      override list(): Promise<never> { return Promise.reject('disk gone') }
+      override approve(): Promise<never> { return Promise.reject(new Error('EIO')) }
+    }
+    const warn = vi.fn()
+    const handler = new plugin.MemoryHandler({ store: new Failing(file), feedback: new FeedbackStore(join(dir, 'feedback.jsonl')), logger: { info: vi.fn(), warn } })
+    expect((await handler.fetch(new Request(url()))).status).toBe(500)
+    expect(warn).toHaveBeenCalledWith('fork-memory-settings: %s failed: %s', 'GET', 'disk gone')
+    const approve = await handler.fetch(new Request(url(), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'approve', ids: ['abcdef'] }) }))
+    expect(approve.status).toBe(500)
+    expect(warn).toHaveBeenCalledWith('fork-memory-settings: %s failed: %s', 'POST', 'EIO')
+  })
+
+  it('serves the default memory and feedback files of the DSH home when no file is configured', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'fork-memory-settings-'))
+    dirs.push(dir)
+    vi.stubEnv('DSH_HOME', dir)
+    const routes: Route[] = []
+    const ctx = new Context()
+    ctx.provide('connection', { fetch: { register: (route: Route) => { routes.push(route); return () => Promise.resolve() } } } as never)
+    await ctx.plugin(plugin, plugin.Config({}))
+    await new MemoryStore(join(dir, 'fork-memory', 'memory.jsonl')).save({ text: 'in the default file', category: 'projects' })
+    const view = await (await routes[0]!.fetch(new Request(url()))).json() as MemoryView
+    expect(view.entries.items.map(item => item.text)).toEqual(['in the default file'])
+    const added = await routes[0]!.fetch(new Request(url(), {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'feedback.add', scope: 'up', verdict: 'keep', kind: 'comment', text: 'nice reply' }),
+    }))
+    expect(added.status).toBe(200)
+    expect(await readFile(join(dir, 'fork-memory', 'feedback.jsonl'), 'utf8')).toContain('nice reply')
+    await ctx.fiber.dispose()
   })
 })

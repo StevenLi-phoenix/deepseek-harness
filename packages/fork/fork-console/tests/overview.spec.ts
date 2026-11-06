@@ -255,4 +255,56 @@ describe('overview cards', () => {
   })
 })
 
+describe('overview card corners', () => {
+  const base = async () => ({ config: { bili: { url: await closedUrl() } } })
+
+  it('shows a card that does not answer within the deadline as timed out, and keeps the others', async () => {
+    const config = { bili: { url: await closedUrl() }, probeTimeoutMs: 200 }
+    const { byId, logs } = await overview(
+      { config },
+      { forkNotifier: { send: async () => {}, health: () => new Promise(() => {}) }, forkEventBus: fakeBus() },
+    )
+    expect(byId('wechat')).toMatchObject({ tone: 'down', state: 'timeout', facts: {} })
+    expect(byId('bus')).toMatchObject({ tone: 'ok', state: 'up' })
+    expect(logs).toContain('warn fork-console: the wechat card did not answer within 900 ms')
+  })
+
+  it('shows a card that fails with something that is not an Error as a plain error', async () => {
+    const { byId, logs } = await overview(await base(), { forkEventBus: fakeBus({ stats: () => { throw 'secret /Users/x' } }) })
+    expect(byId('bus')).toMatchObject({ tone: 'down', state: 'error' })
+    expect(logs).toContain('warn fork-console: the bus card failed: error')
+    expect(logs.join('\n')).not.toContain('/Users/x')
+  })
+
+  it('keeps bili green on its own healthy report, with a detail when it has one', async () => {
+    const bili = await serve({ '/healthz': 200 })
+    expect((await overview({ config: { bili: { url: bili } } }, { bili: { health: () => ({ state: 'ok' }) } })).byId('bili'))
+      .toMatchObject({ tone: 'ok', state: 'up', facts: { detail: null } })
+    expect((await overview({ config: { bili: { url: bili } } }, { bili: { health: () => ({ state: 'down', detail: 'login expired' }) } })).byId('bili'))
+      .toMatchObject({ tone: 'down', state: 'down', facts: { detail: 'login expired' } })
+  })
+
+  it('ignores a health answer that is not one of the three known states', async () => {
+    const bili = await serve({ '/healthz': 200 })
+    for (const answer of [null, 'fine', { state: 'great' }, {}]) {
+      expect((await overview({ config: { bili: { url: bili } } }, { bili: { health: () => answer } })).byId('bili'), JSON.stringify(answer))
+        .toMatchObject({ tone: 'ok', state: 'up' })
+    }
+  })
+
+  it('reads a QQ connection that lacks the account, the attempt, and the group count', async () => {
+    const qq = (connection: Record<string, unknown>) => ({ connectionStatus: () => connection })
+    expect((await overview(await base(), { forkQq: qq({ state: 'connected', selfId: 12 }) })).byId('qq'))
+      .toMatchObject({ tone: 'ok', state: 'up', facts: { groups: null, account: null } })
+    expect((await overview(await base(), { forkQq: qq({ state: 'reconnecting' }) })).byId('qq'))
+      .toMatchObject({ tone: 'down', state: 'reconnecting', facts: { attempt: 0 } })
+  })
+
+  it('takes a WeChat report without a detail, and a notifier that has no outbox as nothing queued', async () => {
+    expect((await overview(await base(), { forkNotifier: { send: async () => {}, health: () => ({ state: 'warn' }) } })).byId('wechat'))
+      .toMatchObject({ tone: 'warn', state: 'warn', facts: { detail: null } })
+    expect((await overview(await base(), { forkNotifier: { send: async () => {} } })).byId('wechat')).toMatchObject({ tone: 'ok', state: 'up' })
+  })
+})
+
 beforeEach(() => { vi.useRealTimers() })

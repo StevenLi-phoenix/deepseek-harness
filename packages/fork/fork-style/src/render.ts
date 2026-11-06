@@ -43,6 +43,7 @@ const plain = (text: string): string => text.replaceAll('<', '＜').replaceAll('
 const PLATFORM = { qq: 'QQ', bili: 'B站' } as const
 
 function line(record: StyleRecord): string {
+  /* v8 ignore next -- called only for records with a reply. */
   const reply = quote(record.reply ?? '')
   return `${record.prompt === undefined ? `- ${reply}` : `- ${quote(record.prompt)} → ${reply}`}（${PLATFORM[record.source]}）`
 }
@@ -123,6 +124,7 @@ export function renderStyleBlock(input: BlockInput): { text: string; shown: numb
  */
 export function localDay(at: Date, timeZone: string): string {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(at)
+  /* v8 ignore next -- the formatter yields every requested part. */
   const get = (type: string): string => parts.find(part => part.type === type)?.value ?? '00'
   return `${get('year')}-${get('month')}-${get('day')}`
 }

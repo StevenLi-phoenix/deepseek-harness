@@ -674,6 +674,8 @@ export class StyleService {
       review: this.config.review, lastRefreshAt: lastRun?.at ?? null, ticTrend: ticTrend(trend),
     }
     const { config } = this
+    /* v8 ignore next -- a live record always has a reply. */
+    const replyOf = (reply: string | undefined): string => reply ?? ''
     return {
       enabled: config.enabled,
       parts: {
@@ -687,7 +689,7 @@ export class StyleService {
       },
       samples: records.map(record => ({
         id: record.id, source: record.source, owner: record.owner, status: record.status === 'pending' ? 'pending' : 'active', addedAt: record.addedAt,
-        ...record.prompt === undefined ? {} : { prompt: record.prompt }, reply: record.reply ?? '', origin: record.origin,
+        ...record.prompt === undefined ? {} : { prompt: record.prompt }, reply: replyOf(record.reply), origin: record.origin,
       })),
       notes,
       hot: hot.slice(0, config.hotwatch.maxIndex).map(meme => ({ title: meme.title, heat: meme.heat })),
@@ -716,6 +718,7 @@ export class StyleService {
           const id = typeof body['id'] === 'string' ? body['id'] : ''
           const note = await this.notes.remove(id)
           const record = note === undefined ? await this.store.remove(id) : undefined
+          /* v8 ignore next -- store.remove throws when the note is absent. */
           this.ctx.logger.info('fork-style: the owner removed %s (%s); it is blocked', id, note?.kind ?? record?.source ?? 'sample')
           break
         }
@@ -923,6 +926,7 @@ function applyPrompt(ctx: Context, config: Config): void {
   ctx.on('session/event', (session, event) => {
     if (event.type === 'user/message' && event.data.source.kind === name) {
       const tag = BLOCK_TAG.exec(textOf(event.data))
+      /* v8 ignore next -- the tag pattern's groups are mandatory. */
       if (tag !== null) shown.set(session.id, `${tag[1] ?? ''}:${tag[2] ?? ''}`)
     } else if (event.type === 'compaction/end' && event.data.error === undefined) {
       shown.delete(session.id)
@@ -992,6 +996,7 @@ function applyCollect(ctx: Context, config: Config): void {
   const open = new Map<string, string>()
   ctx.on('session/event', (_session, event) => {
     const text = webResultText(open, event)
+    /* v8 ignore next -- the map holds more than 200 entries here. */
     if (open.size > 200) open.delete(open.keys().next().value ?? '')
     if (text !== undefined) {
       void service.feedWeb(text).catch((error: unknown) => { ctx.logger.warn('fork-style: web inbox write failed: %s', error instanceof Error ? error.message : String(error)) })

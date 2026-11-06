@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -7,7 +7,7 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as ToolUp from '../src/index.ts'
-import { BiliEvidenceRefusedError, CommentCache, commentsOf, loadSalt, senderKey } from '../src/index.ts'
+import { BiliEvidenceRefusedError, CommentCache, commentsOf, defaultSaltFile, loadSalt, senderKey } from '../src/index.ts'
 
 const contexts: Context[] = []
 const dirs: string[] = []
@@ -143,5 +143,66 @@ describe('bili evidence verifier', () => {
     const { ctx } = await mount()
     expect(typeof ctx.get('biliEvidence')?.evidenceOf).toBe('function')
     expect(ToolUp.name).toBe('fork-tool-up')
+  })
+
+  it('logs and keeps nothing when bili-svc cannot be asked who the creator\'s accounts are', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.endsWith('/v1/status')) throw new Error('connect ECONNREFUSED')
+      return new Response(JSON.stringify({ comments: [comment(1, 7, 'x')] }), { status: 200 })
+    }))
+    const { ctx, read, evidence } = await mount()
+    const warnings: string[] = []
+    ctx.logger.exporter({ levels: { default: 3 }, export: (message) => { warnings.push(`${message.type}: ${String(message.args[0])}`) } })
+    await read('up_comments', {})
+    expect(await evidence.evidenceOf(['1'], { sessionId: 'up-1' })).toEqual([])
+    expect(warnings.some(line => line.includes('/v1/status for the evidence check failed: connect ECONNREFUSED'))).toBe(true)
+  })
+
+  it('keeps the salt under DSH_HOME when the configuration names no salt file', async () => {
+    const home = await tmp()
+    vi.stubEnv('DSH_HOME', home)
+    biliSvc()
+    const dir = await tmp()
+    const ctx = new Context()
+    contexts.push(ctx)
+    ctx.provide('systemPrompt', { tools: () => () => {} } as never)
+    ctx.provide('credentials', { resolve: async () => ({ value: 't' }) } as never)
+    ctx.provide('forkEventBus', { persistentSubscriptionOf: () => 'bili-digest' } as never)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(NativeToolExecutor)
+    await ctx.plugin(ToolUp, ToolUp.Config({ notes: { file: join(dir, 'notes.json') } } as never))
+    await ctx.biliEvidence.evidenceOf(['1'], { sessionId: 'up-1' })
+    expect(defaultSaltFile()).toBe(join(home, 'fork-tool-up', 'evidence-salt'))
+    expect((await readFile(defaultSaltFile(), 'utf8')).trim()).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  it('resolves the default salt file from the environment it is given', () => {
+    expect(defaultSaltFile({ DSH_HOME: '/srv/dsh' })).toBe(join('/srv/dsh', 'fork-tool-up', 'evidence-salt'))
+  })
+
+  it('reads the path again when exclusive creation finds it taken, and fails when nothing is readable there', async () => {
+    const dir = await tmp()
+    const file = join(dir, 'salt')
+    // A dangling link reads as missing but makes the exclusive create fail with EEXIST.
+    await symlink(join(dir, 'nowhere'), file)
+    await expect(loadSalt(file)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('fails with the file system\'s error when the salt cannot be created', async () => {
+    const dir = await tmp()
+    await chmod(dir, 0o500)
+    try {
+      await expect(loadSalt(join(dir, 'salt'))).rejects.toMatchObject({ code: 'EACCES' })
+    } finally {
+      await chmod(dir, 0o700)
+    }
+  })
+
+  it('creates the salt once with mode 0600 and returns the same salt afterwards', async () => {
+    const file = join(await tmp(), 'sub', 'salt')
+    const first = await loadSalt(file)
+    expect(first).toMatch(/^[0-9a-f]{64}$/)
+    expect((await stat(file)).mode & 0o777).toBe(0o600)
+    expect(await loadSalt(file)).toBe(first)
   })
 })

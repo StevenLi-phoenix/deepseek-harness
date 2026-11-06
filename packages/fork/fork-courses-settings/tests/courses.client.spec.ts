@@ -41,6 +41,47 @@ describe('course deadline section text', () => {
     expect(upcomingText({ id: 'x', course: 'C', title: 'T', phase: 'late', deadline: AT, nextAt: null }, ZONE, t)).toEqual({ when: '已过准时截止，迟交截止 11/2 22:00', next: '这个截止的提醒都发过了' })
   })
 
+  it('words every outcome of a successful check, with zero counts when the poll gives none', () => {
+    const poll = (outcome: string | null, extra: object = {}) => pollLine({ at: AT, trigger: 'timer', durationMs: 1, ok: true, error: null, openTasks: null, reminders: null, outcome: outcome as never, ...extra }, ZONE, t)
+    expect(poll('sent', { reminders: 2, openTasks: 5 })).toBe('上次检查 11/2 22:00：5 项未完成，发出 2 条提醒')
+    expect(poll('failed', { reminders: 1 })).toContain(t('result.failed', { count: 1 }))
+    expect(poll('disabled')).toContain(t('result.disabled'))
+    expect(poll(null)).toContain(t('result.none'))
+    expect(poll('held')).toContain('0 条提醒')
+    expect(poll(null)).toContain('0 项未完成')
+  })
+
+  it('writes a failed check with an empty error when none was recorded', () => {
+    expect(pollLine({ at: AT, trigger: 'timer', durationMs: 1, ok: false, error: null, openTasks: null, reminders: null, outcome: null }, ZONE, t)).toBe('上次检查 11/2 22:00 失败：')
+  })
+
+  it('describes a sync that never ran clean, with a status the page has no copy for, and no reason', () => {
+    const unknown = syncLines({ status: 'weird', latestRunAt: null, lastCleanAt: null, failedRuns: 1, reason: null, alerting: false }, ZONE, t)
+    expect(unknown.tone).toBe('warn')
+    expect(unknown.lines).toEqual([t('sync.broken', { status: 'weird', clean: t('sync.never'), count: 1 })])
+    expect(syncLines({ status: 'degraded', latestRunAt: null, lastCleanAt: null, failedRuns: 0, reason: null, alerting: false }, ZONE, t).lines[0]).toContain(t('sync.status.degraded'))
+    expect(syncLines({ status: 'ok', latestRunAt: null, lastCleanAt: null, failedRuns: 0, reason: null, alerting: false }, ZONE, t).lines).toEqual([t('sync.ok', { time: '—' })])
+  })
+
+  it('lists no quiet-hours rule when neither is on and turns the urgent rule off at 0 hours', () => {
+    const lines = ruleLines({ ...VIEW, quietHours: { followPresence: false, enabled: false, start: '01:00', end: '09:00' }, urgentWithinHours: 0 }, t)
+    expect(lines).toEqual([t('rules.before', { hours: '72 / 24 / 6 / 2' }), t('rules.late', { hours: '24 / 6 / 2' }), t('rules.urgentOff'), t('rules.zone', { zone: ZONE })])
+  })
+
+  it('words an on-time row with its next reminder', () => {
+    expect(upcomingText({ id: 'x', course: 'C', title: 'T', phase: 'due', deadline: AT, nextAt: AT + 3_600_000 }, ZONE, t))
+      .toEqual({ when: t('upcoming.due', { time: '11/2 22:00' }), next: t('upcoming.next', { time: '11/2 23:00' }) })
+  })
+
+  it('refuses answers whose outer fields are the wrong type', () => {
+    expect(() => parseView(null)).toThrow('unexpected course deadline answer')
+    const ok = { enabled: true, upcoming: [], notes: [], timeZone: 'UTC' }
+    expect(parseView(ok)).toBe(ok)
+    for (const bad of [{ ...ok, enabled: 'yes' }, { ...ok, upcoming: {} }, { ...ok, notes: null }, { ...ok, timeZone: 5 }]) {
+      expect(() => parseView(bad)).toThrow('unexpected course deadline answer')
+    }
+  })
+
   it('has the same keys in every dictionary', () => {
     expect(Object.keys(en).sort()).toEqual(Object.keys(zh).sort())
   })
@@ -62,6 +103,67 @@ describe('loader', () => {
     await loader.checkNow()
     expect(store.getSnapshot()).toMatchObject({ view: { polling: true }, stale: false, checking: false })
     expect(() => parseView({})).toThrow('unexpected course deadline answer')
+  })
+
+  it('does not warn again while the reading stays stale, and a second check while one runs does nothing', async () => {
+    const store = createCoursesStore()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    warn.mockClear()
+    const gate = Promise.withResolvers<CoursesView>()
+    const check = vi.fn(() => gate.promise)
+    const loader = new CoursesLoader(store, async () => { throw new Error('down') }, check)
+    await loader.refresh()
+    await loader.refresh()
+    expect(warn).toHaveBeenCalledTimes(1)
+    const first = loader.checkNow()
+    await loader.checkNow()
+    expect(check).toHaveBeenCalledTimes(1)
+    gate.resolve(VIEW)
+    await first
+    expect(store.getSnapshot()).toMatchObject({ view: VIEW, stale: false, checking: false })
+    warn.mockRestore()
+  })
+
+  it('does not start a second timer when a visible page fires visibilitychange, and polls without a page', () => {
+    vi.useFakeTimers()
+    try {
+      const listeners: Array<() => void> = []
+      const page = { visibilityState: 'visible' as DocumentVisibilityState, addEventListener: (_: 'visibilitychange', listener: () => void) => { listeners.push(listener) }, removeEventListener: vi.fn() }
+      const refresh = vi.fn()
+      const stop = startPolling(refresh, 1000, page)
+      listeners[0]?.()
+      expect(refresh).toHaveBeenCalledTimes(1)
+      page.visibilityState = 'hidden'
+      listeners[0]?.()
+      listeners[0]?.()
+      page.visibilityState = 'visible'
+      listeners[0]?.()
+      expect(refresh).toHaveBeenCalledTimes(2)
+      stop()
+      expect(page.removeEventListener).toHaveBeenCalledTimes(1)
+      const bare = vi.fn()
+      const stopBare = startPolling(bare, 1000, null)
+      vi.advanceTimersByTime(1000)
+      expect(bare).toHaveBeenCalledTimes(2)
+      stopBare()
+      vi.advanceTimersByTime(3000)
+      expect(bare).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('polls straight away and on the interval when the runtime has no document', () => {
+    vi.useFakeTimers()
+    try {
+      const refresh = vi.fn()
+      const stop = startPolling(refresh, 1000)
+      vi.advanceTimersByTime(2000)
+      expect(refresh).toHaveBeenCalledTimes(3)
+      stop()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('polls while visible and stops when hidden', () => {

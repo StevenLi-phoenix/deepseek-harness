@@ -212,6 +212,7 @@ export function screenPairs(
       continue
     }
     seen.add(id)
+    /* v8 ignore next -- a screened pair always has a prompt. */
     accepted.push({ ...result, prompt: screened.prompt ?? '', reply: screened.reply, id })
   }
   return { accepted, filtered }
@@ -239,6 +240,7 @@ export function pickForRun(accepted: readonly Accepted[], limits: { readonly max
     for (const pair of accepted.filter(candidate => !candidate.owner && candidate.how === how).toSorted((a, b) => b.at - a.at)) {
       queues.set(pair.key, [...queues.get(pair.key) ?? [], pair])
     }
+    /* v8 ignore next -- no queue is empty. */
     const order = [...queues.values()].toSorted((a, b) => (b[0]?.at ?? 0) - (a[0]?.at ?? 0))
     for (let round = 0; strangers.length < limits.max && round < limits.perKey; round += 1) {
       for (const queue of order) {
@@ -425,6 +427,7 @@ export class StyleCollector {
       const key = record.owner ? 'bili-owner' : record.source
       bySource[key] = (bySource[key] ?? 0) + 1
     }
+    /* v8 ignore next -- collected records carry a prompt and a reply. */
     for (const record of stored.added) logger.debug(`fork-style: added ${record.id} (${record.source}, ${record.status}): ${JSON.stringify(record.prompt ?? '')} -> ${JSON.stringify(record.reply ?? '')}`)
     const report: RunReport = {
       at: started, ms: now() - started, trigger, qq, bili,

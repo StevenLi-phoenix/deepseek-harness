@@ -12,6 +12,7 @@ describe('scanPatterns', () => {
     ['写信给 someone ＠ example 。 com', 'pattern.email'],
     ['身份证 11010519491231002X', 'pattern.id_number'],
     ['4111 1111 1111 1111', 'pattern.bank_card'],
+    ['4012 8888 8888 1881', 'pattern.bank_card'],
     ['群号 123456', 'pattern.long_number'],
     ['他的 uid 是 ８８８８８８', 'pattern.long_number'],
     ['问一下 @某某 吧', 'pattern.mention'],
@@ -57,6 +58,7 @@ describe('scanPatterns', () => {
   it('checks Luhn', () => {
     expect(luhn('4111111111111111')).toBe(true)
     expect(luhn('4111111111111112')).toBe(false)
+    expect(luhn('4012888888881881')).toBe(true)
   })
 
   it('never puts the match in the reason', () => {

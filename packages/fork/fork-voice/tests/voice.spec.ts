@@ -1,9 +1,9 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import ForkVoice, { Config, VoiceError } from '../src/index.ts'
 import { FakeVoiceHost, wavBytes } from './fake-voice.ts'
 
@@ -28,14 +28,16 @@ afterEach(async () => {
 
 interface Log { type: string; text: string }
 
-async function mount(overrides: Record<string, unknown> = {}, keys: Record<string, string> = { FORK_FEIYU_API_KEY: 'feiyu-key' }) {
+type Resolver = (ref: string) => Promise<{ value: string; source: string } | undefined>
+
+async function mount(overrides: Record<string, unknown> = {}, keys: Record<string, string> = { FORK_FEIYU_API_KEY: 'feiyu-key' }, resolver?: Resolver) {
   const dir = mkdtempSync(join(tmpdir(), 'fork-voice-'))
   dirs.push(dir)
   const ctx = new Context()
   contexts.push(ctx)
   const logs: Log[] = []
   ctx.logger.exporter({ levels: { default: 3 }, export: (message) => { logs.push({ type: message.type, text: String(message.args[0]) }) } })
-  ctx.provide('credentials', { resolve: async (ref: string) => (keys[ref] === undefined ? undefined : { value: keys[ref], source: 'env' }) } as never)
+  ctx.provide('credentials', { resolve: resolver ?? (async (ref: string) => (keys[ref] === undefined ? undefined : { value: keys[ref], source: 'env' })) } as never)
   const tts = {
     provider: 'feiyu', fallback: 'mac-mini', format: 'wav', retryDelayMs: 1, retries: 1,
     feiyu: { baseUrl: `${url}/feiyu`, pollMs: 100 },
@@ -126,6 +128,67 @@ describe('speak', () => {
     expect(host.seen).toHaveLength(0)
   })
 
+  it('reports a non-Error failure of the first provider as text and falls back', async () => {
+    const { voice, logs } = await mount({}, {}, async () => { throw 'vault locked' })
+    const result = await voice.speak('你好')
+    expect(result).toMatchObject({ provider: 'mac-mini', fellBackFrom: 'feiyu: vault locked' })
+    expect(logs.some(line => line.type === 'warn' && line.text === 'fork-voice: feiyu could not speak 2 chars: vault locked')).toBe(true)
+  })
+
+  it('stops with a cancellation instead of trying the fallback when the caller aborts', async () => {
+    const { voice, logs } = await mount()
+    const controller = new AbortController()
+    controller.abort()
+    await expect(voice.speak('你好', { signal: controller.signal })).rejects.toThrow('speech was cancelled')
+    expect(host.seen).toHaveLength(0)
+    expect(logs.some(line => line.text.includes('could not speak'))).toBe(false)
+  })
+
+  it('passes a live caller signal through when speaking', async () => {
+    const { voice } = await mount()
+    const result = await voice.speak('你好', { signal: new AbortController().signal })
+    expect(result.provider).toBe('feiyu')
+  })
+
+  it('reports the switch of speech and refuses a relative data directory', async () => {
+    const { voice } = await mount()
+    expect(voice.ttsEnabled).toBe(true)
+    expect((await mount({ tts: { enabled: false } })).voice.ttsEnabled).toBe(false)
+    await expect(mount({ dataDir: 'relative/dir' })).rejects.toThrow('dataDir must be an absolute path')
+  })
+
+  it('keeps its data under $DSH_HOME when no data directory is configured', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'fork-voice-home-'))
+    dirs.push(home)
+    vi.stubEnv('DSH_HOME', home)
+    try {
+      const { voice, logs } = await mount({ dataDir: undefined })
+      expect(logs.some(line => line.text.endsWith(`data in ${join(home, 'fork-voice')}`))).toBe(true)
+      expect((await voice.speak('你好')).path.startsWith(join(home, 'fork-voice', 'audio'))).toBe(true)
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('skips cached files that are empty or unreadable and reuses an older good one', async () => {
+    const { voice, dir } = await mount()
+    const first = await voice.speak('缓存')
+    const audioDir = join(dir, 'audio')
+    const suffix = first.path.slice(audioDir.length + 1).replace(/^\d{8}-\d{6}/, '')
+    writeFileSync(join(audioDir, `99990101-000001${suffix}`), '')
+    symlinkSync(join(dir, 'nowhere.wav'), join(audioDir, `99990101-000002${suffix}`))
+    host.seen.length = 0
+    expect(await voice.speak('缓存')).toMatchObject({ path: first.path, cached: true })
+    expect(host.seen).toHaveLength(0)
+  })
+
+  it('warns when old files cannot be pruned because a data directory is not a directory', async () => {
+    const { voice, dir, logs } = await mount()
+    writeFileSync(join(dir, 'asr'), 'occupied')
+    await voice.speak('你好')
+    await vi.waitFor(() => { expect(logs.some(line => line.type === 'warn' && line.text.startsWith(`fork-voice: pruning ${join(dir, 'asr')} failed`))).toBe(true) })
+  })
+
   it('runs calls one at a time', async () => {
     host.feiyuStatuses = ['running', 'success']
     const { voice } = await mount()
@@ -203,6 +266,55 @@ describe('transcribe', () => {
     writeFileSync(big, wavBytes(500))
     await expect(voice.transcribe(big)).rejects.toThrow('exceeds 1024 bytes')
     expect(host.seen).toHaveLength(0)
+  })
+
+  it('tells which files it would transcribe', async () => {
+    const off = await mount()
+    expect(off.voice.canTranscribe('a.wav')).toBe(false)
+    const { voice } = await mount({ asr: { enabled: true } })
+    expect(voice.canTranscribe('a.wav')).toBe(true)
+    expect(voice.canTranscribe('a.silk')).toBe(false)
+  })
+
+  it('names an extensionless file and refuses a directory or an empty file', async () => {
+    const { voice, dir } = await mount({ asr: { enabled: true } })
+    await expect(voice.transcribe(join(dir, 'voicenote'))).rejects.toThrow('this file is not an audio format')
+    mkdirSync(join(dir, 'folder.wav'))
+    await expect(voice.transcribe(join(dir, 'folder.wav'))).rejects.toThrow('not a non-empty regular file')
+    writeFileSync(join(dir, 'empty.wav'), '')
+    await expect(voice.transcribe(join(dir, 'empty.wav'))).rejects.toThrow('not a non-empty regular file')
+    expect(host.seen).toHaveLength(0)
+  })
+
+  it('sends the configured language and honours a caller signal', async () => {
+    const { voice, dir } = await mount({ asr: { enabled: true, engine: 'whisper', language: 'en' } })
+    const file = join(dir, 'en.wav')
+    writeFileSync(file, wavBytes())
+    const result = await voice.transcribe(file, { signal: new AbortController().signal })
+    expect(result.engine).toBe('whisper')
+    expect(host.requests('/asr/transcribe')[0]!.body.toString('latin1')).toMatch(/name="language"\r\n\r\nen/)
+  })
+
+  it('logs retries of the asr-service without a service label', async () => {
+    host.failNext.asr = [500]
+    const { voice, dir, logs } = await mount({ asr: { enabled: true } })
+    const file = join(dir, 'a.wav')
+    writeFileSync(file, wavBytes())
+    await voice.transcribe(file)
+    expect(logs.some(line => line.type === 'warn' && line.text.startsWith('fork-voice: retrying after attempt 1: asr POST /transcribe answered HTTP 500'))).toBe(true)
+  })
+
+  it('wraps a failure to store the raw answer in a VoiceError', async () => {
+    const { voice, dir, logs } = await mount({ asr: { enabled: true } })
+    const file = join(dir, 'a.wav')
+    const audio = wavBytes()
+    writeFileSync(file, audio)
+    voice.now = () => new Date(2026, 0, 2, 3, 4, 5)
+    mkdirSync(join(dir, 'asr', `20260102-030405-${host.sha(audio).slice(0, 8)}.json`), { recursive: true })
+    const failure = await voice.transcribe(file).catch((error: unknown) => error)
+    expect(failure).toBeInstanceOf(VoiceError)
+    expect((failure as Error).message).toContain('EISDIR')
+    expect(logs.some(line => line.type === 'warn' && line.text.startsWith('fork-voice: transcribing a.wav failed'))).toBe(true)
   })
 
   it('logs a failing service as a warning and rethrows a VoiceError', async () => {

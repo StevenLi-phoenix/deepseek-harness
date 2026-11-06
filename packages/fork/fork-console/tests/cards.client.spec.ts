@@ -3,6 +3,7 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { SERVICE_IDS, type ServiceCard } from '../src/views.ts'
 import { BALANCE_ROUTE, balanceCard, parseBalance } from '../src/client/balance.ts'
 import { factLines, statusText } from '../src/client/cards.ts'
+import { parseAgents, parseFlowActivity, parseOverview, parseSubscriptions } from '../src/client/parse.ts'
 import { ago, clock, duration, until, type Translate } from '../src/client/format.ts'
 import { de, en, es, fr, ja, pt, ru, zh } from '../src/client/locales.ts'
 
@@ -81,6 +82,52 @@ describe('factLines', () => {
   })
 })
 
+describe('factLines corners', () => {
+  it('leaves out an uptime the Host did not send, and shows a note of the WeChat channel only when it carries one', () => {
+    expect(factLines(card('dsh', 'up', { version: '0.2.2', sha: null }), t)).toEqual(['版本 0.2.2'])
+    expect(factLines(card('wechat', 'warn', { detail: 'token stale' }, 'warn'), t)).toEqual(['token stale'])
+    expect(factLines(card('wechat', 'up'), t)).toEqual([])
+  })
+})
+
+describe('Host answer parsing', () => {
+  const activity = { windows: {}, recent: [], checkedAt: 1 }
+  const subscriptions = { subscriptions: null, schedules: null, defaults: {}, checkedAt: 1 }
+
+  it('takes an overview with cards and a time, and refuses anything else', () => {
+    const body = { cards: [], checkedAt: 1 }
+    expect(parseOverview(body)).toBe(body)
+    for (const bad of [null, 'text', {}, { cards: {}, checkedAt: 1 }, { cards: [], checkedAt: '1' }]) expect(() => parseOverview(bad)).toThrow('unexpected overview answer')
+  })
+
+  it('fills the routes and changes a Host from before run-time routes leaves out, and refuses an answer without windows', () => {
+    expect(parseFlowActivity(activity)).toEqual({ ...activity, routes: [], changes: [] })
+    expect(parseFlowActivity({ ...activity, routes: [{ id: 'r' }], changes: [{ id: 'c' }] })).toMatchObject({ routes: [{ id: 'r' }], changes: [{ id: 'c' }] })
+    for (const bad of [null, {}, { ...activity, windows: null }, { ...activity, recent: {} }, { ...activity, checkedAt: 'now' }]) {
+      expect(() => parseFlowActivity(bad)).toThrow('unexpected flow answer')
+    }
+  })
+
+  it('takes a subscriptions answer, defaults its archive to none, and refuses a malformed one', () => {
+    expect(parseSubscriptions(subscriptions)).toEqual({ ...subscriptions, archive: null })
+    const withArchive = { ...subscriptions, subscriptions: [], schedules: [], archive: { enabled: true } }
+    expect(parseSubscriptions(withArchive)).toBe(withArchive)
+    expect(parseSubscriptions({ ...subscriptions, archive: null })).toMatchObject({ archive: null })
+    for (const bad of [
+      null, { ...subscriptions, checkedAt: 'x' }, { ...subscriptions, defaults: null }, { ...subscriptions, defaults: 1 },
+      { ...subscriptions, subscriptions: {} }, { ...subscriptions, schedules: 'x' }, { ...subscriptions, archive: 'x' },
+    ]) expect(() => parseSubscriptions(bad)).toThrow('unexpected subscriptions answer')
+  })
+
+  it('takes an agents answer that names both cards, even as null, and refuses one that omits a card', () => {
+    const body = { cc: null, voice: null, checkedAt: 1 }
+    expect(parseAgents(body)).toBe(body)
+    for (const bad of [null, { cc: null, voice: null }, { voice: null, checkedAt: 1 }, { cc: null, checkedAt: 1 }]) {
+      expect(() => parseAgents(bad)).toThrow('unexpected agents answer')
+    }
+  })
+})
+
 describe('balance card', () => {
   it('summarizes the readings of the balance route', () => {
     expect(BALANCE_ROUTE).toBe('api/fork.balance')
@@ -90,6 +137,9 @@ describe('balance card', () => {
       { status: 'failed', reason: 'x' },
     ] })).toEqual({ ready: 2, failed: 1, highest: 40.6 })
     expect(() => parseBalance({})).toThrow('unexpected balance answer')
+    expect(() => parseBalance(null)).toThrow('unexpected balance answer')
+    expect(parseBalance({ readings: [{ status: 'pending' }, { status: 'ready', windows: [{ percent: 'high' }, {}] }, { status: 'ready', windows: 'none' }] }))
+      .toEqual({ ready: 2, failed: 0, highest: null })
   })
 
   it('is green when every source reads, amber when one failed, grey with none, and red when the route itself failed', () => {

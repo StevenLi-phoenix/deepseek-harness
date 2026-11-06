@@ -16,6 +16,10 @@ interface FakeService {
   items: Record<string, unknown>[]
   health: Record<string, unknown> | null
   down: boolean
+  /** Replaces the report answer's `result`, given the request body. */
+  reportResult?: (body: Record<string, unknown>) => unknown
+  /** The `get` of a sync run answers 500. */
+  getDown: boolean
   calls: Array<{ op: string; body: Record<string, unknown>; headers: Headers }>
 }
 
@@ -44,12 +48,20 @@ afterEach(async () => {
 })
 
 function fakeService(): FakeService {
-  const service: FakeService = { items: [], health: { status: 'ok', latest_run_at: iso(START - H), last_clean_run_at: iso(START - H), failed_runs_since_clean: 0 }, down: false, calls: [] }
+  const service: FakeService = {
+    items: [],
+    health: { status: 'ok', latest_run_at: iso(START - H), last_clean_run_at: iso(START - H), failed_runs_since_clean: 0 },
+    down: false,
+    getDown: false,
+    calls: [],
+  }
   vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
     const op = url.slice(url.lastIndexOf('/') + 1)
     const body = JSON.parse(typeof init.body === 'string' ? init.body : '{}') as Record<string, unknown>
     service.calls.push({ op, body, headers: new Headers(init.headers) })
     if (service.down) return Response.json({ ok: false, error: 'Internal error' }, { status: 500 })
+    if (op === 'report' && service.reportResult !== undefined) return Response.json({ ok: true, result: service.reportResult(body) })
+    if (op === 'get' && service.getDown) return Response.json({ ok: false, error: 'Internal error' }, { status: 500 })
     if (op === 'report') return Response.json({ ok: true, result: { items: service.items, next_offset: null, coverage: { health: service.health, items: [{ id: 'run-7' }] } } })
     if (op === 'get') return Response.json({ ok: true, result: { id: body['id'], data: { coverage: [{ area: 'content', status: 'failed', detail: 'fall-x: Browser is not available: iab' }] } } })
     return Response.json({ ok: false, error: 'Unknown operation' }, { status: 404 })
@@ -62,6 +74,10 @@ interface MountOptions {
   config?: Record<string, unknown>
   asleep?: boolean
   failSend?: () => boolean
+  /** The notifier throws this value (not an Error) when it is set and returns true. */
+  throwValue?: () => unknown
+  noNotifier?: boolean
+  noPresence?: boolean
 }
 
 async function mount(options: MountOptions = {}) {
@@ -83,14 +99,18 @@ async function mount(options: MountOptions = {}) {
   })
   ctx.provide('credentials', { resolve: async (ref: string) => (ref === 'FORK_COURSES_PAT' ? { value: TOKEN, source: 'env' } : undefined) } as never)
   const sent: ForkNote[] = []
-  ctx.provide('forkNotifier', {
-    send: async (note: ForkNote) => {
-      if (options.failSend?.() === true) throw new Error('storage failed')
-      sent.push(note)
-    },
-  } as never)
+  if (options.noNotifier !== true) {
+    ctx.provide('forkNotifier', {
+      send: async (note: ForkNote) => {
+        const thrown = options.throwValue?.()
+        if (thrown !== undefined) throw thrown
+        if (options.failSend?.() === true) throw new Error('storage failed')
+        sent.push(note)
+      },
+    } as never)
+  }
   const presence = { asleep: options.asleep ?? false }
-  ctx.provide('forkPresence', { isAsleep: () => presence.asleep } as never)
+  if (options.noPresence !== true) ctx.provide('forkPresence', { isAsleep: () => presence.asleep } as never)
   await ctx.plugin(ForkCourses, Config(options.config as never ?? {}))
   await vi.advanceTimersByTimeAsync(0)
   return { ctx, courses: ctx.forkCourses, sent, logs, pool, presence }
@@ -251,5 +271,254 @@ describe('service outage', () => {
     expect(service.calls).toHaveLength(0)
     expect(sent).toHaveLength(0)
     expect(courses.status().outage.failures).toBe(5)
+  })
+})
+
+describe('configuration edge cases', () => {
+  it('fails at load when beforeHours has no checkpoint', async () => {
+    fakeService()
+    await expect(mount({ config: { beforeHours: [] } })).rejects.toThrow('beforeHours needs at least one checkpoint')
+  })
+
+  it('exposes the zone the owner reads times in', async () => {
+    fakeService()
+    const { courses } = await mount({ config: { timeZone: 'Asia/Shanghai' } })
+    expect(courses.timeZone).toBe('Asia/Shanghai')
+  })
+
+  it('is never quiet from sleep when no presence service is mounted', async () => {
+    fakeService()
+    const { courses } = await mount({ noPresence: true })
+    expect(courses.status().quietNow).toBe(false)
+  })
+})
+
+describe('status before any poll', () => {
+  it('has no last poll, no sync health, no notes, and an empty outage', async () => {
+    fakeService()
+    const { courses } = await mount()
+    expect(courses.status()).toMatchObject({
+      lastPoll: null, sync: null, notes: [], upcoming: [], outage: { failures: 0, since: null, alerted: false },
+    })
+  })
+
+  it('answers with empty notes before the domain has opened', async () => {
+    fakeService()
+    const ctx = new Context()
+    contexts.push(ctx)
+    const pool = new MemoryMediaPool()
+    const backend = new MemoryStorageBackend(pool)
+    await ctx.plugin(Timer)
+    await ctx.plugin(Storage)
+    ctx.effect(() => ctx.storage.backend.register('fixture', backend))
+    const facility = new DomainFacility(ctx, { backend: 'fixture' })
+    ctx.effect(() => {
+      const unmount = ctx.storage.mount('domain', facility)
+      ctx.provide('storageDomain', facility)
+      return async () => { await facility.closeAll(); unmount() }
+    })
+    ctx.provide('credentials', { resolve: async () => ({ value: TOKEN, source: 'env' }) } as never)
+    const loading = ctx.plugin(ForkCourses, Config({} as never))
+    while (ctx.forkCourses === undefined) await Promise.resolve()
+    const courses = ctx.forkCourses
+    expect(courses.status()).toMatchObject({ lastPoll: null, notes: [] })
+    await loading
+    await vi.advanceTimersByTimeAsync(0)
+    expect(courses.status().notes).toEqual([])
+  })
+})
+
+describe('restart log', () => {
+  it('says on restart that the last poll failed and how many reminder keys are stored', async () => {
+    const service = fakeService()
+    service.down = true
+    const first = await mount()
+    await first.courses.poll('manual')
+    await first.ctx.fiber.dispose()
+    const second = await mount({ pool: first.pool })
+    expect(second.logs.some(line => /reminders on, every 15 min.*0 reminder keys stored, last poll \S+ failed$/u.test(line))).toBe(true)
+  })
+
+  it('stores no reminder key past 30 days after its deadline', async () => {
+    const service = fakeService()
+    service.items = [taskRow('a', START + 5 * H)]
+    const first = await mount()
+    await first.courses.poll('manual')
+    await first.ctx.fiber.dispose()
+    const second = await mount({ pool: first.pool })
+    expect(second.logs.some(line => line.includes(' 1 reminder keys stored'))).toBe(true)
+    vi.setSystemTime(START + 5 * H + 31 * 24 * H)
+    service.items = []
+    await second.courses.poll('manual')
+    await second.ctx.fiber.dispose()
+    const third = await mount({ pool: first.pool })
+    expect(third.logs.some(line => line.includes(' 0 reminder keys stored'))).toBe(true)
+  })
+})
+
+describe('report reading', () => {
+  it('reads every page of the report until the service gives no next offset, and keeps the first page\'s health', async () => {
+    const service = fakeService()
+    service.reportResult = body => body['offset'] === 0
+      ? { items: [taskRow('a', START + 5 * H)], next_offset: 100, coverage: { health: service.health, items: [{ id: 'run-7' }] } }
+      : { items: [taskRow('b', START + 6 * H)], next_offset: null, coverage: { health: { status: 'failing' } } }
+    const { courses } = await mount()
+    expect(await courses.poll('manual')).toMatchObject({ ok: true, openTasks: 2, syncStatus: 'ok' })
+    expect(service.calls.map(call => call.body['offset'])).toEqual([0, 100])
+  })
+
+  it('stops after five pages even when the service keeps offering more', async () => {
+    const service = fakeService()
+    service.reportResult = body => ({ items: [], next_offset: Number(body['offset']) + 100, coverage: { health: service.health } })
+    const { courses } = await mount()
+    expect(await courses.poll('manual')).toMatchObject({ ok: true, openTasks: 0 })
+    expect(service.calls.map(call => call.body['offset'])).toEqual([0, 100, 200, 300, 400])
+  })
+
+  it('fails the poll when the report is not an object or has no items list', async () => {
+    const service = fakeService()
+    const { courses } = await mount()
+    service.reportResult = () => null
+    expect(await courses.poll('manual')).toMatchObject({ ok: false, error: 'the courses report has no items list' })
+    service.reportResult = () => ({ items: 'none' })
+    expect(await courses.poll('manual')).toMatchObject({ ok: false, error: 'the courses report has no items list' })
+  })
+
+  it('logs a sync with no clean run without the last-clean detail and warns the records may be stale', async () => {
+    const service = fakeService()
+    service.health = { status: 'missing', latest_run_at: null, last_clean_run_at: null }
+    service.items = [taskRow('a', START + 5 * H)]
+    const { courses, sent, logs } = await mount()
+    await courses.poll('manual')
+    expect(logs.some(line => line.endsWith('1 reminder(s) sent, sync missing'))).toBe(true)
+    expect(sent[0]?.body).toContain('（课程记录可能过时：还没有过成功的同步；新作业和提交状态可能没更新。）')
+    expect(sent.map(note => note.title)).toContain('⚠️ 课程同步还没有成功过')
+  })
+})
+
+describe('delivery', () => {
+  it('records a failed message when no notifier is mounted, and keeps only the latest 20 messages', async () => {
+    const service = fakeService()
+    service.items = [taskRow('a', START + 5 * H)]
+    const { courses, logs } = await mount({ noNotifier: true })
+    for (let i = 0; i < 21; i++) expect(await courses.poll('manual')).toMatchObject({ outcome: 'failed' })
+    expect(logs.some(line => line.includes('no forkNotifier service is mounted; the next poll retries'))).toBe(true)
+    const { notes } = courses.status()
+    expect(notes).toHaveLength(20)
+    expect(notes[0]).toMatchObject({ seq: 21, outcome: 'failed', error: 'no forkNotifier service is mounted' })
+    expect(notes.at(-1)?.seq).toBe(2)
+  })
+
+  it('reports a notifier that throws something other than an Error by its text', async () => {
+    const service = fakeService()
+    service.items = [taskRow('a', START + 5 * H)]
+    const { courses } = await mount({ throwValue: () => 'channel closed' })
+    expect(await courses.poll('manual')).toMatchObject({ outcome: 'failed' })
+    expect(courses.status().notes[0]).toMatchObject({ outcome: 'failed', error: 'channel closed' })
+  })
+})
+
+describe('sync health alerts', () => {
+  const failing = (): Record<string, unknown> => ({
+    status: 'failing', latest_run_at: iso(START - H), last_clean_run_at: iso(START - 90 * H), failed_runs_since_clean: 3,
+  })
+
+  it('sends no sync message when sync.alert is off', async () => {
+    const service = fakeService()
+    service.health = failing()
+    const { courses, sent } = await mount({ config: { sync: { alert: false } } })
+    await courses.poll('manual')
+    expect(sent).toHaveLength(0)
+    expect(courses.status().sync).toMatchObject({ status: 'failing', reason: 'Browser is not available: iab', alerting: false })
+  })
+
+  it('holds the sync alert while the owner sleeps and sends it after', async () => {
+    const service = fakeService()
+    service.health = failing()
+    const { courses, sent, presence, logs } = await mount({ asleep: true })
+    await courses.poll('manual')
+    expect(sent).toHaveLength(0)
+    expect(logs).toContain('info fork-courses: the sync alert waits for quiet hours to end')
+    presence.asleep = false
+    await courses.poll('manual')
+    expect(sent.map(note => note.kinds)).toEqual([['courses.sync.failing']])
+  })
+
+  it('retries the sync alert on the next poll when the channel fails', async () => {
+    const service = fakeService()
+    service.health = failing()
+    let fail = true
+    const { courses, sent } = await mount({ failSend: () => fail })
+    await courses.poll('manual')
+    expect(courses.status().sync?.alerting).toBe(false)
+    fail = false
+    await courses.poll('manual')
+    expect(sent.map(note => note.kinds)).toEqual([['courses.sync.failing']])
+    expect(courses.status().sync?.alerting).toBe(true)
+  })
+
+  it('goes on without a reason when the newest run cannot be read, and says so in the log', async () => {
+    const service = fakeService()
+    service.health = failing()
+    service.getDown = true
+    const { courses, sent, logs } = await mount()
+    await courses.poll('manual')
+    const prefix = 'info fork-courses: could not read sync run run-7: courses get failed with HTTP 500'
+    expect(logs.some(line => line.startsWith(prefix))).toBe(true)
+    expect(sent[0]?.body).not.toContain('原因')
+    expect(courses.status().sync?.reason).toBeNull()
+  })
+})
+
+describe('outage across restarts', () => {
+  it('ends a told outage silently when reminders are switched off before the service answers again', async () => {
+    const service = fakeService()
+    service.down = true
+    const first = await mount()
+    for (let i = 0; i < 4; i++) await first.courses.poll('manual')
+    expect(first.sent).toHaveLength(1)
+    await first.ctx.fiber.dispose()
+    service.down = false
+    const second = await mount({ pool: first.pool, config: { enabled: false } })
+    await second.courses.poll('manual')
+    expect(second.sent).toHaveLength(0)
+    expect(second.logs.some(line => line.includes('the courses service answers again after 4 failed poll(s)'))).toBe(true)
+    expect(second.courses.status().outage).toEqual({ failures: 0, since: null, alerted: false })
+  })
+})
+
+describe('poll failures outside the report', () => {
+  it('does not arm again or poll a closed store when it stops during a timer poll', async () => {
+    const service = fakeService()
+    let answer = (response: Response): void => { void response }
+    const pending = new Promise<Response>((resolve) => { answer = resolve })
+    vi.stubGlobal('fetch', vi.fn(() => { service.calls.push({ op: 'report', body: {}, headers: new Headers() }); return pending }))
+    const { ctx } = await mount()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(service.calls).toHaveLength(1)
+    const stopping = ctx.fiber.dispose()
+    answer(Response.json({ ok: true, result: { items: [], next_offset: null, coverage: {} } }))
+    await vi.advanceTimersByTimeAsync(0)
+    await stopping
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('logs a timer poll that rejects and polls again on schedule', async () => {
+    const service = fakeService()
+    const { logs, courses } = await mount()
+    const poll = vi.spyOn(courses, 'poll').mockRejectedValueOnce(new Error('the store is gone'))
+    await vi.advanceTimersByTimeAsync(60_000)
+    await vi.waitFor(() => { expect(logs.some(line => line.includes('fork-courses: poll failed: the store is gone'))).toBe(true) })
+    poll.mockRestore()
+    await vi.advanceTimersByTimeAsync(15 * 60_000)
+    expect(service.calls.map(call => call.op)).toEqual(['report'])
+  })
+
+  it('rejects a poll whose storage is gone and still runs the polls after it', async () => {
+    fakeService()
+    const { ctx, courses } = await mount()
+    await ctx.fiber.dispose()
+    await expect(courses.poll('manual')).rejects.toThrow()
+    await expect(courses.poll('manual')).rejects.toThrow()
   })
 })

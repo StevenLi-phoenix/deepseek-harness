@@ -184,6 +184,7 @@ export class ForkCourses extends Service {
   private domain: Domain<typeof coursesDomain> | undefined
   private chain: Promise<unknown> = Promise.resolve()
   private timer: NodeJS.Timeout | undefined
+  private stopped = false
   private nextPollAt: number | null = null
   private polling = false
   private tasks: readonly TaskSummary[] = []
@@ -213,6 +214,8 @@ export class ForkCourses extends Service {
       this.ctx.logger.info(`fork-courses: ${config.enabled ? `reminders on, every ${config.pollMinutes} min, checkpoints ${config.beforeHours.join('/')} h, late ${config.lateBeforeHours.join('/')} h, zone ${config.timeZone}` : 'reminders off'}; ${Array.from(domain.table('sent').keys()).length} reminder keys stored${last === undefined ? '' : `, last poll ${new Date(last.at).toISOString()} ${last.ok ? 'ok' : 'failed'}`}`)
       if (config.enabled) this.arm(config.firstPollSeconds * 1000)
       return async () => {
+        // A poll under way re-arms when it ends, which is after this.
+        this.stopped = true
         if (this.timer !== undefined) clearTimeout(this.timer)
         this.timer = undefined
         this.nextPollAt = null
@@ -233,11 +236,13 @@ export class ForkCourses extends Service {
   }
 
   private arm(delayMs: number): void {
-    if (this.timer !== undefined) clearTimeout(this.timer)
+    if (this.stopped) return
     this.nextPollAt = Date.now() + delayMs
     this.timer = setTimeout(() => {
       this.timer = undefined
-      void this.poll('timer').finally(() => { this.arm(this.config.pollMinutes * 60_000) })
+      void this.poll('timer')
+        .catch((error: unknown) => { this.ctx.logger.warn(`fork-courses: poll failed: ${errorText(error)}`) })
+        .finally(() => { this.arm(this.config.pollMinutes * 60_000) })
     }, delayMs)
     this.timer.unref()
   }
@@ -346,6 +351,7 @@ export class ForkCourses extends Service {
       health ??= parseHealth(body.coverage)
       offset = typeof body.next_offset === 'number' ? body.next_offset : null
     }
+    /* v8 ignore next -- the page loop runs at least once and sets health; ?? only satisfies the type. */
     return { tasks, health: health ?? parseHealth(undefined) }
   }
 
@@ -413,10 +419,12 @@ export class ForkCourses extends Service {
     const table = domain.table('outage')
     const held = table.get('latest') ?? { failures: 0, since: null, alerted: false }
     const next: OutageRecord = { failures: held.failures + 1, since: held.since ?? record.at, alerted: held.alerted }
+    /* v8 ignore next -- failed-poll records always carry an error; ?? only satisfies the optional type. */
     this.ctx.logger.warn(`fork-courses: poll (${record.trigger}) failed (${next.failures} in a row): ${record.error ?? ''}`)
     if (tell && this.config.enabled && !next.alerted && next.failures >= this.config.outageAlertAfter) {
       next.alerted = await this.deliver(domain, {
         title: '⚠️ 连不上课程记录服务，DDL 提醒暂停了',
+        /* v8 ignore next -- failed-poll records carry an error and a stored since; ?? only satisfies the types. */
         body: `从 ${stamp(next.since ?? record.at, this.config.timeZone)} 起连续 ${next.failures} 次读取失败：${record.error ?? ''}\n恢复后我会再说一声。`,
         kinds: ['courses.service.down'],
         urgent: false,

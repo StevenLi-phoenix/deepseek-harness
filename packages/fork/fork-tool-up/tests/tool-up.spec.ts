@@ -121,4 +121,41 @@ describe('up tools', () => {
     const forbidden = /approve|release|login|delete|publish|upload|edit|brake|mode/
     expect(ctx.tools.schemas().map(schema => schema.name).filter(n => forbidden.test(n))).toEqual([])
   })
+
+  it.each([
+    ['up_status', {}, '/v1/status', 'Creator account status'],
+    ['up_comments', {}, '/v1/comments?unreplied=1&limit=20', 'Read waiting comments'],
+    ['up_comments', { unreplied: false, limit: 500 }, '/v1/comments?unreplied=0&limit=50', 'Read waiting comments'],
+    ['up_comments', { limit: -3 }, '/v1/comments?unreplied=1&limit=1', 'Read waiting comments'],
+    ['up_comment_thread', { rpid: 1001 }, '/v1/comments/1001/thread?page=1', 'Read thread 1001'],
+    ['up_comment_thread', { rpid: 1001, page: 3 }, '/v1/comments/1001/thread?page=3', 'Read thread 1001'],
+    ['up_dm_sessions', {}, '/v1/dm/sessions?awaiting=1', 'Read private-message conversations'],
+    ['up_dm_sessions', { awaiting: false }, '/v1/dm/sessions?awaiting=0', 'Read private-message conversations'],
+    ['up_dm_messages', { talker: 77 }, '/v1/dm/messages?talker=77&size=10', 'Read messages with 77'],
+    ['up_dm_messages', { talker: 77, size: 99 }, '/v1/dm/messages?talker=77&size=30', 'Read messages with 77'],
+    ['up_archives', {}, '/v1/archives?limit=20&offset=0', 'List videos'],
+    ['up_archives', { limit: 5, offset: -4 }, '/v1/archives?limit=5&offset=0', 'List videos'],
+    ['up_archives', { limit: 5, offset: 10 }, '/v1/archives?limit=5&offset=10', 'List videos'],
+    ['up_archive', { bvid: 'BV1aa4y1X7aa' }, '/v1/archives/BV1aa4y1X7aa', 'Read BV1aa4y1X7aa'],
+    ['up_stats', { bvid: 'BV1aa4y1X7aa' }, '/v1/stats?bvid=BV1aa4y1X7aa&days=7', 'Statistics of BV1aa4y1X7aa'],
+    ['up_stats', { bvid: 'BV1aa4y1X7aa', days: 90 }, '/v1/stats?bvid=BV1aa4y1X7aa&days=30', 'Statistics of BV1aa4y1X7aa'],
+    ['up_danmaku', { bvid: 'BV1aa4y1X7aa' }, '/v1/danmaku?bvid=BV1aa4y1X7aa&limit=100', 'Danmaku of BV1aa4y1X7aa'],
+    ['up_danmaku', { bvid: 'BV1aa4y1X7aa', limit: 999 }, '/v1/danmaku?bvid=BV1aa4y1X7aa&limit=200', 'Danmaku of BV1aa4y1X7aa'],
+  ])('%s %j reads %s and is titled %s', async (name, args, path, title) => {
+    const { ctx, call, requests } = await mount({ token: 't', answer: () => ({ status: 200, body: {} }) })
+    await call(name, args)
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toMatchObject({ method: 'GET', url: `http://127.0.0.1:8097${path}` })
+    expect(ctx.tools.get(name)!.presentCall!(args)).toEqual({ card: 'generic', title, kind: 'read' })
+  })
+
+  it('titles the reply calls and sends 0 for an id the model left out', async () => {
+    const { ctx, call, requests } = await mount({ token: 't', answer: () => ({ status: 200, body: { status: 'sent' } }) })
+    expect(ctx.tools.get('up_reply_comment')!.presentCall!({ rpid: 1001, message: 'x' }))
+      .toEqual({ card: 'generic', title: 'Reply to comment 1001', kind: 'other' })
+    expect(ctx.tools.get('up_reply_dm')!.presentCall!({ talker: 77, message: 'x' })).toEqual({ card: 'generic', title: 'Reply to 77', kind: 'other' })
+    // A sent answer without an id carries no id.
+    expect((await call('up_reply_dm', { talker: 77, message: '你好' })).result).toEqual(expect.objectContaining({ value: { status: 'sent' } }))
+    expect(JSON.parse(requests[0]!.body!)).toEqual({ talker: 77, message: '你好' })
+  })
 })

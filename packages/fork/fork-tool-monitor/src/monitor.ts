@@ -285,6 +285,7 @@ export class MonitorRegistry {
 
   private onStdout(entry: Live, chunk: string): void {
     const parts = (entry.partial + chunk).split('\n')
+    /* v8 ignore next -- split() always yields at least one element; ?? only satisfies pop()'s undefined type. */
     entry.partial = parts.pop() ?? ''
     if (entry.partial.length > this.limits.maxLineChars * 4) {
       parts.push(entry.partial)

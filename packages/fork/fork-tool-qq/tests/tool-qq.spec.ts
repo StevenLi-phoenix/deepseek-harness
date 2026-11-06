@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -8,7 +8,7 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as ToolQq from '../src/index.ts'
-import { messageLine, resolveGroup, untrustedBlock } from '../src/index.ts'
+import { groupLine, messageLine, resolveGroup, untrustedBlock } from '../src/index.ts'
 
 const contexts: Context[] = []
 const AT = Date.UTC(2026, 9, 31, 12, 5, 0)
@@ -68,6 +68,15 @@ describe('helpers', () => {
   it('writes a message as a line with the time in Shanghai, the name, and the QQ number', () => {
     expect(messageLine(row())).toBe('[10-31 20:05] 名片(10001)：今天发版')
     expect(messageLine(row({ card: '', nickname: '', replyTo: 'x', text: 'a\nb' }), '技术群')).toBe('[10-31 20:05] 技术群 10001(10001) ↳回复：a ⏎ b')
+  })
+
+  it('names the sender by nickname when the card is blank', () => {
+    expect(messageLine(row({ card: '  ', nickname: ' 小明 ' }))).toBe('[10-31 20:05] 小明(10001)：今天发版')
+  })
+
+  it('writes a group as a line, with no head count or times for a group the account has not named or digested', () => {
+    expect(groupLine({ groupId: '444', name: '新群', memberCount: null, recorded: true, messages: 0, firstAt: null, lastAt: null, lastDigestAt: null }))
+      .toBe('444 新群 已记录：0 条消息，最早 无，最近 无，上次摘要 无')
   })
 
   it('resolves a group by number or by part of its name, among the recorded ones only', () => {
@@ -222,8 +231,9 @@ describe('qq_image', () => {
   afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })
 
   async function run(observer: Record<string, unknown>, args: unknown,
-    options: { cwd?: string | null; services?: Record<string, unknown> } = {}) {
+    options: { cwd?: string | null; services?: Record<string, unknown>; setup?: (ctx: Context) => void } = {}) {
     const { ctx } = await mount(observer)
+    options.setup?.(ctx)
     for (const [name, service] of Object.entries(options.services ?? {})) ctx.provide(name as never, service as never)
     const cwd = options.cwd === undefined ? mkdtempSync(join(tmpdir(), 'qq-image-')) : options.cwd
     if (typeof cwd === 'string') dirs.push(cwd)
@@ -282,5 +292,115 @@ describe('qq_image', () => {
     expect((await run(observer, { ref: '' })).text).toContain('ref is the part after #')
     expect((await run(observer, { ref: 'm12ab' }, { cwd: null })).text).toContain('no working directory')
     expect(observer['image']).not.toHaveBeenCalled()
+  })
+
+  it('says the file could not be prepared and writes no picture when the ignore file cannot be written', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'qq-image-'))
+    dirs.push(cwd)
+    mkdirSync(join(cwd, '.qq-media'), { mode: 0o500 })
+    const done = await run(holding(), { ref: 'm12ab' }, { cwd })
+    const answer = JSON.parse(done.text) as { error: string }
+    expect(answer.error).toContain('EACCES')
+    chmodSync(join(cwd, '.qq-media'), 0o700)
+    expect(() => statSync(join(cwd, '.qq-media', 'm12ab.png'))).toThrow()
+  })
+
+  describe('when the route reads pictures', () => {
+    const attachments = (limits: { mediaTypes: string[]; maxImageBytes: number }, saveImage = vi.fn()) => ({
+      attachments: { imageLimits: limits, saveImage },
+      llm: { resolveModelInfo: async () => ({ inputModalities: ['text', 'image'] }) },
+    })
+
+    it.each([
+      ['a type the attachment store does not take', { mediaTypes: ['image/jpeg'], maxImageBytes: 1_000_000 }],
+      ['a picture larger than the store takes', { mediaTypes: ['image/png'], maxImageBytes: 4 }],
+    ])('returns the saved path only for %s', async (_name, limits) => {
+      const saveImage = vi.fn()
+      const done = await run(holding(), { ref: 'm12ab' }, { services: attachments(limits, saveImage) })
+      expect(done.content.map(part => part.type)).toEqual(['text'])
+      expect(done.text).toContain('does not read pictures')
+      expect(saveImage).not.toHaveBeenCalled()
+    })
+
+    it('logs why and returns the saved path when the attachment store fails', async () => {
+      const logs: string[] = []
+      const saveImage = vi.fn(async () => { throw new Error('store full') })
+      const done = await run(holding(), { ref: 'm12ab' }, {
+        services: attachments({ mediaTypes: ['image/png'], maxImageBytes: 1_000_000 }, saveImage),
+        setup: (ctx) => { ctx.logger.exporter({ levels: { default: 3 }, export: (message) => { logs.push(String(message.args[0])) } }) },
+      })
+      expect(done.content.map(part => part.type)).toEqual(['text'])
+      expect(done.text).toContain(join(done.cwd as string, '.qq-media', 'm12ab.png'))
+      expect(logs).toContain('fork-tool-qq: the picture is not shown to the model (store full); the saved path is returned')
+    })
+  })
+})
+
+describe('presentation and rendering', () => {
+  const view = (ctx: Context, name: string, args: unknown) => ctx.tools.get(name)!.presentCall!(args)
+
+  it('titles every read call by what it asks, naming the group only when one is given', async () => {
+    const { ctx } = await mount(stand())
+    expect(view(ctx, 'qq_groups', {})).toEqual({ card: 'generic', title: 'QQ groups', kind: 'read' })
+    expect(view(ctx, 'qq_digest', {})?.title).toBe('QQ digests')
+    expect(view(ctx, 'qq_digest', { group: '交流' })?.title).toBe('QQ digests of 交流')
+    expect(view(ctx, 'qq_recent', { group: '交流' })).toEqual({ card: 'generic', title: 'QQ messages of 交流', kind: 'read' })
+    expect(view(ctx, 'qq_search', { query: '发版' })).toEqual({ card: 'generic', title: 'QQ search "发版"', kind: 'read' })
+    expect(view(ctx, 'qq_image', { ref: 'm12ab' })).toEqual({ card: 'generic', title: 'QQ picture m12ab', kind: 'read' })
+    expect(view(ctx, 'qq_forget', {})).toEqual({ card: 'generic', title: 'Forget QQ digests', kind: 'other' })
+    expect(view(ctx, 'qq_forget', { group: '交流' })?.title).toBe('Forget QQ digests of 交流')
+  })
+
+  it('titles the digest-mode calls', async () => {
+    const { ctx } = await mount(stand(), { mode: 'digest' })
+    expect(view(ctx, 'qq_digest_write', { groupId: '111111', text: 'x' })).toEqual({ card: 'generic', title: 'Write QQ digest of 111111', kind: 'edit' })
+    expect(view(ctx, 'qq_group_note', { groupId: '111111', op: 'remove', text: 'x' })).toEqual({ card: 'generic', title: 'remove QQ group note', kind: 'edit' })
+  })
+
+  it('renders an empty untrusted block for a read result without text, and the error alone for a failed one', async () => {
+    const { ctx } = await mount(stand())
+    const { output } = ctx.tools.get('qq_groups')!
+    expect(output.render({}, {})).toEqual([{ type: 'text', text: untrustedBlock('groups', '') }])
+    expect(output.render({}, { error: 'down' })).toEqual([{ type: 'text', text: '{"error":"down"}' }])
+  })
+
+  it('renders a saved picture result with blank fields rather than undefined when the Host sent none', async () => {
+    const { ctx } = await mount(stand())
+    const [block] = ctx.tools.get('qq_image')!.output.render({}, {})
+    expect(block).toMatchObject({ type: 'text' })
+    expect((block as { text: string }).text).toContain('<qq_image path="" type="" bytes="0" trust="untrusted">')
+  })
+})
+
+describe('edge answers', () => {
+  it('reports a failure that is not an Error by its text', async () => {
+    // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the subject is a rejection that is not an Error
+    const { call } = await mount(stand({ groupOverview: () => Promise.reject('plain failure') }))
+    expect(JSON.parse(await call('qq_groups', {}))).toEqual({ error: 'plain failure' })
+  })
+
+  it('says a window had no messages for a group that exists', async () => {
+    const { call } = await mount(stand({ recentMessages: () => Promise.resolve([]) }))
+    expect(await call('qq_recent', { group: '111111' })).toContain('技术交流群（111111），0 条：这段时间没有消息')
+  })
+
+  it('searches inside one group without repeating the group name on each line', async () => {
+    const observer = stand()
+    const { call } = await mount(observer)
+    const text = await call('qq_search', { query: '发版', group: '111111', limit: 5 })
+    expect(text).toContain('[10-31 20:05] 名片(10001)：今天发版')
+    expect(text).not.toContain('技术交流群 名片')
+    expect(observer['searchMessages']).toHaveBeenCalledWith('发版', { groupId: '111111', limit: 5 })
+  })
+
+  it('answers empty text when the observer accepts a digest without a message and refuses one without a reason', async () => {
+    const observer = {
+      digestWrite: vi.fn(() => ({ ok: true as const })),
+      groupNote: vi.fn(() => Promise.resolve({ ok: false as const })),
+      ...stand(),
+    }
+    const { call } = await mount(observer, { mode: 'digest' })
+    expect(JSON.parse(await call('qq_digest_write', { groupId: '111111', text: 'x' }))).toEqual({ ok: true, message: '' })
+    expect(JSON.parse(await call('qq_group_note', { groupId: '111111', op: 'add', text: 'x' }))).toEqual({ ok: false, error: '' })
   })
 })

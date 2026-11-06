@@ -86,4 +86,49 @@ describe('localDay', () => {
     expect(localDay(new Date('2026-11-01T03:00:00Z'), 'America/New_York')).toBe('2026-10-31')
     expect(localDay(new Date('2026-11-01T03:00:00Z'), 'Asia/Shanghai')).toBe('2026-11-01')
   })
+
+  it('puts the owner\'s newest lines first among several', () => {
+    const owners = [record('2', 'bili', '旧的', undefined, { owner: true }), record('9', 'bili', '新的', undefined, { owner: true })]
+    const block = renderStyleBlock({ ...INPUT, samples: owners })!
+    expect(block.owner).toBe(2)
+    expect(block.text.indexOf('新的')).toBeLessThan(block.text.indexOf('旧的'))
+  })
+
+  it('skips a line too long for what is left of the character budget and takes a shorter one after it', () => {
+    const long = record('3', 'qq', '很长很长'.repeat(30), '问')
+    const short = record('4', 'qq', '短', '问')
+    const block = renderStyleBlock({ ...INPUT, samples: [long, short], toneChars: 40 })!
+    expect(block.shown).toBe(1)
+    expect(block.text).toContain('短')
+    expect(block.text).not.toContain('很长很长')
+  })
+
+  it('shows no heading for strangers\' lines when only the owner\'s are there', () => {
+    const block = renderStyleBlock({ ...INPUT, samples: [record('2', 'bili', '刚剪完', '更新了', { owner: true })] })!
+    expect(block.text).toContain('魔女大人自己这样说话')
+    expect(block.text).not.toContain('群聊和评论区里的别人')
+  })
+
+  it('lists HotWatch titles alone when the groups have no memes of their own', () => {
+    const block = renderStyleBlock({ ...INPUT, memes: [], hot: ['某某热梗'] })!
+    expect(block.memes).toBe(1)
+    expect(block.text).toContain('全网热梗：某某热梗')
+    expect(block.text).not.toContain('圈内黑话')
+  })
+
+  it('shows at most the number of tone lines asked for', () => {
+    const block = renderStyleBlock({ ...INPUT, samples: [record('3', 'qq', '一', '问'), record('4', 'qq', '二', '问'), record('5', 'qq', '三', '问')], toneShown: 2 })!
+    expect(block.shown).toBe(2)
+  })
+
+  it('shows no tone samples and no invitation for a block that has only a card', () => {
+    const block = renderStyleBlock({ ...INPUT, invite: false, traits: [], memes: [], hot: [], samples: [] })!
+    expect(block).toMatchObject({ shown: 0, owner: 0, memes: 0 })
+    expect(block.text).not.toContain(STYLE_INTRO)
+  })
+
+  it('names the day in a time zone', () => {
+    expect(localDay(new Date('2026-11-01T23:30:00Z'), 'Asia/Shanghai')).toBe('2026-11-02')
+    expect(localDay(new Date('2026-11-01T23:30:00Z'), 'America/New_York')).toBe('2026-11-01')
+  })
 })

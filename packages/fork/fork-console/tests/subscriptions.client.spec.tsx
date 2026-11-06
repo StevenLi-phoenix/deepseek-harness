@@ -334,3 +334,66 @@ describe('SubscriptionsSection auto-archive card', () => {
     expect(section.lastElementChild).toBe(screen.getByTestId('config-fork-time-gap'))
   })
 })
+
+describe('SubscriptionsSection corners', () => {
+  const noRuns: ArchiveView['last'] = { at: NOW - 600_000, trigger: 'timer', dryRun: false, scanned: 5, archived: 0, errors: 0, aborted: null, preview: [], skipped: {} }
+
+  it('shows a reminder without a next time as having none, and resumes or pauses it on one click', () => {
+    const view: SubscriptionsView = { ...VIEW, schedules: [
+      { id: 'lost', title: 'Lost', rule: 'every', detail: '60 s', status: 'active', nextAt: null, lastFiredAt: null },
+      VIEW.schedules![1]!,
+    ] }
+    const { act: send } = mount({ data: view, checkedAt: NOW, busy: { 'pause:schedule:lost': true } })
+    expect(schedule('lost').textContent).toContain('尚未触发')
+    expect(schedule('lost').textContent).not.toContain('下次')
+    expect(schedule('lost').hasAttribute('data-busy')).toBe(true)
+    fireEvent.click(within(schedule('def')).getByRole('button', { name: '恢复' }))
+    expect(send).toHaveBeenLastCalledWith({ action: 'resume', target: 'schedule', id: 'def' })
+    expect(schedule('def').hasAttribute('data-busy')).toBe(false)
+  })
+
+  it('switches the form back to a notification and sends the window and the hourly limit as typed', async () => {
+    const { act: send } = mount()
+    fireEvent.click(screen.getByRole('button', { name: '新建订阅' }))
+    fireEvent.change(screen.getByLabelText('命中后'), { target: { value: 'session' } })
+    expect(screen.queryByLabelText(/任务说明/u)).not.toBeNull()
+    fireEvent.change(screen.getByLabelText('命中后'), { target: { value: 'notify' } })
+    expect(screen.queryByLabelText(/任务说明/u)).toBeNull()
+    fireEvent.change(screen.getByLabelText(/名称/u), { target: { value: 'tuned' } })
+    fireEvent.change(screen.getByLabelText(/来源（/u), { target: { value: 'host' } })
+    fireEvent.change(screen.getByLabelText('合并窗口（秒）'), { target: { value: '5' } })
+    fireEvent.change(screen.getByLabelText('每小时最多批数'), { target: { value: '2' } })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '创建' })) })
+    expect(send).toHaveBeenCalledWith({
+      action: 'create', subscription: { id: 'tuned', sources: ['host'], kinds: [], subjects: [], mode: 'notify', coalesceSeconds: 5, maxPerHour: 2 },
+    })
+  })
+
+  it('disables the create button while a create is in flight', () => {
+    const { store } = mount()
+    fireEvent.click(screen.getByRole('button', { name: '新建订阅' }))
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '创建' }).disabled).toBe(false)
+    act(() => { store.update((draft) => { draft.busy = { 'create:x': true } }) })
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '创建' }).disabled).toBe(true)
+  })
+
+  it('says the reading failed when the Host answered nothing usable, and shows a refusal with its reason', () => {
+    mount({ data: null, checkedAt: NOW, notice: { kind: 'error', code: 'invalid_subscription', detail: 'selector' } })
+    expect(screen.getByRole('status').textContent).toBe(zh['status.failed'])
+    expect(screen.getByRole('alert').textContent).toContain('(selector)')
+  })
+
+  it('shows a preview or a sweep in flight on the archive buttons', () => {
+    mount({ data: VIEW, checkedAt: NOW, busy: { 'archive:preview': true } })
+    const card = document.querySelector('[data-scope="archive"]') as HTMLElement
+    expect(within(card).getAllByRole('button').map(item => item.textContent)).toContain(zh['subs.archive.working'])
+  })
+
+  it('leaves out the skip and error lines of a quiet sweep, and the protectors when nobody protects Sessions', () => {
+    mount({ data: { ...VIEW, archive: { ...ARCHIVE, protectors: [], last: noRuns } }, checkedAt: NOW })
+    const card = document.querySelector('[data-scope="archive"]') as HTMLElement
+    expect(card.textContent).not.toContain('跳过：')
+    expect(card.querySelector('[data-scope="archive-last"]')!.textContent).not.toContain('归档失败')
+    expect(card.querySelector('[data-scope="archive-state"]')!.textContent).not.toContain('保护自己的会话')
+  })
+})

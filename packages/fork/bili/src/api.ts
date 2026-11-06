@@ -299,6 +299,7 @@ export async function danmaku(client: BiliCaller, cid: number, limit: number): P
   const xml = typeof data === 'string' ? data : ''
   const lines: DanmakuLine[] = []
   for (const match of xml.matchAll(/<d p="([\d.]+)[^"]*">([^<]*)<\/d>/g)) {
+    /* v8 ignore next -- the pattern always captures group 2 and only five entity names match, so both `??` only satisfy index types. */
     const text = clean((match[2] ?? '').replace(/&(amp|lt|gt|quot|apos);/g, (_all, name: string) => XML_ENTITIES[name] ?? ''), 60)
     if (text !== '') lines.push({ at: Math.floor(Number(match[1])), text })
   }
@@ -474,9 +475,11 @@ export async function subtitles(
       machine,
       page: index,
       pages: pages.length,
+      /* v8 ignore next -- `index` is clamped into 1..pages.length and pages is not empty here, so `read` is always set. */
       text: read?.text ?? '',
       coverage: machine ? COVERAGE.machine : COVERAGE.human,
     },
+    /* v8 ignore next -- same clamp: `read` is always set. */
     ...(read === undefined ? {} : { reached: Math.ceil(read.to) }),
   }
 }

@@ -201,6 +201,14 @@ describe('parsePanel', () => {
   })
 })
 
+describe('headline account naming', () => {
+  it('shows a dash when neither the login nor the connection knows the account, and zero duration without a start time', () => {
+    const unknown = headline(panel({ connection: { selfId: null, since: null }, login: { uin: null, nickname: null } }), NOW, t)
+    expect(unknown).toMatchObject({ kind: 'connected' })
+    expect(unknown.detail).toBe(`账号 — · 已连续在线 ${formatDuration(0, t)}`)
+  })
+})
+
 describe('statusLine', () => {
   it('reads loading, live, stale, and failed', () => {
     const store = createQqStore()
@@ -263,6 +271,43 @@ describe('startPolling', () => {
     expect(refresh).toHaveBeenCalledTimes(3)
     vi.advanceTimersByTime(1)
     expect(refresh).toHaveBeenCalledTimes(4)
+    stop()
+  })
+
+  it('polls without a visibility source outside a browser', () => {
+    vi.useFakeTimers()
+    const refresh = vi.fn()
+    const stop = startPolling(refresh, 1000)
+    expect(refresh).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(2000)
+    expect(refresh).toHaveBeenCalledTimes(3)
+    stop()
+    vi.advanceTimersByTime(5000)
+    expect(refresh).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not refresh while the page starts hidden, and starts when it is shown', () => {
+    vi.useFakeTimers()
+    const refresh = vi.fn()
+    const doc = page('hidden')
+    const stop = startPolling(refresh, POLL_INTERVAL_MS, doc)
+    vi.advanceTimersByTime(POLL_INTERVAL_MS * 3)
+    expect(refresh).not.toHaveBeenCalled()
+    doc.show('visible')
+    expect(refresh).toHaveBeenCalledTimes(1)
+    stop()
+    expect(doc.listeners).toBe(0)
+  })
+
+  it('keeps one timer when the page is shown again while already polling', () => {
+    vi.useFakeTimers()
+    const refresh = vi.fn()
+    const doc = page('visible')
+    const stop = startPolling(refresh, POLL_INTERVAL_MS, doc)
+    doc.show('visible')
+    expect(refresh).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(POLL_INTERVAL_MS)
+    expect(refresh).toHaveBeenCalledTimes(2)
     stop()
   })
 })

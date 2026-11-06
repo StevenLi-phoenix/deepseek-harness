@@ -115,7 +115,7 @@ function Verdict({ trouble, loaded, onOpen, onFix, canFix, t }: {
         type="button"
         className={css.flowVerdictBody}
         disabled={node === undefined}
-        onClick={() => { if (node !== undefined) onOpen(node) }}
+        onClick={() => { /* v8 ignore else -- a disabled button takes no click. */ if (node !== undefined) onOpen(node) }}
       >
         <b>{t(`card.${card.id}.title`)}：{statusText(card, t)}</b>
         <span>

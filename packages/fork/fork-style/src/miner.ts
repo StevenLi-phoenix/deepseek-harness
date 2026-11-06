@@ -208,6 +208,7 @@ export class MemeMiner {
       const surplus = files.slice(0, Math.max(0, files.length - this.deps.settings.rawKept))
       for (const old of surplus) await rm(join(this.deps.rawDir, old), { force: true })
     } catch (error: unknown) {
+      /* v8 ignore next -- fs errors are Error instances. */
       this.deps.logger.warn(`fork-style: miner could not keep a raw ${kind} response: ${error instanceof Error ? error.message : String(error)}`)
     }
   }

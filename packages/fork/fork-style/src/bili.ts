@@ -50,6 +50,7 @@ export function createBiliReader(http: BiliHttp): BiliReader {
       headers: { Authorization: `Bearer ${http.token}` },
       signal: signal === undefined ? timeout : AbortSignal.any([signal, timeout]),
     })
+    /* v8 ignore next -- split always yields a first element. */
     if (!response.ok) throw new Error(`bili-svc answered HTTP ${String(response.status)} for ${path.split('?')[0] ?? path}`)
     return record(await response.json())
   }

@@ -1,13 +1,21 @@
-import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { runAdminCli, runImportCli } from '../src/cli.ts'
+import { readAll } from '../src/cli-io.ts'
 import { MemoryStore } from '../src/store.ts'
 
 const dirs: string[] = []
 
+const stdinDescriptor = Object.getOwnPropertyDescriptor(process, 'stdin')
+const argvBefore = process.argv
+
 afterEach(async () => {
+  vi.restoreAllMocks()
+  vi.unstubAllEnvs()
+  process.argv = argvBefore
+  if (stdinDescriptor !== undefined) Object.defineProperty(process, 'stdin', stdinDescriptor)
   await Promise.all(dirs.splice(0).map(async (dir) => { await rm(dir, { recursive: true, force: true }) }))
 })
 
@@ -151,5 +159,171 @@ describe('memory-admin', () => {
     expect((await admin(['forget', 'abcdef'], dir)).code).toBe(2)
     expect((await admin(['approve'], dir)).code).toBe(2)
     expect((await admin(['--bogus'], dir)).code).toBe(2)
+  })
+})
+
+describe('process defaults', () => {
+  function captured(): { out: string[]; err: string[] } {
+    const out: string[] = []
+    const err: string[] = []
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Uint8Array) => { out.push(String(chunk)); return true })
+    vi.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => { err.push(String(chunk)); return true })
+    return { out, err }
+  }
+
+  function stdinOf(text: string): void {
+    Object.defineProperty(process, 'stdin', { value: (async function * () { yield text })(), configurable: true })
+  }
+
+  it('reads Buffer chunks as well as strings when reading a stream to its end', async () => {
+    expect(await readAll((async function * () { yield Buffer.from('né'); yield 'w' })())).toBe('néw')
+  })
+
+  it('writes to the process streams, reads process.argv and process.stdin when no streams are injected', async () => {
+    const { out, err } = captured()
+    const dir = await mkdtemp(join(tmpdir(), 'fork-memory-cli-'))
+    dirs.push(dir)
+    process.argv = ['node', 'memory-import', '--dry-run']
+    stdinOf(EXPORT)
+    expect(await runImportCli({ env: { DSH_HOME: dir } })).toBe(0)
+    expect(out).toEqual(['memory-import: 2 entries in the export (instructions 1, preferences 0, identity 0, career 0, projects 1)\n'])
+    process.argv = ['node', 'memory-import', '--bogus']
+    expect(await runImportCli({ env: { DSH_HOME: dir } })).toBe(2)
+    expect(err.join('')).toMatch(/^usage: memory-import/u)
+    process.argv = ['node', 'memory-admin', 'ids']
+    expect(await runAdminCli({ env: { DSH_HOME: dir } })).toBe(0)
+    expect(out.at(-1)).toBe('memory-admin: 0 entries, 0 waiting\n')
+    process.argv = ['node', 'memory-admin']
+    expect(await runAdminCli({ env: { DSH_HOME: dir } })).toBe(2)
+  })
+
+  it('reads the memory-admin notices mute file under the process DSH_HOME when no env is injected', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'fork-memory-cli-'))
+    dirs.push(dir)
+    vi.stubEnv('DSH_HOME', dir)
+    const out: string[] = []
+    expect(await runAdminCli({ argv: ['notices', 'mute'], stdout: line => out.push(line), stderr: line => out.push(line) })).toBe(0)
+    expect((await stat(join(dir, 'notices.muted'))).isFile()).toBe(true)
+  })
+})
+
+describe('memory-import options and faults', () => {
+  it('writes to the file named by --file, and refuses --file without a value', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'fork-memory-cli-'))
+    dirs.push(dir)
+    const file = join(dir, 'custom', 'memory.jsonl')
+    const out: string[] = []
+    const err: string[] = []
+    const io = {
+      stdin: (async function * () { yield EXPORT })(),
+      stdout: (line: string) => out.push(line),
+      stderr: (line: string) => err.push(line),
+    }
+    expect(await runImportCli({ ...io, argv: ['--file', file] })).toBe(0)
+    expect((await new MemoryStore(file).list()).map(entry => entry.date)).toEqual(['2026-10-20', '2026-10-21'])
+    expect(await runImportCli({ ...io, argv: ['--file'] })).toBe(2)
+    expect(err).toHaveLength(1)
+  })
+
+  it('reports an export file that cannot be read, and a stream that fails with something that is not an Error', async () => {
+    const err: string[] = []
+    const dir = await mkdtemp(join(tmpdir(), 'fork-memory-cli-'))
+    dirs.push(dir)
+    const io = { env: { DSH_HOME: dir }, stdout: () => {}, stderr: (line: string) => err.push(line) }
+    expect(await runImportCli({ ...io, argv: [join(dir, 'missing.md')] })).toBe(1)
+    expect(err[0]).toMatch(/^memory-import: ENOENT/u)
+    // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the non-Error arm is the case under test.
+    const failing: AsyncIterable<string> = { [Symbol.asyncIterator]: () => ({ next: () => Promise.reject('stream broke') }) }
+    expect(await runImportCli({ ...io, argv: [], stdin: failing })).toBe(1)
+    expect(err[1]).toBe('memory-import: stream broke')
+  })
+})
+
+describe('memory-admin output and faults', () => {
+  async function admin(argv: string[], dir: string, extra: { stdin?: string; file?: string } = {}) {
+    const out: string[] = []
+    const err: string[] = []
+    const code = await runAdminCli({
+      argv: extra.file === undefined ? argv : [...argv, '--file', extra.file],
+      env: { DSH_HOME: dir },
+      ...extra.stdin === undefined ? {} : { stdin: (async function * () { yield extra.stdin as string })() },
+      stdout: line => out.push(line),
+      stderr: line => err.push(line),
+    })
+    return { code, out, err }
+  }
+
+  async function home(): Promise<{ dir: string; store: MemoryStore }> {
+    const dir = await mkdtemp(join(tmpdir(), 'fork-memory-admin-'))
+    dirs.push(dir)
+    return { dir, store: new MemoryStore(join(dir, 'fork-memory', 'memory.jsonl')) }
+  }
+
+  it('cuts a long text in `recent` to its opening and shows legacy placeholders for a record without meta', async () => {
+    const { dir, store } = await home()
+    const long = `${'word '.repeat(30)}end`
+    const saved = (await store.save({ text: long, category: 'identity' })).entry
+    await store.forget(saved.id)
+    await writeFile(store.historyFile, `${await readFile(store.historyFile, 'utf8')}${JSON.stringify({ at: '2026-10-23T00:00:00.000Z', op: 'forget', id: 'ffffff', sha: 'x' })}\n`)
+    const waiting = await store.savePending({ text: 'waits', category: 'career' })
+    const { out } = await admin(['recent', '--limit', '10'], dir)
+    expect(out[0]).toBe(`waiting add ${waiting.id} career legacy ${waiting.date} waits`)
+    expect(out[1]).toBe('2026-10-23T00:00:00.000Z forget ffffff - legacy - ')
+    expect(out[2]).toMatch(new RegExp(`^\\S+ forget ${saved.id} identity legacy - word word word .*…$`, 'u'))
+    expect(out[2]!.split(' - ')[1]).toHaveLength(61)
+  })
+
+  it('shows a waiting write marked as waiting, with a history line that has no meta', async () => {
+    const { dir, store } = await home()
+    const entry = (await store.save({ text: 'plain', category: 'identity' })).entry
+    const waiting = await store.savePending({ text: 'later', category: 'career' })
+    const shown = await admin(['show', waiting.id], dir)
+    expect(shown.out).toEqual([`${waiting.id} career legacy ${waiting.date} (waiting)`, 'later'])
+    const full = await admin(['show', entry.id], dir)
+    expect(full.out[0]).toBe(`${entry.id} identity legacy ${entry.date}`)
+    expect(full.out[2]).toMatch(/^\S+ add legacy - session -$/u)
+  })
+
+  it('rolls back by time alone, by Session and time, and says so when nothing matched', async () => {
+    const { dir, store } = await home()
+    await store.save({ text: 'by a session', category: 'identity' }, { session: 's1' })
+    const since = await admin(['rollback', '--since', '2000-01-01T00:00:00Z', '--dry-run'], dir)
+    expect(since.out[0]).toMatch(/^memory-admin: rollback \(dry run\): 1 change\(s\) matched, 0 restored, 1 removed; ids [0-9a-f]{6}$/u)
+    const both = await admin(['rollback', '--session', 's1', '--since', '2000-01-01T00:00:00Z'], dir)
+    expect(both.out[0]).toContain('1 removed')
+    const none = await admin(['rollback', '--session', 'nobody'], dir)
+    expect(none.out).toEqual(['memory-admin: rollback: 0 change(s) matched, 0 restored, 0 removed; ids -'])
+  })
+
+  it('refuses a feedback list scope it does not know, and a feedback payload that is not an object', async () => {
+    const { dir } = await home()
+    expect((await admin(['feedback', 'list', '--scope', 'main'], dir)).code).toBe(2)
+    const scalar = await admin(['feedback', 'add'], dir, { stdin: '42' })
+    expect(scalar.code).toBe(1)
+    expect(scalar.err).toEqual(['memory-admin: feedback add needs one JSON object on stdin'])
+    const nothing = await admin(['feedback', 'add'], dir, { stdin: 'null' })
+    expect(nothing.code).toBe(1)
+  })
+
+  it('keeps feedback beside the --file memory file, and reads feedback JSON from process.stdin by default', async () => {
+    const { dir } = await home()
+    const file = join(dir, 'elsewhere', 'memory.jsonl')
+    await mkdir(join(dir, 'elsewhere'))
+    const payload = JSON.stringify({ scope: 'up', verdict: 'keep', kind: 'comment', text: 'nice', ref: 'r9' })
+    Object.defineProperty(process, 'stdin', { value: (async function * () { yield payload })(), configurable: true })
+    const out: string[] = []
+    expect(await runAdminCli({ argv: ['feedback', 'add', '--file', file], env: { DSH_HOME: dir }, stdout: line => out.push(line), stderr: () => {} })).toBe(0)
+    expect((await readFile(join(dir, 'elsewhere', 'feedback.jsonl'), 'utf8'))).toContain('nice')
+    expect((await admin(['feedback', 'list'], dir, { file })).out).toHaveLength(1)
+  })
+
+  it('reports a failure that is not an Error with its text', async () => {
+    const { dir } = await home()
+    const code = await runAdminCli({ argv: ['ids'], env: { DSH_HOME: dir }, stdout: () => { throw 'pipe broke' }, stderr: () => {} })
+    expect(code).toBe(1)
+    const err: string[] = []
+    await mkdir(join(dir, 'fork-memory', 'memory.jsonl'), { recursive: true })
+    expect(await runAdminCli({ argv: ['ids'], env: { DSH_HOME: dir }, stdout: () => {}, stderr: line => err.push(line) })).toBe(1)
+    expect(err[0]).toMatch(/^memory-admin: EISDIR/u)
   })
 })

@@ -118,4 +118,20 @@ describe('providerRows', () => {
     expect(freshness(state({ refreshing: true }), t)).toBe('正在刷新…')
     expect(freshness(state({ checkedAt: null }), t)).toBe('正在刷新…')
   })
+
+  it('shows an unfunded wallet as exhausted, and a key without a limit by its spend alone', () => {
+    const empty: ProviderReading = { ...DEEPSEEK_API, wallets: [
+      { currency: 'USD', total: '0', toppedUp: '0', granted: '0' },
+      { currency: 'CNY', total: '0', toppedUp: '0', granted: '0' },
+    ] }
+    const unlimited: ProviderReading = { ...OPENCODE, key: { period: 'total', limitUsd: null, spendUsd: 3, remainingUsd: null } }
+    const rows = providerRows(state({ providers: [empty, unlimited] }), t)
+    expect(rows[0]).toMatchObject({ value: '¥0.00', exhausted: true })
+    expect(rows[1]!.details.at(-1)).toBe(t('detail.keyUnlimited', { used: '$3.00' }))
+  })
+
+  it('names a limit period the app does not know as the gateway sent it', () => {
+    const weekly: ProviderReading = { ...OPENCODE, key: { period: 'weekly-reset', limitUsd: 5, spendUsd: 1, remainingUsd: 4 } }
+    expect(providerRows(state({ providers: [weekly] }), t)[0]!.details.at(-1)).toBe(t('detail.keyLimit', { period: 'weekly-reset', limit: '$5.00', used: '$1.00' }))
+  })
 })

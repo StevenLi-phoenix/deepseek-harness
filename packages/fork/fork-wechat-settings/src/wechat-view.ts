@@ -145,7 +145,7 @@ export const VERIFY_CODE_PATTERN = /^\d{1,8}$/
 /**
  * Show an id without giving it away: the start and end of the part before `@`, and the domain after it.
  * @param id - `ilink_bot_id` or `ilink_user_id`.
- * @returns for example `o9c…x1f@im.wechat`.
+ * @returns for example `o9c…1f@im.wechat`.
  */
 export function maskId(id: string): string {
   const at = id.lastIndexOf('@')

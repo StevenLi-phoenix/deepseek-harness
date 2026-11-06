@@ -24,6 +24,7 @@ function zonedParts(ms: number, timeZone: string): ZonedParts {
     formatters.set(timeZone, format)
   }
   const parts = format.formatToParts(ms)
+  /* v8 ignore next -- the formatter above always yields the year, month, day, hour, minute, second, and weekday parts. */
   const value = (type: Intl.DateTimeFormatPartTypes): string => parts.find(part => part.type === type)?.value ?? ''
   return {
     year: Number(value('year')), month: Number(value('month')), day: Number(value('day')),

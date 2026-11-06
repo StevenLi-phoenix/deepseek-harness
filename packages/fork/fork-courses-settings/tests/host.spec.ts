@@ -29,12 +29,12 @@ const STATUS: CoursesStatus = {
   notes: [{ seq: 1, at: 9, title: 'T', body: 'B', kinds: ['courses.deadline.late'], outcome: 'sent' }],
 }
 
-async function mount() {
+async function mount(status: CoursesStatus = STATUS) {
   const ctx = new Context()
   const routes: Route[] = []
   ctx.provide('connection', { fetch: { register: (route: Route) => { routes.push(route); return () => Promise.resolve() } } } as never)
   const poll = vi.fn(async () => STATUS.lastPoll)
-  ctx.provide('forkCourses', { status: () => STATUS, poll } as never)
+  ctx.provide('forkCourses', { status: () => status, poll } as never)
   await ctx.plugin(plugin)
   const route = (path: string): Route => routes.find(entry => entry.path === path)!
   return { ctx, routes, route, poll }
@@ -57,6 +57,36 @@ describe('fork-courses-settings Host routes', () => {
     expect(view.sync).toEqual({ status: 'failing', latestRunAt: 5, lastCleanAt: 1, failedRuns: 14, reason: 'Browser is not available', alerting: true })
     expect(view.notes).toEqual([{ at: 9, title: 'T', body: 'B', outcome: 'sent', error: null }])
     expect(view.beforeHours).toEqual([72, 24, 6, 2])
+  })
+
+  it('answers null for a status with no poll, no sync, no failure reason, and an untitled parent', async () => {
+    const { route } = await mount({
+      ...STATUS, lastPoll: null, sync: null,
+      upcoming: [{ ...STATUS.upcoming[0]!, task: { ...STATUS.upcoming[0]!.task, parentTitle: null } }],
+    })
+    const view = await (await route('/api/fork.courses').fetch(new Request('http://127.0.0.1/api/fork.courses'))).json() as CoursesView
+    expect(view.lastPoll).toBeNull()
+    expect(view.sync).toBeNull()
+    expect(view.upcoming[0]?.title).toBe('Written')
+  })
+
+  it('carries a failed poll\'s error and a failed note\'s error, and nulls the counts a failed poll lacks', async () => {
+    const { route } = await mount({
+      ...STATUS,
+      lastPoll: { at: 10, trigger: 'manual', durationMs: 3, ok: false, error: 'HTTP 500', syncStatus: 'missing' },
+      notes: [{ seq: 2, at: 11, title: 'N', body: 'B', kinds: [], outcome: 'failed', error: 'no channel' }],
+    })
+    const view = await (await route('/api/fork.courses').fetch(new Request('http://127.0.0.1/api/fork.courses'))).json() as CoursesView
+    expect(view.lastPoll).toEqual({ at: 10, trigger: 'manual', durationMs: 3, ok: false, error: 'HTTP 500', openTasks: null, reminders: null, outcome: null })
+    expect(view.notes).toEqual([{ at: 11, title: 'N', body: 'B', outcome: 'failed', error: 'no channel' }])
+  })
+
+  it('refuses a poll request that carries no content type', async () => {
+    const { route, poll } = await mount()
+    const refused = await route('/api/fork.courses.poll').fetch(new Request('http://127.0.0.1/api/fork.courses.poll', { method: 'POST' }))
+    expect(refused.status).toBe(415)
+    expect(await refused.json()).toEqual({ error: 'send application/json' })
+    expect(poll).not.toHaveBeenCalled()
   })
 
   it('polls on a JSON POST and refuses any other body, which a cross-site form could send', async () => {

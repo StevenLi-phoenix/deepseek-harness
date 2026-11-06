@@ -3,8 +3,8 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
-import type { LoginSnapshot, WechatAnswer, WechatView } from '../src/wechat-view.ts'
-import { agoText, spanText } from '../src/client/wechat/format.ts'
+import { maskId, type LoginSnapshot, type WechatAnswer, type WechatView } from '../src/wechat-view.ts'
+import { agoText, dateTime, spanText, stampTime } from '../src/client/wechat/format.ts'
 import { de, en, es, fr, ja, pt, ru, zh } from '../src/client/wechat/locales.ts'
 import { isWeixinLink, qrPath, qrViewSize } from '../src/client/wechat/qr.ts'
 import {
@@ -126,6 +126,62 @@ describe('WechatSection status', () => {
   })
 })
 
+describe('WechatSection partial status', () => {
+  it('says a bound bot has no bind time, long-poll answer, or traffic yet', () => {
+    const quiet = { ...UNBOUND.channel, link: 'starting' as const }
+    const binding = { state: 'bound' as const, botId: 'b…1@im.bot', ownerId: 'o…2@im.wechat', boundAt: null }
+    mount({ view: { ...VIEW, binding, channel: quiet }, checkedAt: NOW })
+    const hero = screen.getByRole('region', { name: '微信 bot' })
+    expect(hero.textContent).toContain('bot b…1@im.bot · 主人 o…2@im.wechat')
+    expect(hero.textContent).not.toContain('绑定')
+    expect(hero.textContent).toContain('还没有响应')
+    expect(within(hero).getAllByText('暂无')).toHaveLength(2)
+  })
+
+  it('shows a dash for traffic of an unknown kind, and which side a failure was on', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOW)
+    const channel = { ...VIEW.channel, lastOutboundKind: null, lastError: { at: NOW - 60_000, where: 'send' as const, text: 'HTTP 500' } }
+    mount({ view: { ...VIEW, channel }, checkedAt: NOW })
+    const hero = screen.getByRole('region', { name: '微信 bot' })
+    expect(hero.textContent).toContain('2 分钟前（—）')
+    expect(hero.textContent).toContain('发消息：HTTP 500 · 1 分钟前')
+  })
+
+  it('shows neither a count, an end, nor a reason for an open window without a record', () => {
+    const window = { open: true, closed: null, repliesLeft: null, repliesPerToken: 10, expiresAt: null }
+    mount({ view: { ...VIEW, window }, checkedAt: NOW })
+    expect(screen.getByRole('region', { name: '回复窗口' }).textContent).toBe(`回复窗口${zh['window.hint']}${zh['outbox.empty']}`)
+  })
+
+  it('shows the queue without an age when the oldest entry has no time', () => {
+    mount({ view: { ...VIEW, outbox: { count: 2, limit: 50, oldestAt: null } }, checkedAt: NOW })
+    const card = screen.getByRole('region', { name: '回复窗口' })
+    expect(card.textContent).toContain('2 条在排队（最多 50 条）')
+    expect(card.textContent).not.toContain('排上的最早一条')
+  })
+
+  it('says it is reading until the first answer, and draws no card', () => {
+    mount({ view: null })
+    expect(screen.getByText('正在读取…')).toBeTruthy()
+    expect(screen.queryByRole('region', { name: '微信 bot' })).toBeNull()
+  })
+
+  it('dates the line from the last check, or from now before any check settled', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOW)
+    const checked = NOW - 3_600_000
+    mount({ view: VIEW, stale: true, checkedAt: checked })
+    expect(screen.getByText(`未能刷新 · 显示 ${stampTime(checked)} 的数据`)).toBeTruthy()
+    cleanup()
+    mount({ view: VIEW, stale: true, checkedAt: null })
+    expect(screen.getByText(`未能刷新 · 显示 ${stampTime(NOW)} 的数据`)).toBeTruthy()
+    cleanup()
+    mount({ view: VIEW, checkedAt: null })
+    expect(screen.getByText(`${stampTime(NOW)} 更新`)).toBeTruthy()
+  })
+})
+
 describe('WechatSection bind', () => {
   it('offers a scan to an unbound bot and a rebind to a bound one, and shows no unbind until bound', () => {
     const unbound = mount({ view: UNBOUND, checkedAt: NOW })
@@ -205,6 +261,41 @@ describe('WechatSection bind', () => {
     cleanup()
     mount({ view: UNBOUND, checkedAt: NOW, login: { ...LOGIN, phase: 'failed', qr: null, failure: null } })
     expect(screen.getByRole('alert').textContent).toContain('出了点问题')
+  })
+
+  it('sends no number by the Enter key while it is invalid or while one is in flight', () => {
+    const idle = mount({ view: UNBOUND, checkedAt: NOW, login: { ...LOGIN, phase: 'needs-code' } })
+    const input = screen.getByRole<HTMLInputElement>('textbox')
+    fireEvent.submit(input.closest('form')!)
+    fireEvent.change(input, { target: { value: '12ab' } })
+    fireEvent.submit(input.closest('form')!)
+    expect(idle.calls.submitCode).not.toHaveBeenCalled()
+    expect(input.value).toBe('12ab')
+    cleanup()
+    const inFlight = mount({ view: UNBOUND, checkedAt: NOW, login: { ...LOGIN, phase: 'needs-code' }, busy: 'login.code' })
+    const typed = screen.getByRole<HTMLInputElement>('textbox')
+    fireEvent.change(typed, { target: { value: '4821' } })
+    fireEvent.submit(typed.closest('form')!)
+    expect(inFlight.calls.submitCode).not.toHaveBeenCalled()
+    expect(typed.value).toBe('4821')
+  })
+
+  it('answers the retry at once in the expired and the failed panels', () => {
+    mount({ view: UNBOUND, checkedAt: NOW, busy: 'login.start', login: { ...LOGIN, phase: 'expired', qr: null } })
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '正在获取二维码…' }).disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: '换一个新二维码' })).toBeNull()
+    cleanup()
+    mount({ view: UNBOUND, checkedAt: NOW, busy: 'login.start', login: { ...LOGIN, phase: 'failed', qr: null, failure: 'timeout' } })
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '正在获取二维码…' }).disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: '再试一次' })).toBeNull()
+  })
+
+  it('shows an open login that has no code yet without a drawing, an attempt, or a link', () => {
+    mount({ view: UNBOUND, checkedAt: NOW, login: { ...LOGIN, qr: null } })
+    expect(screen.getByText('用手机微信扫描这个二维码')).toBeTruthy()
+    expect(screen.queryByRole('img')).toBeNull()
+    expect(screen.queryByRole('link')).toBeNull()
+    expect(screen.queryByText('第 1 张二维码')).toBeNull()
   })
 
   it('confirms a finished bind', () => {
@@ -349,9 +440,60 @@ describe('WechatLoader', () => {
   })
 })
 
+describe('WechatLoader edges', () => {
+  function edges(post: (action: unknown) => Promise<WechatAnswer> = () => Promise.resolve(answer(VIEW))) {
+    const store = createWechatStore()
+    const read = vi.fn(() => Promise.resolve(answer(VIEW)))
+    const posted = vi.fn(post)
+    return { store, read, post: posted, loader: new WechatLoader(store, read, posted, () => 42) }
+  }
+
+  it('warns once when the view goes stale, and again only after it recovered', async () => {
+    const { store, read, loader } = edges()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    read.mockRejectedValueOnce(new Error('offline')).mockRejectedValueOnce(new Error('offline'))
+    await loader.refresh()
+    await loader.refresh()
+    expect(store.getSnapshot().stale).toBe(true)
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith('[fork-wechat] status read failed')
+    await loader.refresh()
+    expect(store.getSnapshot().stale).toBe(false)
+    read.mockRejectedValueOnce(new Error('offline'))
+    await loader.refresh()
+    expect(warn).toHaveBeenCalledTimes(2)
+  })
+
+  it('sends no number when the panel has closed', async () => {
+    const { store, post, loader } = edges()
+    await loader.submitCode('4821')
+    expect(post).not.toHaveBeenCalled()
+    expect(store.getSnapshot()).toMatchObject({ busy: null, error: null })
+  })
+
+  it('shows a rejection that is not an Error as its text', async () => {
+    const { store, loader } = edges(async () => { throw 'gateway said no' })
+    await loader.unbind()
+    expect(store.getSnapshot()).toMatchObject({ busy: null, error: 'gateway said no' })
+  })
+
+  it('keeps the panel of a newer login when the Host forgot the old one', async () => {
+    const { store, post, loader } = edges()
+    store.update((draft) => { draft.login = LOGIN })
+    post.mockImplementationOnce(async () => {
+      store.update((draft) => { draft.login = { ...LOGIN, key: 'k2' } })
+      throw new WechatRefused('that login is gone', 404)
+    })
+    await loader.pollLogin()
+    expect(store.getSnapshot().login?.key).toBe('k2')
+  })
+})
+
 describe('client helpers', () => {
   it('checks the answer fields', () => {
     expect(() => parseAnswer({})).toThrow('unexpected WeChat answer')
+    expect(() => parseAnswer(null)).toThrow('unexpected WeChat answer')
+    expect(() => parseAnswer('not an object')).toThrow('unexpected WeChat answer')
     expect(() => parseAnswer({ view: { ...VIEW, outbox: null }, login: null })).toThrow('unexpected WeChat answer')
     expect(() => parseAnswer({ view: VIEW, login: { phase: 'waiting' } })).toThrow('unexpected WeChat answer')
     const ok = answer(VIEW, LOGIN)
@@ -380,6 +522,28 @@ describe('client helpers', () => {
     expect(spanText(NOW + 45 * 60_000, NOW, t as never)).toBe('45 分钟')
     expect(spanText(NOW + 5 * 3_600_000, NOW, t as never)).toBe('5 小时')
     expect(spanText(NOW + 4 * 86_400_000, NOW, t as never)).toBe('4 天')
+  })
+
+  it('dates an instant in the zone it is given, and in the local zone without one', () => {
+    expect(dateTime(NOW, 'America/New_York')).toBe('11-01 11:00')
+    const local = new Date(NOW)
+    const pad = (value: number): string => String(value).padStart(2, '0')
+    expect(dateTime(NOW)).toBe(`${pad(local.getMonth() + 1)}-${pad(local.getDate())} ${pad(local.getHours())}:${pad(local.getMinutes())}`)
+  })
+
+  it('leaves a part blank when the formatter does not give it', () => {
+    vi.spyOn(Intl.DateTimeFormat.prototype, 'formatToParts').mockReturnValue([{ type: 'month', value: '11' }])
+    expect(dateTime(NOW, 'America/New_York')).toBe('11- :')
+  })
+
+  it('masks an id down to its ends and keeps the domain after the last @', () => {
+    expect(maskId('o9cabcdefx1f@im.wechat')).toBe('o9c…1f@im.wechat')
+    expect(maskId('a@b@im.bot')).toBe('a…@im.bot')
+    expect(maskId('abcdef@im.bot')).toBe('a…@im.bot')
+    expect(maskId('abcdefg')).toBe('abc…fg')
+    expect(maskId('😀😁😂😃😄😅😆')).toBe('😀😁😂…😅😆')
+    expect(maskId('@im.bot')).toBe('…@im.bot')
+    expect(maskId('')).toBe('…')
   })
 
   it('keeps every dictionary on the same keys and placeholders', () => {
@@ -416,5 +580,29 @@ describe('client helpers', () => {
     vi.advanceTimersByTime(POLL_INTERVAL_MS * 3)
     expect(refresh).toHaveBeenCalledTimes(3)
     expect(listeners.size).toBe(0)
+  })
+
+  it('stays paused on a page that starts hidden, and keeps one timer through repeated events', () => {
+    vi.useFakeTimers()
+    const listeners = new Set<() => void>()
+    const page = {
+      visibilityState: 'hidden' as DocumentVisibilityState,
+      addEventListener: (_type: 'visibilitychange', listener: () => void) => { listeners.add(listener) },
+      removeEventListener: (_type: 'visibilitychange', listener: () => void) => { listeners.delete(listener) },
+    }
+    const refresh = vi.fn()
+    const stop = startPolling(refresh, POLL_INTERVAL_MS, page)
+    for (const listener of listeners) listener()
+    vi.advanceTimersByTime(POLL_INTERVAL_MS)
+    expect(refresh).not.toHaveBeenCalled()
+    page.visibilityState = 'visible'
+    for (const listener of listeners) listener()
+    for (const listener of listeners) listener()
+    expect(refresh).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(POLL_INTERVAL_MS)
+    expect(refresh).toHaveBeenCalledTimes(2)
+    stop()
+    vi.advanceTimersByTime(POLL_INTERVAL_MS)
+    expect(refresh).toHaveBeenCalledTimes(2)
   })
 })

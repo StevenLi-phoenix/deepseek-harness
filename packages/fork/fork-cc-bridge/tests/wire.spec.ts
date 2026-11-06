@@ -1,5 +1,13 @@
-import { describe, expect, it } from 'vitest'
-import { addressPath, buildFrame, encodeAddress, escapeBody, parseWrapper, wrapMessage } from '../src/wire.ts'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
+import { addressPath, buildFrame, encodeAddress, escapeBody, keyPath, parseWrapper, readPeerToken, wrapMessage } from '../src/wire.ts'
+
+const roots: string[] = []
+afterEach(() => {
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
+})
 
 describe('wire', () => {
   it('round-trips a wrapper', () => {
@@ -22,6 +30,29 @@ describe('wire', () => {
     expect(encodeAddress('/tmp/a b/c.sock')).toBe('uds:/tmp/a%20b/c.sock')
     expect(addressPath('uds:/tmp/a%20b/c.sock')).toBe('/tmp/a b/c.sock')
     expect(addressPath('bridge:x')).toBeUndefined()
+  })
+
+  it('refuses an address with malformed escapes', () => {
+    expect(addressPath('uds:/tmp/%ZZ.sock')).toBeUndefined()
+  })
+
+  it('parses a wrapper without attributes, leaving them out of the result', () => {
+    expect(parseWrapper('<cross-session-message>\nbody\n</cross-session-message>')).toEqual({ body: 'body' })
+  })
+
+  it('reads a session token only from a key file holding a valid one', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ccb-wire-'))
+    roots.push(dir)
+    const path = keyPath(dir, 7, '/a.sock')
+    expect(await readPeerToken(dir, 7, '/a.sock')).toBeUndefined()
+    writeFileSync(path, '{ not json')
+    expect(await readPeerToken(dir, 7, '/a.sock')).toBeUndefined()
+    writeFileSync(path, JSON.stringify({ peerToken: 'too-short' }))
+    expect(await readPeerToken(dir, 7, '/a.sock')).toBeUndefined()
+    writeFileSync(path, JSON.stringify({ peerToken: 32 }))
+    expect(await readPeerToken(dir, 7, '/a.sock')).toBeUndefined()
+    writeFileSync(path, JSON.stringify({ peerToken: 'ab'.repeat(16) }))
+    expect(await readPeerToken(dir, 7, '/a.sock')).toBe('ab'.repeat(16))
   })
 
   it('does not parse plain text, and builds the frame shape Claude Code expects', () => {

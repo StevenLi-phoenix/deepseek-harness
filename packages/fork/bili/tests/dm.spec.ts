@@ -54,6 +54,13 @@ describe('DmChannel', () => {
     expect(h.host.replyOwner).not.toHaveBeenCalled()
   })
 
+  it('says in its log how the turn ended, with the detail when the relay gave one', async () => {
+    const h = host()
+    const dm = new DmChannel(h.host)
+    expect(await dm.deliver({ sessionId: 'bili-1', text: 'x', outcome: 'aborted', detail: 'stopped by the owner' })).toBe('kept')
+    expect(h.host.logger.info).toHaveBeenCalledWith(expect.stringContaining('ended a turn the owner\'s messages did not start (aborted: stopped by the owner)'))
+  })
+
   it('forgets the mark of a prompt that failed', async () => {
     const h = host()
     const dm = new DmChannel(h.host)

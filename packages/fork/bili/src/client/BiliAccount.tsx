@@ -124,7 +124,6 @@ function resultText(result: ActionResult, t: Translate): string | null {
 /** Words for a failed action: a known code gets its own line. */
 function errorText(error: string, code: string | null, t: Translate): string {
   switch (code) {
-    case 'mode_refused': return t('error.mode_refused')
     case 'not_owner': return t('error.not_owner')
     case 'no_token': return t('error.no_token')
     case 'refresh_failed': return t('error.refresh_failed', { error })

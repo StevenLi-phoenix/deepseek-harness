@@ -72,6 +72,21 @@ describe('loginWithQr', () => {
     expect(progress).toEqual(['已扫码，切换到 idc2.weixin.qq.com 继续确认。'])
   })
 
+  it('follows a WeChat redirect on port 443 and ignores one on another port', async () => {
+    const ilink = new FakeIlink()
+    ilink.statuses(
+      { status: 'scaned_but_redirect', redirect_host: 'idc2.weixin.qq.com:8443' },
+      { status: 'scaned_but_redirect', redirect_host: 'idc3.weixin.qq.com:443' },
+      CONFIRMED,
+    )
+    const { opts, progress } = options(ilink)
+    await loginWithQr(opts)
+    expect(ilink.requestsTo('ilink/bot/get_qrcode_status').map(request => request.origin)).toEqual([
+      'https://ilink.test', 'https://ilink.test', 'https://idc3.weixin.qq.com',
+    ])
+    expect(progress).toEqual(['已扫码，切换到 idc3.weixin.qq.com:443 继续确认。'])
+  })
+
   it('refuses a base URL outside WeChat or without HTTPS', async () => {
     for (const baseurl of ['https://evil.example', 'http://ilinkai.weixin.qq.com', 'https://ilinkai.weixin.qq.com:8443', 'https://weixin.qq.com.evil.example']) {
       const ilink = new FakeIlink()

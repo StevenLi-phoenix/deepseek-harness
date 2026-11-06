@@ -129,3 +129,13 @@ describe('screenNote', () => {
     expect(screenNote('今天的选举新闻', 20)).toBeUndefined()
   })
 })
+
+describe('screenNote and cleanQqText edge cases', () => {
+  it('refuses an empty note', () => {
+    expect(screenNote('', 10)).toBe('empty')
+  })
+
+  it('takes a QQ message without segment kinds as words', () => {
+    expect(cleanQqText('哈哈', '')).toEqual({ text: '哈哈' })
+  })
+})

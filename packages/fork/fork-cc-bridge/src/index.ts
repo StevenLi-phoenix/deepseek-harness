@@ -184,6 +184,7 @@ export function apply(ctx: Context, config: Config): void {
       return false
     }
     const now = Date.now()
+    /* v8 ignore next -- the loop condition checked the array is not empty. */
     while (delivered.length > 0 && now - (delivered[0] ?? now) > HOUR_MS) delivered.shift()
     if (delivered.length >= config.inboundPerHour) {
       ctx.logger.warn(`cc-bridge: dropped a ${String(message.text.length)}-char message from ${message.from.name}: ${String(config.inboundPerHour)} per hour reached`)

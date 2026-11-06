@@ -187,9 +187,11 @@ export class WechatSettings {
         return this.answer(login)
       }
       case 'login.cancel':
+        /* v8 ignore next -- after a cancel the entry still matches the key. */
         return this.logins.cancel(action.key) ? this.answer(this.logins.poll(action.key) ?? null) : failure(404, 'that login is gone or already over')
       case 'unbind':
         return this.unbind()
+      /* v8 ignore next 2 -- actionSchema admits only the five actions above, and handle() passes nothing else. */
       default:
         return failure(400, 'unknown action')
     }

@@ -385,7 +385,8 @@ describe('QqRecorder backfill is gentle', () => {
     fake.handlers.set('get_group_list', () => [])
     fake.handlers.set('get_group_msg_history', params => (params['message_seq'] === undefined ? { messages: history.slice(2) } : { messages: history.slice(0, 2) }))
     const h = await bootRecorder({ fake })
-    await until(() => h.recorder.store.recent(GROUP, { limit: 10 }).length === 5, 'the backfill')
+    // The log comes after the loop's last page, which repeats stored messages: the store holds all five one call before that.
+    await until(() => h.logs.some(line => line.text.includes('backfilled 5 message(s)')), 'the backfill')
     expect(h.recorder.store.recent(GROUP, { limit: 10 }).map(m => m.text)).toEqual(['历史消息1', '历史消息2', '历史消息3', '历史消息4', '历史消息5'])
     const calls = fake.callsOf('get_group_msg_history')
     expect(calls.slice(0, 2)).toEqual([{ group_id: Number(GROUP), count: 20 }, { group_id: Number(GROUP), count: 17, message_seq: 103 }])

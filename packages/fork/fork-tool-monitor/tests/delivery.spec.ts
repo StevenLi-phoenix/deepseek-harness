@@ -11,8 +11,10 @@ interface World {
   readonly loaded?: 'idle' | 'running'
   /** What Session persistence says: a stored header, nothing, or a failure. */
   readonly stored?: { header: { origin?: 'subagent' } } | 'missing' | 'error'
-  readonly resolved?: 'agent' | 'not-found' | 'broken'
+  readonly resolved?: 'agent' | 'not-found' | 'broken' | 'error-instance' | 'code-only'
   stopped?: boolean
+  /** Disposal begins while the agent is loading. */
+  readonly stopWhileLoading?: boolean
 }
 
 /** A context with just the services delivery reads, and what the agent and the logger received. */
@@ -21,11 +23,16 @@ function fixture(world: World) {
   const injected: UserMessage[] = []
   const warnings: string[] = []
   const agent = { status: world.loaded ?? 'idle', followup: (message: UserMessage) => { followups.push(message) }, inject: (message: UserMessage) => { injected.push(message) } }
-  const resolveAgent = vi.fn(() => Promise.resolve(
-    world.resolved === 'not-found' ? { error: { code: 'session/not-found' } }
-      : world.resolved === 'broken' ? { error: { code: 'session/busy', message: 'held by another writer' } }
-        : { agent },
-  ))
+  const resolveAgent = vi.fn(() => {
+    if (world.stopWhileLoading === true) world.stopped = true
+    return Promise.resolve(
+      world.resolved === 'not-found' ? { error: { code: 'session/not-found' } }
+        : world.resolved === 'broken' ? { error: { code: 'session/busy', message: 'held by another writer' } }
+          : world.resolved === 'error-instance' ? { error: Object.assign(new Error('resume failed: lock timeout'), { code: 'session/busy' }) }
+            : world.resolved === 'code-only' ? { error: { code: 'session/unavailable' } }
+              : { agent },
+    )
+  })
   const ctx = {
     get: (service: string) => service === 'agents' ? { get: () => world.loaded === undefined ? undefined : agent } : undefined,
     sessionPersistence: {
@@ -74,6 +81,25 @@ describe('delivery', () => {
     const offline = fixture({ stored: 'error' })
     expect(await offline.delivery.deliver('s1', VIEW, LINES)).toBe(true)
     expect(offline.warnings.join('\n')).toContain('index offline')
+  })
+
+  it('keeps the monitor and logs the Error itself, or the code when the failure has no message', async () => {
+    const thrown = fixture({ stored: { header: {} }, resolved: 'error-instance' })
+    expect(await thrown.delivery.deliver('s1', VIEW, LINES)).toBe(true)
+    expect(thrown.warnings.join('\n')).toContain('resume failed: lock timeout')
+
+    const bare = fixture({ stored: { header: {} }, resolved: 'code-only' })
+    expect(await bare.delivery.deliver('s1', VIEW, LINES)).toBe(true)
+    expect(bare.warnings.join('\n')).toContain('session/unavailable')
+    expect(bare.followups).toHaveLength(0)
+  })
+
+  it('drops a notice whose agent finished loading after disposal began', async () => {
+    const world = fixture({ stored: { header: {} }, stopWhileLoading: true })
+    expect(await world.delivery.deliver('s1', VIEW, LINES)).toBe(true)
+    expect(world.resolveAgent).toHaveBeenCalledOnce()
+    expect(world.followups).toHaveLength(0)
+    expect(world.injected).toHaveLength(0)
   })
 
   it('delivers nothing once disposal has begun', async () => {

@@ -209,4 +209,25 @@ describe('SystemSampler', () => {
     await sampler.read()
     expect(exec).toHaveBeenCalledTimes(3)
   })
+
+  it('treats a statfs failure that is not an error object as unreadable', () => {
+    const statfs = (): FsStats => { throw 'plain string' }
+    expect(readDisks([{ mount: '/odd', label: 'Odd' }], statfs).skipped).toEqual([{ mount: '/odd', label: 'Odd', reason: 'unreadable' }])
+  })
+
+  it('logs once when a skipped volume reads again', async () => {
+    let readable = false
+    const { probes, logger } = harness({
+      statfs: (path: string): FsStats => {
+        if (!readable) throw Object.assign(new Error(path), { code: 'ENOENT' })
+        return { bsize: 4096, blocks: 100, bavail: 50 }
+      },
+    })
+    const sampler = new SystemSampler({ mounts: [{ mount: '/Volumes/Back', label: 'Back' }], cacheMs: 0, logger, probes })
+    expect((await sampler.sample()).skippedMounts).toHaveLength(1)
+    expect(logger.warn).toHaveBeenCalledWith('fork-sysmon: /Volumes/Back skipped (not found)')
+    readable = true
+    expect((await sampler.sample()).disks).toHaveLength(1)
+    expect(logger.info).toHaveBeenCalledWith('fork-sysmon: /Volumes/Back reads again')
+  })
 })

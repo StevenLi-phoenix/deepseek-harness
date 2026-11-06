@@ -73,6 +73,24 @@ describe('speak', () => {
     expect(logs.some(line => line.startsWith('warn: fork-tool-voice: speak failed'))).toBe(true)
   })
 
+  it('reports a thrown non-Error value as text', async () => {
+    const { call, logs } = await mount({ voice: { ttsEnabled: true, speak: async () => { throw 'quota exhausted' } }, notifier: { send: vi.fn() } })
+    expect(await call({ text: '你好' })).toMatchObject({ value: { error: 'quota exhausted' } })
+    expect(logs).toContain('warn: fork-tool-voice: speak failed: quota exhausted')
+  })
+
+  it('logs an empty reason, and the registry rejects the result, when the channel reports neither a send nor a reason', async () => {
+    const notifier = { send: vi.fn(), sendFile: async () => ({}) }
+    const { call, logs } = await mount({ voice: { ttsEnabled: true, speak: async () => spoken }, notifier })
+    expect(await call({ text: '你好' })).toMatchObject({ isError: true, error: { info: { code: 'INVALID_TOOL_OUTPUT' } } })
+    expect(logs).toContain(`info: fork-tool-voice: spoke 2 chars with feiyu; not sent:  (${spoken.path})`)
+  })
+
+  it('presents the call with the length of the text', async () => {
+    const { ctx } = await mount({ voice: { ttsEnabled: true, speak: async () => spoken } })
+    expect(ctx.tools.get('speak')!.presentCall!({ text: '你好吗' })).toEqual({ card: 'generic', title: 'Say it out loud (3 chars)', kind: 'other', rawInput: '你好吗' })
+  })
+
   it('tells the model when speech is off', async () => {
     const speak = vi.fn()
     const { call } = await mount({ voice: { ttsEnabled: false, speak }, notifier: { send: vi.fn(), sendFile: vi.fn() } })

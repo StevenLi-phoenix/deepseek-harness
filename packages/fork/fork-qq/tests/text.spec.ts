@@ -53,3 +53,71 @@ describe('displayName', () => {
     expect(displayName({}, '10001')).toBe('10001')
   })
 })
+
+describe('parseMessage rendering', () => {
+  it('writes each kind of segment as its marker', () => {
+    const parsed = parseMessage([
+      { type: 'at', data: { qq: 'all' } },
+      { type: 'at', data: { qq: '10001', name: '小明' } },
+      { type: 'at', data: { qq: '10002' } },
+      { type: 'at', data: {} },
+      { type: 'face', data: { id: 1 } },
+      { type: 'mface', data: { summary: '[笑]' } },
+      { type: 'mface', data: {} },
+      { type: 'video', data: { file: 'v.mp4', url: 'https://x/v' } },
+      { type: 'forward', data: {} },
+      { type: 'xml', data: {} },
+      { type: 'share', data: { title: '标题', url: 'https://x/s' } },
+      { type: 'poke', data: {} },
+      { type: 'dice', data: {} },
+      { type: 'rps', data: {} },
+      { type: 'music', data: {} },
+    ])
+    expect(parsed.text).toBe('@全体成员 @小明 @10002 @ [表情][表情包:[笑]][表情包][视频][合并转发][卡片][分享:标题 https://x/s][戳一戳][骰子][猜拳][music]')
+    expect(parsed.media).toEqual([{ kind: 'video', url: 'https://x/v', file: 'v.mp4', name: 'v.mp4' }])
+    expect(parsed.kinds).toHaveLength(15)
+  })
+
+  it('keeps the id of the message a reply quotes, and marks an animated sticker', () => {
+    const parsed = parseMessage([
+      { type: 'reply', data: { id: 7788 } },
+      { type: 'image', data: { summary: '[动画表情]', file: 'a.gif' } },
+      { type: 'text', data: { text: 5 } },
+      { type: 'text', data: { text: '' } },
+    ])
+    expect(parsed.replyTo).toBe('7788')
+    expect(parsed.text).toBe('[动画表情]5')
+  })
+
+  it('names a file by its file field when it has no name, and leaves the name blank when it has neither', () => {
+    const parsed = parseMessage([
+      { type: 'file', data: { file: 'doc.pdf' } },
+      { type: 'file', data: {} },
+      { type: 'image', data: { file_size: 0 } },
+      { type: 'image', data: { file_size: 'abc' } },
+    ])
+    expect(parsed.text).toBe('[文件:doc.pdf][文件:][图片][图片]')
+    expect(parsed.media.map(item => [item.file, item.name, item.bytes])).toEqual([
+      ['doc.pdf', 'doc.pdf', undefined], [undefined, undefined, undefined], [undefined, undefined, undefined], [undefined, undefined, undefined],
+    ])
+  })
+
+  it('reads a card that has no meta, only a prompt, or only a link', () => {
+    const card = (body: unknown): string => parseMessage([{ type: 'json', data: { data: JSON.stringify(body) } }]).text
+    expect(card({})).toBe('[卡片]')
+    expect(card({ prompt: '[小程序]' })).toBe('[卡片:[小程序]]')
+    expect(card({ prompt: '[小程序]', meta: { a: { title: '[小程序]', qqdocurl: 'https://x/d' } } })).toBe('[卡片:[小程序] https://x/d]')
+    expect(card({ meta: { a: { title: 5, desc: 5, jumpUrl: 5, qqdocurl: 5 } } })).toBe('[卡片]')
+    expect(parseMessage([{ type: 'json', data: {} }]).text).toBe('[卡片]')
+    expect(parseMessage([{ type: 'json', data: { data: 'null' } }]).text).toBe('[卡片]')
+  })
+
+  it('reads a share with only a title or only a link', () => {
+    expect(parseMessage([{ type: 'share', data: { title: '标题' } }]).text).toBe('[分享:标题]')
+    expect(parseMessage([{ type: 'share', data: {} }]).text).toBe('[分享:]')
+  })
+
+  it('treats a message that is neither a list nor a string as empty', () => {
+    expect(parseMessage({} as never).kinds).toEqual([])
+  })
+})

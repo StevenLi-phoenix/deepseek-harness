@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { Config as BridgeConfig } from '@deepseek-ai/dsh-fork-cc-bridge'
 import { afterEach, describe, expect, it } from 'vitest'
+import type { Run } from '@deepseek-ai/dsh-fork-cc-bridge'
 import ClaudeCodeAdmin, { Config, MAX_TASK_CHARS } from '../src/index.ts'
 
 const dirs: string[] = []
@@ -37,7 +38,7 @@ exit 0
   return { tmux, calls: () => (existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : []) }
 }
 
-function setup(overrides: Record<string, unknown> = {}) {
+function setup(overrides: Record<string, unknown> = {}, run?: Run) {
   const home = mkdtempSync(join(tmpdir(), 'fork-cc-admin-'))
   dirs.push(home)
   mkdirSync(join(home, '.claude', 'sessions'), { recursive: true })
@@ -47,8 +48,8 @@ function setup(overrides: Record<string, unknown> = {}) {
   contexts.push(ctx)
   const logs: string[] = []
   ctx.logger.exporter({ levels: { default: 3 }, export: (message) => { logs.push(`${message.type} ${String(message.args[0])}`) } })
-  const admin = new ClaudeCodeAdmin(ctx, Config({ tmux, ...overrides } as never), home)
-  return { ctx, admin, home, calls, logs }
+  const admin = new ClaudeCodeAdmin(ctx, Config({ tmux, ...overrides } as never), home, run)
+  return { ctx, admin, home, calls, logs, tmuxPath: tmux }
 }
 
 describe('configuration', () => {
@@ -110,6 +111,40 @@ describe('view', () => {
   })
 })
 
+describe('configured sources', () => {
+  it('lists sessions from the configured sessions directory, with nulls for a record that has no status, cwd or update time', async () => {
+    const { home, tmuxPath } = setup()
+    const ctx = new Context()
+    contexts.push(ctx)
+    const custom = join(home, 'elsewhere')
+    mkdirSync(custom)
+    const procStart = execFileSync('ps', ['-o', 'lstart=', '-p', String(process.ppid)], { env: { PATH: '/bin:/usr/bin', LC_ALL: 'C', TZ: 'UTC' } }).toString().trim()
+    writeFileSync(join(custom, `${process.ppid}.json`), JSON.stringify({
+      pid: process.ppid, procStart, kind: 'interactive', name: 'custom-1', messagingSocketPath: '/tmp/custom-1.sock',
+    }))
+    const admin = new ClaudeCodeAdmin(ctx, Config({ tmux: tmuxPath, sessionsDir: custom } as never), home)
+    expect((await admin.view()).sessions).toEqual([{ name: 'custom-1', pid: process.ppid, status: null, cwd: null, updatedAt: null, managed: false }])
+  })
+
+  it('runs tmux through the runner it was given', async () => {
+    const seen: string[][] = []
+    const run: Run = (_file, args) => {
+      seen.push(args)
+      return Promise.resolve(args.includes('list-sessions') ? { code: 0, stdout: 'from-runner\n' } : { code: 0, stdout: '' })
+    }
+    const { admin } = setup({}, run)
+    expect((await admin.view()).started).toEqual(['from-runner'])
+    expect(seen.some(args => args.includes('list-sessions'))).toBe(true)
+  })
+
+  it('says it is off when disabled, and reports that in the view', async () => {
+    const { admin, logs } = setup({ enabled: false })
+    expect(admin.enabled).toBe(false)
+    expect((await admin.view()).enabled).toBe(false)
+    expect(logs.some(line => line.startsWith('info fork-cc-admin: Claude Code of ') && line.endsWith('is turned off'))).toBe(true)
+  })
+})
+
 describe('start', () => {
   it('starts a named session in tmux with the first task as one quoted prompt argument, and logs without the task', async () => {
     const { admin, calls, logs } = setup()
@@ -150,5 +185,12 @@ describe('stop', () => {
     expect((await admin.view()).started).toEqual([])
     expect(await admin.stop('review-1')).toMatchObject({ ok: false, error: 'not_found' })
     expect(await admin.stop('../etc')).toMatchObject({ ok: false, error: 'not_found' })
+  })
+
+  it('reports stop_failed with tmux\'s reason when tmux cannot kill a session it lists', async () => {
+    const run: Run = (_file, args) => Promise.resolve(args.includes('kill-session') ? { code: 1, stdout: '' } : { code: 0, stdout: 'review-1\n' })
+    const { admin, logs } = setup({}, run)
+    expect(await admin.stop('review-1')).toEqual({ ok: false, error: 'stop_failed', detail: 'tmux could not stop the session' })
+    expect(logs).toContain('warn fork-cc-admin: stopping review-1 failed: tmux could not stop the session')
   })
 })

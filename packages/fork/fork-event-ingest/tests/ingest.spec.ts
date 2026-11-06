@@ -1,5 +1,6 @@
-import { createServer, type Server } from 'node:http'
+import { createServer, request as httpRequest, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { Readable } from 'node:stream'
 import { Context } from '@deepseek-ai/cordis'
 import type { ForkEventInput } from '@deepseek-ai/dsh-fork-event-bus'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -37,12 +38,12 @@ async function mount(tokens: Record<string, string | undefined>, config: Ingest.
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...token === undefined ? {} : { authorization: `Bearer ${token}` } },
-      body: typeof body === 'string' ? body : JSON.stringify(body),
+      body: (typeof body === 'string' || body instanceof Uint8Array ? body : JSON.stringify(body)) as BodyInit,
       ...init,
     })
     return { status: response.status, body: await response.json() as Record<string, unknown> }
   }
-  return { post, published, path: route.path }
+  return { post, published, path: route.path, url, handler: route.handler }
 }
 
 const EVENT = { kind: 'kaorou.job.failed', key: 'job-91-attempt-3', subject: 'job 91', title: 'burn failed: ffmpeg exit 255', text: 'stderr tail', url: 'https://example.com/jobs/91', occurredAt: 1_761_000_000_000 }
@@ -131,5 +132,102 @@ describe('fork-event-ingest', () => {
     const refusing = await mount({ PRESENCE_TOKEN: 'p-secret' }, config, { ingest: () => Promise.reject(new Error('unknown presence kind')) })
     expect(await refusing.post(event, 'p-secret')).toEqual({ status: 400, body: { error: 'unknown presence kind' } })
     await expect(mount({}, { sources: [{ id: 'presence', tokenEnv: 'X', sink: 'not a service' }] })).rejects.toThrow('must be a service name')
+  })
+
+  it('refuses a key that is not a string', async () => {
+    const { post, published } = await mount({ KAOROU_TOKEN: 'k-secret' })
+    expect(await post({ ...EVENT, key: 5 }, 'k-secret')).toEqual({ status: 400, body: { error: 'key must be a string' } })
+    expect(published).toEqual([])
+  })
+
+  it('applies its defaults when mounted without a path, sources, or body ceiling', async () => {
+    const ctx = new Context()
+    contexts.push(ctx)
+    const routes: Route[] = []
+    ctx.provide('webServer', { register: (route: Route) => { routes.push(route); return () => {} } } as never)
+    ctx.provide('credentials', { resolve: () => Promise.resolve(undefined) } as never)
+    ctx.provide('forkEventBus', { publish: () => Promise.resolve('accepted') } as never)
+    Ingest.apply(ctx, {})
+    expect(routes.map(route => route.path)).toEqual(['/hooks/events'])
+  })
+
+  it('answers 413 when a chunked body outgrows the ceiling without declaring its length', async () => {
+    const { url } = await mount({ KAOROU_TOKEN: 'k-secret' }, { sources: [{ id: 'kaorou', tokenEnv: 'KAOROU_TOKEN' }], maxBodyBytes: 1024 })
+    const reply = await new Promise<{ status: number | undefined; body: string }>((resolve, reject) => {
+      const request = httpRequest(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: 'Bearer k-secret', 'transfer-encoding': 'chunked' },
+      }, (response) => {
+        const parts: Buffer[] = []
+        response.on('data', (part: Buffer) => { parts.push(part) })
+        response.on('end', () => { resolve({ status: response.statusCode, body: Buffer.concat(parts).toString('utf8') }) })
+      })
+      request.on('error', reject)
+      request.write('{"padding":"')
+      request.write('x'.repeat(2000))
+      request.end('"}')
+    })
+    expect(reply).toEqual({ status: 413, body: JSON.stringify({ error: 'body too large' }) })
+  })
+
+  it('reads a body delivered as strings', async () => {
+    const { handler, published } = await mount({ KAOROU_TOKEN: 'k-secret' })
+    const request = Object.assign(Readable.from([JSON.stringify(EVENT)]), {
+      method: 'POST',
+      headers: { authorization: 'Bearer k-secret', 'content-type': 'application/json' },
+    })
+    const sent: { status?: number; body?: string } = {}
+    const response = {
+      writeHead: (status: number) => { sent.status = status },
+      end: (body: string) => { sent.body = body },
+    }
+    await handler(request, response)
+    expect(sent).toEqual({ status: 202, body: JSON.stringify({ outcome: 'accepted' }) })
+    expect(published).toEqual([{ source: 'kaorou', ...EVENT }])
+  })
+
+  it('answers 400 for a body that is not UTF-8', async () => {
+    const { post } = await mount({ KAOROU_TOKEN: 'k-secret' })
+    const result = await post(new Uint8Array([0x7b, 0xff, 0xfe, 0x7d]), 'k-secret', {
+      headers: { 'content-type': 'application/json', authorization: 'Bearer k-secret' },
+    })
+    expect(result).toEqual({ status: 400, body: { error: 'body is not UTF-8' } })
+  })
+
+  it('answers 415 when the request carries no content type', async () => {
+    const { post } = await mount({ KAOROU_TOKEN: 'k-secret' })
+    const result = await post(new Uint8Array([0x7b, 0x7d]), 'k-secret', { headers: { authorization: 'Bearer k-secret' } })
+    expect(result).toEqual({ status: 415, body: { error: 'content type must be application/json' } })
+  })
+
+  it('answers 400 with a default reason when the sink rejects with a non-Error', async () => {
+    const config = { sources: [{ id: 'presence', tokenEnv: 'PRESENCE_TOKEN', sink: 'forkPresence' }] }
+    const event = { kind: 'presence.sleep.on', key: 'k', subject: 'owner', title: 't' }
+    const refusing = await mount({ PRESENCE_TOKEN: 'p-secret' }, config, { ingest: async () => { throw 'nope' } })
+    expect(await refusing.post(event, 'p-secret')).toEqual({ status: 400, body: { error: 'event refused' } })
+  })
+
+  it('answers 503 and logs when the bus fails, whether it throws an Error or a bare value', async () => {
+    for (const failure of [new Error('bus down'), 'bus down']) {
+      const ctx = new Context()
+      contexts.push(ctx)
+      const routes: Route[] = []
+      const warnings: string[] = []
+      ctx.provide('webServer', { register: (route: Route) => { routes.push(route); return () => {} } } as never)
+      ctx.provide('credentials', { resolve: () => Promise.resolve({ value: 'k-secret' }) } as never)
+      ctx.provide('forkEventBus', { publish: async () => { throw failure } } as never)
+      await ctx.plugin(Ingest, { sources: [{ id: 'kaorou', tokenEnv: 'KAOROU_TOKEN' }] })
+      ctx.logger.warn = ((format: string, ...args: unknown[]) => { warnings.push([format, ...args].join(' ')) }) as never
+      const route = routes[0]
+      if (route === undefined) throw new Error('no route registered')
+      const sent: { status?: number; body?: string } = {}
+      const request = Object.assign(Readable.from([JSON.stringify(EVENT)]), {
+        method: 'POST',
+        headers: { authorization: 'Bearer k-secret', 'content-type': 'application/json' },
+      })
+      await route.handler(request, { writeHead: (status: number) => { sent.status = status }, end: (body: string) => { sent.body = body } })
+      expect(sent).toEqual({ status: 503, body: JSON.stringify({ error: 'ingest unavailable' }) })
+      expect(warnings).toEqual(['ingest failed: %s bus down'])
+    }
   })
 })

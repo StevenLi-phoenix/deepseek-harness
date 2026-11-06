@@ -125,4 +125,32 @@ describe('QqStore media, paging, and meta', () => {
     store.setMeta('x', '2')
     expect(store.getMeta('x')).toBe('2')
   })
+
+  it('rolls a transaction back and rethrows when its work fails, and commits when it succeeds', () => {
+    const failure = new Error('stop here')
+    expect(() => store.transaction(() => {
+      store.setMeta('written', 'inside')
+      throw failure
+    })).toThrow(failure)
+    expect(store.getMeta('written')).toBeUndefined()
+    expect(store.transaction(() => { store.setMeta('written', 'kept'); return 'done' })).toBe('done')
+    expect(store.getMeta('written')).toBe('kept')
+  })
+
+  it('limits a full-text search to one group', () => {
+    store.insertMessage(message({ messageId: 'a', text: '周五晚上聚餐吃火锅' }), [], 0)
+    store.insertMessage(message({ messageId: 'b', groupId: 'g2', text: '周五晚上聚餐吃烧烤' }), [], 0)
+    expect(store.search('周五晚上', { limit: 10 }).map(m => m.messageId).sort()).toEqual(['a', 'b'])
+    expect(store.search('周五晚上', { limit: 10, groupId: 'g2' }).map(m => m.messageId)).toEqual(['b'])
+  })
+
+  it('keeps groups with and without a head count, and answers undefined for an unknown name', () => {
+    store.upsertGroup({ groupId: 'g1', name: '甲群', memberCount: 12 }, 10)
+    store.upsertGroup({ groupId: 'g2', name: '乙群' }, 11)
+    expect(store.groups().map(g => [g.groupId, g.memberCount]).sort()).toEqual([['g1', 12], ['g2', null]])
+    expect(store.groupName('g1')).toBe('甲群')
+    expect(store.groupName('nobody')).toBeUndefined()
+    store.upsertGroup({ groupId: 'g1', name: '甲群改名' }, 20)
+    expect(store.groups().find(g => g.groupId === 'g1')).toMatchObject({ name: '甲群改名', memberCount: null, updatedAt: 20 })
+  })
 })

@@ -61,3 +61,9 @@ describe('splitText', () => {
     expect(splitText('ok\ud83d', 100, 1)).toEqual(['ok�'])
   })
 })
+
+describe('frameInbound without a group id', () => {
+  it('names an empty group when a group message carries none', () => {
+    expect(frameInbound({ scope: 'group', senderId: 'E4D1A2B3C4D5E6F708192A3B4C5D6E7F' }, ' hi ')).toBe('[QQ 群  · 成员 5D6E7F] hi')
+  })
+})

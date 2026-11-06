@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { createConnection, createServer, type Server } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -69,4 +69,25 @@ export async function until(predicate: () => boolean | Promise<boolean>, ms = 30
     if (Date.now() > deadline) throw new Error('timed out waiting')
     await new Promise((resolve) => { setTimeout(resolve, 10) })
   }
+}
+
+/** A tmux stand-in for `Spawner`: it keeps its session names in a file beside the script and takes the arguments the real tmux gets. */
+export function fakeTmux(): { path: string; root: string; sessions: () => string[] } {
+  const root = mkdtempSync(join(tmpdir(), 'ccb-tmux-'))
+  const path = join(root, 'tmux')
+  writeFileSync(path, [
+    '#!/bin/sh',
+    'state="$0.sessions"',
+    'shift 2',
+    'case "$1" in',
+    '  list-sessions) [ -s "$state" ] || exit 1; cat "$state" ;;',
+    '  new-session) printf \'%s\\n\' "$4" >> "$state" ;;',
+    '  kill-session) grep -vx "$3" "$state" > "$state.next"; mv "$state.next" "$state" ;;',
+    'esac',
+    'exit 0',
+    '',
+  ].join('\n'), { mode: 0o755 })
+  const state = `${path}.sessions`
+  const sessions = (): string[] => existsSync(state) ? readFileSync(state, 'utf8').split('\n').filter(Boolean) : []
+  return { path, root, sessions }
 }

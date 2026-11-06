@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { inflateSync } from 'node:zlib'
 import { encode } from 'uqr'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { connectUrl, decryptSecret, loginWithQr, LoginError, qrPng, runLoginCli, upsertEnvFile } from '../src/login.ts'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { connectUrl, createBindTask, decryptSecret, loginWithQr, LoginError, pollBindResult, qrPng, runLoginCli, upsertEnvFile } from '../src/login.ts'
 
 const APP_ID = '1020304050'
 const APP_SECRET = 'PlatformIssuedSecret0123456789abcdef'
@@ -31,6 +31,8 @@ class FakeBindService {
   expireFirstOnly = false
   failPolls = 0
   failCreate: string | undefined
+  /** Task creations after which the next one is refused; undefined means never. */
+  failCreateAfter: number | undefined
   garbleSecret = false
   private counter = 0
 
@@ -40,7 +42,9 @@ class FakeBindService {
     const body = JSON.parse(init?.body as string) as Record<string, string>
     const reply = (data: unknown, retcode = 0, msg = 'success'): Response => new Response(JSON.stringify({ retcode, msg, data }), { status: 200 })
     if (path === '/lite/create_bind_task') {
-      if (this.failCreate !== undefined) return reply(undefined, 1, this.failCreate)
+      if (this.failCreate !== undefined || (this.failCreateAfter !== undefined && this.counter >= this.failCreateAfter)) {
+        return reply(undefined, 1, this.failCreate ?? 'service busy')
+      }
       this.counter += 1
       const taskId = `task-${this.counter}`
       this.tasks.set(taskId, { key: body['key']!, polls: 0, scanAfter: this.scanAfter, expireAfter: this.expireFirstOnly && this.counter > 1 ? undefined : this.expireAfter })
@@ -63,7 +67,15 @@ class FakeBindService {
 
 let dir: string
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'fork-qqbot-login-')) })
-afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
+afterEach(() => {
+  rmSync(dir, { recursive: true, force: true })
+  vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
+  vi.restoreAllMocks()
+})
+
+/** A fetch that answers every call with the same JSON body. */
+const answering = (body: unknown) => async (): Promise<Response> => new Response(JSON.stringify(body), { status: 200 })
 
 const quick = { pollDelayMs: 1 }
 
@@ -207,5 +219,154 @@ describe('runLoginCli', () => {
     const argv = ['--env-file', join(dir, 'x.env')]
     expect(await runLoginCli({ stdout: sink(), stderr: err, argv, login: { fetch: broken.fetch } })).toBe(1)
     expect(err.text).toContain('QQ 登录失败')
+  })
+})
+
+describe('bind service answers', () => {
+  it.each([
+    ['no message', { retcode: 1 }, '/lite/create_bind_task failed'],
+    ['an empty message', { retcode: 1, msg: '' }, '/lite/create_bind_task failed'],
+    ['a message', { retcode: 1, msg: 'rate limited' }, 'rate limited'],
+  ])('reports a refusal with %s', async (_name, body, expected) => {
+    await expect(createBindTask(answering(body))).rejects.toThrow(expected)
+  })
+
+  it('refuses an answer without a task id, whether the data is missing or empty', async () => {
+    await expect(createBindTask(answering({ retcode: 0 }))).rejects.toThrow('no task_id')
+    await expect(createBindTask(answering({ retcode: 0, data: { task_id: '' } }))).rejects.toThrow('no task_id')
+  })
+
+  it('reports an HTTP failure by status and path', async () => {
+    const failing = async (): Promise<Response> => new Response('down', { status: 503 })
+    await expect(createBindTask(failing)).rejects.toThrow('HTTP 503 from /lite/create_bind_task')
+  })
+
+  it.each([
+    ['no app id', { status: 2, bot_encrypt_secret: 'abc' }],
+    ['app id 0', { status: 2, bot_appid: 0, bot_encrypt_secret: 'abc' }],
+    ['a secret that is not text', { status: 2, bot_appid: '1', bot_encrypt_secret: 5 }],
+  ])('refuses a completed task with %s', async (_name, data) => {
+    await expect(pollBindResult('t', answering({ retcode: 0, data }))).rejects.toThrow('completed without credentials')
+  })
+
+  it('leaves the openid out when the platform sent none, and reads an expired and a pending task', async () => {
+    const completed = await pollBindResult('t', answering({ retcode: 0, data: { status: 2, bot_appid: 77, bot_encrypt_secret: 'abc' } }))
+    expect(completed).toEqual({ status: 'completed', appId: '77', encryptedSecret: 'abc' })
+    expect(await pollBindResult('t', answering({ retcode: 0, data: { status: 3 } }))).toEqual({ status: 'expired' })
+    expect(await pollBindResult('t', answering({ retcode: 0 }))).toEqual({ status: 'pending' })
+  })
+
+  it('uses the global fetch when none is given', async () => {
+    const service = new FakeBindService()
+    vi.stubGlobal('fetch', service.fetch)
+    const result = await loginWithQr({ ...quick, showQrCode: () => {} })
+    expect(result.appId).toBe(APP_ID)
+    expect((await createBindTask()).taskId).toBe('task-2')
+    const anyString: unknown = expect.any(String)
+    expect(await pollBindResult('task-2')).toEqual({ status: 'completed', appId: APP_ID, encryptedSecret: anyString, userOpenid: OPENID })
+    expect(service.calls).toEqual(['/lite/create_bind_task', '/lite/poll_bind_result', '/lite/create_bind_task', '/lite/poll_bind_result'])
+  })
+})
+
+describe('loginWithQr edge cases', () => {
+  it('says the first task could not be opened when the transport throws something that is not an Error', async () => {
+    const thrower = async (): Promise<Response> => { throw 'connection reset' }
+    await expect(loginWithQr({ fetch: thrower, showQrCode: () => {} })).rejects.toThrow('could not open a bind task: connection reset')
+  })
+
+  it('says a refreshed task could not be opened and stops', async () => {
+    const service = new FakeBindService()
+    service.scanAfter = undefined
+    service.expireAfter = 1
+    service.failCreateAfter = 1
+    await expect(loginWithQr({ fetch: service.fetch, ...quick, showQrCode: () => {} })).rejects.toThrow('could not open a new bind task: service busy')
+  })
+
+  it('finishes normally with a signal that never fires', async () => {
+    const service = new FakeBindService()
+    const controller = new AbortController()
+    const result = await loginWithQr({ fetch: service.fetch, ...quick, signal: controller.signal, showQrCode: () => {} })
+    expect(result.appId).toBe(APP_ID)
+  })
+
+  it('stops waiting between polls when the signal aborts', async () => {
+    const service = new FakeBindService()
+    service.scanAfter = undefined
+    const controller = new AbortController()
+    const reason = new Error('login cancelled')
+    const login = loginWithQr({
+      fetch: service.fetch, pollDelayMs: 60_000, signal: controller.signal, showQrCode: () => {},
+    })
+    await vi.waitFor(() => { expect(service.calls).toContain('/lite/poll_bind_result') })
+    controller.abort(reason)
+    await expect(login).rejects.toBe(reason)
+  })
+
+  it('does not start when the signal was aborted before the first wait', async () => {
+    const service = new FakeBindService()
+    service.scanAfter = undefined
+    const controller = new AbortController()
+    const reason = new Error('already cancelled')
+    const login = loginWithQr({
+      fetch: service.fetch, pollDelayMs: 60_000, signal: controller.signal, showQrCode: () => { controller.abort(reason) },
+    })
+    await expect(login).rejects.toBe(reason)
+  })
+})
+
+describe('upsertEnvFile failures', () => {
+  it('rethrows a read failure that is not a missing file', async () => {
+    await expect(upsertEnvFile(dir, { A: '1' })).rejects.toThrow(/EISDIR/)
+  })
+})
+
+describe('runLoginCli with the process defaults', () => {
+  it('writes to the process streams, reads DSH_HOME and argv, and numbers a refreshed code', async () => {
+    const service = new FakeBindService()
+    service.expireAfter = 1
+    service.expireFirstOnly = true
+    service.scanAfter = 2
+    vi.stubEnv('DSH_HOME', dir)
+    const argv = ['node', 'login.ts', '--timeout-min', '1']
+    vi.spyOn(process, 'argv', 'get').mockReturnValue(argv)
+    let out = ''
+    let err = ''
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Uint8Array) => { out += String(chunk); return true })
+    vi.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => { err += String(chunk); return true })
+    expect(await runLoginCli({ login: { fetch: service.fetch, pollDelayMs: 1 } })).toBe(0)
+    expect(err).toBe('')
+    expect(out).toContain('（第 2 张）')
+    expect(out).toContain('二维码已过期，已刷新。')
+    expect(readFileSync(join(dir, '.env'), 'utf8')).toContain(`FORK_QQBOT_APP_ID=${APP_ID}`)
+  })
+
+  it('reports a failure on the process error stream', async () => {
+    const broken = new FakeBindService()
+    broken.failCreate = 'nope'
+    vi.stubEnv('DSH_HOME', dir)
+    vi.spyOn(process, 'argv', 'get').mockReturnValue(['node', 'login.ts'])
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    let err = ''
+    vi.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => { err += String(chunk); return true })
+    expect(await runLoginCli({ login: { fetch: broken.fetch } })).toBe(1)
+    expect(err).toContain('QQ 登录失败：could not open a bind task: nope')
+  })
+
+  it('prints no openid block when the platform sent none', async () => {
+    const service = new FakeBindService()
+    const bare = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      const response = await service.fetch(input, init)
+      const body = await response.json() as { data: Record<string, unknown> }
+      delete body.data['user_openid']
+      return new Response(JSON.stringify({ retcode: 0, msg: 'success', data: body.data }), { status: 200 })
+    }
+    let out = ''
+    const code = await runLoginCli({
+      stdout: { write: (chunk) => { out += chunk } }, stderr: { write: () => {} },
+      argv: ['--env-file', join(dir, 'bare.env')], login: { fetch: bare, pollDelayMs: 1 },
+    })
+    expect(code).toBe(0)
+    expect(out).toContain(`AppID ${APP_ID}`)
+    expect(out).not.toContain('openid')
   })
 })

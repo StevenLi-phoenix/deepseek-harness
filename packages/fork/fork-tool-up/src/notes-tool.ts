@@ -109,6 +109,7 @@ export function mountNotes(ctx: Context, config: NotesConfig, gate: SessionGate)
             ...(outcome.reason === 'guard_unavailable' ? { message: 'the text guard is not available right now, so no note was kept; try again later' } : {}),
             count: outcome.count,
           }
+        /* v8 ignore next 2 -- NoteOutcome is a closed union: its four statuses are handled above, so no input reaches the guard. */
         default:
           return assertNever(outcome)
       }
