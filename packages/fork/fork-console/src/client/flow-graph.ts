@@ -42,7 +42,7 @@ export const NODES: readonly FlowNode[] = [
     gap: '接收端和 Session 已就绪；在另一台机器上发 upload.local.ready 的脚本要主人自己放（RUNBOOK §25）。',
   },
   { id: 'dnd', cell: [1, 6], role: 'core', service: 'dsh', manage: 'fork-presence', via: 'fork-presence' },
-  { id: 'deferQ', cell: [4, 1], needs: 'wechat', role: 'core', title: '现在发，还是等？', via: 'defer_deliver tool · fork-wechat outbox · fork-presence' },
+  { id: 'deferQ', cell: [4, 1], needs: 'wechat', role: 'core', title: '发送时机', via: 'defer_deliver tool · fork-wechat outbox · fork-presence' },
   {
     id: 'githubSessions', cell: [1, 3], tracks: { subscriptions: ['ci'] }, role: 'agent', title: 'GitHub CI', service: 'dsh', manage: 'fork-agents', wired: 'partial',
     via: 'subscription ci (one Session per repo)', gap: '只接 workflow_run.completed 一种事件；发布、提交不起 Session。',
@@ -61,7 +61,7 @@ export const NODES: readonly FlowNode[] = [
     via: 'ga-watch journal Monitor', gap: '分组在 Monitor 的闸门里（新问题、12 小时后复发、抖动），不是 DSH 里的 Session。',
   },
   {
-    id: 'repairQ', cell: [2, 4], role: 'cond', title: '要自动修吗？', wired: 'partial', via: 'skill ams-repair (the main agent judges)',
+    id: 'repairQ', cell: [2, 4], role: 'cond', title: '自动修复？', wired: 'partial', via: 'skill ams-repair (the main agent judges)',
     gap: '判断由主智能体按技能做，不是固定规则；技能随 setup-profile 链接进 DSH_HOME 之后才生效。',
   },
   {
@@ -74,7 +74,7 @@ export const NODES: readonly FlowNode[] = [
     gap: '读各群摘要并保持跨群上下文；出口 QQ onebot 尚未实现，所以它不开口，回答也不进微信。',
   },
   {
-    id: 'autocutQ', cell: [1, 10], tracks: { subscriptions: ['upload-local'] }, role: 'cond', title: '要剪吗？', wired: 'partial', via: 'subscription upload-local (the Session judges)',
+    id: 'autocutQ', cell: [1, 10], tracks: { subscriptions: ['upload-local'] }, role: 'cond', title: '需要剪辑？', wired: 'partial', via: 'subscription upload-local (the Session judges)',
     gap: '“剪不剪”由该会话自己判断；“否”这一支只问主人是否上传，主人说好才交给烤肉。',
   },
   {

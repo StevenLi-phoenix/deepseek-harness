@@ -13,6 +13,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 - A message flow page with its own sidebar entry (`fork-flow`, 2026-11-06): one line names what is broken and what it touches with the way to fix it, a funnel counts what came in and what reached the owner over an hour, a day, or a week (`GET /api/fork.flow`), each box says what passed it, arrows thicken with use and run a dot when recent, and the latest 50 events can be followed through the picture; drawn from the owner's flow editor export (`flow-graph.ts`), with unbuilt boxes behind a switch.
 
 ### Changed
+- The message flow's copy is plain state wording instead of speaking for the system as a person: sent, not sent, deferred, do not disturb on (2026-11-06).
 - The owner turned off the WeChat notices for memory writes and for changes to watched files (`notify: false` on the `fork-memory` and `fork-integrity` bundle rows, 2026-11-06); both stay in the log and the memory history.
 - Skill `service-code` says how DSH changes its own settings: root rows through the profile patch, preset rows through `fork/main` and a deploy, never the build output (2026-11-06).
 - Synced upstream master `fcc0ad4621` (`dsh-v0.2.2-rc.1` plus later fixes).
