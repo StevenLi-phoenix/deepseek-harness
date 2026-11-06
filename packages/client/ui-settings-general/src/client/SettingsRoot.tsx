@@ -18,7 +18,8 @@ import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import {
   ConnectionIndicator, Tooltip, useModalLayer,
-  IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconChecklistOutlineMedium, IconClockOutlineMedium, IconCloseOutlineRegular,
+  IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconBranchOutlineMedium, IconChecklistOutlineMedium, IconClockOutlineMedium,
+  IconCloseOutlineRegular,
   IconCodeOutlineMedium,
   IconDatabaseOutlineMedium, IconDataOutlineMedium, IconEnhanceOutlineMedium, IconFlatListOutlineMedium, IconGaugeOutlineMedium,
   IconNewChatOutlineMedium, IconPersonalizationOutlineMedium, IconPlayOutlineMedium, IconQueueOutlineMedium, IconSettingsOutlineMedium,
@@ -41,10 +42,11 @@ const NAV_ICONS: Readonly<Record<string, typeof IconSettingsOutlineMedium>> = {
   'agent-presets': IconAgentPresetOutlineMedium,
   'plugins': IconPersonalizationOutlineMedium,
   'archived-sessions': IconArchiveOutlineMedium,
-  // Fork-added sections (packages/lsy), by the id each registers: service overview, subscriptions, and Claude Code
+  // Fork-added sections (packages/lsy), by the id each registers: service overview, data flow, subscriptions, and Claude Code
   // agents (lsy-console); the WeChat page, its presence page, and its speaking style; memory; System status; the Bilibili account; QQ;
   // course deadlines.
   'lsy-overview': IconFlatListOutlineMedium,
+  'lsy-flow': IconBranchOutlineMedium,
   'lsy-subscriptions': IconQueueOutlineMedium,
   'lsy-agents': IconCodeOutlineMedium,
   'lsy-wechat': IconNewChatOutlineMedium,

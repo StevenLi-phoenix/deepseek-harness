@@ -232,6 +232,14 @@ function redact(text: string, account: WechatAccount): string {
 }
 
 /** Storage key of an outbox row; zero-padded so keys sort like `seq`. */
+/** Longest wait an agent may ask {@link WechatChannel.holdDelivery} for. */
+const MAX_HOLD_MS = 7 * 86_400_000
+
+/** What {@link WechatChannel.holdDelivery} did: how many messages it queued, or why it queued none. */
+export type HoldResult =
+  | { held: number; until?: number; wakes: boolean }
+  | { notHeld: string }
+
 function outboxKey(seq: number): string {
   return String(seq).padStart(12, '0')
 }
@@ -257,6 +265,8 @@ export class WechatChannel extends Service implements LsyNotifier {
   private loop: Promise<void> | undefined
   private chain: Promise<unknown> = Promise.resolve()
   private stopping = false
+  /** Fires when the earliest text an agent asked to hold comes due. */
+  private holdTimer: NodeJS.Timeout | undefined
   /** Account loaded by the latest file check. */
   private account: WechatAccount | undefined
   /** Last logged account state, so each change is logged once. */
@@ -312,9 +322,11 @@ export class WechatChannel extends Service implements LsyNotifier {
     ctx.effect(async () => {
       const domain = await this.ready
       this.domain = domain
+      this.armHold()
       const cleanup = ctx.effect(() => async () => {
         this.stopping = true
         this.clearTypingGrace()
+        this.clearHold()
         // A running chat turn dies with the process; say so while the reply window is still usable.
         if (this.working.size > 0) await this.sendRestartNotice()
         await this.typing.stop()
@@ -453,6 +465,10 @@ export class WechatChannel extends Service implements LsyNotifier {
       const domain = await this.ready
       const held = this.outbox().filter(row => row.deferred === true).length
       if (held === 0) return 0
+      // A text held until a time goes with the wake when that comes first.
+      for (const row of this.outbox()) {
+        if (row.releaseAt !== undefined) await domain.table('outbox').put(outboxKey(row.seq), { seq: row.seq, text: row.text, queuedAt: row.queuedAt, deferred: true })
+      }
       const sent = await this.flushOutbox(domain)
       let kept = 0
       for (const row of this.outbox()) {
@@ -461,6 +477,51 @@ export class WechatChannel extends Service implements LsyNotifier {
         await domain.table('outbox').put(outboxKey(row.seq), { seq: row.seq, text: row.text, queuedAt: row.queuedAt })
       }
       this.ctx.logger.info(`lsy-wechat: ${why}; ${held} held text(s): ${sent} sent, ${kept} left for the next reply window`)
+      this.armHold()
+      return sent
+    })
+  }
+
+  /** Arm the one timer for the earliest text an agent asked to hold until a time. */
+  private armHold(): void {
+    this.clearHold()
+    if (this.stopping) return
+    const times = this.outbox().flatMap(row => row.releaseAt === undefined ? [] : [row.releaseAt])
+    if (times.length === 0) return
+    this.holdTimer = setTimeout(() => {
+      this.holdTimer = undefined
+      this.track(this.releaseDue().then(() => undefined))
+    }, Math.max(0, Math.min(...times) - Date.now()))
+  }
+
+  private clearHold(): void {
+    if (this.holdTimer !== undefined) clearTimeout(this.holdTimer)
+    this.holdTimer = undefined
+  }
+
+  /**
+   * Send the held texts whose time has come as digests, even while the owner still sleeps (the agent chose the time), and let the
+   * ones the reply window cannot take wait as ordinary outbox texts.
+   * @returns how many texts went out.
+   */
+  private releaseDue(): Promise<number> {
+    return this.serialize(async () => {
+      const domain = await this.ready
+      const now = Date.now()
+      const comes = (row: OutboxRecord): boolean => row.releaseAt !== undefined && row.releaseAt <= now
+      const due = this.outbox().filter(comes)
+      if (due.length === 0) {
+        this.armHold()
+        return 0
+      }
+      const sent = await this.flushOutbox(domain, due)
+      let kept = 0
+      for (const row of this.outbox().filter(comes)) {
+        kept += 1
+        await domain.table('outbox').put(outboxKey(row.seq), { seq: row.seq, text: row.text, queuedAt: row.queuedAt })
+      }
+      this.ctx.logger.info(`lsy-wechat: ${due.length} deferred text(s) came due: ${sent} sent, ${kept} left for the next reply window`)
+      this.armHold()
       return sent
     })
   }
@@ -657,6 +718,35 @@ export class WechatChannel extends Service implements LsyNotifier {
    */
   ownsSession(sessionId: string): boolean {
     return this.domain?.table('sessions').get(sessionId) !== undefined
+  }
+
+  /**
+   * Hold a text the agent asked to defer. It goes to the owner inside a digest when `until` comes, or as soon as the owner wakes if that
+   * is first; the owner's own messages do not release it earlier. Without `until` the owner has to be asleep now, since a text with no
+   * time and no sleep to wait for would never be due.
+   * @param raw - the text for the owner.
+   * @param until - Unix epoch milliseconds, at most a week away.
+   * @returns how many messages were queued, or why none were.
+   */
+  async holdDelivery(raw: string, until?: number): Promise<HoldResult> {
+    const text = raw.toWellFormed().trim()
+    if (text === '') return { notHeld: 'the text is empty' }
+    const now = Date.now()
+    if (until !== undefined && until <= now) return { notHeld: 'until is not in the future' }
+    if (until !== undefined && until - now > MAX_HOLD_MS) return { notHeld: 'until is more than 7 days away' }
+    const wakes = this.ctx.get('lsyPresence')?.isAsleep() === true
+    if (until === undefined && !wakes) return { notHeld: 'the owner is awake: put the text in your answer, or give a time with until' }
+    return this.serialize(async (): Promise<HoldResult> => {
+      const domain = await this.ready
+      const chars = this.config.maxMessageChars - Array.from(QUOTA_FOOTER).length
+      const bytes = WECHAT_MAX_TEXT_BYTES - Buffer.byteLength(QUOTA_FOOTER, 'utf8')
+      const parts = splitText(text, chars, this.config.maxReplyParts, bytes)
+      for (const part of parts) await this.enqueue(domain, part, 'the agent asked to defer it', true, until)
+      this.armHold()
+      const when = until === undefined ? 'until the owner wakes' : `until ${new Date(until).toISOString()}`
+      this.ctx.logger.info(`lsy-wechat: held ${parts.length} message(s) the agent asked to defer, ${when}`)
+      return { held: parts.length, ...until === undefined ? {} : { until }, wakes }
+    })
   }
 
   /**
@@ -1347,14 +1437,17 @@ export class WechatChannel extends Service implements LsyNotifier {
   }
 
   /** Queue one text; a full outbox drops its oldest texts. */
-  private async enqueue(domain: Domain<typeof wechatDomain>, text: string, reason: string, deferred = false): Promise<void> {
+  private async enqueue(
+    domain: Domain<typeof wechatDomain>, text: string, reason: string, deferred = false, releaseAt?: number,
+  ): Promise<void> {
     const outbox = domain.table('outbox')
     const rows = this.outbox()
     const victims = rows.slice(0, Math.max(0, rows.length - this.config.outboxLimit + 1))
     for (const row of victims) await outbox.delete(outboxKey(row.seq))
     if (victims.length > 0) this.ctx.logger.warn(`lsy-wechat: outbox full; dropped the ${victims.length} oldest text(s)`)
     const seq = (rows.at(-1)?.seq ?? 0) + 1
-    await outbox.put(outboxKey(seq), { seq, text, queuedAt: Date.now(), ...deferred ? { deferred } : {} })
+    const held = { ...deferred ? { deferred } : {}, ...releaseAt === undefined ? {} : { releaseAt } }
+    await outbox.put(outboxKey(seq), { seq, text, queuedAt: Date.now(), ...held })
     this.ctx.logger.info(`lsy-wechat: queued ${text.length} chars (${reason}); ${outbox.size} waiting`)
   }
 
@@ -1362,8 +1455,10 @@ export class WechatChannel extends Service implements LsyNotifier {
    * Send queued texts as digests while the window has more than one slot left; the last slot stays for the reply.
    * @returns how many texts went out.
    */
-  private async flushOutbox(domain: Domain<typeof wechatDomain>): Promise<number> {
-    let rows = this.outbox()
+  private async flushOutbox(domain: Domain<typeof wechatDomain>, only?: readonly OutboxRecord[]): Promise<number> {
+    // A text held until a time stays in the outbox until then, whoever else flushes it.
+    const now = Date.now()
+    let rows = only ?? this.outbox().filter(row => row.releaseAt === undefined || row.releaseAt <= now)
     let sent = 0
     while (rows.length > 0) {
       const target = this.target(domain)

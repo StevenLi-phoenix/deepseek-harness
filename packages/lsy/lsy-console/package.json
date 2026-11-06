@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-lsy-console",
-  "description": "Settings sections for the event service: a service overview, subscriptions and schedule reminders, and Claude Code sessions with the voice service",
+  "description": "Settings sections for the event service: a service overview, a data-flow graph, subscriptions and schedule reminders, and Claude Code sessions with the voice service",
   "version": "0.2.2-rc.1",
   "publishConfig": {
     "access": "public"

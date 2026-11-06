@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-lsy-tool-wechat",
-  "description": "Model-facing wechat_send_file tool: send a local file to the owner over the lsy WeChat channel",
+  "description": "Model-facing WeChat tools: wechat_send_file sends a local file to the owner, and defer_deliver holds a text for a time or the owner's waking",
   "version": "0.2.2-rc.1",
   "publishConfig": {
     "access": "public"

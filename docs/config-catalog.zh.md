@@ -2914,7 +2914,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-lsy-integrity`
 
-- `source`: [`packages/lsy/lsy-integrity/src/index.ts:33`](../packages/lsy/lsy-integrity/src/index.ts)
+- `source`: [`packages/lsy/lsy-integrity/src/index.ts:30`](../packages/lsy/lsy-integrity/src/index.ts)
 
 ```ts config-catalog
 /** Settings. */
@@ -2947,7 +2947,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-lsy-memory`
 
 - `inject`: `tools`
-- `source`: [`packages/lsy/lsy-memory/src/index.ts:63`](../packages/lsy/lsy-memory/src/index.ts)
+- `source`: [`packages/lsy/lsy-memory/src/config.ts:7`](../packages/lsy/lsy-memory/src/config.ts)
 
 ```ts config-catalog
 /** Memory file and context budget. */
@@ -3548,7 +3548,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-lsy-tool-up`
 
 - `inject`: `tools` · `credentials`
-- `source`: [`packages/lsy/lsy-tool-up/src/index.ts:61`](../packages/lsy/lsy-tool-up/src/index.ts)
+- `source`: [`packages/lsy/lsy-tool-up/src/index.ts:51`](../packages/lsy/lsy-tool-up/src/index.ts)
 
 ```ts config-catalog
 /** Notes, evidence, and the Session they belong to. */

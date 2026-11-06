@@ -115,7 +115,13 @@ The tools call `MemoryStore`, which validates everything the model sends: catego
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Plugin entry: the pre-step injection and the three tools |
+| [`src/index.ts`](src/index.ts) | Plugin entry: wires the notice queue, the memory block, and the tools; re-exports the public API |
+| [`src/config.ts`](src/config.ts) | The plugin configuration and the `LSY_MEMORY_HOLD` switch |
+| [`src/session-block.ts`](src/session-block.ts) | The pre-step injection both modes share: one block per root Session, right after the claimed prompt |
+| [`src/memory-block.ts`](src/memory-block.ts) | Owner-memory mode: loads the file and renders the memory block |
+| [`src/feedback-mode.ts`](src/feedback-mode.ts) | Feedback mode for the persona presets: one scope's verdicts in front of each root Session |
+| [`src/tools.ts`](src/tools.ts) | `memory_search`, `memory_save`, `memory_forget`, and the turn-origin check behind the hold |
+| [`src/notice-queue.ts`](src/notice-queue.ts) | Queues a turn's notices until the turn ends, caps them per day, and sends them through the notifier |
 | [`src/store.ts`](src/store.ts) | The JSONL store: list, save, hold, approve, revert, roll back, purge, import, search, and the history and snapshots |
 | [`src/notice.ts`](src/notice.ts) | The WeChat notice for a turn's protected changes |
 | [`src/render.ts`](src/render.ts) | The memory block and its byte budget |
@@ -124,7 +130,10 @@ The tools call `MemoryStore`, which validates everything the model sends: catego
 | [`src/export.ts`](src/export.ts) | claude.ai export parser |
 | [`src/admin.ts`](src/admin.ts) | The review functions the CLI and the Settings route share: approve, discard, revert, and the previewed rollback and erase with their tokens |
 | [`src/settings.ts`](src/settings.ts) | The `/api/lsy.memory` route (`@deepseek-ai/dsh-lsy-memory/settings`); [`src/settings/`](src/settings) holds its read model, request handler, and wire types |
-| [`src/cli.ts`](src/cli.ts) | `memory-import` (run through [`lsy/deploy/memory-import.mjs`](../../../lsy/deploy/memory-import.mjs)) and `memory-admin` ([`lsy/deploy/memory-admin.mjs`](../../../lsy/deploy/memory-admin.mjs)) |
+| [`src/cli.ts`](src/cli.ts) | `memory-import` (run through [`lsy/deploy/memory-import.mjs`](../../../lsy/deploy/memory-import.mjs)); re-exports `memory-admin` |
+| [`src/admin-cli.ts`](src/admin-cli.ts) | `memory-admin` ([`lsy/deploy/memory-admin.mjs`](../../../lsy/deploy/memory-admin.mjs)): argument parsing and dispatch |
+| [`src/admin-commands.ts`](src/admin-commands.ts) | The `memory-admin` commands and the usage text |
+| [`src/cli-io.ts`](src/cli-io.ts) | Streams, environment, and stdin reading both CLIs share |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 

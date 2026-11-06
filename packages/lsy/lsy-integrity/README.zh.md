@@ -67,7 +67,12 @@ Session 钩子监听 `session/event`。`system/message` 被哈希（SHA-256 的�
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 插件：扫描循环、通知、系统 prompt 哈希、口头禅计数、定时任务可信记录 |
+| [`src/index.ts`](src/index.ts) | 插件入口：配置，以及扫描器与 Session 监视的接线 |
+| [`src/scanner.ts`](src/scanner.ts) | 扫描循环、通知及其间隔与每日上限、基线 |
+| [`src/compare.ts`](src/compare.ts) | 把监控目标与基线对比，以及通知的文字 |
+| [`src/schedule-trust.ts`](src/schedule-trust.ts) | 定时任务服务最后一次写出的任务文件状态 |
+| [`src/session-watch.ts`](src/session-watch.ts) | 来自 Session 事件的系统 prompt 哈希与口头禅计数 |
+| [`src/files.ts`](src/files.ts) | 读写状态文件，以及记忆历史里最后一条摘要 |
 | [`src/scan.ts`](src/scan.ts) | 监控目标及其摘要 |
 | [`src/tics.ts`](src/tics.ts) | 禁用口头禅及其匹配器 |
 

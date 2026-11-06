@@ -95,7 +95,7 @@ The command starts from the beginning. `tail -n 0 -F` skips lines written while 
 
 The plugin mounts inside an agent preset's scope and creates one `MonitorRegistry` for that scope. The agent preset registry mounts a preset's plugins when the preset is registered at host start, not with its first Agent, so the plugin opens its storage domain and restores the stored monitors at host start. Disposing the plugin kills every monitor's process group without notices and keeps the stored records. `monitor_start` validates its arguments, then the registry spawns `/bin/bash -c` with `detached: true` so that stopping reaches every process the script started. Stdout is cut into lines (a partial line waits for its newline), each line is clipped, and blank lines are skipped. The first pending line starts a 500 ms timer; when it fires, the batch becomes one notice.
 
-Before a notice goes out, the registry forgets the monitor's notices older than an hour and checks the budget. `deliver` in `src/index.ts` builds a user message with source `{ kind: 'lsy-tool-monitor', form: 'notice' }` for the Session's agent. An idle agent receives it through `followup()`, which wakes it; a busy agent receives it through `inject()` and reads it at its next step. The registry keeps the 20 most recent ended monitors for `monitor_list`.
+Before a notice goes out, the registry forgets the monitor's notices older than an hour and checks the budget. `createDelivery` in `src/delivery.ts` builds a user message with source `{ kind: 'lsy-tool-monitor', form: 'notice' }` for the Session's agent. An idle agent receives it through `followup()`, which wakes it; a busy agent receives it through `inject()` and reads it at its next step. The registry keeps the 20 most recent ended monitors for `monitor_list`.
 
 After a restart, Sessions resume lazily: `ctx.agents` has no agent for a Session until something resolves it. When the owner's agent is not loaded, `deliver` asks Session persistence (`stat`) whether the Session still exists, then resolves it through `ctx.sessionController.resolveAgent`, which resumes it; later notices of that Session wait in order. Only a definite answer stops the monitor: persistence no longer has the Session, the Session is a subagent's (only its parent's subagent runtime resumes it), or the controller answers `session/not-found`. Any other failure, such as `session/agent-busy` or `session/writer-held`, drops that notice with a warning and keeps the monitor. The sweep every 60 s applies the same rule, so a Session whose agent is only unloaded keeps its monitors.
 
@@ -103,7 +103,12 @@ The registry reports every ending except disposal to the plugin as soon as its r
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Plugin entry: the three tool definitions, argument validation, delivery to the agent |
+| [`src/index.ts`](src/index.ts) | Plugin entry: wires the registry, delivery, store, handover, and tools; the sweep and disposal |
+| [`src/tools.ts`](src/tools.ts) | The three tool definitions and the argument validation of `monitor_start` |
+| [`src/delivery.ts`](src/delivery.ts) | Delivery of a notice to the agent (waking an idle one, loading an unloaded one) and the liveness check the sweep uses |
+| [`src/persistence.ts`](src/persistence.ts) | The ordered store writes and the silent restore of stored monitors after a host restart |
+| [`src/handover.ts`](src/handover.ts) | Moves a conversation's running monitors to its new Session |
+| [`src/error-text.ts`](src/error-text.ts) | Error message text for logs |
 | [`src/monitor.ts`](src/monitor.ts) | `MonitorRegistry`: processes, batching, budget, deadlines, restore, and the notice text |
 | [`src/storage.ts`](src/storage.ts) | The `lsy_tool_monitor` storage domain: one record per running monitor |
 

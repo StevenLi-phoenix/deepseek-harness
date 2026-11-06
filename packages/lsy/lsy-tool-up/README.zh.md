@@ -69,7 +69,13 @@ bili-svc 没有按 id 取单条评论的端点，所以证据校验先从这个�
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 插件入口：九个读工具、两个回复工具、`bili_channel_note`、笔记块和 `ctx.biliEvidence` |
+| [`src/index.ts`](src/index.ts) | 插件入口：配置，以及把下面各部分装配起来的 `apply` |
+| [`src/tools.ts`](src/tools.ts) | 九个读工具和两个回复工具（以表格形式）及其注册 |
+| [`src/bili-svc.ts`](src/bili-svc.ts) | bili-svc 客户端：地址、`up` 令牌、唯一的 HTTP 调用，以及不可信数据的包装 |
+| [`src/session-gate.ts`](src/session-gate.ts) | 哪个 Session 可以写笔记或要证据，以及每轮的调用上限 |
+| [`src/notes-tool.ts`](src/notes-tool.ts) | `bili_channel_note`、每条笔记都要过的文本守卫，以及把笔记显示给 Session 的钩子 |
+| [`src/evidence-service.ts`](src/evidence-service.ts) | `ctx.biliEvidence` 和创作者自己的账号 id |
+| [`src/values.ts`](src/values.ts) | 错误文本、参数转换和穷尽性检查 |
 | [`src/notes.ts`](src/notes.ts) | 笔记文件和笔记块 |
 | [`src/pii.ts`](src/pii.ts) | 笔记的个人信息规则 |
 | [`src/evidence.ts`](src/evidence.ts) | 评论解析、rpid 缓存、发送者 key 和盐 |
