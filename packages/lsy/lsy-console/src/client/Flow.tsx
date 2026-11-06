@@ -1,7 +1,8 @@
 /**
  * The message flow page, its own place in the sidebar. It answers, in this order: is anything broken and what does that touch; how
  * much came in and how much of it reached the owner; which ways are in use; and where one event went and what became of it. The
- * topology is fixed in `flow-graph.ts`; health comes from the overview route and the counts from the activity route, both on the
+ * topology starts from `flow-graph.ts` and follows the routes the agent has changed (`flow-live.ts`); health comes from the
+ * overview route and the counts from the activity route, both on the
  * same 10 s poll, and all spans arrive together, so switching one needs no request.
  */
 
@@ -15,6 +16,7 @@ import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import { FLOW_WINDOWS, type FlowActivityView, type FlowRecentItem, type FlowWindow, type OverviewView, type ServiceCard } from '../views.ts'
 import { MANAGE_SECTION, statusText } from './cards.ts'
 import { GRAPH, GRAPH_BUILT, PLANNED_COUNT } from './flow-graph.ts'
+import { liveGraph, routeSignature } from './flow-live.ts'
 import { factOf, stopsOf, titleOf, type BoxFact } from './flow-view.ts'
 import { FlowCanvas } from './FlowCanvas.tsx'
 import { FlowSide } from './FlowDetail.tsx'
@@ -143,8 +145,15 @@ export function FlowPage({ useOverview, useActivity, refresh, canManage, openSet
     console.info(`[lsy-console] flow open ${GRAPH.nodes.length} boxes, ${GRAPH.edges.length} arrows`)
   }, [])
 
-  const graph = showPlanned ? GRAPH : GRAPH_BUILT
   const view = activity.data
+  // Laid out again only when a route changes, not on each poll.
+  const routes = view?.routes
+  const signature = useMemo(() => routeSignature(routes ?? []), [routes])
+  const graph = useMemo(
+    () => liveGraph(showPlanned ? GRAPH : GRAPH_BUILT, routes ?? []),
+    // The signature stands for the routes that shape the picture.
+    [showPlanned, signature],
+  )
   const now = view?.checkedAt ?? overview.data?.checkedAt ?? 0
   const cards = useMemo(() => new Map<string, ServiceCard>((overview.data?.cards ?? []).map(card => [card.id, card])), [overview.data])
   const facts = useMemo(() => {
@@ -251,6 +260,8 @@ export function FlowPage({ useOverview, useActivity, refresh, canManage, openSet
           node={chosen === null ? undefined : graph.node(chosen)}
           fact={chosen === null ? undefined : facts.get(chosen)}
           recent={view?.recent ?? []}
+          routes={view?.routes ?? []}
+          changes={view?.changes ?? []}
           ignored={view?.windows[span].ignored ?? 0}
           followed={followed?.id ?? null}
           now={now}

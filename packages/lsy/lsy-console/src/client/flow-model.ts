@@ -45,6 +45,8 @@ export interface FlowNode {
   readonly needs?: ServiceId
   /** For a `partial` or `planned` box: how the running service differs from the drawing, in the owner's words like a title of its own. */
   readonly gap?: string
+  /** The route this box was redrawn or added for, because the flow changed at run time. */
+  readonly route?: string
 }
 
 /** One arrow. */

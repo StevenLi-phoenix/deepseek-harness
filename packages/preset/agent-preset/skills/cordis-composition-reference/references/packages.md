@@ -362,7 +362,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-lsy-tool-qq` | yes | Read-only qq_groups, qq_digest, qq_recent, and qq_search tools: the agent reads what the QQ observer recorded and digested |
 | `@deepseek-ai/dsh-lsy-tool-up` | yes | Model-facing up_* tools for the creator account's reads and Reply Gate replies (bili-svc) |
 | `@deepseek-ai/dsh-lsy-tool-voice` | no | Model-facing speak tool: turn text into speech and send the audio to the owner over the lsy WeChat channel |
-| `@deepseek-ai/dsh-lsy-tool-watch` | yes | Model-facing watch_create, watch_list, and watch_delete tools over the lsy event bus and GitHub sensor |
+| `@deepseek-ai/dsh-lsy-tool-watch` | yes | Model-facing watch_create, watch_list, watch_delete, flow_read, and flow_edit tools over the lsy event bus and GitHub sensor |
 | `@deepseek-ai/dsh-lsy-tool-wechat` | no | Model-facing wechat_send_file tool: send a local file to the owner over the lsy WeChat channel |
 | `@deepseek-ai/dsh-lsy-voice` | yes | Voice for the owner's agents: text to speech through feiyu or the Mac mini TTS service, and speech to text through the asr-service (off by default) |
 | `@deepseek-ai/dsh-lsy-wechat` | yes | WeChat (iLink bot) channel: owner chat Session, notification delivery, and ctx.lsyNotifier for the lsy event bus |

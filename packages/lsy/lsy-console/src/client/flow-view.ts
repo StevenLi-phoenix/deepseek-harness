@@ -3,7 +3,7 @@
  * overview's cards and the dictionary, so the box, the detail card, and the lists of neighbours read the same words.
  */
 
-import type { FlowActivityView, FlowRecentItem, FlowWindow, ServiceCard, Tone } from '../views.ts'
+import type { FlowActivityView, FlowRecentItem, FlowRoute, FlowWindow, ServiceCard, Tone } from '../views.ts'
 import { statusText } from './cards.ts'
 import { ago, clock, type Translate } from './format.ts'
 import type { FlowGraph, FlowNode, Wiring } from './flow-model.ts'
@@ -95,6 +95,17 @@ const whenText = (at: number, { now, t }: FactSources): string =>
   new Date(at).toDateString() === new Date(now).toDateString() ? clock(at) : ago(at, now, t)
 
 /**
+ * The route a box stands for.
+ * @param node - the box.
+ * @param routes - every route.
+ * @returns the route of a box that shows one, or undefined.
+ */
+export function routeOfBox(node: FlowNode, routes: readonly FlowRoute[]): FlowRoute | undefined {
+  const ids = node.tracks?.subscriptions
+  return ids === undefined ? undefined : routes.find(route => ids.includes(route.id))
+}
+
+/**
  * The one line a box shows: what is wrong when something is, otherwise what passed through it. A healthy box says what it did,
  * never that it is healthy.
  * @param node - the box.
@@ -104,6 +115,9 @@ const whenText = (at: number, { now, t }: FactSources): string =>
 export function factOf(node: FlowNode, sources: FactSources): BoxFact {
   const { cards, activity, span, t } = sources
   if (wiringOf(node) === 'planned') return { state: 'planned', text: t('flow.fact.planned'), count: 0, lastAt: null }
+  const route = routeOfBox(node, activity?.routes ?? [])
+  if (route?.removed === true) return { state: 'idle', text: t('flow.fact.removed'), count: 0, lastAt: null }
+  if (route?.paused === true) return { state: 'idle', text: t('flow.fact.paused'), count: 0, lastAt: null }
   const own = node.service === undefined || node.service === 'dsh' ? undefined : cards.get(node.service)
   if (own?.tone === 'down') return { state: 'bad', text: statusText(own, t), count: 0, lastAt: null }
   const need = node.needs === undefined ? undefined : cards.get(node.needs)

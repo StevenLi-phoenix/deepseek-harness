@@ -1,6 +1,7 @@
 /**
  * Model-facing `watch_create`, `watch_list`, and `watch_delete` tools over the
- * lsy event bus and GitHub sensor, and `flow_read` and `flow_edit` over the bus's whole notification flow. Mounting the plugin registers them in the
+ * lsy event bus and GitHub sensor, and `flow_read` and `flow_edit` over the bus's notification flow.
+ * Mounting the plugin registers them in the
  * mounting scope, so a preset decides which agents may change what the
  * service monitors; watches are global to the instance, not to a Session.
  * @module @deepseek-ai/dsh-lsy-tool-watch

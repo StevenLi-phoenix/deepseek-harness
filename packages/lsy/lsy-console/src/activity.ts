@@ -6,7 +6,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import {
-  FLOW_WINDOWS, type FlowActivityView, type FlowOutcome, type FlowRecentItem, type FlowSourceActivity,
+  FLOW_WINDOWS, type FlowActivityView, type FlowChangeRow, type FlowOutcome, type FlowRecentItem, type FlowRoute, type FlowSourceActivity,
   type FlowSubscriptionActivity, type FlowWindow, type FlowWindowActivity,
 } from './views.ts'
 
@@ -16,6 +16,12 @@ const WINDOW_MS: Readonly<Record<FlowWindow, number>> = { '1h': HOUR_MS, '24h': 
 const RECENT_MAX = 50
 /** Longest label sent to the browser, in characters. */
 const TITLE_MAX = 80
+/** Longest instructions sent to the browser, in characters. */
+const INSTRUCTIONS_MAX = 1200
+/** Changes of the flow on the page. */
+const CHANGES_MAX = 8
+/** Source of the events that carry a route's answer on to the next route. */
+const FLOW_SOURCE = 'flow'
 
 /** The fields read of a stored event. */
 interface EventRow {
@@ -35,10 +41,36 @@ interface BatchRow {
   readonly createdAt: number
   readonly status: 'dispatched' | 'delivered' | 'completed' | 'failed'
   readonly silent?: boolean
+  readonly notSent?: boolean
+}
+
+/** The fields read of a route. */
+interface RouteRow {
+  readonly id: string
+  readonly origin: 'config' | 'agent'
+  readonly action: 'notify' | 'session'
+  readonly sources: readonly string[]
+  readonly kinds: readonly string[]
+  readonly subjects: readonly string[]
+  readonly paused?: boolean
+  readonly removed?: boolean
+  readonly changed?: { readonly at: number }
+  readonly result?: 'notify' | 'urgent' | 'main' | 'quiet' | 'event'
+  readonly downstream: readonly string[]
+  readonly session?: { readonly instructions?: string }
+}
+
+/** The fields read of a change. */
+interface ChangeRow {
+  readonly id: string
+  readonly at: number
+  readonly op: FlowChangeRow['op']
+  readonly route: string
+  readonly note?: string
 }
 
 /** What the page reads of the bus and of the presence service. */
-interface BusView { events(): EventRow[]; batches(): BatchRow[] }
+interface BusView { events(): EventRow[]; batches(): BatchRow[]; flowRoutes(): RouteRow[]; flowHistory(limit: number): ChangeRow[] }
 interface PresenceReader { view(): { asleep: boolean; deferred: number } }
 
 type BatchResult = 'sent' | 'silent' | 'failed' | 'working'
@@ -46,7 +78,7 @@ type BatchResult = 'sent' | 'silent' | 'failed' | 'working'
 function resultOf(batch: BatchRow): BatchResult {
   if (batch.status === 'failed') return 'failed'
   if (batch.status === 'dispatched') return 'working'
-  return batch.silent === true ? 'silent' : 'sent'
+  return batch.silent === true || batch.notSent === true ? 'silent' : 'sent'
 }
 
 const later = (a: number | null, b: number): number => a === null || b > a ? b : a
@@ -57,7 +89,8 @@ function windowOf(events: readonly EventRow[], batches: readonly BatchRow[], sin
   const funnel = { events: 0, batches: 0, sent: 0, silent: 0, failed: 0 }
   let ignored = 0
   for (const event of events) {
-    if (event.receivedAt < since) continue
+    // A route's answer going on to the next route is not a new thing that happened.
+    if (event.receivedAt < since || event.source === FLOW_SOURCE) continue
     funnel.events += 1
     if (event.outcome !== 'accepted' || event.subscriptions.length === 0) ignored += 1
     const seen = sources[event.source]
@@ -110,6 +143,23 @@ function recentOf(events: readonly EventRow[], batches: readonly BatchRow[]): Fl
     }))
 }
 
+function routeOf(route: RouteRow): FlowRoute {
+  const instructions = route.action === 'session' ? route.session?.instructions : undefined
+  return {
+    id: route.id,
+    origin: route.origin,
+    sources: route.sources,
+    kinds: route.kinds,
+    subjects: route.subjects,
+    paused: route.paused === true,
+    removed: route.removed === true,
+    changedAt: route.changed?.at ?? null,
+    result: route.action === 'notify' ? 'direct' : route.result ?? 'notify',
+    downstream: route.downstream,
+    instructions: instructions === undefined ? null : Array.from(instructions).slice(0, INSTRUCTIONS_MAX).join(''),
+  }
+}
+
 /**
  * Read the activity of the message flow.
  * @param ctx - Host context; the bus and the presence service are optional.
@@ -129,6 +179,8 @@ export function collectActivity(ctx: Context, now: number): FlowActivityView {
     ) as Record<FlowWindow, FlowWindowActivity>,
     recent: recentOf(events, batches),
     presence: view === undefined ? null : { asleep: view.asleep, deferred: view.deferred },
+    routes: bus?.flowRoutes().map(routeOf) ?? [],
+    changes: bus?.flowHistory(CHANGES_MAX).map(({ id, at, op, route, note }) => ({ id, at, op, route, note: note ?? null })) ?? [],
     checkedAt: now,
   }
 }

@@ -5,10 +5,10 @@
  */
 
 import type { ReactNode } from 'react'
-import type { FlowOutcome, FlowRecentItem } from '../views.ts'
+import type { FlowChangeRow, FlowOutcome, FlowRecentItem, FlowRoute } from '../views.ts'
 import { clock, ago, type Translate } from './format.ts'
 import type { FlowGraph, FlowNode } from './flow-model.ts'
-import { noteOf, rowsThrough, titleOf, wiringOf, type BoxFact } from './flow-view.ts'
+import { noteOf, routeOfBox, rowsThrough, titleOf, wiringOf, type BoxFact } from './flow-view.ts'
 import css from './Console.module.css'
 
 /** The word for each outcome. */
@@ -34,12 +34,53 @@ function FeedRow({ item, now, following, onFollow, translate }: {
   )
 }
 
+/** The rule of one route: what it takes and where its answer goes. */
+function RouteRule({ route, translate }: { route: FlowRoute; translate: Translate }): ReactNode {
+  const sep = translate('flow.sep')
+  const takes = [...route.sources, ...route.kinds, ...route.subjects].join(sep)
+  return (
+    <>
+      <h3 className={css.flowSideHead}>{translate('flow.rule.title')}</h3>
+      <p className={css.flowSideNote}>{translate('flow.rule.takes', { list: takes })}</p>
+      <p className={css.flowSideNote}>{translate(`flow.rule.result.${route.result}`, { list: route.downstream.join(sep) })}</p>
+      {route.instructions === null
+        ? null
+        : (
+          <details className={css.flowWiring}>
+            <summary>{translate('flow.rule.instructions')}</summary>
+            <p className={css.flowSideNote}>{route.instructions}</p>
+          </details>
+        )}
+    </>
+  )
+}
+
+/** The latest changes of the flow. */
+function ChangeList({ changes, now, translate }: { changes: readonly FlowChangeRow[]; now: number; translate: Translate }): ReactNode {
+  if (changes.length === 0) return null
+  return (
+    <>
+      <h3 className={css.flowSideHead}>{translate('flow.changes.title')}</h3>
+      {changes.map((change) => {
+        const today = new Date(change.at).toDateString() === new Date(now).toDateString()
+        const when = today ? clock(change.at) : ago(change.at, now, translate)
+        const what = `${when} ${translate(`flow.changes.op.${change.op}`)} ${change.route}`
+        return <p key={change.id} className={css.flowSideNote} data-change={change.op}>{change.note === null ? what : `${what}：${change.note}`}</p>
+      })}
+    </>
+  )
+}
+
 /** What the side is given. */
 export interface FlowSideProps {
   graph: FlowGraph
   node: FlowNode | undefined
   fact: BoxFact | undefined
   recent: readonly FlowRecentItem[]
+  /** Every route as it runs now. */
+  routes: readonly FlowRoute[]
+  /** Latest changes of the flow. */
+  changes: readonly FlowChangeRow[]
   /** Events of the span the list leaves out, because nothing took them. */
   ignored: number
   /** The row being followed, by id. */
@@ -59,7 +100,7 @@ export interface FlowSideProps {
  * @returns the side panel.
  */
 export function FlowSide({
-  graph, node, fact, recent, ignored, followed, now, canManage, onManage, onFollow, onBack, translate,
+  graph, node, fact, recent, routes, changes, ignored, followed, now, canManage, onManage, onFollow, onBack, translate,
 }: FlowSideProps): ReactNode {
   const list = (items: readonly FlowRecentItem[]): ReactNode => (
     <div className={css.flowFeed}>
@@ -75,6 +116,7 @@ export function FlowSide({
         <p className={css.flowSideNote}>{translate('flow.feed.hint')}</p>
         {recent.length === 0 ? <p className={css.flowSideNote}>{translate('flow.feed.empty')}</p> : list(recent)}
         {ignored > 0 ? <p className={css.flowFeedRest}>{translate('flow.feed.ignored', { count: ignored })}</p> : null}
+        <ChangeList changes={changes} now={now} translate={translate} />
       </aside>
     )
   }
@@ -87,6 +129,7 @@ export function FlowSide({
     .join(translate('flow.sep'))
   const through = rowsThrough(graph, node.id, recent)
   const note = noteOf(node, translate)
+  const route = routeOfBox(node, routes)
   const wiring = wiringOf(node)
   const { manage, via, gap } = node
   const broken = fact?.state === 'bad' || fact?.state === 'hit'
@@ -104,6 +147,7 @@ export function FlowSide({
       {fact === undefined || fact.text === '' ? null : <p className={css.flowSideFact} data-state={fact.state}>{fact.text}</p>}
       {note === undefined ? null : <p className={css.flowSideNote}>{note}</p>}
       {action}
+      {route === undefined ? null : <RouteRule route={route} translate={translate} />}
       <h3 className={css.flowSideHead}>{translate('flow.side.through')}</h3>
       {through.length === 0 ? <p className={css.flowSideNote}>{translate('flow.side.none')}</p> : list(through)}
       <h3 className={css.flowSideHead}>{translate('flow.side.around')}</h3>

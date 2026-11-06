@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/lsy/lsy-tool-watch/README.md
 /:
-  en: 70446637f284cc89
-  zh: bed4988159403f2e
+  en: 34fc8a4b9e178b58
+  zh: 63d881cba3042f15
 /deepseek-ai-dsh-lsy-tool-watch:
   en: 7037ac9b9d0e9b80
   zh: d0e4822bde926eb5
@@ -26,6 +26,9 @@
 /deepseek-ai-dsh-lsy-tool-watch/use-this-package/minimal-configuration:
   en: f573c0ab21f5575f
   zh: eb947915712297d7
+/deepseek-ai-dsh-lsy-tool-watch/use-this-package/the-notification-flow:
+  en: 8de00f6fa745957a
+  zh: 799129c58dbfb1f6
 /deepseek-ai-dsh-lsy-tool-watch/understand-the-implementation:
   en: 2e9f72932ad0b65c
   zh: 795602e525001f6e

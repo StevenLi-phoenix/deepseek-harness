@@ -100,6 +100,12 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 
 Matching, flushing, restart recovery, and the webhook Session rule all use the merged set.
 
+### Notification flow
+
+`flowRoutes()` lists every route, whichever origin it has, with where a Session route's answer goes (`result`) and which routes take it (`downstream`). `editFlow()` changes one at run time: `set` changes fields or creates the route, `remove` takes it out, `reset` puts a configuration route back as written, and `pause` and `resume` stop and restart it. A configuration route keeps its row and the change is stored over it, so a restart or a deploy keeps the change. `flowHistory()` holds the latest 200 changes with the route before and after.
+
+`session.result` says where an answer goes: `notify` (the default, or `quiet` for a `quietResult` row), `urgent` (a note past do-not-disturb), `main` (the owner's main agent), `quiet`, or `event`. An `event` answer is published with source `flow` and kind `flow.<route id>.result`, and any route naming them takes it, so routes chain; `NO_REPLY` stops it. `editFlow()` refuses a loop with `LsyFlowError`, and an answer nothing can take goes to the notifier instead.
+
 ### Persistent Sessions
 
 With `session.persistent.enabled`, the first batch creates the subscription's Session through the webhook runtime as usual, and the bus stores its id in the `persistent` table once the Session's first message arrives. Each later batch enters that Session as a new turn (`Agent.followup()` through `ctx.sessionController.resolveAgent()`), with the same prompt text and the same message source a new Session's first message has (`webhook`, provider `lsy-event`, the batch id as delivery id), so turn-origin checks such as lsy-taint's treat both alike. The preset owns compaction (`dsh-compaction-basic`'s `thresholdRatio`); the bus keeps the text of the Session's latest `compaction/summary` and counts compactions.

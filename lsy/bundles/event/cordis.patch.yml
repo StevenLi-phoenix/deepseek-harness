@@ -157,7 +157,7 @@
                 the session. Never send anything to WeChat from this session (no wechat_send_file, no
                 text), never confirm, reject, or hand off here, and answer NO_REPLY: the owner asks to
                 see a preview in their own words, and only then is it sent.
-          # A video made or recorded on another machine (message flow page, "本地视频上传" and "要剪吗？"):
+          # A video made or recorded on another machine (message flow page, "本地视频上传" and "需要剪辑？"):
           # the Session decides whether it needs cutting. Cutting runs the autocut skill's pipelines, which stop at the
           # owner's confirmation; no cutting asks the owner in one sentence whether to upload, and only the owner's yes
           # starts the hand-over, so the skill's confirmation gate stays shut until then.

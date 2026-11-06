@@ -269,6 +269,37 @@ export interface FlowRecentItem {
   readonly outcome: FlowOutcome
 }
 
+/** Where a route's answer goes: `direct` is a notify route, which runs no model. */
+export type FlowRouteResult = 'direct' | 'notify' | 'urgent' | 'main' | 'quiet' | 'event'
+
+/** One route of the notification flow as it runs now. */
+export interface FlowRoute {
+  readonly id: string
+  readonly origin: 'config' | 'agent'
+  readonly sources: readonly string[]
+  readonly kinds: readonly string[]
+  readonly subjects: readonly string[]
+  readonly paused: boolean
+  /** A deployment's route taken out at run time. */
+  readonly removed: boolean
+  /** Latest run-time change of a deployment's route, or null. */
+  readonly changedAt: number | null
+  readonly result: FlowRouteResult
+  /** Routes that take its answer. */
+  readonly downstream: readonly string[]
+  /** What its Session is told to do; null for a notify route. */
+  readonly instructions: string | null
+}
+
+/** One change of the notification flow. */
+export interface FlowChangeRow {
+  readonly id: string
+  readonly at: number
+  readonly op: 'set' | 'remove' | 'reset' | 'pause' | 'resume'
+  readonly route: string
+  readonly note: string | null
+}
+
 /** Body of `GET api/lsy.flow`. */
 export interface FlowActivityView {
   readonly windows: Readonly<Record<FlowWindow, FlowWindowActivity>>
@@ -276,6 +307,10 @@ export interface FlowActivityView {
   readonly recent: readonly FlowRecentItem[]
   /** Null when `lsy-presence` is not mounted. */
   readonly presence: { readonly asleep: boolean; readonly deferred: number } | null
+  /** Every route as it runs now, so the picture draws what the agent has changed. */
+  readonly routes: readonly FlowRoute[]
+  /** Latest changes of the flow, newest first. */
+  readonly changes: readonly FlowChangeRow[]
   readonly checkedAt: number
 }
 
