@@ -3,14 +3,14 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/fork/fork-tool-wechat/README.md
 /:
-  en: b5ca50b0a742a760
-  zh: beef20c54e44f11b
+  en: b46c8f53f36579cf
+  zh: c31bab09a7422fba
 /deepseek-ai-dsh-fork-tool-wechat:
   en: fabcdd234432a7b6
   zh: 5f169c96342d1051
 /deepseek-ai-dsh-fork-tool-wechat/summary:
-  en: da162f66daec7f26
-  zh: 7bfd97b408100fe8
+  en: 60d63a72a9790e8a
+  zh: 95c0d88eb47ce49d
 /deepseek-ai-dsh-fork-tool-wechat/table-of-contents:
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
@@ -18,8 +18,8 @@
   en: a7941623eb6e7e85
   zh: ef887bd14a2b1471
 /deepseek-ai-dsh-fork-tool-wechat/understand-the-implementation:
-  en: 19f2347d8fb8aaf2
-  zh: ed04d83c95d82585
+  en: 128448f84153ca32
+  zh: 9b2c552ba4577b12
 /deepseek-ai-dsh-fork-tool-wechat/further-exploration:
   en: fbb0c043ed951db2
   zh: 9c5b414e553023d6
@@ -38,6 +38,30 @@
 /deepseek-ai-dsh-fork-tool-wechat/model-experience/send-tool/kv-cache-effect:
   en: 5b38c23791d4786e
   zh: 73534032522a91f8
+/deepseek-ai-dsh-fork-tool-wechat/model-experience/defer-tool:
+  en: fff7902f3441388c
+  zh: e6a5c77e352f1713
+/deepseek-ai-dsh-fork-tool-wechat/model-experience/defer-tool/what-the-model-sees:
+  en: e78818e58c968d93
+  zh: bcefec3b50f0fde5
+/deepseek-ai-dsh-fork-tool-wechat/model-experience/defer-tool/token-effect:
+  en: 8e25e1233f04e7c0
+  zh: 6c7312be28070a77
+/deepseek-ai-dsh-fork-tool-wechat/model-experience/defer-tool/kv-cache-effect:
+  en: 5b38c23791d4786e
+  zh: 500f91bdeba9d59b
+/deepseek-ai-dsh-fork-tool-wechat/model-experience/defer-results:
+  en: 838fff31fc4edfb1
+  zh: c9695186ef74920f
+/deepseek-ai-dsh-fork-tool-wechat/model-experience/defer-results/what-the-model-sees:
+  en: 6a9e83a5b48f20ad
+  zh: c863cb4916090791
+/deepseek-ai-dsh-fork-tool-wechat/model-experience/defer-results/token-effect:
+  en: 7aa5c06d9b372bc1
+  zh: 67b2b39ce1a8003f
+/deepseek-ai-dsh-fork-tool-wechat/model-experience/defer-results/kv-cache-effect:
+  en: 2fbf2175168e8244
+  zh: b48070db9f5a496f
 /deepseek-ai-dsh-fork-tool-wechat/model-experience/send-results:
   en: eac0d9475e171f8e
   zh: 603f1886906cfa8d
@@ -51,8 +75,8 @@
   en: 2fbf2175168e8244
   zh: fdc53d49bb7c3bca
 /deepseek-ai-dsh-fork-tool-wechat/known-limitations-and-deferred-work:
-  en: 1e1eb457997bd21d
-  zh: 0e2c0e04ac3531db
+  en: aa52bac6590f92f8
+  zh: 65c64d4e02d1e9cb
 /deepseek-ai-dsh-fork-tool-wechat/known-limitations-and-deferred-work/dev-note:
   en: b00afaa29a73b626
   zh: bf0ebe65b08dd824

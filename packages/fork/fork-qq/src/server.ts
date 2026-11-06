@@ -23,6 +23,9 @@ const MAX_BODY_BYTES = 256 * 1024
 /** Heartbeat of the event stream. */
 const PING_MS = 15_000
 
+/** What a handler returns once it has answered. */
+type Handled = true
+
 /** Options of {@link startRecorderServer}. */
 export interface RecorderServerOptions {
   recorder: QqRecorder
@@ -53,9 +56,6 @@ export interface RecorderServer {
   close(): Promise<void>
 }
 
-/** What a handler returns once it has answered. */
-type Handled = true
-
 /** Failure with an HTTP status and a stable code. */
 class HttpError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) {
@@ -82,6 +82,204 @@ function listen(server: Server, ...args: [string] | [number, string]): Promise<v
   })
 }
 
+/** Answers a request with a JSON body checked against its schema, or with a structured error. */
+interface Responder {
+  /** The protocol tag every answer carries. */
+  readonly tag: string
+  send: <T extends z.ZodType>(res: ServerResponse, status: number, schema: T, value: z.input<T>) => Handled
+  sendError: (res: ServerResponse, status: number, code: string, message: string) => void
+}
+
+function createResponder(logger: RecorderLogger, tag: string): Responder {
+  const sendError = (res: ServerResponse, status: number, code: string, message: string): void => {
+    if (res.headersSent) { res.end(); return }
+    res.writeHead(status, { 'content-type': 'application/json', [PROTOCOL_HEADER]: tag, 'cache-control': 'no-store' })
+    res.end(JSON.stringify(ErrorDto.parse({ error: { code, message } })))
+  }
+  const send: Responder['send'] = (res, status, schema, value) => {
+    // The recorder's own answers are checked too: a drift between the schema and the code fails here, not in DSH.
+    let body: string
+    try {
+      body = JSON.stringify(schema.parse(value))
+    } catch (error: unknown) {
+      logger.error(`qq-recorder: an answer did not match its schema: ${error instanceof ZodError ? error.issues[0]?.path.join('.') ?? '' : String(error)}`)
+      sendError(res, 500, 'internal', 'the answer did not match its schema')
+      return true
+    }
+    res.writeHead(status, { 'content-type': 'application/json', [PROTOCOL_HEADER]: tag, 'cache-control': 'no-store' })
+    res.end(body)
+    return true
+  }
+  return { tag, send, sendError }
+}
+
+async function readBody(req: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = []
+  let size = 0
+  for await (const chunk of req as AsyncIterable<Buffer>) {
+    size += chunk.length
+    if (size > MAX_BODY_BYTES) throw new HttpError(413, 'too-large', `the body is larger than ${MAX_BODY_BYTES} bytes`)
+    chunks.push(chunk)
+  }
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
+  } catch {
+    throw new HttpError(400, 'invalid-json', 'the body is not JSON')
+  }
+}
+
+const query = <T extends z.ZodType>(url: URL, schema: T): z.output<T> => schema.parse(Object.fromEntries(url.searchParams))
+
+const GroupQuery = z.object({ groupId: z.string().regex(/^[0-9]{3,20}$/) })
+const ListQuery = GroupQuery.extend({
+  sinceMs: z.coerce.number().int().nonnegative(),
+  limit: z.coerce.number().int().min(1).max(1000),
+  userId: z.string().regex(/^[0-9]{1,30}$/).optional(),
+})
+const PageQuery = GroupQuery.extend({ after: z.string().max(40).optional(), limit: z.coerce.number().int().min(1).max(5000) })
+const LoginQuery = z.object({ fresh: z.enum(['1', '0']).optional() })
+
+/** One request as a route handler sees it. */
+interface RouteContext {
+  readonly req: IncomingMessage
+  readonly res: ServerResponse
+  readonly url: URL
+  /** The groups of the pattern the path matched; null for an exact path. */
+  readonly match: RegExpExecArray | null
+}
+
+/** A path, the one method it takes, and what answers it. */
+interface Route {
+  readonly method: 'GET' | 'POST' | 'PUT'
+  readonly run: (context: RouteContext) => Handled | Promise<Handled>
+}
+
+/** What the routes need from the server. */
+interface RouteDeps {
+  readonly recorder: QqRecorder
+  readonly respond: Responder
+  /** The event streams open now. */
+  readonly streams: Set<ServerResponse>
+  readonly major: number
+  readonly minor: number
+  readonly build: string
+  readonly pingMs: number
+}
+
+/** NDJSON event stream: the status first, then every recorder event, with a heartbeat. */
+function streamEvents({ recorder, respond, streams, pingMs }: RouteDeps, { req, res }: RouteContext): Handled {
+  res.writeHead(200, { 'content-type': 'application/x-ndjson', [PROTOCOL_HEADER]: respond.tag, 'cache-control': 'no-store' })
+  streams.add(res)
+  const write = (event: z.input<typeof EventDto>): void => {
+    if (res.writableEnded) return
+    res.write(`${JSON.stringify(EventDto.parse(event))}\n`)
+  }
+  write({ type: 'status', status: recorder.status() })
+  const off = recorder.subscribe(write)
+  const timer = setInterval(() => { write({ type: 'ping', at: Date.now() }) }, pingMs)
+  timer.unref()
+  const done = (): void => { clearInterval(timer); off(); streams.delete(res) }
+  req.on('close', done)
+  res.on('close', done)
+  return true
+}
+
+/** Recent messages of a group when `sinceMs` is given, otherwise one page of its history. */
+function listMessages({ recorder, respond }: RouteDeps, { res, url }: RouteContext): Handled {
+  if (url.searchParams.has('sinceMs')) {
+    const q = query(url, ListQuery)
+    return respond.send(res, 200, MessageListDto,
+      recorder.recent(q.groupId, { sinceMs: q.sinceMs, limit: q.limit, ...q.userId === undefined ? {} : { userId: q.userId } }))
+  }
+  const q = query(url, PageQuery)
+  try {
+    return respond.send(res, 200, MessagePageDto, recorder.page(q.groupId, q.after, q.limit))
+  } catch (error: unknown) {
+    if (error instanceof RangeError) throw new HttpError(400, 'invalid-cursor', error.message)
+    throw error
+  }
+}
+
+/** A saved picture: the bytes, with its description in a header. */
+async function serveMedia({ recorder, respond }: RouteDeps, { res, match }: RouteContext): Promise<Handled> {
+  try {
+    const file = await recorder.mediaFile(match?.[1] ?? '')
+    res.writeHead(200, {
+      'content-type': file.header.contentType, 'content-length': file.bytes.length, [MEDIA_HEADER]: JSON.stringify(MediaHeaderDto.parse(file.header)),
+      [PROTOCOL_HEADER]: respond.tag, 'cache-control': 'no-store',
+    })
+    res.end(file.bytes)
+    return true
+  } catch (error: unknown) {
+    if (error instanceof MediaNotSaved) throw new HttpError(404, 'not-saved', error.message)
+    if (error instanceof RangeError) throw new HttpError(400, 'invalid-ref', error.message)
+    throw error
+  }
+}
+
+async function putConfig({ recorder, respond }: RouteDeps, { req, res }: RouteContext): Promise<Handled> {
+  const body = RecorderConfigDto.parse(await readBody(req))
+  try {
+    return respond.send(res, 200, ConfigAppliedDto, recorder.applyConfig(body))
+  } catch (error: unknown) {
+    if (error instanceof ConfigRejected) throw new HttpError(422, 'config-rejected', error.message)
+    throw error
+  }
+}
+
+/** Every route: exact paths first, then the patterns with a captured reference. */
+interface Routes {
+  readonly exact: ReadonlyMap<string, Route>
+  readonly patterns: ReadonlyArray<Route & { readonly pattern: RegExp }>
+}
+
+function buildRoutes(deps: RouteDeps): Routes {
+  const { recorder, respond, major, minor } = deps
+  const exact = new Map<string, Route>([
+    [PATHS.hello, {
+      method: 'GET',
+      run: ({ res }) => respond.send(res, 200, HelloDto, {
+        protocol: { name: PROTOCOL.name, major, minor }, build: deps.build, startedAt: recorder.startedAt,
+      }),
+    }],
+    [PATHS.status, { method: 'GET', run: ({ res }) => respond.send(res, 200, StatusDto, recorder.status()) }],
+    [PATHS.events, { method: 'GET', run: context => streamEvents(deps, context) }],
+    [PATHS.groups, { method: 'GET', run: ({ res }) => respond.send(res, 200, GroupDto.array(), recorder.groups()) }],
+    [PATHS.messages, { method: 'GET', run: context => listMessages(deps, context) }],
+    [PATHS.search, {
+      method: 'POST',
+      run: async ({ req, res }) => {
+        const body = SearchRequestDto.parse(await readBody(req))
+        return respond.send(res, 200, MessageListDto,
+          recorder.search(body.query, { ...body.groupId === undefined ? {} : { groupId: body.groupId }, limit: body.limit }))
+      },
+    }],
+    [PATHS.lookup, {
+      method: 'POST',
+      run: async ({ req, res }) => {
+        const body = LookupRequestDto.parse(await readBody(req))
+        return respond.send(res, 200, MessageListDto, recorder.lookup(body.groupId, body.messageIds))
+      },
+    }],
+    [PATHS.config, { method: 'PUT', run: context => putConfig(deps, context) }],
+    [PATHS.login, {
+      method: 'GET',
+      run: async ({ res, url }) => respond.send(res, 200, LoginDto, await recorder.loginStatus({ fresh: query(url, LoginQuery).fresh === '1' })),
+    }],
+    [PATHS.loginRefresh, { method: 'POST', run: async ({ res }) => respond.send(res, 200, RefreshDto, await recorder.refreshLogin()) }],
+    [PATHS.legacy, { method: 'GET', run: ({ res }) => respond.send(res, 200, LegacyDigestStateDto, recorder.legacyState()) }],
+  ])
+  const patterns = [
+    { pattern: /^\/v1\/media\/(m[0-9a-z]{1,12})$/, method: 'GET' as const, run: (context: RouteContext) => serveMedia(deps, context) },
+    {
+      pattern: /^\/v1\/groups\/([0-9]{3,20})\/members$/,
+      method: 'GET' as const,
+      run: ({ res, match }: RouteContext) => respond.send(res, 200, MembersDto, recorder.members(match?.[1] ?? '')),
+    },
+  ]
+  return { exact, patterns }
+}
+
 /**
  * Start the API.
  * @param options - the recorder it fronts, where it listens, and the token.
@@ -100,69 +298,8 @@ export async function startRecorderServer(options: RecorderServerOptions): Promi
 
   const streams = new Set<ServerResponse>()
   const active = new Set<Promise<unknown>>()
-
-  const send = <T extends z.ZodType>(res: ServerResponse, status: number, schema: T, value: z.input<T>): Handled => {
-    // The recorder's own answers are checked too: a drift between the schema and the code fails here, not in DSH.
-    let body: string
-    try {
-      body = JSON.stringify(schema.parse(value))
-    } catch (error: unknown) {
-      logger.error(`qq-recorder: an answer did not match its schema: ${error instanceof ZodError ? error.issues[0]?.path.join('.') ?? '' : String(error)}`)
-      sendError(res, 500, 'internal', 'the answer did not match its schema')
-      return true
-    }
-    res.writeHead(status, { 'content-type': 'application/json', [PROTOCOL_HEADER]: protocolTag({ major, minor }), 'cache-control': 'no-store' })
-    res.end(body)
-    return true
-  }
-  const sendError = (res: ServerResponse, status: number, code: string, message: string): void => {
-    if (res.headersSent) { res.end(); return }
-    res.writeHead(status, { 'content-type': 'application/json', [PROTOCOL_HEADER]: protocolTag({ major, minor }), 'cache-control': 'no-store' })
-    res.end(JSON.stringify(ErrorDto.parse({ error: { code, message } })))
-  }
-
-  const readBody = async (req: IncomingMessage): Promise<unknown> => {
-    const chunks: Buffer[] = []
-    let size = 0
-    for await (const chunk of req as AsyncIterable<Buffer>) {
-      size += chunk.length
-      if (size > MAX_BODY_BYTES) throw new HttpError(413, 'too-large', `the body is larger than ${MAX_BODY_BYTES} bytes`)
-      chunks.push(chunk)
-    }
-    try {
-      return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
-    } catch {
-      throw new HttpError(400, 'invalid-json', 'the body is not JSON')
-    }
-  }
-
-  const query = <T extends z.ZodType>(url: URL, schema: T): z.output<T> => schema.parse(Object.fromEntries(url.searchParams))
-
-  const GroupQuery = z.object({ groupId: z.string().regex(/^[0-9]{3,20}$/) })
-  const ListQuery = GroupQuery.extend({
-    sinceMs: z.coerce.number().int().nonnegative(),
-    limit: z.coerce.number().int().min(1).max(1000),
-    userId: z.string().regex(/^[0-9]{1,30}$/).optional(),
-  })
-  const PageQuery = GroupQuery.extend({ after: z.string().max(40).optional(), limit: z.coerce.number().int().min(1).max(5000) })
-  const LoginQuery = z.object({ fresh: z.enum(['1', '0']).optional() })
-
-  const events = (req: IncomingMessage, res: ServerResponse): Handled => {
-    res.writeHead(200, { 'content-type': 'application/x-ndjson', [PROTOCOL_HEADER]: protocolTag({ major, minor }), 'cache-control': 'no-store' })
-    streams.add(res)
-    const write = (event: z.input<typeof EventDto>): void => {
-      if (res.writableEnded) return
-      res.write(`${JSON.stringify(EventDto.parse(event))}\n`)
-    }
-    write({ type: 'status', status: recorder.status() })
-    const off = recorder.subscribe(write)
-    const timer = setInterval(() => { write({ type: 'ping', at: Date.now() }) }, options.pingMs ?? PING_MS)
-    timer.unref()
-    const done = (): void => { clearInterval(timer); off(); streams.delete(res) }
-    req.on('close', done)
-    res.on('close', done)
-    return true
-  }
+  const respond = createResponder(logger, protocolTag({ major, minor }))
+  const routes = buildRoutes({ recorder, respond, streams, major, minor, build: options.build ?? 'dev', pingMs: options.pingMs ?? PING_MS })
 
   const route = async (req: IncomingMessage, res: ServerResponse): Promise<Handled> => {
     const url = new URL(req.url ?? '/', 'http://recorder')
@@ -172,109 +309,32 @@ export async function startRecorderServer(options: RecorderServerOptions): Promi
     if (supplied === undefined || !timingSafeEqual(digest(supplied), expected)) throw new HttpError(401, 'unauthorized', 'a valid bearer token is required')
     const client = parseProtocolTag(req.headers[PROTOCOL_HEADER] as string | undefined)
     if (req.headers[PROTOCOL_HEADER] !== undefined && (client === undefined || client.major !== major)) {
-      throw new HttpError(426, 'protocol-mismatch', `this recorder speaks ${protocolTag({ major, minor })}`)
+      throw new HttpError(426, 'protocol-mismatch', `this recorder speaks ${respond.tag}`)
     }
-    const only = (allowed: string): void => {
-      if (method !== allowed) throw new HttpError(405, 'method-not-allowed', `${path} takes ${allowed}`)
+    let found: Route | undefined = routes.exact.get(path)
+    let match: RegExpExecArray | null = null
+    for (const candidate of found === undefined ? routes.patterns : []) {
+      match = candidate.pattern.exec(path)
+      if (match !== null) { found = candidate; break }
     }
+    if (found === undefined) throw new HttpError(404, 'not-found', `no such path ${path}`)
+    if (method !== found.method) throw new HttpError(405, 'method-not-allowed', `${path} takes ${found.method}`)
+    return found.run({ req, res, url, match })
+  }
 
-    if (path === PATHS.hello) {
-      only('GET')
-      return send(res, 200, HelloDto, { protocol: { name: PROTOCOL.name, major, minor }, build: options.build ?? 'dev', startedAt: recorder.startedAt })
+  const fail = (res: ServerResponse, error: unknown): void => {
+    if (error instanceof HttpError) {
+      respond.sendError(res, error.status, error.code, error.message)
+    } else if (error instanceof ZodError) {
+      respond.sendError(res, 400, 'invalid-request', `${error.issues[0]?.path.join('.') || 'request'}: ${error.issues[0]?.message ?? 'invalid'}`)
+    } else {
+      logger.error(`qq-recorder: request failed: ${error instanceof Error ? error.message : String(error)}`)
+      respond.sendError(res, 500, 'internal', 'the recorder failed to answer')
     }
-    if (path === PATHS.status) {
-      only('GET')
-      return send(res, 200, StatusDto, recorder.status())
-    }
-    if (path === PATHS.events) {
-      only('GET')
-      return events(req, res)
-    }
-    if (path === PATHS.groups) {
-      only('GET')
-      return send(res, 200, GroupDto.array(), recorder.groups())
-    }
-    if (path === PATHS.messages) {
-      only('GET')
-      if (url.searchParams.has('sinceMs')) {
-        const q = query(url, ListQuery)
-        return send(res, 200, MessageListDto,
-          recorder.recent(q.groupId, { sinceMs: q.sinceMs, limit: q.limit, ...q.userId === undefined ? {} : { userId: q.userId } }))
-      }
-      const q = query(url, PageQuery)
-      try {
-        return send(res, 200, MessagePageDto, recorder.page(q.groupId, q.after, q.limit))
-      } catch (error: unknown) {
-        if (error instanceof RangeError) throw new HttpError(400, 'invalid-cursor', error.message)
-        throw error
-      }
-    }
-    if (path === PATHS.search) {
-      only('POST')
-      const body = SearchRequestDto.parse(await readBody(req))
-      return send(res, 200, MessageListDto,
-        recorder.search(body.query, { ...body.groupId === undefined ? {} : { groupId: body.groupId }, limit: body.limit }))
-    }
-    if (path === PATHS.lookup) {
-      only('POST')
-      const body = LookupRequestDto.parse(await readBody(req))
-      return send(res, 200, MessageListDto, recorder.lookup(body.groupId, body.messageIds))
-    }
-    const media = /^\/v1\/media\/(m[0-9a-z]{1,12})$/.exec(path)
-    if (media !== null) {
-      only('GET')
-      try {
-        const file = await recorder.mediaFile(media[1] ?? '')
-        res.writeHead(200, {
-          'content-type': file.header.contentType, 'content-length': file.bytes.length, [MEDIA_HEADER]: JSON.stringify(MediaHeaderDto.parse(file.header)),
-          [PROTOCOL_HEADER]: protocolTag({ major, minor }), 'cache-control': 'no-store',
-        })
-        res.end(file.bytes)
-        return true
-      } catch (error: unknown) {
-        if (error instanceof MediaNotSaved) throw new HttpError(404, 'not-saved', error.message)
-        if (error instanceof RangeError) throw new HttpError(400, 'invalid-ref', error.message)
-        throw error
-      }
-    }
-    const members = /^\/v1\/groups\/([0-9]{3,20})\/members$/.exec(path)
-    if (members !== null) {
-      only('GET')
-      return send(res, 200, MembersDto, recorder.members(members[1] ?? ''))
-    }
-    if (path === PATHS.config) {
-      only('PUT')
-      const body = RecorderConfigDto.parse(await readBody(req))
-      try {
-        return send(res, 200, ConfigAppliedDto, recorder.applyConfig(body))
-      } catch (error: unknown) {
-        if (error instanceof ConfigRejected) throw new HttpError(422, 'config-rejected', error.message)
-        throw error
-      }
-    }
-    if (path === PATHS.login) {
-      only('GET')
-      const q = query(url, LoginQuery)
-      return send(res, 200, LoginDto, await recorder.loginStatus({ fresh: q.fresh === '1' }))
-    }
-    if (path === PATHS.loginRefresh) {
-      only('POST')
-      return send(res, 200, RefreshDto, await recorder.refreshLogin())
-    }
-    if (path === PATHS.legacy) {
-      only('GET')
-      return send(res, 200, LegacyDigestStateDto, recorder.legacyState())
-    }
-    throw new HttpError(404, 'not-found', `no such path ${path}`)
   }
 
   const handle = (req: IncomingMessage, res: ServerResponse): void => {
-    const work = route(req, res).catch((error: unknown) => {
-      if (error instanceof HttpError) return sendError(res, error.status, error.code, error.message)
-      if (error instanceof ZodError) return sendError(res, 400, 'invalid-request', `${error.issues[0]?.path.join('.') || 'request'}: ${error.issues[0]?.message ?? 'invalid'}`)
-      logger.error(`qq-recorder: request failed: ${error instanceof Error ? error.message : String(error)}`)
-      return sendError(res, 500, 'internal', 'the recorder failed to answer')
-    }).finally(() => active.delete(work))
+    const work = route(req, res).then(() => undefined, (error: unknown) => { fail(res, error) }).finally(() => active.delete(work))
     active.add(work)
   }
 
@@ -303,7 +363,7 @@ export async function startRecorderServer(options: RecorderServerOptions): Promi
     const address = health.address()
     healthPort = typeof address === 'object' && address !== null ? address.port : undefined
   }
-  logger.info(`qq-recorder: listening on ${socketPath}${healthPort === undefined ? '' : `; health on 127.0.0.1:${healthPort}`}; protocol ${protocolTag({ major, minor })}`)
+  logger.info(`qq-recorder: listening on ${socketPath}${healthPort === undefined ? '' : `; health on 127.0.0.1:${healthPort}`}; protocol ${respond.tag}`)
 
   return {
     socketPath,

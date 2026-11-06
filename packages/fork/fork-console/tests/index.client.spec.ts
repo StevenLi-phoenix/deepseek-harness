@@ -33,15 +33,16 @@ describe('fork-console browser entry', () => {
     expect(inject).toEqual(['slots', 'locale'])
   })
 
-  it('registers the three sections with their ids and orders, and all eight dictionaries', () => {
+  it('registers the four sections with their ids and orders, and all eight dictionaries', () => {
     const { ctx, registered, dictionaries } = fakeContext()
     apply(ctx as never)
     expect(registered.map(entry => [entry.options.name, entry.options.id, entry.options.order, entry.options.locale])).toEqual([
       ['settings.section', 'fork-overview', 35, 'fork.console'],
+      ['settings.section', 'fork-flow', 36, 'fork.console'],
       ['settings.section', 'fork-subscriptions', 58, 'fork.console'],
       ['settings.section', 'fork-agents', 60, 'fork.console'],
     ])
-    expect(registered.map(entry => entry.options.label())).toEqual(['nav.overview', 'nav.subscriptions', 'nav.agents'])
+    expect(registered.map(entry => entry.options.label())).toEqual(['nav.overview', 'nav.flow', 'nav.subscriptions', 'nav.agents'])
     expect(Object.keys(dictionaries['fork.console'] as object).sort()).toEqual(['de', 'en', 'es', 'fr', 'ja', 'pt', 'ru', 'zh'])
     expect((dictionaries['fork.console'] as { zh: unknown }).zh).toBe(zh)
   })
@@ -49,10 +50,11 @@ describe('fork-console browser entry', () => {
   it('gives each section its own stable faces: store hook, refresh, and the actions', () => {
     const { ctx, registered } = fakeContext([{ options: { id: 'bili', order: 45 } }, { options: { id: 'general', order: 0 } }])
     apply(ctx as never)
-    const [overview, subscriptions, agents] = registered.map(entry => entry.options.inject() as Record<string, unknown>)
+    const [overview, flow, subscriptions, agents] = registered.map(entry => entry.options.inject() as Record<string, unknown>)
     expect(Object.keys((overview!.hooks as object))).toEqual(['overview', 'balance'])
     expect(Object.keys((subscriptions!.hooks as object))).toEqual(['subscriptions'])
     expect(Object.keys((agents!.hooks as object))).toEqual(['agents'])
+    expect(Object.keys((flow!.hooks as object))).toEqual(['overview'])
     expect(overview).not.toHaveProperty('manage')
     expect((overview!.canManage as (id: string) => boolean)('bili')).toBe(true)
     expect((overview!.canManage as (id: string) => boolean)('fork-qq')).toBe(false)
@@ -77,16 +79,16 @@ describe('fork-console browser entry', () => {
     apply(ctx as never)
     const faces = registered.map(entry => entry.options.inject() as { refresh: () => void; act?: (request: unknown) => Promise<boolean> })
     faces[0]!.refresh()
-    faces[1]!.refresh()
     faces[2]!.refresh()
+    faces[3]!.refresh()
     await vi.waitFor(() => { expect(calls).toHaveLength(4) })
     expect(calls.map(([url]) => url).sort()).toEqual(['api/fork.agents', 'api/fork.balance', 'api/fork.overview', 'api/fork.subscriptions'])
-    expect(await faces[1]!.act!({ action: 'delete', target: 'subscription', id: 'x' })).toBe(true)
+    expect(await faces[2]!.act!({ action: 'delete', target: 'subscription', id: 'x' })).toBe(true)
     expect(calls.at(-1)).toEqual(['api/fork.subscriptions', {
       credentials: 'same-origin', cache: 'no-store', method: 'POST', headers: { 'content-type': 'application/json' },
       body: '{"action":"delete","target":"subscription","id":"x"}',
     }])
-    expect(await faces[2]!.act!({ action: 'cc.stop', name: 'one' })).toBe(true)
+    expect(await faces[3]!.act!({ action: 'cc.stop', name: 'one' })).toBe(true)
     expect(calls.at(-1)![1]).toMatchObject({ method: 'POST', body: '{"action":"cc.stop","name":"one"}' })
   })
 
@@ -106,7 +108,7 @@ describe('fork-console browser entry', () => {
     function previewFace() {
       const { ctx, registered } = fakeContext()
       apply(ctx as never)
-      return registered[2]!.options.inject() as { preview: (onPlaying: () => void) => Promise<unknown>; stopPreview: () => void }
+      return registered[3]!.options.inject() as { preview: (onPlaying: () => void) => Promise<unknown>; stopPreview: () => void }
     }
 
     it('posts the preview request, plays the audio in the browser, and ends when it ends', async () => {

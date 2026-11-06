@@ -2912,7 +2912,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-fork-integrity`
 
-- `source`: [`packages/fork/fork-integrity/src/index.ts:33`](../packages/fork/fork-integrity/src/index.ts)
+- `source`: [`packages/fork/fork-integrity/src/index.ts:30`](../packages/fork/fork-integrity/src/index.ts)
 
 ```ts config-catalog
 /** Settings. */
@@ -2945,7 +2945,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-fork-memory`
 
 - `inject`: `tools`
-- `source`: [`packages/fork/fork-memory/src/index.ts:63`](../packages/fork/fork-memory/src/index.ts)
+- `source`: [`packages/fork/fork-memory/src/config.ts:7`](../packages/fork/fork-memory/src/config.ts)
 
 ```ts config-catalog
 /** Memory file and context budget. */
@@ -3546,7 +3546,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-fork-tool-up`
 
 - `inject`: `tools` · `credentials`
-- `source`: [`packages/fork/fork-tool-up/src/index.ts:61`](../packages/fork/fork-tool-up/src/index.ts)
+- `source`: [`packages/fork/fork-tool-up/src/index.ts:51`](../packages/fork/fork-tool-up/src/index.ts)
 
 ```ts config-catalog
 /** Notes, evidence, and the Session they belong to. */

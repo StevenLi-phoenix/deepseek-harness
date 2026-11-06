@@ -3,23 +3,23 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/fork/fork-console/README.md
 /:
-  en: fa864f5c7e47c205
-  zh: fe93a90da5e0a0e1
+  en: 6c5801e162f783ae
+  zh: 0b6a39542f408dec
 /deepseek-ai-dsh-fork-console:
   en: cf2a5bc861641a5d
   zh: 8dc4bd3106ee3df6
 /deepseek-ai-dsh-fork-console/summary:
-  en: 5b5937b106436aa9
-  zh: 8b1424053d22253a
+  en: e0c2f4d6c7ae14f6
+  zh: 61ec56501dc8568a
 /deepseek-ai-dsh-fork-console/table-of-contents:
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
 /deepseek-ai-dsh-fork-console/use-this-package:
-  en: 02e088ea2f582b37
-  zh: b127594cf7930030
+  en: 9257481d6f415e9d
+  zh: a633290612198dde
 /deepseek-ai-dsh-fork-console/understand-the-implementation:
-  en: 24844c8d9f75f57b
-  zh: c6ceae85c8a153bf
+  en: 924a3563c91b009f
+  zh: 5eacff87a3d7b068
 /deepseek-ai-dsh-fork-console/further-exploration:
   en: 4dc7d1d202eb21dc
   zh: aa817bd4e08f74a4

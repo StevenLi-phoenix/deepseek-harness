@@ -106,13 +106,17 @@ describe('event bundle', () => {
       'kaorou': ['/Users/dsh-runtime/work/events', '事件'],
       'autocut': ['/Users/dsh-runtime/work/events', '事件'],
       'operator': ['/Users/dsh-runtime/work/events', '事件'],
+      'upload-local': ['/Users/dsh-runtime/work/events', '事件'],
+      'notify-funnel': ['/Users/dsh-runtime/work/events', '事件'],
       'bili-digest': ['/Users/dsh-runtime/work/bili', 'B站'],
       'ci': ['/Users/dsh-runtime/work/ci', 'CI'],
     })
     expect(sessions['ci']).toMatchObject({ titlePrefix: 'CI', persistent: { enabled: true, key: 'subject' } })
     expect(sessions['bili-digest']).toMatchObject({ titlePrefix: 'B站评论与私信', persistent: { enabled: true } })
+    // The notification desk is one long Session, so it remembers earlier batches and merges repeats.
+    expect(sessions['notify-funnel']).toMatchObject({ titlePrefix: '通知', persistent: { enabled: true } })
     // One-off Sessions stay one per batch.
-    for (const id of ['kaorou', 'autocut', 'operator']) expect(sessions[id]).not.toHaveProperty('persistent')
+    for (const id of ['kaorou', 'autocut', 'operator', 'upload-local']) expect(sessions[id]).not.toHaveProperty('persistent')
   })
 
   it('mounts the time check once, at the root, with the plugin\'s defaults, so every preset\'s Sessions get it', () => {

@@ -87,6 +87,21 @@ describe('qq-recorder server', () => {
     expect(await call(h.socketPath, 'POST', '/v1/status')).toMatchObject({ status: 405 })
   })
 
+  it('takes one method per path, and sends a path that matches no route to 404', async () => {
+    const h = await boot({ config: false })
+    const takes: Array<[string, string]> = [
+      ['/v1/hello', 'GET'], ['/v1/status', 'GET'], ['/v1/events', 'GET'], ['/v1/groups', 'GET'], ['/v1/messages', 'GET'],
+      ['/v1/messages/search', 'POST'], ['/v1/messages/lookup', 'POST'], ['/v1/config', 'PUT'], ['/v1/login', 'GET'],
+      ['/v1/login/refresh', 'POST'], ['/v1/legacy/digest-state', 'GET'], ['/v1/media/m1', 'GET'], [`/v1/groups/${GROUP}/members`, 'GET'],
+    ]
+    for (const [path, method] of takes) {
+      expect(await call(h.socketPath, 'DELETE', path), path).toMatchObject({ status: 405, body: { error: { code: 'method-not-allowed', message: `${path} takes ${method}` } } })
+    }
+    for (const path of ['/v1/media/', '/v1/media/m1/extra', '/v1/media/X1', '/v1/groups/12/members', `/v1/groups/${GROUP}/members/x`, '/v1/login/refresh/now', '/']) {
+      expect(await call(h.socketPath, 'GET', path), path).toMatchObject({ status: 404, body: { error: { code: 'not-found' } } })
+    }
+  })
+
   it('applies a pushed configuration, validated, and answers 422 for one that cannot work', async () => {
     const h = await boot({ config: false })
     const config = recorderConfig(h.fake.url, { groups: [GROUP] })

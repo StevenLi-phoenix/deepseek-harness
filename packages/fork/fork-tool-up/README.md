@@ -69,7 +69,13 @@ bili-svc has no endpoint that returns one comment by id, so the evidence verifie
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Plugin entry: the nine read tools, the two reply tools, `bili_channel_note`, the notes block, and `ctx.biliEvidence` |
+| [`src/index.ts`](src/index.ts) | Plugin entry: the configuration, and `apply`, which wires the parts below together |
+| [`src/tools.ts`](src/tools.ts) | The nine read tools and the two reply tools, as tables, and their registration |
+| [`src/bili-svc.ts`](src/bili-svc.ts) | The bili-svc client: address, `up` token, the one HTTP call, and the untrusted-data wrapper |
+| [`src/session-gate.ts`](src/session-gate.ts) | Which Session may write notes or ask for evidence, and the per-turn call limit |
+| [`src/notes-tool.ts`](src/notes-tool.ts) | `bili_channel_note`, the text guard every note passes, and the hook that shows the notes to the Session |
+| [`src/evidence-service.ts`](src/evidence-service.ts) | `ctx.biliEvidence` and the creator's own account ids |
+| [`src/values.ts`](src/values.ts) | Error text, argument coercion, and an exhaustiveness guard |
 | [`src/notes.ts`](src/notes.ts) | The notes file and the notes block |
 | [`src/pii.ts`](src/pii.ts) | The personal-information rules for notes |
 | [`src/evidence.ts`](src/evidence.ts) | Comment parsing, the rpid cache, sender keys, and the salt |
