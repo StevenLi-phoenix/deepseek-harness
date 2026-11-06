@@ -106,11 +106,12 @@ describe('createBiliReader', () => {
       '/v1/comments': { comments: [{ rpid: 10, mid: 7, ctime: 1, root: 0, parent: 0, untrusted: { text: '好看', uname: 'x' } }, { rpid: 'bad' }] },
       '/v1/comments/10/thread': { root: { rpid: 10, mid: 7, ctime: 1, parent: 0, untrusted: { text: '好看' } }, replies: [{ rpid: 11, mid: 401, ctime: 2, parent: 10, gate: false, untrusted: { text: '谢谢' } }] },
     }
-    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
-      const path = new URL(url).pathname
-      calls.push({ url, auth: new Headers(init?.headers).get('authorization') })
+    const fetch: typeof globalThis.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const href = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
+      const path = new URL(href).pathname
+      calls.push({ url: href, auth: new Headers(init?.headers).get('authorization') })
       return Response.json(answers[path])
-    }) as unknown as typeof globalThis.fetch
+    })
     const reader = createBiliReader({ baseUrl: 'http://127.0.0.1:8097', token: 'tok', timeoutMs: 1000, fetch })
     expect(await reader.accounts()).toEqual([{ id: 'maodeng', mid: 401 }, { id: 'maomao', mid: 402 }])
     expect(await reader.comments(100)).toEqual([{ rpid: 10, mid: 7, ctime: 1, root: 0, parent: 0, text: '好看' }])
@@ -120,7 +121,7 @@ describe('createBiliReader', () => {
   })
 
   it('fails on a non-200 answer', async () => {
-    const fetch = (async () => new Response('{}', { status: 403 })) as unknown as typeof globalThis.fetch
+    const fetch: typeof globalThis.fetch = async () => new Response('{}', { status: 403 })
     await expect(createBiliReader({ baseUrl: 'http://x', token: 't', timeoutMs: 1000, fetch }).accounts()).rejects.toThrow(/HTTP 403 for \/v1\/status/u)
   })
 })

@@ -89,6 +89,7 @@ function clamp(ratio: number): number {
 }
 
 /**
+ * Pick the severity level for a usage share, using the warn and critical thresholds.
  * @param ratio - share used, 0-1.
  * @returns the bar colour for that share.
  */
@@ -99,7 +100,8 @@ export function usageLevel(ratio: number): Level {
 }
 
 /**
- * @param bytes - a size.
+ * Format a byte count with binary units.
+ * @param bytes - a size; negative values are treated as 0.
  * @returns the size in binary units, one decimal below 100: `10.8 GB`, `245 GB`, `3.6 TB`.
  */
 export function formatBytes(bytes: number): string {
@@ -113,7 +115,8 @@ export function formatBytes(bytes: number): string {
 }
 
 /**
- * @param ratio - a share, 0-1.
+ * Format a share as a percentage.
+ * @param ratio - a share, 0-1; clamped, and non-finite values count as 0.
  * @returns whole percent.
  */
 export function formatPercent(ratio: number): string {
@@ -121,7 +124,8 @@ export function formatPercent(ratio: number): string {
 }
 
 /**
- * @param watts - a power reading.
+ * Format a power reading in watts.
+ * @param watts - a power reading, or null when unknown.
  * @param t - translate seat.
  * @returns one decimal below 10 W, whole watts above; the unknown mark for null.
  */
@@ -130,7 +134,8 @@ export function formatWatts(watts: number | null, t: Translate): string {
 }
 
 /**
- * @param celsius - a temperature reading.
+ * Format a temperature in degrees Celsius.
+ * @param celsius - a temperature reading, or null when unknown.
  * @param t - translate seat.
  * @returns whole degrees; the unknown mark for null.
  */
@@ -139,7 +144,8 @@ export function formatCelsius(celsius: number | null, t: Translate): string {
 }
 
 /**
- * @param seconds - an uptime.
+ * Format an uptime in the two largest non-zero units.
+ * @param seconds - an uptime; negative values are treated as 0.
  * @param t - translate seat.
  * @returns days and hours, hours and minutes, or minutes.
  */
@@ -153,6 +159,7 @@ export function formatDuration(seconds: number, t: Translate): string {
 }
 
 /**
+ * Format a timestamp as a wall-clock time in the local zone.
  * @param at - epoch milliseconds.
  * @returns local `HH:MM:SS`.
  */
@@ -162,6 +169,7 @@ export function clock(at: number): string {
 }
 
 /**
+ * Build the CPU card.
  * @param snapshot - the Host's answer.
  * @param t - translate seat.
  * @returns usage, core count, and load averages.
@@ -258,6 +266,7 @@ export function storageRows(snapshot: SysmonSnapshot, t: Translate): StorageRow[
 }
 
 /**
+ * Build the status line under the cards.
  * @param state - the store state.
  * @param t - translate seat.
  * @returns when the shown reading was taken, and whether it is current.

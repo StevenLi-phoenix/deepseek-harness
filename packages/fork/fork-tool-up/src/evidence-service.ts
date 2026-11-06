@@ -31,12 +31,18 @@ export class OwnAccounts {
     this.at = Date.now()
   }
 
-  /** Whether the ids were read within the TTL. */
+  /**
+   * Check whether the ids are recent enough to trust.
+   * @returns whether the ids were read within the TTL.
+   */
   fresh(): boolean {
     return this.at > 0 && Date.now() - this.at < OWN_MIDS_TTL_MS
   }
 
-  /** Whether the ids have ever been read. */
+  /**
+   * Check whether any ids were ever read.
+   * @returns whether the ids have ever been read, however long ago.
+   */
   known(): boolean {
     return this.at > 0
   }
@@ -68,7 +74,8 @@ export interface EvidenceDeps {
  * @param deps - the context, configuration, bili-svc client, caches, and gate.
  * @returns `ctx.biliEvidence`.
  */
-export function createEvidence({ ctx, config, svc, comments, own, gate }: EvidenceDeps): BiliEvidence {
+export function createEvidence(deps: EvidenceDeps): BiliEvidence {
+  const { ctx, config, svc, comments, own, gate } = deps
   let salt: Promise<string> | undefined
   /** Make sure the creator's own ids are known; false when bili-svc cannot say, so nothing can be kept. */
   const ownKnown = async (): Promise<boolean> => {

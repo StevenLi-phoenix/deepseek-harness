@@ -113,6 +113,7 @@ export class MemoryHandler {
   /**
    * Answer one request.
    * @param request - a GET for the page's data, or a POST carrying one action.
+   * @returns the JSON or HTML answer; failures are answered as responses.
    */
   async fetch(request: Request): Promise<Response> {
     const started = this.now()

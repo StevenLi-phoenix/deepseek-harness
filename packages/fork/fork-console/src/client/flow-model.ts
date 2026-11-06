@@ -60,6 +60,7 @@ export interface FlowEdge {
 
 /** Box size and spacing, in canvas units. */
 export const NODE_W = 136
+/** Box height, in canvas units. */
 export const NODE_H = 44
 const COLUMN_GAP = 30
 const ROW_GAP = 8
@@ -130,7 +131,11 @@ export interface FlowGraph {
   readonly route: (stops: readonly string[]) => readonly FlowEdge[]
 }
 
-/** The key an arrow goes by in sets and in the DOM: `from>to`. */
+/**
+ * The key an arrow goes by in sets and in the DOM: `from>to`.
+ * @param edge - the arrow.
+ * @returns the key.
+ */
 export const edgeKey = (edge: Pick<FlowEdge, 'from' | 'to'>): string => `${edge.from}>${edge.to}`
 
 /** The arrows into and out of each box, in the order they are listed. */

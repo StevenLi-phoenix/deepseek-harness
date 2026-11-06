@@ -84,23 +84,39 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-/** The cursor of a stored row. */
+/**
+ * The cursor of a stored row.
+ * @param rowId - the message row id.
+ * @returns the cursor string.
+ */
 export function cursorOf(rowId: number): string {
   return `c${rowId}`
 }
 
-/** The stored row a cursor names, or undefined when it is not one of ours. */
+/**
+ * The stored row a cursor names.
+ * @param cursor - a cursor from {@link cursorOf}.
+ * @returns the row id, or undefined when the cursor is not one of ours.
+ */
 export function rowOf(cursor: string): number | undefined {
   const match = /^c(\d{1,15})$/.exec(cursor)
   return match === null ? undefined : Number(match[1])
 }
 
-/** The short reference of a media row. */
+/**
+ * The short reference of a media row.
+ * @param mediaId - the media row id.
+ * @returns the reference string.
+ */
 export function mediaRef(mediaId: number): string {
   return `m${mediaId.toString(36)}`
 }
 
-/** The media row a reference names, or undefined when it is not one of ours. */
+/**
+ * The media row a reference names.
+ * @param ref - a reference from {@link mediaRef}.
+ * @returns the media row id, or undefined when the reference is not one of ours.
+ */
 export function mediaIdOf(ref: string): number | undefined {
   const match = /^m([0-9a-z]{1,12})$/.exec(ref)
   const id = match === null ? Number.NaN : Number.parseInt(match[1] ?? '', 36)
@@ -119,7 +135,12 @@ function mediaKind(kind: string): 'image' | 'voice' | 'video' | 'file' {
   return kind === 'image' || kind === 'voice' || kind === 'video' ? kind : 'file'
 }
 
-/** A stored message as the protocol shows it. */
+/**
+ * A stored message as the protocol shows it.
+ * @param row - the stored message.
+ * @param media - its media rows, in segment order.
+ * @returns the protocol message; a media item is `saved` when its row has a local file.
+ */
 export function toMessage(row: MessageRow, media: readonly MediaRow[] = []): Message {
   return {
     cursor: cursorOf(row.id), groupId: row.groupId, messageId: row.messageId, at: row.at, userId: row.userId,
@@ -131,6 +152,7 @@ export function toMessage(row: MessageRow, media: readonly MediaRow[] = []): Mes
 /**
  * Why a configuration cannot work, or undefined when it can.
  * @param config - a parsed configuration.
+ * @returns a message naming the unusable address, or undefined when `url` and `login.url` are acceptable.
  */
 export function configProblem(config: RecorderConfig): string | undefined {
   if (!isPrivateUrl(config.url)) return 'url must be a ws:// or wss:// address on this machine (127.0.0.1, localhost) or the tailnet (100.64.0.0/10, *.ts.net)'
@@ -140,8 +162,11 @@ export function configProblem(config: RecorderConfig): string | undefined {
 
 /** The recorder. */
 export class QqRecorder {
+  /** The message database, `qq.db` in {@link QqRecorder.dataDir}. */
   readonly store: QqStore
+  /** The directory holding the database, saved media, and the saved configuration. */
   readonly dataDir: string
+  /** When this recorder instance started, in epoch milliseconds. */
   readonly startedAt: number
   private config: RecorderConfig | undefined
   private readonly abort = new AbortController()
@@ -240,7 +265,8 @@ export class QqRecorder {
       // A first start: DSH pushes the configuration, and the recorder waits for it before connecting.
       return
     }
-    const parsed = RecorderConfigDto.safeParse(JSON.parse(raw) as unknown)
+    const saved: unknown = JSON.parse(raw)
+    const parsed = RecorderConfigDto.safeParse(saved)
     const problem = parsed.success ? configProblem(parsed.data) : parsed.error.message.slice(0, 300)
     if (!parsed.success || problem !== undefined) {
       this.deps.logger.error(`qq-recorder: the saved configuration in recorder-config.json is unusable (${problem ?? 'invalid'}); waiting for DSH to push one`)
@@ -338,7 +364,10 @@ export class QqRecorder {
 
   // ---- reads, for the server ----
 
-  /** @returns the recorder's state for `GET /v1/status` and the `status` event. */
+  /**
+   * The recorder's state for `GET /v1/status` and the `status` event.
+   * @returns the connection, outage clock, recorded group count, configuration revision, and counters.
+   */
   status(): Status {
     const up = this.connState === 'connected'
     return {
@@ -353,7 +382,10 @@ export class QqRecorder {
     }
   }
 
-  /** @returns every group the account is in, recorded ones first. */
+  /**
+   * Every group the account is in.
+   * @returns the groups, recorded ones first, then by unlisted traffic, message count, and name.
+   */
   groups(): Group[] {
     const stats = new Map(this.store.stats().map(stat => [stat.groupId, stat]))
     const known = new Map(this.store.groups().map(group => [group.groupId, group]))
@@ -369,7 +401,13 @@ export class QqRecorder {
       || b.messages - a.messages || a.name.localeCompare(b.name))
   }
 
-  /** @returns recent messages of a recorded group, oldest first; nothing for a group not on the list. */
+  /**
+   * Recent messages of a recorded group.
+   * @param groupId - the QQ group number.
+   * @param options - `sinceMs` is the lower bound on the message time in epoch milliseconds, `limit` the maximum count, `userId` restricts
+   *   to one sender.
+   * @returns the messages, oldest first; empty for a group not on the list.
+   */
   recent(groupId: string, options: { sinceMs: number; limit: number; userId?: string }): Message[] {
     if (!this.recordedIds.has(groupId)) return []
     const rows = this.store.recent(groupId,
@@ -383,7 +421,14 @@ export class QqRecorder {
     return rows.map(row => toMessage(row, media.get(row.id)))
   }
 
-  /** @returns messages of a recorded group after a cursor, in log order. */
+  /**
+   * A page of a recorded group's messages after a cursor.
+   * @param groupId - the QQ group number.
+   * @param after - the cursor of the last message already seen; undefined starts at the oldest.
+   * @param limit - the maximum number of messages.
+   * @returns the messages in log order, and the next cursor or null when the page is not full; empty for a group not on the list.
+   * @throws {@link RangeError} when `after` is not a cursor of this recorder.
+   */
   page(groupId: string, after: string | undefined, limit: number): { items: Message[]; nextCursor: string | null } {
     const row = after === undefined ? 0 : rowOf(after)
     if (row === undefined) throw new RangeError('after is not a cursor of this recorder')
@@ -392,13 +437,23 @@ export class QqRecorder {
     return { items, nextCursor: items.length >= limit ? items.at(-1)?.cursor ?? null : null }
   }
 
-  /** @returns matches in the recorded groups, newest first. */
+  /**
+   * Search the recorded groups' messages.
+   * @param query - the text to find.
+   * @param options - `groupId` limits to one group, `limit` caps the count.
+   * @returns the matches, newest first; empty when `groupId` is not on the list.
+   */
   search(query: string, options: { groupId?: string; limit: number }): Message[] {
     if (options.groupId !== undefined && !this.recordedIds.has(options.groupId)) return []
     return this.withMedia(this.store.search(query, options).filter(row => this.recordedIds.has(row.groupId)))
   }
 
-  /** @returns the stored messages of a recorded group by their OneBot ids (recalled ones included, text emptied). */
+  /**
+   * The stored messages of a recorded group by their OneBot ids (recalled ones included, text emptied).
+   * @param groupId - the QQ group number.
+   * @param messageIds - OneBot message ids; only the first 200 are used.
+   * @returns the messages found, in the order asked; empty for a group not on the list.
+   */
   lookup(groupId: string, messageIds: readonly string[]): Message[] {
     if (!this.recordedIds.has(groupId)) return []
     const rows: MessageRow[] = []
@@ -410,11 +465,12 @@ export class QqRecorder {
   }
 
   /**
-   * The saved image behind a media reference, for `GET /v1/media/{ref}`. Nothing is fetched from QQ here: the file was
-   * downloaded when its message arrived (never for a backfilled one), so serving it cannot start a download.
+   * The saved image behind a media reference, for `GET /v1/media/{ref}`. Nothing is fetched from QQ here: the file was downloaded when its
+   * message arrived (never for a backfilled one), so serving it cannot start a download.
    * @param ref - a reference from a message's `media`.
-   * @throws {@link MediaNotSaved} when the recorder does not hold that image (images are off, the download failed or was
-   * skipped, the file aged out, the message was recalled, or the group is no longer recorded).
+   * @returns the file content and its header (content type, size, group).
+   * @throws {@link MediaNotSaved} when the recorder does not hold that image (images are off, the download failed or was skipped, the file
+   *   aged out, the message was recalled, or the group is no longer recorded).
    * @throws {@link RangeError} when the reference is not one of this recorder's.
    */
   async mediaFile(ref: string): Promise<{ bytes: Buffer; header: MediaHeader }> {
@@ -438,12 +494,19 @@ export class QqRecorder {
     return { bytes, header: { contentType, bytes: bytes.length, groupId: item.groupId } }
   }
 
-  /** @returns the distinct member names a recorded group's messages show. */
+  /**
+   * The distinct member names a recorded group's messages show.
+   * @param groupId - the QQ group number.
+   * @returns the names; empty for a group not on the list.
+   */
   members(groupId: string): Member[] {
     return this.recordedIds.has(groupId) ? this.store.members(groupId) : []
   }
 
-  /** @returns the digest state the plugin kept in `qq.db` before it moved to DSH. */
+  /**
+   * The digest state the plugin kept in `qq.db` before it moved to DSH.
+   * @returns the old digests, notes, Sessions, alias salt, and last outage notice time.
+   */
   legacyState(): LegacyDigestState {
     let outageNoticeAt: number | null = null
     try {
@@ -508,9 +571,10 @@ export class QqRecorder {
   }
 
   /**
-   * NapCat's login as the login door reports it. When NapCat turns out to be logged in while the recorder is still
-   * backing off, the recorder reconnects at once, so a scan ends in "connected" within seconds. Answers are shared for 1.5 s.
+   * NapCat's login as the login door reports it. When NapCat turns out to be logged in while the recorder is still backing off, the
+   * recorder reconnects at once, so a scan ends in "connected" within seconds. Answers are shared for 1.5 s.
    * @param options - `fresh` skips the shared answer.
+   * @returns the login state; `door` says whether the door answered.
    */
   async loginStatus(options: { fresh?: boolean } = {}): Promise<Login> {
     let login = await this.loginView(options.fresh === true)
@@ -527,6 +591,7 @@ export class QqRecorder {
 
   /**
    * Ask NapCat for a fresh login QR code. Refused while QQ is logged in and for ten minutes after the connection came up.
+   * @returns whether a code was requested, and the reason when refused.
    */
   async refreshLogin(): Promise<Refresh> {
     let refusal: Refresh['reason'] = null
@@ -687,8 +752,10 @@ export class QqRecorder {
             this.deps.logger.info(`qq-recorder: the protocol end connection closed (${reason})`)
           },
         }, connAbort.signal)
+        // oxlint-disable-next-line typescript/no-unnecessary-condition -- stop() and reconfigure() set these during the await.
         if (this.stopping) return
       } catch (error: unknown) {
+        // oxlint-disable-next-line typescript/no-unnecessary-condition -- stop() and reconfigure() set these during the await.
         if (this.stopping) return
         this.lastError = errorText(error)
         this.deps.logger.info(`qq-recorder: could not reach the protocol end: ${errorText(error)}`)
@@ -701,6 +768,7 @@ export class QqRecorder {
         this.lastDisconnectAt = this.now()
         this.touchAlive()
       }
+      // oxlint-disable-next-line typescript/no-unnecessary-condition -- stop() and reconfigure() set these during the await.
       if (this.reconfigured) {
         failures = 0
         this.setConnection('starting')
@@ -865,7 +933,7 @@ export class QqRecorder {
       for (const message of [...messages].reverse()) {
         fetched += 1
         if (this.store.hasMessage(groupId, String(message.message_id))) known = true
-        else if (await this.record({ ...message, post_type: 'message', message_type: 'group', group_id: groupId }, true)) added += 1
+        else if (this.record({ ...message, post_type: 'message', message_type: 'group', group_id: groupId }, true)) added += 1
       }
       const oldest = messages[0]?.message_seq === undefined ? undefined : String(messages[0].message_seq)
       if (known || oldest === undefined || oldest === seq) break
@@ -879,7 +947,7 @@ export class QqRecorder {
   private async handleEvent(event: OneBotEvent): Promise<void> {
     if (event.post_type === 'message') {
       if (event.message_type === 'group') {
-        await this.record(event, false)
+        this.record(event, false)
       } else {
         this.counters.private += 1
       }
@@ -905,7 +973,7 @@ export class QqRecorder {
   }
 
   /** Record a group message when its group is listed. @returns whether a new row was stored. */
-  private async record(event: OneBotEvent, backfilled: boolean): Promise<boolean> {
+  private record(event: OneBotEvent, backfilled: boolean): boolean {
     const groupId = String(event.group_id ?? '')
     const userId = String(event.user_id ?? event.sender?.user_id ?? '')
     if (groupId === '' || userId === '' || event.message_id === undefined) return false

@@ -15,7 +15,9 @@ export const inject = ['connection']
 
 /** The service's answers fit the fields the browser half reads. */
 type Fits<Source extends Target, Target> = Source
+/** Compiles only while the service panel is assignable to the panel type the browser half reads. */
 export type PanelFits = Fits<ServicePanel, StylePanel>
+/** Compiles only while the service edit answer is assignable to the edit answer type the browser half reads. */
 export type EditAnswerFits = Fits<ServiceEditAnswer, StyleEditAnswer>
 
 /** The slice of the connection service this plugin uses. */

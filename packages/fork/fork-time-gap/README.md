@@ -18,6 +18,7 @@ A message that arrives after a long silence is not a quick follow-up, but its hi
 - [Further Exploration](#further-exploration)
 - [Model Experience](#model-experience)
 - [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
 -----
 
@@ -124,3 +125,15 @@ Append-only: the notice joins the new turn after the cached history, and the sys
 - **Queued input** — an input queued behind a running turn (`mode: 'queue'`) is measured when its own turn starts, from the reply just before it, so a long wait in the queue shows no gap.
 - **Owner or sender comes from the preset** — the owner typing in the Web UI into a Session of a `senderPresets` preset is called "the sender"; only the source and the preset are read, never the text.
 - **Background-job notices** — `tool-jobs` completions and other plugins' notices are context, so a turn they start gets no notice.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+This Dev Note is non-authoritative working context: undecided directions and notes for maintainers. Shipped behavior and accepted rationale live in the sections above, the package code, and the linked Agent Notes.
+
+- The two thresholds for WeChat could become one setting if the owner never sets them apart.
+
+</details>

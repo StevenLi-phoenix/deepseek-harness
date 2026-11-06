@@ -13,7 +13,7 @@ import { isAbsolute, join } from 'node:path'
 import { Context, Service, type Volatile } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
-import type { ForkEventBus, ForkNotifier } from '@deepseek-ai/dsh-fork-event-bus'
+import type {} from '@deepseek-ai/dsh-fork-event-bus'
 // Type-only: the `loader/volatile-update` event the group list follows.
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-permission-presets'
@@ -340,6 +340,7 @@ export class QqObserver extends Service {
   static inject = ['sessionController', 'permissionPresets', 'sessionTitle', 'credentials', 'storageDomain']
   static Config = Config
 
+  /** Path of the recorder's unix socket: `recorder.socket` from the configuration, else `run/qq-recorder.sock` under the DSH home. */
   readonly socketPath: string
   private readonly client: RecorderClient
   private readonly abort = new AbortController()
@@ -401,7 +402,7 @@ export class QqObserver extends Service {
         () => d.maxImages.get(),
         // The shared QQ main Session hears of each digest through the bus; the observer works without the bus.
         async (digest) => {
-          const bus = ctx.get('forkEventBus') as ForkEventBus | undefined
+          const bus = ctx.get('forkEventBus')
           await bus?.publish({
             source: 'qq',
             kind: 'qq.digest.new',
@@ -924,7 +925,7 @@ export class QqObserver extends Service {
     } catch (error: unknown) {
       this.ctx.logger.warn(`fork-qq: could not remember the owner notice: ${errorText(error)}`)
     }
-    const notifier = this.ctx.get('forkNotifier') as ForkNotifier | undefined
+    const notifier = this.ctx.get('forkNotifier')
     if (notifier === undefined) return
     try {
       await notifier.send({ title, body, origin: 'the QQ observer (a notice, not the owner)' })

@@ -3,9 +3,10 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
-import { PluginConfigCard, type PluginConfigCardProps, type PluginConfigTranslate } from '../src/client/PluginConfigCard.tsx'
+import { PluginConfigCard, type PluginConfigCardUsedProps, type PluginConfigTranslate } from '../src/client/PluginConfigCard.tsx'
 import { createConfigStore, entryKey, type EntryState } from '../src/client/store.ts'
 import { zh } from '../src/client/locales.ts'
+import type {} from '../src/client/slot-contract.ts'
 import { leavesOf, type ConfigEntryView, type FieldNode, type ConfigValue } from '../src/view.ts'
 import { QQ_FORM } from './qq-form.client.ts'
 import { entryView, sampleForm } from './sample-form.client.ts'
@@ -39,7 +40,7 @@ function mount(
   const props = {
     entries, t, load, save, ...extra,
     usePluginConfig: bindSnapshotSelector(store), useLocale: bindSnapshotSelector(locale),
-  } as unknown as PluginConfigCardProps
+  } satisfies PluginConfigCardUsedProps
   const view = render(<PluginConfigCard {...props} />)
   return { store, load, save, view }
 }

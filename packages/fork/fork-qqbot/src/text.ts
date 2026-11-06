@@ -9,7 +9,11 @@ export const FORWARD_FAILED_PREFIX = '⚠️ 消息没能交给 agent：'
 /** What an attachment-only message reads as: attachments are not downloaded. */
 export const ATTACHMENT_NOTE = '（这条消息带了附件，当前版本不读取附件）'
 
-/** Last six characters of an openid: enough to tell peers apart in a prompt or log line without printing the whole id. */
+/**
+ * Last six characters of an openid: enough to tell peers apart in a prompt or log line without printing the whole id.
+ * @param id - an openid.
+ * @returns the id itself when at most six characters, otherwise its last six.
+ */
 export function shortId(id: string): string {
   return id.length <= 6 ? id : id.slice(-6)
 }
@@ -17,6 +21,8 @@ export function shortId(id: string): string {
 /**
  * Make inbound text unable to pose as the channel's own frame: a line that opens with `[QQ`
  * gets a full-width bracket, so only the host writes real frames.
+ * @param text - the sender's text.
+ * @returns the text with such line openings rewritten.
  */
 export function sanitizeInbound(text: string): string {
   return text.replace(/^(\s*)\[(?=QQ)/gm, '$1［')
@@ -33,6 +39,9 @@ export interface FrameSender {
  * The text the chat Session reads for one inbound message: a frame naming where it came from, then the
  * sender's words. Ids are shortened; the words are untrusted but not wrapped, since the Session's preset
  * already treats everything on QQ as data.
+ * @param sender - scope and ids of the sender.
+ * @param text - the sender's words.
+ * @returns the frame head, a space, then the sanitized trimmed text.
  */
 export function frameInbound(sender: FrameSender, text: string): string {
   const body = sanitizeInbound(text.trim())
@@ -50,6 +59,9 @@ const BREAKS = ['\n\n', '\n', '。', '！', '？', '. ', '! ', '? ', '；', '; '
  * latest paragraph, line, sentence, or word break in the second half of the window, otherwise inside a
  * word. What does not fit in the last part is cut and marked with `…`.
  * @returns at least one non-empty part, or none for blank input.
+ * @param raw - the text to split.
+ * @param maxChars - code points per part.
+ * @param maxParts - parts at most.
  */
 export function splitText(raw: string, maxChars: number, maxParts: number): string[] {
   const text = raw.toWellFormed().trim()

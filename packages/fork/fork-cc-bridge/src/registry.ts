@@ -27,9 +27,14 @@ export interface SessionRecord extends SessionView {
   socketPath: string
 }
 
+/** Looks up the start-time string of a process; resolves undefined when the pid does not exist. */
 export type StartOf = (pid: number) => Promise<string | undefined>
 
-/** `ps -o lstart=` for one pid, or undefined when it does not exist. */
+/**
+ * `ps -o lstart=` for one pid, or undefined when it does not exist.
+ * @param pid - process id to look up.
+ * @returns the trimmed `lstart` text (UTC, C locale), or undefined when `ps` fails or prints nothing.
+ */
 export const processStart: StartOf = pid => new Promise((resolve) => {
   execFile('ps', ['-o', 'lstart=', '-p', String(pid)], { env: { PATH: '/bin:/usr/bin', LC_ALL: 'C', TZ: 'UTC' }, timeout: 2000 }, (error, stdout) => {
     const text = stdout.trim()
@@ -40,6 +45,7 @@ export const processStart: StartOf = pid => new Promise((resolve) => {
 /** Kinds that take messages from the agent; daemons and spares do not. */
 const LISTABLE = new Set(['interactive', 'bg'])
 
+/** Reads and caches the live Claude Code session records of one sessions directory. */
 export class Registry {
   private cache: SessionRecord[] = []
   private loadedAt = Number.NEGATIVE_INFINITY
@@ -100,7 +106,11 @@ export class Registry {
     return out
   }
 
-  /** Live sessions, newest activity first; cached for `ttlMs` unless `refresh`. */
+  /**
+   * Live sessions, newest activity first; cached for `ttlMs` unless `refresh`.
+   * @param refresh - true to re-read the directory regardless of cache age.
+   * @returns the session records; empty when the directory is unreadable.
+   */
   async sessions(refresh = false): Promise<SessionRecord[]> {
     if (refresh || this.now() - this.loadedAt > this.ttlMs) {
       this.cache = (await this.read()).sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
@@ -109,7 +119,11 @@ export class Registry {
     return this.cache
   }
 
-  /** The live session listening on `socketPath`, if any. */
+  /**
+   * The live session listening on `socketPath`, if any.
+   * @param socketPath - the session's `messagingSocketPath`.
+   * @returns the record, or undefined; re-reads the directory once before giving up.
+   */
   async bySocket(socketPath: string): Promise<SessionRecord | undefined> {
     for (const refresh of [false, true]) {
       const hit = (await this.sessions(refresh)).find(rec => rec.socketPath === socketPath)
@@ -118,7 +132,11 @@ export class Registry {
     return undefined
   }
 
-  /** One session for a name, a pid, or a session id prefix; otherwise why not. */
+  /**
+   * One session for a name, a pid, or a session id prefix; otherwise why not.
+   * @param selector - session name (case-insensitive), pid or `pid:<n>`, or a session id prefix of at least 6 characters.
+   * @returns `{ session }` for exactly one match, or `{ error }` for no match, several matches, or an empty selector.
+   */
   async resolve(selector: string): Promise<{ session: SessionRecord } | { error: string }> {
     const sel = selector.trim().toLowerCase()
     if (sel === '') return { error: 'name the session to send to (see cc_list_sessions)' }
@@ -133,7 +151,11 @@ export class Registry {
   }
 }
 
-/** The view handed to the agent. */
+/**
+ * The view handed to the agent.
+ * @param rec - the session record.
+ * @returns the record without `socketPath` and `sessionId`.
+ */
 export function publicView(rec: SessionRecord): SessionView {
   const { socketPath: _socketPath, sessionId: _sessionId, ...view } = rec
   return view

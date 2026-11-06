@@ -74,7 +74,10 @@ export interface MemoryState {
   error: ActionError | null
 }
 
-/** @returns a store holding the not-yet-loaded state. */
+/**
+ * Create the memory store in its not-yet-loaded state (no view, nothing busy, no open flow or error).
+ * @returns a fresh store; each call returns an independent one.
+ */
 export function createMemoryStore(): SnapshotStore<MemoryState> {
   return createSnapshotStore<MemoryState>({
     view: null,

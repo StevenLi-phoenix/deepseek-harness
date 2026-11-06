@@ -12,6 +12,12 @@ interface Row {
   insert?: Row[]
 }
 
+/** The child rows a `cordis:group` carries in `config`. */
+const groupRows = (config: unknown): Row[] => {
+  if (!Array.isArray(config)) throw new Error('cordis:group config is not an array')
+  return config as Row[]
+}
+
 const read = (path: string): Row[] => parse(readFileSync(join(import.meta.dirname, '../../../..', path), 'utf8'), { logLevel: 'error' }) as Row[]
 const bundle = read('fork/bundles/event/cordis.patch.yml')
 const inserted = bundle.flatMap(row => row.insert ?? [])
@@ -170,7 +176,7 @@ describe('event bundle', () => {
     const preset = inserted.find(entry => entry.id === 'preset-bili')!
     expect(preset.config?.['id']).toBe('bili')
     const names = (preset.config?.plugins ?? []).flatMap(plugin => plugin.name === 'cordis:group'
-      ? (plugin.config as unknown as Row[]).map(child => child.name)
+      ? groupRows(plugin.config).map(child => child.name)
       : [plugin.name])
     expect(names).toEqual([
       '@deepseek-ai/dsh-persona',

@@ -21,6 +21,7 @@ const HISTORY_SHOWN = 50
  * Cut text to `chars` characters.
  * @param text - the text.
  * @param chars - the most characters kept.
+ * @returns the text unchanged, or its first `chars` characters followed by an ellipsis.
  */
 export function clip(text: string, chars: number = CLIP_CHARS): string {
   return text.length <= chars ? text : `${text.slice(0, chars)}…`
@@ -146,6 +147,7 @@ function matching(entries: readonly MemoryEntry[], last: ReadonlyMap<string, His
  * @param feedback - the feedback store.
  * @param query - the list's filter and page.
  * @param now - epoch milliseconds, injectable for tests.
+ * @returns the page's data.
  */
 export async function readView(
   store: MemoryStore,

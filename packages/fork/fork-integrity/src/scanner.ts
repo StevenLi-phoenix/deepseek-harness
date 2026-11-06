@@ -42,7 +42,10 @@ export class NoticeGate {
     return now - this.lastNoticeAt < this.minGapMs ? 'minimum gap' : undefined
   }
 
-  /** Count a notice that went out. */
+  /**
+   * Count a notice that went out.
+   * @param now - epoch ms of the send.
+   */
   sent(now: number): void {
     this.rollDay(now)
     this.lastNoticeAt = now

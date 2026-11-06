@@ -26,6 +26,7 @@ function line(body: Record<string, unknown>, field: 'key' | 'subject' | 'title')
  * Turn a parsed body into a bus event for `source`.
  * @param source - the source the request's token belongs to.
  * @param body - parsed JSON.
+ * @returns the event input with `source` set.
  * @throws InvalidEvent naming the first field that fails.
  */
 export function eventFrom(source: string, body: unknown): ForkEventInput {

@@ -892,6 +892,7 @@ export class WechatChannel extends Service implements ForkNotifier {
         if (updates.buf !== undefined && updates.buf !== cursor?.buf) await domain.table('cursors').put(account.botId, { buf: updates.buf })
         for (const message of updates.messages) await this.handleMessage(domain, account, message)
       } catch (error: unknown) {
+        // oxlint-disable-next-line typescript/no-unnecessary-condition -- teardown sets it while getUpdates is awaited.
         if (this.stopping) return
         if (poll.signal.aborted) {
           // A reload cut the long-poll: read the account file again at once.

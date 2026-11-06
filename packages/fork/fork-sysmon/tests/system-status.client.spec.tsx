@@ -49,7 +49,7 @@ describe('SystemStatusSection', () => {
     const renderFactorySlot = vi.fn((_name: string, _props: object) => <div data-testid="plugin-config" />)
     const props = {
       close: () => {}, useSysmon: bindSnapshotSelector(store), refresh: vi.fn(), t, renderFactorySlot,
-    } as unknown as SystemStatusProps
+    } as SystemStatusProps
     const { container } = render(<SystemStatusSection {...props} />)
     expect(renderFactorySlot).toHaveBeenCalledWith('settings.plugin-config', { entries: ['fork-sysmon'] })
     expect(container.querySelector('section')?.lastElementChild).toBe(screen.getByTestId('plugin-config'))

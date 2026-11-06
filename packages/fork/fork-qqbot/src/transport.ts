@@ -68,6 +68,9 @@ interface SdkInbound {
 /**
  * Normalize the SDK's inbound message. Guild and guild-DM messages (the SDK's default intents include
  * them) and malformed events yield `undefined`: the channel serves private chats and group @ mentions only.
+ * @param message - the SDK's event, validated here.
+ * @param now - epoch milliseconds used when the event has no valid timestamp.
+ * @returns the normalized message, or undefined for unsupported or malformed events.
  */
 export function toInbound(message: unknown, now: number = Date.now()): QqInbound | undefined {
   const m = message as SdkInbound | null
@@ -110,7 +113,12 @@ export interface SdkTransportOptions {
  */
 export const GROUP_AND_C2C_INTENT = 1 << 25
 
-/** Strip the app secret and anything shaped like a bearer token from SDK log text. */
+/**
+ * Strip the app secret and anything shaped like a bearer token from SDK log text.
+ * @param text - SDK log text.
+ * @param secret - the app secret; empty means none to strip.
+ * @returns the text with the secret and token values replaced by `***`.
+ */
 export function scrub(text: string, secret: string): string {
   const withoutSecret = secret === '' ? text : text.split(secret).join('***')
   return withoutSecret.replace(/(QQBot\s+|access_token["':=\s]+)[A-Za-z0-9._~+/=-]{12,}/g, '$1***')
@@ -119,6 +127,8 @@ export function scrub(text: string, secret: string): string {
 /**
  * The default transport, over Tencent's official SDK. The SDK loads on first use, so a build that never
  * configures QQ never touches it.
+ * @param options - credentials, log sink and optional endpoint overrides.
+ * @returns a transport whose SDK client starts on first use.
  */
 export function createSdkTransport(options: SdkTransportOptions): QqTransport {
   type Bot = InstanceType<typeof import('@tencent-connect/qqbot-nodejs').QQBot>

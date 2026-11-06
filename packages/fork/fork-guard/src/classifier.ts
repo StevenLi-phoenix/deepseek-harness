@@ -13,14 +13,17 @@ export const GUARD_PROMPT_VERSION = 'guard-2026-11-01.1'
 
 /** The labels a model may answer with. */
 export const GUARD_LABELS = ['clear', 'pii', 'unsure'] as const
+/** One of {@link GUARD_LABELS}. */
 export type GuardLabel = typeof GUARD_LABELS[number]
 
 /** What kind of private information the model found. */
 export const GUARD_CATEGORIES = [
   'real_name', 'school_employer', 'location', 'contact_account', 'health', 'finance', 'family', 'private_message', 'other',
 ] as const
+/** One of {@link GUARD_CATEGORIES}. */
 export type GuardCategory = typeof GUARD_CATEGORIES[number]
 
+/** System prompt sent with every review call; its answer format is parsed by the classifier. */
 export const GUARD_SYSTEM_PROMPT = `You are a strict privacy reviewer. A text is about to be written where other people can read it: a public page, or a shared channel such as a QQ group or a Bilibili account's replies. The text was written by an AI agent that works for a private individual (its owner). Decide whether the text reveals private information about the owner or about any real person.
 
 Private information to catch:
@@ -44,6 +47,7 @@ Use "clear" only when you are confident that nothing in the text is private. Use
  * @param text - the text under review.
  * @param purpose - the caller's purpose.
  * @param audience - who will read the text.
+ * @returns the message text; `<` and `>` in the input are replaced with full-width forms.
  */
 export function guardUserMessage(text: string, purpose: string, audience: GuardAudience): string {
   const safe = text.replaceAll('<', '＜').replaceAll('>', '＞')
@@ -95,6 +99,7 @@ export function parseGuardAnswer(text: string): ParsedAnswer | undefined {
 /**
  * SHA-256 of a string, hex.
  * @param value - any string.
+ * @returns 64 lower-case hex characters.
  */
 export function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex')
@@ -138,7 +143,10 @@ export class RawStore {
     return path
   }
 
-  /** Remove day directories older than the retention, at most once an hour. */
+  /**
+ * Remove day directories older than the retention, at most once an hour.
+ * @returns the number of directories removed; 0 when called again within the hour.
+ */
   async prune(): Promise<number> {
     const now = this.now().getTime()
     if (now - this.lastPrune < 3_600_000) return 0
@@ -161,7 +169,11 @@ export class RawStore {
   }
 }
 
-/** A short random id for a raw file: the time, then random hex. */
+/**
+ * A short random id for a raw file: the time, then random hex.
+ * @param now - clock reading to embed.
+ * @returns `<epoch ms>-<6 hex characters>`.
+ */
 export function rawId(now: Date = new Date()): string {
   return `${String(now.getTime())}-${randomBytes(3).toString('hex')}`
 }
@@ -169,6 +181,7 @@ export function rawId(now: Date = new Date()): string {
 /**
  * The local date as `YYYY-MM-DD`.
  * @param date - any date.
+ * @returns the date in the process time zone.
  */
 export function dayStamp(date: Date): string {
   const pad = (value: number): string => String(value).padStart(2, '0')

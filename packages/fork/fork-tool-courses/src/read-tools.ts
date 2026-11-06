@@ -20,6 +20,11 @@ export interface ReadSpec {
   run: (args: Record<string, unknown>, signal: AbortSignal) => Promise<string>
 }
 
+/**
+ * Define `courses_deadlines`, the list of open tasks due soon.
+ * @param courses - the courses client; its time zone formats dates.
+ * @returns the tool's name, description, parameters, and run function; `run` rejects when the courses service call fails.
+ */
 export function deadlinesTool(courses: ForkCourses): ReadSpec {
   const zone = courses.timeZone
   return {
@@ -54,6 +59,11 @@ export function deadlinesTool(courses: ForkCourses): ReadSpec {
   }
 }
 
+/**
+ * Define `courses_find`, the text search over all tasks.
+ * @param courses - the courses client; its time zone formats dates.
+ * @returns the tool's name, description, parameters, and run function; `run` throws `ToolProblem` when no words are given.
+ */
 export function findTool(courses: ForkCourses): ReadSpec {
   const zone = courses.timeZone
   return {
@@ -78,6 +88,11 @@ export function findTool(courses: ForkCourses): ReadSpec {
   }
 }
 
+/**
+ * Define `courses_get`, the read of one task by id.
+ * @param courses - the courses client; its time zone formats dates.
+ * @returns the tool's name, description, parameters, and run function; `run` throws `ToolProblem` when the id is empty or not a task.
+ */
 export function getTool(courses: ForkCourses): ReadSpec {
   const zone = courses.timeZone
   return {
@@ -103,6 +118,11 @@ export function getTool(courses: ForkCourses): ReadSpec {
   }
 }
 
+/**
+ * Define `courses_sync`, the report of what recent sync runs read.
+ * @param courses - the courses client; its time zone formats dates.
+ * @returns the tool's name, description, parameters, and run function.
+ */
 export function syncTool(courses: ForkCourses): ReadSpec {
   const zone = courses.timeZone
   return {

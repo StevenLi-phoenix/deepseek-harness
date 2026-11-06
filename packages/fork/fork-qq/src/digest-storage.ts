@@ -85,7 +85,11 @@ export class DigestStore {
 
   // ---- digests ----
 
-  /** @returns digests newest first, optionally of one group and/or made since `sinceMs`. */
+  /**
+   * Digests of all groups or one, newest first.
+   * @param options - `groupId` and `sinceMs` (inclusive lower bound on the creation time, milliseconds) filter; `limit` caps the count.
+   * @returns the matching digests.
+   */
   digests(options: { groupId?: string; sinceMs?: number; limit: number }): DigestRecord[] {
     const since = options.sinceMs ?? 0
     return [...this.domain.table('digests').entries()].map(([, row]) => row)
@@ -94,17 +98,28 @@ export class DigestStore {
       .slice(0, options.limit)
   }
 
-  /** @returns the cursor the group's newest digest reached, or undefined when it has none. */
+  /**
+   * The point in the message log the group's digests have reached.
+   * @param groupId - the QQ group number.
+   * @returns the cursor the group's newest digest reached, or undefined when it has none.
+   */
   digestedUpTo(groupId: string): string | undefined {
     return this.digests({ groupId, limit: 1 })[0]?.toCursor
   }
 
-  /** @returns when the group's newest digest was made, or 0. */
+  /**
+   * When the group's newest digest was made.
+   * @param groupId - the QQ group number.
+   * @returns the creation time in epoch milliseconds, or 0 when the group has no digest.
+   */
   lastDigestAt(groupId: string): number {
     return this.digests({ groupId, limit: 1 })[0]?.createdAt ?? 0
   }
 
-  /** @returns each group's newest digest time. */
+  /**
+   * The newest digest time of every group that has a digest.
+   * @returns a map from group number to epoch milliseconds.
+   */
   lastDigestTimes(): Map<string, number> {
     const times = new Map<string, number>()
     for (const [, row] of this.domain.table('digests').entries()) times.set(row.groupId, Math.max(times.get(row.groupId) ?? 0, row.createdAt))
@@ -118,20 +133,35 @@ export class DigestStore {
     return id
   }
 
-  /** Store a digest. @returns its id. */
+  /**
+   * Store a digest under the next free id.
+   * @param digest - the record without its id.
+   * @returns the id assigned.
+   */
   async insertDigest(digest: Omit<DigestRecord, 'id'>): Promise<number> {
     const id = await this.nextId('last-digest-id', [...this.domain.table('digests').keys()].map(Number))
     await this.domain.table('digests').put(key(id), { id, ...digest })
     return id
   }
 
-  /** Keep the newest `keep` digests of a group and delete the rest. @returns how many were deleted. */
+  /**
+   * Keep the newest `keep` digests of a group and delete the rest.
+   * @param groupId - the QQ group number.
+   * @param keep - how many digests to keep.
+   * @returns how many were deleted.
+   */
   async capDigests(groupId: string, keep: number): Promise<number> {
     const rows = this.digests({ groupId, limit: Number.MAX_SAFE_INTEGER })
     return this.domain.table('digests').deleteMany(rows.slice(keep).map(row => key(row.id)))
   }
 
-  /** Delete digests, of one group and/or made before `beforeMs`. @returns how many were deleted. */
+  /**
+   * Delete digests of one group and/or made before a time.
+   * @param options - `groupId` limits to one group, `beforeMs` deletes digests created before that epoch millisecond; at least one is
+   *   required.
+   * @returns how many were deleted.
+   * @throws {@link Error} when neither option is given.
+   */
   async deleteDigests(options: { groupId?: string; beforeMs?: number }): Promise<number> {
     if (options.groupId === undefined && options.beforeMs === undefined) throw new Error('deleteDigests needs a group or a date')
     const doomed = [...this.domain.table('digests').entries()].filter(([, row]) =>
@@ -142,29 +172,51 @@ export class DigestStore {
 
   // ---- resident Sessions ----
 
-  /** @returns the resident digest Session of a group, if it has one. */
+  /**
+   * The resident digest Session of a group.
+   * @param groupId - the QQ group number.
+   * @returns the Session record, or undefined when the group has none.
+   */
   groupSession(groupId: string): GroupSession | undefined {
     return this.domain.table('sessions').get(groupId)
   }
 
-  /** @returns whether a Session is some group's current resident digest Session. */
+  /**
+   * Whether a Session is some group's current resident digest Session.
+   * @param sessionId - the Session id to look for.
+   * @returns true when a group's record names this Session.
+   */
   isResidentSession(sessionId: string): boolean {
     return [...this.domain.table('sessions').entries()].some(([, row]) => row.sessionId === sessionId)
   }
 
-  /** Record the resident digest Session of a group, replacing the previous one. */
+  /**
+   * Record the resident digest Session of a group, replacing the previous one.
+   * @param groupId - the QQ group number.
+   * @param session - the new Session record.
+   */
   setGroupSession(groupId: string, session: GroupSession): Promise<void> {
     return this.domain.table('sessions').put(groupId, session)
   }
 
   // ---- notes ----
 
-  /** @returns the notes of a group, oldest first. */
+  /**
+   * The notes of a group.
+   * @param groupId - the QQ group number.
+   * @returns the notes, oldest first.
+   */
   notes(groupId: string): NoteRecord[] {
     return [...this.domain.table('notes').entries()].map(([, row]) => row).filter(row => row.groupId === groupId).sort((a, b) => a.id - b.id)
   }
 
-  /** Add a note. @returns its id; undefined when the group already has that note or has {@link MAX_NOTES_PER_GROUP}. */
+  /**
+   * Add a note to a group.
+   * @param groupId - the QQ group number.
+   * @param text - the note; an identical text already stored is not added again.
+   * @param now - the creation time in epoch milliseconds.
+   * @returns the new id; undefined when the group already has that note or has {@link MAX_NOTES_PER_GROUP}.
+   */
   async addNote(groupId: string, text: string, now: number): Promise<number | undefined> {
     const own = this.notes(groupId)
     if (own.length >= MAX_NOTES_PER_GROUP || own.some(note => note.text === text)) return undefined
@@ -173,7 +225,12 @@ export class DigestStore {
     return id
   }
 
-  /** Remove a note of a group by its id (`7` or `#7`) or by its exact text. */
+  /**
+   * Remove a note of a group.
+   * @param groupId - the QQ group number.
+   * @param which - the note's id (`7` or `#7`) or its exact text.
+   * @returns whether a note was removed.
+   */
   async removeNote(groupId: string, which: string): Promise<boolean> {
     const asId = /^#?(\d+)$/.exec(which.trim())
     const found = this.notes(groupId).find(note => (asId === null ? note.text === which.trim() : note.id === Number(asId[1])))
@@ -182,22 +239,36 @@ export class DigestStore {
 
   // ---- meta ----
 
-  /** @returns a setting, or undefined. */
+  /**
+   * A stored setting.
+   * @param name - the setting name.
+   * @returns the value, or undefined when it is not set.
+   */
   getMeta(name: string): string | undefined {
     return this.domain.table('meta').get(name)?.value
   }
 
-  /** Store a setting. */
+  /**
+   * Store a setting.
+   * @param name - the setting name.
+   * @param value - the value, replacing any previous one.
+   */
   setMeta(name: string, value: string): Promise<void> {
     return this.domain.table('meta').put(name, { value })
   }
 
-  /** Remove a setting. */
+  /**
+   * Remove a setting.
+   * @param name - the setting name; removing an unset name is allowed.
+   */
   async deleteMeta(name: string): Promise<void> {
     await this.domain.table('meta').delete(name)
   }
 
-  /** @returns the per-install salt of member aliases, created on first use. */
+  /**
+   * The per-install salt of member aliases, created on first use.
+   * @returns the salt.
+   */
   async ensureSalt(): Promise<string> {
     const stored = this.getMeta('alias-salt')
     if (stored !== undefined) return stored
@@ -206,23 +277,30 @@ export class DigestStore {
     return salt
   }
 
-  /** @returns the alias salt if it exists already. */
+  /**
+   * The per-install salt of member aliases, without creating it.
+   * @returns the salt, or undefined when none has been created or imported.
+   */
   salt(): string | undefined {
     return this.getMeta('alias-salt')
   }
 
   // ---- the one-time import ----
 
-  /** @returns whether the import of the recorder's frozen digest state has run. */
+  /**
+   * Whether the one-time import of the recorder's frozen digest state has run.
+   * @returns true once the import marker is stored.
+   */
   get imported(): boolean {
     return this.getMeta('legacy-imported-at') !== undefined
   }
 
   /**
-   * Copy the digest state the plugin kept in `qq.db` into this domain. Records get fixed ids, so a run that crashed half
-   * way is repeated safely; the marker is written last, and once it is there nothing is imported again.
+   * Copy the digest state the plugin kept in `qq.db` into this domain. Records get fixed ids, so a run that crashed half way is repeated
+   * safely; the marker is written last, and once it is there nothing is imported again.
    * @param legacy - what the recorder reports.
-   * @param now - the time to stamp the marker with.
+   * @param now - the time to stamp the marker with, in epoch milliseconds.
+   * @returns the counts imported; `imported` is false when the marker already existed.
    */
   async importLegacy(legacy: LegacyDigestState, now: number): Promise<ImportResult> {
     if (this.imported) return { imported: false, digests: 0, notes: 0, sessions: 0 }

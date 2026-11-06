@@ -51,7 +51,8 @@ export async function readJson(request: Request): Promise<unknown> {
   const text = await request.text()
   if (text.length > MAX_BODY_BYTES) throw new Refusal('invalid_request', 'size')
   try {
-    return JSON.parse(text) as unknown
+    const body: unknown = JSON.parse(text)
+    return body
   } catch {
     throw new Refusal('invalid_request', 'json')
   }

@@ -28,6 +28,7 @@ export const PROTECTED_CATEGORIES: readonly MemoryCategory[] = ['instructions', 
 /**
  * Whether a category is protected.
  * @param category - entry category.
+ * @returns true when the category is one of {@link PROTECTED_CATEGORIES}.
  */
 export function isProtected(category: MemoryCategory): boolean {
   return PROTECTED_CATEGORIES.includes(category)
@@ -47,6 +48,7 @@ export type MemorySource = typeof SOURCES[number]
 /**
  * Whether a value names an entry source.
  * @param value - candidate source.
+ * @returns true when the value is a known source string.
  */
 export function isSource(value: unknown): value is MemorySource {
   return typeof value === 'string' && (SOURCES as readonly string[]).includes(value)
@@ -94,6 +96,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/u
 /**
  * Whether a value names a category.
  * @param value - candidate category.
+ * @returns true when the value is a known category string.
  */
 export function isCategory(value: unknown): value is MemoryCategory {
   return typeof value === 'string' && (CATEGORIES as readonly string[]).includes(value)
@@ -102,6 +105,7 @@ export function isCategory(value: unknown): value is MemoryCategory {
 /**
  * Whether a value is a store id.
  * @param value - candidate id.
+ * @returns true when the value matches the id pattern.
  */
 export function isEntryId(value: unknown): value is string {
   return typeof value === 'string' && ID.test(value)
@@ -110,6 +114,7 @@ export function isEntryId(value: unknown): value is string {
 /**
  * Collapse whitespace (newlines included) to single spaces and trim, so every entry stays one line.
  * @param text - raw entry text.
+ * @returns the single-line text.
  */
 export function normalizeText(text: string): string {
   return text.replace(/\s+/gu, ' ').trim()

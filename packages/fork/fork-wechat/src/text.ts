@@ -78,6 +78,7 @@ export const STOP_IDLE_REPLY = '现在没有正在运行的任务。'
 /**
  * Answer to `/stop` after cancelling running tasks.
  * @param labels - one name per cancelled task, in the order they were stopped.
+ * @returns the reply text listing each label.
  */
 export function stopReply(labels: readonly string[]): string {
   return `⏹ 已停下 ${labels.length} 个正在运行的任务：\n${labels.map(label => `• ${label}`).join('\n')}\n\n监控和定时提醒不受影响；要停它们，直接告诉我。`
@@ -293,6 +294,7 @@ function itemText(item: WeixinItem): string {
  * Prompt text of one inbound message: a short quote prefix, the text items,
  * speech-to-text of voice items, and placeholders for media.
  * @param message - inbound message.
+ * @param recall - returns the bot-sent text for a quoted message's send time (ms), or undefined; used when the quote has no text.
  * @returns the text, or an empty string when nothing usable was sent.
  */
 export function inboundText(message: WeixinMessage, recall?: (sentAt: number) => string | undefined): string {
@@ -411,6 +413,7 @@ export function timeGapNotice(now: number, before: ActivityRecord | undefined, m
  * @param at - when it was sent, in Unix epoch milliseconds.
  * @param timeZone - IANA zone for the time.
  * @param from - who sent it, as the chat Session reads it.
+ * @returns the note text with the time frame and `text`.
  */
 export function sharedNoteText(text: string, at: number, timeZone: string, from: string = OTHER_SESSION): string {
   return `At ${formatStamp(at, timeZone)} (${timeZone}), ${from} sent the owner this message on WeChat.`
@@ -427,6 +430,7 @@ const AGENT_MESSAGE_TAG = 'agent_message'
  * @param message - the text and who sent it.
  * @param at - when it was sent, in Unix epoch milliseconds.
  * @param timeZone - IANA zone for the time.
+ * @returns the prompt text.
  */
 export function agentMessageText(message: ForkAgentMessage, at: number, timeZone: string): string {
   const frame = [

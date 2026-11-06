@@ -21,7 +21,12 @@ const OWN_STATES: Readonly<Record<ServiceId, readonly string[]>> = {
 /** States every service shares under `state.<state>`. */
 const SHARED_STATES: ReadonlySet<string> = new Set(['up', 'ok', 'warn', 'down', 'absent', 'timeout', 'error', 'loading'])
 
-/** The status line of a card. */
+/**
+ * The status line of a card.
+ * @param card - the service card.
+ * @param t - translator for console copy keys.
+ * @returns the localized status; an unknown state reads as the shared `error` text.
+ */
 export function statusText(card: ServiceCard, t: Translate): string {
   if (OWN_STATES[card.id].includes(card.state)) return t(`card.${card.id}.${card.state}` as ConsoleKey, params(card.facts))
   return t(`state.${SHARED_STATES.has(card.state) ? card.state : 'error'}` as ConsoleKey)
@@ -32,7 +37,13 @@ function params(facts: Readonly<Record<string, Fact>>): Record<string, string | 
   return Object.fromEntries(Object.entries(facts).map(([key, value]) => [key, value === null ? '—' : typeof value === 'boolean' ? String(value) : value]))
 }
 
-/** The short facts under the status line, for example the version and the sessions. */
+/**
+ * The short facts under the status line, for example the version and the sessions.
+ * @param card - the service card.
+ * @param t - translator for console copy keys.
+ * @param now - current time in epoch milliseconds, used for relative durations.
+ * @returns the localized lines; empty when the card has no facts to show.
+ */
 export function factLines(card: ServiceCard, t: Translate, now: number = Date.now()): string[] {
   const { facts } = card
   const text = (key: ConsoleKey, extra: Record<string, string | number> = {}): string => t(key, { ...params(facts), ...extra })

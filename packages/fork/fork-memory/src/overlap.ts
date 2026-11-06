@@ -44,6 +44,7 @@ export function spanKeys(text: string): Set<string> {
  * Whether two span-key sets share a key.
  * @param left - keys of one text.
  * @param right - keys of another.
+ * @returns true when at least one key is in both sets.
  */
 export function sharesSpan(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {
   const [small, large] = left.size <= right.size ? [left, right] : [right, left]

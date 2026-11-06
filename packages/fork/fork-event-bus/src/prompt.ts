@@ -209,7 +209,8 @@ function jsonLine(text: string, name: string): unknown {
   const line = text.split('\n').find(candidate => candidate.startsWith(prefix))
   if (line === undefined) return undefined
   try {
-    return JSON.parse(line.slice(prefix.length)) as unknown
+    const parsed: unknown = JSON.parse(line.slice(prefix.length))
+    return parsed
   } catch {
     return undefined
   }
@@ -244,6 +245,7 @@ export function reminderLabel(text: string | undefined): string | undefined {
 /**
  * Label of a turn woken by a fork-tool-monitor notice: "Monitor mon-xxxxxx (description)".
  * @param text - the notice text.
+ * @returns the label, or undefined when the text is absent or is not a monitor notice.
  */
 export function monitorLabel(text: string | undefined): string | undefined {
   return text === undefined ? undefined : /^(Monitor mon-[0-9a-f]{6} \(.{1,80}?\))(?= printed | ended: )/u.exec(text)?.[1]

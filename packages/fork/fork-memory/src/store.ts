@@ -58,6 +58,7 @@ export interface SaveResult {
  * Whether a rollback by this filter undoes a history record.
  * @param record - one history record.
  * @param filter - the Session and/or time to go back to.
+ * @returns true when the record is within the filter.
  */
 export function matchesRollback(record: HistoryRecord, filter: RollbackFilter): boolean {
   return (filter.session === undefined || record.session === filter.session)
@@ -145,12 +146,17 @@ export interface SearchResult {
 /**
  * Default memory file of a DSH home.
  * @param env - environment holding `DSH_HOME`; defaults to `process.env`.
+ * @returns the absolute path of `fork-memory/memory.jsonl` under the DSH home.
  */
 export function defaultMemoryFile(env: NodeJS.ProcessEnv = process.env): string {
   return join(resolveDshHome(undefined, env), 'fork-memory', 'memory.jsonl')
 }
 
-/** Today as `YYYY-MM-DD` in the process time zone. */
+/**
+ * Today as `YYYY-MM-DD` in the process time zone.
+ * @param now - the instant to format.
+ * @returns the local date.
+ */
 export function localDate(now: Date = new Date()): string {
   const pad = (value: number): string => String(value).padStart(2, '0')
   return `${String(now.getFullYear())}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
@@ -158,7 +164,12 @@ export function localDate(now: Date = new Date()): string {
 
 const locks = new Map<string, Promise<void>>()
 
-/** Run `task` after every earlier task on the same file has settled. */
+/**
+ * Run `task` after every earlier task on the same file has settled.
+ * @param file - the lock key; tasks on the same key run one at a time.
+ * @param task - the work to run.
+ * @returns the task's result; a rejected earlier task does not block it.
+ */
 export async function serialized<T>(file: string, task: () => Promise<T>): Promise<T> {
   const previous = locks.get(file) ?? Promise.resolve()
   const run = previous.then(task)
@@ -240,7 +251,10 @@ export class MemoryStore {
     this.snapshotDir = join(dir, 'snapshots')
   }
 
-  /** Every entry in file order; a missing file is empty. */
+  /**
+   * Every entry in file order; a missing file is empty.
+   * @returns the entries.
+   */
   async list(): Promise<MemoryEntry[]> {
     const raw = await this.read(this.file)
     const entries: MemoryEntry[] = []
@@ -270,12 +284,18 @@ export class MemoryStore {
     }
   }
 
-  /** SHA-256 of the memory file's current text, or of nothing when it does not exist. */
+  /**
+   * SHA-256 of the memory file's current text, or of nothing when it does not exist.
+   * @returns the lowercase hex digest.
+   */
   async sha(): Promise<string> {
     return sha256(await this.read(this.file))
   }
 
-  /** Writes waiting for the owner, oldest first; expired ones are left out. */
+  /**
+   * Writes waiting for the owner, oldest first; expired ones are left out.
+   * @returns the unexpired pending writes.
+   */
   async listPending(): Promise<PendingEntry[]> {
     const pending: PendingEntry[] = []
     const cutoff = this.now().getTime() - PENDING_DAYS * 86_400_000
@@ -297,6 +317,8 @@ export class MemoryStore {
    * Add an entry, or replace the text (and category) of entry `id`.
    * @param input - text, category, and the id to replace.
    * @param meta - who wrote it, kept with the entry and in the history.
+   * @returns the entry and whether it was `added`, `replaced` or `unchanged`.
+   * @throws MemoryError for invalid input, an unknown id, or a full store.
    */
   async save(input: { text: unknown; category: unknown; id?: unknown }, meta?: WriteMeta): Promise<SaveResult> {
     const text = validText(input.text)
@@ -448,7 +470,10 @@ export class MemoryStore {
     })
   }
 
-  /** The history, oldest first; a damaged line is skipped. */
+  /**
+   * The history, oldest first; a damaged line is skipped.
+   * @returns the readable records.
+   */
   async history(): Promise<HistoryRecord[]> {
     const records: HistoryRecord[] = []
     for (const line of (await this.read(this.historyFile)).split('\n')) {
@@ -467,6 +492,7 @@ export class MemoryStore {
    * Undo every change a Session's turns made, or every change since a time, newest first.
    * @param filter - the Session id and/or the ISO time to go back to.
    * @param options - `dryRun` only counts; `expect` guards what a confirmed rollback applies.
+   * @returns counts and ids of the touched entries; rejects with `MemoryError` when the filter is empty.
    */
   async rollback(filter: RollbackFilter, options: RollbackOptions = {}): Promise<RollbackResult> {
     if (filter.session === undefined && filter.since === undefined) throw new MemoryError('invalid_id', 'give a session or a since time to roll back.')
@@ -556,6 +582,7 @@ export class MemoryStore {
   /**
    * Add dated drafts, keeping their dates; drafts whose category and text already exist are skipped.
    * @param drafts - entries to add, in order; they are marked as imported.
+   * @returns how many drafts were added and how many were duplicates.
    */
   async importDrafts(drafts: readonly MemoryDraft[]): Promise<ImportResult> {
     const checked = drafts.map(draft => ({ ...draft, category: validCategory(draft.category), text: validText(draft.text) }))
@@ -581,6 +608,7 @@ export class MemoryStore {
    * An empty query lists the category (or everything), newest first.
    * @param query - whitespace-separated terms; an entry id also matches.
    * @param options - category filter and result cap.
+   * @returns up to `limit` entries and the count of matches beyond it.
    */
   async search(query: string, options: { category?: MemoryCategory; limit: number }): Promise<SearchResult> {
     const terms = termsOf(query)
@@ -613,7 +641,10 @@ export class MemoryStore {
     return false
   }
 
-  /** Ids and categories of every entry and every waiting write: what the owner reviews without reading text. */
+  /**
+   * Ids and categories of every entry and every waiting write: what the owner reviews without reading text.
+   * @returns id and category per entry (with source) and per waiting write (with op).
+   */
   async index(): Promise<{
     entries: Array<{ id: string; category: MemoryCategory; source: string }>
     pending: Array<{ id: string; category: MemoryCategory; op: string }>
@@ -695,6 +726,11 @@ export class MemoryStore {
   }
 }
 
+/**
+ * Pick a random id not used by any given entry.
+ * @param entries - entries whose ids are taken.
+ * @returns six lowercase hex digits.
+ */
 export function freshId(entries: readonly { readonly id: string }[]): string {
   const taken = new Set(entries.map(entry => entry.id))
   for (;;) {

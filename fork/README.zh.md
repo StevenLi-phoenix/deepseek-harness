@@ -9,10 +9,10 @@
 | 路径 | 内容 |
 |---|---|
 | [`CHANGELOG.md`](CHANGELOG.md) | fork 本地变更（Keep a Changelog） |
-| [`bundles/event/`](bundles/event/) | `@deepseek-ai/dsh-fork-event-bundle`：以 bundle 层形式提供的事件组合配置（归代码所有；路由状态存在存储里，由 agent 的工具管理） |
+| [`bundles/event/`](bundles/event/) | `@deepseek-ai/dsh-fork-event-bundle`：以 bundle 层形式提供的事件组合配置（归代码所有；路由状态存在存储里，由 agent 的工具管理）。`unattended` preset 保留 `workflow` 工具；Agent Teams 在 bundle 层禁用 |
 | [`profiles/event/`](profiles/event/) | 事件 profile：`package.json`（Web bundle 加事件 bundle）与 `cordis.patch.yml`，即主人自己的空 patch 层，Web 设置页写入这里 |
 | [`deploy/RUNBOOK.md`](deploy/RUNBOOK.md) | Mac mini 上的隔离部署：`dsh-runtime` 用户、LaunchDaemon、密钥、微信绑定、验证 |
-| [`deploy/`](deploy/) | `install-app.sh`、`setup-profile.sh`（软链插件和 bundle，只在首次创建主人层）、`check-setup-profile.sh`、`upgrade.sh`、`wechat-login.mjs`、`home.cordis.patch.yml`、LaunchDaemon 模板 |
+| [`deploy/`](deploy/) | `install-app.sh`、`setup-profile.sh`（软链插件和 bundle，只在首次创建主人层）、`check-setup-profile.sh <installed prefix>`（检查全新、迁移过和重复运行的 home；`upgrade.sh` 在切换 `current` 前运行它）、`upgrade.sh`、`wechat-login.mjs`、`home.cordis.patch.yml`、LaunchDaemon 模板 |
 | [`../packages/fork/UPSTREAM.md`](../packages/fork/UPSTREAM.md) | 上游基线、复制的包、改动过的上游文件、升级流程 |
 
 ## fork 组的检查
@@ -28,6 +28,8 @@ pnpm run verify-translation-pairing packages/fork/README.md packages/fork/*/READ
 pnpm run verify-package-readme-model-experience && pnpm run verify-package-readme-summaries
 pnpm run verify-config-catalog && pnpm run verify-cordis-catalog && pnpm run verify-md-links
 ```
+
+`tsconfig.host.json` 不包含 `*.client.spec.*` 测试；它们在 Client 聚合 `tsconfig.client.json` 里做类型检查。
 
 ## 从源码运行事件 profile
 

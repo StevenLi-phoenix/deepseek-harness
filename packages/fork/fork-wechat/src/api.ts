@@ -541,7 +541,8 @@ export class IlinkClient {
     }
     if (status < 200 || status > 299) throw new IlinkError(`iLink ${spec.path}: HTTP ${status}`)
     try {
-      return JSON.parse(text) as unknown
+      const parsed: unknown = JSON.parse(text)
+      return parsed
     } catch {
       throw new IlinkError(`iLink ${spec.path}: response is not JSON`)
     }

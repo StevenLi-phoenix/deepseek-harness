@@ -54,7 +54,11 @@ export const TICS: readonly string[] = [
   '没接你那句……',
 ]
 
-/** A matcher for one blacklist item. */
+/**
+ * A matcher for one blacklist item.
+ * @param item - the phrase; `……` stands for 1 to 30 characters, `/` separates alternatives.
+ * @returns the unanchored regular expression for it.
+ */
 export function compileTic(item: string): RegExp {
   const escape = (text: string): string => text.replaceAll(/[.*+?^${}()|[\]\\]/gu, String.raw`\$&`)
   const source = item.split('……').map(part => part.split('/').map(escape).join('|')).map(part => (part.includes('|') ? `(?:${part})` : part)).join('.{1,30}?')

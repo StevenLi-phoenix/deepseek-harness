@@ -26,7 +26,11 @@ const ENTRY_SCHEMA = {
   },
 } as const
 
-/** An entry as the model sees it: no Session id or origin label. */
+/**
+ * An entry as the model sees it: no Session id or origin label.
+ * @param entry - the stored entry.
+ * @returns the entry without session id or origin; `source` is present only when set.
+ */
 export function publicEntry(entry: MemoryEntry): { id: string; category: MemoryEntry['category']; date: string; text: string; source?: string } {
   const { id, category, date, text, source } = entry
   return { id, category, date, text, ...source === undefined ? {} : { source } }

@@ -12,6 +12,7 @@ import { readAll, type ImportCliIo } from './cli-io.ts'
 import { defaultFeedbackFile, FEEDBACK_SCOPES, FeedbackStore, type FeedbackScope } from './feedback.ts'
 import type { MemoryStore } from './store.ts'
 
+/** The `memory-admin` usage text, one line per command. */
 export const ADMIN_USAGE = [
   'usage: memory-admin <command> [--file <memory.jsonl>]',
   '  ids                             id, category, source of every entry and every waiting write (no text)',

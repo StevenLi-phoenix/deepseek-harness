@@ -313,8 +313,7 @@ describe('system prompt hashes and stock lines', () => {
     const info = vi.fn()
     const warn = vi.fn()
     const ctx = await mount({})
-    ;(ctx.logger as unknown as { info: unknown }).info = info
-    ;(ctx.logger as unknown as { warn: unknown }).warn = warn
+    Object.assign(ctx.logger, { info, warn })
     const session = chatSession('unattended')
     const prompt = (text: string): SessionEvent => ({ type: 'system/message', seq: 0, time: 0, data: { turn: 1, step: 1, message: createSystemMessage(text) } }) as never
     ctx.emit('session/event', session, prompt(''))

@@ -26,7 +26,7 @@ export function mountFacility(ctx: Context, pool: MemoryMediaPool): void {
 }
 
 /** An open `fork_qq` domain on a throwaway context. */
-export async function memoryStore(pool?: MemoryMediaPool): Promise<{ ctx: Context; store: DigestStore; close(): Promise<void> }> {
+export async function memoryStore(pool?: MemoryMediaPool): Promise<{ ctx: Context; store: DigestStore; close: () => Promise<void> }> {
   const ctx = new Context()
   await mountMemoryStorage(ctx, pool)
   const domain = await ctx.storageDomain.open(qqDomain)

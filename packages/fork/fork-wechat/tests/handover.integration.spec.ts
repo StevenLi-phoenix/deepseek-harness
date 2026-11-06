@@ -54,7 +54,8 @@ it('moves the old chat\'s reminder and watch to the new chat Session, so the old
   await ctx.plugin(Timer)
   await ctx.plugin(OwnerRelay)
   await ctx.plugin(ForkEventBus, {
-    subscriptions: [], suppress: { actors: [], markers: [] }, retainEvents: 100, retainBatches: 100, maxTextChars: 2000,
+    subscriptions: [], suppress: { actors: [], markers: [] }, retainEvents: 100, retainBatches: 100,
+    flowChangesKept: 200, maxTextChars: 2000,
     notifySessionResult: true, reportScheduledTurns: true, maxNoteEvents: 10,
   })
   await ctx.plugin(WechatChannel, Config({ accountFile, chat: { workspacePath: join(dir, 'work') } } as never))

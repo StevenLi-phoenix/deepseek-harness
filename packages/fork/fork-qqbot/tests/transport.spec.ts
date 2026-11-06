@@ -83,8 +83,9 @@ describe('createSdkTransport against a local Open Platform', () => {
     await transport.send({ scope: 'group', id: GROUP, msgId: 'ROBOT1.0_grp-1' }, '好的')
     await transport.send({ scope: 'c2c', id: USER }, '主动消息')
     const sends = platform.requests.filter(request => request.url.includes('/messages'))
+    const anyNumber: unknown = expect.any(Number)
     expect(sends.map(request => [request.url, request.auth, request.body])).toEqual([
-      [`/v2/users/${USER}/messages`, 'QQBot tok-0123456789abcdef', expect.objectContaining({ content: '你好呀', msg_type: 0, msg_id: 'ROBOT1.0_c2c-1', msg_seq: expect.any(Number) as unknown })],
+      [`/v2/users/${USER}/messages`, 'QQBot tok-0123456789abcdef', expect.objectContaining({ content: '你好呀', msg_type: 0, msg_id: 'ROBOT1.0_c2c-1', msg_seq: anyNumber })],
       [`/v2/groups/${GROUP}/messages`, 'QQBot tok-0123456789abcdef', expect.objectContaining({ content: '好的', msg_type: 0, msg_id: 'ROBOT1.0_grp-1' })],
       [`/v2/users/${USER}/messages`, 'QQBot tok-0123456789abcdef', expect.objectContaining({ content: '主动消息', msg_type: 0 })],
     ])

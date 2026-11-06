@@ -3,7 +3,12 @@
  * bad configuration at load) and the recorder (which refuses a pushed one); neither imports the other's modules for it.
  */
 
-/** Whether the URL points at this machine or the tailnet, the only places the protocol end may live. */
+/**
+ * Whether the URL points at this machine or the tailnet, the only places the protocol end may live.
+ * @param raw - the WebSocket address.
+ * @returns true for a `ws:` or `wss:` URL on localhost, loopback, a tailnet address, or a `*.ts.net` name; false for anything else,
+ *   including an unparsable string.
+ */
 export function isPrivateUrl(raw: string): boolean {
   return isPrivateAddress(raw, ['ws:', 'wss:'])
 }

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { createMemoryStore, type MemoryActions, type MemoryState } from '../src/client/memory.ts'
 import { de, en, es, fr, ja, pt, ru, zh } from '../src/client/locales.ts'
@@ -12,7 +12,7 @@ import { DETAIL, GUARD, VIEW } from './fixtures.client.ts'
 const t = makeTranslate(zh) as MemoryProps['t']
 
 /** Every action as a spy that settles at once. */
-function spies(): { [K in keyof MemoryActions]: ReturnType<typeof vi.fn> } {
+function spies(): { [K in keyof MemoryActions]: Mock<MemoryActions[K]> } {
   return {
     refresh: vi.fn(() => Promise.resolve()),
     setQuery: vi.fn(() => Promise.resolve()),
@@ -34,7 +34,7 @@ function mount(state: Partial<MemoryState> = {}) {
   const store = createMemoryStore()
   store.update((draft) => { Object.assign(draft, { view: VIEW, checkedAt: Date.now() }, state) })
   const actions = spies()
-  const props = { close: () => {}, useMemory: bindSnapshotSelector(store), actions: actions as unknown as MemoryActions, t } as MemoryProps
+  const props = { close: () => {}, useMemory: bindSnapshotSelector(store), actions, t } as MemoryProps
   const view = render(<MemorySection {...props} />)
   return { store, actions, view }
 }

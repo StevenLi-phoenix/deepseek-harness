@@ -38,7 +38,10 @@ export interface BiliState {
   ledgerLimit: number
 }
 
-/** @returns a store holding the not-yet-loaded state. */
+/**
+ * Create the account section's store.
+ * @returns a store holding the not-yet-loaded state.
+ */
 export function createBiliStore(): SnapshotStore<BiliState> {
   return createSnapshotStore<BiliState>({
     view: null, checkedAt: null, stale: false, busy: null, error: null, errorCode: null, result: null, ledgerLimit: LEDGER_PAGE,
@@ -98,7 +101,10 @@ export class BiliLoader {
     private readonly now: () => number = Date.now,
   ) {}
 
-  /** @returns settlement after the answer is published; concurrent callers share the request in flight. */
+  /**
+   * Read the view from the Host and publish it.
+   * @returns settlement after the answer is published; concurrent callers share the request in flight.
+   */
   refresh(): Promise<void> {
     if (this.inFlight !== undefined) return this.inFlight
     const request = this.query().finally(() => { this.inFlight = undefined })

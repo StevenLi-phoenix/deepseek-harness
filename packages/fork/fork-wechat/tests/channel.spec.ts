@@ -38,6 +38,7 @@ interface LogLine {
 
 /** Session Controller double: Sessions are live once created unless told otherwise. */
 function fakeSessions(onPrompt: () => void = () => {}) {
+  const noError: unknown = undefined
   const state = {
     created: [] as SessionCreateRequest[],
     /** Messages injected into chat Sessions, as [sessionId, text]. */
@@ -50,7 +51,7 @@ function fakeSessions(onPrompt: () => void = () => {}) {
     errors: new Map<string, string>(),
     /** Newly created Sessions fail to resolve. */
     brokenCreate: false,
-    promptError: undefined as unknown,
+    promptError: noError,
     /** Errors thrown by the next prompts, one each, before {@link promptError}. */
     promptErrorsOnce: [] as unknown[],
     /** Prompts wait for their abort signal. */
@@ -273,7 +274,7 @@ describe('WechatChannel chat', () => {
     expect(h.presets.set).toHaveBeenCalledWith({ id: 'chat-1' }, 'danger-full-access')
     expect(h.titles.rename).toHaveBeenCalledWith({ id: 'chat-1' }, '微信')
     expect(h.sessions.prompts).toEqual([{
-      requestId: expect.stringMatching(/^[0-9a-f-]{36}$/) as unknown,
+      requestId: expect.stringMatching(/^[0-9a-f-]{36}$/) as string,
       sessionId: 'chat-1',
       mode: 'steer',
       content: [{ type: 'text', text: 'hello' }],
@@ -358,7 +359,7 @@ describe('WechatChannel chat', () => {
     expect(h.sessions.prompts).toHaveLength(2)
     expect(h.sessions.prompts[1]!.requestId).not.toBe(h.sessions.prompts[0]!.requestId)
     expect(h.sessions.prompts[1]!.content).toEqual([
-      { type: 'text', text: expect.stringMatching(/saved at .*-image\.png; the current model does not accept images\.$/) as unknown },
+      { type: 'text', text: expect.stringMatching(/saved at .*-image\.png; the current model does not accept images\.$/) as string },
     ])
     expect(h.ilink.sent).toEqual([])
     expect(h.logs.some(line => line.type === 'warn' && line.text.includes('refused the image parts'))).toBe(true)

@@ -10,6 +10,7 @@ function fields(body: unknown): Record<string, unknown> {
 }
 
 /**
+ * Validate an overview answer.
  * @param body - the parsed JSON body.
  * @returns the overview.
  * @throws when the body is not an overview answer.
@@ -21,6 +22,7 @@ export function parseOverview(body: unknown): OverviewView {
 }
 
 /**
+ * Validate a flow activity answer; `routes` and `changes` default to empty lists.
  * @param body - the parsed JSON body.
  * @returns the message flow's activity.
  * @throws when the body is not an activity answer.
@@ -36,6 +38,7 @@ export function parseFlowActivity(body: unknown): FlowActivityView {
 }
 
 /**
+ * Validate a subscriptions answer; `archive` defaults to null.
  * @param body - the parsed JSON body.
  * @returns the subscriptions view.
  * @throws when the body is not a subscriptions answer.
@@ -50,6 +53,7 @@ export function parseSubscriptions(body: unknown): SubscriptionsView {
 }
 
 /**
+ * Validate an agents answer.
  * @param body - the parsed JSON body.
  * @returns the Claude Code and voice view.
  * @throws when the body is not an agents answer.

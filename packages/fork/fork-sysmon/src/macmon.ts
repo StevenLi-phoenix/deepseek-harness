@@ -25,7 +25,12 @@ export type ExecFile = (
 
 const execFileAsync = promisify(execFile)
 
-/** Node's `execFile`, promisified: no shell, so arguments are never interpreted. */
+/**
+ * Node's `execFile`, promisified: no shell, so arguments are never interpreted.
+ * @param file - executable to run.
+ * @param args - argument list passed as-is.
+ * @param options - `timeout` in milliseconds and `maxBuffer` in bytes; the call rejects when either is exceeded.
+ */
 export const nodeExecFile: ExecFile = (file, args, options) =>
   execFileAsync(file, [...args], { ...options, encoding: 'utf8', windowsHide: true })
 

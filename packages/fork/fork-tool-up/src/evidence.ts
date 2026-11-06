@@ -134,8 +134,9 @@ export class CommentCache {
   }
 
   /**
+   * Look up a cached comment.
    * @param rpid - comment id.
-   * @returns the cached comment.
+   * @returns the cached comment; undefined when it was never read or has been evicted.
    */
   get(rpid: number): CachedComment | undefined {
     return this.entries.get(rpid)

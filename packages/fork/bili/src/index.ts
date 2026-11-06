@@ -561,7 +561,8 @@ export class BiliAccount extends Service {
     const stored = domain.table('current').get('session')
     if (stored !== undefined) {
       const sessionId = stored.sessionId as SessionId
-      // An archived Session still resolves, but its turns end `blocked` before any model call (the archived-session gate), so the owner's messages would get a placeholder answer.
+      // An archived Session still resolves, but its turns end `blocked` before any model call (the archived-session gate),
+      // so the owner's messages would get a placeholder answer.
       if (this.ctx.get('workspaceRegistry')?.archivedSessionIds.includes(sessionId) === true) {
         this.ctx.logger.info(`bili: Session ${sessionId} is archived; starting a new one`)
       } else {

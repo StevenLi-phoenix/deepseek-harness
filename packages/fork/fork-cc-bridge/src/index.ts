@@ -133,6 +133,8 @@ function plain(text: string, limit: number): string {
 /**
  * How the main agent reads who sent an inbound message. The name comes from the relay's session
  * registry, found by the process that connected, so the sender cannot choose it.
+ * @param from - the registry view of the sending session.
+ * @returns one line naming the session, its pid, and its working directory when known.
  */
 export function senderLabel(from: SessionView): string {
   const name = plain(from.name, 80)
@@ -140,14 +142,24 @@ export function senderLabel(from: SessionView): string {
   return `a Claude Code session on this Mac named "${name}" (pid ${String(from.pid)}${where}), the owner's own coding agent running in the owner's account`
 }
 
-/** A view of a session for the model, with how long it has been quiet. */
+/**
+ * A view of a session for the model, with how long it has been quiet.
+ * @param session - the session view; its `sessionId` is dropped.
+ * @param now - current time in epoch milliseconds, compared with `session.updatedAt`.
+ * @returns the view plus `idleSeconds` (whole seconds, at least 0), omitted when `updatedAt` is unknown.
+ */
 export function sessionForModel(session: SessionView, now: number): Omit<SessionView, 'sessionId'> & { idleSeconds?: number } {
   const { sessionId: _sessionId, ...rest } = session
   const quiet = session.updatedAt === undefined ? {} : { idleSeconds: Math.max(0, Math.round((now - session.updatedAt) / 1000)) }
   return { ...rest, ...quiet }
 }
 
-/** The session registry the bridge reads: this account's own, which keeps the owner's sessions out of reach. */
+/**
+ * The session registry the bridge reads: this account's own, which keeps the owner's sessions out of reach.
+ * @param configured - the configured directory; an empty string selects the default.
+ * @param home - home directory of the account, used for the default.
+ * @returns `configured`, or `<home>/.claude/sessions` when it is empty.
+ */
 export function resolveSessionsDir(configured: string, home: string): string {
   return configured === '' ? join(home, '.claude', 'sessions') : configured
 }

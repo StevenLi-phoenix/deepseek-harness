@@ -31,6 +31,7 @@ export interface ReviewResult {
  * @param op - `approve` keeps a waiting write, `discard` drops it, `revert` undoes the latest change.
  * @param id - entry or waiting-write id.
  * @param origin - who answered, kept in the history.
+ * @returns the outcome for the caller to word; rejects with the store's `MemoryError` when the id is unknown.
  */
 export async function reviewWrite(store: MemoryStore, op: ReviewOp, id: string, origin: string): Promise<ReviewResult> {
   if (op === 'approve') {
@@ -51,6 +52,7 @@ const digest = (value: unknown): string => createHash('sha256').update(JSON.stri
  * The token that binds a rollback preview to its application.
  * @param filter - the Session and/or time the preview was for.
  * @param planned - the dry run's answer.
+ * @returns a hex SHA-256 digest of the filter and the dry run.
  */
 export function rollbackToken(filter: RollbackFilter, planned: RollbackResult): string {
   return digest(['rollback', filter.session ?? null, filter.since ?? null, planned.matched, planned.restored, planned.removed, planned.ids, planned.state])
@@ -71,6 +73,7 @@ export interface RollbackItem {
  * Per entry, what a rollback by this filter would change: the entry now against the oldest matching record's earlier state.
  * @param store - the memory store.
  * @param filter - the Session and/or time to go back to.
+ * @returns one item per affected entry id, in history order; empty when no record matches.
  */
 export async function describeRollback(store: MemoryStore, filter: RollbackFilter): Promise<RollbackItem[]> {
   const matches = (await store.history()).filter(record => matchesRollback(record, filter))
@@ -92,6 +95,7 @@ export async function describeRollback(store: MemoryStore, filter: RollbackFilte
  * @param filter - the Session and/or time to go back to.
  * @param token - the preview's token.
  * @throws MemoryError `stale_preview` when the store no longer matches the preview.
+ * @returns the applied rollback.
  */
 export async function rollbackConfirmed(store: MemoryStore, filter: RollbackFilter, token: string): Promise<RollbackResult> {
   const planned = await store.rollback(filter, { dryRun: true })
@@ -111,6 +115,7 @@ export interface PurgePlan {
  * Count what erasing entries would remove, writing nothing.
  * @param store - the memory store.
  * @param ids - entry ids.
+ * @returns one plan per id, in the order given.
  */
 export async function planPurge(store: MemoryStore, ids: readonly string[]): Promise<PurgePlan[]> {
   const entries = await store.list()
@@ -125,6 +130,7 @@ export async function planPurge(store: MemoryStore, ids: readonly string[]): Pro
 /**
  * The token that binds an erase preview to its application.
  * @param plans - the dry run's answers, in the order of the ids.
+ * @returns a hex SHA-256 digest of the plans.
  */
 export function purgeToken(plans: readonly PurgePlan[]): string {
   return digest(['purge', plans.map(plan => [plan.id, plan.entry ?? null, plan.planned])])
@@ -139,6 +145,7 @@ const samePurge = (left: PurgeResult, right: PurgeResult): boolean => left.entri
  * @param ids - entry ids, as previewed.
  * @param token - the preview's token.
  * @throws MemoryError `stale_preview` when the store no longer matches the preview.
+ * @returns the applied plans, in the order of the ids.
  */
 export async function purgeConfirmed(store: MemoryStore, ids: readonly string[], token: string): Promise<PurgePlan[]> {
   const plans = await planPurge(store, ids)

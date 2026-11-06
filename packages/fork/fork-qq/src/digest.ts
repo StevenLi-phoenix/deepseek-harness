@@ -88,7 +88,12 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-/** `MM-DD HH:mm` in a zone. */
+/**
+ * `MM-DD HH:mm` in a zone.
+ * @param at - the instant, in epoch milliseconds.
+ * @param timeZone - an IANA zone name such as `Asia/Shanghai`.
+ * @returns the month, day, and 24-hour time of `at` in that zone.
+ */
 export function stampIn(at: number, timeZone: string): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
@@ -98,17 +103,23 @@ export function stampIn(at: number, timeZone: string): string {
 }
 
 /**
- * A member's stable stand-in: `群友#` and four hex digits of a salted hash of the QQ number. The salt stays in the
- * database, so the alias cannot be turned back into a number or a name, yet the same member always gets the same one.
+ * A member's stable stand-in: `群友#` and four hex digits of a salted hash of the QQ number. The salt stays in the database, so the alias
+ * cannot be turned back into a number or a name, yet the same member always gets the same one.
+ * @param userId - the QQ number.
+ * @param salt - the per-install alias salt.
+ * @returns the alias.
  */
 export function memberAlias(userId: string, salt: string): string {
   return `群友#${createHash('sha256').update(`${salt}:${userId}`).digest('hex').slice(0, 4)}`
 }
 
 /**
- * A member's stable key inside one group: sixteen hex digits of a salted hash of the group and the QQ number. The same
- * member always has the same key in a group and a different one in every other group, and the number cannot be read
- * back from it.
+ * A member's stable key inside one group: sixteen hex digits of a salted hash of the group and the QQ number. The same member always has
+ * the same key in a group and a different one in every other group, and the number cannot be read back from it.
+ * @param groupId - the QQ group number.
+ * @param userId - the QQ number.
+ * @param salt - the per-install alias salt.
+ * @returns the key.
  */
 export function senderKey(groupId: string, userId: string, salt: string): string {
   return createHash('sha256').update(`${salt}:${groupId}:${userId}`).digest('hex').slice(0, 16)
@@ -117,13 +128,23 @@ export function senderKey(groupId: string, userId: string, salt: string): string
 /** How a transcript names members. */
 export type NameOf = (message: Pick<MessageRow, 'userId' | 'card' | 'nickname'>) => string
 
-/** Real names: the group card, else the nickname, else the number, with the last four digits of the number. */
+/**
+ * Real names: the group card, else the nickname, else the number, with the last four digits of the number.
+ * @param message - the sender fields of a message.
+ */
 export const realNames: NameOf = (message) => {
   const name = message.card.trim() !== '' ? message.card.trim() : message.nickname.trim() !== '' ? message.nickname.trim() : message.userId
   return `${name}(${message.userId.slice(-4)})`
 }
 
-/** One transcript line: time, who, what, and whom it answered. */
+/**
+ * One transcript line: time, who, what, and whom it answered.
+ * @param message - the message to render; newlines in its text become ` ⏎ `.
+ * @param byMessageId - finds the message this one replies to; undefined renders as a reply to an old message.
+ * @param timeZone - an IANA zone name for the time stamp.
+ * @param nameOf - how members are named; real names by default.
+ * @returns the line, without a trailing newline.
+ */
 export function formatLine(
   message: MessageRow, byMessageId: (id: string) => MessageRow | undefined, timeZone: string, nameOf: NameOf = realNames,
 ): string {
@@ -150,9 +171,12 @@ interface Entry {
 }
 
 /**
- * Cut a backlog into transcripts of at most `maxChars` characters each (a single longer line is cut). Consecutive messages
- * of one member that are only `[表情]`, `[动画表情]`, `[戳一戳]`, or `[合并转发]` become one line (`[表情]×3`); every message,
- * folded or not, still counts toward the chunk's cursors and message count, so the digest cursor moves past all of them.
+ * Cut a backlog into transcripts of at most `maxChars` characters each (a single longer line is cut). Consecutive messages of one member
+ * that are only `[表情]`, `[动画表情]`, `[戳一戳]`, or `[合并转发]` become one line (`[表情]×3`); every message, folded or not, still counts toward the
+ * chunk's cursors and message count, so the digest cursor moves past all of them.
+ * @param messages - the backlog, in log order.
+ * @param line - renders one message as a transcript line.
+ * @param maxChars - the size limit of a chunk's text, in characters.
  * @returns each chunk's lines, the cursors of the first and last message it covers, and its messages.
  */
 export function chunkTranscript(
@@ -222,6 +246,7 @@ export interface MentionNames {
 /**
  * The names (nickname and card) the members of a group showed, each mapped to its member, for {@link scrubMentions}.
  * @param members - the recorder's member list of the group.
+ * @returns the name table; a name two members share maps to undefined.
  */
 export function mentionNames(members: readonly Member[]): MentionNames {
   const byName = new Map<string, string | undefined>()
@@ -235,12 +260,13 @@ export function mentionNames(members: readonly Member[]): MentionNames {
 }
 
 /**
- * Make the @-mentions of a message safe to show with member aliases: `@<QQ number>` becomes that member's alias, `@<name>`
- * the alias of the member who has that name in this group, and any other `@<name>` (a name nobody in the group shows, or
- * one two members share) `@某群友`; `@全体成员` stays. The alias is `memberAlias(userId, salt)`.
+ * Make the @-mentions of a message safe to show with member aliases: `@<QQ number>` becomes that member's alias, `@<name>` the alias of
+ * the member who has that name in this group, and any other `@<name>` (a name nobody in the group shows, or one two members share) `@某群友`;
+ * `@全体成员` stays. The alias is `memberAlias(userId, salt)`.
  * @param text - the stored one-line message text.
  * @param names - the group's member names.
  * @param salt - the alias salt.
+ * @returns the text with every mention rewritten; text without `@` is returned unchanged.
  */
 export function scrubMentions(text: string, names: MentionNames, salt: string): string {
   if (!text.includes('@')) return text
@@ -259,7 +285,16 @@ export function scrubMentions(text: string, names: MentionNames, salt: string): 
   })
 }
 
-/** The instruction and the transcript, as one prompt. */
+/**
+ * The instruction and the transcript, as one prompt.
+ * @param groupName - the group's display name.
+ * @param transcript - the rendered messages; a closing `qq_group_messages` tag inside it is escaped.
+ * @param count - the number of messages in the transcript.
+ * @param profiles - whether to ask for a section on members' views and expertise.
+ * @param group - when set, the prompt asks for the `qq_digest_write` and `qq_group_note` tools and carries the group's notes, earlier
+ *   digests, and attached picture tags.
+ * @returns the prompt text.
+ */
 export function digestPrompt(
   groupName: string, transcript: string, count: number, profiles = false,
   group?: { groupId: string; notes: readonly GroupNote[]; history?: readonly string[]; attached?: readonly string[] },
@@ -357,7 +392,6 @@ interface Picture {
 /** Image types a prompt may carry. */
 export type ImageMediaType = 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'
 
-/** The digest runner. */
 /** One stored digest with something in it, as the runner tells its listener. */
 export interface StoredDigest {
   groupId: string
@@ -368,6 +402,10 @@ export interface StoredDigest {
   text: string
 }
 
+/**
+ * Runs the digest rounds: reads each group's new messages from the recorder, has a model Session write the digest through tools bound to
+ * that group, and stores the result.
+ */
 export class DigestRunner {
   /** The Sessions that are digesting right now, by id: what their tools may touch. */
   private readonly bindings = new Map<string, RoundBinding>()
@@ -390,9 +428,11 @@ export class DigestRunner {
   ) {}
 
   /**
-   * Run one round: every group in `groups` whose last digest is `everyHours` old and which has `minMessages` new
-   * messages gets up to `maxCallsPerRound` model calls.
-   * @returns the number of digests stored.
+   * Run one round: every group in `groups` whose last digest is `everyHours` old and which has `minMessages` new messages gets up to
+   * `maxCallsPerRound` model calls. A failing group is logged and skipped.
+   * @param groups - the group numbers to consider, in order.
+   * @param signal - aborting stops the round before the next group.
+   * @returns the number of digests stored; 0 when digests are disabled.
    */
   async runRound(groups: readonly string[], signal: AbortSignal): Promise<number> {
     if (!this.config.enabled) return 0

@@ -23,6 +23,7 @@ export interface ClaudeCodeService {
 }
 
 /**
+ * Look up the Claude Code admin service on the Host context.
  * @param ctx - Host context.
  * @returns the service, or undefined when `fork-cc-admin` is not mounted.
  */

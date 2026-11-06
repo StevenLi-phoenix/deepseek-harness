@@ -2592,6 +2592,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'The observer. Provides `ctx.forkQq`, whose read methods the agent tools use. The recorded data lives in the qq-recorder service: every read of it is a request that fails with RecorderUnavailable while the recorder is down.',
     methods: [
       {
+        signature: 'readonly socketPath: string',
+        description: 'Path of the recorder\'s unix socket: `recorder.socket` from the configuration, else `run/qq-recorder.sock` under the DSH home.',
+        parameters: [],
+      },
+      {
         signature: 'now: () => number = Date.now',
         description: 'Replaced by tests.',
         parameters: [],

@@ -7,6 +7,7 @@ export type Translate = (key: BiliKey, params?: Record<string, string | number>)
 /**
  * `HH:MM:SS` of an instant, for the status line.
  * @param ms - Unix epoch milliseconds.
+ * @returns the time in the runtime's local zone.
  */
 export function stampTime(ms: number): string {
   return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(ms)
@@ -16,6 +17,7 @@ export function stampTime(ms: number): string {
  * `MM-DD HH:MM` of an instant in a zone.
  * @param ms - Unix epoch milliseconds.
  * @param timeZone - IANA zone.
+ * @returns the text; the runtime's zone when `timeZone` is omitted.
  */
 export function dateTime(ms: number, timeZone?: string): string {
   const parts = new Intl.DateTimeFormat('en-GB', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', ...(timeZone === undefined ? {} : { timeZone }) }).formatToParts(ms)
@@ -28,6 +30,7 @@ export function dateTime(ms: number, timeZone?: string): string {
  * @param ms - the past instant.
  * @param now - the current instant.
  * @param t - translate.
+ * @returns the translated text; "now" under one minute, never negative.
  */
 export function agoText(ms: number, now: number, t: Translate): string {
   const minutes = Math.floor(Math.max(0, now - ms) / 60_000)
@@ -40,6 +43,7 @@ export function agoText(ms: number, now: number, t: Translate): string {
 /**
  * Path data of a QR code: one unit square per dark module.
  * @param modules - rows of `0`/`1`.
+ * @returns SVG path commands; empty when there are no dark modules.
  */
 export function qrPath(modules: readonly string[]): string {
   let path = ''
@@ -55,6 +59,7 @@ export function qrPath(modules: readonly string[]): string {
  * `m:ss` left until an instant, never negative.
  * @param until - the instant.
  * @param now - the current instant.
+ * @returns the text, rounded up to whole seconds.
  */
 export function countdown(until: number, now: number): string {
   const seconds = Math.max(0, Math.ceil((until - now) / 1000))

@@ -21,12 +21,20 @@ export async function httpProbe(url: string, timeoutMs: number, fetchImpl: typeo
   }
 }
 
-/** True for a 2xx answer. */
+/**
+ * True for a 2xx answer.
+ * @param status - the probe result.
+ * @returns whether the status is 200-299.
+ */
 export function isHealthy(status: ProbeResult): boolean {
   return status !== null && status >= 200 && status < 300
 }
 
-/** True for any answer below 500: something is listening and not failing, even when it has no page at this path. */
+/**
+ * True for any answer below 500: something is listening and not failing, even when it has no page at this path.
+ * @param status - the probe result.
+ * @returns whether the status is below 500.
+ */
 export function isReachable(status: ProbeResult): boolean {
   return status !== null && status < 500
 }

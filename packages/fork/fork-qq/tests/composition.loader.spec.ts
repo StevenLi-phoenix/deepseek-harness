@@ -284,7 +284,7 @@ describe('QQ channel through the real Loader and the real recorder', () => {
 
   it('(h) qq_image fetches a saved picture through the recorder into the workspace; images off, and an older recorder, say so', { timeout: 40_000 }, async () => {
     const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('composition-pixels')])
-    const rig = await startRig({ fetch: vi.fn(async () => new Response(png)) as never })
+    const rig = await startRig({ fetch: vi.fn(async () => new Response(png)) })
     const app = await bootApp(rig, new MemoryMediaPool())
     await linked(app)
     const workspace = mkdtempSync(join(tmpdir(), 'qq-image-ws-'))

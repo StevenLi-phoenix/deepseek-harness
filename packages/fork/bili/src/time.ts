@@ -32,7 +32,12 @@ function zonedParts(ms: number, timeZone: string): ZonedParts {
   }
 }
 
-/** `2026-10-23`-style key of the local day containing `ms`. */
+/**
+ * `2026-10-23`-style key of the local day containing `ms`.
+ * @param ms - Unix epoch milliseconds.
+ * @param timeZone - IANA zone.
+ * @returns the `YYYY-MM-DD` key.
+ */
 export function dayKey(ms: number, timeZone: string): string {
   const { year, month, day } = zonedParts(ms, timeZone)
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
@@ -53,6 +58,7 @@ export function formatStamp(ms: number, timeZone: string): string {
 /**
  * Whether `timeZone` is a zone the runtime knows.
  * @param timeZone - candidate IANA name.
+ * @returns true when `Intl.DateTimeFormat` accepts the name.
  */
 export function isTimeZone(timeZone: string): boolean {
   try {

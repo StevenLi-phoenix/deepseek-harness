@@ -124,7 +124,11 @@ export class MonitorRegistry {
     private readonly ended: (monitor: MonitorView, reason: string) => void = () => {},
   ) {}
 
-  /** Start a monitor; throws {@link MonitorRefused} past the per-owner cap. */
+  /**
+   * Start a monitor; throws {@link MonitorRefused} past the per-owner cap.
+   * @param request - the command, its owner, and an optional timeout.
+   * @returns a snapshot of the running monitor.
+   */
   start(request: StartRequest): MonitorView {
     this.admit(request.owner)
     let id: string
@@ -137,6 +141,8 @@ export class MonitorRegistry {
   /**
    * Start a stored monitor again under its own id, stopping it at its original deadline.
    * Throws {@link MonitorRefused} when that id is running or past the per-owner cap.
+   * @param request - the stored monitor's id, start time, deadline, and command.
+   * @returns a snapshot of the running monitor.
    */
   restore(request: RestoreRequest): MonitorView {
     if (this.live.has(request.id)) throw new MonitorRefused(`monitor ${request.id} is already running`)
@@ -203,6 +209,8 @@ export class MonitorRegistry {
 
   /**
    * Stop a running monitor; its owner gets the `ended` notice.
+   * @param id - the monitor's id.
+   * @param reason - why it stopped, shown in the `ended` notice; defaults to the owner's own stop.
    * @returns false when no running monitor has that id.
    */
   stop(id: string, reason = STOPPED_BY_OWNER): boolean {
@@ -244,13 +252,22 @@ export class MonitorRegistry {
     return moved
   }
 
-  /** The owner's monitors, running first, then recently ended ones. */
+  /**
+   * List the owner's monitors.
+   * @param owner - the owner's Session id.
+   * @returns snapshots, running first, then recently ended ones.
+   */
   list(owner: string): MonitorView[] {
     const running = [...this.live.values()].filter(entry => entry.owner === owner).map(entry => this.snapshot(entry))
     return [...running, ...this.finished.filter(view => this.ownerOf.get(view.id) === owner)]
   }
 
-  /** Whether `id` is a running monitor of `owner`. */
+  /**
+   * Check who a monitor belongs to.
+   * @param owner - the owner's Session id.
+   * @param id - the monitor's id.
+   * @returns whether `id` is a running monitor of `owner`.
+   */
   owns(owner: string, id: string): boolean {
     return this.live.get(id)?.owner === owner
   }
@@ -352,6 +369,7 @@ export class MonitorRegistry {
  * Model-facing text of one notice. Lines are the command's output: data, never instructions.
  * @param monitor - the monitor the notice belongs to.
  * @param notice - lines or the end of the monitor.
+ * @returns the text for the agent: the monitor's id and description, the line count, and the lines or the end reason.
  */
 export function noticeText(monitor: MonitorView, notice: MonitorNotice): string {
   const head = `Monitor ${monitor.id} (${monitor.description})`

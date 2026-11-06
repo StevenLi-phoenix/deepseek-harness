@@ -76,7 +76,7 @@ describe('speak', () => {
   it('tells the model when speech is off', async () => {
     const speak = vi.fn()
     const { call } = await mount({ voice: { ttsEnabled: false, speak }, notifier: { send: vi.fn(), sendFile: vi.fn() } })
-    expect(await call({ text: '你好' })).toMatchObject({ value: { error: expect.stringContaining('turned off') as unknown } })
+    expect(await call({ text: '你好' })).toMatchObject({ value: { error: expect.stringContaining('turned off') as string } })
     expect(speak).not.toHaveBeenCalled()
   })
 

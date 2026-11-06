@@ -14,7 +14,10 @@ export interface SubscriptionDraft {
   maxPerHour: string
 }
 
-/** A blank form. */
+/**
+ * A blank form.
+ * @returns a draft with every field empty and mode `notify`.
+ */
 export function blankDraft(): SubscriptionDraft {
   return { id: '', sources: '', kinds: '', subjects: '', mode: 'notify', instructions: '', coalesceSeconds: '', maxPerHour: '' }
 }
@@ -25,7 +28,11 @@ export type DraftError = 'id' | 'selector' | 'instructions' | 'number'
 const ID = /^[a-z0-9][a-z0-9-]{0,62}$/u
 const MAX_INSTRUCTIONS = 4000
 
-/** Split a selector field on spaces and commas. */
+/**
+ * Split a selector field on spaces and commas.
+ * @param text - the raw field text.
+ * @returns the non-empty entries in order.
+ */
 export function parseList(text: string): string[] {
   return text.split(/[\s,]+/u).filter(entry => entry !== '')
 }
@@ -65,7 +72,11 @@ export function toRequest(draft: SubscriptionDraft): SubscriptionAction {
   return { action: 'create', subscription }
 }
 
-/** The busy key of a request: what is acted on. */
+/**
+ * The busy key of a request: what is acted on.
+ * @param request - the action being sent.
+ * @returns the key used in `ResourceState.busy`.
+ */
 export function requestKey(request: SubscriptionAction): string {
   if (request.action === 'archive.sweep') return request.dryRun ? 'archive:preview' : 'archive:sweep'
   return request.action === 'create' ? `create:${request.subscription.id}` : `${request.action}:${request.target}:${request.id}`

@@ -48,6 +48,12 @@ const CONFIG_EXCLUDE = ['groups'] as const
 export type QqLoginProps = PropsRuntime<'settings.section'> & InjectFace<QqLoginInjected> & PropsLocale<'fork.qq'>
   & Partial<PropsRenderFactories>
 
+/** The props the section reads; the shell passes the full set, a test passes only these. */
+export type QqLoginUsedProps = Pick<
+  QqLoginProps,
+  'useQq' | 'useGroupsForm' | 'refresh' | 'renewCode' | 'addGroup' | 'removeGroup' | 'renderFactorySlot' | 't'
+>
+
 function QrCard({ matrix, state, translate, renewCode }: {
   matrix: NonNullable<QqState['panel']>['login']['qr']
   state: QqState
@@ -88,7 +94,7 @@ function QrCard({ matrix, state, translate, renewCode }: {
  * @returns the section.
  */
 export function QqLoginSection(
-  { useQq, useGroupsForm, refresh, renewCode, addGroup, removeGroup, renderFactorySlot, t }: QqLoginProps,
+  { useQq, useGroupsForm, refresh, renewCode, addGroup, removeGroup, renderFactorySlot, t }: QqLoginUsedProps,
 ): ReactNode {
   const state = useQq(value => value)
   const form = useGroupsForm(value => value)

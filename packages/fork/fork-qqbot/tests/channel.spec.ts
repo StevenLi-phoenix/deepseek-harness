@@ -28,7 +28,7 @@ function fakeSessions() {
     prompts: [] as SessionPromptRequest[],
     live: new Set<string>(),
     errors: new Map<string, string>(),
-    promptError: undefined as unknown,
+    promptError: undefined as Error | undefined,
   }
   const controller = {
     create: async (request: SessionCreateRequest) => {
@@ -183,8 +183,9 @@ describe('QqBotChannel private chat', () => {
     expect(existsSync(join(dir, 'qq'))).toBe(true)
     expect(h.presets.set).toHaveBeenCalledWith({ id: 'qq-1' }, 'danger-full-access')
     expect(h.titles.rename).toHaveBeenCalledWith({ id: 'qq-1' }, 'QQ 私聊 5D6E7F')
+    const anyRequestId: unknown = expect.stringMatching(/^[0-9a-f-]{36}$/)
     expect(h.sessions.prompts).toEqual([{
-      requestId: expect.stringMatching(/^[0-9a-f-]{36}$/) as unknown,
+      requestId: anyRequestId,
       sessionId: 'qq-1',
       mode: 'steer',
       content: [{ type: 'text', text: '[QQ 私聊 · 5D6E7F] 你好' }],
@@ -323,7 +324,8 @@ describe('QqBotChannel group chat', () => {
       '[QQ 群 7E8F90 · 成员 33CCCC] 我也想知道',
     ])
     await h.finishTurn('qq-1', '10 月 30 日')
-    expect(h.qq.sent.at(-1)).toEqual([{ scope: 'group', id: GROUP, msgId: expect.stringContaining('gmsg') as unknown }, '10 月 30 日'])
+    const anyGroupMsgId: unknown = expect.stringContaining('gmsg')
+    expect(h.qq.sent.at(-1)).toEqual([{ scope: 'group', id: GROUP, msgId: anyGroupMsgId }, '10 月 30 日'])
   })
 
   it('ignores groups that are not listed, whoever is in them', async () => {

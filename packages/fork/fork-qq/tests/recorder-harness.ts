@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { vi } from 'vitest'
 import { QqRecorder, type RecorderLogger } from '../src/recorder.ts'
-import type { RecorderConfig } from '../src/protocol.ts'
+import { RecorderConfigDto, type RecorderConfig } from '../src/protocol.ts'
 import { FakeOneBot } from './fake-onebot.ts'
 
 export const TOKEN = 'onebot-token-0123456789abcdef'
@@ -41,7 +41,7 @@ export function recorderConfig(url: string, over: Partialize<RecorderConfig> = {
       ? { ...current, ...value }
       : value
   }
-  return merged as unknown as RecorderConfig
+  return RecorderConfigDto.parse(merged)
 }
 
 /** One log line of the recorder. */

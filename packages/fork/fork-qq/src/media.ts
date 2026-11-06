@@ -8,8 +8,11 @@ import { DEFAULT_MEDIA_HOST_SUFFIXES } from './address.ts'
 export { DEFAULT_MEDIA_HOST_SUFFIXES }
 
 /**
- * Whether a media link may be fetched: HTTPS, a plain host name (no IP address, no port), and a suffix on the list.
- * Keeps a crafted message from pointing the collector at an address on this machine or the network.
+ * Whether a media link may be fetched: HTTPS, a plain host name (no IP address, no port), and a suffix on the list. Keeps a crafted
+ * message from pointing the collector at an address on this machine or the network.
+ * @param raw - the link.
+ * @param suffixes - allowed host suffixes with the leading dot; a bare host equal to a suffix without its dot also passes.
+ * @returns true when the link may be fetched.
  */
 export function isAllowedMediaUrl(raw: string, suffixes: readonly string[] = DEFAULT_MEDIA_HOST_SUFFIXES): boolean {
   const url = URL.parse(raw)
@@ -23,8 +26,14 @@ export function isAllowedMediaUrl(raw: string, suffixes: readonly string[] = DEF
 export class MediaTooLarge extends Error {}
 
 /**
- * Fetch a link with a deadline and a size cap.
- * @throws when the answer is not OK, is larger than `maxBytes`, or does not arrive in time.
+ * Fetch a link with a deadline and a size cap. Redirects are not followed.
+ * @param url - the link; the caller checks it with {@link isAllowedMediaUrl}.
+ * @param maxBytes - the size cap in bytes, checked against `content-length` and while streaming.
+ * @param timeoutMs - the deadline for the whole fetch, in milliseconds.
+ * @param fetchImpl - the fetch function; tests replace it.
+ * @returns the body.
+ * @throws {@link MediaTooLarge} when the body exceeds `maxBytes`.
+ * @throws {@link Error} when the answer is a redirect or not OK, has no body, or does not arrive in time.
  */
 export async function fetchCapped(url: string, maxBytes: number, timeoutMs: number, fetchImpl: typeof fetch = fetch): Promise<Buffer> {
   const response = await fetchImpl(url, { redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) })
@@ -43,7 +52,13 @@ export async function fetchCapped(url: string, maxBytes: number, timeoutMs: numb
   return Buffer.concat(chunks)
 }
 
-/** File extension for downloaded bytes: from the content for images, from a name for others. */
+/**
+ * File extension for downloaded bytes: from the content for images and audio, from a name for others.
+ * @param bytes - the downloaded content.
+ * @param kind - the media kind; `image` falls back to `.img`, anything else to `.bin`.
+ * @param name - the original file name, used when the content is not recognised.
+ * @returns the extension with its dot.
+ */
 export function detectExtension(bytes: Buffer, kind: string, name?: string): string {
   if (bytes.length >= 12) {
     if (bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return '.png'
@@ -69,6 +84,11 @@ function month(at: number): string {
 
 /**
  * Write bytes to `<dir>/media/<group>/<YYYYMM>/<sha256>.<ext>` (mode 0600; a file already there is kept: the name is its content).
+ * @param dir - the recorder's data directory.
+ * @param groupId - the QQ group number; a value that is not 3 to 20 digits is replaced by a hash prefix in the path.
+ * @param at - the message time in epoch milliseconds, which picks the month folder (UTC).
+ * @param bytes - the content.
+ * @param extension - the extension with its dot.
  * @returns the path, the hash, and the size.
  */
 export async function saveMedia(
@@ -89,7 +109,10 @@ export async function saveMedia(
   return { path, sha256, bytes: bytes.length }
 }
 
-/** Delete a downloaded file; a file already gone is fine. */
+/**
+ * Delete a downloaded file; a file already gone is fine.
+ * @param path - the file to delete.
+ */
 export async function removeMedia(path: string): Promise<void> {
   await rm(path, { force: true })
 }

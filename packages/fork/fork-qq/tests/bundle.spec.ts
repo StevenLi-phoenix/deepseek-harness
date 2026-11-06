@@ -13,13 +13,19 @@ interface Row {
 }
 
 const read = (path: string): Row[] => parse(readFileSync(join(import.meta.dirname, '../../../..', path), 'utf8'), { logLevel: 'error' }) as Row[]
+/** The `cordis:group` plugin row, whose `config` is a list of nested rows. */
+interface GroupRow { name: 'cordis:group'; isolate: unknown; config: Row[] }
+
+const isGroup = (value: unknown): value is GroupRow => typeof value === 'object' && value !== null
+  && 'name' in value && value.name === 'cordis:group' && 'config' in value && Array.isArray(value.config)
+
 const inserted = read('fork/bundles/event/cordis.patch.yml').flatMap(row => row.insert ?? [])
 
 describe('event bundle', () => {
   it('mounts the observer with a valid configuration that records nothing, sends nothing, and keeps voice off', () => {
     const row = inserted.find(entry => entry.id === 'fork-qq')!
     expect(row.name).toBe('@deepseek-ai/dsh-fork-qq')
-    const config = Config((row.config ?? {}) as never)
+    const config = Config((row.config ?? {}))
     // The owner lists group numbers in the profile patch; this public repository carries none.
     expect(config.groups.get()).toEqual([])
     expect(row.config ?? {}).not.toHaveProperty('groups')
@@ -57,7 +63,8 @@ describe('event bundle', () => {
 
   it('has the qq-digest preset condense its own history at a quarter of the window, keeping the newest 5%', () => {
     const preset = inserted.find(entry => entry.id === 'preset-qq-digest')!
-    const group = (preset.config?.plugins ?? []).find(plugin => plugin.name === 'cordis:group') as unknown as { isolate: unknown; config: Row[] }
+    const plugins: unknown[] = preset.config?.plugins ?? []
+    const group = plugins.find(isGroup)!
     // Isolated, so the preset's compaction settings do not touch the other presets' Sessions.
     expect(group.isolate).toEqual({ compaction: true })
     expect(group.config).toEqual([{ id: 'compaction-basic', name: '@deepseek-ai/dsh-compaction-basic', config: { thresholdRatio: 0.25, retainRatio: 0.05 } }])

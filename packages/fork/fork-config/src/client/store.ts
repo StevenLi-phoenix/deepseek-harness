@@ -61,7 +61,10 @@ export const RELOAD_POLICY: ReloadPolicy = { attempts: 40, intervalMs: 750 }
 
 const FRESH: EntryState = { view: null, phase: 'loading', refused: null, savedAt: null }
 
-/** @returns a store holding no entry. */
+/**
+ * Create the store the card reads.
+ * @returns a store holding no entry.
+ */
 export function createConfigStore(): SnapshotStore<ConfigState> {
   return createSnapshotStore<ConfigState>({ entries: {} })
 }

@@ -41,7 +41,11 @@ export interface TurnOriginOptions {
   readonly parent?: (id: string) => Session | undefined
 }
 
-/** A request id for a prompt whose words are not the owner's, naming where they came from. */
+/**
+ * A request id for a prompt whose words are not the owner's, naming where they came from.
+ * @param origin - free-form source label; reduced to at most 24 lower-case slug characters, `peer` when nothing is left.
+ * @returns the untrusted prefix, the slug, and a random UUID.
+ */
 export function untrustedRequestId(origin: string): string {
   const slug = origin.toLowerCase().replaceAll(/[^a-z0-9]+/gu, '-').replaceAll(/^-+|-+$/gu, '').slice(0, 24)
   return `${UNTRUSTED_REQUEST_PREFIX}${slug === '' ? 'peer' : slug}:${randomUUID()}`
@@ -113,7 +117,11 @@ export function turnOrigin(session: Session, options: TurnOriginOptions = {}): T
   return { triggers, owner, contaminated, clean: owner && contaminated.length === 0 }
 }
 
-/** One short label for logs and audit lines, e.g. `peer:bili` or `owner+web_fetch`. */
+/**
+ * One short label for logs and audit lines, e.g. `peer:bili` or `owner+web_fetch`.
+ * @param origin - the turn origin.
+ * @returns trigger labels then contaminating tool names joined with `+`; `unknown` when there is no trigger.
+ */
 export function describeOrigin(origin: TurnOrigin): string {
   if (origin.triggers.length === 0) return 'unknown'
   return [...new Set(origin.triggers), ...origin.contaminated].join('+')
@@ -136,6 +144,7 @@ const FROM: Readonly<Record<string, string>> = {
 /**
  * Where a write came from, in the owner's words.
  * @param origin - the `describeOrigin` label.
+ * @returns the origin in Chinese, for messages to the owner.
  */
 export function originZh(origin: string): string {
   const [first = 'unknown', ...tools] = origin.split('+')

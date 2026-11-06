@@ -56,7 +56,7 @@ kind: "package-group"
 | [`fork-tool-qq/`](fork-tool-qq/README.zh.md) | `qq_groups`、`qq_digest`、`qq_recent`、`qq_search` 工具：agent 读取 QQ 观察者记录和摘要的内容 |
 | [`fork-tool-watch/`](fork-tool-watch/README.zh.md) | `watch_create`、`watch_list`、`watch_delete` 工具：agent 自己管理监控；`flow_read`、`flow_edit`：它自己改整条通知流程 |
 | [`fork-tool-wechat/`](fork-tool-wechat/README.zh.md) | `wechat_send_file` 工具：agent 给 owner 发图片、视频和文件 |
-| [`fork-voice/`](fork-voice/README.zh.md) | `ctx.forkVoice`：文字转语音（feiyu，Mac mini TTS 兜底）与音频文件转文字（asr-service，默认关闭） |
+| [`fork-voice/`](fork-voice/README.zh.md) | `ctx.forkVoice`：文字转语音（feiyu）与音频文件转文字（asr-service，默认关闭） |
 | [`fork-wechat/`](fork-wechat/README.zh.md) | 微信（iLink bot）通道：主人对话 Session、经 `owner-relay` 送达的回答，以及 `ctx.forkNotifier`；设置页可扫码绑定、查看通道健康和解绑 |
 | [`owner-relay/`](owner-relay/README.zh.md) | `ctx.ownerRelay`：所有被认领 Session 的最终回答走同一套规则，交给认领它的通道（微信、B站私信），发不出时带标签降级到微信 |
 | [`tool-bili/`](tool-bili/README.zh.md) | `bili` preset 的 B站工具：动态、借字幕看视频、评论、收件箱，经 bili-svc 点赞、投币、关注和收藏，以及日记；不发言 |
@@ -66,6 +66,7 @@ kind: "package-group"
 <a id="related-documentation"></a>
 ## 相关文档
 
+- [fork 子系统](../../docs/subsystems/fork.zh.md)——服务方法与结果记录。
 - [上游账本](UPSTREAM.md)——这个组从上游复制了什么，以及如何升级。
 - [Webhook runtime](../experimental/webhook/README.zh.md)——总线复用的 Session 创建接口。
 

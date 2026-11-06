@@ -8,7 +8,7 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { GroupsSection } from '../src/client/groups.ts'
 import { createQqStore, type QqState } from '../src/client/qq.ts'
-import { QqLoginSection, type QqLoginProps } from '../src/client/QqLogin.tsx'
+import { QqLoginSection, type QqLoginProps, type QqLoginUsedProps } from '../src/client/QqLogin.tsx'
 import { zh } from '../src/client/locales.ts'
 
 const t = makeTranslate(zh) as QqLoginProps['t']
@@ -67,9 +67,9 @@ describe('QqLoginSection', () => {
     const formStore = createSnapshotStore<ConfigFormSnapshot<GroupsSection>>(READY)
     const renderFactorySlot = vi.fn((_name: string, _props: object) => <div data-testid="plugin-config" />)
     const props = {
-      close: () => {}, useQq: bindSnapshotSelector(store), useGroupsForm: bindSnapshotSelector(formStore),
+      useQq: bindSnapshotSelector(store), useGroupsForm: bindSnapshotSelector(formStore),
       refresh: vi.fn(), renewCode: vi.fn(), addGroup: vi.fn(), removeGroup: vi.fn(), t, renderFactorySlot,
-    } as unknown as QqLoginProps
+    } satisfies QqLoginUsedProps
     const { container } = render(<QqLoginSection {...props} />)
     expect(renderFactorySlot).toHaveBeenCalledWith('settings.plugin-config', {
       entries: ['fork-qq'],
