@@ -184,7 +184,7 @@ Docs accompany every code change: update affected README and JSDoc contracts tog
 
 `CLAUDE.md` symlinks `AGENTS.md` at root and `packages/`; edit the real file. Keep each rule self-contained while linking high-level docs. Condense when clarity survives; raise a `verify-doc-budgets` ceiling when the required content genuinely needs more space.
 
-## Fork layer
+## Fork
 
 Before changing `packages/fork/`, `fork/`, or upstream files: read [fork/AGENTS.md](fork/AGENTS.md).
 
