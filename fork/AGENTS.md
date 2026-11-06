@@ -7,6 +7,7 @@ These rules supplement the repo-wide [AGENTS.md](../AGENTS.md) for this fork's e
 - Work on `fork/main` and push to `origin` (`StevenLi-phoenix/deepseek-harness`); `master` mirrors the `upstream` remote. Upstream syncs follow the ledger's upgrade procedure.
 - Every edit outside `packages/fork/` and `fork/` is an upstream-file edit: add its file and change to the ledger's "Upstream files touched" table in the same commit, so a sync can re-apply it.
 - Record fork changes in [CHANGELOG.md](CHANGELOG.md) (Keep a Changelog sections under `[Unreleased]`).
+- Before adding a client, scheduler, budget, notifier, classifier, key, or deploy script, look for what already does it: `packages/fork`, the Web UI's Remote API, AMS, `https://registry.lishuyu.app`, and the GitHub topic `dsh-plugin`. A new one says in its commit why those do not do.
 
 ## Memory and persona safety
 
@@ -57,12 +58,13 @@ The `event` profile composes, in order: the base and Web bundles; `@deepseek-ai/
 
 The [runbook](deploy/RUNBOOK.md) owns the procedure. The service runs as the non-admin user `dsh-runtime` (LaunchDaemon `app.lishuyu.dsh-events`, `127.0.0.1:3081`, served as `https://dsh.tailc2559b.ts.net`); `/Users/owner` and `/Volumes/MiniSSD` are closed to it. Builds install to `/Users/Shared/fork-dsh/builds.noindex/<sha>` (Spotlight skips `*.noindex`) behind the `current` symlink; logs are `/Users/dsh-runtime/logs/{stdout,stderr}.log`, and stdout carries the first-login token URL, so redact it when reading.
 
-Upgrade without a password through `/etc/sudoers.d/dsh-events`:
+Push to `fork/main`, then deploy from any checkout with `ssh mini`:
 
 ```sh
-fork/deploy/upgrade.sh
-sudo -n -u dsh-runtime /usr/bin/env PATH=/opt/homebrew/bin:/usr/bin:/bin /Users/Shared/fork-dsh/current/fork/deploy/setup-profile.sh /Users/dsh-runtime/.dsh /Users/Shared/fork-dsh/current
-sudo -n /bin/launchctl kickstart -k system/app.lishuyu.dsh-events
+fork/deploy/deploy-dsh.sh --plan   # says whether this commit goes hot or restarts, and why
+fork/deploy/deploy-dsh.sh          # deploys it, waits, and exits 0 only when that commit runs
 ```
+
+It refuses a commit that is not on `origin/fork/main`, uncommitted changes, and a deploy already running. Keep what you change on the hot path when you can: a plugin's own files reload in about two minutes with the process and every turn alive, and docs, skills, and scripts take seconds. Do not run `upgrade.sh` or `launchctl kickstart` for a deploy; they are for a first install, or when `dsh-upgrade` itself cannot run (runbook, Operate).
 
 Only the build that runs stays on disk; go back by deploying the old commit. Service secrets live in `/Users/dsh-runtime/.dsh/.env` and `.credentials.yaml`; use them only through shell substitution. The harness strips variables named like `*KEY*`, `*PASSWORD*`, `*SECRET*`, or `*TOKEN*` from agent shells, so the service user's `git push` authenticates through its own `gh` login.

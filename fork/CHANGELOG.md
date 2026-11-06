@@ -17,6 +17,9 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 - Skill `service-code` says how DSH changes its own settings: root rows through the profile patch, preset rows through `fork/main` and a deploy, never the build output (2026-11-06).
 - Synced upstream master `fcc0ad4621` (`dsh-v0.2.2-rc.1` plus later fixes).
 - The event bundle pins defaults upstream changed: read-before-write stays on, web search stays on `deepseek-official` with 4 queries and 8 results, and Agent Teams (service, task tools, menu switch) stays out.
+- A hot deploy packs only the plugins it can replace, not the whole release, and a change to docs, skills, or scripts needs no build, reconcile, or settling time.
+- A deploy that restarts names up to three paths that forced it, and `.agents/`, `docs/`, READMEs, and CHANGELOGs no longer force one.
+- `fork/AGENTS.md` and the runbook send deploys to `deploy-dsh.sh`; `upgrade.sh` and `kickstart` by hand are for a first install or a broken `dsh-upgrade`.
 - A deploy keeps no old version: `self-upgrade.sh` makes no copy of the files a hot deploy replaces, removes the old build once the new process is up, and removes the failed build after a rollback; `upgrade.sh` keeps only this commit's tarballs, and the recorder keeps only its current bundle.
 - A hot deploy that does not hold is reported and stays on the new files, since the framework's HMR does not restore a stopped plugin; deploying a fix or the old commit recovers it, and `.hot-sha` now records what the disk holds.
 
@@ -24,9 +27,11 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 - `prune-builds.sh --relocate`, and the recorder's manual rollback steps: they needed a previous build on disk.
 
 ### Fixed
+- A deploy request for a commit `fork/main` does not hold escalates through AMS instead of dying with one line in a log nobody reads.
 - QQ digests no longer fail for every group with a hyphen in a member's name: `scrubMentions` escaped `-`, which a `u` regular expression refuses outside a class, so the whole digest threw `Invalid regular expression`.
 
 ### Added
+- `deploy/deploy-dsh.sh`: one command that says the path a commit will take, refuses an unpushed commit, a dirty checkout, or a deploy already running, waits, and exits 0 only when that commit runs.
 - `deploy/self-upgrade.sh` deploys a change confined to plugins by hot reload: it replaces their files in the running build and reconciles through the plugin manager, so the process and running turns stay; a plugin that fails to start gets its old files back (RUNBOOK "DSH itself").
 - A deploy that needs a restart waits until no turn runs, for at most 30 minutes, and says so when it cut one.
 - `fork-balance` logs its route and source count when it starts, which also shows in the log that a hot reload took effect.

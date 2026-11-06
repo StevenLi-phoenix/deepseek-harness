@@ -62,11 +62,12 @@ echo fork/main > /Users/dsh-runtime/.ams/services/dsh-upgrade/request
 ams ctl start dsh-upgrade
 ```
 
-它在 AMS 里跑，构建加测试要几分钟到十几分钟，这期间你可以继续做别的。结果以 `operator.dsh-upgrade` 事件开新回合告诉你。
+先确认推送成功：写 `fork/main` 部署的是远端已有的版本，推送失败时它会把旧版本再部署一遍。它在 AMS 里跑，这期间你可以继续做别的。结果以 `operator.dsh-upgrade` 事件开新回合告诉你。
 
 它看改了什么来决定怎么上线：
 
-- **热更新**：只改了能热替换的插件（`fork-wechat`、`owner-relay`、`fork-voice`、`fork-presence`、`fork-guard`、`fork-console`、设置页等）、skill、脚本或文档。进程不重启，你的回合和其他会话都不断。新插件起不来不会换回旧代码：它一直停着，直到你部署修好的 commit，或部署旧 commit 回去。
+- **不构建**：只改了文档、skill 或部署脚本。几秒就好，不碰插件和进程。
+- **热更新**：只改了能热替换的插件（`fork-wechat`、`owner-relay`、`fork-voice`、`fork-presence`、`fork-guard`、`fork-console`、设置页等），构建和测试约一分钟。进程不重启，你的回合和其他会话都不断。新插件起不来不会换回旧代码：它一直停着，直到你部署修好的 commit，或部署旧 commit 回去。
 - **等回合结束后重启**：其他改动，包括框架、依赖、bundle 配置，以及 agent 正在用的插件（`fork-tool-*`、`fork-memory`、`fork-event-bus`、`fork-qq`、`bili` 等）。它会等所有回合结束再重启，最多等 30 分钟；新版本起不来会自动回滚，正常起来后旧版本就删了。后台 job 和 monitor 不算在内，重启时会结束，有在跑的先处理掉。
 
 所以发起部署后，尽快结束当前回合，别让重启一直等你。

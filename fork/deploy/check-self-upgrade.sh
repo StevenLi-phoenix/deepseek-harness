@@ -70,10 +70,10 @@ run_build() {
   echo build >>"$CALLS"
   [ -z "$FAKE_BUILD_FAILS" ] || return 1
   rm -rf "$WORK/dist/$SHA"
-  mkdir -p "$WORK/dist/$SHA/dsh" "$WORK/pack/package/lib"
+  mkdir -p "$WORK/dist/$SHA/hot" "$WORK/pack/package/lib"
   echo "$FAKE_LIB" >"$WORK/pack/package/lib/index.js"
   echo "$FAKE_MANIFEST" >"$WORK/pack/package/package.json"
-  COPYFILE_DISABLE=1 tar -czf "$WORK/dist/$SHA/dsh/deepseek-ai-dsh-fork-demo-1.0.0.tgz" -C "$WORK/pack" package
+  COPYFILE_DISABLE=1 tar -czf "$WORK/dist/$SHA/hot/deepseek-ai-dsh-fork-demo-1.0.0.tgz" -C "$WORK/pack" package
   rm -rf "$WORK/pack"
 }
 setup_profile() { echo setup >>"$CALLS"; }
@@ -134,8 +134,8 @@ hot() {
   ln -sfn "$BUILD" "$APPS/current"
   RC=0
   ( cd "$REPO" && env APPS="$APPS" CALLS="$CALLS" WORK="$WORK" FAKE_LIB=new FAKE_MANIFEST='{"name":"@deepseek-ai/dsh-fork-demo"}' FAKE_PIDS='7 7 7 7' \
-      FAKE_RECONCILE=applied FAKE_UNHEALTHY= FAKE_BUILD_FAILS= "$@" DSH_UPGRADE_APPS="$APPS" DSH_UPGRADE_WORK="$WORK" \
-      DSH_UPGRADE_SETTLE_S=0 DSH_UPGRADE_DRAIN_POLL_S=0 DSH_UPGRADE_TEST_HOOKS="$WORK/hot-hooks.sh" "$HERE/self-upgrade.sh" >"$WORK/$name.out" 2>&1 ) || RC=$?
+      FAKE_RECONCILE=applied FAKE_UNHEALTHY= FAKE_BUILD_FAILS= DSH_UPGRADE_APPS="$APPS" DSH_UPGRADE_WORK="$WORK" \
+      DSH_UPGRADE_SETTLE_S=0 DSH_UPGRADE_DRAIN_POLL_S=0 "$@" DSH_UPGRADE_TEST_HOOKS="$WORK/hot-hooks.sh" "$HERE/self-upgrade.sh" >"$WORK/$name.out" 2>&1 ) || RC=$?
 }
 lib() { cat "$PLUGIN/lib/index.js"; }
 
@@ -167,6 +167,34 @@ echo 1 >"$CALLS.pids"
 [ "$RC" = 0 ] || fail "the commit that already runs must exit 0"
 called build && fail "the commit that already runs must not build"
 called '已经是' || fail "the commit that already runs must report"
+
+# A change no process loads needs no build, no reconcile, and no time to settle: it is on disk in seconds.
+for inert in docs/guide/x.md .agents/notes/x.json README.md fork/CHANGELOG.md fork/deploy/RUNBOOK.md packages/fork/fork-demo/README.md packages/client/ui/README.i18n.yaml fork/skills/demo/extra.md; do
+  INERT_START=$SECONDS
+  hot hot-inert "$inert" DSH_UPGRADE_SETTLE_S=30
+  [ $((SECONDS - INERT_START)) -lt 30 ] || fail "$inert must not wait for the process to settle: nothing was reloaded"
+  [ "$RC" = 0 ] || fail "$inert must exit 0 (rc $RC): $(cat "$WORK/hot-inert.out")"
+  called build && fail "$inert must not build"
+  called upgrade && fail "$inert must not install a whole build"
+  called reconcile && fail "$inert must not reconcile"
+  called restart && fail "$inert must not restart DSH"
+  [ "$(cat "$BUILD/fork/skills/demo/SKILL.md")" = new-skill ] || fail "$inert: skills must follow the checkout"
+  [ "$(cat "$BUILD/.hot-sha")" = "$(git -C "$REPO" rev-parse --short HEAD)" ] || fail "$inert must record the commit"
+  called '没有插件代码变化' || fail "$inert must report that no plugin changed"
+  rm -rf "${APPS:?}" "${REPO:?}" "$WORK/hot-stage"
+done
+
+# What looks like a document or a script but reaches a process still builds, or restarts.
+hot hot-recorder fork/deploy/qq-recorder/main.ts
+called build || fail "the recorder is built by the deploy, so a change to it must build"
+hot hot-prompt packages/agents/prompts/system.md
+called upgrade && called restart || fail "a Markdown file outside the docs may be loaded at run time, so it must take the restart"
+hot hot-bundle-doc fork/bundles/event/persona.md
+called upgrade && called restart || fail "a file in the bundle must take the restart, Markdown or not"
+
+# A restart says everything that forced it, not only the first path in sort order.
+hot hot-reasons packages/boot/hmr/src/index.ts
+/usr/bin/grep -q 'restart path: packages/boot/hmr/src/index.ts' "$WORK/hot-reasons.out" || fail "a restart must name the path that forced it: $(cat "$WORK/hot-reasons.out")"
 
 hot hot-framework packages/boot/hmr/src/index.ts
 called upgrade && called restart || fail "a framework change must take the whole build and the restart"
@@ -241,5 +269,40 @@ hot hot-died "$PLUGIN_SRC" FAKE_PIDS='7 8 8 8'
 [ "$RC" != 0 ] || fail "a process that died after the replacement must exit non-zero"
 called '失败' || fail "a process that died after the replacement must report"
 called restart && fail "launchd restarts a process that died; the deploy must not"
+
+# start.sh: a request for a commit fork/main does not hold must say so where AMS sees it, not end in a log nobody reads.
+ORIGIN="$WORK/start-origin"
+git init -q -b fork/main "$ORIGIN"
+mkdir -p "$ORIGIN/fork/deploy"
+printf '#!/bin/bash\necho ran >>"$DSH_UPGRADE_CHECK_RAN"\n' >"$ORIGIN/fork/deploy/self-upgrade.sh"
+chmod +x "$ORIGIN/fork/deploy/self-upgrade.sh"
+git -C "$ORIGIN" add -A
+git -C "$ORIGIN" -c user.name=c -c user.email=c@localhost commit -q -m base
+ON_MAIN=$(git -C "$ORIGIN" rev-parse HEAD)
+git -C "$ORIGIN" checkout -q -b elsewhere
+git -C "$ORIGIN" -c user.name=c -c user.email=c@localhost commit -q --allow-empty -m other
+OFF_MAIN=$(git -C "$ORIGIN" rev-parse HEAD)
+git -C "$ORIGIN" checkout -q fork/main
+# start <name> <request>; leaves the exit code in RC, stderr in START_ERR, and whether the deploy ran in START_RAN.
+start() {
+  local dir="$WORK/start-$1"
+  mkdir -p "$dir"
+  printf '%s\n' "$2" >"$dir/request"
+  START_RAN="$dir/ran"
+  START_ERR="$dir/err"
+  RC=0
+  DSH_UPGRADE_REQUEST="$dir/request" DSH_UPGRADE_WORK="$WORK/start-work" DSH_UPGRADE_REPO="file://$ORIGIN" DSH_UPGRADE_CHECK_RAN="$START_RAN" \
+    "$HERE/dsh-upgrade/start.sh" >/dev/null 2>"$START_ERR" || RC=$?
+}
+start main fork/main
+[ "$RC" = 0 ] && [ -f "$START_RAN" ] || fail "start.sh must deploy fork/main (rc $RC): $(cat "$START_ERR")"
+start pinned "$ON_MAIN"
+[ "$RC" = 0 ] && [ -f "$START_RAN" ] || fail "start.sh must deploy a commit on fork/main (rc $RC): $(cat "$START_ERR")"
+start missing 0123456789012345678901234567890123456789
+[ "$RC" != 0 ] || fail "a commit nobody pushed must exit non-zero"
+[ ! -f "$START_RAN" ] || fail "a commit nobody pushed must not deploy"
+/usr/bin/grep -q 'not on fork/main' "$START_ERR" || fail "a commit nobody pushed must say so on stderr, which AMS escalates: $(cat "$START_ERR")"
+start offmain "$OFF_MAIN"
+[ "$RC" != 0 ] && [ ! -f "$START_RAN" ] || fail "a commit on another branch must not deploy"
 
 echo "check-self-upgrade: ok"
