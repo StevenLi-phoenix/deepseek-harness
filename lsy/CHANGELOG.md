@@ -4,6 +4,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 
 ## [Unreleased]
 
+
 ### Added
 - `flow_read` and `flow_edit` (`lsy-tool-watch`): the agent reads and changes the whole notification flow at run time, including routes the bundle wrote such as `ci`; a route's answer can go to the owner, past do-not-disturb, to the main agent, nowhere, or on to another route; changes outlive deploys, `reset` restores the bundle row, and the message flow page draws the routes as they run.
 - The `qq-main` subscription: `lsy-qq` publishes each stored digest as `qq.digest.new` to one long, tool-less Session on the cheap route, whose answers stay in the Session (`session.quietResult`).
@@ -28,6 +29,9 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 - `prune-builds.sh --relocate`, and the recorder's manual rollback steps: they needed a previous build on disk.
 
 ### Fixed
+- `flow_edit` gives a new route the limits of the tool's configuration; `session.result` is accepted in configured subscriptions.
+- The Cordis and persistence catalogs cover the notification flow types and the seven lsy message source kinds.
+- The `lsy-event-bus` project registration test waits for the real directory instead of a fixed fake-timer advance.
 - A deploy request for a commit `lsy/main` does not hold escalates through AMS instead of dying with one line in a log nobody reads.
 - QQ digests no longer fail for every group with a hyphen in a member's name: `scrubMentions` escaped `-`, which a `u` regular expression refuses outside a class, so the whole digest threw `Invalid regular expression`.
 

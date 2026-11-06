@@ -31,6 +31,10 @@ import { WechatSettings, type SettingsConnection } from './settings.ts'
 import { wechatDomain, type ActivityRecord, type OutboxRecord, type SentKind, type WindowRecord } from './storage.ts'
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
+    /**
+     * WeChat messages from the owner and outbox notices.
+     * @persistenceAttribution
+     */
     'lsy-wechat': { kind: 'lsy-wechat' } & ContextFormed
   }
 }
@@ -888,7 +892,6 @@ export class WechatChannel extends Service implements LsyNotifier {
         if (updates.buf !== undefined && updates.buf !== cursor?.buf) await domain.table('cursors').put(account.botId, { buf: updates.buf })
         for (const message of updates.messages) await this.handleMessage(domain, account, message)
       } catch (error: unknown) {
-        // oxlint-disable-next-line typescript/no-unnecessary-condition -- teardown sets it while getUpdates is awaited.
         if (this.stopping) return
         if (poll.signal.aborted) {
           // A reload cut the long-poll: read the account file again at once.

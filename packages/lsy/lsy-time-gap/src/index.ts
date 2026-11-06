@@ -24,6 +24,10 @@ import { classifyArrival, incomingKind, measureGap, timeGapNotice, timeGapSummar
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
+    /**
+     * Notices of elapsed time since the previous message.
+     * @persistenceAttribution
+     */
     'lsy-time-gap': { kind: 'lsy-time-gap' } & ContextFormed
   }
 }

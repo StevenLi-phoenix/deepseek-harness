@@ -12,6 +12,10 @@ import type { GuardModel, GuardModelAnswer } from './classifier.ts'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
+    /**
+     * Requests of the guard classifier.
+     * @persistenceAttribution
+     */
     'lsy-guard': { kind: 'lsy-guard' } & ContextFormed
   }
 }

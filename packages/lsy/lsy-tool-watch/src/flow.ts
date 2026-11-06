@@ -10,22 +10,9 @@ import {
 } from '@deepseek-ai/dsh-lsy-event-bus'
 import { defineTool, type GenericCallView } from '@deepseek-ai/dsh-tools'
 import type { Config } from './index.ts'
+import { ID_PATTERN, MAX_COALESCE_SECONDS, MAX_PER_HOUR } from './limits.ts'
 
-const ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/
-/** Longest coalesce window a call may ask for: one day. */
-const MAX_COALESCE_SECONDS = 86_400
-/** Highest hourly batch limit a call may ask for. */
-const MAX_PER_HOUR = 60
-/** Bounds of the event data embedded in a started Session's prompt. */
-const SESSION_PROMPT_EVENTS = 50
-const SESSION_TEXT_CHARS = 2000
-const ROLLOVER_DAYS = 30
-const MAX_SEED_CHARS = 20_000
 const DAY_MS = 86_400_000
-/** Changes `flow_read` lists. */
-const HISTORY_SHOWN = 20
-/** Kinds without a route `flow_read` lists. */
-const UNROUTED_SHOWN = 20
 
 const OPS = ['set', 'remove', 'reset', 'pause', 'resume'] as const
 const ERROR_CODES = ['invalid_arguments', 'invalid_route', 'not_found', 'not_config', 'cycle', 'internal_error'] as const
@@ -40,18 +27,13 @@ const ERROR_SCHEMA = {
 } as const
 
 const READ_DESCRIPTION =
-  'Read the whole notification flow, every route from an incoming event to the owner: which events each route takes, what its Session is told '
-  + 'to do, where its answer goes, and how it has been doing. Also lists event kinds no route takes and the latest changes of the flow. '
-  + 'Read it before flow_edit.'
+  'Read the notification flow: every route from an incoming event to the owner, with what it takes, what its Session is told, where its answer '
+  + 'goes, and its recent batches; also the event kinds no route took in the last day and the latest changes of the flow.'
 
 const EDIT_DESCRIPTION =
   'Change the notification flow, including routes the deployment wrote, such as CI runs or host alerts. A route takes events by source, kind, and '
-  + 'subject globs. A notify route sends a plain message; a session route runs an agent on the batch, and `result` says where its answer goes: '
-  + 'notify (a message for the owner), urgent (the same, past do-not-disturb), main (the owner\'s main agent), quiet (nowhere), or event (an '
-  + 'event of source "flow" and kind "flow.<id>.result", which another route takes by naming them in its sources and kinds). Answering NO_REPLY '
-  + 'sends nothing on any of them, so a route filters. Routes chain this way, and a change that makes a loop is refused. '
-  + 'op "set" changes the fields given and creates the route when the id is new; "remove" takes a route out; "reset" puts a deployment route back '
-  + 'as written; "pause" and "resume" stop and restart it. A change takes effect at once and outlives restarts and deploys.'
+  + 'subject; a notify route sends a plain message and a session route runs an agent on the batch. A change takes effect at once, outlives '
+  + 'restarts and deploys, and is refused when it makes a loop.'
 
 /** Arguments of `flow_edit`. */
 interface EditArgs {
@@ -88,7 +70,7 @@ function argumentProblem(args: EditArgs): string | undefined {
 }
 
 /** The Session settings a call gives. */
-function sessionOf(args: EditArgs): NonNullable<RoutePatch['session']> {
+function sessionOf(args: EditArgs, config: Config): NonNullable<RoutePatch['session']> {
   return {
     ...(args.instructions === undefined ? {} : { instructions: args.instructions.trim() }),
     ...(args.agent_preset === undefined ? {} : { agentPreset: args.agent_preset }),
@@ -99,8 +81,8 @@ function sessionOf(args: EditArgs): NonNullable<RoutePatch['session']> {
       persistent: {
         enabled: args.session_per !== 'batch',
         key: args.session_per === 'subject' ? 'subject' as const : 'subscription' as const,
-        rolloverDays: ROLLOVER_DAYS,
-        maxSeedChars: MAX_SEED_CHARS,
+        rolloverDays: config.defaultRolloverDays,
+        maxSeedChars: config.defaultMaxSeedChars,
       },
     }),
   }
@@ -114,7 +96,7 @@ function sessionOf(args: EditArgs): NonNullable<RoutePatch['session']> {
  * @returns the change.
  */
 function patchOf(args: EditArgs, existing: FlowRouteView | undefined, config: Config): RoutePatch {
-  const session = sessionOf(args)
+  const session = sessionOf(args, config)
   const action = args.action ?? existing?.action ?? (args.instructions === undefined ? 'notify' : 'session')
   const needsDefaults = action === 'session' && existing?.action !== 'session'
   const defaults = needsDefaults
@@ -122,8 +104,8 @@ function patchOf(args: EditArgs, existing: FlowRouteView | undefined, config: Co
       workspacePath: config.defaultWorkspacePath,
       agentPreset: config.defaultAgentPreset,
       permissionPreset: config.defaultPermissionPreset,
-      maxPromptEvents: SESSION_PROMPT_EVENTS,
-      maxTextChars: SESSION_TEXT_CHARS,
+      maxPromptEvents: config.defaultMaxPromptEvents,
+      maxTextChars: config.defaultMaxTextChars,
     }
     : {}
   const merged = { ...defaults, ...session }
@@ -134,6 +116,12 @@ function patchOf(args: EditArgs, existing: FlowRouteView | undefined, config: Co
     ...(existing === undefined || args.action !== undefined ? { action } : {}),
     ...(args.coalesce_seconds === undefined ? {} : { coalesceMs: args.coalesce_seconds * 1000 }),
     ...(args.max_per_hour === undefined ? {} : { maxPerHour: args.max_per_hour }),
+    ...(existing === undefined
+      ? {
+        coalesceMs: (args.coalesce_seconds ?? config.defaultCoalesceSeconds) * 1000,
+        maxPerHour: args.max_per_hour ?? (action === 'session' ? config.defaultSessionMaxPerHour : config.defaultNotifyMaxPerHour),
+      }
+      : {}),
     ...(Object.keys(merged).length === 0 ? {} : { session: merged }),
   }
 }
@@ -245,8 +233,8 @@ export function registerFlowTools(ctx: Context, config: Config): void {
       }
       return Promise.resolve({
         routes: ctx.lsyEventBus.flowRoutes().map(routeView),
-        unrouted_kinds: [...unrouted.values()].sort((a, b) => b.count - a.count).slice(0, UNROUTED_SHOWN),
-        history: ctx.lsyEventBus.flowHistory(HISTORY_SHOWN).map(changeView),
+        unrouted_kinds: [...unrouted.values()].sort((a, b) => b.count - a.count).slice(0, config.flowUnroutedShown),
+        history: ctx.lsyEventBus.flowHistory(config.flowHistoryShown).map(changeView),
       })
     },
     presentCall: () => present('Read the notification flow', 'read'),
@@ -256,14 +244,14 @@ export function registerFlowTools(ctx: Context, config: Config): void {
     name: 'flow_edit',
     description: EDIT_DESCRIPTION,
     parameters: {
-      op: { type: 'string', required: true, enum: OPS, description: 'What to do to the route.' },
-      id: { type: 'string', required: true, description: 'The route, as flow_read shows it, or a new id: 1-63 lowercase letters, digits, or hyphens.' },
-      note: { type: 'string', required: true, description: 'Why, in one line the owner reads on the message flow page.' },
+      op: { type: 'string', required: true, enum: OPS, description: 'set: change the fields given, creating the route when the id is new. remove: take it out. reset: put a deployment route back as written. pause, resume: stop and restart it.' },
+      id: { type: 'string', required: true, description: 'A route from flow_read, or a new id of 1-63 lowercase letters, digits, or hyphens.' },
+      note: { type: 'string', required: true, description: 'Why, in one line for the owner.' },
       sources: { type: 'array', items: { type: 'string' }, description: 'op set: source globs it takes, e.g. ["github"] or ["flow"].' },
       kinds: { type: 'array', items: { type: 'string' }, description: 'op set: kind globs it takes, e.g. ["github.workflow_run.*"] or ["flow.ci.result"].' },
       subjects: { type: 'array', items: { type: 'string' }, description: 'op set: subject globs it takes, e.g. ["owner/*"]; empty takes every subject.' },
       action: { type: 'string', enum: ['notify', 'session'], description: 'op set: notify sends a message; session runs an agent. A new route with instructions defaults to session.' },
-      result: { type: 'string', enum: ROUTE_RESULTS, description: 'op set: where a session route\'s answer goes.' },
+      result: { type: 'string', enum: ROUTE_RESULTS, description: 'op set: where a session route\'s answer goes. notify: a message for the owner. urgent: the same, past do-not-disturb. main: the owner\'s main agent. quiet: nowhere. event: an event of source "flow" and kind "flow.<id>.result", which a route naming them takes, so routes chain. An answer of NO_REPLY sends nothing, so a route can filter.' },
       instructions: { type: 'string', description: 'op set: what a session route\'s agent does with each batch. It replaces the current text.' },
       agent_preset: { type: 'string', description: `op set: agent preset of its Sessions. New session routes default to ${config.defaultAgentPreset}.` },
       workspace_path: { type: 'string', description: `op set: absolute working directory of its Sessions. New session routes default to ${config.defaultWorkspacePath}.` },

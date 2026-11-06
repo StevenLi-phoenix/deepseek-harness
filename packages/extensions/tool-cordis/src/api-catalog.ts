@@ -2352,6 +2352,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: '`ok`, `not_found`, or `config_owned` for an id the configuration owns.',
       },
       {
+        signature: 'flowRoutes(): FlowRouteView[]',
+        description: 'The whole notification flow: every route with where its answer goes and which routes take it, including a configuration route taken out, so it can be seen and put back.',
+        parameters: [],
+        returns: 'routes in matching order, then the ones taken out.',
+      },
+      {
+        signature: 'flowHistory(limit: number = this.config.flowChangesKept): FlowChange[]',
+        description: 'Changes of the flow.',
+        parameters: [{ name: 'limit', description: 'most entries.' }],
+        returns: 'the newest first.',
+      },
+      {
+        signature: 'async editFlow(edit: FlowEdit, meta: FlowEditMeta = {}): Promise<FlowEditResult>',
+        description: 'Change the notification flow at run time. It is stored, so a restart or a deploy keeps it; a configuration route keeps its bundle row and `reset` puts it back.',
+        parameters: [{ name: 'edit', description: 'the change.' }, { name: 'meta', description: 'who made it and why.' }],
+        returns: 'the route as it stands, the history entry, and anything worth a second look.',
+        throws: ['{LsyFlowError} when the change would leave a route the bus cannot run, or a loop.'],
+      },
+      {
         signature: 'protectSessions(label: string, check: SessionProtector): ProtectionDisposer',
         description: 'Keep a plugin\'s Sessions out of the auto-archive sweep (for example the QQ resident group Sessions or the WeChat chat Session). `check` runs only for Sessions that are otherwise due; return `true` (or a short reason) to keep one. A throw keeps it. Register inside an effect so a reload withdraws the claim: `ctx.inject([\'lsyEventBus\'], scoped => { scoped.effect(() => scoped.lsyEventBus.protectSessions(\'qq\', check), \'qq.archiveProtection()\') })`.',
         parameters: [{ name: 'label', description: 'skip category name shown in the sweep log and Settings, for example `qq`.' }, { name: 'check', description: 'the claim.' }],
@@ -7344,6 +7363,26 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface FinishReasonMap {\n    \'stop\': {\n        kind: \'stop\';\n    };\n    \'tool-calls\': {\n        kind: \'tool-calls\';\n    };\n    \'max-tokens\': {\n        kind: \'max-tokens\';\n    };\n    \'aborted\': {\n        kind: \'aborted\';\n        failure: LlmFailure;\n    };\n    \'error\': {\n        kind: \'error\';\n        failure: LlmFailure;\n    };\n}',
   },
   {
+    name: 'FlowChange',
+    declaration: 'export interface FlowChange {\n    id: string;\n    at: number;\n    op: FlowEdit[\'op\'];\n    route: string;\n    by?: string;\n    note?: string;\n    before?: string;\n    after?: string;\n}',
+  },
+  {
+    name: 'FlowEdit',
+    declaration: 'export type FlowEdit = {\n    op: \'set\';\n    id: string;\n    patch: RoutePatch;\n} | {\n    op: \'remove\';\n    id: string;\n} | {\n    op: \'reset\';\n    id: string;\n} | {\n    op: \'pause\';\n    id: string;\n} | {\n    op: \'resume\';\n    id: string;\n};',
+  },
+  {
+    name: 'FlowEditMeta',
+    declaration: 'export interface FlowEditMeta {\n    by?: string;\n    note?: string;\n}',
+  },
+  {
+    name: 'FlowEditResult',
+    declaration: 'export interface FlowEditResult {\n    route: FlowRouteView | null;\n    change: FlowChange;\n    warnings: string[];\n}',
+  },
+  {
+    name: 'FlowRouteView',
+    declaration: 'export interface FlowRouteView extends SubscriptionView {\n    removed?: true;\n    result?: RouteResult;\n    downstream: string[];\n}',
+  },
+  {
     name: 'FocusView',
     declaration: 'export interface FocusView {\n    readonly asleep: boolean;\n    readonly at: number;\n    readonly since: number;\n    readonly heartbeatAt: number | null;\n}',
   },
@@ -9168,6 +9207,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type ReviewDecision = \'approved\' | \'changes-requested\' | \'review-required\' | \'none\';',
   },
   {
+    name: 'RoutePatch',
+    declaration: 'export interface RoutePatch {\n    sources?: string[];\n    kinds?: string[];\n    subjects?: string[];\n    action?: \'notify\' | \'session\';\n    coalesceMs?: number;\n    maxPerHour?: number;\n    session?: Partial<Pick<SessionAction, \'workspacePath\' | \'agentPreset\' | \'permissionPreset\' | \'instructions\' | \'titlePrefix\' | \'maxPromptEvents\' | \'maxTextChars\' | \'result\' | \'model\' | \'persistent\' | \'project\'>>;\n}',
+  },
+  {
+    name: 'RouteResult',
+    declaration: 'export type RouteResult = \'notify\' | \'urgent\' | \'main\' | \'quiet\' | \'event\';',
+  },
+  {
     name: 'RpcId',
     declaration: 'export type RpcId = Branded<\'rpc-id\'>;',
   },
@@ -9381,7 +9428,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionAction',
-    declaration: 'export interface SessionAction {\n    workspacePath: string;\n    agentPreset: string;\n    permissionPreset: string;\n    instructions: string;\n    titlePrefix?: string;\n    maxPromptEvents: number;\n    maxTextChars: number;\n    trustedText?: boolean;\n    model?: {\n        provider: string;\n        model: string;\n    };\n    persistent?: PersistentSessionAction;\n    project?: string;\n}',
+    declaration: 'export interface SessionAction {\n    workspacePath: string;\n    agentPreset: string;\n    permissionPreset: string;\n    instructions: string;\n    titlePrefix?: string;\n    maxPromptEvents: number;\n    maxTextChars: number;\n    trustedText?: boolean;\n    quietResult?: boolean;\n    result?: RouteResult;\n    model?: {\n        provider: string;\n        model: string;\n    };\n    persistent?: PersistentSessionAction;\n    project?: string;\n}',
   },
   {
     name: 'SessionActivity',
@@ -10529,7 +10576,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SubscriptionView',
-    declaration: 'export interface SubscriptionView extends Subscription {\n    origin: SubscriptionOrigin;\n    createdAt?: number;\n    createdBy?: string;\n    paused?: true;\n    status: SubscriptionStatus;\n}',
+    declaration: 'export interface SubscriptionView extends Subscription {\n    origin: SubscriptionOrigin;\n    createdAt?: number;\n    createdBy?: string;\n    paused?: true;\n    changed?: {\n        at: number;\n        by?: string;\n    };\n    status: SubscriptionStatus;\n}',
   },
   {
     name: 'SubtitleView',

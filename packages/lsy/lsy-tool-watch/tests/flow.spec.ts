@@ -47,6 +47,16 @@ describe('flow_edit', () => {
     expect(ctx.lsyEventBus.flowHistory()[0]).toMatchObject({ route: 'config-releases', note: 'tags too' })
   })
 
+  it('gives a new route the limits of the tool\'s configuration unless the call names its own', async () => {
+    const { call } = await mount()
+    const set = async (args: object): Promise<Record<string, unknown>> =>
+      (await call('flow_edit', { op: 'set', note: 'n', sources: ['host'], ...args }) as { value: { route: Record<string, unknown> } }).value.route
+    expect(await set({ id: 'plain' })).toMatchObject({ action: 'notify', coalesce_seconds: 60, max_per_hour: 12 })
+    expect(await set({ id: 'agent', instructions: 'Look.' })).toMatchObject({ action: 'session', coalesce_seconds: 60, max_per_hour: 4 })
+    expect(await set({ id: 'named', coalesce_seconds: 5, max_per_hour: 2 })).toMatchObject({ coalesce_seconds: 5, max_per_hour: 2 })
+    expect(await set({ id: 'plain', sources: ['flow'] })).toMatchObject({ sources: ['flow'], coalesce_seconds: 60, max_per_hour: 12 })
+  })
+
   it('refuses bad calls with a code the model can act on', async () => {
     const { call } = await mount()
     const code = async (args: unknown): Promise<unknown> => (await call('flow_edit', args) as { value: { code?: string } }).value.code

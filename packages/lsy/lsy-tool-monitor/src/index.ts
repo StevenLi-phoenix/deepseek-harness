@@ -19,6 +19,10 @@ import { registerMonitorTools } from './tools.ts'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
+    /**
+     * Notices of a background monitor; the event bus uses the kind to report the turn they wake.
+     * @persistenceAttribution
+     */
     'lsy-tool-monitor': { kind: 'lsy-tool-monitor' } & ContextFormed
   }
 }

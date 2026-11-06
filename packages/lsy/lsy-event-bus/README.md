@@ -75,6 +75,7 @@ Choose it when external events should wake an agent or a human without a person 
 | `subscriptions[].session.project` | unset | Web UI project title of `workspacePath`: before a Session starts there, the bus creates the directory and registers it as a project, unless one exists (an existing project keeps its title) |
 | `suppress.actors` / `suppress.markers` | `[]` | Agent identities and output markers whose events are dropped; prefer identities, which the host sets, over markers, which depend on what the model writes |
 | `retainEvents` / `retainBatches` | `5000` / `1000` | Stored history; the oldest settled rows are pruned |
+| `flowChangesKept` | `200` | Changes of the notification flow kept for `flow_read` and the message flow page |
 | `maxTextChars` | `4000` | Stored characters of each event's untrusted text |
 | `notifySessionResult` | `true` | Send each bus-started Session's first-turn result to the notifier |
 | `reportScheduledTurns` | `true` | Send the final answer of each unattended Host-schedule reminder turn, and of each turn a `lsy-tool-monitor` notice wakes (titled 📡 with the monitor), to the notifier |

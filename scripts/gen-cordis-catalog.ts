@@ -195,6 +195,7 @@ export const SERVICE_PAGE: Record<string, string> = {
  * to a model as `cordis_runtime_inspect what:"client"`).
  */
 export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
+  settingsNavigation: 'fork-local client-side Settings navigation — packages/lsy/UPSTREAM.md owns the entry',
   contextMenus: 'client-side interface-typed menu registry — packages/client/ui-context-menu/README.md owns the API',
   fileActions: 'client-side interface-typed file actions — packages/client/ui-file-actions/README.md owns the API',
   invocation: 'not a service: per-call accessor (RemoteInvocation | undefined) the Gateway derives for each Remote call — packages/api/gateway/README.md owns the contract',
@@ -1011,6 +1012,11 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   SubscriptionMeta: 'fork-local subscription metadata is owned by packages/lsy/lsy-event-bus/README.md',
   SubscriptionView: 'fork-local subscription view is owned by packages/lsy/lsy-event-bus/README.md',
   UnsubscribeOutcome: 'fork-local unsubscribe result is owned by packages/lsy/lsy-event-bus/README.md',
+  FlowRouteView: 'fork-local notification route view is owned by packages/lsy/lsy-event-bus/README.md',
+  FlowChange: 'fork-local notification flow change is owned by packages/lsy/lsy-event-bus/README.md',
+  FlowEdit: 'fork-local notification flow edit is owned by packages/lsy/lsy-event-bus/README.md',
+  FlowEditMeta: 'fork-local notification flow edit metadata is owned by packages/lsy/lsy-event-bus/README.md',
+  FlowEditResult: 'fork-local notification flow edit answer is owned by packages/lsy/lsy-event-bus/README.md',
   LsyNote: 'fork-local notifier message is owned by packages/lsy/lsy-event-bus/README.md',
   PresenceView: 'fork-local Settings view is owned by packages/lsy/lsy-presence/README.md',
   QuietWindow: 'fork-local daily window is owned by packages/lsy/lsy-presence/README.md',

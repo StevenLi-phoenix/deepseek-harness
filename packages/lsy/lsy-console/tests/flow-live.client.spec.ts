@@ -59,7 +59,8 @@ describe('liveGraph', () => {
     const routes = [route('ci', { sources: ['github'], changedAt: 1, removed: true })]
     const graph = liveGraph(GRAPH_BUILT, routes)
     expect(arrow(graph, 'github', 'githubSessions')).toBe(false)
-    const activity = { routes, windows: {}, recent: [], changes: [], presence: null, checkedAt: 0 } as unknown as FlowActivityView
+    const none = { funnel: { events: 0, batches: 0, sent: 0, silent: 0, failed: 0 }, sources: {}, subscriptions: {}, ignored: 0 }
+    const activity: FlowActivityView = { routes, windows: { '1h': none, '24h': none, '7d': none }, recent: [], changes: [], presence: null, checkedAt: 0 }
     const node = graph.node('githubSessions')
     if (node === undefined) throw new Error('missing box')
     expect(factOf(node, { cards: new Map(), activity, span: '24h', now: 0, t: (key: string) => key }).text).toBe('flow.fact.removed')
