@@ -423,6 +423,7 @@
 
 .flowVerdict b { font-weight: 500; }
 .flowVerdict[data-state='bad'] { border-color: var(--dsw-alias-state-error-primary); }
+.flowVerdict[data-state='warn'] { border-color: var(--dsw-alias-state-warn-primary); }
 .flowVerdict[data-state='loading'] b { color: var(--dsw-alias-label-tertiary); font-weight: 400; }
 
 .flowVerdictDot {
@@ -438,6 +439,7 @@
   animation: flowBreathe 2.4s ease-in-out infinite;
 }
 
+.flowVerdict[data-state='warn'] .flowVerdictDot { background: var(--dsw-alias-state-warn-primary); }
 .flowVerdict[data-state='loading'] .flowVerdictDot { background: var(--dsw-alias-state-idle-primary); }
 
 .flowVerdictBody {
@@ -455,6 +457,8 @@
   text-align: left;
   cursor: pointer;
 }
+
+.flowVerdictBody:disabled { cursor: default; }
 
 .flowVerdictBody span { color: var(--dsw-alias-label-secondary); }
 
@@ -552,13 +556,10 @@
   scrollbar-gutter: stable;
 }
 
-.flowLanes {
-  position: relative;
-  display: flex;
-  justify-content: space-between;
-  padding: 10px 16px 0;
-  color: var(--dsw-alias-label-tertiary);
+.flowLane {
+  fill: var(--dsw-alias-label-tertiary);
   font-size: 12px;
+  pointer-events: none;
 }
 
 .flowPlanned {
@@ -573,6 +574,8 @@
 
 .flowSvg {
   display: block;
+  height: auto;
+  margin: 0 auto;
   font-family: inherit;
   animation: flowFade 260ms ease-out both;
 }
@@ -682,7 +685,7 @@
   flex: none;
   flex-direction: column;
   gap: 6px;
-  width: 320px;
+  width: 300px;
   overflow: auto;
   padding: 14px 12px 20px 16px;
   border-left: 0.5px solid var(--dsw-alias-settings-card-stroke);

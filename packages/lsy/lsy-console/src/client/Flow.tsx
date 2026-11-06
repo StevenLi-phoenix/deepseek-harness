@@ -13,7 +13,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from './locales.ts'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import { FLOW_WINDOWS, type FlowActivityView, type FlowRecentItem, type FlowWindow, type OverviewView, type ServiceCard } from '../views.ts'
-import { statusText } from './cards.ts'
+import { MANAGE_SECTION, statusText } from './cards.ts'
 import { GRAPH, GRAPH_BUILT, PLANNED_COUNT } from './flow-graph.ts'
 import { factOf, stopsOf, titleOf, type BoxFact } from './flow-view.ts'
 import { FlowCanvas } from './FlowCanvas.tsx'
@@ -84,15 +84,15 @@ function Figure({ value, label, small }: { value: number; label: string; small?:
 }
 
 /** The broken service first; one line says all there is at a glance, a click goes to the box. */
-function Verdict({ down, loaded, onOpen, onFix, canFix, t }: {
-  down: readonly { card: ServiceCard; node: string | undefined; affected: readonly string[]; manage: string | undefined }[]
+function Verdict({ trouble, loaded, onOpen, onFix, canFix, t }: {
+  trouble: readonly { card: ServiceCard; node: string | undefined; affected: readonly string[]; manage: string | undefined }[]
   loaded: boolean
   onOpen: (id: string) => void
   onFix: (section: string) => void
   canFix: (section: string) => boolean
   t: Translate
 }): ReactNode {
-  const first = down[0]
+  const first = trouble[0]
   if (first === undefined) {
     return (
       <div className={css.flowVerdict} data-state={loaded ? 'ok' : 'loading'} role="status">
@@ -102,18 +102,24 @@ function Verdict({ down, loaded, onOpen, onFix, canFix, t }: {
     )
   }
   const { card, node, affected, manage } = first
+  const bad = card.tone === 'down'
   return (
-    <div className={css.flowVerdict} data-state="bad" role="status">
+    <div className={css.flowVerdict} data-state={bad ? 'bad' : 'warn'} role="status">
       <span className={css.flowVerdictDot} aria-hidden="true" />
-      <button type="button" className={css.flowVerdictBody} onClick={() => { if (node !== undefined) onOpen(node) }}>
+      <button
+        type="button"
+        className={css.flowVerdictBody}
+        disabled={node === undefined}
+        onClick={() => { if (node !== undefined) onOpen(node) }}
+      >
         <b>{t(`card.${card.id}.title`)}：{statusText(card, t)}</b>
         <span>
           {affected.length === 0 ? t('flow.verdict.noneElse') : t('flow.verdict.touches', { list: affected.join(t('flow.sep')) })}
-          {down.length > 1 ? ` ${t('flow.verdict.more', { count: down.length - 1 })}` : ''}
+          {trouble.length > 1 ? ` ${t('flow.verdict.more', { count: trouble.length - 1 })}` : ''}
         </span>
       </button>
       {manage !== undefined && canFix(manage)
-        ? <button type="button" className={css.flowAction} data-primary="" onClick={() => { onFix(manage) }}>{t('flow.fix')}</button>
+        ? <button type="button" className={css.flowAction} data-primary={bad ? '' : undefined} onClick={() => { onFix(manage) }}>{t('flow.fix')}</button>
         : null}
     </div>
   )
@@ -146,15 +152,22 @@ export function FlowPage({ useOverview, useActivity, refresh, canManage, openSet
     for (const node of graph.nodes) map.set(node.id, factOf(node, { cards, activity: view, span, now, t: translate }))
     return map
   }, [graph, cards, view, span, now, translate])
-  const down = useMemo(() => [...cards.values()].filter(card => card.tone === 'down').map((card) => {
-    const owner = graph.nodes.find(node => node.service === card.id)
-    return {
-      card,
-      node: owner?.id,
-      manage: owner?.manage,
-      affected: graph.nodes.filter(node => node.needs === card.id).map(node => titleOf(node, translate)),
-    }
-  }), [cards, graph, translate])
+  const trouble = useMemo(() => {
+    const all = [...cards.values()]
+    const down = all.filter(card => card.tone === 'down')
+    // Something down says everything; only with nothing down does a warning get the line.
+    return (down.length > 0 ? down : all.filter(card => card.tone === 'warn')).map((card) => {
+      const owner = graph.nodes.find(node => node.service === card.id)
+      return {
+        card,
+        node: owner?.id,
+        manage: owner?.manage ?? MANAGE_SECTION[card.id],
+        affected: card.tone === 'down'
+          ? graph.nodes.filter(node => node.needs === card.id).map(node => titleOf(node, translate))
+          : [],
+      }
+    })
+  }, [cards, graph, translate])
 
   const choose = useCallback((id: string) => {
     console.info(`[lsy-console] flow toggle ${id}`)
@@ -170,6 +183,11 @@ export function FlowPage({ useOverview, useActivity, refresh, canManage, openSet
   }, [])
   const walk = useMemo(() => followed === null ? [] : graph.route(stopsOf(graph, followed)), [graph, followed])
 
+  const lanes = useMemo(() => [
+    { column: 0, label: translate('flow.lane.from') },
+    { column: 1, label: translate('flow.lane.by') },
+    { column: 4, label: translate('flow.lane.to') },
+  ], [translate])
   const funnel = view?.windows[span].funnel
   const held = view?.presence?.deferred ?? 0
   const failed = funnel?.failed ?? 0
@@ -181,7 +199,14 @@ export function FlowPage({ useOverview, useActivity, refresh, canManage, openSet
           <h1>{translate('title.flow')}</h1>
           {stale && view !== null ? <span className={css.flowStale}>{translate('status.stale', { time: clock(view.checkedAt) })}</span> : null}
         </div>
-        <Verdict down={down} loaded={overview.checkedAt !== null} onOpen={open} onFix={openSettings} canFix={canManage} t={translate} />
+        <Verdict
+          trouble={trouble}
+          loaded={overview.checkedAt !== null}
+          onOpen={open}
+          onFix={openSettings}
+          canFix={canManage}
+          t={translate}
+        />
         <div className={css.flowFunnel}>
           <Figure value={funnel?.events ?? 0} label={translate('flow.funnel.events')} />
           <span className={css.flowArrow} aria-hidden="true">→</span>
@@ -204,11 +229,6 @@ export function FlowPage({ useOverview, useActivity, refresh, canManage, openSet
       </header>
       <div className={css.flowBody}>
         <div className={css.flowScroll}>
-          <div className={css.flowLanes} style={{ width: graph.layout.width }}>
-            <span>{translate('flow.lane.from')}</span>
-            <span>{translate('flow.lane.by')}</span>
-            <span>{translate('flow.lane.to')}</span>
-          </div>
           <FlowCanvas
             graph={graph}
             facts={facts}
@@ -219,6 +239,7 @@ export function FlowPage({ useOverview, useActivity, refresh, canManage, openSet
             onChoose={choose}
             onClear={clear}
             translate={translate}
+            lanes={lanes}
           />
           <label className={css.flowPlanned}>
             <input type="checkbox" checked={showPlanned} onChange={(event) => { setShowPlanned(event.target.checked) }} />

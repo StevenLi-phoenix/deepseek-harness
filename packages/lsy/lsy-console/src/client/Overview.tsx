@@ -12,25 +12,12 @@ import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-cli
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: registers the lsy.console locale namespace this component's `t` reads.
 import type {} from './locales.ts'
-import type { OverviewView, ServiceCard, ServiceId } from '../views.ts'
+import type { OverviewView, ServiceCard } from '../views.ts'
 import { balanceCard, type BalanceSummary } from './balance.ts'
-import { factLines, statusText } from './cards.ts'
+import { MANAGE_SECTION, factLines, statusText } from './cards.ts'
 import { clock, type Translate } from './format.ts'
 import { POLL_INTERVAL_MS, startPolling, type ResourceState } from './resource.ts'
 import css from './Console.module.css'
-
-/** Settings section each service's Manage link goes to. */
-export const MANAGE_SECTION: Readonly<Partial<Record<ServiceId, string>>> = {
-  dsh: 'lsy-sysmon',
-  bus: 'lsy-subscriptions',
-  bili: 'bili',
-  qq: 'lsy-qq',
-  wechat: 'lsy-wechat',
-  style: 'lsy-style',
-  voice: 'lsy-agents',
-  cc: 'lsy-agents',
-  llm: 'account',
-}
 
 /** The section's injected face (slot `inject`). */
 export interface OverviewInjected {

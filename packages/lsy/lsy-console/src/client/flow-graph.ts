@@ -42,13 +42,13 @@ export const NODES: readonly FlowNode[] = [
     gap: '接收端和 Session 已就绪；在另一台机器上发 upload.local.ready 的脚本要主人自己放（RUNBOOK §25）。',
   },
   { id: 'dnd', cell: [1, 6], role: 'core', service: 'dsh', manage: 'lsy-presence', via: 'lsy-presence' },
-  { id: 'deferQ', cell: [4, 1], needs: 'wechat', role: 'core', title: '现在发，还是留到醒来？', via: 'defer_deliver tool · lsy-wechat outbox · lsy-presence' },
+  { id: 'deferQ', cell: [4, 1], needs: 'wechat', role: 'core', title: '现在发，还是等？', via: 'defer_deliver tool · lsy-wechat outbox · lsy-presence' },
   {
     id: 'githubSessions', cell: [1, 3], tracks: { subscriptions: ['ci'] }, role: 'agent', title: 'GitHub CI', service: 'dsh', manage: 'lsy-agents', wired: 'partial',
     via: 'subscription ci (one Session per repo)', gap: '只接 workflow_run.completed 一种事件；发布、提交不起 Session。',
   },
   {
-    id: 'notifySession', cell: [3, 3], tracks: { subscriptions: ['notify-funnel'] }, role: 'agent', title: '通知台', service: 'bus', manage: 'lsy-subscriptions', wired: 'partial',
+    id: 'notifySession', cell: [3, 3], tracks: { subscriptions: ['notify-funnel'] }, role: 'agent', title: '通知台', manage: 'lsy-subscriptions', wired: 'partial',
     via: 'subscription notify-funnel · preset notify',
     gap: '接主机的非紧急通知和 autocut 待确认、失败，走便宜路由；自动修复和 AMS 的分支还没接进来；紧急的主机告警（磁盘满）仍直接发微信。',
   },
@@ -69,7 +69,7 @@ export const NODES: readonly FlowNode[] = [
     gap: '只修到分支为止，测试通过后汇报；部署和重启要主人点头。',
   },
   {
-    id: 'qqMain', cell: [2, 8], tracks: { subscriptions: ['qq-main'] }, needs: 'qq', role: 'agent', title: 'QQ 主会话', service: 'bus', manage: 'lsy-subscriptions', wired: 'partial',
+    id: 'qqMain', cell: [2, 8], tracks: { subscriptions: ['qq-main'] }, needs: 'qq', role: 'agent', title: 'QQ 主会话', manage: 'lsy-subscriptions', wired: 'partial',
     via: 'subscription qq-main · preset qq-main',
     gap: '读各群摘要并保持跨群上下文；出口 QQ onebot 尚未实现，所以它不开口，回答也不进微信。',
   },

@@ -82,3 +82,16 @@ export function factLines(card: ServiceCard, t: Translate, now: number = Date.no
 function detail(card: ServiceCard): string[] {
   return typeof card.facts.detail === 'string' && card.facts.detail !== '' ? [card.facts.detail] : []
 }
+
+/** Settings section each service's Manage link goes to. */
+export const MANAGE_SECTION: Readonly<Partial<Record<ServiceId, string>>> = {
+  dsh: 'lsy-sysmon',
+  bus: 'lsy-subscriptions',
+  bili: 'bili',
+  qq: 'lsy-qq',
+  wechat: 'lsy-wechat',
+  style: 'lsy-style',
+  voice: 'lsy-agents',
+  cc: 'lsy-agents',
+  llm: 'account',
+}
