@@ -254,6 +254,8 @@ export interface FlowWindowActivity {
   }
   readonly sources: Readonly<Record<string, FlowSourceActivity>>
   readonly subscriptions: Readonly<Record<string, FlowSubscriptionActivity>>
+  /** Events no subscription took, or a filter dropped: counted in the funnel, left out of the list. */
+  readonly ignored: number
 }
 
 /** One thing that happened, by its label only: never the text of a message. */
@@ -270,7 +272,7 @@ export interface FlowRecentItem {
 /** Body of `GET api/fork.flow`. */
 export interface FlowActivityView {
   readonly windows: Readonly<Record<FlowWindow, FlowWindowActivity>>
-  /** Newest first, at most 50. */
+  /** What a subscription took, newest first, at most 50. */
   readonly recent: readonly FlowRecentItem[]
   /** Null when `fork-presence` is not mounted. */
   readonly presence: { readonly asleep: boolean; readonly deferred: number } | null

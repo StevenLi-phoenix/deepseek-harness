@@ -251,6 +251,7 @@ export function FlowPage({ useOverview, useActivity, refresh, canManage, openSet
           node={chosen === null ? undefined : graph.node(chosen)}
           fact={chosen === null ? undefined : facts.get(chosen)}
           recent={view?.recent ?? []}
+          ignored={view?.windows[span].ignored ?? 0}
           followed={followed?.id ?? null}
           now={now}
           canManage={canManage}

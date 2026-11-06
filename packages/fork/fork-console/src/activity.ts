@@ -55,9 +55,11 @@ function windowOf(events: readonly EventRow[], batches: readonly BatchRow[], sin
   const sources: Record<string, FlowSourceActivity> = {}
   const subscriptions: Record<string, FlowSubscriptionActivity> = {}
   const funnel = { events: 0, batches: 0, sent: 0, silent: 0, failed: 0 }
+  let ignored = 0
   for (const event of events) {
     if (event.receivedAt < since) continue
     funnel.events += 1
+    if (event.outcome !== 'accepted' || event.subscriptions.length === 0) ignored += 1
     const seen = sources[event.source]
     sources[event.source] = { count: (seen?.count ?? 0) + 1, lastAt: later(seen?.lastAt ?? null, event.receivedAt) }
   }
@@ -75,7 +77,7 @@ function windowOf(events: readonly EventRow[], batches: readonly BatchRow[], sin
       failed: (seen?.failed ?? 0) + (result === 'failed' ? 1 : 0),
     }
   }
-  return { funnel, sources, subscriptions }
+  return { funnel, sources, subscriptions, ignored }
 }
 
 /** The most telling result among the batches of one event: a failure, then a message to the owner, then the rest. */
@@ -93,15 +95,19 @@ function recentOf(events: readonly EventRow[], batches: readonly BatchRow[]): Fl
   for (const batch of batches) {
     for (const id of batch.eventIds) results.set(id, [...results.get(id) ?? [], resultOf(batch)])
   }
-  return [...events].sort((a, b) => b.receivedAt - a.receivedAt).slice(0, RECENT_MAX).map(event => ({
-    id: event.id,
-    at: event.receivedAt,
-    source: event.source,
-    kind: event.kind,
-    title: Array.from(event.title).slice(0, TITLE_MAX).join(''),
-    subscriptions: event.subscriptions,
-    outcome: outcomeOf(event, results),
-  }))
+  return [...events]
+    .filter(event => event.outcome === 'accepted' && event.subscriptions.length > 0)
+    .sort((a, b) => b.receivedAt - a.receivedAt)
+    .slice(0, RECENT_MAX)
+    .map(event => ({
+      id: event.id,
+      at: event.receivedAt,
+      source: event.source,
+      kind: event.kind,
+      title: Array.from(event.title).slice(0, TITLE_MAX).join(''),
+      subscriptions: event.subscriptions,
+      outcome: outcomeOf(event, results),
+    }))
 }
 
 /**
