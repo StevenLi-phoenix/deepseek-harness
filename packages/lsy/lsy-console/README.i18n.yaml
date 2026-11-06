@@ -3,23 +3,23 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/lsy/lsy-console/README.md
 /:
-  en: 6c5801e162f783ae
-  zh: 0b6a39542f408dec
+  en: 43a8592efeff3ed5
+  zh: b8526d5282a21fa5
 /deepseek-ai-dsh-lsy-console:
   en: cf2a5bc861641a5d
   zh: 8dc4bd3106ee3df6
 /deepseek-ai-dsh-lsy-console/summary:
-  en: e0c2f4d6c7ae14f6
-  zh: 61ec56501dc8568a
+  en: a0709396bee95368
+  zh: 05d918a068129982
 /deepseek-ai-dsh-lsy-console/table-of-contents:
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
 /deepseek-ai-dsh-lsy-console/use-this-package:
-  en: 9257481d6f415e9d
-  zh: a633290612198dde
+  en: cc94bcb6e425507a
+  zh: 0543d22642ea298b
 /deepseek-ai-dsh-lsy-console/understand-the-implementation:
-  en: 924a3563c91b009f
-  zh: 5eacff87a3d7b068
+  en: 0e7413af1b9a9dd7
+  zh: 11abc11c91ad056f
 /deepseek-ai-dsh-lsy-console/further-exploration:
   en: 4dc7d1d202eb21dc
   zh: aa817bd4e08f74a4

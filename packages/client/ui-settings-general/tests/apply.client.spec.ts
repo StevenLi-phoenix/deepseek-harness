@@ -184,6 +184,16 @@ describe('ui-settings-general apply', () => {
     expect(track).toHaveBeenLastCalledWith('code_work_view_toggle', { is_enabled: false }, 300)
   })
 
+  it('lets a page outside Settings open a section, and withdraws that when its row unloads', async ({ mock, start }) => {
+    const { c } = await client(mock, start)
+    const opened = c.ctx.get('settingsNavigation')
+    expect(opened).toBeDefined()
+    expect(() => { opened!.openSection('general') }).not.toThrow()
+    await c.unload(SELF)
+    await c.flush()
+    expect(c.ctx.get('settingsNavigation')).toBeUndefined()
+  })
+
   it('registers the zh/en settings dictionaries and frees the seats when its row unloads', async ({ mock, start }) => {
     const { c, settings } = await client(mock, start)
     const english = localeView('en', 1)

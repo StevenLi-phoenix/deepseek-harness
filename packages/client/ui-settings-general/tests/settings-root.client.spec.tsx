@@ -384,7 +384,7 @@ describe('SettingsPanel navigation', () => {
 
   it('gives every section a nav glyph, a different one for each id the shell and the fork name', () => {
     const named = [
-      'general', 'account', 'models', 'agent-presets', 'plugins', 'archived-sessions', 'lsy-overview', 'lsy-flow', 'lsy-subscriptions', 'lsy-agents',
+      'general', 'account', 'models', 'agent-presets', 'plugins', 'archived-sessions', 'lsy-overview', 'lsy-subscriptions', 'lsy-agents',
       'lsy-wechat', 'lsy-presence', 'lsy-style', 'lsy-memory', 'lsy-sysmon', 'bili', 'lsy-qq', 'lsy-courses',
     ]
     mount({ rows: [...named.map((id, index) => ({ id, order: index * 10, label: `S ${id}` })), { id: 'contributed', order: 999, label: 'Contributed' }] })

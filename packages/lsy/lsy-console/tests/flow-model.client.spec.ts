@@ -167,6 +167,50 @@ describe('problems', () => {
   })
 })
 
+describe('a graph on fixed cells', () => {
+  const nodes = [box('a', 'core', { cell: [0, 0] }), box('b', 'core', { cell: [1, 2] }), box('c', 'core', { cell: [1, 0] })]
+  const edges = [arrow('a', 'b'), arrow('a', 'c'), arrow('c', 'b')]
+
+  it('puts each box on its cell and sizes the canvas to fit', () => {
+    const { layout } = buildGraph(nodes, edges)
+    expect(layout.at.b!.x).toBe(layout.at.c!.x)
+    expect(layout.at.a!.y).toBe(layout.at.c!.y)
+    expect(layout.at.b!.y).toBeGreaterThan(layout.at.c!.y + NODE_H)
+    expect(layout.width).toBeGreaterThanOrEqual(layout.at.b!.x + NODE_W)
+    expect(layout.height).toBeGreaterThanOrEqual(layout.at.b!.y + NODE_H)
+  })
+
+  it('falls back to the arrows when any box has no cell', () => {
+    const { layout } = buildGraph([...nodes.slice(0, 2), box('c')], edges)
+    expect(layout.rank).toEqual({ a: 0, c: 1, b: 2 })
+  })
+
+  it('leads an arrow within a column out of the bottom of its source, not across the box', () => {
+    const graph = buildGraph(nodes, edges)
+    const { x, y } = graph.spot('c')
+    expect(graph.path('c', 'b').startsWith(`M${x + NODE_W / 2} ${y + NODE_H} `)).toBe(true)
+  })
+})
+
+describe('route', () => {
+  const graph = buildGraph(
+    [box('a'), box('b'), box('c'), box('d'), box('t')],
+    [arrow('a', 'b'), arrow('b', 'c'), arrow('a', 'c'), arrow('c', 'd'), arrow('t', 'c', { kind: 'pull' })],
+  )
+  const keys = (stops: string[]): string[] => graph.route(stops).map(edgeKey)
+
+  it('takes the shortest way between stops, in walking order', () => {
+    expect(keys(['a', 'd'])).toEqual(['a>c', 'c>d'])
+    expect(keys(['a', 'b', 'd'])).toEqual(['a>b', 'b>c', 'c>d'])
+  })
+
+  it('walks no arrow for a lookup, and skips a step with no way', () => {
+    expect(keys(['t', 'd'])).toEqual([])
+    expect(keys(['a', 't', 'b'])).toEqual(['a>b'])
+    expect(keys(['a'])).toEqual([])
+  })
+})
+
 describe('edgeKey', () => {
   it('joins the two ends with an arrow', () => {
     expect(edgeKey({ from: 'a', to: 'b' })).toBe('a>b')

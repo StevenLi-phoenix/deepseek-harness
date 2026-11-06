@@ -11,10 +11,11 @@ const dirs: string[] = []
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }) })
 
 describe('lsy-console Host half', () => {
-  it('registers the three routes on the connection, under the /api sign-in', async () => {
+  it('registers the four routes on the connection, under the /api sign-in', async () => {
     const { routes } = await mountConsole()
     expect(routes.map(route => [route.path, route.methods, route.requestBody])).toEqual([
       ['/api/lsy.overview', ['GET'], 'buffered'],
+      ['/api/lsy.flow', ['GET'], 'buffered'],
       ['/api/lsy.subscriptions', ['GET', 'POST'], 'buffered'],
       ['/api/lsy.agents', ['GET', 'POST'], 'buffered'],
     ])

@@ -14,7 +14,8 @@ import { Config } from './config.ts'
 import { collectOverview } from './overview.ts'
 import { Refusal, readJson } from './request.ts'
 import { listSubscriptions, runSubscriptionAction } from './subscriptions.ts'
-import { AGENTS_PATH, OVERVIEW_PATH, SUBSCRIPTIONS_PATH, type ActionError, type ActionErrorCode } from './views.ts'
+import { collectActivity } from './activity.ts'
+import { AGENTS_PATH, FLOW_PATH, OVERVIEW_PATH, SUBSCRIPTIONS_PATH, type ActionError, type ActionErrorCode } from './views.ts'
 
 export { Config } from './config.ts'
 export type { HealthReport } from './overview.ts'
@@ -61,7 +62,7 @@ function refusalResponse(refusal: Refusal): Response {
 }
 
 /**
- * Register the three routes.
+ * Register the four routes.
  * @param ctx - Host context with the connection service.
  * @param config - resolved configuration.
  */
@@ -90,6 +91,7 @@ export function apply(ctx: Context, config: Config): void {
   }
 
   register(OVERVIEW_PATH, ['GET'], handle(() => collectOverview({ ctx, config }), undefined))
+  register(FLOW_PATH, ['GET'], handle(() => Promise.resolve(collectActivity(ctx, Date.now())), undefined))
   register(SUBSCRIPTIONS_PATH, ['GET', 'POST'], handle(
     () => listSubscriptions(ctx, config),
     async (body) => {

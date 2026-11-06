@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { EDGES, GRAPH, NODES } from '../src/client/flow-graph.ts'
-import { problems } from '../src/client/flow-model.ts'
+import { EDGES, GRAPH, GRAPH_BUILT, NODES, PLANNED_COUNT } from '../src/client/flow-graph.ts'
+import { edgeKey, problems } from '../src/client/flow-model.ts'
 import { SERVICE_IDS } from '../src/views.ts'
 import { zh } from '../src/client/locales.ts'
 
@@ -74,11 +74,38 @@ describe('flow wiring', () => {
 })
 
 describe('flow layout', () => {
-  it('puts a question after what feeds it and the owner\'s WeChat last', () => {
-    expect(GRAPH.layout.rank.repairQ).toBeGreaterThan(GRAPH.layout.rank.amsGroup!)
-    expect(GRAPH.layout.rank.repair).toBeGreaterThan(GRAPH.layout.rank.repairQ!)
-    expect(GRAPH.layout.rank.main).toBeGreaterThan(GRAPH.layout.rank.notifySession!)
-    expect(GRAPH.layout.rank.wechatOut).toBe(GRAPH.layout.ranks - 1)
+  it('gives every box a cell of its own, so nothing overlaps', () => {
+    const cells = NODES.map(node => node.cell!.join(','))
+    expect(new Set(cells).size).toBe(NODES.length)
+  })
+
+  it('keeps each source in the first column, and the owner\'s WeChat in the last', () => {
+    for (const node of NODES.filter(box => box.role === 'source')) expect(node.cell![0], node.id).toBe(0)
+    const last = Math.max(...NODES.map(node => node.cell![0]))
+    expect(GRAPH.node('wechatOut')!.cell![0]).toBe(last)
+  })
+
+  it('leaves out of the first view what is not built, with the arrows that touch it', () => {
+    expect(GRAPH_BUILT.nodes.length + PLANNED_COUNT).toBe(NODES.length)
+    expect(GRAPH_BUILT.nodes.some(node => node.wired === 'planned')).toBe(false)
+    const built = new Set(GRAPH_BUILT.nodes.map(node => node.id))
+    for (const edge of GRAPH_BUILT.edges) expect(built.has(edge.from) && built.has(edge.to), edgeKey(edge)).toBe(true)
+  })
+})
+
+describe('flow counts', () => {
+  it('ties to the bus only what a box really carries: a tracked box is built, a box that needs a service knows the service', () => {
+    for (const node of NODES) {
+      if (node.tracks !== undefined) expect(node.wired, node.id).not.toBe('planned')
+      if (node.needs !== undefined) expect(SERVICE_IDS, node.id).toContain(node.needs)
+    }
+  })
+
+  it('walks a row of a tracked source to the owner\'s WeChat along arrows that exist', () => {
+    const way = GRAPH_BUILT.route(['github', 'githubSessions', 'wechatOut'])
+    expect(way[0]!.from).toBe('github')
+    expect(way.at(-1)!.to).toBe('wechatOut')
+    for (let index = 1; index < way.length; index += 1) expect(way[index]!.from).toBe(way[index - 1]!.to)
   })
 })
 

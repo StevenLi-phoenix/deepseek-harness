@@ -222,11 +222,68 @@ export type AgentsAction =
 /** Longest first task, as `cc_start` allows. */
 export const MAX_TASK_CHARS = 8000
 
+/** What became of one event: told to the owner, judged not worth it, failed, at work, waiting for its batch, or no one listens. */
+export type FlowOutcome = 'sent' | 'silent' | 'failed' | 'working' | 'waiting' | 'suppressed' | 'unmatched'
+
+/** The time spans the message flow page offers. */
+export const FLOW_WINDOWS = ['1h', '24h', '7d'] as const
+/** One of {@link FLOW_WINDOWS}. */
+export type FlowWindow = typeof FLOW_WINDOWS[number]
+
+/** How much passed one source in a window. */
+export interface FlowSourceActivity {
+  readonly count: number
+  readonly lastAt: number | null
+}
+
+/** How much one subscription handled in a window, in batches. */
+export interface FlowSubscriptionActivity extends FlowSourceActivity {
+  readonly sent: number
+  readonly silent: number
+  readonly failed: number
+}
+
+/** One window of the page: from everything that came in to what reached the owner. */
+export interface FlowWindowActivity {
+  readonly funnel: {
+    readonly events: number
+    readonly batches: number
+    readonly sent: number
+    readonly silent: number
+    readonly failed: number
+  }
+  readonly sources: Readonly<Record<string, FlowSourceActivity>>
+  readonly subscriptions: Readonly<Record<string, FlowSubscriptionActivity>>
+}
+
+/** One thing that happened, by its label only: never the text of a message. */
+export interface FlowRecentItem {
+  readonly id: string
+  readonly at: number
+  readonly source: string
+  readonly kind: string
+  readonly title: string
+  readonly subscriptions: readonly string[]
+  readonly outcome: FlowOutcome
+}
+
+/** Body of `GET api/lsy.flow`. */
+export interface FlowActivityView {
+  readonly windows: Readonly<Record<FlowWindow, FlowWindowActivity>>
+  /** Newest first, at most 50. */
+  readonly recent: readonly FlowRecentItem[]
+  /** Null when `lsy-presence` is not mounted. */
+  readonly presence: { readonly asleep: boolean; readonly deferred: number } | null
+  readonly checkedAt: number
+}
+
 /** Absolute Host registration paths of the routes. */
 export const OVERVIEW_PATH = '/api/lsy.overview'
+export const FLOW_PATH = '/api/lsy.flow'
 export const SUBSCRIPTIONS_PATH = '/api/lsy.subscriptions'
 export const AGENTS_PATH = '/api/lsy.agents'
 /** Document-relative forms the browser fetches. */
 export const OVERVIEW_ROUTE = OVERVIEW_PATH.slice(1)
+export const FLOW_ROUTE = FLOW_PATH.slice(1)
 export const SUBSCRIPTIONS_ROUTE = SUBSCRIPTIONS_PATH.slice(1)
 export const AGENTS_ROUTE = AGENTS_PATH.slice(1)

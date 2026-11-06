@@ -3,55 +3,98 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
-import type { OverviewView } from '../src/views.ts'
-import { EDGES, NODES } from '../src/client/flow-graph.ts'
-import { FlowSection, type FlowProps } from '../src/client/Flow.tsx'
+import type { FlowActivityView, FlowRecentItem, FlowWindowActivity, OverviewView } from '../src/views.ts'
+import { GRAPH, GRAPH_BUILT, PLANNED_COUNT } from '../src/client/flow-graph.ts'
+import { FlowPage, type FlowProps } from '../src/client/Flow.tsx'
+import { clip } from '../src/client/FlowBox.tsx'
 import { FlowCanvas } from '../src/client/FlowCanvas.tsx'
-import { clip, wrapTitle } from '../src/client/FlowBox.tsx'
-import { buildGraph } from '../src/client/flow-model.ts'
+import { buildGraph, edgeKey } from '../src/client/flow-model.ts'
+import { factOf, rowsThrough, stopsOf, type BoxFact } from '../src/client/flow-view.ts'
 import type { Translate } from '../src/client/format.ts'
 import { zh } from '../src/client/locales.ts'
 import { createResourceStore, type ResourceState } from '../src/client/resource.ts'
 
 const t = makeTranslate(zh) as FlowProps['t']
-const CHECKED = new Date(2026, 10, 2, 9, 30, 15).getTime()
+const translate = t as Translate
+const NOW = new Date(2026, 10, 6, 9, 30, 15).getTime()
 
-const VIEW: OverviewView = {
-  checkedAt: CHECKED,
+const window = (overrides: Partial<FlowWindowActivity> = {}): FlowWindowActivity => ({
+  funnel: { events: 0, batches: 0, sent: 0, silent: 0, failed: 0 }, sources: {}, subscriptions: {}, ...overrides,
+})
+
+const OVERVIEW: OverviewView = {
+  checkedAt: NOW,
   cards: [
     { id: 'dsh', tone: 'ok', state: 'up', facts: { version: '0.2.2', sha: '0a1b2c3d4e', uptime: 3600 } },
-    { id: 'bus', tone: 'warn', state: 'limited', facts: { subscriptions: 3, paused: 0, pending: 1, events: 9, batches: 4, limited: 2 } },
-    { id: 'bili', tone: 'down', state: 'down', facts: { plugin: true } },
-    { id: 'qq', tone: 'off', state: 'absent', facts: {} },
-    { id: 'wechat', tone: 'warn', state: 'queued', facts: {} },
+    { id: 'bus', tone: 'ok', state: 'up', facts: { subscriptions: 3, paused: 0, pending: 0, events: 9, batches: 4, limited: 0 } },
+    { id: 'wechat', tone: 'ok', state: 'up', facts: {} },
   ],
 }
 
-function mount(overview: Partial<ResourceState<OverviewView>>, registered: string[] = []) {
-  const overviewStore = createResourceStore<OverviewView>()
-  overviewStore.update((draft) => { Object.assign(draft, overview) })
-  const refresh = vi.fn()
-  const select = vi.fn()
-  const props = {
-    close: () => {}, select, useOverview: bindSnapshotSelector(overviewStore),
-    refresh, canManage: (section: string) => registered.includes(section), t,
-  } as FlowProps
-  const view = render(<FlowSection {...props} />)
-  return { refresh, select, view }
+const QQ_DOWN: OverviewView = { ...OVERVIEW, cards: [...OVERVIEW.cards, { id: 'qq', tone: 'down', state: 'down', facts: {} }] }
+
+const ITEM: FlowRecentItem = { id: 'e1', at: NOW - 60_000, source: 'github', kind: 'ci.failed', title: 'main 构建失败', subscriptions: ['ci'], outcome: 'sent' }
+
+const ACTIVITY: FlowActivityView = {
+  checkedAt: NOW,
+  presence: { asleep: false, deferred: 0 },
+  recent: [ITEM, { ...ITEM, id: 'e2', source: 'host', kind: 'host.test.info', title: '磁盘检查', subscriptions: ['notify-funnel'], outcome: 'silent' }],
+  windows: {
+    '1h': window({ funnel: { events: 2, batches: 1, sent: 1, silent: 0, failed: 0 } }),
+    '24h': window({
+      funnel: { events: 40, batches: 6, sent: 3, silent: 3, failed: 2 },
+      sources: { github: { count: 12, lastAt: NOW - 60_000 } },
+      subscriptions: { ci: { count: 5, lastAt: NOW - 60_000, sent: 2, silent: 3, failed: 0 } },
+    }),
+    '7d': window({ funnel: { events: 300, batches: 30, sent: 9, silent: 21, failed: 0 } }),
+  },
 }
 
+interface Reads {
+  overview?: Partial<ResourceState<OverviewView>>
+  activity?: Partial<ResourceState<FlowActivityView>>
+  registered?: string[]
+}
+
+function mount({ overview = {}, activity = {}, registered = [] }: Reads = {}) {
+  const overviewStore = createResourceStore<OverviewView>()
+  overviewStore.update((draft) => { Object.assign(draft, overview) })
+  const activityStore = createResourceStore<FlowActivityView>()
+  activityStore.update((draft) => { Object.assign(draft, activity) })
+  const refresh = vi.fn()
+  const openSettings = vi.fn()
+  const props = {
+    useOverview: bindSnapshotSelector(overviewStore),
+    useActivity: bindSnapshotSelector(activityStore),
+    refresh,
+    openSettings,
+    canManage: (section: string) => registered.includes(section),
+    t,
+  } as unknown as FlowProps
+  const view = render(<FlowPage {...props} />)
+  return { refresh, openSettings, view }
+}
+
+const loaded = (overview: OverviewView = OVERVIEW): Reads => ({
+  overview: { data: overview, checkedAt: NOW },
+  activity: { data: ACTIVITY, checkedAt: NOW },
+})
+
 const node = (id: string): Element => document.querySelector(`[data-node="${id}"]`)!
-const edge = (key: string): Element => document.querySelector(`[data-edge="${key}"]`)!
+const edge = (key: string): Element | null => document.querySelector(`[data-edge="${key}"]`)
+const side = (): HTMLElement => screen.getByTestId('flow-side')
+const figures = (): string[] => Array.from(document.querySelectorAll('strong')).map(figure => figure.textContent)
 
 afterEach(() => {
   cleanup()
   vi.useRealTimers()
+  vi.restoreAllMocks()
 })
 
-describe('FlowSection', () => {
+describe('FlowPage', () => {
   it('reads on opening and every 10 s while open, and stops when closed', () => {
     vi.useFakeTimers()
-    const { refresh, view } = mount({})
+    const { refresh, view } = mount()
     expect(refresh).toHaveBeenCalledTimes(1)
     act(() => { vi.advanceTimersByTime(10_000) })
     expect(refresh).toHaveBeenCalledTimes(2)
@@ -60,172 +103,259 @@ describe('FlowSection', () => {
     expect(refresh).toHaveBeenCalledTimes(2)
   })
 
-  it('draws every node and arrow before any reading arrives, with the loading line', () => {
-    mount({})
+  it('draws what is built before any reading arrives, with the loading line, and no arrow for a tool or a call', () => {
+    mount()
     expect(screen.getByRole('status').textContent).toBe('正在读取…')
-    expect(document.querySelectorAll('[data-node]')).toHaveLength(NODES.length)
-    expect(document.querySelectorAll('[data-edge]')).toHaveLength(EDGES.length)
-    expect(node('wechatOut').getAttribute('data-tone')).toBe('off')
+    expect(document.querySelectorAll('[data-node]')).toHaveLength(GRAPH_BUILT.nodes.length)
+    const drawn = GRAPH_BUILT.edges.filter(arrow => arrow.kind !== 'pull' && arrow.kind !== 'call')
+    expect(document.querySelectorAll('[data-edge]')).toHaveLength(drawn.length)
   })
 
-  it('takes each node\'s tone from its service card, and leaves a node with no probe plain', () => {
-    mount({ data: VIEW, checkedAt: 1 })
-    expect(screen.getByRole('status').textContent).toBe('09:30:15 更新')
-    expect(node('wechatOut').getAttribute('data-tone')).toBe('warn')
-    expect(node('bili').getAttribute('data-tone')).toBe('down')
-    expect(node('gate').getAttribute('data-tone')).toBe('down')
-    expect(node('main').getAttribute('data-tone')).toBe('ok')
-    expect(node('qq').getAttribute('data-tone')).toBe('off')
-    expect(node('github').getAttribute('data-tone')).toBe('none')
-    expect(node('repairQ').getAttribute('data-tone')).toBe('none')
-    expect(node('notifySession').getAttribute('data-tone')).toBe('warn')
+  describe('whether anything is broken', () => {
+    it('says so in one line when nothing is', () => {
+      mount(loaded())
+      expect(screen.getByRole('status').textContent).toBe('一切正常')
+    })
+
+    it('names what is broken and what it touches, and marks the box and those it starves', () => {
+      mount(loaded(QQ_DOWN))
+      const verdict = screen.getByRole('status')
+      expect(verdict.textContent).toContain('QQ 观察器')
+      expect(verdict.textContent).toContain('QQ 群摘要')
+      expect(verdict.textContent).toContain('QQ 主会话')
+      expect(verdict.textContent).toContain('其余都正常')
+      expect(node('qq').getAttribute('data-state')).toBe('bad')
+      expect(node('qq').querySelector('rect')).not.toBeNull()
+      expect(node('qqSessions').getAttribute('data-state')).toBe('hit')
+      expect(node('qqMain').getAttribute('data-state')).toBe('hit')
+      expect(node('github').getAttribute('data-state')).not.toBe('hit')
+    })
+
+    it('opens the broken box from the verdict, and goes to its Settings section with the fix', () => {
+      const { openSettings } = mount({ ...loaded(QQ_DOWN), registered: ['lsy-qq'] })
+      const verdict = screen.getByRole('status')
+      fireEvent.click(within(verdict).getByRole('button', { name: '去处理' }))
+      expect(openSettings).toHaveBeenCalledWith('lsy-qq')
+      fireEvent.click(within(verdict).getAllByRole('button')[0]!)
+      expect(node('qq').getAttribute('aria-pressed')).toBe('true')
+      expect(within(side()).getByRole('heading', { level: 2 }).textContent).toBe(zh['flow.node.qq'])
+    })
+
+    it('offers no fix for a section that is not registered', () => {
+      mount(loaded(QQ_DOWN))
+      expect(screen.queryByRole('button', { name: '去处理' })).toBeNull()
+    })
   })
 
-  it('draws a question as a hexagon and writes each answer on its arrow', () => {
-    mount({})
-    expect(node('repairQ').querySelector('polygon')).not.toBeNull()
-    expect(node('main').querySelector('polygon')).toBeNull()
-    const labels = [...document.querySelectorAll('[data-label]')]
-    expect(labels).toHaveLength(EDGES.filter(edge => edge.branch !== undefined).length)
-    expect(document.querySelector('[data-label="repairQ>repair"]')?.textContent).toBe('是')
-    expect(document.querySelector('[data-label="repairQ>notifySession"]')?.textContent).toBe('否')
-    expect(document.querySelector('[data-label="autocutQ>autocut"]')?.textContent).toBe('是')
+  describe('how much came in and how much reached the owner', () => {
+    it('shows the funnel of the chosen span, and switches span with no new read', () => {
+      const { refresh } = mount(loaded())
+      expect(figures().slice(0, 3)).toEqual(['40', '6', '3'])
+      expect(screen.getByText(zh['flow.funnel.failed'])).toBeTruthy()
+      const reads = refresh.mock.calls.length
+      fireEvent.click(screen.getByRole('button', { name: '7 天' }))
+      expect(figures().slice(0, 3)).toEqual(['300', '30', '9'])
+      expect(screen.queryByText(zh['flow.funnel.failed'])).toBeNull()
+      expect(refresh).toHaveBeenCalledTimes(reads)
+      expect(screen.getByRole('button', { name: '7 天' }).getAttribute('aria-pressed')).toBe('true')
+    })
+
+    it('counts what waits for the owner to wake only when something does', () => {
+      mount({ ...loaded(), activity: { data: { ...ACTIVITY, presence: { asleep: true, deferred: 4 } }, checkedAt: NOW } })
+      expect(screen.getByText(zh['flow.funnel.held'])).toBeTruthy()
+      expect(node('dnd').textContent).toContain('现在在睡')
+    })
   })
 
-  it('breaks a long title over two lines at a space and keeps the whole name for assistive tech', () => {
-    mount({})
-    const lines = [...node('githubSessions').querySelectorAll('text')].map(text => text.textContent)
-    expect(lines).toEqual(['Github Sessions', 'Group By repo'])
-    expect(node('githubSessions').getAttribute('aria-label')).toBe('Github Sessions Group By repo, 部分接通')
+  describe('where one event went', () => {
+    it('lists what just happened and draws the way of a followed row, one arrow after another', () => {
+      mount(loaded())
+      const row = within(side()).getByRole('button', { name: /main 构建失败/u })
+      expect(row.textContent).toContain('发给你了')
+      fireEvent.click(row)
+      const runs = Array.from(document.querySelectorAll<SVGPathElement>('[data-run]'))
+      expect(runs.length).toBeGreaterThan(1)
+      expect(runs[0]!.getAttribute('data-run')!.startsWith('github>')).toBe(true)
+      expect(runs.at(-1)!.getAttribute('data-run')!.endsWith('>wechatOut')).toBe(true)
+      expect(runs.map(run => run.style.animationDelay)).toEqual(runs.map((_, index) => `${index * 170}ms`))
+      expect(node('github').hasAttribute('data-walked')).toBe(true)
+      expect(node('bili').hasAttribute('data-dim')).toBe(true)
+      fireEvent.click(row)
+      expect(document.querySelectorAll('[data-run]')).toHaveLength(0)
+    })
+
+    it('says so when nothing happened', () => {
+      mount()
+      expect(within(side()).getByText('这段时间什么也没发生')).toBeTruthy()
+    })
   })
 
-  it('lights up the paths through a node when it is chosen and clears them when it is chosen again', () => {
-    mount({ data: VIEW, checkedAt: 1 })
-    fireEvent.click(node('repairQ'))
-    expect(node('repairQ').getAttribute('aria-pressed')).toBe('true')
-    expect(node('github').getAttribute('data-dim')).toBeNull()
-    expect(node('wechatOut').getAttribute('data-dim')).toBeNull()
-    expect(node('wechatIn').getAttribute('data-dim')).toBe('')
-    expect(edge('github>githubSessions').getAttribute('data-dim')).toBeNull()
-    expect(edge('wechatIn>main').getAttribute('data-dim')).toBe('')
-    expect(document.querySelector('[data-label="repairQ>repair"]')?.getAttribute('data-dim')).toBeNull()
-    fireEvent.click(node('wechatIn'))
-    expect(document.querySelector('[data-label="repairQ>repair"]')?.getAttribute('data-dim')).toBe('')
-    fireEvent.click(node('wechatIn'))
-    expect(node('github').getAttribute('data-dim')).toBeNull()
-    expect(edge('wechatIn>main').getAttribute('data-dim')).toBeNull()
+  describe('one box', () => {
+    it('tells how it stands, what passed it, and what is around it, with its wiring behind a disclosure', () => {
+      mount(loaded())
+      fireEvent.click(node('githubSessions'))
+      const panel = side()
+      expect(within(panel).getByRole('heading', { level: 2 }).textContent).toBe('GitHub CI')
+      expect(within(panel).getByRole('button', { name: /main 构建失败/u })).toBeTruthy()
+      expect(within(panel).queryByRole('button', { name: /磁盘检查/u })).toBeNull()
+      expect(within(panel).getByText(/^来自：/u).textContent).toContain('GitHub')
+      expect(panel.querySelector('details')!.hasAttribute('open')).toBe(false)
+      expect(panel.querySelector('details')!.textContent).toContain('接线细节')
+    })
+
+    it('lights the paths through it, shows the tool arrows that belong to it, and goes back on Escape', () => {
+      mount(loaded())
+      const pull = GRAPH_BUILT.edges.find(arrow => arrow.kind === 'pull')!
+      expect(edge(edgeKey(pull))).toBeNull()
+      fireEvent.click(node(pull.to))
+      expect(edge(edgeKey(pull))).not.toBeNull()
+      expect(edge(edgeKey(pull))!.hasAttribute('data-lit')).toBe(true)
+      fireEvent.keyDown(node(pull.to), { key: 'Escape' })
+      expect(edge(edgeKey(pull))).toBeNull()
+      expect(within(side()).getByText('最近发生了什么')).toBeTruthy()
+    })
+
+    it('works from the keyboard, and a second press lets go', () => {
+      mount(loaded())
+      fireEvent.keyDown(node('main'), { key: 'Enter' })
+      expect(node('main').getAttribute('aria-pressed')).toBe('true')
+      fireEvent.keyDown(node('main'), { key: ' ' })
+      expect(node('main').getAttribute('aria-pressed')).toBe('false')
+    })
+
+    it('offers Manage only for a registered section, and returns to the list', () => {
+      const { openSettings } = mount({ ...loaded(), registered: ['lsy-wechat'] })
+      fireEvent.click(node('wechatOut'))
+      fireEvent.click(within(side()).getByRole('button', { name: '管理' }))
+      expect(openSettings).toHaveBeenCalledWith('lsy-wechat')
+      fireEvent.click(within(side()).getByRole('button', { name: '← 看全部' }))
+      expect(node('wechatOut').getAttribute('aria-pressed')).toBe('false')
+      fireEvent.click(node('github'))
+      expect(within(side()).queryByRole('button', { name: '管理' })).toBeNull()
+    })
   })
 
-  it('works from the keyboard: Enter chooses, Escape clears', () => {
-    mount({ data: VIEW, checkedAt: 1 })
-    fireEvent.keyDown(node('main'), { key: 'Enter' })
-    expect(node('main').getAttribute('aria-pressed')).toBe('true')
-    fireEvent.keyDown(node('main'), { key: 'Escape' })
-    expect(node('main').getAttribute('aria-pressed')).toBe('false')
-  })
-
-  it('describes the chosen node: its state, what feeds it and where it goes, and offers Manage where the section exists', () => {
-    const { select } = mount({ data: VIEW, checkedAt: 1 }, ['lsy-wechat'])
-    expect(screen.getByTestId('flow-detail').textContent).toContain('点一个节点')
-    fireEvent.click(node('wechatOut'))
-    const detail = screen.getByTestId('flow-detail')
-    expect(detail.textContent).toContain('微信（主人）')
-    expect(detail.textContent).toContain('有通知在等你回复后发出')
-    expect(detail.textContent).toContain('来自：微信主智能体、defer delay?、tools 语音')
-    expect(detail.textContent).not.toContain('去向')
-    fireEvent.click(within(detail).getByRole('button', { name: '管理' }))
-    expect(select).toHaveBeenCalledWith('lsy-wechat')
-  })
-
-  it('describes a node the dictionary knows with its job, and one it does not with its title alone', () => {
-    mount({ data: VIEW, checkedAt: 1 })
-    fireEvent.click(node('main'))
-    expect(screen.getByTestId('flow-detail').textContent).toContain('唯一的聊天会话')
-    fireEvent.click(node('repairQ'))
-    expect(screen.getByTestId('flow-detail').textContent).toContain('自动修复')
-    expect(screen.getByTestId('flow-detail').textContent).not.toContain('唯一的聊天会话')
-  })
-
-  it('offers no Manage button for a node whose section is not registered', () => {
-    mount({ data: VIEW, checkedAt: 1 }, [])
-    fireEvent.click(node('wechatOut'))
-    expect(within(screen.getByTestId('flow-detail')).queryByRole('button')).toBeNull()
+  it('hides what is not built until asked for', () => {
+    mount(loaded())
+    expect(document.querySelectorAll('[data-node]')).toHaveLength(GRAPH_BUILT.nodes.length)
+    fireEvent.click(screen.getByRole('checkbox', { name: `显示未建成的 ${PLANNED_COUNT} 项` }))
+    expect(document.querySelectorAll('[data-node]')).toHaveLength(GRAPH.nodes.length)
+    expect(document.querySelectorAll('[data-state="planned"]')).toHaveLength(PLANNED_COUNT)
   })
 
   it('keeps the last picture with a quiet stale line', () => {
-    mount({ data: VIEW, checkedAt: 2, stale: true })
-    expect(screen.getByRole('status').textContent).toBe('未能刷新 · 显示 09:30:15 的数据')
-    expect(node('wechatOut').getAttribute('data-tone')).toBe('warn')
-  })
-})
-
-describe('wiring', () => {
-  it('borders a box by how far the running service matches it, and reads the state out with its name', () => {
-    mount({})
-    const border = (id: string): string | null => node(id).querySelector('[data-wired]')!.getAttribute('data-wired')
-    expect(border('main')).toBe('live')
-    expect(border('githubSessions')).toBe('partial')
-    expect(border('notifySession')).toBe('partial')
-    expect(border('qqOut')).toBe('planned')
-    expect(border('repairQ')).toBe('partial')
-    expect(node('main').getAttribute('aria-label')).toBe('微信主智能体')
-    expect(border('qqMain')).toBe('partial')
-    expect(node('qqMain').getAttribute('aria-label')).toBe('shared QQ main session (iso), 部分接通')
-  })
-
-  it('explains the border in the legend', () => {
-    mount({})
-    const keys = [...document.querySelectorAll('rect[data-wired]')].filter(rect => rect.closest('[data-node]') === null)
-    expect(keys.map(rect => rect.getAttribute('data-wired'))).toEqual(['partial', 'planned'])
-    expect(document.body.textContent).toContain('部分接通')
-    expect(document.body.textContent).toContain('尚未实现')
-  })
-
-  it('tells in the detail card what carries a live box, and how a partial or planned one differs', () => {
-    mount({ data: VIEW, checkedAt: 1 })
-    fireEvent.click(node('main'))
-    let detail = screen.getByTestId('flow-detail').textContent ?? ''
-    expect(detail).toContain('已接通')
-    expect(detail).toContain('实际承载：lsy-wechat chat Session')
-    fireEvent.click(node('githubSessions'))
-    detail = screen.getByTestId('flow-detail').textContent ?? ''
-    expect(detail).toContain('部分接通')
-    expect(detail).toContain('实际承载：subscription ci (one Session per repo)')
-    expect(detail).toContain('只接 workflow_run.completed 一种事件')
-    fireEvent.click(node('qqOut'))
-    detail = screen.getByTestId('flow-detail').textContent ?? ''
-    expect(detail).toContain('尚未实现')
-    expect(detail).not.toContain('实际承载')
-    expect(detail).toContain('按设计只收不发')
-  })
-})
-
-describe('wrapTitle', () => {
-  it('keeps a short title on one line', () => {
-    expect(wrapTitle('微信主智能体')).toEqual(['微信主智能体'])
-  })
-
-  it('breaks a long title at the last space within reach, even two characters past the limit', () => {
-    expect(wrapTitle('Github Sessions Group By repo')).toEqual(['Github Sessions', 'Group By repo'])
-    expect(wrapTitle('bilibili upload from local')).toEqual(['bilibili upload', 'from local'])
-  })
-
-  it('cuts at the limit when there is no space to break at, and clips what overflows the second line', () => {
-    expect(wrapTitle('一二三四五六七八九十一二三四五六七八')).toEqual(['一二三四五六七八九十一二三四', '五六七八'])
-    expect(wrapTitle('x'.repeat(40))[1]).toBe(clip('x'.repeat(26)))
-    expect(clip('x'.repeat(40))).toHaveLength(14)
+    mount({ overview: { data: OVERVIEW, checkedAt: NOW, stale: true }, activity: { data: ACTIVITY, checkedAt: NOW, stale: true } })
+    expect(screen.getByText(/未能刷新/u)).toBeTruthy()
+    expect(figures().slice(0, 3)).toEqual(['40', '6', '3'])
   })
 })
 
 describe('FlowCanvas', () => {
-  it('draws whatever graph it is given, with no part of the event service built in', () => {
-    const graph = buildGraph(
-      [{ id: 'in', role: 'source', title: 'In' }, { id: 'q', role: 'cond', title: 'Ok?' }, { id: 'out', role: 'out', title: 'Out' }],
-      [{ from: 'in', to: 'q', kind: 'event' }, { from: 'q', to: 'out', kind: 'send', branch: 'yes' }],
-    )
-    render(<FlowCanvas graph={graph} cards={new Map()} chosen={null} onChoose={() => {}} onClear={() => {}} translate={t as Translate} />)
-    expect([...document.querySelectorAll('[data-node]')].map(el => el.getAttribute('data-node'))).toEqual(['in', 'q', 'out'])
-    expect(document.querySelector('[data-label="q>out"]')?.textContent).toBe('是')
-    expect(document.querySelector('[data-node="bus"]')).toBeNull()
+  const box = (id: string) => ({ id, role: 'core' as const })
+  const facts = (entries: Record<string, Partial<BoxFact>>): Map<string, BoxFact> =>
+    new Map(Object.entries(entries).map(([id, fact]) => [id, { state: 'plain' as const, text: '', count: 0, lastAt: null, ...fact }]))
+  const draw = (graph: ReturnType<typeof buildGraph>, given: Map<string, BoxFact>) => render(
+    <FlowCanvas graph={graph} facts={given} chosen={null} walk={[]} walkKey="" now={NOW} onChoose={() => {}} onClear={() => {}} translate={translate} />,
+  )
+  const pair = buildGraph([box('a'), box('b')], [{ from: 'a', to: 'b', kind: 'event' }])
+
+  it('runs a dot along an arrow used in the last minutes, and not along an old or broken one', () => {
+    draw(pair, facts({ a: { lastAt: NOW - 60_000, count: 3 } }))
+    expect(document.querySelector('[data-dot="a>b"]')).not.toBeNull()
+    cleanup()
+    draw(pair, facts({ a: { lastAt: NOW - 3_600_000, count: 3 } }))
+    expect(document.querySelector('[data-dot="a>b"]')).toBeNull()
+    cleanup()
+    draw(pair, facts({ a: { state: 'bad', lastAt: NOW - 60_000 } }))
+    expect(document.querySelector('[data-dot="a>b"]')).toBeNull()
+    expect(edge('a>b')!.getAttribute('data-state')).toBe('broken')
+  })
+
+  it('never runs more than ten dots', () => {
+    const ids = Array.from({ length: 12 }, (_, index) => `n${index}`)
+    const graph = buildGraph([box('hub'), ...ids.map(box)], ids.map(id => ({ from: 'hub', to: id, kind: 'event' as const })))
+    draw(graph, facts({ hub: { lastAt: NOW - 1_000, count: 1 } }))
+    expect(document.querySelectorAll('[data-dot]')).toHaveLength(10)
+  })
+
+  it('makes an arrow heavier the more passed it, within a limit', () => {
+    const widthAt = (count: number): number => {
+      draw(pair, facts({ a: { count } }))
+      const width = Number((edge('a>b') as SVGPathElement).style.strokeWidth)
+      cleanup()
+      return width
+    }
+    expect(widthAt(0)).toBe(1)
+    expect(widthAt(9)).toBe(2)
+    expect(widthAt(1_000_000)).toBe(3.25)
+  })
+})
+
+describe('factOf', () => {
+  const sources = (overrides: Partial<Parameters<typeof factOf>[1]> = {}): Parameters<typeof factOf>[1] => ({
+    cards: new Map(OVERVIEW.cards.map(card => [card.id, card])), activity: ACTIVITY, span: '24h', now: NOW, t: translate, ...overrides,
+  })
+  const down = new Map(QQ_DOWN.cards.map(card => [card.id, card]))
+
+  it('says what is wrong first, for the box itself and for one that needs it', () => {
+    expect(factOf(GRAPH.node('qq')!, sources({ cards: down })).state).toBe('bad')
+    const hit = factOf(GRAPH.node('qqMain')!, sources({ cards: down }))
+    expect(hit.state).toBe('hit')
+    expect(hit.text).toBe('QQ 观察器断开，没有新内容')
+  })
+
+  it('counts a source\'s events with the time of the latest', () => {
+    const fact = factOf(GRAPH.node('github')!, sources())
+    expect(fact).toMatchObject({ state: 'plain', count: 12, lastAt: NOW - 60_000 })
+    expect(fact.text).toMatch(/^12 件 · /u)
+  })
+
+  it('counts a Session\'s batches and how many reached the owner', () => {
+    expect(factOf(GRAPH.node('githubSessions')!, sources()).text).toBe('5 批 · 2 条告诉你')
+  })
+
+  it('says a box saw nothing, for the chosen span', () => {
+    expect(factOf(GRAPH.node('github')!, sources({ span: '1h' }))).toMatchObject({ state: 'idle', text: '1 小时没有事件' })
+  })
+
+  it('reads the sent count on the owner\'s WeChat and the sleep state on do-not-disturb', () => {
+    expect(factOf(GRAPH.node('wechatOut')!, sources()).text).toBe('3 条发给你')
+    expect(factOf(GRAPH.node('dnd')!, sources()).text).toBe('现在醒着')
+  })
+
+  it('says nothing about a healthy box the bus does not know', () => {
+    expect(factOf(GRAPH.node('main')!, sources())).toMatchObject({ state: 'plain', text: '' })
+  })
+
+  it('marks a box that is not built, whatever its service says', () => {
+    const planned = GRAPH.nodes.find(box => box.wired === 'planned')!
+    expect(factOf(planned, sources()).state).toBe('planned')
+  })
+})
+
+describe('stopsOf', () => {
+  it('walks from the source through the Sessions that took it, and to the owner\'s WeChat when it reached them', () => {
+    expect(stopsOf(GRAPH_BUILT, ITEM)).toEqual(['github', 'githubSessions', 'wechatOut'])
+    expect(stopsOf(GRAPH_BUILT, { ...ITEM, outcome: 'silent' })).toEqual(['github', 'githubSessions'])
+  })
+
+  it('has no stops for a source no box stands for', () => {
+    expect(stopsOf(GRAPH_BUILT, { ...ITEM, source: 'nobody', subscriptions: [], outcome: 'unmatched' })).toEqual([])
+  })
+
+  it('finds the rows through a box', () => {
+    expect(rowsThrough(GRAPH_BUILT, 'githubSessions', ACTIVITY.recent).map(row => row.id)).toEqual(['e1'])
+    expect(rowsThrough(GRAPH_BUILT, 'qq', ACTIVITY.recent)).toEqual([])
+  })
+})
+
+describe('clip', () => {
+  it('keeps a line that fits', () => {
+    expect(clip('十二个字十二个字十二个字')).toBe('十二个字十二个字十二个字')
+  })
+
+  it('cuts a longer line with an ellipsis, counting a Latin character as half', () => {
+    expect(clip('十三个字十三个字十三个字十')).toBe('十三个字十三个字十三个字…')
+    expect(clip('abcdefghijklmnopqrstuvwxyz')).toBe('abcdefghijklmnopqrstu…')
   })
 })
