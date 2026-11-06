@@ -45,6 +45,8 @@ const batchRecordSchema = z.object({
   subject: z.string().optional(),
   /** The batch this one was split from by subject; such rows do not count against `maxPerHour`. */
   parent: z.string().optional(),
+  /** The answer went on to another route or the main agent, or stayed in the Session: no message for the owner came of this batch. */
+  notSent: z.literal(true).optional(),
 }).strict()
 
 const persistentRecordSchema = z.object({
@@ -61,6 +63,15 @@ const persistentRecordSchema = z.object({
   previous: z.string().optional(),
 }).strict()
 
+const routeResultSchema = z.enum(['notify', 'urgent', 'main', 'quiet', 'event'])
+
+const persistentActionSchema = z.object({
+  enabled: z.boolean(),
+  key: z.enum(['subscription', 'subject']),
+  rolloverDays: z.number().int().min(1),
+  maxSeedChars: z.number().int().min(1),
+}).strict()
+
 const sessionActionSchema = z.object({
   workspacePath: z.string().min(1),
   agentPreset: z.string().min(1),
@@ -69,6 +80,10 @@ const sessionActionSchema = z.object({
   titlePrefix: z.string().optional(),
   maxPromptEvents: z.number().int().min(1),
   maxTextChars: z.number().int().min(1),
+  result: routeResultSchema.optional(),
+  model: z.object({ provider: z.string().min(1), model: z.string().min(1) }).strict().optional(),
+  persistent: persistentActionSchema.optional(),
+  project: z.string().optional(),
 }).strict()
 
 const subscriptionRecordSchema = z.object({
@@ -87,6 +102,37 @@ const subscriptionRecordSchema = z.object({
   paused: z.literal(true).optional(),
 }).strict()
 
+const routePatchSchema = z.object({
+  sources: z.array(z.string()).optional(),
+  kinds: z.array(z.string()).optional(),
+  subjects: z.array(z.string()).optional(),
+  action: z.enum(['notify', 'session']).optional(),
+  coalesceMs: z.number().int().min(0).optional(),
+  maxPerHour: z.number().int().min(1).optional(),
+  session: sessionActionSchema.partial().optional(),
+}).strict()
+
+/** How a configuration route differs at run time; the bundle stays as written, so a deploy never undoes it. */
+const routeOverrideSchema = z.object({
+  id: z.string().min(1),
+  patch: routePatchSchema.optional(),
+  paused: z.literal(true).optional(),
+  removed: z.literal(true).optional(),
+  updatedAt: z.number(),
+  updatedBy: z.string().optional(),
+}).strict()
+
+const flowChangeSchema = z.object({
+  id: z.string().min(1),
+  at: z.number(),
+  op: z.enum(['set', 'remove', 'reset', 'pause', 'resume']),
+  route: z.string().min(1),
+  by: z.string().optional(),
+  note: z.string().optional(),
+  before: z.string().optional(),
+  after: z.string().optional(),
+}).strict()
+
 /** One published, non-duplicate event and what the bus decided about it. */
 export type LsyEventRecord = z.infer<typeof eventRecordSchema>
 /** One event waiting for one subscription's next batch. */
@@ -95,6 +141,10 @@ export type PendingRecord = z.infer<typeof pendingRecordSchema>
 export type BatchRecord = z.infer<typeof batchRecordSchema>
 /** One subscription created at run time, keyed by its id. */
 export type SubscriptionRecord = z.infer<typeof subscriptionRecordSchema>
+/** How a configuration route differs at run time, keyed by its id. */
+export type RouteOverrideRecord = z.infer<typeof routeOverrideSchema>
+/** One entry of the flow's change history, keyed by its id. */
+export type FlowChangeRecord = z.infer<typeof flowChangeSchema>
 /** The persistent Session of one subscription (keyed by its id) or one subject of it (`<id>|<subject>`). */
 export type PersistentRecord = z.infer<typeof persistentRecordSchema>
 
@@ -108,5 +158,7 @@ export const busDomain = defineDomain({
     batches: domainTable<string, BatchRecord>(batchRecordSchema),
     subscriptions: domainTable<string, SubscriptionRecord>(subscriptionRecordSchema),
     persistent: domainTable<string, PersistentRecord>(persistentRecordSchema),
+    route_overrides: domainTable<string, RouteOverrideRecord>(routeOverrideSchema),
+    flow_changes: domainTable<string, FlowChangeRecord>(flowChangeSchema),
   },
 })

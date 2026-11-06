@@ -18,19 +18,22 @@ import {
   archiveDomain, autoArchiveSchema, resolveAutoArchive, SessionArchiver, type ArchiveHost, type ArchiveStatus, type AutoArchiveConfig,
   logModifiedAt, type LogLocator, type ProtectionDisposer, type SessionProtector, type SessionRow, type SweepReport,
 } from './archive.ts'
+import { applyRoutePatch, downstreamOf, findCycle, FLOW_SOURCE, flowResultKind, mergeRoutePatches, resultOf } from './flow.ts'
 import { matchesSubscription, suppressionReason } from './match.ts'
 import {
   LSY_SILENT_REPLY, batchTitle, buildBatchPrompt, buildSessionRequest, clip, failureDetail, formatBatchNote, formatReminderNote,
   formatResultNote, isSilentReply, monitorLabel, reminderLabel, type CarriedOver,
 } from './prompt.ts'
-import { busDomain, type BatchRecord, type LsyEventRecord, type PersistentRecord, type SubscriptionRecord } from './storage.ts'
+import { busDomain, type BatchRecord, type LsyEventRecord, type PersistentRecord, type RouteOverrideRecord, type SubscriptionRecord } from './storage.ts'
 import type {
+  FlowChange, FlowEdit, FlowEditMeta, FlowEditResult, FlowRouteView, RoutePatch,
   BatchEvent, BatchSummary, BusStats, LsyDeliveryEvent, LsyEventInput, LsyNotifier, PauseOutcome, PersistentSessionView, PublishOutcome,
   SessionAction, SessionDelivery, SessionHandoverMover, SessionHandoverReport, Subscription, SubscriptionMeta, SubscriptionOrigin,
   SubscriptionView, SuppressConfig, UnsubscribeOutcome,
 } from './types.ts'
-import { LsySubscriptionError, subscriptionProblem } from './validate.ts'
+import { LsyFlowError, LsySubscriptionError, subscriptionProblem } from './validate.ts'
 
+export * from './flow.ts'
 export * from './match.ts'
 export * from './prompt.ts'
 export * from './validate.ts'
@@ -58,6 +61,8 @@ export const LSY_EVENT_KIND = 'lsy-event'
 export const LSY_EVENT_RULE_ID = 'lsy-event-bus'
 
 const HOUR_MS = 3_600_000
+/** Entries of the flow's change history kept. */
+const FLOW_CHANGES_KEPT = 200
 const DAY_MS = 86_400_000
 /** Titles are labels; anything longer is a sensor bug, not content. */
 const MAX_TITLE_CHARS = 300
@@ -227,6 +232,11 @@ function assertConfig(config: Config): void {
   }
 }
 
+/** When and by whom a configuration route last changed. */
+function changedOf(override: RouteOverrideRecord): { at: number; by?: string } {
+  return { at: override.updatedAt, ...(override.updatedBy === undefined ? {} : { by: override.updatedBy }) }
+}
+
 /** Copy a validated subscription into its stored row; a `notify` row keeps no Session settings. */
 function toRecord(subscription: Subscription, meta: SubscriptionMeta, createdAt: number): SubscriptionRecord {
   const session = subscription.action === 'session' ? subscription.session : undefined
@@ -254,6 +264,10 @@ function toSessionAction(session: SubscriptionRecord['session'] & {}): SessionAc
     maxPromptEvents: session.maxPromptEvents,
     maxTextChars: session.maxTextChars,
     ...(session.titlePrefix === undefined ? {} : { titlePrefix: session.titlePrefix }),
+    ...(session.result === undefined ? {} : { result: session.result }),
+    ...(session.model === undefined ? {} : { model: session.model }),
+    ...(session.persistent === undefined ? {} : { persistent: session.persistent }),
+    ...(session.project === undefined ? {} : { project: session.project }),
   }
 }
 
@@ -658,6 +672,165 @@ export class LsyEventBus extends Service {
   }
 
   /**
+   * The whole notification flow: every route with where its answer goes and which routes take it, including a configuration route
+   * taken out, so it can be seen and put back.
+   * @returns routes in matching order, then the ones taken out.
+   */
+  flowRoutes(): FlowRouteView[] {
+    const active = this.allSubscriptions()
+    const routes: FlowRouteView[] = this.listSubscriptions().map(view => ({
+      ...view,
+      ...(view.action === 'session' ? { result: resultOf(view) } : {}),
+      downstream: downstreamOf(view, active),
+    }))
+    const removed = rowsOf(this.domain?.table('route_overrides')).filter(row => row.removed === true)
+    for (const row of removed) {
+      const route = this.configSubscriptions.get(row.id)
+      if (route === undefined) continue
+      routes.push({
+        ...route,
+        origin: 'config',
+        removed: true,
+        changed: changedOf(row),
+        status: { pending: 0, batchesLastHour: 0 },
+        downstream: [],
+      })
+    }
+    return routes
+  }
+
+  /**
+   * Changes of the flow.
+   * @param limit - most entries.
+   * @returns the newest first.
+   */
+  flowHistory(limit = FLOW_CHANGES_KEPT): FlowChange[] {
+    return rowsOf(this.domain?.table('flow_changes')).sort((a, b) => b.at - a.at || b.id.localeCompare(a.id)).slice(0, limit) as FlowChange[]
+  }
+
+  /**
+   * Change the notification flow at run time. It is stored, so a restart or a deploy keeps it; a configuration route keeps its bundle
+   * row and `reset` puts it back.
+   * @param edit - the change.
+   * @param meta - who made it and why.
+   * @returns the route as it stands, the history entry, and anything worth a second look.
+   * @throws {LsyFlowError} when the change would leave a route the bus cannot run, or a loop.
+   */
+  async editFlow(edit: FlowEdit, meta: FlowEditMeta = {}): Promise<FlowEditResult> {
+    return this.serialize(async () => {
+      const domain = await this.ready
+      const before = this.subscriptionById(edit.id)
+      await this.applyFlowEdit(domain, edit, before, meta)
+      const after = this.subscriptionById(edit.id)
+      const now = Date.now()
+      const change: FlowChange = {
+        id: `${String(now).padStart(15, '0')}-${String(domain.table('flow_changes').size).padStart(6, '0')}`,
+        at: now,
+        op: edit.op,
+        route: edit.id,
+        ...(meta.by === undefined ? {} : { by: meta.by }),
+        ...(meta.note === undefined ? {} : { note: meta.note }),
+        ...(before === undefined ? {} : { before: JSON.stringify(before) }),
+        ...(after === undefined ? {} : { after: JSON.stringify(after) }),
+      }
+      const changes = domain.table('flow_changes')
+      await changes.put(change.id, change)
+      for (const old of this.flowHistory(Number.MAX_SAFE_INTEGER).slice(FLOW_CHANGES_KEPT)) await changes.delete(old.id)
+      const who = meta.by === undefined ? '' : ` by ${meta.by}`
+      this.ctx.logger.info(`lsy-event-bus: flow ${edit.op} ${edit.id}${who}${meta.note === undefined ? '' : `: ${meta.note}`}`)
+      const route = this.flowRoutes().find(row => row.id === edit.id) ?? null
+      const warnings = route?.result === 'event' && route.downstream.length === 0
+        ? [`No route takes ${flowResultKind(edit.id)} yet, so its answers go to the notifier until one does.`]
+        : []
+      return { route, change, warnings }
+    })
+  }
+
+  /** Apply one change to the stored rows; runs inside the storage chain. */
+  private async applyFlowEdit(
+    domain: Domain<typeof busDomain>, edit: FlowEdit, before: Subscription | undefined, meta: FlowEditMeta,
+  ): Promise<void> {
+    const overrides = domain.table('route_overrides')
+    const stored = domain.table('subscriptions')
+    const configured = this.configSubscriptions.has(edit.id)
+    const override = overrides.get(edit.id)
+    const row = stored.get(edit.id)
+    const stamp = { updatedAt: Date.now(), ...(meta.by === undefined ? {} : { updatedBy: meta.by }) }
+    const known = configured || row !== undefined
+    if (edit.op === 'reset') {
+      if (!configured) throw new LsyFlowError('not_config', `"${edit.id}" is not a configuration route; set or remove it instead.`)
+      this.assertNoCycle(this.allSubscriptions().filter(route => route.id !== edit.id), this.configSubscriptions.get(edit.id))
+      await overrides.delete(edit.id)
+      await this.rearm(domain, edit.id)
+      return
+    }
+    if (edit.op !== 'set' && !known) throw new LsyFlowError('not_found', `No route has id "${edit.id}"; flow_read lists them.`)
+    if (edit.op === 'remove') {
+      await (configured ? overrides.put(edit.id, { ...override, id: edit.id, removed: true, ...stamp }) : stored.delete(edit.id))
+      await this.dropPending(domain, edit.id)
+      return
+    }
+    if (edit.op === 'pause' || edit.op === 'resume') {
+      const paused = edit.op === 'pause' ? { paused: true as const } : {}
+      if (configured) {
+        const { paused: _was, ...rest } = override ?? { id: edit.id, ...stamp }
+        await overrides.put(edit.id, { ...rest, ...paused, ...stamp })
+      } else if (row !== undefined) {
+        const { paused: _was, ...rest } = row
+        await stored.put(edit.id, { ...rest, ...paused })
+      }
+      if (edit.op === 'pause') {
+        this.flushTimers.get(edit.id)?.dispose()
+        this.flushTimers.delete(edit.id)
+      } else {
+        await this.rearm(domain, edit.id)
+      }
+      return
+    }
+    const original = this.configSubscriptions.get(edit.id)
+    const base: Subscription = (original === undefined ? before : applyRoutePatch(original, (override?.patch ?? {}) as RoutePatch))
+      ?? { id: edit.id, sources: [], kinds: [], subjects: [], action: 'notify', coalesceMs: 60_000, maxPerHour: 12 }
+    const next = applyRoutePatch(base, edit.patch)
+    const problem = subscriptionProblem(next)
+    if (problem !== undefined) throw new LsyFlowError('invalid_route', `lsy-event-bus: ${problem}`)
+    if (next.sources.length === 0 && next.kinds.length === 0) {
+      throw new LsyFlowError('invalid_route', `Route "${edit.id}" needs sources or kinds; with neither it takes every event of every service.`)
+    }
+    this.assertNoCycle(this.allSubscriptions().filter(route => route.id !== edit.id), next)
+    if (configured) {
+      const { removed: _removed, ...rest } = override ?? { id: edit.id, ...stamp }
+      await overrides.put(edit.id, { ...rest, patch: mergeRoutePatches(override?.patch as RoutePatch | undefined, edit.patch), ...stamp })
+    } else {
+      const createdBy = row === undefined ? meta.by : row.createdBy
+      const record = toRecord(next, createdBy === undefined ? {} : { createdBy }, row?.createdAt ?? Date.now())
+      await stored.put(edit.id, row?.paused === true ? { ...record, paused: true } : record)
+    }
+  }
+
+  /** Refuse a set of routes in which an answer could feed itself. */
+  private assertNoCycle(others: readonly Subscription[], route: Subscription | undefined): void {
+    const loop = findCycle(route === undefined ? others : [...others, route])
+    if (loop === undefined) return
+    throw new LsyFlowError('cycle', `That change makes a loop: ${loop.join(' → ')}. An answer must not reach its own route again.`)
+  }
+
+  /** Drop a route's pending events and its flush timer. */
+  private async dropPending(domain: Domain<typeof busDomain>, id: string): Promise<void> {
+    this.flushTimers.get(id)?.dispose()
+    this.flushTimers.delete(id)
+    const pending = domain.table('pending')
+    for (const [key, row] of [...pending.entries()]) if (row.subscription === id) await pending.delete(key)
+  }
+
+  /** Arm the flush of a route that takes events again and has some waiting. */
+  private async rearm(domain: Domain<typeof busDomain>, id: string): Promise<void> {
+    const route = this.subscriptionById(id)
+    if (route === undefined || this.pausedIds().has(id)) return
+    const waiting = [...domain.table('pending').entries()].some(([, row]) => row.subscription === id)
+    if (waiting) this.scheduleFlush(id, Date.now() + route.coalesceMs)
+  }
+
+  /**
    * Keep a plugin's Sessions out of the auto-archive sweep (for example the QQ resident group Sessions or the WeChat chat
    * Session). `check` runs only for Sessions that are otherwise due; return `true` (or a short reason) to keep one. A throw keeps it.
    * Register inside an effect so a reload withdraws the claim:
@@ -822,20 +995,38 @@ export class LsyEventBus extends Service {
     return rowsOf(this.domain?.table('subscriptions')).sort((a, b) => a.createdAt - b.createdAt)
   }
 
-  /** Ids of paused run-time subscriptions. */
+  /** Ids of paused subscriptions of either origin. */
   private pausedIds(): ReadonlySet<string> {
-    return new Set(this.storedSubscriptions().filter(record => record.paused === true).map(record => record.id))
+    return new Set([
+      ...this.storedSubscriptions().filter(record => record.paused === true).map(record => record.id),
+      ...rowsOf(this.domain?.table('route_overrides')).filter(row => row.paused === true).map(row => row.id),
+    ])
+  }
+
+  /** A configuration route with its run-time change laid over it; undefined once it is taken out. */
+  private effectiveConfig(route: Subscription): Subscription | undefined {
+    const override = this.domain?.table('route_overrides').get(route.id)
+    if (override?.removed === true) return undefined
+    return override?.patch === undefined ? route : applyRoutePatch(route, override.patch as RoutePatch)
+  }
+
+  /** Configuration routes as they stand at run time. */
+  private configRoutes(): Subscription[] {
+    return this.config.subscriptions.flatMap((route) => {
+      const effective = this.effectiveConfig(route)
+      return effective === undefined ? [] : [effective]
+    })
   }
 
   /** Configuration and run-time subscriptions, in matching order. */
   private allSubscriptions(): Subscription[] {
-    return [...this.config.subscriptions, ...this.storedSubscriptions().map(toSubscription)]
+    return [...this.configRoutes(), ...this.storedSubscriptions().map(toSubscription)]
   }
 
   /** One subscription by id from either origin. */
   private subscriptionById(id: string): Subscription | undefined {
     const configured = this.configSubscriptions.get(id)
-    if (configured !== undefined) return configured
+    if (configured !== undefined) return this.effectiveConfig(configured)
     const stored = this.domain?.table('subscriptions').get(id)
     return stored === undefined ? undefined : toSubscription(stored)
   }
@@ -850,13 +1041,15 @@ export class LsyEventBus extends Service {
     const view = (subscription: Subscription, origin: SubscriptionOrigin, record?: SubscriptionRecord): SubscriptionView => {
       const history = batches.get(subscription.id) ?? []
       const last = history.at(-1)
+      const override = origin === 'config' ? this.domain?.table('route_overrides').get(subscription.id) : undefined
       const timer = this.flushTimers.get(subscription.id)
       return {
         ...subscription,
         origin,
         ...(record === undefined ? {} : { createdAt: record.createdAt }),
         ...(record?.createdBy === undefined ? {} : { createdBy: record.createdBy }),
-        ...(record?.paused === true ? { paused: true as const } : {}),
+        ...(record?.paused === true || override?.paused === true ? { paused: true as const } : {}),
+        ...(override === undefined ? {} : { changed: changedOf(override) }),
         status: {
           pending: pending.get(subscription.id) ?? 0,
           batchesLastHour: history.filter(batch => batch.createdAt > now - HOUR_MS).length,
@@ -866,7 +1059,7 @@ export class LsyEventBus extends Service {
       }
     }
     return [
-      ...(withConfig ? this.config.subscriptions.map(subscription => view(subscription, 'config')) : []),
+      ...(withConfig ? this.configRoutes().map(subscription => view(subscription, 'config')) : []),
       ...records.map(record => view(toSubscription(record), 'agent', record)),
     ]
   }
@@ -930,7 +1123,7 @@ export class LsyEventBus extends Service {
     if (subscription === undefined || this.stopping) return undefined
     const domain = await this.ready
     // A paused subscription keeps its pending rows; resuming arms the flush again.
-    if (domain.table('subscriptions').get(subscriptionId)?.paused === true) return undefined
+    if (this.pausedIds().has(subscriptionId)) return undefined
     const pending = domain.table('pending')
     const rows = [...pending.entries()]
       .filter(([, row]) => row.subscription === subscriptionId)
@@ -1224,7 +1417,7 @@ export class LsyEventBus extends Service {
   }
 
   /** Merge fields into one stored batch; a pruned batch is ignored. */
-  private markBatch(id: string, patch: Partial<Pick<BatchRecord, 'status' | 'error' | 'sessionId' | 'outcome' | 'silent' | 'delivery'>>): Promise<void> {
+  private markBatch(id: string, patch: Partial<Pick<BatchRecord, 'status' | 'error' | 'sessionId' | 'outcome' | 'silent' | 'delivery' | 'notSent'>>): Promise<void> {
     return this.serialize(async () => {
       const domain = await this.ready
       const batches = domain.table('batches')
@@ -1378,21 +1571,65 @@ export class LsyEventBus extends Service {
       this.ctx.logger.info(`lsy-event-bus: Session of ${tracked.batchId} answered ${LSY_SILENT_REPLY}; nothing sent`)
       return
     }
-    if (this.subscriptionById(tracked.subscription)?.session?.quietResult === true) {
+    const route = this.subscriptionById(tracked.subscription)
+    const result = route === undefined ? 'notify' : resultOf(route)
+    if (result === 'quiet') {
+      await this.markBatch(tracked.batchId, { notSent: true })
       this.ctx.logger.info(`lsy-event-bus: Session of ${tracked.batchId} belongs to a quiet subscription; nothing sent`)
       return
     }
+    if (result === 'event' && await this.passOn(tracked)) return
+    if (result === 'main' && await this.tellMain(tracked)) return
     if (!this.config.notifySessionResult) return
     const notifier = this.ctx.get('lsyNotifier')
     if (notifier === undefined) return
-    await notifier.send(formatResultNote({
+    const note = formatResultNote({
       subscription: tracked.subscription,
       title: tracked.title,
       outcome,
       text: tracked.text,
       url: this.config.webUrl,
       detail,
-    }))
+    })
+    await notifier.send(result === 'urgent' ? { ...note, urgent: true } : note)
+  }
+
+  /** Publish a route's answer as an event for the routes after it. False when nothing takes it, so the answer is not lost. */
+  private async passOn(tracked: TrackedSession): Promise<boolean> {
+    const text = tracked.text ?? ''
+    const subject = this.domain?.table('batches').get(tracked.batchId)?.subject ?? tracked.subscription
+    const firstLine = text.split('\n', 1)[0]?.trim()
+    const outcome = await this.publish({
+      source: FLOW_SOURCE,
+      kind: flowResultKind(tracked.subscription),
+      key: tracked.batchId,
+      subject,
+      title: firstLine === undefined || firstLine === '' ? tracked.title : firstLine,
+      text,
+    })
+    this.ctx.logger.info(`lsy-event-bus: answer of ${tracked.batchId} went on as ${flowResultKind(tracked.subscription)}: ${outcome}`)
+    if (outcome !== 'accepted') return false
+    await this.markBatch(tracked.batchId, { notSent: true })
+    return true
+  }
+
+  /** Give a route's answer to the owner's main agent. False when there is none or it refused, so the owner still hears it. */
+  private async tellMain(tracked: TrackedSession): Promise<boolean> {
+    const notifier = this.ctx.get('lsyNotifier')
+    if (notifier?.tellMainAgent === undefined) return false
+    try {
+      await notifier.tellMainAgent({
+        text: tracked.text ?? '',
+        from: `the notification route ${tracked.subscription} (an unattended Session that read outside events)`,
+        origin: 'flow',
+      })
+    } catch (error: unknown) {
+      const reason = error instanceof Error ? error.message : String(error)
+      this.ctx.logger.warn(`lsy-event-bus: main agent refused the answer of ${tracked.batchId}: ${reason}`)
+      return false
+    }
+    await this.markBatch(tracked.batchId, { notSent: true })
+    return true
   }
 
   /** Drop the oldest settled events and batches beyond the retention caps. */

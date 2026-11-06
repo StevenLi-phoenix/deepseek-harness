@@ -1,6 +1,6 @@
 /**
  * Model-facing `watch_create`, `watch_list`, and `watch_delete` tools over the
- * lsy event bus and GitHub sensor. Mounting the plugin registers them in the
+ * lsy event bus and GitHub sensor, and `flow_read` and `flow_edit` over the bus's whole notification flow. Mounting the plugin registers them in the
  * mounting scope, so a preset decides which agents may change what the
  * service monitors; watches are global to the instance, not to a Session.
  * @module @deepseek-ai/dsh-lsy-tool-watch
@@ -12,6 +12,7 @@ import { LsySubscriptionError, type Subscription, type SubscriptionView } from '
 import { REPO_STREAMS, streamId, type CredentialStatus, type PollStatus, type RepoProbe, type RepoStream, type WatchedRepo } from '@deepseek-ai/dsh-lsy-github-sensor'
 import { defineTool, type GenericCallView } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
+import { registerFlowTools } from './flow.ts'
 
 /** Plugin name registered with the Loader. */
 export const name = 'lsy-tool-watch'
@@ -514,6 +515,7 @@ function viewOf(subscription: SubscriptionView, sensor: SensorSnapshot): WatchVi
  */
 export function apply(ctx: Context, config: Config): void {
   ctx.inject(['lsyEventBus', 'lsyGithubSensor'], (scoped) => { registerWatchTools(scoped, config) })
+  ctx.inject(['lsyEventBus'], (scoped) => { registerFlowTools(scoped, config) })
 }
 
 /**
