@@ -45,7 +45,7 @@ kind: "package-group"
 | [`fork-memory-admin/`](fork-memory-admin/README.zh.md) | 审阅智能体记忆的设置分区：待批准的写入、条目、带预览的回滚与彻底删除、人格反馈（它的 Host 路由是 `fork-memory` 的 `settings` 入口） |
 | [`fork-sysmon/`](fork-sysmon/README.zh.md) | 设置里显示 Host 机器 CPU、内存、功耗、温度与各卷磁盘用量的分区 |
 | [`fork-cc-admin/`](fork-cc-admin/README.zh.md) | 根服务 `ctx.forkClaudeCode`：服务账号的 Claude Code 会话，供设置页列出、带第一条任务启动和停止 |
-| [`fork-console/`](fork-console/README.zh.md) | 设置里的服务健康总览、事件服务数据流图、事件订阅与定时提醒、Claude Code 会话与语音试听分区 |
+| [`fork-console/`](fork-console/README.zh.md) | 消息流页面，以及设置里的服务健康总览、事件订阅与定时提醒、Claude Code 会话与语音试听分区 |
 | [`fork-taint/`](fork-taint/README.zh.md) | 回合来源：当前回合由谁发起、陌生人的话有没有进来；只在 owner 自己的回合里联系 Claude Code，其他回合建的提醒和监控要上报 |
 | [`fork-time-gap/`](fork-time-gap/README.zh.md) | 所有 Session 的时间说明：安静一段时间（5 分钟）之后到达的输入，带着当前时间、Session 安静了多久，以及“按它本身来读”的提示交给模型 |
 | [`fork-tool-courses/`](fork-tool-courses/README.zh.md) | `courses_deadlines`、`courses_find`、`courses_get`、`courses_sync`、`courses_set_progress`、`courses_save_memo` 工具：agent 按主人的课程记录回答并更新它们 |

@@ -384,7 +384,7 @@ describe('SettingsPanel navigation', () => {
 
   it('gives every section a nav glyph, a different one for each id the shell and the fork name', () => {
     const named = [
-      'general', 'account', 'models', 'agent-presets', 'plugins', 'archived-sessions', 'fork-overview', 'fork-flow', 'fork-subscriptions', 'fork-agents',
+      'general', 'account', 'models', 'agent-presets', 'plugins', 'archived-sessions', 'fork-overview', 'fork-subscriptions', 'fork-agents',
       'fork-wechat', 'fork-presence', 'fork-style', 'fork-memory', 'fork-sysmon', 'bili', 'fork-qq', 'fork-courses',
     ]
     mount({ rows: [...named.map((id, index) => ({ id, order: index * 10, label: `S ${id}` })), { id: 'contributed', order: 999, label: 'Contributed' }] })

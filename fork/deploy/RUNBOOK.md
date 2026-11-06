@@ -535,7 +535,7 @@ The skill `dag-workflow` (`fork/skills/dag-workflow`) lets the main agent choose
 
 Going back to a build older than the 2026-11-06 upstream sync: a Session that created a subagent on the newer build carries `subagent/catalog` version 3, which older releases refuse to open, so start a new Session for those chats.
 
-## 23. Notification desk (Settings → Data flow, 通知消息 session)
+## 23. Notification desk (message flow page, 通知台)
 
 Host notices that are not urgent and autocut runs that wait for confirmation or failed reach one long Session, the `notify-funnel` subscription (agent preset `notify`: persona, time, compaction, no tools), which remembers earlier batches, merges repeats, and answers `NO_REPLY` unless the owner has something to do. Its result note goes out like any bus result: the owner's WeChat, held by `fork-presence` while the owner sleeps. The bundle declares the subscription and the preset; nothing to install. It runs on the cheap route `opencode`, like `ci` and `qq-main`; `packages/fork/bili/tests/bundle.spec.ts` pins the list.
 
@@ -547,9 +547,9 @@ Host notices that are not urgent and autocut runs that wait for confirmation or 
 
 `fork-qq` publishes each stored digest with something in it as `qq.digest.new` (source `qq`, subject: the group), and the `qq-main` subscription gives them to one long Session (agent preset `qq-main`: persona, time, compaction, no tools; route `opencode`). `session.quietResult` keeps its answers out of WeChat, and the QQ onebot exit stays unbuilt, so the Session reads and keeps the picture across groups. Batches are coalesced for 30 minutes, at most 2 an hour. **Settings → Subscriptions** shows it, and pausing it there stops the spending; digests keep working without it.
 
-## 25. Local uploads and auto-repair (Settings → Data flow)
+## 25. Local uploads and auto-repair (message flow page)
 
-Two boxes of the Data flow picture that ride on pieces already there.
+Two boxes of the message flow picture that ride on pieces already there.
 
 - **Local upload** (`upload` ingest source, `upload-local` subscription). A video the owner made or recorded on another machine is announced to DSH as `upload.local.ready` (subject: the file's name; text: where the file is, its size, and whether the owner asked for an edit); the subscription starts a Session with the autocut skill, which decides whether the video needs cutting. Cutting: it opens a job and runs the pipelines of the skill, which stop at "waiting for the owner's confirmation". No cutting: it tells the owner in one line that the video is ready and asks whether to upload it; only the owner's yes starts the hand-over to kaorou (`ar confirm` with the owner's words, then `ar handoff --to kaorou`, visibility `self`). The confirmation gate of the autocut skill is not bypassed.
   1. Create the token on the Mac mini without printing it, as in §18 (back up `.env` first, `FORK_INGEST_TOKEN_UPLOAD`, restart afterwards), and give the same value to the sender on the other machine (a file readable by its owner only).

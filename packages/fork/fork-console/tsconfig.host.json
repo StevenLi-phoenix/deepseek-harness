@@ -12,6 +12,7 @@
     "src/claude-code.ts",
     "src/config.ts",
     "src/log.ts",
+    "src/activity.ts",
     "src/overview.ts",
     "src/probe.ts",
     "src/request.ts",

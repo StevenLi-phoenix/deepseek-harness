@@ -59,6 +59,19 @@ export type { SettingsDocumentState } from './settings-document-store.ts'
 export { SettingsDocumentStore } from './settings-document-store.ts'
 export type { SettingsKey } from './locales.ts'
 
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Cross-plugin navigation to the Settings panel. */
+    settingsNavigation: {
+      /**
+       * Open Settings on one registered section; an unknown id shows the first section.
+       * @param id - the section's id.
+       */
+      openSection(id: string): void
+    }
+  }
+}
+
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** Shell chrome + shell-owned General section copy. */
@@ -245,7 +258,11 @@ export function apply(ctx: ClientContext): void {
         },
         inject: shellInjected,
       }, SettingsRoot)
-      return () => { disposeCommand(); disposeSlot() }
+      // Another plugin's page may link to a section, the way a section links to another with `select`.
+      const disposeNavigation = ctx.reflect.provide('settingsNavigation', {
+        openSection: (id: string) => { shellInstance.actions.openSection(id) },
+      })
+      return () => { void disposeNavigation(); disposeCommand(); disposeSlot() }
     }))
 
   ctx.slots.inject('settings.trigger', () =>

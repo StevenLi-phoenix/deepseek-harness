@@ -18,7 +18,7 @@ import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import {
   ConnectionIndicator, Tooltip, useModalLayer,
-  IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconBranchOutlineMedium, IconChecklistOutlineMedium, IconClockOutlineMedium,
+  IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconChecklistOutlineMedium, IconClockOutlineMedium,
   IconCloseOutlineRegular,
   IconCodeOutlineMedium,
   IconDatabaseOutlineMedium, IconDataOutlineMedium, IconEnhanceOutlineMedium, IconFlatListOutlineMedium, IconGaugeOutlineMedium,
@@ -46,7 +46,6 @@ const NAV_ICONS: Readonly<Record<string, typeof IconSettingsOutlineMedium>> = {
   // agents (fork-console); the WeChat page, its presence page, and its speaking style; memory; System status; the Bilibili account; QQ;
   // course deadlines.
   'fork-overview': IconFlatListOutlineMedium,
-  'fork-flow': IconBranchOutlineMedium,
   'fork-subscriptions': IconQueueOutlineMedium,
   'fork-agents': IconCodeOutlineMedium,
   'fork-wechat': IconNewChatOutlineMedium,

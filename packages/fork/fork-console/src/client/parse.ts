@@ -3,7 +3,7 @@
  * package's own contract.
  */
 
-import type { AgentsView, OverviewView, SubscriptionsView } from '../views.ts'
+import type { AgentsView, FlowActivityView, OverviewView, SubscriptionsView } from '../views.ts'
 
 function fields(body: unknown): Record<string, unknown> {
   return typeof body === 'object' && body !== null ? body as Record<string, unknown> : {}
@@ -18,6 +18,19 @@ export function parseOverview(body: unknown): OverviewView {
   const { cards, checkedAt } = fields(body)
   if (!Array.isArray(cards) || typeof checkedAt !== 'number') throw new Error('unexpected overview answer')
   return body as OverviewView
+}
+
+/**
+ * @param body - the parsed JSON body.
+ * @returns the message flow's activity.
+ * @throws when the body is not an activity answer.
+ */
+export function parseFlowActivity(body: unknown): FlowActivityView {
+  const { windows, recent, checkedAt } = fields(body)
+  if (typeof windows !== 'object' || windows === null || !Array.isArray(recent) || typeof checkedAt !== 'number') {
+    throw new Error('unexpected flow answer')
+  }
+  return body as FlowActivityView
 }
 
 /**

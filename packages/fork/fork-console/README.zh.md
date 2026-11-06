@@ -1,5 +1,5 @@
 ---
-description: "管理事件服务运行内容的设置分区：每个已集成服务的健康总览、事件在服务里流转的数据流图，事件总线订阅和定时提醒的暂停、恢复、删除与新建，以及服务账号的 Claude Code 会话和语音试听。"
+description: "在浏览器里管理事件服务：消息流页面显示什么坏了、进来多少又有多少到了主人那里、每件事去了哪；设置分区提供每个已集成服务的健康总览、事件总线订阅和定时提醒，以及服务账号的 Claude Code 会话和语音试听。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-在浏览器里管理事件服务，不用再开 SSH。**设置 → 服务总览**为每个已集成的服务显示一张健康卡片，带一个跳到该服务自己分区的“管理”链接。**设置 → 数据流**画出事件在服务里的流转，每个节点带着健康状态。**设置 → 订阅与监控**列出事件总线订阅和定时提醒，可以暂停、恢复、删除或新建；来自配置的保持只读。**设置 → Claude Code 与语音**列出、启动和停止服务账号的 Claude Code 会话，并在你的浏览器里播放一句语音试听。
+在浏览器里管理事件服务，不用再开 SSH。侧边栏的**消息流**显示有没有东西坏了、影响了谁，进来多少、有多少到了你这里，以及每件事去了哪。**设置 → 服务总览**为每个服务显示一张健康卡片，带“管理”链接。**设置 → 订阅与监控**可以暂停、恢复、删除或新建事件总线订阅和定时提醒；来自配置的保持只读。**设置 → Claude Code 与语音**列出、启动和停止服务账号的 Claude Code 会话，并播放一句语音试听。
 
 ## 目录
 
@@ -42,7 +42,9 @@ kind: "package-reference"
 
 **总览。**分区打开且页面可见时，卡片每 10 秒刷新一次。只有目标分区已注册时，卡片才会链接到 `bili`、`fork-qq`、`fork-wechat`、`fork-style`、`fork-sysmon`、`fork-subscriptions`、`fork-agents` 或 `account`。服务想给自己的卡片补充细节，可以提供一个可选的 `health()`，返回 `{ state: 'ok' | 'warn' | 'down', detail? }`；`bili` 和 `forkNotifier` 有它就按它读。说话风格卡片读 [`fork-style`](../fork-style/README.zh.md) 的 `ctx.forkStyle.health()`（`StyleHealth`，收到后再校验一遍；保留和待审样本数、审核模式、上次更新、口癖趋势；只有计数）：有应答为绿，需要审核且有样本在等为黄，抛错或返回意外形状为红。
 
-**数据流。**这个页面不加 Host 路由，也不加服务：它读和总览同一份 `api/fork.overview` 卡片，用同一个 store 和同样的 10 秒轮询（模型路由卡片不在其中：模型路由是公共基础设施，不是消息流的一环）。拓扑本身写在 [`src/client/flow-graph.ts`](src/client/flow-graph.ts)：它是主人画出来的流程图，在流程编辑器里画好、导出成 JSON，所以一个节点可以写运行时还没有那样做的东西：每个节点用 `wired`、`via`、`gap` 说明它是已接通（无标记）、部分接通（点线边框）还是尚未实现（虚线边框）、由哪个订阅或插件承载，以及与图的差别在哪，`tests/flow-graph.client.spec.ts` 遇到什么都没写的节点会失败。尚未实现的节点不带健康点。里面有来源（微信、QQ、B站、GitHub、流水线、主机与 AMS 告警、主人自己的 Claude Code、定时与课程、勿扰信号、语音输出、Persona、本地上传）、把它们归拢的会话（GitHub 按仓库、QQ 按群、AMS 消息、通知）、中间的判断（自动修复、Autocut、延后）、主智能体，以及答复离开的渠道。自带 `title` 的节点不需要词典条目，其余的读 `flow.node.<id>` 和 `.desc`。`cond` 节点画成六边形，从它出去的每条箭头写着自己的答案（`branch: 'yes' | 'no'`）。布局是 [`src/client/flow-model.ts`](src/client/flow-model.ts) 里的纯计算，它不认识任何具体的图：列由边自己决定（从来源起的最长路径，可选 `minRank`，来源放在它喂的第一个节点前一列，让箭头保持短），所以新增一条边，节点会自己挪位置。同一个文件里的 `problems()` 会报告环、悬空或重复的箭头、没有任何箭头的节点，以及缺一个答案的判断，`tests/flow-graph.client.spec.ts` 遇到其中任何一种都会失败。节点的健康点取自它的 `service` 对应的卡片（事件服务内部的节点用 `dsh` 卡片，不显示状态行；没人探测的节点不显示圆点）。点击或按 Enter 选中一个节点，会淡化不在它上下游的一切，并在下方卡片里写出它的作用、状态、谁给它供数、结果去哪，目标分区已注册时还有“管理”链接；按 Esc 或点背景取消。箭头按类型画：实线是推送的事件，虚线是智能体通过工具主动查询，点线是调用，蓝色是发出的消息。它们表示数据能去哪里，不是实时流量。
+**消息流。**这个页面从侧边栏自己的入口打开，因为它是用来看的地方，不是要调的设置。它按这个顺序回答主人想知道的事。*有没有坏，影响了谁？* 顶部一行写出第一个断开的服务、没有它就收不到内容的节点（`needs`），以及去处理的入口；断开的节点呼吸红光，失去依赖的节点变虚线。*进来多少，有多少到了我这里？* 旁边的漏斗统计事件、交给智能体的批次、发给主人的消息、判定不用打扰的批次、等主人醒来的消息和失败数，可切换最近一小时、一天或一周；三段数据一起到达，切换不发请求。*哪些路在用？* 每个节点说一件关于现在的事（[`src/client/flow-view.ts`](src/client/flow-view.ts) 的 `factOf`）：有问题时说问题，否则说经过了什么；健康的节点从不说自己健康。经过越多箭头越粗，最近 15 分钟用过的箭头上有小圆点在跑（同时最多十个），什么也没收到的来源退到背景。*这件事去哪了，结果如何？* 侧栏列出最近 50 件事和它们的结果。点一行，它走过的路会一段接一段画出来（`stopsOf`、`route`）：从来源到接手的会话，发给主人时再到主人的微信。结果是事件总线知道的类别，智能体的具体理由留在它的会话里。点击或按 Enter 选中节点，会点亮经过它的所有路径，显示属于它的工具和调用箭头，并把侧栏变成这个节点的内容：现状、对应设置分区的入口（已注册时）、最近经过的事、上下游，以及折叠起来的接线细节。按 Esc 或点背景返回。`prefers-reduced-motion` 下所有动画停止。
+
+拓扑写在 [`src/client/flow-graph.ts`](src/client/flow-graph.ts)：它是主人画出来的流程图，在流程编辑器里画好、导出成 JSON，所以一个节点可以写运行时还没有那样做的东西。每个节点用 `wired`、`via`、`gap` 说明它是已接通、部分接通还是尚未实现、由什么承载，以及与图的差别在哪，`tests/flow-graph.client.spec.ts` 遇到什么都没写的节点会失败。尚未实现的节点默认不显示，由一个开关打开。每个节点有 `cell`，即固定的列和行：一个来源一行，左边是从哪来，右边是到哪去。节点通过 `tracks`（事件来源和订阅）说明事件总线知道它的哪些数据。自带 `title` 的节点不需要词典条目，其余的读 `flow.node.<id>` 和 `.desc`。布局和路径是 [`src/client/flow-model.ts`](src/client/flow-model.ts) 里的纯计算，它不认识任何具体的图。其中的 `problems()` 会报告环、悬空或重复的箭头、没有任何箭头的节点，以及缺一个答案的判断，同一个测试遇到其中任何一种都会失败。健康状态来自 `api/fork.overview`，用总览的 store；计数来自 `api/fork.flow`（[`src/activity.ts`](src/activity.ts)），它读事件总线和 presence 服务，只返回标题，不返回事件正文。页面打开时两者每 10 秒一起读取。模型路由卡片不在其中：模型路由是公共基础设施，不是消息流的一环。
 
 **订阅。**在总线配置里定义的订阅显示“来自配置”，没有按钮。`watch_create` 或表单建的订阅可以暂停（不再匹配新事件，已在排队的事件保留）、恢复，或在第二次点击后删除；删除监视时也会停掉它的仓库轮询，和 `watch_delete` 一致。表单需要名称、来源/类型/对象 glob（至少一项）、通知或会话模式，会话模式还要任务说明；会话订阅按配置的预设和工作区运行。定时提醒（`schedule_create`）可以暂停、恢复和删除；改时间请对智能体说。分区最后是**时间间隔提示**，即 [`fork-time-gap`](../fork-time-gap/README.zh.md) 的“全部设置”卡片（阈值、时区、排除的预设），它给安静一段时间后才到达的输入加上说明。
 
@@ -58,7 +60,7 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-Host 部分在 connection 上注册 `GET /api/fork.overview`、`GET`/`POST /api/fork.subscriptions` 和 `GET`/`POST /api/fork.agents`，因此受 `/api` 的登录校验保护。POST 必须是 `application/json`（跨站表单发不出它），不超过 64 KiB，并用 schemastery 校验；拒绝时返回 `{ error, detail? }`，带稳定的错误码和字段路径，从不带值。每个动作记一行日志：名称、目标、结果和耗时（`subscription.delete octo-tags -> ok (3 ms)`），从不记 token、事件、任务或试听的那句话。
+Host 部分在 connection 上注册 `GET /api/fork.overview`、`GET /api/fork.flow`、`GET`/`POST /api/fork.subscriptions` 和 `GET`/`POST /api/fork.agents`，因此受 `/api` 的登录校验保护。POST 必须是 `application/json`（跨站表单发不出它），不超过 64 KiB，并用 schemastery 校验；拒绝时返回 `{ error, detail? }`，带稳定的错误码和字段路径，从不带值。每个动作记一行日志：名称、目标、结果和耗时（`subscription.delete octo-tags -> ok (3 ms)`），从不记 token、事件、任务或试听的那句话。
 
 总览并行读取每张卡片。每个 HTTP 探测有 `probeTimeoutMs`，整张卡片的上限是它的两倍加半秒，所以卡死的服务只花一个期限并显示为红色；抛错的卡片显示红色，日志只记错误类型。卡片带的是状态和事实（计数、名称、秒数），从不带 URL、密钥或消息正文。构建标识取入口文件所在的 `builds.noindex/<sha>` 目录和它上面 `@deepseek-ai/dsh` 包的版本。Claude Code 的登录状态：`~/.claude/.credentials.json` 非空为 `full`，OAuth token 文件非空为 `token`，否则 `none`；这些文件只做 `stat`。
 
@@ -66,22 +68,23 @@ Host 部分在 connection 上注册 `GET /api/fork.overview`、`GET`/`POST /api/
 
 Claude Code 会话来自 `ctx.forkClaudeCode`（[`fork-cc-admin`](../fork-cc-admin/README.zh.md)），通过一个很小的结构类型读取，所以这个带浏览器部分的包不会运行时导入任何对等包的值。语音和总线的错误同理，Host 部分按名字识别它们。
 
-浏览器部分通过 `ctx.slots.inject` 注册四个 `settings.section` 条目（`fork-overview` 顺序 35、`fork-flow` 36、`fork-subscriptions` 58、`fork-agents` 60）。“管理”链接调用设置外壳交给每个分区的 `select(id)`（与 `close` 并列），并且只在目标分区已注册时显示。模型路由卡片在浏览器里由 `api/fork.balance` 构建。
+浏览器部分通过 `ctx.slots.inject` 注册三个 `settings.section` 条目（`fork-overview` 顺序 35、`fork-subscriptions` 58、`fork-agents` 60），并把消息流注册成 `main` 页面和 `sidebar.panellist` 入口（`fork-flow`，顺序 20，在插件和自动化之后）。页面跳转到设置时调用设置外壳提供的 `ctx.get('settingsNavigation')?.openSection(id)`。“管理”链接调用设置外壳交给每个分区的 `select(id)`（与 `close` 并列），并且只在目标分区已注册时显示。模型路由卡片在浏览器里由 `api/fork.balance` 构建。
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Host 部分：三个路由、状态码与错误应答 |
+| [`src/index.ts`](src/index.ts) | Host 部分：四个路由、状态码与错误应答 |
 | [`src/overview.ts`](src/overview.ts) | 各卡片与它们带期限的探测 |
+| [`src/activity.ts`](src/activity.ts) | 消息流要统计的内容：各时间段的漏斗、来源和订阅，以及最近的事件 |
 | [`src/subscriptions.ts`](src/subscriptions.ts) | 总线与定时服务上的列表与动作，以及自动归档的视图与检查 |
 | [`src/agents.ts`](src/agents.ts) | Claude Code 与语音卡片、启动、停止和试听 |
 | [`src/claude-code.ts`](src/claude-code.ts) | 本页用到的 `ctx.forkClaudeCode` 的形状 |
 | [`src/request.ts`](src/request.ts)、[`src/log.ts`](src/log.ts)、[`src/probe.ts`](src/probe.ts)、[`src/build-info.ts`](src/build-info.ts) | 请求体解析与拒绝、动作日志、期限、构建标识 |
 | [`src/views.ts`](src/views.ts) | 两部分共用的类型与路由路径 |
-| [`src/client/index.ts`](src/client/index.ts) | 浏览器入口：词典、loader、四个分区注册、试听播放器 |
+| [`src/client/index.ts`](src/client/index.ts) | 浏览器入口：词典、loader、分区和页面注册、试听播放器 |
 | [`src/client/resource.ts`](src/client/resource.ts) | store、带乐观动作的 loader，以及感知页面可见性的轮询 |
 | [`src/client/Overview.tsx`](src/client/Overview.tsx)、[`Subscriptions.tsx`](src/client/Subscriptions.tsx)、[`Agents.tsx`](src/client/Agents.tsx) | 三个分区 |
-| [`src/client/Flow.tsx`](src/client/Flow.tsx)、[`FlowCanvas.tsx`](src/client/FlowCanvas.tsx)、[`FlowBox.tsx`](src/client/FlowBox.tsx)、[`FlowDetail.tsx`](src/client/FlowDetail.tsx)、[`flow-view.ts`](src/client/flow-view.ts) | 数据流分区：页面外壳、图、单个节点、详情卡，以及节点对自己的说法 |
-| [`src/client/flow-graph.ts`](src/client/flow-graph.ts)、[`flow-model.ts`](src/client/flow-model.ts) | 数据流的拓扑（只有数据），以及适用于任何图的布局、路径遍历和检查 |
+| [`src/client/Flow.tsx`](src/client/Flow.tsx)、[`FlowCanvas.tsx`](src/client/FlowCanvas.tsx)、[`FlowBox.tsx`](src/client/FlowBox.tsx)、[`FlowDetail.tsx`](src/client/FlowDetail.tsx)、[`flow-view.ts`](src/client/flow-view.ts) | 消息流页面：页面外壳、图、单个节点、侧栏，以及节点对自己的说法 |
+| [`src/client/flow-graph.ts`](src/client/flow-graph.ts)、[`flow-model.ts`](src/client/flow-model.ts) | 消息流的拓扑（只有数据），以及适用于任何图的布局、路径遍历和检查 |
 | [`src/client/cards.ts`](src/client/cards.ts)、[`balance.ts`](src/client/balance.ts)、[`subs.ts`](src/client/subs.ts) | 卡片文字、模型路由卡片、表单规则 |
 
 这是 fork 本地包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。

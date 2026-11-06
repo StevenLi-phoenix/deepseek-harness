@@ -37,6 +37,12 @@ export interface FlowNode {
   readonly wired?: Wiring
   /** What carries the box in the running service, as plain identifiers: a subscription, a plugin, a service. */
   readonly via?: string
+  /** Fixed place of the box as `[column, row]`; a graph whose boxes all have one is drawn on that grid instead of from its arrows. */
+  readonly cell?: readonly [number, number]
+  /** What the bus knows about this box: the event sources or the subscriptions whose counts it shows. */
+  readonly tracks?: { readonly sources?: readonly string[]; readonly subscriptions?: readonly string[] }
+  /** The service this box gets nothing without, though it runs on another one: it is marked when that service is down. */
+  readonly needs?: ServiceId
   /** For a `partial` or `planned` box: how the running service differs from the drawing, in the owner's words like a title of its own. */
   readonly gap?: string
 }
@@ -51,10 +57,10 @@ export interface FlowEdge {
 }
 
 /** Box size and spacing, in canvas units. */
-export const NODE_W = 132
-export const NODE_H = 46
-const COLUMN_GAP = 76
-const ROW_GAP = 14
+export const NODE_W = 152
+export const NODE_H = 48
+const COLUMN_GAP = 40
+const ROW_GAP = 10
 const PAD_X = 16
 /** Room above the first row. */
 const HEAD = 16
@@ -111,6 +117,8 @@ export interface FlowGraph {
   readonly relatives: (id: string) => Relatives
   /** Boxes one step upstream and downstream of a box, in the order the arrows are listed. */
   readonly neighbours: (id: string) => Neighbours
+  /** The arrows of the shortest way through these boxes in turn, in walking order; a box with no way to it is passed over. */
+  readonly route: (stops: readonly string[]) => readonly FlowEdge[]
 }
 
 /** The key an arrow goes by in sets and in the DOM: `from>to`. */
@@ -210,6 +218,26 @@ function place(columns: readonly (readonly string[])[]): Pick<Layout, 'at' | 'wi
   return { at, width: PAD_X * 2 + ranks * NODE_W + Math.max(0, ranks - 1) * COLUMN_GAP, height: HEAD + inner + PAD_BOTTOM }
 }
 
+/** The boxes at their fixed cells. */
+function gridLayout(nodes: readonly FlowNode[]): Layout {
+  const rank: Record<string, number> = {}
+  const at: Record<string, CanvasPoint> = {}
+  let ranks = 0
+  let rows = 0
+  for (const node of nodes) {
+    const [column, row] = node.cell ?? [0, 0]
+    rank[node.id] = column
+    at[node.id] = { x: PAD_X + column * (NODE_W + COLUMN_GAP), y: HEAD + row * (NODE_H + ROW_GAP) }
+    ranks = Math.max(ranks, column + 1)
+    rows = Math.max(rows, row + 1)
+  }
+  return {
+    rank, ranks, at,
+    width: PAD_X * 2 + ranks * NODE_W + (ranks - 1) * COLUMN_GAP,
+    height: HEAD + rows * NODE_H + (rows - 1) * ROW_GAP + PAD_BOTTOM,
+  }
+}
+
 function computeLayout(nodes: readonly FlowNode[], adj: Adjacency): Layout {
   const rank = assignRanks(nodes, adj)
   const ranks = nodes.length === 0 ? 0 : Math.max(...Object.values(rank)) + 1
@@ -227,7 +255,7 @@ function computeLayout(nodes: readonly FlowNode[], adj: Adjacency): Layout {
  */
 export function buildGraph(nodes: readonly FlowNode[], edges: readonly FlowEdge[]): FlowGraph {
   const adj = adjacency(nodes, edges)
-  const layout = computeLayout(nodes, adj)
+  const layout = nodes.length > 0 && nodes.every(node => node.cell !== undefined) ? gridLayout(nodes) : computeLayout(nodes, adj)
   const byId = new Map(nodes.map((node): [string, FlowNode] => [node.id, node]))
 
   const spot = (id: string): CanvasPoint => {
@@ -243,11 +271,21 @@ export function buildGraph(nodes: readonly FlowNode[], edges: readonly FlowEdge[
   const path = (from: string, to: string): string => {
     const a = spot(from)
     const b = spot(to)
+    // An arrow to a box in the same column or further left leaves by the bottom or the top, so it never crosses its own box.
+    if (b.x <= a.x) {
+      const down = b.y > a.y
+      const x1 = a.x + NODE_W / 2
+      const y1 = down ? a.y + NODE_H : a.y
+      const x2 = b.x + NODE_W / 2
+      const y2 = down ? b.y : b.y + NODE_H
+      const bend = (y1 + y2) / 2
+      return `M${x1} ${y1} C${x1} ${bend} ${x2} ${bend} ${x2} ${y2}`
+    }
     const x1 = a.x + NODE_W
     const y1 = a.y + NODE_H / 2
     const x2 = b.x
     const y2 = b.y + NODE_H / 2
-    const reach = Math.max(36, (x2 - x1) / 2)
+    const reach = Math.max(20, (x2 - x1) * 0.45)
     return `M${x1} ${y1} C${x1 + reach} ${y1} ${x2 - reach} ${y2} ${x2} ${y2}`
   }
 
@@ -273,7 +311,34 @@ export function buildGraph(nodes: readonly FlowNode[], edges: readonly FlowEdge[
     after: (adj.out.get(id) ?? []).map(edge => edge.to),
   })
 
-  return { nodes, edges, layout, node: id => byId.get(id), spot, path, mid, relatives, neighbours }
+  const stepRoute = (from: string, to: string): readonly FlowEdge[] => {
+    const cameBy = new Map<string, FlowEdge>()
+    const queue = [from]
+    for (const current of queue) {
+      if (current === to) break
+      for (const edge of adj.out.get(current) ?? []) {
+        if (edge.kind === 'pull' || edge.to === from || cameBy.has(edge.to)) continue
+        cameBy.set(edge.to, edge)
+        queue.push(edge.to)
+      }
+    }
+    const steps: FlowEdge[] = []
+    for (let edge = cameBy.get(to); edge !== undefined; edge = cameBy.get(edge.from)) steps.unshift(edge)
+    return steps
+  }
+  const route = (stops: readonly string[]): readonly FlowEdge[] => {
+    const [first, ...rest] = stops
+    const way: FlowEdge[] = []
+    let at = first ?? ''
+    for (const stop of rest) {
+      const steps = stepRoute(at, stop)
+      // A stop with no way to it is passed over, and the walk goes on from where it stands.
+      if (steps.length > 0) { way.push(...steps); at = stop }
+    }
+    return way
+  }
+
+  return { nodes, edges, layout, node: id => byId.get(id), spot, path, mid, relatives, neighbours, route }
 }
 
 /**

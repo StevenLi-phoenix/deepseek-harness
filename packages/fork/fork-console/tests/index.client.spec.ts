@@ -3,16 +3,17 @@ import { apply, inject } from '../src/client/index.ts'
 import { zh } from '../src/client/locales.ts'
 
 interface Registration {
-  options: { name: string; id: string; order: number; label: () => string; locale: string; inject: () => unknown }
+  options: { name: string; id: string; key?: string; order: number; label: () => string; locale: string; inject: () => unknown }
   component: unknown
 }
 
-function fakeContext(entries: { options: { id?: string; order?: number } }[] = []) {
+function fakeContext(entries: { options: { id?: string; order?: number } }[] = [], services: Record<string, unknown> = {}) {
   const registered: Registration[] = []
   const dictionaries: Record<string, unknown> = {}
   const effects: Array<() => unknown> = []
   const ctx = {
     effect: (run: () => unknown) => { effects.push(run); return run() },
+    get: (name: string) => services[name],
     locale: {
       register: (namespace: string, value: unknown) => { dictionaries[namespace] = value; return () => {} },
       bind: () => (key: string) => key,
@@ -28,21 +29,27 @@ function fakeContext(entries: { options: { id?: string; order?: number } }[] = [
 
 afterEach(() => { vi.unstubAllGlobals() })
 
+const sections = (registered: Registration[]): Registration[] => registered.filter(entry => entry.options.name === 'settings.section')
+const flowPage = (registered: Registration[]): Registration => registered.find(entry => entry.options.name === 'main')!
+const flowEntry = (registered: Registration[]): Registration => registered.find(entry => entry.options.name === 'sidebar.panellist')!
+
 describe('fork-console browser entry', () => {
   it('needs the slot registry and the locale', () => {
     expect(inject).toEqual(['slots', 'locale'])
   })
 
-  it('registers the four sections with their ids and orders, and all eight dictionaries', () => {
+  it('registers three Settings sections, the message flow as a page of its own, and all eight dictionaries', () => {
     const { ctx, registered, dictionaries } = fakeContext()
     apply(ctx as never)
-    expect(registered.map(entry => [entry.options.name, entry.options.id, entry.options.order, entry.options.locale])).toEqual([
-      ['settings.section', 'fork-overview', 35, 'fork.console'],
-      ['settings.section', 'fork-flow', 36, 'fork.console'],
-      ['settings.section', 'fork-subscriptions', 58, 'fork.console'],
-      ['settings.section', 'fork-agents', 60, 'fork.console'],
+    expect(sections(registered).map(entry => [entry.options.id, entry.options.order, entry.options.locale])).toEqual([
+      ['fork-overview', 35, 'fork.console'],
+      ['fork-subscriptions', 58, 'fork.console'],
+      ['fork-agents', 60, 'fork.console'],
     ])
-    expect(registered.map(entry => entry.options.label())).toEqual(['nav.overview', 'nav.flow', 'nav.subscriptions', 'nav.agents'])
+    expect(sections(registered).map(entry => entry.options.label())).toEqual(['nav.overview', 'nav.subscriptions', 'nav.agents'])
+    expect(flowPage(registered).options).toMatchObject({ key: 'fork-flow', locale: 'fork.console' })
+    expect(flowEntry(registered).options).toMatchObject({ id: 'fork-flow', order: 20, locale: 'fork.console' })
+    expect(flowEntry(registered).options.label()).toBe('nav.flow')
     expect(Object.keys(dictionaries['fork.console'] as object).sort()).toEqual(['de', 'en', 'es', 'fr', 'ja', 'pt', 'ru', 'zh'])
     expect((dictionaries['fork.console'] as { zh: unknown }).zh).toBe(zh)
   })
@@ -50,11 +57,13 @@ describe('fork-console browser entry', () => {
   it('gives each section its own stable faces: store hook, refresh, and the actions', () => {
     const { ctx, registered } = fakeContext([{ options: { id: 'bili', order: 45 } }, { options: { id: 'general', order: 0 } }])
     apply(ctx as never)
-    const [overview, flow, subscriptions, agents] = registered.map(entry => entry.options.inject() as Record<string, unknown>)
+    const [overview, subscriptions, agents] = sections(registered).map(entry => entry.options.inject() as Record<string, unknown>)
+    const flow = flowPage(registered).options.inject() as Record<string, unknown>
     expect(Object.keys((overview!.hooks as object))).toEqual(['overview', 'balance'])
     expect(Object.keys((subscriptions!.hooks as object))).toEqual(['subscriptions'])
     expect(Object.keys((agents!.hooks as object))).toEqual(['agents'])
-    expect(Object.keys((flow!.hooks as object))).toEqual(['overview'])
+    expect(Object.keys((flow.hooks as object))).toEqual(['overview', 'activity'])
+    expect((flow.hooks as { overview: unknown }).overview).toBe((overview!.hooks as { overview: unknown }).overview)
     expect(overview).not.toHaveProperty('manage')
     expect((overview!.canManage as (id: string) => boolean)('bili')).toBe(true)
     expect((overview!.canManage as (id: string) => boolean)('fork-qq')).toBe(false)
@@ -77,19 +86,49 @@ describe('fork-console browser entry', () => {
     vi.spyOn(console, 'info').mockImplementation(() => {})
     const { ctx, registered } = fakeContext()
     apply(ctx as never)
-    const faces = registered.map(entry => entry.options.inject() as { refresh: () => void; act?: (request: unknown) => Promise<boolean> })
+    type Face = { refresh: () => void; act?: (request: unknown) => Promise<boolean> }
+    const faces = sections(registered).map(entry => entry.options.inject() as Face)
     faces[0]!.refresh()
+    faces[1]!.refresh()
     faces[2]!.refresh()
-    faces[3]!.refresh()
     await vi.waitFor(() => { expect(calls).toHaveLength(4) })
     expect(calls.map(([url]) => url).sort()).toEqual(['api/fork.agents', 'api/fork.balance', 'api/fork.overview', 'api/fork.subscriptions'])
-    expect(await faces[2]!.act!({ action: 'delete', target: 'subscription', id: 'x' })).toBe(true)
+    expect(await faces[1]!.act!({ action: 'delete', target: 'subscription', id: 'x' })).toBe(true)
     expect(calls.at(-1)).toEqual(['api/fork.subscriptions', {
       credentials: 'same-origin', cache: 'no-store', method: 'POST', headers: { 'content-type': 'application/json' },
       body: '{"action":"delete","target":"subscription","id":"x"}',
     }])
-    expect(await faces[3]!.act!({ action: 'cc.stop', name: 'one' })).toBe(true)
+    expect(await faces[2]!.act!({ action: 'cc.stop', name: 'one' })).toBe(true)
     expect(calls.at(-1)![1]).toMatchObject({ method: 'POST', body: '{"action":"cc.stop","name":"one"}' })
+  })
+
+  it('reads the message flow from the overview and its own route together, each once per refresh', async () => {
+    const calls: string[] = []
+    vi.stubGlobal('fetch', (url: string) => {
+      calls.push(url)
+      return Promise.resolve(Response.json({
+        cards: [], checkedAt: 1, recent: [], presence: null,
+        windows: Object.fromEntries(['1h', '24h', '7d'].map(span => [span, { funnel: { events: 0, batches: 0, sent: 0, silent: 0, failed: 0 }, sources: {}, subscriptions: {} }])),
+      }))
+    })
+    vi.spyOn(console, 'info').mockImplementation(() => {})
+    const { ctx, registered } = fakeContext()
+    apply(ctx as never)
+    const face = flowPage(registered).options.inject() as { refresh: () => void }
+    face.refresh()
+    await vi.waitFor(() => { expect(calls).toHaveLength(2) })
+    expect(calls.sort()).toEqual(['api/fork.flow', 'api/fork.overview'])
+  })
+
+  it('opens a Settings section through the settings shell when it is there, and does nothing when it is not', () => {
+    const openSection = vi.fn()
+    const mounted = fakeContext([], { settingsNavigation: { openSection } })
+    apply(mounted.ctx as never)
+    ;(flowPage(mounted.registered).options.inject() as { openSettings: (id: string) => void }).openSettings('fork-qq')
+    expect(openSection).toHaveBeenCalledWith('fork-qq')
+    const bare = fakeContext()
+    apply(bare.ctx as never)
+    expect(() => { (flowPage(bare.registered).options.inject() as { openSettings: (id: string) => void }).openSettings('fork-qq') }).not.toThrow()
   })
 
   describe('voice preview', () => {
@@ -108,7 +147,7 @@ describe('fork-console browser entry', () => {
     function previewFace() {
       const { ctx, registered } = fakeContext()
       apply(ctx as never)
-      return registered[3]!.options.inject() as { preview: (onPlaying: () => void) => Promise<unknown>; stopPreview: () => void }
+      return sections(registered)[2]!.options.inject() as { preview: (onPlaying: () => void) => Promise<unknown>; stopPreview: () => void }
     }
 
     it('posts the preview request, plays the audio in the browser, and ends when it ends', async () => {
