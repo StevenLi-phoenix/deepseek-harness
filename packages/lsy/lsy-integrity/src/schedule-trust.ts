@@ -9,6 +9,12 @@ import { writeJson } from './files.ts'
 import { scheduleState, type Target } from './scan.ts'
 import type { TrustedSchedule } from './compare.ts'
 
+/**
+ * Make the trusted schedule state for a digest.
+ * @param digest - digest of all task definitions.
+ * @param tasks - task id to the digest of its definition; undefined when the file had none.
+ * @returns the state stamped with the current time as an ISO string.
+ */
 export const trustedOf = (digest: string, tasks: Record<string, string> | undefined): TrustedSchedule => (
   { at: new Date().toISOString(), digest, ...tasks === undefined ? {} : { tasks } }
 )

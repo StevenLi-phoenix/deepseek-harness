@@ -7,6 +7,50 @@ A service can be a core spine service, a swappable capability seam, a bundle/com
 
 ```mermaid
 flowchart LR
+  pkg_lsy_event_bus["lsy-event-bus"]
+  svc_lsyEventBus["ctx.lsyEventBus<br/>Event bus of the event service"]
+  pkg_lsy_event_ingest["lsy-event-ingest"]
+  pkg_lsy_github_sensor["lsy-github-sensor"]
+  pkg_lsy_qq["lsy-qq"]
+  pkg_lsy_qqbot["lsy-qqbot"]
+  pkg_lsy_tool_monitor["lsy-tool-monitor"]
+  pkg_lsy_tool_up["lsy-tool-up"]
+  pkg_lsy_tool_watch["lsy-tool-watch"]
+  pkg_lsy_wechat["lsy-wechat"]
+  pkg_lsy_console["lsy-console"]
+  svc_lsyNotifier["ctx.lsyNotifier<br/>Owner notification channel"]
+  pkg_lsy_courses["lsy-courses"]
+  pkg_lsy_memory["lsy-memory"]
+  pkg_lsy_integrity["lsy-integrity"]
+  pkg_lsy_tool_voice["lsy-tool-voice"]
+  pkg_lsy_tool_wechat["lsy-tool-wechat"]
+  pkg_owner_relay["owner-relay"]
+  svc_ownerRelay["ctx.ownerRelay<br/>Relay of final answers to the owner"]
+  pkg_bili["bili"]
+  pkg_lsy_time_gap["lsy-time-gap"]
+  pkg_lsy_presence["lsy-presence"]
+  svc_lsyPresence["ctx.lsyPresence<br/>Owner sleep state"]
+  svc_lsyGithubSensor["ctx.lsyGithubSensor<br/>GitHub event sensor"]
+  svc_lsyCourses["ctx.lsyCourses<br/>Course reminders"]
+  pkg_lsy_tool_courses["lsy-tool-courses"]
+  pkg_lsy_courses_settings["lsy-courses-settings"]
+  svc_lsyQq["ctx.lsyQq<br/>QQ group observer"]
+  pkg_lsy_tool_qq["lsy-tool-qq"]
+  pkg_lsy_qq_login["lsy-qq-login"]
+  pkg_lsy_style["lsy-style"]
+  svc_lsyQqBot["ctx.lsyQqBot<br/>Official QQ bot channel"]
+  svc_lsyStyle["ctx.lsyStyle<br/>Speaking style"]
+  pkg_lsy_style_settings["lsy-style-settings"]
+  pkg_lsy_guard["lsy-guard"]
+  svc_lsyGuard["ctx.lsyGuard<br/>Content guard for shared text"]
+  pkg_lsy_voice["lsy-voice"]
+  svc_lsyVoice["ctx.lsyVoice<br/>Text to speech and audio transcription"]
+  pkg_lsy_cc_admin["lsy-cc-admin"]
+  svc_lsyClaudeCode["ctx.lsyClaudeCode<br/>Claude Code session listing"]
+  svc_bili["ctx.bili<br/>Bilibili account client"]
+  pkg_tool_bili["tool-bili"]
+  svc_biliHot["ctx.biliHot<br/>Bilibili trending reads"]
+  svc_biliEvidence["ctx.biliEvidence<br/>Bilibili reply evidence"]
   pkg_action_cards["action-cards"]
   svc_actionCards["ctx.actionCards<br/>Optional action cards"]
   pkg_creation_recommendations["creation-recommendations"]
@@ -339,6 +383,8 @@ flowchart LR
   pkg_authorization --> svc_authorization
   pkg_bash_local --> svc_shell
   pkg_bash_sandbox --> svc_shell
+  pkg_bili --> svc_bili
+  pkg_bili --> svc_biliHot
   pkg_browser_use --> svc_browserUse
   pkg_client_connection --> svc_connection
   pkg_client_file_upload --> svc_fileUploads
@@ -401,12 +447,25 @@ flowchart LR
   pkg_llm_replay --> svc_llm
   pkg_lsp --> svc_lsp
   pkg_lsp_stdio --> svc_lsp
+  pkg_lsy_cc_admin --> svc_lsyClaudeCode
+  pkg_lsy_courses --> svc_lsyCourses
+  pkg_lsy_event_bus --> svc_lsyEventBus
+  pkg_lsy_github_sensor --> svc_lsyGithubSensor
+  pkg_lsy_guard --> svc_lsyGuard
+  pkg_lsy_presence --> svc_lsyPresence
+  pkg_lsy_qq --> svc_lsyQq
+  pkg_lsy_qqbot --> svc_lsyQqBot
+  pkg_lsy_style --> svc_lsyStyle
+  pkg_lsy_tool_up --> svc_biliEvidence
+  pkg_lsy_voice --> svc_lsyVoice
+  pkg_lsy_wechat --> svc_lsyNotifier
   pkg_mcp_client --> svc_mcpResources
   pkg_mcp_manager --> svc_mcpManager
   pkg_mcp_resources --> svc_mcpResources
   pkg_message_feedback --> svc_messageFeedback
   pkg_office_to_pdf --> svc_officeToPdf
   pkg_otel --> svc_otel
+  pkg_owner_relay --> svc_ownerRelay
   pkg_permission_presets --> svc_permissionPresets
   pkg_plan_mode --> svc_planMode
   pkg_plugin_manager --> svc_pluginManager
@@ -499,6 +558,10 @@ flowchart LR
   svc_attachments --> pkg_llm_pi_ai
   svc_attachments --> pkg_tool_fs
   svc_authorization --> pkg_llm_pi_ai
+  svc_bili --> pkg_lsy_style
+  svc_bili --> pkg_tool_bili
+  svc_biliEvidence --> pkg_lsy_style
+  svc_biliHot --> pkg_lsy_style
   svc_browserUse --> pkg_experimental_browser_use_chrome_devtools_mcp
   svc_browserUse --> pkg_experimental_browser_use_playwright_mcp
   svc_browserUse --> pkg_experimental_browser_use_stagehand_native
@@ -536,10 +599,52 @@ flowchart LR
   svc_llm --> pkg_agent_loop
   svc_llm --> pkg_compaction_basic
   svc_lsp --> pkg_tool_lsp
+  svc_lsyClaudeCode --> pkg_lsy_console
+  svc_lsyCourses --> pkg_lsy_courses_settings
+  svc_lsyCourses --> pkg_lsy_tool_courses
+  svc_lsyEventBus --> pkg_lsy_console
+  svc_lsyEventBus --> pkg_lsy_event_ingest
+  svc_lsyEventBus --> pkg_lsy_github_sensor
+  svc_lsyEventBus --> pkg_lsy_qq
+  svc_lsyEventBus --> pkg_lsy_qqbot
+  svc_lsyEventBus --> pkg_lsy_tool_monitor
+  svc_lsyEventBus --> pkg_lsy_tool_up
+  svc_lsyEventBus --> pkg_lsy_tool_watch
+  svc_lsyEventBus --> pkg_lsy_wechat
+  svc_lsyGithubSensor --> pkg_lsy_console
+  svc_lsyGithubSensor --> pkg_lsy_tool_watch
+  svc_lsyGuard --> pkg_lsy_qq
+  svc_lsyGuard --> pkg_lsy_style
+  svc_lsyGuard --> pkg_lsy_tool_up
+  svc_lsyNotifier --> pkg_lsy_courses
+  svc_lsyNotifier --> pkg_lsy_event_bus
+  svc_lsyNotifier --> pkg_lsy_integrity
+  svc_lsyNotifier --> pkg_lsy_memory
+  svc_lsyNotifier --> pkg_lsy_qq
+  svc_lsyNotifier --> pkg_lsy_tool_voice
+  svc_lsyNotifier --> pkg_lsy_tool_watch
+  svc_lsyNotifier --> pkg_lsy_tool_wechat
+  svc_lsyPresence --> pkg_lsy_console
+  svc_lsyPresence --> pkg_lsy_courses
+  svc_lsyPresence --> pkg_lsy_wechat
+  svc_lsyQq --> pkg_lsy_console
+  svc_lsyQq --> pkg_lsy_qq_login
+  svc_lsyQq --> pkg_lsy_style
+  svc_lsyQq --> pkg_lsy_tool_qq
+  svc_lsyStyle --> pkg_lsy_console
+  svc_lsyStyle --> pkg_lsy_style_settings
+  svc_lsyVoice --> pkg_lsy_console
+  svc_lsyVoice --> pkg_lsy_tool_voice
+  svc_lsyVoice --> pkg_lsy_wechat
   svc_mcpResources --> pkg_mcp_resources
   svc_officeToPdf --> pkg_client_ui_sidebar_documentpreview
   svc_otel --> pkg_host_product_telemetry_otel
   svc_otel --> pkg_session_telemetry_otel
+  svc_ownerRelay --> pkg_bili
+  svc_ownerRelay --> pkg_lsy_event_bus
+  svc_ownerRelay --> pkg_lsy_qqbot
+  svc_ownerRelay --> pkg_lsy_time_gap
+  svc_ownerRelay --> pkg_lsy_wechat
   svc_pluginManager --> pkg_plugin_manager
   svc_pluginManager --> pkg_ui_settings_plugin_inventory
   svc_pluginMarket --> pkg_client_ui_plugin_market
@@ -649,6 +754,21 @@ flowchart LR
 
 | ctx key | Role | Owner | Implementations | Direct consumers | Companion plugins | Note |
 | --- | --- | --- | --- | --- | --- | --- |
+| `ctx.lsyEventBus` | `service` | [`lsy-event-bus`](../packages/lsy/lsy-event-bus) | - | [`lsy-event-ingest`](../packages/lsy/lsy-event-ingest), [`lsy-github-sensor`](../packages/lsy/lsy-github-sensor), [`lsy-qq`](../packages/lsy/lsy-qq), [`lsy-qqbot`](../packages/lsy/lsy-qqbot), [`lsy-tool-monitor`](../packages/lsy/lsy-tool-monitor), [`lsy-tool-up`](../packages/lsy/lsy-tool-up), [`lsy-tool-watch`](../packages/lsy/lsy-tool-watch), [`lsy-wechat`](../packages/lsy/lsy-wechat), [`lsy-console`](../packages/lsy/lsy-console) | - | Owns dedupe, routes, batches, and the notification flow; sensors publish events and tools change routes. |
+| `ctx.lsyNotifier` | `service` | [`lsy-wechat`](../packages/lsy/lsy-wechat) | - | [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-qq`](../packages/lsy/lsy-qq), [`lsy-courses`](../packages/lsy/lsy-courses), [`lsy-memory`](../packages/lsy/lsy-memory), [`lsy-integrity`](../packages/lsy/lsy-integrity), [`lsy-tool-watch`](../packages/lsy/lsy-tool-watch), [`lsy-tool-voice`](../packages/lsy/lsy-tool-voice), [`lsy-tool-wechat`](../packages/lsy/lsy-tool-wechat) | - | The event bus defines the channel interface; the WeChat channel provides it. |
+| `ctx.ownerRelay` | `service` | [`owner-relay`](../packages/lsy/owner-relay) | - | [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-wechat`](../packages/lsy/lsy-wechat), [`lsy-qqbot`](../packages/lsy/lsy-qqbot), [`bili`](../packages/lsy/bili), [`lsy-time-gap`](../packages/lsy/lsy-time-gap) | - | Channels register here and claim Sessions; the relay sends each final answer through its Session's channel. |
+| `ctx.lsyPresence` | `service` | [`lsy-presence`](../packages/lsy/lsy-presence) | - | [`lsy-wechat`](../packages/lsy/lsy-wechat), [`lsy-courses`](../packages/lsy/lsy-courses), [`lsy-console`](../packages/lsy/lsy-console) | - | Combines the Sleep Focus, a daily window, and manual buttons into one state. |
+| `ctx.lsyGithubSensor` | `service` | [`lsy-github-sensor`](../packages/lsy/lsy-github-sensor) | - | [`lsy-tool-watch`](../packages/lsy/lsy-tool-watch), [`lsy-console`](../packages/lsy/lsy-console) | - | Polls and receives GitHub deliveries and publishes them to the event bus. |
+| `ctx.lsyCourses` | `service` | [`lsy-courses`](../packages/lsy/lsy-courses) | - | [`lsy-tool-courses`](../packages/lsy/lsy-tool-courses), [`lsy-courses-settings`](../packages/lsy/lsy-courses-settings) | - | Reads the course service and sends deadline reminders. |
+| `ctx.lsyQq` | `service` | [`lsy-qq`](../packages/lsy/lsy-qq) | - | [`lsy-tool-qq`](../packages/lsy/lsy-tool-qq), [`lsy-qq-login`](../packages/lsy/lsy-qq-login), [`lsy-style`](../packages/lsy/lsy-style), [`lsy-console`](../packages/lsy/lsy-console) | - | Client of the qq-recorder service; writes group digests and answers searches. |
+| `ctx.lsyQqBot` | `service` | [`lsy-qqbot`](../packages/lsy/lsy-qqbot) | - | - | - | Holds the official-bot connection; no other package calls it. |
+| `ctx.lsyStyle` | `service` | [`lsy-style`](../packages/lsy/lsy-style) | - | [`lsy-style-settings`](../packages/lsy/lsy-style-settings), [`lsy-console`](../packages/lsy/lsy-console) | - | Collects style from QQ, Bilibili, and public web pages and shows it to the presets that mount it. |
+| `ctx.lsyGuard` | `service` | [`lsy-guard`](../packages/lsy/lsy-guard) | - | [`lsy-qq`](../packages/lsy/lsy-qq), [`lsy-style`](../packages/lsy/lsy-style), [`lsy-tool-up`](../packages/lsy/lsy-tool-up) | - | Checks text others can read through patterns, canaries, memory overlap, and a model, and refuses on failure. |
+| `ctx.lsyVoice` | `service` | [`lsy-voice`](../packages/lsy/lsy-voice) | - | [`lsy-tool-voice`](../packages/lsy/lsy-tool-voice), [`lsy-wechat`](../packages/lsy/lsy-wechat), [`lsy-console`](../packages/lsy/lsy-console) | - | Calls the speech and transcription services and returns files or text. |
+| `ctx.lsyClaudeCode` | `service` | [`lsy-cc-admin`](../packages/lsy/lsy-cc-admin) | - | [`lsy-console`](../packages/lsy/lsy-console) | - | Lists and starts Claude Code sessions of the service account for the Settings page. |
+| `ctx.bili` | `service` | [`bili`](../packages/lsy/bili) | - | [`tool-bili`](../packages/lsy/tool-bili), [`lsy-style`](../packages/lsy/lsy-style) | - | Thin client of bili-svc, which holds the session and writes to Bilibili. |
+| `ctx.biliHot` | `service` | [`bili`](../packages/lsy/bili) | - | [`lsy-style`](../packages/lsy/lsy-style) | - | Reads trending videos through bili-svc. |
+| `ctx.biliEvidence` | `service` | [`lsy-tool-up`](../packages/lsy/lsy-tool-up) | - | [`lsy-style`](../packages/lsy/lsy-style) | - | Serves the evidence records of the creator account tools. |
 | `ctx.actionCards` | `service` | [`action-cards`](../packages/experimental/action-cards) | - | [`creation-recommendations`](../packages/experimental/creation-recommendations), [`client-ui-action-cards`](../packages/experimental/client-ui-action-cards) | - | Owns the card tool, card state, user actions and status notices; card kinds register their actions and handlers. |
 | `ctx.pluginRecommendations` | `service` | [`plugin-recommendations`](../packages/experimental/plugin-recommendations) | - | [`client-ui-plugin-recommendations`](../packages/experimental/client-ui-plugin-recommendations) | - | Reads the current catalog text of an official plugin card and enables the plugin through the profile plugin manager after a click. |
 | `ctx.headlessStartup` | `core` | [`headless`](../packages/bundle/headless) | - | [`headless`](../packages/bundle/headless) | - | Supplies parsed task and run options to the headless runner and its sandbox-policy configuration. |

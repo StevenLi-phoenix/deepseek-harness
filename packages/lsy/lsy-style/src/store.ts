@@ -145,7 +145,10 @@ export class StyleStore {
     return next
   }
 
-  /** Every record, newest first; a damaged line costs that record only. */
+  /**
+   * Every record, newest first; a damaged line costs that record only.
+   * @returns the records; an empty list when the file does not exist.
+   */
   async all(): Promise<StyleRecord[]> {
     let raw = ''
     try {
@@ -166,7 +169,10 @@ export class StyleStore {
     return records.toSorted(newestFirst)
   }
 
-  /** Active and pending samples, newest first. */
+  /**
+   * Active and pending samples, newest first.
+   * @returns the records whose status is `active` or `pending`.
+   */
   async live(): Promise<StyleRecord[]> {
     return (await this.all()).filter(record => record.status === 'active' || record.status === 'pending')
   }

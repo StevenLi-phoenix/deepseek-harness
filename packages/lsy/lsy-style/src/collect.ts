@@ -308,7 +308,10 @@ export class StyleCollector {
     return this.running !== undefined
   }
 
-  /** The last run's report, from memory or the state file. */
+  /**
+   * The last run's report, from memory or the state file.
+   * @returns the report, or undefined when no run has been recorded.
+   */
   async lastRun(): Promise<RunReport | undefined> {
     return (await this.loadState()).lastRun
   }

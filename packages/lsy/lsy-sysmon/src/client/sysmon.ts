@@ -23,7 +23,10 @@ export interface SysmonState {
   refreshing: boolean
 }
 
-/** @returns a store holding the not-yet-loaded state. */
+/**
+ * Create the sysmon store in its not-yet-loaded state (no snapshot, no timestamp, not stale, not refreshing).
+ * @returns a fresh store; each call returns an independent one.
+ */
 export function createSysmonStore(): SnapshotStore<SysmonState> {
   return createSnapshotStore<SysmonState>({ snapshot: null, checkedAt: null, stale: false, refreshing: false })
 }
@@ -57,7 +60,10 @@ export class SysmonLoader {
     private readonly now: () => number = Date.now,
   ) {}
 
-  /** @returns settlement after the answer is published; concurrent callers share the request in flight. */
+  /**
+   * Read a snapshot and publish it to the store.
+   * @returns settlement after the answer is published; concurrent callers share the request in flight.
+   */
   refresh(): Promise<void> {
     if (this.inFlight !== undefined) return this.inFlight
     this.store.update((draft) => { draft.refreshing = true })

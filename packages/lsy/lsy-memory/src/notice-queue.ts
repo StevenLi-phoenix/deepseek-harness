@@ -23,10 +23,11 @@ export type Enqueue = (sessionId: string | undefined, item: NoticeItem) => void
 /**
  * Mount the notice queue: the turn-end flush and the cleanup of waiting timers.
  * @param ctx - the preset scope's context.
- * @param options - whether to notify and the daily cap.
+ * @param options - `notify` turns notices on; `noticesPerDay` caps those sent per day.
  * @returns the enqueue function the tools call.
  */
-export function mountNotices(ctx: Context, { notify, noticesPerDay }: NoticeOptions): Enqueue {
+export function mountNotices(ctx: Context, options: NoticeOptions): Enqueue {
+  const { notify, noticesPerDay } = options
   /** Notices queued per Session until its turn ends, and how many went out today. */
   const queued = new Map<string, { items: NoticeItem[]; timer: ReturnType<typeof setTimeout> }>()
   let sentToday = { day: '', count: 0 }

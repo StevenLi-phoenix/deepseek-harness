@@ -9,10 +9,10 @@ Deployment files for running this fork as an always-on, event-driven agent servi
 | Path | Contents |
 |---|---|
 | [`CHANGELOG.md`](CHANGELOG.md) | Fork-local changes (Keep a Changelog) |
-| [`bundles/event/`](bundles/event/) | `@deepseek-ai/dsh-lsy-event-bundle`: the event composition as a bundle layer (code-owned; routing state lives in storage and is managed by the agent's tools) |
+| [`bundles/event/`](bundles/event/) | `@deepseek-ai/dsh-lsy-event-bundle`: the event composition as a bundle layer (code-owned; routing state lives in storage and is managed by the agent's tools). The `unattended` preset keeps the `workflow` tool; Agent Teams are disabled at the bundle |
 | [`profiles/event/`](profiles/event/) | Event profile: `package.json` (Web bundles plus the event bundle) and `cordis.patch.yml`, the owner's empty patch layer that Web UI settings write to |
 | [`deploy/RUNBOOK.md`](deploy/RUNBOOK.md) | Isolated deployment on the Mac mini: `dsh-runtime` user, LaunchDaemon, secrets, WeChat binding, verification |
-| [`deploy/`](deploy/) | `install-app.sh`, `setup-profile.sh` (links plugins and the bundle; creates the owner layer once), `check-setup-profile.sh`, `upgrade.sh`, `wechat-login.mjs`, `home.cordis.patch.yml`, LaunchDaemon template |
+| [`deploy/`](deploy/) | `install-app.sh`, `setup-profile.sh` (links plugins and the bundle; creates the owner layer once), `check-setup-profile.sh <installed prefix>` (checks fresh, migrated, and re-run homes; `upgrade.sh` runs it before switching `current`), `upgrade.sh`, `wechat-login.mjs`, `home.cordis.patch.yml`, LaunchDaemon template |
 | [`../packages/lsy/UPSTREAM.md`](../packages/lsy/UPSTREAM.md) | Upstream baseline, copied packages, touched upstream files, upgrade procedure |
 
 ## Checks for the lsy group
@@ -28,6 +28,8 @@ pnpm run verify-translation-pairing packages/lsy/README.md packages/lsy/*/README
 pnpm run verify-package-readme-model-experience && pnpm run verify-package-readme-summaries
 pnpm run verify-config-catalog && pnpm run verify-cordis-catalog && pnpm run verify-md-links
 ```
+
+`tsconfig.host.json` excludes `*.client.spec.*` tests; they type-check in the Client aggregate, `tsconfig.client.json`.
 
 ## Run the event profile from source
 

@@ -33,6 +33,7 @@ export function clean(value: unknown, max: number, multiline = false): string {
 /**
  * Code points of a text, as Bilibili counts its limits.
  * @param text - text to measure.
+ * @returns the count of Unicode code points.
  */
 export function codePoints(text: string): number {
   return Array.from(text).length

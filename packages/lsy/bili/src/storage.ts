@@ -116,7 +116,11 @@ function table<V>(schema: z.ZodType<V>): DomainTableSpec<string, V> {
   return { valueSchema: schema }
 }
 
-/** Storage key of a sequence number; zero-padded so keys sort like numbers. */
+/**
+ * Storage key of a sequence number; zero-padded so keys sort like numbers.
+ * @param seq - non-negative integer sequence number.
+ * @returns the key, 15 digits wide.
+ */
 export function seqKey(seq: number): string {
   return String(seq).padStart(15, '0')
 }

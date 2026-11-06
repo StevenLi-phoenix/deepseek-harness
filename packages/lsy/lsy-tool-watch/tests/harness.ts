@@ -20,7 +20,7 @@ export const busConfig: BusConfig = {
   ],
   suppress: { actors: [], markers: ['Dsh-Agent:'] },
   retainEvents: 1000,
-  retainBatches: 100,
+  retainBatches: 100, flowChangesKept: 200,
   maxTextChars: 2000,
   notifySessionResult: true,
   reportScheduledTurns: true,

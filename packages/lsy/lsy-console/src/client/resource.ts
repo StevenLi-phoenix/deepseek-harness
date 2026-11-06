@@ -33,7 +33,10 @@ export interface ResourceState<T> {
   notice: Notice | null
 }
 
-/** @returns a store holding the not-yet-loaded state. */
+/**
+ * Create the store a resource view reads from.
+ * @returns a store holding the not-yet-loaded state.
+ */
 export function createResourceStore<T>(): SnapshotStore<ResourceState<T>> {
   return createSnapshotStore<ResourceState<T>>({ data: null, checkedAt: null, stale: false, refreshing: false, busy: {}, notice: null })
 }
@@ -83,7 +86,9 @@ export class ResourceLoader<T> {
     private readonly now: () => number = Date.now,
   ) {}
 
-  /** @returns settlement after the answer is published; concurrent callers share the request in flight. */
+  /**
+   * Reload the resource and publish the answer.
+   * @returns settlement after the answer is published; concurrent callers share the request in flight. */
   refresh(): Promise<void> {
     if (this.inFlight !== undefined) return this.inFlight
     this.store.update((draft) => { draft.refreshing = true })

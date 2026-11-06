@@ -28,6 +28,7 @@ export interface GroupRow {
 }
 
 /**
+ * Validate a typed group number.
  * @param text - what the owner typed.
  * @returns the trimmed group number, or null when it is not one.
  */
@@ -37,6 +38,7 @@ export function parseGroupId(text: string): string | null {
 }
 
 /**
+ * Add a group number to the whitelist.
  * @param current - the list now.
  * @param id - a group number to add.
  * @returns the list with the group last; the same list when it is already there.
@@ -46,6 +48,7 @@ export function withGroup(current: readonly string[], id: string): string[] {
 }
 
 /**
+ * Remove a group number from the whitelist.
  * @param current - the list now.
  * @param id - a group number to remove.
  * @returns the list without it.
@@ -60,6 +63,7 @@ function rowOf(groupId: string, known: ReadonlyMap<string, QqGroup>): GroupRow {
 }
 
 /**
+ * Build the rows of the recorded-groups list.
  * @param listed - the group numbers on the list now (from the settings form).
  * @param groups - the Host panel's groups, for names.
  * @returns one row per listed group, in list order.
@@ -70,6 +74,7 @@ export function whitelistRows(listed: readonly string[], groups: readonly QqGrou
 }
 
 /**
+ * Build the rows of the groups the account is in but the list does not record.
  * @param listed - the group numbers on the list now.
  * @param groups - the Host panel's groups.
  * @returns the account's other groups, the busiest first, then by name.

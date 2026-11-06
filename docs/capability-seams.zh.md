@@ -9,6 +9,50 @@
 
 ```mermaid
 flowchart LR
+  pkg_lsy_event_bus["lsy-event-bus"]
+  svc_lsyEventBus["ctx.lsyEventBus<br/>Event bus of the event service"]
+  pkg_lsy_event_ingest["lsy-event-ingest"]
+  pkg_lsy_github_sensor["lsy-github-sensor"]
+  pkg_lsy_qq["lsy-qq"]
+  pkg_lsy_qqbot["lsy-qqbot"]
+  pkg_lsy_tool_monitor["lsy-tool-monitor"]
+  pkg_lsy_tool_up["lsy-tool-up"]
+  pkg_lsy_tool_watch["lsy-tool-watch"]
+  pkg_lsy_wechat["lsy-wechat"]
+  pkg_lsy_console["lsy-console"]
+  svc_lsyNotifier["ctx.lsyNotifier<br/>Owner notification channel"]
+  pkg_lsy_courses["lsy-courses"]
+  pkg_lsy_memory["lsy-memory"]
+  pkg_lsy_integrity["lsy-integrity"]
+  pkg_lsy_tool_voice["lsy-tool-voice"]
+  pkg_lsy_tool_wechat["lsy-tool-wechat"]
+  pkg_owner_relay["owner-relay"]
+  svc_ownerRelay["ctx.ownerRelay<br/>Relay of final answers to the owner"]
+  pkg_bili["bili"]
+  pkg_lsy_time_gap["lsy-time-gap"]
+  pkg_lsy_presence["lsy-presence"]
+  svc_lsyPresence["ctx.lsyPresence<br/>Owner sleep state"]
+  svc_lsyGithubSensor["ctx.lsyGithubSensor<br/>GitHub event sensor"]
+  svc_lsyCourses["ctx.lsyCourses<br/>Course reminders"]
+  pkg_lsy_tool_courses["lsy-tool-courses"]
+  pkg_lsy_courses_settings["lsy-courses-settings"]
+  svc_lsyQq["ctx.lsyQq<br/>QQ group observer"]
+  pkg_lsy_tool_qq["lsy-tool-qq"]
+  pkg_lsy_qq_login["lsy-qq-login"]
+  pkg_lsy_style["lsy-style"]
+  svc_lsyQqBot["ctx.lsyQqBot<br/>Official QQ bot channel"]
+  svc_lsyStyle["ctx.lsyStyle<br/>Speaking style"]
+  pkg_lsy_style_settings["lsy-style-settings"]
+  pkg_lsy_guard["lsy-guard"]
+  svc_lsyGuard["ctx.lsyGuard<br/>Content guard for shared text"]
+  pkg_lsy_voice["lsy-voice"]
+  svc_lsyVoice["ctx.lsyVoice<br/>Text to speech and audio transcription"]
+  pkg_lsy_cc_admin["lsy-cc-admin"]
+  svc_lsyClaudeCode["ctx.lsyClaudeCode<br/>Claude Code session listing"]
+  svc_bili["ctx.bili<br/>Bilibili account client"]
+  pkg_tool_bili["tool-bili"]
+  svc_biliHot["ctx.biliHot<br/>Bilibili trending reads"]
+  svc_biliEvidence["ctx.biliEvidence<br/>Bilibili reply evidence"]
   pkg_action_cards["action-cards"]
   svc_actionCards["ctx.actionCards<br/>Optional action cards"]
   pkg_creation_recommendations["creation-recommendations"]
@@ -341,6 +385,8 @@ flowchart LR
   pkg_authorization --> svc_authorization
   pkg_bash_local --> svc_shell
   pkg_bash_sandbox --> svc_shell
+  pkg_bili --> svc_bili
+  pkg_bili --> svc_biliHot
   pkg_browser_use --> svc_browserUse
   pkg_client_connection --> svc_connection
   pkg_client_file_upload --> svc_fileUploads
@@ -403,12 +449,25 @@ flowchart LR
   pkg_llm_replay --> svc_llm
   pkg_lsp --> svc_lsp
   pkg_lsp_stdio --> svc_lsp
+  pkg_lsy_cc_admin --> svc_lsyClaudeCode
+  pkg_lsy_courses --> svc_lsyCourses
+  pkg_lsy_event_bus --> svc_lsyEventBus
+  pkg_lsy_github_sensor --> svc_lsyGithubSensor
+  pkg_lsy_guard --> svc_lsyGuard
+  pkg_lsy_presence --> svc_lsyPresence
+  pkg_lsy_qq --> svc_lsyQq
+  pkg_lsy_qqbot --> svc_lsyQqBot
+  pkg_lsy_style --> svc_lsyStyle
+  pkg_lsy_tool_up --> svc_biliEvidence
+  pkg_lsy_voice --> svc_lsyVoice
+  pkg_lsy_wechat --> svc_lsyNotifier
   pkg_mcp_client --> svc_mcpResources
   pkg_mcp_manager --> svc_mcpManager
   pkg_mcp_resources --> svc_mcpResources
   pkg_message_feedback --> svc_messageFeedback
   pkg_office_to_pdf --> svc_officeToPdf
   pkg_otel --> svc_otel
+  pkg_owner_relay --> svc_ownerRelay
   pkg_permission_presets --> svc_permissionPresets
   pkg_plan_mode --> svc_planMode
   pkg_plugin_manager --> svc_pluginManager
@@ -501,6 +560,10 @@ flowchart LR
   svc_attachments --> pkg_llm_pi_ai
   svc_attachments --> pkg_tool_fs
   svc_authorization --> pkg_llm_pi_ai
+  svc_bili --> pkg_lsy_style
+  svc_bili --> pkg_tool_bili
+  svc_biliEvidence --> pkg_lsy_style
+  svc_biliHot --> pkg_lsy_style
   svc_browserUse --> pkg_experimental_browser_use_chrome_devtools_mcp
   svc_browserUse --> pkg_experimental_browser_use_playwright_mcp
   svc_browserUse --> pkg_experimental_browser_use_stagehand_native
@@ -538,10 +601,52 @@ flowchart LR
   svc_llm --> pkg_agent_loop
   svc_llm --> pkg_compaction_basic
   svc_lsp --> pkg_tool_lsp
+  svc_lsyClaudeCode --> pkg_lsy_console
+  svc_lsyCourses --> pkg_lsy_courses_settings
+  svc_lsyCourses --> pkg_lsy_tool_courses
+  svc_lsyEventBus --> pkg_lsy_console
+  svc_lsyEventBus --> pkg_lsy_event_ingest
+  svc_lsyEventBus --> pkg_lsy_github_sensor
+  svc_lsyEventBus --> pkg_lsy_qq
+  svc_lsyEventBus --> pkg_lsy_qqbot
+  svc_lsyEventBus --> pkg_lsy_tool_monitor
+  svc_lsyEventBus --> pkg_lsy_tool_up
+  svc_lsyEventBus --> pkg_lsy_tool_watch
+  svc_lsyEventBus --> pkg_lsy_wechat
+  svc_lsyGithubSensor --> pkg_lsy_console
+  svc_lsyGithubSensor --> pkg_lsy_tool_watch
+  svc_lsyGuard --> pkg_lsy_qq
+  svc_lsyGuard --> pkg_lsy_style
+  svc_lsyGuard --> pkg_lsy_tool_up
+  svc_lsyNotifier --> pkg_lsy_courses
+  svc_lsyNotifier --> pkg_lsy_event_bus
+  svc_lsyNotifier --> pkg_lsy_integrity
+  svc_lsyNotifier --> pkg_lsy_memory
+  svc_lsyNotifier --> pkg_lsy_qq
+  svc_lsyNotifier --> pkg_lsy_tool_voice
+  svc_lsyNotifier --> pkg_lsy_tool_watch
+  svc_lsyNotifier --> pkg_lsy_tool_wechat
+  svc_lsyPresence --> pkg_lsy_console
+  svc_lsyPresence --> pkg_lsy_courses
+  svc_lsyPresence --> pkg_lsy_wechat
+  svc_lsyQq --> pkg_lsy_console
+  svc_lsyQq --> pkg_lsy_qq_login
+  svc_lsyQq --> pkg_lsy_style
+  svc_lsyQq --> pkg_lsy_tool_qq
+  svc_lsyStyle --> pkg_lsy_console
+  svc_lsyStyle --> pkg_lsy_style_settings
+  svc_lsyVoice --> pkg_lsy_console
+  svc_lsyVoice --> pkg_lsy_tool_voice
+  svc_lsyVoice --> pkg_lsy_wechat
   svc_mcpResources --> pkg_mcp_resources
   svc_officeToPdf --> pkg_client_ui_sidebar_documentpreview
   svc_otel --> pkg_host_product_telemetry_otel
   svc_otel --> pkg_session_telemetry_otel
+  svc_ownerRelay --> pkg_bili
+  svc_ownerRelay --> pkg_lsy_event_bus
+  svc_ownerRelay --> pkg_lsy_qqbot
+  svc_ownerRelay --> pkg_lsy_time_gap
+  svc_ownerRelay --> pkg_lsy_wechat
   svc_pluginManager --> pkg_plugin_manager
   svc_pluginManager --> pkg_ui_settings_plugin_inventory
   svc_pluginMarket --> pkg_client_ui_plugin_market
@@ -651,6 +756,21 @@ flowchart LR
 
 | ctx 键 | 角色 | 所属包 | 实现 | 直接消费方 | 配套插件 | 说明 |
 | --- | --- | --- | --- | --- | --- | --- |
+| `ctx.lsyEventBus` | `service` | [`lsy-event-bus`](../packages/lsy/lsy-event-bus) | - | [`lsy-event-ingest`](../packages/lsy/lsy-event-ingest), [`lsy-github-sensor`](../packages/lsy/lsy-github-sensor), [`lsy-qq`](../packages/lsy/lsy-qq), [`lsy-qqbot`](../packages/lsy/lsy-qqbot), [`lsy-tool-monitor`](../packages/lsy/lsy-tool-monitor), [`lsy-tool-up`](../packages/lsy/lsy-tool-up), [`lsy-tool-watch`](../packages/lsy/lsy-tool-watch), [`lsy-wechat`](../packages/lsy/lsy-wechat), [`lsy-console`](../packages/lsy/lsy-console) | - | 负责去重、路由、批次和通知流程；传感器发布事件，工具修改路由。 |
+| `ctx.lsyNotifier` | `service` | [`lsy-wechat`](../packages/lsy/lsy-wechat) | - | [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-qq`](../packages/lsy/lsy-qq), [`lsy-courses`](../packages/lsy/lsy-courses), [`lsy-memory`](../packages/lsy/lsy-memory), [`lsy-integrity`](../packages/lsy/lsy-integrity), [`lsy-tool-watch`](../packages/lsy/lsy-tool-watch), [`lsy-tool-voice`](../packages/lsy/lsy-tool-voice), [`lsy-tool-wechat`](../packages/lsy/lsy-tool-wechat) | - | 事件总线定义通道接口，微信通道提供实现。 |
+| `ctx.ownerRelay` | `service` | [`owner-relay`](../packages/lsy/owner-relay) | - | [`lsy-event-bus`](../packages/lsy/lsy-event-bus), [`lsy-wechat`](../packages/lsy/lsy-wechat), [`lsy-qqbot`](../packages/lsy/lsy-qqbot), [`bili`](../packages/lsy/bili), [`lsy-time-gap`](../packages/lsy/lsy-time-gap) | - | 通道在此注册并认领 Session；中继通过 Session 所属的通道发送每个最终回答。 |
+| `ctx.lsyPresence` | `service` | [`lsy-presence`](../packages/lsy/lsy-presence) | - | [`lsy-wechat`](../packages/lsy/lsy-wechat), [`lsy-courses`](../packages/lsy/lsy-courses), [`lsy-console`](../packages/lsy/lsy-console) | - | 把睡眠专注模式、每日时段和手动按钮合成一个状态。 |
+| `ctx.lsyGithubSensor` | `service` | [`lsy-github-sensor`](../packages/lsy/lsy-github-sensor) | - | [`lsy-tool-watch`](../packages/lsy/lsy-tool-watch), [`lsy-console`](../packages/lsy/lsy-console) | - | 轮询并接收 GitHub 投递，发布到事件总线。 |
+| `ctx.lsyCourses` | `service` | [`lsy-courses`](../packages/lsy/lsy-courses) | - | [`lsy-tool-courses`](../packages/lsy/lsy-tool-courses), [`lsy-courses-settings`](../packages/lsy/lsy-courses-settings) | - | 读取课程服务并发送截止提醒。 |
+| `ctx.lsyQq` | `service` | [`lsy-qq`](../packages/lsy/lsy-qq) | - | [`lsy-tool-qq`](../packages/lsy/lsy-tool-qq), [`lsy-qq-login`](../packages/lsy/lsy-qq-login), [`lsy-style`](../packages/lsy/lsy-style), [`lsy-console`](../packages/lsy/lsy-console) | - | qq-recorder 服务的客户端；写群摘要并响应检索。 |
+| `ctx.lsyQqBot` | `service` | [`lsy-qqbot`](../packages/lsy/lsy-qqbot) | - | - | - | 持有官方机器人连接；没有其他包调用它。 |
+| `ctx.lsyStyle` | `service` | [`lsy-style`](../packages/lsy/lsy-style) | - | [`lsy-style-settings`](../packages/lsy/lsy-style-settings), [`lsy-console`](../packages/lsy/lsy-console) | - | 从 QQ、B 站和公开网页收集风格，并展示给挂载它的 preset。 |
+| `ctx.lsyGuard` | `service` | [`lsy-guard`](../packages/lsy/lsy-guard) | - | [`lsy-qq`](../packages/lsy/lsy-qq), [`lsy-style`](../packages/lsy/lsy-style), [`lsy-tool-up`](../packages/lsy/lsy-tool-up) | - | 用模式、金丝雀、记忆重合和模型检查他人可读的文本，失败即拒绝。 |
+| `ctx.lsyVoice` | `service` | [`lsy-voice`](../packages/lsy/lsy-voice) | - | [`lsy-tool-voice`](../packages/lsy/lsy-tool-voice), [`lsy-wechat`](../packages/lsy/lsy-wechat), [`lsy-console`](../packages/lsy/lsy-console) | - | 调用语音和转写服务，返回文件或文字。 |
+| `ctx.lsyClaudeCode` | `service` | [`lsy-cc-admin`](../packages/lsy/lsy-cc-admin) | - | [`lsy-console`](../packages/lsy/lsy-console) | - | 为设置页面列出并启动服务账号的 Claude Code 会话。 |
+| `ctx.bili` | `service` | [`bili`](../packages/lsy/bili) | - | [`tool-bili`](../packages/lsy/tool-bili), [`lsy-style`](../packages/lsy/lsy-style) | - | bili-svc 的轻量客户端；bili-svc 持有登录态并写入 B 站。 |
+| `ctx.biliHot` | `service` | [`bili`](../packages/lsy/bili) | - | [`lsy-style`](../packages/lsy/lsy-style) | - | 通过 bili-svc 读取热门视频。 |
+| `ctx.biliEvidence` | `service` | [`lsy-tool-up`](../packages/lsy/lsy-tool-up) | - | [`lsy-style`](../packages/lsy/lsy-style) | - | 提供创作者账号工具的证据记录。 |
 | `ctx.actionCards` | `service` | [`action-cards`](../packages/experimental/action-cards) | - | [`creation-recommendations`](../packages/experimental/creation-recommendations), [`client-ui-action-cards`](../packages/experimental/client-ui-action-cards) | - | 负责卡片工具、卡片状态、用户操作和状态通知；各卡片种类注册自己的动作和处理器。 |
 | `ctx.pluginRecommendations` | `service` | [`plugin-recommendations`](../packages/experimental/plugin-recommendations) | - | [`client-ui-plugin-recommendations`](../packages/experimental/client-ui-plugin-recommendations) | - | 读取官方插件卡片的当前目录文本，并在用户点击后通过配置插件管理器启用该插件。 |
 | `ctx.headlessStartup` | `core` | [`headless`](../packages/bundle/headless) | - | [`headless`](../packages/bundle/headless) | - | 将解析后的任务和运行选项提供给无界面运行器及其 sandbox-policy 配置。 |

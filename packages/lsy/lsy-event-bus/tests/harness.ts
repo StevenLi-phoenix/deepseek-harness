@@ -134,7 +134,7 @@ export const baseConfig: Config = {
   ],
   suppress: { actors: ['dsh-bot'], markers: ['Dsh-Agent:'] },
   retainEvents: 100,
-  retainBatches: 100,
+  retainBatches: 100, flowChangesKept: 200,
   maxTextChars: 2000,
   notifySessionResult: true,
   reportScheduledTurns: true,

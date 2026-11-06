@@ -5,6 +5,7 @@ const INVISIBLE = /[\u00AD\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\u
  * Fold a text for comparison: compatibility forms (full-width letters and digits) become plain, invisible characters go,
  * letters lower-case.
  * @param text - any text.
+ * @returns the folded text.
  */
 export function fold(text: string): string {
   return text.normalize('NFKC').replace(INVISIBLE, '').toLowerCase()
@@ -13,6 +14,7 @@ export function fold(text: string): string {
 /**
  * Fold a text and keep only letters and digits, so spacing, punctuation, and separators cannot split a match.
  * @param text - any text.
+ * @returns the folded text without characters other than letters and digits.
  */
 export function squash(text: string): string {
   return fold(text).replace(/[^\p{L}\p{N}]+/gu, '')

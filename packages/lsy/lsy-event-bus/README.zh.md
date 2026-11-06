@@ -73,7 +73,7 @@ kind: "package-reference"
 | `subscriptions[].session.persistent.maxSeedChars` | `20000` | 带过去的摘要的字符上限 |
 | `subscriptions[].session.persistent.key` | `subscription` | `subscription` 为订阅保留一个 Session；`subject` 为每个事件对象（一个仓库、一个视频）各保留一个，标题为 `<titlePrefix>: <subject>`，并把一批按对象拆开 |
 | `subscriptions[].session.project` | 未设置 | `workspacePath` 在 Web UI 里的项目标题：Session 在那里启动之前，总线建好目录并把它登记为项目，已有项目则不动（已有项目保留原标题） |
-| `suppress.actors` / `suppress.markers` | `[]` | agent 的身份与输出标记，命中的事件被丢弃；优先用身份（由宿主设定），不要依赖标记（取决于模型写了什么） |
+| `suppress.actors` / `suppress.markers` | `[]` | agent 的身份与输出标记，命中的事件被丢弃；优先用身份（由宿主设定），不要依赖标记（取决于模型写了什么）；lsy 事件 bundle 把 `actors` 设为 GitHub App 登录名 `dsh-events[bot]` |
 | `retainEvents` / `retainBatches` | `5000` / `1000` | 保留的历史；最旧的已结算记录先被清理 |
 | `flowChangesKept` | `200` | 为 `flow_read` 和消息流页面保留的通知流程改动条数 |
 | `maxTextChars` | `4000` | 每个事件不可信正文的存储字符上限 |

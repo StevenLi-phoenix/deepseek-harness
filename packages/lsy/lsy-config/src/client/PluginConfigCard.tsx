@@ -22,6 +22,12 @@ import css from './PluginConfigCard.module.css'
 /** Complete props of the factory component. */
 export type PluginConfigCardProps = FactoryComponentPropsOf<'settings.plugin-config'>
 
+/** The props the card reads; the factory passes the full set, a test passes only these. */
+export type PluginConfigCardUsedProps = Pick<
+  PluginConfigCardProps,
+  'entries' | 'exclude' | 'reloadWarning' | 'usePluginConfig' | 'useLocale' | 'load' | 'save' | 't'
+>
+
 /** The card's translate function. */
 export type PluginConfigTranslate = PluginConfigCardProps['t']
 
@@ -276,7 +282,7 @@ function EntryForm({ id, exclude, reloadWarning, state, locale, t, load, save }:
  * @returns the card, or nothing while no named entry has a form to show.
  */
 export function PluginConfigCard(
-  { entries, exclude: excluded, reloadWarning, usePluginConfig, useLocale, load, save, t }: PluginConfigCardProps,
+  { entries, exclude: excluded, reloadWarning, usePluginConfig, useLocale, load, save, t }: PluginConfigCardUsedProps,
 ): ReactNode {
   const key = entries.join(',')
   const excludeKey = (excluded ?? []).join(',')

@@ -167,9 +167,8 @@ function routeOf(route: RouteRow): FlowRoute {
  * @returns all windows, the latest events, and the owner's presence.
  */
 export function collectActivity(ctx: Context, now: number): FlowActivityView {
-  const get = ctx.get as (name: string) => unknown
-  const bus = get.call(ctx, 'lsyEventBus') as BusView | undefined
-  const presence = get.call(ctx, 'lsyPresence') as PresenceReader | undefined
+  const bus = (ctx.get as (name: string) => unknown)('lsyEventBus') as BusView | undefined
+  const presence = (ctx.get as (name: string) => unknown)('lsyPresence') as PresenceReader | undefined
   const events = bus?.events() ?? []
   const batches = bus?.batches() ?? []
   const view = presence?.view()

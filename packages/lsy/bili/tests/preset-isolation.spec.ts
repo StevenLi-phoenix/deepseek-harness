@@ -16,6 +16,7 @@ interface Row {
   name?: string
   config?: Record<string, unknown> | Row[]
   insert?: Row[]
+  isolate?: { compaction?: boolean }
 }
 
 const ROOT = join(import.meta.dirname, '../../../..')
@@ -195,7 +196,7 @@ describe('the qq-digest preset\'s tools', () => {
     expect(Array.isArray(group!.config)).toBe(true)
     const inner = (group!.config as Row[]).map(row => row.name)
     expect(inner.every(name => name?.startsWith('@deepseek-ai/dsh-compaction'))).toBe(true)
-    expect((group as unknown as { isolate?: { compaction?: boolean } }).isolate).toEqual({ compaction: true })
+    expect(group!.isolate).toEqual({ compaction: true })
   })
 
   it.each(['qqbot', 'qq-digest'] as const)('never gives the %s preset the owner memory or its tools, in any row or group', (preset) => {

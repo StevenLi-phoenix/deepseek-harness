@@ -15,6 +15,7 @@ export const FILTER_REASONS = [
   'no-words', 'tic', 'echo', 'same-speaker', 'own-account', 'owner-unverified', 'parent-missing', 'old', 'duplicate',
   'removed', 'pii', 'minor',
 ] as const
+/** One of {@link FILTER_REASONS}. */
 export type FilterReason = typeof FILTER_REASONS[number]
 
 /** Words that mark the owner or the agent; a line naming one is left out. Lowercase compare. */
@@ -38,6 +39,7 @@ const CITIES = [
 
 /** Kinds of personal information never stored, each with its own rule. */
 export const PII_KINDS = ['name', 'qq', 'uid', 'phone', 'email', 'address', 'org', 'place', 'nick'] as const
+/** One of {@link PII_KINDS}. */
 export type PiiKind = typeof PII_KINDS[number]
 
 // Specific patterns first: a phone or UID number is not also reported as a QQ number.

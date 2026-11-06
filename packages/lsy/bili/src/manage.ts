@@ -214,6 +214,7 @@ export function parseLedger(answer: Record<string, unknown>): LedgerView {
 /**
  * QR modules as rows of `0`/`1`, so only the picture leaves the Host.
  * @param url - what the code encodes; it carries the sign-in key.
+ * @returns one string per row, border of 1 module included.
  */
 export function qrModules(url: string): string[] {
   return encode(url, { border: 1 }).data.map(row => row.map(dark => (dark ? '1' : '0')).join(''))
@@ -224,7 +225,10 @@ export class ManageClient {
   /** @param hooks - base URL, token, logging. */
   constructor(private readonly hooks: ManageHooks) {}
 
-  /** Whether a manage token is set right now. */
+  /**
+   * Whether a manage token is set right now.
+   * @returns true when the token is a non-empty string.
+   */
   async hasToken(): Promise<boolean> {
     const token = await this.hooks.token()
     return token !== undefined && token !== ''
@@ -233,6 +237,8 @@ export class ManageClient {
   /**
    * The full status: accounts with renewal facts, and the gate with its brake.
    * @param signal - cancellation.
+   * @returns the parsed status.
+   * @throws {ManageError} when the request fails or times out.
    */
   async status(signal?: AbortSignal): Promise<ManageStatus> {
     return parseManageStatus(await this.request('GET', 'status', '/v1/status', undefined, MANAGE_TIMEOUT_MS, signal))
@@ -242,13 +248,19 @@ export class ManageClient {
    * Switch the gate's mode.
    * @param mode - `auto` or `readonly`.
    * @throws {ManageError} `mode_refused` (HTTP 409) while a brake is active and the mode is `auto`.
+   * @param signal - cancellation.
+   * @returns the mode in force and the active brake, if any.
    */
   async setMode(mode: GateMode, signal?: AbortSignal): Promise<{ mode: string; brake: BrakeView | null }> {
     const answer = await this.request('POST', 'gate/mode', '/v1/manage/gate/mode', { mode }, MANAGE_TIMEOUT_MS, signal)
     return { mode: clean(answer['mode'], 40), brake: parseManageStatus({ gate: { brake: answer['brake'] } }).gate?.brake ?? null }
   }
 
-  /** Release the brake. Answers whether one was set. */
+  /**
+   * Release the brake. Answers whether one was set.
+   * @param signal - cancellation.
+   * @returns whether a brake was released, and the mode in force.
+   */
   async releaseBrake(signal?: AbortSignal): Promise<{ released: boolean; mode: string }> {
     const answer = await this.request('POST', 'brake/release', '/v1/manage/brake/release', {}, MANAGE_TIMEOUT_MS, signal)
     return { released: answer['released'] === true, mode: clean(answer['mode'], 40) }
@@ -257,6 +269,8 @@ export class ManageClient {
   /**
    * Recent ledger rows.
    * @param limit - rows wanted, at most {@link LEDGER_MAX_ROWS}.
+   * @param signal - cancellation.
+   * @returns the parsed ledger rows.
    */
   async ledger(limit: number, signal?: AbortSignal): Promise<LedgerView> {
     const rows = Math.min(Math.max(1, Math.floor(limit)), LEDGER_MAX_ROWS)
@@ -267,6 +281,8 @@ export class ManageClient {
    * Start a QR sign-in.
    * @param id - bili-svc account id.
    * @throws {ManageError} `not_owner` (HTTP 409) for an account whose session another service owns.
+   * @param signal - cancellation.
+   * @returns the QR key, the URL it encodes, and its expiry; throws {@link ManageError} `bad_answer` when bili-svc sends no code.
    */
   async loginStart(id: string, signal?: AbortSignal): Promise<QrStart> {
     const answer = await this.request('POST', 'login/qr', `/v1/manage/accounts/${encodeURIComponent(id)}/login/qr`, {}, MANAGE_TIMEOUT_MS, signal)
@@ -281,6 +297,8 @@ export class ManageClient {
    * Where a QR sign-in stands.
    * @param id - bili-svc account id.
    * @param key - the key {@link loginStart} returned.
+   * @param signal - cancellation.
+   * @returns the state and bili-svc's message, or null when it sends none.
    */
   async loginPoll(id: string, key: string, signal?: AbortSignal): Promise<QrPoll> {
     const answer = await this.request('GET', 'login/qr', `/v1/manage/accounts/${encodeURIComponent(id)}/login/qr?key=${encodeURIComponent(key)}`, undefined, MANAGE_TIMEOUT_MS, signal)
@@ -295,6 +313,7 @@ export class ManageClient {
    * @param id - bili-svc account id.
    * @returns whether it was renewed (false: nothing to renew yet).
    * @throws {ManageError} `refresh_failed` (HTTP 502) with bili-svc's reason.
+   * @param signal - cancellation.
    */
   async refresh(id: string, signal?: AbortSignal): Promise<{ refreshed: boolean }> {
     const answer = await this.request('POST', 'session/refresh', `/v1/manage/accounts/${encodeURIComponent(id)}/session/refresh`, {}, SESSION_TIMEOUT_MS, signal)
@@ -305,6 +324,7 @@ export class ManageClient {
    * Ask Bilibili whether an account's session still works (bili-svc's `nav` probe, which also renews a session that is due).
    * @param id - bili-svc account id.
    * @returns `valid` or `invalid` by the probe's `isLogin`, and the days left when bili-svc knew.
+   * @param signal - cancellation.
    */
   async check(id: string, signal?: AbortSignal): Promise<{ outcome: 'valid' | 'invalid'; days: number | null }> {
     const answer = await this.request('POST', 'session/check', `/v1/manage/accounts/${encodeURIComponent(id)}/session/check`, {}, SESSION_TIMEOUT_MS, signal)
@@ -314,6 +334,7 @@ export class ManageClient {
   /**
    * Sign an account out: bili-svc drops its session.
    * @param id - bili-svc account id; sent again as the confirmation.
+   * @param signal - cancellation.
    */
   async logout(id: string, signal?: AbortSignal): Promise<void> {
     await this.request('POST', 'logout', `/v1/manage/accounts/${encodeURIComponent(id)}/logout`, { confirm: id }, MANAGE_TIMEOUT_MS, signal)

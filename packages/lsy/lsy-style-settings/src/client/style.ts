@@ -26,7 +26,10 @@ export interface StyleState {
   error: string | null
 }
 
-/** @returns a store holding the not-yet-loaded state. */
+/**
+ * Create the style store in its not-yet-loaded state (no panel, no timestamp, not stale, not saving).
+ * @returns a fresh store; each call returns an independent one.
+ */
 export function createStyleStore(): SnapshotStore<StyleState> {
   return createSnapshotStore<StyleState>({ panel: null, checkedAt: null, stale: false, saving: false, error: null })
 }
@@ -100,7 +103,10 @@ export class StyleLoader {
     private readonly now: () => number = Date.now,
   ) {}
 
-  /** @returns settlement after the panel is published; concurrent callers share the read in flight. */
+  /**
+   * Read the panel and publish it to the store.
+   * @returns settlement after the panel is published; concurrent callers share the read in flight.
+   */
   refresh(): Promise<void> {
     if (this.inFlight !== undefined) return this.inFlight
     const request = this.query().finally(() => { this.inFlight = undefined })

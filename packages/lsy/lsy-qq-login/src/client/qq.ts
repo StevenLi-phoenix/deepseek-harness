@@ -28,7 +28,10 @@ export interface QqState {
   codeDeclined: boolean
 }
 
-/** @returns a store holding the not-yet-loaded state. */
+/**
+ * Create the store the section renders.
+ * @returns a store holding the not-yet-loaded state.
+ */
 export function createQqStore(): SnapshotStore<QqState> {
   return createSnapshotStore<QqState>({ panel: null, checkedAt: null, stale: false, codeRequested: false, codeDeclined: false })
 }
@@ -65,7 +68,10 @@ export class QqLoader {
     private readonly now: () => number = Date.now,
   ) {}
 
-  /** @returns settlement after the answer is published; concurrent callers share the request in flight. */
+  /**
+   * Query the Host for the panel and publish the answer to the store.
+   * @returns settlement after the answer is published; concurrent callers share the request in flight.
+   */
   refresh(): Promise<void> {
     if (this.inFlight !== undefined) return this.inFlight
     const request = this.query().finally(() => { this.inFlight = undefined })

@@ -17,7 +17,11 @@ interface TicDay {
   perLine: Record<string, number>
 }
 
-/** Text of a message's content blocks. */
+/**
+ * Text of a message's content blocks.
+ * @param message - a message whose `content` may be anything.
+ * @returns the `text` of its text blocks joined by newlines; empty when `content` is not an array.
+ */
 export function textOf(message: { content?: unknown }): string {
   if (!Array.isArray(message.content)) return ''
   return (message.content as Array<{ type?: string; text?: string }>).filter(block => block.type === 'text').map(block => block.text ?? '').join('\n')

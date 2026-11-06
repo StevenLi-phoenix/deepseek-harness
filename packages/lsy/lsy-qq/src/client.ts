@@ -114,23 +114,36 @@ export class RecorderClient {
 
   // ---- state ----
 
-  /** Register a listener. @returns the unsubscribe function. */
+  /**
+   * Register a listener for link and status changes.
+   * @param listener - called on every change; kept until the returned function runs.
+   * @returns the function that unsubscribes the listener.
+   */
   listen(listener: ClientListener): () => void {
     this.listeners.add(listener)
     return () => { this.listeners.delete(listener) }
   }
 
-  /** @returns the link state. */
+  /**
+   * The state of the connection to the recorder.
+   * @returns the link state.
+   */
   link(): LinkState {
     return this.state
   }
 
-  /** @returns the recorder's last reported status, while the link is up. */
+  /**
+   * The recorder's most recent status report.
+   * @returns the status while the link is `ok`, otherwise undefined.
+   */
   status(): Status | undefined {
     return this.state === 'ok' ? this.lastStatus : undefined
   }
 
-  /** @returns what the recorder announced in `hello`. */
+  /**
+   * What the recorder announced in its `hello` answer.
+   * @returns the announcement, or undefined before the first successful hello.
+   */
   helloOf(): Hello | undefined {
     return this.hello
   }
@@ -138,13 +151,17 @@ export class RecorderClient {
   /**
    * Whether the recorder in front of us offers an optional capability.
    * @param feature - a key of {@link FEATURE_MINOR}.
+   * @returns false before the first hello, for an unknown key, or when the recorder's protocol minor is lower than the feature needs.
    */
   supports(feature: string): boolean {
     const needed = FEATURE_MINOR[feature]
     return this.hello !== undefined && needed !== undefined && this.hello.protocol.minor >= needed
   }
 
-  /** @returns the connection as the Settings page and the overview show it, synchronously. */
+  /**
+   * The connection as the Settings page and the overview show it, computed synchronously from cached state.
+   * @returns the connection state, with `selfId` null while the recorder is unreachable.
+   */
   connection(): QqConnection {
     if (this.state === 'recorder-down' || this.state === 'protocol-mismatch') {
       return { state: this.state, since: this.since, attempt: this.attempt, lastError: this.lastError ?? null, selfId: null }
@@ -254,10 +271,12 @@ export class RecorderClient {
           wait = this.retry.first
           await this.pushConfig()
           await this.follow()
+          // oxlint-disable-next-line typescript/no-unnecessary-condition -- stop() sets it while a request is awaited.
           if (this.stopped) return
           this.setState('recorder-down', 'the event stream ended')
         }
       } catch (error: unknown) {
+        // oxlint-disable-next-line typescript/no-unnecessary-condition -- stop() sets it while a request is awaited.
         if (this.stopped) return
         if (error instanceof RecorderUnavailable && error.reason === 'protocol-mismatch') {
           this.setState('protocol-mismatch', error.message)
@@ -283,6 +302,7 @@ export class RecorderClient {
     if (!this.supports('events')) {
       while (!this.stopped && this.state === 'ok') {
         await this.delay(5000)
+        // oxlint-disable-next-line typescript/no-unnecessary-condition -- stop() sets it while a request is awaited.
         if (this.stopped) return
         this.lastStatus = await this.call('GET', PATHS.status, StatusDto)
         this.changed()
@@ -434,7 +454,8 @@ export class RecorderClient {
       throw new RecorderError(answer.status, 'error', `HTTP ${answer.status}`)
     }
     const raw = answer.headers[MEDIA_HEADER]
-    const described = MediaHeaderDto.safeParse(typeof raw === 'string' ? JSON.parse(raw) as unknown : undefined)
+    const rawHeader: unknown = typeof raw === 'string' ? JSON.parse(raw) : undefined
+    const described = MediaHeaderDto.safeParse(rawHeader)
     if (!described.success || described.data.bytes !== answer.body.length) {
       throw new RecorderError(200, 'invalid-response', 'the recorder\'s description of the image does not match the file')
     }
@@ -443,50 +464,89 @@ export class RecorderClient {
 
   // ---- the API ----
 
-  /** @returns every group the account is in. */
+  /**
+   * Every group the account is in.
+   * @returns the groups, recorded ones first.
+   */
   groups(): Promise<Group[]> {
     return this.call('GET', PATHS.groups, GroupDto.array())
   }
 
-  /** @returns recent messages of a recorded group, oldest first. */
+  /**
+   * Recent messages of a recorded group.
+   * @param groupId - the QQ group number.
+   * @param options - `sinceMs` is the lookback in milliseconds (negative is treated as 0), `limit` the maximum count, `userId` restricts
+   *   to one sender.
+   * @returns the messages, oldest first.
+   */
   recent(groupId: string, options: { sinceMs: number; limit: number; userId?: string }): Promise<Message[]> {
     const q = new URLSearchParams({ groupId, sinceMs: String(Math.max(0, Math.round(options.sinceMs))), limit: String(options.limit),
       ...options.userId === undefined ? {} : { userId: options.userId } })
     return this.call('GET', `${PATHS.messages}?${q.toString()}`, MessageListDto)
   }
 
-  /** @returns a page of a recorded group's messages after a cursor, in log order. */
+  /**
+   * A page of a recorded group's messages in log order.
+   * @param groupId - the QQ group number.
+   * @param after - the cursor of the last message already seen; undefined starts at the oldest message.
+   * @param limit - the maximum number of messages in the page.
+   * @returns the page, with the cursor for the next one or null at the end.
+   */
   page(groupId: string, after: string | undefined, limit: number): Promise<MessagePage> {
     const q = new URLSearchParams({ groupId, limit: String(limit), ...after === undefined ? {} : { after } })
     return this.call('GET', `${PATHS.messages}?${q.toString()}`, MessagePageDto)
   }
 
-  /** @returns matches, newest first. */
+  /**
+   * Full-text search over the recorded messages.
+   * @param query - the text to look for.
+   * @param options - `groupId` limits the search to one group, `limit` caps the matches.
+   * @returns the matches, newest first.
+   */
   search(query: string, options: { groupId?: string; limit: number }): Promise<Message[]> {
     return this.call('POST', PATHS.search, MessageListDto, { body: { query, ...options.groupId === undefined ? {} : { groupId: options.groupId }, limit: options.limit } })
   }
 
-  /** @returns the messages of a group by their OneBot ids. */
+  /**
+   * Messages of a group by their OneBot ids.
+   * @param groupId - the QQ group number.
+   * @param messageIds - OneBot message ids; only the first 200 are sent.
+   * @returns the messages the recorder holds, in log order; unknown ids are absent.
+   */
   lookup(groupId: string, messageIds: readonly string[]): Promise<Message[]> {
     return this.call('POST', PATHS.lookup, MessageListDto, { body: { groupId, messageIds: messageIds.slice(0, 200) } })
   }
 
-  /** @returns the member names a group's recorded messages show. */
+  /**
+   * The member names a group's recorded messages show.
+   * @param groupId - the QQ group number.
+   * @returns one entry per distinct user id, with the nickname and group card seen.
+   */
   members(groupId: string): Promise<Member[]> {
     return this.call('GET', PATHS.members(groupId), MembersDto)
   }
 
-  /** @returns NapCat's login as the recorder reads it. */
+  /**
+   * NapCat's login state as the recorder reads it.
+   * @param fresh - true asks the recorder to query NapCat again instead of answering from its cache.
+   * @returns the login state.
+   */
   login(fresh: boolean): Promise<Login> {
     return this.call('GET', `${PATHS.login}${fresh ? '?fresh=1' : ''}`, LoginDto)
   }
 
-  /** @returns the answer to asking NapCat for a fresh login code. */
+  /**
+   * Ask NapCat for a fresh login code.
+   * @returns the recorder's answer to the request.
+   */
   refreshLogin(): Promise<Refresh> {
     return this.call('POST', PATHS.loginRefresh, RefreshDto, { body: {} })
   }
 
-  /** @returns the digest state the recorder holds from before the move to DSH. */
+  /**
+   * The digest state the recorder holds from before digests moved to DSH.
+   * @returns the old digests, notes and sessions, for a one-time import.
+   */
   legacyState(): Promise<LegacyDigestState> {
     return this.call('GET', PATHS.legacy, LegacyDigestStateDto)
   }

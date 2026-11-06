@@ -38,14 +38,14 @@ Mount it once at the root; the lsy event bundle does, ahead of every writer of s
 
 A plugin that writes text others can read looks the service up when it writes, with `ctx.get`, and refuses the write when the guard is absent:
 
-```ts
+```js
 const guard = ctx.get('lsyGuard')
 if (guard === undefined) return 'refused: the content guard is not mounted'
 const verdict = await guard.check(text, { purpose: 'persona_update', audience: 'public', sessionId })
 if (!verdict.ok) return `refused (${verdict.rule}): ${verdict.publicReason}`
 ```
 
-The check never rejects, so no `try` is needed; a plugin without the guard in its dependency graph declares a local structural type for it instead of importing this package. A text is checked as written, so a caller checks the exact string it stores, once per write.
+The check never rejects, so no `try` is needed; a plugin without the guard in its dependency graph declares a local structural type for it instead of importing this package. A text is checked as written, so a caller checks the exact string it stores, once per write. A refusal's `publicReason` never repeats the text and may go back to the model.
 
 `purpose` is a short identifier (`persona_update`, `style_note`, `qq_group_note`, `bili_channel_note`, lowercase letters, digits, `_`, `.`, `-`, at most 40 characters). `audience` is `public` for text anyone can read and `channel` for the readers of one QQ group or Bilibili account. The two differ in one thing: the model layer can be switched off for `channel` and never for `public`.
 

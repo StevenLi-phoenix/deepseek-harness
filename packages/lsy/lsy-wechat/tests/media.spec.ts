@@ -160,9 +160,9 @@ describe('uploadMedia', () => {
     expect(kind).toBe('image')
     expect(requests).toEqual([expect.objectContaining({
       media_type: 1, to_user_id: 'owner@im.wechat', rawsize: PNG.byteLength, filesize: 32,
-      rawfilemd5: expect.stringMatching(/^[0-9a-f]{32}$/) as unknown,
-      filekey: expect.stringMatching(/^[0-9a-f]{32}$/) as unknown,
-      aeskey: expect.stringMatching(/^[0-9a-f]{32}$/) as unknown,
+      rawfilemd5: expect.stringMatching(/^[0-9a-f]{32}$/) as string,
+      filekey: expect.stringMatching(/^[0-9a-f]{32}$/) as string,
+      aeskey: expect.stringMatching(/^[0-9a-f]{32}$/) as string,
     })])
     expect(cdn.uploads[0]!.url).toMatch(/^https:\/\/cdn\.test\/c2c\/upload\?encrypted_query_param=up%2B1&filekey=[0-9a-f]{32}$/)
     expect(cdn.uploads[0]!.headers['content-type']).toBe('application/octet-stream')

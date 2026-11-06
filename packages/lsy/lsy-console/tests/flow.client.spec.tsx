@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { FlowActivityView, FlowRecentItem, FlowWindowActivity, OverviewView } from '../src/views.ts'
 import { GRAPH, GRAPH_BUILT, PLANNED_COUNT } from '../src/client/flow-graph.ts'
-import { FlowPage, type FlowProps } from '../src/client/Flow.tsx'
+import { FlowPage, type FlowPageProps, type FlowProps } from '../src/client/Flow.tsx'
 import { clip } from '../src/client/FlowBox.tsx'
 import { FlowCanvas } from '../src/client/FlowCanvas.tsx'
 import { buildGraph, edgeKey } from '../src/client/flow-model.ts'
@@ -66,14 +66,14 @@ function mount({ overview = {}, activity = {}, registered = [] }: Reads = {}) {
   activityStore.update((draft) => { Object.assign(draft, activity) })
   const refresh = vi.fn()
   const openSettings = vi.fn()
-  const props = {
+  const props: FlowPageProps = {
     useOverview: bindSnapshotSelector(overviewStore),
     useActivity: bindSnapshotSelector(activityStore),
     refresh,
     openSettings,
     canManage: (section: string) => registered.includes(section),
     t,
-  } as unknown as FlowProps
+  }
   const view = render(<FlowPage {...props} />)
   return { refresh, openSettings, view }
 }

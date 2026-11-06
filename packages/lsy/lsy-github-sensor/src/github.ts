@@ -78,23 +78,47 @@ function parseList<T>(schema: z.ZodType<T>, body: unknown): T[] | undefined {
   return parsed.success ? parsed.data : undefined
 }
 
-/** Releases visible to the token, without drafts so a later publication still counts as new. */
+/**
+ * Releases visible to the token, without drafts so a later publication still counts as new.
+ * @param body - decoded JSON body.
+ * @returns releases in API order, or undefined for a malformed body.
+ */
 export const parseReleases = (body: unknown): Release[] | undefined =>
   parseList(releaseSchema, body)?.filter(release => release.draft !== true)
-/** Tags, newest first as the API orders them. */
+/**
+ * Tags, newest first as the API orders them.
+ * @param body - decoded JSON body.
+ * @returns tags, or undefined for a malformed body.
+ */
 export const parseTags = (body: unknown): Tag[] | undefined => parseList(tagSchema, body)
-/** Commits on one branch, newest first. */
+/**
+ * Commits on one branch, newest first.
+ * @param body - decoded JSON body.
+ * @returns commits, or undefined for a malformed body.
+ */
 export const parseCommits = (body: unknown): Commit[] | undefined => parseList(commitSchema, body)
-/** Notification threads, most recently updated first. */
+/**
+ * Notification threads, most recently updated first.
+ * @param body - decoded JSON body.
+ * @returns threads, or undefined for a malformed body.
+ */
 export const parseThreads = (body: unknown): Thread[] | undefined => parseList(threadSchema, body)
 
-/** One release, as a webhook `release` payload carries it; undefined when the shape is unexpected. */
+/**
+ * One release, as a webhook `release` payload carries it.
+ * @param value - the decoded `release` field.
+ * @returns the release, or undefined when it does not match the release schema.
+ */
 export function parseRelease(value: unknown): Release | undefined {
   const parsed = releaseSchema.safeParse(value)
   return parsed.success ? parsed.data : undefined
 }
 
-/** Parse an ISO timestamp, omitting the field when absent. */
+/**
+ * Parse an ISO timestamp, omitting the field when absent.
+ * @param value - ISO 8601 string, or null/undefined.
+ * @returns `{ occurredAt }` in epoch milliseconds, or `{}` when the value is absent or unparsable.
+ */
 export function occurredAt(value: string | null | undefined): { occurredAt?: number } {
   if (value === null || value === undefined) return {}
   const parsed = Date.parse(value)

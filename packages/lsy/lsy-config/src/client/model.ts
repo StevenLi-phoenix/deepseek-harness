@@ -42,17 +42,26 @@ export interface Plan {
 /** Longest value the review prints before cutting it. */
 const REVIEW_LIMIT = 80
 
-/** @returns the map key of a field path. */
+/**
+ * Join a field path into the key that `Drafts` and `Change` use.
+ * @param path - field path.
+ * @returns the key; equal paths give equal keys.
+ */
 export function pathKey(path: readonly string[]): string {
   return path.join('\u0000')
 }
 
-/** @returns the value shown for a leaf now: the stored one, else the schema default. */
+/**
+ * Pick the value a leaf shows now.
+ * @param leaf - the field.
+ * @returns the stored value, else the schema default, else undefined.
+ */
 export function shownValue(leaf: LeafField): ConfigValue | undefined {
   return leaf.value ?? leaf.default
 }
 
 /**
+ * Format a field value as the text its control holds.
  * @param kind - how the field is edited.
  * @param value - a value of the field.
  * @returns the text the field's control holds for it.
@@ -65,7 +74,11 @@ export function valueText(kind: LeafField['kind'], value: ConfigValue | undefine
   return typeof value === 'string' ? value : String(value)
 }
 
-/** @returns the text a leaf's control holds before any edit. */
+/**
+ * Format the value a leaf shows now as control text.
+ * @param leaf - the field.
+ * @returns the text the control holds before any edit.
+ */
 export function initialText(leaf: LeafField): string {
   return valueText(leaf.kind, shownValue(leaf))
 }
@@ -76,6 +89,7 @@ type Parsed =
   | { readonly ok: false }
 
 /**
+ * Turn control text back into an edit of one field.
  * @param leaf - the field.
  * @param text - what the owner typed or chose.
  * @returns the edit the text stands for; an empty text of an optional field clears it.
@@ -120,7 +134,11 @@ export function parseText(leaf: LeafField, text: string): Parsed {
   }
 }
 
-/** @returns a value as one short line for the review. */
+/**
+ * Format a value for the review list.
+ * @param value - the value, or undefined for none.
+ * @returns one line, cut with an ellipsis after 80 characters; empty for undefined and null.
+ */
 export function brief(value: ConfigValue | undefined): string {
   if (value === undefined || value === null) return ''
   const text = typeof value === 'string' ? value : Array.isArray(value) && value.every(item => typeof item === 'string')
@@ -169,6 +187,7 @@ function plan1(leaf: LeafField, draft: Draft): { change: Change; op: ConfigOp } 
 }
 
 /**
+ * Compare staged drafts with what each field shows and plan the save.
  * @param entry - the entry as the Host last described it.
  * @param drafts - the staged edits.
  * @returns the edits a save would send, their review lines, and the drafts the fields do not accept.
@@ -190,13 +209,18 @@ export function planEdits(entry: ConfigEntryView, drafts: Drafts): Plan {
   return { ops, changes, invalid, reload: changes.some(change => !change.volatile) }
 }
 
-/** @returns how many leaves a node holds, and how many of them the owner's patch sets. */
+/**
+ * Count the leaves below a list of nodes.
+ * @param nodes - form nodes, groups included.
+ * @returns how many leaves they hold in total, and how many of those the owner's patch sets.
+ */
 export function countLeaves(nodes: readonly FieldNode[]): { total: number; owner: number } {
   const leaves = leavesOf(nodes)
   return { total: leaves.length, owner: leaves.filter(leaf => leaf.layer === 'owner').length }
 }
 
 /**
+ * Choose the description text for a locale.
  * @param text - a schema description: one text, or one per locale (the empty key is the fallback).
  * @param locale - the active locale id.
  * @returns the text for the locale, else English, else the fallback, else any.

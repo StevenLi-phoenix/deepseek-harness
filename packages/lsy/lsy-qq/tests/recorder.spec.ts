@@ -85,7 +85,7 @@ describe('QqRecorder recording', () => {
   })
 
   it('keeps an image it cannot fetch as a row with its reason, and stops at the size cap', async () => {
-    const h = await bootRecorder({ fetch: vi.fn(async () => new Response(Buffer.alloc(5000), { status: 200 })) as never,
+    const h = await bootRecorder({ fetch: vi.fn(async () => new Response(Buffer.alloc(5000), { status: 200 })),
       config: { media: { maxImageBytes: 2048 } } })
     await connected(h)
     h.fake.push(groupMessage(GROUP, USER, [{ type: 'image', data: { url: 'https://gchat.qpic.cn/a.jpg' } }]))
@@ -96,7 +96,7 @@ describe('QqRecorder recording', () => {
 
   it('does not download images when turned off', async () => {
     const spy = vi.fn(async () => new Response(PNG))
-    const h = await bootRecorder({ fetch: spy as never, config: { media: { images: false } } })
+    const h = await bootRecorder({ fetch: spy, config: { media: { images: false } } })
     await connected(h)
     h.fake.push(groupMessage(GROUP, USER, [{ type: 'image', data: { url: 'https://gchat.qpic.cn/a.jpg' } }]))
     await until(() => rows(h).length === 1, 'the row')
@@ -117,7 +117,7 @@ describe('QqRecorder recording', () => {
   })
 
   it('drops the text and files of a recalled message, unless told to keep them', async () => {
-    const h = await bootRecorder({ fetch: vi.fn(async () => new Response(PNG)) as never })
+    const h = await bootRecorder({ fetch: vi.fn(async () => new Response(PNG)) })
     await connected(h)
     const event = groupMessage(GROUP, USER, [{ type: 'text', data: { text: '说错了的话' } }, { type: 'image', data: { url: 'https://gchat.qpic.cn/a.jpg' } }])
     h.fake.push(event)
@@ -150,7 +150,7 @@ describe('QqRecorder recording', () => {
 
 describe('QqRecorder retention', () => {
   it('deletes raw messages and downloads older than 30 days', async () => {
-    const h = await bootRecorder({ fetch: vi.fn(async () => new Response(PNG)) as never })
+    const h = await bootRecorder({ fetch: vi.fn(async () => new Response(PNG)) })
     await connected(h)
     const now = Date.now()
     h.fake.push(groupMessage(GROUP, USER, [{ type: 'text', data: { text: '三个月前的闲聊' } }, { type: 'image', data: { url: 'https://gchat.qpic.cn/a.jpg' } }], { time: Math.floor(now / 1000) - 90 * 86_400 }))
@@ -311,7 +311,7 @@ describe('QqRecorder backfill is gentle', () => {
       return history(params)
     })
     const h = await bootRecorder({ fake,
-      config: { groups: GROUPS, reconnectQuietMs: 0, backfill: { gapMs: 0, minIntervalMs: 0, ...backfill } as never } })
+      config: { groups: GROUPS, reconnectQuietMs: 0, backfill: { gapMs: 0, minIntervalMs: 0, ...backfill } } })
     await Promise.resolve()
     return Object.assign(h, { calls })
   }
@@ -370,7 +370,7 @@ describe('QqRecorder backfill is gentle', () => {
     await fake.listen()
     fake.handlers.set('get_group_list', () => [])
     fake.handlers.set('get_group_msg_history', () => ({ messages: [old] }))
-    const h = await bootRecorder({ fake, fetch: fetch as never, config: { groups: ['111111'], reconnectQuietMs: 0 } })
+    const h = await bootRecorder({ fake, fetch: fetch, config: { groups: ['111111'], reconnectQuietMs: 0 } })
     await until(() => h.recorder.store.recent('111111', { limit: 10 }).length === 1, 'the backfilled message')
     await sleep(200)
     expect(fetch).not.toHaveBeenCalled()
@@ -471,7 +471,7 @@ describe('QqRecorder serves the pictures it saved', () => {
   }
 
   it('lists a message\'s media with a short stable reference, and says whether the file is held', async () => {
-    const h = await bootRecorder({ fetch: vi.fn(async () => new Response(PNG)) as never })
+    const h = await bootRecorder({ fetch: vi.fn(async () => new Response(PNG)) })
     await connected(h)
     const item = await saved(h)
     expect(item).toMatchObject({ kind: 'image', saved: true })
@@ -487,7 +487,7 @@ describe('QqRecorder serves the pictures it saved', () => {
 
   it('hands out the file with its type and size, nothing fetched from QQ for it', async () => {
     const fetched = vi.fn(async () => new Response(PNG))
-    const h = await bootRecorder({ fetch: fetched as never })
+    const h = await bootRecorder({ fetch: fetched })
     await connected(h)
     const item = await saved(h)
     const before = fetched.mock.calls.length
@@ -498,7 +498,7 @@ describe('QqRecorder serves the pictures it saved', () => {
   })
 
   it('answers not-saved when images are off, when the download failed, after a recall, and for a group no longer recorded', async () => {
-    const h = await bootRecorder({ fetch: vi.fn(async () => new Response(PNG)) as never })
+    const h = await bootRecorder({ fetch: vi.fn(async () => new Response(PNG)) })
     await connected(h)
     const item = await saved(h)
     h.apply({ media: { images: false } })
@@ -525,7 +525,7 @@ describe('QqRecorder serves the pictures it saved', () => {
     await fake.listen()
     fake.handlers.set('get_group_list', () => [])
     fake.handlers.set('get_group_msg_history', () => ({ messages: [old] }))
-    const h = await bootRecorder({ fake, fetch: fetched as never })
+    const h = await bootRecorder({ fake, fetch: fetched })
     await until(() => h.recorder.lookup(GROUP, ['8001']).length === 1, 'the backfilled message')
     const [message] = h.recorder.lookup(GROUP, ['8001'])
     expect(message!.media[0]).toMatchObject({ kind: 'image', saved: false })

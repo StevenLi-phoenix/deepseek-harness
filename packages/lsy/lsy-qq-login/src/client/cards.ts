@@ -60,7 +60,8 @@ const TONES: Record<Headline['kind'], Tone> = {
 }
 
 /**
- * @param seconds - a span.
+ * Format a span as a coarse duration.
+ * @param seconds - a span; negative counts as 0.
  * @param t - translate seat.
  * @returns days and hours, hours and minutes, or minutes.
  */
@@ -76,6 +77,7 @@ export function formatDuration(seconds: number, t: Translate): string {
 const two = (value: number): string => String(value).padStart(2, '0')
 
 /**
+ * Format a time of day with seconds.
  * @param at - epoch milliseconds.
  * @returns local `HH:MM:SS`.
  */
@@ -85,6 +87,7 @@ export function clock(at: number): string {
 }
 
 /**
+ * Format when something happened, leaving the date out for today.
  * @param at - epoch milliseconds, or null.
  * @param now - the current time, to leave the date out for today.
  * @param t - translate seat.
@@ -145,6 +148,7 @@ export function headline(panel: QqPanel, now: number, t: Translate): Headline {
 }
 
 /**
+ * Build the rows of the connection card.
  * @param panel - the Host's answer.
  * @param now - the current time.
  * @param t - translate seat.
@@ -173,6 +177,7 @@ export function detailRows(panel: QqPanel, now: number, t: Translate): DetailRow
 }
 
 /**
+ * Describe how current the shown answer is.
  * @param state - what the store holds.
  * @param t - translate seat.
  * @returns when the shown answer was built, and whether it is current.

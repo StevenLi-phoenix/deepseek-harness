@@ -101,17 +101,28 @@ export class MonitorStorage {
     })
   }
 
-  /** Store a monitor that just started. */
+  /**
+   * Store a monitor that just started; the write is queued and a failure is logged, not thrown.
+   * @param id - the monitor's id.
+   * @param record - what a restart needs to start it again.
+   */
   save(id: string, record: MonitorRecord): void {
     this.write(`save monitor ${id}`, domain => domain.table('monitors').put(id, record))
   }
 
-  /** Forget a monitor that ended. */
+  /**
+   * Forget a monitor that ended; the write is queued and a failure is logged, not thrown.
+   * @param id - the monitor's id.
+   */
   forget(id: string): void {
     this.write(`forget monitor ${id}`, domain => domain.table('monitors').delete(id))
   }
 
-  /** Point a monitor at the Session its conversation moved to. */
+  /**
+   * Point a monitor at the Session its conversation moved to; the write is queued, and nothing changes when `id` is not stored.
+   * @param id - the monitor's id.
+   * @param owner - the new owner's Session id.
+   */
   moveTo(id: string, owner: string): void {
     this.write(`move monitor ${id}`, async (domain) => {
       const table = domain.table('monitors')

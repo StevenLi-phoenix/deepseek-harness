@@ -20,6 +20,7 @@ import { randomUUID } from 'node:crypto'
 import { Registry, processStart, publicView, type SessionRecord, type SessionView, type StartOf } from './registry.ts'
 import { LINE_LIMIT, addressPath, buildFrame, encodeAddress, parseWrapper, readPeerToken } from './wire.ts'
 
+/** Log sink the hub writes to; `message` is one line of text. */
 export interface HubLogger {
   debug(message: string): void
   info(message: string): void
@@ -36,6 +37,7 @@ export interface InboundMessage {
   claimedName: string | undefined
 }
 
+/** Settings for a `PeerHub`: paths, rate limits, logging, and the inbound-message handler. */
 export interface HubOptions {
   /** Directory for the inbox socket; created 0700. */
   stateDir: string
@@ -59,6 +61,7 @@ export interface HubOptions {
   maxAttempts?: number
 }
 
+/** Outcome of `PeerHub.send`: the recipient and message id on success, otherwise a reason the caller can show. */
 export type SendResult = { ok: true; to: SessionView; msgId: string } | { ok: false; error: string }
 
 /** `capacity` events at once, refilled evenly over a minute. */
@@ -102,8 +105,11 @@ const preview = (text: string, n = 60): string => {
   return flat.length <= n ? flat : `${flat.slice(0, n)}...`
 }
 
+/** Sends messages to Claude Code sessions of this account and receives theirs on one unix socket. */
 export class PeerHub {
+  /** Session registry the hub resolves recipients and senders against. */
   readonly registry: Registry
+  /** Path of the inbox unix socket, `cc.sock` inside `stateDir`. */
   readonly inboxPath: string
   private server: Server | undefined
   private peerRecord: string | undefined
@@ -117,6 +123,7 @@ export class PeerHub {
   private readonly attempts = new Map<string, number>()
   private readonly timers = new Set<NodeJS.Timeout>()
   private stopped = false
+  /** Counters since construction: messages sent, received, dropped on arrival, and refused or failed on send. */
   readonly stats = { sent: 0, received: 0, droppedIn: 0, refusedOut: 0 }
 
   constructor(private readonly o: HubOptions) {
@@ -131,6 +138,10 @@ export class PeerHub {
     this.notices = new Keyed(1, this.now)
   }
 
+  /**
+   * Create the 0700 state directory, listen on the inbox socket (0600), and write the peer record.
+   * Rejects if the directory is owned by another user or the socket cannot listen.
+   */
   async start(): Promise<void> {
     this.stopped = false
     await mkdir(this.o.stateDir, { recursive: true, mode: 0o700 })
@@ -150,6 +161,7 @@ export class PeerHub {
     this.o.logger.info(`cc-bridge: inbox ${this.inboxPath}; peer record ${this.peerRecord ?? 'not written'}`)
   }
 
+  /** Cancel pending retries, close the inbox socket, and remove the socket and peer record files. */
   async stop(): Promise<void> {
     this.stopped = true
     for (const t of this.timers) clearTimeout(t)
@@ -216,6 +228,10 @@ export class PeerHub {
 
   // ── listing and sending ──────────────────────────────────────────────────
 
+  /**
+   * Live sessions of this account, read fresh from the registry and stripped of socket path and session id.
+   * @returns the session views, newest activity first.
+   */
   async list(): Promise<SessionView[]> {
     return (await this.registry.sessions(true)).map(publicView)
   }
@@ -224,6 +240,8 @@ export class PeerHub {
    * Hand one message to a session's inbox.
    * @param selector - session name, pid, or session id prefix.
    * @param text - the message; the recipient sees it labelled as coming from the agent, not the user.
+   * @returns `ok: true` with the recipient and message id, or `ok: false` with the reason
+   *   (empty or oversized text, no unique match, rate limit, delivery failure); never throws.
    */
   async send(selector: string, text: string): Promise<SendResult> {
     if (text.trim() === '') return { ok: false, error: 'text is empty' }

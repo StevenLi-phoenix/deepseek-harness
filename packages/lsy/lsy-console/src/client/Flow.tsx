@@ -46,6 +46,9 @@ export interface FlowInjected {
 /** Props delivered by the slot. */
 export type FlowProps = PropsRuntime<'main'> & InjectFace<FlowInjected> & PropsLocale<'lsy.console'>
 
+/** The members of {@link FlowProps} the page reads. */
+export type FlowPageProps = Pick<FlowProps, 'useOverview' | 'useActivity' | 'refresh' | 'canManage' | 'openSettings' | 't'>
+
 const reducedMotion = (): boolean => typeof matchMedia !== 'function' || matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /** A number that runs to its new value instead of jumping. */
@@ -132,7 +135,7 @@ function Verdict({ trouble, loaded, onOpen, onFix, canFix, t }: {
  * @param props - the two stores, callbacks, and copy.
  * @returns the page.
  */
-export function FlowPage({ useOverview, useActivity, refresh, canManage, openSettings, t }: FlowProps): ReactNode {
+export function FlowPage({ useOverview, useActivity, refresh, canManage, openSettings, t }: FlowPageProps): ReactNode {
   const overview = useOverview(value => value)
   const activity = useActivity(value => value)
   const translate = t as Translate

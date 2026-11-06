@@ -40,9 +40,9 @@ describe('callService', () => {
   })
 
   it('turns a deadline into a timeout reason', async () => {
-    const hang = ((_url: unknown, init: RequestInit) => new Promise((_resolve, reject) => {
-      init.signal!.addEventListener('abort', () => { reject(new Error('aborted')) })
-    })) as unknown as typeof fetch
+    const hang: typeof fetch = (_url, init) => new Promise<Response>((_resolve, reject) => {
+      init!.signal!.addEventListener('abort', () => { reject(new Error('aborted')) })
+    })
     const failure = await callService('svc GET /x', 'http://h/x', {}, { timeoutMs: 20, retries: 0, retryDelayMs: 1, fetch: hang }).catch((e: unknown) => e)
     expect((failure as Error).message).toBe('svc GET /x timed out after 20 ms')
   })

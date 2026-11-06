@@ -182,7 +182,10 @@ describe('overview cards', () => {
     const observer = new Proxy({ connectionStatus: () => ({ state: 'connected', attempt: 0, selfId: '1' }), recordedGroups: () => 2 }, {
       get: (target, key) => {
         // The service container's own bookkeeping reads symbols; only named members are the page's doing.
-        if (typeof key === 'symbol') return Reflect.get(target, key) as unknown
+        if (typeof key === 'symbol') {
+          const member: unknown = Reflect.get(target, key)
+          return member
+        }
         touched.push(key)
         if (key === 'connectionStatus' || key === 'recordedGroups') return Reflect.get(target, key)
         throw new Error(`the overview touched lsyQq.${key}`)

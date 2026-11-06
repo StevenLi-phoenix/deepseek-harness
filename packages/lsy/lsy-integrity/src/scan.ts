@@ -70,12 +70,21 @@ export interface ScheduleState {
   readonly tasks?: Record<string, string>
 }
 
-/** Digest of a set of task digests. */
+/**
+ * Digest of a set of task digests.
+ * @param tasks - task id to the digest of its definition.
+ * @returns one digest that does not depend on the order of the entries.
+ */
 export function digestOfTasks(tasks: Readonly<Record<string, string>>): string {
   return sha(Object.entries(tasks).toSorted(([a], [b]) => a.localeCompare(b)).map(([id, digest]) => `${id}\0${digest}`).join('\n'))
 }
 
-/** How many tasks a set of task digests gained, lost, and changed against another. */
+/**
+ * How many tasks a set of task digests gained, lost, and changed against another.
+ * @param from - task id to digest before.
+ * @param to - task id to digest now.
+ * @returns the counts of ids only in `to`, only in `from`, and in both with different digests.
+ */
 export function diffTasks(
   from: Readonly<Record<string, string>>, to: Readonly<Record<string, string>>,
 ): { added: number; removed: number; changed: number } {
@@ -130,6 +139,7 @@ export const INSTRUCTION_FILES = ['AGENTS.md', 'CLAUDE.md', 'CLAUDE.local.md'] a
  * @param home - `DSH_HOME`.
  * @param workspaces - directories the agent works in.
  * @param userHome - the service user's home, for `~/.agents/skills`.
+ * @returns the watched files and directories: the patch files, the skill directories, the schedule file, and the instruction files.
  */
 export function targetsFor(home: string, workspaces: readonly string[], userHome: string): Target[] {
   const targets: Target[] = [

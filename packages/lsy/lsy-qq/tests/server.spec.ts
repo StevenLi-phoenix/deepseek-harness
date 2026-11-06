@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, statSync } from 'node:fs'
 import { request } from 'node:http'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { MEDIA_HEADER, MediaHeaderDto, PROTOCOL_HEADER, StatusDto, type RecorderEvent } from '../src/protocol.ts'
+import { MEDIA_HEADER, MediaHeaderDto, PROTOCOL_HEADER, StatusDto, type RecorderEvent, type Status } from '../src/protocol.ts'
 import { startRecorderServer, type RecorderServer } from '../src/server.ts'
 import { groupMessage } from './fake-onebot.ts'
 import { bootRecorder, connected, recorderConfig, shutdown, until, vi, type Booted } from './recorder-harness.ts'
@@ -42,7 +42,8 @@ function call(socketPath: string, method: string, path: string,
       res.on('data', (chunk: Buffer) => chunks.push(chunk))
       res.on('end', () => {
         const text = Buffer.concat(chunks).toString('utf8')
-        resolve({ status: res.statusCode ?? 0, body: text === '' ? undefined : JSON.parse(text) as unknown, headers: res.headers })
+        const body: unknown = text === '' ? undefined : JSON.parse(text)
+        resolve({ status: res.statusCode ?? 0, body, headers: res.headers })
       })
     })
     req.on('error', reject)
@@ -132,7 +133,8 @@ describe('qq-recorder server', () => {
 
   it('checks its own answers against the schema, so a drift fails here and not in DSH', async () => {
     const h = await boot({ config: false })
-    ;(h.recorder as unknown as { status(): unknown }).status = () => ({ connection: { state: 'connected' } })
+    // A deliberately incomplete answer, so the server's schema check has something to reject.
+    vi.spyOn(h.recorder, 'status').mockReturnValue({ connection: { state: 'connected' } } as Status)
     const answer = await call(h.socketPath, 'GET', '/v1/status')
     expect(answer.status).toBe(500)
     expect(h.logs.some(line => line.type === 'error' && line.text.includes('did not match its schema'))).toBe(true)
@@ -218,7 +220,7 @@ describe('qq-recorder server', () => {
 
   it('serves a saved picture with its description in a header, answers 404 not-saved otherwise, and 400 for a bad reference', async () => {
     const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('pixels-0123456789')])
-    const h = await boot({ fetch: vi.fn(async () => new Response(png)) as never })
+    const h = await boot({ fetch: vi.fn(async () => new Response(png)) })
     await connected(h)
     h.fake.push(groupMessage(GROUP, '10001', [{ type: 'image', data: { url: 'https://gchat.qpic.cn/a.png', file: 'a.png' } }]))
     await until(() => h.recorder.store.mediaOf(1).some(m => m.localPath !== null), 'the picture')

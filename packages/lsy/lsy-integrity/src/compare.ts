@@ -91,6 +91,7 @@ export async function scan(
 /**
  * The notice for a set of changes.
  * @param changes - what differs from the baseline.
+ * @returns a title, and a body when the notice needs one; it names what changed and never shows the content.
  */
 export function integrityNotice(changes: readonly Change[]): { title: string; body?: string } {
   const verb = { changed: '被改动', added: '新出现', removed: '被删除' } as const

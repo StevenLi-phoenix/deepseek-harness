@@ -70,6 +70,7 @@ export type EndpointName = keyof typeof ENDPOINTS
 /**
  * Whether a name is one of {@link ENDPOINTS}.
  * @param name - a name from anywhere.
+ * @returns true when `name` is a string key of the endpoint table.
  */
 export function isEndpointName(name: unknown): name is EndpointName {
   return typeof name === 'string' && Object.hasOwn(ENDPOINTS, name)

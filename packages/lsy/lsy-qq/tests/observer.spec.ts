@@ -58,7 +58,7 @@ async function boot(r: Rig,
   await ctx.plugin(QqObserver, {
     url: r.fake.url, groups: [GROUP], recorder: { socket: r.socketPath }, login: { enabled: false },
     digest: { enabled: false, workspacePath: join(tmpdir(), 'lsy-qq-observer-ws') }, ...options.config,
-  } as never)
+  })
   const observer = ctx.lsyQq
   await until(() => observer.connectionStatus().state === 'connected', 'the recorder and QQ')
   return { ctx, observer, logs }
@@ -197,8 +197,7 @@ describe('QqObserver takes over the old digest state', () => {
 })
 
 describe('QqObserver owner notices', () => {
-  type Checker = { checkOutage(botOffline: boolean): Promise<void> }
-  const check = (h: { observer: QqObserver }) => (h.observer as unknown as Checker).checkOutage(false)
+  const check = (h: { observer: QqObserver }) => h.observer['checkOutage'](false)
 
   async function down() {
     const notifier = { send: vi.fn(async () => {}) }
@@ -222,7 +221,7 @@ describe('QqObserver owner notices', () => {
     ctx.provide('permissionPresets', {} as never)
     ctx.provide('sessionTitle', {} as never)
     if (options.notifier !== undefined) ctx.provide('lsyNotifier', options.notifier as never)
-    await ctx.plugin(QqObserver, { url, groups: [GROUP], recorder: { socket: r.socketPath }, login: { enabled: false }, digest: { enabled: false, workspacePath: join(tmpdir(), 'ws') }, ...options.config } as never)
+    await ctx.plugin(QqObserver, { url, groups: [GROUP], recorder: { socket: r.socketPath }, login: { enabled: false }, digest: { enabled: false, workspacePath: join(tmpdir(), 'ws') }, ...options.config })
     const observer = ctx.lsyQq
     await until(() => observer.connectionStatus().state === 'reconnecting', 'the failing connection')
     await until(() => r.recorder.status().outage.disconnectedSince !== null, 'the outage clock')
@@ -311,7 +310,7 @@ describe('QqObserver owner notices', () => {
 })
 
 describe('QqObserver configuration', () => {
-  const make = (over: Record<string, unknown>) => () => new QqObserver(new Context(), Config({ digest: { workspacePath: '/tmp/d' }, ...over } as never))
+  const make = (over: Record<string, unknown>) => () => new QqObserver(new Context(), Config({ digest: { workspacePath: '/tmp/d' }, ...over }))
 
   it('refuses an address that is not on this machine or the tailnet, a group that is not a number, and a relative path', () => {
     expect(make({ url: 'ws://192.168.1.50:3001' })).toThrow('on this machine')

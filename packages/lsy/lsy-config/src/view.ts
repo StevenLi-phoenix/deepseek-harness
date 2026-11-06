@@ -139,6 +139,7 @@ export type ConfigSaveResult =
   | { readonly ok: false; readonly reason: ConfigSaveFailure; readonly message: string }
 
 /**
+ * Format a field path for display.
  * @param path - a field path.
  * @returns the path as dotted text, for logs and display.
  */
@@ -147,6 +148,7 @@ export function pathLabel(path: readonly string[]): string {
 }
 
 /**
+ * Flatten a form into its leaves.
  * @param nodes - the nodes of a form.
  * @returns every leaf below them, depth first.
  */

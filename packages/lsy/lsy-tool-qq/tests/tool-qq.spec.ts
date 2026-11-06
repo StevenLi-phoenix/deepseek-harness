@@ -151,7 +151,8 @@ describe('lsy-tool-qq', () => {
     expect(JSON.parse(await call('qq_forget', { group: '交流' }))).toEqual({ deleted: 3 })
     expect(observer['forgetDigests']).toHaveBeenCalledWith({ groupId: '111111' })
     expect(JSON.parse(await call('qq_forget', { older_than_days: 30 }))).toEqual({ deleted: 3 })
-    expect((observer['forgetDigests'] as ReturnType<typeof vi.fn>).mock.calls[1]![0]).toEqual({ beforeMs: expect.any(Number) as unknown })
+    const anyNumber: unknown = expect.any(Number)
+    expect((observer['forgetDigests'] as ReturnType<typeof vi.fn>).mock.calls[1]![0]).toEqual({ beforeMs: anyNumber })
     expect(JSON.parse(await call('qq_forget', {}))).toEqual({ error: 'give a group, or older_than_days, or both' })
   })
 

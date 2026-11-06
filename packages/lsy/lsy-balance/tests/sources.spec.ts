@@ -4,7 +4,7 @@ import { DEFAULT_SOURCES, readSource, type BalanceSource } from '../src/sources.
 /** A fetch double answering by URL; records the headers each request carried. */
 function server(answers: Record<string, { status?: number; body: unknown } | Error>) {
   const calls: { url: string; headers: Record<string, string> }[] = []
-  const fetch = vi.fn((input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+  const fetch: typeof globalThis.fetch = vi.fn((input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const url = String(input instanceof Request ? input.url : input)
     calls.push({ url, headers: Object.fromEntries(new Headers(init?.headers).entries()) })
     const answer = answers[url]
@@ -12,7 +12,7 @@ function server(answers: Record<string, { status?: number; body: unknown } | Err
     if (answer instanceof Error) return Promise.reject(answer)
     return Promise.resolve(new Response(JSON.stringify(answer.body), { status: answer.status ?? 200 }))
   })
-  return { fetch: fetch as unknown as typeof globalThis.fetch, calls }
+  return { fetch, calls }
 }
 
 const source = (kind: BalanceSource['kind']): BalanceSource => DEFAULT_SOURCES.find(entry => entry.kind === kind)!

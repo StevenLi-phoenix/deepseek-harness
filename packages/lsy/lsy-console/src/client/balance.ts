@@ -42,7 +42,10 @@ export function parseBalance(body: unknown): BalanceSummary {
   return { ready, failed, highest }
 }
 
-/** Read the balance route. */
+/**
+ * Read the balance route.
+ * @returns the parsed summary; rejects when the request fails or the answer does not parse.
+ */
 export function readBalance(): Promise<BalanceSummary> {
   return requestJson<unknown>(BALANCE_ROUTE).then(parseBalance)
 }

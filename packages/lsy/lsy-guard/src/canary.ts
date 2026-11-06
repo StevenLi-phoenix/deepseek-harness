@@ -67,6 +67,7 @@ export class CanarySet {
 
   /**
    * Counts of what is loaded, after refreshing from the file.
+   * @returns active and too-short canary counts, and whether the file was found.
    * @throws when the file exists and cannot be read.
    */
   async counts(): Promise<CanaryCounts> {
@@ -77,6 +78,7 @@ export class CanarySet {
   /**
    * Whether the text contains a canary, compared without case, width, spacing, or punctuation.
    * @param text - the text to check.
+   * @returns true when any loaded canary appears in the text.
    * @throws when the file exists and cannot be read; a caller that publishes must treat that as a refusal.
    */
   async matches(text: string): Promise<boolean> {

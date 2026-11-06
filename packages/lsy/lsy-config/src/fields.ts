@@ -19,13 +19,19 @@ export interface FormState {
   readonly exclude?: readonly string[]
 }
 
-/** @returns whether a path is, or lies below, one of the excluded dotted paths. */
+/**
+ * Test a field path against the excluded dotted paths.
+ * @param exclude - dotted paths of fields and groups left out; undefined excludes nothing.
+ * @param path - field path.
+ * @returns whether the path is, or lies below, one of them.
+ */
 export function isExcluded(exclude: readonly string[] | undefined, path: readonly string[]): boolean {
   const dotted = path.join('.')
   return (exclude ?? []).some(entry => dotted === entry || dotted.startsWith(`${entry}.`))
 }
 
 /**
+ * Remove the excluded fields from a stored config.
  * @param config - a stored config.
  * @param exclude - dotted paths to leave out.
  * @returns a detached copy without those fields.
@@ -50,6 +56,7 @@ function isExpression(value: unknown): boolean {
 }
 
 /**
+ * Read one field out of a stored config.
  * @param root - a stored config.
  * @param path - field path.
  * @returns the value there, `undefined` when nothing is stored, or the expression marker when a node on the way is an expression.
@@ -64,7 +71,11 @@ export function readAt(root: unknown, path: readonly string[]): unknown {
   return isExpression(node) ? EXPRESSION : node
 }
 
-/** @returns the object fields a schema node declares, or undefined when it is not an object. */
+/**
+ * List the object fields of a schema node.
+ * @param node - a schema node; an intersection merges its members.
+ * @returns the fields by key, or undefined when the node is not an object.
+ */
 export function objectFields(node: z): Record<string, z> | undefined {
   if (node.type === 'object') return node.dict ?? {}
   if (node.type !== 'intersect') return undefined
@@ -77,7 +88,11 @@ export function objectFields(node: z): Record<string, z> | undefined {
   return merged
 }
 
-/** @returns whether a schema node, or anything below it, is a credential slot. */
+/**
+ * Find a credential slot in a schema.
+ * @param node - a schema node.
+ * @returns whether the node, or anything below it, is a credential slot.
+ */
 export function containsSecret(node: z): boolean {
   if (node.meta.role === 'secret') return true
   return [...Object.values(node.dict ?? {}), ...node.inner === undefined ? [] : [node.inner], ...node.list ?? []]
@@ -102,7 +117,11 @@ function descriptionOf(node: z): { description: DescriptionText } | Record<strin
   return {}
 }
 
-/** @returns the leaf kind a schema node is edited as. */
+/**
+ * Choose how a schema node is edited.
+ * @param node - a schema node.
+ * @returns the leaf kind; `json` for nodes without a dedicated control.
+ */
 export function leafKind(node: z): LeafKind {
   if (node.meta.role === 'secret') return 'secret'
   switch (node.type) {
@@ -164,12 +183,12 @@ function walk(fields: Record<string, z>, path: readonly string[], defaults: unkn
     const here = [...path, key]
     if (node.meta.hidden === true || isExcluded(state.exclude, here)) return []
     const below = volatile || node.meta.volatile === true
-    const fallback = typeof defaults === 'object' && defaults !== null ? Reflect.get(defaults, key) as unknown : undefined
+    const inherited: unknown = typeof defaults === 'object' && defaults !== null ? Reflect.get(defaults, key) : undefined
     const children = objectFields(node)
-    if (children === undefined) return [leafOf(node, here, fallback, state, below)]
+    if (children === undefined) return [leafOf(node, here, inherited, state, below)]
     return [{
       kind: 'group', key, path: here, ...descriptionOf(node),
-      children: walk(children, here, node.meta.default ?? fallback, state, below),
+      children: walk(children, here, node.meta.default ?? inherited, state, below),
     }]
   })
 }
@@ -186,6 +205,7 @@ export function buildFields(schema: z, state: FormState): FieldNode[] {
 }
 
 /**
+ * Tell whether a change at a path applies without reloading the plugin.
  * @param schema - the plugin's Config schema.
  * @param path - field path.
  * @returns whether the field, or an object above it, is `volatile`, so a change applies without reloading the plugin.
@@ -204,6 +224,7 @@ export function isVolatileAt(schema: z, path: readonly string[]): boolean {
 }
 
 /**
+ * Look up the leaf schema node at a path.
  * @param schema - the plugin's Config schema.
  * @param path - field path.
  * @returns the leaf schema node at a path, or undefined when the path is not a leaf of the form.

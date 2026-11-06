@@ -42,6 +42,7 @@ function toLogin(reading: Omit<QqLogin, 'qr'> & { qrUrl: string | null }): QqLog
 }
 
 /**
+ * Build the status answer of the QQ route.
  * @param source - the QQ observer.
  * @param options - `fresh` skips the observer's shared reading of the last 1.5 s.
  * @param now - clock, replaceable in tests.

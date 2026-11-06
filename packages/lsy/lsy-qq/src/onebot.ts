@@ -82,7 +82,12 @@ export class OneBotError extends Error {
   }
 }
 
-/** Strip a token from text that may quote the URL or a header. */
+/**
+ * Strip a token from text that may quote the URL or a header.
+ * @param text - the text to clean.
+ * @param token - the secret to replace; an empty token leaves the text unchanged.
+ * @returns the text with each occurrence of the token replaced by `***`.
+ */
 export function scrubToken(text: string, token: string): string {
   return token === '' ? text : text.split(token).join('***')
 }
@@ -102,6 +107,8 @@ export class OneBotClient {
 
   /**
    * Connect and deliver events until `signal` aborts or the socket closes.
+   * @param handlers - receives events and the open and close notices.
+   * @param signal - aborting closes the socket.
    * @returns when the socket closed or the signal aborted; rejects when the connection could not be made.
    */
   run(handlers: OneBotHandlers, signal: AbortSignal): Promise<void> {
@@ -151,7 +158,8 @@ export class OneBotClient {
         touch()
         let payload: Record<string, unknown>
         try {
-          payload = JSON.parse(String(raw)) as Record<string, unknown>
+          // ws hands a Buffer under its default binaryType.
+          payload = JSON.parse((raw as Buffer).toString()) as Record<string, unknown>
         } catch {
           return
         }
@@ -176,7 +184,9 @@ export class OneBotClient {
 
   /**
    * Call one API action.
-   * @returns the action's `data`.
+   * @param action - the OneBot action name.
+   * @param params - the action's parameters.
+   * @returns the action's `data`, which the caller types as `T` without validation.
    * @throws {@link OneBotError} when the socket is down, the call times out, or the protocol end answers a failure.
    */
   async call<T = unknown>(action: string, params: Record<string, unknown> = {}): Promise<T> {

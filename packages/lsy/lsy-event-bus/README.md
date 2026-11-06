@@ -73,7 +73,7 @@ Choose it when external events should wake an agent or a human without a person 
 | `subscriptions[].session.persistent.maxSeedChars` | `20000` | Characters of the carried-over summary |
 | `subscriptions[].session.persistent.key` | `subscription` | `subscription` keeps one Session for the subscription; `subject` keeps one per event subject (a repository, a video), each titled `<titlePrefix>: <subject>`, and splits a batch by subject |
 | `subscriptions[].session.project` | unset | Web UI project title of `workspacePath`: before a Session starts there, the bus creates the directory and registers it as a project, unless one exists (an existing project keeps its title) |
-| `suppress.actors` / `suppress.markers` | `[]` | Agent identities and output markers whose events are dropped; prefer identities, which the host sets, over markers, which depend on what the model writes |
+| `suppress.actors` / `suppress.markers` | `[]` | Agent identities and output markers whose events are dropped; prefer identities, which the host sets, over markers, which depend on what the model writes; the lsy event bundle sets `actors` to the GitHub App login `dsh-events[bot]` |
 | `retainEvents` / `retainBatches` | `5000` / `1000` | Stored history; the oldest settled rows are pruned |
 | `flowChangesKept` | `200` | Changes of the notification flow kept for `flow_read` and the message flow page |
 | `maxTextChars` | `4000` | Stored characters of each event's untrusted text |

@@ -18,6 +18,7 @@ kind: "package-reference"
 - [延伸阅读](#further-exploration)
 - [模型体验](#model-experience)
 - [已知限制与延后工作](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
 -----
 
@@ -124,3 +125,15 @@ Time check: this event arrived at <now> (<zone>), after <gap> of silence in this
 - **排队的输入** — 排在正在运行的回合后面的输入（`mode: 'queue'`）在它自己的回合开始时才计算，从它前面刚结束的回复算起，所以在队列里等得再久也显示不出间隔。
 - **owner 还是 sender 由 preset 决定** — owner 在 Web UI 里往 `senderPresets` preset 的 Session 里打字，也会被称为“the sender”；只读来源和 preset，从不读文字。
 - **后台任务的通知** — `tool-jobs` 的完成通知和其他插件的提示是上下文，它们开启的回合不加说明。
+
+<a id="dev-note"></a>
+### 开发备注
+
+<details>
+<summary>维护者的工作上下文——点击展开</summary>
+
+本开发备注是不具权威性的工作上下文：尚未决定的探索方向与维护者备注。已交付的行为与既定理由以上文、包代码和相关 Agent Note 为准。
+
+- 如果 owner 从不把微信的两个阈值设成不同的值，它们可以合并成一个设置。
+
+</details>

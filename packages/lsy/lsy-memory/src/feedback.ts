@@ -13,12 +13,15 @@ import { freshId, serialized } from './store.ts'
 
 /** The personas whose replies the owner reviews: the creator account's session (`up`) and the cat's own account (`bili`). */
 export const FEEDBACK_SCOPES = ['up', 'bili'] as const
+/** A persona whose replies are reviewed. */
 export type FeedbackScope = typeof FEEDBACK_SCOPES[number]
 /** What the owner decided about a reply. */
 export const FEEDBACK_VERDICTS = ['keep', 'delete'] as const
+/** An owner decision about a reply. */
 export type FeedbackVerdict = typeof FEEDBACK_VERDICTS[number]
 /** Where the reply was posted. */
 export const FEEDBACK_KINDS = ['comment', 'dm'] as const
+/** Where a reply was posted. */
 export type FeedbackKind = typeof FEEDBACK_KINDS[number]
 
 /** Records kept per scope; the oldest go first. */
@@ -70,6 +73,7 @@ export class FeedbackError extends Error {
 /**
  * Default feedback file of a DSH home.
  * @param env - environment holding `DSH_HOME`; defaults to `process.env`.
+ * @returns the absolute path of `lsy-memory/feedback.jsonl` under the DSH home.
  */
 export function defaultFeedbackFile(env: NodeJS.ProcessEnv = process.env): string {
   return join(resolveDshHome(undefined, env), 'lsy-memory', 'feedback.jsonl')
@@ -151,6 +155,7 @@ export class FeedbackStore {
   /**
    * The records, newest first.
    * @param scope - only this scope; all scopes without it.
+   * @returns the matching records, newest first.
    */
   async list(scope?: FeedbackScope): Promise<FeedbackEntry[]> {
     return (await this.all()).filter(entry => scope === undefined || entry.scope === scope).toReversed()
@@ -159,6 +164,7 @@ export class FeedbackStore {
   /**
    * Record a verdict, or replace the earlier one on the same scope and ref.
    * @param input - the verdict as a caller sent it; validated here.
+   * @returns the stored record and whether it was `added` or `replaced`; rejects with `FeedbackError` on invalid fields.
    */
   async add(input: FeedbackInput): Promise<{ entry: FeedbackEntry; outcome: 'added' | 'replaced' }> {
     const scope = oneOf('scope', input.scope, FEEDBACK_SCOPES)
@@ -186,6 +192,7 @@ export class FeedbackStore {
   /**
    * Remove one record.
    * @param id - the record's id.
+   * @returns the removed record; rejects with `FeedbackError` `not_found` when no record has the id.
    */
   async forget(id: unknown): Promise<FeedbackEntry> {
     return await serialized(this.file, async () => {

@@ -17,7 +17,11 @@ export const PROTOCOL = { name: 'qq-recorder', major: 1, minor: 1 } as const
 /** Header carrying {@link PROTOCOL} as `qq-recorder/1.0`. */
 export const PROTOCOL_HEADER = 'x-lsy-protocol'
 
-/** The header value an end with protocol `{major, minor}` sends. */
+/**
+ * The header value an end with a protocol version sends.
+ * @param version - the version; this build's {@link PROTOCOL} by default.
+ * @returns `name/major.minor`.
+ */
 export function protocolTag(version: { major: number; minor: number } = PROTOCOL): string {
   return `${PROTOCOL.name}/${version.major}.${version.minor}`
 }
@@ -64,7 +68,11 @@ export const PATHS = {
   members: (groupId: string): string => `/v1/groups/${encodeURIComponent(groupId)}/members`,
 } as const
 
-/** A string enumeration that may grow: a value this end does not know reads as `'unknown'`. */
+/**
+ * A string enumeration that may grow: a value this end does not know reads as `'unknown'`.
+ * @param values - the values this end knows.
+ * @returns a schema that accepts any string and maps the unlisted ones to `'unknown'`.
+ */
 export function openEnum<const T extends readonly [string, ...string[]]>(values: T): z.ZodType<T[number] | 'unknown', string> {
   return z.string().transform((value): T[number] | 'unknown' => ((values as readonly string[]).includes(value) ? value as T[number] : 'unknown'))
 }

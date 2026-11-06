@@ -51,7 +51,10 @@ export class ManageSettings {
   /** @param hooks - the client, logging, and clock. */
   constructor(private readonly hooks: SettingsHooks) {}
 
-  /** @returns whether a manage token is set. */
+  /**
+   * Whether a manage token is set.
+   * @returns true when the client has a non-empty token.
+   */
   hasToken(): Promise<boolean> {
     return this.hooks.manage.hasToken()
   }
@@ -61,6 +64,7 @@ export class ManageSettings {
    * @param limit - ledger rows wanted.
    * @param signal - cancellation.
    * @throws {ManageError} when the status cannot be read.
+   * @returns the status and the ledger; the ledger is null when it could not be read.
    */
   async read(limit: number = LEDGER_ROWS, signal?: AbortSignal): Promise<ManageSnapshot> {
     const [status, ledger] = await Promise.all([
@@ -73,7 +77,10 @@ export class ManageSettings {
     return { status, ledger }
   }
 
-  /** QR sign-ins in progress or just finished, with local expiry applied. */
+  /**
+   * QR sign-ins in progress or just finished, with local expiry applied.
+   * @returns one view per account, expired attempts marked and finished ones dropped after they have been shown.
+   */
   logins(): LoginView[] {
     const now = this.hooks.now()
     const views: LoginView[] = []

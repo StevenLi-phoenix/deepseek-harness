@@ -35,9 +35,9 @@ class FakeBindService {
   private counter = 0
 
   fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-    const path = new URL(String(input)).pathname
+    const path = new URL(input instanceof Request ? input.url : input).pathname
     this.calls.push(path)
-    const body = JSON.parse(String(init?.body)) as Record<string, string>
+    const body = JSON.parse(init?.body as string) as Record<string, string>
     const reply = (data: unknown, retcode = 0, msg = 'success'): Response => new Response(JSON.stringify({ retcode, msg, data }), { status: 200 })
     if (path === '/lite/create_bind_task') {
       if (this.failCreate !== undefined) return reply(undefined, 1, this.failCreate)

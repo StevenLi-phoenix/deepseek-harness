@@ -316,11 +316,17 @@ export interface FlowActivityView {
 
 /** Absolute Host registration paths of the routes. */
 export const OVERVIEW_PATH = '/api/lsy.overview'
+/** Host registration path of the flow route. */
 export const FLOW_PATH = '/api/lsy.flow'
+/** Host registration path of the subscriptions route. */
 export const SUBSCRIPTIONS_PATH = '/api/lsy.subscriptions'
+/** Host registration path of the agents route. */
 export const AGENTS_PATH = '/api/lsy.agents'
 /** Document-relative forms the browser fetches. */
 export const OVERVIEW_ROUTE = OVERVIEW_PATH.slice(1)
+/** Document-relative flow route. */
 export const FLOW_ROUTE = FLOW_PATH.slice(1)
+/** Document-relative subscriptions route. */
 export const SUBSCRIPTIONS_ROUTE = SUBSCRIPTIONS_PATH.slice(1)
+/** Document-relative agents route. */
 export const AGENTS_ROUTE = AGENTS_PATH.slice(1)

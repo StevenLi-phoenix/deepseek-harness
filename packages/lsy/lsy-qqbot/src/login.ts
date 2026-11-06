@@ -65,6 +65,9 @@ async function post(
  * Open a bind task.
  * @returns the task id and the key to decrypt its answer with.
  * @throws when the platform refuses or cannot be reached.
+ * @param fetchImpl - fetch to use; defaults to the global one.
+ * @param origin - bind service origin.
+ * @param signal - aborts the request.
  */
 export async function createBindTask(fetchImpl: Fetch = fetch, origin = QQ_BIND_ORIGIN, signal?: AbortSignal): Promise<BindTask> {
   const key = randomBytes(32).toString('base64')
@@ -79,14 +82,22 @@ export type BindPoll =
   | { status: 'expired' }
   | { status: 'completed'; appId: string; encryptedSecret: string; userOpenid?: string | undefined }
 
-/** Ask the platform whether a bind task was scanned. */
+/**
+ * Ask the platform whether a bind task was scanned.
+ * @param taskId - id from {@link createBindTask}.
+ * @param fetchImpl - fetch to use; defaults to the global one.
+ * @param origin - bind service origin.
+ * @param signal - aborts the request.
+ * @returns `pending`, `expired`, or `completed` with the app id and the still-encrypted secret.
+ * @throws when the platform refuses, or reports completion without credentials.
+ */
 export async function pollBindResult(
   taskId: string, fetchImpl: Fetch = fetch, origin = QQ_BIND_ORIGIN, signal?: AbortSignal,
 ): Promise<BindPoll> {
   const data = await post(fetchImpl, origin, '/lite/poll_bind_result', { task_id: taskId }, signal)
   if (data['status'] === STATUS_EXPIRED) return { status: 'expired' }
   if (data['status'] !== STATUS_COMPLETED) return { status: 'pending' }
-  const appId = String(data['bot_appid'] ?? '')
+  const appId = (data['bot_appid'] as string | number | undefined ?? '').toString()
   const encryptedSecret = typeof data['bot_encrypt_secret'] === 'string' ? data['bot_encrypt_secret'] : ''
   if (appId === '' || appId === '0' || encryptedSecret === '') throw new Error('poll_bind_result: completed without credentials')
   const openid = data['user_openid']
@@ -96,6 +107,9 @@ export async function pollBindResult(
 /**
  * Decrypt the AppSecret: AES-256-GCM, the blob being a 12-byte nonce, the ciphertext, and a 16-byte tag, in base64.
  * @throws when the blob does not authenticate under the key.
+ * @param blob - base64 of nonce, ciphertext and tag.
+ * @param keyBase64 - the base64 key sent when the task was created.
+ * @returns the AppSecret as UTF-8 text.
  */
 export function decryptSecret(blob: string, keyBase64: string): string {
   const key = Buffer.from(keyBase64, 'base64')
@@ -106,7 +120,12 @@ export function decryptSecret(blob: string, keyBase64: string): string {
   return Buffer.concat([decipher.update(raw.subarray(12, raw.length - 16)), decipher.final()]).toString('utf8')
 }
 
-/** The page the phone opens for a task. */
+/**
+ * The page the phone opens for a task.
+ * @param taskId - id from {@link createBindTask}.
+ * @param origin - bind service origin.
+ * @returns the absolute URL to show as a QR code.
+ */
 export function connectUrl(taskId: string, origin = QQ_BIND_ORIGIN): string {
   return `${origin}/qqbot/openclaw/connect.html?task_id=${encodeURIComponent(taskId)}&source=dsh-lsy&_wv=2`
 }
@@ -141,6 +160,8 @@ function delay(ms: number, signal: AbortSignal | undefined): Promise<void> {
 /**
  * Show a QR code, wait for the scan, and return the bot's credentials. An expired code is replaced by a new one.
  * @throws {@link LoginError} on timeout, on too many expiries or failed polls, or when the secret does not decrypt.
+ * @param options - QR display callback, deadlines and retry limits.
+ * @returns the app id, secret and scanner openid.
  */
 export async function loginWithQr(options: LoginOptions): Promise<QqLogin> {
   const fetchImpl = options.fetch ?? fetch
@@ -202,6 +223,8 @@ export async function loginWithQr(options: LoginOptions): Promise<QqLogin> {
  * Render text as a QR code PNG (black on white, 8-bit grayscale).
  * @param scale - pixels per module.
  * @param margin - quiet zone in modules.
+ * @param text - the text to encode.
+ * @returns the PNG bytes.
  */
 export function qrPng(text: string, scale = 8, margin = 4): Buffer {
   const modules = encode(text, { ecc: 'M', border: 0 }).data
@@ -243,6 +266,8 @@ export function qrPng(text: string, scale = 8, margin = 4): Buffer {
  * Set `name=value` lines in a dotenv file, replacing existing ones and keeping every other line, by writing a
  * sibling file with mode 0600 and renaming it over the original.
  * @returns the names written, never the values.
+ * @param path - the dotenv file; created when missing.
+ * @param entries - names and values to set.
  */
 export async function upsertEnvFile(path: string, entries: Record<string, string>): Promise<string[]> {
   let existing = ''
@@ -293,6 +318,7 @@ function flagValue(argv: readonly string[], flag: string): string | undefined {
  * refresh), wait for the scan, and write `LSY_QQBOT_APP_ID` and `LSY_QQBOT_APP_SECRET` into `<DSH_HOME>/.env` (or
  * `--env-file <file>`). Prints the AppID and the scanner's openid, never the AppSecret.
  * @returns process exit code: 0 when the credentials were saved, 1 otherwise.
+ * @param options - argv and output streams; default to the process's.
  */
 export async function runLoginCli(options: LoginCliOptions = {}): Promise<number> {
   const stdout = options.stdout ?? process.stdout

@@ -122,7 +122,8 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
     chunks.push(chunk)
   }
   try {
-    return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
+    const body: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+    return body
   } catch {
     throw new HttpError(400, 'invalid-json', 'the body is not JSON')
   }

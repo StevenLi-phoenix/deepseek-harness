@@ -22,6 +22,7 @@ const SECTION_CATEGORY: Readonly<Record<string, MemoryCategory>> = {
  * Parse an export into drafts, in file order.
  * @param text - the export, Markdown with or without a surrounding code fence.
  * @throws when an entry line has no known heading above it.
+ * @returns the drafts; empty when the text holds no entry lines.
  */
 export function parseClaudeExport(text: string): MemoryDraft[] {
   const drafts: MemoryDraft[] = []

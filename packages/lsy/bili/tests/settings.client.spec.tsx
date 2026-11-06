@@ -442,7 +442,7 @@ describe('All settings card', () => {
     const renderFactorySlot = vi.fn((_name: string, _props: object) => <div data-testid="plugin-config" />)
     const props = {
       close: () => {}, useBili: bindSnapshotSelector(store), refresh: vi.fn(), act: vi.fn(), poll: vi.fn(), t, renderFactorySlot,
-    } as unknown as BiliAccountProps
+    } as BiliAccountProps
     const { container } = render(<BiliAccountSection {...props} />)
     expect(renderFactorySlot).toHaveBeenCalledWith('settings.plugin-config', { entries: ['bili', 'tool-bili'] })
     expect(container.querySelector('section')?.lastElementChild).toBe(screen.getByTestId('plugin-config'))

@@ -7,13 +7,21 @@ export type Translate = (key: ConsoleKey, params?: Record<string, string | numbe
 
 const pad = (value: number): string => String(value).padStart(2, '0')
 
-/** `HH:mm:ss` in the browser's time zone. */
+/**
+ * `HH:mm:ss` in the browser's time zone.
+ * @param at - epoch milliseconds.
+ * @returns the clock text.
+ */
 export function clock(at: number): string {
   const date = new Date(at)
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
-/** `Nov 1, 09:30` style short date and time: month/day plus clock, in the browser's zone. */
+/**
+ * `MM-DD HH:mm` short date and time in the browser's zone.
+ * @param at - epoch milliseconds.
+ * @returns the stamp text.
+ */
 export function stamp(at: number): string {
   const date = new Date(at)
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`

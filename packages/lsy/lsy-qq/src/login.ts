@@ -82,8 +82,9 @@ export class LoginDoor {
   }
 
   /**
+   * NapCat's login state as the door reports it.
    * @param token - the OneBot access token.
-   * @returns NapCat's login state as the door reports it.
+   * @returns the door's answer.
    */
   status(token: string): Promise<DoorResult> {
     return this.send('GET', '/v1/login', token).then(answer => answer.result)

@@ -6,11 +6,15 @@
 
 /** Absolute Host registration paths: the panel (GET), the owner's edits (POST), and a collection run on demand (POST). */
 export const STYLE_PATH = '/api/lsy.style'
+/** Absolute Host path of the owner's edits (POST). */
 export const STYLE_EDIT_PATH = '/api/lsy.style.edit'
+/** Absolute Host path of the on-demand collection run (POST). */
 export const STYLE_COLLECT_PATH = '/api/lsy.style.collect'
 /** Document-relative forms the browser fetches. */
 export const STYLE_ROUTE = STYLE_PATH.slice(1)
+/** Document-relative form of {@link STYLE_EDIT_PATH}. */
 export const STYLE_EDIT_ROUTE = STYLE_EDIT_PATH.slice(1)
+/** Document-relative form of {@link STYLE_COLLECT_PATH}. */
 export const STYLE_COLLECT_ROUTE = STYLE_COLLECT_PATH.slice(1)
 
 /** How widely an item was seen, as counts: the platform (QQ or Bilibili only), groups or threads, speakers, days. */

@@ -123,7 +123,7 @@ describe('formatting', () => {
     }
     for (const key of Object.keys(zh) as QqKey[]) expect(placeholders(en[key])).toBe(placeholders(zh[key]))
     for (const dictionary of [zh, en, ja, es, fr, de, ru, pt]) {
-      for (const key of ['head.recorder-down', 'head.protocol-mismatch', 'detail.connection.recorder-down'] as const) expect((dictionary as Record<QqKey, string>)[key]).not.toBe('')
+      for (const key of ['head.recorder-down', 'head.protocol-mismatch', 'detail.connection.recorder-down'] as const) expect((dictionary)[key]).not.toBe('')
     }
   })
 })

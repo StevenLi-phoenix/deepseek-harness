@@ -56,6 +56,7 @@ function cardTitle(raw: string | undefined): string {
 /**
  * Read a message's segments (or, for a protocol end set to string format, its CQ code) into text and media.
  * @param message - the event's `message` field.
+ * @returns the text cut to the length limit, the replied-to message id, the media items, and the segment kinds.
  */
 export function parseMessage(message: OneBotSegment[] | string | undefined): ParsedMessage {
   const segments: OneBotSegment[] = typeof message === 'string'
@@ -131,7 +132,12 @@ export function parseMessage(message: OneBotSegment[] | string | undefined): Par
   return { text: Array.from(text.trim()).slice(0, MAX_TEXT_CHARS).join(''), replyTo, media, kinds }
 }
 
-/** A display name for a sender: the group card, else the nickname, else the number. */
+/**
+ * A display name for a sender: the group card, else the nickname, else the number.
+ * @param sender - the card and nickname fields of the event's sender; blank values are skipped.
+ * @param userId - the QQ number used when both names are blank.
+ * @returns the name.
+ */
 export function displayName(sender: { card?: string | undefined; nickname?: string | undefined }, userId: string): string {
   const card = sender.card?.trim()
   if (card !== undefined && card !== '') return card

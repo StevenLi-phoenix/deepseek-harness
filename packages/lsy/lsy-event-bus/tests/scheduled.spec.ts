@@ -154,12 +154,11 @@ describe('LsyEventBus silent Session results', () => {
 
   it('records the outcome of a quiet subscription\'s Session and sends nothing, whatever it answered', async () => {
     const notes: LsyNote[] = []
-    const quiet = {
-      ...sessionConfig,
+    const quiet = withConfig(sessionConfig, {
       subscriptions: sessionConfig.subscriptions.map(subscription => ({
         ...subscription, session: { ...subscription.session!, quietResult: true },
       })),
-    }
+    })
     const { bus, emit } = await harness({ config: quiet, notifier: { send: async (note: LsyNote) => { notes.push(note) } } })
     await bus.publish(release(1))
     await vi.advanceTimersByTimeAsync(1_000)

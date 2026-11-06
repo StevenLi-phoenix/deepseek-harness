@@ -24,7 +24,7 @@ describe('group note filter', () => {
   ])('refuses %s', (_name, text) => {
     const verdict = ok(text)
     expect(verdict.ok).toBe(false)
-    expect(verdict).toMatchObject({ reason: expect.stringContaining('') })
+    expect(verdict).toMatchObject({ reason: expect.stringContaining('') as string })
   })
 
   it('refuses a member name or card the group has shown, even inside another word', () => {

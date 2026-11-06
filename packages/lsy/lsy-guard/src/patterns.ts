@@ -62,6 +62,7 @@ export const PATTERN_RULES: readonly string[] = Object.keys(REASONS).map(key => 
 /**
  * Whether a digit string passes the Luhn check that payment card numbers carry.
  * @param digits - only digits.
+ * @returns true when the checksum is valid.
  */
 export function luhn(digits: string): boolean {
   let sum = 0

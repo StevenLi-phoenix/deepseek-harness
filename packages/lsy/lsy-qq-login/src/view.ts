@@ -4,11 +4,13 @@
  * without a QR library and without ever seeing NapCat's link.
  */
 
-/** Absolute Host registration path of the QQ status route (GET) and its refresh action (POST). */
+/** Absolute Host registration path of the QQ status route (GET). */
 export const QQ_PATH = '/api/lsy.qq'
+/** Absolute Host registration path of the fresh-code action (POST). */
 export const QQ_REFRESH_PATH = '/api/lsy.qq.refresh'
-/** Document-relative forms the browser fetches. */
+/** Document-relative form of {@link QQ_PATH}, without the leading slash. */
 export const QQ_ROUTE = QQ_PATH.slice(1)
+/** Document-relative form of {@link QQ_REFRESH_PATH}, without the leading slash. */
 export const QQ_REFRESH_ROUTE = QQ_REFRESH_PATH.slice(1)
 
 /** How many unrecorded groups the answer offers as candidates. */

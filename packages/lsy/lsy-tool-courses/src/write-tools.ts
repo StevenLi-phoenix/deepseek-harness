@@ -20,6 +20,11 @@ export interface WriteSpec {
   build: (args: Record<string, unknown>) => Record<string, unknown>
 }
 
+/**
+ * Define `courses_set_progress`, the write of the owner's progress on one task.
+ * @returns the tool's name, operation, description, parameters, title, and `build`, which makes the request body and throws
+ *   `ToolProblem` without an id or evidence.
+ */
 export function progressTool(): WriteSpec {
   return {
     name: 'courses_set_progress',
@@ -53,6 +58,11 @@ export function progressTool(): WriteSpec {
   }
 }
 
+/**
+ * Define `courses_save_memo`, the write of a note for the owner's courses.
+ * @returns the tool's name, operation, description, parameters, title, and `build`, which makes the request body and throws
+ *   `ToolProblem` without a title.
+ */
 export function memoTool(): WriteSpec {
   return {
     name: 'courses_save_memo',

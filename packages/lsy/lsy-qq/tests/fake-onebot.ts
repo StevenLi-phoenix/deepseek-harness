@@ -31,7 +31,7 @@ export class FakeOneBot {
       this.socket = socket
       this.connections += 1
       socket.on('message', (raw) => {
-        const request = JSON.parse(String(raw)) as { action: string; params: Record<string, unknown>; echo: string }
+        const request = JSON.parse((raw as Buffer).toString()) as { action: string; params: Record<string, unknown>; echo: string }
         this.calls.push([request.action, request.params])
         const handler = this.handlers.get(request.action)
         if (handler === undefined) {
@@ -51,7 +51,7 @@ export class FakeOneBot {
   listen(): Promise<void> { return new Promise(resolve => this.http.listen(0, '127.0.0.1', resolve)) }
   close(): Promise<void> {
     for (const client of this.wss.clients) client.terminate()
-    return new Promise(resolve => this.wss.close(() => this.http.close(() => { resolve() })))
+    return new Promise((resolve) =>{  this.wss.close(() => this.http.close(() => { resolve() })) })
   }
 
   /** Push an event to the connected client. */

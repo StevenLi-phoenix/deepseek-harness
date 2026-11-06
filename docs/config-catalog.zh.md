@@ -2987,6 +2987,7 @@ export interface Config {
   feedbackScope?: FeedbackScope
 }
 
+/** A persona whose replies are reviewed. */
 export type FeedbackScope = typeof FEEDBACK_SCOPES[number]
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsy-memory -->

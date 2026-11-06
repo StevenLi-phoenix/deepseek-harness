@@ -38,14 +38,14 @@ kind: "package-reference"
 
 写入他人可读文字的插件在写入时用 `ctx.get` 取这个服务，守卫不存在就拒绝这次写入：
 
-```ts
+```js
 const guard = ctx.get('lsyGuard')
 if (guard === undefined) return 'refused: the content guard is not mounted'
 const verdict = await guard.check(text, { purpose: 'persona_update', audience: 'public', sessionId })
 if (!verdict.ok) return `refused (${verdict.rule}): ${verdict.publicReason}`
 ```
 
-`check` 永远不会 reject，所以不需要 `try`；依赖图里没有守卫的插件声明一个本地的结构类型，而不是导入这个包。文字按写入时的样子检查，所以调用方检查它实际存下的那个字符串，每次写入检查一次。
+`check` 永远不会 reject，所以不需要 `try`；依赖图里没有守卫的插件声明一个本地的结构类型，而不是导入这个包。文字按写入时的样子检查，所以调用方检查它实际存下的那个字符串，每次写入检查一次。拒绝里的 `publicReason` 绝不重复原文，可以交回给模型。
 
 `purpose` 是简短的标识符（`persona_update`、`style_note`、`qq_group_note`、`bili_channel_note`，小写字母、数字、`_`、`.`、`-`，最多 40 个字符）。`audience` 为 `public` 表示任何人都能读，`channel` 表示某个 QQ 群或 B 站账号的读者。两者只差一点：模型层对 `channel` 可以关，对 `public` 永远关不掉。
 

@@ -55,6 +55,7 @@ export function contentText(content: readonly unknown[]): string | undefined {
 /**
  * Whether the owner stopped the turn: it was aborted with cancellation cause `user`.
  * @param reason - how the turn ended.
+ * @returns true when the turn was aborted by the user.
  */
 export function stoppedByOwner(reason: TurnEndFacts): boolean {
   return reason.kind === 'aborted' && reason.reason?.kind === 'user'
@@ -86,6 +87,7 @@ export function decideRelay(text: string | undefined, reason: TurnEndFacts): Rel
  * @param answer - the answer the channel could not deliver.
  * @param why - why it could not.
  * @param origin - the channel's fallback label: who sent it, as the owner's chat Session reads it.
+ * @returns a note with the answer text and the reason.
  */
 export function relayFallbackNote(answer: RelayAnswer, why: string, origin: string): LsyNote {
   return { title: RELAY_FALLBACK_TITLE, body: `${answer.text}\n\n原因：${why}`, origin }

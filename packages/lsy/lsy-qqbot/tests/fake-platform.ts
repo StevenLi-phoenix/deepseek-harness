@@ -17,7 +17,7 @@ export class FakeOpenPlatform {
       this.socket = socket
       socket.send(JSON.stringify({ op: 10, d: { heartbeat_interval: 30_000 } }))
       socket.on('message', (raw) => {
-        const payload = JSON.parse(String(raw)) as { op: number; d: unknown }
+        const payload = JSON.parse((raw as Buffer).toString()) as { op: number; d: unknown }
         if (payload.op === 2) {
           this.identifies.push(payload.d)
           socket.send(JSON.stringify({ op: 0, s: 1, t: 'READY', d: { session_id: 'sess-1', user: { id: 'bot', username: 'bot' } } }))
@@ -51,7 +51,7 @@ export class FakeOpenPlatform {
   listen(): Promise<void> { return new Promise(resolve => this.http.listen(0, '127.0.0.1', resolve)) }
   close(): Promise<void> {
     for (const client of this.ws.clients) client.terminate()
-    return new Promise(resolve => this.ws.close(() => this.http.close(() => { resolve() })))
+    return new Promise((resolve) =>{  this.ws.close(() => this.http.close(() => { resolve() })) })
   }
 
   dispatch(type: string, data: unknown, seq: number): void {

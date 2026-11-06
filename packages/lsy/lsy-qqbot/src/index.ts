@@ -7,7 +7,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type {} from '@deepseek-ai/dsh-llm'
-import type { LsyNotifier } from '@deepseek-ai/dsh-lsy-event-bus'
+import type {} from '@deepseek-ai/dsh-lsy-event-bus'
 // Type-only: ctx.ownerRelay, which relays each chat Session's final answers through this channel.
 import type { RelayAnswer, RelayChannel, RelayDelivery } from '@deepseek-ai/dsh-owner-relay'
 import type {} from '@deepseek-ai/dsh-permission-presets'
@@ -139,7 +139,11 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-/** Peer key of an inbound message: the user in a private chat, the group in a group chat. */
+/**
+ * Peer key of an inbound message: the user in a private chat, the group in a group chat.
+ * @param message - the inbound message's scope and ids.
+ * @returns `group:<groupId>` for a group message, `c2c:<senderId>` otherwise.
+ */
 export function peerKeyOf(message: Pick<QqInbound, 'scope' | 'senderId' | 'groupId'>): string {
   return message.scope === 'group' ? `group:${message.groupId ?? ''}` : `c2c:${message.senderId}`
 }
@@ -383,9 +387,11 @@ export class QqBotChannel extends Service {
           },
           disconnected: (reason) => { this.ctx.logger.warn(`lsy-qqbot: disconnected from the QQ gateway: ${reason}`) },
         }, this.abort.signal)
+        // oxlint-disable-next-line typescript/no-unnecessary-condition -- teardown sets it while the connection is awaited.
         if (this.stopping) return
         this.ctx.logger.warn('lsy-qqbot: the QQ connection ended without a stop; reconnecting')
       } catch (error: unknown) {
+        // oxlint-disable-next-line typescript/no-unnecessary-condition -- teardown sets it while the connection is awaited.
         if (this.stopping) return
         this.ctx.logger.warn(`lsy-qqbot: the QQ connection failed: ${errorText(error)}`)
       } finally {
@@ -456,7 +462,7 @@ export class QqBotChannel extends Service {
 
   /** Tell the owner, rarely, that a sender outside the allowlist wrote, with the openid to add. */
   private async reportUnknown(domain: Domain<typeof qqDomain>, message: QqInbound, targetId: string): Promise<void> {
-    const notifier = this.ctx.get('lsyNotifier') as LsyNotifier | undefined
+    const notifier = this.ctx.get('lsyNotifier')
     if (notifier === undefined) return
     const now = Date.now()
     await this.serialize(async () => {

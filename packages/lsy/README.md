@@ -56,7 +56,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`lsy-tool-qq/`](lsy-tool-qq/README.md) | `qq_groups`, `qq_digest`, `qq_recent`, `qq_search` tools: the agent reads what the QQ observer recorded and digested |
 | [`lsy-tool-watch/`](lsy-tool-watch/README.md) | `watch_create`, `watch_list`, `watch_delete` tools: the agent manages its own watches; `flow_read`, `flow_edit`: it changes the whole notification flow |
 | [`lsy-tool-wechat/`](lsy-tool-wechat/README.md) | `wechat_send_file` tool: the agent sends pictures, videos, and files to the owner |
-| [`lsy-voice/`](lsy-voice/README.md) | `ctx.lsyVoice`: text to speech (feiyu, Mac mini TTS fallback) and speech to text for audio files (asr-service, off by default) |
+| [`lsy-voice/`](lsy-voice/README.md) | `ctx.lsyVoice`: text to speech (feiyu) and speech to text for audio files (asr-service, off by default) |
 | [`lsy-wechat/`](lsy-wechat/README.md) | WeChat (iLink bot) channel: owner chat Session, its answers through `owner-relay`, and `ctx.lsyNotifier`; a Settings section to bind by QR code, see its health, and unbind |
 | [`owner-relay/`](owner-relay/README.md) | `ctx.ownerRelay`: one rule set for every claimed Session's final answer, handed to its channel (WeChat, Bilibili messages) with a labelled WeChat fallback |
 | [`tool-bili/`](tool-bili/README.md) | Bilibili tools of the `bili` preset: feeds, videos through subtitles, comments, inbox, likes, coins, follows, and saves through bili-svc, and a journal; no speech |
@@ -66,6 +66,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 <a id="related-documentation"></a>
 ## Related documentation
 
+- [lsy subsystem](../../docs/subsystems/lsy.md) — service methods and result records.
 - [Upstream ledger](UPSTREAM.md) — what this group copied from upstream and how to upgrade.
 - [Webhook runtime](../experimental/webhook/README.md) — the Session creation seam the bus reuses.
 

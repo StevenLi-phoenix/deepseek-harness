@@ -1,7 +1,6 @@
-import type { Context } from '@deepseek-ai/cordis'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import { describe, expect, it, vi } from 'vitest'
-import { createDelivery, SOURCE_KIND } from '../src/delivery.ts'
+import { createDelivery, SOURCE_KIND, type DeliveryContext } from '../src/delivery.ts'
 import { errorText } from '../src/error-text.ts'
 import type { MonitorNotice, MonitorView } from '../src/monitor.ts'
 
@@ -34,7 +33,7 @@ function fixture(world: World) {
     },
     sessionController: { resolveAgent },
     logger: { info: () => {}, warn: (...args: unknown[]) => { warnings.push(args.map(String).join(' ')) } },
-  } as unknown as Context
+  } satisfies DeliveryContext
   const delivery = createDelivery(ctx, () => world.stopped ?? false)
   return { delivery, followups, injected, warnings, resolveAgent }
 }

@@ -38,7 +38,11 @@ export function untrusted(label: string, value: unknown, max = MAX_BLOCK_CHARS):
   return `<bilibili_data trust="untrusted" source="${label}">\n${body}\n</bilibili_data>`
 }
 
-/** ` (error code)` of a bili-svc error body, for log lines. */
+/**
+ * ` (error code)` of a bili-svc error body, for log lines.
+ * @param body - a parsed answer body of any shape.
+ * @returns the body's `error` string cut to 60 characters in parentheses with a leading space; empty when there is none.
+ */
 export function errorCode(body: unknown): string {
   const error = (body as { error?: unknown } | null)?.error
   return typeof error === 'string' ? ` (${error.slice(0, 60)})` : ''

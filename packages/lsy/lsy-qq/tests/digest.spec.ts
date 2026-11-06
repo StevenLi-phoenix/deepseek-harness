@@ -72,7 +72,7 @@ function harness(answer: string | ((prompt: string, sessionId: string) => string
       const text = request.content[0]!.text
       prompts.push(text)
       if (options.silent === true) return { accepted: true }
-      queueMicrotask(async () => {
+      queueMicrotask(() => { void (async () => {
         const session = { id: request.sessionId }
         let reply: string
         try {
@@ -85,7 +85,7 @@ function harness(answer: string | ((prompt: string, sessionId: string) => string
           type: 'assistant/message', seq: 1, data: { message: { content: [{ type: 'text', text: reply }] }, ...options.usage === undefined ? {} : { usage: options.usage } },
         })
         ;(ctx.emit as (...args: unknown[]) => void)('session/event', session, { type: 'turn/end', seq: 2, data: { reason: { kind: options.kind ?? 'completed' } } })
-      })
+      })() })
       return { accepted: true }
     },
   } as never)
@@ -328,8 +328,8 @@ describe('DigestRunner tools', () => {
     r = asRunner(h, config())
     await r.runRound(['g1'], new AbortController().signal)
     expect(results).toEqual([
-      { ok: false, error: expect.stringContaining('groupId must be g1') },
-      { ok: false, error: expect.stringContaining('groupId must be g1') },
+      { ok: false, error: expect.stringContaining('groupId must be g1') as string },
+      { ok: false, error: expect.stringContaining('groupId must be g1') as string },
       { ok: true, message: 'digest saved' },
       { ok: false, error: 'the digest was already written for this turn' },
     ])
@@ -356,7 +356,7 @@ describe('DigestRunner tools', () => {
     let ended = ''
     const h = harness((_prompt, session) => { ended = session; return '好' })
     r = asRunner(h, config())
-    expect(r.writeDigest('nobody', 'g1', 'x')).toEqual({ ok: false, error: expect.stringContaining('only inside a QQ digest turn') })
+    expect(r.writeDigest('nobody', 'g1', 'x')).toEqual({ ok: false, error: expect.stringContaining('only inside a QQ digest turn') as string })
     expect(r.writeDigest(undefined, 'g1', 'x').ok).toBe(false)
     await r.runRound(['g1'], new AbortController().signal)
     expect((await r.groupNote(ended, 'g1', 'add', '话题')).ok).toBe(false)
@@ -376,7 +376,7 @@ describe('DigestRunner tools', () => {
     h.ctx.provide('lsyGuard', { check: async () => ({ ok: true }) } as never)
     r = asRunner(h, config())
     expect(await r.runRound(['g1'], new AbortController().signal)).toBe(1)
-    expect(results[0]).toEqual({ ok: false, error: expect.stringContaining('member names of this group cannot be read') })
+    expect(results[0]).toEqual({ ok: false, error: expect.stringContaining('member names of this group cannot be read') as string })
     expect(results.slice(1).map(entry => entry.ok)).toEqual([true, true])
     expect(store.notes('g1')).toEqual([])
     expect(store.digests({ groupId: 'g1', limit: 1 })[0]?.text).toBe('## 话题\n仍然写得出摘要')
@@ -779,15 +779,15 @@ describe('pictures in the digest', () => {
   const harnessWithPictures = (images: number, options: { reject?: boolean } = {}) => {
     const h = harness('摘要')
     const sent: Array<Array<{ type: string; mediaType?: string; data?: string }>> = []
-    type Controller = { prompt: (request: { content: Array<{ type: string }> }) => Promise<unknown> }
-    const controller = (h.ctx as unknown as { sessionController: Controller }).sessionController
+    const controller = h.ctx.sessionController
     const original = controller.prompt.bind(controller)
-    controller.prompt = async (request) => {
+    controller.prompt = async (...args) => {
+      const [request] = args
       sent.push(request.content as never)
       if (options.reject === true && request.content.some(part => part.type === 'image')) {
         throw Object.assign(new Error('Model does not support image input.'), { code: 'session/attachment-invalid' })
       }
-      return original(request as never)
+      return original(...args)
     }
     const run = new DigestRunner(h.ctx, store, log, config(), join(dir, 'raw'), () => NOW, () => 0, () => images)
     return { h, run, sent }

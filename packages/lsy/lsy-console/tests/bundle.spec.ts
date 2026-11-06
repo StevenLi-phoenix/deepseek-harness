@@ -8,7 +8,8 @@ import { Config } from '../src/index.ts'
 interface Row {
   id: string
   name?: string
-  config?: Record<string, unknown> & { plugins?: Row[] }
+  /** An object for a plugin; the child rows for a `cordis:group`. */
+  config?: (Record<string, unknown> & { plugins?: Row[] }) | Row[]
   insert?: Row[]
 }
 
@@ -19,8 +20,9 @@ const inserted = bundle.flatMap(row => row.insert ?? [])
 
 /** Every plugin name inside the presets, however deeply grouped. */
 function presetNames(row: Row): string[] {
-  return (row.config?.plugins ?? []).flatMap(plugin => plugin.name === 'cordis:group'
-    ? (plugin.config as unknown as Row[]).map(child => child.name ?? '')
+  const config = Array.isArray(row.config) ? undefined : row.config
+  return (config?.plugins ?? []).flatMap(plugin => plugin.name === 'cordis:group'
+    ? (Array.isArray(plugin.config) ? plugin.config : []).map(child => child.name ?? '')
     : [plugin.name ?? ''])
 }
 

@@ -75,7 +75,10 @@ function grouped(value: string): string {
   return `${Number(integer).toLocaleString('en-US')}.${fraction}`
 }
 
-/** @returns a store holding the not-yet-loaded state. */
+/**
+ * Create the wallet store in its not-yet-loaded state (phase `idle`, no wallets, no timestamps).
+ * @returns a fresh store; each call returns an independent one.
+ */
 export function createBalanceStore(): SnapshotStore<BalanceState> {
   return createSnapshotStore<BalanceState>({ phase: 'idle', wallets: [], updatedAt: null, checkedAt: null, refreshing: false, providers: [] })
 }

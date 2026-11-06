@@ -169,11 +169,16 @@ export class QqStore {
     `)
   }
 
+  /** Close the database; the store is unusable afterwards. */
   close(): void {
     this.db.close()
   }
 
-  /** Run `work` in one transaction. */
+  /**
+   * Run `work` in one transaction.
+   * @param work - synchronous; an exception rolls the transaction back and is rethrown.
+   * @returns what `work` returned.
+   */
   transaction<T>(work: () => T): T {
     this.db.exec('BEGIN')
     try {
@@ -188,6 +193,11 @@ export class QqStore {
 
   // ---- groups ----
 
+  /**
+   * Insert a group or update its name, member count, and update time.
+   * @param group - the group; an undefined `memberCount` is stored as null.
+   * @param now - the update time in epoch milliseconds.
+   */
   upsertGroup(group: { groupId: string; name: string; memberCount?: number | undefined }, now: number): void {
     this.db.prepare(`
       INSERT INTO groups (group_id, name, member_count, updated_at) VALUES (?, ?, ?, ?)
@@ -195,12 +205,21 @@ export class QqStore {
     `).run(group.groupId, group.name, group.memberCount ?? null, now)
   }
 
+  /**
+   * Every group the recorder has seen.
+   * @returns the groups, ordered by name.
+   */
   groups(): GroupRow[] {
     return (this.db.prepare('SELECT group_id, name, member_count, updated_at FROM groups ORDER BY name').all() as Row[]).map(row => ({
       groupId: String(row['group_id']), name: String(row['name']), memberCount: row['member_count'] === null ? null : Number(row['member_count']), updatedAt: Number(row['updated_at']),
     }))
   }
 
+  /**
+   * The stored name of a group.
+   * @param groupId - the QQ group number.
+   * @returns the name, or undefined when the group is unknown.
+   */
   groupName(groupId: string): string | undefined {
     const row = this.db.prepare('SELECT name FROM groups WHERE group_id = ?').get(groupId) as Row | undefined
     return row === undefined ? undefined : String(row['name'])
@@ -210,6 +229,9 @@ export class QqStore {
 
   /**
    * Record a message and its media; nothing happens when the group already holds that QQ message id.
+   * @param message - the message.
+   * @param media - its media items, in segment order.
+   * @param now - the media rows' creation time in epoch milliseconds.
    * @returns the new row id, or undefined for a duplicate.
    */
   insertMessage(message: NewMessage, media: NewMedia[], now: number): number | undefined {
@@ -231,17 +253,29 @@ export class QqStore {
     })
   }
 
+  /**
+   * Whether the group already holds a QQ message id.
+   * @param groupId - the QQ group number.
+   * @param messageId - the OneBot message id.
+   * @returns true when a row exists, recalled or not.
+   */
   hasMessage(groupId: string, messageId: string): boolean {
     return this.db.prepare('SELECT 1 FROM messages WHERE group_id = ? AND message_id = ?').get(groupId, messageId) !== undefined
   }
 
-  /** Add words to a stored message (a voice transcript), keeping the search index current. */
+  /**
+   * Add words to a stored message (a voice transcript), keeping the search index current.
+   * @param rowId - the message row id.
+   * @param extra - the text appended to the end of the stored text.
+   */
   appendText(rowId: number, extra: string): void {
     this.db.prepare('UPDATE messages SET text = text || ? WHERE id = ?').run(extra, rowId)
   }
 
   /**
    * Mark a message recalled and drop what it said: its text, its raw segments, and its media rows.
+   * @param groupId - the QQ group number.
+   * @param messageId - the OneBot message id.
    * @returns the local files of its media, for the caller to delete; undefined when the message is unknown.
    */
   recall(groupId: string, messageId: string): string[] | undefined {
@@ -260,11 +294,17 @@ export class QqStore {
     return {
       id: Number(row['id']), groupId: String(row['group_id']), messageId: String(row['message_id']), at: Number(row['at']), userId: String(row['user_id']),
       nickname: String(row['nickname']), card: String(row['card']), role: String(row['role']), text: String(row['text']),
-      replyTo: row['reply_to'] === null ? null : String(row['reply_to']), kinds: String(row['kinds']), recalled: Number(row['recalled']) === 1,
+      replyTo: row['reply_to'] === null ? null : (row['reply_to'] as string | number).toString(), kinds: String(row['kinds']), recalled: Number(row['recalled']) === 1,
     }
   }
 
-  /** Newest messages of a group since `sinceMs`, oldest first. */
+  /**
+   * Newest messages of a group since `sinceMs`, oldest first.
+   * @param groupId - the QQ group number.
+   * @param options - `sinceMs` is an inclusive lower bound on the message time in epoch milliseconds (default 0), `limit` the maximum
+   *   count, `userId` restricts to one sender; recalled messages are skipped.
+   * @returns the messages in time order.
+   */
   recent(groupId: string, options: { sinceMs?: number; limit: number; userId?: string }): MessageRow[] {
     const params: SQLInputValue[] = [groupId, options.sinceMs ?? 0]
     let user = ''
@@ -277,12 +317,23 @@ export class QqStore {
     return rows.map(row => this.messageRow(row)).reverse()
   }
 
-  /** Messages of a group after a row id, oldest first, for the digest. */
+  /**
+   * Messages of a group after a row id, oldest first, for the digest.
+   * @param groupId - the QQ group number.
+   * @param rowId - the exclusive lower bound on the row id.
+   * @param limit - the maximum count.
+   * @returns the messages in row order; recalled messages are skipped.
+   */
   after(groupId: string, rowId: number, limit: number): MessageRow[] {
     return (this.db.prepare('SELECT * FROM messages WHERE group_id = ? AND id > ? AND recalled = 0 ORDER BY id LIMIT ?').all(groupId, rowId, limit) as Row[]).map(row => this.messageRow(row))
   }
 
-  /** Quoted message of `messageId` in a group, when stored. */
+  /**
+   * Quoted message of `messageId` in a group, when stored.
+   * @param groupId - the QQ group number.
+   * @param messageId - the OneBot message id.
+   * @returns the message, recalled ones included; undefined when not stored.
+   */
   byMessageId(groupId: string, messageId: string): MessageRow | undefined {
     const row = this.db.prepare('SELECT * FROM messages WHERE group_id = ? AND message_id = ?').get(groupId, messageId) as Row | undefined
     return row === undefined ? undefined : this.messageRow(row)
@@ -290,7 +341,9 @@ export class QqStore {
 
   /**
    * Search message text. Three characters or more use the FTS5 trigram index; shorter queries scan with LIKE.
-   * Newest first.
+   * @param query - the text to find; surrounding whitespace is trimmed and an empty query matches nothing.
+   * @param options - `groupId` limits to one group, `limit` caps the count.
+   * @returns the matches, newest first; recalled messages are skipped.
    */
   search(query: string, options: { groupId?: string; limit: number }): MessageRow[] {
     const trimmed = query.trim()
@@ -311,6 +364,10 @@ export class QqStore {
     return (this.db.prepare(sql).all(...params) as Row[]).map(row => this.messageRow(row))
   }
 
+  /**
+   * Message counts and time range per group.
+   * @returns one entry per group that has messages, recalled ones excluded; times are epoch milliseconds.
+   */
   stats(): GroupStats[] {
     const rows = this.db.prepare(`
       SELECT m.group_id AS group_id, COUNT(*) AS messages, MIN(m.at) AS first_at, MAX(m.at) AS last_at
@@ -322,7 +379,11 @@ export class QqStore {
     }))
   }
 
-  /** Highest message row id of a group, or 0. */
+  /**
+   * Highest message row id of a group.
+   * @param groupId - the QQ group number.
+   * @returns the row id, or 0 when the group has no messages.
+   */
   lastRow(groupId: string): number {
     const row = this.db.prepare('SELECT MAX(id) AS id FROM messages WHERE group_id = ?').get(groupId) as Row
     return row['id'] === null ? 0 : Number(row['id'])
@@ -330,19 +391,28 @@ export class QqStore {
 
   // ---- media ----
 
+  /**
+   * Media rows of one message.
+   * @param rowId - the message row id.
+   * @returns the rows in segment order.
+   */
   mediaOf(rowId: number): MediaRow[] {
     return (this.db.prepare('SELECT * FROM media WHERE message_row = ? ORDER BY id').all(rowId) as Row[]).map(row => this.mediaRow(row))
   }
 
   private mediaRow(row: Row): MediaRow {
-    const text = (value: unknown): string | null => (value === null ? null : String(value))
+    const text = (value: unknown): string | null => (value === null ? null : (value as string | number).toString())
     return {
       id: Number(row['id']), messageRow: Number(row['message_row']), kind: String(row['kind']), url: text(row['url']), file: text(row['file']), name: text(row['name']),
       bytes: row['bytes'] === null ? null : Number(row['bytes']), localPath: text(row['local_path']), sha256: text(row['sha256']), transcript: text(row['transcript']), error: text(row['error']),
     }
   }
 
-  /** Media rows of several messages, by message row, in segment order. */
+  /**
+   * Media rows of several messages, by message row, in segment order.
+   * @param rowIds - message row ids; a message without media has no entry in the result.
+   * @returns a map from message row id to its media rows.
+   */
   mediaForMessages(rowIds: readonly number[]): Map<number, MediaRow[]> {
     const found = new Map<number, MediaRow[]>()
     for (let at = 0; at < rowIds.length; at += 500) {
@@ -356,31 +426,57 @@ export class QqStore {
     return found
   }
 
-  /** One media row with the group of its message, or undefined. */
+  /**
+   * One media row with the group of its message.
+   * @param mediaId - the media row id.
+   * @returns the row, or undefined when it does not exist.
+   */
   mediaById(mediaId: number): (MediaRow & { groupId: string }) | undefined {
     const row = this.db.prepare('SELECT media.*, messages.group_id AS group_id FROM media JOIN messages ON messages.id = media.message_row WHERE media.id = ?').get(mediaId) as Row | undefined
     return row === undefined ? undefined : { ...this.mediaRow(row), groupId: String(row['group_id']) }
   }
 
+  /**
+   * Record the downloaded file of a media row and clear its error.
+   * @param mediaId - the media row id.
+   * @param file - the local path, content hash, and size in bytes.
+   */
   setMediaFile(mediaId: number, file: { localPath: string; sha256: string; bytes: number }): void {
     this.db.prepare('UPDATE media SET local_path = ?, sha256 = ?, bytes = ?, error = NULL WHERE id = ?').run(file.localPath, file.sha256, file.bytes, mediaId)
   }
 
+  /**
+   * Record why a media row could not be downloaded.
+   * @param mediaId - the media row id.
+   * @param error - the reason; stored cut to 300 characters.
+   */
   setMediaError(mediaId: number, error: string): void {
     this.db.prepare('UPDATE media SET error = ? WHERE id = ?').run(error.slice(0, 300), mediaId)
   }
 
+  /**
+   * Store the speech transcript of a media row.
+   * @param mediaId - the media row id.
+   * @param transcript - the transcribed text.
+   */
   setTranscript(mediaId: number, transcript: string): void {
     this.db.prepare('UPDATE media SET transcript = ? WHERE id = ?').run(transcript, mediaId)
   }
 
-  /** Bytes of downloaded media on disk, by the rows. */
+  /**
+   * Bytes of downloaded media on disk, by the rows.
+   * @returns the sum of `bytes` over rows that have a local file.
+   */
   mediaBytes(): number {
     const row = this.db.prepare('SELECT COALESCE(SUM(bytes), 0) AS total FROM media WHERE local_path IS NOT NULL').get() as Row
     return Number(row['total'])
   }
 
-  /** Downloaded media older than `beforeMs`, for retention. */
+  /**
+   * Downloaded media older than `beforeMs`, for retention.
+   * @param beforeMs - the cutoff in epoch milliseconds, compared with the time of the message.
+   * @returns the media row ids and local paths.
+   */
   expiredMedia(beforeMs: number): Array<{ id: number; localPath: string }> {
     return (this.db.prepare(`
       SELECT media.id AS id, media.local_path AS local_path FROM media JOIN messages ON messages.id = media.message_row
@@ -388,12 +484,17 @@ export class QqStore {
     `).all(beforeMs) as Row[]).map(row => ({ id: Number(row['id']), localPath: String(row['local_path']) }))
   }
 
+  /**
+   * Forget the local file of a media row (the caller deletes the file).
+   * @param mediaId - the media row id.
+   */
   clearMediaFile(mediaId: number): void {
     this.db.prepare('UPDATE media SET local_path = NULL WHERE id = ?').run(mediaId)
   }
 
   /**
    * Delete messages older than `beforeMs` with their media rows (the index follows).
+   * @param beforeMs - the cutoff in epoch milliseconds.
    * @returns how many messages went and the local files of their media, for the caller to delete.
    */
   pruneMessages(beforeMs: number): { messages: number; files: string[] } {
@@ -409,28 +510,41 @@ export class QqStore {
 
   // ---- frozen digest state (read once for DSH's import) ----
 
-  /** Every digest the plugin stored here before the digest state moved to DSH, oldest first. */
+  /**
+   * Every digest the plugin stored here before the digest state moved to DSH, oldest first.
+   * @returns the digest rows, with row-id ranges instead of cursors.
+   */
   legacyDigests(): LegacyDigestRow[] {
     return (this.db.prepare('SELECT * FROM digests ORDER BY id').all() as Row[]).map(row => ({
       groupId: String(row['group_id']), fromRow: Number(row['from_row']), toRow: Number(row['to_row']), messageCount: Number(row['message_count']),
-      text: String(row['text']), model: String(row['model']), usage: row['usage'] === null ? null : String(row['usage']),
-      rawPath: row['raw_path'] === null ? null : String(row['raw_path']), createdAt: Number(row['created_at']),
+      text: String(row['text']), model: String(row['model']), usage: row['usage'] as string | null,
+      rawPath: row['raw_path'] as string | null, createdAt: Number(row['created_at']),
     }))
   }
 
-  /** Every group note stored before the move, oldest first. */
+  /**
+   * Every group note stored before the move, oldest first.
+   * @returns the notes.
+   */
   legacyNotes(): Array<{ groupId: string; text: string; createdAt: number }> {
     return (this.db.prepare('SELECT group_id, text, created_at FROM group_notes ORDER BY id').all() as Row[])
       .map(row => ({ groupId: String(row['group_id']), text: String(row['text']), createdAt: Number(row['created_at']) }))
   }
 
-  /** Every resident digest Session stored before the move. */
+  /**
+   * Every resident digest Session stored before the move.
+   * @returns one entry per group.
+   */
   legacySessions(): Array<{ groupId: string; sessionId: string; createdAt: number; generation: number }> {
     return (this.db.prepare('SELECT group_id, session_id, created_at, generation FROM group_sessions').all() as Row[])
       .map(row => ({ groupId: String(row['group_id']), sessionId: String(row['session_id']), createdAt: Number(row['created_at']), generation: Number(row['generation']) }))
   }
 
-  /** Every distinct (member, nickname, card) combination the group's recorded messages carry. */
+  /**
+   * Every distinct (member, nickname, card) combination the group's recorded messages carry.
+   * @param groupId - the QQ group number.
+   * @returns the combinations; entries where both nickname and card are empty are left out.
+   */
   members(groupId: string): Array<{ userId: string; nickname: string; card: string }> {
     const rows = this.db.prepare('SELECT DISTINCT user_id, nickname, card FROM messages WHERE group_id = ? AND (nickname <> \'\' OR card <> \'\')').all(groupId) as Row[]
     return rows.map(row => ({ userId: String(row['user_id']), nickname: String(row['nickname']), card: String(row['card']) }))
@@ -438,11 +552,21 @@ export class QqStore {
 
   // ---- meta ----
 
+  /**
+   * A stored setting.
+   * @param key - the setting name.
+   * @returns the value, or undefined when it is not set.
+   */
   getMeta(key: string): string | undefined {
     const row = this.db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as Row | undefined
     return row === undefined ? undefined : String(row['value'])
   }
 
+  /**
+   * Store a setting.
+   * @param key - the setting name.
+   * @param value - the value, replacing any previous one.
+   */
   setMeta(key: string, value: string): void {
     this.db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value').run(key, value)
   }
