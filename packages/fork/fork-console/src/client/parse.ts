@@ -30,7 +30,8 @@ export function parseFlowActivity(body: unknown): FlowActivityView {
   if (typeof windows !== 'object' || windows === null || !Array.isArray(recent) || typeof checkedAt !== 'number') {
     throw new Error('unexpected flow answer')
   }
-  return body as FlowActivityView
+  // A Host from before run-time routes answers without them.
+  return { routes: [], changes: [], ...(body as object) } as FlowActivityView
 }
 
 /**

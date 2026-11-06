@@ -1,5 +1,5 @@
 ---
-description: "面向模型的 watch_create、watch_list、watch_delete 工具，让 agent 自己决定 fork 事件服务监控什么：GitHub 仓库与通知线程，结果经微信送达或交给无人值守的 agent。"
+description: "面向模型的 watch_create、watch_list、watch_delete、flow_read、flow_edit 工具，让 agent 自己决定 fork 事件服务监控什么、每条通知怎么走：GitHub 仓库与通知线程，结果经微信送达或交给无人值守的 agent。"
 kind: "package-reference"
 ---
 
@@ -58,6 +58,11 @@ kind: "package-reference"
 -----
 
 <a id="understand-the-implementation"></a>
+### 通知流程
+
+- `flow_read()`——从事件到主人的每条路由：接收什么、它的 Session 要做什么、回答去哪、最近情况如何；还有最近一天没有路由接收的事件类型，以及最新改动。
+- `flow_edit(op, id, note, ...)`——改一条路由，包括部署写好的路由。`set` 改给出的字段或新建路由；`remove`、`reset`、`pause`、`resume` 分别是移除、恢复默认、暂停、恢复。`result` 取 `notify`、`urgent`、`main`、`quiet` 或 `event`，`event` 路由的回答由写明 `flow.<id>.result` 的路由接收。改动立即生效，部署不会盖回；通知器不转发的 Session 做的改动还会给主人发一条消息。
+
 ## 理解实现
 
 <details>

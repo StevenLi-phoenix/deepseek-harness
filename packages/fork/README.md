@@ -54,7 +54,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`fork-tool-voice/`](fork-tool-voice/README.md) | `speak` tool: the agent turns text into speech and sends the audio to the owner on WeChat |
 | [`fork-cc-bridge/`](fork-cc-bridge/README.md) | `cc_list_sessions`, `cc_send`, `cc_start`, `cc_stop` tools: work with Claude Code sessions of the agent's own account |
 | [`fork-tool-qq/`](fork-tool-qq/README.md) | `qq_groups`, `qq_digest`, `qq_recent`, `qq_search` tools: the agent reads what the QQ observer recorded and digested |
-| [`fork-tool-watch/`](fork-tool-watch/README.md) | `watch_create`, `watch_list`, `watch_delete` tools: the agent manages its own watches |
+| [`fork-tool-watch/`](fork-tool-watch/README.md) | `watch_create`, `watch_list`, `watch_delete` tools: the agent manages its own watches; `flow_read`, `flow_edit`: it changes the whole notification flow |
 | [`fork-tool-wechat/`](fork-tool-wechat/README.md) | `wechat_send_file` tool: the agent sends pictures, videos, and files to the owner |
 | [`fork-voice/`](fork-voice/README.md) | `ctx.forkVoice`: text to speech (feiyu, Mac mini TTS fallback) and speech to text for audio files (asr-service, off by default) |
 | [`fork-wechat/`](fork-wechat/README.md) | WeChat (iLink bot) channel: owner chat Session, its answers through `owner-relay`, and `ctx.forkNotifier`; a Settings section to bind by QR code, see its health, and unbind |

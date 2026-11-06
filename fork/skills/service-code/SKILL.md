@@ -80,6 +80,7 @@ ams ctl start dsh-upgrade
 
 | 设置在哪 | 怎么改 | 何时生效 |
 |---|---|---|
+| 通知怎么走：哪些事件进哪个 Session、Session 的回答发给谁（`ci`、`host-alerts`、`notify-funnel` 这些订阅，以及新建一条） | `flow_read` 看全部路由，`flow_edit` 改。不用改 YAML，部署不会盖回 | 立即 |
 | 根上的条目（`cordis_inspect_list` 列得出来的，比如 `fork-integrity`、`fork-qq`） | 先备份，再改 `/Users/dsh-runtime/.dsh/profiles/event/cordis.patch.yml`，按 `id` 写。`config` 会整段替换下层，下层设过的字段要一起写上 | 保存后自动重载 |
 | preset 里的条目（`preset-unattended` 下的 `fork-memory` 这类，profile patch 按 id 够不到） | 改 `fork/main` 上的 `fork/bundles/event/cordis.patch.yml`，推送后按“部署 DSH 自己”上线 | 等回合结束后重启 |
 

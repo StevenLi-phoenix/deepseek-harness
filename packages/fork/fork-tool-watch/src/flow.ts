@@ -76,10 +76,11 @@ interface EditArgs {
 function argumentProblem(args: EditArgs): string | undefined {
   if (!ID_PATTERN.test(args.id)) return 'id must be 1-63 lowercase letters, digits, or hyphens.'
   if (args.note.trim() === '') return 'note must say why, in a line the owner can read.'
-  if (args.coalesce_seconds !== undefined && !(Number.isSafeInteger(args.coalesce_seconds) && args.coalesce_seconds >= 0 && args.coalesce_seconds <= MAX_COALESCE_SECONDS)) {
+  const within = (value: number, min: number, max: number): boolean => Number.isSafeInteger(value) && value >= min && value <= max
+  if (args.coalesce_seconds !== undefined && !within(args.coalesce_seconds, 0, MAX_COALESCE_SECONDS)) {
     return `coalesce_seconds must be a whole number from 0 to ${MAX_COALESCE_SECONDS}.`
   }
-  if (args.max_per_hour !== undefined && !(Number.isSafeInteger(args.max_per_hour) && args.max_per_hour >= 1 && args.max_per_hour <= MAX_PER_HOUR)) {
+  if (args.max_per_hour !== undefined && !within(args.max_per_hour, 1, MAX_PER_HOUR)) {
     return `max_per_hour must be a whole number from 1 to ${MAX_PER_HOUR}.`
   }
   if (args.workspace_path?.startsWith('/') === false) return 'workspace_path must be absolute.'
@@ -234,7 +235,7 @@ export function registerFlowTools(ctx: Context, config: Config): void {
       },
       render: renderValue,
     },
-    async execute() {
+    execute() {
       const since = Date.now() - DAY_MS
       const unrouted = new Map<string, { kind: string; source: string; count: number }>()
       for (const event of ctx.forkEventBus.events()) {
@@ -242,11 +243,11 @@ export function registerFlowTools(ctx: Context, config: Config): void {
         const seen = unrouted.get(event.kind)
         unrouted.set(event.kind, { kind: event.kind, source: event.source, count: (seen?.count ?? 0) + 1 })
       }
-      return {
+      return Promise.resolve({
         routes: ctx.forkEventBus.flowRoutes().map(routeView),
         unrouted_kinds: [...unrouted.values()].sort((a, b) => b.count - a.count).slice(0, UNROUTED_SHOWN),
         history: ctx.forkEventBus.flowHistory(HISTORY_SHOWN).map(changeView),
-      }
+      })
     },
     presentCall: () => present('Read the notification flow', 'read'),
   }))
@@ -297,7 +298,7 @@ export function registerFlowTools(ctx: Context, config: Config): void {
       render: renderValue,
     },
     async execute(args, exec) {
-      const edit = args as EditArgs
+      const edit: EditArgs = args
       const problem = argumentProblem(edit)
       if (problem !== undefined) return { code: 'invalid_arguments' as const, message: problem }
       const sessionId = exec.agent?.session.id

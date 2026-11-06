@@ -158,6 +158,7 @@ Say it in WeChat; the agent sets it up with its tools and confirms:
 - `我的 GitHub 通知有新的就推给我` → a notifications watch (needs `FORK_GITHUB_NOTIFICATIONS_TOKEN`).
 - `每天早上 9 点看一下 kaorou 队列有没有卡住的任务，没问题就别打扰我` → a reminder; quiet runs answer `NO_REPLY` and send nothing.
 - `列一下你现在在盯什么` / `把 xxx 那个删掉` → `watch_list` / `watch_delete`; reminders use `schedule_list` / `schedule_delete`.
+- `CI 失败先走通知台再告诉我` / `这类通知别发了` → `flow_read` / `flow_edit` (§22).
 
 ## 10. Web access: take over `dsh.tailc2559b.ts.net`
 
@@ -530,9 +531,11 @@ What the framework can replace live, measured with a model stream held open acro
 
 A resumed Session's agent stays alive until the process ends and nothing can release it, so these do not become hot by waiting. The reconcile decides at deploy time, so this table only says what to expect.
 
-## 22. DAG workflows
+## 22. Notification flow
 
-The skill `dag-workflow` (`fork/skills/dag-workflow`) tells the main agent how to use the `workflow` tool when the owner asks for it: order and parallelism come from the script body, with no scheduler helper in the prompt. It adds no plugin or tool: `workflow-ptc` and `tool-workflow` were already in the `unattended` preset, and `setup-profile.sh` links the skill into `$DSH_HOME/skills`. Other presets have no `workflow` tool. Runs appear in the chat as workflow cards and in the job list when backgrounded. Each child spends the route's daily limit. `packages/fork/bili/tests/dag-workflow-skill.spec.ts` runs the example from `SKILL.md` through the real workflow guest.
+The whole way from an event to the owner is data the agent changes itself, with no YAML and no deploy: `flow_read` lists every route, what it takes, what its Session is told, and where its answer goes; `flow_edit` changes one, including the routes `fork/bundles/event/cordis.patch.yml` wrote (`ci`, `host-alerts`, `notify-funnel`). A Session route's answer goes to `notify`, `urgent` (past do-not-disturb), `main` (the main agent), `quiet`, or `event`: an event of source `flow` and kind `flow.<route>.result` that another route takes, so routes chain. `NO_REPLY` sends nothing on any of them. The bus refuses a change that makes a loop, and a `session` route's answer goes to the notifier when nothing takes it.
+
+A change lives in the bus's storage (`route_overrides`, `flow_changes`), so a restart or a deploy keeps it and the bundle stays the default underneath. `flow_edit` with op `reset` puts a bundle route back; each change keeps the route before and after in `flow_changes`, and the message flow page lists the latest ones and draws the routes as they run. A change from a Session other than the WeChat chat also sends the owner a message. Rolling the service back past this version needs the agent-made routes with `result`, `model`, `persistent`, or `project` removed first: the older schema refuses those rows.
 
 Going back to a build older than the 2026-11-06 upstream sync: a Session that created a subagent on the newer build carries `subagent/catalog` version 3, which older releases refuse to open, so start a new Session for those chats.
 

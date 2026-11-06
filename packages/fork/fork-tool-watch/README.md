@@ -1,5 +1,5 @@
 ---
-description: "Model-facing watch_create, watch_list, and watch_delete tools that let the agent decide what the fork event service monitors: GitHub repositories and notification threads, reported over WeChat or handed to an unattended agent."
+description: "Model-facing watch_create, watch_list, watch_delete, flow_read, and flow_edit tools that let the agent decide what the fork event service monitors and how each notification travels: GitHub repositories and notification threads, reported over WeChat or handed to an unattended agent."
 kind: "package-reference"
 ---
 
@@ -58,6 +58,11 @@ After a successful create or delete, the tool sends `🆕 watch created: <id>` o
 -----
 
 <a id="understand-the-implementation"></a>
+### The notification flow
+
+- `flow_read()` — Every route from an event to the owner: what it takes, what its Session is told, where its answer goes, how it has been doing; event kinds no route took in the last day; and the latest changes.
+- `flow_edit(op, id, note, ...)` — Change a route, including one the deployment wrote. `set` changes the fields given or creates the route; `remove`, `reset`, `pause`, and `resume` do what they say. `result` is `notify`, `urgent`, `main`, `quiet`, or `event`, and an `event` route's answer is taken by a route naming `flow.<id>.result`. A change works at once and outlives deploys, and a change from a Session the notifier does not relay also sends the owner a message.
+
 ## Understand the implementation
 
 <details>

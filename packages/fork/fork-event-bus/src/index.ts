@@ -704,7 +704,7 @@ export class ForkEventBus extends Service {
    * @param limit - most entries.
    * @returns the newest first.
    */
-  flowHistory(limit = FLOW_CHANGES_KEPT): FlowChange[] {
+  flowHistory(limit: number = FLOW_CHANGES_KEPT): FlowChange[] {
     return rowsOf(this.domain?.table('flow_changes')).sort((a, b) => b.at - a.at || b.id.localeCompare(a.id)).slice(0, limit) as FlowChange[]
   }
 
@@ -761,7 +761,7 @@ export class ForkEventBus extends Service {
       if (!configured) throw new ForkFlowError('not_config', `"${edit.id}" is not a configuration route; set or remove it instead.`)
       this.assertNoCycle(this.allSubscriptions().filter(route => route.id !== edit.id), this.configSubscriptions.get(edit.id))
       await overrides.delete(edit.id)
-      await this.rearm(domain, edit.id)
+      this.rearm(domain, edit.id)
       return
     }
     if (edit.op !== 'set' && !known) throw new ForkFlowError('not_found', `No route has id "${edit.id}"; flow_read lists them.`)
@@ -783,7 +783,7 @@ export class ForkEventBus extends Service {
         this.flushTimers.get(edit.id)?.dispose()
         this.flushTimers.delete(edit.id)
       } else {
-        await this.rearm(domain, edit.id)
+        this.rearm(domain, edit.id)
       }
       return
     }
@@ -823,7 +823,7 @@ export class ForkEventBus extends Service {
   }
 
   /** Arm the flush of a route that takes events again and has some waiting. */
-  private async rearm(domain: Domain<typeof busDomain>, id: string): Promise<void> {
+  private rearm(domain: Domain<typeof busDomain>, id: string): void {
     const route = this.subscriptionById(id)
     if (route === undefined || this.pausedIds().has(id)) return
     const waiting = [...domain.table('pending').entries()].some(([, row]) => row.subscription === id)

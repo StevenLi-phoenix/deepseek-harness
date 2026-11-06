@@ -17,6 +17,8 @@ const fakeCtx = (bus: unknown, presence?: unknown) => ({
 }) as never
 
 const BUS = {
+  flowRoutes: () => [],
+  flowHistory: () => [],
   events: () => [
     event('old', 'github', 3 * 24 * HOUR, ['ci']),
     event('a', 'github', 2 * HOUR, ['ci']),
@@ -59,6 +61,8 @@ describe('flow activity', () => {
     expect(view.recent.map(item => item.id)).not.toContain('e')
     expect(view.windows['24h'].ignored).toBe(1)
     const busy = {
+      flowRoutes: () => [],
+      flowHistory: () => [],
       events: () => [
         ...Array.from({ length: 60 }, (_, index) => event(`u${index}`, 'github', 1 + index, [])),
         event('taken', 'github', 100 * 60_000, ['ci']),
@@ -71,7 +75,7 @@ describe('flow activity', () => {
   })
 
   it('cuts a long title, and answers with empty windows when the bus is not mounted', () => {
-    const long = { events: () => [{ ...event('x', 'qq', 1, ['qq-main']), title: '长'.repeat(200) }], batches: () => [] }
+    const long = { flowRoutes: () => [], flowHistory: () => [], events: () => [{ ...event('x', 'qq', 1, ['qq-main']), title: '长'.repeat(200) }], batches: () => [] }
     expect(Array.from(collectActivity(fakeCtx(long), NOW).recent[0]!.title).length).toBe(80)
     const none = collectActivity(fakeCtx(undefined), NOW)
     expect(none.windows['24h'].funnel.events).toBe(0)
@@ -82,5 +86,30 @@ describe('flow activity', () => {
   it('reads whether the owner is asleep and how many messages wait for them', () => {
     const presence = { view: () => ({ asleep: true, deferred: 2, since: 1 }) }
     expect(collectActivity(fakeCtx(BUS, presence), NOW).presence).toEqual({ asleep: true, deferred: 2 })
+  })
+})
+
+describe('routes of the flow', () => {
+  const ctx = (bus: object) => ({ get: (name: string) => name === 'forkEventBus' ? bus : undefined }) as never
+
+  it('says how each route runs now and what changed, and sends no answer text', () => {
+    const view = collectActivity(ctx({
+      events: () => [event('e1', 'github', HOUR, ['ci']), event('e2', 'flow', HOUR, ['desk'])],
+      batches: () => [{ subscription: 'ci', eventIds: ['e1'], createdAt: NOW - HOUR, status: 'completed', notSent: true }],
+      flowRoutes: () => [
+        {
+          id: 'ci', origin: 'config', action: 'session', sources: ['github'], kinds: ['github.*'], subjects: [], changed: { at: 5 }, result: 'event', downstream: ['desk'],
+          session: { instructions: 'x'.repeat(2000) },
+        },
+        { id: 'alerts', origin: 'config', action: 'notify', sources: ['host'], kinds: [], subjects: [], paused: true, downstream: [], session: {} },
+      ],
+      flowHistory: () => [{ id: 'c1', at: 5, op: 'set', route: 'ci', by: 'session', note: 'through the desk', before: '{}', after: '{}' }],
+    }), NOW)
+    expect(view.routes[0]).toMatchObject({ id: 'ci', changedAt: 5, result: 'event', downstream: ['desk'], paused: false })
+    expect(view.routes[0]?.instructions).toHaveLength(1200)
+    expect(view.routes[1]).toMatchObject({ result: 'direct', paused: true, instructions: null })
+    expect(view.changes).toEqual([{ id: 'c1', at: 5, op: 'set', route: 'ci', note: 'through the desk' }])
+    // An answer going on is not a new event, and a batch whose answer went on did not reach the owner.
+    expect(view.windows['24h'].funnel).toMatchObject({ events: 1, batches: 1, sent: 0, silent: 1 })
   })
 })

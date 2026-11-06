@@ -100,6 +100,12 @@ kind: "package-reference"
 
 匹配、flush、重启恢复和 webhook Session rule 都使用合并后的集合。
 
+### 通知流程
+
+`flowRoutes()` 列出所有路由，不论来源，并给出 Session 路由的回答去向（`result`）和接收它的路由（`downstream`）。`editFlow()` 在运行时修改路由：`set` 改字段或新建，`remove` 移除，`reset` 把配置路由恢复成写好的样子，`pause` 和 `resume` 暂停和恢复。配置路由的那一行不变，改动存在它上面，所以重启和部署都会保留。`flowHistory()` 保存最近 200 次改动及改动前后的路由。
+
+`session.result` 决定回答去向：`notify`（默认；`quietResult` 的行默认为 `quiet`）、`urgent`（通知不受勿扰限制）、`main`（主人的主智能体）、`quiet` 或 `event`。`event` 的回答以来源 `flow`、类型 `flow.<路由 id>.result` 发布，写明它们的路由都会接收，路由由此串起来；`NO_REPLY` 到此为止。`editFlow()` 用 `ForkFlowError` 拒绝成环的改动，没有路由接收的回答改发给通知器。
+
 ### 常驻 Session
 
 设置 `session.persistent.enabled` 后，第一批照常通过 webhook runtime 创建订阅的 Session，等这个 Session 的第一条消息到达时，总线把它的 id 记进 `persistent` 表。之后每一批都作为新的一轮进入这个 Session（经 `ctx.sessionController.resolveAgent()` 调用 `Agent.followup()`），prompt 文本和消息来源都与新 Session 的第一条消息相同（`webhook`、provider `fork-event`、批次 id 作 delivery id），所以 fork-taint 这类轮次来源检查对两者一视同仁。压缩归 preset 管（`dsh-compaction-basic` 的 `thresholdRatio`）；总线记下该 Session 最近一次 `compaction/summary` 的文本并计数。

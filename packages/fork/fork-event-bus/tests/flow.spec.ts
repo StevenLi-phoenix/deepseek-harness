@@ -101,7 +101,7 @@ describe('editFlow', () => {
 
   it('refuses a route that cannot run, takes everything, or does not exist', async () => {
     const { bus } = await harness({ config })
-    const code = async (work: Promise<unknown>): Promise<string> => work.then(() => 'ok', (error: ForkFlowError) => error.code)
+    const code = async (work: Promise<unknown>): Promise<string> => work.then(() => 'ok', (error: unknown) => (error as ForkFlowError).code)
     expect(await code(bus.editFlow({ op: 'set', id: 'x', patch: { sources: ['host'], action: 'session', session: { instructions: 'x' } } }))).toBe('invalid_route')
     expect(await code(bus.editFlow({ op: 'set', id: 'x', patch: { action: 'notify' } }))).toBe('invalid_route')
     expect(await code(bus.editFlow({ op: 'set', id: 'ci', patch: { session: { result: 'nope' as 'quiet' } } }))).toBe('invalid_route')
