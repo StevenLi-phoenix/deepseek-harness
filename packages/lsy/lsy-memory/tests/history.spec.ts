@@ -28,7 +28,7 @@ afterEach(async () => {
 
 const meta = { source: 'owner-turn', session: 's1', origin: 'owner' } as const
 
-describe('provenance', () => {
+describe('entry source fields', () => {
   it('stores where an entry came from, and reads an old line without it as legacy', async () => {
     const memory = await store()
     await writeFile(memory.file, `${JSON.stringify({ id: 'aaaaaa', category: 'instructions', date: '2026-10-01', text: 'old' })}\n`)
@@ -40,7 +40,7 @@ describe('provenance', () => {
     expect((await memory.index()).entries.map(entry => entry.source)).toEqual(['legacy', 'owner-turn'])
   })
 
-  it('reads a line whose provenance is malformed as an entry without it', async () => {
+  it('reads a line whose source fields are malformed as an entry without it', async () => {
     const memory = await store()
     await writeFile(memory.file, `${JSON.stringify({ id: 'bbbbbb', category: 'projects', date: '2026-10-01', text: 't', source: 'martian', session: 7 })}\n`)
     expect(await memory.list()).toEqual([{ id: 'bbbbbb', category: 'projects', date: '2026-10-01', text: 't' }])

@@ -12,7 +12,7 @@ export interface Config {
   /**
    * Hold a protected write (`instructions`, `preferences`, `identity`) until the owner approves it
    * when the turn was not the owner's alone, refuse to forget a protected entry then, and show
-   * `identity` entries only as a count. Off keeps the provenance records and notices but no holds.
+   * `identity` entries only as a count. Off keeps each entry's `source`, `session`, and `origin` and the notices, but no holds.
    * `LSY_MEMORY_HOLD=0` in the environment turns it off whatever the configuration says.
    */
   hold?: boolean

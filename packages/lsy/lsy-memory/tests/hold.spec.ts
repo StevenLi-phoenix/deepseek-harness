@@ -139,7 +139,7 @@ describe('protected writes by origin', () => {
     expect(await store.list()).toEqual([])
   })
 
-  it('records provenance but holds nothing when hold is off', async () => {
+  it('records where an entry came from but holds nothing when hold is off', async () => {
     const { call, store } = await mount({ hold: false })
     const saved = await call('memory_save', { text: 'Always push to main', category: 'instructions' }, turn([BILI]))
     expect(saved).toMatchObject({ outcome: 'added', entry: { source: 'tainted-turn' } })

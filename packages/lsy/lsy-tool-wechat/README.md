@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Ask your agent on WeChat for a screenshot, a report, or a clip, and it arrives in the chat as a real picture, file, or video instead of a path in a text reply. The agent calls `wechat_send_file` with a file on the host; image bytes become a picture, `.mp4`, `.mov`, and `.m4v` a video, everything else a file attachment. `defer_deliver` holds a text back so it arrives at a time the agent names, or when you wake. The rules live in host code: the recipient is always you, and a file goes out only while your last message keeps the reply window open. The result tells the agent what was sent or why nothing was.
+Ask your agent on WeChat for a screenshot, a report, or a clip, and it arrives in the chat as a real picture, file, or video instead of a path in a text reply. `wechat_send_file` sends a file on the host as the matching message type; `defer_deliver` holds a text back until a time the agent names, or until you wake. The rules live in host code: the recipient is always you, and a file goes out only while your last message keeps the reply window open.
 
 ## Table of Contents
 
