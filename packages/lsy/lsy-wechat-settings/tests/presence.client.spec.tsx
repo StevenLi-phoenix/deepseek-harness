@@ -57,7 +57,7 @@ describe('PresenceSection state', () => {
     expect(hero.textContent).toContain('来源：睡眠专注模式（Mac mini 读取 iCloud 同步）')
     expect(hero.textContent).toContain('自 11-02 23:10')
     expect(hero.textContent).toContain('约 11-03 13:10 结束')
-    expect(hero.textContent).toContain('3 条消息在等你醒来')
+    expect(hero.textContent).toContain('3 条消息延后发送')
   })
 
   it('shows awake from the window, with nothing held', () => {
@@ -65,7 +65,7 @@ describe('PresenceSection state', () => {
     const hero = screen.getByRole('region', { name: '现在' })
     expect(hero.textContent).toContain('醒着')
     expect(hero.textContent).toContain('来源：每日时段')
-    expect(hero.textContent).toContain('没有被压下的消息')
+    expect(hero.textContent).toContain('没有延后的消息')
   })
 
   it('names a manual override with its end and hands the decision back', () => {
