@@ -5,7 +5,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 ## [Unreleased]
 
 ### Added
-- Skill `dag-workflow`: the main agent may orchestrate subagents as a loose dependency graph through the `workflow` tool without being asked by name, with a `dag()` helper offering hard (`needs`) and soft (`after`) dependencies.
+- Skill `dag-workflow`: how the main agent orchestrates subagents through the `workflow` tool when the owner asks for it, with order and parallelism written in the script body.
 - The `qq-main` subscription: `fork-qq` publishes each stored digest as `qq.digest.new` to one long, tool-less Session on the cheap route, whose answers stay in the Session (`session.quietResult`).
 - Local uploads and auto-repair (2026-11-02): an `upload` ingest source and the `upload-local` subscription start a Session that decides whether a video made on another machine needs cutting (autocut pipelines) or only asks the owner whether to upload it, keeping the autocut confirmation gate shut; the `ams-repair` skill tells the main agent when an AMS fault may go to a `cc_start` Claude Code session (a branch, tests, no push, deploy, or restart) and how to report it; `check-setup-profile.sh` now checks that every shipped skill is linked.
 - `defer_deliver` (`fork-tool-wechat`, 2026-11-02): the agent holds a text for the owner until a time (`until`, ISO 8601 with a UTC offset, at most 7 days ahead) or until the owner wakes, whichever is first; `WechatChannel.holdDelivery()` keeps it in the outbox with a release time, one timer for the earliest (armed again after a restart), and the owner's own messages do not release it early.
