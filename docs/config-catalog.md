@@ -2633,7 +2633,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-fork-event-bus`
 
 - `inject`: `timer` · `storageDomain`
-- `source`: [`packages/fork/fork-event-bus/src/index.ts:66`](../packages/fork/fork-event-bus/src/index.ts)
+- `source`: [`packages/fork/fork-event-bus/src/index.ts:72`](../packages/fork/fork-event-bus/src/index.ts)
 
 ```ts config-catalog
 /** Bus configuration. */
@@ -2646,6 +2646,8 @@ export interface Config {
   retainEvents: number
   /** Batches kept for rate limiting and inspection; the oldest are pruned first. */
   retainBatches: number
+  /** Changes of the notification flow kept for `flow_read` and the message flow page; the oldest are pruned first. */
+  flowChangesKept: number
   /** Maximum stored characters of each event's untrusted text. */
   maxTextChars: number
   /** Send the final assistant text of each bus-started Session to the notifier. */
@@ -2734,6 +2736,8 @@ export interface SessionAction {
   trustedText?: boolean
   /** Keep the Session's answer in the Session: the outcome is recorded and no result note goes to the notifier. */
   quietResult?: boolean
+  /** Where the Session's answer goes; overrides `quietResult`. Omitted: `quietResult` decides, otherwise the notifier. */
+  result?: RouteResult
   /**
    * A model route for this subscription's Sessions instead of the profile's default, as
    * `{ provider, model }` (the provider is a registered `llm-pi-ai` route). Configuration rows only;
@@ -2757,6 +2761,13 @@ export interface SessionAction {
    */
   project?: string
 }
+
+/**
+ * Where a `session` route's answer goes: `notify` a message for the owner, `urgent` the same past the do-not-disturb hold, `main` the
+ * owner's main agent, `quiet` nowhere, and `event` an event of kind `flow.<route id>.result` that other routes can take. The silent
+ * reply sends nothing on any of them, so a route filters by answering it.
+ */
+export type RouteResult = 'notify' | 'urgent' | 'main' | 'quiet' | 'event'
 
 /**
  * How a `session` subscription keeps one Session across batches. The first batch creates it through
@@ -3247,7 +3258,7 @@ export interface SessionConfig {
 
 ## `@deepseek-ai/dsh-fork-style`
 
-- `source`: [`packages/fork/fork-style/src/index.ts:100`](../packages/fork/fork-style/src/index.ts)
+- `source`: [`packages/fork/fork-style/src/index.ts:104`](../packages/fork/fork-style/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -3500,7 +3511,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-fork-time-gap`
 
 - `inject`: `agents` · `sessionProjections`
-- `source`: [`packages/fork/fork-time-gap/src/index.ts:42`](../packages/fork/fork-time-gap/src/index.ts)
+- `source`: [`packages/fork/fork-time-gap/src/index.ts:46`](../packages/fork/fork-time-gap/src/index.ts)
 
 ```ts config-catalog
 /** Settings, edited in Settings → 订阅与监控 through the All settings card. */
@@ -3548,7 +3559,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-fork-tool-up`
 
 - `inject`: `tools` · `credentials`
-- `source`: [`packages/fork/fork-tool-up/src/index.ts:51`](../packages/fork/fork-tool-up/src/index.ts)
+- `source`: [`packages/fork/fork-tool-up/src/index.ts:55`](../packages/fork/fork-tool-up/src/index.ts)
 
 ```ts config-catalog
 /** Notes, evidence, and the Session they belong to. */
@@ -3585,7 +3596,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-fork-tool-watch`
 
 - `inject`: `tools`
-- `source`: [`packages/fork/fork-tool-watch/src/index.ts:28`](../packages/fork/fork-tool-watch/src/index.ts)
+- `source`: [`packages/fork/fork-tool-watch/src/index.ts:26`](../packages/fork/fork-tool-watch/src/index.ts)
 
 ```ts config-catalog
 /** Defaults applied to watches the model creates. */
@@ -3602,6 +3613,18 @@ export interface Config {
   defaultNotifyMaxPerHour: number
   /** Batches per rolling hour of a `session` watch. */
   defaultSessionMaxPerHour: number
+  /** Events embedded in the prompt of a Session that a watch or route starts. */
+  defaultMaxPromptEvents: number
+  /** Characters of each event's text in that prompt. */
+  defaultMaxTextChars: number
+  /** Days a route's long-running Session lives before the next batch replaces it. */
+  defaultRolloverDays: number
+  /** Characters of the summary carried into the replacement. */
+  defaultMaxSeedChars: number
+  /** Changes of the notification flow that `flow_read` returns. */
+  flowHistoryShown: number
+  /** Event kinds without a route that `flow_read` returns. */
+  flowUnroutedShown: number
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-watch -->
@@ -3705,7 +3728,7 @@ export type TtsProviderName = 'feiyu' | 'mac-mini'
 ## `@deepseek-ai/dsh-fork-wechat`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/fork-wechat/src/index.ts:78`](../packages/fork/fork-wechat/src/index.ts)
+- `source`: [`packages/fork/fork-wechat/src/index.ts:82`](../packages/fork/fork-wechat/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */

@@ -37,6 +37,10 @@ declare module '@deepseek-ai/cordis' {
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
+    /**
+     * Notices of the creator-account tools.
+     * @persistenceAttribution
+     */
     'fork-tool-up': { kind: 'fork-tool-up' } & ContextFormed
   }
 }

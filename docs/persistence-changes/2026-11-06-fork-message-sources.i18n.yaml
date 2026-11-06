@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for 2026-11-06-fork-message-sources.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/persistence-changes/2026-11-06-fork-message-sources.md
+/:
+  en: 3d5a424ae7d7e46b
+  zh: c22a8e4a62d8cc1a
+/2026-11-06-fork-message-sources:
+  en: 6fdfed5324613245
+  zh: 931fc1a2b8b4e832
+/2026-11-06-fork-message-sources/summary:
+  en: ccdd763537a2bcdf
+  zh: 44636ac133e68f44
+/2026-11-06-fork-message-sources/table-of-contents:
+  en: 6cf314a069ceb451
+  zh: 9adff678e9ecab3b
+/2026-11-06-fork-message-sources/declaration:
+  en: 6907136f28e48c90
+  zh: 02f8298485f3d8e7
+/2026-11-06-fork-message-sources/compatibility:
+  en: e0c55b5f46cc99a6
+  zh: 7221328cb2528546
+/2026-11-06-fork-message-sources/verification:
+  en: 8007b3d337d6a3c2
+  zh: 272a65c3f1b95839
+/2026-11-06-fork-message-sources/dev-note:
+  en: b75c8458928b72b9
+  zh: 003ba4e17b4b5269

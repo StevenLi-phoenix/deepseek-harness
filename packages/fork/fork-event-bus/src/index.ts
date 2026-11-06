@@ -18,7 +18,7 @@ import {
   archiveDomain, autoArchiveSchema, resolveAutoArchive, SessionArchiver, type ArchiveHost, type ArchiveStatus, type AutoArchiveConfig,
   logModifiedAt, type LogLocator, type ProtectionDisposer, type SessionProtector, type SessionRow, type SweepReport,
 } from './archive.ts'
-import { applyRoutePatch, downstreamOf, findCycle, FLOW_SOURCE, flowResultKind, mergeRoutePatches, resultOf } from './flow.ts'
+import { applyRoutePatch, downstreamOf, findCycle, FLOW_SOURCE, flowResultKind, mergeRoutePatches, resultOf, ROUTE_RESULTS } from './flow.ts'
 import { matchesSubscription, suppressionReason } from './match.ts'
 import {
   FORK_SILENT_REPLY, batchTitle, buildBatchPrompt, buildSessionRequest, clip, failureDetail, formatBatchNote, formatReminderNote,
@@ -61,8 +61,9 @@ export const FORK_EVENT_KIND = 'fork-event'
 export const FORK_EVENT_RULE_ID = 'fork-event-bus'
 
 const HOUR_MS = 3_600_000
-/** Entries of the flow's change history kept. */
-const FLOW_CHANGES_KEPT = 200
+/** Limits of a route the configuration or a flow edit does not set. */
+const ROUTE_COALESCE_MS = 60_000
+const ROUTE_MAX_PER_HOUR = 12
 const DAY_MS = 86_400_000
 /** Titles are labels; anything longer is a sensor bug, not content. */
 const MAX_TITLE_CHARS = 300
@@ -77,6 +78,8 @@ export interface Config {
   retainEvents: number
   /** Batches kept for rate limiting and inspection; the oldest are pruned first. */
   retainBatches: number
+  /** Changes of the notification flow kept for `flow_read` and the message flow page; the oldest are pruned first. */
+  flowChangesKept: number
   /** Maximum stored characters of each event's untrusted text. */
   maxTextChars: number
   /** Send the final assistant text of each bus-started Session to the notifier. */
@@ -109,6 +112,7 @@ const sessionActionSchema: z<SessionAction> = z.object({
   maxTextChars: z.natural().min(1).default(2000),
   trustedText: z.boolean().default(false),
   quietResult: z.boolean().default(false),
+  result: z.union(ROUTE_RESULTS),
   model: z.object({ provider: z.string(), model: z.string() }),
   project: z.string(),
   persistent: z.object({
@@ -125,8 +129,8 @@ const subscriptionSchema: z<Subscription> = z.object({
   kinds: z.array(z.string()).default([]),
   subjects: z.array(z.string()).default([]),
   action: z.union(['notify', 'session'] as const).required(),
-  coalesceMs: z.natural().default(60_000),
-  maxPerHour: z.natural().min(1).default(12),
+  coalesceMs: z.natural().default(ROUTE_COALESCE_MS),
+  maxPerHour: z.natural().min(1).default(ROUTE_MAX_PER_HOUR),
   session: sessionActionSchema,
 })
 
@@ -139,6 +143,7 @@ export const Config: z<Config> = z.object({
   }),
   retainEvents: z.natural().min(1).default(5000),
   retainBatches: z.natural().min(1).default(1000),
+  flowChangesKept: z.natural().min(1).default(200),
   maxTextChars: z.natural().min(1).default(4000),
   notifySessionResult: z.boolean().default(true),
   reportScheduledTurns: z.boolean().default(true),
@@ -704,7 +709,7 @@ export class ForkEventBus extends Service {
    * @param limit - most entries.
    * @returns the newest first.
    */
-  flowHistory(limit: number = FLOW_CHANGES_KEPT): FlowChange[] {
+  flowHistory(limit: number = this.config.flowChangesKept): FlowChange[] {
     return rowsOf(this.domain?.table('flow_changes')).sort((a, b) => b.at - a.at || b.id.localeCompare(a.id)).slice(0, limit) as FlowChange[]
   }
 
@@ -735,7 +740,7 @@ export class ForkEventBus extends Service {
       }
       const changes = domain.table('flow_changes')
       await changes.put(change.id, change)
-      for (const old of this.flowHistory(Number.MAX_SAFE_INTEGER).slice(FLOW_CHANGES_KEPT)) await changes.delete(old.id)
+      for (const old of this.flowHistory(Number.MAX_SAFE_INTEGER).slice(this.config.flowChangesKept)) await changes.delete(old.id)
       const who = meta.by === undefined ? '' : ` by ${meta.by}`
       this.ctx.logger.info(`fork-event-bus: flow ${edit.op} ${edit.id}${who}${meta.note === undefined ? '' : `: ${meta.note}`}`)
       const route = this.flowRoutes().find(row => row.id === edit.id) ?? null
@@ -789,7 +794,7 @@ export class ForkEventBus extends Service {
     }
     const original = this.configSubscriptions.get(edit.id)
     const base: Subscription = (original === undefined ? before : applyRoutePatch(original, (override?.patch ?? {}) as RoutePatch))
-      ?? { id: edit.id, sources: [], kinds: [], subjects: [], action: 'notify', coalesceMs: 60_000, maxPerHour: 12 }
+      ?? { id: edit.id, sources: [], kinds: [], subjects: [], action: 'notify', coalesceMs: ROUTE_COALESCE_MS, maxPerHour: ROUTE_MAX_PER_HOUR }
     const next = applyRoutePatch(base, edit.patch)
     const problem = subscriptionProblem(next)
     if (problem !== undefined) throw new ForkFlowError('invalid_route', `fork-event-bus: ${problem}`)

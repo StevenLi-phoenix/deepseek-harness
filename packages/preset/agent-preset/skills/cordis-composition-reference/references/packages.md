@@ -338,7 +338,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-fork-cc-admin` | yes | Claude Code sessions of the service account as a root service: list, start with a first task, and stop, for the Settings page |
 | `@deepseek-ai/dsh-fork-cc-bridge` | yes | Model-facing cc_list_sessions and cc_send tools: the agent talks to the owner's Claude Code sessions on the same Mac through a relay, and their replies reach the main agent |
 | `@deepseek-ai/dsh-fork-config` | no | All settings card: every Config field of a plugin entry, the layer that set it, and one explicit save to the owner patch, embeddable in any Settings section |
-| `@deepseek-ai/dsh-fork-console` | yes | Settings sections for the event service: a service overview, subscriptions and schedule reminders, and Claude Code sessions with the voice service |
+| `@deepseek-ai/dsh-fork-console` | yes | The event service in the browser: a message flow page, and Settings sections for a service overview, subscriptions and schedule reminders, and Claude Code sessions with the voice service |
 | `@deepseek-ai/dsh-fork-courses` | yes | The owner's course records in DSH: a client of the courses service and a deadline poller that reminds the owner on WeChat by fixed rules (checkpoints, late windows, quiet hours) and tells when the course sync is broken |
 | `@deepseek-ai/dsh-fork-courses-settings` | no | Settings section for course deadline reminders: on or off, the last and next check with a button to check now, the course sync's health, the next deadlines, the latest reminders, and the plugin's configuration |
 | `@deepseek-ai/dsh-fork-event-bus` | yes | Durable event bus for event-driven agent runs: dedupe, loop suppression, subscriptions, coalescing, rate limits, and dispatch to notify or Session actuators |
@@ -363,7 +363,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-fork-tool-up` | yes | Model-facing up_* tools for the creator account's reads and Reply Gate replies (bili-svc) |
 | `@deepseek-ai/dsh-fork-tool-voice` | no | Model-facing speak tool: turn text into speech and send the audio to the owner over the fork WeChat channel |
 | `@deepseek-ai/dsh-fork-tool-watch` | yes | Model-facing watch_create, watch_list, watch_delete, flow_read, and flow_edit tools over the fork event bus and GitHub sensor |
-| `@deepseek-ai/dsh-fork-tool-wechat` | no | Model-facing wechat_send_file tool: send a local file to the owner over the fork WeChat channel |
+| `@deepseek-ai/dsh-fork-tool-wechat` | no | Model-facing WeChat tools: wechat_send_file sends a local file to the owner, and defer_deliver holds a text for a time or the owner's waking |
 | `@deepseek-ai/dsh-fork-voice` | yes | Voice for the owner's agents: text to speech through feiyu or the Mac mini TTS service, and speech to text through the asr-service (off by default) |
 | `@deepseek-ai/dsh-fork-wechat` | yes | WeChat (iLink bot) channel: owner chat Session, notification delivery, and ctx.forkNotifier for the fork event bus |
 | `@deepseek-ai/dsh-fork-wechat-settings` | no | WeChat and quiet-hours (勿扰) settings sections: bind the owner's WeChat bot by QR code, see the channel's health, unbind, and control when the owner counts as asleep (browser half; the Host routes are served by @deepseek-ai/dsh-fork-wechat and @deepseek-ai/dsh-fork-presence) |

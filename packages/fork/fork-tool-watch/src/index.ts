@@ -14,17 +14,13 @@ import { REPO_STREAMS, streamId, type CredentialStatus, type PollStatus, type Re
 import { defineTool, type GenericCallView } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
 import { registerFlowTools } from './flow.ts'
+import { ID_PATTERN, MAX_COALESCE_SECONDS, MAX_PER_HOUR } from './limits.ts'
 
 /** Plugin name registered with the Loader. */
 export const name = 'fork-tool-watch'
 
 /** Host services this plugin consumes; the bus and the sensor are resolved per scope. */
 export const inject = ['tools']
-
-/** Longest coalesce window a call may ask for: one day. */
-const MAX_COALESCE_SECONDS = 86_400
-/** Highest hourly batch limit a call may ask for. */
-const MAX_PER_HOUR = 60
 
 /** Defaults applied to watches the model creates. */
 export interface Config {
@@ -40,6 +36,18 @@ export interface Config {
   defaultNotifyMaxPerHour: number
   /** Batches per rolling hour of a `session` watch. */
   defaultSessionMaxPerHour: number
+  /** Events embedded in the prompt of a Session that a watch or route starts. */
+  defaultMaxPromptEvents: number
+  /** Characters of each event's text in that prompt. */
+  defaultMaxTextChars: number
+  /** Days a route's long-running Session lives before the next batch replaces it. */
+  defaultRolloverDays: number
+  /** Characters of the summary carried into the replacement. */
+  defaultMaxSeedChars: number
+  /** Changes of the notification flow that `flow_read` returns. */
+  flowHistoryShown: number
+  /** Event kinds without a route that `flow_read` returns. */
+  flowUnroutedShown: number
 }
 
 /** Configuration schema. */
@@ -50,15 +58,17 @@ export const Config: z<Config> = z.object({
   defaultCoalesceSeconds: z.natural().max(MAX_COALESCE_SECONDS).default(60),
   defaultNotifyMaxPerHour: z.natural().min(1).max(MAX_PER_HOUR).default(12),
   defaultSessionMaxPerHour: z.natural().min(1).max(MAX_PER_HOUR).default(4),
+  defaultMaxPromptEvents: z.natural().min(1).default(50),
+  defaultMaxTextChars: z.natural().min(1).default(2000),
+  defaultRolloverDays: z.natural().min(1).default(30),
+  defaultMaxSeedChars: z.natural().min(1).default(20_000),
+  flowHistoryShown: z.natural().min(1).default(20),
+  flowUnroutedShown: z.natural().min(1).default(20),
 })
 
-const ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/
 const REPO_NAME = /^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/
 const NOTIFICATION_KINDS = ['github.notification.*']
 const KIND_OF_STREAM: Record<RepoStream, string> = { releases: 'github.release', tags: 'github.tag', commits: 'github.commit' }
-/** Bounds of the event data embedded in a started Session's prompt. */
-const SESSION_PROMPT_EVENTS = 50
-const SESSION_TEXT_CHARS = 2000
 /** Characters of session instructions quoted in an audit note. */
 const AUDIT_INSTRUCTION_CHARS = 200
 
@@ -577,8 +587,8 @@ function registerWatchTools(ctx: Context, config: Config): void {
           permissionPreset: config.defaultPermissionPreset,
           // validateCreate already required non-blank instructions for a session watch.
           instructions: String(args.instructions).trim(),
-          maxPromptEvents: SESSION_PROMPT_EVENTS,
-          maxTextChars: SESSION_TEXT_CHARS,
+          maxPromptEvents: config.defaultMaxPromptEvents,
+          maxTextChars: config.defaultMaxTextChars,
         },
       } : {}),
     }

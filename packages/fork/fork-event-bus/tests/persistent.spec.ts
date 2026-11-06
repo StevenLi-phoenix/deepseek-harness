@@ -404,11 +404,14 @@ describe('ensureProject', () => {
     const projectDir = `${tmpdir()}/fork-bus-ws-${process.pid}-${Date.now()}`
     const sub: Subscription = { ...persistentSub, session: { ...persistentSub.session!, workspacePath: projectDir, project: '事件' } }
     const { bus } = await harness({ config: withConfig(sessionConfig, { subscriptions: [sub] }), registry })
+    // The directory comes from the real file system, which fake timers do not wait for.
+    const registered = (): void => { expect([...registry.projects]).toEqual([[projectDir, '事件']]) }
     await bus.publish(release(1))
     await vi.advanceTimersByTimeAsync(1_000)
+    await vi.waitFor(registered)
     await bus.publish(release(2))
     await vi.advanceTimersByTimeAsync(1_000)
-    expect([...registry.projects]).toEqual([[projectDir, '事件']])
+    await vi.waitFor(registered)
     await rm(projectDir, { recursive: true })
   })
 })

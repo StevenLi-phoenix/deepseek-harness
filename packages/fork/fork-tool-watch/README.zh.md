@@ -54,15 +54,21 @@ kind: "package-reference"
 | `defaultCoalesceSeconds` | `60` | 第一条新事件之后的合批窗口 |
 | `defaultNotifyMaxPerHour` | `12` | `notify` watch 滚动一小时的批次上限 |
 | `defaultSessionMaxPerHour` | `4` | `session` watch 滚动一小时的批次上限 |
+| `defaultMaxPromptEvents` | `50` | watch 或路由启动的 Session，其提示内嵌入的事件数 |
+| `defaultMaxTextChars` | `2000` | 该提示内每个事件文本的字符数 |
+| `defaultRolloverDays` | `30` | 路由的长期 Session 存续天数，到期后下一批次替换它 |
+| `defaultMaxSeedChars` | `20000` | 带入替换 Session 的摘要字符数 |
+| `flowHistoryShown` | `20` | `flow_read` 返回的通知流程改动条数 |
+| `flowUnroutedShown` | `20` | `flow_read` 返回的无路由事件种类数 |
 
------
-
-<a id="understand-the-implementation"></a>
 ### 通知流程
 
 - `flow_read()`——从事件到主人的每条路由：接收什么、它的 Session 要做什么、回答去哪、最近情况如何；还有最近一天没有路由接收的事件类型，以及最新改动。
 - `flow_edit(op, id, note, ...)`——改一条路由，包括部署写好的路由。`set` 改给出的字段或新建路由；`remove`、`reset`、`pause`、`resume` 分别是移除、恢复默认、暂停、恢复。`result` 取 `notify`、`urgent`、`main`、`quiet` 或 `event`，`event` 路由的回答由写明 `flow.<id>.result` 的路由接收。改动立即生效，部署不会盖回；通知器不转发的 Session 做的改动还会给主人发一条消息。
 
+-----
+
+<a id="understand-the-implementation"></a>
 ## 理解实现
 
 <details>
@@ -72,7 +78,9 @@ kind: "package-reference"
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 插件入口：三个注册、参数校验与视图投影 |
+| [`src/index.ts`](src/index.ts) | 插件入口：watch 工具注册、参数校验与视图投影 |
+| [`src/flow.ts`](src/flow.ts) | `flow_read` 和 `flow_edit`：路由视图，以及调用字段到路由改动的映射 |
+| [`src/limits.ts`](src/limits.ts) | 工具调用可请求值的上下限 |
 
 这是 fork 本地的包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。测试在内存存储上挂载真实的总线、传感器与工具注册表，并复用传感器的 `tests/fake-github.ts`。
 
@@ -106,6 +114,34 @@ preset 挂载这个包的 Agent，每次请求都有一份固定的 schema 开�
 
 工具定义与可见性不变时前缀稳定。挂载、dispose，或改变了描述里提到的默认值的配置变更，可能从第一个变化的 schema token 起使复用失效。
 
+### Flow 工具
+
+#### 模型看到什么
+
+同一 preset 行下多出两个工具 schema。`flow_read` 没有参数。`flow_edit` 必填 `op`（枚举 `set`、`remove`、`reset`、`pause`、`resume`）、`id` 和 `note`；`set` 还接受 `sources`、`kinds`、`subjects`、`action`、`result`（枚举 `notify`、`urgent`、`main`、`quiet`、`event`）、`instructions`、`agent_preset`、`workspace_path`、`model`、`session_per`（枚举 `batch`、`route`、`subject`）、`coalesce_seconds` 和 `max_per_hour`。默认 preset 和工作区写在对应参数的描述里。
+
+#### Token 影响
+
+preset 挂载这个包的 Agent，每次请求在 watch 工具之外多一份固定的 schema 开销。
+
+#### KV Cache 影响
+
+工具定义与可见性不变时前缀稳定。修改 `defaultAgentPreset` 或 `defaultWorkspacePath` 会改变参数描述，可能从第一个变化的 schema token 起使复用失效。
+
+### Flow 结果
+
+#### 模型看到什么
+
+每次调用一个无损 JSON 文本块。`flow_read` 返回 `routes`、`unrouted_kinds`（最近一天的种类、来源、次数）和 `history`（时间、操作、路由、Session、说明）。路由包含 `id`、`origin`、`action`、`sources`、`kinds`、`subjects`、`coalesce_seconds`、`max_per_hour`、`downstream`、`pending`、`batches_last_hour`，以及设置时才有的 `paused`、`removed`、`changed_at`、`result`、`result_kind`、`instructions`、`agent_preset`、`workspace_path`、`model`、`session_per` 和 `last_batch`。`flow_edit` 返回 `route`（移除后为 `null`）和 `warnings`，或带 `code`（`invalid_arguments`、`invalid_route`、`not_found`、`not_config`、`cycle`、`internal_error`）和 `message` 的拒绝。
+
+#### Token 影响
+
+结果在压缩前一直留在调用方 Session 的历史里；`flow_read` 的结果随路由数量增长，其列表受 `flowHistoryShown` 和 `flowUnroutedShown` 限制。
+
+#### KV Cache 影响
+
+只追加；新出现的内容位于可复用的请求前缀之后，不会使已有的 KV Cache 条目失效。
+
 ### Watch 结果
 
 #### 模型看到什么
@@ -128,6 +164,7 @@ preset 挂载这个包的 Agent，每次请求都有一份固定的 schema 开�
 - **同一仓库的 watch 共享事件**——订阅按仓库和 kind 匹配，所以同一仓库的两个 watch（例如两个分支的 commits）都会看到任一分支的提交。
 - **不能原地修改**——修改 watch 要先 `watch_delete` 再 `watch_create`，会重新记录基线。
 - **watch 作用于整个实例**——preset 挂载了这些工具的任何 Agent，都能看到并删除所有 agent 创建的 watch。
+- **preset 下的任何 Agent 都能改流程**——事件启动的 Session 也能改路由。通知器不转发的 Session 做的每次改动都会给主人发一条通知，消息流页面列出改动，`reset` 恢复部署写好的路由。
 
 <a id="dev-note"></a>
 ### 开发备注

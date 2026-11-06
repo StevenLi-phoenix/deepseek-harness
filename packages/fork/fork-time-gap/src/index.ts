@@ -24,6 +24,10 @@ import { classifyArrival, incomingKind, measureGap, timeGapNotice, timeGapSummar
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
+    /**
+     * Notices of elapsed time since the previous message.
+     * @persistenceAttribution
+     */
     'fork-time-gap': { kind: 'fork-time-gap' } & ContextFormed
   }
 }

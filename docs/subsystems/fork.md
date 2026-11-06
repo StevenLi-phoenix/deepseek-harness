@@ -395,6 +395,30 @@ async unsubscribe(id: string): Promise<UnsubscribeOutcome>
 async setPaused(id: string, paused: boolean): Promise<PauseOutcome>
 
 /**
+ * The whole notification flow: every route with where its answer goes and which routes take it, including a configuration route
+ * taken out, so it can be seen and put back.
+ * @returns routes in matching order, then the ones taken out.
+ */
+flowRoutes(): FlowRouteView[]
+
+/**
+ * Changes of the flow.
+ * @param limit - most entries.
+ * @returns the newest first.
+ */
+flowHistory(limit: number = this.config.flowChangesKept): FlowChange[]
+
+/**
+ * Change the notification flow at run time. It is stored, so a restart or a deploy keeps it; a configuration route keeps its bundle
+ * row and `reset` puts it back.
+ * @param edit - the change.
+ * @param meta - who made it and why.
+ * @returns the route as it stands, the history entry, and anything worth a second look.
+ * @throws {ForkFlowError} when the change would leave a route the bus cannot run, or a loop.
+ */
+async editFlow(edit: FlowEdit, meta: FlowEditMeta = {}): Promise<FlowEditResult>
+
+/**
  * Keep a plugin's Sessions out of the auto-archive sweep (for example the QQ resident group Sessions or the WeChat chat
  * Session). `check` runs only for Sessions that are otherwise due; return `true` (or a short reason) to keep one. A throw keeps it.
  * Register inside an effect so a reload withdraws the claim:

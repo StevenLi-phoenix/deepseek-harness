@@ -89,6 +89,10 @@ declare module '@deepseek-ai/cordis' {
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
+    /**
+     * Requests and context of the speaking-style plugin.
+     * @persistenceAttribution
+     */
     'fork-style': { kind: 'fork-style' } & ContextFormed
   }
 }

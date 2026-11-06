@@ -75,6 +75,7 @@ kind: "package-reference"
 | `subscriptions[].session.project` | 未设置 | `workspacePath` 在 Web UI 里的项目标题：Session 在那里启动之前，总线建好目录并把它登记为项目，已有项目则不动（已有项目保留原标题） |
 | `suppress.actors` / `suppress.markers` | `[]` | agent 的身份与输出标记，命中的事件被丢弃；优先用身份（由宿主设定），不要依赖标记（取决于模型写了什么） |
 | `retainEvents` / `retainBatches` | `5000` / `1000` | 保留的历史；最旧的已结算记录先被清理 |
+| `flowChangesKept` | `200` | 为 `flow_read` 和消息流页面保留的通知流程改动条数 |
 | `maxTextChars` | `4000` | 每个事件不可信正文的存储字符上限 |
 | `notifySessionResult` | `true` | 把总线启动的 Session 第一轮的结果发给通知器 |
 | `reportScheduledTurns` | `true` | 把每个无人值守的 Host schedule 提醒轮次、以及每个被 `fork-tool-monitor` 通知唤醒的轮次（标题为 📡 加监控名）的最终回答发给通知器 |

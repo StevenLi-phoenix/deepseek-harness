@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { findCycle, flowResultKind, ForkFlowError } from '../src/index.ts'
+import { Config, findCycle, flowResultKind, ForkFlowError } from '../src/index.ts'
 import type { ForkNote, Subscription } from '../src/types.ts'
 import { MemoryMediaPool } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 import { baseConfig, disposeAll, harness, release, sessionEvents, withConfig } from './harness.ts'
@@ -28,6 +28,14 @@ const desk: Subscription = {
 }
 
 const config = withConfig(baseConfig, { subscriptions: [ci, desk] })
+
+describe('Config', () => {
+  it('takes where a configured route\'s answer goes, and refuses a place that does not exist', () => {
+    const row = (result: string): never => ({ subscriptions: [{ id: 'a', action: 'session', session: { workspacePath: '/w', instructions: 'x', result } }] }) as never
+    expect(Config(row('event')).subscriptions[0]?.session?.result).toBe('event')
+    expect(() => Config(row('elsewhere'))).toThrow()
+  })
+})
 
 describe('findCycle', () => {
   const chain = (id: string, kinds: string[]): Subscription => ({

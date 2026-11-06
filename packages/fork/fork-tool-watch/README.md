@@ -54,15 +54,21 @@ After a successful create or delete, the tool sends `🆕 watch created: <id>` o
 | `defaultCoalesceSeconds` | `60` | Batch window after the first new event |
 | `defaultNotifyMaxPerHour` | `12` | Batches per rolling hour of a `notify` watch |
 | `defaultSessionMaxPerHour` | `4` | Batches per rolling hour of a `session` watch |
+| `defaultMaxPromptEvents` | `50` | Events embedded in the prompt of a Session a watch or route starts |
+| `defaultMaxTextChars` | `2000` | Characters of each event's text in that prompt |
+| `defaultRolloverDays` | `30` | Days a route's long-running Session lives before the next batch replaces it |
+| `defaultMaxSeedChars` | `20000` | Characters of the summary carried into the replacement |
+| `flowHistoryShown` | `20` | Changes of the notification flow that `flow_read` returns |
+| `flowUnroutedShown` | `20` | Event kinds without a route that `flow_read` returns |
 
------
-
-<a id="understand-the-implementation"></a>
 ### The notification flow
 
 - `flow_read()` — Every route from an event to the owner: what it takes, what its Session is told, where its answer goes, how it has been doing; event kinds no route took in the last day; and the latest changes.
 - `flow_edit(op, id, note, ...)` — Change a route, including one the deployment wrote. `set` changes the fields given or creates the route; `remove`, `reset`, `pause`, and `resume` do what they say. `result` is `notify`, `urgent`, `main`, `quiet`, or `event`, and an `event` route's answer is taken by a route naming `flow.<id>.result`. A change works at once and outlives deploys, and a change from a Session the notifier does not relay also sends the owner a message.
 
+-----
+
+<a id="understand-the-implementation"></a>
 ## Understand the implementation
 
 <details>
@@ -72,7 +78,9 @@ The plugin registers three `defineTool` definitions once the mounting scope reso
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Plugin entry: the three registrations, argument validation, and the view projection |
+| [`src/index.ts`](src/index.ts) | Plugin entry: the watch tool registrations, argument validation, and the view projection |
+| [`src/flow.ts`](src/flow.ts) | `flow_read` and `flow_edit`: the route views and the mapping from call fields to a route change |
+| [`src/limits.ts`](src/limits.ts) | Bounds on what a tool call may ask for |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md). Tests mount the real bus, sensor, and tool registry over memory storage and reuse the sensor's `tests/fake-github.ts`.
 
@@ -106,6 +114,34 @@ A fixed schema cost on every request from an Agent whose preset mounts the packa
 
 Prefix-stable while tool definitions and visibility are unchanged. Mounting, disposal, or a configuration change that alters a default named in a description may invalidate reuse from the first changed schema token.
 
+### Flow tools
+
+#### What the model sees
+
+Two more tool schemas under the same preset row. `flow_read` takes no parameters. `flow_edit` requires `op` (enum `set`, `remove`, `reset`, `pause`, `resume`), `id`, and `note`; `set` also takes `sources`, `kinds`, `subjects`, `action`, `result` (enum `notify`, `urgent`, `main`, `quiet`, `event`), `instructions`, `agent_preset`, `workspace_path`, `model`, `session_per` (enum `batch`, `route`, `subject`), `coalesce_seconds`, and `max_per_hour`. The default preset and workspace appear in their parameter descriptions.
+
+#### Token effect
+
+A fixed schema cost on every request from an Agent whose preset mounts the package, added to the watch tools.
+
+#### KV Cache effect
+
+Prefix-stable while tool definitions and visibility are unchanged. A configuration change to `defaultAgentPreset` or `defaultWorkspacePath` alters a parameter description and may invalidate reuse from the first changed schema token.
+
+### Flow results
+
+#### What the model sees
+
+One lossless JSON text block per call. `flow_read` returns `routes`, `unrouted_kinds` (kind, source, count over the last day), and `history` (time, op, route, Session, note). A route carries `id`, `origin`, `action`, `sources`, `kinds`, `subjects`, `coalesce_seconds`, `max_per_hour`, `downstream`, `pending`, `batches_last_hour`, and when set `paused`, `removed`, `changed_at`, `result`, `result_kind`, `instructions`, `agent_preset`, `workspace_path`, `model`, `session_per`, and `last_batch`. `flow_edit` returns `route` (`null` after a removal) and `warnings`, or a refusal with `code` (`invalid_arguments`, `invalid_route`, `not_found`, `not_config`, `cycle`, `internal_error`) and `message`.
+
+#### Token effect
+
+Results stay in the calling Session's history until compaction; a `flow_read` result grows with the number of routes and is bounded by `flowHistoryShown` and `flowUnroutedShown` for its lists.
+
+#### KV Cache effect
+
+Append-only; newly visible content follows the reusable request prefix and does not invalidate existing KV Cache entries.
+
 ### Watch results
 
 #### What the model sees
@@ -128,6 +164,7 @@ Append-only; newly visible content follows the reusable request prefix and does 
 - **Same-repository watches share events** — subscriptions match by repository and kind, so two watches of one repository, such as commits on two branches, both see commits from either branch.
 - **No in-place update** — changing a watch means `watch_delete` and `watch_create`, which records a new baseline.
 - **Watches are instance-wide** — any Agent whose preset mounts the tools sees and can delete every agent-created watch.
+- **Any Agent under the preset can change the flow** — a Session an event started can edit routes too. The owner gets a note for each change from a Session the notifier does not relay, the message flow page lists the changes, and `reset` restores a deployment route.
 
 <a id="dev-note"></a>
 ### Dev Note

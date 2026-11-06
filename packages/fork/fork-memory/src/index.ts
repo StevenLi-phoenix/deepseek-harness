@@ -20,6 +20,10 @@ import { registerMemoryTools } from './tools.ts'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
+    /**
+     * The memory block and the requests of the memory plugin.
+     * @persistenceAttribution
+     */
     'fork-memory': { kind: 'fork-memory' } & ContextFormed
   }
 }
