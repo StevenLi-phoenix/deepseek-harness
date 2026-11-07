@@ -11,7 +11,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { ContextFormed } from '@deepseek-ai/dsh-llm'
-import { createDelivery, SOURCE_KIND } from './delivery.ts'
+import { createDelivery, SOURCE_KIND, type MonitorEvent } from './delivery.ts'
 import { mountHandover } from './handover.ts'
 import { DEFAULT_LIMITS, MonitorRegistry } from './monitor.ts'
 import { MonitorStorage } from './persistence.ts'
@@ -56,7 +56,18 @@ export function apply(ctx: Context): void {
   let stopping = false
   const stopped = (): boolean => stopping
 
-  const delivery = createDelivery(ctx, stopped)
+  // Both services are optional: a process without a chat channel has no main agent, and its monitors answer their Sessions.
+  const optional = ctx as unknown as {
+    get(name: 'forkNotifier'): { ownsSession?(sessionId: string): boolean } | undefined
+    get(name: 'forkEventBus'): { publish(event: MonitorEvent): Promise<unknown> } | undefined
+  }
+  const delivery = createDelivery(ctx, stopped, {
+    isMainAgent: owner => optional.get('forkNotifier')?.ownsSession?.(owner) === true,
+    publish: (event) => {
+      const bus = optional.get('forkEventBus')
+      return bus === undefined ? Promise.reject(new Error('the event bus is not running')) : bus.publish(event)
+    },
+  })
   const storage = new MonitorStorage(ctx, { reachable: delivery.reachable, stopped })
   const registry = new MonitorRegistry(delivery.deliver, DEFAULT_LIMITS, Date.now, (monitor, reason) => {
     ctx.logger.info('monitor %s ended: %s', monitor.id, reason)

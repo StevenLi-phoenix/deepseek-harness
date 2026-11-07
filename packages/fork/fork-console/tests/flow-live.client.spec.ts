@@ -13,8 +13,27 @@ const arrow = (graph: ReturnType<typeof liveGraph>, from: string, to: string): b
   graph.edges.some(edge => edge.from === from && edge.to === to)
 
 describe('liveGraph', () => {
-  it('leaves the drawing as it is when no route was touched', () => {
-    expect(liveGraph(GRAPH_BUILT, [route('ci', { sources: ['github'] })])).toBe(GRAPH_BUILT)
+  it('leaves the drawing as it is when the service reports no routes', () => {
+    expect(liveGraph(GRAPH_BUILT, [])).toBe(GRAPH_BUILT)
+  })
+
+  it('draws a route nobody changed from what it really does, too', () => {
+    const graph = liveGraph(GRAPH_BUILT, [route('ci', { sources: ['github'], result: 'notify' })])
+    expect(arrow(graph, 'github', 'githubSessions')).toBe(true)
+    expect(arrow(graph, 'githubSessions', 'wechatOut')).toBe(true)
+    expect(arrow(graph, 'githubSessions', 'repairQ')).toBe(false)
+  })
+
+  it('draws CI through the desk to the main agent, and monitors into the desk', () => {
+    const graph = liveGraph(GRAPH_BUILT, [
+      route('ci', { sources: ['github'], result: 'event', downstream: ['notify-funnel'] }),
+      route('notify-funnel', { sources: ['host', 'flow', 'monitor'], result: 'main' }),
+    ])
+    expect(arrow(graph, 'githubSessions', 'notifySession')).toBe(true)
+    expect(arrow(graph, 'githubSessions', 'wechatOut')).toBe(false)
+    expect(arrow(graph, 'notifySession', 'main')).toBe(true)
+    expect(arrow(graph, 'notifySession', 'wechatOut')).toBe(false)
+    expect(arrow(graph, 'monitors', 'notifySession')).toBe(true)
   })
 
   it('redraws a changed route from what it really does', () => {
@@ -31,7 +50,7 @@ describe('liveGraph', () => {
 
   it('gives a new route a box of its own under the drawing, on the way from its source to the owner', () => {
     const graph = liveGraph(GRAPH_BUILT, [route('new-one', { origin: 'agent', sources: ['github'], result: 'urgent' })])
-    expect(graph.node('route:new-one')).toMatchObject({ title: 'new-one', cell: [1, 13] })
+    expect(graph.node('route:new-one')).toMatchObject({ title: 'new-one', cell: [1, 14] })
     expect(arrow(graph, 'github', 'route:new-one')).toBe(true)
     expect(arrow(graph, 'route:new-one', 'wechatOut')).toBe(true)
   })
@@ -47,12 +66,12 @@ describe('liveGraph', () => {
     expect(arrow(graph, 'route:second', 'main')).toBe(true)
   })
 
-  it('stays drawable when an arrow of the drawing would close a loop', () => {
+  it('stays drawable when routes would close a loop', () => {
     const graph = liveGraph(GRAPH_BUILT, [
-      route('notify-funnel', { sources: ['host'], changedAt: 1, result: 'event', downstream: ['ci'] }),
-      route('ci', { sources: ['github', 'flow'] }),
+      route('notify-funnel', { sources: ['host'], result: 'event', downstream: ['ci'] }),
+      route('ci', { sources: ['github', 'flow'], result: 'event', downstream: ['notify-funnel'] }),
     ])
-    expect(arrow(graph, 'notifySession', 'githubSessions')).toBe(false)
+    expect(arrow(graph, 'notifySession', 'githubSessions') && arrow(graph, 'githubSessions', 'notifySession')).toBe(false)
     expect(graph.nodes.length).toBe(GRAPH_BUILT.nodes.length)
   })
 
@@ -101,9 +120,10 @@ describe('liveGraph corners', () => {
 })
 
 describe('routeSignature', () => {
-  it('changes with the shape of a touched route and not with anything else', () => {
+  it('changes with the shape of a route and not with anything else', () => {
     const one = route('ci', { changedAt: 1 })
-    expect(routeSignature([one])).toBe(routeSignature([{ ...one, changedAt: 2, instructions: 'other' }, route('calm')]))
+    expect(routeSignature([one])).toBe(routeSignature([{ ...one, changedAt: 2, instructions: 'other' }]))
+    expect(routeSignature([one])).not.toBe(routeSignature([one, route('calm')]))
     expect(routeSignature([one])).not.toBe(routeSignature([{ ...one, result: 'quiet' }]))
   })
 })

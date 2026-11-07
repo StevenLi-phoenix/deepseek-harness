@@ -23,6 +23,8 @@ kind: "package-reference"
 -----
 
 <a id="use-this-package"></a>
+在主人的主对话里，这些行不会直接回来：主 agent 只接收其他 Session 发来的总结，所以它启动的监控发布 `monitor.output` 和 `monitor.ended` 事件交给通知台，事件总线拒收的通知会被丢弃并记日志。
+
 ## 使用这个包
 
 把下面这一行加到需要盯事情的 agent preset 的插件列表里。fork event profile 把它挂在 `unattended` preset 中，那里的 persona 会告诉 agent `monitor_start` 的存在。插件会等待 Host 的 `storageDomain`、`sessionPersistence` 和 `sessionController` 服务，这些由 Web bundle 挂载。

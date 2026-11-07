@@ -29,7 +29,7 @@ describe('the notification desk', () => {
   const desk = subs.find(sub => sub.id === 'notify-funnel')!
 
   it('is one long Session of a preset with no tools, on the cheap route, and tells the owner only what needs them', () => {
-    expect(desk).toMatchObject({ action: 'session', sources: ['host', 'autocut'], maxPerHour: 6 })
+    expect(desk).toMatchObject({ action: 'session', sources: ['host', 'autocut', 'flow', 'monitor'], maxPerHour: 6 })
     expect(desk.session).toMatchObject({ agentPreset: 'notify', persistent: { enabled: true } })
     expect(desk.session!.persistent!.key ?? 'subscription').toBe('subscription')
     expect(desk.session).toMatchObject({ model: { provider: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } })

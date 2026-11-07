@@ -1,20 +1,17 @@
 /**
- * The picture follows the running flow. `flow-graph.ts` is the owner's drawing; a route the agent has changed or added is redrawn here
- * from what it really takes and where its answer really goes, so the page never shows a way that is no longer there. Routes nobody has
- * touched keep the drawing as it is. Pure: boxes and routes in, a graph out.
+ * The picture is generated from the running flow. `flow-graph.ts` places the boxes and draws what no route carries; every route's arrows
+ * come from here, from what it really takes and where its answer really goes, so the page never shows a way that is not there.
+ * Pure: boxes and routes in, a graph out.
  */
 
 import type { FlowRoute } from '../views.ts'
 import { buildGraph, type FlowEdge, type FlowGraph, type FlowNode } from './flow-model.ts'
 
 /** The first free row under the drawing, where boxes of new routes go. */
-const FIRST_ROW = 13
+const FIRST_ROW = 14
 /** Column of a route's box: after its sources, one further per route before it, still left of the owner's exit. */
 const FIRST_COLUMN = 1
 const LAST_COLUMN = 3
-
-/** A route the drawing cannot be trusted on: changed at run time, or created at run time. */
-const isTouched = (route: FlowRoute): boolean => route.changedAt !== null || route.origin === 'agent'
 
 /**
  * What about the routes shapes the picture, so the page lays it out again only when that changes.
@@ -22,7 +19,7 @@ const isTouched = (route: FlowRoute): boolean => route.changedAt !== null || rou
  * @returns a string that changes with them.
  */
 export function routeSignature(routes: readonly FlowRoute[]): string {
-  return JSON.stringify(routes.filter(isTouched).map(route => [route.id, route.sources, route.result, route.downstream, route.removed]))
+  return JSON.stringify(routes.map(route => [route.id, route.sources, route.result, route.downstream, route.removed]))
 }
 
 const globMatch = (pattern: string, value: string): boolean =>
@@ -35,16 +32,13 @@ const globMatch = (pattern: string, value: string): boolean =>
  * @returns the drawing itself when no route was touched, otherwise a new graph.
  */
 export function liveGraph(base: FlowGraph, routes: readonly FlowRoute[]): FlowGraph {
-  const touched = routes.filter(isTouched)
-  if (touched.length === 0) return base
+  if (routes.length === 0) return base
 
   const byId = new Map(routes.map(route => [route.id, route]))
   const owner = new Map<string, FlowNode>()
   for (const node of base.nodes) for (const id of node.tracks?.subscriptions ?? []) owner.set(id, node)
 
-  // A route after a touched one needs a box too, or the arrow has nowhere to land.
-  const shown = new Set(touched.map(route => route.id))
-  for (const route of touched) for (const id of route.downstream) shown.add(id)
+  const shown = new Set(routes.map(route => route.id))
 
   const depth = new Map<string, number>()
   const depthOf = (id: string): number => {
@@ -67,7 +61,7 @@ export function liveGraph(base: FlowGraph, routes: readonly FlowRoute[]): FlowGr
     const drawn = owner.get(id)
     if (drawn !== undefined) {
       boxOf.set(id, drawn.id)
-      if (isTouched(route)) redrawn.add(drawn.id)
+      redrawn.add(drawn.id)
       continue
     }
     const box = `route:${id}`
@@ -96,7 +90,7 @@ export function liveGraph(base: FlowGraph, routes: readonly FlowRoute[]): FlowGr
     ...added,
   ]
 
-  // Arrows the drawing guessed for a touched route go; those it carries for something else stay.
+  // Arrows the drawing guessed for a route go; those it carries for something else stay.
   const sourceBoxes = new Set(base.nodes.filter(node => node.role === 'source').map(node => node.id))
   const edges: FlowEdge[] = base.edges.filter((edge) => {
     if (redrawn.has(edge.from) && (edge.kind === 'event' || edge.kind === 'send')) return false
@@ -124,7 +118,7 @@ export function liveGraph(base: FlowGraph, routes: readonly FlowRoute[]): FlowGr
   for (const id of shown) {
     const route = byId.get(id)
     const box = boxOf.get(id)
-    if (route === undefined || box === undefined || !isTouched(route) || route.removed) continue
+    if (route === undefined || box === undefined || route.removed) continue
     for (const node of base.nodes) {
       if (node.role !== 'source') continue
       if ((node.tracks?.sources ?? []).some(source => route.sources.some(pattern => globMatch(pattern, source)))) connect(node.id, box)

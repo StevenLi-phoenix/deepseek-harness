@@ -47,6 +47,7 @@ const renderValue = (_args: unknown, value: unknown) => [{ type: 'text' as const
 
 const START_DESCRIPTION = [
   'Start a background monitor: a bash command whose stdout lines are sent back to this session as they appear, waking you when you are idle.',
+  'In the owner\'s main chat the lines go to the notification desk instead, and only its summary comes back to you.',
   'Use it to watch something over time, e.g. `tail -n 0 -F /path/app.log | grep --line-buffered -E "ERROR|Traceback"`, or a loop such as `while true; do curl -fsS http://127.0.0.1:8080/health >/dev/null || echo "health check failed"; sleep 60; done`.',
   'Print only lines that need your attention, and use --line-buffered (grep) or fflush (awk) in pipelines so lines are not held back. Lines arriving together are batched; a monitor that sends more than 30 batches in an hour is stopped, so filter tightly.',
   'stderr is not sent; it is shown when the monitor ends. It runs as the service user in the session\'s working directory until it exits, its timeout passes, or you call monitor_stop; a host restart starts it again with the same id.',

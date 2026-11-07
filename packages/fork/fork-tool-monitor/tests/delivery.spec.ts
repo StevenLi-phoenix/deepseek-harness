@@ -42,7 +42,7 @@ function fixture(world: World) {
     logger: { info: () => {}, warn: (...args: unknown[]) => { warnings.push(args.map(String).join(' ')) } },
   } satisfies DeliveryContext
   const delivery = createDelivery(ctx, () => world.stopped ?? false)
-  return { delivery, followups, injected, warnings, resolveAgent }
+  return { ctx, delivery, followups, injected, warnings, resolveAgent }
 }
 
 describe('delivery', () => {
@@ -125,5 +125,38 @@ describe('errorText', () => {
     expect(errorText(new Error('boom'))).toBe('boom')
     expect(errorText('plain')).toBe('plain')
     expect(errorText(42)).toBe('42')
+  })
+})
+
+describe('the main agent takes no monitor notice', () => {
+  const desk = (main: boolean, publish = vi.fn(() => Promise.resolve())) => ({ isMainAgent: () => main, publish })
+
+  it('publishes for the notification desk instead of waking the main agent', async () => {
+    const world = fixture({ loaded: 'idle' })
+    const target = desk(true)
+    const delivery = createDelivery(world.ctx, () => false, target)
+    expect(await delivery.deliver('main', VIEW, LINES)).toBe(true)
+    expect(await delivery.deliver('main', VIEW, { kind: 'ended', reason: 'exited with code 2', stderr: [] })).toBe(true)
+    expect(world.followups).toEqual([])
+    expect(world.injected).toEqual([])
+    expect(target.publish.mock.calls.map(call => (call as unknown as [{ kind: string }])[0].kind)).toEqual(['monitor.output', 'monitor.ended'])
+    expect((target.publish.mock.calls[0] as unknown as [{ source: string; subject: string; text: string }])[0]).toMatchObject({ source: 'monitor', subject: 'm1' })
+  })
+
+  it('drops a notice the bus refuses and keeps the monitor, rather than waking the main agent', async () => {
+    const world = fixture({ loaded: 'idle' })
+    const delivery = createDelivery(world.ctx, () => false, desk(true, vi.fn(() => Promise.reject(new Error('no bus')))))
+    expect(await delivery.deliver('main', VIEW, LINES)).toBe(true)
+    expect(world.followups).toEqual([])
+    expect(world.warnings.join()).toContain('no bus')
+  })
+
+  it('still wakes any other Session that started a monitor', async () => {
+    const world = fixture({ loaded: 'idle' })
+    const target = desk(false)
+    const delivery = createDelivery(world.ctx, () => false, target)
+    expect(await delivery.deliver('other', VIEW, LINES)).toBe(true)
+    expect(world.followups).toHaveLength(1)
+    expect(target.publish).not.toHaveBeenCalled()
   })
 })

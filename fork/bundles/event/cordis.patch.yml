@@ -220,8 +220,8 @@
           # so the do-not-disturb hold would keep a disk-full alert until the owner wakes. The `notify` preset has no
           # tools, and the Session runs on the cheap route `opencode` (see `ci` below), as does `qq-main`.
           - id: notify-funnel
-            sources: [host, autocut]
-            kinds: ['host.*.warn', 'host.*.info', 'autocut.ready', 'autocut.failed']
+            sources: [host, autocut, flow, monitor]
+            kinds: ['host.*.warn', 'host.*.info', 'autocut.ready', 'autocut.failed', 'flow.ci.result', 'monitor.*']
             action: session
             coalesceMs: 600000
             maxPerHour: 6
@@ -231,6 +231,8 @@
               agentPreset: notify
               permissionPreset: danger-full-access
               titlePrefix: 通知
+              # The main agent takes only summaries from other Sessions, so the desk answers to it, not to the owner.
+              result: main
               persistent:
                 enabled: true
                 rolloverDays: 30
@@ -239,8 +241,10 @@
                 model: opencode-go/deepseek-v4.1-flash
               instructions: >-
                 The owner's services reported the events below: host notices (host.*.warn, host.*.info), autocut
-                runs waiting for the owner's confirmation (autocut.ready), and autocut runs that gave up
-                (autocut.failed). You are the notification desk: filter and sum up.
+                runs waiting for the owner's confirmation (autocut.ready), autocut runs that gave up
+                (autocut.failed), what a CI Session found (flow.ci.result), and the output of a monitor the main
+                agent started (monitor.*). You are the notification desk: filter and sum up. Your answer goes to
+                the main agent, which decides what the owner hears.
                 This Session remembers the earlier batches, so a notice that repeats is one line with a count,
                 and a notice you already told the owner about stays silent. Answer exactly NO_REPLY unless the
                 owner has something to do or needs to know: a warning that keeps coming back, a failure whose
@@ -317,7 +321,8 @@
                 whole (a recurring topic, joke, or mood; never one viewer), keep it with bili_channel_note.
                 Your final answer must be exactly NO_REPLY.
           # Finished GitHub Actions runs of the owner's repositories (App webhook workflow_run; the title
-          # ends with the conclusion). Success is the common case and stays silent.
+          # ends with the conclusion). Success is the common case and stays silent. An answer goes to the
+          # notification desk, never straight to the owner.
           - id: ci
             sources: [github]
             kinds: ['github.workflow_run.completed']
@@ -331,6 +336,7 @@
               agentPreset: unattended
               permissionPreset: danger-full-access
               titlePrefix: CI
+              result: event
               # One Session per repository (the event subject), so a repository's runs share its history; each
               # Session is titled "CI: <owner/repo>". A persistent Session is left out of the auto-archive sweep;
               # it is archived when it rolls over after `rolloverDays`.
