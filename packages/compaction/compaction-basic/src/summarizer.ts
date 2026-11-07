@@ -107,8 +107,11 @@ export type SummaryResult = {
   }
 )
 
-/** Waits before each further try of a summary request. */
-const SUMMARY_RETRY_DELAYS_MS: readonly number[] = [2_000, 8_000, 20_000]
+/**
+ * Waits before each further try of a summary request. A long Session's summary often misses the cache, and a provider short of
+ * capacity refuses such a request for tens of seconds (`prefill_cap_refused` asks for 30 s), so short waits land in the same window.
+ */
+const SUMMARY_RETRY_DELAYS_MS: readonly number[] = [10_000, 30_000, 60_000]
 /** Failures that are the provider's or the network's, not the request's. */
 const TRANSIENT_CODES: ReadonlySet<string> = new Set(['RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT'])
 
