@@ -2,9 +2,9 @@
  * Validate the tree a pull request produces once merged with its base branch: the version
  * synchronization of the released manifests, the install, and the Host and Client builds.
  *
- * The `Policy / Pre-Merge Check` job runs this file with `node`, and knows nothing else about the
- * merged tree, so what that tree needs changes here without touching the check. The file runs under
- * plain Node and spawns its steps itself, so no dependency is installed before it starts.
+ * No CI job runs this file now: the `Policy` workflows that ran it were removed. It runs with `node`
+ * and knows nothing else about the merged tree, so what that tree needs changes here. The file runs
+ * under plain Node and spawns its steps itself, so no dependency is installed before it starts.
  */
 
 import { spawn } from 'node:child_process'

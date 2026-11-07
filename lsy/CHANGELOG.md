@@ -195,6 +195,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 - Event service logs move from `~dsh-runtime/Library/Logs/dsh-events/` (inside the 700 `Library`) to `/Users/dsh-runtime/logs/`, which the operator reads without sudo.
 
 ### Removed
+- The `Policy` workflows (`pr-check-after-approve.yml`, `pr-check-on-base-branch.yml`, `pr-check-on-head-branch.yml`) and their calls to `deepseek-harness/deepseek-harness-check@master`, code from another repository: the `review`, `recheck`, and `master-diff` checks and the `pre-merge` validation of the merged tree are gone; `scripts/pre-merge-check.ts` has no CI caller now (2026-11-07).
 - `prune-builds.sh --relocate`, and the recorder's manual rollback steps: they needed a previous build on disk.
 - Bilibili speech from DSH (2026-10-31): the tools `bili_comment`, `bili_reply`, `bili_dynamic`, and `bili_dm_owner`, share reports, messages to the owner on the account's own initiative, and inbox wakes that answered replies and mentions; replies to viewers are the `up` preset's, behind bili-svc's Reply Gate.
 - Bilibili scouting (2026-10-31): the body clock and wakes, Wake now, the watch floor, picks per day, keywords, interests, grades (`bili_verdict`, `bili_seen`), finds, taste notes (`bili_taste_write`), trends (`bili_trend_write`), off-peak pricing, and their Settings cards.
