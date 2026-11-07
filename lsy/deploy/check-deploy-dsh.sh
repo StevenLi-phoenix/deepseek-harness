@@ -28,17 +28,17 @@ mini() {
 }
 HOOKS
 
-git init -q --bare -b lsy/main "$WORK/origin.git"
+git init -q --bare -b main "$WORK/origin.git"
 CHECKOUT="$WORK/checkout"
 git clone -q "$WORK/origin.git" "$CHECKOUT" 2>/dev/null
 G() { git -C "$CHECKOUT" -c user.name=c -c user.email=c@localhost "$@"; }
-G checkout -q -b lsy/main
+G checkout -q -b main
 mkdir -p "$CHECKOUT/lsy/deploy"
 cp "$HERE/deploy-dsh.sh" "$HERE/deploy-paths.sh" "$CHECKOUT/lsy/deploy/"
-G add -A; G commit -q -m base; G push -q origin lsy/main
+G add -A; G commit -q -m base; G push -q origin main
 BASE=$(G rev-parse --short HEAD)
 # change <path>: a pushed commit touching <path>.
-change() { mkdir -p "$CHECKOUT/$(dirname "$1")"; echo "$RANDOM" >>"$CHECKOUT/$1"; G add -A; G commit -q -m "change $1"; G push -q origin lsy/main; }
+change() { mkdir -p "$CHECKOUT/$(dirname "$1")"; echo "$RANDOM" >>"$CHECKOUT/$1"; G add -A; G commit -q -m "change $1"; G push -q origin main; }
 
 # deploy <args...>: from a fresh state running $BASE; leaves the exit code in RC, the output in OUT, the calls in CALLS.
 STATE="$WORK/state"
@@ -101,7 +101,7 @@ deploy
 [ "$RC" != 0 ] || fail "an unpushed commit must refuse"
 said 'push it first' || fail "an unpushed commit must say what to do: $OUT"
 requested && fail "an unpushed commit must not deploy"
-G reset -q --hard origin/lsy/main
+G reset -q --hard origin/main
 
 echo x >>"$CHECKOUT/docs/guide.md"
 deploy

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build, pack, and install the current lsy/main checkout as a new release of the event service.
+# Build, pack, and install the current main checkout as a new release of the event service.
 # Runs through self-upgrade.sh, as the service user. A deploy starts with lsy/deploy/deploy-dsh.sh, not here: by hand this is for a
 # first install, or when the service dsh-upgrade cannot run. It then prints the two commands that finish the switch.
 # With LSY_DSH_BUILD_ONLY=1 it stops at the tested plugin tarballs and the recorder: self-upgrade.sh then replaces plugins in the

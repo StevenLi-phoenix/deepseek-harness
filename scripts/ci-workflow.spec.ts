@@ -363,7 +363,7 @@ describe('CI workflow', () => {
     }
   })
 
-  it('keeps split native Windows PR jobs with failover in their own workflow, plus a master-only standby', () => {
+  it('keeps split native Windows PR jobs with failover in their own workflow, plus a main-only standby', () => {
     const workflow = loadWorkflow('.github/workflows/ci.yml')
     const windowsWorkflow = loadWorkflow('.github/workflows/ci-windows.yml')
     const masterWorkflow = loadWorkflow('.github/workflows/ci-master.yml')
@@ -510,8 +510,8 @@ describe('CI workflow', () => {
     expect(report?.run).toContain('::warning::')
     expect(report?.run).toContain('Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append')
 
-    // serial-windows: master-only standby, self-hosted, non-blocking, lives in ci-master.
-    expect(serialWindows.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/master'")
+    // serial-windows: main-only standby, self-hosted, non-blocking, lives in ci-master.
+    expect(serialWindows.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/main'")
     expect(serialWindows['runs-on']).toEqual(['self-hosted', 'dsh-win-ci', 'windows'])
     expect(serialWindows.name).toBe('serial / windows (self-hosted standby)')
     // Its store must share the ReFS workspace volume for clone; the install
@@ -771,7 +771,7 @@ describe('CI workflow', () => {
     expect(wineGates).toContain('  "$scratch/logs/client-references.log" \\')
   })
 
-  it('runs only Wine for its manual suite and retains master-push scheduling', () => {
+  it('runs only Wine for its manual suite and retains main-push scheduling', () => {
     const master = loadWorkflow('.github/workflows/ci-master.yml')
     if (!isRecord(master.on) || !isRecord(master.on.workflow_dispatch)
       || !isRecord(master.on.workflow_dispatch.inputs) || !isRecord(master.on.workflow_dispatch.inputs.suite)
@@ -782,7 +782,7 @@ describe('CI workflow', () => {
     const wine = workflowJob(master, 'windows')
     if (typeof wine.if !== 'string') throw new TypeError('Wine must define a trigger condition')
     for (const [event, ref, suite, expected] of [
-      ['push', 'refs/heads/master', '', true],
+      ['push', 'refs/heads/main', '', true],
       ['push', 'refs/heads/topic', '', false],
       ['pull_request', 'refs/pull/42/merge', 'wine', false],
       ['workflow_dispatch', 'refs/heads/topic', 'wine', true],
@@ -802,7 +802,7 @@ describe('CI workflow', () => {
     expect(enabled).toEqual(['windows'])
   })
 
-  it('cancels superseded master runs without changing the post-merge job inventory', () => {
+  it('cancels superseded main runs without changing the post-merge job inventory', () => {
     const workflow = loadWorkflow('.github/workflows/ci-master.yml')
     const prWorkflow = loadWorkflow('.github/workflows/ci.yml')
     if (!isRecord(workflow.jobs) || !isRecord(workflow.concurrency)) {
@@ -818,8 +818,8 @@ describe('CI workflow', () => {
     })
     expect(prWorkflow.concurrency).toEqual(workflow.concurrency)
 
-    // The exact event sets are what keep master-only jobs out of the PR check
-    // panel: ci-master triggers only on push(master) + workflow_dispatch and
+    // The exact event sets are what keep main-only jobs out of the PR check
+    // panel: ci-master triggers only on push(main) + workflow_dispatch and
     // never on pull_request; ci.yml is exactly pull_request-only. Assert the
     // full sets so losing the wrong event, or gaining an extra one, fails.
     if (!isRecord(workflow.on) || !isRecord(prWorkflow.on)) {
@@ -846,7 +846,7 @@ describe('CI workflow', () => {
       if (!isRecord(job)) throw new TypeError(`${name} must be defined`)
       expect(job.concurrency).toBeUndefined()
       // Standby drills remain post-merge work, but share run cancellation.
-      expect(job.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/master'")
+      expect(job.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/main'")
     }
 
     // Pin the post-merge runtime, Wine, and standby inventory.
@@ -952,7 +952,7 @@ describe('CI workflow', () => {
       ['push', 'ssh-helper', false], ['pull_request', 'ssh-helper', false],
       ['workflow_dispatch', 'larger-runner-benchmark', false], ['workflow_dispatch', 'ssh-helper', true],
     ] as const) {
-      expect(runInNewContext(master.if, { github: { event_name: event, ref: 'refs/heads/master' }, inputs: { suite } }, { timeout: 1000 })).toBe(expected)
+      expect(runInNewContext(master.if, { github: { event_name: event, ref: 'refs/heads/main' }, inputs: { suite } }, { timeout: 1000 })).toBe(expected)
     }
     expect(master.with).toEqual({ targets: 'node24-linux-x64,node24-linux-arm64,node24-macos-arm64,node24-macos-x64' })
     const workflow = loadWorkflow('.github/workflows/build-exe-for-ssh-helper.yml')
@@ -1624,7 +1624,7 @@ describe('npm release workflows', () => {
   })
 
   it('keeps publication dispatch-only and pack in the PR workflow', () => {
-    // pack stays in the PR/master release workflows so a PR proves the set packs.
+    // pack stays in the PR/main release workflows so a PR proves the set packs.
     for (const file of ['release.yml', 'release-vendor.yml']) {
       const workflow = loadWorkflow(`.github/workflows/${file}`)
       if (!isRecord(workflow.jobs)) throw new TypeError(`${file} must define jobs`)
@@ -1786,7 +1786,7 @@ describe('Policy workflows', () => {
     return steps.filter(isRecord)
   }
 
-  it.each(workflows)('%s runs each check from master and reads its mode from a repository variable', (file, jobs) => {
+  it.each(workflows)('%s runs each check from main and reads its mode from a repository variable', (file, jobs) => {
     const workflow = loadWorkflow('.github/workflows/' + file)
     expect(Object.keys(workflow).filter(key => key !== 'name')).toEqual(['on', 'permissions', 'concurrency', 'jobs'])
     const events = workflow.on
@@ -1800,8 +1800,8 @@ describe('Policy workflows', () => {
     }
   })
 
-  it('runs on the release branches as well as master, on both pull requests and base-branch pushes', () => {
-    const branches = ['master', 'release/dsh-[0-9]+.[0-9]+.[0-9]+']
+  it('runs on the release branches as well as main, on both pull requests and base-branch pushes', () => {
+    const branches = ['main', 'release/dsh-[0-9]+.[0-9]+.[0-9]+']
     for (const file of ['pr-check-on-head-branch.yml', 'pr-check-after-approve.yml']) {
       const workflow = loadWorkflow('.github/workflows/' + file)
       const events = workflow.on

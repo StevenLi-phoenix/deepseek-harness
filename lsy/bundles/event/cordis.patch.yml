@@ -354,8 +354,7 @@
                 work, and they see it themselves; the owner does not need to hear about it. Answer
                 exactly NO_REPLY unless a run needs the owner: a failure no code change can fix (an
                 expired or missing secret or token, billing or quota, a runner offline, an outage of a
-                third-party service), a failed deployment or release, or the default branch (main,
-                master, lsy/main) failing the same workflow twice in a row with no green run between.
+                third-party service), a failed deployment or release, or the default branch (main) failing the same workflow twice in a row with no green run between.
                 A failure on another branch or a pull request never needs the owner, and neither does
                 a success. When a run needs the owner, read its failing step with `gh run view <run id>
                 --log-failed` (read-only; never re-run, cancel, or change anything) and answer in

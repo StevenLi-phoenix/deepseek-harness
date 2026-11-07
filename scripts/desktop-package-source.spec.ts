@@ -19,7 +19,7 @@ it.each(['macos', 'windows'])('%s packaging accepts test branches but preserves 
       GIT_CONFIG_COUNT: '0', GIT_DIR: undefined, GIT_WORK_TREE: undefined, GIT_INDEX_FILE: undefined }
     const git = (...args: string[]) => execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'tag.gpgSign=false', ...args],
       { cwd: root, env, encoding: 'utf8', stdio: 'pipe' }).trim()
-    git('init', '--initial-branch=master')
+    git('init', '--initial-branch=main')
     mkdirSync(join(root, 'apps/desktop/scripts'), { recursive: true })
     writeFileSync(join(root, 'package.json'), '{"version":"1.0.0"}')
     writeFileSync(join(root, 'apps/desktop/scripts/desktop-ci-version.mjs'), 'PACKAGE_VERSION_MODE')
@@ -37,7 +37,7 @@ it.each(['macos', 'windows'])('%s packaging accepts test branches but preserves 
       expect(result.signal).toBeNull()
       return result
     }
-    for (const preset of ['test', 'production']) expect(run(preset, 'master').status).toBe(0)
+    for (const preset of ['test', 'production']) expect(run(preset, 'main').status).toBe(0)
     git('checkout', '-b', 'feature/desktop-update')
     expect(run('test', 'feature/desktop-update').status).toBe(0)
     expect(run('production', 'feature/desktop-update').status).not.toBe(0)
@@ -45,7 +45,7 @@ it.each(['macos', 'windows'])('%s packaging accepts test branches but preserves 
     expect(run('test', 'refs/heads/feature/desktop-update').status).not.toBe(0)
     expect(run('unknown', 'feature/desktop-update').status).not.toBe(0)
     git('checkout', '--detach', sha)
-    for (const ref of [sha, 'master', 'HEAD', 'refs/pull/42/head']) {
+    for (const ref of [sha, 'main', 'HEAD', 'refs/pull/42/head']) {
       const result = run('test', ref)
       expect(result.status).not.toBe(0)
       expect(result.stderr).toContain('Select a branch in this repository, not a SHA or PR ref')

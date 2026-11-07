@@ -30,7 +30,7 @@ export interface DiffConfig extends GitConfig {
 export interface ForkPoint {
   /** Full commit object name. */
   readonly commit: string
-  /** Branch such as `origin/master`, the created worktree's base branch, or an abbreviated commit. */
+  /** Branch such as `origin/main`, the created worktree's base branch, or an abbreviated commit. */
   readonly label: string
   /** Whether `commit` is the base commit of the worktree the Session created rather than a merge base. */
   readonly worktree: boolean

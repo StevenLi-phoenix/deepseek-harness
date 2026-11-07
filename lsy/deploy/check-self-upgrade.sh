@@ -270,9 +270,9 @@ hot hot-died "$PLUGIN_SRC" FAKE_PIDS='7 8 8 8'
 called '失败' || fail "a process that died after the replacement must report"
 called restart && fail "launchd restarts a process that died; the deploy must not"
 
-# start.sh: a request for a commit lsy/main does not hold must say so where AMS sees it, not end in a log nobody reads.
+# start.sh: a request for a commit main does not hold must say so where AMS sees it, not end in a log nobody reads.
 ORIGIN="$WORK/start-origin"
-git init -q -b lsy/main "$ORIGIN"
+git init -q -b main "$ORIGIN"
 mkdir -p "$ORIGIN/lsy/deploy"
 printf '#!/bin/bash\necho ran >>"$DSH_UPGRADE_CHECK_RAN"\n' >"$ORIGIN/lsy/deploy/self-upgrade.sh"
 chmod +x "$ORIGIN/lsy/deploy/self-upgrade.sh"
@@ -282,7 +282,7 @@ ON_MAIN=$(git -C "$ORIGIN" rev-parse HEAD)
 git -C "$ORIGIN" checkout -q -b elsewhere
 git -C "$ORIGIN" -c user.name=c -c user.email=c@localhost commit -q --allow-empty -m other
 OFF_MAIN=$(git -C "$ORIGIN" rev-parse HEAD)
-git -C "$ORIGIN" checkout -q lsy/main
+git -C "$ORIGIN" checkout -q main
 # start <name> <request>; leaves the exit code in RC, stderr in START_ERR, and whether the deploy ran in START_RAN.
 start() {
   local dir="$WORK/start-$1"
@@ -294,14 +294,14 @@ start() {
   DSH_UPGRADE_REQUEST="$dir/request" DSH_UPGRADE_WORK="$WORK/start-work" DSH_UPGRADE_REPO="file://$ORIGIN" DSH_UPGRADE_CHECK_RAN="$START_RAN" \
     "$HERE/dsh-upgrade/start.sh" >/dev/null 2>"$START_ERR" || RC=$?
 }
-start main lsy/main
-[ "$RC" = 0 ] && [ -f "$START_RAN" ] || fail "start.sh must deploy lsy/main (rc $RC): $(cat "$START_ERR")"
+start main main
+[ "$RC" = 0 ] && [ -f "$START_RAN" ] || fail "start.sh must deploy main (rc $RC): $(cat "$START_ERR")"
 start pinned "$ON_MAIN"
-[ "$RC" = 0 ] && [ -f "$START_RAN" ] || fail "start.sh must deploy a commit on lsy/main (rc $RC): $(cat "$START_ERR")"
+[ "$RC" = 0 ] && [ -f "$START_RAN" ] || fail "start.sh must deploy a commit on main (rc $RC): $(cat "$START_ERR")"
 start missing 0123456789012345678901234567890123456789
 [ "$RC" != 0 ] || fail "a commit nobody pushed must exit non-zero"
 [ ! -f "$START_RAN" ] || fail "a commit nobody pushed must not deploy"
-/usr/bin/grep -q 'not on lsy/main' "$START_ERR" || fail "a commit nobody pushed must say so on stderr, which AMS escalates: $(cat "$START_ERR")"
+/usr/bin/grep -q 'not on main' "$START_ERR" || fail "a commit nobody pushed must say so on stderr, which AMS escalates: $(cat "$START_ERR")"
 start offmain "$OFF_MAIN"
 [ "$RC" != 0 ] && [ ! -f "$START_RAN" ] || fail "a commit on another branch must not deploy"
 
