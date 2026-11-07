@@ -18,6 +18,8 @@ These rules supplement the repo-wide [AGENTS.md](../AGENTS.md) for `packages/for
 
 ## Event service architecture
 
+- **The main agent takes only summaries from other Sessions**, besides the owner's own messages and its own schedule. A route that should reach it goes through a Session with `result: main` (normally the notification desk), and its monitors publish events for the desk instead of waking it. Nothing else wakes the chat Session: an alert, a log line, or a monitor's output goes to a Session first.
+- **The message flow page is generated.** `flow-live.ts` draws every route from what it really does, so change the route to change the picture; `flow-graph.ts` only places the boxes and draws what no route carries.
 - **Resident processes are AMS services.** Declare any long-running process beside `dsh-events` on the mini to AMS (`service.toml`, `ams ctl`, `ams secret set`; its error lines reach the escalation journal and ga-watch), never as a new LaunchDaemon, LaunchAgent, or notifier of its own.
 - **Processes talk through versioned APIs.** DSH and a split-out service exchange versioned DTOs over a unix socket, HTTP, or a pipe; neither opens the other's database, WAL, or state files.
 - Architecture: [package table and READMEs](../packages/fork/README.md), [subsystem page](../docs/subsystems/fork.md), [runbook](deploy/RUNBOOK.md).
