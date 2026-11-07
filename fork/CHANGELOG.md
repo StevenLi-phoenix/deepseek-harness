@@ -125,6 +125,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 - `packages/fork/UPSTREAM.md` ledger and this `fork/` deployment directory.
 - `fork/AGENTS.md`: agent instructions for the fork layer (fork and ledger rules, event service architecture, profile layering, regeneration steps, deployment), linked from a short section of the root `AGENTS.md` so Claude Code, Codex, and dsh agents all reach it without loading it on every turn.
 - DeepSeek account sign-in from the tailnet Web UI (upstream packages, see `UPSTREAM.md`): Platform accepts only loopback redirect_uri values (non-loopback ones fail `auth_init` with 50005), so a page on another origin now starts an attempt that redirects to the Host's loopback port; after sign-in the browser stops on that unreachable address, and the sign-in dialog and Account settings take the pasted address (`completeSignIn`), checked like the callback route. A wrong paste shows an inline message and keeps the attempt waiting. Before this, signing in from `https://dsh.tailc2559b.ts.net` always failed with 登录失败.
+- The `platform-status` skill: the main agent reads the API platform's deployer, core, and registry status with a read-only PAT (`FORK_API_READONLY_PAT`), so a platform alert can be judged without asking the owner; it cannot change anything there (RUNBOOK §26).
 
 ### Changed
 - The default branch is `main`: `master` and `fork/main` are gone from `origin`, and the deploy path (`deploy/deploy-dsh.sh`, the `dsh-upgrade` service) fetches `origin main` (2026-11-07).

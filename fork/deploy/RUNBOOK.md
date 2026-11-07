@@ -561,6 +561,12 @@ Two boxes of the message flow picture that ride on pieces already there.
   3. Check: **Settings → Subscriptions** shows `upload-local` with a batch five seconds after the post.
 - **Auto-repair** (no subscription, no ingest source). A service's error reaches the main agent through the AMS journal Monitor (§17); the `ams-repair` skill (`fork/skills/ams-repair`, linked into the home by `setup-profile.sh`) tells the agent when a fault is one Claude Code may fix (a clear cause in a service's code or configuration, a reversible change, a test that proves it) and when it only reports (credentials, quota, outages, a full disk, an unknown cause, a repeat), how to brief a `cc_start` session (a `repair/<service>-<date>` branch, tests, no push, no deploy, no restart, no credentials), and how to report in one or two sentences. Deploying and restarting wait for the owner's yes. Switch it off by removing the skill link from `$DSH_HOME/skills`.
 
+## 26. Platform status (read-only PAT)
+
+The skill `platform-status` (`fork/skills/platform-status`) lets the main agent read the API platform's status with `FORK_API_READONLY_PAT` from `/Users/dsh-runtime/.dsh/.env`, which only its shell reads (`grep` in a command substitution), so adding or rotating it needs no restart. The token has exactly the scope and the audience `readonly`: the platform answers it on its deployer, core, and registry catalog GETs and with 401 everywhere else (`packages/auth/docs/index.md` in `StevenLi-phoenix/api`).
+
+To rotate, mint a new one with a user session (`{"name":"…","scopes":["readonly"],"audiences":["readonly"]}`), append it as in section 20, delete the old line, then revoke the old one. Check as the service user: `/v2/admin/core` answers 200, `/v2/auth/me` answers 401.
+
 ## Operate
 
 Patch edits (`$DSH_HOME/cordis.patch.yml`, the profile patch) reload live; `.env` edits need a restart; a new build hot-reloads or restarts as "DSH itself" describes. The composition is the `@deepseek-ai/dsh-fork-event-bundle` layer linked from the build; the profile patch `profiles/event/cordis.patch.yml` is the owner's layer, where Web UI settings save, and upgrades keep it. A home patch entry replaces that entry's whole `config`, so override only entries whose config it restates in full, and the Web UI refuses to save an entry the home patch sets ("Configuration for … is overridden by a home patch").
