@@ -1,7 +1,7 @@
 name: Policy
 on:
   pull_request_target:
-    branches: [master, 'release/dsh-[0-9]+.[0-9]+.[0-9]+']
+    branches: [main, 'release/dsh-[0-9]+.[0-9]+.[0-9]+']
     types: [opened, synchronize, reopened, ready_for_review, review_requested, auto_merge_enabled, labeled]
 permissions:
   contents: read
@@ -92,7 +92,7 @@ jobs:
               stop "the base commit $BASE_SHA could not be fetched, so nothing was merged or compiled"
           fi
           git -c user.name=pr-check -c user.email=pr-check@users.noreply.github.com merge --no-ff --no-edit -m "Merge $BASE_SHA into $HEAD_SHA" "$BASE_SHA" ||
-            stop "the pull request cannot merge $BASE_SHA; merge master into it and push, then this check runs again"
+            stop "the pull request cannot merge $BASE_SHA; merge main into it and push, then this check runs again"
           echo "merged=true" >> "$GITHUB_OUTPUT"
 
       - uses: pnpm/action-setup@v5.0.0

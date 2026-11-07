@@ -29,7 +29,7 @@ Pre-stable internal APIs whose consumers are all updated in the same change need
 
 ## Maintenance
 
-While the root version is unchanged, the current version directory describes the delta from vT to current `master`. When a later change touches a surface a guide there covers, update that guide in the same change; delete the guide when the break is reverted. After the version bump, guides in older version directories are frozen; a new break goes into the new version directory. Never write a guide spanning more than one release.
+While the root version is unchanged, the current version directory describes the delta from vT to current `main`. When a later change touches a surface a guide there covers, update that guide in the same change; delete the guide when the break is reverted. After the version bump, guides in older version directories are frozen; a new break goes into the new version directory. Never write a guide spanning more than one release.
 
 ## Format
 

@@ -1,7 +1,7 @@
 /**
  * Check that every released manifest carries the root version. A release synchronization bumps
  * them together, so a mismatch means a merge combined two version lines: a pull request that bumps
- * versions merged onto a master that added a package, for instance.
+ * versions merged onto a main that added a package, for instance.
  *
  * The released manifests are the ones the release tooling rewrites, `packages/<group>/<package>`
  * and `apps/<application>`. Reading them needs no installed dependency, so the check runs before an

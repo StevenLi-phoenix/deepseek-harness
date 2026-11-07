@@ -52,11 +52,11 @@ TARGET=${1:-HEAD}
 [ "$#" -le 1 ] || die "usage: deploy-dsh.sh [--plan] [<commit>]"
 
 cd "$(git rev-parse --show-toplevel)"
-git fetch -q origin fork/main:refs/remotes/origin/fork/main || die "cannot fetch origin fork/main"
+git fetch -q origin main:refs/remotes/origin/main || die "cannot fetch origin main"
 SHA=$(git rev-parse --verify -q "$TARGET^{commit}") || die "$TARGET is not a commit here"
 SHORT=$(git rev-parse --short "$SHA")
 [ "$TARGET" != HEAD ] || [ -z "$(git status --porcelain)" ] || die "the checkout has uncommitted changes, which would not deploy; commit them, or name the commit"
-git merge-base --is-ancestor "$SHA" origin/fork/main || die "$SHORT is not on origin/fork/main; push it first (the last push may have failed)"
+git merge-base --is-ancestor "$SHA" origin/main || die "$SHORT is not on origin/main; push it first (the last push may have failed)"
 
 RUNNING=$(mini commit)
 [ -n "$RUNNING" ] || die "cannot read what runs on the mini"

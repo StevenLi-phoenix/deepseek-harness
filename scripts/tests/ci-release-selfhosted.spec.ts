@@ -76,7 +76,7 @@ const trustedPush = {
   'github.repository': repository,
   'github.actor': 'maintainer',
   'github.event_name': 'push',
-  'github.ref': 'refs/heads/master',
+  'github.ref': 'refs/heads/main',
 }
 const fallbackCases: Array<[string, Record<string, string | boolean>]> = [
   ['unset switch', { ...trustedPr, 'vars.DSH_CI_FAILOVER_LINUX': '' }],
@@ -88,10 +88,10 @@ const fallbackCases: Array<[string, Record<string, string | boolean>]> = [
   ['Dependabot author rerun by maintainer', { ...trustedPr, 'github.event.pull_request.user.login': 'dependabot[bot]' }],
   ['Dependabot PR actor', { ...trustedPr, 'github.actor': 'dependabot[bot]' }],
   ['Dependabot push actor', { ...trustedPush, 'github.actor': 'dependabot[bot]' }],
-  ['non-master push', { ...trustedPush, 'github.ref': 'refs/heads/topic' }],
+  ['non-main push', { ...trustedPush, 'github.ref': 'refs/heads/topic' }],
   ['tag push', { ...trustedPush, 'github.ref': 'refs/tags/dsh-v1.0.0' }],
   ['push in another repository', { ...trustedPush, 'github.repository': 'outsider/fork' }],
-  ['dispatch on master', { ...trustedPush, 'github.event_name': 'workflow_dispatch' }],
+  ['dispatch on main', { ...trustedPush, 'github.event_name': 'workflow_dispatch' }],
   ['dispatch on topic', { ...trustedPush, 'github.event_name': 'workflow_dispatch', 'github.ref': 'refs/heads/topic' }],
   ['dispatch on tag', { ...trustedPush, 'github.event_name': 'workflow_dispatch', 'github.ref': 'refs/tags/dsh-v1.0.0' }],
   ['pull_request_target', { ...trustedPr, 'github.event_name': 'pull_request_target' }],
@@ -103,14 +103,14 @@ for (const [file, jobIds] of [['release.yml', ['dependencies', 'pack']], ['relea
     const release = workflow(file)
     it('preserves the logical jobs, rehearsal events and read-only permission', () => {
       expect(Object.keys(release.jobs)).toEqual(jobIds)
-      expect(release.on).toEqual({ pull_request: null, push: { branches: ['master'] }, workflow_dispatch: null })
+      expect(release.on).toEqual({ pull_request: null, push: { branches: ['main'] }, workflow_dispatch: null })
       expect(release.permissions).toEqual({ contents: 'read' })
       expect(release.concurrency).toEqual({ group: '${{ github.workflow }}-${{ github.ref }}', 'cancel-in-progress': true })
     })
     for (const jobId of jobIds) {
       describe(jobId, () => {
         const job = release.jobs[jobId]!
-        it('routes trusted PRs and master pushes onto the existing Linux pool', () => {
+        it('routes trusted PRs and main pushes onto the existing Linux pool', () => {
           expect(evaluate(job['runs-on'], trustedPr)).toEqual(selfhosted)
           expect(evaluate(job['runs-on'], trustedPush)).toEqual(selfhosted)
           expect(evaluate(job['runs-on'], { ...trustedPush, 'vars.DSH_CI_FAILOVER_LINUX': '' })).toBe(hosted)
@@ -207,8 +207,8 @@ it('keeps DSH publication manual and delegates all helper selections to the Mac 
 
 it.each([
   ['refs/tags/dsh-v0.2.1-rc.4', false, true],
-  ['refs/heads/master', false, false],
-  ['refs/heads/master', true, true],
+  ['refs/heads/main', false, false],
+  ['refs/heads/main', true, true],
 ] as const)('gates helper selection for ref %s, skip=%s', (ref, skip, expected) => {
   const expression = workflow('release-publish.yml').jobs['cua-helper']!.if!
   expect(evaluate(expression, { 'github.ref': ref, 'inputs.skip-tag-check': skip })).toBe(expected)
@@ -287,7 +287,7 @@ it.each([
   ['refs/heads/release-candidate', 'test', true, ''],
   ['refs/tags/dsh-v1.2.3', 'production', true, ''],
   ['refs/tags/dsh-v1.2.4', 'production', false, 'Release tag must match product version'],
-  ['refs/heads/master', 'invalid', false, 'Invalid preset'],
+  ['refs/heads/main', 'invalid', false, 'Invalid preset'],
   ['refs/pull/42/merge', 'test', false, 'Select a trusted repository branch or release tag'],
   ['', 'test', false, 'Select a trusted repository branch or release tag'],
 ] as const)('validates the run ref %s and preset %s before dependency installation', (ref, preset, accepted, diagnostic) => {

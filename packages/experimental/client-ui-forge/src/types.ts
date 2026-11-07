@@ -220,7 +220,7 @@ export interface ForgeBranches {
 export interface ForgeBaseBranch {
   /** Full ref name: `refs/heads/<branch>` or `refs/remotes/<remote>/<branch>`. */
   readonly ref: string
-  /** The ref without `refs/heads/` or `refs/remotes/`, such as `master` or `origin/master`. */
+  /** The ref without `refs/heads/` or `refs/remotes/`, such as `main` or `origin/main`. */
   readonly name: string
 }
 
@@ -298,7 +298,7 @@ export interface ForgeDiffFile {
 
 /** Local changes of the Session's checkout in one scope. */
 export interface ForgeLocalDiff {
-  /** Ref or abbreviated commit the `branch` scope compares with, such as `origin/master`; null for other scopes. */
+  /** Ref or abbreviated commit the `branch` scope compares with, such as `origin/main`; null for other scopes. */
   readonly base: string | null
   /** Changed files in Git's path order, untracked files last. */
   readonly files: readonly ForgeDiffFile[]

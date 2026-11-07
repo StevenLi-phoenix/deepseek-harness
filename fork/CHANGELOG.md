@@ -127,6 +127,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 - DeepSeek account sign-in from the tailnet Web UI (upstream packages, see `UPSTREAM.md`): Platform accepts only loopback redirect_uri values (non-loopback ones fail `auth_init` with 50005), so a page on another origin now starts an attempt that redirects to the Host's loopback port; after sign-in the browser stops on that unreachable address, and the sign-in dialog and Account settings take the pasted address (`completeSignIn`), checked like the callback route. A wrong paste shows an inline message and keeps the attempt waiting. Before this, signing in from `https://dsh.tailc2559b.ts.net` always failed with 登录失败.
 
 ### Changed
+- The default branch is `main`: `master` and `fork/main` are gone from `origin`, and the deploy path (`deploy/deploy-dsh.sh`, the `dsh-upgrade` service) fetches `origin main` (2026-11-07).
 - Every source file of the fork group is at 100% in the coverage gate: about 3000 uncovered lines and branches got tests, code nothing can reach was deleted or marked with a reason.
 - The fork group meets the repository's rules: JSDoc on exported symbols, no new casts, the lint gate, and the budget of `fork/AGENTS.md`, whose facts moved to the package READMEs, `fork/README.md`, and the runbook.
 - The message flow's copy is plain state wording instead of speaking for the system as a person: sent, not sent, deferred, do not disturb on (2026-11-06).

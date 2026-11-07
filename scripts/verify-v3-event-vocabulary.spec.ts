@@ -94,7 +94,7 @@ describe('explicit V3 source vocabulary verification', () => {
       .toThrow('Extra migration names: developer/message')
   })
 
-  it.each(['HEAD', 'origin/master', 'dsh-v0.1.5-alpha.1', 'a'.repeat(10), '', '--help'])('rejects a mutable or incomplete source pin %j', (ref) => {
+  it.each(['HEAD', 'origin/main', 'dsh-v0.1.5-alpha.1', 'a'.repeat(10), '', '--help'])('rejects a mutable or incomplete source pin %j', (ref) => {
     expect(() => verifyV3EventVocabulary(tmpdir(), ref)).toThrow('full immutable commit id')
   })
 

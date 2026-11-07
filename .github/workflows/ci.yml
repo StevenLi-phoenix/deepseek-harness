@@ -35,7 +35,7 @@ jobs:
   # Setting the variable to 'blacksmith' instead routes the same jobs onto
   # Blacksmith's hosted runners sized per workload (see
   # .agents/notes/implemented/process/2026-09-09-blacksmith-failover-leg.md). The
-  # in-house pool's readiness is re-proven on every master push by the
+  # in-house pool's readiness is re-proven on every main push by the
   # serial-linux-selfhosted standby lane in ci-master.yml. Native Windows jobs
   # and their separate DSH_CI_FAILOVER_WINDOWS switch live in ci-windows.yml.
   node-24:
@@ -385,7 +385,7 @@ jobs:
           echo "path=$store_path" >> "$GITHUB_OUTPUT"
 
       # Pull requests restore the pnpm store and Playwright caches without paying
-      # compression and upload on the required path. No master job saves these
+      # compression and upload on the required path. No main job saves these
       # hosted cache keys, so each restore-keys fallback hits the matching archived
       # entry until it evicts, after which the store is cold. Self-hosted runners
       # reuse the shared persistent store instead of restoring the remote archive.
@@ -552,7 +552,7 @@ jobs:
   # `needs`. `needs` cannot cross workflow files: native Windows jobs report
   # the separate "windows checks passed" verdict from ci-windows.yml, Python
   # jobs report "python checks passed" from ci-python.yml, and Wine plus the
-  # master-only runtime targets live in ci-master.yml.
+  # main-only runtime targets live in ci-master.yml.
   # An explicit status function runs the verdict after failed/skipped needs
   # without keeping a cancelled workflow alive for an obsolete verdict.
   all-checks-passed:
