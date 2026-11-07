@@ -1,4 +1,4 @@
-import { describe, expect, expectTypeOf, it, onTestFinished, vi } from 'vitest'
+import { beforeEach, describe, expect, expectTypeOf, it, onTestFinished, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
@@ -39,6 +39,9 @@ declare module '@deepseek-ai/dsh-llm' {
 
 const SIGNAL = new AbortController().signal
 const MODEL = 'test-model'
+
+const waits = vi.hoisted(() => vi.fn((_ms: number) => Promise.resolve()))
+vi.mock('node:timers/promises', async original => ({ ...await original<typeof import('node:timers/promises')>(), setTimeout: waits }))
 
 class ContextAdapter extends LlmAdapter {
   constructor(private readonly contextWindow: number) {
@@ -2557,13 +2560,15 @@ describe('route-priced image pressure', () => {
 })
 
 describe('a summary request that fails', () => {
-  /** The harness's adapter, failing its first call with this code. */
-  const failingOnce = (adapter: ScriptedAdapter, code: string) => {
+  beforeEach(() => { waits.mockClear() })
+
+  /** The harness's adapter, failing its first calls with this code. */
+  const failingOnce = (adapter: ScriptedAdapter, code: string, times = 1) => {
     const stream = adapter.stream.bind(adapter)
     let calls = 0
     vi.spyOn(adapter, 'stream').mockImplementation(async function* (options: GenerateOptions): AsyncIterable<StreamChunk> {
       calls += 1
-      if (calls === 1) {
+      if (calls <= times) {
         yield { type: 'finish', reason: { kind: 'error', failure: { message: '500: upstream broke', code } } as never }
         return
       }
@@ -2577,7 +2582,17 @@ describe('a summary request that fails', () => {
     const calls = failingOnce(adapter, 'SERVER')
     expect((await compact.runSummarize({ messages: [] }, agent(conversation(1)))).summary).toHaveLength(1)
     expect(calls()).toBe(2)
-  }, 10_000)
+    expect(waits).toHaveBeenCalledTimes(1)
+    expect(waits.mock.calls[0]?.[0]).toBe(10_000)
+  })
+
+  it('gives up after three more tries and throws what the last one answered', async () => {
+    const { adapter, compact } = await summarizerHarness([{ type: 'text', text: 'summary' }])
+    const calls = failingOnce(adapter, 'SERVER', 99)
+    await expect(compact.runSummarize({ messages: [] }, agent(conversation(1)))).rejects.toThrow('upstream broke')
+    expect(calls()).toBe(4)
+    expect(waits.mock.calls.map(call => call[0])).toEqual([10_000, 30_000, 60_000])
+  })
 
   it('is not tried again when the request itself is wrong', async () => {
     const { adapter, compact } = await summarizerHarness([{ type: 'text', text: 'summary' }])
