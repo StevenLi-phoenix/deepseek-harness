@@ -2555,3 +2555,34 @@ describe('route-priced image pressure', () => {
     expect(summaryEvent?.data.shadowedTokenCount).toBe(shadowedHeuristic)
   })
 })
+
+describe('a summary request that fails', () => {
+  /** The harness's adapter, failing its first call with this code. */
+  const failingOnce = (adapter: ScriptedAdapter, code: string) => {
+    const stream = adapter.stream.bind(adapter)
+    let calls = 0
+    vi.spyOn(adapter, 'stream').mockImplementation(async function* (options: GenerateOptions): AsyncIterable<StreamChunk> {
+      calls += 1
+      if (calls === 1) {
+        yield { type: 'finish', reason: { kind: 'error', failure: { message: '500: upstream broke', code } } as never }
+        return
+      }
+      yield* stream(options)
+    })
+    return () => calls
+  }
+
+  it('is tried again when the provider failed it', async () => {
+    const { adapter, compact } = await summarizerHarness([{ type: 'text', text: 'summary' }])
+    const calls = failingOnce(adapter, 'SERVER')
+    expect((await compact.runSummarize({ messages: [] }, agent(conversation(1)))).summary).toHaveLength(1)
+    expect(calls()).toBe(2)
+  }, 10_000)
+
+  it('is not tried again when the request itself is wrong', async () => {
+    const { adapter, compact } = await summarizerHarness([{ type: 'text', text: 'summary' }])
+    const calls = failingOnce(adapter, 'INVALID_REQUEST')
+    await expect(compact.runSummarize({ messages: [] }, agent(conversation(1)))).rejects.toThrow('upstream broke')
+    expect(calls()).toBe(1)
+  })
+})

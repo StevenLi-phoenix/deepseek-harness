@@ -205,6 +205,13 @@ describe('/compact human command', () => {
     expect(test.compact.calls).toHaveLength(1)
   })
 
+  it('says what a failed summary request answered', async () => {
+    const test = await harness()
+    test.compact.failure = new ManualCompactionError('summary', 'backend detail', { cause: new Error('500: upstream broke\nmore') })
+    const execution = await run(test)
+    expect(execution.result).toEqual({ kind: 'error', text: 'Compaction failed: 500: upstream broke. The attempt is recorded in the session log.' })
+  })
+
   it.each([
     ['busy', 'Compaction is unavailable because this process has an active compaction, or the agent is not idle.'],
     ['cancelled', 'Compaction cancelled.'],

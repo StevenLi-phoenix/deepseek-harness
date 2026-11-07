@@ -24,6 +24,8 @@ Every edit outside `packages/lsy/` and `/lsy` is listed here so an upgrade can r
 
 | File | Change |
 |---|---|
+| `packages/compaction/compaction-basic/src/summarizer.ts`, `packages/compaction/compaction-basic/tests/compaction-basic.spec.ts`, `packages/compaction/compaction-image-offload/tests/image-offload.spec.ts` | Summary requests retry provider and network failures (`streamSummary`), since they do not pass `llm-retry`. |
+| `packages/compaction/command-compact/src/index.ts`, `packages/compaction/command-compact/tests/command-compact.spec.ts` | `/compact` reports what a failed summary request answered. |
 | `AGENTS.md` (`CLAUDE.md` symlinks it) | Short "Fork layer (lsy)" section linking [lsy/AGENTS.md](../../lsy/AGENTS.md); the root file stays within its `verify-doc-budgets` ceiling |
 | `scripts/doc-budgets.manifest.json` | `lsy/AGENTS.md` ceiling |
 | `packages/core/agent-loop/src/agent.ts`, `README.md`, `README.zh.md`, `tests/model-route-fallback.spec.ts` | `routableSelection()` before each step: a recorded route whose model the provider no longer has (`UNKNOWN_MODEL`) is replaced by the live configured route, recorded with `model.select` and logged, instead of failing every turn of a long-lived Session (2026-11-01, after the llmgateway switch renamed `deepseek-v4.1-flash` to `opencode-go/deepseek-v4.1-flash`) |

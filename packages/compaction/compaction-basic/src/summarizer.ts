@@ -4,6 +4,7 @@
  * @module @deepseek-ai/dsh-compaction-basic/summarizer
  */
 
+import { setTimeout as delay } from 'node:timers/promises'
 import type { Context } from '@deepseek-ai/cordis'
 import { contentHasImage, BlockAssembler, LlmError } from '@deepseek-ai/dsh-llm'
 import { deepFreeze } from '@deepseek-ai/dsh-util-values'
@@ -106,6 +107,11 @@ export type SummaryResult = {
   }
 )
 
+/** Waits before each further try of a summary request. */
+const SUMMARY_RETRY_DELAYS_MS: readonly number[] = [2_000, 8_000, 20_000]
+/** Failures that are the provider's or the network's, not the request's. */
+const TRANSIENT_CODES: ReadonlySet<string> = new Set(['RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT'])
+
 /**
  * Run the default cache-reusing `ctx.llm.stream()` summarization call: replay
  * the conversation prefix, then append the compaction instruction as the final
@@ -141,7 +147,6 @@ export async function summarizeWithLlm(
     )
   }
 
-  const assembler = new BlockAssembler()
   const messages: RequestMessage[] = [
     ...input.messages,
     deepFreeze({
@@ -160,9 +165,7 @@ export async function summarizeWithLlm(
     purpose: 'compaction',
     ...signal === undefined ? {} : { signal },
   }
-  for await (const chunk of ctx.llm.stream(options)) assembler.push(chunk)
-  const error = finishError(assembler.finish)
-  if (error !== undefined) throw error
+  const assembler = await streamSummary(ctx, options, signal)
 
   const rawOutput = assembler.blocks()
   const summary = summaryText(rawOutput)
@@ -194,6 +197,28 @@ export function frameSummary(summary: readonly ContentBlock[]): ContentBlock[] {
 }
 
 /** Map a terminal summarization finish to its fail-closed error. */
+/** One summary request, tried again while it fails on the provider's side: this call does not pass the agent loop's `llm-retry`. */
+async function streamSummary(ctx: Context, options: GenerateOptions, signal?: AbortSignal): Promise<BlockAssembler> {
+  for (let attempt = 0; ; attempt += 1) {
+    const assembler = new BlockAssembler()
+    try {
+      for await (const chunk of ctx.llm.stream(options)) assembler.push(chunk)
+      const failed = finishError(assembler.finish)
+      if (failed === undefined) return assembler
+      throw failed
+    } catch (error: unknown) {
+      const wait = SUMMARY_RETRY_DELAYS_MS[attempt]
+      if (wait === undefined || signal?.aborted === true || !isTransient(error)) throw error
+      ctx.logger.warn('compaction: summary request failed, trying again in %d ms: %s', wait, (error as Error).message)
+      await delay(wait, undefined, signal === undefined ? undefined : { signal })
+    }
+  }
+}
+
+function isTransient(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && TRANSIENT_CODES.has(String((error as { code?: unknown }).code))
+}
+
 function finishError(finish: FinishReason): Error | undefined {
   switch (finish.kind) {
     case 'error':

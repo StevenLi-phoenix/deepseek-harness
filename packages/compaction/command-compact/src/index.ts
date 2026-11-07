@@ -35,11 +35,15 @@ function expectedFailure(error: ManualCompactionError): CommandResult {
         kind: 'error',
         text: 'The history selected for compaction changed before it could be replaced. The attempt is recorded in the session log.',
       }
-    case 'summary':
+    case 'summary': {
+      const reason = error.cause instanceof Error ? error.cause.message.split('\n')[0]?.trim().slice(0, 200) : undefined
       return {
         kind: 'error',
-        text: 'Compaction could not produce a useful summary. The attempt is recorded in the session log.',
+        text: reason === undefined || reason.length === 0
+          ? 'Compaction could not produce a useful summary. The attempt is recorded in the session log.'
+          : `Compaction failed: ${reason}. The attempt is recorded in the session log.`,
       }
+    }
     case 'commit':
       return {
         kind: 'error',
