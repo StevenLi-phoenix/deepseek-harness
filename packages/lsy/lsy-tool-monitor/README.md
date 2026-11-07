@@ -23,6 +23,8 @@ Ask your agent to watch something, and it comes back when something happens: an 
 -----
 
 <a id="use-this-package"></a>
+In the owner's main chat the lines do not come back directly: the main agent takes only summaries from other Sessions, so its monitors publish `monitor.output` and `monitor.ended` events for the notification desk, and a notice the bus refuses is dropped and logged.
+
 ## Use this package
 
 Add the row to the plugin list of the agent preset that should watch things. The lsy event profile mounts it in its `unattended` preset, and the persona there tells the agent about `monitor_start`. The plugin waits for the Host's `storageDomain`, `sessionPersistence`, and `sessionController` services, which the Web bundles mount.

@@ -38,7 +38,10 @@ describe('warnings no longer have a DSH source', () => {
     const ci = subs.find(sub => sub.id === 'ci')!
     expect(ci).toMatchObject({ sources: ['github'], kinds: ['github.workflow_run.completed'], action: 'session', maxPerHour: 4 })
     expect(ci.subjects).toEqual(['StevenLi-phoenix/*'])
-    expect(ci.session).toMatchObject({ agentPreset: 'unattended' })
+    expect(ci.session).toMatchObject({ agentPreset: 'unattended', result: 'event' })
+    const desk = subs.find(sub => sub.id === 'notify-funnel')!
+    expect(desk.kinds).toContain('flow.ci.result')
+    expect(desk.session).toMatchObject({ result: 'main' })
     expect(ci.session!.instructions).toContain('NO_REPLY')
     expect(ci.session!.instructions).toContain('success')
   })

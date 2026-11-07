@@ -1,8 +1,11 @@
 /**
  * Notice delivery: a monitor's output returns to the Session that started it as a user message, waking an idle agent and
- * loading an unloaded one on its first notice. The sweep asks the same question the other way round: does the Session
- * still exist.
+ * loading an unloaded one on its first notice. The owner's main agent takes only summaries from other Sessions, so its
+ * monitors publish an event instead, which the notification desk filters. The sweep asks the same question the other way
+ * round: does the Session still exist.
  */
+
+import { randomUUID } from 'node:crypto'
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -36,6 +39,24 @@ export interface DeliveryContext {
 /** Source kind of monitor notices, and the plugin's name. */
 export const SOURCE_KIND = 'lsy-tool-monitor'
 
+/** One notice as an event on the bus. */
+export interface MonitorEvent {
+  readonly source: 'monitor'
+  readonly kind: 'monitor.output' | 'monitor.ended'
+  readonly key: string
+  readonly subject: string
+  readonly title: string
+  readonly text: string
+}
+
+/** Where the notices of the owner's main agent go instead of its Session. */
+export interface MonitorDesk {
+  /** Whether this Session is the owner's main agent. */
+  readonly isMainAgent: (owner: string) => boolean
+  /** Publish on the event bus; rejects when the bus cannot take it. */
+  readonly publish: (event: MonitorEvent) => Promise<unknown>
+}
+
 /** The delivery functions the registry, the store, and the sweep call. */
 export interface Delivery {
   /** Whether a Session whose agent is not loaded still takes notices; rejects when persistence cannot tell. */
@@ -50,9 +71,10 @@ export interface Delivery {
  * Build the delivery functions.
  * @param ctx - the preset scope's context, or anything that serves the services listed in {@link DeliveryContext}.
  * @param stopped - whether disposal has begun: nothing is delivered or swept after that.
+ * @param desk - where the main agent's notices go; without it every notice goes to its Session.
  * @returns the functions.
  */
-export function createDelivery(ctx: DeliveryContext, stopped: () => boolean): Delivery {
+export function createDelivery(ctx: DeliveryContext, stopped: () => boolean, desk?: MonitorDesk): Delivery {
   /** Notices of owners whose agent is loading, in order. */
   const pending = new Map<string, Promise<boolean>>()
 
@@ -69,6 +91,25 @@ export function createDelivery(ctx: DeliveryContext, stopped: () => boolean): De
     if (agent.status === 'idle') agent.followup(message)
     else agent.inject(message)
     ctx.logger.info('monitor %s → session %s: %s', monitor.id, owner, notice.kind === 'ended' ? `ended (${notice.reason})` : `${String(notice.lines.length + notice.dropped)} line(s)`)
+  }
+
+  const toDesk = async (target: MonitorDesk, monitor: MonitorView, notice: MonitorNotice): Promise<boolean> => {
+    const ended = notice.kind === 'ended'
+    try {
+      await target.publish({
+        source: 'monitor',
+        kind: ended ? 'monitor.ended' : 'monitor.output',
+        key: `${monitor.id}:${randomUUID()}`,
+        subject: monitor.id,
+        title: `Monitor ${monitor.id} (${monitor.description}): ${ended ? `ended, ${notice.reason}` : `${String(notice.lines.length + notice.dropped)} line(s)`}`,
+        text: noticeText(monitor, notice),
+      })
+      ctx.logger.info('monitor %s → notification desk: %s', monitor.id, notice.kind)
+    } catch (error: unknown) {
+      // Never into the main agent's Session instead: the monitor keeps running and the next notice tries again.
+      ctx.logger.warn('monitor %s: the event bus did not take a notice, dropped it: %s', monitor.id, errorText(error))
+    }
+    return true
   }
 
   const loadedAgent = (owner: string): DeliveryAgent | undefined => ctx.get('agents')?.get(owner as SessionId)
@@ -107,6 +148,7 @@ export function createDelivery(ctx: DeliveryContext, stopped: () => boolean): De
   }
 
   const deliver = (owner: string, monitor: MonitorView, notice: MonitorNotice): boolean | Promise<boolean> => {
+    if (desk?.isMainAgent(owner) === true) return toDesk(desk, monitor, notice)
     const agent = loadedAgent(owner)
     if (agent !== undefined && !pending.has(owner)) {
       send(agent, owner, monitor, notice)

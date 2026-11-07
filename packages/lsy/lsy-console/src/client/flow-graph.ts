@@ -1,7 +1,8 @@
 /**
  * The event service's data flow as a graph: where an event comes from, what it passes through, and where an answer goes.
- * The topology is written down here, drawn in the flow editor and exported from it (`nodes` and `edges` of its JSON); it is
- * the owner's picture of the flow, so a box may name something not wired yet. A hexagonal `cond` box asks a question and its
+ * The boxes are written down here, drawn in the flow editor and exported from it (`nodes` and `edges` of its JSON), so a box may
+ * name something not wired yet; `flow-live.ts` replaces the arrows of every box that is a route with what the route really does.
+ * A hexagonal `cond` box asks a question and its
  * arrows carry the answer. Each box has a fixed cell, one row per kind of source, so the picture stays in the owner's mental map
  * when it grows, and
  * `flow-graph.client.spec.ts` fails on a cycle, a dangling arrow, or a question without both answers. Pure data.
@@ -31,6 +32,7 @@ export const NODES: readonly FlowNode[] = [
   },
   { id: 'schedule', cell: [0, 1], role: 'source', manage: 'lsy-courses', via: 'Host schedule · lsy-courses' },
   { id: 'presence', cell: [0, 6], role: 'source', via: 'focus-watch · ingest source presence' },
+  { id: 'monitors', cell: [0, 13], tracks: { sources: ['monitor'] }, role: 'source', title: 'Monitor', via: 'lsy-tool-monitor · event source monitor' },
   { id: 'speech', cell: [0, 12], role: 'source', title: '语音输入', wired: 'planned', gap: '图上没有写明语义，代码里没有对应的东西。' },
   {
     id: 'personaIn', cell: [0, 8], role: 'source', title: '风格学习', service: 'style', manage: 'lsy-style', wired: 'partial',
@@ -113,6 +115,7 @@ export const EDGES: readonly FlowEdge[] = [
   { from: 'notifySession', to: 'main', kind: 'event' },
   { from: 'qqSessions', to: 'main', kind: 'event' },
   { from: 'host', to: 'notifySession', kind: 'event' },
+  { from: 'monitors', to: 'notifySession', kind: 'event' },
   { from: 'operator', to: 'main', kind: 'event' },
   { from: 'main', to: 'voice', kind: 'event' },
   { from: 'speech', to: 'main', kind: 'event' },
