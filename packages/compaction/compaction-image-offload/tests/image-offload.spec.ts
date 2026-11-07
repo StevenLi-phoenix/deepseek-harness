@@ -175,10 +175,10 @@ describe('summary image offload', () => {
 
   it('preserves omission when a subsequent summary failure is terminal', async () => {
     const { compact, agent, adapter } = await summaryHarness([
-      textResponse('answer'), offloadRequired(1), () => { throw new LlmError('provider outage', 'SERVER') },
+      textResponse('answer'), offloadRequired(1), () => { throw new LlmError('request refused', 'INVALID_REQUEST') },
     ])
     await seedImages(agent, ['first'])
-    await expect(compact.compactNow(agent, new AbortController().signal)).rejects.toMatchObject({ code: 'summary', cause: { code: 'SERVER' } })
+    await expect(compact.compactNow(agent, new AbortController().signal)).rejects.toMatchObject({ code: 'summary', cause: { code: 'INVALID_REQUEST' } })
     expect(adapter.requests).toHaveLength(3)
     expect(decisions(agent.session)).toHaveLength(1)
     expect(agent.session.surface.replaceGeneration).toBe(0)
