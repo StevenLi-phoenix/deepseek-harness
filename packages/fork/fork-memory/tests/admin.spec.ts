@@ -14,7 +14,9 @@ afterEach(async () => {
 async function store(): Promise<MemoryStore> {
   const dir = await mkdtemp(join(tmpdir(), 'fork-memory-admin-'))
   dirs.push(dir)
-  return new MemoryStore(join(dir, 'memory.jsonl'), () => '2026-10-24')
+  // Pin the clock too: waiting writes expire after PENDING_DAYS, so a fixed date with a real clock turns
+  // this file red a fortnight after it was written.
+  return new MemoryStore(join(dir, 'memory.jsonl'), () => '2026-10-24', () => new Date('2026-10-24T12:00:00'))
 }
 
 async function code(work: Promise<unknown>): Promise<string> {
