@@ -78,7 +78,7 @@ describe('reminder message', () => {
       '⏰ 快到截止：',
       `• Other Course · Lab 2 — ${stamp(NOW + 5 * H, ZONE)} 截止，还剩 5 小时，进度：做了一部分 40%`,
       '',
-      '交了或做完了直接告诉我，我来更新记录。',
+      '做完了在 app 里打勾就行，不用回我。',
     ].join('\n'))
     expect(note.kinds).toEqual(['courses.deadline.late', 'courses.deadline.due'])
     expect(note.urgent).toBe(false)
@@ -127,7 +127,7 @@ describe('outlook after the reminders', () => {
       `⚠️ Learning Course · HW3 — 准时截止 ${stamp(NOW - 14 * H, ZONE)} 已过，迟交截止 ${stamp(NOW + 34 * H, ZONE)}，还剩 34 小时`,
       `• Game Course · Essay — ${stamp(NOW + 70 * H, ZONE)} 截止，还剩 2 天 22 小时`,
     ].join('\n'))
-    expect(sections.at(-1)).toBe('交了或做完了直接告诉我，我来更新记录。')
+    expect(sections.at(-1)).toBe('做完了在 app 里打勾就行，不用回我。')
   })
 
   it('shows at most six rows and counts the rest', () => {

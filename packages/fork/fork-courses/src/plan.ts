@@ -256,7 +256,7 @@ export function renderReminders(planned: readonly PlannedReminder[], context: Re
   }
   const health = context.health
   if (health !== null && health.status !== 'ok') sections.push(freshnessLine(health, timeZone))
-  sections.push('交了或做完了直接告诉我，我来更新记录。')
+  sections.push('做完了在 app 里打勾就行，不用回我。')
   const urgent = context.urgentWithinHours > 0 && shown.some(reminder => reminder.deadline - now <= hours(context.urgentWithinHours))
   const title = late.length > 0
     ? `⚠️ 课程 DDL：${late.length} 项已过准时截止，迟交窗口还开着${due.length > 0 ? `；另有 ${due.length} 项快到截止` : ''}`
