@@ -5,7 +5,7 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import LlmRuntime, { LlmError, createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { LlmResolvedModelInfo } from '@deepseek-ai/dsh-llm'
+import type { BuiltinLlmFailureCode, LlmResolvedModelInfo } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -14,7 +14,7 @@ import { MockAdapter, textResponse } from './mock-adapter.ts'
 
 /** Serves every model except the listed ones, which fail like a pi-ai route that no longer has them. */
 class PartialAdapter extends MockAdapter {
-  constructor(script: ConstructorParameters<typeof MockAdapter>[0], readonly missing: string[], private readonly code = 'UNKNOWN_MODEL') {
+  constructor(script: ConstructorParameters<typeof MockAdapter>[0], readonly missing: string[], private readonly code: BuiltinLlmFailureCode = 'UNKNOWN_MODEL') {
     super(script)
   }
 

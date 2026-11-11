@@ -49,6 +49,9 @@ const ROOT_TOOL_ROWS_WITHOUT_TOOLS = new Set([
   '@deepseek-ai/dsh-tool-cordis/host',
   '@deepseek-ai/dsh-tool-executor-native',
   '@deepseek-ai/dsh-tool-subagent/model-selection-settings',
+  // Upstream's row is disabled by its own `!!js` condition outside the Desktop profile, which mounts it
+  // with DSH_PRIMARY_RUNTIME; composedRoot counts a conditional row as enabled because it cannot read it.
+  '@deepseek-ai/dsh-tool-workspace-dependencies',
 ])
 
 describe('event bundle', () => {
