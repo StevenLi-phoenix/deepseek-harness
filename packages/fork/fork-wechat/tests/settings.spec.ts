@@ -357,7 +357,8 @@ describe('view contents', () => {
     const keys = (value: unknown): string[] => (typeof value === 'object' && value !== null ? Object.entries(value).flatMap(([key, inner]) => [key, ...keys(inner)]) : [])
     expect(new Set(keys(view))).toEqual(new Set([
       'binding', 'state', 'botId', 'ownerId', 'boundAt', 'channel', 'link', 'lastPollAt', 'failures', 'lastError', 'lastInboundAt', 'lastOutboundAt', 'lastOutboundKind',
-      'window', 'open', 'closed', 'repliesLeft', 'repliesPerToken', 'expiresAt', 'outbox', 'count', 'limit', 'oldestAt', 'loginActive', 'timeZone',
+      'window', 'open', 'closed', 'repliesLeft', 'repliesPerToken', 'expiresAt', 'outbox', 'count', 'limit', 'oldestAt',
+      'delivery', 'mode', 'toolSends', 'repeatsSkipped', 'loginActive', 'timeZone',
     ]))
   })
 })
