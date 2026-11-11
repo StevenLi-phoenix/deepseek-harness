@@ -87,8 +87,10 @@ async function startDoor(env: Record<string, string> = {}): Promise<void> {
     stdio: ['ignore', 'ignore', 'pipe'],
   })
   child.stderr?.on('data', (chunk: Buffer) => { stderr += chunk.toString() })
+  // A spawn failure never reaches stderr, and the CI runner needs longer than a local shell to import and bind.
+  child.on('error', (error: Error) => { stderr += `spawn failed: ${error.message}` })
   base = `http://127.0.0.1:${port}`
-  const deadline = Date.now() + 5000
+  const deadline = Date.now() + 30_000
   while (!stderr.includes('listening')) {
     if (Date.now() > deadline) throw new Error(`login-door did not start: ${stderr}`)
     await new Promise(resolve => setTimeout(resolve, 20))

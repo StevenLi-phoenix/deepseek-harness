@@ -7,7 +7,9 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import ForkVoice, { Config, VoiceError } from '../src/index.ts'
 import { FakeVoiceHost, wavBytes } from './fake-voice.ts'
 
-const FFMPEG = '/opt/homebrew/bin/ffmpeg'
+/** ffmpeg where this host keeps it; the macOS CI runner has none, so the mp3 case skips there. */
+const FFMPEG = ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/usr/bin/ffmpeg'].find(candidate => existsSync(candidate)) ?? '/opt/homebrew/bin/ffmpeg'
+const hasFfmpeg = existsSync(FFMPEG)
 const host = new FakeVoiceHost()
 let url = ''
 const contexts: Context[] = []
@@ -76,7 +78,7 @@ describe('speak', () => {
     expect(logs.some(line => line.text.includes('feiyu-key'))).toBe(false)
   })
 
-  it('converts to mp3 when asked and ffmpeg works', async () => {
+  it.skipIf(!hasFfmpeg)('converts to mp3 when asked and ffmpeg works', async () => {
     const { voice } = await mount({ tts: { format: 'mp3', ffmpegPath: FFMPEG } })
     const result = await voice.speak('你好')
     expect(result.format).toBe('mp3')
