@@ -19,6 +19,7 @@ import hmac
 import json
 import os
 import re
+import socketserver
 import sys
 import threading
 import time
@@ -314,8 +315,23 @@ def make_handler(door):
     return Handler
 
 
+class DoorServer(ThreadingHTTPServer):
+    """The door's listener, binding without resolving its own host name.
+
+    HTTPServer.server_bind asks socket.getfqdn() for server_name, and that call blocks for tens of seconds where
+    reverse DNS is slow or absent (a macOS CI runner does it), during which the door looks like it never started.
+    Nothing here uses server_name: the door answers on the address it bound.
+    """
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        host, port = self.server_address[:2]
+        self.server_name = host
+        self.server_port = port
+
+
 def main():
-    server = ThreadingHTTPServer((BIND, PORT), make_handler(Door(Upstream())))
+    server = DoorServer((BIND, PORT), make_handler(Door(Upstream())))
     log(f"listening on {BIND}:{PORT}, NapCat at {UPSTREAM}")
     server.serve_forever()
 
