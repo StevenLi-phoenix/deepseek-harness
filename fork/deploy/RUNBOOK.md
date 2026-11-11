@@ -569,6 +569,14 @@ The skill `platform-status` (`fork/skills/platform-status`) lets the main agent 
 
 To rotate, mint a new one with a user session (`{"name":"…","scopes":["readonly"],"audiences":["readonly"]}`), append it as in section 20, delete the old line, then revoke the old one. Check as the service user: `/v2/admin/core` answers 200, `/v2/auth/me` answers 401.
 
+## 27. Resume refresh (resume-writer PAT)
+
+The daily resume task (a scheduled Session) keeps the owner's public resume current by writing `https://api.lishuyu.app/resume/` with `FORK_RESUME_PAT` from `/Users/dsh-runtime/.dsh/.env`, which only its shell reads (`grep` in a command substitution), so adding or rotating it needs no restart. The live page loads its data from that API at run time; `public/data.json` in the resume repo is only the build-time fallback, so a commit alone never changes the page.
+
+The resume service accepts a write only from an administrator identity that holds the live `resume` write ACL, and a PAT is an administrator only with the scope `admin`. So the token has the scope `admin` and the audience `resume`; the audience is what refuses it everywhere else (`/v2/auth/me`, the courses service, and the PAT routes all answer 401). A read-only or `courses` token cannot write here: they answer 401 and 403.
+
+To rotate, mint a new one with a user session (`{"name":"…","scopes":["admin"],"audiences":["resume"]}`), append it as in section 20, delete the old line, then revoke the old one. Check as the service user with a body the service rejects, never a valid one: `PUT /resume/projects/reorder` with `{"bad":true}` answers 422 when the token is right and 401 or 403 when it is not.
+
 ## Operate
 
 Patch edits (`$DSH_HOME/cordis.patch.yml`, the profile patch) reload live; `.env` edits need a restart; a new build hot-reloads or restarts as "DSH itself" describes. The composition is the `@deepseek-ai/dsh-fork-event-bundle` layer linked from the build; the profile patch `profiles/event/cordis.patch.yml` is the owner's layer, where Web UI settings save, and upgrades keep it. A home patch entry replaces that entry's whole `config`, so override only entries whose config it restates in full, and the Web UI refuses to save an entry the home patch sets ("Configuration for … is overridden by a home patch").

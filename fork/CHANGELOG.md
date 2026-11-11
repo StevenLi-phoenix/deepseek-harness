@@ -5,6 +5,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 ## [Unreleased]
 
 ### Added
+- The resume-writer PAT (`FORK_RESUME_PAT`, scope `admin`, audience `resume`, 2026-11-10): the daily resume task can write the live resume API, which the read-only and `courses` tokens cannot; the audience keeps it useless on every other service (RUNBOOK §27).
 - A recorded session of `flow_read` and `flow_edit` (`snapshots/session/fork-flow-edit`): the tool definitions, a loop refused, and a route reset replay without a key.
 - `flow_read` and `flow_edit` (`fork-tool-watch`): the agent reads and changes the whole notification flow at run time, including routes the bundle wrote such as `ci`; a route's answer can go to the owner, past do-not-disturb, to the main agent, nowhere, or on to another route; changes outlive deploys, `reset` restores the bundle row, and the message flow page draws the routes as they run.
 - The `qq-main` subscription: `fork-qq` publishes each stored digest as `qq.digest.new` to one long, tool-less Session on the cheap route, whose answers stay in the Session (`session.quietResult`).
