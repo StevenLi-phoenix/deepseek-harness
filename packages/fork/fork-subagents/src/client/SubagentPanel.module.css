@@ -153,8 +153,8 @@
 .figures {
   display: inline-flex;
   flex: none;
-  flex-direction: column;
-  align-items: flex-end;
+  gap: 6px;
+  align-items: baseline;
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
   line-height: 18px;
