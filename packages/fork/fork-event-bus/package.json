@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-fork-event-bus",
   "description": "Durable event bus for event-driven agent runs: dedupe, loop suppression, subscriptions, coalescing, rate limits, and dispatch to notify or Session actuators",
-  "version": "0.2.2-rc.1",
+  "version": "0.2.2-rc.2",
   "publishConfig": {
     "access": "public"
   },

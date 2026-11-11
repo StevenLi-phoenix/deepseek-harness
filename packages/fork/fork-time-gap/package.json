@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-fork-time-gap",
   "description": "Time check for every Session: an input that arrives after a quiet spell reaches the model with the current time, how long the Session was quiet, and a reminder to read it on its own terms",
-  "version": "0.2.2-rc.1",
+  "version": "0.2.2-rc.2",
   "publishConfig": {
     "access": "public"
   },

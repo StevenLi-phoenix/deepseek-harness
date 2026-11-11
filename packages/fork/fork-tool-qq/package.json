@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-fork-tool-qq",
   "description": "Read-only qq_groups, qq_digest, qq_recent, and qq_search tools: the agent reads what the QQ observer recorded and digested",
-  "version": "0.2.2-rc.1",
+  "version": "0.2.2-rc.2",
   "publishConfig": {
     "access": "public"
   },

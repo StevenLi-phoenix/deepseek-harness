@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-fork-console",
   "description": "The event service in the browser: a message flow page, and Settings sections for a service overview, subscriptions and schedule reminders, and Claude Code sessions with the voice service",
-  "version": "0.2.2-rc.1",
+  "version": "0.2.2-rc.2",
   "publishConfig": {
     "access": "public"
   },

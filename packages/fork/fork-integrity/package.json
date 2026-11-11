@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-fork-integrity",
   "description": "Integrity watch for the owner's main agent: hashes of the files that steer it, a WeChat notice when one changes, persona hashes per Session, and a count of the persona's forbidden stock lines",
-  "version": "0.2.2-rc.1",
+  "version": "0.2.2-rc.2",
   "publishConfig": {
     "access": "public"
   },

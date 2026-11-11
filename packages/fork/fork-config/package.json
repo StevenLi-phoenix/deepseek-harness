@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-fork-config",
   "description": "All settings card: every Config field of a plugin entry, the layer that set it, and one explicit save to the owner patch, embeddable in any Settings section",
-  "version": "0.2.2-rc.1",
+  "version": "0.2.2-rc.2",
   "publishConfig": {
     "access": "public"
   },

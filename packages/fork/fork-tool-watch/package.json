@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-fork-tool-watch",
   "description": "Model-facing watch_create, watch_list, watch_delete, flow_read, and flow_edit tools over the fork event bus and GitHub sensor",
-  "version": "0.2.2-rc.1",
+  "version": "0.2.2-rc.2",
   "publishConfig": {
     "access": "public"
   },
