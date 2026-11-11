@@ -20,6 +20,7 @@ const VIEW: WechatView = {
   channel: { link: 'connected', lastPollAt: NOW - 20_000, failures: 0, lastError: null, lastInboundAt: NOW - 3_600_000, lastOutboundAt: NOW - 120_000, lastOutboundKind: 'reply' },
   window: { open: true, closed: null, repliesLeft: 7, repliesPerToken: 10, expiresAt: NOW + 21 * 3_600_000 },
   outbox: { count: 0, limit: 50, oldestAt: null },
+  delivery: { mode: 'hybrid', toolSends: 0, repeatsSkipped: 0 },
   loginActive: false,
   timeZone: 'America/New_York',
 }
@@ -109,6 +110,14 @@ describe('WechatSection status', () => {
     expect(card.textContent).toContain('还能回 7 / 10 条')
     expect(card.textContent).toContain('21 小时后结束')
     expect(card.textContent).toContain('3 条在排队（最多 50 条） · 2 小时前排上的最早一条')
+    expect(card.textContent).toContain('投递：最终回答照常发出；agent 也能用 wechat_send 在一轮中途给你发消息（启动以来 0 条，跳过重复 0 条）。')
+    cleanup()
+    mount({ view: { ...VIEW, delivery: { mode: 'text', toolSends: 0, repeatsSkipped: 0 } }, checkedAt: NOW })
+    card = screen.getByRole('region', { name: '回复窗口' })
+    expect(card.textContent).toContain('投递：只发每一轮的最终回答。')
+    cleanup()
+    mount({ view: { ...VIEW, outbox: { count: 3, limit: 50, oldestAt: NOW - 7_200_000 } }, checkedAt: NOW })
+    card = screen.getByRole('region', { name: '回复窗口' })
     cleanup()
     mount({ view: { ...VIEW, window: { ...VIEW.window, open: false, closed: 'used-up', repliesLeft: 0 } }, checkedAt: NOW })
     card = screen.getByRole('region', { name: '回复窗口' })
@@ -151,7 +160,7 @@ describe('WechatSection partial status', () => {
   it('shows neither a count, an end, nor a reason for an open window without a record', () => {
     const window = { open: true, closed: null, repliesLeft: null, repliesPerToken: 10, expiresAt: null }
     mount({ view: { ...VIEW, window }, checkedAt: NOW })
-    expect(screen.getByRole('region', { name: '回复窗口' }).textContent).toBe(`回复窗口${zh['window.hint']}${zh['outbox.empty']}`)
+    expect(screen.getByRole('region', { name: '回复窗口' }).textContent).toBe(`回复窗口${zh['window.hint']}${zh['delivery.hybrid'].replace('{n}', '0').replace('{repeats}', '0')}${zh['outbox.empty']}`)
   })
 
   it('shows the queue without an age when the oldest entry has no time', () => {

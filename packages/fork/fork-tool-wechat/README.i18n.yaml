@@ -3,29 +3,53 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/fork/fork-tool-wechat/README.md
 /:
-  en: b46c8f53f36579cf
-  zh: c31bab09a7422fba
+  en: c7c20523a49edd65
+  zh: 1591ffa3206a3b87
 /deepseek-ai-dsh-fork-tool-wechat:
   en: fabcdd234432a7b6
   zh: 5f169c96342d1051
 /deepseek-ai-dsh-fork-tool-wechat/summary:
-  en: 5f67dd60129e1fda
-  zh: 2c8b8cd36f4ea462
+  en: 9fb0fbf367e9a454
+  zh: 80c06235f6ba2b47
 /deepseek-ai-dsh-fork-tool-wechat/table-of-contents:
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
 /deepseek-ai-dsh-fork-tool-wechat/use-this-package:
-  en: a7941623eb6e7e85
-  zh: ef887bd14a2b1471
+  en: dffd9f4c54de7092
+  zh: cb22a755145bb4d8
 /deepseek-ai-dsh-fork-tool-wechat/understand-the-implementation:
-  en: 128448f84153ca32
-  zh: 9b2c552ba4577b12
+  en: af3a2638e280798a
+  zh: 21075966e00589b7
 /deepseek-ai-dsh-fork-tool-wechat/further-exploration:
   en: fbb0c043ed951db2
   zh: 9c5b414e553023d6
 /deepseek-ai-dsh-fork-tool-wechat/model-experience:
   en: 215e7ba838619b7b
   zh: a311da3843709f90
+/deepseek-ai-dsh-fork-tool-wechat/model-experience/message-tool:
+  en: 8d052749420990da
+  zh: 72ff64a761fd1454
+/deepseek-ai-dsh-fork-tool-wechat/model-experience/message-tool/what-the-model-sees:
+  en: 5c70fb8908dfa287
+  zh: c704d133695b384f
+/deepseek-ai-dsh-fork-tool-wechat/model-experience/message-tool/token-effect:
+  en: 22f9aff43547ba97
+  zh: 4b2820009e478956
+/deepseek-ai-dsh-fork-tool-wechat/model-experience/message-tool/kv-cache-effect:
+  en: e7a8f3504d1c4285
+  zh: 9d9e0cf7ef4cc86d
+/deepseek-ai-dsh-fork-tool-wechat/model-experience/message-results:
+  en: e00d05874112430d
+  zh: 92f6b87507ccada9
+/deepseek-ai-dsh-fork-tool-wechat/model-experience/message-results/what-the-model-sees:
+  en: 80d28f031fc5ea5a
+  zh: fa30e98be2e86666
+/deepseek-ai-dsh-fork-tool-wechat/model-experience/message-results/token-effect:
+  en: 7aa5c06d9b372bc1
+  zh: 67b2b39ce1a8003f
+/deepseek-ai-dsh-fork-tool-wechat/model-experience/message-results/kv-cache-effect:
+  en: 2fbf2175168e8244
+  zh: b48070db9f5a496f
 /deepseek-ai-dsh-fork-tool-wechat/model-experience/send-tool:
   en: 32be3bbb2ad13667
   zh: efc91bf504ad3789

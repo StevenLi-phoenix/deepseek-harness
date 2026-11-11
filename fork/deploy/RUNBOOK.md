@@ -577,6 +577,23 @@ The resume service accepts a write only from an administrator identity that hold
 
 To rotate, mint a new one with a user session (`{"name":"…","scopes":["admin"],"audiences":["resume"]}`), append it as in section 20, delete the old line, then revoke the old one. Check as the service user with a body the service rejects, never a valid one: `PUT /resume/projects/reorder` with `{"bad":true}` answers 422 when the token is right and 401 or 403 when it is not.
 
+## 28. Messages in the middle of a turn (`wechat_send`)
+
+The chat Session's final answer of each turn is sent to the owner as the reply, as before. With `chat.delivery: hybrid` (the code default and the bundle's value) the Session also has the tool `wechat_send` (`fork-tool-wechat`) for messages while a turn is still running: progress on a long job, a first answer before a slow step, an `urgent` heads-up past do-not-disturb. The channel sends it through the same path as a relayed answer (split, held while the owner sleeps unless urgent, sent through the open reply window or queued with the reason) and tells the model how many replies are left. One turn sends at most `maxSendsPerTurn` (10, the whole window) texts, the window's last slot is kept for the final answer, and a final answer that repeats a `wechat_send` text (whitespace aside) is not sent a second time. Nothing else changes: bilibili, QQ bot, and event Sessions deliver their text as before.
+
+**Switch off.** In the owner layer `/Users/dsh-runtime/.dsh/profiles/event/cordis.patch.yml` (reloads live; back it up first, edit as `sudo -n -u dsh-runtime` after `cd /`):
+
+```yaml
+- id: fork-wechat
+  config:
+    chat:
+      delivery: text
+```
+
+The tool plugin reads the mode when the channel is provided, so the reload drops `wechat_send` from the next turn's tools and the channel refuses a call that is still running. To switch it on again set `hybrid` or remove the entry.
+
+**Watch.** The log has one line per call, `fork-wechat: wechat_send session=… chars=… parts=… sent=… queued=… held=… urgent=… turnSends=k/10 repliesLeft=…`, and `fork-wechat: Session … final answer repeats a wechat_send text; not sent again` for each skipped repeat (never the text). Settings → 微信, reply window card, shows the mode, the calls since the process started, and the repeats skipped. Roll back (switch off) if the repeats skipped exceed a fifth of the calls, if the owner reports doubled messages, or if the cache hit rate drops below 90 percent (the tool schema is a fixed cost of about 250 tokens per request; the hit rate is 96.5 percent without it).
+
 ## Operate
 
 Patch edits (`$DSH_HOME/cordis.patch.yml`, the profile patch) reload live; `.env` edits need a restart; a new build hot-reloads or restarts as "DSH itself" describes. The composition is the `@deepseek-ai/dsh-fork-event-bundle` layer linked from the build; the profile patch `profiles/event/cordis.patch.yml` is the owner's layer, where Web UI settings save, and upgrades keep it. A home patch entry replaces that entry's whole `config`, so override only entries whose config it restates in full, and the Web UI refuses to save an entry the home patch sets ("Configuration for … is overridden by a home patch").

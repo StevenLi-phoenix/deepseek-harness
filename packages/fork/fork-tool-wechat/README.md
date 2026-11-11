@@ -1,5 +1,5 @@
 ---
-description: "Model-facing WeChat tools: wechat_send_file sends a picture, video, or file from the host to the owner, and defer_deliver holds a text for a time or the owner's waking, with every rule enforced by the channel, not the model."
+description: "Model-facing WeChat tools: wechat_send messages the owner in the middle of a turn, wechat_send_file sends a picture, video, or file from the host to the owner, and defer_deliver holds a text for a time or the owner's waking, with every rule enforced by the channel, not the model."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Ask your agent on WeChat for a screenshot, a report, or a clip, and it arrives in the chat as a real picture, file, or video instead of a path in a text reply. `wechat_send_file` sends a file on the host as the matching message type; `defer_deliver` holds a text back until a time the agent names, or until you wake. The rules live in host code: the recipient is always you, and a file goes out only while your last message keeps the reply window open.
+Ask your agent on WeChat for a screenshot, a report, or a clip, and it arrives in the chat as a real picture, file, or video. `wechat_send_file` sends a file as the matching message type, `defer_deliver` holds a text until a time the agent names or until you wake, and `wechat_send` lets it message you in the middle of a long job. The rules live in host code: the recipient is always you, and a file goes out only while your last message keeps the reply window open.
 
 ## Table of Contents
 
@@ -32,7 +32,7 @@ Add the row to the plugin list of the agent preset that should send files, in a 
   name: '@deepseek-ai/dsh-fork-tool-wechat'
 ```
 
-The plugin has no configuration; the size limit is the channel's `maxMediaBytes` (25 MiB).
+The plugin has no configuration; the size limit is the channel's `maxMediaBytes` (25 MiB). `wechat_send` is registered only while the channel's `chat.delivery` is `hybrid` (its default); with `text` the agent has the other two tools only.
 
 -----
 
@@ -42,11 +42,11 @@ The plugin has no configuration; the size limit is the channel's `maxMediaBytes`
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-Once the mounting scope resolves `ctx.forkNotifier`, the plugin registers two `defineTool` definitions. `wechat_send_file` passes the path to `WechatChannel.sendFile()` and returns its outcome unchanged; `defer_deliver` checks that `until` is ISO 8601 with a UTC offset (a time without one would be read in the Host's zone, which the model cannot see), passes the text and the parsed time to `WechatChannel.holdDelivery()`, and gives the held time back as ISO text. The channel queues the text in its outbox with a release time and one timer for the earliest; a wake releases it early, and the owner's own messages do not. For a file, the channel checks that the path is absolute and names a non-empty regular file within `maxMediaBytes`, takes the open reply window (keeping its last slot for the text reply), encrypts the file with a fresh AES-128 key, uploads it to the WeChat CDN, and sends one image, video, or file item to the owner on the same serialized path as text replies. Nothing is queued; each send is logged with its kind, name, size, and path.
+Once the mounting scope resolves `ctx.forkNotifier`, the plugin registers up to three `defineTool` definitions. `wechat_send` (only while `ctx.forkNotifier.delivery()` is `hybrid`, read each time the channel is provided, so a config reload registers or drops it) passes the text, `urgent`, and the calling Session's id to `WechatChannel.sendText()`, which returns how many messages went out or wait and how many replies are left, or why it refused (the turn's cap, the window's last slot, an empty text, text delivery). `wechat_send_file` passes the path to `WechatChannel.sendFile()` and returns its outcome unchanged; `defer_deliver` checks that `until` is ISO 8601 with a UTC offset (a time without one would be read in the Host's zone, which the model cannot see), passes the text and the parsed time to `WechatChannel.holdDelivery()`, and gives the held time back as ISO text. The channel queues the text in its outbox with a release time and one timer for the earliest; a wake releases it early, and the owner's own messages do not. For a file, the channel checks that the path is absolute and names a non-empty regular file within `maxMediaBytes`, takes the open reply window (keeping its last slot for the text reply), encrypts the file with a fresh AES-128 key, uploads it to the WeChat CDN, and sends one image, video, or file item to the owner on the same serialized path as text replies. Nothing is queued; each send is logged with its kind, name, size, and path.
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Plugin entry: both tool definitions |
+| [`src/index.ts`](src/index.ts) | Plugin entry: the three tool definitions |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 
@@ -63,6 +63,34 @@ This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 
 <a id="model-experience"></a>
 ## Model Experience
+
+### Message tool
+
+#### What the model sees
+
+While `chat.delivery` is `hybrid`, a schema `wechat_send`: the required string `text` ("What to tell the owner, as you would write it in a message: plain text, no Markdown.") and the optional boolean `urgent` (pass the owner's sleep). The description says it messages the owner now, in the middle of the turn (progress on a long job, a first answer before a slow step, a finding that cannot wait); that the final answer is still sent as the reply, so what was sent here is not repeated in it, and that if everything was said here the turn ends with exactly `NO_REPLY`; that everything for one moment belongs in one message because the owner can be answered only about ten times per message of theirs and the last of those is kept for the final answer; and that `urgent` is only for something the owner must read even while asleep.
+
+#### Token effect
+
+A fixed schema cost of about 250 tokens on every request from an Agent whose preset mounts the package while `hybrid` delivery is on.
+
+#### KV Cache effect
+
+Prefix-stable while tool definitions and visibility are unchanged; switching `chat.delivery` adds or removes the schema and may invalidate reuse from the first changed schema token.
+
+### Message results
+
+#### What the model sees
+
+One JSON text block per call: `{ "sent": <messages sent now>, "queued": <messages waiting>, "held": true | false, "why"?: "<reason the first one waits>", "repliesLeft"?: <replies left in the window> }`, or `{ "notSent": "<reason>" }` with reasons such as `the text is empty`, `this turn already sent 10 messages (the cap is 10): put what is left into your final answer`, `reply quota nearly used up; the last message is kept for your final answer`, or `wechat_send is off (chat.delivery is text): put the words in your answer`.
+
+#### Token effect
+
+A few dozen tokens per call, kept in the Session's history until compaction.
+
+#### KV Cache effect
+
+Append-only; newly visible content follows the reusable request prefix and does not invalidate existing KV Cache entries.
 
 ### Send tool
 

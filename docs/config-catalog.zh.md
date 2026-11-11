@@ -3731,7 +3731,7 @@ export type TtsProviderName = 'feiyu' | 'mac-mini'
 ## `@deepseek-ai/dsh-fork-wechat`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/fork-wechat/src/index.ts:82`](../packages/fork/fork-wechat/src/index.ts)
+- `source`: [`packages/fork/fork-wechat/src/index.ts:90`](../packages/fork/fork-wechat/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
@@ -3776,6 +3776,8 @@ export interface Config {
    * evidently awake, and what the chat Session answers in that time is a reply. 0 holds even replies.
    */
   awakeAfterMessageMs: number
+  /** Messages one turn may send with `wechat_send`; the default is the whole reply window of one owner message (`repliesPerToken`). */
+  maxSendsPerTurn: number
 }
 
 /** How the owner's chat Session is created. */
@@ -3800,6 +3802,14 @@ export interface ChatConfig {
    * the message in the chat as a notice, so nothing happens until the owner replies.
    */
   agentMessage: 'turn' | 'notify'
+  /**
+   * How the chat Session's words reach the owner. `hybrid`: the final answer of each turn is still sent as the reply, and
+   * the Session also has `wechat_send` for messages in the middle of a turn (progress, a first answer before a long step,
+   * a heads-up that cannot wait); a final answer that repeats a `wechat_send` text is not sent twice. `text`: only the final
+   * answer is sent and `wechat_send` is not offered. Read when the tool plugin mounts and at every send, so a config
+   * reload switches it.
+   */
+  delivery: 'text' | 'hybrid'
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-wechat -->

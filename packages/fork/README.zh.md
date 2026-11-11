@@ -55,7 +55,7 @@ kind: "package-group"
 | [`fork-cc-bridge/`](fork-cc-bridge/README.zh.md) | `cc_list_sessions`、`cc_send`、`cc_start`、`cc_stop` 工具：与 agent 自己账号下的 Claude Code 会话协作 |
 | [`fork-tool-qq/`](fork-tool-qq/README.zh.md) | `qq_groups`、`qq_digest`、`qq_recent`、`qq_search` 工具：agent 读取 QQ 观察者记录和摘要的内容 |
 | [`fork-tool-watch/`](fork-tool-watch/README.zh.md) | `watch_create`、`watch_list`、`watch_delete` 工具：agent 自己管理监控；`flow_read`、`flow_edit`：它自己改整条通知流程 |
-| [`fork-tool-wechat/`](fork-tool-wechat/README.zh.md) | `wechat_send_file` 工具：agent 给 owner 发图片、视频和文件 |
+| [`fork-tool-wechat/`](fork-tool-wechat/README.zh.md) | `wechat_send` 与 `wechat_send_file` 工具：agent 在一轮中途给 owner 发消息，以及发图片、视频和文件 |
 | [`fork-voice/`](fork-voice/README.zh.md) | `ctx.forkVoice`：文字转语音（feiyu）与音频文件转文字（asr-service，默认关闭） |
 | [`fork-wechat/`](fork-wechat/README.zh.md) | 微信（iLink bot）通道：主人对话 Session、经 `owner-relay` 送达的回答，以及 `ctx.forkNotifier`；设置页可扫码绑定、查看通道健康和解绑 |
 | [`owner-relay/`](owner-relay/README.zh.md) | `ctx.ownerRelay`：所有被认领 Session 的最终回答走同一套规则，交给认领它的通道（微信、B站私信），发不出时带标签降级到微信 |

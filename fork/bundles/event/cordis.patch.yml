@@ -155,7 +155,7 @@
                 live deliverable's preview to disk with `autocut-remote fetch` and write its path and
                 the summary in the session. autocut.failed: write what failed and the error's fix in
                 the session. Never send anything to WeChat from this session (no wechat_send_file, no
-                text), never confirm, reject, or hand off here, and answer NO_REPLY: the owner asks to
+                wechat_send, no text), never confirm, reject, or hand off here, and answer NO_REPLY: the owner asks to
                 see a preview in their own words, and only then is it sent.
           # A video made or recorded on another machine (message flow page, "本地视频上传" and "需要剪辑？"):
           # the Session decides whether it needs cutting. Cutting runs the autocut skill's pipelines, which stop at the
@@ -480,6 +480,9 @@
           # A message another Session passes the main agent (Bilibili, Claude Code) starts a turn marked as
           # not the owner's (`turn`); `notify` only tells the owner on WeChat and starts nothing.
           agentMessage: turn
+          # `hybrid`: the final answer of each turn is sent as the reply, and the Session can also message the
+          # owner mid-turn with `wechat_send`; `text` sends the final answer only (RUNBOOK section 28).
+          delivery: hybrid
 
     # The agent's own Bilibili account (ctx.bili), as a client of bili-svc. bili-svc holds and refreshes
     # its session and is the only place that writes to Bilibili: reads and the non-speech actions (like,

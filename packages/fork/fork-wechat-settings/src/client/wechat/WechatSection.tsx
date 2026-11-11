@@ -139,6 +139,7 @@ function WindowCard({ view, now, t }: { view: WechatView; now: number; t: Transl
         ? <span className={css.big}>{t('window.replies', { left: reply.repliesLeft, total: reply.repliesPerToken })}</span>
         : <span className={css.reason}>{reply.closed === null ? '' : t(`window.closed.${reply.closed}`)}</span>}
       <span className={css.hint}>{t('window.hint')}</span>
+      <span className={css.hint}>{t(view.delivery.mode === 'hybrid' ? 'delivery.hybrid' : 'delivery.text', { n: view.delivery.toolSends, repeats: view.delivery.repeatsSkipped })}</span>
       <div className={css.queue}>
         {outbox.count === 0
           ? <span className={css.meta}>{t('outbox.empty')}</span>
