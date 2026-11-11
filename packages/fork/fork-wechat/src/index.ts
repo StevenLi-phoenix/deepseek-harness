@@ -801,10 +801,13 @@ export class WechatChannel extends Service implements ForkNotifier {
     }
     this.toolStats.sends += 1
     // The owner's reply to a text lands in the current chat Session: it gets a copy of what another Session said.
-    if (sessionId !== undefined && (!own || !this.isCurrentChat(sessionId))) await this.shareWithChat(text, own ? EARLIER_CHAT : undefined, sessionId)
+    if (sessionId !== undefined && (!own || !this.isCurrentChat(sessionId))) {
+      await this.shareWithChat(text, own ? EARLIER_CHAT : undefined, sessionId)
+    }
     const repliesLeft = this.status().window.repliesLeft
     this.ctx.logger.info(`fork-wechat: wechat_send session=${sessionId ?? 'none'} chars=${Array.from(text).length} parts=${report.parts} sent=${report.sent} queued=${report.queued.length} held=${report.held} urgent=${options.urgent === true} turnSends=${turn?.count ?? 0}/${this.config.maxSendsPerTurn} repliesLeft=${repliesLeft ?? 'n/a'}`)
-    return { sent: report.sent, queued: report.queued.length, held: report.held, ...report.queued[0] === undefined ? {} : { why: report.queued[0] }, repliesLeft }
+    const why = report.queued[0]
+    return { sent: report.sent, queued: report.queued.length, held: report.held, ...why === undefined ? {} : { why }, repliesLeft }
   }
 
   /** The `wechat_send` record of a Session's running turn, created on first use. */
@@ -1399,7 +1402,9 @@ export class WechatChannel extends Service implements ForkNotifier {
    * Split one text into messages and send or queue each in order; while the owner sleeps, a text that is
    * not urgent is queued for the morning instead (the log names its kind and count, never its text).
    */
-  private deliver(raw: string, kind: SentKind, options: { urgent?: boolean; events?: readonly string[] | undefined } = {}): Promise<DeliverReport> {
+  private deliver(
+    raw: string, kind: SentKind, options: { urgent?: boolean; events?: readonly string[] | undefined } = {},
+  ): Promise<DeliverReport> {
     // An unpaired surrogate (a cut emoji in model output) makes sendmessage fail with ret -1.
     const text = raw.toWellFormed()
     return this.serialize(async (): Promise<DeliverReport> => {

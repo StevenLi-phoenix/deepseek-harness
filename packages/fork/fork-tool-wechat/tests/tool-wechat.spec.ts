@@ -39,7 +39,9 @@ describe('wechat_send', () => {
   })
 
   it('passes the text, urgency and the calling Session to the channel and returns what became of it', async () => {
-    const sendText = vi.fn((_session: string | undefined, _text: string, _options: { urgent?: boolean }) => Promise.resolve({ sent: 1, queued: 0, held: false, repliesLeft: 7 }))
+    const sendText = vi.fn((_session: string | undefined, _text: string, _options: { urgent?: boolean }) => (
+      Promise.resolve({ sent: 1, queued: 0, held: false, repliesLeft: 7 })
+    ))
     const { ctx, send } = await mount(tool({ sendText }))
     expect(await send({ text: 'on it', urgent: true })).toMatchObject({ value: { sent: 1, queued: 0, held: false, repliesLeft: 7 } })
     expect(sendText).toHaveBeenCalledWith(undefined, 'on it', { urgent: true })
@@ -71,7 +73,9 @@ describe('wechat_send', () => {
   it('tells the model the final answer is still sent, and leaves the other tools\' wording alone', async () => {
     const text = await mount({ send: vi.fn(), ownsSession: () => false, delivery: () => 'text' })
     const on = await mount(tool())
-    const description = (h: Awaited<ReturnType<typeof mount>>, name: string) => h.ctx.tools.schemas().find(schema => schema.name === name)!.description
+    const description = (h: Awaited<ReturnType<typeof mount>>, name: string) => (
+      h.ctx.tools.schemas().find(schema => schema.name === name)!.description
+    )
     expect(description(on, 'wechat_send')).toContain('final answer is still sent')
     expect(description(on, 'wechat_send_file')).toBe(description(text, 'wechat_send_file'))
     expect(description(on, 'defer_deliver')).toBe(description(text, 'defer_deliver'))
