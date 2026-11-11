@@ -158,6 +158,8 @@ function stateOf(sources: PanelSources, entry: CatalogEntry): RowState {
 
 /** Counts over a Session's whole subagent tree, for every Session the walk reached. */
 export interface TreeIndex {
+  /** Counts over every descendant of the Session the walk started from. */
+  readonly total: StateCounts
   /** Per Session: counts over all its descendants, itself excluded. Sessions the walk did not reach are absent. */
   readonly below: ReadonlyMap<SessionId, StateCounts>
   /** The walk stopped at {@link MAX_TREE_DEPTH} or {@link MAX_TREE_NODES}, so the counts are a floor. */
@@ -197,8 +199,8 @@ export function indexTree(sources: PanelSources, rootId: SessionId): TreeIndex {
     below.set(parentId, counts)
     return counts
   }
-  walk(rootId, 1)
-  return { below, truncated }
+  const total = walk(rootId, 1)
+  return { total, below, truncated }
 }
 
 /**
@@ -243,7 +245,7 @@ export function rowsOf(sources: PanelSources, parentId: SessionId, now: number, 
       ...activity === undefined ? {} : { activity },
       createdAt: entry.createdAt,
       children: external ? 0 : catalogOf(sources, entry.id).entries.length,
-      below: external ? NO_COUNTS : index.below.get(entry.id) ?? NO_COUNTS,
+      below: index.below.get(entry.id) ?? NO_COUNTS,
     }
   })
   const live = rows.filter(isLive).sort((a, b) => b.createdAt - a.createdAt)

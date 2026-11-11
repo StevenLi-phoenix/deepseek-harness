@@ -20,7 +20,7 @@ import type {} from '@deepseek-ai/dsh-token-meter/client'
 import type {} from '@deepseek-ai/dsh-subagent/client'
 import type {} from '../activity.ts'
 import {
-  AUTO_EXPAND_DEPTH, MAX_TREE_DEPTH, MAX_TREE_NODES, NO_COUNTS, catalogOf, endReason, finishedLabel, formatDuration, formatTokens,
+  AUTO_EXPAND_DEPTH, MAX_TREE_DEPTH, MAX_TREE_NODES, catalogOf, endReason, finishedLabel, formatDuration, formatTokens,
   indexTree, isLive, metaParts, nowLine, rowsOf, summaryLine,
   type PanelRow, type PanelSources, type T, type TreeIndex,
 } from './model.ts'
@@ -101,7 +101,7 @@ function Row({ row, depth, ctx }: { row: PanelRow; depth: number; ctx: ListConte
           className={css.main}
           disabled={address === undefined}
           aria-label={[row.title, stateLabel, t('open.aside')].join(' · ')}
-          onClick={() => { if (address !== undefined) actions.openAside(address) }}
+          onClick={address === undefined ? undefined : () => { actions.openAside(address) }}
         >
           <Mark row={row} />
           <span className={css.body}>
@@ -200,7 +200,7 @@ function Rows({ parentId, depth, ctx }: { parentId: SessionId; depth: number; ct
   const live = rows.filter(isLive)
   const finished = rows.filter(row => !isLive(row))
   // The running section counts running Sessions at every depth, matching the header and the summary.
-  const running = (ctx.index.below.get(parentId) ?? NO_COUNTS).running
+  const running = ctx.index.total.running
   return (
     <>
       {live.length > 0 && (
@@ -245,7 +245,7 @@ export function SubagentPanel(props: SubagentPanelProps) {
       sessionId, MAX_TREE_DEPTH, MAX_TREE_NODES,
     )
   }, [index.truncated, sessionId])
-  const counts = index.below.get(sessionId) ?? NO_COUNTS
+  const counts = index.total
   // Tick while anything in the tree runs, so open turns and waits count up at every depth.
   const now = useNow(counts.running > 0)
   const top = rowsOf(sources, sessionId, now, index)

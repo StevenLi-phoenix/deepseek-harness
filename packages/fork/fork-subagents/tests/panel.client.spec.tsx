@@ -7,8 +7,8 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ForkSubagentActivity } from '../src/activity.ts'
 import { zh } from '../src/client/locales.ts'
 import {
-  MAX_TREE_DEPTH, classify, countStates, endReason, finishedLabel, formatClock, formatDuration, formatTokens, indexTree, nowLine,
-  rowsOf, summaryLine, totalOf,
+  MAX_TREE_DEPTH, MAX_TREE_NODES, NO_COUNTS, catalogOf, classify, countStates, endReason, finishedLabel, formatClock, formatDuration,
+  formatTokens, indexTree, metaParts, nowLine, rowsOf, summaryLine, totalOf,
   type PanelSources, type T,
 } from '../src/client/model.ts'
 import { SubagentPanel, type SubagentPanelProps } from '../src/client/SubagentPanel.tsx'
@@ -219,7 +219,7 @@ function nested(): PanelSources {
       scout: summary('scout', false, done(NOW - 90_000)),
       worker: summary('worker', true, {
         subagentTiming: { settledMs: 0, active: { since: NOW - 30_000, through: NOW - 1_000 } },
-        forkSubagentActivity: activity({ phase: 'tool', since: NOW - 8_000, at: NOW - 8_000, step: 3, toolCalls: 2, tool: { name: 'bash', open: 1 } }),
+        forkSubagentActivity: activity({ phase: 'tool', since: NOW - 8_000, at: NOW - 8_000, step: 3, toolCalls: 2, tool: { name: 'bash', preview: '', open: 1 } }),
       }),
       deep: summary('deep', false, done(NOW - 20_000)),
     } as never,
@@ -308,5 +308,141 @@ describe('nested subagents', () => {
     } as unknown as SubagentToggleProps
     render(<SubagentToggle {...props} />)
     expect(screen.getByRole('button', { name: '子智能体：1 个在跑，共 4 个。在右侧栏查看' }).textContent).toBe('1 个在跑')
+  })
+})
+
+/** A root whose catalog holds the given entries, with the given summaries. */
+function tree(entries: readonly Record<string, unknown>[], summaries: Record<string, unknown> = {}): PanelSources {
+  return {
+    projections: { [ROOT]: { state: 'ready', values: { subagentCatalog: entries } } } as never,
+    summaries: summaries as never,
+    statuses: new Map(),
+  }
+}
+
+describe('model edges', () => {
+  it('knows when a catalog is unread, loading, failed, or read empty', () => {
+    const at = (snapshot: unknown) =>
+      catalogOf({ projections: { [ROOT]: snapshot } as never, summaries: {}, statuses: new Map() }, ROOT).state
+    expect(catalogOf({ projections: {}, summaries: {}, statuses: new Map() }, ROOT)).toEqual({ entries: [], state: 'idle' })
+    expect(at({ state: 'loading', values: {} })).toBe('loading')
+    expect(at({ state: 'error', values: {} })).toBe('error')
+    expect(at({ state: 'ready', values: {} })).toBe('ready')
+    expect(at({ state: 'idle', values: {} })).toBe('idle')
+  })
+
+  it('titles a row from its label, its Session title, its name, or its id, and orders running rows newest first', () => {
+    const rows = rowsOf(tree([
+      { id: id('labelled'), createdAt: 1, mode: 'continuable', label: 'same', name: 'same' },
+      { id: id('titled'), createdAt: 2, mode: 'oneshot', label: '' },
+      { id: id('bare'), createdAt: 3, mode: 'oneshot' },
+      { id: id('named'), createdAt: 4, mode: 'continuable', label: '', name: 'worker' },
+      { id: id('old'), createdAt: 5, mode: 'oneshot', label: 'old run' },
+      { id: id('new'), createdAt: 6, mode: 'oneshot', label: 'new run' },
+    ], {
+      titled: { id: id('titled'), running: false, title: 'From the title', projectionValues: { subagentTiming: { settledMs: 5_000, active: { since: NOW - 9_000, through: NOW - 4_000 } } } },
+      old: { id: id('old'), running: true },
+      new: { id: id('new'), running: true },
+    }), ROOT, NOW)
+    expect(rows.slice(0, 2).map(row => row.id)).toEqual(['new', 'old'])
+    const byId = new Map(rows.map(row => [row.id, row]))
+    expect(byId.get(id('labelled'))).toMatchObject({ title: 'same' })
+    expect(byId.get(id('labelled'))).not.toHaveProperty('name')
+    // A stopped child's open turn ends at its last event, not at the clock.
+    expect(byId.get(id('titled'))).toMatchObject({ title: 'From the title', durationMs: 10_000 })
+    expect(byId.get(id('bare'))?.title).toBe('bare')
+    expect(byId.get(id('named'))?.title).toBe('worker')
+  })
+
+  it('formats the long tails: stopped and idle counts, days, thousands of tokens', () => {
+    expect(summaryLine({ ...NO_COUNTS, stopped: 2, idle: 1 }, t)).toBe('2 个中断 · 1 个未运行')
+    expect(formatDuration(2 * 86_400_000 + 3 * 3_600_000, t)).toBe('2 天 3 小时')
+    expect(formatTokens(12_345, t)).toBe('12.3K tok')
+    expect(formatTokens(123_456, t)).toBe('123K tok')
+  })
+
+  it('reads a retry without its count or reason, and a tool phase without its call', () => {
+    expect(nowLine(activity({ phase: 'retry', since: NOW }), NOW, t)).toMatchObject({ label: '模型请求失败，第 0 次重试', retrying: true })
+    expect(nowLine(activity({ phase: 'retry', since: NOW, retry: { attempt: 1, max: 3, reason: '' } }), NOW, t)).not.toHaveProperty('detail')
+    expect(nowLine(activity({ phase: 'tool', since: NOW - 1_000 }), NOW, t).label).toBe('模型思考中')
+  })
+
+  it('names the last tool of a running row between calls, failed or not', () => {
+    const row = (partial: Partial<ForkSubagentActivity>) => ({ state: 'running', activity: activity(partial) }) as never
+    expect(metaParts(row({ phase: 'model', lastTool: { name: 'bash', preview: '', error: true } }), t)).toEqual(['上一个：bash（失败）'])
+    expect(metaParts(row({ phase: 'model', lastTool: { name: 'read', preview: '', error: false } }), t)).toEqual(['上一个：read'])
+    expect(metaParts(row({ phase: 'tool', lastTool: { name: 'read', preview: '', error: false } }), t)).toEqual([])
+  })
+
+  it('says why a row stopped', () => {
+    const stopped = (ended?: ForkSubagentActivity['ended']) =>
+      endReason({ state: 'stopped', activity: activity(ended === undefined ? {} : { ended }) } as never, t)
+    expect(endReason({ state: 'failed' } as never, t)).toBe('出错')
+    expect(endReason({ state: 'done' } as never, t)).toBeUndefined()
+    expect([stopped('aborted'), stopped('blocked'), stopped('max-tokens'), stopped('forked'), stopped()])
+      .toEqual(['被停止', '被拦下', '输出超长后停下', '分叉时结束', '中断'])
+  })
+
+  it('stops a wide tree at the size bound, and walks a chain exactly as deep as the bound', () => {
+    const wide = tree(Array.from({ length: MAX_TREE_NODES + 5 }, (_, n) => ({ id: id(`w${n}`), createdAt: n, mode: 'oneshot', label: `w${n}` })))
+    const index = indexTree(wide, ROOT)
+    expect(index.truncated).toBe(true)
+    expect(totalOf(index.total)).toBe(MAX_TREE_NODES)
+
+    const links = Array.from({ length: MAX_TREE_DEPTH }, (_, n) => [n === 0 ? ROOT : `d${n}`, `d${n + 1}`] as const)
+    const exact: PanelSources = {
+      projections: Object.fromEntries(links.map(([parent, child]) => [parent, {
+        state: 'ready', values: { subagentCatalog: [{ id: id(child), createdAt: 1, mode: 'oneshot', label: child }] },
+      }])) as never,
+      summaries: {},
+      statuses: new Map(),
+    }
+    const chain = indexTree(exact, ROOT)
+    expect(chain.truncated).toBe(false)
+    expect(totalOf(chain.total)).toBe(MAX_TREE_DEPTH)
+    // The deepest Session is counted but not walked, so its row has no descendant counts.
+    expect(rowsOf(exact, id(`d${MAX_TREE_DEPTH - 1}`), NOW, chain)[0]?.below).toBe(NO_COUNTS)
+  })
+})
+
+describe('SubagentPanel edges', () => {
+  const actions = () => ({ prepare: vi.fn(), openAside: vi.fn(), openMain: vi.fn() })
+  const mount = (source: PanelSources, injected = actions()) => {
+    render(<SubagentPanel {...{ sessionId: ROOT, ...hooks(source), ...injected, t } as unknown as SubagentPanelProps} />)
+    return injected
+  }
+
+  it('offers a retry when the catalog read failed, and says it is reading while it loads', () => {
+    const injected = mount({ projections: { [ROOT]: { state: 'error', values: {} } } as never, summaries: {}, statuses: new Map() })
+    expect(screen.getByRole('alert').textContent).toContain('读取子智能体失败')
+    injected.prepare.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: '重试' }))
+    expect(injected.prepare).toHaveBeenCalledWith(ROOT)
+    cleanup()
+    mount({ projections: { [ROOT]: { state: 'loading', values: {} } } as never, summaries: {}, statuses: new Map() })
+    expect(screen.getByRole('status').textContent).toBe('正在读取子智能体…')
+  })
+
+  it('marks stopped and never-run rows, and says how long a stalled child has been quiet', () => {
+    vi.useFakeTimers({ now: NOW, toFake: ['Date', 'setInterval', 'clearInterval'] })
+    mount(tree([
+      { id: id('stopped'), createdAt: 1, mode: 'oneshot', label: 'Stopped one' },
+      { id: id('never'), createdAt: 2, mode: 'oneshot', label: 'Never ran' },
+      { id: id('stuck'), createdAt: 3, mode: 'oneshot', label: 'Stuck one' },
+    ], {
+      stopped: { id: id('stopped'), running: false, projectionValues: { forkSubagentActivity: activity({ ended: 'aborted' }) } },
+      stuck: { id: id('stuck'), running: true, projectionValues: { forkSubagentActivity: activity({ phase: 'model', since: NOW - 7 * 60_000, at: NOW - 7 * 60_000 }) } },
+    }))
+    expect(screen.getByText('Stopped one').closest('li')?.getAttribute('data-state')).toBe('stopped')
+    expect(screen.getByText('Never ran').closest('li')?.getAttribute('data-state')).toBe('idle')
+    expect(screen.getByText('7 分 00 秒没有新动作')).toBeTruthy()
+    vi.useRealTimers()
+  })
+
+  it('warns once the tree passes its bound', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mount(tree(Array.from({ length: MAX_TREE_NODES + 1 }, (_, n) => ({ id: id(`w${n}`), createdAt: n, mode: 'oneshot', label: `w${n}` }))))
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[fork-subagents]'), ROOT, MAX_TREE_DEPTH, MAX_TREE_NODES)
+    warn.mockRestore()
   })
 })

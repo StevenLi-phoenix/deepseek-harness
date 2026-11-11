@@ -9,7 +9,7 @@ import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-cli
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
-import { NO_COUNTS, catalogOf, indexTree, totalOf, type PanelSources } from './model.ts'
+import { catalogOf, indexTree, totalOf, type PanelSources } from './model.ts'
 import css from './SubagentToggle.module.css'
 
 /** Business action the registration supplies. */
@@ -41,7 +41,7 @@ function RootToggle({ sessionId, useSessions, useSessionStatus, toggle, t }: Sub
   const statuses = useSessionStatus(value => value)
   const sources = useMemo<PanelSources>(() => ({ projections, summaries, statuses }), [projections, summaries, statuses])
   const catalog = catalogOf(sources, sessionId)
-  const counts = useMemo(() => indexTree(sources, sessionId).below.get(sessionId) ?? NO_COUNTS, [sources, sessionId])
+  const counts = useMemo(() => indexTree(sources, sessionId).total, [sources, sessionId])
   const total = totalOf(counts)
   if (total === 0 && catalog.state !== 'error') return null
   const running = counts.running

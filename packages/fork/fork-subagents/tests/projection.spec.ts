@@ -106,6 +106,17 @@ describe('forkSubagentActivity', () => {
     expect(state.view).toMatchObject({ phase: 'model', since: 6 })
   })
 
+  it('reads a retry without its optional fields, and ignores a retry start outside a retry', () => {
+    const state = fold([event('step/start', 10, { turn: 1, step: 1 }), event('llm/retry', 20, { turn: 1, step: 1 })])
+    expect(state.view).toMatchObject({ phase: 'retry', retry: { attempt: 0, reason: '' } })
+    expect(state.view?.retry).not.toHaveProperty('max')
+    const model = fold([event('step/start', 10, { turn: 1, step: 1 })])
+    expect(unit.apply(model, event('llm/retry-started', 30, { turn: 1, step: 1, retry: 1 }))).toBe(model)
+    const failed = fold([event('turn/start', 1, { turn: 1 }), event('turn/end', 2, { turn: 1, reason: { kind: 'error' } })])
+    expect(failed.view).toMatchObject({ ended: 'error' })
+    expect(failed.view).not.toHaveProperty('error')
+  })
+
   it('validates its own state and view', () => {
     const state = fold([event('step/start', 1, { turn: 1, step: 1 }), call(2, 'c', 'bash', { command: 'ls' })])
     expect(unit.stateSchema.parse(state)).toEqual(state)
@@ -120,6 +131,7 @@ describe('previews', () => {
     expect(previewOf(JSON.stringify({ other: 'x y' }))).toBe('x y')
     expect(previewOf(JSON.stringify({ n: 1 }))).toBe('')
     expect(previewOf('not json\n at all')).toBe('not json at all')
+    for (const value of ['[1]', '"text"', 'null', '3']) expect(previewOf(value)).toBe('')
   })
 
   it('shortens to one line with an ellipsis', () => {
@@ -131,6 +143,8 @@ describe('previews', () => {
     expect(noteOf([{ type: 'reasoning', text: 'hm' }, { type: 'text', text: '改好了' }])).toEqual({ kind: 'text', text: '改好了' })
     expect(noteOf([{ type: 'reasoning', text: 'hm' }])).toEqual({ kind: 'thought', text: 'hm' })
     expect(noteOf([{ type: 'image' }])).toBeUndefined()
+    expect(noteOf([null, 'loose', { type: 'other', text: 'x' }, { type: 'text', text: '  ' }, { type: 'thinking', text: 'deep' }]))
+      .toEqual({ kind: 'thought', text: 'deep' })
   })
 })
 

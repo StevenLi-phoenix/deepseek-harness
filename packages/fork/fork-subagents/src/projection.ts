@@ -177,16 +177,16 @@ function apply(state: ActivityState, event: SessionEvent): ActivityState {
     case 'tool/call': {
       const call: OpenCall = { name: event.data.name, preview: previewOf(event.data.arguments), at: time }
       const open = { ...state.open, [event.data.callId]: call }
-      // The call just added keeps `open` non-empty; the oldest one stays in front.
-      const first = oldest(open) ?? { call, count: 1 }
+      // Open calls keep their insertion order, so an older one still running stays in front.
+      const first = Object.values(state.open)[0] ?? call
       return {
         ...state,
         open,
         view: {
-          ...base(view, 'tool', first.call.at),
+          ...base(view, 'tool', first.at),
           at: time,
           toolCalls: view.toolCalls + 1,
-          tool: { name: first.call.name, preview: first.call.preview, open: first.count },
+          tool: { name: first.name, preview: first.preview, open: Object.keys(open).length },
         },
       }
     }
