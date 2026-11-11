@@ -64,16 +64,14 @@ export interface WindowView {
   readonly expiresAt: number | null
 }
 
-/** How the chat Session's words reach the owner, and how tool delivery has been doing since the process started. */
+/** How the chat Session's words reach the owner, and how `wechat_send` has been used since the process started. */
 export interface DeliveryView {
-  /** `text`: the final answer of each turn is sent. `tool`: only `wechat_send` reaches the owner. */
-  readonly mode: 'text' | 'tool'
+  /** `hybrid`: the final answer is sent and the Session may also use `wechat_send`. `text`: only the final answer is sent. */
+  readonly mode: 'text' | 'hybrid'
   /** `wechat_send` calls that delivered or queued a text. */
   readonly toolSends: number
-  /** Owner messages whose turn ended without a `wechat_send`, answered by one reminder turn. */
-  readonly nudges: number
-  /** Owner messages that stayed unanswered even after the reminder: the owner got the fixed notice. */
-  readonly silentNotices: number
+  /** Final answers not sent because they repeated a `wechat_send` text. */
+  readonly repeatsSkipped: number
 }
 
 /** Texts waiting for the next window. */

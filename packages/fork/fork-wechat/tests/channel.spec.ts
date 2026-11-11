@@ -11,7 +11,7 @@ import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 import * as TimeGap from '@deepseek-ai/dsh-fork-time-gap'
-import WechatChannel, { Config, handoverText, NO_SEND_NOTICE, NO_SEND_NUDGE, WECHAT_RELAY_CHANNEL, type ChatConfig } from '../src/index.ts'
+import WechatChannel, { Config, handoverText, QUOTA_FOOTER, WECHAT_RELAY_CHANNEL, type ChatConfig } from '../src/index.ts'
 import { downloadMedia } from '../src/media.ts'
 import type { WechatAccount } from '../src/login.ts'
 import { wechatDomain } from '../src/storage.ts'
@@ -222,7 +222,7 @@ async function harness(options: {
   const config: Config = {
     ...(options.defaultAccountFile === true ? {} : { accountFile }),
     chat: { workspacePath: join(dir, 'work'), agentPreset: 'unattended', permissionPreset: 'danger-full-access', title: '微信', timeZone: 'America/New_York', agentMessage: 'turn', delivery: 'text', ...chat },
-    maxSendsPerTurn: 3,
+    maxSendsPerTurn: 10,
     maxMessageChars: 3000,
     maxReplyParts: 3,
     repliesPerToken: 10,
@@ -1691,7 +1691,7 @@ describe('WechatChannel Settings route', () => {
       channel: { link: 'idle', lastPollAt: null, failures: 0, lastError: null, lastInboundAt: null, lastOutboundAt: null, lastOutboundKind: null },
       window: { open: false, closed: 'no-account', repliesLeft: null, repliesPerToken: 10, expiresAt: null },
       outbox: { count: 0, limit: 50, oldestAt: null },
-      delivery: { mode: 'text', toolSends: 0, nudges: 0, silentNotices: 0 },
+      delivery: { mode: 'text', toolSends: 0, repeatsSkipped: 0 },
     })
 
     const h = await harness()
@@ -1964,8 +1964,8 @@ describe('WechatChannel sendFile', () => {
 describe('WechatChannel configuration', () => {
   it('applies defaults', () => {
     expect(resolveConfig({})).toEqual({
-      chat: { workspacePath: '/Users/dsh-runtime/work', agentPreset: 'unattended', permissionPreset: 'danger-full-access', title: '微信', timeZone: 'America/New_York', agentMessage: 'turn', delivery: 'text' },
-      maxSendsPerTurn: 3,
+      chat: { workspacePath: '/Users/dsh-runtime/work', agentPreset: 'unattended', permissionPreset: 'danger-full-access', title: '微信', timeZone: 'America/New_York', agentMessage: 'turn', delivery: 'hybrid' },
+      maxSendsPerTurn: 10,
       maxMessageChars: 3000,
       maxReplyParts: 3,
       repliesPerToken: 10,
@@ -2405,116 +2405,86 @@ describe('WechatChannel restart notice failures', () => {
 })
 
 
-describe('WechatChannel tool delivery', () => {
-  const tool = { chat: { delivery: 'tool' as const } }
+describe('WechatChannel hybrid delivery', () => {
+  const hybrid = { chat: { delivery: 'hybrid' as const } }
   const turnStart = { type: 'turn/start', seq: 0, data: { turn: 1 } }
 
   it('refuses wechat_send in text delivery and keeps relaying the final answer', async () => {
     const h = await harness()
     expect(h.channel.delivery()).toBe('text')
-    expect(await h.channel.sendText('chat-1', 'hi')).toEqual({ notSent: 'WeChat delivery is in text mode: put the words in your answer' })
+    expect(await h.channel.sendText('chat-1', 'hi')).toEqual({ notSent: 'wechat_send is off (chat.delivery is text): put the words in your answer' })
     await h.ownerSays('hello')
     await h.finishTurn('chat-1', 'Final answer.')
     expect(h.ilink.sent.map(sent => sent.text)).toEqual(['Final answer.'])
-    expect(h.channel.status().delivery).toEqual({ mode: 'text', toolSends: 0, nudges: 0, silentNotices: 0 })
+    expect(h.channel.status().delivery).toEqual({ mode: 'text', toolSends: 0, repeatsSkipped: 0 })
   })
 
-  it('sends what the Session passes to wechat_send, and relays none of its notes', async () => {
-    const h = await harness({ config: tool })
-    expect(h.channel.delivery()).toBe('tool')
+  it('sends what the Session passes to wechat_send and still sends the final answer', async () => {
+    const h = await harness({ config: hybrid })
+    expect(h.channel.delivery()).toBe('hybrid')
     await h.ownerSays('hello')
     h.emit('chat-1', turnStart)
     expect(await h.channel.sendText('chat-1', '  on it  ')).toEqual({ sent: 1, queued: 0, held: false, repliesLeft: 9 })
-    expect(await h.channel.sendText('chat-1', 'done: 42')).toMatchObject({ sent: 1, repliesLeft: 8 })
-    await h.finishTurn('chat-1', 'notes: answered twice')
-    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['on it', 'done: 42'])
+    await h.finishTurn('chat-1', 'All done: 42')
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['on it', 'All done: 42'])
     expect(h.sessions.prompts).toHaveLength(1)
-    expect(h.channel.status().delivery).toEqual({ mode: 'tool', toolSends: 2, nudges: 0, silentNotices: 0 })
-    expect(h.logs.some(line => line.text.startsWith('fork-wechat: wechat_send session=chat-1 chars=5 parts=1 sent=1 queued=0 held=false urgent=false turnSends=1/3 repliesLeft=9'))).toBe(true)
-    expect(h.logs.filter(line => line.text.includes('notes: answered twice') || line.text.includes('done: 42'))).toEqual([])
+    expect(h.channel.status().delivery).toEqual({ mode: 'hybrid', toolSends: 1, repeatsSkipped: 0 })
+    expect(h.logs.some(line => line.text.startsWith('fork-wechat: wechat_send session=chat-1 chars=5 parts=1 sent=1 queued=0 held=false urgent=false turnSends=1/10 repliesLeft=9'))).toBe(true)
+    expect(h.logs.filter(line => line.text.includes('on it') || line.text.includes('All done'))).toEqual([])
+  })
+
+  it('does not send a final answer that repeats a wechat_send text, and counts the next turn afresh', async () => {
+    const h = await harness({ config: hybrid })
+    await h.ownerSays('hello')
+    h.emit('chat-1', turnStart)
+    await h.channel.sendText('chat-1', 'The answer is\n42.')
+    await h.finishTurn('chat-1', '  The answer is 42. ')
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['The answer is\n42.'])
+    expect(h.channel.status().delivery).toMatchObject({ toolSends: 1, repeatsSkipped: 1 })
+    expect(h.logs.some(line => line.text.includes('final answer repeats a wechat_send text; not sent again (1 so far)'))).toBe(true)
+    // A later turn that says the same thing says it: only the running turn's sends are compared.
+    await h.ownerSays('again?')
+    h.emit('chat-1', turnStart)
+    await h.finishTurn('chat-1', 'The answer is 42.')
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['The answer is\n42.', 'The answer is 42.'])
   })
 
   it('caps the sends of one turn and counts again in the next', async () => {
-    const h = await harness({ config: tool })
+    const h = await harness({ config: { ...hybrid, maxSendsPerTurn: 2 } })
     await h.ownerSays('hello')
     h.emit('chat-1', turnStart)
-    for (const word of ['a', 'b', 'c']) expect(await h.channel.sendText('chat-1', word)).toMatchObject({ sent: 1 })
-    expect(await h.channel.sendText('chat-1', 'd')).toEqual({ notSent: 'this turn already sent 3 messages (the cap is 3): put what is left into one message in your next turn' })
+    for (const word of ['a', 'b']) expect(await h.channel.sendText('chat-1', word)).toMatchObject({ sent: 1 })
+    expect(await h.channel.sendText('chat-1', 'c')).toEqual({ notSent: 'this turn already sent 2 messages (the cap is 2): put what is left into your final answer' })
     expect(await h.channel.sendText('chat-1', '   ')).toEqual({ notSent: 'the text is empty' })
     await h.finishTurn('chat-1', 'NO_REPLY')
     h.emit('chat-1', turnStart)
-    expect(await h.channel.sendText('chat-1', 'e')).toMatchObject({ sent: 1 })
-    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['a', 'b', 'c', 'e'])
+    expect(await h.channel.sendText('chat-1', 'd')).toMatchObject({ sent: 1 })
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['a', 'b', 'd'])
   })
 
-  it('starts one reminder turn when an owner message got no wechat_send, then tells the owner', async () => {
-    const h = await harness({ config: tool })
+  it('keeps the window\'s last slot for the final answer', async () => {
+    const h = await harness({ config: { ...hybrid, repliesPerToken: 3 } })
     await h.ownerSays('hello')
     h.emit('chat-1', turnStart)
-    await h.finishTurn('chat-1', 'notes only')
-    expect(h.ilink.sent).toEqual([])
-    expect(h.sessions.prompts).toHaveLength(2)
-    expect(h.sessions.prompts[1]).toMatchObject({
-      requestId: expect.stringMatching(/^fork-untrusted:reply-check:/) as string,
-      sessionId: 'chat-1',
-      mode: 'queue',
-      content: [{ type: 'text', text: NO_SEND_NUDGE }],
-    })
-    expect(h.channel.status().delivery).toMatchObject({ nudges: 1, silentNotices: 0 })
-    h.emit('chat-1', turnStart)
-    await h.finishTurn('chat-1', 'more notes')
-    expect(h.ilink.sent.map(sent => sent.text)).toEqual([NO_SEND_NOTICE])
-    expect(h.sessions.prompts).toHaveLength(2)
-    expect(h.channel.status().delivery).toMatchObject({ nudges: 1, silentNotices: 1 })
-    // Done with that message: a later turn without an owner message asks for nothing.
-    h.emit('chat-1', turnStart)
-    await h.finishTurn('chat-1', 'idle notes')
-    expect(h.sessions.prompts).toHaveLength(2)
-    expect(h.ilink.sent).toHaveLength(1)
+    expect(await h.channel.sendText('chat-1', 'a')).toMatchObject({ sent: 1, repliesLeft: 2 })
+    expect(await h.channel.sendText('chat-1', 'b')).toMatchObject({ sent: 1, repliesLeft: 1 })
+    expect(await h.channel.sendText('chat-1', 'c')).toEqual({ notSent: 'reply quota nearly used up; the last message is kept for your final answer' })
+    await h.finishTurn('chat-1', 'final')
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['a', 'b', `final${QUOTA_FOOTER}`])
   })
 
-  it('is satisfied by a wechat_send in the reminder turn', async () => {
-    const h = await harness({ config: tool })
+  it('still sends the warning, with the Session\'s text, when a turn fails after wechat_send calls', async () => {
+    const h = await harness({ config: hybrid })
     await h.ownerSays('hello')
     h.emit('chat-1', turnStart)
-    await h.finishTurn('chat-1', 'notes')
-    h.emit('chat-1', turnStart)
-    await h.channel.sendText('chat-1', 'sorry, here you go')
-    await h.finishTurn('chat-1', '.')
-    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['sorry, here you go'])
-    expect(h.channel.status().delivery).toMatchObject({ nudges: 1, silentNotices: 0 })
-  })
-
-  it('treats NO_REPLY, a stop and a failed turn as the owner being told', async () => {
-    const h = await harness({ config: tool })
-    await h.ownerSays('thanks!')
-    h.emit('chat-1', turnStart)
-    await h.finishTurn('chat-1', 'NO_REPLY')
-    expect(h.sessions.prompts).toHaveLength(1)
-    expect(h.ilink.sent).toEqual([])
-
-    await h.ownerSays('and now?', 'ctx-2')
-    h.emit('chat-1', turnStart)
+    await h.channel.sendText('chat-1', 'working')
     await h.finishTurn('chat-1', 'half', 'max-tokens')
-    // The warning alone: the notes stay private.
-    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['⚠️ 本轮未完成（max-tokens）'])
-    expect(h.sessions.prompts).toHaveLength(2)
-    expect(h.channel.status().delivery).toMatchObject({ nudges: 0, silentNotices: 0 })
-  })
-
-  it('tells the owner at once when the reminder turn cannot start', async () => {
-    const h = await harness({ config: tool })
-    await h.ownerSays('hello')
-    h.sessions.promptErrorsOnce.push(new Error('session busy'))
-    h.emit('chat-1', turnStart)
-    await h.finishTurn('chat-1', 'notes')
-    expect(h.ilink.sent.map(sent => sent.text)).toEqual([NO_SEND_NOTICE])
-    expect(h.channel.status().delivery).toMatchObject({ nudges: 1, silentNotices: 1 })
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['working', 'half\n\n⚠️ 本轮未完成（max-tokens）'])
   })
 
   it('holds a text for the morning while the owner sleeps unless it is urgent, and says why a text waits', async () => {
     const sleeping = fakePresence(true)
-    const h = await harness({ config: { ...tool, awakeAfterMessageMs: 0 }, presence: sleeping.presence })
+    const h = await harness({ config: { ...hybrid, awakeAfterMessageMs: 0 }, presence: sleeping.presence })
     await h.ownerSays('hello')
     h.emit('chat-1', turnStart)
     expect(await h.channel.sendText('chat-1', 'morning thought')).toMatchObject({ sent: 0, queued: 1, held: true, why: 'owner asleep' })
@@ -2523,28 +2493,9 @@ describe('WechatChannel tool delivery', () => {
   })
 
   it('queues a text when no reply window is open and reports the reason', async () => {
-    const h = await harness({ config: tool })
+    const h = await harness({ config: hybrid })
     h.emit('chat-1', turnStart)
     expect(await h.channel.sendText(undefined, 'anyone?')).toMatchObject({ sent: 0, queued: 1, held: false, why: 'the owner has not written yet' })
     expect(h.channel.status().outbox.count).toBe(1)
-  })
-
-  it('keeps the window\'s last slot for the text reply only in text delivery', async () => {
-    const dir_ = join(dir, 'x.png')
-    writeFileSync(dir_, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
-    // One slot used of two: the other is the last one.
-    const text = await harness({ config: { repliesPerToken: 2 } })
-    await text.ownerSays('hi')
-    await text.finishTurn('chat-1', 'first answer')
-    expect(await text.channel.sendFile(dir_)).toEqual({ notSent: 'reply quota nearly used up; the last message is kept for the text reply' })
-    const tooled = await harness({ config: { ...tool, repliesPerToken: 2 } })
-    await tooled.ownerSays('hi')
-    await tooled.channel.sendText('chat-1', 'first message')
-    expect(await tooled.channel.sendFile(dir_)).toMatchObject({ sent: 'image' })
-  })
-
-  it('points deferred texts at wechat_send in tool delivery', async () => {
-    const h = await harness({ config: tool })
-    expect(await h.channel.holdDelivery('later')).toEqual({ notHeld: 'the owner is awake: send the text with wechat_send, or give a time with until' })
   })
 })

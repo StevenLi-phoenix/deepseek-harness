@@ -37,27 +37,6 @@ describe('decideRelay', () => {
   })
 })
 
-describe('decideRelay in tool delivery', () => {
-  it('relays no text of a completed turn: the words went out by tool, the text is notes', () => {
-    expect(decideRelay('notes to myself', { kind: 'completed' }, 'tool')).toEqual({ kind: 'tool' })
-    expect(decideRelay(undefined, { kind: 'completed' }, 'tool')).toEqual({ kind: 'tool' })
-  })
-
-  it('still honours NO_REPLY and a stop, and sends only the warning when the turn did not complete', () => {
-    expect(decideRelay('NO_REPLY', { kind: 'completed' }, 'tool')).toEqual({ kind: 'silent' })
-    expect(decideRelay('half', { kind: 'aborted', reason: { kind: 'user' } }, 'tool')).toEqual({ kind: 'stopped' })
-    expect(decideRelay('notes that must not leak', { kind: 'max-tokens' }, 'tool'))
-      .toEqual({ kind: 'answer', text: '⚠️ 本轮未完成（max-tokens）', outcome: 'max-tokens' })
-    const error = { kind: 'error', error: { code: 'QUOTA', message: 'no credits' } }
-    expect(decideRelay('notes', error, 'tool'))
-      .toEqual({ kind: 'answer', text: '⚠️ 本轮未完成（error）\n原因：QUOTA: no credits', outcome: 'error', detail: 'QUOTA: no credits' })
-  })
-
-  it('defaults to text delivery', () => {
-    expect(decideRelay('answer', { kind: 'completed' })).toEqual({ kind: 'answer', text: 'answer', outcome: 'completed' })
-  })
-})
-
 describe('relayFallbackNote', () => {
   it('carries the answer, why it did not go out, and the channel label as its origin', () => {
     expect(relayFallbackNote({ sessionId: 's1', text: 'answer', outcome: 'completed' }, 'not mutual', 'the test Session'))

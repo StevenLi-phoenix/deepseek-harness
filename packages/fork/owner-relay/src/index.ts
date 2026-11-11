@@ -9,7 +9,7 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import { failureDetail } from '@deepseek-ai/dsh-fork-event-bus'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
-import { contentText, decideRelay, relayFallbackNote, type DeliveryMode, type RelayAnswer, type RelayDecision } from './rules.ts'
+import { contentText, decideRelay, relayFallbackNote, type RelayAnswer, type RelayDecision } from './rules.ts'
 
 export * from './rules.ts'
 
@@ -39,13 +39,6 @@ export interface RelayChannel {
    */
   readonly fallbackLabel?: string
   /**
-   * How this channel's Sessions reach the owner, read at every turn end (so a config reload applies at once).
-   * `text` (the default) relays a turn's final text through `deliver`. `tool` never relays the text: the Session's
-   * words go out through the channel's own send tool, its text is notes, a completed turn is decided `tool`, and a turn
-   * that did not complete still sends the warning alone.
-   */
-  delivery?(): DeliveryMode
-  /**
    * Deliver one answer. Called synchronously when the turn ends.
    * @param answer - the Session, the text for the owner, the outcome, and the failure reason.
    * @returns `sent`, or `kept` when the channel chose not to send it (e.g. a turn no wake started).
@@ -56,7 +49,7 @@ export interface RelayChannel {
   onTurnStart?(sessionId: string): void
   /**
    * A claimed Session ended a turn; called before `deliver`, whether or not anything is sent.
-   * @param ended - the relay's decision: `answer` (a `deliver` follows), `silent` (NO_REPLY), `stopped` (the owner stopped it), `empty`, or `tool` (a completed turn of a tool-delivery channel).
+   * @param ended - the relay's decision: `answer` (a `deliver` follows), `silent` (NO_REPLY), `stopped` (the owner stopped it), or `empty`.
    */
   onTurnEnd?(sessionId: string, ended: RelayDecision['kind']): void
   /** The ended turn's answer went out, was kept, failed, or there was none. */
@@ -80,7 +73,6 @@ const NOTHING: Readonly<Record<Exclude<RelayDecision['kind'], 'answer'>, string>
   stopped: 'the owner stopped; nothing is relayed',
   silent: 'that answered NO_REPLY; nothing is relayed',
   empty: 'without text; nothing is relayed',
-  tool: 'in tool delivery: the Session\'s words travel by the channel\'s send tool; nothing is relayed',
 }
 
 /**
@@ -186,7 +178,7 @@ export class OwnerRelay extends Service {
       this.ctx.logger.warn(`owner-relay: Session ${session.id} ended a turn (${ended}), but ${why}`)
       return
     }
-    this.turnEnded(session.id, channel, ended, decideRelay(text, reason, channel.delivery?.() ?? 'text'))
+    this.turnEnded(session.id, channel, ended, decideRelay(text, reason))
   }
 
   /** Apply the decision of one ended turn: say why nothing goes out, or hand the answer to its channel. */

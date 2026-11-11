@@ -8,13 +8,6 @@ import type { ActivityRecord, SentKind } from './storage.ts'
 export const WECHAT_MAX_TEXT_BYTES = 16_384
 /** Appended to the message that uses the last reply slot of a window. */
 export const QUOTA_FOOTER = '\n\n（消息额度已用完，回复任意消息继续接收）'
-/**
- * Prompt of the one reminder turn a chat Session gets when an owner message ended a turn without a `wechat_send` call
- * (tool delivery): the Session's text is notes, so the owner has heard nothing.
- */
-export const NO_SEND_NUDGE = '（系统提醒）用户在等你的回复，但你这一回合没有调用 wechat_send，用户看不到你的文字。要回复就现在调用 wechat_send；确实不需要回复（比如只是一个表情或致谢），就只回复 NO_REPLY。'
-/** Sent to the owner when even the reminder turn sent nothing: the failure is told, never hidden. */
-export const NO_SEND_NOTICE = '⚠️ 我处理了这条消息，但没有写出回复（已记日志）。'
 /** Reply to `/new`. */
 export const NEW_CHAT_REPLY = '已开始新对话。'
 /** Answer to `/help`. */

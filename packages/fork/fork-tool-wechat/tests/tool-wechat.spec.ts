@@ -27,9 +27,9 @@ afterEach(async () => {
 })
 
 describe('wechat_send', () => {
-  const tool = (extra: Record<string, unknown> = {}) => ({ send: vi.fn(), ownsSession: () => false, delivery: () => 'tool' as const, ...extra })
+  const tool = (extra: Record<string, unknown> = {}) => ({ send: vi.fn(), ownsSession: () => false, delivery: () => 'hybrid' as const, ...extra })
 
-  it('is registered only while the channel delivers by tool', async () => {
+  it('is registered only while the channel delivers in hybrid mode', async () => {
     const text = await mount({ send: vi.fn(), ownsSession: () => false, delivery: () => 'text' })
     expect(text.ctx.tools.schemas().map(schema => schema.name)).not.toContain('wechat_send')
     const legacy = await mount({ send: vi.fn(), ownsSession: () => false })
@@ -59,24 +59,22 @@ describe('wechat_send', () => {
   })
 
   it('returns the channel\'s refusal, says so when the notifier is not the WeChat channel, and refuses a call without text', async () => {
-    const sendText = vi.fn(() => Promise.resolve({ notSent: 'this turn already sent 3 messages (the cap is 3): put what is left into one message in your next turn' }))
+    const sendText = vi.fn(() => Promise.resolve({ notSent: 'this turn already sent 10 messages (the cap is 10): put what is left into your final answer' }))
     const capped = await mount(tool({ sendText }))
-    expect(JSON.stringify(await capped.send({ text: 'x' }))).toContain('the cap is 3')
+    expect(JSON.stringify(await capped.send({ text: 'x' }))).toContain('the cap is 10')
     const bare = await mount(tool())
     expect(await bare.send({ text: 'x' })).toMatchObject({ value: { notSent: 'the WeChat channel is not mounted' } })
     const refused = await capped.send({})
     expect(refused).not.toHaveProperty('value')
   })
 
-  it('moves the "final answer" wording of the other tools to wechat_send', async () => {
+  it('tells the model the final answer is still sent, and leaves the other tools\' wording alone', async () => {
     const text = await mount({ send: vi.fn(), ownsSession: () => false, delivery: () => 'text' })
     const on = await mount(tool())
-    const describe_ = (h: Awaited<ReturnType<typeof mount>>, name: string) => h.ctx.tools.schemas().find(schema => schema.name === name)!.description
-    expect(describe_(text, 'wechat_send_file')).toContain('final answer')
-    expect(describe_(on, 'wechat_send_file')).toContain('wechat_send')
-    expect(describe_(on, 'wechat_send_file')).not.toContain('final answer')
-    expect(describe_(text, 'defer_deliver')).toContain('final answer')
-    expect(describe_(on, 'defer_deliver')).not.toContain('final answer')
+    const description = (h: Awaited<ReturnType<typeof mount>>, name: string) => h.ctx.tools.schemas().find(schema => schema.name === name)!.description
+    expect(description(on, 'wechat_send')).toContain('final answer is still sent')
+    expect(description(on, 'wechat_send_file')).toBe(description(text, 'wechat_send_file'))
+    expect(description(on, 'defer_deliver')).toBe(description(text, 'defer_deliver'))
   })
 })
 

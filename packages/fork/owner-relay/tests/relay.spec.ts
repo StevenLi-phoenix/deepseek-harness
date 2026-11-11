@@ -42,7 +42,7 @@ async function mount(options: { notifier?: false | ((note: ForkNote) => Promise<
 }
 
 /** A channel double that records its hooks and the answers it gets, in order. */
-function recorder(name: string, options: { fallbackLabel?: string; delivery?: 'text' | 'tool'; deliver?: (answer: RelayAnswer) => Promise<RelayDelivery> } = {}) {
+function recorder(name: string, options: { fallbackLabel?: string; deliver?: (answer: RelayAnswer) => Promise<RelayDelivery> } = {}) {
   const calls: string[] = []
   const answers: RelayAnswer[] = []
   /** How each ended turn ended, as `onTurnEnd` heard it. */
@@ -50,7 +50,6 @@ function recorder(name: string, options: { fallbackLabel?: string; delivery?: 't
   const channel: RelayChannel = {
     name,
     ...(options.fallbackLabel === undefined ? {} : { fallbackLabel: options.fallbackLabel }),
-    ...(options.delivery === undefined ? {} : { delivery: () => options.delivery! }),
     deliver: async (answer) => {
       calls.push(`deliver:${answer.sessionId}`)
       answers.push(answer)
@@ -79,45 +78,6 @@ async function turn(
   emit(sessionId, turnEnd(reason))
   await drain()
 }
-
-describe('OwnerRelay tool delivery', () => {
-  it('relays no text of a completed turn but tells the channel the turn ended as `tool`', async () => {
-    const h = await mount()
-    const wechat = recorder('wechat', { delivery: 'tool' })
-    h.relay.registerChannel(wechat.channel)
-    h.relay.claim('chat-1', 'wechat')
-    await turn(h.emit, 'chat-1', 'my notes: the owner asked for X')
-    expect(wechat.answers).toEqual([])
-    expect(wechat.ends).toEqual(['tool'])
-    expect(wechat.calls).toEqual(['start:chat-1', 'end:chat-1', 'settled:chat-1'])
-    expect(h.logs.some(line => line.text.includes('in tool delivery') && line.text.includes('chat-1'))).toBe(true)
-    expect(h.logs.every(line => !line.text.includes('my notes'))).toBe(true)
-  })
-
-  it('still sends the warning alone when a tool-delivery turn fails, and honours NO_REPLY', async () => {
-    const h = await mount()
-    const wechat = recorder('wechat', { delivery: 'tool' })
-    h.relay.registerChannel(wechat.channel)
-    h.relay.claim('chat-1', 'wechat')
-    await turn(h.emit, 'chat-1', 'notes that stay private', { kind: 'error', error: { code: 'AUTH', message: 'x' } })
-    expect(wechat.answers.map(answer => answer.text)).toEqual(['⚠️ 本轮未完成（error）\n原因：AUTH: x'])
-    await turn(h.emit, 'chat-1', 'NO_REPLY')
-    expect(wechat.ends).toEqual(['answer', 'silent'])
-  })
-
-  it('reads the mode at every turn end, so a live switch applies to the next turn', async () => {
-    const h = await mount()
-    let mode: 'text' | 'tool' = 'text'
-    const wechat = recorder('wechat')
-    h.relay.registerChannel({ ...wechat.channel, delivery: () => mode })
-    h.relay.claim('chat-1', 'wechat')
-    await turn(h.emit, 'chat-1', 'first')
-    mode = 'tool'
-    await turn(h.emit, 'chat-1', 'second')
-    expect(wechat.answers.map(answer => answer.text)).toEqual(['first'])
-    expect(wechat.ends).toEqual(['answer', 'tool'])
-  })
-})
 
 describe('OwnerRelay rules', () => {
   it('relays the latest text of a completed turn to the channel that claimed the Session', async () => {
