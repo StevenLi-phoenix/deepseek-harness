@@ -41,7 +41,10 @@ jobs:
 
   # These native runtime carriers are post-merge checks; release keeps all targets.
   python-runtime:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # The installed-wheel check talks to the real DeepSeek API, and its preflight fails rather than skip when
+    # the key is absent (2026-08-23 note). This fork holds no such secret, so the leg is opt-in here: set the
+    # PYTHON_RUNTIME_KEYED variable and the secret to run it. Upstream keeps its unconditional run.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (github.repository != 'StevenLi-phoenix/deepseek-harness' || vars.PYTHON_RUNTIME_KEYED == 'true')
     name: python runtime / macOS and Linux ARM64
     uses: ./.github/workflows/build-exe-for-python-sdk.yml
     with:
