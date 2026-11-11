@@ -29,6 +29,7 @@ const IDLE: ChannelStatus = {
   channel: { link: 'idle', lastPollAt: null, failures: 0, lastError: null, lastInboundAt: null, lastOutboundAt: null, lastOutboundKind: null },
   window: { open: false, closed: 'no-account', repliesLeft: null, repliesPerToken: 10, expiresAt: null },
   outbox: { count: 0, limit: 50, oldestAt: null },
+  delivery: { mode: 'hybrid', toolSends: 0, repeatsSkipped: 0 },
 }
 
 let dir: string
