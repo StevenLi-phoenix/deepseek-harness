@@ -4,7 +4,9 @@
  * its corner button opens it in the main view.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { IconChevronRightOutlineRegular, IconRefreshOutlineRegular, IconRightUpOutlineRegular, StateDot, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import {
+  IconCheckOutlineRegular, IconChevronRightOutlineRegular, IconRefreshOutlineRegular, IconRightUpOutlineRegular, StateDot, Tooltip,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SubagentAddress } from '@deepseek-ai/dsh-subagent/client'
@@ -14,7 +16,7 @@ import type {} from '@deepseek-ai/dsh-token-meter/client'
 import type {} from '@deepseek-ai/dsh-subagent/client'
 import type {} from '../activity.ts'
 import {
-  catalogOf, countStates, endReason, formatDuration, formatTokens, metaParts, nowLine, rowsOf, summaryLine,
+  catalogOf, countStates, endReason, finishedLabel, formatDuration, formatTokens, metaParts, nowLine, rowsOf, summaryLine,
   type PanelRow, type PanelSources, type T,
 } from './model.ts'
 import css from './SubagentPanel.module.css'
@@ -55,13 +57,18 @@ interface ListContext {
   readonly t: T
 }
 
-/** Status mark of a row: the loader while running, a dot otherwise. */
+/**
+ * Status mark of a row. Only work in progress and problems take colour: the loader while running, red for an
+ * error, amber for a stop; a completed child gets a quiet grey check, never a green dot that reads as "online".
+ */
 function Mark({ row }: { row: PanelRow }) {
+  if (row.state === 'done') {
+    return <span className={css.mark} data-mark="done"><IconCheckOutlineRegular size={14} /></span>
+  }
   const state = row.state === 'running' ? 'ongoing'
-    : row.state === 'done' ? 'done'
-      : row.state === 'failed' ? 'error'
-        : row.state === 'stopped' ? 'warning'
-          : 'idle'
+    : row.state === 'failed' ? 'error'
+      : row.state === 'stopped' ? 'warning'
+        : 'idle'
   return <span className={css.mark}><StateDot state={state} /></span>
 }
 
@@ -69,7 +76,7 @@ function Mark({ row }: { row: PanelRow }) {
 function Row({ row, ctx }: { row: PanelRow; ctx: ListContext }) {
   const { t, now, actions } = ctx
   const running = row.state === 'running'
-  const meta = metaParts(row, t)
+  const meta = running ? metaParts(row, t) : [finishedLabel(row, now, t), ...metaParts(row, t)]
   const line = running ? nowLine(row.activity, now, t) : undefined
   const reason = running ? undefined : endReason(row, t)
   const note = row.activity?.note
@@ -95,7 +102,13 @@ function Row({ row, ctx }: { row: PanelRow; ctx: ListContext }) {
                 {row.tokens !== undefined && <span className={css.tokens}>{formatTokens(row.tokens, t)}</span>}
               </span>
             </span>
-            {meta.length > 0 && <span className={css.meta}>{meta.join(' · ')}</span>}
+            {meta.length > 0 && (
+              <span className={css.meta}>
+                {running
+                  ? meta.join(' · ')
+                  : <><span className={css.stateWord}>{meta[0]}</span>{meta.length > 1 && ` · ${meta.slice(1).join(' · ')}`}</>}
+              </span>
+            )}
             {line !== undefined && (
               <span className={css.now} data-stalled={line.stalled || undefined} data-retrying={line.retrying || undefined}>
                 <span className={css.nowLabel}>{line.label}</span>
@@ -162,13 +175,13 @@ function Rows({ parentId, ctx, sectioned = false }: { parentId: SessionId; ctx: 
     <>
       {running.length > 0 && (
         <section className={css.section} aria-label={ctx.t('section.running')}>
-          <h3 className={css.sectionTitle}>{ctx.t('section.running')}</h3>
+          <h3 className={css.sectionTitle}>{ctx.t('section.count', { title: ctx.t('section.running'), count: running.length })}</h3>
           <ul className={css.list}>{running.map(row => <Row key={row.id} row={row} ctx={ctx} />)}</ul>
         </section>
       )}
       {finished.length > 0 && (
         <section className={css.section} aria-label={ctx.t('section.finished')}>
-          <h3 className={css.sectionTitle}>{ctx.t('section.finished')}</h3>
+          <h3 className={css.sectionTitle}>{ctx.t('section.count', { title: ctx.t('section.finished'), count: finished.length })}</h3>
           <ul className={css.list}>{finished.map(row => <Row key={row.id} row={row} ctx={ctx} />)}</ul>
         </section>
       )}

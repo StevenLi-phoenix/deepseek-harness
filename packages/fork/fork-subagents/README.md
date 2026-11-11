@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-See what your agent's subagents are doing. One header button, “1 个在跑” or an icon with the count, opens the 子智能体 page in the right Sidebar. Running subagents come first: the task, the step, the tool running now with a line of its arguments (or the model thinking, or a retry and its reason), how long that wait has lasted, amber when too long, and the latest thought. Finished ones follow with time, tokens, and their last reply, error, or stop reason. A row opens its conversation in the Sidebar; its arrow opens it in the main view.
+See what your agent's subagents are doing. One header button, “1 个在跑” or “10 个已结束”, opens the 子智能体 page in the right Sidebar. Running subagents come first: the task, the step, the tool running now with a line of its arguments (or the model thinking, or a retry and its reason), how long that wait has lasted (amber when too long), and the latest thought. Finished ones follow, each saying 完成, 出错, or 中断 and when, with time, tokens, and the last reply or error. A row opens its conversation in the Sidebar, its arrow in the main view.
 
 ## Table of Contents
 

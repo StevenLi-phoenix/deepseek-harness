@@ -61,7 +61,7 @@ function RootToggle({ sessionId, useSessions, useSessionStatus, toggle, t }: Sub
         <span className={css.glyph} aria-hidden>
           {running > 0 ? <StateDot state="ongoing" /> : <IconUsersOutlineRegular size={14} />}
         </span>
-        <span className={css.text}>{running > 0 ? t('toggle.running', { count: running }) : total}</span>
+        <span className={css.text}>{running > 0 ? t('toggle.running', { count: running }) : t('toggle.idle', { count: total })}</span>
       </button>
     </Tooltip>
   )

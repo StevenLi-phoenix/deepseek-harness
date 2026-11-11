@@ -7,7 +7,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ForkSubagentActivity } from '../src/activity.ts'
 import { zh } from '../src/client/locales.ts'
 import {
-  classify, countStates, endReason, formatDuration, formatTokens, nowLine, rowsOf, summaryLine,
+  classify, countStates, endReason, finishedLabel, formatClock, formatDuration, formatTokens, nowLine, rowsOf, summaryLine,
   type PanelSources, type T,
 } from '../src/client/model.ts'
 import { SubagentPanel, type SubagentPanelProps } from '../src/client/SubagentPanel.tsx'
@@ -91,6 +91,16 @@ describe('model', () => {
     expect(nowLine(undefined, NOW, t).label).toBe('等待开始')
   })
 
+  it('labels a finished row with its state and when it ended, the date only when not today', () => {
+    const at = new Date(2026, 10, 11, 11, 43).getTime()
+    const now = new Date(2026, 10, 11, 12, 44).getTime()
+    expect(formatClock(at, now)).toBe('11:43')
+    expect(formatClock(new Date(2026, 10, 10, 18, 54).getTime(), now)).toBe('11/10 18:54')
+    expect(finishedLabel({ state: 'done', activity: activity({ phase: 'idle', since: at, ended: 'completed' }) } as never, now, t)).toBe('完成 11:43')
+    expect(finishedLabel({ state: 'failed', activity: activity({ phase: 'idle', since: at, ended: 'error' }) } as never, now, t)).toBe('出错 11:43')
+    expect(finishedLabel({ state: 'done' } as never, now, t)).toBe('完成')
+  })
+
   it('formats durations and tokens', () => {
     expect(formatDuration(5_000, t)).toBe('5 秒')
     expect(formatDuration(782_000, t)).toBe('13 分 02 秒')
@@ -123,6 +133,13 @@ describe('SubagentPanel', () => {
     expect(screen.getByText('daytrail-upload · 第 34 步 · 48 次工具')).toBeTruthy()
     expect(screen.getByText('在想：I have spent a lot; let me decide and implement.')).toBeTruthy()
     expect(screen.getByText('UNKNOWN_MODEL')).toBeTruthy()
+    // Every finished row says it is finished, with a grey check for completed rather than a green dot.
+    expect(screen.getByRole('heading', { name: '已结束 · 3' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: '正在运行 · 1' })).toBeTruthy()
+    const done = screen.getByText('已解决 12 个冲突并推到 main').closest('li')!
+    expect(done.querySelector('[data-mark="done"]')).not.toBeNull()
+    expect(done.querySelector('[data-state="done"]')).toBeNull()
+    expect(done.textContent).toMatch(/^Resolve upstream merge conflicts.*完成 \d{2}:\d{2} · dsh-merge/)
     expect(screen.getByText('已解决 12 个冲突并推到 main')).toBeTruthy()
     expect(screen.getByText('13 分 00 秒')).toBeTruthy()
     expect(screen.getByText('3.2M tok')).toBeTruthy()
@@ -168,7 +185,7 @@ describe('SubagentToggle', () => {
     const idle = sources()
     ;(idle.summaries as Record<string, { running: boolean }>).run!.running = false
     mount(idle)
-    expect(screen.getByRole('button', { name: '子智能体：共 4 个，都没在跑。在右侧栏查看' }).textContent).toBe('4')
+    expect(screen.getByRole('button', { name: '子智能体：共 4 个，都没在跑。在右侧栏查看' }).textContent).toBe('4 个已结束')
     cleanup()
     mount({ projections: {}, summaries: {}, statuses: new Map() })
     expect(screen.queryByRole('button')).toBeNull()

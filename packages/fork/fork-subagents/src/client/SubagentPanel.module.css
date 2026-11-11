@@ -55,7 +55,12 @@
 }
 
 .sectionTitle {
-  margin: 0 4px 6px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0 -12px 6px;
+  padding: 6px 16px;
+  background: var(--dsw-alias-bg-base);
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
   font-weight: 500;
@@ -113,6 +118,22 @@
 
 .main:focus-visible {
   outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color);
+}
+
+.mark[data-mark='done'] {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.stateWord {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.item[data-state='failed'] .stateWord {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.item[data-state='stopped'] .stateWord {
+  color: var(--dsw-alias-state-warn-primary);
 }
 
 .mark {

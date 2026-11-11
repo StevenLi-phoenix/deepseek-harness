@@ -278,6 +278,34 @@ export function metaParts(row: PanelRow, t: T): string[] {
 }
 
 /**
+ * A clock time, with the date when it is not today.
+ * @param at - epoch ms.
+ * @param now - clock for "today".
+ * @returns e.g. "11:43" or "11/10 18:54" (local time).
+ */
+export function formatClock(at: number, now: number): string {
+  const date = new Date(at)
+  const today = new Date(now)
+  const hm = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+  const sameDay = date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate()
+  return sameDay ? hm : `${date.getMonth() + 1}/${date.getDate()} ${hm}`
+}
+
+/**
+ * The state word of a finished row with the time it ended, so a row reads on its own when the section title is
+ * scrolled away.
+ * @param row - a row that is not running.
+ * @param now - clock.
+ * @param t - translator.
+ * @returns e.g. "完成 11:43", or the state word alone when the end time is unknown.
+ */
+export function finishedLabel(row: PanelRow, now: number, t: T): string {
+  const state = t(`state.${row.state}`)
+  const ended = row.activity?.phase === 'idle' && row.activity.ended !== undefined ? row.activity.since : undefined
+  return ended === undefined ? state : t('finished.at', { state, time: formatClock(ended, now) })
+}
+
+/**
  * Why a finished row stopped, when it did not complete.
  * @param row - a finished row.
  * @param t - translator.
