@@ -1,7 +1,7 @@
 /**
  * The header control that replaces the upstream hover catalog: a plain button that says how many
  * subagents run ("1 个在跑") or how many exist (an icon and a number), and opens the Sidebar page.
- * It never opens a menu.
+ * Both counts cover the whole tree, nested subagents included. It never opens a menu.
  */
 import { useMemo } from 'react'
 import { IconUsersOutlineRegular, StateDot, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -9,7 +9,7 @@ import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-cli
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
-import { catalogOf, countStates, rowsOf, type PanelSources } from './model.ts'
+import { NO_COUNTS, catalogOf, indexTree, totalOf, type PanelSources } from './model.ts'
 import css from './SubagentToggle.module.css'
 
 /** Business action the registration supplies. */
@@ -34,15 +34,15 @@ export function SubagentToggle(props: SubagentToggleProps) {
   return <RootToggle {...props} />
 }
 
-/** Count the direct children and draw the button. */
+/** Count the whole subagent tree and draw the button. */
 function RootToggle({ sessionId, useSessions, useSessionStatus, toggle, t }: SubagentToggleProps) {
   const projections = useSessions(state => state.projectionsBySession)
   const summaries = useSessions(state => state.byId)
   const statuses = useSessionStatus(value => value)
   const sources = useMemo<PanelSources>(() => ({ projections, summaries, statuses }), [projections, summaries, statuses])
   const catalog = catalogOf(sources, sessionId)
-  const counts = countStates(rowsOf(sources, sessionId, 0))
-  const total = catalog.entries.length
+  const counts = useMemo(() => indexTree(sources, sessionId).below.get(sessionId) ?? NO_COUNTS, [sources, sessionId])
+  const total = totalOf(counts)
   if (total === 0 && catalog.state !== 'error') return null
   const running = counts.running
   const label = running > 0

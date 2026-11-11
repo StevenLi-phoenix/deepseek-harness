@@ -330,3 +330,15 @@
   padding-left: 8px;
   border-left: 0.5px solid var(--dsw-alias-border-l3);
 }
+
+.runningBelow {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.runningBelow::before {
+  content: '·';
+  color: var(--dsw-alias-label-tertiary);
+}

@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ForkSubagentActivity } from '../src/activity.ts'
 import { zh } from '../src/client/locales.ts'
 import {
-  classify, countStates, endReason, finishedLabel, formatClock, formatDuration, formatTokens, nowLine, rowsOf, summaryLine,
+  MAX_TREE_DEPTH, classify, countStates, endReason, finishedLabel, formatClock, formatDuration, formatTokens, indexTree, nowLine,
+  rowsOf, summaryLine, totalOf,
   type PanelSources, type T,
 } from '../src/client/model.ts'
 import { SubagentPanel, type SubagentPanelProps } from '../src/client/SubagentPanel.tsx'
@@ -191,5 +192,121 @@ describe('SubagentToggle', () => {
     expect(screen.queryByRole('button')).toBeNull()
     mount(sources(), true)
     expect(screen.queryByRole('button')).toBeNull()
+  })
+})
+
+/**
+ * A nested tree: the root's only child `lead` has finished, but one of the two it started (`worker`)
+ * still runs; `worker` started `deep`, which is done.
+ *
+ *   root → lead (done) → worker (running) → deep (done)
+ *                      → scout (done)
+ */
+function nested(): PanelSources {
+  const entry = (sid: string, createdAt: number, label: string) => ({ id: id(sid), createdAt, mode: 'continuable', label, name: sid })
+  const summary = (sid: string, running: boolean, values: Record<string, unknown>) => ({
+    id: id(sid), displayTitle: sid, running, retainedBy: {}, blank: false, updatedAt: 0, origin: 'subagent', projectionValues: values,
+  })
+  const done = (at: number) => ({ subagentTiming: { settledMs: 60_000, lastTurnCompleted: true }, forkSubagentActivity: activity({ ended: 'completed', at }) })
+  return {
+    projections: {
+      [ROOT]: { state: 'ready', values: { subagentCatalog: [entry('lead', 1, 'Coordinate the release')] } },
+      lead: { state: 'idle', values: { subagentCatalog: [entry('scout', 2, 'Survey the changes'), entry('worker', 3, 'Build the bundle')] } },
+      worker: { state: 'idle', values: { subagentCatalog: [entry('deep', 4, 'Check one file')] } },
+    } as never,
+    summaries: {
+      lead: summary('lead', false, done(NOW - 120_000)),
+      scout: summary('scout', false, done(NOW - 90_000)),
+      worker: summary('worker', true, {
+        subagentTiming: { settledMs: 0, active: { since: NOW - 30_000, through: NOW - 1_000 } },
+        forkSubagentActivity: activity({ phase: 'tool', since: NOW - 8_000, at: NOW - 8_000, step: 3, toolCalls: 2, tool: { name: 'bash', open: 1 } }),
+      }),
+      deep: summary('deep', false, done(NOW - 20_000)),
+    } as never,
+    statuses: new Map(),
+  }
+}
+
+describe('nested subagents', () => {
+  it('counts the whole tree per Session, and puts a finished row with a running descendant with the live ones', () => {
+    const source = nested()
+    const index = indexTree(source, ROOT)
+    expect(index.truncated).toBe(false)
+    expect(index.below.get(ROOT)).toMatchObject({ running: 1, done: 3 })
+    expect(totalOf(index.below.get(ROOT)!)).toBe(4)
+    expect(index.below.get(id('lead'))).toMatchObject({ running: 1, done: 2 })
+    expect(index.below.get(id('worker'))).toMatchObject({ running: 0, done: 1 })
+    const [lead] = rowsOf(source, ROOT, NOW, index)
+    expect(lead).toMatchObject({ id: 'lead', state: 'done', children: 2, below: { running: 1, done: 2 } })
+    expect(rowsOf(source, id('lead'), NOW, index).map(row => row.id)).toEqual(['worker', 'scout'])
+  })
+
+  it('counts a Session met twice once, and stops at the depth bound', () => {
+    const loop: PanelSources = {
+      projections: {
+        [ROOT]: { state: 'ready', values: { subagentCatalog: [{ id: id('a'), createdAt: 1, mode: 'oneshot', label: 'a' }] } },
+        a: { state: 'ready', values: { subagentCatalog: [{ id: id('b'), createdAt: 2, mode: 'oneshot', label: 'b' }] } },
+        b: { state: 'ready', values: { subagentCatalog: [{ id: id('a'), createdAt: 3, mode: 'oneshot', label: 'a' }, { id: ROOT, createdAt: 4, mode: 'oneshot', label: 'r' }] } },
+      } as never,
+      summaries: {},
+      statuses: new Map(),
+    }
+    expect(totalOf(indexTree(loop, ROOT).below.get(ROOT)!)).toBe(2)
+
+    const chain = Array.from({ length: MAX_TREE_DEPTH + 3 }, (_, n) => [n === 0 ? ROOT : `c${n}`, `c${n + 1}`] as const)
+    const deep: PanelSources = {
+      projections: Object.fromEntries(chain.map(([parent, child]) => [parent, {
+        state: 'ready', values: { subagentCatalog: [{ id: id(child), createdAt: 1, mode: 'oneshot', label: child }] },
+      }])) as never,
+      summaries: {},
+      statuses: new Map(),
+    }
+    const index = indexTree(deep, ROOT)
+    expect(index.truncated).toBe(true)
+    expect(totalOf(index.below.get(ROOT)!)).toBe(MAX_TREE_DEPTH)
+  })
+
+  it('opens a branch with running work by itself, reads it, keeps the clock going, and lets the viewer close it', () => {
+    vi.useFakeTimers({ now: NOW, toFake: ['Date', 'setInterval', 'clearInterval'] })
+    const prepare = vi.fn()
+    const actions = { prepare, openAside: vi.fn(), openMain: vi.fn() }
+    const props = { sessionId: ROOT, ...hooks(nested()), ...actions, t } as unknown as SubagentPanelProps
+    render(<SubagentPanel {...props} />)
+    expect(screen.getByText('1 个在跑 · 3 个完成')).toBeTruthy()
+    const running = screen.getByRole('region', { name: '正在运行' })
+    expect(screen.getByRole('heading', { name: '正在运行 · 1' })).toBeTruthy()
+    expect(screen.queryByRole('region', { name: '已结束' })).toBeNull()
+    // The finished lead still says it finished; the running worker under it shows what it does.
+    expect(running.textContent).toMatch(/Coordinate the release.*完成 \d{2}:\d{2}/)
+    expect(running.textContent).toContain('Build the bundle')
+    expect(screen.getByText('已 8 秒')).toBeTruthy()
+    expect(prepare).toHaveBeenCalledWith(ROOT)
+    expect(prepare).toHaveBeenCalledWith('lead')
+    // Only a nested Session runs, and the clock still ticks.
+    act(() => { vi.advanceTimersByTime(2_000) })
+    expect(screen.getByText('已 10 秒')).toBeTruthy()
+    // The worker's own finished child stays closed.
+    expect(screen.getByRole('button', { name: '展开 1 个下级子智能体' })).toBeTruthy()
+    expect(screen.queryByText('Check one file')).toBeNull()
+
+    const branch = screen.getByRole('button', { name: '收起下级子智能体 · 1 个在跑' })
+    expect(branch.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(branch)
+    expect(screen.queryByText('Build the bundle')).toBeNull()
+    const closed = screen.getByRole('button', { name: /^展开 2 个下级子智能体/ })
+    expect(closed.textContent).toBe('展开 2 个下级子智能体1 个在跑')
+    expect(closed.hasAttribute('data-running-below')).toBe(true)
+    fireEvent.click(closed)
+    expect(screen.getByText('Build the bundle')).toBeTruthy()
+    vi.useRealTimers()
+  })
+
+  it('counts nested subagents in the header', () => {
+    const props = {
+      sessionId: ROOT, ...hooks(nested()), toggle: vi.fn(), t,
+      useSession: ((selector: (value: { subagent: unknown }) => unknown) => selector({ subagent: null })) as never,
+    } as unknown as SubagentToggleProps
+    render(<SubagentToggle {...props} />)
+    expect(screen.getByRole('button', { name: '子智能体：1 个在跑，共 4 个。在右侧栏查看' }).textContent).toBe('1 个在跑')
   })
 })

@@ -1,7 +1,8 @@
 /**
  * Pure derivation of the panel from shared Session state: one row per direct child of a Session,
- * classified, sorted, and given its text. Nothing here renders or reads a store, so the rules are
- * unit-tested without a DOM.
+ * classified, sorted, and given its text, plus per-Session counts over the whole subagent tree (a
+ * subagent may start its own). Nothing here renders or reads a store, so the rules are unit-tested
+ * without a DOM.
  */
 import type { SessionProjectionMap, SessionProjectionSnapshot, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionStatusSnapshot } from '@deepseek-ai/dsh-client-ui-session/client'
@@ -36,9 +37,14 @@ export interface PanelRow {
   readonly tokens?: number
   readonly activity?: ForkSubagentActivity
   readonly createdAt: number
-  /** Direct children this child has started, as far as its catalog is loaded. */
+  /** Direct children this child has started, as far as its catalog is known. */
   readonly children: number
+  /** Counts over every descendant of this child (itself excluded). */
+  readonly below: StateCounts
 }
+
+/** Counts per state, for the header toggle, the panel's summary line, and a row's descendants. */
+export type StateCounts = Readonly<Record<RowState, number>>
 
 /** A Session's catalog read state, as the panel needs it. */
 export type CatalogState = 'idle' | 'loading' | 'ready' | 'error'
@@ -120,19 +126,106 @@ function lastSeen(row: PanelRow): number {
 }
 
 /**
- * Rows for the direct children of one Session: running first (newest started first), then the
- * finished ones (most recently active first).
+ * Whether a row belongs with the work in progress: it runs, or something it started still runs.
+ * @param row - the row.
+ * @returns true for the "running" section and the top of a level.
+ */
+export function isLive(row: PanelRow): boolean {
+  return row.state === 'running' || row.below.running > 0
+}
+
+/** Deepest level the tree walk follows below the Session it starts from. */
+export const MAX_TREE_DEPTH = 12
+
+/** Most descendants one walk counts, so a runaway fan-out cannot stall a render. */
+export const MAX_TREE_NODES = 1_000
+
+/** Levels that open by themselves to show a running descendant; deeper ones open on click. */
+export const AUTO_EXPAND_DEPTH = 4
+
+/** Every state, in summary order. */
+const STATES: readonly RowState[] = ['running', 'done', 'failed', 'stopped', 'idle', 'external']
+
+/** All-zero counts, shared by rows without descendants. */
+export const NO_COUNTS: StateCounts = { running: 0, done: 0, failed: 0, stopped: 0, idle: 0, external: 0 }
+
+/** State of one catalog entry, the same rule its row uses. */
+function stateOf(sources: PanelSources, entry: CatalogEntry): RowState {
+  if (entry.mode === 'external') return 'external'
+  const lastTurnCompleted = sources.summaries[entry.id]?.projectionValues?.subagentTiming?.lastTurnCompleted
+  return classify(isRunning(sources, entry.id), activityOf(sources, entry.id), lastTurnCompleted)
+}
+
+/** Counts over a Session's whole subagent tree, for every Session the walk reached. */
+export interface TreeIndex {
+  /** Per Session: counts over all its descendants, itself excluded. Sessions the walk did not reach are absent. */
+  readonly below: ReadonlyMap<SessionId, StateCounts>
+  /** The walk stopped at {@link MAX_TREE_DEPTH} or {@link MAX_TREE_NODES}, so the counts are a floor. */
+  readonly truncated: boolean
+}
+
+/**
+ * Walk the subagent tree under a Session through each Session's catalog (the list carries every
+ * Session's catalog, so no read is needed), counting descendants per state for every node.
+ * A Session met twice (a cycle, or listed under two parents) is counted once.
+ * @param sources - shared Session state.
+ * @param rootId - the Session to start from.
+ * @returns per-Session descendant counts.
+ */
+export function indexTree(sources: PanelSources, rootId: SessionId): TreeIndex {
+  const below = new Map<SessionId, StateCounts>()
+  const seen = new Set<SessionId>([rootId])
+  let truncated = false
+  const walk = (parentId: SessionId, depth: number): StateCounts => {
+    const counts: Record<RowState, number> = { ...NO_COUNTS }
+    for (const entry of catalogOf(sources, parentId).entries) {
+      if (seen.has(entry.id)) continue
+      if (seen.size > MAX_TREE_NODES) {
+        truncated = true
+        break
+      }
+      seen.add(entry.id)
+      counts[stateOf(sources, entry)] += 1
+      if (entry.mode === 'external') continue
+      if (depth >= MAX_TREE_DEPTH) {
+        if (catalogOf(sources, entry.id).entries.length > 0) truncated = true
+        continue
+      }
+      const nested = walk(entry.id, depth + 1)
+      for (const state of STATES) counts[state] += nested[state]
+    }
+    below.set(parentId, counts)
+    return counts
+  }
+  walk(rootId, 1)
+  return { below, truncated }
+}
+
+/**
+ * Number of Sessions a set of counts covers.
+ * @param counts - per-state counts.
+ * @returns their sum.
+ */
+export function totalOf(counts: StateCounts): number {
+  return STATES.reduce((sum, state) => sum + counts[state], 0)
+}
+
+/**
+ * Rows for the direct children of one Session: live ones first (running, or with a running
+ * descendant; newest started first), then the finished ones (most recently active first).
  * @param sources - shared Session state.
  * @param parentId - the parent Session.
  * @param now - clock for open turns.
+ * @param index - tree counts, when the caller already walked the tree.
  * @returns the rows.
  */
-export function rowsOf(sources: PanelSources, parentId: SessionId, now: number): PanelRow[] {
+export function rowsOf(sources: PanelSources, parentId: SessionId, now: number, index = indexTree(sources, parentId)): PanelRow[] {
   const rows = catalogOf(sources, parentId).entries.map((entry): PanelRow => {
     const summary = sources.summaries[entry.id]
     const external = entry.mode === 'external'
     const running = !external && isRunning(sources, entry.id)
     const activity = external ? undefined : activityOf(sources, entry.id)
+    const state = stateOf(sources, entry)
     const values = summary?.projectionValues
     const name = entry.mode === 'continuable' || entry.mode === 'external' ? entry.name : undefined
     const description = entry.label || summary?.title || undefined
@@ -144,24 +237,22 @@ export function rowsOf(sources: PanelSources, parentId: SessionId, now: number):
       ...external ? {} : { address: { parentSessionId: parentId, childSessionId: entry.id, mode: entry.mode } },
       title,
       ...description !== undefined && name !== undefined && name !== description ? { name } : {},
-      state: external ? 'external' : classify(running, activity, values?.subagentTiming?.lastTurnCompleted),
+      state,
       ...durationMs === undefined ? {} : { durationMs },
       ...tokens === undefined ? {} : { tokens },
       ...activity === undefined ? {} : { activity },
       createdAt: entry.createdAt,
       children: external ? 0 : catalogOf(sources, entry.id).entries.length,
+      below: external ? NO_COUNTS : index.below.get(entry.id) ?? NO_COUNTS,
     }
   })
-  const running = rows.filter(row => row.state === 'running').sort((a, b) => b.createdAt - a.createdAt)
-  const finished = rows.filter(row => row.state !== 'running').sort((a, b) => lastSeen(b) - lastSeen(a))
-  return [...running, ...finished]
+  const live = rows.filter(isLive).sort((a, b) => b.createdAt - a.createdAt)
+  const finished = rows.filter(row => !isLive(row)).sort((a, b) => lastSeen(b) - lastSeen(a))
+  return [...live, ...finished]
 }
 
-/** Counts per state, for the header toggle and the panel's summary line. */
-export type StateCounts = Readonly<Record<RowState, number>>
-
 /**
- * Count rows per state.
+ * Count rows per state (one level; {@link indexTree} counts the whole tree).
  * @param rows - the rows.
  * @returns a count for every state.
  */

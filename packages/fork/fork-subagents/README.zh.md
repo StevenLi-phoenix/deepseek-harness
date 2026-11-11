@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概要
 
-不用悬停菜单，就能看到 agent 派出的子智能体在做什么。顶栏一个按钮（“1 个在跑”或“10 个已结束”）在右侧栏打开“子智能体”页面。在跑的排在前面：任务、第几步、此刻执行的工具和它参数里的一行（或者模型思考中，或者带原因的重试）、这次等待多久了（太久变琥珀色）和最近的想法。已结束的随后列出，每行写着“完成”“出错”或“中断”和结束时间，以及用时、token、最后的回复或错误。点一行在侧栏打开它的对话，点箭头在主区打开。
+不用悬停菜单，就能看到 agent 派出的子智能体在做什么。顶栏一个按钮（“1 个在跑”或“10 个已结束”）在右侧栏打开“子智能体”页面。在跑的排在前面：任务、第几步、此刻执行的工具和它参数里的一行（或者模型思考中，或者重试）、等了多久（太久变琥珀色）和最近的想法。已结束的随后列出，每行写着“完成”“出错”或“中断”和结束时间，以及用时、token、最后的回复或错误。下级子智能体也计入；有下级在跑的分支自己展开。点一行在侧栏打开它的对话，点箭头在主区打开。
 
 ## 目录
 
@@ -44,7 +44,7 @@ kind: "package-reference"
 
 Host 端注册 `forkSubagentActivity` projection。它只对 header 里写着 `origin: 'subagent'`（或带有子智能体 descriptor）的会话折叠；其他会话保持 `null`，所以普通会话的摘要里没有这个值。它跟踪 `turn/start`、`step/start`、`tool/call`、`tool/result`、`assistant/message`、`llm/retry`、`llm/retry-started` 和 `turn/end`，遇到其他事件原样返回状态，所以 Host 的 control stream 只在页面会变时才发帧。工具预览取调用自带的 `description`，没有就取 `command`、路径、查询或 URL，最多 120 字；想法取回复文字，没有就取推理开头，最多 160 字。
 
-浏览器端遮蔽上游的顶栏条目：用同一个 id `subagent-catalog`、优先级 -1 注册到 `conversation.session.header.actions`，slot 运行时渲染优先级最低的那个。页面注册成标签类型 `fork-subagents`，是一个带一条引导入口的页面类型。行数据来自父会话的 `subagentCatalog` projection、每个子会话的摘要（`subagentTiming`、`tokenUsage`、`forkSubagentActivity`）和会话状态里的运行标记；打开页面时按上游菜单准备一层的方式读取目录和直接子会话，之后由 control stream 的实时帧保持更新。一行打开的是 `dsh-resource://subagentchat/session/<child>?parent=<parent>&mode=<mode>`，也就是 `ui-subagent` 注册的地址。
+浏览器端遮蔽上游的顶栏条目：用同一个 id `subagent-catalog`、优先级 -1 注册到 `conversation.session.header.actions`，slot 运行时渲染优先级最低的那个。页面注册成标签类型 `fork-subagents`，是一个带一条引导入口的页面类型。行数据来自父会话的 `subagentCatalog` projection、每个子会话的摘要（`subagentTiming`、`tokenUsage`、`forkSubagentActivity`）和会话状态里的运行标记；打开页面时按上游菜单准备一层的方式读取目录和直接子会话，每个下级层展开时也这样读取自己，之后由 control stream 的实时帧保持更新。会话列表本来就带着每个会话的目录，所以整棵树不用额外读取就能计数：顶栏、摘要行和“正在运行”分区都按所有层级计数，一行会写出它下面有几个在跑，有下级在跑的分支自己展开（最多四层），即使分支顶上那一行已经结束，也排在“正在运行”分区。遍历最多走 12 层或 1000 个会话，同一个会话遇到两次只算一次，提前停下时在控制台打一条警告。一行打开的是 `dsh-resource://subagentchat/session/<child>?parent=<parent>&mode=<mode>`，也就是 `ui-subagent` 注册的地址。
 
 | 文件 | 作用 |
 |---|---|
