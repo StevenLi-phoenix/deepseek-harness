@@ -88,6 +88,9 @@ export function ProviderBalances({ useBalance, refresh, t }: ProviderBalancesPro
                         {window.elapsed === null
                           ? null
                           : <span className={css.now} style={{ left: `${Math.round(window.elapsed)}%` }} data-window-now="" aria-hidden="true" />}
+                        {window.projected === null || window.projected >= 100
+                          ? null
+                          : <span className={css.projected} style={{ left: `${Math.round(window.projected)}%` }} data-window-projected="" aria-hidden="true" />}
                       </span>
                       <span className={css.windowValue}>{percent}</span>
                       <span className={css.windowReset} data-window-reset="">{window.resets ?? ''}</span>

@@ -57,7 +57,11 @@ describe('ProviderBalances', () => {
     const meters = screen.getAllByRole('meter')
     // No reset known: no time marker and no pace line.
     expect(meters[0]!.querySelector('[data-window-now]')).toBeNull()
+    expect(meters[0]!.querySelector('[data-window-projected]')).toBeNull()
     expect((meters[1]!.querySelector('[data-window-now]') as HTMLElement).style.left).toBe('50%')
+    // The line is the clock, the dot is where the pace lands: 25 % used at a third of the month projects 75 %.
+    expect((meters[2]!.querySelector('[data-window-projected]') as HTMLElement).style.left).toBe('75%')
+    expect((meters[2]!.querySelector('[data-window-now]') as HTMLElement).style.left).toBe('33%')
     const paces = [...document.querySelectorAll('[data-window-pace]')]
     expect(paces.map(cell => cell.textContent)).toEqual(['', '时间已过 50% · 照这个速度，11-27 21:32 用完', '时间已过 33% · 照这个速度，到期约用 75%'])
     // 60 % used is under the warning line, but the pace runs out before the reset.

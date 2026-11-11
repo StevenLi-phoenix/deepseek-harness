@@ -138,6 +138,18 @@
 }
 
 /* Where the window's time stands: use past this tick is ahead of the clock. */
+.projected {
+  position: absolute;
+  /* The dot is where the current rate ends up by the reset; the 2px line beside it is where the clock is now. */
+  inset: 0 auto 0 0;
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-business-primary);
+  box-shadow: 0 0 0 1px var(--dsw-alias-border-l2);
+}
+
 .now {
   position: absolute;
   inset: 0 auto 0 0;
