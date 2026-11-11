@@ -272,8 +272,6 @@
     "apps/desktop/tests/keyboard.spec.ts",
     // Upstream deleted these packages in the 0.2.2 account unification; the merge could not record
     // the deletion, so their leftover files stay out of the aggregate until a human removes them.
-    "packages/api/account-controller/**",
-    "packages/credentials/deepseek-account-platform/**",
     "packages/client/*/src/**",
     "benchmarks/**/*.client.ts",
     "benchmarks/**/*.client.tsx",
