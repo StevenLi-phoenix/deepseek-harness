@@ -145,6 +145,13 @@ describe('event bundle', () => {
     }
   })
 
+  it('mounts the subagent panel once at the root and keeps ui-subagent, whose header entry it only shadows', () => {
+    expect(inserted.filter(entry => entry.id === 'fork-subagents')).toHaveLength(1)
+    expect(inserted.find(entry => entry.id === 'fork-subagents')!.config).toBeUndefined()
+    expect(composedRoot().get('fork-subagents')).toEqual({ name: '@deepseek-ai/dsh-fork-subagents', enabled: true })
+    expect(composedRoot().get('ui-subagent')?.enabled).toBe(true)
+  })
+
   it('leaves no model tool at the profile root, where every preset, bili included, would inherit it', () => {
     const enabled = [...composedRoot()].filter(([, row]) => row.enabled && row.name?.startsWith('@deepseek-ai/dsh-tool-'))
     expect(enabled.map(([, row]) => row.name).filter(name => !ROOT_TOOL_ROWS_WITHOUT_TOOLS.has(name!))).toEqual([])

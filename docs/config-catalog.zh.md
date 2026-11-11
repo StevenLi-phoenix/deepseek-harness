@@ -6617,6 +6617,7 @@ export interface Config {
 | `@deepseek-ai/dsh-fork-memory-admin` | — | [`packages/fork/fork-memory-admin/src/index.ts`](../packages/fork/fork-memory-admin/src/index.ts) |
 | `@deepseek-ai/dsh-fork-qq-login` | `connection` · `forkQq` | [`packages/fork/fork-qq-login/src/index.ts`](../packages/fork/fork-qq-login/src/index.ts) |
 | `@deepseek-ai/dsh-fork-style-settings` | `connection` | [`packages/fork/fork-style-settings/src/index.ts`](../packages/fork/fork-style-settings/src/index.ts) |
+| `@deepseek-ai/dsh-fork-subagents` | `sessionProjections` | [`packages/fork/fork-subagents/src/index.ts`](../packages/fork/fork-subagents/src/index.ts) |
 | `@deepseek-ai/dsh-fork-tool-courses` | `tools` | [`packages/fork/fork-tool-courses/src/index.ts`](../packages/fork/fork-tool-courses/src/index.ts) |
 | `@deepseek-ai/dsh-fork-tool-monitor` | `tools` · `storageDomain` · `sessionController` · `sessionPersistence` | [`packages/fork/fork-tool-monitor/src/index.ts`](../packages/fork/fork-tool-monitor/src/index.ts) |
 | `@deepseek-ai/dsh-fork-tool-voice` | `tools` | [`packages/fork/fork-tool-voice/src/index.ts`](../packages/fork/fork-tool-voice/src/index.ts) |

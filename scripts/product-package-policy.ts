@@ -29,6 +29,7 @@ export const PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackagePolic
   'packages/fork/fork-integrity': { category: 'optional', reason: 'Fork-local integrity watch for the owner\'s main agent; mounted by the event profile.' },
   'packages/fork/fork-courses': { category: 'optional', reason: 'Fork-local course records client and deadline reminder poller; mounted by the event profile bundle.' },
   'packages/fork/fork-courses-settings': { category: 'optional', reason: 'Fork-local Settings section for course deadline reminders mounted by the event profile bundle.' },
+  'packages/fork/fork-subagents': { category: 'optional', reason: 'Fork-local right-Sidebar subagent page and its activity projection mounted by the event profile bundle.' },
   'packages/fork/fork-tool-courses': { category: 'optional', reason: 'Fork-local course record tools mounted by the event profile preset.' },
   'packages/fork/fork-time-gap': { category: 'optional', reason: 'Fork-local time check before an input that ends a quiet spell in a Session; mounted by the event profile bundle.' },
   'packages/fork/fork-wechat': { category: 'optional', reason: 'Fork-local WeChat channel; requires a QR-bound iLink bot account.' },

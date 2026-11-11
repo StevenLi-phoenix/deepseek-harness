@@ -388,6 +388,7 @@ flowchart TD
     pkg_fork_qqbot["fork-qqbot"]
     pkg_fork_style["fork-style"]
     pkg_fork_style_settings["fork-style-settings"]
+    pkg_fork_subagents["fork-subagents"]
     pkg_fork_sysmon["fork-sysmon"]
     pkg_fork_taint["fork-taint"]
     pkg_fork_time_gap["fork-time-gap"]
@@ -1873,6 +1874,7 @@ flowchart TD
 | [`fork-memory-admin`](../packages/fork/fork-memory-admin) | `fork` | — |
 | [`fork-qq-login`](../packages/fork/fork-qq-login) | `fork` | — |
 | [`fork-style-settings`](../packages/fork/fork-style-settings) | `fork` | — |
+| [`fork-subagents`](../packages/fork/fork-subagents) | `fork` | — |
 | [`fork-sysmon`](../packages/fork/fork-sysmon) | `fork` | — |
 | [`fork-wechat-settings`](../packages/fork/fork-wechat-settings) | `fork` | — |
 | [`message-quotes`](../packages/session/message-quotes) | `session` | — |

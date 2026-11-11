@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Subagent panel",
+    "description": "Lists a Session's subagents in the right sidebar: what each is doing now, for how long, and how it ended, opened from one header button."
+  }
+}

@@ -1,0 +1,65 @@
+/* Same footprint as the upstream count trigger it replaces: quiet text in the header actions band. */
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.toggle[data-running] {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.toggle:focus-visible {
+  color: var(--dsw-alias-label-primary);
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color);
+}
+
+.toggle:active {
+  background: var(--dsw-alias-interactive-bg-active);
+}
+
+@media (hover: hover) {
+  .toggle:hover {
+    color: var(--dsw-alias-label-primary);
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+.glyph {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+}
+
+.text {
+  white-space: nowrap;
+}
+
+/* The title-row container drops passive preset text at 540px; this control keeps only its glyph at 460px. */
+@container (max-width: 460px) {
+  .toggle {
+    box-sizing: border-box;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .text {
+    display: none;
+  }
+}

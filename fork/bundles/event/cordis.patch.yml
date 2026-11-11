@@ -400,6 +400,13 @@
     - id: fork-balance
       name: '@deepseek-ai/dsh-fork-balance'
 
+    # Right Sidebar → 子智能体: a Session's subagents, what each is doing now, how long, how it ended. Its
+    # header button shadows ui-subagent's hover catalog (same slot id, lower priority); ui-subagent stays for
+    # the breadcrumb switcher, the Sidebar chat tab, and the read-only composer. The Host half registers the
+    # forkSubagentActivity projection (subagent Sessions only).
+    - id: fork-subagents
+      name: '@deepseek-ai/dsh-fork-subagents'
+
     # Settings → System status: this Mac's CPU, memory, power, temperature, and disks per volume.
     # Power and temperature come from /Users/dsh-runtime/bin/macmon (sudoless); the defaults
     # show /System/Volumes/Data (Internal) and /Volumes/MiniSSD.
