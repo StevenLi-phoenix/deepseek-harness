@@ -18,11 +18,66 @@ async function mount(notifier: unknown) {
   const run = async (name: string, args: unknown) => (await ctx.tools.execute({ signal: new AbortController().signal, calls: [{ type: 'tool-call', id: ToolCallId('send-call'), name, arguments: JSON.stringify(args) }] })).results[0]!.result
   const call = (args: unknown) => run('wechat_send_file', args)
   const defer = (args: unknown) => run('defer_deliver', args)
-  return { ctx, call, defer }
+  const send = (args: unknown) => run('wechat_send', args)
+  return { ctx, call, defer, send }
 }
 
 afterEach(async () => {
   await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose()))
+})
+
+describe('wechat_send', () => {
+  const tool = (extra: Record<string, unknown> = {}) => ({ send: vi.fn(), ownsSession: () => false, delivery: () => 'tool' as const, ...extra })
+
+  it('is registered only while the channel delivers by tool', async () => {
+    const text = await mount({ send: vi.fn(), ownsSession: () => false, delivery: () => 'text' })
+    expect(text.ctx.tools.schemas().map(schema => schema.name)).not.toContain('wechat_send')
+    const legacy = await mount({ send: vi.fn(), ownsSession: () => false })
+    expect(legacy.ctx.tools.schemas().map(schema => schema.name)).not.toContain('wechat_send')
+    const on = await mount(tool())
+    expect(on.ctx.tools.schemas().map(schema => schema.name)).toContain('wechat_send')
+  })
+
+  it('passes the text, urgency and the calling Session to the channel and returns what became of it', async () => {
+    const sendText = vi.fn((_session: string | undefined, _text: string, _options: { urgent?: boolean }) => Promise.resolve({ sent: 1, queued: 0, held: false, repliesLeft: 7 }))
+    const { ctx, send } = await mount(tool({ sendText }))
+    expect(await send({ text: 'on it', urgent: true })).toMatchObject({ value: { sent: 1, queued: 0, held: false, repliesLeft: 7 } })
+    expect(sendText).toHaveBeenCalledWith(undefined, 'on it', { urgent: true })
+    await send({ text: 'plain' })
+    expect(sendText).toHaveBeenLastCalledWith(undefined, 'plain', { urgent: false })
+    expect(ctx.tools.get('wechat_send')!.presentCall!({ text: 'on it' })).toEqual({
+      card: 'generic', title: 'Message the owner on WeChat', kind: 'other', rawInput: 'on it',
+    })
+  })
+
+  it('leaves out repliesLeft when the channel has no window record, and passes a queued text\'s reason on', async () => {
+    const sendText = vi.fn(() => Promise.resolve({ sent: 0, queued: 1, held: false, why: 'the owner has not written yet', repliesLeft: null }))
+    const { send } = await mount(tool({ sendText }))
+    const result = await send({ text: 'hello' })
+    expect(result).toMatchObject({ value: { sent: 0, queued: 1, held: false, why: 'the owner has not written yet' } })
+    expect(JSON.stringify(result)).not.toContain('repliesLeft')
+  })
+
+  it('returns the channel\'s refusal, says so when the notifier is not the WeChat channel, and refuses a call without text', async () => {
+    const sendText = vi.fn(() => Promise.resolve({ notSent: 'this turn already sent 3 messages (the cap is 3): put what is left into one message in your next turn' }))
+    const capped = await mount(tool({ sendText }))
+    expect(JSON.stringify(await capped.send({ text: 'x' }))).toContain('the cap is 3')
+    const bare = await mount(tool())
+    expect(await bare.send({ text: 'x' })).toMatchObject({ value: { notSent: 'the WeChat channel is not mounted' } })
+    const refused = await capped.send({})
+    expect(refused).not.toHaveProperty('value')
+  })
+
+  it('moves the "final answer" wording of the other tools to wechat_send', async () => {
+    const text = await mount({ send: vi.fn(), ownsSession: () => false, delivery: () => 'text' })
+    const on = await mount(tool())
+    const describe_ = (h: Awaited<ReturnType<typeof mount>>, name: string) => h.ctx.tools.schemas().find(schema => schema.name === name)!.description
+    expect(describe_(text, 'wechat_send_file')).toContain('final answer')
+    expect(describe_(on, 'wechat_send_file')).toContain('wechat_send')
+    expect(describe_(on, 'wechat_send_file')).not.toContain('final answer')
+    expect(describe_(text, 'defer_deliver')).toContain('final answer')
+    expect(describe_(on, 'defer_deliver')).not.toContain('final answer')
+  })
 })
 
 describe('wechat_send_file', () => {

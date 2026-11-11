@@ -6,13 +6,17 @@
  *
  * `defer_deliver`: the agent holds a text for the owner until a time or until the owner
  * wakes (`WechatChannel.holdDelivery`); the channel keeps the text and sends it.
+ *
+ * `wechat_send` (only while the channel delivers by tool, `chat.delivery: tool`): the agent's words for the
+ * owner. Its own text reply is notes then, so this is the one way to speak; the channel does the splitting,
+ * the sleep hold, the reply window and the outbox (`WechatChannel.sendText`).
  */
 
 import { basename } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.forkNotifier service the channel provides.
 import type {} from '@deepseek-ai/dsh-fork-event-bus'
-import type { HoldResult, SendFileResult, WechatChannel } from '@deepseek-ai/dsh-fork-wechat'
+import type { HoldResult, SendFileResult, SendTextResult, WechatChannel } from '@deepseek-ai/dsh-fork-wechat'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 
 /** Plugin name. */
@@ -21,12 +25,54 @@ export const name = 'fork-tool-wechat'
 /** Mounted inside an agent preset's scope, like other tool plugins. */
 export const inject = ['tools']
 
-const DESCRIPTION = [
+/** Description of `wechat_send_file`; the last sentence says where the words go. */
+const fileDescription = (tool: boolean): string => [
   'Send a file from this computer to the owner on WeChat.',
   'A PNG, JPEG, GIF, or WebP image arrives as a picture, an .mp4, .mov, or .m4v file as a video, anything else as a file attachment.',
   'The recipient is always the owner, and sending works only while the owner\'s last WeChat message is recent (about a day) and its reply allowance is not used up; otherwise the result says why nothing was sent.',
-  'Use it when the owner asks for a file or picture, or when one says more than text. Your final answer still goes out as the text reply.',
+  tool
+    ? 'Use it when the owner asks for a file or picture, or when one says more than text. Say anything that goes with it with wechat_send.'
+    : 'Use it when the owner asks for a file or picture, or when one says more than text. Your final answer still goes out as the text reply.',
 ].join(' ')
+
+const SEND_DESCRIPTION = [
+  'Send a message to the owner on WeChat. This is the only way to speak to the owner: your own text replies are notes that the owner never sees, so keep them to one short line.',
+  'Call it once per thing you have to say, with everything for that moment in one message: the owner can be answered only about ten times per message of theirs, and one turn may send only a few.',
+  'Set urgent only for something the owner must read now even while asleep.',
+  'The result says how many messages went out, how many wait (queued with the reason, or held for the morning), and how many replies are left in the window.',
+  'When an owner message needs no reply, send nothing and end with exactly NO_REPLY.',
+].join(' ')
+
+const SEND_OUTPUT_SCHEMA = {
+  oneOf: [
+    {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        sent: { type: 'number', required: true },
+        queued: { type: 'number', required: true },
+        held: { type: 'boolean', required: true },
+        why: { type: 'string' },
+        repliesLeft: { type: 'number' },
+      },
+    },
+    {
+      type: 'object',
+      additionalProperties: false,
+      properties: { notSent: { type: 'string', required: true } },
+    },
+  ],
+} as const
+
+/** The model-facing form of a send: the channel's `repliesLeft: null` (no window record yet) is left out. */
+type SendOutput = { sent: number; queued: number; held: boolean; why?: string; repliesLeft?: number } | { notSent: string }
+
+/** Turn the channel's result into what the model reads. */
+function sendOutput(result: SendTextResult): SendOutput {
+  if ('notSent' in result) return result
+  const { repliesLeft, ...rest } = result
+  return { ...rest, ...repliesLeft === null ? {} : { repliesLeft } }
+}
 
 const OUTPUT_SCHEMA = {
   oneOf: [
@@ -47,12 +93,15 @@ const OUTPUT_SCHEMA = {
   ],
 } as const
 
-const DEFER_DESCRIPTION = [
+/** Description of `defer_deliver`; one sentence says what to do about the answer. */
+const deferDescription = (tool: boolean): string => [
   'Hold a text for the owner on WeChat instead of sending it now, and let it arrive later.',
   'It goes out at the time you give in until (ISO 8601 with a UTC offset, for example 2026-11-03T09:00:00-05:00, at most 7 days ahead),',
   'or as soon as the owner wakes if that comes first; with no until the owner has to be asleep now, and the text waits for the waking.',
   'Use it for something the owner should read later rather than now: a night-time finding, a result for the morning, a message for a set time.',
-  'Do not repeat the text in your final answer; if this was all you had to say, answer exactly NO_REPLY.',
+  tool
+    ? 'Do not send the same text again with wechat_send; if this was all you had to say, end with exactly NO_REPLY.'
+    : 'Do not repeat the text in your final answer; if this was all you had to say, answer exactly NO_REPLY.',
   'Sending then needs an open WeChat reply window; a text it cannot reach waits in the outbox for the owner\'s next message.',
 ].join(' ')
 
@@ -104,10 +153,28 @@ function deferOutput(result: HoldResult): DeferOutput {
  */
 export function apply(ctx: Context): void {
   ctx.inject(['forkNotifier'], (scoped) => {
-    const channel = scoped.forkNotifier as Partial<Pick<WechatChannel, 'sendFile' | 'holdDelivery'>>
+    const channel = scoped.forkNotifier as Partial<Pick<WechatChannel, 'sendFile' | 'holdDelivery' | 'sendText' | 'delivery'>>
+    // The mode is read when the channel is (re)provided: a config reload re-runs this, so a switch registers or drops wechat_send.
+    const tool = typeof channel.delivery === 'function' && channel.delivery() === 'tool'
+    if (tool) {
+      scoped.tools.register(defineTool({
+        name: 'wechat_send',
+        description: SEND_DESCRIPTION,
+        parameters: {
+          text: { type: 'string', required: true, description: 'What to tell the owner, as you would write it in a message: plain text, no Markdown.' },
+          urgent: { type: 'boolean', description: 'Pass the owner\'s sleep (do-not-disturb). Only for something that cannot wait.' },
+        },
+        output: { schema: SEND_OUTPUT_SCHEMA, render: (_args: unknown, value: unknown) => [{ type: 'text' as const, text: JSON.stringify(value) }] },
+        async execute(args, exec): Promise<SendOutput> {
+          if (typeof channel.sendText !== 'function') return { notSent: 'the WeChat channel is not mounted' }
+          return sendOutput(await channel.sendText(exec.agent?.session.id, args.text, { urgent: args.urgent === true }))
+        },
+        presentCall: args => ({ card: 'generic', title: 'Message the owner on WeChat', kind: 'other', rawInput: args.text }),
+      }))
+    }
     scoped.tools.register(defineTool({
       name: 'wechat_send_file',
-      description: DESCRIPTION,
+      description: fileDescription(tool),
       parameters: {
         path: { type: 'string', required: true, description: 'Absolute path of a regular file on this computer, at most 25 MiB.' },
       },
@@ -120,7 +187,7 @@ export function apply(ctx: Context): void {
     }))
     scoped.tools.register(defineTool({
       name: 'defer_deliver',
-      description: DEFER_DESCRIPTION,
+      description: deferDescription(tool),
       parameters: {
         text: { type: 'string', required: true, description: 'What to tell the owner, as you would write it in a message.' },
         until: { type: 'string', description: 'When to send it: ISO 8601 with a UTC offset, at most 7 days ahead. Leave it out to wait for the owner to wake.' },
