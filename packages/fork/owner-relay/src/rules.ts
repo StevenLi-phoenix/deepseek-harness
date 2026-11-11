@@ -31,6 +31,12 @@ export type RelayDecision =
   | { readonly kind: 'silent' }
   /** A completed turn without assistant text. */
   | { readonly kind: 'empty' }
+  /**
+   * A completed turn of a channel that delivers by tool (`delivery: 'tool'`): the Session's words went out through
+   * the channel's own tools, its text is notes, and the relay sends nothing. The channel checks at `onTurnEnd`
+   * whether the owner got a reply.
+   */
+  | { readonly kind: 'tool' }
   /** Something to send. */
   | { readonly kind: 'answer'; readonly text: string; readonly outcome: string; readonly detail?: string }
 
@@ -61,22 +67,30 @@ export function stoppedByOwner(reason: TurnEndFacts): boolean {
   return reason.kind === 'aborted' && reason.reason?.kind === 'user'
 }
 
+/** How a channel's Sessions reach the owner: the turn's final text (`text`), or only through the channel's send tool (`tool`). */
+export type DeliveryMode = 'text' | 'tool'
+
 /**
  * The one rule set for every channel: what the end of a turn sends the owner.
  * @param text - the turn's latest assistant text, if any.
  * @param reason - how the turn ended.
+ * @param mode - `text` relays the final text; `tool` never does: the text is the Session's notes, a completed turn
+ *   is `tool`, and a turn that did not complete sends only the warning.
  * @returns nothing (and why), or the message with the turn's outcome and failure reason.
  */
-export function decideRelay(text: string | undefined, reason: TurnEndFacts): RelayDecision {
+export function decideRelay(text: string | undefined, reason: TurnEndFacts, mode: DeliveryMode = 'text'): RelayDecision {
   if (stoppedByOwner(reason)) return { kind: 'stopped' }
   if (isSilentReply(text)) return { kind: 'silent' }
   const outcome = reason.kind
-  if (outcome === 'completed') return text === undefined ? { kind: 'empty' } : { kind: 'answer', text, outcome }
+  if (outcome === 'completed') {
+    if (mode === 'tool') return { kind: 'tool' }
+    return text === undefined ? { kind: 'empty' } : { kind: 'answer', text, outcome }
+  }
   const detail = failureDetail(reason)
   const warning = detail === undefined ? `⚠️ 本轮未完成（${outcome}）` : `⚠️ 本轮未完成（${outcome}）\n原因：${detail}`
   return {
     kind: 'answer',
-    text: text === undefined ? warning : `${text}\n\n${warning}`,
+    text: text === undefined || mode === 'tool' ? warning : `${text}\n\n${warning}`,
     outcome,
     ...(detail === undefined ? {} : { detail }),
   }

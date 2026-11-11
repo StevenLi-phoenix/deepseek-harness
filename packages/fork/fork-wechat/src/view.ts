@@ -64,6 +64,18 @@ export interface WindowView {
   readonly expiresAt: number | null
 }
 
+/** How the chat Session's words reach the owner, and how tool delivery has been doing since the process started. */
+export interface DeliveryView {
+  /** `text`: the final answer of each turn is sent. `tool`: only `wechat_send` reaches the owner. */
+  readonly mode: 'text' | 'tool'
+  /** `wechat_send` calls that delivered or queued a text. */
+  readonly toolSends: number
+  /** Owner messages whose turn ended without a `wechat_send`, answered by one reminder turn. */
+  readonly nudges: number
+  /** Owner messages that stayed unanswered even after the reminder: the owner got the fixed notice. */
+  readonly silentNotices: number
+}
+
 /** Texts waiting for the next window. */
 export interface OutboxView {
   readonly count: number
@@ -77,6 +89,7 @@ export interface ChannelStatus {
   readonly channel: ChannelView
   readonly window: WindowView
   readonly outbox: OutboxView
+  readonly delivery: DeliveryView
 }
 
 /** Body of `GET api/fork.wechat`. */

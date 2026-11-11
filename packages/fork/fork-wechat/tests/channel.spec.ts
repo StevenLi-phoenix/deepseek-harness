@@ -221,7 +221,8 @@ async function harness(options: {
   const { chat, ...rest } = options.config ?? {}
   const config: Config = {
     ...(options.defaultAccountFile === true ? {} : { accountFile }),
-    chat: { workspacePath: join(dir, 'work'), agentPreset: 'unattended', permissionPreset: 'danger-full-access', title: '微信', timeZone: 'America/New_York', agentMessage: 'turn', ...chat },
+    chat: { workspacePath: join(dir, 'work'), agentPreset: 'unattended', permissionPreset: 'danger-full-access', title: '微信', timeZone: 'America/New_York', agentMessage: 'turn', delivery: 'text', ...chat },
+    maxSendsPerTurn: 3,
     maxMessageChars: 3000,
     maxReplyParts: 3,
     repliesPerToken: 10,
@@ -1690,6 +1691,7 @@ describe('WechatChannel Settings route', () => {
       channel: { link: 'idle', lastPollAt: null, failures: 0, lastError: null, lastInboundAt: null, lastOutboundAt: null, lastOutboundKind: null },
       window: { open: false, closed: 'no-account', repliesLeft: null, repliesPerToken: 10, expiresAt: null },
       outbox: { count: 0, limit: 50, oldestAt: null },
+      delivery: { mode: 'text', toolSends: 0, nudges: 0, silentNotices: 0 },
     })
 
     const h = await harness()
@@ -1962,7 +1964,8 @@ describe('WechatChannel sendFile', () => {
 describe('WechatChannel configuration', () => {
   it('applies defaults', () => {
     expect(resolveConfig({})).toEqual({
-      chat: { workspacePath: '/Users/dsh-runtime/work', agentPreset: 'unattended', permissionPreset: 'danger-full-access', title: '微信', timeZone: 'America/New_York', agentMessage: 'turn' },
+      chat: { workspacePath: '/Users/dsh-runtime/work', agentPreset: 'unattended', permissionPreset: 'danger-full-access', title: '微信', timeZone: 'America/New_York', agentMessage: 'turn', delivery: 'text' },
+      maxSendsPerTurn: 3,
       maxMessageChars: 3000,
       maxReplyParts: 3,
       repliesPerToken: 10,

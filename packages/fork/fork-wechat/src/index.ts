@@ -12,7 +12,7 @@ import type { ContextFormed, UserMessage } from '@deepseek-ai/dsh-llm'
 import type { ForkAgentMessage, ForkNote, ForkNotifier } from '@deepseek-ai/dsh-fork-event-bus'
 import { untrustedRequestId } from '@deepseek-ai/dsh-fork-taint'
 // Type-only: ctx.ownerRelay, which relays each chat Session's final answers through this channel.
-import type { RelayAnswer, RelayChannel, RelayDelivery } from '@deepseek-ai/dsh-owner-relay'
+import type { RelayAnswer, RelayChannel, RelayDecision, RelayDelivery } from '@deepseek-ai/dsh-owner-relay'
 // Type-only: ctx.forkVoice, which reads the audio files the owner sends when transcription is on.
 import type {} from '@deepseek-ai/dsh-fork-voice'
 // Type-only: ctx.forkPresence, which tells whether the owner sleeps, so non-urgent messages wait for the morning.
@@ -40,7 +40,7 @@ declare module '@deepseek-ai/dsh-llm' {
 }
 
 import type { HandoverPart } from './text.ts'
-import { agentMessageText, buildDigest, EARLIER_CHAT, fitText, formatGap, handoverFailureText, handoverNotice, handoverText, HELP_REPLY, inboundText, NEW_CHAT_REPLY, QUOTA_FOOTER, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES } from './text.ts'
+import { agentMessageText, buildDigest, EARLIER_CHAT, fitText, formatGap, handoverFailureText, handoverNotice, handoverText, HELP_REPLY, inboundText, NEW_CHAT_REPLY, NO_SEND_NOTICE, NO_SEND_NUDGE, QUOTA_FOOTER, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES } from './text.ts'
 import { TypingIndicator } from './typing.ts'
 import type { ChannelError, ChannelLink, ChannelStatus, WindowClosed } from './view.ts'
 
@@ -76,6 +76,13 @@ export interface ChatConfig {
    * the message in the chat as a notice, so nothing happens until the owner replies.
    */
   agentMessage: 'turn' | 'notify'
+  /**
+   * How the chat Session's words reach the owner. `text` sends the final answer of each turn. `tool` sends only what the
+   * Session passes to `wechat_send`: its text is notes, and an owner message that got no `wechat_send` is followed by one
+   * reminder turn and then a fixed notice, so a missing reply is never silent. Read at every turn end, so a config
+   * reload switches it at once.
+   */
+  delivery: 'text' | 'tool'
 }
 
 /** Channel configuration. */
@@ -120,6 +127,8 @@ export interface Config {
    * evidently awake, and what the chat Session answers in that time is a reply. 0 holds even replies.
    */
   awakeAfterMessageMs: number
+  /** Messages one turn may send with `wechat_send`; more are refused so the reply window is not spent on progress. */
+  maxSendsPerTurn: number
 }
 
 /** Configuration schema. */
@@ -133,6 +142,7 @@ export const Config: z<Config> = z.object({
     title: z.string().default('微信'),
     timeZone: z.string().default('America/New_York'),
     agentMessage: z.union(['turn', 'notify'] as const).default('turn'),
+    delivery: z.union(['text', 'tool'] as const).default('text'),
   }),
   maxMessageChars: z.natural().min(200).max(WECHAT_MAX_TEXT_BYTES).default(3000),
   maxReplyParts: z.natural().min(1).default(3),
@@ -147,6 +157,7 @@ export const Config: z<Config> = z.object({
   mediaTimeoutMs: z.natural().min(1000).default(60_000),
   timeGapMs: z.natural().default(300_000),
   awakeAfterMessageMs: z.natural().default(1_800_000),
+  maxSendsPerTurn: z.natural().min(1).default(3),
 })
 
 /** Name of the channel through which `ctx.ownerRelay` relays the chat Sessions' answers. */
@@ -180,6 +191,33 @@ const TRANSIENT_RESOLVE_CODES: ReadonlySet<string> = new Set(['session/agent-bus
 export type SendFileResult =
   | { readonly sent: OutboundKind; readonly name: string; readonly bytes: number }
   | { readonly notSent: string }
+
+/** What {@link WechatChannel.deliver} made of one text: its messages, how many went out now, and why the rest wait. */
+export interface DeliverReport {
+  /** Messages the text was split into. */
+  readonly parts: number
+  /** Messages sent through the open reply window. */
+  readonly sent: number
+  /** Why each message that did not go out now waits (outbox reason, or `owner asleep`). */
+  readonly queued: readonly string[]
+  /** True when the owner is asleep and the text was held for the morning. */
+  readonly held: boolean
+}
+
+/** Outcome of {@link WechatChannel.sendText}: what became of the text, or why it was refused. */
+export type SendTextResult =
+  | { readonly sent: number; readonly queued: number; readonly held: boolean; readonly why?: string; readonly repliesLeft: number | null }
+  | { readonly notSent: string }
+
+/** What tool delivery tracks per chat Session: the owner's latest message awaiting a reply, and the running turn's sends. */
+interface ReplyState {
+  /** An owner message arrived and no `wechat_send` has answered it yet. */
+  awaiting: boolean
+  /** The reminder turn for that message was already started. */
+  nudged: boolean
+  /** Sends of the running turn, against `maxSendsPerTurn`. */
+  turnSends: number
+}
 
 /** What `/stop` needs of the Host agent registry; read through `ctx.get`, so the channel works without one. */
 interface RootAgents {
@@ -279,6 +317,10 @@ export class WechatChannel extends Service implements ForkNotifier {
   private onlineState = ''
   /** Bot token the server declared stale; the loop waits for a different one. */
   private staleToken: string | undefined
+  /** Tool delivery's per-Session state; empty in text delivery. */
+  private readonly replies = new Map<string, ReplyState>()
+  /** Tool delivery's counters since this process started, for the Settings page and the log. */
+  private readonly toolStats = { sends: 0, nudges: 0, silent: 0 }
   /** The owner's "typing" line while a chat Session works. */
   private readonly typing: TypingIndicator
   /** The latest stored reply window, readable after storage closed during teardown. */
@@ -411,13 +453,19 @@ export class WechatChannel extends Service implements ForkNotifier {
     const relay = child.ownerRelay
     const channel: RelayChannel = {
       name: WECHAT_RELAY_CHANNEL,
+      delivery: () => this.config.chat.delivery,
       deliver: answer => this.hold(this.relayAnswer(answer)),
       onTurnStart: (sessionId) => {
         this.working.add(sessionId)
+        const state = this.replies.get(sessionId)
+        if (state !== undefined) state.turnSends = 0
         this.clearTypingGrace()
         this.typing.start()
       },
-      onTurnEnd: (sessionId) => { this.working.delete(sessionId) },
+      onTurnEnd: (sessionId, ended) => {
+        this.working.delete(sessionId)
+        this.checkReply(sessionId, ended)
+      },
       // Typing clears after the reply went out, so the chat never looks idle before the answer shows.
       onTurnSettled: () => { this.settleTyping() },
     }
@@ -694,7 +742,8 @@ export class WechatChannel extends Service implements ForkNotifier {
       const domain = await this.ready
       const target = this.target(domain)
       if (typeof target === 'string') return { notSent: target }
-      if (target.window.used + 1 >= this.config.repliesPerToken) return { notSent: 'reply quota nearly used up; the last message is kept for the text reply' }
+      // In text delivery the window's last slot stays for the turn's text reply; in tool delivery every send is a tool call.
+      if (this.config.chat.delivery === 'text' && target.window.used + 1 >= this.config.repliesPerToken) return { notSent: 'reply quota nearly used up; the last message is kept for the text reply' }
       const { baseUrl, botToken: token } = target.account
       const client = new IlinkClient({ baseUrl, token, timeoutMs: this.config.requestTimeoutMs })
       let uploaded: Awaited<ReturnType<typeof uploadMedia>>
@@ -713,6 +762,106 @@ export class WechatChannel extends Service implements ForkNotifier {
       const outcome = await this.transmitItem(domain, target, uploaded.item, `${uploaded.kind} ${name} (${size} bytes) from ${path}`, 'file')
       return outcome === 'sent' ? { sent: uploaded.kind, name, bytes: size } : { notSent: outcome }
     })
+  }
+
+  /** How the chat Session's words reach the owner: `tool` registers `wechat_send` and stops relaying the final text. */
+  delivery(): 'text' | 'tool' {
+    return this.config.chat.delivery
+  }
+
+  /**
+   * Send a text the agent wrote for the owner (`wechat_send`). It goes through the same path as a relayed answer: split,
+   * held while the owner sleeps (unless urgent), sent through the open reply window, or queued with the reason.
+   * @param sessionId - the calling Session, for the per-turn cap and the answer bookkeeping; undefined outside a Session.
+   * @param raw - the words for the owner.
+   * @param options - `urgent` passes the owner's sleep.
+   * @returns how many messages went out or wait and why, or why the text was refused.
+   */
+  async sendText(sessionId: string | undefined, raw: string, options: { urgent?: boolean } = {}): Promise<SendTextResult> {
+    if (this.config.chat.delivery !== 'tool') return { notSent: 'WeChat delivery is in text mode: put the words in your answer' }
+    const text = raw.toWellFormed().trim()
+    if (text === '') return { notSent: 'the text is empty' }
+    const state = sessionId === undefined ? undefined : this.replyState(sessionId)
+    if (state !== undefined && state.turnSends >= this.config.maxSendsPerTurn) {
+      this.ctx.logger.info(`fork-wechat: wechat_send refused for Session ${sessionId}: turn cap ${state.turnSends}/${this.config.maxSendsPerTurn}`)
+      return { notSent: `this turn already sent ${state.turnSends} messages (the cap is ${this.config.maxSendsPerTurn}): put what is left into one message in your next turn` }
+    }
+    const own = sessionId === undefined || this.ownsSession(sessionId)
+    const report = await this.deliver(text, own ? 'reply' : 'note', { urgent: options.urgent === true })
+    if (state !== undefined) {
+      state.turnSends += 1
+      state.awaiting = false
+    }
+    this.toolStats.sends += 1
+    // The owner's reply to a text lands in the current chat Session: it gets a copy of what another Session said.
+    if (sessionId !== undefined && (!own || !this.isCurrentChat(sessionId))) await this.shareWithChat(text, own ? EARLIER_CHAT : undefined, sessionId)
+    const repliesLeft = this.status().window.repliesLeft
+    this.ctx.logger.info(`fork-wechat: wechat_send session=${sessionId ?? 'none'} chars=${Array.from(text).length} parts=${report.parts} sent=${report.sent} queued=${report.queued.length} held=${report.held} urgent=${options.urgent === true} turnSends=${state?.turnSends ?? 0}/${this.config.maxSendsPerTurn} repliesLeft=${repliesLeft ?? 'n/a'}`)
+    return { sent: report.sent, queued: report.queued.length, held: report.held, ...report.queued[0] === undefined ? {} : { why: report.queued[0] }, repliesLeft }
+  }
+
+  /** The tool-delivery state of a Session, created on first use. */
+  private replyState(sessionId: string): ReplyState {
+    let state = this.replies.get(sessionId)
+    if (state === undefined) {
+      state = { awaiting: false, nudged: false, turnSends: 0 }
+      this.replies.set(sessionId, state)
+    }
+    return state
+  }
+
+  /** An owner message went to the chat Session: in tool delivery it now awaits a `wechat_send` (or a deliberate NO_REPLY). */
+  private expectReply(sessionId: string): void {
+    if (this.config.chat.delivery !== 'tool') return
+    const state = this.replyState(sessionId)
+    state.awaiting = true
+    state.nudged = false
+  }
+
+  /**
+   * A turn of an owned Session ended (the relay calls this before anything is relayed). In tool delivery an owner message that
+   * got no `wechat_send` is never left silent: the first time the Session gets one reminder turn, the second time the owner gets
+   * a fixed notice. `NO_REPLY`, a stop, and a failed turn (whose warning is already sent) all count as the owner being told.
+   */
+  private checkReply(sessionId: string, ended: RelayDecision['kind']): void {
+    const state = this.replies.get(sessionId)
+    if (state === undefined || !state.awaiting || this.config.chat.delivery !== 'tool') return
+    if (ended === 'stopped' || ended === 'silent' || ended === 'answer') {
+      state.awaiting = false
+      this.ctx.logger.info(`fork-wechat: Session ${sessionId} ended a turn (${ended}) with no wechat_send; the owner is not left waiting`)
+      return
+    }
+    if (!state.nudged) {
+      state.nudged = true
+      this.toolStats.nudges += 1
+      this.ctx.logger.warn(`fork-wechat: Session ${sessionId} ended a turn without wechat_send after an owner message; starting one reminder turn (${this.toolStats.nudges} so far)`)
+      this.track(this.nudge(sessionId))
+      return
+    }
+    state.awaiting = false
+    this.toolStats.silent += 1
+    this.ctx.logger.warn(`fork-wechat: Session ${sessionId} sent nothing even after the reminder; telling the owner (${this.toolStats.silent} so far)`)
+    this.track(this.deliver(NO_SEND_NOTICE, 'notice').then(() => undefined))
+  }
+
+  /** The one reminder turn; its request id marks it as not the owner's words. */
+  private async nudge(sessionId: string): Promise<void> {
+    try {
+      await this.ctx.sessionController.prompt({
+        requestId: untrustedRequestId('reply-check') as SessionRequestId,
+        sessionId: sessionId as SessionId,
+        mode: 'queue',
+        content: [{ type: 'text', text: NO_SEND_NUDGE }],
+        clientTimeZone: this.config.chat.timeZone,
+      }, this.abort.signal)
+    } catch (error: unknown) {
+      // The reminder could not start: the owner must still hear that nothing was said.
+      const state = this.replies.get(sessionId)
+      if (state !== undefined) state.awaiting = false
+      this.toolStats.silent += 1
+      this.ctx.logger.warn(`fork-wechat: the reminder turn for Session ${sessionId} could not start (${errorText(error)}); telling the owner`)
+      await this.deliver(NO_SEND_NOTICE, 'notice')
+    }
   }
 
   /**
@@ -740,7 +889,9 @@ export class WechatChannel extends Service implements ForkNotifier {
     if (until !== undefined && until <= now) return { notHeld: 'until is not in the future' }
     if (until !== undefined && until - now > MAX_HOLD_MS) return { notHeld: 'until is more than 7 days away' }
     const wakes = this.ctx.get('forkPresence')?.isAsleep() === true
-    if (until === undefined && !wakes) return { notHeld: 'the owner is awake: put the text in your answer, or give a time with until' }
+    if (until === undefined && !wakes) {
+      return { notHeld: `the owner is awake: ${this.config.chat.delivery === 'tool' ? 'send the text with wechat_send' : 'put the text in your answer'}, or give a time with until` }
+    }
     return this.serialize(async (): Promise<HoldResult> => {
       const domain = await this.ready
       const chars = this.config.maxMessageChars - Array.from(QUOTA_FOOTER).length
@@ -798,6 +949,7 @@ export class WechatChannel extends Service implements ForkNotifier {
         expiresAt: stored === undefined ? null : stored.receivedAt + this.config.contextTtlMs,
       },
       outbox: { count: rows.length, limit: this.config.outboxLimit, oldestAt: rows[0]?.queuedAt ?? null },
+      delivery: { mode: this.config.chat.delivery, toolSends: this.toolStats.sends, nudges: this.toolStats.nudges, silentNotices: this.toolStats.silent },
     }
   }
 
@@ -1204,6 +1356,7 @@ export class WechatChannel extends Service implements ForkNotifier {
   ): Promise<void> {
     mkdirSync(this.config.chat.workspacePath, { recursive: true })
     const sessionId = await this.chatSession(domain, account)
+    this.expectReply(sessionId)
     if (gap !== undefined && await this.injectNotice(sessionId, gap.text, 'time since the last chat message')) {
       this.ctx.logger.info(`fork-wechat: told chat Session ${sessionId} the chat was quiet for ${formatGap(gap.quietMs)}`)
     }
@@ -1296,10 +1449,10 @@ export class WechatChannel extends Service implements ForkNotifier {
    * Split one text into messages and send or queue each in order; while the owner sleeps, a text that is
    * not urgent is queued for the morning instead (the log names its kind and count, never its text).
    */
-  private deliver(raw: string, kind: SentKind, options: { urgent?: boolean; events?: readonly string[] | undefined } = {}): Promise<void> {
+  private deliver(raw: string, kind: SentKind, options: { urgent?: boolean; events?: readonly string[] | undefined } = {}): Promise<DeliverReport> {
     // An unpaired surrogate (a cut emoji in model output) makes sendmessage fail with ret -1.
     const text = raw.toWellFormed()
-    return this.serialize(async () => {
+    return this.serialize(async (): Promise<DeliverReport> => {
       const domain = await this.ready
       const chars = this.config.maxMessageChars - Array.from(QUOTA_FOOTER).length
       const bytes = WECHAT_MAX_TEXT_BYTES - Buffer.byteLength(QUOTA_FOOTER, 'utf8')
@@ -1308,22 +1461,30 @@ export class WechatChannel extends Service implements ForkNotifier {
         for (const part of parts) await this.enqueue(domain, part, 'owner asleep', true)
         const events = options.events === undefined || options.events.length === 0 ? '' : `, events ${options.events.join(' ')}`
         this.ctx.logger.info(`fork-wechat: held ${parts.length} ${kind} message(s) while the owner sleeps${events}; ${this.outbox().filter(row => row.deferred === true).length} held`)
-        return
+        return { parts: parts.length, sent: 0, queued: parts.map(() => 'owner asleep'), held: true }
       }
-      for (const part of parts) await this.deliverPart(domain, part, kind)
+      let sent = 0
+      const queued: string[] = []
+      for (const part of parts) {
+        const outcome = await this.deliverPart(domain, part, kind)
+        if (outcome === 'sent') sent += 1
+        else queued.push(outcome)
+      }
+      return { parts: parts.length, sent, queued, held: false }
     })
   }
 
-  /** Send one message through the open window, or queue it with the reason it cannot go now. */
-  private async deliverPart(domain: Domain<typeof wechatDomain>, text: string, kind: SentKind): Promise<void> {
+  /** Send one message through the open window, or queue it with the reason it cannot go now; returns `sent` or that reason. */
+  private async deliverPart(domain: Domain<typeof wechatDomain>, text: string, kind: SentKind): Promise<string> {
     const target = this.target(domain)
     if (typeof target === 'string') {
       await this.enqueue(domain, text, target)
-      return
+      return target
     }
     const last = target.window.used + 1 >= this.config.repliesPerToken
     const outcome = await this.transmit(domain, target, last ? `${text}${QUOTA_FOOTER}` : text, kind)
     if (outcome !== 'sent') await this.enqueue(domain, text, outcome)
+    return outcome
   }
 
   /** The open reply window, or why there is none. */
