@@ -1,5 +1,5 @@
 ---
-description: "The agent's own Bilibili account (ctx.bili) as a client of bili-svc: reads and non-speech actions (like, coin, triple, follow, favorite, watch later, the watch heartbeat) through bili-svc's door, the owner's own Bilibili messages answered through bili-svc's Reply Gate with a WeChat fallback, a journal, messages to the main agent, and a Settings section that manages bili-svc: accounts, QR sign-in, sessions, the gate and its brake, and the ledger."
+description: "The agent's own Bilibili account (ctx.bili) as a client of bili-svc: reads and non-speech actions (like, coin, triple, follow, favorite, watch later, the watch heartbeat) through bili-svc's door, the owner's own Bilibili messages answered through bili-svc's Reply Gate with a WeChat fallback, a daily share that messages the owner first once a day through bili-svc's owner-only POST /v1/share/owner, a journal, messages to the main agent, and a Settings section that manages bili-svc (accounts, QR sign-in, sessions, the gate and its brake, the ledger) and the daily share."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Give your always-on agent a Bilibili account of its own without giving it the account's keys. bili-svc, a service on the same Mac, holds the session and does every write, under one ledger, daily caps, and one risk brake. Through it the agent's Session browses, watches videos through subtitles, likes, coins, follows, and saves, and chats with you: your message wakes its Session, and the answer comes back as a Bilibili message through bili-svc's Reply Gate, or on WeChat when the Gate holds it. The account never comments, posts, replies to strangers, or messages you unasked.
+Give your always-on agent a Bilibili account of its own without giving it the account's keys. bili-svc, a service on the same Mac, holds the session and does every write under one ledger, daily caps, and a risk brake. Through it the agent browses, watches videos through subtitles, likes, coins, follows, and saves. It answers your Bilibili messages, and once a day it messages you first with a video it watched and a recent 热梗; whatever bili-svc holds back comes on WeChat. It never comments, posts, replies to strangers, or messages anyone but you.
 
 ## Table of Contents
 
@@ -29,7 +29,7 @@ Mount the account at the root of a Web profile that also mounts [`@deepseek-ai/d
 
 ### When to choose it
 
-Choose it when the agent should keep a presence of its own on Bilibili, separate from the owner's account, and talk with the owner there, while one service owns the account's session and every write. Avoid it for speaking in public or posting on anyone's behalf: this package has no comment, reply, dynamic, or message endpoint at all, and replies to viewers belong to bili-svc's Reply Gate (the `up` preset).
+Choose it when the agent should keep a presence of its own on Bilibili, separate from the owner's account, and talk with the owner there, while one service owns the account's session and every write. Avoid it for speaking in public or posting on anyone's behalf: this package has no comment, reply, dynamic, or message endpoint for the model at all (the host sends only to the owner's account: answers and the daily share), and replies to viewers belong to bili-svc's Reply Gate (the `up` preset).
 
 ### Minimal configuration
 
@@ -60,15 +60,18 @@ The page ends with the [All settings](../fork-config/README.md) card for the `bi
 | `session.agentPreset` | `bili` | Agent preset of the Session |
 | `session.permissionPreset` | `danger-full-access` | Set on a new Session; the `bili` preset mounts no shell or file tools, and nobody approves calls |
 | `session.title` | `B站` | Session title |
+| `share.enabled` | `true` | Whether the daily share runs; the switch in Settings wins once the owner used it |
+| `share.start`, `share.end` | `19:00`, `22:30` | Window of the day's random share time, `HH:MM` in `timeZone`; `end` must be after `start`, and a load with a bad window fails |
 
 `BILI_SVC_URL` in the service environment changes bili-svc's address. The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-bili) is the exhaustive source for every accepted field; fields of the retired scouting and write guard (`wakes`, `depth`, `caps`, `pricing`, and the rest) are ignored when an older profile patch still sets them.
 
 ### What the owner sees
 
 - **On Bilibili** — when the owner's main account messages the agent's account, its Session answers, and the answer arrives as a private message from the account, unless it is exactly `NO_REPLY`. It goes through bili-svc's Reply Gate (`POST /v1/reply/dm`), which answers the owner without its classifier, daily cap, or time window but keeps its rules (no @, length, links, contact details) and its brake. Long answers are split into at most two messages of 500 characters, the rest cut with `…`. A turn the owner started in the Web UI stays there, and so does a reminder or monitor turn: the event bus does not report a Session the account's channel claimed. After a message from the owner, the account checks its messages every minute until 15 minutes after the latest one.
-- **On WeChat** — any answer the Gate did not send (`held`, `blocked`, or no answer from bili-svc), titled `📺 B站：这条没能用 B站私信发出，改发微信` and ending with the reason (`原因：bili-svc's Reply Gate answered held (r-12)`). The copy the WeChat chat Session keeps names its sender `the Bilibili account's Session (its answer could not go out as a Bilibili message)`, so a reply there has its context. Notices about the session, risk control, and the Gate come from bili-svc's own events, not from this package.
+- **Once a day on Bilibili** — at a random time in the share window (planned at the first check of the day and stored, so a restart never shares twice), the Session is prompted for the daily share and its answer arrives as a private message: one or two videos it opened and read the subtitles of, and one recent 热梗 with where it comes from, at most 400 characters. It goes through `POST /v1/share/owner`, which only messages bili-svc's owner accounts, needs the two accounts to follow each other, keeps the owner rules and the brake, and has its own daily cap (`owner_share_per_day`, 2; at most 4). The share waits while the owner is asleep (`forkPresence`), within 15 minutes of the owner's last message, while the owner's messages wait for an answer, or while the Session is in a turn; still waiting two hours after the window, it is `missed`. `NO_REPLY` sends nothing; a turn that did not complete or still runs after 45 minutes is `failed` and sends nothing, even if it ends later. The next prompts list the last seven shares so a video or meme is not sent twice.
+- **On WeChat** — any answer the Gate did not send (`held`, `blocked`, or no answer from bili-svc), titled `📺 B站：这条没能用 B站私信发出，改发微信` and ending with the reason (`原因：bili-svc's Reply Gate answered held (r-12)`), and a share bili-svc did not send, titled `📺 B站：今天的推荐没能用 B站私信发出，改发微信`. The copy the WeChat chat Session keeps names its sender `the Bilibili account's Session (its answer could not go out as a Bilibili message)`, so a reply there has its context. Notices about the session, risk control, and the Gate come from bili-svc's own events, not from this package.
 - **From the main agent** — when the owner asks the account to tell the main agent something, the Session sends it with `bili_tell_main_agent`: `ctx.forkNotifier.tellMainAgent()` queues it in the WeChat chat Session as untrusted data, and the main agent's answer reaches the owner on WeChat. The account's own answer still comes as a Bilibili message.
-- **In Settings** — with the manage token: the gate (mode, the brake and its reason, today's counters against the caps; **Release brake**, **Switch to read-only** in one click; **Switch to automatic** is off while a brake is set, with the order spelled out (release the brake first), and otherwise asks a second, explicit click whose text says the Reply Gate will then answer comments under the creator's videos and messages in public as the account of bili-svc's `reply_comment` route, within today's caps; a refusal by bili-svc shows inside the card); one card per account (name, UID, state, who renews the session, last renewal or import, why it ended) with **Sign in with QR** (a code that turns "scanned" and closes on success), **Refresh session**, **Check**, and **Sign out** (a second click confirms); an account another service owns (`refresh_mode` `external`, like maodeng) shows no control; a collapsed list of the last 20 ledger actions, with more on request, whose drafts and verdicts show as plain text; and the main-account UID. Every control shows its busy state at once. Without the manage token only the read-only cards and the main-account UID remain, with a note naming `manageTokenEnv`. The route is `GET`/`POST /api/bili` (`?ledger=<rows>` on `GET`), behind the connection's sign-in like every `/api` route. The Host validates every action body (account ids, a sign-out repeating the account id, bounded numbers), logs each action with its account, outcome, and time (never a token, QR key, or URL), and answers a bili-svc refusal with its words and a code (`mode_refused`, `not_owner`, `refresh_failed`) the page explains.
+- **In Settings** — with the manage token: the gate (mode, the brake and its reason, today's counters against the caps; **Release brake**, **Switch to read-only** in one click; **Switch to automatic** is off while a brake is set, with the order spelled out (release the brake first), and otherwise asks a second, explicit click whose text says the Reply Gate will then answer comments under the creator's videos and messages in public as the account of bili-svc's `reply_comment` route, within today's caps; a refusal by bili-svc shows inside the card); one card per account (name, UID, state, who renews the session, last renewal or import, why it ended) with **Sign in with QR** (a code that turns "scanned" and closes on success), **Refresh session**, **Check**, and **Sign out** (a second click confirms); an account another service owns (`refresh_mode` `external`, like maodeng) shows no control; a collapsed list of the last 20 ledger actions, with more on request, whose drafts and verdicts show as plain text; the main-account UID; and the **Daily share** card (每日推荐): an on/off switch that flips at once, **Send one now** (现在发一条: one share outside the window, still within bili-svc's cap), what today's share is doing (planned for a time, being written, sent, sent to WeChat, nothing worth sending, missed, failed), bili-svc's count of shares today against its cap, and the last ten shares, each opening to its text. Every control shows its busy state at once. Without the manage token only the read-only cards, the main-account UID, and the daily share remain, with a note naming `manageTokenEnv`; the daily share needs no manage token. The route is `GET`/`POST /api/bili` (`?ledger=<rows>` on `GET`), behind the connection's sign-in like every `/api` route. The Host validates every action body (account ids, a sign-out repeating the account id, bounded numbers), logs each action with its account, outcome, and time (never a token, QR key, or URL), and answers a bili-svc refusal with its words and a code (`mode_refused`, `not_owner`, `refresh_failed`) the page explains.
 
 ### What other plugins can read
 
@@ -91,21 +94,22 @@ The store is bounded to 2000 comments and 500 words, rows expire after 14 days (
 
 An action runs one optional pre-read through the door (already liked, following, in the folder, on watch later, coins given, the balance, a triple's parts) so an idempotent action costs nothing and answers `already`, then the one call. bili-svc decides the rest, and its answer reaches the model unchanged in meaning: `refused` (a daily cap, the owner's account, an unknown endpoint) and `held` (read-only mode, the brake, a busy sender) as `refused` with the reason, `already` (a coin or triple once ever, the watch heartbeat once a day) as `already`, and `uncertain` or a transport failure as `uncertain`, never sent again. Coins follow Bilibili's rule (2 for an original, 1 otherwise, `count` defaults to that most) and the balance; a triple reports what Bilibili applied and what was done before. After `bili_video` returns a subtitle page, the host reports one watch of that video as far as the page reaches. Nothing is retried, and there is no local ledger, cap, slot, or pause.
 
-The owner-message check (no model) reads `dmUnread`, and when something is unread (or on the first look, which records a baseline) the owner's conversation through `dmMessages`; new messages queue durably and prompt the Session (created with the configured preset, permission preset, and title; replaced when it no longer resolves) while it is idle. The `bili-dm` channel is marked before that prompt; at `session/event` turn end the relay decides (`NO_REPLY` and a turn the owner stopped send nothing) and `deliver` sends the answer through `POST /v1/reply/dm` `{ account, talker: ownerMid, message }`, part by part; any answer other than `sent` goes to WeChat with the reason. A turn the owner's messages did not start is kept in the Session. `bili_inbox` reads the same feeds for the model and marks the owner's messages it showed as handed over; replies and mentions from others are for reading only.
+The owner-message check (no model) reads `dmUnread`, and when something is unread (or on the first look, which records a baseline) the owner's conversation through `dmMessages`; new messages queue durably and prompt the Session (created with the configured preset, permission preset, and title; replaced when it no longer resolves) while it is idle. The `bili-dm` channel is marked before that prompt; at `session/event` turn end the relay decides (`NO_REPLY` and a turn the owner stopped send nothing) and `deliver` sends the answer through `POST /v1/reply/dm` `{ account, talker: ownerMid, message }`, part by part; any answer other than `sent` goes to WeChat with the reason. A turn the owner's messages did not start is kept in the Session. The daily share (`DailyShare`, `src/share.ts`) ticks every minute: it settles a lost turn (`failed` 45 minutes after its prompt) and an overdue plan (`missed`), plans today's time in the `share_days` table, and when the time has come and nothing holds it, marks the channel `share` and prompts the Session with `sharePrompt`; `deliver` then sends the answer through `POST /v1/share/owner` `{ account, talker: ownerMid, message }` (unless the share was given up meanwhile), and anything but `sent` goes to WeChat. The owner's switch is the `share_prefs` row; the last 30 shares are kept, each with at most 300 characters of what reached the owner. `bili_inbox` reads the same feeds for the model and marks the owner's messages it showed as handed over; replies and mentions from others are for reading only.
 
 The Settings view comes from `GET /v1/status` under the manage token (accounts with `refresh_mode`, `login`, renewal times, and the dead reason; the gate with its brake and counters) and `GET /v1/manage/ledger?limit=`; the account card of `ctx.bili` is the one whose id is `account`, else the first whose session is `ok`. Without the manage token the status comes from the agent's own token, read-only. `ManageClient` (`src/manage.ts`) is the only code holding the manage token and the only caller of `/v1/manage/*`; it parses every answer field by field and bounds each text, because drafts and verdicts relay third-party words. A QR sign-in starts on the Host (`ManageSettings`, `src/settings.ts`): the key and URL stay there, the browser receives the code's modules drawn with `uqr`, the page asks `login.poll` every two seconds, and a finished attempt leaves the view after eight seconds. Times from bili-svc are epoch seconds and are converted to milliseconds. The owner's UID is stored in the `bili` storage domain with the journal, today's messages to the main agent, the owner-message cursor and queue, and the Sessions it created; tables of the retired scouting, sign-in, and write guard are no longer declared, so their stored rows are not loaded.
 
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | `BiliAccount` (`ctx.bili`): configuration, lifecycle, the owner-message check, the relay registration, reads, actions, journal, messages to the main agent, Settings route |
-| [`src/client.ts`](src/client.ts) | `RemoteBiliClient`: the door, `/v1/status`, `/v1/reply/dm`, the token, deadlines, outcome mapping, lossless JSON |
+| [`src/client.ts`](src/client.ts) | `RemoteBiliClient`: the door, `/v1/status`, `/v1/reply/dm`, `/v1/share/owner`, the token, deadlines, outcome mapping, lossless JSON |
 | [`src/manage.ts`](src/manage.ts) | `ManageClient`: bili-svc's management API under the `manage` token, answer parsers, QR modules |
 | [`src/settings.ts`](src/settings.ts) | `ManageSettings`: management reads and the owner's actions, QR attempts, action logging |
 | [`src/actions.ts`](src/actions.ts) | Validation of the Settings route's `POST` bodies |
-| [`src/dm.ts`](src/dm.ts) | `DmChannel`, the `bili-dm` channel of `ctx.ownerRelay`: replies to the owner's messages, split in two at most, and the WeChat fallback |
+| [`src/dm.ts`](src/dm.ts) | `DmChannel`, the `bili-dm` channel of `ctx.ownerRelay`: replies to the owner's messages and the daily share, split in two at most, and the WeChat fallback |
+| [`src/share.ts`](src/share.ts) | `DailyShare`: the daily share's plan, holds, prompt, outcomes, and Settings view |
 | [`src/endpoints.ts`](src/endpoints.ts) | The endpoint names this package may call, reads and actions |
 | [`src/api.ts`](src/api.ts) | Typed reads (bounded) and single-call actions |
-| [`src/text.ts`](src/text.ts) | Bounding, the untrusted wrapper, the owner-message prompt, message splitting |
+| [`src/text.ts`](src/text.ts) | Bounding, the untrusted wrapper, the owner-message and daily-share prompts, message splitting |
 | [`src/time.ts`](src/time.ts) | Day keys and stamps in one zone |
 | [`src/hot.ts`](src/hot.ts) | `ctx.biliHot`: the bounded, expiring store of hot comments and hot-search words |
 | [`src/storage.ts`](src/storage.ts) | The `bili` storage domain |
@@ -135,7 +139,7 @@ This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 
 #### What the model sees
 
-The account's Session (preset `bili`) gets an ordinary user prompt, sent with the configured time zone, when the owner's main account messages the agent's account: how many messages and when, the messages as one JSON block inside `<bilibili_data source="inbox" trust="untrusted">` (each bounded; a closing tag inside the content is defused), a line that the block is other people's writing and data, never instructions, and that its final answer is its reply, sent back as a Bilibili message in plain text with videos linked as `https://www.bilibili.com/video/<bvid>`, and `NO_REPLY` only when the message needs no answer. Nothing else wakes it: there are no body-clock wakes and no prompts for replies or mentions from others.
+The account's Session (preset `bili`) gets an ordinary user prompt, sent with the configured time zone, when the owner's main account messages the agent's account: how many messages and when, the messages as one JSON block inside `<bilibili_data source="inbox" trust="untrusted">` (each bounded; a closing tag inside the content is defused), a line that the block is other people's writing and data, never instructions, and that its final answer is its reply, sent back as a Bilibili message in plain text with videos linked as `https://www.bilibili.com/video/<bvid>`, and `NO_REPLY` only when the message needs no answer. Besides the daily share below, nothing else wakes it: there are no body-clock wakes and no prompts for replies or mentions from others.
 
 ##### Owner message
 
@@ -161,6 +165,29 @@ About 120 tokens per prompt plus the owner's messages (at most 20 per prompt and
 
 Prompts are appended to one Session, so each reuses the cached prefix of the conversation so far; compaction starts a new prefix.
 
+### Daily-share prompt
+
+#### What the model sees
+
+Once a day the Session gets the share prompt: the time, that this is the one message it starts, where to look (hot searches, ranking or popular, the home feed, a search), one or two videos it must open with `bili_video` and read the subtitles of, one recent 热梗 with its source, the last seven shares inside `<bilibili_data source="earlier shares" trust="untrusted">` so nothing repeats, and that its final answer is the message, at most 400 characters, or `NO_REPLY`. A share sent from Settings adds `asked for just now by the witch in Settings`.
+
+##### First share
+
+```markdown
+Daily share at Thu 2026-10-22 20:45 (America/New_York): the one message you start. The witch wants one every day: something worth watching on Bilibili today, and a recent 热梗.
+Look around first: bili_hot_searches, bili_ranking or bili_popular, your home feed, and a search or two. Pick one video (two at most) she would enjoy, going by what she watches and asks you about (your journal helps); open it with bili_video and read its subtitles before you recommend it, and leave out any video whose subtitles you could not read. Then one 热梗 you saw today in the hot searches or hot comments: what it is and where it comes from, in one line (meme_lookup helps).
+Nothing was shared on earlier days.
+Your final answer is that message: it goes to the witch as a Bilibili private message from your account. Plain text in your voice, at most 400 characters; each video with its title, one line of why, and https://www.bilibili.com/video/<bvid>. No greeting ritual and no question at the end. Answer exactly NO_REPLY when nothing today is worth her time.
+```
+
+#### Token effect
+
+About 330 tokens per daily share, plus at most 4,000 characters of earlier shares (seven, each at most 300 characters), once a day and once per **Send one now**.
+
+#### KV Cache effect
+
+The share prompt is appended to the same long-lived Session as the owner's messages, so it reuses the cached prefix of the conversation so far; it changes nothing earlier in the context.
+
 ## Known Limitations and Deferred Work
 
 <a id="known-limitations-and-deferred-work"></a>
@@ -172,6 +199,7 @@ Prompts are appended to one Session, so each reuses the cached prefix of the con
 - **Messages need mutual follows** — Bilibili delivers messages only between accounts that follow each other; the owner's main account and the agent's must follow each other, or the Gate's send fails and the answer comes on WeChat.
 - **Messages are plain text** — Bilibili shows no Markdown in messages, and an answer longer than two 500-character messages is cut.
 - **Hot slang only follows the agent's reads** — `ctx.biliHot` holds what `bili_video`, `bili_comments`, and `bili_hot_searches` returned in the last 14 days, so it is empty until the agent has read; it makes no request of its own.
+- **The daily share shares bili-svc's cap** — **Send one now** after the day's share uses the second of the two shares bili-svc allows a day; a third is held and goes to WeChat.
 - **Held answers carry no reason** — bili-svc tells a non-admin token only `held` or `blocked`, so the WeChat fallback says which, not why.
 
 <a id="dev-note"></a>

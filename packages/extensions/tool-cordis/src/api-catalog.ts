@@ -6983,7 +6983,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'BiliView',
-    declaration: 'export interface BiliView {\n    readonly account: AccountView;\n    readonly gate: GateView | null;\n    readonly accounts: readonly ManagedAccount[];\n    readonly ledger: LedgerView | null;\n    readonly logins: readonly LoginView[];\n    readonly speaker: {\n        readonly id: string;\n        readonly display: string;\n    } | null;\n    readonly manage: boolean;\n    readonly manageEnv: string;\n    readonly manageError: string | null;\n    readonly result: ActionResult | null;\n    readonly ownerMid: number;\n    readonly ownerUpdatedAt: number | null;\n    readonly timeZone: string;\n}',
+    declaration: 'export interface BiliView {\n    readonly account: AccountView;\n    readonly gate: GateView | null;\n    readonly accounts: readonly ManagedAccount[];\n    readonly ledger: LedgerView | null;\n    readonly logins: readonly LoginView[];\n    readonly speaker: {\n        readonly id: string;\n        readonly display: string;\n    } | null;\n    readonly manage: boolean;\n    readonly manageEnv: string;\n    readonly manageError: string | null;\n    readonly result: ActionResult | null;\n    readonly ownerMid: number;\n    readonly ownerUpdatedAt: number | null;\n    readonly timeZone: string;\n    readonly share: ShareView;\n}',
   },
   {
     name: 'BindingOrigin',
@@ -10650,8 +10650,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ShareCapabilityOffers {\n    readonly capabilities: readonly ShareCapabilityGroup[];\n}',
   },
   {
+    name: 'ShareOutcome',
+    declaration: 'export type ShareOutcome = typeof SHARE_OUTCOMES[number];',
+  },
+  {
+    name: 'ShareRow',
+    declaration: 'export interface ShareRow {\n    readonly day: string;\n    readonly reason: \'plan\' | \'manual\';\n    readonly planAt: number;\n    readonly firedAt: number | null;\n    readonly outcome: ShareOutcome | null;\n    readonly detail: string | null;\n    readonly text: string | null;\n}',
+  },
+  {
     name: 'ShareSessions',
     declaration: 'export interface ShareSessions {\n    readonly shareId: string;\n    readonly sessionIds: readonly string[];\n}',
+  },
+  {
+    name: 'ShareView',
+    declaration: 'export interface ShareView {\n    readonly enabled: boolean;\n    readonly overridden: boolean;\n    readonly start: string;\n    readonly end: string;\n    readonly today: ShareRow | null;\n    readonly recent: readonly ShareRow[];\n    readonly running: boolean;\n}',
   },
   {
     name: 'ShellExecRequest',
@@ -11719,7 +11731,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'UsageCounts',
-    declaration: 'export interface UsageCounts {\n    readonly comment: number;\n    readonly dm: number;\n}',
+    declaration: 'export interface UsageCounts {\n    readonly comment: number;\n    readonly dm: number;\n    readonly share: number | null;\n}',
   },
   {
     name: 'UserMessage',

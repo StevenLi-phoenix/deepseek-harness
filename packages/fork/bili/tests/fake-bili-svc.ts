@@ -78,7 +78,9 @@ export class FakeBiliSvc {
     { id: 'maomao', mid: 3_000_001, display: '魔女的猫猫', session: 'ok' },
   ]
   /** The gate `GET /v1/status` reports. */
-  gate = { mode: 'auto', readonly: false, used_today: { comment: 0, dm: 0, share: 0 }, daily_caps: { comment: 5, dm: 20, share: 2 } }
+  gate: { mode: string; readonly: boolean; used_today: Record<string, number>; daily_caps: Record<string, number> } = {
+    mode: 'auto', readonly: false, used_today: { comment: 0, dm: 0, share: 0 }, daily_caps: { comment: 5, dm: 20, share: 2 },
+  }
   /** The account `routes.reply_comment` and `routes.reply_dm` name. */
   speaker = 'maomao'
   /** The risk brake, as a manage token sees it. */

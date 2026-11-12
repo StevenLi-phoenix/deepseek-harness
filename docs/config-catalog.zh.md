@@ -500,7 +500,7 @@ export type Config = LocalConfig
 ## `@deepseek-ai/dsh-bili`
 
 - `inject`: `timer` · `storageDomain` · `credentials` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/bili/src/index.ts:90`](../packages/fork/bili/src/index.ts)
+- `source`: [`packages/fork/bili/src/index.ts:93`](../packages/fork/bili/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -525,6 +525,8 @@ export interface Config {
   session: SessionConfig
   /** Owner-message check period, in milliseconds; checks cost no model tokens. */
   inboxPollMs: number
+  /** The daily share: once a day the account messages the owner first, at a random time in the window. */
+  share: ShareConfig
 }
 
 /** How the account's Session is created. */
@@ -537,6 +539,16 @@ export interface SessionConfig {
   permissionPreset: string
   /** Session title. */
   title: string
+}
+
+/** Configuration of the daily share. */
+export interface ShareConfig {
+  /** Whether it runs; the owner's switch in Settings wins. */
+  enabled: boolean
+  /** Start of the window the day's random share time falls in, `HH:MM` in the account's `timeZone`. */
+  start: string
+  /** End of that window, `HH:MM` in the same zone; later than `start` on the same day. */
+  end: string
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-bili -->

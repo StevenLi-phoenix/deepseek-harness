@@ -17,8 +17,9 @@ import type { ShareOutcome, ShareRow, ShareView } from './view.ts'
 export interface ShareConfig {
   /** Whether it runs; the owner's switch in Settings wins. */
   enabled: boolean
-  /** Window of the day's random time, `HH:MM` in the account's `timeZone`. */
+  /** Start of the window the day's random share time falls in, `HH:MM` in the account's `timeZone`. */
   start: string
+  /** End of that window, `HH:MM` in the same zone; later than `start` on the same day. */
   end: string
 }
 

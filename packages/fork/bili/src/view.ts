@@ -167,8 +167,9 @@ export interface ShareView {
   readonly enabled: boolean
   /** Whether the switch in Settings set `enabled` (else the configuration did). */
   readonly overridden: boolean
-  /** The window the day's random time falls in, `HH:MM` in `timeZone`. */
+  /** Start of the window the day's random time falls in, `HH:MM` in `timeZone`. */
   readonly start: string
+  /** End of that window. */
   readonly end: string
   /** Today's planned share, or null before it is planned. */
   readonly today: ShareRow | null
