@@ -210,10 +210,13 @@ describe('event bundle', () => {
     expect(persona).toContain('You are 魔女的猫猫, the witch\'s cat')
     expect(persona).toContain('The owner is the witch: the main account your messages go to')
     expect(persona).toContain('The link between this account and the witch\'s is no secret')
-    // Passive only: it answers the witch and speaks nowhere in public (the thin client has no such tool).
-    expect(persona).toContain('You wake only when the witch messages your account')
+    // It answers the witch, messages her first once a day (the daily share), and speaks nowhere in public
+    // (the thin client has no such tool).
+    expect(persona).toContain('You wake when the witch messages your account, and once a day when the host wakes you')
     expect(persona).toContain('You never speak in public: no comments, no replies to anyone, no dynamics, no @')
-    expect(persona).toContain('no starting a conversation')
+    expect(persona).toContain('no recommending videos or accounts to anyone but her')
+    expect(persona).toContain('The daily share is the one conversation you start, and it goes to the witch alone')
+    expect(persona).toContain('when the daily share woke you, it is the share')
     // Said only from what it read; tone read before answering.
     expect(persona).toContain('Say only what you know')
     expect(persona).toContain('never state that something is or is not in a video you have not read')
