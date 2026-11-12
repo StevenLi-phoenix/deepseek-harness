@@ -6,8 +6,10 @@
  * ledger, daily caps, and risk brake, and its Reply Gate (`POST /v1/reply/dm`) carries the answers
  * to the owner's own messages. DSH thinks and drafts: the account's long-lived Session answers the
  * owner's Bilibili messages through `ctx.ownerRelay` and the DM channel (`src/dm.ts`), and its
- * tools read and act through the door. The account never comments, replies, posts, shares, or
- * messages the owner on its own.
+ * tools read and act through the door. Once a day the daily share (`src/share.ts`) prompts the
+ * Session to message the owner first (a video it watched and a recent 热梗) through bili-svc's
+ * `POST /v1/share/owner`; that is the only message it starts, and only to the owner. The account
+ * never comments, replies, posts, or shares in public.
  */
 
 import { randomUUID } from 'node:crypto'
@@ -44,6 +46,7 @@ import {
 import { BILI_AGENT_ORIGIN, BILI_RELAY_CHANNEL, DmChannel, type DmOutcome } from './dm.ts'
 import { HotStore, type BiliHot } from './hot.ts'
 import { biliDomain, seqKey } from './storage.ts'
+import { assertShareConfig, DailyShare, type ShareConfig } from './share.ts'
 import { clean, codePoints, ownerPrompt } from './text.ts'
 import { dayKey, formatStamp, isTimeZone } from './time.ts'
 import { parseAction } from './actions.ts'
@@ -108,6 +111,8 @@ export interface Config {
   session: SessionConfig
   /** Owner-message check period, in milliseconds; checks cost no model tokens. */
   inboxPollMs: number
+  /** The daily share: once a day the account messages the owner first, at a random time in the window. */
+  share: ShareConfig
 }
 
 /** Configuration schema. */
@@ -124,6 +129,11 @@ export const Config: z<Config> = z.object({
     title: z.string().default('B站').description('Title of the account Session.'),
   }),
   inboxPollMs: z.natural().min(120_000).default(600_000).description('Owner-message check period, in milliseconds; checks cost no model tokens.'),
+  share: z.object({
+    enabled: z.boolean().default(true).description('Whether the account messages the owner once a day with a video it watched and a recent 热梗; the switch in Settings wins.'),
+    start: z.string().default('19:00').description('Start of the daily share window, HH:MM in timeZone.'),
+    end: z.string().default('22:30').description('End of the daily share window, HH:MM in timeZone (same day, after start).'),
+  }),
 })
 
 /** Resolve failures that keep the stored Session: it exists and is only unavailable right now. */
@@ -150,6 +160,13 @@ export const MAIN_AGENT_MAX_CHARS = 2000
 const HOT_SEARCHES = 30
 /** Danmaku lines one read returns. */
 const DANMAKU_LINES = 40
+/** The daily share is checked this often; a check costs no model tokens. */
+const SHARE_TICK_MS = 60_000
+
+/** The slice of `ctx.forkPresence` the daily share reads, when the presence plugin is mounted. */
+interface PresenceReader {
+  isAsleep(): boolean
+}
 
 /** What a write tool learns. */
 export type WriteOutcome =
@@ -238,6 +255,7 @@ function assertConfig(config: Config): void {
   if (!isTimeZone(config.timeZone)) throw new Error(`bili: timeZone "${config.timeZone}" is not a valid IANA time zone`)
   if (!/^[a-z0-9_-]{1,64}$/.test(config.account)) throw new Error(`bili: account "${config.account}" is not a bili-svc account id`)
   if (!CREDENTIAL_NAME.test(config.manageTokenEnv)) throw new Error(`bili: manageTokenEnv "${config.manageTokenEnv}" is not a credential name (a shell identifier)`)
+  assertShareConfig(config.share)
 }
 
 /** `1 coin`, `2 coins`. */
@@ -321,6 +339,8 @@ export class BiliAccount extends Service {
   private fastPoll: (() => void) | undefined
   /** A message check is running; another one waits for the next tick. */
   private polling = false
+  /** The daily share to the owner. */
+  private readonly share: DailyShare
 
   /**
    * @param ctx - Host services owning timers, storage, credentials, and Sessions.
@@ -354,8 +374,21 @@ export class BiliAccount extends Service {
     this.ready = ctx.storageDomain.open(biliDomain)
     this.hot = new HotStore({ ready: this.ready, now: () => Date.now(), logger: ctx.logger })
     ctx.provide('biliHot', this.hot)
+    this.share = new DailyShare({
+      ready: this.ready,
+      serialize: work => this.serialize(work),
+      ownerMid: () => this.ownerMid(),
+      holdReason: now => this.shareHold(now),
+      prompt: text => this.promptShare(text),
+      timeZone: config.timeZone,
+      now: () => Date.now(),
+      random: () => Math.random(),
+      logger: { info: (message) => { ctx.logger.info(message) }, warn: (message) => { ctx.logger.warn(message) } },
+    }, config.share)
     this.dm = new DmChannel({
       replyOwner: text => this.replyOwner(text),
+      shareOwner: text => this.shareOwner(text),
+      shareSettled: (sessionId, outcome, detail, text) => this.share.settled(sessionId, outcome, detail, text),
       hold: work => this.hold(work),
       notifier: () => this.ctx.get('forkNotifier'),
       logger: { info: (message) => { ctx.logger.info(message) }, warn: (message) => { ctx.logger.warn(message) } },
@@ -420,6 +453,9 @@ export class BiliAccount extends Service {
     if (dropped > 0) this.ctx.logger.info(`bili: dropped ${dropped} queued reply or mention item(s): replies to strangers are bili-svc's (the up preset) now`)
     this.ctx.logger.info(`bili: bili-svc at ${this.client.baseUrl}, account ${this.config.account}; ${this.ownerMid() === undefined ? 'no owner account set, so no messages are answered' : 'answering the owner\'s messages'}`)
     this.every(this.config.inboxPollMs, () => this.pollOwner())
+    this.every(SHARE_TICK_MS, () => this.share.tick())
+    const enabled = await this.share.enabled()
+    this.ctx.logger.info(`bili: the daily share is ${enabled ? `on, once a day at a random time in ${this.config.share.start}–${this.config.share.end} ${this.config.timeZone}` : 'off'}`)
   }
 
   /** Run storage work one piece at a time; rejections reach the caller without breaking the chain. */
@@ -598,17 +634,31 @@ export class BiliAccount extends Service {
    * @returns whether the prompt went in.
    */
   private async promptSession(text: string): Promise<boolean> {
+    return (await this.promptAs(text, 'reply')) !== undefined
+  }
+
+  /**
+   * Prompt the account's Session with the daily share unless it is busy; the DM channel sends its answer as the share.
+   * @returns the Session id, or undefined when the Session is in a turn.
+   */
+  private promptShare(text: string): Promise<string | undefined> {
+    return this.promptAs(text, 'share')
+  }
+
+  /** Prompt the account's Session, marking what its answer is; undefined when the Session is in a turn. */
+  private async promptAs(text: string, kind: 'reply' | 'share'): Promise<SessionId | undefined> {
     mkdirSync(this.config.session.workspacePath, { recursive: true })
     const sessionId = await this.accountSession()
     const resolved = await this.ctx.sessionController.resolveAgent(sessionId)
     if ('error' in resolved) throw resolved.error
     const status = (resolved.agent as { status?: string }).status
     if (status !== undefined && status !== 'idle') {
-      this.ctx.logger.info(`bili: Session ${sessionId} is ${status}; the owner's messages wait for the next check`)
-      return false
+      this.ctx.logger.info(`bili: Session ${sessionId} is ${status}; ${kind === 'reply' ? 'the owner\'s messages wait for the next check' : 'the share waits'}`)
+      return undefined
     }
-    // Known before the turn can end: its answer is the reply.
-    this.dm.expectReply(sessionId)
+    // Known before the turn can end: its answer is the reply, or the share.
+    if (kind === 'reply') this.dm.expectReply(sessionId)
+    else this.dm.expectShare(sessionId)
     try {
       await this.ctx.sessionController.prompt({
         requestId: randomUUID() as SessionRequestId,
@@ -621,8 +671,37 @@ export class BiliAccount extends Service {
       this.dm.dropReply(sessionId)
       throw error
     }
-    this.ctx.logger.info(`bili: the owner's messages prompted Session ${sessionId} (${text.length} chars)`)
-    return true
+    if (kind === 'reply') this.ctx.logger.info(`bili: the owner's messages prompted Session ${sessionId} (${text.length} chars)`)
+    return sessionId
+  }
+
+  /** Why the daily share should wait now: the owner sleeps, is messaging the account, or has messages queued. */
+  private shareHold(now: number): string | undefined {
+    const presence = (this.ctx.get as (name: string) => unknown)('forkPresence') as PresenceReader | undefined
+    if (presence?.isAsleep() === true) return 'the owner is asleep'
+    if (this.conversationUntil > now) return 'the owner is messaging the account'
+    const pending = this.domain?.table('pending').size ?? 0
+    if (pending > 0) return 'the owner\'s messages are waiting for an answer'
+    return undefined
+  }
+
+  /**
+   * One part of the daily share to the owner through bili-svc (`POST /v1/share/owner`). Anything but `sent` goes to WeChat.
+   * @param text - one message, at most 500 characters.
+   */
+  private async shareOwner(text: string): Promise<DmOutcome> {
+    const ownerMid = this.ownerMid()
+    if (ownerMid === undefined) return { status: 'failed', detail: 'no owner account is configured' }
+    try {
+      const answer = await this.client.shareOwner(ownerMid, text.trim(), this.abort.signal)
+      const id = answer.id === undefined ? '' : ` (${answer.id})`
+      this.ctx.logger.info(`bili: bili-svc answered ${answer.status}${id} to a ${codePoints(text.trim())}-char share to the owner`)
+      return { status: answer.status, detail: answer.status === 'sent' ? 'sent' : `bili-svc answered ${answer.status}${id} (a daily cap, the brake, or a rule)` }
+    } catch (error: unknown) {
+      const unknown = error instanceof BiliTransportError
+      this.ctx.logger.warn(`bili: the share to the owner ${unknown ? 'has an unknown outcome' : 'was refused'}: ${errorText(error)}`)
+      return { status: 'failed', detail: unknown ? `the outcome at bili-svc is unknown (${errorText(error)})` : errorText(error) }
+    }
   }
 
   /**
@@ -1342,6 +1421,7 @@ export class BiliAccount extends Service {
       ownerMid: this.ownerMid() ?? 0,
       ownerUpdatedAt: domain.table('owner').get('main')?.updatedAt ?? null,
       timeZone: this.config.timeZone,
+      share: await this.share.view(),
     }
   }
 
@@ -1368,6 +1448,15 @@ export class BiliAccount extends Service {
       if (action.mid === view.mid) return Response.json({ error: 'mid is this account itself, not the owner\'s main account' }, { status: 400, headers })
       await this.setOwner(action.mid)
       return Response.json(await this.view(), { headers })
+    }
+    // The daily share is DSH's own: no manage token needed.
+    if (action.action === 'share.enabled') {
+      await this.share.setEnabled(action.enabled)
+      return Response.json(await this.view({ action: action.action, account: null, outcome: action.enabled ? 'on' : 'off', days: null }), { headers })
+    }
+    if (action.action === 'share.now') {
+      const outcome = await this.share.sendNow()
+      return Response.json(await this.view({ action: action.action, account: null, outcome, days: null }), { headers })
     }
     if (!await this.settings.hasToken()) {
       return Response.json({ error: `the manage token is not set (credential ${this.config.manageTokenEnv})`, code: 'no_token' }, { status: 403, headers })

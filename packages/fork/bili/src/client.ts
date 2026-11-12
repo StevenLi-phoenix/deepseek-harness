@@ -341,6 +341,27 @@ export class RemoteBiliClient implements BiliCaller {
     return id === '' ? { status: verdict } : { status: verdict, id }
   }
 
+  /**
+   * The daily share: a message the account starts to the owner (`POST /v1/share/owner`). bili-svc sends
+   * it only to an owner mid, between mutual followers, under its own daily cap.
+   * @param talker - the owner's main account.
+   * @param message - one message, at most 500 characters.
+   * @param signal - cancellation.
+   * @returns `sent`, `held`, or `blocked`, with bili-svc's ledger id.
+   * @throws {BiliRefused} for no token or HTTP 401/403/404/422; {@link BiliTransportError} when the outcome is unknown.
+   */
+  async shareOwner(talker: number, message: string, signal?: AbortSignal): Promise<ReplyAnswer> {
+    const body = { account: this.hooks.account, talker, message }
+    const { status, answer } = await this.request('share/owner', 'POST', '/v1/share/owner', body, ACTION_TIMEOUT_MS, signal)
+    this.refusedStatus('share/owner', status, answer)
+    if (status !== 200) throw new BiliTransportError('share/owner', `bili-svc answered HTTP ${status}`)
+    const verdict = answer['status']
+    if (verdict !== 'sent' && verdict !== 'held' && verdict !== 'blocked') throw new BiliTransportError('share/owner', 'bili-svc answered no status')
+    const id = line(answer['id'], 64)
+    this.hooks.debug(`bili: share/owner answered ${verdict}${id === '' ? '' : ` (${id})`}`)
+    return id === '' ? { status: verdict } : { status: verdict, id }
+  }
+
   /** HTTP answers bili-svc decides before Bilibili: nothing was done. */
   private refusedStatus(name: string, status: number, answer: Record<string, unknown>): void {
     if (status === 401 || status === 403) throw new BiliRefused(`bili-svc did not accept the token for ${name} (HTTP ${status}${line(answer['error'], 60) === '' ? '' : `: ${line(answer['error'], 60)}`})`)

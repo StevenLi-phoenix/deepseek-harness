@@ -12,7 +12,7 @@ import type { ActionResult, BiliAction, LedgerView, LoginState, LoginView } from
 const FINISHED_MS = 8000
 
 /** The actions that need bili-svc's management API. */
-export type ManageActionBody = Exclude<BiliAction, { action: 'owner' }>
+export type ManageActionBody = Exclude<BiliAction, { action: 'owner' | 'share.enabled' | 'share.now' }>
 
 /** One QR sign-in as the Host keeps it. */
 interface LoginAttempt {

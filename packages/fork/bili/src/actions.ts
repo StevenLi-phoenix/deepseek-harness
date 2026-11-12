@@ -22,6 +22,8 @@ const SCHEMAS: { readonly [A in BiliAction['action']]: z<Extract<BiliAction, { a
   'session.check': z.object({ action: z.const('session.check' as const).required(), account: ACCOUNT_ID }),
   'logout': z.object({ action: z.const('logout' as const).required(), account: ACCOUNT_ID, confirm: ACCOUNT_ID }),
   'ledger': z.object({ action: z.const('ledger' as const).required(), limit: z.number().step(1).min(1).max(LEDGER_MAX_ROWS).required() }),
+  'share.enabled': z.object({ action: z.const('share.enabled' as const).required(), enabled: z.boolean().required() }),
+  'share.now': z.object({ action: z.const('share.now' as const).required() }),
 }
 
 /** Whether a name is one of the route's actions. */

@@ -45,6 +45,40 @@ export function dayKey(ms: number, timeZone: string): string {
 }
 
 /**
+ * Minutes after local midnight of an `HH:MM` text.
+ * @param text - candidate clock text.
+ * @returns the minutes, or undefined when it is not a 24-hour `HH:MM`.
+ */
+export function parseClock(text: string): number | undefined {
+  const match = /^(\d{2}):(\d{2})$/.exec(text)
+  if (match === null) return undefined
+  const hours = Number(match[1])
+  const minutes = Number(match[2])
+  return hours < 24 && minutes < 60 ? hours * 60 + minutes : undefined
+}
+
+/**
+ * The instant a local clock in `timeZone` shows `minutes` after midnight of `day`.
+ * Across a DST change the nearest existing instant is used.
+ * @param day - `YYYY-MM-DD`.
+ * @param minutes - minutes after local midnight; 1440 is the next midnight.
+ * @param timeZone - IANA zone.
+ * @returns Unix epoch milliseconds.
+ */
+export function localTime(day: string, minutes: number, timeZone: string): number {
+  const [year, month, date] = day.split('-').map(Number) as [number, number, number]
+  const wanted = Date.UTC(year, month - 1, date, 0, minutes)
+  let guess = wanted
+  // Two corrections settle every zone offset, including one that changes between the guesses.
+  for (let step = 0; step < 2; step += 1) {
+    const shown = zonedParts(guess, timeZone)
+    const shownUtc = Date.UTC(shown.year, shown.month - 1, shown.day, shown.hour, shown.minute, shown.second)
+    guess += wanted - shownUtc
+  }
+  return guess
+}
+
+/**
  * Wall-clock stamp as prompts show it.
  * @param ms - Unix epoch milliseconds.
  * @param timeZone - IANA zone.

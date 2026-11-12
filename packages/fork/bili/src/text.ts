@@ -74,6 +74,43 @@ export function ownerPrompt(facts: OwnerFacts): string {
   ].join('\n')
 }
 
+/** Code points the daily share asks for; one Bilibili message holds {@link REPLY_CHARS}. */
+export const SHARE_CHARS = 400
+
+/** One earlier share, as the next share's prompt lists it. */
+export interface ShareMemory {
+  day: string
+  /** What was sent, bounded. */
+  text: string
+}
+
+/** Facts of a daily-share turn. */
+export interface ShareFacts {
+  now: number
+  timeZone: string
+  /** The owner pressed 现在发一条 in Settings. */
+  manual: boolean
+  /** Earlier shares, newest first. */
+  recent: readonly ShareMemory[]
+}
+
+/**
+ * Prompt of the daily share: the one turn in which the account messages the owner first.
+ * @param facts - time, whether the owner asked for it, and the earlier shares.
+ * @returns the prompt text.
+ */
+export function sharePrompt(facts: ShareFacts): string {
+  const when = `${formatStamp(facts.now, facts.timeZone)} (${facts.timeZone})`
+  return [
+    `Daily share at ${when}${facts.manual ? ', asked for just now by the witch in Settings' : ''}: the one message you start. The witch wants one every day: something worth watching on Bilibili today, and a recent 热梗.`,
+    'Look around first: bili_hot_searches, bili_ranking or bili_popular, your home feed, and a search or two. Pick one video (two at most) she would enjoy, going by what she watches and asks you about (your journal helps); open it with bili_video and read its subtitles before you recommend it, and leave out any video whose subtitles you could not read. Then one 热梗 you saw today in the hot searches or hot comments: what it is and where it comes from, in one line (meme_lookup helps).',
+    facts.recent.length === 0
+      ? 'Nothing was shared on earlier days.'
+      : `Your earlier shares, newest first; never send the same video or meme again:\n${untrusted('earlier shares', facts.recent, 4000)}`,
+    `Your final answer is that message: it goes to the witch as a Bilibili private message from your account. Plain text in your voice, at most ${SHARE_CHARS} characters; each video with its title, one line of why, and https://www.bilibili.com/video/<bvid>. No greeting ritual and no question at the end. Answer exactly NO_REPLY when nothing today is worth her time.`,
+  ].join('\n')
+}
+
 /**
  * Split a message at line breaks (or sentence ends) into at most `parts`
  * pieces of at most `max` code points; what does not fit is cut with `…`.
@@ -106,3 +143,5 @@ export function splitMessage(text: string, max: number, parts: number): string[]
 
 /** Title of a turn's answer that could not go out as a Bilibili message and came to WeChat instead. */
 export const FALLBACK_TITLE = '📺 B站：这条没能用 B站私信发出，改发微信'
+/** Title of a daily share that could not go out as a Bilibili message and came to WeChat instead. */
+export const SHARE_FALLBACK_TITLE = '📺 B站：今天的推荐没能用 B站私信发出，改发微信'

@@ -136,6 +136,46 @@ export interface ActionResult {
   readonly days: number | null
 }
 
+/** How one daily share went: sent on Bilibili, sent to WeChat instead, nothing worth sending, not run in time, or failed. */
+export const SHARE_OUTCOMES = ['sent', 'wechat', 'silent', 'missed', 'failed'] as const
+/** One of {@link SHARE_OUTCOMES}. */
+export type ShareOutcome = typeof SHARE_OUTCOMES[number]
+
+/** One daily share, as Settings shows it. */
+export interface ShareRow {
+  /** Local day (`timeZone`). */
+  readonly day: string
+  /** `plan`: the day's share; `manual`: the owner pressed 现在发一条. */
+  readonly reason: 'plan' | 'manual'
+  /** When it is due, Unix epoch milliseconds. */
+  readonly planAt: number
+  /** When the Session was prompted, or null while it waits. */
+  readonly firedAt: number | null
+  /** Null while it is planned or its turn runs. */
+  readonly outcome: ShareOutcome | null
+  /** Why, in one line; null when there is nothing to add. */
+  readonly detail: string | null
+  /** What reached the owner, bounded (the account's own words); null when nothing did. */
+  readonly text: string | null
+}
+
+/** The daily share: once a day the account messages the owner first with a video and a 热梗. */
+export interface ShareView {
+  /** Whether the daily share runs. */
+  readonly enabled: boolean
+  /** Whether the switch in Settings set `enabled` (else the configuration did). */
+  readonly overridden: boolean
+  /** The window the day's random time falls in, `HH:MM` in `timeZone`. */
+  readonly start: string
+  readonly end: string
+  /** Today's planned share, or null before it is planned. */
+  readonly today: ShareRow | null
+  /** The latest shares, newest first (planned and manual, today's included). */
+  readonly recent: readonly ShareRow[]
+  /** Whether a share's turn is running now. */
+  readonly running: boolean
+}
+
 /** Body of `GET api/bili` and of every `POST`. */
 export interface BiliView {
   /** The agent's own account (`account` in the configuration). */
@@ -164,6 +204,8 @@ export interface BiliView {
   readonly ownerUpdatedAt: number | null
   /** IANA zone of the journal and the daily limit, for showing times. */
   readonly timeZone: string
+  /** The daily share to the owner. */
+  readonly share: ShareView
 }
 
 /** Modes the gate switches between. */
@@ -183,6 +225,8 @@ export type BiliAction =
   | { readonly action: 'session.check'; readonly account: string }
   | { readonly action: 'logout'; readonly account: string; readonly confirm: string }
   | { readonly action: 'ledger'; readonly limit: number }
+  | { readonly action: 'share.enabled'; readonly enabled: boolean }
+  | { readonly action: 'share.now' }
 
 /** Absolute Host registration path of the Settings route. */
 export const BILI_PATH = '/api/bili'

@@ -161,6 +161,7 @@ describe('journal, account card, and Settings', () => {
       ownerMid: 200000001,
       ownerUpdatedAt: null,
       timeZone: 'America/New_York',
+      share: { enabled: true, overridden: false, start: '19:00', end: '22:30', today: null, recent: [], running: false },
     })
     expect(svc.requests.filter(request => request.path === '/v1/status')).toHaveLength(1)
     // Within ten seconds the status answer is reused.

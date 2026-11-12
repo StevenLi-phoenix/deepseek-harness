@@ -2,7 +2,7 @@
  * In-process bili-svc double behind a `fetch` replacement: the door (`POST /v1/bili/call`) with a
  * small Bilibili inside (feeds, videos, subtitles, comments, the inbox, relations, favorites,
  * likes, watch later, coins, triples, watch heartbeats), `GET /v1/status`, and the Reply Gate's
- * `POST /v1/reply/dm`. It checks the bearer token, refuses speech endpoints like the real door,
+ * `POST /v1/reply/dm` and `POST /v1/share/owner`. It checks the bearer token, refuses speech endpoints like the real door,
  * keeps coin and triple to once per target ever and the watch heartbeat to once a day, and any
  * endpoint or route can be given canned answers (an outcome, an HTTP status, a network error, or
  * an answer that never comes).
@@ -95,6 +95,10 @@ export class FakeBiliSvc {
   readonly replies: { account: unknown; talker: unknown; message: unknown }[] = []
   /** What the Reply Gate answers, in order; `sent` once empty. */
   replyStatus: ('sent' | 'held' | 'blocked')[] = []
+  /** Daily shares `POST /v1/share/owner` received. */
+  readonly shares: { account: unknown; talker: unknown; message: unknown }[] = []
+  /** What `POST /v1/share/owner` answers, in order; `sent` once empty. */
+  shareStatus: ('sent' | 'held' | 'blocked')[] = []
   /** The owner's account, whose unfollow the door refuses. */
   ownerMids = new Set<number>([200_000_001])
 
@@ -184,6 +188,11 @@ export class FakeBiliSvc {
         this.replies.push({ account: body?.['account'], talker: body?.['talker'], message: body?.['message'] })
         const status = this.replyStatus.shift() ?? 'sent'
         return json(200, { status, id: `r-${this.replies.length}` })
+      }
+      case 'POST /v1/share/owner': {
+        this.shares.push({ account: body?.['account'], talker: body?.['talker'], message: body?.['message'] })
+        const status = this.shareStatus.shift() ?? 'sent'
+        return json(200, { status, id: `s-${this.shares.length}` })
       }
       case 'POST /v1/bili/call':
         return json(200, this.door(this.calls.at(-1)!))

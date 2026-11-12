@@ -1,15 +1,17 @@
 /**
  * The account's DM channel (`bili-dm`) of `ctx.ownerRelay`: the final answer of each turn the
  * owner's own Bilibili messages started goes back to the owner through bili-svc's Reply Gate
- * (`POST /v1/reply/dm`), and whatever the Gate does not send (held, blocked, or no answer) goes to
- * WeChat with the reason, labelled for the owner's chat Session as the account's. Turns nothing
- * started (the owner in the Web UI, a reminder) keep their answer in the Session. The account
- * never messages the owner on its own initiative.
+ * (`POST /v1/reply/dm`), and the answer of the daily share's turn goes through
+ * `POST /v1/share/owner`, the one message the account starts. Whatever bili-svc does not send
+ * (held, blocked, or no answer) goes to WeChat with the reason, labelled for the owner's chat
+ * Session as the account's. Turns nothing started (the owner in the Web UI, a reminder) keep their
+ * answer in the Session.
  */
 // Type-only: the ctx.forkNotifier contract and the relay's channel contract.
 import type { ForkNotifier } from '@deepseek-ai/dsh-fork-event-bus'
 import type { RelayAnswer, RelayChannel, RelayDecision, RelayDelivery } from '@deepseek-ai/dsh-owner-relay'
-import { FALLBACK_TITLE, REPLY_CHARS, splitMessage } from './text.ts'
+import { FALLBACK_TITLE, REPLY_CHARS, SHARE_FALLBACK_TITLE, splitMessage } from './text.ts'
+import type { ShareOutcome } from './view.ts'
 
 /** Name of the account's channel in `ctx.ownerRelay`. */
 export const BILI_RELAY_CHANNEL = 'bili-dm'
@@ -26,10 +28,17 @@ export interface DmOutcome {
   readonly detail: string
 }
 
+/** What a marked turn answers: the owner's messages, or the daily share. */
+export type TurnKind = 'reply' | 'share'
+
 /** What the channel needs of the account. */
 export interface DmChannelHost {
   /** Send one reply to the owner's main account through bili-svc's Reply Gate. */
   replyOwner(text: string): Promise<DmOutcome>
+  /** Send one part of the daily share to the owner's main account (`POST /v1/share/owner`). */
+  shareOwner(text: string): Promise<DmOutcome>
+  /** The daily share's turn is over: how it went, why, and what reached the owner. */
+  shareSettled(sessionId: string, outcome: ShareOutcome, detail: string, text?: string): Promise<void>
   /** Keep a delivery alive until the account's teardown drains it; its outcome stays the relay's. */
   hold<T>(work: Promise<T>): Promise<T>
   /** The WeChat notifier, read per use. */
@@ -49,10 +58,10 @@ function endedText(answer: RelayAnswer): string {
 export class DmChannel implements RelayChannel {
   readonly name = BILI_RELAY_CHANNEL
   readonly fallbackLabel = BILI_FALLBACK_LABEL
-  /** Sessions whose next or running turn answers the owner's messages, marked before the prompt. */
-  private readonly owed = new Set<string>()
-  /** Sessions whose turn that answers the owner just ended, from `onTurnEnd` to the `deliver` that follows it in the same tick. */
-  private readonly ended = new Set<string>()
+  /** Sessions whose next or running turn answers the owner's messages or is the daily share, marked before the prompt. */
+  private readonly owed = new Map<string, TurnKind>()
+  /** Sessions whose marked turn just ended, from `onTurnEnd` to the `deliver` that follows it in the same tick. */
+  private readonly ended = new Map<string, TurnKind>()
 
   /** @param host - the account's reply sending, teardown hold, notifier, and logger. */
   constructor(private readonly host: DmChannelHost) {}
@@ -62,7 +71,15 @@ export class DmChannel implements RelayChannel {
    * @param sessionId - the account's Session.
    */
   expectReply(sessionId: string): void {
-    this.owed.add(sessionId)
+    this.owed.set(sessionId, 'reply')
+  }
+
+  /**
+   * Mark a Session's next turn as the daily share, before its prompt.
+   * @param sessionId - the account's Session.
+   */
+  expectShare(sessionId: string): void {
+    this.owed.set(sessionId, 'share')
   }
 
   /**
@@ -80,9 +97,18 @@ export class DmChannel implements RelayChannel {
    * @param ended - the relay's decision for the turn.
    */
   onTurnEnd(sessionId: string, ended: RelayDecision['kind']): void {
-    const owed = this.owed.delete(sessionId)
+    const owed = this.owed.get(sessionId)
+    this.owed.delete(sessionId)
     this.ended.delete(sessionId)
-    if (owed && ended === 'answer') this.ended.add(sessionId)
+    if (owed !== undefined && ended === 'answer') this.ended.set(sessionId, owed)
+    else if (owed === 'share') {
+      // NO_REPLY or an empty answer: nothing worth sending today; a stop by the owner ends it too.
+      const outcome: ShareOutcome = ended === 'stopped' ? 'failed' : 'silent'
+      const detail = ended === 'stopped' ? 'the owner stopped the turn' : ended === 'silent' ? 'the account answered NO_REPLY' : 'the turn ended without an answer'
+      this.host.hold(this.host.shareSettled(sessionId, outcome, detail)).catch((error: unknown) => {
+        this.host.logger.warn(`bili: recording the share's outcome failed: ${error instanceof Error ? error.message : String(error)}`)
+      })
+    }
   }
 
   /**
@@ -94,8 +120,43 @@ export class DmChannel implements RelayChannel {
    */
   deliver(answer: RelayAnswer): Promise<RelayDelivery> {
     // Taken at once: the relay calls deliver in the same tick as onTurnEnd, before the next prompt can mark the Session.
-    const owed = this.ended.delete(answer.sessionId)
-    return this.host.hold(this.send(answer, owed))
+    const owed = this.ended.get(answer.sessionId)
+    this.ended.delete(answer.sessionId)
+    return this.host.hold(owed === 'share' ? this.share(answer) : this.send(answer, owed === 'reply'))
+  }
+
+  /**
+   * Send the daily share's answer through `POST /v1/share/owner`; a turn that did not complete sends
+   * nothing (the owner never asked for its failure notice), and what bili-svc does not send goes to WeChat.
+   */
+  private async share(answer: RelayAnswer): Promise<RelayDelivery> {
+    const { sessionId } = answer
+    if (answer.outcome !== 'completed') {
+      this.host.logger.warn(`bili: Session ${sessionId} ended the share turn ${endedText(answer)}; nothing is sent`)
+      await this.host.shareSettled(sessionId, 'failed', `the turn ended ${endedText(answer)}`)
+      return 'kept'
+    }
+    this.host.logger.info(`bili: Session ${sessionId} ended the share turn; sending ${answer.text.length} chars to the owner through bili-svc`)
+    const parts = splitMessage(answer.text, REPLY_CHARS, 2)
+    for (const [index, part] of parts.entries()) {
+      const outcome = await this.host.shareOwner(part)
+      if (outcome.status !== 'sent') {
+        const rest = parts.slice(index).join('\n\n')
+        const why = `原因：${outcome.detail}`
+        this.host.logger.warn(`bili: the share goes to WeChat instead of a Bilibili message: ${why}`)
+        const notifier = this.host.notifier()
+        if (notifier === undefined) {
+          await this.host.shareSettled(sessionId, 'failed', `bili-svc did not send it (${outcome.detail}) and no forkNotifier is mounted`)
+          throw new Error('no forkNotifier is mounted')
+        }
+        await notifier.send({ title: SHARE_FALLBACK_TITLE, body: `${rest}\n\n${why}`, origin: BILI_FALLBACK_LABEL })
+        await this.host.shareSettled(sessionId, 'wechat', outcome.detail, answer.text)
+        return 'sent'
+      }
+    }
+    this.host.logger.info(`bili: sent the share to the owner as ${parts.length} Bilibili message(s) through bili-svc`)
+    await this.host.shareSettled(sessionId, 'sent', `${parts.length} Bilibili message(s)`, answer.text)
+    return 'sent'
   }
 
   /** Send one answer, or keep it in the Session. */
