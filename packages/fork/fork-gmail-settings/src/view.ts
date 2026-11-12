@@ -1,6 +1,6 @@
 /**
  * Wire types and paths of Settings → 邮箱: what `GET /api/fork.gmail` answers, the actions `POST /api/fork.gmail` takes,
- * and the path of the page Google's sign-in returns to.
+ * the path of the page Google's sign-in returns to, and the path of the privacy statement.
  */
 
 /** Host route path of the status and the actions. */
@@ -12,6 +12,11 @@ export const GMAIL_ROUTE = 'api/fork.gmail'
  * Equal to `OAUTH_PATH` of `@deepseek-ai/dsh-fork-gmail`, which the browser bundle does not import.
  */
 export const GMAIL_OAUTH_PATH = '/fork.gmail.oauth'
+/**
+ * Path of the OAuth app's privacy statement, outside `/api` like the sign-in page. Google requires a privacy policy
+ * link (and a home page) before an app can be published In production; Settings shows `<origin><GMAIL_PRIVACY_PATH>`.
+ */
+export const GMAIL_PRIVACY_PATH = '/fork.gmail.privacy'
 
 /**
  * Account ids the service accepts: lower-case letters, digits, and `-`, a letter first, at most 24 characters.

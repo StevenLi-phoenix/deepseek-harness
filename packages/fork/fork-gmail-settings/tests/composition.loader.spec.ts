@@ -204,7 +204,7 @@ describe('Gmail through the real Loader, the real credential store, and a fake G
     const root = newRoot()
     const app = await bootApp(root, new MemoryMediaPool(), google)
     expect([...app.routes.keys()]).toEqual(['/api/fork.gmail'])
-    expect([...app.pages.keys()]).toEqual(['/fork.gmail.oauth'])
+    expect([...app.pages.keys()]).toEqual(['/fork.gmail.oauth', '/fork.gmail.privacy'])
     expect((await app.get()).client.configured).toBe(false)
 
     await connectPersonal(app, google)

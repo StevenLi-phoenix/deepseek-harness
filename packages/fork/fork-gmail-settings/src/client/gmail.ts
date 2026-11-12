@@ -5,7 +5,7 @@
  */
 
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import { GMAIL_OAUTH_PATH, type GmailAction, type GmailAnswer, type GmailView, type PendingRow, type PolicyView } from '../view.ts'
+import { GMAIL_OAUTH_PATH, GMAIL_PRIVACY_PATH, type GmailAction, type GmailAnswer, type GmailView, type PendingRow, type PolicyView } from '../view.ts'
 import type { GmailKey } from './locales.ts'
 
 /** How often the open section refreshes; held messages arrive from WeChat turns. */
@@ -320,6 +320,22 @@ export function parsesAsJson(text: string): boolean {
  */
 export function redirectUriOf(view: GmailView, origin: string): string {
   return view.redirectUri ?? `${origin}${GMAIL_OAUTH_PATH}`
+}
+
+/**
+ * The home page and privacy statement to enter in Google's app settings, on the redirect URI's origin.
+ * @param uri - the redirect URI.
+ * @param origin - this page's origin, used when the configured URI does not parse.
+ * @returns both URLs.
+ */
+export function appPagesOf(uri: string, origin: string): { home: string; privacy: string } {
+  let base = origin
+  try {
+    base = new URL(uri).origin
+  } catch {
+    // TypeError: a malformed configured URI, which the card already flags; this page's origin stands in.
+  }
+  return { home: `${base}/`, privacy: `${base}${GMAIL_PRIVACY_PATH}` }
 }
 
 /**

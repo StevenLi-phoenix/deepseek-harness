@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/fork/fork-gmail-settings/README.md
 /:
-  en: bce9dedbd41284cf
-  zh: 6b261bf790cb8488
+  en: 2d21929c7d14992b
+  zh: 792dfdcb08244282
 /deepseek-ai-dsh-fork-gmail-settings:
   en: 666aa65128c240e4
   zh: 97ed1d406ba89b6a
@@ -18,8 +18,8 @@
   en: 0ba6ed70d06b3e72
   zh: 1a916afdc021c982
 /deepseek-ai-dsh-fork-gmail-settings/understand-the-implementation:
-  en: e166417fab2268d7
-  zh: 9f58a22f0e15226f
+  en: 5bde6ff94d0e96d0
+  zh: f91aa299ee091abb
 /deepseek-ai-dsh-fork-gmail-settings/further-exploration:
   en: baa411c8ab0e2418
   zh: c1caba723e29d898

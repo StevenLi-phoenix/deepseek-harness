@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import {
-  ADD_CONTROL, GmailLoader, RouteError, activityKind, activityWarns, ago, controlOf, createGmailStore, doneLine, expiresAt,
+  ADD_CONTROL, GmailLoader, RouteError, activityKind, activityWarns, ago, appPagesOf, controlOf, createGmailStore, doneLine, expiresAt,
   expiresSoon, failureLine, heldRows, looksLikeAddress, parseAnswer, parseView, parsesAsJson, redirectAccepted, redirectUriOf, relative,
   resolvedRows, timeFormatter, type Translate,
 } from '../src/client/gmail.ts'
@@ -79,6 +79,13 @@ describe('Gmail section text', () => {
   it('uses the configured redirect URI, else this page\'s origin with the OAuth path', () => {
     expect(redirectUriOf(VIEW, 'https://dsh.example.com')).toBe('https://dsh.example.com/fork.gmail.oauth')
     expect(redirectUriOf({ ...VIEW, redirectUri: 'https://mail.example.com/cb' }, 'https://dsh.example.com')).toBe('https://mail.example.com/cb')
+  })
+
+  it('puts the home page and privacy statement on the redirect URI\'s origin, else on this page\'s', () => {
+    expect(appPagesOf('https://dsh.example.ts.net/fork.gmail.oauth', 'http://localhost:5173')).toEqual({
+      home: 'https://dsh.example.ts.net/', privacy: 'https://dsh.example.ts.net/fork.gmail.privacy',
+    })
+    expect(appPagesOf('not a url', 'https://dsh.example.com')).toEqual({ home: 'https://dsh.example.com/', privacy: 'https://dsh.example.com/fork.gmail.privacy' })
   })
 
   it('accepts the redirect URIs Google accepts: https on a domain, or http on localhost', () => {

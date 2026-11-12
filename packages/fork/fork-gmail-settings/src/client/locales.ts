@@ -114,8 +114,10 @@ export const zh = {
   'client.intro': '连接 Gmail 要用你自己在 Google Cloud 建的 OAuth 客户端（免费），按下面的步骤做一次就好',
   'client.stepProject': '打开 Google Cloud 控制台，新建或选择一个项目',
   'client.stepApi': '启用 Gmail API',
-  'client.stepConsent':
-    '在 Google Auth Platform 点「Get started」：填应用名和支持邮箱，Audience 选「External」；再到「Audience」点「Publish app」，'
+  'client.stepConsent': '在 Google Auth Platform 点「Get started」：填应用名和支持邮箱，Audience 选「External」，填联系邮箱，同意条款后点「Create」',
+  'client.stepBranding':
+    '在「Branding」里把 Application home page 填成 {home}，Application privacy policy link 填成 {privacy}，'
+    + '把这个地址的上级域名（dsh.example.ts.net 就填 example.ts.net）加进 Authorized domains，保存；再到「Audience」点「Publish app」，'
     + '让状态变成「In production」，否则 Google 会在 7 天后让登录失效',
   'client.stepCredentials': '在「Clients」点「Create client」，Application type 选「Web application」',
   'client.stepRedirect': '在「Authorized redirect URIs」里添加这个地址：',
@@ -290,9 +292,13 @@ export const en: Record<GmailKey, string> = {
   'client.stepProject': 'Open the Google Cloud console and create or pick a project',
   'client.stepApi': 'Enable the Gmail API',
   'client.stepConsent':
-    'In Google Auth Platform choose Get started: an app name, your support email, and the audience '
-    + 'External; then under Audience press Publish app so the status reads In production, or Google ends '
-    + 'the sign-in after 7 days',
+    'In Google Auth Platform choose Get started: an app name, your support email, the audience External, '
+    + 'and a contact email; agree to the policy and choose Create',
+  'client.stepBranding':
+    'Under Branding set Application home page to {home} and Application privacy policy link to '
+    + '{privacy}, add the parent domain of that address (example.ts.net for dsh.example.ts.net) under '
+    + 'Authorized domains, and save; then under Audience press Publish app so the status reads In '
+    + 'production, or Google ends the sign-in after 7 days',
   'client.stepCredentials': 'Under Clients choose Create client, with the application type Web application',
   'client.stepRedirect': 'Add this address under Authorized redirect URIs:',
   'client.stepDownload': 'After creating it, download the JSON file, paste all of it below, and save',
@@ -458,7 +464,11 @@ export const ja: Record<GmailKey, string> = {
   'client.stepProject': 'Google Cloud コンソールを開き、プロジェクトを作成または選択します',
   'client.stepApi': 'Gmail API を有効にします',
   'client.stepConsent':
-    'Google Auth Platform で「Get started」を選び、アプリ名とサポートメールを入力し、Audience は「External」にします。'
+    'Google Auth Platform で「Get started」を選び、アプリ名とサポートメールを入力し、Audience は「External」、連絡先メールを入力して、'
+    + 'ポリシーに同意して「Create」を押します',
+  'client.stepBranding':
+    '「Branding」で Application home page を {home}、Application privacy policy link を {privacy} にし、'
+    + 'このアドレスの親ドメイン（dsh.example.ts.net なら example.ts.net）を Authorized domains に追加して保存します。'
     + '次に「Audience」で「Publish app」を押して状態を「In production」にします。そうしないと 7 日後にログインが無効になります',
   'client.stepCredentials': '「Clients」で「Create client」を選び、Application type は「Web application」にします',
   'client.stepRedirect': '「Authorized redirect URIs」にこのアドレスを追加します：',
@@ -625,9 +635,13 @@ export const es: Record<GmailKey, string> = {
   'client.stepProject': 'Abre la consola de Google Cloud y crea o elige un proyecto',
   'client.stepApi': 'Habilita la API de Gmail',
   'client.stepConsent':
-    'En Google Auth Platform elige Get started: un nombre de app, tu correo de asistencia y la audiencia '
-    + 'External; luego, en Audience, pulsa Publish app para que el estado diga In production; si no, '
-    + 'Google cierra la sesión a los 7 días',
+    'En Google Auth Platform elige Get started: un nombre de app, tu correo de asistencia, la audiencia '
+    + 'External y un correo de contacto; acepta la política y elige Create',
+  'client.stepBranding':
+    'En Branding pon Application home page en {home} y Application privacy policy link en {privacy}, '
+    + 'añade el dominio padre de esa dirección (example.ts.net para dsh.example.ts.net) en Authorized '
+    + 'domains y guarda; luego, en Audience, pulsa Publish app para que el estado diga In production; si '
+    + 'no, Google cierra la sesión a los 7 días',
   'client.stepCredentials': 'En Clients elige Create client, con el tipo Web application',
   'client.stepRedirect': 'Añade esta dirección en Authorized redirect URIs:',
   'client.stepDownload': 'Tras crearlo, descarga el archivo JSON, pega todo su contenido abajo y guarda',
@@ -793,9 +807,13 @@ export const fr: Record<GmailKey, string> = {
   'client.stepProject': 'Ouvrez la console Google Cloud et créez ou choisissez un projet',
   'client.stepApi': 'Activez l’API Gmail',
   'client.stepConsent':
-    'Dans Google Auth Platform, choisissez Get started : un nom d’application, votre e-mail d’assistance '
-    + 'et l’audience External ; puis, dans Audience, cliquez sur Publish app pour que l’état indique In '
-    + 'production, sinon Google met fin à la connexion après 7 jours',
+    'Dans Google Auth Platform, choisissez Get started : un nom d’application, votre e-mail '
+    + 'd’assistance, l’audience External et un e-mail de contact ; acceptez la règle et choisissez Create',
+  'client.stepBranding':
+    'Dans Branding, mettez Application home page à {home} et Application privacy policy link à '
+    + '{privacy}, ajoutez le domaine parent de cette adresse (example.ts.net pour dsh.example.ts.net) dans '
+    + 'Authorized domains et enregistrez ; puis, dans Audience, cliquez sur Publish app pour que l’état '
+    + 'indique In production, sinon Google met fin à la connexion après 7 jours',
   'client.stepCredentials': 'Dans Clients, choisissez Create client, de type Web application',
   'client.stepRedirect': 'Ajoutez cette adresse dans Authorized redirect URIs :',
   'client.stepDownload': 'Une fois créé, téléchargez le fichier JSON, collez tout son contenu ci-dessous et enregistrez',
@@ -961,9 +979,13 @@ export const de: Record<GmailKey, string> = {
   'client.stepProject': 'Öffne die Google Cloud Console und lege ein Projekt an oder wähle eines aus',
   'client.stepApi': 'Aktiviere die Gmail API',
   'client.stepConsent':
-    'Wähle in Google Auth Platform Get started: einen App-Namen, deine Support-E-Mail und die Zielgruppe '
-    + 'External; drücke dann unter Audience auf Publish app, damit der Status In production lautet, sonst '
-    + 'beendet Google die Anmeldung nach 7 Tagen',
+    'Wähle in Google Auth Platform Get started: einen App-Namen, deine Support-E-Mail, die Zielgruppe '
+    + 'External und eine Kontakt-E-Mail; stimme der Richtlinie zu und wähle Create',
+  'client.stepBranding':
+    'Setze unter Branding Application home page auf {home} und Application privacy policy link auf '
+    + '{privacy}, füge die übergeordnete Domain dieser Adresse (example.ts.net für dsh.example.ts.net) '
+    + 'unter Authorized domains hinzu und speichere; drücke dann unter Audience auf Publish app, damit der '
+    + 'Status In production lautet, sonst beendet Google die Anmeldung nach 7 Tagen',
   'client.stepCredentials': 'Wähle unter Clients Create client mit dem Typ Web application',
   'client.stepRedirect': 'Füge diese Adresse unter Authorized redirect URIs hinzu:',
   'client.stepDownload': 'Lade danach die JSON-Datei herunter, füge ihren ganzen Inhalt unten ein und speichere',
@@ -1129,9 +1151,13 @@ export const ru: Record<GmailKey, string> = {
   'client.stepProject': 'Откройте консоль Google Cloud и создайте или выберите проект',
   'client.stepApi': 'Включите Gmail API',
   'client.stepConsent':
-    'В Google Auth Platform выберите «Get started»: название приложения, адрес поддержки и аудиторию '
-    + '«External»; затем в разделе «Audience» нажмите «Publish app», чтобы статус стал «In production», '
-    + 'иначе Google завершит вход через 7 дней',
+    'В Google Auth Platform выберите «Get started»: название приложения, адрес поддержки, аудиторию '
+    + '«External» и контактный адрес; примите правила и нажмите «Create»',
+  'client.stepBranding':
+    'В разделе «Branding» укажите Application home page {home} и Application privacy policy link '
+    + '{privacy}, добавьте родительский домен этого адреса (example.ts.net для dsh.example.ts.net) в '
+    + '«Authorized domains» и сохраните; затем в разделе «Audience» нажмите «Publish app», чтобы статус '
+    + 'стал «In production», иначе Google завершит вход через 7 дней',
   'client.stepCredentials': 'В разделе «Clients» выберите «Create client» с типом «Web application»',
   'client.stepRedirect': 'Добавьте этот адрес в «Authorized redirect URIs»:',
   'client.stepDownload': 'После создания скачайте JSON-файл, вставьте всё его содержимое ниже и сохраните',
@@ -1297,9 +1323,13 @@ export const pt: Record<GmailKey, string> = {
   'client.stepProject': 'Abra o console do Google Cloud e crie ou escolha um projeto',
   'client.stepApi': 'Ative a API do Gmail',
   'client.stepConsent':
-    'No Google Auth Platform escolha Get started: um nome de app, seu e-mail de suporte e o público '
-    + 'External; depois, em Audience, clique em Publish app para o status ficar In production, senão o '
-    + 'Google encerra o login após 7 dias',
+    'No Google Auth Platform escolha Get started: um nome de app, seu e-mail de suporte, o público '
+    + 'External e um e-mail de contato; aceite a política e escolha Create',
+  'client.stepBranding':
+    'Em Branding defina Application home page como {home} e Application privacy policy link como '
+    + '{privacy}, adicione o domínio pai desse endereço (example.ts.net para dsh.example.ts.net) em '
+    + 'Authorized domains e salve; depois, em Audience, clique em Publish app para o status ficar In '
+    + 'production, senão o Google encerra o login após 7 dias',
   'client.stepCredentials': 'Em Clients escolha Create client, com o tipo Web application',
   'client.stepRedirect': 'Adicione este endereço em Authorized redirect URIs:',
   'client.stepDownload': 'Depois de criar, baixe o arquivo JSON, cole todo o conteúdo abaixo e salve',

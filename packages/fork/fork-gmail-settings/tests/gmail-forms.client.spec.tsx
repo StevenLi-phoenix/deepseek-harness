@@ -193,7 +193,7 @@ describe('add-account form', () => {
 })
 
 describe('OAuth client card', () => {
-  it('lists the Google Cloud steps with their pages and the redirect URI of this page', () => {
+  it('lists the Google Cloud steps with their pages, the redirect URI, and the home and privacy pages of this DSH', () => {
     mount({ view: SETUP })
     const setup = within(screen.getByRole('region', { name: 'Google OAuth 客户端' }))
     expect(setup.getByText(t('client.intro'))).toBeTruthy()
@@ -202,10 +202,13 @@ describe('OAuth client card', () => {
       'https://console.cloud.google.com/projectselector2/home/dashboard',
       'https://console.cloud.google.com/apis/library/gmail.googleapis.com',
       'https://console.cloud.google.com/auth/overview',
+      'https://console.cloud.google.com/auth/branding',
       'https://console.cloud.google.com/auth/clients/create',
     ])
     expect(links.every(link => link.getAttribute('target') === '_blank' && link.getAttribute('rel') === 'noreferrer')).toBe(true)
-    expect(setup.getByText(/状态变成「In production」/u)).toBeTruthy()
+    expect(setup.getByText(/状态变成「In production」/u).textContent).toContain(
+      'Application home page 填成 https://dsh.example.com/，Application privacy policy link 填成 https://dsh.example.com/fork.gmail.privacy，',
+    )
     const uri = setup.getByRole<HTMLInputElement>('textbox', { name: '重定向 URI' })
     expect(uri.value).toBe('https://dsh.example.com/fork.gmail.oauth')
     expect(uri.readOnly).toBe(true)

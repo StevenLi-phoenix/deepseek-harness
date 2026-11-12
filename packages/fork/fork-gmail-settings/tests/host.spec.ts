@@ -3,7 +3,7 @@ import type { WebResourceRoute } from '@deepseek-ai/dsh-host-webserver'
 import { GmailError, OAUTH_PATH, type GmailStatus } from '@deepseek-ai/dsh-fork-gmail'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as plugin from '../src/index.ts'
-import { escapeHtml, GMAIL_OAUTH_PATH, type GmailAnswer } from '../src/index.ts'
+import { escapeHtml, GMAIL_OAUTH_PATH, GMAIL_PRIVACY_PATH, privacyPage, type GmailAnswer } from '../src/index.ts'
 import { PAGE_HEADERS } from '../src/page.ts'
 
 interface Route {
@@ -76,14 +76,34 @@ async function mount(options: { web?: boolean } = {}) {
 }
 
 describe('fork-gmail-settings Host routes', () => {
-  it('registers /api/fork.gmail under the /api sign-in and the sign-in page outside it, and drops both on disposal', async () => {
+  it('registers /api/fork.gmail under the /api sign-in and the sign-in and privacy pages outside it, and drops them on disposal', async () => {
     const { routes, pages, fiber } = await mount()
     expect(routes.map(route => [route.path, route.methods])).toEqual([['/api/fork.gmail', ['GET', 'POST']]])
-    expect(pages.map(route => [route.kind, route.path])).toEqual([['exact', '/fork.gmail.oauth']])
+    expect(pages.map(route => [route.kind, route.path])).toEqual([['exact', '/fork.gmail.oauth'], ['exact', '/fork.gmail.privacy']])
     expect(GMAIL_OAUTH_PATH).toBe(OAUTH_PATH)
     await fiber.dispose()
     expect(routes).toEqual([])
     expect(pages).toEqual([])
+  })
+
+  it('serves the privacy statement as a static page in English and Chinese, with no script and no referrer', async () => {
+    const { pages } = await mount()
+    const route = pages.find(entry => entry.path === GMAIL_PRIVACY_PATH)
+    if (route === undefined) throw new Error('privacy page missing')
+    const response = await route.resource(new Request(`https://dsh.example${GMAIL_PRIVACY_PATH}`))
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8')
+    expect(response.headers.get('content-security-policy')).toContain("default-src 'none'")
+    expect(response.headers.get('referrer-policy')).toBe('no-referrer')
+    const html = await response.text()
+    expect(html).toBe(privacyPage())
+    expect(html).toContain('<title>DSH Mail privacy statement</title>')
+    expect(html).toContain('it never deletes mail permanently')
+    expect(html).toContain('the language model provider the owner has configured')
+    expect(html).toContain('<section lang="zh-CN">')
+    expect(html).toContain('它从不永久删除邮件')
+    expect(html).toContain('owner&#39;s')
+    expect(html).not.toContain('<script')
   })
 
   it('serves the status without a web server, and leaves the sign-in page out', async () => {

@@ -6,7 +6,8 @@
  *
  * `GET /fork.gmail.oauth` is the page Google's sign-in returns to. It lies outside `/api` because the DSH sign-in
  * cookie is `SameSite=Strict` and Google's cross-site redirect arrives without it; the one-use `state` that only an
- * open sign-in started from Settings holds authenticates the request.
+ * open sign-in started from Settings holds authenticates the request. `GET /fork.gmail.privacy` is the OAuth app's
+ * static privacy statement, the page Google's app settings link to as its home page and privacy policy.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -14,11 +15,11 @@ import type {} from '@deepseek-ai/dsh-host-webserver'
 import { GmailError, OAUTH_PATH, type GmailStatus, type ForkGmail } from '@deepseek-ai/dsh-fork-gmail'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { z } from 'zod'
-import { PAGE_HEADERS, signInPage } from './page.ts'
-import { GMAIL_PATH, POLICIES, type GmailAction, type GmailAnswer, type GmailView } from './view.ts'
+import { PAGE_HEADERS, privacyPage, signInPage } from './page.ts'
+import { GMAIL_PATH, GMAIL_PRIVACY_PATH, POLICIES, type GmailAction, type GmailAnswer, type GmailView } from './view.ts'
 
 export * from './view.ts'
-export { escapeHtml, signInPage } from './page.ts'
+export { escapeHtml, privacyPage, signInPage } from './page.ts'
 
 /** Plugin name. */
 export const name = 'fork-gmail-settings'
@@ -177,5 +178,10 @@ export function apply(ctx: Context): void {
         }
       },
     }), `fork-gmail-settings: ${OAUTH_PATH}`)
+    web.effect(() => web.webServer.register({
+      kind: 'exact',
+      path: GMAIL_PRIVACY_PATH,
+      resource: () => Promise.resolve(new Response(privacyPage(), { status: 200, headers: PAGE_HEADERS })),
+    }), `fork-gmail-settings: ${GMAIL_PRIVACY_PATH}`)
   })
 }

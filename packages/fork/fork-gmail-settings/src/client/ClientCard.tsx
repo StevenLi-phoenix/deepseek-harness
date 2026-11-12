@@ -1,12 +1,13 @@
 /**
  * The Google OAuth client. Configured, it is a collapsed card with the client id, whether the secret is stored (never
  * the secret), and the redirect URI, plus 更换客户端. Not configured, it lists the Google Cloud steps with the redirect
- * URI to copy and a box for the downloaded JSON. The box holds the client secret: it asks the browser for no
- * autofill, spelling, or writing-assistant help, and empties after a successful save.
+ * URI to copy, the home page and privacy statement to enter, and a box for the downloaded JSON. The box holds the
+ * client secret: it asks the browser for no autofill, spelling, or writing-assistant help, and empties after a
+ * successful save.
  */
 
 import { useId, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { parsesAsJson, redirectAccepted, redirectUriOf, type Translate } from './gmail.ts'
+import { appPagesOf, parsesAsJson, redirectAccepted, redirectUriOf, type Translate } from './gmail.ts'
 import type { GmailKey } from './locales.ts'
 import { ActionError, Field, type PartProps } from './parts.tsx'
 import css from './GmailSection.module.css'
@@ -19,6 +20,8 @@ interface FaceProps {
   readonly parts: PartProps
   /** The redirect URI to register at Google. */
   readonly uri: string
+  /** This page's origin. */
+  readonly origin: string
   readonly copy: Copy
 }
 
@@ -27,6 +30,7 @@ const CONSOLE_STEPS: ReadonlyArray<{ readonly key: GmailKey; readonly href: stri
   { key: 'client.stepProject', href: 'https://console.cloud.google.com/projectselector2/home/dashboard' },
   { key: 'client.stepApi', href: 'https://console.cloud.google.com/apis/library/gmail.googleapis.com' },
   { key: 'client.stepConsent', href: 'https://console.cloud.google.com/auth/overview' },
+  { key: 'client.stepBranding', href: 'https://console.cloud.google.com/auth/branding' },
   { key: 'client.stepCredentials', href: 'https://console.cloud.google.com/auth/clients/create' },
 ]
 
@@ -154,9 +158,10 @@ function ConfiguredClient({ parts, uri, copy }: FaceProps): ReactNode {
   )
 }
 
-function ClientSetup({ parts, uri, copy }: FaceProps): ReactNode {
+function ClientSetup({ parts, uri, origin, copy }: FaceProps): ReactNode {
   const { t } = parts
   const titleId = useId()
+  const pages = appPagesOf(uri, origin)
   return (
     <section className={css.card} aria-labelledby={titleId} data-tone="setup">
       <span id={titleId} className={css.cardTitle}>{t('client.title')}</span>
@@ -164,7 +169,7 @@ function ClientSetup({ parts, uri, copy }: FaceProps): ReactNode {
       <ol className={css.steps}>
         {CONSOLE_STEPS.map(step => (
           <li key={step.key}>
-            {t(step.key)}
+            {t(step.key, pages)}
             {' '}
             <a className={css.link} href={step.href} target="_blank" rel="noreferrer">{t('client.open')}</a>
           </li>
@@ -188,6 +193,6 @@ function ClientSetup({ parts, uri, copy }: FaceProps): ReactNode {
 export function ClientCard({ parts, origin, copy }: { parts: PartProps; origin: string; copy: Copy }): ReactNode {
   const uri = redirectUriOf(parts.view, origin)
   return parts.view.client.configured
-    ? <ConfiguredClient parts={parts} uri={uri} copy={copy} />
-    : <ClientSetup parts={parts} uri={uri} copy={copy} />
+    ? <ConfiguredClient parts={parts} uri={uri} origin={origin} copy={copy} />
+    : <ClientSetup parts={parts} uri={uri} origin={origin} copy={copy} />
 }

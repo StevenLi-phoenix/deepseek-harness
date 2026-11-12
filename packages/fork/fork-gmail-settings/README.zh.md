@@ -1,5 +1,5 @@
 ---
-description: "fork-gmail 的设置页区块「邮箱」：等主人确认的信（可确认或丢弃）、已连接的账号（发信规则、重新登录、移除）、经 Google 登录添加账号、OAuth client 设置、规则和动态；另有 Google 登录完成后跳回的页面，位于 /api 之外。"
+description: "fork-gmail 的设置页区块「邮箱」：等主人确认的信（可确认或丢弃）、已连接的账号（发信规则、重新登录、移除）、经 Google 登录添加账号、OAuth client 设置、规则和动态；另有 Google 登录完成后跳回的页面和 OAuth 应用的隐私说明，位于 /api 之外。"
 kind: "package-reference"
 ---
 
@@ -42,13 +42,13 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-Host 部分在 `/api` 下、Web UI 登录之后注册 `GET /api/fork.gmail`（状态取自 `ctx.forkGmail.status()`，逐字段映射成 `src/view.ts` 里的线路类型，所以服务新增的字段不经审查到不了浏览器）和 `POST /api/fork.gmail`。POST 必须是 `application/json`，跨站表单发不出来；请求体是 `client`、`sign-in`、`policy`、`remove`、`confirm`、`discard` 之一，用严格的 schema 检查，回答新的状态（`sign-in` 另带要打开的 Google 页面）。服务拒绝时回答 400 和它的说明；其他失败回答 500 和一句通用文字，并把原因写进日志。`GET /fork.gmail.oauth` 在 `/api` 之外，因为 DSH 的登录 cookie 是 `SameSite=Strict`，Google 的跨站跳转不会带上它；从设置页开始的登录有一个只能用一次的 `state`，用它来认证请求。这个页面是静态 HTML，所有值都转义，没有脚本，带 `Content-Security-Policy: default-src 'none'`、`Referrer-Policy: no-referrer`（地址里有 Google 的一次性授权码）和 `Cache-Control: no-store`。浏览器部分在区块打开且页面可见时刷新，读取失败时保留上一次的回答，全部文案有八种语言。
+Host 部分在 `/api` 下、Web UI 登录之后注册 `GET /api/fork.gmail`（状态取自 `ctx.forkGmail.status()`，逐字段映射成 `src/view.ts` 里的线路类型，所以服务新增的字段不经审查到不了浏览器）和 `POST /api/fork.gmail`。POST 必须是 `application/json`，跨站表单发不出来；请求体是 `client`、`sign-in`、`policy`、`remove`、`confirm`、`discard` 之一，用严格的 schema 检查，回答新的状态（`sign-in` 另带要打开的 Google 页面）。服务拒绝时回答 400 和它的说明；其他失败回答 500 和一句通用文字，并把原因写进日志。`GET /fork.gmail.oauth` 在 `/api` 之外，因为 DSH 的登录 cookie 是 `SameSite=Strict`，Google 的跨站跳转不会带上它；从设置页开始的登录有一个只能用一次的 `state`，用它来认证请求。这个页面是静态 HTML，所有值都转义，没有脚本，带 `Content-Security-Policy: default-src 'none'`、`Referrer-Policy: no-referrer`（地址里有 Google 的一次性授权码）和 `Cache-Control: no-store`。`GET /fork.gmail.privacy` 用同样的响应头提供 OAuth 应用的静态隐私说明（英文和中文）：应用发布为 In production 之前，Google 要求填首页和隐私政策链接，设置步骤会按重定向 URI 的 origin 列出这两个地址。浏览器部分在区块打开且页面可见时刷新，读取失败时保留上一次的回答，全部文案有八种语言。
 
 | 文件 | 作用 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Host 部分：状态和操作路由、线路映射、登录页路由 |
 | [`src/view.ts`](src/view.ts) | 两部分共用的线路类型和路径 |
-| [`src/page.ts`](src/page.ts) | 登录页的 HTML 和响应头 |
+| [`src/page.ts`](src/page.ts) | 登录页和隐私说明的 HTML 与响应头 |
 | [`src/client/index.ts`](src/client/index.ts) | 浏览器部分：把区块和它的词典注册进 `settings.section` |
 | [`src/client/GmailSection.tsx`](src/client/GmailSection.tsx) | 区块本身：概要、待确认的信、账号、OAuth client、规则、动态、「全部设置」卡片 |
 | [`src/client/Held.tsx`](src/client/Held.tsx) | 待确认的信，带发送（先复述收件人，第二次点击才提交）和丢弃；已处理的信 |
