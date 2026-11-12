@@ -2637,6 +2637,120 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'forkGmail',
+    summary: 'The owner\'s Gmail accounts.',
+    description: 'The owner\'s Gmail accounts.',
+    methods: [
+      {
+        signature: 'accounts(): AccountView[]',
+        description: 'Every connected account, in id order.',
+        parameters: [],
+        returns: 'the accounts without tokens.',
+      },
+      {
+        signature: 'search(account: string, query: string, options: SearchOptions = {}): Promise<SearchResult>',
+        description: 'Search an account\'s mail.',
+        parameters: [{ name: 'account', description: 'account id.' }, { name: 'query', description: 'Gmail search syntax.' }, { name: 'options', description: 'threads wanted (capped by config) and the page token of a previous page.' }],
+        returns: 'one summary per thread.',
+      },
+      {
+        signature: 'thread(account: string, threadId: string, keepQuotes: boolean = false): Promise<ThreadView>',
+        description: 'Read one thread: its newest messages in full.',
+        parameters: [{ name: 'account', description: 'account id.' }, { name: 'threadId', description: 'thread id.' }, { name: 'keepQuotes', description: 'keep the quoted history of each reply.' }],
+        returns: 'the thread.',
+      },
+      {
+        signature: 'message(account: string, messageId: string, keepQuotes: boolean = false): Promise<MessageView>',
+        description: 'Read one message.',
+        parameters: [{ name: 'account', description: 'account id.' }, { name: 'messageId', description: 'message id.' }, { name: 'keepQuotes', description: 'keep the quoted history.' }],
+        returns: 'the message.',
+      },
+      {
+        signature: 'download(account: string, messageId: string, part: string, cwd: string): Promise<SavedAttachment>',
+        description: 'Save one attachment of a received message under `<cwd>/.gmail-inbox/`.',
+        parameters: [{ name: 'account', description: 'account id.' }, { name: 'messageId', description: 'message id.' }, { name: 'part', description: 'the attachment\'s part id.' }, { name: 'cwd', description: 'the Session\'s working directory.' }],
+        returns: 'where it was saved.',
+      },
+      {
+        signature: 'draft(account: string, message: Outgoing, draftId?: string): Promise<DraftOutcome>',
+        description: 'Write a draft, or replace one.',
+        parameters: [{ name: 'account', description: 'account id.' }, { name: 'message', description: 'the message.' }, { name: 'draftId', description: 'the draft to replace; a held one cannot be changed.' }],
+        returns: 'the draft.',
+      },
+      {
+        signature: 'send(account: string, request: SendRequest, turn: TurnFacts): Promise<SendOutcome>',
+        description: 'Send a message or a draft, or hold it for the owner, by the account\'s policy and the turn.',
+        parameters: [{ name: 'account', description: 'account id.' }, { name: 'request', description: 'a new message, or a draft id.' }, { name: 'turn', description: 'the turn\'s facts, read from the Session log.' }],
+        returns: 'sent, or held with its reason.',
+        throws: ['GmailError `refused` on a read-only account, `limit` over the daily cap.'],
+      },
+      {
+        signature: 'confirm(code: string, how: { readonly by: \'settings\' } | { readonly by: \'owner-turn\'; readonly turn: TurnFacts }): Promise<{ readonly account: string; readonly messageId: string; readonly threadId: string }>',
+        description: 'Send a held message the owner confirmed.',
+        parameters: [{ name: 'code', description: 'the held message\'s code, in any case.' }, { name: 'how', description: 'from Settings, or from the owner\'s own turn (whose words must hold the code).' }],
+        returns: 'the sent message.',
+        throws: ['GmailError when the code is unknown, resolved, or expired, the turn does not confirm, the draft changed, or the cap is reached.'],
+      },
+      {
+        signature: 'discard(code: string): Promise<void>',
+        description: 'Drop a held message: its draft is deleted from Gmail.',
+        parameters: [{ name: 'code', description: 'the held message\'s code.' }],
+      },
+      {
+        signature: 'modify(account: string, threadIds: readonly string[], action: ModifyAction, label?: string): Promise<{ readonly changed: number }>',
+        description: 'Change labels on threads: read state, inbox, star, trash, or a label of the account\'s own.',
+        parameters: [{ name: 'account', description: 'account id.' }, { name: 'threadIds', description: 'threads to change.' }, { name: 'action', description: 'the change.' }, { name: 'label', description: 'the label name, for `label` and `unlabel`.' }],
+        returns: 'how many threads changed.',
+      },
+      {
+        signature: 'async beginSignIn(request: SignInRequest): Promise<{ readonly url: string; readonly redirectUri: string }>',
+        description: 'Start a Google sign-in for one account.',
+        parameters: [{ name: 'request', description: 'the account id, its policy when new, an address hint, and the origin Settings runs on.' }],
+        returns: 'the consent page address.',
+      },
+      {
+        signature: 'async completeSignIn(answer: SignInAnswer): Promise<AccountView>',
+        description: 'Finish a sign-in from Google\'s redirect.',
+        parameters: [{ name: 'answer', description: 'the redirect\'s `state`, `code`, and `error` parameters.' }],
+        returns: 'the connected account.',
+      },
+      {
+        signature: 'removeAccount(account: string): Promise<void>',
+        description: 'Disconnect an account: revoke its token at Google, delete it, and drop its held messages.',
+        parameters: [{ name: 'account', description: 'account id.' }],
+      },
+      {
+        signature: 'setPolicy(account: string, policy: SendPolicy): Promise<void>',
+        description: 'Change an account\'s send policy.',
+        parameters: [{ name: 'account', description: 'account id.' }, { name: 'policy', description: 'the new policy.' }],
+      },
+      {
+        signature: 'async setClient(text: string): Promise<ClientInfo>',
+        description: 'Store the OAuth client from Google\'s downloaded JSON.',
+        parameters: [{ name: 'text', description: 'the JSON file\'s text.' }],
+        returns: 'the client as Settings shows it.',
+      },
+      {
+        signature: 'async clientInfo(): Promise<ClientInfo>',
+        description: 'The OAuth client\'s state.',
+        parameters: [],
+        returns: 'whether it is set, and its id (not secret).',
+      },
+      {
+        signature: 'async status(): Promise<GmailStatus>',
+        description: 'Everything Settings shows.',
+        parameters: [],
+        returns: 'a snapshot.',
+      },
+      {
+        signature: 'async held(): Promise<PendingRecord[]>',
+        description: 'The held messages, oldest first.',
+        parameters: [],
+        returns: 'every message waiting for the owner.',
+      },
+    ],
+  },
+  {
     key: 'forkGuard',
     summary: 'The validator.',
     description: 'The validator.',
@@ -6898,6 +7012,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type AttachmentId = Branded<\'AttachmentId\'>;',
   },
   {
+    name: 'AttachmentInfo',
+    declaration: 'export interface AttachmentInfo {\n    readonly part: string;\n    readonly filename: string;\n    readonly mimeType: string;\n    readonly size: number;\n}',
+  },
+  {
     name: 'AuthorizationEntry',
     declaration: 'export interface AuthorizationEntry {\n    key: CredentialKey;\n    label: string;\n    methods: readonly AuthorizationMethod[];\n    inFlight: boolean;\n}',
   },
@@ -7092,6 +7210,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ClientArtifactBaseline',
     declaration: 'export interface ClientArtifactBaseline {\n    readonly path: string;\n    readonly mtimeMs: number;\n    readonly ctimeMs: number;\n    readonly size: number;\n}',
+  },
+  {
+    name: 'ClientInfo',
+    declaration: 'export interface ClientInfo {\n    readonly configured: boolean;\n    readonly clientId: string | null;\n    readonly secretConfigured: boolean;\n}',
   },
   {
     name: 'CollectedOutput',
@@ -7594,6 +7716,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface DomainTableSpec<K extends string = string, V = unknown> {\n    readonly valueSchema: ZodType<V>;\n    readonly __key?: K;\n}',
   },
   {
+    name: 'DraftOutcome',
+    declaration: 'export interface DraftOutcome {\n    readonly draftId: string;\n    readonly threadId: string | null;\n    readonly recipients: readonly string[];\n    readonly subject: string;\n}',
+  },
+  {
     name: 'DshEnvironment',
     declaration: 'export type DshEnvironment = Readonly<Record<DshEnvironmentKey, string>>;',
   },
@@ -8036,6 +8162,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'GenericResultView',
     declaration: 'export interface GenericResultView {\n    card: \'generic\';\n    title?: string;\n    content?: ContentBlock[];\n}',
+  },
+  {
+    name: 'GmailStatus',
+    declaration: 'export interface GmailStatus {\n    readonly client: ClientInfo;\n    readonly redirectUri: string | null;\n    readonly accounts: readonly AccountView[];\n    readonly pending: readonly PendingRecord[];\n    readonly activity: readonly ActivityRecord[];\n    readonly maxSendsPerDay: number;\n    readonly confirmTtlHours: number;\n    readonly trustedRecipients: readonly string[];\n}',
   },
   {
     name: 'GoalActivation',
@@ -8794,6 +8924,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface MessageSourceMap {\n    user: {\n        kind: \'user\';\n    };\n    model: ModelMessageSource;\n    tool: ToolMessageSource;\n    \'system-prompt\': SystemPromptMessageSource;\n}',
   },
   {
+    name: 'MessageView',
+    declaration: 'export interface MessageView {\n    readonly id: string;\n    readonly threadId: string;\n    readonly labels: readonly string[];\n    readonly date: number | null;\n    readonly from: string;\n    readonly to: string;\n    readonly cc: string;\n    readonly replyTo: string;\n    readonly subject: string;\n    readonly messageId: string;\n    readonly references: string;\n    readonly text: string;\n    readonly textChars: number;\n    readonly quoteTrimmed: boolean;\n    readonly attachments: readonly AttachmentInfo[];\n    readonly snippet: string;\n}',
+  },
+  {
     name: 'MeView',
     declaration: 'export interface MeView {\n    signedIn: boolean;\n    mid?: number;\n    uname?: string;\n    level?: number;\n    following?: number;\n    followers?: number;\n    folders?: Folder[];\n    exp?: {\n        current: number;\n        min: number;\n        next: number | null;\n    };\n    coins?: number;\n    rewards?: DailyRewards;\n    limits: string;\n    pause?: string;\n}',
   },
@@ -8844,6 +8978,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ModHook',
     declaration: 'export type ModHook<E, R> = ($: ModsApi, e: E, next: HookNext<E, R>) => R | Promise<R>;',
+  },
+  {
+    name: 'ModifyAction',
+    declaration: 'export type ModifyAction = \'read\' | \'unread\' | \'archive\' | \'inbox\' | \'star\' | \'unstar\' | \'trash\' | \'untrash\' | \'label\' | \'unlabel\';',
   },
   {
     name: 'ModOn',
@@ -8976,6 +9114,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'OutageRecord',
     declaration: 'export type OutageRecord = z.infer<typeof outageSchema>;',
+  },
+  {
+    name: 'Outgoing',
+    declaration: 'export interface Outgoing {\n    readonly to: readonly string[];\n    readonly cc: readonly string[];\n    readonly bcc: readonly string[];\n    readonly subject?: string | undefined;\n    readonly body: string;\n    readonly replyTo?: string | undefined;\n    readonly replyAll?: boolean | undefined;\n    readonly attachments: readonly string[];\n    readonly cwd?: string | undefined;\n}',
   },
   {
     name: 'OwnerIdentityRequest',
@@ -9742,6 +9884,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SandboxPolicyRequest {\n    session?: Session;\n    mode?: SandboxMode;\n}',
   },
   {
+    name: 'SavedAttachment',
+    declaration: 'export interface SavedAttachment {\n    readonly path: string;\n    readonly filename: string;\n    readonly mimeType: string;\n    readonly bytes: number;\n}',
+  },
+  {
     name: 'SaveFileAttachment',
     declaration: 'export interface SaveFileAttachment {\n    data: Uint8Array;\n    name?: string;\n}',
   },
@@ -9890,6 +10036,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SearchMatchesResultView {\n    card: \'search\';\n    shape: \'matches\';\n    title?: string;\n    files: SearchFileMatches[];\n    truncated: boolean;\n    total: number;\n}',
   },
   {
+    name: 'SearchOptions',
+    declaration: 'export interface SearchOptions {\n    readonly max?: number | undefined;\n    readonly pageToken?: string | undefined;\n}',
+  },
+  {
     name: 'SearchOrder',
     declaration: 'export type SearchOrder = \'relevance\' | \'newest\';',
   },
@@ -9900,6 +10050,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SearchResultView',
     declaration: 'export type SearchResultView = SearchMatchesResultView | SearchPathsResultView;',
+  },
+  {
+    name: 'SendOutcome',
+    declaration: 'export type SendOutcome = {\n    readonly kind: \'sent\';\n    readonly messageId: string;\n    readonly threadId: string;\n    readonly recipients: readonly string[];\n} | {\n    readonly kind: \'held\';\n    readonly reason: string;\n    readonly draftId: string;\n    readonly noticeSent: boolean;\n    readonly recipients: readonly string[];\n};',
+  },
+  {
+    name: 'SendPolicy',
+    declaration: 'export type SendPolicy = \'read-only\' | \'confirm-all\' | \'confirm-untrusted\' | \'direct\';',
+  },
+  {
+    name: 'SendRequest',
+    declaration: 'export type SendRequest = {\n    readonly kind: \'new\';\n    readonly message: Outgoing;\n} | {\n    readonly kind: \'draft\';\n    readonly draftId: string;\n};',
   },
   {
     name: 'SerializedElement',
@@ -10706,8 +10868,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ShellSandboxInfo {\n    mode: SandboxMode;\n    denied: boolean;\n    enforcement?: SandboxEnforcement;\n    runnerFailed?: boolean;\n}',
   },
   {
+    name: 'SignInAnswer',
+    declaration: 'export interface SignInAnswer {\n    readonly state: string;\n    readonly code?: string | undefined;\n    readonly error?: string | undefined;\n}',
+  },
+  {
     name: 'SignInAttemptId',
     declaration: 'export type SignInAttemptId = Branded<\'SignInAttemptId\'>;',
+  },
+  {
+    name: 'SignInRequest',
+    declaration: 'export interface SignInRequest {\n    readonly account: string;\n    readonly policy?: SendPolicy | undefined;\n    readonly loginHint?: string | undefined;\n    readonly origin: string;\n}',
   },
   {
     name: 'SkillCandidate',
@@ -11302,6 +11472,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface TextProps {\n    readonly color?: string | undefined;\n    readonly bold?: boolean | undefined;\n    readonly dimColor?: boolean | undefined;\n    readonly italic?: boolean | undefined;\n    readonly underline?: boolean | undefined;\n    readonly children?: UiNode | undefined;\n}',
   },
   {
+    name: 'ThreadView',
+    declaration: 'export interface ThreadView {\n    readonly id: string;\n    readonly messages: readonly MessageView[];\n    readonly omitted: number;\n}',
+  },
+  {
     name: 'TimedUserQuestionResult',
     declaration: 'export type TimedUserQuestionResult = AskUserQuestionAnswer | {\n    pending: true;\n    callId: ToolCallId;\n};',
   },
@@ -11544,6 +11718,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TurnEndReasonMap',
     declaration: 'export interface TurnEndReasonMap {\n    completed: {\n        kind: \'completed\';\n    };\n    aborted: {\n        kind: \'aborted\';\n        reason: TurnEndCancelCause;\n    };\n    blocked: {\n        kind: \'blocked\';\n    };\n    error: {\n        kind: \'error\';\n        error: LlmFailure;\n    };\n    \'max-tokens\': {\n        kind: \'max-tokens\';\n    };\n    interrupted: {\n        kind: \'interrupted\';\n    };\n    forked: {\n        kind: \'forked\';\n    };\n}',
+  },
+  {
+    name: 'TurnFacts',
+    declaration: 'export interface TurnFacts {\n    readonly clean: boolean;\n    readonly origin: string;\n    readonly ownerText: readonly string[];\n    readonly sessionId?: string | undefined;\n}',
   },
   {
     name: 'TurnStartInput',

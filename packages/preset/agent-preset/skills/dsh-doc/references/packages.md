@@ -347,6 +347,8 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-fork-event-bus` | yes | Durable event bus for event-driven agent runs: dedupe, loop suppression, subscriptions, coalescing, rate limits, and dispatch to notify or Session actuators |
 | `@deepseek-ai/dsh-fork-event-ingest` | yes | Authenticated POST route through which the owner's own services push events into the fork event bus, one token per source |
 | `@deepseek-ai/dsh-fork-github-sensor` | yes | GitHub polling sensor for the fork event bus: releases, tags, commits, and notifications with conditional requests |
+| `@deepseek-ai/dsh-fork-gmail` | yes | The owner's Gmail accounts in DSH: OAuth sign-in per account, the Gmail REST client, mail composition, and the send gate that holds a message for the owner's confirmation when strangers' words reached the turn |
+| `@deepseek-ai/dsh-fork-gmail-settings` | no | Settings section for the owner's Gmail accounts: the Google OAuth client, connecting and removing accounts with their send policy, the messages held for confirmation with confirm and discard, the recent activity, and the OAuth redirect page |
 | `@deepseek-ai/dsh-fork-guard` | yes | One content validator for text that others can read: patterns, canaries, overlap with the owner's memory, and a model, any layer that cannot run refuses |
 | `@deepseek-ai/dsh-fork-integrity` | yes | Integrity watch for the owner's main agent: hashes of the files that steer it, a WeChat notice when one changes, persona hashes per Session, and a count of the persona's forbidden stock lines |
 | `@deepseek-ai/dsh-fork-memory` | yes | Owner memory across Sessions: a JSONL store the Host injects into each root Session, memory_search/memory_save/memory_forget tools, and a claude.ai export importer |
@@ -362,6 +364,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-fork-taint` | yes | Turn origin for the owner's main agent: who started the current turn (the owner, a relayed message, an event, a reminder), which tools read strangers' words in it, and the rules that follow |
 | `@deepseek-ai/dsh-fork-time-gap` | yes | Time check for every Session: an input that arrives after a quiet spell reaches the model with the current time, how long the Session was quiet, and a reminder to read it on its own terms |
 | `@deepseek-ai/dsh-fork-tool-courses` | no | Course tools of the owner's main agent: courses_deadlines, courses_find, courses_get, and the writes courses_set_progress and courses_save_memo over the owner's course records |
+| `@deepseek-ai/dsh-fork-tool-gmail` | yes | Gmail tools of the owner's main agent over ctx.forkGmail: gmail_accounts, gmail_search, gmail_read, gmail_attachment, gmail_draft, gmail_send (behind the send gate), and gmail_modify |
 | `@deepseek-ai/dsh-fork-tool-monitor` | no | Model-facing monitor tools: a bash command whose stdout lines come back to the same Session as they appear, like Claude Code's Monitor |
 | `@deepseek-ai/dsh-fork-tool-qq` | yes | Read-only qq_groups, qq_digest, qq_recent, and qq_search tools: the agent reads what the QQ observer recorded and digested |
 | `@deepseek-ai/dsh-fork-tool-up` | yes | Model-facing up_* tools for the creator account's reads and Reply Gate replies (bili-svc) |

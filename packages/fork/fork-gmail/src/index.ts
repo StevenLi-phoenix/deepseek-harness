@@ -596,7 +596,7 @@ export class ForkGmail extends Service {
    * @param keepQuotes - keep the quoted history of each reply.
    * @returns the thread.
    */
-  thread(account: string, threadId: string, keepQuotes = false): Promise<ThreadView> {
+  thread(account: string, threadId: string, keepQuotes: boolean = false): Promise<ThreadView> {
     return this.run(account, 'read thread', async (api) => {
       const thread = await api.thread(threadId, 'full')
       const all = thread.messages ?? []
@@ -616,7 +616,7 @@ export class ForkGmail extends Service {
    * @param keepQuotes - keep the quoted history.
    * @returns the message.
    */
-  message(account: string, messageId: string, keepQuotes = false): Promise<MessageView> {
+  message(account: string, messageId: string, keepQuotes: boolean = false): Promise<MessageView> {
     return this.run(account, 'read message', async api => messageView(await api.message(messageId, 'full'), this.viewOptions(keepQuotes)))
   }
 

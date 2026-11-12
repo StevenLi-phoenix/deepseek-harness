@@ -2973,6 +2973,47 @@ export type RepoStream = 'releases' | 'commits' | 'tags'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-github-sensor -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-gmail -->
+<a id="deepseek-aidsh-fork-gmail"></a>
+
+## `@deepseek-ai/dsh-fork-gmail`
+
+- `inject`: `storageDomain` · `credentials`
+- `source`: [`packages/fork/fork-gmail/src/index.ts:82`](../packages/fork/fork-gmail/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Name of the OAuth client id in the credential store or `$DSH_HOME/.env`. */
+  clientIdEnv: string
+  /** Name of the OAuth client secret in the credential store or `$DSH_HOME/.env`. */
+  clientSecretEnv: string
+  /** Redirect URI registered at Google; empty derives `<Settings origin>/fork.gmail.oauth`. */
+  redirectUri: string
+  /** Addresses that never need a confirmation, besides the connected accounts themselves. */
+  trustedRecipients: string[]
+  /** Messages one account may send in 24 hours; more are refused. */
+  maxSendsPerDay: number
+  /** Hours a held message waits for the owner before it expires (its draft stays in Gmail). */
+  confirmTtlHours: number
+  /** Timeout of one call to Google, in milliseconds. */
+  requestTimeoutMs: number
+  /** Threads one search returns at most. */
+  maxSearchResults: number
+  /** Characters of one message body shown to the model. */
+  maxBodyChars: number
+  /** Characters of an HTML body read at most. */
+  maxHtmlChars: number
+  /** Newest messages of one thread shown; older ones are only counted. */
+  maxThreadMessages: number
+  /** Bytes of all attachments of one outgoing message. */
+  maxAttachmentBytes: number
+  /** Bytes of one received attachment saved. */
+  maxDownloadBytes: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-gmail -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-guard -->
 <a id="deepseek-aidsh-fork-guard"></a>
 
@@ -3634,6 +3675,23 @@ export interface Config {
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-time-gap -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-gmail -->
+<a id="deepseek-aidsh-fork-tool-gmail"></a>
+
+## `@deepseek-ai/dsh-fork-tool-gmail`
+
+- `inject`: `tools`
+- `source`: [`packages/fork/fork-tool-gmail/src/index.ts:24`](../packages/fork/fork-tool-gmail/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** IANA zone dates are shown in. */
+  timeZone: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-gmail -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-qq -->
 <a id="deepseek-aidsh-fork-tool-qq"></a>
@@ -6624,6 +6682,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-lsp` | — | [`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts) |
 | `@deepseek-ai/dsh-fork-config` | `connection` · `configEditor` | [`packages/fork/fork-config/src/index.ts`](../packages/fork/fork-config/src/index.ts) |
 | `@deepseek-ai/dsh-fork-courses-settings` | `connection` · `forkCourses` | [`packages/fork/fork-courses-settings/src/index.ts`](../packages/fork/fork-courses-settings/src/index.ts) |
+| `@deepseek-ai/dsh-fork-gmail-settings` | `connection` · `forkGmail` | [`packages/fork/fork-gmail-settings/src/index.ts`](../packages/fork/fork-gmail-settings/src/index.ts) |
 | `@deepseek-ai/dsh-fork-memory-admin` | — | [`packages/fork/fork-memory-admin/src/index.ts`](../packages/fork/fork-memory-admin/src/index.ts) |
 | `@deepseek-ai/dsh-fork-qq-login` | `connection` · `forkQq` | [`packages/fork/fork-qq-login/src/index.ts`](../packages/fork/fork-qq-login/src/index.ts) |
 | `@deepseek-ai/dsh-fork-style-settings` | `connection` | [`packages/fork/fork-style-settings/src/index.ts`](../packages/fork/fork-style-settings/src/index.ts) |
