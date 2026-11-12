@@ -94,6 +94,7 @@ export function ownerConfirms(turn: TurnFacts, code: string): boolean {
 }
 
 /** A closed union ran out of cases. */
+/* v8 ignore next 3 -- closed-union backstop; its only call site is the ignored default above. */
 function assertNever(value: never): never {
   throw new Error(`unhandled send policy ${String(value)}`)
 }

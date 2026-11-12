@@ -19,7 +19,7 @@ export class AddressProblem extends Error {}
 const CONTROL = /[\u0000-\u0008\u000A-\u001F\u007F]/u
 
 /** `local@domain` with a dot-atom local part and a dotted domain; quoted local parts are not accepted. */
-const ADDRESS = new RegExp(String.raw`^[A-Za-z0-9!#$%&'*+/=?^_\`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_\`{|}~-]+)*`
+const ADDRESS = new RegExp(String.raw`^[A-Za-z0-9!#$%&'*+/=?^_\x60{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_\x60{|}~-]+)*`
   + String.raw`@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$`, 'u')
 
 /** Longest address the tools accept (RFC 5321 path limit). */

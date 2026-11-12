@@ -100,7 +100,7 @@ export interface Config {
   maxBodyChars: number
   /** Characters of an HTML body read at most. */
   maxHtmlChars: number
-  /** Messages of one thread shown in full; older ones show their headers and snippet. */
+  /** Newest messages of one thread shown; older ones are only counted. */
   maxThreadMessages: number
   /** Bytes of all attachments of one outgoing message. */
   maxAttachmentBytes: number
@@ -120,7 +120,7 @@ export const Config: z<Config> = z.object({
   maxSearchResults: z.natural().min(1).max(50).default(20).description('Threads one search returns at most.'),
   maxBodyChars: z.natural().min(500).default(20_000).description('Characters of one message body shown to the model.'),
   maxHtmlChars: z.natural().min(10_000).default(500_000).description('Characters of an HTML body read at most.'),
-  maxThreadMessages: z.natural().min(1).default(10).description('Messages of one thread shown in full; older ones show headers and snippet.'),
+  maxThreadMessages: z.natural().min(1).default(10).description('Newest messages of one thread shown; older ones are only counted.'),
   maxAttachmentBytes: z.natural().min(1).default(18 * 1_048_576).description('Bytes of all attachments of one outgoing message (Gmail caps a message at 25 MB encoded).'),
   maxDownloadBytes: z.natural().min(1).default(25 * 1_048_576).description('Bytes of one received attachment saved.'),
 })
@@ -513,7 +513,7 @@ export class ForkGmail extends Service {
     this.tokens.delete(account)
     const noticed = await this.notify({
       title: `⚠️ Gmail ${account}（${row.email}）要重新登录`,
-      body: `Google 不再接受这个账号的登录（${why.slice(0, 200)}）。在 设置 → 邮箱 里点「重新连接」；之前不能读信或发信。`,
+      body: `Google 不再接受这个账号的登录（${why.slice(0, 200)}）。在 设置 → 邮箱 里点「重新登录」；在那之前不能读信或发信。`,
       kinds: ['gmail.reconnect'],
     })
     await domain.table('accounts').put(account, { ...row, needsReconnect: true, lastError: why.slice(0, 300), reconnectNoticeAt: noticed ? Date.now() : null })
@@ -642,7 +642,8 @@ export class ForkGmail extends Service {
       }
       const size = found.body?.size ?? 0
       if (size > this.config.maxDownloadBytes) throw new GmailError('limit', `the attachment holds ${size} bytes, over the ${this.config.maxDownloadBytes}-byte limit`)
-      const data = found.body?.attachmentId !== undefined ? await api.attachment(messageId, found.body.attachmentId) : Buffer.from(found.body?.data ?? '', 'base64url')
+      const inline = found.body?.data ?? ''
+      const data = found.body?.attachmentId !== undefined ? await api.attachment(messageId, found.body.attachmentId) : Buffer.from(inline, 'base64url')
       if (data.length > this.config.maxDownloadBytes) throw new GmailError('limit', `the attachment holds ${data.length} bytes, over the ${this.config.maxDownloadBytes}-byte limit`)
       const filename = found.filename
       const path = await saveAttachment(cwd, messageId.slice(-8), filename, data)
@@ -734,7 +735,7 @@ export class ForkGmail extends Service {
   draft(account: string, message: Outgoing, draftId?: string): Promise<DraftOutcome> {
     return this.run(account, draftId === undefined ? 'draft' : 'update draft', async (api, row) => {
       if (row.policy === 'read-only') throw new GmailError('refused', 'this account is read-only: the owner allows no drafts, sends, or changes from you')
-      if (draftId !== undefined) this.assertNotHeld(draftId)
+      if (draftId !== undefined) this.assertNotHeld(await this.ready, draftId)
       const prepared = await this.prepare(api, row, message)
       const draft = draftId === undefined
         ? await api.createDraft(prepared.raw, prepared.threadId)
@@ -746,8 +747,8 @@ export class ForkGmail extends Service {
     }, result => `${result.draftId} to ${result.recipients.length} recipient(s)`)
   }
 
-  private assertNotHeld(draftId: string): void {
-    const held = this.domain === undefined ? undefined : Array.from(this.domain.table('pending').entries()).find(([, row]) => row.draftId === draftId && row.status === 'held')
+  private assertNotHeld(domain: Domain<typeof gmailDomain>, draftId: string): void {
+    const held = Array.from(domain.table('pending').entries()).find(([, row]) => row.draftId === draftId && row.status === 'held')
     if (held !== undefined) throw new GmailError('refused', 'this draft waits for the owner\'s confirmation and cannot be changed or sent by you; write a new one instead')
   }
 
@@ -766,7 +767,7 @@ export class ForkGmail extends Service {
         await this.activity(domain, account, 'refused', `read-only account (${turn.origin})`)
         throw new GmailError('refused', 'this account is read-only: the owner allows no drafts, sends, or changes from you')
       }
-      if (request.kind === 'draft') this.assertNotHeld(request.draftId)
+      if (request.kind === 'draft') this.assertNotHeld(domain, request.draftId)
       const outgoing: Prepared | DraftFacts = request.kind === 'new' ? await this.prepare(api, row, request.message) : await ForkGmail.draftFacts(api, request.draftId)
       const recipients = 'raw' in outgoing ? outgoing.recipients : [...outgoing.to, ...outgoing.cc, ...outgoing.bcc]
       if (recipients.length === 0) throw new AddressProblem('the message has no recipient')
@@ -1243,6 +1244,7 @@ function rawHeaders(raw: string): (name: string) => string {
 }
 
 /** A closed union ran out of cases. */
+/* v8 ignore next 3 -- closed-union backstop; its only call sites are the ignored defaults above. */
 function assertNever(value: never): never {
   throw new Error(`unhandled case ${String(value)}`)
 }

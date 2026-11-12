@@ -45,7 +45,7 @@ const pendingSchema = z.object({
   messageId: z.string().nullable(),
   /** Whether the owner's WeChat notice went out. */
   noticeSent: z.boolean(),
-  /** SHA-256 over the held draft's recipients, subject, text, and attachment names; a changed draft is never sent. */
+  /** SHA-256 of the held draft's RFC 5322 text (format=raw); a changed draft is never sent. */
   fingerprint: z.string(),
 }).strict()
 
