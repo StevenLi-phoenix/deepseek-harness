@@ -152,6 +152,14 @@ describe('event bundle', () => {
     expect(composedRoot().get('ui-subagent')?.enabled).toBe(true)
   })
 
+  it('mounts the Gmail service and its Settings section once at the root with the plugin\'s defaults (no owner value in the bundle)', () => {
+    for (const id of ['fork-gmail', 'fork-gmail-settings']) {
+      expect(inserted.filter(entry => entry.id === id)).toHaveLength(1)
+      expect(inserted.find(entry => entry.id === id)?.config).toBeUndefined()
+      expect(composedRoot().get(id)?.enabled).toBe(true)
+    }
+  })
+
   it('leaves no model tool at the profile root, where every preset, bili included, would inherit it', () => {
     const enabled = [...composedRoot()].filter(([, row]) => row.enabled && row.name?.startsWith('@deepseek-ai/dsh-tool-'))
     expect(enabled.map(([, row]) => row.name).filter(name => !ROOT_TOOL_ROWS_WITHOUT_TOOLS.has(name!))).toEqual([])

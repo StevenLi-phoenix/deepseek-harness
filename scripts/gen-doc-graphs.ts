@@ -120,7 +120,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'fork-wechat',
     title: 'Owner notification channel',
     mode: 'service',
-    consumers: ['fork-event-bus', 'fork-qq', 'fork-courses', 'fork-memory', 'fork-integrity', 'fork-tool-watch', 'fork-tool-voice', 'fork-tool-wechat'],
+    consumers: ['fork-event-bus', 'fork-qq', 'fork-courses', 'fork-gmail', 'fork-memory', 'fork-integrity', 'fork-tool-watch', 'fork-tool-voice', 'fork-tool-wechat'],
     note: 'The event bus defines the channel interface; the WeChat channel provides it.',
   },
   {
@@ -154,6 +154,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     mode: 'service',
     consumers: ['fork-tool-courses', 'fork-courses-settings'],
     note: 'Reads the course service and sends deadline reminders.',
+  },
+  {
+    key: 'forkGmail',
+    pkg: 'fork-gmail',
+    title: 'Gmail accounts',
+    mode: 'service',
+    consumers: ['fork-tool-gmail', 'fork-gmail-settings'],
+    note: 'Reads and sends the owner\'s Gmail; holds a send for the owner\'s confirmation.',
   },
   {
     key: 'forkQq',

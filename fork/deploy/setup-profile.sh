@@ -56,7 +56,8 @@ for (const name of ['@deepseek-ai/dsh-webhook', '@deepseek-ai/dsh-webhook-github
   '@deepseek-ai/dsh-fork-voice', '@deepseek-ai/dsh-fork-tool-voice', '@deepseek-ai/dsh-fork-tool-up',
   '@deepseek-ai/dsh-tool-bili', '@deepseek-ai/dsh-owner-relay', '@deepseek-ai/dsh-fork-qq', '@deepseek-ai/dsh-fork-qq-login', '@deepseek-ai/dsh-fork-tool-qq', '@deepseek-ai/dsh-fork-qqbot',
   '@deepseek-ai/dsh-fork-taint', '@deepseek-ai/dsh-fork-integrity', '@deepseek-ai/dsh-fork-style', '@deepseek-ai/dsh-fork-style-settings', '@deepseek-ai/dsh-fork-guard', '@deepseek-ai/dsh-fork-time-gap',
-  '@deepseek-ai/dsh-fork-courses', '@deepseek-ai/dsh-fork-courses-settings', '@deepseek-ai/dsh-fork-tool-courses', '@deepseek-ai/dsh-fork-subagents']) {
+  '@deepseek-ai/dsh-fork-courses', '@deepseek-ai/dsh-fork-courses-settings', '@deepseek-ai/dsh-fork-tool-courses',
+  '@deepseek-ai/dsh-fork-gmail', '@deepseek-ai/dsh-fork-gmail-settings', '@deepseek-ai/dsh-fork-tool-gmail', '@deepseek-ai/dsh-fork-subagents']) {
   link(name, join(prefix, 'node_modules', name))
 }
 link('@deepseek-ai/dsh-fork-event-bundle', bundleDir)

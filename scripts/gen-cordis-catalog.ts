@@ -156,6 +156,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   forkEventBus: 'fork.md',
   forkPresence: 'fork.md',
   forkCourses: 'fork.md',
+  forkGmail: 'fork.md',
   forkGithubSensor: 'fork.md',
   forkNotifier: 'fork.md',
   ownerRelay: 'fork.md',

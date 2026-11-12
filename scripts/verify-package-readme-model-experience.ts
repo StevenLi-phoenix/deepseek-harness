@@ -182,6 +182,7 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/fork/fork-style-settings': { kind: 'none', reason: 'Settings section showing the speaking-style samples; registers nothing model-facing (the samples reach the model through fork-style).' },
   'packages/fork/fork-config': { kind: 'none', reason: 'Settings card editing plugin configuration; registers nothing model-facing.' },
   'packages/fork/fork-courses-settings': { kind: 'none', reason: 'Settings section showing the course deadline poller and its configuration; registers nothing model-facing.' },
+  'packages/fork/fork-gmail-settings': { kind: 'none', reason: 'Settings section and OAuth return page for the Gmail accounts; registers nothing model-facing, and the OAuth client secret never leaves the Host.' },
   'packages/fork/fork-subagents': { kind: 'none', reason: 'Sidebar page and a projection over subagent Session events; registers no tool and adds nothing to model requests.' },
   'packages/fork/fork-qq-login': { kind: 'none', reason: 'Settings section showing the QQ connection and login QR code; registers nothing model-facing, and the code never enters a model request.' },
   'packages/fork/fork-cc-admin': { kind: 'none', reason: 'Lists and starts Claude Code sessions for a settings page; registers nothing model-facing.' },
