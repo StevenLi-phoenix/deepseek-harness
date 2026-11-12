@@ -378,7 +378,7 @@ export class BiliAccount extends Service {
       ready: this.ready,
       serialize: work => this.serialize(work),
       ownerMid: () => this.ownerMid(),
-      holdReason: now => this.shareHold(now),
+      holdReason: (now, domain) => this.shareHold(now, domain),
       prompt: text => this.promptShare(text),
       timeZone: config.timeZone,
       now: () => Date.now(),
@@ -388,6 +388,7 @@ export class BiliAccount extends Service {
     this.dm = new DmChannel({
       replyOwner: text => this.replyOwner(text),
       shareOwner: text => this.shareOwner(text),
+      shareCurrent: sessionId => this.share.isShareTurn(sessionId),
       shareSettled: (sessionId, outcome, detail, text) => this.share.settled(sessionId, outcome, detail, text),
       hold: work => this.hold(work),
       notifier: () => this.ctx.get('forkNotifier'),
@@ -676,12 +677,11 @@ export class BiliAccount extends Service {
   }
 
   /** Why the daily share should wait now: the owner sleeps, is messaging the account, or has messages queued. */
-  private shareHold(now: number): string | undefined {
+  private shareHold(now: number, domain: Domain<typeof biliDomain>): string | undefined {
     const presence = (this.ctx.get as (name: string) => unknown)('forkPresence') as PresenceReader | undefined
     if (presence?.isAsleep() === true) return 'the owner is asleep'
     if (this.conversationUntil > now) return 'the owner is messaging the account'
-    const pending = this.domain?.table('pending').size ?? 0
-    if (pending > 0) return 'the owner\'s messages are waiting for an answer'
+    if (domain.table('pending').size > 0) return 'the owner\'s messages are waiting for an answer'
     return undefined
   }
 

@@ -1,7 +1,7 @@
 /**
  * The Bilibili account Settings section: the gate with its brake, one card per account bili-svc
  * holds (with QR sign-in, refresh, check, and sign-out when the Host has the manage token), the
- * recent action ledger, and the owner's main account. It polls while mounted and pauses while the
+ * owner's main account, the daily share to it, and the recent action ledger. It polls while mounted and pauses while the
  * page is hidden; a QR code waiting for a scan is asked every two seconds. Nothing it shows can be
  * a cookie or token: bili-svc's answers name accounts and states only, and QR keys stay on the Host.
  */
@@ -19,6 +19,7 @@ import { LOGIN_POLL_MS, POLL_INTERVAL_MS, startPolling, type BiliState } from '.
 import { dateTime, stampTime, type Translate } from './format.ts'
 import { Gate } from './Gate.tsx'
 import { Ledger } from './Ledger.tsx'
+import { Share } from './Share.tsx'
 import css from './BiliAccount.module.css'
 
 /** How long the line that says what an action did stays up. */
@@ -116,8 +117,23 @@ function resultText(result: ActionResult, t: Translate): string | null {
       return t('result.loggedOut', { account })
     case 'login.poll':
       return result.outcome === 'done' ? t('result.loginDone', { account }) : null
+    case 'share.enabled':
+      return result.outcome === 'on' ? t('result.shareOn') : t('result.shareOff')
+    case 'share.now':
+      return shareNowText(result.outcome, t)
     default:
       return null
+  }
+}
+
+/** What 现在发一条 did: started, or why not, in the owner's words where the Host's reason is known. */
+function shareNowText(outcome: string, t: Translate): string {
+  switch (outcome) {
+    case 'started': return t('result.shareStarted')
+    case 'a share is running': return t('result.shareRunning')
+    case 'no owner account is set': return t('result.shareNoOwner')
+    case 'the Session is in a turn': return t('result.shareBusy')
+    default: return t('result.shareNotStarted', { reason: outcome })
   }
 }
 
@@ -179,6 +195,7 @@ export function BiliAccountSection({ useBili, refresh, act, poll, renderFactoryS
               <Accounts view={view} now={now} t={translate} busy={state.busy} act={act} />
               <OwnerCard view={view} act={act} busy={state.busy !== null} t={translate} />
             </div>
+            <Share view={view} now={now} t={translate} busy={state.busy} act={act} />
             <Ledger view={view} now={now} t={translate} busy={state.busy} act={act} limit={state.ledgerLimit} />
           </>
         )}

@@ -59,6 +59,7 @@ export function parseView(body: unknown): BiliView {
   if (
     typeof fields.account !== 'object' || fields.account === null || typeof fields.ownerMid !== 'number' || typeof fields.timeZone !== 'string'
     || !Array.isArray(fields.accounts) || !Array.isArray(fields.logins) || typeof fields.manage !== 'boolean'
+    || typeof fields.share !== 'object' || fields.share === null
   ) {
     throw new Error('unexpected Bilibili account answer')
   }
@@ -77,8 +78,12 @@ export class RouteError extends Error {
   }
 }
 
-/** What an action changes in the view before the Host answers: only stopping is shown ahead, since bili-svc may refuse automatic. */
+/**
+ * What an action changes in the view before the Host answers: stopping the gate (bili-svc may refuse
+ * automatic, so that waits) and the daily share's switch, which the Host always accepts.
+ */
 function optimistic(view: BiliView, action: BiliAction): BiliView {
+  if (action.action === 'share.enabled') return { ...view, share: { ...view.share, enabled: action.enabled } }
   if (action.action !== 'gate.mode' || action.mode !== 'readonly' || view.gate === null) return view
   return { ...view, gate: { ...view.gate, mode: action.mode, readonly: true } }
 }

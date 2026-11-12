@@ -455,7 +455,72 @@
   overflow-wrap: anywhere;
 }
 
+/* Daily share card: an on/off switch in the header, today's line, the send-now button, and the recent shares. */
+.switch {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  corner-shape: round;
+  background: var(--dsw-alias-border-l3);
+  cursor: pointer;
+  transition: background 160ms ease, opacity 160ms ease;
+}
+
+.switch[aria-checked='true'] {
+  background: var(--dsw-alias-state-business-primary);
+}
+
+.switch:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.switch[aria-busy='true'] {
+  opacity: 0.75;
+  cursor: progress;
+}
+
+.knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  corner-shape: round;
+  background: var(--dsw-alias-label-primary-foreground);
+  transition: transform 160ms ease;
+}
+
+.switch[aria-checked='true'] .knob {
+  transform: translateX(16px);
+}
+
+.shareToday {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.shareRecent > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.shareRecent > summary::-webkit-details-marker {
+  display: none;
+}
+
+.pill[data-state='idle'] {
+  background: var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-secondary);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dot[data-tone='live'] { animation: none; }
-  .primary, .secondary, .danger { transition: none; }
+  .primary, .secondary, .danger, .switch, .knob { transition: none; }
 }

@@ -276,6 +276,20 @@ describe('RemoteBiliClient over answers bili-svc could give', () => {
     await expect(client().replyRoutes()).rejects.toThrow('accounts: bili-svc answered HTTP 500')
   })
 
+  it('sends the daily share through /v1/share/owner and reads its answer like a reply\'s', async () => {
+    answering(200, { status: 'held', id: 's-9' })
+    expect(await client().shareOwner(200000001, '今天的推荐')).toEqual({ status: 'held', id: 's-9' })
+    answering(200, { status: 'sent' })
+    expect(await client().shareOwner(200000001, '今天的推荐')).toEqual({ status: 'sent' })
+    expect(logs.at(-1)).toBe('debug bili: share/owner answered sent')
+    answering(200, {})
+    await expect(client().shareOwner(200000001, '今天的推荐')).rejects.toThrow('bili-svc answered no status')
+    answering(502, {})
+    await expect(client().shareOwner(200000001, '今天的推荐')).rejects.toThrow('share/owner: bili-svc answered HTTP 502')
+    answering(422, { error: 'not_owner' })
+    await expect(client().shareOwner(200000002, '今天的推荐')).rejects.toBeInstanceOf(BiliRefused)
+  })
+
   it('answers a reply without an id as just its status, and refuses any other HTTP answer', async () => {
     answering(200, { status: 'sent' })
     expect(await client().replyDm(200000001, 'hi')).toEqual({ status: 'sent' })

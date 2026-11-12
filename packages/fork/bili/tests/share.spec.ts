@@ -49,7 +49,7 @@ async function mounted(config: Record<string, unknown> = {}) {
     await vi.advanceTimersByTimeAsync(1000)
   }
   const promptText = (index: number): string => (h.sessions.prompts[index]!.content[0] as { text: string }).text
-  return { ...h, sessions: sessions.state, answer, promptText }
+  return { ...h, sessions: sessions.state, controller: sessions.controller, answer, promptText }
 }
 
 /** Advance fake time to a New York wall-clock time today. */
@@ -126,9 +126,10 @@ describe('the daily share', () => {
     expect(h.logs.filter(line => line.text === 'bili: the share 2026-10-23 waits: the owner is asleep')).toHaveLength(1)
     asleep = false
     h.sessions.status.set('bili-1', 'running')
-    await vi.advanceTimersByTimeAsync(61_000)
+    await vi.advanceTimersByTimeAsync(122_000)
     expect(h.sessions.prompts).toHaveLength(0)
-    expect(h.logs.some(line => line.text === 'bili: the share 2026-10-23 waits: the Session is in a turn')).toBe(true)
+    // Each wait is logged once, however many minutes it lasts.
+    expect(h.logs.filter(line => line.text === 'bili: the share 2026-10-23 waits: the Session is in a turn')).toHaveLength(1)
     h.sessions.status.set('bili-1', 'idle')
     await vi.advanceTimersByTimeAsync(61_000)
     expect(h.sessions.prompts).toHaveLength(1)
@@ -160,8 +161,136 @@ describe('the daily share', () => {
     await vi.advanceTimersByTimeAsync(46 * 60_000)
     expect((await h.view()).share.today).toMatchObject({ outcome: 'failed' })
     expect((await h.view()).share.running).toBe(false)
+    // The late answer of the given-up turn is not sent, and the record stays failed.
+    await h.answer(SHARE)
+    expect(svc.shares).toEqual([])
+    expect((await h.view()).share.today).toMatchObject({ outcome: 'failed' })
+    expect(h.logs.some(line => line.text.includes('already given up as failed; nothing is sent'))).toBe(true)
     await until('23:59')
     expect(h.sessions.prompts).toHaveLength(1)
+  })
+
+  it('leaves a given-up share failed when its turn ends late with NO_REPLY', async () => {
+    const h = await mounted()
+    await until('20:46')
+    await vi.advanceTimersByTimeAsync(46 * 60_000)
+    await h.answer('NO_REPLY')
+    expect((await h.view()).share.today).toMatchObject({ outcome: 'failed' })
+    expect(h.logs.some(line => line.text === 'bili: Session bili-1 ended a share turn that was already given up (silent); its record stays')).toBe(true)
+  })
+
+  it('keeps a long share short in Settings, and lists earlier shares sent on Bilibili or WeChat newest first', async () => {
+    const h = await mounted()
+    const long = `${'长'.repeat(340)}。`
+    svc.shareStatus = ['held']
+    await until('20:46')
+    await h.answer(long)
+    const first = (await h.view()).share.today!
+    expect(first.outcome).toBe('wechat')
+    expect(Array.from(first.text!)).toHaveLength(300)
+    expect(first.text!.endsWith('…')).toBe(true)
+    await vi.advanceTimersByTimeAsync(24 * 3_600_000)
+    expect(h.sessions.prompts).toHaveLength(2)
+    await h.answer(SHARE)
+    await vi.advanceTimersByTimeAsync(24 * 3_600_000)
+    expect(h.sessions.prompts).toHaveLength(3)
+    const third = h.promptText(2)
+    expect(third.indexOf('开门大吉')).toBeGreaterThan(-1)
+    expect(third.indexOf('开门大吉')).toBeLessThan(third.indexOf('长长长'))
+  })
+
+  it('waits for a manual share that is still running, then sends the day\'s share', async () => {
+    const h = await mounted()
+    await until('20:40')
+    await h.post({ action: 'share.now' })
+    expect(h.sessions.prompts).toHaveLength(1)
+    await until('20:50')
+    expect(h.sessions.prompts).toHaveLength(1)
+    await h.answer(SHARE)
+    await vi.advanceTimersByTimeAsync(61_000)
+    expect(h.sessions.prompts).toHaveLength(2)
+    expect(h.promptText(1)).toContain('Daily share at')
+  })
+
+  it('waits while the owner is messaging the account, and tries again when a prompt fails', async () => {
+    const h = await mounted({ inboxPollMs: 600_000 })
+    await until('20:30')
+    svc.ownerMessages.push({ sender: OWNER, text: '在吗', key: '6984393491767670002', at: Math.floor(Date.now() / 1000) })
+    svc.unread.follow = 1
+    await vi.advanceTimersByTimeAsync(600_000)
+    expect(h.sessions.prompts).toHaveLength(1)
+    await h.answer('在的')
+    await until('20:50')
+    expect(h.sessions.prompts).toHaveLength(1)
+    expect(h.logs.filter(line => line.text === 'bili: the share 2026-10-23 waits: the owner is messaging the account')).toHaveLength(1)
+    const prompt = h.controller.prompt
+    h.controller.prompt = () => Promise.reject(new Error('the Session is gone'))
+    await until('21:00')
+    expect(h.logs.some(line => line.text === 'bili: prompting the Session for the share 2026-10-23 failed: the Session is gone')).toBe(true)
+    // A thrown value that is not an Error is worded as text.
+    // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the non-Error arm is the case under test.
+    h.controller.prompt = () => Promise.reject('no Session')
+    expect((await (await h.post({ action: 'share.now' })).json() as { result: { outcome: string } }).result.outcome).toBe('the Session could not be prompted: no Session')
+    h.controller.prompt = prompt
+    await vi.advanceTimersByTimeAsync(61_000)
+    expect(h.sessions.prompts).toHaveLength(2)
+    expect(h.promptText(1)).toContain('Daily share at')
+  })
+
+  it('does not start a manual share while the Session is in a turn', async () => {
+    const h = await mounted()
+    h.sessions.status.set('bili-1', 'running')
+    const busy = await h.post({ action: 'share.now' })
+    expect((await busy.json() as { result: { outcome: string } }).result.outcome).toBe('the Session is in a turn')
+    expect(h.sessions.prompts).toHaveLength(0)
+    expect((await h.view()).share.recent).toEqual([])
+  })
+
+  it('records a planned share as missed, without a wait reason, when the owner turned the share off before it ran', async () => {
+    const h = await mounted()
+    await vi.advanceTimersByTimeAsync(61_000)
+    await h.post({ action: 'share.enabled', enabled: false })
+    await until('23:59')
+    vi.setSystemTime(new Date(localTime('2026-10-24', 31, 'America/New_York')))
+    await vi.advanceTimersByTimeAsync(61_000)
+    const row = (await h.view()).share.recent.find(entry => entry.day === '2026-10-23')!
+    expect(row.outcome).toBe('missed')
+    expect(row.detail).toBe('it could not run before Sat 2026-10-24 00:30')
+  })
+
+  it('keeps only the newest 30 shares and lists 10 in Settings', async () => {
+    const h = await mounted()
+    for (let index = 0; index < 31; index += 1) {
+      await h.post({ action: 'share.now' })
+      await h.answer('NO_REPLY')
+    }
+    const domain = await (Reflect.get(h.account, 'ready') as Promise<{ table(name: string): { size: number } }>)
+    expect(domain.table('share_days').size).toBe(SHARE_KEPT)
+    expect((await h.view()).share.recent).toHaveLength(10)
+  })
+
+  it('says it is off in its start log when the configuration turns it off, and turns on from Settings', async () => {
+    const h = await mounted({ share: { enabled: false, start: '19:00', end: '22:30' } })
+    expect(h.logs.some(line => line.text === 'bili: the daily share is off')).toBe(true)
+    await until('23:59')
+    expect(h.sessions.prompts).toHaveLength(0)
+    const on = await h.post({ action: 'share.enabled', enabled: true })
+    expect((await on.json() as { share: { enabled: boolean }; result: { outcome: string } })).toMatchObject({ share: { enabled: true }, result: { outcome: 'on' } })
+    expect(h.logs.some(line => line.text === 'bili: the owner turned the daily share on')).toBe(true)
+  })
+
+  it('sends a share bili-svc answered without an id, and words a share bili-svc refused or lost', async () => {
+    const h = await mounted()
+    svc.answer('/v1/share/owner', { body: { status: 'sent' } }, { status: 502, body: {} }, { status: 422, body: { error: 'not_owner' } })
+    await until('20:46')
+    await h.answer(SHARE)
+    expect(h.logs.some(line => /^bili: bili-svc answered sent to a \d+-char share to the owner$/.test(line.text))).toBe(true)
+    for (const expected of ['the outcome at bili-svc is unknown', 'bili-svc refused the request as malformed']) {
+      await h.post({ action: 'share.now' })
+      await h.answer(SHARE)
+      expect(h.notes.at(-1)!.body).toContain(expected)
+    }
+    expect((await h.view()).share.recent.slice(0, 2).map(row => row.outcome)).toEqual(['wechat', 'wechat'])
   })
 
   it('obeys the owner\'s switch in Settings and sends one at once on 现在发一条', async () => {
@@ -194,6 +323,29 @@ describe('the daily share', () => {
     expect(h.sessions.prompts).toHaveLength(0)
     const now = await h.post({ action: 'share.now' })
     expect((await now.json() as { result: { outcome: string } }).result.outcome).toBe('no owner account is set')
+    const shareOwner = Reflect.get(h.account, 'shareOwner') as (text: string) => Promise<unknown>
+    await expect(shareOwner.call(h.account, 'hi')).resolves.toEqual({ status: 'failed', detail: 'no owner account is configured' })
+    expect(svc.shares).toEqual([])
+  })
+
+  it('waits while the owner\'s messages are queued for an answer', async () => {
+    const h = await mounted()
+    const domain = await (Reflect.get(h.account, 'ready') as Promise<{ table(name: string): { put(key: string, value: unknown): Promise<void> } }>)
+    h.sessions.status.set('bili-1', 'running')
+    await domain.table('pending').put('dm:9', { kind: 'dm', id: '9', at: Date.now(), item: { kind: 'message from the owner\'s account', text: '在吗' } })
+    await until('20:50')
+    expect(h.sessions.prompts).toHaveLength(0)
+    expect(h.logs.some(line => line.text === 'bili: the share 2026-10-23 waits: the owner\'s messages are waiting for an answer')).toBe(true)
+  })
+
+  it('marks a share prompted before a restart as failed once its turn is overdue', async () => {
+    const first = await mounted()
+    await until('20:46')
+    expect(first.sessions.prompts).toHaveLength(1)
+    await first.ctx.fiber.dispose()
+    const again = await harness({ svc, sessions: fakeSessions(), workspace: dir, pool: first.pool })
+    await vi.advanceTimersByTimeAsync(46 * 60_000)
+    expect((await again.view()).share.today).toMatchObject({ outcome: 'failed', detail: 'its turn did not end within 45 min (DSH restarted, or the turn hung)' })
   })
 
   it('keeps answering the owner\'s own messages through the Reply Gate, not as a share', async () => {
@@ -213,7 +365,9 @@ describe('share configuration and prompt', () => {
   it('refuses a window that cannot work', () => {
     expect(() => { assertShareConfig({ enabled: true, start: '7pm', end: '22:30' }) }).toThrow('HH:MM')
     expect(() => { assertShareConfig({ enabled: true, start: '22:00', end: '21:00' }) }).toThrow('must be after')
-    expect(() => { assertShareConfig({ enabled: true, start: '19:00', end: '22:30' }) }).not.toThrow()
+    expect(() => { assertShareConfig({ enabled: true, start: '24:00', end: '22:30' }) }).toThrow('HH:MM')
+    expect(() => { assertShareConfig({ enabled: true, start: '19:00', end: '22:60' }) }).toThrow('HH:MM')
+    expect(assertShareConfig({ enabled: true, start: '19:00', end: '22:30' })).toEqual({ start: 1140, end: 1350 })
   })
 
   it('keeps the prompt within its rules', () => {

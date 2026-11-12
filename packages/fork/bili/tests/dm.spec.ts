@@ -3,13 +3,28 @@ import type { ForkNote } from '@deepseek-ai/dsh-fork-event-bus'
 import { describe, expect, it, vi } from 'vitest'
 import { BILI_FALLBACK_LABEL, DmChannel, type DmOutcome } from '../src/dm.ts'
 
+const SENT: DmOutcome = { status: 'sent', detail: 'sent' }
+
 /** A host double whose replies wait until the test settles them. */
-function host(options: { notifier?: false | ((note: ForkNote) => Promise<void>) } = {}) {
+/** How the host double answers: its notifier, the share's bili-svc outcome, whether the share is current, and how a share is recorded. */
+interface HostOptions {
+  notifier?: false | ((note: ForkNote) => Promise<void>)
+  share?: DmOutcome
+  current?: boolean
+  settled?: () => Promise<void>
+}
+
+function host(options: HostOptions = {}) {
   const pending: Array<(outcome: DmOutcome) => void> = []
   const notes: ForkNote[] = []
   const send = options.notifier === undefined ? (note: ForkNote) => { notes.push(note); return Promise.resolve() } : options.notifier
   const value = {
     replyOwner: vi.fn((_text: string) => new Promise<DmOutcome>((resolve) => { pending.push(resolve) })),
+    shareOwner: vi.fn((_text: string) => Promise.resolve(options.share ?? SENT)),
+    shareCurrent: vi.fn((_sessionId: string) => options.current ?? true),
+    shareSettled: vi.fn((_sessionId: string, _outcome: string, _detail: string, _text?: string) => (
+      options.settled === undefined ? Promise.resolve() : options.settled()
+    )),
     hold: <T>(work: Promise<T>): Promise<T> => work,
     notifier: () => (send === false ? undefined : { send }),
     logger: { info: vi.fn((_message: string) => {}), warn: vi.fn((_message: string) => {}) },
@@ -22,7 +37,6 @@ function host(options: { notifier?: false | ((note: ForkNote) => Promise<void>) 
   return { host: value, notes, settle }
 }
 
-const SENT: DmOutcome = { status: 'sent', detail: 'sent' }
 
 describe('DmChannel', () => {
   it('sends the answer of a turn the owner\'s messages started as replies, even when the next prompt comes before the last answer went out', async () => {
@@ -111,5 +125,48 @@ describe('DmChannel', () => {
     await new Promise(resolve => setImmediate(resolve))
     await missing.settle({ status: 'blocked', detail: 'bili-svc\'s Reply Gate answered blocked' })
     await answer
+  })
+})
+
+describe('DmChannel and the daily share', () => {
+  it('settles a share turn the owner stopped as failed and an empty one as silent, and only logs a record that failed', async () => {
+    const h = host()
+    const dm = new DmChannel(h.host)
+    dm.expectShare('bili-1')
+    dm.onTurnEnd('bili-1', 'stopped')
+    dm.expectShare('bili-1')
+    dm.onTurnEnd('bili-1', 'empty')
+    expect(h.host.shareSettled.mock.calls).toEqual([
+      ['bili-1', 'failed', 'the owner stopped the turn'], ['bili-1', 'silent', 'the turn ended without an answer'],
+    ])
+    for (const failure of [new Error('disk full'), 'gone']) {
+      // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the non-Error arm is the case under test.
+      const broken = host({ settled: () => Promise.reject(failure) })
+      const channel = new DmChannel(broken.host)
+      channel.expectShare('bili-1')
+      channel.onTurnEnd('bili-1', 'silent')
+      await new Promise(resolve => setImmediate(resolve))
+      expect(broken.host.logger.warn).toHaveBeenCalledWith(`bili: recording the share's outcome failed: ${failure instanceof Error ? failure.message : failure}`)
+    }
+  })
+
+  it('records a share bili-svc held as failed when no notifier is mounted, and fails the delivery', async () => {
+    const h = host({ notifier: false, share: { status: 'held', detail: 'bili-svc answered held' } })
+    const dm = new DmChannel(h.host)
+    dm.expectShare('bili-1')
+    dm.onTurnEnd('bili-1', 'answer')
+    await expect(dm.deliver({ sessionId: 'bili-1', text: '今天的推荐', outcome: 'completed' })).rejects.toThrow('no forkNotifier is mounted')
+    expect(h.host.shareSettled).toHaveBeenCalledWith('bili-1', 'failed', 'bili-svc did not send it (bili-svc answered held) and no forkNotifier is mounted')
+  })
+
+  it('sends nothing for a share turn that was already given up, and keeps its answer in the Session', async () => {
+    const h = host({ current: false })
+    const dm = new DmChannel(h.host)
+    dm.expectShare('bili-1')
+    dm.onTurnEnd('bili-1', 'answer')
+    expect(await dm.deliver({ sessionId: 'bili-1', text: '今天的推荐', outcome: 'completed' })).toBe('kept')
+    expect(h.host.shareOwner).not.toHaveBeenCalled()
+    expect(h.host.shareSettled).not.toHaveBeenCalled()
+    expect(h.host.logger.warn).toHaveBeenCalledWith(expect.stringContaining('already given up as failed; nothing is sent'))
   })
 })

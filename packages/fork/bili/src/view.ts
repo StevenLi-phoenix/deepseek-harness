@@ -31,6 +31,8 @@ export interface AccountView {
 export interface UsageCounts {
   readonly comment: number
   readonly dm: number
+  /** Messages to the owner on the account's own initiative (the daily share); null from a bili-svc before 0.5.0. */
+  readonly share: number | null
 }
 
 /** The risk brake bili-svc set after Bilibili answered with risk control (or the owner pulled it). */

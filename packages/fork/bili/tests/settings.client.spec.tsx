@@ -3,7 +3,7 @@
 import { act as reactAct, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
-import type { BiliAction, BiliView, LoginView, ManagedAccount } from '../src/view.ts'
+import type { BiliAction, BiliView, LoginView, ManagedAccount, ShareRow, ShareView } from '../src/view.ts'
 import { BiliLoader, RouteError, createBiliStore, parseView, startPolling, type BiliState } from '../src/client/bili.ts'
 import { BiliAccountSection, type BiliAccountProps } from '../src/client/BiliAccount.tsx'
 import { agoText, countdown, dateTime, qrPath, stampTime } from '../src/client/format.ts'
@@ -21,9 +21,16 @@ const MAOMAO: ManagedAccount = {
   refreshedAt: NOW - 86_400_000, importedAt: NOW - 5 * 86_400_000, deadReason: '-101 not logged in',
 }
 
+const SHARED: ShareRow = {
+  day: '2026-10-30', reason: 'plan', planAt: NOW - 86_400_000 + 9_000_000, firedAt: NOW - 86_400_000 + 9_000_000,
+  outcome: 'sent', detail: 'bili-svc sent it', text: '今天的推荐：《一只猫学会了开门》 <b>x</b>',
+}
+const TODAY: ShareRow = { day: '2026-10-31', reason: 'plan', planAt: NOW + 9_900_000, firedAt: null, outcome: null, detail: null, text: null }
+const SHARE: ShareView = { enabled: true, overridden: false, start: '19:00', end: '22:30', today: TODAY, recent: [TODAY, SHARED], running: false }
+
 const VIEW: BiliView = {
   account: { account: 'maomao', session: 'dead', mid: 3_000_001, uname: '魔女的猫猫', checkedAt: NOW - 60_000 },
-  gate: { mode: 'auto', readonly: false, brake: null, used: { comment: 2, dm: 7 }, caps: { comment: 5, dm: 20 } },
+  gate: { mode: 'auto', readonly: false, brake: null, used: { comment: 2, dm: 7, share: 1 }, caps: { comment: 5, dm: 20, share: 2 } },
   accounts: [MAODENG, MAOMAO],
   speaker: { id: 'maomao', display: '魔女的猫猫' },
   ledger: {
@@ -41,6 +48,7 @@ const VIEW: BiliView = {
   ownerMid: 200000001,
   ownerUpdatedAt: null,
   timeZone: 'America/New_York',
+  share: SHARE,
 }
 
 function login(patch: Partial<LoginView> = {}): LoginView {
@@ -323,6 +331,110 @@ describe('feedback', () => {
   })
 })
 
+describe('daily share', () => {
+  const shareCard = (): HTMLElement => card('每日推荐')
+
+  it('shows the window, today\'s plan, bili-svc\'s count, and the recent shares with their text inside', () => {
+    mount({ view: VIEW, checkedAt: NOW })
+    const share = shareCard()
+    expect(share.textContent).toContain('每天 19:00–22:30（America/New_York）之间随机一个时间')
+    expect(within(share).getByRole('status').textContent).toBe('今天计划在 10-31 16:45 发送。')
+    expect(share.textContent).toContain('bili-svc 今天已放行 1/2 条主动私信。')
+    expect(within(share).getByRole('switch', { name: '每日推荐' }).getAttribute('aria-checked')).toBe('true')
+    const recent = share.querySelector('details')!
+    expect(recent.hasAttribute('open')).toBe(false)
+    expect(recent.textContent).toContain('最近 2 次')
+    const sent = share.querySelector('[data-share-row="2026-10-30"]')!
+    expect(sent.textContent).toContain('已发送')
+    expect(sent.textContent).toContain('每日')
+    // The account's words stay text.
+    expect(sent.textContent).toContain('<b>x</b>')
+    expect(sent.querySelector('b')).toBeNull()
+    expect(sent.textContent).toContain('bili-svc sent it')
+    expect(share.querySelector('[data-share-row="2026-10-31"]')!.textContent).toContain('计划中')
+  })
+
+  it('switches off and sends one now, without the manage token', () => {
+    const { actions } = mount({ view: { ...VIEW, manage: false, ledger: null }, checkedAt: NOW })
+    const share = shareCard()
+    fireEvent.click(within(share).getByRole('switch', { name: '每日推荐' }))
+    fireEvent.click(within(share).getByRole('button', { name: '现在发一条' }))
+    expect(actions).toEqual([{ action: 'share.enabled', enabled: false }, { action: 'share.now' }])
+  })
+
+  it('marks the pressed control busy and holds 现在发一条 while a share runs or no owner is set', () => {
+    const { view } = mount({ view: VIEW, checkedAt: NOW, busy: { action: 'share.now', account: null } })
+    const busy = within(shareCard()).getByRole('button', { name: '开始中…' })
+    expect(within(shareCard()).getByRole('switch').getAttribute('aria-busy')).toBeNull()
+    expect(busy.getAttribute('aria-busy')).toBe('true')
+    expect(within(shareCard()).getByRole('switch')).toHaveProperty('disabled', true)
+    view.unmount()
+    const switching = mount({ view: VIEW, checkedAt: NOW, busy: { action: 'share.enabled', account: null } })
+    expect(within(shareCard()).getByRole('switch').getAttribute('aria-busy')).toBe('true')
+    switching.view.unmount()
+    const fired = { ...TODAY, firedAt: NOW - 60_000 }
+    const running = mount({ view: { ...VIEW, share: { ...SHARE, running: true, today: fired, recent: [fired, SHARED] } }, checkedAt: NOW })
+    expect(within(shareCard()).getByRole('status').textContent).toBe('今天的推荐正在生成。')
+    expect(within(shareCard()).getByRole('button', { name: '现在发一条' })).toHaveProperty('disabled', true)
+    expect(shareCard().querySelector('[data-share-row="2026-10-31"]')!.textContent).toContain('生成中')
+    running.view.unmount()
+    mount({ view: { ...VIEW, ownerMid: 0 }, checkedAt: NOW })
+    expect(within(shareCard()).getByRole('status').textContent).toBe('还没设置主号，不会发送。')
+    expect(within(shareCard()).getByRole('button', { name: '现在发一条' })).toHaveProperty('disabled', true)
+  })
+
+  it('says what today\'s share did, and what it does while off or before it is planned', () => {
+    const cases: [Partial<ShareView>, string][] = [
+      [{ today: null }, '今天的发送时间还没排定，一分钟内排好。'],
+      [{ today: null, enabled: false }, '已关闭：不会主动发送。'],
+      [{ enabled: false }, '已关闭：不会主动发送。'],
+      [{ today: { ...TODAY, outcome: 'sent' } }, '今天的推荐已发送。'],
+      [{ today: { ...TODAY, outcome: 'wechat' } }, '今天的推荐没能用 B站私信发出，已改发微信。'],
+      [{ today: { ...TODAY, outcome: 'silent' } }, '今天没有值得发的，未发送。'],
+      [{ today: { ...TODAY, outcome: 'missed' } }, '今天的推荐错过了时间，未发送。'],
+      [{ today: { ...TODAY, outcome: 'failed' } }, '今天的推荐没有完成，未发送。'],
+    ]
+    for (const [patch, text] of cases) {
+      const { view } = mount({ view: { ...VIEW, share: { ...SHARE, ...patch } }, checkedAt: NOW })
+      expect(within(shareCard()).getByRole('status').textContent, text).toBe(text)
+      view.unmount()
+    }
+  })
+
+  it('labels every outcome in the recent list, says when nothing was shared, and hides the count from an older bili-svc', () => {
+    const rows: ShareRow[] = (['wechat', 'silent', 'missed', 'failed'] as const).map((outcome, index) => ({ ...SHARED, day: `2026-10-2${index}`, outcome, text: null, detail: null }))
+    const { view } = mount({ view: { ...VIEW, share: { ...SHARE, recent: [{ ...rows[0]!, reason: 'manual' }, ...rows.slice(1)] } }, checkedAt: NOW })
+    const pills = [...shareCard().querySelectorAll('[data-share-row]')].map(row => row.textContent)
+    expect(pills[0]).toContain('手动')
+    expect(pills.join('|')).toMatch(/改发微信.*未发送.*已错过.*失败/)
+    view.unmount()
+    const older = { ...VIEW.gate!, used: { comment: 0, dm: 0, share: null } }
+    mount({ view: { ...VIEW, share: { ...SHARE, recent: [] }, gate: older }, checkedAt: NOW })
+    expect(shareCard().textContent).toContain('还没有发过。')
+    expect(shareCard().textContent).not.toContain('主动私信。')
+  })
+
+  it('says what the switch and 现在发一条 did', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOW)
+    const cases: [string, string, string][] = [
+      ['share.enabled', 'on', '每日推荐已打开。'],
+      ['share.enabled', 'off', '每日推荐已关闭。'],
+      ['share.now', 'started', '已开始生成一条推荐，几分钟内发到主号。'],
+      ['share.now', 'a share is running', '已有一条推荐在生成。'],
+      ['share.now', 'no owner account is set', '还没设置主号，没有发送。'],
+      ['share.now', 'the Session is in a turn', '账号的会话正忙，稍后再试。'],
+      ['share.now', 'the Session could not be prompted: gone', '没有开始：the Session could not be prompted: gone'],
+    ]
+    for (const [action, outcome, text] of cases) {
+      const value = { action, account: null, outcome, days: null } as BiliView['result'] & object
+      const { view } = mount({ view: VIEW, checkedAt: NOW, result: { value, at: NOW - 1000 } })
+      expect(screen.getByText(text)).toBeTruthy()
+      view.unmount()
+    }
+  })
+})
+
 describe('owner and status', () => {
   it('sets the main account from a UID, and says nothing is answered until then', () => {
     const { actions } = mount({ view: { ...VIEW, ownerMid: 0 }, checkedAt: NOW })
@@ -366,6 +478,19 @@ describe('BiliLoader', () => {
     await loader.refresh()
     expect(read).toHaveBeenLastCalledWith(50)
     vi.restoreAllMocks()
+  })
+
+  it('flips the daily share switch at once', async () => {
+    const store = createBiliStore()
+    store.update((draft) => { draft.view = VIEW })
+    let answer: (view: BiliView) => void = () => {}
+    const post = (): Promise<BiliView> => new Promise<BiliView>((resolve) => { answer = resolve })
+    const loader = new BiliLoader(store, () => Promise.resolve(VIEW), post, () => 1)
+    const pending = loader.act({ action: 'share.enabled', enabled: false })
+    expect(store.getSnapshot().view?.share.enabled).toBe(false)
+    answer({ ...VIEW, share: { ...SHARE, enabled: false, overridden: true } })
+    await pending
+    expect(store.getSnapshot().view?.share).toMatchObject({ enabled: false, overridden: true })
   })
 
   it('shows the gate mode at once, restores it when the Host refuses, and keeps the code', async () => {

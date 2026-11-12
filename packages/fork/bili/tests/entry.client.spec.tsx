@@ -22,6 +22,7 @@ const VIEW: BiliView = {
   ownerMid: 0,
   ownerUpdatedAt: null,
   timeZone: 'UTC',
+  share: { enabled: true, overridden: false, start: '19:00', end: '22:30', today: null, recent: [], running: false },
 }
 
 interface Spec { name: string; id: string; order: number; label: () => string; locale: string; inject: () => BiliAccountInjected }

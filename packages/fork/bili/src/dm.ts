@@ -37,6 +37,8 @@ export interface DmChannelHost {
   replyOwner(text: string): Promise<DmOutcome>
   /** Send one part of the daily share to the owner's main account (`POST /v1/share/owner`). */
   shareOwner(text: string): Promise<DmOutcome>
+  /** Whether the Session's share is still the running one; false once it was given up (its turn ran past the limit). */
+  shareCurrent(sessionId: string): boolean
   /** The daily share's turn is over: how it went, why, and what reached the owner. */
   shareSettled(sessionId: string, outcome: ShareOutcome, detail: string, text?: string): Promise<void>
   /** Keep a delivery alive until the account's teardown drains it; its outcome stays the relay's. */
@@ -134,6 +136,10 @@ export class DmChannel implements RelayChannel {
     if (answer.outcome !== 'completed') {
       this.host.logger.warn(`bili: Session ${sessionId} ended the share turn ${endedText(answer)}; nothing is sent`)
       await this.host.shareSettled(sessionId, 'failed', `the turn ended ${endedText(answer)}`)
+      return 'kept'
+    }
+    if (!this.host.shareCurrent(sessionId)) {
+      this.host.logger.warn(`bili: Session ${sessionId} ended a share turn that was already given up as failed; nothing is sent, its answer stays in the Session`)
       return 'kept'
     }
     this.host.logger.info(`bili: Session ${sessionId} ended the share turn; sending ${answer.text.length} chars to the owner through bili-svc`)

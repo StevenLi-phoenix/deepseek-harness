@@ -126,12 +126,12 @@ function text(value: unknown, max: number): string {
   return ''
 }
 
-/** Day counters, or null when the field is not two numbers. */
+/** Day counters, or null when `comment` and `dm` are not numbers; `share` is null when bili-svc does not count it. */
 function counts(value: unknown): UsageCounts | null {
   const row = obj(value)
   const comment = num(row['comment'])
   const dm = num(row['dm'])
-  return comment === undefined || dm === undefined ? null : { comment, dm }
+  return comment === undefined || dm === undefined ? null : { comment, dm, share: num(row['share']) ?? null }
 }
 
 /**

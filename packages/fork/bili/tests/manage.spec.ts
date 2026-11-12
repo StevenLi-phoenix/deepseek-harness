@@ -34,7 +34,7 @@ beforeEach(() => {
     { id: 'maodeng', mid: 1_000_001, display: '猫灯魔女岚栖', session: 'ok', refresh_mode: 'external', login: false, refreshed_at: 1_790_000_000, imported_at: null, dead_reason: null },
     { id: 'maomao', mid: 3_000_001, display: '魔女的猫猫', session: 'dead', refresh_mode: 'owner', login: true, refreshed_at: 1_790_100_000, imported_at: 1_789_000_000, dead_reason: '-101 not logged in' },
   ]
-  svc.gate = { mode: 'auto', readonly: false, used_today: { comment: 2, dm: 7 }, daily_caps: { comment: 5, dm: 20 } }
+  svc.gate = { mode: 'auto', readonly: false, used_today: { comment: 2, dm: 7, share: 1 }, daily_caps: { comment: 5, dm: 20 } }
   vi.useFakeTimers()
   vi.setSystemTime(new Date('2026-10-31T14:00:00.000Z'))
 })
@@ -101,7 +101,8 @@ describe('the management view', () => {
     ])
     expect(view.account).toMatchObject({ account: 'maomao', session: 'dead', mid: 3_000_001 })
     expect(view.gate).toEqual({
-      mode: 'auto', readonly: false, used: { comment: 2, dm: 7 }, caps: { comment: 5, dm: 20 },
+      // A bili-svc before 0.5.0 counts no share: its cap reads null, the count it gave stays.
+      mode: 'auto', readonly: false, used: { comment: 2, dm: 7, share: 1 }, caps: { comment: 5, dm: 20, share: null },
       brake: { reason: 'risk_352', detail: 'Bilibili answered -352', ts: 1_790_200_000_000 },
     })
     // The comment speaker comes from the Reply Gate's route, read with the agent's own token.

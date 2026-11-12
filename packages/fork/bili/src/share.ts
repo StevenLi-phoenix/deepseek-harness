@@ -42,8 +42,8 @@ export interface ShareHost {
   serialize<T>(work: () => Promise<T>): Promise<T>
   /** The owner's main account, or undefined while unset (nothing is shared). */
   ownerMid(): number | undefined
-  /** Why the owner should not be messaged right now (asleep, messaging the account, messages waiting), or undefined. */
-  holdReason(now: number): string | undefined
+  /** Why the owner should not be messaged right now (asleep, messaging the account, messages waiting in `domain`), or undefined. */
+  holdReason(now: number, domain: Domain<typeof biliDomain>): string | undefined
   /**
    * Prompt the account's Session with the share; the DM channel sends the turn's answer as the share.
    * @returns the Session id, or undefined when the Session is in a turn.
@@ -57,11 +57,12 @@ export interface ShareHost {
 }
 
 /** Fail at load on a window that cannot work. */
-export function assertShareConfig(config: ShareConfig): void {
+export function assertShareConfig(config: ShareConfig): { start: number; end: number } {
   const start = parseClock(config.start)
   const end = parseClock(config.end)
   if (start === undefined || end === undefined) throw new Error(`bili: share.start and share.end must be HH:MM (got "${config.start}" and "${config.end}")`)
   if (end <= start) throw new Error(`bili: share.end (${config.end}) must be after share.start (${config.start}) on the same day`)
+  return { start, end }
 }
 
 /** The row Settings shows. */
@@ -72,6 +73,11 @@ function rowView(row: ShareRecord): ShareRow {
   }
 }
 
+/** An error's message, or the thrown value as text. */
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 /** Keep at most `max` code points. */
 function bounded(text: string, max: number): string {
   const points = Array.from(text.trim())
@@ -80,17 +86,19 @@ function bounded(text: string, max: number): string {
 
 /** The daily share's schedule and bookkeeping. */
 export class DailyShare {
-  /** The share whose turn runs now, by storage key and Session. */
-  private running: { key: string; sessionId: string } | undefined
+  /** The share whose turn runs now: its storage key, Session, and the row as stored when it was prompted. */
+  private running: { key: string; sessionId: string; row: ShareRecord } | undefined
   /** Hold reasons already logged per key, so a wait is logged once, not every minute. */
   private readonly logged = new Map<string, string>()
+  /** The window, minutes after local midnight. */
+  private readonly clocks: { start: number; end: number }
 
   /**
    * @param host - storage, the owner account, prompting, time, and the logger.
    * @param config - window and default switch; checked by {@link assertShareConfig}.
    */
   constructor(private readonly host: ShareHost, private readonly config: ShareConfig) {
-    assertShareConfig(config)
+    this.clocks = assertShareConfig(config)
   }
 
   /** Whether the share runs: the owner's switch, else the configuration. */
@@ -114,10 +122,7 @@ export class DailyShare {
   /** The window of the local day containing `now`, as instants. */
   private window(now: number): { day: string; start: number; end: number } {
     const day = dayKey(now, this.host.timeZone)
-    /* v8 ignore next 2 -- assertShareConfig checked both clocks at load. */
-    const start = localTime(day, parseClock(this.config.start) ?? 0, this.host.timeZone)
-    const end = localTime(day, parseClock(this.config.end) ?? 0, this.host.timeZone)
-    return { day, start, end }
+    return { day, start: localTime(day, this.clocks.start, this.host.timeZone), end: localTime(day, this.clocks.end, this.host.timeZone) }
   }
 
   /** Run once a minute: plan today's share, settle a lost turn, and prompt the Session when the share is due. */
@@ -154,20 +159,20 @@ export class DailyShare {
   /** Prompt the Session unless something holds the share; a hold is logged once per reason. */
   private async fire(key: string, row: ShareRecord, now: number): Promise<string> {
     if (this.running !== undefined) return 'another share is running'
-    const hold = this.host.holdReason(now)
+    const domain = await this.host.ready
+    const hold = this.host.holdReason(now, domain)
     if (hold !== undefined) {
       if (this.logged.get(key) !== hold) this.host.logger.info(`bili: the share ${key} waits: ${hold}`)
       this.logged.set(key, hold)
       return hold
     }
-    const domain = await this.host.ready
-    const recent = this.memory(domain, key)
+    const recent = this.memory(domain)
     const text = sharePrompt({ now, timeZone: this.host.timeZone, manual: row.reason === 'manual', recent })
     let sessionId: string | undefined
     try {
       sessionId = await this.host.prompt(text)
     } catch (error: unknown) {
-      const detail = error instanceof Error ? error.message : String(error)
+      const detail = messageOf(error)
       this.host.logger.warn(`bili: prompting the Session for the share ${key} failed: ${detail}`)
       return `the Session could not be prompted: ${detail}`
     }
@@ -176,23 +181,23 @@ export class DailyShare {
       this.logged.set(key, 'busy')
       return 'the Session is in a turn'
     }
-    this.running = { key, sessionId }
+    const fired: ShareRecord = { ...row, firedAt: now, sessionId }
+    this.running = { key, sessionId, row: fired }
     this.logged.delete(key)
     await this.host.serialize(async () => {
-      await domain.table('share_days').put(key, { ...row, firedAt: now, sessionId })
+      await domain.table('share_days').put(key, fired)
     })
     this.host.logger.info(`bili: the share ${key} prompted Session ${sessionId} (${text.length} chars, ${recent.length} earlier share(s) listed)`)
     return 'started'
   }
 
-  /** The latest sent shares before `key`, for the prompt. */
-  private memory(domain: Domain<typeof biliDomain>, key: string): ShareMemory[] {
-    return [...domain.table('share_days').entries()]
-      .filter(([other, row]) => other !== key && row.text !== undefined && (row.outcome === 'sent' || row.outcome === 'wechat'))
-      .map(([, row]) => row)
-      .sort((a, b) => (b.firedAt ?? b.planAt) - (a.firedAt ?? a.planAt))
-      .slice(0, SHARE_REMEMBERED)
-      .map(row => ({ day: row.day, text: row.text ?? '' }))
+  /** The latest shares that reached the owner (only those keep a text), newest first, for the prompt. */
+  private memory(domain: Domain<typeof biliDomain>): ShareMemory[] {
+    const shared: (ShareMemory & { at: number })[] = []
+    for (const [, row] of domain.table('share_days').entries()) {
+      if (row.text !== undefined) shared.push({ day: row.day, text: row.text, at: row.planAt })
+    }
+    return shared.sort((a, b) => b.at - a.at).slice(0, SHARE_REMEMBERED).map(({ day, text }) => ({ day, text }))
   }
 
   /**
@@ -209,18 +214,19 @@ export class DailyShare {
     // The owner asked: only a running turn or a missing owner stops it, not sleep or a quiet hour.
     let sessionId: string | undefined
     try {
-      const recent = this.memory(await this.host.ready, key)
+      const recent = this.memory(await this.host.ready)
       sessionId = await this.host.prompt(sharePrompt({ now, timeZone: this.host.timeZone, manual: true, recent }))
     } catch (error: unknown) {
-      const detail = error instanceof Error ? error.message : String(error)
+      const detail = messageOf(error)
       this.host.logger.warn(`bili: prompting the Session for a manual share failed: ${detail}`)
       return `the Session could not be prompted: ${detail}`
     }
     if (sessionId === undefined) return 'the Session is in a turn'
-    this.running = { key, sessionId }
+    const fired: ShareRecord = { ...row, firedAt: now, sessionId }
+    this.running = { key, sessionId, row: fired }
     await this.host.serialize(async () => {
       const domain = await this.host.ready
-      await domain.table('share_days').put(key, { ...row, firedAt: now, sessionId })
+      await domain.table('share_days').put(key, fired)
       await this.prune(domain)
     })
     this.host.logger.info(`bili: the owner asked for a share now; prompted Session ${sessionId}`)
@@ -244,21 +250,19 @@ export class DailyShare {
    */
   async settled(sessionId: string, outcome: ShareOutcome, detail: string, text?: string): Promise<void> {
     const running = this.running
-    if (running?.sessionId !== sessionId) return
+    if (running?.sessionId !== sessionId) {
+      this.host.logger.info(`bili: Session ${sessionId} ended a share turn that was already given up (${outcome}); its record stays`)
+      return
+    }
     this.running = undefined
-    await this.settle(running.key, outcome, detail, text)
+    await this.settle(running.key, running.row, outcome, detail, text)
   }
 
-  /** Record a share's outcome. */
-  private async settle(key: string, outcome: ShareOutcome, detail: string, text?: string): Promise<void> {
+  /** Record a share's outcome; the DM channel passes a text only for a share that reached the owner (sent or wechat). */
+  private async settle(key: string, row: ShareRecord, outcome: ShareOutcome, detail: string, text?: string): Promise<void> {
     await this.host.serialize(async () => {
       const domain = await this.host.ready
-      const row = domain.table('share_days').get(key)
-      if (row === undefined) return
-      await domain.table('share_days').put(key, {
-        ...row, outcome, detail, settledAt: this.host.now(),
-        ...(text === undefined || text.trim() === '' ? {} : { text: bounded(text, SHARE_TEXT_CHARS) }),
-      })
+      await domain.table('share_days').put(key, { ...row, outcome, detail, settledAt: this.host.now(), ...(text === undefined ? {} : { text: bounded(text, SHARE_TEXT_CHARS) }) })
     })
     this.logged.delete(key)
     const chars = text === undefined ? '' : `, ${codePoints(text.trim())} chars`
@@ -278,14 +282,13 @@ export class DailyShare {
       if (row.firedAt !== undefined) {
         if (now - row.firedAt < SHARE_TURN_MS) continue
         if (this.running?.key === key) this.running = undefined
-        await this.settle(key, 'failed', `its turn did not end within ${SHARE_TURN_MS / 60_000} min (DSH restarted, or the turn hung)`)
+        await this.settle(key, row, 'failed', `its turn did not end within ${SHARE_TURN_MS / 60_000} min (DSH restarted, or the turn hung)`)
         continue
       }
-      /* v8 ignore next -- assertShareConfig checked the clock at load. */
-      const deadline = localTime(row.day, parseClock(this.config.end) ?? 0, this.host.timeZone) + SHARE_GRACE_MS
+      const deadline = localTime(row.day, this.clocks.end, this.host.timeZone) + SHARE_GRACE_MS
       if (now <= deadline) continue
       const waited = this.logged.get(key)
-      await this.settle(key, 'missed', `it could not run before ${formatStamp(deadline, this.host.timeZone)}${waited === undefined ? '' : ` (${waited})`}`)
+      await this.settle(key, row, 'missed', `it could not run before ${formatStamp(deadline, this.host.timeZone)}${waited === undefined ? '' : ` (${waited})`}`)
     }
   }
 
