@@ -13,6 +13,12 @@ export const GMAIL_ROUTE = 'api/fork.gmail'
  */
 export const GMAIL_OAUTH_PATH = '/fork.gmail.oauth'
 
+/**
+ * Account ids the service accepts: lower-case letters, digits, and `-`, a letter first, at most 24 characters.
+ * Equal to `ACCOUNT_ID` of `@deepseek-ai/dsh-fork-gmail`, which refuses any other id; the page checks it before a sign-in.
+ */
+export const ACCOUNT_ID_PATTERN = /^[a-z][a-z0-9-]{0,23}$/u
+
 /** Send policies, strictest first. */
 export const POLICIES = ['read-only', 'confirm-all', 'confirm-untrusted', 'direct'] as const
 
@@ -77,7 +83,7 @@ export interface ActivityRow {
   readonly detail: string
 }
 
-/** Body of `GET /api/fork.gmail`. */
+/** The status, the `status` field of the answer of `GET /api/fork.gmail` and of `POST /api/fork.gmail`. */
 export interface GmailView {
   readonly client: ClientView
   /** The redirect URI set in the configuration; null derives `<page origin><GMAIL_OAUTH_PATH>`. */

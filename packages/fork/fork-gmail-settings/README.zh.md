@@ -32,7 +32,7 @@ kind: "package-reference"
   name: '@deepseek-ai/dsh-fork-gmail-settings'
 ```
 
-它没有配置；上限和可信收件人属于 `fork-gmail`。
+它没有配置；上限和可信收件人属于 `fork-gmail`，在区块底部它的「全部设置」卡片（[`fork-config`](../fork-config/README.zh.md)）里改。
 
 -----
 
@@ -49,7 +49,16 @@ Host 部分在 `/api` 下、Web UI 登录之后注册 `GET /api/fork.gmail`（�
 | [`src/index.ts`](src/index.ts) | Host 部分：状态和操作路由、线路映射、登录页路由 |
 | [`src/view.ts`](src/view.ts) | 两部分共用的线路类型和路径 |
 | [`src/page.ts`](src/page.ts) | 登录页的 HTML 和响应头 |
-| [`src/client/`](src/client/) | 浏览器部分：区块、它的 store 和刷新、文案 |
+| [`src/client/index.ts`](src/client/index.ts) | 浏览器部分：把区块和它的词典注册进 `settings.section` |
+| [`src/client/GmailSection.tsx`](src/client/GmailSection.tsx) | 区块本身：概要、待确认的信、账号、OAuth client、规则、动态、「全部设置」卡片 |
+| [`src/client/Held.tsx`](src/client/Held.tsx) | 待确认的信，带发送（先复述收件人，第二次点击才提交）和丢弃；已处理的信 |
+| [`src/client/Accounts.tsx`](src/client/Accounts.tsx) | 账号卡片（发信规则、重新登录、断开）和添加账号的表单 |
+| [`src/client/ClientCard.tsx`](src/client/ClientCard.tsx) | OAuth client：Google Cloud 步骤、重定向 URI、JSON 输入框 |
+| [`src/client/parts.tsx`](src/client/parts.tsx) | 各卡片共用的 props 和小部件 |
+| [`src/client/gmail.ts`](src/client/gmail.ts) | store、loader（同一时间只有一次读取和一个操作）和文案函数 |
+| [`src/client/polling.ts`](src/client/polling.ts) | 区块打开且页面可见时刷新 |
+| [`src/client/locales.ts`](src/client/locales.ts) | 八种语言的文案 |
+| [`src/client/GmailSection.module.css`](src/client/GmailSection.module.css) | 区块的样式 |
 
 这是 fork 本地包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。
 

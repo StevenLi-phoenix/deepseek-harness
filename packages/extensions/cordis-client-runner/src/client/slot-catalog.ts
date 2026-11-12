@@ -3908,6 +3908,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
       'fork-console SubscriptionsSection id \'fork-subscriptions\'',
       'fork-console AgentsSection id \'fork-agents\'',
       'fork-courses-settings CoursesSection id \'fork-courses\'',
+      'fork-gmail-settings GmailSection id \'fork-gmail\'',
       'fork-memory-admin MemorySection id \'fork-memory\'',
       'fork-qq-login QqLoginSection id \'fork-qq\'',
       'fork-style-settings StyleSection id \'fork-style\'',

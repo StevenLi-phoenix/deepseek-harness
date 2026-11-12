@@ -22,7 +22,8 @@ import {
   IconCloseOutlineRegular,
   IconCodeOutlineMedium,
   IconDatabaseOutlineMedium, IconDataOutlineMedium, IconEnhanceOutlineMedium, IconFlatListOutlineMedium, IconGaugeOutlineMedium,
-  IconNewChatOutlineMedium, IconPersonalizationOutlineMedium, IconPlayOutlineMedium, IconQueueOutlineMedium, IconSettingsOutlineMedium,
+  IconNewChatOutlineMedium, IconPaperPlaneOutlineMedium, IconPersonalizationOutlineMedium, IconPlayOutlineMedium, IconQueueOutlineMedium,
+  IconSettingsOutlineMedium,
   IconUserOutlineMedium, IconUsersOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConnectionIndicatorState } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -44,7 +45,7 @@ const NAV_ICONS: Readonly<Record<string, typeof IconSettingsOutlineMedium>> = {
   'archived-sessions': IconArchiveOutlineMedium,
   // Fork-added sections (packages/fork), by the id each registers: service overview, data flow, subscriptions, and Claude Code
   // agents (fork-console); the WeChat page, its presence page, and its speaking style; memory; System status; the Bilibili account; QQ;
-  // course deadlines.
+  // course deadlines; the Gmail accounts (the set has no envelope glyph, so the paper plane stands for mail).
   'fork-overview': IconFlatListOutlineMedium,
   'fork-subscriptions': IconQueueOutlineMedium,
   'fork-agents': IconCodeOutlineMedium,
@@ -56,6 +57,7 @@ const NAV_ICONS: Readonly<Record<string, typeof IconSettingsOutlineMedium>> = {
   'bili': IconPlayOutlineMedium,
   'fork-qq': IconUsersOutlineMedium,
   'fork-courses': IconChecklistOutlineMedium,
+  'fork-gmail': IconPaperPlaneOutlineMedium,
 }
 
 function navIcon(id: string) {

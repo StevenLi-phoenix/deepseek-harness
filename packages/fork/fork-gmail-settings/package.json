@@ -61,6 +61,7 @@
     "@deepseek-ai/dsh-credentials-local": "workspace:*",
     "@deepseek-ai/dsh-host-webserver": "workspace:*",
     "@deepseek-ai/dsh-llm": "workspace:*",
+    "@deepseek-ai/dsh-fork-config": "workspace:*",
     "@deepseek-ai/dsh-fork-event-bus": "workspace:*",
     "@deepseek-ai/dsh-fork-gmail": "workspace:*",
     "@deepseek-ai/dsh-fork-taint": "workspace:*",
