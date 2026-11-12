@@ -47,8 +47,12 @@ declare module '@deepseek-ai/cordis' {
 
 /** The one permission asked for: read, draft, send, and change labels; never permanent deletion. */
 export const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.modify'
-/** Path of the OAuth redirect under the DSH origin. */
-export const OAUTH_PATH = '/api/fork.gmail.oauth'
+/**
+ * Path of the OAuth redirect under the DSH origin. It lies outside `/api`: the DSH sign-in cookie is `SameSite=Strict`,
+ * so Google's cross-site redirect arrives without it, and the one-use `state` of an open sign-in authenticates the
+ * request instead.
+ */
+export const OAUTH_PATH = '/fork.gmail.oauth'
 /** Credential-store scope of the grant records. */
 const GRANT_SCOPE = 'fork-gmail'
 /** Account ids: lower-case, a letter first, at most 24 characters (they are credential key segments). */
@@ -80,7 +84,7 @@ export interface Config {
   clientIdEnv: string
   /** Name of the OAuth client secret in the credential store or `$DSH_HOME/.env`. */
   clientSecretEnv: string
-  /** Redirect URI registered at Google; empty derives `<Settings origin>/api/fork.gmail.oauth`. */
+  /** Redirect URI registered at Google; empty derives `<Settings origin>/fork.gmail.oauth`. */
   redirectUri: string
   /** Addresses that never need a confirmation, besides the connected accounts themselves. */
   trustedRecipients: string[]
@@ -108,7 +112,7 @@ export interface Config {
 export const Config: z<Config> = z.object({
   clientIdEnv: z.string().default('FORK_GMAIL_CLIENT_ID').description('Name of the Google OAuth client id in the credential store or $DSH_HOME/.env.'),
   clientSecretEnv: z.string().default('FORK_GMAIL_CLIENT_SECRET').description('Name of the Google OAuth client secret in the credential store or $DSH_HOME/.env.'),
-  redirectUri: z.string().default('').description('Redirect URI registered at Google; empty derives <Settings origin>/api/fork.gmail.oauth.'),
+  redirectUri: z.string().default('').description('Redirect URI registered at Google; empty derives <Settings origin>/fork.gmail.oauth.'),
   trustedRecipients: z.array(z.string()).default([]).description('Addresses that never need a confirmation, besides the connected accounts.'),
   maxSendsPerDay: z.natural().min(1).default(50).description('Messages one account may send in 24 hours; more are refused.'),
   confirmTtlHours: z.natural().min(1).default(72).description('Hours a held message waits for the owner before it expires.'),

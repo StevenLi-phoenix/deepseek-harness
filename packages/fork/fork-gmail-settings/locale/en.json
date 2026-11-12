@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Gmail accounts",
+    "description": "Connects the owner's Gmail accounts with Google sign-in, sets each account's send policy, and lists the messages that wait for the owner's confirmation in Settings."
+  }
+}
