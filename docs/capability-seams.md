@@ -20,6 +20,7 @@ flowchart LR
   pkg_fork_console["fork-console"]
   svc_forkNotifier["ctx.forkNotifier<br/>Owner notification channel"]
   pkg_fork_courses["fork-courses"]
+  pkg_fork_gmail["fork-gmail"]
   pkg_fork_memory["fork-memory"]
   pkg_fork_integrity["fork-integrity"]
   pkg_fork_tool_voice["fork-tool-voice"]
@@ -34,6 +35,9 @@ flowchart LR
   svc_forkCourses["ctx.forkCourses<br/>Course reminders"]
   pkg_fork_tool_courses["fork-tool-courses"]
   pkg_fork_courses_settings["fork-courses-settings"]
+  svc_forkGmail["ctx.forkGmail<br/>Gmail accounts"]
+  pkg_fork_tool_gmail["fork-tool-gmail"]
+  pkg_fork_gmail_settings["fork-gmail-settings"]
   svc_forkQq["ctx.forkQq<br/>QQ group observer"]
   pkg_fork_tool_qq["fork-tool-qq"]
   pkg_fork_qq_login["fork-qq-login"]
@@ -450,6 +454,7 @@ flowchart LR
   pkg_fork_courses --> svc_forkCourses
   pkg_fork_event_bus --> svc_forkEventBus
   pkg_fork_github_sensor --> svc_forkGithubSensor
+  pkg_fork_gmail --> svc_forkGmail
   pkg_fork_guard --> svc_forkGuard
   pkg_fork_presence --> svc_forkPresence
   pkg_fork_qq --> svc_forkQq
@@ -612,11 +617,14 @@ flowchart LR
   svc_forkEventBus --> pkg_fork_wechat
   svc_forkGithubSensor --> pkg_fork_console
   svc_forkGithubSensor --> pkg_fork_tool_watch
+  svc_forkGmail --> pkg_fork_gmail_settings
+  svc_forkGmail --> pkg_fork_tool_gmail
   svc_forkGuard --> pkg_fork_qq
   svc_forkGuard --> pkg_fork_style
   svc_forkGuard --> pkg_fork_tool_up
   svc_forkNotifier --> pkg_fork_courses
   svc_forkNotifier --> pkg_fork_event_bus
+  svc_forkNotifier --> pkg_fork_gmail
   svc_forkNotifier --> pkg_fork_integrity
   svc_forkNotifier --> pkg_fork_memory
   svc_forkNotifier --> pkg_fork_qq
@@ -757,11 +765,12 @@ flowchart LR
 | ctx key | Role | Owner | Implementations | Direct consumers | Companion plugins | Note |
 | --- | --- | --- | --- | --- | --- | --- |
 | `ctx.forkEventBus` | `service` | [`fork-event-bus`](../packages/fork/fork-event-bus) | - | [`fork-event-ingest`](../packages/fork/fork-event-ingest), [`fork-github-sensor`](../packages/fork/fork-github-sensor), [`fork-qq`](../packages/fork/fork-qq), [`fork-qqbot`](../packages/fork/fork-qqbot), [`fork-tool-monitor`](../packages/fork/fork-tool-monitor), [`fork-tool-up`](../packages/fork/fork-tool-up), [`fork-tool-watch`](../packages/fork/fork-tool-watch), [`fork-wechat`](../packages/fork/fork-wechat), [`fork-console`](../packages/fork/fork-console) | - | Owns dedupe, routes, batches, and the notification flow; sensors publish events and tools change routes. |
-| `ctx.forkNotifier` | `service` | [`fork-wechat`](../packages/fork/fork-wechat) | - | [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-qq`](../packages/fork/fork-qq), [`fork-courses`](../packages/fork/fork-courses), [`fork-memory`](../packages/fork/fork-memory), [`fork-integrity`](../packages/fork/fork-integrity), [`fork-tool-watch`](../packages/fork/fork-tool-watch), [`fork-tool-voice`](../packages/fork/fork-tool-voice), [`fork-tool-wechat`](../packages/fork/fork-tool-wechat) | - | The event bus defines the channel interface; the WeChat channel provides it. |
+| `ctx.forkNotifier` | `service` | [`fork-wechat`](../packages/fork/fork-wechat) | - | [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-qq`](../packages/fork/fork-qq), [`fork-courses`](../packages/fork/fork-courses), [`fork-gmail`](../packages/fork/fork-gmail), [`fork-memory`](../packages/fork/fork-memory), [`fork-integrity`](../packages/fork/fork-integrity), [`fork-tool-watch`](../packages/fork/fork-tool-watch), [`fork-tool-voice`](../packages/fork/fork-tool-voice), [`fork-tool-wechat`](../packages/fork/fork-tool-wechat) | - | The event bus defines the channel interface; the WeChat channel provides it. |
 | `ctx.ownerRelay` | `service` | [`owner-relay`](../packages/fork/owner-relay) | - | [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-wechat`](../packages/fork/fork-wechat), [`fork-qqbot`](../packages/fork/fork-qqbot), [`bili`](../packages/fork/bili), [`fork-time-gap`](../packages/fork/fork-time-gap) | - | Channels register here and claim Sessions; the relay sends each final answer through its Session's channel. |
 | `ctx.forkPresence` | `service` | [`fork-presence`](../packages/fork/fork-presence) | - | [`fork-wechat`](../packages/fork/fork-wechat), [`fork-courses`](../packages/fork/fork-courses), [`fork-console`](../packages/fork/fork-console) | - | Combines the Sleep Focus, a daily window, and manual buttons into one state. |
 | `ctx.forkGithubSensor` | `service` | [`fork-github-sensor`](../packages/fork/fork-github-sensor) | - | [`fork-tool-watch`](../packages/fork/fork-tool-watch), [`fork-console`](../packages/fork/fork-console) | - | Polls and receives GitHub deliveries and publishes them to the event bus. |
 | `ctx.forkCourses` | `service` | [`fork-courses`](../packages/fork/fork-courses) | - | [`fork-tool-courses`](../packages/fork/fork-tool-courses), [`fork-courses-settings`](../packages/fork/fork-courses-settings) | - | Reads the course service and sends deadline reminders. |
+| `ctx.forkGmail` | `service` | [`fork-gmail`](../packages/fork/fork-gmail) | - | [`fork-tool-gmail`](../packages/fork/fork-tool-gmail), [`fork-gmail-settings`](../packages/fork/fork-gmail-settings) | - | Reads and sends the owner's Gmail; holds a send for the owner's confirmation. |
 | `ctx.forkQq` | `service` | [`fork-qq`](../packages/fork/fork-qq) | - | [`fork-tool-qq`](../packages/fork/fork-tool-qq), [`fork-qq-login`](../packages/fork/fork-qq-login), [`fork-style`](../packages/fork/fork-style), [`fork-console`](../packages/fork/fork-console) | - | Client of the qq-recorder service; writes group digests and answers searches. |
 | `ctx.forkQqBot` | `service` | [`fork-qqbot`](../packages/fork/fork-qqbot) | - | - | - | Holds the official-bot connection; no other package calls it. |
 | `ctx.forkStyle` | `service` | [`fork-style`](../packages/fork/fork-style) | - | [`fork-style-settings`](../packages/fork/fork-style-settings), [`fork-console`](../packages/fork/fork-console) | - | Collects style from QQ, Bilibili, and public web pages and shows it to the presets that mount it. |
