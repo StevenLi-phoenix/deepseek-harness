@@ -84,7 +84,9 @@ describe('the overview over the real fork-style service', () => {
     }
     const ctx = new Context()
     contexts.push(ctx)
-    await ctx.plugin(Style, { dir, ticsFile: join(dir, 'tics.json'), qq: { enabled: false }, bili: { enabled: false }, review } as Style.Config)
+    // No network: hotwatch off like the fork-style harness, or panel() waits on the real tailnet host.
+    const off = { enabled: false }
+    await ctx.plugin(Style, { dir, ticsFile: join(dir, 'tics.json'), qq: off, bili: off, hotwatch: off, review } as Style.Config)
     return mountConsole({ ctx })
   }
   const card = async (mounted: Awaited<ReturnType<typeof mountStyle>>) => {
