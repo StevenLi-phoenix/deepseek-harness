@@ -32,6 +32,8 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`fork-event-bus/`](fork-event-bus/README.md) | Dedupe, loop suppression, subscriptions, coalescing, rate limits, notify and Session dispatch |
 | [`fork-event-ingest/`](fork-event-ingest/README.md) | `POST /hooks/events` route: the owner's own services push events under one bearer token per source |
 | [`fork-github-sensor/`](fork-github-sensor/README.md) | Polls GitHub releases, tags, commits, and notifications with conditional requests |
+| [`fork-gmail/`](fork-gmail/README.md) | The owner's Gmail accounts (`ctx.forkGmail`): one Google sign-in per account, reading, drafts, and the send gate that holds a message as a draft and asks the owner on WeChat with a code when the account's policy and the turn's origin say so |
+| [`fork-gmail-settings/`](fork-gmail-settings/README.md) | Settings section 邮箱: held messages to confirm or discard, the accounts with their send policy, adding an account through Google's sign-in, the OAuth client, and the page the sign-in returns to |
 | [`fork-guard/`](fork-guard/README.md) | `ctx.forkGuard.check`: one validator for text that others can read; patterns, canary strings, overlap with the owner's memory, and a model, any layer that cannot run refusing |
 | [`fork-integrity/`](fork-integrity/README.md) | Integrity watch: digests of the files that steer the agent, a WeChat notice naming what changed, system prompt hashes, and a count of the persona's forbidden stock lines |
 | [`fork-memory/`](fork-memory/README.md) | Owner memory across Sessions: the memory block, `memory_search`, `memory_save`, `memory_forget`, and the claude.ai export importer |
@@ -50,6 +52,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 | [`fork-taint/`](fork-taint/README.md) | Turn origin: who started the open turn and whether strangers' words reached it; Claude Code messaging only in the owner's own turns, reminders and watches from other turns reported |
 | [`fork-time-gap/`](fork-time-gap/README.md) | Time check for every Session: an input that arrives after a quiet spell (5 minutes) reaches the model with the time, how long the Session was quiet, and a reminder to read it on its own terms |
 | [`fork-tool-courses/`](fork-tool-courses/README.md) | `courses_deadlines`, `courses_find`, `courses_get`, `courses_sync`, `courses_set_progress`, `courses_save_memo` tools: the agent answers and updates the owner's course records |
+| [`fork-tool-gmail/`](fork-tool-gmail/README.md) | `gmail_accounts`, `gmail_search`, `gmail_read`, `gmail_attachment`, `gmail_draft`, `gmail_send`, `gmail_modify` tools: the agent reads and sends the owner's mail, received mail as untrusted data, every send through the send gate |
 | [`fork-tool-monitor/`](fork-tool-monitor/README.md) | `monitor_start`, `monitor_stop`, `monitor_list` tools: a command's output lines come back to the same Session |
 | [`fork-tool-up/`](fork-tool-up/README.md) | `up_*` tools: the agent reads the creator account's comments, private messages and videos and asks bili-svc's Reply Gate for replies; the answer is `sent`, `held`, or `blocked` |
 | [`fork-tool-voice/`](fork-tool-voice/README.md) | `speak` tool: the agent turns text into speech and sends the audio to the owner on WeChat |
