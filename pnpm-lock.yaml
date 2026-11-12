@@ -15053,6 +15053,37 @@ importers:
         specifier: workspace:*
         version: link:../../util/values
 
+  packages/fork/fork-tool-gmail:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../llm/llm
+      '@deepseek-ai/dsh-fork-gmail':
+        specifier: workspace:*
+        version: link:../fork-gmail
+      '@deepseek-ai/dsh-fork-taint':
+        specifier: workspace:*
+        version: link:../fork-taint
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../core/session
+      '@deepseek-ai/dsh-tool-executor-native':
+        specifier: workspace:*
+        version: link:../../core/tool-executor-native
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../core/tools
+      '@deepseek-ai/dsh-util-values':
+        specifier: workspace:*
+        version: link:../../util/values
+
   packages/fork/fork-tool-monitor:
     dependencies:
       zod:

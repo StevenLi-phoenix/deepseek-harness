@@ -13,9 +13,9 @@ import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 /** Prefix of the request id of a prompt that is not the owner speaking. */
 export const UNTRUSTED_REQUEST_PREFIX = 'fork-untrusted:'
 
-/** Tools whose results carry words strangers wrote (web pages, QQ groups). */
+/** Tools whose results carry words strangers wrote (web pages, QQ groups, received mail). */
 export const CONTAMINATING_TOOLS: ReadonlySet<string> = new Set([
-  'web_fetch', 'web_search', 'qq_groups', 'qq_digest', 'qq_recent', 'qq_search',
+  'web_fetch', 'web_search', 'qq_groups', 'qq_digest', 'qq_recent', 'qq_search', 'gmail_search', 'gmail_read', 'gmail_attachment',
 ])
 
 /** Who and what shaped one turn. */
@@ -116,6 +116,25 @@ export function turnOrigin(session: Session, options: TurnOriginOptions = {}): T
   }
   const owner = opened && triggers.length > 0 && (subagent ? inherited?.owner === true : triggers.every(label => label === 'owner'))
   return { triggers, owner, contaminated, clean: owner && contaminated.length === 0 }
+}
+
+/**
+ * The owner's own words in the Session's open turn: the text of each message the owner sent, in order. A subagent's
+ * turn has none (the owner never writes into it), and neither has a turn with no open `turn/start`.
+ * @param session - the Session whose tool is running.
+ * @returns the texts; empty when the owner sent nothing in the open turn.
+ */
+export function ownerWords(session: Session): string[] {
+  if (session.header.origin === 'subagent') return []
+  const events = [...openTurnEvents(session)].toReversed()
+  if (events[0]?.type !== 'turn/start') return []
+  const words: string[] = []
+  for (const event of events) {
+    if (event.type !== 'user/message' || triggerOf(event.data.source) !== 'owner') continue
+    const text = event.data.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n')
+    if (text !== '') words.push(text)
+  }
+  return words
 }
 
 /**

@@ -17,7 +17,7 @@ import type { PreToolDecision } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
 import { describeOrigin, originZh, turnOrigin } from './origin.ts'
 
-export { CONTAMINATING_TOOLS, describeOrigin, originZh, turnOrigin, untrustedRequestId, UNTRUSTED_REQUEST_PREFIX } from './origin.ts'
+export { CONTAMINATING_TOOLS, describeOrigin, originZh, ownerWords, turnOrigin, untrustedRequestId, UNTRUSTED_REQUEST_PREFIX } from './origin.ts'
 export type { TurnOrigin, TurnOriginOptions } from './origin.ts'
 
 /** Plugin name. */

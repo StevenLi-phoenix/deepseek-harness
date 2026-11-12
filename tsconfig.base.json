@@ -501,6 +501,7 @@
       "@deepseek-ai/dsh-fork-courses": ["./packages/fork/fork-courses/src"],
       "@deepseek-ai/dsh-fork-courses-settings": ["./packages/fork/fork-courses-settings/src"],
       "@deepseek-ai/dsh-fork-gmail": ["./packages/fork/fork-gmail/src"],
+      "@deepseek-ai/dsh-fork-tool-gmail": ["./packages/fork/fork-tool-gmail/src"],
       "@deepseek-ai/dsh-fork-event-bus": ["./packages/fork/fork-event-bus/src"],
       "@deepseek-ai/dsh-fork-event-ingest": ["./packages/fork/fork-event-ingest/src"],
       "@deepseek-ai/dsh-fork-github-sensor": ["./packages/fork/fork-github-sensor/src"],
