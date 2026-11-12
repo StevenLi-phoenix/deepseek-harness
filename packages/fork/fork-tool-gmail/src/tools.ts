@@ -254,10 +254,10 @@ export function gmailTools(deps: ToolDeps): ToolSpec[] {
       untrusted: false,
       title: args => `Gmail ${text(args['action'])} on ${list(args['thread_ids'], 'thread_ids').length} thread(s)`,
       run: async (args) => {
-        const action = text(args['action'])
-        if (!MODIFY_ACTIONS.includes(action as ModifyAction)) throw new ToolProblem(`action is one of ${MODIFY_ACTIONS.join(', ')}`)
+        // The schema's enum admits only MODIFY_ACTIONS.
+        const action = args['action'] as ModifyAction
         const label = text(args['label'])
-        const result = await gmail.modify(required(args, 'account'), list(args['thread_ids'], 'thread_ids'), action as ModifyAction, label === '' ? undefined : label)
+        const result = await gmail.modify(required(args, 'account'), list(args['thread_ids'], 'thread_ids'), action, label === '' ? undefined : label)
         return { changed: result.changed }
       },
     },
