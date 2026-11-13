@@ -186,8 +186,10 @@ export interface RenderContext {
   readonly timeZone: string
   /** A deadline this close (hours) marks the message urgent; 0 never does. */
   readonly urgentWithinHours: number
-  /** Sync health; a status other than `ok` adds a line saying how old the records may be. */
+  /** Sync health; records last synced `staleHours` or more ago add a line saying how old they may be. */
   readonly health: SyncHealth | null
+  /** Hours since the last sync after which the records count as old. */
+  readonly staleHours: number
   /** Every open task, for the outlook after the reminders; without it the message has no outlook. */
   readonly tasks?: readonly TaskSummary[]
 }
@@ -255,7 +257,7 @@ export function renderReminders(planned: readonly PlannedReminder[], context: Re
     if (section !== undefined) sections.push(section)
   }
   const health = context.health
-  if (health !== null && health.status !== 'ok') sections.push(freshnessLine(health, timeZone))
+  if (health !== null && isStale(health, now, context.staleHours)) sections.push(freshnessLine(health, timeZone))
   sections.push('做完了在 app 里打勾就行，不用回我。')
   const urgent = context.urgentWithinHours > 0 && shown.some(reminder => reminder.deadline - now <= hours(context.urgentWithinHours))
   const title = late.length > 0
@@ -265,10 +267,23 @@ export function renderReminders(planned: readonly PlannedReminder[], context: Re
   return { title, body: sections.join('\n\n'), kinds, urgent }
 }
 
-/** How old the records may be, when the sync is not healthy. */
+/**
+ * Whether the records are old: no run ever checked anything, or the last one that did is `staleHours` or more ago. A
+ * degraded run (some areas failed) counts as a sync; judging by the last clean run told the owner "6 days without a
+ * sync" hours after a run that read 40 of 48 areas.
+ * @param health - from the report.
+ * @param now - Unix epoch milliseconds.
+ * @param staleHours - hours after which the records count as old.
+ * @returns true when the records are old.
+ */
+export function isStale(health: SyncHealth, now: number, staleHours: number): boolean {
+  return health.lastSyncedAt === null || now - health.lastSyncedAt >= hours(staleHours)
+}
+
+/** How old the records may be, when they are stale. */
 function freshnessLine(health: SyncHealth, timeZone: string): string {
-  const clean = health.lastCleanAt === null ? '还没有过成功的同步' : `最近一次成功同步在 ${stamp(health.lastCleanAt, timeZone)}`
-  return `（课程记录可能过时：${clean}${health.failedRuns > 0 ? `，之后 ${health.failedRuns} 次同步失败` : ''}；新作业和提交状态可能没更新。）`
+  const synced = health.lastSyncedAt === null ? '还没有过成功的同步' : `最近一次同步在 ${stamp(health.lastSyncedAt, timeZone)}`
+  return `（课程记录可能过时：${synced}${health.failedSinceSynced > 0 ? `，之后 ${health.failedSinceSynced} 次同步失败` : ''}；新作业和提交状态可能没更新。）`
 }
 
 /** The sync alert held in storage. */
@@ -277,7 +292,7 @@ export interface SyncAlertState {
   readonly active: boolean
   /** When the last alert went out. */
   readonly alertedAt: number | null
-  /** `lastCleanAt` when the alert went out; a newer clean run ends the alert. */
+  /** `lastSyncedAt` when the alert went out (stored as `cleanAt`); a newer sync ends the alert. */
   readonly cleanAt: number | null
 }
 
@@ -285,15 +300,17 @@ export interface SyncAlertState {
 export interface SyncAlertRules {
   /** Health statuses that count as broken. */
   readonly statuses: readonly string[]
-  /** Hours since the last clean run before the first alert. */
+  /** Hours since the last sync before the first alert. */
   readonly staleHours: number
   /** Hours between alerts while it stays broken. */
   readonly repeatHours: number
 }
 
 /**
- * Whether the sync health calls for a message: the first alert once it has been broken for `staleHours`, then at
- * most one every `repeatHours`, and one recovery when a clean run follows.
+ * Whether the sync health calls for a message: the first alert once the status is broken and the last sync is
+ * `staleHours` old, then at most one every `repeatHours`, and one recovery when a newer sync follows. A sync is a run
+ * that checked something, a degraded one included; the status alone ends nothing, so a degraded run between two
+ * failing ones is one recovery with its real time, not a recovery naming the old sync.
  * @param health - from the report.
  * @param now - Unix epoch milliseconds.
  * @param state - the stored alert.
@@ -301,10 +318,8 @@ export interface SyncAlertRules {
  * @returns `failing`, `recovered`, or null.
  */
 export function planSyncNotice(health: SyncHealth, now: number, state: SyncAlertState, rules: SyncAlertRules): 'failing' | 'recovered' | null {
-  const broken = rules.statuses.includes(health.status)
-  if (state.active && (!broken || (health.lastCleanAt ?? 0) > (state.cleanAt ?? 0))) return 'recovered'
-  if (!broken) return null
-  if (health.lastCleanAt !== null && now - health.lastCleanAt < hours(rules.staleHours)) return null
+  if (state.active && (health.lastSyncedAt ?? 0) > (state.cleanAt ?? 0)) return 'recovered'
+  if (!rules.statuses.includes(health.status) || !isStale(health, now, rules.staleHours)) return null
   if (!state.active) return 'failing'
   return state.alertedAt === null || now - state.alertedAt >= hours(rules.repeatHours) ? 'failing' : null
 }
@@ -318,10 +333,10 @@ export function planSyncNotice(health: SyncHealth, now: number, state: SyncAlert
  * @returns the message.
  */
 export function renderSyncFailing(health: SyncHealth, reason: string | null, now: number, timeZone: string): CoursesNote {
-  const since = health.lastCleanAt === null ? '还没有成功过' : `已经 ${span(now - health.lastCleanAt)}没成功了`
+  const since = health.lastSyncedAt === null ? '还没有成功过' : `已经 ${span(now - health.lastSyncedAt)}没成功了`
   const lines = [
-    health.lastCleanAt === null ? '最近一次成功同步：没有记录。' : `最近一次成功同步：${stamp(health.lastCleanAt, timeZone)}。`,
-    `之后失败 ${health.failedRuns} 次${health.latestRunAt === null ? '' : `，最近一次在 ${stamp(health.latestRunAt, timeZone)}`}。`,
+    health.lastSyncedAt === null ? '最近一次成功同步：没有记录。' : `最近一次成功同步：${stamp(health.lastSyncedAt, timeZone)}。`,
+    `之后失败 ${health.failedSinceSynced} 次${health.latestRunAt === null ? '' : `，最近一次在 ${stamp(health.latestRunAt, timeZone)}`}。`,
     ...reason === null ? [] : [`原因：${reason}`],
     'DDL 提醒照旧按现有记录发，但新作业和提交状态可能没更新。',
   ]
@@ -335,6 +350,6 @@ export function renderSyncFailing(health: SyncHealth, reason: string | null, now
  * @returns the message.
  */
 export function renderSyncRecovered(health: SyncHealth, timeZone: string): CoursesNote {
-  const at = health.lastCleanAt ?? health.latestRunAt
+  const at = health.lastSyncedAt ?? health.latestRunAt
   return { title: '✅ 课程同步恢复了', body: at === null ? '课程记录又能更新了。' : `${stamp(at, timeZone)} 同步成功，课程记录又能更新了。`, kinds: ['courses.sync.recovered'], urgent: false }
 }

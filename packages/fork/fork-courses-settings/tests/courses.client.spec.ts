@@ -27,12 +27,12 @@ describe('course deadline section text', () => {
     expect(pollLine({ at: AT, trigger: 'manual', durationMs: 1, ok: false, error: 'HTTP 500', openTasks: null, reminders: null, outcome: null }, ZONE, t)).toBe('上次检查 11/2 22:00 失败：HTTP 500')
   })
 
-  it('describes a broken sync with the last clean run, the reason, and that the owner was told', () => {
-    expect(syncLines({ status: 'failing', latestRunAt: AT, lastCleanAt: AT - 86_400_000, failedRuns: 14, reason: 'Browser is not available', alerting: true }, ZONE, t)).toEqual({
+  it('describes a broken sync with the last sync, the reason, and that the owner was told', () => {
+    expect(syncLines({ status: 'failing', latestRunAt: AT, lastSyncedAt: AT - 86_400_000, failedSinceSynced: 14, reason: 'Browser is not available', alerting: true }, ZONE, t)).toEqual({
       tone: 'warn',
       lines: ['失败：最近一次成功 11/1 22:00，之后失败 14 次', '最近一次的原因：Browser is not available', '已经告诉主人；一直失败的话每天最多再提醒一次，恢复时会说'],
     })
-    expect(syncLines({ status: 'ok', latestRunAt: AT, lastCleanAt: AT, failedRuns: 0, reason: null, alerting: false }, ZONE, t).tone).toBe('ok')
+    expect(syncLines({ status: 'ok', latestRunAt: AT, lastSyncedAt: AT, failedSinceSynced: 0, reason: null, alerting: false }, ZONE, t).tone).toBe('ok')
     expect(syncLines(null, ZONE, t)).toEqual({ tone: 'idle', lines: ['还没读到同步状态'] })
   })
 
@@ -56,11 +56,11 @@ describe('course deadline section text', () => {
   })
 
   it('describes a sync that never ran clean, with a status the page has no copy for, and no reason', () => {
-    const unknown = syncLines({ status: 'weird', latestRunAt: null, lastCleanAt: null, failedRuns: 1, reason: null, alerting: false }, ZONE, t)
+    const unknown = syncLines({ status: 'weird', latestRunAt: null, lastSyncedAt: null, failedSinceSynced: 1, reason: null, alerting: false }, ZONE, t)
     expect(unknown.tone).toBe('warn')
-    expect(unknown.lines).toEqual([t('sync.broken', { status: 'weird', clean: t('sync.never'), count: 1 })])
-    expect(syncLines({ status: 'degraded', latestRunAt: null, lastCleanAt: null, failedRuns: 0, reason: null, alerting: false }, ZONE, t).lines[0]).toContain(t('sync.status.degraded'))
-    expect(syncLines({ status: 'ok', latestRunAt: null, lastCleanAt: null, failedRuns: 0, reason: null, alerting: false }, ZONE, t).lines).toEqual([t('sync.ok', { time: '—' })])
+    expect(unknown.lines).toEqual([t('sync.broken', { status: 'weird', synced: t('sync.never'), count: 1 })])
+    expect(syncLines({ status: 'degraded', latestRunAt: null, lastSyncedAt: null, failedSinceSynced: 0, reason: null, alerting: false }, ZONE, t).lines[0]).toContain(t('sync.status.degraded'))
+    expect(syncLines({ status: 'ok', latestRunAt: null, lastSyncedAt: null, failedSinceSynced: 0, reason: null, alerting: false }, ZONE, t).lines).toEqual([t('sync.ok', { time: '—' })])
   })
 
   it('lists no quiet-hours rule when neither is on and turns the urgent rule off at 0 hours', () => {

@@ -214,6 +214,8 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 - The `warn` ingest source (`FORK_INGEST_TOKEN_WARN`), its `warn` subscription and `fork/tools/warn` (2026-10-31): the senders moved to the AMS repository and deliver to the AMS intake.
 
 ### Fixed
+- Course sync notices no longer contradict each other (`fork-courses`, `fork-tool-courses`, `fork-courses-settings`, 2026-11-12): the age of the records is the courses service's new `last_synced_run_at` (0.5.1; the newest run that checked something, a degraded one included), not the last clean run, so a run that read 40 of 48 areas and failed one download no longer turns into "✅ 恢复了 · 11/6 同步成功" followed hours later by "⚠️ 已经 6 天没成功了"; a recovery needs a newer sync, not a status change, the stale line in reminders follows `sync.staleHours`, and the model's `Sync:` line and Settings show the last sync.
+- A reminder report is titled by its schedule task (`fork-event-bus`, 2026-11-12): `⏰ <task title>` from `ctx.schedule.view()`, `⏰ 定时任务` when the task cannot be read; the first line of the reminder prompt, the agent's instruction, no longer goes to WeChat.
 - A restart no longer logs `agent/disposed listener threw` for each agent: `file-reference-local` called `.catch` on the nothing a repeat `fiber.dispose()` returns.
 - Stopping `fork-courses` during a timer poll leaves no timer behind that polls the closed store, and a timer poll that rejects is logged instead of unhandled.
 - `fork-wechat`: a typing keepalive no longer outlives a `stop()` that lands as the first send returns; a saved login stays done when the bound hook throws.

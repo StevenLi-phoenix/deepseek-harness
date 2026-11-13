@@ -37,12 +37,15 @@ async function runTurn(emit: (id: string, event: unknown) => void, id: string, t
   await vi.advanceTimersByTimeAsync(0)
 }
 
+const TITLES = new Map<string, string | Error>([['task-1', 'Nightly build'], ['a', 'Disk space'], ['b', 'Queue']])
+
 describe('ForkEventBus scheduled turn reports', () => {
-  it('sends the final answer of an unattended reminder turn, titled by the reminder', async () => {
-    const { emit, notes } = await harness({ config: withConfig(sessionConfig, {}) })
+  it('sends the final answer of an unattended reminder turn, titled by its task, never by its instruction', async () => {
+    const { emit, notes } = await harness({ config: withConfig(sessionConfig, {}), schedules: TITLES })
     emit('other', sessionEvents.assistant('not a reminder Session'))
     await runTurn(emit, 's1', 'The nightly build passed.')
-    expect(notes).toEqual([{ title: '⏰ Check whether the nightly build passed', body: 'The nightly build passed.', url: 'https://dsh.example/' }])
+    expect(notes).toEqual([{ title: '⏰ Nightly build', body: 'The nightly build passed.', url: 'https://dsh.example/' }])
+    expect(JSON.stringify(notes)).not.toContain('Check whether')
 
     // A later human turn of the same Session is not reported.
     emit('s1', { type: 'user/message', seq: 4, data: { role: 'user', content: [], source: { kind: 'user' } } })
@@ -61,11 +64,35 @@ describe('ForkEventBus scheduled turn reports', () => {
     expect(notes).toEqual([{ title: '📡 Monitor mon-0a1b2c (globe errors)', body: '全球感知 gdacs 源超时，已自愈。', url: 'https://dsh.example/' }])
   })
 
-  it('titles a recurring batch by its first reminder and counts the rest', async () => {
-    const { emit, notes } = await harness()
+  it('titles a recurring batch by its first task and counts the rest', async () => {
+    const { emit, notes } = await harness({ schedules: TITLES })
     await runTurn(emit, 's1', 'Disk and queue are fine.', 'completed', BATCH)
-    expect(notes[0]).toMatchObject({ title: '⏰ Check disk space (+1)', body: 'Disk and queue are fine.' })
+    expect(notes[0]).toMatchObject({ title: '⏰ Disk space (+1)', body: 'Disk and queue are fine.' })
     expect(notes[0]).not.toHaveProperty('url')
+  })
+
+  it('reads the title when the turn starts, so a task removed before the turn ends keeps it', async () => {
+    const titles = new Map(TITLES)
+    const { emit, notes } = await harness({ schedules: titles })
+    emit('s1', sessionEvents.schedule(ONE_SHOT))
+    await vi.advanceTimersByTimeAsync(0)
+    titles.delete('task-1')
+    emit('s1', sessionEvents.assistant('Done.'))
+    emit('s1', sessionEvents.turnEnd())
+    await vi.advanceTimersByTimeAsync(0)
+    expect(notes[0]!.title).toBe('⏰ Nightly build')
+  })
+
+  it.each([
+    ['no schedule service is mounted', undefined, []],
+    ['the task is gone', new Map<string, string | Error>(), ['info: fork-event-bus: schedule task task-1 is gone; its reminder report has no title']],
+    ['the schedule service fails', new Map<string, string | Error>([['task-1', new Error('storage closed')]]), ['warn: fork-event-bus: schedule task task-1 could not be read: storage closed']],
+  ])('titles the report 定时任务 without the instruction when %s', async (_case, schedules, logged) => {
+    const logs: string[] = []
+    const { emit, notes } = await harness({ ...schedules === undefined ? {} : { schedules }, logs })
+    await runTurn(emit, 's1', 'Done.')
+    expect(notes[0]!.title).toBe('⏰ 定时任务')
+    for (const line of logged) expect(logs).toContain(line)
   })
 
   it('falls back to the Session id when the reminder text is not recognized', async () => {
@@ -75,9 +102,9 @@ describe('ForkEventBus scheduled turn reports', () => {
   })
 
   it('marks a turn that did not complete and reports missing text', async () => {
-    const { emit, notes } = await harness()
+    const { emit, notes } = await harness({ schedules: TITLES })
     await runTurn(emit, 's1', undefined, 'error')
-    expect(notes[0]).toMatchObject({ title: '⚠️ ⏰ Check whether the nightly build passed (error)', body: '(no assistant text)' })
+    expect(notes[0]).toMatchObject({ title: '⚠️ ⏰ Nightly build (error)', body: '(no assistant text)' })
   })
 
   it('stays silent when the owner stopped the reminder turn', async () => {
@@ -121,7 +148,7 @@ describe('ForkEventBus scheduled turn reports', () => {
   })
 
   it('reports a reminder that lands in the first turn of a bus-started Session only once', async () => {
-    const { bus, emit, notes } = await harness({ config: sessionConfig })
+    const { bus, emit, notes } = await harness({ config: sessionConfig, schedules: TITLES })
     await bus.publish(release(1))
     await vi.advanceTimersByTimeAsync(1_000)
     emit('w1', sessionEvents.webhook(bus.batches()[0]!.id))
@@ -133,7 +160,7 @@ describe('ForkEventBus scheduled turn reports', () => {
 
     // A reminder the event Session scheduled for later is reported on its own.
     await runTurn(emit, 'w1', 'Follow-up: still fine.')
-    expect(notes.at(-1)).toMatchObject({ title: '⏰ Check whether the nightly build passed', body: 'Follow-up: still fine.' })
+    expect(notes.at(-1)).toMatchObject({ title: '⏰ Nightly build', body: 'Follow-up: still fine.' })
   })
 })
 

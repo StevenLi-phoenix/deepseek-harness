@@ -37,6 +37,9 @@
     },
     {
       "path": "../../workspace/workspace"
+    },
+    {
+      "path": "../../schedule/schedule"
     }
   ]
 }

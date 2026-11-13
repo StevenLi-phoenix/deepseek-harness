@@ -52,8 +52,8 @@ export function toView(status: CoursesStatus): CoursesView {
     sync: status.sync === null
       ? null
       : {
-        status: status.sync.status, latestRunAt: status.sync.latestRunAt, lastCleanAt: status.sync.lastCleanAt,
-        failedRuns: status.sync.failedRuns, reason: status.sync.reason, alerting: status.sync.alerting,
+        status: status.sync.status, latestRunAt: status.sync.latestRunAt, lastSyncedAt: status.sync.lastSyncedAt,
+        failedSinceSynced: status.sync.failedSinceSynced, reason: status.sync.reason, alerting: status.sync.alerting,
       },
     outage: status.outage,
     upcoming: status.upcoming.map(row => ({

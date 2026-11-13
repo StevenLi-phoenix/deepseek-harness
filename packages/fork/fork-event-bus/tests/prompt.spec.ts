@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FORK_SILENT_REPLY, batchTitle, buildSessionRequest, failureDetail, formatBatchNote, formatReminderNote, formatResultNote, isSilentReply, monitorLabel, reminderLabel } from '../src/prompt.ts'
+import { FORK_SILENT_REPLY, batchTitle, buildSessionRequest, failureDetail, formatBatchNote, formatReminderNote, formatResultNote, isSilentReply, monitorLabel, REMINDER_FALLBACK_LABEL, reminderScheduleIds, reminderTitle } from '../src/prompt.ts'
 import type { BatchEvent, SessionAction } from '../src/types.ts'
 
 const action: SessionAction = {
@@ -149,34 +149,44 @@ describe('monitorLabel', () => {
   })
 })
 
-describe('reminderLabel', () => {
-  it('reads the first line of a one-shot reminder prompt', () => {
-    expect(reminderLabel('[SCHEDULE REMINDER]\nreminder_prompt_json: "Check CI\\nthen report"')).toBe('Check CI')
+describe('reminderScheduleIds', () => {
+  it('reads the task of a one-shot reminder', () => {
+    expect(reminderScheduleIds('[SCHEDULE REMINDER]\nschedule_id_json: "task-1"\nreminder_prompt_json: "Check CI\\nthen report"')).toEqual(['task-1'])
   })
 
-  it('reads the first reminder of a batch and counts the rest', () => {
-    const batch = `reminders_json: ${JSON.stringify([{ reminder_prompt: 'A' }, { reminder_prompt: 'B' }, { reminder_prompt: 'C' }])}`
-    expect(reminderLabel(batch)).toBe('A (+2)')
-    expect(reminderLabel(`reminders_json: ${JSON.stringify([{ reminder_prompt: 'Only' }])}`)).toBe('Only')
-  })
-
-  it('bounds long prompts', () => {
-    const label = reminderLabel(`reminder_prompt_json: ${JSON.stringify('x'.repeat(200))}`)!
-    expect(label).toHaveLength(80)
-    expect(label.endsWith('…')).toBe(true)
+  it('reads every task of a batch in order', () => {
+    const batch = `reminders_json: ${JSON.stringify([{ schedule_id: 'a', reminder_prompt: 'A' }, { schedule_id: 'b' }, { reminder_prompt: 'C' }, 'x'])}`
+    expect(reminderScheduleIds(batch)).toEqual(['a', 'b'])
   })
 
   it.each([
     ['no text', undefined],
     ['unrelated text', 'hello'],
-    ['malformed JSON', 'reminder_prompt_json: {oops'],
-    ['a non-string prompt', 'reminder_prompt_json: 42'],
-    ['a blank prompt', 'reminder_prompt_json: "   "'],
+    ['malformed JSON', 'schedule_id_json: {oops'],
+    ['a non-string id', 'schedule_id_json: 42'],
+    ['an empty id', 'schedule_id_json: ""'],
     ['an empty batch', 'reminders_json: []'],
-    ['a batch without prompts', 'reminders_json: [{"schedule_id":"a"}]'],
-    ['a batch that is not a list', 'reminders_json: {"reminder_prompt":"a"}'],
-  ])('returns undefined for %s', (_label, text) => {
-    expect(reminderLabel(text)).toBeUndefined()
+    ['a batch that is not a list', 'reminders_json: {"schedule_id":"a"}'],
+  ])('reads no task from %s', (_label, text) => {
+    expect(reminderScheduleIds(text)).toEqual([])
+  })
+})
+
+describe('reminderTitle', () => {
+  it('names the first task that has a title and counts the rest', () => {
+    expect(reminderTitle(['Nightly build'])).toBe('Nightly build')
+    expect(reminderTitle([undefined, '  Disk space ', 'Queue'])).toBe('Disk space (+2)')
+  })
+
+  it('falls back to 定时任务 when no title could be read', () => {
+    expect(reminderTitle([undefined])).toBe(REMINDER_FALLBACK_LABEL)
+    expect(reminderTitle([' ', undefined])).toBe(`${REMINDER_FALLBACK_LABEL} (+1)`)
+  })
+
+  it('bounds long titles', () => {
+    const label = reminderTitle(['x'.repeat(200)])
+    expect(label).toHaveLength(80)
+    expect(label.endsWith('…')).toBe(true)
   })
 })
 

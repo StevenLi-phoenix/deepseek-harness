@@ -45,7 +45,7 @@ kind: "package-reference"
 | `quietHours.followPresence` | `true` | `ctx.forkPresence` 说主人在睡觉时先等着（设置 → 勿扰） |
 | `quietHours.enabled` / `start` / `end` | `false` / `01:00` / `09:00` | 另加一个自己的每日静默时段 |
 | `sync.alert` / `statuses` | `true` / `['failing', 'missing']` | 同步健康状态是其中之一时告诉主人 |
-| `sync.staleHours` / `repeatHours` | `24` / `24` | 距最近一次成功同步多少小时后发第一次提醒，以及两次提醒的间隔 |
+| `sync.staleHours` / `repeatHours` | `24` / `24` | 距最近一次同步多少小时后发第一次提醒、DDL 提醒里加“可能过时”一行，以及两次提醒的间隔 |
 | `outageAlertAfter` | `4` | 连续多少次轮询失败后告诉主人提醒暂停了（从未设置过的 token 只在设置页显示） |
 
 ### 规则
@@ -57,7 +57,7 @@ kind: "package-reference"
 - **每次轮询一条消息**：一次轮询的所有提醒合成一条消息，迟交窗口在前；和父任务同一截止时间提醒的子任务（`parent_task_id`）并进父任务那一行。
 - **接下来**：每条消息在提醒之后附一份“接下来 72 小时内还有什么”：其余未完成、截止时间（迟交窗口内则是迟交截止）在 72 小时内的任务，按截止时间排序，每项一行并带剩余时间；准时截止已过但还能迟交的标 ⚠️；最多 6 行，超出写 `另有 N 项`。主人由此随时看得出真正最紧急的是哪一项。这份清单只是参考：里面的任务不算“已提醒”，仍按各自的时间点发自己的提醒。
 - **静默**：静默期间什么都不发，也不记为已发；静默结束后的第一次轮询发当时所处的时间点。
-- **同步健康**：`report.coverage.health` 坏了 `staleHours` 之后，发一条消息，写明最近一次成功同步、失败次数和最新一次运行的原因（coverage 里第一条 failed，否则第一条 not_checked 的 detail，截到 160 字符）；之后最多每 `repeatHours` 一次，下一次成功同步后发一次恢复。DSH 不运行也不修复同步。
+- **同步健康**：`report.coverage.health` 处于坏状态（`sync.statuses`），且最近一次同步（`last_synced_run_at`：最近一次查到了东西的运行，`degraded` 也算）已过 `staleHours` 时，发一条消息，写明这次同步、之后什么都没查到的运行次数和最新一次运行的原因（coverage 里第一条 failed，否则第一条 not_checked 的 detail，截到 160 字符）；之后最多每 `repeatHours` 一次，有更新的同步后发一次恢复。只有状态变化不会结束提醒，记录有多旧也从不按最后一次干净运行算：两次失败之间夹一次 degraded 运行，曾经先发“恢复了”却写着六天前的干净日期，几小时后又发“六天没同步”。DDL 提醒里的“可能过时”一行按同一条 `staleHours` 规则。DSH 不运行也不修复同步。
 
 -----
 

@@ -125,15 +125,21 @@ describe('task lines', () => {
 })
 
 describe('sync lines', () => {
-  const health = (extra: Partial<SyncHealth>): SyncHealth => ({ status: 'ok', latestRunAt: null, lastCleanAt: null, failedRuns: 0, latestRunId: null, ...extra })
+  const health = (extra: Partial<SyncHealth>): SyncHealth => ({ status: 'ok', latestRunAt: null, lastCleanAt: null, failedRuns: 0, lastSyncedAt: null, failedSinceSynced: 0, latestRunId: null, ...extra })
 
   it('reports an ok sync with its latest run time, or unknown when none is recorded', () => {
     expect(healthLine(health({ latestRunAt: NOW }), ZONE)).toBe('Sync: ok (latest run 11/2 周一 12:00).')
     expect(healthLine(health({}), ZONE)).toBe('Sync: ok (latest run unknown).')
   })
 
-  it('reports a failing sync with no clean sync on record', () => {
-    expect(healthLine(health({ status: 'failing', failedRuns: 3 }), ZONE)).toContain('Sync: failing, no clean sync on record, 3 failed run(s) since.')
+  it('reports a failing sync with no sync on record', () => {
+    expect(healthLine(health({ status: 'failing', failedRuns: 9, failedSinceSynced: 3 }), ZONE)).toContain('Sync: failing, no sync on record, 3 failed run(s) since.')
+  })
+
+  it('dates the records by the last sync, a degraded one included, not by the last clean run', () => {
+    const line = healthLine(health({ status: 'failing', lastCleanAt: NOW - 150 * 3_600_000, failedRuns: 29, lastSyncedAt: NOW, failedSinceSynced: 1 }), ZONE)
+    expect(line).toContain('Sync: failing, last sync 11/2 周一 12:00, 1 failed run(s) since.')
+    expect(line).not.toContain('clean')
   })
 
   it('keeps only coverage rows that have a status, with a placeholder area and clipped detail', () => {

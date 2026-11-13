@@ -112,6 +112,8 @@ const healthSchema = z.object({
   latest_run_at: instant,
   last_clean_run_at: instant,
   failed_runs_since_clean: z.number().int().nonnegative().nullish(),
+  last_synced_run_at: instant,
+  failed_runs_since_synced: z.number().int().nonnegative().nullish(),
 })
 
 /** Whether the sync collectors work, from `report.coverage.health`. */
@@ -119,8 +121,14 @@ export interface SyncHealth {
   /** `ok`, `degraded`, `failing`, or `missing`; other values are passed through. */
   readonly status: string
   readonly latestRunAt: number | null
+  /** Newest run that checked something and failed nothing. */
   readonly lastCleanAt: number | null
+  /** Runs since `lastCleanAt` that failed or checked nothing. */
   readonly failedRuns: number
+  /** Newest run that checked something, a degraded one included: how old the records are. */
+  readonly lastSyncedAt: number | null
+  /** Runs since `lastSyncedAt` that checked nothing. */
+  readonly failedSinceSynced: number
   /** Id of the newest sync run (`report.coverage.items[0].id`), whose coverage names the failure. */
   readonly latestRunId: string | null
 }
@@ -132,7 +140,7 @@ export interface SyncHealth {
  */
 export function parseHealth(coverage: unknown): SyncHealth {
   const record = typeof coverage === 'object' && coverage !== null ? coverage as { health?: unknown; items?: unknown } : {}
-  if (record.health === undefined || record.health === null) return { status: 'missing', latestRunAt: null, lastCleanAt: null, failedRuns: 0, latestRunId: null }
+  if (record.health === undefined || record.health === null) return { status: 'missing', latestRunAt: null, lastCleanAt: null, failedRuns: 0, lastSyncedAt: null, failedSinceSynced: 0, latestRunId: null }
   const health = healthSchema.parse(record.health)
   const first = Array.isArray(record.items) ? record.items[0] as { id?: unknown } | undefined : undefined
   return {
@@ -140,6 +148,8 @@ export function parseHealth(coverage: unknown): SyncHealth {
     latestRunAt: health.latest_run_at,
     lastCleanAt: health.last_clean_run_at,
     failedRuns: health.failed_runs_since_clean ?? 0,
+    lastSyncedAt: health.last_synced_run_at,
+    failedSinceSynced: health.failed_runs_since_synced ?? 0,
     latestRunId: typeof first?.id === 'string' ? first.id : null,
   }
 }

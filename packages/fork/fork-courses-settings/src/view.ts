@@ -27,8 +27,10 @@ export interface SyncView {
   /** `ok`, `degraded`, `failing`, `missing`, or another status the service reports. */
   readonly status: string
   readonly latestRunAt: number | null
-  readonly lastCleanAt: number | null
-  readonly failedRuns: number
+  /** Newest run that checked something, a degraded one included: how old the records are. */
+  readonly lastSyncedAt: number | null
+  /** Runs since `lastSyncedAt` that checked nothing. */
+  readonly failedSinceSynced: number
   /** What the newest run says it could not check. */
   readonly reason: string | null
   /** An alert went out and no recovery since. */

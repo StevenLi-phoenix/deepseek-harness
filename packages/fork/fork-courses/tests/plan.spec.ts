@@ -19,7 +19,7 @@ function task(overrides: Partial<TaskSummary> = {}): TaskSummary {
   }
 }
 
-const OK: SyncHealth = { status: 'ok', latestRunAt: NOW - H, lastCleanAt: NOW - H, failedRuns: 0, latestRunId: 'run-1' }
+const OK: SyncHealth = { status: 'ok', latestRunAt: NOW - H, lastCleanAt: NOW - H, failedRuns: 0, lastSyncedAt: NOW - H, failedSinceSynced: 0, latestRunId: 'run-1' }
 
 describe('reminder steps', () => {
   it('picks the smallest checkpoint already crossed, keyed by phase, task, deadline, and checkpoint', () => {
@@ -69,7 +69,7 @@ describe('reminder message', () => {
     const part = (id: string, title: string): TaskSummary => task({ id, title, parentId: 'hw3', parentTitle: 'Homework 3', dueAt: NOW - 13 * H, lateAt: NOW + 34 * H })
     const lab = task({ id: 'lab5', title: 'Lab 2', course: 'Other Course', dueAt: NOW + 5 * H, progress: 'partial', percent: 40 })
     const planned = planReminders([parent, part('hw3-w', 'Written'), part('hw3-p', 'Programming'), lab], NOW, RULES, () => false)
-    const note = renderReminders(planned, { now: NOW, timeZone: ZONE, urgentWithinHours: 2, health: OK })
+    const note = renderReminders(planned, { now: NOW, timeZone: ZONE, urgentWithinHours: 2, health: OK, staleHours: 24 })
     expect(note.title).toBe('⚠️ 课程 DDL：1 项已过准时截止，迟交窗口还开着；另有 1 项快到截止')
     expect(note.body).toBe([
       '⚠️ 准时截止已过，迟交还来得及：',
@@ -87,24 +87,34 @@ describe('reminder message', () => {
   it('names the parent of a part reminded alone, marks tentative dates, and is urgent near the deadline', () => {
     const part = task({ id: 'p', title: 'Written', parentId: 'gone', parentTitle: 'Homework 9', dueAt: NOW + 1.5 * H, certainty: 'tentative' })
     const planned = planReminders([part], NOW, RULES, () => false)
-    const note = renderReminders(planned, { now: NOW, timeZone: ZONE, urgentWithinHours: 2, health: null })
+    const note = renderReminders(planned, { now: NOW, timeZone: ZONE, urgentWithinHours: 2, health: null, staleHours: 24 })
     expect(note.body).toContain(`• Example Course · Homework 9 · Written — ${stamp(NOW + 1.5 * H, ZONE)} 截止（日期待确认），还剩 1 小时`)
     expect(note.urgent).toBe(true)
-    expect(renderReminders(planned, { now: NOW, timeZone: ZONE, urgentWithinHours: 0, health: null }).urgent).toBe(false)
+    expect(renderReminders(planned, { now: NOW, timeZone: ZONE, urgentWithinHours: 0, health: null, staleHours: 24 }).urgent).toBe(false)
   })
 
-  it('says how old the records may be when the sync is not healthy', () => {
-    const health: SyncHealth = { status: 'failing', latestRunAt: NOW - H, lastCleanAt: Date.parse('2026-10-28T18:16:00-04:00'), failedRuns: 14, latestRunId: 'run-9' }
+  it('says how old the records may be when the last sync is staleHours old', () => {
+    const synced = Date.parse('2026-10-28T18:16:00-04:00')
+    const health: SyncHealth = { status: 'failing', latestRunAt: NOW - H, lastCleanAt: synced - 50 * H, failedRuns: 20, lastSyncedAt: synced, failedSinceSynced: 14, latestRunId: 'run-9' }
     const planned = planReminders([task()], NOW, RULES, () => false)
-    const note = renderReminders(planned, { now: NOW, timeZone: ZONE, urgentWithinHours: 2, health })
-    expect(note.body).toContain('（课程记录可能过时：最近一次成功同步在 10/28 周三 18:16，之后 14 次同步失败；新作业和提交状态可能没更新。）')
+    const note = renderReminders(planned, { now: NOW, timeZone: ZONE, urgentWithinHours: 2, health, staleHours: 24 })
+    expect(note.body).toContain('（课程记录可能过时：最近一次同步在 10/28 周三 18:16，之后 14 次同步失败；新作业和提交状态可能没更新。）')
+  })
+
+  it('adds no stale line when a degraded or failed run follows a recent sync, however old the last clean run', () => {
+    const planned = planReminders([task()], NOW, RULES, () => false)
+    for (const status of ['degraded', 'failing']) {
+      const health: SyncHealth = { status, latestRunAt: NOW - H, lastCleanAt: NOW - 150 * H, failedRuns: 29, lastSyncedAt: NOW - 7 * H, failedSinceSynced: 1, latestRunId: 'run-9' }
+      expect(renderReminders(planned, { now: NOW, timeZone: ZONE, urgentWithinHours: 2, health, staleHours: 24 }).body).not.toContain('可能过时')
+    }
   })
 })
 
 describe('outlook after the reminders', () => {
   const named = (id: string, title: string, overrides: Partial<TaskSummary> = {}): TaskSummary => task({ id, title, ...overrides })
   const render = (tasks: TaskSummary[], reminded: TaskSummary[]) => renderReminders(
-    planReminders(reminded, NOW, RULES, () => false), { now: NOW, timeZone: ZONE, urgentWithinHours: 2, health: null, tasks },
+    planReminders(reminded, NOW, RULES, () => false),
+    { now: NOW, timeZone: ZONE, urgentWithinHours: 2, health: null, staleHours: 24, tasks },
   )
 
   it('lists the other unfinished tasks due within 72 hours after the triggered one, soonest first, late windows marked', () => {
@@ -182,26 +192,44 @@ describe('upcoming list', () => {
 
 describe('sync alert', () => {
   const rules = { statuses: ['failing', 'missing'], staleHours: 24, repeatHours: 24 }
-  const failing: SyncHealth = { status: 'failing', latestRunAt: NOW - H, lastCleanAt: NOW - 30 * H, failedRuns: 4, latestRunId: 'run-4' }
+  const failing: SyncHealth = { status: 'failing', latestRunAt: NOW - H, lastCleanAt: NOW - 100 * H, failedRuns: 9, lastSyncedAt: NOW - 30 * H, failedSinceSynced: 4, latestRunId: 'run-4' }
   const idle = { active: false, alertedAt: null, cleanAt: null }
 
-  it('alerts once the sync has been broken for staleHours, then at most every repeatHours', () => {
-    expect(planSyncNotice({ ...failing, lastCleanAt: NOW - 10 * H }, NOW, idle, rules)).toBeNull()
+  it('alerts once the last sync is staleHours old, then at most every repeatHours', () => {
+    expect(planSyncNotice({ ...failing, lastSyncedAt: NOW - 10 * H }, NOW, idle, rules)).toBeNull()
     expect(planSyncNotice(failing, NOW, idle, rules)).toBe('failing')
-    const alerted = { active: true, alertedAt: NOW, cleanAt: failing.lastCleanAt }
+    expect(planSyncNotice({ ...failing, lastSyncedAt: null }, NOW, idle, rules)).toBe('failing')
+    const alerted = { active: true, alertedAt: NOW, cleanAt: failing.lastSyncedAt }
     expect(planSyncNotice(failing, NOW + 23 * H, alerted, rules)).toBeNull()
     expect(planSyncNotice(failing, NOW + 24 * H, alerted, rules)).toBe('failing')
   })
 
-  it('tells the recovery once, on a clean run or a status that no longer counts as broken', () => {
-    const alerted = { active: true, alertedAt: NOW, cleanAt: failing.lastCleanAt }
-    expect(planSyncNotice({ ...failing, status: 'ok', lastCleanAt: NOW + H }, NOW + 2 * H, alerted, rules)).toBe('recovered')
-    expect(planSyncNotice({ ...failing, lastCleanAt: NOW + H }, NOW + 2 * H, alerted, rules)).toBe('recovered')
+  it('tells the recovery once, on a newer sync, degraded or clean; a status change alone ends nothing', () => {
+    const alerted = { active: true, alertedAt: NOW, cleanAt: failing.lastSyncedAt }
+    expect(planSyncNotice({ ...failing, status: 'ok', lastSyncedAt: NOW + H }, NOW + 2 * H, alerted, rules)).toBe('recovered')
+    expect(planSyncNotice({ ...failing, status: 'degraded', lastSyncedAt: NOW + H }, NOW + 2 * H, alerted, rules)).toBe('recovered')
+    expect(planSyncNotice({ ...failing, status: 'degraded' }, NOW + 2 * H, alerted, rules)).toBeNull()
+    expect(planSyncNotice({ ...failing, lastSyncedAt: NOW + H }, NOW + 2 * H, { ...alerted, cleanAt: null }, rules)).toBe('recovered')
+    expect(planSyncNotice({ ...failing, lastSyncedAt: null }, NOW + 2 * H, { ...alerted, cleanAt: null }, rules)).toBeNull()
     expect(planSyncNotice({ ...failing, status: 'ok' }, NOW, idle, rules)).toBeNull()
     expect(planSyncNotice({ ...failing, status: 'degraded' }, NOW, idle, rules)).toBeNull()
   })
 
-  it('names the last clean sync, the failures since, and the reason', () => {
+  it('does not contradict itself across a degraded run between failing ones (2026-11-12)', () => {
+    const lastClean = Date.parse('2026-11-06T07:55:00-05:00')
+    const degradedRun = Date.parse('2026-11-12T11:28:32-05:00')
+    const failingRun = Date.parse('2026-11-12T17:58:29-05:00')
+    const alerted = { active: true, alertedAt: Date.parse('2026-11-11T09:16:59-05:00'), cleanAt: lastClean }
+    const degraded: SyncHealth = { status: 'degraded', latestRunAt: degradedRun, lastCleanAt: lastClean, failedRuns: 28, lastSyncedAt: degradedRun, failedSinceSynced: 0, latestRunId: 'partial' }
+    expect(planSyncNotice(degraded, Date.parse('2026-11-12T11:51:04-05:00'), alerted, rules)).toBe('recovered')
+    expect(renderSyncRecovered(degraded, ZONE).body).toBe('11/12 周四 11:28 同步成功，课程记录又能更新了。')
+    const recovered = { active: false, alertedAt: alerted.alertedAt, cleanAt: degradedRun }
+    const blocked: SyncHealth = { ...degraded, status: 'failing', latestRunAt: failingRun, failedRuns: 29, failedSinceSynced: 1, latestRunId: 'iab' }
+    expect(planSyncNotice(blocked, Date.parse('2026-11-12T18:21:03-05:00'), recovered, rules)).toBeNull()
+    expect(planSyncNotice(blocked, degradedRun + 24 * H, recovered, rules)).toBe('failing')
+  })
+
+  it('names the last sync, the failures since, and the reason', () => {
     const note = renderSyncFailing(failing, 'Built-in browser unavailable', NOW, ZONE)
     expect(note.title).toBe('⚠️ 课程同步已经 30 小时没成功了')
     expect(note.body).toBe([
@@ -210,7 +238,7 @@ describe('sync alert', () => {
       '原因：Built-in browser unavailable',
       'DDL 提醒照旧按现有记录发，但新作业和提交状态可能没更新。',
     ].join('\n'))
-    expect(renderSyncRecovered({ ...failing, lastCleanAt: NOW }, ZONE)).toEqual({ title: '✅ 课程同步恢复了', body: `${stamp(NOW, ZONE)} 同步成功，课程记录又能更新了。`, kinds: ['courses.sync.recovered'], urgent: false })
+    expect(renderSyncRecovered({ ...failing, lastSyncedAt: NOW }, ZONE)).toEqual({ title: '✅ 课程同步恢复了', body: `${stamp(NOW, ZONE)} 同步成功，课程记录又能更新了。`, kinds: ['courses.sync.recovered'], urgent: false })
   })
 })
 
@@ -229,8 +257,8 @@ describe('wire parsing', () => {
   })
 
   it('reads the sync health and the newest run id', () => {
-    expect(parseHealth({ health: { status: 'failing', latest_run_at: '2026-11-01T14:01:58Z', last_clean_run_at: '2026-10-28T22:16:34.979Z', failed_runs_since_clean: 14 }, items: [{ id: 'run-x' }] }))
-      .toEqual({ status: 'failing', latestRunAt: Date.parse('2026-11-01T14:01:58Z'), lastCleanAt: Date.parse('2026-10-28T22:16:34.979Z'), failedRuns: 14, latestRunId: 'run-x' })
+    expect(parseHealth({ health: { status: 'failing', latest_run_at: '2026-11-01T14:01:58Z', last_clean_run_at: '2026-10-28T22:16:34.979Z', failed_runs_since_clean: 14, last_synced_run_at: '2026-10-31T16:28:32.655Z', failed_runs_since_synced: 3 }, items: [{ id: 'run-x' }] }))
+      .toEqual({ status: 'failing', latestRunAt: Date.parse('2026-11-01T14:01:58Z'), lastCleanAt: Date.parse('2026-10-28T22:16:34.979Z'), failedRuns: 14, lastSyncedAt: Date.parse('2026-10-31T16:28:32.655Z'), failedSinceSynced: 3, latestRunId: 'run-x' })
     expect(parseHealth(undefined).status).toBe('missing')
   })
 
@@ -249,7 +277,7 @@ describe('wire parsing', () => {
 })
 
 describe('reminder message variants', () => {
-  const NO_HEALTH = { now: NOW, timeZone: ZONE, urgentWithinHours: 2, health: null }
+  const NO_HEALTH = { now: NOW, timeZone: ZONE, urgentWithinHours: 2, health: null, staleHours: 24 }
 
   it('reads a late-only message without a due section or a due count, with the course left out when it has none', () => {
     const planned = planReminders([task({ course: '', title: 'Quiz', dueAt: NOW - H, lateAt: NOW + 10 * H })], NOW, RULES, () => false)
@@ -270,8 +298,8 @@ describe('reminder message variants', () => {
     expect(renderReminders([reminder], NO_HEALTH).body).toContain(`准时截止 ${stamp(NOW + 5 * H, ZONE)} 已过，迟交截止 ${stamp(NOW + 5 * H, ZONE)}`)
   })
 
-  it('says there was never a clean sync, without a failure count when none failed', () => {
-    const health: SyncHealth = { status: 'missing', latestRunAt: null, lastCleanAt: null, failedRuns: 0, latestRunId: null }
+  it('says there was never a sync, without a failure count when none failed', () => {
+    const health: SyncHealth = { status: 'missing', latestRunAt: null, lastCleanAt: null, failedRuns: 0, lastSyncedAt: null, failedSinceSynced: 0, latestRunId: null }
     const note = renderReminders(planReminders([task()], NOW, RULES, () => false), { ...NO_HEALTH, health })
     expect(note.body).toContain('（课程记录可能过时：还没有过成功的同步；新作业和提交状态可能没更新。）')
   })
@@ -286,14 +314,14 @@ describe('upcoming list without a late window', () => {
 
 describe('sync messages without timestamps', () => {
   it('writes a failing alert for a sync that never succeeded, with no last run and no reason', () => {
-    const health: SyncHealth = { status: 'missing', latestRunAt: null, lastCleanAt: null, failedRuns: 0, latestRunId: null }
+    const health: SyncHealth = { status: 'missing', latestRunAt: null, lastCleanAt: null, failedRuns: 0, lastSyncedAt: null, failedSinceSynced: 0, latestRunId: null }
     const note = renderSyncFailing(health, null, NOW, ZONE)
     expect(note.title).toBe('⚠️ 课程同步还没有成功过')
     expect(note.body).toBe(['最近一次成功同步：没有记录。', '之后失败 0 次。', 'DDL 提醒照旧按现有记录发，但新作业和提交状态可能没更新。'].join('\n'))
   })
 
-  it('writes the recovery from the latest run when there is no clean run, and without a time when there is neither', () => {
-    const health: SyncHealth = { status: 'ok', latestRunAt: NOW, lastCleanAt: null, failedRuns: 0, latestRunId: null }
+  it('writes the recovery from the latest run when there is no synced run, and without a time when there is neither', () => {
+    const health: SyncHealth = { status: 'ok', latestRunAt: NOW, lastCleanAt: null, failedRuns: 0, lastSyncedAt: null, failedSinceSynced: 0, latestRunId: null }
     expect(renderSyncRecovered(health, ZONE).body).toBe(`${stamp(NOW, ZONE)} 同步成功，课程记录又能更新了。`)
     expect(renderSyncRecovered({ ...health, latestRunAt: null }, ZONE).body).toBe('课程记录又能更新了。')
   })
@@ -337,7 +365,7 @@ describe('wire parsing edge cases', () => {
 
   it('reads a health row without a failure count or run list as zero failures and no run id', () => {
     expect(parseHealth({ health: { status: 'ok' } }))
-      .toEqual({ status: 'ok', latestRunAt: null, lastCleanAt: null, failedRuns: 0, latestRunId: null })
+      .toEqual({ status: 'ok', latestRunAt: null, lastCleanAt: null, failedRuns: 0, lastSyncedAt: null, failedSinceSynced: 0, latestRunId: null })
     expect(parseHealth({ health: { status: 'ok' }, items: [{ id: 7 }] }).latestRunId).toBeNull()
     expect(parseHealth({ health: null }).status).toBe('missing')
   })

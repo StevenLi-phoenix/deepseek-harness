@@ -11293,7 +11293,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SyncHealth',
-    declaration: 'export interface SyncHealth {\n    readonly status: string;\n    readonly latestRunAt: number | null;\n    readonly lastCleanAt: number | null;\n    readonly failedRuns: number;\n    readonly latestRunId: string | null;\n}',
+    declaration: 'export interface SyncHealth {\n    readonly status: string;\n    readonly latestRunAt: number | null;\n    readonly lastCleanAt: number | null;\n    readonly failedRuns: number;\n    readonly lastSyncedAt: number | null;\n    readonly failedSinceSynced: number;\n    readonly latestRunId: string | null;\n}',
   },
   {
     name: 'SystemMessage',

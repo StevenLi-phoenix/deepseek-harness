@@ -85,7 +85,7 @@ export interface Config {
     alert: boolean
     /** `report.coverage.health.status` values that count as broken. */
     statuses: string[]
-    /** Hours since the last clean sync before the first alert. */
+    /** Hours since the last sync before the first alert and the stale line in reminders. */
     staleHours: number
     /** Hours between alerts while it stays broken. */
     repeatHours: number
@@ -117,7 +117,7 @@ export const Config: z<Config> = z.object({
   sync: z.object({
     alert: z.boolean().default(true).description('Tell the owner when the course sync collectors are broken, and when they recover.'),
     statuses: z.array(z.string()).default(['failing', 'missing']).description('Sync health statuses that count as broken.'),
-    staleHours: z.natural().min(1).default(24).description('Hours since the last clean sync before the first alert.'),
+    staleHours: z.natural().min(1).default(24).description('Hours since the last sync (a run that checked something) before the first alert and the stale line in reminders.'),
     repeatHours: z.natural().min(1).default(24).description('Hours between alerts while the sync stays broken.'),
   }),
   outageAlertAfter: z.natural().min(1).default(4).description('Consecutive failed polls before the owner is told that reminders are paused.'),
@@ -308,6 +308,7 @@ export class ForkCourses extends Service {
       if (planned.length > 0) {
         const note = renderReminders(planned, {
           now: started, timeZone: this.config.timeZone, urgentWithinHours: this.config.urgentWithinHours, health, tasks,
+          staleHours: this.config.sync.staleHours,
         })
         if (this.isQuiet(started) && !note.urgent) {
           outcome = 'held'
@@ -333,7 +334,7 @@ export class ForkCourses extends Service {
       openTasks: tasks.length, reminders, outcome, syncStatus: health.status,
     }
     await domain.table('poll').put('latest', record)
-    this.ctx.logger.info(`fork-courses: poll (${trigger}) ok in ${record.durationMs} ms: ${tasks.length} open task(s), ${reminders} reminder(s) ${outcome}, sync ${health.status}${health.lastCleanAt === null ? '' : ` (last clean ${new Date(health.lastCleanAt).toISOString()}, ${health.failedRuns} failed since)`}`)
+    this.ctx.logger.info(`fork-courses: poll (${trigger}) ok in ${record.durationMs} ms: ${tasks.length} open task(s), ${reminders} reminder(s) ${outcome}, sync ${health.status}${health.lastSyncedAt === null ? '' : ` (last synced ${new Date(health.lastSyncedAt).toISOString()}, ${health.failedSinceSynced} failed since; last clean ${health.lastCleanAt === null ? 'none' : new Date(health.lastCleanAt).toISOString()})`}`)
     return record
   }
 
@@ -400,8 +401,8 @@ export class ForkCourses extends Service {
     }
     const note = decision === 'failing' ? renderSyncFailing(health, this.reason, now, this.config.timeZone) : renderSyncRecovered(health, this.config.timeZone)
     if (!await this.deliver(domain, note)) return
-    await table.put('latest', decision === 'failing' ? { active: true, alertedAt: now, cleanAt: health.lastCleanAt } : { active: false, alertedAt: state.alertedAt, cleanAt: health.lastCleanAt })
-    this.ctx.logger.info(`fork-courses: sync ${decision === 'failing' ? `alert sent (status ${health.status}, ${health.failedRuns} failed runs)` : 'recovery sent'}`)
+    await table.put('latest', decision === 'failing' ? { active: true, alertedAt: now, cleanAt: health.lastSyncedAt } : { active: false, alertedAt: state.alertedAt, cleanAt: health.lastSyncedAt })
+    this.ctx.logger.info(`fork-courses: sync ${decision === 'failing' ? `alert sent (status ${health.status}, ${health.failedSinceSynced} failed runs since the last sync)` : `recovery sent (${note.body})`}`)
   }
 
   /** What the newest sync run says it could not check; null (logged) when it cannot be read. */

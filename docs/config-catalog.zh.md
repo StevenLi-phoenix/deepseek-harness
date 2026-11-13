@@ -2720,7 +2720,7 @@ export interface Config {
     alert: boolean
     /** `report.coverage.health.status` values that count as broken. */
     statuses: string[]
-    /** Hours since the last clean sync before the first alert. */
+    /** Hours since the last sync before the first alert and the stale line in reminders. */
     staleHours: number
     /** Hours between alerts while it stays broken. */
     repeatHours: number
@@ -2737,7 +2737,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-fork-event-bus`
 
 - `inject`: `timer` · `storageDomain`
-- `source`: [`packages/fork/fork-event-bus/src/index.ts:72`](../packages/fork/fork-event-bus/src/index.ts)
+- `source`: [`packages/fork/fork-event-bus/src/index.ts:74`](../packages/fork/fork-event-bus/src/index.ts)
 
 ```ts config-catalog
 /** Bus configuration. */

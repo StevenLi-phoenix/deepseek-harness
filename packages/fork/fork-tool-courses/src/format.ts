@@ -44,15 +44,16 @@ export function taskLine(task: TaskSummary, now: number, timeZone: string): stri
 }
 
 /**
- * The sync line: whether the course records are being kept up to date.
+ * The sync line: whether the course records are being kept up to date. The last sync is the newest run that checked
+ * something, a degraded one included; the last clean run is left out, since its age read as the records' age.
  * @param health - from the report.
  * @param timeZone - IANA zone.
  * @returns the line.
  */
 export function healthLine(health: SyncHealth, timeZone: string): string {
   if (health.status === 'ok') return `Sync: ok (latest run ${health.latestRunAt === null ? 'unknown' : stamp(health.latestRunAt, timeZone)}).`
-  const clean = health.lastCleanAt === null ? 'no clean sync on record' : `last clean sync ${stamp(health.lastCleanAt, timeZone)}`
-  return `Sync: ${health.status}, ${clean}, ${health.failedRuns} failed run(s) since. A failed run does not make what earlier runs read old: what a task shows was read when its "last update" says, and courses_sync tells which pages each recent run did read.`
+  const synced = health.lastSyncedAt === null ? 'no sync on record' : `last sync ${stamp(health.lastSyncedAt, timeZone)}`
+  return `Sync: ${health.status}, ${synced}, ${health.failedSinceSynced} failed run(s) since. A failed run does not make what earlier runs read old: what a task shows was read when its "last update" says, and courses_sync tells which pages each recent run did read.`
 }
 
 /** One area of a sync run's coverage. */

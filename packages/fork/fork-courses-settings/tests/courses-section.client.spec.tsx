@@ -16,7 +16,7 @@ const VIEW: CoursesView = {
   quietHours: { followPresence: true, enabled: false, start: '01:00', end: '09:00' }, quietNow: true,
   lastPoll: { at: AT, trigger: 'timer', durationMs: 5, ok: true, error: null, openTasks: 3, reminders: 1, outcome: 'sent' },
   nextPollAt: AT + 900_000, polling: false,
-  sync: { status: 'failing', latestRunAt: AT, lastCleanAt: AT - 3_600_000, failedRuns: 2, reason: null, alerting: false },
+  sync: { status: 'failing', latestRunAt: AT, lastSyncedAt: AT - 3_600_000, failedSinceSynced: 2, reason: null, alerting: false },
   outage: { failures: 0, since: null, alerted: false },
   upcoming: [{ id: 'a', course: 'Example Course', title: 'Lab 2', phase: 'due', deadline: AT + 7_200_000, nextAt: AT + 3_600_000 }],
   notes: [{ at: AT, title: '⏰ 课程 DDL 提醒：1 项快到截止', body: '• Example Course · Lab 2', outcome: 'failed', error: 'no channel' }],
@@ -106,7 +106,7 @@ describe('CoursesSection', () => {
   })
 
   it('shows the sync reason and the alert line of a failing sync in warning text', () => {
-    mount({ view: { ...VIEW, sync: { status: 'failing', latestRunAt: AT, lastCleanAt: null, failedRuns: 4, reason: 'Browser down', alerting: true } } })
+    mount({ view: { ...VIEW, sync: { status: 'failing', latestRunAt: AT, lastSyncedAt: null, failedSinceSynced: 4, reason: 'Browser down', alerting: true } } })
     expect(screen.getByText(t('sync.reason', { reason: 'Browser down' }))).toBeTruthy()
     expect(screen.getByText(t('sync.alerting'))).toBeTruthy()
   })

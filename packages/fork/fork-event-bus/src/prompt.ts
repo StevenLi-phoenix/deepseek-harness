@@ -216,30 +216,38 @@ function jsonLine(text: string, name: string): unknown {
   }
 }
 
-/** First non-blank line of a prompt, bounded for a title. */
-function promptLabel(prompt: unknown): string | undefined {
-  if (typeof prompt !== 'string') return undefined
-  const first = prompt.trim().split('\n', 1).join('').trim()
-  return first === '' ? undefined : clampLabel(first, MAX_REMINDER_LABEL_CHARS)
+/** Label of a reminder turn whose task title cannot be read. */
+export const REMINDER_FALLBACK_LABEL = '定时任务'
+
+/**
+ * The schedule tasks behind a Host schedule message, read from the canonical JSON fields of its framing
+ * (`schedule_id_json` for one reminder, `reminders_json` for a recurring batch).
+ * @param text - text of the schedule `user/message`.
+ * @returns the task ids in delivery order; empty when the text is absent or is not a schedule framing.
+ */
+export function reminderScheduleIds(text: string | undefined): string[] {
+  if (text === undefined) return []
+  const single = jsonLine(text, 'schedule_id_json')
+  if (typeof single === 'string' && single !== '') return [single]
+  const batch = jsonLine(text, 'reminders_json')
+  if (!Array.isArray(batch)) return []
+  return batch.flatMap((item: unknown) => {
+    const id = typeof item === 'object' && item !== null && 'schedule_id' in item ? item.schedule_id : undefined
+    return typeof id === 'string' && id !== '' ? [id] : []
+  })
 }
 
 /**
- * Name the reminder behind a Host schedule message, read from the canonical
- * JSON fields of its framing (`reminder_prompt_json` for one reminder,
- * `reminders_json` for a recurring batch).
- * @param text - text of the schedule `user/message`.
- * @returns first line of the (first) reminder prompt, `(+N)` for more, or undefined when unrecognized.
+ * Name a reminder turn for the owner: the first task title that could be read, `(+N)` for more tasks in the batch.
+ * The instruction (`reminder_prompt`) is never the label: it is written for the agent, and its first line in the
+ * title read to the owner as the system prompt sent to WeChat.
+ * @param titles - the task titles in delivery order; undefined where a task could not be read.
+ * @returns the label, {@link REMINDER_FALLBACK_LABEL} when no title could be read.
  */
-export function reminderLabel(text: string | undefined): string | undefined {
-  if (text === undefined) return undefined
-  const single = jsonLine(text, 'reminder_prompt_json')
-  if (single !== undefined) return promptLabel(single)
-  const batch = jsonLine(text, 'reminders_json')
-  if (!Array.isArray(batch) || batch.length === 0) return undefined
-  const first: unknown = batch[0]
-  const label = promptLabel(typeof first === 'object' && first !== null && 'reminder_prompt' in first ? first.reminder_prompt : undefined)
-  if (label === undefined) return undefined
-  return batch.length > 1 ? `${label} (+${batch.length - 1})` : label
+export function reminderTitle(titles: readonly (string | undefined)[]): string {
+  const first = titles.map(title => title?.trim()).find(title => title !== undefined && title !== '')
+  const label = clampLabel(first ?? REMINDER_FALLBACK_LABEL, MAX_REMINDER_LABEL_CHARS)
+  return titles.length > 1 ? `${label} (+${titles.length - 1})` : label
 }
 
 /**

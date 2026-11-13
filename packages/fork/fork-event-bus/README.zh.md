@@ -133,7 +133,7 @@ kind: "package-reference"
 
 ### 结果回报
 
-总线启动的 Session 结束第一轮、或常驻 Session 结束某一批的那一轮时，总线把结局记到批次上，在日志里记下订阅、Session、投递方式、最后一次请求的输入 token、是否跑了压缩以及这一轮按名字统计的工具调用，并把最终的 assistant 文本发给 `ctx.forkNotifier`，标题用批次标题：一个事件时写这个事件本身，多个事件时写主题和条数（`ci: octo/repo (3 events)`），不拿其中某一个事件的标题。正常结束的一轮不加标记；其他结局的标题是 `⚠️ <标题> (<结局>)`。Host schedule 提醒（`source.kind: schedule`）在没有被 [`ctx.ownerRelay`](../owner-relay/README.zh.md) 的任何通道认领的 Session（`ownerOf(sessionId)` 为 `undefined`）里开启一轮时，总线把这一轮的最终回答发出去，标题为 `⏰ <提醒 prompt 的第一行>`。两种情况下，最终回答恰好是 `NO_REPLY`（`FORK_SILENT_REPLY`）时什么也不发；批次记录 `silent: true`。owner 停下的轮次（以 `aborted` 结束、原因为 `user`，来自 Web UI 或微信 `/stop`）只记录、不报告，因为停它的人已经知道。
+总线启动的 Session 结束第一轮、或常驻 Session 结束某一批的那一轮时，总线把结局记到批次上，在日志里记下订阅、Session、投递方式、最后一次请求的输入 token、是否跑了压缩以及这一轮按名字统计的工具调用，并把最终的 assistant 文本发给 `ctx.forkNotifier`，标题用批次标题：一个事件时写这个事件本身，多个事件时写主题和条数（`ci: octo/repo (3 events)`），不拿其中某一个事件的标题。正常结束的一轮不加标记；其他结局的标题是 `⚠️ <标题> (<结局>)`。Host schedule 提醒（`source.kind: schedule`）在没有被 [`ctx.ownerRelay`](../owner-relay/README.zh.md) 的任何通道认领的 Session（`ownerOf(sessionId)` 为 `undefined`）里开启一轮时，总线把这一轮的最终回答发出去，标题为 `⏰ <任务标题>`：轮次开始时按框架里的 `schedule_id` 向 `ctx.schedule.view()` 取的标题（批次加 `(+N)`），读不到任务时为 `⏰ 定时任务`。提醒 prompt 是给 agent 的指令，不进回报。两种情况下，最终回答恰好是 `NO_REPLY`（`FORK_SILENT_REPLY`）时什么也不发；批次记录 `silent: true`。owner 停下的轮次（以 `aborted` 结束、原因为 `user`，来自 Web UI 或微信 `/stop`）只记录、不报告，因为停它的人已经知道。
 
 -----
 
@@ -199,7 +199,7 @@ kind: "package-reference"
 - **自动归档要读每个 Session 的摘要**——一次检查会列出 Host 知道的全部 Session；有几万个时要几秒，所以每六小时一次而不是频繁检查。
 - **常驻 Session 不会被检查到**——订阅的常驻 Session（`key: subject` 时每个对象一个）一直留到它轮换；再也不跑 CI 的仓库，它的 Session 会一直留在侧栏里。
 - **轮换的种子**——从没压缩过的 Session 只交出它的 id；总线没在运行时发生的压缩，摘要总线看不到。
-- **提醒名取自 Host 框架文本**——schedule 消息格式变化后，回报退回 `⏰ Session <id>`。
+- **提醒名取自 Host 框架里的任务 id**——schedule 消息格式变化后，回报退回 `⏰ Session <id>`。
 - **没有指向单个 Session 的 Web 链接**——结果链接到 Web 根路径；客户端没有按 Session 的 URL。
 - **整个 domain 重写**——JSON 存储后端每次写入都重写整个 domain；保留量要有上限。
 

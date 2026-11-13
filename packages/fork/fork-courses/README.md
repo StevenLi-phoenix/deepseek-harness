@@ -45,7 +45,7 @@ Mount it at the root of a process that also mounts the storage domain facility, 
 | `quietHours.followPresence` | `true` | Wait while `ctx.forkPresence` says the owner sleeps (Settings → 勿扰) |
 | `quietHours.enabled` / `start` / `end` | `false` / `01:00` / `09:00` | An extra daily quiet window of its own |
 | `sync.alert` / `statuses` | `true` / `['failing', 'missing']` | Tell the owner when the sync health has one of these statuses |
-| `sync.staleHours` / `repeatHours` | `24` / `24` | Hours since the last clean sync before the first alert, and between alerts |
+| `sync.staleHours` / `repeatHours` | `24` / `24` | Hours since the last sync before the first alert and the stale line in reminders, and between alerts |
 | `outageAlertAfter` | `4` | Failed polls in a row before the owner hears that reminders are paused (a token that was never set is only shown in Settings) |
 
 ### Rules
@@ -57,7 +57,7 @@ Mount it at the root of a process that also mounts the storage domain facility, 
 - **One message per poll** — every reminder of a poll goes into one message, late windows first; a part (`parent_task_id`) reminded at its parent's deadline is folded into the parent's line.
 - **Outlook** — after the reminders, every message lists "what else is due in the next 72 hours": the other unfinished tasks whose deadline (or, in a late window, whose late deadline) falls within 72 hours, soonest first, one line each with the time left, ⚠️ for a missed on-time deadline that can still be submitted late, at most 6 lines and then `另有 N 项`. It tells the owner which deadline is really the most urgent. The outlook only informs: its tasks are not marked as reminded and still get their own checkpoints.
 - **Quiet** — while quiet, nothing is sent and nothing is marked; the first poll after it sends whatever checkpoint is current then.
-- **Sync health** — `report.coverage.health` that has been broken for `staleHours` is told with the last clean sync, the failed runs, and the newest run's reason (the first failed, else not-checked, coverage detail, cut to 160 characters); then at most every `repeatHours`, and once when a clean run follows. DSH does not run or repair the sync.
+- **Sync health** — a broken `report.coverage.health` (`sync.statuses`) whose last sync (`last_synced_run_at`: the newest run that checked something, a degraded one included) is `staleHours` old is told with that sync, the runs since that checked nothing, and the newest run's reason (the first failed, else not-checked, coverage detail, cut to 160 characters); then at most every `repeatHours`, and once when a newer sync follows. A status change alone ends no alert, and the last clean run never dates the records: a degraded run between two failing ones once sent "recovered" with the six-day-old clean date and, hours later, "six days without a sync". Reminders add the stale line on the same `staleHours` rule. DSH does not run or repair the sync.
 
 -----
 

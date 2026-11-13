@@ -68,24 +68,24 @@ describe('course tools', () => {
       items: [taskRow('t1'), taskRow('t2', { due_at: '2026-10-31T23:00:00-04:00', late_at: '2026-11-02T22:00:00-05:00', parent_task_id: 'p', parent_title: 'Homework 3' })],
       total: 2,
       undated: { total: 3, items: [] },
-      coverage: { health: { status: 'failing', latest_run_at: '2026-11-01T14:01:58Z', last_clean_run_at: '2026-10-28T22:16:34Z', failed_runs_since_clean: 14 }, items: [{ id: 'r' }] },
+      coverage: { health: { status: 'failing', latest_run_at: '2026-11-01T14:01:58Z', last_clean_run_at: '2026-10-20T22:16:34Z', failed_runs_since_clean: 30, last_synced_run_at: '2026-10-28T22:16:34Z', failed_runs_since_synced: 14 }, items: [{ id: 'r' }] },
     }))
     const text = textOf(await run('courses_deadlines', { days: 7, course: 'ml' }))
     expect(api.call.mock.calls[0]).toEqual(['report', expect.objectContaining({ view: 'deadlines', course_id: 'ml', overdue: 'include', coverage_limit: 1, limit: 30, include_undated: 'separate' }), expect.anything()])
     expect(text).toContain('- [t1 v4] Example Course · Task t1 — due 11/2 周一 23:59; progress not_started; submission not_submitted (seen on the platform); last update 10/28 周三 18:16; Assignment: https://example.edu/a/1')
     expect(text).toContain('- [t2 v4] Example Course · Homework 3 › Task t2 — due 10/31 周六 23:00 (passed); late submissions until 11/2 周一 22:00;')
     expect(text).toContain('Undated or tentative tasks: 3')
-    expect(text).toContain('Sync: failing, last clean sync 10/28 周三 18:16, 14 failed run(s) since.')
+    expect(text).toContain('Sync: failing, last sync 10/28 周三 18:16, 14 failed run(s) since.')
     expect(text).not.toContain('Read chapter 3')
   })
 
   it('does not call a failing sync a reason to doubt earlier readings, and points to courses_sync', async () => {
     const { ctx, run } = await mount(() => ({
       items: [], total: 0, undated: { total: 0, items: [] },
-      coverage: { health: { status: 'failing', latest_run_at: '2026-11-02T14:04:23Z', last_clean_run_at: '2026-11-02T00:15:00Z', failed_runs_since_clean: 2 }, items: [{ id: 'r' }] },
+      coverage: { health: { status: 'failing', latest_run_at: '2026-11-02T14:04:23Z', last_clean_run_at: '2026-11-02T00:15:00Z', failed_runs_since_clean: 2, last_synced_run_at: '2026-11-02T00:15:00Z', failed_runs_since_synced: 2 }, items: [{ id: 'r' }] },
     }))
     const text = textOf(await run('courses_deadlines', {}))
-    expect(text).toContain('Sync: failing, last clean sync 11/1 周日 19:15, 2 failed run(s) since.')
+    expect(text).toContain('Sync: failing, last sync 11/1 周日 19:15, 2 failed run(s) since.')
     expect(text).toContain('A failed run does not make what earlier runs read old')
     expect(text).toContain('courses_sync')
     const description = ctx.tools.schemas().find(schema => schema.name === 'courses_deadlines')?.description ?? ''

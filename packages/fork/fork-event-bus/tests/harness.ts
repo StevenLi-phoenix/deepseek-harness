@@ -182,6 +182,11 @@ export interface HarnessOptions {
   notifier?: false | Partial<ForkNotifier>
   /** Claiming channel per Session, served as `ctx.ownerRelay.ownerOf()`; omitted mounts no relay. */
   claims?: ReadonlyMap<string, string>
+  /**
+   * Schedule task titles by id, served as `ctx.schedule.view()`: a missing id is `schedule_not_found`, an Error value
+   * makes `view` throw. Omitted mounts no schedule service.
+   */
+  schedules?: ReadonlyMap<string, string | Error>
   runtime?: FakeRuntime | false
   controller?: FakeController
   registry?: FakeRegistry
@@ -217,6 +222,16 @@ export async function harness(options: HarnessOptions = {}) {
   }
   const claims = options.claims
   if (claims !== undefined) ctx.provide('ownerRelay' as never, { ownerOf: (id: string) => claims.get(id) } as never)
+  const schedules = options.schedules
+  if (schedules !== undefined) {
+    ctx.provide('schedule', {
+      view: async ({ id }: { id: string }) => {
+        const title = schedules.get(id)
+        if (title instanceof Error) throw title
+        return title === undefined ? { id, code: 'schedule_not_found' } : { id, title }
+      },
+    } as never)
+  }
   const runtime = options.runtime === false ? fakeRuntime() : options.runtime ?? fakeRuntime()
   if (options.runtime !== false) ctx.provide('webhookRuntime', runtime as never)
   if (options.controller !== undefined) ctx.provide('sessionController', options.controller as never)

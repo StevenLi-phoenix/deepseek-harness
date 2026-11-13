@@ -141,7 +141,7 @@ export function syncLines(sync: SyncView | null, timeZone: string, t: Translate)
   if (sync.status === 'ok') return { tone: 'ok', lines: [t('sync.ok', { time: sync.latestRunAt === null ? '—' : clock(sync.latestRunAt, timeZone) })] }
   const known = ['degraded', 'failing', 'missing'].includes(sync.status)
   const status = known ? t(`sync.status.${sync.status}` as CoursesKey) : sync.status
-  const lines = [t('sync.broken', { status, clean: sync.lastCleanAt === null ? t('sync.never') : clock(sync.lastCleanAt, timeZone), count: sync.failedRuns })]
+  const lines = [t('sync.broken', { status, synced: sync.lastSyncedAt === null ? t('sync.never') : clock(sync.lastSyncedAt, timeZone), count: sync.failedSinceSynced })]
   if (sync.reason !== null) lines.push(t('sync.reason', { reason: sync.reason }))
   if (sync.alerting) lines.push(t('sync.alerting'))
   return { tone: 'warn', lines }

@@ -8,6 +8,8 @@ import type {} from '@deepseek-ai/cordis-plugin-timer'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-compaction'
 import { boundContextSummary, createUserMessage, type TokenUsage } from '@deepseek-ai/dsh-llm'
+// ctx.schedule names the task behind a reminder turn; its title, not its instruction, labels the report.
+import { ScheduleId } from '@deepseek-ai/dsh-schedule'
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import type { Domain, KvTable } from '@deepseek-ai/dsh-storage-domain'
 import type { VerifiedWebhookDelivery, WebhookDeliveryId, WebhookRule, WebhookRuleId, WebhookSessionRequest, WebhookSourceId } from '@deepseek-ai/dsh-webhook'
@@ -22,7 +24,7 @@ import { applyRoutePatch, downstreamOf, findCycle, FLOW_SOURCE, flowResultKind, 
 import { matchesSubscription, suppressionReason } from './match.ts'
 import {
   FORK_SILENT_REPLY, batchTitle, buildBatchPrompt, buildSessionRequest, clip, failureDetail, formatBatchNote, formatReminderNote,
-  formatResultNote, isSilentReply, monitorLabel, reminderLabel, type CarriedOver,
+  formatResultNote, isSilentReply, monitorLabel, reminderScheduleIds, reminderTitle, type CarriedOver,
 } from './prompt.ts'
 import { busDomain, type BatchRecord, type ForkEventRecord, type PersistentRecord, type RouteOverrideRecord, type SubscriptionRecord } from './storage.ts'
 import type {
@@ -203,7 +205,8 @@ type StoredSession =
 
 /** A Session running a turn started by a Host-schedule reminder. */
 interface TrackedReminder {
-  label: string
+  /** Task title (a reminder's, read from `ctx.schedule` while the turn runs) or monitor label. */
+  label: string | Promise<string>
   /** ⏰ for a reminder, 📡 for a monitor-woken turn. */
   icon: string
   text: string | undefined
@@ -1462,12 +1465,14 @@ export class ForkEventBus extends Service {
         // `schedule` is declared by the Host schedule service, which this package does not import.
         const kind: string = source.kind
         if (kind === 'schedule') {
-          this.trackReminder(session.id, reminderLabel(messageText(event.data.content)), '⏰')
+          const ids = reminderScheduleIds(messageText(event.data.content))
+          this.trackReminder(session.id, () => (ids.length === 0 ? undefined : this.reminderLabel(ids)), '⏰')
           return
         }
         // A turn woken by a monitor's output (fork-tool-monitor) is reported like a reminder turn.
         if (kind === 'fork-tool-monitor') {
-          this.trackReminder(session.id, monitorLabel(messageText(event.data.content)), '📡')
+          const label = monitorLabel(messageText(event.data.content))
+          this.trackReminder(session.id, () => label, '📡')
           return
         }
         if (source.kind !== 'webhook' || source.provider !== FORK_EVENT_KIND || this.tracked.has(session.id)) return
@@ -1537,15 +1542,41 @@ export class ForkEventBus extends Service {
     }
   }
 
-  /** Start following a reminder turn unless reports are off, the bus already follows the Session, or a relay channel claimed it. */
-  private trackReminder(sessionId: string, label: string | undefined, icon: string): void {
+  /**
+   * Start following a reminder turn unless reports are off, the bus already follows the Session, or a relay channel
+   * claimed it. `label` runs only for a followed turn.
+   */
+  private trackReminder(sessionId: string, label: () => string | Promise<string> | undefined, icon: string): void {
     if (!this.config.reportScheduledTurns || this.tracked.has(sessionId) || this.reminders.has(sessionId)) return
     const owner = this.relayOwner(sessionId)
     if (owner !== undefined) {
       this.ctx.logger.info(`fork-event-bus: Session ${sessionId} is relayed by ${owner}; its ${icon} turn is not reported`)
       return
     }
-    this.reminders.set(sessionId, { label: label ?? `Session ${sessionId}`, icon, text: undefined })
+    this.reminders.set(sessionId, { label: label() ?? `Session ${sessionId}`, icon, text: undefined })
+  }
+
+  /**
+   * The label of a reminder turn: the titles of its schedule tasks, read when the turn starts (a one-shot task may be
+   * gone by its end). A task `ctx.schedule` cannot read, or a Host without it, leaves {@link reminderTitle}'s fallback.
+   */
+  private async reminderLabel(ids: readonly string[]): Promise<string> {
+    const schedule = this.ctx.get('schedule')
+    const titles = await Promise.all(ids.map(async (id) => {
+      if (schedule === undefined) return undefined
+      try {
+        const view = await schedule.view({ id: ScheduleId(id) })
+        if ('code' in view) {
+          this.ctx.logger.info(`fork-event-bus: schedule task ${id} is gone; its reminder report has no title`)
+          return undefined
+        }
+        return view.title
+      } catch (error: unknown) {
+        this.ctx.logger.warn(`fork-event-bus: schedule task ${id} could not be read: ${errorText(error)}`)
+        return undefined
+      }
+    }))
+    return reminderTitle(titles)
   }
 
   /** The relay channel that claimed a Session, read from `ctx.ownerRelay` when it is mounted. */
@@ -1568,7 +1599,8 @@ export class ForkEventBus extends Service {
     }
     const notifier = this.ctx.get('forkNotifier')
     if (notifier === undefined) return
-    const { label, icon, text } = reminder
+    const { icon, text } = reminder
+    const label = await reminder.label
     await notifier.send(formatReminderNote({ label, icon, outcome, text, url: this.config.webUrl, detail }))
   }
 

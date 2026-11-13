@@ -50,7 +50,7 @@ afterEach(async () => {
 function fakeService(): FakeService {
   const service: FakeService = {
     items: [],
-    health: { status: 'ok', latest_run_at: iso(START - H), last_clean_run_at: iso(START - H), failed_runs_since_clean: 0 },
+    health: { status: 'ok', latest_run_at: iso(START - H), last_clean_run_at: iso(START - H), failed_runs_since_clean: 0, last_synced_run_at: iso(START - H), failed_runs_since_synced: 0 },
     down: false,
     getDown: false,
     calls: [],
@@ -226,9 +226,9 @@ describe('polling', () => {
 })
 
 describe('sync health', () => {
-  it('tells a broken sync once with the last clean run and the newest run\'s reason, then daily, then its recovery', async () => {
+  it('tells a broken sync once with the last sync and the newest run\'s reason, then daily, then its recovery', async () => {
     const service = fakeService()
-    service.health = { status: 'failing', latest_run_at: iso(START - H), last_clean_run_at: iso(START - 90 * H), failed_runs_since_clean: 14 }
+    service.health = { status: 'failing', latest_run_at: iso(START - H), last_clean_run_at: iso(START - 200 * H), failed_runs_since_clean: 30, last_synced_run_at: iso(START - 90 * H), failed_runs_since_synced: 14 }
     const { courses, sent } = await mount()
     await courses.poll('manual')
     expect(sent.map(note => note.title)).toEqual(['⚠️ 课程同步已经 3 天 18 小时没成功了'])
@@ -237,11 +237,11 @@ describe('sync health', () => {
     await courses.poll('manual')
     expect(sent).toHaveLength(1)
     expect(service.calls.filter(call => call.op === 'get')).toHaveLength(1)
-    expect(courses.status().sync).toMatchObject({ status: 'failing', failedRuns: 14, reason: 'Browser is not available: iab', alerting: true })
+    expect(courses.status().sync).toMatchObject({ status: 'failing', failedSinceSynced: 14, reason: 'Browser is not available: iab', alerting: true })
     vi.setSystemTime(START + 24 * H)
     await courses.poll('manual')
     expect(sent).toHaveLength(2)
-    service.health = { status: 'ok', latest_run_at: iso(START + 25 * H), last_clean_run_at: iso(START + 25 * H), failed_runs_since_clean: 0 }
+    service.health = { status: 'degraded', latest_run_at: iso(START + 25 * H), last_clean_run_at: iso(START - 200 * H), failed_runs_since_clean: 31, last_synced_run_at: iso(START + 25 * H), failed_runs_since_synced: 0 }
     vi.setSystemTime(START + 26 * H)
     await courses.poll('manual')
     expect(sent.map(note => note.title).at(-1)).toBe('✅ 课程同步恢复了')
@@ -386,7 +386,7 @@ describe('report reading', () => {
 
   it('logs a sync with no clean run without the last-clean detail and warns the records may be stale', async () => {
     const service = fakeService()
-    service.health = { status: 'missing', latest_run_at: null, last_clean_run_at: null }
+    service.health = { status: 'missing', latest_run_at: null, last_clean_run_at: null, last_synced_run_at: null }
     service.items = [taskRow('a', START + 5 * H)]
     const { courses, sent, logs } = await mount()
     await courses.poll('manual')
@@ -420,7 +420,20 @@ describe('delivery', () => {
 
 describe('sync health alerts', () => {
   const failing = (): Record<string, unknown> => ({
-    status: 'failing', latest_run_at: iso(START - H), last_clean_run_at: iso(START - 90 * H), failed_runs_since_clean: 3,
+    status: 'failing', latest_run_at: iso(START - H), last_clean_run_at: iso(START - 90 * H), failed_runs_since_clean: 3, last_synced_run_at: iso(START - 90 * H), failed_runs_since_synced: 3,
+  })
+
+  it('ends an alert sent before any sync on the first degraded run, logging the last sync with no clean run', async () => {
+    const service = fakeService()
+    service.health = { status: 'missing', latest_run_at: null, last_clean_run_at: null, last_synced_run_at: null }
+    const { courses, sent, logs } = await mount()
+    await courses.poll('manual')
+    expect(sent.map(note => note.title)).toEqual(['⚠️ 课程同步还没有成功过'])
+    service.health = { status: 'degraded', latest_run_at: iso(START), last_clean_run_at: null, failed_runs_since_clean: 2, last_synced_run_at: iso(START), failed_runs_since_synced: 0 }
+    await courses.poll('manual')
+    expect(sent.map(note => note.title)).toEqual(['⚠️ 课程同步还没有成功过', '✅ 课程同步恢复了'])
+    expect(logs.some(line => line.includes(`sync degraded (last synced ${iso(START)}, 0 failed since; last clean none)`))).toBe(true)
+    expect(logs.some(line => line.startsWith('info fork-courses: sync recovery sent ('))).toBe(true)
   })
 
   it('sends no sync message when sync.alert is off', async () => {
