@@ -32,8 +32,8 @@ kind: "package-group"
 | [`fork-event-bus/`](fork-event-bus/README.zh.md) | 去重、回环抑制、订阅、合批、限流、通知与 Session 分发 |
 | [`fork-event-ingest/`](fork-event-ingest/README.zh.md) | `POST /hooks/events` 路由：主人自己的服务用每个来源一个的 bearer token 推送事件 |
 | [`fork-github-sensor/`](fork-github-sensor/README.zh.md) | 用条件请求轮询 GitHub 的 release、tag、提交与通知 |
-| [`fork-gmail/`](fork-gmail/README.zh.md) | 主人的 Gmail 账号（`ctx.forkGmail`）：每个账号各自一次 Google 登录、读信、草稿，以及发信关卡：账号规则和这一轮的来源要求时，把信留成草稿并在微信上带确认码问主人 |
-| [`fork-gmail-settings/`](fork-gmail-settings/README.zh.md) | 设置页邮箱：待确认的信（确认或丢弃）、账号和各自的发信规则、经 Google 登录添加账号、OAuth client，以及登录完成后跳回的页面 |
+| [`gmail/`](gmail/README.zh.md) | 主人的 Gmail 账号（`ctx.gmail`）：每个账号各自一次 Google 登录、读信、草稿，以及发信关卡：账号规则和这一轮的来源要求时，把信留成草稿并在微信上带确认码问主人 |
+| [`gmail-settings/`](gmail-settings/README.zh.md) | 设置页邮箱：待确认的信（确认或丢弃）、账号和各自的发信规则、经 Google 登录添加账号、OAuth client，以及登录完成后跳回的页面 |
 | [`fork-guard/`](fork-guard/README.zh.md) | `ctx.forkGuard.check`：给别人能读到的文字用的统一校验器；正则模式、金丝雀字符串、与 owner 记忆的重合、再加一个模型，任何一层跑不起来就拒绝 |
 | [`fork-integrity/`](fork-integrity/README.zh.md) | 完整性监控：操控 agent 的文件的摘要、点名告诉 owner 哪里变了的微信通知、系统 prompt 哈希，以及人格禁用口头禅的计数 |
 | [`fork-memory/`](fork-memory/README.zh.md) | 跨 Session 的主人记忆：记忆块、`memory_search`、`memory_save`、`memory_forget`，以及 claude.ai 导出导入器 |
@@ -52,7 +52,7 @@ kind: "package-group"
 | [`fork-taint/`](fork-taint/README.zh.md) | 回合来源：当前回合由谁发起、陌生人的话有没有进来；只在 owner 自己的回合里联系 Claude Code，其他回合建的提醒和监控要上报 |
 | [`fork-time-gap/`](fork-time-gap/README.zh.md) | 所有 Session 的时间说明：安静一段时间（5 分钟）之后到达的输入，带着当前时间、Session 安静了多久，以及“按它本身来读”的提示交给模型 |
 | [`fork-tool-courses/`](fork-tool-courses/README.zh.md) | `courses_deadlines`、`courses_find`、`courses_get`、`courses_sync`、`courses_set_progress`、`courses_save_memo` 工具：agent 按主人的课程记录回答并更新它们 |
-| [`fork-tool-gmail/`](fork-tool-gmail/README.zh.md) | `gmail_accounts`、`gmail_search`、`gmail_read`、`gmail_attachment`、`gmail_draft`、`gmail_send`、`gmail_modify` 工具：agent 读、发主人的邮件，收到的邮件是不可信数据，每次发信都经过发信关卡 |
+| [`tool-gmail/`](tool-gmail/README.zh.md) | `gmail_accounts`、`gmail_search`、`gmail_read`、`gmail_attachment`、`gmail_draft`、`gmail_send`、`gmail_modify` 工具：agent 读、发主人的邮件，收到的邮件是不可信数据，每次发信都经过发信关卡 |
 | [`fork-tool-monitor/`](fork-tool-monitor/README.zh.md) | `monitor_start`、`monitor_stop`、`monitor_list` 工具：命令输出的每一行都回到同一个 Session |
 | [`fork-tool-up/`](fork-tool-up/README.zh.md) | `up_*` 工具：agent 读取创作者号的评论、私信和稿件，并向 bili-svc 回复闸门申请回复；答案只有 `sent`、`held`、`blocked` |
 | [`fork-tool-voice/`](fork-tool-voice/README.zh.md) | `speak` 工具：agent 把文字合成语音，并把音频发给微信上的 owner |

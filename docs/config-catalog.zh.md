@@ -1743,6 +1743,47 @@ export type Config = LocalConfig
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fs-sandbox -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-gmail -->
+<a id="deepseek-aidsh-gmail"></a>
+
+## `@deepseek-ai/dsh-gmail`
+
+- `inject`: `storageDomain` · `credentials`
+- `source`: [`packages/fork/gmail/src/index.ts:82`](../packages/fork/gmail/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Name of the OAuth client id in the credential store or `$DSH_HOME/.env`. */
+  clientIdEnv: string
+  /** Name of the OAuth client secret in the credential store or `$DSH_HOME/.env`. */
+  clientSecretEnv: string
+  /** Redirect URI registered at Google; empty derives `<Settings origin>/gmail.oauth`. */
+  redirectUri: string
+  /** Addresses that never need a confirmation, besides the connected accounts themselves. */
+  trustedRecipients: string[]
+  /** Messages one account may send in 24 hours; more are refused. */
+  maxSendsPerDay: number
+  /** Hours a held message waits for the owner before it expires (its draft stays in Gmail). */
+  confirmTtlHours: number
+  /** Timeout of one call to Google, in milliseconds. */
+  requestTimeoutMs: number
+  /** Threads one search returns at most. */
+  maxSearchResults: number
+  /** Characters of one message body shown to the model. */
+  maxBodyChars: number
+  /** Characters of an HTML body read at most. */
+  maxHtmlChars: number
+  /** Newest messages of one thread shown; older ones are only counted. */
+  maxThreadMessages: number
+  /** Bytes of all attachments of one outgoing message. */
+  maxAttachmentBytes: number
+  /** Bytes of one received attachment saved. */
+  maxDownloadBytes: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-gmail -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-goal -->
 <a id="deepseek-aidsh-goal"></a>
 
@@ -2975,47 +3016,6 @@ export type RepoStream = 'releases' | 'commits' | 'tags'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-github-sensor -->
 
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-gmail -->
-<a id="deepseek-aidsh-fork-gmail"></a>
-
-## `@deepseek-ai/dsh-fork-gmail`
-
-- `inject`: `storageDomain` · `credentials`
-- `source`: [`packages/fork/fork-gmail/src/index.ts:82`](../packages/fork/fork-gmail/src/index.ts)
-
-```ts config-catalog
-/** Plugin configuration. */
-export interface Config {
-  /** Name of the OAuth client id in the credential store or `$DSH_HOME/.env`. */
-  clientIdEnv: string
-  /** Name of the OAuth client secret in the credential store or `$DSH_HOME/.env`. */
-  clientSecretEnv: string
-  /** Redirect URI registered at Google; empty derives `<Settings origin>/fork.gmail.oauth`. */
-  redirectUri: string
-  /** Addresses that never need a confirmation, besides the connected accounts themselves. */
-  trustedRecipients: string[]
-  /** Messages one account may send in 24 hours; more are refused. */
-  maxSendsPerDay: number
-  /** Hours a held message waits for the owner before it expires (its draft stays in Gmail). */
-  confirmTtlHours: number
-  /** Timeout of one call to Google, in milliseconds. */
-  requestTimeoutMs: number
-  /** Threads one search returns at most. */
-  maxSearchResults: number
-  /** Characters of one message body shown to the model. */
-  maxBodyChars: number
-  /** Characters of an HTML body read at most. */
-  maxHtmlChars: number
-  /** Newest messages of one thread shown; older ones are only counted. */
-  maxThreadMessages: number
-  /** Bytes of all attachments of one outgoing message. */
-  maxAttachmentBytes: number
-  /** Bytes of one received attachment saved. */
-  maxDownloadBytes: number
-}
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-gmail -->
-
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-guard -->
 <a id="deepseek-aidsh-fork-guard"></a>
 
@@ -3677,23 +3677,6 @@ export interface Config {
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-time-gap -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-gmail -->
-<a id="deepseek-aidsh-fork-tool-gmail"></a>
-
-## `@deepseek-ai/dsh-fork-tool-gmail`
-
-- `inject`: `tools`
-- `source`: [`packages/fork/fork-tool-gmail/src/index.ts:24`](../packages/fork/fork-tool-gmail/src/index.ts)
-
-```ts config-catalog
-/** Plugin configuration. */
-export interface Config {
-  /** IANA zone dates are shown in. */
-  timeZone: string
-}
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-gmail -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-qq -->
 <a id="deepseek-aidsh-fork-tool-qq"></a>
@@ -5819,6 +5802,23 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-fs-search -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-tool-gmail -->
+<a id="deepseek-aidsh-tool-gmail"></a>
+
+## `@deepseek-ai/dsh-tool-gmail`
+
+- `inject`: `tools`
+- `source`: [`packages/fork/tool-gmail/src/index.ts:24`](../packages/fork/tool-gmail/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** IANA zone dates are shown in. */
+  timeZone: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-gmail -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-tool-goal -->
 <a id="deepseek-aidsh-tool-goal"></a>
 
@@ -6675,6 +6675,7 @@ export interface Config {
 | `@deepseek-ai/dsh-experimental-tool-worktree` | `tools` · `worktrees` | [`packages/experimental/tool-worktree/src/index.ts`](../packages/experimental/tool-worktree/src/index.ts) |
 | `@deepseek-ai/dsh-fs-observation-policy` | — | [`packages/fs/fs-observation-policy/src/index.ts`](../packages/fs/fs-observation-policy/src/index.ts) |
 | `@deepseek-ai/dsh-fs-ssh` | `ssh` · `sandboxPolicy` | [`packages/ssh/fs-ssh/src/index.ts`](../packages/ssh/fs-ssh/src/index.ts) |
+| `@deepseek-ai/dsh-gmail-settings` | `connection` · `gmail` | [`packages/fork/gmail-settings/src/index.ts`](../packages/fork/gmail-settings/src/index.ts) |
 | `@deepseek-ai/dsh-goal-round-driver` | `agents` · `goals` · `sessions` | [`packages/goal/goal-round-driver/src/index.ts`](../packages/goal/goal-round-driver/src/index.ts) |
 | `@deepseek-ai/dsh-harness-dev-context` | `systemPrompt` · `sessionProjections` · `webApp` | [`packages/context/harness-dev-context/src/index.ts`](../packages/context/harness-dev-context/src/index.ts) |
 | `@deepseek-ai/dsh-host-directory-picker-auto` | `webServer` · `connection` · `loader` | [`packages/host/directory-picker-auto/src/index.ts`](../packages/host/directory-picker-auto/src/index.ts) |
@@ -6684,7 +6685,6 @@ export interface Config {
 | `@deepseek-ai/dsh-lsp` | — | [`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts) |
 | `@deepseek-ai/dsh-fork-config` | `connection` · `configEditor` | [`packages/fork/fork-config/src/index.ts`](../packages/fork/fork-config/src/index.ts) |
 | `@deepseek-ai/dsh-fork-courses-settings` | `connection` · `forkCourses` | [`packages/fork/fork-courses-settings/src/index.ts`](../packages/fork/fork-courses-settings/src/index.ts) |
-| `@deepseek-ai/dsh-fork-gmail-settings` | `connection` · `forkGmail` | [`packages/fork/fork-gmail-settings/src/index.ts`](../packages/fork/fork-gmail-settings/src/index.ts) |
 | `@deepseek-ai/dsh-fork-memory-admin` | — | [`packages/fork/fork-memory-admin/src/index.ts`](../packages/fork/fork-memory-admin/src/index.ts) |
 | `@deepseek-ai/dsh-fork-qq-login` | `connection` · `forkQq` | [`packages/fork/fork-qq-login/src/index.ts`](../packages/fork/fork-qq-login/src/index.ts) |
 | `@deepseek-ai/dsh-fork-style-settings` | `connection` | [`packages/fork/fork-style-settings/src/index.ts`](../packages/fork/fork-style-settings/src/index.ts) |

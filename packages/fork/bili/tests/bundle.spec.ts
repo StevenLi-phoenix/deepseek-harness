@@ -153,7 +153,7 @@ describe('event bundle', () => {
   })
 
   it('mounts the Gmail service and its Settings section once at the root with the plugin\'s defaults (no owner value in the bundle)', () => {
-    for (const id of ['fork-gmail', 'fork-gmail-settings']) {
+    for (const id of ['gmail', 'gmail-settings']) {
       expect(inserted.filter(entry => entry.id === id)).toHaveLength(1)
       expect(inserted.find(entry => entry.id === id)?.config).toBeUndefined()
       expect(composedRoot().get(id)?.enabled).toBe(true)

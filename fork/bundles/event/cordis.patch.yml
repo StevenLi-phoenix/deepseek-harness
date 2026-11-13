@@ -553,18 +553,18 @@
     - id: fork-courses-settings
       name: '@deepseek-ai/dsh-fork-courses-settings'
 
-    # The owner's Gmail accounts (ctx.forkGmail): one Google sign-in per account (work, personal, a bot, more) with
+    # The owner's Gmail accounts (ctx.gmail): one Google sign-in per account (work, personal, a bot, more) with
     # only the gmail.modify permission, the refresh token a grant record in the credential store, and the Gmail REST
     # API. Each account has a send policy; under confirm-untrusted a message goes out at once only when the owner
     # started the turn alone, nothing written by others was read in it, and every recipient was named by the owner in
     # that turn or got mail from the account before. Otherwise it is kept as a Gmail draft and DSH asks the owner on
     # WeChat with a code ("发送 CODE") or in Settings → 邮箱; a changed draft is never sent. At most 50 sends per
-    # account in 24 hours. Settings → 邮箱 (fork-gmail-settings) stores the OAuth client, connects accounts, and shows
-    # the held messages; Google's sign-in returns to /fork.gmail.oauth.
-    - id: fork-gmail
-      name: '@deepseek-ai/dsh-fork-gmail'
-    - id: fork-gmail-settings
-      name: '@deepseek-ai/dsh-fork-gmail-settings'
+    # account in 24 hours. Settings → 邮箱 (gmail-settings) stores the OAuth client, connects accounts, and shows
+    # the held messages; Google's sign-in returns to /gmail.oauth.
+    - id: gmail
+      name: '@deepseek-ai/dsh-gmail'
+    - id: gmail-settings
+      name: '@deepseek-ai/dsh-gmail-settings'
 
     # The official QQ bot channel (ctx.forkQqBot), DISABLED by default (`disabled: true`). It answers owner-listed
     # openids on the QQ Open Platform bot in private chats and in groups where the bot is @-mentioned, one chat
@@ -1073,10 +1073,10 @@
           - id: fork-tool-courses
             name: '@deepseek-ai/dsh-fork-tool-courses'
           # The owner's Gmail accounts: search, read (as untrusted data), attachments, drafts, sends behind the
-          # send gate of fork-gmail, and label changes. Reading mail counts as strangers' words (fork-taint), so a send
+          # send gate of gmail, and label changes. Reading mail counts as strangers' words (fork-taint), so a send
           # after it waits for the owner.
-          - id: fork-tool-gmail
-            name: '@deepseek-ai/dsh-fork-tool-gmail'
+          - id: tool-gmail
+            name: '@deepseek-ai/dsh-tool-gmail'
           # speak: text to speech, sent to the owner on WeChat as an audio file.
           - id: fork-tool-voice
             name: '@deepseek-ai/dsh-fork-tool-voice'

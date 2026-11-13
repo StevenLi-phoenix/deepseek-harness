@@ -159,7 +159,7 @@
     { "path": "./packages/fork/fork-config/tsconfig.client.json" },
     { "path": "./packages/fork/fork-qq-login/tsconfig.client.json" },
     { "path": "./packages/fork/fork-courses-settings/tsconfig.client.json" },
-    { "path": "./packages/fork/fork-gmail-settings/tsconfig.client.json" },
+    { "path": "./packages/fork/gmail-settings/tsconfig.client.json" },
     { "path": "./packages/fork/fork-subagents/tsconfig.client.json" },
     { "path": "./packages/fork/fork-style-settings/tsconfig.client.json" },
     { "path": "./packages/fork/fork-memory-admin/tsconfig.client.json" },

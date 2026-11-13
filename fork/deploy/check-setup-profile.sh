@@ -55,8 +55,8 @@ done
 /usr/bin/grep -q "^- id: fork-time-gap$" "$WORK/fresh.yml" || fail "composition lacks fork-time-gap"
 /usr/bin/grep -q "^- id: fork-courses$" "$WORK/fresh.yml" || fail "composition lacks fork-courses"
 /usr/bin/grep -q "^- id: fork-courses-settings$" "$WORK/fresh.yml" || fail "composition lacks fork-courses-settings"
-/usr/bin/grep -q "^- id: fork-gmail$" "$WORK/fresh.yml" || fail "composition lacks fork-gmail"
-/usr/bin/grep -q "^- id: fork-gmail-settings$" "$WORK/fresh.yml" || fail "composition lacks fork-gmail-settings"
+/usr/bin/grep -q "^- id: gmail$" "$WORK/fresh.yml" || fail "composition lacks gmail"
+/usr/bin/grep -q "^- id: gmail-settings$" "$WORK/fresh.yml" || fail "composition lacks gmail-settings"
 /usr/bin/grep -q "^- id: fork-subagents$" "$WORK/fresh.yml" || fail "composition lacks fork-subagents"
 
 for skill in "$PREFIX"/fork/skills/*/; do

@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/fork/gmail-settings/README.md
+/:
+  en: fddd740f72eab65c
+  zh: 018a945000a63bef
+/deepseek-ai-dsh-gmail-settings:
+  en: f0273fb4ac42b331
+  zh: 0fc754f2b2afd60c
+/deepseek-ai-dsh-gmail-settings/summary:
+  en: 6535dbecb352071e
+  zh: 4fe8dd95c7546f69
+/deepseek-ai-dsh-gmail-settings/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-gmail-settings/use-this-package:
+  en: ec816d5c505cb774
+  zh: cf1e370410e7ff8a
+/deepseek-ai-dsh-gmail-settings/understand-the-implementation:
+  en: 31ebdd9593b057aa
+  zh: b5561ae16b6cf156
+/deepseek-ai-dsh-gmail-settings/further-exploration:
+  en: a8474779a5e3bfd6
+  zh: 17932bbe651469c8
+/deepseek-ai-dsh-gmail-settings/model-experience:
+  en: e20a7d8f005a449b
+  zh: dd7c4072c739dc62
+/deepseek-ai-dsh-gmail-settings/model-experience/kv-cache-effect:
+  en: ca75c51c89c2c9b0
+  zh: a18013b9ffbc0b06
+/deepseek-ai-dsh-gmail-settings/known-limitations-and-deferred-work:
+  en: 7e57188dc29b25fa
+  zh: 7b360db14fbab9c5
+/deepseek-ai-dsh-gmail-settings/known-limitations-and-deferred-work/dev-note:
+  en: a65df20f851ab129
+  zh: f73102158b832e45

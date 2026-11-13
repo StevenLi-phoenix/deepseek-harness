@@ -380,8 +380,8 @@ flowchart TD
     pkg_fork_event_bus["fork-event-bus"]
     pkg_fork_event_ingest["fork-event-ingest"]
     pkg_fork_github_sensor["fork-github-sensor"]
-    pkg_fork_gmail["fork-gmail"]
-    pkg_fork_gmail_settings["fork-gmail-settings"]
+    pkg_gmail["gmail"]
+    pkg_gmail_settings["gmail-settings"]
     pkg_fork_guard["fork-guard"]
     pkg_fork_integrity["fork-integrity"]
     pkg_fork_memory["fork-memory"]
@@ -397,7 +397,7 @@ flowchart TD
     pkg_fork_taint["fork-taint"]
     pkg_fork_time_gap["fork-time-gap"]
     pkg_fork_tool_courses["fork-tool-courses"]
-    pkg_fork_tool_gmail["fork-tool-gmail"]
+    pkg_tool_gmail["tool-gmail"]
     pkg_fork_tool_monitor["fork-tool-monitor"]
     pkg_fork_tool_qq["fork-tool-qq"]
     pkg_fork_tool_up["fork-tool-up"]
@@ -1598,9 +1598,9 @@ flowchart TD
   pkg_fork_github_sensor --> pkg_credentials
   pkg_fork_github_sensor --> pkg_fork_event_bus
   pkg_fork_github_sensor --> pkg_storage_domain
-  pkg_fork_gmail --> pkg_credentials
-  pkg_fork_gmail --> pkg_fork_event_bus
-  pkg_fork_gmail --> pkg_storage_domain
+  pkg_gmail --> pkg_credentials
+  pkg_gmail --> pkg_fork_event_bus
+  pkg_gmail --> pkg_storage_domain
   pkg_fork_integrity --> pkg_home_paths
   pkg_fork_integrity --> pkg_fork_event_bus
   pkg_fork_integrity --> pkg_schedule
@@ -1665,7 +1665,7 @@ flowchart TD
   pkg_fork_courses --> pkg_fork_event_bus
   pkg_fork_courses --> pkg_fork_presence
   pkg_fork_courses --> pkg_storage_domain
-  pkg_fork_gmail_settings --> pkg_fork_gmail
+  pkg_gmail_settings --> pkg_gmail
   pkg_fork_memory --> pkg_agent
   pkg_fork_memory --> pkg_home_paths
   pkg_fork_memory --> pkg_llm
@@ -1701,11 +1701,11 @@ flowchart TD
   pkg_fork_time_gap --> pkg_owner_relay
   pkg_fork_time_gap --> pkg_session
   pkg_fork_time_gap --> pkg_session_projection
-  pkg_fork_tool_gmail --> pkg_fork_gmail
-  pkg_fork_tool_gmail --> pkg_fork_taint
-  pkg_fork_tool_gmail --> pkg_session
-  pkg_fork_tool_gmail --> pkg_tools
-  pkg_fork_tool_gmail --> pkg_util_values
+  pkg_tool_gmail --> pkg_gmail
+  pkg_tool_gmail --> pkg_fork_taint
+  pkg_tool_gmail --> pkg_session
+  pkg_tool_gmail --> pkg_tools
+  pkg_tool_gmail --> pkg_util_values
   pkg_fork_tool_qq --> pkg_attachment
   pkg_fork_tool_qq --> pkg_llm
   pkg_fork_tool_qq --> pkg_fork_qq
@@ -2133,7 +2133,7 @@ flowchart TD
 | [`fork-cc-bridge`](../packages/fork/fork-cc-bridge) | `fork` | [`agent`](../packages/core/agent), [`fork-event-bus`](../packages/fork/fork-event-bus), [`tools`](../packages/core/tools) |
 | [`fork-event-ingest`](../packages/fork/fork-event-ingest) | `fork` | [`credentials`](../packages/credentials/credentials), [`host-webserver`](../packages/host/webserver), [`fork-event-bus`](../packages/fork/fork-event-bus) |
 | [`fork-github-sensor`](../packages/fork/fork-github-sensor) | `fork` | [`credentials`](../packages/credentials/credentials), [`fork-event-bus`](../packages/fork/fork-event-bus), [`storage-domain`](../packages/storage/storage-domain) |
-| [`fork-gmail`](../packages/fork/fork-gmail) | `fork` | [`credentials`](../packages/credentials/credentials), [`fork-event-bus`](../packages/fork/fork-event-bus), [`storage-domain`](../packages/storage/storage-domain) |
+| [`gmail`](../packages/fork/gmail) | `fork` | [`credentials`](../packages/credentials/credentials), [`fork-event-bus`](../packages/fork/fork-event-bus), [`storage-domain`](../packages/storage/storage-domain) |
 | [`fork-integrity`](../packages/fork/fork-integrity) | `fork` | [`home-paths`](../packages/util/home-paths), [`fork-event-bus`](../packages/fork/fork-event-bus), [`schedule`](../packages/schedule/schedule), [`session`](../packages/core/session) |
 | [`fork-presence`](../packages/fork/fork-presence) | `fork` | [`fork-event-bus`](../packages/fork/fork-event-bus), [`storage-domain`](../packages/storage/storage-domain) |
 | [`fork-qq`](../packages/fork/fork-qq) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`fork-event-bus`](../packages/fork/fork-event-bus), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
@@ -2146,12 +2146,12 @@ flowchart TD
 | [`sdk-jsonrpc-server`](../packages/sdk/server) | `sdk` | [`agent`](../packages/core/agent), [`attachment`](../packages/attachment/attachment), [`commands`](../packages/interaction/commands), [`goal`](../packages/goal/goal), [`llm`](../packages/llm/llm), [`llm-deepseek-api-key`](../packages/llm/llm-deepseek-api-key), [`schedule`](../packages/schedule/schedule), [`scope`](../packages/core/scope), [`sdk-protocol`](../packages/sdk/protocol), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`user-approval`](../packages/interaction/user-approval), [`user-questions`](../packages/interaction/user-questions), [`working-directory`](../packages/session/working-directory) |
 | [`fork-cc-admin`](../packages/fork/fork-cc-admin) | `fork` | [`fork-cc-bridge`](../packages/fork/fork-cc-bridge) |
 | [`fork-courses`](../packages/fork/fork-courses) | `fork` | [`credentials`](../packages/credentials/credentials), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-presence`](../packages/fork/fork-presence), [`storage-domain`](../packages/storage/storage-domain) |
-| [`fork-gmail-settings`](../packages/fork/fork-gmail-settings) | `fork` | [`fork-gmail`](../packages/fork/fork-gmail) |
+| [`gmail-settings`](../packages/fork/gmail-settings) | `fork` | [`gmail`](../packages/fork/gmail) |
 | [`fork-memory`](../packages/fork/fork-memory) | `fork` | [`agent`](../packages/core/agent), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-taint`](../packages/fork/fork-taint), [`session`](../packages/core/session), [`tools`](../packages/core/tools) |
 | [`fork-qqbot`](../packages/fork/fork-qqbot) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`fork-style`](../packages/fork/fork-style) | `fork` | [`agent`](../packages/core/agent), [`agent-default-model`](../packages/core/agent-default-model), [`compaction`](../packages/compaction/compaction), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-integrity`](../packages/fork/fork-integrity), [`fork-qq`](../packages/fork/fork-qq), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`web`](../packages/web/web) |
 | [`fork-time-gap`](../packages/fork/fork-time-gap) | `fork` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`fork-taint`](../packages/fork/fork-taint), [`owner-relay`](../packages/fork/owner-relay), [`session`](../packages/core/session), [`session-projection`](../packages/session/session-projection) |
-| [`fork-tool-gmail`](../packages/fork/fork-tool-gmail) | `fork` | [`fork-gmail`](../packages/fork/fork-gmail), [`fork-taint`](../packages/fork/fork-taint), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
+| [`tool-gmail`](../packages/fork/tool-gmail) | `fork` | [`gmail`](../packages/fork/gmail), [`fork-taint`](../packages/fork/fork-taint), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
 | [`fork-tool-qq`](../packages/fork/fork-tool-qq) | `fork` | [`attachment`](../packages/attachment/attachment), [`llm`](../packages/llm/llm), [`fork-qq`](../packages/fork/fork-qq), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
 | [`fork-tool-watch`](../packages/fork/fork-tool-watch) | `fork` | [`agent`](../packages/core/agent), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-github-sensor`](../packages/fork/fork-github-sensor), [`tools`](../packages/core/tools) |
 | [`fork-guard`](../packages/fork/fork-guard) | `fork` | [`agent-default-model`](../packages/core/agent-default-model), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-memory`](../packages/fork/fork-memory) |

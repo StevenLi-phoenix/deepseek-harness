@@ -60,7 +60,7 @@ const WECHAT_SIDE: Record<string, string> = {
   '@deepseek-ai/dsh-fork-tool-monitor': 'monitors whose output returns to a Session with the owner\'s context',
   '@deepseek-ai/dsh-fork-tool-voice': 'speaks to the owner through the WeChat notifier',
   '@deepseek-ai/dsh-fork-tool-courses': 'reads and writes the owner\'s course records (deadlines, progress, memos)',
-  '@deepseek-ai/dsh-fork-tool-gmail': 'reads the owner\'s mail and sends as the owner',
+  '@deepseek-ai/dsh-tool-gmail': 'reads the owner\'s mail and sends as the owner',
   '@deepseek-ai/dsh-fork-taint': 'only meaningful beside the memory and bridge tools',
   '@deepseek-ai/dsh-tool-schedule': 'reminders that start turns in the owner\'s Sessions',
   '@deepseek-ai/dsh-agent-instructions': 'reads the workspace instruction files, which hold what the owner told the main agent',
@@ -158,10 +158,10 @@ describe('channel isolation of the event bundle\'s presets', () => {
   })
 
   it('mounts the Gmail tools in the WeChat preset only; the root Gmail service registers no tool', () => {
-    expect(names(WECHAT_PRESET).filter(name => name === '@deepseek-ai/dsh-fork-tool-gmail')).toHaveLength(1)
-    expect(rootRows.map(row => row.name)).not.toContain('@deepseek-ai/dsh-fork-tool-gmail')
-    expect(rootRows.map(row => row.name)).toEqual(expect.arrayContaining(['@deepseek-ai/dsh-fork-gmail', '@deepseek-ai/dsh-fork-gmail-settings']))
-    for (const file of ['packages/fork/fork-gmail/src/index.ts', 'packages/fork/fork-gmail-settings/src/index.ts']) {
+    expect(names(WECHAT_PRESET).filter(name => name === '@deepseek-ai/dsh-tool-gmail')).toHaveLength(1)
+    expect(rootRows.map(row => row.name)).not.toContain('@deepseek-ai/dsh-tool-gmail')
+    expect(rootRows.map(row => row.name)).toEqual(expect.arrayContaining(['@deepseek-ai/dsh-gmail', '@deepseek-ai/dsh-gmail-settings']))
+    for (const file of ['packages/fork/gmail/src/index.ts', 'packages/fork/gmail-settings/src/index.ts']) {
       expect(readFileSync(join(ROOT, file), 'utf8')).not.toContain('tools.register')
     }
   })

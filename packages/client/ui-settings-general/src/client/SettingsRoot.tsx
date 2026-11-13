@@ -57,7 +57,7 @@ const NAV_ICONS: Readonly<Record<string, typeof IconSettingsOutlineMedium>> = {
   'bili': IconPlayOutlineMedium,
   'fork-qq': IconUsersOutlineMedium,
   'fork-courses': IconChecklistOutlineMedium,
-  'fork-gmail': IconPaperPlaneOutlineMedium,
+  'gmail': IconPaperPlaneOutlineMedium,
 }
 
 function navIcon(id: string) {

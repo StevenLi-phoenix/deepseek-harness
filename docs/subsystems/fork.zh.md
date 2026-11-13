@@ -2,7 +2,7 @@
 
 [English](fork.md) | 中文
 
-事件驱动 agent 背后的 fork 本地服务：[`@deepseek-ai/dsh-fork-event-bus`](../../packages/fork/fork-event-bus/README.zh.md) 把传感器事件路由成通知或无人值守的 Session，[`@deepseek-ai/dsh-fork-github-sensor`](../../packages/fork/fork-github-sensor/README.zh.md) 轮询 GitHub，[`@deepseek-ai/dsh-fork-wechat`](../../packages/fork/fork-wechat/README.zh.md) 通过微信提供 `forkNotifier` 契约，[`@deepseek-ai/dsh-fork-qq`](../../packages/fork/fork-qq/README.zh.md) 潜伏在主人列出的 QQ 群里并做摘要，消息由 `qq-recorder` 服务提供（它是独占 QQ 唯一连接的 AMS 服务，所以重启 DSH 不会让 QQ 重连；它的设置 → QQ 页面 [`@deepseek-ai/dsh-fork-qq-login`](../../packages/fork/fork-qq-login/README.zh.md) 显示连接状态，以及被踢下线后用来扫码的登录二维码），[`@deepseek-ai/dsh-fork-style`](../../packages/fork/fork-style/README.zh.md) 保存各 agent 共享的人格层，学自 QQ 群和 B站公开文本（它的设置 → 人格与风格 页面是 [`@deepseek-ai/dsh-fork-style-settings`](../../packages/fork/fork-style-settings/README.zh.md)），[`@deepseek-ai/dsh-bili`](../../packages/fork/bili/README.zh.md) 是 agent 自己的 B站账号，[`@deepseek-ai/dsh-fork-courses`](../../packages/fork/fork-courses/README.zh.md) 按 courses 服务里的记录、用固定规则提醒主人课程 DDL（它的设置 → 课程 DDL 页是 [`@deepseek-ai/dsh-fork-courses-settings`](../../packages/fork/fork-courses-settings/README.zh.md)），[`@deepseek-ai/dsh-fork-gmail`](../../packages/fork/fork-gmail/README.zh.md) 管理主人的 Gmail 账号，以及把主人没确认的信留成草稿的发信关卡（它的设置 → 邮箱 页是 [`@deepseek-ai/dsh-fork-gmail-settings`](../../packages/fork/fork-gmail-settings/README.zh.md)），[`@deepseek-ai/dsh-fork-subagents`](../../packages/fork/fork-subagents/README.zh.md) 在顶栏打开的右侧栏页面里列出一个会话的子智能体和它们此刻在做什么。行为、配置与限制见各包 README；[上游账本](../../packages/fork/UPSTREAM.md)记录 fork 如何跟踪上游。
+事件驱动 agent 背后的 fork 本地服务：[`@deepseek-ai/dsh-fork-event-bus`](../../packages/fork/fork-event-bus/README.zh.md) 把传感器事件路由成通知或无人值守的 Session，[`@deepseek-ai/dsh-fork-github-sensor`](../../packages/fork/fork-github-sensor/README.zh.md) 轮询 GitHub，[`@deepseek-ai/dsh-fork-wechat`](../../packages/fork/fork-wechat/README.zh.md) 通过微信提供 `forkNotifier` 契约，[`@deepseek-ai/dsh-fork-qq`](../../packages/fork/fork-qq/README.zh.md) 潜伏在主人列出的 QQ 群里并做摘要，消息由 `qq-recorder` 服务提供（它是独占 QQ 唯一连接的 AMS 服务，所以重启 DSH 不会让 QQ 重连；它的设置 → QQ 页面 [`@deepseek-ai/dsh-fork-qq-login`](../../packages/fork/fork-qq-login/README.zh.md) 显示连接状态，以及被踢下线后用来扫码的登录二维码），[`@deepseek-ai/dsh-fork-style`](../../packages/fork/fork-style/README.zh.md) 保存各 agent 共享的人格层，学自 QQ 群和 B站公开文本（它的设置 → 人格与风格 页面是 [`@deepseek-ai/dsh-fork-style-settings`](../../packages/fork/fork-style-settings/README.zh.md)），[`@deepseek-ai/dsh-bili`](../../packages/fork/bili/README.zh.md) 是 agent 自己的 B站账号，[`@deepseek-ai/dsh-fork-courses`](../../packages/fork/fork-courses/README.zh.md) 按 courses 服务里的记录、用固定规则提醒主人课程 DDL（它的设置 → 课程 DDL 页是 [`@deepseek-ai/dsh-fork-courses-settings`](../../packages/fork/fork-courses-settings/README.zh.md)），[`@deepseek-ai/dsh-gmail`](../../packages/fork/gmail/README.zh.md) 管理主人的 Gmail 账号，以及把主人没确认的信留成草稿的发信关卡（它的设置 → 邮箱 页是 [`@deepseek-ai/dsh-gmail-settings`](../../packages/fork/gmail-settings/README.zh.md)），[`@deepseek-ai/dsh-fork-subagents`](../../packages/fork/fork-subagents/README.zh.md) 在顶栏打开的右侧栏页面里列出一个会话的子智能体和它们此刻在做什么。行为、配置与限制见各包 README；[上游账本](../../packages/fork/UPSTREAM.md)记录 fork 如何跟踪上游。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -241,6 +241,157 @@ words(options?: { since?: number }): Promise<string[]>
 ```
 
 Source: [`packages/fork/bili/src/hot.ts`](../../packages/fork/bili/src/hot.ts)
+
+<a id="ctxgmail--gmail"></a>
+
+### `ctx.gmail` — `Gmail`
+
+The owner's Gmail accounts.
+
+```ts cordis-catalog
+/**
+ * Every connected account, in id order.
+ * @returns the accounts without tokens.
+ */
+accounts(): AccountView[]
+
+/**
+ * Search an account's mail.
+ * @param account - account id.
+ * @param query - Gmail search syntax.
+ * @param options - threads wanted (capped by config) and the page token of a previous page.
+ * @returns one summary per thread.
+ */
+search(account: string, query: string, options: SearchOptions = {}): Promise<SearchResult>
+
+/**
+ * Read one thread: its newest messages in full.
+ * @param account - account id.
+ * @param threadId - thread id.
+ * @param keepQuotes - keep the quoted history of each reply.
+ * @returns the thread.
+ */
+thread(account: string, threadId: string, keepQuotes: boolean = false): Promise<ThreadView>
+
+/**
+ * Read one message.
+ * @param account - account id.
+ * @param messageId - message id.
+ * @param keepQuotes - keep the quoted history.
+ * @returns the message.
+ */
+message(account: string, messageId: string, keepQuotes: boolean = false): Promise<MessageView>
+
+/**
+ * Save one attachment of a received message under `<cwd>/.gmail-inbox/`.
+ * @param account - account id.
+ * @param messageId - message id.
+ * @param part - the attachment's part id.
+ * @param cwd - the Session's working directory.
+ * @returns where it was saved.
+ */
+download(account: string, messageId: string, part: string, cwd: string): Promise<SavedAttachment>
+
+/**
+ * Write a draft, or replace one.
+ * @param account - account id.
+ * @param message - the message.
+ * @param draftId - the draft to replace; a held one cannot be changed.
+ * @returns the draft.
+ */
+draft(account: string, message: Outgoing, draftId?: string): Promise<DraftOutcome>
+
+/**
+ * Send a message or a draft, or hold it for the owner, by the account's policy and the turn.
+ * @param account - account id.
+ * @param request - a new message, or a draft id.
+ * @param turn - the turn's facts, read from the Session log.
+ * @returns sent, or held with its reason.
+ * @throws GmailError `refused` on a read-only account, `limit` over the daily cap.
+ */
+send(account: string, request: SendRequest, turn: TurnFacts): Promise<SendOutcome>
+
+/**
+ * Send a held message the owner confirmed.
+ * @param code - the held message's code, in any case.
+ * @param how - from Settings, or from the owner's own turn (whose words must hold the code).
+ * @returns the sent message.
+ * @throws GmailError when the code is unknown, resolved, or expired, the turn does not confirm, the draft changed, or the cap is reached.
+ */
+confirm(code: string, how: { readonly by: 'settings' } | { readonly by: 'owner-turn'; readonly turn: TurnFacts }): Promise<{ readonly account: string; readonly messageId: string; readonly threadId: string }>
+
+/**
+ * Drop a held message: its draft is deleted from Gmail.
+ * @param code - the held message's code.
+ */
+discard(code: string): Promise<void>
+
+/**
+ * Change labels on threads: read state, inbox, star, trash, or a label of the account's own.
+ * @param account - account id.
+ * @param threadIds - threads to change.
+ * @param action - the change.
+ * @param label - the label name, for `label` and `unlabel`.
+ * @returns how many threads changed.
+ */
+modify(account: string, threadIds: readonly string[], action: ModifyAction, label?: string): Promise<{ readonly changed: number }>
+
+/**
+ * Start a Google sign-in for one account.
+ * @param request - the account id, its policy when new, an address hint, and the origin Settings runs on.
+ * @returns the consent page address.
+ */
+async beginSignIn(request: SignInRequest): Promise<{ readonly url: string; readonly redirectUri: string }>
+
+/**
+ * Finish a sign-in from Google's redirect.
+ * @param answer - the redirect's `state`, `code`, and `error` parameters.
+ * @returns the connected account.
+ */
+async completeSignIn(answer: SignInAnswer): Promise<AccountView>
+
+/**
+ * Disconnect an account: revoke its token at Google, delete it, and drop its held messages.
+ * @param account - account id.
+ */
+removeAccount(account: string): Promise<void>
+
+/**
+ * Change an account's send policy.
+ * @param account - account id.
+ * @param policy - the new policy.
+ */
+setPolicy(account: string, policy: SendPolicy): Promise<void>
+
+/**
+ * Store the OAuth client from Google's downloaded JSON.
+ * @param text - the JSON file's text.
+ * @returns the client as Settings shows it.
+ */
+async setClient(text: string): Promise<ClientInfo>
+
+/**
+ * The OAuth client's state.
+ * @returns whether it is set, and its id (not secret).
+ */
+async clientInfo(): Promise<ClientInfo>
+
+/**
+ * Everything Settings shows.
+ * @returns a snapshot.
+ */
+async status(): Promise<GmailStatus>
+
+/**
+ * The held messages, oldest first.
+ * @returns every message waiting for the owner.
+ */
+async held(): Promise<PendingRecord[]>
+```
+
+Types: [AccountView](credentials.zh.md)
+
+Source: [`packages/fork/gmail/src/index.ts`](../../packages/fork/gmail/src/index.ts)
 
 <a id="ctxlsyclaudecode--claudecodeadmin"></a>
 
@@ -542,157 +693,6 @@ async credentialStatus(): Promise<CredentialStatus>
 ```
 
 Source: [`packages/fork/fork-github-sensor/src/index.ts`](../../packages/fork/fork-github-sensor/src/index.ts)
-
-<a id="ctxlsygmail--forkgmail"></a>
-
-### `ctx.forkGmail` — `ForkGmail`
-
-The owner's Gmail accounts.
-
-```ts cordis-catalog
-/**
- * Every connected account, in id order.
- * @returns the accounts without tokens.
- */
-accounts(): AccountView[]
-
-/**
- * Search an account's mail.
- * @param account - account id.
- * @param query - Gmail search syntax.
- * @param options - threads wanted (capped by config) and the page token of a previous page.
- * @returns one summary per thread.
- */
-search(account: string, query: string, options: SearchOptions = {}): Promise<SearchResult>
-
-/**
- * Read one thread: its newest messages in full.
- * @param account - account id.
- * @param threadId - thread id.
- * @param keepQuotes - keep the quoted history of each reply.
- * @returns the thread.
- */
-thread(account: string, threadId: string, keepQuotes: boolean = false): Promise<ThreadView>
-
-/**
- * Read one message.
- * @param account - account id.
- * @param messageId - message id.
- * @param keepQuotes - keep the quoted history.
- * @returns the message.
- */
-message(account: string, messageId: string, keepQuotes: boolean = false): Promise<MessageView>
-
-/**
- * Save one attachment of a received message under `<cwd>/.gmail-inbox/`.
- * @param account - account id.
- * @param messageId - message id.
- * @param part - the attachment's part id.
- * @param cwd - the Session's working directory.
- * @returns where it was saved.
- */
-download(account: string, messageId: string, part: string, cwd: string): Promise<SavedAttachment>
-
-/**
- * Write a draft, or replace one.
- * @param account - account id.
- * @param message - the message.
- * @param draftId - the draft to replace; a held one cannot be changed.
- * @returns the draft.
- */
-draft(account: string, message: Outgoing, draftId?: string): Promise<DraftOutcome>
-
-/**
- * Send a message or a draft, or hold it for the owner, by the account's policy and the turn.
- * @param account - account id.
- * @param request - a new message, or a draft id.
- * @param turn - the turn's facts, read from the Session log.
- * @returns sent, or held with its reason.
- * @throws GmailError `refused` on a read-only account, `limit` over the daily cap.
- */
-send(account: string, request: SendRequest, turn: TurnFacts): Promise<SendOutcome>
-
-/**
- * Send a held message the owner confirmed.
- * @param code - the held message's code, in any case.
- * @param how - from Settings, or from the owner's own turn (whose words must hold the code).
- * @returns the sent message.
- * @throws GmailError when the code is unknown, resolved, or expired, the turn does not confirm, the draft changed, or the cap is reached.
- */
-confirm(code: string, how: { readonly by: 'settings' } | { readonly by: 'owner-turn'; readonly turn: TurnFacts }): Promise<{ readonly account: string; readonly messageId: string; readonly threadId: string }>
-
-/**
- * Drop a held message: its draft is deleted from Gmail.
- * @param code - the held message's code.
- */
-discard(code: string): Promise<void>
-
-/**
- * Change labels on threads: read state, inbox, star, trash, or a label of the account's own.
- * @param account - account id.
- * @param threadIds - threads to change.
- * @param action - the change.
- * @param label - the label name, for `label` and `unlabel`.
- * @returns how many threads changed.
- */
-modify(account: string, threadIds: readonly string[], action: ModifyAction, label?: string): Promise<{ readonly changed: number }>
-
-/**
- * Start a Google sign-in for one account.
- * @param request - the account id, its policy when new, an address hint, and the origin Settings runs on.
- * @returns the consent page address.
- */
-async beginSignIn(request: SignInRequest): Promise<{ readonly url: string; readonly redirectUri: string }>
-
-/**
- * Finish a sign-in from Google's redirect.
- * @param answer - the redirect's `state`, `code`, and `error` parameters.
- * @returns the connected account.
- */
-async completeSignIn(answer: SignInAnswer): Promise<AccountView>
-
-/**
- * Disconnect an account: revoke its token at Google, delete it, and drop its held messages.
- * @param account - account id.
- */
-removeAccount(account: string): Promise<void>
-
-/**
- * Change an account's send policy.
- * @param account - account id.
- * @param policy - the new policy.
- */
-setPolicy(account: string, policy: SendPolicy): Promise<void>
-
-/**
- * Store the OAuth client from Google's downloaded JSON.
- * @param text - the JSON file's text.
- * @returns the client as Settings shows it.
- */
-async setClient(text: string): Promise<ClientInfo>
-
-/**
- * The OAuth client's state.
- * @returns whether it is set, and its id (not secret).
- */
-async clientInfo(): Promise<ClientInfo>
-
-/**
- * Everything Settings shows.
- * @returns a snapshot.
- */
-async status(): Promise<GmailStatus>
-
-/**
- * The held messages, oldest first.
- * @returns every message waiting for the owner.
- */
-async held(): Promise<PendingRecord[]>
-```
-
-Types: [AccountView](credentials.zh.md)
-
-Source: [`packages/fork/fork-gmail/src/index.ts`](../../packages/fork/fork-gmail/src/index.ts)
 
 <a id="ctxlsyguard--guardservice"></a>
 
