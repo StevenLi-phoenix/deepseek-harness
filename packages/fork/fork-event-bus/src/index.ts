@@ -1589,18 +1589,19 @@ export class ForkEventBus extends Service {
   private async reportReminder(
     sessionId: string, reminder: TrackedReminder, outcome: string, detail: string | undefined, stoppedByOwner: boolean,
   ): Promise<void> {
+    const { icon, text } = reminder
+    const label = await reminder.label
     if (stoppedByOwner) {
-      this.ctx.logger.info(`fork-event-bus: reminder turn of Session ${sessionId} was stopped by the owner; nothing sent`)
+      this.ctx.logger.info(`fork-event-bus: reminder turn of Session ${sessionId} (${icon} ${label}) was stopped by the owner; nothing sent`)
       return
     }
-    if (isSilentReply(reminder.text)) {
-      this.ctx.logger.info(`fork-event-bus: reminder turn of Session ${sessionId} answered ${FORK_SILENT_REPLY}; nothing sent`)
+    if (isSilentReply(text)) {
+      this.ctx.logger.info(`fork-event-bus: reminder turn of Session ${sessionId} (${icon} ${label}) answered ${FORK_SILENT_REPLY}; nothing sent`)
       return
     }
     const notifier = this.ctx.get('forkNotifier')
     if (notifier === undefined) return
-    const { icon, text } = reminder
-    const label = await reminder.label
+    this.ctx.logger.info(`fork-event-bus: reminder turn of Session ${sessionId} reported as ${icon} ${label}`)
     await notifier.send(formatReminderNote({ label, icon, outcome, text, url: this.config.webUrl, detail }))
   }
 

@@ -115,10 +115,19 @@ describe('ForkEventBus scheduled turn reports', () => {
     expect(notes).toEqual([])
   })
 
-  it('stays silent when the final answer is NO_REPLY', async () => {
-    const { emit, notes } = await harness()
+  it('stays silent when the final answer is NO_REPLY, and logs the task title it would have used', async () => {
+    const logs: string[] = []
+    const { emit, notes } = await harness({ schedules: TITLES, logs })
     await runTurn(emit, 's1', `  ${FORK_SILENT_REPLY}\n`)
     expect(notes).toHaveLength(0)
+    expect(logs).toContain(`info: fork-event-bus: reminder turn of Session s1 (⏰ Nightly build) answered ${FORK_SILENT_REPLY}; nothing sent`)
+  })
+
+  it('logs the title a sent report carries', async () => {
+    const logs: string[] = []
+    const { emit } = await harness({ schedules: TITLES, logs })
+    await runTurn(emit, 's1', 'Fine.')
+    expect(logs).toContain('info: fork-event-bus: reminder turn of Session s1 reported as ⏰ Nightly build')
   })
 
   it('skips Sessions a relay channel claimed, whatever the notifier owns', async () => {
