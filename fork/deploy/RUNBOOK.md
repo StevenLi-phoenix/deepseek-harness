@@ -10,8 +10,8 @@ Every `sudo` line is meant to be run by hand, one at a time. The agent runs with
 
 | Path | Owner | Contents |
 |---|---|---|
-| `/Users/Shared/dsh/builds.noindex/<sha>/` | owner, 755 | Installed build (≈1.6 GB) plus `fork/` (event bundle, profile template, `setup-profile.sh`, `wechat-login.mjs`); `dsh-runtime` can read, not write; the `.noindex` name keeps Spotlight out of every build's `node_modules` (indexing each new 1.7 GB build held the mini at load 24 on 2026-10-31) |
-| `/Users/Shared/dsh/current` | owner | Symlink to the active build; the LaunchDaemon, the sudoers rules, and the profile links use this path only |
+| `/Users/Shared/dsh/builds.noindex/<sha>/` | the operator account, 755 | Installed build (≈1.6 GB) plus `fork/` (event bundle, profile template, `setup-profile.sh`, `wechat-login.mjs`); `dsh-runtime` can read, not write; the `.noindex` name keeps Spotlight out of every build's `node_modules` (indexing each new 1.7 GB build held the mini at load 24 on 2026-10-31) |
+| `/Users/Shared/dsh/current` | the operator account | Symlink to the active build; the LaunchDaemon, the sudoers rules, and the profile links use this path only |
 | `/Users/dsh-runtime/.dsh/` | dsh-runtime, 700 | `DSH_HOME`: profile, Sessions, storages (watches, subscriptions, cursors), `.env` secrets |
 | `/Users/dsh-runtime/.dsh/wechat/account.json` | dsh-runtime, 600 | WeChat bot binding written by `wechat-login.mjs` |
 | `/Users/dsh-runtime/me/` | dsh-runtime | Clone of `StevenLi-phoenix/me` (private), the WeChat chat Session's workspace; WeChat attachments land in its `.wechat-inbox/` (700, files 600, ignored by its own `.gitignore`) |
@@ -21,7 +21,7 @@ Every `sudo` line is meant to be run by hand, one at a time. The agent runs with
 
 ## 0. Close `/Volumes/MiniSSD`
 
-`diskutil info /Volumes/MiniSSD` reports `Owners: Disabled` (mounted `noowners`): every local user acts as the owner of every file there, so `dsh-runtime` could read and write kaorou data, backups, and other projects. Turn ownership on and give the volume back to `owner`.
+`diskutil info /Volumes/MiniSSD` reports `Owners: Disabled` (mounted `noowners`): every local user acts as the owner of every file there, so `dsh-runtime` could read and write kaorou data, backups, and other projects. Turn ownership on and give the volume back to the operator account.
 
 Do it while kaorou has no burn or upload in flight (check its panel): stopping the daemon kills in-flight `ffmpeg`. globalawareness writes to the volume too (`/Volumes/MiniSSD/globalAwarness/data`), so it stops and starts with kaorou.
 
@@ -30,25 +30,25 @@ launchctl bootout gui/$(id -u)/app.lishuyu.kaorou.daemon
 launchctl bootout gui/$(id -u)/app.lishuyu.kaorou.api
 launchctl bootout gui/$(id -u)/app.lishuyu.globalawareness
 sudo diskutil enableOwnership /Volumes/MiniSSD
-find /Volumes/MiniSSD ! -user owner -print 2>/dev/null | head    # expect only /Volumes/MiniSSD
-sudo chown owner:staff /Volumes/MiniSSD
+find /Volumes/MiniSSD ! -user "$USER" -print 2>/dev/null | head    # expect only /Volumes/MiniSSD
+sudo chown "$USER":staff /Volumes/MiniSSD
 chmod 700 /Volumes/MiniSSD
-launchctl bootstrap gui/$(id -u) /Users/owner/Library/LaunchAgents/app.lishuyu.kaorou.api.plist
-launchctl bootstrap gui/$(id -u) /Users/owner/Library/LaunchAgents/app.lishuyu.kaorou.daemon.plist
-launchctl bootstrap gui/$(id -u) /Users/owner/Library/LaunchAgents/app.lishuyu.globalawareness.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/app.lishuyu.kaorou.api.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/app.lishuyu.kaorou.daemon.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/app.lishuyu.globalawareness.plist
 ```
 
-- With ownership on, files keep the uid of the user who wrote them: on 2026-10-21 all 273,037 entries were already `501:20` and only the volume root showed `root:wheel`, so the `chown` touches the root alone. If the `find` lists anything else, `sudo chown -R owner:staff` those paths; leave `.fseventsd`, `.Spotlight-V100`, and `.Trashes` to the system.
-- `chmod 700` closes the volume to every other local account. Guest SMB clients of the `MiniSSD` share lose access; logging in to the share as `owner` keeps working.
+- With ownership on, files keep the uid of the user who wrote them: on 2026-10-21 all 273,037 entries were already `501:20` and only the volume root showed `root:wheel`, so the `chown` touches the root alone. If the `find` lists anything else, `sudo chown -R "$USER":staff` those paths; leave `.fseventsd`, `.Spotlight-V100`, and `.Trashes` to the system.
+- `chmod 700` closes the volume to every other local account. Guest SMB clients of the `MiniSSD` share lose access; logging in to the share as the operator account keeps working.
 - On 2026-10-22 each `bootstrap` printed `Bootstrap failed: 5: Input/output error` although the service did start; trust `launchctl print gui/$(id -u)/<label>` (`state = running`) over that message.
-- Check: `diskutil info /Volumes/MiniSSD | grep Owners` → `Enabled`; `ls -ld /Volumes/MiniSSD` → `drwx------  owner  staff`; kaorou panel shows the daemon back; globalawareness listens on `127.0.0.1:8790`.
+- Check: `diskutil info /Volumes/MiniSSD | grep Owners` → `Enabled`; `ls -ld /Volumes/MiniSSD` → `drwx------  <operator>  staff`; kaorou panel shows the daemon back; globalawareness listens on `127.0.0.1:8790`.
 
 ## 1. Close the home directory
 
-`/Users/owner` is `drwxr-x---` with group `staff`, and every local user is in `staff`, so a new account could read `~/.env`, `~/.ssh`, and the dsh credentials. No process runs as another user that needs to read it (checked 2026-10-21; guest SMB already cannot traverse `750`).
+The operator's home is `drwxr-x---` with group `staff`, and every local user is in `staff`, so a new account could read `~/.env`, `~/.ssh`, and the dsh credentials. No process runs as another user that needs to read it (checked 2026-10-21; guest SMB already cannot traverse `750`).
 
 ```sh
-chmod 700 /Users/owner
+chmod 700 "$HOME"
 ```
 
 ## 2. Create the service user
@@ -61,7 +61,7 @@ sudo createhomedir -c -u dsh-runtime
 sudo dscl . create /Users/dsh-runtime IsHidden 1
 ```
 
-## 3. Install the build (as owner, no sudo)
+## 3. Install the build (as the operator account, no sudo)
 
 ```sh
 mkdir -p /Users/Shared/dsh && chmod 755 /Users/Shared/dsh
@@ -139,8 +139,8 @@ sudo launchctl bootstrap system /Library/LaunchDaemons/app.lishuyu.dsh-events.pl
 ```sh
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3081/               # 401 = up
 tail -n 30 /Users/dsh-runtime/logs/stdout.log              # sensor, bus, and wechat lines
-sudo -u dsh-runtime cat /Users/owner/.env                                    # must fail: Permission denied
-sudo -u dsh-runtime ls /Users/owner/.ssh                                     # must fail: Permission denied
+sudo -u dsh-runtime cat "$HOME/.env"                                         # must fail: Permission denied
+sudo -u dsh-runtime ls "$HOME/.ssh"                                          # must fail: Permission denied
 sudo -u dsh-runtime ls /Volumes/MiniSSD                                        # must fail: Permission denied
 sudo -u dsh-runtime touch /Users/Shared/dsh/current/x                     # must fail: Permission denied
 ```
@@ -269,7 +269,7 @@ Limits of the platform: a group message reaches the bot only if it @-mentions it
 
 ## 14. Claude Code for the service user (optional)
 
-The agent can start and talk to Claude Code sessions of its own. They run as `dsh-runtime`, so the agent reaches their sockets (`/tmp/cc-socks-502`, 0600) directly; the owner's sessions under `owner` stay out of reach. The `unattended` preset already mounts the `cc-bridge` plugin; until this step is done `cc_start` reports that the session did not register.
+The agent can start and talk to Claude Code sessions of its own. They run as `dsh-runtime`, so the agent reaches their sockets (`/tmp/cc-socks-502`, 0600) directly; the owner's sessions under the operator account stay out of reach. The `unattended` preset already mounts the `cc-bridge` plugin; until this step is done `cc_start` reports that the session did not register.
 
 Provision (as the operator; no password prompts with the sudoers file of "Operator access"):
 
@@ -351,11 +351,11 @@ sudo chflags uchg /Users/dsh-runtime/.dsh/cordis.patch.yml     # undo: sudo chfl
 `/etc/sudoers.d/dsh-events` (root:wheel 440, written with `sudo visudo -f /etc/sudoers.d/dsh-events`) lets the operator act as the service user and restart the daemon without a password, so config edits, `.env` changes, and upgrades need no one at the keyboard:
 
 ```
-owner ALL = (dsh-runtime) NOPASSWD: ALL
-owner ALL = (root) NOPASSWD: /bin/launchctl kickstart -k system/app.lishuyu.dsh-events
+<operator> ALL = (dsh-runtime) NOPASSWD: ALL
+<operator> ALL = (root) NOPASSWD: /bin/launchctl kickstart -k system/app.lishuyu.dsh-events
 ```
 
-Acting as `dsh-runtime` is a step down from `owner`; root is limited to the one restart.
+Acting as `dsh-runtime` is a step down from the operator account; root is limited to the one restart.
 
 ## 13. Voice (optional)
 
@@ -422,7 +422,7 @@ Check: `ams escalations -n 5` (as `dsh-runtime`, `AMS_STATE_DIR=/Users/dsh-runti
 
 ## 18. Quiet hours: the owner's sleep (optional)
 
-`presence` decides whether the owner is asleep; while the owner is, `wechat` holds the messages that are not urgent and sends them as one digest on waking. The signal is the Sleep Focus that iCloud syncs from the phone, which `focus-watch` (a signed binary on the Mac mini under `owner`, with Full Disk Access) reads and posts to `http://127.0.0.1:3081/hooks/events` as `presence.sleep.on` / `presence.sleep.off` on every change and as a heartbeat every 30 minutes (keys `sleep-on-<ts>` / `sleep-off-<ts>` for changes, `sleep-on-hb-<bucket>` / `sleep-off-hb-<bucket>` for heartbeats, subject `owner`). A signal holds for 2 hours without a newer one (14 hours for asleep), so a stopped watcher hands over to the daily window (03:30-10:30 New York); **Settings → 勿扰** has buttons that win over both. Urgent kinds (`host.disk.full`, `host.*.critical`, `bili.risk.*`, `bili.gate.readonly`) and the replies to a message the owner sent in the last 30 minutes are never held.
+`presence` decides whether the owner is asleep; while the owner is, `wechat` holds the messages that are not urgent and sends them as one digest on waking. The signal is the Sleep Focus that iCloud syncs from the phone, which `focus-watch` (a signed binary on the Mac mini under the operator account, with Full Disk Access) reads and posts to `http://127.0.0.1:3081/hooks/events` as `presence.sleep.on` / `presence.sleep.off` on every change and as a heartbeat every 30 minutes (keys `sleep-on-<ts>` / `sleep-off-<ts>` for changes, `sleep-on-hb-<bucket>` / `sleep-off-hb-<bucket>` for heartbeats, subject `owner`). A signal holds for 2 hours without a newer one (14 hours for asleep), so a stopped watcher hands over to the daily window (03:30-10:30 New York); **Settings → 勿扰** has buttons that win over both. Urgent kinds (`host.disk.full`, `host.*.critical`, `bili.risk.*`, `bili.gate.readonly`) and the replies to a message the owner sent in the last 30 minutes are never held.
 
 1. Create the ingest token for the `presence` source on the Mac mini without printing it, back up the service `.env` first, and restart afterwards:
    ```sh
@@ -432,8 +432,8 @@ Check: `ams escalations -n 5` (as `dsh-runtime`, `AMS_STATE_DIR=/Users/dsh-runti
    mkdir -p ~/.config/focus-watch && (umask 077 && printf %s "$TOKEN" > ~/.config/focus-watch/ingest-token); unset TOKEN
    sudo /bin/launchctl kickstart -k system/app.lishuyu.dsh-events
    ```
-   The bundle already declares the `presence` ingest source (a sink of `ctx.presence`: its events never reach the event bus) and the `presence` row. `~/.config/focus-watch/ingest-token` is `owner`'s file, mode 0600; the value is the same as `EVENT_INGEST_TOKEN_PRESENCE`.
-2. Install `focus-watch` as `owner` on the Mac mini per its README (build, sign, grant Full Disk Access, start). It posts to the local address above, so nothing leaves the machine.
+   The bundle already declares the `presence` ingest source (a sink of `ctx.presence`: its events never reach the event bus) and the `presence` row. `~/.config/focus-watch/ingest-token` is the operator's file, mode 0600; the value is the same as `EVENT_INGEST_TOKEN_PRESENCE`.
+2. Install `focus-watch` as the operator account on the Mac mini per its README (build, sign, grant Full Disk Access, start). It posts to the local address above, so nothing leaves the machine.
 3. Check: **Settings → 勿扰 → 睡眠信号** shows the latest signal and heartbeat within 30 minutes, and `stdout.log` shows `presence sleep-on-hb-…` or `sleep-off-hb-…` answered `asleep` / `awake`. Turning Sleep Focus on or off on the phone shows `presence: asleep by focus (focus on)` (or off) after iCloud syncs it. With no signal for over an hour the page says: "focus-watch 没在发信号：在 mini 上运行 `~/.local/libexec/focus-watch/focus-watch status` 查看". By hand: `curl -sS -X POST http://127.0.0.1:3081/hooks/events -H "Authorization: Bearer $(cat ~/.config/focus-watch/ingest-token)" -H 'content-type: application/json' -d '{"kind":"presence.sleep.off","key":"sleep-off-hb-0","subject":"owner","title":"test"}'` answers `{"outcome":"awake"}`.
 4. Stop: set `disabled: true` on the `presence` row in the profile patch (everything is sent as before), or press **我醒了** for up to 12 hours. Held messages are in the WeChat outbox; **立即发送** sends them.
 
@@ -448,7 +448,7 @@ Check: `ams escalations -n 5` (as `dsh-runtime`, `AMS_STATE_DIR=/Users/dsh-runti
 cd / && sudo -n -u dsh-runtime /bin/zsh -fc 'umask 077; t=$(openssl rand -hex 32); f=/Users/dsh-runtime/.dsh/.env; /bin/cp -p $f $f.bak.$(date +%Y%m%d%H%M%S); { /usr/bin/grep -v "^QQ_RECORDER_TOKEN=" $f; print -r -- "QQ_RECORDER_TOKEN=$t"; } >| $f.new && /bin/mv -f $f.new $f; print -r -- $t | AMS_STATE_DIR=/Users/dsh-runtime/.ams /Users/dsh-runtime/ams/.venv/bin/ams secret set qq-recorder QQ_RECORDER_TOKEN'
 # 2. NapCat's OneBot token, copied from .env into the recorder's AMS secret
 cd / && sudo -n -u dsh-runtime /bin/zsh -fc '/usr/bin/grep "^QQ_ONEBOT_TOKEN=" /Users/dsh-runtime/.dsh/.env | /usr/bin/cut -d= -f2- | AMS_STATE_DIR=/Users/dsh-runtime/.ams /Users/dsh-runtime/ams/.venv/bin/ams secret set qq-recorder QQ_ONEBOT_TOKEN'
-# 3. Build and install (as owner): builds DSH and the recorder bundle, pins the bundle, and places service.toml.
+# 3. Build and install (as the operator account): builds DSH and the recorder bundle, pins the bundle, and places service.toml.
 #    On this first install it does NOT start the recorder.
 fork/deploy/upgrade.sh
 # 4. Both secrets must have values (exit 1 lists what is missing)

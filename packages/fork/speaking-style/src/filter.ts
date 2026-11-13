@@ -18,8 +18,11 @@ export const FILTER_REASONS = [
 /** One of {@link FILTER_REASONS}. */
 export type FilterReason = typeof FILTER_REASONS[number]
 
-/** Words that mark the owner or the agent; a line naming one is left out. Lowercase compare. */
-export const BUILTIN_IDENTITY_MARKERS: readonly string[] = ['猫灯', 'maodeng', '猫猫', 'maomao', '魔女', 'owner', 'stevenli', 'steven li', 'phoenix']
+/**
+ * Words that mark the agent's persona; a line naming one is left out. Lowercase compare. The owner's names and handles
+ * come from `config.identityMarkers` in the profile patch, so the public repository carries none of them.
+ */
+export const BUILTIN_IDENTITY_MARKERS: readonly string[] = ['猫灯', 'maodeng', '猫猫', 'maomao', '魔女']
 
 /** A small blocklist of slurs, abuse, and sexual terms; a line containing one is left out. Lowercase compare. */
 export const BUILTIN_SLURS: readonly string[] = [

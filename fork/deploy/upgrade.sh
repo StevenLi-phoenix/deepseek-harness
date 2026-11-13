@@ -19,6 +19,9 @@ BUILD_ONLY=${DSH_BUILD_ONLY:-}
 BUILDS=$APPS/builds.noindex
 PREFIX=$BUILDS/$SHA
 echo "upgrade: building $SHA"
+# The repository is public: a commit that names the owner is not built.
+node "$ROOT/fork/deploy/check-owner-names.mjs" --self-test
+node "$ROOT/fork/deploy/check-owner-names.mjs"
 pnpm install --frozen-lockfile
 pnpm run build:official
 pnpm exec vitest run packages/fork

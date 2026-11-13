@@ -24,6 +24,9 @@ pre-commit:
     - name: whitespace (staged)
       run: git diff --cached --check
 
+    - name: owner names (staged)
+      run: node fork/deploy/check-owner-names.mjs --cached
+
     - name: pi-ai provider metadata
       glob: '{pnpm-lock.yaml,packages/llm/llm-pi-ai/package.json,packages/llm/llm-pi-ai/scripts/gen-provider-data.ts,packages/llm/llm-pi-ai/src/provider-data.generated.ts}'
       run: node_modules/.bin/tsx packages/llm/llm-pi-ai/scripts/gen-provider-data.ts --check --cached

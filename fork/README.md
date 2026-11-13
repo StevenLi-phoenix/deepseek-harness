@@ -18,6 +18,7 @@ Deployment files for running this fork as an always-on, event-driven agent servi
 ## Checks for the fork group
 
 ```sh
+node fork/deploy/check-owner-names.mjs
 pnpm exec vitest run packages/fork
 pnpm exec vitest run packages/fork --coverage --coverage.include='packages/fork/*/src/**/*.ts'
 pnpm exec tsc -b packages/fork/cc-bridge packages/fork/event-bus packages/fork/github-sensor packages/fork/tool-watch packages/fork/wechat packages/fork/qq packages/fork/qqbot packages/fork/tool-qq packages/fork/speaking-style packages/fork/content-guard packages/fork/provider-balance packages/fork/bili packages/fork/tool-bili

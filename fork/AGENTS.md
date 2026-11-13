@@ -7,7 +7,7 @@ These rules supplement the repo-wide [AGENTS.md](../AGENTS.md) for `packages/for
 - Work on `main` and push to `origin` (`StevenLi-phoenix/deepseek-harness`). Upstream syncs follow the ledger's upgrade procedure.
 - Every edit outside `packages/fork/` and `fork/` is an upstream-file edit: add its file and change to the ledger's "Upstream files touched" table in the same commit.
 - Record fork changes in [CHANGELOG.md](CHANGELOG.md) (Keep a Changelog sections under `[Unreleased]`).
-- **Name by function, never by person.** Packages, services, storage domains, routes, env names, and keys say what they do (`gmail`, `ctx.gmail`, `GMAIL_CLIENT_ID`), qualified where upstream uses the word (`owner-memory`); never a person's name or initials (this repository is public).
+- **Name by function, never by person.** Packages, services, storage domains, routes, env names, and keys say what they do (`gmail`, `ctx.gmail`, `GMAIL_CLIENT_ID`), qualified where upstream uses the word (`owner-memory`); never a person's name or initials (this repository is public; `deploy/check-owner-names.mjs` enforces it).
 - Before adding a client, scheduler, budget, notifier, classifier, key, or deploy script, check `packages/fork`, the Web UI's Remote API, AMS, `https://registry.lishuyu.app`, and the GitHub topic `dsh-plugin`. A new one says in its commit why those do not do.
 
 ## Memory and persona safety

@@ -24,6 +24,7 @@ Every edit outside `packages/fork/` and `/fork` is listed here so an upgrade can
 
 | File | Change |
 |---|---|
+| `lefthook.yml` | pre-commit job `owner names (staged)` runs `fork/deploy/check-owner-names.mjs --cached`: a staged file that names the owner fails the commit. |
 | `packages/compaction/compaction-basic/src/summarizer.ts`, `packages/compaction/compaction-basic/tests/compaction-basic.spec.ts`, `packages/compaction/compaction-image-offload/tests/image-offload.spec.ts` | Summary requests retry provider and network failures (`streamSummary`), since they do not pass `llm-retry`. |
 | `packages/compaction/command-compact/src/index.ts`, `packages/compaction/command-compact/tests/command-compact.spec.ts` | `/compact` reports what a failed summary request answered. |
 | `AGENTS.md` (`CLAUDE.md` symlinks it) | Short "Fork" section linking [fork/AGENTS.md](../../fork/AGENTS.md); the root file stays within its `verify-doc-budgets` ceiling |
