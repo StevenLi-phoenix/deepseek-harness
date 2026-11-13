@@ -81,6 +81,10 @@ describe('formatBatchNote', () => {
     const note = formatBatchNote('releases', [...events, { ...events[0]!, id: 'x' }], 1)
     expect(note.kinds).toEqual([...new Set(events.map(event => event.kind))])
   })
+
+  it('names the route as its sender, for the main agent that relays it', () => {
+    expect(formatBatchNote('releases', events, 1).origin).toBe('the notification route releases (events the owner\'s services pushed; no Session read them)')
+  })
 })
 
 describe('formatResultNote', () => {
@@ -192,17 +196,17 @@ describe('reminderTitle', () => {
 
 describe('formatReminderNote', () => {
   it('titles a completed reminder turn with the alarm clock', () => {
-    expect(formatReminderNote({ label: 'Check CI', outcome: 'completed', text: ' Green. ', url: 'https://dsh.example/' }))
-      .toEqual({ title: '⏰ Check CI', body: 'Green.', url: 'https://dsh.example/' })
+    expect(formatReminderNote({ sessionId: 's1', label: 'Check CI', outcome: 'completed', text: ' Green. ', url: 'https://dsh.example/' }))
+      .toEqual({ title: '⏰ Check CI', body: 'Green.', url: 'https://dsh.example/', origin: 'a scheduled task\'s turn in Session s1 (a Session outside the chat that the owner or an agent gave the task)' })
   })
 
   it('marks other outcomes and tolerates missing text', () => {
-    expect(formatReminderNote({ label: 'Check CI', outcome: 'cancelled', text: undefined, url: undefined }))
-      .toEqual({ title: '⚠️ ⏰ Check CI (cancelled)', body: '(no assistant text)' })
+    expect(formatReminderNote({ sessionId: 's1', label: 'Check CI', outcome: 'cancelled', text: undefined, url: undefined }))
+      .toEqual({ title: '⚠️ ⏰ Check CI (cancelled)', body: '(no assistant text)', origin: 'a scheduled task\'s turn in Session s1 (a Session outside the chat that the owner or an agent gave the task)' })
   })
 
   it('appends the failure reason', () => {
-    expect(formatReminderNote({ label: 'Check CI', outcome: 'error', text: undefined, url: undefined, detail: 'RATE_LIMIT: slow down' }))
-      .toEqual({ title: '⚠️ ⏰ Check CI (error)', body: '(no assistant text)\n\nReason: RATE_LIMIT: slow down' })
+    expect(formatReminderNote({ sessionId: 's1', label: 'Check CI', outcome: 'error', text: undefined, url: undefined, detail: 'RATE_LIMIT: slow down' }))
+      .toEqual({ title: '⚠️ ⏰ Check CI (error)', body: '(no assistant text)\n\nReason: RATE_LIMIT: slow down', origin: 'a scheduled task\'s turn in Session s1 (a Session outside the chat that the owner or an agent gave the task)' })
   })
 })

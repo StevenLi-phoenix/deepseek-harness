@@ -1602,7 +1602,7 @@ export class ForkEventBus extends Service {
     const notifier = this.ctx.get('forkNotifier')
     if (notifier === undefined) return
     this.ctx.logger.info(`fork-event-bus: reminder turn of Session ${sessionId} reported as ${icon} ${label}`)
-    await notifier.send(formatReminderNote({ label, icon, outcome, text, url: this.config.webUrl, detail }))
+    await notifier.send(formatReminderNote({ sessionId, label, icon, outcome, text, url: this.config.webUrl, detail }))
   }
 
   /** Record the Session outcome and send it to the notifier unless it is the silent reply or the owner stopped it. */

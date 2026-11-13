@@ -176,6 +176,8 @@ describe('originZh', () => {
     ['owner', '你的消息'],
     ['peer:bili', 'B站猫猫的传话'],
     ['peer:qq', 'qq 的传话'],
+    ['peer:note', '转给你的通知'],
+    ['peer:flow', '通知台的传话'],
     ['mystery', 'mystery'],
     ['unknown', '来源不明的回合'],
     ['unknown+web_fetch', '来源不明的回合，且读过 web_fetch 的内容'],

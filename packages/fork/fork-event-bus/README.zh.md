@@ -105,7 +105,7 @@ kind: "package-reference"
 
 `flowRoutes()` 列出所有路由，不论来源，并给出 Session 路由的回答去向（`result`）和接收它的路由（`downstream`）。`editFlow()` 在运行时修改路由：`set` 改字段或新建，`remove` 移除，`reset` 把配置路由恢复成写好的样子，`pause` 和 `resume` 暂停和恢复。配置路由的那一行不变，改动存在它上面，所以重启和部署都会保留。`flowHistory()` 保存最近 200 次改动及改动前后的路由。
 
-`session.result` 决定回答去向：`notify`（默认；`quietResult` 的行默认为 `quiet`）、`urgent`（通知不受勿扰限制）、`main`（主人的主智能体）、`quiet` 或 `event`。`event` 的回答以来源 `flow`、类型 `flow.<路由 id>.result` 发布，写明它们的路由都会接收，路由由此串起来；`NO_REPLY` 到此为止。`editFlow()` 用 `ForkFlowError` 拒绝成环的改动，没有路由接收的回答改发给通知器。
+`session.result` 决定回答去向：`notify`（默认；`quietResult` 的行默认为 `quiet`）、`urgent`（通知不受勿扰限制）、`main`（主人的主智能体）、`quiet` 或 `event`。`event` 的回答以来源 `flow`、类型 `flow.<路由 id>.result` 发布，写明它们的路由都会接收，路由由此串起来；`NO_REPLY` 到此为止。`editFlow()` 用 `ForkFlowError` 拒绝成环的改动，没有路由接收的回答改发给通知器。总线发出的每条通知（`notify` 批次、Session 结果、提醒回报）都在 `ForkNote.origin` 里写明发送方（`the notification route <id> …`、`the Session of the notification route <id> …`、`a scheduled task's turn in Session <id> …`、`a monitor's turn in Session <id> …`），因为 [`fork-wechat`](../fork-wechat/README.zh.md) 把通知交给 owner 的主 agent（`chat.notes: turn`），由它用自己的话告诉 owner。
 
 ### 常驻 Session
 

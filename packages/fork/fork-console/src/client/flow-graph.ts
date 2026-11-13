@@ -52,7 +52,7 @@ export const NODES: readonly FlowNode[] = [
   {
     id: 'notifySession', cell: [3, 3], tracks: { subscriptions: ['notify-funnel'] }, role: 'agent', title: '通知台', manage: 'fork-subscriptions', wired: 'partial',
     via: 'subscription notify-funnel · preset notify',
-    gap: '接主机的非紧急通知和 autocut 待确认、失败，走便宜路由；自动修复和 AMS 的分支还没接进来；紧急的主机告警（磁盘满）仍直接发微信。',
+    gap: '接主机的非紧急通知、autocut 待确认和失败、B站账号的告警与审核结果，走便宜路由；自动修复和 AMS 的分支还没接进来；紧急的主机告警（磁盘满）不进通知台，直接交主智能体，回复越过勿扰。',
   },
   {
     id: 'qqSessions', cell: [1, 7], needs: 'qq', role: 'agent', title: 'QQ 群摘要', service: 'dsh', manage: 'fork-agents', wired: 'partial',

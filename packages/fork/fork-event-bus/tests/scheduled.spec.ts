@@ -44,7 +44,10 @@ describe('ForkEventBus scheduled turn reports', () => {
     const { emit, notes } = await harness({ config: withConfig(sessionConfig, {}), schedules: TITLES })
     emit('other', sessionEvents.assistant('not a reminder Session'))
     await runTurn(emit, 's1', 'The nightly build passed.')
-    expect(notes).toEqual([{ title: '⏰ Nightly build', body: 'The nightly build passed.', url: 'https://dsh.example/' }])
+    expect(notes).toEqual([{
+      title: '⏰ Nightly build', body: 'The nightly build passed.', url: 'https://dsh.example/',
+      origin: 'a scheduled task\'s turn in Session s1 (a Session outside the chat that the owner or an agent gave the task)',
+    }])
     expect(JSON.stringify(notes)).not.toContain('Check whether')
 
     // A later human turn of the same Session is not reported.
@@ -61,7 +64,10 @@ describe('ForkEventBus scheduled turn reports', () => {
     emit('s2', sessionEvents.assistant('全球感知 gdacs 源超时，已自愈。'))
     emit('s2', sessionEvents.turnEnd())
     await vi.advanceTimersByTimeAsync(0)
-    expect(notes).toEqual([{ title: '📡 Monitor mon-0a1b2c (globe errors)', body: '全球感知 gdacs 源超时，已自愈。', url: 'https://dsh.example/' }])
+    expect(notes).toEqual([{
+      title: '📡 Monitor mon-0a1b2c (globe errors)', body: '全球感知 gdacs 源超时，已自愈。', url: 'https://dsh.example/',
+      origin: 'a monitor\'s turn in Session s2 (a Session outside the chat that watches something for the owner)',
+    }])
   })
 
   it('titles a recurring batch by its first task and counts the rest', async () => {

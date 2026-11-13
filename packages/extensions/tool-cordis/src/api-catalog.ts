@@ -2776,7 +2776,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     methods: [
       {
         signature: 'send(note: ForkNote): Promise<void>',
-        description: 'Deliver one message.',
+        description: 'Deliver one message for the owner. A channel with a chat Session may hand it to the owner\'s main agent instead, which decides whether and how to tell the owner; a `safety` note always goes to the owner as written.',
         parameters: [{ name: 'note', description: 'title, optional body, optional link, and optional origin.' }],
         returns: 'resolves once the channel accepted the message; rejects on failure.',
       },
@@ -8669,7 +8669,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ForkAgentMessage',
-    declaration: 'export interface ForkAgentMessage {\n    text: string;\n    from: string;\n    origin?: string | undefined;\n}',
+    declaration: 'export interface ForkAgentMessage {\n    text: string;\n    from: string;\n    origin?: string | undefined;\n    urgent?: true | undefined;\n}',
   },
   {
     name: 'ForkEventInput',

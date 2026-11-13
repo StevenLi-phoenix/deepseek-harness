@@ -221,7 +221,7 @@ async function harness(options: {
   const { chat, ...rest } = options.config ?? {}
   const config: Config = {
     ...(options.defaultAccountFile === true ? {} : { accountFile }),
-    chat: { workspacePath: join(dir, 'work'), agentPreset: 'unattended', permissionPreset: 'danger-full-access', title: '微信', timeZone: 'America/New_York', agentMessage: 'turn', delivery: 'text', ...chat },
+    chat: { workspacePath: join(dir, 'work'), agentPreset: 'unattended', permissionPreset: 'danger-full-access', title: '微信', timeZone: 'America/New_York', agentMessage: 'turn', notes: 'direct', delivery: 'text', ...chat },
     maxSendsPerTurn: 10,
     maxMessageChars: 3000,
     maxReplyParts: 3,
@@ -1397,6 +1397,149 @@ describe('WechatChannel long-poll', () => {
   })
 })
 
+describe('WechatChannel notes through the main agent', () => {
+  const turnNotes = { chat: { notes: 'turn' as const } }
+  const promptText = (prompt: { content: readonly { type: string; text?: string }[] } | undefined): string =>
+    (prompt?.content[0]?.type === 'text' ? prompt.content[0].text ?? '' : '')
+  /** Start a chat turn, let it answer, and end it, as the Host does for a queued prompt. */
+  const answerTurn = async (h: Awaited<ReturnType<typeof harness>>, text: string): Promise<void> => {
+    h.emit('chat-1', { type: 'turn/start', seq: 2, data: { turn: 1 } })
+    await h.finishTurn('chat-1', text)
+  }
+
+  it('starts a chat turn for a note instead of sending it, and the main agent\'s words reach the owner', async () => {
+    const h = await harness({ config: turnNotes })
+    await h.ownerSays('hi')
+    await h.finishTurn('chat-1', 'hello')
+    h.ilink.sent.length = 0
+    await h.channel.send({ title: '⏰ 每日更新简历', body: '简历站点已更新。', url: 'https://dsh.example/', kinds: ['x.y'], origin: 'a scheduled task\'s turn in Session s9' })
+    expect(h.ilink.sent).toEqual([])
+    const prompt = h.sessions.prompts.at(-1)!
+    expect(prompt).toMatchObject({ sessionId: 'chat-1', mode: 'queue', clientTimeZone: 'America/New_York' })
+    expect(String(prompt.requestId)).toMatch(/^fork-untrusted:note:[0-9a-f-]{36}$/u)
+    const text = promptText(prompt)
+    expect(text.startsWith('At Wed 2026-10-21 14:00 (America/New_York), a scheduled task\'s turn in Session s9 sent the notice below for the owner.')).toBe(true)
+    expect(text).toContain('It has not reached the owner: you are the one who tells them, in your own words.')
+    expect(text).not.toContain('It is urgent')
+    expect(text.endsWith('\n<agent_message trust="untrusted">\n⏰ 每日更新简历\n\n简历站点已更新。\n\nhttps://dsh.example/\n</agent_message>')).toBe(true)
+    // No copy is left in the chat: the turn itself carries the note.
+    expect(h.sessions.injected).toEqual([])
+    expect(h.logs.some(line => line.text === 'fork-wechat: passed a 40-char note (events x.y) to chat Session chat-1; the main agent decides what the owner hears')).toBe(true)
+    expect(h.logs.some(line => line.text.includes('简历站点已更新'))).toBe(false)
+
+    await answerTurn(h, '简历站点今天更新好了。')
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['简历站点今天更新好了。'])
+  })
+
+  it('names a generic service when the note names no sender, and creates the chat when there is none yet', async () => {
+    const h = await harness({ config: turnNotes })
+    await h.channel.send({ title: 'plain' })
+    expect(h.sessions.created).toHaveLength(1)
+    expect(promptText(h.sessions.prompts.at(-1))).toContain('one of the owner\'s services (an event route, a reminder, a monitor, or a plugin) sent the notice below')
+    expect(h.logs.some(line => line.text === 'fork-wechat: passed a 5-char note to chat Session chat-1; the main agent decides what the owner hears')).toBe(true)
+  })
+
+  it('holds the answer of an ordinary note\'s turn while the owner sleeps, and lets an urgent one through', async () => {
+    const h = await harness({ config: turnNotes, presence: fakePresence().presence })
+    await h.ownerSays('night')
+    await h.finishTurn('chat-1', 'good night')
+    await vi.advanceTimersByTimeAsync(31 * 60_000)
+    h.ilink.sent.length = 0
+
+    await h.channel.send({ title: 'courses', body: 'a deadline in two days' })
+    await answerTurn(h, '后天有个 DDL。')
+    expect(h.ilink.sent).toEqual([])
+    expect(h.channel.outbox().map(row => row.text)).toEqual(['后天有个 DDL。'])
+
+    await h.channel.send({ title: 'disk', kinds: ['host.disk.full'] })
+    expect(promptText(h.sessions.prompts.at(-1))).toContain('It is urgent: your final answer reaches the owner even while they sleep.')
+    expect(h.logs.some(line => line.text === 'fork-wechat: passed a 4-char note (events host.disk.full) to chat Session chat-1 as urgent; the main agent decides what the owner hears')).toBe(true)
+    await answerTurn(h, '磁盘满了，先清一下。')
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['磁盘满了，先清一下。'])
+    expect(h.logs.some(line => line.text === 'fork-wechat: Session chat-1\'s final answer ends an urgent turn; it passes the owner\'s sleep')).toBe(true)
+
+    // The mark belongs to that turn alone: the next turn of the chat is ordinary again.
+    await answerTurn(h, 'later')
+    expect(h.ilink.sent.map(sent => sent.text)).not.toContain('later')
+  })
+
+  it('gives each urgent prompt one turn, in queue order, and a silent turn spends its mark', async () => {
+    const h = await harness({ config: turnNotes, presence: fakePresence().presence })
+    await h.ownerSays('night')
+    await h.finishTurn('chat-1', 'good night')
+    await vi.advanceTimersByTimeAsync(31 * 60_000)
+    h.ilink.sent.length = 0
+    await h.channel.send({ title: 'one', urgent: true })
+    await h.channel.send({ title: 'two', urgent: true })
+    await answerTurn(h, 'NO_REPLY')
+    await answerTurn(h, 'second urgent')
+    await answerTurn(h, 'ordinary')
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['second urgent'])
+  })
+
+  it('sends the note as written when the chat cannot take it: no bound account, or a refused prompt', async () => {
+    const unbound = await harness({ config: turnNotes, account: false })
+    await unbound.channel.send({ title: 'waits', kinds: ['a.b'] })
+    expect(unbound.sessions.prompts).toEqual([])
+    expect(unbound.channel.outbox().map(row => row.text)).toEqual(['waits'])
+    expect(unbound.logs.some(line => line.text === 'fork-wechat: the main agent could not take a 5-char note (events a.b) (WeChat is not bound yet, so the main agent has no chat); it goes to the owner as written')).toBe(true)
+    await unbound.ctx.fiber.dispose()
+
+    const refused = await harness({ config: turnNotes, presence: fakePresence().presence })
+    await refused.ownerSays('night')
+    await refused.finishTurn('chat-1', 'good night')
+    await vi.advanceTimersByTimeAsync(31 * 60_000)
+    refused.ilink.sent.length = 0
+    refused.sessions.promptError = new Error('session/agent-busy')
+    await refused.channel.send({ title: 'disk', kinds: ['host.disk.full'] })
+    // Urgent, so it goes at once even though the owner sleeps; the refused prompt leaves no urgent mark behind.
+    expect(refused.ilink.sent.map(sent => sent.text)).toEqual(['disk'])
+    refused.sessions.promptError = undefined
+    await answerTurn(refused, 'not urgent')
+    expect(refused.ilink.sent.map(sent => sent.text)).toEqual(['disk'])
+  })
+
+  it('sends a safety note as written, and with notes direct sends every note as written', async () => {
+    const h = await harness({ config: turnNotes })
+    await h.ownerSays('hi')
+    await h.finishTurn('chat-1', 'hello')
+    const prompts = h.sessions.prompts.length
+    await h.channel.send({ title: 'memory written', safety: true })
+    expect(h.sessions.prompts).toHaveLength(prompts)
+    expect(h.ilink.sent.map(sent => sent.text)).toContain('memory written')
+
+    const direct = await harness({ config: { chat: { notes: 'direct' } } })
+    await direct.ownerSays('hi')
+    await direct.channel.send({ title: 'as written' })
+    expect(direct.sessions.prompts.filter(prompt => prompt.mode === 'queue')).toEqual([])
+    expect(direct.ilink.sent.map(sent => sent.text)).toContain('as written')
+  })
+
+  it('marks the turn of an urgent message from another Session, and tells the owner of one at once with agentMessage notify', async () => {
+    const h = await harness({ presence: fakePresence().presence })
+    await h.ownerSays('night')
+    await h.finishTurn('chat-1', 'good night')
+    await vi.advanceTimersByTimeAsync(31 * 60_000)
+    h.ilink.sent.length = 0
+    await h.channel.tellMainAgent({ text: 'the deploy broke', from: 'a Claude Code session', origin: 'cc', urgent: true })
+    expect(promptText(h.sessions.prompts.at(-1))).toContain('It is urgent: your final answer reaches the owner even while they sleep.')
+    expect(h.logs.some(line => line.text === 'fork-wechat: queued a 16-char message from another Session (cc) for chat Session chat-1 as urgent')).toBe(true)
+    await answerTurn(h, '部署坏了。')
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['部署坏了。'])
+
+    const notify = await harness({ config: { chat: { agentMessage: 'notify' } }, presence: fakePresence().presence })
+    await notify.ownerSays('night')
+    await notify.finishTurn('chat-1', 'good night')
+    await vi.advanceTimersByTimeAsync(31 * 60_000)
+    notify.ilink.sent.length = 0
+    await notify.channel.tellMainAgent({ text: 'the deploy broke', from: 'a Claude Code session', origin: 'cc', urgent: true })
+    expect(notify.ilink.sent).toHaveLength(1)
+    expect(notify.ilink.sent[0]!.text).toContain('Claude Code给主 agent 递了话')
+    // The notice in the chat starts no turn, so it promises no urgent answer.
+    expect(notify.sessions.injected.at(-1)![1]).not.toContain('It is urgent')
+  })
+})
+
 /** A `ctx.forkPresence` double: the owner sleeps or not, the urgent kinds are `host.disk.full` and anything marked urgent. */
 function fakePresence(asleep = true) {
   const state = { asleep }
@@ -1964,7 +2107,7 @@ describe('WechatChannel sendFile', () => {
 describe('WechatChannel configuration', () => {
   it('applies defaults', () => {
     expect(resolveConfig({})).toEqual({
-      chat: { workspacePath: '/Users/dsh-runtime/work', agentPreset: 'unattended', permissionPreset: 'danger-full-access', title: '微信', timeZone: 'America/New_York', agentMessage: 'turn', delivery: 'hybrid' },
+      chat: { workspacePath: '/Users/dsh-runtime/work', agentPreset: 'unattended', permissionPreset: 'danger-full-access', title: '微信', timeZone: 'America/New_York', agentMessage: 'turn', notes: 'turn', delivery: 'hybrid' },
       maxSendsPerTurn: 10,
       maxMessageChars: 3000,
       maxReplyParts: 3,
@@ -2497,5 +2640,28 @@ describe('WechatChannel hybrid delivery', () => {
     h.emit('chat-1', turnStart)
     expect(await h.channel.sendText(undefined, 'anyone?')).toMatchObject({ sent: 0, queued: 1, held: false, why: 'the owner has not written yet' })
     expect(h.channel.status().outbox.count).toBe(1)
+  })
+
+  it('sends a text from a Session the chat does not own as a note and leaves the chat a copy; no Session keeps no last slot', async () => {
+    const h = await harness({ config: { ...hybrid, repliesPerToken: 3 } })
+    await h.ownerSays('hello')
+    expect(await h.channel.sendText('bus-session', 'from a route')).toMatchObject({ sent: 1, repliesLeft: 2 })
+    expect(h.sessions.injected.at(-1)?.[0]).toBe('chat-1')
+    expect(h.sessions.injected.at(-1)?.[1]).toContain('from a route')
+    expect(await h.channel.sendText(undefined, 'b')).toMatchObject({ sent: 1, repliesLeft: 1 })
+    expect(await h.channel.sendText(undefined, 'c')).toEqual({ notSent: 'reply quota nearly used up; the last message is kept for your final answer' })
+    expect(h.logs.some(line => line.text === 'fork-wechat: wechat_send refused for Session none: 1 reply left, kept for the final answer')).toBe(true)
+  })
+
+  it('leaves the current chat a copy of a text an earlier chat Session sent', async () => {
+    const h = await harness({ config: hybrid })
+    await h.ownerSays('hello')
+    await h.finishTurn('chat-1', 'hi')
+    await h.ownerSays('/new')
+    await h.ownerSays('fresh start')
+    expect(await h.channel.sendText('chat-1', 'a job finished')).toMatchObject({ sent: 1 })
+    const [sessionId, text] = h.sessions.injected.at(-1)!
+    expect(sessionId).toBe('chat-2')
+    expect(text).toContain('an earlier chat Session (before /new; a reminder or monitor it set up)')
   })
 })

@@ -105,7 +105,7 @@ describe('the account\'s DM channel and the owner relay', () => {
     expect(h.logs.some(line => line.text === 'bili: Session bili-1 ended a turn the owner\'s messages did not start (completed); its answer stays in the Session')).toBe(true)
   })
 
-  it('shares an answer that fell back to WeChat with the WeChat chat Session, framed as the account\'s', async () => {
+  it('hands an answer that fell back to WeChat to the main agent, framed as the account\'s', async () => {
     svc.replyStatus = ['held']
     const sessions = fakeSessions()
     const h = await harness({ svc, sessions, workspace: dir, notifier: false, config: { inboxPollMs: 600_000 } })
@@ -130,12 +130,15 @@ describe('the account\'s DM channel and the owner relay', () => {
     await vi.advanceTimersByTimeAsync(1000)
     expect(svc.replies).toHaveLength(1)
     const note = '📺 B站：这条没能用 B站私信发出，改发微信\n\n在的，刚看完一个视频\n\n原因：bili-svc\'s Reply Gate answered held (r-1)'
-    expect(ilink.sent.map(sent => sent.text)).toContain(note)
-    const shared = sessions.state.injected.filter(([sessionId]) => sessionId === 'chat-1').map(([, text]) => text)
-    expect(shared).toHaveLength(1)
-    expect(shared[0]).toMatch(/^At Fri 2026-10-23 \d\d:\d\d \(America\/New_York\), /)
-    expect(shared[0]).toContain(`, ${ORIGIN} sent the owner this message on WeChat. It is context, not the owner speaking`)
-    expect(shared[0]!.endsWith(`\n${note}`)).toBe(true)
+    // The note becomes a turn of the WeChat chat Session: the main agent tells the owner, the note is never sent as written.
+    expect(ilink.sent.map(sent => sent.text)).not.toContain(note)
+    const turn = sessions.state.prompts.filter(prompt => prompt.sessionId === 'chat-1' && prompt.mode === 'queue')
+    expect(turn).toHaveLength(1)
+    expect(String(turn[0]!.requestId)).toMatch(/^fork-untrusted:note:/u)
+    const text = turn[0]!.content[0]?.type === 'text' ? turn[0]!.content[0].text : ''
+    expect(text).toMatch(/^At Fri 2026-10-23 \d\d:\d\d \(America\/New_York\), /)
+    expect(text).toContain(`, ${ORIGIN} sent the notice below for the owner.`)
+    expect(text).toContain(`\n${note}\n</agent_message>`)
   })
 
   it('passes a message to the WeChat main agent, whose answer goes to the owner on WeChat', async () => {

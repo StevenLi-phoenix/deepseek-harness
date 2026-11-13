@@ -726,7 +726,8 @@ Notification actuator contract; a channel plugin provides it as `ctx.forkNotifie
 
 ```ts cordis-catalog
 /**
- * Deliver one message.
+ * Deliver one message for the owner. A channel with a chat Session may hand it to the owner's main agent
+ * instead, which decides whether and how to tell the owner; a `safety` note always goes to the owner as written.
  * @param note - title, optional body, optional link, and optional origin.
  * @returns resolves once the channel accepted the message; rejects on failure.
  */

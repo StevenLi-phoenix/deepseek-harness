@@ -118,7 +118,7 @@ describe('up preset and bili events in the event bundle', () => {
     expect(conf(ingest).sources).toContainEqual({ id: 'bili', tokenEnv: 'FORK_INGEST_TOKEN_BILI' })
   })
 
-  it('batches the reply session (at least five minutes, two to four runs an hour) and keeps alerts model-free', () => {
+  it('batches the reply session (at least five minutes, two to four runs an hour) and sends alerts to the notification desk', () => {
     const subs = conf(bus).subscriptions!
     const digest = subs.find(sub => sub.id === 'bili-digest')!
     expect(digest).toMatchObject({ sources: ['bili'], action: 'session', session: { agentPreset: 'up' } })
@@ -130,11 +130,16 @@ describe('up preset and bili events in the event bundle', () => {
     expect(digest.session!.instructions).toContain('bili_channel_note')
     // One persistent Session for every batch, rolled over monthly.
     expect(digest.session!.persistent).toEqual({ enabled: true, rolloverDays: 30 })
-    for (const id of ['bili-alerts', 'bili-review']) {
-      expect(subs.find(sub => sub.id === id)).toMatchObject({ sources: ['bili'], action: 'notify' })
-    }
-    // Every bili kind is delivered to exactly one subscription family: alerts + reply gate, review, or the digest session.
-    const kinds = subs.filter(sub => sub.sources.includes('bili')).flatMap(sub => sub.kinds)
-    for (const kind of ['bili.login.*', 'bili.risk.*', 'bili.gate.*', 'bili.api.*', 'bili.pii.*', 'bili.reply.*', 'bili.archive.*', 'bili.comment.digest', 'bili.dm.new']) expect(kinds).toContain(kind)
+    // Alerts, the Reply Gate, and review results reach the owner through the desk and the main agent, never as a raw note.
+    const desk = subs.find(sub => sub.id === 'notify-funnel')!
+    expect(desk).toMatchObject({ action: 'session', session: { result: 'main' } })
+    expect(desk.sources).toContain('bili')
+    const alerts = ['bili.login.*', 'bili.risk.*', 'bili.gate.*', 'bili.api.*', 'bili.pii.*', 'bili.reply.*', 'bili.archive.*', 'bili.stats.*']
+    for (const kind of alerts) expect(desk.kinds).toContain(kind)
+    expect(subs.filter(sub => sub.sources.includes('bili') && sub.action === 'notify')).toEqual([])
+    // Every bili kind is delivered to exactly one subscription: the desk or the digest session.
+    const kinds = subs.filter(sub => sub.sources.includes('bili')).flatMap(sub => sub.kinds.filter(kind => kind.startsWith('bili.')))
+    expect(new Set(kinds).size).toBe(kinds.length)
+    for (const kind of [...alerts, 'bili.comment.digest', 'bili.dm.new']) expect(kinds).toContain(kind)
   })
 })

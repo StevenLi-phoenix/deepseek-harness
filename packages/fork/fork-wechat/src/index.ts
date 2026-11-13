@@ -40,7 +40,7 @@ declare module '@deepseek-ai/dsh-llm' {
 }
 
 import type { HandoverPart } from './text.ts'
-import { agentMessageText, buildDigest, EARLIER_CHAT, fitText, formatGap, handoverFailureText, handoverNotice, handoverText, HELP_REPLY, inboundText, NEW_CHAT_REPLY, QUOTA_FOOTER, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES } from './text.ts'
+import { agentMessageText, buildDigest, EARLIER_CHAT, fitText, formatGap, handoverFailureText, handoverNotice, handoverText, HELP_REPLY, inboundText, NEW_CHAT_REPLY, noteTurnText, QUOTA_FOOTER, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES } from './text.ts'
 import { TypingIndicator } from './typing.ts'
 import type { ChannelError, ChannelLink, ChannelStatus, WindowClosed } from './view.ts'
 
@@ -76,6 +76,12 @@ export interface ChatConfig {
    * the message in the chat as a notice, so nothing happens until the owner replies.
    */
   agentMessage: 'turn' | 'notify'
+  /**
+   * What a note for the owner (`send()`) does: `turn` queues it in the chat Session as a prompt that starts a turn of its
+   * own (marked as not the owner's), and the main agent tells the owner in its own words or answers NO_REPLY; `direct`
+   * sends it as written. Safety notes, and notes the chat cannot take, always go as written.
+   */
+  notes: 'turn' | 'direct'
   /**
    * How the chat Session's words reach the owner. `hybrid`: the final answer of each turn is still sent as the reply, and
    * the Session also has `wechat_send` for messages in the middle of a turn (progress, a first answer before a long step,
@@ -143,6 +149,7 @@ export const Config: z<Config> = z.object({
     title: z.string().default('微信'),
     timeZone: z.string().default('America/New_York'),
     agentMessage: z.union(['turn', 'notify'] as const).default('turn'),
+    notes: z.union(['turn', 'direct'] as const).default('turn'),
     delivery: z.union(['text', 'hybrid'] as const).default('hybrid'),
   }),
   maxMessageChars: z.natural().min(200).max(WECHAT_MAX_TEXT_BYTES).default(3000),
@@ -329,6 +336,10 @@ export class WechatChannel extends Service implements ForkNotifier {
   private lastWindow: { key: string; window: WindowRecord } | undefined
   /** Owned Sessions with a running turn. */
   private readonly working = new Set<string>()
+  /** Urgent prompts queued per chat Session whose turn has not started; each starts one turn, in queue order. */
+  private readonly urgentAsked = new Map<string, number>()
+  /** Chat Sessions whose running turn an urgent prompt started: its final answer passes the owner's sleep. */
+  private readonly urgentTurns = new Set<string>()
   /** Stops typing when a forwarded message starts no chat turn. */
   private typingGrace: NodeJS.Timeout | undefined
   /** The long-poll's health since the current account was loaded, for {@link status}. */
@@ -459,6 +470,7 @@ export class WechatChannel extends Service implements ForkNotifier {
       onTurnStart: (sessionId) => {
         this.working.add(sessionId)
         this.turns.delete(sessionId)
+        this.startUrgentTurn(sessionId)
         this.clearTypingGrace()
         this.typing.start()
       },
@@ -594,12 +606,14 @@ export class WechatChannel extends Service implements ForkNotifier {
    * @returns `sent` once the text was sent or durably queued.
    */
   private async relayAnswer(answer: RelayAnswer): Promise<RelayDelivery> {
+    const urgent = this.urgentTurns.delete(answer.sessionId)
     if (this.turns.get(answer.sessionId)?.texts.has(sameText(answer.text)) === true) {
       this.toolStats.repeats += 1
       this.ctx.logger.info(`fork-wechat: Session ${answer.sessionId}'s final answer repeats a wechat_send text; not sent again (${this.toolStats.repeats} so far)`)
       return 'sent'
     }
-    await this.deliver(answer.text, 'reply')
+    if (urgent) this.ctx.logger.info(`fork-wechat: Session ${answer.sessionId}'s final answer ends an urgent turn; it passes the owner's sleep`)
+    await this.deliver(answer.text, 'reply', { urgent })
     await this.shareWithChat(answer.text, EARLIER_CHAT, answer.sessionId)
     return 'sent'
   }
@@ -612,9 +626,12 @@ export class WechatChannel extends Service implements ForkNotifier {
   }
 
   /**
-   * Deliver one notification to the owner, or keep it for the next reply window.
-   * @param note - title, optional body, and optional link, rendered as plain text.
-   * @returns resolves once the text was sent or durably queued.
+   * Deliver one notification for the owner. With `chat.notes: turn` it starts a turn of the chat Session, and the
+   * main agent tells the owner in its own words or answers NO_REPLY; an urgent note (`forkPresence.isUrgent()`) makes
+   * that turn's answer pass the owner's sleep. A safety note, `chat.notes: direct`, or a chat that cannot take the
+   * turn (no bound account, a refused prompt) sends the note as written, or keeps it for the next reply window.
+   * @param note - title, optional body, optional link, and who sent it.
+   * @returns resolves once the turn was queued, or the text was sent or durably queued.
    * @throws only when storage fails.
    */
   async send(note: ForkNote): Promise<void> {
@@ -624,8 +641,81 @@ export class WechatChannel extends Service implements ForkNotifier {
     }
     const text = renderNote(note)
     const urgent = this.ctx.get('forkPresence')?.isUrgent(note) ?? false
+    if (note.safety !== true && this.config.chat.notes === 'turn' && await this.noteToMain(note, text, urgent)) return
     await this.deliver(text, 'note', { urgent, events: note.kinds })
     await this.shareWithChat(text, note.origin)
+  }
+
+  /**
+   * Give a note to the owner's main agent as a turn of the chat Session.
+   * @returns false (logged) when there is no chat to take it or the Session refused the prompt, so the note goes as written.
+   */
+  private async noteToMain(note: ForkNote, text: string, urgent: boolean): Promise<boolean> {
+    const events = note.kinds === undefined || note.kinds.length === 0 ? '' : ` (events ${note.kinds.join(' ')})`
+    try {
+      const framed = noteTurnText({ text, from: note.origin, urgent }, Date.now(), this.config.chat.timeZone)
+      const sessionId = await this.queueAgentTurn(framed, 'note', urgent)
+      this.ctx.logger.info(`fork-wechat: passed a ${text.length}-char note${events} to chat Session ${sessionId}${urgent ? ' as urgent' : ''}; the main agent decides what the owner hears`)
+      return true
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`fork-wechat: the main agent could not take a ${text.length}-char note${events} (${errorText(error)}); it goes to the owner as written`)
+      return false
+    }
+  }
+
+  /**
+   * Queue a prompt that is not the owner's in the owner's current chat Session, creating one when there is none.
+   * @param framed - the prompt text.
+   * @param origin - the request-id label of its sender (`bili`, `cc`, `note`).
+   * @param urgent - the turn it starts ends with an answer that passes the owner's sleep.
+   * @returns the chat Session it was queued in.
+   * @throws when no account is bound (there is no chat), or the Session refused the prompt.
+   */
+  private async queueAgentTurn(framed: string, origin: string, urgent: boolean): Promise<SessionId> {
+    const sessionId = await this.openChat()
+    // Counted before the prompt, whose turn can start before prompt() resolves.
+    if (urgent) this.urgentAsked.set(sessionId, (this.urgentAsked.get(sessionId) ?? 0) + 1)
+    try {
+      await this.ctx.sessionController.prompt({
+        // The request id is how the Host later tells this turn from one the owner started.
+        requestId: untrustedRequestId(origin) as SessionRequestId,
+        sessionId,
+        mode: 'queue',
+        content: [{ type: 'text', text: framed }],
+        clientTimeZone: this.config.chat.timeZone,
+      }, this.abort.signal)
+    } catch (error: unknown) {
+      if (urgent) this.takeUrgent(sessionId)
+      throw error
+    }
+    return sessionId
+  }
+
+  /** The owner's current chat Session, created when there is none. */
+  private async openChat(): Promise<SessionId> {
+    const domain = await this.ready
+    const account = this.account
+    if (account === undefined) throw new Error('WeChat is not bound yet, so the main agent has no chat')
+    mkdirSync(this.config.chat.workspacePath, { recursive: true })
+    return this.chatSession(domain, account)
+  }
+
+  /** Count one queued urgent prompt of a chat Session as taken; false when none was waiting. */
+  private takeUrgent(sessionId: string): boolean {
+    const asked = this.urgentAsked.get(sessionId) ?? 0
+    if (asked === 0) return false
+    if (asked === 1) this.urgentAsked.delete(sessionId)
+    else this.urgentAsked.set(sessionId, asked - 1)
+    return true
+  }
+
+  /**
+   * A chat Session started a turn: it is urgent when an urgent prompt waits in that Session. A turn the owner started first
+   * takes the mark too, which changes nothing: the owner who just wrote counts as awake.
+   */
+  private startUrgentTurn(sessionId: string): void {
+    if (this.takeUrgent(sessionId)) this.urgentTurns.add(sessionId)
+    else this.urgentTurns.delete(sessionId)
   }
 
   /**
@@ -649,34 +739,25 @@ export class WechatChannel extends Service implements ForkNotifier {
    * @throws when no account is bound (there is no chat), or the Session refused the prompt.
    */
   async tellMainAgent(message: ForkAgentMessage): Promise<SessionId> {
-    const domain = await this.ready
-    const account = this.account
-    if (account === undefined) throw new Error('WeChat is not bound yet, so the main agent has no chat')
-    mkdirSync(this.config.chat.workspacePath, { recursive: true })
-    const sessionId = await this.chatSession(domain, account)
-    const framed = agentMessageText(message, Date.now(), this.config.chat.timeZone)
     if (this.config.chat.agentMessage === 'notify') {
+      const sessionId = await this.openChat()
+      // The notice starts no turn, so it carries no urgent answer.
+      const framed = agentMessageText({ text: message.text, from: message.from }, Date.now(), this.config.chat.timeZone)
       // No turn: the owner is told, the chat keeps the message as a notice, and the owner's reply decides what happens.
       const origin = message.origin ?? 'peer'
       await this.deliver(renderNote({
         title: `📨 ${origin === 'bili' ? 'B站猫猫' : origin === 'cc' ? 'Claude Code' : '另一个 Session'}给主 agent 递了话（没有开始处理）`,
         body: `${fitText(message.text.replaceAll(/\s+/gu, ' ').trim(), 300)}\n\n要我处理，直接回复我；不理它就当没看到。`,
-      }), 'note')
+      }), 'note', { urgent: message.urgent === true })
       if (!await this.injectNotice(sessionId, framed, 'another Session messaged the main agent')) {
         throw new Error('the message could not be left in the chat Session')
       }
       this.ctx.logger.info(`fork-wechat: told the owner about a ${message.text.length}-char message from another Session (${origin}); no turn started`)
       return sessionId
     }
-    await this.ctx.sessionController.prompt({
-      // The request id is how the Host later tells this turn from one the owner started.
-      requestId: untrustedRequestId(message.origin ?? 'peer') as SessionRequestId,
-      sessionId,
-      mode: 'queue',
-      content: [{ type: 'text', text: framed }],
-      clientTimeZone: this.config.chat.timeZone,
-    }, this.abort.signal)
-    this.ctx.logger.info(`fork-wechat: queued a ${message.text.length}-char message from another Session (${message.origin ?? 'peer'}) for chat Session ${sessionId}`)
+    const framed = agentMessageText(message, Date.now(), this.config.chat.timeZone)
+    const sessionId = await this.queueAgentTurn(framed, message.origin ?? 'peer', message.urgent === true)
+    this.ctx.logger.info(`fork-wechat: queued a ${message.text.length}-char message from another Session (${message.origin ?? 'peer'}) for chat Session ${sessionId}${message.urgent === true ? ' as urgent' : ''}`)
     return sessionId
   }
 

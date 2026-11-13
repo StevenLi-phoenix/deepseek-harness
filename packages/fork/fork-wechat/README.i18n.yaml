@@ -21,11 +21,11 @@
   en: 831e47681cfb8c50
   zh: 9d998c62874aeea6
 /deepseek-ai-dsh-fork-wechat/use-this-package/minimal-configuration:
-  en: 1c9d205803507686
-  zh: 77e73dd56ced0a51
+  en: 16eacf691b94bf06
+  zh: d0af5cf17d7a52dd
 /deepseek-ai-dsh-fork-wechat/use-this-package/quiet-hours:
-  en: 23527561acfefde5
-  zh: c4976cea5611c829
+  en: 4a77309aa827501c
+  zh: df22a498699c0e5a
 /deepseek-ai-dsh-fork-wechat/understand-the-implementation:
   en: 9c3f1ae450e0a883
   zh: abbe36408f74e9f2
@@ -47,6 +47,9 @@
 /deepseek-ai-dsh-fork-wechat/model-experience/chat-session/what-the-model-sees/shared-note:
   en: d199f3d0f1a7f283
   zh: 343e8c6dfae96117
+/deepseek-ai-dsh-fork-wechat/model-experience/chat-session/what-the-model-sees/note-for-the-main-agent:
+  en: ae04138db419363b
+  zh: bcd816e8ed546cf6
 /deepseek-ai-dsh-fork-wechat/model-experience/chat-session/what-the-model-sees/handover-notice:
   en: b266a2cb3abb0015
   zh: fb34083b30143d10
@@ -54,8 +57,8 @@
   en: f92d4ca31a30bc7b
   zh: ab050226a608877c
 /deepseek-ai-dsh-fork-wechat/model-experience/chat-session/token-effect:
-  en: b51bbba9699c7d10
-  zh: 6d5a47a611f33140
+  en: 31f55daa09260e73
+  zh: 8fae9f2b99ff21e9
 /deepseek-ai-dsh-fork-wechat/model-experience/chat-session/kv-cache-effect:
   en: 4d2838921c24db11
   zh: 6f3b27453433a4e8

@@ -152,6 +152,8 @@ const FROM: Readonly<Record<string, string>> = {
   'peer:bili': 'B站猫猫的传话',
   'peer:cc': 'Claude Code 的消息',
   'peer:peer': '另一个 Session 的传话',
+  'peer:note': '转给你的通知',
+  'peer:flow': '通知台的传话',
   event: '事件触发的回合',
   scheduled: '提醒触发的回合',
   monitor: '监控触发的回合',

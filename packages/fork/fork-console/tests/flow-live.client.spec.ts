@@ -20,7 +20,9 @@ describe('liveGraph', () => {
   it('draws a route nobody changed from what it really does, too', () => {
     const graph = liveGraph(GRAPH_BUILT, [route('ci', { sources: ['github'], result: 'notify' })])
     expect(arrow(graph, 'github', 'githubSessions')).toBe(true)
-    expect(arrow(graph, 'githubSessions', 'wechatOut')).toBe(true)
+    // A note for the owner goes through the main agent, never straight to WeChat.
+    expect(arrow(graph, 'githubSessions', 'main')).toBe(true)
+    expect(arrow(graph, 'githubSessions', 'wechatOut')).toBe(false)
     expect(arrow(graph, 'githubSessions', 'repairQ')).toBe(false)
   })
 
@@ -52,7 +54,8 @@ describe('liveGraph', () => {
     const graph = liveGraph(GRAPH_BUILT, [route('new-one', { origin: 'agent', sources: ['github'], result: 'urgent' })])
     expect(graph.node('route:new-one')).toMatchObject({ title: 'new-one', cell: [1, 14] })
     expect(arrow(graph, 'github', 'route:new-one')).toBe(true)
-    expect(arrow(graph, 'route:new-one', 'wechatOut')).toBe(true)
+    expect(arrow(graph, 'route:new-one', 'main')).toBe(true)
+    expect(arrow(graph, 'route:new-one', 'wechatOut')).toBe(false)
   })
 
   it('draws a chain of new routes one column after another, and a route taken to the main agent', () => {
@@ -91,6 +94,7 @@ describe('liveGraph corners', () => {
   it('draws a route that sends its answer straight to the owner as a core box', () => {
     const graph = liveGraph(GRAPH_BUILT, [route('plain', { origin: 'agent', sources: ['host'], result: 'direct' })])
     expect(graph.node('route:plain')?.role).toBe('core')
+    expect(arrow(graph, 'route:plain', 'main')).toBe(true)
     expect(graph.node('route:new')).toBeUndefined()
   })
 

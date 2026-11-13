@@ -57,6 +57,7 @@ export function liveGraph(base: FlowGraph, routes: readonly FlowRoute[]): FlowGr
   const redrawn = new Set<string>()
   for (const id of shown) {
     const route = byId.get(id)
+    /* v8 ignore next -- every shown id is a route's. */
     if (route === undefined) continue
     const drawn = owner.get(id)
     if (drawn !== undefined) {
@@ -123,8 +124,8 @@ export function liveGraph(base: FlowGraph, routes: readonly FlowRoute[]): FlowGr
       if (node.role !== 'source') continue
       if ((node.tracks?.sources ?? []).some(source => route.sources.some(pattern => globMatch(pattern, source)))) connect(node.id, box)
     }
-    if (route.result === 'direct' || route.result === 'notify' || route.result === 'urgent') connect(box, 'wechatOut')
-    if (route.result === 'main') connect(box, 'main')
+    // fork-wechat hands every note for the owner to the main agent (`chat.notes: turn`), so a note reaches WeChat through it.
+    if (route.result === 'direct' || route.result === 'notify' || route.result === 'urgent' || route.result === 'main') connect(box, 'main')
     if (route.result === 'event') {
       for (const next of route.downstream) {
         const target = boxOf.get(next)

@@ -3872,7 +3872,7 @@ export type TtsProviderName = 'feiyu' | 'mac-mini'
 ## `@deepseek-ai/dsh-fork-wechat`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/fork-wechat/src/index.ts:90`](../packages/fork/fork-wechat/src/index.ts)
+- `source`: [`packages/fork/fork-wechat/src/index.ts:96`](../packages/fork/fork-wechat/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
@@ -3943,6 +3943,12 @@ export interface ChatConfig {
    * the message in the chat as a notice, so nothing happens until the owner replies.
    */
   agentMessage: 'turn' | 'notify'
+  /**
+   * What a note for the owner (`send()`) does: `turn` queues it in the chat Session as a prompt that starts a turn of its
+   * own (marked as not the owner's), and the main agent tells the owner in its own words or answers NO_REPLY; `direct`
+   * sends it as written. Safety notes, and notes the chat cannot take, always go as written.
+   */
+  notes: 'turn' | 'direct'
   /**
    * How the chat Session's words reach the owner. `hybrid`: the final answer of each turn is still sent as the reply, and
    * the Session also has `wechat_send` for messages in the middle of a turn (progress, a first answer before a long step,

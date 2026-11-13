@@ -126,6 +126,33 @@ function modelOf(action: SessionAction): { model?: { provider: string; model: st
 }
 
 /**
+ * Who sent a note, as the owner's main agent reads it when the channel hands the note to it.
+ * @param subscription - the route.
+ * @returns the sender of a `notify` route's batch.
+ */
+export const batchNoteOrigin = (subscription: string): string =>
+  `the notification route ${subscription} (events the owner's services pushed; no Session read them)`
+
+/**
+ * Who sent a Session result note, as the owner's main agent reads it.
+ * @param subscription - the route whose Session answered.
+ * @returns the sender.
+ */
+export const resultNoteOrigin = (subscription: string): string =>
+  `the Session of the notification route ${subscription} (an unattended Session that read outside events)`
+
+/**
+ * Who sent a reminder report, as the owner's main agent reads it.
+ * @param sessionId - the Session whose reminder or monitor turn it reports.
+ * @param icon - ⏰ for a schedule task, 📡 for a monitor.
+ * @returns the sender.
+ */
+export const reminderNoteOrigin = (sessionId: string, icon: string): string =>
+  icon === '⏰'
+    ? `a scheduled task's turn in Session ${sessionId} (a Session outside the chat that the owner or an agent gave the task)`
+    : `a monitor's turn in Session ${sessionId} (a Session outside the chat that watches something for the owner)`
+
+/**
  * Render a notify batch as one message with a bounded event list.
  * @param subscription - subscription id.
  * @param events - batch events, oldest first.
@@ -139,7 +166,12 @@ export function formatBatchNote(subscription: string, events: readonly BatchEven
     if (event.url !== undefined) lines.push(`  ${event.url}`)
   }
   if (events.length > maxEvents) lines.push(`… and ${events.length - maxEvents} more`)
-  return { title: `${subscription}: ${events.length} event(s)`, body: clip(lines.join('\n'), MAX_NOTE_BODY_CHARS), kinds: [...new Set(events.map(event => event.kind))] }
+  return {
+    title: `${subscription}: ${events.length} event(s)`,
+    body: clip(lines.join('\n'), MAX_NOTE_BODY_CHARS),
+    kinds: [...new Set(events.map(event => event.kind))],
+    origin: batchNoteOrigin(subscription),
+  }
 }
 
 /** A failure reason is one line under a phone-sized message. */
@@ -197,6 +229,7 @@ export function formatResultNote(result: SessionResult): ForkNote {
     title,
     body: noteBody(result.text, result.detail),
     ...(result.url === undefined ? {} : { url: result.url }),
+    origin: resultNoteOrigin(result.subscription),
   }
 }
 
@@ -261,6 +294,8 @@ export function monitorLabel(text: string | undefined): string | undefined {
 
 /** Facts reported when an unattended reminder turn ends. */
 export interface ReminderResult {
+  /** The Session the turn ran in. */
+  sessionId: string
   /** Reminder or Session label. */
   label: string
   /** Title icon; a reminder's ⏰ by default. */
@@ -287,5 +322,6 @@ export function formatReminderNote(result: ReminderResult): ForkNote {
     title,
     body: noteBody(result.text, result.detail),
     ...(result.url === undefined ? {} : { url: result.url }),
+    origin: reminderNoteOrigin(result.sessionId, icon),
   }
 }

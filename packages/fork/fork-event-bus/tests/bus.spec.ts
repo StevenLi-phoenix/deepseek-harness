@@ -189,7 +189,7 @@ describe('ForkEventBus session actuator', () => {
     emit({ type: 'turn/end', seq: 4, data: { turn: 1, reason: { kind: 'completed' } } })
     await vi.advanceTimersByTimeAsync(0)
 
-    expect(notes).toEqual([{ title: 'triage: octo/repo v1.0.0', body: 'Final answer.', url: 'https://dsh.example/' }])
+    expect(notes).toEqual([{ title: 'triage: octo/repo v1.0.0', body: 'Final answer.', url: 'https://dsh.example/', origin: 'the Session of the notification route triage (an unattended Session that read outside events)' }])
     expect(bus.batches()[0]).toMatchObject({ status: 'completed', sessionId: 'webhook-123', outcome: 'completed' })
 
     // Later turns of the same Session are not reported again.
@@ -285,7 +285,7 @@ describe('ForkEventBus Session observation', () => {
     emit('s1', { type: 'step/start', seq: 4, data: { turn: 1, step: 1 } })
     emit('s1', { type: 'turn/end', seq: 5, data: { turn: 1, reason: { kind: 'error' } } })
     await vi.advanceTimersByTimeAsync(0)
-    expect(notes).toEqual([{ title: '⚠️ triage: octo/repo v1.0.0 (error)', body: '(no assistant text)', url: 'https://dsh.example/' }])
+    expect(notes).toEqual([{ title: '⚠️ triage: octo/repo v1.0.0 (error)', body: '(no assistant text)', url: 'https://dsh.example/', origin: 'the Session of the notification route triage (an unattended Session that read outside events)' }])
     expect(bus.batches()[0]).toMatchObject({ status: 'completed', outcome: 'error', sessionId: 's1' })
   })
 
@@ -303,7 +303,10 @@ describe('ForkEventBus Session observation', () => {
     emit('s1', userMessage)
     emit('s1', { type: 'turn/end', seq: 2, data: { turn: 1, reason: { kind: 'error', error: { code: 'AUTH', message: '401 User not found.', status: 401 } } } })
     await vi.advanceTimersByTimeAsync(0)
-    expect(notes).toEqual([{ title: '⚠️ triage: octo/repo v1.0.0 (error)', body: '(no assistant text)\n\nReason: AUTH: 401 User not found.', url: 'https://dsh.example/' }])
+    expect(notes).toEqual([{
+      title: '⚠️ triage: octo/repo v1.0.0 (error)', body: '(no assistant text)\n\nReason: AUTH: 401 User not found.', url: 'https://dsh.example/',
+      origin: 'the Session of the notification route triage (an unattended Session that read outside events)',
+    }])
     expect(bus.batches()[0]).toMatchObject({ status: 'completed', outcome: 'error', error: 'AUTH: 401 User not found.' })
   })
 

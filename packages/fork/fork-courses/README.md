@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Never miss a course deadline: DSH reads your course records every 15 minutes and messages you on WeChat 48, 24, and 3 hours before each deadline, and at once when a deadline passed while late submissions are still open. Finished work is left alone, each reminder goes out once even across restarts, and reminders wait while you sleep unless the deadline is under 3 hours away. A broken course sync is told once a day with the last good sync and the reason, and once when it recovers. Code decides what is sent; the agent only answers your replies.
+Never miss a course deadline: DSH reads your course records every 15 minutes and messages you on WeChat 48, 24, and 3 hours before each deadline, and at once when a deadline passed while late submissions are still open. Finished work is left alone, each reminder goes out once even across restarts, and reminders wait while you sleep unless the deadline is under 3 hours away. A broken course sync is told once a day with the last good sync and the reason, and once when it recovers. Code decides when a reminder is due; the main agent tells you in its own words and answers your replies.
 
 ## Table of Contents
 
@@ -100,7 +100,7 @@ This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 
 #### What the model sees
 
-Nothing is registered for a model. The WeChat channel keeps a copy of each message in the owner's chat Session as a notice from another Session (`origin`: the course deadline check, fixed rules over the owner's course records), so when the owner answers "交了" the main agent knows which tasks the message named and updates them with the course tools.
+Nothing is registered for a model. The WeChat channel hands each message to the owner's main agent as a turn of the chat Session (`chat.notes: turn`), framed with its sender (`origin`: the course deadline check, fixed rules over the owner's course records), and the main agent tells the owner in its own words; an urgent reminder's turn answers past the owner's sleep. When the owner then answers "交了", the main agent knows which tasks the message named and updates them with the course tools. With `chat.notes: direct` the message goes as written and the chat Session keeps a copy as a notice.
 
 #### Token effect
 
