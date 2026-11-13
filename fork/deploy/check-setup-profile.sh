@@ -1,8 +1,8 @@
 #!/bin/bash
 # Regression check for setup-profile.sh against an installed prefix, in throwaway DSH homes:
 # a fresh home gets the owner layer and the event bundle; a pre-bundle composition copy is moved
-# aside; a re-run keeps the owner's settings and extra dependencies; fresh and migrated homes
-# compose the same profile.
+# aside; a re-run keeps the owner's settings and extra dependencies and drops links whose package is gone;
+# fresh and migrated homes compose the same profile.
 # usage: check-setup-profile.sh <installed prefix>
 set -euo pipefail
 PREFIX=$(cd "${1:?installed prefix}" && pwd)
@@ -79,5 +79,14 @@ node -e 'const f=process.argv[1],m=JSON.parse(require("fs").readFileSync(f));m.d
 "$SETUP" "$FRESH" "$PREFIX" >/dev/null
 cmp -s "$PATCH" "$WORK/owner.yml" || fail "re-run replaced the owner layer"
 /usr/bin/grep -q '"extra-plugin"' "$FRESH/profiles/event/package.json" || fail "re-run dropped an owner dependency"
+
+# A link into the product whose package is gone (renamed since the last run) is dropped with its bundle entry.
+GONE="$PREFIX/node_modules/@deepseek-ai/dsh-renamed-away"
+node -e 'const f=process.argv[1],m=JSON.parse(require("fs").readFileSync(f));m.dependencies["@deepseek-ai/dsh-renamed-away"]="file:"+process.argv[2];m.dsh.profile.bundles.push("@deepseek-ai/dsh-renamed-away");require("fs").writeFileSync(f,JSON.stringify(m))' "$FRESH/profiles/event/package.json" "$GONE"
+ln -s "$GONE" "$FRESH/profiles/event/node_modules/@deepseek-ai/dsh-renamed-away"
+"$SETUP" "$FRESH" "$PREFIX" >/dev/null
+! /usr/bin/grep -q 'dsh-renamed-away' "$FRESH/profiles/event/package.json" || fail "re-run kept a dead link or its bundle"
+[ ! -L "$FRESH/profiles/event/node_modules/@deepseek-ai/dsh-renamed-away" ] || fail "re-run kept the dead symlink"
+/usr/bin/grep -q '"extra-plugin"' "$FRESH/profiles/event/package.json" || fail "pruning dropped an owner dependency"
 
 echo "check-setup-profile: ok ($PREFIX)"

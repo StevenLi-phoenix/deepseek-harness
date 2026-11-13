@@ -43,7 +43,7 @@ async function mount(tokens: Record<string, string | undefined>, config: Ingest.
     })
     return { status: response.status, body: await response.json() as Record<string, unknown> }
   }
-  return { post, published, path: route.path, url, handler: route.handler }
+  return { post, published, path: route.path, url, handler: route.handler, routes }
 }
 
 const EVENT = { kind: 'kaorou.job.failed', key: 'job-91-attempt-3', subject: 'job 91', title: 'burn failed: ffmpeg exit 255', text: 'stderr tail', url: 'https://example.com/jobs/91', occurredAt: 1_761_000_000_000 }
@@ -106,6 +106,14 @@ describe('event-ingest', () => {
     await expect(mount({}, { sources: [{ id: 'github', tokenEnv: 'X' }] })).rejects.toThrow('source id')
     await expect(mount({}, { sources: [{ id: 'a', tokenEnv: 'X' }, { id: 'a', tokenEnv: 'Y' }] })).rejects.toThrow('source id')
     await expect(mount({}, { path: '/api/events', sources: [] })).rejects.toThrow('under /hooks/')
+  })
+
+  it('answers on every alias with the same handler as on the path, and refuses an alias outside /hooks/ or listed twice', async () => {
+    const { routes } = await mount({ KAOROU_TOKEN: 'k-secret' }, { aliases: ['/hooks/legacy'], sources: [{ id: 'kaorou', tokenEnv: 'KAOROU_TOKEN' }] })
+    expect(routes.map(route => route.path)).toEqual(['/hooks/events', '/hooks/legacy'])
+    expect(routes[1]?.handler).toBe(routes[0]?.handler)
+    await expect(mount({}, { aliases: ['/api/legacy'], sources: [] })).rejects.toThrow('under /hooks/')
+    await expect(mount({}, { aliases: ['/hooks/events'], sources: [] })).rejects.toThrow('listed twice')
   })
 
   it('gives a sink source its events and never publishes them on the bus', async () => {

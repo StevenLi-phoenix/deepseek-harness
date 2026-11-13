@@ -1408,6 +1408,8 @@ export interface Config {
 export interface Config {
   /** Route path; must start with `/hooks/` and not end with `/`. */
   path?: string
+  /** More paths that answer exactly like {@link Config.path}, e.g. an older path callers still post to; same rules as `path`. */
+  aliases?: string[]
   /** Services allowed to push, each with its own bearer token; with none configured every request gets 503. */
   sources?: IngestSource[]
   /** Largest accepted request body, in bytes. */
@@ -4501,7 +4503,7 @@ export interface Config {
   tools: StyleTool[]
   /** Collect mode: `false` stops collection, refuses notes and card updates, and keeps the block out of every prompt; the data stays. */
   enabled: boolean
-  /** Collect mode: directory of `samples.jsonl`, `notes.json`, `state.json`, and `answers.json`; defaults to `<DSH_HOME>/speaking-style`. */
+  /** Collect mode: directory of `samples.jsonl`, `notes.json`, `state.json`, `answers.json`; defaults to `<DSH_HOME>/speaking-style`. */
   dir?: string
   /**
    * `optional`: strangers' samples that pass the filters go active and the owner deletes bad ones. `required`: they wait as

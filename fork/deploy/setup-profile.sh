@@ -39,6 +39,17 @@ const manifest = {
   dependencies: { ...current.dependencies },
   dsh: { ...current.dsh, ...shipped.dsh, profile: { ...current.dsh?.profile, ...shipped.dsh.profile, bundles: [...bundles, ...extraBundles] } },
 }
+// A `file:` dependency whose directory no longer holds a package (renamed or removed since the last run) is dead:
+// drop it, its link, and its bundle entry, so a renamed bundle is not composed twice under its old name.
+const dropped = []
+for (const [name, spec] of Object.entries(manifest.dependencies)) {
+  if (typeof spec !== 'string' || !spec.startsWith('file:') || existsSync(join(spec.slice('file:'.length), 'package.json'))) continue
+  delete manifest.dependencies[name]
+  rmSync(join(target, '..', 'node_modules', name), { force: true, recursive: false })
+  dropped.push(name)
+}
+manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter(name => !dropped.includes(name))
+if (dropped.length > 0) console.log(`setup-profile: dropped ${dropped.length} dead link(s): ${dropped.join(' ')}`)
 const links = []
 function link(name, directory) {
   if (!existsSync(join(directory, 'package.json'))) throw new Error(`setup-profile: ${name} is not installed in ${directory}`)

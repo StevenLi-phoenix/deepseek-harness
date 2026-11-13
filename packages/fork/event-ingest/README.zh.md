@@ -45,6 +45,7 @@ kind: "package-reference"
 | 字段 | 默认值 | 含义 |
 |---|---|---|
 | `path` | `/hooks/events` | 路由路径；必须以 `/hooks/` 开头，且不以 `/` 结尾 |
+| `aliases` | `[]` | 与 `path` 行为完全相同的其他路径，比如调用方还在推送的旧路径；规则同 `path`，不能重复 |
 | `sources` | `[]` | 允许推送的服务；为空时每个请求都得到 503 |
 | `sources[].id` | 必填 | 总线上的来源 id：小写字母、数字和连字符，最长 32 个字符，不能重复，不能是 `github` 或 `schedule` |
 | `sources[].tokenEnv` | 必填 | 保存该来源 bearer token 的凭据引用 |
@@ -103,7 +104,7 @@ curl -sS -X POST http://127.0.0.1:3081/hooks/events \
 <details>
 <summary>实现细节——点击展开</summary>
 
-挂载时 `apply` 检查配置，遇到 `/hooks/` 之外的路径、格式错误或重复的来源 id、保留 id（`github` 和 `schedule`）就抛错。然后它在 `ctx.webServer` 上注册一条精确匹配的路由。处理每个请求时，处理器依次检查方法、`Authorization: Bearer` 头、token、Content-Type、请求体和事件字段，所以没有有效 token 的调用方了解不到载荷规则。
+挂载时 `apply` 检查配置，遇到 `/hooks/` 之外的路径或别名、重复列出的路径、格式错误或重复的来源 id、保留 id（`github` 和 `schedule`）就抛错。然后它为每个路径在 `ctx.webServer` 上注册一条精确匹配的路由，共用同一个处理器。处理每个请求时，处理器依次检查方法、`Authorization: Bearer` 头、token、Content-Type、请求体和事件字段，所以没有有效 token 的调用方了解不到载荷规则。
 
 token 检查会从凭据存储解析每个来源的 token，跳过未设置的，并用 `timingSafeEqual` 比较传入值与存储值的 SHA-256 摘要，因此长度和内容都不会从耗时中泄露。匹配到的来源成为事件的 `source`。随后 `src/event.ts` 里的 `eventFrom` 按 `LIMITS` 校验请求体并构造 `BusEventInput`，要求 `kind` 以 `<source>.` 开头；`ctx.eventBus.publish()` 返回的结果作为 `202` 回给调用方。任何意外失败都回答 `503 ingest unavailable`。日志记录来源、kind、key 和结果，对被拒绝的推送只发警告而不带 token，也从不记录事件文本。
 

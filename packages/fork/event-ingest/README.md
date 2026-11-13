@@ -45,6 +45,7 @@ Choose it when a service you run should wake the agent the moment it has news. A
 | Field | Default | Meaning |
 |---|---|---|
 | `path` | `/hooks/events` | Route path; it must start with `/hooks/` and not end with `/` |
+| `aliases` | `[]` | More paths that answer exactly like `path`, such as an older path callers still post to; same rules, no repeats |
 | `sources` | `[]` | Services allowed to push; with none, every request gets 503 |
 | `sources[].id` | required | Source id on the bus: lowercase letters, digits, and hyphens, at most 32 characters, unique, never `github` or `schedule` |
 | `sources[].tokenEnv` | required | Credential reference holding that source's bearer token |
@@ -103,7 +104,7 @@ The event service listens on `127.0.0.1:3081`. Once a subscription matches, the 
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-At mount time `apply` checks the configuration and throws on a path outside `/hooks/`, a malformed or repeated source id, or a reserved one (`github` and `schedule`). It then registers one exact route on `ctx.webServer`. For each request the handler checks, in order, the method, the `Authorization: Bearer` header, the token, the content type, the body, and the event fields, so a caller without a valid token learns nothing about the payload rules.
+At mount time `apply` checks the configuration and throws on a path or alias outside `/hooks/`, a path listed twice, a malformed or repeated source id, or a reserved one (`github` and `schedule`). It then registers one exact route on `ctx.webServer` per path, all with the same handler. For each request the handler checks, in order, the method, the `Authorization: Bearer` header, the token, the content type, the body, and the event fields, so a caller without a valid token learns nothing about the payload rules.
 
 The token check resolves every source's token from the credential store, skips unset ones, and compares SHA-256 digests of the given and stored values with `timingSafeEqual`, so neither length nor content shows in timing. The matching source becomes the event's `source`. `eventFrom` in `src/event.ts` then validates the body against `LIMITS` and builds a `BusEventInput`, requiring `kind` to start with `<source>.`; `ctx.eventBus.publish()` returns the outcome that goes back as `202`. Any unexpected failure answers `503 ingest unavailable`. Logs name the source, kind, key, and outcome, and warn about a rejected push without the token; they never carry event text.
 

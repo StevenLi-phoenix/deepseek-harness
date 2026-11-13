@@ -41,6 +41,8 @@ export interface IngestSource {
 export interface Config {
   /** Route path; must start with `/hooks/` and not end with `/`. */
   path?: string
+  /** More paths that answer exactly like {@link Config.path}, e.g. an older path callers still post to; same rules as `path`. */
+  aliases?: string[]
   /** Services allowed to push, each with its own bearer token; with none configured every request gets 503. */
   sources?: IngestSource[]
   /** Largest accepted request body, in bytes. */
@@ -50,6 +52,7 @@ export interface Config {
 /** Schemastery validation for {@link Config}. */
 export const Config: z<Config> = z.object({
   path: z.string().default('/hooks/events'),
+  aliases: z.array(z.string()).default([]),
   sources: z.array(z.object({
     id: z.string().required(),
     tokenEnv: z.string().role('credential-ref').required(),
@@ -110,9 +113,13 @@ function sameToken(given: string, expected: string): boolean {
  */
 export function apply(ctx: Context, config: Config): void {
   const path = config.path ?? '/hooks/events'
+  const paths = [path, ...config.aliases ?? []]
   const sources = config.sources ?? []
   const maxBodyBytes = config.maxBodyBytes ?? 65_536
-  if (!path.startsWith('/hooks/') || path.endsWith('/')) throw new Error(`event-ingest: path must be under /hooks/, got ${path}`)
+  for (const [index, entry] of paths.entries()) {
+    if (!entry.startsWith('/hooks/') || entry.endsWith('/')) throw new Error(`event-ingest: path must be under /hooks/, got ${entry}`)
+    if (paths.indexOf(entry) !== index) throw new Error(`event-ingest: path ${entry} is listed twice`)
+  }
   const ids = new Set<string>()
   for (const source of sources) {
     if (source.sink !== undefined && !SINK_NAME.test(source.sink)) throw new Error(`event-ingest: sink ${JSON.stringify(source.sink)} of source ${source.id} must be a service name`)
@@ -147,52 +154,51 @@ export function apply(ctx: Context, config: Config): void {
     }
   }
 
-  ctx.effect(() => ctx.webServer.register({
-    kind: 'exact',
-    path,
-    handler: async (request, response) => {
-      try {
-        if (request.method !== 'POST') {
-          response.setHeader('allow', 'POST')
-          throw new HttpError(405, 'method not allowed')
-        }
-        const authorization = request.headers.authorization ?? ''
-        const token = /^Bearer (\S+)$/u.exec(authorization)?.[1]
-        if (token === undefined) throw new HttpError(401, 'bearer token required')
-        const source = await sourceFor(token)
-        if (source === undefined) throw new HttpError(401, 'unknown token')
-        if (!/^application\/json\s*(?:;\s*charset=(?:utf-8|"utf-8"))?$/iu.test(request.headers['content-type'] ?? '')) {
-          throw new HttpError(415, 'content type must be application/json')
-        }
-        const raw = await readBody(request, maxBodyBytes)
-        let parsed: unknown
-        try {
-          parsed = JSON.parse(raw)
-        } catch {
-          throw new HttpError(400, 'body is not JSON')
-        }
-        let event
-        try {
-          event = eventFrom(source, parsed)
-        } catch (error: unknown) {
-          /* v8 ignore next 2 -- eventFrom throws only InvalidEvent. */
-          if (error instanceof InvalidEvent) throw new HttpError(400, error.message)
-          /* v8 ignore next -- eventFrom throws only InvalidEvent. */
-          throw error
-        }
-        const sink = sources.find(entry => entry.id === source)?.sink
-        const outcome = sink === undefined ? await ctx.eventBus.publish(event) : await applyToSink(sink, event)
-        ctx.logger.info('%s %s (%s): %s', source, event.kind, event.key, outcome)
-        reply(response, 202, { outcome })
-      } catch (error: unknown) {
-        if (error instanceof HttpError) {
-          if (error.status === 401) ctx.logger.warn('rejected push: %s', error.message)
-          reply(response, error.status, { error: error.message })
-          return
-        }
-        ctx.logger.warn('ingest failed: %s', error instanceof Error ? error.message : String(error))
-        reply(response, 503, { error: 'ingest unavailable' })
+  const handler = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
+    try {
+      if (request.method !== 'POST') {
+        response.setHeader('allow', 'POST')
+        throw new HttpError(405, 'method not allowed')
       }
-    },
-  }), `event-ingest: ${path}`)
+      const authorization = request.headers.authorization ?? ''
+      const token = /^Bearer (\S+)$/u.exec(authorization)?.[1]
+      if (token === undefined) throw new HttpError(401, 'bearer token required')
+      const source = await sourceFor(token)
+      if (source === undefined) throw new HttpError(401, 'unknown token')
+      if (!/^application\/json\s*(?:;\s*charset=(?:utf-8|"utf-8"))?$/iu.test(request.headers['content-type'] ?? '')) {
+        throw new HttpError(415, 'content type must be application/json')
+      }
+      const raw = await readBody(request, maxBodyBytes)
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(raw)
+      } catch {
+        throw new HttpError(400, 'body is not JSON')
+      }
+      let event
+      try {
+        event = eventFrom(source, parsed)
+      } catch (error: unknown) {
+        /* v8 ignore next 2 -- eventFrom throws only InvalidEvent. */
+        if (error instanceof InvalidEvent) throw new HttpError(400, error.message)
+        /* v8 ignore next -- eventFrom throws only InvalidEvent. */
+        throw error
+      }
+      const sink = sources.find(entry => entry.id === source)?.sink
+      const outcome = sink === undefined ? await ctx.eventBus.publish(event) : await applyToSink(sink, event)
+      ctx.logger.info('%s %s (%s): %s', source, event.kind, event.key, outcome)
+      reply(response, 202, { outcome })
+    } catch (error: unknown) {
+      if (error instanceof HttpError) {
+        if (error.status === 401) ctx.logger.warn('rejected push: %s', error.message)
+        reply(response, error.status, { error: error.message })
+        return
+      }
+      ctx.logger.warn('ingest failed: %s', error instanceof Error ? error.message : String(error))
+      reply(response, 503, { error: 'ingest unavailable' })
+    }
+  }
+
+  for (const entry of paths) ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: entry, handler }), `event-ingest: ${entry}`)
+  ctx.logger.info('serving %s for %d source(s)', paths.join(', '), sources.length)
 }
