@@ -1,5 +1,0 @@
-# Removed in this fork (see commit 989b84a92a): the Policy workflows called the external
-# `deepseek-harness-check` action, which this repository cannot authenticate, and they name
-# upstream's `master` branch. A later upstream change modified this file, so the merge raised it
-# again; the resolve flow can only write files and cannot record a deletion, so this tombstone
-# stands in for the removed workflow. Delete the file when convenient.
