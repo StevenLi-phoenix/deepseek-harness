@@ -18,7 +18,9 @@ remote_body() {
 set -euo pipefail
 export HOME=/Users/dsh-runtime PATH=/Users/dsh-runtime/ams/.venv/bin:/opt/homebrew/bin:/usr/bin:/bin AMS_STATE_DIR=/Users/dsh-runtime/.ams
 APPS=/Users/Shared/fork-dsh
+# The repo's dsh-upgrade/start.sh logs under the build volume; the copy installed on the mini logs beside stdout.log.
 LOGS=/Volumes/MiniSSD/dsh-self/logs
+SERVICE_LOGS=/Users/dsh-runtime/logs
 case "$1" in
   commit) cat "$APPS/current/.hot-sha" 2>/dev/null || basename "$(readlink "$APPS/current")" ;;
   pid) pgrep -u "$(id -u)" -f '/@deepseek-ai/dsh/lib/bin\.js event' | head -1 || true ;;
@@ -28,7 +30,7 @@ case "$1" in
     ams ctl start dsh-upgrade >/dev/null
     ;;
   log)
-    newest=$(ls -1t "$LOGS"/upgrade-*.log | head -1)
+    newest=$(ls -1t "$LOGS"/upgrade-*.log "$SERVICE_LOGS"/dsh-upgrade-*.log 2>/dev/null | head -1)
     echo "$newest"
     /usr/bin/grep -E '^[0-9-]+ [0-9:]+ dsh-upgrade:|^reconcile:' "$newest" | cut -c1-200 || tail -c 400 "$newest"
     ;;
@@ -84,10 +86,10 @@ upgrade_running() {
   case "$status" in stopped | failed) return 1 ;; *) return 0 ;; esac
 }
 
-! upgrade_running || die "another deploy is running, or AMS cannot say; see the newest log in /Volumes/MiniSSD/dsh-self/logs on the mini"
+! upgrade_running || die "another deploy is running, or AMS cannot say; see the newest upgrade log on the mini (/Users/dsh-runtime/logs/dsh-upgrade-*.log or /Volumes/MiniSSD/dsh-self/logs)"
 PID_BEFORE=$(mini pid)
 mini request "$SHA"
-say "requested; waiting (log on the mini: /Volumes/MiniSSD/dsh-self/logs)"
+say "requested; waiting (log on the mini: /Users/dsh-runtime/logs/dsh-upgrade-*.log or /Volumes/MiniSSD/dsh-self/logs)"
 START=$SECONDS
 while upgrade_running; do
   [ $((SECONDS - START)) -lt "$WAIT_S" ] || die "still running after ${WAIT_S}s; see the log on the mini"

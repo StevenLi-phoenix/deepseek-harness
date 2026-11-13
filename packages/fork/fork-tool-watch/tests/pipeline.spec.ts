@@ -35,7 +35,10 @@ describe('watch pipeline', () => {
     await vi.advanceTimersByTimeAsync(60_000 + 30_000)
     expect(notes).toEqual([
       { title: '🆕 watch created: acme', body: 'target: GitHub repo acme/tool [releases]\naction: notify\nSession: unknown' },
-      { title: 'acme: 1 event(s)', body: '• acme/tool v2.0.0\n  https://github.com/octo/repo/releases/tag/v2.0.0', kinds: ['github.release'] },
+      {
+        title: 'acme: 1 event(s)', body: '• acme/tool v2.0.0\n  https://github.com/octo/repo/releases/tag/v2.0.0', kinds: ['github.release'],
+        origin: 'the notification route acme (events the owner\'s services pushed; no Session read them)',
+      },
     ])
 
     // After watch_delete the repository is no longer polled.
@@ -72,7 +75,10 @@ describe('watch pipeline', () => {
     expect(deliveries).toHaveLength(2)
     expect(notes).toEqual([
       { title: '🆕 watch created: acme', body: 'target: GitHub repo acme/tool [releases]\naction: session\ninstructions: Decide whether to upgrade.\nSession: unknown' },
-      { title: 'acme: acme/tool v2.0.0', body: 'Upgrade: it fixes a bug you hit.', url: 'https://dsh.example/' },
+      {
+        title: 'acme: acme/tool v2.0.0', body: 'Upgrade: it fixes a bug you hit.', url: 'https://dsh.example/',
+        origin: 'the Session of the notification route acme (an unattended Session that read outside events)',
+      },
     ])
   })
 })

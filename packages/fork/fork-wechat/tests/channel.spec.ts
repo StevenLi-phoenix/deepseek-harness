@@ -1500,7 +1500,7 @@ describe('WechatChannel notes through the main agent', () => {
   })
 
   it('sends a safety note as written, and with notes direct sends every note as written', async () => {
-    const h = await harness({ config: turnNotes })
+    const h = await harness({ config: { ...turnNotes, muteFile: join(dir, 'notices.muted') } })
     await h.ownerSays('hi')
     await h.finishTurn('chat-1', 'hello')
     const prompts = h.sessions.prompts.length
