@@ -219,6 +219,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 - The `warn` ingest source (`EVENT_INGEST_TOKEN_WARN`), its `warn` subscription and `fork/tools/warn` (2026-10-31): the senders moved to the AMS repository and deliver to the AMS intake.
 
 ### Fixed
+- The `integrity-watch` daily-limit spec pins its clock (2026-11-12): it advances about 24 minutes, so a run started after about 23:36 local time crossed midnight, reset the day's count, and failed every build in that window.
 - The tree no longer names the owner (2026-11-12): `speaking-style`'s built-in identity markers keep only the persona's names (the owner's names come from `config.identityMarkers` in the profile patch), RUNBOOK and CHANGELOG say "the operator account" or `$USER`/`$HOME`, and the two message-source persistence records are one record, `2026-11-12-fork-message-sources`, from `2026-10-27-retry-control-input` to the current kinds.
 - The `qq` digest-round specs run in a temporary `DSH_HOME` (2026-11-12): each build's fork tests wrote their raw model answers into the deployment's `~/.dsh/qq-digest/raw` (60 files named `123456789-c1-c1-*` / `-c2-c2-*` on the mini), and the new `qq-digest/` they created stopped the fork-rename migration.
 - `deploy-dsh.sh` shows the log of the deploy it ran (2026-11-12): it read only `/Volumes/MiniSSD/dsh-self/logs`, while the `dsh-upgrade` start script installed on the mini logs to `/Users/dsh-runtime/logs/dsh-upgrade-*.log`, so a failed build printed a log from days before; it now takes the newest from both.

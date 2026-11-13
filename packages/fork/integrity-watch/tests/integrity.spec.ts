@@ -144,6 +144,8 @@ describe('the watch', () => {
   })
 
   it('merges changes that arrive inside the minimum gap into the next notice, and keeps to the daily limit', async () => {
+    // The case advances the clock by about 24 minutes; a start near local midnight would begin a new day and reset the limit.
+    vi.setSystemTime(new Date(2026, 0, 15, 9, 0, 0))
     const { workspace } = await home()
     const notices: Array<{ title: string; body?: string }> = []
     await mount({ workspaces: [workspace], intervalSec: 60, minGapSec: 600, noticesPerDay: 2 }, notices)
