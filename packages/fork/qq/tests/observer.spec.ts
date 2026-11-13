@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { Context } from '@deepseek-ai/cordis'
 import { equalExceptVolatile } from '../../../../vendor/loader/src/config/diff.ts'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Config, ImageNotSaved, isPrivateAddress, QqObserver, SendRefused, type DigestRow } from '../src/index.ts'
 import { RecorderClient, RecorderError, RecorderUnavailable } from '../src/client.ts'
 import type { Group, Login, Message } from '../src/protocol.ts'
@@ -372,6 +372,12 @@ describe('QqObserver owner notice failures', () => {
 })
 
 describe('QqObserver digest rounds', () => {
+  // A round keeps the raw model answers under <DSH_HOME>/qq-digest/raw; each test gets its own home.
+  beforeEach(() => {
+    const home = mkdtempSync(join(tmpdir(), 'qq-observer-home-'))
+    tmp.push(home)
+    vi.stubEnv('DSH_HOME', home)
+  })
   const sessionsAnswering = (text: string) => (ctx: Context) => {
     let count = 0
     const emit = (session: object, event: object): void => { (ctx.emit as (...args: unknown[]) => void)('session/event', session, event) }
