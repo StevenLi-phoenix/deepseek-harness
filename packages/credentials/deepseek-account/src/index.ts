@@ -96,7 +96,7 @@ interface Attempt {
   running: Promise<void>
   origin: string
   loginSource: 'web' | 'desktop'
-  disposeCallback?: () => Promise<void>
+  disposeCallback?: () => boolean
   /** Validate a callback address against this attempt and release its code; set once authorization runs. */
   accept?: (url: URL) => 'accepted' | 'invalid' | 'gone'
   callback?: ServerResponse
@@ -529,7 +529,7 @@ export class DeepSeekAccount extends TypertRemoteService {
       if (attempt.callback !== undefined) {
         await streamPromises.finished(attempt.callback, { cleanup: true }).catch(() => undefined)
       }
-      await attempt.disposeCallback?.()
+      attempt.disposeCallback?.()
     })
     this.changed('snapshot')
     return this.getState()
@@ -711,6 +711,7 @@ export class DeepSeekAccount extends TypertRemoteService {
   private async run(session: AuthorizationSession, attempt: Attempt): Promise<void> {
     const webServer = this.ctx.get('webServer')
     if (webServer === undefined) throw new PlatformAuthError('protocol')
+    const callbackOrigin = new URL(attempt.origin)
     const verifier = randomBytes(32).toString('base64url')
     const state = randomBytes(32).toString('base64url')
     const challenge = createHash('sha256').update(verifier).digest('base64url')
@@ -739,17 +740,21 @@ export class DeepSeekAccount extends TypertRemoteService {
       return 'accepted'
     }
     try {
-      attempt.disposeCallback = this.ctx.effect(() => webServer.register({
-        kind: 'exact', path: '/oauth/callback', handler: (req, res) => {
-          let url: URL
-          try { url = new URL(req.url ?? '/', 'http://127.0.0.1') }
-          catch { res.writeHead(400, { 'cache-control': 'no-store' }).end(); return }
-          const outcome = req.method === 'GET' ? attempt.accept?.(url) : 'invalid'
-          if (outcome === 'invalid') { res.writeHead(400, { 'cache-control': 'no-store' }).end(); return }
-          if (outcome !== 'accepted') { res.writeHead(410, { 'cache-control': 'no-store' }).end(); return }
-          attempt.callback = res
-        },
-      }), 'account: browser callback')
+      attempt.disposeCallback = this.ctx.on('webserver/request', async (req, res, next) => {
+        let receivedOrigin: URL
+        try { receivedOrigin = new URL(`http://${req.headers.host ?? ''}`) }
+        catch { await next(); return }
+        if (receivedOrigin.href !== callbackOrigin.href) { await next(); return }
+        let url: URL
+        try { url = new URL(req.url ?? '/', callbackOrigin) }
+        catch { res.writeHead(400, { 'cache-control': 'no-store' }).end(); return }
+        if (url.origin !== callbackOrigin.origin || url.pathname !== '/oauth/callback') { await next(); return }
+        // The same check serves a loopback page's callback and an address pasted from a remote page.
+        const outcome = req.method === 'GET' ? attempt.accept?.(url) : 'invalid'
+        if (outcome === 'invalid') { res.writeHead(400, { 'cache-control': 'no-store' }).end(); return }
+        if (outcome !== 'accepted') { res.writeHead(410, { 'cache-control': 'no-store' }).end(); return }
+        attempt.callback = res
+      })
       signal.throwIfAborted()
       const redirectUri = `${attempt.origin}/oauth/callback`
       const init = initialization.safeParse(await this.request('auth_init', {
@@ -801,7 +806,7 @@ export class DeepSeekAccount extends TypertRemoteService {
       if (signal.aborted && authorizeId !== undefined) this.cancelRequest(authorizeId, verifier, attempt.clientHeaders)
       clearTimeout(timer)
       signal.removeEventListener('abort', abort)
-      // begin() settles the browser response and removes only this attempt’s route.
+      // begin() settles the browser response and removes only this attempt's callback listener.
     }
   }
 

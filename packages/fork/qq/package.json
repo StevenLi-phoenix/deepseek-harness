@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-qq",
   "description": "QQ group observer over a OneBot v11 protocol end: records listed groups, downloads images, transcribes voice on request, digests on a schedule, and never speaks by default",
-  "version": "0.2.2-rc.2",
+  "version": "0.2.2-rc.3",
   "publishConfig": {
     "access": "public"
   },

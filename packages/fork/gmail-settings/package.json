@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-gmail-settings",
   "description": "Settings section for the owner's Gmail accounts: the Google OAuth client, connecting and removing accounts with their send policy, the messages held for confirmation with confirm and discard, the recent activity, and the OAuth redirect page",
-  "version": "0.2.2-rc.2",
+  "version": "0.2.2-rc.3",
   "publishConfig": {
     "access": "public"
   },

@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-courses-settings",
   "description": "Settings section for course deadline reminders: on or off, the last and next check with a button to check now, the course sync's health, the next deadlines, the latest reminders, and the plugin's configuration",
-  "version": "0.2.2-rc.2",
+  "version": "0.2.2-rc.3",
   "publishConfig": {
     "access": "public"
   },

@@ -5,7 +5,7 @@
  * without a DOM.
  */
 import type { SessionProjectionMap, SessionProjectionSnapshot, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
-import type { SessionStatusSnapshot } from '@deepseek-ai/dsh-client-ui-session/client'
+import type { SessionStatusSnapshot } from '@deepseek-ai/dsh-client-ui-session-status/client'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SubagentAddress } from '@deepseek-ai/dsh-subagent/client'

@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-wechat",
   "description": "WeChat (iLink bot) channel: owner chat Session, notification delivery, and ctx.ownerNotifier for the fork event bus",
-  "version": "0.2.2-rc.2",
+  "version": "0.2.2-rc.3",
   "publishConfig": {
     "access": "public"
   },

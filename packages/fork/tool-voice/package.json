@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-tool-voice",
   "description": "Model-facing speak tool: turn text into speech and send the audio to the owner over the fork WeChat channel",
-  "version": "0.2.2-rc.2",
+  "version": "0.2.2-rc.3",
   "publishConfig": {
     "access": "public"
   },

@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-tool-gmail",
   "description": "Gmail tools of the owner's main agent over ctx.gmail: gmail_accounts, gmail_search, gmail_read, gmail_attachment, gmail_draft, gmail_send (behind the send gate), and gmail_modify",
-  "version": "0.2.2-rc.2",
+  "version": "0.2.2-rc.3",
   "publishConfig": {
     "access": "public"
   },

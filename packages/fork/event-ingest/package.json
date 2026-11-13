@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-event-ingest",
   "description": "Authenticated POST route through which the owner's own services push events into the fork event bus, one token per source",
-  "version": "0.2.2-rc.2",
+  "version": "0.2.2-rc.3",
   "publishConfig": {
     "access": "public"
   },

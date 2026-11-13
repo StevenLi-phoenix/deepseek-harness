@@ -72,7 +72,7 @@ RRULE 时间规则使用 `{ kind: "rrule", rrule: "DTSTART:…\nRRULE:…" }`。
 
 `edit({ id, action: "update", patch, expectedUpdatedAt? }, actorSessionId?, signal?)` 修改 `title`、`prompt`、`timing`、`target` 或 `active`；`action: "delete"` 删除任务。版本不匹配返回 `schedule_conflict`；`null` 比较存储版本字段缺失的情况。等价编辑保留已提交发生时点，并写入当前行格式。暂停保留任务；恢复计算下一个未来发生时点。
 
-`list({ active?, limit?, offset? })`、`catalog()`、`view({ id })`、`history({ id, limit, before? })` 和 `run({ id })` 服务宿主全部任务。Remote `create` 和 `edit` 委托同一原生方法。包根入口与 `/client` 暴露同名无前缀类型。Remote 输入错误使用 `schedule/input-invalid` 和 `details.code`。
+`list({ active?, limit?, offset? })`、`catalog()`、`view({ id })`、`history({ id, limit, before? })` 和 `run({ id })` 服务宿主全部任务。Remote `create` 和 `edit` 委托同一原生方法。包根入口与 `/client` 暴露同名无前缀类型。`ScheduleId` 仅为类型；`dsh-brand` 的 `brandString<ScheduleId>(value)` 为已准入的字符串添加品牌，不校验或生成 id。Remote 输入错误使用 `schedule/input-invalid` 和 `details.code`。
 
 `handOverSessions(from, to, signal?)` 把一些 Session 的任务移到另一个 Session，用于在新 Session 里继续的对话：`session` 目标指向某个 `from` Session 的活动或已暂停任务改为投递到 `to`，所有活动或已暂停任务的参与 Session 中 `from` 都换成 `to`，因此归档检查、Session 时钟标记和变更通知都跟着走。`to` 按 `session` 目标校验。已结束任务保留原来的 Session。每个被移动任务的修订推进，其在线参与 Session 收到 `updated` 通知；重复调用不写入，返回空列表。
 

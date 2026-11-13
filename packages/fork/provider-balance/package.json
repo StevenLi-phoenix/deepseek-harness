@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-provider-balance",
   "description": "Account settings card with the balance or quota of every provider key the Host holds",
-  "version": "0.2.2-rc.2",
+  "version": "0.2.2-rc.3",
   "publishConfig": {
     "access": "public"
   },

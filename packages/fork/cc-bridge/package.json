@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-cc-bridge",
   "description": "Model-facing cc_list_sessions and cc_send tools: the agent talks to the owner's Claude Code sessions on the same Mac through a relay, and their replies reach the main agent",
-  "version": "0.2.2-rc.2",
+  "version": "0.2.2-rc.3",
   "publishConfig": {
     "access": "public"
   },

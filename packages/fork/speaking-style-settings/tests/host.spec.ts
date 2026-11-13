@@ -1,6 +1,5 @@
 import { Context } from '@deepseek-ai/cordis'
-import { HostConnectionService } from '@deepseek-ai/dsh-client-connection'
-import type { BrowserAuth } from '@deepseek-ai/dsh-client-connection/src/browser-auth.ts'
+import { ConnectionAuthentication, HostConnectionService } from '@deepseek-ai/dsh-client-connection'
 import type { Principal } from '@deepseek-ai/dsh-typert-protocol'
 import { describe, expect, it, vi } from 'vitest'
 import * as plugin from '../src/index.ts'
@@ -76,7 +75,7 @@ describe('speaking-style-settings Host routes', () => {
 
   it('answers 403 to a Peer that is not the owner, through the real connection, and serves the owner', async () => {
     const ctx = new Context()
-    const fiber = ctx.plugin((inner: Context) => { new HostConnectionService(inner, [], {} as BrowserAuth) })
+    const fiber = ctx.plugin((inner: Context) => { new ConnectionAuthentication(inner); new HostConnectionService(inner, []) })
     await fiber.await()
     ctx.provide('speakingStyle', { panel: () => Promise.resolve(PANEL), edit: vi.fn(), collect: vi.fn() } as never)
     await ctx.plugin(plugin)

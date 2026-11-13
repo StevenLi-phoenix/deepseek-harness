@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-owner-memory-admin",
   "description": "Memory settings section: review, approve, undo, and erase what the agent remembers about the owner (browser half; the Host route is @deepseek-ai/dsh-owner-memory/settings)",
-  "version": "0.2.2-rc.2",
+  "version": "0.2.2-rc.3",
   "publishConfig": {
     "access": "public"
   },

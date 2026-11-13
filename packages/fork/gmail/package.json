@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-gmail",
   "description": "The owner's Gmail accounts in DSH: OAuth sign-in per account, the Gmail REST client, mail composition, and the send gate that holds a message for the owner's confirmation when strangers' words reached the turn",
-  "version": "0.2.2-rc.2",
+  "version": "0.2.2-rc.3",
   "publishConfig": {
     "access": "public"
   },
