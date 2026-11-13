@@ -11,7 +11,7 @@
 # The main agent hears the outcome in a new turn. Runs from the AMS service dsh-upgrade (dsh-upgrade/start.sh), since a restart
 # ends every process under DSH. Overridable for check-self-upgrade.sh.
 set -euo pipefail
-APPS=${DSH_UPGRADE_APPS:-/Users/Shared/fork-dsh}
+APPS=${DSH_UPGRADE_APPS:-/Users/Shared/dsh}
 WORK=${DSH_UPGRADE_WORK:-/Volumes/MiniSSD/dsh-self}
 DSH_HOME=${DSH_UPGRADE_HOME:-/Users/dsh-runtime/.dsh}
 URL=${DSH_UPGRADE_URL:-http://127.0.0.1:3081}
@@ -21,7 +21,7 @@ DRAIN_S=${DSH_UPGRADE_DRAIN_S:-1800}
 DRAIN_POLL_S=${DSH_UPGRADE_DRAIN_POLL_S:-10}
 DSH_LOG=${DSH_UPGRADE_LOG:-/Users/dsh-runtime/logs/stdout.log}
 # The reconcile needs a selected bundle to name; the selection itself does not change.
-RECONCILE_BUNDLE=${DSH_UPGRADE_RECONCILE_BUNDLE:-@deepseek-ai/dsh-fork-event-bundle}
+RECONCILE_BUNDLE=${DSH_UPGRADE_RECONCILE_BUNDLE:-@deepseek-ai/dsh-event-bundle}
 HERE=$(cd "$(dirname "$0")" && pwd)
 . "$HERE/deploy-paths.sh"
 STAGE=$WORK/hot-stage
@@ -29,9 +29,9 @@ PATHS=$WORK/hot-paths
 
 log() { printf '%s dsh-upgrade: %s\n' "$(date '+%F %T')" "$*"; }
 
-run_upgrade() { FORK_DSH_APPS="$APPS" FORK_DSH_DIST_ROOT="$WORK/dist" QQ_RECORDER_AS=env fork/deploy/upgrade.sh; }
+run_upgrade() { DSH_APPS="$APPS" DSH_DIST_ROOT="$WORK/dist" QQ_RECORDER_AS=env fork/deploy/upgrade.sh; }
 
-run_build() { FORK_DSH_BUILD_ONLY=1 FORK_DSH_APPS="$APPS" FORK_DSH_DIST_ROOT="$WORK/dist" QQ_RECORDER_AS=env fork/deploy/upgrade.sh; }
+run_build() { DSH_BUILD_ONLY=1 DSH_APPS="$APPS" DSH_DIST_ROOT="$WORK/dist" QQ_RECORDER_AS=env fork/deploy/upgrade.sh; }
 
 setup_profile() { "$APPS/current/fork/deploy/setup-profile.sh" "$DSH_HOME" "$APPS/current"; }
 
@@ -68,7 +68,7 @@ wait_healthy() {
 # The new turn this starts is how the agent learns the outcome: its own turn ended with the restart.
 notify() {
   local token body
-  token=$(/usr/bin/grep '^FORK_INGEST_TOKEN_OPERATOR=' "$DSH_HOME/.env" | cut -d= -f2-) || { log "no operator token; not notifying"; return 0; }
+  token=$(/usr/bin/grep '^EVENT_INGEST_TOKEN_OPERATOR=' "$DSH_HOME/.env" | cut -d= -f2-) || { log "no operator token; not notifying"; return 0; }
   body=$(/usr/bin/python3 -I -c 'import json,sys,time; print(json.dumps({"kind":"operator.dsh-upgrade","key":"dsh-upgrade-%d" % time.time(),"subject":"DSH 部署","title":sys.argv[1][:290],"text":"用一句话在微信告诉主人这个结果。"}))' "$1")
   curl -s -m 15 -o /dev/null -X POST "$URL/hooks/events" -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d "$body" || log "notify failed"
 }

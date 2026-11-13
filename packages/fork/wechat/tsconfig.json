@@ -1,0 +1,60 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../api/session-controller/tsconfig.host.json"
+    },
+    {
+      "path": "../../util/home-paths"
+    },
+    {
+      "path": "../event-bus"
+    },
+    {
+      "path": "../voice"
+    },
+    {
+      "path": "../owner-relay"
+    },
+    {
+      "path": "../../interaction/permission-presets"
+    },
+    {
+      "path": "../../core/session"
+    },
+    {
+      "path": "../../session/session-title"
+    },
+    {
+      "path": "../../storage/storage-domain"
+    },
+    {
+      "path": "../../llm/llm"
+    },
+    {
+      "path": "../turn-taint"
+    },
+    {
+      "path": "../time-gap"
+    },
+    {
+      "path": "../presence"
+    },
+    {
+      "path": "../../schedule/schedule"
+    }
+  ]
+}

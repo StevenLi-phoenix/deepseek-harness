@@ -44,19 +44,19 @@ const NAV_ICONS: Readonly<Record<string, typeof IconSettingsOutlineMedium>> = {
   'plugins': IconPersonalizationOutlineMedium,
   'archived-sessions': IconArchiveOutlineMedium,
   // Fork-added sections (packages/fork), by the id each registers: service overview, data flow, subscriptions, and Claude Code
-  // agents (fork-console); the WeChat page, its presence page, and its speaking style; memory; System status; the Bilibili account; QQ;
+  // agents (event-console); the WeChat page, its presence page, and its speaking style; memory; System status; the Bilibili account; QQ;
   // course deadlines; the Gmail accounts (the set has no envelope glyph, so the paper plane stands for mail).
-  'fork-overview': IconFlatListOutlineMedium,
-  'fork-subscriptions': IconQueueOutlineMedium,
-  'fork-agents': IconCodeOutlineMedium,
-  'fork-wechat': IconNewChatOutlineMedium,
-  'fork-presence': IconClockOutlineMedium,
-  'fork-style': IconEnhanceOutlineMedium,
-  'fork-memory': IconDatabaseOutlineMedium,
-  'fork-sysmon': IconGaugeOutlineMedium,
+  'service-overview': IconFlatListOutlineMedium,
+  'event-subscriptions': IconQueueOutlineMedium,
+  'claude-code-sessions': IconCodeOutlineMedium,
+  'wechat': IconNewChatOutlineMedium,
+  'presence': IconClockOutlineMedium,
+  'speaking-style': IconEnhanceOutlineMedium,
+  'owner-memory': IconDatabaseOutlineMedium,
+  'sysmon': IconGaugeOutlineMedium,
   'bili': IconPlayOutlineMedium,
-  'fork-qq': IconUsersOutlineMedium,
-  'fork-courses': IconChecklistOutlineMedium,
+  'qq': IconUsersOutlineMedium,
+  'courses': IconChecklistOutlineMedium,
   'gmail': IconPaperPlaneOutlineMedium,
 }
 

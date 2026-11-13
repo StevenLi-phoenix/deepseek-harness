@@ -331,6 +331,48 @@ flowchart TD
     pkg_command_feedback["command-feedback"]
     pkg_message_feedback["message-feedback"]
   end
+  subgraph group_fork["packages/fork"]
+    pkg_bili["bili"]
+    pkg_cc_admin["cc-admin"]
+    pkg_cc_bridge["cc-bridge"]
+    pkg_content_guard["content-guard"]
+    pkg_courses["courses"]
+    pkg_courses_settings["courses-settings"]
+    pkg_event_bus["event-bus"]
+    pkg_event_console["event-console"]
+    pkg_event_ingest["event-ingest"]
+    pkg_github_sensor["github-sensor"]
+    pkg_gmail["gmail"]
+    pkg_gmail_settings["gmail-settings"]
+    pkg_integrity_watch["integrity-watch"]
+    pkg_owner_memory["owner-memory"]
+    pkg_owner_memory_admin["owner-memory-admin"]
+    pkg_owner_relay["owner-relay"]
+    pkg_plugin_config["plugin-config"]
+    pkg_presence["presence"]
+    pkg_provider_balance["provider-balance"]
+    pkg_qq["qq"]
+    pkg_qq_login["qq-login"]
+    pkg_qqbot["qqbot"]
+    pkg_speaking_style["speaking-style"]
+    pkg_speaking_style_settings["speaking-style-settings"]
+    pkg_subagent_activity["subagent-activity"]
+    pkg_sysmon["sysmon"]
+    pkg_time_gap["time-gap"]
+    pkg_tool_bili["tool-bili"]
+    pkg_tool_courses["tool-courses"]
+    pkg_tool_gmail["tool-gmail"]
+    pkg_tool_monitor["tool-monitor"]
+    pkg_tool_qq["tool-qq"]
+    pkg_tool_up["tool-up"]
+    pkg_tool_voice["tool-voice"]
+    pkg_tool_watch["tool-watch"]
+    pkg_tool_wechat["tool-wechat"]
+    pkg_turn_taint["turn-taint"]
+    pkg_voice["voice"]
+    pkg_wechat["wechat"]
+    pkg_wechat_settings["wechat-settings"]
+  end
   subgraph group_guard["packages/guard"]
     pkg_repeat_tool_reminder["repeat-tool-reminder"]
     pkg_tool_call_timeout_policy["tool-call-timeout-policy"]
@@ -365,48 +407,6 @@ flowchart TD
     pkg_lsp["lsp"]
     pkg_lsp_stdio["lsp-stdio"]
     pkg_tool_lsp["tool-lsp"]
-  end
-  subgraph group_fork["packages/fork"]
-    pkg_bili["bili"]
-    pkg_fork_balance["fork-balance"]
-    pkg_fork_cc_admin["fork-cc-admin"]
-    pkg_fork_cc_bridge["fork-cc-bridge"]
-    pkg_fork_config["fork-config"]
-    pkg_fork_console["fork-console"]
-    pkg_fork_courses["fork-courses"]
-    pkg_fork_courses_settings["fork-courses-settings"]
-    pkg_fork_event_bus["fork-event-bus"]
-    pkg_fork_event_ingest["fork-event-ingest"]
-    pkg_fork_github_sensor["fork-github-sensor"]
-    pkg_gmail["gmail"]
-    pkg_gmail_settings["gmail-settings"]
-    pkg_fork_guard["fork-guard"]
-    pkg_fork_integrity["fork-integrity"]
-    pkg_fork_memory["fork-memory"]
-    pkg_fork_memory_admin["fork-memory-admin"]
-    pkg_fork_presence["fork-presence"]
-    pkg_fork_qq["fork-qq"]
-    pkg_fork_qq_login["fork-qq-login"]
-    pkg_fork_qqbot["fork-qqbot"]
-    pkg_fork_style["fork-style"]
-    pkg_fork_style_settings["fork-style-settings"]
-    pkg_fork_subagents["fork-subagents"]
-    pkg_fork_sysmon["fork-sysmon"]
-    pkg_fork_taint["fork-taint"]
-    pkg_fork_time_gap["fork-time-gap"]
-    pkg_fork_tool_courses["fork-tool-courses"]
-    pkg_tool_gmail["tool-gmail"]
-    pkg_fork_tool_monitor["fork-tool-monitor"]
-    pkg_fork_tool_qq["fork-tool-qq"]
-    pkg_fork_tool_up["fork-tool-up"]
-    pkg_fork_tool_voice["fork-tool-voice"]
-    pkg_fork_tool_watch["fork-tool-watch"]
-    pkg_fork_tool_wechat["fork-tool-wechat"]
-    pkg_fork_voice["fork-voice"]
-    pkg_fork_wechat["fork-wechat"]
-    pkg_fork_wechat_settings["fork-wechat-settings"]
-    pkg_owner_relay["owner-relay"]
-    pkg_tool_bili["tool-bili"]
   end
   subgraph group_mcp["packages/mcp"]
     pkg_mcp_client["mcp-client"]
@@ -544,10 +544,10 @@ flowchart TD
   pkg_credentials_local --> pkg_home_paths
   pkg_credentials_local --> pkg_launch_environment
   pkg_experimental_liveshare --> pkg_scope
+  pkg_voice --> pkg_credentials
+  pkg_voice --> pkg_home_paths
   pkg_anonymous_user_id --> pkg_brand
   pkg_anonymous_user_id --> pkg_home_paths
-  pkg_fork_voice --> pkg_credentials
-  pkg_fork_voice --> pkg_home_paths
   pkg_storage_domain --> pkg_storage
   pkg_storage_json --> pkg_storage
   pkg_storage_sqlite --> pkg_storage
@@ -1068,6 +1068,9 @@ flowchart TD
   pkg_message_feedback --> pkg_session
   pkg_message_feedback --> pkg_session_persistence
   pkg_message_feedback --> pkg_typert_protocol
+  pkg_tool_bili --> pkg_bili
+  pkg_tool_bili --> pkg_tools
+  pkg_tool_bili --> pkg_util_values
   pkg_repeat_tool_reminder --> pkg_agent
   pkg_repeat_tool_reminder --> pkg_tools
   pkg_tool_call_timeout_policy --> pkg_llm
@@ -1088,9 +1091,6 @@ flowchart TD
   pkg_tool_lsp --> pkg_timeout
   pkg_tool_lsp --> pkg_tools
   pkg_tool_lsp --> pkg_working_directory
-  pkg_tool_bili --> pkg_bili
-  pkg_tool_bili --> pkg_tools
-  pkg_tool_bili --> pkg_util_values
   pkg_mcp_resources --> pkg_llm
   pkg_mcp_resources --> pkg_scope
   pkg_mcp_resources --> pkg_system_prompt
@@ -1533,12 +1533,6 @@ flowchart TD
   pkg_workflow_ptc --> pkg_tools
   pkg_workflow_ptc --> pkg_workflow
   pkg_workflow_ptc --> pkg_working_directory
-  pkg_fork_event_bus --> pkg_api_session_controller
-  pkg_fork_event_bus --> pkg_compaction
-  pkg_fork_event_bus --> pkg_llm
-  pkg_fork_event_bus --> pkg_session
-  pkg_fork_event_bus --> pkg_storage_domain
-  pkg_fork_event_bus --> pkg_workspace
   pkg_schedule --> pkg_agent
   pkg_schedule --> pkg_api_session_controller
   pkg_schedule --> pkg_brand
@@ -1587,58 +1581,13 @@ flowchart TD
   pkg_subagent_dsh_sdk --> pkg_session
   pkg_subagent_dsh_sdk --> pkg_subagent
   pkg_subagent_dsh_sdk --> pkg_subprocess
-  pkg_fork_cc_bridge --> pkg_agent
-  pkg_fork_cc_bridge --> pkg_fork_event_bus
-  pkg_fork_cc_bridge --> pkg_tools
-  pkg_fork_event_ingest --> pkg_credentials
-  pkg_fork_event_ingest --> pkg_host_webserver
-  pkg_fork_event_ingest --> pkg_fork_event_bus
-  pkg_fork_github_sensor --> pkg_credentials
-  pkg_fork_github_sensor --> pkg_fork_event_bus
-  pkg_fork_github_sensor --> pkg_storage_domain
-  pkg_gmail --> pkg_credentials
-  pkg_gmail --> pkg_fork_event_bus
-  pkg_gmail --> pkg_storage_domain
-  pkg_fork_integrity --> pkg_home_paths
-  pkg_fork_integrity --> pkg_fork_event_bus
-  pkg_fork_integrity --> pkg_schedule
-  pkg_fork_integrity --> pkg_session
-  pkg_fork_presence --> pkg_fork_event_bus
-  pkg_fork_presence --> pkg_storage_domain
-  pkg_fork_qq --> pkg_api_session_controller
-  pkg_fork_qq --> pkg_credentials
-  pkg_fork_qq --> pkg_home_paths
-  pkg_fork_qq --> pkg_fork_event_bus
-  pkg_fork_qq --> pkg_permission_presets
-  pkg_fork_qq --> pkg_session
-  pkg_fork_qq --> pkg_session_title
-  pkg_fork_qq --> pkg_storage_domain
-  pkg_fork_taint --> pkg_fork_event_bus
-  pkg_fork_taint --> pkg_session
-  pkg_fork_taint --> pkg_tools
-  pkg_fork_tool_monitor --> pkg_agent
-  pkg_fork_tool_monitor --> pkg_api_session_controller
-  pkg_fork_tool_monitor --> pkg_llm
-  pkg_fork_tool_monitor --> pkg_fork_event_bus
-  pkg_fork_tool_monitor --> pkg_session
-  pkg_fork_tool_monitor --> pkg_session_persistence
-  pkg_fork_tool_monitor --> pkg_storage_domain
-  pkg_fork_tool_monitor --> pkg_subprocess
-  pkg_fork_tool_monitor --> pkg_tools
-  pkg_fork_tool_up --> pkg_agent
-  pkg_fork_tool_up --> pkg_compaction
-  pkg_fork_tool_up --> pkg_credentials
-  pkg_fork_tool_up --> pkg_home_paths
-  pkg_fork_tool_up --> pkg_llm
-  pkg_fork_tool_up --> pkg_fork_event_bus
-  pkg_fork_tool_up --> pkg_session
-  pkg_fork_tool_up --> pkg_tools
-  pkg_fork_tool_up --> pkg_util_values
-  pkg_fork_tool_voice --> pkg_fork_event_bus
-  pkg_fork_tool_voice --> pkg_fork_voice
-  pkg_fork_tool_voice --> pkg_tools
-  pkg_owner_relay --> pkg_fork_event_bus
-  pkg_owner_relay --> pkg_session
+  pkg_event_bus --> pkg_api_session_controller
+  pkg_event_bus --> pkg_compaction
+  pkg_event_bus --> pkg_llm
+  pkg_event_bus --> pkg_schedule
+  pkg_event_bus --> pkg_session
+  pkg_event_bus --> pkg_storage_domain
+  pkg_event_bus --> pkg_workspace
   pkg_tool_schedule --> pkg_llm
   pkg_tool_schedule --> pkg_schedule
   pkg_tool_schedule --> pkg_subagent
@@ -1658,85 +1607,137 @@ flowchart TD
   pkg_sdk_jsonrpc_server --> pkg_user_approval
   pkg_sdk_jsonrpc_server --> pkg_user_questions
   pkg_sdk_jsonrpc_server --> pkg_working_directory
-  pkg_fork_cc_admin --> pkg_fork_cc_bridge
-  pkg_fork_courses --> pkg_credentials
-  pkg_fork_courses --> pkg_fork_event_bus
-  pkg_fork_courses --> pkg_fork_presence
-  pkg_fork_courses --> pkg_storage_domain
+  pkg_cc_bridge --> pkg_agent
+  pkg_cc_bridge --> pkg_event_bus
+  pkg_cc_bridge --> pkg_tools
+  pkg_event_ingest --> pkg_credentials
+  pkg_event_ingest --> pkg_event_bus
+  pkg_event_ingest --> pkg_host_webserver
+  pkg_github_sensor --> pkg_credentials
+  pkg_github_sensor --> pkg_event_bus
+  pkg_github_sensor --> pkg_storage_domain
+  pkg_gmail --> pkg_credentials
+  pkg_gmail --> pkg_event_bus
+  pkg_gmail --> pkg_storage_domain
+  pkg_integrity_watch --> pkg_event_bus
+  pkg_integrity_watch --> pkg_home_paths
+  pkg_integrity_watch --> pkg_schedule
+  pkg_integrity_watch --> pkg_session
+  pkg_owner_relay --> pkg_event_bus
+  pkg_owner_relay --> pkg_session
+  pkg_presence --> pkg_event_bus
+  pkg_presence --> pkg_storage_domain
+  pkg_qq --> pkg_api_session_controller
+  pkg_qq --> pkg_credentials
+  pkg_qq --> pkg_event_bus
+  pkg_qq --> pkg_home_paths
+  pkg_qq --> pkg_permission_presets
+  pkg_qq --> pkg_session
+  pkg_qq --> pkg_session_title
+  pkg_qq --> pkg_storage_domain
+  pkg_tool_monitor --> pkg_agent
+  pkg_tool_monitor --> pkg_api_session_controller
+  pkg_tool_monitor --> pkg_event_bus
+  pkg_tool_monitor --> pkg_llm
+  pkg_tool_monitor --> pkg_session
+  pkg_tool_monitor --> pkg_session_persistence
+  pkg_tool_monitor --> pkg_storage_domain
+  pkg_tool_monitor --> pkg_subprocess
+  pkg_tool_monitor --> pkg_tools
+  pkg_tool_up --> pkg_agent
+  pkg_tool_up --> pkg_compaction
+  pkg_tool_up --> pkg_credentials
+  pkg_tool_up --> pkg_event_bus
+  pkg_tool_up --> pkg_home_paths
+  pkg_tool_up --> pkg_llm
+  pkg_tool_up --> pkg_session
+  pkg_tool_up --> pkg_tools
+  pkg_tool_up --> pkg_util_values
+  pkg_tool_voice --> pkg_event_bus
+  pkg_tool_voice --> pkg_tools
+  pkg_tool_voice --> pkg_voice
+  pkg_turn_taint --> pkg_event_bus
+  pkg_turn_taint --> pkg_session
+  pkg_turn_taint --> pkg_tools
+  pkg_cc_admin --> pkg_cc_bridge
+  pkg_courses --> pkg_credentials
+  pkg_courses --> pkg_event_bus
+  pkg_courses --> pkg_presence
+  pkg_courses --> pkg_storage_domain
   pkg_gmail_settings --> pkg_gmail
-  pkg_fork_memory --> pkg_agent
-  pkg_fork_memory --> pkg_home_paths
-  pkg_fork_memory --> pkg_llm
-  pkg_fork_memory --> pkg_fork_event_bus
-  pkg_fork_memory --> pkg_fork_taint
-  pkg_fork_memory --> pkg_session
-  pkg_fork_memory --> pkg_tools
-  pkg_fork_qqbot --> pkg_api_session_controller
-  pkg_fork_qqbot --> pkg_credentials
-  pkg_fork_qqbot --> pkg_home_paths
-  pkg_fork_qqbot --> pkg_llm
-  pkg_fork_qqbot --> pkg_fork_event_bus
-  pkg_fork_qqbot --> pkg_owner_relay
-  pkg_fork_qqbot --> pkg_permission_presets
-  pkg_fork_qqbot --> pkg_session
-  pkg_fork_qqbot --> pkg_session_title
-  pkg_fork_qqbot --> pkg_storage_domain
-  pkg_fork_style --> pkg_agent
-  pkg_fork_style --> pkg_agent_default_model
-  pkg_fork_style --> pkg_compaction
-  pkg_fork_style --> pkg_credentials
-  pkg_fork_style --> pkg_home_paths
-  pkg_fork_style --> pkg_llm
-  pkg_fork_style --> pkg_fork_event_bus
-  pkg_fork_style --> pkg_fork_integrity
-  pkg_fork_style --> pkg_fork_qq
-  pkg_fork_style --> pkg_session
-  pkg_fork_style --> pkg_tools
-  pkg_fork_style --> pkg_web
-  pkg_fork_time_gap --> pkg_agent
-  pkg_fork_time_gap --> pkg_llm
-  pkg_fork_time_gap --> pkg_fork_taint
-  pkg_fork_time_gap --> pkg_owner_relay
-  pkg_fork_time_gap --> pkg_session
-  pkg_fork_time_gap --> pkg_session_projection
+  pkg_owner_memory --> pkg_agent
+  pkg_owner_memory --> pkg_event_bus
+  pkg_owner_memory --> pkg_home_paths
+  pkg_owner_memory --> pkg_llm
+  pkg_owner_memory --> pkg_session
+  pkg_owner_memory --> pkg_tools
+  pkg_owner_memory --> pkg_turn_taint
+  pkg_qqbot --> pkg_api_session_controller
+  pkg_qqbot --> pkg_credentials
+  pkg_qqbot --> pkg_event_bus
+  pkg_qqbot --> pkg_home_paths
+  pkg_qqbot --> pkg_llm
+  pkg_qqbot --> pkg_owner_relay
+  pkg_qqbot --> pkg_permission_presets
+  pkg_qqbot --> pkg_session
+  pkg_qqbot --> pkg_session_title
+  pkg_qqbot --> pkg_storage_domain
+  pkg_speaking_style --> pkg_agent
+  pkg_speaking_style --> pkg_agent_default_model
+  pkg_speaking_style --> pkg_compaction
+  pkg_speaking_style --> pkg_credentials
+  pkg_speaking_style --> pkg_event_bus
+  pkg_speaking_style --> pkg_home_paths
+  pkg_speaking_style --> pkg_integrity_watch
+  pkg_speaking_style --> pkg_llm
+  pkg_speaking_style --> pkg_qq
+  pkg_speaking_style --> pkg_session
+  pkg_speaking_style --> pkg_tools
+  pkg_speaking_style --> pkg_web
+  pkg_time_gap --> pkg_agent
+  pkg_time_gap --> pkg_llm
+  pkg_time_gap --> pkg_owner_relay
+  pkg_time_gap --> pkg_session
+  pkg_time_gap --> pkg_session_projection
+  pkg_time_gap --> pkg_turn_taint
   pkg_tool_gmail --> pkg_gmail
-  pkg_tool_gmail --> pkg_fork_taint
   pkg_tool_gmail --> pkg_session
   pkg_tool_gmail --> pkg_tools
+  pkg_tool_gmail --> pkg_turn_taint
   pkg_tool_gmail --> pkg_util_values
-  pkg_fork_tool_qq --> pkg_attachment
-  pkg_fork_tool_qq --> pkg_llm
-  pkg_fork_tool_qq --> pkg_fork_qq
-  pkg_fork_tool_qq --> pkg_tools
-  pkg_fork_tool_qq --> pkg_util_values
-  pkg_fork_tool_watch --> pkg_agent
-  pkg_fork_tool_watch --> pkg_fork_event_bus
-  pkg_fork_tool_watch --> pkg_fork_github_sensor
-  pkg_fork_tool_watch --> pkg_tools
-  pkg_fork_guard --> pkg_agent_default_model
-  pkg_fork_guard --> pkg_home_paths
-  pkg_fork_guard --> pkg_llm
-  pkg_fork_guard --> pkg_fork_memory
-  pkg_fork_tool_courses --> pkg_fork_courses
-  pkg_fork_tool_courses --> pkg_tools
-  pkg_fork_tool_courses --> pkg_util_values
-  pkg_fork_wechat --> pkg_api_session_controller
-  pkg_fork_wechat --> pkg_home_paths
-  pkg_fork_wechat --> pkg_llm
-  pkg_fork_wechat --> pkg_fork_event_bus
-  pkg_fork_wechat --> pkg_fork_presence
-  pkg_fork_wechat --> pkg_fork_taint
-  pkg_fork_wechat --> pkg_fork_time_gap
-  pkg_fork_wechat --> pkg_fork_voice
-  pkg_fork_wechat --> pkg_owner_relay
-  pkg_fork_wechat --> pkg_permission_presets
-  pkg_fork_wechat --> pkg_schedule
-  pkg_fork_wechat --> pkg_session
-  pkg_fork_wechat --> pkg_session_title
-  pkg_fork_wechat --> pkg_storage_domain
-  pkg_fork_tool_wechat --> pkg_fork_event_bus
-  pkg_fork_tool_wechat --> pkg_fork_wechat
-  pkg_fork_tool_wechat --> pkg_tools
+  pkg_tool_qq --> pkg_attachment
+  pkg_tool_qq --> pkg_llm
+  pkg_tool_qq --> pkg_qq
+  pkg_tool_qq --> pkg_tools
+  pkg_tool_qq --> pkg_util_values
+  pkg_tool_watch --> pkg_agent
+  pkg_tool_watch --> pkg_event_bus
+  pkg_tool_watch --> pkg_github_sensor
+  pkg_tool_watch --> pkg_tools
+  pkg_content_guard --> pkg_agent_default_model
+  pkg_content_guard --> pkg_home_paths
+  pkg_content_guard --> pkg_llm
+  pkg_content_guard --> pkg_owner_memory
+  pkg_tool_courses --> pkg_courses
+  pkg_tool_courses --> pkg_tools
+  pkg_tool_courses --> pkg_util_values
+  pkg_wechat --> pkg_api_session_controller
+  pkg_wechat --> pkg_event_bus
+  pkg_wechat --> pkg_home_paths
+  pkg_wechat --> pkg_llm
+  pkg_wechat --> pkg_owner_relay
+  pkg_wechat --> pkg_permission_presets
+  pkg_wechat --> pkg_presence
+  pkg_wechat --> pkg_schedule
+  pkg_wechat --> pkg_session
+  pkg_wechat --> pkg_session_title
+  pkg_wechat --> pkg_storage_domain
+  pkg_wechat --> pkg_time_gap
+  pkg_wechat --> pkg_turn_taint
+  pkg_wechat --> pkg_voice
+  pkg_tool_wechat --> pkg_event_bus
+  pkg_tool_wechat --> pkg_tools
+  pkg_tool_wechat --> pkg_wechat
 ```
 
 <!-- BEGIN GENERATED module-graph:packages -->
@@ -1873,22 +1874,22 @@ flowchart TD
 | [`personalized-recommendations`](../packages/experimental/personalized-recommendations) | `experimental` | — |
 | [`client-ui-cordis`](../packages/extensions/ui-cordis) | `extensions` | — |
 | [`cordis-client-runner`](../packages/extensions/cordis-client-runner) | `extensions` | — |
+| [`bili`](../packages/fork/bili) | `fork` | — |
+| [`courses-settings`](../packages/fork/courses-settings) | `fork` | — |
+| [`event-console`](../packages/fork/event-console) | `fork` | — |
+| [`owner-memory-admin`](../packages/fork/owner-memory-admin) | `fork` | — |
+| [`plugin-config`](../packages/fork/plugin-config) | `fork` | — |
+| [`provider-balance`](../packages/fork/provider-balance) | `fork` | — |
+| [`qq-login`](../packages/fork/qq-login) | `fork` | — |
+| [`speaking-style-settings`](../packages/fork/speaking-style-settings) | `fork` | — |
+| [`subagent-activity`](../packages/fork/subagent-activity) | `fork` | — |
+| [`sysmon`](../packages/fork/sysmon) | `fork` | — |
+| [`wechat-settings`](../packages/fork/wechat-settings) | `fork` | — |
 | [`host-directory-picker`](../packages/host/directory-picker) | `host` | — |
 | [`host-directory-picker-browse`](../packages/host/directory-picker-browse) | `host` | — |
 | [`host-directory-picker-native`](../packages/host/directory-picker-native) | `host` | — |
 | [`host-open-in-app`](../packages/host/open-in-app) | `host` | — |
 | [`host-webserver`](../packages/host/webserver) | `host` | — |
-| [`bili`](../packages/fork/bili) | `fork` | — |
-| [`fork-balance`](../packages/fork/fork-balance) | `fork` | — |
-| [`fork-config`](../packages/fork/fork-config) | `fork` | — |
-| [`fork-console`](../packages/fork/fork-console) | `fork` | — |
-| [`fork-courses-settings`](../packages/fork/fork-courses-settings) | `fork` | — |
-| [`fork-memory-admin`](../packages/fork/fork-memory-admin) | `fork` | — |
-| [`fork-qq-login`](../packages/fork/fork-qq-login) | `fork` | — |
-| [`fork-style-settings`](../packages/fork/fork-style-settings) | `fork` | — |
-| [`fork-subagents`](../packages/fork/fork-subagents) | `fork` | — |
-| [`fork-sysmon`](../packages/fork/fork-sysmon) | `fork` | — |
-| [`fork-wechat-settings`](../packages/fork/fork-wechat-settings) | `fork` | — |
 | [`message-quotes`](../packages/session/message-quotes) | `session` | — |
 | [`session-format`](../packages/session/session-format) | `session` | — |
 | [`session-format-v0-to-v1`](../packages/session/session-format-v0-to-v1) | `session` | — |
@@ -1911,8 +1912,8 @@ flowchart TD
 | [`computer-use`](../packages/computer-use/computer-use) | `computer-use` | [`brand`](../packages/util/brand) |
 | [`credentials-local`](../packages/credentials/credentials-local) | `credentials` | [`atomic-write`](../packages/util/atomic-write), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`launch-environment`](../packages/util/launch-environment) |
 | [`experimental-liveshare`](../packages/experimental/liveshare) | `experimental` | [`scope`](../packages/core/scope) |
+| [`voice`](../packages/fork/voice) | `fork` | [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths) |
 | [`anonymous-user-id`](../packages/identity/anonymous-user-id) | `identity` | [`brand`](../packages/util/brand), [`home-paths`](../packages/util/home-paths) |
-| [`fork-voice`](../packages/fork/fork-voice) | `fork` | [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths) |
 | [`storage-domain`](../packages/storage/storage-domain) | `storage` | [`storage`](../packages/storage/storage) |
 | [`storage-json`](../packages/storage/storage-json) | `storage` | [`storage`](../packages/storage/storage) |
 | [`storage-sqlite`](../packages/storage/storage-sqlite) | `storage` | [`storage`](../packages/storage/storage) |
@@ -2049,12 +2050,12 @@ flowchart TD
 | [`tool-terminal`](../packages/experimental/tool-terminal) | `experimental` | [`agent`](../packages/core/agent), [`jobs`](../packages/jobs/jobs), [`llm`](../packages/llm/llm), [`output-retention`](../packages/util/output-retention), [`system-prompt`](../packages/core/system-prompt), [`terminal`](../packages/terminal/terminal), [`tools`](../packages/core/tools), [`working-directory`](../packages/session/working-directory) |
 | [`cordis-host-runner`](../packages/extensions/cordis-host-runner) | `extensions` | [`agent`](../packages/core/agent), [`brand`](../packages/util/brand), [`llm`](../packages/llm/llm), [`scope`](../packages/core/scope), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`typert-protocol`](../packages/typert/protocol) |
 | [`message-feedback`](../packages/feedback/message-feedback) | `feedback` | [`brand`](../packages/util/brand), [`command-feedback`](../packages/feedback/command-feedback), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`typert-protocol`](../packages/typert/protocol) |
+| [`tool-bili`](../packages/fork/tool-bili) | `fork` | [`bili`](../packages/fork/bili), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
 | [`repeat-tool-reminder`](../packages/guard/repeat-tool-reminder) | `guard` | [`agent`](../packages/core/agent), [`tools`](../packages/core/tools) |
 | [`tool-call-timeout-policy`](../packages/guard/timeout-policy) | `guard` | [`llm`](../packages/llm/llm), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools) |
 | [`tool-ask-user`](../packages/interaction/tool-ask-user) | `interaction` | [`agent`](../packages/core/agent), [`tools`](../packages/core/tools), [`user-questions`](../packages/interaction/user-questions) |
 | [`tool-jobs`](../packages/jobs/tool-jobs) | `jobs` | [`agent`](../packages/core/agent), [`jobs`](../packages/jobs/jobs), [`llm`](../packages/llm/llm), [`output-retention`](../packages/util/output-retention), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`tool-lsp`](../packages/lsp/tool-lsp) | `lsp` | [`llm`](../packages/llm/llm), [`lsp`](../packages/lsp/lsp), [`system-prompt`](../packages/core/system-prompt), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools), [`working-directory`](../packages/session/working-directory) |
-| [`tool-bili`](../packages/fork/tool-bili) | `fork` | [`bili`](../packages/fork/bili), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
 | [`mcp-resources`](../packages/mcp/mcp-resources) | `mcp` | [`llm`](../packages/llm/llm), [`scope`](../packages/core/scope), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`agent-preset-registry`](../packages/preset/agent-preset-registry) | `preset` | [`agent`](../packages/core/agent), [`scope`](../packages/core/scope), [`session`](../packages/core/session), [`session-projection`](../packages/session/session-projection), [`settings`](../packages/settings/settings), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools), [`typert-protocol`](../packages/typert/protocol) |
 | [`session-checkpoint-policy`](../packages/session/session-checkpoint-policy) | `session` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`tools`](../packages/core/tools) |
@@ -2122,38 +2123,38 @@ flowchart TD
 | [`sdk-protocol`](../packages/sdk/protocol) | `sdk` | [`commands`](../packages/interaction/commands), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`user-questions`](../packages/interaction/user-questions) |
 | [`agent-team`](../packages/team/agent-team) | `team` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`session-projection`](../packages/session/session-projection), [`subagent`](../packages/subagent/subagent), [`typert-protocol`](../packages/typert/protocol) |
 | [`workflow-ptc`](../packages/workflow/workflow-ptc) | `workflow` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`ptc-runtime`](../packages/ptc-runtime/ptc-runtime), [`sandbox`](../packages/sandbox/sandbox), [`sandbox-policy`](../packages/sandbox/sandbox-policy), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`tools`](../packages/core/tools), [`workflow`](../packages/workflow/workflow), [`working-directory`](../packages/session/working-directory) |
-| [`fork-event-bus`](../packages/fork/fork-event-bus) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`compaction`](../packages/compaction/compaction), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`storage-domain`](../packages/storage/storage-domain), [`workspace`](../packages/workspace/workspace) |
 | [`schedule`](../packages/schedule/schedule) | `schedule` | [`agent`](../packages/core/agent), [`api-session-controller`](../packages/api/session-controller), [`brand`](../packages/util/brand), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`session-projection`](../packages/session/session-projection), [`storage-domain`](../packages/storage/storage-domain), [`subagent`](../packages/subagent/subagent), [`tools`](../packages/core/tools), [`typert-protocol`](../packages/typert/protocol), [`util-time`](../packages/util/time), [`workspace`](../packages/workspace/workspace) |
 | [`sdk-client`](../packages/sdk/client) | `sdk` | [`llm`](../packages/llm/llm), [`sdk-protocol`](../packages/sdk/protocol), [`session`](../packages/core/session) |
 | [`tool-agent-team`](../packages/team/tool-agent-team) | `team` | [`agent`](../packages/core/agent), [`agent-team`](../packages/team/agent-team), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`client-test-runtime`](../packages/test-support/client-runtime) | `test-support` | [`api-gateway`](../packages/api/gateway), [`api-session-controller`](../packages/api/session-controller), [`api-workspace-controller`](../packages/api/workspace-controller), [`attachment`](../packages/attachment/attachment), [`client-connection`](../packages/client/connection), [`client-hmr`](../packages/client/hmr), [`client-modules`](../packages/client/modules), [`client-store`](../packages/client/store), [`client-ui-chat`](../packages/client/ui-chat), [`client-ui-context-menu`](../packages/client/ui-context-menu), [`client-ui-conversation`](../packages/client/ui-conversation), [`client-ui-renderer`](../packages/client/ui-renderer), [`client-ui-session`](../packages/client/ui-session), [`client-ui-settings`](../packages/client/ui-settings), [`client-ui-slots`](../packages/client/ui-slots), [`client-web`](../packages/client/web), [`remote-mock`](../packages/test-support/remote-mock), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`typert-protocol`](../packages/typert/protocol) |
 | [`subagent-dsh-sdk`](../packages/subagent/subagent-dsh-sdk) | `subagent` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`sdk-client`](../packages/sdk/client), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`subprocess`](../packages/subprocess/subprocess) |
-| [`fork-cc-bridge`](../packages/fork/fork-cc-bridge) | `fork` | [`agent`](../packages/core/agent), [`fork-event-bus`](../packages/fork/fork-event-bus), [`tools`](../packages/core/tools) |
-| [`fork-event-ingest`](../packages/fork/fork-event-ingest) | `fork` | [`credentials`](../packages/credentials/credentials), [`host-webserver`](../packages/host/webserver), [`fork-event-bus`](../packages/fork/fork-event-bus) |
-| [`fork-github-sensor`](../packages/fork/fork-github-sensor) | `fork` | [`credentials`](../packages/credentials/credentials), [`fork-event-bus`](../packages/fork/fork-event-bus), [`storage-domain`](../packages/storage/storage-domain) |
-| [`gmail`](../packages/fork/gmail) | `fork` | [`credentials`](../packages/credentials/credentials), [`fork-event-bus`](../packages/fork/fork-event-bus), [`storage-domain`](../packages/storage/storage-domain) |
-| [`fork-integrity`](../packages/fork/fork-integrity) | `fork` | [`home-paths`](../packages/util/home-paths), [`fork-event-bus`](../packages/fork/fork-event-bus), [`schedule`](../packages/schedule/schedule), [`session`](../packages/core/session) |
-| [`fork-presence`](../packages/fork/fork-presence) | `fork` | [`fork-event-bus`](../packages/fork/fork-event-bus), [`storage-domain`](../packages/storage/storage-domain) |
-| [`fork-qq`](../packages/fork/fork-qq) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`fork-event-bus`](../packages/fork/fork-event-bus), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
-| [`fork-taint`](../packages/fork/fork-taint) | `fork` | [`fork-event-bus`](../packages/fork/fork-event-bus), [`session`](../packages/core/session), [`tools`](../packages/core/tools) |
-| [`fork-tool-monitor`](../packages/fork/fork-tool-monitor) | `fork` | [`agent`](../packages/core/agent), [`api-session-controller`](../packages/api/session-controller), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`storage-domain`](../packages/storage/storage-domain), [`subprocess`](../packages/subprocess/subprocess), [`tools`](../packages/core/tools) |
-| [`fork-tool-up`](../packages/fork/fork-tool-up) | `fork` | [`agent`](../packages/core/agent), [`compaction`](../packages/compaction/compaction), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
-| [`fork-tool-voice`](../packages/fork/fork-tool-voice) | `fork` | [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-voice`](../packages/fork/fork-voice), [`tools`](../packages/core/tools) |
-| [`owner-relay`](../packages/fork/owner-relay) | `fork` | [`fork-event-bus`](../packages/fork/fork-event-bus), [`session`](../packages/core/session) |
+| [`event-bus`](../packages/fork/event-bus) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`compaction`](../packages/compaction/compaction), [`llm`](../packages/llm/llm), [`schedule`](../packages/schedule/schedule), [`session`](../packages/core/session), [`storage-domain`](../packages/storage/storage-domain), [`workspace`](../packages/workspace/workspace) |
 | [`tool-schedule`](../packages/schedule/tool-schedule) | `schedule` | [`llm`](../packages/llm/llm), [`schedule`](../packages/schedule/schedule), [`subagent`](../packages/subagent/subagent), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`sdk-jsonrpc-server`](../packages/sdk/server) | `sdk` | [`agent`](../packages/core/agent), [`attachment`](../packages/attachment/attachment), [`commands`](../packages/interaction/commands), [`goal`](../packages/goal/goal), [`llm`](../packages/llm/llm), [`llm-deepseek-api-key`](../packages/llm/llm-deepseek-api-key), [`schedule`](../packages/schedule/schedule), [`scope`](../packages/core/scope), [`sdk-protocol`](../packages/sdk/protocol), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`user-approval`](../packages/interaction/user-approval), [`user-questions`](../packages/interaction/user-questions), [`working-directory`](../packages/session/working-directory) |
-| [`fork-cc-admin`](../packages/fork/fork-cc-admin) | `fork` | [`fork-cc-bridge`](../packages/fork/fork-cc-bridge) |
-| [`fork-courses`](../packages/fork/fork-courses) | `fork` | [`credentials`](../packages/credentials/credentials), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-presence`](../packages/fork/fork-presence), [`storage-domain`](../packages/storage/storage-domain) |
+| [`cc-bridge`](../packages/fork/cc-bridge) | `fork` | [`agent`](../packages/core/agent), [`event-bus`](../packages/fork/event-bus), [`tools`](../packages/core/tools) |
+| [`event-ingest`](../packages/fork/event-ingest) | `fork` | [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`host-webserver`](../packages/host/webserver) |
+| [`github-sensor`](../packages/fork/github-sensor) | `fork` | [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`storage-domain`](../packages/storage/storage-domain) |
+| [`gmail`](../packages/fork/gmail) | `fork` | [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`storage-domain`](../packages/storage/storage-domain) |
+| [`integrity-watch`](../packages/fork/integrity-watch) | `fork` | [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`schedule`](../packages/schedule/schedule), [`session`](../packages/core/session) |
+| [`owner-relay`](../packages/fork/owner-relay) | `fork` | [`event-bus`](../packages/fork/event-bus), [`session`](../packages/core/session) |
+| [`presence`](../packages/fork/presence) | `fork` | [`event-bus`](../packages/fork/event-bus), [`storage-domain`](../packages/storage/storage-domain) |
+| [`qq`](../packages/fork/qq) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
+| [`tool-monitor`](../packages/fork/tool-monitor) | `fork` | [`agent`](../packages/core/agent), [`api-session-controller`](../packages/api/session-controller), [`event-bus`](../packages/fork/event-bus), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`storage-domain`](../packages/storage/storage-domain), [`subprocess`](../packages/subprocess/subprocess), [`tools`](../packages/core/tools) |
+| [`tool-up`](../packages/fork/tool-up) | `fork` | [`agent`](../packages/core/agent), [`compaction`](../packages/compaction/compaction), [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
+| [`tool-voice`](../packages/fork/tool-voice) | `fork` | [`event-bus`](../packages/fork/event-bus), [`tools`](../packages/core/tools), [`voice`](../packages/fork/voice) |
+| [`turn-taint`](../packages/fork/turn-taint) | `fork` | [`event-bus`](../packages/fork/event-bus), [`session`](../packages/core/session), [`tools`](../packages/core/tools) |
+| [`cc-admin`](../packages/fork/cc-admin) | `fork` | [`cc-bridge`](../packages/fork/cc-bridge) |
+| [`courses`](../packages/fork/courses) | `fork` | [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`presence`](../packages/fork/presence), [`storage-domain`](../packages/storage/storage-domain) |
 | [`gmail-settings`](../packages/fork/gmail-settings) | `fork` | [`gmail`](../packages/fork/gmail) |
-| [`fork-memory`](../packages/fork/fork-memory) | `fork` | [`agent`](../packages/core/agent), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-taint`](../packages/fork/fork-taint), [`session`](../packages/core/session), [`tools`](../packages/core/tools) |
-| [`fork-qqbot`](../packages/fork/fork-qqbot) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
-| [`fork-style`](../packages/fork/fork-style) | `fork` | [`agent`](../packages/core/agent), [`agent-default-model`](../packages/core/agent-default-model), [`compaction`](../packages/compaction/compaction), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-integrity`](../packages/fork/fork-integrity), [`fork-qq`](../packages/fork/fork-qq), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`web`](../packages/web/web) |
-| [`fork-time-gap`](../packages/fork/fork-time-gap) | `fork` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`fork-taint`](../packages/fork/fork-taint), [`owner-relay`](../packages/fork/owner-relay), [`session`](../packages/core/session), [`session-projection`](../packages/session/session-projection) |
-| [`tool-gmail`](../packages/fork/tool-gmail) | `fork` | [`gmail`](../packages/fork/gmail), [`fork-taint`](../packages/fork/fork-taint), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
-| [`fork-tool-qq`](../packages/fork/fork-tool-qq) | `fork` | [`attachment`](../packages/attachment/attachment), [`llm`](../packages/llm/llm), [`fork-qq`](../packages/fork/fork-qq), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
-| [`fork-tool-watch`](../packages/fork/fork-tool-watch) | `fork` | [`agent`](../packages/core/agent), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-github-sensor`](../packages/fork/fork-github-sensor), [`tools`](../packages/core/tools) |
-| [`fork-guard`](../packages/fork/fork-guard) | `fork` | [`agent-default-model`](../packages/core/agent-default-model), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-memory`](../packages/fork/fork-memory) |
-| [`fork-tool-courses`](../packages/fork/fork-tool-courses) | `fork` | [`fork-courses`](../packages/fork/fork-courses), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
-| [`fork-wechat`](../packages/fork/fork-wechat) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-presence`](../packages/fork/fork-presence), [`fork-taint`](../packages/fork/fork-taint), [`fork-time-gap`](../packages/fork/fork-time-gap), [`fork-voice`](../packages/fork/fork-voice), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`schedule`](../packages/schedule/schedule), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
-| [`fork-tool-wechat`](../packages/fork/fork-tool-wechat) | `fork` | [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-wechat`](../packages/fork/fork-wechat), [`tools`](../packages/core/tools) |
+| [`owner-memory`](../packages/fork/owner-memory) | `fork` | [`agent`](../packages/core/agent), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`turn-taint`](../packages/fork/turn-taint) |
+| [`qqbot`](../packages/fork/qqbot) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
+| [`speaking-style`](../packages/fork/speaking-style) | `fork` | [`agent`](../packages/core/agent), [`agent-default-model`](../packages/core/agent-default-model), [`compaction`](../packages/compaction/compaction), [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`integrity-watch`](../packages/fork/integrity-watch), [`llm`](../packages/llm/llm), [`qq`](../packages/fork/qq), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`web`](../packages/web/web) |
+| [`time-gap`](../packages/fork/time-gap) | `fork` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`owner-relay`](../packages/fork/owner-relay), [`session`](../packages/core/session), [`session-projection`](../packages/session/session-projection), [`turn-taint`](../packages/fork/turn-taint) |
+| [`tool-gmail`](../packages/fork/tool-gmail) | `fork` | [`gmail`](../packages/fork/gmail), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`turn-taint`](../packages/fork/turn-taint), [`util-values`](../packages/util/values) |
+| [`tool-qq`](../packages/fork/tool-qq) | `fork` | [`attachment`](../packages/attachment/attachment), [`llm`](../packages/llm/llm), [`qq`](../packages/fork/qq), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
+| [`tool-watch`](../packages/fork/tool-watch) | `fork` | [`agent`](../packages/core/agent), [`event-bus`](../packages/fork/event-bus), [`github-sensor`](../packages/fork/github-sensor), [`tools`](../packages/core/tools) |
+| [`content-guard`](../packages/fork/content-guard) | `fork` | [`agent-default-model`](../packages/core/agent-default-model), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`owner-memory`](../packages/fork/owner-memory) |
+| [`tool-courses`](../packages/fork/tool-courses) | `fork` | [`courses`](../packages/fork/courses), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
+| [`wechat`](../packages/fork/wechat) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`presence`](../packages/fork/presence), [`schedule`](../packages/schedule/schedule), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain), [`time-gap`](../packages/fork/time-gap), [`turn-taint`](../packages/fork/turn-taint), [`voice`](../packages/fork/voice) |
+| [`tool-wechat`](../packages/fork/tool-wechat) | `fork` | [`event-bus`](../packages/fork/event-bus), [`tools`](../packages/core/tools), [`wechat`](../packages/fork/wechat) |
 <!-- END GENERATED module-graph:packages -->

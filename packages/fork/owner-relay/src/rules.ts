@@ -1,5 +1,5 @@
 /** Pure rules of the relay: the text of an assistant message, what a turn's end sends the owner, and the fallback note. */
-import { failureDetail, isSilentReply, type ForkNote } from '@deepseek-ai/dsh-fork-event-bus'
+import { failureDetail, isSilentReply, type OwnerNote } from '@deepseek-ai/dsh-event-bus'
 
 /** The fields of a `TurnEndReason` the rules read. */
 export interface TurnEndFacts {
@@ -89,6 +89,6 @@ export function decideRelay(text: string | undefined, reason: TurnEndFacts): Rel
  * @param origin - the channel's fallback label: who sent it, as the owner's chat Session reads it.
  * @returns a note with the answer text and the reason.
  */
-export function relayFallbackNote(answer: RelayAnswer, why: string, origin: string): ForkNote {
+export function relayFallbackNote(answer: RelayAnswer, why: string, origin: string): OwnerNote {
   return { title: RELAY_FALLBACK_TITLE, body: `${answer.text}\n\n原因：${why}`, origin }
 }

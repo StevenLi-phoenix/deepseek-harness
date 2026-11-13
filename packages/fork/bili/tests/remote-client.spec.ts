@@ -341,7 +341,7 @@ describe('the manage token', () => {
     const files = sourceFiles
     const agentFacing = [
       ...files(join(import.meta.dirname, '../../tool-bili/src')),
-      ...files(join(import.meta.dirname, '../../fork-tool-up/src')),
+      ...files(join(import.meta.dirname, '../../tool-up/src')),
       join(import.meta.dirname, '../src/client.ts'),
       join(import.meta.dirname, '../src/api.ts'),
       join(import.meta.dirname, '../src/dm.ts'),

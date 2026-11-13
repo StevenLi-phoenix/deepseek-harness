@@ -1,5 +1,5 @@
 ---
-description: "把 Session 的最终回答转给主人的唯一中继（ctx.ownerRelay）：微信对话、B站账号私信这类通道认领自己的 Session，每轮结束时由同一套规则决定，通道送不出的回答带着来源标签退回 ctx.forkNotifier，事件总线跳过已被认领的 Session。"
+description: "把 Session 的最终回答转给主人的唯一中继（ctx.ownerRelay）：微信对话、B站账号私信这类通道认领自己的 Session，每轮结束时由同一套规则决定，通道送不出的回答带着来源标签退回 ctx.ownerNotifier，事件总线跳过已被认领的 Session。"
 kind: "package-reference"
 ---
 
@@ -25,7 +25,7 @@ agent 的某个 Session 结束一轮时你会收到什么，由一个地方决�
 <a id="use-this-package"></a>
 ## 使用这个包
 
-把中继挂在 profile 根部，放在使用它的插件之前。它不依赖其他服务，也没有配置；只有需要退回时才读取 `ctx.forkNotifier`（来自 [`@deepseek-ai/dsh-fork-wechat`](../fork-wechat/README.zh.md)）。fork 事件 bundle 把它挂在事件总线之前。
+把中继挂在 profile 根部，放在使用它的插件之前。它不依赖其他服务，也没有配置；只有需要退回时才读取 `ctx.ownerNotifier`（来自 [`@deepseek-ai/dsh-wechat`](../wechat/README.zh.md)）。fork 事件 bundle 把它挂在事件总线之前。
 
 ```yaml
 - id: owner-relay
@@ -34,7 +34,7 @@ agent 的某个 Session 结束一轮时你会收到什么，由一个地方决�
 
 ### 何时选用
 
-当一个插件拥有若干 Session，而它们的最终回答应该经由该插件自己的通道送到主人手里时，选用它。不要用它处理没有通道认领的 Session 的报告（事件总线的结果和提醒通知），也不要用它发送不属于某一轮回答的通知（登录或风控通知）：这些直接发给 `ctx.forkNotifier`。
+当一个插件拥有若干 Session，而它们的最终回答应该经由该插件自己的通道送到主人手里时，选用它。不要用它处理没有通道认领的 Session 的报告（事件总线的结果和提醒通知），也不要用它发送不属于某一轮回答的通知（登录或风控通知）：这些直接发给 `ctx.ownerNotifier`。
 
 ### 规则
 
@@ -59,16 +59,16 @@ agent 的某个 Session 结束一轮时你会收到什么，由一个地方决�
 
 一个通道（`RelayChannel`）有 `name`、`deliver(answer)`、可选的钩子 `onTurnStart`、`onTurnEnd`、`onTurnSettled`，以及可选的 `fallbackLabel`。回答带有 `sessionId`、`text`（主人收到的内容）、`outcome` 和 `detail`（失败原因）。`deliver` 以 `sent`（已发出或已持久排队）或 `kept`（通道选择不发，比如不是唤醒开启的 B站那一轮）完成，送不出时 reject。中继在 `turn/start` 时调用 `onTurnStart`；在 `turn/end` 时先调用 `onTurnEnd(sessionId, ended)`，再在同一个 tick 里调用 `deliver`，等 `deliver` 和可能的退回都结束后调用 `onTurnSettled`。没有要发的内容时，`onTurnSettled` 紧跟在 `onTurnEnd` 之后。`ended` 是中继对这一轮的决定：`answer`（随后会调用 `deliver`）、`silent`（最终文本是 `NO_REPLY`）、`stopped`（主人停掉了这一轮）或 `empty`（完成了但没有文本），所以按轮记录状态的通道，即使什么都没有投递，也知道这一轮是怎么结束的。
 
-`deliver` reject 时，中继给 `ctx.forkNotifier` 发一条 `↪️ 这条回答没能从原渠道发出，改发这里` 通知：回答本身、下面一行 `原因：<error>`，并把通道的 `fallbackLabel` 作为通知的 `origin`，微信对话 Session 里的副本会以它作为发送者。没有标签的通道就是通知器自己，它送不出时只记日志。
+`deliver` reject 时，中继给 `ctx.ownerNotifier` 发一条 `↪️ 这条回答没能从原渠道发出，改发这里` 通知：回答本身、下面一行 `原因：<error>`，并把通道的 `fallbackLabel` 作为通知的 `origin`，微信对话 Session 里的副本会以它作为发送者。没有标签的通道就是通知器自己，它送不出时只记日志。
 
 认领只保存在内存里。每个通道注册时重新认领自己存储的 Session，在新 Session 的第一次 prompt 之前认领它，注销时失去它的认领。fork 事件 profile 有两个通道：
 
 | 通道 | 插件 | 认领 | 投递 | `fallbackLabel` |
 |---|---|---|---|---|
-| `wechat` | `@deepseek-ai/dsh-fork-wechat` | 它记得的每个对话 Session（当前的和更早的） | 一条微信回复；更早的对话 Session 的回答还会复制一份到当前对话里 | 无：它就是通知器 |
+| `wechat` | `@deepseek-ai/dsh-wechat` | 它记得的每个对话 Session（当前的和更早的） | 一条微信回复；更早的对话 Session 的回答还会复制一份到当前对话里 | 无：它就是通知器 |
 | `bili-dm` | `@deepseek-ai/dsh-bili` | 账号的 Session | owner 本人的 B站私信开启的一轮，经 bili-svc 的回复闸门回复（否则 `kept`）；闸门扣下或拦住的部分带着原因和标签改发微信 | `the Bilibili account's Session (its answer could not go out as a Bilibili message)` |
 
-`@deepseek-ai/dsh-fork-event-bus` 在跟踪提醒或监控那一轮之前先问 `ownerOf()`，所以被认领的 Session 的一轮只经由它的通道送达主人一次。
+`@deepseek-ai/dsh-event-bus` 在跟踪提醒或监控那一轮之前先问 `ownerOf()`，所以被认领的 Session 的一轮只经由它的通道送达主人一次。
 
 -----
 
@@ -82,14 +82,14 @@ agent 的某个 Session 结束一轮时你会收到什么，由一个地方决�
 
 每个决定都以 info 级别记日志，带 Session id 和原因，从不记录正文：`owner-relay: Session <id> ended a turn (<outcome>); relaying <n> chars through <channel>`、什么也不转发的原因（`the owner stopped`、`that answered NO_REPLY`、`without text`），以及 `<channel> sent` 或 `kept the answer`。被 reject 的投递和每次退回的结果以 warn 或 info 记录。
 
-中继依赖 `@deepseek-ai/dsh-fork-event-bus` 的 `failureDetail`、`isSilentReply` 和 `ForkNotifier` 契约，所以事件总线通过一个结构化的 `ownerOf()` 视图读取 `ctx.ownerRelay`，而不导入这个包。`@deepseek-ai/dsh-fork-wechat` 和 `@deepseek-ai/dsh-bili` 只导入它的类型，通过一个 `inject: ['ownerRelay']` 的子插件注册；有浏览器部分的 `bili` 把它保留为开发依赖。
+中继依赖 `@deepseek-ai/dsh-event-bus` 的 `failureDetail`、`isSilentReply` 和 `OwnerNotifier` 契约，所以事件总线通过一个结构化的 `ownerOf()` 视图读取 `ctx.ownerRelay`，而不导入这个包。`@deepseek-ai/dsh-wechat` 和 `@deepseek-ai/dsh-bili` 只导入它的类型，通过一个 `inject: ['ownerRelay']` 的子插件注册；有浏览器部分的 `bili` 把它保留为开发依赖。
 
 | 文件 | 作用 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 服务：通道、认领、事件跟踪、投递、退回和日志 |
 | [`src/rules.ts`](src/rules.ts) | 纯规则：`contentText`、`decideRelay` 和退回通知 |
 
-这是 fork 本地的包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。单元测试用通道替身驱动服务；fork-wechat、fork-event-bus 和 bili 的测试把它和真实插件一起挂载。
+这是 fork 本地的包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。单元测试用通道替身驱动服务；wechat、event-bus 和 bili 的测试把它和真实插件一起挂载。
 
 </details>
 
@@ -98,9 +98,9 @@ agent 的某个 Session 结束一轮时你会收到什么，由一个地方决�
 <a id="further-exploration"></a>
 ## 延伸阅读
 
-- [微信通道](../fork-wechat/README.zh.md)——`wechat` 通道和 `ctx.forkNotifier`
+- [微信通道](../wechat/README.zh.md)——`wechat` 通道和 `ctx.ownerNotifier`
 - [B站账号](../bili/README.zh.md)——`bili-dm` 通道
-- [事件总线](../fork-event-bus/README.zh.md)——没有通道认领的 Session 的报告
+- [事件总线](../event-bus/README.zh.md)——没有通道认领的 Session 的报告
 
 -----
 
@@ -111,7 +111,7 @@ agent 的某个 Session 结束一轮时你会收到什么，由一个地方决�
 
 #### 模型看到的内容
 
-中继不往它转发回答的 Session 里加任何内容，只读取它们的事件。退回的回答作为一条共享通知（来自 `@deepseek-ai/dsh-fork-wechat`）进入主人的微信对话 Session，带有发出时间，开头用通道的 `fallbackLabel` 代替笼统的“另一个 session”说法，让对话 agent 知道主人回复的那条消息来自哪里。
+中继不往它转发回答的 Session 里加任何内容，只读取它们的事件。退回的回答作为一条共享通知（来自 `@deepseek-ai/dsh-wechat`）进入主人的微信对话 Session，带有发出时间，开头用通道的 `fallbackLabel` 代替笼统的“另一个 session”说法，让对话 agent 知道主人回复的那条消息来自哪里。
 
 ##### 共享的退回通知
 
@@ -138,8 +138,8 @@ At Fri 2026-10-23 19:42 (America/New_York), the Bilibili account's Session (its 
 
 - **认领只在内存里**——只有通道已注册并认领了某个 Session，才会转发它；通道的插件重启期间结束的一轮不会被转发。
 - **一个 Session 只属于一个通道**——第二次认领会把 Session 转给新的通道。
-- **回答不持久**——中继什么也不存储；host 停止时还在投递中的回答会丢失，除非通道已经把它排进了队列（fork-wechat 的 outbox 会这样做）。
-- **退回需要通知器**——没有 `ctx.forkNotifier`，或者通道就是通知器自己时，送不出的回答只记日志。
+- **回答不持久**——中继什么也不存储；host 停止时还在投递中的回答会丢失，除非通道已经把它排进了队列（wechat 的 outbox 会这样做）。
+- **退回需要通知器**——没有 `ctx.ownerNotifier`，或者通道就是通知器自己时，送不出的回答只记日志。
 
 <a id="dev-note"></a>
 ### 开发备注

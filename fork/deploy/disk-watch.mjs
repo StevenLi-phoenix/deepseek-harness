@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 // Disk-usage watcher for the fork event service: every DISK_WATCH_INTERVAL_S seconds it reads each
 // volume with statfs and, while one is above DISK_WATCH_THRESHOLD (default 0.95 = 95 %), pushes
-// `host.disk.full` to dsh's fork-event-ingest route. The key carries the volume and the date, so the
+// `host.disk.full` to dsh's event-ingest route. The key carries the volume and the date, so the
 // bus turns a full disk into at most one warning per volume per day. Runs as an AMS service
 // (dsh-runtime), so no launchd job of its own; push failures are logged at level "error", which AMS
 // escalates. No dependencies; nothing is read from the network.
-//   env: FORK_INGEST_TOKEN (required, the `host` source token), FORK_INGEST_URL,
+//   env: EVENT_INGEST_TOKEN (required, the `host` source token), EVENT_INGEST_URL,
 //        DISK_WATCH_MOUNTS ("/path:Label,..."), DISK_WATCH_THRESHOLD, DISK_WATCH_INTERVAL_S
 //   --once: check once and exit (exit 1 when a push failed), for testing.
 import { statfs } from 'node:fs/promises'
 
-const URL = process.env.FORK_INGEST_URL || 'http://127.0.0.1:3081/hooks/events'
-const TOKEN = (process.env.FORK_INGEST_TOKEN || '').trim()
+const URL = process.env.EVENT_INGEST_URL || 'http://127.0.0.1:3081/hooks/events'
+const TOKEN = (process.env.EVENT_INGEST_TOKEN || '').trim()
 const THRESHOLD = Number(process.env.DISK_WATCH_THRESHOLD || '0.95')
 const INTERVAL_S = Number(process.env.DISK_WATCH_INTERVAL_S || '300')
 const MOUNTS = (process.env.DISK_WATCH_MOUNTS || '/System/Volumes/Data:Internal,/Volumes/MiniSSD:MiniSSD')
@@ -80,7 +80,7 @@ async function check() {
 }
 
 if (TOKEN === '') {
-  log('error', 'FORK_INGEST_TOKEN is not set')
+  log('error', 'EVENT_INGEST_TOKEN is not set')
   process.exit(78)
 }
 if (!(THRESHOLD > 0 && THRESHOLD < 1) || !(INTERVAL_S >= 10)) {

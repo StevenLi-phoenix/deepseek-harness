@@ -7,7 +7,7 @@ OUT=${1:?out dir}
 rm -rf "${OUT:?}"
 mkdir -p "$OUT"
 pnpm pack --recursive --workspace-concurrency=8 --pack-destination "$OUT" \
-  --filter='@deepseek-ai/dsh-fork-*' --filter=@deepseek-ai/dsh-bili --filter=@deepseek-ai/dsh-tool-bili --filter=@deepseek-ai/dsh-owner-relay >/dev/null
+  --filter='./packages/fork/*' --filter='./fork/bundles/*' >/dev/null
 COUNT=$(find "$OUT" -name '*.tgz' | wc -l | tr -d ' ')
 [ "$COUNT" != 0 ] || { echo "pack-hot-plugins: no tarball in $OUT" >&2; exit 1; }
 echo "pack-hot-plugins: $COUNT tarball(s) in $OUT"

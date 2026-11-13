@@ -28,7 +28,7 @@ describe('gen-tool-catalog collectToolCatalog', () => {
     const names = catalog.flatMap(entry => entry.schemas.map(s => s.name)).sort()
     expect(names).toEqual([
       'apply_patch', 'ask_user_question', 'bash', 'bash',
-      // Fork-local (fork): the Bilibili account tools of packages/fork/tool-bili.
+      // Fork-local: the Bilibili account tools of packages/fork/tool-bili.
       'bili_coin', 'bili_comments', 'bili_danmaku', 'bili_favorite', 'bili_follow', 'bili_following_feed', 'bili_home_feed',
       'bili_hot_searches', 'bili_inbox', 'bili_journal_read', 'bili_journal_write', 'bili_like', 'bili_me', 'bili_popular',
       'bili_ranking', 'bili_search', 'bili_tell_main_agent', 'bili_triple', 'bili_unfollow', 'bili_video', 'bili_watchlater',

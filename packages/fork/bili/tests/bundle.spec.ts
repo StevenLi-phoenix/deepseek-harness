@@ -94,7 +94,7 @@ describe('event bundle', () => {
   })
 
   it('runs ci, the notification desk, and the QQ main Session on the cheap edge-gateway route, and no other Session', () => {
-    const bus = inserted.find(entry => entry.id === 'fork-event-bus')!
+    const bus = inserted.find(entry => entry.id === 'event-bus')!
     type Subscription = { id: string; session?: { model?: { provider: string; model: string } } }
     const subscriptions = (bus.config as { subscriptions: Subscription[] }).subscriptions
     const pinned = subscriptions.filter(subscription => subscription.session?.model !== undefined)
@@ -106,7 +106,7 @@ describe('event bundle', () => {
   })
 
   it('groups the bus subscriptions\' Sessions into Web UI projects, keeps the CI Session per repository and the channel Session fixed-titled', () => {
-    const bus = inserted.find(entry => entry.id === 'fork-event-bus')!
+    const bus = inserted.find(entry => entry.id === 'event-bus')!
     type Session = { workspacePath: string; project?: string; titlePrefix?: string; persistent?: { enabled: boolean; key?: string } }
     type Subscription = { id: string; action: string; session?: Session }
     const subscriptions = (bus.config as { subscriptions: Subscription[] }).subscriptions
@@ -132,13 +132,13 @@ describe('event bundle', () => {
   })
 
   it('mounts the time check once, at the root, with the plugin\'s defaults, so every preset\'s Sessions get it', () => {
-    expect(inserted.filter(entry => entry.name === '@deepseek-ai/dsh-fork-time-gap').map(entry => entry.id)).toEqual(['fork-time-gap'])
-    expect(inserted.find(entry => entry.id === 'fork-time-gap')!.config).toBeUndefined()
-    expect(composedRoot().get('fork-time-gap')).toEqual({ name: '@deepseek-ai/dsh-fork-time-gap', enabled: true })
+    expect(inserted.filter(entry => entry.name === '@deepseek-ai/dsh-time-gap').map(entry => entry.id)).toEqual(['time-gap'])
+    expect(inserted.find(entry => entry.id === 'time-gap')!.config).toBeUndefined()
+    expect(composedRoot().get('time-gap')).toEqual({ name: '@deepseek-ai/dsh-time-gap', enabled: true })
   })
 
   it('mounts the course service and its Settings section once at the root with the plugin\'s defaults (no owner value in the bundle)', () => {
-    for (const id of ['fork-courses', 'fork-courses-settings']) {
+    for (const id of ['courses', 'courses-settings']) {
       expect(inserted.filter(entry => entry.id === id)).toHaveLength(1)
       expect(inserted.find(entry => entry.id === id)!.config).toBeUndefined()
       expect(composedRoot().get(id)?.enabled).toBe(true)
@@ -146,9 +146,9 @@ describe('event bundle', () => {
   })
 
   it('mounts the subagent panel once at the root and keeps ui-subagent, whose header entry it only shadows', () => {
-    expect(inserted.filter(entry => entry.id === 'fork-subagents')).toHaveLength(1)
-    expect(inserted.find(entry => entry.id === 'fork-subagents')!.config).toBeUndefined()
-    expect(composedRoot().get('fork-subagents')).toEqual({ name: '@deepseek-ai/dsh-fork-subagents', enabled: true })
+    expect(inserted.filter(entry => entry.id === 'subagent-activity')).toHaveLength(1)
+    expect(inserted.find(entry => entry.id === 'subagent-activity')!.config).toBeUndefined()
+    expect(composedRoot().get('subagent-activity')).toEqual({ name: '@deepseek-ai/dsh-subagent-activity', enabled: true })
     expect(composedRoot().get('ui-subagent')?.enabled).toBe(true)
   })
 
@@ -200,7 +200,7 @@ describe('event bundle', () => {
       '@deepseek-ai/dsh-persona',
       '@deepseek-ai/dsh-time-context',
       '@deepseek-ai/dsh-tool-bili',
-      '@deepseek-ai/dsh-fork-style',
+      '@deepseek-ai/dsh-speaking-style',
       '@deepseek-ai/dsh-compaction-basic',
       '@deepseek-ai/dsh-compaction-tool-result-pruner',
     ])

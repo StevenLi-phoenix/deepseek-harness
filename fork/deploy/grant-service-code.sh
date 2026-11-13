@@ -22,7 +22,7 @@ REPOS=(
   "$HOME/Codes/bgutil-ytdlp-pot-provider"
 )
 APPS=(asr-service autocut bili-svc kaorou bgutil-pot python)
-DSH_APPS=/Users/Shared/fork-dsh
+DSH_APPS=/Users/Shared/dsh
 DIR_RIGHTS="list,add_file,search,add_subdirectory,delete_child,readattr,writeattr,readextattr,writeextattr,readsecurity,writesecurity,delete,file_inherit,directory_inherit"
 FILE_RIGHTS="read,write,append,execute,delete,readattr,writeattr,readextattr,writeextattr,readsecurity,writesecurity"
 # Files that hold credentials in the dev checkouts: never part of a commit or a deploy, so denied outright.

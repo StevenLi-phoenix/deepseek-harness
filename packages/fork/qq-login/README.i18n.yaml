@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/fork/qq-login/README.md
+/:
+  en: 9100d20420de893a
+  zh: defd7bdd35d7d912
+/deepseek-ai-dsh-qq-login:
+  en: 3938da85d2993340
+  zh: 892242375a904e32
+/deepseek-ai-dsh-qq-login/summary:
+  en: 3a58c722e35f4305
+  zh: 6d5353dd4ced4653
+/deepseek-ai-dsh-qq-login/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-qq-login/use-this-package:
+  en: 01925e98db32bb5d
+  zh: 68ae3c965313e710
+/deepseek-ai-dsh-qq-login/understand-the-implementation:
+  en: e5d0afdb59dccb47
+  zh: 94b5125a258943b5
+/deepseek-ai-dsh-qq-login/further-exploration:
+  en: 29acc276dda72529
+  zh: f8f4909ac9a0c418
+/deepseek-ai-dsh-qq-login/model-experience:
+  en: 17c85568abf874e0
+  zh: 173ee8a6821e3eba
+/deepseek-ai-dsh-qq-login/model-experience/kv-cache-effect:
+  en: ca75c51c89c2c9b0
+  zh: a18013b9ffbc0b06
+/deepseek-ai-dsh-qq-login/known-limitations-and-deferred-work:
+  en: b4a5d51fe85de84f
+  zh: 60ecccc366ba27b6
+/deepseek-ai-dsh-qq-login/known-limitations-and-deferred-work/dev-note:
+  en: 87b1a21ffc2c3264
+  zh: 33bc37affba1d67e

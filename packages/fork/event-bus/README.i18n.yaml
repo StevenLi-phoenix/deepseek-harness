@@ -1,0 +1,67 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/fork/event-bus/README.md
+/:
+  en: 51b7e7d8bba38af2
+  zh: 8e611b5c8b456d55
+/deepseek-ai-dsh-event-bus:
+  en: 275dfe2357079f75
+  zh: 098eac11481e3463
+/deepseek-ai-dsh-event-bus/summary:
+  en: 53352bfe06e38327
+  zh: 1c60a7e8751ed388
+/deepseek-ai-dsh-event-bus/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-event-bus/use-this-package:
+  en: fd1582b4e61383c4
+  zh: c9a6ca162004d76a
+/deepseek-ai-dsh-event-bus/use-this-package/when-to-choose-it:
+  en: 816aa7cb41e2592d
+  zh: 18c8c1bba8523d27
+/deepseek-ai-dsh-event-bus/use-this-package/minimal-configuration:
+  en: a376b980d622dca5
+  zh: 664d86e05116ca99
+/deepseek-ai-dsh-event-bus/use-this-package/run-time-subscriptions:
+  en: 2201f3bc579f9e6f
+  zh: 047f550cb660a054
+/deepseek-ai-dsh-event-bus/use-this-package/notification-flow:
+  en: 74d1794e43462a70
+  zh: 78e32119acf32a97
+/deepseek-ai-dsh-event-bus/use-this-package/persistent-sessions:
+  en: 24c4953df1dd7b7a
+  zh: f01829c99132a00d
+/deepseek-ai-dsh-event-bus/use-this-package/auto-archive:
+  en: 09dda9022a508cfa
+  zh: 18261190ab1ff37c
+/deepseek-ai-dsh-event-bus/use-this-package/result-reports:
+  en: f94eaf8fe907e345
+  zh: f899fa34e48c84c7
+/deepseek-ai-dsh-event-bus/understand-the-implementation:
+  en: 2de51082d3ae9b27
+  zh: 7219d0a556c762a3
+/deepseek-ai-dsh-event-bus/further-exploration:
+  en: 2848acb83cfcac90
+  zh: ae2b0172cc3cb681
+/deepseek-ai-dsh-event-bus/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-event-bus/model-experience/session-prompt:
+  en: 3296e9dd8138b0a0
+  zh: 3296e9dd8138b0a0
+/deepseek-ai-dsh-event-bus/model-experience/session-prompt/what-the-model-sees:
+  en: f43f776ad843e65c
+  zh: 228f8f6439f2849a
+/deepseek-ai-dsh-event-bus/model-experience/session-prompt/token-effect:
+  en: cd761bb6b373beda
+  zh: ae782765a1423ea4
+/deepseek-ai-dsh-event-bus/model-experience/session-prompt/kv-cache-effect:
+  en: 76a1a39f133968f7
+  zh: 0aa29005e3ee0fcb
+/deepseek-ai-dsh-event-bus/known-limitations-and-deferred-work:
+  en: f016cdb6e59f6b1a
+  zh: 730da2c235945d7e
+/deepseek-ai-dsh-event-bus/known-limitations-and-deferred-work/dev-note:
+  en: 2b37c6cbf673f6fd
+  zh: cf08de597627eff2

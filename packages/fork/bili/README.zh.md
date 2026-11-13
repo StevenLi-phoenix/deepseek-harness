@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用这个包
 
-把账号挂在一个同时挂了 [`@deepseek-ai/dsh-owner-relay`](../owner-relay/README.zh.md)（`ctx.ownerRelay`，把每一轮的回答交给账号的 `bili-dm` 通道）和 `@deepseek-ai/dsh-fork-wechat`（提供 `ctx.forkNotifier`）的 Web profile 根部，并定义一个插件列表里含 [`@deepseek-ai/dsh-tool-bili`](../tool-bili/README.zh.md) 的 agent preset。它需要宿主的 Session Controller、权限预设、Session 标题、存储域、凭据存储（存 bili-svc 的令牌）和定时器；设置页需要浏览器连接。bili-svc 必须跑在同一台机器上（`BILI_SVC_URL`，默认 `http://127.0.0.1:8097`），并持有这个账号的会话。
+把账号挂在一个同时挂了 [`@deepseek-ai/dsh-owner-relay`](../owner-relay/README.zh.md)（`ctx.ownerRelay`，把每一轮的回答交给账号的 `bili-dm` 通道）和 `@deepseek-ai/dsh-wechat`（提供 `ctx.ownerNotifier`）的 Web profile 根部，并定义一个插件列表里含 [`@deepseek-ai/dsh-tool-bili`](../tool-bili/README.zh.md) 的 agent preset。它需要宿主的 Session Controller、权限预设、Session 标题、存储域、凭据存储（存 bili-svc 的令牌）和定时器；设置页需要浏览器连接。bili-svc 必须跑在同一台机器上（`BILI_SVC_URL`，默认 `http://127.0.0.1:8097`），并持有这个账号的会话。
 
 ### 何时选用
 
@@ -46,7 +46,7 @@ kind: "package-reference"
 
 把 bili-svc 的 bearer 令牌以 `BILI_SVC_TOKEN_BILI` 放进凭据存储（权限 `bili`、`read`、`reply`，只限这个账号）。然后打开 **设置 → B站账号**，在 **主号** 里填你自己账号的 UID（`space.bilibili.com/` 后面那串数字）；它只存在运行时的存储里，提交的文件里不会出现 owner。设置页列出 bili-svc 保管的每个账号和它的会话状态（`ok`、`dead`、`missing`、`none`，或连不上 bili-svc）。要在这里扫码登录、续期、用闸门，需要给服务再配一个 `manage` 权限的令牌 `BILI_SVC_TOKEN_MANAGE`（[RUNBOOK §16b](../../../fork/deploy/RUNBOOK.md)）；没有它，设置页保持只读，并写明缺哪个凭据。
 
-页面末尾有 `bili` 与 `tool-bili` 条目的[全部设置](../fork-config/README.zh.md)卡片，列出账号的每个配置字段（时区、每日上限、Session、轮询周期），并把改动保存到你自己的补丁。
+页面末尾有 `bili` 与 `tool-bili` 条目的[全部设置](../plugin-config/README.zh.md)卡片，列出账号的每个配置字段（时区、每日上限、Session、轮询周期），并把改动保存到你自己的补丁。
 
 | 字段 | 默认值 | 含义 |
 |---|---|---|
@@ -68,14 +68,14 @@ kind: "package-reference"
 ### owner 看到什么
 
 - **在 B站上**——owner 的主号私信 agent 的账号时，它的 Session 回答，回答以这个号的私信送达，除非恰好是 `NO_REPLY`。它经 bili-svc 的回复闸门（`POST /v1/reply/dm`）发出；闸门回复 owner 时不过分类器、不计每日额度、不受时段限制，但仍守它的规则（不 @、长度、链接、联系方式）和刹车。长回答最多拆成两条 500 字的私信，其余用 `…` 截断。owner 在 Web UI 里开的一轮留在那里，提醒或监视器的一轮也一样：账号通道认领的 Session，事件总线不会上报。owner 发来私信后，账号在最后一条之后的 15 分钟内每分钟查一次私信。
-- **每天一次，在 B站上**——在推荐时间窗里随机一个时间（当天第一次检查时排定并存下，重启也不会发两次），Session 收到每日推荐的提示词，它的回答以私信送达：一到两个它打开并读过字幕的视频，加一个最近的热梗和出处，最多 400 字。它经 `POST /v1/share/owner` 发出：这个接口只给 bili-svc 的 owner 账号发，要求两个号互相关注，守 owner 规则和刹车，并有自己的每日额度（`owner_share_per_day`，2 条；最多 4 条）。owner 在睡觉（`forkPresence`）、owner 最后一条私信后 15 分钟内、owner 的私信还在等回答、或 Session 正在一轮里时，推荐顺延；时间窗结束两小时后还在等，就记为 `missed`。`NO_REPLY` 什么都不发；没有完成的一轮，或 45 分钟后还没结束的一轮，记为 `failed`，什么都不发，之后才结束也不发。之后的提示词列出最近七次推荐，免得同一个视频或热梗发两次。
+- **每天一次，在 B站上**——在推荐时间窗里随机一个时间（当天第一次检查时排定并存下，重启也不会发两次），Session 收到每日推荐的提示词，它的回答以私信送达：一到两个它打开并读过字幕的视频，加一个最近的热梗和出处，最多 400 字。它经 `POST /v1/share/owner` 发出：这个接口只给 bili-svc 的 owner 账号发，要求两个号互相关注，守 owner 规则和刹车，并有自己的每日额度（`owner_share_per_day`，2 条；最多 4 条）。owner 在睡觉（`presence`）、owner 最后一条私信后 15 分钟内、owner 的私信还在等回答、或 Session 正在一轮里时，推荐顺延；时间窗结束两小时后还在等，就记为 `missed`。`NO_REPLY` 什么都不发；没有完成的一轮，或 45 分钟后还没结束的一轮，记为 `failed`，什么都不发，之后才结束也不发。之后的提示词列出最近七次推荐，免得同一个视频或热梗发两次。
 - **在微信上**——闸门没有发出的回答（`held`、`blocked`，或 bili-svc 没有应答），标题是 `📺 B站：这条没能用 B站私信发出，改发微信`，结尾一行写原因（`原因：bili-svc's Reply Gate answered held (r-12)`）；bili-svc 没有发出的推荐也一样，标题是 `📺 B站：今天的推荐没能用 B站私信发出，改发微信`。微信聊天 Session 保存的副本把发送者写成 `the Bilibili account's Session (its answer could not go out as a Bilibili message)`，在那里回复时有上下文。关于会话、风控和闸门的通知来自 bili-svc 自己的事件，不来自这个包。
-- **来自主 agent**——owner 让这个号转告主 agent 时，Session 用 `bili_tell_main_agent` 发出：`ctx.forkNotifier.tellMainAgent()` 把它作为不可信数据排进微信聊天 Session，主 agent 的回答在微信上送达 owner。这个号自己的回答仍以 B站私信送达。
+- **来自主 agent**——owner 让这个号转告主 agent 时，Session 用 `bili_tell_main_agent` 发出：`ctx.ownerNotifier.tellMainAgent()` 把它作为不可信数据排进微信聊天 Session，主 agent 的回答在微信上送达 owner。这个号自己的回答仍以 B站私信送达。
 - **在设置页里**——有 manage 令牌时：闸门（模式、急停和它的原因、今天各项用量对上限；**解除急停**、一键**切到只读**；急停还在时**切到自动**是灰的，并写明顺序（先解除急停）；否则要再点一次明确确认，确认文字会说明回复闸门之后会以 bili-svc 的 `reply_comment` 路由所指账号的名义，在创作者视频下回评论、也回私信，受今日额度限制；bili-svc 拒绝时原话显示在卡片里）；每个账号一张卡（昵称、UID、状态、谁负责续期、上次续期或导入、失效原因），带**扫码登录**（二维码会变成“已扫码”，成功后自动关闭）、**刷新会话**、**检查**和**退出登录**（再点一次才生效）；会话归别的服务管的账号（`refresh_mode` 为 `external`，比如猫灯）不显示任何操作按钮；一个默认折叠的最近 20 条动作记录（可以再加载更多），草稿和判定都按纯文本显示；主号 UID；以及**每日推荐**卡片：一个立刻生效的开关、**现在发一条**（不受时间窗限制，仍受 bili-svc 的额度限制）、今天的推荐在做什么（计划在几点、正在生成、已发送、改发微信、没有值得发的、错过、失败）、bili-svc 今天放行的推荐条数对上限，以及最近十次推荐，点开可以看内容。每个按钮点下去立刻显示忙碌状态。没有 manage 令牌时只剩只读卡片、主号 UID 和每日推荐，并提示 `manageTokenEnv`；每日推荐不需要 manage 令牌。路由是 `GET`/`POST /api/bili`（`GET` 可带 `?ledger=<行数>`），和所有 `/api` 路由一样要先通过连接的登录。Host 校验每个操作的请求体（账号 id、退出登录必须重复账号 id、数值有上限），把每次操作连同账号、结果和耗时写进日志（从不写令牌、二维码 key 或 URL），bili-svc 拒绝时把它的原话和一个代码（`mode_refused`、`not_owner`、`refresh_failed`）交给页面解释。
 
 ### 其他插件能读到什么
 
-`ctx.biliHot` 把站里当下的流行说法交给 `fork-style` 这类使用方，来源只是账号本来就在做的读取，不会为它新发请求：`bili_video` 和 `bili_comments` 返回的热评（至少 20 个赞）和 `bili_hot_searches` 的关键词。
+`ctx.biliHot` 把站里当下的流行说法交给 `speaking-style` 这类使用方，来源只是账号本来就在做的读取，不会为它新发请求：`bili_video` 和 `bili_comments` 返回的热评（至少 20 个赞）和 `bili_hot_searches` 的关键词。
 
 - `comments({ since? })`——`{ text, likes, bvid, at }[]`，最近读到的在前。评论只保留文字、点赞数、视频和读取时间：不存 UID、昵称、指向个人的链接或 `@`；回复开头的 `回复 @name :` 会被剪掉，含 `@` 的文字整条丢弃。
 - `words({ since? })`——关键词字符串，最近上榜的在前。
@@ -125,8 +125,8 @@ kind: "package-reference"
 ## 延伸阅读
 
 - [B站工具](../tool-bili/README.zh.md)——账号的 Session 能调用什么
-- [创作者号工具](../fork-tool-up/README.zh.md)——`up` preset，经同一个回复闸门回复观众
-- [微信通道](../fork-wechat/README.zh.md)——兜底的回答发到哪里
+- [创作者号工具](../tool-up/README.zh.md)——`up` preset，经同一个回复闸门回复观众
+- [微信通道](../wechat/README.zh.md)——兜底的回答发到哪里
 - [Owner relay](../owner-relay/README.zh.md)——回合结束的规则，以及挡住事件总线的认领
 - [存储域](../../storage/storage-domain/README.zh.md)——持久表
 

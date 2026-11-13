@@ -14,8 +14,8 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import { credentialKey, credentialRef } from '@deepseek-ai/dsh-credentials'
 // Type-only: ctx.credentials.
 import type {} from '@deepseek-ai/dsh-credentials'
-// Type-only: ctx.get('forkNotifier').
-import type {} from '@deepseek-ai/dsh-fork-event-bus'
+// Type-only: ctx.get('ownerNotifier').
+import type {} from '@deepseek-ai/dsh-event-bus'
 import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import z from '@deepseek-ai/schemastery'
 import { z as zod } from 'zod'
@@ -1211,9 +1211,9 @@ export class Gmail extends Service {
 
   /** Send the owner a notice; false (and a warning) when it could not be handed over. */
   private async notify(note: { readonly title: string; readonly body: string; readonly kinds: readonly string[] }): Promise<boolean> {
-    const notifier = this.ctx.get('forkNotifier')
+    const notifier = this.ctx.get('ownerNotifier')
     if (notifier === undefined) {
-      this.ctx.logger.warn(`gmail: could not send "${note.title}": no forkNotifier service is mounted`)
+      this.ctx.logger.warn(`gmail: could not send "${note.title}": no ownerNotifier service is mounted`)
       return false
     }
     try {

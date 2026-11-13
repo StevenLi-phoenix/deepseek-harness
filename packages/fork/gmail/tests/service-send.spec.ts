@@ -495,7 +495,7 @@ describe('notices', () => {
     const env = await account('confirm-all', { noNotifier: true })
     expect(await sendNew(env)).toMatchObject({ kind: 'held', noticeSent: false })
     expect((await heldOne(env)).noticeSent).toBe(false)
-    expect(env.logs).toContain('warn gmail: could not send "✉️ 待你确认：work 发给 ada@example.com": no forkNotifier service is mounted')
+    expect(env.logs).toContain('warn gmail: could not send "✉️ 待你确认：work 发给 ada@example.com": no ownerNotifier service is mounted')
   })
 
   it('holds the message with noticeSent false and a warning when the notifier throws', async () => {

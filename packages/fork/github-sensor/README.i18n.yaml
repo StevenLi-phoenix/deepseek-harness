@@ -1,0 +1,61 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/fork/github-sensor/README.md
+/:
+  en: f8236718117ac808
+  zh: a0b417a5a553a571
+/deepseek-ai-dsh-github-sensor:
+  en: eb791f413afab72f
+  zh: e2569c5c4b507f8e
+/deepseek-ai-dsh-github-sensor/summary:
+  en: 6d1cf3c6d3471f78
+  zh: 2bf9fecc18c1b720
+/deepseek-ai-dsh-github-sensor/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-github-sensor/use-this-package:
+  en: a92adba9c144e0a4
+  zh: f0642732101e7330
+/deepseek-ai-dsh-github-sensor/use-this-package/when-to-choose-it:
+  en: 053815536c3d5b85
+  zh: 67e5804457c1c9fa
+/deepseek-ai-dsh-github-sensor/use-this-package/minimal-configuration:
+  en: 3c40b73431398414
+  zh: 98ef4b9ad6145183
+/deepseek-ai-dsh-github-sensor/use-this-package/run-time-watches:
+  en: 9e7c9d3c019dd075
+  zh: f0a04faae7a163ce
+/deepseek-ai-dsh-github-sensor/use-this-package/events:
+  en: 94ac2bfbaee1b546
+  zh: 68cbf92287522f7a
+/deepseek-ai-dsh-github-sensor/use-this-package/webhooks:
+  en: a657e9f06e723fff
+  zh: 5fc654df97e9f031
+/deepseek-ai-dsh-github-sensor/understand-the-implementation:
+  en: e1733ee83dc1de27
+  zh: f1ad78dbafcca250
+/deepseek-ai-dsh-github-sensor/further-exploration:
+  en: db266269605a55eb
+  zh: c97f20a57f027811
+/deepseek-ai-dsh-github-sensor/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-github-sensor/model-experience/event-data-in-session-prompts:
+  en: 8dc9ce4dbe9f1d11
+  zh: 462c31889fc4ae16
+/deepseek-ai-dsh-github-sensor/model-experience/event-data-in-session-prompts/what-the-model-sees:
+  en: 5cd68178c4cf9615
+  zh: d6c0f3153a26d577
+/deepseek-ai-dsh-github-sensor/model-experience/event-data-in-session-prompts/token-effect:
+  en: b5524e406da4862b
+  zh: 1dfaa0fc882e5cde
+/deepseek-ai-dsh-github-sensor/model-experience/event-data-in-session-prompts/kv-cache-effect:
+  en: cba369e25c091d39
+  zh: d84edd031e96dc5d
+/deepseek-ai-dsh-github-sensor/known-limitations-and-deferred-work:
+  en: 21441003f9db8152
+  zh: 29d0d7f454219d7d
+/deepseek-ai-dsh-github-sensor/known-limitations-and-deferred-work/dev-note:
+  en: 0ca3b4f2b6cc181e
+  zh: ef46b9cd0a7fb971

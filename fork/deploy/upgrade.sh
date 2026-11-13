@@ -2,7 +2,7 @@
 # Build, pack, and install the current main checkout as a new release of the event service.
 # Runs through self-upgrade.sh, as the service user. A deploy starts with fork/deploy/deploy-dsh.sh, not here: by hand this is for a
 # first install, or when the service dsh-upgrade cannot run. It then prints the two commands that finish the switch.
-# With FORK_DSH_BUILD_ONLY=1 it stops at the tested plugin tarballs and the recorder: self-upgrade.sh then replaces plugins in the
+# With DSH_BUILD_ONLY=1 it stops at the tested plugin tarballs and the recorder: self-upgrade.sh then replaces plugins in the
 # running build, and neither a new prefix nor a switch happens.
 # usage: fork/deploy/upgrade.sh            (from the repository root)
 set -euo pipefail
@@ -11,9 +11,9 @@ ROOT=$(git rev-parse --show-toplevel)
 cd "$ROOT"
 [ -z "$(git status --porcelain)" ] || { echo "upgrade: commit or stash local changes first" >&2; exit 1; }
 SHA=$(git rev-parse --short HEAD)
-DIST=${FORK_DSH_DIST_ROOT:-/Volumes/MiniSSD/fork-dsh-dist}/$SHA
-APPS=${FORK_DSH_APPS:-/Users/Shared/fork-dsh}
-BUILD_ONLY=${FORK_DSH_BUILD_ONLY:-}
+DIST=${DSH_DIST_ROOT:-/Volumes/MiniSSD/dsh-dist}/$SHA
+APPS=${DSH_APPS:-/Users/Shared/dsh}
+BUILD_ONLY=${DSH_BUILD_ONLY:-}
 # Builds sit in a *.noindex directory so Spotlight leaves their node_modules alone (see prune-builds.sh);
 # <apps>/current stays the stable path the LaunchDaemon and the sudoers rules use.
 BUILDS=$APPS/builds.noindex

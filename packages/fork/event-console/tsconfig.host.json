@@ -1,0 +1,42 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "tsBuildInfoFile": "lib/tsconfig.host.tsbuildinfo"
+  },
+  "files": [
+    "src/index.ts",
+    "src/agents.ts",
+    "src/build-info.ts",
+    "src/claude-code.ts",
+    "src/config.ts",
+    "src/log.ts",
+    "src/activity.ts",
+    "src/overview.ts",
+    "src/probe.ts",
+    "src/request.ts",
+    "src/subscriptions.ts",
+    "src/views.ts"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../event-bus"
+    },
+    {
+      "path": "../speaking-style"
+    },
+    {
+      "path": "../voice"
+    },
+    {
+      "path": "../../schedule/schedule"
+    }
+  ]
+}

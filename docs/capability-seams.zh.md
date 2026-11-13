@@ -9,46 +9,50 @@
 
 ```mermaid
 flowchart LR
-  pkg_fork_event_bus["fork-event-bus"]
-  svc_forkEventBus["ctx.forkEventBus<br/>Event bus of the event service"]
-  pkg_fork_event_ingest["fork-event-ingest"]
-  pkg_fork_github_sensor["fork-github-sensor"]
-  pkg_fork_qq["fork-qq"]
-  pkg_fork_qqbot["fork-qqbot"]
-  pkg_fork_tool_monitor["fork-tool-monitor"]
-  pkg_fork_tool_up["fork-tool-up"]
-  pkg_fork_tool_watch["fork-tool-watch"]
-  pkg_fork_wechat["fork-wechat"]
-  pkg_fork_console["fork-console"]
-  svc_forkNotifier["ctx.forkNotifier<br/>Owner notification channel"]
-  pkg_fork_courses["fork-courses"]
-  pkg_fork_memory["fork-memory"]
-  pkg_fork_integrity["fork-integrity"]
-  pkg_fork_tool_voice["fork-tool-voice"]
-  pkg_fork_tool_wechat["fork-tool-wechat"]
+  pkg_event_bus["event-bus"]
+  svc_eventBus["ctx.eventBus<br/>Event bus of the event service"]
+  pkg_event_ingest["event-ingest"]
+  pkg_github_sensor["github-sensor"]
+  pkg_qq["qq"]
+  pkg_qqbot["qqbot"]
+  pkg_tool_monitor["tool-monitor"]
+  pkg_tool_up["tool-up"]
+  pkg_tool_watch["tool-watch"]
+  pkg_wechat["wechat"]
+  pkg_event_console["event-console"]
+  svc_ownerNotifier["ctx.ownerNotifier<br/>Owner notification channel"]
+  pkg_courses["courses"]
+  pkg_gmail["gmail"]
+  pkg_owner_memory["owner-memory"]
+  pkg_integrity_watch["integrity-watch"]
+  pkg_tool_voice["tool-voice"]
+  pkg_tool_wechat["tool-wechat"]
   pkg_owner_relay["owner-relay"]
   svc_ownerRelay["ctx.ownerRelay<br/>Relay of final answers to the owner"]
   pkg_bili["bili"]
-  pkg_fork_time_gap["fork-time-gap"]
-  pkg_fork_presence["fork-presence"]
-  svc_forkPresence["ctx.forkPresence<br/>Owner sleep state"]
-  svc_forkGithubSensor["ctx.forkGithubSensor<br/>GitHub event sensor"]
-  svc_forkCourses["ctx.forkCourses<br/>Course reminders"]
-  pkg_fork_tool_courses["fork-tool-courses"]
-  pkg_fork_courses_settings["fork-courses-settings"]
-  svc_forkQq["ctx.forkQq<br/>QQ group observer"]
-  pkg_fork_tool_qq["fork-tool-qq"]
-  pkg_fork_qq_login["fork-qq-login"]
-  pkg_fork_style["fork-style"]
-  svc_forkQqBot["ctx.forkQqBot<br/>Official QQ bot channel"]
-  svc_forkStyle["ctx.forkStyle<br/>Speaking style"]
-  pkg_fork_style_settings["fork-style-settings"]
-  pkg_fork_guard["fork-guard"]
-  svc_forkGuard["ctx.forkGuard<br/>Content guard for shared text"]
-  pkg_fork_voice["fork-voice"]
-  svc_forkVoice["ctx.forkVoice<br/>Text to speech and audio transcription"]
-  pkg_fork_cc_admin["fork-cc-admin"]
-  svc_forkClaudeCode["ctx.forkClaudeCode<br/>Claude Code session listing"]
+  pkg_time_gap["time-gap"]
+  pkg_presence["presence"]
+  svc_presence["ctx.presence<br/>Owner sleep state"]
+  svc_githubSensor["ctx.githubSensor<br/>GitHub event sensor"]
+  svc_courses["ctx.courses<br/>Course reminders"]
+  pkg_tool_courses["tool-courses"]
+  pkg_courses_settings["courses-settings"]
+  svc_gmail["ctx.gmail<br/>Gmail accounts"]
+  pkg_tool_gmail["tool-gmail"]
+  pkg_gmail_settings["gmail-settings"]
+  svc_qq["ctx.qq<br/>QQ group observer"]
+  pkg_tool_qq["tool-qq"]
+  pkg_qq_login["qq-login"]
+  pkg_speaking_style["speaking-style"]
+  svc_qqBot["ctx.qqBot<br/>Official QQ bot channel"]
+  svc_speakingStyle["ctx.speakingStyle<br/>Speaking style"]
+  pkg_speaking_style_settings["speaking-style-settings"]
+  pkg_content_guard["content-guard"]
+  svc_contentGuard["ctx.contentGuard<br/>Content guard for shared text"]
+  pkg_voice["voice"]
+  svc_voice["ctx.voice<br/>Text to speech and audio transcription"]
+  pkg_cc_admin["cc-admin"]
+  svc_claudeCodeSessions["ctx.claudeCodeSessions<br/>Claude Code session listing"]
   svc_bili["ctx.bili<br/>Bilibili account client"]
   pkg_tool_bili["tool-bili"]
   svc_biliHot["ctx.biliHot<br/>Bilibili trending reads"]
@@ -388,6 +392,7 @@ flowchart LR
   pkg_bili --> svc_bili
   pkg_bili --> svc_biliHot
   pkg_browser_use --> svc_browserUse
+  pkg_cc_admin --> svc_claudeCodeSessions
   pkg_client_connection --> svc_connection
   pkg_client_file_upload --> svc_fileUploads
   pkg_client_modules --> svc_clientModules
@@ -400,13 +405,16 @@ flowchart LR
   pkg_compaction_tool_result_pruner --> svc_toolResultPruner
   pkg_computer_use --> svc_computerUse
   pkg_config_editor --> svc_configEditor
+  pkg_content_guard --> svc_contentGuard
   pkg_cordis_host_runner --> svc_cordisInspect
   pkg_cordis_host_runner --> svc_dynamicCordisRunner
+  pkg_courses --> svc_courses
   pkg_credentials --> svc_credentials
   pkg_credentials_local --> svc_credentials
   pkg_cua --> svc_cuaAccess
   pkg_deepseek_account --> svc_deepseekAccount
   pkg_deepseek_llm_api_extensions --> svc_deepseekLlmApiExtensions
+  pkg_event_bus --> svc_eventBus
   pkg_experimental_api_speech_to_text --> svc_speechController
   pkg_experimental_browser_use_chrome_devtools_mcp --> svc_browserUse
   pkg_experimental_browser_use_playwright_mcp --> svc_browserUse
@@ -431,6 +439,8 @@ flowchart LR
   pkg_fs_local --> svc_fs
   pkg_fs_sandbox --> svc_fs
   pkg_fs_ssh --> svc_fs
+  pkg_github_sensor --> svc_githubSensor
+  pkg_gmail --> svc_gmail
   pkg_goal --> svc_goals
   pkg_headless --> svc_headlessStartup
   pkg_hmr --> svc_hmr
@@ -448,18 +458,6 @@ flowchart LR
   pkg_llm_replay --> svc_llm
   pkg_lsp --> svc_lsp
   pkg_lsp_stdio --> svc_lsp
-  pkg_fork_cc_admin --> svc_forkClaudeCode
-  pkg_fork_courses --> svc_forkCourses
-  pkg_fork_event_bus --> svc_forkEventBus
-  pkg_fork_github_sensor --> svc_forkGithubSensor
-  pkg_fork_guard --> svc_forkGuard
-  pkg_fork_presence --> svc_forkPresence
-  pkg_fork_qq --> svc_forkQq
-  pkg_fork_qqbot --> svc_forkQqBot
-  pkg_fork_style --> svc_forkStyle
-  pkg_fork_tool_up --> svc_biliEvidence
-  pkg_fork_voice --> svc_forkVoice
-  pkg_fork_wechat --> svc_forkNotifier
   pkg_mcp_client --> svc_mcpResources
   pkg_mcp_manager --> svc_mcpManager
   pkg_mcp_resources --> svc_mcpResources
@@ -473,9 +471,12 @@ flowchart LR
   pkg_plugin_market --> svc_pluginMarket
   pkg_plugin_package_inventory_deepseek --> svc_deepseekLlmApiExtensions
   pkg_plugin_recommendations --> svc_pluginRecommendations
+  pkg_presence --> svc_presence
   pkg_ptc_runtime --> svc_ptcRuntime
   pkg_ptc_runtime_node --> svc_ptcRuntime
   pkg_pwsh_local --> svc_shell
+  pkg_qq --> svc_qq
+  pkg_qqbot --> svc_qqBot
   pkg_sandbox --> svc_sandbox
   pkg_sandbox_local --> svc_sandbox
   pkg_sandbox_policy --> svc_sandboxPolicy
@@ -504,6 +505,7 @@ flowchart LR
   pkg_skill_badge --> svc_skills
   pkg_skill_filesystem --> svc_skills
   pkg_skill_office --> svc_skills
+  pkg_speaking_style --> svc_speakingStyle
   pkg_spill --> svc_spillStore
   pkg_spill_local --> svc_spillStore
   pkg_ssh --> svc_ssh
@@ -527,16 +529,19 @@ flowchart LR
   pkg_terminal_panel --> svc_terminals
   pkg_token_meter --> svc_tokenMeter
   pkg_tool_subagent --> svc_subagentModelSelection
+  pkg_tool_up --> svc_biliEvidence
   pkg_tools --> svc_tools
   pkg_typert_registry --> svc_typert
   pkg_user_approval --> svc_approval
   pkg_user_questions --> svc_userQuestions
+  pkg_voice --> svc_voice
   pkg_web --> svc_web
   pkg_web_app --> svc_webApp
   pkg_web_deepseek_api --> svc_web
   pkg_web_fetch_http --> svc_web
   pkg_web_search_deepseek --> svc_web
   pkg_webhook --> svc_webhookRuntime
+  pkg_wechat --> svc_ownerNotifier
   pkg_workflow --> svc_workflowEngine
   pkg_workflow_ptc --> svc_workflowEngine
   pkg_working_directory --> svc_workingDirectory
@@ -560,13 +565,14 @@ flowchart LR
   svc_attachments --> pkg_llm_pi_ai
   svc_attachments --> pkg_tool_fs
   svc_authorization --> pkg_llm_pi_ai
-  svc_bili --> pkg_fork_style
+  svc_bili --> pkg_speaking_style
   svc_bili --> pkg_tool_bili
-  svc_biliEvidence --> pkg_fork_style
-  svc_biliHot --> pkg_fork_style
+  svc_biliEvidence --> pkg_speaking_style
+  svc_biliHot --> pkg_speaking_style
   svc_browserUse --> pkg_experimental_browser_use_chrome_devtools_mcp
   svc_browserUse --> pkg_experimental_browser_use_playwright_mcp
   svc_browserUse --> pkg_experimental_browser_use_stagehand_native
+  svc_claudeCodeSessions --> pkg_event_console
   svc_clientModules --> pkg_client_hmr
   svc_compaction --> pkg_compaction_basic
   svc_computerUse --> pkg_experimental_computer_use_cua_driver_mcp
@@ -575,7 +581,12 @@ flowchart LR
   svc_configEditor --> pkg_settings
   svc_connection --> pkg_api_gateway
   svc_connection --> pkg_host_frontend_static
+  svc_contentGuard --> pkg_qq
+  svc_contentGuard --> pkg_speaking_style
+  svc_contentGuard --> pkg_tool_up
   svc_cordisInspect --> pkg_tool_cordis
+  svc_courses --> pkg_courses_settings
+  svc_courses --> pkg_tool_courses
   svc_credentials --> pkg_api_settings_controller
   svc_credentials --> pkg_llm_deepseek
   svc_credentials --> pkg_llm_pi_ai
@@ -584,12 +595,25 @@ flowchart LR
   svc_deepseekLlmApiExtensions --> pkg_llm_deepseek
   svc_directoryPicker --> pkg_api_workspace_controller
   svc_dynamicCordisRunner --> pkg_tool_cordis
+  svc_eventBus --> pkg_event_console
+  svc_eventBus --> pkg_event_ingest
+  svc_eventBus --> pkg_github_sensor
+  svc_eventBus --> pkg_qq
+  svc_eventBus --> pkg_qqbot
+  svc_eventBus --> pkg_tool_monitor
+  svc_eventBus --> pkg_tool_up
+  svc_eventBus --> pkg_tool_watch
+  svc_eventBus --> pkg_wechat
   svc_fileReferences --> pkg_api_session_controller
   svc_fileUploads --> pkg_api_session_controller
   svc_forge --> pkg_experimental_client_ui_forge
   svc_forge --> pkg_experimental_forge_session
   svc_forgeSession --> pkg_experimental_client_ui_forge
   svc_fs --> pkg_tool_fs
+  svc_githubSensor --> pkg_event_console
+  svc_githubSensor --> pkg_tool_watch
+  svc_gmail --> pkg_gmail_settings
+  svc_gmail --> pkg_tool_gmail
   svc_headlessStartup --> pkg_headless
   svc_hmr --> pkg_app_boot
   svc_jobs --> pkg_api_job_controller
@@ -600,62 +624,41 @@ flowchart LR
   svc_llm --> pkg_agent_loop
   svc_llm --> pkg_compaction_basic
   svc_lsp --> pkg_tool_lsp
-  svc_forkClaudeCode --> pkg_fork_console
-  svc_forkCourses --> pkg_fork_courses_settings
-  svc_forkCourses --> pkg_fork_tool_courses
-  svc_forkEventBus --> pkg_fork_console
-  svc_forkEventBus --> pkg_fork_event_ingest
-  svc_forkEventBus --> pkg_fork_github_sensor
-  svc_forkEventBus --> pkg_fork_qq
-  svc_forkEventBus --> pkg_fork_qqbot
-  svc_forkEventBus --> pkg_fork_tool_monitor
-  svc_forkEventBus --> pkg_fork_tool_up
-  svc_forkEventBus --> pkg_fork_tool_watch
-  svc_forkEventBus --> pkg_fork_wechat
-  svc_forkGithubSensor --> pkg_fork_console
-  svc_forkGithubSensor --> pkg_fork_tool_watch
-  svc_forkGuard --> pkg_fork_qq
-  svc_forkGuard --> pkg_fork_style
-  svc_forkGuard --> pkg_fork_tool_up
-  svc_forkNotifier --> pkg_fork_courses
-  svc_forkNotifier --> pkg_fork_event_bus
-  svc_forkNotifier --> pkg_fork_integrity
-  svc_forkNotifier --> pkg_fork_memory
-  svc_forkNotifier --> pkg_fork_qq
-  svc_forkNotifier --> pkg_fork_tool_voice
-  svc_forkNotifier --> pkg_fork_tool_watch
-  svc_forkNotifier --> pkg_fork_tool_wechat
-  svc_forkPresence --> pkg_fork_console
-  svc_forkPresence --> pkg_fork_courses
-  svc_forkPresence --> pkg_fork_wechat
-  svc_forkQq --> pkg_fork_console
-  svc_forkQq --> pkg_fork_qq_login
-  svc_forkQq --> pkg_fork_style
-  svc_forkQq --> pkg_fork_tool_qq
-  svc_forkStyle --> pkg_fork_console
-  svc_forkStyle --> pkg_fork_style_settings
-  svc_forkVoice --> pkg_fork_console
-  svc_forkVoice --> pkg_fork_tool_voice
-  svc_forkVoice --> pkg_fork_wechat
   svc_mcpResources --> pkg_mcp_resources
   svc_officeKit --> pkg_client_ui_sidebar_documentpreview
   svc_officeKit --> pkg_tool_office
   svc_otel --> pkg_host_product_telemetry_otel
   svc_otel --> pkg_session_telemetry_otel
+  svc_ownerNotifier --> pkg_courses
+  svc_ownerNotifier --> pkg_event_bus
+  svc_ownerNotifier --> pkg_gmail
+  svc_ownerNotifier --> pkg_integrity_watch
+  svc_ownerNotifier --> pkg_owner_memory
+  svc_ownerNotifier --> pkg_qq
+  svc_ownerNotifier --> pkg_tool_voice
+  svc_ownerNotifier --> pkg_tool_watch
+  svc_ownerNotifier --> pkg_tool_wechat
   svc_ownerRelay --> pkg_bili
-  svc_ownerRelay --> pkg_fork_event_bus
-  svc_ownerRelay --> pkg_fork_qqbot
-  svc_ownerRelay --> pkg_fork_time_gap
-  svc_ownerRelay --> pkg_fork_wechat
+  svc_ownerRelay --> pkg_event_bus
+  svc_ownerRelay --> pkg_qqbot
+  svc_ownerRelay --> pkg_time_gap
+  svc_ownerRelay --> pkg_wechat
   svc_pluginManager --> pkg_plugin_manager
   svc_pluginManager --> pkg_ui_settings_plugin_inventory
   svc_pluginMarket --> pkg_client_ui_plugin_market
   svc_pluginMarket --> pkg_plugin_market
   svc_pluginRecommendations --> pkg_client_ui_plugin_recommendations
   svc_pluginRegistryProbe --> pkg_client_ui_plugin_manager
+  svc_presence --> pkg_courses
+  svc_presence --> pkg_event_console
+  svc_presence --> pkg_wechat
   svc_profileContext --> pkg_plugin_manager
   svc_ptcRuntime --> pkg_tool_executor_ptc
   svc_ptcRuntime --> pkg_workflow_ptc
+  svc_qq --> pkg_event_console
+  svc_qq --> pkg_qq_login
+  svc_qq --> pkg_speaking_style
+  svc_qq --> pkg_tool_qq
   svc_remoteAccess --> pkg_api_gateway
   svc_remoteAccess --> pkg_api_session_controller
   svc_remoteAccess --> pkg_api_workspace_controller
@@ -696,6 +699,8 @@ flowchart LR
   svc_shellEnv --> pkg_tool_bash
   svc_shellEnv --> pkg_tool_pwsh
   svc_skills --> pkg_tool_skill
+  svc_speakingStyle --> pkg_event_console
+  svc_speakingStyle --> pkg_speaking_style_settings
   svc_speechToText --> pkg_experimental_api_speech_to_text
   svc_spillStore --> pkg_spill_policy
   svc_ssh --> pkg_fs_ssh
@@ -736,6 +741,9 @@ flowchart LR
   svc_typert --> pkg_api_gateway
   svc_typert --> pkg_typert_loader
   svc_userQuestions --> pkg_tool_ask_user
+  svc_voice --> pkg_event_console
+  svc_voice --> pkg_tool_voice
+  svc_voice --> pkg_wechat
   svc_web --> pkg_tool_web
   svc_webApp --> pkg_harness_dev_context
   svc_webServer --> pkg_client_connection
@@ -758,21 +766,22 @@ flowchart LR
 
 | ctx 键 | 角色 | 所属包 | 实现 | 直接消费方 | 配套插件 | 说明 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ctx.forkEventBus` | `service` | [`fork-event-bus`](../packages/fork/fork-event-bus) | - | [`fork-event-ingest`](../packages/fork/fork-event-ingest), [`fork-github-sensor`](../packages/fork/fork-github-sensor), [`fork-qq`](../packages/fork/fork-qq), [`fork-qqbot`](../packages/fork/fork-qqbot), [`fork-tool-monitor`](../packages/fork/fork-tool-monitor), [`fork-tool-up`](../packages/fork/fork-tool-up), [`fork-tool-watch`](../packages/fork/fork-tool-watch), [`fork-wechat`](../packages/fork/fork-wechat), [`fork-console`](../packages/fork/fork-console) | - | 负责去重、路由、批次和通知流程；传感器发布事件，工具修改路由。 |
-| `ctx.forkNotifier` | `service` | [`fork-wechat`](../packages/fork/fork-wechat) | - | [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-qq`](../packages/fork/fork-qq), [`fork-courses`](../packages/fork/fork-courses), [`fork-memory`](../packages/fork/fork-memory), [`fork-integrity`](../packages/fork/fork-integrity), [`fork-tool-watch`](../packages/fork/fork-tool-watch), [`fork-tool-voice`](../packages/fork/fork-tool-voice), [`fork-tool-wechat`](../packages/fork/fork-tool-wechat) | - | 事件总线定义通道接口，微信通道提供实现。 |
-| `ctx.ownerRelay` | `service` | [`owner-relay`](../packages/fork/owner-relay) | - | [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-wechat`](../packages/fork/fork-wechat), [`fork-qqbot`](../packages/fork/fork-qqbot), [`bili`](../packages/fork/bili), [`fork-time-gap`](../packages/fork/fork-time-gap) | - | 通道在此注册并认领 Session；中继通过 Session 所属的通道发送每个最终回答。 |
-| `ctx.forkPresence` | `service` | [`fork-presence`](../packages/fork/fork-presence) | - | [`fork-wechat`](../packages/fork/fork-wechat), [`fork-courses`](../packages/fork/fork-courses), [`fork-console`](../packages/fork/fork-console) | - | 把睡眠专注模式、每日时段和手动按钮合成一个状态。 |
-| `ctx.forkGithubSensor` | `service` | [`fork-github-sensor`](../packages/fork/fork-github-sensor) | - | [`fork-tool-watch`](../packages/fork/fork-tool-watch), [`fork-console`](../packages/fork/fork-console) | - | 轮询并接收 GitHub 投递，发布到事件总线。 |
-| `ctx.forkCourses` | `service` | [`fork-courses`](../packages/fork/fork-courses) | - | [`fork-tool-courses`](../packages/fork/fork-tool-courses), [`fork-courses-settings`](../packages/fork/fork-courses-settings) | - | 读取课程服务并发送截止提醒。 |
-| `ctx.forkQq` | `service` | [`fork-qq`](../packages/fork/fork-qq) | - | [`fork-tool-qq`](../packages/fork/fork-tool-qq), [`fork-qq-login`](../packages/fork/fork-qq-login), [`fork-style`](../packages/fork/fork-style), [`fork-console`](../packages/fork/fork-console) | - | qq-recorder 服务的客户端；写群摘要并响应检索。 |
-| `ctx.forkQqBot` | `service` | [`fork-qqbot`](../packages/fork/fork-qqbot) | - | - | - | 持有官方机器人连接；没有其他包调用它。 |
-| `ctx.forkStyle` | `service` | [`fork-style`](../packages/fork/fork-style) | - | [`fork-style-settings`](../packages/fork/fork-style-settings), [`fork-console`](../packages/fork/fork-console) | - | 从 QQ、B 站和公开网页收集风格，并展示给挂载它的 preset。 |
-| `ctx.forkGuard` | `service` | [`fork-guard`](../packages/fork/fork-guard) | - | [`fork-qq`](../packages/fork/fork-qq), [`fork-style`](../packages/fork/fork-style), [`fork-tool-up`](../packages/fork/fork-tool-up) | - | 用模式、金丝雀、记忆重合和模型检查他人可读的文本，失败即拒绝。 |
-| `ctx.forkVoice` | `service` | [`fork-voice`](../packages/fork/fork-voice) | - | [`fork-tool-voice`](../packages/fork/fork-tool-voice), [`fork-wechat`](../packages/fork/fork-wechat), [`fork-console`](../packages/fork/fork-console) | - | 调用语音和转写服务，返回文件或文字。 |
-| `ctx.forkClaudeCode` | `service` | [`fork-cc-admin`](../packages/fork/fork-cc-admin) | - | [`fork-console`](../packages/fork/fork-console) | - | 为设置页面列出并启动服务账号的 Claude Code 会话。 |
-| `ctx.bili` | `service` | [`bili`](../packages/fork/bili) | - | [`tool-bili`](../packages/fork/tool-bili), [`fork-style`](../packages/fork/fork-style) | - | bili-svc 的轻量客户端；bili-svc 持有登录态并写入 B 站。 |
-| `ctx.biliHot` | `service` | [`bili`](../packages/fork/bili) | - | [`fork-style`](../packages/fork/fork-style) | - | 通过 bili-svc 读取热门视频。 |
-| `ctx.biliEvidence` | `service` | [`fork-tool-up`](../packages/fork/fork-tool-up) | - | [`fork-style`](../packages/fork/fork-style) | - | 提供创作者账号工具的证据记录。 |
+| `ctx.eventBus` | `service` | [`event-bus`](../packages/fork/event-bus) | - | [`event-ingest`](../packages/fork/event-ingest), [`github-sensor`](../packages/fork/github-sensor), [`qq`](../packages/fork/qq), [`qqbot`](../packages/fork/qqbot), [`tool-monitor`](../packages/fork/tool-monitor), [`tool-up`](../packages/fork/tool-up), [`tool-watch`](../packages/fork/tool-watch), [`wechat`](../packages/fork/wechat), [`event-console`](../packages/fork/event-console) | - | 负责去重、路由、批次和通知流程；传感器发布事件，工具修改路由。 |
+| `ctx.ownerNotifier` | `service` | [`wechat`](../packages/fork/wechat) | - | [`event-bus`](../packages/fork/event-bus), [`qq`](../packages/fork/qq), [`courses`](../packages/fork/courses), [`gmail`](../packages/fork/gmail), [`owner-memory`](../packages/fork/owner-memory), [`integrity-watch`](../packages/fork/integrity-watch), [`tool-watch`](../packages/fork/tool-watch), [`tool-voice`](../packages/fork/tool-voice), [`tool-wechat`](../packages/fork/tool-wechat) | - | 事件总线定义通道接口，微信通道提供实现。 |
+| `ctx.ownerRelay` | `service` | [`owner-relay`](../packages/fork/owner-relay) | - | [`event-bus`](../packages/fork/event-bus), [`wechat`](../packages/fork/wechat), [`qqbot`](../packages/fork/qqbot), [`bili`](../packages/fork/bili), [`time-gap`](../packages/fork/time-gap) | - | 通道在此注册并认领 Session；中继通过 Session 所属的通道发送每个最终回答。 |
+| `ctx.presence` | `service` | [`presence`](../packages/fork/presence) | - | [`wechat`](../packages/fork/wechat), [`courses`](../packages/fork/courses), [`event-console`](../packages/fork/event-console) | - | 把睡眠专注模式、每日时段和手动按钮合成一个状态。 |
+| `ctx.githubSensor` | `service` | [`github-sensor`](../packages/fork/github-sensor) | - | [`tool-watch`](../packages/fork/tool-watch), [`event-console`](../packages/fork/event-console) | - | 轮询并接收 GitHub 投递，发布到事件总线。 |
+| `ctx.courses` | `service` | [`courses`](../packages/fork/courses) | - | [`tool-courses`](../packages/fork/tool-courses), [`courses-settings`](../packages/fork/courses-settings) | - | 读取课程服务并发送截止提醒。 |
+| `ctx.gmail` | `service` | [`gmail`](../packages/fork/gmail) | - | [`tool-gmail`](../packages/fork/tool-gmail), [`gmail-settings`](../packages/fork/gmail-settings) | - | 读取并发送主人的 Gmail；发信可先留给主人确认。 |
+| `ctx.qq` | `service` | [`qq`](../packages/fork/qq) | - | [`tool-qq`](../packages/fork/tool-qq), [`qq-login`](../packages/fork/qq-login), [`speaking-style`](../packages/fork/speaking-style), [`event-console`](../packages/fork/event-console) | - | qq-recorder 服务的客户端；写群摘要并响应检索。 |
+| `ctx.qqBot` | `service` | [`qqbot`](../packages/fork/qqbot) | - | - | - | 持有官方机器人连接；没有其他包调用它。 |
+| `ctx.speakingStyle` | `service` | [`speaking-style`](../packages/fork/speaking-style) | - | [`speaking-style-settings`](../packages/fork/speaking-style-settings), [`event-console`](../packages/fork/event-console) | - | 从 QQ、B 站和公开网页收集风格，并展示给挂载它的 preset。 |
+| `ctx.contentGuard` | `service` | [`content-guard`](../packages/fork/content-guard) | - | [`qq`](../packages/fork/qq), [`speaking-style`](../packages/fork/speaking-style), [`tool-up`](../packages/fork/tool-up) | - | 用模式、金丝雀、记忆重合和模型检查他人可读的文本，失败即拒绝。 |
+| `ctx.voice` | `service` | [`voice`](../packages/fork/voice) | - | [`tool-voice`](../packages/fork/tool-voice), [`wechat`](../packages/fork/wechat), [`event-console`](../packages/fork/event-console) | - | 调用语音和转写服务，返回文件或文字。 |
+| `ctx.claudeCodeSessions` | `service` | [`cc-admin`](../packages/fork/cc-admin) | - | [`event-console`](../packages/fork/event-console) | - | 为设置页面列出并启动服务账号的 Claude Code 会话。 |
+| `ctx.bili` | `service` | [`bili`](../packages/fork/bili) | - | [`tool-bili`](../packages/fork/tool-bili), [`speaking-style`](../packages/fork/speaking-style) | - | bili-svc 的轻量客户端；bili-svc 持有登录态并写入 B 站。 |
+| `ctx.biliHot` | `service` | [`bili`](../packages/fork/bili) | - | [`speaking-style`](../packages/fork/speaking-style) | - | 通过 bili-svc 读取热门视频。 |
+| `ctx.biliEvidence` | `service` | [`tool-up`](../packages/fork/tool-up) | - | [`speaking-style`](../packages/fork/speaking-style) | - | 提供创作者账号工具的证据记录。 |
 | `ctx.actionCards` | `service` | [`action-cards`](../packages/experimental/action-cards) | - | [`creation-recommendations`](../packages/experimental/creation-recommendations), [`client-ui-action-cards`](../packages/experimental/client-ui-action-cards) | - | 负责卡片工具、卡片状态、用户操作和状态通知；各卡片种类注册自己的动作和处理器。 |
 | `ctx.pluginRecommendations` | `service` | [`plugin-recommendations`](../packages/experimental/plugin-recommendations) | - | [`client-ui-plugin-recommendations`](../packages/experimental/client-ui-plugin-recommendations) | - | 读取官方插件卡片的当前目录文本，并在用户点击后通过配置插件管理器启用该插件。 |
 | `ctx.headlessStartup` | `core` | [`headless`](../packages/bundle/headless) | - | [`headless`](../packages/bundle/headless) | - | 将解析后的任务和运行选项提供给无界面运行器及其 sandbox-policy 配置。 |

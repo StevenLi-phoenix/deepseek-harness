@@ -3,11 +3,11 @@
  * the Bilibili account's messages) claim the Sessions whose answers they carry; the relay follows
  * those Sessions, keeps each turn's latest assistant text, applies one rule set when the turn ends,
  * and hands the answer to the claiming channel. An answer a channel cannot deliver goes to
- * `ctx.forkNotifier` instead, labelled with where it came from.
+ * `ctx.ownerNotifier` instead, labelled with where it came from.
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
-import { failureDetail } from '@deepseek-ai/dsh-fork-event-bus'
+import { failureDetail } from '@deepseek-ai/dsh-event-bus'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { contentText, decideRelay, relayFallbackNote, type RelayAnswer, type RelayDecision } from './rules.ts'
 
@@ -35,7 +35,7 @@ export interface RelayChannel {
   /**
    * Who sent a fallback copy, as the owner's chat Session reads it (the note's `origin`), e.g.
    * `the Bilibili account's Session (its answer could not go out as a Bilibili message)`. Omit it on
-   * the notifier's own channel (fork-wechat): an answer it cannot deliver has nowhere else to go.
+   * the notifier's own channel (wechat): an answer it cannot deliver has nowhere else to go.
    */
   readonly fallbackLabel?: string
   /**
@@ -221,14 +221,14 @@ export class OwnerRelay extends Service {
       this.ctx.logger.warn(`owner-relay: ${own}; the answer of Session ${id} was not delivered`)
       return
     }
-    const notifier = this.ctx.get('forkNotifier')
+    const notifier = this.ctx.get('ownerNotifier')
     if (notifier === undefined) {
-      this.ctx.logger.warn(`owner-relay: no forkNotifier is mounted; the answer of Session ${id} was not delivered`)
+      this.ctx.logger.warn(`owner-relay: no ownerNotifier is mounted; the answer of Session ${id} was not delivered`)
       return
     }
     try {
       await notifier.send(relayFallbackNote(answer, why, channel.fallbackLabel))
-      this.ctx.logger.info(`owner-relay: sent the answer of Session ${id} to forkNotifier instead of ${channel.name}`)
+      this.ctx.logger.info(`owner-relay: sent the answer of Session ${id} to ownerNotifier instead of ${channel.name}`)
     } catch (error: unknown) {
       this.ctx.logger.warn(`owner-relay: the fallback of Session ${id} failed too: ${errorText(error)}`)
     }

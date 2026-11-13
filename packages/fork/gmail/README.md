@@ -25,7 +25,7 @@ Let your agent read, draft, and send mail from each Gmail account you connect, s
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount it at the root of a process that also mounts the storage domain facility, the credential store, and a notifier such as [`@deepseek-ai/dsh-fork-wechat`](../fork-wechat/README.md). The fork event bundle mounts it with its defaults beside [`gmail-settings`](../gmail-settings/README.md), which serves the page Google's sign-in returns to; the tools are [`tool-gmail`](../tool-gmail/README.md).
+Mount it at the root of a process that also mounts the storage domain facility, the credential store, and a notifier such as [`@deepseek-ai/dsh-wechat`](../wechat/README.md). The fork event bundle mounts it with its defaults beside [`gmail-settings`](../gmail-settings/README.md), which serves the page Google's sign-in returns to; the tools are [`tool-gmail`](../tool-gmail/README.md).
 
 ```yaml
 - id: gmail
@@ -58,7 +58,7 @@ To connect accounts, create a Google Cloud project with the Gmail API enabled, a
 
 ### Rules
 
-- **Turn facts** — whether a turn is clean, its origin, and the owner's own words come from the Session log through [`fork-taint`](../fork-taint/README.md); the model supplies none of them. Reading mail (`gmail_search`, `gmail_read`, `gmail_attachment`) makes the turn not clean.
+- **Turn facts** — whether a turn is clean, its origin, and the owner's own words come from the Session log through [`turn-taint`](../turn-taint/README.md); the model supplies none of them. Reading mail (`gmail_search`, `gmail_read`, `gmail_attachment`) makes the turn not clean.
 - **Held** — a held message is kept as a Gmail draft and gets a six-character code; the owner's WeChat notice lists From, To, Cc, Bcc, the subject, the attachments, why it waits, and the first 400 characters of the text. The gate decides on, and the notice shows, the draft as Gmail stores it (its RFC 5322 text), and its SHA-256 is kept.
 - **Confirm** — from Settings, or from a clean turn whose owner message holds the code as a word, in which the agent calls `gmail_send` with the code before it reads any mail or web page. The draft is read again: a changed draft is discarded and not sent, a deleted one is dropped, and a read-only account sends nothing.
 - **Expiry** — an unconfirmed message expires after `confirmTtlHours`; its draft stays in Gmail. A held draft cannot be changed or sent by the agent.
@@ -101,7 +101,7 @@ This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 
 - [Gmail tools](../tool-gmail/README.md) — what the main agent calls
 - [Settings → 邮箱](../gmail-settings/README.md) — the client, the accounts, the held messages, and the sign-in page
-- [Turn origin](../fork-taint/README.md) — how a turn is classified
+- [Turn origin](../turn-taint/README.md) — how a turn is classified
 
 -----
 

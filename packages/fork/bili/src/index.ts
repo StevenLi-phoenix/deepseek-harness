@@ -20,8 +20,8 @@ import type {} from '@deepseek-ai/cordis-plugin-timer'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 // Type-only: the credential store's reference brand; this package takes no runtime export from it.
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
-// Type-only: the ctx.forkNotifier service the WeChat channel provides.
-import type {} from '@deepseek-ai/dsh-fork-event-bus'
+// Type-only: the ctx.ownerNotifier service the WeChat channel provides.
+import type {} from '@deepseek-ai/dsh-event-bus'
 // Type-only: ctx.ownerRelay, which relays the account's turns through its DM channel.
 import type {} from '@deepseek-ai/dsh-owner-relay'
 import type {} from '@deepseek-ai/dsh-permission-presets'
@@ -163,7 +163,7 @@ const DANMAKU_LINES = 40
 /** The daily share is checked this often; a check costs no model tokens. */
 const SHARE_TICK_MS = 60_000
 
-/** The slice of `ctx.forkPresence` the daily share reads, when the presence plugin is mounted. */
+/** The slice of `ctx.presence` the daily share reads, when the presence plugin is mounted. */
 interface PresenceReader {
   isAsleep(): boolean
 }
@@ -391,7 +391,7 @@ export class BiliAccount extends Service {
       shareCurrent: sessionId => this.share.isShareTurn(sessionId),
       shareSettled: (sessionId, outcome, detail, text) => this.share.settled(sessionId, outcome, detail, text),
       hold: work => this.hold(work),
-      notifier: () => this.ctx.get('forkNotifier'),
+      notifier: () => this.ctx.get('ownerNotifier'),
       logger: { info: (message) => { ctx.logger.info(message) }, warn: (message) => { ctx.logger.warn(message) } },
     })
 
@@ -678,7 +678,7 @@ export class BiliAccount extends Service {
 
   /** Why the daily share should wait now: the owner sleeps, is messaging the account, or has messages queued. */
   private shareHold(now: number, domain: Domain<typeof biliDomain>): string | undefined {
-    const presence = (this.ctx.get as (name: string) => unknown)('forkPresence') as PresenceReader | undefined
+    const presence = (this.ctx.get as (name: string) => unknown)('presence') as PresenceReader | undefined
     if (presence?.isAsleep() === true) return 'the owner is asleep'
     if (this.conversationUntil > now) return 'the owner is messaging the account'
     if (domain.table('pending').size > 0) return 'the owner\'s messages are waiting for an answer'
@@ -1355,7 +1355,7 @@ export class BiliAccount extends Service {
       const today = kept.length
       const perDay = this.config.mainAgentPerDay
       if (today >= perDay) return { outcome: 'refused', detail: `today's ${perDay} message(s) to the main agent are used up` }
-      const notifier = this.ctx.get('forkNotifier')
+      const notifier = this.ctx.get('ownerNotifier')
       if (notifier?.tellMainAgent === undefined) return { outcome: 'refused', detail: 'the owner\'s WeChat channel is not running, so the main agent cannot be reached' }
       let sessionId: string
       try {

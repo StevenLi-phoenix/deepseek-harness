@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/fork/speaking-style-settings/README.md
+/:
+  en: 75db4027c5add3b3
+  zh: c4041e7f4662ad10
+/deepseek-ai-dsh-speaking-style-settings:
+  en: df33c29cbe32f69b
+  zh: cd953d4dcd4a823a
+/deepseek-ai-dsh-speaking-style-settings/summary:
+  en: 63137ee693a47662
+  zh: da0b2ee961db982a
+/deepseek-ai-dsh-speaking-style-settings/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-speaking-style-settings/use-this-package:
+  en: f0947ac4fa197f51
+  zh: 657d22315ea09f41
+/deepseek-ai-dsh-speaking-style-settings/understand-the-implementation:
+  en: be2dea8dca7aaa1c
+  zh: 59501f014029422b
+/deepseek-ai-dsh-speaking-style-settings/further-exploration:
+  en: a0ade5c10bb4ef6d
+  zh: 4a1ddeae54711d80
+/deepseek-ai-dsh-speaking-style-settings/model-experience:
+  en: 0939e6934deec13f
+  zh: ac9d55af396106e7
+/deepseek-ai-dsh-speaking-style-settings/model-experience/kv-cache-effect:
+  en: ca75c51c89c2c9b0
+  zh: 0a4a6dba5e6904a5
+/deepseek-ai-dsh-speaking-style-settings/known-limitations-and-deferred-work:
+  en: 9294035b8002d6d7
+  zh: 53e1b7305c325e48
+/deepseek-ai-dsh-speaking-style-settings/known-limitations-and-deferred-work/dev-note:
+  en: e06eba918a7c379f
+  zh: 5ecf9e20f365edda

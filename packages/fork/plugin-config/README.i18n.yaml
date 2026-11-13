@@ -1,0 +1,46 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/fork/plugin-config/README.md
+/:
+  en: 107082981371cfa5
+  zh: 6e7bdbc92bc88271
+/deepseek-ai-dsh-plugin-config:
+  en: 522a439dd0dcac79
+  zh: f9ec8ac3a9a4d30c
+/deepseek-ai-dsh-plugin-config/summary:
+  en: 773161c0b2cce1b9
+  zh: 33a0246dee3005b2
+/deepseek-ai-dsh-plugin-config/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-plugin-config/use-this-package:
+  en: ae101ae35913dd49
+  zh: bb9c985d9fce1b35
+/deepseek-ai-dsh-plugin-config/use-this-package/put-the-card-in-a-settings-section:
+  en: 58155ccf94dbada0
+  zh: d1e4244410c72f99
+/deepseek-ai-dsh-plugin-config/use-this-package/what-the-card-shows:
+  en: ded5452e922befc4
+  zh: bb9c55eb25a07f14
+/deepseek-ai-dsh-plugin-config/use-this-package/saving:
+  en: a1d10414d79c5edf
+  zh: 4189bd3630d9b14f
+/deepseek-ai-dsh-plugin-config/understand-the-implementation:
+  en: bd063824da4acd47
+  zh: 1b14b4df92196575
+/deepseek-ai-dsh-plugin-config/further-exploration:
+  en: 27be904c5bc516b3
+  zh: 54208ecb48351128
+/deepseek-ai-dsh-plugin-config/model-experience:
+  en: 751c3fd04a33c145
+  zh: a9426f5001570a7a
+/deepseek-ai-dsh-plugin-config/model-experience/kv-cache-effect:
+  en: d0326f65e29a4da0
+  zh: a8a1b3d1ea57dc32
+/deepseek-ai-dsh-plugin-config/known-limitations-and-deferred-work:
+  en: c029563bba4a5951
+  zh: e325df79fd24f51e
+/deepseek-ai-dsh-plugin-config/known-limitations-and-deferred-work/dev-note:
+  en: 648e724aecf884ef
+  zh: ab5270dca4af2a9a

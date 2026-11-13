@@ -120,7 +120,7 @@ describe('the daily share', () => {
   it('waits while the owner sleeps or is messaging the account, and while the Session is in a turn', async () => {
     const h = await mounted()
     let asleep = true
-    h.ctx.provide('forkPresence', { isAsleep: () => asleep } as never)
+    h.ctx.provide('presence', { isAsleep: () => asleep } as never)
     await until('20:50')
     expect(h.sessions.prompts).toHaveLength(0)
     expect(h.logs.filter(line => line.text === 'bili: the share 2026-10-23 waits: the owner is asleep')).toHaveLength(1)
@@ -137,7 +137,7 @@ describe('the daily share', () => {
 
   it('is missed when it could not run within two hours after the window', async () => {
     const h = await mounted()
-    h.ctx.provide('forkPresence', { isAsleep: () => true } as never)
+    h.ctx.provide('presence', { isAsleep: () => true } as never)
     await until('23:59')
     vi.setSystemTime(new Date(localTime('2026-10-24', 30, 'America/New_York')))
     await vi.advanceTimersByTimeAsync(61_000)

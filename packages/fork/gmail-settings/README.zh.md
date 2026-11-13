@@ -32,7 +32,7 @@ kind: "package-reference"
   name: '@deepseek-ai/dsh-gmail-settings'
 ```
 
-它没有配置；上限和可信收件人属于 `gmail`，在区块底部它的「全部设置」卡片（[`fork-config`](../fork-config/README.zh.md)）里改。
+它没有配置；上限和可信收件人属于 `gmail`，在区块底部它的「全部设置」卡片（[`plugin-config`](../plugin-config/README.zh.md)）里改。
 
 -----
 

@@ -254,6 +254,51 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-command-feedback` | no | Log-only session feedback: the record event, the sessionFeedback Host Remote, and the human-facing slash command |
 | `@deepseek-ai/dsh-message-feedback` | yes | Canonical Session-log ratings and notes for finalized assistant messages |
 
+## fork
+
+| Package | Config | Description |
+|---|---|---|
+| `@deepseek-ai/dsh-bili` | yes | The agent's own Bilibili account as a client of bili-svc: reads and non-speech actions through bili-svc's door, the owner's messages answered through its Reply Gate, and a Settings section that manages bili-svc (accounts, QR sign-in, sessions, gate, brake, ledger) |
+| `@deepseek-ai/dsh-cc-admin` | yes | Claude Code sessions of the service account as a root service: list, start with a first task, and stop, for the Settings page |
+| `@deepseek-ai/dsh-cc-bridge` | yes | Model-facing cc_list_sessions and cc_send tools: the agent talks to the owner's Claude Code sessions on the same Mac through a relay, and their replies reach the main agent |
+| `@deepseek-ai/dsh-content-guard` | yes | One content validator for text that others can read: patterns, canaries, overlap with the owner's memory, and a model, any layer that cannot run refuses |
+| `@deepseek-ai/dsh-courses` | yes | The owner's course records in DSH: a client of the courses service and a deadline poller that reminds the owner on WeChat by fixed rules (checkpoints, late windows, quiet hours) and tells when the course sync is broken |
+| `@deepseek-ai/dsh-courses-settings` | no | Settings section for course deadline reminders: on or off, the last and next check with a button to check now, the course sync's health, the next deadlines, the latest reminders, and the plugin's configuration |
+| `@deepseek-ai/dsh-event-bus` | yes | Durable event bus for event-driven agent runs: dedupe, loop suppression, subscriptions, coalescing, rate limits, and dispatch to notify or Session actuators |
+| `@deepseek-ai/dsh-event-console` | yes | The event service in the browser: a message flow page, and Settings sections for a service overview, subscriptions and schedule reminders, and Claude Code sessions with the voice service |
+| `@deepseek-ai/dsh-event-ingest` | yes | Authenticated POST route through which the owner's own services push events into the fork event bus, one token per source |
+| `@deepseek-ai/dsh-github-sensor` | yes | GitHub polling sensor for the fork event bus: releases, tags, commits, and notifications with conditional requests |
+| `@deepseek-ai/dsh-gmail` | yes | The owner's Gmail accounts in DSH: OAuth sign-in per account, the Gmail REST client, mail composition, and the send gate that holds a message for the owner's confirmation when strangers' words reached the turn |
+| `@deepseek-ai/dsh-gmail-settings` | no | Settings section for the owner's Gmail accounts: the Google OAuth client, connecting and removing accounts with their send policy, the messages held for confirmation with confirm and discard, the recent activity, and the OAuth redirect page |
+| `@deepseek-ai/dsh-integrity-watch` | yes | Integrity watch for the owner's main agent: hashes of the files that steer it, a WeChat notice when one changes, persona hashes per Session, and a count of the persona's forbidden stock lines |
+| `@deepseek-ai/dsh-owner-memory` | yes | Owner memory across Sessions: a JSONL store the Host injects into each root Session, memory_search/memory_save/memory_forget tools, and a claude.ai export importer |
+| `@deepseek-ai/dsh-owner-memory-admin` | no | Memory settings section: review, approve, undo, and erase what the agent remembers about the owner (browser half; the Host route is @deepseek-ai/dsh-owner-memory/settings) |
+| `@deepseek-ai/dsh-owner-relay` | no | One relay of a Session's final answer to the owner: channels claim Sessions, one rule set decides at turn end, and a channel that cannot deliver falls back to ctx.ownerNotifier |
+| `@deepseek-ai/dsh-plugin-config` | no | All settings card: every Config field of a plugin entry, the layer that set it, and one explicit save to the owner patch, embeddable in any Settings section |
+| `@deepseek-ai/dsh-presence` | yes | Owner presence for the event service: asleep or awake from the phone's Sleep Focus, a daily fallback window, and manual overrides; channels hold back non-urgent messages while the owner sleeps (the Settings page is @deepseek-ai/dsh-wechat-settings) |
+| `@deepseek-ai/dsh-provider-balance` | yes | Account settings card with the balance or quota of every provider key the Host holds |
+| `@deepseek-ai/dsh-qq` | yes | QQ group observer over a OneBot v11 protocol end: records listed groups, downloads images, transcribes voice on request, digests on a schedule, and never speaks by default |
+| `@deepseek-ai/dsh-qq-login` | no | QQ settings section: the QQ observer's connection, NapCat's login state, and the login QR code to scan from the phone when QQ was signed out |
+| `@deepseek-ai/dsh-qqbot` | yes | QQ channel over the official QQ Open Platform Bot API: allowlisted private chats and group @ mentions reach per-peer chat Sessions |
+| `@deepseek-ai/dsh-speaking-style` | yes | Speaking style from real people's words: short QQ group and Bilibili exchanges, filtered without a model, kept in a bounded file the owner edits, and shown to the main agent once a day as quoted data |
+| `@deepseek-ai/dsh-speaking-style-settings` | no | Speaking style settings section: the real QQ and Bilibili exchanges that tune the main agent's voice, one-tap deletion, review, lines of the owner's own, and the stock-line trend |
+| `@deepseek-ai/dsh-subagent-activity` | no | Right-Sidebar page of a Session's subagents (what each is doing now, how long, how it ended), opened from a header toggle that replaces the hover catalog |
+| `@deepseek-ai/dsh-sysmon` | yes | System status settings section: the Host machine's CPU, memory, power, temperature, and disk usage per volume |
+| `@deepseek-ai/dsh-time-gap` | yes | Time check for every Session: an input that arrives after a quiet spell reaches the model with the current time, how long the Session was quiet, and a reminder to read it on its own terms |
+| `@deepseek-ai/dsh-tool-bili` | no | Model-facing Bilibili tools for the agent's own account: browse, watch through subtitles, like, coin, follow, and save through bili-svc, and keep a journal; no speech |
+| `@deepseek-ai/dsh-tool-courses` | no | Course tools of the owner's main agent: courses_deadlines, courses_find, courses_get, and the writes courses_set_progress and courses_save_memo over the owner's course records |
+| `@deepseek-ai/dsh-tool-gmail` | yes | Gmail tools of the owner's main agent over ctx.gmail: gmail_accounts, gmail_search, gmail_read, gmail_attachment, gmail_draft, gmail_send (behind the send gate), and gmail_modify |
+| `@deepseek-ai/dsh-tool-monitor` | no | Model-facing monitor tools: a bash command whose stdout lines come back to the same Session as they appear, like Claude Code's Monitor |
+| `@deepseek-ai/dsh-tool-qq` | yes | Read-only qq_groups, qq_digest, qq_recent, and qq_search tools: the agent reads what the QQ observer recorded and digested |
+| `@deepseek-ai/dsh-tool-up` | yes | Model-facing up_* tools for the creator account's reads and Reply Gate replies (bili-svc) |
+| `@deepseek-ai/dsh-tool-voice` | no | Model-facing speak tool: turn text into speech and send the audio to the owner over the fork WeChat channel |
+| `@deepseek-ai/dsh-tool-watch` | yes | Model-facing watch_create, watch_list, watch_delete, flow_read, and flow_edit tools over the fork event bus and GitHub sensor |
+| `@deepseek-ai/dsh-tool-wechat` | no | Model-facing WeChat tools: wechat_send_file sends a local file to the owner, and defer_deliver holds a text for a time or the owner's waking |
+| `@deepseek-ai/dsh-turn-taint` | yes | Turn origin for the owner's main agent: who started the current turn (the owner, a relayed message, an event, a reminder), which tools read strangers' words in it, and the rules that follow |
+| `@deepseek-ai/dsh-voice` | yes | Voice for the owner's agents: text to speech through feiyu or the Mac mini TTS service, and speech to text through the asr-service (off by default) |
+| `@deepseek-ai/dsh-wechat` | yes | WeChat (iLink bot) channel: owner chat Session, notification delivery, and ctx.ownerNotifier for the fork event bus |
+| `@deepseek-ai/dsh-wechat-settings` | no | WeChat and quiet-hours (勿扰) settings sections: bind the owner's WeChat bot by QR code, see the channel's health, unbind, and control when the owner counts as asleep (browser half; the Host routes are served by @deepseek-ai/dsh-wechat and @deepseek-ai/dsh-presence) |
+
 ## fs
 
 | Package | Config | Description |
@@ -331,51 +376,6 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-lsp` | no | Abstract LSP capability seam (ctx.lsp) for the DeepSeek Harness — language-server provider registry keyed by branded id and extension mapping, order-independent per-query selection, normalized definition/references/implementation/hover requests and results, and the LspError taxonomy |
 | `@deepseek-ai/dsh-lsp-stdio` | yes | Generic stdio language-server provider for the DeepSeek Harness LSP capability seam (ctx.lsp) — spawns configured servers, translates JSON-RPC, and serves transient-open goToDefinition/findReferences/goToImplementation/hover queries in the host filesystem namespace |
 | `@deepseek-ai/dsh-tool-lsp` | yes | Model-facing lsp tool over the DeepSeek Harness LSP capability seam (ctx.lsp) — one read-only tool with goToDefinition/findReferences/goToImplementation/hover operations, one-based UTF-16 cursor coordinates, bounded location rendering, and hover normalization |
-
-## fork
-
-| Package | Config | Description |
-|---|---|---|
-| `@deepseek-ai/dsh-bili` | yes | The agent's own Bilibili account as a client of bili-svc: reads and non-speech actions through bili-svc's door, the owner's messages answered through its Reply Gate, and a Settings section that manages bili-svc (accounts, QR sign-in, sessions, gate, brake, ledger) |
-| `@deepseek-ai/dsh-gmail` | yes | The owner's Gmail accounts in DSH: OAuth sign-in per account, the Gmail REST client, mail composition, and the send gate that holds a message for the owner's confirmation when strangers' words reached the turn |
-| `@deepseek-ai/dsh-gmail-settings` | no | Settings section for the owner's Gmail accounts: the Google OAuth client, connecting and removing accounts with their send policy, the messages held for confirmation with confirm and discard, the recent activity, and the OAuth redirect page |
-| `@deepseek-ai/dsh-fork-balance` | yes | Account settings card with the balance or quota of every provider key the Host holds |
-| `@deepseek-ai/dsh-fork-cc-admin` | yes | Claude Code sessions of the service account as a root service: list, start with a first task, and stop, for the Settings page |
-| `@deepseek-ai/dsh-fork-cc-bridge` | yes | Model-facing cc_list_sessions and cc_send tools: the agent talks to the owner's Claude Code sessions on the same Mac through a relay, and their replies reach the main agent |
-| `@deepseek-ai/dsh-fork-config` | no | All settings card: every Config field of a plugin entry, the layer that set it, and one explicit save to the owner patch, embeddable in any Settings section |
-| `@deepseek-ai/dsh-fork-console` | yes | The event service in the browser: a message flow page, and Settings sections for a service overview, subscriptions and schedule reminders, and Claude Code sessions with the voice service |
-| `@deepseek-ai/dsh-fork-courses` | yes | The owner's course records in DSH: a client of the courses service and a deadline poller that reminds the owner on WeChat by fixed rules (checkpoints, late windows, quiet hours) and tells when the course sync is broken |
-| `@deepseek-ai/dsh-fork-courses-settings` | no | Settings section for course deadline reminders: on or off, the last and next check with a button to check now, the course sync's health, the next deadlines, the latest reminders, and the plugin's configuration |
-| `@deepseek-ai/dsh-fork-event-bus` | yes | Durable event bus for event-driven agent runs: dedupe, loop suppression, subscriptions, coalescing, rate limits, and dispatch to notify or Session actuators |
-| `@deepseek-ai/dsh-fork-event-ingest` | yes | Authenticated POST route through which the owner's own services push events into the fork event bus, one token per source |
-| `@deepseek-ai/dsh-fork-github-sensor` | yes | GitHub polling sensor for the fork event bus: releases, tags, commits, and notifications with conditional requests |
-| `@deepseek-ai/dsh-fork-guard` | yes | One content validator for text that others can read: patterns, canaries, overlap with the owner's memory, and a model, any layer that cannot run refuses |
-| `@deepseek-ai/dsh-fork-integrity` | yes | Integrity watch for the owner's main agent: hashes of the files that steer it, a WeChat notice when one changes, persona hashes per Session, and a count of the persona's forbidden stock lines |
-| `@deepseek-ai/dsh-fork-memory` | yes | Owner memory across Sessions: a JSONL store the Host injects into each root Session, memory_search/memory_save/memory_forget tools, and a claude.ai export importer |
-| `@deepseek-ai/dsh-fork-memory-admin` | no | Memory settings section: review, approve, undo, and erase what the agent remembers about the owner (browser half; the Host route is @deepseek-ai/dsh-fork-memory/settings) |
-| `@deepseek-ai/dsh-fork-presence` | yes | Owner presence for the event service: asleep or awake from the phone's Sleep Focus, a daily fallback window, and manual overrides; channels hold back non-urgent messages while the owner sleeps (the Settings page is @deepseek-ai/dsh-fork-wechat-settings) |
-| `@deepseek-ai/dsh-fork-qq` | yes | QQ group observer over a OneBot v11 protocol end: records listed groups, downloads images, transcribes voice on request, digests on a schedule, and never speaks by default |
-| `@deepseek-ai/dsh-fork-qq-login` | no | QQ settings section: the QQ observer's connection, NapCat's login state, and the login QR code to scan from the phone when QQ was signed out |
-| `@deepseek-ai/dsh-fork-qqbot` | yes | QQ channel over the official QQ Open Platform Bot API: allowlisted private chats and group @ mentions reach per-peer chat Sessions |
-| `@deepseek-ai/dsh-fork-style` | yes | Speaking style from real people's words: short QQ group and Bilibili exchanges, filtered without a model, kept in a bounded file the owner edits, and shown to the main agent once a day as quoted data |
-| `@deepseek-ai/dsh-fork-style-settings` | no | Speaking style settings section: the real QQ and Bilibili exchanges that tune the main agent's voice, one-tap deletion, review, lines of the owner's own, and the stock-line trend |
-| `@deepseek-ai/dsh-fork-subagents` | no | Right-Sidebar page of a Session's subagents (what each is doing now, how long, how it ended), opened from a header toggle that replaces the hover catalog |
-| `@deepseek-ai/dsh-fork-sysmon` | yes | System status settings section: the Host machine's CPU, memory, power, temperature, and disk usage per volume |
-| `@deepseek-ai/dsh-fork-taint` | yes | Turn origin for the owner's main agent: who started the current turn (the owner, a relayed message, an event, a reminder), which tools read strangers' words in it, and the rules that follow |
-| `@deepseek-ai/dsh-fork-time-gap` | yes | Time check for every Session: an input that arrives after a quiet spell reaches the model with the current time, how long the Session was quiet, and a reminder to read it on its own terms |
-| `@deepseek-ai/dsh-fork-tool-courses` | no | Course tools of the owner's main agent: courses_deadlines, courses_find, courses_get, and the writes courses_set_progress and courses_save_memo over the owner's course records |
-| `@deepseek-ai/dsh-fork-tool-monitor` | no | Model-facing monitor tools: a bash command whose stdout lines come back to the same Session as they appear, like Claude Code's Monitor |
-| `@deepseek-ai/dsh-fork-tool-qq` | yes | Read-only qq_groups, qq_digest, qq_recent, and qq_search tools: the agent reads what the QQ observer recorded and digested |
-| `@deepseek-ai/dsh-fork-tool-up` | yes | Model-facing up_* tools for the creator account's reads and Reply Gate replies (bili-svc) |
-| `@deepseek-ai/dsh-fork-tool-voice` | no | Model-facing speak tool: turn text into speech and send the audio to the owner over the fork WeChat channel |
-| `@deepseek-ai/dsh-fork-tool-watch` | yes | Model-facing watch_create, watch_list, watch_delete, flow_read, and flow_edit tools over the fork event bus and GitHub sensor |
-| `@deepseek-ai/dsh-fork-tool-wechat` | no | Model-facing WeChat tools: wechat_send_file sends a local file to the owner, and defer_deliver holds a text for a time or the owner's waking |
-| `@deepseek-ai/dsh-fork-voice` | yes | Voice for the owner's agents: text to speech through feiyu or the Mac mini TTS service, and speech to text through the asr-service (off by default) |
-| `@deepseek-ai/dsh-fork-wechat` | yes | WeChat (iLink bot) channel: owner chat Session, notification delivery, and ctx.forkNotifier for the fork event bus |
-| `@deepseek-ai/dsh-fork-wechat-settings` | no | WeChat and quiet-hours (勿扰) settings sections: bind the owner's WeChat bot by QR code, see the channel's health, unbind, and control when the owner counts as asleep (browser half; the Host routes are served by @deepseek-ai/dsh-fork-wechat and @deepseek-ai/dsh-fork-presence) |
-| `@deepseek-ai/dsh-owner-relay` | no | One relay of a Session's final answer to the owner: channels claim Sessions, one rule set decides at turn end, and a channel that cannot deliver falls back to ctx.forkNotifier |
-| `@deepseek-ai/dsh-tool-bili` | no | Model-facing Bilibili tools for the agent's own account: browse, watch through subtitles, like, coin, follow, and save through bili-svc, and keep a journal; no speech |
-| `@deepseek-ai/dsh-tool-gmail` | yes | Gmail tools of the owner's main agent over ctx.gmail: gmail_accounts, gmail_search, gmail_read, gmail_attachment, gmail_draft, gmail_send (behind the send gate), and gmail_modify |
 
 ## mcp
 

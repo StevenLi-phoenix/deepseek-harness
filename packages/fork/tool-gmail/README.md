@@ -1,5 +1,5 @@
 ---
-description: "Gmail tools of the owner's main agent over ctx.gmail: gmail_accounts, gmail_search, gmail_read, gmail_attachment, gmail_draft, gmail_send, and gmail_modify, with received mail wrapped as untrusted data, the read tools counted as strangers' words for fork-taint, and every send decided by gmail's send gate from the turn's facts in the Session log."
+description: "Gmail tools of the owner's main agent over ctx.gmail: gmail_accounts, gmail_search, gmail_read, gmail_attachment, gmail_draft, gmail_send, and gmail_modify, with received mail wrapped as untrusted data, the read tools counted as strangers' words for turn-taint, and every send decided by gmail's send gate from the turn's facts in the Session log."
 kind: "package-reference"
 ---
 
@@ -25,7 +25,7 @@ Ask your agent on WeChat "anything new from school today", "reply to Alice that 
 <a id="use-this-package"></a>
 ## Use this package
 
-Add the row to the plugin list of the agent preset that faces the owner, in a process that mounts [`@deepseek-ai/dsh-gmail`](../gmail/README.md), together with [`fork-taint`](../fork-taint/README.md), whose turn origin the send gate reads. The fork event profile mounts it in its `unattended` preset, which the WeChat chat Session uses; the channel presets (`bili`, `up`, `qqbot`, `qq-digest`) never mount it. The tools register once `ctx.gmail` exists.
+Add the row to the plugin list of the agent preset that faces the owner, in a process that mounts [`@deepseek-ai/dsh-gmail`](../gmail/README.md), together with [`turn-taint`](../turn-taint/README.md), whose turn origin the send gate reads. The fork event profile mounts it in its `unattended` preset, which the WeChat chat Session uses; the channel presets (`bili`, `up`, `qqbot`, `qq-digest`) never mount it. The tools register once `ctx.gmail` exists.
 
 ```yaml
 - id: tool-gmail
@@ -44,7 +44,7 @@ Add the row to the plugin list of the agent preset that faces the owner, in a pr
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-Each tool calls one method of `ctx.gmail` and nothing else; whether a message goes out is decided there. `gmail_send` reads the turn's facts with `turnOrigin()`, `describeOrigin()`, and `ownerWords()` of `fork-taint` from the calling Agent's Session (a subagent inherits its parent's origin) and passes them to `send` or `confirm`; outside an Agent the turn is not clean. A read tool's answer is `{ text }`, rendered for the model inside `<mail account="…" trust="untrusted">` with any closing tag in the text escaped and a trust note after it; a write answers JSON; a failure answers `{ error }`. Attachment paths resolve against the Session's working directory. Every call logs its tool and duration, and failures as warnings.
+Each tool calls one method of `ctx.gmail` and nothing else; whether a message goes out is decided there. `gmail_send` reads the turn's facts with `turnOrigin()`, `describeOrigin()`, and `ownerWords()` of `turn-taint` from the calling Agent's Session (a subagent inherits its parent's origin) and passes them to `send` or `confirm`; outside an Agent the turn is not clean. A read tool's answer is `{ text }`, rendered for the model inside `<mail account="…" trust="untrusted">` with any closing tag in the text escaped and a trust note after it; a write answers JSON; a failure answers `{ error }`. Attachment paths resolve against the Session's working directory. Every call logs its tool and duration, and failures as warnings.
 
 | File | Role |
 |---|---|
@@ -63,7 +63,7 @@ This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 ## Further Exploration
 
 - [Gmail service](../gmail/README.md) — policies, the send gate, held messages
-- [Turn origin](../fork-taint/README.md) — what makes a turn clean
+- [Turn origin](../turn-taint/README.md) — what makes a turn clean
 
 -----
 

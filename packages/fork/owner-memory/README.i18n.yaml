@@ -1,0 +1,64 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/fork/owner-memory/README.md
+/:
+  en: df1bb628c4c23c54
+  zh: c418adc5135f1e4b
+/deepseek-ai-dsh-owner-memory:
+  en: cbf7f62364237dcd
+  zh: 6207584ac779d88f
+/deepseek-ai-dsh-owner-memory/summary:
+  en: 9e56e949724e06d0
+  zh: 9982cf949bc501cb
+/deepseek-ai-dsh-owner-memory/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-owner-memory/use-this-package:
+  en: c195e7cbb389af86
+  zh: b7789b17d59732a6
+/deepseek-ai-dsh-owner-memory/use-this-package/who-wrote-it-and-undoing-it:
+  en: f9e9bda3e64be42c
+  zh: c4e20d4e71128b1f
+/deepseek-ai-dsh-owner-memory/use-this-package/owner-feedback-for-the-bilibili-personas:
+  en: b273bbe274dc1102
+  zh: a6871d2995195cc5
+/deepseek-ai-dsh-owner-memory/understand-the-implementation:
+  en: f9f972d150545d56
+  zh: 43bc8cef9db5f593
+/deepseek-ai-dsh-owner-memory/further-exploration:
+  en: 2f63222240791f11
+  zh: 1957349e48fa65cc
+/deepseek-ai-dsh-owner-memory/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-owner-memory/model-experience/memory-block:
+  en: c3cd427d8d480a46
+  zh: 4c61ab3ebf942d74
+/deepseek-ai-dsh-owner-memory/model-experience/memory-block/what-the-model-sees:
+  en: 68675084aff6739c
+  zh: b70d02cb2c499f38
+/deepseek-ai-dsh-owner-memory/model-experience/memory-block/token-effect:
+  en: 598e346071539b88
+  zh: 75679b0c4551c85e
+/deepseek-ai-dsh-owner-memory/model-experience/memory-block/kv-cache-effect:
+  en: 7c6be6e15d5416d7
+  zh: 78d8edb9e074f57e
+/deepseek-ai-dsh-owner-memory/model-experience/memory-tools:
+  en: b160ca92da193ddb
+  zh: 337cb883c2dc3d7d
+/deepseek-ai-dsh-owner-memory/model-experience/memory-tools/what-the-model-sees:
+  en: 81dff5482540001b
+  zh: 6012458b26e378a3
+/deepseek-ai-dsh-owner-memory/model-experience/memory-tools/token-effect:
+  en: 09cda3aa4f2d94a1
+  zh: d38b5be56a06afe3
+/deepseek-ai-dsh-owner-memory/model-experience/memory-tools/kv-cache-effect:
+  en: 44574f4487e48b3e
+  zh: 5af2107448c78ee5
+/deepseek-ai-dsh-owner-memory/known-limitations-and-deferred-work:
+  en: d753dd195658385f
+  zh: 1e9874247e0d26b5
+/deepseek-ai-dsh-owner-memory/known-limitations-and-deferred-work/dev-note:
+  en: 135e3ebef08f8412
+  zh: de51499d928d7147

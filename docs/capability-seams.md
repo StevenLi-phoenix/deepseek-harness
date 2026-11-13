@@ -7,50 +7,50 @@ A service can be a core spine service, a swappable capability seam, a bundle/com
 
 ```mermaid
 flowchart LR
-  pkg_fork_event_bus["fork-event-bus"]
-  svc_forkEventBus["ctx.forkEventBus<br/>Event bus of the event service"]
-  pkg_fork_event_ingest["fork-event-ingest"]
-  pkg_fork_github_sensor["fork-github-sensor"]
-  pkg_fork_qq["fork-qq"]
-  pkg_fork_qqbot["fork-qqbot"]
-  pkg_fork_tool_monitor["fork-tool-monitor"]
-  pkg_fork_tool_up["fork-tool-up"]
-  pkg_fork_tool_watch["fork-tool-watch"]
-  pkg_fork_wechat["fork-wechat"]
-  pkg_fork_console["fork-console"]
-  svc_forkNotifier["ctx.forkNotifier<br/>Owner notification channel"]
-  pkg_fork_courses["fork-courses"]
+  pkg_event_bus["event-bus"]
+  svc_eventBus["ctx.eventBus<br/>Event bus of the event service"]
+  pkg_event_ingest["event-ingest"]
+  pkg_github_sensor["github-sensor"]
+  pkg_qq["qq"]
+  pkg_qqbot["qqbot"]
+  pkg_tool_monitor["tool-monitor"]
+  pkg_tool_up["tool-up"]
+  pkg_tool_watch["tool-watch"]
+  pkg_wechat["wechat"]
+  pkg_event_console["event-console"]
+  svc_ownerNotifier["ctx.ownerNotifier<br/>Owner notification channel"]
+  pkg_courses["courses"]
   pkg_gmail["gmail"]
-  pkg_fork_memory["fork-memory"]
-  pkg_fork_integrity["fork-integrity"]
-  pkg_fork_tool_voice["fork-tool-voice"]
-  pkg_fork_tool_wechat["fork-tool-wechat"]
+  pkg_owner_memory["owner-memory"]
+  pkg_integrity_watch["integrity-watch"]
+  pkg_tool_voice["tool-voice"]
+  pkg_tool_wechat["tool-wechat"]
   pkg_owner_relay["owner-relay"]
   svc_ownerRelay["ctx.ownerRelay<br/>Relay of final answers to the owner"]
   pkg_bili["bili"]
-  pkg_fork_time_gap["fork-time-gap"]
-  pkg_fork_presence["fork-presence"]
-  svc_forkPresence["ctx.forkPresence<br/>Owner sleep state"]
-  svc_forkGithubSensor["ctx.forkGithubSensor<br/>GitHub event sensor"]
-  svc_forkCourses["ctx.forkCourses<br/>Course reminders"]
-  pkg_fork_tool_courses["fork-tool-courses"]
-  pkg_fork_courses_settings["fork-courses-settings"]
+  pkg_time_gap["time-gap"]
+  pkg_presence["presence"]
+  svc_presence["ctx.presence<br/>Owner sleep state"]
+  svc_githubSensor["ctx.githubSensor<br/>GitHub event sensor"]
+  svc_courses["ctx.courses<br/>Course reminders"]
+  pkg_tool_courses["tool-courses"]
+  pkg_courses_settings["courses-settings"]
   svc_gmail["ctx.gmail<br/>Gmail accounts"]
   pkg_tool_gmail["tool-gmail"]
   pkg_gmail_settings["gmail-settings"]
-  svc_forkQq["ctx.forkQq<br/>QQ group observer"]
-  pkg_fork_tool_qq["fork-tool-qq"]
-  pkg_fork_qq_login["fork-qq-login"]
-  pkg_fork_style["fork-style"]
-  svc_forkQqBot["ctx.forkQqBot<br/>Official QQ bot channel"]
-  svc_forkStyle["ctx.forkStyle<br/>Speaking style"]
-  pkg_fork_style_settings["fork-style-settings"]
-  pkg_fork_guard["fork-guard"]
-  svc_forkGuard["ctx.forkGuard<br/>Content guard for shared text"]
-  pkg_fork_voice["fork-voice"]
-  svc_forkVoice["ctx.forkVoice<br/>Text to speech and audio transcription"]
-  pkg_fork_cc_admin["fork-cc-admin"]
-  svc_forkClaudeCode["ctx.forkClaudeCode<br/>Claude Code session listing"]
+  svc_qq["ctx.qq<br/>QQ group observer"]
+  pkg_tool_qq["tool-qq"]
+  pkg_qq_login["qq-login"]
+  pkg_speaking_style["speaking-style"]
+  svc_qqBot["ctx.qqBot<br/>Official QQ bot channel"]
+  svc_speakingStyle["ctx.speakingStyle<br/>Speaking style"]
+  pkg_speaking_style_settings["speaking-style-settings"]
+  pkg_content_guard["content-guard"]
+  svc_contentGuard["ctx.contentGuard<br/>Content guard for shared text"]
+  pkg_voice["voice"]
+  svc_voice["ctx.voice<br/>Text to speech and audio transcription"]
+  pkg_cc_admin["cc-admin"]
+  svc_claudeCodeSessions["ctx.claudeCodeSessions<br/>Claude Code session listing"]
   svc_bili["ctx.bili<br/>Bilibili account client"]
   pkg_tool_bili["tool-bili"]
   svc_biliHot["ctx.biliHot<br/>Bilibili trending reads"]
@@ -390,6 +390,7 @@ flowchart LR
   pkg_bili --> svc_bili
   pkg_bili --> svc_biliHot
   pkg_browser_use --> svc_browserUse
+  pkg_cc_admin --> svc_claudeCodeSessions
   pkg_client_connection --> svc_connection
   pkg_client_file_upload --> svc_fileUploads
   pkg_client_modules --> svc_clientModules
@@ -402,13 +403,16 @@ flowchart LR
   pkg_compaction_tool_result_pruner --> svc_toolResultPruner
   pkg_computer_use --> svc_computerUse
   pkg_config_editor --> svc_configEditor
+  pkg_content_guard --> svc_contentGuard
   pkg_cordis_host_runner --> svc_cordisInspect
   pkg_cordis_host_runner --> svc_dynamicCordisRunner
+  pkg_courses --> svc_courses
   pkg_credentials --> svc_credentials
   pkg_credentials_local --> svc_credentials
   pkg_cua --> svc_cuaAccess
   pkg_deepseek_account --> svc_deepseekAccount
   pkg_deepseek_llm_api_extensions --> svc_deepseekLlmApiExtensions
+  pkg_event_bus --> svc_eventBus
   pkg_experimental_api_speech_to_text --> svc_speechController
   pkg_experimental_browser_use_chrome_devtools_mcp --> svc_browserUse
   pkg_experimental_browser_use_playwright_mcp --> svc_browserUse
@@ -433,6 +437,7 @@ flowchart LR
   pkg_fs_local --> svc_fs
   pkg_fs_sandbox --> svc_fs
   pkg_fs_ssh --> svc_fs
+  pkg_github_sensor --> svc_githubSensor
   pkg_gmail --> svc_gmail
   pkg_goal --> svc_goals
   pkg_headless --> svc_headlessStartup
@@ -451,18 +456,6 @@ flowchart LR
   pkg_llm_replay --> svc_llm
   pkg_lsp --> svc_lsp
   pkg_lsp_stdio --> svc_lsp
-  pkg_fork_cc_admin --> svc_forkClaudeCode
-  pkg_fork_courses --> svc_forkCourses
-  pkg_fork_event_bus --> svc_forkEventBus
-  pkg_fork_github_sensor --> svc_forkGithubSensor
-  pkg_fork_guard --> svc_forkGuard
-  pkg_fork_presence --> svc_forkPresence
-  pkg_fork_qq --> svc_forkQq
-  pkg_fork_qqbot --> svc_forkQqBot
-  pkg_fork_style --> svc_forkStyle
-  pkg_fork_tool_up --> svc_biliEvidence
-  pkg_fork_voice --> svc_forkVoice
-  pkg_fork_wechat --> svc_forkNotifier
   pkg_mcp_client --> svc_mcpResources
   pkg_mcp_manager --> svc_mcpManager
   pkg_mcp_resources --> svc_mcpResources
@@ -476,9 +469,12 @@ flowchart LR
   pkg_plugin_market --> svc_pluginMarket
   pkg_plugin_package_inventory_deepseek --> svc_deepseekLlmApiExtensions
   pkg_plugin_recommendations --> svc_pluginRecommendations
+  pkg_presence --> svc_presence
   pkg_ptc_runtime --> svc_ptcRuntime
   pkg_ptc_runtime_node --> svc_ptcRuntime
   pkg_pwsh_local --> svc_shell
+  pkg_qq --> svc_qq
+  pkg_qqbot --> svc_qqBot
   pkg_sandbox --> svc_sandbox
   pkg_sandbox_local --> svc_sandbox
   pkg_sandbox_policy --> svc_sandboxPolicy
@@ -507,6 +503,7 @@ flowchart LR
   pkg_skill_badge --> svc_skills
   pkg_skill_filesystem --> svc_skills
   pkg_skill_office --> svc_skills
+  pkg_speaking_style --> svc_speakingStyle
   pkg_spill --> svc_spillStore
   pkg_spill_local --> svc_spillStore
   pkg_ssh --> svc_ssh
@@ -530,16 +527,19 @@ flowchart LR
   pkg_terminal_panel --> svc_terminals
   pkg_token_meter --> svc_tokenMeter
   pkg_tool_subagent --> svc_subagentModelSelection
+  pkg_tool_up --> svc_biliEvidence
   pkg_tools --> svc_tools
   pkg_typert_registry --> svc_typert
   pkg_user_approval --> svc_approval
   pkg_user_questions --> svc_userQuestions
+  pkg_voice --> svc_voice
   pkg_web --> svc_web
   pkg_web_app --> svc_webApp
   pkg_web_deepseek_api --> svc_web
   pkg_web_fetch_http --> svc_web
   pkg_web_search_deepseek --> svc_web
   pkg_webhook --> svc_webhookRuntime
+  pkg_wechat --> svc_ownerNotifier
   pkg_workflow --> svc_workflowEngine
   pkg_workflow_ptc --> svc_workflowEngine
   pkg_working_directory --> svc_workingDirectory
@@ -563,13 +563,14 @@ flowchart LR
   svc_attachments --> pkg_llm_pi_ai
   svc_attachments --> pkg_tool_fs
   svc_authorization --> pkg_llm_pi_ai
-  svc_bili --> pkg_fork_style
+  svc_bili --> pkg_speaking_style
   svc_bili --> pkg_tool_bili
-  svc_biliEvidence --> pkg_fork_style
-  svc_biliHot --> pkg_fork_style
+  svc_biliEvidence --> pkg_speaking_style
+  svc_biliHot --> pkg_speaking_style
   svc_browserUse --> pkg_experimental_browser_use_chrome_devtools_mcp
   svc_browserUse --> pkg_experimental_browser_use_playwright_mcp
   svc_browserUse --> pkg_experimental_browser_use_stagehand_native
+  svc_claudeCodeSessions --> pkg_event_console
   svc_clientModules --> pkg_client_hmr
   svc_compaction --> pkg_compaction_basic
   svc_computerUse --> pkg_experimental_computer_use_cua_driver_mcp
@@ -578,7 +579,12 @@ flowchart LR
   svc_configEditor --> pkg_settings
   svc_connection --> pkg_api_gateway
   svc_connection --> pkg_host_frontend_static
+  svc_contentGuard --> pkg_qq
+  svc_contentGuard --> pkg_speaking_style
+  svc_contentGuard --> pkg_tool_up
   svc_cordisInspect --> pkg_tool_cordis
+  svc_courses --> pkg_courses_settings
+  svc_courses --> pkg_tool_courses
   svc_credentials --> pkg_api_settings_controller
   svc_credentials --> pkg_llm_deepseek
   svc_credentials --> pkg_llm_pi_ai
@@ -587,12 +593,23 @@ flowchart LR
   svc_deepseekLlmApiExtensions --> pkg_llm_deepseek
   svc_directoryPicker --> pkg_api_workspace_controller
   svc_dynamicCordisRunner --> pkg_tool_cordis
+  svc_eventBus --> pkg_event_console
+  svc_eventBus --> pkg_event_ingest
+  svc_eventBus --> pkg_github_sensor
+  svc_eventBus --> pkg_qq
+  svc_eventBus --> pkg_qqbot
+  svc_eventBus --> pkg_tool_monitor
+  svc_eventBus --> pkg_tool_up
+  svc_eventBus --> pkg_tool_watch
+  svc_eventBus --> pkg_wechat
   svc_fileReferences --> pkg_api_session_controller
   svc_fileUploads --> pkg_api_session_controller
   svc_forge --> pkg_experimental_client_ui_forge
   svc_forge --> pkg_experimental_forge_session
   svc_forgeSession --> pkg_experimental_client_ui_forge
   svc_fs --> pkg_tool_fs
+  svc_githubSensor --> pkg_event_console
+  svc_githubSensor --> pkg_tool_watch
   svc_gmail --> pkg_gmail_settings
   svc_gmail --> pkg_tool_gmail
   svc_headlessStartup --> pkg_headless
@@ -605,63 +622,41 @@ flowchart LR
   svc_llm --> pkg_agent_loop
   svc_llm --> pkg_compaction_basic
   svc_lsp --> pkg_tool_lsp
-  svc_forkClaudeCode --> pkg_fork_console
-  svc_forkCourses --> pkg_fork_courses_settings
-  svc_forkCourses --> pkg_fork_tool_courses
-  svc_forkEventBus --> pkg_fork_console
-  svc_forkEventBus --> pkg_fork_event_ingest
-  svc_forkEventBus --> pkg_fork_github_sensor
-  svc_forkEventBus --> pkg_fork_qq
-  svc_forkEventBus --> pkg_fork_qqbot
-  svc_forkEventBus --> pkg_fork_tool_monitor
-  svc_forkEventBus --> pkg_fork_tool_up
-  svc_forkEventBus --> pkg_fork_tool_watch
-  svc_forkEventBus --> pkg_fork_wechat
-  svc_forkGithubSensor --> pkg_fork_console
-  svc_forkGithubSensor --> pkg_fork_tool_watch
-  svc_forkGuard --> pkg_fork_qq
-  svc_forkGuard --> pkg_fork_style
-  svc_forkGuard --> pkg_fork_tool_up
-  svc_forkNotifier --> pkg_gmail
-  svc_forkNotifier --> pkg_fork_courses
-  svc_forkNotifier --> pkg_fork_event_bus
-  svc_forkNotifier --> pkg_fork_integrity
-  svc_forkNotifier --> pkg_fork_memory
-  svc_forkNotifier --> pkg_fork_qq
-  svc_forkNotifier --> pkg_fork_tool_voice
-  svc_forkNotifier --> pkg_fork_tool_watch
-  svc_forkNotifier --> pkg_fork_tool_wechat
-  svc_forkPresence --> pkg_fork_console
-  svc_forkPresence --> pkg_fork_courses
-  svc_forkPresence --> pkg_fork_wechat
-  svc_forkQq --> pkg_fork_console
-  svc_forkQq --> pkg_fork_qq_login
-  svc_forkQq --> pkg_fork_style
-  svc_forkQq --> pkg_fork_tool_qq
-  svc_forkStyle --> pkg_fork_console
-  svc_forkStyle --> pkg_fork_style_settings
-  svc_forkVoice --> pkg_fork_console
-  svc_forkVoice --> pkg_fork_tool_voice
-  svc_forkVoice --> pkg_fork_wechat
   svc_mcpResources --> pkg_mcp_resources
   svc_officeKit --> pkg_client_ui_sidebar_documentpreview
   svc_officeKit --> pkg_tool_office
   svc_otel --> pkg_host_product_telemetry_otel
   svc_otel --> pkg_session_telemetry_otel
+  svc_ownerNotifier --> pkg_courses
+  svc_ownerNotifier --> pkg_event_bus
+  svc_ownerNotifier --> pkg_gmail
+  svc_ownerNotifier --> pkg_integrity_watch
+  svc_ownerNotifier --> pkg_owner_memory
+  svc_ownerNotifier --> pkg_qq
+  svc_ownerNotifier --> pkg_tool_voice
+  svc_ownerNotifier --> pkg_tool_watch
+  svc_ownerNotifier --> pkg_tool_wechat
   svc_ownerRelay --> pkg_bili
-  svc_ownerRelay --> pkg_fork_event_bus
-  svc_ownerRelay --> pkg_fork_qqbot
-  svc_ownerRelay --> pkg_fork_time_gap
-  svc_ownerRelay --> pkg_fork_wechat
+  svc_ownerRelay --> pkg_event_bus
+  svc_ownerRelay --> pkg_qqbot
+  svc_ownerRelay --> pkg_time_gap
+  svc_ownerRelay --> pkg_wechat
   svc_pluginManager --> pkg_plugin_manager
   svc_pluginManager --> pkg_ui_settings_plugin_inventory
   svc_pluginMarket --> pkg_client_ui_plugin_market
   svc_pluginMarket --> pkg_plugin_market
   svc_pluginRecommendations --> pkg_client_ui_plugin_recommendations
   svc_pluginRegistryProbe --> pkg_client_ui_plugin_manager
+  svc_presence --> pkg_courses
+  svc_presence --> pkg_event_console
+  svc_presence --> pkg_wechat
   svc_profileContext --> pkg_plugin_manager
   svc_ptcRuntime --> pkg_tool_executor_ptc
   svc_ptcRuntime --> pkg_workflow_ptc
+  svc_qq --> pkg_event_console
+  svc_qq --> pkg_qq_login
+  svc_qq --> pkg_speaking_style
+  svc_qq --> pkg_tool_qq
   svc_remoteAccess --> pkg_api_gateway
   svc_remoteAccess --> pkg_api_session_controller
   svc_remoteAccess --> pkg_api_workspace_controller
@@ -702,6 +697,8 @@ flowchart LR
   svc_shellEnv --> pkg_tool_bash
   svc_shellEnv --> pkg_tool_pwsh
   svc_skills --> pkg_tool_skill
+  svc_speakingStyle --> pkg_event_console
+  svc_speakingStyle --> pkg_speaking_style_settings
   svc_speechToText --> pkg_experimental_api_speech_to_text
   svc_spillStore --> pkg_spill_policy
   svc_ssh --> pkg_fs_ssh
@@ -742,6 +739,9 @@ flowchart LR
   svc_typert --> pkg_api_gateway
   svc_typert --> pkg_typert_loader
   svc_userQuestions --> pkg_tool_ask_user
+  svc_voice --> pkg_event_console
+  svc_voice --> pkg_tool_voice
+  svc_voice --> pkg_wechat
   svc_web --> pkg_tool_web
   svc_webApp --> pkg_harness_dev_context
   svc_webServer --> pkg_client_connection
@@ -764,22 +764,22 @@ flowchart LR
 
 | ctx key | Role | Owner | Implementations | Direct consumers | Companion plugins | Note |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ctx.forkEventBus` | `service` | [`fork-event-bus`](../packages/fork/fork-event-bus) | - | [`fork-event-ingest`](../packages/fork/fork-event-ingest), [`fork-github-sensor`](../packages/fork/fork-github-sensor), [`fork-qq`](../packages/fork/fork-qq), [`fork-qqbot`](../packages/fork/fork-qqbot), [`fork-tool-monitor`](../packages/fork/fork-tool-monitor), [`fork-tool-up`](../packages/fork/fork-tool-up), [`fork-tool-watch`](../packages/fork/fork-tool-watch), [`fork-wechat`](../packages/fork/fork-wechat), [`fork-console`](../packages/fork/fork-console) | - | Owns dedupe, routes, batches, and the notification flow; sensors publish events and tools change routes. |
-| `ctx.forkNotifier` | `service` | [`fork-wechat`](../packages/fork/fork-wechat) | - | [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-qq`](../packages/fork/fork-qq), [`fork-courses`](../packages/fork/fork-courses), [`gmail`](../packages/fork/gmail), [`fork-memory`](../packages/fork/fork-memory), [`fork-integrity`](../packages/fork/fork-integrity), [`fork-tool-watch`](../packages/fork/fork-tool-watch), [`fork-tool-voice`](../packages/fork/fork-tool-voice), [`fork-tool-wechat`](../packages/fork/fork-tool-wechat) | - | The event bus defines the channel interface; the WeChat channel provides it. |
-| `ctx.ownerRelay` | `service` | [`owner-relay`](../packages/fork/owner-relay) | - | [`fork-event-bus`](../packages/fork/fork-event-bus), [`fork-wechat`](../packages/fork/fork-wechat), [`fork-qqbot`](../packages/fork/fork-qqbot), [`bili`](../packages/fork/bili), [`fork-time-gap`](../packages/fork/fork-time-gap) | - | Channels register here and claim Sessions; the relay sends each final answer through its Session's channel. |
-| `ctx.forkPresence` | `service` | [`fork-presence`](../packages/fork/fork-presence) | - | [`fork-wechat`](../packages/fork/fork-wechat), [`fork-courses`](../packages/fork/fork-courses), [`fork-console`](../packages/fork/fork-console) | - | Combines the Sleep Focus, a daily window, and manual buttons into one state. |
-| `ctx.forkGithubSensor` | `service` | [`fork-github-sensor`](../packages/fork/fork-github-sensor) | - | [`fork-tool-watch`](../packages/fork/fork-tool-watch), [`fork-console`](../packages/fork/fork-console) | - | Polls and receives GitHub deliveries and publishes them to the event bus. |
-| `ctx.forkCourses` | `service` | [`fork-courses`](../packages/fork/fork-courses) | - | [`fork-tool-courses`](../packages/fork/fork-tool-courses), [`fork-courses-settings`](../packages/fork/fork-courses-settings) | - | Reads the course service and sends deadline reminders. |
+| `ctx.eventBus` | `service` | [`event-bus`](../packages/fork/event-bus) | - | [`event-ingest`](../packages/fork/event-ingest), [`github-sensor`](../packages/fork/github-sensor), [`qq`](../packages/fork/qq), [`qqbot`](../packages/fork/qqbot), [`tool-monitor`](../packages/fork/tool-monitor), [`tool-up`](../packages/fork/tool-up), [`tool-watch`](../packages/fork/tool-watch), [`wechat`](../packages/fork/wechat), [`event-console`](../packages/fork/event-console) | - | Owns dedupe, routes, batches, and the notification flow; sensors publish events and tools change routes. |
+| `ctx.ownerNotifier` | `service` | [`wechat`](../packages/fork/wechat) | - | [`event-bus`](../packages/fork/event-bus), [`qq`](../packages/fork/qq), [`courses`](../packages/fork/courses), [`gmail`](../packages/fork/gmail), [`owner-memory`](../packages/fork/owner-memory), [`integrity-watch`](../packages/fork/integrity-watch), [`tool-watch`](../packages/fork/tool-watch), [`tool-voice`](../packages/fork/tool-voice), [`tool-wechat`](../packages/fork/tool-wechat) | - | The event bus defines the channel interface; the WeChat channel provides it. |
+| `ctx.ownerRelay` | `service` | [`owner-relay`](../packages/fork/owner-relay) | - | [`event-bus`](../packages/fork/event-bus), [`wechat`](../packages/fork/wechat), [`qqbot`](../packages/fork/qqbot), [`bili`](../packages/fork/bili), [`time-gap`](../packages/fork/time-gap) | - | Channels register here and claim Sessions; the relay sends each final answer through its Session's channel. |
+| `ctx.presence` | `service` | [`presence`](../packages/fork/presence) | - | [`wechat`](../packages/fork/wechat), [`courses`](../packages/fork/courses), [`event-console`](../packages/fork/event-console) | - | Combines the Sleep Focus, a daily window, and manual buttons into one state. |
+| `ctx.githubSensor` | `service` | [`github-sensor`](../packages/fork/github-sensor) | - | [`tool-watch`](../packages/fork/tool-watch), [`event-console`](../packages/fork/event-console) | - | Polls and receives GitHub deliveries and publishes them to the event bus. |
+| `ctx.courses` | `service` | [`courses`](../packages/fork/courses) | - | [`tool-courses`](../packages/fork/tool-courses), [`courses-settings`](../packages/fork/courses-settings) | - | Reads the course service and sends deadline reminders. |
 | `ctx.gmail` | `service` | [`gmail`](../packages/fork/gmail) | - | [`tool-gmail`](../packages/fork/tool-gmail), [`gmail-settings`](../packages/fork/gmail-settings) | - | Reads and sends the owner's Gmail; holds a send for the owner's confirmation. |
-| `ctx.forkQq` | `service` | [`fork-qq`](../packages/fork/fork-qq) | - | [`fork-tool-qq`](../packages/fork/fork-tool-qq), [`fork-qq-login`](../packages/fork/fork-qq-login), [`fork-style`](../packages/fork/fork-style), [`fork-console`](../packages/fork/fork-console) | - | Client of the qq-recorder service; writes group digests and answers searches. |
-| `ctx.forkQqBot` | `service` | [`fork-qqbot`](../packages/fork/fork-qqbot) | - | - | - | Holds the official-bot connection; no other package calls it. |
-| `ctx.forkStyle` | `service` | [`fork-style`](../packages/fork/fork-style) | - | [`fork-style-settings`](../packages/fork/fork-style-settings), [`fork-console`](../packages/fork/fork-console) | - | Collects style from QQ, Bilibili, and public web pages and shows it to the presets that mount it. |
-| `ctx.forkGuard` | `service` | [`fork-guard`](../packages/fork/fork-guard) | - | [`fork-qq`](../packages/fork/fork-qq), [`fork-style`](../packages/fork/fork-style), [`fork-tool-up`](../packages/fork/fork-tool-up) | - | Checks text others can read through patterns, canaries, memory overlap, and a model, and refuses on failure. |
-| `ctx.forkVoice` | `service` | [`fork-voice`](../packages/fork/fork-voice) | - | [`fork-tool-voice`](../packages/fork/fork-tool-voice), [`fork-wechat`](../packages/fork/fork-wechat), [`fork-console`](../packages/fork/fork-console) | - | Calls the speech and transcription services and returns files or text. |
-| `ctx.forkClaudeCode` | `service` | [`fork-cc-admin`](../packages/fork/fork-cc-admin) | - | [`fork-console`](../packages/fork/fork-console) | - | Lists and starts Claude Code sessions of the service account for the Settings page. |
-| `ctx.bili` | `service` | [`bili`](../packages/fork/bili) | - | [`tool-bili`](../packages/fork/tool-bili), [`fork-style`](../packages/fork/fork-style) | - | Thin client of bili-svc, which holds the session and writes to Bilibili. |
-| `ctx.biliHot` | `service` | [`bili`](../packages/fork/bili) | - | [`fork-style`](../packages/fork/fork-style) | - | Reads trending videos through bili-svc. |
-| `ctx.biliEvidence` | `service` | [`fork-tool-up`](../packages/fork/fork-tool-up) | - | [`fork-style`](../packages/fork/fork-style) | - | Serves the evidence records of the creator account tools. |
+| `ctx.qq` | `service` | [`qq`](../packages/fork/qq) | - | [`tool-qq`](../packages/fork/tool-qq), [`qq-login`](../packages/fork/qq-login), [`speaking-style`](../packages/fork/speaking-style), [`event-console`](../packages/fork/event-console) | - | Client of the qq-recorder service; writes group digests and answers searches. |
+| `ctx.qqBot` | `service` | [`qqbot`](../packages/fork/qqbot) | - | - | - | Holds the official-bot connection; no other package calls it. |
+| `ctx.speakingStyle` | `service` | [`speaking-style`](../packages/fork/speaking-style) | - | [`speaking-style-settings`](../packages/fork/speaking-style-settings), [`event-console`](../packages/fork/event-console) | - | Collects style from QQ, Bilibili, and public web pages and shows it to the presets that mount it. |
+| `ctx.contentGuard` | `service` | [`content-guard`](../packages/fork/content-guard) | - | [`qq`](../packages/fork/qq), [`speaking-style`](../packages/fork/speaking-style), [`tool-up`](../packages/fork/tool-up) | - | Checks text others can read through patterns, canaries, memory overlap, and a model, and refuses on failure. |
+| `ctx.voice` | `service` | [`voice`](../packages/fork/voice) | - | [`tool-voice`](../packages/fork/tool-voice), [`wechat`](../packages/fork/wechat), [`event-console`](../packages/fork/event-console) | - | Calls the speech and transcription services and returns files or text. |
+| `ctx.claudeCodeSessions` | `service` | [`cc-admin`](../packages/fork/cc-admin) | - | [`event-console`](../packages/fork/event-console) | - | Lists and starts Claude Code sessions of the service account for the Settings page. |
+| `ctx.bili` | `service` | [`bili`](../packages/fork/bili) | - | [`tool-bili`](../packages/fork/tool-bili), [`speaking-style`](../packages/fork/speaking-style) | - | Thin client of bili-svc, which holds the session and writes to Bilibili. |
+| `ctx.biliHot` | `service` | [`bili`](../packages/fork/bili) | - | [`speaking-style`](../packages/fork/speaking-style) | - | Reads trending videos through bili-svc. |
+| `ctx.biliEvidence` | `service` | [`tool-up`](../packages/fork/tool-up) | - | [`speaking-style`](../packages/fork/speaking-style) | - | Serves the evidence records of the creator account tools. |
 | `ctx.actionCards` | `service` | [`action-cards`](../packages/experimental/action-cards) | - | [`creation-recommendations`](../packages/experimental/creation-recommendations), [`client-ui-action-cards`](../packages/experimental/client-ui-action-cards) | - | Owns the card tool, card state, user actions and status notices; card kinds register their actions and handlers. |
 | `ctx.pluginRecommendations` | `service` | [`plugin-recommendations`](../packages/experimental/plugin-recommendations) | - | [`client-ui-plugin-recommendations`](../packages/experimental/client-ui-plugin-recommendations) | - | Reads the current catalog text of an official plugin card and enables the plugin through the profile plugin manager after a click. |
 | `ctx.headlessStartup` | `core` | [`headless`](../packages/bundle/headless) | - | [`headless`](../packages/bundle/headless) | - | Supplies parsed task and run options to the headless runner and its sandbox-policy configuration. |

@@ -8,7 +8,7 @@ description: 查 API 平台（api.lishuyu.app，phm 上的 core 和它托管的�
 你有一枚只读 PAT，能看平台状态，改不了任何东西。取值只经 shell 替换，别打印它：
 
 ```sh
-api() { curl -sS -H "Authorization: Bearer $(grep '^FORK_API_READONLY_PAT=' ~/.dsh/.env | cut -d= -f2-)" "https://api.lishuyu.app$1"; }
+api() { curl -sS -H "Authorization: Bearer $(grep '^API_READONLY_PAT=' ~/.dsh/.env | cut -d= -f2-)" "https://api.lishuyu.app$1"; }
 api /v2/admin/core | jq '.plugins[] | {pluginId, phase: .live.phase}'
 ```
 

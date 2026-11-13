@@ -8,9 +8,9 @@
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
-import { renderMemoryBlock } from '../../packages/fork/fork-memory/src/render.ts'
-import type { MemoryEntry } from '../../packages/fork/fork-memory/src/entries.ts'
-import { agentMessageText } from '../../packages/fork/fork-wechat/src/text.ts'
+import { renderMemoryBlock } from '../../packages/fork/owner-memory/src/render.ts'
+import type { MemoryEntry } from '../../packages/fork/owner-memory/src/entries.ts'
+import { agentMessageText } from '../../packages/fork/wechat/src/text.ts'
 
 /** What the harness asks the model to return. */
 export interface Reply {

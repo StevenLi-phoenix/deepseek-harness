@@ -16,7 +16,7 @@ import Timer from '@deepseek-ai/cordis-plugin-timer'
 import LocalCredentialProvider from '@deepseek-ai/dsh-credentials-local'
 import type { WebResourceRoute } from '@deepseek-ai/dsh-host-webserver'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
-import type { ForkNote } from '@deepseek-ai/dsh-fork-event-bus'
+import type { OwnerNote } from '@deepseek-ai/dsh-event-bus'
 import { SESSION_FORMAT_VERSION, SessionId, type Session } from '@deepseek-ai/dsh-session'
 import Storage from '@deepseek-ai/dsh-storage'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
@@ -25,7 +25,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parse } from 'yaml'
 import * as GmailModule from '../../gmail/src/index.ts'
 import { FakeGoogle, rawHeader } from '../../gmail/tests/fixture.ts'
-import { mountFacility } from '../../fork-qq/tests/digest-harness.ts'
+import { mountFacility } from '../../qq/tests/digest-harness.ts'
 import * as ToolGmail from '../../tool-gmail/src/index.ts'
 import { openTurn, OWNER } from '../../tool-gmail/tests/session.ts'
 import { MemoryMediaPool } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
@@ -43,7 +43,7 @@ interface App {
   readonly logs: string[]
   readonly routes: Map<string, Route>
   readonly pages: Map<string, WebResourceRoute>
-  readonly notes: ForkNote[]
+  readonly notes: OwnerNote[]
   get(): Promise<GmailView>
   post(action: Record<string, unknown>): Promise<{ status: number; body: GmailAnswer & { error?: string } }>
   call(name: string, args: Record<string, unknown>, session?: Session): Promise<{ value: Record<string, unknown>; text: string }>
@@ -71,7 +71,7 @@ async function bootApp(root: string, pool: MemoryMediaPool, google: FakeGoogle):
   vi.stubGlobal('fetch', vi.fn(google.fetch))
   const routes = new Map<string, Route>()
   const pages = new Map<string, WebResourceRoute>()
-  const notes: ForkNote[] = []
+  const notes: OwnerNote[] = []
   const configPath = join(root, 'cordis.yml')
   writeFileSync(configPath, [
     '- name: fixture-timer',
@@ -105,7 +105,7 @@ async function bootApp(root: string, pool: MemoryMediaPool, google: FakeGoogle):
         },
       } as never)
       ctx.provide('webServer', { register: (route: WebResourceRoute) => { pages.set(route.path, route); return () => { pages.delete(route.path) } } } as never)
-      ctx.provide('forkNotifier', { send: (note: ForkNote) => { notes.push(note); return Promise.resolve() } } as never)
+      ctx.provide('ownerNotifier', { send: (note: OwnerNote) => { notes.push(note); return Promise.resolve() } } as never)
     },
   }
   const tools = {

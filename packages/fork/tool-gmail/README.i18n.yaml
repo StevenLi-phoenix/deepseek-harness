@@ -3,11 +3,11 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/fork/tool-gmail/README.md
 /:
-  en: 83a1e213d13fcaec
-  zh: 15ce484dabce0a20
+  en: e75019a3b9c891fb
+  zh: f25178b3a89acbd9
 /deepseek-ai-dsh-tool-gmail:
-  en: 7b7c1e0afc9595a3
-  zh: 11ad16017467202e
+  en: 557ddb5fa67aa83a
+  zh: 65c76e7d690028eb
 /deepseek-ai-dsh-tool-gmail/summary:
   en: 31098fa542b54c42
   zh: cf8a02aca7231d34
@@ -15,14 +15,14 @@
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
 /deepseek-ai-dsh-tool-gmail/use-this-package:
-  en: e7bc139bcb9d0544
-  zh: 25aa9e5c701d501a
+  en: da4b342573f6ddc3
+  zh: 2db54867d884ff0f
 /deepseek-ai-dsh-tool-gmail/understand-the-implementation:
-  en: 1053bf54244498e5
-  zh: a27a420b002804f9
+  en: 7497af10572b4b91
+  zh: 79e12d1324dd370c
 /deepseek-ai-dsh-tool-gmail/further-exploration:
-  en: 289b529bfebbc01a
-  zh: 59bf4144fbeab030
+  en: adb91b894caf5cac
+  zh: b9054aca48441e44
 /deepseek-ai-dsh-tool-gmail/model-experience:
   en: 215e7ba838619b7b
   zh: a311da3843709f90

@@ -1,7 +1,7 @@
 /**
  * Gmail tools for the owner's main agent, over `ctx.gmail`: the accounts, a search, a read, an attachment, a
  * draft, a send, and label changes. Received mail is wrapped as untrusted data, and the read tools count as
- * strangers' words for `fork-taint`, so a send after reading mail waits for the owner. The send gate itself lives in
+ * strangers' words for `turn-taint`, so a send after reading mail waits for the owner. The send gate itself lives in
  * `gmail`, which decides with the turn's facts this package reads from the Session log.
  */
 

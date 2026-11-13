@@ -1,6 +1,6 @@
 /**
  * `ctx.biliHot`: what Bilibili's public reads showed of the site's current slang, kept for a daily meme miner
- * (fork-style). Two sources, both reads the `bili` Session already makes: the hot comments of `bili_video` and
+ * (speaking-style). Two sources, both reads the `bili` Session already makes: the hot comments of `bili_video` and
  * `bili_comments`, and the hot-search list of `bili_hot_searches`. No new request is ever made for it.
  *
  * A comment is kept only as text, likes, video, and the time it was read: no UID, nickname, or link to a person.

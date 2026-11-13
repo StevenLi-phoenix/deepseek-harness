@@ -12,7 +12,7 @@
 #
 # Environment (all for tests, with the production defaults):
 #   QQ_RECORDER_AS      command prefix that runs a command as dsh-runtime (default: sudo -n -u dsh-runtime)
-#   QQ_RECORDER_SHARED  where the pinned bundles live (default: /Users/Shared/fork-dsh/qq-recorder.noindex)
+#   QQ_RECORDER_SHARED  where the pinned bundles live (default: /Users/Shared/dsh/qq-recorder.noindex)
 #   QQ_RECORDER_DECL    the declaration's path (default: /Users/dsh-runtime/.ams/services/qq-recorder/service.toml)
 #   QQ_RECORDER_AMS     the ams executable (default: /Users/dsh-runtime/ams/.venv/bin/ams)
 #   QQ_RECORDER_STATE   AMS_STATE_DIR (default: /Users/dsh-runtime/.ams)
@@ -21,7 +21,7 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 BUNDLE=${1:?usage: deploy.sh <qq-recorder.mjs>}
 [ -f "$BUNDLE" ] || { echo "deploy: $BUNDLE is not a file" >&2; exit 1; }
-SHARED=${QQ_RECORDER_SHARED:-/Users/Shared/fork-dsh/qq-recorder.noindex}
+SHARED=${QQ_RECORDER_SHARED:-/Users/Shared/dsh/qq-recorder.noindex}
 DECL=${QQ_RECORDER_DECL:-/Users/dsh-runtime/.ams/services/qq-recorder/service.toml}
 AMS=${QQ_RECORDER_AMS:-/Users/dsh-runtime/ams/.venv/bin/ams}
 STATE=${QQ_RECORDER_STATE:-/Users/dsh-runtime/.ams}

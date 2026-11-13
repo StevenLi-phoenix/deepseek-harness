@@ -1,5 +1,5 @@
 #!/bin/bash
-# The QQ protocol end of fork-qq: NapCat (OneBot v11) in a Docker container on colima, bound to 127.0.0.1.
+# The QQ protocol end of qq: NapCat (OneBot v11) in a Docker container on colima, bound to 127.0.0.1.
 # Run it as the operator (not as dsh-runtime): the container holds the QQ login session, which the agent's
 # account must not be able to read, so only the operator's docker socket reaches it.
 #
@@ -16,7 +16,7 @@
 # files, a shell in the container, logout, restart), the docker socket, or the volumes that hold the QQ session: the door
 # alone holds the WebUI token, and the door's only two endpoints are the ones above.
 #
-# The OneBot access token is generated here (openssl) and stored as the AMS secret FORK_QQ_ONEBOT_TOKEN of the service
+# The OneBot access token is generated here (openssl) and stored as the AMS secret QQ_ONEBOT_TOKEN of the service
 # qq-recorder (`ams secret set`, the value on stdin); it is never printed. For one release cycle it is also written to
 # $DSH_ENV, which the previous build reads, so a rollback finds it. Re-running `start` keeps the existing token; a token
 # that is in $DSH_ENV but not yet a secret is copied into the secret, not regenerated. A new token restarts the recorder
@@ -73,8 +73,8 @@ door() {
 
 # AMS, as dsh-runtime (it owns the state directory): the recorder's secrets and its process.
 ams() { (cd / && sudo -n -u dsh-runtime env AMS_STATE_DIR="$AMS_STATE" "$AMS_BIN" "$@"); }
-secret_exists() { ams secret list qq-recorder 2>/dev/null | /usr/bin/grep -qx 'FORK_QQ_ONEBOT_TOKEN'; }
-env_token_exists() { sudo -n -u dsh-runtime /usr/bin/grep -q '^FORK_QQ_ONEBOT_TOKEN=.' "$DSH_ENV"; }
+secret_exists() { ams secret list qq-recorder 2>/dev/null | /usr/bin/grep -qx 'QQ_ONEBOT_TOKEN'; }
+env_token_exists() { sudo -n -u dsh-runtime /usr/bin/grep -q '^QQ_ONEBOT_TOKEN=.' "$DSH_ENV"; }
 token_exists() { secret_exists || env_token_exists; }
 # Restart the recorder so it reads a changed secret; it may not be declared yet (first install), which is not an error.
 restart_recorder() {
@@ -89,7 +89,7 @@ start() {
   docker volume create napcat-qq >/dev/null
   if token_exists && ! secret_exists; then
     # Migration: the token predates the recorder; copy it into the secret (stdin to stdin, never printed).
-    sudo -n -u dsh-runtime /usr/bin/grep '^FORK_QQ_ONEBOT_TOKEN=' "$DSH_ENV" | /usr/bin/cut -d= -f2- | ams secret set qq-recorder FORK_QQ_ONEBOT_TOKEN
+    sudo -n -u dsh-runtime /usr/bin/grep '^QQ_ONEBOT_TOKEN=' "$DSH_ENV" | /usr/bin/cut -d= -f2- | ams secret set qq-recorder QQ_ONEBOT_TOKEN
     echo "copied the OneBot token from $DSH_ENV into the qq-recorder's secrets"
   fi
   if ! token_exists || ! docker run --rm -v napcat-config:/cfg --entrypoint test "$IMAGE" -f /cfg/onebot11.json; then
@@ -97,8 +97,8 @@ start() {
     docker run --rm -e t -v napcat-config:/cfg --entrypoint bash "$IMAGE" -c \
       'jq --arg t "$t" ".network.websocketServers[0].token = \$t | .network.websocketServers[0].host = \"0.0.0.0\"" /app/templates/ws.json > /cfg/onebot11.json'
     cd / && printf '%s' "$t" | sudo -n -u dsh-runtime /bin/zsh -fc \
-      "umask 077; f=$DSH_ENV; /bin/cp -p \$f \$f.bak.\$(date +%Y%m%d%H%M%S); read -r v; { print -r -- \"FORK_QQ_ONEBOT_TOKEN=\$v\"; /usr/bin/grep -v '^FORK_QQ_ONEBOT_TOKEN=' \$f; } >| \$f.new && /bin/mv -f \$f.new \$f"
-    printf '%s' "$t" | ams secret set qq-recorder FORK_QQ_ONEBOT_TOKEN
+      "umask 077; f=$DSH_ENV; /bin/cp -p \$f \$f.bak.\$(date +%Y%m%d%H%M%S); read -r v; { print -r -- \"QQ_ONEBOT_TOKEN=\$v\"; /usr/bin/grep -v '^QQ_ONEBOT_TOKEN=' \$f; } >| \$f.new && /bin/mv -f \$f.new \$f"
+    printf '%s' "$t" | ams secret set qq-recorder QQ_ONEBOT_TOKEN
     unset t
     echo "wrote a new OneBot token to the qq-recorder's secrets and to $DSH_ENV (not shown)"
     NEW_TOKEN=1

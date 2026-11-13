@@ -7,8 +7,8 @@
  * Session as the account's. Turns nothing started (the owner in the Web UI, a reminder) keep their
  * answer in the Session.
  */
-// Type-only: the ctx.forkNotifier contract and the relay's channel contract.
-import type { ForkNotifier } from '@deepseek-ai/dsh-fork-event-bus'
+// Type-only: the ctx.ownerNotifier contract and the relay's channel contract.
+import type { OwnerNotifier } from '@deepseek-ai/dsh-event-bus'
 import type { RelayAnswer, RelayChannel, RelayDecision, RelayDelivery } from '@deepseek-ai/dsh-owner-relay'
 import { FALLBACK_TITLE, REPLY_CHARS, SHARE_FALLBACK_TITLE, splitMessage } from './text.ts'
 import type { ShareOutcome } from './view.ts'
@@ -44,7 +44,7 @@ export interface DmChannelHost {
   /** Keep a delivery alive until the account's teardown drains it; its outcome stays the relay's. */
   hold<T>(work: Promise<T>): Promise<T>
   /** The WeChat notifier, read per use. */
-  notifier(): Pick<ForkNotifier, 'send'> | undefined
+  notifier(): Pick<OwnerNotifier, 'send'> | undefined
   logger: { info(message: string): void; warn(message: string): void }
 }
 
@@ -152,8 +152,8 @@ export class DmChannel implements RelayChannel {
         this.host.logger.warn(`bili: the share goes to WeChat instead of a Bilibili message: ${why}`)
         const notifier = this.host.notifier()
         if (notifier === undefined) {
-          await this.host.shareSettled(sessionId, 'failed', `bili-svc did not send it (${outcome.detail}) and no forkNotifier is mounted`)
-          throw new Error('no forkNotifier is mounted')
+          await this.host.shareSettled(sessionId, 'failed', `bili-svc did not send it (${outcome.detail}) and no ownerNotifier is mounted`)
+          throw new Error('no ownerNotifier is mounted')
         }
         await notifier.send({ title: SHARE_FALLBACK_TITLE, body: `${rest}\n\n${why}`, origin: BILI_FALLBACK_LABEL })
         await this.host.shareSettled(sessionId, 'wechat', outcome.detail, answer.text)
@@ -190,7 +190,7 @@ export class DmChannel implements RelayChannel {
   private async fallback(text: string, why: string): Promise<void> {
     this.host.logger.warn(`bili: the answer goes to WeChat instead of a Bilibili message: ${why}`)
     const notifier = this.host.notifier()
-    if (notifier === undefined) throw new Error('no forkNotifier is mounted')
+    if (notifier === undefined) throw new Error('no ownerNotifier is mounted')
     await notifier.send({ title: FALLBACK_TITLE, body: `${text}\n\n${why}`, origin: BILI_FALLBACK_LABEL })
   }
 }

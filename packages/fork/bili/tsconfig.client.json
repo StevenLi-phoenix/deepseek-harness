@@ -30,7 +30,7 @@
       "path": "../../client/ui-slots"
     },
     {
-      "path": "../fork-config/tsconfig.client.json"
+      "path": "../plugin-config/tsconfig.client.json"
     }
   ]
 }

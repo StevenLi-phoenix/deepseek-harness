@@ -18,7 +18,7 @@
       "path": "../gmail"
     },
     {
-      "path": "../fork-taint"
+      "path": "../turn-taint"
     },
     {
       "path": "../../core/session"

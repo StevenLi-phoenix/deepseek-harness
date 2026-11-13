@@ -1,0 +1,70 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/fork/wechat/README.md
+/:
+  en: 0bbb46468b85a008
+  zh: 1c4fe576fb9a7985
+/deepseek-ai-dsh-wechat:
+  en: 8d7124f467a28db9
+  zh: 427df31687299535
+/deepseek-ai-dsh-wechat/summary:
+  en: b296a735ab295cfb
+  zh: fb1acb3d0e400845
+/deepseek-ai-dsh-wechat/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-wechat/use-this-package:
+  en: dc9d9b2f31053f70
+  zh: 6d8fe6fc59c78448
+/deepseek-ai-dsh-wechat/use-this-package/when-to-choose-it:
+  en: 831e47681cfb8c50
+  zh: 9d998c62874aeea6
+/deepseek-ai-dsh-wechat/use-this-package/minimal-configuration:
+  en: 3841b622a64b76d1
+  zh: f4aa74255f6f5a06
+/deepseek-ai-dsh-wechat/use-this-package/quiet-hours:
+  en: a84b29730d77abd5
+  zh: 1a58206b384d389d
+/deepseek-ai-dsh-wechat/understand-the-implementation:
+  en: 6ef5a05cefa927a6
+  zh: 702993bf93f2ebb2
+/deepseek-ai-dsh-wechat/further-exploration:
+  en: eab15f0031e603d8
+  zh: 0f7a011f32c279bc
+/deepseek-ai-dsh-wechat/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-wechat/model-experience/chat-session:
+  en: a19f429aab1a23b3
+  zh: 55b1ba7f2ba3363e
+/deepseek-ai-dsh-wechat/model-experience/chat-session/what-the-model-sees:
+  en: 1d67bd2d252b3a17
+  zh: 9c379a833a6243aa
+/deepseek-ai-dsh-wechat/model-experience/chat-session/what-the-model-sees/time-gap-notice:
+  en: 7453a788c2d54bf8
+  zh: 7d4a10ae3958ae21
+/deepseek-ai-dsh-wechat/model-experience/chat-session/what-the-model-sees/shared-note:
+  en: d199f3d0f1a7f283
+  zh: 343e8c6dfae96117
+/deepseek-ai-dsh-wechat/model-experience/chat-session/what-the-model-sees/note-for-the-main-agent:
+  en: ae04138db419363b
+  zh: bcd816e8ed546cf6
+/deepseek-ai-dsh-wechat/model-experience/chat-session/what-the-model-sees/handover-notice:
+  en: b266a2cb3abb0015
+  zh: fb34083b30143d10
+/deepseek-ai-dsh-wechat/model-experience/chat-session/what-the-model-sees/message-from-another-session:
+  en: f92d4ca31a30bc7b
+  zh: ab050226a608877c
+/deepseek-ai-dsh-wechat/model-experience/chat-session/token-effect:
+  en: 31f55daa09260e73
+  zh: 8fae9f2b99ff21e9
+/deepseek-ai-dsh-wechat/model-experience/chat-session/kv-cache-effect:
+  en: 4d2838921c24db11
+  zh: 6f3b27453433a4e8
+/deepseek-ai-dsh-wechat/known-limitations-and-deferred-work:
+  en: 795ff75fe284904a
+  zh: bec3a62ead517ffe
+/deepseek-ai-dsh-wechat/known-limitations-and-deferred-work/dev-note:
+  en: 6887c1a211fa1631
+  zh: 7baa8b5765207a44

@@ -1,0 +1,58 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/fork/tool-voice/README.md
+/:
+  en: 218d3b5b5540e1e6
+  zh: 383e0f8e884bdcbf
+/deepseek-ai-dsh-tool-voice:
+  en: 0add2db2c4e240e8
+  zh: 8c9730546f80dd9b
+/deepseek-ai-dsh-tool-voice/summary:
+  en: 25f1f45bde799f3f
+  zh: f4d035292e0df23c
+/deepseek-ai-dsh-tool-voice/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-tool-voice/use-this-package:
+  en: 008054ab58f61c3c
+  zh: 0bc2476ebcc0da84
+/deepseek-ai-dsh-tool-voice/understand-the-implementation:
+  en: 5bebd79999d824b3
+  zh: aca7b46e60790ff9
+/deepseek-ai-dsh-tool-voice/further-exploration:
+  en: 4629ba9492f65b2c
+  zh: 10a873ebe737e9ab
+/deepseek-ai-dsh-tool-voice/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-tool-voice/model-experience/speak-tool:
+  en: a7ba271b8389e1f4
+  zh: 8d8928f30861f2dc
+/deepseek-ai-dsh-tool-voice/model-experience/speak-tool/what-the-model-sees:
+  en: 5cac3d8d946ebe92
+  zh: 2b6e289339f71180
+/deepseek-ai-dsh-tool-voice/model-experience/speak-tool/token-effect:
+  en: 9b6fea54ebf84b5a
+  zh: a9085ac0476b86ed
+/deepseek-ai-dsh-tool-voice/model-experience/speak-tool/kv-cache-effect:
+  en: 5b38c23791d4786e
+  zh: ee76dfc43a986563
+/deepseek-ai-dsh-tool-voice/model-experience/speak-results:
+  en: 5d0f756c71dc235a
+  zh: d28a40367c7b5f81
+/deepseek-ai-dsh-tool-voice/model-experience/speak-results/what-the-model-sees:
+  en: c2ed9f3440ccc0a0
+  zh: ff1248b811a64fc9
+/deepseek-ai-dsh-tool-voice/model-experience/speak-results/token-effect:
+  en: 7aa5c06d9b372bc1
+  zh: 134d318dd5201130
+/deepseek-ai-dsh-tool-voice/model-experience/speak-results/kv-cache-effect:
+  en: 2fbf2175168e8244
+  zh: 9ed25f9061c187c9
+/deepseek-ai-dsh-tool-voice/known-limitations-and-deferred-work:
+  en: e8c5f6e1abf71c28
+  zh: a38455474caeeb63
+/deepseek-ai-dsh-tool-voice/known-limitations-and-deferred-work/dev-note:
+  en: 1058b664f80f65b9
+  zh: 4198cd8475aa9433

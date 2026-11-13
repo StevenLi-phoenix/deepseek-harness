@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/fork/event-console/README.md
+/:
+  en: 43a8592efeff3ed5
+  zh: b8526d5282a21fa5
+/deepseek-ai-dsh-event-console:
+  en: e0c8688eb7c2d289
+  zh: e67dd220b7c78c9d
+/deepseek-ai-dsh-event-console/summary:
+  en: a0709396bee95368
+  zh: 05d918a068129982
+/deepseek-ai-dsh-event-console/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-event-console/use-this-package:
+  en: ed63824a400c07aa
+  zh: d9382027e6132048
+/deepseek-ai-dsh-event-console/understand-the-implementation:
+  en: 7e72d228ec4f8e82
+  zh: 56d147ae1bf50332
+/deepseek-ai-dsh-event-console/further-exploration:
+  en: 94019c447083ce90
+  zh: 9208053ec6c5ffd1
+/deepseek-ai-dsh-event-console/model-experience:
+  en: f1605a7fd0094ea8
+  zh: 651636ce8e774179
+/deepseek-ai-dsh-event-console/model-experience/kv-cache-effect:
+  en: ca75c51c89c2c9b0
+  zh: a18013b9ffbc0b06
+/deepseek-ai-dsh-event-console/known-limitations-and-deferred-work:
+  en: 6d066ea3d001be89
+  zh: 6b4babb3d17192d4
+/deepseek-ai-dsh-event-console/known-limitations-and-deferred-work/dev-note:
+  en: 5882f0bd30bb7516
+  zh: 1d8d08a01af65fda

@@ -1,0 +1,55 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/fork/time-gap/README.md
+/:
+  en: 4fd91edfea137673
+  zh: cc5810103bf65402
+/deepseek-ai-dsh-time-gap:
+  en: dc82c53b07f928a6
+  zh: 9677caef7947762b
+/deepseek-ai-dsh-time-gap/summary:
+  en: 1bf50f89d6545fd9
+  zh: 884defd726abb7fe
+/deepseek-ai-dsh-time-gap/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-time-gap/use-this-package:
+  en: fc3b060072abbf34
+  zh: 50c339270a523b4c
+/deepseek-ai-dsh-time-gap/use-this-package/which-sessions-and-inputs-get-it:
+  en: 09066463154726cc
+  zh: b6fdcd0be8498907
+/deepseek-ai-dsh-time-gap/understand-the-implementation:
+  en: 56ffaa9a13326af2
+  zh: d7afc5c7a49a0e0b
+/deepseek-ai-dsh-time-gap/further-exploration:
+  en: 7c70887cf00a6399
+  zh: 90d77796fde27a2e
+/deepseek-ai-dsh-time-gap/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-time-gap/model-experience/time-check-before-an-input-after-a-quiet-spell:
+  en: 955ed474cc126e05
+  zh: a2bf8a70f056f41f
+/deepseek-ai-dsh-time-gap/model-experience/time-check-before-an-input-after-a-quiet-spell/what-the-model-sees:
+  en: 012c41591e692a87
+  zh: cacc91ce363b703a
+/deepseek-ai-dsh-time-gap/model-experience/time-check-before-an-input-after-a-quiet-spell/what-the-model-sees/verbatim-text-for-a-message-from-the-owner-or-a-sender:
+  en: 1441838f139814fc
+  zh: 86849b244e32f0a4
+/deepseek-ai-dsh-time-gap/model-experience/time-check-before-an-input-after-a-quiet-spell/what-the-model-sees/verbatim-text-for-an-event-or-a-reminder:
+  en: ec18fb3d7d59f6cb
+  zh: 5d101732a277a088
+/deepseek-ai-dsh-time-gap/model-experience/time-check-before-an-input-after-a-quiet-spell/token-effect:
+  en: 35311463caa695fb
+  zh: 89c1f1fa09e500b2
+/deepseek-ai-dsh-time-gap/model-experience/time-check-before-an-input-after-a-quiet-spell/kv-cache-effect:
+  en: 98f1848aeab6ef82
+  zh: 93334a44c2ea3ea6
+/deepseek-ai-dsh-time-gap/known-limitations-and-deferred-work:
+  en: b9476a8fa5096a3f
+  zh: 50e402bdaf8ec880
+/deepseek-ai-dsh-time-gap/known-limitations-and-deferred-work/dev-note:
+  en: 05c8ca74e7a7d1a0
+  zh: bea02f232e77d8e4

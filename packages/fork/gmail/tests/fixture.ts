@@ -6,7 +6,7 @@
 import { Context, type Fiber } from '@deepseek-ai/cordis'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
 import type { CredentialInfo, CredentialRecord, ResolvedCredential } from '@deepseek-ai/dsh-credentials'
-import type { ForkNote } from '@deepseek-ai/dsh-fork-event-bus'
+import type { OwnerNote } from '@deepseek-ai/dsh-event-bus'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility, type Domain } from '@deepseek-ai/dsh-storage-domain'
 import { vi } from 'vitest'
@@ -373,7 +373,7 @@ export interface MountOptions {
   readonly google?: FakeGoogle | undefined
   /** No OAuth client stored. */
   readonly noClient?: boolean | undefined
-  /** No forkNotifier service. */
+  /** No ownerNotifier service. */
   readonly noNotifier?: boolean | undefined
   /** The notifier throws this value. */
   readonly notifierThrows?: unknown
@@ -387,7 +387,7 @@ export interface Mounted {
   readonly credentials: FakeCredentials
   readonly google: FakeGoogle
   readonly pool: MemoryMediaPool
-  readonly notes: ForkNote[]
+  readonly notes: OwnerNote[]
   readonly logs: string[]
 }
 
@@ -431,10 +431,10 @@ export async function host(options: MountOptions = {}): Promise<Omit<Mounted, 'g
     credentials.values.set(CLIENT_SECRET_REF, CLIENT_SECRET)
   }
   ctx.provide('credentials', credentials)
-  const notes: ForkNote[] = []
+  const notes: OwnerNote[] = []
   if (options.noNotifier !== true) {
-    ctx.provide('forkNotifier', {
-      send: async (note: ForkNote) => {
+    ctx.provide('ownerNotifier', {
+      send: async (note: OwnerNote) => {
         if (options.notifierThrows !== undefined) throw options.notifierThrows
         notes.push(note)
       },

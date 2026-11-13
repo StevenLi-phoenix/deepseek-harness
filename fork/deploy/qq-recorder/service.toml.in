@@ -5,16 +5,16 @@
 id = "qq-recorder"
 name = "QQ recorder"
 # Values are set out of band: `ams secret set qq-recorder <NAME>` with the value on stdin (RUNBOOK, "qq-recorder").
-secrets = ["FORK_QQ_ONEBOT_TOKEN", "QQ_RECORDER_TOKEN"]
+secrets = ["QQ_ONEBOT_TOKEN", "QQ_RECORDER_TOKEN"]
 
 [start]
 # Plain node, no dependency runtime: the bundle has everything inlined. The flag keeps node:sqlite's experimental notice
 # (if a node ever prints one) from reading as a warning to AMS.
 argv = ["/opt/homebrew/bin/node", "--disable-warning=ExperimentalWarning", "@BUNDLE@"]
-workdir = "/Users/dsh-runtime/.dsh/fork-qq"
+workdir = "/Users/dsh-runtime/.dsh/qq"
 
 [env]
-QQ_RECORDER_DATA_DIR = "/Users/dsh-runtime/.dsh/fork-qq"
+QQ_RECORDER_DATA_DIR = "/Users/dsh-runtime/.dsh/qq"
 QQ_RECORDER_SOCKET = "/Users/dsh-runtime/.dsh/run/qq-recorder.sock"
 QQ_RECORDER_BUILD = "@BUILD@"
 

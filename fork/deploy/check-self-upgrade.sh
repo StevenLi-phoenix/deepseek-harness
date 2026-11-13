@@ -7,7 +7,7 @@
 # usage: check-self-upgrade.sh
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-WORK=$(mktemp -d "${TMPDIR:-/tmp}/fork-self-upgrade.XXXXXX")
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/self-upgrade.XXXXXX")
 trap 'rm -rf "${WORK:?}"' EXIT
 fail() { echo "check-self-upgrade: FAIL: $*" >&2; exit 1; }
 
@@ -73,7 +73,7 @@ run_build() {
   mkdir -p "$WORK/dist/$SHA/hot" "$WORK/pack/package/lib"
   echo "$FAKE_LIB" >"$WORK/pack/package/lib/index.js"
   echo "$FAKE_MANIFEST" >"$WORK/pack/package/package.json"
-  COPYFILE_DISABLE=1 tar -czf "$WORK/dist/$SHA/hot/deepseek-ai-dsh-fork-demo-1.0.0.tgz" -C "$WORK/pack" package
+  COPYFILE_DISABLE=1 tar -czf "$WORK/dist/$SHA/hot/deepseek-ai-dsh-demo-1.0.0.tgz" -C "$WORK/pack" package
   rm -rf "$WORK/pack"
 }
 setup_profile() { echo setup >>"$CALLS"; }
@@ -96,7 +96,7 @@ wait_healthy() { echo health >>"$CALLS"; [ -z "$FAKE_UNHEALTHY" ]; }
 reconcile() {
   local word
   word=$(echo "$FAKE_RECONCILE" | cut -d' ' -f1)
-  echo "reconcile $word $(cat "$APPS/current/node_modules/@deepseek-ai/dsh-fork-demo/lib/index.js")" >>"$CALLS"
+  echo "reconcile $word $(cat "$APPS/current/node_modules/@deepseek-ai/dsh-demo/lib/index.js")" >>"$CALLS"
   [ "$FAKE_RECONCILE" = "$word" ] || FAKE_RECONCILE=${FAKE_RECONCILE#* }
   case "$word" in applied) return 0 ;; pending) return 2 ;; *) return 1 ;; esac
 }
@@ -124,22 +124,22 @@ hot() {
   git -C "$REPO" add -A
   git -C "$REPO" -c user.name=c -c user.email=c@localhost commit -q -m change
   BUILD="$APPS/builds.noindex/$BASE"
-  PLUGIN="$BUILD/node_modules/@deepseek-ai/dsh-fork-demo"
+  PLUGIN="$BUILD/node_modules/@deepseek-ai/dsh-demo"
   mkdir -p "$PLUGIN/lib" "$PLUGIN/node_modules/dep" "$BUILD/fork/skills/demo" "$APPS/builds.noindex/cold"
   echo old >"$PLUGIN/lib/index.js"
   echo removed-by-the-new-build >"$PLUGIN/lib/stale.js"
-  echo '{"name":"@deepseek-ai/dsh-fork-demo"}' >"$PLUGIN/package.json"
+  echo '{"name":"@deepseek-ai/dsh-demo"}' >"$PLUGIN/package.json"
   echo nested >"$PLUGIN/node_modules/dep/index.js"
   echo old-skill >"$BUILD/fork/skills/demo/SKILL.md"
   ln -sfn "$BUILD" "$APPS/current"
   RC=0
-  ( cd "$REPO" && env APPS="$APPS" CALLS="$CALLS" WORK="$WORK" FAKE_LIB=new FAKE_MANIFEST='{"name":"@deepseek-ai/dsh-fork-demo"}' FAKE_PIDS='7 7 7 7' \
+  ( cd "$REPO" && env APPS="$APPS" CALLS="$CALLS" WORK="$WORK" FAKE_LIB=new FAKE_MANIFEST='{"name":"@deepseek-ai/dsh-demo"}' FAKE_PIDS='7 7 7 7' \
       FAKE_RECONCILE=applied FAKE_UNHEALTHY= FAKE_BUILD_FAILS= DSH_UPGRADE_APPS="$APPS" DSH_UPGRADE_WORK="$WORK" \
       DSH_UPGRADE_SETTLE_S=0 DSH_UPGRADE_DRAIN_POLL_S=0 "$@" DSH_UPGRADE_TEST_HOOKS="$WORK/hot-hooks.sh" "$HERE/self-upgrade.sh" >"$WORK/$name.out" 2>&1 ) || RC=$?
 }
 lib() { cat "$PLUGIN/lib/index.js"; }
 
-PLUGIN_SRC=packages/fork/fork-demo/src/index.ts
+PLUGIN_SRC=packages/fork/demo/src/index.ts
 
 hot hot-applied "$PLUGIN_SRC"
 [ "$RC" = 0 ] || fail "a plugin change must exit 0 (rc $RC): $(cat "$WORK/hot-applied.out")"
@@ -162,14 +162,14 @@ called prune && fail "a hot deploy leaves no other build to remove"
 RC=0
 : >"$CALLS"
 echo 1 >"$CALLS.pids"
-( cd "$REPO" && env APPS="$APPS" CALLS="$CALLS" WORK="$WORK" FAKE_LIB=new FAKE_MANIFEST='{"name":"@deepseek-ai/dsh-fork-demo"}' FAKE_PIDS='7 7' FAKE_RECONCILE=applied FAKE_UNHEALTHY= FAKE_BUILD_FAILS= \
+( cd "$REPO" && env APPS="$APPS" CALLS="$CALLS" WORK="$WORK" FAKE_LIB=new FAKE_MANIFEST='{"name":"@deepseek-ai/dsh-demo"}' FAKE_PIDS='7 7' FAKE_RECONCILE=applied FAKE_UNHEALTHY= FAKE_BUILD_FAILS= \
     DSH_UPGRADE_APPS="$APPS" DSH_UPGRADE_WORK="$WORK" DSH_UPGRADE_SETTLE_S=0 DSH_UPGRADE_TEST_HOOKS="$WORK/hot-hooks.sh" "$HERE/self-upgrade.sh" >/dev/null 2>&1 ) || RC=$?
 [ "$RC" = 0 ] || fail "the commit that already runs must exit 0"
 called build && fail "the commit that already runs must not build"
 called '已经是' || fail "the commit that already runs must report"
 
 # A change no process loads needs no build, no reconcile, and no time to settle: it is on disk in seconds.
-for inert in docs/guide/x.md .agents/notes/x.json README.md fork/CHANGELOG.md fork/deploy/RUNBOOK.md packages/fork/fork-demo/README.md packages/client/ui/README.i18n.yaml fork/skills/demo/extra.md; do
+for inert in docs/guide/x.md .agents/notes/x.json README.md fork/CHANGELOG.md fork/deploy/RUNBOOK.md packages/fork/demo/README.md packages/client/ui/README.i18n.yaml fork/skills/demo/extra.md; do
   INERT_START=$SECONDS
   hot hot-inert "$inert" DSH_UPGRADE_SETTLE_S=30
   [ $((SECONDS - INERT_START)) -lt 30 ] || fail "$inert must not wait for the process to settle: nothing was reloaded"
@@ -213,14 +213,14 @@ called '仍有' || fail "a restart that cut a turn must say so"
 HOT_TURNS=x hot hot-drain-unknown packages/boot/hmr/src/index.ts
 called restart || fail "a turn count that cannot be read must not hold a deploy"
 
-hot hot-manifest packages/fork/fork-demo/package.json
+hot hot-manifest packages/fork/demo/package.json
 called upgrade && called restart || fail "a plugin's manifest change must take the restart"
 hot hot-lockfile pnpm-lock.yaml
 called upgrade && called restart || fail "a lockfile change must take the restart"
 hot hot-setup fork/deploy/setup-profile.sh
 called upgrade && called restart || fail "a change to the profile layout must take the restart"
 
-hot hot-packed-manifest "$PLUGIN_SRC" FAKE_MANIFEST='{"name":"@deepseek-ai/dsh-fork-demo","dependencies":{"x":"1"}}'
+hot hot-packed-manifest "$PLUGIN_SRC" FAKE_MANIFEST='{"name":"@deepseek-ai/dsh-demo","dependencies":{"x":"1"}}'
 called upgrade && called restart || fail "a packed manifest that differs must take the restart"
 [ "$(lib)" = old ] || fail "a packed manifest that differs must leave the running files"
 
@@ -243,7 +243,7 @@ git -C "$REPO" checkout -q "$BASE"
 RC=0
 : >"$CALLS"
 echo 1 >"$CALLS.pids"
-( cd "$REPO" && env APPS="$APPS" CALLS="$CALLS" WORK="$WORK" FAKE_LIB=old FAKE_MANIFEST='{"name":"@deepseek-ai/dsh-fork-demo"}' FAKE_PIDS='7 7' FAKE_RECONCILE=applied FAKE_UNHEALTHY= FAKE_BUILD_FAILS= \
+( cd "$REPO" && env APPS="$APPS" CALLS="$CALLS" WORK="$WORK" FAKE_LIB=old FAKE_MANIFEST='{"name":"@deepseek-ai/dsh-demo"}' FAKE_PIDS='7 7' FAKE_RECONCILE=applied FAKE_UNHEALTHY= FAKE_BUILD_FAILS= \
     DSH_UPGRADE_APPS="$APPS" DSH_UPGRADE_WORK="$WORK" DSH_UPGRADE_SETTLE_S=0 DSH_UPGRADE_TEST_HOOKS="$WORK/hot-hooks.sh" "$HERE/self-upgrade.sh" >/dev/null 2>&1 ) || RC=$?
 [ "$RC" = 0 ] || fail "deploying the old commit after a failed replacement must exit 0"
 [ "$(lib)" = old ] || fail "deploying the old commit must bring its file back"

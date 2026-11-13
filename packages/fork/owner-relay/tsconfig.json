@@ -12,7 +12,7 @@
       "path": "../../../vendor/cordis"
     },
     {
-      "path": "../fork-event-bus"
+      "path": "../event-bus"
     },
     {
       "path": "../../core/session"

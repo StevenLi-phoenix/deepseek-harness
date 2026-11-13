@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/fork/owner-memory-admin/README.md
+/:
+  en: 637d26a24b630e7a
+  zh: a539ce65fd18f521
+/deepseek-ai-dsh-owner-memory-admin:
+  en: 7fa2f5d35848bbf6
+  zh: d7d7e43014421763
+/deepseek-ai-dsh-owner-memory-admin/summary:
+  en: 4adc05ab8bac4d56
+  zh: 4b13a92deb6cf78a
+/deepseek-ai-dsh-owner-memory-admin/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-owner-memory-admin/use-this-package:
+  en: 0d5480ea1d5558ee
+  zh: 0e3851841ef46795
+/deepseek-ai-dsh-owner-memory-admin/understand-the-implementation:
+  en: 2a17074d492e3042
+  zh: c6ad4231680b0133
+/deepseek-ai-dsh-owner-memory-admin/further-exploration:
+  en: 7101dfc19532b5cb
+  zh: 1ffffe261b1f3d07
+/deepseek-ai-dsh-owner-memory-admin/model-experience:
+  en: f1c5ac0fff418584
+  zh: 69a4dd39da5b51de
+/deepseek-ai-dsh-owner-memory-admin/model-experience/kv-cache-effect:
+  en: ca75c51c89c2c9b0
+  zh: bc18dcaf8e5986ea
+/deepseek-ai-dsh-owner-memory-admin/known-limitations-and-deferred-work:
+  en: d0a7175ffd6be1a8
+  zh: 63122743740e1b0c
+/deepseek-ai-dsh-owner-memory-admin/known-limitations-and-deferred-work/dev-note:
+  en: e23e7f69b5d00dde
+  zh: 4e5b914fe0e56ad0

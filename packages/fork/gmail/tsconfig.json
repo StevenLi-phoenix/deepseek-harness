@@ -18,7 +18,7 @@
       "path": "../../credentials/credentials"
     },
     {
-      "path": "../fork-event-bus"
+      "path": "../event-bus"
     },
     {
       "path": "../../storage/storage-domain"

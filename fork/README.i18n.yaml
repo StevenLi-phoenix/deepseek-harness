@@ -3,14 +3,14 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write fork/README.md
 /fork-event-driven-agent-service-fork-local:
-  en: 77e9819f97b44a94
-  zh: 59ca5eaa20da713b
+  en: 49b7ef115dc05546
+  zh: 5714085244f3513a
 /fork-event-driven-agent-service-fork-local/layout:
-  en: 32ef48e12cdbfe2b
-  zh: ba25730dec2af79e
+  en: de485abec4159655
+  zh: 0cdae9698c1ff2dd
 /fork-event-driven-agent-service-fork-local/checks-for-the-fork-group:
-  en: 293e6a29a2b8fa1e
-  zh: 4e8d5a34fdbe0ea7
+  en: 7ecb665ec453e657
+  zh: 2888e561ff31b663
 /fork-event-driven-agent-service-fork-local/run-the-event-profile-from-source:
-  en: 575dfad8f0d09fd9
-  zh: 3b62766e80b5f608
+  en: 4a7be5307542fde2
+  zh: ac0eb19c3a98da1e

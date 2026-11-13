@@ -1,12 +1,12 @@
 /**
- * The facts of the turn a Gmail tool runs in, read from the Session log by `fork-taint`: whether the owner started it
+ * The facts of the turn a Gmail tool runs in, read from the Session log by `turn-taint`: whether the owner started it
  * alone with no strangers' words read in it, its origin label, and the owner's own words. The model supplies none of
  * them.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { TurnFacts } from '@deepseek-ai/dsh-gmail'
-import { describeOrigin, ownerWords, turnOrigin } from '@deepseek-ai/dsh-fork-taint'
+import { describeOrigin, ownerWords, turnOrigin } from '@deepseek-ai/dsh-turn-taint'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 
 /**

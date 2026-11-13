@@ -5,7 +5,7 @@
 # usage: check-prune-builds.sh
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-WORK=$(mktemp -d "${TMPDIR:-/tmp}/fork-prune-builds.XXXXXX")
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/prune-builds.XXXXXX")
 trap 'rm -rf "${WORK:?}"' EXIT
 fail() { echo "check-prune-builds: FAIL: $*" >&2; exit 1; }
 mk() { mkdir -p "$1/node_modules"; : > "$1/node_modules/x"; }

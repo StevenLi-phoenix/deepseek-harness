@@ -3,11 +3,11 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/fork/README.md
 /:
-  en: 8baaddf9cf57a87e
-  zh: dccce063f91c1b44
+  en: ab6bef810d3dba34
+  zh: 87a06fc9fdb36054
 /fork-event-driven-agent-runs:
-  en: 019f10b56ca3d680
-  zh: 43fac1ee9e3dd2ad
+  en: ee4a9f04dc98b819
+  zh: b08587524ab87e0e
 /fork-event-driven-agent-runs/summary:
   en: 6263c5830bb437ec
   zh: 48fe135e8fd46d43
@@ -15,11 +15,11 @@
   en: 1eb35b015a6c423f
   zh: a8a3dceee2c9e943
 /fork-event-driven-agent-runs/packages:
-  en: eadb518976422f75
-  zh: ba739bb48ba1bce4
+  en: 6dceb68186466353
+  zh: 9f007f360a89bc38
 /fork-event-driven-agent-runs/related-documentation:
-  en: 2e77b32f9a4bdce9
-  zh: 0bb40f0eba7bd605
+  en: 9ac12a7e127fb3db
+  zh: d2d10a6d6d697b60
 /fork-event-driven-agent-runs/dev-note:
-  en: 1dacfe263d6e9886
-  zh: 44a51bff96f2922e
+  en: 9146d4daaf4c127c
+  zh: 7a269b6c7e706401

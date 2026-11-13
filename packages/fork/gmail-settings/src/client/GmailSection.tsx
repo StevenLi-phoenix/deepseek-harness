@@ -12,7 +12,7 @@ import type { InjectFace, PropsLocale, PropsRenderFactories, PropsRuntime } from
 // Type-only: pulls the settings shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: declares the 'settings.plugin-config' factory this section renders at its foot.
-import type {} from '@deepseek-ai/dsh-fork-config/client'
+import type {} from '@deepseek-ai/dsh-plugin-config/client'
 import type { GmailAction, GmailView } from '../view.ts'
 // Type-only: registers the gmail locale namespace this component's `t` reads.
 import type {} from './locales.ts'

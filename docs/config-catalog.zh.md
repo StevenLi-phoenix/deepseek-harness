@@ -553,6 +553,73 @@ export interface ShareConfig {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-bili -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-cc-admin -->
+<a id="deepseek-aidsh-cc-admin"></a>
+
+## `@deepseek-ai/dsh-cc-admin`
+
+- `source`: [`packages/fork/cc-admin/src/index.ts:28`](../packages/fork/cc-admin/src/index.ts)
+
+```ts config-catalog
+/** Settings; every default is the bridge's. */
+export interface Config {
+  /** Turn the service off: the Settings page then shows the bridge as off. */
+  enabled: boolean
+  /** Claude Code's session registry for this account; empty means `~/.claude/sessions`. */
+  sessionsDir: string
+  /** The tmux binary that hosts started sessions. */
+  tmux: string
+  /** The launcher that sets HOME and the token file, then execs Claude Code. */
+  command: string
+  /** Where started sessions work. */
+  workDir: string
+  /** The model a started session uses. */
+  model: string
+  /** Most started sessions running at once. */
+  maxSessions: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-cc-admin -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-cc-bridge -->
+<a id="deepseek-aidsh-cc-bridge"></a>
+
+## `@deepseek-ai/dsh-cc-bridge`
+
+- `inject`: `tools`
+- `source`: [`packages/fork/cc-bridge/src/index.ts:33`](../packages/fork/cc-bridge/src/index.ts)
+
+```ts config-catalog
+/** Bridge settings. */
+export interface Config {
+  /** Turn the whole bridge off: no tools, no inbox, no inbound messages. */
+  enabled: boolean
+  /** Directory for the inbox socket (0700). */
+  stateDir: string
+  /** Claude Code's session registry for this account; empty means `~/.claude/sessions`. */
+  sessionsDir: string
+  /** The name Claude Code's `ListAgents` shows for the agent. */
+  peerName: string
+  /** Only the owner's chat Sessions (the main agent) may use the Claude Code tools. */
+  mainAgentOnly: boolean
+  /** Most Claude Code messages handed to the main agent per rolling hour; the rest are dropped and logged. */
+  inboundPerHour: number
+  /** `cc_start` and `cc_stop`: sessions the agent starts for itself. */
+  spawn: boolean
+  /** The tmux binary that hosts started sessions. */
+  tmux: string
+  /** The launcher that sets HOME and the token file, then execs Claude Code. */
+  command: string
+  /** Where started sessions work. */
+  workDir: string
+  /** The model a started session uses. */
+  model: string
+  /** Most started sessions running at once. */
+  maxSessions: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-cc-bridge -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-client-connection -->
 <a id="deepseek-aidsh-client-connection"></a>
 
@@ -906,6 +973,55 @@ export interface ToolResultPruneConfig {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-compaction-tool-result-pruner -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-content-guard -->
+<a id="deepseek-aidsh-content-guard"></a>
+
+## `@deepseek-ai/dsh-content-guard`
+
+- `source`: [`packages/fork/content-guard/src/index.ts:38`](../packages/fork/content-guard/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Which layers run. The model layer ignores `false` for audience `public`. */
+  layers: {
+    /** Phone, email, ID, card, long-number, mention, address, and link patterns. */
+    patterns: boolean
+    /** The canary file and `extraCanaries`. */
+    canary: boolean
+    /** Overlap with the owner's memory entries. */
+    memory: boolean
+    /** The model's judgement; always runs for audience `public`. */
+    llm: boolean
+  }
+  /** Refuse any link, not only one that carries a token or an account id. */
+  blockLinks: boolean
+  /** Absolute path of the canary file, one string per line (`#` comments); defaults to `<DSH_HOME>/content-guard/canaries.txt`. */
+  canaryFile?: string
+  /** Canary strings from the configuration, on top of the file: honeypot tokens. */
+  extraCanaries: string[]
+  /** Absolute path of owner-memory's memory file; defaults to `<DSH_HOME>/owner-memory/memory.jsonl`. */
+  memoryFile?: string
+  /** Provider of the model layer's route; set together with `model`. Unset uses the profile's default model. */
+  provider?: string
+  /** Model id of the model layer's route; set together with `provider`. */
+  model?: string
+  /** Deadline of one model call, in milliseconds. */
+  timeoutMs: number
+  /** Output cap of one model call, in tokens. */
+  maxOutputTokens: number
+  /** Longest text checked, in characters; a longer one is refused. */
+  maxChars: number
+  /** Hours a model verdict is reused for the same text, purpose, and audience. */
+  cacheHours: number
+  /** Directory of `canaries.txt` and `raw/`; defaults to `<DSH_HOME>/content-guard`. */
+  dir?: string
+  /** Days the model's raw responses are kept. */
+  rawRetentionDays: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-content-guard -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-cordis-host-runner -->
 <a id="deepseek-aidsh-cordis-host-runner"></a>
 
@@ -924,6 +1040,69 @@ export interface Config {
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-cordis-host-runner -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-courses -->
+<a id="deepseek-aidsh-courses"></a>
+
+## `@deepseek-ai/dsh-courses`
+
+- `inject`: `storageDomain` · `credentials`
+- `source`: [`packages/fork/courses/src/index.ts:46`](../packages/fork/courses/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Send deadline and sync reminders; off keeps the client and the tools working and stops the poller. */
+  enabled: boolean
+  /** Courses API base, without a trailing slash. */
+  baseUrl: string
+  /** Name of the PAT (audience `courses`) in the credential store or `$DSH_HOME/.env`. */
+  tokenEnv: string
+  /** `X-Courses-Agent` value: how the service's history names writes from DSH. */
+  agentName: string
+  /** IANA zone deadlines are shown and quiet hours are read in. */
+  timeZone: string
+  /** Minutes between polls. */
+  pollMinutes: number
+  /** Seconds after start before the first poll. */
+  firstPollSeconds: number
+  /** Timeout of one call to the service, in milliseconds. */
+  requestTimeoutMs: number
+  /** Days ahead the poll reads; must cover the largest checkpoint. */
+  lookaheadDays: number
+  /** Hours before an on-time deadline at which the owner is reminded. */
+  beforeHours: number[]
+  /** Hours before the end of a late window at which the owner is reminded (the first notice of a missed deadline comes at once). */
+  lateBeforeHours: number[]
+  /** A reminder whose deadline is this many hours away goes out during quiet hours and while the owner sleeps; 0 never. */
+  urgentWithinHours: number
+  /** When reminders wait; the next poll after them sends what is still due. */
+  quietHours: {
+    /** Wait while `ctx.presence` says the owner sleeps (Settings → 勿扰). */
+    followPresence: boolean
+    /** Also wait in the daily window below. */
+    enabled: boolean
+    /** Window start, `HH:MM`. */
+    start: string
+    /** Window end, `HH:MM`; earlier than `start` wraps midnight. */
+    end: string
+  }
+  /** Telling the owner that the course sync collectors are broken. */
+  sync: {
+    /** Send the alert and the recovery at all. */
+    alert: boolean
+    /** `report.coverage.health.status` values that count as broken. */
+    statuses: string[]
+    /** Hours since the last sync before the first alert and the stale line in reminders. */
+    staleHours: number
+    /** Hours between alerts while it stays broken. */
+    repeatHours: number
+  }
+  /** Consecutive failed polls before the owner is told that reminders are paused. */
+  outageAlertAfter: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-courses -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-credentials-local -->
 <a id="deepseek-aidsh-credentials-local"></a>
@@ -1011,6 +1190,246 @@ export interface Config {
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-deepseek-account -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-event-bus -->
+<a id="deepseek-aidsh-event-bus"></a>
+
+## `@deepseek-ai/dsh-event-bus`
+
+- `inject`: `timer` · `storageDomain`
+- `source`: [`packages/fork/event-bus/src/index.ts:74`](../packages/fork/event-bus/src/index.ts)
+
+```ts config-catalog
+/** Bus configuration. */
+export interface Config {
+  /** Routing rules owned by the configuration; `subscribe()` adds more at run time. */
+  subscriptions: Subscription[]
+  /** Loop suppression for events the agent itself caused. */
+  suppress: SuppressConfig
+  /** Settled events kept for dedupe and inspection; the oldest are pruned first. */
+  retainEvents: number
+  /** Batches kept for rate limiting and inspection; the oldest are pruned first. */
+  retainBatches: number
+  /** Changes of the notification flow kept for `flow_read` and the message flow page; the oldest are pruned first. */
+  flowChangesKept: number
+  /** Maximum stored characters of each event's untrusted text. */
+  maxTextChars: number
+  /** Send the final assistant text of each bus-started Session to the notifier. */
+  notifySessionResult: boolean
+  /**
+   * Send the final assistant text of each unattended Host-schedule reminder turn, and of each
+   * turn a tool-monitor notice wakes, to the notifier.
+   */
+  reportScheduledTurns: boolean
+  /** Events listed in one notify message before the remainder is counted. */
+  maxNoteEvents: number
+  /** Web UI link attached to Session result messages. */
+  webUrl?: string
+  /**
+   * Archive chat Sessions nobody touched for `inactiveDays` (archive only, never delete). A plain object without this
+   * block keeps it off; the schema fills in the defaults.
+   */
+  autoArchive?: AutoArchiveConfig
+}
+
+/** One routing rule, from the bus configuration or created at run time through `EventBus.subscribe()`. */
+export interface Subscription {
+  /** Stable id; also the webhook delivery source and the notification label. */
+  id: string
+  /** Source globs; empty matches every source. */
+  sources: string[]
+  /** Kind globs; empty matches every kind. */
+  kinds: string[]
+  /** Subject globs; empty matches every subject. */
+  subjects: string[]
+  /** `notify` sends a message; `session` starts an agent Session. */
+  action: 'notify' | 'session'
+  /** Window after the first pending event during which later events join the same batch. */
+  coalesceMs: number
+  /** Maximum batches per rolling hour; later batches wait for the window to free up. */
+  maxPerHour: number
+  /** Required when `action` is `session`. */
+  session?: SessionAction
+}
+
+/** Loop suppression: events the agent itself caused must not trigger it again. */
+export interface SuppressConfig {
+  /** Origin identities of the agent (e.g. its GitHub login), compared case-insensitively. */
+  actors: string[]
+  /** Substrings the agent writes into its own output (e.g. a commit trailer). */
+  markers: string[]
+}
+
+/** Auto-archive configuration (the `autoArchive` block of the bus configuration). */
+export interface AutoArchiveConfig {
+  /** Run the sweep. */
+  enabled: boolean
+  /** Archive Sessions whose last message is older than this many days. */
+  inactiveDays: number
+  /** Select and log, but archive nothing. */
+  dryRun: boolean
+  /** Most Sessions archived by one sweep; the rest wait for the next. */
+  maxPerSweep: number
+  /** Minutes after startup before the first sweep. */
+  firstSweepMinutes: number
+  /** Hours between sweeps. */
+  sweepHours: number
+}
+
+/** How a `session` subscription turns one batch into a new agent Session. */
+export interface SessionAction {
+  /** Absolute Workspace directory the Session runs in. */
+  workspacePath: string
+  /** Agent preset id, e.g. `standard` or a deployment-defined `unattended`. */
+  agentPreset: string
+  /** Permission preset id, e.g. `danger-full-access` for unattended runs. */
+  permissionPreset: string
+  /** Trusted task text placed before the untrusted event data. */
+  instructions: string
+  /** Session title prefix; defaults to the subscription id. */
+  titlePrefix?: string
+  /** Maximum events embedded in the prompt; the rest are counted. */
+  maxPromptEvents: number
+  /** Maximum characters of each event's untrusted text in the prompt. */
+  maxTextChars: number
+  /**
+   * The source is an authenticated owner channel (for example event-ingest's `operator`
+   * token): the prompt presents each event's `text` as the owner's request instead of
+   * untrusted data. Only set it on subscriptions whose sources no outsider can publish to.
+   */
+  trustedText?: boolean
+  /** Keep the Session's answer in the Session: the outcome is recorded and no result note goes to the notifier. */
+  quietResult?: boolean
+  /** Where the Session's answer goes; overrides `quietResult`. Omitted: `quietResult` decides, otherwise the notifier. */
+  result?: RouteResult
+  /**
+   * A model route for this subscription's Sessions instead of the profile's default, as
+   * `{ provider, model }` (the provider is a registered `llm-pi-ai` route). Configuration rows only;
+   * the Session then runs without the default's reasoning effort. Omitted, or both fields empty:
+   * the default applies.
+   */
+  model?: {
+    /** Registered `llm-pi-ai` route name. */
+    provider: string
+    /** Provider-owned model id. */
+    model: string
+  }
+  /**
+   * One Session for the whole subscription instead of one per batch. Configuration rows only;
+   * omitted, or `enabled: false`, starts a new Session per batch.
+   */
+  persistent?: PersistentSessionAction
+  /**
+   * Web UI project title for `workspacePath`: before a Session starts there, the bus creates the directory and
+   * registers it as a project with this title unless one exists. Omitted: the directory must exist.
+   */
+  project?: string
+}
+
+/**
+ * Where a `session` route's answer goes: `notify` a message for the owner, `urgent` the same past the do-not-disturb hold, `main` the
+ * owner's main agent, `quiet` nowhere, and `event` an event of kind `flow.<route id>.result` that other routes can take. The silent
+ * reply sends nothing on any of them, so a route filters by answering it.
+ */
+export type RouteResult = 'notify' | 'urgent' | 'main' | 'quiet' | 'event'
+
+/**
+ * How a `session` subscription keeps one Session across batches. The first batch creates it through
+ * the webhook runtime; later batches enter it as new turns with the same prompt framing. A stored
+ * Session that is gone or archived is replaced by a new one. After `rolloverDays` the next batch starts
+ * a new Session whose first message carries the old Session's last compaction summary, and the old
+ * Session is archived (DSH has no Session deletion; the archive keeps its log).
+ */
+export interface PersistentSessionAction {
+  /** Reuse one Session for this subscription. */
+  enabled: boolean
+  /** One Session for the whole subscription, or one per event subject (a repository, a video). */
+  key: 'subscription' | 'subject'
+  /** Days after which the next batch starts a new Session and archives the old one. */
+  rolloverDays: number
+  /** Characters of the carried-over compaction summary kept in the new Session's first message. */
+  maxSeedChars: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-event-bus -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-event-console -->
+<a id="deepseek-aidsh-event-console"></a>
+
+## `@deepseek-ai/dsh-event-console`
+
+- `inject`: `connection`
+- `source`: [`packages/fork/event-console/src/config.ts:6`](../packages/fork/event-console/src/config.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** bili-svc, the Bilibili service. */
+  bili: {
+    /** Base URL; the card probes `<url>/healthz`. */
+    url: string
+  }
+  /** The AMS intake receiver of other machines' warnings. */
+  ams: {
+    /** Base URL; any answer below 500 counts as reachable. Empty leaves its card out. */
+    url: string
+  }
+  /** Deadline of every probe, in milliseconds. */
+  probeTimeoutMs: number
+  /** What the create form fills in for a subscription; the defaults are those of `watch_create`. */
+  subscriptions: {
+    /** Absolute Workspace of the Sessions a `session` subscription starts. */
+    workspacePath: string
+    /** Agent preset of those Sessions. */
+    agentPreset: string
+    /** Permission preset of those Sessions. */
+    permissionPreset: string
+    /** Seconds after the first event during which later events join the same batch. */
+    coalesceSeconds: number
+    /** Batches per rolling hour of a `notify` subscription. */
+    notifyMaxPerHour: number
+    /** Batches per rolling hour of a `session` subscription. */
+    sessionMaxPerHour: number
+  }
+  /** The sentence the voice preview speaks; at most the voice service's `tts.maxChars` characters. */
+  previewText: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-event-console -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-event-ingest -->
+<a id="deepseek-aidsh-event-ingest"></a>
+
+## `@deepseek-ai/dsh-event-ingest`
+
+- `inject`: `webServer` · `credentials` · `eventBus`
+- `source`: [`packages/fork/event-ingest/src/index.ts:41`](../packages/fork/event-ingest/src/index.ts)
+
+```ts config-catalog
+/** Route, sources, and body ceiling. */
+export interface Config {
+  /** Route path; must start with `/hooks/` and not end with `/`. */
+  path?: string
+  /** Services allowed to push, each with its own bearer token; with none configured every request gets 503. */
+  sources?: IngestSource[]
+  /** Largest accepted request body, in bytes. */
+  maxBodyBytes?: number
+}
+
+/** One service allowed to push. */
+export interface IngestSource {
+  /** Source id on the bus, e.g. `kaorou`; event kinds must start with `<id>.`. */
+  id: string
+  /** Credential reference of this source's bearer token. */
+  tokenEnv: string
+  /**
+   * Name of a Host service (an {@link IngestSink}) that takes this source's events instead of the
+   * bus, e.g. `presence`. Such events are never published, so no subscription can match them.
+   */
+  sink?: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-event-ingest -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-experimental-api-speech-to-text -->
 <a id="deepseek-aidsh-experimental-api-speech-to-text"></a>
@@ -1743,6 +2162,54 @@ export type Config = LocalConfig
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-fs-sandbox -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-github-sensor -->
+<a id="deepseek-aidsh-github-sensor"></a>
+
+## `@deepseek-ai/dsh-github-sensor`
+
+- `inject`: `timer` · `storageDomain` · `credentials` · `eventBus`
+- `source`: [`packages/fork/github-sensor/src/index.ts:94`](../packages/fork/github-sensor/src/index.ts)
+
+```ts config-catalog
+/** Sensor configuration. */
+export interface Config {
+  /** Poll period in milliseconds. */
+  intervalMs: number
+  /** REST API origin. */
+  apiBase: string
+  /** Credential reference for repository reads (a fine-grained read-only token). */
+  tokenEnv: string
+  /** Credential reference for `/notifications` (a classic token with the `notifications` scope). */
+  notificationsTokenEnv: string
+  /** Poll the authenticated user's notification threads when the notifications token resolves. */
+  notifications: boolean
+  /** Repositories watched by configuration; `GithubSensor.watch()` adds more at run time. */
+  repos: RepoWatch[]
+  /** Per-request deadline in milliseconds. */
+  timeoutMs: number
+  /** Characters of release notes and commit messages kept in events. */
+  maxTextChars: number
+  /** `per_page` of repository list requests; more new items than this between polls are missed. */
+  perPage: number
+  /** Seen ids remembered per stream. */
+  maxSeenPerStream: number
+}
+
+/** One watched repository. */
+export interface RepoWatch {
+  /** `owner/name`. */
+  repo: string
+  /** Streams to poll, published in this order within one tick. */
+  watch: RepoStream[]
+  /** Branch for `commits`; the default branch when unset. */
+  branch?: string
+}
+
+/** Per-repository streams. */
+export type RepoStream = 'releases' | 'commits' | 'tags'
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-github-sensor -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-gmail -->
 <a id="deepseek-aidsh-gmail"></a>
 
@@ -2071,6 +2538,38 @@ export interface TlsConfig {
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-host-webserver -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-integrity-watch -->
+<a id="deepseek-aidsh-integrity-watch"></a>
+
+## `@deepseek-ai/dsh-integrity-watch`
+
+- `source`: [`packages/fork/integrity-watch/src/index.ts:30`](../packages/fork/integrity-watch/src/index.ts)
+
+```ts config-catalog
+/** Settings. */
+export interface Config {
+  /** Turn the whole watch off. */
+  enabled?: boolean
+  /** Directories the agent works in: their instruction files and skill directories are watched. */
+  workspaces?: string[]
+  /** Seconds between scans. */
+  intervalSec?: number
+  /** Tell the owner on WeChat when a target changes. */
+  notify?: boolean
+  /** Fewest seconds between two notices; changes seen sooner wait for the next one. */
+  minGapSec?: number
+  /** Notices in a day. */
+  noticesPerDay?: number
+  /** Agent presets whose answers are checked for the persona's forbidden stock lines. */
+  ticPresets?: string[]
+  /** Directory of the state files; defaults to `<DSH_HOME>/integrity-watch`. */
+  stateDir?: string
+  /** The memory file whose digest is checked against the memory history; defaults to `<DSH_HOME>/owner-memory/memory.jsonl`. */
+  memoryFile?: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-integrity-watch -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-jobs-local -->
 <a id="deepseek-aidsh-jobs-local"></a>
@@ -2564,1405 +3063,6 @@ export interface LspLocalServerConfig {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-lsp-stdio -->
 
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-balance -->
-<a id="deepseek-aidsh-fork-balance"></a>
-
-## `@deepseek-ai/dsh-fork-balance`
-
-- `inject`: `credentials` · `connection`
-- `source`: [`packages/fork/fork-balance/src/index.ts:18`](../packages/fork/fork-balance/src/index.ts)
-
-```ts config-catalog
-/** Plugin configuration. */
-export interface Config {
-  /** Providers to query; a source whose key reference is unset is skipped. */
-  sources: BalanceSource[]
-  /** How long an answer is served from cache, in milliseconds. */
-  cacheMs: number
-  /** Deadline of one provider request, in milliseconds. */
-  timeoutMs: number
-}
-
-/** One configured balance source. */
-export interface BalanceSource {
-  /** Which provider endpoint to query. */
-  kind: BalanceSourceKind
-  /** Credential reference holding the provider key (the Models page's `apiKeyEnv`). */
-  keyRef: string
-  /** Name shown on the provider's row. */
-  label: string
-}
-
-/** Providers with a balance or quota endpoint. */
-export type BalanceSourceKind = 'deepseek' | 'opencode-go'
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-balance -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-cc-admin -->
-<a id="deepseek-aidsh-fork-cc-admin"></a>
-
-## `@deepseek-ai/dsh-fork-cc-admin`
-
-- `source`: [`packages/fork/fork-cc-admin/src/index.ts:28`](../packages/fork/fork-cc-admin/src/index.ts)
-
-```ts config-catalog
-/** Settings; every default is the bridge's. */
-export interface Config {
-  /** Turn the service off: the Settings page then shows the bridge as off. */
-  enabled: boolean
-  /** Claude Code's session registry for this account; empty means `~/.claude/sessions`. */
-  sessionsDir: string
-  /** The tmux binary that hosts started sessions. */
-  tmux: string
-  /** The launcher that sets HOME and the token file, then execs Claude Code. */
-  command: string
-  /** Where started sessions work. */
-  workDir: string
-  /** The model a started session uses. */
-  model: string
-  /** Most started sessions running at once. */
-  maxSessions: number
-}
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-cc-admin -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-cc-bridge -->
-<a id="deepseek-aidsh-fork-cc-bridge"></a>
-
-## `@deepseek-ai/dsh-fork-cc-bridge`
-
-- `inject`: `tools`
-- `source`: [`packages/fork/fork-cc-bridge/src/index.ts:33`](../packages/fork/fork-cc-bridge/src/index.ts)
-
-```ts config-catalog
-/** Bridge settings. */
-export interface Config {
-  /** Turn the whole bridge off: no tools, no inbox, no inbound messages. */
-  enabled: boolean
-  /** Directory for the inbox socket (0700). */
-  stateDir: string
-  /** Claude Code's session registry for this account; empty means `~/.claude/sessions`. */
-  sessionsDir: string
-  /** The name Claude Code's `ListAgents` shows for the agent. */
-  peerName: string
-  /** Only the owner's chat Sessions (the main agent) may use the Claude Code tools. */
-  mainAgentOnly: boolean
-  /** Most Claude Code messages handed to the main agent per rolling hour; the rest are dropped and logged. */
-  inboundPerHour: number
-  /** `cc_start` and `cc_stop`: sessions the agent starts for itself. */
-  spawn: boolean
-  /** The tmux binary that hosts started sessions. */
-  tmux: string
-  /** The launcher that sets HOME and the token file, then execs Claude Code. */
-  command: string
-  /** Where started sessions work. */
-  workDir: string
-  /** The model a started session uses. */
-  model: string
-  /** Most started sessions running at once. */
-  maxSessions: number
-}
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-cc-bridge -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-console -->
-<a id="deepseek-aidsh-fork-console"></a>
-
-## `@deepseek-ai/dsh-fork-console`
-
-- `inject`: `connection`
-- `source`: [`packages/fork/fork-console/src/config.ts:6`](../packages/fork/fork-console/src/config.ts)
-
-```ts config-catalog
-/** Plugin configuration. */
-export interface Config {
-  /** bili-svc, the Bilibili service. */
-  bili: {
-    /** Base URL; the card probes `<url>/healthz`. */
-    url: string
-  }
-  /** The AMS intake receiver of other machines' warnings. */
-  ams: {
-    /** Base URL; any answer below 500 counts as reachable. Empty leaves its card out. */
-    url: string
-  }
-  /** Deadline of every probe, in milliseconds. */
-  probeTimeoutMs: number
-  /** What the create form fills in for a subscription; the defaults are those of `watch_create`. */
-  subscriptions: {
-    /** Absolute Workspace of the Sessions a `session` subscription starts. */
-    workspacePath: string
-    /** Agent preset of those Sessions. */
-    agentPreset: string
-    /** Permission preset of those Sessions. */
-    permissionPreset: string
-    /** Seconds after the first event during which later events join the same batch. */
-    coalesceSeconds: number
-    /** Batches per rolling hour of a `notify` subscription. */
-    notifyMaxPerHour: number
-    /** Batches per rolling hour of a `session` subscription. */
-    sessionMaxPerHour: number
-  }
-  /** The sentence the voice preview speaks; at most the voice service's `tts.maxChars` characters. */
-  previewText: string
-}
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-console -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-courses -->
-<a id="deepseek-aidsh-fork-courses"></a>
-
-## `@deepseek-ai/dsh-fork-courses`
-
-- `inject`: `storageDomain` · `credentials`
-- `source`: [`packages/fork/fork-courses/src/index.ts:46`](../packages/fork/fork-courses/src/index.ts)
-
-```ts config-catalog
-/** Plugin configuration. */
-export interface Config {
-  /** Send deadline and sync reminders; off keeps the client and the tools working and stops the poller. */
-  enabled: boolean
-  /** Courses API base, without a trailing slash. */
-  baseUrl: string
-  /** Name of the PAT (audience `courses`) in the credential store or `$DSH_HOME/.env`. */
-  tokenEnv: string
-  /** `X-Courses-Agent` value: how the service's history names writes from DSH. */
-  agentName: string
-  /** IANA zone deadlines are shown and quiet hours are read in. */
-  timeZone: string
-  /** Minutes between polls. */
-  pollMinutes: number
-  /** Seconds after start before the first poll. */
-  firstPollSeconds: number
-  /** Timeout of one call to the service, in milliseconds. */
-  requestTimeoutMs: number
-  /** Days ahead the poll reads; must cover the largest checkpoint. */
-  lookaheadDays: number
-  /** Hours before an on-time deadline at which the owner is reminded. */
-  beforeHours: number[]
-  /** Hours before the end of a late window at which the owner is reminded (the first notice of a missed deadline comes at once). */
-  lateBeforeHours: number[]
-  /** A reminder whose deadline is this many hours away goes out during quiet hours and while the owner sleeps; 0 never. */
-  urgentWithinHours: number
-  /** When reminders wait; the next poll after them sends what is still due. */
-  quietHours: {
-    /** Wait while `ctx.forkPresence` says the owner sleeps (Settings → 勿扰). */
-    followPresence: boolean
-    /** Also wait in the daily window below. */
-    enabled: boolean
-    /** Window start, `HH:MM`. */
-    start: string
-    /** Window end, `HH:MM`; earlier than `start` wraps midnight. */
-    end: string
-  }
-  /** Telling the owner that the course sync collectors are broken. */
-  sync: {
-    /** Send the alert and the recovery at all. */
-    alert: boolean
-    /** `report.coverage.health.status` values that count as broken. */
-    statuses: string[]
-    /** Hours since the last sync before the first alert and the stale line in reminders. */
-    staleHours: number
-    /** Hours between alerts while it stays broken. */
-    repeatHours: number
-  }
-  /** Consecutive failed polls before the owner is told that reminders are paused. */
-  outageAlertAfter: number
-}
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-courses -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-event-bus -->
-<a id="deepseek-aidsh-fork-event-bus"></a>
-
-## `@deepseek-ai/dsh-fork-event-bus`
-
-- `inject`: `timer` · `storageDomain`
-- `source`: [`packages/fork/fork-event-bus/src/index.ts:74`](../packages/fork/fork-event-bus/src/index.ts)
-
-```ts config-catalog
-/** Bus configuration. */
-export interface Config {
-  /** Routing rules owned by the configuration; `subscribe()` adds more at run time. */
-  subscriptions: Subscription[]
-  /** Loop suppression for events the agent itself caused. */
-  suppress: SuppressConfig
-  /** Settled events kept for dedupe and inspection; the oldest are pruned first. */
-  retainEvents: number
-  /** Batches kept for rate limiting and inspection; the oldest are pruned first. */
-  retainBatches: number
-  /** Changes of the notification flow kept for `flow_read` and the message flow page; the oldest are pruned first. */
-  flowChangesKept: number
-  /** Maximum stored characters of each event's untrusted text. */
-  maxTextChars: number
-  /** Send the final assistant text of each bus-started Session to the notifier. */
-  notifySessionResult: boolean
-  /**
-   * Send the final assistant text of each unattended Host-schedule reminder turn, and of each
-   * turn a fork-tool-monitor notice wakes, to the notifier.
-   */
-  reportScheduledTurns: boolean
-  /** Events listed in one notify message before the remainder is counted. */
-  maxNoteEvents: number
-  /** Web UI link attached to Session result messages. */
-  webUrl?: string
-  /**
-   * Archive chat Sessions nobody touched for `inactiveDays` (archive only, never delete). A plain object without this
-   * block keeps it off; the schema fills in the defaults.
-   */
-  autoArchive?: AutoArchiveConfig
-}
-
-/** One routing rule, from the bus configuration or created at run time through `ForkEventBus.subscribe()`. */
-export interface Subscription {
-  /** Stable id; also the webhook delivery source and the notification label. */
-  id: string
-  /** Source globs; empty matches every source. */
-  sources: string[]
-  /** Kind globs; empty matches every kind. */
-  kinds: string[]
-  /** Subject globs; empty matches every subject. */
-  subjects: string[]
-  /** `notify` sends a message; `session` starts an agent Session. */
-  action: 'notify' | 'session'
-  /** Window after the first pending event during which later events join the same batch. */
-  coalesceMs: number
-  /** Maximum batches per rolling hour; later batches wait for the window to free up. */
-  maxPerHour: number
-  /** Required when `action` is `session`. */
-  session?: SessionAction
-}
-
-/** Loop suppression: events the agent itself caused must not trigger it again. */
-export interface SuppressConfig {
-  /** Origin identities of the agent (e.g. its GitHub login), compared case-insensitively. */
-  actors: string[]
-  /** Substrings the agent writes into its own output (e.g. a commit trailer). */
-  markers: string[]
-}
-
-/** Auto-archive configuration (the `autoArchive` block of the bus configuration). */
-export interface AutoArchiveConfig {
-  /** Run the sweep. */
-  enabled: boolean
-  /** Archive Sessions whose last message is older than this many days. */
-  inactiveDays: number
-  /** Select and log, but archive nothing. */
-  dryRun: boolean
-  /** Most Sessions archived by one sweep; the rest wait for the next. */
-  maxPerSweep: number
-  /** Minutes after startup before the first sweep. */
-  firstSweepMinutes: number
-  /** Hours between sweeps. */
-  sweepHours: number
-}
-
-/** How a `session` subscription turns one batch into a new agent Session. */
-export interface SessionAction {
-  /** Absolute Workspace directory the Session runs in. */
-  workspacePath: string
-  /** Agent preset id, e.g. `standard` or a deployment-defined `unattended`. */
-  agentPreset: string
-  /** Permission preset id, e.g. `danger-full-access` for unattended runs. */
-  permissionPreset: string
-  /** Trusted task text placed before the untrusted event data. */
-  instructions: string
-  /** Session title prefix; defaults to the subscription id. */
-  titlePrefix?: string
-  /** Maximum events embedded in the prompt; the rest are counted. */
-  maxPromptEvents: number
-  /** Maximum characters of each event's untrusted text in the prompt. */
-  maxTextChars: number
-  /**
-   * The source is an authenticated owner channel (for example fork-event-ingest's `operator`
-   * token): the prompt presents each event's `text` as the owner's request instead of
-   * untrusted data. Only set it on subscriptions whose sources no outsider can publish to.
-   */
-  trustedText?: boolean
-  /** Keep the Session's answer in the Session: the outcome is recorded and no result note goes to the notifier. */
-  quietResult?: boolean
-  /** Where the Session's answer goes; overrides `quietResult`. Omitted: `quietResult` decides, otherwise the notifier. */
-  result?: RouteResult
-  /**
-   * A model route for this subscription's Sessions instead of the profile's default, as
-   * `{ provider, model }` (the provider is a registered `llm-pi-ai` route). Configuration rows only;
-   * the Session then runs without the default's reasoning effort. Omitted, or both fields empty:
-   * the default applies.
-   */
-  model?: {
-    /** Registered `llm-pi-ai` route name. */
-    provider: string
-    /** Provider-owned model id. */
-    model: string
-  }
-  /**
-   * One Session for the whole subscription instead of one per batch. Configuration rows only;
-   * omitted, or `enabled: false`, starts a new Session per batch.
-   */
-  persistent?: PersistentSessionAction
-  /**
-   * Web UI project title for `workspacePath`: before a Session starts there, the bus creates the directory and
-   * registers it as a project with this title unless one exists. Omitted: the directory must exist.
-   */
-  project?: string
-}
-
-/**
- * Where a `session` route's answer goes: `notify` a message for the owner, `urgent` the same past the do-not-disturb hold, `main` the
- * owner's main agent, `quiet` nowhere, and `event` an event of kind `flow.<route id>.result` that other routes can take. The silent
- * reply sends nothing on any of them, so a route filters by answering it.
- */
-export type RouteResult = 'notify' | 'urgent' | 'main' | 'quiet' | 'event'
-
-/**
- * How a `session` subscription keeps one Session across batches. The first batch creates it through
- * the webhook runtime; later batches enter it as new turns with the same prompt framing. A stored
- * Session that is gone or archived is replaced by a new one. After `rolloverDays` the next batch starts
- * a new Session whose first message carries the old Session's last compaction summary, and the old
- * Session is archived (DSH has no Session deletion; the archive keeps its log).
- */
-export interface PersistentSessionAction {
-  /** Reuse one Session for this subscription. */
-  enabled: boolean
-  /** One Session for the whole subscription, or one per event subject (a repository, a video). */
-  key: 'subscription' | 'subject'
-  /** Days after which the next batch starts a new Session and archives the old one. */
-  rolloverDays: number
-  /** Characters of the carried-over compaction summary kept in the new Session's first message. */
-  maxSeedChars: number
-}
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-event-bus -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-event-ingest -->
-<a id="deepseek-aidsh-fork-event-ingest"></a>
-
-## `@deepseek-ai/dsh-fork-event-ingest`
-
-- `inject`: `webServer` · `credentials` · `forkEventBus`
-- `source`: [`packages/fork/fork-event-ingest/src/index.ts:41`](../packages/fork/fork-event-ingest/src/index.ts)
-
-```ts config-catalog
-/** Route, sources, and body ceiling. */
-export interface Config {
-  /** Route path; must start with `/hooks/` and not end with `/`. */
-  path?: string
-  /** Services allowed to push, each with its own bearer token; with none configured every request gets 503. */
-  sources?: IngestSource[]
-  /** Largest accepted request body, in bytes. */
-  maxBodyBytes?: number
-}
-
-/** One service allowed to push. */
-export interface IngestSource {
-  /** Source id on the bus, e.g. `kaorou`; event kinds must start with `<id>.`. */
-  id: string
-  /** Credential reference of this source's bearer token. */
-  tokenEnv: string
-  /**
-   * Name of a Host service (an {@link ForkIngestSink}) that takes this source's events instead of the
-   * bus, e.g. `forkPresence`. Such events are never published, so no subscription can match them.
-   */
-  sink?: string
-}
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-event-ingest -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-github-sensor -->
-<a id="deepseek-aidsh-fork-github-sensor"></a>
-
-## `@deepseek-ai/dsh-fork-github-sensor`
-
-- `inject`: `timer` · `storageDomain` · `credentials` · `forkEventBus`
-- `source`: [`packages/fork/fork-github-sensor/src/index.ts:94`](../packages/fork/fork-github-sensor/src/index.ts)
-
-```ts config-catalog
-/** Sensor configuration. */
-export interface Config {
-  /** Poll period in milliseconds. */
-  intervalMs: number
-  /** REST API origin. */
-  apiBase: string
-  /** Credential reference for repository reads (a fine-grained read-only token). */
-  tokenEnv: string
-  /** Credential reference for `/notifications` (a classic token with the `notifications` scope). */
-  notificationsTokenEnv: string
-  /** Poll the authenticated user's notification threads when the notifications token resolves. */
-  notifications: boolean
-  /** Repositories watched by configuration; `GithubSensor.watch()` adds more at run time. */
-  repos: RepoWatch[]
-  /** Per-request deadline in milliseconds. */
-  timeoutMs: number
-  /** Characters of release notes and commit messages kept in events. */
-  maxTextChars: number
-  /** `per_page` of repository list requests; more new items than this between polls are missed. */
-  perPage: number
-  /** Seen ids remembered per stream. */
-  maxSeenPerStream: number
-}
-
-/** One watched repository. */
-export interface RepoWatch {
-  /** `owner/name`. */
-  repo: string
-  /** Streams to poll, published in this order within one tick. */
-  watch: RepoStream[]
-  /** Branch for `commits`; the default branch when unset. */
-  branch?: string
-}
-
-/** Per-repository streams. */
-export type RepoStream = 'releases' | 'commits' | 'tags'
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-github-sensor -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-guard -->
-<a id="deepseek-aidsh-fork-guard"></a>
-
-## `@deepseek-ai/dsh-fork-guard`
-
-- `source`: [`packages/fork/fork-guard/src/index.ts:38`](../packages/fork/fork-guard/src/index.ts)
-
-```ts config-catalog
-/** Plugin configuration. */
-export interface Config {
-  /** Which layers run. The model layer ignores `false` for audience `public`. */
-  layers: {
-    /** Phone, email, ID, card, long-number, mention, address, and link patterns. */
-    patterns: boolean
-    /** The canary file and `extraCanaries`. */
-    canary: boolean
-    /** Overlap with the owner's memory entries. */
-    memory: boolean
-    /** The model's judgement; always runs for audience `public`. */
-    llm: boolean
-  }
-  /** Refuse any link, not only one that carries a token or an account id. */
-  blockLinks: boolean
-  /** Absolute path of the canary file, one string per line (`#` comments); defaults to `<DSH_HOME>/fork-guard/canaries.txt`. */
-  canaryFile?: string
-  /** Canary strings from the configuration, on top of the file: honeypot tokens. */
-  extraCanaries: string[]
-  /** Absolute path of fork-memory's memory file; defaults to `<DSH_HOME>/fork-memory/memory.jsonl`. */
-  memoryFile?: string
-  /** Provider of the model layer's route; set together with `model`. Unset uses the profile's default model. */
-  provider?: string
-  /** Model id of the model layer's route; set together with `provider`. */
-  model?: string
-  /** Deadline of one model call, in milliseconds. */
-  timeoutMs: number
-  /** Output cap of one model call, in tokens. */
-  maxOutputTokens: number
-  /** Longest text checked, in characters; a longer one is refused. */
-  maxChars: number
-  /** Hours a model verdict is reused for the same text, purpose, and audience. */
-  cacheHours: number
-  /** Directory of `canaries.txt` and `raw/`; defaults to `<DSH_HOME>/fork-guard`. */
-  dir?: string
-  /** Days the model's raw responses are kept. */
-  rawRetentionDays: number
-}
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-guard -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-integrity -->
-<a id="deepseek-aidsh-fork-integrity"></a>
-
-## `@deepseek-ai/dsh-fork-integrity`
-
-- `source`: [`packages/fork/fork-integrity/src/index.ts:30`](../packages/fork/fork-integrity/src/index.ts)
-
-```ts config-catalog
-/** Settings. */
-export interface Config {
-  /** Turn the whole watch off. */
-  enabled?: boolean
-  /** Directories the agent works in: their instruction files and skill directories are watched. */
-  workspaces?: string[]
-  /** Seconds between scans. */
-  intervalSec?: number
-  /** Tell the owner on WeChat when a target changes. */
-  notify?: boolean
-  /** Fewest seconds between two notices; changes seen sooner wait for the next one. */
-  minGapSec?: number
-  /** Notices in a day. */
-  noticesPerDay?: number
-  /** Agent presets whose answers are checked for the persona's forbidden stock lines. */
-  ticPresets?: string[]
-  /** Directory of the state files; defaults to `<DSH_HOME>/fork-integrity`. */
-  stateDir?: string
-  /** The memory file whose digest is checked against the memory history; defaults to `<DSH_HOME>/fork-memory/memory.jsonl`. */
-  memoryFile?: string
-}
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-integrity -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-memory -->
-<a id="deepseek-aidsh-fork-memory"></a>
-
-## `@deepseek-ai/dsh-fork-memory`
-
-- `inject`: `tools`
-- `source`: [`packages/fork/fork-memory/src/config.ts:7`](../packages/fork/fork-memory/src/config.ts)
-
-```ts config-catalog
-/** Memory file and context budget. */
-export interface Config {
-  /** Absolute path of the memory file; defaults to `<DSH_HOME>/fork-memory/memory.jsonl`. */
-  file?: string
-  /** Cap on the memory block, in bytes. */
-  maxBytes?: number
-  /**
-   * Hold a protected write (`instructions`, `preferences`, `identity`) until the owner approves it
-   * when the turn was not the owner's alone, refuse to forget a protected entry then, and show
-   * `identity` entries only as a count. Off keeps each entry's `source`, `session`, and `origin` and the notices, but no holds.
-   * `FORK_MEMORY_HOLD=0` in the environment turns it off whatever the configuration says.
-   */
-  hold?: boolean
-  /** Tell the owner on WeChat about protected writes, one merged notice per turn. */
-  notify?: boolean
-  /** Notices the owner gets in a day; further writes are still recorded in the history. */
-  noticesPerDay?: number
-  /**
-   * Feedback mode, for the Bilibili persona presets (`up`, `bili`): no memory block and no tools; the Host puts the
-   * owner's keep/delete verdicts on that scope's replies in front of each root Session as examples of tone.
-   */
-  feedbackScope?: FeedbackScope
-}
-
-/** A persona whose replies are reviewed. */
-export type FeedbackScope = typeof FEEDBACK_SCOPES[number]
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-memory -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-presence -->
-<a id="deepseek-aidsh-fork-presence"></a>
-
-## `@deepseek-ai/dsh-fork-presence`
-
-- `inject`: `storageDomain`
-- `source`: [`packages/fork/fork-presence/src/index.ts:36`](../packages/fork/fork-presence/src/index.ts)
-
-```ts config-catalog
-/** Plugin configuration. */
-export interface Config {
-  /** IANA zone of the owner; the window and the manual times are read in it. */
-  timeZone: string
-  /** Daily fallback window, used when no Focus signal is fresh; the Settings page can replace it. */
-  window: QuietWindow
-  /** Hours a Focus signal holds without a newer one before the window decides again (the watcher sends a heartbeat every 30 minutes). */
-  focusFreshHours: number
-  /** Hours an asleep Focus signal holds when its off signal never arrives. */
-  sleepMaxHours: number
-  /** Hours a Settings button holds when it names no end. */
-  manualMaxHours: number
-  /** Globs of the event kinds that are sent while the owner sleeps. */
-  urgentKinds: string[]
-}
-
-/** Daily fallback window, in the owner's time zone; it wraps past midnight when `start` is later than `end`. */
-export interface QuietWindow {
-  /** Whether the window applies at all. */
-  readonly enabled: boolean
-  /** `HH:MM`, 24-hour. */
-  readonly start: string
-  /** `HH:MM`, 24-hour. */
-  readonly end: string
-}
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-presence -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-qq -->
-<a id="deepseek-aidsh-fork-qq"></a>
-
-## `@deepseek-ai/dsh-fork-qq`
-
-- `inject`: `sessionController` · `permissionPresets` · `sessionTitle` · `credentials` · `storageDomain`
-- `refs`: `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/fork/fork-qq/src/index.ts:51`](../packages/fork/fork-qq/src/index.ts)
-
-```ts config-catalog
-/** Channel configuration. */
-export interface Config {
-  /** WebSocket address of the protocol end (NapCat's OneBot server); it must be on this machine or the tailnet. The recorder connects. */
-  url: string
-  /** Name of the recorder's secret holding the protocol end's access token. */
-  tokenEnv: string
-  /**
-   * Group numbers to record. Empty records nothing; messages of every other group are dropped on arrival. Volatile: the
-   * Settings page's QQ section adds and removes groups at run time and the recorder follows without a restart.
-   */
-  groups: Volatile<string[]>
-  /** Ignored: the recorder owns its data directory (`QQ_RECORDER_DATA_DIR` in its declaration). */
-  dataDir?: string
-  /** The qq-recorder service this plugin talks to. */
-  recorder: {
-    /** Unix socket of the recorder; defaults to `<DSH_HOME>/run/qq-recorder.sock`. */
-    socket?: string
-    /** Credential holding the bearer token shared with the recorder. */
-    tokenEnv: string
-    /** Deadline of one request, in milliseconds. */
-    timeoutMs: number
-  }
-  /** Image downloads: what is fetched, from where, and how much is kept. Applied by the recorder. */
-  media: {
-    /** Download the images of recorded messages. */
-    images: Volatile<boolean>
-    /** Largest image downloaded, in bytes. */
-    maxImageBytes: Volatile<number>
-    /** Stop downloading once the downloads together reach this many bytes. */
-    maxTotalBytes: Volatile<number>
-    /** Delete downloads of messages older than this many days; 0 keeps them. 30 by default. */
-    retainDays: Volatile<number>
-    /** Hosts media may be fetched from, as suffixes. */
-    hostSuffixes: Volatile<string[]>
-    /** Deadline of one download, in milliseconds. */
-    timeoutMs: Volatile<number>
-  }
-  /** Keep voice messages. */
-  voice: {
-    /** Fetch the audio of voice messages. */
-    download: Volatile<boolean>
-    /** Largest audio kept, in bytes. */
-    maxBytes: Volatile<number>
-  }
-  /** Voice transcription. The recorder does not transcribe yet; `enabled` is refused at load. */
-  asr: {
-    /** Transcribe voice messages. Refused at load: the recorder keeps the audio and does not transcribe it. */
-    enabled: Volatile<boolean>
-  }
-  /** How long raw messages are kept. Digests are not affected and can be deleted by group or date. */
-  retention: {
-    /** Delete messages (text, raw segments, media rows) older than this many days; 0 keeps them. 30 by default. */
-    textDays: Volatile<number>
-  }
-  /** Drop the text and files of a message its sender recalled. */
-  honorRecall: Volatile<boolean>
-  /** Fetch what was missed while disconnected. Applied by the recorder. */
-  backfill: {
-    /** Fetch history after each connection. */
-    enabled: Volatile<boolean>
-    /** Messages fetched per group at most. 20 by default: one small page. */
-    maxMessages: Volatile<number>
-    /** Groups caught up per connection at most; the next connection continues with the following ones. 5 by default. */
-    maxGroups: Volatile<number>
-    /** Pause between two groups' backfills, in milliseconds, plus up to half as much again of jitter. 5000 by default. */
-    gapMs: Volatile<number>
-    /** A connection made less than this long after the previous one dropped fetches nothing; 0 never skips. 30 minutes by default. */
-    skipWithinMs: Volatile<number>
-    /** A backfill runs at most this often, also across recorder restarts; 0 never holds one back. 30 minutes by default. */
-    minIntervalMs: Volatile<number>
-  }
-  /** Sending to a group. Refused: the recorder has no send endpoint, so `enabled` fails the load. */
-  send: {
-    /** Allow sending at all. Refused at load. */
-    enabled: boolean
-    /** Groups sending would be allowed in. Unused while sending is refused. */
-    groups: string[]
-    /** Seconds between two sends to one group. Unused while sending is refused. */
-    minIntervalSec: number
-    /** Sends per group per day. Unused while sending is refused. */
-    maxPerDay: number
-  }
-  /** Scheduled digests of the recorded groups, made by one-turn Sessions. */
-  digest: {
-    /** Digest each recorded group on a schedule. */
-    enabled: boolean
-    /** Hours between digests of one group. */
-    everyHours: number
-    /** A group with fewer new messages than this waits for the next round. */
-    minMessages: number
-    /** Characters of transcript per model call; a longer backlog is cut into several calls. */
-    maxPromptChars: number
-    /** Model calls one group may use in one round. */
-    maxCallsPerRound: number
-    /** Show members to the model, and so in the digests, as stable aliases (`群友#a3f9`), never names or QQ numbers. */
-    aliasMembers: boolean
-    /** Ask for the section on what members know or argued, by alias. Off by default: no per-member profiles. */
-    profiles: boolean
-    /** Digests kept per group; the oldest are deleted when a new one is stored. */
-    keepPerGroup: number
-    /** Longest digest stored, in characters. */
-    maxDigestChars: number
-    /**
-     * Pictures of one transcript chunk attached to the digest prompt at most (the newest ones, when the route reads images;
-     * otherwise their `[图片#ref]` tags stay as text); 0 attaches none. They go to the model only and are never stored.
-     */
-    maxImages: Volatile<number>
-    /** Tool calls (`qq_digest_write`, `qq_group_note`) one digest Session may make, refused ones included. 12 by default. */
-    maxToolCalls: number
-    /** Archive each digest Session when its turn ends, so it does not fill the sidebar (its log stays). True by default. */
-    archiveSessions: boolean
-    /**
-     * Keep one Session per recorded group across rounds, condensed by the preset's compaction, and replace it every
-     * `retention.textDays` days; false runs a new one-shot Session per round. True by default.
-     */
-    resident: boolean
-    /** Provider route of the digest Session's model; the profile's default when omitted. */
-    provider?: string
-    /** Model id on that route; the profile's default when omitted. */
-    model?: string
-    /** Agent preset of the digest Session; the bundle defines `qq-digest` with a persona and no tools. */
-    agentPreset: string
-    /** Permission preset set on the digest Session. */
-    permissionPreset: string
-    /** Absolute working directory of the digest Sessions. */
-    workspacePath: string
-    /** IANA zone the transcript's times are written in. */
-    timeZone: string
-    /** How long to wait for one model call, in milliseconds. */
-    timeoutMs: number
-  }
-  /** Tell the owner when the protocol end has been unreachable this long, in milliseconds; 0 turns it off. */
-  offlineNoticeMs: Volatile<number>
-  /**
-   * A connection made less than this long after the previous one was last alive skips the group list and the backfill.
-   * The recorder keeps the time on disk, so it holds across a recorder restart; 0 never skips. 10 minutes by default.
-   */
-  reconnectQuietMs: Volatile<number>
-  /**
-   * While an outage lasts, remind the owner again after this long, in milliseconds; 0 never repeats. What was told is kept
-   * in this plugin's storage, so a reload or deploy in the middle of an outage does not tell again. 24 hours by default.
-   */
-  offlineRepeatMs: Volatile<number>
-  /** Where the Settings page lives, quoted in the owner notice (the event service's address); unset names the page without a link. */
-  settingsUrl: Volatile<string | undefined>
-  /** The login door: the window onto NapCat's login that the Settings page's QQ section uses. The recorder asks it. */
-  login: {
-    /** Ask the door at all. */
-    enabled: boolean
-    /** The door's address; it must be on this machine or the tailnet. */
-    url: string
-    /** Deadline of one call to the door, in milliseconds. */
-    timeoutMs: number
-  }
-}
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-qq -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-qqbot -->
-<a id="deepseek-aidsh-fork-qqbot"></a>
-
-## `@deepseek-ai/dsh-fork-qqbot`
-
-- `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle` · `credentials`
-- `source`: [`packages/fork/fork-qqbot/src/index.ts:57`](../packages/fork/fork-qqbot/src/index.ts)
-
-```ts config-catalog
-/** Channel configuration. */
-export interface Config {
-  /** Name of the credential (`$DSH_HOME/.env` variable or stored credential) holding the bot's AppID. */
-  appIdEnv: string
-  /** Name of the credential holding the bot's AppSecret. */
-  appSecretEnv: string
-  /** Who is answered. */
-  allow: AllowConfig
-  /** Chat Session settings. */
-  session: SessionConfig
-  /** Code points per QQ message; longer answers are split. */
-  maxMessageChars: number
-  /** Messages one answer may be split into (QQ allows five replies to one inbound message). */
-  maxReplyParts: number
-  /** Messages one peer may send per minute before the rest are dropped. */
-  perPeerPerMinute: number
-  /** How long a private message keeps its reply window open, in milliseconds. */
-  c2cReplyWindowMs: number
-  /** How long a group message keeps its reply window open, in milliseconds. */
-  groupReplyWindowMs: number
-  /** Tell the owner (through `ctx.forkNotifier`) when a sender outside the allowlist writes, so its openid can be added. */
-  notifyUnknown: boolean
-  /** Credential re-check period while the AppID or AppSecret is missing, in milliseconds. */
-  credentialPollMs: number
-}
-
-/** Who may talk to the bot: openids QQ assigned, listed here. Both lists start empty, so nobody gets an answer. */
-export interface AllowConfig {
-  /** `user_openid`s whose private messages are answered. */
-  users: string[]
-  /** `group_openid`s whose @ messages are answered, from any member. */
-  groups: string[]
-}
-
-/** How a peer's chat Session is created. */
-export interface SessionConfig {
-  /** Absolute directory the chat Sessions work in; created before every forwarded message. */
-  workspacePath: string
-  /** Agent preset of the chat Sessions; the bundle defines `qqbot` with a persona and no shell, file, or web tools. */
-  agentPreset: string
-  /** Permission preset applied when a chat Session is created. */
-  permissionPreset: string
-  /** Session title prefix; the peer's short id follows. */
-  titlePrefix: string
-  /** IANA time zone sent with every prompt. */
-  timeZone: string
-}
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-qqbot -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-style -->
-<a id="deepseek-aidsh-fork-style"></a>
-
-## `@deepseek-ai/dsh-fork-style`
-
-- `source`: [`packages/fork/fork-style/src/index.ts:104`](../packages/fork/fork-style/src/index.ts)
-
-```ts config-catalog
-/** Plugin configuration. */
-export interface Config {
-  /** `collect` (at the root): the stores, collection, `ctx.forkStyle`. `prompt` (inside a preset): the block and the listed tools. */
-  mode: 'collect' | 'prompt'
-  /** Prompt mode: put the style block in front of root Sessions (qq-digest turns it off, so digests do not learn from their own notes). */
-  block: boolean
-  /** Prompt mode: the tools this preset mounts. */
-  tools: StyleTool[]
-  /** Collect mode: `false` stops collection, refuses notes and card updates, and keeps the block out of every prompt; the data stays. */
-  enabled: boolean
-  /** Collect mode: directory of `samples.jsonl`, `notes.json`, `state.json`, and `answers.json`; defaults to `<DSH_HOME>/fork-style`. */
-  dir?: string
-  /**
-   * `optional`: strangers' samples that pass the filters go active and the owner deletes bad ones. `required`: they wait as
-   * pending until the owner keeps them.
-   */
-  review: 'optional' | 'required'
-  /** Hours between scheduled collection runs. */
-  everyHours: number
-  /** Longest side of a collected exchange, in characters. */
-  maxChars: number
-  /** Active samples in all. */
-  maxActive: number
-  /** Active samples of the owner's own, pinned ahead of the rest. */
-  maxOwner: number
-  /** Pending samples kept while review is required. */
-  maxPending: number
-  /** Strangers' samples one run adds at most. */
-  perRun: number
-  /** Strangers' samples one run takes from one group or comment thread at most. */
-  perGroup: number
-  /** Strangers' samples said longer ago than this many days are retired (QQ keeps raw messages 30 days). */
-  maxAgeDays: number
-  /** Words that identify the owner (a real name, other handles) on top of the built-in list; a line containing one is left out. */
-  identityMarkers: string[]
-  /** Blocked words on top of the built-in slur list. */
-  blocklist: string[]
-  /** QQ groups (through `ctx.forkQq`). */
-  qq: {
-    /** Read the recorded groups at all. */
-    enabled: boolean
-    /** Hours of messages read per group in one run. */
-    windowHours: number
-    /** Messages read per group at most. */
-    maxMessages: number
-    /** Longest gap, in seconds, between a message and an unquoted answer by another member. */
-    gapSec: number
-    /** Messages newer than this many minutes wait for the next run (a sender can recall a message for 2 minutes). */
-    settleMinutes: number
-  }
-  /** Comments under the owner's Bilibili videos (through bili-svc's read API). */
-  bili: {
-    /** Read the comments at all. */
-    enabled: boolean
-    /** bili-svc's address; unset uses `BILI_SVC_URL` or `http://127.0.0.1:8097`. */
-    url?: string
-    /** Credential holding a bili-svc token with the `read` scope. */
-    tokenEnv: string
-    /** bili-svc's id of the owner's own account (猫灯): its hand-written replies become tone samples marked `owner`. */
-    ownerAccount: string
-    /** Newest comments read per run. */
-    comments: number
-    /** Comment threads read per run (each is one live read through bili-svc). */
-    maxThreads: number
-    /** Deadline of one read, in milliseconds. */
-    timeoutMs: number
-  }
-  /** Tone samples in the block. */
-  tone: {
-    /** Show tone samples at all; collection keeps running. */
-    enabled: boolean
-    /** Exchanges shown at most. */
-    maxShown: number
-    /** Characters of the shown exchanges at most. */
-    maxChars: number
-  }
-  /** Memes: the index in the block, `meme_lookup`, and the meme notes. */
-  memes: {
-    /** Put the meme index in the block, answer `meme_lookup`, and take meme notes. */
-    enabled: boolean
-    /** Names in the index at most. */
-    maxIndex: number
-    /** Meme notes kept at most, most recently seen first. */
-    maxStored: number
-    /** A meme not seen for this many days expires. */
-    expireDays: number
-  }
-  /** Traits of the groups' overall tone. */
-  traits: {
-    /** Show traits in the block and take trait notes. */
-    enabled: boolean
-    /** Traits kept and shown at most. */
-    max: number
-  }
-  /** The persona card the agent writes for itself. */
-  persona: {
-    /** Show the card in the block and take `persona_update`. */
-    enabled: boolean
-    /** Longest card, in characters. */
-    maxChars: number
-    /** Hours between two of the agent's revisions; an owner edit restarts the wait. */
-    minIntervalHours: number
-    /** Card versions kept. */
-    maxVersions: number
-  }
-  /** The meme miner: runs after each collection and by hand. */
-  miner: {
-    /** Mine at all; needs `memes.enabled`. */
-    enabled: boolean
-    /** Provider of the miner's model calls; with `model`, replaces the profile's default route. */
-    provider?: string
-    /** Model of the miner's calls. */
-    model?: string
-    /** Output tokens per call at most. */
-    maxOutputTokens: number
-    /** Texts sent to the model at most. */
-    maxInputs: number
-    /** New memes one run keeps at most. */
-    maxNew: number
-    /** Web searches one run makes at most (the meaning of a new meme, when no page the main agent read explains it). */
-    maxSearches: number
-    /** Likes that make one Bilibili hot comment evidence on its own. */
-    minLikes: number
-    /** A term in more than this share of the texts (from `commonFrom` texts on) is an ordinary word. */
-    commonShare: number
-    /** Texts needed before `commonShare` applies. */
-    commonFrom: number
-    /** Hours of Bilibili hot rows and QQ messages one run reads. */
-    windowHours: number
-    /** QQ messages read per group at most. */
-    qqMessages: number
-    /** Longest one-line meaning of a mined meme, in characters. */
-    meaningChars: number
-    /** Raw model and search responses kept on disk. */
-    rawKept: number
-    /** Pages the main agent searched or fetched, kept for the miner (result text only, never the query). */
-    inbox: {
-      /** Pages kept at most. */
-      items: number
-      /** Characters kept per page. */
-      chars: number
-      /** Days a page is kept. */
-      days: number
-    }
-  }
-  /** `style_note`: which preset writes for which platform, the longest fields, and the calls per turn. */
-  notes: {
-    /** Preset of the calling Session → the platform of what it reads (`web`: pages the Session searched or fetched). */
-    sources: Record<string, NoteSource>
-    /** Longest term, in characters. */
-    termChars: number
-    /** Longest meaning or example, in characters. */
-    textChars: number
-    /** Calls one Session may make in one turn. */
-    perTurn: number
-  }
-  /** HotWatch, the trending-topics service: its `meme` domain supplements the meme index. */
-  hotwatch: {
-    /** Ask HotWatch at all. */
-    enabled: boolean
-    /** Address, on the tailnet. */
-    url: string
-    /** Titles fetched, by heat. */
-    limit: number
-    /** Of them, names put in the index at most. */
-    maxIndex: number
-    /** How long a list or a summary is kept, in milliseconds. */
-    ttlMs: number
-    /** Deadline of one call, in milliseconds. */
-    timeoutMs: number
-  }
-  /** Agent presets whose root Sessions get the block (the prompt row checks the Session's preset). */
-  presets: string[]
-  /** Presets whose answer lengths the page's trend counts. */
-  answerPresets: string[]
-  /** IANA zone of the day the block rotates on. */
-  timeZone: string
-  /** fork-integrity's per-day stock-line counts; defaults to `<DSH_HOME>/fork-integrity/tics.json`. */
-  ticsFile?: string
-}
-
-/** One of {@link STYLE_TOOLS}. */
-export type StyleTool = typeof STYLE_TOOLS[number]
-
-/** One of {@link NOTE_SOURCES}. */
-export type NoteSource = typeof NOTE_SOURCES[number]
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-style -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-sysmon -->
-<a id="deepseek-aidsh-fork-sysmon"></a>
-
-## `@deepseek-ai/dsh-fork-sysmon`
-
-- `inject`: `connection`
-- `source`: [`packages/fork/fork-sysmon/src/index.ts:20`](../packages/fork/fork-sysmon/src/index.ts)
-
-```ts config-catalog
-/** Plugin configuration. */
-export interface Config {
-  /** Absolute path of the macmon binary (power, temperature, memory); unset tries `<home>/bin/macmon`, then `/opt/homebrew/bin/macmon`. */
-  macmonPath?: string
-  /** Volumes to show, in order; a mount that cannot be read is skipped and reported. */
-  mounts: SysmonMount[]
-  /** How long a snapshot is served from cache, in milliseconds. */
-  cacheMs: number
-}
-
-/** One volume to show. */
-export interface SysmonMount {
-  /** Mount point passed to `statfs`, for example `/Volumes/MiniSSD`. */
-  mount: string
-  /** Name shown on the volume's row. */
-  label: string
-}
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-sysmon -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-taint -->
-<a id="deepseek-aidsh-fork-taint"></a>
-
-## `@deepseek-ai/dsh-fork-taint`
-
-- `inject`: `tools`
-- `source`: [`packages/fork/fork-taint/src/index.ts:30`](../packages/fork/fork-taint/src/index.ts)
-
-```ts config-catalog
-/** Settings. */
-export interface Config {
-  /**
-   * Refuse the owner-only tools outside a clean owner turn; off only logs what would have been refused.
-   * `FORK_TAINT_ENFORCE=0` in the environment turns it off whatever the configuration says.
-   */
-  enforce?: boolean
-  /** Tools that act on other sessions or machines, refused outside a clean owner turn. */
-  ownerOnlyTools?: string[]
-  /** Tools that outlive the turn, allowed everywhere but marked when a turn that is not clean uses them. */
-  auditedTools?: string[]
-  /** Tell the owner on WeChat about audited calls, one merged notice per turn. */
-  notify?: boolean
-}
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-taint -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-time-gap -->
-<a id="deepseek-aidsh-fork-time-gap"></a>
-
-## `@deepseek-ai/dsh-fork-time-gap`
-
-- `inject`: `agents` · `sessionProjections`
-- `source`: [`packages/fork/fork-time-gap/src/index.ts:46`](../packages/fork/fork-time-gap/src/index.ts)
-
-```ts config-catalog
-/** Settings, edited in Settings → 订阅与监控 through the All settings card. */
-export interface Config {
-  /** Add the notice at all. */
-  enabled: boolean
-  /** Shortest silence, in milliseconds, after which an incoming input gets the notice. */
-  thresholdMs: number
-  /** IANA zone of the times in the notice. */
-  timeZone: string
-  /** Presets whose Sessions never get the notice. */
-  excludePresets: string[]
-  /** Presets whose prompts carry someone else's words (a channel bot), so the notice says "the sender". */
-  senderPresets: string[]
-  /** Owner-relay channels that write their own time check before the owner's messages in the Sessions they claim. */
-  deferChannels: string[]
-}
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-time-gap -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-qq -->
-<a id="deepseek-aidsh-fork-tool-qq"></a>
-
-## `@deepseek-ai/dsh-fork-tool-qq`
-
-- `inject`: `tools`
-- `source`: [`packages/fork/fork-tool-qq/src/index.ts:25`](../packages/fork/fork-tool-qq/src/index.ts)
-
-```ts config-catalog
-/** Which tools the plugin registers. */
-export interface Config {
-  /**
-   * `read` (the default): the read tools and `qq_forget`, for the main agent. `digest`: only `qq_digest_write` and
-   * `qq_group_note`, for the `qq-digest` preset, whose Session writes the digest and the notes of the one group it is
-   * digesting; the observer binds both to that Session and that group, so they can touch nothing else.
-   */
-  mode: 'read' | 'digest'
-}
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-qq -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-up -->
-<a id="deepseek-aidsh-fork-tool-up"></a>
-
-## `@deepseek-ai/dsh-fork-tool-up`
-
-- `inject`: `tools` · `credentials`
-- `source`: [`packages/fork/fork-tool-up/src/index.ts:55`](../packages/fork/fork-tool-up/src/index.ts)
-
-```ts config-catalog
-/** Notes, evidence, and the Session they belong to. */
-export interface Config {
-  /** The bus subscription whose persistent Session may write notes and verify evidence; any other Session is refused. */
-  subscription: string
-  /** Calls per turn of `bili_channel_note`, and separately of `ctx.biliEvidence.evidenceOf`. */
-  callsPerTurn: number
-  /** The channel notes file and its limits. */
-  notes: {
-    /** Absolute path of the notes file; defaults to `<DSH_HOME>/fork-tool-up/channel-notes.json`. */
-    file?: string
-    /** Notes kept. */
-    maxEntries: number
-    /** Longest note, in characters. */
-    maxChars: number
-  }
-  /** The evidence verifier's sender-key salt, comment cache, and per-call id limit. */
-  evidence: {
-    /** Absolute path of the sender-key salt; defaults to `<DSH_HOME>/fork-tool-up/evidence-salt`, created on first use. */
-    saltFile?: string
-    /** Comments remembered from the Session's reads, by rpid. */
-    cacheSize: number
-    /** Ids looked up per call; the rest are left out. */
-    maxIds: number
-  }
-}
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-up -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-watch -->
-<a id="deepseek-aidsh-fork-tool-watch"></a>
-
-## `@deepseek-ai/dsh-fork-tool-watch`
-
-- `inject`: `tools`
-- `source`: [`packages/fork/fork-tool-watch/src/index.ts:26`](../packages/fork/fork-tool-watch/src/index.ts)
-
-```ts config-catalog
-/** Defaults applied to watches the model creates. */
-export interface Config {
-  /** Absolute Workspace of Sessions that `session` watches start, unless the call names one. */
-  defaultWorkspacePath: string
-  /** Agent preset of those Sessions. */
-  defaultAgentPreset: string
-  /** Permission preset of those Sessions. */
-  defaultPermissionPreset: string
-  /** Seconds after the first new event during which later events join the same batch. */
-  defaultCoalesceSeconds: number
-  /** Batches per rolling hour of a `notify` watch. */
-  defaultNotifyMaxPerHour: number
-  /** Batches per rolling hour of a `session` watch. */
-  defaultSessionMaxPerHour: number
-  /** Events embedded in the prompt of a Session that a watch or route starts. */
-  defaultMaxPromptEvents: number
-  /** Characters of each event's text in that prompt. */
-  defaultMaxTextChars: number
-  /** Days a route's long-running Session lives before the next batch replaces it. */
-  defaultRolloverDays: number
-  /** Characters of the summary carried into the replacement. */
-  defaultMaxSeedChars: number
-  /** Changes of the notification flow that `flow_read` returns. */
-  flowHistoryShown: number
-  /** Event kinds without a route that `flow_read` returns. */
-  flowUnroutedShown: number
-}
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-tool-watch -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-voice -->
-<a id="deepseek-aidsh-fork-voice"></a>
-
-## `@deepseek-ai/dsh-fork-voice`
-
-- `inject`: `credentials`
-- `source`: [`packages/fork/fork-voice/src/index.ts:45`](../packages/fork/fork-voice/src/index.ts)
-
-```ts config-catalog
-/** Voice configuration. Every field has a default, so a patch entry restates only what it changes. */
-export interface Config {
-  /** Absolute directory for audio and raw service answers; defaults to `<DSH_HOME>/fork-voice`. */
-  dataDir?: string
-  /** Keep files this many days; older ones are removed on the next call. */
-  keepDays: number
-  /** Text to speech: the `speak` path. */
-  tts: {
-    /** Turns `speak` off when false. */
-    enabled: boolean
-    /** First provider to try (`mac-mini` is retired). */
-    provider: TtsProviderName
-    /** Provider tried when the first fails; `none` (the default) stops after one. */
-    fallback: TtsProviderName | 'none'
-    /** Delivered file format; `mp3` needs ffmpeg and falls back to `wav` when the conversion fails. */
-    format: 'mp3' | 'wav'
-    /** Absolute path of the ffmpeg binary used for the mp3 conversion. */
-    ffmpegPath: string
-    /** Longest text accepted, in characters. */
-    maxChars: number
-    /** Reuse the audio of a text spoken before (until `keepDays` removes it) instead of synthesizing it again. */
-    cache: boolean
-    /** Extra attempts of one HTTP call after the first. */
-    retries: number
-    /** First pause before a retry, in milliseconds; it doubles each time. */
-    retryDelayMs: number
-    /** The feiyu voice service on the laptop (async jobs, bearer key). */
-    feiyu: {
-      /** Base URL of the service. */
-      baseUrl: string
-      /** Credential reference of the bearer key (in `$DSH_HOME/.env`). */
-      apiKeyEnv: string
-      /** Voice name sent with each job. */
-      voice: string
-      /** Style sent with each job (`cute` or `gentle`). */
-      style: string
-      /** Deadline of one HTTP call, in milliseconds. */
-      timeoutMs: number
-      /** Deadline of the whole job (queue, cold model load of about 45 s, synthesis), in milliseconds. */
-      jobTimeoutMs: number
-      /** Pause between job polls, in milliseconds. */
-      pollMs: number
-    }
-    /**
-     * The Mac mini TTS service (Qwen3-TTS, answers the WAV directly). Retired on 2026-10-31; used only when
-     * selected as `provider` or `fallback`.
-     */
-    macMini: {
-      /** Base URL of the service. */
-      baseUrl: string
-      /** Preset speaker name. */
-      speaker: string
-      /** Language name the service expects, for example `Chinese`. */
-      language: string
-      /** Deadline of one call in milliseconds; the first call after idle loads the model. */
-      timeoutMs: number
-    }
-  }
-  /** Speech to text on audio files; reads files only and never opens a microphone. */
-  asr: {
-    /** Transcribe audio files the owner sends; off until set. */
-    enabled: boolean
-    /** Base URL of the asr-service. */
-    baseUrl: string
-    /** `funasr` (Chinese) or `whisper` (English and multilingual). */
-    engine: 'funasr' | 'whisper'
-    /** Whisper language hint, for example `en`. */
-    language?: string
-    /** Deadline of one call in milliseconds. */
-    timeoutMs: number
-    /** Extra attempts of one call after the first. */
-    retries: number
-    /** First pause before a retry, in milliseconds; it doubles each time. */
-    retryDelayMs: number
-    /** Largest audio file sent, in bytes. */
-    maxBytes: number
-  }
-}
-
-/** Providers a text can be synthesized by. */
-export type TtsProviderName = 'feiyu' | 'mac-mini'
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-voice -->
-
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-fork-wechat -->
-<a id="deepseek-aidsh-fork-wechat"></a>
-
-## `@deepseek-ai/dsh-fork-wechat`
-
-- `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/fork-wechat/src/index.ts:96`](../packages/fork/fork-wechat/src/index.ts)
-
-```ts config-catalog
-/** Channel configuration. */
-export interface Config {
-  /** Account file written by the login command; defaults to `<DSH_HOME>/fork-wechat/account.json`. */
-  accountFile?: string
-  /** Chat Session settings. */
-  chat: ChatConfig
-  /** The operator's mute file for safety notices; defaults to `<DSH_HOME>/notices.muted`. */
-  muteFile?: string
-  /** Code points per WeChat message; longer texts are split. */
-  maxMessageChars: number
-  /** Messages one text may be split into; the last is cut beyond that. */
-  maxReplyParts: number
-  /** Messages the bot may send per owner message. */
-  repliesPerToken: number
-  /** How long an owner message keeps its reply window open, in milliseconds. */
-  contextTtlMs: number
-  /** Undelivered texts kept for the next window; the oldest are dropped first. */
-  outboxLimit: number
-  /** Account file re-check period while no usable account exists, in milliseconds. */
-  accountPollMs: number
-  /** Long-poll deadline until the server suggests another, in milliseconds. */
-  longPollTimeoutMs: number
-  /** Deadline of one send, in milliseconds. */
-  requestTimeoutMs: number
-  /** WeChat CDN base for media downloads; a server-provided `full_url` must share its origin. */
-  cdnBaseUrl: string
-  /** Largest attachment downloaded, in bytes. */
-  maxMediaBytes: number
-  /** Deadline of one attachment download, in milliseconds. */
-  mediaTimeoutMs: number
-  /**
-   * Chat silence, in milliseconds, after which the owner's next message reaches the chat Session
-   * with a note of when it was sent, how long the chat was quiet, and what the last message was.
-   * Defaults to fork-time-gap's 5 minutes, which leaves the owner's WeChat messages to this check
-   * (its `deferChannels`). 0 turns the note off.
-   */
-  timeGapMs: number
-  /**
-   * How long after the owner's latest message nothing is held back for sleep, in milliseconds: the owner is
-   * evidently awake, and what the chat Session answers in that time is a reply. 0 holds even replies.
-   */
-  awakeAfterMessageMs: number
-  /** Messages one turn may send with `wechat_send`; the default is the whole reply window of one owner message (`repliesPerToken`). */
-  maxSendsPerTurn: number
-}
-
-/** How the owner's chat Session is created. */
-export interface ChatConfig {
-  /**
-   * Absolute directory the chat Session works in; created before every
-   * forwarded message, so a removed directory never strands the stored
-   * Session. Received attachments go to its `.wechat-inbox/`.
-   */
-  workspacePath: string
-  /** Agent preset of the chat Session. */
-  agentPreset: string
-  /** Permission preset applied when the chat Session is created. */
-  permissionPreset: string
-  /** Session title. */
-  title: string
-  /** IANA time zone sent with every prompt and used for digest timestamps. */
-  timeZone: string
-  /**
-   * What a message another Session passes the main agent does: `turn` queues it as a prompt that starts
-   * a turn of its own (the turn is marked as not the owner's); `notify` only tells the owner and leaves
-   * the message in the chat as a notice, so nothing happens until the owner replies.
-   */
-  agentMessage: 'turn' | 'notify'
-  /**
-   * What a note for the owner (`send()`) does: `turn` queues it in the chat Session as a prompt that starts a turn of its
-   * own (marked as not the owner's), and the main agent tells the owner in its own words or answers NO_REPLY; `direct`
-   * sends it as written. Safety notes, and notes the chat cannot take, always go as written.
-   */
-  notes: 'turn' | 'direct'
-  /**
-   * How the chat Session's words reach the owner. `hybrid`: the final answer of each turn is still sent as the reply, and
-   * the Session also has `wechat_send` for messages in the middle of a turn (progress, a first answer before a long step,
-   * a heads-up that cannot wait); a final answer that repeats a `wechat_send` text is not sent twice. `text`: only the final
-   * answer is sent and `wechat_send` is not offered. Read when the tool plugin mounts and at every send, so a config
-   * reload switches it.
-   */
-  delivery: 'text' | 'hybrid'
-}
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-fork-wechat -->
-
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-mcp-client -->
 <a id="deepseek-aidsh-mcp-client"></a>
 
@@ -4179,6 +3279,44 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-office-kit -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-owner-memory -->
+<a id="deepseek-aidsh-owner-memory"></a>
+
+## `@deepseek-ai/dsh-owner-memory`
+
+- `inject`: `tools`
+- `source`: [`packages/fork/owner-memory/src/config.ts:7`](../packages/fork/owner-memory/src/config.ts)
+
+```ts config-catalog
+/** Memory file and context budget. */
+export interface Config {
+  /** Absolute path of the memory file; defaults to `<DSH_HOME>/owner-memory/memory.jsonl`. */
+  file?: string
+  /** Cap on the memory block, in bytes. */
+  maxBytes?: number
+  /**
+   * Hold a protected write (`instructions`, `preferences`, `identity`) until the owner approves it
+   * when the turn was not the owner's alone, refuse to forget a protected entry then, and show
+   * `identity` entries only as a count. Off keeps each entry's `source`, `session`, and `origin` and the notices, but no holds.
+   * `OWNER_MEMORY_HOLD=0` in the environment turns it off whatever the configuration says.
+   */
+  hold?: boolean
+  /** Tell the owner on WeChat about protected writes, one merged notice per turn. */
+  notify?: boolean
+  /** Notices the owner gets in a day; further writes are still recorded in the history. */
+  noticesPerDay?: number
+  /**
+   * Feedback mode, for the Bilibili persona presets (`up`, `bili`): no memory block and no tools; the Host puts the
+   * owner's keep/delete verdicts on that scope's replies in front of each root Session as examples of tone.
+   */
+  feedbackScope?: FeedbackScope
+}
+
+/** A persona whose replies are reviewed. */
+export type FeedbackScope = typeof FEEDBACK_SCOPES[number]
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-owner-memory -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-permission-presets -->
 <a id="deepseek-aidsh-permission-presets"></a>
 
@@ -4373,6 +3511,77 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-plugin-package-inventory-deepseek -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-presence -->
+<a id="deepseek-aidsh-presence"></a>
+
+## `@deepseek-ai/dsh-presence`
+
+- `inject`: `storageDomain`
+- `source`: [`packages/fork/presence/src/index.ts:36`](../packages/fork/presence/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** IANA zone of the owner; the window and the manual times are read in it. */
+  timeZone: string
+  /** Daily fallback window, used when no Focus signal is fresh; the Settings page can replace it. */
+  window: QuietWindow
+  /** Hours a Focus signal holds without a newer one before the window decides again (the watcher sends a heartbeat every 30 minutes). */
+  focusFreshHours: number
+  /** Hours an asleep Focus signal holds when its off signal never arrives. */
+  sleepMaxHours: number
+  /** Hours a Settings button holds when it names no end. */
+  manualMaxHours: number
+  /** Globs of the event kinds that are sent while the owner sleeps. */
+  urgentKinds: string[]
+}
+
+/** Daily fallback window, in the owner's time zone; it wraps past midnight when `start` is later than `end`. */
+export interface QuietWindow {
+  /** Whether the window applies at all. */
+  readonly enabled: boolean
+  /** `HH:MM`, 24-hour. */
+  readonly start: string
+  /** `HH:MM`, 24-hour. */
+  readonly end: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-presence -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-provider-balance -->
+<a id="deepseek-aidsh-provider-balance"></a>
+
+## `@deepseek-ai/dsh-provider-balance`
+
+- `inject`: `credentials` · `connection`
+- `source`: [`packages/fork/provider-balance/src/index.ts:18`](../packages/fork/provider-balance/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Providers to query; a source whose key reference is unset is skipped. */
+  sources: BalanceSource[]
+  /** How long an answer is served from cache, in milliseconds. */
+  cacheMs: number
+  /** Deadline of one provider request, in milliseconds. */
+  timeoutMs: number
+}
+
+/** One configured balance source. */
+export interface BalanceSource {
+  /** Which provider endpoint to query. */
+  kind: BalanceSourceKind
+  /** Credential reference holding the provider key (the Models page's `apiKeyEnv`). */
+  keyRef: string
+  /** Name shown on the provider's row. */
+  label: string
+}
+
+/** Providers with a balance or quota endpoint. */
+export type BalanceSourceKind = 'deepseek' | 'opencode-go'
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-provider-balance -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-ptc-runtime-node -->
 <a id="deepseek-aidsh-ptc-runtime-node"></a>
 
@@ -4486,6 +3695,233 @@ export interface Config {
 export type Config = LocalConfig
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-pwsh-sandbox -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-qq -->
+<a id="deepseek-aidsh-qq"></a>
+
+## `@deepseek-ai/dsh-qq`
+
+- `inject`: `sessionController` · `permissionPresets` · `sessionTitle` · `credentials` · `storageDomain`
+- `refs`: `Volatile` (`@deepseek-ai/cordis`)
+- `source`: [`packages/fork/qq/src/index.ts:51`](../packages/fork/qq/src/index.ts)
+
+```ts config-catalog
+/** Channel configuration. */
+export interface Config {
+  /** WebSocket address of the protocol end (NapCat's OneBot server); it must be on this machine or the tailnet. The recorder connects. */
+  url: string
+  /** Name of the recorder's secret holding the protocol end's access token. */
+  tokenEnv: string
+  /**
+   * Group numbers to record. Empty records nothing; messages of every other group are dropped on arrival. Volatile: the
+   * Settings page's QQ section adds and removes groups at run time and the recorder follows without a restart.
+   */
+  groups: Volatile<string[]>
+  /** Ignored: the recorder owns its data directory (`QQ_RECORDER_DATA_DIR` in its declaration). */
+  dataDir?: string
+  /** The qq-recorder service this plugin talks to. */
+  recorder: {
+    /** Unix socket of the recorder; defaults to `<DSH_HOME>/run/qq-recorder.sock`. */
+    socket?: string
+    /** Credential holding the bearer token shared with the recorder. */
+    tokenEnv: string
+    /** Deadline of one request, in milliseconds. */
+    timeoutMs: number
+  }
+  /** Image downloads: what is fetched, from where, and how much is kept. Applied by the recorder. */
+  media: {
+    /** Download the images of recorded messages. */
+    images: Volatile<boolean>
+    /** Largest image downloaded, in bytes. */
+    maxImageBytes: Volatile<number>
+    /** Stop downloading once the downloads together reach this many bytes. */
+    maxTotalBytes: Volatile<number>
+    /** Delete downloads of messages older than this many days; 0 keeps them. 30 by default. */
+    retainDays: Volatile<number>
+    /** Hosts media may be fetched from, as suffixes. */
+    hostSuffixes: Volatile<string[]>
+    /** Deadline of one download, in milliseconds. */
+    timeoutMs: Volatile<number>
+  }
+  /** Keep voice messages. */
+  voice: {
+    /** Fetch the audio of voice messages. */
+    download: Volatile<boolean>
+    /** Largest audio kept, in bytes. */
+    maxBytes: Volatile<number>
+  }
+  /** Voice transcription. The recorder does not transcribe yet; `enabled` is refused at load. */
+  asr: {
+    /** Transcribe voice messages. Refused at load: the recorder keeps the audio and does not transcribe it. */
+    enabled: Volatile<boolean>
+  }
+  /** How long raw messages are kept. Digests are not affected and can be deleted by group or date. */
+  retention: {
+    /** Delete messages (text, raw segments, media rows) older than this many days; 0 keeps them. 30 by default. */
+    textDays: Volatile<number>
+  }
+  /** Drop the text and files of a message its sender recalled. */
+  honorRecall: Volatile<boolean>
+  /** Fetch what was missed while disconnected. Applied by the recorder. */
+  backfill: {
+    /** Fetch history after each connection. */
+    enabled: Volatile<boolean>
+    /** Messages fetched per group at most. 20 by default: one small page. */
+    maxMessages: Volatile<number>
+    /** Groups caught up per connection at most; the next connection continues with the following ones. 5 by default. */
+    maxGroups: Volatile<number>
+    /** Pause between two groups' backfills, in milliseconds, plus up to half as much again of jitter. 5000 by default. */
+    gapMs: Volatile<number>
+    /** A connection made less than this long after the previous one dropped fetches nothing; 0 never skips. 30 minutes by default. */
+    skipWithinMs: Volatile<number>
+    /** A backfill runs at most this often, also across recorder restarts; 0 never holds one back. 30 minutes by default. */
+    minIntervalMs: Volatile<number>
+  }
+  /** Sending to a group. Refused: the recorder has no send endpoint, so `enabled` fails the load. */
+  send: {
+    /** Allow sending at all. Refused at load. */
+    enabled: boolean
+    /** Groups sending would be allowed in. Unused while sending is refused. */
+    groups: string[]
+    /** Seconds between two sends to one group. Unused while sending is refused. */
+    minIntervalSec: number
+    /** Sends per group per day. Unused while sending is refused. */
+    maxPerDay: number
+  }
+  /** Scheduled digests of the recorded groups, made by one-turn Sessions. */
+  digest: {
+    /** Digest each recorded group on a schedule. */
+    enabled: boolean
+    /** Hours between digests of one group. */
+    everyHours: number
+    /** A group with fewer new messages than this waits for the next round. */
+    minMessages: number
+    /** Characters of transcript per model call; a longer backlog is cut into several calls. */
+    maxPromptChars: number
+    /** Model calls one group may use in one round. */
+    maxCallsPerRound: number
+    /** Show members to the model, and so in the digests, as stable aliases (`群友#a3f9`), never names or QQ numbers. */
+    aliasMembers: boolean
+    /** Ask for the section on what members know or argued, by alias. Off by default: no per-member profiles. */
+    profiles: boolean
+    /** Digests kept per group; the oldest are deleted when a new one is stored. */
+    keepPerGroup: number
+    /** Longest digest stored, in characters. */
+    maxDigestChars: number
+    /**
+     * Pictures of one transcript chunk attached to the digest prompt at most (the newest ones, when the route reads images;
+     * otherwise their `[图片#ref]` tags stay as text); 0 attaches none. They go to the model only and are never stored.
+     */
+    maxImages: Volatile<number>
+    /** Tool calls (`qq_digest_write`, `qq_group_note`) one digest Session may make, refused ones included. 12 by default. */
+    maxToolCalls: number
+    /** Archive each digest Session when its turn ends, so it does not fill the sidebar (its log stays). True by default. */
+    archiveSessions: boolean
+    /**
+     * Keep one Session per recorded group across rounds, condensed by the preset's compaction, and replace it every
+     * `retention.textDays` days; false runs a new one-shot Session per round. True by default.
+     */
+    resident: boolean
+    /** Provider route of the digest Session's model; the profile's default when omitted. */
+    provider?: string
+    /** Model id on that route; the profile's default when omitted. */
+    model?: string
+    /** Agent preset of the digest Session; the bundle defines `qq-digest` with a persona and no tools. */
+    agentPreset: string
+    /** Permission preset set on the digest Session. */
+    permissionPreset: string
+    /** Absolute working directory of the digest Sessions. */
+    workspacePath: string
+    /** IANA zone the transcript's times are written in. */
+    timeZone: string
+    /** How long to wait for one model call, in milliseconds. */
+    timeoutMs: number
+  }
+  /** Tell the owner when the protocol end has been unreachable this long, in milliseconds; 0 turns it off. */
+  offlineNoticeMs: Volatile<number>
+  /**
+   * A connection made less than this long after the previous one was last alive skips the group list and the backfill.
+   * The recorder keeps the time on disk, so it holds across a recorder restart; 0 never skips. 10 minutes by default.
+   */
+  reconnectQuietMs: Volatile<number>
+  /**
+   * While an outage lasts, remind the owner again after this long, in milliseconds; 0 never repeats. What was told is kept
+   * in this plugin's storage, so a reload or deploy in the middle of an outage does not tell again. 24 hours by default.
+   */
+  offlineRepeatMs: Volatile<number>
+  /** Where the Settings page lives, quoted in the owner notice (the event service's address); unset names the page without a link. */
+  settingsUrl: Volatile<string | undefined>
+  /** The login door: the window onto NapCat's login that the Settings page's QQ section uses. The recorder asks it. */
+  login: {
+    /** Ask the door at all. */
+    enabled: boolean
+    /** The door's address; it must be on this machine or the tailnet. */
+    url: string
+    /** Deadline of one call to the door, in milliseconds. */
+    timeoutMs: number
+  }
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-qq -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-qqbot -->
+<a id="deepseek-aidsh-qqbot"></a>
+
+## `@deepseek-ai/dsh-qqbot`
+
+- `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle` · `credentials`
+- `source`: [`packages/fork/qqbot/src/index.ts:57`](../packages/fork/qqbot/src/index.ts)
+
+```ts config-catalog
+/** Channel configuration. */
+export interface Config {
+  /** Name of the credential (`$DSH_HOME/.env` variable or stored credential) holding the bot's AppID. */
+  appIdEnv: string
+  /** Name of the credential holding the bot's AppSecret. */
+  appSecretEnv: string
+  /** Who is answered. */
+  allow: AllowConfig
+  /** Chat Session settings. */
+  session: SessionConfig
+  /** Code points per QQ message; longer answers are split. */
+  maxMessageChars: number
+  /** Messages one answer may be split into (QQ allows five replies to one inbound message). */
+  maxReplyParts: number
+  /** Messages one peer may send per minute before the rest are dropped. */
+  perPeerPerMinute: number
+  /** How long a private message keeps its reply window open, in milliseconds. */
+  c2cReplyWindowMs: number
+  /** How long a group message keeps its reply window open, in milliseconds. */
+  groupReplyWindowMs: number
+  /** Tell the owner (through `ctx.ownerNotifier`) when a sender outside the allowlist writes, so its openid can be added. */
+  notifyUnknown: boolean
+  /** Credential re-check period while the AppID or AppSecret is missing, in milliseconds. */
+  credentialPollMs: number
+}
+
+/** Who may talk to the bot: openids QQ assigned, listed here. Both lists start empty, so nobody gets an answer. */
+export interface AllowConfig {
+  /** `user_openid`s whose private messages are answered. */
+  users: string[]
+  /** `group_openid`s whose @ messages are answered, from any member. */
+  groups: string[]
+}
+
+/** How a peer's chat Session is created. */
+export interface SessionConfig {
+  /** Absolute directory the chat Sessions work in; created before every forwarded message. */
+  workspacePath: string
+  /** Agent preset of the chat Sessions; the bundle defines `qqbot` with a persona and no shell, file, or web tools. */
+  agentPreset: string
+  /** Permission preset applied when a chat Session is created. */
+  permissionPreset: string
+  /** Session title prefix; the peer's short id follows. */
+  titlePrefix: string
+  /** IANA time zone sent with every prompt. */
+  timeZone: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-qqbot -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-repeat-tool-reminder -->
 <a id="deepseek-aidsh-repeat-tool-reminder"></a>
@@ -5049,6 +4485,203 @@ export type PythonEnvironment = 'workspace-dependencies' | 'user'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-skill-office -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-speaking-style -->
+<a id="deepseek-aidsh-speaking-style"></a>
+
+## `@deepseek-ai/dsh-speaking-style`
+
+- `source`: [`packages/fork/speaking-style/src/index.ts:104`](../packages/fork/speaking-style/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** `collect` (at the root): the stores, collection, `ctx.speakingStyle`. `prompt` (inside a preset): the block and the listed tools. */
+  mode: 'collect' | 'prompt'
+  /** Prompt mode: put the style block in front of root Sessions (qq-digest turns it off, so digests do not learn from their own notes). */
+  block: boolean
+  /** Prompt mode: the tools this preset mounts. */
+  tools: StyleTool[]
+  /** Collect mode: `false` stops collection, refuses notes and card updates, and keeps the block out of every prompt; the data stays. */
+  enabled: boolean
+  /** Collect mode: directory of `samples.jsonl`, `notes.json`, `state.json`, and `answers.json`; defaults to `<DSH_HOME>/speaking-style`. */
+  dir?: string
+  /**
+   * `optional`: strangers' samples that pass the filters go active and the owner deletes bad ones. `required`: they wait as
+   * pending until the owner keeps them.
+   */
+  review: 'optional' | 'required'
+  /** Hours between scheduled collection runs. */
+  everyHours: number
+  /** Longest side of a collected exchange, in characters. */
+  maxChars: number
+  /** Active samples in all. */
+  maxActive: number
+  /** Active samples of the owner's own, pinned ahead of the rest. */
+  maxOwner: number
+  /** Pending samples kept while review is required. */
+  maxPending: number
+  /** Strangers' samples one run adds at most. */
+  perRun: number
+  /** Strangers' samples one run takes from one group or comment thread at most. */
+  perGroup: number
+  /** Strangers' samples said longer ago than this many days are retired (QQ keeps raw messages 30 days). */
+  maxAgeDays: number
+  /** Words that identify the owner (a real name, other handles) on top of the built-in list; a line containing one is left out. */
+  identityMarkers: string[]
+  /** Blocked words on top of the built-in slur list. */
+  blocklist: string[]
+  /** QQ groups (through `ctx.qq`). */
+  qq: {
+    /** Read the recorded groups at all. */
+    enabled: boolean
+    /** Hours of messages read per group in one run. */
+    windowHours: number
+    /** Messages read per group at most. */
+    maxMessages: number
+    /** Longest gap, in seconds, between a message and an unquoted answer by another member. */
+    gapSec: number
+    /** Messages newer than this many minutes wait for the next run (a sender can recall a message for 2 minutes). */
+    settleMinutes: number
+  }
+  /** Comments under the owner's Bilibili videos (through bili-svc's read API). */
+  bili: {
+    /** Read the comments at all. */
+    enabled: boolean
+    /** bili-svc's address; unset uses `BILI_SVC_URL` or `http://127.0.0.1:8097`. */
+    url?: string
+    /** Credential holding a bili-svc token with the `read` scope. */
+    tokenEnv: string
+    /** bili-svc's id of the owner's own account (猫灯): its hand-written replies become tone samples marked `owner`. */
+    ownerAccount: string
+    /** Newest comments read per run. */
+    comments: number
+    /** Comment threads read per run (each is one live read through bili-svc). */
+    maxThreads: number
+    /** Deadline of one read, in milliseconds. */
+    timeoutMs: number
+  }
+  /** Tone samples in the block. */
+  tone: {
+    /** Show tone samples at all; collection keeps running. */
+    enabled: boolean
+    /** Exchanges shown at most. */
+    maxShown: number
+    /** Characters of the shown exchanges at most. */
+    maxChars: number
+  }
+  /** Memes: the index in the block, `meme_lookup`, and the meme notes. */
+  memes: {
+    /** Put the meme index in the block, answer `meme_lookup`, and take meme notes. */
+    enabled: boolean
+    /** Names in the index at most. */
+    maxIndex: number
+    /** Meme notes kept at most, most recently seen first. */
+    maxStored: number
+    /** A meme not seen for this many days expires. */
+    expireDays: number
+  }
+  /** Traits of the groups' overall tone. */
+  traits: {
+    /** Show traits in the block and take trait notes. */
+    enabled: boolean
+    /** Traits kept and shown at most. */
+    max: number
+  }
+  /** The persona card the agent writes for itself. */
+  persona: {
+    /** Show the card in the block and take `persona_update`. */
+    enabled: boolean
+    /** Longest card, in characters. */
+    maxChars: number
+    /** Hours between two of the agent's revisions; an owner edit restarts the wait. */
+    minIntervalHours: number
+    /** Card versions kept. */
+    maxVersions: number
+  }
+  /** The meme miner: runs after each collection and by hand. */
+  miner: {
+    /** Mine at all; needs `memes.enabled`. */
+    enabled: boolean
+    /** Provider of the miner's model calls; with `model`, replaces the profile's default route. */
+    provider?: string
+    /** Model of the miner's calls. */
+    model?: string
+    /** Output tokens per call at most. */
+    maxOutputTokens: number
+    /** Texts sent to the model at most. */
+    maxInputs: number
+    /** New memes one run keeps at most. */
+    maxNew: number
+    /** Web searches one run makes at most (the meaning of a new meme, when no page the main agent read explains it). */
+    maxSearches: number
+    /** Likes that make one Bilibili hot comment evidence on its own. */
+    minLikes: number
+    /** A term in more than this share of the texts (from `commonFrom` texts on) is an ordinary word. */
+    commonShare: number
+    /** Texts needed before `commonShare` applies. */
+    commonFrom: number
+    /** Hours of Bilibili hot rows and QQ messages one run reads. */
+    windowHours: number
+    /** QQ messages read per group at most. */
+    qqMessages: number
+    /** Longest one-line meaning of a mined meme, in characters. */
+    meaningChars: number
+    /** Raw model and search responses kept on disk. */
+    rawKept: number
+    /** Pages the main agent searched or fetched, kept for the miner (result text only, never the query). */
+    inbox: {
+      /** Pages kept at most. */
+      items: number
+      /** Characters kept per page. */
+      chars: number
+      /** Days a page is kept. */
+      days: number
+    }
+  }
+  /** `style_note`: which preset writes for which platform, the longest fields, and the calls per turn. */
+  notes: {
+    /** Preset of the calling Session → the platform of what it reads (`web`: pages the Session searched or fetched). */
+    sources: Record<string, NoteSource>
+    /** Longest term, in characters. */
+    termChars: number
+    /** Longest meaning or example, in characters. */
+    textChars: number
+    /** Calls one Session may make in one turn. */
+    perTurn: number
+  }
+  /** HotWatch, the trending-topics service: its `meme` domain supplements the meme index. */
+  hotwatch: {
+    /** Ask HotWatch at all. */
+    enabled: boolean
+    /** Address, on the tailnet. */
+    url: string
+    /** Titles fetched, by heat. */
+    limit: number
+    /** Of them, names put in the index at most. */
+    maxIndex: number
+    /** How long a list or a summary is kept, in milliseconds. */
+    ttlMs: number
+    /** Deadline of one call, in milliseconds. */
+    timeoutMs: number
+  }
+  /** Agent presets whose root Sessions get the block (the prompt row checks the Session's preset). */
+  presets: string[]
+  /** Presets whose answer lengths the page's trend counts. */
+  answerPresets: string[]
+  /** IANA zone of the day the block rotates on. */
+  timeZone: string
+  /** integrity-watch's per-day stock-line counts; defaults to `<DSH_HOME>/integrity-watch/tics.json`. */
+  ticsFile?: string
+}
+
+/** One of {@link STYLE_TOOLS}. */
+export type StyleTool = typeof STYLE_TOOLS[number]
+
+/** One of {@link NOTE_SOURCES}. */
+export type NoteSource = typeof NOTE_SOURCES[number]
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-speaking-style -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-spill-local -->
 <a id="deepseek-aidsh-spill-local"></a>
 
@@ -5449,6 +5082,35 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-subagent-spawn-in-process -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-sysmon -->
+<a id="deepseek-aidsh-sysmon"></a>
+
+## `@deepseek-ai/dsh-sysmon`
+
+- `inject`: `connection`
+- `source`: [`packages/fork/sysmon/src/index.ts:20`](../packages/fork/sysmon/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Absolute path of the macmon binary (power, temperature, memory); unset tries `<home>/bin/macmon`, then `/opt/homebrew/bin/macmon`. */
+  macmonPath?: string
+  /** Volumes to show, in order; a mount that cannot be read is skipped and reported. */
+  mounts: SysmonMount[]
+  /** How long a snapshot is served from cache, in milliseconds. */
+  cacheMs: number
+}
+
+/** One volume to show. */
+export interface SysmonMount {
+  /** Mount point passed to `statfs`, for example `/Volumes/MiniSSD`. */
+  mount: string
+  /** Name shown on the volume's row. */
+  label: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-sysmon -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-system-prompt -->
 <a id="deepseek-aidsh-system-prompt"></a>
 
@@ -5602,6 +5264,33 @@ export interface Config {
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-time-context -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-time-gap -->
+<a id="deepseek-aidsh-time-gap"></a>
+
+## `@deepseek-ai/dsh-time-gap`
+
+- `inject`: `agents` · `sessionProjections`
+- `source`: [`packages/fork/time-gap/src/index.ts:46`](../packages/fork/time-gap/src/index.ts)
+
+```ts config-catalog
+/** Settings, edited in Settings → 订阅与监控 through the All settings card. */
+export interface Config {
+  /** Add the notice at all. */
+  enabled: boolean
+  /** Shortest silence, in milliseconds, after which an incoming input gets the notice. */
+  thresholdMs: number
+  /** IANA zone of the times in the notice. */
+  timeZone: string
+  /** Presets whose Sessions never get the notice. */
+  excludePresets: string[]
+  /** Presets whose prompts carry someone else's words (a channel bot), so the notice says "the sender". */
+  senderPresets: string[]
+  /** Owner-relay channels that write their own time check before the owner's messages in the Sessions they claim. */
+  deferChannels: string[]
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-time-gap -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-tmux-context -->
 <a id="deepseek-aidsh-tmux-context"></a>
@@ -6002,6 +5691,27 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-pwsh-persistent -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-tool-qq -->
+<a id="deepseek-aidsh-tool-qq"></a>
+
+## `@deepseek-ai/dsh-tool-qq`
+
+- `inject`: `tools`
+- `source`: [`packages/fork/tool-qq/src/index.ts:25`](../packages/fork/tool-qq/src/index.ts)
+
+```ts config-catalog
+/** Which tools the plugin registers. */
+export interface Config {
+  /**
+   * `read` (the default): the read tools and `qq_forget`, for the main agent. `digest`: only `qq_digest_write` and
+   * `qq_group_note`, for the `qq-digest` preset, whose Session writes the digest and the notes of the one group it is
+   * digesting; the observer binds both to that Session and that group, so they can touch nothing else.
+   */
+  mode: 'read' | 'digest'
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-qq -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-tool-ralph -->
 <a id="deepseek-aidsh-tool-ralph"></a>
 
@@ -6197,6 +5907,82 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-todo -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-tool-up -->
+<a id="deepseek-aidsh-tool-up"></a>
+
+## `@deepseek-ai/dsh-tool-up`
+
+- `inject`: `tools` · `credentials`
+- `source`: [`packages/fork/tool-up/src/index.ts:55`](../packages/fork/tool-up/src/index.ts)
+
+```ts config-catalog
+/** Notes, evidence, and the Session they belong to. */
+export interface Config {
+  /** The bus subscription whose persistent Session may write notes and verify evidence; any other Session is refused. */
+  subscription: string
+  /** Calls per turn of `bili_channel_note`, and separately of `ctx.biliEvidence.evidenceOf`. */
+  callsPerTurn: number
+  /** The channel notes file and its limits. */
+  notes: {
+    /** Absolute path of the notes file; defaults to `<DSH_HOME>/tool-up/channel-notes.json`. */
+    file?: string
+    /** Notes kept. */
+    maxEntries: number
+    /** Longest note, in characters. */
+    maxChars: number
+  }
+  /** The evidence verifier's sender-key salt, comment cache, and per-call id limit. */
+  evidence: {
+    /** Absolute path of the sender-key salt; defaults to `<DSH_HOME>/tool-up/evidence-salt`, created on first use. */
+    saltFile?: string
+    /** Comments remembered from the Session's reads, by rpid. */
+    cacheSize: number
+    /** Ids looked up per call; the rest are left out. */
+    maxIds: number
+  }
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-up -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-tool-watch -->
+<a id="deepseek-aidsh-tool-watch"></a>
+
+## `@deepseek-ai/dsh-tool-watch`
+
+- `inject`: `tools`
+- `source`: [`packages/fork/tool-watch/src/index.ts:26`](../packages/fork/tool-watch/src/index.ts)
+
+```ts config-catalog
+/** Defaults applied to watches the model creates. */
+export interface Config {
+  /** Absolute Workspace of Sessions that `session` watches start, unless the call names one. */
+  defaultWorkspacePath: string
+  /** Agent preset of those Sessions. */
+  defaultAgentPreset: string
+  /** Permission preset of those Sessions. */
+  defaultPermissionPreset: string
+  /** Seconds after the first new event during which later events join the same batch. */
+  defaultCoalesceSeconds: number
+  /** Batches per rolling hour of a `notify` watch. */
+  defaultNotifyMaxPerHour: number
+  /** Batches per rolling hour of a `session` watch. */
+  defaultSessionMaxPerHour: number
+  /** Events embedded in the prompt of a Session that a watch or route starts. */
+  defaultMaxPromptEvents: number
+  /** Characters of each event's text in that prompt. */
+  defaultMaxTextChars: number
+  /** Days a route's long-running Session lives before the next batch replaces it. */
+  defaultRolloverDays: number
+  /** Characters of the summary carried into the replacement. */
+  defaultMaxSeedChars: number
+  /** Changes of the notification flow that `flow_read` returns. */
+  flowHistoryShown: number
+  /** Event kinds without a route that `flow_read` returns. */
+  flowUnroutedShown: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-watch -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-tool-web -->
 <a id="deepseek-aidsh-tool-web"></a>
 
@@ -6278,6 +6064,32 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-workspace-dependencies -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-turn-taint -->
+<a id="deepseek-aidsh-turn-taint"></a>
+
+## `@deepseek-ai/dsh-turn-taint`
+
+- `inject`: `tools`
+- `source`: [`packages/fork/turn-taint/src/index.ts:30`](../packages/fork/turn-taint/src/index.ts)
+
+```ts config-catalog
+/** Settings. */
+export interface Config {
+  /**
+   * Refuse the owner-only tools outside a clean owner turn; off only logs what would have been refused.
+   * `TURN_TAINT_ENFORCE=0` in the environment turns it off whatever the configuration says.
+   */
+  enforce?: boolean
+  /** Tools that act on other sessions or machines, refused outside a clean owner turn. */
+  ownerOnlyTools?: string[]
+  /** Tools that outlive the turn, allowed everywhere but marked when a turn that is not clean uses them. */
+  auditedTools?: string[]
+  /** Tell the owner on WeChat about audited calls, one merged notice per turn. */
+  notify?: boolean
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-turn-taint -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-typert-loader -->
 <a id="deepseek-aidsh-typert-loader"></a>
 
@@ -6328,6 +6140,99 @@ export interface Config {
 export type ApprovalPolicy = 'ask' | 'never'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-user-approval -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-voice -->
+<a id="deepseek-aidsh-voice"></a>
+
+## `@deepseek-ai/dsh-voice`
+
+- `inject`: `credentials`
+- `source`: [`packages/fork/voice/src/index.ts:45`](../packages/fork/voice/src/index.ts)
+
+```ts config-catalog
+/** Voice configuration. Every field has a default, so a patch entry restates only what it changes. */
+export interface Config {
+  /** Absolute directory for audio and raw service answers; defaults to `<DSH_HOME>/voice`. */
+  dataDir?: string
+  /** Keep files this many days; older ones are removed on the next call. */
+  keepDays: number
+  /** Text to speech: the `speak` path. */
+  tts: {
+    /** Turns `speak` off when false. */
+    enabled: boolean
+    /** First provider to try (`mac-mini` is retired). */
+    provider: TtsProviderName
+    /** Provider tried when the first fails; `none` (the default) stops after one. */
+    fallback: TtsProviderName | 'none'
+    /** Delivered file format; `mp3` needs ffmpeg and falls back to `wav` when the conversion fails. */
+    format: 'mp3' | 'wav'
+    /** Absolute path of the ffmpeg binary used for the mp3 conversion. */
+    ffmpegPath: string
+    /** Longest text accepted, in characters. */
+    maxChars: number
+    /** Reuse the audio of a text spoken before (until `keepDays` removes it) instead of synthesizing it again. */
+    cache: boolean
+    /** Extra attempts of one HTTP call after the first. */
+    retries: number
+    /** First pause before a retry, in milliseconds; it doubles each time. */
+    retryDelayMs: number
+    /** The feiyu voice service on the laptop (async jobs, bearer key). */
+    feiyu: {
+      /** Base URL of the service. */
+      baseUrl: string
+      /** Credential reference of the bearer key (in `$DSH_HOME/.env`). */
+      apiKeyEnv: string
+      /** Voice name sent with each job. */
+      voice: string
+      /** Style sent with each job (`cute` or `gentle`). */
+      style: string
+      /** Deadline of one HTTP call, in milliseconds. */
+      timeoutMs: number
+      /** Deadline of the whole job (queue, cold model load of about 45 s, synthesis), in milliseconds. */
+      jobTimeoutMs: number
+      /** Pause between job polls, in milliseconds. */
+      pollMs: number
+    }
+    /**
+     * The Mac mini TTS service (Qwen3-TTS, answers the WAV directly). Retired on 2026-10-31; used only when
+     * selected as `provider` or `fallback`.
+     */
+    macMini: {
+      /** Base URL of the service. */
+      baseUrl: string
+      /** Preset speaker name. */
+      speaker: string
+      /** Language name the service expects, for example `Chinese`. */
+      language: string
+      /** Deadline of one call in milliseconds; the first call after idle loads the model. */
+      timeoutMs: number
+    }
+  }
+  /** Speech to text on audio files; reads files only and never opens a microphone. */
+  asr: {
+    /** Transcribe audio files the owner sends; off until set. */
+    enabled: boolean
+    /** Base URL of the asr-service. */
+    baseUrl: string
+    /** `funasr` (Chinese) or `whisper` (English and multilingual). */
+    engine: 'funasr' | 'whisper'
+    /** Whisper language hint, for example `en`. */
+    language?: string
+    /** Deadline of one call in milliseconds. */
+    timeoutMs: number
+    /** Extra attempts of one call after the first. */
+    retries: number
+    /** First pause before a retry, in milliseconds; it doubles each time. */
+    retryDelayMs: number
+    /** Largest audio file sent, in bytes. */
+    maxBytes: number
+  }
+}
+
+/** Providers a text can be synthesized by. */
+export type TtsProviderName = 'feiyu' | 'mac-mini'
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-voice -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-web -->
 <a id="deepseek-aidsh-web"></a>
@@ -6518,6 +6423,101 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-webhook-github -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-wechat -->
+<a id="deepseek-aidsh-wechat"></a>
+
+## `@deepseek-ai/dsh-wechat`
+
+- `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
+- `source`: [`packages/fork/wechat/src/index.ts:96`](../packages/fork/wechat/src/index.ts)
+
+```ts config-catalog
+/** Channel configuration. */
+export interface Config {
+  /** Account file written by the login command; defaults to `<DSH_HOME>/wechat/account.json`. */
+  accountFile?: string
+  /** Chat Session settings. */
+  chat: ChatConfig
+  /** The operator's mute file for safety notices; defaults to `<DSH_HOME>/notices.muted`. */
+  muteFile?: string
+  /** Code points per WeChat message; longer texts are split. */
+  maxMessageChars: number
+  /** Messages one text may be split into; the last is cut beyond that. */
+  maxReplyParts: number
+  /** Messages the bot may send per owner message. */
+  repliesPerToken: number
+  /** How long an owner message keeps its reply window open, in milliseconds. */
+  contextTtlMs: number
+  /** Undelivered texts kept for the next window; the oldest are dropped first. */
+  outboxLimit: number
+  /** Account file re-check period while no usable account exists, in milliseconds. */
+  accountPollMs: number
+  /** Long-poll deadline until the server suggests another, in milliseconds. */
+  longPollTimeoutMs: number
+  /** Deadline of one send, in milliseconds. */
+  requestTimeoutMs: number
+  /** WeChat CDN base for media downloads; a server-provided `full_url` must share its origin. */
+  cdnBaseUrl: string
+  /** Largest attachment downloaded, in bytes. */
+  maxMediaBytes: number
+  /** Deadline of one attachment download, in milliseconds. */
+  mediaTimeoutMs: number
+  /**
+   * Chat silence, in milliseconds, after which the owner's next message reaches the chat Session
+   * with a note of when it was sent, how long the chat was quiet, and what the last message was.
+   * Defaults to time-gap's 5 minutes, which leaves the owner's WeChat messages to this check
+   * (its `deferChannels`). 0 turns the note off.
+   */
+  timeGapMs: number
+  /**
+   * How long after the owner's latest message nothing is held back for sleep, in milliseconds: the owner is
+   * evidently awake, and what the chat Session answers in that time is a reply. 0 holds even replies.
+   */
+  awakeAfterMessageMs: number
+  /** Messages one turn may send with `wechat_send`; the default is the whole reply window of one owner message (`repliesPerToken`). */
+  maxSendsPerTurn: number
+}
+
+/** How the owner's chat Session is created. */
+export interface ChatConfig {
+  /**
+   * Absolute directory the chat Session works in; created before every
+   * forwarded message, so a removed directory never strands the stored
+   * Session. Received attachments go to its `.wechat-inbox/`.
+   */
+  workspacePath: string
+  /** Agent preset of the chat Session. */
+  agentPreset: string
+  /** Permission preset applied when the chat Session is created. */
+  permissionPreset: string
+  /** Session title. */
+  title: string
+  /** IANA time zone sent with every prompt and used for digest timestamps. */
+  timeZone: string
+  /**
+   * What a message another Session passes the main agent does: `turn` queues it as a prompt that starts
+   * a turn of its own (the turn is marked as not the owner's); `notify` only tells the owner and leaves
+   * the message in the chat as a notice, so nothing happens until the owner replies.
+   */
+  agentMessage: 'turn' | 'notify'
+  /**
+   * What a note for the owner (`send()`) does: `turn` queues it in the chat Session as a prompt that starts a turn of its
+   * own (marked as not the owner's), and the main agent tells the owner in its own words or answers NO_REPLY; `direct`
+   * sends it as written. Safety notes, and notes the chat cannot take, always go as written.
+   */
+  notes: 'turn' | 'direct'
+  /**
+   * How the chat Session's words reach the owner. `hybrid`: the final answer of each turn is still sent as the reply, and
+   * the Session also has `wechat_send` for messages in the middle of a turn (progress, a first answer before a long step,
+   * a heads-up that cannot wait); a final answer that repeats a `wechat_send` text is not sent twice. `text`: only the final
+   * answer is sent and `wechat_send` is not offered. Read when the tool plugin mounts and at every send, so a config
+   * reload switches it.
+   */
+  delivery: 'text' | 'hybrid'
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-wechat -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-workflow-ptc -->
 <a id="deepseek-aidsh-workflow-ptc"></a>
 
@@ -6668,6 +6668,7 @@ export interface Config {
 | `@deepseek-ai/dsh-computer-use` | — | [`packages/computer-use/computer-use/src/index.ts`](../packages/computer-use/computer-use/src/index.ts) |
 | `@deepseek-ai/dsh-config-editor` | `loader` · `profileContext` | [`packages/boot/config-editor/src/index.ts`](../packages/boot/config-editor/src/index.ts) |
 | `@deepseek-ai/dsh-cordis-client-runner` | — | [`packages/extensions/cordis-client-runner/src/index.ts`](../packages/extensions/cordis-client-runner/src/index.ts) |
+| `@deepseek-ai/dsh-courses-settings` | `connection` · `courses` | [`packages/fork/courses-settings/src/index.ts`](../packages/fork/courses-settings/src/index.ts) |
 | `@deepseek-ai/dsh-creation-recommendations` | `tools` · `pluginManager` · `agents` · `subagents` · `profileContext` · `skills` · `actionCards` | [`packages/experimental/creation-recommendations/src/index.ts`](../packages/experimental/creation-recommendations/src/index.ts) |
 | `@deepseek-ai/dsh-cua` | — | [`packages/experimental/cua/src/index.ts`](../packages/experimental/cua/src/index.ts) |
 | `@deepseek-ai/dsh-deepseek-llm-api-extensions` | — | [`packages/llm/deepseek-llm-api-extensions/src/index.ts`](../packages/llm/deepseek-llm-api-extensions/src/index.ts) |
@@ -6689,22 +6690,14 @@ export interface Config {
 | `@deepseek-ai/dsh-host-plugin-inventory` | `loader` | [`packages/host/plugin-inventory/src/index.ts`](../packages/host/plugin-inventory/src/index.ts) |
 | `@deepseek-ai/dsh-llm` | — | [`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts) |
 | `@deepseek-ai/dsh-lsp` | — | [`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts) |
-| `@deepseek-ai/dsh-fork-config` | `connection` · `configEditor` | [`packages/fork/fork-config/src/index.ts`](../packages/fork/fork-config/src/index.ts) |
-| `@deepseek-ai/dsh-fork-courses-settings` | `connection` · `forkCourses` | [`packages/fork/fork-courses-settings/src/index.ts`](../packages/fork/fork-courses-settings/src/index.ts) |
-| `@deepseek-ai/dsh-fork-memory-admin` | — | [`packages/fork/fork-memory-admin/src/index.ts`](../packages/fork/fork-memory-admin/src/index.ts) |
-| `@deepseek-ai/dsh-fork-qq-login` | `connection` · `forkQq` | [`packages/fork/fork-qq-login/src/index.ts`](../packages/fork/fork-qq-login/src/index.ts) |
-| `@deepseek-ai/dsh-fork-style-settings` | `connection` | [`packages/fork/fork-style-settings/src/index.ts`](../packages/fork/fork-style-settings/src/index.ts) |
-| `@deepseek-ai/dsh-fork-subagents` | `sessionProjections` | [`packages/fork/fork-subagents/src/index.ts`](../packages/fork/fork-subagents/src/index.ts) |
-| `@deepseek-ai/dsh-fork-tool-courses` | `tools` | [`packages/fork/fork-tool-courses/src/index.ts`](../packages/fork/fork-tool-courses/src/index.ts) |
-| `@deepseek-ai/dsh-fork-tool-monitor` | `tools` · `storageDomain` · `sessionController` · `sessionPersistence` | [`packages/fork/fork-tool-monitor/src/index.ts`](../packages/fork/fork-tool-monitor/src/index.ts) |
-| `@deepseek-ai/dsh-fork-tool-voice` | `tools` | [`packages/fork/fork-tool-voice/src/index.ts`](../packages/fork/fork-tool-voice/src/index.ts) |
-| `@deepseek-ai/dsh-fork-tool-wechat` | `tools` | [`packages/fork/fork-tool-wechat/src/index.ts`](../packages/fork/fork-tool-wechat/src/index.ts) |
-| `@deepseek-ai/dsh-fork-wechat-settings` | — | [`packages/fork/fork-wechat-settings/src/index.ts`](../packages/fork/fork-wechat-settings/src/index.ts) |
 | `@deepseek-ai/dsh-mcp-resources` | `tools` | [`packages/mcp/mcp-resources/src/index.ts`](../packages/mcp/mcp-resources/src/index.ts) |
 | `@deepseek-ai/dsh-message-quotes` | — | [`packages/session/message-quotes/src/index.ts`](../packages/session/message-quotes/src/index.ts) |
 | `@deepseek-ai/dsh-otel` | — | [`packages/telemetry/otel/src/index.ts`](../packages/telemetry/otel/src/index.ts) |
+| `@deepseek-ai/dsh-owner-memory-admin` | — | [`packages/fork/owner-memory-admin/src/index.ts`](../packages/fork/owner-memory-admin/src/index.ts) |
 | `@deepseek-ai/dsh-owner-relay` | — | [`packages/fork/owner-relay/src/index.ts`](../packages/fork/owner-relay/src/index.ts) |
+| `@deepseek-ai/dsh-plugin-config` | `connection` · `configEditor` | [`packages/fork/plugin-config/src/index.ts`](../packages/fork/plugin-config/src/index.ts) |
 | `@deepseek-ai/dsh-plugin-recommendations` | `pluginManager` · `agents` · `skills` · `actionCards` | [`packages/experimental/plugin-recommendations/src/index.ts`](../packages/experimental/plugin-recommendations/src/index.ts) |
+| `@deepseek-ai/dsh-qq-login` | `connection` · `qq` | [`packages/fork/qq-login/src/index.ts`](../packages/fork/qq-login/src/index.ts) |
 | `@deepseek-ai/dsh-sandbox-ssh` | `ssh` | [`packages/ssh/sandbox-ssh/src/index.ts`](../packages/ssh/sandbox-ssh/src/index.ts) |
 | `@deepseek-ai/dsh-session` | — | [`packages/core/session/src/index.ts`](../packages/core/session/src/index.ts) |
 | `@deepseek-ai/dsh-session-checkpoint-policy` | `llm` · `sessionPersistence` · `sessions` · `tools` | [`packages/session/session-checkpoint-policy/src/index.ts`](../packages/session/session-checkpoint-policy/src/index.ts) |
@@ -6713,19 +6706,26 @@ export interface Config {
 | `@deepseek-ai/dsh-session-turn-outline` | `sessionProjections` | [`packages/session/session-turn-outline/src/index.ts`](../packages/session/session-turn-outline/src/index.ts) |
 | `@deepseek-ai/dsh-settings` | `configEditor` · `profileContext` | [`packages/settings/settings/src/index.ts`](../packages/settings/settings/src/index.ts) |
 | `@deepseek-ai/dsh-skill-badge` | `skills` | [`packages/experimental/skill-badge/src/index.ts`](../packages/experimental/skill-badge/src/index.ts) |
+| `@deepseek-ai/dsh-speaking-style-settings` | `connection` | [`packages/fork/speaking-style-settings/src/index.ts`](../packages/fork/speaking-style-settings/src/index.ts) |
 | `@deepseek-ai/dsh-storage` | — | [`packages/storage/storage/src/index.ts`](../packages/storage/storage/src/index.ts) |
+| `@deepseek-ai/dsh-subagent-activity` | `sessionProjections` | [`packages/fork/subagent-activity/src/index.ts`](../packages/fork/subagent-activity/src/index.ts) |
 | `@deepseek-ai/dsh-subprocess-local` | — | [`packages/subprocess/subprocess-local/src/index.ts`](../packages/subprocess/subprocess-local/src/index.ts) |
 | `@deepseek-ai/dsh-subprocess-ssh` | `ssh` | [`packages/ssh/subprocess-ssh/src/index.ts`](../packages/ssh/subprocess-ssh/src/index.ts) |
 | `@deepseek-ai/dsh-terminal` | — | [`packages/terminal/terminal/src/index.ts`](../packages/terminal/terminal/src/index.ts) |
 | `@deepseek-ai/dsh-tool-bili` | `tools` | [`packages/fork/tool-bili/src/index.ts`](../packages/fork/tool-bili/src/index.ts) |
 | `@deepseek-ai/dsh-tool-call-timeout-policy` | `tools` | [`packages/guard/timeout-policy/src/index.ts`](../packages/guard/timeout-policy/src/index.ts) |
 | `@deepseek-ai/dsh-tool-cordis` | `tools` · `cordisInspect` | [`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/tool-cordis/src/index.ts) |
+| `@deepseek-ai/dsh-tool-courses` | `tools` | [`packages/fork/tool-courses/src/index.ts`](../packages/fork/tool-courses/src/index.ts) |
 | `@deepseek-ai/dsh-tool-executor-native` | `tools` | [`packages/core/tool-executor-native/src/index.ts`](../packages/core/tool-executor-native/src/index.ts) |
+| `@deepseek-ai/dsh-tool-monitor` | `tools` · `storageDomain` · `sessionController` · `sessionPersistence` | [`packages/fork/tool-monitor/src/index.ts`](../packages/fork/tool-monitor/src/index.ts) |
 | `@deepseek-ai/dsh-tool-schedule` | `tools` · `systemPrompt` | [`packages/schedule/tool-schedule/src/index.ts`](../packages/schedule/tool-schedule/src/index.ts) |
+| `@deepseek-ai/dsh-tool-voice` | `tools` | [`packages/fork/tool-voice/src/index.ts`](../packages/fork/tool-voice/src/index.ts) |
+| `@deepseek-ai/dsh-tool-wechat` | `tools` | [`packages/fork/tool-wechat/src/index.ts`](../packages/fork/tool-wechat/src/index.ts) |
 | `@deepseek-ai/dsh-tool-working-directory` | `tools` · `workingDirectory` | [`packages/session/tool-working-directory/src/index.ts`](../packages/session/tool-working-directory/src/index.ts) |
 | `@deepseek-ai/dsh-tools` | `systemPrompt` | [`packages/core/tools/src/index.ts`](../packages/core/tools/src/index.ts) |
 | `@deepseek-ai/dsh-user-questions` | — | [`packages/interaction/user-questions/src/index.ts`](../packages/interaction/user-questions/src/index.ts) |
 | `@deepseek-ai/dsh-webhook` | `agents` · `agentDefaultModel` · `agentPresets` · `permissionPresets` · `sessionTitle` · `workspaceRegistry` | [`packages/experimental/webhook/src/index.ts`](../packages/experimental/webhook/src/index.ts) |
+| `@deepseek-ai/dsh-wechat-settings` | — | [`packages/fork/wechat-settings/src/index.ts`](../packages/fork/wechat-settings/src/index.ts) |
 | `@deepseek-ai/dsh-workspace` | `storageDomain` · `sessionPersistence` | [`packages/workspace/workspace/src/index.ts`](../packages/workspace/workspace/src/index.ts) |
 <!-- END GENERATED config-catalog:no-config -->
 

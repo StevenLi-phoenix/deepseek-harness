@@ -12,7 +12,7 @@ import type { InjectFace, PropsLocale, PropsRenderFactories, PropsRuntime } from
 // Type-only: pulls the settings shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: declares the 'settings.plugin-config' factory this section renders at its foot.
-import type {} from '@deepseek-ai/dsh-fork-config/client'
+import type {} from '@deepseek-ai/dsh-plugin-config/client'
 import type { ActionResult, BiliAction, BiliView } from '../view.ts'
 import { Accounts } from './Accounts.tsx'
 import { LOGIN_POLL_MS, POLL_INTERVAL_MS, startPolling, type BiliState } from './bili.ts'

@@ -50,17 +50,17 @@ function link(name, directory) {
 }
 // The installed product resolves only its own default packages; the experimental webhook runtime, its
 // GitHub adapter, and the console logger are profile plugins here, linked like the fork packages.
-for (const name of ['@deepseek-ai/dsh-webhook', '@deepseek-ai/dsh-webhook-github', '@deepseek-ai/cordis-plugin-logger-console', '@deepseek-ai/dsh-fork-event-bus', '@deepseek-ai/dsh-fork-github-sensor',
-  '@deepseek-ai/dsh-fork-wechat', '@deepseek-ai/dsh-fork-tool-watch', '@deepseek-ai/dsh-fork-tool-wechat', '@deepseek-ai/dsh-fork-balance', '@deepseek-ai/dsh-fork-memory', '@deepseek-ai/dsh-fork-memory-admin',
-  '@deepseek-ai/dsh-fork-event-ingest', '@deepseek-ai/dsh-fork-tool-monitor', '@deepseek-ai/dsh-fork-cc-bridge', '@deepseek-ai/dsh-fork-sysmon', '@deepseek-ai/dsh-fork-config', '@deepseek-ai/dsh-fork-console', '@deepseek-ai/dsh-fork-cc-admin', '@deepseek-ai/dsh-fork-presence', '@deepseek-ai/dsh-fork-wechat-settings', '@deepseek-ai/dsh-bili',
-  '@deepseek-ai/dsh-fork-voice', '@deepseek-ai/dsh-fork-tool-voice', '@deepseek-ai/dsh-fork-tool-up',
-  '@deepseek-ai/dsh-tool-bili', '@deepseek-ai/dsh-owner-relay', '@deepseek-ai/dsh-fork-qq', '@deepseek-ai/dsh-fork-qq-login', '@deepseek-ai/dsh-fork-tool-qq', '@deepseek-ai/dsh-fork-qqbot',
-  '@deepseek-ai/dsh-fork-taint', '@deepseek-ai/dsh-fork-integrity', '@deepseek-ai/dsh-fork-style', '@deepseek-ai/dsh-fork-style-settings', '@deepseek-ai/dsh-fork-guard', '@deepseek-ai/dsh-fork-time-gap',
-  '@deepseek-ai/dsh-fork-courses', '@deepseek-ai/dsh-fork-courses-settings', '@deepseek-ai/dsh-fork-tool-courses',
-  '@deepseek-ai/dsh-gmail', '@deepseek-ai/dsh-gmail-settings', '@deepseek-ai/dsh-tool-gmail', '@deepseek-ai/dsh-fork-subagents']) {
+for (const name of ['@deepseek-ai/dsh-webhook', '@deepseek-ai/dsh-webhook-github', '@deepseek-ai/cordis-plugin-logger-console', '@deepseek-ai/dsh-event-bus', '@deepseek-ai/dsh-github-sensor',
+  '@deepseek-ai/dsh-wechat', '@deepseek-ai/dsh-tool-watch', '@deepseek-ai/dsh-tool-wechat', '@deepseek-ai/dsh-provider-balance', '@deepseek-ai/dsh-owner-memory', '@deepseek-ai/dsh-owner-memory-admin',
+  '@deepseek-ai/dsh-event-ingest', '@deepseek-ai/dsh-tool-monitor', '@deepseek-ai/dsh-cc-bridge', '@deepseek-ai/dsh-sysmon', '@deepseek-ai/dsh-plugin-config', '@deepseek-ai/dsh-event-console', '@deepseek-ai/dsh-cc-admin', '@deepseek-ai/dsh-presence', '@deepseek-ai/dsh-wechat-settings', '@deepseek-ai/dsh-bili',
+  '@deepseek-ai/dsh-voice', '@deepseek-ai/dsh-tool-voice', '@deepseek-ai/dsh-tool-up',
+  '@deepseek-ai/dsh-tool-bili', '@deepseek-ai/dsh-owner-relay', '@deepseek-ai/dsh-qq', '@deepseek-ai/dsh-qq-login', '@deepseek-ai/dsh-tool-qq', '@deepseek-ai/dsh-qqbot',
+  '@deepseek-ai/dsh-turn-taint', '@deepseek-ai/dsh-integrity-watch', '@deepseek-ai/dsh-speaking-style', '@deepseek-ai/dsh-speaking-style-settings', '@deepseek-ai/dsh-content-guard', '@deepseek-ai/dsh-time-gap',
+  '@deepseek-ai/dsh-courses', '@deepseek-ai/dsh-courses-settings', '@deepseek-ai/dsh-tool-courses',
+  '@deepseek-ai/dsh-gmail', '@deepseek-ai/dsh-gmail-settings', '@deepseek-ai/dsh-tool-gmail', '@deepseek-ai/dsh-subagent-activity']) {
   link(name, join(prefix, 'node_modules', name))
 }
-link('@deepseek-ai/dsh-fork-event-bundle', bundleDir)
+link('@deepseek-ai/dsh-event-bundle', bundleDir)
 writeFileSync(target, `${JSON.stringify(manifest, null, 2)}\n`)
 console.log(`setup-profile: ${links.length} link(s) in ${join(target, '..')}`)
 NODE

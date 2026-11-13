@@ -1,0 +1,70 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/fork/tool-monitor/README.md
+/:
+  en: 22f7da7b43a9ad2a
+  zh: 89a32c8341fe684f
+/deepseek-ai-dsh-tool-monitor:
+  en: 4b8a48cacd5b72fa
+  zh: c56d39d4064386e7
+/deepseek-ai-dsh-tool-monitor/summary:
+  en: 1a7f3010dc3d391a
+  zh: 49150800eb4a1d43
+/deepseek-ai-dsh-tool-monitor/table-of-contents:
+  en: a648245911f3ac49
+  zh: 20f9d522ccfd1fc9
+/deepseek-ai-dsh-tool-monitor/use-this-package:
+  en: aa4a463eed99cfe4
+  zh: 879bece28dbab920
+/deepseek-ai-dsh-tool-monitor/use-this-package/when-to-choose-it:
+  en: 8dcc8d1e412722fa
+  zh: 0f7277c4c1378d7c
+/deepseek-ai-dsh-tool-monitor/use-this-package/the-tools:
+  en: 1ff4a934e0deb81c
+  zh: d76c7827d57d1897
+/deepseek-ai-dsh-tool-monitor/use-this-package/when-a-monitor-ends:
+  en: 7c77377e28637107
+  zh: cf43d8f586bbcef3
+/deepseek-ai-dsh-tool-monitor/use-this-package/after-a-host-restart:
+  en: a4feed3c6b592ce3
+  zh: d29da84283a19634
+/deepseek-ai-dsh-tool-monitor/understand-the-implementation:
+  en: 251d642472938563
+  zh: a9bd8a97c57f1033
+/deepseek-ai-dsh-tool-monitor/further-exploration:
+  en: f4749bf13c086d2f
+  zh: 73ae14c4f2a54dbb
+/deepseek-ai-dsh-tool-monitor/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-tool-monitor/model-experience/monitor-tools:
+  en: a307cb76160637a6
+  zh: f21a7f129418dfca
+/deepseek-ai-dsh-tool-monitor/model-experience/monitor-tools/what-the-model-sees:
+  en: 59e01fc3fce3666b
+  zh: f747846c17361e23
+/deepseek-ai-dsh-tool-monitor/model-experience/monitor-tools/token-effect:
+  en: 79c2f9e9613365c4
+  zh: 7e9a9c13dd88900d
+/deepseek-ai-dsh-tool-monitor/model-experience/monitor-tools/kv-cache-effect:
+  en: 44574f4487e48b3e
+  zh: 5af2107448c78ee5
+/deepseek-ai-dsh-tool-monitor/model-experience/monitor-notices:
+  en: 4aeffa303f746289
+  zh: 529a4bc53b343e54
+/deepseek-ai-dsh-tool-monitor/model-experience/monitor-notices/what-the-model-sees:
+  en: e84e06a076c06e1d
+  zh: aa2fb67eebb0f114
+/deepseek-ai-dsh-tool-monitor/model-experience/monitor-notices/token-effect:
+  en: 4aabd17743d86c56
+  zh: 76e57e57330c6c33
+/deepseek-ai-dsh-tool-monitor/model-experience/monitor-notices/kv-cache-effect:
+  en: 78a3fd42de0ec820
+  zh: 38b33960f4c26954
+/deepseek-ai-dsh-tool-monitor/known-limitations-and-deferred-work:
+  en: 057eaaface1e0b78
+  zh: 18257b9131ca90b3
+/deepseek-ai-dsh-tool-monitor/known-limitations-and-deferred-work/dev-note:
+  en: e59a09d849c81f4a
+  zh: 22cff2e37cf276e6

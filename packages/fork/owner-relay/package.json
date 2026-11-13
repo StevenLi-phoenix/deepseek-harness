@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-owner-relay",
-  "description": "One relay of a Session's final answer to the owner: channels claim Sessions, one rule set decides at turn end, and a channel that cannot deliver falls back to ctx.forkNotifier",
+  "description": "One relay of a Session's final answer to the owner: channels claim Sessions, one rule set decides at turn end, and a channel that cannot deliver falls back to ctx.ownerNotifier",
   "version": "0.2.2-rc.2",
   "publishConfig": {
     "access": "public"
@@ -28,12 +28,12 @@
   "license": "MIT",
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
-    "@deepseek-ai/dsh-fork-event-bus": "workspace:*",
+    "@deepseek-ai/dsh-event-bus": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
-    "@deepseek-ai/dsh-fork-event-bus": "workspace:*",
+    "@deepseek-ai/dsh-event-bus": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*"
   }
 }

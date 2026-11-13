@@ -410,14 +410,14 @@ const TOOL_PACKAGES: ToolPackage[] = [
     pkg: '@deepseek-ai/dsh-tool-bili',
     dir: 'tool-bili',
     source: 'packages/fork/tool-bili/src/index.ts',
-    requires: ['ctx.tools', 'ctx.bili (the account service of @deepseek-ai/dsh-bili)', 'ctx.forkNotifier for bili_tell_main_agent'],
+    requires: ['ctx.tools', 'ctx.bili (the account service of @deepseek-ai/dsh-bili)', 'ctx.ownerNotifier for bili_tell_main_agent'],
     writes: ['tool/call', 'tool/result', 'the Bilibili account\'s journal; actions go to bili-svc, which keeps their ledger'],
     async mount(ctx) {
       // Schema harvest never reaches Bilibili: the account service is a stub.
       ctx.provide('bili', {} as BiliAccount)
       await ctx.plugin(ToolBili)
     },
-    note: 'Fork-local (fork): mounted only in the event profile\'s `bili` preset, so the main agents never see these tools.',
+    note: 'Fork-local: mounted only in the event profile\'s `bili` preset, so the main agents never see these tools.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-pwsh-persistent',
@@ -796,7 +796,7 @@ export type ToolCatalog = CatalogPackage[]
 
 /**
  * Assert the boot manifest covers every shipped tool package on disk (a
- * `tool-*` leaf under `packages/`, excluding test support).
+ * `tool-*` leaf under `packages/`, excluding test support and the fork group).
  * Booting has no source declaration to enumerate, so this glob restores the
  * "a new tool cannot be silently undocumented" guarantee: an unlisted package
  * fails the generator (and the freshness gate) until it is added to
@@ -806,8 +806,9 @@ export type ToolCatalog = CatalogPackage[]
  */
 export function assertManifestComplete(packages: ToolPackage[] = TOOL_PACKAGES, scanRoot: string = root): void {
   // Native execution owns no tool definitions; PTC contributes run_code.
+  // Fork tool packages are documented in their own READMEs; the ones listed here (tool-bili) are still booted.
   const onDisk = globSync('packages/*/tool-*', { cwd: scanRoot })
-    .filter(path => basename(dirname(path)) !== 'test-support')
+    .filter(path => !['test-support', 'fork'].includes(basename(dirname(path))))
     .map(p => basename(p))
     .filter(dir => dir !== 'tool-executor-native').sort()
   const listed = new Set(packages.map(p => p.dir))

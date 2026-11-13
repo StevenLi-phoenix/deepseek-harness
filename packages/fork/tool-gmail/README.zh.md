@@ -1,5 +1,5 @@
 ---
-description: "主人主 agent 的 Gmail 工具，基于 ctx.gmail：gmail_accounts、gmail_search、gmail_read、gmail_attachment、gmail_draft、gmail_send 和 gmail_modify；收到的邮件包成不可信数据，读信工具在 fork-taint 里算作外人的文字，每次发信都由 gmail 的发信关卡按 Session 日志里这一轮的事实决定。"
+description: "主人主 agent 的 Gmail 工具，基于 ctx.gmail：gmail_accounts、gmail_search、gmail_read、gmail_attachment、gmail_draft、gmail_send 和 gmail_modify；收到的邮件包成不可信数据，读信工具在 turn-taint 里算作外人的文字，每次发信都由 gmail 的发信关卡按 Session 日志里这一轮的事实决定。"
 kind: "package-reference"
 ---
 
@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用这个包
 
-把这一行加到面向主人的 agent preset 的插件列表里，该进程要挂载 [`@deepseek-ai/dsh-gmail`](../gmail/README.zh.md)，同时挂载 [`fork-taint`](../fork-taint/README.zh.md)，发信关卡读的是它给出的这一轮来源。fork event profile 把它挂在 `unattended` preset 里，微信聊天 Session 用的就是这个 preset；频道 preset（`bili`、`up`、`qqbot`、`qq-digest`）从不挂载它。`ctx.gmail` 出现之后工具才会注册。
+把这一行加到面向主人的 agent preset 的插件列表里，该进程要挂载 [`@deepseek-ai/dsh-gmail`](../gmail/README.zh.md)，同时挂载 [`turn-taint`](../turn-taint/README.zh.md)，发信关卡读的是它给出的这一轮来源。fork event profile 把它挂在 `unattended` preset 里，微信聊天 Session 用的就是这个 preset；频道 preset（`bili`、`up`、`qqbot`、`qq-digest`）从不挂载它。`ctx.gmail` 出现之后工具才会注册。
 
 ```yaml
 - id: tool-gmail
@@ -44,7 +44,7 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-每个工具只调用 `ctx.gmail` 的一个方法；信发不发由那里决定。`gmail_send` 用 `fork-taint` 的 `turnOrigin()`、`describeOrigin()` 和 `ownerWords()` 从调用方 Agent 的 Session 读出这一轮的事实（subagent 继承父 Session 的来源），交给 `send` 或 `confirm`；不在 Agent 里时这一轮不干净。读工具回答 `{ text }`，给模型时包在 `<mail account="…" trust="untrusted">` 里，正文里的闭合标签会被转义，后面跟一句信任说明；写工具回答 JSON；失败回答 `{ error }`。附件路径按 Session 的工作目录解析。每次调用都记录工具名和耗时，失败记为警告。
+每个工具只调用 `ctx.gmail` 的一个方法；信发不发由那里决定。`gmail_send` 用 `turn-taint` 的 `turnOrigin()`、`describeOrigin()` 和 `ownerWords()` 从调用方 Agent 的 Session 读出这一轮的事实（subagent 继承父 Session 的来源），交给 `send` 或 `confirm`；不在 Agent 里时这一轮不干净。读工具回答 `{ text }`，给模型时包在 `<mail account="…" trust="untrusted">` 里，正文里的闭合标签会被转义，后面跟一句信任说明；写工具回答 JSON；失败回答 `{ error }`。附件路径按 Session 的工作目录解析。每次调用都记录工具名和耗时，失败记为警告。
 
 | 文件 | 作用 |
 |---|---|
@@ -63,7 +63,7 @@ kind: "package-reference"
 ## 延伸阅读
 
 - [Gmail 服务](../gmail/README.zh.md)：发信规则、发信关卡、待确认的信
-- [这一轮的来源](../fork-taint/README.zh.md)：什么样的一轮算干净
+- [这一轮的来源](../turn-taint/README.zh.md)：什么样的一轮算干净
 
 -----
 

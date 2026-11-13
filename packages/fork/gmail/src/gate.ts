@@ -1,6 +1,6 @@
 /**
  * The send gate: whether a message goes out now, waits for the owner, or is refused, decided by fixed rules over
- * the account's policy, the turn's origin (read from the Session log by `fork-taint`, never from the model), and the
+ * the account's policy, the turn's origin (read from the Session log by `turn-taint`, never from the model), and the
  * recipients. A clean owner turn still holds a message to an address the owner neither named in the turn nor wrote
  * to before, since words read in an earlier turn may still be in the model's context. A held message is confirmed
  * only by the owner: in Settings, or in a turn the owner started alone whose

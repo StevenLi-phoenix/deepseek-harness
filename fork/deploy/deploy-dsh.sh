@@ -17,7 +17,7 @@ remote_body() {
   cat <<'REMOTE'
 set -euo pipefail
 export HOME=/Users/dsh-runtime PATH=/Users/dsh-runtime/ams/.venv/bin:/opt/homebrew/bin:/usr/bin:/bin AMS_STATE_DIR=/Users/dsh-runtime/.ams
-APPS=/Users/Shared/fork-dsh
+APPS=/Users/Shared/dsh
 # The repo's dsh-upgrade/start.sh logs under the build volume; the copy installed on the mini logs beside stdout.log.
 LOGS=/Volumes/MiniSSD/dsh-self/logs
 SERVICE_LOGS=/Users/dsh-runtime/logs

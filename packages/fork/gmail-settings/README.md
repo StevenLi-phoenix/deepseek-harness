@@ -32,7 +32,7 @@ Mount it at the root of a Web profile beside [`@deepseek-ai/dsh-gmail`](../gmail
   name: '@deepseek-ai/dsh-gmail-settings'
 ```
 
-It has no configuration; the limits and the trusted recipients belong to `gmail`, whose All settings card ([`fork-config`](../fork-config/README.md)) sits at the foot of the section.
+It has no configuration; the limits and the trusted recipients belong to `gmail`, whose All settings card ([`plugin-config`](../plugin-config/README.md)) sits at the foot of the section.
 
 -----
 

@@ -352,7 +352,7 @@ describe('access tokens', () => {
     vi.setSystemTime(TOKEN_STALE)
     expect(await gmailFailure(env.gmail.search('work', 'a'))).toMatchObject({ failure: 'needs-reconnect' })
     expect(env.gmail.accounts()[0]).toMatchObject({ needsReconnect: true, reconnectNoticeAt: null })
-    expect(env.logs).toContain(`warn gmail: could not send "⚠️ Gmail work（${OWNER}）要重新登录": no forkNotifier service is mounted`)
+    expect(env.logs).toContain(`warn gmail: could not send "⚠️ Gmail work（${OWNER}）要重新登录": no ownerNotifier service is mounted`)
   })
 
   it('tells the owner once when two calls in flight both find the grant refused', async () => {

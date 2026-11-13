@@ -13,7 +13,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/opt/homebrew/bin/node</string>
-        <string>/Users/Shared/fork-dsh/current/node_modules/@deepseek-ai/dsh/lib/bin.js</string>
+        <string>/Users/Shared/dsh/current/node_modules/@deepseek-ai/dsh/lib/bin.js</string>
         <string>event</string>
         <string>--no-open</string>
         <string>--port</string>

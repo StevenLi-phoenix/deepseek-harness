@@ -2,7 +2,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { ForkAgentMessage } from '@deepseek-ai/dsh-fork-event-bus'
+import type { MainAgentMessage } from '@deepseek-ai/dsh-event-bus'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BILI_AGENT_ORIGIN } from '../src/dm.ts'
 import { MAIN_AGENT_MAX_CHARS } from '../src/index.ts'
@@ -28,8 +28,8 @@ afterEach(async () => {
 
 /** A main agent that records what reached it and answers with its chat Session. */
 function mainAgent() {
-  const told: ForkAgentMessage[] = []
-  return { told, tell: (message: ForkAgentMessage) => { told.push(message); return Promise.resolve('chat-1') } }
+  const told: MainAgentMessage[] = []
+  return { told, tell: (message: MainAgentMessage) => { told.push(message); return Promise.resolve('chat-1') } }
 }
 
 describe('BiliAccount.tellMainAgent', () => {
@@ -107,7 +107,7 @@ describe('BiliAccount.tellMainAgent', () => {
   it('reports a message the channel could not queue, which does not count', async () => {
     let fail = true
     const told: string[] = []
-    const tell = (message: ForkAgentMessage): Promise<string> => {
+    const tell = (message: MainAgentMessage): Promise<string> => {
       if (fail) return Promise.reject(new Error('WeChat is not bound yet, so the main agent has no chat'))
       told.push(message.text)
       return Promise.resolve('chat-2')

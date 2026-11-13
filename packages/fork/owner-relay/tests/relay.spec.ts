@@ -1,6 +1,6 @@
 import { setImmediate } from 'node:timers/promises'
 import { Context } from '@deepseek-ai/cordis'
-import type { ForkNote } from '@deepseek-ai/dsh-fork-event-bus'
+import type { OwnerNote } from '@deepseek-ai/dsh-event-bus'
 import { afterEach, describe, expect, it } from 'vitest'
 import OwnerRelay, { type RelayAnswer, type RelayChannel, type RelayDecision, type RelayDelivery } from '../src/index.ts'
 
@@ -22,7 +22,7 @@ async function drain(): Promise<void> {
 }
 
 /** Mount the relay with a recording notifier unless `notifier` is false. */
-async function mount(options: { notifier?: false | ((note: ForkNote) => Promise<void>) } = {}) {
+async function mount(options: { notifier?: false | ((note: OwnerNote) => Promise<void>) } = {}) {
   const ctx = new Context()
   contexts.push(ctx)
   const logs: LogLine[] = []
@@ -30,10 +30,10 @@ async function mount(options: { notifier?: false | ((note: ForkNote) => Promise<
     levels: { default: 3 },
     export: (message) => { logs.push({ type: message.type, text: String(message.args[0]) }) },
   })
-  const notes: ForkNote[] = []
+  const notes: OwnerNote[] = []
   if (options.notifier !== false) {
-    const send = options.notifier ?? (async (note: ForkNote) => { notes.push(note) })
-    ctx.provide('forkNotifier', { send } as never)
+    const send = options.notifier ?? (async (note: OwnerNote) => { notes.push(note) })
+    ctx.provide('ownerNotifier', { send } as never)
   }
   await ctx.plugin(OwnerRelay)
   const relay = ctx.ownerRelay
@@ -265,7 +265,7 @@ describe('OwnerRelay delivery', () => {
     await turn(h.emit, 'bili-1', 'a share')
     expect(h.notes).toEqual([{ title: '↪️ 这条回答没能从原渠道发出，改发这里', body: 'a share\n\n原因：the write guard failed', origin: label }])
     expect(h.logs.some(line => line.type === 'warn' && line.text === 'owner-relay: bili-dm could not deliver the answer of Session bili-1: the write guard failed')).toBe(true)
-    expect(h.logs.some(line => line.type === 'info' && line.text === 'owner-relay: sent the answer of Session bili-1 to forkNotifier instead of bili-dm')).toBe(true)
+    expect(h.logs.some(line => line.type === 'info' && line.text === 'owner-relay: sent the answer of Session bili-1 to ownerNotifier instead of bili-dm')).toBe(true)
     expect(bili.calls.at(-1)).toBe('settled:bili-1')
   })
 
@@ -283,7 +283,7 @@ describe('OwnerRelay delivery', () => {
     bare.relay.registerChannel(recorder('bili-dm', { fallbackLabel: 'x', deliver: () => Promise.reject(new Error('down')) }).channel)
     bare.relay.claim('bili-1', 'bili-dm')
     await turn(bare.emit, 'bili-1', 'answer')
-    expect(bare.logs.some(line => line.text === 'owner-relay: no forkNotifier is mounted; the answer of Session bili-1 was not delivered')).toBe(true)
+    expect(bare.logs.some(line => line.text === 'owner-relay: no ownerNotifier is mounted; the answer of Session bili-1 was not delivered')).toBe(true)
 
     const failing = await mount({ notifier: () => Promise.reject(new Error('wechat down')) })
     const bili = recorder('bili-dm', { fallbackLabel: 'x', deliver: () => Promise.reject(new Error('down')) })

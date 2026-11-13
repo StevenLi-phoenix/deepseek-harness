@@ -1,5 +1,5 @@
 {
-  "name": "@deepseek-ai/dsh-fork-event-bundle",
+  "name": "@deepseek-ai/dsh-event-bundle",
   "version": "0.2.2-rc.2",
   "private": true,
   "description": "fork event service composition: webhook runtime, fork plugins, the unattended preset, and remote-first overrides on top of the Web bundles.",

@@ -2,7 +2,7 @@
 # a top-level YAML array of loader patch entries (id-targeted config
 # overrides, disables, and insert lists; `!!js` expressions allowed).
 # Web UI settings forms save here; setup-profile.sh creates this file once and never replaces it.
-# The event composition itself is the @deepseek-ai/dsh-fork-event-bundle layer.
+# The event composition itself is the @deepseek-ai/dsh-event-bundle layer.
 #
 # Starting values, yours to change from the Web UI (Models page, model picker, settings):
 # models through llmgateway (https://api.lishuyu.app/llm/v1), keyed by LLMGW_DSH_API_KEY in

@@ -2,9 +2,9 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import WechatChannel, { Config as WechatConfig } from '@deepseek-ai/dsh-fork-wechat'
+import WechatChannel, { Config as WechatConfig } from '@deepseek-ai/dsh-wechat'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { FakeIlink, textMessage } from '../../fork-wechat/tests/fake-ilink.ts'
+import { FakeIlink, textMessage } from '../../wechat/tests/fake-ilink.ts'
 import { FakeBiliSvc } from './fake-bili-svc.ts'
 import { allLogs, contexts, credentialStore, fakeSessions, harness } from './harness.ts'
 
@@ -101,7 +101,7 @@ describe('the account\'s DM channel and the owner relay', () => {
     await vi.advanceTimersByTimeAsync(1000)
     expect(h.notes).toEqual([])
     expect(svc.replies).toHaveLength(1)
-    expect(h.logs.some(line => line.text === 'fork-event-bus: Session bili-1 is relayed by bili-dm; its ⏰ turn is not reported')).toBe(true)
+    expect(h.logs.some(line => line.text === 'event-bus: Session bili-1 is relayed by bili-dm; its ⏰ turn is not reported')).toBe(true)
     expect(h.logs.some(line => line.text === 'bili: Session bili-1 ended a turn the owner\'s messages did not start (completed); its answer stays in the Session')).toBe(true)
   })
 
@@ -134,7 +134,7 @@ describe('the account\'s DM channel and the owner relay', () => {
     expect(ilink.sent.map(sent => sent.text)).not.toContain(note)
     const turn = sessions.state.prompts.filter(prompt => prompt.sessionId === 'chat-1' && prompt.mode === 'queue')
     expect(turn).toHaveLength(1)
-    expect(String(turn[0]!.requestId)).toMatch(/^fork-untrusted:note:/u)
+    expect(String(turn[0]!.requestId)).toMatch(/^untrusted:note:/u)
     const text = turn[0]!.content[0]?.type === 'text' ? turn[0]!.content[0].text : ''
     expect(text).toMatch(/^At Fri 2026-10-23 \d\d:\d\d \(America\/New_York\), /)
     expect(text).toContain(`, ${ORIGIN} sent the notice below for the owner.`)

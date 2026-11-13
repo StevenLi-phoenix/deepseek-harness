@@ -3,11 +3,11 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/fork/owner-relay/README.md
 /:
-  en: a206d7291257e4ff
-  zh: f5124917bd975826
+  en: 00eb3f7490ee8d2c
+  zh: a9131e318b3c43e8
 /deepseek-ai-dsh-owner-relay:
-  en: 3466c8c384bcf3bf
-  zh: 3de991a01d3d64e2
+  en: 9a37e9a68c4d6e38
+  zh: 3c9918014b947403
 /deepseek-ai-dsh-owner-relay/summary:
   en: 0062f2a124011732
   zh: 1a5d5ad09ad3775c
@@ -15,23 +15,23 @@
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
 /deepseek-ai-dsh-owner-relay/use-this-package:
-  en: fae92d06b578dd2a
-  zh: 17bdf80b6648e617
+  en: 05b2bac7eb845a25
+  zh: 5ea42a53537448aa
 /deepseek-ai-dsh-owner-relay/use-this-package/when-to-choose-it:
-  en: 8cfc3495de5970ea
-  zh: f47d909d4d168a28
+  en: ff4eb5c0ec193c5e
+  zh: d578b1970ecf630e
 /deepseek-ai-dsh-owner-relay/use-this-package/the-rules:
   en: 01ee6098e4c1f66f
   zh: f58200dfaf2dfcdc
 /deepseek-ai-dsh-owner-relay/use-this-package/the-service:
-  en: 6df35b26d755a13c
-  zh: 371bd00f4e7c428b
+  en: b282a17ea2c87c28
+  zh: 780ac7414cb81a2f
 /deepseek-ai-dsh-owner-relay/understand-the-implementation:
-  en: ca3096c162266712
-  zh: 38ab01bae5a8f11b
+  en: 64840e18ae673609
+  zh: a2cc1370107a5e64
 /deepseek-ai-dsh-owner-relay/further-exploration:
-  en: 885bff77b9e5f466
-  zh: d00237f420108f97
+  en: 2c3866bc0548bbf0
+  zh: e16455fc1cdb41a7
 /deepseek-ai-dsh-owner-relay/model-experience:
   en: 215e7ba838619b7b
   zh: a311da3843709f90
@@ -39,8 +39,8 @@
   en: bf9fd7282d3a2b6c
   zh: f90bab5d9087ca38
 /deepseek-ai-dsh-owner-relay/model-experience/fallback-note/what-the-model-sees:
-  en: 429d5e43e0773fd0
-  zh: 6ff71641d1231edf
+  en: b96321a4aa489afb
+  zh: c5a5dfb544421de3
 /deepseek-ai-dsh-owner-relay/model-experience/fallback-note/what-the-model-sees/shared-fallback-note:
   en: 9fec596592d3ebe5
   zh: 278b1f8fdd79c6dd
@@ -51,8 +51,8 @@
   en: 879f75422fffdf2a
   zh: b3c95e008ae02fe5
 /deepseek-ai-dsh-owner-relay/known-limitations-and-deferred-work:
-  en: 299f04bd5cd94727
-  zh: a4330f87e04b982c
+  en: f3046a07909f4dd4
+  zh: 1b5193aa80c0f3af
 /deepseek-ai-dsh-owner-relay/known-limitations-and-deferred-work/dev-note:
   en: f5a978a38c22a856
   zh: 218bdaf571d14829

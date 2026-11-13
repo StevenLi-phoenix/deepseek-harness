@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用这个包
 
-把它挂在进程根上，该进程还要挂载 storage domain、凭据库和一个通知服务，比如 [`@deepseek-ai/dsh-fork-wechat`](../fork-wechat/README.zh.md)。fork event bundle 用默认配置挂载它，旁边是 [`gmail-settings`](../gmail-settings/README.zh.md)，后者提供 Google 登录完成后跳回的页面；工具在 [`tool-gmail`](../tool-gmail/README.zh.md)。
+把它挂在进程根上，该进程还要挂载 storage domain、凭据库和一个通知服务，比如 [`@deepseek-ai/dsh-wechat`](../wechat/README.zh.md)。fork event bundle 用默认配置挂载它，旁边是 [`gmail-settings`](../gmail-settings/README.zh.md)，后者提供 Google 登录完成后跳回的页面；工具在 [`tool-gmail`](../tool-gmail/README.zh.md)。
 
 ```yaml
 - id: gmail
@@ -58,7 +58,7 @@ kind: "package-reference"
 
 ### 规则
 
-- **这一轮的事实**：这一轮是否干净、来源和主人自己的话都经 [`fork-taint`](../fork-taint/README.zh.md) 从 Session 日志里读出；模型一样也提供不了。读信（`gmail_search`、`gmail_read`、`gmail_attachment`）会让这一轮变得不干净。
+- **这一轮的事实**：这一轮是否干净、来源和主人自己的话都经 [`turn-taint`](../turn-taint/README.zh.md) 从 Session 日志里读出；模型一样也提供不了。读信（`gmail_search`、`gmail_read`、`gmail_attachment`）会让这一轮变得不干净。
 - **待确认**：待确认的信留成 Gmail 草稿，并得到一个六位确认码；发给主人的微信通知列出发件人、收件人、抄送、密送、主题、附件、为什么要确认，以及正文前 400 个字符。关卡判断的、通知展示的都是 Gmail 存下的草稿（它的 RFC 5322 原文），并记下它的 SHA-256。
 - **确认**：在设置页确认；或者在干净的一轮里，主人的消息中单独出现了这个确认码，agent 在读任何邮件或网页之前用这个码调用 `gmail_send`。发出前会重新读一遍草稿：被改过的草稿作废、不发；被删掉的直接丢弃；账号已改成只读则什么都不发。
 - **作废**：没确认的信过了 `confirmTtlHours` 作废；草稿留在 Gmail 里。待确认的草稿 agent 既改不了也发不了。
@@ -101,7 +101,7 @@ kind: "package-reference"
 
 - [Gmail 工具](../tool-gmail/README.zh.md)：主 agent 调用什么
 - [设置 → 邮箱](../gmail-settings/README.zh.md)：client、账号、待确认的信和登录页
-- [这一轮的来源](../fork-taint/README.zh.md)：一轮怎样分类
+- [这一轮的来源](../turn-taint/README.zh.md)：一轮怎样分类
 
 -----
 

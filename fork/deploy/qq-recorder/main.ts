@@ -4,11 +4,11 @@
  * application (no agent, no Cordis tree), so it lives here and not in `apps/`.
  *
  * Environment (AMS declaration): QQ_RECORDER_DATA_DIR, QQ_RECORDER_SOCKET, PORT_health, QQ_RECORDER_BUILD, and the secrets
- * QQ_RECORDER_TOKEN (the bearer token DSH presents) and FORK_QQ_ONEBOT_TOKEN (NapCat's access token, named by DSH's pushed
+ * QQ_RECORDER_TOKEN (the bearer token DSH presents) and QQ_ONEBOT_TOKEN (NapCat's access token, named by DSH's pushed
  * configuration). Logs are JSON lines: info and debug to stdout, error to stderr, which AMS escalates.
  */
-import { QqRecorder, type RecorderLogger } from '../../../packages/fork/fork-qq/src/recorder.ts'
-import { startRecorderServer, type RecorderServer } from '../../../packages/fork/fork-qq/src/server.ts'
+import { QqRecorder, type RecorderLogger } from '../../../packages/fork/qq/src/recorder.ts'
+import { startRecorderServer, type RecorderServer } from '../../../packages/fork/qq/src/server.ts'
 
 const BUILD = process.env['QQ_RECORDER_BUILD'] ?? 'dev'
 

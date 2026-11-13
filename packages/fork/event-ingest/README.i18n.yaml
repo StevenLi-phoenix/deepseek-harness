@@ -1,0 +1,58 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/fork/event-ingest/README.md
+/:
+  en: 52b7d2238c7a07a7
+  zh: 3b4721ec4d40f4ac
+/deepseek-ai-dsh-event-ingest:
+  en: 4a909fef4c37c3a9
+  zh: e919d78547fbad37
+/deepseek-ai-dsh-event-ingest/summary:
+  en: 4506b6a10c3e467a
+  zh: a4fc0588be45e861
+/deepseek-ai-dsh-event-ingest/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-event-ingest/use-this-package:
+  en: 7caa07b91adec9c6
+  zh: 76ae07ac8b14473c
+/deepseek-ai-dsh-event-ingest/use-this-package/when-to-choose-it:
+  en: db14c1da4fb944b5
+  zh: f0c2a3d96ce4103f
+/deepseek-ai-dsh-event-ingest/use-this-package/minimal-configuration:
+  en: b8c114778374d87c
+  zh: 5bad03006ff0fedd
+/deepseek-ai-dsh-event-ingest/use-this-package/push-an-event:
+  en: 08c977323b1a2c56
+  zh: b7258f70af7b1430
+/deepseek-ai-dsh-event-ingest/use-this-package/replies:
+  en: f183857ceaac2c0e
+  zh: d9a0bbad20213cbd
+/deepseek-ai-dsh-event-ingest/understand-the-implementation:
+  en: ee5f7891112bf5bd
+  zh: 6fe9f97ee85175e0
+/deepseek-ai-dsh-event-ingest/further-exploration:
+  en: ca31f9d5cc2de1ae
+  zh: 81c8da7b0459991e
+/deepseek-ai-dsh-event-ingest/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-event-ingest/model-experience/event-data-in-session-prompts:
+  en: 8dc9ce4dbe9f1d11
+  zh: a9e7e4574d829424
+/deepseek-ai-dsh-event-ingest/model-experience/event-data-in-session-prompts/what-the-model-sees:
+  en: 5715ea84f0706152
+  zh: 3c92f92ae8eea517
+/deepseek-ai-dsh-event-ingest/model-experience/event-data-in-session-prompts/token-effect:
+  en: 69ae47ca31e5431b
+  zh: b5281695e4976cd5
+/deepseek-ai-dsh-event-ingest/model-experience/event-data-in-session-prompts/kv-cache-effect:
+  en: 44c1e37e031446da
+  zh: 961439948a9045a1
+/deepseek-ai-dsh-event-ingest/known-limitations-and-deferred-work:
+  en: fb8aa8907ee9dc7f
+  zh: 857cd33ecc972087
+/deepseek-ai-dsh-event-ingest/known-limitations-and-deferred-work/dev-note:
+  en: 60fde1165a8f1e94
+  zh: 46604776941cba9b

@@ -2,7 +2,7 @@
 
 English | [中文](fork.zh.md)
 
-The fork-local services behind the event-driven agent: [`@deepseek-ai/dsh-fork-event-bus`](../../packages/fork/fork-event-bus/README.md) routes sensor events to notifications or unattended Sessions, [`@deepseek-ai/dsh-fork-github-sensor`](../../packages/fork/fork-github-sensor/README.md) polls GitHub, [`@deepseek-ai/dsh-fork-wechat`](../../packages/fork/fork-wechat/README.md) provides the `forkNotifier` contract over WeChat, [`@deepseek-ai/dsh-fork-qq`](../../packages/fork/fork-qq/README.md) lurks in the QQ groups the owner lists and digests them, reading the messages from the `qq-recorder` service (an AMS service that holds the one QQ connection, so a DSH restart never reconnects QQ; its Settings → QQ page, [`@deepseek-ai/dsh-fork-qq-login`](../../packages/fork/fork-qq-login/README.md), shows the connection and the login QR code to scan after a sign-out), [`@deepseek-ai/dsh-fork-style`](../../packages/fork/fork-style/README.md) keeps the persona layer the agents share, learned from QQ groups and public Bilibili text (its Settings → 人格与风格 page is [`@deepseek-ai/dsh-fork-style-settings`](../../packages/fork/fork-style-settings/README.md)), [`@deepseek-ai/dsh-bili`](../../packages/fork/bili/README.md) is the agent's own Bilibili account, and [`@deepseek-ai/dsh-fork-courses`](../../packages/fork/fork-courses/README.md) reminds the owner of course deadlines by fixed rules over the courses service (its Settings → 课程 DDL page is [`@deepseek-ai/dsh-fork-courses-settings`](../../packages/fork/fork-courses-settings/README.md)), [`@deepseek-ai/dsh-gmail`](../../packages/fork/gmail/README.md) holds the owner's Gmail accounts and the send gate that keeps a message the owner has not confirmed as a draft (its Settings → 邮箱 page is [`@deepseek-ai/dsh-gmail-settings`](../../packages/fork/gmail-settings/README.md)), and [`@deepseek-ai/dsh-fork-subagents`](../../packages/fork/fork-subagents/README.md) shows a Session's subagents and what each is doing now on a right-Sidebar page opened from the header. Behavior, configuration, and limitations are on each package README; the [upstream ledger](../../packages/fork/UPSTREAM.md) records how the fork tracks upstream.
+The fork-local services behind the event-driven agent: [`@deepseek-ai/dsh-event-bus`](../../packages/fork/event-bus/README.md) routes sensor events to notifications or unattended Sessions, [`@deepseek-ai/dsh-github-sensor`](../../packages/fork/github-sensor/README.md) polls GitHub, [`@deepseek-ai/dsh-wechat`](../../packages/fork/wechat/README.md) provides the `ownerNotifier` contract over WeChat, [`@deepseek-ai/dsh-qq`](../../packages/fork/qq/README.md) lurks in the QQ groups the owner lists and digests them, reading the messages from the `qq-recorder` service (an AMS service that holds the one QQ connection, so a DSH restart never reconnects QQ; its Settings → QQ page, [`@deepseek-ai/dsh-qq-login`](../../packages/fork/qq-login/README.md), shows the connection and the login QR code to scan after a sign-out), [`@deepseek-ai/dsh-speaking-style`](../../packages/fork/speaking-style/README.md) keeps the persona layer the agents share, learned from QQ groups and public Bilibili text (its Settings → 人格与风格 page is [`@deepseek-ai/dsh-speaking-style-settings`](../../packages/fork/speaking-style-settings/README.md)), [`@deepseek-ai/dsh-bili`](../../packages/fork/bili/README.md) is the agent's own Bilibili account, and [`@deepseek-ai/dsh-courses`](../../packages/fork/courses/README.md) reminds the owner of course deadlines by fixed rules over the courses service (its Settings → 课程 DDL page is [`@deepseek-ai/dsh-courses-settings`](../../packages/fork/courses-settings/README.md)), [`@deepseek-ai/dsh-gmail`](../../packages/fork/gmail/README.md) holds the owner's Gmail accounts and the send gate that keeps a message the owner has not confirmed as a draft (its Settings → 邮箱 page is [`@deepseek-ai/dsh-gmail-settings`](../../packages/fork/gmail-settings/README.md)), and [`@deepseek-ai/dsh-subagent-activity`](../../packages/fork/subagent-activity/README.md) shows a Session's subagents and what each is doing now on a right-Sidebar page opened from the header. Behavior, configuration, and limitations are on each package README; the [upstream ledger](../../packages/fork/UPSTREAM.md) records how the fork tracks upstream.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -202,7 +202,7 @@ Source: [`packages/fork/bili/src/index.ts`](../../packages/fork/bili/src/index.t
 
 ### `ctx.biliEvidence` — `BiliEvidence`
 
-`ctx.biliEvidence`: the Bilibili evidence verifier, provided by `@deepseek-ai/dsh-fork-tool-up` inside the `up` preset's isolated group, so only rows in that group see it.
+`ctx.biliEvidence`: the Bilibili evidence verifier, provided by `@deepseek-ai/dsh-tool-up` inside the `up` preset's isolated group, so only rows in that group see it.
 
 ```ts cordis-catalog
 /**
@@ -216,7 +216,7 @@ Source: [`packages/fork/bili/src/index.ts`](../../packages/fork/bili/src/index.t
 evidenceOf(ids: readonly string[], caller: BiliEvidenceCaller): Promise<BiliEvidenceItem[]>
 ```
 
-Source: [`packages/fork/fork-tool-up/src/evidence.ts`](../../packages/fork/fork-tool-up/src/evidence.ts)
+Source: [`packages/fork/tool-up/src/evidence.ts`](../../packages/fork/tool-up/src/evidence.ts)
 
 <a id="ctxbilihot--bilihot"></a>
 
@@ -241,6 +241,331 @@ words(options?: { since?: number }): Promise<string[]>
 ```
 
 Source: [`packages/fork/bili/src/hot.ts`](../../packages/fork/bili/src/hot.ts)
+
+<a id="ctxclaudecodesessions--claudecodeadmin"></a>
+
+### `ctx.claudeCodeSessions` — `ClaudeCodeAdmin`
+
+Service behind `ctx.claudeCodeSessions`.
+
+```ts cordis-catalog
+/**
+ * How the service account is signed in, from file existence only.
+ * @returns the login state.
+ */
+login(): CcLogin
+
+/**
+ * Live sessions and the tmux sessions the bridge started.
+ * @returns the view.
+ */
+async view(): Promise<CcView>
+
+/**
+ * Start a session, optionally with a first task.
+ * @param name - lower-case letters, digits, and hyphens, at most 31 characters.
+ * @param task - the first prompt, at most {@link MAX_TASK_CHARS} characters.
+ * @returns the outcome; the limit is a code of its own so a page can word it.
+ */
+async start(name: string, task: string | undefined): Promise<CcOutcome>
+
+/**
+ * Stop a session the bridge started.
+ * @param name - the name it was started with.
+ * @returns the outcome.
+ */
+async stop(name: string): Promise<CcOutcome>
+```
+
+Source: [`packages/fork/cc-admin/src/index.ts`](../../packages/fork/cc-admin/src/index.ts)
+
+<a id="ctxcontentguard--guardservice"></a>
+
+### `ctx.contentGuard` — `GuardService`
+
+The validator.
+
+```ts cordis-catalog
+/**
+ * Check a text before it is written where others can read it.
+ * @param text - the text as it would be written.
+ * @param options - purpose, audience, and the Session that wrote it.
+ * @returns `{ ok: true }`, or the rule that refused it and a reason that never repeats the text. Never rejects.
+ */
+async check(text: string, options: GuardCheckOptions): Promise<GuardVerdict>
+
+/**
+ * Counts for the Settings overview, last 24 hours, without any text.
+ * @returns checks, refusals by rule, the last layer failure, and the latest check.
+ */
+health(): GuardHealth
+```
+
+Source: [`packages/fork/content-guard/src/service.ts`](../../packages/fork/content-guard/src/service.ts)
+
+<a id="ctxcourses--courses"></a>
+
+### `ctx.courses` — `Courses`
+
+The courses client and the deadline poller.
+
+```ts cordis-catalog
+/**
+ * Whether reminders wait right now: the daily window, or the owner asleep when `followPresence` is on.
+ * @param now - Unix epoch milliseconds.
+ * @returns true while quiet.
+ */
+isQuiet(now: number = Date.now()): boolean
+
+/**
+ * Read the report once, send what is due, and record the outcome. Polls run one at a time; a manual poll while
+ * one runs waits for it and then runs.
+ * @param trigger - the timer or the Settings button.
+ * @returns the poll's record.
+ */
+poll(trigger: 'timer' | 'manual'): Promise<PollRecord>
+
+/**
+ * Everything Settings shows: the rules, the last poll, the sync health with the newest run's reason, the
+ * outage counter, the next reminders, and the latest messages (newest first).
+ * @returns a snapshot.
+ */
+status(): CoursesStatus
+```
+
+Source: [`packages/fork/courses/src/index.ts`](../../packages/fork/courses/src/index.ts)
+
+<a id="ctxeventbus--eventbus"></a>
+
+### `ctx.eventBus` — `EventBus`
+
+Durable event bus. Sensors publish; subscriptions from the configuration or created at run time decide which events reach which actuator; the bus owns dedupe, loop suppression, coalescing, and rate limits so actuators never see raw sensor traffic.
+
+```ts cordis-catalog
+/**
+ * Publish one sensor observation.
+ * @param input - event; `source` + `key` identify it for dedupe.
+ * @returns `accepted` (queued for at least one subscription), `duplicate`, `suppressed`, or `unmatched`.
+ * @throws when a required field is empty.
+ */
+async publish(input: BusEventInput): Promise<PublishOutcome>
+
+/**
+ * Stored events, oldest first.
+ * @returns snapshot of the events table.
+ */
+events(): BusEventRecord[]
+
+/**
+ * Stored batches, oldest first.
+ * @returns snapshot of the batches table.
+ */
+batches(): BatchRecord[]
+
+/**
+ * Number of event/subscription pairs waiting for a batch.
+ * @returns pending row count.
+ */
+pendingCount(): number
+
+/**
+ * The persistent Sessions of subscriptions with `session.persistent.enabled`.
+ * @returns one row per subscription that has one; empty before the storage domain opens.
+ */
+persistentSessions(): PersistentSessionView[]
+
+/**
+ * The subscription whose current persistent Session this is. Tools that may run only in that Session
+ * (for example the `up` preset's note tool) ask this.
+ * @param sessionId - Session to check.
+ * @returns the subscription id, or undefined when the Session is no subscription's current persistent Session.
+ */
+persistentSubscriptionOf(sessionId: string): string | undefined
+
+/**
+ * {@link ensureProject} with this Host's Workspace registry, once per path and process.
+ * @param path - absolute directory.
+ * @param name - title of a new project.
+ * @returns resolves once the directory exists and is a project; a registry failure is logged, not thrown.
+ */
+ensureProject(path: string, name: string): Promise<void>
+
+/**
+ * Add a routing rule at run time. It is stored durably and survives restarts.
+ * @param subscription - rule; validated like a configuration row.
+ * @param meta - who created the subscription, e.g. the creating Session.
+ * @returns the stored subscription with its (empty) status.
+ * @throws {SubscriptionError} `invalid_subscription` for a rule the bus cannot route, or `duplicate_id`
+ * for an id the configuration or another stored subscription already uses.
+ */
+async subscribe(subscription: Subscription, meta: SubscriptionMeta = {}): Promise<SubscriptionView>
+
+/**
+ * Remove a run-time subscription, its pending events, and its flush timer.
+ * Batches already created stay in the history.
+ * @param id - subscription id.
+ * @returns `removed`, `not_found`, or `config_owned` for an id the configuration owns.
+ */
+async unsubscribe(id: string): Promise<UnsubscribeOutcome>
+
+/**
+ * Pause or resume a run-time subscription. A paused subscription stops matching new events (they are
+ * `unmatched` for it) and holds the events already pending; resuming flushes those after the usual
+ * coalesce window. The flag is stored, so it survives restarts.
+ * @param id - subscription id.
+ * @param paused - true to pause, false to resume.
+ * @returns `ok`, `not_found`, or `config_owned` for an id the configuration owns.
+ */
+async setPaused(id: string, paused: boolean): Promise<PauseOutcome>
+
+/**
+ * The whole notification flow: every route with where its answer goes and which routes take it, including a configuration route
+ * taken out, so it can be seen and put back.
+ * @returns routes in matching order, then the ones taken out.
+ */
+flowRoutes(): FlowRouteView[]
+
+/**
+ * Changes of the flow.
+ * @param limit - most entries.
+ * @returns the newest first.
+ */
+flowHistory(limit: number = this.config.flowChangesKept): FlowChange[]
+
+/**
+ * Change the notification flow at run time. It is stored, so a restart or a deploy keeps it; a configuration route keeps its bundle
+ * row and `reset` puts it back.
+ * @param edit - the change.
+ * @param meta - who made it and why.
+ * @returns the route as it stands, the history entry, and anything worth a second look.
+ * @throws {FlowError} when the change would leave a route the bus cannot run, or a loop.
+ */
+async editFlow(edit: FlowEdit, meta: FlowEditMeta = {}): Promise<FlowEditResult>
+
+/**
+ * Keep a plugin's Sessions out of the auto-archive sweep (for example the QQ resident group Sessions or the WeChat chat
+ * Session). `check` runs only for Sessions that are otherwise due; return `true` (or a short reason) to keep one. A throw keeps it.
+ * Register inside an effect so a reload withdraws the claim:
+ * `ctx.inject(['eventBus'], scoped => {
+ *   scoped.effect(() => scoped.eventBus.protectSessions('qq', check), 'qq.archiveProtection()')
+ * })`.
+ * @param label - skip category name shown in the sweep log and Settings, for example `qq`.
+ * @param check - the claim.
+ * @returns the disposer; the bus drops every claim when it stops.
+ */
+protectSessions(label: string, check: SessionProtector): ProtectionDisposer
+
+/**
+ * Register a mover that runs on every {@link handOverSessions}, for a plugin whose bindings name a Session
+ * (what it delivers to it, or records as created by it). Register inside an effect so a reload withdraws it:
+ * `ctx.inject(['eventBus'], scoped => { scoped.effect(() => scoped.eventBus.registerHandover('monitor', move)) })`.
+ * @param kind - binding kind reported with what the mover moved, for example `monitor`.
+ * @param move - the mover.
+ * @returns the disposer.
+ */
+registerHandover(kind: string, move: SessionHandoverMover): () => void
+
+/**
+ * Move every binding of some Sessions to another Session, for a conversation that continues in a new Session
+ * (WeChat `/new`): the run-time subscriptions they created now name `to` as their creator, then each registered
+ * mover moves its own. A failing mover is logged and reported, and the others still run; a repeat moves nothing
+ * the first call moved.
+ * @param from - Sessions whose bindings move; `to` itself is ignored.
+ * @param to - Session that takes them over.
+ * @returns what moved, by kind (kinds that moved nothing are left out), and which movers failed.
+ */
+async handOverSessions(from: readonly string[], to: string): Promise<SessionHandoverReport>
+
+/**
+ * The auto-archive schedule, protectors, last sweep, and recently archived Sessions, for health and Settings.
+ * @returns snapshot.
+ */
+archiveStatus(): ArchiveStatus
+
+/**
+ * Run an auto-archive sweep now (Settings "sweep now"); joins a sweep already running.
+ * @param options - `dryRun: true` lists what a sweep would archive without archiving.
+ * @returns the sweep report.
+ */
+sweepArchive(options: { dryRun?: boolean } = {}): Promise<SweepReport>
+
+/**
+ * Counters for the last rolling hour and the current queue, for status pages.
+ * @returns snapshot; before the storage domain opens, only the configuration rows are counted.
+ */
+stats(): BusStats
+
+/**
+ * Every subscription, configuration first and then run-time ones by creation time, with live status.
+ * @returns snapshot; before the storage domain opens, only configuration rows with empty status.
+ */
+listSubscriptions(): SubscriptionView[]
+```
+
+Source: [`packages/fork/event-bus/src/index.ts`](../../packages/fork/event-bus/src/index.ts)
+
+<a id="ctxgithubsensor--githubsensor"></a>
+
+### `ctx.githubSensor` — `GithubSensor`
+
+Polls GitHub on a fixed period with conditional requests and publishes what is new since the previous poll. The first successful poll of a stream only records a baseline. Repositories come from the configuration and from watches created at run time; a stream several watches name is polled once.
+
+```ts cordis-catalog
+/**
+ * Stored cursor of one stream.
+ * @param stream - stream id, see {@link streamId}, or `notifications`.
+ * @returns cursor, or undefined before the first poll.
+ */
+cursor(stream: string): StreamCursor | undefined
+
+/**
+ * Outcome of the latest poll of one stream in this process.
+ * @param stream - stream id, see {@link streamId}, or `notifications`.
+ * @returns status, or undefined before the first poll since start or after the stream was forgotten.
+ */
+pollStatus(stream: string): PollStatus | undefined
+
+/**
+ * Watch a repository at run time. The watch is stored durably; a poll starts
+ * right away so the existing items become the baseline, and only later
+ * items are published. A watch with the same ref is replaced.
+ * @param ref - watch id, e.g. the bus subscription that routes its events.
+ * @param spec - `owner/name`, a non-empty subset of streams, and an optional commits branch.
+ * @returns the stored watch with its stream status.
+ * @throws {TypeError} when the ref, repository, streams, or branch is invalid.
+ */
+async watch(ref: string, spec: RepoWatch): Promise<WatchedRepo>
+
+/**
+ * Stop a run-time watch. Cursors of streams nobody polls anymore are
+ * deleted, so watching the repository again records a fresh baseline.
+ * @param ref - watch id.
+ * @returns true when the watch existed.
+ */
+async unwatch(ref: string): Promise<boolean>
+
+/**
+ * Every polled repository, configuration first and then run-time watches by creation time.
+ * @returns snapshot with per-stream baseline and latest poll.
+ */
+watchedRepos(): WatchedRepo[]
+
+/**
+ * Check that a repository exists and the repository token can read it. Never throws.
+ * @param repo - `owner/name`.
+ * @param signal - optional caller cancellation.
+ * @returns canonical name, visibility, and default branch, or the HTTP status (0 without a response) and a message.
+ */
+async probe(repo: string, signal?: AbortSignal): Promise<RepoProbe>
+
+/**
+ * Report which tokens resolve. Token values never leave the credential store.
+ * @returns per-reference status and whether notification polling is on.
+ */
+async credentialStatus(): Promise<CredentialStatus>
+```
+
+Source: [`packages/fork/github-sensor/src/index.ts`](../../packages/fork/github-sensor/src/index.ts)
 
 <a id="ctxgmail--gmail"></a>
 
@@ -393,336 +718,11 @@ Types: [AccountView](credentials.md)
 
 Source: [`packages/fork/gmail/src/index.ts`](../../packages/fork/gmail/src/index.ts)
 
-<a id="ctxlsyclaudecode--claudecodeadmin"></a>
+<a id="ctxownernotifier--ownernotifier"></a>
 
-### `ctx.forkClaudeCode` — `ClaudeCodeAdmin`
+### `ctx.ownerNotifier` — `OwnerNotifier`
 
-Service behind `ctx.forkClaudeCode`.
-
-```ts cordis-catalog
-/**
- * How the service account is signed in, from file existence only.
- * @returns the login state.
- */
-login(): CcLogin
-
-/**
- * Live sessions and the tmux sessions the bridge started.
- * @returns the view.
- */
-async view(): Promise<CcView>
-
-/**
- * Start a session, optionally with a first task.
- * @param name - lower-case letters, digits, and hyphens, at most 31 characters.
- * @param task - the first prompt, at most {@link MAX_TASK_CHARS} characters.
- * @returns the outcome; the limit is a code of its own so a page can word it.
- */
-async start(name: string, task: string | undefined): Promise<CcOutcome>
-
-/**
- * Stop a session the bridge started.
- * @param name - the name it was started with.
- * @returns the outcome.
- */
-async stop(name: string): Promise<CcOutcome>
-```
-
-Source: [`packages/fork/fork-cc-admin/src/index.ts`](../../packages/fork/fork-cc-admin/src/index.ts)
-
-<a id="ctxlsycourses--forkcourses"></a>
-
-### `ctx.forkCourses` — `ForkCourses`
-
-The courses client and the deadline poller.
-
-```ts cordis-catalog
-/**
- * Whether reminders wait right now: the daily window, or the owner asleep when `followPresence` is on.
- * @param now - Unix epoch milliseconds.
- * @returns true while quiet.
- */
-isQuiet(now: number = Date.now()): boolean
-
-/**
- * Read the report once, send what is due, and record the outcome. Polls run one at a time; a manual poll while
- * one runs waits for it and then runs.
- * @param trigger - the timer or the Settings button.
- * @returns the poll's record.
- */
-poll(trigger: 'timer' | 'manual'): Promise<PollRecord>
-
-/**
- * Everything Settings shows: the rules, the last poll, the sync health with the newest run's reason, the
- * outage counter, the next reminders, and the latest messages (newest first).
- * @returns a snapshot.
- */
-status(): CoursesStatus
-```
-
-Source: [`packages/fork/fork-courses/src/index.ts`](../../packages/fork/fork-courses/src/index.ts)
-
-<a id="ctxlsyeventbus--forkeventbus"></a>
-
-### `ctx.forkEventBus` — `ForkEventBus`
-
-Durable event bus. Sensors publish; subscriptions from the configuration or created at run time decide which events reach which actuator; the bus owns dedupe, loop suppression, coalescing, and rate limits so actuators never see raw sensor traffic.
-
-```ts cordis-catalog
-/**
- * Publish one sensor observation.
- * @param input - event; `source` + `key` identify it for dedupe.
- * @returns `accepted` (queued for at least one subscription), `duplicate`, `suppressed`, or `unmatched`.
- * @throws when a required field is empty.
- */
-async publish(input: ForkEventInput): Promise<PublishOutcome>
-
-/**
- * Stored events, oldest first.
- * @returns snapshot of the events table.
- */
-events(): ForkEventRecord[]
-
-/**
- * Stored batches, oldest first.
- * @returns snapshot of the batches table.
- */
-batches(): BatchRecord[]
-
-/**
- * Number of event/subscription pairs waiting for a batch.
- * @returns pending row count.
- */
-pendingCount(): number
-
-/**
- * The persistent Sessions of subscriptions with `session.persistent.enabled`.
- * @returns one row per subscription that has one; empty before the storage domain opens.
- */
-persistentSessions(): PersistentSessionView[]
-
-/**
- * The subscription whose current persistent Session this is. Tools that may run only in that Session
- * (for example the `up` preset's note tool) ask this.
- * @param sessionId - Session to check.
- * @returns the subscription id, or undefined when the Session is no subscription's current persistent Session.
- */
-persistentSubscriptionOf(sessionId: string): string | undefined
-
-/**
- * {@link ensureProject} with this Host's Workspace registry, once per path and process.
- * @param path - absolute directory.
- * @param name - title of a new project.
- * @returns resolves once the directory exists and is a project; a registry failure is logged, not thrown.
- */
-ensureProject(path: string, name: string): Promise<void>
-
-/**
- * Add a routing rule at run time. It is stored durably and survives restarts.
- * @param subscription - rule; validated like a configuration row.
- * @param meta - who created the subscription, e.g. the creating Session.
- * @returns the stored subscription with its (empty) status.
- * @throws {ForkSubscriptionError} `invalid_subscription` for a rule the bus cannot route, or `duplicate_id`
- * for an id the configuration or another stored subscription already uses.
- */
-async subscribe(subscription: Subscription, meta: SubscriptionMeta = {}): Promise<SubscriptionView>
-
-/**
- * Remove a run-time subscription, its pending events, and its flush timer.
- * Batches already created stay in the history.
- * @param id - subscription id.
- * @returns `removed`, `not_found`, or `config_owned` for an id the configuration owns.
- */
-async unsubscribe(id: string): Promise<UnsubscribeOutcome>
-
-/**
- * Pause or resume a run-time subscription. A paused subscription stops matching new events (they are
- * `unmatched` for it) and holds the events already pending; resuming flushes those after the usual
- * coalesce window. The flag is stored, so it survives restarts.
- * @param id - subscription id.
- * @param paused - true to pause, false to resume.
- * @returns `ok`, `not_found`, or `config_owned` for an id the configuration owns.
- */
-async setPaused(id: string, paused: boolean): Promise<PauseOutcome>
-
-/**
- * The whole notification flow: every route with where its answer goes and which routes take it, including a configuration route
- * taken out, so it can be seen and put back.
- * @returns routes in matching order, then the ones taken out.
- */
-flowRoutes(): FlowRouteView[]
-
-/**
- * Changes of the flow.
- * @param limit - most entries.
- * @returns the newest first.
- */
-flowHistory(limit: number = this.config.flowChangesKept): FlowChange[]
-
-/**
- * Change the notification flow at run time. It is stored, so a restart or a deploy keeps it; a configuration route keeps its bundle
- * row and `reset` puts it back.
- * @param edit - the change.
- * @param meta - who made it and why.
- * @returns the route as it stands, the history entry, and anything worth a second look.
- * @throws {ForkFlowError} when the change would leave a route the bus cannot run, or a loop.
- */
-async editFlow(edit: FlowEdit, meta: FlowEditMeta = {}): Promise<FlowEditResult>
-
-/**
- * Keep a plugin's Sessions out of the auto-archive sweep (for example the QQ resident group Sessions or the WeChat chat
- * Session). `check` runs only for Sessions that are otherwise due; return `true` (or a short reason) to keep one. A throw keeps it.
- * Register inside an effect so a reload withdraws the claim:
- * `ctx.inject(['forkEventBus'], scoped => {
- *   scoped.effect(() => scoped.forkEventBus.protectSessions('qq', check), 'qq.archiveProtection()')
- * })`.
- * @param label - skip category name shown in the sweep log and Settings, for example `qq`.
- * @param check - the claim.
- * @returns the disposer; the bus drops every claim when it stops.
- */
-protectSessions(label: string, check: SessionProtector): ProtectionDisposer
-
-/**
- * Register a mover that runs on every {@link handOverSessions}, for a plugin whose bindings name a Session
- * (what it delivers to it, or records as created by it). Register inside an effect so a reload withdraws it:
- * `ctx.inject(['forkEventBus'], scoped => { scoped.effect(() => scoped.forkEventBus.registerHandover('monitor', move)) })`.
- * @param kind - binding kind reported with what the mover moved, for example `monitor`.
- * @param move - the mover.
- * @returns the disposer.
- */
-registerHandover(kind: string, move: SessionHandoverMover): () => void
-
-/**
- * Move every binding of some Sessions to another Session, for a conversation that continues in a new Session
- * (WeChat `/new`): the run-time subscriptions they created now name `to` as their creator, then each registered
- * mover moves its own. A failing mover is logged and reported, and the others still run; a repeat moves nothing
- * the first call moved.
- * @param from - Sessions whose bindings move; `to` itself is ignored.
- * @param to - Session that takes them over.
- * @returns what moved, by kind (kinds that moved nothing are left out), and which movers failed.
- */
-async handOverSessions(from: readonly string[], to: string): Promise<SessionHandoverReport>
-
-/**
- * The auto-archive schedule, protectors, last sweep, and recently archived Sessions, for health and Settings.
- * @returns snapshot.
- */
-archiveStatus(): ArchiveStatus
-
-/**
- * Run an auto-archive sweep now (Settings "sweep now"); joins a sweep already running.
- * @param options - `dryRun: true` lists what a sweep would archive without archiving.
- * @returns the sweep report.
- */
-sweepArchive(options: { dryRun?: boolean } = {}): Promise<SweepReport>
-
-/**
- * Counters for the last rolling hour and the current queue, for status pages.
- * @returns snapshot; before the storage domain opens, only the configuration rows are counted.
- */
-stats(): BusStats
-
-/**
- * Every subscription, configuration first and then run-time ones by creation time, with live status.
- * @returns snapshot; before the storage domain opens, only configuration rows with empty status.
- */
-listSubscriptions(): SubscriptionView[]
-```
-
-Source: [`packages/fork/fork-event-bus/src/index.ts`](../../packages/fork/fork-event-bus/src/index.ts)
-
-<a id="ctxlsygithubsensor--githubsensor"></a>
-
-### `ctx.forkGithubSensor` — `GithubSensor`
-
-Polls GitHub on a fixed period with conditional requests and publishes what is new since the previous poll. The first successful poll of a stream only records a baseline. Repositories come from the configuration and from watches created at run time; a stream several watches name is polled once.
-
-```ts cordis-catalog
-/**
- * Stored cursor of one stream.
- * @param stream - stream id, see {@link streamId}, or `notifications`.
- * @returns cursor, or undefined before the first poll.
- */
-cursor(stream: string): StreamCursor | undefined
-
-/**
- * Outcome of the latest poll of one stream in this process.
- * @param stream - stream id, see {@link streamId}, or `notifications`.
- * @returns status, or undefined before the first poll since start or after the stream was forgotten.
- */
-pollStatus(stream: string): PollStatus | undefined
-
-/**
- * Watch a repository at run time. The watch is stored durably; a poll starts
- * right away so the existing items become the baseline, and only later
- * items are published. A watch with the same ref is replaced.
- * @param ref - watch id, e.g. the bus subscription that routes its events.
- * @param spec - `owner/name`, a non-empty subset of streams, and an optional commits branch.
- * @returns the stored watch with its stream status.
- * @throws {TypeError} when the ref, repository, streams, or branch is invalid.
- */
-async watch(ref: string, spec: RepoWatch): Promise<WatchedRepo>
-
-/**
- * Stop a run-time watch. Cursors of streams nobody polls anymore are
- * deleted, so watching the repository again records a fresh baseline.
- * @param ref - watch id.
- * @returns true when the watch existed.
- */
-async unwatch(ref: string): Promise<boolean>
-
-/**
- * Every polled repository, configuration first and then run-time watches by creation time.
- * @returns snapshot with per-stream baseline and latest poll.
- */
-watchedRepos(): WatchedRepo[]
-
-/**
- * Check that a repository exists and the repository token can read it. Never throws.
- * @param repo - `owner/name`.
- * @param signal - optional caller cancellation.
- * @returns canonical name, visibility, and default branch, or the HTTP status (0 without a response) and a message.
- */
-async probe(repo: string, signal?: AbortSignal): Promise<RepoProbe>
-
-/**
- * Report which tokens resolve. Token values never leave the credential store.
- * @returns per-reference status and whether notification polling is on.
- */
-async credentialStatus(): Promise<CredentialStatus>
-```
-
-Source: [`packages/fork/fork-github-sensor/src/index.ts`](../../packages/fork/fork-github-sensor/src/index.ts)
-
-<a id="ctxlsyguard--guardservice"></a>
-
-### `ctx.forkGuard` — `GuardService`
-
-The validator.
-
-```ts cordis-catalog
-/**
- * Check a text before it is written where others can read it.
- * @param text - the text as it would be written.
- * @param options - purpose, audience, and the Session that wrote it.
- * @returns `{ ok: true }`, or the rule that refused it and a reason that never repeats the text. Never rejects.
- */
-async check(text: string, options: GuardCheckOptions): Promise<GuardVerdict>
-
-/**
- * Counts for the Settings overview, last 24 hours, without any text.
- * @returns checks, refusals by rule, the last layer failure, and the latest check.
- */
-health(): GuardHealth
-```
-
-Source: [`packages/fork/fork-guard/src/service.ts`](../../packages/fork/fork-guard/src/service.ts)
-
-<a id="ctxlsynotifier--forknotifier"></a>
-
-### `ctx.forkNotifier` — `ForkNotifier`
-
-Notification actuator contract; a channel plugin provides it as `ctx.forkNotifier`.
+Notification actuator contract; a channel plugin provides it as `ctx.ownerNotifier`.
 
 ```ts cordis-catalog
 /**
@@ -731,7 +731,7 @@ Notification actuator contract; a channel plugin provides it as `ctx.forkNotifie
  * @param note - title, optional body, optional link, and optional origin.
  * @returns resolves once the channel accepted the message; rejects on failure.
  */
-send(note: ForkNote): Promise<void>
+send(note: OwnerNote): Promise<void>
 
 /**
  * Pass a message from another of the agent's Sessions to the owner's main agent: the channel's
@@ -741,7 +741,7 @@ send(note: ForkNote): Promise<void>
  * @returns the chat Session the message was queued in.
  * @throws when there is no chat to pass it to or the Session refused the prompt.
  */
-tellMainAgent?(message: ForkAgentMessage): Promise<string>
+tellMainAgent?(message: MainAgentMessage): Promise<string>
 
 /**
  * Whether the channel created this Session (e.g. its chat Session). Kept for callers outside the
@@ -752,11 +752,50 @@ tellMainAgent?(message: ForkAgentMessage): Promise<string>
 ownsSession?(sessionId: string): boolean
 ```
 
-Source: [`packages/fork/fork-event-bus/src/types.ts`](../../packages/fork/fork-event-bus/src/types.ts)
+Source: [`packages/fork/event-bus/src/types.ts`](../../packages/fork/event-bus/src/types.ts)
 
-<a id="ctxlsypresence--forkpresence"></a>
+<a id="ctxownerrelay--ownerrelay"></a>
 
-### `ctx.forkPresence` — `ForkPresence`
+### `ctx.ownerRelay` — `OwnerRelay`
+
+The relay. Claims live in memory: each channel claims its stored Sessions again when it registers, and unregistering releases them. Every decision is logged at info level with the Session id and the reason, never the text.
+
+```ts cordis-catalog
+/**
+ * Add a channel.
+ * @param channel - name, delivery, hooks, and fallback label.
+ * @returns a disposer that removes the channel and releases every Session it claimed.
+ * @throws when a channel of the same name is registered.
+ */
+registerChannel(channel: RelayChannel): () => void
+
+/**
+ * Relay a Session's turns through one channel from now on.
+ * @param sessionId - Session to claim; a claim by another channel moves to this one.
+ * @param channelName - the claiming channel's name.
+ */
+claim(sessionId: string, channelName: string): void
+
+/**
+ * Stop relaying a Session.
+ * @param sessionId - Session to release.
+ * @returns whether it was claimed.
+ */
+release(sessionId: string): boolean
+
+/**
+ * The channel that relays a Session's turns.
+ * @param sessionId - Session to check.
+ * @returns the channel name, or undefined when no channel claimed the Session.
+ */
+ownerOf(sessionId: string): string | undefined
+```
+
+Source: [`packages/fork/owner-relay/src/index.ts`](../../packages/fork/owner-relay/src/index.ts)
+
+<a id="ctxpresence--presence"></a>
+
+### `ctx.presence` — `Presence`
 
 Presence of the owner. Holds the latest Focus signal and Settings button in storage, evaluates the answer on demand and at every moment it can change by itself, and tells listeners when the owner falls asleep or wakes.
 
@@ -773,7 +812,7 @@ isAsleep(): boolean
  * @param note - the message; only `urgent` and `kinds` are read.
  * @returns true when it must not wait.
  */
-isUrgent(note: Pick<ForkNote, 'urgent' | 'kinds'>): boolean
+isUrgent(note: Pick<OwnerNote, 'urgent' | 'kinds'>): boolean
 
 /**
  * Listen for the owner falling asleep and waking, whatever the source.
@@ -805,7 +844,7 @@ async flushNow(): Promise<number>
  * @returns `asleep` or `awake`, as the signal says.
  * @throws {Error} for any other kind.
  */
-async ingest(event: ForkEventInput): Promise<string>
+async ingest(event: BusEventInput): Promise<string>
 
 /**
  * Press "I am going to sleep" or "I am awake", optionally with an end.
@@ -844,13 +883,13 @@ view(deferred: number = this.deferredCount()): PresenceView
 deferredCount(): number
 ```
 
-Source: [`packages/fork/fork-presence/src/index.ts`](../../packages/fork/fork-presence/src/index.ts)
+Source: [`packages/fork/presence/src/index.ts`](../../packages/fork/presence/src/index.ts)
 
-<a id="ctxlsyqq--qqobserver"></a>
+<a id="ctxqq--qqobserver"></a>
 
-### `ctx.forkQq` — `QqObserver`
+### `ctx.qq` — `QqObserver`
 
-The observer. Provides `ctx.forkQq`, whose read methods the agent tools use. The recorded data lives in the qq-recorder service: every read of it is a request that fails with RecorderUnavailable while the recorder is down.
+The observer. Provides `ctx.qq`, whose read methods the agent tools use. The recorded data lives in the qq-recorder service: every read of it is a request that fails with RecorderUnavailable while the recorder is down.
 
 ```ts cordis-catalog
 /**
@@ -1018,13 +1057,13 @@ async loginStatus(options: { fresh?: boolean } = {}): Promise<QqLoginReading>
 async refreshLogin(): Promise<{ login: QqLoginReading; refreshed: boolean; reason: RefreshRefusal | null }>
 ```
 
-Source: [`packages/fork/fork-qq/src/index.ts`](../../packages/fork/fork-qq/src/index.ts)
+Source: [`packages/fork/qq/src/index.ts`](../../packages/fork/qq/src/index.ts)
 
-<a id="ctxlsyqqbot--qqbotchannel"></a>
+<a id="ctxqqbot--qqbotchannel"></a>
 
-### `ctx.forkQqBot` — `QqBotChannel`
+### `ctx.qqBot` — `QqBotChannel`
 
-QQ channel. Connects the official bot to the QQ Open Platform, answers only the openids in `allow`, gives each private chat and each group its own chat Session, and delivers each turn's final answer that `ctx.ownerRelay` hands its `qqbot` channel. QQ lets a bot reply to a message within a window (about an hour in private chats, minutes in groups) and at most five times; later answers go out as proactive messages, and an answer QQ refuses falls back to `ctx.forkNotifier` through the relay.
+QQ channel. Connects the official bot to the QQ Open Platform, answers only the openids in `allow`, gives each private chat and each group its own chat Session, and delivers each turn's final answer that `ctx.ownerRelay` hands its `qqbot` channel. QQ lets a bot reply to a message within a window (about an hour in private chats, minutes in groups) and at most five times; later answers go out as proactive messages, and an answer QQ refuses falls back to `ctx.ownerNotifier` through the relay.
 
 ```ts cordis-catalog
 /**
@@ -1036,13 +1075,13 @@ QQ channel. Connects the official bot to the QQ Open Platform, answers only the 
 ownsSession(sessionId: string): boolean
 ```
 
-Source: [`packages/fork/fork-qqbot/src/index.ts`](../../packages/fork/fork-qqbot/src/index.ts)
+Source: [`packages/fork/qqbot/src/index.ts`](../../packages/fork/qqbot/src/index.ts)
 
-<a id="ctxlsystyle--styleservice"></a>
+<a id="ctxspeakingstyle--styleservice"></a>
 
-### `ctx.forkStyle` — `StyleService`
+### `ctx.speakingStyle` — `StyleService`
 
-DSH's speaking style: what the root row provides as `ctx.forkStyle`.
+DSH's speaking style: what the root row provides as `ctx.speakingStyle`.
 
 ```ts cordis-catalog
 /**
@@ -1131,20 +1170,20 @@ async lookup(term: string): Promise<LookupAnswer>
  * A `persona_update` call: at most `persona.maxChars` characters, the note filter, the guard, and at least
  * `persona.minIntervalHours` since the last version (the agent's or the owner's; an owner edit on the Settings page
  * is never limited). The owner is told which version it became and how much changed, never the text, through
- * `ctx.forkNotifier`, whose channel holds the notice while the owner sleeps.
+ * `ctx.ownerNotifier`, whose channel holds the notice while the owner sleeps.
  * @param input - the whole card, a one-line reason, and the writing Session.
  * @returns `recorded`, or `rejected` with a reason code.
  */
 async updateCard(input: { readonly card: string; readonly reason: string; readonly sessionId?: string }): Promise<WriteAnswer>
 ```
 
-Source: [`packages/fork/fork-style/src/index.ts`](../../packages/fork/fork-style/src/index.ts)
+Source: [`packages/fork/speaking-style/src/index.ts`](../../packages/fork/speaking-style/src/index.ts)
 
-<a id="ctxlsyvoice--forkvoice"></a>
+<a id="ctxvoice--voice"></a>
 
-### `ctx.forkVoice` — `ForkVoice`
+### `ctx.voice` — `Voice`
 
-Service behind `ctx.forkVoice`.
+Service behind `ctx.voice`.
 
 ```ts cordis-catalog
 /**
@@ -1181,44 +1220,5 @@ speak(text: string, options: { signal?: AbortSignal } = {}): Promise<SpeakResult
 async transcribe(path: string, options: { signal?: AbortSignal } = {}): Promise<TranscribeResult>
 ```
 
-Source: [`packages/fork/fork-voice/src/index.ts`](../../packages/fork/fork-voice/src/index.ts)
-
-<a id="ctxownerrelay--ownerrelay"></a>
-
-### `ctx.ownerRelay` — `OwnerRelay`
-
-The relay. Claims live in memory: each channel claims its stored Sessions again when it registers, and unregistering releases them. Every decision is logged at info level with the Session id and the reason, never the text.
-
-```ts cordis-catalog
-/**
- * Add a channel.
- * @param channel - name, delivery, hooks, and fallback label.
- * @returns a disposer that removes the channel and releases every Session it claimed.
- * @throws when a channel of the same name is registered.
- */
-registerChannel(channel: RelayChannel): () => void
-
-/**
- * Relay a Session's turns through one channel from now on.
- * @param sessionId - Session to claim; a claim by another channel moves to this one.
- * @param channelName - the claiming channel's name.
- */
-claim(sessionId: string, channelName: string): void
-
-/**
- * Stop relaying a Session.
- * @param sessionId - Session to release.
- * @returns whether it was claimed.
- */
-release(sessionId: string): boolean
-
-/**
- * The channel that relays a Session's turns.
- * @param sessionId - Session to check.
- * @returns the channel name, or undefined when no channel claimed the Session.
- */
-ownerOf(sessionId: string): string | undefined
-```
-
-Source: [`packages/fork/owner-relay/src/index.ts`](../../packages/fork/owner-relay/src/index.ts)
+Source: [`packages/fork/voice/src/index.ts`](../../packages/fork/voice/src/index.ts)
 <!-- END GENERATED cordis-surface -->

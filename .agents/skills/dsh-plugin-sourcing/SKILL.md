@@ -79,7 +79,7 @@ Installing, always pinned to the version you reviewed:
 
   ```sh
   sudo -n -u dsh-runtime /usr/bin/env HOME=/Users/dsh-runtime DSH_HOME=/Users/dsh-runtime/.dsh PATH=/opt/homebrew/bin:/usr/bin:/bin \
-    node /Users/Shared/fork-dsh/current/node_modules/@deepseek-ai/dsh/lib/bin.js plugin --profile event add <name>@<version>
+    node /Users/Shared/dsh/current/node_modules/@deepseek-ai/dsh/lib/bin.js plugin --profile event add <name>@<version>
   sudo -n /bin/launchctl kickstart -k system/app.lishuyu.dsh-events
   ```
 

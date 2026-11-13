@@ -1,5 +1,5 @@
 /** The DM channel alone: which answers go to the owner through bili-svc, and what falls back to WeChat. */
-import type { ForkNote } from '@deepseek-ai/dsh-fork-event-bus'
+import type { OwnerNote } from '@deepseek-ai/dsh-event-bus'
 import { describe, expect, it, vi } from 'vitest'
 import { BILI_FALLBACK_LABEL, DmChannel, type DmOutcome } from '../src/dm.ts'
 
@@ -8,7 +8,7 @@ const SENT: DmOutcome = { status: 'sent', detail: 'sent' }
 /** A host double whose replies wait until the test settles them. */
 /** How the host double answers: its notifier, the share's bili-svc outcome, whether the share is current, and how a share is recorded. */
 interface HostOptions {
-  notifier?: false | ((note: ForkNote) => Promise<void>)
+  notifier?: false | ((note: OwnerNote) => Promise<void>)
   share?: DmOutcome
   current?: boolean
   settled?: () => Promise<void>
@@ -16,8 +16,8 @@ interface HostOptions {
 
 function host(options: HostOptions = {}) {
   const pending: Array<(outcome: DmOutcome) => void> = []
-  const notes: ForkNote[] = []
-  const send = options.notifier === undefined ? (note: ForkNote) => { notes.push(note); return Promise.resolve() } : options.notifier
+  const notes: OwnerNote[] = []
+  const send = options.notifier === undefined ? (note: OwnerNote) => { notes.push(note); return Promise.resolve() } : options.notifier
   const value = {
     replyOwner: vi.fn((_text: string) => new Promise<DmOutcome>((resolve) => { pending.push(resolve) })),
     shareOwner: vi.fn((_text: string) => Promise.resolve(options.share ?? SENT)),
@@ -121,7 +121,7 @@ describe('DmChannel', () => {
     const dm = new DmChannel(missing.host)
     dm.expectReply('bili-1')
     dm.onTurnEnd('bili-1', 'answer')
-    const answer = expect(dm.deliver({ sessionId: 'bili-1', text: 'a reply', outcome: 'completed' })).rejects.toThrow('no forkNotifier is mounted')
+    const answer = expect(dm.deliver({ sessionId: 'bili-1', text: 'a reply', outcome: 'completed' })).rejects.toThrow('no ownerNotifier is mounted')
     await new Promise(resolve => setImmediate(resolve))
     await missing.settle({ status: 'blocked', detail: 'bili-svc\'s Reply Gate answered blocked' })
     await answer
@@ -155,8 +155,8 @@ describe('DmChannel and the daily share', () => {
     const dm = new DmChannel(h.host)
     dm.expectShare('bili-1')
     dm.onTurnEnd('bili-1', 'answer')
-    await expect(dm.deliver({ sessionId: 'bili-1', text: '今天的推荐', outcome: 'completed' })).rejects.toThrow('no forkNotifier is mounted')
-    expect(h.host.shareSettled).toHaveBeenCalledWith('bili-1', 'failed', 'bili-svc did not send it (bili-svc answered held) and no forkNotifier is mounted')
+    await expect(dm.deliver({ sessionId: 'bili-1', text: '今天的推荐', outcome: 'completed' })).rejects.toThrow('no ownerNotifier is mounted')
+    expect(h.host.shareSettled).toHaveBeenCalledWith('bili-1', 'failed', 'bili-svc did not send it (bili-svc answered held) and no ownerNotifier is mounted')
   })
 
   it('sends nothing for a share turn that was already given up, and keeps its answer in the Session', async () => {

@@ -1069,7 +1069,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'T',
-    declaration: 'export type T = TranslateNS<\'fork.subagents\'>;',
+    declaration: 'export type T = TranslateNS<\'subagent-activity\'>;',
   },
   {
     name: 'ThemeDefinition',

@@ -1,0 +1,58 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/fork/tool-courses/README.md
+/:
+  en: ccb6a6b94d23276a
+  zh: 5c3a3c5ce56c00be
+/deepseek-ai-dsh-tool-courses:
+  en: e730a3313f409a02
+  zh: 2335578f0917a3d2
+/deepseek-ai-dsh-tool-courses/summary:
+  en: afdf3e08c53d1623
+  zh: 17ec59d031e50609
+/deepseek-ai-dsh-tool-courses/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-tool-courses/use-this-package:
+  en: ab5f007bd68bb6aa
+  zh: 1fe303c5b640ef55
+/deepseek-ai-dsh-tool-courses/understand-the-implementation:
+  en: 44a66fbefb25d57f
+  zh: 9adad5933f2968e1
+/deepseek-ai-dsh-tool-courses/further-exploration:
+  en: f5de09a3b256aa0c
+  zh: d397d20f17ccf7e7
+/deepseek-ai-dsh-tool-courses/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-tool-courses/model-experience/course-tools:
+  en: 41c39ec13eaad826
+  zh: 10e439ed644a8d55
+/deepseek-ai-dsh-tool-courses/model-experience/course-tools/what-the-model-sees:
+  en: 84469b8ad42ac919
+  zh: 274ae820c618675b
+/deepseek-ai-dsh-tool-courses/model-experience/course-tools/token-effect:
+  en: 9b6fea54ebf84b5a
+  zh: 0cfa524a6c076636
+/deepseek-ai-dsh-tool-courses/model-experience/course-tools/kv-cache-effect:
+  en: 5b38c23791d4786e
+  zh: 70fd36edd6c64c71
+/deepseek-ai-dsh-tool-courses/model-experience/course-tool-results:
+  en: 401229b6ecfa3d4d
+  zh: 663f922cb44517fc
+/deepseek-ai-dsh-tool-courses/model-experience/course-tool-results/what-the-model-sees:
+  en: 7f0c45388509287d
+  zh: 8b6c9d60ba384ba6
+/deepseek-ai-dsh-tool-courses/model-experience/course-tool-results/token-effect:
+  en: f748da4f87577fea
+  zh: bc010f9b82ae2fbc
+/deepseek-ai-dsh-tool-courses/model-experience/course-tool-results/kv-cache-effect:
+  en: 2fbf2175168e8244
+  zh: 37ee13b733de02cd
+/deepseek-ai-dsh-tool-courses/known-limitations-and-deferred-work:
+  en: a0a56b2995b3cfbb
+  zh: d77d08d5f1eefcb4
+/deepseek-ai-dsh-tool-courses/known-limitations-and-deferred-work/dev-note:
+  en: 73d9f04934a4f842
+  zh: b8112c8cd4dc2992

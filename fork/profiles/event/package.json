@@ -7,7 +7,7 @@
       "bundles": [
         "@deepseek-ai/dsh-base",
         "@deepseek-ai/dsh-web-app",
-        "@deepseek-ai/dsh-fork-event-bundle"
+        "@deepseek-ai/dsh-event-bundle"
       ]
     }
   }

@@ -4,7 +4,7 @@
 # usage: check-deploy-dsh.sh
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-WORK=$(mktemp -d "${TMPDIR:-/tmp}/fork-deploy-dsh.XXXXXX")
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/deploy-dsh.XXXXXX")
 trap 'rm -rf "${WORK:?}"' EXIT
 fail() { echo "check-deploy-dsh: FAIL: $*" >&2; exit 1; }
 
@@ -67,7 +67,7 @@ deploy --plan
 [ "$RC" = 0 ] && said 'hot, no build' || fail "a docs change must plan no build: $OUT"
 requested && fail "--plan must not deploy"
 
-change packages/fork/fork-demo/src/index.ts
+change packages/fork/demo/src/index.ts
 deploy --plan
 said 'hot: build' || fail "a plugin change must plan the hot path: $OUT"
 

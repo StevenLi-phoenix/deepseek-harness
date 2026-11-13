@@ -22,5 +22,5 @@ for (const dir of dirs) {
   }
 }
 const optional = Object.keys(optionalDependencies).length === 0 ? {} : { optionalDependencies }
-writeFileSync(out, `${JSON.stringify({ name: 'fork-dsh-app', version: '0.0.0', private: true, dependencies, ...optional }, null, 2)}\n`)
+writeFileSync(out, `${JSON.stringify({ name: 'dsh-app', version: '0.0.0', private: true, dependencies, ...optional }, null, 2)}\n`)
 console.log(`consumer-manifest: ${Object.keys(dependencies).length} package(s), ${Object.keys(optionalDependencies).length} optional → ${out}`)

@@ -9,7 +9,7 @@ Deployment files for running this fork as an always-on, event-driven agent servi
 | Path | Contents |
 |---|---|
 | [`CHANGELOG.md`](CHANGELOG.md) | Fork-local changes (Keep a Changelog) |
-| [`bundles/event/`](bundles/event/) | `@deepseek-ai/dsh-fork-event-bundle`: the event composition as a bundle layer (code-owned; routing state lives in storage and is managed by the agent's tools). The `unattended` preset keeps the `workflow` tool; Agent Teams are disabled at the bundle |
+| [`bundles/event/`](bundles/event/) | `@deepseek-ai/dsh-event-bundle`: the event composition as a bundle layer (code-owned; routing state lives in storage and is managed by the agent's tools). The `unattended` preset keeps the `workflow` tool; Agent Teams are disabled at the bundle |
 | [`profiles/event/`](profiles/event/) | Event profile: `package.json` (Web bundles plus the event bundle) and `cordis.patch.yml`, the owner's empty patch layer that Web UI settings write to |
 | [`deploy/RUNBOOK.md`](deploy/RUNBOOK.md) | Isolated deployment on the Mac mini: `dsh-runtime` user, LaunchDaemon, secrets, WeChat binding, verification |
 | [`deploy/`](deploy/) | `install-app.sh`, `setup-profile.sh` (links plugins and the bundle; creates the owner layer once), `check-setup-profile.sh <installed prefix>` (checks fresh, migrated, and re-run homes; `upgrade.sh` runs it before switching `current`), `upgrade.sh`, `wechat-login.mjs`, `home.cordis.patch.yml`, LaunchDaemon template |
@@ -20,7 +20,7 @@ Deployment files for running this fork as an always-on, event-driven agent servi
 ```sh
 pnpm exec vitest run packages/fork
 pnpm exec vitest run packages/fork --coverage --coverage.include='packages/fork/*/src/**/*.ts'
-pnpm exec tsc -b packages/fork/fork-cc-bridge packages/fork/fork-event-bus packages/fork/fork-github-sensor packages/fork/fork-tool-watch packages/fork/fork-wechat packages/fork/fork-qq packages/fork/fork-qqbot packages/fork/fork-tool-qq packages/fork/fork-style packages/fork/fork-guard packages/fork/fork-balance packages/fork/bili packages/fork/tool-bili
+pnpm exec tsc -b packages/fork/cc-bridge packages/fork/event-bus packages/fork/github-sensor packages/fork/tool-watch packages/fork/wechat packages/fork/qq packages/fork/qqbot packages/fork/tool-qq packages/fork/speaking-style packages/fork/content-guard packages/fork/provider-balance packages/fork/bili packages/fork/tool-bili
 pnpm exec tsc -p tsconfig.host.json --noEmit   # also type-checks tests
 pnpm exec tsx scripts/run-oxlint.ts packages/fork fork/deploy
 pnpm run constraints && pnpm run verify-product-use && pnpm run verify-tsconfig-paths
@@ -37,9 +37,9 @@ pnpm run verify-config-catalog && pnpm run verify-cordis-catalog && pnpm run ver
 export DSH_HOME=/path/to/test-home            # never the live ~/.dsh
 mkdir -p "$DSH_HOME/profiles/event/node_modules/@deepseek-ai"
 cp fork/profiles/event/package.json fork/profiles/event/cordis.patch.yml "$DSH_HOME/profiles/event/"
-ln -s "$PWD/fork/bundles/event" "$DSH_HOME/profiles/event/node_modules/@deepseek-ai/dsh-fork-event-bundle"
+ln -s "$PWD/fork/bundles/event" "$DSH_HOME/profiles/event/node_modules/@deepseek-ai/dsh-event-bundle"
 pnpm dsh event --dump-config | less            # composed tree, with the layer that set each row
 pnpm dsh event --port 3092 --no-open           # Web UI + sensors + bus + WeChat channel
 ```
 
-Without `$DSH_HOME/fork-wechat/account.json` the WeChat channel idles and queues notifications. Watches are created from a Session with the `unattended` preset (`watch_create`); a `$DSH_HOME/cordis.patch.yml` can still override any row for experiments.
+Without `$DSH_HOME/wechat/account.json` the WeChat channel idles and queues notifications. Watches are created from a Session with the `unattended` preset (`watch_create`); a `$DSH_HOME/cordis.patch.yml` can still override any row for experiments.
