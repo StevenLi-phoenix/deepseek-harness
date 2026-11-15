@@ -15,6 +15,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-plugin-config/client'
 // Type-only: registers the owner-memory locale namespace this component's `t` reads.
 import type {} from './locales.ts'
+import { MergePanel, ForgetConfirm } from './ConfirmPanels.tsx'
 import { EntriesCard } from './EntriesCard.tsx'
 import { FeedbackCard } from './FeedbackCard.tsx'
 import { GuardCard } from './GuardCard.tsx'
@@ -22,6 +23,7 @@ import { POLL_INTERVAL_MS, startPolling, type MemoryActions, type MemoryState } 
 import { Button, type Translate } from './parts.tsx'
 import { PendingCard } from './PendingCard.tsx'
 import { RollbackCard } from './RollbackCard.tsx'
+import { SuggestionsCard } from './SuggestionsCard.tsx'
 import css from './Memory.module.css'
 
 /** Plugin entries whose configuration the All settings card lists on this page: the content guard's. */
@@ -60,8 +62,13 @@ export function MemorySection({ useMemory, actions, renderFactorySlot, t }: Memo
   const status = statusLine(state, translate)
   const { view } = state
   const waiting = (view?.pending ?? []).filter(item => !state.hiding.includes(item.id)).length
+  const onKeyDown = (event: { key: string }): void => {
+    if (event.key !== 'Escape') return
+    if (state.merge !== null) actions.mergeCancel()
+    else if (state.purge !== null) actions.purgeCancel()
+  }
   return (
-    <section className={css.section} aria-label={translate('title')} data-stale={state.stale ? '' : undefined}>
+    <section className={css.section} aria-label={translate('title')} data-stale={state.stale ? '' : undefined} onKeyDown={onKeyDown}>
       <div className={css.header}>
         <span className={css.status} role="status">
           <span className={css.dot} data-tone={status.tone} aria-hidden="true" />
@@ -81,7 +88,10 @@ export function MemorySection({ useMemory, actions, renderFactorySlot, t }: Memo
         ? null
         : (
           <>
+            <MergePanel state={state} actions={actions} t={translate} />
+            <ForgetConfirm state={state} actions={actions} t={translate} />
             <PendingCard state={state} actions={actions} t={translate} />
+            <SuggestionsCard state={state} actions={actions} t={translate} />
             <EntriesCard state={state} actions={actions} t={translate} />
             <RollbackCard state={state} actions={actions} t={translate} />
             <FeedbackCard state={state} actions={actions} t={translate} />

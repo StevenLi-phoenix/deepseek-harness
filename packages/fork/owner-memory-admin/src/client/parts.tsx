@@ -3,7 +3,7 @@
  * layout components. All text from the Host is rendered as text, never as markup.
  */
 
-import { useId, type ReactNode } from 'react'
+import { useId, type KeyboardEvent, type ReactNode } from 'react'
 import type { MemoryKey } from './locales.ts'
 import css from './Memory.module.css'
 
@@ -32,11 +32,17 @@ export function when(iso: string): string {
     : time.toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-/** One titled card. */
-export function Card({ title, meta, children, id }: { title: string; meta?: string; children: ReactNode; id?: string }): ReactNode {
+/** One titled card; `onKeyDown` lets the card answer a key pressed anywhere inside it. */
+export function Card({ title, meta, children, id, onKeyDown }: {
+  title: string
+  meta?: string
+  children: ReactNode
+  id?: string
+  onKeyDown?: (event: KeyboardEvent<HTMLElement>) => void
+}): ReactNode {
   const heading = useId()
   return (
-    <section className={css.card} aria-labelledby={heading} {...id === undefined ? {} : { 'data-card': id }}>
+    <section className={css.card} aria-labelledby={heading} onKeyDown={onKeyDown} {...id === undefined ? {} : { 'data-card': id }}>
       <div className={css.cardHeader}>
         <span id={heading} className={css.cardTitle}>{title}</span>
         {meta === undefined ? null : <span className={css.meta}>{meta}</span>}
@@ -60,8 +66,10 @@ export function Button(props: {
   busy?: boolean
   pressed?: boolean
   label?: string
+  /** Take the focus when the button appears, so the owner can answer at once. */
+  autoFocus?: boolean
 }): ReactNode {
-  const { children, onClick, kind = 'quiet', disabled = false, busy = false, pressed, label } = props
+  const { children, onClick, kind = 'quiet', disabled = false, busy = false, pressed, label, autoFocus = false } = props
   return (
     <button
       type="button"
@@ -71,6 +79,7 @@ export function Button(props: {
       disabled={disabled || busy}
       aria-pressed={pressed}
       aria-label={label}
+      autoFocus={autoFocus}
       onClick={onClick}
     >
       {children}

@@ -176,9 +176,10 @@
 
 .rowButton {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
   padding: 0;
   border: none;
   background: none;
@@ -186,6 +187,183 @@
   font: inherit;
   text-align: start;
   cursor: pointer;
+}
+
+/* A compact entry row: the checkbox, then one line of category, opening, date, and the protected mark. */
+.entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 0;
+}
+
+.entry + .entry {
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.entry[data-open] {
+  padding-bottom: 10px;
+}
+
+.check {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--dsw-alias-state-business-primary);
+}
+
+.entryText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: start;
+}
+
+.entry .detail {
+  flex-basis: 100%;
+  padding-left: 23px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar .input {
+  flex: 1 1 220px;
+  width: auto;
+}
+
+.modes {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+.selection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.checkLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-skeleton);
+}
+
+.moveTo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.moveTo .input {
+  width: auto;
+  padding: 3px 6px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fieldLabel {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+/* One duplicate group: its verdict, its similarity, and its members with the differing clauses marked. */
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0;
+}
+
+.group + .group {
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.groupHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.groupHead .actions {
+  margin-left: auto;
+}
+
+.groupMembers {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.groupMember {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  border-left: 2px solid var(--dsw-alias-border-l2);
+  border-radius: 0 var(--dsw-radius-md) var(--dsw-radius-md) 0;
+}
+
+.diff {
+  padding: 0 1px;
+  border-radius: var(--dsw-radius-sm);
+  background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 22%, transparent);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* A long set of proposals stays one screen tall and scrolls; every item is still reachable by keyboard. */
+.suggestList {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.suggestList .text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.confirmList {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
 }
 
 .rowButton:focus-visible,

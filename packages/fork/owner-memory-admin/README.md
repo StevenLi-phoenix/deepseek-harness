@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Review and undo what the agent remembers without a terminal. **Settings → Memory** lists the writes waiting for you first, with their source and Session, to approve or discard. Below are the memories, searchable by text and category, with full text and history on demand, to undo or erase. A rollback card undoes one Session's changes or everything since a time, previewing first. A card holds your keep/delete verdicts on persona replies, and the page ends with the content guard's refusals of the last 24 hours and its settings.
+Review and tidy what the agent remembers without a terminal. **Settings → Memory** lists the writes waiting for you first, with their source and Session, to approve or discard. A curation card then proposes merges of entries that say nearly the same thing and points at entries that look over, and every proposal waits for your click. Below are the memories as compact one-line rows — category, the opening, the date, the protected mark — searchable by text and by id, expandable to the full text and history, selectable for a merge, an erase, or a category change, with a filter onto the duplicate groups where the differing clauses are marked. A rollback card undoes one Session's changes or everything since a time, previewing first. A card holds your keep/delete verdicts on persona replies, and the page ends with the content guard's refusals of the last 24 hours and its settings.
 
 ## Table of Contents
 
@@ -41,7 +41,9 @@ What each card does:
 | Card | Shows | You can |
 |---|---|---|
 | Waiting for you | Protected writes (instructions, preferences, identity) the agent made in a turn you did not start alone, with their source, Session, and the day they lapse | Approve or discard one; approve or discard all (a second click confirms) |
-| Entries | Memories, newest change first, with category counts; the opening of each text | Search, filter by category, page; open one for its full text and history; undo its latest change; erase it completely after seeing what goes |
+| Curation | Proposed merges of near-duplicates (the differing clauses marked) and entries whose expiry or term has passed, from the Host's read | Accept (opens the merge or erase preview) or set one aside |
+| Entries | Memories as compact rows, newest change first, with category counts: category, the opening, the date, and the protected mark | Search by text or id, filter by category, page; open one for its full text and history; undo its latest change; erase it completely after seeing what goes; select rows to merge, erase, or move to another category |
+| Duplicates | Only the groups that say nearly the same thing, with the clauses that differ marked and the group's similarity | Merge a group into one (previewed, and the wording is yours) or keep both |
 | Rollback | The Sessions that changed memory | Pick a Session or a time, preview the changes, confirm |
 | Reply feedback | Your keep/delete verdicts on persona replies | Remove one, or add one by hand |
 | Content guard | Texts checked and refused in the last 24 hours, refusals by rule name, the latest layer failure (from `GET /api/content-guard`, [`content-guard`](../content-guard/README.md); hidden where that route is not mounted) | Edit the `content-guard` entry in the All settings card below it ([`plugin-config`](../plugin-config/README.md)) |
@@ -56,7 +58,7 @@ The same operations exist as the `memory-admin` command-line tool; it stays as t
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The page talks to `GET`/`POST /api/owner-memory`, registered by `@deepseek-ai/dsh-owner-memory/settings`. The route sits under `/api`, so the connection answers 403 to everyone but the owner's signed-in Web UI. It registers no agent tool and has no action that writes an entry, so the agent cannot call it and a write waiting for you cannot be approved by the Session that made it. A `POST` must be `application/json` from the same origin. Actions are validated with schemastery; the log records the action, the ids, and the outcome with its duration, never entry text.
+The page talks to `GET`/`POST /api/owner-memory`, registered by `@deepseek-ai/dsh-owner-memory/settings`. The route sits under `/api`, so the connection answers 403 to everyone but the owner's signed-in Web UI. It registers no agent tool, so the agent cannot call it and a write waiting for you cannot be approved by the Session that made it; the only writes it makes are the owner's explicit merge (previewed, applied with the preview's token) and category change. A `POST` must be `application/json` from the same origin. Actions are validated with schemastery; the log records the action, the ids, and the outcome with its duration, never entry text.
 
 Rollback and erase are two steps. Without a `confirm` token the request is a preview: the Host computes what would change and answers it with a token over that answer and the memory it was computed from. With the token, the Host recomputes and applies only if the token still matches, and checks again under the memory file's lock before it writes; if memory changed in between, nothing is applied (`409`) and the page asks you to preview again.
 

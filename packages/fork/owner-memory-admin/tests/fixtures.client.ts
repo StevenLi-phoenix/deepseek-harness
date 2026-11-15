@@ -1,5 +1,32 @@
-import type { ActionResult, DetailView, GuardOverview, MemoryAction, MemoryQuery, MemoryView } from '../src/view.ts'
+import type { ActionResult, CurationView, DetailView, GuardOverview, MemoryAction, MemoryQuery, MemoryView } from '../src/view.ts'
 import type { MemoryApi } from '../src/client/memory.ts'
+
+/** One duplicate group over the two entries, and one entry that looks out of date. */
+export const CURATION: CurationView = {
+  scanned: 2,
+  groups: [{
+    key: 'bbbbbb-cccccc',
+    kind: 'duplicate',
+    score: 0.86,
+    ids: ['bbbbbb', 'cccccc'],
+    category: 'projects',
+    proposal: 'building the dsh assistant, with a memory page',
+    members: [
+      {
+        id: 'bbbbbb', category: 'projects', date: '2026-10-20', protected: false,
+        text: 'building dsh', parts: [{ text: 'building dsh', differs: false }],
+      },
+      {
+        id: 'cccccc', category: 'projects', date: '2026-10-21', protected: false,
+        text: 'building dsh, with a memory page', parts: [{ text: 'building dsh', differs: false }, { text: ', with a memory page', differs: true }],
+      },
+    ],
+  }],
+  suggestions: [
+    { key: 'merge:bbbbbb-cccccc', kind: 'merge', reason: 'duplicate', ids: ['bbbbbb', 'cccccc'], category: 'projects', text: 'building dsh, with a memory page' },
+    { key: 'stale:eeeeee', kind: 'stale', reason: 'expired-date', ids: ['eeeeee'], category: 'identity', text: 'old lease expired 2026-09-06' },
+  ],
+}
 
 /** A view with one waiting write (tainted), two entries, one Session, and one verdict. */
 export const VIEW: MemoryView = {
@@ -20,6 +47,7 @@ export const VIEW: MemoryView = {
   },
   sessions: [{ id: 'sess-bad-000000', changes: 2, entries: 2, firstAt: '2026-10-31T10:00:00.000Z', lastAt: '2026-10-31T10:05:00.000Z', origin: 'owner' }],
   feedback: [{ id: 'dddddd', scope: 'up', verdict: 'delete', kind: 'comment', text: 'too long a reply', at: '2026-10-29T08:00:00.000Z', note: 'tone' }],
+  curation: CURATION,
 }
 
 /** The guard's counts: two refusals by two rules and one failed model call. */

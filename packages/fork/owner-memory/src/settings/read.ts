@@ -3,13 +3,14 @@
  * file hold, shaped for the page. Reading writes nothing.
  */
 
+import { composeMergeText, dominantCategory, groupDuplicates, staleEntries, textParts } from '../curation.ts'
 import { isProtected, type MemoryEntry, type MemorySource, type PendingEntry } from '../entries.ts'
 import type { FeedbackEntry, FeedbackStore } from '../feedback.ts'
 import { PENDING_DAYS, type HistoryRecord, type MemoryStore } from '../store.ts'
 import {
   CATEGORIES, CLIP_CHARS,
-  type Category, type DetailView, type EntrySource, type EntryView, type FeedbackView, type HistoryView, type MemoryQuery, type MemoryView,
-  type PendingView, type SessionView,
+  type Category, type CurationView, type DetailView, type DuplicateGroupView, type EntrySource, type EntryView,
+  type FeedbackView, type HistoryView, type MemoryQuery, type MemoryView, type PendingView, type SessionView, type SuggestionView,
 } from './view.ts'
 
 /** Sessions the rollback picker lists. */
@@ -142,6 +143,54 @@ function matching(entries: readonly MemoryEntry[], last: ReadonlyMap<string, His
 }
 
 /**
+ * Duplicates and stale-looking entries over the whole file, as the curation panel shows them.
+ * @param entries - every entry in file order.
+ * @param now - epoch milliseconds, for the stale check.
+ * @returns the groups, their merge proposals, and the stale entries.
+ */
+export function buildCuration(entries: readonly MemoryEntry[], now: number): CurationView {
+  const groups: DuplicateGroupView[] = groupDuplicates(entries).map((group) => {
+    const parts = textParts(group.members)
+    const ids = group.members.map(member => member.id)
+    return {
+      key: ids.toSorted().join('-'),
+      kind: new Set(group.members.map(member => member.category)).size > 1 ? 'conflict' : 'duplicate',
+      score: Math.round(group.score * 100) / 100,
+      ids,
+      members: group.members.map(member => ({
+        id: member.id,
+        category: member.category,
+        date: member.date,
+        text: member.text,
+        protected: isProtected(member.category),
+        parts: parts.get(member.id) ?? [],
+      })),
+      proposal: composeMergeText(group.members),
+      category: dominantCategory(group.members),
+    }
+  })
+  const suggestions: SuggestionView[] = [
+    ...groups.map(group => ({
+      key: `merge:${group.key}`,
+      kind: 'merge' as const,
+      reason: 'duplicate' as const,
+      ids: group.ids,
+      category: group.category,
+      text: group.proposal,
+    })),
+    ...staleEntries(entries, new Date(now)).map(({ entry, reason }) => ({
+      key: `stale:${entry.id}`,
+      kind: 'stale' as const,
+      reason,
+      ids: [entry.id],
+      category: entry.category,
+      text: entry.text,
+    })),
+  ]
+  return { scanned: entries.length, groups, suggestions }
+}
+
+/**
  * Build the page's data.
  * @param store - the memory store.
  * @param feedback - the feedback store.
@@ -173,6 +222,7 @@ export async function readView(
     },
     sessions: sessionViews(history),
     feedback: verdicts.map(feedbackView),
+    curation: buildCuration(entries, now),
   }
 }
 

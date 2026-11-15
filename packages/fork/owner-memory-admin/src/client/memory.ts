@@ -8,7 +8,7 @@
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import {
   PAGE_SIZE,
-  type ActionResult, type DetailView, type GuardOverview, type MemoryAction, type MemoryQuery, type MemoryView,
+  type ActionResult, type Category, type DetailView, type GuardOverview, type MemoryAction, type MemoryQuery, type MemoryView,
 } from '../view.ts'
 
 export type { ActionResult, DetailView, GuardOverview, MemoryAction, MemoryQuery, MemoryView } from '../view.ts'
@@ -20,6 +20,8 @@ export const POLL_INTERVAL_MS = 10_000
 export type RollbackPreview = Extract<ActionResult, { action: 'rollback'; stage: 'preview' }>
 /** An erase preview, as the Host answers it. */
 export type PurgePreview = Extract<ActionResult, { action: 'forget'; stage: 'preview' }>
+/** A merge preview, as the Host answers it. */
+export type MergePreview = Extract<ActionResult, { action: 'merge'; stage: 'preview' }>
 
 /** The Session and/or time a rollback goes back to. */
 export interface RollbackTarget {
@@ -41,6 +43,15 @@ export interface PurgeFlow {
   readonly ids: readonly string[]
   readonly stage: 'previewing' | 'ready' | 'applying'
   readonly preview?: PurgePreview
+}
+
+/** Where a merge is: asking for the preview, showing it, applying it, or finished. */
+export interface MergeFlow {
+  readonly ids: readonly string[]
+  readonly stage: 'previewing' | 'ready' | 'applying' | 'done'
+  readonly preview?: MergePreview
+  /** Ids the applied merge took out besides the kept one. */
+  readonly removed?: readonly string[]
 }
 
 /** One entry's detail: loading, in hand, or unreadable. */
@@ -71,6 +82,9 @@ export interface MemoryState {
   details: Record<string, DetailState>
   rollback: RollbackFlow | null
   purge: PurgeFlow | null
+  merge: MergeFlow | null
+  /** Suggestion and group keys the owner kept or set aside for this visit. */
+  dismissed: string[]
   error: ActionError | null
 }
 
@@ -90,6 +104,8 @@ export function createMemoryStore(): SnapshotStore<MemoryState> {
     details: {},
     rollback: null,
     purge: null,
+    merge: null,
+    dismissed: [],
     error: null,
   })
 }
@@ -156,6 +172,15 @@ export interface MemoryActions {
   purgePreview(ids: readonly string[]): Promise<void>
   purgeApply(): Promise<void>
   purgeCancel(): void
+  /** Ask what merging these entries would say; nothing changes until {@link mergeApply}. */
+  mergePreview(ids: readonly string[]): Promise<void>
+  /** Apply the previewed merge with the owner's text and category; the Host refuses if the entries changed. */
+  mergeApply(input: { text: string; category?: Category }): Promise<void>
+  mergeCancel(): void
+  /** Move entries to another category, keeping their text. */
+  reclassify(ids: readonly string[], category: Category): Promise<void>
+  /** Set a suggestion or duplicate group aside without changing memory. */
+  dismiss(key: string): void
   feedbackAdd(input: Extract<MemoryAction, { action: 'feedback.add' }>): Promise<boolean>
   feedbackForget(id: string): Promise<void>
   dismissError(): void
@@ -339,6 +364,96 @@ export class MemoryLoader implements MemoryActions {
   /** Close the erase confirmation. */
   purgeCancel(): void {
     this.store.update((draft) => { draft.purge = null })
+  }
+
+  /**
+   * Ask the Host what merging these entries would say. Nothing changes until {@link mergeApply}.
+   * @param ids - entry ids.
+   */
+  async mergePreview(ids: readonly string[]): Promise<void> {
+    this.store.update((draft) => {
+      draft.merge = { ids, stage: 'previewing' }
+      draft.error = null
+    })
+    try {
+      const preview = await this.api.post({ action: 'merge', ids: [...ids] })
+      if (preview.action !== 'merge' || preview.stage !== 'preview') throw new Error('unexpected merge answer')
+      this.store.update((draft) => { draft.merge = { ids, stage: 'ready', preview } })
+    } catch (error: unknown) {
+      this.store.update((draft) => {
+        draft.merge = null
+        draft.error = asError(error)
+      })
+    }
+  }
+
+  /**
+   * Apply the previewed merge, with the owner's wording and category; the Host refuses a stale preview.
+   * @param input - the merged text and, when the owner changed it, the category.
+   */
+  async mergeApply(input: { text: string; category?: Category }): Promise<void> {
+    const flow = this.store.getSnapshot().merge
+    if (flow?.stage !== 'ready' || flow.preview === undefined) return
+    const { preview, ids } = flow
+    this.store.update((draft) => { draft.merge = { ids, stage: 'applying', preview } })
+    try {
+      const done = await this.api.post({
+        action: 'merge',
+        ids: [...preview.ids],
+        keep: preview.keep,
+        category: input.category ?? preview.category,
+        text: input.text,
+        confirm: preview.token,
+      })
+      if (done.action !== 'merge' || done.stage !== 'done') throw new Error('unexpected merge answer')
+      this.store.update((draft) => { draft.merge = { ids: preview.ids, stage: 'done', preview, removed: done.removed } })
+      this.forgetDetails(preview.ids)
+    } catch (error: unknown) {
+      this.store.update((draft) => {
+        draft.merge = null
+        draft.error = asError(error)
+      })
+    }
+    await this.reload()
+  }
+
+  /** Close the merge preview or its result. */
+  mergeCancel(): void {
+    this.store.update((draft) => { draft.merge = null })
+  }
+
+  /**
+   * Move entries to another category.
+   * @param ids - entry ids.
+   * @param category - the category to move them to.
+   */
+  async reclassify(ids: readonly string[], category: Category): Promise<void> {
+    this.store.update((draft) => {
+      draft.busy = [...new Set([...draft.busy, ...ids])]
+      draft.error = null
+    })
+    try {
+      const result = await this.api.post({ action: 'reclassify', ids: [...ids], category })
+      if (result.action !== 'reclassify') throw new Error('unexpected reclassify answer')
+      const failed = result.results.filter(item => !item.ok)
+      if (failed.length > 0) {
+        this.store.update((draft) => {
+          draft.error = { code: failed[0]?.failure?.code ?? null, message: failed.map(item => item.failure?.message ?? item.id).join(' ') }
+        })
+      }
+    } catch (error: unknown) {
+      this.store.update((draft) => { draft.error = asError(error) })
+    }
+    await this.reload()
+    this.store.update((draft) => { draft.busy = without(draft.busy, ids) })
+  }
+
+  /**
+   * Set a suggestion or duplicate group aside without changing memory.
+   * @param key - the suggestion or group key.
+   */
+  dismiss(key: string): void {
+    this.store.update((draft) => { draft.dismissed = [...new Set([...draft.dismissed, key])] })
   }
 
   /**
