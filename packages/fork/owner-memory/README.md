@@ -79,7 +79,7 @@ With `hold` on, a protected write from a turn the owner did not start alone is n
   name: '@deepseek-ai/dsh-owner-memory/settings'
 ```
 
-The row has one optional field, `file` (the memory file, default as above; the feedback file sits beside it). The page lists the waiting writes first, with where each came from and the Session behind it, to approve or discard; the entries, searchable by text and category, newest change first, with the full text and history on demand, to undo or erase; a rollback of a Session's changes or of everything since a time, which always shows a preview first and applies exactly that preview; and the feedback verdicts. The route is `GET`/`POST /api/owner-memory` under the Web UI sign-in; it registers no tool, so no agent can call it, and it has no action that writes an entry, so a write waiting for the owner cannot be approved by the Session that made it. It calls the same functions as the CLI (`src/admin.ts`) and stamps its changes in the history with the origin `settings`.
+The row has one optional field, `file` (the memory file, default as above; the feedback file sits beside it). The page lists the waiting writes first, with where each came from and the Session behind it, to approve or discard; the entries, searchable by text and category, newest change first, with the full text and history on demand, to undo or erase; a rollback of a Session's changes or of everything since a time, which always shows a preview first and applies exactly that preview; and the feedback verdicts. It also answers the curation the page shows: duplicate groups with the clauses that differ, merge proposals, and entries whose expiry or term has passed. The route is `GET`/`POST /api/owner-memory` under the Web UI sign-in; it registers no tool, so no agent can call it and a write waiting for the owner cannot be approved by the Session that made it. The only writes it makes are the owner's own: a merge, which previews first and applies with the preview's token, and a category change per id. It calls the same functions as the CLI (`src/admin.ts`) and stamps its changes in the history with the origin `settings`.
 
 The CLI runs on the host as the service user, from a laptop with `ssh mini '…'` (the RUNBOOK has the full line). `ids` prints ids, categories, and counts and never text; `recent` and `show` print text, to find the id a notice meant:
 
@@ -122,13 +122,14 @@ The tools call `MemoryStore`, which validates everything the model sends: catego
 | [`src/feedback-mode.ts`](src/feedback-mode.ts) | Feedback mode for the persona presets: one scope's verdicts in front of each root Session |
 | [`src/tools.ts`](src/tools.ts) | `memory_search`, `memory_save`, `memory_forget`, and the turn-origin check behind the hold |
 | [`src/notice-queue.ts`](src/notice-queue.ts) | Queues a turn's notices until the turn ends, caps them per day, and sends them through the notifier |
-| [`src/store.ts`](src/store.ts) | The JSONL store: list, save, hold, approve, revert, roll back, purge, import, search, and the history and snapshots |
+| [`src/store.ts`](src/store.ts) | The JSONL store: list, save, hold, approve, revert, merge, roll back, purge, import, search, and the history and snapshots |
 | [`src/notice.ts`](src/notice.ts) | The WeChat notice for a turn's protected changes |
 | [`src/render.ts`](src/render.ts) | The memory block and its byte budget |
 | [`src/feedback.ts`](src/feedback.ts) | The owner's keep/delete verdicts on persona replies: store, CLI payload validation, and the feedback block |
 | [`src/entries.ts`](src/entries.ts) | Entry type, categories, validation |
 | [`src/export.ts`](src/export.ts) | claude.ai export parser |
-| [`src/admin.ts`](src/admin.ts) | The review functions the CLI and the Settings route share: approve, discard, revert, and the previewed rollback and erase with their tokens |
+| [`src/curation.ts`](src/curation.ts) | The heuristics the page's suggestions rest on: token similarity and duplicate groups, the merged wording, the clauses that differ, and entries whose expiry or term is over |
+| [`src/admin.ts`](src/admin.ts) | The review functions the CLI and the Settings route share: approve, discard, revert, the previewed rollback and erase with their tokens, and the previewed merge and category change |
 | [`src/settings.ts`](src/settings.ts) | The `/api/owner-memory` route (`@deepseek-ai/dsh-owner-memory/settings`); [`src/settings/`](src/settings) holds its read model, request handler, and wire types |
 | [`src/cli.ts`](src/cli.ts) | `memory-import` (run through [`fork/deploy/memory-import.mjs`](../../../fork/deploy/memory-import.mjs)); re-exports `memory-admin` |
 | [`src/admin-cli.ts`](src/admin-cli.ts) | `memory-admin` ([`fork/deploy/memory-admin.mjs`](../../../fork/deploy/memory-admin.mjs)): argument parsing and dispatch |

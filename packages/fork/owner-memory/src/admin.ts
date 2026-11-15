@@ -6,8 +6,10 @@
  */
 
 import { createHash } from 'node:crypto'
-import type { MemoryEntry } from './entries.ts'
+import { composeMergeText, dominantCategory } from './curation.ts'
+import { isCategory, MAX_TEXT_CHARS, normalizeText, type MemoryCategory, type MemoryEntry } from './entries.ts'
 import { matchesRollback, MemoryError, type MemoryStore, type PurgeResult, type RollbackFilter, type RollbackResult } from './store.ts'
+import type { ItemResult } from './settings/view.ts'
 
 /** History label of a change made from the memory-admin CLI. */
 export const CLI_ORIGIN = 'memory-admin'
@@ -155,4 +157,125 @@ export async function purgeConfirmed(store: MemoryStore, ids: readonly string[],
     done.push({ ...plan, planned: await store.purge(plan.id, { expect: now => samePurge(now, plan.planned) }) })
   }
   return done
+}
+
+/** What a merge would do, before anything is written. */
+export interface MergePlan {
+  /** The entries to merge, in the order asked. */
+  readonly ids: readonly string[]
+  /** The entry that keeps its id and takes the merged text. */
+  readonly keep: string
+  readonly category: MemoryCategory
+  readonly text: string
+  /** The entries as they are now. */
+  readonly members: readonly MemoryEntry[]
+}
+
+/** How a merge was asked for: the ids, and optionally the entry to keep, the category, and the text. */
+export interface MergeRequest {
+  readonly ids: readonly string[]
+  readonly keep?: string
+  readonly category?: MemoryCategory
+  readonly text?: string
+}
+
+/** What a merge did. */
+export interface MergeApplied {
+  readonly plan: MergePlan
+  readonly removed: readonly MemoryEntry[]
+}
+
+/** The entries a merge names, as it previewed them; the token is a digest of this and of the request. */
+function membersOf(entries: readonly MemoryEntry[], ids: readonly string[]): Array<[string, string, MemoryCategory, string] | null> {
+  return ids.map((id) => {
+    const entry = entries.find(candidate => candidate.id === id)
+    return entry === undefined ? null : [entry.id, entry.date, entry.category, entry.text]
+  })
+}
+
+/**
+ * The token that binds a merge preview to its application: the entries as they are, which entry is kept, and the
+ * category. The merged text is not part of it — the owner may word it before confirming.
+ * @param plan - the planned merge.
+ * @returns a hex SHA-256 digest.
+ */
+export function mergeToken(plan: MergePlan): string {
+  return digest(['merge', plan.ids, plan.keep, plan.category, plan.members.map(entry => [entry.id, entry.date, entry.category, entry.text])])
+}
+
+/**
+ * Work out what merging entries would say, writing nothing.
+ * @param store - the memory store.
+ * @param request - the ids, and optionally the entry to keep, the category, and the text to use.
+ * @returns the plan; the text is the owner's when given, else the proposer's.
+ * @throws MemoryError when an id is unknown, the list is short, or the text does not fit an entry.
+ */
+export async function planMerge(store: MemoryStore, request: MergeRequest): Promise<MergePlan> {
+  const ids = [...new Set(request.ids)]
+  if (ids.length < 2) throw new MemoryError('invalid_id', 'merge needs at least two entries.')
+  const entries = await store.list()
+  const members: MemoryEntry[] = []
+  for (const id of ids) {
+    const entry = entries.find(candidate => candidate.id === id)
+    if (entry === undefined) throw new MemoryError('not_found', `no entry with id ${id}.`)
+    members.push(entry)
+  }
+  const category = request.category ?? dominantCategory(members)
+  if (!isCategory(category)) throw new MemoryError('invalid_category', `unknown category ${JSON.stringify(category)}.`)
+  const keep = request.keep !== undefined && ids.includes(request.keep) ? request.keep : dominantMember(members).id
+  const text = normalizeText(request.text ?? composeMergeText(members))
+  if (text.length === 0) throw new MemoryError('invalid_text', 'text is empty.')
+  if (text.length > MAX_TEXT_CHARS) throw new MemoryError('invalid_text', `text is ${String(text.length)} characters; the limit is ${String(MAX_TEXT_CHARS)}.`)
+  return { ids, keep, category, text, members }
+}
+
+/** The member with the most text, which a merge keeps; a tie goes to the first asked for. */
+function dominantMember(members: readonly MemoryEntry[]): MemoryEntry {
+  return members.reduce((best, entry) => (entry.text.length > best.text.length ? entry : best), members[0] as MemoryEntry)
+}
+
+/**
+ * Apply only the merge its preview described; the store re-checks the entries under the lock.
+ * @param store - the memory store.
+ * @param request - the merge to apply, as the preview was asked for.
+ * @param token - the preview's token.
+ * @param origin - who confirmed it, kept in the history.
+ * @throws MemoryError `stale_preview` when an entry changed after the preview.
+ * @returns the plan it applied and the entries it removed.
+ */
+export async function mergeConfirmed(store: MemoryStore, request: MergeRequest, token: string, origin: string): Promise<MergeApplied> {
+  const plan = await planMerge(store, request)
+  if (mergeToken(plan) !== token) throw new MemoryError('stale_preview', 'memory changed since the preview; preview again.')
+  const applied = await store.merge(
+    { ids: plan.ids, text: plan.text, category: plan.category, keep: plan.keep },
+    { source: 'owner-confirmed', origin },
+    { expect: entries => digest(['merge', plan.ids, plan.keep, plan.category, membersOf(entries, plan.ids)]) === token },
+  )
+  return { plan, removed: applied.removed }
+}
+
+/**
+ * Move entries to another category, keeping their text and who wrote them.
+ * @param store - the memory store.
+ * @param ids - entry ids.
+ * @param category - the category to move them to.
+ * @returns one result per id, in the order given.
+ */
+export async function reclassifyEntries(store: MemoryStore, ids: readonly string[], category: MemoryCategory): Promise<ItemResult[]> {
+  const entries = await store.list()
+  const results: ItemResult[] = []
+  for (const id of [...new Set(ids)]) {
+    const entry = entries.find(candidate => candidate.id === id)
+    if (entry === undefined) {
+      results.push({ id, ok: false, failure: { code: 'not_found', message: `no entry with id ${id}.` } })
+      continue
+    }
+    await store.save({ id, text: entry.text, category }, {
+      ...entry.source === undefined ? {} : { source: entry.source },
+      ...entry.session === undefined ? {} : { session: entry.session },
+      ...entry.origin === undefined ? {} : { origin: entry.origin },
+    })
+    results.push({ id, ok: true, outcome: 'reclassified' })
+  }
+  return results
 }

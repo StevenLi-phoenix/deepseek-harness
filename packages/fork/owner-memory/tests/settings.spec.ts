@@ -476,3 +476,108 @@ describe('what the route reports beyond the happy path', () => {
     await ctx.fiber.dispose()
   })
 })
+
+describe('curation', () => {
+  const A = 'CS-UY 4523 Design Project meets on Tuesdays with Professor Smith; the final presentation is a poster session'
+  const B = 'CS-UY 4523 Design Project meets on Tuesdays with Professor Smith; the final presentation is a demo'
+
+  it('answers duplicates over the whole file with the differing clauses marked, whatever the page shows', async () => {
+    const { store, get } = await mount()
+    const first = await store.save({ text: A, category: 'projects' })
+    const second = await store.save({ text: B, category: 'identity' })
+    await store.save({ text: 'Roommate Alice likes jazz and plays the trumpet on weekends', category: 'identity' })
+    const view = await get('?limit=1')
+    expect(view.entries.items).toHaveLength(1)
+    expect(view.curation?.scanned).toBe(3)
+    expect(view.curation?.groups).toHaveLength(1)
+    const group = view.curation?.groups[0]
+    expect(group).toMatchObject({
+      kind: 'conflict',
+      ids: [first.entry.id, second.entry.id],
+      category: 'projects',
+    })
+    expect(group?.score).toBeGreaterThan(0.8)
+    expect(group?.members.map(member => member.id)).toEqual([first.entry.id, second.entry.id])
+    expect(group?.members[0]?.parts.some(part => part.differs)).toBe(true)
+    expect(group?.proposal).toContain('poster session')
+    expect(group?.proposal).toContain('demo')
+    expect(view.curation?.suggestions).toEqual([expect.objectContaining({
+      key: `merge:${[first.entry.id, second.entry.id].toSorted().join('-')}`,
+      kind: 'merge', reason: 'duplicate', ids: [first.entry.id, second.entry.id], category: 'projects',
+    })])
+  })
+
+  it('lists an entry whose expiry has passed, and says nothing about a current one', async () => {
+    const { store, get } = await mount()
+    const old = await store.save({ text: 'Lease: current lease expires 2020-09-06', category: 'identity' })
+    await store.save({ text: 'Lease: current lease expires 2099-09-06', category: 'identity' })
+    const view = await get()
+    expect(view.curation?.groups).toEqual([])
+    expect(view.curation?.suggestions).toEqual([expect.objectContaining({
+      key: `stale:${old.entry.id}`, kind: 'stale', reason: 'expired-date', ids: [old.entry.id], category: 'identity',
+    })])
+  })
+
+  it('previews a merge without writing, then applies exactly the previewed entries with the owner\'s text', async () => {
+    const { store, get, act } = await mount()
+    const first = await store.save({ text: A, category: 'projects' })
+    const second = await store.save({ text: B, category: 'identity' })
+    const preview = await act({ action: 'merge', ids: [first.entry.id, second.entry.id] })
+    expect(preview).toMatchObject({ action: 'merge', stage: 'preview', keep: first.entry.id, category: 'projects', removed: 1 })
+    expect('token' in preview && preview.token).toMatch(/^[0-9a-f]{64}$/u)
+    expect(await store.list()).toHaveLength(2)
+
+    const token = 'token' in preview ? preview.token : ''
+    const done = await act({ action: 'merge', ids: [first.entry.id, second.entry.id], text: 'One merged fact about the design project', confirm: token })
+    expect(done).toMatchObject({
+      action: 'merge', stage: 'done', keep: first.entry.id, category: 'projects', text: 'One merged fact about the design project',
+      removed: [second.entry.id],
+    })
+    const entries = await store.list()
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({ id: first.entry.id, category: 'projects', text: 'One merged fact about the design project', source: 'owner-confirmed', origin: 'settings' })
+    const history = await store.history()
+    expect(history.slice(-2).map(record => [record.id, record.op])).toEqual([[first.entry.id, 'replace'], [second.entry.id, 'forget']])
+    expect((await get()).curation?.groups).toEqual([])
+  })
+
+  it('refuses a merge when an entry changed after the preview, and keeps both', async () => {
+    const { store, post, act } = await mount()
+    const first = await store.save({ text: A, category: 'projects' })
+    const second = await store.save({ text: B, category: 'projects' })
+    const preview = await act({ action: 'merge', ids: [first.entry.id, second.entry.id] })
+    const token = 'token' in preview ? preview.token : ''
+    await store.save({ text: `${A} changed by another turn`, category: 'projects', id: second.entry.id })
+    const response = await post({ action: 'merge', ids: [first.entry.id, second.entry.id], confirm: token })
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({ code: 'stale_preview' })
+    expect(await store.list()).toHaveLength(2)
+  })
+
+  it('refuses a merge of one id, an empty list, and an unknown id without changing anything', async () => {
+    const { store, post } = await mount()
+    const only = await store.save({ text: A, category: 'projects' })
+    expect((await post({ action: 'merge', ids: [only.entry.id] })).status).toBe(400)
+    expect((await post({ action: 'merge', ids: [] })).status).toBe(400)
+    expect((await post({ action: 'merge', ids: [only.entry.id, 'ffffff'] })).status).toBe(404)
+    expect(await store.list()).toHaveLength(1)
+  })
+
+  it('moves entries to another category, keeping the text and who wrote them', async () => {
+    const { store, act } = await mount()
+    const first = await store.save({ text: A, category: 'projects' }, { source: 'owner-turn', session: 's1', origin: 'owner' })
+    const second = await store.save({ text: B, category: 'projects' })
+    const result = await act({ action: 'reclassify', ids: [first.entry.id, second.entry.id, 'ffffff'], category: 'career' })
+    expect(result).toMatchObject({
+      action: 'reclassify', category: 'career',
+      results: [
+        { id: first.entry.id, ok: true, outcome: 'reclassified' },
+        { id: second.entry.id, ok: true, outcome: 'reclassified' },
+        { id: 'ffffff', ok: false, failure: { code: 'not_found' } },
+      ],
+    })
+    const entries = await store.list()
+    expect(entries.map(entry => [entry.id, entry.category, entry.text])).toEqual([[first.entry.id, 'career', A], [second.entry.id, 'career', B]])
+    expect(entries[0]).toMatchObject({ source: 'owner-turn', session: 's1', origin: 'owner' })
+  })
+})
