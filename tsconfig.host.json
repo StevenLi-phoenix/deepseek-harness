@@ -326,6 +326,7 @@
     { "path": "./packages/skill/skill-office" },
     { "path": "./packages/skill/tool-workspace-dependencies" },
     { "path": "./packages/browser-use/browser-use" },
+    { "path": "./packages/browser-use/headless-browser" },
     { "path": "./packages/experimental/browser-use-runtime" },
     { "path": "./packages/experimental/browser-use-playwright-mcp" },
     { "path": "./packages/experimental/browser-use-chrome-devtools-mcp" },

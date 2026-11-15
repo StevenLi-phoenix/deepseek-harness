@@ -21,6 +21,7 @@ export const PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackagePolic
   'packages/client/script-realm': { category: 'optional', reason: 'Script environment provider registry for explicitly selected Client integrations.' },
   'packages/client/script-realm-iframe': { category: 'optional', reason: 'Iframe execution provider registered only by an explicitly selected Client plugin.' },
   'packages/browser-use/browser-use': { category: 'optional', reason: 'Service definition used by explicitly selected browser providers.' },
+  'packages/browser-use/headless-browser': { category: 'optional', reason: 'Persistent headless Chromium with model tools and a Web take-over page; a deployment mounts it explicitly because the profile and login it owns are its choice.' },
   'packages/computer-use/computer-use': { category: 'optional', reason: 'Service definition used by explicitly selected computer providers.' },
   'packages/lsp/lsp': { category: 'optional', reason: 'Service definition for deployment-configured language servers.' },
   'packages/fork/provider-balance': { category: 'optional', reason: 'Fork-local composer balance pill mounted by the event profile bundle.' },

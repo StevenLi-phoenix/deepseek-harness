@@ -2284,6 +2284,37 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-headless -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-headless-browser -->
+<a id="deepseek-aidsh-headless-browser"></a>
+
+## `@deepseek-ai/dsh-headless-browser`
+
+- `inject`: `tools`
+- `source`: [`packages/browser-use/headless-browser/src/config.ts:13`](../packages/browser-use/headless-browser/src/config.ts)
+
+```ts config-catalog
+/** Persistent profile, viewport, live-view, and screenshot settings. */
+export interface Config {
+  /**
+   * Chromium profile directory; cookies, sign-ins, and local storage live here,
+   * so they survive a host restart.
+   * @default $DSH_HOME/data/headless-browser/profile
+   */
+  profileDir: string
+  /** Run the browser without a visible window. @default true */
+  headless: boolean
+  /** Page viewport width in CSS pixels; live-view frames are scaled to it. @default 1280 */
+  viewportWidth: number
+  /** Page viewport height in CSS pixels. @default 800 */
+  viewportHeight: number
+  /** JPEG quality of live-view frames, 1 through 100. @default 60 */
+  jpegQuality: number
+  /** Directory that receives `headless_browser_snapshot` PNG files. @default $DSH_HOME/cache/headless-browser/snapshots */
+  snapshotDir: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-headless-browser -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-hmr -->
 <a id="deepseek-aidsh-hmr"></a>
 

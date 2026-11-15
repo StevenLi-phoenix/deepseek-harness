@@ -1,0 +1,64 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/browser-use/headless-browser/README.md
+/:
+  en: c6051445f758b2cc
+  zh: 2e0ab17317e925c5
+/deepseek-ai-dsh-headless-browser:
+  en: f4253daa2d0d63e1
+  zh: b349207a631a9333
+/deepseek-ai-dsh-headless-browser/summary:
+  en: 7234baf9f3847ce9
+  zh: b2638cba38f4c07c
+/deepseek-ai-dsh-headless-browser/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: f14f34fce35a8d90
+/deepseek-ai-dsh-headless-browser/use-this-package:
+  en: 65cb9f473faa3786
+  zh: 4035d1fe139387c1
+/deepseek-ai-dsh-headless-browser/use-this-package/the-browser-binary:
+  en: b07272e39341a9c0
+  zh: 138c3d4825cff89e
+/deepseek-ai-dsh-headless-browser/use-this-package/the-take-over-page:
+  en: efe5806147b250cc
+  zh: 5cd1dfc5b821eb25
+/deepseek-ai-dsh-headless-browser/understand-the-implementation:
+  en: 5f44d624d546053f
+  zh: be9de65f26ba1c9e
+/deepseek-ai-dsh-headless-browser/further-exploration:
+  en: 43206093e89698f4
+  zh: b12af8d88b5a1933
+/deepseek-ai-dsh-headless-browser/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-headless-browser/model-experience/page-tools:
+  en: d5daed83e51c630e
+  zh: a39623fa93fe6f7c
+/deepseek-ai-dsh-headless-browser/model-experience/page-tools/what-the-model-sees:
+  en: 38a0d57dc8826bf1
+  zh: 875ddcaa2d50da48
+/deepseek-ai-dsh-headless-browser/model-experience/page-tools/token-effect:
+  en: c2de14f06b6cc2a3
+  zh: d89fe876462f1df7
+/deepseek-ai-dsh-headless-browser/model-experience/page-tools/kv-cache-effect:
+  en: 94b53e443759f56a
+  zh: 2c3ad9bb928be808
+/deepseek-ai-dsh-headless-browser/model-experience/control-tools:
+  en: ecf6b8ab3280f7dc
+  zh: 2a5239754026870a
+/deepseek-ai-dsh-headless-browser/model-experience/control-tools/what-the-model-sees:
+  en: e347f577b1c887db
+  zh: 2fd3e9d3468ab6e3
+/deepseek-ai-dsh-headless-browser/model-experience/control-tools/token-effect:
+  en: ed7e1f1b0a365768
+  zh: de3259e85354a818
+/deepseek-ai-dsh-headless-browser/model-experience/control-tools/kv-cache-effect:
+  en: b92d717917f63dc9
+  zh: e8e55a56144fdb93
+/deepseek-ai-dsh-headless-browser/known-limitations-and-deferred-work:
+  en: 843abf209b0ab300
+  zh: 306927479e12d242
+/deepseek-ai-dsh-headless-browser/known-limitations-and-deferred-work/dev-note:
+  en: fd19c8542e1f001f
+  zh: 095ceda61cd7961c
