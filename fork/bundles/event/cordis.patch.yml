@@ -96,6 +96,13 @@
     - id: time-gap
       name: '@deepseek-ai/dsh-time-gap'
 
+    # One persistent headless Chromium the agent drives with tools and a person takes over from the
+    # Web UI (/headless-browser) for a sign-in or a CAPTCHA; the profile directory keeps the sign-in
+    # across restarts. Rows added here, not in the owner's profile patch, because that layer only
+    # overrides a row that already exists.
+    - id: headless-browser
+      name: '@deepseek-ai/dsh-headless-browser'
+
     # Routing state (agent-created subscriptions and repository watches) lives in storage;
     # these rows only carry deployment-wide settings.
     - id: event-bus
