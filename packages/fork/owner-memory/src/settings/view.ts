@@ -104,6 +104,69 @@ export interface FeedbackView {
   readonly at: string
 }
 
+/** One clause of a duplicate group's entry, and whether the rest of the group says anything like it. */
+export interface EntryPartView {
+  readonly text: string
+  /** True when no other member of the group has a clause like this one. */
+  readonly differs: boolean
+}
+
+/** One entry of a duplicate group: what a compact row needs, with its clauses in order. */
+export interface GroupMemberView {
+  readonly id: string
+  readonly category: Category
+  readonly date: string
+  /** The text in full: the group is small, and the differing parts need all of it. */
+  readonly text: string
+  readonly protected: boolean
+  /** The text split into clauses, each marked when it differs from the rest of the group. */
+  readonly parts: readonly EntryPartView[]
+}
+
+/** Two or more entries that say nearly the same thing. */
+export interface DuplicateGroupView {
+  /** Stable key of the group: its member ids, sorted. */
+  readonly key: string
+  /** `conflict` when the members disagree on the category. */
+  readonly kind: 'duplicate' | 'conflict'
+  /** The weakest pair of the group, 0–1. */
+  readonly score: number
+  readonly ids: readonly string[]
+  readonly members: readonly GroupMemberView[]
+  /** What merging them would say. */
+  readonly proposal: string
+  /** The category a merge would take. */
+  readonly category: Category
+}
+
+/** One item of the curation panel: a proposed merge, or an entry whose subject looks over. */
+export type SuggestionView =
+  | {
+    readonly key: string
+    readonly kind: 'merge'
+    readonly reason: 'duplicate'
+    readonly ids: readonly string[]
+    readonly category: Category
+    readonly text: string
+  }
+  | {
+    readonly key: string
+    readonly kind: 'stale'
+    readonly reason: 'expired-date' | 'finished-term'
+    readonly ids: readonly string[]
+    readonly category: Category
+    readonly text: string
+  }
+
+/** What the curation page needs, computed over every entry whatever the page shows. */
+export interface CurationView {
+  /** Entries the heuristics looked at. */
+  readonly scanned: number
+  readonly groups: readonly DuplicateGroupView[]
+  /** Proposed merges first, then the entries that look over. */
+  readonly suggestions: readonly SuggestionView[]
+}
+
 /** What the list asks for. */
 export interface MemoryQuery {
   /** Whitespace-separated terms; an entry must contain all of them (or have the id). */
@@ -127,6 +190,11 @@ export interface MemoryView {
   /** Sessions that changed memory, newest first. */
   readonly sessions: readonly SessionView[]
   readonly feedback: readonly FeedbackView[]
+  /**
+   * Duplicates and stale-looking entries over the whole file, for the curation panel. Absent from a Host that predates
+   * the panel, which then shows no suggestions.
+   */
+  readonly curation?: CurationView
 }
 
 /** One history line of an entry. */
@@ -207,6 +275,29 @@ export type ActionResult =
   | { readonly action: 'forget'; readonly stage: 'done'; readonly items: readonly PurgePreviewItem[] }
   | { readonly action: 'feedback.add'; readonly outcome: 'added' | 'replaced'; readonly id: string }
   | { readonly action: 'feedback.forget'; readonly id: string }
+  /** A merge waiting for the owner's confirm; the token binds it to the entries it was computed from. */
+  | {
+    readonly action: 'merge'
+    readonly stage: 'preview'
+    readonly ids: readonly string[]
+    readonly keep: string
+    readonly category: Category
+    readonly text: string
+    /** How many entries the merge would take out besides the kept one. */
+    readonly removed: number
+    readonly token: string
+  }
+  | {
+    readonly action: 'merge'
+    readonly stage: 'done'
+    readonly ids: readonly string[]
+    readonly keep: string
+    readonly category: Category
+    readonly text: string
+    /** Ids taken out besides the kept one. */
+    readonly removed: readonly string[]
+  }
+  | { readonly action: 'reclassify'; readonly category: Category; readonly results: readonly ItemResult[] }
 
 /** What the browser posts. */
 export type MemoryAction =
@@ -215,3 +306,10 @@ export type MemoryAction =
   | { action: 'forget'; ids: string[]; confirm?: string }
   | { action: 'feedback.add'; scope: 'up' | 'bili'; verdict: 'keep' | 'delete'; kind: 'comment' | 'dm'; text: string; ref?: string; note?: string }
   | { action: 'feedback.forget'; id: string }
+  /**
+   * Merge entries into one: without `confirm` the Host answers a preview whose token applies the very same entries;
+   * the owner may edit `text`, which the token does not cover.
+   */
+  | { action: 'merge'; ids: string[]; keep?: string; category?: Category; text?: string; confirm?: string }
+  /** Move entries to another category, keeping their text. */
+  | { action: 'reclassify'; ids: string[]; category: Category }

@@ -120,6 +120,14 @@ export interface RollbackOptions {
   readonly expect?: (planned: RollbackResult) => boolean
 }
 
+/** What {@link MemoryStore.merge} did. */
+export interface MergeResult {
+  /** The kept entry, rewritten with the merged text and category. */
+  readonly entry: MemoryEntry
+  /** The entries taken out besides the kept one. */
+  readonly removed: readonly MemoryEntry[]
+}
+
 /** What {@link MemoryStore.purge} removed, place by place. */
 export interface PurgeResult {
   readonly entries: number
@@ -211,6 +219,8 @@ interface Change<T> {
   entries: MemoryEntry[]
   result: T
   op: HistoryOp
+  /** Per-id history operations, for one change that adds a record and removes others (a merge). */
+  ops?: ReadonlyMap<string, HistoryOp>
 }
 
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex')
@@ -472,6 +482,52 @@ export class MemoryStore {
   }
 
   /**
+   * Merge entries into one: the kept entry takes the merged text and category, and the others are removed, all
+   * under one lock and with one history time. History records the kept entry as replaced and each removed one as
+   * forgotten, so a revert of either side works as usual.
+   * @param input - the ids to merge, the merged text and category, and optionally which entry to keep.
+   * @param meta - who merged them; the kept entry carries it.
+   * @param options - `expect` runs under the lock on the entries as read, to refuse a stale preview.
+   * @returns the kept entry and the removed ones.
+   */
+  async merge(
+    input: { ids: readonly unknown[]; text: unknown; category: unknown; keep?: unknown },
+    meta?: WriteMeta,
+    options: { expect?: (entries: readonly MemoryEntry[]) => boolean } = {},
+  ): Promise<MergeResult> {
+    const text = validText(input.text)
+    const category = validCategory(input.category)
+    if (!Array.isArray(input.ids)) throw new MemoryError('invalid_id', 'merge needs a list of ids.')
+    const ids = [...new Set(input.ids)]
+    if (ids.length < 2) throw new MemoryError('invalid_id', 'merge needs at least two entries.')
+    for (const id of ids) {
+      if (!isEntryId(id)) throw new MemoryError('invalid_id', `id ${JSON.stringify(id)} is not six hex digits.`)
+    }
+    const keep = typeof input.keep === 'string' && ids.includes(input.keep) ? input.keep : undefined
+    const stamp = metaOf(meta)
+    return await this.mutate<MergeResult>(stamp, (entries) => {
+      const members: MemoryEntry[] = []
+      for (const id of ids) {
+        const found = entries.find(entry => entry.id === id)
+        if (found === undefined) throw new MemoryError('not_found', `no entry with id ${id}.`)
+        members.push(found)
+      }
+      if (options.expect !== undefined && !options.expect(entries)) throw stalePreview()
+      const longest = members.reduce((best, entry) => (entry.text.length > best.text.length ? entry : best), members[0] as MemoryEntry)
+      const keptId = keep ?? longest.id
+      const merged: MemoryEntry = { id: keptId, category, date: this.today(), text, ...stamp }
+      const removed = members.filter(entry => entry.id !== keptId)
+      const next = entries.flatMap(entry => (entry.id === keptId ? [merged] : ids.includes(entry.id) ? [] : [entry]))
+      return {
+        entries: next,
+        result: { entry: merged, removed },
+        op: 'replace',
+        ops: new Map(removed.map(entry => [entry.id, 'forget' as HistoryOp])),
+      }
+    })
+  }
+
+  /**
    * The history, oldest first; a damaged line is skipped.
    * @returns the readable records.
    */
@@ -685,7 +741,7 @@ export class MemoryStore {
   ): Promise<T> {
     return await serialized(this.file, async () => {
       const before = await this.list()
-      const { entries, result, op } = await change(before)
+      const { entries, result, op, ops } = await change(before)
       const changed = entries.length !== before.length || entries.some((entry, index) => !sameEntry(entry, before[index]))
       if (!changed) return result
       await mkdir(dirname(this.file), { recursive: true, mode: 0o700 })
@@ -703,7 +759,13 @@ export class MemoryStore {
         if (sameEntry(was, now)) continue
         /* v8 ignore next 2 -- an add always uses a fresh id. */
         const record: HistoryRecord = {
-          at, op: op === 'add' && was !== undefined ? 'replace' : op, id, ...was === undefined ? {} : { before: was }, ...now === undefined ? {} : { after: now }, ...meta, sha,
+          at,
+          op: ops?.get(id) ?? (op === 'add' && was !== undefined ? 'replace' : op),
+          id,
+          ...was === undefined ? {} : { before: was },
+          ...now === undefined ? {} : { after: now },
+          ...meta,
+          sha,
         }
         records.push(record)
       }

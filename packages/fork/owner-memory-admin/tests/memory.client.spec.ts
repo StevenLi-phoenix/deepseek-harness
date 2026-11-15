@@ -357,3 +357,81 @@ describe('startPolling', () => {
     vi.unstubAllGlobals()
   })
 })
+
+describe('MemoryLoader merge', () => {
+  const PREVIEW = {
+    action: 'merge' as const, stage: 'preview' as const, ids: ['aaaaaa', 'bbbbbb'], keep: 'aaaaaa',
+    category: 'projects' as const, text: 'one merged fact', removed: 1, token: 'a'.repeat(64),
+  }
+  const DONE = {
+    action: 'merge' as const, stage: 'done' as const, ids: ['aaaaaa', 'bbbbbb'], keep: 'aaaaaa',
+    category: 'projects' as const, text: 'owner words', removed: ['bbbbbb'],
+  }
+
+  it('previews a merge, applies it with the owner\'s text, and reads again', async () => {
+    const store = createMemoryStore()
+    const api = fakeApi({ post: action => (action.action === 'merge' && action.confirm === undefined ? PREVIEW : DONE) })
+    const loader = new MemoryLoader(store, api, () => 1)
+    await loader.mergePreview(['aaaaaa', 'bbbbbb'])
+    expect(store.getSnapshot().merge).toMatchObject({ stage: 'ready', preview: PREVIEW })
+    await loader.mergeApply({ text: 'owner words' })
+    expect(api.posts[1]).toEqual({
+      action: 'merge', ids: ['aaaaaa', 'bbbbbb'], keep: 'aaaaaa', category: 'projects', text: 'owner words', confirm: PREVIEW.token,
+    })
+    expect(store.getSnapshot().merge).toMatchObject({ stage: 'done', removed: ['bbbbbb'] })
+    expect(api.reads).toHaveLength(1)
+  })
+
+  it('keeps the preview\'s category unless the owner changes it, and closes on demand', async () => {
+    const store = createMemoryStore()
+    const api = fakeApi({ post: action => (action.action === 'merge' && action.confirm === undefined ? PREVIEW : DONE) })
+    const loader = new MemoryLoader(store, api, () => 1)
+    await loader.mergePreview(['aaaaaa', 'bbbbbb'])
+    await loader.mergeApply({ text: 'owner words', category: 'identity' })
+    expect(api.posts[1]).toMatchObject({ category: 'identity' })
+    loader.mergeCancel()
+    expect(store.getSnapshot().merge).toBeNull()
+  })
+
+  it('drops the preview and reports why when the Host refuses, and does nothing without a preview', async () => {
+    const store = createMemoryStore()
+    const api = fakeApi({ post: () => { throw new MemoryRequestError('memory changed since the preview; preview again.', 'stale_preview') } })
+    const loader = new MemoryLoader(store, api, () => 1)
+    await loader.mergePreview(['aaaaaa', 'bbbbbb'])
+    expect(store.getSnapshot().merge).toBeNull()
+    expect(store.getSnapshot().error).toEqual({ code: 'stale_preview', message: 'memory changed since the preview; preview again.' })
+    await loader.mergeApply({ text: 'x' })
+    expect(api.posts).toHaveLength(1)
+  })
+
+  it('reclassifies entries and keeps every id busy until the answer lands', async () => {
+    const store = createMemoryStore()
+    const gate = {
+      promise: undefined as unknown as Promise<ActionResult>,
+      resolve: (_value: ActionResult) => {},
+    }
+    const api = fakeApi({
+      post: () => {
+        const result = gate
+        gate.promise = new Promise<ActionResult>((resolve) => { result.resolve = resolve })
+        return gate.promise
+      },
+    })
+    const loader = new MemoryLoader(store, api, () => 1)
+    const pending = loader.reclassify(['aaaaaa', 'bbbbbb'], 'career')
+    expect(store.getSnapshot().busy).toEqual(['aaaaaa', 'bbbbbb'])
+    gate.resolve({ action: 'reclassify', category: 'career', results: [{ id: 'aaaaaa', ok: false, failure: { code: 'not_found', message: 'gone' } }] })
+    await pending
+    expect(store.getSnapshot().busy).toEqual([])
+    expect(store.getSnapshot().error).toEqual({ code: 'not_found', message: 'gone' })
+  })
+
+  it('sets a suggestion aside without touching memory', () => {
+    const store = createMemoryStore()
+    const loader = new MemoryLoader(store, fakeApi(), () => 1)
+    loader.dismiss('merge:aaaaaa-bbbbbb')
+    loader.dismiss('merge:aaaaaa-bbbbbb')
+    loader.dismiss('stale:cccccc')
+    expect(store.getSnapshot().dismissed).toEqual(['merge:aaaaaa-bbbbbb', 'stale:cccccc'])
+  })
+})

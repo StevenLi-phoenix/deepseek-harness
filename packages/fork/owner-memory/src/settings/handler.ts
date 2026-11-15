@@ -6,15 +6,17 @@
  */
 
 import {
-  describeRollback, planPurge, purgeConfirmed, purgeToken, reviewWrite, rollbackConfirmed, rollbackToken,
+  describeRollback, mergeConfirmed, mergeToken, planMerge, planPurge, purgeConfirmed, purgeToken, reclassifyEntries,
+  reviewWrite, rollbackConfirmed, rollbackToken, type MergeRequest,
 } from '../admin.ts'
 import { FeedbackError, type FeedbackStore } from '../feedback.ts'
+import { MAX_TEXT_CHARS } from '../entries.ts'
 import { MemoryError, type MemoryStore, type RollbackFilter } from '../store.ts'
 import z from '@deepseek-ai/schemastery'
 import { clip, readDetail, readView } from './read.ts'
 import {
   CATEGORIES, MAX_IDS, MAX_PAGE_SIZE, PAGE_SIZE,
-  type ActionResult, type ItemResult, type MemoryAction, type MemoryQuery, type PurgePreviewItem, type RollbackPreviewItem,
+  type ActionResult, type Category, type ItemResult, type MemoryAction, type MemoryQuery, type PurgePreviewItem, type RollbackPreviewItem,
 } from './view.ts'
 
 /** History label of a change made from Settings. */
@@ -50,6 +52,14 @@ const ACTION_SCHEMAS = {
     confirm: z.string().pattern(TOKEN),
   }),
   'forget': z.object({ ids, confirm: z.string().pattern(TOKEN) }),
+  'merge': z.object({
+    ids,
+    keep: z.string().pattern(ID),
+    category: z.union([...CATEGORIES]),
+    text: z.string().max(MAX_TEXT_CHARS),
+    confirm: z.string().pattern(TOKEN),
+  }),
+  'reclassify': z.object({ ids, category: z.union([...CATEGORIES]).required() }),
   'feedback.add': z.object({
     scope: z.union(['up', 'bili']).required(),
     verdict: z.union(['keep', 'delete']).required(),
@@ -203,6 +213,12 @@ export class MemoryHandler {
         return `${result.outcome} ${result.id}`
       case 'feedback.forget':
         return result.id
+      case 'merge':
+        return result.stage === 'preview'
+          ? `preview: keep ${result.keep}, ${String(result.removed)} removed`
+          : `done: keep ${result.keep}, removed ${result.removed.join(' ')}`
+      case 'reclassify':
+        return `to ${result.category}: ids ${result.results.map(item => `${item.id}${item.ok ? '' : ' (failed)'}`).join(' ')}`
     }
   }
 
@@ -259,6 +275,43 @@ export class MemoryHandler {
         if (confirm !== undefined) return { action: 'forget', stage: 'done', items: preview(await purgeConfirmed(store, wanted, confirm)) }
         const plans = await planPurge(store, wanted)
         return { action: 'forget', stage: 'preview', items: preview(plans), token: purgeToken(plans) }
+      }
+      case 'merge': {
+        const request: MergeRequest = {
+          ids: body['ids'] as string[],
+          ...body['keep'] === undefined ? {} : { keep: body['keep'] as string },
+          ...body['category'] === undefined ? {} : { category: body['category'] as Category },
+          ...body['text'] === undefined ? {} : { text: body['text'] as string },
+        }
+        const confirm = body['confirm'] as string | undefined
+        if (confirm !== undefined) {
+          const applied = await mergeConfirmed(store, request, confirm, SETTINGS_ORIGIN)
+          return {
+            action: 'merge',
+            stage: 'done',
+            ids: applied.plan.ids,
+            keep: applied.plan.keep,
+            category: applied.plan.category,
+            text: applied.plan.text,
+            removed: applied.removed.map(entry => entry.id),
+          }
+        }
+        const plan = await planMerge(store, request)
+        return {
+          action: 'merge',
+          stage: 'preview',
+          ids: plan.ids,
+          keep: plan.keep,
+          category: plan.category,
+          text: plan.text,
+          removed: plan.ids.length - 1,
+          token: mergeToken(plan),
+        }
+      }
+      case 'reclassify': {
+        const category = body['category'] as Category
+        const results = await reclassifyEntries(store, body['ids'] as string[], category)
+        return { action: 'reclassify', category, results }
       }
       case 'feedback.add': {
         const added = await feedback.add(body as never)

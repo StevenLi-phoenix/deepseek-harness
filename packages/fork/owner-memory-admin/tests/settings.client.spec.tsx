@@ -29,6 +29,11 @@ function spies(): { [K in keyof MemoryActions]: Mock<MemoryActions[K]> } {
     purgePreview: vi.fn(() => Promise.resolve()),
     purgeApply: vi.fn(() => Promise.resolve()),
     purgeCancel: vi.fn(),
+    mergePreview: vi.fn(() => Promise.resolve()),
+    mergeApply: vi.fn(() => Promise.resolve()),
+    mergeCancel: vi.fn(),
+    reclassify: vi.fn(() => Promise.resolve()),
+    dismiss: vi.fn(),
     feedbackAdd: vi.fn(() => Promise.resolve(true)),
     feedbackForget: vi.fn(() => Promise.resolve()),
     dismissError: vi.fn(),
@@ -148,9 +153,7 @@ describe('MemorySection entries', () => {
     const { actions } = mount({
       purge: { ids: ['bbbbbb'], stage: 'ready', preview: { action: 'forget', stage: 'preview', token: 'b'.repeat(64), items: [{ id: 'bbbbbb', found: true, text: 'reply in Chinese', history: 3, snapshots: 2, pending: 1 }] } },
     })
-    const row = screen.getByText('reply in Chinese').closest('li')!
-    fireEvent.click(within(row).getByRole('button', { expanded: false }))
-    const dialog = within(row).getByRole('alertdialog')
+    const dialog = screen.getByRole('alertdialog')
     expect(dialog.textContent).toContain('彻底删除 bbbbbb？')
     expect(dialog.textContent).toContain('无法恢复')
     expect(dialog.textContent).toContain('历史 3 · 快照 2 · 待审批 1')
@@ -417,13 +420,11 @@ describe('MemorySection entries in detail', () => {
     mount({
       purge: { ids: ['bbbbbb'], stage: 'ready', preview: { action: 'forget', stage: 'preview', token: 'b'.repeat(64), items: [] } },
     })
-    fireEvent.click(within(screen.getByText('reply in Chinese').closest('li')!).getByRole('button', { expanded: false }))
     const dialog = screen.getByRole('alertdialog')
     expect(dialog.textContent).toContain('找不到这条记忆')
     expect(dialog.textContent).not.toContain('历史 ')
-    const other = screen.getByText('building dsh').closest('li')!
-    fireEvent.click(within(other).getByRole('button', { expanded: false }))
-    expect(within(other).queryByRole('alertdialog')).toBeNull()
+    // One confirmation at the top of the page, not one per row.
+    expect(screen.getAllByRole('alertdialog')).toHaveLength(1)
   })
 })
 
@@ -583,5 +584,141 @@ describe('locales', () => {
         expect(placeholders(dictionary[key as keyof typeof zh]), `${name} ${key}`).toEqual(placeholders(source))
       }
     }
+  })
+})
+
+describe('the curation page', () => {
+  const MERGE = {
+    action: 'merge' as const,
+    stage: 'preview' as const,
+    ids: ['bbbbbb', 'cccccc'],
+    keep: 'bbbbbb',
+    category: 'projects' as const,
+    text: 'building dsh, with a memory page',
+    removed: 1,
+    token: 'a'.repeat(64),
+  }
+
+  it('shows a compact row: category, one opening, date, and the protected mark', () => {
+    mount()
+    const row = screen.getByText('reply in Chinese').closest('li')!
+    expect(within(row).getByText('指令')).toBeTruthy()
+    expect(within(row).getByText('受保护')).toBeTruthy()
+    expect(row.textContent).toContain('2026-10-31')
+    expect(row.querySelectorAll('button[aria-expanded]')).toHaveLength(1)
+    expect(within(row).getByRole('checkbox', { name: '选择 bbbbbb' })).toBeTruthy()
+  })
+
+  it('filters to duplicate groups, marks the differing clauses, and offers merge or keep', () => {
+    const { actions } = mount()
+    const card = screen.getByRole('region', { name: '记忆条目' })
+    fireEvent.click(within(card).getByRole('button', { name: '重复 / 冲突 1' }))
+    expect(card.textContent).toContain('相似度 86%')
+    const marks = card.querySelectorAll('mark')
+    expect(marks).toHaveLength(1)
+    expect(marks[0]?.textContent).toBe(', with a memory page')
+    fireEvent.click(within(card).getByRole('button', { name: '合并成一条' }))
+    expect(actions.mergePreview).toHaveBeenCalledWith(['bbbbbb', 'cccccc'])
+    fireEvent.click(within(card).getByRole('button', { name: '都保留' }))
+    expect(actions.dismiss).toHaveBeenCalledWith('merge:bbbbbb-cccccc')
+  })
+
+  it('narrows the duplicate groups with the search terms', () => {
+    mount({ query: { q: 'nothing-like-this', category: 'all', offset: 0, limit: 20 } })
+    const card = screen.getByRole('region', { name: '记忆条目' })
+    fireEvent.click(within(card).getByRole('button', { name: '重复 / 冲突 0' }))
+    expect(within(card).getByText('没有发现几乎重复的条目。')).toBeTruthy()
+  })
+
+  it('lists curation suggestions and lets the owner accept or set each one aside', () => {
+    const { actions } = mount()
+    const card = screen.getByRole('region', { name: '整理建议' })
+    expect(card.textContent).toContain('内容几乎重复')
+    expect(card.textContent).toContain('日期已过')
+    const merge = screen.getByText('building dsh, with a memory page').closest('li')!
+    fireEvent.click(within(merge).getByRole('button', { name: '接受' }))
+    expect(actions.mergePreview).toHaveBeenCalledWith(['bbbbbb', 'cccccc'])
+    const stale = screen.getByText('old lease expired 2026-09-06').closest('li')!
+    fireEvent.click(within(stale).getByRole('button', { name: '接受' }))
+    expect(actions.purgePreview).toHaveBeenCalledWith(['eeeeee'])
+    fireEvent.click(within(stale).getByRole('button', { name: '不需要' }))
+    expect(actions.dismiss).toHaveBeenCalledWith('stale:eeeeee')
+  })
+
+  it('shows no suggestion card on a Host that computes no curation', () => {
+    const { curation: _curation, ...rest } = VIEW
+    mount({ view: rest })
+    expect(screen.queryByRole('region', { name: '整理建议' })).toBeNull()
+  })
+
+  it('merges a selection, erases it, or moves it to another category', () => {
+    const { actions } = mount()
+    const card = screen.getByRole('region', { name: '记忆条目' })
+    fireEvent.click(within(card).getByRole('checkbox', { name: '全选本页' }))
+    expect(within(card).getByRole('toolbar', { name: '已选 2 条' })).toBeTruthy()
+    fireEvent.click(within(card).getByRole('button', { name: '合并所选' }))
+    expect(actions.mergePreview).toHaveBeenCalledWith(['bbbbbb', 'cccccc'])
+    fireEvent.click(within(card).getByRole('button', { name: '删除所选' }))
+    expect(actions.purgePreview).toHaveBeenCalledWith(['bbbbbb', 'cccccc'])
+    fireEvent.change(within(card).getByLabelText('改为'), { target: { value: 'career' } })
+    expect(actions.reclassify).toHaveBeenCalledWith(['bbbbbb', 'cccccc'], 'career')
+    fireEvent.click(within(card).getByRole('button', { name: '取消选择' }))
+    expect(within(card).queryByRole('toolbar')).toBeNull()
+  })
+
+  it('needs two entries for a merge and lets Escape clear the selection and close a row', () => {
+    const { actions } = mount()
+    const card = screen.getByRole('region', { name: '记忆条目' })
+    fireEvent.click(within(card).getByRole('checkbox', { name: '选择 bbbbbb' }))
+    expect(within(card).getByRole('button', { name: '合并所选' }).hasAttribute('disabled')).toBe(true)
+    fireEvent.click(within(card).getByRole('button', { name: '取消选择' }))
+    expect(actions.mergePreview).not.toHaveBeenCalled()
+
+    fireEvent.click(within(card).getByRole('checkbox', { name: '选择 cccccc' }))
+    fireEvent.keyDown(card, { key: 'Escape' })
+    expect(within(card).queryByRole('toolbar')).toBeNull()
+
+    fireEvent.click(within(card).getAllByRole('button', { expanded: false })[0]!)
+    fireEvent.keyDown(card, { key: 'Escape' })
+    expect(within(card).getAllByRole('button', { expanded: false })).toHaveLength(2)
+  })
+
+  it('previews a merge with its proposal, and applies only the owner\'s confirm', () => {
+    const { actions } = mount({ merge: { ids: MERGE.ids, stage: 'ready', preview: MERGE } })
+    const dialog = screen.getByRole('dialog', { name: '合并 2 条记忆？' })
+    expect(dialog.textContent).toContain('保留 bbbbbb')
+    const area = within(dialog).getByLabelText('合并后的内容') as HTMLTextAreaElement
+    expect(area.value).toBe(MERGE.text)
+    fireEvent.change(area, { target: { value: '  one merged fact  ' } })
+    fireEvent.change(within(dialog).getByLabelText('类别'), { target: { value: 'identity' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: '确认合并' }))
+    expect(actions.mergeApply).toHaveBeenCalledWith({ text: 'one merged fact', category: 'identity' })
+    fireEvent.click(within(dialog).getByRole('button', { name: '取消' }))
+    expect(actions.mergeCancel).toHaveBeenCalled()
+  })
+
+  it('cannot confirm an empty merge, reports its result, and closes with Escape', () => {
+    mount({ merge: { ids: MERGE.ids, stage: 'ready', preview: MERGE } })
+    const dialog = screen.getByRole('dialog', { name: '合并 2 条记忆？' })
+    fireEvent.change(within(dialog).getByLabelText('合并后的内容'), { target: { value: '   ' } })
+    expect(within(dialog).getByRole('button', { name: '确认合并' }).hasAttribute('disabled')).toBe(true)
+    cleanup()
+
+    const { actions } = mount({ merge: { ids: MERGE.ids, stage: 'done', preview: MERGE, removed: ['cccccc'] } })
+    expect(screen.getByRole('status', { name: '合并 2 条记忆？' }).textContent).toContain('已合并为 bbbbbb。')
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }))
+    expect(actions.mergeCancel).toHaveBeenCalled()
+    cleanup()
+
+    mount({ merge: { ids: MERGE.ids, stage: 'previewing' } })
+    const section = screen.getByRole('region', { name: '记忆' })
+    fireEvent.keyDown(section, { key: 'Escape' })
+    expect(screen.getByRole('region', { name: '记忆' })).toBeTruthy()
+  })
+
+  it('closes a merge preview with Escape from the section', () => {
+    const { actions } = mount({ merge: { ids: MERGE.ids, stage: 'ready', preview: MERGE } })
+    fireEvent.keyDown(screen.getByRole('region', { name: '记忆' }), { key: 'Escape' })
+    expect(actions.mergeCancel).toHaveBeenCalledTimes(1)
   })
 })
