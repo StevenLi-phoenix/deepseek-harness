@@ -1,0 +1,13 @@
+{
+  "name": "@deepseek-ai/headless-browser",
+  "version": "0.2.2-rc.3",
+  "private": true,
+  "description": "Profile layer for the event service's headless browser: the one persistent headless Chromium the agent drives with tools and a person takes over from the Web UI.",
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml"
+      ]
+    }
+  }
+}

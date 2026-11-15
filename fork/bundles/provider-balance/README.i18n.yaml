@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write fork/bundles/provider-balance/README.md
+/:
+  en: 6c7add4041e96f8c
+  zh: 339e3c6538f867f7
+/deepseek-ai-provider-balance:
+  en: 03569b25e4558ce3
+  zh: 1685b4ba3de1cc92
+/deepseek-ai-provider-balance/summary:
+  en: 674648357880b30d
+  zh: ea165173ec1aec8d
+/deepseek-ai-provider-balance/table-of-contents:
+  en: 5db0ae01d50cb0e4
+  zh: da127c656e81b685
+/deepseek-ai-provider-balance/use-this-package:
+  en: bbff250eba0f1b89
+  zh: 0a618f05cc88ee2b
+/deepseek-ai-provider-balance/use-this-package/install-into-the-event-profile:
+  en: f7a0b48ecbfa185a
+  zh: 0d16f692f9bac262
+/deepseek-ai-provider-balance/use-this-package/what-you-get:
+  en: bee31a9c8ec5a465
+  zh: 7072ede118a13eba
+/deepseek-ai-provider-balance/use-this-package/what-it-needs:
+  en: e7a7042afb08a02f
+  zh: 8c2b195820ed320b
+/deepseek-ai-provider-balance/understand-the-implementation:
+  en: 2a02f537d13ecd69
+  zh: 7dbd05e4251ff9e9
+/deepseek-ai-provider-balance/further-exploration:
+  en: be63ca9f9cf36cb3
+  zh: 9856601a59b28880
+/deepseek-ai-provider-balance/known-limitations-and-deferred-work:
+  en: c301adb78e6ad1b4
+  zh: ad7bc2153d962096

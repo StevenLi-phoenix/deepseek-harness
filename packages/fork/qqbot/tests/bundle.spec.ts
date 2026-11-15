@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { Config } from '../src/index.ts'
+import { forkPatchFiles } from '../../../../scripts/fork-bundle-layers.ts'
 
 /** One loader patch row. */
 interface Row {
@@ -15,7 +16,7 @@ interface Row {
 }
 
 const read = (path: string): Row[] => parse(readFileSync(join(import.meta.dirname, '../../../..', path), 'utf8'), { logLevel: 'error' }) as Row[]
-const inserted = read('fork/bundles/event/cordis.patch.yml').flatMap(row => row.insert ?? [])
+const inserted = forkPatchFiles().flatMap(read).flatMap(row => row.insert ?? [])
 
 describe('event bundle', () => {
   it('ships the official-bot channel disabled: nothing mounts it until the owner enables it', () => {

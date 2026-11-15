@@ -1,0 +1,13 @@
+{
+  "name": "@deepseek-ai/style",
+  "version": "0.2.2-rc.3",
+  "private": true,
+  "description": "Profile layer for the event service's speaking style: DSH's speaking style and Settings -> 说话风格.",
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml"
+      ]
+    }
+  }
+}

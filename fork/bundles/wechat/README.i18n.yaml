@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write fork/bundles/wechat/README.md
+/:
+  en: b2561373bf90d672
+  zh: 2179a42e9790047e
+/deepseek-ai-wechat:
+  en: a410ff1e72f319a1
+  zh: 5c4bf98b56b9c38a
+/deepseek-ai-wechat/summary:
+  en: 67a3cbf9e37aa8e8
+  zh: dd2ffa62e710b948
+/deepseek-ai-wechat/table-of-contents:
+  en: 5db0ae01d50cb0e4
+  zh: da127c656e81b685
+/deepseek-ai-wechat/use-this-package:
+  en: bbff250eba0f1b89
+  zh: 0a618f05cc88ee2b
+/deepseek-ai-wechat/use-this-package/install-into-the-event-profile:
+  en: f7a0b48ecbfa185a
+  zh: 0d16f692f9bac262
+/deepseek-ai-wechat/use-this-package/what-you-get:
+  en: f25bb0fc7be8c5c6
+  zh: 694570326b7af07a
+/deepseek-ai-wechat/use-this-package/what-it-needs:
+  en: 9ac83ff005256ffb
+  zh: bfb421b6d15b09d9
+/deepseek-ai-wechat/understand-the-implementation:
+  en: 2a02f537d13ecd69
+  zh: 7dbd05e4251ff9e9
+/deepseek-ai-wechat/further-exploration:
+  en: 4f558d3b51dbf6c7
+  zh: b8891d0233e8d033
+/deepseek-ai-wechat/known-limitations-and-deferred-work:
+  en: a80ee6d0fd70a851
+  zh: b812e333660653ee

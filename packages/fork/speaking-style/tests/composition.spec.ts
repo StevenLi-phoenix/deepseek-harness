@@ -16,6 +16,7 @@ import { parse } from 'yaml'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 import { cleanup, fakeGuard, fakeWeb, fixture, fixtureText, minerScript, tmp, track } from './harness.ts'
 import * as Style from '../src/index.ts'
+import { forkPatchFiles } from '../../../../scripts/fork-bundle-layers.ts'
 
 /**
  * The shipped composition: the event bundle's own `speaking-style` rows (the root row and each preset's `speaking-style-prompt`
@@ -34,7 +35,7 @@ interface Row {
 }
 
 const STYLE = '@deepseek-ai/dsh-speaking-style'
-const bundle = parse(readFileSync(join(import.meta.dirname, '../../../../fork/bundles/event/cordis.patch.yml'), 'utf8'), { logLevel: 'error' }) as Row[]
+const bundle = forkPatchFiles().flatMap(file => parse(readFileSync(join(import.meta.dirname, '../../../..', file), 'utf8'), { logLevel: 'error' }) as Row[])
 const inserted = bundle.flatMap(row => row.insert ?? [])
 const rootRow = inserted.find(row => row.name === STYLE && row.id === 'speaking-style')!
 const presetRows = inserted.filter(row => row.name === '@deepseek-ai/dsh-agent-preset')

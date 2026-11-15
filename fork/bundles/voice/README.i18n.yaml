@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write fork/bundles/voice/README.md
+/:
+  en: 5f52fb2f81505376
+  zh: e73b2c8dd9a07bce
+/deepseek-ai-voice:
+  en: 699432da2766d1f8
+  zh: f4934a6296dfedac
+/deepseek-ai-voice/summary:
+  en: 6d8d12f28deec8f7
+  zh: e317be2dab355221
+/deepseek-ai-voice/table-of-contents:
+  en: 5db0ae01d50cb0e4
+  zh: da127c656e81b685
+/deepseek-ai-voice/use-this-package:
+  en: bbff250eba0f1b89
+  zh: 0a618f05cc88ee2b
+/deepseek-ai-voice/use-this-package/install-into-the-event-profile:
+  en: f7a0b48ecbfa185a
+  zh: 0d16f692f9bac262
+/deepseek-ai-voice/use-this-package/what-you-get:
+  en: 0a317bc21e693796
+  zh: 5b93398519dbd5c8
+/deepseek-ai-voice/use-this-package/what-it-needs:
+  en: 23a278b783351c26
+  zh: bcb584786b70d1d7
+/deepseek-ai-voice/understand-the-implementation:
+  en: 2a02f537d13ecd69
+  zh: 7dbd05e4251ff9e9
+/deepseek-ai-voice/further-exploration:
+  en: 0376f02006b86702
+  zh: d82e95e5b96f49c3
+/deepseek-ai-voice/known-limitations-and-deferred-work:
+  en: 3602266927daaaad
+  zh: a30c46fe7c35bcf3

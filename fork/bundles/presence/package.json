@@ -1,0 +1,13 @@
+{
+  "name": "@deepseek-ai/presence",
+  "version": "0.2.2-rc.3",
+  "private": true,
+  "description": "Profile layer for the event service's do-not-disturb: Settings -> 勿扰: whether the owner sleeps, from the Sleep Focus signal.",
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml"
+      ]
+    }
+  }
+}

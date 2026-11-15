@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write fork/bundles/guard/README.md
+/:
+  en: 98f028809c3fbc61
+  zh: 68d6afa10c2fbc97
+/deepseek-ai-guard:
+  en: a82bf20d88ef6144
+  zh: 1c646aa1562ce2de
+/deepseek-ai-guard/summary:
+  en: eca4de623a4299a4
+  zh: a9f9667569d08532
+/deepseek-ai-guard/table-of-contents:
+  en: 5db0ae01d50cb0e4
+  zh: da127c656e81b685
+/deepseek-ai-guard/use-this-package:
+  en: bbff250eba0f1b89
+  zh: 0a618f05cc88ee2b
+/deepseek-ai-guard/use-this-package/install-into-the-event-profile:
+  en: f7a0b48ecbfa185a
+  zh: 0d16f692f9bac262
+/deepseek-ai-guard/use-this-package/what-you-get:
+  en: 88fb848f9b93f1aa
+  zh: 5a78087fe891d6d8
+/deepseek-ai-guard/use-this-package/what-it-needs:
+  en: b3900e5c3cc15e83
+  zh: 6811e23dfcee5076
+/deepseek-ai-guard/understand-the-implementation:
+  en: 2a02f537d13ecd69
+  zh: 7dbd05e4251ff9e9
+/deepseek-ai-guard/further-exploration:
+  en: 572a6db11353697e
+  zh: c0d5c7acb1b906e5
+/deepseek-ai-guard/known-limitations-and-deferred-work:
+  en: a822733591f0d591
+  zh: 48666009ecb03d2f

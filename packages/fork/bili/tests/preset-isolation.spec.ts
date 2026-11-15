@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
+import { forkPatchFiles } from '../../../../scripts/fork-bundle-layers.ts'
 
 /**
  * Memory and PII stay per channel: what the agent knows from WeChat (the owner memory, the chat Session,
@@ -20,7 +21,7 @@ interface Row {
 }
 
 const ROOT = join(import.meta.dirname, '../../../..')
-const bundle = parse(readFileSync(join(ROOT, 'fork/bundles/event/cordis.patch.yml'), 'utf8'), { logLevel: 'error' }) as Row[]
+const bundle = forkPatchFiles().flatMap(file => parse(readFileSync(join(ROOT, file), 'utf8'), { logLevel: 'error' }) as Row[])
 const rootRows = bundle.flatMap(row => row.insert ?? [])
 const presets = new Map(rootRows.filter(row => row.id.startsWith('preset-')).map(row => [row.id.slice('preset-'.length), row]))
 

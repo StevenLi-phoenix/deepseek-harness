@@ -1,0 +1,21 @@
+# fork voice bundle — one feature's rows for the event profile, @deepseek-ai/voice.
+#
+# A layer of the `event` profile, mounted right after @deepseek-ai/dsh-event-bundle (the service
+# skeleton) and before the owner's profile patch. This layer mounts ctx.voice: text to speech for
+# the `speak` tool and speech to text for audio files. It is mounted after the skeleton rows it
+# depends on; see ../event/README.md for the mount order and for what the skeleton keeps.
+
+- insert:
+    # Voice (ctx.voice): text to speech for the `speak` tool (feiyu on the laptop, no fallback;
+    # the Mac mini TTS service was retired on 2026-10-31; the key is FEIYU_API_KEY in
+    # $DSH_HOME/.env) and speech to text for audio files the owner sends on WeChat. Transcription is OFF: to turn it on, add
+    # to the profile patch ($DSH_HOME/profiles/event/cordis.patch.yml)
+    #   - id: voice
+    #     config: { asr: { enabled: true } }
+    # (every other field keeps its default; a patch entry's config replaces the whole config, so
+    # restate any field changed here, and put asr into an existing voice row of the patch). It reads files only; it never opens a microphone.
+    - id: voice
+      name: '@deepseek-ai/dsh-voice'
+      config:
+        asr:
+          enabled: false

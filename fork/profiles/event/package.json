@@ -7,7 +7,25 @@
       "bundles": [
         "@deepseek-ai/dsh-base",
         "@deepseek-ai/dsh-web-app",
-        "@deepseek-ai/dsh-event-bundle"
+        "@deepseek-ai/dsh-event-bundle",
+        "@deepseek-ai/github",
+        "@deepseek-ai/headless-browser",
+        "@deepseek-ai/provider-balance",
+        "@deepseek-ai/subagent-activity",
+        "@deepseek-ai/sysmon",
+        "@deepseek-ai/memory",
+        "@deepseek-ai/presence",
+        "@deepseek-ai/wechat",
+        "@deepseek-ai/cc-admin",
+        "@deepseek-ai/voice",
+        "@deepseek-ai/bili",
+        "@deepseek-ai/qq",
+        "@deepseek-ai/courses",
+        "@deepseek-ai/gmail",
+        "@deepseek-ai/qqbot",
+        "@deepseek-ai/integrity",
+        "@deepseek-ai/guard",
+        "@deepseek-ai/style"
       ]
     }
   }

@@ -1,0 +1,30 @@
+# fork wechat bundle — one feature's rows for the event profile, @deepseek-ai/wechat.
+#
+# A layer of the `event` profile, mounted right after @deepseek-ai/dsh-event-bundle (the service
+# skeleton) and before the owner's profile patch. This layer mounts the owner's WeChat channel and
+# the browser half of Settings -> WeChat. It is mounted after the skeleton rows it depends on; see
+# ../event/README.md for the mount order and for what the skeleton keeps.
+
+- insert:
+    # The browser half of Settings → WeChat (微信, /api/wechat) and Settings → 勿扰 (/api/presence).
+    # Their Host routes are served by the wechat and presence rows; this package only delivers the pages.
+    - id: wechat-settings
+      name: '@deepseek-ai/dsh-wechat-settings'
+
+    # Owner channel: chat Session over WeChat (its answers come through owner-relay's `wechat`
+    # channel) and ctx.ownerNotifier for the bus. The chat works in a clone of the owner's tracking
+    # repository StevenLi-phoenix/me (RUNBOOK step 5).
+    - id: wechat
+      name: '@deepseek-ai/dsh-wechat'
+      config:
+        # The Mac mini's upload to the WeChat CDN measured about 65 KB/s (2026-10-31): the default 60 s
+        # timeout failed a 10 MiB and a 22 MiB video. 300 s fits the 8 MiB previews autocut sends.
+        mediaTimeoutMs: 300000
+        chat:
+          workspacePath: /Users/dsh-runtime/me
+          # A message another Session passes the main agent (Bilibili, Claude Code) starts a turn marked as
+          # not the owner's (`turn`); `notify` only tells the owner on WeChat and starts nothing.
+          agentMessage: turn
+          # `hybrid`: the final answer of each turn is sent as the reply, and the Session can also message the
+          # owner mid-turn with `wechat_send`; `text` sends the final answer only (RUNBOOK section 28).
+          delivery: hybrid

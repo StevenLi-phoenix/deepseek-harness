@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write fork/bundles/qqbot/README.md
+/:
+  en: 359d684fab56782b
+  zh: ad5fe59ef83ab4b6
+/deepseek-ai-qqbot:
+  en: 03e86273e9f8cd1c
+  zh: 86796d487442577f
+/deepseek-ai-qqbot/summary:
+  en: 9960f62a68be3bfd
+  zh: 6e4f69e38e9a70d4
+/deepseek-ai-qqbot/table-of-contents:
+  en: 5db0ae01d50cb0e4
+  zh: da127c656e81b685
+/deepseek-ai-qqbot/use-this-package:
+  en: bbff250eba0f1b89
+  zh: 0a618f05cc88ee2b
+/deepseek-ai-qqbot/use-this-package/install-into-the-event-profile:
+  en: f7a0b48ecbfa185a
+  zh: 0d16f692f9bac262
+/deepseek-ai-qqbot/use-this-package/what-you-get:
+  en: 561a648dd1383b3d
+  zh: ea540ba016e7a70f
+/deepseek-ai-qqbot/use-this-package/what-it-needs:
+  en: 15c3d0e04f72ca67
+  zh: 41a157d72dd415ea
+/deepseek-ai-qqbot/understand-the-implementation:
+  en: 2a02f537d13ecd69
+  zh: 7dbd05e4251ff9e9
+/deepseek-ai-qqbot/further-exploration:
+  en: 1181ae5d3e220108
+  zh: 56762e9b458c5789
+/deepseek-ai-qqbot/known-limitations-and-deferred-work:
+  en: ae0a0f1c464b6850
+  zh: 9fd617ad333256b2

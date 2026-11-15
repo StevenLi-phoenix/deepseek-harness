@@ -1,0 +1,13 @@
+{
+  "name": "@deepseek-ai/github",
+  "version": "0.2.2-rc.3",
+  "private": true,
+  "description": "Profile layer for the event service's GitHub sensor: the GitHub App webhook route and the sensor that turns its deliveries into bus events.",
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml"
+      ]
+    }
+  }
+}

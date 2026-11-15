@@ -1,0 +1,13 @@
+{
+  "name": "@deepseek-ai/qqbot",
+  "version": "0.2.2-rc.3",
+  "private": true,
+  "description": "Profile layer for the event service's QQ bot channel: the official QQ bot channel and its `qqbot` preset.",
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml"
+      ]
+    }
+  }
+}

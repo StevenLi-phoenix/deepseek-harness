@@ -1,0 +1,16 @@
+# fork headless-browser bundle — one feature's rows for the event profile,
+# @deepseek-ai/headless-browser.
+#
+# A layer of the `event` profile, mounted right after @deepseek-ai/dsh-event-bundle (the service
+# skeleton) and before the owner's profile patch. This layer mounts the one persistent headless
+# Chromium the agent drives with tools and a person takes over from the Web UI. It is mounted after
+# the skeleton rows it depends on; see ../event/README.md for the mount order and for what the
+# skeleton keeps.
+
+- insert:
+    # One persistent headless Chromium the agent drives with tools and a person takes over from the
+    # Web UI (/headless-browser) for a sign-in or a CAPTCHA; the profile directory keeps the sign-in
+    # across restarts. Rows added here, not in the owner's profile patch, because that layer only
+    # overrides a row that already exists.
+    - id: headless-browser
+      name: '@deepseek-ai/dsh-headless-browser'

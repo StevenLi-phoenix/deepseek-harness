@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write fork/bundles/cc-admin/README.md
+/:
+  en: 9fc94a9748143b88
+  zh: c322f69434fa3239
+/deepseek-ai-cc-admin:
+  en: a7f7c1bd7de1023b
+  zh: 1a14b3d84e94fc47
+/deepseek-ai-cc-admin/summary:
+  en: cb0ae183b6b12751
+  zh: 3009a2a427e761a0
+/deepseek-ai-cc-admin/table-of-contents:
+  en: 5db0ae01d50cb0e4
+  zh: da127c656e81b685
+/deepseek-ai-cc-admin/use-this-package:
+  en: bbff250eba0f1b89
+  zh: 0a618f05cc88ee2b
+/deepseek-ai-cc-admin/use-this-package/install-into-the-event-profile:
+  en: f7a0b48ecbfa185a
+  zh: 0d16f692f9bac262
+/deepseek-ai-cc-admin/use-this-package/what-you-get:
+  en: 605c0077616b1509
+  zh: a1943fdf57bd0cae
+/deepseek-ai-cc-admin/use-this-package/what-it-needs:
+  en: f047a4739229d13c
+  zh: 5cc14da32735131f
+/deepseek-ai-cc-admin/understand-the-implementation:
+  en: 2a02f537d13ecd69
+  zh: 7dbd05e4251ff9e9
+/deepseek-ai-cc-admin/further-exploration:
+  en: bf78a9e9d0bfa3f1
+  zh: 04de3f140b2dbf8d
+/deepseek-ai-cc-admin/known-limitations-and-deferred-work:
+  en: 98650a2056adc280
+  zh: 031ea6ff80883d54

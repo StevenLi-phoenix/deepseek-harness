@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write fork/bundles/subagent-activity/README.md
+/:
+  en: 5b040fa8bf692a42
+  zh: 5eec8b1a64363247
+/deepseek-ai-subagent-activity:
+  en: 5e75b68761c37268
+  zh: dc6da70cce5728bc
+/deepseek-ai-subagent-activity/summary:
+  en: 60a4d02cc7632fd9
+  zh: 126cfb6ecb0bcce5
+/deepseek-ai-subagent-activity/table-of-contents:
+  en: 5db0ae01d50cb0e4
+  zh: da127c656e81b685
+/deepseek-ai-subagent-activity/use-this-package:
+  en: bbff250eba0f1b89
+  zh: 0a618f05cc88ee2b
+/deepseek-ai-subagent-activity/use-this-package/install-into-the-event-profile:
+  en: f7a0b48ecbfa185a
+  zh: 0d16f692f9bac262
+/deepseek-ai-subagent-activity/use-this-package/what-you-get:
+  en: d15ec7b3a7e1645c
+  zh: 95ce5b33e370cf37
+/deepseek-ai-subagent-activity/use-this-package/what-it-needs:
+  en: 3d5ccb40f7931a0c
+  zh: a93074ad2f306495
+/deepseek-ai-subagent-activity/understand-the-implementation:
+  en: 2a02f537d13ecd69
+  zh: 7dbd05e4251ff9e9
+/deepseek-ai-subagent-activity/further-exploration:
+  en: f123fa8e39ae04a9
+  zh: 3a3981cc0b7a0fad
+/deepseek-ai-subagent-activity/known-limitations-and-deferred-work:
+  en: 36d851ce7572f79f
+  zh: 5e536aaa115c2329

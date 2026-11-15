@@ -1,0 +1,13 @@
+{
+  "name": "@deepseek-ai/wechat",
+  "version": "0.2.2-rc.3",
+  "private": true,
+  "description": "Profile layer for the event service's WeChat channel: the owner's WeChat channel and the browser half of Settings -> WeChat.",
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml"
+      ]
+    }
+  }
+}

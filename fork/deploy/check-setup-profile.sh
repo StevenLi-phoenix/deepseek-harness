@@ -19,6 +19,7 @@ FRESH="$WORK/fresh"; mkdir -p "$FRESH"
 PATCH="$FRESH/profiles/event/cordis.patch.yml"
 cmp -s "$PATCH" "$PREFIX/fork/profiles/event/cordis.patch.yml" || fail "fresh owner layer differs from the shipped template"
 /usr/bin/grep -q '"@deepseek-ai/dsh-event-bundle"' "$FRESH/profiles/event/package.json" || fail "event bundle missing from the manifest"
+node -e 'const m=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8"));const fork=m.dsh.profile.bundles.filter(n=>!["@deepseek-ai/dsh-base","@deepseek-ai/dsh-web-app"].includes(n));if(fork.length!==19)throw new Error(`expected 19 fork bundle layers, found ${fork.length}`);if(fork[0]!=="@deepseek-ai/dsh-event-bundle")throw new Error(`the skeleton must mount first, found ${fork[0]}`)' "$FRESH/profiles/event/package.json" || fail "the profile does not list the 19 fork bundle layers with the skeleton first"
 compose "$FRESH" > "$WORK/fresh.yml"
 for id in event-bus github-sensor wechat preset-unattended; do
   /usr/bin/grep -q "^- id: $id\$" "$WORK/fresh.yml" || fail "composition lacks $id"

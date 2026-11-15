@@ -1,0 +1,20 @@
+# fork presence bundle — one feature's rows for the event profile, @deepseek-ai/presence.
+#
+# A layer of the `event` profile, mounted right after @deepseek-ai/dsh-event-bundle (the service
+# skeleton) and before the owner's profile patch. This layer mounts Settings -> 勿扰: whether the
+# owner sleeps, from the Sleep Focus signal. It is mounted after the skeleton rows it depends on;
+# see ../event/README.md for the mount order and for what the skeleton keeps.
+
+- insert:
+    # Settings → 勿扰: whether the owner sleeps. The signal is the Sleep Focus that iCloud syncs from the
+    # phone: focus-watch (a signed binary on this Mac under the owner's user, RUNBOOK §18) reads it and
+    # pushes presence.sleep.on/off to event-ingest's `presence` source on every change and as a
+    # heartbeat every 30 minutes. A daily 03:30-10:30 New York window decides when no signal is fresh
+    # (2 h), and buttons in Settings override both. While asleep wechat holds non-urgent messages
+    # and sends them as one digest on waking. Urgent kinds are the defaults (host.disk.full,
+    # host.*.critical, bili.risk.*, bili.gate.readonly). The token is EVENT_INGEST_TOKEN_PRESENCE in
+    # $DSH_HOME/.env, and the same value in focus-watch's token file.
+    - id: presence
+      name: '@deepseek-ai/dsh-presence'
+      config:
+        timeZone: America/New_York

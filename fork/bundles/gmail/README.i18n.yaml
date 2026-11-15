@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write fork/bundles/gmail/README.md
+/:
+  en: ffdee81d2ab021d1
+  zh: c3929bbe97fdb903
+/deepseek-ai-gmail:
+  en: fd57e5a10ba0d473
+  zh: 06e0c1526f57952b
+/deepseek-ai-gmail/summary:
+  en: 9e5a5955ca48291f
+  zh: 84b1462b3a67fee3
+/deepseek-ai-gmail/table-of-contents:
+  en: 5db0ae01d50cb0e4
+  zh: da127c656e81b685
+/deepseek-ai-gmail/use-this-package:
+  en: bbff250eba0f1b89
+  zh: 0a618f05cc88ee2b
+/deepseek-ai-gmail/use-this-package/install-into-the-event-profile:
+  en: f7a0b48ecbfa185a
+  zh: 0d16f692f9bac262
+/deepseek-ai-gmail/use-this-package/what-you-get:
+  en: ae25e0d8fac57bed
+  zh: 0f00e00d859bbd9b
+/deepseek-ai-gmail/use-this-package/what-it-needs:
+  en: af777087cd707f9f
+  zh: 846bbb858e2a39db
+/deepseek-ai-gmail/understand-the-implementation:
+  en: 2a02f537d13ecd69
+  zh: 7dbd05e4251ff9e9
+/deepseek-ai-gmail/further-exploration:
+  en: 68d894f542c90795
+  zh: bf0e0082e253585c
+/deepseek-ai-gmail/known-limitations-and-deferred-work:
+  en: 2f238b5a131fda17
+  zh: 2ea31340bb1b6be3

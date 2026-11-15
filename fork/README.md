@@ -9,10 +9,10 @@ Deployment files for running this fork as an always-on, event-driven agent servi
 | Path | Contents |
 |---|---|
 | [`CHANGELOG.md`](CHANGELOG.md) | Fork-local changes (Keep a Changelog) |
-| [`bundles/event/`](bundles/event/) | `@deepseek-ai/dsh-event-bundle`: the event composition as a bundle layer (code-owned; routing state lives in storage and is managed by the agent's tools). The `unattended` preset keeps the `workflow` tool; Agent Teams are disabled at the bundle |
-| [`profiles/event/`](profiles/event/) | Event profile: `package.json` (Web bundles plus the event bundle) and `cordis.patch.yml`, the owner's empty patch layer that Web UI settings write to |
+| [`bundles/event/`](bundles/event/) | `@deepseek-ai/dsh-event-bundle`: the event service skeleton as a bundle layer (webhook runtime, owner relay, event bus and its subscriptions, ingest, the console and settings rows, the `notify` and `unattended` presets; routing state lives in storage and is managed by the agent's tools). Every feature is a bundle of its own beside it, mounted after it: `github`, `headless-browser`, `provider-balance`, `subagent-activity`, `sysmon`, `memory`, `presence`, `wechat`, `cc-admin`, `voice`, `bili`, `qq`, `courses`, `gmail`, `qqbot`, `integrity`, `guard`, `style` ([`bundles/event/README.md`](bundles/event/README.md) holds the mount order) |
+| [`profiles/event/`](profiles/event/) | Event profile: `package.json` (Web bundles, the skeleton, then one bundle per feature in mount order) and `cordis.patch.yml`, the owner's empty patch layer that Web UI settings write to |
 | [`deploy/RUNBOOK.md`](deploy/RUNBOOK.md) | Isolated deployment on the Mac mini: `dsh-runtime` user, LaunchDaemon, secrets, WeChat binding, verification |
-| [`deploy/`](deploy/) | `install-app.sh`, `setup-profile.sh` (links plugins and the bundle; creates the owner layer once), `check-setup-profile.sh <installed prefix>` (checks fresh, migrated, and re-run homes; `upgrade.sh` runs it before switching `current`), `upgrade.sh`, `wechat-login.mjs`, `home.cordis.patch.yml`, LaunchDaemon template |
+| [`deploy/`](deploy/) | `install-app.sh`, `setup-profile.sh` (links plugins and every fork bundle; creates the owner layer once), `check-setup-profile.sh <installed prefix>` (checks fresh, migrated, and re-run homes; `upgrade.sh` runs it before switching `current`), `upgrade.sh`, `wechat-login.mjs`, `home.cordis.patch.yml`, LaunchDaemon template |
 | [`../packages/fork/UPSTREAM.md`](../packages/fork/UPSTREAM.md) | Upstream baseline, copied packages, touched upstream files, upgrade procedure |
 
 ## Checks for the fork group
@@ -36,9 +36,7 @@ pnpm run verify-config-catalog && pnpm run verify-cordis-catalog && pnpm run ver
 
 ```sh
 export DSH_HOME=/path/to/test-home            # never the live ~/.dsh
-mkdir -p "$DSH_HOME/profiles/event/node_modules/@deepseek-ai"
-cp fork/profiles/event/package.json fork/profiles/event/cordis.patch.yml "$DSH_HOME/profiles/event/"
-ln -s "$PWD/fork/bundles/event" "$DSH_HOME/profiles/event/node_modules/@deepseek-ai/dsh-event-bundle"
+fork/deploy/setup-profile.sh "$DSH_HOME" "$PWD" # links the plugins and all 19 fork bundles
 pnpm dsh event --dump-config | less            # composed tree, with the layer that set each row
 pnpm dsh event --port 3092 --no-open           # Web UI + sensors + bus + WeChat channel
 ```

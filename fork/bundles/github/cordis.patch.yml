@@ -1,0 +1,23 @@
+# fork github bundle — one feature's rows for the event profile, @deepseek-ai/github.
+#
+# A layer of the `event` profile, mounted right after @deepseek-ai/dsh-event-bundle (the service
+# skeleton) and before the owner's profile patch. This layer mounts the GitHub App webhook route and
+# the sensor that turns its deliveries into bus events. It is mounted after the skeleton rows it
+# depends on; see ../event/README.md for the mount order and for what the skeleton keeps. Its
+# secrets are GITHUB_WEBHOOK_SECRET (the HMAC check), GITHUB_SENSOR_TOKEN, and optionally
+# GITHUB_SENSOR_NOTIFICATIONS_TOKEN.
+
+- insert:
+    # GitHub App webhooks. GitHub posts to https://api.lishuyu.app/github-relay/github on phm, which
+    # forwards the untouched body and signature headers over the tailnet to this route; the HMAC check
+    # here is the only trust boundary. github-sensor's rule turns deliveries into bus events.
+    - id: webhook-github
+      name: '@deepseek-ai/dsh-webhook-github'
+      config:
+        source: github-app
+        path: /hooks/github
+        secretEnv: GITHUB_WEBHOOK_SECRET
+        maxBodyBytes: 26214400
+
+    - id: github-sensor
+      name: '@deepseek-ai/dsh-github-sensor'

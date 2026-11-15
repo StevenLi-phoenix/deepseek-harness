@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { Config } from '../src/index.ts'
+import { forkPatchFiles, forkPatchText } from '../../../../scripts/fork-bundle-layers.ts'
 
 /** One loader patch row. */
 interface Row {
@@ -13,7 +14,7 @@ interface Row {
 }
 
 const root = join(import.meta.dirname, '../../../..')
-const inserted = (parse(readFileSync(join(root, 'fork/bundles/event/cordis.patch.yml'), 'utf8'), { logLevel: 'error' }) as Row[]).flatMap(row => row.insert ?? [])
+const inserted = forkPatchFiles().flatMap(file => parse(readFileSync(join(root, file), 'utf8'), { logLevel: 'error' }) as Row[]).flatMap(row => row.insert ?? [])
 
 describe('event bundle', () => {
   it('mounts the guard once at the root with the defaults', () => {
@@ -29,6 +30,6 @@ describe('event bundle', () => {
   })
 
   it('carries no honeypot or canary value in this public repository', () => {
-    expect(readFileSync(join(root, 'fork/bundles/event/cordis.patch.yml'), 'utf8')).not.toContain('honeypot_')
+    expect(forkPatchText()).not.toContain('honeypot_')
   })
 })

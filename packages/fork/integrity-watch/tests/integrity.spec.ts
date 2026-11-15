@@ -10,6 +10,7 @@ import { parse } from 'yaml'
 import * as Integrity from '../src/index.ts'
 import { ABSENT, digestOf, targetsFor } from '../src/scan.ts'
 import { compileTic, ticHits, TICS } from '../src/tics.ts'
+import { forkPatchFiles } from '../../../../scripts/fork-bundle-layers.ts'
 
 const contexts: Context[] = []
 const dirs: string[] = []
@@ -381,7 +382,7 @@ describe('the stock-line matcher', () => {
 
 describe('the bundle\'s persona', () => {
   it('forbids exactly the lines the counter looks for, in both persona presets', () => {
-    const rows = (parse(readFileSync(join(import.meta.dirname, '../../../../fork/bundles/event/cordis.patch.yml'), 'utf8'), { logLevel: 'error' }) as Array<{ insert?: Array<{ config?: { id?: string; plugins?: Array<{ name?: string; config?: { prefix?: string } }> } }> }>)
+    const rows = forkPatchFiles().flatMap(file => parse(readFileSync(join(import.meta.dirname, '../../../..', file), 'utf8'), { logLevel: 'error' }) as Array<{ insert?: Array<{ config?: { id?: string; plugins?: Array<{ name?: string; config?: { prefix?: string } }> } }> }>)
       .flatMap(row => row.insert ?? [])
     for (const preset of ['unattended', 'bili']) {
       const prefix = rows.find(row => row.config?.id === preset)?.config?.plugins?.find(plugin => plugin.name === '@deepseek-ai/dsh-persona')?.config?.prefix?.replaceAll(/\s+/gu, ' ') ?? ''
