@@ -68,6 +68,12 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 
 页面上的输入只在用户持有控制权时进入浏览器。从页面取得控制会把持有者设为 `human`，理由是「用户从接管页取得控制」；交还按钮把它还给 agent。两个按钮和两个控制工具是同一个状态转换。
 
+#### 应用内的接管页
+
+本包的浏览器半边也把「浏览器接管」注册成 Web UI 的一个页面：一个键为 `browser-takeover` 的 `main` 面板，由同 id 的侧边栏行选中。主人点那一行就到实时画面，地址栏保持应用自己的 URL，不会跳到站点根路径下面。
+
+画面由页面自己画，不是 iframe，也不打开任何子地址。它用应用自己的来源和 Cookie 读上面的状态路由和实时 socket；「接管」「交回」两个按钮发的是和这页按钮相同的控制消息，只是理由不同。上面那个独立页面留给浏览器允许它的部署。
+
 <a id="understand-the-implementation"></a>
 ## 理解实现
 

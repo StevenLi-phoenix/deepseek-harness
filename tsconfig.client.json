@@ -167,6 +167,7 @@
     { "path": "./packages/fork/speaking-style-settings/tsconfig.client.json" },
     { "path": "./packages/fork/owner-memory-admin/tsconfig.client.json" },
     { "path": "./packages/fork/event-console/tsconfig.client.json" },
+    { "path": "./packages/browser-use/headless-browser/tsconfig.client.json" },
     { "path": "./packages/fork/bili/tsconfig.client.json" },
     { "path": "./packages/fork/wechat-settings/tsconfig.client.json" },
     { "path": "./packages/client/ui-trajectory/tsconfig.client.json" },
