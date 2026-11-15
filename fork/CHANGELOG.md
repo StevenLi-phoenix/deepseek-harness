@@ -4,6 +4,9 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 
 ## [Unreleased]
 
+### Changed
+- Fork rules (2026-11-14): `fork/AGENTS.md` now says AMS remains the only process supervisor (DSH observes plugin and Session failures and reports them, no service migrates into a DSH profile), that one plugin package must be a complete feature on its own, and that a prefix naming the owner is reserved for private or deployment-specific work.
+
 ### Added
 - `deploy/check-owner-names.mjs` (2026-11-12): fails when a tracked path or line names the owner by initials or account name (the owner's `.app` domain and its reverse-DNS launchd labels excepted; integrity hashes and words that only contain the letters do not count). `upgrade.sh` runs it with `--self-test` before every build and the lefthook pre-commit job runs it on the staged files, so a commit that names the owner is neither committed nor built.
 - Gmail for the main agent (2026-11-12): new `@deepseek-ai/dsh-gmail` (`ctx.gmail`) connects any number of the owner's Gmail accounts by Google OAuth (PKCE, scope `gmail.modify`, refresh tokens as grant records in the credential store) and decides every send by the account's policy (`read-only`, `confirm-all`, `confirm-untrusted` by default, `direct`) and the turn's origin from the Session log; a held message stays a Gmail draft and DSH asks the owner on WeChat with a six-character code, sending it only on `发送 CODE` in the owner's own clean turn or a confirm in Settings, never when the draft changed after the notice (SHA-256 of its raw text), after `confirmTtlHours` (72), or over `maxSendsPerDay` (50) (RUNBOOK §29).
