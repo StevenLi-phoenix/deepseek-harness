@@ -16,15 +16,11 @@ import { firstLine } from './error.ts'
 import { cdpCommand, decodeClientMessage, type ClientMessage } from './input.ts'
 import type { LiveView, Viewer } from './live-view.ts'
 import { PAGE_HTML } from './page.ts'
+import { LIVE_PATH, PAGE_PATH, STATUS_PATH } from './paths.ts'
 import type { HeadlessBrowserSession } from './session.ts'
 import type { TakeoverState } from './takeover.ts'
 
-/** Page path; the mountable route prefix of this plugin. */
-export const PAGE_PATH = '/headless-browser'
-/** Status path behind the page. */
-export const STATUS_PATH = '/headless-browser/status'
-/** Upgrade path of the live view socket. */
-export const LIVE_PATH = '/headless-browser/live'
+export { LIVE_PATH, PAGE_PATH, STATUS_PATH } from './paths.ts'
 
 /** Largest accepted socket message; the page sends a few hundred bytes at most. */
 const MAX_MESSAGE_BYTES = 64 * 1024

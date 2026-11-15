@@ -68,6 +68,12 @@ Admission is the deployment's, not this package's: the page and status use the W
 
 The page's input only reaches the browser while the user holds control. Taking control from the page sets the holder to `human` with the reason "用户从接管页取得控制"; the release button returns it to the agent. Both buttons are the same state transitions as the two control tools.
 
+#### The in-app page
+
+The package's browser half also registers 浏览器接管 as a page of the Web UI: one `main` panel keyed `browser-takeover`, selected by the sidebar row of the same id. The owner reaches the live frame by clicking that row, so the app's address bar keeps its URL instead of navigating below the site root.
+
+The page paints the frames itself; it is not an iframe and opens no sub-URL. It reads the status route and the live socket above with the app's own origin and cookie, and its 接管 and 交回 buttons send the same control messages as this page's buttons, with a different stated reason. The standalone page stays for deployments whose browsers allow it.
+
 ## Understand the implementation
 
 <details>

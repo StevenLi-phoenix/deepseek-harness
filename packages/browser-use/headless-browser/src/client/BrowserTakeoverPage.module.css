@@ -1,0 +1,164 @@
+/* The 浏览器接管 page: a header line, the live frame, and the text-insert field.
+   Values follow the app's tokens so both themes read the same ink/background pairing. */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  color: var(--dsw-alias-label-primary);
+}
+
+.header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.badgeAgent,
+.badgeHuman {
+  flex: none;
+  padding: 1px 8px;
+  border: 0.5px solid transparent;
+  border-radius: 999px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.badgeAgent {
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-bg-layer-3);
+  border-color: var(--dsw-alias-border-l3);
+}
+
+.badgeHuman {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-module-platform);
+  border-color: var(--dsw-alias-border-selected);
+}
+
+.hint,
+.url,
+.offline,
+.viewers {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--dsw-alias-label-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hint {
+  flex: 1;
+}
+
+.url {
+  max-width: 32ch;
+  color: var(--dsw-alias-label-primary);
+  opacity: 0.8;
+}
+
+.offline {
+  flex: none;
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.viewers {
+  flex: none;
+}
+
+.action {
+  flex: none;
+  padding: 4px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-module-platform);
+  cursor: pointer;
+}
+
+.action:hover {
+  border-color: var(--dsw-alias-border-selected);
+}
+
+.action:focus-visible {
+  outline: 2px solid var(--dsw-alias-border-selected);
+  outline-offset: 1px;
+}
+
+.stage {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 16px;
+  overflow: hidden;
+  background: var(--dsw-alias-bg-layer-1);
+  outline: none;
+}
+
+.stage:focus-visible {
+  outline: 2px solid var(--dsw-alias-border-selected);
+  outline-offset: -4px;
+}
+
+.frame {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  /* The pointer is the browser's while the user holds it; no drag image, no text caret. */
+  user-select: none;
+  box-shadow: 0 0 0 0.5px var(--dsw-alias-border-l2);
+}
+
+.waiting {
+  margin: 0;
+  font-size: 13px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.footer {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  padding: 10px 20px 14px;
+}
+
+.insert {
+  width: 32ch;
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.insert:focus-visible {
+  border-color: var(--dsw-alias-border-selected);
+  outline: none;
+}
+
+/* A text field under a 16px font zooms the visual viewport on iOS Safari. */
+@media (pointer: coarse) {
+  .insert {
+    font-size: 16px;
+  }
+}
