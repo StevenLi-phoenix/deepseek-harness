@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { Config } from '../src/index.ts'
+import { forkPatchFiles, forkPatchText } from '../../../../scripts/fork-bundle-layers.ts'
 
 /** One loader patch row. */
 interface Row {
@@ -19,7 +20,7 @@ const groupRows = (config: unknown): Row[] => {
 }
 
 const read = (path: string): Row[] => parse(readFileSync(join(import.meta.dirname, '../../../..', path), 'utf8'), { logLevel: 'error' }) as Row[]
-const bundle = read('fork/bundles/event/cordis.patch.yml')
+const bundle = forkPatchFiles().flatMap(read)
 const inserted = bundle.flatMap(row => row.insert ?? [])
 
 /**
@@ -29,15 +30,13 @@ const inserted = bundle.flatMap(row => row.insert ?? [])
  */
 function composedRoot(): Map<string, { name?: string; enabled: boolean }> {
   const rows = new Map<string, { name?: string; enabled: boolean }>()
-  for (const layer of ['packages/bundle/base/cordis.patch.yml', 'packages/bundle/web-app/cordis.patch.yml', 'fork/bundles/event/cordis.patch.yml']) {
-    for (const entry of read(layer) as Array<Row & { disabled?: unknown }>) {
-      for (const row of (entry.insert ?? []) as Array<Row & { disabled?: unknown }>) {
-        rows.set(row.id, { ...row.name === undefined ? {} : { name: row.name }, enabled: row.disabled !== true })
-      }
-      if (entry.insert === undefined && 'disabled' in entry) {
-        const row = rows.get(entry.id)
-        if (row !== undefined) row.enabled = entry.disabled !== true
-      }
+  for (const entry of [read('packages/bundle/base/cordis.patch.yml'), read('packages/bundle/web-app/cordis.patch.yml'), bundle].flat() as Array<Row & { disabled?: unknown }>) {
+    for (const row of (entry.insert ?? []) as Array<Row & { disabled?: unknown }>) {
+      rows.set(row.id, { ...row.name === undefined ? {} : { name: row.name }, enabled: row.disabled !== true })
+    }
+    if (entry.insert === undefined && 'disabled' in entry) {
+      const row = rows.get(entry.id)
+      if (row !== undefined) row.enabled = entry.disabled !== true
     }
   }
   return rows
@@ -83,7 +82,7 @@ describe('event bundle', () => {
   })
 
   it('names the bili-svc token as a credential of the bundle, and no Bilibili session', () => {
-    const text = readFileSync(join(import.meta.dirname, '../../../../fork/bundles/event/cordis.patch.yml'), 'utf8')
+    const text = forkPatchText()
     expect(text).toContain('BILI_SVC_TOKEN_BILI')
     expect(text).not.toMatch(/signed in by QR|cookies and refresh token live/)
   })

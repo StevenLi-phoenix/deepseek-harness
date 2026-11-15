@@ -1,0 +1,13 @@
+{
+  "name": "@deepseek-ai/gmail",
+  "version": "0.2.2-rc.3",
+  "private": true,
+  "description": "Profile layer for the event service's Gmail accounts: the owner's Gmail accounts and Settings -> 邮箱.",
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml"
+      ]
+    }
+  }
+}

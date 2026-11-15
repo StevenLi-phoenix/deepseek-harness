@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { parse, stringify } from 'yaml'
 import * as Guard from '../src/index.ts'
 import * as GuardSettings from '../src/settings.ts'
+import { forkPatchFiles } from '../../../../scripts/fork-bundle-layers.ts'
 
 /** One loader patch row. */
 interface Row {
@@ -24,7 +25,7 @@ interface Row {
 }
 
 const root = join(import.meta.dirname, '../../../..')
-const inserted = (parse(readFileSync(join(root, 'fork/bundles/event/cordis.patch.yml'), 'utf8'), { logLevel: 'error' }) as Row[]).flatMap(row => row.insert ?? [])
+const inserted = forkPatchFiles().flatMap(file => parse(readFileSync(join(root, file), 'utf8'), { logLevel: 'error' }) as Row[]).flatMap(row => row.insert ?? [])
 const bundleRow = inserted.find(row => row.id === 'content-guard')!
 const settingsRow = inserted.find(row => row.id === 'content-guard-settings')!
 

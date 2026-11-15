@@ -1,0 +1,21 @@
+# fork courses bundle — one feature's rows for the event profile, @deepseek-ai/courses.
+#
+# A layer of the `event` profile, mounted right after @deepseek-ai/dsh-event-bundle (the service
+# skeleton) and before the owner's profile patch. This layer mounts the owner's course records, the
+# deadline poller, and Settings -> 课程 DDL. It is mounted after the skeleton rows it depends on; see
+# ../event/README.md for the mount order and for what the skeleton keeps.
+
+- insert:
+    # The owner's course records (ctx.courses): a client of the courses service
+    # (https://api.lishuyu.app/courses, REST with the PAT COURSES_PAT of audience `courses` from $DSH_HOME/.env)
+    # and a deadline poller (every 15 minutes). Fixed rules decide whether a reminder goes out, never a model:
+    # checkpoints before each deadline, a missed deadline told at once while its late window is open, submitted or
+    # completed tasks skipped, one message per task and checkpoint across restarts, quiet while the owner sleeps
+    # (presence), and urgent within 3 hours. A broken course sync (report.coverage.health) is told once, then at
+    # most daily, and its recovery once. DSH only reads the records' sync health; the sync agents run elsewhere.
+    # Settings → 课程 DDL (courses-settings) shows the checks and edits this row's config.
+    - id: courses
+      name: '@deepseek-ai/dsh-courses'
+
+    - id: courses-settings
+      name: '@deepseek-ai/dsh-courses-settings'

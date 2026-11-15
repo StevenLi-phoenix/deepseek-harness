@@ -1,0 +1,13 @@
+{
+  "name": "@deepseek-ai/cc-admin",
+  "version": "0.2.2-rc.3",
+  "private": true,
+  "description": "Profile layer for the event service's Claude Code admin page: ctx.claudeCodeSessions for the console page: the service account's Claude Code sessions.",
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml"
+      ]
+    }
+  }
+}

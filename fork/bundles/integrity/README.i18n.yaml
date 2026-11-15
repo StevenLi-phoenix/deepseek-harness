@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write fork/bundles/integrity/README.md
+/:
+  en: 8b66193e5f093f7e
+  zh: 701eab941bab4c6b
+/deepseek-ai-integrity:
+  en: 6b476d6973612667
+  zh: aa652cfbd67d6e58
+/deepseek-ai-integrity/summary:
+  en: d0c149e077e321de
+  zh: 78bf3b755691b334
+/deepseek-ai-integrity/table-of-contents:
+  en: 5db0ae01d50cb0e4
+  zh: da127c656e81b685
+/deepseek-ai-integrity/use-this-package:
+  en: bbff250eba0f1b89
+  zh: 0a618f05cc88ee2b
+/deepseek-ai-integrity/use-this-package/install-into-the-event-profile:
+  en: f7a0b48ecbfa185a
+  zh: 0d16f692f9bac262
+/deepseek-ai-integrity/use-this-package/what-you-get:
+  en: 73e4de56cc2edfac
+  zh: dc760b0f86a3bce5
+/deepseek-ai-integrity/use-this-package/what-it-needs:
+  en: d872f880b8528db0
+  zh: b6e7f4e3a8bc75be
+/deepseek-ai-integrity/understand-the-implementation:
+  en: 2a02f537d13ecd69
+  zh: 7dbd05e4251ff9e9
+/deepseek-ai-integrity/further-exploration:
+  en: b24a915e608eed15
+  zh: 7c18b4b367c1d98f
+/deepseek-ai-integrity/known-limitations-and-deferred-work:
+  en: 487a4b812556c453
+  zh: ebe8bf56363e79b7

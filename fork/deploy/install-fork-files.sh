@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copy the fork's scripts, profile, bundle, and skills from a checkout into an installed build, so the service user (who cannot
+# Copy the fork's scripts, profile, bundles, and skills from a checkout into an installed build, so the service user (who cannot
 # read the operator's home) sets up exactly the composition this build was tested with.
 # usage: install-fork-files.sh <checkout> <installed prefix>
 set -euo pipefail
@@ -10,5 +10,5 @@ for script in setup-profile.sh wechat-login.mjs qqbot-login.mjs memory-import.mj
   [ ! -f "$ROOT/fork/deploy/$script" ] || cp "$ROOT/fork/deploy/$script" "$PREFIX/fork/deploy/"
 done
 [ ! -d "$ROOT/fork/profiles/event" ] || /usr/bin/rsync -rlpc --delete "$ROOT/fork/profiles/event/" "$PREFIX/fork/profiles/event/"
-[ ! -d "$ROOT/fork/bundles/event" ] || /usr/bin/rsync -rlpc --delete "$ROOT/fork/bundles/event/" "$PREFIX/fork/bundles/event/"
+/usr/bin/rsync -rlpc --delete "$ROOT/fork/bundles/" "$PREFIX/fork/bundles/"
 [ ! -d "$ROOT/fork/skills" ] || /usr/bin/rsync -rlpc --delete "$ROOT/fork/skills/" "$PREFIX/fork/skills/"

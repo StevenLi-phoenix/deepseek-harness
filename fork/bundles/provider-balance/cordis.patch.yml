@@ -1,0 +1,12 @@
+# fork provider-balance bundle — one feature's rows for the event profile,
+# @deepseek-ai/provider-balance.
+#
+# A layer of the `event` profile, mounted right after @deepseek-ai/dsh-event-bundle (the service
+# skeleton) and before the owner's profile patch. This layer mounts the composer dock pill that
+# shows the DeepSeek account balance. It is mounted after the skeleton rows it depends on; see
+# ../event/README.md for the mount order and for what the skeleton keeps.
+
+- insert:
+    # Composer dock pill: the DeepSeek account balance next to the activity and usage pills.
+    - id: provider-balance
+      name: '@deepseek-ai/dsh-provider-balance'

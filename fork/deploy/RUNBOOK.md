@@ -612,7 +612,7 @@ The fork's packages, services, storage domains, data directories, env names, and
 
 ## Operate
 
-Patch edits (`$DSH_HOME/cordis.patch.yml`, the profile patch) reload live; `.env` edits need a restart; a new build hot-reloads or restarts as "DSH itself" describes. The composition is the `@deepseek-ai/dsh-event-bundle` layer linked from the build; the profile patch `profiles/event/cordis.patch.yml` is the owner's layer, where Web UI settings save, and upgrades keep it. A home patch entry replaces that entry's whole `config`, so override only entries whose config it restates in full, and the Web UI refuses to save an entry the home patch sets ("Configuration for … is overridden by a home patch").
+Patch edits (`$DSH_HOME/cordis.patch.yml`, the profile patch) reload live; `.env` edits need a restart; a new build hot-reloads or restarts as "DSH itself" describes. The composition is the fork bundle layers linked from the build (`@deepseek-ai/dsh-event-bundle` as the service skeleton, then one bundle per feature; `fork/bundles/event/README.md` has the mount order); the profile patch `profiles/event/cordis.patch.yml` is the owner's layer, where Web UI settings save, and upgrades keep it. A home patch entry replaces that entry's whole `config`, so override only entries whose config it restates in full, and the Web UI refuses to save an entry the home patch sets ("Configuration for … is overridden by a home patch").
 
 | Task | Command |
 |---|---|

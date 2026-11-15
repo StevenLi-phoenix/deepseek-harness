@@ -1,0 +1,15 @@
+# fork subagent-activity bundle — one feature's rows for the event profile,
+# @deepseek-ai/subagent-activity.
+#
+# A layer of the `event` profile, mounted right after @deepseek-ai/dsh-event-bundle (the service
+# skeleton) and before the owner's profile patch. This layer mounts Right Sidebar -> 子智能体: a
+# Session's subagents and what each is doing. It is mounted after the skeleton rows it depends on;
+# see ../event/README.md for the mount order and for what the skeleton keeps.
+
+- insert:
+    # Right Sidebar → 子智能体: a Session's subagents, what each is doing now, how long, how it ended. Its
+    # header button shadows ui-subagent's hover catalog (same slot id, lower priority); ui-subagent stays for
+    # the breadcrumb switcher, the Sidebar chat tab, and the read-only composer. The Host half registers the
+    # subagentActivity projection (subagent Sessions only).
+    - id: subagent-activity
+      name: '@deepseek-ai/dsh-subagent-activity'

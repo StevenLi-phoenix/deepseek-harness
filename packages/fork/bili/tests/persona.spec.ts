@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
+import { forkPatchFiles } from '../../../../scripts/fork-bundle-layers.ts'
 
 /** One loader patch row. */
 interface Row {
@@ -11,7 +12,8 @@ interface Row {
   insert?: Row[]
 }
 
-const rows = (parse(readFileSync(join(import.meta.dirname, '../../../../fork/bundles/event/cordis.patch.yml'), 'utf8'), { logLevel: 'error' }) as Row[])
+const rows = forkPatchFiles()
+  .flatMap(file => parse(readFileSync(join(import.meta.dirname, '../../../..', file), 'utf8'), { logLevel: 'error' }) as Row[])
   .flatMap(row => row.insert ?? [])
 
 /** Persona prefix of one agent preset of the event bundle, as the bundle writes it (whitespace folded). */

@@ -1,0 +1,21 @@
+# fork gmail bundle — one feature's rows for the event profile, @deepseek-ai/gmail.
+#
+# A layer of the `event` profile, mounted right after @deepseek-ai/dsh-event-bundle (the service
+# skeleton) and before the owner's profile patch. This layer mounts the owner's Gmail accounts and
+# Settings -> 邮箱. It is mounted after the skeleton rows it depends on; see ../event/README.md for
+# the mount order and for what the skeleton keeps.
+
+- insert:
+    # The owner's Gmail accounts (ctx.gmail): one Google sign-in per account (work, personal, a bot, more) with
+    # only the gmail.modify permission, the refresh token a grant record in the credential store, and the Gmail REST
+    # API. Each account has a send policy; under confirm-untrusted a message goes out at once only when the owner
+    # started the turn alone, nothing written by others was read in it, and every recipient was named by the owner in
+    # that turn or got mail from the account before. Otherwise it is kept as a Gmail draft and DSH asks the owner on
+    # WeChat with a code ("发送 CODE") or in Settings → 邮箱; a changed draft is never sent. At most 50 sends per
+    # account in 24 hours. Settings → 邮箱 (gmail-settings) stores the OAuth client, connects accounts, and shows
+    # the held messages; Google's sign-in returns to /gmail.oauth.
+    - id: gmail
+      name: '@deepseek-ai/dsh-gmail'
+
+    - id: gmail-settings
+      name: '@deepseek-ai/dsh-gmail-settings'

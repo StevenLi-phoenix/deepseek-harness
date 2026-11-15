@@ -1,0 +1,18 @@
+# fork memory bundle — one feature's rows for the event profile, @deepseek-ai/memory.
+#
+# A layer of the `event` profile, mounted right after @deepseek-ai/dsh-event-bundle (the service
+# skeleton) and before the owner's profile patch. This layer mounts Settings -> Memory: the admin
+# page and the /api/owner-memory route behind it. It is mounted after the skeleton rows it depends
+# on; see ../event/README.md for the mount order and for what the skeleton keeps.
+
+- insert:
+    # Settings → Memory: waiting writes to approve or discard, entries to search, undo, or erase, a
+    # Session's changes to roll back, and the keep/delete verdicts on persona replies. The page is
+    # owner-memory-admin (browser half); its Host route /api/owner-memory is owner-memory-settings, which reads
+    # the file the owner-memory rows below use (<DSH_HOME>/owner-memory/memory.jsonl). The route sits under
+    # the Web UI sign-in and registers no tool, so no agent can reach it.
+    - id: owner-memory-admin
+      name: '@deepseek-ai/dsh-owner-memory-admin'
+
+    - id: owner-memory-settings
+      name: '@deepseek-ai/dsh-owner-memory/settings'

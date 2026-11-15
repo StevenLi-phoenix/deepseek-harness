@@ -31,7 +31,10 @@ These rules supplement the repo-wide [AGENTS.md](../AGENTS.md) for `packages/for
 
 ## Profile layering
 
-The `event` profile composes, in order: the base and Web bundles; `@deepseek-ai/dsh-event-bundle` ([bundles/event/](bundles/event/), code-owned); the profile patch `$DSH_HOME/profiles/event/cordis.patch.yml` (the owner's layer, seeded once from [profiles/event/cordis.patch.yml](profiles/event/cordis.patch.yml); Web UI settings save here); and the home patch `$DSH_HOME/cordis.patch.yml` ([deploy/home.cordis.patch.yml](deploy/home.cordis.patch.yml)).
+The `event` profile composes, in order: the base and Web bundles; `@deepseek-ai/dsh-event-bundle` ([bundles/event/](bundles/event/), the code-owned service skeleton: webhook runtime, owner relay, event bus and subscriptions, ingest, the console and settings rows, the `notify` and `unattended` presets); one bundle per feature under `fork/bundles/<feature>/` (`@deepseek-ai/<feature>`, in the mount order [profiles/event/package.json](profiles/event/package.json) lists); the profile patch `$DSH_HOME/profiles/event/cordis.patch.yml` (the owner's layer, seeded once from [profiles/event/cordis.patch.yml](profiles/event/cordis.patch.yml); Web UI settings save here); and the home patch `$DSH_HOME/cordis.patch.yml` ([deploy/home.cordis.patch.yml](deploy/home.cordis.patch.yml)).
+
+- A feature's rows live in its own bundle; [bundles/event/README.md](bundles/event/README.md) holds the layer table and why each row sits where it does. Add a bundle directory and list it in the profile manifest, or `setup-profile.sh` fails on the mismatch.
+- Patches apply as one flattened list in manifest order and an `insert` appends, so a feature mounts after the skeleton rows it uses. A preset stays whole in one layer: its `config.plugins` is a config value, not a patchable group, so the feature presets travel with their feature and `preset-unattended` keeps the tool rows it names.
 
 - A patch entry's `config` replaces that entry's whole `config`; restate every field the lower layer set.
 - The Web UI refuses to save any entry the home patch sets, so the home patch holds only deployment fixtures the UI does not edit.

@@ -1,0 +1,13 @@
+{
+  "name": "@deepseek-ai/subagent-activity",
+  "version": "0.2.2-rc.3",
+  "private": true,
+  "description": "Profile layer for the event service's subagent activity panel: Right Sidebar -> 子智能体: a Session's subagents and what each is doing.",
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml"
+      ]
+    }
+  }
+}

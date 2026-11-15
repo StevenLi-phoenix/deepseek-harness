@@ -1,0 +1,13 @@
+{
+  "name": "@deepseek-ai/provider-balance",
+  "version": "0.2.2-rc.3",
+  "private": true,
+  "description": "Profile layer for the event service's provider balance pill: the composer dock pill that shows the DeepSeek account balance.",
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml"
+      ]
+    }
+  }
+}

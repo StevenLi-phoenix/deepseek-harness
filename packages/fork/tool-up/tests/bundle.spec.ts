@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
+import { forkPatchFiles } from '../../../../scripts/fork-bundle-layers.ts'
 
 /** The object config of a row. */
 type RowConfig = Record<string, unknown> & {
@@ -46,7 +47,7 @@ function flatten(rows: readonly Row[]): Row[] {
   return rows.flatMap(row => (row.name === 'cordis:group' && Array.isArray(row.config) ? flatten(row.config) : [row]))
 }
 
-const bundle = parse(readFileSync(join(import.meta.dirname, '../../../../fork/bundles/event/cordis.patch.yml'), 'utf8'), { logLevel: 'error' }) as Row[]
+const bundle = forkPatchFiles().flatMap(file => parse(readFileSync(join(import.meta.dirname, '../../../..', file), 'utf8'), { logLevel: 'error' }) as Row[])
 const inserted = bundle.flatMap(row => row.insert ?? [])
 const preset = inserted.find(row => row.id === 'preset-up')!
 const presetRows = conf(preset).plugins ?? []

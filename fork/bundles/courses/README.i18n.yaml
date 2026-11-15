@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write fork/bundles/courses/README.md
+/:
+  en: 6023db11121e3707
+  zh: c070abbc66070470
+/deepseek-ai-courses:
+  en: d3d27ac7ab54c1e7
+  zh: f69bb90e3f66a10c
+/deepseek-ai-courses/summary:
+  en: c6e0a74acdd6e141
+  zh: 14712d2283221f74
+/deepseek-ai-courses/table-of-contents:
+  en: 5db0ae01d50cb0e4
+  zh: da127c656e81b685
+/deepseek-ai-courses/use-this-package:
+  en: bbff250eba0f1b89
+  zh: 0a618f05cc88ee2b
+/deepseek-ai-courses/use-this-package/install-into-the-event-profile:
+  en: f7a0b48ecbfa185a
+  zh: 0d16f692f9bac262
+/deepseek-ai-courses/use-this-package/what-you-get:
+  en: 5c171fa04fe08dc8
+  zh: a92218c3002951b2
+/deepseek-ai-courses/use-this-package/what-it-needs:
+  en: d68e2566b79185c0
+  zh: dbeb9af9a57898ac
+/deepseek-ai-courses/understand-the-implementation:
+  en: 2a02f537d13ecd69
+  zh: 7dbd05e4251ff9e9
+/deepseek-ai-courses/further-exploration:
+  en: bc7cb57ef48186d1
+  zh: 68960b1b25a702ad
+/deepseek-ai-courses/known-limitations-and-deferred-work:
+  en: e957e36ada975d8e
+  zh: d271b20732c39abe

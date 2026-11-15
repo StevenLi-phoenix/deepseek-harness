@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write fork/bundles/headless-browser/README.md
+/:
+  en: 89672e6d4d6ddeff
+  zh: a93a1dfef415758b
+/deepseek-ai-headless-browser:
+  en: f70b149de8a2c0f0
+  zh: b398d8c510b3bc7f
+/deepseek-ai-headless-browser/summary:
+  en: 532fc5de03390847
+  zh: 4bc2f128e91a1a42
+/deepseek-ai-headless-browser/table-of-contents:
+  en: 5db0ae01d50cb0e4
+  zh: da127c656e81b685
+/deepseek-ai-headless-browser/use-this-package:
+  en: bbff250eba0f1b89
+  zh: 0a618f05cc88ee2b
+/deepseek-ai-headless-browser/use-this-package/install-into-the-event-profile:
+  en: f7a0b48ecbfa185a
+  zh: 0d16f692f9bac262
+/deepseek-ai-headless-browser/use-this-package/what-you-get:
+  en: c056c7bc3c6ad29e
+  zh: 897b16541d272932
+/deepseek-ai-headless-browser/use-this-package/what-it-needs:
+  en: c844196835f832a7
+  zh: 98b4eb69defa5bc8
+/deepseek-ai-headless-browser/understand-the-implementation:
+  en: 2a02f537d13ecd69
+  zh: 7dbd05e4251ff9e9
+/deepseek-ai-headless-browser/further-exploration:
+  en: 4a514745efd0d405
+  zh: 42de38781ef80d5f
+/deepseek-ai-headless-browser/known-limitations-and-deferred-work:
+  en: 6f7d478397650a69
+  zh: 9b36d8a10d146cff

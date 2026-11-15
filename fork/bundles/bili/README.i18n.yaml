@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write fork/bundles/bili/README.md
+/:
+  en: a3ea3e812cd00d9a
+  zh: 041e373bf584b020
+/deepseek-ai-bili:
+  en: e0a38712668a27c5
+  zh: 0eac2912999f09fa
+/deepseek-ai-bili/summary:
+  en: cd54a8e4aafe78be
+  zh: 45dfd7e237e07338
+/deepseek-ai-bili/table-of-contents:
+  en: 5db0ae01d50cb0e4
+  zh: da127c656e81b685
+/deepseek-ai-bili/use-this-package:
+  en: bbff250eba0f1b89
+  zh: 0a618f05cc88ee2b
+/deepseek-ai-bili/use-this-package/install-into-the-event-profile:
+  en: f7a0b48ecbfa185a
+  zh: 0d16f692f9bac262
+/deepseek-ai-bili/use-this-package/what-you-get:
+  en: d5ad8b0eb88bec91
+  zh: 2a509c09ee3ea9c4
+/deepseek-ai-bili/use-this-package/what-it-needs:
+  en: 5a6fa4f199ba8986
+  zh: c51234e7bcb2c2fc
+/deepseek-ai-bili/understand-the-implementation:
+  en: 2a02f537d13ecd69
+  zh: 7dbd05e4251ff9e9
+/deepseek-ai-bili/further-exploration:
+  en: b3d4942baa56d00f
+  zh: 4ae0452d99690745
+/deepseek-ai-bili/known-limitations-and-deferred-work:
+  en: fcd5dfdfec373208
+  zh: da54225ead310007

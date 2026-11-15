@@ -1,0 +1,13 @@
+# fork sysmon bundle — one feature's rows for the event profile, @deepseek-ai/sysmon.
+#
+# A layer of the `event` profile, mounted right after @deepseek-ai/dsh-event-bundle (the service
+# skeleton) and before the owner's profile patch. This layer mounts Settings -> System status: this
+# Mac's CPU, memory, power, temperature, and disks. It is mounted after the skeleton rows it depends
+# on; see ../event/README.md for the mount order and for what the skeleton keeps.
+
+- insert:
+    # Settings → System status: this Mac's CPU, memory, power, temperature, and disks per volume.
+    # Power and temperature come from /Users/dsh-runtime/bin/macmon (sudoless); the defaults
+    # show /System/Volumes/Data (Internal) and /Volumes/MiniSSD.
+    - id: sysmon
+      name: '@deepseek-ai/dsh-sysmon'

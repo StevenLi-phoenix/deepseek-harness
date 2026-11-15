@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write fork/bundles/event/README.md
+/:
+  en: 22bf79720648f018
+  zh: 26841318e5adcaae
+/deepseek-ai-dsh-event-bundle:
+  en: 83d9cf49d85d6f48
+  zh: 8b9cc4c8ebdfb25b
+/deepseek-ai-dsh-event-bundle/summary:
+  en: cf28ae7126600f52
+  zh: 9668b248a43da265
+/deepseek-ai-dsh-event-bundle/table-of-contents:
+  en: f21be334c88ffa4d
+  zh: b959f446f0fb29db
+/deepseek-ai-dsh-event-bundle/use-this-package:
+  en: bbff250eba0f1b89
+  zh: 0a618f05cc88ee2b
+/deepseek-ai-dsh-event-bundle/use-this-package/install-into-the-event-profile:
+  en: aa4a9bc9244742c2
+  zh: 01e2d57c9bbf208c
+/deepseek-ai-dsh-event-bundle/use-this-package/what-the-skeleton-mounts:
+  en: 7226cc5f6beb9c57
+  zh: f375c1a8c1f22959
+/deepseek-ai-dsh-event-bundle/the-layers-and-their-order:
+  en: 45952232b7ddd449
+  zh: 209057e4b30bc989
+/deepseek-ai-dsh-event-bundle/understand-the-implementation:
+  en: 419e261349a384ed
+  zh: 1b763a36102aff01
+/deepseek-ai-dsh-event-bundle/further-exploration:
+  en: e38e23d3dfcf0c8a
+  zh: 64749d098e921fe2
+/deepseek-ai-dsh-event-bundle/known-limitations-and-deferred-work:
+  en: 707c8e408a34d82f
+  zh: 2612be8a1144d96e

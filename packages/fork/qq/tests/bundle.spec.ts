@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { Config } from '../src/index.ts'
+import { forkPatchFiles } from '../../../../scripts/fork-bundle-layers.ts'
 
 /** One loader patch row. */
 interface Row {
@@ -19,7 +20,8 @@ interface GroupRow { name: 'cordis:group'; isolate: unknown; config: Row[] }
 const isGroup = (value: unknown): value is GroupRow => typeof value === 'object' && value !== null
   && 'name' in value && value.name === 'cordis:group' && 'config' in value && Array.isArray(value.config)
 
-const inserted = read('fork/bundles/event/cordis.patch.yml').flatMap(row => row.insert ?? [])
+const bundle = forkPatchFiles().flatMap(read)
+const inserted = bundle.flatMap(row => row.insert ?? [])
 
 describe('event bundle', () => {
   it('mounts the observer with a valid configuration that records nothing, sends nothing, and keeps voice off', () => {
@@ -76,7 +78,7 @@ describe('event bundle', () => {
   it('mounts the read tools in the unattended preset and no tool that sends to QQ anywhere', () => {
     const unattended = inserted.find(entry => entry.id === 'preset-unattended')!
     expect((unattended.config?.plugins ?? []).map(plugin => plugin.name)).toContain('@deepseek-ai/dsh-tool-qq')
-    const names = JSON.stringify(read('fork/bundles/event/cordis.patch.yml'))
+    const names = JSON.stringify(bundle)
     expect(names).not.toMatch(/qq_send|send_group|tool-qq-send/)
   })
 })

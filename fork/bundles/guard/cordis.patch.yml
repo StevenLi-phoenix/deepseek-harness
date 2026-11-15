@@ -1,0 +1,21 @@
+# fork guard bundle — one feature's rows for the event profile, @deepseek-ai/guard.
+#
+# A layer of the `event` profile, mounted right after @deepseek-ai/dsh-event-bundle (the service
+# skeleton) and before the owner's profile patch. This layer mounts ctx.contentGuard and the
+# Settings view of its refusals. It is mounted after the skeleton rows it depends on; see
+# ../event/README.md for the mount order and for what the skeleton keeps.
+
+- insert:
+    # Content guard: `ctx.contentGuard.check(text, { purpose, audience })`, the one validator for text that others can read
+    # (persona updates, style notes, QQ group notes, Bilibili channel notes). Layers, in order, any failure refuses:
+    # patterns (phone, email, ID, cards, long numbers, @, addresses, links), canaries ($DSH_HOME/content-guard/canaries.txt
+    # plus `extraCanaries`), overlap with the owner's memory file, and a model on the profile's default route (never
+    # switched off for audience `public`). Raw model responses are kept 14 days in $DSH_HOME/content-guard/raw. In the
+    # profile patch, `- id: content-guard` with `config.extraCanaries` adds honeypot tokens (restate any other field you set).
+    - id: content-guard
+      name: '@deepseek-ai/dsh-content-guard'
+
+    # Settings → Memory shows the guard's settings (the All settings card) and its refusals of the last 24 hours by rule
+    # (counts only, never a text) over GET /api/content-guard, under the Web UI sign-in; it registers no tool.
+    - id: content-guard-settings
+      name: '@deepseek-ai/dsh-content-guard/settings'

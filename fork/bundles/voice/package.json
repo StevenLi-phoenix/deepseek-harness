@@ -1,0 +1,13 @@
+{
+  "name": "@deepseek-ai/voice",
+  "version": "0.2.2-rc.3",
+  "private": true,
+  "description": "Profile layer for the event service's voice: ctx.voice: text to speech for the `speak` tool and speech to text for audio files.",
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml"
+      ]
+    }
+  }
+}

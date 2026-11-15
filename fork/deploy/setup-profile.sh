@@ -1,5 +1,5 @@
 #!/bin/bash
-# Lay out the event profile in a DSH home: link the fork plugins and the event bundle from an installed
+# Lay out the event profile in a DSH home: link the fork plugins and every fork bundle from an installed
 # prefix, and create the owner's patch layer once.
 # usage: setup-profile.sh <DSH_HOME> <installed prefix>
 # Re-running refreshes the manifest and the links. The profile's cordis.patch.yml belongs to the owner
@@ -10,7 +10,7 @@ HOME_DIR=${1:?DSH_HOME}
 PREFIX=${2:?installed prefix}
 HERE=$(cd "$(dirname "$0")" && pwd)
 PROFILE_SRC="$HERE/../profiles/event"
-BUNDLE_SRC=$(cd "$HERE/../bundles/event" && pwd)
+BUNDLES_SRC=$(cd "$HERE/../bundles" && pwd)
 PROFILE="$HOME_DIR/profiles/event"
 PATCH="$PROFILE/cordis.patch.yml"
 mkdir -p "$PROFILE/node_modules/@deepseek-ai"
@@ -24,10 +24,10 @@ if [ ! -f "$PATCH" ]; then
   cp "$PROFILE_SRC/cordis.patch.yml" "$PATCH"
   echo "setup-profile: created the owner patch layer $PATCH"
 fi
-node - "$PROFILE_SRC/package.json" "$PROFILE/package.json" "$PREFIX" "$BUNDLE_SRC" <<'NODE'
-const { readFileSync, writeFileSync, symlinkSync, rmSync, existsSync } = require('node:fs')
+node - "$PROFILE_SRC/package.json" "$PROFILE/package.json" "$PREFIX" "$BUNDLES_SRC" <<'NODE'
+const { readFileSync, writeFileSync, symlinkSync, rmSync, existsSync, readdirSync } = require('node:fs')
 const { join } = require('node:path')
-const [source, target, prefix, bundleDir] = process.argv.slice(2)
+const [source, target, prefix, bundlesDir] = process.argv.slice(2)
 const shipped = JSON.parse(readFileSync(source, 'utf8'))
 // Keep what the owner added through the plugin manager; the shipped bundles and links always win.
 const current = existsSync(target) ? JSON.parse(readFileSync(target, 'utf8')) : {}
@@ -71,9 +71,20 @@ for (const name of ['@deepseek-ai/dsh-webhook', '@deepseek-ai/dsh-webhook-github
   '@deepseek-ai/dsh-gmail', '@deepseek-ai/dsh-gmail-settings', '@deepseek-ai/dsh-tool-gmail', '@deepseek-ai/dsh-subagent-activity']) {
   link(name, join(prefix, 'node_modules', name))
 }
-link('@deepseek-ai/dsh-event-bundle', bundleDir)
+// The fork bundles: one directory per layer under fork/bundles/, each declaring its own package name. The
+// profile composes them in the order fork/profiles/event/package.json lists them, so every bundle directory
+// must be named there, and every fork bundle named there must be linked here.
+const forkBundles = readdirSync(bundlesDir, { withFileTypes: true })
+  .filter(entry => entry.isDirectory() && existsSync(join(bundlesDir, entry.name, 'package.json')))
+  .map(entry => ({ dir: entry.name, name: JSON.parse(readFileSync(join(bundlesDir, entry.name, 'package.json'), 'utf8')).name }))
+  .sort((a, b) => a.dir.localeCompare(b.dir))
+if (forkBundles.length === 0) throw new Error(`setup-profile: no fork bundles in ${bundlesDir}`)
+for (const bundle of forkBundles) {
+  if (!bundles.includes(bundle.name)) throw new Error(`setup-profile: ${bundle.name} (fork/bundles/${bundle.dir}) is not in the profile's bundle list ${source}`)
+}
+for (const bundle of forkBundles) link(bundle.name, join(bundlesDir, bundle.dir))
 writeFileSync(target, `${JSON.stringify(manifest, null, 2)}\n`)
-console.log(`setup-profile: ${links.length} link(s) in ${join(target, '..')}`)
+console.log(`setup-profile: ${links.length} link(s) in ${join(target, '..')}, ${forkBundles.length} of them fork bundles`)
 NODE
 # Owner skills shipped with the build (fork/skills/<name>): the skill-filesystem user root <DSH_HOME>/skills
 # picks them up live, so linking is enough (no restart). A plain directory left by a manual install is replaced.

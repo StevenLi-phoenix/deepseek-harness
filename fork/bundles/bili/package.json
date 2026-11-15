@@ -1,0 +1,13 @@
+{
+  "name": "@deepseek-ai/bili",
+  "version": "0.2.2-rc.3",
+  "private": true,
+  "description": "Profile layer for the event service's Bilibili account: the agent's own Bilibili account and the two presets that answer there.",
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml"
+      ]
+    }
+  }
+}

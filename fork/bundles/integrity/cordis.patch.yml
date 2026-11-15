@@ -1,0 +1,20 @@
+# fork integrity bundle — one feature's rows for the event profile, @deepseek-ai/integrity.
+#
+# A layer of the `event` profile, mounted right after @deepseek-ai/dsh-event-bundle (the service
+# skeleton) and before the owner's profile patch. This layer mounts the integrity watch over what
+# steers the agent. It is mounted after the skeleton rows it depends on; see ../event/README.md for
+# the mount order and for what the skeleton keeps.
+
+- insert:
+    # Integrity watch: digests of what steers the agent (both profile patches, the instruction files and
+    # skill directories of its workspaces, the memory file against its history, the scheduled tasks). A change
+    # goes to the log only: the owner turned the WeChat notice off (`notify: false`). It also logs a hash of each Session's system prompt and counts the persona's forbidden stock lines per day
+    # ($DSH_HOME/integrity-watch/tics.json, counts only).
+    - id: integrity-watch
+      name: '@deepseek-ai/dsh-integrity-watch'
+      config:
+        notify: false
+        workspaces:
+          - /Users/dsh-runtime/me
+          - /Users/dsh-runtime/work
+          - /Users/dsh-runtime/bili

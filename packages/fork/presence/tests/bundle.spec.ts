@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { Config } from '../src/index.ts'
 import { KIND_SLEEP_OFF, KIND_SLEEP_ON, PRESENCE_SOURCE } from '../src/view.ts'
+import { forkPatchFiles } from '../../../../scripts/fork-bundle-layers.ts'
 
 /** One loader patch row. */
 interface Row {
@@ -14,7 +15,7 @@ interface Row {
   insert?: Row[]
 }
 
-const bundle = parse(readFileSync(join(import.meta.dirname, '../../../../fork/bundles/event/cordis.patch.yml'), 'utf8'), { logLevel: 'error' }) as Row[]
+const bundle = forkPatchFiles().flatMap(file => parse(readFileSync(join(import.meta.dirname, '../../../..', file), 'utf8'), { logLevel: 'error' }) as Row[])
 const inserted = bundle.flatMap(row => row.insert ?? [])
 const row = (id: string): Row => inserted.find(entry => entry.id === id)!
 

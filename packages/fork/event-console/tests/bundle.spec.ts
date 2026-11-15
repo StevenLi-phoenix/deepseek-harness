@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { Config } from '../src/index.ts'
+import { forkPatchFiles } from '../../../../scripts/fork-bundle-layers.ts'
 
 /** One loader patch row. */
 interface Row {
@@ -15,7 +16,7 @@ interface Row {
 
 const ROOT = join(import.meta.dirname, '../../../..')
 const read = (path: string): Row[] => parse(readFileSync(join(ROOT, path), 'utf8'), { logLevel: 'error' }) as Row[]
-const bundle = read('fork/bundles/event/cordis.patch.yml')
+const bundle = forkPatchFiles().flatMap(read)
 const inserted = bundle.flatMap(row => row.insert ?? [])
 
 /** Every plugin name inside the presets, however deeply grouped. */

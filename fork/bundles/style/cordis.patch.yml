@@ -1,0 +1,29 @@
+# fork style bundle — one feature's rows for the event profile, @deepseek-ai/style.
+#
+# A layer of the `event` profile, mounted right after @deepseek-ai/dsh-event-bundle (the service
+# skeleton) and before the owner's profile patch. This layer mounts DSH's speaking style and
+# Settings -> 说话风格. It is mounted after the skeleton rows it depends on; see ../event/README.md for
+# the mount order and for what the skeleton keeps.
+
+- insert:
+    # DSH's speaking style (Settings → 说话风格): its own persona card (written with persona_update), traits of the
+    # groups' overall tone and memes (written with style_note by the Sessions that read the QQ groups, the Bilibili
+    # comments, or the web, examples checked verbatim against what that Session read), a meme miner that runs after
+    # each collection (Bilibili hot comments and hot-search words, the QQ groups, and pages the main agent searched;
+    # a cheap model proposes, code confirms, a search explains), HotWatch's meme domain in the index (meme_lookup
+    # explains on demand), and tone samples collected daily without a model from the recorded QQ groups (ctx.qq)
+    # and public Bilibili comments (bili-svc's read API, token BILI_SVC_TOKEN_UP). Inputs are QQ, Bilibili, and
+    # public web pages only, never memory, WeChat, or the owner's messages. Every public write (card, note, mined meme)
+    # is checked by ctx.contentGuard and refused while it is not mounted. The `speaking-style-prompt` rows put the block in the
+    # unattended, up, bili, and qqbot presets as quoted style reference, outside turn-taint's turn tracking; the owner
+    # edits or deletes everything on the page. In the profile patch, `- id: speaking-style` with `config.review: required`
+    # holds new tone samples, `config.enabled: false` turns it all off, `tone`/`memes`/`traits`/`persona`/`hotwatch`/
+    # `miner` `.enabled` switch the parts, and `config.identityMarkers` adds the owner's real name and other handles
+    # to the filter.
+    - id: speaking-style
+      name: '@deepseek-ai/dsh-speaking-style'
+
+    # Settings → 说话风格: the persona card (edit, history, rollback), traits, memes, and tone samples with deletion,
+    # pending samples to keep, the last run's counts, and the stock-line trend (data from speaking-style; nothing to configure).
+    - id: speaking-style-settings
+      name: '@deepseek-ai/dsh-speaking-style-settings'
