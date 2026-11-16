@@ -199,6 +199,10 @@ export function apply(ctx: Context, config: Config): void {
     }
   }
 
-  for (const entry of paths) ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: entry, handler }), `event-ingest: ${entry}`)
+  // `auth: 'anonymous'` is deliberate: the web server's default policy is `required`, which admits only a
+  // browser session or an API credential, so every service push was refused with 401 before this handler ran
+  // (all HTTP sources stopped 2026-11-13). The bearer token below is the admission test, per source and in
+  // constant time; the Host/Origin fence still applies because a route's own policy is checked after it.
+  for (const entry of paths) ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: entry, auth: 'anonymous', handler }), `event-ingest: ${entry}`)
   ctx.logger.info('serving %s for %d source(s)', paths.join(', '), sources.length)
 }

@@ -14,7 +14,7 @@ afterEach(async () => {
   await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose()))
 })
 
-type Route = { path: string; handler: (request: unknown, response: unknown) => Promise<void> }
+type Route = { path: string; auth?: string; handler: (request: unknown, response: unknown) => Promise<void> }
 
 async function mount(tokens: Record<string, string | undefined>, config: Ingest.Config = {
   sources: [{ id: 'kaorou', tokenEnv: 'KAOROU_TOKEN' }, { id: 'globe', tokenEnv: 'GLOBE_TOKEN' }],
@@ -56,6 +56,12 @@ describe('event-ingest', () => {
     expect(published).toEqual([{ source: 'kaorou', ...EVENT }])
     expect(await post({ ...EVENT, kind: 'globe.fetch.failed' }, 'g-secret')).toMatchObject({ status: 202 })
     expect(published[1]?.source).toBe('globe')
+  })
+
+  it('registers the route as anonymous so the bearer token, not a browser session, is the admission test', async () => {
+    // A `required` policy refuses every service push with 401 at the web server, before this handler runs.
+    const { routes } = await mount({ KAOROU_TOKEN: 'k-secret' })
+    expect(routes.map(route => [route.path, route.auth])).toEqual([['/hooks/events', 'anonymous']])
   })
 
   it('rejects missing, unknown, and cross-source tokens', async () => {
