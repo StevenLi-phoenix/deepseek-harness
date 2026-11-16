@@ -13,7 +13,9 @@ afterEach(async () => {
 async function store(): Promise<MemoryStore> {
   const dir = await mkdtemp(join(tmpdir(), 'owner-memory-overlap-'))
   dirs.push(dir)
-  return new MemoryStore(join(dir, 'memory.jsonl'), () => '2026-11-01')
+  // Pin the clock too: waiting writes expire after PENDING_DAYS, so a fixed date with a real clock turns
+  // this file red a fortnight after it was written (admin.spec.ts pins both for the same reason).
+  return new MemoryStore(join(dir, 'memory.jsonl'), () => '2026-11-01', () => new Date('2026-11-01T12:00:00'))
 }
 
 describe('spanKeys', () => {
