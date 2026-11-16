@@ -5,6 +5,10 @@
  * policy, and the live socket additionally requires the owner principal,
  * because taking over a signed-in profile is the owner's authority.
  *
+ * The socket speaks protocol v2: `state` carries the tab strip, `frame` names
+ * the tab it belongs to, and input messages may name a tab. A v1 page that
+ * sends no tab id still works and acts on the active tab.
+ *
  * @module @deepseek-ai/dsh-headless-browser/routes
  */
 
@@ -30,7 +34,7 @@ const PAGE_HEADERS = { ...NO_STORE, 'content-type': 'text/html; charset=utf-8' }
 
 /** What the routes act on. */
 export interface TakeoverRoutesDeps {
-  /** The browser whose page the view shows. */
+  /** The browser whose tabs the view shows. */
   readonly browser: HeadlessBrowserSession
   /** Who holds control. */
   readonly takeover: TakeoverState
@@ -48,7 +52,11 @@ export interface TakeoverRoutesDeps {
  */
 export function mountTakeoverRoutes(server: WebServer, deps: TakeoverRoutesDeps): () => Promise<void> {
   const sockets = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES })
-  const stopState = deps.takeover.onChange(view => deps.view.broadcast({ type: 'state', ...view }))
+  const stopState = deps.takeover.onChange(() => { broadcastState(deps) })
+  const stopTabs = deps.browser.onTabsChange(() => {
+    broadcastState(deps)
+    void deps.view.refresh()
+  })
   const removePage = server.register({
     kind: 'exact',
     path: PAGE_PATH,
@@ -72,6 +80,7 @@ export function mountTakeoverRoutes(server: WebServer, deps: TakeoverRoutesDeps)
   })
   return async () => {
     stopState()
+    stopTabs()
     removePage()
     removeStatus()
     removeLive()
@@ -89,6 +98,16 @@ function statusResponse(deps: TakeoverRoutesDeps): Response {
   }, { headers: NO_STORE })
 }
 
+/** The state message every viewer receives: holder plus the whole tab strip. */
+function stateMessage(deps: TakeoverRoutesDeps): unknown {
+  return { type: 'state', ...deps.takeover.view(), tabs: deps.browser.tabsState() }
+}
+
+/** Tell every open viewer what the browser and its holder look like now. */
+function broadcastState(deps: TakeoverRoutesDeps): void {
+  deps.view.broadcast(stateMessage(deps))
+}
+
 /** Answer an authenticated non-owner on the upgrade before any protocol negotiation. */
 function refuse(socket: Duplex): void {
   socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nCache-Control: no-store\r\nContent-Length: 0\r\n\r\n')
@@ -101,7 +120,7 @@ function adopt(deps: TakeoverRoutesDeps, client: WebSocket): void {
       if (client.readyState === WebSocket.OPEN) client.send(text)
     },
   }
-  client.send(JSON.stringify({ type: 'state', ...deps.takeover.view() }))
+  client.send(JSON.stringify(stateMessage(deps)))
   const attaching = deps.view.attach(viewer).catch((error: unknown) => {
     // The page opened before Chromium started: say so, then let the page reconnect.
     viewer.send(JSON.stringify({ type: 'error', message: firstLine(error) }))
@@ -109,7 +128,7 @@ function adopt(deps: TakeoverRoutesDeps, client: WebSocket): void {
   })
   client.on('message', (data, binary) => {
     if (binary) return
-    void forward(deps, String(data))
+    void forward(deps, String(data), text => viewer.send(text))
   })
   client.on('close', () => { void deps.view.detach(viewer) })
   client.on('error', (error: Error) => { deps.log.warn('headless-browser: take-over socket failed: %s', firstLine(error)) })
@@ -117,10 +136,11 @@ function adopt(deps: TakeoverRoutesDeps, client: WebSocket): void {
 }
 
 /**
- * Apply one page message. Control changes always apply; input applies only while
- * the user holds control, so a stray pointer event cannot move the agent's page.
+ * Apply one page message. Control changes always apply; browser chrome and
+ * input apply only while the user holds control, so a stray pointer event or
+ * tab switch cannot move the agent's page.
  */
-async function forward(deps: TakeoverRoutesDeps, text: string): Promise<void> {
+async function forward(deps: TakeoverRoutesDeps, text: string, reply: (text: string) => void): Promise<void> {
   const message = parseMessage(text)
   if (message === undefined) return
   if (message.type === 'control') {
@@ -129,12 +149,18 @@ async function forward(deps: TakeoverRoutesDeps, text: string): Promise<void> {
     return
   }
   if (deps.takeover.holder !== 'human') return
-  const command = cdpCommand(message)
-  if (command === undefined) return
   try {
-    await deps.browser.dispatch(command)
+    if (message.type === 'tab') {
+      await deps.browser.applyTabCommand(message)
+      broadcastState(deps)
+      return
+    }
+    const command = cdpCommand(message)
+    if (command === undefined) return
+    await deps.browser.dispatch(command, message.tabId)
   } catch (error: unknown) {
-    deps.log.warn('headless-browser: forwarding input failed: %s', firstLine(error))
+    deps.log.warn('headless-browser: forwarding a browser operation failed: %s', firstLine(error))
+    reply(JSON.stringify({ type: 'error', message: firstLine(error) }))
   }
 }
 

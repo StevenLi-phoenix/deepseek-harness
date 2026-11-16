@@ -4,6 +4,10 @@
  * and single-flight, because the first tool call and the first page view race
  * each other and one Chromium must win.
  *
+ * The browser keeps a tab model over that one context. Tools and the take-over
+ * page act on the active tab unless they name another, and every tab shares the
+ * profile, cookies, and context; only the page and its CDP session differ.
+ *
  * @module @deepseek-ai/dsh-headless-browser/session
  */
 
@@ -14,7 +18,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import { chromium, type BrowserContext, type CDPSession, type Page } from 'playwright-core'
 import type { Config } from './config.ts'
 import { firstLine } from './error.ts'
-import type { InputCommand } from './input.ts'
+import type { InputCommand, TabInfo, TabMessage } from './input.ts'
+import { BrowserTabs, type ActiveTab, type TabsContext } from './tabs.ts'
 
 /** The browser cannot run, so a tool reports the reason instead of retrying. */
 export class BrowserUnavailableError extends Error {
@@ -30,11 +35,19 @@ export interface BrowserStatus {
   readonly launched: boolean
   /** Identity of the current launch; changes after a restart. */
   readonly sessionId?: string
-  /** URL of the shared page while it is open. */
+  /** URL of the active tab while one is open. */
   readonly url?: string
+  /** Number of open tabs. */
+  readonly tabs?: number
 }
 
-/** Launch, navigate, inspect, and close one persistent Chromium. */
+/** A screencast target: the active tab and the CDP session that carries its frames and input. */
+export interface CastTarget {
+  readonly tabId: string
+  readonly cdp: CDPSession
+}
+
+/** Launch, navigate, inspect, and close one persistent Chromium with tabs. */
 export class HeadlessBrowserSession {
   readonly #config: Config
   readonly #log: Context['logger']
@@ -42,9 +55,8 @@ export class HeadlessBrowserSession {
   #launching: Promise<BrowserContext> | undefined
   #closed = false
   #sessionId: string | undefined
-  #page: Page | undefined
-  #cdp: CDPSession | undefined
-  #cdpPage: Page | undefined
+  #tabs: BrowserTabs | undefined
+  readonly #cdps = new WeakMap<Page, CDPSession>()
 
   /**
    * @param config - profile, viewport, and snapshot settings.
@@ -72,40 +84,66 @@ export class HeadlessBrowserSession {
     }
   }
 
-  /**
-   * The page the agent and the take-over view share; a closed page is replaced,
-   * because a crashed renderer must not strand every later operation.
-   * @returns the live page.
-   */
-  async page(): Promise<Page> {
-    const context = await this.ensure()
-    const current = this.#page
-    if (current !== undefined && !current.isClosed()) return current
-    const page = context.pages().find(candidate => !candidate.isClosed()) ?? await context.newPage()
-    this.#page = page
-    this.#log.info('headless-browser: sharing page %s', page.url())
-    return page
+  /** The tab model over the persistent context, created on first use. */
+  tabs(): BrowserTabs {
+    this.#tabs ??= new BrowserTabs({
+      context: async () => await this.ensure() as unknown as TabsContext,
+      log: this.#log,
+    })
+    return this.#tabs
+  }
+
+  /** The tab strip's state, or an empty list before the browser starts. */
+  tabsState(): TabInfo[] {
+    return this.#tabs?.state() ?? []
+  }
+
+  /** Observe tab and active-tab changes. */
+  onTabsChange(listener: () => void): () => void {
+    return this.tabs().onChange(listener)
   }
 
   /**
-   * The CDP session of the shared page, created once per page.
+   * The page an operation acts on; a closed page is replaced, because a
+   * crashed renderer must not strand every later operation.
+   * @param id - tab id, or nothing for the active tab.
+   * @returns the live page.
+   */
+  async page(id?: string): Promise<Page> {
+    const page = await this.tabs().page(id)
+    return page as unknown as Page
+  }
+
+  /**
+   * The CDP session of one tab's page, created once per page.
+   * @param id - tab id, or nothing for the active tab.
    * @returns the session that carries both live-view frames and forwarded input.
    */
-  async cdp(): Promise<CDPSession> {
-    const page = await this.page()
-    if (this.#cdp !== undefined && this.#cdpPage === page) return this.#cdp
+  async cdp(id?: string): Promise<CDPSession> {
+    const page = await this.page(id)
+    const cached = this.#cdps.get(page)
+    if (cached !== undefined) return cached
     const cdp = await page.context().newCDPSession(page)
-    this.#cdp = cdp
-    this.#cdpPage = page
+    this.#cdps.set(page, cdp)
     return cdp
   }
 
   /**
-   * Perform one input command from the take-over page.
-   * @param command - the validated command; `method` selects the CDP operation.
+   * The active tab and its CDP session, which is what the screencast follows.
+   * @returns the tab id and its CDP session.
    */
-  async dispatch(command: InputCommand): Promise<void> {
-    const cdp = await this.cdp()
+  async castTarget(): Promise<CastTarget> {
+    const tab: ActiveTab = await this.tabs().active()
+    return { tabId: tab.id, cdp: await this.cdp(tab.id) }
+  }
+
+  /**
+   * Perform one input command from the take-over page on one tab.
+   * @param command - the validated command; `method` selects the CDP operation.
+   * @param tabId - the tab the page sent it for, or nothing for the active tab.
+   */
+  async dispatch(command: InputCommand, tabId?: string): Promise<void> {
+    const cdp = await this.cdp(tabId)
     switch (command.method) {
       case 'Input.dispatchMouseEvent':
         await cdp.send('Input.dispatchMouseEvent', command.params)
@@ -119,22 +157,36 @@ export class HeadlessBrowserSession {
   }
 
   /**
-   * Navigate the shared page.
+   * Apply one tab command from the take-over page.
+   * @param message - the validated tab message.
+   */
+  async applyTabCommand(message: TabMessage): Promise<void> {
+    await this.tabs().command(message.action, message.tabId, message.url)
+  }
+
+  /**
+   * Open a URL in the active tab, or in a new one.
    * @param url - absolute URL; the page reports a relative one as invalid.
+   * @param newTab - open a new tab instead of reusing the active one.
    * @returns the settled URL and the document title.
    */
-  async open(url: string): Promise<{ url: string; title: string }> {
+  async open(url: string, newTab = false): Promise<{ url: string; title: string }> {
+    if (newTab) {
+      const tab = await this.tabs().create(url)
+      return { url: tab.url, title: tab.title }
+    }
+    await this.tabs().navigate(url)
     const page = await this.page()
-    await page.goto(url, { waitUntil: 'domcontentloaded' })
     return { url: page.url(), title: await page.title() }
   }
 
   /**
-   * Save a PNG of the shared page for the model to read.
+   * Save a PNG of one tab for the model to read.
+   * @param tabId - tab id, or nothing for the active tab.
    * @returns the file path and the page it captured.
    */
-  async snapshot(): Promise<{ path: string; url: string }> {
-    const page = await this.page()
+  async snapshot(tabId?: string): Promise<{ path: string; url: string }> {
+    const page = await this.page(tabId)
     await mkdir(this.#config.snapshotDir, { recursive: true })
     const path = join(this.#config.snapshotDir, `page-${new Date().toISOString().replaceAll(':', '-')}.png`)
     await page.screenshot({ path })
@@ -142,36 +194,40 @@ export class HeadlessBrowserSession {
   }
 
   /**
-   * Click the first element matching a CSS selector.
+   * Click the first element matching a CSS selector in one tab.
    * @param selector - selector the page resolves to one element.
+   * @param tabId - tab id, or nothing for the active tab.
    * @returns the page URL after the click, which may already be the navigation target.
    */
-  async click(selector: string): Promise<{ url: string }> {
-    const page = await this.page()
+  async click(selector: string, tabId?: string): Promise<{ url: string }> {
+    const page = await this.page(tabId)
     await page.locator(selector).first().click()
     return { url: page.url() }
   }
 
   /**
-   * Replace the editable value of the first element matching a CSS selector.
+   * Replace the editable value of the first element matching a CSS selector in one tab.
    * @param selector - selector for an input, textarea, or contenteditable element.
    * @param text - the value to write.
+   * @param tabId - tab id, or nothing for the active tab.
    */
-  async fill(selector: string, text: string): Promise<void> {
-    await (await this.page()).locator(selector).first().fill(text)
+  async fill(selector: string, text: string, tabId?: string): Promise<void> {
+    await (await this.page(tabId)).locator(selector).first().fill(text)
   }
 
   /**
    * What the browser is doing now, without launching it.
-   * @returns whether a context is open, its session id, and the shared page URL.
+   * @returns whether a context is open, its session id, and the active tab's URL.
    */
   status(): BrowserStatus {
     if (this.#context === undefined) return { launched: false }
-    const page = this.#page
+    const tabs = this.#tabs?.state() ?? []
+    const active = tabs.find(tab => tab.active)
     return {
       launched: true,
       ...this.#sessionId === undefined ? {} : { sessionId: this.#sessionId },
-      ...page === undefined || page.isClosed() ? {} : { url: page.url() },
+      ...active === undefined || active.url === '' ? {} : { url: active.url },
+      tabs: tabs.length,
     }
   }
 
@@ -189,9 +245,8 @@ export class HeadlessBrowserSession {
     }
     const context = this.#context
     this.#context = undefined
-    this.#page = undefined
-    this.#cdp = undefined
-    this.#cdpPage = undefined
+    this.#tabs?.dispose()
+    this.#tabs = undefined
     await context?.close()
   }
 
@@ -215,9 +270,8 @@ export class HeadlessBrowserSession {
     context.on('close', () => {
       this.#context = undefined
       this.#launching = undefined
-      this.#page = undefined
-      this.#cdp = undefined
-      this.#cdpPage = undefined
+      this.#tabs?.dispose()
+      this.#tabs = undefined
     })
     this.#log.info('headless-browser: launched session %s with profile %s', this.#sessionId, this.#config.profileDir)
     return context

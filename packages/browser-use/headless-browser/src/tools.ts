@@ -70,6 +70,7 @@ export function registerBrowserTools(ctx: Context, deps: ToolDeps): void {
     description: 'Open a URL in the headless browser and return the page title.',
     parameters: {
       url: { type: 'string', required: true, description: 'Absolute URL, including the scheme.' },
+      newTab: { type: 'boolean', description: 'Open a new tab instead of reusing the active one.' },
     },
     output: {
       schema: {
@@ -84,14 +85,17 @@ export function registerBrowserTools(ctx: Context, deps: ToolDeps): void {
       },
       render: renderJson,
     },
-    execute: (args: { url: string }) => acting(deps, `opening ${args.url}`, () => deps.browser.open(args.url)),
+    execute: (args: { url: string; newTab?: boolean }) =>
+      acting(deps, `opening ${args.url}`, () => deps.browser.open(args.url, args.newTab === true)),
     presentCall: args => ({ card: 'generic', title: `Open ${args.url}`, kind: 'execute', rawInput: args.url }),
   }))
 
   ctx.tools.register(defineTool({
     name: 'headless_browser_snapshot',
     description: 'Save a PNG screenshot of the headless browser page and return its path.',
-    parameters: {},
+    parameters: {
+      tab: { type: 'string', description: 'Tab id to snapshot; the active tab when omitted.' },
+    },
     output: {
       schema: {
         oneOf: [
@@ -107,7 +111,7 @@ export function registerBrowserTools(ctx: Context, deps: ToolDeps): void {
     },
     // A screenshot reads the page without acting on it, so it stays available
     // while the user holds control.
-    execute: () => attempt('taking a screenshot', () => deps.browser.snapshot()),
+    execute: (args: { tab?: string }) => attempt('taking a screenshot', () => deps.browser.snapshot(args.tab)),
     presentCall: () => ({ card: 'generic', title: 'Screenshot the browser', kind: 'other' }),
   }))
 
@@ -116,6 +120,7 @@ export function registerBrowserTools(ctx: Context, deps: ToolDeps): void {
     description: 'Click the first element that matches a CSS selector.',
     parameters: {
       selector: { type: 'string', required: true, description: 'CSS selector; the first match is clicked.' },
+      tab: { type: 'string', description: 'Tab id to click in; the active tab when omitted.' },
     },
     output: {
       schema: {
@@ -130,8 +135,8 @@ export function registerBrowserTools(ctx: Context, deps: ToolDeps): void {
       },
       render: renderJson,
     },
-    execute: async (args: { selector: string }) => acting(deps, `clicking ${args.selector}`, async () => {
-      const { url } = await deps.browser.click(args.selector)
+    execute: async (args: { selector: string; tab?: string }) => acting(deps, `clicking ${args.selector}`, async () => {
+      const { url } = await deps.browser.click(args.selector, args.tab)
       return { clicked: args.selector, url }
     }),
     presentCall: args => ({ card: 'generic', title: `Click ${args.selector}`, kind: 'execute' }),
@@ -143,6 +148,7 @@ export function registerBrowserTools(ctx: Context, deps: ToolDeps): void {
     parameters: {
       selector: { type: 'string', required: true, description: 'CSS selector for an input, textarea, or contenteditable element.' },
       text: { type: 'string', required: true, description: 'Text written into the element; an empty string clears it.' },
+      tab: { type: 'string', description: 'Tab id to type in; the active tab when omitted.' },
     },
     output: {
       schema: {
@@ -157,8 +163,8 @@ export function registerBrowserTools(ctx: Context, deps: ToolDeps): void {
       },
       render: renderJson,
     },
-    execute: async (args: { selector: string; text: string }) => acting(deps, `typing into ${args.selector}`, async () => {
-      await deps.browser.fill(args.selector, args.text)
+    execute: async (args: { selector: string; text: string; tab?: string }) => acting(deps, `typing into ${args.selector}`, async () => {
+      await deps.browser.fill(args.selector, args.text, args.tab)
       return { typed: args.selector }
     }),
     presentCall: args => ({ card: 'generic', title: `Type into ${args.selector}`, kind: 'execute' }),

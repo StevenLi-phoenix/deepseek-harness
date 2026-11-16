@@ -10,7 +10,7 @@ import { decodeClientMessage } from '../src/input.ts'
 import type { FrameMetadata } from '../src/input.ts'
 import {
   controlMessage, decodeServerMessage, decodeStatus, encodeClientMessage, keyMessage, liveSocketUrl,
-  modifiersOf, mouseMessage, pagePoint, textMessage, wheelMessage,
+  modifiersOf, mouseMessage, normalizeAddress, pagePoint, tabMessage, textMessage, wheelMessage,
 } from '../src/client/protocol.ts'
 
 /** A 1280×800 frame painted into a 640×400 box at the viewport origin. */
@@ -35,18 +35,25 @@ describe('live socket address', () => {
 })
 
 describe('decodeServerMessage', () => {
-  it('reads a state change, with and without the user\'s reason', () => {
-    expect(decodeServerMessage(JSON.stringify({ type: 'state', holder: 'human', reason: 'signing in' })))
-      .toEqual({ type: 'state', holder: 'human', reason: 'signing in' })
+  it('reads a state change, its tab strip, and a v1 state without one', () => {
+    const tabs = [{ id: 't1', title: 'Sign in', url: 'https://example.com/signin', loading: false, active: true }]
+    expect(decodeServerMessage(JSON.stringify({ type: 'state', holder: 'human', reason: 'signing in', tabs })))
+      .toEqual({ type: 'state', holder: 'human', reason: 'signing in', tabs })
     expect(decodeServerMessage(JSON.stringify({ type: 'state', holder: 'agent' })))
-      .toEqual({ type: 'state', holder: 'agent' })
-    expect(decodeServerMessage(JSON.stringify({ type: 'state', holder: 'agent', reason: '' })))
-      .toEqual({ type: 'state', holder: 'agent' })
+      .toEqual({ type: 'state', holder: 'agent', tabs: [] })
+    expect(decodeServerMessage(JSON.stringify({ type: 'state', holder: 'agent', reason: '', tabs: 'not a list' })))
+      .toEqual({ type: 'state', holder: 'agent', tabs: [] })
+    expect(decodeServerMessage(JSON.stringify({ type: 'state', holder: 'agent', tabs: [{ id: 't1' }, { title: 'no id' }] })))
+      .toEqual({
+        type: 'state',
+        holder: 'agent',
+        tabs: [{ id: 't1', title: '', url: '', loading: false, active: false }],
+      })
   })
 
   it('reads a frame with the geometry pointer input is scaled by', () => {
-    const text = JSON.stringify({ type: 'frame', data: '/9j/4AAQ', metadata: { ...METADATA, timestamp: 42 } })
-    expect(decodeServerMessage(text)).toEqual({ type: 'frame', data: '/9j/4AAQ', metadata: { ...METADATA, timestamp: 42 } })
+    const text = JSON.stringify({ type: 'frame', tabId: 't2', data: '/9j/4AAQ', metadata: { ...METADATA, timestamp: 42 } })
+    expect(decodeServerMessage(text)).toEqual({ type: 'frame', tabId: 't2', data: '/9j/4AAQ', metadata: { ...METADATA, timestamp: 42 } })
     expect(decodeServerMessage(JSON.stringify({ type: 'frame', data: '/9j/4AAQ', metadata: METADATA })))
       .toEqual({ type: 'frame', data: '/9j/4AAQ', metadata: METADATA })
   })
@@ -165,6 +172,29 @@ describe('key mapping', () => {
     expect(keyMessage('down', { ...FLAGS, key: '', code: '', keyCode: 0 })).toBeUndefined()
     expect(keyMessage('down', { ...FLAGS, key: 'x'.repeat(33), code: 'KeyX', keyCode: 88 })).toBeUndefined()
     expect(keyMessage('down', { ...FLAGS, key: 'a', code: 'KeyA', keyCode: 999 })).toBeUndefined()
+  })
+})
+
+describe('tab chrome messages', () => {
+  it('builds every tab operation the Host accepts', () => {
+    expect(tabMessage('new')).toEqual({ type: 'tab', action: 'new' })
+    expect(tabMessage('new', undefined, 'https://example.com')).toEqual({ type: 'tab', action: 'new', url: 'https://example.com' })
+    expect(tabMessage('close', 't3')).toEqual({ type: 'tab', action: 'close', tabId: 't3' })
+    expect(tabMessage('activate', 't3')).toEqual({ type: 'tab', action: 'activate', tabId: 't3' })
+    expect(tabMessage('navigate', 't3', 'https://example.com/pay')).toEqual({ type: 'tab', action: 'navigate', tabId: 't3', url: 'https://example.com/pay' })
+    for (const message of [
+      tabMessage('new'), tabMessage('close', 't3'), tabMessage('back', 't3'), tabMessage('forward'),
+      tabMessage('reload', 't3'), tabMessage('navigate', 't3', 'https://example.com'),
+    ]) expect(decodeClientMessage(message)).toEqual(message)
+  })
+
+  it('adds https:// to a bare address but leaves a scheme alone', () => {
+    expect(normalizeAddress(' example.com ')).toBe('https://example.com')
+    expect(normalizeAddress('https://example.com/a?b=1')).toBe('https://example.com/a?b=1')
+    expect(normalizeAddress('http://127.0.0.1:3081')).toBe('http://127.0.0.1:3081')
+    expect(normalizeAddress('data:text/html,hi')).toBe('data:text/html,hi')
+    expect(normalizeAddress('about:blank')).toBe('about:blank')
+    expect(normalizeAddress('   ')).toBeUndefined()
   })
 })
 

@@ -79,7 +79,7 @@ The page paints the frames itself; it is not an iframe and opens no sub-URL. It 
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-One `HeadlessBrowserSession` owns the context. The launch is lazy and single-flight, so a tool call and a page view racing each other still start one Chromium; `close()` settles a launch that lost the race. The shared page is the first open page, replaced after a crash. A launch gets a fresh session id, which the status route reports.
+One `HeadlessBrowserSession` owns the context. The launch is lazy and single-flight, so a tool call and a page view racing each other still start one Chromium; `close()` settles a launch that lost the race. The browser keeps tabs over that one context: the first page is adopted as `t1`, each new tab gets the next id, and a page that closes is replaced so the context and its profile stay open. A launch gets a fresh session id, which the status route reports.
 
 The live view is one CDP screencast per page shared by every connected viewer. `Page.startScreencast` starts for the first viewer and `Page.stopScreencast` stops for the last; every frame is acknowledged before it is fanned out, because Chrome sends the next one only after the ack. Chrome sends frames on repaint, so the hub keeps the last frame: a page that connects to a still page sees the current screen at once instead of a blank area. Frames carry the metadata the page scales pointer input by, and arrive only while the browser page exists.
 
@@ -90,7 +90,8 @@ The tools share one guard. An acting tool calls `TakeoverState.assertAgent` firs
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Plugin entry: session, control state, live view, tools, routes |
-| [`src/session.ts`](src/session.ts) | Persistent context, shared page, CDP session, navigation, screenshot, click, fill |
+| [`src/session.ts`](src/session.ts) | Persistent context, tab-aware CDP sessions, navigation, screenshot, click, fill |
+| [`src/tabs.ts`](src/tabs.ts) | Tab ids, active tab, loading state, the eight-tab cap, and the per-navigation deadline |
 | [`src/takeover.ts`](src/takeover.ts) | Holder state and the refusal an agent action gets |
 | [`src/input.ts`](src/input.ts) | Wire decoding, CDP command mapping, frame encoding |
 | [`src/live-view.ts`](src/live-view.ts) | Screencast fan-out and viewer bookkeeping |
@@ -147,10 +148,10 @@ Append-only: results and refusals enter the history after the reusable prefix an
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **One browser, one mounting scope** — the routes are fixed paths, so a Host mounts the package once; a second mount collides on `/headless-browser`. The browser is one Chromium with one shared page, not one per Session, so parallel agents share it.
+- **One browser, one mounting scope** — the routes are fixed paths, so a Host mounts the package once; a second mount collides on `/headless-browser`. The browser is one Chromium with one tab model, not one per Session, so parallel agents share its tabs.
 - **The browser binary is the deployment's** — `playwright-core` ships no browser, and this package does not download one. Without `PLAYWRIGHT_BROWSERS_PATH` or an install into the account's cache, every tool call fails with the launcher diagnostic.
 - **Headless is the supported mode** — `headless: false` needs a logged-in desktop session; a service account cannot open a window.
-- **No tab or window picker** — the shared page is the first open page, replaced after a crash; a page opened by the site itself (a popup or a new tab) is not followed.
+- **Tabs are ours, not the site's** — the tab model covers tabs the tools or the take-over view open; a popup the site opens for itself is not adopted. The browser keeps at most eight tabs, and every navigation has a 20-second deadline.
 - **Streaming is live-only** — frames arrive only while a take-over page is connected, are not recorded, and can drop frames when Chrome is busy. A still page sends no new frames, so a page that connects later shows the last painted frame. A renderer that crashes ends the cast, and the picture returns only after the page is reloaded and the user reconnects.
 - **The hand-over URL needs a Web server** — in a composition without one, `headless_browser_hand_over` returns `/headless-browser` alone, which the user cannot open.
 - **The generated catalogs follow the mount** — `docs/tool-catalog.md` and `docs/config-catalog.md` list this package's tools and fields only after a composition mounts it and the generators run.

@@ -1,5 +1,5 @@
-/* The 浏览器接管 page: a header line, the live frame, and the text-insert field.
-   Values follow the app's tokens so both themes read the same ink/background pairing. */
+/* The 浏览器接管 page: tab strip, browser chrome, live viewport, and the text-insert
+   field. Values follow the app's tokens so both themes read the same ink/background pairing. */
 
 .page {
   display: flex;
@@ -14,7 +14,7 @@
   flex: none;
   align-items: center;
   gap: 12px;
-  padding: 12px 20px;
+  padding: 8px 20px;
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
@@ -47,8 +47,6 @@
 }
 
 .hint,
-.url,
-.offline,
 .viewers {
   min-width: 0;
   overflow: hidden;
@@ -62,14 +60,9 @@
   flex: 1;
 }
 
-.url {
-  max-width: 32ch;
-  color: var(--dsw-alias-label-primary);
-  opacity: 0.8;
-}
-
 .offline {
   flex: none;
+  font-size: 13px;
   color: var(--dsw-alias-state-warn-label);
 }
 
@@ -98,6 +91,173 @@
   outline-offset: 1px;
 }
 
+.tabStrip {
+  display: flex;
+  flex: none;
+  align-items: stretch;
+  gap: 2px;
+  padding: 6px 12px 0;
+  overflow-x: auto;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  scrollbar-width: thin;
+}
+
+.tab,
+.tabActive {
+  display: flex;
+  flex: none;
+  align-items: center;
+  max-width: 24ch;
+  min-width: 8ch;
+  border: 0.5px solid transparent;
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.tabActive {
+  border-color: var(--dsw-alias-border-l3);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.tabTitle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 4px 4px 10px;
+  border: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.tabActive .tabTitle {
+  color: var(--dsw-alias-label-primary);
+}
+
+.tabLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tabClose,
+.tabNew {
+  flex: none;
+  padding: 2px 7px;
+  border: 0;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--dsw-alias-label-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.tabNew {
+  align-self: center;
+  margin: 0 0 2px 4px;
+  font-size: 16px;
+}
+
+.tabClose:hover,
+.tabNew:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-layer-3);
+}
+
+.tabTitle:disabled,
+.tabClose:disabled,
+.tabNew:disabled,
+.tool:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.address:disabled,
+.insert:disabled {
+  opacity: 0.6;
+}
+
+.tabTitle:focus-visible,
+.tabClose:focus-visible,
+.tabNew:focus-visible,
+.tool:focus-visible {
+  outline: 2px solid var(--dsw-alias-border-selected);
+  outline-offset: -2px;
+}
+
+.spinner {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--dsw-alias-label-secondary);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.tool {
+  flex: none;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  border: 0.5px solid transparent;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 15px;
+  color: var(--dsw-alias-label-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.tool:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-layer-3);
+}
+
+.address {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.address:focus {
+  border-color: var(--dsw-alias-border-selected);
+  outline: none;
+}
+
+.loading {
+  flex: none;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
 .stage {
   position: relative;
   display: flex;
@@ -108,12 +268,14 @@
   padding: 16px;
   overflow: hidden;
   background: var(--dsw-alias-bg-layer-1);
-  outline: none;
+  outline: 2px solid transparent;
+  outline-offset: -4px;
 }
 
-.stage:focus-visible {
-  outline: 2px solid var(--dsw-alias-border-selected);
-  outline-offset: -4px;
+/* A click focuses the viewport for the browser; the ring stays visible so the
+   owner knows where typed keys will go. */
+.stage:focus {
+  outline-color: var(--dsw-alias-border-selected);
 }
 
 .frame {
@@ -126,17 +288,29 @@
   box-shadow: 0 0 0 0.5px var(--dsw-alias-border-l2);
 }
 
-.waiting {
+.waiting,
+.notice {
   margin: 0;
   font-size: 13px;
   color: var(--dsw-alias-label-secondary);
+}
+
+.notice {
+  position: absolute;
+  right: 20px;
+  bottom: 16px;
+  max-width: 50%;
+  padding: 4px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-2);
 }
 
 .footer {
   display: flex;
   flex: none;
   justify-content: flex-end;
-  padding: 10px 20px 14px;
+  padding: 8px 20px 12px;
 }
 
 .insert {

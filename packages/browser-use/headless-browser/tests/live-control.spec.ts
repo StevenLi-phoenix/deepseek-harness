@@ -6,7 +6,7 @@
  * machine, not Chromium, which `browser.spec.ts` covers.
  */
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { WebSocket } from 'ws'
 import { Context } from '@deepseek-ai/cordis'
 import HttpServer from '@deepseek-ai/dsh-host-webserver'
@@ -21,6 +21,8 @@ interface App {
   readonly base: string
   readonly takeover: TakeoverState
   readonly dispatched: InputCommand[]
+  readonly tabIds: Array<string | undefined>
+  readonly tabCommands: unknown[]
   close(): Promise<void>
 }
 
@@ -51,12 +53,18 @@ async function boot(): Promise<App> {
   await new Promise<void>((resolve) => { ctx.inject(['webServer'], () => { resolve() }) })
 
   const dispatched: InputCommand[] = []
+  const tabIds: Array<string | undefined> = []
+  const tabCommands: unknown[] = []
   const browser = {
-    async dispatch(command: InputCommand): Promise<unknown> {
+    async dispatch(command: InputCommand, tabId?: string): Promise<unknown> {
       dispatched.push(command)
+      tabIds.push(tabId)
       return undefined
     },
-    status: () => ({ launched: true, url: 'https://example.com/signin' }),
+    async applyTabCommand(message: unknown): Promise<void> { tabCommands.push(message) },
+    tabsState: () => [],
+    onTabsChange: () => () => {},
+    status: () => ({ launched: true, url: 'https://example.com/signin', tabs: 0 }),
   } as unknown as HeadlessBrowserSession
   const viewers = new Set<Viewer>()
   const view = {
@@ -69,6 +77,7 @@ async function boot(): Promise<App> {
     broadcast(message: unknown): void {
       for (const viewer of viewers) viewer.send(JSON.stringify(message))
     },
+    async refresh(): Promise<void> {},
     async close(): Promise<void> { viewers.clear() },
   } as unknown as LiveView
   const takeover = new TakeoverState()
@@ -79,6 +88,8 @@ async function boot(): Promise<App> {
     base: `127.0.0.1:${String(port)}`,
     takeover,
     dispatched,
+    tabIds,
+    tabCommands,
     async close() {
       await removeRoutes()
       await ctx.fiber.dispose()
@@ -147,7 +158,7 @@ describe('take-over socket control', () => {
     const live = await openLive(app.base)
     try {
       // A connecting viewer learns who holds the browser before anything else happens.
-      await expect(live.next(isState)).resolves.toEqual({ type: 'state', holder: 'agent' })
+      await expect(live.next(isState)).resolves.toEqual({ type: 'state', holder: 'agent', tabs: [] })
 
       const input = { type: 'mouse', event: 'down', x: 10, y: 20, button: 'left', buttons: 1, clickCount: 1, modifiers: 0 }
       live.send(input)
@@ -158,7 +169,7 @@ describe('take-over socket control', () => {
 
       live.send({ type: 'control', action: 'take', reason: 'signing in' })
       await expect(live.next(message => isState(message) && message.holder === 'human'))
-        .resolves.toEqual({ type: 'state', holder: 'human', reason: 'signing in' })
+        .resolves.toEqual({ type: 'state', holder: 'human', reason: 'signing in', tabs: [] })
       expect(app.takeover.view()).toEqual({ holder: 'human', reason: 'signing in' })
 
       live.send(input)
@@ -170,12 +181,33 @@ describe('take-over socket control', () => {
 
       live.send({ type: 'control', action: 'release' })
       await expect(live.next(message => isState(message) && message.holder === 'agent'))
-        .resolves.toEqual({ type: 'state', holder: 'agent' })
+        .resolves.toEqual({ type: 'state', holder: 'agent', tabs: [] })
       expect(app.takeover.view()).toEqual({ holder: 'agent' })
 
       live.send(input)
       await new Promise(resolve => setTimeout(resolve, 50))
       expect(app.dispatched).toHaveLength(1)
+    } finally {
+      live.socket.close()
+    }
+  })
+
+  it('forwards a tab operation and its tab id only while the user holds control', async () => {
+    const app = await boot()
+    const live = await openLive(app.base)
+    try {
+      await live.next(isState)
+      live.send({ type: 'tab', action: 'activate', tabId: 't2' })
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(app.tabCommands).toEqual([])
+
+      live.send({ type: 'control', action: 'take', reason: 'switching tabs' })
+      await live.next(message => isState(message) && message.holder === 'human')
+      live.send({ type: 'tab', action: 'activate', tabId: 't2' })
+      live.send({ type: 'mouse', tabId: 't2', event: 'down', x: 1, y: 2, button: 'left', buttons: 1, clickCount: 1, modifiers: 0 })
+      await vi.waitFor(() => { expect(app.tabCommands).toHaveLength(1); expect(app.dispatched).toHaveLength(1) })
+      expect(app.tabCommands[0]).toEqual({ type: 'tab', action: 'activate', tabId: 't2' })
+      expect(app.tabIds).toEqual(['t2'])
     } finally {
       live.socket.close()
     }

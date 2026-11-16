@@ -17,6 +17,15 @@ export const zh = {
   'stage.waiting': '等待浏览器…',
   'connect.lost': '连接断开，正在重连',
   'insert.placeholder': '输入文本后回车插入',
+  'tab.new': '新建标签页',
+  'tab.close': '关闭标签页',
+  'tab.untitled': '新标签页',
+  'nav.back': '后退',
+  'nav.forward': '前进',
+  'nav.reload': '重新加载',
+  'address.placeholder': '输入网址后回车',
+  'address.label': '地址栏',
+  'stage.focus': '点击画面后可操作浏览器',
 }
 
 /** The keys this namespace owns. */
@@ -39,6 +48,15 @@ export const en: Record<HeadlessBrowserKey, string> = {
   'stage.waiting': 'Waiting for the browser…',
   'connect.lost': 'Connection lost, reconnecting',
   'insert.placeholder': 'Type text and press Enter to insert',
+  'tab.new': 'New tab',
+  'tab.close': 'Close tab',
+  'tab.untitled': 'New tab',
+  'nav.back': 'Back',
+  'nav.forward': 'Forward',
+  'nav.reload': 'Reload',
+  'address.placeholder': 'Type an address and press Enter',
+  'address.label': 'Address bar',
+  'stage.focus': 'Click the view to operate the browser',
 }
 
 /** Japanese dictionary. */
@@ -58,6 +76,15 @@ export const ja: Record<HeadlessBrowserKey, string> = {
   'stage.waiting': 'ブラウザを待っています…',
   'connect.lost': '接続が切れました。再接続中',
   'insert.placeholder': 'テキストを入力して Enter で挿入',
+  'tab.new': '新しいタブ',
+  'tab.close': 'タブを閉じる',
+  'tab.untitled': '新しいタブ',
+  'nav.back': '戻る',
+  'nav.forward': '進む',
+  'nav.reload': '再読み込み',
+  'address.placeholder': 'アドレスを入力して Enter',
+  'address.label': 'アドレスバー',
+  'stage.focus': '画面をクリックしてブラウザを操作',
 }
 
 /** Spanish dictionary. */
@@ -77,6 +104,15 @@ export const es: Record<HeadlessBrowserKey, string> = {
   'stage.waiting': 'Esperando al navegador…',
   'connect.lost': 'Conexión perdida, reconectando',
   'insert.placeholder': 'Escribe texto y pulsa Intro para insertarlo',
+  'tab.new': 'Nueva pestaña',
+  'tab.close': 'Cerrar pestaña',
+  'tab.untitled': 'Nueva pestaña',
+  'nav.back': 'Atrás',
+  'nav.forward': 'Adelante',
+  'nav.reload': 'Recargar',
+  'address.placeholder': 'Escribe una dirección y pulsa Intro',
+  'address.label': 'Barra de direcciones',
+  'stage.focus': 'Haz clic en la vista para usar el navegador',
 }
 
 /** French dictionary. */
@@ -96,6 +132,15 @@ export const fr: Record<HeadlessBrowserKey, string> = {
   'stage.waiting': 'En attente du navigateur…',
   'connect.lost': 'Connexion perdue, reconnexion',
   'insert.placeholder': 'Saisissez du texte puis Entrée pour insérer',
+  'tab.new': 'Nouvel onglet',
+  'tab.close': "Fermer l'onglet",
+  'tab.untitled': 'Nouvel onglet',
+  'nav.back': 'Retour',
+  'nav.forward': 'Avancer',
+  'nav.reload': 'Recharger',
+  'address.placeholder': 'Saisissez une adresse puis Entrée',
+  'address.label': "Barre d'adresse",
+  'stage.focus': 'Cliquez sur la vue pour utiliser le navigateur',
 }
 
 /** German dictionary. */
@@ -115,6 +160,15 @@ export const de: Record<HeadlessBrowserKey, string> = {
   'stage.waiting': 'Warte auf den Browser…',
   'connect.lost': 'Verbindung verloren, verbinde neu',
   'insert.placeholder': 'Text eingeben und mit Enter einfügen',
+  'tab.new': 'Neuer Tab',
+  'tab.close': 'Tab schließen',
+  'tab.untitled': 'Neuer Tab',
+  'nav.back': 'Zurück',
+  'nav.forward': 'Vorwärts',
+  'nav.reload': 'Neu laden',
+  'address.placeholder': 'Adresse eingeben und Enter drücken',
+  'address.label': 'Adressleiste',
+  'stage.focus': 'Klicke auf die Ansicht, um den Browser zu bedienen',
 }
 
 /** Russian dictionary. */
@@ -134,6 +188,15 @@ export const ru: Record<HeadlessBrowserKey, string> = {
   'stage.waiting': 'Ожидание браузера…',
   'connect.lost': 'Соединение потеряно, переподключение',
   'insert.placeholder': 'Введите текст и нажмите Enter',
+  'tab.new': 'Новая вкладка',
+  'tab.close': 'Закрыть вкладку',
+  'tab.untitled': 'Новая вкладка',
+  'nav.back': 'Назад',
+  'nav.forward': 'Вперёд',
+  'nav.reload': 'Обновить',
+  'address.placeholder': 'Введите адрес и нажмите Enter',
+  'address.label': 'Адресная строка',
+  'stage.focus': 'Нажмите на экран, чтобы управлять браузером',
 }
 
 /** Portuguese dictionary. */
@@ -153,6 +216,15 @@ export const pt: Record<HeadlessBrowserKey, string> = {
   'stage.waiting': 'Aguardando o navegador…',
   'connect.lost': 'Conexão perdida, reconectando',
   'insert.placeholder': 'Digite o texto e pressione Enter para inserir',
+  'tab.new': 'Nova aba',
+  'tab.close': 'Fechar aba',
+  'tab.untitled': 'Nova aba',
+  'nav.back': 'Voltar',
+  'nav.forward': 'Avançar',
+  'nav.reload': 'Recarregar',
+  'address.placeholder': 'Digite um endereço e pressione Enter',
+  'address.label': 'Barra de endereço',
+  'stage.focus': 'Clique na tela para operar o navegador',
 }
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {

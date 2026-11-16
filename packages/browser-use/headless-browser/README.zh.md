@@ -80,7 +80,7 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 <details>
 <summary>实现细节——点击展开</summary>
 
-一个 `HeadlessBrowserSession` 拥有上下文。启动是惰性的单飞：工具调用和页面连接同时到达也只会起一个 Chromium；`close()` 会等一个输掉竞争的启动结束。共享页面是第一个打开的页面，崩溃后换新的。每次启动都有新的 session id，状态路由会报告它。
+一个 `HeadlessBrowserSession` 拥有上下文。启动是惰性的单飞：工具调用和页面连接同时到达也只会起一个 Chromium；`close()` 会等一个输掉竞争的启动结束。浏览器在一个上下文上维护标签页：第一个页面作为 `t1` 接管，每个新标签拿到下一个 id，关闭的页面会被替换，因此上下文和它的 profile 始终存活。每次启动都有新的 session id，状态路由会报告它。
 
 实时画面是每个页面一个 CDP screencast，由所有已连接的查看者共享。第一个查看者到来时 `Page.startScreencast` 开始，最后一个离开时 `Page.stopScreencast` 停止；每一帧先确认再分发，因为 Chrome 只有收到确认才发下一帧。Chrome 在重绘时发帧，所以这个分发器保留最后一帧：页面静止时后连上来的查看者会立刻看到当前画面，而不是一块空白。帧里带着页面缩放指针输入所需的元数据，只在浏览器页面存在时才有帧。
 
@@ -91,7 +91,8 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 | 文件 | 作用 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件入口：会话、控制状态、实时画面、工具、路由 |
-| [`src/session.ts`](src/session.ts) | 持久上下文、共享页面、CDP 会话、导航、截图、点击、填值 |
+| [`src/session.ts`](src/session.ts) | 持久上下文、按标签页的 CDP 会话、导航、截图、点击、填值 |
+| [`src/tabs.ts`](src/tabs.ts) | 标签 id、活动标签、加载状态、八标签上限和每次导航的期限 |
 | [`src/takeover.ts`](src/takeover.ts) | 持有者状态，以及 agent 动作被拒绝时的错误 |
 | [`src/input.ts`](src/input.ts) | 线路消息解码、CDP 命令映射、帧编码 |
 | [`src/live-view.ts`](src/live-view.ts) | screencast 分发与查看者记录 |
@@ -148,10 +149,10 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **一个浏览器、一个挂载作用域** —— 路由是固定路径，所以一个 Host 只挂载一次；第二次挂载会在 `/headless-browser` 上冲突。浏览器是一个 Chromium、一个共享页面，不是每个 Session 一个，并行运行的 agent 共用它。
+- **一个浏览器、一个挂载作用域** —— 路由是固定路径，所以一个 Host 只挂载一次；第二次挂载会在 `/headless-browser` 上冲突。浏览器是一个 Chromium、一套标签模型，不是每个 Session 一个，并行运行的 agent 共用它的标签页。
 - **浏览器二进制由部署负责** —— `playwright-core` 不带浏览器，本包也不下载。没有 `PLAYWRIGHT_BROWSERS_PATH` 或账号缓存里的安装，每次工具调用都会带着启动器诊断失败。
 - **支持的是无头模式** —— `headless: false` 需要已登录的桌面会话；服务账号开不了窗口。
-- **没有标签页或窗口选择** —— 共享页面是第一个打开的页面，崩溃后换新的；站点自己打开的页面（弹窗、新标签页）不会被跟随。
+- **标签页由我们管理，而不是站点** —— 标签模型只管工具或接管页打开的标签；站点自己开的弹窗不会被接管。最多同时保留八个标签，每次导航都有 20 秒期限。
 - **画面只实时** —— 只有接管页连着时才有帧，不录制，Chrome 繁忙时会掉帧。静止页面不会产生新帧，后连上来的页面看到的是最后画出的那一帧。渲染进程崩溃会结束推流，重新加载页面并连接之后画面才会回来。
 - **接管地址需要 Web 服务器** —— 在没有 Web 服务器的组合里，`headless_browser_hand_over` 只返回 `/headless-browser`，用户打不开。
 - **生成的目录跟着挂载走** —— `docs/tool-catalog.md` 和 `docs/config-catalog.md` 只有在某个组合挂载本包并运行生成器之后，才会列出本包的工具和字段。

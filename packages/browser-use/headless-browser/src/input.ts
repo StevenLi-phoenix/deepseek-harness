@@ -16,6 +16,8 @@ export type MouseButton = 'left' | 'middle' | 'right'
 /** Pointer position, pressed-button mask, and click count in page coordinates. */
 export interface MouseMessage {
   readonly type: 'mouse'
+  /** Tab the pointer event belongs to; absent on a v1 page, which means the active tab. */
+  readonly tabId?: string
   readonly event: MouseEventKind
   readonly x: number
   readonly y: number
@@ -29,6 +31,8 @@ export interface MouseMessage {
 /** One wheel turn in page coordinates, with the scroll delta in CSS pixels. */
 export interface WheelMessage {
   readonly type: 'wheel'
+  /** Tab the wheel turn belongs to; absent on a v1 page, which means the active tab. */
+  readonly tabId?: string
   readonly x: number
   readonly y: number
   readonly deltaX: number
@@ -39,6 +43,8 @@ export interface WheelMessage {
 /** One key transition; printable characters carry `text` so Chrome inserts them. */
 export interface KeyMessage {
   readonly type: 'key'
+  /** Tab the key belongs to; absent on a v1 page, which means the active tab. */
+  readonly tabId?: string
   readonly event: 'down' | 'up'
   readonly key: string
   readonly code: string
@@ -51,6 +57,8 @@ export interface KeyMessage {
 /** Text inserted as a whole, for paste and non-Latin input. */
 export interface TextMessage {
   readonly type: 'text'
+  /** Tab the inserted text belongs to; absent on a v1 page, which means the active tab. */
+  readonly tabId?: string
   readonly text: string
 }
 
@@ -61,8 +69,34 @@ export interface ControlMessage {
   readonly reason?: string
 }
 
+/** One tab in the Host's state, as the tab strip draws it. */
+export interface TabInfo {
+  /** Stable id for the life of the tab. */
+  readonly id: string
+  /** Document title, empty until the page reports one. */
+  readonly title: string
+  /** Current URL of the tab. */
+  readonly url: string
+  /** Whether the tab is navigating. */
+  readonly loading: boolean
+  /** Whether this tab is the one the screencast follows. */
+  readonly active: boolean
+}
+
+/** Browser chrome the user can operate from the take-over page. */
+export type TabAction = 'new' | 'close' | 'activate' | 'navigate' | 'back' | 'forward' | 'reload'
+
+/** One tab operation; `tabId` names the tab, and is absent for the active one. */
+export interface TabMessage {
+  readonly type: 'tab'
+  readonly action: TabAction
+  readonly tabId?: string
+  /** Navigation target, required for `navigate` and accepted on `new`. */
+  readonly url?: string
+}
+
 /** One validated message from the take-over page. */
-export type ClientMessage = MouseMessage | WheelMessage | KeyMessage | TextMessage | ControlMessage
+export type ClientMessage = MouseMessage | WheelMessage | KeyMessage | TextMessage | ControlMessage | TabMessage
 
 /** Parameters of one `Input.dispatchMouseEvent` command, including the wheel turn. */
 export interface MouseEventParams {
@@ -116,6 +150,8 @@ const MAX_MODIFIERS = 15
 const MAX_BUTTONS = 7
 const MAX_CLICK_COUNT = 3
 const MAX_REASON_CHARS = 500
+const MAX_TAB_ID_CHARS = 32
+const MAX_URL_CHARS = 2_048
 
 /**
  * Decode one message received from the take-over page.
@@ -131,6 +167,7 @@ export function decodeClientMessage(value: unknown): ClientMessage | undefined {
     case 'key': return decodeKey(message)
     case 'text': return decodeText(message)
     case 'control': return decodeControl(message)
+    case 'tab': return decodeTab(message)
     // An unknown tag is not a page message this plugin understands.
     default: return undefined
   }
@@ -185,6 +222,7 @@ export function cdpCommand(message: ClientMessage): InputCommand | undefined {
     case 'text':
       return { method: 'Input.insertText', params: { text: message.text } }
     case 'control':
+    case 'tab':
       return undefined
     default:
       return assertNever(message)
@@ -197,11 +235,12 @@ export function cdpCommand(message: ClientMessage): InputCommand | undefined {
  * @param metadata - page geometry that tells the page how to scale pointer input.
  * @returns the JSON text a viewer receives.
  */
-export function encodeFrame(data: string, metadata: FrameMetadata): string {
-  return JSON.stringify({ type: 'frame', data, metadata })
+export function encodeFrame(tabId: string, data: string, metadata: FrameMetadata): string {
+  return JSON.stringify({ type: 'frame', tabId, data, metadata })
 }
 
 function decodeMouse(message: Readonly<Record<string, unknown>>): MouseMessage | undefined {
+  const tabId = optionalTabId(message.tabId)
   const event = message.event === 'move' || message.event === 'down' || message.event === 'up' ? message.event : undefined
   const x = coordinate(message.x)
   const y = coordinate(message.y)
@@ -211,38 +250,68 @@ function decodeMouse(message: Readonly<Record<string, unknown>>): MouseMessage |
   const buttons = integer(message.buttons, MAX_BUTTONS)
   const clickCount = integer(message.clickCount, MAX_CLICK_COUNT)
   const modifiers = integer(message.modifiers, MAX_MODIFIERS)
-  if (event === undefined || x === undefined || y === undefined || button === undefined
+  if (tabId === null || event === undefined || x === undefined || y === undefined || button === undefined
     || buttons === undefined || clickCount === undefined || modifiers === undefined) return undefined
-  return { type: 'mouse', event, x, y, button, buttons, clickCount, modifiers }
+  return {
+    type: 'mouse',
+    ...tabId === undefined ? {} : { tabId },
+    event,
+    x,
+    y,
+    button,
+    buttons,
+    clickCount,
+    modifiers,
+  }
 }
 
 function decodeWheel(message: Readonly<Record<string, unknown>>): WheelMessage | undefined {
+  const tabId = optionalTabId(message.tabId)
   const x = coordinate(message.x)
   const y = coordinate(message.y)
   const deltaX = delta(message.deltaX)
   const deltaY = delta(message.deltaY)
   const modifiers = integer(message.modifiers, MAX_MODIFIERS)
-  if (x === undefined || y === undefined || deltaX === undefined || deltaY === undefined || modifiers === undefined) return undefined
-  return { type: 'wheel', x, y, deltaX, deltaY, modifiers }
+  if (tabId === null || x === undefined || y === undefined || deltaX === undefined
+    || deltaY === undefined || modifiers === undefined) return undefined
+  return {
+    type: 'wheel',
+    ...tabId === undefined ? {} : { tabId },
+    x,
+    y,
+    deltaX,
+    deltaY,
+    modifiers,
+  }
 }
 
 function decodeKey(message: Readonly<Record<string, unknown>>): KeyMessage | undefined {
+  const tabId = optionalTabId(message.tabId)
   const event = message.event === 'down' || message.event === 'up' ? message.event : undefined
   const key = boundedString(message.key, MAX_KEY_CHARS, 1)
   const code = boundedString(message.code, MAX_KEY_CHARS, 0)
   const keyCode = integer(message.keyCode, MAX_VIRTUAL_KEY_CODE)
   const modifiers = integer(message.modifiers, MAX_MODIFIERS)
   const text = message.text === undefined ? undefined : boundedString(message.text, MAX_KEY_TEXT_CHARS, 1)
-  if (event === undefined || key === undefined || code === undefined || keyCode === undefined
+  if (tabId === null || event === undefined || key === undefined || code === undefined || keyCode === undefined
     || modifiers === undefined || (message.text !== undefined && text === undefined)) return undefined
-  return text === undefined
-    ? { type: 'key', event, key, code, keyCode, modifiers }
-    : { type: 'key', event, key, code, keyCode, modifiers, text }
+  return {
+    type: 'key',
+    ...tabId === undefined ? {} : { tabId },
+    event,
+    key,
+    code,
+    keyCode,
+    modifiers,
+    ...text === undefined ? {} : { text },
+  }
 }
 
 function decodeText(message: Readonly<Record<string, unknown>>): TextMessage | undefined {
+  const tabId = optionalTabId(message.tabId)
   const text = boundedString(message.text, MAX_TEXT_CHARS, 1)
-  return text === undefined ? undefined : { type: 'text', text }
+  if (tabId === null || text === undefined) return undefined
+  return { type: 'text', ...tabId === undefined ? {} : { tabId }, text }
 }
 
 function decodeControl(message: Readonly<Record<string, unknown>>): ControlMessage | undefined {
@@ -251,6 +320,28 @@ function decodeControl(message: Readonly<Record<string, unknown>>): ControlMessa
   if (message.reason === undefined) return { type: 'control', action }
   const reason = boundedString(message.reason, MAX_REASON_CHARS, 0)
   return reason === undefined ? undefined : { type: 'control', action, reason }
+}
+
+function decodeTab(message: Readonly<Record<string, unknown>>): TabMessage | undefined {
+  const action = message.action
+  if (action !== 'new' && action !== 'close' && action !== 'activate'
+    && action !== 'navigate' && action !== 'back' && action !== 'forward' && action !== 'reload') return undefined
+  const tabId = optionalTabId(message.tabId)
+  if (tabId === null) return undefined
+  if (message.url === undefined) {
+    return action === 'navigate'
+      ? undefined
+      : { type: 'tab', action, ...tabId === undefined ? {} : { tabId } }
+  }
+  const url = boundedString(message.url, MAX_URL_CHARS, 1)
+  if (url === undefined) return undefined
+  return { type: 'tab', action, ...tabId === undefined ? {} : { tabId }, url }
+}
+
+/** Decode an optional tab id: `undefined` when absent, `null` when present but malformed. */
+function optionalTabId(value: unknown): string | undefined | null {
+  if (value === undefined) return undefined
+  return boundedString(value, MAX_TAB_ID_CHARS, 1) ?? null
 }
 
 function asRecord(value: unknown): Readonly<Record<string, unknown>> | undefined {

@@ -74,7 +74,7 @@ function renderPage() {
 /** The frame's image, once one is painted, with a real on-screen box in jsdom. */
 function paintedFrame(): HTMLImageElement {
   const image = screen.getByRole('img') as HTMLImageElement
-  Object.defineProperty(image, 'getBoundingClientRect', { value: () => RECT })
+  Object.defineProperty(image, 'getBoundingClientRect', { value: () => RECT, configurable: true })
   return image
 }
 
@@ -100,7 +100,7 @@ describe('浏览器接管 in-app page', () => {
     const socket = FakeSocket.instances[0]!
     expect(socket.url).toBe(`ws://${window.location.host}/headless-browser/live`)
     socket.open()
-    expect(await screen.findByText('https://example.com/signin')).toBeDefined()
+    expect(await screen.findByDisplayValue('https://example.com/signin')).toBeDefined()
     expect(screen.getByText('1 个查看者')).toBeDefined()
     expect(screen.getByText('agent 控制')).toBeDefined()
     expect(screen.getByText('等待浏览器…')).toBeDefined()
@@ -172,6 +172,99 @@ describe('浏览器接管 in-app page', () => {
     fireEvent(stage(), new MouseEvent('pointerdown', { bubbles: true, clientX: 10, clientY: 10, button: 0, buttons: 1 }))
     fireEvent.keyDown(stage(), { key: 'a', code: 'KeyA', keyCode: 65 })
     expect(socket.after(at)).toEqual([])
+  })
+
+  it('draws the tab strip, follows the active tab, and sends chrome operations', () => {
+    renderPage()
+    const socket = FakeSocket.instances[0]!
+    socket.open()
+    socket.deliver({
+      type: 'state',
+      holder: 'human',
+      tabs: [
+        { id: 't1', title: 'Alpha', url: 'https://alpha.example/', loading: false, active: false },
+        { id: 't2', title: 'Beta', url: 'https://beta.example/', loading: true, active: true },
+      ],
+    })
+    expect(screen.getByDisplayValue('https://beta.example/')).toBeDefined()
+    expect(screen.getByTitle('Alpha')).toBeDefined()
+    expect(screen.getByTitle('Beta')).toBeDefined()
+
+    // A frame from the active tab paints; one from the tab it replaced does not.
+    socket.deliver({ type: 'frame', tabId: 't2', data: 'ACTIVE', metadata: METADATA })
+    const image = paintedFrame()
+    expect(image.src).toContain('ACTIVE')
+    socket.deliver({ type: 'frame', tabId: 't1', data: 'STALE', metadata: METADATA })
+    expect(paintedFrame().src).toContain('ACTIVE')
+
+    const at = socket.sent.length
+    fireEvent.click(screen.getByTitle('Alpha'))
+    fireEvent.click(screen.getAllByRole('button', { name: '关闭标签页' })[1]!)
+    fireEvent.click(screen.getByRole('button', { name: '新建标签页' }))
+    fireEvent.click(screen.getByRole('button', { name: '后退' }))
+    fireEvent.click(screen.getByRole('button', { name: '前进' }))
+    fireEvent.click(screen.getByRole('button', { name: '重新加载' }))
+    expect(socket.after(at)).toEqual([
+      { type: 'tab', action: 'activate', tabId: 't1' },
+      { type: 'tab', action: 'close', tabId: 't2' },
+      { type: 'tab', action: 'new' },
+      { type: 'tab', action: 'back', tabId: 't2' },
+      { type: 'tab', action: 'forward', tabId: 't2' },
+      { type: 'tab', action: 'reload', tabId: 't2' },
+    ])
+  })
+
+  it('navigates from the address bar and reverts it on Escape', () => {
+    renderPage()
+    const socket = FakeSocket.instances[0]!
+    socket.open()
+    socket.deliver({
+      type: 'state', holder: 'human',
+      tabs: [{ id: 't1', title: 'Alpha', url: 'https://alpha.example/', loading: false, active: true }],
+    })
+    const address = screen.getByLabelText('地址栏') as HTMLInputElement
+    fireEvent.focus(address)
+    fireEvent.change(address, { target: { value: 'example.com/pay' } })
+    fireEvent.keyDown(address, { key: 'Enter' })
+    expect(socket.after(0)).toEqual([{ type: 'tab', action: 'navigate', tabId: 't1', url: 'https://example.com/pay' }])
+
+    fireEvent.focus(address)
+    fireEvent.change(address, { target: { value: 'typing...' } })
+    fireEvent.keyDown(address, { key: 'Escape' })
+    expect(address.value).toBe('https://alpha.example/')
+    expect(socket.sent).toHaveLength(1)
+  })
+
+  it('focuses the viewport and forwards keys without letting a window shortcut see them', async () => {
+    renderPage()
+    const socket = FakeSocket.instances[0]!
+    socket.open()
+    socket.deliver({ type: 'state', holder: 'human', tabs: [{ id: 't1', title: 'A', url: 'https://a.example/', loading: false, active: true }] })
+    socket.deliver({ type: 'frame', tabId: 't1', data: '/9j/4AAQ', metadata: METADATA })
+    const shortcut = vi.fn()
+    window.addEventListener('keydown', shortcut)
+    const view = stage()
+    fireEvent.pointerDown(view, { clientX: 320, clientY: 200, button: 0, buttons: 1 })
+    expect(document.activeElement).toBe(view)
+    fireEvent.keyDown(view, { key: 'Tab', code: 'Tab', keyCode: 9 })
+    fireEvent.keyDown(view, { key: 'Enter', code: 'Enter', keyCode: 13 })
+    fireEvent.keyDown(view, { key: 'ArrowRight', code: 'ArrowRight', keyCode: 39 })
+    fireEvent.keyDown(view, { key: 'a', code: 'KeyA', keyCode: 65, ctrlKey: true })
+    expect(shortcut).not.toHaveBeenCalled()
+    await vi.waitFor(() => { expect(socket.after(0)).toContainEqual({ type: 'key', tabId: 't1', event: 'down', key: 'Tab', code: 'Tab', keyCode: 9, modifiers: 0 }) })
+    expect(socket.after(0)).toContainEqual({ type: 'key', tabId: 't1', event: 'down', key: 'a', code: 'KeyA', keyCode: 65, modifiers: 2 })
+    window.removeEventListener('keydown', shortcut)
+  })
+
+  it('shows a reconnect line, never an HTTP error page, when the status is unauthorized and the socket drops', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({ message: 'unauthorized' }) } as unknown as Response)
+    renderPage()
+    const socket = FakeSocket.instances[0]!
+    socket.open()
+    act(() => { socket.onclose?.() })
+    expect(screen.getByRole('status').textContent).toBe('连接断开，正在重连')
+    expect(screen.queryByText('unauthorized')).toBeNull()
+    expect(screen.queryByRole('img')).toBeNull()
   })
 
   it('shows the Host\'s failure and reconnects after the socket drops', () => {

@@ -72,7 +72,7 @@ async function boot(): Promise<BrowserApp> {
     snapshotDir: join(root, 'snapshots'),
   }, ctx.logger)
   const takeover = new TakeoverState()
-  const view = new LiveView(() => browser.cdp(), { jpegQuality: 50, maxWidth: 1280, maxHeight: 800 }, ctx.logger)
+  const view = new LiveView(() => browser.castTarget(), { jpegQuality: 50, maxWidth: 1280, maxHeight: 800 }, ctx.logger)
   const removeRoutes = mountTakeoverRoutes(ctx.webServer, { browser, takeover, view, log: ctx.logger })
   const port = ctx.webServer.port
   if (port === undefined) throw new Error('the test Web server did not bind a port')
@@ -116,11 +116,39 @@ function openLive(base: string): Promise<LiveSocket> {
   })
 }
 
-function isFrame(message: unknown): message is { type: 'frame'; data: string; metadata: { deviceWidth: number; deviceHeight: number } } {
+function isFrame(message: unknown): message is { type: 'frame'; tabId: string; data: string; metadata: { deviceWidth: number; deviceHeight: number } } {
   return typeof message === 'object' && message !== null && (message as { type?: unknown }).type === 'frame'
 }
 
 describe.skipIf(!AVAILABLE)('headless browser live view', () => {
+  it('opens a second tab, follows it with the screencast, and switches back without closing the context', async () => {
+    const app = await boot()
+    await app.browser.open(DATA_PAGE)
+    const first = app.browser.tabsState()[0]!
+    await app.browser.open('data:text/html,<title>second</title><body>second', true)
+    const second = app.browser.tabsState().find(tab => tab.active)
+    expect(second).toMatchObject({ title: 'second' })
+    expect(second?.id).not.toBe(first.id)
+
+    const { socket, messages } = await openLive(app.base)
+    try {
+      await eventually(() => messages.some(message => (message as { type?: unknown }).type === 'state'
+        && ((message as { tabs?: unknown[] }).tabs?.length ?? 0) === 2))
+      await eventually(() => messages.some(message => isFrame(message) && message.tabId === second?.id))
+
+      await app.browser.tabs().activate(first.id)
+      await eventually(() => messages.some(message => isFrame(message) && message.tabId === first.id))
+      expect(app.browser.status().launched).toBe(true)
+      expect(app.browser.tabsState()).toHaveLength(2)
+
+      await app.browser.tabs().close(second!.id)
+      expect(app.browser.tabsState()).toHaveLength(1)
+      expect(app.browser.status().launched).toBe(true)
+    } finally {
+      socket.close()
+    }
+  }, 120_000)
+
   it('streams a frame of a data: page and forwards a click while the user holds control', async () => {
     const app = await boot()
     await app.browser.open(DATA_PAGE)
@@ -131,6 +159,7 @@ describe.skipIf(!AVAILABLE)('headless browser live view', () => {
       await eventually(() => messages.some(isFrame))
       const frame = messages.find(isFrame)
       expect(frame?.data.length).toBeGreaterThan(1_000)
+      expect(frame?.tabId).toMatch(/^t[0-9]+$/u)
       expect(frame?.metadata.deviceWidth).toBe(1280)
       expect(frame?.metadata.deviceHeight).toBe(800)
 

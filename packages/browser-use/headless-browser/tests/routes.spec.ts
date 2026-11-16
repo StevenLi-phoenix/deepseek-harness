@@ -78,7 +78,7 @@ async function boot(): Promise<App> {
     snapshotDir: join(root, 'snapshots'),
   }, ctx.logger)
   const takeover = new TakeoverState()
-  const view = new LiveView(() => browser.cdp(), { jpegQuality: 50, maxWidth: 800, maxHeight: 600 }, ctx.logger)
+  const view = new LiveView(() => browser.castTarget(), { jpegQuality: 50, maxWidth: 800, maxHeight: 600 }, ctx.logger)
   const removeRoutes = mountTakeoverRoutes(ctx.webServer, { browser, takeover, view, log: ctx.logger })
   const port = ctx.webServer.port
   if (port === undefined) throw new Error('the test Web server did not bind a port')

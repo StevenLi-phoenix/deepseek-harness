@@ -13,7 +13,9 @@
  * @module @deepseek-ai/dsh-headless-browser/client/protocol
  */
 
-import type { ClientMessage, ControlMessage, FrameMetadata, KeyMessage, MouseMessage, TextMessage, WheelMessage } from '../input.ts'
+import type {
+  ClientMessage, ControlMessage, FrameMetadata, KeyMessage, MouseMessage, TabAction, TabInfo, TabMessage, TextMessage, WheelMessage,
+} from '../input.ts'
 import { LIVE_PATH } from '../paths.ts'
 
 /** Who currently controls the browser. */
@@ -24,11 +26,15 @@ export interface StateMessage {
   readonly type: 'state'
   readonly holder: Holder
   readonly reason?: string
+  /** The tab strip: every open tab, with the active one marked. */
+  readonly tabs: readonly TabInfo[]
 }
 
 /** One screencast frame and the geometry pointer input is scaled by. */
 export interface FrameMessage {
   readonly type: 'frame'
+  /** Tab the frame came from; absent only from a v1 Host. */
+  readonly tabId?: string
   readonly data: string
   readonly metadata: FrameMetadata
 }
@@ -287,6 +293,36 @@ export function controlMessage(action: 'take' | 'release', reason?: string): Con
   return reason === undefined ? { type: 'control', action } : { type: 'control', action, reason }
 }
 
+/**
+ * Build one browser-chrome operation.
+ * @param action - new, close, activate, navigate, back, forward, or reload.
+ * @param tabId - the tab it names; omit for the active tab.
+ * @param url - the target of a navigate, or the first URL of a new tab.
+ * @returns the tab message.
+ */
+export function tabMessage(action: TabAction, tabId?: string, url?: string): TabMessage {
+  return {
+    type: 'tab',
+    action,
+    ...tabId === undefined ? {} : { tabId },
+    ...url === undefined ? {} : { url },
+  }
+}
+
+/**
+ * Turn an address-bar value into an absolute URL without guessing a scheme
+ * for something that already has one. A bare host or search-looking word gets
+ * `https://`; the Host validates the result and refuses anything else.
+ * @param value - what the owner typed.
+ * @returns the absolute URL, or `undefined` for empty input.
+ */
+export function normalizeAddress(value: string): string | undefined {
+  const text = value.trim()
+  if (text === '') return undefined
+  if (/^(?:https?|data|about):/iu.test(text)) return text
+  return `https://${text}`
+}
+
 /** Serialize one message for the socket. */
 export function encodeClientMessage(message: ClientMessage): string {
   return JSON.stringify(message)
@@ -295,9 +331,31 @@ export function encodeClientMessage(message: ClientMessage): string {
 function decodeState(message: Readonly<Record<string, unknown>>): StateMessage | undefined {
   const holder = asHolder(message.holder)
   if (holder === undefined) return undefined
-  return typeof message.reason === 'string' && message.reason !== ''
-    ? { type: 'state', holder, reason: message.reason }
-    : { type: 'state', holder }
+  return {
+    type: 'state',
+    holder,
+    ...typeof message.reason === 'string' && message.reason !== '' ? { reason: message.reason } : {},
+    tabs: decodeTabs(message.tabs),
+  }
+}
+
+/** Read the tab strip; a v1 Host without one reports no tabs. */
+function decodeTabs(value: unknown): TabInfo[] {
+  if (!Array.isArray(value)) return []
+  const tabs: TabInfo[] = []
+  for (const entry of value) {
+    const tab = asRecord(entry)
+    if (tab === undefined) continue
+    if (typeof tab.id !== 'string' || tab.id === '') continue
+    tabs.push({
+      id: tab.id,
+      title: typeof tab.title === 'string' ? tab.title : '',
+      url: typeof tab.url === 'string' ? tab.url : '',
+      loading: tab.loading === true,
+      active: tab.active === true,
+    })
+  }
+  return tabs
 }
 
 function decodeFrame(message: Readonly<Record<string, unknown>>): FrameMessage | undefined {
@@ -310,6 +368,7 @@ function decodeFrame(message: Readonly<Record<string, unknown>>): FrameMessage |
     || !isFiniteNumber(metadata.scrollOffsetX) || !isFiniteNumber(metadata.scrollOffsetY)) return undefined
   return {
     type: 'frame',
+    ...typeof message.tabId === 'string' && message.tabId !== '' ? { tabId: message.tabId } : {},
     data,
     metadata: {
       offsetTop: metadata.offsetTop,

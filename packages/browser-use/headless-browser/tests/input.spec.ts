@@ -38,6 +38,29 @@ describe('decodeClientMessage', () => {
     expect(decodeClientMessage({ type: 'control', action: 'release' })).toEqual({ type: 'control', action: 'release' })
   })
 
+  it('carries the tab id on input, and still accepts a v1 message without one', () => {
+    expect(decodeClientMessage({ type: 'mouse', tabId: 't2', event: 'down', x: 1, y: 2, button: 'left', buttons: 1, clickCount: 1, modifiers: 0 }))
+      .toMatchObject({ type: 'mouse', tabId: 't2' })
+    expect(decodeClientMessage({ type: 'key', tabId: 't2', event: 'up', key: 'a', code: 'KeyA', keyCode: 65, modifiers: 0 }))
+      .toMatchObject({ type: 'key', tabId: 't2' })
+    expect(decodeClientMessage({ type: 'text', tabId: 't2', text: 'x' })).toEqual({ type: 'text', tabId: 't2', text: 'x' })
+    expect(decodeClientMessage({ type: 'wheel', tabId: 't2', x: 1, y: 2, deltaX: 0, deltaY: 1, modifiers: 0 }))
+      .toMatchObject({ type: 'wheel', tabId: 't2' })
+    expect(decodeClientMessage({ type: 'text', text: 'x' })).toEqual({ type: 'text', text: 'x' })
+    expect(decodeClientMessage({ type: 'text', tabId: '', text: 'x' })).toBeUndefined()
+  })
+
+  it('decodes tab chrome operations and refuses a navigate without a URL', () => {
+    expect(decodeClientMessage({ type: 'tab', action: 'new' })).toEqual({ type: 'tab', action: 'new' })
+    expect(decodeClientMessage({ type: 'tab', action: 'close', tabId: 't3' })).toEqual({ type: 'tab', action: 'close', tabId: 't3' })
+    expect(decodeClientMessage({ type: 'tab', action: 'navigate', tabId: 't3', url: 'https://example.com' }))
+      .toEqual({ type: 'tab', action: 'navigate', tabId: 't3', url: 'https://example.com' })
+    expect(decodeClientMessage({ type: 'tab', action: 'navigate' })).toBeUndefined()
+    expect(decodeClientMessage({ type: 'tab', action: 'fly' })).toBeUndefined()
+    expect(decodeClientMessage({ type: 'tab', action: 'activate', tabId: 'x'.repeat(33) })).toBeUndefined()
+    expect(cdpCommand({ type: 'tab', action: 'reload' })).toBeUndefined()
+  })
+
   it.each([
     ['not an object', 'mouse'],
     ['an array', [1, 2]],
@@ -53,6 +76,8 @@ describe('decodeClientMessage', () => {
     ['an empty text value', { type: 'text', text: '' }],
     ['an unknown control action', { type: 'control', action: 'steal' }],
     ['an oversized take-over reason', { type: 'control', action: 'take', reason: 'x'.repeat(501) }],
+    ['an oversized tab id', { type: 'tab', action: 'close', tabId: 'x'.repeat(33) }],
+    ['an oversized tab URL', { type: 'tab', action: 'navigate', url: `https://example.com/${'x'.repeat(2_048)}` }],
   ])('rejects %s', (_label, value) => {
     expect(decodeClientMessage(value)).toBeUndefined()
   })
@@ -105,7 +130,7 @@ describe('encodeFrame', () => {
     const metadata: FrameMetadata = {
       offsetTop: 0, pageScaleFactor: 1, deviceWidth: 1280, deviceHeight: 800, scrollOffsetX: 0, scrollOffsetY: 0,
     }
-    const text = encodeFrame('AAAA', metadata)
-    expect(JSON.parse(text)).toEqual({ type: 'frame', data: 'AAAA', metadata })
+    const text = encodeFrame('t4', 'AAAA', metadata)
+    expect(JSON.parse(text)).toEqual({ type: 'frame', tabId: 't4', data: 'AAAA', metadata })
   })
 })

@@ -33,7 +33,7 @@ export const inject = ['tools']
 export function apply(ctx: Context, config: Config): void {
   const browser = new HeadlessBrowserSession(config, ctx.logger)
   const takeover = new TakeoverState()
-  const view = new LiveView(() => browser.cdp(), {
+  const view = new LiveView(() => browser.castTarget(), {
     jpegQuality: config.jpegQuality,
     maxWidth: config.viewportWidth,
     maxHeight: config.viewportHeight,
