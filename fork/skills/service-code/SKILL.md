@@ -18,7 +18,7 @@ description: 修改并上线 mini 上服务和主人 App 的代码：发现或�
 | `kaorou-potoken` | `/Users/Shared/ams-src/bgutil-ytdlp-pot-provider`（第三方上游） | `rsync -rlpc --delete server/ /Users/Shared/ams-apps/bgutil-pot/server/`，再重启 |
 | `global-awareness` | `/Users/dsh-runtime/services/globalAwarness`（无 GitHub） | `pnpm -C apps/web build:check && pnpm -C apps/server build:node`，再重启 |
 | `intake` 和 AMS 本身 | `/Users/dsh-runtime/ams`（GitHub `agent-managed-services`） | `git pull --ff-only`；只重启 `intake`，harness 不重启 |
-| `QuotaPulse`（主人的菜单栏额度 App，iPhone/Watch 经 iCloud 读） | GitHub `QuotaPulse`（`main`）；你的克隆放 `/Users/dsh-runtime/src/QuotaPulse` | 推到 `main` 后发消息给主人，由 Claude Code 发布新版本，见下方“主人身份运行的 App” |
+| `QuotaPulse`（主人的菜单栏额度 App，iPhone/Watch 经 iCloud 读） | GitHub `QuotaPulse`（`main`）；你的克隆放 `/Users/dsh-runtime/src/QuotaPulse` | 推到 `main` 就发布（GitHub Actions 签名、公证、发版，Mac 自己更新），见下方“主人身份运行的 App” |
 | `disk-watch` `qq-recorder` DSH 本身 | `/Users/dsh-runtime/src/deepseek-harness`（你自己的 clone，`main`，`gh` 已登录，能直接 push），规则读 `fork/AGENTS.md` | 见下方“部署 DSH 自己” |
 
 `service.toml` 在 `/Users/dsh-runtime/.ams/services/<id>/service.toml`，配置写这里，密钥用 `ams secret set`。各仓库 RUNBOOK 里的 `~/services/x`、`~/Codes/x` 对你来说就是 `/Users/Shared/ams-src/x`。
@@ -77,15 +77,7 @@ ams ctl start dsh-upgrade
 
 ### 主人身份运行的 App
 
-QuotaPulse 这类 App 以主人身份签名、读主人的 App Group 和 keychain，你的账号构建不出能装的版本，也不用构建。**推到 `main` 你这边就做完了**，然后在微信发主人一条消息，主人会转给 Claude Code，由它发布新版本：Mac 上装的 App 会自己更新，手机由 Claude Code 装。消息要能原样转发：
-
-```
-QuotaPulse 已推到 main：<短 sha> <一句话改了什么>
-请发布新版本（改了 iOS、Watch 或小组件时加上：手机也要装）
-验证：<上线后在哪里能看到效果>
-```
-
-消息里不写 rsync、`install.sh`、`release.sh`、`xcodebuild` 这类命令，发布怎么做由 Claude Code 决定。主人能看到的改动在 `CHANGELOG.md` 的 `[Unreleased]` 下加一行，发布时这些行就是 App 里显示的更新说明。
+QuotaPulse 这类 App 以主人身份签名、读主人的 App Group 和 keychain，你的账号构建不出能装的版本，也不用构建。**推到 `main` 就是发布**：`CHANGELOG.md` 的 `[Unreleased]` 下有行时，仓库的 GitHub Actions（`release.yml`）跑测试、用 Developer ID 签名、公证，再发 GitHub release，主人的 Mac 一小时内自己装上新版本；`[Unreleased]` 下没有行的推送不发版。主人能看到的改动都在 `[Unreleased]` 下加一行（`### Added` 下有行升 minor，否则升 patch），这些行就是 App 里显示的更新说明。
 
 推之前在你的克隆里验证（Xcode 工程由 `xcodegen generate` 从 `project.yml` 生成，不进 git）：
 
@@ -94,6 +86,23 @@ QuotaPulse 已推到 main：<短 sha> <一句话改了什么>
 (cd QuotaUI && swift test)
 xcodebuild -scheme QuotaPulse-macOS -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
 ```
+
+推完在克隆里等这次发布跑完（约 15 分钟）：
+
+```sh
+gh run list --workflow release.yml -L 3            # 找 commit 对得上你这次推送的那一行
+gh run watch <run id> --exit-status
+gh run view <run id> --log-failed                  # 失败时看原因，修好再推
+```
+
+发版成功、只改了 Mac 端时不用通知主人。改了 iOS、Watch 或小组件时，手机要重新安装才有，发主人一条消息：
+
+```
+QuotaPulse <版本> 已发布：<一句话改了什么>
+Mac 会自己更新；这次也改了 <iPhone/Watch/小组件>，手机要重新安装
+```
+
+改了 iCloud 记录（新字段、新记录类型）时先别推：生产环境的 CloudKit schema 要主人在 CloudKit Console 部署，部署前发出的版本写不进 iCloud。把要部署的字段告诉主人，等主人说部署好了再推。
 
 ### 改 DSH 自己的设置
 
