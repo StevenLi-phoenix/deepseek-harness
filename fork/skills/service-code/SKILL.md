@@ -18,7 +18,7 @@ description: 修改并上线 mini 上服务和主人 App 的代码：发现或�
 | `kaorou-potoken` | `/Users/Shared/ams-src/bgutil-ytdlp-pot-provider`（第三方上游） | `rsync -rlpc --delete server/ /Users/Shared/ams-apps/bgutil-pot/server/`，再重启 |
 | `global-awareness` | `/Users/dsh-runtime/services/globalAwarness`（无 GitHub） | `pnpm -C apps/web build:check && pnpm -C apps/server build:node`，再重启 |
 | `intake` 和 AMS 本身 | `/Users/dsh-runtime/ams`（GitHub `agent-managed-services`） | `git pull --ff-only`；只重启 `intake`，harness 不重启 |
-| `QuotaPulse`（主人的菜单栏额度 App，iPhone/Watch 经 iCloud 读） | GitHub `QuotaPulse`（`main`）；你的克隆放 `/Users/dsh-runtime/src/QuotaPulse` | 推到 `main` 后发消息给主人，由 Claude Code 上线，见下方“主人身份运行的 App” |
+| `QuotaPulse`（主人的菜单栏额度 App，iPhone/Watch 经 iCloud 读） | GitHub `QuotaPulse`（`main`）；你的克隆放 `/Users/dsh-runtime/src/QuotaPulse` | 推到 `main` 后发消息给主人，由 Claude Code 发布新版本，见下方“主人身份运行的 App” |
 | `disk-watch` `qq-recorder` DSH 本身 | `/Users/dsh-runtime/src/deepseek-harness`（你自己的 clone，`main`，`gh` 已登录，能直接 push），规则读 `fork/AGENTS.md` | 见下方“部署 DSH 自己” |
 
 `service.toml` 在 `/Users/dsh-runtime/.ams/services/<id>/service.toml`，配置写这里，密钥用 `ams secret set`。各仓库 RUNBOOK 里的 `~/services/x`、`~/Codes/x` 对你来说就是 `/Users/Shared/ams-src/x`。
@@ -77,15 +77,15 @@ ams ctl start dsh-upgrade
 
 ### 主人身份运行的 App
 
-QuotaPulse 这类 App 以主人身份签名、读主人的 App Group 和 keychain，你的账号构建不出能装的版本，也不用构建。**推到 `main` 你这边就做完了**，然后在微信发主人一条消息，主人会转给 Claude Code，由它构建并装到主人的 Mac 和手机上。消息要能原样转发：
+QuotaPulse 这类 App 以主人身份签名、读主人的 App Group 和 keychain，你的账号构建不出能装的版本，也不用构建。**推到 `main` 你这边就做完了**，然后在微信发主人一条消息，主人会转给 Claude Code，由它发布新版本：Mac 上装的 App 会自己更新，手机由 Claude Code 装。消息要能原样转发：
 
 ```
 QuotaPulse 已推到 main：<短 sha> <一句话改了什么>
-请更新部署：Mac 上的 App（改了 iOS、Watch 或小组件时加上：手机也要）
+请发布新版本（改了 iOS、Watch 或小组件时加上：手机也要装）
 验证：<上线后在哪里能看到效果>
 ```
 
-消息里不写 rsync、`install.sh`、`xcodebuild` 这类命令，部署怎么做由 Claude Code 决定。
+消息里不写 rsync、`install.sh`、`release.sh`、`xcodebuild` 这类命令，发布怎么做由 Claude Code 决定。主人能看到的改动在 `CHANGELOG.md` 的 `[Unreleased]` 下加一行，发布时这些行就是 App 里显示的更新说明。
 
 推之前在你的克隆里验证（Xcode 工程由 `xcodegen generate` 从 `project.yml` 生成，不进 git）：
 
