@@ -36,6 +36,7 @@ kind: "package-reference"
 |---|---|---|
 | `profileDir` | `$DSH_HOME/data/headless-browser/profile` | Chromium profile 目录；cookie、登录状态和本地存储都在这里 |
 | `headless` | `true` | 不开窗口运行；`false` 需要已登录的桌面会话 |
+| `stealth` | `true` | 每个页面都报告一个 macOS Chrome 身份，让把「无头浏览器」认出来的站点正常返回页面 |
 | `viewportWidth` | `1280` | 页面视口宽度（CSS 像素） |
 | `viewportHeight` | `800` | 页面视口高度（CSS 像素） |
 | `jpegQuality` | `60` | 实时画面 JPEG 质量 |
@@ -53,6 +54,14 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 ```
 
 不设变量时使用平台缓存（macOS 是 `~/Library/Caches/ms-playwright`，Linux 是 `~/.cache/ms-playwright`）。缺二进制时第一次工具调用会带着启动器的诊断失败，而不是在加载时报错。
+
+### 读取拒绝无头浏览器的站点
+
+`stealth` 选项默认打开，让浏览器如实描述它本来是什么：一个 macOS arm64 的 Chrome，版本就是本包钉住的构建。不打开时 Playwright 的启动会在 `navigator.userAgentData.brands` 和 `navigator.userAgent` 里报 `HeadlessChrome`，让 `navigator.webdriver` 为 true，并发出与 user-agent 字符串不一致的 client hints。站点只要用其中任何一项做机器人检查，就会在内容起作用之前拒绝这个页面；而这些表面一致之后，同一台机器上的同一个 Chromium 就能拿到这个页面。
+
+它同时改三处。启动改用完整 Chromium 构建而不是 headless shell，并带上 `--disable-blink-features=AutomationControlled` 和 `--lang=en-US`。每个页面和每个子框架里都有一份文档起始脚本，替换 `navigator.userAgentData`（含 `getHighEntropyValues`）、`navigator.webdriver`、`navigator.plugins`、`navigator.languages`、`window.chrome`，以及 WebGL 的 vendor 与 renderer 字符串。每个页面还有一次 CDP `Emulation.setUserAgentOverride`，让 `Sec-CH-UA`、完整版本列表、架构、位数和平台版本跟同一个身份对上。新建的标签、站点自己打开的页面，以及从 profile 恢复的页面，都拿到这两半。
+
+它不编造字体列表，不伪造证书，也不应答任何挑战，页面内容一概不碰。仍然拒绝的站点由主人自己接管：接管页照旧工作，挑战本身也正是主人接管的地方。这些用于读取主人有权读取的页面。设 `stealth: false` 就保留浏览器本来的表面。
 
 ### 接管页
 
@@ -93,6 +102,7 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 | [`src/index.ts`](src/index.ts) | 插件入口：会话、控制状态、实时画面、工具、路由 |
 | [`src/session.ts`](src/session.ts) | 持久上下文、按标签页的 CDP 会话、导航、截图、点击、填值 |
 | [`src/tabs.ts`](src/tabs.ts) | 标签 id、活动标签、加载状态、八标签上限和每次导航的期限 |
+| [`src/stealth.ts`](src/stealth.ts) | 身份：启动设置、文档起始脚本，以及每页的 client hints 覆盖 |
 | [`src/takeover.ts`](src/takeover.ts) | 持有者状态，以及 agent 动作被拒绝时的错误 |
 | [`src/input.ts`](src/input.ts) | 线路消息解码、CDP 命令映射、帧编码 |
 | [`src/live-view.ts`](src/live-view.ts) | screencast 分发与查看者记录 |
@@ -152,6 +162,7 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 - **一个浏览器、一个挂载作用域** —— 路由是固定路径，所以一个 Host 只挂载一次；第二次挂载会在 `/headless-browser` 上冲突。浏览器是一个 Chromium、一套标签模型，不是每个 Session 一个，并行运行的 agent 共用它的标签页。
 - **浏览器二进制由部署负责** —— `playwright-core` 不带浏览器，本包也不下载。没有 `PLAYWRIGHT_BROWSERS_PATH` 或账号缓存里的安装，每次工具调用都会带着启动器诊断失败。
 - **支持的是无头模式** —— `headless: false` 需要已登录的桌面会话；服务账号开不了窗口。
+- **拒绝就是拒绝** —— 身份只改浏览器怎么描述自己，不改站点怎么判断：按地址、profile 或请求本身打分的站点仍然可以拒绝这个页面，本包不应答任何挑战。
 - **标签页由我们管理，而不是站点** —— 标签模型只管工具或接管页打开的标签；站点自己开的弹窗不会被接管。最多同时保留八个标签，每次导航都有 20 秒期限。
 - **画面只实时** —— 只有接管页连着时才有帧，不录制，Chrome 繁忙时会掉帧。静止页面不会产生新帧，后连上来的页面看到的是最后画出的那一帧。渲染进程崩溃会结束推流，重新加载页面并连接之后画面才会回来。
 - **接管地址需要 Web 服务器** —— 在没有 Web 服务器的组合里，`headless_browser_hand_over` 只返回 `/headless-browser`，用户打不开。

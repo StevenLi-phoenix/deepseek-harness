@@ -36,6 +36,7 @@ Mount the row once in a Host composition that has the Web server and the tool re
 |---|---|---|
 | `profileDir` | `$DSH_HOME/data/headless-browser/profile` | Chromium profile directory; cookies, sign-ins, and local storage live here |
 | `headless` | `true` | Run without a window; `false` needs a logged-in desktop session |
+| `stealth` | `true` | Report a macOS Chrome identity on every page, so a site that refuses a browser announcing itself as headless answers normally |
 | `viewportWidth` | `1280` | Page viewport width in CSS pixels |
 | `viewportHeight` | `800` | Page viewport height in CSS pixels |
 | `jpegQuality` | `60` | JPEG quality of live-view frames |
@@ -53,6 +54,14 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 ```
 
 An unset variable uses the platform cache (`~/Library/Caches/ms-playwright` on macOS, `~/.cache/ms-playwright` on Linux). A missing binary fails the first tool call with the launcher diagnostic, not at load.
+
+### Reading sites that refuse a headless browser
+
+The `stealth` option, on by default, makes the browser describe the Chromium it actually is: a macOS arm64 Chrome of the version this package pins. Playwright's launch otherwise announces `HeadlessChrome` in `navigator.userAgentData.brands` and `navigator.userAgent`, leaves `navigator.webdriver` true, and sends client hints that disagree with the user-agent string. A site whose bot check keys on any of those refuses the page before its content matters, and the same Chromium on the same machine gets that page once the surface is aligned.
+
+It changes three things together. The launch uses the full Chromium build rather than the headless shell, with `--disable-blink-features=AutomationControlled` and `--lang=en-US`. A document-start script in every page and frame replaces `navigator.userAgentData` (including `getHighEntropyValues`), `navigator.webdriver`, `navigator.plugins`, `navigator.languages`, `window.chrome`, and the WebGL vendor and renderer strings. A CDP `Emulation.setUserAgentOverride` per page keeps `Sec-CH-UA`, the full version list, architecture, bitness, and platform version in step with the same identity. A new tab, a page the site opens, and a page restored from the profile all get both halves.
+
+It invents no font list, spoofs no certificate, and answers no challenge, and it leaves the page's content alone. A site that still refuses the page is the owner's to take over: the take-over page keeps working, and the challenge itself is where the owner takes it. Use this for reading pages the owner has a right to read. Set `stealth: false` to keep the browser's own surface.
 
 ### The take-over page
 
@@ -92,6 +101,7 @@ The tools share one guard. An acting tool calls `TakeoverState.assertAgent` firs
 | [`src/index.ts`](src/index.ts) | Plugin entry: session, control state, live view, tools, routes |
 | [`src/session.ts`](src/session.ts) | Persistent context, tab-aware CDP sessions, navigation, screenshot, click, fill |
 | [`src/tabs.ts`](src/tabs.ts) | Tab ids, active tab, loading state, the eight-tab cap, and the per-navigation deadline |
+| [`src/stealth.ts`](src/stealth.ts) | The identity: launch settings, the document-start script, and the per-page client-hint override |
 | [`src/takeover.ts`](src/takeover.ts) | Holder state and the refusal an agent action gets |
 | [`src/input.ts`](src/input.ts) | Wire decoding, CDP command mapping, frame encoding |
 | [`src/live-view.ts`](src/live-view.ts) | Screencast fan-out and viewer bookkeeping |
@@ -151,6 +161,7 @@ Append-only: results and refusals enter the history after the reusable prefix an
 - **One browser, one mounting scope** — the routes are fixed paths, so a Host mounts the package once; a second mount collides on `/headless-browser`. The browser is one Chromium with one tab model, not one per Session, so parallel agents share its tabs.
 - **The browser binary is the deployment's** — `playwright-core` ships no browser, and this package does not download one. Without `PLAYWRIGHT_BROWSERS_PATH` or an install into the account's cache, every tool call fails with the launcher diagnostic.
 - **Headless is the supported mode** — `headless: false` needs a logged-in desktop session; a service account cannot open a window.
+- **A refusal stays a refusal** — the identity fixes what the browser says about itself, not what the site decides: a site that scores the address, the profile, or the request can still refuse the page, and this package answers no challenge.
 - **Tabs are ours, not the site's** — the tab model covers tabs the tools or the take-over view open; a popup the site opens for itself is not adopted. The browser keeps at most eight tabs, and every navigation has a 20-second deadline.
 - **Streaming is live-only** — frames arrive only while a take-over page is connected, are not recorded, and can drop frames when Chrome is busy. A still page sends no new frames, so a page that connects later shows the last painted frame. A renderer that crashes ends the cast, and the picture returns only after the page is reloaded and the user reconnects.
 - **The hand-over URL needs a Web server** — in a composition without one, `headless_browser_hand_over` returns `/headless-browser` alone, which the user cannot open.

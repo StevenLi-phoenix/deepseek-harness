@@ -72,6 +72,7 @@ async function boot(): Promise<App> {
   const browser = new HeadlessBrowserSession({
     profileDir,
     headless: true,
+    stealth: true,
     viewportWidth: 800,
     viewportHeight: 600,
     jpegQuality: 50,

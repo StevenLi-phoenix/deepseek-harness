@@ -2303,6 +2303,13 @@ export interface Config {
   profileDir: string
   /** Run the browser without a visible window. @default true */
   headless: boolean
+  /**
+   * Report a macOS Chrome identity on every page and every new tab, so a site
+   * that refuses a browser announcing itself as headless answers normally; see
+   * `src/stealth.ts`. Turn it off to keep the browser's own surface.
+   * @default true
+   */
+  stealth: boolean
   /** Page viewport width in CSS pixels; live-view frames are scaled to it. @default 1280 */
   viewportWidth: number
   /** Page viewport height in CSS pixels. @default 800 */
