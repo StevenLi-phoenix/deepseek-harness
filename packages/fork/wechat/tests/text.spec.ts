@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  agentMessageText, buildDigest, fitText, formatGap, formatStamp, handoverNotice, handoverText, inboundText, quotedAt, renderNote,
-  sharedNoteText, splitText, timeGapNotice,
+  agentMessageText, buildDigest, fitText, formatGap, formatStamp, handoverNotice, handoverText, inboundText, markdownImages, quotedAt,
+  renderNote, sharedNoteText, splitText, timeGapNotice, withoutMarkdownImages,
 } from '../src/text.ts'
 
 describe('fitText', () => {
@@ -327,5 +327,38 @@ describe('timeGapNotice without a recorded kind', () => {
   it('reads a sent message of no recorded kind as the agent\'s reply', () => {
     const notice = timeGapNotice(Date.UTC(2026, 9, 21, 18), { sentAt: Date.UTC(2026, 9, 21, 12) }, 1000, 'UTC')
     expect(notice).toContain('The last message before it was your reply, at Wed 2026-10-21 12:00.')
+  })
+})
+
+describe('markdownImages', () => {
+  it('finds plain references, angle-bracketed paths with spaces, and several in order', () => {
+    const text = '看图 ![第一张](one.png) 还有 ![two](<two images/two.png>)'
+    expect(markdownImages(text).map(image => [image.raw, image.target])).toEqual([
+      ['![第一张](one.png)', 'one.png'],
+      ['![two](<two images/two.png>)', 'two images/two.png'],
+    ])
+    expect(markdownImages(text).map(image => text.slice(image.index, image.index + image.raw.length))).toEqual(['![第一张](one.png)', '![two](<two images/two.png>)'])
+  })
+
+  it('finds a remote URL and an empty alt, and nothing in a plain answer', () => {
+    expect(markdownImages('![a](https://example.com/a.png)').map(image => image.target)).toEqual(['https://example.com/a.png'])
+    expect(markdownImages('![](shot.png)').map(image => image.target)).toEqual(['shot.png'])
+    expect(markdownImages('没有图片，只有 ![不是链接] 和 [a](b.png)')).toEqual([])
+    expect(markdownImages('')).toEqual([])
+  })
+
+  it('ignores the syntax quoted inside a fenced code block', () => {
+    const text = '这样写：\n```md\n![a](inside.png)\n```\n真正的图 ![b](outside.png)'
+    expect(markdownImages(text).map(image => image.target)).toEqual(['outside.png'])
+    const unclosed = '说明\n```\n![a](inside.png)'
+    expect(markdownImages(unclosed)).toEqual([])
+  })
+
+  it('removes only the references it is given, and trims what is left', () => {
+    const text = ' 见 ![a](one.png) 和 ![b](two.png) '
+    const [first] = markdownImages(text)
+    expect(withoutMarkdownImages(text, [first!])).toBe('见  和 ![b](two.png)')
+    expect(withoutMarkdownImages(text, markdownImages(text))).toBe('见  和')
+    expect(withoutMarkdownImages('![a](one.png)', markdownImages('![a](one.png)'))).toBe('')
   })
 })

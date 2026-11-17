@@ -89,8 +89,19 @@ describe('wechat_send_file', () => {
     expect(ctx.tools.schemas().map(schema => schema.name)).toContain('wechat_send_file')
     expect(await call({ path: '/Users/dsh-runtime/me/a.png' })).toMatchObject({ value: { sent: 'image', name: 'a.png', bytes: 3 } })
     expect(await call({ path: '/tmp/b.pdf' })).toMatchObject({ value: { notSent: 'the owner has not written yet' } })
-    expect(sendFile.mock.calls).toEqual([['/Users/dsh-runtime/me/a.png'], ['/tmp/b.pdf']])
+    expect(sendFile.mock.calls.map(([path]) => path)).toEqual(['/Users/dsh-runtime/me/a.png', '/tmp/b.pdf'])
     expect(ctx.tools.get('wechat_send_file')!.presentCall!({ path: '/x/y/report.pdf' })).toEqual({ card: 'generic', title: 'Send report.pdf on WeChat', kind: 'other', rawInput: '/x/y/report.pdf' })
+  })
+
+  it('passes the calling Session, so this turn\'s answer does not send the same file twice', async () => {
+    const sendFile = vi.fn(() => Promise.resolve({ sent: 'image', name: 'a.png', bytes: 3 }))
+    const { ctx } = await mount({ send: vi.fn(), ownsSession: () => false, sendFile })
+    await ctx.tools.execute({
+      signal: new AbortController().signal,
+      agent: { session: { id: 'chat-1' } } as never,
+      calls: [{ type: 'tool-call', id: ToolCallId('send-call'), name: 'wechat_send_file', arguments: JSON.stringify({ path: '/tmp/a.png' }) }],
+    })
+    expect(sendFile).toHaveBeenCalledWith('/tmp/a.png', 'chat-1')
   })
 
   it('says so when the notifier is not the WeChat channel', async () => {

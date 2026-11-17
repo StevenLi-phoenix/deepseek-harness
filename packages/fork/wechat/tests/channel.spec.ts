@@ -273,6 +273,13 @@ function fakeAgent(id: string, status: 'idle' | 'running'): FakeAgent {
   return { session: { id, header: {} }, status, cancel: vi.fn() }
 }
 
+/** Write a file into the test's temporary directory and return its absolute path. */
+function writeFileAt(name: string, data: Uint8Array | string): string {
+  const path = join(dir, name)
+  writeFileSync(path, data)
+  return path
+}
+
 function assistant(text: string): unknown {
   return { type: 'assistant/message', seq: 1, data: { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text }] } } }
 }
@@ -2039,11 +2046,7 @@ describe('WechatChannel chat Session bookkeeping', () => {
 })
 
 describe('WechatChannel sendFile', () => {
-  const file = (name: string, data: Uint8Array | string): string => {
-    const path = join(dir, name)
-    writeFileSync(path, data)
-    return path
-  }
+  const file = writeFileAt
 
   it('uploads a picture and sends it to the owner through the open window', async () => {
     const h = await harness()
@@ -2101,6 +2104,114 @@ describe('WechatChannel sendFile', () => {
     h.ilink.reply('ilink/bot/getuploadurl', { body: { ret: -14 } })
     expect(await h.channel.sendFile(join(dir, 'a.png'))).toEqual({ notSent: 'bot token is stale' })
     expect(await h.channel.sendFile(join(dir, 'a.png'))).toEqual({ notSent: 'bot token is stale' })
+  })
+})
+
+describe('WechatChannel pictures in a final answer', () => {
+  const turnStart = { type: 'turn/start', seq: 0, data: { turn: 1 } }
+  const file = writeFileAt
+  /** Wait until the channel finished a delivery it started from the relay. */
+  const settled = async (h: Awaited<ReturnType<typeof harness>>, images: number): Promise<void> => {
+    await vi.waitFor(() => { expect(h.ilink.sentItems.filter(item => item.item.type === 2)).toHaveLength(images) })
+  }
+
+  it('sends the text without the references, then each picture as its own image message in order', async () => {
+    const h = await harness()
+    await h.ownerSays('来两张图')
+    const one = file('one.png', Buffer.concat([PNG, Buffer.from('one')]))
+    const two = file('two images.png', Buffer.concat([PNG, Buffer.from('two')]))
+    await h.finishTurn('chat-1', `第一张 ![a](${one}) 第二张 ![b](<${two}>)`)
+    await settled(h, 2)
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['第一张  第二张'])
+    expect(h.ilink.sentItems.map(item => item.item.type)).toEqual([1, 2, 2])
+    const [first, second] = h.ilink.sentItems.slice(1)
+    expect(first!.item).toMatchObject({ image_item: { media: { encrypt_query_param: 'dl-1' } } })
+    expect(second!.item).toMatchObject({ image_item: { media: { encrypt_query_param: 'dl-2' } } })
+    const read = async (item: { item: Record<string, unknown> }): Promise<Buffer> => (
+      await downloadMedia(item.item, { cdnBaseUrl: CDN, maxBytes: 4096, timeoutMs: 5000, fetch: h.ilink.fetch })
+    ).data
+    expect(await read(first!)).toEqual(Buffer.concat([PNG, Buffer.from('one')]))
+    expect(await read(second!)).toEqual(Buffer.concat([PNG, Buffer.from('two')]))
+    // The text kept the window's slot; each picture counts as one message too.
+    expect(h.channel.status().window.repliesLeft).toBe(7)
+    expect(h.logs.filter(line => line.text.includes('第一张'))).toEqual([])
+  })
+
+  it('sends a picture-only answer as pictures and no empty text', async () => {
+    const h = await harness()
+    await h.ownerSays('图')
+    await h.finishTurn('chat-1', `![a](${file('only.png', PNG)})`)
+    await settled(h, 1)
+    expect(h.ilink.sent).toEqual([])
+    expect(h.ilink.sentItems.map(item => item.item.type)).toEqual([2])
+    expect(h.channel.status().window.repliesLeft).toBe(9)
+  })
+
+  it('leaves a remote URL, a missing file, and a file that is not a picture in the text, and logs each once', async () => {
+    const h = await harness()
+    await h.ownerSays('看')
+    const doc = file('notes.pdf', '%PDF-1.7 tiny')
+    const picture = file('good.png', PNG)
+    const missing = join(dir, 'missing.png')
+    await h.finishTurn('chat-1', `看 ![r](https://example.com/a.png) ![m](${missing}) ![d](${doc}) ![g](${picture})`)
+    await settled(h, 1)
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual([`看 ![r](https://example.com/a.png) ![m](${missing}) ![d](${doc})`])
+    const logged = (needle: string): number => h.logs.filter(line => line.text.includes(needle)).length
+    expect(logged('a remote URL is not sent')).toBe(1)
+    expect(logged('cannot read the file (ENOENT)')).toBe(1)
+    expect(logged('not a PNG, JPEG, GIF, or WebP image')).toBe(1)
+    expect(h.ilink.sentItems.map(item => item.item.type)).toEqual([1, 2])
+  })
+
+  it('sends a reference to the same file twice only once', async () => {
+    const h = await harness()
+    await h.ownerSays('重复')
+    const picture = file('same.png', PNG)
+    await h.finishTurn('chat-1', `一张 ![a](${picture}) 和再来一次 ![b](${picture})`)
+    await settled(h, 1)
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['一张  和再来一次'])
+    expect(h.ilink.sentItems.map(item => item.item.type)).toEqual([1, 2])
+  })
+
+  it('does not send a picture the same turn already sent with wechat_send_file', async () => {
+    const h = await harness()
+    await h.ownerSays('截图')
+    const picture = file('shot.png', PNG)
+    h.emit('chat-1', turnStart)
+    expect(await h.channel.sendFile(picture, 'chat-1')).toMatchObject({ sent: 'image' })
+    await h.finishTurn('chat-1', `已经发过了 ![a](${picture})`)
+    await vi.waitFor(() => { expect(h.ilink.sent.map(sent => sent.text)).toEqual(['已经发过了']) })
+    expect(h.ilink.sentItems.map(item => item.item.type)).toEqual([2, 1])
+    expect(h.logs.some(line => line.text === `wechat: a picture already sent with wechat_send_file in this turn is not sent again: ${picture}`)).toBe(true)
+  })
+
+  it('counts each picture against the reply window and logs the one it could not send', async () => {
+    const h = await harness({ config: { repliesPerToken: 2 } })
+    await h.ownerSays('额度')
+    const one = file('q1.png', PNG)
+    const two = file('q2.png', PNG)
+    await h.finishTurn('chat-1', `看 ![a](${one}) ![b](${two})`)
+    await settled(h, 1)
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['看'])
+    expect(h.channel.status().window.repliesLeft).toBe(0)
+    expect(h.logs.some(line => line.type === 'warn' && line.text === 'wechat: the picture q2.png of Session chat-1\'s answer was not sent: reply quota used up')).toBe(true)
+  })
+
+  it('holds the pictures with an answer that waits for the morning', async () => {
+    const sleeping = fakePresence()
+    const h = await harness({ config: { awakeAfterMessageMs: 0 }, presence: sleeping.presence })
+    await h.ownerSays('晚安')
+    await h.finishTurn('chat-1', `![a](${file('night.png', PNG)})`)
+    await vi.waitFor(() => { expect(h.logs.some(line => line.text === 'wechat: 1 picture(s) of Session chat-1\'s answer were not sent: the answer waits for the morning')).toBe(true) })
+    expect(h.ilink.sentItems).toEqual([])
+  })
+
+  it('sends a plain answer as one text message, with no upload', async () => {
+    const h = await harness()
+    await h.ownerSays('你好')
+    await h.finishTurn('chat-1', '没有图片的普通回答。')
+    await vi.waitFor(() => { expect(h.ilink.sent.map(sent => sent.text)).toEqual(['没有图片的普通回答。']) })
+    expect(h.ilink.requestsTo('ilink/bot/getuploadurl')).toEqual([])
   })
 })
 

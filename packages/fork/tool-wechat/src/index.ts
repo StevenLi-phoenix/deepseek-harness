@@ -172,9 +172,10 @@ export function apply(ctx: Context): void {
         path: { type: 'string', required: true, description: 'Absolute path of a regular file on this computer, at most 25 MiB.' },
       },
       output: { schema: OUTPUT_SCHEMA, render: (_args: unknown, value: unknown) => [{ type: 'text' as const, text: JSON.stringify(value) }] },
-      async execute(args): Promise<SendFileResult> {
+      async execute(args, exec): Promise<SendFileResult> {
         if (typeof channel.sendFile !== 'function') return { notSent: 'the WeChat channel is not mounted' }
-        return await channel.sendFile(args.path)
+        // The Session is passed so a markdown image of the same file in this turn's answer is not sent twice.
+        return await channel.sendFile(args.path, exec.agent?.session.id)
       },
       presentCall: args => ({ card: 'generic', title: `Send ${basename(args.path)} on WeChat`, kind: 'other', rawInput: args.path }),
     }))

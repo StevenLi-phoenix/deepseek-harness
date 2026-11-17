@@ -482,3 +482,85 @@ export function noteTurnText(
   ].join(' ')
   return `${frame}\n${agentMessageBlock(note.text)}`
 }
+
+/** One markdown image a final answer refers to. */
+export interface MarkdownImage {
+  /** The whole `![alt](…)` as written. */
+  readonly raw: string
+  /** What the parentheses hold, without the angle brackets of a path with spaces. */
+  readonly target: string
+  /** Offset of {@link raw} in the text it was found in. */
+  readonly index: number
+}
+
+/** One markdown image: `![alt](path)` or `![alt](<path with spaces>)`. */
+const MARKDOWN_IMAGE = /!\[[^\]\n]*\]\(\s*(?:<([^<>\n]*)>|([^()\s]+))\s*\)/gu
+
+/**
+ * Offsets `[start, end)` of the fenced code blocks of a text, opener line included; an
+ * unclosed fence runs to the end.
+ * @param text - the text to scan.
+ * @returns the blocks, in order.
+ */
+function fencedRanges(text: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = []
+  let start = -1
+  let marker = ''
+  let run = 0
+  let offset = 0
+  for (const line of text.split('\n')) {
+    const next = offset + line.length + 1
+    const fenceLength = fenceRun(line)
+    const opened = fenceLength === 0 ? '' : line.trim()[0] ?? ''
+    if (marker === '') {
+      if (fenceLength > 0) {
+        start = offset
+        marker = opened
+        run = fenceLength
+      }
+    } else if (fenceLength >= run && opened === marker && line.trim() === marker.repeat(fenceLength)) {
+      ranges.push([start, next])
+      marker = ''
+    }
+    offset = next
+  }
+  if (marker !== '') ranges.push([start, offset])
+  return ranges
+}
+
+/**
+ * Find the markdown images of an answer, in the order they were written, skipping any
+ * inside a fenced code block: a model may quote the syntax rather than use it.
+ * @param text - the answer as the model wrote it.
+ * @returns each reference; empty when the answer has none.
+ */
+export function markdownImages(text: string): MarkdownImage[] {
+  const fenced = fencedRanges(text)
+  const images: MarkdownImage[] = []
+  for (const match of text.matchAll(MARKDOWN_IMAGE)) {
+    const index = match.index ?? 0
+    if (fenced.some(([start, end]) => index > start && index < end)) continue
+    const target = (match[1] ?? match[2] ?? '').trim()
+    if (target === '') continue
+    images.push({ raw: match[0], target, index })
+  }
+  return images
+}
+
+/**
+ * The text without the given markdown images; a reference not among them stays as written.
+ * @param text - the text the references were found in.
+ * @param images - the references to remove.
+ * @returns the remaining text, trimmed.
+ */
+export function withoutMarkdownImages(text: string, images: readonly MarkdownImage[]): string {
+  const ordered = [...images].sort((a, b) => a.index - b.index)
+  let out = ''
+  let at = 0
+  for (const image of ordered) {
+    if (image.index < at) continue
+    out += text.slice(at, image.index)
+    at = image.index + image.raw.length
+  }
+  return (out + text.slice(at)).trim()
+}

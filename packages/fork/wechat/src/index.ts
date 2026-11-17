@@ -3,7 +3,7 @@
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, statSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
-import { basename, isAbsolute, join } from 'node:path'
+import { basename, isAbsolute, join, resolve } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
@@ -26,7 +26,7 @@ import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import z from '@deepseek-ai/schemastery'
 import { IlinkApiError, IlinkClient, ILINK_SEND_REJECTED, isStaleTokenError, ItemType, MESSAGE_TYPE_USER, type WeixinMessage } from './api.ts'
 import { accountFilePath, readAccountFile, type WechatAccount } from './login.ts'
-import { attachmentNote, describeMedia, downloadMedia, isPromptImage, mediaSpec, saveInboxFile, uploadMedia, type OutboundKind, type ReceivedMedia, type Transcription } from './media.ts'
+import { attachmentNote, describeMedia, downloadMedia, isPromptImage, mediaSpec, outboundKind, saveInboxFile, uploadMedia, type OutboundKind, type ReceivedMedia, type Transcription } from './media.ts'
 import { WechatSettings, type SettingsConnection } from './settings.ts'
 import { wechatDomain, type ActivityRecord, type OutboxRecord, type SentKind, type WindowRecord } from './storage.ts'
 declare module '@deepseek-ai/dsh-llm' {
@@ -40,7 +40,7 @@ declare module '@deepseek-ai/dsh-llm' {
 }
 
 import type { HandoverPart } from './text.ts'
-import { agentMessageText, buildDigest, EARLIER_CHAT, fitText, formatGap, handoverFailureText, handoverNotice, handoverText, HELP_REPLY, inboundText, NEW_CHAT_REPLY, noteTurnText, QUOTA_FOOTER, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES } from './text.ts'
+import { agentMessageText, buildDigest, EARLIER_CHAT, fitText, formatGap, handoverFailureText, handoverNotice, handoverText, HELP_REPLY, inboundText, markdownImages, NEW_CHAT_REPLY, noteTurnText, QUOTA_FOOTER, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES, withoutMarkdownImages, type MarkdownImage } from './text.ts'
 import { TypingIndicator } from './typing.ts'
 import type { ChannelError, ChannelLink, ChannelStatus, WindowClosed } from './view.ts'
 
@@ -217,15 +217,34 @@ export type SendTextResult =
   | { readonly sent: number; readonly queued: number; readonly held: boolean; readonly why?: string; readonly repliesLeft: number | null }
   | { readonly notSent: string }
 
-/** What `wechat_send` has sent in a Session's running turn: how many, and which texts (so the final answer does not repeat one). */
+/**
+ * What a Session's running turn already sent: its `wechat_send` texts (the answer does not
+ * repeat one) and its files (a markdown image of one is not sent twice).
+ */
 interface TurnSends {
   count: number
   texts: Set<string>
+  files: Set<string>
 }
 
 /** Texts compared for repetition ignore whitespace differences. */
 function sameText(text: string): string {
   return text.replace(/\s+/g, ' ').trim()
+}
+
+/** One local file read and checked for sending. */
+interface OutgoingFile {
+  /** Absolute path it was read from. */
+  readonly path: string
+  /** Leaf name the owner sees. */
+  readonly name: string
+  readonly data: Buffer
+  readonly size: number
+}
+
+/** Whether a markdown image target points somewhere this computer cannot read: a URL or a protocol-relative path. */
+function isRemoteReference(target: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:/iu.test(target) || target.startsWith('//')
 }
 
 /** What `/stop` needs of the Host agent registry; read through `ctx.get`, so the channel works without one. */
@@ -613,8 +632,14 @@ export class WechatChannel extends Service implements OwnerNotifier {
       return 'sent'
     }
     if (urgent) this.ctx.logger.info(`wechat: Session ${answer.sessionId}'s final answer ends an urgent turn; it passes the owner's sleep`)
-    await this.deliver(answer.text, 'reply', { urgent })
-    await this.shareWithChat(answer.text, EARLIER_CHAT, answer.sessionId)
+    // WeChat shows no picture inside a text message: the answer goes as text without its markdown
+    // images, and each local picture follows as its own image message.
+    const { text, pictures } = await this.planInlinePictures(answer.text, answer.sessionId)
+    const held = text === ''
+      ? await this.holdsReply(urgent)
+      : (await this.deliver(text, 'reply', { urgent })).held
+    if (text !== '') await this.shareWithChat(text, EARLIER_CHAT, answer.sessionId)
+    await this.sendInlinePictures(answer.sessionId, pictures, held)
     return 'sent'
   }
 
@@ -805,9 +830,24 @@ export class WechatChannel extends Service implements OwnerNotifier {
    * the owner and the file goes only through the open reply window, never
    * queued; the window's last slot stays for the turn's text reply.
    * @param path - absolute path of a regular file within `maxMediaBytes`.
+   * @param sessionId - the Session sending it, so a markdown image of the same file in this turn's answer is not sent twice.
    * @returns what was sent, or why it was not.
    */
-  async sendFile(path: string): Promise<SendFileResult> {
+  async sendFile(path: string, sessionId?: string): Promise<SendFileResult> {
+    const file = await this.readOutgoing(path)
+    if ('notSent' in file) return file
+    const result = await this.sendOutgoing(file, true)
+    if ('sent' in result && sessionId !== undefined) this.turnSends(sessionId).files.add(file.path)
+    return result
+  }
+
+  /**
+   * Read one local file and apply the checks every outbound attachment shares:
+   * an absolute path, a regular non-empty file within `maxMediaBytes`.
+   * @param path - the path to read.
+   * @returns the bytes and size, or why the file cannot be sent.
+   */
+  private async readOutgoing(path: string): Promise<OutgoingFile | { notSent: string }> {
     if (!isAbsolute(path)) return { notSent: 'path must be absolute' }
     let size: number
     try {
@@ -819,18 +859,27 @@ export class WechatChannel extends Service implements OwnerNotifier {
     }
     if (size === 0) return { notSent: 'the file is empty' }
     if (size > this.config.maxMediaBytes) return { notSent: `the file exceeds ${this.config.maxMediaBytes} bytes` }
-    const data = await readFile(path)
-    const name = basename(path)
+    return { path, name: basename(path), data: await readFile(path), size }
+  }
+
+  /**
+   * Upload one checked file and send it as its own message through the open reply window.
+   * @param file - the file as {@link readOutgoing} read it.
+   * @param reserveLastSlot - keep the window's last slot for the turn's text reply, as a file sent
+   * in the middle of a turn does; a picture that follows the reply has nothing left to reserve.
+   * @returns what was sent, or why it was not.
+   */
+  private sendOutgoing(file: OutgoingFile, reserveLastSlot: boolean): Promise<SendFileResult> {
     return this.serialize(async (): Promise<SendFileResult> => {
       const domain = await this.ready
       const target = this.target(domain)
       if (typeof target === 'string') return { notSent: target }
-      if (target.window.used + 1 >= this.config.repliesPerToken) return { notSent: 'reply quota nearly used up; the last message is kept for the text reply' }
+      if (reserveLastSlot && target.window.used + 1 >= this.config.repliesPerToken) return { notSent: 'reply quota nearly used up; the last message is kept for the text reply' }
       const { baseUrl, botToken: token } = target.account
       const client = new IlinkClient({ baseUrl, token, timeoutMs: this.config.requestTimeoutMs })
       let uploaded: Awaited<ReturnType<typeof uploadMedia>>
       try {
-        uploaded = await uploadMedia(client, target.account.ownerUserId, name, data, {
+        uploaded = await uploadMedia(client, target.account.ownerUserId, file.name, file.data, {
           cdnBaseUrl: this.config.cdnBaseUrl, timeoutMs: this.config.mediaTimeoutMs, signal: this.abort.signal,
         })
       } catch (error: unknown) {
@@ -838,12 +887,91 @@ export class WechatChannel extends Service implements OwnerNotifier {
           this.markStale(target.account)
           return { notSent: 'bot token is stale' }
         }
-        this.ctx.logger.warn(`wechat: uploading ${name} failed: ${errorText(error)}`)
+        this.ctx.logger.warn(`wechat: uploading ${file.name} failed: ${errorText(error)}`)
         return { notSent: `upload failed: ${errorText(error)}` }
       }
-      const outcome = await this.transmitItem(domain, target, uploaded.item, `${uploaded.kind} ${name} (${size} bytes) from ${path}`, 'file')
-      return outcome === 'sent' ? { sent: uploaded.kind, name, bytes: size } : { notSent: outcome }
+      const outcome = await this.transmitItem(domain, target, uploaded.item, `${uploaded.kind} ${file.name} (${file.size} bytes) from ${file.path}`, 'file')
+      return outcome === 'sent' ? { sent: uploaded.kind, name: file.name, bytes: file.size } : { notSent: outcome }
     })
+  }
+
+  /**
+   * Whether a reply would wait for the morning, as {@link deliver} decides it.
+   * @param urgent - the answer passes the owner's sleep.
+   * @returns true when the owner sleeps and the answer is held.
+   */
+  private holdsReply(urgent: boolean): Promise<boolean> {
+    return this.serialize(async () => this.holdsBack(await this.ready, 'reply', urgent))
+  }
+
+  /**
+   * Split a final answer into the text to send and the local pictures it refers to with
+   * markdown (`![alt](path)`, `![alt](<path with spaces>)`). A reference to a remote URL, a
+   * missing file, a file over the size limit, or something that is not a PNG, JPEG, GIF, or
+   * WebP image stays in the text as written and is logged, so the owner still sees what the
+   * model meant; a reference to a file this turn already sent with `wechat_send_file` is
+   * dropped, since the owner has that picture.
+   * @param text - the answer as the model wrote it.
+   * @param sessionId - the answering Session, for what its turn already sent.
+   * @returns the text without the references that will be sent, and those pictures in the order they appeared.
+   */
+  private async planInlinePictures(text: string, sessionId: string): Promise<{ text: string; pictures: OutgoingFile[] }> {
+    const images = markdownImages(text)
+    if (images.length === 0) return { text, pictures: [] }
+    const alreadySent = this.turns.get(sessionId)?.files
+    const strip: MarkdownImage[] = []
+    const pictures: OutgoingFile[] = []
+    const planned = new Set<string>()
+    for (const image of images) {
+      const target = image.target
+      if (isRemoteReference(target)) {
+        this.ctx.logger.info(`wechat: left a markdown image in Session ${sessionId}'s answer (a remote URL is not sent): ${fitText(target, 200)}`)
+        continue
+      }
+      const path = resolve(this.config.chat.workspacePath, target)
+      if (alreadySent?.has(path) === true) {
+        strip.push(image)
+        this.ctx.logger.info(`wechat: a picture already sent with wechat_send_file in this turn is not sent again: ${path}`)
+        continue
+      }
+      if (planned.has(path)) {
+        strip.push(image)
+        continue
+      }
+      const file = await this.readOutgoing(path)
+      if ('notSent' in file) {
+        this.ctx.logger.info(`wechat: left a markdown image in Session ${sessionId}'s answer (${file.notSent}): ${fitText(target, 200)}`)
+        continue
+      }
+      if (outboundKind(file.name, file.data) !== 'image') {
+        this.ctx.logger.info(`wechat: left a markdown image in Session ${sessionId}'s answer (not a PNG, JPEG, GIF, or WebP image): ${fitText(target, 200)}`)
+        continue
+      }
+      planned.add(path)
+      pictures.push(file)
+      strip.push(image)
+    }
+    return { text: withoutMarkdownImages(text, strip), pictures }
+  }
+
+  /**
+   * Send the pictures of a final answer, one message each, after its text. Each counts against
+   * the reply window like any other message; a picture cannot wait in the outbox, so when the
+   * answer itself is held for the morning they are not sent and the log says so.
+   * @param sessionId - the answering Session, for the log.
+   * @param pictures - the pictures, in the order they appeared in the answer.
+   * @param held - the answer waits for the owner to wake.
+   */
+  private async sendInlinePictures(sessionId: string, pictures: readonly OutgoingFile[], held: boolean): Promise<void> {
+    if (pictures.length === 0) return
+    if (held) {
+      this.ctx.logger.info(`wechat: ${pictures.length} picture(s) of Session ${sessionId}'s answer were not sent: the answer waits for the morning`)
+      return
+    }
+    for (const file of pictures) {
+      const result = await this.sendOutgoing(file, false)
+      if ('notSent' in result) this.ctx.logger.warn(`wechat: the picture ${file.name} of Session ${sessionId}'s answer was not sent: ${result.notSent}`)
+    }
   }
 
   /** How the chat Session's words reach the owner: `hybrid` registers `wechat_send` beside the final-answer reply. */
@@ -895,7 +1023,7 @@ export class WechatChannel extends Service implements OwnerNotifier {
   private turnSends(sessionId: string): TurnSends {
     let turn = this.turns.get(sessionId)
     if (turn === undefined) {
-      turn = { count: 0, texts: new Set() }
+      turn = { count: 0, texts: new Set(), files: new Set() }
       this.turns.set(sessionId, turn)
     }
     return turn
