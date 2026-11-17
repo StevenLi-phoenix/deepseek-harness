@@ -107,6 +107,8 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
         ? processPresentation?.hasNonReplyProcess === true
         : processPresentation?.hasExternalProcess === true)),
       open: processOpen,
+      // The whole-Turn collapse hides earlier replies only when the setting folds them.
+      foldedMessageCount: keepReplies ? 0 : processSpec.messageCount,
       setOpen,
     }, [
     foldable, interleavedInput, keepReplies, processOpen, processSpec,

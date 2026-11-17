@@ -278,6 +278,8 @@ export interface TurnProcessOwnerProps {
   readonly spec: TurnProcessSpec
   readonly foldable: boolean
   readonly open: boolean
+  /** Assistant text messages the collapsed control holds; zero when replies stay visible. */
+  readonly foldedMessageCount: number
   setOpen(open: boolean): void
 }
 

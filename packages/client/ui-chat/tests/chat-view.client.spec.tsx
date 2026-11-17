@@ -4936,3 +4936,84 @@ it('does not infer menu targets from links or data attributes inside a plugin fl
   expect(custom).toHaveBeenCalledOnce()
   expect(h.props.resolveFilePath).not.toHaveBeenCalled()
 })
+
+describe('A finished Turn keeps every assistant message', () => {
+  /** Assistant reply rows in rendered order with their searchable-hidden state. */
+  function replyRows(container: HTMLElement): { text: string; hidden: boolean }[] {
+    return [...container.querySelectorAll<HTMLElement>('[data-chat-flow-kind="assistant-step"]')]
+      .map(node => ({ text: node.textContent ?? '', hidden: node.hasAttribute('hidden') }))
+  }
+
+  function messageHarness(replies: readonly string[], folded: FoldedReplies) {
+    const nodes: ConversationNode[] = [user(1, 'question')]
+    let seq = 2
+    replies.forEach((text, index) => { nodes.push(assistant(seq++, text, 1, index + 1)) })
+    const h = makeHarness({
+      nodes,
+      turnEnds: new Map([[1, seq]]),
+      turnTimings: new Map([[1, { startTime: 1_000, endTime: 5_000 }]]),
+    })
+    h.setFoldedReplies(folded)
+    return h
+  }
+
+  it('counts a three-message Turn on the collapsed row and reveals all three on expansion', () => {
+    const h = messageHarness(['first note', 'second note', 'final answer'], 'final')
+    const view = render(<h.ChatView {...h.props} />)
+    const toggle = turnProcessControl(view.container)!
+    expect(toggle.textContent).toBe('已完成 · 3 条消息 · 4秒')
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(replyRows(view.container)).toEqual([
+      { text: 'first note', hidden: true },
+      { text: 'second note', hidden: true },
+      { text: 'final answer', hidden: false },
+    ])
+
+    fireEvent.click(toggle)
+    expect(toggle.textContent).toBe('已完成，用时 4秒')
+    expect(replyRows(view.container)).toEqual([
+      { text: 'first note', hidden: false },
+      { text: 'second note', hidden: false },
+      { text: 'final answer', hidden: false },
+    ])
+  })
+
+  it('counts a two-message Turn on the collapsed row and keeps both rows', () => {
+    const h = messageHarness(['first answer', 'follow-up'], 'final')
+    const view = render(<h.ChatView {...h.props} />)
+    const toggle = turnProcessControl(view.container)!
+    expect(toggle.textContent).toBe('已完成 · 2 条消息 · 4秒')
+    expect(replyRows(view.container)).toEqual([
+      { text: 'first answer', hidden: true },
+      { text: 'follow-up', hidden: false },
+    ])
+    fireEvent.click(toggle)
+    expect(replyRows(view.container)).toEqual([
+      { text: 'first answer', hidden: false },
+      { text: 'follow-up', hidden: false },
+    ])
+  })
+
+  it('keeps the single-message Turn label unchanged in either folded-reply setting', () => {
+    const h = messageHarness(['only answer'], 'final')
+    const view = render(<h.ChatView {...h.props} />)
+    const toggle = turnProcessControl(view.container)!
+    expect(toggle.textContent).toBe('已完成，用时 4秒')
+    expect(replyRows(view.container)).toEqual([{ text: 'only answer', hidden: false }])
+    act(() => { h.setFoldedReplies('all') })
+    expect(turnProcessControl(view.container)?.textContent).toBe('已完成，用时 4秒')
+    expect(replyRows(view.container)).toEqual([{ text: 'only answer', hidden: false }])
+  })
+
+  it('keeps every message visible and the duration label when replies are never folded', () => {
+    const h = messageHarness(['first note', 'second note', 'final answer'], 'all')
+    const view = render(<h.ChatView {...h.props} />)
+    const toggle = turnProcessControl(view.container)!
+    expect(toggle.textContent).toBe('已完成，用时 4秒')
+    expect(replyRows(view.container)).toEqual([
+      { text: 'first note', hidden: false },
+      { text: 'second note', hidden: false },
+      { text: 'final answer', hidden: false },
+    ])
+  })
+})

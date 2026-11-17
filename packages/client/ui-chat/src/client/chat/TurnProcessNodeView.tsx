@@ -24,9 +24,14 @@ export const TurnProcessNodeView = memo(function TurnProcessNodeView({
   const duration = elapsedMs === undefined || stopped || reason === 'error' ? undefined
     : formatRunDuration(elapsedMs, t)
   // Other end reasons retain elapsed time; only stops and failure replace it.
+  const folded = canCollapse && !open && turnProcess.hasContent ? turnProcess.foldedMessageCount > 0 : false
+  // Once the control holds any reply back it reports every reply the Turn contains, so the
+  // reader can tell what the fold hides without expanding it.
+  const messages = folded ? node.data.messageCount + (node.data.answerStep === null ? 0 : 1) : 0
+  const separator = t('message.turnProcess.separator')
   const label = stopped ? t('message.stopped')
     : reason === 'error' ? t('message.turnProcess.failed')
-      : duration === undefined ? t('message.turnProcess.worked')
+      : duration === undefined || folded ? t('message.turnProcess.worked')
         : t('message.turnProcess.took')
   const announcement = stopped ? t('message.stopped')
     : reason === 'error' ? t('message.turnProcess.failed')
@@ -51,6 +56,8 @@ export const TurnProcessNodeView = memo(function TurnProcessNodeView({
       >
         <span className={css.label}>
           {label}
+          {messages > 0 && `${separator}${t(`message.turnProcess.messages.${messages === 1 ? 'one' : 'other'}`, { count: messages })}`}
+          {messages > 0 && duration !== undefined && separator}
           {duration?.map((part, index) => (
             <span key={index} className={part.numeric ? css.durationNumber : undefined}>{part.text}</span>
           ))}
