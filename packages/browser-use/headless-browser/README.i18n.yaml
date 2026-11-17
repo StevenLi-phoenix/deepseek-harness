@@ -9,14 +9,17 @@
   en: f4253daa2d0d63e1
   zh: b349207a631a9333
 /deepseek-ai-dsh-headless-browser/summary:
-  en: 7234baf9f3847ce9
-  zh: b2638cba38f4c07c
+  en: 462683fd89db62dd
+  zh: d9e83ecc4948c9b5
 /deepseek-ai-dsh-headless-browser/table-of-contents:
   en: d152484eb41ac6b4
   zh: f14f34fce35a8d90
 /deepseek-ai-dsh-headless-browser/use-this-package:
   en: 5bb62eaabd85da85
   zh: eae7d5ca095fa9c4
+/deepseek-ai-dsh-headless-browser/use-this-package/reading-a-page-s-text:
+  en: c4f5f700333e1b39
+  zh: 2f00de34b9699514
 /deepseek-ai-dsh-headless-browser/use-this-package/the-browser-binary:
   en: b07272e39341a9c0
   zh: 138c3d4825cff89e
@@ -30,8 +33,8 @@
   en: b21317179e46b6e0
   zh: 875d89b47c74b5a4
 /deepseek-ai-dsh-headless-browser/understand-the-implementation:
-  en: 176a32c78548500c
-  zh: 1db3e2eab9afd4f7
+  en: 60812ead4086b25a
+  zh: 11bf653adb9ff6bd
 /deepseek-ai-dsh-headless-browser/further-exploration:
   en: 43206093e89698f4
   zh: b12af8d88b5a1933
@@ -42,11 +45,11 @@
   en: d5daed83e51c630e
   zh: a39623fa93fe6f7c
 /deepseek-ai-dsh-headless-browser/model-experience/page-tools/what-the-model-sees:
-  en: 38a0d57dc8826bf1
-  zh: 875ddcaa2d50da48
+  en: 714600c54d4dc491
+  zh: 69bbefb369744cac
 /deepseek-ai-dsh-headless-browser/model-experience/page-tools/token-effect:
-  en: c2de14f06b6cc2a3
-  zh: d89fe876462f1df7
+  en: 93f23a5b9cb47a8b
+  zh: accd50007cefbd07
 /deepseek-ai-dsh-headless-browser/model-experience/page-tools/kv-cache-effect:
   en: 94b53e443759f56a
   zh: 2c3ad9bb928be808
@@ -54,8 +57,8 @@
   en: ecf6b8ab3280f7dc
   zh: 2a5239754026870a
 /deepseek-ai-dsh-headless-browser/model-experience/control-tools/what-the-model-sees:
-  en: e347f577b1c887db
-  zh: 2fd3e9d3468ab6e3
+  en: 51be8897b91dc4aa
+  zh: a40b9ee1e912e5b1
 /deepseek-ai-dsh-headless-browser/model-experience/control-tools/token-effect:
   en: ed7e1f1b0a365768
   zh: de3259e85354a818
@@ -63,8 +66,8 @@
   en: b92d717917f63dc9
   zh: e8e55a56144fdb93
 /deepseek-ai-dsh-headless-browser/known-limitations-and-deferred-work:
-  en: fa5b807ee5bbc3c4
-  zh: a8dd32a5ddb125ea
+  en: 56d6206fcaf3b8c9
+  zh: ffbeb0222487dfe6
 /deepseek-ai-dsh-headless-browser/known-limitations-and-deferred-work/dev-note:
   en: fd19c8542e1f001f
   zh: 095ceda61cd7961c

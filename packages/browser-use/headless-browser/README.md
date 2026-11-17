@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Give the agent a browser it keeps between turns and a person a way into it. One headless Chromium runs with its own profile directory, so a sign-in survives a host restart. The model opens pages, takes screenshots, clicks, and types; when a step needs a human, it hands over and returns the page where the user takes control, sees what the agent sees, and hands back. While the user holds the page the agent is refused instead of competing with them.
+Give the agent a browser it keeps between turns and a person a way into it. One headless Chromium runs with its own profile directory, so a sign-in survives a host restart. The model opens pages, reads their text, takes screenshots, clicks, and types; when a step needs a human, it hands over and returns the page where the user takes control, sees what the agent sees, and hands back. While the user holds the page the agent is refused instead of competing with them.
 
 ## Table of Contents
 
@@ -43,6 +43,12 @@ Mount the row once in a Host composition that has the Web server and the tool re
 | `snapshotDir` | `$DSH_HOME/cache/headless-browser/snapshots` | Where `headless_browser_snapshot` writes PNG files |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-headless-browser) lists every accepted field.
+
+### Reading a page's text
+
+A screenshot captures the viewport, so a list longer than the viewport reaches the model with its lower rows missing and no way to scroll them into a picture. `headless_browser_read` answers with the page's rendered text instead of pixels: the document body, or the first element that matches a CSS `selector`, cut into character windows. `offset` and `limit` page through it — 8000 characters by default, 20000 at most — and the result carries a `header` naming the tab, the page URL, the page, and the character range, plus `total` and the `nextOffset` of the text that remains. A URL too long for one line is shortened in the header, and a window is counted in characters, so it never ends inside a surrogate pair such as an emoji: every window is text the model can read on its own.
+
+A screenshot keeps its use where the picture matters: `fullPage: true` captures the whole scrollable page instead of the viewport.
 
 ### The browser binary
 
@@ -94,12 +100,13 @@ The live view is one CDP screencast per page shared by every connected viewer. `
 
 Input from the page is one JSON message per event. `decodeClientMessage` validates it, `cdpCommand` maps it to `Input.dispatchMouseEvent` (including `mouseWheel`), `Input.dispatchKeyEvent`, or `Input.insertText`, and `TakeoverState` decides whether input is accepted at all. Keys carry the DOM `keyCode` as both CDP virtual key codes, so shortcuts and non-printing keys behave as in a real window; text that cannot be typed key by key uses `Input.insertText`.
 
-The tools share one guard. An acting tool calls `TakeoverState.assertAgent` first and reports the user's reason in an error result; the screenshot tool skips that guard because it reads the page without acting on it.
+The tools share one guard. An acting tool calls `TakeoverState.assertAgent` first and reports the user's reason in an error result; the screenshot tool skips that guard because it reads the page without acting on it, while a text read keeps it because reading is the first half of the same browse-and-act loop as a click.
 
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Plugin entry: session, control state, live view, tools, routes |
 | [`src/session.ts`](src/session.ts) | Persistent context, tab-aware CDP sessions, navigation, screenshot, click, fill |
+| [`src/read.ts`](src/read.ts) | Page text, cut into character windows with a header naming the page and range |
 | [`src/tabs.ts`](src/tabs.ts) | Tab ids, active tab, loading state, the eight-tab cap, and the per-navigation deadline |
 | [`src/stealth.ts`](src/stealth.ts) | The identity: launch settings, the document-start script, and the per-page client-hint override |
 | [`src/takeover.ts`](src/takeover.ts) | Holder state and the refusal an agent action gets |
@@ -107,7 +114,7 @@ The tools share one guard. An acting tool calls `TakeoverState.assertAgent` firs
 | [`src/live-view.ts`](src/live-view.ts) | Screencast fan-out and viewer bookkeeping |
 | [`src/routes.ts`](src/routes.ts) | Page, status, and live socket registration |
 | [`src/page.ts`](src/page.ts) | The served document and its script |
-| [`src/tools.ts`](src/tools.ts) | The six model tools |
+| [`src/tools.ts`](src/tools.ts) | The seven model tools |
 
 </details>
 
@@ -130,11 +137,11 @@ The tools share one guard. An acting tool calls `TakeoverState.assertAgent` firs
 
 #### What the model sees
 
-Four tool definitions whenever the mounting scope has the tool registry: `headless_browser_open` (`url`), `headless_browser_snapshot` (no arguments), `headless_browser_click` (`selector`), and `headless_browser_type` (`selector`, `text`). Each description is one sentence naming the operation and what the result answers: opening returns the settled URL and document title, a screenshot returns its PNG path and page URL, a click returns the selector and page URL, and typing returns the selector. Results are one JSON text block. The typing result never repeats the text, so a password the model typed into a form is not echoed into the session log.
+Five tool definitions whenever the mounting scope has the tool registry: `headless_browser_open` (`url`, `newTab`), `headless_browser_snapshot` (`tab`, `fullPage`), `headless_browser_read` (`tab`, `selector`, `offset`, `limit`), `headless_browser_click` (`selector`, `tab`), and `headless_browser_type` (`selector`, `text`, `tab`). Each description is one sentence naming the operation and what the result answers: opening returns the settled URL and document title, a screenshot returns its PNG path and page URL, a read returns one text window with the header naming its page and range, a click returns the selector and page URL, and typing returns the selector. Results are one JSON text block. The typing result never repeats the text, so a password the model typed into a form is not echoed into the session log.
 
 #### Token effect
 
-A fixed schema cost on every request from an Agent whose scope mounts the package, a few dozen tokens per tool definition. A result is a short JSON object; a screenshot adds only its path, not the image.
+A fixed schema cost on every request from an Agent whose scope mounts the package, a few dozen tokens per tool definition. A result is a short JSON object; a screenshot adds only its path, not the image, and a read is bounded by `limit`, so its text stays under 20000 characters.
 
 #### KV Cache effect
 
@@ -144,7 +151,7 @@ Prefix-stable while the tool definitions and the descriptions are unchanged; res
 
 #### What the model sees
 
-`headless_browser_hand_over` takes a `reason` and returns `{ "url": "<origin>/headless-browser", "holder": "human", "reason": "…" }`; the URL is what the user opens. `headless_browser_hand_back` returns `{ "holder": "agent" }`. While the user holds control, every acting tool answers `{ "error": "the user holds the browser (<reason>); call headless_browser_hand_back when they are done" }` instead of touching the page, and a launcher failure answers `{ "error": "the headless browser could not start: <first line>" }`.
+`headless_browser_hand_over` takes a `reason` and returns `{ "url": "<origin>/headless-browser", "holder": "human", "reason": "…" }`; the URL is what the user opens. `headless_browser_hand_back` returns `{ "holder": "agent" }`. While the user holds control, every acting tool — `headless_browser_read` included — answers `{ "error": "the user holds the browser (<reason>); call headless_browser_hand_back when they are done" }` instead of touching the page, a selector that matches nothing answers `{ "error": "no element matches <selector>; check the selector or read the whole page" }`, a tab that is not open answers `{ "error": "no tab named <id>; use the active tab or open a new one" }`, and a launcher failure answers `{ "error": "the headless browser could not start: <first line>" }`. A screenshot keeps answering throughout, because it never competes for input.
 
 #### Token effect
 
@@ -162,6 +169,7 @@ Append-only: results and refusals enter the history after the reusable prefix an
 - **The browser binary is the deployment's** — `playwright-core` ships no browser, and this package does not download one. Without `PLAYWRIGHT_BROWSERS_PATH` or an install into the account's cache, every tool call fails with the launcher diagnostic.
 - **Headless is the supported mode** — `headless: false` needs a logged-in desktop session; a service account cannot open a window.
 - **A refusal stays a refusal** — the identity fixes what the browser says about itself, not what the site decides: a site that scores the address, the profile, or the request can still refuse the page, and this package answers no challenge.
+- **A read is the rendered text** — `headless_browser_read` returns what the page renders: collapsed or hidden content is absent, a selector that matches several elements reads only the first, and text inside a frame or a shadow root is not part of the document body. An assignment list's rows below the fold are in the text even though no screenshot of the viewport contains them.
 - **Tabs are ours, not the site's** — the tab model covers tabs the tools or the take-over view open; a popup the site opens for itself is not adopted. The browser keeps at most eight tabs, and every navigation has a 20-second deadline.
 - **Streaming is live-only** — frames arrive only while a take-over page is connected, are not recorded, and can drop frames when Chrome is busy. A still page sends no new frames, so a page that connects later shows the last painted frame. A renderer that crashes ends the cast, and the picture returns only after the page is reloaded and the user reconnects.
 - **The hand-over URL needs a Web server** — in a composition without one, `headless_browser_hand_over` returns `/headless-browser` alone, which the user cannot open.

@@ -1,12 +1,14 @@
 /**
  * REAL browser coverage: a headless Chromium launches with a temporary profile,
  * the take-over socket receives a live frame of a `data:` page, and a pointer
- * click forwarded through the socket reaches the page. The suite skips cleanly
- * when Playwright cannot resolve a Chromium binary for this machine, so a
- * checkout without the browser download still runs the rest of the package tests.
+ * click forwarded through the socket reaches the page. Page text comes from the
+ * real DOM, including rows far below the viewport, and a full-page screenshot
+ * is taller than the viewport. The suite skips cleanly when Playwright cannot
+ * resolve a Chromium binary for this machine, so a checkout without the browser
+ * download still runs the rest of the package tests.
  */
 
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -16,6 +18,7 @@ import { Context } from '@deepseek-ai/cordis'
 import HttpServer from '@deepseek-ai/dsh-host-webserver'
 import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import { LiveView } from '../src/live-view.ts'
+import { SelectorMissError } from '../src/read.ts'
 import { LIVE_PATH, mountTakeoverRoutes } from '../src/routes.ts'
 import { HeadlessBrowserSession } from '../src/session.ts'
 import { TakeoverState } from '../src/takeover.ts'
@@ -30,6 +33,26 @@ const DATA_PAGE = `data:text/html,${encodeURIComponent([
   'document.title = "after"; document.body.style.background = "#ff0000" })</script>',
   '</body>',
 ].join(''))}`
+
+/**
+ * A page taller than the viewport: 120 rows of assignment text and a trailing
+ * block, so everything after the first rows sits below the fold.
+ */
+const TALL_PAGE = `data:text/html;charset=utf-8,${encodeURIComponent([
+  '<!doctype html><title>assignments</title>',
+  '<body style="margin:0;font:16px/1.5 sans-serif">',
+  '<ul id="rows">',
+  ...Array.from({ length: 120 }, (_, index) => `<li>第${String(index + 1)}行 作业 😀</li>`),
+  '</ul>',
+  '<div style="height:3000px">tail</div>',
+  '</body>',
+].join(''))}`
+
+/** Width and height of a PNG, read from its IHDR chunk. */
+function pngSize(path: string): { width: number; height: number } {
+  const header = readFileSync(path).subarray(16, 24)
+  return { width: header.readUInt32BE(0), height: header.readUInt32BE(4) }
+}
 
 interface BrowserApp {
   readonly base: string
@@ -192,5 +215,42 @@ describe.skipIf(!AVAILABLE)('headless browser live view', () => {
     } finally {
       socket.close()
     }
+  }, 120_000)
+
+  it('reads rows below the fold and captures the whole page when asked', async () => {
+    const app = await boot()
+    await app.browser.open(TALL_PAGE)
+    const whole = await app.browser.read({})
+    expect(whole.total).toBeGreaterThan(1_000)
+    expect(whole.header).toContain('text of t1 (data:text/html;charset=utf-8,')
+    expect(whole.header).toMatch(/page 1 of \d+, characters 1-/u)
+    // Row 120 sits roughly seven viewports below the fold, and its text is there.
+    expect(whole.text).toContain('第120行 作业 😀')
+    expect(whole.text).toContain('tail')
+
+    const window = await app.browser.read({ limit: 10 })
+    expect([...window.text]).toHaveLength(10)
+    expect(window.text.startsWith('第1行 作业 😀')).toBe(true)
+    expect(window.nextOffset).toBe(10)
+    expect(whole.text.startsWith(window.text)).toBe(true)
+
+    const rows = await app.browser.read({ selector: '#rows' })
+    expect(rows.text.startsWith('第1行 作业 😀')).toBe(true)
+    expect(rows.text).toContain('第120行 作业 😀')
+    expect(rows.text).not.toContain('tail')
+    await expect(app.browser.read({ selector: '#missing' })).rejects.toBeInstanceOf(SelectorMissError)
+
+    const tall = app.browser.tabsState()[0]!
+    const viewport = pngSize((await app.browser.snapshot(tall.id)).path)
+    const full = pngSize((await app.browser.snapshot(tall.id, true)).path)
+    expect(viewport).toEqual({ width: 1280, height: 800 })
+    expect(full.width).toBe(1280)
+    expect(full.height).toBeGreaterThan(viewport.height)
+
+    await app.browser.open('data:text/html;charset=utf-8,<title>second</title><body>второй список', true)
+    const second = app.browser.tabsState().find(tab => tab.active)!
+    const other = await app.browser.read({}, second.id)
+    expect(other.header).toContain(`text of ${second.id} `)
+    expect(other.text).toBe('второй список')
   }, 120_000)
 })

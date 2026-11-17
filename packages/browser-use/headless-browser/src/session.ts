@@ -19,6 +19,7 @@ import { chromium, type BrowserContext, type CDPSession, type Page } from 'playw
 import type { Config } from './config.ts'
 import { firstLine } from './error.ts'
 import type { InputCommand, TabInfo, TabMessage } from './input.ts'
+import { readText, type ReadPage, type ReadRequest, type ReadResult } from './read.ts'
 import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
 import { BrowserTabs, type ActiveTab, type TabsContext } from './tabs.ts'
 
@@ -186,14 +187,28 @@ export class HeadlessBrowserSession {
   /**
    * Save a PNG of one tab for the model to read.
    * @param tabId - tab id, or nothing for the active tab.
+   * @param fullPage - capture the whole scrollable page instead of the viewport.
    * @returns the file path and the page it captured.
    */
-  async snapshot(tabId?: string): Promise<{ path: string; url: string }> {
+  async snapshot(tabId?: string, fullPage = false): Promise<{ path: string; url: string }> {
     const page = await this.page(tabId)
     await mkdir(this.#config.snapshotDir, { recursive: true })
     const path = join(this.#config.snapshotDir, `page-${new Date().toISOString().replaceAll(':', '-')}.png`)
-    await page.screenshot({ path })
+    await page.screenshot({ path, fullPage })
     return { path, url: page.url() }
+  }
+
+  /**
+   * Read one tab's text, cut to a character window.
+   * @param request - the selector and the character window.
+   * @param tabId - tab id, or nothing for the active tab.
+   * @returns the window, the whole text's length, and the header line.
+   * @throws SelectorMissError - when the selector matches no element.
+   */
+  async read(request: ReadRequest, tabId?: string): Promise<ReadResult> {
+    const tab = tabId ?? (await this.tabs().active()).id
+    const page = await this.page(tab)
+    return await readText(readable(page), tab, request)
   }
 
   /**
@@ -285,5 +300,23 @@ export class HeadlessBrowserSession {
     })
     this.#log.info('headless-browser: launched session %s with profile %s', this.#sessionId, this.#config.profileDir)
     return context
+  }
+}
+
+/**
+ * A read over one Playwright page: the body, or the first match of a selector.
+ * Playwright's `innerText` is the element's own rendered text, so a hidden
+ * element contributes nothing, and a selector that matches nothing reports
+ * nothing rather than waiting out the locator timeout.
+ * @param page - the tab's page.
+ * @returns the page operations one read needs.
+ */
+function readable(page: Page): ReadPage {
+  return {
+    url: () => page.url(),
+    innerText: async (selector) => {
+      const target = page.locator(selector ?? 'body').first()
+      return await target.count() === 0 ? undefined : await target.innerText()
+    },
   }
 }

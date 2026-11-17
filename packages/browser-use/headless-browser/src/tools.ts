@@ -9,13 +9,24 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { firstLine } from './error.ts'
-import { BrowserUnavailableError, type HeadlessBrowserSession } from './session.ts'
+import { DEFAULT_READ_LIMIT, MAX_READ_LIMIT, SelectorMissError, type ReadRequest, type ReadResult } from './read.ts'
+import { BrowserUnavailableError } from './session.ts'
+import { TabNotFoundError } from './tabs.ts'
 import { UserHoldsBrowserError, type TakeoverState } from './takeover.ts'
+
+/** The browser operations the tools call; the session class in `session.ts` satisfies them. */
+export interface ToolBrowser {
+  open(url: string, newTab?: boolean): Promise<{ url: string; title: string }>
+  snapshot(tabId?: string, fullPage?: boolean): Promise<{ path: string; url: string }>
+  read(request: ReadRequest, tabId?: string): Promise<ReadResult>
+  click(selector: string, tabId?: string): Promise<{ url: string }>
+  fill(selector: string, text: string, tabId?: string): Promise<void>
+}
 
 /** What the tools act on. */
 export interface ToolDeps {
   /** The persistent browser. */
-  readonly browser: HeadlessBrowserSession
+  readonly browser: ToolBrowser
   /** Who holds control. */
   readonly takeover: TakeoverState
   /** Absolute URL of the take-over page, read when a tool result needs it. */
@@ -32,6 +43,8 @@ const renderJson = (_args: unknown, value: unknown) => [{ type: 'text' as const,
 
 /**
  * Run one tool body, turning expected failures into a result the model can read.
+ * A page-state refusal keeps its own message, which already names the fix; an
+ * unexpected failure is prefixed with the action that produced it.
  * @param action - short description used in an unexpected failure message.
  * @param run - the browser operation.
  */
@@ -39,7 +52,10 @@ async function attempt<T>(action: string, run: () => Promise<T>): Promise<T | { 
   try {
     return await run()
   } catch (error: unknown) {
-    if (error instanceof UserHoldsBrowserError || error instanceof BrowserUnavailableError) return { error: error.message }
+    if (error instanceof UserHoldsBrowserError || error instanceof BrowserUnavailableError
+      || error instanceof TabNotFoundError || error instanceof SelectorMissError) {
+      return { error: error.message }
+    }
     if (error instanceof Error) return { error: `${action} failed: ${firstLine(error)}` }
     throw error
   }
@@ -59,8 +75,8 @@ async function acting<T>(deps: ToolDeps, action: string, run: () => Promise<T>):
 }
 
 /**
- * Register `headless_browser_open`, `_snapshot`, `_click`, `_type`, `_hand_over`,
- * and `_hand_back`.
+ * Register `headless_browser_open`, `_snapshot`, `_read`, `_click`, `_type`,
+ * `_hand_over`, and `_hand_back`.
  * @param ctx - the mounting scope's context.
  * @param deps - the browser, the control state, and the take-over page URL.
  */
@@ -95,6 +111,7 @@ export function registerBrowserTools(ctx: Context, deps: ToolDeps): void {
     description: 'Save a PNG screenshot of the headless browser page and return its path.',
     parameters: {
       tab: { type: 'string', description: 'Tab id to snapshot; the active tab when omitted.' },
+      fullPage: { type: 'boolean', description: 'Capture the whole scrollable page instead of the viewport.' },
     },
     output: {
       schema: {
@@ -111,8 +128,51 @@ export function registerBrowserTools(ctx: Context, deps: ToolDeps): void {
     },
     // A screenshot reads the page without acting on it, so it stays available
     // while the user holds control.
-    execute: (args: { tab?: string }) => attempt('taking a screenshot', () => deps.browser.snapshot(args.tab)),
-    presentCall: () => ({ card: 'generic', title: 'Screenshot the browser', kind: 'other' }),
+    execute: (args: { tab?: string; fullPage?: boolean }) =>
+      attempt('taking a screenshot', () => deps.browser.snapshot(args.tab, args.fullPage === true)),
+    presentCall: args => ({
+      card: 'generic',
+      title: args.fullPage === true ? 'Screenshot the whole page' : 'Screenshot the browser',
+      kind: 'other',
+    }),
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'headless_browser_read',
+    description: 'Read the text of a page in the headless browser, one character range at a time, instead of its pixels.',
+    parameters: {
+      tab: { type: 'string', description: 'Tab id to read; the active tab when omitted.' },
+      selector: { type: 'string', description: 'CSS selector whose first match is read; omit to read the document body.' },
+      offset: { type: 'integer', description: 'Characters to skip from the start of the text; 0 when omitted.' },
+      limit: { type: 'integer', description: `Characters to return; ${DEFAULT_READ_LIMIT} when omitted, at most ${MAX_READ_LIMIT}.` },
+    },
+    output: {
+      schema: {
+        oneOf: [
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              header: { type: 'string', required: true },
+              text: { type: 'string', required: true },
+              total: { type: 'integer', required: true },
+              nextOffset: { type: 'integer' },
+            },
+          },
+          ERROR_SCHEMA,
+        ],
+      },
+      render: renderJson,
+    },
+    // Reading is part of the agent's browse-and-act loop, so a page the user
+    // holds refuses it exactly like click and type.
+    execute: (args: { tab?: string; selector?: string; offset?: number; limit?: number }) =>
+      acting(deps, `reading ${args.tab ?? 'the active tab'}`, () => deps.browser.read({
+        ...args.selector === undefined ? {} : { selector: args.selector },
+        ...args.offset === undefined ? {} : { offset: args.offset },
+        ...args.limit === undefined ? {} : { limit: args.limit },
+      }, args.tab)),
+    presentCall: args => ({ card: 'generic', title: `Read ${args.selector ?? 'the page text'}`, kind: 'read' }),
   }))
 
   ctx.tools.register(defineTool({
