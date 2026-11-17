@@ -12,13 +12,19 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { chromium, type BrowserContext, type CDPSession, type Page } from 'playwright-core'
+import { chromium, type BrowserContext, type CDPSession, type ConsoleMessage, type Page } from 'playwright-core'
+import { AX_ID_ATTRIBUTE, PageAxIds, StaleAxIdError, UnknownAxIdError, parseAxId } from './ax-ids.ts'
 import type { Config } from './config.ts'
 import { firstLine } from './error.ts'
 import type { InputCommand, TabInfo, TabMessage } from './input.ts'
+import {
+  formatAxTree, pngSize, shapeEval, truncate,
+  LOOK_DIGEST_CHARS, LOOK_DIGEST_NODES, MAX_IMAGE_EDGE, MAX_IMAGE_PIXELS,
+  type AxNode, type AxRead, type EvalReport, type ImageSize,
+} from './inspect.ts'
 import { readText, type ReadPage, type ReadRequest, type ReadResult } from './read.ts'
 import { cdpScrollChannel, scrollPage, type ScrollRequest, type ScrollResult } from './scroll.ts'
 import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
@@ -58,6 +64,71 @@ export interface CastTarget {
   readonly cdp: CDPSession
 }
 
+/** The element an acting tool targets: a CSS selector, or an id an accessibility read printed. */
+export type BrowserTarget = { readonly selector: string } | { readonly axId: string }
+
+/** How one accessibility read is scoped. */
+export interface AxReadOptions {
+  /** Read only this element's subtree; the whole page when omitted. */
+  readonly selector?: string
+  /** Most nodes printed; the text ends with an `N more nodes` line past it. */
+  readonly maxNodes?: number
+}
+
+/** How one `look` call is shaped. */
+export interface LookOptions {
+  /** Capture the whole scrollable page instead of the viewport. */
+  readonly fullPage?: boolean
+  /** Include the accessibility digest; on unless this is false. */
+  readonly text?: boolean
+}
+
+/** How one capture is shaped. */
+export interface CaptureOptions {
+  /** Capture the whole scrollable page instead of the viewport. */
+  readonly fullPage?: boolean
+}
+
+/** One captured page: the file, the bytes, and how much of the page they show. */
+export interface Capture {
+  /** Absolute path of the written PNG. */
+  readonly path: string
+  /** Page URL when the capture settled. */
+  readonly url: string
+  /** Width of the image actually returned. */
+  readonly width: number
+  /** Height of the image actually returned. */
+  readonly height: number
+  /** Whether the capture covered the whole scrollable page. */
+  readonly fullPage: boolean
+  /** Capture scale below one when a large page had to be shrunk to stay bounded. */
+  readonly scale: number
+  /** Whether the returned image is smaller than the page it shows. */
+  readonly downscaled: boolean
+  /** The PNG bytes, the same image the path holds. */
+  readonly data: Uint8Array
+}
+
+/** The accessibility digest `look` returns beside its screenshot, bounded. */
+export interface LookDigest {
+  /** The capped accessibility text. */
+  readonly text: string
+  /** Nodes printed. */
+  readonly nodes: number
+  /** Printed nodes whose role is interactive, each with an id. */
+  readonly interactive: number
+  /** Nodes the node cap left out. */
+  readonly omitted: number
+  /** Whether the character cap shortened the text. */
+  readonly truncated: boolean
+}
+
+/** What one `look` call returns: the picture, and what the page reads as. */
+export interface LookReport extends Capture {
+  /** The accessibility digest, unless the call turned it off. */
+  readonly digest?: LookDigest
+}
+
 /** Launch, navigate, inspect, and close one persistent Chromium with tabs. */
 export class HeadlessBrowserSession {
   readonly #config: Config
@@ -70,6 +141,10 @@ export class HeadlessBrowserSession {
   /** Stops watching for pages once the context is gone. */
   #stopStealth: (() => void) | undefined
   readonly #cdps = new WeakMap<Page, CDPSession>()
+  /** Accessibility ids per page; a navigation drops the page's mapping. */
+  readonly #axIds = new WeakMap<Page, PageAxIds>()
+  /** Browser-wide id counter, so an id from one tab never names a node in another. */
+  #axSequence = 0
 
   /**
    * @param config - profile, viewport, and snapshot settings.
@@ -218,17 +293,195 @@ export class HeadlessBrowserSession {
   }
 
   /**
-   * Save a PNG of one tab for the model to read.
+   * Scroll one element into view, named by an id an accessibility read printed.
+   * @param axId - the id the read printed.
+   * @param tabId - tab id, or nothing for the active tab.
+   * @returns where the page ended up, framed like a wheel scroll.
+   */
+  async scrollTo(axId: string, tabId?: string): Promise<ScrollResult> {
+    const page = await this.page(tabId)
+    const cdp = await this.cdp(tabId)
+    const selector = await this.#locatorSelector({ axId }, page, cdp)
+    const locator = page.locator(selector).first()
+    await locator.scrollIntoViewIfNeeded()
+    const position = await cdpScrollChannel(cdp).position()
+    const box = await locator.boundingBox()
+    const size = page.viewportSize() ?? { width: this.#config.viewportWidth, height: this.#config.viewportHeight }
+    return {
+      x: Math.round(box === null ? size.width / 2 : box.x + box.width / 2),
+      y: Math.round(box === null ? size.height / 2 : box.y + box.height / 2),
+      ...position,
+      atTop: position.scrollY <= 1,
+      atBottom: position.scrollY + position.viewportHeight >= position.pageHeight - 1,
+    }
+  }
+
+  /**
+   * Capture one tab as a PNG the model can look at, bounded so a long page is
+   * scaled down instead of returning an enormous image.
    * @param tabId - tab id, or nothing for the active tab.
    * @param fullPage - capture the whole scrollable page instead of the viewport.
-   * @returns the file path and the page it captured.
+   * @returns the file, the image bytes, and the size actually captured.
    */
-  async snapshot(tabId?: string, fullPage = false): Promise<{ path: string; url: string }> {
+  async snapshot(tabId?: string, fullPage = false): Promise<Capture> {
     const page = await this.page(tabId)
+    const cdp = await this.cdp(tabId)
+    return await this.#capture(page, cdp, fullPage, 'page')
+  }
+
+  /**
+   * Capture one tab with CDP, so the whole page can be clipped and scaled in one
+   * operation, and write the PNG where the take-over view and the owner can find it.
+   * @param page - the page to capture.
+   * @param cdp - that page's CDP session.
+   * @param fullPage - capture the whole scrollable page.
+   * @param prefix - filename prefix, which tells a screenshot from a look.
+   * @returns the file, the image bytes, and the size actually captured.
+   */
+  async #capture(page: Page, cdp: CDPSession, fullPage: boolean, prefix: string): Promise<Capture> {
+    const natural = fullPage ? await this.#contentSize(cdp) : this.#viewportSize(page)
+    const scale = Math.min(
+      1,
+      MAX_IMAGE_EDGE / Math.max(natural.width, natural.height),
+      Math.sqrt(MAX_IMAGE_PIXELS / (natural.width * natural.height)),
+    )
+    const clip = { x: 0, y: 0, width: natural.width, height: natural.height, scale }
+    const shot = await cdp.send('Page.captureScreenshot', {
+      format: 'png',
+      captureBeyondViewport: fullPage,
+      clip,
+    })
+    const data = Buffer.from(shot.data, 'base64')
+    const size = pngSize(data) ?? { width: Math.round(natural.width * scale), height: Math.round(natural.height * scale) }
     await mkdir(this.#config.snapshotDir, { recursive: true })
-    const path = join(this.#config.snapshotDir, `page-${new Date().toISOString().replaceAll(':', '-')}.png`)
-    await page.screenshot({ path, fullPage })
-    return { path, url: page.url() }
+    const stamp = new Date().toISOString().replaceAll(':', '-')
+    const path = join(this.#config.snapshotDir, `${prefix}-${stamp}-${randomUUID().slice(0, 8)}.png`)
+    await writeFile(path, data)
+    return {
+      path,
+      url: page.url(),
+      width: size.width,
+      height: size.height,
+      fullPage,
+      scale,
+      downscaled: size.width < natural.width || size.height < natural.height,
+      data,
+    }
+  }
+
+  /**
+   * The scrollable size of one page, in CSS pixels.
+   * @param cdp - the page's CDP session.
+   * @returns the size a full-page capture covers.
+   */
+  async #contentSize(cdp: CDPSession): Promise<ImageSize> {
+    const metrics = await cdp.send('Page.getLayoutMetrics')
+    const size = metrics.cssContentSize ?? metrics.contentSize
+    return { width: Math.max(1, Math.ceil(size.width)), height: Math.max(1, Math.ceil(size.height)) }
+  }
+
+  /**
+   * The viewport of one page, in CSS pixels.
+   * @param page - the page about to be captured.
+   * @returns the size a viewport capture covers.
+   */
+  #viewportSize(page: Page): ImageSize {
+    const viewport = page.viewportSize()
+    if (viewport !== null) return { width: viewport.width, height: viewport.height }
+    return { width: this.#config.viewportWidth, height: this.#config.viewportHeight }
+  }
+
+  /**
+   * Evaluate one expression in one tab and report what the page did with it.
+   * The expression runs in the page's own world with the page's own credentials;
+   * whatever it returns and whatever the page logs is page content, quoted as
+   * the page produced it.
+   * @param expression - JavaScript evaluated as one expression, so statements need an IIFE.
+   * @param awaitPromise - wait for a returned promise before reading the result.
+   * @param tabId - tab id, or nothing for the active tab.
+   * @returns the JSON text of the result, and the diagnostics from the page.
+   */
+  async evaluate(expression: string, awaitPromise: boolean, tabId?: string): Promise<EvalReport> {
+    const page = await this.page(tabId)
+    const cdp = await this.cdp(tabId)
+    const consoleErrors: string[] = []
+    const pageErrors: string[] = []
+    const onConsole = (message: ConsoleMessage): void => {
+      if (message.type() !== 'error' && message.type() !== 'assert') return
+      consoleErrors.push(message.text())
+    }
+    // An expression may also fail off the evaluated task itself; the page's own
+    // error event is where that surfaces.
+    const onPageError = (error: Error): void => { pageErrors.push(error.message) }
+    page.on('console', onConsole)
+    page.on('pageerror', onPageError)
+    try {
+      const response = await cdp.send('Runtime.evaluate', {
+        expression,
+        returnByValue: true,
+        awaitPromise,
+      })
+      // Console output the same task queued can land just after the response.
+      await new Promise(resolve => setTimeout(resolve, 25))
+      const details = response.exceptionDetails
+      const thrown = details === undefined ? [] : [details.exception?.description ?? details.text]
+      return shapeEval({
+        url: page.url(),
+        result: response.result,
+        exceptions: [...thrown, ...pageErrors],
+        consoleErrors,
+      })
+    } finally {
+      page.off('console', onConsole)
+      page.off('pageerror', onPageError)
+    }
+  }
+
+  /**
+   * Read the page as its accessibility tree sees it, with a stable id printed
+   * beside every node an agent can act on.
+   * @param options - the subtree to read and the node cap.
+   * @param tabId - tab id, or nothing for the active tab.
+   * @returns the indented text, its counts, and the page URL.
+   */
+  async ax(options: AxReadOptions, tabId?: string): Promise<AxRead> {
+    const page = await this.page(tabId)
+    const cdp = await this.cdp(tabId)
+    const nodes: readonly AxNode[] = options.selector === undefined
+      ? (await cdp.send('Accessibility.getFullAXTree')).nodes
+      : await this.#scopedAxNodes(cdp, options.selector)
+    const ids = this.#axIdsFor(page)
+    const shaped = formatAxTree(nodes, {
+      ...options.maxNodes === undefined ? {} : { maxNodes: options.maxNodes },
+      idOf: backendDOMNodeId => ids.idFor(backendDOMNodeId),
+    })
+    return { url: page.url(), ...shaped }
+  }
+
+  /**
+   * Capture one tab and read the same page in one call, so an agent that wants
+   * to see and understand a page does not spend two round-trips on it.
+   * @param options - full-page capture, and whether the digest is wanted.
+   * @param tabId - tab id, or nothing for the active tab.
+   * @returns the picture, its size, and the bounded accessibility digest.
+   */
+  async look(options: LookOptions, tabId?: string): Promise<LookReport> {
+    const page = await this.page(tabId)
+    const cdp = await this.cdp(tabId)
+    const capture = await this.#capture(page, cdp, options.fullPage === true, 'look')
+    if (options.text === false) return capture
+    const read = await this.ax({ maxNodes: LOOK_DIGEST_NODES }, tabId)
+    const digest = truncate(read.text, LOOK_DIGEST_CHARS)
+    return {
+      ...capture,
+      digest: {
+        text: digest.text,
+        nodes: read.nodes,
+        interactive: read.interactive,
+        omitted: read.omitted,
+        truncated: digest.truncated,
+      },
+    }
   }
 
   /**
@@ -245,25 +498,29 @@ export class HeadlessBrowserSession {
   }
 
   /**
-   * Click the first element matching a CSS selector in one tab.
-   * @param selector - selector the page resolves to one element.
+   * Click the element one target names in one tab.
    * @param tabId - tab id, or nothing for the active tab.
    * @returns the page URL after the click, which may already be the navigation target.
    */
-  async click(selector: string, tabId?: string): Promise<{ url: string }> {
+  async click(target: BrowserTarget, tabId?: string): Promise<{ url: string }> {
     const page = await this.page(tabId)
+    const cdp = await this.cdp(tabId)
+    const selector = await this.#locatorSelector(target, page, cdp)
     await page.locator(selector).first().click()
     return { url: page.url() }
   }
 
   /**
-   * Replace the editable value of the first element matching a CSS selector in one tab.
-   * @param selector - selector for an input, textarea, or contenteditable element.
+   * Replace the editable value of the element one target names in one tab.
+   * @param target - a CSS selector, or an id an accessibility read printed.
    * @param text - the value to write.
    * @param tabId - tab id, or nothing for the active tab.
    */
-  async fill(selector: string, text: string, tabId?: string): Promise<void> {
-    await (await this.page(tabId)).locator(selector).first().fill(text)
+  async fill(target: BrowserTarget, text: string, tabId?: string): Promise<void> {
+    const page = await this.page(tabId)
+    const cdp = await this.cdp(tabId)
+    const selector = await this.#locatorSelector(target, page, cdp)
+    await page.locator(selector).first().fill(text)
   }
 
   /**
@@ -299,6 +556,115 @@ export class HeadlessBrowserSession {
     this.#tabs?.dispose()
     this.#tabs = undefined
     await context?.close()
+  }
+
+  /**
+   * The ids of one page, allocated on its first accessibility read.
+   * @param page - the page an accessibility read or an action names.
+   * @returns the page's id map, dropped when the document is replaced.
+   */
+  #axIdsFor(page: Page): PageAxIds {
+    const existing = this.#axIds.get(page)
+    if (existing !== undefined) return existing
+    const ids = new PageAxIds(() => {
+      this.#axSequence += 1
+      return `e${String(this.#axSequence)}`
+    })
+    this.#axIds.set(page, ids)
+    // A navigation replaces the document, and the DOM node behind every id
+    // printed from the old one; a stale id must not resolve into the new page.
+    page.on('framenavigated', (frame) => {
+      if (frame === page.mainFrame()) ids.invalidate()
+    })
+    return ids
+  }
+
+  /**
+   * Resolve one acting target to a selector a locator can use.
+   * @param target - the selector, or the id an accessibility read printed.
+   * @param page - the page the action acts on.
+   * @param cdp - that page's CDP session.
+   * @returns a selector matching the element the model named.
+   * @throws UnknownAxIdError - when no read printed that id.
+   * @throws StaleAxIdError - when the id's element is gone from this document.
+   */
+  async #locatorSelector(target: BrowserTarget, page: Page, cdp: CDPSession): Promise<string> {
+    if ('selector' in target) return target.selector
+    const backendDOMNodeId = this.#axIdsFor(page).nodeFor(target.axId)
+    if (backendDOMNodeId === undefined) throw this.#axIdRefusal(target.axId)
+    await this.#tagAxNode(cdp, backendDOMNodeId, target.axId)
+    const selector = `[${AX_ID_ATTRIBUTE}="${target.axId}"]`
+    // The node can be replaced between the read and the action; a locator that
+    // matches nothing must fail here, naming the id, instead of clicking a node
+    // that merely came next.
+    if (await page.locator(selector).count() === 0) throw new StaleAxIdError(target.axId)
+    return selector
+  }
+
+  /**
+   * Mark one element with its printed id, so a locator finds exactly that node.
+   * @param cdp - the page's CDP session.
+   * @param backendDOMNodeId - the DOM node behind the accessibility node.
+   * @param axId - the id to write onto the element.
+   * @throws StaleAxIdError - when the document no longer holds that node.
+   */
+  async #tagAxNode(cdp: CDPSession, backendDOMNodeId: number, axId: string): Promise<void> {
+    let objectId: string | undefined
+    try {
+      const resolved = await cdp.send('DOM.resolveNode', { backendNodeId: backendDOMNodeId })
+      objectId = resolved.object.objectId
+    } catch (error: unknown) {
+      throw new StaleAxIdError(axId, firstLine(error))
+    }
+    if (objectId === undefined) throw new StaleAxIdError(axId)
+    await cdp.send('Runtime.callFunctionOn', {
+      objectId,
+      functionDeclaration: 'function (name, value) { this.setAttribute(name, value); return true }',
+      arguments: [{ value: AX_ID_ATTRIBUTE }, { value: axId }],
+      returnByValue: true,
+    })
+  }
+
+  /**
+   * Refuse an id that names no node of this page.
+   * @param axId - the id a tool call carried.
+   * @returns the refusal, distinguishing an id never printed from one whose page is gone.
+   */
+  #axIdRefusal(axId: string): StaleAxIdError | UnknownAxIdError {
+    const issued = parseAxId(axId)
+    // Within the browser's count means some page printed it: another tab, or a
+    // document that has since been replaced.
+    if (issued !== undefined && issued <= this.#axSequence) return new StaleAxIdError(axId)
+    return new UnknownAxIdError(axId)
+  }
+
+  /**
+   * Read one element's accessibility subtree.
+   * @param cdp - the tab's CDP session.
+   * @param selector - CSS selector for the subtree root.
+   * @returns that subtree's nodes, in document order.
+   */
+  async #scopedAxNodes(cdp: CDPSession, selector: string): Promise<readonly AxNode[]> {
+    const { root } = await cdp.send('DOM.getDocument', { depth: 0 })
+    const found = await cdp.send('DOM.querySelector', { nodeId: root.nodeId, selector })
+    if (Number(found.nodeId) === 0) throw new Error(`no element matches ${selector}`)
+    const described = await cdp.send('DOM.describeNode', { nodeId: found.nodeId, depth: 0 })
+    const backendDOMNodeId = Number(described.node.backendNodeId)
+    const { nodes } = await cdp.send('Accessibility.getFullAXTree')
+    const matches = nodes.filter(node => node.backendDOMNodeId === backendDOMNodeId)
+    const scoped = matches.find(node => node.ignored !== true) ?? matches[0]
+    if (scoped === undefined) throw new Error(`the element matching ${selector} is not in the page's accessibility tree`)
+    const byId = new Map(nodes.map(node => [node.nodeId, node] as const))
+    const kept: AxNode[] = []
+    const visit = (node: AxNode): void => {
+      kept.push(node)
+      for (const childId of node.childIds ?? []) {
+        const child = byId.get(childId)
+        if (child !== undefined) visit(child)
+      }
+    }
+    visit(scoped)
+    return kept
   }
 
   async #launch(): Promise<BrowserContext> {

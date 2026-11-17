@@ -14,6 +14,8 @@ Give the agent a browser it keeps between turns and a person a way into it. One 
 ## Table of Contents
 
 - [Use this package](#use-this-package)
+  - [Choosing how to look at a page](#choosing-how-to-look-at-a-page)
+  - [Acting by accessibility id](#acting-by-accessibility-id)
 - [Understand the implementation](#understand-the-implementation)
 - [Further Exploration](#further-exploration)
 - [Model Experience](#model-experience)
@@ -44,11 +46,57 @@ Mount the row once in a Host composition that has the Web server and the tool re
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-headless-browser) lists every accepted field.
 
-### Reading a page's text
+### Choosing how to look at a page
+
+Each tool answers a different question. Reach for the cheapest one that answers the question in front of you, and prefer `look` when you need both the picture and the meaning.
+
+| Tool | Answers | Cost |
+|---|---|---|
+| `headless_browser_look` | What does the page look like, and what does it say? One result: the picture and a capped accessibility digest of the same page | One round-trip; one image plus at most 60 nodes and 2000 characters |
+| `headless_browser_ax` | Which elements can I act on, and what are their states? The accessibility tree as indented lines, with an id on every interactive node | Text only; the default cap is 300 nodes |
+| `headless_browser_read` | What does the prose say? The rendered text of the body or one selector, in character windows | Text only; up to 20000 characters per window |
+| `headless_browser_snapshot` | What did the page look like, with no reading? The picture alone, viewport or whole page | One image, no page text |
+| `headless_browser_eval` | What does this expression evaluate to? JSON text, with the page's exceptions and console errors quoted verbatim | Text only; the expression is capped at 16 KiB and the result at 8000 characters |
+
+`look` is the default for a page the agent has not seen: it returns the picture the model can look at and the accessibility digest in the same result, so it does not pay for a screenshot and then a read. `read` is for long prose that does not need the picture. `ax` is for forms, menus, and lists where the question is what to click, and it is the only read that hands back ids the acting tools accept. `snapshot` is the pixel fallback when text cannot describe the page, and the tool whose coordinates a later click can be derived from. `eval` is the last resort for a computed value, not a way to read a page.
+
+#### The picture the model sees
+
+`headless_browser_snapshot` and `headless_browser_look` return the PNG as an image content block the model can look at, together with its path, page URL, width, height, the `fullPage` flag they honoured, and a `scale`. The picture is bounded: a page longer than 1568 pixels on an edge, or larger than 1.2 million pixels, is captured clipped and scaled down, and the result says `downscaled: true` with a note naming the size it was reduced to, so a tall page arrives as a legible overview instead of an enormous image. The bytes also exist as a file under `snapshotDir`, which is what the take-over view and the owner read. When the composition mounts no attachment store, the result keeps the path and says so in a note instead of failing.
+
+#### Reading a page's text
 
 A screenshot captures the viewport, so a list longer than the viewport reaches the model with its lower rows missing and no way to scroll them into a picture. `headless_browser_read` answers with the page's rendered text instead of pixels: the document body, or the first element that matches a CSS `selector`, cut into character windows. `offset` and `limit` page through it — 8000 characters by default, 20000 at most — and the result carries a `header` naming the tab, the page URL, the page, and the character range, plus `total` and the `nextOffset` of the text that remains. A URL too long for one line is shortened in the header, and a window is counted in characters, so it never ends inside a surrogate pair such as an emoji: every window is text the model can read on its own.
 
-A screenshot keeps its use where the picture matters: `fullPage: true` captures the whole scrollable page instead of the viewport.
+### Acting by accessibility id
+
+`headless_browser_ax` and the digest `headless_browser_look` returns print an id such as `e12` beside every node an agent can act on: a button, link, textbox, searchbox, combobox, checkbox, radio, menuitem (including its checkbox and radio variants), tab, slider, switch, or spinbutton, a file input included because it reports the button role. The id names the element, not a selector: the host keeps a per-page map from id to the DOM node behind it, so consecutive reads on the same page print the same id for the same element, and a capture in between changes nothing. The model reads a page once and then passes `axId` to `headless_browser_click`, `headless_browser_type`, or `headless_browser_scroll`, which resolves exactly that element and refuses below Playwright's actionability threshold rather than clicking something else.
+
+Ids die on navigation, because the document and every node in it are gone; they also belong to one tab, since the allocator numbers ids for the whole browser. An id from another tab or from the previous document answers `{ "error": "axId e12 no longer names an element on this page (…); ids die on navigation, so read the page again with headless_browser_ax" }`, and an id no read ever printed answers `{ "error": "no element has axId e77; read the page with headless_browser_ax and use an id it printed" }`.
+
+Resolving an id writes `data-dsh-axid="e12"` onto the element so one locator call finds exactly that node, including inside a shadow root; the attribute is a marker for that lookup, not page content.
+
+### Understanding accessibility output
+
+A line is `id role "name" value="…" [states]`, indented two spaces per level:
+
+```
+RootWebArea "Checkout"
+  heading "Delivery"
+  e3 textbox "Street" [required]
+  e4 combobox "Country" value="United States" [expanded=false]
+  e5 checkbox "Gift wrap" [checked]
+  e6 button "Pay" [disabled]
+  … 42 more nodes
+```
+
+Only the states that are on are printed — `checked`, `checked=mixed`, `disabled`, `required` — except `expanded`, which prints `expanded=true` or `expanded=false` because a combobox's closed state is itself the information. Hidden nodes are dropped and their children take their place, a node whose text only repeats its parent's name is dropped, and the walk stops at `maxNodes` (300 by default, 1000 at most) with one `… N more nodes` line that says what the cap hid. `selector` scopes the read to one element's subtree, which is how a model reads one form instead of the whole page.
+
+### Evaluating an expression
+
+`headless_browser_eval` runs one JavaScript expression in the page and answers `result` as JSON text: the value when JSON can carry it, and Chrome's own form for a value JSON cannot carry (`undefined`, `Infinity`, `5n`). A returned promise is awaited only when `awaitPromise` is true. Everything the page says while the expression runs is quoted, never paraphrased: each thrown exception keeps the page's own description and stack, and each console error keeps the page's own text. The expression is capped at 16384 characters, the result at 8000 characters with a marker naming what was cut, and a refusal answers with an error naming the cap instead of reaching the page.
+
+This is the one tool that runs code the model wrote inside a signed-in profile. Its result is page data: a string an `eval` returns, a console line, or a thrown exception is what the page says about itself and never an instruction to follow. A page that knows the tool runs can observe or interfere with anything it evaluates, so use it for a value the agent already decided to ask for — not to have the page decide what to do next, and never by pasting page text into an expression as if it were code or commands.
 
 ### The browser binary
 
@@ -105,8 +153,10 @@ The tools share one guard. An acting tool calls `TakeoverState.assertAgent` firs
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Plugin entry: session, control state, live view, tools, routes |
-| [`src/session.ts`](src/session.ts) | Persistent context, tab-aware CDP sessions, navigation, screenshot, read, click, fill, scroll, tab close |
+| [`src/session.ts`](src/session.ts) | Persistent context, tab-aware CDP sessions, navigation, bounded capture, read, evaluate, accessibility read, click, fill, scroll, tab close |
 | [`src/read.ts`](src/read.ts) | Page text, cut into character windows with a header naming the page and range |
+| [`src/inspect.ts`](src/inspect.ts) | The reading rules: eval result text and diagnostics, accessibility text, caps, and PNG size |
+| [`src/ax-ids.ts`](src/ax-ids.ts) | Stable per-page ids, the action attribute, and the refusals a dead id gets |
 | [`src/tabs.ts`](src/tabs.ts) | Tab ids, active tab, loading state, closing, the eight-tab cap, and the per-navigation deadline |
 | [`src/stealth.ts`](src/stealth.ts) | The identity: launch settings, the document-start script, and the per-page client-hint override |
 | [`src/takeover.ts`](src/takeover.ts) | Holder state and the refusal an agent action gets |
@@ -114,7 +164,7 @@ The tools share one guard. An acting tool calls `TakeoverState.assertAgent` firs
 | [`src/live-view.ts`](src/live-view.ts) | Screencast fan-out and viewer bookkeeping |
 | [`src/routes.ts`](src/routes.ts) | Page, status, and live socket registration |
 | [`src/page.ts`](src/page.ts) | The served document and its script |
-| [`src/tools.ts`](src/tools.ts) | The nine model tools |
+| [`src/tools.ts`](src/tools.ts) | The twelve model tools |
 
 </details>
 
@@ -137,11 +187,11 @@ The tools share one guard. An acting tool calls `TakeoverState.assertAgent` firs
 
 #### What the model sees
 
-Six page tools whenever the mounting scope has the tool registry: `headless_browser_open` (`url`, `newTab`), `headless_browser_snapshot` (`tab`, `fullPage`), `headless_browser_read` (`tab`, `selector`, `offset`, `limit`), `headless_browser_click` (`selector`, `tab`), `headless_browser_type` (`selector`, `text`, `tab`), and `headless_browser_scroll` (`tab`, `x`, `y`, `deltaY`, `to`). Each description is one sentence naming the operation and what the result answers: opening returns the settled URL and document title, a screenshot returns its PNG path and page URL, a read returns one text window with the header naming its page and range, a click returns the selector and page URL, typing returns the selector, and scrolling returns `x`, `y`, `scrollX`, `scrollY`, `pageHeight`, `viewportHeight`, `atTop`, and `atBottom`, so the model knows whether it reached the end. Results are one JSON text block. The typing result never repeats the text, so a password the model typed into a form is not echoed into the session log.
+Nine page tools whenever the mounting scope has the tool registry: `headless_browser_open` (`url`, `newTab`), `headless_browser_snapshot` (`tab`, `fullPage`), `headless_browser_read` (`tab`, `selector`, `offset`, `limit`), `headless_browser_look` (`tab`, `fullPage`, `text`), `headless_browser_ax` (`tab`, `selector`, `maxNodes`), `headless_browser_eval` (`tab`, `expression`, `awaitPromise`), `headless_browser_click` (`selector` or `axId`, `tab`), `headless_browser_type` (`selector` or `axId`, `text`, `tab`), and `headless_browser_scroll` (`tab`, `axId` or `x`, `y`, `deltaY`, `to`). Each description is one sentence naming the operation and what the result answers: opening returns the settled URL and document title, a screenshot returns the picture with its path and size, a read returns one text window with the header naming its page and range, a look returns the picture plus the digest in one result, an accessibility read returns the indented tree, an eval returns JSON text with its diagnostics, a click returns the selector or id and page URL, typing returns the selector or id without repeating the text, and scrolling returns `x`, `y`, `scrollX`, `scrollY`, `pageHeight`, `viewportHeight`, `atTop`, and `atBottom`, so the model knows whether it reached the end. Results are one text block; a picture's block carries the metadata first and the image after it.
 
 #### Token effect
 
-A fixed schema cost on every request from an Agent whose scope mounts the package, a few dozen tokens per tool definition. A result is a short JSON object; a screenshot adds only its path, not the image, and a read is bounded by `limit`, so its text stays under 20000 characters.
+A fixed schema cost on every request from an Agent whose scope mounts the package, a few dozen tokens per tool definition. A read is bounded by `limit`, so its text stays under 20000 characters; an accessibility text prints at most 300 nodes by default, and a digest at most 60 nodes and 2000 characters; an eval result is capped at 8000 characters. A screenshot or look spends one image, bounded to 1568 pixels on its long edge and 1.2 million pixels, which is the point: a model that looks once should not pay for a screenshot and a separate read.
 
 #### KV Cache effect
 
@@ -165,7 +215,7 @@ Append-only: results enter the history after the reusable prefix.
 
 #### What the model sees
 
-`headless_browser_hand_over` takes a `reason` and returns `{ "url": "<origin>/headless-browser", "holder": "human", "reason": "…" }`; the URL is what the user opens. `headless_browser_hand_back` returns `{ "holder": "agent" }`. While the user holds control, every acting tool — `headless_browser_read` included — answers `{ "error": "the user holds the browser (<reason>); call headless_browser_hand_back when they are done" }` instead of touching the page, a selector that matches nothing answers `{ "error": "no element matches <selector>; check the selector or read the whole page" }`, a tab that is not open answers `{ "error": "no tab named <id>; use the active tab or open a new one" }`, and a launcher failure answers `{ "error": "the headless browser could not start: <first line>" }`. A screenshot keeps answering throughout, because it never competes for input.
+`headless_browser_hand_over` takes a `reason` and returns `{ "url": "<origin>/headless-browser", "holder": "human", "reason": "…" }`; the URL is what the user opens. `headless_browser_hand_back` returns `{ "holder": "agent" }`. While the user holds control, every acting tool — `headless_browser_read`, `_look`, `_ax`, and `_eval` included — answers `{ "error": "the user holds the browser (<reason>); call headless_browser_hand_back when they are done" }` instead of touching the page, a selector that matches nothing answers `{ "error": "no element matches <selector>; check the selector or read the whole page" }`, an unknown or stale `axId` names the id and the read that fixes it, a tab that is not open answers `{ "error": "no tab named <id>; use the active tab or open a new one" }`, and a launcher failure answers `{ "error": "the headless browser could not start: <first line>" }`. A screenshot keeps answering throughout, because it never competes for input; `headless_browser_look` does not, because it also reads the page the user is working in.
 
 #### Token effect
 
@@ -184,6 +234,10 @@ Append-only: results and refusals enter the history after the reusable prefix an
 - **Headless is the supported mode** — `headless: false` needs a logged-in desktop session; a service account cannot open a window.
 - **A refusal stays a refusal** — the identity fixes what the browser says about itself, not what the site decides: a site that scores the address, the profile, or the request can still refuse the page, and this package answers no challenge.
 - **A read is the rendered text** — `headless_browser_read` returns what the page renders: collapsed or hidden content is absent, a selector that matches several elements reads only the first, and text inside a frame or a shadow root is not part of the document body. An assignment list's rows below the fold are in the text even though no screenshot of the viewport contains them.
+- **An id lives as long as its document** — `headless_browser_ax`'s ids resolve on the page that printed them. A navigation, a closed tab, or a tab you never read answers with the id and asks for a fresh read; resolving an id writes a `data-dsh-axid` attribute onto its element, because a selector that names exactly one node is what a locator needs.
+- **The accessibility tree is the main frame's** — a `selector` for `headless_browser_ax` is resolved in the main document, so a node inside an iframe is reachable only by reading the frame's page directly. Nodes with no role and no text are dropped, and the cap reports what it hid instead of truncating silently.
+- **Evaluating runs the model's code in the page** — `headless_browser_eval` has the page's own credentials and can change the page, and everything it returns is page data rather than an instruction. Its expression cap and result cap bound the size of that exchange, not what the code may do.
+- **A capture is scaled, not pixel-exact above the bound** — a full-page capture of a very long page is scaled down to stay under 1568 pixels on its long edge and 1.2 million pixels, and the result says so with `downscaled`, `scale`, and the size it was reduced to.
 - **Tabs are ours, not the site's** — the tab model covers tabs the tools or the take-over view open; a popup the site opens for itself is not adopted. The browser keeps at most eight tabs; `headless_browser_close` frees one, and the cap error names that tool. Every navigation has a 20-second deadline.
 - **Streaming is live-only** — frames arrive only while a take-over page is connected, are not recorded, and can drop frames when Chrome is busy. A still page sends no new frames, so a page that connects later shows the last painted frame. A renderer that crashes ends the cast, and the picture returns only after the page is reloaded and the user reconnects.
 - **The hand-over URL needs a Web server** — in a composition without one, `headless_browser_hand_over` returns `/headless-browser` alone, which the user cannot open.
@@ -200,7 +254,8 @@ This Dev Note is non-authoritative working context: undecided directions and not
 
 - The page deliberately loads no Client bundle: the Host serves one static document, so the plugin works in a composition whose Web UI is not otherwise extended.
 - Input is accepted only while the user holds control. An idle page therefore never moves the agent's browser, and the agent never moves the page under the user's cursor.
-- The screenshot stays available to the agent while the user holds control; it reads the page without competing for input.
+- The screenshot stays available to the agent while the user holds control; it reads the page without competing for input. `look` does not: it reads the page the user is working in, so it sits behind the same gate as the other page tools.
+- `ax` ids are allocated as nodes are printed, so a capped read hands out ids only for what the model saw; a later read continues the sequence and never reuses an id for a different node.
 - The tests that need a browser resolve `chromium.executablePath()` and skip when the binary is absent, so a checkout without the Playwright download still runs every other spec.
 
 </details>

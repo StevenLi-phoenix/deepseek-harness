@@ -9,6 +9,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-attachment'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { Config } from './config.ts'
 import { LiveView } from './live-view.ts'
@@ -50,6 +51,15 @@ export function apply(ctx: Context, config: Config): void {
     pageUrl: () => {
       const server = ctx.get('webServer')
       return server === undefined ? PAGE_PATH : `${server.getOrigin()}${PAGE_PATH}`
+    },
+    // A capture becomes an image block through the attachment store; a
+    // composition without one still gets the PNG path.
+    images: {
+      save: async (data) => {
+        const attachments = ctx.get('attachments')
+        if (attachments === undefined) return undefined
+        return await attachments.saveImage({ data, mediaType: 'image/png' })
+      },
     },
   })
 

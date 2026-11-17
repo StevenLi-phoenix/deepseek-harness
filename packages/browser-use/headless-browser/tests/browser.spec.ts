@@ -17,6 +17,7 @@ import { WebSocket } from 'ws'
 import { Context } from '@deepseek-ai/cordis'
 import HttpServer from '@deepseek-ai/dsh-host-webserver'
 import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
+import { MAX_IMAGE_EDGE } from '../src/inspect.ts'
 import { LiveView } from '../src/live-view.ts'
 import { SelectorMissError } from '../src/read.ts'
 import { LIVE_PATH, mountTakeoverRoutes } from '../src/routes.ts'
@@ -290,10 +291,14 @@ describe.skipIf(!AVAILABLE)('headless browser live view', () => {
 
     const tall = app.browser.tabsState()[0]!
     const viewport = pngSize((await app.browser.snapshot(tall.id)).path)
-    const full = pngSize((await app.browser.snapshot(tall.id, true)).path)
+    const shot = await app.browser.snapshot(tall.id, true)
+    const full = pngSize(shot.path)
     expect(viewport).toEqual({ width: 1280, height: 800 })
-    expect(full.width).toBe(1280)
+    // The whole page is captured, and a tall one is scaled down to stay bounded.
     expect(full.height).toBeGreaterThan(viewport.height)
+    expect(Math.max(full.width, full.height)).toBeLessThanOrEqual(MAX_IMAGE_EDGE)
+    expect(shot.downscaled).toBe(true)
+    expect({ width: shot.width, height: shot.height }).toEqual(full)
 
     await app.browser.open('data:text/html;charset=utf-8,<title>second</title><body>второй список', true)
     const second = app.browser.tabsState().find(tab => tab.active)!

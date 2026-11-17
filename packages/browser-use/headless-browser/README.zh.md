@@ -9,11 +9,15 @@ kind: "package-reference"
 
 ## 概述
 
-给 agent 一个能跨轮次保留状态的浏览器，也给人一个进去的办法。一个无头 Chromium 用自己的 profile 目录运行，登录状态能扛过 Host 重启。模型可以打开页面、读页面的文本、截图、点击、输入、滚动、关闭标签；某一步需要人时，它交出控制权并返回一个页面地址，用户在那一页看到和 agent 相同的画面、自己操作，再交还回去。用户控制期间 agent 的动作会被拒绝，不会和人抢同一个页面。
+给 agent 一个能跨轮次保留状态的浏览器，也给人一个进去的办法。一个无头 Chromium 用自己的 profile 目录运行，登录状态能扛过 Host 重启。模型可以打开页面、看页面、读页面、点击、输入、滚动、关闭标签；某一步需要人时，它交出控制权并返回一个页面地址，用户在那一页看到和 agent 相同的画面、自己操作，再交还回去。用户控制期间 agent 的动作会被拒绝，不会和人抢同一个页面。
+
+一个页面有三种读法、两种看法。`headless_browser_look` 一次调用同时交回画面和一份有上限的无障碍摘要，想看又想知道页面讲什么的模型因此只花一个来回，不再先截图再读一遍。`headless_browser_ax` 打印无障碍树，每个可操作的节点前面带一个短 id；`headless_browser_click`、`headless_browser_type`、`headless_browser_scroll` 直接用这个 id 操作，模型读一次表单就能动手，不必猜 selector。`headless_browser_read` 给超出视口的长正文；`headless_browser_eval` 算一个值；`headless_browser_snapshot` 只给画面。
 
 ## 目录
 
 - [使用本包](#use-this-package)
+  - [怎么看一个页面](#choosing-how-to-look-at-a-page)
+  - [按无障碍 id 操作](#acting-by-accessibility-id)
 - [理解实现](#understand-the-implementation)
 - [延伸阅读](#further-exploration)
 - [模型体验](#model-experience)
@@ -44,11 +48,59 @@ kind: "package-reference"
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-headless-browser)列出了全部可用字段。
 
-### 读取页面文本
+<a id="choosing-how-to-look-at-a-page"></a>
+### 怎么看一个页面
+
+每个工具回答不同的问题。选能回答眼前问题的最便宜那个；既要画面又要知道页面讲了什么时，直接用 `look`。
+
+| 工具 | 回答什么 | 代价 |
+|---|---|---|
+| `headless_browser_look` | 页面长什么样，又说了什么？一次结果里既有画面，也有同一页面有上限的无障碍摘要 | 一个来回；一张图，加重叠不超过 60 个节点、2000 个字符 |
+| `headless_browser_ax` | 哪些元素能操作、状态是什么？无障碍树按缩进打印，每个可交互节点带 id | 纯文本；默认上限 300 个节点 |
+| `headless_browser_read` | 正文说了什么？body 或某个 selector 渲染出来的文本，按字符窗口翻 | 纯文本；每窗口最多 20000 个字符 |
+| `headless_browser_snapshot` | 页面当时长什么样，不需要读？只有画面，视口或整页 | 一张图，不带页面文本 |
+| `headless_browser_eval` | 这个表达式的值是什么？JSON 文本，加上页面自己的异常和 console 错误原文 | 纯文本；表达式上限 16 KiB，结果上限 8000 个字符 |
+
+agent 还没看过的页面默认用 `look`：它在同一个结果里交回模型能看的画面和无障碍摘要，不必先截图再读。`read` 用于不需要画面的长正文。`ax` 用于表单、菜单、列表这类「该点哪里」的问题，也是唯一会把 id 交给操作工具的读法。`snapshot` 是文本说不清页面时的像素兜底，也是坐标点击的来源。`eval` 是取计算值的最后手段，不是读页面的办法。
+
+#### 模型看到的画面
+
+`headless_browser_snapshot` 和 `headless_browser_look` 把 PNG 作为 image 内容块交给模型看，同一结果里带路径、页面 URL、宽、高、它们遵守的 `fullPage` 标志，以及 `scale`。画面是有上限的：一边超过 1568 像素、或总面积超过 120 万像素的页面会被裁剪后缩放拍下，结果显示 `downscaled: true`，并注明缩小到了多大，所以很长的页面到手上是一张看得清的概览，而不是一张巨大的图。同样的字节也落在 `snapshotDir` 下的文件里，接管页和主人读的是这个文件。组合里没有挂载 attachment store 时，结果保留路径并在 note 里说明，而不是让整次调用失败。
+
+#### 读取页面文本
 
 截图只拍视口，比视口长的列表到了模型手上就少了下面几行，而且没有把画面滚动下去再拍一次的办法。`headless_browser_read` 交回页面渲染出来的文本而不是像素：整个文档 body，或者 CSS `selector` 命中的第一个元素，按字符切成窗口。`offset` 与 `limit` 逐页翻——默认 8000 个字符，最多 20000——结果里的 `header` 写明标签页、页面 URL、第几页和字符区间，另有 `total`，以及剩余文本的起始偏移 `nextOffset`。过长的一行 URL 在 `header` 里会截断，窗口按字符计数，不会切在代理对（例如 emoji）中间：每个窗口本身就是模型能独立读的文本。
 
-需要画面本身时截图仍然有用：`fullPage: true` 拍整个可滚动页面，而不是视口。
+<a id="acting-by-accessibility-id"></a>
+### 按无障碍 id 操作
+
+`headless_browser_ax` 和 `headless_browser_look` 的摘要会给每个 agent 能操作的节点打印一个 `e12` 这样的 id：button、link、textbox、searchbox、combobox、checkbox、radio、menuitem（含它的 checkbox 与 radio 变体）、tab、slider、switch、spinbutton；文件选择框本身报 button 角色，也被覆盖。id 命名的是元素，不是 selector：宿主按页面保存一张 id 到 DOM 节点的映射，所以同一页面连续读两次，同一个元素拿到同一个 id，中间夹一次截图也不影响。模型读一次页面，然后把 `axId` 交给 `headless_browser_click`、`headless_browser_type` 或 `headless_browser_scroll`，它们只解析那一个元素，达不到 Playwright 的可操作性阈值就拒绝，而不是去点别的元素。
+
+id 随导航失效，因为文档和里面的节点都没了；它也只属于一个标签页，因为发号器是全浏览器共用的。别的标签页或上一份文档的 id 会得到 `{ "error": "axId e12 no longer names an element on this page (…); ids die on navigation, so read the page again with headless_browser_ax" }`；从没打印过的 id 会得到 `{ "error": "no element has axId e77; read the page with headless_browser_ax and use an id it printed" }`。
+
+解析 id 时会把 `data-dsh-axid="e12"` 写到元素上，让一次 locator 调用正好找到那个节点，shadow root 里也一样；这个属性只是那次查找的标记，不是页面内容。
+
+### 无障碍输出的样子
+
+一行是 `id role "name" value="…" [states]`，每层缩进两个空格：
+
+```
+RootWebArea "Checkout"
+  heading "Delivery"
+  e3 textbox "Street" [required]
+  e4 combobox "Country" value="United States" [expanded=false]
+  e5 checkbox "Gift wrap" [checked]
+  e6 button "Pay" [disabled]
+  … 42 more nodes
+```
+
+只打印打开着的状态——`checked`、`checked=mixed`、`disabled`、`required`——只有 `expanded` 例外，它打印 `expanded=true` 或 `expanded=false`，因为 combobox 收起来本身就是信息。隐藏节点被丢掉，它的子节点顶上来；文本只是重复父节点名字的节点被丢掉；走到 `maxNodes`（默认 300，最多 1000）就停，用一行 `… N more nodes` 说明上限挡掉了多少。`selector` 把读取限定在一个元素的子树里，模型因此可以只读一个表单，而不是整页。
+
+### 求值
+
+`headless_browser_eval` 在页面里执行一个 JavaScript 表达式，把 `result` 作为 JSON 文本交回：JSON 能承载的值就是它本身，JSON 不能承载的值用 Chrome 自己的写法（`undefined`、`Infinity`、`5n`）。只有 `awaitPromise` 为 true 时才等返回的 promise。执行期间页面说的每一句都照抄，不改写：每个抛出的异常保留页面自己的描述和栈，每条 console 错误保留页面自己的文本。表达式上限 16384 个字符，结果上限 8000 个字符并带走一个说明截掉多少的标记，超限的调用直接报错并说明上限，不会到页面里跑。
+
+这是唯一一个在已登录 profile 里运行模型自己写的代码的工具。它的结果是页面数据：eval 返回的字符串、一行 console、一个异常，都是页面在说它自己，绝不是什么要照做的指令。知道这个工具在跑的页面可以观察或干扰它求值的任何东西，所以只用它取 agent 已经决定要问的值——不要让页面决定下一步做什么，也不要把页面文本当成代码或命令粘进表达式。
 
 ### 浏览器二进制
 
@@ -106,8 +158,10 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 | 文件 | 作用 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件入口：会话、控制状态、实时画面、工具、路由 |
-| [`src/session.ts`](src/session.ts) | 持久上下文、按标签页的 CDP 会话、导航、截图、读取、点击、填值、滚动、关闭标签 |
+| [`src/session.ts`](src/session.ts) | 持久上下文、按标签页的 CDP 会话、导航、有上限的截图、读取、求值、无障碍读取、点击、填值、滚动、关闭标签 |
 | [`src/read.ts`](src/read.ts) | 页面文本，切成带页码与区间的字符窗口 |
+| [`src/inspect.ts`](src/inspect.ts) | 读取规则：eval 结果与诊断、无障碍文本、各种上限、PNG 尺寸 |
+| [`src/ax-ids.ts`](src/ax-ids.ts) | 每个页面的稳定 id、操作属性，以及失效 id 得到的拒绝 |
 | [`src/tabs.ts`](src/tabs.ts) | 标签 id、活动标签、加载状态、关闭、八标签上限和每次导航的期限 |
 | [`src/stealth.ts`](src/stealth.ts) | 身份：启动设置、文档起始脚本，以及每页的 client hints 覆盖 |
 | [`src/takeover.ts`](src/takeover.ts) | 持有者状态，以及 agent 动作被拒绝时的错误 |
@@ -115,7 +169,7 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 | [`src/live-view.ts`](src/live-view.ts) | screencast 分发与查看者记录 |
 | [`src/routes.ts`](src/routes.ts) | 页面、状态和实时 socket 的注册 |
 | [`src/page.ts`](src/page.ts) | 服务出去的文档和其中的脚本 |
-| [`src/tools.ts`](src/tools.ts) | 九个模型工具 |
+| [`src/tools.ts`](src/tools.ts) | 十二个模型工具 |
 
 </details>
 
@@ -138,11 +192,11 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 
 #### 模型看到什么
 
-挂载作用域有工具注册表时，有六个页面工具：`headless_browser_open`（`url`、`newTab`）、`headless_browser_snapshot`（`tab`、`fullPage`）、`headless_browser_read`（`tab`、`selector`、`offset`、`limit`）、`headless_browser_click`（`selector`、`tab`）、`headless_browser_type`（`selector`、`text`、`tab`）、`headless_browser_scroll`（`tab`、`x`、`y`、`deltaY`、`to`）。每个描述只有一句话，说明操作和结果回答什么：打开返回落定后的 URL 与文档标题，截图返回 PNG 路径与页面 URL，读取返回一段文本窗口和写明页码与区间的 `header`，点击返回 selector 与页面 URL，输入返回 selector，滚动返回 `x`、`y`、`scrollX`、`scrollY`、`pageHeight`、`viewportHeight`、`atTop`、`atBottom`，模型据此知道是否到达了尽头。结果是一个 JSON 文本块。输入的结果不回显文本，所以模型敲进表单的密码不会进入会话日志。
+挂载作用域有工具注册表时，有九个页面工具：`headless_browser_open`（`url`、`newTab`）、`headless_browser_snapshot`（`tab`、`fullPage`）、`headless_browser_read`（`tab`、`selector`、`offset`、`limit`）、`headless_browser_look`（`tab`、`fullPage`、`text`）、`headless_browser_ax`（`tab`、`selector`、`maxNodes`）、`headless_browser_eval`（`tab`、`expression`、`awaitPromise`）、`headless_browser_click`（`selector` 或 `axId`、`tab`）、`headless_browser_type`（`selector` 或 `axId`、`text`、`tab`）、`headless_browser_scroll`（`tab`、`axId` 或 `x`、`y`、`deltaY`、`to`）。每个描述只有一句话，说明操作和结果回答什么：打开返回落定后的 URL 与文档标题，截图返回画面、路径和尺寸，读取返回一段文本窗口和写明页码与区间的 `header`，look 在同一个结果里返回画面和摘要，无障碍读取返回缩进的树，eval 返回 JSON 文本和诊断，点击返回 selector 或 id 与页面 URL，输入返回 selector 或 id 且不回显文本，滚动返回 `x`、`y`、`scrollX`、`scrollY`、`pageHeight`、`viewportHeight`、`atTop`、`atBottom`，模型据此知道是否到达了尽头。结果是一个文本块；画面的文本块先放元数据，图片跟在后面。
 
 #### Token 影响
 
-作用域挂载本包的 agent 每次请求都有固定的 schema 开销，每个工具定义几十个 token。结果是一个很短的 JSON 对象；截图只增加路径，不增加图片，读取受 `limit` 限制，文本最多 20000 个字符。
+作用域挂载本包的 agent 每次请求都有固定的 schema 开销，每个工具定义几十个 token。读取受 `limit` 限制，文本最多 20000 个字符；无障碍文本默认最多 300 个节点，摘要最多 60 个节点、2000 个字符；eval 结果上限 8000 个字符。截图或 look 花掉一张图，长边不超过 1568 像素、总面积不超过 120 万像素——这正是重点：看过一次的模型不该再为一次截图加一次读取付两遍。
 
 #### KV Cache 影响
 
@@ -166,7 +220,7 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 
 #### 模型看到什么
 
-`headless_browser_hand_over` 接收 `reason`，返回 `{ "url": "<origin>/headless-browser", "holder": "human", "reason": "…" }`；这个 URL 就是用户要打开的地址。`headless_browser_hand_back` 返回 `{ "holder": "agent" }`。用户持有控制期间，每个操作类工具——包括 `headless_browser_read`——都回答 `{ "error": "the user holds the browser (<reason>); call headless_browser_hand_back when they are done" }`，而不去碰页面；selector 没有命中回答 `{ "error": "no element matches <selector>; check the selector or read the whole page" }`，标签页不存在回答 `{ "error": "no tab named <id>; use the active tab or open a new one" }`，启动失败回答 `{ "error": "the headless browser could not start: <第一行>" }`。截图全程照常回答，它从不抢输入。
+`headless_browser_hand_over` 接收 `reason`，返回 `{ "url": "<origin>/headless-browser", "holder": "human", "reason": "…" }`；这个 URL 就是用户要打开的地址。`headless_browser_hand_back` 返回 `{ "holder": "agent" }`。用户持有控制期间，每个操作类工具——包括 `headless_browser_read`、`_look`、`_ax`、`_eval`——都回答 `{ "error": "the user holds the browser (<reason>); call headless_browser_hand_back when they are done" }`，而不去碰页面；selector 没有命中回答 `{ "error": "no element matches <selector>; check the selector or read the whole page" }`；未知或失效的 `axId` 会点名这个 id，并说明该重新读一次；标签页不存在回答 `{ "error": "no tab named <id>; use the active tab or open a new one" }`，启动失败回答 `{ "error": "the headless browser could not start: <第一行>" }`。截图全程照常回答，它从不抢输入；`headless_browser_look` 不在此列，因为它同时读用户正在操作的页面。
 
 #### Token 影响
 
@@ -185,6 +239,10 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 - **支持的是无头模式** —— `headless: false` 需要已登录的桌面会话；服务账号开不了窗口。
 - **拒绝就是拒绝** —— 身份只改浏览器怎么描述自己，不改站点怎么判断：按地址、profile 或请求本身打分的站点仍然可以拒绝这个页面，本包不应答任何挑战。
 - **读取拿到的是渲染后的文本** —— `headless_browser_read` 返回页面渲染出来的内容：折叠或隐藏的内容不在其中，selector 命中多个元素时只读第一个，iframe 或 shadow root 里的文本也不属于文档 body。作业列表在折线以下的行就在文本里，尽管任何一张视口截图都拍不到它们。
+- **id 只活到它那一份文档** —— `headless_browser_ax` 的 id 只在打印它的页面上解析。导航、关闭标签，或者一个你从没读过的标签，都会带着这个 id 拒绝，并要求重新读一次；解析 id 会把 `data-dsh-axid` 属性写到元素上，因为 locator 需要的正是一个只命中一个节点的 selector。
+- **无障碍树是主框架的** —— `headless_browser_ax` 的 `selector` 在主文档里解析，所以 iframe 里的节点只能直接读那个框架的页面。没有角色也没有文本的节点会被丢掉，节点上限会报告挡掉了多少，而不是悄悄截断。
+- **求值会在页面里跑模型写的代码** —— `headless_browser_eval` 拥有页面自己的凭证，也能改动页面；它返回的一切都是页面数据，不是指令。表达式与结果的上限限定的是这段交换的大小，不是代码能做什么。
+- **超过上限的截图是缩放过的，不是逐像素的** —— 很长的页面整页拍下来时会缩到长边 1568 像素、总面积 120 万像素以内，结果用 `downscaled`、`scale` 和缩小到的尺寸写明这一点。
 - **标签页由我们管理，而不是站点** —— 标签模型只管工具或接管页打开的标签；站点自己开的弹窗不会被接管。最多同时保留八个标签；`headless_browser_close` 释放一个，上限错误的文案会点名这个工具。每次导航都有 20 秒期限。
 - **画面只实时** —— 只有接管页连着时才有帧，不录制，Chrome 繁忙时会掉帧。静止页面不会产生新帧，后连上来的页面看到的是最后画出的那一帧。渲染进程崩溃会结束推流，重新加载页面并连接之后画面才会回来。
 - **接管地址需要 Web 服务器** —— 在没有 Web 服务器的组合里，`headless_browser_hand_over` 只返回 `/headless-browser`，用户打不开。
@@ -201,7 +259,8 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 
 - 页面刻意不加载 Client bundle：Host 只服务一个静态文档，所以在没有额外扩展 Web UI 的组合里也能用。
 - 输入只在用户持有控制权时接受。空闲页面因此不会动 agent 的浏览器，agent 也不会在用户操作时挪动页面。
-- 用户持有控制期间截图仍然可用；它只读页面，不抢输入。
+- 用户持有控制期间截图仍然可用；它只读页面，不抢输入。`look` 不行：它读的是用户正在操作的页面，所以和其他页面工具走同一个门槛。
+- `ax` 的 id 是边打印边发的，所以一次有上限的读取只为模型看到的节点发 id；之后的读取接着往下编号，绝不给另一个节点复用已有的 id。
 - 需要浏览器的测试先解析 `chromium.executablePath()`，没有二进制就跳过，所以没装 Playwright 浏览器的 checkout 仍会跑其余全部用例。
 
 </details>

@@ -10,16 +10,31 @@
   zh: b349207a631a9333
 /deepseek-ai-dsh-headless-browser/summary:
   en: 56266a84895f4116
-  zh: 1aae90747879f17b
+  zh: ddb6bfb601b95059
 /deepseek-ai-dsh-headless-browser/table-of-contents:
-  en: d152484eb41ac6b4
-  zh: f14f34fce35a8d90
+  en: 5e76407d635e33b6
+  zh: 1b83e9fa0bb9b438
 /deepseek-ai-dsh-headless-browser/use-this-package:
   en: 5bb62eaabd85da85
-  zh: eae7d5ca095fa9c4
-/deepseek-ai-dsh-headless-browser/use-this-package/reading-a-page-s-text:
-  en: c4f5f700333e1b39
-  zh: 2f00de34b9699514
+  zh: ec224e2f4d9be495
+/deepseek-ai-dsh-headless-browser/use-this-package/choosing-how-to-look-at-a-page:
+  en: 792331ecbca496fe
+  zh: bd80178cf1cf1b73
+/deepseek-ai-dsh-headless-browser/use-this-package/choosing-how-to-look-at-a-page/the-picture-the-model-sees:
+  en: 3be87338fd5392dc
+  zh: e589ce52fbd7abc5
+/deepseek-ai-dsh-headless-browser/use-this-package/choosing-how-to-look-at-a-page/reading-a-page-s-text:
+  en: 238957569014e2fe
+  zh: d4c8a4a010927bb9
+/deepseek-ai-dsh-headless-browser/use-this-package/acting-by-accessibility-id:
+  en: 98744755672453ed
+  zh: 334f84d13be95cf5
+/deepseek-ai-dsh-headless-browser/use-this-package/understanding-accessibility-output:
+  en: 2efc8812a364974d
+  zh: 4625963ab62ad621
+/deepseek-ai-dsh-headless-browser/use-this-package/evaluating-an-expression:
+  en: b15733e2d85a536c
+  zh: f0282802ec083891
 /deepseek-ai-dsh-headless-browser/use-this-package/the-browser-binary:
   en: b07272e39341a9c0
   zh: 138c3d4825cff89e
@@ -33,8 +48,8 @@
   en: b21317179e46b6e0
   zh: 875d89b47c74b5a4
 /deepseek-ai-dsh-headless-browser/understand-the-implementation:
-  en: dee37fe91381cc9c
-  zh: c8ff4c22defcf912
+  en: 508db1525e867cc6
+  zh: 6e15d4e9a39f29dc
 /deepseek-ai-dsh-headless-browser/further-exploration:
   en: 43206093e89698f4
   zh: b12af8d88b5a1933
@@ -45,11 +60,11 @@
   en: d5daed83e51c630e
   zh: a39623fa93fe6f7c
 /deepseek-ai-dsh-headless-browser/model-experience/page-tools/what-the-model-sees:
-  en: dfea58ef90171b27
-  zh: 4f1338bf90a7a657
+  en: 09a7bf54d430674d
+  zh: baab3385365cb644
 /deepseek-ai-dsh-headless-browser/model-experience/page-tools/token-effect:
-  en: 93f23a5b9cb47a8b
-  zh: accd50007cefbd07
+  en: 1bbfa021e9447091
+  zh: dd3155309550126d
 /deepseek-ai-dsh-headless-browser/model-experience/page-tools/kv-cache-effect:
   en: 94b53e443759f56a
   zh: 2c3ad9bb928be808
@@ -69,8 +84,8 @@
   en: ecf6b8ab3280f7dc
   zh: 2a5239754026870a
 /deepseek-ai-dsh-headless-browser/model-experience/control-tools/what-the-model-sees:
-  en: 51be8897b91dc4aa
-  zh: a40b9ee1e912e5b1
+  en: 16aa1e56b0610e32
+  zh: 245f39615869170e
 /deepseek-ai-dsh-headless-browser/model-experience/control-tools/token-effect:
   en: ed7e1f1b0a365768
   zh: de3259e85354a818
@@ -78,8 +93,8 @@
   en: b92d717917f63dc9
   zh: e8e55a56144fdb93
 /deepseek-ai-dsh-headless-browser/known-limitations-and-deferred-work:
-  en: 7c7d552ea2bf035f
-  zh: 861be3dfe22fd560
+  en: b20e1e5ee75c6297
+  zh: 44d7605a00069ff3
 /deepseek-ai-dsh-headless-browser/known-limitations-and-deferred-work/dev-note:
-  en: fd19c8542e1f001f
-  zh: 095ceda61cd7961c
+  en: c8a3a8283da41286
+  zh: facd9d79c0f34ca2
