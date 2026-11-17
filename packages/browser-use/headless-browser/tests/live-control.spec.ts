@@ -82,7 +82,14 @@ async function boot(): Promise<App> {
     async close(): Promise<void> { viewers.clear() },
   } as unknown as LiveView
   const takeover = new TakeoverState()
-  const removeRoutes = mountTakeoverRoutes(ctx.webServer, { browser, takeover, view, security: new SecurityLog(), log: ctx.logger })
+  const removeRoutes = mountTakeoverRoutes(ctx.webServer, {
+    browser,
+    takeover,
+    view,
+    security: new SecurityLog(),
+    keepalives: () => [],
+    log: ctx.logger,
+  })
   const port = ctx.webServer.port
   if (port === undefined) throw new Error('the test Web server did not bind a port')
   const app: App = {

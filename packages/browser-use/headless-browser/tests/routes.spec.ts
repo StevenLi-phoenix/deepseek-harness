@@ -78,10 +78,19 @@ async function boot(): Promise<App> {
     viewportHeight: 600,
     jpegQuality: 50,
     snapshotDir: join(root, 'snapshots'),
+    keepalivePath: join(root, 'keepalive.json'),
+    keepaliveEscalateAfter: 3,
   }, ctx.logger)
   const takeover = new TakeoverState()
   const view = new LiveView(() => browser.castTarget(), { jpegQuality: 50, maxWidth: 800, maxHeight: 600 }, ctx.logger)
-  const removeRoutes = mountTakeoverRoutes(ctx.webServer, { browser, takeover, view, security: new SecurityLog(), log: ctx.logger })
+  const removeRoutes = mountTakeoverRoutes(ctx.webServer, {
+    browser,
+    takeover,
+    view,
+    security: new SecurityLog(),
+    keepalives: () => [],
+    log: ctx.logger,
+  })
   const port = ctx.webServer.port
   if (port === undefined) throw new Error('the test Web server did not bind a port')
   const app: App = {
@@ -159,7 +168,7 @@ describe('take-over routes', () => {
     const app = await boot()
     const response = await fetch(`${app.base}${STATUS_PATH}`, { headers: { 'x-test-peer': 'owner' } })
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual({ holder: 'agent', launched: false, viewers: 0, security: { events: [], dropped: 0 } })
+    await expect(response.json()).resolves.toEqual({ holder: 'agent', launched: false, viewers: 0, security: { events: [], dropped: 0 }, keepalive: [] })
   })
 
   it('refuses an admitted peer that is not the owner on the live socket', async () => {

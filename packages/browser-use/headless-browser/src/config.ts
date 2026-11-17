@@ -34,6 +34,18 @@ export interface Config {
   jpegQuality: number
   /** Directory that receives `headless_browser_snapshot` PNG files. @default $DSH_HOME/cache/headless-browser/snapshots */
   snapshotDir: string
+  /**
+   * JSON file that keeps the registered keepalives across a restart, so their
+   * timers are re-armed instead of the owner registering them again.
+   * @default $DSH_HOME/data/headless-browser/keepalive.json
+   */
+  keepalivePath: string
+  /**
+   * Consecutive interactive sign-in challenges after which a keepalive says a
+   * person has to sign in; earlier failures are retried on their own.
+   * @default 3
+   */
+  keepaliveEscalateAfter: number
 }
 
 /** Validate {@link Config} before the browser is constructed. */
@@ -45,4 +57,6 @@ export const Config: z<Config> = z.object({
   viewportHeight: z.natural().min(240).default(800),
   jpegQuality: z.natural().min(1).max(100).default(60),
   snapshotDir: z.string().default(dshPath('cache', 'headless-browser', 'snapshots')),
+  keepalivePath: z.string().default(dshPath('data', 'headless-browser', 'keepalive.json')),
+  keepaliveEscalateAfter: z.natural().min(1).default(3),
 })

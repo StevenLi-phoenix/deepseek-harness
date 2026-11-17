@@ -16,12 +16,15 @@ import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { chromium, type BrowserContext, type CDPSession, type ElementHandle, type Page } from 'playwright-core'
+import { probeChallenge, readChallengeFacts, type ChallengeFacts } from './challenge.ts'
 import type { Config } from './config.ts'
+import { cookieSnapshot, cookieSummary, type CookieResult } from './cookies.ts'
 import { firstLine } from './error.ts'
 import { ActionGuard, ActionRefusedError, blockedAction, refusalOf, type Decision, type PointChoice, type TargetChoice } from './guard.ts'
 import type { InputCommand, TabInfo, TabMessage } from './input.ts'
 import { readText, type ReadPage, type ReadRequest, type ReadResult } from './read.ts'
 import { cdpScrollChannel, scrollPage, type ScrollRequest, type ScrollResult } from './scroll.ts'
+import type { KeepalivePage } from './keepalive.ts'
 import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
 import { BrowserTabs, type ActiveTab, type ClosedTab, type TabsContext } from './tabs.ts'
 import { probeElement, readElementFacts, type ElementFacts } from './visibility.ts'
@@ -134,6 +137,8 @@ export class HeadlessBrowserSession {
   #tabs: BrowserTabs | undefined
   /** Stops watching for pages once the context is gone. */
   #stopStealth: (() => void) | undefined
+  /** Pages a keepalive opened: never a tab, so never part of the tab cap. */
+  readonly #background = new WeakSet<object>()
   readonly #cdps = new WeakMap<Page, CDPSession>()
 
   /**
@@ -177,6 +182,9 @@ export class HeadlessBrowserSession {
     this.#tabs ??= new BrowserTabs({
       context: async () => await this.ensure() as unknown as TabsContext,
       log: this.#log,
+      // A keepalive's offscreen page is nobody's tab: adopting it would spend
+      // one of the eight slots a person's tabs share.
+      reserved: page => this.#background.has(page),
     })
     return this.#tabs
   }
@@ -503,6 +511,52 @@ export class HeadlessBrowserSession {
   #acceptPoint(decision: Decision): PointChoice {
     if (!decision.allowed || decision.point === undefined) throw new ActionRefusedError(blockedAction(refusalOf(decision)))
     return decision.point
+  }
+
+  /**
+   * The context's cookies, filtered to one domain, with the Cookie header a
+   * plain HTTP fetch would send. Values are credentials: the log line names the
+   * cookies and their value lengths, never a value.
+   * @param domain - domain suffix to keep, or nothing for every cookie in the context.
+   * @returns the matching cookies and their Cookie header.
+   */
+  async cookies(domain?: string): Promise<CookieResult> {
+    const context = await this.ensure()
+    const result = cookieSnapshot(await context.cookies(), domain)
+    this.#log.debug('headless-browser: %s', cookieSummary(result.cookies, domain))
+    return result
+  }
+
+  /**
+   * A page a keepalive check drives: created in this context, so it carries the
+   * same profile, cookies, and stealth identity, and kept out of the tab model
+   * so it never counts against the tab cap or moves the active tab.
+   * @returns the page, which the caller closes.
+   */
+  async keepalivePage(): Promise<KeepalivePage> {
+    const context = await this.ensure()
+    const active = this.#tabs?.state().find(tab => tab.active)?.id
+    const page = await context.newPage()
+    this.#background.add(page)
+    if (active !== undefined) {
+      // Opening a page activates it in Chromium; put the agent's tab back in
+      // front so a keepalive never moves the page a person is looking at.
+      try {
+        await (await this.tabs().page(active)).bringToFront()
+      } catch (error: unknown) {
+        void firstLine(error)
+      }
+    }
+    return {
+      url: () => page.url(),
+      isClosed: () => page.isClosed(),
+      goto: async (url, options) => await page.goto(url, options),
+      challenge: async (): Promise<ChallengeFacts> => readChallengeFacts(await page.evaluate(probeChallenge)),
+      close: async () => {
+        this.#background.delete(page)
+        await page.close()
+      },
+    }
   }
 
   /**

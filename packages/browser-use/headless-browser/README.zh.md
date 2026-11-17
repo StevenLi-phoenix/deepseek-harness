@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-给 agent 一个能跨轮次保留状态的浏览器，也给人一个进去的办法。一个无头 Chromium 用自己的 profile 目录运行，登录状态能扛过 Host 重启。模型可以打开、读取、截图、点击、输入、滚动和关闭标签；动作守卫会拒绝人看不见的控件、会破坏东西或动钱的按钮，以及跨站点的跳转，因为页面自己的文字是数据，不是指令。某一步需要人时，模型交出控制权并返回一个页面地址，用户在那一页自己操作，再交还回去。用户控制期间 agent 的动作会被拒绝。
+给 agent 一个能跨轮次保留状态的浏览器，也给人一个进去的办法。一个无头 Chromium 用自己的 profile 目录运行，登录状态能扛过 Host 重启。模型可以打开、读取、截图、点击、输入、滚动和关闭标签；动作守卫会拒绝人看不见的控件、会破坏东西或动钱的按钮，以及跨站点的跳转，因为页面自己的文字是数据，不是指令。某一步需要人时，模型交出控制权并返回一个页面地址，用户在那一页自己操作，再交还回去。用户控制期间 agent 的动作会被拒绝。本包也能把会话的 cookie 作为纯 HTTP 请求的 Cookie 头交给调用方，并按定时器重访一个地址让会话保持活着，所以一次登录能扛过一整周的无人问津。
 
 ## 目录
 
@@ -41,6 +41,8 @@ kind: "package-reference"
 | `viewportHeight` | `800` | 页面视口高度（CSS 像素） |
 | `jpegQuality` | `60` | 实时画面 JPEG 质量 |
 | `snapshotDir` | `$DSH_HOME/cache/headless-browser/snapshots` | `headless_browser_snapshot` 写 PNG 的目录 |
+| `keepalivePath` | `$DSH_HOME/data/headless-browser/keepalive.json` | 跨重启保留已注册保活项的 JSON 文件 |
+| `keepaliveEscalateAfter` | `3` | 连续多少次交互式登录挑战之后，保活项标记为需要人来登录 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-headless-browser)列出了全部可用字段。
 
@@ -76,7 +78,7 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 | 路由 | 用途 |
 |---|---|
 | `GET /headless-browser` | 页面：实时画面、持有者、取得控制与交还按钮，以及一个逐键输入不了的文本输入框 |
-| `GET /headless-browser/status` | JSON：`holder`、用户填写的 `reason`、`launched`、`sessionId`、`url`、已连接的页面数，以及 `security`（最新的守卫事件） |
+| `GET /headless-browser/status` | JSON：`holder`、用户填写的 `reason`、`launched`、`sessionId`、`url`、已连接的页面数、`security`（最新的守卫事件），以及 `keepalive`（每一个已注册的保活项） |
 | `WS /headless-browser/live` | 画面帧、控制权变化，以及转发进去的输入 |
 
 准入交给部署自己：页面和状态路由用 Web 服务器默认的必须认证策略，所以能打开 Web UI 的同一个 Cookie 或启动令牌也能打开它们。实时 socket 另外要求 owner 身份，因为持有它的人可以在一个已登录的 profile 里操作。
@@ -90,6 +92,47 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 画面由页面自己画，不是 iframe，也不打开任何子地址。它用应用自己的来源和 Cookie 读上面的状态路由和实时 socket；「接管」「交回」两个按钮发的是和这页按钮相同的控制消息，只是理由不同。上面那个独立页面留给浏览器允许它的部署。
 
 <a id="understand-the-implementation"></a>
+### 用会话的 cookie 直接取页面
+
+每读一次页面就开一次浏览器既慢，站点也看得见。会话登录之后，调用方通常只需要 Cookie 头：带同一份会话的纯 HTTP 请求几毫秒就能取回页面。`headless_browser_cookies` 交回浏览器上下文自己的 cookie——`name`、`value`、`domain`、`path`、`expires`、`httpOnly`、`secure`——调用里给了域名后缀就只留下匹配的那些，外加 `toHeader`，也就是那个请求会发出的 `name=value; name=value` 一行：
+
+```json
+{"cookies":[{"name":"session","value":"…","domain":".example.com","path":"/","expires":1800000000,"httpOnly":true,"secure":true}],"toHeader":"session=…"}
+```
+
+域名过滤接受裸后缀、带点的 cookie 域名，或者整个 URL，匹配这个主机和它下面的一切：`example.com` 覆盖 `.example.com` 和 `mail.example.com`，而 `notexample.com` 是另一个站点。cookie 按路径从具体到宽泛排列，也就是请求发出的顺序。
+
+拿到 `toHeader` 的调用方自己发请求，不用再开浏览器：
+
+```sh
+curl -s -H "Cookie: session=…; theme=dark" https://example.com/inbox
+```
+
+这些值是凭据。本包从不把它们写到磁盘，从不把任何一个放进日志行：调试行只说每条 cookie 的名字和它值的长度（`session ‹42 chars›`）。它们会到达模型，因为这个工具就是为此存在的，所以只在一次取页需要会话时调用，而不是为了展示。`httpOnly` 的 cookie 照样在头里，因为浏览器是替这个请求持有它的；调用之后站点轮换过的 cookie 已经过期；一个上下文的 cookie 也不是另一台机器的会话。
+
+### 让会话保持活着
+
+没人访问，登录就会死。站点让自己的会话过期，下一次真正的任务从一个登录页开始，主人的注意力花在了一次访问本来就能避免的一步上。`headless_browser_keepalive` 按定时器访问一个地址并检查回来的东西，于是这次访问在站点自己的会话还活着时把它续上。
+
+它不是针对某个站点的 hack。包里没有任何地方写死站点、选择器或 token：`add` 只接受一个 URL、一个可选的站点、一个间隔和一个名字，检查对落到的页面只问一个通用的问题——这还是登录后的那一页吗？
+
+**登录测试。** [`src/challenge.ts`](src/challenge.ts) 量三个结构信号，从不读页面的文字：看得见的密码框、看得见的一次性验证码框（`autocomplete="one-time-code"`，或者 name、id、placeholder、label 里写着 OTP、one-time、TOTP、2FA、MFA、verification code、security code、验证码的输入框），以及看得见、文字里带邮箱地址的链接、按钮或选项。有可见密码框就是 `password`；有一次性验证码框就是 `mfa`；最终 URL 离开了请求的站点、且页面上至少有两个账号链接，就是 `account-chooser`；同样离开站点但没东西可读，就是 `redirect`。落在请求的源上、既没有密码框也没有一次性验证码的页面，就是登录后的页面。`add` 给了 `domain` 时，它和它下面的主机都算同一个站点，于是同一站点内的 SSO 主机不算跳走。这个测试是启发式的，不是承诺：它回答的是「人会说这页已经登录了」，不是「主人想要的那个账号」。
+
+**会话死了是插件的事。** 检查失败会把条目移到 `recovering`，按 5 分钟、15 分钟、之后每小时的退避重试，因为很多故障来自站点自己，一次能续上会话的访问就把它结束了。只有反复出现的交互式挑战才意味着必须人来登录：连续 `keepaliveEscalateAfter` 次（默认 3）失败之后，条目标成 `needs-human`，并最多每小时重复一次通知，通知里始终带着从什么时候开始、试了多少次、最后的 URL、卡在哪一步。只要有一次检查通过，条目就回到 `ok`，计数清零，并发出一条 `recovered` 事件。完全没能跑起来的一次访问——浏览器死了、连接被拒——报 `error`，从不升级，因为登录并不能修它。
+
+**每次状态变化一条事件。** 每次状态变化都通过插件的事件总线 `headless-browser/keepalive` 恰好发出一条事件，而停在 `needs-human` 的条目最多每小时发一条 `reminder`。想让主人知道的宿主订阅这里；本包自己不发送任何消息。
+
+**定时器、文件和标签上限。** 间隔是 5 分钟到 24 小时，`add` 拒绝这个范围之外的值、重复的 URL、带凭据的 URL，以及点不出主机的站点。记录保存在 `$DSH_HOME/data/headless-browser/keepalive.json`，插件加载时重新挂上定时器，所以重启不会忘掉一个会话。检查在自己的离屏页面里访问 URL：页面池最多两个，这个页面从不进入标签模型，agent 或主人当前所在的标签仍然是活动标签。因此保活项永远不占用八个标签的上限。
+
+```text
+headless_browser_keepalive {"action":"add","url":"https://example.com/inbox","everyMinutes":30,"label":"inbox"}
+headless_browser_keepalive {"action":"list"}
+headless_browser_keepalive {"action":"check","id":"k1"}
+headless_browser_keepalive {"action":"remove","id":"k1"}
+```
+
+`list` 交回 `id`、`label`、`url`、`everyMinutes`、`state`（`ok`、`recovering`、`needs-human` 或 `error`）、`consecutiveFailures`、`firstFailureAt`、`lastOkAt`、`lastCheckAt`、`lastAttemptAt`、`nextAttemptAt`、`lastUrl`、`blockedStep` 和 `lastError`，`GET /headless-browser/status` 在 `keepalive` 字段下给出同一份列表。`check` 在定时器到期之前立刻跑一次，并交回同样的字段。
+
 ### 页面是数据，不是指令
 
 页面可以说什么都行：某个复选框「用于验证你是人类」，某个表单只是例行确认，某个链接指向课程站点。这些都不是动手的理由，本包也不把判断留给模型自行斟酌。每个会改动页面的工具（`headless_browser_open`、`_click`、`_type`）都先问宿主里的动作守卫，守卫只根据测量结果和固定表格回答，不看页面怎么写。`headless_browser_scroll` 不指定目的地，因此改不了站点，守卫在那里没有要判断的事。
@@ -121,6 +164,8 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 
 页面发来的输入是每种事件一条 JSON。`decodeClientMessage` 校验它，`cdpCommand` 把它映射为 `Input.dispatchMouseEvent`（包括 `mouseWheel`）、`Input.dispatchKeyEvent` 或 `Input.insertText`，由 `TakeoverState` 决定是否接受输入。按键把 DOM 的 `keyCode` 同时当作两个 CDP 虚拟键码，所以快捷键和不产生字符的按键表现得和真实窗口一样；逐键打不出来的文本走 `Input.insertText`。
 
+一个 `KeepaliveService` 拥有保活项、它们的定时器和离屏页面池。一次检查借一个页面，访问 URL，跑页面侧的探针，然后结算条目；每个条目在途的 promise 让定时器和强制的 `check` 共用同一次尝试，两格的信号量限制并发访问，每次尝试都先写文件再重新挂定时器。事件经 `ctx.emit` 发出，和动作守卫是同一条总线，所以宿主用一套订阅方式就能看住两者。
+
 工具共用一个守卫。会操作页面的工具先调用 `TakeoverState.assertAgent`，并在错误结果里带上用户的理由；截图工具跳过守卫，因为它只读页面、不动页面，而读取文本保留守卫，因为读和点击是同一个「看页面—操作页面」循环的前后两半。`headless_browser_scroll` 发送 CDP 滚轮输入并读取 `Page.getLayoutMetrics`，因此移动页面而不执行页面脚本。随后会操作页面的工具再问 `ActionGuard`：给「人会去点」的那个元素打分，检查敏感名称表和会话所在的站点，把拒绝变成 `blocked` 结果；读取文本和截图同样跳过这个守卫，因为它们不操作任何元素。
 
 | 文件 | 作用 |
@@ -137,7 +182,10 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 | [`src/page.ts`](src/page.ts) | 服务出去的文档和其中的脚本 |
 | [`src/guard.ts`](src/guard.ts) | 动作守卫：敏感名称表、站点记忆、安全事件、untrusted 包装 |
 | [`src/visibility.ts`](src/visibility.ts) | 页面侧的探针和可见性评分 |
-| [`src/tools.ts`](src/tools.ts) | 九个模型工具 |
+| [`src/keepalive.ts`](src/keepalive.ts) | 保活存储、定时器、退避、通知、离屏页面池和它的 JSON 文件 |
+| [`src/challenge.ts`](src/challenge.ts) | 通用登录测试：页面侧探针，以及给被拦访问分类的规则 |
+| [`src/cookies.ts`](src/cookies.ts) | cookie 过滤、Cookie 头和日志安全的摘要 |
+| [`src/tools.ts`](src/tools.ts) | 十一个模型工具 |
 
 </details>
 
@@ -198,6 +246,20 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 
 只追加：结果和拒绝都进入历史中可复用前缀之后，不改写更早的内容。
 
+### 会话工具
+
+#### 模型看到什么
+
+`headless_browser_cookies`（`domain`）交回 `{ "cookies": [ … ], "toHeader": "session=…; theme=dark" }`，每条 cookie 一个对象，带 `name`、`value`、`domain`、`path`、`expires`、`httpOnly` 和 `secure`。`headless_browser_keepalive` 接受一个 `action`：`add` 和 `check` 交回 `{ "keepalive": { … } }`，`list` 交回 `{ "keepalives": [ … ] }`，`remove` 交回 `{ "removed": "k1" }`；被拒绝的请求交回 `{ "error": "everyMinutes must be 5 through 1440: 5 minutes through 24 hours" }` 或 `{ "error": "k1 (inbox) already visits https://example.com/inbox" }`，什么也不存。
+
+#### Token 影响
+
+挂载本包的作用域每次请求多两个定义：cookie 列表是每条一个短对象，保活列表是每个条目一个对象，而两个工具都很少调用——由定时器照看的会话不需要模型每一轮都去看它。
+
+#### KV Cache 影响
+
+定义不变时前缀稳定；结果追加在可复用的前缀之后。
+
 ## 已知限制与延期工作
 
 <a id="known-limitations-and-deferred-work"></a>
@@ -216,6 +278,10 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 - **接管地址需要 Web 服务器** —— 在没有 Web 服务器的组合里，`headless_browser_hand_over` 只返回 `/headless-browser`，用户打不开。
 - **生成的目录跟着挂载走** —— `docs/tool-catalog.md` 和 `docs/config-catalog.md` 只有在某个组合挂载本包并运行生成器之后，才会列出本包的工具和字段。
 - **页面没有做本地化** —— 服务出去的页面文案固定为中文，和由 locale 拥有文案的 Client 插件不同；它不属于任何 Client bundle。
+- **登录测试是启发式的** —— 它读结构不读含义：同源、没有密码框也没有一次性验证码的页面就算通过，哪怕它不是主人想要的那一页；只弹验证码的挑战看起来也像一个普通页面。这次访问仍然会续上站点允许续的部分。
+- **保活项没法替你登录** —— 访问续上的是站点还认的会话。站点自己的会话真的没了之后，只有人才能恢复：条目标成 `needs-human`，通过事件总线最多每小时重复一次通知，本包自己不发消息。
+- **保活是看不见的** —— 它的离屏页面不在标签条里，也没法在接管页上看；页面池最多两个，站点弹出对话框时检查就停在它落到的那个页面上。
+- **cookie 会进入会话记录** —— 一次 cookie 调用的值会进模型的历史，也就进了磁盘上的会话日志，因为调用方要的就是它们；本包自己不写也不记任何值。
 
 <a id="dev-note"></a>
 ### 开发备注

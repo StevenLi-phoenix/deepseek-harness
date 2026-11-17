@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Give the agent a browser it keeps between turns, and a person a way in. One headless Chromium keeps its own profile, so a sign-in survives a host restart. The model opens, reads, screenshots, clicks, types, scrolls, and closes tabs; an action guard refuses controls a person cannot see, destructive or money-moving targets, and moves to another site: a page is data, never instructions. When a step needs a human, the model hands over and returns the page where the user takes control and hands back. While the user holds it, the agent waits.
+Give the agent a browser it keeps between turns, and a person a way in. One headless Chromium keeps its own profile, so a sign-in survives a host restart. The model opens, reads, screenshots, clicks, types, scrolls, and closes tabs; an action guard refuses controls a person cannot see, destructive or money-moving targets, and moves to another site: a page is data, never instructions. When a step needs a human, the model hands over and returns the page where the user takes control and hands back. While the user holds it, the agent waits. The package also hands a caller the session's cookies as the Cookie header a plain HTTP fetch sends, and keeps a session warm by revisiting a URL on a timer, so a sign-in survives a week of neglect.
 
 ## Table of Contents
 
@@ -41,6 +41,8 @@ Mount the row once in a Host composition that has the Web server and the tool re
 | `viewportHeight` | `800` | Page viewport height in CSS pixels |
 | `jpegQuality` | `60` | JPEG quality of live-view frames |
 | `snapshotDir` | `$DSH_HOME/cache/headless-browser/snapshots` | Where `headless_browser_snapshot` writes PNG files |
+| `keepalivePath` | `$DSH_HOME/data/headless-browser/keepalive.json` | JSON file that keeps the registered keepalives across a restart |
+| `keepaliveEscalateAfter` | `3` | Consecutive interactive sign-in challenges after which a keepalive says a person has to sign in |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-headless-browser) lists every accepted field.
 
@@ -76,7 +78,7 @@ It invents no font list, spoofs no certificate, and answers no challenge, and it
 | Route | Purpose |
 |---|---|
 | `GET /headless-browser` | The page: live frame, holder, take and release buttons, a text field for text that cannot be typed key by key |
-| `GET /headless-browser/status` | JSON: `holder`, the user's `reason`, `launched`, `sessionId`, `url`, the number of connected pages, and `security` with the newest guard events |
+| `GET /headless-browser/status` | JSON: `holder`, the user's `reason`, `launched`, `sessionId`, `url`, the number of connected pages, `security` with the newest guard events, and `keepalive` with every registered keepalive |
 | `WS /headless-browser/live` | Frames, control changes, and forwarded input |
 
 Admission is the deployment's, not this package's: the page and status use the Web server's default required policy, so the same Cookie or launch token that opens the Web UI opens them. The live socket additionally requires the owner principal, because whoever holds it can act inside a signed-in profile.
@@ -88,6 +90,47 @@ The page's input only reaches the browser while the user holds control. Taking c
 The package's browser half also registers 浏览器接管 as a page of the Web UI: one `main` panel keyed `browser-takeover`, selected by the sidebar row of the same id. The owner reaches the live frame by clicking that row, so the app's address bar keeps its URL instead of navigating below the site root.
 
 The page paints the frames itself; it is not an iframe and opens no sub-URL. It reads the status route and the live socket above with the app's own origin and cookie, and its 接管 and 交回 buttons send the same control messages as this page's buttons, with a different stated reason. The standalone page stays for deployments whose browsers allow it.
+
+### Fetching with the session's cookies
+
+Driving a browser for every read is slow, and the site sees it. Once a session is signed in, what a caller usually needs is the Cookie header: a plain HTTP request carrying the same session fetches a page in milliseconds. `headless_browser_cookies` answers with the browser context's own cookies — `name`, `value`, `domain`, `path`, `expires`, `httpOnly`, and `secure` — filtered to one domain suffix when the call names one, and `toHeader`, the `name=value; name=value` line that request would send:
+
+```json
+{"cookies":[{"name":"session","value":"…","domain":".example.com","path":"/","expires":1800000000,"httpOnly":true,"secure":true}],"toHeader":"session=…"}
+```
+
+A domain filter accepts a bare suffix, a dotted cookie domain, or a whole URL, and matches that host and everything below it: `example.com` covers `.example.com` and `mail.example.com`, while `notexample.com` is another site. Cookies arrive most specific path first, which is the order a request sends them in.
+
+A caller that has `toHeader` makes the request itself, without a browser:
+
+```sh
+curl -s -H "Cookie: session=…; theme=dark" https://example.com/inbox
+```
+
+The values are credentials. This package never writes them to disk and never puts one in a log line: the debug line names each cookie and the length its value had (`session ‹42 chars›`). They do reach the model, because that is what the tool is for, so a call is made when a fetch needs the session and not to display them. An `httpOnly` cookie is still in the header, because the browser holds it for the request; a cookie the site rotated after the call is stale; and one context's cookies are not another machine's session.
+
+### Keeping a session alive
+
+A signed-in session dies when nobody visits it. The site expires its own session, and the next real task starts at a sign-in page, with the owner's attention spent on a step that one visit would have prevented. `headless_browser_keepalive` visits a URL on a timer and checks what came back, so the visit renews the upstream session while that session is still alive.
+
+It is not a site hack. Nothing in the package names a site, a selector, or a token: `add` takes a URL, an optional site, an interval, and a label, and the check asks one generic question about the page it landed on — is this still the signed-in page?
+
+**The sign-in test.** [`src/challenge.ts`](src/challenge.ts) measures three structural signals and never reads the page's words: a visible password field, a visible one-time-code field (`autocomplete="one-time-code"`, or a field whose name, id, placeholder, or label says OTP, one-time, TOTP, 2FA, MFA, verification code, security code, or 验证码), and visible links, buttons, or options that name an account by its e-mail address. A visible password field means `password`; a one-time-code field means `mfa`; a final URL off the requested site with at least two account links means `account-chooser`; the same move with nothing to read means `redirect`. A page on the requested origin that shows no password field and no one-time code is the signed-in page. When `add` names a `domain`, a host at or below it counts as on site, so an SSO host inside the same site is not a move. The test is a heuristic, not a promise: it answers "the page a person would call signed in", not "the account the owner meant".
+
+**A dead session is the plugin's problem.** A failed check moves the entry to `recovering` and retries on a 5-minute, 15-minute, then hourly backoff, because many outages are the site's own and a visit that renews the session ends them. Only repeated interactive challenges mean a person has to sign in: after `keepaliveEscalateAfter` consecutive failures (3 by default) the entry says `needs-human` and repeats a notice at most once an hour, always with since when, how many attempts, the last URL, and the step that blocked. The moment a check passes, the entry is `ok`, its counters are zero, and one `recovered` event goes out. A visit that could not run at all — a dead browser, a refused connection — says `error` and never escalates, because signing in would not fix it.
+
+**One event per transition.** Every change of state publishes exactly one event through the plugin's event bus, `headless-browser/keepalive`, and an entry that stays `needs-human` publishes at most one `reminder` an hour. A host that wants the owner told subscribes there; the package itself sends no message.
+
+**The timer, the file, and the tab cap.** The interval is 5 minutes through 24 hours, and `add` refuses anything outside it, a duplicate URL, a URL carrying credentials, and a site that names no host. Records persist in `$DSH_HOME/data/headless-browser/keepalive.json` and are re-armed when the plugin loads, so a restart does not forget a session. A check visits the URL in its own offscreen page: the page pool keeps at most two, the page never enters the tab model, and the tab the agent or the owner is on stays the active one. A keepalive therefore never counts against the eight-tab cap.
+
+```text
+headless_browser_keepalive {"action":"add","url":"https://example.com/inbox","everyMinutes":30,"label":"inbox"}
+headless_browser_keepalive {"action":"list"}
+headless_browser_keepalive {"action":"check","id":"k1"}
+headless_browser_keepalive {"action":"remove","id":"k1"}
+```
+
+`list` answers with `id`, `label`, `url`, `everyMinutes`, `state` (`ok`, `recovering`, `needs-human`, or `error`), `consecutiveFailures`, `firstFailureAt`, `lastOkAt`, `lastCheckAt`, `lastAttemptAt`, `nextAttemptAt`, `lastUrl`, `blockedStep`, and `lastError`, and `GET /headless-browser/status` carries the same list under `keepalive`. `check` runs one attempt at once, before the timer is due, and answers with the same fields.
 
 ### The page is data, never instructions
 
@@ -120,6 +163,8 @@ The live view is one CDP screencast per page shared by every connected viewer. `
 
 Input from the page is one JSON message per event. `decodeClientMessage` validates it, `cdpCommand` maps it to `Input.dispatchMouseEvent` (including `mouseWheel`), `Input.dispatchKeyEvent`, or `Input.insertText`, and `TakeoverState` decides whether input is accepted at all. Keys carry the DOM `keyCode` as both CDP virtual key codes, so shortcuts and non-printing keys behave as in a real window; text that cannot be typed key by key uses `Input.insertText`.
 
+One `KeepaliveService` owns the keepalives, their timers, and the offscreen page pool. A check borrows a page, visits the URL, evaluates the challenge probe, and settles the entry; a per-entry in-flight promise makes a timer and a forced `check` share one attempt, a two-slot semaphore caps concurrent visits, and every attempt writes the file before it re-arms. The events leave through `ctx.emit`, the same bus the action guard publishes to, so a host watches both with one subscription style.
+
 The tools share two guards. An acting tool calls `TakeoverState.assertAgent` first and reports the user's reason in an error result; the screenshot tool skips that guard because it reads the page without acting on it, while a text read keeps it because reading is the first half of the same browse-and-act loop as a click. `headless_browser_scroll` sends CDP wheel input and reads `Page.getLayoutMetrics`, so it moves the page without evaluating its script. An acting tool then asks `ActionGuard`, which scores the element a person would reach, checks the sensitive-name table and the session's site, and turns a refusal into a `blocked` result; a text read and a screenshot skip that guard because they act on nothing.
 
 | File | Role |
@@ -136,7 +181,10 @@ The tools share two guards. An acting tool calls `TakeoverState.assertAgent` fir
 | [`src/page.ts`](src/page.ts) | The served document and its script |
 | [`src/guard.ts`](src/guard.ts) | The action guard: sensitive-name table, site memory, security events, the untrusted wrapper |
 | [`src/visibility.ts`](src/visibility.ts) | The page-side probe and the visibility score |
-| [`src/tools.ts`](src/tools.ts) | The nine model tools |
+| [`src/keepalive.ts`](src/keepalive.ts) | The keepalive store, timers, backoff, notices, offscreen page pool, and its JSON file |
+| [`src/challenge.ts`](src/challenge.ts) | The generic sign-in test: the page-side probe and the rule that classifies a blocked visit |
+| [`src/cookies.ts`](src/cookies.ts) | Cookie filtering, the Cookie header, and the log-safe summary |
+| [`src/tools.ts`](src/tools.ts) | The eleven model tools |
 
 </details>
 
@@ -197,6 +245,20 @@ Two small definitions; a refusal is one short line, and the reason is bounded by
 
 Append-only: results and refusals enter the history after the reusable prefix and rewrite nothing earlier.
 
+### Session tools
+
+#### What the model sees
+
+`headless_browser_cookies` (`domain`) answers `{ "cookies": [ … ], "toHeader": "session=…; theme=dark" }`, one object per cookie with `name`, `value`, `domain`, `path`, `expires`, `httpOnly`, and `secure`. `headless_browser_keepalive` takes an `action` and answers `{ "keepalive": { … } }` for `add` and `check`, `{ "keepalives": [ … ] }` for `list`, and `{ "removed": "k1" }` for `remove`; a refused request answers `{ "error": "everyMinutes must be 5 through 1440: 5 minutes through 24 hours" }` or `{ "error": "k1 (inbox) already visits https://example.com/inbox" }` instead of storing anything.
+
+#### Token effect
+
+Two more definitions on every request whose scope mounts the package: a cookie list is one short object per cookie, a keepalive list is one object per entry, and both are called rarely — a session warmed on a timer does not need the model to look at it every turn.
+
+#### KV Cache effect
+
+Prefix-stable while the definitions are unchanged; results append after the reusable prefix.
+
 ## Known Limitations and Deferred Work
 
 <a id="known-limitations-and-deferred-work"></a>
@@ -215,6 +277,10 @@ Append-only: results and refusals enter the history after the reusable prefix an
 - **The hand-over URL needs a Web server** — in a composition without one, `headless_browser_hand_over` returns `/headless-browser` alone, which the user cannot open.
 - **The generated catalogs follow the mount** — `docs/tool-catalog.md` and `docs/config-catalog.md` list this package's tools and fields only after a composition mounts it and the generators run.
 - **The page is not localized** — the served page has fixed Chinese copy, unlike Client plugins whose text is locale-owned; it is not part of any Client bundle.
+- **The sign-in test is a heuristic** — it reads structure, not meaning: a same-origin page with no password field and no one-time code passes even when it is not the page the owner wanted, and a challenge that shows only a captcha looks like a page. The visit still renews whatever the site allows.
+- **A keepalive cannot sign in** — the visit renews a session the site still accepts. Once the site's own session is gone, only a person can restore it: the entry says `needs-human`, repeats at most one notice an hour through the event bus, and the package sends no message by itself.
+- **A keepalive is invisible** — its offscreen page is not in the tab strip and cannot be watched on the take-over page; the pool keeps at most two, and a site that opens a dialog leaves the check on whatever page it landed on.
+- **Cookies reach the session transcript** — a cookie call's values are in the model's history and therefore in the session log on disk, because the caller asked for them; the package itself never writes or logs a value.
 
 <a id="dev-note"></a>
 ### Dev Note

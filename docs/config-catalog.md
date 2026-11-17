@@ -2316,6 +2316,18 @@ export interface Config {
   jpegQuality: number
   /** Directory that receives `headless_browser_snapshot` PNG files. @default $DSH_HOME/cache/headless-browser/snapshots */
   snapshotDir: string
+  /**
+   * JSON file that keeps the registered keepalives across a restart, so their
+   * timers are re-armed instead of the owner registering them again.
+   * @default $DSH_HOME/data/headless-browser/keepalive.json
+   */
+  keepalivePath: string
+  /**
+   * Consecutive interactive sign-in challenges after which a keepalive says a
+   * person has to sign in; earlier failures are retried on their own.
+   * @default 3
+   */
+  keepaliveEscalateAfter: number
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-headless-browser -->

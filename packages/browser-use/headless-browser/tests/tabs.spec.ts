@@ -95,6 +95,22 @@ describe('browser tabs', () => {
     expect((await tabs.active()).id).toBe('t1')
   })
 
+  it('never adopts a page another owner reserved, so an offscreen page spends no tab slot', async () => {
+    const context = new FakeContext()
+    const keepalive = await context.newPage()
+    const ordinary = await context.newPage()
+    const tabs = new BrowserTabs({
+      context: async () => context,
+      log: LOG,
+      reserved: page => page === keepalive,
+    })
+    const first = await tabs.create(dataPage('first'))
+    expect(first.id).toBe('t1')
+    expect((await tabs.active()).page).toBe(ordinary)
+    expect(context.pages()).toContain(keepalive)
+    expect(tabs.state()).toHaveLength(1)
+  })
+
   it('reports loading while a navigation runs and settles it afterwards', async () => {
     const { tabs } = await boot()
     const tab = await tabs.create()

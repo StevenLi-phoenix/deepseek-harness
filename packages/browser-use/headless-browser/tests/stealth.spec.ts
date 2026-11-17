@@ -54,6 +54,8 @@ function browserConfig(profileDir: string, stealth: boolean): Config {
     viewportHeight: 800,
     jpegQuality: 50,
     snapshotDir: join(profileDir, 'snapshots'),
+    keepalivePath: join(profileDir, 'keepalive.json'),
+    keepaliveEscalateAfter: 3,
   }
 }
 

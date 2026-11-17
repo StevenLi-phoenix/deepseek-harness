@@ -1,0 +1,659 @@
+/**
+ * The keepalive store and its timer: registration bounds, the retry state
+ * machine that never parks a dead session on the owner, the notice cap, the
+ * file it survives a restart through, and the tab cap it is exempt from. The
+ * clock and the timer are the test's, so a five-minute backoff costs nothing;
+ * Chromium's own behavior is covered by `browser.spec.ts`.
+ */
+
+import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import type { Context } from '@deepseek-ai/cordis'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ChallengeFacts } from '../src/challenge.ts'
+import {
+  KeepalivePagePool,
+  KeepaliveService,
+  MAX_EVERY_MINUTES,
+  MIN_EVERY_MINUTES,
+  NOTICE_INTERVAL_MS,
+  RETRY_BACKOFF_MINUTES,
+  type KeepaliveEvent,
+  type KeepalivePage,
+  type KeepaliveStatus,
+} from '../src/keepalive.ts'
+import { BrowserTabs, MAX_TABS, TabLimitError, type TabsPage } from '../src/tabs.ts'
+
+const LOG = { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as Context['logger']
+
+/** Start of the test's clock, so every timestamp in a result is readable. */
+const START = Date.parse('2026-01-01T00:00:00.000Z')
+
+const temporary: string[] = []
+
+afterEach(() => {
+  for (const directory of temporary.splice(0)) rmSync(directory, { recursive: true, force: true })
+  vi.clearAllMocks()
+})
+
+/** A fresh directory for one test's files. */
+function temporaryDir(): string {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-keepalive-'))
+  temporary.push(root)
+  return root
+}
+
+/** What the next visit lands on and shows. */
+interface Landing {
+  /** URL the visit settles on; the requested URL when absent. */
+  readonly url?: string
+  /** What the document shows; a signed-in page when absent. */
+  readonly facts?: Partial<ChallengeFacts>
+  /** Make the visit itself fail, as a timeout or a dead network would. */
+  readonly error?: string
+}
+
+/** The fake site every page of one test consults. */
+class FakeSite {
+  landing: Landing = {}
+  visits = 0
+  readonly pages: FakePage[] = []
+
+  async page(): Promise<FakePage> {
+    const page = new FakePage(this)
+    this.pages.push(page)
+    return page
+  }
+}
+
+/** One page that satisfies both the tab model and a keepalive check. */
+class FakePage implements TabsPage, KeepalivePage {
+  closed = false
+  #url = 'about:blank'
+  #listeners = new Map<string, Set<(...args: never[]) => void>>()
+
+  /**
+   * @param site - the site this page visits.
+   */
+  constructor(readonly site: FakeSite) {}
+
+  url(): string { return this.#url }
+  isClosed(): boolean { return this.closed }
+  async title(): Promise<string> { return 'page' }
+  async goto(url: string, _options?: { waitUntil?: string; timeout?: number }): Promise<unknown> {
+    this.site.visits += 1
+    const { error } = this.site.landing
+    if (error !== undefined) throw new Error(error)
+    this.#url = this.site.landing.url ?? url
+    return null
+  }
+  async challenge(): Promise<ChallengeFacts> {
+    return { passwordField: false, oneTimeCode: false, accountLinks: 0, ...this.site.landing.facts }
+  }
+  async goBack(): Promise<unknown> { return null }
+  async goForward(): Promise<unknown> { return null }
+  async reload(): Promise<unknown> { return null }
+  async bringToFront(): Promise<void> {}
+  async close(): Promise<void> {
+    this.closed = true
+    this.emit('close')
+  }
+  on(event: string, listener: (...args: never[]) => void): this {
+    const set = this.#listeners.get(event) ?? new Set()
+    set.add(listener)
+    this.#listeners.set(event, set)
+    return this
+  }
+  off(event: string, listener: (...args: never[]) => void): this {
+    this.#listeners.get(event)?.delete(listener)
+    return this
+  }
+  emit(event: string, ...args: never[]): void {
+    for (const listener of [...this.#listeners.get(event) ?? []]) listener(...args)
+  }
+}
+
+/** A clock and a timer this test advances and fires by hand. */
+class ManualTimer {
+  #now = START
+  readonly scheduled: { delay: number; run: () => void; cancelled: boolean }[] = []
+
+  now = (): number => this.#now
+
+  schedule = (delay: number, run: () => void): (() => void) => {
+    const entry = { delay, run, cancelled: false }
+    this.scheduled.push(entry)
+    return () => { entry.cancelled = true }
+  }
+
+  advance(ms: number): void {
+    this.#now += ms
+  }
+
+  /** The timer still waiting to fire, if any. */
+  pending(): { delay: number; run: () => void; cancelled: boolean } | undefined {
+    return [...this.scheduled].reverse().find(entry => !entry.cancelled)
+  }
+
+  /** Fire the pending timer, as an elapsed `setTimeout` would. */
+  fire(): void {
+    const entry = this.pending()
+    if (entry === undefined) throw new Error('no timer is pending')
+    entry.cancelled = true
+    entry.run()
+  }
+}
+
+/** One booted service, with the pieces a test inspects. */
+interface Bench {
+  readonly service: KeepaliveService
+  readonly events: KeepaliveEvent[]
+  readonly timer: ManualTimer
+  readonly site: FakeSite
+  readonly path: string
+}
+
+/**
+ * Boot one service over a fresh file.
+ * @param options - the settings a test changes, and the file to reuse.
+ * @returns the service and everything the test needs to drive it.
+ */
+function boot(options: { path?: string; escalateAfter?: number; site?: FakeSite } = {}): Bench {
+  const timer = new ManualTimer()
+  const site = options.site ?? new FakeSite()
+  const path = options.path ?? join(temporaryDir(), 'keepalive.json')
+  const events: KeepaliveEvent[] = []
+  const service = new KeepaliveService({
+    path,
+    create: async () => await site.page(),
+    log: LOG,
+    emit: (event) => { events.push(event) },
+    ...options.escalateAfter === undefined ? {} : { escalateAfter: options.escalateAfter },
+    now: timer.now,
+    schedule: timer.schedule,
+  })
+  return { service, events, timer, site, path }
+}
+
+/** Let a fired timer's attempt finish, since a timer callback cannot be awaited. */
+async function flush(): Promise<void> {
+  for (let turn = 0; turn < 8; turn += 1) await new Promise<void>((resolve) => { setImmediate(resolve) })
+}
+
+/** The kinds of the events one bench published. */
+function kinds(bench: Bench): string[] {
+  return bench.events.map(event => event.kind)
+}
+
+describe('registering a keepalive', () => {
+  it('registers a URL with the minimum interval, a label, and an attempt due at once', async () => {
+    const bench = boot()
+    const added = await bench.service.add({ url: 'https://example.com' })
+    expect(added).toEqual({
+      id: 'k1',
+      label: 'example.com',
+      url: 'https://example.com/',
+      everyMinutes: MIN_EVERY_MINUTES,
+      state: 'ok',
+      consecutiveFailures: 0,
+      nextAttemptAt: '2026-01-01T00:00:00.000Z',
+    })
+    expect(bench.timer.pending()?.delay).toBe(0)
+    await expect(bench.service.list()).resolves.toEqual([added])
+  })
+
+  it('keeps a named label, interval, and site', async () => {
+    const bench = boot()
+    const added = await bench.service.add({
+      url: 'https://mail.example.com/inbox?page=2',
+      domain: 'Example.COM',
+      everyMinutes: 30,
+      label: '  mail  ',
+    })
+    expect(added).toMatchObject({
+      label: 'mail',
+      url: 'https://mail.example.com/inbox?page=2',
+      everyMinutes: 30,
+      domain: 'example.com',
+    })
+    expect(bench.timer.pending()?.delay).toBe(0)
+  })
+
+  it('refuses a URL a later visit could not make sense of', async () => {
+    const bench = boot()
+    await expect(bench.service.add({ url: '   ' })).rejects.toThrow('a keepalive needs a url')
+    await expect(bench.service.add({ url: '/inbox' })).rejects.toThrow('must be an absolute http or https URL')
+    await expect(bench.service.add({ url: 'file:///etc/passwd' })).rejects.toThrow('must be an absolute http or https URL')
+    await expect(bench.service.add({ url: 'https://user:pw@example.com/' }))
+      .rejects.toThrow('must not carry a username or password')
+  })
+
+  it('refuses an interval outside five minutes through a day', async () => {
+    const bench = boot()
+    await expect(bench.service.add({ url: 'https://example.com/a', everyMinutes: MIN_EVERY_MINUTES - 1 }))
+      .rejects.toThrow('everyMinutes must be 5 through 1440')
+    await expect(bench.service.add({ url: 'https://example.com/a', everyMinutes: MAX_EVERY_MINUTES + 1 }))
+      .rejects.toThrow('everyMinutes must be 5 through 1440')
+    await expect(bench.service.add({ url: 'https://example.com/a', everyMinutes: 7.5 }))
+      .rejects.toThrow('everyMinutes must be a whole number of minutes')
+    await expect(bench.service.add({ url: 'https://example.com/a', everyMinutes: MAX_EVERY_MINUTES }))
+      .resolves.toMatchObject({ everyMinutes: MAX_EVERY_MINUTES })
+  })
+
+  it('refuses the same URL twice, however it is spelled', async () => {
+    const bench = boot()
+    await bench.service.add({ url: 'https://example.com/', label: 'first' })
+    await expect(bench.service.add({ url: 'https://example.com', label: 'again' }))
+      .rejects.toThrow('k1 (first) already visits https://example.com/')
+    await expect(bench.service.add({ url: 'https://example.com/other' })).resolves.toMatchObject({ id: 'k2' })
+  })
+
+  it('refuses a site that names no host', async () => {
+    const bench = boot()
+    await expect(bench.service.add({ url: 'https://example.com/', domain: 'not a host' }))
+      .rejects.toThrow('domain must name a host')
+    await expect(bench.service.add({ url: 'https://example.com/a', domain: 'https://example.com/inbox' }))
+      .resolves.toMatchObject({ domain: 'example.com' })
+  })
+
+  it('removes one entry and keeps the rest in order', async () => {
+    const bench = boot()
+    await bench.service.add({ url: 'https://example.com/a' })
+    await bench.service.add({ url: 'https://example.com/b' })
+    await bench.service.remove('k1')
+    await expect(bench.service.list()).resolves.toMatchObject([{ id: 'k2' }])
+    await expect(bench.service.remove('k1')).rejects.toThrow('no keepalive named k1')
+    await expect(bench.service.check('k9')).rejects.toThrow('no keepalive named k9')
+    expect(bench.timer.pending()?.delay).toBe(0)
+  })
+})
+
+describe('persistence', () => {
+  it('writes the file and re-arms the same entries after a restart', async () => {
+    const first = boot()
+    await first.service.add({ url: 'https://example.com/a', everyMinutes: 15, label: 'a' })
+    await first.service.add({ url: 'https://example.com/b', everyMinutes: 45, label: 'b' })
+    await first.service.close()
+
+    const second = boot({ path: first.path })
+    await expect(second.service.list()).resolves.toMatchObject([
+      { id: 'k1', label: 'a', url: 'https://example.com/a', everyMinutes: 15, state: 'ok' },
+      { id: 'k2', label: 'b', url: 'https://example.com/b', everyMinutes: 45, state: 'ok' },
+    ])
+    // Both entries have a timer, and a new entry continues the sequence.
+    expect(second.timer.scheduled.filter(entry => !entry.cancelled)).toHaveLength(2)
+    await expect(second.service.add({ url: 'https://example.com/c' })).resolves.toMatchObject({ id: 'k3' })
+  })
+
+  it('restores an entry that still needed a person, with its counters and backoff', async () => {
+    const first = boot({ escalateAfter: 1 })
+    const added = await first.service.add({ url: 'https://example.com/a', everyMinutes: 20 })
+    first.site.landing = { url: 'https://example.com/login', facts: { passwordField: true } }
+    await first.service.check(added.id)
+    await first.service.close()
+
+    const second = boot({ path: first.path })
+    const [restored] = await second.service.list() as [KeepaliveStatus]
+    expect(restored).toMatchObject({
+      id: 'k1',
+      state: 'needs-human',
+      consecutiveFailures: 1,
+      blockedStep: 'password',
+      lastUrl: 'https://example.com/login',
+      lastError: 'the page shows a password field',
+    })
+    expect(restored.firstFailureAt).toBe('2026-01-01T00:00:00.000Z')
+    // Armed for the moment the backoff ends, not for a fresh interval.
+    expect(second.timer.pending()?.delay).toBe(5 * 60_000)
+  })
+
+  it('keeps working when the file is missing, malformed, or holds junk', async () => {
+    const root = temporaryDir()
+    const missing = boot({ path: join(root, 'absent.json') })
+    await expect(missing.service.list()).resolves.toEqual([])
+
+    const malformed = join(root, 'malformed.json')
+    writeFileSync(malformed, '{ not json', 'utf8')
+    await expect(boot({ path: malformed }).service.list()).resolves.toEqual([])
+    expect(LOG.warn).toHaveBeenCalledWith(expect.stringContaining('is not valid JSON'), expect.anything(), expect.anything())
+
+    const unshaped = join(root, 'unshaped.json')
+    writeFileSync(unshaped, JSON.stringify({ version: 1 }), 'utf8')
+    await expect(boot({ path: unshaped }).service.list()).resolves.toEqual([])
+
+    const junk = join(root, 'junk.json')
+    writeFileSync(junk, JSON.stringify({
+      version: 1,
+      entries: [
+        null,
+        { id: '', url: 'https://example.com/' },
+        { id: 'k1', url: 'not a url' },
+        { id: 'k2', url: 'https://example.com/a', everyMinutes: 1, state: 'nonsense', consecutiveFailures: -3, blockedStep: 'nonsense', domain: '  ' },
+        { id: 'k2', url: 'https://example.com/duplicate' },
+      ],
+    }), 'utf8')
+    const restored = await boot({ path: junk }).service.list()
+    expect(restored).toEqual([{
+      id: 'k2',
+      label: 'https://example.com/a',
+      url: 'https://example.com/a',
+      everyMinutes: MIN_EVERY_MINUTES,
+      state: 'ok',
+      consecutiveFailures: 0,
+    }])
+    expect(LOG.warn).toHaveBeenCalledWith(expect.stringContaining('skipped'), expect.anything(), expect.anything())
+  })
+
+  it('logs a write it cannot make instead of failing the caller', async () => {
+    const root = temporaryDir()
+    const path = join(root, 'keepalive.json')
+    const bench = boot({ path })
+    await bench.service.add({ url: 'https://example.com/a' })
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({
+      version: 1,
+      entries: [{ id: 'k1', url: 'https://example.com/a', everyMinutes: MIN_EVERY_MINUTES }],
+    })
+    // A directory where the file should be: the write fails, the entry stays.
+    const blockedPath = join(root, 'blocked.json')
+    mkdirSync(blockedPath, { recursive: true })
+    const blocked = boot({ path: blockedPath })
+    await expect(blocked.service.add({ url: 'https://example.com/b' })).resolves.toMatchObject({ id: 'k1' })
+    await blocked.service.close()
+    expect(LOG.warn).toHaveBeenCalledWith(expect.stringContaining('writing'), expect.anything(), expect.anything())
+  })
+})
+
+describe('the retry state machine', () => {
+  it('goes ok to recovering on one failed check and retries in five minutes', async () => {
+    const bench = boot()
+    const added = await bench.service.add({ url: 'https://example.com/a', everyMinutes: 60 })
+    bench.site.landing = { url: 'https://example.com/login', facts: { passwordField: true } }
+    const failed = await bench.service.check(added.id)
+    expect(failed).toMatchObject({
+      state: 'recovering',
+      consecutiveFailures: 1,
+      blockedStep: 'password',
+      lastError: 'the page shows a password field',
+      lastUrl: 'https://example.com/login',
+      firstFailureAt: '2026-01-01T00:00:00.000Z',
+      lastAttemptAt: '2026-01-01T00:00:00.000Z',
+      lastCheckAt: '2026-01-01T00:00:00.000Z',
+      nextAttemptAt: '2026-01-01T00:05:00.000Z',
+    })
+    expect(kinds(bench)).toEqual(['recovering'])
+  })
+
+  it('retries on the 5m, 15m, 1h schedule and caps at an hour', async () => {
+    const bench = boot({ escalateAfter: 9 })
+    const added = await bench.service.add({ url: 'https://example.com/a' })
+    bench.site.landing = { facts: { passwordField: true } }
+    const delays: number[] = []
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const status = await bench.service.check(added.id)
+      delays.push(Date.parse(status.nextAttemptAt as string) - Date.parse(status.lastAttemptAt as string))
+      bench.timer.advance(RETRY_BACKOFF_MINUTES.at(-1) as number * 60_000)
+    }
+    expect(delays).toEqual([
+      5 * 60_000,
+      15 * 60_000,
+      60 * 60_000,
+      60 * 60_000,
+      60 * 60_000,
+    ])
+    // Only the first check is a transition; the rest stay where they are.
+    expect(kinds(bench)).toEqual(['recovering'])
+  })
+
+  it('escalates to needs-human after three interactive challenges, with what the owner needs', async () => {
+    const bench = boot()
+    const added = await bench.service.add({ url: 'https://example.com/a', label: 'assignments' })
+    bench.site.landing = { url: 'https://example.com/login', facts: { passwordField: true } }
+    await bench.service.check(added.id)
+    await bench.service.check(added.id)
+    expect((await bench.service.check(added.id)).state).toBe('needs-human')
+    expect(bench.events.at(-1)).toMatchObject({
+      kind: 'needs-human',
+      id: 'k1',
+      label: 'assignments',
+      url: 'https://example.com/a',
+      state: 'needs-human',
+      consecutiveFailures: 3,
+      firstFailureAt: '2026-01-01T00:00:00.000Z',
+      lastUrl: 'https://example.com/login',
+      blockedStep: 'password',
+    })
+    expect(kinds(bench)).toEqual(['recovering', 'needs-human'])
+  })
+
+  it('recovers with exactly one event and resets every count', async () => {
+    const bench = boot()
+    const added = await bench.service.add({ url: 'https://example.com/a', everyMinutes: 20 })
+    bench.site.landing = { facts: { passwordField: true } }
+    await bench.service.check(added.id)
+    await bench.service.check(added.id)
+    await bench.service.check(added.id)
+    const recovered = bench.events.length
+    bench.timer.advance(60 * 60_000)
+    bench.site.landing = { url: 'https://example.com/a' }
+    const status = await bench.service.check(added.id)
+    expect(status).toEqual({
+      id: 'k1',
+      label: 'example.com',
+      url: 'https://example.com/a',
+      everyMinutes: 20,
+      state: 'ok',
+      consecutiveFailures: 0,
+      lastOkAt: '2026-01-01T01:00:00.000Z',
+      lastAttemptAt: '2026-01-01T01:00:00.000Z',
+      lastCheckAt: '2026-01-01T01:00:00.000Z',
+      nextAttemptAt: '2026-01-01T01:20:00.000Z',
+      lastUrl: 'https://example.com/a',
+    })
+    expect(bench.events.length).toBe(recovered + 1)
+    expect(bench.events.at(-1)).toMatchObject({ kind: 'recovered', state: 'ok', consecutiveFailures: 0 })
+    // A second success is not a transition and publishes nothing.
+    await bench.service.check(added.id)
+    expect(bench.events.length).toBe(recovered + 1)
+  })
+
+  it('says error, not needs-human, when the visit itself could not run', async () => {
+    const bench = boot({ escalateAfter: 2 })
+    const added = await bench.service.add({ url: 'https://example.com/a' })
+    bench.site.landing = { error: 'net::ERR_CONNECTION_RESET' }
+    const first = await bench.service.check(added.id)
+    expect(first.state).toBe('error')
+    expect(first.lastError).toBe('net::ERR_CONNECTION_RESET')
+    expect(first.blockedStep).toBeUndefined()
+    const second = await bench.service.check(added.id)
+    expect(second.state).toBe('error')
+    expect(second.consecutiveFailures).toBe(2)
+    expect(kinds(bench)).toEqual(['error'])
+  })
+
+  it('keeps needs-human through a transport failure, because signing in is still what is missing', async () => {
+    const bench = boot({ escalateAfter: 1 })
+    const added = await bench.service.add({ url: 'https://example.com/a' })
+    bench.site.landing = { facts: { oneTimeCode: true } }
+    await bench.service.check(added.id)
+    expect(bench.events.at(-1)).toMatchObject({ kind: 'needs-human', blockedStep: 'mfa' })
+    bench.timer.advance(60 * 60_000)
+    bench.site.landing = { error: 'net::ERR_TIMED_OUT' }
+    const status = await bench.service.check(added.id)
+    expect(status.state).toBe('needs-human')
+    expect(status.blockedStep).toBeUndefined()
+    expect(kinds(bench)).toEqual(['needs-human'])
+  })
+
+  it('treats a sign-in host below the named site as the same session', async () => {
+    const bench = boot()
+    const added = await bench.service.add({ url: 'https://example.com/a', domain: 'example.com' })
+    bench.site.landing = { url: 'https://sso.example.com/authorize' }
+    const status = await bench.service.check(added.id)
+    expect(status.state).toBe('ok')
+    expect(bench.events).toEqual([])
+  })
+
+  it('escalates after the configured number of failures, not a fixed one', async () => {
+    const bench = boot({ escalateAfter: 2 })
+    const added = await bench.service.add({ url: 'https://example.com/a' })
+    bench.site.landing = { facts: { accountLinks: 3 }, url: 'https://accounts.elsewhere.test/chooser' }
+    expect((await bench.service.check(added.id)).state).toBe('recovering')
+    expect((await bench.service.check(added.id)).state).toBe('needs-human')
+    expect(bench.events.at(-1)).toMatchObject({ blockedStep: 'account-chooser' })
+  })
+})
+
+describe('the notice cap', () => {
+  it('repeats a needs-human notice at most once an hour, always with the same facts', async () => {
+    const bench = boot()
+    const added = await bench.service.add({ url: 'https://example.com/a', label: 'mail' })
+    bench.site.landing = { url: 'https://example.com/login', facts: { passwordField: true } }
+    await bench.service.check(added.id)
+    await bench.service.check(added.id)
+    await bench.service.check(added.id)
+    expect(kinds(bench)).toEqual(['recovering', 'needs-human'])
+
+    // Twenty minutes later, still dead: no second notice yet.
+    bench.timer.advance(20 * 60_000)
+    await bench.service.check(added.id)
+    expect(kinds(bench)).toEqual(['recovering', 'needs-human'])
+
+    // An hour after the escalation, the owner gets the same facts again.
+    bench.timer.advance(NOTICE_INTERVAL_MS - 20 * 60_000)
+    await bench.service.check(added.id)
+    expect(bench.events.at(-1)).toMatchObject({
+      kind: 'reminder',
+      id: 'k1',
+      label: 'mail',
+      consecutiveFailures: 5,
+      firstFailureAt: '2026-01-01T00:00:00.000Z',
+      lastUrl: 'https://example.com/login',
+      blockedStep: 'password',
+    })
+
+    // And never twice in the same hour.
+    bench.timer.advance(30 * 60_000)
+    await bench.service.check(added.id)
+    expect(kinds(bench)).toEqual(['recovering', 'needs-human', 'reminder'])
+  })
+})
+
+describe('the timer', () => {
+  it('runs an attempt when the timer fires', async () => {
+    const bench = boot()
+    await bench.service.add({ url: 'https://example.com/a' })
+    bench.timer.advance(5 * 60_000)
+    bench.site.landing = { facts: { passwordField: true } }
+    bench.timer.fire()
+    await flush()
+    expect(bench.site.visits).toBe(1)
+    const [status] = await bench.service.list() as [KeepaliveStatus]
+    expect(status.state).toBe('recovering')
+    expect(bench.events).toHaveLength(1)
+  })
+
+  it('runs one attempt at once for a forced check, before the timer is due', async () => {
+    const bench = boot()
+    const added = await bench.service.add({ url: 'https://example.com/a', everyMinutes: 120 })
+    expect(bench.timer.scheduled).toHaveLength(1)
+    const status = await bench.service.check(added.id)
+    expect(bench.site.visits).toBe(1)
+    expect(status.lastAttemptAt).toBe('2026-01-01T00:00:00.000Z')
+    // The pending timer was replaced by one for the new due time.
+    expect(bench.timer.scheduled[0]?.cancelled).toBe(true)
+    expect(bench.timer.pending()?.delay).toBe(120 * 60_000)
+  })
+
+  it('cancels every timer on close and refuses a new entry afterwards', async () => {
+    const bench = boot()
+    await bench.service.add({ url: 'https://example.com/a' })
+    await bench.service.close()
+    expect(bench.timer.scheduled.every(entry => entry.cancelled)).toBe(true)
+    await expect(bench.service.add({ url: 'https://example.com/b' })).rejects.toThrow('shutting down')
+  })
+
+  it('shares an attempt already in flight instead of starting a second', async () => {
+    const bench = boot()
+    const added = await bench.service.add({ url: 'https://example.com/a' })
+    const [first, second] = await Promise.all([
+      bench.service.check(added.id),
+      bench.service.check(added.id),
+    ])
+    expect(first.state).toBe('ok')
+    expect(second.state).toBe('ok')
+    expect(bench.site.visits).toBe(1)
+  })
+})
+
+describe('the page pool', () => {
+  it('reuses an idle page and replaces one that closed', async () => {
+    const site = new FakeSite()
+    const pool = new KeepalivePagePool({ create: async () => await site.page(), log: LOG })
+    const first = await pool.acquire() as FakePage
+    pool.release(first)
+    const again = await pool.acquire() as FakePage
+    expect(again).toBe(first)
+    pool.release(again)
+    await again.close()
+    const replacement = await pool.acquire() as FakePage
+    expect(replacement).not.toBe(again)
+    pool.release(replacement)
+    await pool.close()
+    expect(replacement.closed).toBe(true)
+    await expect(pool.acquire()).rejects.toThrow('the keepalive pages are closed')
+  })
+
+  it('closes a page it cannot keep, and a release after close', async () => {
+    const site = new FakeSite()
+    const pool = new KeepalivePagePool({ create: async () => await site.page(), log: LOG })
+    const first = await pool.acquire() as FakePage
+    await pool.close()
+    pool.release(first)
+    expect(first.closed).toBe(true)
+    // Closing a page twice is the page's own no-op, not an error.
+    const second = await site.page()
+    await second.close()
+    pool.release(second)
+    expect(second.closed).toBe(true)
+  })
+
+  it('closes an idle page and reports a page that refuses to close', async () => {
+    const site = new FakeSite()
+    const pool = new KeepalivePagePool({ create: async () => await site.page(), log: LOG })
+    const page = await site.page()
+    vi.spyOn(page, 'close').mockRejectedValue(new Error('already gone'))
+    pool.release(page)
+    await pool.close()
+    expect(LOG.warn).toHaveBeenCalledWith(expect.stringContaining('closing a keepalive page failed'), 'already gone')
+  })
+})
+
+describe('the tab cap', () => {
+  it('checks a keepalive while the browser is at its eight-tab limit, without spending a tab', async () => {
+    const site = new FakeSite()
+    const context = {
+      pages: (): readonly TabsPage[] => site.pages,
+      newPage: async (): Promise<TabsPage> => await site.page(),
+    }
+    const tabs = new BrowserTabs({ context: async () => context, log: LOG })
+    for (let index = 0; index < MAX_TABS; index += 1) await tabs.create()
+    await expect(tabs.create()).rejects.toThrow(TabLimitError)
+
+    const timer = new ManualTimer()
+    const service = new KeepaliveService({
+      path: join(temporaryDir(), 'keepalive.json'),
+      create: async () => await site.page(),
+      log: LOG,
+      emit: () => {},
+      now: timer.now,
+      schedule: timer.schedule,
+    })
+    const added = await service.add({ url: 'https://example.com/a' })
+    const status = await service.check(added.id)
+    expect(status.state).toBe('ok')
+    expect(tabs.state()).toHaveLength(MAX_TABS)
+    expect(site.pages).toHaveLength(MAX_TABS + 1)
+    await service.close()
+  })
+})

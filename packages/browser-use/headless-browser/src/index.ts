@@ -11,7 +11,9 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { Config } from './config.ts'
+import { firstLine } from './error.ts'
 import { ActionGuard, type SecurityEvent } from './guard.ts'
+import { KeepaliveService, type KeepaliveEvent } from './keepalive.ts'
 import { LiveView } from './live-view.ts'
 import { PAGE_PATH, mountTakeoverRoutes } from './routes.ts'
 import { HeadlessBrowserSession } from './session.ts'
@@ -28,6 +30,14 @@ declare module '@deepseek-ai/cordis' {
      * @mode emit
      */
     'headless-browser/security'(event: SecurityEvent): void
+    /**
+     * One keepalive transition — `recovering`, `needs-human`, `error`, or
+     * `recovered` — and at most one `reminder` an hour while a keepalive stays
+     * `needs-human`. Exactly one event per transition, so a host can count them.
+     * @param event - the entry, its new state, and what the last attempt saw.
+     * @mode emit
+     */
+    'headless-browser/keepalive'(event: KeepaliveEvent): void
   }
 }
 
@@ -49,6 +59,13 @@ export function apply(ctx: Context, config: Config): void {
     onEvent: (event) => { ctx.emit('headless-browser/security', event) },
   })
   const browser = new HeadlessBrowserSession(config, ctx.logger, guard)
+  const keepalives = new KeepaliveService({
+    path: config.keepalivePath,
+    create: async () => await browser.keepalivePage(),
+    log: ctx.logger,
+    escalateAfter: config.keepaliveEscalateAfter,
+    emit: (event) => { ctx.emit('headless-browser/keepalive', event) },
+  })
   const takeover = new TakeoverState()
   const view = new LiveView(() => browser.castTarget(), {
     jpegQuality: config.jpegQuality,
@@ -56,13 +73,21 @@ export function apply(ctx: Context, config: Config): void {
     maxHeight: config.viewportHeight,
   }, ctx.logger)
 
+  // Re-armed from the file at mount: a session that matters does not wait for
+  // someone to open its page before it is visited again.
+  void keepalives.load().catch((error: unknown) => {
+    ctx.logger.warn('headless-browser: arming the keepalives failed: %s', firstLine(error))
+  })
+
   ctx.effect(() => async () => {
+    await keepalives.close()
     await view.close()
     await browser.close()
   }, 'headless-browser: close the browser')
 
   registerBrowserTools(ctx, {
     browser,
+    keepalives,
     takeover,
     pageUrl: () => {
       const server = ctx.get('webServer')
@@ -74,7 +99,14 @@ export function apply(ctx: Context, config: Config): void {
   // has no page to hand over to.
   ctx.inject(['webServer'], (web) => {
     web.effect(
-      () => mountTakeoverRoutes(web.webServer, { browser, takeover, view, security: guard.log, log: ctx.logger }),
+      () => mountTakeoverRoutes(web.webServer, {
+        browser,
+        takeover,
+        view,
+        security: guard.log,
+        keepalives: () => keepalives.snapshot(),
+        log: ctx.logger,
+      }),
       'headless-browser: take-over routes',
     )
   })

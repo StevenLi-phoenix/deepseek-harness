@@ -6,7 +6,9 @@
 import { Context } from '@deepseek-ai/cordis'
 import { assertSupportedJsonSchema, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { describe, expect, it, vi } from 'vitest'
+import type { CookieResult } from '../src/cookies.ts'
 import type { TabInfo } from '../src/input.ts'
+import { KeepaliveError, type KeepaliveRequest, type KeepaliveStatus, type KeepaliveTools } from '../src/keepalive.ts'
 import type { ActionOutcome } from '../src/session.ts'
 import { SelectorMissError, type ReadRequest, type ReadResult } from '../src/read.ts'
 import type { ScrollRequest, ScrollResult } from '../src/scroll.ts'
@@ -54,6 +56,34 @@ const SCROLLED: ScrollResult = {
   atBottom: false,
 }
 
+/** The cookies one call reads, and the header a plain HTTP fetch would send. */
+const COOKIES: CookieResult = {
+  cookies: [{
+    name: 'session',
+    value: 'abc123',
+    domain: '.example.com',
+    path: '/',
+    expires: 1_800_000_000,
+    httpOnly: true,
+    secure: true,
+  }],
+  toHeader: 'session=abc123',
+}
+
+/** One keepalive, as the fake store reports it. */
+const KEPT: KeepaliveStatus = {
+  id: 'k1',
+  label: 'example.com',
+  url: 'https://example.com/',
+  everyMinutes: 30,
+  state: 'ok',
+  consecutiveFailures: 0,
+  lastOkAt: '2026-01-01T00:00:00.000Z',
+  lastCheckAt: '2026-01-01T00:00:00.000Z',
+  lastAttemptAt: '2026-01-01T00:00:00.000Z',
+  nextAttemptAt: '2026-01-01T00:30:00.000Z',
+}
+
 /**
  * The execution context a tool body receives; none of these tools reads it.
  * The executor mints its branded identity, so a direct body call passes none.
@@ -68,6 +98,7 @@ const EXEC = {
 function fakeBrowser(overrides: Partial<ToolBrowser> = {}): ToolBrowser {
   return {
     open: async () => ({ url: 'https://example.com/', title: 'Example' }),
+    cookies: async () => COOKIES,
     snapshot: async () => ({ path: '/tmp/page.png', url: 'https://example.com/' }),
     read: async () => READ,
     click: async () => HIT,
@@ -87,12 +118,27 @@ interface Bench {
   readonly definitions: Map<string, ToolDefinition>
   /** Control state the tools consult before acting on the page. */
   readonly takeover: TakeoverState
+  /** The keepalive store the tool acts on. */
+  readonly keepalives: KeepaliveTools
   /** Run one registered tool body and return its canonical value. */
   readonly call: (name: string, args: object) => Promise<unknown>
 }
 
+/** A keepalive store that answers with one fixed entry unless a test replaces an operation. */
+function fakeKeepalives(overrides: Partial<KeepaliveTools> = {}): KeepaliveTools & { added: KeepaliveRequest[] } {
+  const added: KeepaliveRequest[] = []
+  return {
+    added,
+    add: async (request: KeepaliveRequest) => { added.push(request); return KEPT },
+    remove: async () => {},
+    list: async () => [KEPT],
+    check: async () => ({ ...KEPT, state: 'recovering', consecutiveFailures: 1 }),
+    ...overrides,
+  }
+}
+
 /** Register the tools into a Context whose `tools` service records them, as the Host does. */
-function bench(browser: ToolBrowser): Bench {
+function bench(browser: ToolBrowser, keepalives: KeepaliveTools = fakeKeepalives()): Bench {
   const definitions = new Map<string, ToolDefinition>()
   const ctx = new Context()
   ctx.provide('tools', {
@@ -102,8 +148,14 @@ function bench(browser: ToolBrowser): Bench {
     },
   })
   const takeover = new TakeoverState()
-  registerBrowserTools(ctx, { browser, takeover, pageUrl: () => 'http://127.0.0.1:3081/headless-browser' })
+  registerBrowserTools(ctx, {
+    browser,
+    takeover,
+    keepalives,
+    pageUrl: () => 'http://127.0.0.1:3081/headless-browser',
+  })
   return {
+    keepalives,
     definitions,
     takeover,
     async call(name, args) {
@@ -134,10 +186,14 @@ describe('tool registration', () => {
       'headless_browser_close',
       'headless_browser_hand_over',
       'headless_browser_hand_back',
+      'headless_browser_cookies',
+      'headless_browser_keepalive',
     ])
-    for (const definition of tools.definitions.values()) {
+    for (const [name, definition] of tools.definitions) {
       expect(definition.description.length).toBeGreaterThan(20)
       expect(() => { assertSupportedJsonSchema(definition.output.schema) }).not.toThrow()
+      // The keepalive tool's title needs its own `action`, so it is titled below.
+      if (name === 'headless_browser_keepalive') continue
       expect(definition.presentCall?.({ url: 'https://example.com/', selector: '#rows', text: 'x', reason: 'sign in' }))
         .toMatchObject({ card: 'generic' })
     }
@@ -386,6 +442,91 @@ describe('page actions and control', () => {
     expect(click).not.toHaveBeenCalled()
     expect(await tools.call('headless_browser_hand_back', {})).toEqual({ holder: 'agent' })
     expect(await tools.call('headless_browser_click', { selector: '#x' })).toMatchObject({ clicked: 'a.next' })
+  })
+
+  it('reads cookies for one domain and returns the header a plain HTTP fetch sends', async () => {
+    const cookies = vi.fn(async (_domain?: string) => COOKIES)
+    const tools = bench(fakeBrowser({ cookies }))
+    const definition = definitionOf(tools, 'headless_browser_cookies')
+    expect(definition.parameters).toMatchObject({ properties: { domain: { type: 'string' } } })
+    expect(await tools.call('headless_browser_cookies', { domain: 'example.com' })).toEqual(COOKIES)
+    expect(cookies).toHaveBeenCalledWith('example.com')
+    expect(await tools.call('headless_browser_cookies', {})).toEqual(COOKIES)
+    expect(definition.presentCall?.({ domain: 'example.com' })).toMatchObject({ title: 'Read cookies for example.com', kind: 'read' })
+    expect(definition.presentCall?.({})).toMatchObject({ title: 'Read cookies' })
+  })
+
+  it('reports a cookie read that failed as an error result', async () => {
+    const tools = bench(fakeBrowser({ cookies: async () => { throw new Error('context is gone') } }))
+    expect(await tools.call('headless_browser_cookies', {})).toEqual({ error: 'reading cookies failed: context is gone' })
+  })
+
+  it('adds a keepalive with every argument the caller gave', async () => {
+    const keepalives = fakeKeepalives()
+    const tools = bench(fakeBrowser(), keepalives)
+    expect(await tools.call('headless_browser_keepalive', {
+      action: 'add',
+      url: 'https://example.com/',
+      domain: 'example.com',
+      everyMinutes: 30,
+      label: 'mail',
+    })).toEqual({ keepalive: KEPT })
+    expect(keepalives.added).toEqual([{
+      url: 'https://example.com/',
+      domain: 'example.com',
+      everyMinutes: 30,
+      label: 'mail',
+    }])
+    expect(await tools.call('headless_browser_keepalive', { action: 'add', url: 'https://example.com/a' }))
+      .toEqual({ keepalive: KEPT })
+    expect(keepalives.added[1]).toEqual({ url: 'https://example.com/a' })
+  })
+
+  it('lists, removes, and forces one check of a keepalive', async () => {
+    const remove = vi.fn(async (_id: string) => {})
+    const check = vi.fn(async (_id: string) => ({ ...KEPT, state: 'recovering' as const, consecutiveFailures: 1 }))
+    const tools = bench(fakeBrowser(), fakeKeepalives({ remove, check }))
+    expect(await tools.call('headless_browser_keepalive', { action: 'list' })).toEqual({ keepalives: [KEPT] })
+    expect(await tools.call('headless_browser_keepalive', { action: 'remove', id: 'k1' })).toEqual({ removed: 'k1' })
+    expect(remove).toHaveBeenCalledWith('k1')
+    expect(await tools.call('headless_browser_keepalive', { action: 'check', id: 'k1' }))
+      .toMatchObject({ keepalive: { state: 'recovering', consecutiveFailures: 1 } })
+    expect(check).toHaveBeenCalledWith('k1')
+  })
+
+  it('names the argument a keepalive call is missing', async () => {
+    const tools = bench(fakeBrowser())
+    expect(await tools.call('headless_browser_keepalive', { action: 'add' })).toEqual({ error: 'add needs a url' })
+    expect(await tools.call('headless_browser_keepalive', { action: 'remove' })).toEqual({ error: 'remove needs an id' })
+    expect(await tools.call('headless_browser_keepalive', { action: 'check' })).toEqual({ error: 'check needs an id' })
+  })
+
+  it('reports a refused keepalive request with the reason the store gave', async () => {
+    const tools = bench(fakeBrowser(), fakeKeepalives({
+      add: async () => { throw new KeepaliveError('k1 (mail) already visits https://example.com/') },
+      check: async () => { throw new KeepaliveError('no keepalive named k9') },
+    }))
+    expect(await tools.call('headless_browser_keepalive', { action: 'add', url: 'https://example.com/' }))
+      .toEqual({ error: 'k1 (mail) already visits https://example.com/' })
+    expect(await tools.call('headless_browser_keepalive', { action: 'check', id: 'k9' }))
+      .toEqual({ error: 'no keepalive named k9' })
+  })
+
+  it('titles a keepalive call by what it does', () => {
+    const tools = bench(fakeBrowser())
+    const keepalive = definitionOf(tools, 'headless_browser_keepalive')
+    expect(keepalive.parameters).toMatchObject({
+      required: ['action'],
+      properties: {
+        action: { type: 'string', enum: ['add', 'remove', 'list', 'check'] },
+        everyMinutes: { type: 'integer' },
+      },
+    })
+    expect(keepalive.presentCall?.({ action: 'add', url: 'https://example.com/' })).toMatchObject({ title: 'Keep https://example.com/ alive' })
+    expect(keepalive.presentCall?.({ action: 'add' })).toMatchObject({ title: 'Keep a page alive' })
+    expect(keepalive.presentCall?.({ action: 'list' })).toMatchObject({ title: 'List keepalives' })
+    expect(keepalive.presentCall?.({ action: 'remove', id: 'k1' })).toMatchObject({ title: 'Remove keepalive k1' })
+    expect(keepalive.presentCall?.({ action: 'check', id: 'k1' })).toMatchObject({ title: 'Check keepalive k1' })
   })
 
   it('hands the page over with its URL and a reason, and refuses an empty reason', async () => {

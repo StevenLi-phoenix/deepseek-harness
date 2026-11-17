@@ -9,14 +9,14 @@
   en: f4253daa2d0d63e1
   zh: b349207a631a9333
 /deepseek-ai-dsh-headless-browser/summary:
-  en: ec3a065ce9d86678
-  zh: bf7d5454349feeb0
+  en: 1aab7ca08bc4f42c
+  zh: 754e1821082d1d9d
 /deepseek-ai-dsh-headless-browser/table-of-contents:
   en: d152484eb41ac6b4
   zh: f14f34fce35a8d90
 /deepseek-ai-dsh-headless-browser/use-this-package:
-  en: 5bb62eaabd85da85
-  zh: eae7d5ca095fa9c4
+  en: 61920033bd220712
+  zh: a4f694da83ea7c2c
 /deepseek-ai-dsh-headless-browser/use-this-package/reading-a-page-s-text:
   en: c4f5f700333e1b39
   zh: 2f00de34b9699514
@@ -27,17 +27,23 @@
   en: 8fe72156c5ce1680
   zh: 592b01dee602bdce
 /deepseek-ai-dsh-headless-browser/use-this-package/the-take-over-page:
-  en: d0f8ba53aab12421
-  zh: 960516d0d48f1d21
+  en: c5cf4a9e79aa732c
+  zh: 7abda904eaf5cee2
 /deepseek-ai-dsh-headless-browser/use-this-package/the-take-over-page/the-in-app-page:
   en: b21317179e46b6e0
   zh: 875d89b47c74b5a4
+/deepseek-ai-dsh-headless-browser/use-this-package/fetching-with-the-session-s-cookies:
+  en: 1d80bed6badd0754
+  zh: 67a9da2ebced58e0
+/deepseek-ai-dsh-headless-browser/use-this-package/keeping-a-session-alive:
+  en: 9628939db8e6e16f
+  zh: 4f3bc6a269cee798
 /deepseek-ai-dsh-headless-browser/use-this-package/the-page-is-data-never-instructions:
   en: 1080bdf1bad7d191
   zh: fc6e26c8aed903f3
 /deepseek-ai-dsh-headless-browser/understand-the-implementation:
-  en: 19008a132e452b52
-  zh: 8cc2b498deeade2d
+  en: 91f677a4b8859d5b
+  zh: e53839a6c32b2e24
 /deepseek-ai-dsh-headless-browser/further-exploration:
   en: 43206093e89698f4
   zh: b12af8d88b5a1933
@@ -80,9 +86,21 @@
 /deepseek-ai-dsh-headless-browser/model-experience/control-tools/kv-cache-effect:
   en: b92d717917f63dc9
   zh: e8e55a56144fdb93
+/deepseek-ai-dsh-headless-browser/model-experience/session-tools:
+  en: ef1e254f29227c17
+  zh: ecb7b4bc581146d5
+/deepseek-ai-dsh-headless-browser/model-experience/session-tools/what-the-model-sees:
+  en: cc421b496d06db2e
+  zh: 7576866bfbb324c4
+/deepseek-ai-dsh-headless-browser/model-experience/session-tools/token-effect:
+  en: 979146e0f9ea7dcf
+  zh: 9fee9b70980c8481
+/deepseek-ai-dsh-headless-browser/model-experience/session-tools/kv-cache-effect:
+  en: 7d4914dd8961ea36
+  zh: e1b3d4cb71cde35d
 /deepseek-ai-dsh-headless-browser/known-limitations-and-deferred-work:
-  en: 249e374c4f2e3aad
-  zh: 6746bac7e54d3f27
+  en: 9fb31d2b47d297b8
+  zh: 763ffcaa56062a3c
 /deepseek-ai-dsh-headless-browser/known-limitations-and-deferred-work/dev-note:
   en: fd19c8542e1f001f
   zh: 095ceda61cd7961c

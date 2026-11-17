@@ -43,6 +43,8 @@ async function boot(): Promise<App> {
     viewportHeight: 800,
     jpegQuality: 50,
     snapshotDir: join(root, 'snapshots'),
+    keepalivePath: join(root, 'keepalive.json'),
+    keepaliveEscalateAfter: 3,
   }, new Context().logger, guard)
   const app: App = {
     browser,

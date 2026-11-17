@@ -90,6 +90,11 @@ export interface TabsOptions {
   readonly maxTabs?: number
   /** Per-navigation deadline; defaults to {@link NAVIGATION_TIMEOUT_MS}. */
   readonly navigationTimeoutMs?: number
+  /**
+   * Pages that belong to another owner — a keepalive's offscreen page — and are
+   * never adopted as a tab, so they cannot spend one of the tab slots.
+   */
+  readonly reserved?: (page: TabsPage) => boolean
 }
 
 /** What the active tab and its CDP session are, for the screencast. */
@@ -359,7 +364,9 @@ export class BrowserTabs {
   }
 
   async #firstPage(context: TabsContext): Promise<TabsPage> {
-    const reusable = context.pages().find(page => !page.isClosed() && !this.#hasPage(page))
+    const reusable = context.pages().find(page => !page.isClosed()
+      && !this.#hasPage(page)
+      && !(this.#options.reserved?.(page) ?? false))
     return reusable ?? await context.newPage()
   }
 

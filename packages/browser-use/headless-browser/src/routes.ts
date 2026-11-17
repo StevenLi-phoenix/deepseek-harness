@@ -19,6 +19,7 @@ import { WebSocket, WebSocketServer } from 'ws'
 import { firstLine } from './error.ts'
 import type { SecurityLog } from './guard.ts'
 import { cdpCommand, decodeClientMessage, type ClientMessage } from './input.ts'
+import type { KeepaliveStatus } from './keepalive.ts'
 import type { LiveView, Viewer } from './live-view.ts'
 import { PAGE_HTML } from './page.ts'
 import { LIVE_PATH, PAGE_PATH, STATUS_PATH } from './paths.ts'
@@ -43,6 +44,8 @@ export interface TakeoverRoutesDeps {
   readonly view: LiveView
   /** Guard decisions, so the status route can report refusals and drifts. */
   readonly security: SecurityLog
+  /** Session keepalives, with their state and retry schedule. */
+  readonly keepalives: () => KeepaliveStatus[]
   /** Plugin logger for dropped input and socket failures. */
   readonly log: Context['logger']
 }
@@ -99,6 +102,7 @@ function statusResponse(deps: TakeoverRoutesDeps): Response {
     ...deps.browser.status(),
     viewers: deps.view.size,
     security: deps.security.view(),
+    keepalive: deps.keepalives(),
   }, { headers: NO_STORE })
 }
 

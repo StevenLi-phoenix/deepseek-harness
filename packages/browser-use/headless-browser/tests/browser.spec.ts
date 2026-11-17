@@ -9,6 +9,7 @@
  */
 
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -22,6 +23,7 @@ import { LiveView } from '../src/live-view.ts'
 import { SelectorMissError } from '../src/read.ts'
 import { LIVE_PATH, mountTakeoverRoutes } from '../src/routes.ts'
 import { HeadlessBrowserSession } from '../src/session.ts'
+import { TabLimitError, MAX_TABS } from '../src/tabs.ts'
 import { TakeoverState } from '../src/takeover.ts'
 
 const AVAILABLE = existsSync(chromium.executablePath())
@@ -95,10 +97,19 @@ async function boot(): Promise<BrowserApp> {
     viewportHeight: 800,
     jpegQuality: 50,
     snapshotDir: join(root, 'snapshots'),
+    keepalivePath: join(root, 'keepalive.json'),
+    keepaliveEscalateAfter: 3,
   }, ctx.logger)
   const takeover = new TakeoverState()
   const view = new LiveView(() => browser.castTarget(), { jpegQuality: 50, maxWidth: 1280, maxHeight: 800 }, ctx.logger)
-  const removeRoutes = mountTakeoverRoutes(ctx.webServer, { browser, takeover, view, security: new SecurityLog(), log: ctx.logger })
+  const removeRoutes = mountTakeoverRoutes(ctx.webServer, {
+    browser,
+    takeover,
+    view,
+    security: new SecurityLog(),
+    keepalives: () => [],
+    log: ctx.logger,
+  })
   const port = ctx.webServer.port
   if (port === undefined) throw new Error('the test Web server did not bind a port')
   const app: BrowserApp = {
@@ -301,5 +312,73 @@ describe.skipIf(!AVAILABLE)('headless browser live view', () => {
     const other = await app.browser.read({}, second.id)
     expect(other.header).toContain(`text of ${second.id} `)
     expect(other.text).toBe('второй список')
+  }, 120_000)
+})
+
+/** A page a check should accept: no password field, nothing asking for a code. */
+const SIGNED_IN_PAGE = 'data:text/html,<title>inbox</title><body><div>welcome back</div></body>'
+
+/** A page a check must refuse: the site asked for the password again. */
+const SIGN_IN_PAGE = 'data:text/html,<title>sign in</title><body><form><input type="password" name="pw"></form></body>'
+
+/** A page that asks for a one-time code instead. */
+const MFA_PAGE = 'data:text/html,<title>verify</title><body><input autocomplete="one-time-code"><a>a@example.com</a><a>b@example.com</a></body>'
+
+describe.skipIf(!AVAILABLE)('session warming over a real browser', () => {
+  it('visits a page in an offscreen page that is not a tab, and reads what the real DOM shows', async () => {
+    const app = await boot()
+    await app.browser.open(DATA_PAGE)
+    const before = app.browser.tabsState()
+    const kept = await app.browser.keepalivePage()
+    await kept.goto(SIGNED_IN_PAGE, { waitUntil: 'load', timeout: 10_000 })
+    expect(await kept.challenge()).toEqual({ passwordField: false, oneTimeCode: false, accountLinks: 0 })
+    expect(app.browser.tabsState()).toEqual(before)
+    await kept.goto(SIGN_IN_PAGE, { waitUntil: 'load', timeout: 10_000 })
+    expect(await kept.challenge()).toMatchObject({ passwordField: true })
+    await kept.goto(MFA_PAGE, { waitUntil: 'load', timeout: 10_000 })
+    expect(await kept.challenge()).toMatchObject({ oneTimeCode: true, accountLinks: 2 })
+    await kept.close()
+    expect(kept.isClosed()).toBe(true)
+    expect(app.browser.tabsState()).toEqual(before)
+  }, 120_000)
+
+  it('checks a keepalive while the tab model is at its eight-tab cap', async () => {
+    const app = await boot()
+    await app.browser.open('data:text/html,<title>tab0</title>')
+    for (let index = 1; index < MAX_TABS; index += 1) {
+      await app.browser.open(`data:text/html,<title>tab${String(index)}</title>`, true)
+    }
+    expect(app.browser.tabsState()).toHaveLength(MAX_TABS)
+    await expect(app.browser.open('data:text/html,<title>ninth</title>', true)).rejects.toThrow(TabLimitError)
+    const kept = await app.browser.keepalivePage()
+    await kept.goto(SIGNED_IN_PAGE, { waitUntil: 'load', timeout: 10_000 })
+    expect(await kept.challenge()).toMatchObject({ passwordField: false })
+    await kept.close()
+    expect(app.browser.tabsState()).toHaveLength(MAX_TABS)
+  }, 180_000)
+
+  it('reads the context cookies for one domain and builds the header a plain fetch sends', async () => {
+    const app = await boot()
+    const server: Server = createServer((_request, response) => {
+      response.writeHead(200, {
+        'content-type': 'text/html; charset=utf-8',
+        'set-cookie': ['sid=abc123; Path=/', 'theme=dark; Path=/app'],
+      })
+      response.end('<!doctype html><title>home</title><body>home</body>')
+    })
+    await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
+    const address = server.address()
+    if (address === null || typeof address === 'string') throw new Error('the test server did not bind a port')
+    try {
+      await app.browser.open(`http://127.0.0.1:${String(address.port)}/`)
+      const result = await app.browser.cookies('127.0.0.1')
+      expect(result.cookies.map(cookie => cookie.name).sort()).toEqual(['sid', 'theme'])
+      expect(result.toHeader).toContain('sid=abc123')
+      expect(result.cookies.every(cookie => cookie.domain.includes('127.0.0.1'))).toBe(true)
+      const elsewhere = await app.browser.cookies('example.com')
+      expect(elsewhere).toEqual({ cookies: [], toHeader: '' })
+    } finally {
+      await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+    }
   }, 120_000)
 })

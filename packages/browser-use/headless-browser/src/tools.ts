@@ -14,9 +14,11 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import type { CookieResult } from './cookies.ts'
 import { firstLine } from './error.ts'
 import { ActionRefusedError, pageOrigin, type BlockedAction } from './guard.ts'
 import { DEFAULT_READ_LIMIT, MAX_READ_LIMIT, SelectorMissError, type ReadRequest, type ReadResult } from './read.ts'
+import { KeepaliveError, MAX_EVERY_MINUTES, MIN_EVERY_MINUTES, type KeepaliveTools } from './keepalive.ts'
 import { MAX_SCROLL_DELTA, type ScrollRequest, type ScrollResult } from './scroll.ts'
 import { BrowserUnavailableError, NoOpenTabError, type ActionOutcome, type TargetRequest } from './session.ts'
 import { TabNotFoundError, type ClosedTab } from './tabs.ts'
@@ -25,6 +27,7 @@ import { UserHoldsBrowserError, type TakeoverState } from './takeover.ts'
 /** The browser operations the tools call; the session class in `session.ts` satisfies them. */
 export interface ToolBrowser {
   open(url: string, newTab?: boolean, allowOrigin?: boolean): Promise<{ url: string; title: string }>
+  cookies(domain?: string): Promise<CookieResult>
   snapshot(tabId?: string, fullPage?: boolean): Promise<{ path: string; url: string }>
   read(request: ReadRequest, tabId?: string): Promise<ReadResult>
   click(request: TargetRequest, tabId?: string): Promise<ActionOutcome>
@@ -41,6 +44,8 @@ export interface ToolDeps {
   readonly takeover: TakeoverState
   /** Absolute URL of the take-over page, read when a tool result needs it. */
   readonly pageUrl: () => string
+  /** The keepalives the keepalive tool adds, removes, lists, and checks. */
+  readonly keepalives: KeepaliveTools
 }
 
 /** The wrapper every page-derived field arrives in. */
@@ -68,6 +73,44 @@ const TAB_SCHEMA = {
     url: { type: 'string', required: true },
     loading: { type: 'boolean', required: true },
     active: { type: 'boolean', required: true },
+  },
+} as const
+
+/** One cookie the context holds. */
+const COOKIE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    name: { type: 'string', required: true },
+    value: { type: 'string', required: true },
+    domain: { type: 'string', required: true },
+    path: { type: 'string', required: true },
+    expires: { type: 'number', required: true },
+    httpOnly: { type: 'boolean', required: true },
+    secure: { type: 'boolean', required: true },
+  },
+} as const
+
+/** One keepalive, as the keepalive tool and the status route report it. */
+const KEEPALIVE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string', required: true },
+    label: { type: 'string', required: true },
+    url: { type: 'string', required: true },
+    everyMinutes: { type: 'integer', required: true },
+    state: { type: 'string', required: true, enum: ['ok', 'recovering', 'needs-human', 'error'] },
+    consecutiveFailures: { type: 'integer', required: true },
+    domain: { type: 'string' },
+    lastOkAt: { type: 'string' },
+    lastCheckAt: { type: 'string' },
+    lastAttemptAt: { type: 'string' },
+    nextAttemptAt: { type: 'string' },
+    firstFailureAt: { type: 'string' },
+    lastError: { type: 'string' },
+    lastUrl: { type: 'string' },
+    blockedStep: { type: 'string', enum: ['account-chooser', 'password', 'mfa', 'redirect'] },
   },
 } as const
 
@@ -169,7 +212,8 @@ interface BlockedFields {
  */
 function failure(action: string, error: unknown): { error: string } {
   if (error instanceof UserHoldsBrowserError || error instanceof BrowserUnavailableError
-    || error instanceof TabNotFoundError || error instanceof SelectorMissError || error instanceof NoOpenTabError) {
+    || error instanceof TabNotFoundError || error instanceof SelectorMissError || error instanceof NoOpenTabError
+    || error instanceof KeepaliveError) {
     return { error: error.message }
   }
   if (error instanceof Error) return { error: `${action} failed: ${firstLine(error)}` }
@@ -252,6 +296,16 @@ function scrollArgumentError(args: ScrollArgs): string | undefined {
     return 'x and y must not be negative'
   }
   return undefined
+}
+
+/** Arguments accepted by `headless_browser_keepalive`. */
+interface KeepaliveArgs {
+  readonly action: 'add' | 'remove' | 'list' | 'check'
+  readonly id?: string
+  readonly url?: string
+  readonly domain?: string
+  readonly everyMinutes?: number
+  readonly label?: string
 }
 
 /** The arguments a click or type names its target with. */
@@ -729,5 +783,122 @@ export function registerBrowserTools(ctx: Context, deps: ToolDeps): void {
       return { holder: deps.takeover.holder }
     },
     presentCall: () => ({ card: 'generic', title: 'Take control back', kind: 'other' }),
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'headless_browser_cookies',
+    description: 'Read the browser context\'s cookies, filtered by a domain suffix, and return them with the Cookie header a plain HTTP fetch sends; the values are session credentials, so a caller uses them and never displays them.',
+    parameters: {
+      domain: { type: 'string', description: 'Domain suffix to keep, such as example.com; omit for every cookie in the context.' },
+    },
+    output: {
+      schema: {
+        oneOf: [
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              cookies: { type: 'array', required: true, items: COOKIE_SCHEMA },
+              toHeader: { type: 'string', required: true },
+            },
+          },
+          ERROR_SCHEMA,
+        ],
+      },
+      render: renderJson,
+    },
+    // Reading cookies touches no page and takes no control, so it stays
+    // available while the user holds the browser.
+    execute: (args: { domain?: string }) => attempt('reading cookies', async () => {
+      const result = await deps.browser.cookies(args.domain)
+      return { cookies: result.cookies, toHeader: result.toHeader }
+    }),
+    presentCall: args => ({
+      card: 'generic',
+      title: args.domain === undefined ? 'Read cookies' : `Read cookies for ${args.domain}`,
+      kind: 'read',
+    }),
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'headless_browser_keepalive',
+    description: 'Keep a signed-in session alive: add a URL the browser revisits on a timer in an offscreen page, remove one, list them with their state, or force one check now; a failed check is retried on its own, and only a repeated sign-in prompt needs a person.',
+    parameters: {
+      action: {
+        type: 'string',
+        required: true,
+        enum: ['add', 'remove', 'list', 'check'],
+        description: 'add registers a URL, remove deletes one, list reports every entry, check runs one attempt immediately.',
+      },
+      id: { type: 'string', description: 'Keepalive id, for remove and check.' },
+      url: { type: 'string', description: 'Absolute http or https URL, for add.' },
+      domain: { type: 'string', description: 'Site the add treats as on-site, so a sign-in host below it still counts; the URL\'s own origin when omitted.' },
+      everyMinutes: { type: 'integer', description: `Minutes between checks, ${String(MIN_EVERY_MINUTES)} through ${String(MAX_EVERY_MINUTES)}; ${String(MIN_EVERY_MINUTES)} when omitted.` },
+      label: { type: 'string', description: 'Short human name; the host name when omitted.' },
+    },
+    output: {
+      schema: {
+        oneOf: [
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: { keepalive: { ...KEEPALIVE_SCHEMA, required: true } },
+          },
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: { keepalives: { type: 'array', required: true, items: KEEPALIVE_SCHEMA } },
+          },
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: { removed: { type: 'string', required: true } },
+          },
+          ERROR_SCHEMA,
+        ],
+      },
+      render: renderJson,
+    },
+    // A keepalive check drives its own offscreen page, so it neither competes
+    // for the page the user holds nor waits for the agent to take it back.
+    execute: async (args: KeepaliveArgs) => await attempt('running the keepalive', async () => {
+      switch (args.action) {
+        case 'add': {
+          const url = args.url
+          if (url === undefined) return { error: 'add needs a url' }
+          return {
+            keepalive: await deps.keepalives.add({
+              url,
+              ...args.domain === undefined ? {} : { domain: args.domain },
+              ...args.everyMinutes === undefined ? {} : { everyMinutes: args.everyMinutes },
+              ...args.label === undefined ? {} : { label: args.label },
+            }),
+          }
+        }
+        case 'remove': {
+          const id = args.id
+          if (id === undefined) return { error: 'remove needs an id' }
+          await deps.keepalives.remove(id)
+          return { removed: id }
+        }
+        case 'list':
+          return { keepalives: await deps.keepalives.list() }
+        case 'check': {
+          const id = args.id
+          if (id === undefined) return { error: 'check needs an id' }
+          return { keepalive: await deps.keepalives.check(id) }
+        }
+        /* v8 ignore next 2 -- the union is closed and every action returns above. */
+        default:
+          return { error: `unknown action ${String(args.action)}` }
+      }
+    }),
+    presentCall: (args) => {
+      const id = args.id ?? ''
+      const title = args.action === 'list'
+        ? 'List keepalives'
+        : args.action === 'add' ? `Keep ${args.url ?? 'a page'} alive` : `${args.action === 'remove' ? 'Remove' : 'Check'} keepalive ${id}`.trim()
+      return { card: 'generic', title, kind: 'other' }
+    },
   }))
 }
