@@ -17,6 +17,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { WebServer } from '@deepseek-ai/dsh-host-webserver'
 import { WebSocket, WebSocketServer } from 'ws'
 import { firstLine } from './error.ts'
+import type { SecurityLog } from './guard.ts'
 import { cdpCommand, decodeClientMessage, type ClientMessage } from './input.ts'
 import type { LiveView, Viewer } from './live-view.ts'
 import { PAGE_HTML } from './page.ts'
@@ -40,6 +41,8 @@ export interface TakeoverRoutesDeps {
   readonly takeover: TakeoverState
   /** The shared screencast. */
   readonly view: LiveView
+  /** Guard decisions, so the status route can report refusals and drifts. */
+  readonly security: SecurityLog
   /** Plugin logger for dropped input and socket failures. */
   readonly log: Context['logger']
 }
@@ -95,6 +98,7 @@ function statusResponse(deps: TakeoverRoutesDeps): Response {
     ...deps.takeover.view(),
     ...deps.browser.status(),
     viewers: deps.view.size,
+    security: deps.security.view(),
   }, { headers: NO_STORE })
 }
 

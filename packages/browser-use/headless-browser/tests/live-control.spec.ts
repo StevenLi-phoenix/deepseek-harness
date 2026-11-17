@@ -12,6 +12,7 @@ import { Context } from '@deepseek-ai/cordis'
 import HttpServer from '@deepseek-ai/dsh-host-webserver'
 import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import type { InputCommand } from '../src/input.ts'
+import { SecurityLog } from '../src/guard.ts'
 import type { LiveView, Viewer } from '../src/live-view.ts'
 import { LIVE_PATH, mountTakeoverRoutes } from '../src/routes.ts'
 import type { HeadlessBrowserSession } from '../src/session.ts'
@@ -81,7 +82,7 @@ async function boot(): Promise<App> {
     async close(): Promise<void> { viewers.clear() },
   } as unknown as LiveView
   const takeover = new TakeoverState()
-  const removeRoutes = mountTakeoverRoutes(ctx.webServer, { browser, takeover, view, log: ctx.logger })
+  const removeRoutes = mountTakeoverRoutes(ctx.webServer, { browser, takeover, view, security: new SecurityLog(), log: ctx.logger })
   const port = ctx.webServer.port
   if (port === undefined) throw new Error('the test Web server did not bind a port')
   const app: App = {

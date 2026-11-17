@@ -54,6 +54,8 @@ export interface ReadResult {
   readonly total: number
   /** Offset of the next window; absent when this window reaches the end of the text. */
   readonly nextOffset?: number
+  /** URL of the page the text came from, so a tool result can name its origin. */
+  readonly url: string
 }
 
 /** What one read needs from a page; a Playwright `Page` satisfies it. */
@@ -96,6 +98,7 @@ export async function readText(page: ReadPage, tab: string, request: ReadRequest
     header: headerOf(page.url(), tab, total, limit, window),
     text: text.slice(characterBoundary(text, window.start), characterBoundary(text, window.end)),
     total,
+    url: page.url(),
     ...window.end < total ? { nextOffset: window.end } : {},
   }
 }

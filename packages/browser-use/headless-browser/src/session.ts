@@ -15,14 +15,16 @@ import { randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { chromium, type BrowserContext, type CDPSession, type Page } from 'playwright-core'
+import { chromium, type BrowserContext, type CDPSession, type ElementHandle, type Page } from 'playwright-core'
 import type { Config } from './config.ts'
 import { firstLine } from './error.ts'
+import { ActionGuard, ActionRefusedError, blockedAction, refusalOf, type Decision, type PointChoice, type TargetChoice } from './guard.ts'
 import type { InputCommand, TabInfo, TabMessage } from './input.ts'
 import { readText, type ReadPage, type ReadRequest, type ReadResult } from './read.ts'
 import { cdpScrollChannel, scrollPage, type ScrollRequest, type ScrollResult } from './scroll.ts'
 import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
 import { BrowserTabs, type ActiveTab, type ClosedTab, type TabsContext } from './tabs.ts'
+import { probeElement, readElementFacts, type ElementFacts } from './visibility.ts'
 
 /** The browser cannot run, so a tool reports the reason instead of retrying. */
 export class BrowserUnavailableError extends Error {
@@ -58,10 +60,73 @@ export interface CastTarget {
   readonly cdp: CDPSession
 }
 
+/** Which element a mutating tool acts on. */
+export interface ActionTarget {
+  /** CSS selector; every match is scored and the element a person would reach wins. */
+  readonly selector?: string
+  /** Accessibility id from a page read; it names exactly one element. */
+  readonly axId?: string
+  /** Viewport point in CSS pixels; the action lands there and the guard inspects what it hit. */
+  readonly point?: { readonly x: number; readonly y: number }
+}
+
+/** One click or type request, as the model asked for it. */
+export interface TargetRequest extends ActionTarget {
+  /** Allow a move to another registrable domain, as the agent re-requested it after a refusal. */
+  readonly allowOrigin?: boolean
+}
+
+/** What a mutating tool reports about the element it acted on. */
+export interface ActionOutcome {
+  /** Page URL after the action settled. */
+  readonly url: string
+  /** The element that was chosen, for a selector or an accessibility id. */
+  readonly target?: TargetChoice
+  /** The point a coordinate action hit, with the element and score it found there. */
+  readonly point?: PointChoice
+}
+
+/** The element handle an accessibility id resolves to. */
+export type AxTargetHandle = ElementHandle<Element>
+
+/**
+ * Resolves an accessibility id from a page read to the element it names. The
+ * id map belongs to the read tool that produced the ids; this package consumes
+ * it and keeps no second map, so an id can never name two different elements.
+ */
+export interface AxTargetResolver {
+  /**
+   * @param page - the page the id was read from.
+   * @param axId - the id the model named.
+   * @returns the element, or nothing when the id is unknown or the page moved since the read.
+   */
+  resolve(page: Page, axId: string): Promise<AxTargetHandle | undefined>
+}
+
+/** What a locator or an element handle both offer a guarded action. */
+interface Actionable {
+  click(): Promise<void>
+  fill(value: string): Promise<void>
+}
+
+/** The elements one target request resolved to, before the guard chose among them. */
+interface Resolution {
+  /** The selector, accessibility id, or point, as the model wrote it. */
+  readonly ref: string
+  /** Facts for every candidate, in document order. */
+  readonly facts: readonly ElementFacts[]
+  /** The candidate at one index, ready to act on. */
+  readonly element: (index: number) => Actionable
+  /** The accessibility id that resolved to nothing, when it did. */
+  readonly staleAxId?: string
+}
+
 /** Launch, navigate, inspect, and close one persistent Chromium with tabs. */
 export class HeadlessBrowserSession {
   readonly #config: Config
   readonly #log: Context['logger']
+  readonly #guard: ActionGuard
+  #axResolver: AxTargetResolver | undefined
   #context: BrowserContext | undefined
   #launching: Promise<BrowserContext> | undefined
   #closed = false
@@ -75,9 +140,19 @@ export class HeadlessBrowserSession {
    * @param config - profile, viewport, and snapshot settings.
    * @param log - plugin logger for launch and shutdown facts.
    */
-  constructor(config: Config, log: Context['logger']) {
+  constructor(config: Config, log: Context['logger'], guard: ActionGuard = new ActionGuard()) {
     this.#config = config
     this.#log = log
+    this.#guard = guard
+  }
+
+  /**
+   * Register the accessibility id map a read tool owns, so click and type can
+   * name an element by the id the model read.
+   * @param resolver - the read tool's map, or nothing to stop resolving ids.
+   */
+  setAxResolver(resolver: AxTargetResolver | undefined): void {
+    this.#axResolver = resolver
   }
 
   /**
@@ -181,16 +256,40 @@ export class HeadlessBrowserSession {
    * Open a URL in the active tab, or in a new one.
    * @param url - absolute URL; the page reports a relative one as invalid.
    * @param newTab - open a new tab instead of reusing the active one.
+   * @param allowOrigin - allow the move when the destination is another registrable domain.
+   * @returns the settled URL and the document title.
+   * @throws ActionRefusedError - when the destination is another site and this call did not allow it.
+   */
+  async open(url: string, newTab = false, allowOrigin = false): Promise<{ url: string; title: string }> {
+    const current = await this.page()
+    const decision = this.#guard.decideNavigation({ action: 'open', url: current.url(), target: url, allowOrigin })
+    if (!decision.allowed) throw new ActionRefusedError(blockedAction(refusalOf(decision)))
+    const opened = newTab
+      ? await this.#openTab(url)
+      : await this.#openHere(url)
+    this.#guard.anchor(opened.url)
+    return opened
+  }
+
+  /**
+   * Navigate the active tab and report what settled.
+   * @param url - absolute URL to load.
    * @returns the settled URL and the document title.
    */
-  async open(url: string, newTab = false): Promise<{ url: string; title: string }> {
-    if (newTab) {
-      const tab = await this.tabs().create(url)
-      return { url: tab.url, title: tab.title }
-    }
+  async #openHere(url: string): Promise<{ url: string; title: string }> {
     await this.tabs().navigate(url)
     const page = await this.page()
     return { url: page.url(), title: await page.title() }
+  }
+
+  /**
+   * Open a URL in a new tab and report what settled.
+   * @param url - absolute URL to load.
+   * @returns the new tab's URL and title.
+   */
+  async #openTab(url: string): Promise<{ url: string; title: string }> {
+    const tab = await this.tabs().create(url)
+    return { url: tab.url, title: tab.title }
   }
 
   /**
@@ -245,25 +344,165 @@ export class HeadlessBrowserSession {
   }
 
   /**
-   * Click the first element matching a CSS selector in one tab.
-   * @param selector - selector the page resolves to one element.
+   * Click the element a person would reach among a selector's matches, the one
+   * element an accessibility id names, or a viewport point, after the action
+   * guard clears it.
+   * @param request - the selector, accessibility id, or point, and whether the agent allowed a site change.
    * @param tabId - tab id, or nothing for the active tab.
-   * @returns the page URL after the click, which may already be the navigation target.
+   * @returns the page URL after the click and the element or point it acted on.
+   * @throws ActionRefusedError - when visibility, a sensitive name, or origin refuses the click.
    */
-  async click(selector: string, tabId?: string): Promise<{ url: string }> {
+  async click(request: TargetRequest, tabId?: string): Promise<ActionOutcome> {
     const page = await this.page(tabId)
-    await page.locator(selector).first().click()
-    return { url: page.url() }
+    if (request.point !== undefined) {
+      const hit = await this.#hitFacts(page, request.point)
+      const point = this.#acceptPoint(this.#guard.decidePoint({
+        action: 'click',
+        url: page.url(),
+        x: request.point.x,
+        y: request.point.y,
+        ...tabId === undefined ? {} : { tabId },
+        ...hit === undefined ? {} : { hit },
+        allowOrigin: request.allowOrigin === true,
+      }))
+      await page.mouse.click(request.point.x, request.point.y)
+      this.#guard.anchor(page.url())
+      return { url: page.url(), point }
+    }
+    const resolution = await this.#resolve(page, request)
+    const target = this.#accept(this.#guard.decideTarget({
+      action: 'click',
+      url: page.url(),
+      ref: resolution.ref,
+      candidates: resolution.facts,
+      allowOrigin: request.allowOrigin === true,
+      ...resolution.staleAxId === undefined ? {} : { staleAxId: resolution.staleAxId },
+    }))
+    await resolution.element(target.index).click()
+    this.#guard.anchor(page.url())
+    return { url: page.url(), target }
   }
 
   /**
-   * Replace the editable value of the first element matching a CSS selector in one tab.
-   * @param selector - selector for an input, textarea, or contenteditable element.
+   * Replace the editable value of the element a person would reach among a
+   * selector's matches, the one element an accessibility id names, or the field
+   * a viewport point focuses, after the action guard clears it.
+   * @param request - the selector, accessibility id, or point, and whether the agent allowed a site change.
    * @param text - the value to write.
    * @param tabId - tab id, or nothing for the active tab.
+   * @returns the page URL after typing and the element or point it acted on.
+   * @throws ActionRefusedError - when visibility, a sensitive name, or origin refuses the type.
    */
-  async fill(selector: string, text: string, tabId?: string): Promise<void> {
-    await (await this.page(tabId)).locator(selector).first().fill(text)
+  async fill(request: TargetRequest, text: string, tabId?: string): Promise<ActionOutcome> {
+    const page = await this.page(tabId)
+    if (request.point !== undefined) {
+      const hit = await this.#hitFacts(page, request.point)
+      const point = this.#acceptPoint(this.#guard.decidePoint({
+        action: 'type',
+        url: page.url(),
+        x: request.point.x,
+        y: request.point.y,
+        ...tabId === undefined ? {} : { tabId },
+        ...hit === undefined ? {} : { hit },
+        allowOrigin: request.allowOrigin === true,
+      }))
+      await page.mouse.click(request.point.x, request.point.y)
+      await page.keyboard.insertText(text)
+      this.#guard.anchor(page.url())
+      return { url: page.url(), point }
+    }
+    const resolution = await this.#resolve(page, request)
+    const target = this.#accept(this.#guard.decideTarget({
+      action: 'type',
+      url: page.url(),
+      ref: resolution.ref,
+      candidates: resolution.facts,
+      allowOrigin: request.allowOrigin === true,
+      ...resolution.staleAxId === undefined ? {} : { staleAxId: resolution.staleAxId },
+    }))
+    await resolution.element(target.index).fill(text)
+    this.#guard.anchor(page.url())
+    return { url: page.url(), target }
+  }
+
+  /**
+   * What a viewport point hits, measured with the same probe a selector target
+   * gets, so the guard can apply the sensitive-name and origin rules to the
+   * element a person would actually reach there.
+   * @param point - viewport coordinates in CSS pixels.
+   * @returns the facts of the element there, or nothing for a blank point.
+   */
+  async #hitFacts(page: Page, point: { readonly x: number; readonly y: number }): Promise<ElementFacts | undefined> {
+    const handle = await page.evaluateHandle(
+      (at: { x: number; y: number }) => document.elementFromPoint(at.x, at.y),
+      { x: point.x, y: point.y },
+    )
+    try {
+      const element = handle.asElement()
+      if (element === null) return undefined
+      return readElementFacts(await element.evaluate(probeElement))
+    } finally {
+      await handle.dispose()
+    }
+  }
+
+  /**
+   * Resolve a request to the candidates the guard scores. A selector keeps
+   * every match; an accessibility id names one element through the read tool's
+   * map, and an id that map does not know is reported as stale rather than
+   * falling back to a selector or a coordinate.
+   * @param page - the page the action runs in.
+   * @param request - the target the model named.
+   * @returns the candidates and the way to act on one of them.
+   */
+  async #resolve(page: Page, request: TargetRequest): Promise<Resolution> {
+    if (request.axId !== undefined) {
+      const resolver = this.#axResolver
+      if (resolver === undefined) {
+        throw new Error(`accessibility id ${request.axId} cannot be resolved: no page read has registered an id map in this build; pass a selector instead`)
+      }
+      const handle = await resolver.resolve(page, request.axId)
+      if (handle === undefined) {
+        return {
+          ref: request.axId,
+          facts: [],
+          element: () => { throw new Error(`accessibility id ${request.axId} resolved to no element`) },
+          staleAxId: request.axId,
+        }
+      }
+      const facts = readElementFacts(await handle.evaluate(probeElement))
+      return { ref: request.axId, facts: [facts], element: () => handle }
+    }
+    const selector = request.selector
+    if (selector === undefined) throw new Error('a guarded action needs a selector, an accessibility id, or a point')
+    const locator = page.locator(selector)
+    const count = await locator.count()
+    if (count === 0) throw new Error(`no element matches ${selector}`)
+    const facts: ElementFacts[] = []
+    for (let index = 0; index < count; index += 1) {
+      facts.push(readElementFacts(await locator.nth(index).evaluate(probeElement)))
+    }
+    return { ref: selector, facts, element: index => locator.nth(index) }
+  }
+
+  /**
+   * Report the guard's refusal, or return the element it chose.
+   * @param decision - the guard's answer.
+   * @returns the chosen element.
+   */
+  #accept(decision: Decision): TargetChoice {
+    if (!decision.allowed || decision.target === undefined) throw new ActionRefusedError(blockedAction(refusalOf(decision)))
+    return decision.target
+  }
+
+  /**
+   * Report the guard's refusal, or return the point it allowed.
+   * @param decision - the guard's answer.
+   * @returns the point the action hit.
+   */
+  #acceptPoint(decision: Decision): PointChoice {
+    if (!decision.allowed || decision.point === undefined) throw new ActionRefusedError(blockedAction(refusalOf(decision)))
+    return decision.point
   }
 
   /**

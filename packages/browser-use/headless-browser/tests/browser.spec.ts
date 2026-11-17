@@ -17,6 +17,7 @@ import { WebSocket } from 'ws'
 import { Context } from '@deepseek-ai/cordis'
 import HttpServer from '@deepseek-ai/dsh-host-webserver'
 import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
+import { SecurityLog } from '../src/guard.ts'
 import { LiveView } from '../src/live-view.ts'
 import { SelectorMissError } from '../src/read.ts'
 import { LIVE_PATH, mountTakeoverRoutes } from '../src/routes.ts'
@@ -97,7 +98,7 @@ async function boot(): Promise<BrowserApp> {
   }, ctx.logger)
   const takeover = new TakeoverState()
   const view = new LiveView(() => browser.castTarget(), { jpegQuality: 50, maxWidth: 1280, maxHeight: 800 }, ctx.logger)
-  const removeRoutes = mountTakeoverRoutes(ctx.webServer, { browser, takeover, view, log: ctx.logger })
+  const removeRoutes = mountTakeoverRoutes(ctx.webServer, { browser, takeover, view, security: new SecurityLog(), log: ctx.logger })
   const port = ctx.webServer.port
   if (port === undefined) throw new Error('the test Web server did not bind a port')
   const app: BrowserApp = {

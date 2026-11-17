@@ -7,6 +7,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { assertSupportedJsonSchema, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { describe, expect, it, vi } from 'vitest'
 import type { TabInfo } from '../src/input.ts'
+import type { ActionOutcome } from '../src/session.ts'
 import { SelectorMissError, type ReadRequest, type ReadResult } from '../src/read.ts'
 import type { ScrollRequest, ScrollResult } from '../src/scroll.ts'
 import { NoOpenTabError } from '../src/session.ts'
@@ -19,6 +20,20 @@ const READ: ReadResult = {
   header: 'text of t1 (https://example.com/assignments): page 1 of 1, characters 1-12 of 12',
   text: '01 作业',
   total: 12,
+  url: 'https://example.com/assignments',
+}
+
+/** The page-derived wrapper a read window arrives in. */
+const READ_WRAPPED = {
+  header: READ.header,
+  text: { untrusted: 'https://example.com', content: READ.text },
+  total: READ.total,
+}
+
+/** A click or type that landed on a visible element. */
+const HIT: ActionOutcome = {
+  url: 'https://example.com/next',
+  target: { ref: 'a.next', index: 0, name: 'Next', score: 1 },
 }
 
 /** Two open tabs, as the close result reports them. */
@@ -55,8 +70,8 @@ function fakeBrowser(overrides: Partial<ToolBrowser> = {}): ToolBrowser {
     open: async () => ({ url: 'https://example.com/', title: 'Example' }),
     snapshot: async () => ({ path: '/tmp/page.png', url: 'https://example.com/' }),
     read: async () => READ,
-    click: async () => ({ url: 'https://example.com/' }),
-    fill: async () => {},
+    click: async () => HIT,
+    fill: async () => HIT,
     scroll: async () => SCROLLED,
     closeTab: async (tabId?: string): Promise<ClosedTab> => ({
       closed: tabId ?? 't2',
@@ -178,9 +193,9 @@ describe('reading through the tool', () => {
     const tools = bench(fakeBrowser({ read }))
     const value = await tools.call('headless_browser_read', { selector: '#rows', offset: 40, limit: 12, tab: 't2' })
     expect(read).toHaveBeenCalledWith({ selector: '#rows', offset: 40, limit: 12 }, 't2')
-    expect(value).toEqual(READ)
+    expect(value).toEqual(READ_WRAPPED)
     const definition = definitionOf(tools, 'headless_browser_read')
-    expect(definition.output.render({}, value as never)).toEqual([{ type: 'text', text: JSON.stringify(READ) }])
+    expect(definition.output.render({}, value as never)).toEqual([{ type: 'text', text: JSON.stringify(READ_WRAPPED) }])
   })
 
   it('reads the active tab and the whole body when the call names neither', async () => {
@@ -223,7 +238,10 @@ describe('screenshots through the tool', () => {
   it('forwards the full-page flag and the tab', async () => {
     const snapshot = vi.fn(async (_tab?: string, _fullPage?: boolean) => ({ path: '/tmp/page.png', url: 'https://example.com/' }))
     const tools = bench(fakeBrowser({ snapshot }))
-    expect(await tools.call('headless_browser_snapshot', {})).toEqual({ path: '/tmp/page.png', url: 'https://example.com/' })
+    expect(await tools.call('headless_browser_snapshot', {})).toEqual({
+      path: '/tmp/page.png',
+      page: { untrusted: 'https://example.com', content: 'https://example.com/' },
+    })
     expect(snapshot).toHaveBeenLastCalledWith(undefined, false)
     await tools.call('headless_browser_snapshot', { tab: 't2', fullPage: true })
     expect(snapshot).toHaveBeenLastCalledWith('t2', true)
@@ -236,7 +254,7 @@ describe('screenshots through the tool', () => {
     const tools = bench(fakeBrowser())
     tools.takeover.take('paying')
     expect(await tools.call('headless_browser_snapshot', { fullPage: true }))
-      .toEqual({ path: '/tmp/page.png', url: 'https://example.com/' })
+      .toEqual({ path: '/tmp/page.png', page: { untrusted: 'https://example.com', content: 'https://example.com/' } })
   })
 })
 
@@ -335,23 +353,31 @@ describe('scrolling through the tool', () => {
 })
 
 describe('page actions and control', () => {
-  it('forwards open, click, and type to the browser', async () => {
-    const open = vi.fn(async (_url: string, _newTab?: boolean) => ({ url: 'https://example.com/', title: 'Example' }))
-    const click = vi.fn(async (_selector: string, _tab?: string) => ({ url: 'https://example.com/next' }))
-    const fill = vi.fn(async (_selector: string, _text: string, _tab?: string) => {})
+  it('forwards open, click, and type to the browser and wraps page data', async () => {
+    const open = vi.fn(async (_url: string, _newTab?: boolean, _allowOrigin?: boolean) => ({ url: 'https://example.com/', title: 'Example' }))
+    const click = vi.fn(async (_request: unknown, _tab?: string) => HIT)
+    const fill = vi.fn(async (_request: unknown, _text: string, _tab?: string) => HIT)
     const tools = bench(fakeBrowser({ open, click, fill }))
     expect(await tools.call('headless_browser_open', { url: 'https://example.com/', newTab: true }))
-      .toEqual({ url: 'https://example.com/', title: 'Example' })
-    expect(open).toHaveBeenCalledWith('https://example.com/', true)
-    expect(await tools.call('headless_browser_click', { selector: 'a.next', tab: 't2' }))
-      .toEqual({ clicked: 'a.next', url: 'https://example.com/next' })
-    expect(click).toHaveBeenCalledWith('a.next', 't2')
-    expect(await tools.call('headless_browser_type', { selector: '#q', text: '作业' })).toEqual({ typed: '#q' })
-    expect(fill).toHaveBeenCalledWith('#q', '作业', undefined)
+      .toEqual({ url: 'https://example.com/', title: { untrusted: 'https://example.com', content: 'Example' } })
+    expect(open).toHaveBeenCalledWith('https://example.com/', true, false)
+    expect(await tools.call('headless_browser_click', { selector: 'a.next', tab: 't2', allowOrigin: true }))
+      .toEqual({
+        clicked: 'a.next',
+        url: 'https://example.com/next',
+        target: { ref: 'a.next', index: 0, name: { untrusted: 'https://example.com', content: 'Next' }, score: 1 },
+      })
+    expect(click).toHaveBeenCalledWith({ selector: 'a.next', allowOrigin: true }, 't2')
+    expect(await tools.call('headless_browser_type', { selector: '#q', text: '作业' })).toEqual({
+      typed: 'a.next',
+      url: 'https://example.com/next',
+      target: { ref: 'a.next', index: 0, name: { untrusted: 'https://example.com', content: 'Next' }, score: 1 },
+    })
+    expect(fill).toHaveBeenCalledWith({ selector: '#q' }, '作业', undefined)
   })
 
   it('refuses a page action while the user holds the page, and hands back after it', async () => {
-    const click = vi.fn(async () => ({ url: 'https://example.com/' }))
+    const click = vi.fn(async () => HIT)
     const tools = bench(fakeBrowser({ click }))
     tools.takeover.take('')
     expect(await tools.call('headless_browser_click', { selector: '#x' })).toEqual({
@@ -359,7 +385,7 @@ describe('page actions and control', () => {
     })
     expect(click).not.toHaveBeenCalled()
     expect(await tools.call('headless_browser_hand_back', {})).toEqual({ holder: 'agent' })
-    expect(await tools.call('headless_browser_click', { selector: '#x' })).toEqual({ clicked: '#x', url: 'https://example.com/' })
+    expect(await tools.call('headless_browser_click', { selector: '#x' })).toMatchObject({ clicked: 'a.next' })
   })
 
   it('hands the page over with its URL and a reason, and refuses an empty reason', async () => {

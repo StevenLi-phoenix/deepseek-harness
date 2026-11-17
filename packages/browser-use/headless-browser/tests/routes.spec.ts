@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import HttpServer, { type WebAuthRequest } from '@deepseek-ai/dsh-host-webserver'
 import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
+import { SecurityLog } from '../src/guard.ts'
 import { LiveView } from '../src/live-view.ts'
 import { LIVE_PATH, PAGE_PATH, STATUS_PATH, mountTakeoverRoutes } from '../src/routes.ts'
 import { HeadlessBrowserSession } from '../src/session.ts'
@@ -80,7 +81,7 @@ async function boot(): Promise<App> {
   }, ctx.logger)
   const takeover = new TakeoverState()
   const view = new LiveView(() => browser.castTarget(), { jpegQuality: 50, maxWidth: 800, maxHeight: 600 }, ctx.logger)
-  const removeRoutes = mountTakeoverRoutes(ctx.webServer, { browser, takeover, view, log: ctx.logger })
+  const removeRoutes = mountTakeoverRoutes(ctx.webServer, { browser, takeover, view, security: new SecurityLog(), log: ctx.logger })
   const port = ctx.webServer.port
   if (port === undefined) throw new Error('the test Web server did not bind a port')
   const app: App = {
@@ -158,7 +159,7 @@ describe('take-over routes', () => {
     const app = await boot()
     const response = await fetch(`${app.base}${STATUS_PATH}`, { headers: { 'x-test-peer': 'owner' } })
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual({ holder: 'agent', launched: false, viewers: 0 })
+    await expect(response.json()).resolves.toEqual({ holder: 'agent', launched: false, viewers: 0, security: { events: [], dropped: 0 } })
   })
 
   it('refuses an admitted peer that is not the owner on the live socket', async () => {
