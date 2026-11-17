@@ -19,6 +19,7 @@ import { chromium, type BrowserContext, type CDPSession, type Page } from 'playw
 import type { Config } from './config.ts'
 import { firstLine } from './error.ts'
 import type { InputCommand, TabInfo, TabMessage } from './input.ts'
+import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
 import { BrowserTabs, type ActiveTab, type TabsContext } from './tabs.ts'
 
 /** The browser cannot run, so a tool reports the reason instead of retrying. */
@@ -56,6 +57,8 @@ export class HeadlessBrowserSession {
   #closed = false
   #sessionId: string | undefined
   #tabs: BrowserTabs | undefined
+  /** Stops watching for pages once the context is gone. */
+  #stopStealth: (() => void) | undefined
   readonly #cdps = new WeakMap<Page, CDPSession>()
 
   /**
@@ -252,11 +255,15 @@ export class HeadlessBrowserSession {
 
   async #launch(): Promise<BrowserContext> {
     await mkdir(this.#config.profileDir, { recursive: true })
+    // One identity for the whole context: the launch settings, and later the
+    // per-page overrides that keep the client hints in step with it.
+    const stealth = this.#config.stealth ? stealthIdentity() : undefined
     let context: BrowserContext
     try {
       context = await chromium.launchPersistentContext(this.#config.profileDir, {
         headless: this.#config.headless,
         viewport: { width: this.#config.viewportWidth, height: this.#config.viewportHeight },
+        ...stealth === undefined ? {} : stealthLaunch(stealth),
       })
     } catch (error: unknown) {
       throw new BrowserUnavailableError(`the headless browser could not start: ${firstLine(error)}`)
@@ -265,9 +272,12 @@ export class HeadlessBrowserSession {
       await context.close()
       throw new BrowserUnavailableError('the browser plugin is shutting down')
     }
+    if (stealth !== undefined) this.#stopStealth = await applyStealth<Page>(context, this.#log, stealth)
     this.#context = context
     this.#sessionId = randomUUID()
     context.on('close', () => {
+      this.#stopStealth?.()
+      this.#stopStealth = undefined
       this.#context = undefined
       this.#launching = undefined
       this.#tabs?.dispose()
