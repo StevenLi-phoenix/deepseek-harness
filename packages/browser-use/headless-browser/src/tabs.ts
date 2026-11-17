@@ -54,7 +54,7 @@ export class TabNotFoundError extends Error {
 /** The browser is at its tab cap; the caller must close one first. */
 export class TabLimitError extends Error {
   constructor(max: number) {
-    super(`the browser allows at most ${max} tabs; close one before opening another`)
+    super(`the browser allows at most ${max} tabs; close one with headless_browser_close before opening another`)
     this.name = 'TabLimitError'
   }
 }
@@ -96,6 +96,16 @@ export interface TabsOptions {
 export interface ActiveTab {
   readonly id: string
   readonly page: TabsPage
+}
+
+/** What one tab close left behind. */
+export interface ClosedTab {
+  /** Id of the tab that closed. */
+  readonly closed: string
+  /** Whether a blank tab replaced the last tab, keeping the browser open. */
+  readonly replaced: boolean
+  /** Tabs still open, in opening order. */
+  readonly tabs: TabInfo[]
 }
 
 /** Tabs of one persistent browser context. */
@@ -196,14 +206,16 @@ export class BrowserTabs {
   /**
    * Close a tab; the last tab is replaced so the browser stays open.
    * @param id - tab id, or nothing for the active tab.
+   * @returns the closed id, whether a blank tab replaced it, and the tabs that remain.
    */
-  async close(id?: string): Promise<void> {
-    await this.#run(async () => {
+  async close(id?: string): Promise<ClosedTab> {
+    return await this.#run(async () => {
       const tab = id === undefined && this.#activeId === undefined ? await this.#ensureActive() : this.#resolve(id)
       const index = this.#order.indexOf(tab.id)
+      const replaced = this.#tabs.size === 1
       tab.closing = true
       let replacement: Tab | undefined
-      if (this.#tabs.size === 1) {
+      if (replaced) {
         const context = await this.#options.context()
         replacement = this.#adopt(await context.newPage())
         this.#activeId = replacement.id
@@ -222,6 +234,7 @@ export class BrowserTabs {
         this.#activeId = next
       }
       this.#emit()
+      return { closed: tab.id, replaced, tabs: this.state() }
     })
   }
 

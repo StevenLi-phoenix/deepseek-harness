@@ -109,27 +109,37 @@ describe('browser tabs', () => {
     expect(tabs.state()[0]).toMatchObject({ title: 'loaded', loading: false })
   })
 
-  it('refuses the tab after the cap with a clear message', async () => {
+  it('names the close tool when the tab cap refuses another tab', async () => {
     const { tabs } = await boot()
     for (let index = 0; index < MAX_TABS; index++) await tabs.create(dataPage(`page-${String(index)}`))
     await expect(tabs.create(dataPage('one-too-many'))).rejects.toBeInstanceOf(TabLimitError)
-    await expect(tabs.create()).rejects.toThrow(/at most 8 tabs/u)
+    await expect(tabs.create()).rejects.toThrow(/at most 8 tabs; close one with headless_browser_close before opening another/u)
     expect(tabs.state()).toHaveLength(MAX_TABS)
   })
 
-  it('closes a tab without closing the browser and keeps a blank tab after the last one', async () => {
+  it('closes a named tab, then the active one, and keeps a blank tab after the last one', async () => {
     const { context, tabs } = await boot()
     const first = await tabs.create(dataPage('first'))
     const second = await tabs.create(dataPage('second'))
-    await tabs.close(second.id)
-    expect(tabs.state().map(tab => tab.id)).toEqual([first.id])
-    expect(tabs.state()[0]?.active).toBe(true)
+    const named = await tabs.close(second.id)
+    expect(named).toMatchObject({ closed: second.id, replaced: false })
+    expect(named.tabs.map(tab => tab.id)).toEqual([first.id])
+    expect(named.tabs[0]?.active).toBe(true)
     expect(context.closed).toBe(false)
 
-    await tabs.close(first.id)
-    expect(tabs.state()).toHaveLength(1)
-    expect(tabs.state()[0]?.id).not.toBe(first.id)
-    expect(tabs.state()[0]?.url).toBe('about:blank')
+    const third = await tabs.create(dataPage('third'))
+    await tabs.activate(first.id)
+    const active = await tabs.close()
+    expect(active).toMatchObject({ closed: first.id, replaced: false })
+    expect(active.tabs.map(tab => tab.id)).toEqual([third.id])
+    expect(active.tabs[0]?.active).toBe(true)
+
+    const last = await tabs.close(third.id)
+    expect(last).toMatchObject({ closed: third.id, replaced: true })
+    expect(last.tabs).toHaveLength(1)
+    expect(last.tabs[0]?.id).not.toBe(third.id)
+    expect(last.tabs[0]?.url).toBe('about:blank')
+    expect(last.tabs[0]?.active).toBe(true)
     expect(context.open.filter(page => !page.isClosed())).toHaveLength(1)
   })
 

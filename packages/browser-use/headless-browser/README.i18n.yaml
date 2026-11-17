@@ -9,8 +9,8 @@
   en: f4253daa2d0d63e1
   zh: b349207a631a9333
 /deepseek-ai-dsh-headless-browser/summary:
-  en: 462683fd89db62dd
-  zh: d9e83ecc4948c9b5
+  en: 56266a84895f4116
+  zh: 1aae90747879f17b
 /deepseek-ai-dsh-headless-browser/table-of-contents:
   en: d152484eb41ac6b4
   zh: f14f34fce35a8d90
@@ -33,8 +33,8 @@
   en: b21317179e46b6e0
   zh: 875d89b47c74b5a4
 /deepseek-ai-dsh-headless-browser/understand-the-implementation:
-  en: 60812ead4086b25a
-  zh: 11bf653adb9ff6bd
+  en: dee37fe91381cc9c
+  zh: c8ff4c22defcf912
 /deepseek-ai-dsh-headless-browser/further-exploration:
   en: 43206093e89698f4
   zh: b12af8d88b5a1933
@@ -45,14 +45,26 @@
   en: d5daed83e51c630e
   zh: a39623fa93fe6f7c
 /deepseek-ai-dsh-headless-browser/model-experience/page-tools/what-the-model-sees:
-  en: 714600c54d4dc491
-  zh: 69bbefb369744cac
+  en: dfea58ef90171b27
+  zh: 4f1338bf90a7a657
 /deepseek-ai-dsh-headless-browser/model-experience/page-tools/token-effect:
   en: 93f23a5b9cb47a8b
   zh: accd50007cefbd07
 /deepseek-ai-dsh-headless-browser/model-experience/page-tools/kv-cache-effect:
   en: 94b53e443759f56a
   zh: 2c3ad9bb928be808
+/deepseek-ai-dsh-headless-browser/model-experience/tab-tools:
+  en: dfaafba50d714d7f
+  zh: 4c1114afb735092d
+/deepseek-ai-dsh-headless-browser/model-experience/tab-tools/what-the-model-sees:
+  en: 07224e71fc1d17c2
+  zh: 0200935a059eaa14
+/deepseek-ai-dsh-headless-browser/model-experience/tab-tools/token-effect:
+  en: 3b044b833d1b0965
+  zh: 0cc3399e4b839fd4
+/deepseek-ai-dsh-headless-browser/model-experience/tab-tools/kv-cache-effect:
+  en: e42e7e051af8effc
+  zh: 07144c333c4bf4e4
 /deepseek-ai-dsh-headless-browser/model-experience/control-tools:
   en: ecf6b8ab3280f7dc
   zh: 2a5239754026870a
@@ -66,8 +78,8 @@
   en: b92d717917f63dc9
   zh: e8e55a56144fdb93
 /deepseek-ai-dsh-headless-browser/known-limitations-and-deferred-work:
-  en: 56d6206fcaf3b8c9
-  zh: ffbeb0222487dfe6
+  en: 7c7d552ea2bf035f
+  zh: 861be3dfe22fd560
 /deepseek-ai-dsh-headless-browser/known-limitations-and-deferred-work/dev-note:
   en: fd19c8542e1f001f
   zh: 095ceda61cd7961c

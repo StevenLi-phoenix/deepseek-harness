@@ -20,14 +20,23 @@ import type { Config } from './config.ts'
 import { firstLine } from './error.ts'
 import type { InputCommand, TabInfo, TabMessage } from './input.ts'
 import { readText, type ReadPage, type ReadRequest, type ReadResult } from './read.ts'
+import { cdpScrollChannel, scrollPage, type ScrollRequest, type ScrollResult } from './scroll.ts'
 import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
-import { BrowserTabs, type ActiveTab, type TabsContext } from './tabs.ts'
+import { BrowserTabs, type ActiveTab, type ClosedTab, type TabsContext } from './tabs.ts'
 
 /** The browser cannot run, so a tool reports the reason instead of retrying. */
 export class BrowserUnavailableError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'BrowserUnavailableError'
+  }
+}
+
+/** No tab is open, so there is nothing to close. */
+export class NoOpenTabError extends Error {
+  constructor() {
+    super('no tab is open; call headless_browser_open before closing one')
+    this.name = 'NoOpenTabError'
   }
 }
 
@@ -182,6 +191,30 @@ export class HeadlessBrowserSession {
     await this.tabs().navigate(url)
     const page = await this.page()
     return { url: page.url(), title: await page.title() }
+  }
+
+  /**
+   * Close one tab; the last tab is replaced by a blank one so the browser stays open.
+   * @param tabId - tab id, or nothing for the active tab.
+   * @returns the closed id, whether a blank tab replaced it, and the tabs that remain.
+   * @throws NoOpenTabError - when no tab is open, so closing cannot start the browser.
+   */
+  async closeTab(tabId?: string): Promise<ClosedTab> {
+    if (this.tabsState().length === 0) throw new NoOpenTabError()
+    return await this.tabs().close(tabId)
+  }
+
+  /**
+   * Scroll one tab by a vertical distance or to an edge, without evaluating page script.
+   * @param request - distance or edge, and the point whose element receives the wheel.
+   * @param tabId - tab id, or nothing for the active tab.
+   * @returns the resulting scroll position, page height, and whether an edge was reached.
+   */
+  async scroll(request: ScrollRequest, tabId?: string): Promise<ScrollResult> {
+    const page = await this.page(tabId)
+    const cdp = await this.cdp(tabId)
+    const size = page.viewportSize() ?? { width: this.#config.viewportWidth, height: this.#config.viewportHeight }
+    return await scrollPage(cdpScrollChannel(cdp), request, size)
   }
 
   /**

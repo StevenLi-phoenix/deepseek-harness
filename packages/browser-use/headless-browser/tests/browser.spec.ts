@@ -173,6 +173,54 @@ describe.skipIf(!AVAILABLE)('headless browser live view', () => {
     }
   }, 120_000)
 
+  it('closes the active tab, then a named one, and leaves a blank tab after the last', async () => {
+    const app = await boot()
+    await app.browser.open(DATA_PAGE)
+    const first = app.browser.tabsState()[0]!
+    await app.browser.open('data:text/html,<title>second</title><body>second', true)
+    const second = app.browser.tabsState().find(tab => tab.active)!
+
+    const active = await app.browser.closeTab()
+    expect(active).toMatchObject({ closed: second.id, replaced: false })
+    expect(active.tabs.map(tab => tab.id)).toEqual([first.id])
+    expect(active.tabs[0]?.active).toBe(true)
+
+    const last = await app.browser.closeTab(first.id)
+    expect(last).toMatchObject({ closed: first.id, replaced: true })
+    expect(last.tabs).toHaveLength(1)
+    expect(last.tabs[0]?.url).toBe('about:blank')
+    expect(last.tabs[0]?.active).toBe(true)
+    expect(app.browser.status().launched).toBe(true)
+    expect(app.browser.status().tabs).toBe(1)
+  }, 120_000)
+
+  it('scrolls by a delta and to both edges, and a follow-up read and snapshot see the position', async () => {
+    const app = await boot()
+    await app.browser.open(TALL_PAGE)
+    const page = await app.browser.page()
+    expect(await page.evaluate(() => window.scrollY)).toBe(0)
+
+    const delta = await app.browser.scroll({ deltaY: 900 })
+    expect(delta).toMatchObject({ scrollX: 0, scrollY: 900, viewportHeight: 800, atTop: false, atBottom: false })
+    expect(delta.pageHeight).toBeGreaterThan(3_000)
+    expect(await page.evaluate(() => window.scrollY)).toBe(900)
+
+    const bottom = await app.browser.scroll({ to: 'bottom' })
+    expect(bottom.atBottom).toBe(true)
+    expect(bottom.scrollY + bottom.viewportHeight).toBeGreaterThanOrEqual(bottom.pageHeight - 1)
+    const snapshot = await app.browser.snapshot()
+    expect(existsSync(snapshot.path)).toBe(true)
+    expect(await page.evaluate(() => window.scrollY)).toBe(bottom.scrollY)
+
+    const read = await app.browser.scroll({ deltaY: 0 })
+    expect(read.scrollY).toBe(bottom.scrollY)
+    expect(read.atBottom).toBe(true)
+
+    const top = await app.browser.scroll({ to: 'top' })
+    expect(top).toMatchObject({ scrollY: 0, atTop: true, atBottom: false })
+    expect(await page.evaluate(() => window.scrollY)).toBe(0)
+  }, 120_000)
+
   it('streams a frame of a data: page and forwards a click while the user holds control', async () => {
     const app = await boot()
     await app.browser.open(DATA_PAGE)

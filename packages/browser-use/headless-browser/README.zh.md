@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-给 agent 一个能跨轮次保留状态的浏览器，也给人一个进去的办法。一个无头 Chromium 用自己的 profile 目录运行，登录状态能扛过 Host 重启。模型可以打开页面、读页面的文本、截图、点击、输入；某一步需要人时，它交出控制权并返回一个页面地址，用户在那一页看到和 agent 相同的画面、自己操作，再交还回去。用户控制期间 agent 的动作会被拒绝，不会和人抢同一个页面。
+给 agent 一个能跨轮次保留状态的浏览器，也给人一个进去的办法。一个无头 Chromium 用自己的 profile 目录运行，登录状态能扛过 Host 重启。模型可以打开页面、读页面的文本、截图、点击、输入、滚动、关闭标签；某一步需要人时，它交出控制权并返回一个页面地址，用户在那一页看到和 agent 相同的画面、自己操作，再交还回去。用户控制期间 agent 的动作会被拒绝，不会和人抢同一个页面。
 
 ## 目录
 
@@ -101,21 +101,21 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 
 页面发来的输入是每种事件一条 JSON。`decodeClientMessage` 校验它，`cdpCommand` 把它映射为 `Input.dispatchMouseEvent`（包括 `mouseWheel`）、`Input.dispatchKeyEvent` 或 `Input.insertText`，由 `TakeoverState` 决定是否接受输入。按键把 DOM 的 `keyCode` 同时当作两个 CDP 虚拟键码，所以快捷键和不产生字符的按键表现得和真实窗口一样；逐键打不出来的文本走 `Input.insertText`。
 
-工具共用一个守卫。会操作页面的工具先调用 `TakeoverState.assertAgent`，并在错误结果里带上用户的理由；截图工具跳过守卫，因为它只读页面、不动页面，而读取文本保留守卫，因为读和点击是同一个「看页面—操作页面」循环的前后两半。
+工具共用一个守卫。会操作页面的工具先调用 `TakeoverState.assertAgent`，并在错误结果里带上用户的理由；截图工具跳过守卫，因为它只读页面、不动页面，而读取文本保留守卫，因为读和点击是同一个「看页面—操作页面」循环的前后两半。`headless_browser_scroll` 发送 CDP 滚轮输入并读取 `Page.getLayoutMetrics`，因此移动页面而不执行页面脚本。
 
 | 文件 | 作用 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件入口：会话、控制状态、实时画面、工具、路由 |
-| [`src/session.ts`](src/session.ts) | 持久上下文、按标签页的 CDP 会话、导航、截图、点击、填值 |
+| [`src/session.ts`](src/session.ts) | 持久上下文、按标签页的 CDP 会话、导航、截图、读取、点击、填值、滚动、关闭标签 |
 | [`src/read.ts`](src/read.ts) | 页面文本，切成带页码与区间的字符窗口 |
-| [`src/tabs.ts`](src/tabs.ts) | 标签 id、活动标签、加载状态、八标签上限和每次导航的期限 |
+| [`src/tabs.ts`](src/tabs.ts) | 标签 id、活动标签、加载状态、关闭、八标签上限和每次导航的期限 |
 | [`src/stealth.ts`](src/stealth.ts) | 身份：启动设置、文档起始脚本，以及每页的 client hints 覆盖 |
 | [`src/takeover.ts`](src/takeover.ts) | 持有者状态，以及 agent 动作被拒绝时的错误 |
 | [`src/input.ts`](src/input.ts) | 线路消息解码、CDP 命令映射、帧编码 |
 | [`src/live-view.ts`](src/live-view.ts) | screencast 分发与查看者记录 |
 | [`src/routes.ts`](src/routes.ts) | 页面、状态和实时 socket 的注册 |
 | [`src/page.ts`](src/page.ts) | 服务出去的文档和其中的脚本 |
-| [`src/tools.ts`](src/tools.ts) | 七个模型工具 |
+| [`src/tools.ts`](src/tools.ts) | 九个模型工具 |
 
 </details>
 
@@ -138,7 +138,7 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 
 #### 模型看到什么
 
-挂载作用域有工具注册表时，有五个工具定义：`headless_browser_open`（`url`、`newTab`）、`headless_browser_snapshot`（`tab`、`fullPage`）、`headless_browser_read`（`tab`、`selector`、`offset`、`limit`）、`headless_browser_click`（`selector`、`tab`）、`headless_browser_type`（`selector`、`text`、`tab`）。每个描述只有一句话，说明操作和结果回答什么：打开返回落定后的 URL 与文档标题，截图返回 PNG 路径与页面 URL，读取返回一段文本窗口和写明页码与区间的 `header`，点击返回 selector 与页面 URL，输入返回 selector。结果是一个 JSON 文本块。输入的结果不回显文本，所以模型敲进表单的密码不会进入会话日志。
+挂载作用域有工具注册表时，有六个页面工具：`headless_browser_open`（`url`、`newTab`）、`headless_browser_snapshot`（`tab`、`fullPage`）、`headless_browser_read`（`tab`、`selector`、`offset`、`limit`）、`headless_browser_click`（`selector`、`tab`）、`headless_browser_type`（`selector`、`text`、`tab`）、`headless_browser_scroll`（`tab`、`x`、`y`、`deltaY`、`to`）。每个描述只有一句话，说明操作和结果回答什么：打开返回落定后的 URL 与文档标题，截图返回 PNG 路径与页面 URL，读取返回一段文本窗口和写明页码与区间的 `header`，点击返回 selector 与页面 URL，输入返回 selector，滚动返回 `x`、`y`、`scrollX`、`scrollY`、`pageHeight`、`viewportHeight`、`atTop`、`atBottom`，模型据此知道是否到达了尽头。结果是一个 JSON 文本块。输入的结果不回显文本，所以模型敲进表单的密码不会进入会话日志。
 
 #### Token 影响
 
@@ -147,6 +147,20 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 #### KV Cache 影响
 
 工具定义和描述不变时前缀稳定；结果追加在可复用前缀之后。
+
+### 标签工具
+
+#### 模型看到什么
+
+`headless_browser_close` 接收可选的 `tab`，返回 `{ "closed": "t2", "replaced": false, "tabs": [...] }`：剩下每个标签的 id、标题、URL、加载标志和活动标志。关闭最后一个标签时报告 `"replaced": true`，因为一个空白标签会接替它，浏览器、它的上下文和 profile 都保持打开。八个标签的上限保留；开第九个时回答 `{ "error": "opening <url> failed: the browser allows at most 8 tabs; close one with headless_browser_close before opening another" }`。关闭属于操作类工具，所以用户持有浏览器时会被拒绝。
+
+#### Token 影响
+
+一个很小的定义；结果重复剩下的标签列表，最多八条短记录。
+
+#### KV Cache 影响
+
+只追加：结果进入历史中可复用前缀之后。
 
 ### 控制工具
 
@@ -171,7 +185,7 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 - **支持的是无头模式** —— `headless: false` 需要已登录的桌面会话；服务账号开不了窗口。
 - **拒绝就是拒绝** —— 身份只改浏览器怎么描述自己，不改站点怎么判断：按地址、profile 或请求本身打分的站点仍然可以拒绝这个页面，本包不应答任何挑战。
 - **读取拿到的是渲染后的文本** —— `headless_browser_read` 返回页面渲染出来的内容：折叠或隐藏的内容不在其中，selector 命中多个元素时只读第一个，iframe 或 shadow root 里的文本也不属于文档 body。作业列表在折线以下的行就在文本里，尽管任何一张视口截图都拍不到它们。
-- **标签页由我们管理，而不是站点** —— 标签模型只管工具或接管页打开的标签；站点自己开的弹窗不会被接管。最多同时保留八个标签，每次导航都有 20 秒期限。
+- **标签页由我们管理，而不是站点** —— 标签模型只管工具或接管页打开的标签；站点自己开的弹窗不会被接管。最多同时保留八个标签；`headless_browser_close` 释放一个，上限错误的文案会点名这个工具。每次导航都有 20 秒期限。
 - **画面只实时** —— 只有接管页连着时才有帧，不录制，Chrome 繁忙时会掉帧。静止页面不会产生新帧，后连上来的页面看到的是最后画出的那一帧。渲染进程崩溃会结束推流，重新加载页面并连接之后画面才会回来。
 - **接管地址需要 Web 服务器** —— 在没有 Web 服务器的组合里，`headless_browser_hand_over` 只返回 `/headless-browser`，用户打不开。
 - **生成的目录跟着挂载走** —— `docs/tool-catalog.md` 和 `docs/config-catalog.md` 只有在某个组合挂载本包并运行生成器之后，才会列出本包的工具和字段。

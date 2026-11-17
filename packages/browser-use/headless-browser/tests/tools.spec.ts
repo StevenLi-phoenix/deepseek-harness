@@ -6,8 +6,11 @@
 import { Context } from '@deepseek-ai/cordis'
 import { assertSupportedJsonSchema, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { describe, expect, it, vi } from 'vitest'
+import type { TabInfo } from '../src/input.ts'
 import { SelectorMissError, type ReadRequest, type ReadResult } from '../src/read.ts'
-import { TabNotFoundError } from '../src/tabs.ts'
+import type { ScrollRequest, ScrollResult } from '../src/scroll.ts'
+import { NoOpenTabError } from '../src/session.ts'
+import { TabNotFoundError, type ClosedTab } from '../src/tabs.ts'
 import { TakeoverState } from '../src/takeover.ts'
 import { registerBrowserTools, type ToolBrowser } from '../src/tools.ts'
 
@@ -16,6 +19,24 @@ const READ: ReadResult = {
   header: 'text of t1 (https://example.com/assignments): page 1 of 1, characters 1-12 of 12',
   text: '01 作业',
   total: 12,
+}
+
+/** Two open tabs, as the close result reports them. */
+const TABS: TabInfo[] = [
+  { id: 't1', title: 'first', url: 'https://example.com/one', loading: false, active: false },
+  { id: 't2', title: 'second', url: 'https://example.com/two', loading: false, active: true },
+]
+
+/** The scroll result the fake browser answers with. */
+const SCROLLED: ScrollResult = {
+  x: 400,
+  y: 300,
+  scrollX: 0,
+  scrollY: 500,
+  pageHeight: 3_000,
+  viewportHeight: 600,
+  atTop: false,
+  atBottom: false,
 }
 
 /**
@@ -36,6 +57,12 @@ function fakeBrowser(overrides: Partial<ToolBrowser> = {}): ToolBrowser {
     read: async () => READ,
     click: async () => ({ url: 'https://example.com/' }),
     fill: async () => {},
+    scroll: async () => SCROLLED,
+    closeTab: async (tabId?: string): Promise<ClosedTab> => ({
+      closed: tabId ?? 't2',
+      replaced: false,
+      tabs: TABS.filter(tab => tab.id !== (tabId ?? 't2')),
+    }),
     ...overrides,
   }
 }
@@ -80,7 +107,7 @@ function definitionOf(bench: Bench, name: string): ToolDefinition {
 }
 
 describe('tool registration', () => {
-  it('registers the three page reads, the two page actions, and the two control tools', () => {
+  it('registers the six page tools, the two tab tools, and the two control tools', () => {
     const tools = bench(fakeBrowser())
     expect([...tools.definitions.keys()]).toEqual([
       'headless_browser_open',
@@ -88,6 +115,8 @@ describe('tool registration', () => {
       'headless_browser_read',
       'headless_browser_click',
       'headless_browser_type',
+      'headless_browser_scroll',
+      'headless_browser_close',
       'headless_browser_hand_over',
       'headless_browser_hand_back',
     ])
@@ -116,6 +145,30 @@ describe('tool registration', () => {
       .toMatchObject({ properties: { tab: { type: 'string' }, fullPage: { type: 'boolean' } } })
     expect(read.presentCall?.({ selector: '#rows' })).toMatchObject({ title: 'Read #rows', kind: 'read' })
     expect(read.presentCall?.({})).toMatchObject({ title: 'Read the page text', kind: 'read' })
+  })
+
+  it('declares the scroll distance, edge, and point, and the optional close tab', () => {
+    const tools = bench(fakeBrowser())
+    const scroll = definitionOf(tools, 'headless_browser_scroll')
+    expect(scroll.parameters).toMatchObject({
+      type: 'object',
+      properties: {
+        tab: { type: 'string' },
+        x: { type: 'number' },
+        y: { type: 'number' },
+        deltaY: { type: 'number' },
+        to: { type: 'string', enum: ['top', 'bottom'] },
+      },
+    })
+    expect(scroll.parameters).not.toHaveProperty('required')
+    const success = scroll.output.schema.oneOf?.[0]
+    expect(success?.type).toBe('object')
+    expect(success?.required).toEqual(expect.arrayContaining([
+      'x', 'y', 'scrollX', 'scrollY', 'pageHeight', 'viewportHeight', 'atTop', 'atBottom',
+    ]))
+    const close = definitionOf(tools, 'headless_browser_close')
+    expect(close.parameters).toMatchObject({ type: 'object', properties: { tab: { type: 'string' } } })
+    expect(close.parameters).not.toHaveProperty('required')
   })
 })
 
@@ -184,6 +237,100 @@ describe('screenshots through the tool', () => {
     tools.takeover.take('paying')
     expect(await tools.call('headless_browser_snapshot', { fullPage: true }))
       .toEqual({ path: '/tmp/page.png', url: 'https://example.com/' })
+  })
+})
+
+describe('closing tabs through the tool', () => {
+  it('closes the active tab when no tab is named and returns the remaining tabs', async () => {
+    const closeTab = vi.fn(async (): Promise<ClosedTab> => ({ closed: 't2', replaced: false, tabs: [TABS[0]!] }))
+    const tools = bench(fakeBrowser({ closeTab }))
+    const value = await tools.call('headless_browser_close', {})
+    expect(closeTab).toHaveBeenCalledWith(undefined)
+    expect(value).toMatchObject({ closed: 't2', replaced: false })
+    expect((value as { tabs: TabInfo[] }).tabs).toEqual([TABS[0]])
+  })
+
+  it('closes the named tab and reports the blank replacement of the last one', async () => {
+    const blank: TabInfo = { id: 't3', title: '', url: 'about:blank', loading: false, active: true }
+    const closeTab = vi.fn(async (): Promise<ClosedTab> => ({ closed: 't2', replaced: true, tabs: [blank] }))
+    const tools = bench(fakeBrowser({ closeTab }))
+    expect(await tools.call('headless_browser_close', { tab: 't2' }))
+      .toEqual({ closed: 't2', replaced: true, tabs: [blank] })
+    expect(closeTab).toHaveBeenCalledWith('t2')
+  })
+
+  it('reports that there is no tab to close instead of opening a browser', async () => {
+    const closeTab = vi.fn(async (): Promise<ClosedTab> => { throw new NoOpenTabError() })
+    const tools = bench(fakeBrowser({ closeTab }))
+    expect(await tools.call('headless_browser_close', {})).toEqual({
+      error: 'no tab is open; call headless_browser_open before closing one',
+    })
+  })
+
+  it('refuses to close while the user holds the page', async () => {
+    const closeTab = vi.fn(async (): Promise<ClosedTab> => ({ closed: 't2', replaced: false, tabs: [TABS[0]!] }))
+    const tools = bench(fakeBrowser({ closeTab }))
+    tools.takeover.take('finishing the checkout')
+    expect(await tools.call('headless_browser_close', {})).toEqual({
+      error: 'the user holds the browser (finishing the checkout); call headless_browser_hand_back when they are done',
+    })
+    expect(closeTab).not.toHaveBeenCalled()
+  })
+
+  it('names the action when a close fails for any other reason', async () => {
+    const tools = bench(fakeBrowser({ closeTab: async () => { throw new Error('the page is gone') } }))
+    expect(await tools.call('headless_browser_close', { tab: 't2' })).toEqual({
+      error: 'closing tab t2 failed: the page is gone',
+    })
+  })
+})
+
+describe('scrolling through the tool', () => {
+  it('passes a delta scroll and its tab to the browser', async () => {
+    const scroll = vi.fn(async (_request: ScrollRequest, _tab?: string) => SCROLLED)
+    const tools = bench(fakeBrowser({ scroll }))
+    expect(await tools.call('headless_browser_scroll', { tab: 't2', deltaY: 500 })).toEqual(SCROLLED)
+    expect(scroll).toHaveBeenCalledWith({ deltaY: 500 }, 't2')
+  })
+
+  it('passes an edge scroll with the element point to the browser', async () => {
+    const scroll = vi.fn(async (_request: ScrollRequest, _tab?: string) => SCROLLED)
+    const tools = bench(fakeBrowser({ scroll }))
+    await tools.call('headless_browser_scroll', { x: 30, y: 40, to: 'bottom' })
+    expect(scroll).toHaveBeenCalledWith({ x: 30, y: 40, to: 'bottom' }, undefined)
+  })
+
+  it('refuses a scroll request that names neither a distance nor an edge, or both', async () => {
+    const tools = bench(fakeBrowser())
+    expect(await tools.call('headless_browser_scroll', {})).toEqual({
+      error: 'give either deltaY (pixels to scroll) or to ("top" or "bottom")',
+    })
+    expect(await tools.call('headless_browser_scroll', { deltaY: 100, to: 'top' })).toEqual({
+      error: 'give either deltaY (pixels to scroll) or to ("top" or "bottom")',
+    })
+  })
+
+  it('refuses a half-named point, a negative point, and an oversized distance', async () => {
+    const tools = bench(fakeBrowser())
+    expect(await tools.call('headless_browser_scroll', { x: 10, deltaY: 100 })).toEqual({
+      error: 'give both x and y, or neither',
+    })
+    expect(await tools.call('headless_browser_scroll', { x: -1, y: 10, deltaY: 100 })).toEqual({
+      error: 'x and y must not be negative',
+    })
+    expect(await tools.call('headless_browser_scroll', { deltaY: 100_001 })).toEqual({
+      error: 'deltaY must be within ±100000 pixels',
+    })
+  })
+
+  it('refuses to scroll while the user holds the page', async () => {
+    const scroll = vi.fn(async () => SCROLLED)
+    const tools = bench(fakeBrowser({ scroll }))
+    tools.takeover.take('reading the invoice')
+    expect(await tools.call('headless_browser_scroll', { deltaY: 200 })).toEqual({
+      error: 'the user holds the browser (reading the invoice); call headless_browser_hand_back when they are done',
+    })
+    expect(scroll).not.toHaveBeenCalled()
   })
 })
 

@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Give the agent a browser it keeps between turns and a person a way into it. One headless Chromium runs with its own profile directory, so a sign-in survives a host restart. The model opens pages, reads their text, takes screenshots, clicks, and types; when a step needs a human, it hands over and returns the page where the user takes control, sees what the agent sees, and hands back. While the user holds the page the agent is refused instead of competing with them.
+Give the agent a browser it keeps between turns and a person a way into it. One headless Chromium runs with its own profile directory, so a sign-in survives a host restart. The model opens pages, reads their text, takes screenshots, clicks, types, scrolls, and closes tabs; when a step needs a human, it hands over and returns the page where the user takes control, sees what the agent sees, and hands back. While the user holds the page the agent is refused instead of competing with them.
 
 ## Table of Contents
 
@@ -100,21 +100,21 @@ The live view is one CDP screencast per page shared by every connected viewer. `
 
 Input from the page is one JSON message per event. `decodeClientMessage` validates it, `cdpCommand` maps it to `Input.dispatchMouseEvent` (including `mouseWheel`), `Input.dispatchKeyEvent`, or `Input.insertText`, and `TakeoverState` decides whether input is accepted at all. Keys carry the DOM `keyCode` as both CDP virtual key codes, so shortcuts and non-printing keys behave as in a real window; text that cannot be typed key by key uses `Input.insertText`.
 
-The tools share one guard. An acting tool calls `TakeoverState.assertAgent` first and reports the user's reason in an error result; the screenshot tool skips that guard because it reads the page without acting on it, while a text read keeps it because reading is the first half of the same browse-and-act loop as a click.
+The tools share one guard. An acting tool calls `TakeoverState.assertAgent` first and reports the user's reason in an error result; the screenshot tool skips that guard because it reads the page without acting on it, while a text read keeps it because reading is the first half of the same browse-and-act loop as a click. `headless_browser_scroll` sends CDP wheel input and reads `Page.getLayoutMetrics`, so it moves the page without evaluating its script.
 
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Plugin entry: session, control state, live view, tools, routes |
-| [`src/session.ts`](src/session.ts) | Persistent context, tab-aware CDP sessions, navigation, screenshot, click, fill |
+| [`src/session.ts`](src/session.ts) | Persistent context, tab-aware CDP sessions, navigation, screenshot, read, click, fill, scroll, tab close |
 | [`src/read.ts`](src/read.ts) | Page text, cut into character windows with a header naming the page and range |
-| [`src/tabs.ts`](src/tabs.ts) | Tab ids, active tab, loading state, the eight-tab cap, and the per-navigation deadline |
+| [`src/tabs.ts`](src/tabs.ts) | Tab ids, active tab, loading state, closing, the eight-tab cap, and the per-navigation deadline |
 | [`src/stealth.ts`](src/stealth.ts) | The identity: launch settings, the document-start script, and the per-page client-hint override |
 | [`src/takeover.ts`](src/takeover.ts) | Holder state and the refusal an agent action gets |
 | [`src/input.ts`](src/input.ts) | Wire decoding, CDP command mapping, frame encoding |
 | [`src/live-view.ts`](src/live-view.ts) | Screencast fan-out and viewer bookkeeping |
 | [`src/routes.ts`](src/routes.ts) | Page, status, and live socket registration |
 | [`src/page.ts`](src/page.ts) | The served document and its script |
-| [`src/tools.ts`](src/tools.ts) | The seven model tools |
+| [`src/tools.ts`](src/tools.ts) | The nine model tools |
 
 </details>
 
@@ -137,7 +137,7 @@ The tools share one guard. An acting tool calls `TakeoverState.assertAgent` firs
 
 #### What the model sees
 
-Five tool definitions whenever the mounting scope has the tool registry: `headless_browser_open` (`url`, `newTab`), `headless_browser_snapshot` (`tab`, `fullPage`), `headless_browser_read` (`tab`, `selector`, `offset`, `limit`), `headless_browser_click` (`selector`, `tab`), and `headless_browser_type` (`selector`, `text`, `tab`). Each description is one sentence naming the operation and what the result answers: opening returns the settled URL and document title, a screenshot returns its PNG path and page URL, a read returns one text window with the header naming its page and range, a click returns the selector and page URL, and typing returns the selector. Results are one JSON text block. The typing result never repeats the text, so a password the model typed into a form is not echoed into the session log.
+Six page tools whenever the mounting scope has the tool registry: `headless_browser_open` (`url`, `newTab`), `headless_browser_snapshot` (`tab`, `fullPage`), `headless_browser_read` (`tab`, `selector`, `offset`, `limit`), `headless_browser_click` (`selector`, `tab`), `headless_browser_type` (`selector`, `text`, `tab`), and `headless_browser_scroll` (`tab`, `x`, `y`, `deltaY`, `to`). Each description is one sentence naming the operation and what the result answers: opening returns the settled URL and document title, a screenshot returns its PNG path and page URL, a read returns one text window with the header naming its page and range, a click returns the selector and page URL, typing returns the selector, and scrolling returns `x`, `y`, `scrollX`, `scrollY`, `pageHeight`, `viewportHeight`, `atTop`, and `atBottom`, so the model knows whether it reached the end. Results are one JSON text block. The typing result never repeats the text, so a password the model typed into a form is not echoed into the session log.
 
 #### Token effect
 
@@ -146,6 +146,20 @@ A fixed schema cost on every request from an Agent whose scope mounts the packag
 #### KV Cache effect
 
 Prefix-stable while the tool definitions and the descriptions are unchanged; results are appended after the reusable prefix.
+
+### Tab tools
+
+#### What the model sees
+
+`headless_browser_close` takes an optional `tab` and returns `{ "closed": "t2", "replaced": false, "tabs": [...] }`: every remaining tab's id, title, URL, loading flag, and active flag. Closing the last tab reports `"replaced": true`, because a blank tab takes its place and the browser, its context, and its profile stay open. The eight-tab cap remains; opening a ninth answers `{ "error": "opening <url> failed: the browser allows at most 8 tabs; close one with headless_browser_close before opening another" }`. Closing is an acting tool, so it is refused while the user holds the browser.
+
+#### Token effect
+
+One small definition; a result repeats the remaining tab list, at most eight short entries.
+
+#### KV Cache effect
+
+Append-only: results enter the history after the reusable prefix.
 
 ### Control tools
 
@@ -170,7 +184,7 @@ Append-only: results and refusals enter the history after the reusable prefix an
 - **Headless is the supported mode** — `headless: false` needs a logged-in desktop session; a service account cannot open a window.
 - **A refusal stays a refusal** — the identity fixes what the browser says about itself, not what the site decides: a site that scores the address, the profile, or the request can still refuse the page, and this package answers no challenge.
 - **A read is the rendered text** — `headless_browser_read` returns what the page renders: collapsed or hidden content is absent, a selector that matches several elements reads only the first, and text inside a frame or a shadow root is not part of the document body. An assignment list's rows below the fold are in the text even though no screenshot of the viewport contains them.
-- **Tabs are ours, not the site's** — the tab model covers tabs the tools or the take-over view open; a popup the site opens for itself is not adopted. The browser keeps at most eight tabs, and every navigation has a 20-second deadline.
+- **Tabs are ours, not the site's** — the tab model covers tabs the tools or the take-over view open; a popup the site opens for itself is not adopted. The browser keeps at most eight tabs; `headless_browser_close` frees one, and the cap error names that tool. Every navigation has a 20-second deadline.
 - **Streaming is live-only** — frames arrive only while a take-over page is connected, are not recorded, and can drop frames when Chrome is busy. A still page sends no new frames, so a page that connects later shows the last painted frame. A renderer that crashes ends the cast, and the picture returns only after the page is reloaded and the user reconnects.
 - **The hand-over URL needs a Web server** — in a composition without one, `headless_browser_hand_over` returns `/headless-browser` alone, which the user cannot open.
 - **The generated catalogs follow the mount** — `docs/tool-catalog.md` and `docs/config-catalog.md` list this package's tools and fields only after a composition mounts it and the generators run.
