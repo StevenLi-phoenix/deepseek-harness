@@ -50,6 +50,7 @@ function browserConfig(profileDir: string, stealth: boolean): Config {
     profileDir,
     headless: true,
     stealth,
+    sensitiveActions: true,
     viewportWidth: 1280,
     viewportHeight: 800,
     jpegQuality: 50,

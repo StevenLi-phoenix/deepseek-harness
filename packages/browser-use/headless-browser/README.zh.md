@@ -37,6 +37,7 @@ kind: "package-reference"
 | `profileDir` | `$DSH_HOME/data/headless-browser/profile` | Chromium profile 目录；cookie、登录状态和本地存储都在这里 |
 | `headless` | `true` | 不开窗口运行；`false` 需要已登录的桌面会话 |
 | `stealth` | `true` | 每个页面都报告一个 macOS Chrome 身份，让把「无头浏览器」认出来的站点正常返回页面 |
+| `sensitiveActions` | `true` | 名称或值命中敏感表的目标直接拒绝；`false` 时放行，并把这次跳过记成安全事件 |
 | `viewportWidth` | `1280` | 页面视口宽度（CSS 像素） |
 | `viewportHeight` | `800` | 页面视口高度（CSS 像素） |
 | `jpegQuality` | `60` | 实时画面 JPEG 质量 |
@@ -140,6 +141,8 @@ headless_browser_keepalive {"action":"remove","id":"k1"}
 **可见性评分。** [`src/visibility.ts`](src/visibility.ts) 测量人真正要点的那个元素，并把它折成 0 到 1 的分数：计算后的 `display` 和 `visibility`、整条 opacity 链的乘积、盒子面积、`pointer-events`、`aria-hidden`、滚动到它之后盒子落在视口内的比例、五个采样点上命中测试能碰到它的比例，以及有多少个祖先把它裁掉。人绕不过去的项（display、visibility、pointer-events、aria-hidden）权重最高，单独一项就足以让分数归零。低于 `VISIBILITY_THRESHOLD`（0.2）的点击或输入会被拒绝，拒绝里写明分数和拖低分数的那些项。一个选择器命中多个元素时，守卫操作分数最高的那个，并同时报告它和次高者的分数，模型因此能看出自己选中的是真控件而不是诱饵。
 
 **敏感名称。** [`SENSITIVE_ACTIONS`](src/guard.ts) 是唯一一张会破坏东西、会动钱的动词表：submit、pay、purchase、下单或确认订单、transfer、approve、delete、移除/归档/停用账户、unsubscribe、revoke。目标的无障碍名称或值命中其中任何一条就会被拒绝，需要 `headless_browser_hand_over`。这张表是故意保守的：误判的代价是主人花几秒钟确认一次，漏判的代价是一个账户或一笔钱。
+
+**关闭名称规则。** `sensitiveActions: false` 只关掉这一条规则：名称或值命中的目标照常执行，而这个决定仍会记成一条安全事件，带 `rule: 'sensitive-name'` 和 `skipped: true`，所以审计里照样留着规则本来会拒绝的每一个目标。它存在的理由是主人亲自盯着的任务——主人已经看过这个表单，要的就是让 agent 按下 Submit——可见性评分和站点规则则原样保留：它们量的是人能不能点到这个目标、动作会不会离开站点，而不是主人是否已经同意这一次点击。
 
 **站点漂移。** 会话记住自己所在的注册域。打开、点击或输入会把浏览器带到另一个域时，第一次会被拒绝；agent 要带上 `allowOrigin: true` 再请求一次，这次放行会被记录成事件。同一个注册域下的子域算同一个站点，所以 `mail.example.com` 和 `example.com` 之间可以直接走。页面自己跳走的情况会被记录成一次漂移。
 
