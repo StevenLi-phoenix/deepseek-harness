@@ -6427,7 +6427,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-turn-taint`
 
 - `inject`: `tools`
-- `source`: [`packages/fork/turn-taint/src/index.ts:30`](../packages/fork/turn-taint/src/index.ts)
+- `source`: [`packages/fork/turn-taint/src/index.ts:31`](../packages/fork/turn-taint/src/index.ts)
 
 ```ts config-catalog
 /** Settings. */
@@ -6441,7 +6441,7 @@ export interface Config {
   ownerOnlyTools?: string[]
   /** Tools that outlive the turn, allowed everywhere but marked when a turn that is not clean uses them. */
   auditedTools?: string[]
-  /** Tell the owner on WeChat about audited calls, one merged notice per turn. */
+  /** Tell the owner on WeChat about an audited call that keeps running (a recurring reminder or a watch), one merged notice per turn. */
   notify?: boolean
 }
 ```

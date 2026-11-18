@@ -1,5 +1,5 @@
 ---
-description: "Turn origin for the owner's main agent: who started the open turn (the owner, a relayed message, an event, a reminder), which tools read strangers' words in it, and the rules that follow: Claude Code messaging only in the owner's own turns, reminders and watches from other turns reported."
+description: "Turn origin for the owner's main agent: who started the open turn (the owner, a relayed message, an event, a reminder), which tools read strangers' words in it, and the rules that follow: Claude Code messaging only in the owner's own turns, the reminders and watches that keep running from other turns reported."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The main agent listens to more than the owner: another Session passes it messages, events and reminders start turns, and it reads web pages and QQ groups. This package tells which kind of turn a tool call runs in, from the Session's own log, and applies two rules. In a turn the owner did not start alone, `cc_send` and `cc_start` are refused; a reminder or watch created in such a turn still works, but the log marks it and the owner gets one notice naming it. `turnOrigin()` also backs protected memory writes of [`owner-memory`](../owner-memory/README.md) and the send gate of [`tool-gmail`](../tool-gmail/README.md).
+The main agent listens to more than the owner: another Session passes it messages, events and reminders start turns, and it reads web pages and QQ groups. This package tells which kind of turn a tool call runs in, from the Session's own log, and applies two rules. In a turn the owner did not start alone, `cc_send` and `cc_start` are refused; a reminder or watch created in such a turn still works and the log marks it, and one that keeps running (a recurring reminder, a watch) also earns one notice naming it. `turnOrigin()` also backs protected memory writes of [`owner-memory`](../owner-memory/README.md) and the send gate of [`tool-gmail`](../tool-gmail/README.md).
 
 ## Table of Contents
 
@@ -37,7 +37,7 @@ Add the row to the plugin list of the agent preset that should be guarded. The f
 | `enforce` | `true` | Refuse the owner-only tools outside a clean owner turn; `false` only logs `would be refused` |
 | `ownerOnlyTools` | `cc_send`, `cc_start` | Tools refused outside a clean owner turn |
 | `auditedTools` | `schedule_create`, `watch_create` | Tools allowed everywhere but marked when a turn that is not clean uses them |
-| `notify` | `true` | One WeChat notice per turn that left audited calls behind |
+| `notify` | `true` | One WeChat notice per turn that left a recurring reminder or a watch behind; a one-shot reminder is only a log line |
 
 A turn is **clean** when every input that started or joined it was the owner's own prompt and no tool that carries strangers' words (`web_fetch`, `web_search`, `qq_groups`, `qq_digest`, `qq_recent`, `qq_search`, `gmail_search`, `gmail_read`, `gmail_attachment`) ran in it. Anything else is named by its origin in logs and notices: `peer:bili` (a message another Session passed on; the part after `peer:` names the sender), `peer:cc` (Claude Code), `event`, `scheduled`, `monitor`, `job`, `guest`, `subagent`, or the owner plus the tools that read outside text (`owner+web_fetch`). A turn with no recognised input counts as `unknown`, which is not clean.
 
@@ -53,7 +53,7 @@ To switch the refusal off, set `enforce: false` in the bundle row, or put `TURN_
 
 `turnOrigin(session)` walks the Session log backwards from its end to the latest `turn/start` and reads two kinds of events. A `user/message` is classified by its durable `source`: `user` is the owner's, unless its `rpcId` starts with `untrusted:` (or it carries a `principal`, a non-owner caller); `schedule`, `webhook`, `tool-monitor`, and `tool-jobs` name reminders, events, monitors, and background jobs; context the Host injects (`owner-memory`, `wechat` notices, time and workspace context) is ignored. Sessions recorded before the fork rename carry one lower-case word and `-` before `untrusted:` and `tool-monitor`; `untrustedOrigin` and `sourceKind` read those as the current spellings, and `time-gap` uses the same two helpers. A `tool/call` of a contaminating tool marks the turn. The message text is never read, so no wording can make a turn look like the owner's or clear a mark. The request id is the channel's doing: `wechat` mints it with `untrustedRequestId(origin)` when it queues a message another Session passed on (`tellMainAgent`), and no stranger can mint one. Between turns, or when no input is recognised, the origin is empty and not clean. A subagent has no inputs of its own to trust: it inherits its parent's origin (found through `header.parentSession`) with `subagent` first, or counts as unknown when the parent is gone. `ownerWords(session)` returns the text of the owner's own messages in the open turn, classified the same way (empty in a subagent); the Gmail send gate looks for a held message's code and for the recipients the owner named in it.
 
-The plugin listens on `tools/pre-execute` in the preset's scope: a guarded tool outside a clean turn is denied with a reason that names the origin and tells the model to ask the owner on WeChat; an audited tool is allowed, logged at warn level, and queued for one notice sent when the turn ends (or after five minutes).
+The plugin listens on `tools/pre-execute` in the preset's scope: a guarded tool outside a clean turn is denied with a reason that names the origin and tells the model to ask the owner on WeChat; an audited tool is allowed and logged, and one that keeps running —a recurring `schedule_create` or a `watch_create`— is queued for one notice sent when the turn ends (or after five minutes). A `schedule_create` whose rrule has `COUNT=1` fires once and stops, so it is logged as `one-shot … no notice` and left out of the notice's count and body; a watch, a recurring rrule, and an rrule this cannot read keep the notice.
 
 | File | Role |
 |---|---|

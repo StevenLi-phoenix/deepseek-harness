@@ -4,8 +4,9 @@
  * A turn the owner started alone is trusted with the owner's own levers. A turn a relayed message, an
  * event, a reminder, or a monitor started, or one that read a web page or a QQ group, is not: a
  * stranger's words may have steered it. This plugin refuses the levers that reach other machines or
- * sessions in such a turn (`cc_send`, `cc_start`) and marks the ones that outlive a turn
- * (`schedule_create`, `watch_create`) in the log and in one notice to the owner.
+ * sessions in such a turn (`cc_send`, `cc_start`) and logs the things it sets up there
+ * (`schedule_create`, `watch_create`): one that keeps running — a recurring schedule, a watch — also
+ * earns one notice to the owner, while a one-shot reminder is only a log line.
  *
  * @module @deepseek-ai/dsh-turn-taint
  */
@@ -37,7 +38,7 @@ export interface Config {
   ownerOnlyTools?: string[]
   /** Tools that outlive the turn, allowed everywhere but marked when a turn that is not clean uses them. */
   auditedTools?: string[]
-  /** Tell the owner on WeChat about audited calls, one merged notice per turn. */
+  /** Tell the owner on WeChat about an audited call that keeps running (a recurring reminder or a watch), one merged notice per turn. */
   notify?: boolean
 }
 
@@ -54,6 +55,23 @@ const LINGER_MS = 5 * 60_000
 
 /** The audited tools in the owner's words. */
 const AUDITED_ZH: Readonly<Record<string, string>> = { schedule_create: '定时提醒', watch_create: '监控' }
+
+/** An rrule that asks for a single occurrence. */
+const ONE_SHOT = /(?:^|[;\s])COUNT=1(?!\d)/i
+
+/**
+ * Whether an audited call fires once and then stops, so it needs no notice: a `schedule_create`
+ * whose rrule asks for a single occurrence (`COUNT=1`). A watch, a recurring rrule, and an rrule
+ * this cannot read all keep today's behaviour.
+ * @param name - the audited tool's name.
+ * @param args - its parsed arguments.
+ * @returns whether the call sets up something that never runs again.
+ */
+function isOneShot(name: string, args: unknown): boolean {
+  if (name !== 'schedule_create') return false
+  const rrule = (args as { rrule?: unknown } | null | undefined)?.rrule
+  return typeof rrule === 'string' && ONE_SHOT.test(rrule)
+}
 
 /**
  * Register the policy.
@@ -128,6 +146,10 @@ export function apply(ctx: Context, config: Config): void {
         reason: `${exec.name} is only available in a turn the owner started alone. This turn came from ${label}, and what it carries is not the owner's request: tell the owner on WeChat what you would have sent and let them ask for it.`,
         info: { name: exec.name, code: 'NOT_OWNER_TURN' },
       }
+    }
+    if (isOneShot(exec.name, exec.arguments)) {
+      ctx.logger.info('turn-taint: one-shot %s in a turn the owner did not start alone (%s), no notice', exec.name, label)
+      return decision
     }
     ctx.logger.warn('turn-taint: %s used in a turn the owner did not start alone (%s), session %s', exec.name, label, exec.agent.session.id)
     if (notify) enqueue(exec.agent.session.id, `· ${AUDITED_ZH[exec.name] ?? exec.name}（${exec.name}）`, label)

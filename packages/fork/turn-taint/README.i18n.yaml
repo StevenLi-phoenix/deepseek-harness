@@ -3,23 +3,23 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/fork/turn-taint/README.md
 /:
-  en: 9fcef26ebf84ce34
-  zh: 082f9628ff79893f
+  en: d53483f6a37ba30e
+  zh: 0ceb9242a9585b99
 /deepseek-ai-dsh-turn-taint:
   en: d64692c46e77ed5c
   zh: 122bb85d30962c27
 /deepseek-ai-dsh-turn-taint/summary:
-  en: 4511bcdbddafcb00
-  zh: 50214446c0963a36
+  en: 672b78ef3992d0dd
+  zh: 9510b07b577de175
 /deepseek-ai-dsh-turn-taint/table-of-contents:
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
 /deepseek-ai-dsh-turn-taint/use-this-package:
-  en: de538f8e32ce0fbe
-  zh: 1637227559264751
+  en: 1c445c1ab1c7777f
+  zh: 77f673104b949516
 /deepseek-ai-dsh-turn-taint/understand-the-implementation:
-  en: 2b6f5adeb346a910
-  zh: 7153971a0f03a640
+  en: 9757f0880e3736af
+  zh: 35327fa7104dfbfd
 /deepseek-ai-dsh-turn-taint/further-exploration:
   en: 030bb43d924fe904
   zh: 620dbe8f6844f6a6

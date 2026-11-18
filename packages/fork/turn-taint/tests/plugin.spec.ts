@@ -25,6 +25,10 @@ afterEach(async () => {
 type Source = Parameters<typeof createUserMessage>[0]['source']
 const OWNER: Source = { kind: 'user', rpcId: 'owner-1' } as never
 const PEER: Source = { kind: 'user', rpcId: untrustedRequestId('bili') } as never
+/** An rrule that fires once. */
+const ONCE = 'DTSTART:20261118T120000Z\nRRULE:FREQ=DAILY;COUNT=1'
+/** An rrule that keeps firing. */
+const WEEKLY = 'DTSTART:20261118T120000Z\nRRULE:FREQ=WEEKLY;BYDAY=MO'
 
 function agentOn(session: Session): Agent {
   return {
@@ -86,8 +90,8 @@ async function mount(config: Partial<Taint.Config> = {}, options: MountOptions =
   }
   if (options.raw === true) await ctx.plugin({ name: 'turn-taint-raw', apply: (inner: Context) => { Taint.apply(inner, config) } })
   else await ctx.plugin(Taint, config)
-  const call = async (toolName: string, agent: Agent): Promise<string> => {
-    const batch = await ctx.tools.execute({ signal: new AbortController().signal, agent, calls: [{ type: 'tool-call', id: ToolCallId(`${toolName}-call`), name: toolName, arguments: '{}' }] })
+  const call = async (toolName: string, agent: Agent, args: unknown = {}): Promise<string> => {
+    const batch = await ctx.tools.execute({ signal: new AbortController().signal, agent, calls: [{ type: 'tool-call', id: ToolCallId(`${toolName}-call`), name: toolName, arguments: JSON.stringify(args) }] })
     const result = batch.results[0]!.result
     return result.content.map(block => (block.type === 'text' ? block.text : '')).join('\n')
   }
@@ -166,6 +170,49 @@ describe('audited tools', () => {
     expect(notices[0]).toMatchObject({ safety: true })
     expect(notices[0]!.body).toBe('· 定时提醒（schedule_create）\n· 监控（watch_create）')
     expect(JSON.stringify(notices[0])).not.toMatch(/让我|回复|告诉我/u)
+  })
+
+  it('keeps a one-shot reminder to one log line and no notice', async () => {
+    const { call, ran, notices, logs, endTurn } = await mount()
+    const agent = turn([PEER])
+    expect(await call('schedule_create', agent, { rrule: ONCE })).toContain('"ok":true')
+    endTurn(agent)
+    await new Promise((resolve) => { setTimeout(resolve, 10) })
+    expect(ran).toEqual(['schedule_create'])
+    expect(notices).toEqual([])
+    expect(logs.some(line => line.includes('one-shot') && line.includes('peer:bili') && line.includes('no notice'))).toBe(true)
+    expect(logs.filter(line => line.includes('used in a turn'))).toEqual([])
+  })
+
+  it('still tells the owner about a schedule that keeps running', async () => {
+    const { call, notices, endTurn } = await mount()
+    const agent = turn([PEER])
+    await call('schedule_create', agent, { rrule: WEEKLY })
+    endTurn(agent)
+    await vi.waitFor(() => { expect(notices).toHaveLength(1) })
+    expect(notices[0]!.title).toContain('设置了 1 个')
+    expect(notices[0]!.body).toBe('· 定时提醒（schedule_create）')
+  })
+
+  it('does not mistake more than one occurrence for a one-shot', async () => {
+    const { call, notices, endTurn } = await mount()
+    const agent = turn([PEER])
+    await call('schedule_create', agent, { rrule: 'DTSTART:20261118T120000Z\nRRULE:FREQ=DAILY;COUNT=10' })
+    endTurn(agent)
+    await vi.waitFor(() => { expect(notices).toHaveLength(1) })
+    expect(notices[0]!.body).toBe('· 定时提醒（schedule_create）')
+  })
+
+  it('counts only the recurring call when a one-shot and a watch share a turn', async () => {
+    const { call, notices, logs, endTurn } = await mount()
+    const agent = turn([PEER])
+    await call('schedule_create', agent, { rrule: ONCE })
+    await call('watch_create', agent)
+    endTurn(agent)
+    await vi.waitFor(() => { expect(notices).toHaveLength(1) })
+    expect(notices[0]!.title).toBe('一次不是你本人发起的回合（来源：B站猫猫的传话）设置了 1 个之后会自己触发的东西')
+    expect(notices[0]!.body).toBe('· 监控（watch_create）')
+    expect(logs.filter(line => line.includes('one-shot'))).toHaveLength(1)
   })
 
   it('says nothing about the owner\'s own turn, and nothing when notices are off', async () => {
