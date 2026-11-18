@@ -1,4 +1,3 @@
-import z from '@deepseek-ai/schemastery'
 import { IconEditOutlineRegular, IconTrashOutlineRegular, IconPinFillRegular, IconPinOutlineRegular, IconUnarchiveOutlineRegular, IconArchiveOutlineRegular, IconBranchOutlineRegular, IconCopyOutlineRegular, IconMailReadOutlineRegular, IconMailUnreadOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SessionMenu } from './session-actions/SessionMenu.tsx'
 import type {} from '@deepseek-ai/dsh-client-ui-context-menu/client'
@@ -21,6 +20,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-context-menu/client'
  */
 import type {} from '@deepseek-ai/dsh-client-product-analytics/client'
 import type { Context } from '@deepseek-ai/cordis'
+import type { SyncedConfig } from '@deepseek-ai/dsh-client-config/types'
+import type { WorkspaceNavigationConfig } from '../types.ts'
 import type { RemoteHostFacts } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ISessions, SessionForkError } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {
@@ -121,6 +122,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 declare module '@deepseek-ai/dsh-api-session-controller/client' {
   interface SessionReferenceSourceMap {
     workspaceOperation: unknown
+    /** Recently viewed Sessions kept receiving history after leaving the main view. */
+    recentViews: unknown
   }
 }
 
@@ -137,21 +140,6 @@ const NS = 'workspace'
  * `uiSession.sessionStatus` provides the `useSessionStatus` hook the browser rows render with, so the plugin unloads
  * and reloads with it.
  */
-/** Client configuration of the workspace browser. */
-export interface Config {
-  /**
-   * Agent preset ids whose Sessions the sidebar's session-type choice counts
-   * as automated, for channels that prompt through the user path on behalf of
-   * others; Sessions no person prompted count as automated regardless.
-   */
-  automatedAgentPresets?: string[]
-}
-
-/** Configuration schema. */
-export const Config: z<Config> = z.object({
-  automatedAgentPresets: z.array(z.string()).default([]),
-})
-
 export const inject = ['contextMenus',
   'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'layout', 'shortcuts', 'remoteAccess',
   'uiSession', 'uiSession.sessionStatus',
@@ -162,10 +150,13 @@ export const inject = ['contextMenus',
  * ledger. Inject factories return plain callbacks; data reads use the
  * framework's global hooks.
  * @param ctx - client root context.
- * @param config - the browser's configuration.
+ * @param config - Host-synced navigation configuration, including the fork's
+ * automated preset ids.
  */
-export function apply(ctx: Context, config: Config = Config({})): void {
-  const automatedAgentPresets: readonly string[] = [...config.automatedAgentPresets ?? []]
+export function apply(ctx: Context, config: SyncedConfig<WorkspaceNavigationConfig>): void {
+  // Read once at activation: the deployment fixes the list, and a change reaches
+  // the browser on the next load rather than mid-Session.
+  const automatedAgentPresets: readonly string[] = [...config.automatedAgentPresets?.get() ?? []]
   const sessions = ctx.get('sessions') as ISessions
   const workspaces = ctx.get('workspaces') as IWorkspaces
   // One viewing-store instance, created here as ui-layout does for its layout
@@ -178,7 +169,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
   let toastSeq = 0
   const notify = (toast: RowToast): void => { rowToast.set({ ...toast, seq: ++toastSeq }) }
   const uiWorkspace = new UiWorkspaceService(
-    ctx, ctx.remote.directoryPicker, workspaces, sessions, viewInstance.actions, notify,
+    ctx, ctx.remote.directoryPicker, workspaces, sessions, viewInstance.actions, notify, config.recentViewLimit,
   )
   ctx.slots.provideRoot({
     hooks: { workspaces: workspaces.list },

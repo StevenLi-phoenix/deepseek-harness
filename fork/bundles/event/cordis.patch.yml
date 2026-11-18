@@ -30,12 +30,6 @@
   config:
     automatedAgentPresets: [bili, qqbot, qq-digest, up]
 
-# Root rows reach every preset, including `bili`, whose Session reads public Bilibili content:
-# the base bundle's root working_directory tool moves into the `unattended` preset instead.
-# packages/fork/bili/tests/bundle.spec.ts fails if any model tool is left at the root.
-- id: tool-working-directory
-  disabled: true
-
 # Upstream defaults this service keeps at their previous values (packages/fork/bili/tests/bundle.spec.ts).
 # Read-before-write for write and edit (upgrade guide v0.2.2-alpha.2/fs-observation-policy-default-off).
 - id: fs-observation-policy
@@ -498,8 +492,6 @@
             name: '@deepseek-ai/dsh-tool-fs-search'
             config:
               sampleOverCapGlobResults: false
-          - id: tool-working-directory
-            name: '@deepseek-ai/dsh-tool-working-directory'
           - id: tool-jobs
             name: '@deepseek-ai/dsh-tool-jobs'
           - id: tool-schedule

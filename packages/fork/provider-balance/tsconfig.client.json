@@ -33,7 +33,7 @@
       "path": "../../client/ui-slots"
     },
     {
-      "path": "../../credentials/deepseek-account"
+      "path": "../../account/deepseek-account"
     },
     {
       "path": "../../client/ui-settings-account"

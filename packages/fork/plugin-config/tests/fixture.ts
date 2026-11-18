@@ -68,7 +68,7 @@ export async function configFixture(options: FixtureOptions = {}) {
   if (options.home !== undefined) writeFileSync(join(home, 'cordis.patch.yml'), JSON.stringify(options.home))
   const profile: ProfileContext = {
     name: 'test', startedBundles: ['test-bundle'], dir, patchPath: join(dir, 'cordis.patch.yml'),
-    installAnchor: join(home, 'package.json'), cwd: home, home, overlays: [], telemetryDisabledEnv: undefined,
+    installAnchor: join(home, 'package.json'), cwd: home, home, overlayPaths: [], telemetryDisabledEnv: undefined,
   }
   const routes: Route[] = []
   const logs: string[] = []
