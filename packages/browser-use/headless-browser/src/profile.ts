@@ -300,7 +300,7 @@ export async function recoverStaleProfile(
   } catch (error: unknown) {
     void error
   }
-  log?.warn('headless-browser: cleared a stale profile: %s', stale.reasons.join('; '))
+  // The caller reports what was cleared: it knows whether this was a launch or a recovery.
   return stale
 }
 
