@@ -93,6 +93,7 @@ async function boot(): Promise<BrowserApp> {
     profileDir: join(root, 'profile'),
     headless: true,
     stealth: true,
+    sensitiveActions: true,
     viewportWidth: 1280,
     viewportHeight: 800,
     jpegQuality: 50,

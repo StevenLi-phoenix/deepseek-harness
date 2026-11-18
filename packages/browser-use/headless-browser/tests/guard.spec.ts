@@ -7,6 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
+import { Config } from '../src/config.ts'
 import {
   ActionGuard,
   SECURITY_EVENT_LIMIT,
@@ -49,11 +50,15 @@ function facts(overrides: Partial<ElementFacts> = {}): ElementFacts {
 }
 
 /** A guard that records what it publishes, pinned to one clock. */
-function guarded(): { readonly guard: ActionGuard; readonly events: SecurityEvent[] } {
+function guarded(options: { readonly sensitiveActions?: boolean } = {}): {
+  readonly guard: ActionGuard
+  readonly events: SecurityEvent[]
+} {
   const events: SecurityEvent[] = []
   const guard = new ActionGuard({
     onEvent: (event) => { events.push(event) },
     now: () => new Date('2026-01-01T00:00:00.000Z'),
+    ...options,
   })
   guard.anchor('https://site.example/start')
   return { guard, events }
@@ -463,5 +468,110 @@ describe('blocked result', () => {
     expect(blocked.score).toBeUndefined()
     expect(blocked.factors).toBeUndefined()
     expect(blocked.failing).toEqual([])
+  })
+})
+
+describe('sensitive-name switch', () => {
+  /** The Submit click a supervised form asks for, on the test site. */
+  const submit = {
+    action: 'click' as const,
+    url: 'https://site.example/form',
+    ref: '#submit',
+    allowOrigin: false,
+  }
+
+  it('refuses a Submit click and logs the refusal while the rule is on', () => {
+    const { guard, events } = guarded()
+    const decision = guard.decideTarget({ ...submit, candidates: [facts({ name: 'Submit' })] })
+    expect(decision.allowed).toBe(false)
+    expect(refusalOf(decision).rule).toBe('sensitive')
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({ kind: 'refusal', rule: 'sensitive', name: 'Submit' })
+    expect(events[0]?.skipped).toBeUndefined()
+  })
+
+  it('runs the same Submit click with the rule off and records it as skipped', () => {
+    const { guard, events } = guarded({ sensitiveActions: false })
+    const decision = guard.decideTarget({ ...submit, candidates: [facts({ name: 'Submit' })] })
+    expect(decision.allowed).toBe(true)
+    expect(decision.target).toMatchObject({ name: 'Submit', index: 0, score: 1 })
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      kind: 'allow',
+      rule: 'sensitive-name',
+      skipped: true,
+      action: 'click',
+      url: 'https://site.example/form',
+      ref: '#submit',
+      name: 'Submit',
+      score: 1,
+    })
+    expect(events[0]?.reason).toContain('sensitiveActions: false')
+    expect(guard.log.list()).toHaveLength(1)
+  })
+
+  it('runs and records a coordinate click on a Pay button with the rule off', () => {
+    const { guard, events } = guarded({ sensitiveActions: false })
+    const decision = guard.decidePoint({
+      action: 'click',
+      url: 'https://site.example/checkout',
+      x: 10,
+      y: 20,
+      hit: facts({ name: 'Pay now' }),
+      allowOrigin: false,
+    })
+    expect(decision.allowed).toBe(true)
+    expect(events.map(event => event.kind)).toEqual(['point', 'allow'])
+    expect(events[1]).toMatchObject({
+      rule: 'sensitive-name',
+      skipped: true,
+      name: 'Pay now',
+      ref: 'point (10, 20)',
+    })
+  })
+
+  it('keeps the visibility rule in both modes', () => {
+    for (const sensitiveActions of [true, false]) {
+      const { guard, events } = guarded({ sensitiveActions })
+      const decision = guard.decideTarget({
+        ...submit,
+        candidates: [facts({ name: 'Continue', display: 'none', width: 0, height: 0, viewportFraction: 0, occlusion: 0 })],
+      })
+      expect(decision.allowed).toBe(false)
+      expect(refusalOf(decision).rule).toBe('visibility')
+      expect(events.at(-1)).toMatchObject({ kind: 'refusal', rule: 'visibility' })
+    }
+  })
+
+  it('still refuses a switched-off target the visibility rule cannot pass', () => {
+    const { guard, events } = guarded({ sensitiveActions: false })
+    const decision = guard.decideTarget({
+      ...submit,
+      candidates: [facts({ name: 'Submit', display: 'none', width: 0, height: 0, viewportFraction: 0, occlusion: 0 })],
+    })
+    expect(decision.allowed).toBe(false)
+    expect(refusalOf(decision).rule).toBe('visibility')
+    expect(events.map(event => event.kind)).toEqual(['allow', 'refusal'])
+  })
+
+  it('keeps the origin rule in both modes', () => {
+    for (const sensitiveActions of [true, false]) {
+      const { guard } = guarded({ sensitiveActions })
+      const decision = guard.decideTarget({
+        action: 'click',
+        url: 'https://site.example/post',
+        ref: '#out',
+        candidates: [facts({ name: 'Read more', href: 'https://evil.example/landing' })],
+        allowOrigin: false,
+      })
+      expect(decision.allowed).toBe(false)
+      expect(refusalOf(decision).rule).toBe('origin')
+    }
+  })
+
+  it('defaults the plugin config to on and accepts off', () => {
+    const resolve = (input: Partial<Config>): Config => Config(input as Config)
+    expect(resolve({}).sensitiveActions).toBe(true)
+    expect(resolve({ sensitiveActions: false }).sensitiveActions).toBe(false)
   })
 })

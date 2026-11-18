@@ -74,6 +74,7 @@ async function boot(): Promise<App> {
     profileDir,
     headless: true,
     stealth: true,
+    sensitiveActions: true,
     viewportWidth: 800,
     viewportHeight: 600,
     jpegQuality: 50,

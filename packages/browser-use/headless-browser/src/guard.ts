@@ -8,11 +8,13 @@
  * - can a person see and hit this element at all (a score from
  *   {@link scoreVisibility}, refused under {@link VISIBILITY_THRESHOLD});
  * - does its name or value say it destroys something or moves money
- *   ({@link SENSITIVE_ACTIONS}, which always needs the owner);
+ *   ({@link SENSITIVE_ACTIONS}, which needs the owner unless the plugin's
+ *   `sensitiveActions` switch turned it off);
  * - does the action leave the registrable domain the browser is on
  *   ({@link OriginGuard}, which needs an explicit `allowOrigin`).
  *
- * Every refusal is recorded once as a {@link SecurityEvent}, kept in a bounded
+ * Every refusal — and every target the switched-off sensitive-name rule let
+ * through — is recorded once as a {@link SecurityEvent}, kept in a bounded
  * list for the status route, and published to whoever listens. A tool result
  * that carries page text wraps it with {@link untrusted}, so the model reads
  * the page's words as data with an origin rather than as instructions.
@@ -31,10 +33,18 @@ import {
 /** The rule that refused an action. */
 export type GuardRule = 'visibility' | 'sensitive' | 'origin' | 'ax-id'
 
+/**
+ * The rule an event names: a refusal rule, `site-change` for a move the page
+ * made itself, or `sensitive-name` for a target the switched-off sensitive-name
+ * rule allowed. A refusal keeps `sensitive`, so a tool result reads the same
+ * whether or not the switch exists.
+ */
+export type SecurityRule = GuardRule | 'site-change' | 'sensitive-name'
+
 /** The action an event describes. */
 export type GuardAction = 'open' | 'click' | 'type' | 'scroll' | 'eval' | 'navigate'
 
-/** Whether an event is a refusal, an explicit cross-site allow, a page that moved itself, or a recorded coordinate click. */
+/** Whether an event is a refusal, an explicit allow (or a skipped rule), a page that moved itself, or a recorded coordinate click. */
 export type SecurityKind = 'refusal' | 'allow' | 'drift' | 'point'
 
 /** Most security events the status route keeps. */
@@ -46,8 +56,10 @@ export interface SecurityEvent {
   readonly at: string
   /** Refusal, explicit allow, an unrequested move to another site, or a recorded coordinate click. */
   readonly kind: SecurityKind
-  /** The rule that decided, `site-change` for a drift, or nothing for a recorded coordinate click. */
-  readonly rule?: GuardRule | 'site-change'
+  /** The rule that decided, `site-change` for a drift, `sensitive-name` for a skip, or nothing for a recorded coordinate click. */
+  readonly rule?: SecurityRule
+  /** Set when a rule the plugin switched off would have refused the action but let it run instead. */
+  readonly skipped?: boolean
   /** The action the agent asked for. */
   readonly action: GuardAction
   /** URL of the page the action started from, or the destination for a refusal to open one. */
@@ -58,7 +70,7 @@ export interface SecurityEvent {
   readonly name: string
   /** One short line saying why. */
   readonly reason: string
-  /** Visibility score, for a refusal, a target that passed, or the element a point hit. */
+  /** Visibility score, for a refusal, a target that passed or was let through, or the element a point hit. */
   readonly score?: number
   /** Tab the action ran in, when the tool named one. */
   readonly tabId?: string
@@ -66,7 +78,7 @@ export interface SecurityEvent {
   readonly point?: { readonly x: number; readonly y: number }
 }
 
-/** A destructive or money-moving target that always needs the owner. */
+/** A destructive or money-moving target that needs the owner unless the sensitive-name switch is off. */
 export interface SensitiveAction {
   /** Short name used in the refusal, the event, and the tool result. */
   readonly label: string
@@ -78,7 +90,9 @@ export interface SensitiveAction {
  * Targets a person must decide. Deliberately conservative: a false positive
  * costs one hand-over the owner can answer in seconds, while a false negative
  * costs an account or a payment, so a word like `submit` or `delete` is enough
- * even when it appears in a harmless place.
+ * even when it appears in a harmless place. The plugin's `sensitiveActions`
+ * setting turns the refusal off for a task the owner supervises, and then only
+ * the audit record remains.
  */
 export const SENSITIVE_ACTIONS: readonly SensitiveAction[] = [
   { label: 'submit', pattern: /\bsubmit\b|提交/iu },
@@ -389,6 +403,15 @@ export interface ActionGuardOptions {
   readonly onEvent?: (event: SecurityEvent) => void
   /** Clock for event timestamps. */
   readonly now?: () => Date
+  /**
+   * Whether a target whose accessible name or value matches
+   * {@link SENSITIVE_ACTIONS} is refused. On, it needs the owner; off, the
+   * action runs and the skip is recorded as a security event with
+   * `rule: 'sensitive-name'` and `skipped: true`. The visibility and origin
+   * rules are not affected either way.
+   * @default true
+   */
+  readonly sensitiveActions?: boolean
 }
 
 /** The refusal a tool result carries, and the error that stops the action. */
@@ -438,15 +461,18 @@ export class ActionGuard {
   readonly origin = new OriginGuard()
   readonly #onEvent: ((event: SecurityEvent) => void) | undefined
   readonly #now: () => Date
+  /** Whether the sensitive-name rule refuses, or only records, a matching target. */
+  readonly #sensitiveActions: boolean
   /** The site an explicit `allowOrigin` named, so the move after it is not a drift. */
   #allowedSite: string | undefined
 
   /**
-   * @param options - the event listener and the clock.
+   * @param options - the event listener, the clock, and the sensitive-name switch.
    */
   constructor(options: ActionGuardOptions = {}) {
     this.#onEvent = options.onEvent
     this.#now = options.now ?? (() => new Date())
+    this.#sensitiveActions = options.sensitiveActions ?? true
   }
 
   /**
@@ -492,14 +518,18 @@ export class ActionGuard {
     if (target === undefined) throw new Error('a guarded action needs at least one candidate element')
     const sensitive = matchSensitiveAction(`${target.name} ${target.value}`)
     if (sensitive !== undefined) {
-      return this.#refuse(input.action, {
-        rule: 'sensitive',
-        url: input.url,
-        ref: input.ref,
-        name: target.name,
-        reason: `the target ${quote(target.name)} matches the sensitive action "${sensitive.label}"`,
-        failing: [],
-      })
+      if (!this.#sensitiveActions) {
+        this.#recordSkip(input.action, input.url, input.ref, target.name, sensitive, chosen.score)
+      } else {
+        return this.#refuse(input.action, {
+          rule: 'sensitive',
+          url: input.url,
+          ref: input.ref,
+          name: target.name,
+          reason: `the target ${quote(target.name)} matches the sensitive action "${sensitive.label}"`,
+          failing: [],
+        })
+      }
     }
     const originTarget = input.action === 'click' ? target.href : target.formAction
     const originRefusal = this.#crossesSite(input.action, input.url, originTarget, input.allowOrigin, input.ref, target.name)
@@ -531,8 +561,9 @@ export class ActionGuard {
   /**
    * Decide one click or type at a viewport point. The model is acting on what
    * it saw in a screenshot, so the visibility score is recorded and audited
-   * rather than used as a gate; only a sensitive name or a site boundary
-   * refuses. A blank point is allowed and noted.
+   * rather than used as a gate; only a sensitive name (unless the plugin
+   * switched that rule off) or a site boundary refuses. A blank point is
+   * allowed and noted.
    * @param input - the point, the facts of the element a hit test found, and whether the agent allowed a move.
    * @returns the recorded hit, or the refusal.
    */
@@ -561,15 +592,19 @@ export class ActionGuard {
     }
     const sensitive = matchSensitiveAction(`${hit.name} ${hit.value}`)
     if (sensitive !== undefined) {
-      return this.#refuse(input.action, {
-        rule: 'sensitive',
-        url: input.url,
-        ref,
-        name: hit.name,
-        reason: `the element under the point ${quote(hit.name)} matches the sensitive action "${sensitive.label}"`,
-        failing: [],
-        ...score === undefined ? {} : { score },
-      })
+      if (!this.#sensitiveActions) {
+        this.#recordSkip(input.action, input.url, ref, hit.name, sensitive, score)
+      } else {
+        return this.#refuse(input.action, {
+          rule: 'sensitive',
+          url: input.url,
+          ref,
+          name: hit.name,
+          reason: `the element under the point ${quote(hit.name)} matches the sensitive action "${sensitive.label}"`,
+          failing: [],
+          ...score === undefined ? {} : { score },
+        })
+      }
     }
     const originTarget = input.action === 'click' ? hit.href : hit.formAction
     const originRefusal = this.#crossesSite(input.action, input.url, originTarget, input.allowOrigin, ref, hit.name)
@@ -644,6 +679,32 @@ export class ActionGuard {
       reason: `the agent allowed the move to ${site}`,
     })
     return undefined
+  }
+
+  /**
+   * Record that the sensitive-name rule was switched off for a target it would
+   * have refused, so the audit trail keeps what the switch let through. The
+   * decision is an `allow` with `rule: 'sensitive-name'` and `skipped: true`.
+   */
+  #recordSkip(
+    action: GuardAction,
+    url: string,
+    ref: string,
+    name: string,
+    sensitive: SensitiveAction,
+    score: number | undefined,
+  ): void {
+    this.#emit({
+      kind: 'allow',
+      rule: 'sensitive-name',
+      action,
+      url,
+      ref,
+      name,
+      reason: `the target ${quote(name)} matches the sensitive action "${sensitive.label}", but the sensitive-name rule is off (sensitiveActions: false), so the action ran`,
+      skipped: true,
+      ...score === undefined ? {} : { score },
+    })
   }
 
   #refuse(action: GuardAction, input: Omit<Refusal, 'hint'>): Decision {

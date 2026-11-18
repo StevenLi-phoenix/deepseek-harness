@@ -26,6 +26,17 @@ export interface Config {
    * @default true
    */
   stealth: boolean
+  /**
+   * Whether the action guard refuses a click or type whose target's accessible
+   * name or value matches the sensitive table: submit, pay, delete, and the rest
+   * of `SENSITIVE_ACTIONS`. Off, that action runs and the skip is still recorded
+   * as a security event with `rule: 'sensitive-name'` and `skipped: true`, so the
+   * audit trail keeps every target the rule would have refused. Turn it off only
+   * for a task the owner supervises directly, such as pressing submit on a form
+   * the owner read; the visibility and origin rules stay on either way.
+   * @default true
+   */
+  sensitiveActions: boolean
   /** Page viewport width in CSS pixels; live-view frames are scaled to it. @default 1280 */
   viewportWidth: number
   /** Page viewport height in CSS pixels. @default 800 */
@@ -53,6 +64,7 @@ export const Config: z<Config> = z.object({
   profileDir: z.string().default(dshPath('data', 'headless-browser', 'profile')),
   headless: z.boolean().default(true),
   stealth: z.boolean().default(true),
+  sensitiveActions: z.boolean().default(true),
   viewportWidth: z.natural().min(320).default(1280),
   viewportHeight: z.natural().min(240).default(800),
   jpegQuality: z.natural().min(1).max(100).default(60),

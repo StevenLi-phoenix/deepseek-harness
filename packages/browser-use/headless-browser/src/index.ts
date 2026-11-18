@@ -57,6 +57,7 @@ export function apply(ctx: Context, config: Config): void {
   // reads the same event list, so a refusal cannot be logged twice or lost.
   const guard = new ActionGuard({
     onEvent: (event) => { ctx.emit('headless-browser/security', event) },
+    sensitiveActions: config.sensitiveActions,
   })
   const browser = new HeadlessBrowserSession(config, ctx.logger, guard)
   const keepalives = new KeepaliveService({
