@@ -31,6 +31,7 @@ import {
   recoverStaleProfile,
 } from '../src/profile.ts'
 import { BrowserUnavailableError, HeadlessBrowserSession, isLostContextError, type SessionDeps } from '../src/session.ts'
+import { BrowserTabs, type TabsContext } from '../src/tabs.ts'
 
 const LOG = { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as Context['logger']
 
@@ -345,6 +346,32 @@ describe('browser recovery', () => {
     expect(exitHook).toBeDefined()
     exitHook?.()
     expect(kills).toHaveLength(1)
+  })
+
+  it('does not end the process when the browser dies under the last tab', async () => {
+    // Nobody awaits the tab model's close handler, so a dead browser there used
+    // to be an unhandled rejection — which ends a Node process.
+    const context = new FakeContext(0)
+    const tabs = new BrowserTabs({
+      context: async () => ({
+        pages: () => context.pagesList(),
+        newPage: async () => await context.newPage(),
+      }) as unknown as TabsContext,
+      log: LOG,
+    })
+    await tabs.create()
+    const page = context.pages[0] as FakePage
+    // Every page after this one fails, the way a browser that went away answers.
+    context.failNewPage = 5
+    await page.close()
+    await vi.waitFor(() => {
+      expect(LOG.warn).toHaveBeenCalledWith(
+        'headless-browser: replacing the closed tab %s failed: %s',
+        't1',
+        expect.stringContaining('Failed to open a new tab'),
+      )
+    })
+    expect(tabs.state()).toHaveLength(0)
   })
 
   it('moves the keepalives onto the context that came back', async () => {

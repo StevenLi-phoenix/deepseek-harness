@@ -423,21 +423,29 @@ export class BrowserTabs {
 
   async #closed(tab: Tab): Promise<void> {
     if (tab.closing || !this.#tabs.has(tab.id)) return
-    await this.#run(async () => {
-      if (!this.#tabs.has(tab.id)) return
-      const index = this.#order.indexOf(tab.id)
-      this.#remove(tab)
-      // A page closed by the site itself must not leave the browser with no tab
-      // or its tools with no page; replace it exactly as an explicit close would.
-      if (this.#tabs.size === 0) {
-        const context = await this.#options.context()
-        const replacement = this.#adopt(await context.newPage())
-        this.#activeId = replacement.id
-      } else if (this.#activeId === tab.id) {
-        this.#activeId = this.#order[Math.min(index, this.#order.length - 1)]
-      }
+    try {
+      await this.#run(async () => {
+        if (!this.#tabs.has(tab.id)) return
+        const index = this.#order.indexOf(tab.id)
+        this.#remove(tab)
+        // A page closed by the site itself must not leave the browser with no tab
+        // or its tools with no page; replace it exactly as an explicit close would.
+        if (this.#tabs.size === 0) {
+          const context = await this.#options.context()
+          const replacement = this.#adopt(await context.newPage())
+          this.#activeId = replacement.id
+        } else if (this.#activeId === tab.id) {
+          this.#activeId = this.#order[Math.min(index, this.#order.length - 1)]
+        }
+        this.#emit()
+      })
+    } catch (error: unknown) {
+      // Nobody awaits this handler: a browser that died takes the replacement
+      // page with it, and the session relaunches on the next operation. Letting
+      // the rejection escape would end the process instead.
+      this.#options.log.warn('headless-browser: replacing the closed tab %s failed: %s', tab.id, firstLine(error))
       this.#emit()
-    })
+    }
   }
 
   async #refresh(tab: Tab): Promise<void> {
