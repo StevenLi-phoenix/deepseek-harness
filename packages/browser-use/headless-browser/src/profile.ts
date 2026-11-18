@@ -283,7 +283,8 @@ export async function recoverStaleProfile(
   }
   if (stale.orphanPids.length > 0) {
     // The browser needs a moment to release the profile and its own child processes.
-    await new Promise<void>((resolve) => { setTimeout(resolve, 250).unref() })
+    // A plain timer: this wait is part of a launch the caller is waiting for.
+    await new Promise<void>((resolve) => { setTimeout(resolve, 250) })
   }
   for (const path of stale.lockFiles) {
     const owner = lockOwnerPid(await readLinkQuietly(path), probe.hostname ?? osHostname())

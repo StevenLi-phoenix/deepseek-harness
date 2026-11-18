@@ -921,11 +921,13 @@ async function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
 }
 
 /**
- * A plain wait, unref'd so a pending recovery never keeps the process alive.
+ * The wait between closing a lost context and relaunching. It is a plain timer
+ * on purpose: a recovery is work the caller is waiting for, so it must keep the
+ * event loop alive rather than let a short-lived process exit in the middle.
  * @param ms - how long to wait.
  */
 async function sleepMs(ms: number): Promise<void> {
-  await new Promise<void>((resolve) => { setTimeout(resolve, ms).unref() })
+  await new Promise<void>((resolve) => { setTimeout(resolve, ms) })
 }
 
 
