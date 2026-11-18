@@ -1,3 +1,0 @@
-# Deleted on purpose in the fork: this deployment has no GitHub-hosted PR check, and the resolve flow
-# that lands an upstream merge writes files but cannot record a deletion, so the removed workflow comes
-# back as this comment-only tombstone. The commit right after the merge deletes it again; keep it out.
