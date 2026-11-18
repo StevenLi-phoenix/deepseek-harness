@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-headless-browser",
   "description": "One persistent headless Chromium with model tools and a Web page where the user can take it over",
-  "version": "0.2.2-rc.3",
+  "version": "0.2.2-rc.5",
   "publishConfig": {
     "access": "public"
   },
