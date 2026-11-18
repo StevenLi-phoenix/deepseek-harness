@@ -80,7 +80,16 @@ export function apply(ctx: Context, config: Config): void {
     ctx.logger.warn('headless-browser: arming the keepalives failed: %s', firstLine(error))
   })
 
+  // A recovery replaces the context, so every keepalive timer and every page
+  // pool entry that pointed at the old one has to move to the new one.
+  const detachRelaunch = browser.onRelaunch(() => {
+    void keepalives.rearm().catch((error: unknown) => {
+      ctx.logger.warn('headless-browser: re-arming the keepalives after a recovery failed: %s', firstLine(error))
+    })
+  })
+
   ctx.effect(() => async () => {
+    detachRelaunch()
     await keepalives.close()
     await view.close()
     await browser.close()

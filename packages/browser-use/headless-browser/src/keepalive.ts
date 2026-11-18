@@ -249,6 +249,11 @@ export class KeepalivePagePool {
   /** Close every idle page; later acquires are refused. */
   async close(): Promise<void> {
     this.#disposed = true
+    await this.drop()
+  }
+
+  /** Close every idle page but keep the pool usable, for a context that came back. */
+  async drop(): Promise<void> {
     const idle = this.#idle.splice(0)
     await Promise.all(idle.map(async page => await closeQuietly(page, this.#log)))
   }
@@ -388,6 +393,24 @@ export class KeepaliveService implements KeepaliveTools {
     for (const wake of this.#waiters.splice(0)) wake()
     await this.#pages.close()
     await this.#saving
+  }
+
+  /**
+   * Move every timer onto the context that just came back. The pages this
+   * service held died with the old context, so they are dropped rather than
+   * reused, and an attempt that is already due runs as soon as its timer fires.
+   * @returns how many keepalives were re-armed.
+   */
+  async rearm(): Promise<number> {
+    await this.load()
+    if (this.#disposed) return 0
+    await this.#pages.drop()
+    for (const id of [...this.#order]) {
+      const record = this.#records.get(id)
+      if (record !== undefined) this.#arm(record)
+    }
+    this.#options.log.info('headless-browser: re-armed %d keepalive(s) after the browser came back', this.#order.length)
+    return this.#order.length
   }
 
   /** Read the file and arm every record's timer. */

@@ -22,12 +22,63 @@ import { cookieSnapshot, cookieSummary, type CookieResult } from './cookies.ts'
 import { firstLine } from './error.ts'
 import { ActionGuard, ActionRefusedError, blockedAction, refusalOf, type Decision, type PointChoice, type TargetChoice } from './guard.ts'
 import type { InputCommand, TabInfo, TabMessage } from './input.ts'
+import { browserProcesses, killBrowserSync, recoverStaleProfile, removeBrowserOwner, writeBrowserOwner, type ProfileProbe } from './profile.ts'
 import { readText, type ReadPage, type ReadRequest, type ReadResult } from './read.ts'
 import { cdpScrollChannel, scrollPage, type ScrollRequest, type ScrollResult } from './scroll.ts'
 import type { KeepalivePage } from './keepalive.ts'
 import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
 import { BrowserTabs, type ActiveTab, type ClosedTab, type TabsContext } from './tabs.ts'
 import { probeElement, readElementFacts, type ElementFacts } from './visibility.ts'
+
+/** How long a context gets to close before shutdown stops waiting for it. */
+export const SHUTDOWN_TIMEOUT_MS = 10_000
+
+/** How long a recovery waits after the old context closes, before it relaunches. */
+export const RELAUNCH_SETTLE_MS = 1_500
+
+/**
+ * Failures that mean the context is gone rather than the request being wrong: a
+ * browser that was killed under a live context, or a launch that came up while
+ * the previous browser still owned the profile. Chromium's answer to a target
+ * request in that state is `Target.createTarget: Failed to open a new tab`, and
+ * Playwright's is `Target page, context or browser has been closed`.
+ */
+const LOST_CONTEXT = new RegExp([
+  'Target\\.createTarget',
+  'Failed to open a new tab',
+  'Target page, context or browser has been closed',
+  'browser has been closed',
+  'Target closed',
+  'Session closed',
+  'ProcessSingleton',
+  'has been disconnected',
+  'Browser closed',
+  'Protocol error \\(Target\\.',
+].join('|'), 'iu')
+
+/**
+ * Whether one error says the browser context is gone, so a relaunch can put it back.
+ * @param error - what the context or a page threw.
+ * @returns whether a relaunch is worth trying.
+ */
+export function isLostContextError(error: unknown): boolean {
+  const text = error instanceof Error ? error.message : String(error)
+  return LOST_CONTEXT.test(text)
+}
+
+/** How the session reaches the browser and the machine; a test replaces every part. */
+export interface SessionDeps {
+  /** Launch a persistent context; the real Chromium by default. */
+  readonly launch?: (profileDir: string, options: Record<string, unknown>) => Promise<BrowserContext>
+  /** Wait between closing a lost context and relaunching; a timer by default. */
+  readonly sleep?: (ms: number) => Promise<void>
+  /** How the stale-profile check reads the machine. */
+  readonly probe?: ProfileProbe
+  /** Register the process-exit cleanup; `process.once('exit')` by default. */
+  readonly onExit?: (run: () => void) => () => void
+  /** Kill one browser pid; a synchronous `SIGKILL` by default. */
+  readonly kill?: (pid: number) => boolean
+}
 
 /** The browser cannot run, so a tool reports the reason instead of retrying. */
 export class BrowserUnavailableError extends Error {
@@ -129,26 +180,34 @@ export class HeadlessBrowserSession {
   readonly #config: Config
   readonly #log: Context['logger']
   readonly #guard: ActionGuard
+  readonly #deps: SessionDeps
   #axResolver: AxTargetResolver | undefined
   #context: BrowserContext | undefined
   #launching: Promise<BrowserContext> | undefined
+  #recovering: Promise<void> | undefined
   #closed = false
   #sessionId: string | undefined
+  #browserPid: number | undefined
+  #detachExit: (() => void) | undefined
   #tabs: BrowserTabs | undefined
   /** Stops watching for pages once the context is gone. */
   #stopStealth: (() => void) | undefined
   /** Pages a keepalive opened: never a tab, so never part of the tab cap. */
   readonly #background = new WeakSet<object>()
   readonly #cdps = new WeakMap<Page, CDPSession>()
+  readonly #relaunchListeners = new Set<() => void>()
 
   /**
    * @param config - profile, viewport, and snapshot settings.
    * @param log - plugin logger for launch and shutdown facts.
+   * @param guard - the action guard the tools consult.
+   * @param deps - the launcher, timer, and machine access; the real ones by default.
    */
-  constructor(config: Config, log: Context['logger'], guard: ActionGuard = new ActionGuard()) {
+  constructor(config: Config, log: Context['logger'], guard: ActionGuard = new ActionGuard(), deps: SessionDeps = {}) {
     this.#config = config
     this.#log = log
     this.#guard = guard
+    this.#deps = deps
   }
 
   /**
@@ -158,6 +217,25 @@ export class HeadlessBrowserSession {
    */
   setAxResolver(resolver: AxTargetResolver | undefined): void {
     this.#axResolver = resolver
+  }
+
+  /**
+   * Observe a relaunch: the context that was there is gone and a new one runs.
+   * Keepalives re-arm from this, because their timers point at pages of the old
+   * context.
+   * @param listener - what to run after the browser came back.
+   * @returns how to stop listening.
+   */
+  onRelaunch(listener: () => void): () => void {
+    this.#relaunchListeners.add(listener)
+    return () => {
+      this.#relaunchListeners.delete(listener)
+    }
+  }
+
+  /** Pid of the Chromium this session launched, once one is known. */
+  browserPid(): number | undefined {
+    return this.#browserPid
   }
 
   /**
@@ -257,7 +335,9 @@ export class HeadlessBrowserSession {
    * @param message - the validated tab message.
    */
   async applyTabCommand(message: TabMessage): Promise<void> {
-    await this.tabs().command(message.action, message.tabId, message.url)
+    return await this.#guarded('applying a tab command', async () => {
+      await this.tabs().command(message.action, message.tabId, message.url)
+    })
   }
 
   /**
@@ -269,14 +349,16 @@ export class HeadlessBrowserSession {
    * @throws ActionRefusedError - when the destination is another site and this call did not allow it.
    */
   async open(url: string, newTab = false, allowOrigin = false): Promise<{ url: string; title: string }> {
-    const current = await this.page()
-    const decision = this.#guard.decideNavigation({ action: 'open', url: current.url(), target: url, allowOrigin })
-    if (!decision.allowed) throw new ActionRefusedError(blockedAction(refusalOf(decision)))
-    const opened = newTab
-      ? await this.#openTab(url)
-      : await this.#openHere(url)
-    this.#guard.anchor(opened.url)
-    return opened
+    return await this.#guarded('opening the page', async () => {
+      const current = await this.page()
+      const decision = this.#guard.decideNavigation({ action: 'open', url: current.url(), target: url, allowOrigin })
+      if (!decision.allowed) throw new ActionRefusedError(blockedAction(refusalOf(decision)))
+      const opened = newTab
+        ? await this.#openTab(url)
+        : await this.#openHere(url)
+      this.#guard.anchor(opened.url)
+      return opened
+    })
   }
 
   /**
@@ -307,8 +389,10 @@ export class HeadlessBrowserSession {
    * @throws NoOpenTabError - when no tab is open, so closing cannot start the browser.
    */
   async closeTab(tabId?: string): Promise<ClosedTab> {
-    if (this.tabsState().length === 0) throw new NoOpenTabError()
-    return await this.tabs().close(tabId)
+    return await this.#guarded('closing a tab', async () => {
+      if (this.tabsState().length === 0) throw new NoOpenTabError()
+      return await this.tabs().close(tabId)
+    })
   }
 
   /**
@@ -318,10 +402,12 @@ export class HeadlessBrowserSession {
    * @returns the resulting scroll position, page height, and whether an edge was reached.
    */
   async scroll(request: ScrollRequest, tabId?: string): Promise<ScrollResult> {
-    const page = await this.page(tabId)
-    const cdp = await this.cdp(tabId)
-    const size = page.viewportSize() ?? { width: this.#config.viewportWidth, height: this.#config.viewportHeight }
-    return await scrollPage(cdpScrollChannel(cdp), request, size)
+    return await this.#guarded('scrolling', async () => {
+      const page = await this.page(tabId)
+      const cdp = await this.cdp(tabId)
+      const size = page.viewportSize() ?? { width: this.#config.viewportWidth, height: this.#config.viewportHeight }
+      return await scrollPage(cdpScrollChannel(cdp), request, size)
+    })
   }
 
   /**
@@ -331,11 +417,13 @@ export class HeadlessBrowserSession {
    * @returns the file path and the page it captured.
    */
   async snapshot(tabId?: string, fullPage = false): Promise<{ path: string; url: string }> {
-    const page = await this.page(tabId)
-    await mkdir(this.#config.snapshotDir, { recursive: true })
-    const path = join(this.#config.snapshotDir, `page-${new Date().toISOString().replaceAll(':', '-')}.png`)
-    await page.screenshot({ path, fullPage })
-    return { path, url: page.url() }
+    return await this.#guarded('taking a snapshot', async () => {
+      const page = await this.page(tabId)
+      await mkdir(this.#config.snapshotDir, { recursive: true })
+      const path = join(this.#config.snapshotDir, `page-${new Date().toISOString().replaceAll(':', '-')}.png`)
+      await page.screenshot({ path, fullPage })
+      return { path, url: page.url() }
+    })
   }
 
   /**
@@ -346,9 +434,11 @@ export class HeadlessBrowserSession {
    * @throws SelectorMissError - when the selector matches no element.
    */
   async read(request: ReadRequest, tabId?: string): Promise<ReadResult> {
-    const tab = tabId ?? (await this.tabs().active()).id
-    const page = await this.page(tab)
-    return await readText(readable(page), tab, request)
+    return await this.#guarded('reading the page', async () => {
+      const tab = tabId ?? (await this.tabs().active()).id
+      const page = await this.page(tab)
+      return await readText(readable(page), tab, request)
+    })
   }
 
   /**
@@ -361,34 +451,36 @@ export class HeadlessBrowserSession {
    * @throws ActionRefusedError - when visibility, a sensitive name, or origin refuses the click.
    */
   async click(request: TargetRequest, tabId?: string): Promise<ActionOutcome> {
-    const page = await this.page(tabId)
-    if (request.point !== undefined) {
-      const hit = await this.#hitFacts(page, request.point)
-      const point = this.#acceptPoint(this.#guard.decidePoint({
+    return await this.#guarded('clicking', async () => {
+      const page = await this.page(tabId)
+      if (request.point !== undefined) {
+        const hit = await this.#hitFacts(page, request.point)
+        const point = this.#acceptPoint(this.#guard.decidePoint({
+          action: 'click',
+          url: page.url(),
+          x: request.point.x,
+          y: request.point.y,
+          ...tabId === undefined ? {} : { tabId },
+          ...hit === undefined ? {} : { hit },
+          allowOrigin: request.allowOrigin === true,
+        }))
+        await page.mouse.click(request.point.x, request.point.y)
+        this.#guard.anchor(page.url())
+        return { url: page.url(), point }
+      }
+      const resolution = await this.#resolve(page, request)
+      const target = this.#accept(this.#guard.decideTarget({
         action: 'click',
         url: page.url(),
-        x: request.point.x,
-        y: request.point.y,
-        ...tabId === undefined ? {} : { tabId },
-        ...hit === undefined ? {} : { hit },
+        ref: resolution.ref,
+        candidates: resolution.facts,
         allowOrigin: request.allowOrigin === true,
+        ...resolution.staleAxId === undefined ? {} : { staleAxId: resolution.staleAxId },
       }))
-      await page.mouse.click(request.point.x, request.point.y)
+      await resolution.element(target.index).click()
       this.#guard.anchor(page.url())
-      return { url: page.url(), point }
-    }
-    const resolution = await this.#resolve(page, request)
-    const target = this.#accept(this.#guard.decideTarget({
-      action: 'click',
-      url: page.url(),
-      ref: resolution.ref,
-      candidates: resolution.facts,
-      allowOrigin: request.allowOrigin === true,
-      ...resolution.staleAxId === undefined ? {} : { staleAxId: resolution.staleAxId },
-    }))
-    await resolution.element(target.index).click()
-    this.#guard.anchor(page.url())
-    return { url: page.url(), target }
+      return { url: page.url(), target }
+    })
   }
 
   /**
@@ -402,35 +494,37 @@ export class HeadlessBrowserSession {
    * @throws ActionRefusedError - when visibility, a sensitive name, or origin refuses the type.
    */
   async fill(request: TargetRequest, text: string, tabId?: string): Promise<ActionOutcome> {
-    const page = await this.page(tabId)
-    if (request.point !== undefined) {
-      const hit = await this.#hitFacts(page, request.point)
-      const point = this.#acceptPoint(this.#guard.decidePoint({
+    return await this.#guarded('typing', async () => {
+      const page = await this.page(tabId)
+      if (request.point !== undefined) {
+        const hit = await this.#hitFacts(page, request.point)
+        const point = this.#acceptPoint(this.#guard.decidePoint({
+          action: 'type',
+          url: page.url(),
+          x: request.point.x,
+          y: request.point.y,
+          ...tabId === undefined ? {} : { tabId },
+          ...hit === undefined ? {} : { hit },
+          allowOrigin: request.allowOrigin === true,
+        }))
+        await page.mouse.click(request.point.x, request.point.y)
+        await page.keyboard.insertText(text)
+        this.#guard.anchor(page.url())
+        return { url: page.url(), point }
+      }
+      const resolution = await this.#resolve(page, request)
+      const target = this.#accept(this.#guard.decideTarget({
         action: 'type',
         url: page.url(),
-        x: request.point.x,
-        y: request.point.y,
-        ...tabId === undefined ? {} : { tabId },
-        ...hit === undefined ? {} : { hit },
+        ref: resolution.ref,
+        candidates: resolution.facts,
         allowOrigin: request.allowOrigin === true,
+        ...resolution.staleAxId === undefined ? {} : { staleAxId: resolution.staleAxId },
       }))
-      await page.mouse.click(request.point.x, request.point.y)
-      await page.keyboard.insertText(text)
+      await resolution.element(target.index).fill(text)
       this.#guard.anchor(page.url())
-      return { url: page.url(), point }
-    }
-    const resolution = await this.#resolve(page, request)
-    const target = this.#accept(this.#guard.decideTarget({
-      action: 'type',
-      url: page.url(),
-      ref: resolution.ref,
-      candidates: resolution.facts,
-      allowOrigin: request.allowOrigin === true,
-      ...resolution.staleAxId === undefined ? {} : { staleAxId: resolution.staleAxId },
-    }))
-    await resolution.element(target.index).fill(text)
-    this.#guard.anchor(page.url())
-    return { url: page.url(), target }
+      return { url: page.url(), target }
+    })
   }
 
   /**
@@ -521,10 +615,12 @@ export class HeadlessBrowserSession {
    * @returns the matching cookies and their Cookie header.
    */
   async cookies(domain?: string): Promise<CookieResult> {
-    const context = await this.ensure()
-    const result = cookieSnapshot(await context.cookies(), domain)
-    this.#log.debug('headless-browser: %s', cookieSummary(result.cookies, domain))
-    return result
+    return await this.#guarded('reading cookies', async () => {
+      const context = await this.ensure()
+      const result = cookieSnapshot(await context.cookies(), domain)
+      this.#log.debug('headless-browser: %s', cookieSummary(result.cookies, domain))
+      return result
+    })
   }
 
   /**
@@ -534,29 +630,31 @@ export class HeadlessBrowserSession {
    * @returns the page, which the caller closes.
    */
   async keepalivePage(): Promise<KeepalivePage> {
-    const context = await this.ensure()
-    const active = this.#tabs?.state().find(tab => tab.active)?.id
-    const page = await context.newPage()
-    this.#background.add(page)
-    if (active !== undefined) {
-      // Opening a page activates it in Chromium; put the agent's tab back in
-      // front so a keepalive never moves the page a person is looking at.
-      try {
-        await (await this.tabs().page(active)).bringToFront()
-      } catch (error: unknown) {
-        void firstLine(error)
+    return await this.#guarded('opening a keepalive page', async () => {
+      const context = await this.ensure()
+      const active = this.#tabs?.state().find(tab => tab.active)?.id
+      const page = await context.newPage()
+      this.#background.add(page)
+      if (active !== undefined) {
+        // Opening a page activates it in Chromium; put the agent's tab back in
+        // front so a keepalive never moves the page a person is looking at.
+        try {
+          await (await this.tabs().page(active)).bringToFront()
+        } catch (error: unknown) {
+          void firstLine(error)
+        }
       }
-    }
-    return {
-      url: () => page.url(),
-      isClosed: () => page.isClosed(),
-      goto: async (url, options) => await page.goto(url, options),
-      challenge: async (): Promise<ChallengeFacts> => readChallengeFacts(await page.evaluate(probeChallenge)),
-      close: async () => {
-        this.#background.delete(page)
-        await page.close()
-      },
-    }
+      return {
+        url: () => page.url(),
+        isClosed: () => page.isClosed(),
+        goto: async (url, options) => await page.goto(url, options),
+        challenge: async (): Promise<ChallengeFacts> => readChallengeFacts(await page.evaluate(probeChallenge)),
+        close: async () => {
+          this.#background.delete(page)
+          await page.close()
+        },
+      }
+    })
   }
 
   /**
@@ -575,7 +673,11 @@ export class HeadlessBrowserSession {
     }
   }
 
-  /** Close the context and wait for Chromium to exit; later calls stay closed. */
+  /**
+   * Close the context and wait for Chromium to exit; later calls stay closed.
+   * Shutdown is graceful on purpose: a browser left running holds the profile
+   * against the next start, which is why a restart could not open a tab.
+   */
   async close(): Promise<void> {
     this.#closed = true
     const launching = this.#launching
@@ -588,34 +690,131 @@ export class HeadlessBrowserSession {
       }
     }
     const context = this.#context
+    const pid = this.#browserPid
     this.#context = undefined
+    this.#browserPid = undefined
+    this.#stopStealth?.()
+    this.#stopStealth = undefined
     this.#tabs?.dispose()
     this.#tabs = undefined
-    await context?.close()
+    this.#detachExit?.()
+    this.#detachExit = undefined
+    if (context !== undefined) {
+      try {
+        await withDeadline(context.close(), SHUTDOWN_TIMEOUT_MS)
+      } catch (error: unknown) {
+        this.#log.warn('headless-browser: closing the context failed (%s); killing chromium %s', firstLine(error), String(pid ?? 'unknown'))
+        // A browser that outlived its context would hold the profile against the next start.
+        if (pid !== undefined) this.#kill(pid)
+      }
+    }
+    await removeBrowserOwner(this.#config.profileDir).catch((error: unknown) => {
+      this.#log.warn('headless-browser: forgetting the browser owner failed: %s', firstLine(error))
+    })
   }
 
+  /**
+   * Run one page operation, and put the browser back once when the context under
+   * it is gone. A second failure is reported with the profile path, because by
+   * then something outside this process holds it.
+   * @param what - the operation, for the log and for the error.
+   * @param run - the operation itself.
+   * @returns the operation's result.
+   * @throws BrowserUnavailableError - when the operation still fails after one relaunch.
+   */
+  async #guarded<T>(what: string, run: () => Promise<T>): Promise<T> {
+    try {
+      return await run()
+    } catch (error: unknown) {
+      if (this.#closed || !isLostContextError(error)) throw error
+      await this.#recover(`${what} failed: ${firstLine(error)}`)
+      try {
+        return await run()
+      } catch (again: unknown) {
+        if (!isLostContextError(again)) throw again
+        throw new BrowserUnavailableError(`the headless browser was relaunched once and ${what} still failed (${firstLine(again)}); profile ${this.#config.profileDir} may be held by another process`)
+      }
+    }
+  }
+
+  /**
+   * Relaunch the browser once, sharing a relaunch already in flight so two
+   * tools racing each other do not start two browsers.
+   * @param reason - what went wrong, for the log.
+   */
+  async #recover(reason: string): Promise<void> {
+    this.#recovering ??= this.#relaunch(reason).finally(() => { this.#recovering = undefined })
+    await this.#recovering
+  }
+
+  /**
+   * Close the context that died, wait for Chromium to let go of the profile, and
+   * launch again; then tell everyone whose timers point at the old context.
+   * @param reason - what went wrong, for the log.
+   */
+  async #relaunch(reason: string): Promise<void> {
+    if (this.#closed) throw new BrowserUnavailableError('the browser plugin is shutting down')
+    const previous = this.#context
+    const previousPid = this.#browserPid
+    this.#log.warn('headless-browser: recovering the browser after %s; profile %s', reason, this.#config.profileDir)
+    this.#context = undefined
+    this.#launching = undefined
+    this.#browserPid = undefined
+    this.#stopStealth?.()
+    this.#stopStealth = undefined
+    this.#tabs?.dispose()
+    this.#tabs = undefined
+    if (previous !== undefined) {
+      try {
+        await withDeadline(previous.close(), SHUTDOWN_TIMEOUT_MS)
+      } catch (error: unknown) {
+        void firstLine(error)
+      }
+    }
+    if (previousPid !== undefined) this.#kill(previousPid)
+    await (this.#deps.sleep ?? sleepMs)(RELAUNCH_SETTLE_MS)
+    await this.ensure()
+    for (const listener of [...this.#relaunchListeners]) {
+      try {
+        listener()
+      } catch (error: unknown) {
+        this.#log.warn('headless-browser: a relaunch listener failed: %s', firstLine(error))
+      }
+    }
+    this.#log.info('headless-browser: the browser is back as session %s', String(this.#sessionId ?? 'unknown'))
+  }
+
+  /**
+   * Launch one context and record which browser it is, so shutdown and the next
+   * start can reach it.
+   * @returns the open context.
+   */
   async #launch(): Promise<BrowserContext> {
     await mkdir(this.#config.profileDir, { recursive: true })
-    // One identity for the whole context: the launch settings, and later the
-    // per-page overrides that keep the client hints in step with it.
-    const stealth = this.#config.stealth ? stealthIdentity() : undefined
-    let context: BrowserContext
-    try {
-      context = await chromium.launchPersistentContext(this.#config.profileDir, {
-        headless: this.#config.headless,
-        viewport: { width: this.#config.viewportWidth, height: this.#config.viewportHeight },
-        ...stealth === undefined ? {} : stealthLaunch(stealth),
-      })
-    } catch (error: unknown) {
-      throw new BrowserUnavailableError(`the headless browser could not start: ${firstLine(error)}`)
+    // A previous process may have died while its Chromium still held this
+    // profile; clearing that first is what a launch after a restart needs.
+    const stale = await recoverStaleProfile(this.#config.profileDir, this.#deps.probe, this.#log)
+    if (stale !== undefined) {
+      this.#log.warn('headless-browser: cleared a stale profile before launch: %s', stale.reasons.join('; '))
     }
+    const context = await this.#launchContext()
     if (this.#closed) {
       await context.close()
       throw new BrowserUnavailableError('the browser plugin is shutting down')
     }
-    if (stealth !== undefined) this.#stopStealth = await applyStealth<Page>(context, this.#log, stealth)
     this.#context = context
     this.#sessionId = randomUUID()
+    this.#browserPid = await this.#findBrowserPid()
+    this.#installExitHook()
+    if (this.#browserPid !== undefined) {
+      await writeBrowserOwner(this.#config.profileDir, {
+        pid: this.#browserPid,
+        ownerPid: process.pid,
+        startedAt: new Date().toISOString(),
+      }).catch((error: unknown) => {
+        this.#log.warn('headless-browser: recording the browser owner failed: %s', firstLine(error))
+      })
+    }
     context.on('close', () => {
       this.#stopStealth?.()
       this.#stopStealth = undefined
@@ -625,9 +824,110 @@ export class HeadlessBrowserSession {
       this.#tabs = undefined
     })
     this.#log.info('headless-browser: launched session %s with profile %s', this.#sessionId, this.#config.profileDir)
+    if (this.#config.stealth) {
+      const stealth = stealthIdentity()
+      this.#stopStealth = await applyStealth<Page>(context, this.#log, stealth)
+    }
     return context
   }
+
+  /**
+   * One persistent launch with the configured viewport and identity.
+   * @returns the open context.
+   * @throws BrowserUnavailableError - when Chromium does not start.
+   */
+  async #launchContext(): Promise<BrowserContext> {
+    // One identity for the whole context: the launch settings, and later the
+    // per-page overrides that keep the client hints in step with it.
+    const stealth = this.#config.stealth ? stealthIdentity() : undefined
+    const options: Record<string, unknown> = {
+      headless: this.#config.headless,
+      viewport: { width: this.#config.viewportWidth, height: this.#config.viewportHeight },
+      ...stealth === undefined ? {} : stealthLaunch(stealth),
+    }
+    try {
+      return this.#deps.launch === undefined
+        ? await chromium.launchPersistentContext(this.#config.profileDir, options)
+        : await this.#deps.launch(this.#config.profileDir, options)
+    } catch (error: unknown) {
+      throw new BrowserUnavailableError(`the headless browser could not start: ${firstLine(error)}`)
+    }
+  }
+
+  /**
+   * The Chromium this process just started for this profile.
+   * @returns its pid, or nothing when the listing does not name it.
+   */
+  async #findBrowserPid(): Promise<number | undefined> {
+    try {
+      const rows = await browserProcesses(this.#config.profileDir, this.#deps.probe)
+      const mine = rows.find(row => row.ppid === process.pid)
+      return (mine ?? rows[0])?.pid
+    } catch (error: unknown) {
+      this.#log.warn('headless-browser: finding the chromium pid failed: %s', firstLine(error))
+      return undefined
+    }
+  }
+
+  /**
+   * Kill one pid of this profile's browser: the last resort when a context could
+   * not be closed, and the exit hook's only move.
+   * @param pid - the browser process.
+   * @returns whether the signal was sent.
+   */
+  #kill(pid: number): boolean {
+    return (this.#deps.kill ?? killBrowserSync)(pid)
+  }
+
+  /**
+   * Register the best-effort kill of this process's browser for the moment the
+   * process exits without a plugin dispose: only synchronous work is allowed
+   * there, which is why this one path is not awaited.
+   */
+  #installExitHook(): void {
+    if (this.#detachExit !== undefined) return
+    const run = (): void => {
+      const pid = this.#browserPid
+      if (pid === undefined) return
+      this.#kill(pid)
+    }
+    const register = this.#deps.onExit ?? ((listener: () => void) => {
+      process.once('exit', listener)
+      return () => { process.off('exit', listener) }
+    })
+    this.#detachExit = register(run)
+  }
 }
+
+/**
+ * Wait for one promise, or give up on it.
+ * @param work - the work to bound.
+ * @param ms - how long it may take.
+ * @returns the work's result.
+ */
+async function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined
+  try {
+    return await Promise.race([
+      work,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => { reject(new Error(`timed out after ${String(ms)}ms`)) }, ms)
+        timer.unref()
+      }),
+    ])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
+}
+
+/**
+ * A plain wait, unref'd so a pending recovery never keeps the process alive.
+ * @param ms - how long to wait.
+ */
+async function sleepMs(ms: number): Promise<void> {
+  await new Promise<void>((resolve) => { setTimeout(resolve, ms).unref() })
+}
+
 
 /**
  * A read over one Playwright page: the body, or the first match of a selector.
