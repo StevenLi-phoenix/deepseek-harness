@@ -21,6 +21,8 @@ export interface RelayAnswer {
   readonly outcome: string
   /** One-line reason of a failed turn (`failureDetail`), when there is one. */
   readonly detail?: string | undefined
+  /** The turn's separate assistant messages, in order, when it wrote more than one (`text` is them joined). */
+  readonly parts?: readonly string[] | undefined
 }
 
 /** What the end of a turn sends the owner. */
@@ -32,7 +34,7 @@ export type RelayDecision =
   /** A completed turn without assistant text. */
   | { readonly kind: 'empty' }
   /** Something to send. */
-  | { readonly kind: 'answer'; readonly text: string; readonly outcome: string; readonly detail?: string }
+  | { readonly kind: 'answer'; readonly text: string; readonly outcome: string; readonly detail?: string; readonly parts?: readonly string[] }
 
 /** Title of an answer a channel could not deliver, sent through the notifier instead. */
 export const RELAY_FALLBACK_TITLE = '↪️ 这条回答没能从原渠道发出，改发这里'
@@ -63,15 +65,20 @@ export function stoppedByOwner(reason: TurnEndFacts): boolean {
 
 /**
  * The one rule set for every channel: what the end of a turn sends the owner.
- * @param text - the turn's latest assistant text, if any.
+ * Every assistant message of the turn that has text reaches the owner, in order, joined by a blank line;
+ * a message that answers `NO_REPLY` is left out, so a report followed by `NO_REPLY` still goes out.
+ * @param texts - the turn's assistant message texts, oldest first.
  * @param reason - how the turn ended.
  * @returns nothing (and why), or the message with the turn's outcome and failure reason.
  */
-export function decideRelay(text: string | undefined, reason: TurnEndFacts): RelayDecision {
+export function decideRelay(texts: readonly string[], reason: TurnEndFacts): RelayDecision {
   if (stoppedByOwner(reason)) return { kind: 'stopped' }
-  if (isSilentReply(text)) return { kind: 'silent' }
+  const parts = texts.filter(part => !isSilentReply(part))
+  if (texts.length > 0 && parts.length === 0) return { kind: 'silent' }
+  const text = parts.length === 0 ? undefined : parts.join('\n\n')
   const outcome = reason.kind
-  if (outcome === 'completed') return text === undefined ? { kind: 'empty' } : { kind: 'answer', text, outcome }
+  const many = parts.length > 1 ? { parts } : {}
+  if (outcome === 'completed') return text === undefined ? { kind: 'empty' } : { kind: 'answer', text, outcome, ...many }
   const detail = failureDetail(reason)
   const warning = detail === undefined ? `⚠️ 本轮未完成（${outcome}）` : `⚠️ 本轮未完成（${outcome}）\n原因：${detail}`
   return {
@@ -79,6 +86,7 @@ export function decideRelay(text: string | undefined, reason: TurnEndFacts): Rel
     text: text === undefined ? warning : `${text}\n\n${warning}`,
     outcome,
     ...(detail === undefined ? {} : { detail }),
+    ...many,
   }
 }
 

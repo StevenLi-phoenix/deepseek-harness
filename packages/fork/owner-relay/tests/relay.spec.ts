@@ -80,7 +80,7 @@ async function turn(
 }
 
 describe('OwnerRelay rules', () => {
-  it('relays the latest text of a completed turn to the channel that claimed the Session', async () => {
+  it('relays every text of a completed turn to the channel that claimed the Session', async () => {
     const h = await mount()
     const wechat = recorder('wechat')
     h.relay.registerChannel(wechat.channel)
@@ -92,8 +92,8 @@ describe('OwnerRelay rules', () => {
     h.emit('chat-1', assistant('Final answer.'))
     h.emit('chat-1', turnEnd())
     await drain()
-    expect(wechat.answers).toEqual([{ sessionId: 'chat-1', text: 'Final answer.', outcome: 'completed' }])
-    expect(h.logs.some(line => line.type === 'info' && line.text === 'owner-relay: Session chat-1 ended a turn (completed); relaying 13 chars through wechat')).toBe(true)
+    expect(wechat.answers).toEqual([{ sessionId: 'chat-1', text: 'draft\n\nFinal answer.', outcome: 'completed', parts: ['draft', 'Final answer.'] }])
+    expect(h.logs.some(line => line.type === 'info' && line.text === 'owner-relay: Session chat-1 ended a turn (completed); relaying 20 chars from 2 messages through wechat')).toBe(true)
     expect(h.logs.some(line => line.text === 'owner-relay: wechat sent the answer of Session chat-1')).toBe(true)
     // Bodies stay out of the logs.
     expect(h.logs.filter(line => line.text.includes('Final answer.') || line.text.includes('draft'))).toEqual([])

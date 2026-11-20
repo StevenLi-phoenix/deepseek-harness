@@ -1,7 +1,7 @@
 /**
  * One relay of a Session's final answer to the owner (`ctx.ownerRelay`). Channels (the WeChat chat,
  * the Bilibili account's messages) claim the Sessions whose answers they carry; the relay follows
- * those Sessions, keeps each turn's latest assistant text, applies one rule set when the turn ends,
+ * those Sessions, keeps each turn's assistant texts, applies one rule set when the turn ends,
  * and hands the answer to the claiming channel. An answer a channel cannot deliver goes to
  * `ctx.ownerNotifier` instead, labelled with where it came from.
  */
@@ -84,8 +84,8 @@ export class OwnerRelay extends Service {
   private readonly channels = new Map<string, RelayChannel>()
   /** Claiming channel per Session. */
   private readonly claims = new Map<string, string>()
-  /** Latest assistant text of the running turn, per claimed Session. */
-  private readonly texts = new Map<string, string>()
+  /** Assistant texts of the running turn, oldest first, per claimed Session. */
+  private readonly texts = new Map<string, string[]>()
   private readonly inflight = new Set<Promise<void>>()
 
   /** @param ctx - the context whose `session/event` stream the relay follows. */
@@ -160,7 +160,7 @@ export class OwnerRelay extends Service {
     if (owner === undefined) return
     if (event.type === 'assistant/message') {
       const text = contentText(event.data.message.content)
-      if (text !== undefined) this.texts.set(session.id, text)
+      if (text !== undefined) this.texts.set(session.id, [...this.texts.get(session.id) ?? [], text])
       return
     }
     const channel = this.channels.get(owner)
@@ -169,7 +169,7 @@ export class OwnerRelay extends Service {
       return
     }
     if (event.type !== 'turn/end') return
-    const text = this.texts.get(session.id)
+    const texts = this.texts.get(session.id) ?? []
     this.texts.delete(session.id)
     const reason = event.data.reason
     const ended = endedText(reason.kind, failureDetail(reason))
@@ -178,7 +178,7 @@ export class OwnerRelay extends Service {
       this.ctx.logger.warn(`owner-relay: Session ${session.id} ended a turn (${ended}), but ${why}`)
       return
     }
-    this.turnEnded(session.id, channel, ended, decideRelay(text, reason))
+    this.turnEnded(session.id, channel, ended, decideRelay(texts, reason))
   }
 
   /** Apply the decision of one ended turn: say why nothing goes out, or hand the answer to its channel. */
@@ -189,9 +189,14 @@ export class OwnerRelay extends Service {
       this.hook(channel, 'onTurnSettled', sessionId)
       return
     }
-    const { text, outcome, detail } = decision
-    const answer: RelayAnswer = { sessionId, text, outcome, ...(detail === undefined ? {} : { detail }) }
-    this.ctx.logger.info(`owner-relay: Session ${sessionId} ended a turn (${ended}); relaying ${text.length} chars through ${channel.name}`)
+    const { text, outcome, detail, parts } = decision
+    const answer: RelayAnswer = {
+      sessionId, text, outcome,
+      ...(detail === undefined ? {} : { detail }),
+      ...(parts === undefined ? {} : { parts }),
+    }
+    const messages = parts === undefined ? '' : ` from ${parts.length} messages`
+    this.ctx.logger.info(`owner-relay: Session ${sessionId} ended a turn (${ended}); relaying ${text.length} chars${messages} through ${channel.name}`)
     const work = this.deliver(channel, answer).finally(() => { this.hook(channel, 'onTurnSettled', sessionId) })
     this.inflight.add(work)
     void work.finally(() => this.inflight.delete(work))

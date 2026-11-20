@@ -38,13 +38,13 @@ agent 的某个 Session 结束一轮时你会收到什么，由一个地方决�
 
 ### 规则
 
-中继为每个被认领的 Session 记下最新的 assistant 文本（只取文本部分），在这一轮结束时决定：
+中继为每个被认领的 Session 记下这一轮所有的 assistant 文本（只取文本部分，按先后顺序），在这一轮结束时决定；这些文本全部发出，之间空一行，回答 `NO_REPLY` 的那条被略去，所以先写了报告再答 `NO_REPLY` 的一轮，报告照样送到主人手里：
 
 | 这一轮怎样结束 | 认领它的通道收到什么 |
 |---|---|
 | `aborted` 且原因是 `user`（微信 `/stop`、Web UI 的停止） | 什么也不发：主人已经知道 |
-| 最终文本恰好是 `NO_REPLY` | 什么也不发 |
-| `completed` 且有文本 | 这段文本 |
+| 每条文本都恰好是 `NO_REPLY` | 什么也不发 |
+| `completed` 且有文本 | 这一轮的各段文本 |
 | `completed` 但没有文本 | 什么也不发 |
 | 其他任何结束方式（`error`、因其他原因的 `aborted`、`max-tokens`、`interrupted`） | 有文本就先放文本，然后是 `⚠️ 本轮未完成（<kind>）`；`error` 还在下面加 `原因：<code>: <message>` |
 
@@ -78,7 +78,7 @@ agent 的某个 Session 结束一轮时你会收到什么，由一个地方决�
 <details>
 <summary>实现细节——点击展开</summary>
 
-`OwnerRelay` 是一个 Cordis 服务（`ctx.ownerRelay`），监听 `session/event`，忽略没有被认领的 Session。对被认领的 Session，它保存最新的 `assistant/message` 文本（`contentText`：拼接文本部分，没有文本的消息保留上一条），在 `turn/end` 时取出并套用 `decideRelay`。钩子在事件里同步调用，每个都包在自己的 `try` 里，出错的钩子只记日志，不会让中继停下；`deliver` 在第一个 `await` 之前就被调用，所以通道可以读取 `onTurnEnd` 刚设好的每轮状态；`onTurnEnd` 的第二个参数是 `decision.kind`。投递在后台进行，销毁时等它们结束。被一个尚未注册的通道认领的 Session 只记日志并跳过。
+`OwnerRelay` 是一个 Cordis 服务（`ctx.ownerRelay`），监听 `session/event`，忽略没有被认领的 Session。对被认领的 Session，它按顺序保存这一轮每条 `assistant/message` 的文本（`contentText`：拼接文本部分，没有文本的消息跳过），在 `turn/end` 时取出并套用 `decideRelay`。钩子在事件里同步调用，每个都包在自己的 `try` 里，出错的钩子只记日志，不会让中继停下；`deliver` 在第一个 `await` 之前就被调用，所以通道可以读取 `onTurnEnd` 刚设好的每轮状态；`onTurnEnd` 的第二个参数是 `decision.kind`。投递在后台进行，销毁时等它们结束。被一个尚未注册的通道认领的 Session 只记日志并跳过。
 
 每个决定都以 info 级别记日志，带 Session id 和原因，从不记录正文：`owner-relay: Session <id> ended a turn (<outcome>); relaying <n> chars through <channel>`、什么也不转发的原因（`the owner stopped`、`that answered NO_REPLY`、`without text`），以及 `<channel> sent` 或 `kept the answer`。被 reject 的投递和每次退回的结果以 warn 或 info 记录。
 

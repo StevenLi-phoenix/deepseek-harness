@@ -626,7 +626,13 @@ export class WechatChannel extends Service implements OwnerNotifier {
    */
   private async relayAnswer(answer: RelayAnswer): Promise<RelayDelivery> {
     const urgent = this.urgentTurns.delete(answer.sessionId)
-    if (this.turns.get(answer.sessionId)?.texts.has(sameText(answer.text)) === true) {
+    const sentTexts = this.turns.get(answer.sessionId)?.texts
+    // A turn that wrote several messages: leave out each one a `wechat_send` already carried.
+    const fresh = sentTexts === undefined || answer.parts === undefined || answer.outcome !== 'completed'
+      ? undefined
+      : answer.parts.filter(part => !sentTexts.has(sameText(part)))
+    const body = fresh === undefined || fresh.length === 0 ? answer.text : fresh.join('\n\n')
+    if (sentTexts?.has(sameText(body)) === true || fresh?.length === 0) {
       this.toolStats.repeats += 1
       this.ctx.logger.info(`wechat: Session ${answer.sessionId}'s final answer repeats a wechat_send text; not sent again (${this.toolStats.repeats} so far)`)
       return 'sent'
@@ -634,7 +640,7 @@ export class WechatChannel extends Service implements OwnerNotifier {
     if (urgent) this.ctx.logger.info(`wechat: Session ${answer.sessionId}'s final answer ends an urgent turn; it passes the owner's sleep`)
     // WeChat shows no picture inside a text message: the answer goes as text without its markdown
     // images, and each local picture follows as its own image message.
-    const { text, pictures } = await this.planInlinePictures(answer.text, answer.sessionId)
+    const { text, pictures } = await this.planInlinePictures(body, answer.sessionId)
     const held = text === ''
       ? await this.holdsReply(urgent)
       : (await this.deliver(text, 'reply', { urgent })).held

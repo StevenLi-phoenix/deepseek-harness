@@ -323,7 +323,7 @@ describe('WechatChannel chat', () => {
     h.emit('chat-1', { type: 'assistant/message', seq: 2, data: { message: { content: [{ type: 'thinking', thinking: 'hm' }] } } })
     h.emit('chat-1', { type: 'tool/result', seq: 3, data: {} })
     await h.finishTurn('chat-1', 'Final answer.')
-    expect(h.ilink.sent).toEqual([{ to: OWNER, text: 'Final answer.', contextToken: 'ctx-hello' }])
+    expect(h.ilink.sent).toEqual([{ to: OWNER, text: 'draft\n\nFinal answer.', contextToken: 'ctx-hello' }])
     expect(h.logs.some(line => line.text === 'wechat: created chat Session chat-1 in ' + join(dir, 'work') + ' (unattended, danger-full-access)')).toBe(true)
     // Bodies stay out of info logs.
     expect(h.logs.filter(line => line.text.includes('Final answer.'))).toEqual([])
@@ -2701,6 +2701,17 @@ describe('WechatChannel hybrid delivery', () => {
     h.emit('chat-1', turnStart)
     await h.finishTurn('chat-1', 'The answer is 42.')
     expect(h.ilink.sent.map(sent => sent.text)).toEqual(['The answer is\n42.', 'The answer is 42.'])
+  })
+
+  it('sends each message of a multi-message turn, leaving out the one wechat_send already sent', async () => {
+    const h = await harness({ config: hybrid })
+    await h.ownerSays('hello')
+    h.emit('chat-1', turnStart)
+    await h.channel.sendText('chat-1', 'on it')
+    h.emit('chat-1', assistant('on it'))
+    h.emit('chat-1', { type: 'tool/result', seq: 3, data: {} })
+    await h.finishTurn('chat-1', 'All done.')
+    expect(h.ilink.sent.map(sent => sent.text)).toEqual(['on it', 'All done.'])
   })
 
   it('caps the sends of one turn and counts again in the next', async () => {

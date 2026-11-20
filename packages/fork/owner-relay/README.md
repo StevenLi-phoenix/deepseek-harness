@@ -38,13 +38,13 @@ Choose it when a plugin owns Sessions whose final answers should reach the owner
 
 ### The rules
 
-The relay keeps the latest assistant text of each claimed Session (text parts only) and decides when the turn ends:
+The relay keeps every assistant text of the running turn of each claimed Session (text parts only, oldest first) and decides when the turn ends. All of them go out, joined by a blank line; a message that answers `NO_REPLY` is left out, so a report followed by `NO_REPLY` still reaches the owner:
 
 | Turn end | What the claiming channel gets |
 |---|---|
 | `aborted` with cause `user` (WeChat `/stop`, the Web UI's stop) | Nothing: the owner already knows |
-| Final text exactly `NO_REPLY` | Nothing |
-| `completed` with text | The text |
+| Every text exactly `NO_REPLY` | Nothing |
+| `completed` with text | The texts of the turn |
 | `completed` without text | Nothing |
 | Any other end (`error`, `aborted` for another cause, `max-tokens`, `interrupted`) | The text, if any, then `⚠️ 本轮未完成（<kind>）`, plus `原因：<code>: <message>` under it for an `error` |
 
@@ -78,7 +78,7 @@ Claims live in memory. Each channel claims its stored Sessions again when it reg
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-`OwnerRelay` is a Cordis service (`ctx.ownerRelay`) that listens to `session/event` and ignores every Session nobody claimed. For a claimed Session it stores the latest `assistant/message` text (`contentText`: text parts joined, a message without text keeps the previous one) and, at `turn/end`, takes it and applies `decideRelay`. The hooks are called synchronously from the event, each inside its own `try`, so a failing hook is logged and never stops the relay; `deliver` is called before the first `await`, which lets a channel read per-turn state that `onTurnEnd` just set; `onTurnEnd` receives `decision.kind` as its second argument. Deliveries run in the background and teardown waits for them. A Session claimed by a channel that is not registered is logged and skipped.
+`OwnerRelay` is a Cordis service (`ctx.ownerRelay`) that listens to `session/event` and ignores every Session nobody claimed. For a claimed Session it stores the text of every `assistant/message` of the turn in order (`contentText`: text parts joined, a message without text is skipped) and, at `turn/end`, takes them and applies `decideRelay`. The hooks are called synchronously from the event, each inside its own `try`, so a failing hook is logged and never stops the relay; `deliver` is called before the first `await`, which lets a channel read per-turn state that `onTurnEnd` just set; `onTurnEnd` receives `decision.kind` as its second argument. Deliveries run in the background and teardown waits for them. A Session claimed by a channel that is not registered is logged and skipped.
 
 Every decision is logged at info level with the Session id and the reason, never the text: `owner-relay: Session <id> ended a turn (<outcome>); relaying <n> chars through <channel>`, the reason nothing is relayed (`the owner stopped`, `that answered NO_REPLY`, `without text`), and `<channel> sent` or `kept the answer`. A rejected delivery and every fallback outcome are logged at warn or info.
 
