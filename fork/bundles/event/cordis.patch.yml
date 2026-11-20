@@ -555,12 +555,11 @@
             name: '@deepseek-ai/dsh-skill-filesystem'
           - id: tool-skill
             name: '@deepseek-ai/dsh-tool-skill'
-          # Condense at about 200k prompt tokens, not at the plugin's default 550k. Measured on this Mac
-          # (2026-11-20, 24h): 391M prompt tokens over 2601 steps, 151k per step, and not one compaction;
-          # 51% of it went to the 23% of steps whose prompt had grown past 200k, because a long-lived
-          # Session replays its whole history on every step. `retainTokens` keeps the newest 40k verbatim
-          # (the default 16% of W−O would keep 98k) and `maxTokens` bounds the summary itself, which would
-          # otherwise inherit the 65k headroom. See fork/CHANGELOG.md.
+          # Compaction is a hard stop near the window, not a token-saving lever: condensing early throws away
+          # context the model needs, which costs capability instead of saving it. The owner said so on
+          # 2026-11-20 ("压缩 token usage 的正确做法不是限制模型的能力"), so the trigger sits at 639k on the 1M
+          # route (W − O − 8k headroom, 607,808 tokens) rather than 200k, keeps a 128k verbatim tail, and caps
+          # the summary at 32k. Real savings belong to composition — what a turn sends — see fork/CHANGELOG.md.
           - id: compaction
             name: cordis:group
             group: true
@@ -571,9 +570,10 @@
               - id: compaction-basic
                 name: '@deepseek-ai/dsh-compaction-basic'
                 config:
-                  thresholdRatio: 0.2
-                  retainTokens: 40960
-                  maxTokens: 16384
+                  thresholdRatio: 0.8
+                  headroomTokens: 8192
+                  retainTokens: 131072
+                  maxTokens: 32768
               - id: command-compact
                 name: '@deepseek-ai/dsh-command-compact'
               - id: tool-result-pruner

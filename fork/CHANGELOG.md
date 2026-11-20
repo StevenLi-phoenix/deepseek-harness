@@ -4,6 +4,12 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 
 ## [Unreleased]
 
+- Compaction on the unattended preset now waits until the top of the window:
+  trigger 607,808 tokens on the 1M route (was 200,000 for one hour), a 128k
+  verbatim tail (was 40k) and a 32k summary cap (was 16k). Condensing early
+  trades capability for tokens, which is the wrong trade; real savings come
+  from what a turn sends, not from forgetting.
+
 ### Fixed
 - `owner-relay` (2026-11-19): a turn's every assistant text reaches the owner, not only the last one. The relay kept only the latest text, so earlier messages of a turn were dropped, and a report followed by `NO_REPLY` sent nothing (49 of 506 turns of the chat Session lost text). `NO_REPLY` messages are skipped, `RelayAnswer.text` joins the rest with a blank line and `RelayAnswer.parts` keeps them apart; `wechat` sends each as its own message, in order, leaving out the ones `wechat_send` already sent (a failed turn's warning goes under the last one).
 

@@ -45,33 +45,40 @@ const ROUTE = { provider: 'opencode-go', model: 'opencode-go/deepseek-v4.1-flash
 const CONTEXT_WINDOW = 1_000_000
 const RESERVED_COMPLETION_TOKENS = 384_000
 
-describe('the unattended preset condenses its own history', () => {
-  it('condenses at 200k prompt tokens instead of the plugin default, which this deployment never reached', () => {
+describe('the unattended preset condenses near the window, not early', () => {
+  it('keeps the trigger near the top of the window and a large verbatim tail', () => {
     const config = unattendedCompactionConfig()
-    expect(config['thresholdRatio']).toBe(0.2)
-    expect(config['retainTokens']).toBe(40_960)
-    expect(config['maxTokens']).toBe(16_384)
+    expect(config['thresholdRatio']).toBe(0.8)
+    expect(config['headroomTokens']).toBe(8_192)
+    expect(config['retainTokens']).toBe(131_072)
+    expect(config['maxTokens']).toBe(32_768)
   })
 
-  it('resolves to a 200k trigger and a 40k verbatim tail on the routed model', () => {
+  it('resolves to a trigger at or above 600k and a 128k verbatim tail on the routed model', () => {
     const spec = resolveCompactSpec(
       resolveTargetPolicy(resolveConfig(unattendedCompactionConfig()), ROUTE),
       CONTEXT_WINDOW,
       RESERVED_COMPLETION_TOKENS,
     )
-    expect(spec.thresholdTokens).toBe(200_000)
-    expect(spec.retainTokens).toBe(40_960)
-    expect(spec.maxTokens).toBe(16_384)
+    expect(spec.thresholdTokens).toBe(607_808)
+    expect(spec.retainTokens).toBe(131_072)
+    expect(spec.maxTokens).toBe(32_768)
   })
 
-  it('shows the default it replaces: 550k, more than any Session on this Mac ever reached', () => {
+  it('stays above the plugin default it replaces, and above the 600k the owner asked for', () => {
     const spec = resolveCompactSpec(
       resolveTargetPolicy(resolveConfig(), ROUTE),
       CONTEXT_WINDOW,
       RESERVED_COMPLETION_TOKENS,
     )
     expect(spec.thresholdTokens).toBe(550_464)
-    // The 2026-11-20 measurement: 24h of prompts peaked at 479k, so the default never fired once.
-    expect(spec.thresholdTokens).toBeGreaterThan(479_000)
+    // The configured trigger must never condense earlier than the plugin's own default.
+    const configured = resolveCompactSpec(
+      resolveTargetPolicy(resolveConfig(unattendedCompactionConfig()), ROUTE),
+      CONTEXT_WINDOW,
+      RESERVED_COMPLETION_TOKENS,
+    )
+    expect(configured.thresholdTokens).toBeGreaterThan(spec.thresholdTokens)
+    expect(configured.thresholdTokens).toBeGreaterThanOrEqual(600_000)
   })
 })
