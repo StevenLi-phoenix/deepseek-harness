@@ -323,7 +323,10 @@ describe('WechatChannel chat', () => {
     h.emit('chat-1', { type: 'assistant/message', seq: 2, data: { message: { content: [{ type: 'thinking', thinking: 'hm' }] } } })
     h.emit('chat-1', { type: 'tool/result', seq: 3, data: {} })
     await h.finishTurn('chat-1', 'Final answer.')
-    expect(h.ilink.sent).toEqual([{ to: OWNER, text: 'draft\n\nFinal answer.', contextToken: 'ctx-hello' }])
+    expect(h.ilink.sent).toEqual([
+      { to: OWNER, text: 'draft', contextToken: 'ctx-hello' },
+      { to: OWNER, text: 'Final answer.', contextToken: 'ctx-hello' },
+    ])
     expect(h.logs.some(line => line.text === 'wechat: created chat Session chat-1 in ' + join(dir, 'work') + ' (unattended, danger-full-access)')).toBe(true)
     // Bodies stay out of info logs.
     expect(h.logs.filter(line => line.text.includes('Final answer.'))).toEqual([])

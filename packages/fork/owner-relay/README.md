@@ -38,7 +38,7 @@ Choose it when a plugin owns Sessions whose final answers should reach the owner
 
 ### The rules
 
-The relay keeps every assistant text of the running turn of each claimed Session (text parts only, oldest first) and decides when the turn ends. All of them go out, joined by a blank line; a message that answers `NO_REPLY` is left out, so a report followed by `NO_REPLY` still reaches the owner:
+The relay keeps every assistant text of the running turn of each claimed Session (text parts only, oldest first) and decides when the turn ends. All of them go out in order (`text` joins them with a blank line, `parts` keeps them apart; WeChat sends one message each); a message that answers `NO_REPLY` is left out, so a report followed by `NO_REPLY` still reaches the owner:
 
 | Turn end | What the claiming channel gets |
 |---|---|

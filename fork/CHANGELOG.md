@@ -5,7 +5,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
 ## [Unreleased]
 
 ### Fixed
-- `owner-relay` (2026-11-19): a turn's every assistant text reaches the owner, not only the last one. The relay kept only the latest text, so earlier messages of a turn were dropped, and a report followed by `NO_REPLY` sent nothing (49 of 506 turns of the chat Session lost text). Texts join with a blank line, `NO_REPLY` messages are skipped, `RelayAnswer.parts` carries the separate messages, and `wechat` leaves out the ones `wechat_send` already sent.
+- `owner-relay` (2026-11-19): a turn's every assistant text reaches the owner, not only the last one. The relay kept only the latest text, so earlier messages of a turn were dropped, and a report followed by `NO_REPLY` sent nothing (49 of 506 turns of the chat Session lost text). `NO_REPLY` messages are skipped, `RelayAnswer.text` joins the rest with a blank line and `RelayAnswer.parts` keeps them apart; `wechat` sends each as its own message, in order, leaving out the ones `wechat_send` already sent (a failed turn's warning goes under the last one).
 
 ### Changed
 - `turn-taint` (2026-11-18): a one-shot reminder no longer earns the owner a notice. A `schedule_create` whose `rrule` carries `COUNT=1` fires once and stops, so in a turn the owner did not start alone it is logged as `turn-taint: one-shot schedule_create in a turn the owner did not start alone (…), no notice` and stays out of the turn's merged notice, count and body alike. A recurring reminder, a `watch_create`, and an rrule the plugin cannot read keep today's behaviour: allowed, logged, and named in the one notice the turn sends.

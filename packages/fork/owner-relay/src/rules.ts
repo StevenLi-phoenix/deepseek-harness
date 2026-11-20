@@ -65,8 +65,9 @@ export function stoppedByOwner(reason: TurnEndFacts): boolean {
 
 /**
  * The one rule set for every channel: what the end of a turn sends the owner.
- * Every assistant message of the turn that has text reaches the owner, in order, joined by a blank line;
- * a message that answers `NO_REPLY` is left out, so a report followed by `NO_REPLY` still goes out.
+ * Every assistant message of the turn that has text reaches the owner, in order (`text` joins them with a blank line,
+ * `parts` keeps them apart for a channel that sends one message each); a message that answers `NO_REPLY` is left
+ * out, so a report followed by `NO_REPLY` still goes out.
  * @param texts - the turn's assistant message texts, oldest first.
  * @param reason - how the turn ended.
  * @returns nothing (and why), or the message with the turn's outcome and failure reason.
@@ -77,16 +78,19 @@ export function decideRelay(texts: readonly string[], reason: TurnEndFacts): Rel
   if (texts.length > 0 && parts.length === 0) return { kind: 'silent' }
   const text = parts.length === 0 ? undefined : parts.join('\n\n')
   const outcome = reason.kind
-  const many = parts.length > 1 ? { parts } : {}
-  if (outcome === 'completed') return text === undefined ? { kind: 'empty' } : { kind: 'answer', text, outcome, ...many }
+  if (outcome === 'completed') {
+    return text === undefined ? { kind: 'empty' } : { kind: 'answer', text, outcome, ...(parts.length > 1 ? { parts } : {}) }
+  }
   const detail = failureDetail(reason)
   const warning = detail === undefined ? `⚠️ 本轮未完成（${outcome}）` : `⚠️ 本轮未完成（${outcome}）\n原因：${detail}`
+  // The warning goes under the last message, so a channel that sends the messages one by one adds no extra one.
+  const sent = parts.length === 0 ? [warning] : [...parts.slice(0, -1), `${parts.at(-1)}\n\n${warning}`]
   return {
     kind: 'answer',
-    text: text === undefined ? warning : `${text}\n\n${warning}`,
+    text: sent.join('\n\n'),
     outcome,
     ...(detail === undefined ? {} : { detail }),
-    ...many,
+    ...(sent.length > 1 ? { parts: sent } : {}),
   }
 }
 

@@ -45,7 +45,7 @@ describe('decideRelay with several messages', () => {
     expect(decideRelay(['report', 'NO_REPLY'], { kind: 'completed' })).toEqual({ kind: 'answer', text: 'report', outcome: 'completed' })
     expect(decideRelay(['NO_REPLY', 'NO_REPLY'], { kind: 'completed' })).toEqual({ kind: 'silent' })
     expect(decideRelay(['a', 'b'], { kind: 'error', error: { code: 'X', message: 'y' } }))
-      .toEqual({ kind: 'answer', text: 'a\n\nb\n\n⚠️ 本轮未完成（error）\n原因：X: y', outcome: 'error', detail: 'X: y', parts: ['a', 'b'] })
+      .toEqual({ kind: 'answer', text: 'a\n\nb\n\n⚠️ 本轮未完成（error）\n原因：X: y', outcome: 'error', detail: 'X: y', parts: ['a', 'b\n\n⚠️ 本轮未完成（error）\n原因：X: y'] })
   })
 })
 
