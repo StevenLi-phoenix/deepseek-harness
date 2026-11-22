@@ -714,7 +714,7 @@ async status(): Promise<GmailStatus>
 async held(): Promise<PendingRecord[]>
 ```
 
-Types: [AccountView](credentials.md)
+Types: [AccountView](account.md)
 
 Source: [`packages/fork/gmail/src/index.ts`](../../packages/fork/gmail/src/index.ts)
 

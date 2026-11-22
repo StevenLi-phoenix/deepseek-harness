@@ -60,6 +60,8 @@ describe('event bundle', () => {
     // Read-before-write, legacy web search, and the search limits stay as the agents have them.
     expect(root.get('fs-observation-policy')?.enabled).toBe(true)
     expect(edit('web')?.config).toEqual({ searchProvider: 'deepseek-official', fetchProvider: 'http' })
+    // run_code programs and workflow-ptc scripts keep a top-level `return`.
+    expect(edit('ptc-runtime')?.config).toEqual({ executionMode: 'per-call' })
     const unattended = inserted.find(row => row.id === 'preset-unattended')!
     const toolWeb = unattended.config!.plugins!.find(row => row.id === 'tool-web')!
     expect(toolWeb.config).toMatchObject({ searchMaxQueries: 4, searchMaxResults: 8 })

@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-voice",
   "description": "Voice for the owner's agents: text to speech through feiyu or the Mac mini TTS service, and speech to text through the asr-service (off by default)",
-  "version": "0.2.2-rc.5",
+  "version": "0.2.3-alpha.2",
   "publishConfig": {
     "access": "public"
   },

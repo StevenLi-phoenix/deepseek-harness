@@ -64,4 +64,44 @@ register(name: BrowserUseProviderName): () => Promise<void>
 ```
 
 Source: [`packages/browser-use/browser-use/src/index.ts`](../../packages/browser-use/browser-use/src/index.ts)
+
+<a id="headless-browser-events"></a>
+
+### `headless-browser/*` events
+
+<a id="headless-browserkeepalive--emit"></a>
+
+#### `headless-browser/keepalive` — emit
+
+One keepalive transition — `recovering`, `needs-human`, `error`, or `recovered` — and at most one `reminder` an hour while a keepalive stays `needs-human`. Exactly one event per transition, so a host can count them.
+
+```ts cordis-catalog
+/**
+ * One keepalive transition — `recovering`, `needs-human`, `error`, or
+ * `recovered` — and at most one `reminder` an hour while a keepalive stays
+ * `needs-human`. Exactly one event per transition, so a host can count them.
+ * @param event - the entry, its new state, and what the last attempt saw.
+ * @mode emit
+ */
+'headless-browser/keepalive'(event: KeepaliveEvent): void
+```
+
+Source: [`packages/browser-use/headless-browser/src/index.ts`](../../packages/browser-use/headless-browser/src/index.ts)
+
+<a id="headless-browsersecurity--emit"></a>
+
+#### `headless-browser/security` — emit
+
+One action-guard decision, published so a host can watch what the browser is asked to do.
+
+```ts cordis-catalog
+/**
+ * One action-guard decision, published so a host can watch what the browser is asked to do.
+ * @param event - the refusal, explicit allow, unrequested move, or coordinate click that was recorded.
+ * @mode emit
+ */
+'headless-browser/security'(event: SecurityEvent): void
+```
+
+Source: [`packages/browser-use/headless-browser/src/index.ts`](../../packages/browser-use/headless-browser/src/index.ts)
 <!-- END GENERATED cordis-surface -->

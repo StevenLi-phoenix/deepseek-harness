@@ -39,6 +39,11 @@
   config:
     searchProvider: deepseek-official
     fetchProvider: http
+# PTC keeps per-call function bodies; upstream now defaults to the scoped REPL and rejects a top-level
+# `return` (upgrade guide v0.2.2-rc.5/ptc-default-scoped-repl).
+- id: ptc-runtime
+  config:
+    executionMode: per-call
 # Agent Teams stay out: root rows reach every preset, and the Web menu switch would do nothing without the tools.
 - id: agent-team
   disabled: true

@@ -9,6 +9,8 @@
 
 ```mermaid
 flowchart LR
+  pkg_client_remote_connection["client-remote-connection"]
+  svc_remoteConnection["ctx.remoteConnection<br/>Remote browser login"]
   pkg_event_bus["event-bus"]
   svc_eventBus["ctx.eventBus<br/>Event bus of the event service"]
   pkg_event_ingest["event-ingest"]
@@ -424,6 +426,7 @@ flowchart LR
   pkg_client_modules --> svc_clientModules
   pkg_client_modules --> svc_config
   pkg_client_product_analytics --> svc_productAnalytics
+  pkg_client_remote_connection --> svc_remoteConnection
   pkg_client_ui_connector_account --> svc_connectorAccounts
   pkg_client_ui_plugin_manager --> svc_pluginRegistryProbe
   pkg_client_ui_session_status --> svc_sessionStatus
@@ -818,6 +821,7 @@ flowchart LR
 
 | ctx 键 | 角色 | 所属包 | 实现 | 直接消费方 | 配套插件 | 说明 |
 | --- | --- | --- | --- | --- | --- | --- |
+| `ctx.remoteConnection` | `service` | [`client-remote-connection`](../packages/client/remote-connection) | - | - | - | 管理二维码邀请、获批的配对申请、Remote 浏览器凭据和匿名登录文档；Client 提供审批控件及独立的 Token 链接入口。 |
 | `ctx.eventBus` | `service` | [`event-bus`](../packages/fork/event-bus) | - | [`event-ingest`](../packages/fork/event-ingest), [`github-sensor`](../packages/fork/github-sensor), [`qq`](../packages/fork/qq), [`qqbot`](../packages/fork/qqbot), [`tool-monitor`](../packages/fork/tool-monitor), [`tool-up`](../packages/fork/tool-up), [`tool-watch`](../packages/fork/tool-watch), [`wechat`](../packages/fork/wechat), [`event-console`](../packages/fork/event-console) | - | 负责去重、路由、批次和通知流程；传感器发布事件，工具修改路由。 |
 | `ctx.ownerNotifier` | `service` | [`wechat`](../packages/fork/wechat) | - | [`event-bus`](../packages/fork/event-bus), [`qq`](../packages/fork/qq), [`courses`](../packages/fork/courses), [`gmail`](../packages/fork/gmail), [`owner-memory`](../packages/fork/owner-memory), [`integrity-watch`](../packages/fork/integrity-watch), [`tool-watch`](../packages/fork/tool-watch), [`tool-voice`](../packages/fork/tool-voice), [`tool-wechat`](../packages/fork/tool-wechat) | - | 事件总线定义通道接口，微信通道提供实现。 |
 | `ctx.ownerRelay` | `service` | [`owner-relay`](../packages/fork/owner-relay) | - | [`event-bus`](../packages/fork/event-bus), [`wechat`](../packages/fork/wechat), [`qqbot`](../packages/fork/qqbot), [`bili`](../packages/fork/bili), [`time-gap`](../packages/fork/time-gap) | - | 通道在此注册并认领 Session；中继通过 Session 所属的通道发送每个最终回答。 |
@@ -834,8 +838,8 @@ flowchart LR
 | `ctx.bili` | `service` | [`bili`](../packages/fork/bili) | - | [`tool-bili`](../packages/fork/tool-bili), [`speaking-style`](../packages/fork/speaking-style) | - | bili-svc 的轻量客户端；bili-svc 持有登录态并写入 B 站。 |
 | `ctx.biliHot` | `service` | [`bili`](../packages/fork/bili) | - | [`speaking-style`](../packages/fork/speaking-style) | - | 通过 bili-svc 读取热门视频。 |
 | `ctx.biliEvidence` | `service` | [`tool-up`](../packages/fork/tool-up) | - | [`speaking-style`](../packages/fork/speaking-style) | - | 提供创作者账号工具的证据记录。 |
-| `ctx.actionCards` | `service` | [`action-cards`](../packages/experimental/action-cards) | - | [`creation-recommendations`](../packages/experimental/creation-recommendations), [`client-ui-action-cards`](../packages/experimental/client-ui-action-cards) | - | 负责卡片工具、卡片状态、用户操作和状态通知；各卡片种类注册自己的动作和处理器。 |
-| `ctx.pluginRecommendations` | `service` | [`plugin-recommendations`](../packages/experimental/plugin-recommendations) | - | [`client-ui-plugin-recommendations`](../packages/experimental/client-ui-plugin-recommendations) | - | 读取官方插件卡片的当前目录文本，并在用户点击后通过配置插件管理器启用该插件。 |
+| `ctx.actionCards` | `service` | [`action-cards`](../packages/interaction/action-cards) | - | [`creation-recommendations`](../packages/extensions/creation-recommendations), [`client-ui-action-cards`](../packages/client/ui-action-cards) | - | 负责卡片工具、卡片状态、用户操作和状态通知；各卡片种类注册自己的动作和处理器。 |
+| `ctx.pluginRecommendations` | `service` | [`plugin-recommendations`](../packages/extensions/plugin-recommendations) | - | [`client-ui-plugin-recommendations`](../packages/client/ui-plugin-recommendations) | - | 读取官方插件卡片的当前目录文本，并在用户点击后通过配置插件管理器启用该插件。 |
 | `ctx.deepseekChatImport` | `service` | [`deepseek-chat-import`](../packages/experimental/deepseek-chat-import) | - | - | - | 提供仅 owner 可用的上传路由，把 DeepSeek 会话导出的每个对话导入为一个会话，并提供浏览器先行检查的上传上限。 |
 | `ctx.headlessStartup` | `core` | [`headless`](../packages/bundle/headless) | - | [`headless`](../packages/bundle/headless) | - | 将解析后的任务和运行选项提供给无界面运行器及其 sandbox-policy 配置。 |
 | `ctx.cotTranslation` | `service` | [`experimental-client-ui-cot-translation`](../packages/experimental/client-ui-cot-translation) | - | - | - | 为展开的思考内容提供有界的 Session 翻译请求，不改变模型可见历史。 |

@@ -23,6 +23,7 @@ import {
   IconCodeOutlineMedium,
   IconDatabaseOutlineMedium, IconDataOutlineMedium, IconEnhanceOutlineMedium, IconFlatListOutlineMedium, IconGaugeOutlineMedium,
   IconNewChatOutlineMedium, IconPaperPlaneOutlineMedium, IconPersonalizationOutlineMedium, IconPlayOutlineMedium, IconQueueOutlineMedium,
+  IconRemoteConnectionOutlineMedium,
   IconSettingsOutlineMedium,
   IconUserOutlineMedium, IconUsersOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -43,6 +44,7 @@ const NAV_ICONS: Readonly<Record<string, typeof IconSettingsOutlineMedium>> = {
   'agent-presets': IconAgentPresetOutlineMedium,
   'plugins': IconPersonalizationOutlineMedium,
   'archived-sessions': IconArchiveOutlineMedium,
+  'remote-connection': IconRemoteConnectionOutlineMedium,
   // Fork-added sections (packages/fork), by the id each registers: service overview, data flow, subscriptions, and Claude Code
   // agents (event-console); the WeChat page, its presence page, and its speaking style; memory; System status; the Bilibili account; QQ;
   // course deadlines; the Gmail accounts (the set has no envelope glyph, so the paper plane stands for mail).
