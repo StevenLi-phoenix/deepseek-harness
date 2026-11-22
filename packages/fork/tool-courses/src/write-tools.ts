@@ -1,5 +1,6 @@
 /**
- * The two write tools. They carry the record's `expected_version` and a `request_id`; the building of the request lives
+ * The write tools: the owner's progress and memos, and what the agent itself read on a platform page. They carry
+ * the record's `expected_version` and a `request_id`; the building of the request lives
  * here, the sending and the outcome in `register.ts`.
  */
 
@@ -29,7 +30,7 @@ export function progressTool(): WriteSpec {
   return {
     name: 'courses_set_progress',
     operation: 'set_progress',
-    description: 'Record the owner\'s own progress on one course task, from what the owner told you: status, optionally a percent the owner gave, the work done and left, and named parts. It never changes the submission status, which only the platform sync records: when the owner says they submitted, set status completed and say the platform status will confirm it on the next sync. Read the task with courses_get first and pass its version as expected_version; a conflict answer means it changed meanwhile. A task done in parts takes its progress from its parts: update the parts instead (the error names them). Deadline reminders stop for a completed task.',
+    description: 'Record the owner\'s own progress on one course task, from what the owner told you: status, optionally a percent the owner gave, the work done and left, and named parts. It never changes the submission status, which comes only from a platform page read (the sync\'s, or your own saved with courses_observe): when the owner says they submitted, set status completed and say the platform status will confirm it when the page is next read. Read the task with courses_get first and pass its version as expected_version; a conflict answer means it changed meanwhile. A task done in parts takes its progress from its parts: update the parts instead (the error names them). Deadline reminders stop for a completed task.',
     parameters: {
       id: { type: 'string', required: true, description: 'The task id.' },
       expected_version: { type: 'integer', required: true, description: 'The version courses_get showed.' },
@@ -93,6 +94,148 @@ export function memoTool(): WriteSpec {
       }
       const id = text(args['id']) === '' ? `memo-dsh-${createHash('sha256').update(JSON.stringify(fields)).digest('hex').slice(0, 12)}` : text(args['id'])
       return { id, expected_version: typeof args['expected_version'] === 'number' ? args['expected_version'] : 0, evidence: { kind: 'user', detail: 'The owner asked DSH to keep this note.' }, ...fields }
+    },
+  }
+}
+
+const SUBMISSION = ['unknown', 'not_submitted', 'submitted'] as const
+const CERTAINTY = ['confirmed', 'tentative', 'unknown'] as const
+/** The areas a sync run reports on, as the courses service names them. */
+export const SYNC_AREAS = ['announcements', 'assignments', 'quizzes', 'discussions', 'content', 'gradescope', 'grades', 'materials'] as const
+
+/** The current minute in UTC: an identical retry within the minute derives the same request id. */
+function minute(now: Date): string {
+  return `${now.toISOString().slice(0, 16)}:00Z`
+}
+
+/** The platform a page belongs to, named as a collector would. */
+function platformOf(url: string): string {
+  const host = (() => {
+    try {
+      return new URL(url).hostname
+    } catch {
+      return ''
+    }
+  })()
+  if (host.endsWith('gradescope.com')) return 'Gradescope'
+  if (host.startsWith('brightspace.')) return 'Brightspace'
+  return host === '' ? 'platform' : host
+}
+
+/** A model-supplied list of strings, trimmed, empties dropped. */
+function list(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(text).filter(item => item !== '') : []
+}
+
+/**
+ * Define `courses_observe`, the write of what the agent itself read on a course platform page for one task: its dates,
+ * certainty, submission status, or a task the records lack.
+ * @param now - the clock; observed_at is its minute.
+ * @returns the tool's name, operation, description, parameters, title, and `build`, which makes the request body and throws
+ *   `ToolProblem` without a page, without what it showed, without a fact to save, or for a new task without course, title
+ *   and due date.
+ */
+export function observeTool(now: () => Date = () => new Date()): WriteSpec {
+  return {
+    name: 'courses_observe',
+    operation: 'save_task_observation',
+    description: 'Save what you yourself read on a course platform page (Brightspace, Gradescope) in this turn for one task: its due date, late date, deadline certainty, submission status, or a task the records lack. Only what the page showed: never what the owner told you (that is courses_set_progress), never a guess. To update a task, read it with courses_get and pass its id and version, and send only the fields that differ from the record; the others keep their saved values. Before adding a task, search with courses_find by a short title word, because record titles can differ from the platform\'s ("Homework 5" for "Homework Assignment 5"); only when it is really absent pass expected_version 0 with course, title, and due_at ("none" when the page shows no date). Unchanged tasks are not rewritten: list them in courses_record_sync checked_ids.',
+    parameters: {
+      id: { type: 'string', description: 'The task id from courses_get. Leave it out for a new task: one is derived.' },
+      expected_version: { type: 'integer', required: true, description: 'The version courses_get showed; 0 for a new task.' },
+      url: { type: 'string', required: true, description: 'The page you read it on: the assignment list or the assignment itself.' },
+      observed: { type: 'string', required: true, description: 'What the page showed, briefly and in its own words, e.g. "Due on Nov 28, 2026 11:59 PM · 1 Submission, 1 File".' },
+      course: { type: 'string', description: 'Course id or short name; required for a new task.' },
+      title: { type: 'string', description: 'The platform title; required for a new task.' },
+      due_at: { type: 'string', description: 'Due date as ISO 8601 with offset (New York time, e.g. 2026-11-28T23:59:00-05:00); "none" when the page shows no date.' },
+      late_at: { type: 'string', description: 'Last date late work is accepted, ISO 8601 with offset.' },
+      deadline_certainty: { type: 'string', enum: [...CERTAINTY], description: 'confirmed when the page states the date; tentative when it says the date may change.' },
+      submission_status: { type: 'string', enum: [...SUBMISSION], description: 'submitted when the page shows a submission (e.g. "1 Submission"); not_submitted when it shows none.' },
+    },
+    title: args => `Save what the platform showed for ${text(args['id']) === '' ? `"${text(args['title'])}"` : text(args['id'])}`,
+    build: (args) => {
+      const url = text(args['url'])
+      const observed = text(args['observed'])
+      if (url === '' || observed === '') throw new ToolProblem('give the page url and what it showed')
+      const version = typeof args['expected_version'] === 'number' ? args['expected_version'] : -1
+      if (version < 0) throw new ToolProblem('give expected_version: the version courses_get showed, or 0 for a new task')
+      const fresh = version === 0
+      const course = text(args['course'])
+      const title = text(args['title'])
+      const facts: Record<string, unknown> = {
+        ...text(args['due_at']).toLowerCase() === 'none' ? { due_at: null } : text(args['due_at']) === '' ? {} : { due_at: text(args['due_at']) },
+        ...text(args['late_at']) === '' ? {} : { late_at: text(args['late_at']) },
+        ...text(args['deadline_certainty']) === '' ? {} : { deadline_certainty: text(args['deadline_certainty']) },
+        ...text(args['submission_status']) === '' ? {} : { submission: { status: text(args['submission_status']), platform: platformOf(url) } },
+      }
+      if (fresh) {
+        if (course === '' || title === '' || !('due_at' in facts)) throw new ToolProblem('a new task needs course, title, and due_at ("none" when the page shows no date)')
+      } else if (Object.keys(facts).length === 0 && title === '') {
+        throw new ToolProblem('nothing to save: send the fields that differ from the record; a task you found unchanged goes into courses_record_sync checked_ids')
+      }
+      const given = text(args['id'])
+      if (!fresh && given === '') throw new ToolProblem('give the task id to update, or expected_version 0 for a new task')
+      const id = given === '' ? `task-dsh-${createHash('sha256').update(JSON.stringify({ course, title })).digest('hex').slice(0, 12)}` : given
+      return {
+        id,
+        expected_version: version,
+        ...fresh ? { course_id: course, category: 'assignment', source_url: url } : {},
+        ...course !== '' && !fresh ? { course_id: course } : {},
+        ...title === '' ? {} : { title },
+        ...facts,
+        evidence: { kind: 'platform', detail: observed, url, observed_at: minute(now()) },
+      }
+    },
+  }
+}
+
+/**
+ * Define `courses_record_sync`, the record of one platform reading run: what was read, what failed, and the tasks found
+ * unchanged.
+ * @param now - the clock; the run's id and observed_at are its minute.
+ * @returns the tool's name, operation, description, parameters, title, and `build`, which makes the request body and throws
+ *   `ToolProblem` without a detail, without any checked or failed area, or with checked areas but no page url.
+ */
+export function syncRunTool(now: () => Date = () => new Date()): WriteSpec {
+  return {
+    name: 'courses_record_sync',
+    operation: 'record_sync',
+    description: 'Close one course-platform reading run, once at its end, also when it failed: which areas you read (checked), which you tried and could not read (failed), and in checked_ids every task you compared with the page and found unchanged. The records then show when they were last read, and the sync health counts the run. It saves nothing about the tasks themselves: save each change with courses_observe first.',
+    parameters: {
+      detail: { type: 'string', required: true, description: 'What this run read or where it broke: the courses and pages, e.g. "Assignments lists of PT, GD, HCI, ML, DP, ELS, TCH; 41 tasks compared, 2 saved".' },
+      checked: { type: 'array', items: { type: 'string', enum: [...SYNC_AREAS] }, description: 'Areas you read in full: announcements, assignments, quizzes, discussions, content, gradescope, grades, materials.' },
+      failed: { type: 'array', items: { type: 'string', enum: [...SYNC_AREAS] }, description: 'Areas you tried and could not read.' },
+      checked_ids: { type: 'array', items: { type: 'string' }, description: 'Task ids you compared with the page and found unchanged (at most 500).' },
+      url: { type: 'string', description: 'The main page you read, e.g. the course home; required when an area was checked.' },
+      scope: { type: 'string', description: '"all" (default), a course id or short name, or a task id.' },
+    },
+    title: args => `Record a course sync run (${list(args['checked']).join(', ') || 'nothing read'})`,
+    build: (args) => {
+      const detail = text(args['detail'])
+      const checked = new Set(list(args['checked']))
+      const failed = new Set(list(args['failed']))
+      const url = text(args['url'])
+      if (detail === '') throw new ToolProblem('give the run\'s detail: what it read or where it broke')
+      if (checked.size === 0 && failed.size === 0) throw new ToolProblem('name the areas you read (checked) or tried and could not read (failed)')
+      if (checked.size > 0 && url === '') throw new ToolProblem('give the url of the page you read')
+      const at = now()
+      const scope = text(args['scope']) === '' ? 'all' : text(args['scope'])
+      const stamp = at.toISOString().slice(0, 16).replace(/[-:]/gu, '')
+      const ids = list(args['checked_ids']).slice(0, 500)
+      return {
+        id: `sync-dsh-${scope.replace(/[^\w-]/gu, '-')}-${stamp}Z`,
+        expected_version: 0,
+        scope,
+        ...ids.length === 0 ? {} : { checked_ids: ids },
+        coverage: SYNC_AREAS.map(area => ({
+          area,
+          status: checked.has(area) ? 'checked' : failed.has(area) ? 'failed' : 'not_checked',
+          detail: checked.has(area) || failed.has(area) ? detail : 'Not read by DSH in this run.',
+        })),
+        evidence: checked.size > 0
+          ? { kind: 'platform', detail, url, observed_at: minute(at) }
+          : { kind: 'inference', detail, observed_at: minute(at) },
+      }
     },
   }
 }

@@ -1,5 +1,5 @@
 ---
-description: "Course tools of the owner's main agent over ctx.courses: courses_deadlines, courses_find, courses_get, courses_sync, and the writes courses_set_progress and courses_save_memo, with one line per task, expected_version on every write, and a request id that repeats for an identical retry."
+description: "Course tools of the owner's main agent over ctx.courses: courses_deadlines, courses_find, courses_get, courses_sync, the owner's writes courses_set_progress and courses_save_memo, and the platform-read writes courses_observe and courses_record_sync, with one line per task, expected_version on every write, and a request id that repeats for an identical retry."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Ask your agent on WeChat "what deadlines do I have", "did I hand in the lab", or tell it "I finished HW3", and it answers from your course records and updates them. Lists come back as one short line per task with the dates in New York time, the progress, the submission status, and when the record was last updated, so the answer stays small. Your progress and notes are saved with your own words as the reason and a version check, so a change made elsewhere meanwhile is never overwritten. The submission status stays what the platform sync saw.
+Ask your agent on WeChat "what deadlines do I have", "did I hand in the lab", or tell it "I finished HW3", and it answers from your course records and updates them. Lists come back as one short line per task with the dates in New York time, the progress, the submission status, and when the record was last updated, so the answer stays small. Your progress and notes are saved with your own words as the reason and a version check, so a change made elsewhere meanwhile is never overwritten. Dates and the submission status come only from a platform page: the course sync's, or DSH's own headless-browser read, saved with `courses_observe` and closed with `courses_record_sync`.
 
 ## Table of Contents
 
@@ -74,7 +74,7 @@ This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 
 #### What the model sees
 
-Six tool schemas whenever the calling Agent's preset mounts the package and `ctx.courses` exists. `courses_deadlines` (optional `days`, `course`, `include_overdue`) lists open tasks due ahead, overdue ones with their late window, asks the model to say "last update <time>" (when that task's own page was last read) and to tell the owner since when the sync fails without calling earlier readings old, to call `courses_sync` before saying a date is out of date, and that it cannot open Brightspace itself, and says deadline reminders need no schedule, while a schedule that names a course task rechecks it with `courses_get` when it fires and leaves out a task done by then. `courses_find` (required `text`, optional `course`) searches tasks, done ones included. `courses_get` (required `id`) shows one task and its version. `courses_sync` (optional `runs`, default 3) shows what each recent sync run read, area by area (checked, not_checked, failed, with the run's own detail), so a freshness question is answered from the run that read the page, not from a task's own last-update time. `courses_set_progress` (required `id`, `expected_version`, `status`, `evidence`; optional `percent` the owner stated, `completed_work`, `remaining_work`, `request_id`) says it never changes the submission status, that a submitted task is set `completed`, that a task done in parts takes its progress from its parts, and that reminders stop for a completed task. `courses_save_memo` (says never to save a guess that a date is old; required `title`; optional `body`, `category`, `course`, `task_id`, `planned_at`, `id`, `expected_version`, `request_id`) keeps a note.
+Six tool schemas whenever the calling Agent's preset mounts the package and `ctx.courses` exists. `courses_deadlines` (optional `days`, `course`, `include_overdue`) lists open tasks due ahead, overdue ones with their late window, asks the model to say "last update <time>" (when that task's own page was last read) and to tell the owner since when the sync fails without calling earlier readings old, to call `courses_sync` before saying a date is out of date, and that it cannot open Brightspace itself, and says deadline reminders need no schedule, while a schedule that names a course task rechecks it with `courses_get` when it fires and leaves out a task done by then. `courses_find` (required `text`, optional `course`) searches tasks, done ones included. `courses_get` (required `id`) shows one task and its version. `courses_sync` (optional `runs`, default 3) shows what each recent sync run read, area by area (checked, not_checked, failed, with the run's own detail), so a freshness question is answered from the run that read the page, not from a task's own last-update time. `courses_set_progress` (required `id`, `expected_version`, `status`, `evidence`; optional `percent` the owner stated, `completed_work`, `remaining_work`, `request_id`) says it never changes the submission status, that a submitted task is set `completed`, that a task done in parts takes its progress from its parts, and that reminders stop for a completed task. `courses_save_memo` (says never to save a guess that a date is old; required `title`; optional `body`, `category`, `course`, `task_id`, `planned_at`, `id`, `expected_version`, `request_id`) keeps a note. `courses_observe` (required `expected_version`, `url`, `observed`; optional `id`, `course`, `title`, `due_at` (`none` for no date), `late_at`, `deadline_certainty`, `submission_status`) saves what the agent itself read on a platform page as platform evidence: only the fields that differ, or a new task (`expected_version: 0` with course, title and due_at) after a `courses_find` by one short word. `courses_record_sync` (required `detail`; optional `checked` and `failed` areas, `checked_ids`, `url`, `scope`) closes a reading run, a failed one too, so the records show when they were last read.
 
 #### Token effect
 
@@ -102,8 +102,8 @@ Append-only; newly visible content follows the reusable request prefix and does 
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **No submission writes** — a submission the owner reports is recorded as `completed` progress; the platform status changes only when the sync sees it.
-- **No reminders or collector tools** — `save_reminder`, `record_sync`, `save_task_observation`, and the other sync tools are not offered; deadline reminders come from `courses`.
+- **The owner's word is not a submission** — a submission the owner reports is recorded as `completed` progress; the submission status changes only when a platform page shows it (`courses_observe`).
+- **No reminders, requirements or grades** — `save_reminder`, `save_material`, and the observation's requirements, materials and grade fields are not offered; deadline reminders come from `courses`.
 - **Any turn of the preset can write** — the owner's progress and memos are writable from every turn of the `unattended` preset, including turns started by events.
 
 <a id="dev-note"></a>

@@ -3,14 +3,14 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/fork/tool-courses/README.md
 /:
-  en: ccb6a6b94d23276a
-  zh: 5c3a3c5ce56c00be
+  en: 325bc792a8cfa52e
+  zh: ea8d7733149403c1
 /deepseek-ai-dsh-tool-courses:
   en: e730a3313f409a02
   zh: 2335578f0917a3d2
 /deepseek-ai-dsh-tool-courses/summary:
-  en: afdf3e08c53d1623
-  zh: 17ec59d031e50609
+  en: fc4fe0b794df6053
+  zh: 9c237bf3e8f81797
 /deepseek-ai-dsh-tool-courses/table-of-contents:
   en: d152484eb41ac6b4
   zh: 5ea16c73684ce99f
@@ -30,8 +30,8 @@
   en: 41c39ec13eaad826
   zh: 10e439ed644a8d55
 /deepseek-ai-dsh-tool-courses/model-experience/course-tools/what-the-model-sees:
-  en: 84469b8ad42ac919
-  zh: 274ae820c618675b
+  en: d99cdaf25d2f1096
+  zh: 4a9955661ee9e884
 /deepseek-ai-dsh-tool-courses/model-experience/course-tools/token-effect:
   en: 9b6fea54ebf84b5a
   zh: 0cfa524a6c076636
@@ -51,8 +51,8 @@
   en: 2fbf2175168e8244
   zh: 37ee13b733de02cd
 /deepseek-ai-dsh-tool-courses/known-limitations-and-deferred-work:
-  en: a0a56b2995b3cfbb
-  zh: d77d08d5f1eefcb4
+  en: 686b6ac98ce5f175
+  zh: a717fb5f3d4dede3
 /deepseek-ai-dsh-tool-courses/known-limitations-and-deferred-work/dev-note:
   en: 73d9f04934a4f842
   zh: b8112c8cd4dc2992

@@ -50,9 +50,55 @@ function textOf(result: unknown): string {
 }
 
 describe('course tools', () => {
-  it('registers the six tools and nothing that syncs or sends', async () => {
+  it('registers the eight tools and nothing that sends', async () => {
     const { ctx } = await mount(() => ({}))
-    expect(ctx.tools.schemas().map(schema => schema.name).filter(name => name.startsWith('courses_')).sort()).toEqual(['courses_deadlines', 'courses_find', 'courses_get', 'courses_save_memo', 'courses_set_progress', 'courses_sync'])
+    expect(ctx.tools.schemas().map(schema => schema.name).filter(name => name.startsWith('courses_')).sort()).toEqual(['courses_deadlines', 'courses_find', 'courses_get', 'courses_observe', 'courses_record_sync', 'courses_save_memo', 'courses_set_progress', 'courses_sync'])
+  })
+
+  it('saves a platform read as platform evidence with only the changed fields, the submission named by its platform', async () => {
+    const { run, api } = await mount(() => ({ id: 'hw5', kind: 'task', version: 5 }))
+    const url = 'https://brightspace.nyu.edu/d2l/lms/dropbox/user/folders_list.d2l?ou=627923'
+    const result = await run('courses_observe', { id: 'hw5', expected_version: 4, url, observed: 'Due on Nov 28, 2026 11:59 PM · 1 Submission', due_at: '2026-11-28T23:59:00-05:00', deadline_certainty: 'confirmed', submission_status: 'submitted' })
+    expect(result).toMatchObject({ value: { saved: true, id: 'hw5', version: 5 } })
+    const [operation, body] = api.call.mock.calls[0]!
+    expect(operation).toBe('save_task_observation')
+    expect(body).toMatchObject({
+      id: 'hw5', expected_version: 4, due_at: '2026-11-28T23:59:00-05:00', deadline_certainty: 'confirmed',
+      submission: { status: 'submitted', platform: 'Brightspace' },
+      evidence: { kind: 'platform', detail: 'Due on Nov 28, 2026 11:59 PM · 1 Submission', url, observed_at: '2026-11-02T17:00:00Z' },
+    })
+    expect(body).not.toHaveProperty('source_url')
+    expect(body).not.toHaveProperty('title')
+    expect(String(body['request_id'])).toMatch(/^dsh-save_task_observation-/u)
+  })
+
+  it('adds a task the records lack only with course, title and a due date, and refuses an update with nothing to save', async () => {
+    const { run, api } = await mount(() => ({ id: 'x', kind: 'task', version: 1 }))
+    const url = 'https://brightspace.nyu.edu/d2l/lms/dropbox/user/folders_list.d2l?ou=639262'
+    await run('courses_observe', { expected_version: 0, url, observed: 'Week 8 Take Home Assignment, no due date shown', course: 'tch', title: 'Week 8 Take Home Assignment', due_at: 'none' })
+    const body = api.call.mock.calls[0]![1]
+    expect(body).toMatchObject({ expected_version: 0, course_id: 'tch', title: 'Week 8 Take Home Assignment', due_at: null, category: 'assignment', source_url: url })
+    expect(String(body['id'])).toMatch(/^task-dsh-[0-9a-f]{12}$/u)
+    expect(await run('courses_observe', { expected_version: 0, url, observed: 'x', title: 'No course' })).toMatchObject({ value: { error: expect.stringContaining('a new task needs course') } })
+    expect(await run('courses_observe', { id: 't1', expected_version: 3, url, observed: 'same as before' })).toMatchObject({ value: { error: expect.stringContaining('courses_record_sync checked_ids') } })
+    expect(await run('courses_observe', { id: 't1', expected_version: 3, url: '', observed: 'x', due_at: 'none' })).toMatchObject({ value: { error: 'give the page url and what it showed' } })
+    expect(api.call).toHaveBeenCalledTimes(1)
+  })
+
+  it('records a reading run with every area, the unchanged tasks, and a failed run without a page', async () => {
+    const { run, api } = await mount(() => ({ id: 'run', kind: 'sync', version: 1 }))
+    await run('courses_record_sync', { detail: 'Assignments lists of 7 courses; 40 unchanged', checked: ['assignments'], checked_ids: ['t1', 't2'], url: 'https://brightspace.nyu.edu/d2l/home' })
+    const [operation, body] = api.call.mock.calls[0]!
+    expect(operation).toBe('record_sync')
+    expect(body).toMatchObject({ id: 'sync-dsh-all-20261102T1700Z', expected_version: 0, scope: 'all', checked_ids: ['t1', 't2'], evidence: { kind: 'platform', url: 'https://brightspace.nyu.edu/d2l/home', observed_at: '2026-11-02T17:00:00Z' } })
+    const coverage = body['coverage'] as Array<{ area: string; status: string }>
+    expect(coverage).toHaveLength(8)
+    expect(coverage.find(row => row.area === 'assignments')?.status).toBe('checked')
+    expect(coverage.filter(row => row.status === 'not_checked')).toHaveLength(7)
+    await run('courses_record_sync', { detail: 'The Brightspace session needs a sign-in', failed: ['assignments'] })
+    expect(api.call.mock.calls[1]![1]).toMatchObject({ evidence: { kind: 'inference' } })
+    expect(await run('courses_record_sync', { detail: 'read it', checked: ['assignments'] })).toMatchObject({ value: { error: 'give the url of the page you read' } })
+    expect(await run('courses_record_sync', { detail: 'nothing' })).toMatchObject({ value: { error: expect.stringContaining('name the areas') } })
   })
 
   it('tells the model that a schedule naming a course task rechecks the task when it fires', async () => {

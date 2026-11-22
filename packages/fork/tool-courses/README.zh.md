@@ -1,5 +1,5 @@
 ---
-description: "主人主 agent 的课程工具，基于 ctx.courses：courses_deadlines、courses_find、courses_get、courses_sync，以及写操作 courses_set_progress 和 courses_save_memo；每个任务一行，每次写都带 expected_version，同样的重试用同一个 request id。"
+description: "主人主 agent 的课程工具，基于 ctx.courses：courses_deadlines、courses_find、courses_get、courses_sync，主人的写操作 courses_set_progress、courses_save_memo，以及平台实读的写操作 courses_observe、courses_record_sync；每个任务一行，每次写都带 expected_version，同样的重试用同一个 request id。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-在微信上问 agent“我还有什么 DDL”“那个 lab 交了吗”，或者告诉它“HW3 做完了”，它会按你的课程记录回答并更新记录。列表每个任务只回一行短文字，写明纽约时间的日期、进度、提交状态和记录上次更新的时间，回答因此很小。你的进度和备忘会以你自己的话作为理由保存，并做版本检查，所以期间别处做的修改不会被覆盖。提交状态始终是平台同步看到的那样。
+在微信上问 agent“我还有什么 DDL”“那个 lab 交了吗”，或者告诉它“HW3 做完了”，它会按你的课程记录回答并更新记录。列表每个任务只回一行短文字，写明纽约时间的日期、进度、提交状态和记录上次更新的时间，回答因此很小。你的进度和备忘会以你自己的话作为理由保存，并做版本检查，所以期间别处做的修改不会被覆盖。日期和提交状态只来自平台页面：课程同步读到的，或 DSH 自己用 headless 浏览器读到、经 `courses_observe` 保存并以 `courses_record_sync` 收尾的。
 
 ## 目录
 
@@ -74,7 +74,7 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-调用方 Agent 的 preset 挂载了这个包且 `ctx.courses` 存在时，有六个工具 schema。`courses_deadlines`（可选 `days`、`course`、`include_overdue`）列出往后要截止的未完成任务，过期的连同迟交窗口一起列，并要求模型说“last update <时间>”（该任务自己的页面上次被读取的时间），同步失败时告诉主人从何时开始但不把更早的读数说成过期，说日期或状态过期之前先调 `courses_sync`，并说明自己打不开 Brightspace；它还说明截止提醒不需要定时任务，而提到课程任务的定时任务在触发时要用 `courses_get` 复核，到时已完成的任务不再提。`courses_find`（必填 `text`，可选 `course`）搜索任务，包括已完成的。`courses_get`（必填 `id`）显示一个任务和它的版本。`courses_sync`（可选 `runs`，默认 3）按区域列出最近几次同步各读了什么（checked、not_checked、failed，带那次运行写下的说明），新鲜度问题据此回答，不看任务自己的 last-update 时间。`courses_set_progress`（必填 `id`、`expected_version`、`status`、`evidence`；可选主人说出的 `percent`、`completed_work`、`remaining_work`、`request_id`）说明它从不改提交状态、已提交的任务设为 `completed`、分部分完成的任务按部分算进度，以及完成的任务不再提醒。`courses_save_memo`（说明不得把“日期过期了”这类猜测存成备忘；必填 `title`；可选 `body`、`category`、`course`、`task_id`、`planned_at`、`id`、`expected_version`、`request_id`）保存一条备忘。
+调用方 Agent 的 preset 挂载了这个包且 `ctx.courses` 存在时，有八个工具 schema。`courses_deadlines`（可选 `days`、`course`、`include_overdue`）列出往后要截止的未完成任务，过期的连同迟交窗口一起列，并要求模型说“last update <时间>”（该任务自己的页面上次被读取的时间），同步失败时告诉主人从何时开始但不把更早的读数说成过期，说日期或状态过期之前先调 `courses_sync`，要实时核对就用 headless 浏览器读页面、把不同之处用 `courses_observe` 存下，没有浏览器时直说并给出来源链接；它还说明截止提醒不需要定时任务，而提到课程任务的定时任务在触发时要用 `courses_get` 复核，到时已完成的任务不再提。`courses_find`（必填 `text`，可选 `course`）搜索任务，包括已完成的。`courses_get`（必填 `id`）显示一个任务和它的版本。`courses_sync`（可选 `runs`，默认 3）按区域列出最近几次同步各读了什么（checked、not_checked、failed，带那次运行写下的说明），新鲜度问题据此回答，不看任务自己的 last-update 时间。`courses_set_progress`（必填 `id`、`expected_version`、`status`、`evidence`；可选主人说出的 `percent`、`completed_work`、`remaining_work`、`request_id`）说明它从不改提交状态、已提交的任务设为 `completed`、分部分完成的任务按部分算进度，以及完成的任务不再提醒。`courses_save_memo`（说明不得把“日期过期了”这类猜测存成备忘；必填 `title`；可选 `body`、`category`、`course`、`task_id`、`planned_at`、`id`、`expected_version`、`request_id`）保存一条备忘。`courses_observe`（必填 `expected_version`、`url`、`observed`；可选 `id`、`course`、`title`、`due_at`（没有日期写 `none`）、`late_at`、`deadline_certainty`、`submission_status`）把 agent 自己在平台页面上读到的内容存成平台证据：只送与记录不同的字段，或在用一个短词 `courses_find` 确认缺失后新建任务（`expected_version: 0`，带课程、标题和 due_at）。`courses_record_sync`（必填 `detail`；可选 `checked`、`failed` 区域、`checked_ids`、`url`、`scope`）给一轮读取收尾，失败的也记，让记录显示上次读取的时间。
 
 #### Token 影响
 
@@ -102,8 +102,8 @@ kind: "package-reference"
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **不写提交状态**：主人报告的提交记为 `completed` 进度；平台状态只在同步看到时才变。
-- **没有提醒和采集工具**：不提供 `save_reminder`、`record_sync`、`save_task_observation` 等同步工具；DDL 提醒来自 `courses`。
+- **主人的话不算提交**：主人报告的提交记为 `completed` 进度；提交状态只在平台页面显示时才变（`courses_observe`）。
+- **不写提醒、要求和成绩**：不提供 `save_reminder`、`save_material`，也不提供观察里的要求、材料和成绩字段；DDL 提醒来自 `courses`。
 - **preset 的任何一轮都能写**：`unattended` preset 的每一轮都能写主人的进度和备忘，包括由事件开始的轮次。
 
 <a id="dev-note"></a>
