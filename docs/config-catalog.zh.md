@@ -5282,6 +5282,23 @@ export interface Config {
   maxActiveSubagents: Volatile<number>
   /** Default delegation depth for tools without an explicit limit; defaults to 1. */
   maxDepth: Volatile<number>
+  /**
+   * Route for fresh children (a backend that does not inherit the parent's
+   * conversation) when neither the call nor the tool names one; unset, they
+   * keep the parent's route (`null`, the default). A forked child always keeps
+   * the parent's route.
+   */
+  freshChildRoute?: FreshChildRoute | null
+}
+
+/** The route a fresh child runs on when nothing else names one. */
+export interface FreshChildRoute {
+  /** LLM provider route id, as in `llm-pi-ai` providers. */
+  provider: string
+  /** Model id on that route. */
+  model: string
+  /** Reasoning effort when the call names none; unset, the model's own default. */
+  reasoningEffort?: string
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-subagent -->

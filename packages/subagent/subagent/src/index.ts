@@ -190,6 +190,23 @@ export interface Config {
   maxActiveSubagents: Volatile<number>
   /** Default delegation depth for tools without an explicit limit; defaults to 1. */
   maxDepth: Volatile<number>
+  /**
+   * Route for fresh children (a backend that does not inherit the parent's
+   * conversation) when neither the call nor the tool names one; unset, they
+   * keep the parent's route (`null`, the default). A forked child always keeps
+   * the parent's route.
+   */
+  freshChildRoute?: FreshChildRoute | null
+}
+
+/** The route a fresh child runs on when nothing else names one. */
+export interface FreshChildRoute {
+  /** LLM provider route id, as in `llm-pi-ai` providers. */
+  provider: string
+  /** Model id on that route. */
+  model: string
+  /** Reasoning effort when the call names none; unset, the model's own default. */
+  reasoningEffort?: string
 }
 
 /** Named provider registry with managed activations, durable discovery, and local child messaging. */
@@ -197,6 +214,14 @@ export class SubagentRuntime extends TypertRemoteService {
   static Config = z.object({
     maxDepth: z.number().step(1).min(0).max(Number.MAX_SAFE_INTEGER).default(1).volatile(),
     maxActiveSubagents: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(8).volatile(),
+    freshChildRoute: z.union([
+      z.object({
+        provider: z.string().min(1).required(),
+        model: z.string().min(1).required(),
+        reasoningEffort: z.string().min(1),
+      }),
+      z.const(null),
+    ]).default(null),
   })
   static inject = ['workingDirectory', 'sessionProjections']
   private providers = new Map<string, SubagentProvider>()
@@ -284,6 +309,7 @@ export class SubagentRuntime extends TypertRemoteService {
     }
     if (spec.outputSchema !== undefined) assertObjectJsonSchema(spec.outputSchema)
     const prepare = provider.prepareContinuable?.bind(provider)
+    spec = withFreshChildRoute(spec, provider, this.config.freshChildRoute)
     if (prepare !== undefined) {
       return manager.startLocal(spec, (request) => {
         this.assertProviderCurrent(provider)
@@ -615,6 +641,34 @@ export class SubagentRuntime extends TypertRemoteService {
     }
   }
 
+}
+
+/**
+ * Apply the configured fresh-child route to a start request that names no
+ * route of its own. Only fresh children take it: a forked child continues the
+ * parent's conversation, whose history belongs to the parent's route.
+ * @param spec - the start request as the tool built it.
+ * @param provider - the selected backend.
+ * @param route - `freshChildRoute`, if configured.
+ * @returns the request, with the route filled in when it applies.
+ */
+export function withFreshChildRoute<T extends { readonly agentOptions?: SubagentStartRequest['agentOptions'] }>(
+  spec: T,
+  provider: Pick<SubagentProvider, 'inheritsParentContext' | 'capabilities'>,
+  route: Config['freshChildRoute'],
+): T {
+  if (route === null || route === undefined || provider.inheritsParentContext || !provider.capabilities.agentOptions) return spec
+  if (spec.agentOptions?.provider !== undefined || spec.agentOptions?.model !== undefined) return spec
+  const effort = spec.agentOptions?.reasoningEffort ?? route.reasoningEffort
+  return {
+    ...spec,
+    agentOptions: {
+      ...spec.agentOptions,
+      provider: route.provider,
+      model: route.model,
+      ...effort === undefined ? {} : { reasoningEffort: effort },
+    } as T['agentOptions'],
+  }
 }
 
 export default SubagentRuntime
