@@ -44,6 +44,10 @@ kind: "package-reference"
 | `snapshotDir` | `$DSH_HOME/cache/headless-browser/snapshots` | `headless_browser_snapshot` 写 PNG 的目录 |
 | `keepalivePath` | `$DSH_HOME/data/headless-browser/keepalive.json` | 跨重启保留已注册保活项的 JSON 文件 |
 | `keepaliveEscalateAfter` | `3` | 连续多少次交互式登录挑战之后，保活项标记为需要人来登录 |
+| `downloadDir` | `$DSH_HOME/cache/headless-browser/downloads` | 下载文件的保存目录，每个文件仅所有者可读写 |
+| `maxDownloadMB` | `256` | 保留的最大下载；更大的文件会被删除并报告为失败 |
+| `downloadRetainDays` | `7` | 下载文件保留的天数；`0` 表示一直保留 |
+| `downloadPdfs` | `true` | PDF 直接下载，不在浏览器查看器里打开 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-headless-browser)列出了全部可用字段。
 
@@ -93,6 +97,19 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 画面由页面自己画，不是 iframe，也不打开任何子地址。它用应用自己的来源和 Cookie 读上面的状态路由和实时 socket；「接管」「交回」两个按钮发的是和这页按钮相同的控制消息，只是理由不同。上面那个独立页面留给浏览器允许它的部署。
 
 <a id="understand-the-implementation"></a>
+### 下载
+
+这个浏览器从不询问保存位置。它是无头模式，Playwright 把每次下载固定到私有目录，所以 Chromium 不会打开保存面板，也不会出现 `prompt_for_download` 的询问。以前出的问题是无声的：返回 `Content-Disposition: attachment` 的 URL 会让 `headless_browser_open` 以 `Download is starting` 失败，点击下载链接模型看不到任何结果，文件留在浏览器关闭时就被删除的临时目录里。
+
+现在浏览器打开的每个页面都会保留自己的下载。完成的文件复制到 `downloadDir`，命名为 `<时间>-<随机>-<名字>`，目录权限 `0700`，文件 `0600`。名字取自站点建议的文件名，并缩减成单个安全片段（无分隔符、控制字符和开头的点），页面无法把文件引出该目录。超过 `maxDownloadMB` 的文件被删除并报告为失败；两分钟还没结束的下载被取消；超过 `downloadRetainDays` 的文件在保存下一个下载时清理，最多每小时一次。日志只记录每个文件的来源和路径，不含查询字符串，因为它常带签名令牌。
+
+- 对本身就是下载的 URL 调用 `headless_browser_open`，返回 `downloads`（路径、字节数、作为不可信文本的建议名、来源地址），而不是页面。
+- `headless_browser_click` 在点击启动了下载时返回 `downloads`；它等 250 毫秒让下载开始，Chromium 通常在约一百毫秒内开始。
+- `headless_browser_downloads` 列出最新的文件，带 `waitMs` 时等一个慢下载开始；用户接管页面时它依然可用。
+- `downloadPdfs` 在每次启动前把 `plugins.always_open_pdf_externally` 和 `download.prompt_for_download=false` 写入 profile 的 `Default/Preferences`（合并而不替换，文件不是 JSON 时不动）。无头查看器给模型的是空白页，而查看器自带的 Download 按钮正是有窗口的浏览器里唯一会弹出系统保存对话框（`showSaveFilePicker`）的路径；有了这个设置，PDF 作为普通下载到达，根本不经过查看器。无头浏览器里 `showSaveFilePicker` 会立刻以 `AbortError` 被拒绝，所以调用它的页面脚本会快速失败而不是卡住。
+
+下载的文件是来自页面的数据：可以读，不要运行。文件特别大时，`headless_browser_cookies` 加普通 HTTP 请求仍然可以绕开浏览器的那份副本。
+
 ### 用会话的 cookie 直接取页面
 
 每读一次页面就开一次浏览器既慢，站点也看得见。会话登录之后，调用方通常只需要 Cookie 头：带同一份会话的纯 HTTP 请求几毫秒就能取回页面。`headless_browser_cookies` 交回浏览器上下文自己的 cookie——`name`、`value`、`domain`、`path`、`expires`、`httpOnly`、`secure`——调用里给了域名后缀就只留下匹配的那些，外加 `toHeader`，也就是那个请求会发出的 `name=value; name=value` 一行：
@@ -211,7 +228,7 @@ headless_browser_keepalive {"action":"remove","id":"k1"}
 
 #### 模型看到什么
 
-挂载作用域有工具注册表时，有六个页面工具：`headless_browser_open`（`url`、`newTab`、`allowOrigin`）、`headless_browser_snapshot`（`tab`、`fullPage`）、`headless_browser_read`（`tab`、`selector`、`offset`、`limit`）、`headless_browser_click`（`selector`、`axId`、`x`、`y`、`allowOrigin`、`tab`）、`headless_browser_type`（`selector`、`axId`、`x`、`y`、`text`、`allowOrigin`、`tab`）、`headless_browser_scroll`（`tab`、`x`、`y`、`deltaY`、`to`）。点击或输入只指定一个目标：CSS 选择器、页面读取给出的无障碍 id，或视口坐标。每个描述只有一句话，说明操作、结果回答什么，以及来自页面的字段以 `{ "untrusted": "<origin>", "content": "..." }` 的形式到达。打开返回落定后的 URL 和作为不可信数据的文档标题；截图返回 PNG 路径和被捕获的页面；读取返回一段作为不可信数据的文本窗口，`header` 写明它的页面和区间；点击或输入返回目标或坐标点、无障碍名称、它胜出的分数以及次高分；滚动返回 `x`、`y`、`scrollX`、`scrollY`、`pageHeight`、`viewportHeight`、`atTop`、`atBottom`，模型据此知道是否到达了尽头。拒绝返回一个 `blocked` 对象，包含规则、页面、引用、名称、理由、提示、分数、阈值、未通过的项和每一项的值，提示里说明要报告这次拦截而不是重试。结果是一个 JSON 文本块。输入的结果不回显文本，所以模型敲进表单的密码不会进入会话日志。
+挂载作用域有工具注册表时，有七个页面工具：`headless_browser_open`（`url`、`newTab`、`allowOrigin`）、`headless_browser_snapshot`（`tab`、`fullPage`）、`headless_browser_downloads`（`limit`、`waitMs`）、`headless_browser_read`（`tab`、`selector`、`offset`、`limit`）、`headless_browser_click`（`selector`、`axId`、`x`、`y`、`allowOrigin`、`tab`）、`headless_browser_type`（`selector`、`axId`、`x`、`y`、`text`、`allowOrigin`、`tab`）、`headless_browser_scroll`（`tab`、`x`、`y`、`deltaY`、`to`）。点击或输入只指定一个目标：CSS 选择器、页面读取给出的无障碍 id，或视口坐标。每个描述只有一句话，说明操作、结果回答什么，以及来自页面的字段以 `{ "untrusted": "<origin>", "content": "..." }` 的形式到达。打开返回落定后的 URL 和作为不可信数据的文档标题；截图返回 PNG 路径和被捕获的页面；读取返回一段作为不可信数据的文本窗口，`header` 写明它的页面和区间；点击或输入返回目标或坐标点、无障碍名称、它胜出的分数以及次高分；滚动返回 `x`、`y`、`scrollX`、`scrollY`、`pageHeight`、`viewportHeight`、`atTop`、`atBottom`，模型据此知道是否到达了尽头。拒绝返回一个 `blocked` 对象，包含规则、页面、引用、名称、理由、提示、分数、阈值、未通过的项和每一项的值，提示里说明要报告这次拦截而不是重试。结果是一个 JSON 文本块。输入的结果不回显文本，所以模型敲进表单的密码不会进入会话日志。
 
 #### Token 影响
 
@@ -269,6 +286,7 @@ headless_browser_keepalive {"action":"remove","id":"k1"}
 
 - **一个浏览器、一个挂载作用域** —— 路由是固定路径，所以一个 Host 只挂载一次；第二次挂载会在 `/headless-browser` 上冲突。浏览器是一个 Chromium、一套标签模型，不是每个 Session 一个，并行运行的 agent 共用它的标签页。
 - **浏览器二进制由部署负责** —— `playwright-core` 不带浏览器，本包也不下载。没有 `PLAYWRIGHT_BROWSERS_PATH` 或账号缓存里的安装，每次工具调用都会带着启动器诊断失败。
+- **下载在完成后才检查** —— 大小上限针对完成的文件，所以很大的下载在完成或两分钟限制把它取消之前，仍占用浏览器的临时目录；保活项离屏页面的下载不保留。
 - **支持的是无头模式** —— `headless: false` 需要已登录的桌面会话；服务账号开不了窗口。
 - **拒绝就是拒绝** —— 身份只改浏览器怎么描述自己，不改站点怎么判断：按地址、profile 或请求本身打分的站点仍然可以拒绝这个页面，本包不应答任何挑战。
 - **守卫是保守的** —— 敏感名称表按词匹配，所以「Submit search」「Delete draft」也要主人确认；一次确认就是永不放过真实付款的代价。可见性评分读的是计算样式和几何，封闭 shadow root 里的元素无法做命中测试，会被拒绝。

@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { CookieResult } from '../src/cookies.ts'
 import type { TabInfo } from '../src/input.ts'
 import { KeepaliveError, type KeepaliveRequest, type KeepaliveStatus, type KeepaliveTools } from '../src/keepalive.ts'
+import type { DownloadRecord } from '../src/downloads.ts'
 import type { ActionOutcome } from '../src/session.ts'
 import { SelectorMissError, type ReadRequest, type ReadResult } from '../src/read.ts'
 import type { ScrollRequest, ScrollResult } from '../src/scroll.ts'
@@ -100,6 +101,7 @@ function fakeBrowser(overrides: Partial<ToolBrowser> = {}): ToolBrowser {
     open: async () => ({ url: 'https://example.com/', title: 'Example' }),
     cookies: async () => COOKIES,
     snapshot: async () => ({ path: '/tmp/page.png', url: 'https://example.com/' }),
+    downloads: async () => [],
     read: async () => READ,
     click: async () => HIT,
     fill: async () => HIT,
@@ -174,11 +176,12 @@ function definitionOf(bench: Bench, name: string): ToolDefinition {
 }
 
 describe('tool registration', () => {
-  it('registers the six page tools, the two tab tools, and the two control tools', () => {
+  it('registers the seven page tools, the two tab tools, and the two control tools', () => {
     const tools = bench(fakeBrowser())
     expect([...tools.definitions.keys()]).toEqual([
       'headless_browser_open',
       'headless_browser_snapshot',
+      'headless_browser_downloads',
       'headless_browser_read',
       'headless_browser_click',
       'headless_browser_type',
@@ -311,6 +314,58 @@ describe('screenshots through the tool', () => {
     tools.takeover.take('paying')
     expect(await tools.call('headless_browser_snapshot', { fullPage: true }))
       .toEqual({ path: '/tmp/page.png', page: { untrusted: 'https://example.com', content: 'https://example.com/' } })
+  })
+})
+
+/** One kept download, as the store reports it. */
+const SAVED: DownloadRecord = {
+  seq: 1,
+  url: 'https://example.com/files/a.pdf',
+  filename: 'a.pdf',
+  path: '/tmp/downloads/1-abc-a.pdf',
+  bytes: 13_264,
+  savedAt: '2026-01-01T00:00:00.000Z',
+}
+
+describe('downloads through the tools', () => {
+  it('lists the kept files, wraps the site-suggested name, and clamps limit and wait', async () => {
+    const downloads = vi.fn(async (_limit: number, _waitMs: number) => [SAVED, { ...SAVED, seq: 2, path: undefined, bytes: undefined, error: 'too big' }])
+    const tools = bench(fakeBrowser({ downloads }))
+    const listed = await tools.call('headless_browser_downloads', {}) as { downloads: Array<Record<string, unknown>> }
+    expect(downloads).toHaveBeenLastCalledWith(10, 0)
+    expect(listed.downloads[0]).toEqual({
+      path: SAVED.path,
+      bytes: 13_264,
+      filename: { untrusted: 'https://example.com', content: 'a.pdf' },
+      url: SAVED.url,
+      savedAt: SAVED.savedAt,
+    })
+    expect(listed.downloads[1]).toMatchObject({ error: 'too big' })
+    expect(listed.downloads[1]).not.toHaveProperty('path')
+    await tools.call('headless_browser_downloads', { limit: 500, waitMs: 999_999 })
+    expect(downloads).toHaveBeenLastCalledWith(20, 30_000)
+    await tools.call('headless_browser_downloads', { limit: 0, waitMs: -5 })
+    expect(downloads).toHaveBeenLastCalledWith(1, 0)
+  })
+
+  it('still lists while the user holds the page', async () => {
+    const tools = bench(fakeBrowser())
+    tools.takeover.take('paying')
+    expect(await tools.call('headless_browser_downloads', {})).toEqual({ downloads: [] })
+  })
+
+  it('puts a file that open or click downloaded in the result', async () => {
+    const open = vi.fn(async () => ({ url: 'about:blank', title: '', downloads: [SAVED] }))
+    const click = vi.fn(async () => ({ ...HIT, downloads: [SAVED] }))
+    const tools = bench(fakeBrowser({ open, click }))
+    expect(await tools.call('headless_browser_open', { url: SAVED.url })).toMatchObject({
+      url: 'about:blank',
+      downloads: [{ path: SAVED.path, filename: { content: 'a.pdf' } }],
+    })
+    expect(await tools.call('headless_browser_click', { selector: 'a.dl' })).toMatchObject({
+      clicked: 'a.next',
+      downloads: [{ path: SAVED.path }],
+    })
   })
 })
 

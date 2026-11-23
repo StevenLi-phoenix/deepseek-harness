@@ -19,6 +19,7 @@ import { chromium, type BrowserContext, type CDPSession, type ElementHandle, typ
 import { probeChallenge, readChallengeFacts, type ChallengeFacts } from './challenge.ts'
 import type { Config } from './config.ts'
 import { cookieSnapshot, cookieSummary, type CookieResult } from './cookies.ts'
+import { DOWNLOAD_START_WAIT_MS, DownloadStore, ensureDownloadPrefs, isDownloadStarting, type DownloadRecord } from './downloads.ts'
 import { firstLine } from './error.ts'
 import { ActionGuard, ActionRefusedError, blockedAction, refusalOf, type Decision, type PointChoice, type TargetChoice } from './guard.ts'
 import type { InputCommand, TabInfo, TabMessage } from './input.ts'
@@ -27,11 +28,18 @@ import { readText, type ReadPage, type ReadRequest, type ReadResult } from './re
 import { cdpScrollChannel, scrollPage, type ScrollRequest, type ScrollResult } from './scroll.ts'
 import type { KeepalivePage } from './keepalive.ts'
 import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
-import { BrowserTabs, type ActiveTab, type ClosedTab, type TabsContext } from './tabs.ts'
+import { BrowserTabs, TabNavigationError, type ActiveTab, type ClosedTab, type TabsContext, type TabsPage } from './tabs.ts'
 import { probeElement, readElementFacts, type ElementFacts } from './visibility.ts'
 
 /** How long a context gets to close before shutdown stops waiting for it. */
 export const SHUTDOWN_TIMEOUT_MS = 10_000
+
+/**
+ * How long a click waits for a download it may have started. A download event
+ * follows the click within about a hundred milliseconds; a click that downloads
+ * nothing pays this once.
+ */
+export const CLICK_DOWNLOAD_WAIT_MS = 250
 
 /** How long a recovery waits after the old context closes, before it relaunches. */
 export const RELAUNCH_SETTLE_MS = 1_500
@@ -138,6 +146,18 @@ export interface ActionOutcome {
   readonly target?: TargetChoice
   /** The point a coordinate action hit, with the element and score it found there. */
   readonly point?: PointChoice
+  /** Files the action made the browser download, already saved. */
+  readonly downloads?: readonly DownloadRecord[]
+}
+
+/** What opening a URL settled on. */
+export interface OpenResult {
+  /** The tab's URL after the navigation. */
+  readonly url: string
+  /** The tab's document title. */
+  readonly title: string
+  /** Files the URL turned out to be, already saved; set instead of a page. */
+  readonly downloads?: readonly DownloadRecord[]
 }
 
 /** The element handle an accessibility id resolves to. */
@@ -196,6 +216,8 @@ export class HeadlessBrowserSession {
   readonly #background = new WeakSet<object>()
   readonly #cdps = new WeakMap<Page, CDPSession>()
   readonly #relaunchListeners = new Set<() => void>()
+  /** Keeps what the pages download; see `downloads.ts`. */
+  readonly #downloads: DownloadStore
 
   /**
    * @param config - profile, viewport, and snapshot settings.
@@ -208,6 +230,22 @@ export class HeadlessBrowserSession {
     this.#log = log
     this.#guard = guard
     this.#deps = deps
+    this.#downloads = new DownloadStore({
+      dir: config.downloadDir,
+      maxBytes: config.maxDownloadMB * 1024 * 1024,
+      retainMs: config.downloadRetainDays * 86_400_000,
+      log,
+    })
+  }
+
+  /**
+   * The newest files the browser downloaded, once the ones in flight finished.
+   * @param limit - most records to return.
+   * @param waitMs - how long to wait for a download to start when none is in flight.
+   * @returns the records, oldest first.
+   */
+  async downloads(limit: number, waitMs: number): Promise<DownloadRecord[]> {
+    return await this.#downloads.recent(limit, waitMs)
   }
 
   /**
@@ -263,6 +301,7 @@ export class HeadlessBrowserSession {
       // A keepalive's offscreen page is nobody's tab: adopting it would spend
       // one of the eight slots a person's tabs share.
       reserved: page => this.#background.has(page),
+      onAdopt: (page: TabsPage) => this.#downloads.attach(page),
     })
     return this.#tabs
   }
@@ -348,14 +387,27 @@ export class HeadlessBrowserSession {
    * @returns the settled URL and the document title.
    * @throws ActionRefusedError - when the destination is another site and this call did not allow it.
    */
-  async open(url: string, newTab = false, allowOrigin = false): Promise<{ url: string; title: string }> {
+  async open(url: string, newTab = false, allowOrigin = false): Promise<OpenResult> {
     return await this.#guarded('opening the page', async () => {
       const current = await this.page()
       const decision = this.#guard.decideNavigation({ action: 'open', url: current.url(), target: url, allowOrigin })
       if (!decision.allowed) throw new ActionRefusedError(blockedAction(refusalOf(decision)))
-      const opened = newTab
-        ? await this.#openTab(url)
-        : await this.#openHere(url)
+      const mark = this.#downloads.mark()
+      let opened: { url: string; title: string }
+      try {
+        opened = newTab
+          ? await this.#openTab(url)
+          : await this.#openHere(url)
+      } catch (error: unknown) {
+        // A URL that answers with an attachment is a file, not a page: the
+        // navigation fails and the download follows. Report the file.
+        if (!(error instanceof TabNavigationError) || !isDownloadStarting(error.message)) throw error
+        const downloads = await this.#downloads.since(mark, DOWNLOAD_START_WAIT_MS)
+        if (downloads.length === 0) throw error
+        const page = await this.page()
+        this.#log.info('headless-browser: %s was a download, %d file(s) kept', url.split('?')[0], downloads.length)
+        return { url: page.url(), title: await page.title(), downloads }
+      }
       this.#guard.anchor(opened.url)
       return opened
     })
@@ -464,9 +516,10 @@ export class HeadlessBrowserSession {
           ...hit === undefined ? {} : { hit },
           allowOrigin: request.allowOrigin === true,
         }))
+        const mark = this.#downloads.mark()
         await page.mouse.click(request.point.x, request.point.y)
         this.#guard.anchor(page.url())
-        return { url: page.url(), point }
+        return { url: page.url(), point, ...await this.#downloadsSince(mark) }
       }
       const resolution = await this.#resolve(page, request)
       const target = this.#accept(this.#guard.decideTarget({
@@ -477,10 +530,21 @@ export class HeadlessBrowserSession {
         allowOrigin: request.allowOrigin === true,
         ...resolution.staleAxId === undefined ? {} : { staleAxId: resolution.staleAxId },
       }))
+      const mark = this.#downloads.mark()
       await resolution.element(target.index).click()
       this.#guard.anchor(page.url())
-      return { url: page.url(), target }
+      return { url: page.url(), target, ...await this.#downloadsSince(mark) }
     })
+  }
+
+  /**
+   * The files a click started, for the click's own result.
+   * @param mark - the download marker taken before the click.
+   * @returns a `downloads` field, or nothing when the click downloaded no file.
+   */
+  async #downloadsSince(mark: number): Promise<{ downloads: readonly DownloadRecord[] } | Record<string, never>> {
+    const downloads = await this.#downloads.since(mark, CLICK_DOWNLOAD_WAIT_MS)
+    return downloads.length === 0 ? {} : { downloads }
   }
 
   /**
@@ -797,6 +861,9 @@ export class HeadlessBrowserSession {
     if (stale !== undefined) {
       this.#log.warn('headless-browser: cleared a stale profile before launch: %s', stale.reasons.join('; '))
     }
+    await ensureDownloadPrefs(this.#config.profileDir, this.#config.downloadPdfs, this.#log).catch((error: unknown) => {
+      this.#log.warn('headless-browser: setting the profile download preferences failed: %s', firstLine(error))
+    })
     const context = await this.#launchContext()
     if (this.#closed) {
       await context.close()

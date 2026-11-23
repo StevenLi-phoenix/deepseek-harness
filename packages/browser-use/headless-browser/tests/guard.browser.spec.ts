@@ -46,6 +46,10 @@ async function boot(): Promise<App> {
     snapshotDir: join(root, 'snapshots'),
     keepalivePath: join(root, 'keepalive.json'),
     keepaliveEscalateAfter: 3,
+    downloadDir: join(root, 'downloads'),
+    maxDownloadMB: 256,
+    downloadRetainDays: 7,
+    downloadPdfs: true,
   }, new Context().logger, guard)
   const app: App = {
     browser,

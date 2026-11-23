@@ -57,6 +57,22 @@ export interface Config {
    * @default 3
    */
   keepaliveEscalateAfter: number
+  /**
+   * Directory that receives the files the browser downloads, one owner-only
+   * file each; see `src/downloads.ts`.
+   * @default $DSH_HOME/cache/headless-browser/downloads
+   */
+  downloadDir: string
+  /** Largest download kept, in megabytes; a bigger file is deleted and reported as failed. @default 256 */
+  maxDownloadMB: number
+  /** Days a downloaded file is kept before it is deleted; 0 keeps every file. @default 7 */
+  downloadRetainDays: number
+  /**
+   * Download a PDF instead of opening it in the browser's viewer. A headless
+   * browser's viewer shows the model nothing, so a PDF page reads as empty.
+   * @default true
+   */
+  downloadPdfs: boolean
 }
 
 /** Validate {@link Config} before the browser is constructed. */
@@ -71,4 +87,8 @@ export const Config: z<Config> = z.object({
   snapshotDir: z.string().default(dshPath('cache', 'headless-browser', 'snapshots')),
   keepalivePath: z.string().default(dshPath('data', 'headless-browser', 'keepalive.json')),
   keepaliveEscalateAfter: z.natural().min(1).default(3),
+  downloadDir: z.string().default(dshPath('cache', 'headless-browser', 'downloads')),
+  maxDownloadMB: z.natural().min(1).default(256),
+  downloadRetainDays: z.natural().min(0).default(7),
+  downloadPdfs: z.boolean().default(true),
 })

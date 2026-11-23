@@ -81,6 +81,10 @@ async function boot(): Promise<App> {
     snapshotDir: join(root, 'snapshots'),
     keepalivePath: join(root, 'keepalive.json'),
     keepaliveEscalateAfter: 3,
+    downloadDir: join(root, 'downloads'),
+    maxDownloadMB: 256,
+    downloadRetainDays: 7,
+    downloadPdfs: true,
   }, ctx.logger)
   const takeover = new TakeoverState()
   const view = new LiveView(() => browser.castTarget(), { jpegQuality: 50, maxWidth: 800, maxHeight: 600 }, ctx.logger)

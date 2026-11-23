@@ -57,6 +57,10 @@ function browserConfig(profileDir: string, stealth: boolean): Config {
     snapshotDir: join(profileDir, 'snapshots'),
     keepalivePath: join(profileDir, 'keepalive.json'),
     keepaliveEscalateAfter: 3,
+    downloadDir: join(profileDir, 'downloads'),
+    maxDownloadMB: 256,
+    downloadRetainDays: 7,
+    downloadPdfs: true,
   }
 }
 

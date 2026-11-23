@@ -95,6 +95,11 @@ export interface TabsOptions {
    * never adopted as a tab, so they cannot spend one of the tab slots.
    */
   readonly reserved?: (page: TabsPage) => boolean
+  /**
+   * Called for every page the manager adopts; the returned function runs when
+   * the tab lets the page go. The session uses it to keep the page's downloads.
+   */
+  readonly onAdopt?: (page: TabsPage) => () => void
 }
 
 /** What the active tab and its CDP session are, for the screencast. */
@@ -394,7 +399,9 @@ export class BrowserTabs {
     page.on('load', onLoad)
     page.on('framenavigated', onNavigation)
     page.on('close', onClose)
+    const detachAdopt = this.#options.onAdopt?.(page)
     tab.detach = () => {
+      detachAdopt?.()
       page.off('domcontentloaded', onLoad)
       page.off('load', onLoad)
       page.off('framenavigated', onNavigation)

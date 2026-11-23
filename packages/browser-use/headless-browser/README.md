@@ -44,6 +44,10 @@ Mount the row once in a Host composition that has the Web server and the tool re
 | `snapshotDir` | `$DSH_HOME/cache/headless-browser/snapshots` | Where `headless_browser_snapshot` writes PNG files |
 | `keepalivePath` | `$DSH_HOME/data/headless-browser/keepalive.json` | JSON file that keeps the registered keepalives across a restart |
 | `keepaliveEscalateAfter` | `3` | Consecutive interactive sign-in challenges after which a keepalive says a person has to sign in |
+| `downloadDir` | `$DSH_HOME/cache/headless-browser/downloads` | Where downloaded files are kept, one owner-only file each |
+| `maxDownloadMB` | `256` | Largest download kept; a bigger file is deleted and reported as failed |
+| `downloadRetainDays` | `7` | Days a downloaded file is kept; `0` keeps every file |
+| `downloadPdfs` | `true` | Download a PDF instead of opening it in the browser's viewer |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-headless-browser) lists every accepted field.
 
@@ -91,6 +95,19 @@ The page's input only reaches the browser while the user holds control. Taking c
 The package's browser half also registers 浏览器接管 as a page of the Web UI: one `main` panel keyed `browser-takeover`, selected by the sidebar row of the same id. The owner reaches the live frame by clicking that row, so the app's address bar keeps its URL instead of navigating below the site root.
 
 The page paints the frames itself; it is not an iframe and opens no sub-URL. It reads the status route and the live socket above with the app's own origin and cookie, and its 接管 and 交回 buttons send the same control messages as this page's buttons, with a different stated reason. The standalone page stays for deployments whose browsers allow it.
+
+### Downloads
+
+This browser never asks where to save. It runs headless and Playwright pins every download to a private directory, so Chromium opens no save panel and no `prompt_for_download` question can appear. What used to go wrong was silent: a URL that answers `Content-Disposition: attachment` made `headless_browser_open` fail with `Download is starting`, a click on a download link did nothing the model could see, and the file sat in a temporary directory that is deleted when the browser closes.
+
+Every page the browser opens now keeps what it downloads. A finished file is copied into `downloadDir` as `<time>-<random>-<name>`, mode `0600` in a `0700` directory. The name is the one the site suggested, reduced to a single safe segment (no separator, control character, or leading dot), so a page cannot steer the file out of the directory. A file over `maxDownloadMB` is deleted and reported as failed; a download still running after two minutes is cancelled; files older than `downloadRetainDays` are removed when the next download is saved, at most once an hour. A log line records each file with its origin and path but never the query string, which often carries a signed token.
+
+- `headless_browser_open` on a URL that is a download returns `downloads` (path, bytes, the suggested name as untrusted text, the source address) instead of a page.
+- `headless_browser_click` returns `downloads` when the click started one; it waits 250 ms for the download to begin, which Chromium does within about a hundred.
+- `headless_browser_downloads` lists the newest files, and with `waitMs` waits for a slow download to start; it answers while the user holds the page.
+- `downloadPdfs` writes `plugins.always_open_pdf_externally` and `download.prompt_for_download=false` into the profile's `Default/Preferences` before each launch (the file is merged, never replaced, and left alone when it is not JSON). A headless viewer shows the model an empty page, and the viewer's own Download button is the one path that opens a native save dialog (`showSaveFilePicker`) in a browser with a window; with the preference the PDF arrives as an ordinary download and the viewer is never involved. In the headless browser `showSaveFilePicker` is refused at once with `AbortError`, so a page script that calls it fails fast instead of hanging.
+
+A downloaded file is data from the page: read it, never run it. For a very large file, `headless_browser_cookies` plus a plain HTTP request still avoids the browser's copy.
 
 ### Fetching with the session's cookies
 
@@ -210,7 +227,7 @@ The tools share two guards. An acting tool calls `TakeoverState.assertAgent` fir
 
 #### What the model sees
 
-Six page tools whenever the mounting scope has the tool registry: `headless_browser_open` (`url`, `newTab`, `allowOrigin`), `headless_browser_snapshot` (`tab`, `fullPage`), `headless_browser_read` (`tab`, `selector`, `offset`, `limit`), `headless_browser_click` (`selector`, `axId`, `x`, `y`, `allowOrigin`, `tab`), `headless_browser_type` (`selector`, `axId`, `x`, `y`, `text`, `allowOrigin`, `tab`), and `headless_browser_scroll` (`tab`, `x`, `y`, `deltaY`, `to`). A click or type names exactly one target: a CSS selector, an accessibility id from a page read, or a viewport point. Each description is one sentence naming the operation, what the result answers, and that page-derived fields arrive as `{ "untrusted": "<origin>", "content": "..." }`. Opening returns the settled URL and the document title as untrusted data; a screenshot returns its PNG path and the page it captured; a read returns one text window as untrusted data with a header naming its page and range; a click or type returns the target or point with the accessible name, the score it won with, and the runner-up score; scrolling returns `x`, `y`, `scrollX`, `scrollY`, `pageHeight`, `viewportHeight`, `atTop`, and `atBottom`, so the model knows whether it reached the end. A refusal returns a `blocked` object with the rule, the page, the reference, the name, the reason, the hint, the score, the threshold, the failed tests, and every test's value, and the hint says to report the blocked action rather than retry. Results are one JSON text block. The typing result never repeats the text, so a password the model typed into a form is not echoed into the session log.
+Seven page tools whenever the mounting scope has the tool registry: `headless_browser_open` (`url`, `newTab`, `allowOrigin`), `headless_browser_snapshot` (`tab`, `fullPage`), `headless_browser_downloads` (`limit`, `waitMs`), `headless_browser_read` (`tab`, `selector`, `offset`, `limit`), `headless_browser_click` (`selector`, `axId`, `x`, `y`, `allowOrigin`, `tab`), `headless_browser_type` (`selector`, `axId`, `x`, `y`, `text`, `allowOrigin`, `tab`), and `headless_browser_scroll` (`tab`, `x`, `y`, `deltaY`, `to`). A click or type names exactly one target: a CSS selector, an accessibility id from a page read, or a viewport point. Each description is one sentence naming the operation, what the result answers, and that page-derived fields arrive as `{ "untrusted": "<origin>", "content": "..." }`. Opening returns the settled URL and the document title as untrusted data; a screenshot returns its PNG path and the page it captured; a read returns one text window as untrusted data with a header naming its page and range; a click or type returns the target or point with the accessible name, the score it won with, and the runner-up score; scrolling returns `x`, `y`, `scrollX`, `scrollY`, `pageHeight`, `viewportHeight`, `atTop`, and `atBottom`, so the model knows whether it reached the end. A refusal returns a `blocked` object with the rule, the page, the reference, the name, the reason, the hint, the score, the threshold, the failed tests, and every test's value, and the hint says to report the blocked action rather than retry. Results are one JSON text block. The typing result never repeats the text, so a password the model typed into a form is not echoed into the session log.
 
 #### Token effect
 
@@ -268,6 +285,7 @@ Prefix-stable while the definitions are unchanged; results append after the reus
 
 - **One browser, one mounting scope** — the routes are fixed paths, so a Host mounts the package once; a second mount collides on `/headless-browser`. The browser is one Chromium with one tab model, not one per Session, so parallel agents share its tabs.
 - **The browser binary is the deployment's** — `playwright-core` ships no browser, and this package does not download one. Without `PLAYWRIGHT_BROWSERS_PATH` or an install into the account's cache, every tool call fails with the launcher diagnostic.
+- **A download is checked after it finishes** — the size cap applies to the finished file, so a very large download still occupies the browser's temporary directory until it completes or the two-minute limit cancels it; downloads of a keepalive's offscreen page are not kept.
 - **Headless is the supported mode** — `headless: false` needs a logged-in desktop session; a service account cannot open a window.
 - **A refusal stays a refusal** — the identity fixes what the browser says about itself, not what the site decides: a site that scores the address, the profile, or the request can still refuse the page, and this package answers no challenge.
 - **The guard is conservative** — the sensitive-name table matches a word, so "Submit search" and "Delete draft" need the owner too; one hand-over is the price of never matching a real payment. The visibility score reads computed style and geometry, so an element inside a closed shadow root cannot be hit-tested and is refused.
