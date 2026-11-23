@@ -45,12 +45,13 @@ function fakeDownload(root: string, options: FakeOptions = {}): DownloadLike & {
 
 /** A page that lets a test fire its download listeners. */
 function fakePage() {
-  const listeners = new Set<(download: DownloadLike) => void>()
+  type Listener = (...args: never[]) => void
+  const listeners = new Set<Listener>()
   return {
     listeners,
-    on: (_event: string, listener: (download: DownloadLike) => void) => { listeners.add(listener) },
-    off: (_event: string, listener: (download: DownloadLike) => void) => { listeners.delete(listener) },
-    fire(download: DownloadLike) { for (const listener of listeners) listener(download) },
+    on: (_event: string, listener: Listener) => { listeners.add(listener) },
+    off: (_event: string, listener: Listener) => { listeners.delete(listener) },
+    fire(download: DownloadLike) { for (const listener of listeners) (listener as (download: DownloadLike) => void)(download) },
   }
 }
 

@@ -329,7 +329,9 @@ const SAVED: DownloadRecord = {
 
 describe('downloads through the tools', () => {
   it('lists the kept files, wraps the site-suggested name, and clamps limit and wait', async () => {
-    const downloads = vi.fn(async (_limit: number, _waitMs: number) => [SAVED, { ...SAVED, seq: 2, path: undefined, bytes: undefined, error: 'too big' }])
+    const { path: _path, bytes: _bytes, ...unsaved } = SAVED
+    const failed: DownloadRecord = { ...unsaved, seq: 2, error: 'too big' }
+    const downloads = vi.fn(async (_limit: number, _waitMs: number): Promise<readonly DownloadRecord[]> => [SAVED, failed])
     const tools = bench(fakeBrowser({ downloads }))
     const listed = await tools.call('headless_browser_downloads', {}) as { downloads: Array<Record<string, unknown>> }
     expect(downloads).toHaveBeenLastCalledWith(10, 0)

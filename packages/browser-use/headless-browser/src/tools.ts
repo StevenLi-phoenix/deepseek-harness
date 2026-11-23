@@ -204,6 +204,16 @@ const BLOCKED_SCHEMA = {
 /** Largest number of downloads one `headless_browser_downloads` call lists. */
 const MAX_DOWNLOAD_LIST = 20
 
+/** One downloaded file as a tool result carries it. */
+interface DownloadView {
+  readonly path?: string
+  readonly bytes?: number
+  readonly filename: PageText
+  readonly url: string
+  readonly savedAt: string
+  readonly error?: string
+}
+
 /**
  * Shape downloaded files for a tool result. The suggested file name comes from
  * the site, so it arrives wrapped like any page text; the path holds a name
@@ -211,7 +221,7 @@ const MAX_DOWNLOAD_LIST = 20
  * @param records - the files the store kept.
  * @returns the result's `downloads` field.
  */
-function downloadFields(records: readonly DownloadRecord[]): { downloads: unknown[] } {
+function downloadFields(records: readonly DownloadRecord[]): { downloads: DownloadView[] } {
   return {
     downloads: records.map(record => ({
       ...record.path === undefined ? {} : { path: record.path },
