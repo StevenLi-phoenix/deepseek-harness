@@ -115,7 +115,14 @@ const until = async (predicate: () => boolean | Promise<boolean>, ms = 5000): Pr
  */
 async function mount(
   world: World,
-  options: { storageDomain?: unknown; resolveDelayMs?: number; eventBus?: unknown; statError?: Error; statGate?: Promise<void> } = {},
+  options: {
+    storageDomain?: unknown
+    resolveDelayMs?: number
+    eventBus?: unknown
+    ownerNotifier?: unknown
+    statError?: Error
+    statGate?: Promise<void>
+  } = {},
 ) {
   const ctx = new Context()
   contexts.push(ctx)
@@ -147,6 +154,7 @@ async function mount(
     },
   } as never)
   if (options.eventBus !== undefined) ctx.provide('eventBus', options.eventBus as never)
+  if (options.ownerNotifier !== undefined) ctx.provide('ownerNotifier', options.ownerNotifier as never)
   if (options.storageDomain === undefined) await mountStorage(ctx, world.pool)
   else ctx.provide('storageDomain', options.storageDomain as never)
   await ctx.plugin(ToolRuntime)
@@ -407,6 +415,46 @@ describe('monitors on a Session handover', () => {
     await host.ctx.fiber.dispose()
     expect(bus.movers.has('monitor')).toBe(false)
     expect(await withRecords(world, records => records.get(String(kept['id']))?.owner)).toBe('chat-new')
+  })
+})
+
+describe('monitor notices for the main agent', () => {
+  /** `ctx.eventBus` double that records what is published. */
+  function publishingBus() {
+    const published: { kind: string; subject: string; text: string }[] = []
+    return {
+      published,
+      registerHandover: () => () => {},
+      publish: (event: { kind: string; subject: string; text: string }) => {
+        published.push(event)
+        return Promise.resolve()
+      },
+    }
+  }
+
+  it('publishes the main agent\'s monitor output to the event bus instead of waking its Session', async () => {
+    const world = newWorld()
+    const owner = addSession(world, 'main-session')
+    const bus = publishingBus()
+    const host = await mount(world, { eventBus: bus, ownerNotifier: { ownsSession: (id: string) => id === 'main-session' } })
+    host.loaded.set(owner.id, owner.agent)
+    const started = await host.call(owner, 'monitor_start', { command: 'echo main-line; sleep 30', description: 'main watch' })
+    await until(() => bus.published.length === 1)
+    expect(bus.published[0]).toMatchObject({ kind: 'monitor.output', subject: started['id'] })
+    expect(bus.published[0]?.text).toContain('main-line')
+    expect(owner.followups).toEqual([])
+    expect(owner.injected).toEqual([])
+  })
+
+  it('drops the notice and keeps the monitor running when no event bus is running', async () => {
+    const world = newWorld()
+    const owner = addSession(world, 'main-session')
+    const host = await mount(world, { ownerNotifier: { ownsSession: () => true } })
+    host.loaded.set(owner.id, owner.agent)
+    const started = await host.call(owner, 'monitor_start', { command: 'echo lost-line; sleep 30', description: 'main watch' })
+    await until(() => host.logged('the event bus did not take a notice, dropped it: the event bus is not running'))
+    expect(owner.followups).toEqual([])
+    expect(await host.listed(owner)).toEqual([expect.objectContaining({ id: started['id'], status: 'running' })])
   })
 })
 
