@@ -5,11 +5,11 @@
  * it. A persona preset reads the records of its own scope as examples of tone, never as instructions.
  */
 
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { normalizeText } from './entries.ts'
-import { freshId, serialized } from './store.ts'
+import { freshId, replaceFile, serialized } from './store.ts'
 
 /** The personas whose replies the owner reviews: the creator account's session (`up`) and the cat's own account (`bili`). */
 export const FEEDBACK_SCOPES = ['up', 'bili'] as const
@@ -149,10 +149,7 @@ export class FeedbackStore {
   }
 
   private async write(entries: readonly FeedbackEntry[]): Promise<void> {
-    await mkdir(dirname(this.file), { recursive: true, mode: 0o700 })
-    const temporary = `${this.file}.${String(process.pid)}.tmp`
-    await writeFile(temporary, serialize(entries), { mode: 0o600 })
-    await rename(temporary, this.file)
+    await replaceFile(this.file, serialize(entries))
   }
 
   /**

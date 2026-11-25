@@ -101,7 +101,7 @@ kind: "package-reference"
 | 文件 | 作用 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | `BiliAccount`（`ctx.bili`）：配置、生命周期、查私信、relay 注册、读取、操作、日记、给主 agent 的消息、设置页路由 |
-| [`src/client.ts`](src/client.ts) | `RemoteBiliClient`：门、`/v1/status`、`/v1/reply/dm`、`/v1/share/owner`、令牌、限时、结果映射、无损 JSON |
+| [`src/client.ts`](src/client.ts) | `RemoteBiliClient`：门、`/v1/status`、`/v1/reply/dm`、`/v1/share/owner`、令牌、限时、结果映射、无损 JSON，以及 `src/manage.ts` 共用的 HTTP 往返 |
 | [`src/manage.ts`](src/manage.ts) | `ManageClient`：manage 令牌下 bili-svc 的管理接口、回答解析、二维码模块 |
 | [`src/settings.ts`](src/settings.ts) | `ManageSettings`：管理读取和 owner 的操作、扫码尝试、操作日志 |
 | [`src/actions.ts`](src/actions.ts) | 设置页路由 `POST` 请求体的校验 |

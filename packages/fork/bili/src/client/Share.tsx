@@ -10,6 +10,7 @@
 import { useId, type ReactNode } from 'react'
 import type { ShareRow, ShareView } from '../view.ts'
 import { dateTime } from './format.ts'
+import { RowDetails } from './RowDetails.tsx'
 import type { CardProps } from './shared.ts'
 import css from './BiliAccount.module.css'
 
@@ -45,7 +46,6 @@ function todayText(share: ShareView, ownerSet: boolean, timeZone: string, t: Car
 function Row({ row, timeZone, t }: { row: ShareRow; timeZone: string; t: CardProps['t'] }): ReactNode {
   const state = rowState(row, t)
   const details: [string, string][] = [[t('share.row.text'), row.text ?? ''], [t('share.row.detail'), row.detail ?? '']]
-  const present = details.filter(([, value]) => value !== '')
   return (
     <details className={css.row} data-share-row={row.day}>
       <summary className={css.rowSummary}>
@@ -54,18 +54,7 @@ function Row({ row, timeZone, t }: { row: ShareRow; timeZone: string; t: CardPro
         <span className={css.target}>{row.text ?? ''}</span>
         <span className={css.pill} data-state={state.tone}>{state.text}</span>
       </summary>
-      {present.length === 0
-        ? null
-        : (
-          <dl className={css.rowDetails}>
-            {present.map(([label, value]) => (
-              <div key={label} className={css.rowDetail}>
-                <dt className={css.meta}>{label}</dt>
-                <dd className={css.plain}>{value}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
+      <RowDetails details={details} />
     </details>
   )
 }

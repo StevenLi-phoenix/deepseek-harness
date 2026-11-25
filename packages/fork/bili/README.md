@@ -101,7 +101,7 @@ The Settings view comes from `GET /v1/status` under the manage token (accounts w
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | `BiliAccount` (`ctx.bili`): configuration, lifecycle, the owner-message check, the relay registration, reads, actions, journal, messages to the main agent, Settings route |
-| [`src/client.ts`](src/client.ts) | `RemoteBiliClient`: the door, `/v1/status`, `/v1/reply/dm`, `/v1/share/owner`, the token, deadlines, outcome mapping, lossless JSON |
+| [`src/client.ts`](src/client.ts) | `RemoteBiliClient`: the door, `/v1/status`, `/v1/reply/dm`, `/v1/share/owner`, the token, deadlines, outcome mapping, lossless JSON, and the HTTP exchange `src/manage.ts` also uses |
 | [`src/manage.ts`](src/manage.ts) | `ManageClient`: bili-svc's management API under the `manage` token, answer parsers, QR modules |
 | [`src/settings.ts`](src/settings.ts) | `ManageSettings`: management reads and the owner's actions, QR attempts, action logging |
 | [`src/actions.ts`](src/actions.ts) | Validation of the Settings route's `POST` bodies |

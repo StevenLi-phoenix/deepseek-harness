@@ -185,6 +185,51 @@ export function parseJson(text: string): unknown {
   })
 }
 
+/** What one exchange with bili-svc sends. */
+export interface SvcRequest {
+  readonly url: string
+  readonly method: 'GET' | 'POST'
+  /** The bearer token; never logged. */
+  readonly token: string
+  /** A JSON body; undefined sends none. */
+  readonly body: unknown
+  readonly timeoutMs: number
+  readonly signal: AbortSignal | undefined
+}
+
+/** An answer's status and raw text, or why none came. */
+export type SvcExchange =
+  | { readonly ok: true; readonly status: number; readonly text: string }
+  | { readonly ok: false; readonly reason: string }
+
+/**
+ * One HTTP exchange with bili-svc, for this client and the management client: the token, no redirects, and the whole answer
+ * read before a deadline of its own, so the deadline follows the host's clock (and a test's fake one).
+ * @param request - the request.
+ * @returns the status and the text, or `ok: false` with the reason when bili-svc did not answer in time or at all.
+ * @throws the caller's abort reason when `request.signal` aborted.
+ */
+export async function exchange(request: SvcRequest): Promise<SvcExchange> {
+  const { body, signal, timeoutMs } = request
+  const deadline = new AbortController()
+  const timer = setTimeout(() => { deadline.abort(new Error('deadline')) }, timeoutMs)
+  try {
+    const response = await fetch(request.url, {
+      method: request.method,
+      headers: { 'authorization': `Bearer ${request.token}`, 'accept': 'application/json', ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      redirect: 'manual',
+      signal: signal === undefined ? deadline.signal : AbortSignal.any([signal, deadline.signal]),
+    })
+    return { ok: true, status: response.status, text: await response.text() }
+  } catch (error: unknown) {
+    signal?.throwIfAborted()
+    return { ok: false, reason: deadline.signal.aborted ? `no answer from bili-svc within ${timeoutMs} ms` : `bili-svc is unreachable (${error instanceof Error ? error.name : 'unknown'})` }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /** Whether a URL path matches an entry. */
 function pathMatches(entry: Endpoint, path: string): boolean {
   return typeof entry.path === 'string' ? entry.path === path : entry.path.test(path)
@@ -376,38 +421,21 @@ export class RemoteBiliClient implements BiliCaller {
     const token = await this.hooks.token()
     if (token === undefined || token === '') throw new BiliRefused(`${TOKEN_CREDENTIAL} is not set, so bili-svc cannot be called; ${name} was not sent`)
     signal?.throwIfAborted()
-    // A timer of its own, so the deadline follows the host's clock (and a test's fake one).
-    const deadline = new AbortController()
-    const timer = setTimeout(() => { deadline.abort(new Error('deadline')) }, timeoutMs)
     const started = Date.now()
-    let response: Response
-    let text: string
-    try {
-      response = await fetch(`${this.hooks.baseUrl}${route}`, {
-        method,
-        headers: { 'authorization': `Bearer ${token}`, 'accept': 'application/json', ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        redirect: 'manual',
-        signal: signal === undefined ? deadline.signal : AbortSignal.any([signal, deadline.signal]),
-      })
-      text = await response.text()
-    } catch (error: unknown) {
-      signal?.throwIfAborted()
-      throw new BiliTransportError(name, deadline.signal.aborted ? `no answer from bili-svc within ${timeoutMs} ms` : `bili-svc is unreachable (${error instanceof Error ? error.name : 'unknown'})`)
-    } finally {
-      clearTimeout(timer)
-    }
-    this.hooks.debug(`bili: ${name} → bili-svc HTTP ${response.status} (${Date.now() - started} ms)`)
+    const reply = await exchange({ url: `${this.hooks.baseUrl}${route}`, method, token, body, timeoutMs, signal })
+    if (!reply.ok) throw new BiliTransportError(name, reply.reason)
+    const { status, text } = reply
+    this.hooks.debug(`bili: ${name} → bili-svc HTTP ${status} (${Date.now() - started} ms)`)
     if (text.length > MAX_BODY_CHARS) throw new BiliTransportError(name, 'bili-svc answer too large')
     let parsed: unknown = {}
     if (text !== '') {
       try {
         parsed = parseJson(text)
       } catch {
-        throw new BiliTransportError(name, `bili-svc answer is not JSON (HTTP ${response.status})`)
+        throw new BiliTransportError(name, `bili-svc answer is not JSON (HTTP ${status})`)
       }
     }
     const answer = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {}
-    return { status: response.status, answer }
+    return { status, answer }
   }
 }

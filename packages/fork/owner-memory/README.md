@@ -122,7 +122,7 @@ The tools call `MemoryStore`, which validates everything the model sends: catego
 | [`src/feedback-mode.ts`](src/feedback-mode.ts) | Feedback mode for the persona presets: one scope's verdicts in front of each root Session |
 | [`src/tools.ts`](src/tools.ts) | `memory_search`, `memory_save`, `memory_forget`, and the turn-origin check behind the hold |
 | [`src/notice-queue.ts`](src/notice-queue.ts) | Queues a turn's notices until the turn ends, caps them per day, and sends them through the notifier |
-| [`src/store.ts`](src/store.ts) | The JSONL store: list, save, hold, approve, revert, merge, roll back, purge, import, search, and the history and snapshots; the `./store` subpath, which `content-guard` imports |
+| [`src/store.ts`](src/store.ts) | The JSONL store: list, save, hold, approve, revert, merge, roll back, purge, import, search, and the history and snapshots, and the whole-file replacement `src/feedback.ts` also uses; the `./store` subpath, which `content-guard` imports |
 | [`src/notice.ts`](src/notice.ts) | The WeChat notice for a turn's protected changes |
 | [`src/render.ts`](src/render.ts) | The memory block and its byte budget |
 | [`src/feedback.ts`](src/feedback.ts) | The owner's keep/delete verdicts on persona replies: store, CLI payload validation, and the feedback block |

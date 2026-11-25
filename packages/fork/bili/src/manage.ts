@@ -9,7 +9,7 @@
  * stay out of logs; the URL leaves only as a QR image.
  */
 import { encode } from 'uqr'
-import { parseJson } from './client.ts'
+import { exchange, parseJson } from './client.ts'
 import { clean } from './text.ts'
 import type { BrakeView, GateMode, LedgerRow, LedgerView, LoginState, RefreshMode, UsageCounts } from './view.ts'
 import { LOGIN_STATES, REFRESH_MODES, SESSION_STATES, type SessionState } from './view.ts'
@@ -347,40 +347,23 @@ export class ManageClient {
     const token = await this.hooks.token()
     if (token === undefined || token === '') throw new ManageError(name, 0, 'no_token', 'the manage token is not set')
     signal?.throwIfAborted()
-    // A timer of its own, so the deadline follows the host's clock (and a test's fake one).
-    const deadline = new AbortController()
-    const timer = setTimeout(() => { deadline.abort(new Error('deadline')) }, timeoutMs)
     const started = Date.now()
-    let response: Response
-    let raw: string
-    try {
-      response = await fetch(`${this.hooks.baseUrl}${route}`, {
-        method,
-        headers: { 'authorization': `Bearer ${token}`, 'accept': 'application/json', ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        redirect: 'manual',
-        signal: signal === undefined ? deadline.signal : AbortSignal.any([signal, deadline.signal]),
-      })
-      raw = await response.text()
-    } catch (error: unknown) {
-      signal?.throwIfAborted()
-      throw new ManageError(name, 0, 'transport', deadline.signal.aborted ? `no answer from bili-svc within ${timeoutMs} ms` : `bili-svc is unreachable (${error instanceof Error ? error.name : 'unknown'})`)
-    } finally {
-      clearTimeout(timer)
-    }
-    this.hooks.debug(`bili: manage ${name} → bili-svc HTTP ${response.status} (${Date.now() - started} ms)`)
+    const reply = await exchange({ url: `${this.hooks.baseUrl}${route}`, method, token, body, timeoutMs, signal })
+    if (!reply.ok) throw new ManageError(name, 0, 'transport', reply.reason)
+    const { status, text: raw } = reply
+    this.hooks.debug(`bili: manage ${name} → bili-svc HTTP ${status} (${Date.now() - started} ms)`)
     if (raw.length > MAX_BODY_CHARS) throw new ManageError(name, 502, 'bad_answer', 'bili-svc answer too large')
     let parsed: unknown = {}
     if (raw !== '') {
       try {
         parsed = parseJson(raw)
       } catch {
-        throw new ManageError(name, response.status >= 400 ? response.status : 502, 'bad_answer', `bili-svc answer is not JSON (HTTP ${response.status})`)
+        throw new ManageError(name, status >= 400 ? status : 502, 'bad_answer', `bili-svc answer is not JSON (HTTP ${status})`)
       }
     }
     const answer = obj(parsed)
-    if (response.status >= 200 && response.status < 300) return answer
-    const code = clean(answer['error'], 40) || `http_${response.status}`
-    throw new ManageError(name, response.status, code, text(answer['message'], 240))
+    if (status >= 200 && status < 300) return answer
+    const code = clean(answer['error'], 40) || `http_${status}`
+    throw new ManageError(name, status, code, text(answer['message'], 240))
   }
 }

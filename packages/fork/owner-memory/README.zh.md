@@ -122,7 +122,7 @@ echo '{"scope":"up","verdict":"keep","kind":"comment","text":"哈哈这个梗我
 | [`src/feedback-mode.ts`](src/feedback-mode.ts) | 人设预设的反馈模式：把某个范围的评价放在每个根 Session 前面 |
 | [`src/tools.ts`](src/tools.ts) | `memory_search`、`memory_save`、`memory_forget`，以及扣留依据的回合来源判断 |
 | [`src/notice-queue.ts`](src/notice-queue.ts) | 把一个回合的通知排队到回合结束、按天限量，再经通知器发出 |
-| [`src/store.ts`](src/store.ts) | JSONL 存储：列出、保存、扣下、批准、撤销、合并、回滚、抹除、导入、搜索，以及历史和快照；`content-guard` 导入的 `./store` 子路径 |
+| [`src/store.ts`](src/store.ts) | JSONL 存储：列出、保存、扣下、批准、撤销、合并、回滚、抹除、导入、搜索，以及历史和快照，还有 `src/feedback.ts` 共用的整文件替换；`content-guard` 导入的 `./store` 子路径 |
 | [`src/notice.ts`](src/notice.ts) | 一个回合的保护类变动对应的微信通知 |
 | [`src/render.ts`](src/render.ts) | 记忆块与字节预算 |
 | [`src/feedback.ts`](src/feedback.ts) | owner 对人格回复的保留/删除判定：存储、CLI 载荷校验和反馈块 |

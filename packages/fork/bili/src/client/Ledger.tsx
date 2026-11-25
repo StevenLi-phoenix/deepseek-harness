@@ -8,6 +8,7 @@ import type { ReactNode } from 'react'
 import type { LedgerRow } from '../view.ts'
 import { LEDGER_MAX } from './bili.ts'
 import { dateTime } from './format.ts'
+import { RowDetails } from './RowDetails.tsx'
 import type { CardProps } from './shared.ts'
 import css from './BiliAccount.module.css'
 
@@ -18,7 +19,6 @@ function Row({ row, timeZone, t }: { row: LedgerRow; timeZone: string; t: CardPr
   const details: [string, string][] = [
     [t('ledger.reason'), row.reason], [t('ledger.caller'), row.caller], [t('ledger.draft'), row.draft], [t('ledger.verdict'), row.verdict],
   ]
-  const present = details.filter(([, value]) => value !== '')
   return (
     <details className={css.row}>
       <summary className={css.rowSummary}>
@@ -27,18 +27,7 @@ function Row({ row, timeZone, t }: { row: LedgerRow; timeZone: string; t: CardPr
         <span className={css.target}>{row.target}</span>
         <span className={css.pill} data-state={row.state === 'sent' ? 'ok' : row.state}>{row.state}</span>
       </summary>
-      {present.length === 0
-        ? null
-        : (
-          <dl className={css.rowDetails}>
-            {present.map(([label, value]) => (
-              <div key={label} className={css.rowDetail}>
-                <dt className={css.meta}>{label}</dt>
-                <dd className={css.plain}>{value}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
+      <RowDetails details={details} />
     </details>
   )
 }

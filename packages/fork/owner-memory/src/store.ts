@@ -189,6 +189,19 @@ export async function serialized<T>(file: string, task: () => Promise<T>): Promi
   return await run
 }
 
+/**
+ * Replace a file's whole text through a temporary sibling and a rename, so a reader sees the old text or the new one;
+ * a missing directory is created owner-only.
+ * @param file - the file.
+ * @param text - its new text, written owner-only.
+ */
+export async function replaceFile(file: string, text: string): Promise<void> {
+  await mkdir(dirname(file), { recursive: true, mode: 0o700 })
+  const temporary = `${file}.${String(process.pid)}.tmp`
+  await writeFile(temporary, text, { mode: 0o600 })
+  await rename(temporary, file)
+}
+
 function validText(raw: unknown): string {
   if (typeof raw !== 'string') throw new MemoryError('invalid_text', 'text must be a string.')
   const text = normalizeText(raw)
@@ -715,17 +728,11 @@ export class MemoryStore {
   }
 
   private async writeEntries(entries: readonly MemoryEntry[]): Promise<void> {
-    await mkdir(dirname(this.file), { recursive: true, mode: 0o700 })
-    const temporary = `${this.file}.${String(process.pid)}.tmp`
-    await writeFile(temporary, serialize(entries), { mode: 0o600 })
-    await rename(temporary, this.file)
+    await replaceFile(this.file, serialize(entries))
   }
 
   private async writePending(pending: readonly PendingEntry[]): Promise<void> {
-    await mkdir(dirname(this.file), { recursive: true, mode: 0o700 })
-    const temporary = `${this.pendingFile}.${String(process.pid)}.tmp`
-    await writeFile(temporary, pending.map(entry => JSON.stringify(entry)).join('\n') + (pending.length > 0 ? '\n' : ''), { mode: 0o600 })
-    await rename(temporary, this.pendingFile)
+    await replaceFile(this.pendingFile, pending.map(entry => JSON.stringify(entry)).join('\n') + (pending.length > 0 ? '\n' : ''))
   }
 
   private async snapshotNames(): Promise<string[]> {
