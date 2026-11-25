@@ -14,7 +14,15 @@ import HttpServer, { type WebAuthRequest } from '@deepseek-ai/dsh-host-webserver
 import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import { SecurityLog } from '../src/guard.ts'
 import { LiveView } from '../src/live-view.ts'
-import { LIVE_PATH, PAGE_PATH, STATUS_PATH, mountTakeoverRoutes } from '../src/routes.ts'
+import {
+  CREDENTIALS_CSV_PATH,
+  CREDENTIALS_PATH,
+  LIVE_PATH,
+  PAGE_PATH,
+  STATUS_PATH,
+  mountTakeoverRoutes,
+  type TakeoverRoutesDeps,
+} from '../src/routes.ts'
 import { HeadlessBrowserSession } from '../src/session.ts'
 import { TakeoverState } from '../src/takeover.ts'
 
@@ -56,7 +64,7 @@ function peerOf(ctx: Context, id: string, principal: PeerScope['principal']): Pe
 }
 
 /** Boot the real Web server, admit two test identities, and mount the take-over routes. */
-async function boot(): Promise<App> {
+async function boot(options: { readonly credentials?: TakeoverRoutesDeps['credentials'] } = {}): Promise<App> {
   const root = mkdtempSync(join(tmpdir(), 'dsh-headless-browser-routes-'))
   const profileDir = join(root, 'profile')
   const ctx = new Context()
@@ -98,6 +106,7 @@ async function boot(): Promise<App> {
     security: new SecurityLog(),
     keepalives: () => [],
     log: ctx.logger,
+    ...options.credentials === undefined ? {} : { credentials: options.credentials },
   })
   const port = ctx.webServer.port
   if (port === undefined) throw new Error('the test Web server did not bind a port')
@@ -184,5 +193,30 @@ describe('take-over routes', () => {
     const socket = await upgrade(Number(new URL(app.base).port), LIVE_PATH, { 'x-test-peer': 'guest' })
     expect(socket).toMatch(/^HTTP\/1\.1 403 /u)
     expect(socket).not.toContain('101 Switching Protocols')
+  })
+
+  it('answers the saved accounts and their CSV export to the owner only', async () => {
+    const accounts = [{ id: 'c1', host: 'jobs.example.com', username: 'ada', createdAt: '2026-01-01T00:00:00.000Z' }]
+    const csv = 'name,url,username,password,note\r\njobs.example.com,https://jobs.example.com/,ada,secret,\r\n'
+    const app = await boot({ credentials: { list: async () => accounts, exportCsv: async () => csv } })
+
+    for (const path of [CREDENTIALS_PATH, CREDENTIALS_CSV_PATH]) {
+      const refused = await fetch(`${app.base}${path}`, { headers: { 'x-test-peer': 'guest' } })
+      expect(refused.status).toBe(403)
+      expect(refused.headers.get('cache-control')).toBe('no-store')
+      await expect(refused.json()).resolves.toEqual({ error: 'only the owner reads saved site accounts' })
+    }
+
+    const list = await fetch(`${app.base}${CREDENTIALS_PATH}`, { headers: { 'x-test-peer': 'owner' } })
+    expect(list.status).toBe(200)
+    expect(list.headers.get('cache-control')).toBe('no-store')
+    await expect(list.json()).resolves.toEqual({ accounts, export: CREDENTIALS_CSV_PATH })
+
+    const exported = await fetch(`${app.base}${CREDENTIALS_CSV_PATH}`, { headers: { 'x-test-peer': 'owner' } })
+    expect(exported.status).toBe(200)
+    expect(exported.headers.get('content-type')).toBe('text/csv; charset=utf-8')
+    expect(exported.headers.get('content-disposition')).toBe('attachment; filename="dsh-site-passwords.csv"')
+    expect(exported.headers.get('cache-control')).toBe('no-store')
+    await expect(exported.text()).resolves.toBe(csv)
   })
 })

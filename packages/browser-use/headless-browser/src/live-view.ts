@@ -45,6 +45,11 @@ export interface CastTarget {
   readonly cdp: CastCdp
 }
 
+/** The cast in progress: its target and the frame listener registered on its CDP session. */
+interface Cast extends CastTarget {
+  readonly onFrame: (frame: ScreencastFrame) => void
+}
+
 /** Frame format for every viewer. */
 export interface ViewOptions {
   /** JPEG quality, 1 through 100. */
@@ -69,10 +74,9 @@ export class LiveView {
   readonly #log: Pick<Context['logger'], 'info' | 'warn'>
   readonly #viewers = new Set<Viewer>()
   readonly #lastFrames = new Map<string, string>()
-  #target: CastTarget | undefined
+  #target: Cast | undefined
   #syncing: Promise<void> | undefined
   #casting = false
-  #onFrame: ((frame: ScreencastFrame) => void) | undefined
   #closedSession: CastCdp | undefined
 
   /**
@@ -144,11 +148,9 @@ export class LiveView {
     this.#casting = false
     const target = this.#target
     this.#target = undefined
-    const handler = this.#onFrame
-    this.#onFrame = undefined
     this.#closedSession = undefined
     if (target === undefined) return
-    if (handler !== undefined) target.cdp.off('Page.screencastFrame', handler)
+    target.cdp.off('Page.screencastFrame', target.onFrame)
     try {
       await target.cdp.send('Page.stopScreencast')
     } catch (error: unknown) {
@@ -170,7 +172,6 @@ export class LiveView {
   }
 
   async #runSync(): Promise<void> {
-    if (this.#viewers.size === 0) return
     const target = await this.#source()
     if (this.#casting && this.#target?.tabId === target.tabId && this.#target.cdp === target.cdp) return
     await this.stop()
@@ -191,8 +192,7 @@ export class LiveView {
       this.#lastFrames.set(target.tabId, text)
       this.#send(text)
     }
-    this.#target = target
-    this.#onFrame = onFrame
+    this.#target = { tabId: target.tabId, cdp: target.cdp, onFrame }
     this.#closedSession = target.cdp
     target.cdp.on('Page.screencastFrame', onFrame)
     // A crashed page closes its session once; the cast ends and its last frame
@@ -202,7 +202,6 @@ export class LiveView {
       this.#closedSession = undefined
       this.#casting = false
       this.#target = undefined
-      this.#onFrame = undefined
       void this.refresh()
     })
     try {
@@ -216,7 +215,6 @@ export class LiveView {
     } catch (error: unknown) {
       target.cdp.off('Page.screencastFrame', onFrame)
       this.#target = undefined
-      this.#onFrame = undefined
       this.#closedSession = undefined
       throw error
     }

@@ -78,7 +78,8 @@ export function expectationError(expect: readonly KeepaliveExpectation[]): strin
       try {
         new RegExp(rule.expectRegex, 'u')
       } catch (error: unknown) {
-        return `invalid expectRegex: ${error instanceof Error ? error.message : String(error)}`
+        // A string pattern with literal flags fails only with a SyntaxError.
+        return `invalid expectRegex: ${(error as SyntaxError).message}`
       }
     }
   }

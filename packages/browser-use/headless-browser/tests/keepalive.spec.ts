@@ -23,6 +23,7 @@ import {
   type KeepalivePage,
   type KeepaliveStatus,
 } from '../src/keepalive.ts'
+import type { KeepaliveExpectation } from '../src/keepalive-expect.ts'
 import { BrowserTabs, MAX_TABS, TabLimitError, type TabsPage } from '../src/tabs.ts'
 
 const LOG = {
@@ -53,7 +54,11 @@ interface Landing {
   /** What the document shows; a signed-in page when absent. */
   readonly facts?: Partial<ChallengeFacts>
   readonly text?: string
-  /** Make the visit itself fail, as a timeout or a dead network would. */
+  /** HTTP status of the landed document; 200 when absent. */
+  readonly status?: number
+  /** URL the page moves to while the check reads its text. */
+  readonly movesTo?: string
+  /** Make the visit itself fail, as a timeout or a dead network would; `url`, when set, is where the page stopped. */
   readonly error?: string
 }
 
@@ -62,8 +67,13 @@ class FakeSite {
   landing: Landing = {}
   visits = 0
   readonly pages: FakePage[] = []
+  /** While set, every visit waits for it before it loads. */
+  hold: Promise<void> | undefined
+  /** Make opening a page fail with this message. */
+  createError: string | undefined
 
   async page(): Promise<FakePage> {
+    if (this.createError !== undefined) throw new Error(this.createError)
     const page = new FakePage(this)
     this.pages.push(page)
     return page
@@ -86,12 +96,20 @@ class FakePage implements TabsPage, KeepalivePage {
   async title(): Promise<string> { return 'page' }
   async goto(url: string, _options?: { waitUntil?: string; timeout?: number }): Promise<number> {
     this.site.visits += 1
+    await this.site.hold
     const { error } = this.site.landing
-    if (error !== undefined) throw new Error(error)
+    if (error !== undefined) {
+      if (this.site.landing.url !== undefined) this.#url = this.site.landing.url
+      throw new Error(error)
+    }
     this.#url = this.site.landing.url ?? url
-    return 200
+    return this.site.landing.status ?? 200
   }
-  async text(): Promise<string> { return this.site.landing.text ?? '' }
+  async text(): Promise<string> {
+    const { movesTo } = this.site.landing
+    if (movesTo !== undefined) this.#url = movesTo
+    return this.site.landing.text ?? ''
+  }
   async challenge(): Promise<ChallengeFacts> {
     return { passwordField: false, oneTimeCode: false, accountLinks: 0, ...this.site.landing.facts }
   }
@@ -163,7 +181,7 @@ interface Bench {
  * @param options - the settings a test changes, and the file to reuse.
  * @returns the service and everything the test needs to drive it.
  */
-function boot(options: { path?: string; escalateAfter?: number; site?: FakeSite } = {}): Bench {
+function boot(options: { path?: string; escalateAfter?: number; maxConcurrent?: number; site?: FakeSite } = {}): Bench {
   const timer = new ManualTimer()
   const site = options.site ?? new FakeSite()
   const path = options.path ?? join(temporaryDir(), 'keepalive.json')
@@ -174,6 +192,7 @@ function boot(options: { path?: string; escalateAfter?: number; site?: FakeSite 
     log: LOG,
     emit: (event) => { events.push(event) },
     ...options.escalateAfter === undefined ? {} : { escalateAfter: options.escalateAfter },
+    ...options.maxConcurrent === undefined ? {} : { maxConcurrent: options.maxConcurrent },
     now: timer.now,
     schedule: timer.schedule,
   })
@@ -259,6 +278,35 @@ describe('registering a keepalive', () => {
       .rejects.toThrow('domain must name a host')
     await expect(bench.service.add({ url: 'https://example.com/a', domain: 'https://example.com/inbox' }))
       .resolves.toMatchObject({ domain: 'example.com' })
+  })
+
+  it('labels an entry with its URL when the host is nothing but the www prefix', async () => {
+    const bench = boot()
+    await expect(bench.service.add({ url: 'https://www./' })).resolves.toMatchObject({ label: 'https://www./' })
+  })
+
+  it.each<[string, KeepaliveExpectation[], string]>([
+    ['a matcher that sets nothing', [{}], 'each expectation must set a matcher'],
+    ['a wait outside 1 through 30000 ms', [{ expectText: 'Inbox', waitForTextMs: 0 }], 'waitForTextMs must be a whole number from 1 to 30000'],
+    ['a wait with no text to wait for', [{ forbidText: 'Sign in', waitForTextMs: 10 }], 'waitForTextMs requires expectText or expectRegex in the same matcher'],
+    ['a host with a path', [{ allowHosts: ['example.com/inbox'] }], 'allowHosts must name canonical hostnames without paths or ports'],
+    ['an origin with a path', [{ allowOrigins: ['https://example.com/inbox'] }], 'allowOrigins must name canonical HTTP(S) origins without paths'],
+    ['a forbidden path with a trailing slash', [{ forbidPath: ['/access/'] }], 'forbidPath entries must start with / and have no trailing slash'],
+    ['a regular expression that does not compile', [{ expectRegex: '(' }], 'invalid expectRegex: Invalid regular expression'],
+  ])('refuses %s as a landing expectation', async (_name, expectation, message) => {
+    const bench = boot()
+    await expect(bench.service.add({ url: 'https://example.com/a', expect: expectation })).rejects.toThrow(message)
+    await expect(bench.service.list()).resolves.toEqual([])
+  })
+
+  it('refuses a profile override it could not apply, naming the keepalive', () => {
+    expect(() => new KeepaliveService({
+      path: join(temporaryDir(), 'keepalive.json'),
+      create: async () => await new FakeSite().page(),
+      log: LOG,
+      emit: () => {},
+      expectById: { k3: [{}] },
+    })).toThrow('k3: each expectation must set a matcher')
   })
 
   it('removes one entry and keeps the rest in order', async () => {
@@ -358,6 +406,11 @@ describe('persistence', () => {
         { id: 'k1', url: 'not a url' },
         { id: 'k2', url: 'https://example.com/a', everyMinutes: 1, state: 'nonsense', consecutiveFailures: -3, blockedStep: 'nonsense', domain: '  ' },
         { id: 'k2', url: 'https://example.com/duplicate' },
+        { id: 7, url: 'https://example.com/numeric-id' },
+        { id: 'k3', url: 42 },
+        { id: 'k4', url: 'https://example.com/empty-matcher', expect: [{}] },
+        { id: 'k5', url: 'https://example.com/numeric-text', expect: [{ expectText: 42 }] },
+        { id: 'k6', url: 'https://example.com/text-list', expect: 'nonsense' },
       ],
     }), 'utf8')
     const restored = await boot({ path: junk }).service.list()
@@ -369,7 +422,52 @@ describe('persistence', () => {
       state: 'recovering',
       consecutiveFailures: 0,
     }])
-    expect(LOG.warn).toHaveBeenCalledWith(expect.stringContaining('skipped'), expect.anything(), expect.anything())
+    expect(LOG.warn).toHaveBeenCalledWith(expect.stringContaining('skipped'), 9, junk)
+  })
+
+  it('restores a bare list from the oldest file and continues the sequence past ids it did not mint', async () => {
+    const path = join(temporaryDir(), 'keepalive.json')
+    writeFileSync(path, JSON.stringify([
+      { id: 'imported', url: 'https://example.com/i' },
+      { id: 'k4', url: 'https://example.com/j', state: 'ok', lastOkAt: new Date(START).toISOString() },
+    ]), 'utf8')
+    const bench = boot({ path })
+    await expect(bench.service.list()).resolves.toMatchObject([
+      { id: 'imported', state: 'recovering' },
+      { id: 'k4', state: 'recovering' },
+    ])
+    // A healthy record from a file without a version is checked again before it counts as healthy.
+    expect((await bench.service.list())[1]?.lastOkAt).toBeUndefined()
+    await expect(bench.service.add({ url: 'https://example.com/k' })).resolves.toMatchObject({ id: 'k5' })
+  })
+
+  it('drops stored profile rules once the profile no longer names the keepalive', async () => {
+    const path = join(temporaryDir(), 'keepalive.json')
+    writeFileSync(path, JSON.stringify({ version: 2, entries: [{
+      id: 'k1', url: 'https://example.com/a', state: 'ok', profileExpect: [{ expectText: 'Old marker' }],
+      lastOkAt: new Date(START).toISOString(),
+    }] }), 'utf8')
+    const bench = boot({ path })
+    await expect(bench.service.list()).resolves.toMatchObject([{ id: 'k1', state: 'recovering', consecutiveFailures: 0 }])
+    const [stored] = (JSON.parse(readFileSync(path, 'utf8')) as { entries: Record<string, unknown>[] }).entries
+    expect(stored).toMatchObject({ id: 'k1', state: 'recovering' })
+    expect(stored).not.toHaveProperty('profileExpect')
+    expect(stored).not.toHaveProperty('lastOkAt')
+    // The registered text no longer applies, so a page without it is healthy.
+    bench.site.landing = { text: 'Welcome' }
+    await expect(bench.service.check('k1')).resolves.toMatchObject({ state: 'ok' })
+  })
+
+  it('reminds at once about a restored entry that needs a person but records no notice', async () => {
+    const path = join(temporaryDir(), 'keepalive.json')
+    writeFileSync(path, JSON.stringify({ version: 2, entries: [{
+      id: 'k1', url: 'https://example.com/a', state: 'needs-human', consecutiveFailures: 3, blockedStep: 'password',
+      firstFailureAt: new Date(START).toISOString(),
+    }] }), 'utf8')
+    const bench = boot({ path })
+    bench.site.landing = { url: 'https://example.com/login', facts: { passwordField: true } }
+    await expect(bench.service.check('k1')).resolves.toMatchObject({ state: 'needs-human', consecutiveFailures: 4 })
+    expect(bench.events).toMatchObject([{ kind: 'reminder', consecutiveFailures: 4, blockedStep: 'password' }])
   })
 
   it('logs a write it cannot make instead of failing the caller', async () => {
@@ -579,6 +677,91 @@ describe('the retry state machine', () => {
     await expect(bench.service.check('k1')).resolves.toMatchObject({ state: 'recovering', reason: 'sso_redirect:dashboard.other.co.uk' })
   })
 
+  it.each([401, 403])('treats an HTTP %i answer as a sign-in the site asks for', async (status) => {
+    const bench = boot()
+    await bench.service.add({ url: 'https://example.com/a' })
+    bench.site.landing = { status }
+    await expect(bench.service.check('k1')).resolves.toMatchObject({
+      state: 'recovering',
+      reason: `auth_required:${String(status)}`,
+      blockedStep: 'redirect',
+      lastError: `the page refused access (HTTP ${String(status)})`,
+    })
+  })
+
+  it('says error for a server failure, because signing in would not fix it', async () => {
+    const bench = boot()
+    await bench.service.add({ url: 'https://example.com/a' })
+    bench.site.landing = { status: 502 }
+    const status = await bench.service.check('k1')
+    expect(status).toMatchObject({ state: 'error', reason: 'network', lastError: 'HTTP 502' })
+    expect(status.blockedStep).toBeUndefined()
+  })
+
+  it('names an unknown site when the visit settles on no URL', async () => {
+    const bench = boot()
+    await bench.service.add({ url: 'https://example.com/a' })
+    bench.site.landing = { url: '' }
+    await expect(bench.service.check('k1')).resolves.toMatchObject({ state: 'recovering', reason: 'sso_redirect:unknown', blockedStep: 'redirect' })
+  })
+
+  it.each([
+    ['https://login.elsewhere.test/form', 'sso_redirect:login.elsewhere.test'],
+    ['', 'sso_redirect:unknown'],
+  ])('fails a check whose page moves to %j while its text is read', async (movesTo, reason) => {
+    const bench = boot()
+    await bench.service.add({ url: 'https://example.com/a', expect: [{ expectText: 'Inbox' }] })
+    bench.site.landing = { text: 'Inbox', movesTo }
+    await expect(bench.service.check('k1')).resolves.toMatchObject({
+      state: 'recovering',
+      reason,
+      blockedStep: 'redirect',
+      lastError: 'the page moved to a location that is not allowed',
+      lastUrl: movesTo,
+    })
+  })
+
+  it('accepts a wait on a regular expression and a host allowlist', async () => {
+    const bench = boot()
+    await bench.service.add({
+      url: 'https://example.com/a',
+      expect: [{ expectRegex: 'In+box', waitForTextMs: 10 }, { allowHosts: ['mail.example.net'] }],
+    })
+    bench.site.landing = { url: 'https://mail.example.net/inbox', text: 'Innbox' }
+    await expect(bench.service.check('k1')).resolves.toMatchObject({ state: 'ok', lastUrl: 'https://mail.example.net/inbox' })
+    bench.site.landing = { url: 'https://other.example.net/inbox', text: 'Innbox' }
+    await expect(bench.service.check('k1')).resolves.toMatchObject({ state: 'recovering', reason: 'sso_redirect:other.example.net' })
+  })
+
+  it('keeps a localhost keepalive healthy on its own host', async () => {
+    const bench = boot()
+    await bench.service.add({ url: 'http://localhost:8080/app' })
+    await expect(bench.service.check('k1')).resolves.toMatchObject({ state: 'ok', lastUrl: 'http://localhost:8080/app' })
+  })
+
+  it.each([
+    ['the URL the page stopped on', 'https://example.com/partial', 'https://example.com/partial'],
+    ['the requested URL when the page stopped on none', '', 'https://example.com/a'],
+  ])('reports %s for a visit that failed', async (_name, stoppedAt, lastUrl) => {
+    const bench = boot()
+    await bench.service.add({ url: 'https://example.com/a' })
+    bench.site.landing = { error: 'net::ERR_ABORTED', url: stoppedAt }
+    await expect(bench.service.check('k1')).resolves.toMatchObject({ state: 'error', reason: 'network', lastUrl })
+  })
+
+  it('says error with the requested URL when no page could be opened for the visit', async () => {
+    const bench = boot()
+    await bench.service.add({ url: 'https://example.com/a' })
+    bench.site.createError = 'the browser is not running'
+    await expect(bench.service.check('k1')).resolves.toMatchObject({
+      state: 'error',
+      reason: 'network',
+      lastError: 'the browser is not running',
+      lastUrl: 'https://example.com/a',
+    })
+    expect(bench.site.visits).toBe(0)
+  })
+
   it('escalates after the configured number of failures, not a fixed one', async () => {
     const bench = boot({ escalateAfter: 2 })
     const added = await bench.service.add({ url: 'https://example.com/a' })
@@ -656,6 +839,107 @@ describe('the timer', () => {
     await bench.service.close()
     expect(bench.timer.scheduled.every(entry => entry.cancelled)).toBe(true)
     await expect(bench.service.add({ url: 'https://example.com/b' })).rejects.toThrow('shutting down')
+  })
+
+  it('leaves an entry untouched when it is checked after close', async () => {
+    const bench = boot()
+    await bench.service.add({ url: 'https://example.com/a' })
+    await bench.service.close()
+    const status = await bench.service.check('k1')
+    expect(status.lastAttemptAt).toBeUndefined()
+    expect(bench.site.visits).toBe(0)
+    await expect(bench.service.rearm()).resolves.toBe(0)
+    expect(bench.timer.pending()).toBeUndefined()
+  })
+
+  it('re-arms every entry on the context that came back', async () => {
+    const bench = boot()
+    await bench.service.add({ url: 'https://example.com/a' })
+    await bench.service.add({ url: 'https://example.com/b' })
+    const before = bench.timer.scheduled.length
+    await expect(bench.service.rearm()).resolves.toBe(2)
+    expect(bench.timer.scheduled.slice(before).filter(entry => !entry.cancelled)).toHaveLength(2)
+    await bench.service.close()
+  })
+
+  it('does not re-arm an entry that was removed while its check ran', async () => {
+    const bench = boot()
+    await bench.service.add({ url: 'https://example.com/a' })
+    const hold = Promise.withResolvers<undefined>()
+    bench.site.hold = hold.promise
+    const checking = bench.service.check('k1')
+    await vi.waitFor(() => { expect(bench.site.visits).toBe(1) })
+    await bench.service.remove('k1')
+    hold.resolve(undefined)
+    await expect(checking).resolves.toMatchObject({ id: 'k1', state: 'ok' })
+    expect(bench.timer.pending()).toBeUndefined()
+    await expect(bench.service.list()).resolves.toEqual([])
+    expect(JSON.parse(readFileSync(bench.path, 'utf8'))).toEqual({ version: 2, entries: [] })
+  })
+
+  it('runs at most the configured number of checks at once and starts the next when one ends', async () => {
+    const bench = boot({ maxConcurrent: 1 })
+    await bench.service.add({ url: 'https://example.com/a' })
+    await bench.service.add({ url: 'https://example.com/b' })
+    const hold = Promise.withResolvers<undefined>()
+    bench.site.hold = hold.promise
+    const first = bench.service.check('k1')
+    const second = bench.service.check('k2')
+    await vi.waitFor(() => { expect(bench.site.visits).toBe(1) })
+    await flush()
+    // The second check waits for the slot, so it has not visited yet.
+    expect(bench.site.visits).toBe(1)
+    hold.resolve(undefined)
+    await expect(Promise.all([first, second])).resolves.toMatchObject([{ state: 'ok' }, { state: 'ok' }])
+    expect(bench.site.visits).toBe(2)
+    await bench.service.close()
+  })
+
+  it('lets a check waiting for a slot go without a visit when the service closes', async () => {
+    const bench = boot({ maxConcurrent: 1 })
+    await bench.service.add({ url: 'https://example.com/a' })
+    await bench.service.add({ url: 'https://example.com/b' })
+    const hold = Promise.withResolvers<undefined>()
+    bench.site.hold = hold.promise
+    const first = bench.service.check('k1')
+    const second = bench.service.check('k2')
+    await vi.waitFor(() => { expect(bench.site.visits).toBe(1) })
+    await bench.service.close()
+    const waited = await second
+    expect(waited.lastAttemptAt).toBeUndefined()
+    hold.resolve(undefined)
+    await expect(first).resolves.toMatchObject({ id: 'k1', state: 'ok' })
+    expect(bench.site.visits).toBe(1)
+    expect(bench.timer.pending()).toBeUndefined()
+  })
+
+  it('defaults to the wall clock and a timer that does not hold the process open', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], now: START })
+    try {
+      const site = new FakeSite()
+      const service = new KeepaliveService({
+        path: join(temporaryDir(), 'keepalive.json'),
+        create: async () => await site.page(),
+        log: LOG,
+        emit: () => {},
+      })
+      await expect(service.add({ url: 'https://example.com/a' })).resolves.toMatchObject({ nextAttemptAt: '2026-01-01T00:00:00.000Z' })
+      expect(vi.getTimerCount()).toBe(1)
+      await vi.advanceTimersByTimeAsync(0)
+      // The timer started the visit; a check shares it and returns once it has settled and re-armed.
+      await expect(service.check('k1')).resolves.toMatchObject({
+        state: 'ok',
+        lastAttemptAt: '2026-01-01T00:00:00.000Z',
+        nextAttemptAt: '2026-01-01T00:05:00.000Z',
+      })
+      expect(site.visits).toBe(1)
+      // The success armed the next visit five minutes out, and close cancels it.
+      expect(vi.getTimerCount()).toBe(1)
+      await service.close()
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('shares an attempt already in flight instead of starting a second', async () => {

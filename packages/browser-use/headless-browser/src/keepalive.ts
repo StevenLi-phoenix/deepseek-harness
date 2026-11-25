@@ -276,8 +276,8 @@ export class KeepalivePagePool {
 /** The keepalive store and its timers. */
 export class KeepaliveService implements KeepaliveTools {
   readonly #options: KeepaliveOptions
+  /** Every record, in the order it was added: a `Map` iterates in insertion order. */
   readonly #records = new Map<string, KeepaliveRecord>()
-  readonly #order: string[] = []
   readonly #timers = new Map<string, () => void>()
   readonly #inflight = new Map<string, Promise<void>>()
   readonly #waiters: (() => void)[] = []
@@ -322,7 +322,7 @@ export class KeepaliveService implements KeepaliveTools {
    * @returns the status list the tools and the status route report.
    */
   snapshot(): KeepaliveStatus[] {
-    return this.#order.map(id => statusOf(this.#records.get(id) as KeepaliveRecord))
+    return [...this.#records.values()].map(statusOf)
   }
 
   /**
@@ -369,7 +369,6 @@ export class KeepaliveService implements KeepaliveTools {
       ...domain === undefined ? {} : { domain },
     }
     this.#records.set(record.id, record)
-    this.#order.push(record.id)
     this.#arm(record)
     await this.#save()
     return statusOf(record)
@@ -386,8 +385,6 @@ export class KeepaliveService implements KeepaliveTools {
     if (record === undefined) throw new KeepaliveError(`no keepalive named ${id}`)
     this.#cancel(record.id)
     this.#records.delete(id)
-    const index = this.#order.indexOf(id)
-    if (index >= 0) this.#order.splice(index, 1)
     await this.#save()
   }
 
@@ -402,7 +399,7 @@ export class KeepaliveService implements KeepaliveTools {
     const record = this.#records.get(id)
     if (record === undefined) throw new KeepaliveError(`no keepalive named ${id}`)
     this.#cancel(id)
-    await this.#run(id)
+    await this.#run(record)
     return statusOf(record)
   }
 
@@ -426,12 +423,9 @@ export class KeepaliveService implements KeepaliveTools {
     await this.load()
     if (this.#disposed) return 0
     await this.#pages.drop()
-    for (const id of [...this.#order]) {
-      const record = this.#records.get(id)
-      if (record !== undefined) this.#arm(record)
-    }
-    this.#options.log.info('headless-browser: re-armed %d keepalive(s) after the browser came back', this.#order.length)
-    return this.#order.length
+    for (const record of this.#records.values()) this.#arm(record)
+    this.#options.log.info('headless-browser: re-armed %d keepalive(s) after the browser came back', this.#records.size)
+    return this.#records.size
   }
 
   /** Read the file and arm every record's timer. */
@@ -484,15 +478,14 @@ export class KeepaliveService implements KeepaliveTools {
         changed = true
       }
       this.#records.set(record.id, record)
-      this.#order.push(record.id)
       this.#sequence = Math.max(this.#sequence, sequenceOf(record.id))
     }
     if (skipped > 0) {
       this.#options.log.warn('headless-browser: skipped %d unusable keepalive record(s) in %s', skipped, this.#options.path)
     }
     if (changed) await this.#save()
-    for (const id of [...this.#order]) this.#arm(this.#records.get(id) as KeepaliveRecord)
-    this.#options.log.info('headless-browser: %d keepalive(s) re-armed from %s', this.#order.length, this.#options.path)
+    for (const record of this.#records.values()) this.#arm(record)
+    this.#options.log.info('headless-browser: %d keepalive(s) re-armed from %s', this.#records.size, this.#options.path)
   }
 
   /**
@@ -506,7 +499,7 @@ export class KeepaliveService implements KeepaliveTools {
     const delay = Number.isFinite(due) ? Math.max(0, due - this.#now()) : 0
     const cancel = this.#schedule(delay, () => {
       this.#timers.delete(record.id)
-      void this.#run(record.id)
+      void this.#run(record)
     })
     this.#timers.set(record.id, cancel)
   }
@@ -524,18 +517,16 @@ export class KeepaliveService implements KeepaliveTools {
 
   /**
    * Run one attempt for one entry, sharing an attempt already in flight.
-   * @param id - the entry's id.
+   * @param record - the entry to check.
    */
-  async #run(id: string): Promise<void> {
-    const record = this.#records.get(id)
-    if (record === undefined) return
-    const running = this.#inflight.get(id)
+  async #run(record: KeepaliveRecord): Promise<void> {
+    const running = this.#inflight.get(record.id)
     if (running !== undefined) {
       await running
       return
     }
-    const task = this.#attempt(record).finally(() => { this.#inflight.delete(id) })
-    this.#inflight.set(id, task)
+    const task = this.#attempt(record).finally(() => { this.#inflight.delete(record.id) })
+    this.#inflight.set(record.id, task)
     await task
   }
 
@@ -620,7 +611,7 @@ export class KeepaliveService implements KeepaliveTools {
     delete record.lastNoticeAt
     record.nextAttemptAt = iso(at + record.everyMinutes * 60_000)
     // One event per transition, never one per successful check.
-    if (previous !== 'ok') this.#publish(record, 'recovered', atIso)
+    if (previous !== 'ok') this.#publish(record, 'recovered', finalUrl, atIso)
   }
 
   /**
@@ -661,26 +652,27 @@ export class KeepaliveService implements KeepaliveTools {
     if (challenge !== undefined && record.consecutiveFailures >= this.#escalateAfter) {
       record.state = 'needs-human'
       if (previous !== 'needs-human') {
-        this.#publish(record, 'needs-human', atIso)
+        this.#publish(record, 'needs-human', finalUrl, atIso)
         record.lastNoticeAt = atIso
       } else if (noticeDue(record, at)) {
-        this.#publish(record, 'reminder', atIso)
+        this.#publish(record, 'reminder', finalUrl, atIso)
         record.lastNoticeAt = atIso
       }
       return
     }
     // A session already known to need a person stays that way until a check passes.
     record.state = previous === 'needs-human' ? 'needs-human' : challenge === undefined && !pending ? 'error' : 'recovering'
-    if (record.state !== previous || record.state === 'recovering' && record.consecutiveFailures === 1) this.#publish(record, record.state === 'error' ? 'error' : 'recovering', atIso)
+    if (record.state !== previous || record.state === 'recovering' && record.consecutiveFailures === 1) this.#publish(record, record.state === 'error' ? 'error' : 'recovering', finalUrl, atIso)
   }
 
   /**
    * Publish one event for one transition or notice.
    * @param record - the entry the event describes.
    * @param kind - the transition, or `reminder` for the repeated notice.
-   * @param atIso - when it happened.
+   * @param lastUrl - URL the attempt settled on.
+   * @param atIso - when the attempt started, which is when it happened.
    */
-  #publish(record: KeepaliveRecord, kind: KeepaliveEventKind, atIso: string): void {
+  #publish(record: KeepaliveRecord, kind: KeepaliveEventKind, lastUrl: string, atIso: string): void {
     this.#options.emit({
       at: atIso,
       kind,
@@ -689,10 +681,10 @@ export class KeepaliveService implements KeepaliveTools {
       url: record.url,
       state: record.state,
       consecutiveFailures: record.consecutiveFailures,
-      ...record.lastUrl === undefined ? {} : { lastUrl: record.lastUrl },
+      lastUrl,
       ...record.blockedStep === undefined ? {} : { blockedStep: record.blockedStep },
       ...record.firstFailureAt === undefined ? {} : { firstFailureAt: record.firstFailureAt },
-      ...record.lastAttemptAt === undefined ? {} : { lastAttemptAt: record.lastAttemptAt },
+      lastAttemptAt: atIso,
     })
   }
 
@@ -736,7 +728,7 @@ export class KeepaliveService implements KeepaliveTools {
 
   /** The records as the file holds them. */
   #persisted(): KeepaliveRecord[] {
-    return this.#order.map(id => this.#records.get(id) as KeepaliveRecord)
+    return [...this.#records.values()]
   }
 
   /** Refuse a new entry once the plugin is shutting down. */
@@ -998,17 +990,12 @@ function isStep(value: string): value is BlockedStep {
 }
 
 /**
- * The lower-case host of a URL, or the empty string.
- * @param url - an absolute URL.
- * @returns the host without a port, or nothing when it does not parse.
+ * The lower-case host of a URL.
+ * @param url - a URL that {@link targetOf} normalized, so it always parses.
+ * @returns the host without a port.
  */
 function hostOf(url: string): string {
-  try {
-    return new URL(url).hostname.toLowerCase()
-  } catch (error: unknown) {
-    void error
-    return ''
-  }
+  return new URL(url).hostname.toLowerCase()
 }
 
 /**
