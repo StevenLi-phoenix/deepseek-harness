@@ -147,7 +147,21 @@ kind: "package-reference"
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 服务、配置、订阅存储、flush 计时器、actuator、Session 与提醒跟踪 |
+| [`src/index.ts`](src/index.ts) | 插件入口：配置 schema、服务装配，以及委托给下列模块的公开方法 |
+| [`src/routes.ts`](src/routes.ts) | 运行时的路由：叠加了已存覆盖的配置行，再接运行时订阅 |
+| [`src/queue.ts`](src/queue.ts) | 事件接收与成批：去重、抑制、待处理行、flush 计时器、每小时上限、批次行与清理 |
+| [`src/subscriptions.ts`](src/subscriptions.ts) | 运行时订阅：`subscribe()`、`unsubscribe()`、`setPaused()`，以及交接时转移的创建者 |
+| [`src/flow-edit.ts`](src/flow-edit.ts) | `editFlow()` 与流程的变更历史 |
+| [`src/status.ts`](src/status.ts) | 快照：已存的事件与批次、带实时状态的订阅视图、`flowRoutes()` 与 `stats()` |
+| [`src/dispatch.ts`](src/dispatch.ts) | actuator：notify 批次、经 webhook runtime 新建的 Session，以及 webhook 规则的主体 |
+| [`src/persistent.ts`](src/persistent.ts) | 常驻 Session：后续轮次、轮换、替换、接管与压缩记录 |
+| [`src/turns.ts`](src/turns.ts) | 按 Session 事件跟踪总线发起的轮次、提醒轮次与监视器轮次 |
+| [`src/report.ts`](src/report.ts) | 结束轮次的回答去向：notifier、主 agent、流程事件，或不发送 |
+| [`src/handover.ts`](src/handover.ts) | `handOverSessions()` 与登记的转移器 |
+| [`src/archive-host.ts`](src/archive-host.ts) | 自动归档检查所见的 Host，以及总线自己保留、不让检查归档的 Session |
+| [`src/host.ts`](src/host.ts) | 总线读取的可选 Host 服务 |
+| [`src/records.ts`](src/records.ts) | 共享的存储句柄，以及存储行与视图之间的转换 |
+| [`src/log.ts`](src/log.ts) | 各模块共用的日志接口与错误文本 |
 | [`src/delivery.ts`](src/delivery.ts) | 总线投递的 webhook kind 与规则 id、常驻 Session 的键，以及订阅的 Session 所在的项目 |
 | [`src/validate.ts`](src/validate.ts) | 配置与 `subscribe()` 共用的订阅校验 |
 | [`src/match.ts`](src/match.ts) | 通配匹配与回环抑制；`presence` 导入的 `./match` 子路径 |

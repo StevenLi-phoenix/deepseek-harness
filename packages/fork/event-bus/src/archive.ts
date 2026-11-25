@@ -14,6 +14,7 @@ import { stat } from 'node:fs/promises'
 import z from '@deepseek-ai/schemastery'
 import { defineDomain, domainTable, type Domain } from '@deepseek-ai/dsh-storage-domain'
 import { z as zod } from 'zod'
+import { errorText } from './log.ts'
 
 const DAY_MS = 86_400_000
 const HOUR_MS = 3_600_000
@@ -267,11 +268,6 @@ export async function logModifiedAt(persistence: LogLocator | undefined, id: str
 /** A registry refusal that means "something still runs in this Session". */
 function isActiveRefusal(error: unknown): boolean {
   return error instanceof Error && error.name === 'WorkspaceActiveSessionError'
-}
-
-/** Error text for logs. */
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 /** Owns the sweep timer, the protector registry, the last report, and the recently-archived table. */

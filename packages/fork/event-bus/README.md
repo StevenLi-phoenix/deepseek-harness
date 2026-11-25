@@ -147,7 +147,21 @@ When a bus-started Session ends its first turn, or a persistent Session ends a b
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Service, configuration, subscription store, flush timers, actuators, Session and reminder observation |
+| [`src/index.ts`](src/index.ts) | Plugin entry: configuration schema, service wiring, and the public methods, which delegate to the modules below |
+| [`src/routes.ts`](src/routes.ts) | The routes as they stand at run time: configuration rows with their stored overrides, then run-time subscriptions |
+| [`src/queue.ts`](src/queue.ts) | Event intake and batching: dedupe, suppression, pending rows, flush timers, hourly limits, batch rows, and pruning |
+| [`src/subscriptions.ts`](src/subscriptions.ts) | Run-time subscriptions: `subscribe()`, `unsubscribe()`, `setPaused()`, and the creator a handover moves |
+| [`src/flow-edit.ts`](src/flow-edit.ts) | `editFlow()` and the flow's change history |
+| [`src/status.ts`](src/status.ts) | Snapshots: stored events and batches, subscription views with live status, `flowRoutes()`, and `stats()` |
+| [`src/dispatch.ts`](src/dispatch.ts) | Actuators: notify batches, new Sessions through the webhook runtime, and the webhook rule body |
+| [`src/persistent.ts`](src/persistent.ts) | Persistent Sessions: follow-up turns, rollover, replacement, adoption, and compaction records |
+| [`src/turns.ts`](src/turns.ts) | Session-event observation of bus-started, reminder, and monitor turns |
+| [`src/report.ts`](src/report.ts) | Where a finished turn's answer goes: the notifier, the main agent, a flow event, or nowhere |
+| [`src/handover.ts`](src/handover.ts) | `handOverSessions()` and the registered movers |
+| [`src/archive-host.ts`](src/archive-host.ts) | The auto-archive sweep's view of the Host, and the Sessions the bus keeps out of it |
+| [`src/host.ts`](src/host.ts) | The optional Host services the bus reads |
+| [`src/records.ts`](src/records.ts) | The shared storage handle, and the conversions between stored rows and views |
+| [`src/log.ts`](src/log.ts) | The log sink the modules share, and error text |
 | [`src/delivery.ts`](src/delivery.ts) | The webhook kind and rule id of bus deliveries, the persistent Session key, and the project a subscription's Sessions run in |
 | [`src/validate.ts`](src/validate.ts) | Subscription validation shared by configuration and `subscribe()` |
 | [`src/match.ts`](src/match.ts) | Glob matching and loop suppression; the `./match` subpath, which `presence` imports |

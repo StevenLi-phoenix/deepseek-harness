@@ -4,6 +4,7 @@
  */
 
 import { mkdir } from 'node:fs/promises'
+import { errorText, type BusLogger } from './log.ts'
 
 /** Webhook provider kind of every delivery this bus dispatches. */
 export const BUS_EVENT_KIND = 'bus-event'
@@ -40,4 +41,35 @@ export async function ensureProject(registry: ProjectRegistry | undefined, path:
   if (await registry.resolveByPath(path) !== undefined) return 'existing'
   await registry.create(path, name)
   return 'created'
+}
+
+/** {@link ensureProject} once per path for the life of the bus; a failed attempt is forgotten, so a later call tries again. */
+export class ProjectDirectories {
+  private readonly known = new Map<string, Promise<void>>()
+
+  /**
+   * @param registry - reads `ctx.workspaceRegistry` when a path is first ensured.
+   * @param logger - log sink.
+   */
+  constructor(private readonly registry: () => ProjectRegistry | undefined, private readonly logger: BusLogger) {}
+
+  /**
+   * Ensure a project directory, or join the attempt already made for its path.
+   * @param path - absolute directory.
+   * @param name - title of a new project.
+   * @returns resolves once the directory exists and is a project; a registry failure is logged, not thrown.
+   */
+  ensure(path: string, name: string): Promise<void> {
+    const known = this.known.get(path)
+    if (known !== undefined) return known
+    const work = ensureProject(this.registry(), path, name).then(
+      (outcome) => { this.logger.info(`event-bus: project ${JSON.stringify(name)} at ${path}: ${outcome}`) },
+      (error: unknown) => {
+        this.known.delete(path)
+        this.logger.warn(`event-bus: project ${JSON.stringify(name)} at ${path} not ensured: ${errorText(error)}`)
+      },
+    )
+    this.known.set(path, work)
+    return work
+  }
 }
