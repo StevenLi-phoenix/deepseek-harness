@@ -102,6 +102,7 @@ Every edit outside `packages/fork/` and `/fork` is listed here so an upgrade can
 | `packages/host/webserver/{src/index.ts,README.md,README.zh.md,README.i18n.yaml}`, `packages/client/connection/{src/api-request-trust.ts,src/rpc-host.ts,tests/web-authorization.host.spec.ts,README.md,README.zh.md,README.i18n.yaml}` | `self-authenticated-navigation` admits credential-free top-level GETs to an explicitly opted-in exact HTTP resource after the Host fence; Gmail OAuth is the only consumer. Ordinary WebServer and shared RPC authorization are unchanged. |
 | `docs/subsystems/web-server.md`, `docs/subsystems/web-server.zh.md`, `packages/extensions/tool-cordis/src/api-catalog.ts` | Regenerated for the WebServer admission policy and resource route documentation. |
 | `docs/upgrade-guide/v0.2.3-alpha.2/gmail-oauth-redirect/` | Migration for configured Gmail redirects with a path other than `/gmail.oauth`. |
+| `packages/terminal/terminal-bash/src/session.ts`, `tests/session.spec.ts`, `tests/local.spec.ts`, `README.md`, `README.zh.md`, `README.i18n.yaml` | Pwsh sends skip the Linux exact stdin-wait tier (2026-11-24): pwsh reads its terminal while busy (.NET cursor-position queries, PSReadLine's key thread), so that tier settled sends mid-echo, after the start marker, and before the prompt, and `tool-pwsh-persistent` returned the echo, an empty result, or the previous prompt as command output (three Fork CI coverage runs). Pwsh now settles on the verified prompt, silence, or the timeout, as on Windows and macOS. |
 
 ## Upgrade procedure
 

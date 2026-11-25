@@ -726,6 +726,43 @@ describe('LocalPtySession readiness and output', () => {
     expect((await operation.done).waitReason).toBe('stdin_read')
   })
 
+  it.each([
+    { shellDialect: 'bash', settlesOnWait: true },
+    { shellDialect: 'pwsh', settlesOnWait: false },
+  ] as const)('$shellDialect: a stdin wait before the submitted line ran settles the send ($settlesOnWait)', async ({ shellDialect, settlesOnWait }) => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const inspector = new FakeInspector()
+    const session = makeSession(terminal, inspector, config({ shellDialect, idleSilenceMs: 200, timeoutMs: 400 }))
+    try {
+      await initialize(session, terminal)
+      inspector.waiting = true
+      const line = "Write-Output '__START__'; Write-Output ok; Write-Output ('__END__:' + 0)"
+      const operation = session.startSend({ text: line, submit: true })
+      let settled = false
+      void operation.done.then(() => { settled = true })
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(terminal.writes).toEqual([`${line}\r`])
+
+      // The shell leaves its prompt read to echo the line, then reads its terminal again before running it.
+      inspector.waiting = false
+      terminal.emitData("\x1b[93mWrite-Output\x1b[0m '__START__'")
+      await vi.advanceTimersByTimeAsync(10)
+      inspector.waiting = true
+      await vi.advanceTimersByTimeAsync(30)
+      expect(settled).toBe(settlesOnWait)
+
+      terminal.emitData("; Write-Output ok; Write-Output ('__END__:' + 0)\r\n__START__\r\nok\r\n__END__:0\r\n\x1b]133;D;0\x07dsh> ")
+      await vi.advanceTimersByTimeAsync(20)
+      const result = await operation.done
+      expect(result.waitReason).toBe('stdin_read')
+      expect(result.viewport.endsWith('__START__\nok\n__END__:0\ndsh> ')).toBe(!settlesOnWait)
+    } finally {
+      await session.close('dialect stdin wait cleanup')
+    }
+  })
+
   it('distinguishes inferred idle, timeout, exit signal, and operation reads', async () => {
     vi.useFakeTimers()
     const terminal = new FakeTerminal()

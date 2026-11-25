@@ -340,7 +340,6 @@ describe.skipIf(!hasPwsh)('terminal-bash pwsh real shell', () => {
         timeoutMs: 8_000,
       }, 'pwsh')
       const created = await ctx.terminals.spawn(agent, { type: 'shell', name: 'main', cwd: root })
-      // stdin_read can precede delivery of the printable prompt to the PTY reader.
       await expect.poll(() => ctx.terminals.read(agent, created.sessionId, { offset: 0, count: 100 }).text,
         { timeout: 8_000 }).toContain('dsh> ')
 

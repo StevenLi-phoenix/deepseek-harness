@@ -245,6 +245,13 @@ export class LocalPtySession implements TerminalBackendSession {
   private readonly scrollback: BoundedTextBuffer
   private readonly outputEnded = Promise.withResolvers<void>()
   private readonly completion: Promise<void>
+  /**
+   * Whether a provider-proven stdin wait settles a send. Pwsh reads its terminal while it is busy:
+   * .NET answers `Console.CursorLeft`/`CursorTop` with a cursor-position-report round trip, and
+   * PSReadLine reads submitted input on its own key thread. Pwsh sends settle on the verified
+   * prompt, silence, or the timeout instead.
+   */
+  private readonly exactStdinWait: boolean
   private statusValue: TerminalSessionStatus = { kind: 'running' }
   // TODO(pty-send-state-consolidation): Fold the per-send fields below
   // (active/activeTimer/activeDeadlineTimer/activeAbort/interrupting/
@@ -280,6 +287,7 @@ export class LocalPtySession implements TerminalBackendSession {
     private readonly config: ResolvedConfig,
   ) {
     this.pid = terminal.pid
+    this.exactStdinWait = config.shellDialect === 'bash'
     const { Terminal: HeadlessTerminal } = requireHeadless()
     this.emulator = new HeadlessTerminal({ cols: config.cols, rows: config.rows, scrollback: 0 })
     this.emulatorData = this.emulator.onData((data) => {
@@ -578,7 +586,7 @@ export class LocalPtySession implements TerminalBackendSession {
       }
       const elapsed = Date.now() - operation.startedAt
       const startupHasOutput = !this.initializing || !this.scrollback.isEmpty
-      const acceptsStdinWait = startupHasOutput && foreground !== undefined
+      const acceptsStdinWait = this.exactStdinWait && startupHasOutput && foreground !== undefined
         && operation.acceptsStdinWait(foreground.processGroupId, foreground.inputWaiting)
       if (elapsed >= this.config.exactProbeAfterMs && acceptsStdinWait) {
         this.settleActive('stdin_read')
