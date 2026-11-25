@@ -1,8 +1,13 @@
 /**
  * What the Host routes answer and accept, shared by both halves as types and
  * constants only. Nothing here carries a key, a token, a URL of a service, or
- * the text of a message: the Host reports states and counts.
+ * the text of a message: the Host reports states and counts. The Claude Code
+ * card's types are `cc-admin`'s own, imported type-only from its `./view` subpath.
  */
+
+import type { CcView } from '@deepseek-ai/dsh-cc-admin/view'
+
+export type { CcLogin, CcSession, CcView } from '@deepseek-ai/dsh-cc-admin/view'
 
 /** Health of one service: `ok`, `warn` (works with a problem), `down`, or `off` (not mounted or switched off). */
 export type Tone = 'ok' | 'warn' | 'down' | 'off'
@@ -166,30 +171,6 @@ export interface ActionError {
   readonly error: ActionErrorCode
   /** Short reason fit for the screen; never request data. */
   readonly detail?: string
-}
-
-/** A Claude Code session of the service account. */
-export interface CcSession {
-  readonly name: string
-  readonly pid: number
-  readonly status: string | null
-  readonly cwd: string | null
-  readonly updatedAt: number | null
-  /** The bridge started it in tmux, so this page can stop it. */
-  readonly managed: boolean
-}
-
-/** Login state of the service account's Claude Code, from file existence only. */
-export type CcLogin = 'full' | 'token' | 'none'
-
-/** The Claude Code card. */
-export interface CcView {
-  readonly enabled: boolean
-  readonly login: CcLogin
-  readonly sessions: readonly CcSession[]
-  readonly maxSessions: number
-  /** Names of tmux sessions the bridge started, including ones not yet registered. */
-  readonly started: readonly string[]
 }
 
 /** The voice card. */

@@ -6,28 +6,14 @@
  * carries a bot token, a message text, or a QR payload; ids are masked.
  */
 import { access, rename } from 'node:fs/promises'
+import type { ConnectionFetchRoute } from '@deepseek-ai/dsh-client-connection'
 import z from '@deepseek-ai/schemastery'
 import { LoginSessions, type LoginTransport } from './login-session.ts'
 import { readAccountFile, type WechatAccount } from './login.ts'
 import {
   maskId, VERIFY_CODE_PATTERN, WECHAT_PATH,
   type BindingView, type ChannelStatus, type LoginSnapshot, type WechatAction, type WechatAnswer, type WechatView,
-} from './view.ts'
-
-/** The slice of the connection service the route uses. */
-export interface SettingsConnection {
-  readonly fetch: {
-    register(route: SettingsRoute): () => Promise<void>
-  }
-}
-
-/** One route registration. */
-export interface SettingsRoute {
-  readonly path: string
-  readonly methods: readonly ('GET' | 'POST')[]
-  readonly requestBody: 'buffered'
-  readonly fetch: (request: Request) => Promise<Response>
-}
+} from '@deepseek-ai/dsh-wechat-settings/wechat-view'
 
 /** What the route needs of the channel. */
 export interface SettingsChannel {
@@ -109,7 +95,7 @@ export class WechatSettings {
    * The route for the connection service.
    * @returns the registration.
    */
-  route(): SettingsRoute {
+  route(): ConnectionFetchRoute {
     return { path: WECHAT_PATH, methods: ['GET', 'POST'], requestBody: 'buffered', fetch: request => this.handle(request) }
   }
 

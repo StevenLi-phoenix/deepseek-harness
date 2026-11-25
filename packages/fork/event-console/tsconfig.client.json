@@ -40,6 +40,9 @@
     },
     {
       "path": "../plugin-config/tsconfig.client.json"
+    },
+    {
+      "path": "../cc-admin"
     }
   ]
 }

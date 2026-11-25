@@ -7,6 +7,8 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+// Type-only: the connection service's Context merge (ctx.connection).
+import type {} from '@deepseek-ai/dsh-client-connection'
 // Type-only: pulls the QQ observer's Context merge (ctx.qq).
 import type {} from '@deepseek-ai/dsh-qq'
 import { buildPanel, buildRefresh, type QqSource } from './panel.ts'
@@ -15,24 +17,12 @@ import { QQ_PATH, QQ_REFRESH_PATH } from './view.ts'
 /** Required Host services. */
 export const inject = ['connection', 'qq']
 
-/** The slice of the connection service this plugin uses. */
-interface QqConnectionRoutes {
-  readonly fetch: {
-    register(route: {
-      readonly path: string
-      readonly methods: readonly ('GET' | 'POST')[]
-      readonly requestBody: 'buffered'
-      readonly fetch: (request: Request) => Promise<Response>
-    }): () => Promise<void>
-  }
-}
-
 /**
  * Register the QQ status and refresh routes.
  * @param ctx - Host context with the connection service and the QQ observer.
  */
 export function apply(ctx: Context): void {
-  const connection = Reflect.get(ctx, 'connection') as QqConnectionRoutes
+  const connection = ctx.connection
   const source = (): QqSource => ctx.qq
   ctx.effect(() => connection.fetch.register({
     path: QQ_PATH,

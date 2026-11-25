@@ -17,6 +17,9 @@
     },
     {
       "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../client/connection/tsconfig.host.json"
     }
   ]
 }

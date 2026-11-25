@@ -119,7 +119,7 @@ When `ctx.eventBus` is mounted, the observer claims each group's resident digest
 | [`src/index.ts`](src/index.ts) | DSH's service: configuration, the client's lifecycle, the settings push, the digest schedule, the owner notice, and the reads |
 | [`src/onebot.ts`](src/onebot.ts) | OneBot v11 client and the address check |
 | [`src/login.ts`](src/login.ts) | Client of the login door: checks each answer field by field |
-| [`src/status.ts`](src/status.ts) | Connection and login reading types for the Settings section |
+| [`src/status.ts`](src/status.ts) | Connection and login reading types for the Settings section; the `./status` subpath, which `qq-login` imports type-only |
 | [`src/text.ts`](src/text.ts) | Segments to text and media |
 | [`src/store.ts`](src/store.ts) | The recorder's SQLite schema, FTS5 search, and retention; the digest tables are frozen and read once for the takeover |
 | [`src/media.ts`](src/media.ts) | Address allowlist, capped fetch, type detection, content-addressed files |

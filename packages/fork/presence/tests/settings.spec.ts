@@ -1,7 +1,6 @@
-import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 import { PresenceSettings, type SettingsPresence } from '../src/settings.ts'
-import { PRESENCE_PATH, type PresenceAnswer, type PresenceView } from '../src/view.ts'
+import { PRESENCE_PATH, type PresenceAnswer, type PresenceView } from '@deepseek-ai/dsh-wechat-settings/presence-view'
 
 const VIEW: PresenceView = {
   asleep: true,
@@ -95,13 +94,5 @@ describe('Settings route', () => {
     expect(JSON.stringify(echoed.json)).not.toContain('secret-text')
     expect(calls).toEqual([])
     expect(logs.every(line => !line.includes('secret-text'))).toBe(true)
-  })
-})
-
-describe('wire types', () => {
-  it('are shared with the browser half as a byte-identical copy', async () => {
-    const host = await readFile(new URL('../src/view.ts', import.meta.url), 'utf8')
-    const client = await readFile(new URL('../../wechat-settings/src/presence-view.ts', import.meta.url), 'utf8')
-    expect(host).toBe(client)
   })
 })

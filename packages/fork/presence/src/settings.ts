@@ -4,23 +4,9 @@
  * It sits under `/api`, so the connection's sign-in check guards it. Every action is checked against
  * a schema and logged with its outcome and duration; the answer never carries a token.
  */
+import type { ConnectionFetchRoute } from '@deepseek-ai/dsh-client-connection'
 import z from '@deepseek-ai/schemastery'
-import { CLOCK_PATTERN, PRESENCE_PATH, type PresenceAction, type PresenceAnswer, type PresenceView, type QuietWindow } from './view.ts'
-
-/** The slice of the connection service the route uses. */
-export interface SettingsConnection {
-  readonly fetch: {
-    register(route: SettingsRoute): () => Promise<void>
-  }
-}
-
-/** One route registration. */
-export interface SettingsRoute {
-  readonly path: string
-  readonly methods: readonly ('GET' | 'POST')[]
-  readonly requestBody: 'buffered'
-  readonly fetch: (request: Request) => Promise<Response>
-}
+import { CLOCK_PATTERN, PRESENCE_PATH, type PresenceAction, type PresenceAnswer, type PresenceView, type QuietWindow } from '@deepseek-ai/dsh-wechat-settings/presence-view'
 
 /** What the route needs of the presence service. */
 export interface SettingsPresence {
@@ -71,7 +57,7 @@ export class PresenceSettings {
    * The route for the connection service.
    * @returns the registration.
    */
-  route(): SettingsRoute {
+  route(): ConnectionFetchRoute {
     return { path: PRESENCE_PATH, methods: ['GET', 'POST'], requestBody: 'buffered', fetch: request => this.handle(request) }
   }
 

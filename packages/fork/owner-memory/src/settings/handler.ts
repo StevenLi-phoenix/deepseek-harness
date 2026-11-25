@@ -17,7 +17,7 @@ import { clip, readDetail, readView } from './read.ts'
 import {
   CATEGORIES, MAX_IDS, MAX_PAGE_SIZE, PAGE_SIZE,
   type ActionResult, type Category, type ItemResult, type MemoryAction, type MemoryQuery, type PurgePreviewItem, type RollbackPreviewItem,
-} from './view.ts'
+} from '@deepseek-ai/dsh-owner-memory-admin/view'
 
 /** History label of a change made from Settings. */
 export const SETTINGS_ORIGIN = 'settings'

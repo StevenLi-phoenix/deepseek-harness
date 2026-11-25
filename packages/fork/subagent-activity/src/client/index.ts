@@ -12,7 +12,7 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SubagentAddress } from '@deepseek-ai/dsh-subagent/client'
-import type {} from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
@@ -42,6 +42,13 @@ const NS = 'subagent-activity'
 /** The upstream header entry this package shadows; see `ui-subagent`'s registration. */
 const CATALOG_ENTRY_ID = 'subagent-catalog'
 
+/** Whether a child's projections can be read, as the upstream menu decides: no migration is due and its last read did not fail. */
+function readable(state: SessionListState, id: SessionId): boolean {
+  if (state.byId[id]?.formatStatus === 'migration-required') return false
+  const projection = state.projectionsBySession[id]?.state
+  return projection !== 'migration-required' && projection !== 'error'
+}
+
 /** Required browser services. */
 export const inject = ['slots', 'locale', 'sessions', 'sidebarRight', 'sidebarRightTabs', 'uiWorkspace']
 
@@ -69,13 +76,9 @@ export function apply(ctx: ClientContext): void {
     await ctx.sessions.refreshProjections(parentId)
     const parent = ctx.sessions.list.getSnapshot().projectionsBySession[parentId]
     if (parent?.state !== 'ready') return
-    for (const entry of parent.values.subagentCatalog ?? []) {
-      if (entry.mode === 'external') continue
-      const state = ctx.sessions.list.getSnapshot()
-      if (state.byId[entry.id]?.formatStatus === 'migration-required'
-        || state.projectionsBySession[entry.id]?.state === 'migration-required'
-        || state.projectionsBySession[entry.id]?.state === 'error') continue
-      await ctx.sessions.refreshProjections(entry.id)
+    const children = (parent.values.subagentCatalog ?? []).filter(entry => entry.mode !== 'external')
+    for (const { id } of children) {
+      if (readable(ctx.sessions.list.getSnapshot(), id)) await ctx.sessions.refreshProjections(id)
     }
   }
   // One object for the registration's lifetime, so the page's read effect runs only on real changes.

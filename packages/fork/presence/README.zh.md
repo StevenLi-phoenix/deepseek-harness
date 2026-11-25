@@ -69,7 +69,7 @@ kind: "package-reference"
 
 服务实现了 `IngestSink`。`event-ingest` 对声明了 `sink: presence` 的来源，把校验过的事件交给它而不发布到总线，并回答 `202 {"outcome":"asleep"|"awake"}`；`presence.sleep.on` 和 `presence.sleep.off` 以外的类型是 `400`，服务没挂载是 `503`。路由 `GET`/`POST /api/presence` 位于 `/api` 下，受 connection 的登录校验保护；每个动作（`sleep.now`、`wake.now`、`quiet.until`、`manual.clear`、`window.set`、`flush`）都按 schemastery schema 校验，并记录结果和耗时。任何回答里都没有令牌。
 
-设置页是只含浏览器端的包 [`@deepseek-ai/dsh-wechat-settings`](../wechat-settings/README.zh.md) 里的分区 `presence`（顺序 53）：八种语言，打开且页面可见时每 5 秒轮询 `api/presence`。本包没有浏览器面；它的 `src/view.ts` 与那个包里的副本逐字节相同，由测试检查。
+设置页是只含浏览器端的包 [`@deepseek-ai/dsh-wechat-settings`](../wechat-settings/README.zh.md) 里的分区 `presence`（顺序 53）：八种语言，打开且页面可见时每 5 秒轮询 `api/presence`。本包没有浏览器面；页面的线上类型从那个包的 `./presence-view` 子路径导入。
 
 | 文件 | 作用 |
 |---|---|
@@ -78,7 +78,6 @@ kind: "package-reference"
 | [`src/state.ts`](src/state.ts) | 纯状态机和时钟辅助函数 |
 | [`src/settings.ts`](src/settings.ts) | 路由 `/api/presence` 及其动作 |
 | [`src/storage.ts`](src/storage.ts) | storage domain |
-| [`src/view.ts`](src/view.ts) | 两端共用的类型和常量 |
 
 这是 fork 本地的包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。
 

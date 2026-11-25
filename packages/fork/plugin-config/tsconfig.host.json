@@ -23,6 +23,9 @@
     },
     {
       "path": "../../boot/config-editor"
+    },
+    {
+      "path": "../../client/connection/tsconfig.host.json"
     }
   ]
 }

@@ -19,6 +19,9 @@
     },
     {
       "path": "../../credentials/credentials"
+    },
+    {
+      "path": "../../client/connection/tsconfig.host.json"
     }
   ]
 }

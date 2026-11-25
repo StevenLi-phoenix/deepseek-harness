@@ -44,8 +44,8 @@ The Host half registers three routes under `/api`, so the connection's owner che
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Host routes over `ctx.speakingStyle`, and a compile-time check that the service's answers fit `src/view.ts` |
-| [`src/view.ts`](src/view.ts) | Route paths and the panel's fields, shared by both halves |
+| [`src/index.ts`](src/index.ts) | Host routes over `ctx.speakingStyle` |
+| [`src/view.ts`](src/view.ts) | Route paths, shared by both halves, and the panel's types from `@deepseek-ai/dsh-speaking-style/view` |
 | [`src/client/index.ts`](src/client/index.ts) | Registers the dictionaries and the section |
 | [`src/client/style.ts`](src/client/style.ts) | Store, loader (reads, edits applied before the answer, runs), and the poller (5 s while the page is visible) |
 | [`src/client/StyleSection.tsx`](src/client/StyleSection.tsx) | The section |

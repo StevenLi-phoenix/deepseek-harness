@@ -16,6 +16,9 @@
     },
     {
       "path": "../qq"
+    },
+    {
+      "path": "../../client/connection/tsconfig.host.json"
     }
   ]
 }

@@ -55,6 +55,12 @@
     },
     {
       "path": "../../schedule/schedule"
+    },
+    {
+      "path": "../wechat-settings/tsconfig.host.json"
+    },
+    {
+      "path": "../../client/connection/tsconfig.host.json"
     }
   ]
 }

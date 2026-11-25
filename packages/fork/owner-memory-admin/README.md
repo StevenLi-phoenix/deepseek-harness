@@ -66,7 +66,7 @@ The browser half registers one `settings.section` entry (`owner-memory`, order 5
 
 | File | Role |
 |---|---|
-| [`src/view.ts`](src/view.ts) | The wire types and constants; `owner-memory/src/settings/view.ts` is a byte-identical copy (a test keeps them equal) |
+| [`src/view.ts`](src/view.ts) | The wire types and constants; the `./view` subpath, from which `owner-memory`'s route imports them |
 | [`src/index.ts`](src/index.ts) | Host half: an empty plugin, so the browser half is delivered |
 | [`src/client/index.ts`](src/client/index.ts) | Browser entry: dictionaries, the Host calls, the Settings section registration |
 | [`src/client/memory.ts`](src/client/memory.ts) | Store, loader (optimistic hiding, previews with tokens), and the visibility-aware poller |

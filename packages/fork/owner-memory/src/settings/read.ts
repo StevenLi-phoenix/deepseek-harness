@@ -11,7 +11,7 @@ import {
   CATEGORIES, CLIP_CHARS,
   type Category, type CurationView, type DetailView, type DuplicateGroupView, type EntrySource, type EntryView,
   type FeedbackView, type HistoryView, type MemoryQuery, type MemoryView, type PendingView, type SessionView, type SuggestionView,
-} from './view.ts'
+} from '@deepseek-ai/dsh-owner-memory-admin/view'
 
 /** Sessions the rollback picker lists. */
 const SESSIONS_SHOWN = 30

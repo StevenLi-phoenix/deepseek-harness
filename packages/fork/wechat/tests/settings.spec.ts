@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -6,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LoginSessions } from '../src/login-session.ts'
 import { readAccountFile, type WechatAccount } from '../src/login.ts'
 import { WechatSettings, type SettingsChannel } from '../src/settings.ts'
-import { maskId, WECHAT_PATH, type ChannelStatus, type WechatAnswer, type WechatView } from '../src/view.ts'
+import { maskId, WECHAT_PATH, type ChannelStatus, type WechatAnswer, type WechatView } from '@deepseek-ai/dsh-wechat-settings/wechat-view'
 import { FakeIlink } from './fake-ilink.ts'
 
 /** Faults the real file system cannot produce: an error with no `code`. */
@@ -360,14 +359,6 @@ describe('view contents', () => {
       'window', 'open', 'closed', 'repliesLeft', 'repliesPerToken', 'expiresAt', 'outbox', 'count', 'limit', 'oldestAt',
       'delivery', 'mode', 'toolSends', 'repeatsSkipped', 'loginActive', 'timeZone',
     ]))
-  })
-})
-
-describe('wire types', () => {
-  it('are shared with the browser half as a byte-identical copy', async () => {
-    const host = await readFile(new URL('../src/view.ts', import.meta.url), 'utf8')
-    const client = await readFile(new URL('../../wechat-settings/src/wechat-view.ts', import.meta.url), 'utf8')
-    expect(host).toBe(client)
   })
 })
 

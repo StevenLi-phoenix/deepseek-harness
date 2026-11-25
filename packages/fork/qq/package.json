@@ -22,6 +22,10 @@
       "types": "./lib/types/digest.d.ts",
       "default": "./lib/types/digest.js"
     },
+    "./status": {
+      "types": "./lib/types/status.d.ts",
+      "default": "./lib/types/status.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"

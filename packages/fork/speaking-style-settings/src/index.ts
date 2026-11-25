@@ -6,31 +6,14 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-// Type-only: the style service's Context merge (ctx.speakingStyle) and its answers.
-import type { StyleEditAnswer as ServiceEditAnswer, StylePanel as ServicePanel } from '@deepseek-ai/dsh-speaking-style'
-import { STYLE_COLLECT_PATH, STYLE_EDIT_PATH, STYLE_PATH, type StyleEditAnswer, type StylePanel } from './view.ts'
+// Type-only: the connection service's Context merge (ctx.connection).
+import type {} from '@deepseek-ai/dsh-client-connection'
+// Type-only: the style service's Context merge (ctx.speakingStyle).
+import type {} from '@deepseek-ai/dsh-speaking-style'
+import { STYLE_COLLECT_PATH, STYLE_EDIT_PATH, STYLE_PATH, type StyleEditAnswer } from './view.ts'
 
 /** Required Host services. */
 export const inject = ['connection']
-
-/** The service's answers fit the fields the browser half reads. */
-type Fits<Source extends Target, Target> = Source
-/** Compiles only while the service panel is assignable to the panel type the browser half reads. */
-export type PanelFits = Fits<ServicePanel, StylePanel>
-/** Compiles only while the service edit answer is assignable to the edit answer type the browser half reads. */
-export type EditAnswerFits = Fits<ServiceEditAnswer, StyleEditAnswer>
-
-/** The slice of the connection service this plugin uses. */
-interface StyleConnection {
-  readonly fetch: {
-    register(route: {
-      readonly path: string
-      readonly methods: readonly ('GET' | 'POST')[]
-      readonly requestBody: 'buffered'
-      readonly fetch: (request: Request) => Promise<Response>
-    }): () => Promise<void>
-  }
-}
 
 const json = (body: unknown, status = 200): Response => Response.json(body, { status, headers: { 'cache-control': 'no-store' } })
 
@@ -39,7 +22,7 @@ const json = (body: unknown, status = 200): Response => Response.json(body, { st
  * @param ctx - Host context with the connection service; `ctx.speakingStyle` is read per request.
  */
 export function apply(ctx: Context): void {
-  const connection = Reflect.get(ctx, 'connection') as StyleConnection
+  const { connection } = ctx
   const unavailable = (): Response => json({ error: 'unavailable', message: 'speaking-style is not mounted' }, 503)
   ctx.effect(() => connection.fetch.register({
     path: STYLE_PATH, methods: ['GET'], requestBody: 'buffered',

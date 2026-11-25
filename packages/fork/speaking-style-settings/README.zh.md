@@ -44,8 +44,8 @@ Host 一半在 `/api` 下注册三条路由，所以由连接的 owner 检查保
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 基于 `ctx.speakingStyle` 的 Host 路由，以及服务返回值符合 `src/view.ts` 的编译期检查 |
-| [`src/view.ts`](src/view.ts) | 路由路径和面板字段，两半共用 |
+| [`src/index.ts`](src/index.ts) | 基于 `ctx.speakingStyle` 的 Host 路由 |
+| [`src/view.ts`](src/view.ts) | 两半共用的路由路径，以及来自 `@deepseek-ai/dsh-speaking-style/view` 的面板类型 |
 | [`src/client/index.ts`](src/client/index.ts) | 注册词典和分区 |
 | [`src/client/style.ts`](src/client/style.ts) | store、loader（读取、先显示后确认的编辑、收集）以及轮询（页面可见时每 5 秒） |
 | [`src/client/StyleSection.tsx`](src/client/StyleSection.tsx) | 分区本身 |

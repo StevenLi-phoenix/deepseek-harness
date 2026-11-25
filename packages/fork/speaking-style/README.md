@@ -95,6 +95,7 @@ Every write of text other people can read (the card, a note, a mined meme) goes 
 |---|---|
 | [`src/index.ts`](src/index.ts) | Plugin: configuration, the two modes, the schedule, the web inbox feed, and the answer-length counter |
 | [`src/service.ts`](src/service.ts) | `StyleService` (`ctx.speakingStyle`: block, panel, edits, collection, mining, notes, lookups, card updates, `health()`) |
+| [`src/view.ts`](src/view.ts) | The panel's types and the sample and note sources; the `./view` subpath, which `speaking-style-settings` imports type-only |
 | [`src/tools.ts`](src/tools.ts) | `meme_lookup`, `style_note` (with its per-turn limit), `persona_update` |
 | [`src/notes.ts`](src/notes.ts) | `notes.json`: memes (with `related` and `meaningSource`), traits, blocked terms, card versions |
 | [`src/guard.ts`](src/guard.ts) | `StyleGate`: the per-call `ctx.contentGuard` check, fail closed |

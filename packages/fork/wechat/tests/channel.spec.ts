@@ -16,7 +16,7 @@ import { handoverText, QUOTA_FOOTER, WECHAT_RELAY_CHANNEL } from '../src/text.ts
 import { downloadMedia } from '../src/media.ts'
 import type { WechatAccount } from '../src/login.ts'
 import { wechatDomain } from '../src/storage.ts'
-import type { WechatAnswer } from '../src/view.ts'
+import type { WechatAnswer } from '@deepseek-ai/dsh-wechat-settings/wechat-view'
 import { FakeIlink, imageMessage, textMessage } from './fake-ilink.ts'
 
 const Config = WechatChannel.Config

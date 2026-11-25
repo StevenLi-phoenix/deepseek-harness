@@ -8,6 +8,8 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+// Type-only: the connection service's Context merge (ctx.connection).
+import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-schedule'
 import { readAgents, runAgentsAction } from './agents.ts'
 import { Config } from './config.ts'
@@ -42,18 +44,6 @@ const STATUS: Record<ActionErrorCode, number> = {
   internal_error: 500,
 }
 
-/** The slice of the connection service this plugin uses. */
-interface ConsoleConnection {
-  readonly fetch: {
-    register(route: {
-      readonly path: string
-      readonly methods: readonly ('GET' | 'POST')[]
-      readonly requestBody: 'buffered'
-      readonly fetch: (request: Request) => Promise<Response>
-    }): () => Promise<void>
-  }
-}
-
 const NO_STORE = { 'cache-control': 'no-store' } as const
 
 function refusalResponse(refusal: Refusal): Response {
@@ -67,7 +57,7 @@ function refusalResponse(refusal: Refusal): Response {
  * @param config - resolved configuration.
  */
 export function apply(ctx: Context, config: Config): void {
-  const connection = Reflect.get(ctx, 'connection') as ConsoleConnection
+  const connection = ctx.connection
   const log = ctx.logger
 
   /** Answer a GET with JSON, a POST through `post`; unexpected failures are logged by class and answered as `internal_error`. */

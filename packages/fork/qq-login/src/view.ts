@@ -1,8 +1,13 @@
 /**
  * What the Host QQ route answers, shared by both halves as types and constants only (no Node imports: the browser
  * half reads this file too). The QR code arrives already encoded as a module matrix, so the browser draws it
- * without a QR library and without ever seeing NapCat's link.
+ * without a QR library and without ever seeing NapCat's link. The observer's connection and login states are the QQ
+ * package's own types, imported type-only from its `./status` subpath.
  */
+
+import type { QqConnection, QqLoginState } from '@deepseek-ai/dsh-qq/status'
+
+export type { QqConnection, QqLoginState }
 
 /** Absolute Host registration path of the QQ status route (GET). */
 export const QQ_PATH = '/api/qq'
@@ -15,33 +20,6 @@ export const QQ_REFRESH_ROUTE = QQ_REFRESH_PATH.slice(1)
 
 /** How many unrecorded groups the answer offers as candidates. */
 export const QQ_GROUP_CANDIDATES = 60
-
-/** The observer's connection to the protocol end (NapCat's OneBot server). */
-export interface QqConnection {
-  /**
-   * `connected`: the socket is up. `reconnecting`: it is down and being retried. `waiting-token`: the access token is
-   * not set, so no attempt is made. `starting`: the first attempt has not settled. `recorder-down`: the qq-recorder
-   * service does not answer. `protocol-mismatch`: it speaks another protocol version than DSH. `unknown`: a state only a
-   * newer recorder knows.
-   */
-  readonly state: 'connected' | 'reconnecting' | 'waiting-token' | 'starting' | 'recorder-down' | 'protocol-mismatch' | 'unknown'
-  /** When the state began, in epoch milliseconds; null while starting. */
-  readonly since: number | null
-  /** Failed attempts in a row (0 while connected). */
-  readonly attempt: number
-  /** Why the last attempt failed; null when none did. */
-  readonly lastError: string | null
-  /** The account the observer is logged in as; null while not connected. */
-  readonly selfId: string | null
-}
-
-/**
- * NapCat's own login, as the login door reports it. `online`: logged in. `offline`: the session ended and NapCat
- * wants a new login. `qr`: a code is waiting for a scan. `scanned`/`logging-in`: the scan was taken and QQ is
- * completing it. `preparing`: a code is being made. `restarting`: QQ is reconnecting to Tencent's servers
- * (NapCat's `reconnecting` phase, which follows a scan for a minute or more).
- */
-export type QqLoginState = 'online' | 'offline' | 'qr' | 'scanned' | 'logging-in' | 'preparing' | 'restarting' | 'unknown'
 
 /** A QR code as a square module matrix: `rows[y][x]` is `'1'` for a dark module. */
 export interface QqQrMatrix {

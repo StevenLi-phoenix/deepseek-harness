@@ -59,6 +59,7 @@ The plugin listens on `tools/pre-execute` in the preset's scope: a guarded tool 
 |---|---|
 | [`src/origin.ts`](src/origin.ts) | `turnOrigin`, `ownerWords`, `describeOrigin`, `untrustedRequestId`, `untrustedOrigin`, `sourceKind`, and the contaminating tool list; the `./origin` subpath, which `owner-memory`, `time-gap`, `tool-gmail`, and `wechat` import |
 | [`src/index.ts`](src/index.ts) | The plugin: owner-only and audited tools |
+| [`src/turn-queue.ts`](src/turn-queue.ts) | Items held per Session until its turn ends; the `./turn-queue` subpath, which `owner-memory`'s notices use |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 

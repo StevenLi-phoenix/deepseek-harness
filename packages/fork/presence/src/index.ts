@@ -11,18 +11,20 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
+// Type-only: the connection service's Context merge (ctx.connection).
+import type {} from '@deepseek-ai/dsh-client-connection'
 import { type BusEventInput, type IngestSink, type OwnerNote } from '@deepseek-ai/dsh-event-bus'
 import { globToRegExp } from '@deepseek-ai/dsh-event-bus/match'
 import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import z from '@deepseek-ai/schemastery'
-import { PresenceSettings, type SettingsConnection } from './settings.ts'
+import { PresenceSettings } from './settings.ts'
 import { evaluate, hours, nextChange, nextClockTime, type PresenceInputs, type PresenceRules, type PresenceState } from './state.ts'
 import { presenceDomain, type InputsRecord } from './storage.ts'
 import { DEFAULT_URGENT_KINDS } from './urgent.ts'
-import { CLOCK_PATTERN, HEARTBEAT_KEY, KIND_SLEEP_OFF, KIND_SLEEP_ON, PRESENCE_SOURCE, SIGNAL_SILENT_MS, type FocusView, type ManualView, type PresenceView, type QuietWindow } from './view.ts'
+import { CLOCK_PATTERN, HEARTBEAT_KEY, KIND_SLEEP_OFF, KIND_SLEEP_ON, PRESENCE_SOURCE, SIGNAL_SILENT_MS, type FocusView, type ManualView, type PresenceView, type QuietWindow } from '@deepseek-ai/dsh-wechat-settings/presence-view'
 
 export type * from './state.ts'
-export type * from './view.ts'
+export type * from '@deepseek-ai/dsh-wechat-settings/presence-view'
 export type * from './storage.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -145,7 +147,7 @@ export class Presence extends Service implements IngestSink {
       inject: ['connection'],
       apply: (child: Context) => {
         const settings = new PresenceSettings({ presence: this, logger: child.logger })
-        const connection = Reflect.get(child, 'connection') as SettingsConnection
+        const connection = child.connection
         child.effect(() => connection.fetch.register(settings.route()), 'presence.settings()')
       },
     })

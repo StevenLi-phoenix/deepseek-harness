@@ -56,7 +56,8 @@ The login state is `full` when `~/.claude/.credentials.json` has content, `token
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Configuration, the types, and `ClaudeCodeAdmin` |
+| [`src/index.ts`](src/index.ts) | Configuration and `ClaudeCodeAdmin` |
+| [`src/view.ts`](src/view.ts) | The types it answers; the `./view` subpath, which `event-console` imports type-only |
 | [`src/limits.ts`](src/limits.ts) | The longest first task |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).

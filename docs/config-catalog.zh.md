@@ -516,7 +516,7 @@ export type Config = LocalConfig
 ## `@deepseek-ai/dsh-bili`
 
 - `inject`: `timer` · `storageDomain` · `credentials` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/bili/src/index.ts:88`](../packages/fork/bili/src/index.ts)
+- `source`: [`packages/fork/bili/src/index.ts:90`](../packages/fork/bili/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -574,7 +574,7 @@ export interface ShareConfig {
 
 ## `@deepseek-ai/dsh-cc-admin`
 
-- `source`: [`packages/fork/cc-admin/src/index.ts:28`](../packages/fork/cc-admin/src/index.ts)
+- `source`: [`packages/fork/cc-admin/src/index.ts:31`](../packages/fork/cc-admin/src/index.ts)
 
 ```ts config-catalog
 /** Settings; every default is the bridge's. */
@@ -3940,7 +3940,8 @@ export interface Config {
 ## `@deepseek-ai/dsh-presence`
 
 - `inject`: `storageDomain`
-- `source`: [`packages/fork/presence/src/index.ts:35`](../packages/fork/presence/src/index.ts)
+- `refs`: `QuietWindow` (`@deepseek-ai/dsh-wechat-settings/presence-view`)
+- `source`: [`packages/fork/presence/src/index.ts:37`](../packages/fork/presence/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -3958,16 +3959,6 @@ export interface Config {
   /** Globs of the event kinds that are sent while the owner sleeps. */
   urgentKinds: string[]
 }
-
-/** Daily fallback window, in the owner's time zone; it wraps past midnight when `start` is later than `end`. */
-export interface QuietWindow {
-  /** Whether the window applies at all. */
-  readonly enabled: boolean
-  /** `HH:MM`, 24-hour. */
-  readonly start: string
-  /** `HH:MM`, 24-hour. */
-  readonly end: string
-}
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-presence -->
 
@@ -3977,7 +3968,7 @@ export interface QuietWindow {
 ## `@deepseek-ai/dsh-provider-balance`
 
 - `inject`: `credentials` · `connection`
-- `source`: [`packages/fork/provider-balance/src/index.ts:18`](../packages/fork/provider-balance/src/index.ts)
+- `source`: [`packages/fork/provider-balance/src/index.ts:20`](../packages/fork/provider-balance/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -4944,7 +4935,7 @@ export type PythonEnvironment = 'workspace-dependencies' | 'user'
 
 ## `@deepseek-ai/dsh-speaking-style`
 
-- `source`: [`packages/fork/speaking-style/src/index.ts:81`](../packages/fork/speaking-style/src/index.ts)
+- `source`: [`packages/fork/speaking-style/src/index.ts:82`](../packages/fork/speaking-style/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -5559,7 +5550,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-sysmon`
 
 - `inject`: `connection`
-- `source`: [`packages/fork/sysmon/src/index.ts:20`](../packages/fork/sysmon/src/index.ts)
+- `source`: [`packages/fork/sysmon/src/index.ts:22`](../packages/fork/sysmon/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -6675,7 +6666,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-turn-taint`
 
 - `inject`: `tools`
-- `source`: [`packages/fork/turn-taint/src/index.ts:30`](../packages/fork/turn-taint/src/index.ts)
+- `source`: [`packages/fork/turn-taint/src/index.ts:31`](../packages/fork/turn-taint/src/index.ts)
 
 ```ts config-catalog
 /** Settings. */
@@ -7056,7 +7047,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-wechat`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/wechat/src/index.ts:98`](../packages/fork/wechat/src/index.ts)
+- `source`: [`packages/fork/wechat/src/index.ts:100`](../packages/fork/wechat/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */

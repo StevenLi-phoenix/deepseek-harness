@@ -119,7 +119,7 @@ OneBot v11 WebSocket 服务端是 colima 上 Docker 容器里的 NapCat（[`fork
 | [`src/index.ts`](src/index.ts) | DSH 一侧的服务：配置、客户端的生命周期、设置推送、摘要定时任务、给 owner 的通知和读取 |
 | [`src/onebot.ts`](src/onebot.ts) | OneBot v11 客户端和地址检查 |
 | [`src/login.ts`](src/login.ts) | 扫码入口的客户端：逐字段检查每个答案 |
-| [`src/status.ts`](src/status.ts) | 设置分区用的连接与登录读数类型 |
+| [`src/status.ts`](src/status.ts) | 设置分区用的连接与登录读数类型；`qq-login` 只导入类型的 `./status` 子路径 |
 | [`src/text.ts`](src/text.ts) | 消息片段到文字和媒体 |
 | [`src/store.ts`](src/store.ts) | 记录器的 SQLite 表结构、FTS5 检索和保留期；摘要表已冻结，只读一次供接管使用 |
 | [`src/media.ts`](src/media.ts) | 地址白名单、有上限的抓取、类型识别、按内容命名的文件 |

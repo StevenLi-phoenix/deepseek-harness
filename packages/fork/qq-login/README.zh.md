@@ -54,7 +54,7 @@ Host 部分在 connection 上注册 `GET /api/qq` 和 `POST /api/qq.refresh`，�
 |---|---|
 | [`src/index.ts`](src/index.ts) | Host 部分：两条路由 |
 | [`src/panel.ts`](src/panel.ts) | 答案组装与二维码矩阵 |
-| [`src/view.ts`](src/view.ts) | 两部分共用的答案类型与路由路径 |
+| [`src/view.ts`](src/view.ts) | 两部分共用的答案类型与路由路径；连接和登录状态用 `qq` 自己的类型（`@deepseek-ai/dsh-qq/status`） |
 | [`src/client/index.ts`](src/client/index.ts) | 浏览器入口：词典、loader、设置分区注册 |
 | [`src/client/qq.ts`](src/client/qq.ts) | store、loader 与感知页面可见性的轮询 |
 | [`src/client/cards.ts`](src/client/cards.ts) | 由答案得出结论、明细行和二维码路径 |

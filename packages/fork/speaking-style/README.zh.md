@@ -93,6 +93,7 @@ kind: "package-reference"
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件：配置、两种模式、定时、网页收件箱的写入和回答长度计数 |
 | [`src/service.ts`](src/service.ts) | `StyleService`（`ctx.speakingStyle`：内容块、面板、编辑、收集、挖掘、笔记、查询、人设卡更新、`health()`） |
+| [`src/view.ts`](src/view.ts) | 面板的类型以及样本和笔记的来源；`speaking-style-settings` 只导入类型的 `./view` 子路径 |
 | [`src/tools.ts`](src/tools.ts) | `meme_lookup`、`style_note`（带每回合上限）、`persona_update` |
 | [`src/notes.ts`](src/notes.ts) | `notes.json`：梗（带 `related` 和 `meaningSource`）、性格、被屏蔽的词、人设卡版本 |
 | [`src/guard.ts`](src/guard.ts) | `StyleGate`：每次调用时查 `ctx.contentGuard`，失败即关闭 |

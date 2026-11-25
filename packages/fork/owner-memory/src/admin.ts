@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto'
 import { composeMergeText, dominantCategory } from './curation.ts'
 import { isCategory, MAX_TEXT_CHARS, normalizeText, type MemoryCategory, type MemoryEntry } from './entries.ts'
 import { matchesRollback, MemoryError, type MemoryStore, type PurgeResult, type RollbackFilter, type RollbackResult } from './store.ts'
-import type { ItemResult } from './settings/view.ts'
+import type { ItemResult } from '@deepseek-ai/dsh-owner-memory-admin/view'
 
 /** History label of a change made from the memory-admin CLI. */
 export const CLI_ORIGIN = 'memory-admin'

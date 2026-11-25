@@ -7,7 +7,7 @@
 import { randomUUID } from 'node:crypto'
 import { encode } from 'uqr'
 import { LoginError, loginWithQr, saveLogin, type LoginFailure, type LoginOptions, type WechatAccount } from './login.ts'
-import type { LoginFailureView, LoginPhase, LoginQr, LoginSnapshot } from './view.ts'
+import type { LoginFailureView, LoginPhase, LoginQr, LoginSnapshot } from '@deepseek-ai/dsh-wechat-settings/wechat-view'
 
 /** Transport and pacing of the login, replaceable in tests. */
 export type LoginTransport = Pick<LoginOptions, 'fetch' | 'baseUrl' | 'pollDelayMs' | 'statusTimeoutMs' | 'maxFailures' | 'maxQrCodes'>

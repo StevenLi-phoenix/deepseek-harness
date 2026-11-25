@@ -69,7 +69,7 @@ Mount the row next to `@deepseek-ai/dsh-wechat` and `@deepseek-ai/dsh-event-inge
 
 The service implements `IngestSink`. `event-ingest` gives a source that names `sink: presence` the validated event instead of publishing it, and answers `202 {"outcome":"asleep"|"awake"}`; any kind other than `presence.sleep.on` and `presence.sleep.off` is a `400`, and an unmounted service a `503`. The route `GET`/`POST /api/presence` sits under `/api`, so the connection's sign-in check guards it; each action (`sleep.now`, `wake.now`, `quiet.until`, `manual.clear`, `window.set`, `flush`) is checked against a schemastery schema and logged with its outcome and duration. No answer carries a token.
 
-The Settings page is the section `presence` (order 53) of the browser-only package [`@deepseek-ai/dsh-wechat-settings`](../wechat-settings/README.md): eight languages, polling `api/presence` every 5 seconds while it is open and the page is visible. This package has no browser face; its `src/view.ts` and the copy in that package are byte-identical, and a test checks it.
+The Settings page is the section `presence` (order 53) of the browser-only package [`@deepseek-ai/dsh-wechat-settings`](../wechat-settings/README.md): eight languages, polling `api/presence` every 5 seconds while it is open and the page is visible. This package has no browser face; it imports the page's wire types from that package's `./presence-view` subpath.
 
 | File | Role |
 |---|---|
@@ -78,7 +78,6 @@ The Settings page is the section `presence` (order 53) of the browser-only packa
 | [`src/state.ts`](src/state.ts) | The pure state machine and clock helpers |
 | [`src/settings.ts`](src/settings.ts) | Route `/api/presence` and its actions |
 | [`src/storage.ts`](src/storage.ts) | The storage domain |
-| [`src/view.ts`](src/view.ts) | Types and constants shared by both halves |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 

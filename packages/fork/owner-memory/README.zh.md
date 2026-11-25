@@ -121,7 +121,7 @@ echo '{"scope":"up","verdict":"keep","kind":"comment","text":"哈哈这个梗我
 | [`src/memory-block.ts`](src/memory-block.ts) | 主人记忆模式：读文件并渲染记忆块 |
 | [`src/feedback-mode.ts`](src/feedback-mode.ts) | 人设预设的反馈模式：把某个范围的评价放在每个根 Session 前面 |
 | [`src/tools.ts`](src/tools.ts) | `memory_search`、`memory_save`、`memory_forget`，以及扣留依据的回合来源判断 |
-| [`src/notice-queue.ts`](src/notice-queue.ts) | 把一个回合的通知排队到回合结束、按天限量，再经通知器发出 |
+| [`src/notice-queue.ts`](src/notice-queue.ts) | 把一个回合的通知排队到回合结束（`turn-taint` 的 `./turn-queue`）、按天限量，再经通知器发出 |
 | [`src/store.ts`](src/store.ts) | JSONL 存储：列出、保存、扣下、批准、撤销、合并、回滚、抹除、导入、搜索，以及历史和快照，还有 `src/feedback.ts` 共用的整文件替换；`content-guard` 导入的 `./store` 子路径 |
 | [`src/notice.ts`](src/notice.ts) | 一个回合的保护类变动对应的微信通知 |
 | [`src/render.ts`](src/render.ts) | 记忆块与字节预算 |
@@ -130,7 +130,7 @@ echo '{"scope":"up","verdict":"keep","kind":"comment","text":"哈哈这个梗我
 | [`src/export.ts`](src/export.ts) | claude.ai 导出解析器 |
 | [`src/curation.ts`](src/curation.ts) | 页面建议所依据的启发式：词元相似度和重复组、合并后的措辞、不同的分句，以及到期或期限已过的条目 |
 | [`src/admin.ts`](src/admin.ts) | CLI 与设置路由共用的审阅函数：批准、丢弃、撤销，带令牌的预览式回滚和彻底删除，以及预览式合并和改分类 |
-| [`src/settings.ts`](src/settings.ts) | `/api/owner-memory` 路由（`@deepseek-ai/dsh-owner-memory/settings`）；[`src/settings/`](src/settings) 放它的读取模型、请求处理和线上数据类型 |
+| [`src/settings.ts`](src/settings.ts) | `/api/owner-memory` 路由（`@deepseek-ai/dsh-owner-memory/settings`）；[`src/settings/`](src/settings) 放它的读取模型和请求处理；线上数据类型来自 `@deepseek-ai/dsh-owner-memory-admin/view` |
 | [`src/cli.ts`](src/cli.ts) | `memory-import`（通过 [`fork/deploy/memory-import.mjs`](../../../fork/deploy/memory-import.mjs) 运行）；并重新导出 `memory-admin` |
 | [`src/admin-cli.ts`](src/admin-cli.ts) | `memory-admin`（[`fork/deploy/memory-admin.mjs`](../../../fork/deploy/memory-admin.mjs)）：参数解析与分发 |
 | [`src/admin-commands.ts`](src/admin-commands.ts) | `memory-admin` 的各个命令与用法文本 |

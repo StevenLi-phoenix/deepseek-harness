@@ -42,14 +42,14 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-Host 一侧是个空的 `apply`，让插件出现在 Loader 里，浏览器端（`exports["./client"]`，经 `package.json` 里的 `dsh.client` 找到）得以送达。路由不在这里，因为它们需要运行中的通道和在线状态服务，而带浏览器面的包在运行时不能引入它们；Host 包保留路由，仍然只有 Host 面。路由回答的线上类型（`src/wechat-view.ts`、`src/presence-view.ts`）是 `wechat/src/view.ts` 和 `presence/src/view.ts` 的副本；两个 Host 包里各有一个测试，副本差一个字节就会失败。
+Host 一侧是个空的 `apply`，让插件出现在 Loader 里，浏览器端（`exports["./client"]`，经 `package.json` 里的 `dsh.client` 找到）得以送达。路由不在这里，因为它们需要运行中的通道和在线状态服务，而带浏览器面的包在运行时不能引入它们；Host 包保留路由，仍然只有 Host 面。路由回答的线上类型（`src/wechat-view.ts`、`src/presence-view.ts`）只在这里，即 `./wechat-view` 和 `./presence-view` 子路径，Host 包从这里导入它们。
 
 每页有一个 store 和一个 loader：它们共享进行中的请求，请求失败时保留上一次的视图，并把页面的动作 POST 到同一个路由。微信页还每 2 秒轮询进行中的二维码登录，用 Host 发来的模块行画出二维码（白底上的一条 SVG 路径，所以深色主题下也能扫），并且只在链接是微信域名下的 HTTPS 链接时才提供它。两页都不显示令牌或消息正文：Host 遮挡 id，只回答时间、数量和代码，页面上没有任何地方能带出 ingest 令牌。
 
 | 文件 | 作用 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Node 一侧：空的 `apply` |
-| [`src/wechat-view.ts`](src/wechat-view.ts)、[`src/presence-view.ts`](src/presence-view.ts) | Host 包线上类型的逐字节相同的副本 |
+| [`src/wechat-view.ts`](src/wechat-view.ts)、[`src/presence-view.ts`](src/presence-view.ts) | `wechat` 和 `presence` 路由的线上类型；`./wechat-view` 和 `./presence-view` 子路径 |
 | [`src/client/index.ts`](src/client/index.ts) | 浏览器入口：注册两个分区 |
 | [`src/client/wechat/`](src/client/wechat) | 微信分区：store、loader、轮询、二维码绘制、分区本身、词典 |
 | [`src/client/presence/`](src/client/presence) | 勿扰分区：store、loader、轮询、分区本身、词典 |

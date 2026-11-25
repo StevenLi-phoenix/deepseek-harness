@@ -7809,6 +7809,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ButtonProps {\n    readonly label: string;\n    readonly hotkey?: string | undefined;\n    readonly disabled?: boolean | undefined;\n    readonly onPress?: (() => unknown) | undefined;\n}',
   },
   {
+    name: 'CardView',
+    declaration: 'export interface CardView {\n    readonly version: number;\n    readonly card: string;\n    readonly author: \'agent\' | \'owner\';\n    readonly reason: string;\n    readonly at: number;\n}',
+  },
+  {
+    name: 'CcLogin',
+    declaration: 'export type CcLogin = \'full\' | \'token\' | \'none\';',
+  },
+  {
+    name: 'CcSession',
+    declaration: 'export interface CcSession {\n    readonly name: string;\n    readonly pid: number;\n    readonly status: string | null;\n    readonly cwd: string | null;\n    readonly updatedAt: number | null;\n    readonly managed: boolean;\n}',
+  },
+  {
+    name: 'CcView',
+    declaration: 'export interface CcView {\n    readonly enabled: boolean;\n    readonly login: CcLogin;\n    readonly sessions: readonly CcSession[];\n    readonly maxSessions: number;\n    readonly started: readonly string[];\n}',
+  },
+  {
     name: 'ChangeRequestBrief',
     declaration: 'export type ChangeRequestBrief = Pick<ChangeRequestSnapshot, \'ref\' | \'url\' | \'title\' | \'state\' | \'draft\' | \'mergeability\' | \'reviewDecision\' | \'checksRollup\'>;',
   },
@@ -9933,6 +9949,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface MeView {\n    signedIn: boolean;\n    mid?: number;\n    uname?: string;\n    level?: number;\n    following?: number;\n    followers?: number;\n    folders?: Folder[];\n    exp?: {\n        current: number;\n        min: number;\n        next: number | null;\n    };\n    coins?: number;\n    rewards?: DailyRewards;\n    limits: string;\n    pause?: string;\n}',
   },
   {
+    name: 'MineReport',
+    declaration: 'export interface MineReport {\n    readonly at: number;\n    readonly ms: number;\n    readonly inputs: {\n        readonly qq: number;\n        readonly comment: number;\n        readonly hot: number;\n        readonly web: number;\n        readonly dropped: number;\n    };\n    readonly touched: number;\n    readonly candidates: number;\n    readonly kept: number;\n    readonly rejected: Readonly<Record<string, number>>;\n    readonly llmCalls: number;\n    readonly searches: number;\n    readonly skipped?: string;\n}',
+  },
+  {
     name: 'ModDefinition',
     declaration: 'export interface ModDefinition {\n    readonly name: string;\n    readonly version?: string;\n    readonly root?: string;\n    readonly options?: PluginOptions;\n    readonly register: ModRegister;\n}',
   },
@@ -10103,6 +10123,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'OptionalSessionSeq',
     declaration: 'export type OptionalSessionSeq = SessionSeq | null;',
+  },
+  {
+    name: 'Origin',
+    declaration: 'export interface Origin {\n    readonly platform: SampleSource;\n    readonly groups: number;\n    readonly speakers: number;\n    readonly days: number;\n}',
   },
   {
     name: 'OTelEventRecord',
@@ -10597,8 +10621,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type PublishOutcome = \'accepted\' | \'duplicate\' | \'suppressed\' | \'unmatched\';',
   },
   {
+    name: 'QqConnection',
+    declaration: 'export interface QqConnection {\n    readonly state: \'connected\' | \'reconnecting\' | \'waiting-token\' | \'starting\' | \'recorder-down\' | \'protocol-mismatch\' | \'unknown\';\n    readonly since: number | null;\n    readonly attempt: number;\n    readonly lastError: string | null;\n    readonly selfId: string | null;\n}',
+  },
+  {
     name: 'QqLoginReading',
     declaration: 'export interface QqLoginReading {\n    readonly door: \'ok\' | \'napcat-down\' | \'unreachable\' | \'unauthorized\' | \'invalid\' | \'disabled\' | \'recorder-down\';\n    readonly state: QqLoginState | null;\n    readonly uin: string | null;\n    readonly nickname: string | null;\n    readonly error: string | null;\n    readonly qrUrl: string | null;\n}',
+  },
+  {
+    name: 'QqLoginState',
+    declaration: 'export type QqLoginState = \'online\' | \'offline\' | \'qr\' | \'scanned\' | \'logging-in\' | \'preparing\' | \'restarting\' | \'unknown\';',
   },
   {
     name: 'QueueAction',
@@ -10919,6 +10951,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RunnerFailureRule',
     declaration: 'export interface RunnerFailureRule {\n    allowedExitCodes?: readonly number[];\n    fatalSignatures: readonly string[];\n    informationalLines?: readonly string[];\n}',
+  },
+  {
+    name: 'RunReport',
+    declaration: 'export interface RunReport {\n    readonly at: number;\n    readonly ms: number;\n    readonly trigger: \'schedule\' | \'manual\';\n    readonly qq: {\n        readonly status: \'ok\' | \'off\' | \'unavailable\';\n        readonly groups: number;\n        readonly messages: number;\n    };\n    readonly bili: {\n        readonly status: \'ok\' | \'off\' | \'unavailable\' | \'no-token\';\n        readonly comments: number;\n        readonly threads: number;\n        readonly error?: string;\n    };\n    readonly seen: number;\n    readonly accepted: number;\n    readonly added: number;\n    readonly retired: number;\n    readonly filtered: Readonly<Record<string, number>>;\n    readonly bySource: Readonly<Record<string, number>>;\n}',
+  },
+  {
+    name: 'SampleSource',
+    declaration: 'export type SampleSource = typeof SAMPLE_SOURCES[number];',
+  },
+  {
+    name: 'SampleView',
+    declaration: 'export interface SampleView {\n    readonly id: string;\n    readonly source: SampleSource;\n    readonly owner: boolean;\n    readonly status: \'active\' | \'pending\';\n    readonly addedAt: string;\n    readonly prompt?: string;\n    readonly reply: string;\n    readonly origin: Origin;\n}',
   },
   {
     name: 'SandboxEnforcement',
@@ -12173,12 +12217,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface StyleBlock {\n    readonly text: string;\n    readonly shown: number;\n    readonly owner: number;\n    readonly memes: number;\n    readonly card: number;\n}',
   },
   {
+    name: 'StyleEditAnswer',
+    declaration: 'export type StyleEditAnswer = {\n    readonly ok: true;\n    readonly panel: StylePanel;\n} | {\n    readonly ok: false;\n    readonly error: string;\n    readonly panel: StylePanel;\n};',
+  },
+  {
     name: 'StyleHealth',
     declaration: 'export interface StyleHealth {\n    readonly kept: number;\n    readonly pending: number;\n    readonly review: \'optional\' | \'required\';\n    readonly lastRefreshAt: number | null;\n    readonly ticTrend: \'up\' | \'flat\' | \'down\' | null;\n}',
   },
   {
     name: 'StyleNoteInput',
     declaration: 'export interface StyleNoteInput {\n    readonly sessionId: string;\n    readonly preset: string;\n    readonly kind: \'meme\' | \'trait\';\n    readonly term: string;\n    readonly meaning?: string;\n    readonly example: string;\n    readonly related?: readonly string[];\n    readonly session?: SessionLog;\n}',
+  },
+  {
+    name: 'StylePanel',
+    declaration: 'export interface StylePanel {\n    readonly enabled: boolean;\n    readonly parts: {\n        readonly tone: boolean;\n        readonly memes: boolean;\n        readonly traits: boolean;\n        readonly persona: boolean;\n        readonly miner: boolean;\n    };\n    readonly review: \'optional\' | \'required\';\n    readonly limits: {\n        readonly maxActive: number;\n        readonly maxOwner: number;\n        readonly maxMemes: number;\n        readonly maxTraits: number;\n        readonly cardChars: number;\n    };\n    readonly samples: readonly SampleView[];\n    readonly notes: readonly NoteView[];\n    readonly hot: ReadonlyArray<{\n        readonly title: string;\n        readonly heat: number;\n    }>;\n    readonly cards: readonly CardView[];\n    readonly running: boolean;\n    readonly lastRun: RunReport | null;\n    readonly lastMine: MineReport | null;\n    readonly nextRunAt: number | null;\n    readonly trend: readonly TrendDay[];\n}',
   },
   {
     name: 'SubagentActivation',
@@ -12811,6 +12863,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TranslationSpec',
     declaration: 'export type TranslationSpec = AnonymousTranslationSpec | PaidTranslationSpec;',
+  },
+  {
+    name: 'TrendDay',
+    declaration: 'export interface TrendDay {\n    readonly day: string;\n    readonly answers: number;\n    readonly withTics: number;\n    readonly mainAnswers: number;\n    readonly meanChars: number | null;\n}',
   },
   {
     name: 'TtsProviderName',

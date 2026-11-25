@@ -16,6 +16,8 @@ import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
+// Type-only: the connection service's Context merge (ctx.connection).
+import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/cordis-plugin-timer'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 // Type-only: the credential store's reference brand; this package takes no runtime export from it.
@@ -175,18 +177,6 @@ export interface InboxView {
   replies: Omit<InboxItem, 'type' | 'oid' | 'root'>[]
   mentions: Omit<InboxItem, 'type' | 'oid' | 'root'>[]
   ownerMessages: OwnerMessage[]
-}
-
-/** The slice of the connection service the Settings route uses. */
-interface BiliConnection {
-  readonly fetch: {
-    register(route: {
-      readonly path: string
-      readonly methods: readonly ('GET' | 'POST')[]
-      readonly requestBody: 'buffered'
-      readonly fetch: (request: Request) => Promise<Response>
-    }): () => Promise<void>
-  }
 }
 
 /** Human-readable error text; client errors never carry request data. */
@@ -416,7 +406,7 @@ export class BiliAccount extends Service {
       name: 'bili-settings-route',
       inject: ['connection'],
       apply: (child: Context) => {
-        const connection = Reflect.get(child, 'connection') as BiliConnection
+        const connection = child.connection
         child.effect(() => connection.fetch.register({
           path: BILI_PATH,
           methods: ['GET', 'POST'],

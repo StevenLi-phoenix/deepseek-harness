@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-session'
 import { readJson, sha256, writeJson } from './files.ts'
-import { ticHits, TICS } from './tics.ts'
+import { textOf, ticHits, TICS } from './tics.ts'
 
 /** Per-day counters of the forbidden stock lines. */
 interface TicDay {
@@ -15,16 +15,6 @@ interface TicDay {
   answersWithHits: number
   hits: number
   perLine: Record<string, number>
-}
-
-/**
- * Text of a message's content blocks.
- * @param message - a message whose `content` may be anything.
- * @returns the `text` of its text blocks joined by newlines; empty when `content` is not an array.
- */
-export function textOf(message: { content?: unknown }): string {
-  if (!Array.isArray(message.content)) return ''
-  return (message.content as Array<{ type?: string; text?: string }>).filter(block => block.type === 'text').map(block => block.text ?? '').join('\n')
 }
 
 /** The day-by-day counts, as stored. */

@@ -48,7 +48,8 @@
     "@deepseek-ai/dsh-event-bus": "workspace:*",
     "@deepseek-ai/dsh-turn-taint": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",
-    "@deepseek-ai/dsh-tools": "workspace:*"
+    "@deepseek-ai/dsh-tools": "workspace:*",
+    "@deepseek-ai/dsh-owner-memory-admin": "workspace:*"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "workspace:~"
@@ -64,6 +65,8 @@
     "@deepseek-ai/dsh-turn-taint": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",
     "@deepseek-ai/dsh-tool-executor-native": "workspace:*",
-    "@deepseek-ai/dsh-tools": "workspace:*"
+    "@deepseek-ai/dsh-tools": "workspace:*",
+    "@deepseek-ai/dsh-owner-memory-admin": "workspace:*",
+    "@deepseek-ai/dsh-client-connection": "workspace:*"
   }
 }

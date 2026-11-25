@@ -17,6 +17,7 @@ import type {} from '@deepseek-ai/dsh-event-bus'
 import type { PreToolDecision } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
 import { describeOrigin, originZh, turnOrigin } from './origin.ts'
+import { turnQueue } from './turn-queue.ts'
 
 export type { TurnOrigin, TurnOriginOptions } from './origin.ts'
 
@@ -84,48 +85,23 @@ export function apply(ctx: Context, config: Config): void {
   const audited = new Set(config.auditedTools ?? ['schedule_create', 'watch_create'])
   const notify = config.notify ?? true
   ctx.logger.info('turn-taint: enforce %s (%s), audit notices %s', enforce ? 'on' : 'off (observing: log only)', [...ownerOnly].join(', '), notify ? 'on' : 'off')
-  const queued = new Map<string, { lines: string[]; sources: Set<string>; timer: ReturnType<typeof setTimeout> }>()
-
-  const flush = async (sessionId: string): Promise<void> => {
-    const entry = queued.get(sessionId)
-    /* v8 ignore next -- flush deletes the entry and clears its timer together. */
-    if (entry === undefined) return
-    queued.delete(sessionId)
-    clearTimeout(entry.timer)
+  const queue = turnQueue<{ line: string; source: string }>(ctx, { lingerMs: LINGER_MS, label: 'turn-taint: drop queued notices' }, async (sessionId, items) => {
     const notifier = ctx.get('ownerNotifier')
     if (notifier === undefined) return
+    const lines = items.map(item => item.line)
+    const sources = new Set(items.map(item => item.source))
     try {
       await notifier.send({
         safety: true,
-        title: `一次不是你本人发起的回合（来源：${[...entry.sources].map(originZh).join('、')}）设置了 ${String(entry.lines.length)} 个之后会自己触发的东西`,
-        body: [...entry.lines.slice(0, 6), ...entry.lines.length > 6 ? [`…另有 ${String(entry.lines.length - 6)} 个`] : []].join('\n'),
+        title: `一次不是你本人发起的回合（来源：${[...sources].map(originZh).join('、')}）设置了 ${String(lines.length)} 个之后会自己触发的东西`,
+        body: [...lines.slice(0, 6), ...lines.length > 6 ? [`…另有 ${String(lines.length - 6)} 个`] : []].join('\n'),
         origin: 'the turn-origin guard of your own Session (a notice to the owner about a reminder or watch set up in a turn the owner did not start)',
       })
-      ctx.logger.info('turn-taint: told the owner about %d audited call(s) of session %s', entry.lines.length, sessionId)
+      ctx.logger.info('turn-taint: told the owner about %d audited call(s) of session %s', lines.length, sessionId)
     } catch (error: unknown) {
       ctx.logger.warn('turn-taint: audit notice for session %s failed: %s', sessionId, error instanceof Error ? error.message : String(error))
     }
-  }
-
-  const enqueue = (sessionId: string, line: string, source: string): void => {
-    const existing = queued.get(sessionId)
-    if (existing !== undefined) {
-      existing.lines.push(line)
-      existing.sources.add(source)
-      return
-    }
-    const timer = setTimeout(() => { void flush(sessionId) }, LINGER_MS)
-    timer.unref()
-    queued.set(sessionId, { lines: [line], sources: new Set([source]), timer })
-  }
-
-  ctx.on('session/event', (session, event) => {
-    if (event.type === 'turn/end' && queued.has(session.id)) void flush(session.id)
   })
-  ctx.effect(() => () => {
-    for (const entry of queued.values()) clearTimeout(entry.timer)
-    queued.clear()
-  }, 'turn-taint: drop queued notices')
 
   ctx.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {
     const decision = await next()
@@ -151,7 +127,7 @@ export function apply(ctx: Context, config: Config): void {
       return decision
     }
     ctx.logger.warn('turn-taint: %s used in a turn the owner did not start alone (%s), session %s', exec.name, label, exec.agent.session.id)
-    if (notify) enqueue(exec.agent.session.id, `· ${AUDITED_ZH[exec.name] ?? exec.name}（${exec.name}）`, label)
+    if (notify) queue(exec.agent.session.id, { line: `· ${AUDITED_ZH[exec.name] ?? exec.name}（${exec.name}）`, source: label })
     return decision
   })
 }

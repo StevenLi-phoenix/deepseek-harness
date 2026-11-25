@@ -66,7 +66,7 @@ kind: "package-reference"
 
 | 文件 | 作用 |
 |---|---|
-| [`src/view.ts`](src/view.ts) | 线上数据类型和常量；`owner-memory/src/settings/view.ts` 是逐字节相同的副本（由测试保持一致） |
+| [`src/view.ts`](src/view.ts) | 线上数据类型和常量；`./view` 子路径，`owner-memory` 的路由从这里导入它们 |
 | [`src/index.ts`](src/index.ts) | Host 部分：一个空插件，让浏览器部分得以下发 |
 | [`src/client/index.ts`](src/client/index.ts) | 浏览器入口：词典、对 Host 的调用、设置分区注册 |
 | [`src/client/memory.ts`](src/client/memory.ts) | Store、loader（乐观隐藏、带令牌的预览）和感知页面可见性的轮询 |

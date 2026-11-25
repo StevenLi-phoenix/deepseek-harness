@@ -6,6 +6,8 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+// Type-only: the connection service's Context merge (ctx.connection).
+import type {} from '@deepseek-ai/dsh-client-connection'
 import type { CoursesStatus, Courses } from '@deepseek-ai/dsh-courses'
 import { COURSES_PATH, COURSES_POLL_PATH, type CoursesView } from './view.ts'
 
@@ -13,18 +15,6 @@ export type * from './view.ts'
 
 /** Required Host services. */
 export const inject = ['connection', 'courses']
-
-/** The slice of the connection service this plugin uses. */
-interface CoursesConnection {
-  readonly fetch: {
-    register(route: {
-      readonly path: string
-      readonly methods: readonly ('GET' | 'POST')[]
-      readonly requestBody: 'buffered'
-      readonly fetch: (request: Request) => Promise<Response>
-    }): () => Promise<void>
-  }
-}
 
 /**
  * The status as the page reads it.
@@ -71,7 +61,7 @@ function toView(status: CoursesStatus): CoursesView {
  * @param ctx - Host context with the connection service and the courses service.
  */
 export function apply(ctx: Context): void {
-  const connection = Reflect.get(ctx, 'connection') as CoursesConnection
+  const connection = ctx.connection
   const courses = (): Courses => ctx.courses
   const answer = (): Response => Response.json(toView(courses().status()), { headers: { 'cache-control': 'no-store' } })
   ctx.effect(() => connection.fetch.register({

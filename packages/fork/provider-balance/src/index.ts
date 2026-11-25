@@ -9,6 +9,8 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+// Type-only: the connection service's Context merge (ctx.connection).
+import type {} from '@deepseek-ai/dsh-client-connection'
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
 import z from '@deepseek-ai/schemastery'
 import { BALANCE_PATH, type BalanceRouteBody, type ProviderReading } from './readings.ts'
@@ -40,18 +42,6 @@ export const inject = ['credentials', 'connection']
 
 /** A click may bypass the cache, but not more often than this. */
 const MIN_FRESH_MS = 10_000
-
-/** The slice of the connection service this plugin uses. */
-interface BalanceConnection {
-  readonly fetch: {
-    register(route: {
-      readonly path: string
-      readonly methods: readonly 'GET'[]
-      readonly requestBody: 'buffered'
-      readonly fetch: (request: Request) => Promise<Response>
-    }): () => Promise<void>
-  }
-}
 
 /**
  * Register the balance route.
@@ -94,7 +84,7 @@ export function apply(ctx: Context, config: Config): void {
   }
 
   ctx.logger.info(`provider-balance: serving ${BALANCE_PATH} for ${String(config.sources.length)} source(s)`)
-  const connection = Reflect.get(ctx, 'connection') as BalanceConnection
+  const connection = ctx.connection
   ctx.effect(() => connection.fetch.register({
     path: BALANCE_PATH,
     methods: ['GET'],

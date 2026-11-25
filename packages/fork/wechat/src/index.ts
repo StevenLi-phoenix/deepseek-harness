@@ -5,6 +5,8 @@ import { mkdirSync, statSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 import { basename, isAbsolute, join, resolve } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
+// Type-only: the connection service's Context merge (ctx.connection).
+import type {} from '@deepseek-ai/dsh-client-connection'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -27,7 +29,7 @@ import z from '@deepseek-ai/schemastery'
 import { IlinkApiError, IlinkClient, ILINK_SEND_REJECTED, isStaleTokenError, ItemType, MESSAGE_TYPE_USER, type WeixinMessage } from './api.ts'
 import { accountFilePath, readAccountFile, type WechatAccount } from './login.ts'
 import { attachmentNote, describeMedia, downloadMedia, isPromptImage, mediaSpec, outboundKind, saveInboxFile, uploadMedia, type OutboundKind, type ReceivedMedia, type Transcription } from './media.ts'
-import { WechatSettings, type SettingsConnection } from './settings.ts'
+import { WechatSettings } from './settings.ts'
 import { wechatDomain, type ActivityRecord, type OutboxRecord, type SentKind, type WindowRecord } from './storage.ts'
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
@@ -42,7 +44,7 @@ declare module '@deepseek-ai/dsh-llm' {
 import type { HandoverPart } from './text.ts'
 import { agentMessageText, buildDigest, EARLIER_CHAT, fitText, formatGap, handoverFailureText, handoverNotice, handoverText, HELP_REPLY, inboundText, markdownImages, NEW_CHAT_REPLY, noteTurnText, QUOTA_FOOTER, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES, WECHAT_RELAY_CHANNEL, withoutMarkdownImages, type MarkdownImage } from './text.ts'
 import { TypingIndicator } from './typing.ts'
-import type { ChannelError, ChannelLink, ChannelStatus, WindowClosed } from './view.ts'
+import type { ChannelError, ChannelLink, ChannelStatus, WindowClosed } from '@deepseek-ai/dsh-wechat-settings/wechat-view'
 
 /** How long a mute file keeps the safety notices quiet, in milliseconds. */
 const SAFETY_MUTE_MS = 30 * 60_000
@@ -52,7 +54,7 @@ export { IlinkApiError, IlinkError } from './api.ts'
 export type * from './login.ts'
 export { LoginError } from './login.ts'
 export type * from './login-session.ts'
-export type * from './view.ts'
+export type * from '@deepseek-ai/dsh-wechat-settings/wechat-view'
 export type * from './text.ts'
 export type * from './storage.ts'
 
@@ -457,7 +459,7 @@ export class WechatChannel extends Service implements OwnerNotifier {
           channel: this,
           logger: child.logger,
         })
-        const connection = Reflect.get(child, 'connection') as SettingsConnection
+        const connection = child.connection
         child.effect(() => connection.fetch.register(settings.route()), 'wechat.settings()')
         child.effect(() => () => { settings.dispose() }, 'wechat.settings.logins()')
       },

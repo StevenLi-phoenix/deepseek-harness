@@ -22,6 +22,10 @@
       "types": "./lib/types/client/index.d.ts",
       "default": "./lib/client.js"
     },
+    "./view": {
+      "types": "./lib/types/view.d.ts",
+      "default": "./lib/types/view.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
@@ -60,6 +64,7 @@
     "locale/*.json",
     "lib/index.js",
     "lib/client.js",
+    "lib/types/**/*.js",
     "lib/types/**/*.d.ts",
     "lib/types/**/*.d.ts.map",
     "lib/**/*.js.map",

@@ -9,8 +9,8 @@ import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-
 import Presence, { type DeferralHolder } from '../src/index.ts'
 import { DEFAULT_URGENT_KINDS } from '../src/urgent.ts'
 import { hours } from '../src/state.ts'
-import type { SettingsConnection, SettingsRoute } from '../src/settings.ts'
-import { PRESENCE_PATH } from '../src/view.ts'
+import type { ConnectionFetchRoute, HostConnectionFetch } from '@deepseek-ai/dsh-client-connection'
+import { PRESENCE_PATH } from '@deepseek-ai/dsh-wechat-settings/presence-view'
 
 const Config = Presence.Config
 
@@ -40,7 +40,9 @@ function heartbeat(kind: 'presence.sleep.on' | 'presence.sleep.off'): BusEventIn
 }
 
 /** Mount presence over memory storage; `pool` carries the stored state across restarts. */
-async function mount(options: { pool?: MemoryMediaPool; config?: Record<string, unknown>; connection?: SettingsConnection } = {}) {
+async function mount(
+  options: { pool?: MemoryMediaPool; config?: Record<string, unknown>; connection?: { readonly fetch: HostConnectionFetch } } = {},
+) {
   const ctx = new Context()
   contexts.push(ctx)
   const logs: string[] = []
@@ -375,9 +377,9 @@ describe('holders', () => {
 
 describe('settings route', () => {
   it('registers the route with the connection service when it is present, and removes it with the plugin', async () => {
-    const registered: SettingsRoute[] = []
+    const registered: ConnectionFetchRoute[] = []
     let removed = 0
-    const connection: SettingsConnection = {
+    const connection: { readonly fetch: HostConnectionFetch } = {
       fetch: { register: (route) => { registered.push(route); return () => { removed += 1; return Promise.resolve() } } },
     }
     const { ctx, presence } = await mount({ connection })
@@ -413,7 +415,7 @@ describe('ingest door', () => {
 
 describe('focus-watch keys', () => {
   it('reads the keys focus-watch 0.1.0 sends: -hb-<bucket> is a heartbeat, sleep-on-<ts> and sleep-off-<ts> are changes', async () => {
-    const { HEARTBEAT_KEY } = await import('../src/view.ts')
+    const { HEARTBEAT_KEY } = await import('@deepseek-ai/dsh-wechat-settings/presence-view')
     for (const key of ['sleep-on-hb-1011', 'sleep-off-hb-1011', 'heartbeat-5']) expect(HEARTBEAT_KEY.test(key), key).toBe(true)
     for (const key of ['sleep-on-1793700000', 'sleep-off-1793700000', 'sleep-on-hb', 'sleep-on-hb-12x']) expect(HEARTBEAT_KEY.test(key), key).toBe(false)
   })

@@ -121,7 +121,7 @@ The tools call `MemoryStore`, which validates everything the model sends: catego
 | [`src/memory-block.ts`](src/memory-block.ts) | Owner-memory mode: loads the file and renders the memory block |
 | [`src/feedback-mode.ts`](src/feedback-mode.ts) | Feedback mode for the persona presets: one scope's verdicts in front of each root Session |
 | [`src/tools.ts`](src/tools.ts) | `memory_search`, `memory_save`, `memory_forget`, and the turn-origin check behind the hold |
-| [`src/notice-queue.ts`](src/notice-queue.ts) | Queues a turn's notices until the turn ends, caps them per day, and sends them through the notifier |
+| [`src/notice-queue.ts`](src/notice-queue.ts) | Queues a turn's notices until the turn ends (`turn-taint`'s `./turn-queue`), caps them per day, and sends them through the notifier |
 | [`src/store.ts`](src/store.ts) | The JSONL store: list, save, hold, approve, revert, merge, roll back, purge, import, search, and the history and snapshots, and the whole-file replacement `src/feedback.ts` also uses; the `./store` subpath, which `content-guard` imports |
 | [`src/notice.ts`](src/notice.ts) | The WeChat notice for a turn's protected changes |
 | [`src/render.ts`](src/render.ts) | The memory block and its byte budget |
@@ -130,7 +130,7 @@ The tools call `MemoryStore`, which validates everything the model sends: catego
 | [`src/export.ts`](src/export.ts) | claude.ai export parser |
 | [`src/curation.ts`](src/curation.ts) | The heuristics the page's suggestions rest on: token similarity and duplicate groups, the merged wording, the clauses that differ, and entries whose expiry or term is over |
 | [`src/admin.ts`](src/admin.ts) | The review functions the CLI and the Settings route share: approve, discard, revert, the previewed rollback and erase with their tokens, and the previewed merge and category change |
-| [`src/settings.ts`](src/settings.ts) | The `/api/owner-memory` route (`@deepseek-ai/dsh-owner-memory/settings`); [`src/settings/`](src/settings) holds its read model, request handler, and wire types |
+| [`src/settings.ts`](src/settings.ts) | The `/api/owner-memory` route (`@deepseek-ai/dsh-owner-memory/settings`); [`src/settings/`](src/settings) holds its read model and request handler; the wire types come from `@deepseek-ai/dsh-owner-memory-admin/view` |
 | [`src/cli.ts`](src/cli.ts) | `memory-import` (run through [`fork/deploy/memory-import.mjs`](../../../fork/deploy/memory-import.mjs)); re-exports `memory-admin` |
 | [`src/admin-cli.ts`](src/admin-cli.ts) | `memory-admin` ([`fork/deploy/memory-admin.mjs`](../../../fork/deploy/memory-admin.mjs)): argument parsing and dispatch |
 | [`src/admin-commands.ts`](src/admin-commands.ts) | The `memory-admin` commands and the usage text |

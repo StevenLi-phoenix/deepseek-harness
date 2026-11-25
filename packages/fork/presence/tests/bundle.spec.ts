@@ -5,7 +5,7 @@ import { matchesSubscription } from '@deepseek-ai/dsh-event-bus/src/match.ts'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import Presence from '../src/index.ts'
-import { KIND_SLEEP_OFF, KIND_SLEEP_ON, PRESENCE_SOURCE } from '../src/view.ts'
+import { KIND_SLEEP_OFF, KIND_SLEEP_ON, PRESENCE_SOURCE } from '@deepseek-ai/dsh-wechat-settings/presence-view'
 import { forkPatchFiles } from '../../../../scripts/fork-bundle-layers.ts'
 
 const Config = Presence.Config

@@ -119,7 +119,6 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 | [`src/login.ts`](src/login.ts) | 二维码登录状态机、终端登录命令、`saveLogin()`（两种登录共同写入的账号文件）、账号文件 |
 | [`src/login-session.ts`](src/login-session.ts) | 设置页驱动的那一个二维码登录：`waiting`、`scanned`、`needs-code`、`expired`、`done`、`failed`；转交验证数字；经 `saveLogin()` 写账号，并通知通道重读 |
 | [`src/settings.ts`](src/settings.ts) | 路由 `/api/wechat`：视图（绑定、通道健康、回复窗口、发件箱），经 schema 校验的 `login.start`、`login.poll`、`login.code`、`login.cancel`、`unbind`，每个都记录结果和耗时 |
-| [`src/view.ts`](src/view.ts) | Host 路由和浏览器端共用的类型、常量和 `maskId()`（`wechat-settings` 保留一份逐字节相同的副本） |
 | [`src/text.ts`](src/text.ts) | 入站文本提取与引用时间、按 Markdown 结构拆分消息、摘要、时间戳、时间间隔提示与转来通知的文本、命令回复 |
 | [`src/typing.ts`](src/typing.ts) | “正在输入”提示：带退避的 ticket 缓存、5 秒保活、一小时上限、失败从不影响回复 |
 | [`src/media.ts`](src/media.ts) | CDN 下载与解密、图片类型识别、inbox、附件说明（含音频文件的转写）；外发的加密与上传（`getuploadurl`、CDN POST、`x-encrypted-param`） |

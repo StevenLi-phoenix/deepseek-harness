@@ -10,6 +10,8 @@
 
 import { isAbsolute } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
+// Type-only: the connection service's Context merge (ctx.connection).
+import type {} from '@deepseek-ai/dsh-client-connection'
 import z from '@deepseek-ai/schemastery'
 import { DEFAULT_MOUNTS, SystemSampler, type SysmonMount } from './sampler.ts'
 import { SYSMON_PATH } from './snapshot.ts'
@@ -39,18 +41,6 @@ export const Config: z<Config> = z.object({
 /** Required Host services. */
 export const inject = ['connection']
 
-/** The slice of the connection service this plugin uses. */
-interface SysmonConnection {
-  readonly fetch: {
-    register(route: {
-      readonly path: string
-      readonly methods: readonly 'GET'[]
-      readonly requestBody: 'buffered'
-      readonly fetch: (request: Request) => Promise<Response>
-    }): () => Promise<void>
-  }
-}
-
 /**
  * Register the system status route.
  * @param ctx - Host context with the connection service.
@@ -67,7 +57,7 @@ export function apply(ctx: Context, config: Config): void {
     cacheMs: config.cacheMs,
     logger: ctx.logger,
   })
-  const connection = Reflect.get(ctx, 'connection') as SysmonConnection
+  const connection = ctx.connection
   ctx.effect(() => connection.fetch.register({
     path: SYSMON_PATH,
     methods: ['GET'],

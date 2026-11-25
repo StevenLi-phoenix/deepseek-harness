@@ -37,6 +37,12 @@
     },
     {
       "path": "../turn-taint"
+    },
+    {
+      "path": "../owner-memory-admin/tsconfig.host.json"
+    },
+    {
+      "path": "../../client/connection/tsconfig.host.json"
     }
   ]
 }

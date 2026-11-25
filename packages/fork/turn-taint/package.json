@@ -22,6 +22,10 @@
       "types": "./lib/types/origin.d.ts",
       "default": "./lib/types/origin.js"
     },
+    "./turn-queue": {
+      "types": "./lib/types/turn-queue.d.ts",
+      "default": "./lib/types/turn-queue.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"

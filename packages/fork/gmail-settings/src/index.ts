@@ -10,6 +10,8 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+// Type-only: the connection service's Context merge (ctx.connection).
+import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { GmailError, type GmailStatus, type Gmail } from '@deepseek-ai/dsh-gmail'
 import { OAUTH_PATH } from '@deepseek-ai/dsh-gmail/oauth'
@@ -25,18 +27,6 @@ export const name = 'gmail-settings'
 
 /** Required Host services; the sign-in page also needs `webServer`, which only a served Host has. */
 export const inject = ['connection', 'gmail']
-
-/** The slice of the connection service this plugin uses. */
-interface GmailConnection {
-  readonly fetch: {
-    register(route: {
-      readonly path: string
-      readonly methods: readonly ('GET' | 'POST')[]
-      readonly requestBody: 'buffered'
-      readonly fetch: (request: Request) => Promise<Response>
-    }): () => Promise<void>
-  }
-}
 
 const NO_STORE = { 'cache-control': 'no-store' }
 
@@ -117,7 +107,7 @@ async function perform(gmail: Gmail, action: GmailAction, origin: string): Promi
  * @param ctx - Host context with the connection service and the Gmail service.
  */
 export function apply(ctx: Context): void {
-  const connection = Reflect.get(ctx, 'connection') as GmailConnection
+  const connection = ctx.connection
   const gmail = (): Gmail => ctx.gmail
   const answer = async (extra: Partial<GmailAnswer> = {}): Promise<Response> => {
     const body: GmailAnswer = { status: toView(await gmail().status()), ...extra }

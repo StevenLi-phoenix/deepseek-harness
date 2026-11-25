@@ -19,6 +19,12 @@
     },
     {
       "path": "../../storage/storage-domain"
+    },
+    {
+      "path": "../wechat-settings/tsconfig.host.json"
+    },
+    {
+      "path": "../../client/connection/tsconfig.host.json"
     }
   ]
 }

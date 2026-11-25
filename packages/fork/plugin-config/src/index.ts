@@ -8,6 +8,8 @@
 
 import { isDeepStrictEqual } from 'node:util'
 import { FiberState, type Context } from '@deepseek-ai/cordis'
+// Type-only: the connection service's Context merge (ctx.connection).
+import type {} from '@deepseek-ai/dsh-client-connection'
 import type z from '@deepseek-ai/schemastery'
 import type { Entry } from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-config-editor'
@@ -20,18 +22,6 @@ import {
 
 /** Required Host services. */
 export const inject = ['connection', 'configEditor']
-
-/** The slice of the connection service this plugin uses. */
-interface ConfigConnection {
-  readonly fetch: {
-    register(route: {
-      readonly path: string
-      readonly methods: readonly ('GET' | 'POST')[]
-      readonly requestBody: 'buffered'
-      readonly fetch: (request: Request) => Promise<Response>
-    }): () => Promise<void>
-  }
-}
 
 /** One entry and the layers under it, as the configuration editor reports them. */
 interface Row {
@@ -124,7 +114,7 @@ function classify(error: unknown): ConfigSaveFailure {
  * @param ctx - Host context with the connection service and the configuration editor.
  */
 export function apply(ctx: Context): void {
-  const connection = Reflect.get(ctx, 'connection') as ConfigConnection
+  const connection = ctx.connection
   const rows = (): Row[] => ctx.configEditor.configuration()
 
   const describe = (ids: readonly string[], exclude: readonly string[]): ConfigDescribe => {

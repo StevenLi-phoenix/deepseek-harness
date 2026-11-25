@@ -30,6 +30,7 @@ import type { ContextFormed } from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-web'
 // Type-only: ctx.ownerNotifier, for the card revision notice.
 import type {} from '@deepseek-ai/dsh-event-bus'
+import { textOf } from '@deepseek-ai/dsh-integrity-watch/tics'
 // Type-only: ctx.qq, the QQ observer collection and notes read.
 import type {} from '@deepseek-ai/dsh-qq'
 import type {} from '@deepseek-ai/dsh-session'
@@ -374,11 +375,6 @@ function assertConfig(config: Config): void {
   } catch {
     throw new Error(`speaking-style: timeZone "${config.timeZone}" is not a valid IANA time zone`)
   }
-}
-
-function textOf(message: { content?: unknown }): string {
-  if (!Array.isArray(message.content)) return ''
-  return (message.content as Array<{ type?: string; text?: string }>).filter(block => block.type === 'text').map(block => block.text ?? '').join('\n')
 }
 
 /**

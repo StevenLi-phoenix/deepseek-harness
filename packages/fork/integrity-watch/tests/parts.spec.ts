@@ -11,7 +11,8 @@ import { integrityNotice, scan, type Baseline, type TrustedSchedule } from '../s
 import { ABSENT, digestOf, scheduleState, type Target } from '../src/scan.ts'
 import { lastHistorySha, readJson, sha256, writeJson } from '../src/files.ts'
 import { NoticeGate } from '../src/scanner.ts'
-import { countAnswer, mountSessionWatch, textOf, type TicCounts } from '../src/session-watch.ts'
+import { countAnswer, mountSessionWatch, type TicCounts } from '../src/session-watch.ts'
+import { textOf } from '../src/tics.ts'
 import { mountScheduleTrust, trustedOf } from '../src/schedule-trust.ts'
 
 const dirs: string[] = []

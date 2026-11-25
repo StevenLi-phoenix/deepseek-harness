@@ -87,6 +87,7 @@
     "@deepseek-ai/dsh-owner-relay": "workspace:*",
     "@deepseek-ai/dsh-wechat": "workspace:*",
     "@deepseek-ai/dsh-credentials": "workspace:*",
-    "@deepseek-ai/dsh-plugin-config": "workspace:*"
+    "@deepseek-ai/dsh-plugin-config": "workspace:*",
+    "@deepseek-ai/dsh-client-connection": "workspace:*"
   }
 }

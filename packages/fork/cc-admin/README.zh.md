@@ -56,7 +56,8 @@ kind: "package-reference"
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 配置、类型和 `ClaudeCodeAdmin` |
+| [`src/index.ts`](src/index.ts) | 配置和 `ClaudeCodeAdmin` |
+| [`src/view.ts`](src/view.ts) | 它回答的类型；`event-console` 只导入类型的 `./view` 子路径 |
 | [`src/limits.ts`](src/limits.ts) | 第一条任务的最大长度 |
 
 这是 fork 本地包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。

@@ -9,7 +9,7 @@
  * Clock times are read in the owner's time zone; on the two days a year the zone changes its offset,
  * a boundary can land an hour off.
  */
-import type { FocusView, PresenceSource, QuietWindow } from './view.ts'
+import type { FocusView, PresenceSource, QuietWindow } from '@deepseek-ai/dsh-wechat-settings/presence-view'
 
 const HOUR = 3_600_000
 const DAY_SECONDS = 86_400

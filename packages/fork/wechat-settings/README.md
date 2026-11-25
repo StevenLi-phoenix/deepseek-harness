@@ -42,14 +42,14 @@ The package has no configuration. Its sections are `wechat` (order 52) and `pres
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The Host half is an empty `apply`, so the plugin appears in the Loader and the browser half (`exports["./client"]`, found through `dsh.client` in `package.json`) is delivered. The routes are not here because they need the live channel and the presence service, which a package with a browser face may not import at runtime; the Host packages keep them and stay host-only. The wire types the routes answer (`src/wechat-view.ts`, `src/presence-view.ts`) are copies of `wechat/src/view.ts` and `presence/src/view.ts`; a test in each Host package fails when the copy differs by one byte.
+The Host half is an empty `apply`, so the plugin appears in the Loader and the browser half (`exports["./client"]`, found through `dsh.client` in `package.json`) is delivered. The routes are not here because they need the live channel and the presence service, which a package with a browser face may not import at runtime; the Host packages keep them and stay host-only. The wire types the routes answer live here only (`src/wechat-view.ts`, `src/presence-view.ts`), as the `./wechat-view` and `./presence-view` subpaths, from which the Host packages import them.
 
 Each page has one store and one loader that share a request in flight, keep the last view when a request fails, and post the page's actions to the same route. The WeChat page also polls an open QR login every 2 seconds, draws the code from the module rows the Host sends (an SVG path on a white card, so it scans in a dark theme too), and offers the link only when it is an HTTPS link on a WeChat domain. Neither page shows a token or a message text: the Host masks ids and answers times, counts, and codes, and nothing on the pages can carry the ingest token.
 
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Node half: the empty `apply` |
-| [`src/wechat-view.ts`](src/wechat-view.ts), [`src/presence-view.ts`](src/presence-view.ts) | Byte-identical copies of the Host packages' wire types |
+| [`src/wechat-view.ts`](src/wechat-view.ts), [`src/presence-view.ts`](src/presence-view.ts) | The wire types of the `wechat` and `presence` routes; the `./wechat-view` and `./presence-view` subpaths |
 | [`src/client/index.ts`](src/client/index.ts) | Browser entry: registers both sections |
 | [`src/client/wechat/`](src/client/wechat) | The WeChat section: store, loader, pollers, QR drawing, the section, dictionaries |
 | [`src/client/presence/`](src/client/presence) | The quiet-hours section: store, loader, poller, the section, dictionaries |

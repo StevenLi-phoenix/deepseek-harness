@@ -41,6 +41,9 @@
     },
     {
       "path": "../../storage/storage-domain"
+    },
+    {
+      "path": "../../client/connection/tsconfig.host.json"
     }
   ]
 }

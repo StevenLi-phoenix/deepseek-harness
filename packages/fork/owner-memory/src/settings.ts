@@ -11,14 +11,16 @@
 
 import { dirname, isAbsolute, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
+// Type-only: the connection service's Context merge (ctx.connection).
+import type {} from '@deepseek-ai/dsh-client-connection'
 import z from '@deepseek-ai/schemastery'
 import { defaultFeedbackFile, FeedbackStore } from './feedback.ts'
 import { defaultMemoryFile, MemoryStore } from './store.ts'
 import { MemoryHandler } from './settings/handler.ts'
-import { MEMORY_PATH } from './settings/view.ts'
+import { MEMORY_PATH } from '@deepseek-ai/dsh-owner-memory-admin/view'
 
 export { MemoryHandler, SETTINGS_ORIGIN } from './settings/handler.ts'
-export type * from './settings/view.ts'
+export type * from '@deepseek-ai/dsh-owner-memory-admin/view'
 
 /** Plugin configuration. */
 export interface Config {
@@ -34,18 +36,6 @@ export const Config: z<Config> = z.object({
 /** Required Host services. */
 export const inject = ['connection']
 
-/** The slice of the connection service this plugin uses. */
-interface MemoryConnection {
-  readonly fetch: {
-    register(route: {
-      readonly path: string
-      readonly methods: readonly ('GET' | 'POST')[]
-      readonly requestBody: 'buffered'
-      readonly fetch: (request: Request) => Promise<Response>
-    }): () => Promise<void>
-  }
-}
-
 /**
  * Register the Memory settings route.
  * @param ctx - Host context with the connection service.
@@ -56,7 +46,7 @@ export function apply(ctx: Context, config: Config): void {
   const file = config.file ?? defaultMemoryFile()
   const feedbackFile = config.file === undefined ? defaultFeedbackFile() : join(dirname(config.file), 'feedback.jsonl')
   const handler = new MemoryHandler({ store: new MemoryStore(file), feedback: new FeedbackStore(feedbackFile), logger: ctx.logger })
-  const connection = Reflect.get(ctx, 'connection') as MemoryConnection
+  const connection = ctx.connection
   ctx.logger.info('owner-memory-settings: serving %s from %s', MEMORY_PATH, file)
   ctx.effect(() => connection.fetch.register({
     path: MEMORY_PATH,

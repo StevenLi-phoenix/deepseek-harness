@@ -9,7 +9,7 @@ import { FeedbackStore } from '../src/feedback.ts'
 import { MemoryStore } from '../src/store.ts'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as plugin from '../src/settings.ts'
-import { CATEGORIES, MEMORY_PATH, type ActionResult, type DetailView, type MemoryView } from '../src/settings/view.ts'
+import { CATEGORIES, MEMORY_PATH, type ActionResult, type DetailView, type MemoryView } from '@deepseek-ai/dsh-owner-memory-admin/view'
 
 interface Route {
   path: string
@@ -77,12 +77,6 @@ describe('owner-memory-settings Host route', () => {
 
   it('keeps its category list equal to the memory package\'s', () => {
     expect(CATEGORIES).toEqual(MEMORY_CATEGORIES)
-  })
-
-  it('shares its wire types with the browser half as a byte-identical copy', async () => {
-    const host = await readFile(new URL('../src/settings/view.ts', import.meta.url), 'utf8')
-    const client = await readFile(new URL('../../owner-memory-admin/src/view.ts', import.meta.url), 'utf8')
-    expect(host).toBe(client)
   })
 
   it('refuses a relative file path', () => {

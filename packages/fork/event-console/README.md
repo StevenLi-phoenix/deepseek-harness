@@ -81,7 +81,7 @@ The browser half registers three `settings.section` entries (`service-overview` 
 | [`src/agents.ts`](src/agents.ts) | Claude Code and voice cards, start, stop, and the preview |
 | [`src/claude-code.ts`](src/claude-code.ts) | The shape of `ctx.claudeCodeSessions` this page uses |
 | [`src/request.ts`](src/request.ts), [`src/log.ts`](src/log.ts), [`src/probe.ts`](src/probe.ts), [`src/build-info.ts`](src/build-info.ts) | Body parsing and refusals, action logging, deadlines, build identity |
-| [`src/views.ts`](src/views.ts) | Types and route paths shared by both halves |
+| [`src/views.ts`](src/views.ts) | Types and route paths shared by both halves; the Claude Code card's types are `cc-admin`'s own (`@deepseek-ai/dsh-cc-admin/view`) |
 | [`src/client/index.ts`](src/client/index.ts) | Browser entry: dictionaries, loaders, the section and page registrations, the preview player |
 | [`src/client/resource.ts`](src/client/resource.ts) | Store, loader with optimistic actions, and the visibility-aware poller |
 | [`src/client/Overview.tsx`](src/client/Overview.tsx), [`Subscriptions.tsx`](src/client/Subscriptions.tsx), [`Agents.tsx`](src/client/Agents.tsx) | The sections |

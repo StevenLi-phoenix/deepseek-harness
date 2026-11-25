@@ -119,7 +119,6 @@ When `ctx.eventBus` is mounted, the channel claims the owner's current chat Sess
 | [`src/login.ts`](src/login.ts) | QR login status machine, terminal login command, `saveLogin()` (the account file both logins write), account file |
 | [`src/login-session.ts`](src/login-session.ts) | The one QR login the Settings page drives: `waiting`, `scanned`, `needs-code`, `expired`, `done`, `failed`; hands over the verification number; writes the account through `saveLogin()` and tells the channel to reload |
 | [`src/settings.ts`](src/settings.ts) | Route `/api/wechat`: the view (binding, channel health, reply window, outbox), schema-checked `login.start`, `login.poll`, `login.code`, `login.cancel`, and `unbind`, each logged with outcome and duration |
-| [`src/view.ts`](src/view.ts) | Types, constants, and `maskId()` shared by the Host route and the browser half (`wechat-settings` keeps a byte-identical copy) |
 | [`src/text.ts`](src/text.ts) | Inbound text extraction and quote times, Markdown-aware message splitting, digests, time stamps, time-gap and shared-note texts, command replies |
 | [`src/typing.ts`](src/typing.ts) | Typing indicator: ticket cache with backoff, 5 s keepalive, one-hour cap, failures that never reach a reply |
 | [`src/media.ts`](src/media.ts) | CDN download and decryption, image type detection, the inbox, and the attachment note (with the transcript of an audio file); outbound encryption and upload (`getuploadurl`, CDN POST, `x-encrypted-param`) |
