@@ -4,7 +4,7 @@
  * a view, and the owner's CSV export is what Chrome's importer reads.
  */
 
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -64,6 +64,10 @@ describe('credentialHost', () => {
     expect(() => credentialHost('')).toThrow(CredentialError)
     expect(() => credentialHost('not a host/path')).toThrow(CredentialError)
   })
+
+  it('refuses a value with a scheme that does not parse as a URL', () => {
+    expect(() => credentialHost('https://')).toThrow(new CredentialError('https:// is not a URL with a host'))
+  })
 })
 
 describe('CredentialVault', () => {
@@ -120,6 +124,54 @@ describe('CredentialVault', () => {
     const lines = csv.trimEnd().split('\r\n')
     expect(lines[0]).toBe('name,url,username,password,note')
     expect(lines[1]).toBe(`"Acme, Inc. ""Careers""",https://jobs.example.com/,cv@example.com,${record.password},"Acme, Inc. ""Careers""; saved by DSH 2026-11-24T12:00:00.000Z"`)
+  })
+
+  it('names the file it keeps the records in, and stamps a record with the current time by default', async () => {
+    const { vault, path } = vaultAt()
+    expect(vault.path).toBe(path)
+    const before = Date.now()
+    const record = await new CredentialVault(path).create({ host: 'jobs.example.com', username: 'cv@example.com' })
+    expect(Date.parse(record.createdAt)).toBeGreaterThanOrEqual(before)
+    expect(Date.parse(record.createdAt)).toBeLessThanOrEqual(Date.now())
+  })
+
+  it('refuses a blank login name', async () => {
+    const { vault, path } = vaultAt()
+    await expect(vault.create({ host: 'jobs.example.com', username: '  ' })).rejects.toThrow(
+      new CredentialError('give the login name (usually the e-mail address) the account is created with'),
+    )
+    expect(existsSync(path)).toBe(false)
+  })
+
+  it('takes the new label of a replaced password', async () => {
+    const { vault } = vaultAt()
+    await vault.create({ host: 'jobs.example.com', username: 'cv@example.com', label: 'Acme' })
+    const replaced = await vault.create({ host: 'jobs.example.com', username: 'cv@example.com', label: 'Acme Careers', replace: true })
+    expect(replaced.label).toBe('Acme Careers')
+    expect((await vault.list()).map(view => view.label)).toEqual(['Acme Careers'])
+  })
+
+  it('leaves the records as they are when the touched id is not saved', async () => {
+    const { vault } = vaultAt()
+    await vault.create({ host: 'jobs.example.com', username: 'cv@example.com' })
+    const before = await vault.list()
+    await vault.touch('c000000000000')
+    expect(await vault.list()).toEqual(before)
+  })
+
+  it('exports an unlabelled account under its host, and the password a replacement superseded', async () => {
+    const { vault } = vaultAt()
+    const first = await vault.create({ host: 'jobs.example.com', username: 'cv@example.com' })
+    const replaced = await vault.create({ host: 'jobs.example.com', username: 'cv@example.com', replace: true })
+    const lines = (await vault.exportCsv()).trimEnd().split('\r\n')
+    expect(lines[1]).toBe(`jobs.example.com,https://jobs.example.com/,cv@example.com,${replaced.password},saved by DSH 2026-11-24T12:00:00.000Z; previous password ${first.password}`)
+  })
+
+  it('reports a file it cannot read instead of starting empty', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-credentials-'))
+    roots.push(root)
+    const vault = new CredentialVault(root)
+    await expect(vault.list()).rejects.toMatchObject({ code: 'EISDIR' })
   })
 
   it('refuses to read or overwrite a file of another version', async () => {

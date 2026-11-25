@@ -262,7 +262,8 @@ export class CredentialVault {
     if (onHost.length === 0) {
       throw new CredentialError(`no saved password for ${bare}; on the site's sign-up form use action create, or hand over if the account was made outside this browser`)
     }
-    if (matches.length === 0) throw new CredentialError(`${bare} has no saved password for ${username ?? ''}; saved login names: ${onHost.map(entry => entry.username).join(', ')}`)
+    // Without a login name every account on the host matches, so only a named login can match none.
+    if (username !== undefined && matches.length === 0) throw new CredentialError(`${bare} has no saved password for ${username}; saved login names: ${onHost.map(entry => entry.username).join(', ')}`)
     throw new CredentialError(`${bare} has ${String(matches.length)} saved accounts; pass username: ${onHost.map(entry => entry.username).join(' | ')}`)
   }
 

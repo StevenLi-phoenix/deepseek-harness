@@ -59,7 +59,7 @@ export function registerTool(ctx: Context, definition: ToolDefinition): void {
     ...definition.presentResult === undefined ? {} : { presentResult: (args, result) => definition.presentResult?.(clean(args), result) },
     ...definition.isConcurrencySafe === undefined
       ? {}
-      : { isConcurrencySafe: args => definition.isConcurrencySafe?.(clean(args)) ?? false },
+      : { isConcurrencySafe: args => definition.isConcurrencySafe?.(clean(args)) === true },
   })
 }
 

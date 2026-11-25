@@ -30,6 +30,7 @@ import {
   ERROR_SCHEMA,
   TARGET_SCHEMA,
   attempt,
+  describeTarget,
   guarded,
   outcomeFields,
   pageText,
@@ -118,6 +119,20 @@ interface CredentialArgs extends TargetArgs {
 }
 
 /**
+ * Read the one element an upload call named: the file input, or the button that opens the file chooser.
+ * @param args - the tool arguments.
+ * @returns the target, or `undefined` when the call named none or more than one.
+ */
+function attachTargetOf(args: UploadArgs): AttachTarget | undefined {
+  const named: AttachTarget[] = [
+    ...args.selector === undefined ? [] : [{ selector: args.selector, ...args.index === undefined ? {} : { index: args.index } }],
+    ...args.trigger === undefined ? [] : [{ trigger: { selector: args.trigger } }],
+    ...args.triggerAxId === undefined ? [] : [{ trigger: { axId: args.triggerAxId } }],
+  ]
+  return named.length === 1 ? named[0] : undefined
+}
+
+/**
  * Register `headless_browser_upload` and `headless_browser_credential`.
  * @param ctx - the mounting scope's context.
  * @param deps - the browser, control state, credential store, and upload policy.
@@ -163,12 +178,8 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
       render: renderJson,
     },
     execute: async (args: UploadArgs) => {
-      const { selector, trigger, triggerAxId } = args
-      const triggers = [selector !== undefined, trigger !== undefined, triggerAxId !== undefined].filter(Boolean).length
-      if (triggers !== 1) return { error: 'give exactly one of selector (the file input), trigger, or triggerAxId' }
-      const target: AttachTarget = selector !== undefined
-        ? { selector, ...args.index === undefined ? {} : { index: args.index } }
-        : { trigger: trigger !== undefined ? { selector: trigger } : { axId: triggerAxId ?? '' } }
+      const target = attachTargetOf(args)
+      if (target === undefined) return { error: 'give exactly one of selector (the file input), trigger, or triggerAxId' }
       return await guarded(deps, 'attaching files', async () => {
         const files = await deps.uploads.resolve(args.files)
         const outcome = await deps.browser.attachFiles(target, files.map(file => file.path), args.tab)
@@ -190,7 +201,7 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
     },
     presentCall: args => ({
       card: 'generic',
-      title: `Attach ${Array.isArray(args.files) ? args.files.join(', ') : 'files'}`,
+      title: `Attach ${args.files.join(', ')}`,
       kind: 'execute',
     }),
   }))
@@ -271,7 +282,7 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
             if (args.replace !== true) await deps.credentials.remove(record.id)
             throw error
           }
-          wrote.push(first.target?.ref ?? parsed.request.selector ?? parsed.request.axId ?? 'field')
+          wrote.push(first.target?.ref ?? describeTarget(parsed.request))
           if (args.confirmSelector !== undefined) {
             await deps.browser.fillSecret({ selector: args.confirmSelector }, record.password, 'password', record.host, args.tab)
             wrote.push(args.confirmSelector)
@@ -293,7 +304,7 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
         const record = await deps.credentials.find(host, args.username)
         const value = field === 'password' ? record.password : record.username
         const outcome = await deps.browser.fillSecret(parsed.request, value, field, record.host, args.tab)
-        const wrote = [outcome.target?.ref ?? parsed.request.selector ?? parsed.request.axId ?? 'field']
+        const wrote = [outcome.target?.ref ?? describeTarget(parsed.request)]
         if (field === 'password' && args.confirmSelector !== undefined) {
           await deps.browser.fillSecret({ selector: args.confirmSelector }, value, 'password', record.host, args.tab)
           wrote.push(args.confirmSelector)

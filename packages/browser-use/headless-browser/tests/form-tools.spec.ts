@@ -93,6 +93,16 @@ describe('form tool registration', () => {
       expect(definition.presentCall?.({ action: 'create', files: ['resume.pdf'] })).toMatchObject({ card: 'generic' })
     }
   })
+
+  it('titles each credential action and an upload by its files', () => {
+    const bench = setup()
+    const credential = bench.definitions.get('headless_browser_credential')
+    expect(credential?.presentCall?.({ action: 'list' })).toEqual({ card: 'generic', title: 'List saved accounts', kind: 'read' })
+    expect(credential?.presentCall?.({ action: 'create' })).toEqual({ card: 'generic', title: 'Create a saved password', kind: 'execute' })
+    expect(credential?.presentCall?.({ action: 'fill' })).toEqual({ card: 'generic', title: 'Fill a saved credential', kind: 'execute' })
+    expect(bench.definitions.get('headless_browser_upload')?.presentCall?.({ files: ['resume.pdf', 'letter.pdf'] }))
+      .toMatchObject({ title: 'Attach resume.pdf, letter.pdf' })
+  })
 })
 
 describe('headless_browser_credential', () => {
@@ -179,6 +189,59 @@ describe('headless_browser_credential', () => {
     expect(await bench.call('headless_browser_credential', { action: 'fill', selector: '#password' })).toMatchObject({ error: expect.stringContaining('用户') as string })
   })
 
+  it('creates into the field an accessibility id names, at the requested length, and names the field it wrote', async () => {
+    const bench = setup({
+      fillSecret: async (request, secret, field, host) => {
+        bench.written.push({ request, secret, field, host })
+        return { url: HIT.url }
+      },
+    })
+    const result = await bench.call('headless_browser_credential', { action: 'create', axId: 'e5', username: 'cv@example.com', length: 24 })
+    const saved = await bench.vault.find('acme.wd5.myworkdayjobs.com')
+    expect(result).toMatchObject({ action: 'create', wrote: ['e5'], url: HIT.url })
+    expect(result).not.toHaveProperty('target')
+    expect(bench.written.map(write => write.request)).toEqual([{ axId: 'e5' }])
+    expect(saved.password).toHaveLength(24)
+  })
+
+  it('keeps the saved account when a replacement password could not be written', async () => {
+    let refuse = false
+    const bench = setup({
+      fillSecret: async (request, secret, field, host) => {
+        if (refuse) throw new SecretFieldError('#name is not a password input (input[type=password]); a saved password is only written into one')
+        bench.written.push({ request, secret, field, host })
+        return HIT
+      },
+    })
+    await bench.call('headless_browser_credential', { action: 'create', selector: '#password', username: 'cv@example.com' })
+    refuse = true
+    expect(await bench.call('headless_browser_credential', { action: 'create', selector: '#name', username: 'cv@example.com', replace: true })).toEqual({
+      error: '#name is not a password input (input[type=password]); a saved password is only written into one',
+    })
+    expect(await bench.vault.list()).toHaveLength(1)
+    expect((await bench.vault.find('acme.wd5.myworkdayjobs.com')).replacedAt).toBeDefined()
+  })
+
+  it('fills the saved password into the confirm field too, and names an accessibility id it wrote', async () => {
+    const bench = setup()
+    await bench.call('headless_browser_credential', { action: 'create', selector: '#password', username: 'cv@example.com' })
+    bench.written.length = 0
+    const saved = await bench.vault.find('acme.wd5.myworkdayjobs.com')
+    expect(await bench.call('headless_browser_credential', { action: 'fill', selector: '#password', confirmSelector: '#confirm' }))
+      .toMatchObject({ action: 'fill', wrote: ['#password', '#confirm'] })
+    expect(bench.written.map(write => [write.request, write.field, write.secret === saved.password])).toEqual([
+      [{ selector: '#password' }, 'password', true],
+      [{ selector: '#confirm' }, 'password', true],
+    ])
+  })
+
+  it('names the accessibility id of a filled field the page reported no element for', async () => {
+    const bench = setup({ fillSecret: async () => ({ url: HIT.url }) })
+    await bench.call('headless_browser_credential', { action: 'create', selector: '#password', username: 'cv@example.com' })
+    expect(await bench.call('headless_browser_credential', { action: 'fill', field: 'username', axId: 'e3' }))
+      .toMatchObject({ action: 'fill', wrote: ['e3'] })
+  })
+
   it('lists saved accounts without passwords', async () => {
     const bench = setup()
     await bench.call('headless_browser_credential', { action: 'create', selector: '#password', username: 'cv@example.com' })
@@ -214,6 +277,15 @@ describe('headless_browser_upload', () => {
     const bench = setup({ attachFiles })
     await bench.call('headless_browser_upload', { files: ['resume.pdf'], selector: '', index: 0, trigger: 'button.upload', triggerAxId: '', tab: '' })
     expect(attachFiles).toHaveBeenCalledWith({ trigger: { selector: 'button.upload' } }, ['/up/resume.pdf'], undefined)
+  })
+
+  it('passes a trigger accessibility id through as a guarded click target', async () => {
+    const attachFiles = vi.fn<FormBrowser['attachFiles']>(async () => ({ url: 'https://jobs.example.com/apply', ref: 'e7' }))
+    const bench = setup({ attachFiles })
+    expect(await bench.call('headless_browser_upload', { files: ['resume.pdf'], triggerAxId: 'e7' })).toEqual({
+      attached: [{ name: 'resume.pdf', bytes: 10 }], ref: 'e7', url: 'https://jobs.example.com/apply',
+    })
+    expect(attachFiles).toHaveBeenCalledWith({ trigger: { axId: 'e7' } }, ['/up/resume.pdf'], undefined)
   })
 
   it('refuses a file the upload policy refuses, and a call with no or two targets', async () => {

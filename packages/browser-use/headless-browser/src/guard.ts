@@ -518,8 +518,7 @@ export class ActionGuard {
       })
     }
     const chosen = pickCandidate(input.candidates)
-    const target = input.candidates[chosen.index]
-    if (target === undefined) throw new Error('a guarded action needs at least one candidate element')
+    const target = chosen.candidate
     const sensitive = matchSensitiveAction(`${target.name} ${target.value}`)
     if (sensitive !== undefined) {
       if (!this.#sensitiveActions) {
@@ -574,27 +573,36 @@ export class ActionGuard {
    */
   decidePoint(input: PointDecisionInput): Decision {
     const ref = `point (${String(Math.round(input.x))}, ${String(Math.round(input.y))})`
+    const tab = input.tabId === undefined ? {} : { tabId: input.tabId }
     const hit = input.hit
-    const score = hit === undefined ? undefined : scoreVisibility(hit).score
-    this.#emit({
-      kind: 'point',
-      action: input.action,
-      url: input.url,
-      ref,
-      name: hit === undefined ? '' : hit.name,
-      reason: hit === undefined
-        ? 'the point hit no element'
-        : `the point hit an element scoring ${(score ?? 0).toFixed(2)}`,
-      ...score === undefined ? {} : { score },
-      ...input.tabId === undefined ? {} : { tabId: input.tabId },
-      point: { x: input.x, y: input.y },
-    })
     if (hit === undefined) {
+      this.#emit({
+        kind: 'point',
+        action: input.action,
+        url: input.url,
+        ref,
+        name: '',
+        reason: 'the point hit no element',
+        ...tab,
+        point: { x: input.x, y: input.y },
+      })
       return {
         allowed: true,
         point: { x: input.x, y: input.y, name: '', note: 'the point hit no element; the click reaches the page itself' },
       }
     }
+    const score = scoreVisibility(hit).score
+    this.#emit({
+      kind: 'point',
+      action: input.action,
+      url: input.url,
+      ref,
+      name: hit.name,
+      reason: `the point hit an element scoring ${score.toFixed(2)}`,
+      score,
+      ...tab,
+      point: { x: input.x, y: input.y },
+    })
     const sensitive = matchSensitiveAction(`${hit.name} ${hit.value}`)
     if (sensitive !== undefined) {
       if (!this.#sensitiveActions) {
@@ -607,7 +615,7 @@ export class ActionGuard {
           name: hit.name,
           reason: `the element under the point ${quote(hit.name)} matches the sensitive action "${sensitive.label}"`,
           failing: [],
-          ...score === undefined ? {} : { score },
+          score,
         })
       }
     }
@@ -620,7 +628,7 @@ export class ActionGuard {
         x: input.x,
         y: input.y,
         name: hit.name,
-        ...score === undefined ? {} : { score },
+        score,
       },
     }
   }
@@ -703,7 +711,7 @@ export class ActionGuard {
     ref: string,
     name: string,
     sensitive: SensitiveAction,
-    score: number | undefined,
+    score: number,
   ): void {
     this.#emit({
       kind: 'allow',
@@ -714,7 +722,7 @@ export class ActionGuard {
       name,
       reason: `the target ${quote(name)} matches the sensitive action "${sensitive.label}", but the sensitive-name rule is off (sensitiveActions: false), so the action ran`,
       skipped: true,
-      ...score === undefined ? {} : { score },
+      score,
     })
   }
 
@@ -790,25 +798,26 @@ function pickCandidate(candidates: readonly ElementFacts[]): {
   readonly index: number
   readonly score: number
   readonly visibility: VisibilityScore
+  readonly candidate: ElementFacts
   readonly runnerUpScore?: number
 } {
   let index = 0
   let best = -1
   let runnerUp: number | undefined
-  let chosen: VisibilityScore | undefined
+  let chosen: { readonly visibility: VisibilityScore; readonly candidate: ElementFacts } | undefined
   for (const [position, candidate] of candidates.entries()) {
     const visibility = scoreVisibility(candidate)
     if (visibility.score > best) {
       runnerUp = best < 0 ? undefined : best
       best = visibility.score
       index = position
-      chosen = visibility
+      chosen = { visibility, candidate }
     } else if (runnerUp === undefined || visibility.score > runnerUp) {
       runnerUp = visibility.score
     }
   }
   if (chosen === undefined) throw new Error('a guarded action needs at least one candidate element')
-  return { index, score: best, visibility: chosen, ...runnerUp === undefined ? {} : { runnerUpScore: runnerUp } }
+  return { index, score: best, ...chosen, ...runnerUp === undefined ? {} : { runnerUpScore: runnerUp } }
 }
 
 /** Name the tests that failed, hardest first, so the refusal explains itself. */

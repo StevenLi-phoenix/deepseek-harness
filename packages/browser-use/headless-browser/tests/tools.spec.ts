@@ -4,9 +4,10 @@
  */
 
 import { Context } from '@deepseek-ai/cordis'
-import { assertSupportedJsonSchema, type ToolDefinition } from '@deepseek-ai/dsh-tools'
+import { assertSupportedJsonSchema, defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { describe, expect, it, vi } from 'vitest'
 import type { CookieResult } from '../src/cookies.ts'
+import { ActionRefusedError } from '../src/guard.ts'
 import type { TabInfo } from '../src/input.ts'
 import { KeepaliveError, type KeepaliveRequest, type KeepaliveStatus, type KeepaliveTools } from '../src/keepalive.ts'
 import type { DownloadRecord } from '../src/downloads.ts'
@@ -16,7 +17,15 @@ import type { ScrollRequest, ScrollResult } from '../src/scroll.ts'
 import { NoOpenTabError } from '../src/session.ts'
 import { TabNotFoundError, type ClosedTab } from '../src/tabs.ts'
 import { TakeoverState } from '../src/takeover.ts'
-import { registerBrowserTools, withoutBlankOptionals, type ToolBrowser } from '../src/tools.ts'
+import {
+  describeTarget,
+  failure,
+  registerBrowserTools,
+  registerTool,
+  renderJson,
+  withoutBlankOptionals,
+  type ToolBrowser,
+} from '../src/tools.ts'
 
 /** The read result the fake browser answers with. */
 const READ: ReadResult = {
@@ -642,5 +651,196 @@ describe('page actions and control', () => {
     })
     expect(tools.takeover.holder).toBe('human')
     expect(await tools.call('headless_browser_hand_over', { reason: '   ' })).toEqual({ error: 'reason must not be empty' })
+  })
+})
+
+describe('registering a tool', () => {
+  it('passes an argument that is not an object through unchanged', () => {
+    const schema = { type: 'object', properties: {} }
+    const list = ['', 'a']
+    expect(withoutBlankOptionals(schema, null)).toBeNull()
+    expect(withoutBlankOptionals(schema, 'raw')).toBe('raw')
+    expect(withoutBlankOptionals(schema, list)).toBe(list)
+  })
+
+  it('gives the result presenter and the concurrency check the call without its blank optionals, and adds no call presenter the tool lacks', () => {
+    const registered = new Map<string, ToolDefinition>()
+    const ctx = new Context()
+    ctx.provide('tools', {
+      register(definition: ToolDefinition) {
+        registered.set(definition.name, definition)
+        return () => { registered.delete(definition.name) }
+      },
+    })
+    const seen: unknown[] = []
+    registerTool(ctx, defineTool({
+      name: 'headless_browser_probe',
+      description: 'A tool with a result presenter and a concurrency check but no call presenter.',
+      parameters: {
+        tab: { type: 'string' },
+        text: { type: 'string', required: true },
+      },
+      output: {
+        schema: { type: 'object', additionalProperties: false, properties: { ok: { type: 'boolean', required: true } } },
+        render: renderJson,
+      },
+      execute: async () => ({ ok: true }),
+      presentResult: (args) => {
+        seen.push(args)
+        return { card: 'generic', title: 'Probed' }
+      },
+      isConcurrencySafe: (args) => {
+        seen.push(args)
+        return args.tab === undefined
+      },
+    }))
+    const definition = registered.get('headless_browser_probe')
+    expect(definition).not.toHaveProperty('presentCall')
+    expect(definition?.isConcurrencySafe?.({ tab: '', text: '' })).toBe(true)
+    expect(definition?.isConcurrencySafe?.({ tab: 't2', text: '' })).toBe(false)
+    expect(definition?.presentResult?.({ tab: ' ', text: 'x' }, { content: [], isError: false })).toEqual({ card: 'generic', title: 'Probed' })
+    expect(seen).toEqual([{ text: '' }, { tab: 't2', text: '' }, { text: 'x' }])
+  })
+})
+
+describe('failures and targets', () => {
+  it('rethrows a thrown value that is not an Error, since no message can be read from it', () => {
+    expect(() => failure('reading the page', 'gone')).toThrow('gone')
+  })
+
+  it('names an accessibility id, a point, or the page as the target of a message', () => {
+    expect(describeTarget({ axId: 'e12' })).toBe('e12')
+    expect(describeTarget({ point: { x: 10, y: 20 } })).toBe('point (10, 20)')
+    expect(describeTarget({})).toBe('the page')
+  })
+
+  it('refuses a point that names only one coordinate', async () => {
+    const click = vi.fn(async () => HIT)
+    const fill = vi.fn(async () => HIT)
+    const tools = bench(fakeBrowser({ click, fill }))
+    expect(await tools.call('headless_browser_click', { x: 10 })).toEqual({ error: 'give both x and y, or neither' })
+    expect(await tools.call('headless_browser_type', { y: 10, text: 'a' })).toEqual({ error: 'give both x and y, or neither' })
+    expect(click).not.toHaveBeenCalled()
+    expect(fill).not.toHaveBeenCalled()
+  })
+
+  it('names the accessibility id when a click on it fails', async () => {
+    const click = vi.fn(async (_request: unknown, _tab?: string): Promise<ActionOutcome> => { throw new Error('the page went away') })
+    const tools = bench(fakeBrowser({ click }))
+    expect(await tools.call('headless_browser_click', { axId: 'e12' })).toEqual({ error: 'clicking e12 failed: the page went away' })
+    expect(click).toHaveBeenCalledWith({ axId: 'e12' }, undefined)
+  })
+})
+
+describe('results that carry every optional field', () => {
+  it('reports the next window and the embedded pages of a read', async () => {
+    const frames = [{ url: 'https://forms.example.com/apply', width: 800, height: 600 }]
+    const tools = bench(fakeBrowser({ read: async () => ({ ...READ, nextOffset: 12, frames }) }))
+    expect(await tools.call('headless_browser_read', {})).toEqual({ ...READ_WRAPPED, nextOffset: 12, frames })
+  })
+
+  it('reports a coordinate click by its point, with the score, the note, and the popups it opened', async () => {
+    const click = vi.fn(async (_request: unknown, _tab?: string): Promise<ActionOutcome> => ({
+      url: 'https://example.com/signin',
+      point: { x: 10, y: 20, name: 'Continue with Google', score: 0.9, note: 'the point hit a button' },
+      popups: [{ tab: 't3', opener: 't1', url: 'https://accounts.example.com/' }],
+    }))
+    const tools = bench(fakeBrowser({ click }))
+    expect(await tools.call('headless_browser_click', { x: 10, y: 20 })).toEqual({
+      clicked: 'point (10, 20)',
+      url: 'https://example.com/signin',
+      point: {
+        x: 10,
+        y: 20,
+        name: { untrusted: 'https://example.com', content: 'Continue with Google' },
+        score: 0.9,
+        note: 'the point hit a button',
+      },
+      popups: [{ tab: 't3', opener: 't1', url: 'https://accounts.example.com/' }],
+    })
+    expect(click).toHaveBeenCalledWith({ point: { x: 10, y: 20 } }, undefined)
+  })
+
+  it('reports a typed point without a score, and the option a select chose', async () => {
+    const fill = async (): Promise<ActionOutcome> => ({
+      url: 'https://example.com/form',
+      point: { x: 30, y: 40, name: '' },
+      selected: 'Canada',
+    })
+    const tools = bench(fakeBrowser({ fill }))
+    expect(await tools.call('headless_browser_type', { x: 30, y: 40, text: 'Canada' })).toEqual({
+      typed: 'point (30, 40)',
+      url: 'https://example.com/form',
+      point: { x: 30, y: 40, name: { untrusted: 'https://example.com', content: '' } },
+      selected: { untrusted: 'https://example.com', content: 'Canada' },
+    })
+  })
+
+  it('reports the runner-up score of a chosen element', async () => {
+    const click = async (): Promise<ActionOutcome> => ({
+      url: HIT.url,
+      target: { ref: 'a.next', index: 0, name: 'Next', score: 1, runnerUpScore: 0.2 },
+    })
+    const tools = bench(fakeBrowser({ click }))
+    expect(await tools.call('headless_browser_click', { selector: 'a.next' })).toMatchObject({
+      target: { ref: 'a.next', score: 1, runnerUpScore: 0.2 },
+    })
+  })
+
+  it('reports a refusal with only the fields the guard set', async () => {
+    const blocked = {
+      rule: 'sensitive' as const,
+      url: 'https://example.com/account',
+      ref: '#delete',
+      name: { untrusted: 'https://example.com', content: 'Delete account' },
+      reason: 'the target matches the sensitive action "delete"',
+      hint: 'hand over',
+      failing: [],
+    }
+    const click = async (): Promise<ActionOutcome> => { throw new ActionRefusedError(blocked) }
+    const tools = bench(fakeBrowser({ click }))
+    expect(await tools.call('headless_browser_click', { selector: '#delete' })).toEqual({ blocked })
+  })
+
+  it('reports a refusal with its score, threshold, failed tests, and what covers the target', async () => {
+    const factors = {
+      display: 1, visibility: 1, pointerEvents: 1, ariaHidden: 1, opacity: 1, viewport: 1, occlusion: 0.1, area: 1, clipping: 1,
+    }
+    const blocked = {
+      rule: 'visibility' as const,
+      url: 'https://example.com/form',
+      ref: '#submit',
+      name: { untrusted: 'https://example.com', content: 'Continue' },
+      reason: 'the element scored 0.10',
+      hint: 'close the banner first',
+      score: 0.1,
+      threshold: 0.5,
+      failing: ['occlusion'],
+      factors,
+      coveredBy: { untrusted: 'https://example.com', content: 'Accept cookies' },
+    }
+    const click = async (): Promise<ActionOutcome> => { throw new ActionRefusedError(blocked) }
+    const tools = bench(fakeBrowser({ click }))
+    expect(await tools.call('headless_browser_click', { selector: '#submit' })).toEqual({ blocked })
+  })
+})
+
+describe('call titles', () => {
+  it('titles a click and a type by the target they name', () => {
+    const tools = bench(fakeBrowser())
+    const click = definitionOf(tools, 'headless_browser_click')
+    const type = definitionOf(tools, 'headless_browser_type')
+    expect(click.presentCall?.({ axId: 'e12' })).toMatchObject({ title: 'Click e12' })
+    expect(click.presentCall?.({ x: 10, y: 20 })).toMatchObject({ title: 'Click (10, 20)' })
+    expect(click.presentCall?.({ x: 10 })).toMatchObject({ title: 'Click (10, 0)' })
+    expect(click.presentCall?.({})).toMatchObject({ title: 'Click a point' })
+    expect(type.presentCall?.({ axId: 'e12', text: 'a' })).toMatchObject({ title: 'Type into e12' })
+    expect(type.presentCall?.({ x: 10, y: 20, text: 'a' })).toMatchObject({ title: 'Type into a point' })
+  })
+
+  it('titles a scroll by its edge and a close by its tab', () => {
+    const tools = bench(fakeBrowser())
+    expect(definitionOf(tools, 'headless_browser_scroll').presentCall?.({ to: 'bottom' })).toMatchObject({ title: 'Scroll to bottom' })
+    expect(definitionOf(tools, 'headless_browser_close').presentCall?.({ tab: 't2' })).toMatchObject({ title: 'Close tab t2' })
   })
 })

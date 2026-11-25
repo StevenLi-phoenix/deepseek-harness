@@ -23,7 +23,7 @@ import {
   untrusted,
   type SecurityEvent,
 } from '../src/guard.ts'
-import { VISIBILITY_THRESHOLD, type ElementFacts } from '../src/visibility.ts'
+import { VISIBILITY_THRESHOLD, scoreVisibility, type ElementFacts } from '../src/visibility.ts'
 
 /** A visible, hittable button, before one test is broken. */
 function facts(overrides: Partial<ElementFacts> = {}): ElementFacts {
@@ -297,6 +297,38 @@ describe('guarded click', () => {
     expect(decision.allowed).toBe(true)
     expect(decision.target).toMatchObject({ ref: 'e12', index: 0, score: 1 })
   })
+
+  it('reports the best score among the elements the chosen one beat, wherever they sit', () => {
+    const { guard } = guarded()
+    const partly = facts({ viewportFraction: 0.5 })
+    const decision = guard.decideTarget({
+      action: 'click',
+      url: 'https://site.example/form',
+      ref: 'button',
+      candidates: [facts(), facts({ opacity: 0 }), partly, facts({ display: 'none' })],
+      allowOrigin: false,
+    })
+    expect(scoreVisibility(partly).score).toBeGreaterThan(0)
+    expect(decision.target).toMatchObject({ index: 0, score: 1, runnerUpScore: scoreVisibility(partly).score })
+  })
+
+  it('refuses to decide a target without a candidate element', () => {
+    const { guard } = guarded()
+    expect(() => guard.decideTarget({ action: 'click', url: 'https://site.example/form', ref: '#none', candidates: [], allowOrigin: false }))
+      .toThrow('a guarded action needs at least one candidate element')
+  })
+
+  it('says a sensitive target has no accessible name when only its value matched', () => {
+    const { guard } = guarded()
+    const decision = guard.decideTarget({
+      action: 'click',
+      url: 'https://site.example/form',
+      ref: 'input[type=submit]',
+      candidates: [facts({ name: '', value: 'Submit', tag: 'input' })],
+      allowOrigin: false,
+    })
+    expect(refusalOf(decision).reason).toBe('the target (no accessible name) matches the sensitive action "submit"')
+  })
 })
 
 describe('guarded point', () => {
@@ -370,6 +402,33 @@ describe('guarded point', () => {
     expect(decision.allowed).toBe(true)
     expect(decision.point?.score).toBeLessThan(VISIBILITY_THRESHOLD)
   })
+
+  it('refuses typing at a point whose form submits to another site', () => {
+    const { guard, events } = guarded()
+    const decision = guard.decidePoint({
+      action: 'type',
+      url: 'https://site.example/login',
+      x: 40,
+      y: 50,
+      hit: facts({ name: 'Password', href: 'https://site.example/help', formAction: 'https://evil.example/collect' }),
+      allowOrigin: false,
+    })
+    expect(refusalOf(decision)).toMatchObject({ rule: 'origin', ref: 'point (40, 50)', reason: 'the target is on evil.example while the page is on site.example' })
+    expect(events.map(event => event.kind)).toEqual(['point', 'refusal'])
+  })
+
+  it('carries the score of the element under the point on a sensitive refusal', () => {
+    const { guard } = guarded()
+    const decision = guard.decidePoint({
+      action: 'click',
+      url: 'https://site.example/account',
+      x: 40,
+      y: 50,
+      hit: facts({ name: 'Delete account' }),
+      allowOrigin: false,
+    })
+    expect(refusalOf(decision)).toMatchObject({ rule: 'sensitive', score: 1 })
+  })
 })
 
 describe('guarded navigation', () => {
@@ -410,6 +469,20 @@ describe('guarded navigation', () => {
     expect(refusalOf(refused).rule).toBe('origin')
     const allowed = guard.decideEval({ url: 'https://site.example/', script: 'document.title = "x"', allowOrigin: false })
     expect(allowed.allowed).toBe(true)
+  })
+
+  it('checks every URL in a mutating eval, past the ones on the same site', () => {
+    const { guard } = guarded()
+    const script = 'fetch("https://api.site.example/save"); location.href = "https://evil.example/x"'
+    expect(refusalOf(guard.decideEval({ url: 'https://site.example/', script, allowOrigin: false })).reason)
+      .toBe('the target is on evil.example while the page is on site.example')
+    expect(guard.decideEval({ url: 'https://site.example/', script: 'fetch("https://api.site.example/save")', allowOrigin: false }).allowed).toBe(true)
+  })
+})
+
+describe('refusal of a decision', () => {
+  it('refuses to read a refusal out of a decision that allowed the action', () => {
+    expect(() => refusalOf({ allowed: true })).toThrow('the action guard allowed the action, so it has no refusal')
   })
 })
 
