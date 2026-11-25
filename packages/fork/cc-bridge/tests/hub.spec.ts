@@ -237,6 +237,7 @@ describe('PeerHub start and stop', () => {
     const denied = 2 ** 22 - 13
     writeFileSync(path('notes.txt'), 'not a record')
     writeFileSync(path(`${String(2 ** 22 - 15)}.json`), '{ not json')
+    writeFileSync(path(`${String(2 ** 22 - 19)}.json`), 'null')
     writeFileSync(path(`${String(dead)}.json`), JSON.stringify({ dshBridge: true }))
     writeFileSync(path(`${String(denied)}.json`), JSON.stringify({ dshBridge: true }))
     writeFileSync(path(`${String(process.ppid)}.json`), JSON.stringify({ dshBridge: true }))
@@ -250,10 +251,26 @@ describe('PeerHub start and stop', () => {
     expect(existsSync(path(`${String(denied)}.json`))).toBe(true)
     expect(existsSync(path(`${String(process.ppid)}.json`))).toBe(true)
     expect(existsSync(path(`${String(2 ** 22 - 15)}.json`))).toBe(true)
+    expect(existsSync(path(`${String(2 ** 22 - 19)}.json`))).toBe(true)
     expect(existsSync(path('notes.txt'))).toBe(true)
     expect(logged(log.info).filter(line => line.includes('removed the peer record'))).toEqual([
       `cc-bridge: removed the peer record of a dead run: ${String(dead)}.json`,
     ])
+  })
+
+  it('warns and keeps a dead run\'s record it cannot remove', async () => {
+    const { hub, dirs, log } = bareHub()
+    const dead = 2 ** 22 - 17
+    const record = join(dirs.sessionsDir, `${String(dead)}.json`)
+    writeFileSync(record, JSON.stringify({ dshBridge: true }))
+    chmodSync(dirs.sessionsDir, 0o555)
+    try {
+      await hub.start()
+    } finally {
+      chmodSync(dirs.sessionsDir, 0o755)
+    }
+    expect(existsSync(record)).toBe(true)
+    expect(logged(log.warn)).toContainEqual(expect.stringContaining(`cc-bridge: the peer record of a dead run stays: ${String(dead)}.json: `))
   })
 })
 

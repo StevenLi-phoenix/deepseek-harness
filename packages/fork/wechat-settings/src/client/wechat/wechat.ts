@@ -149,7 +149,7 @@ export class WechatLoader {
     if (login === undefined) return
     try {
       await this.post({ action: 'login.cancel', key: login.key })
-    } catch {
+    } catch (_error) {
       // The login times out by itself on the Host if the cancel did not arrive.
     }
   }

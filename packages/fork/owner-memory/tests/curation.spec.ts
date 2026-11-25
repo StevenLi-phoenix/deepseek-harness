@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  composeMergeText, dominantCategory, groupDuplicates, overlapOf, staleEntries, staleReason, textParts, tokensOf,
+  composeMergeText, dominantCategory, groupDuplicates, overlapOf, staleEntries, staleReason, textParts, tokensOf, type TextPart,
 } from '../src/curation.ts'
 import { MAX_TEXT_CHARS, type MemoryCategory, type MemoryEntry } from '../src/entries.ts'
 
@@ -92,8 +92,8 @@ describe('groupDuplicates', () => {
 describe('textParts', () => {
   it('marks the clause only one member says', () => {
     const parts = textParts([entry(COURSE_A, 'projects', '2026-10-01', 'aaaaaa'), entry(COURSE_B, 'projects', '2026-10-01', 'bbbbbb')])
-    const first = parts.get('aaaaaa') ?? []
-    const second = parts.get('bbbbbb') ?? []
+    expect(parts.map(({ member }) => member.id)).toEqual(['aaaaaa', 'bbbbbb'])
+    const [first, second] = parts.map(({ parts: memberParts }) => memberParts) as [TextPart[], TextPart[]]
     expect(first.map(part => part.text)).toEqual([
       'CS-UY 4523 Design Project meets on Tuesdays with Professor Smith;',
       ' the final presentation is a poster session',
@@ -165,7 +165,6 @@ describe('dominantCategory', () => {
     expect(dominantCategory([
       entry('one', 'career'), entry('two', 'career'), entry('a much longer text about someone', 'identity'),
     ])).toBe('career')
-    expect(dominantCategory([])).toBe('instructions')
   })
 })
 

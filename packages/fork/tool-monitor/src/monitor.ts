@@ -352,8 +352,8 @@ export class MonitorRegistry {
     if (pid === undefined || entry.child.exitCode !== null) return
     try {
       process.kill(-pid, signal)
-    } catch {
-      // The group is already gone.
+    } catch (_error) {
+      // ESRCH: the group is already gone.
     }
   }
 

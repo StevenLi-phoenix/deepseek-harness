@@ -79,8 +79,8 @@ describe('course tools', () => {
     const body = api.call.mock.calls[0]![1]
     expect(body).toMatchObject({ expected_version: 0, course_id: 'tch', title: 'Week 8 Take Home Assignment', due_at: null, category: 'assignment', source_url: url })
     expect(String(body['id'])).toMatch(/^task-dsh-[0-9a-f]{12}$/u)
-    expect(await run('courses_observe', { expected_version: 0, url, observed: 'x', title: 'No course' })).toMatchObject({ value: { error: expect.stringContaining('a new task needs course') } })
-    expect(await run('courses_observe', { id: 't1', expected_version: 3, url, observed: 'same as before' })).toMatchObject({ value: { error: expect.stringContaining('courses_record_sync checked_ids') } })
+    expect(await run('courses_observe', { expected_version: 0, url, observed: 'x', title: 'No course' })).toMatchObject({ value: { error: expect.stringContaining('a new task needs course') as string } })
+    expect(await run('courses_observe', { id: 't1', expected_version: 3, url, observed: 'same as before' })).toMatchObject({ value: { error: expect.stringContaining('courses_record_sync checked_ids') as string } })
     expect(await run('courses_observe', { id: 't1', expected_version: 3, url: '', observed: 'x', due_at: 'none' })).toMatchObject({ value: { error: 'give the page url and what it showed' } })
     expect(api.call).toHaveBeenCalledTimes(1)
   })
@@ -131,7 +131,7 @@ describe('course tools', () => {
     await run('courses_record_sync', { detail: 'The Brightspace session needs a sign-in', failed: ['assignments'] })
     expect(api.call.mock.calls[1]![1]).toMatchObject({ evidence: { kind: 'inference' } })
     expect(await run('courses_record_sync', { detail: 'read it', checked: ['assignments'] })).toMatchObject({ value: { error: 'give the url of the page you read' } })
-    expect(await run('courses_record_sync', { detail: 'nothing' })).toMatchObject({ value: { error: expect.stringContaining('name the areas') } })
+    expect(await run('courses_record_sync', { detail: 'nothing' })).toMatchObject({ value: { error: expect.stringContaining('name the areas') as string } })
   })
 
   it('tells the model that a schedule naming a course task rechecks the task when it fires', async () => {

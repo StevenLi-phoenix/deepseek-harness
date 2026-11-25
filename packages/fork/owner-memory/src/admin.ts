@@ -185,12 +185,20 @@ export interface MergeApplied {
   readonly removed: readonly MemoryEntry[]
 }
 
-/** The entries a merge names, as it previewed them; the token is a digest of this and of the request. */
-function membersOf(entries: readonly MemoryEntry[], ids: readonly string[]): Array<[string, string, MemoryCategory, string] | null> {
-  return ids.map((id) => {
-    const entry = entries.find(candidate => candidate.id === id)
-    return entry === undefined ? null : [entry.id, entry.date, entry.category, entry.text]
-  })
+/** One merge member as the preview token digests it: id, date, category, text. */
+type MemberDigest = [string, string, MemoryCategory, string]
+
+/**
+ * The entries a merge names, in its order, as it previewed them; the token is a digest of this and of the request.
+ * The store has already refused a merge naming a missing id.
+ */
+function membersOf(entries: readonly MemoryEntry[], ids: readonly string[]): MemberDigest[] {
+  return ids.flatMap(id => entries.filter(entry => entry.id === id).map(digestOf))
+}
+
+/** A member's id, date, category and text, as the preview token digests them. */
+function digestOf(entry: MemoryEntry): MemberDigest {
+  return [entry.id, entry.date, entry.category, entry.text]
 }
 
 /**
@@ -200,7 +208,7 @@ function membersOf(entries: readonly MemoryEntry[], ids: readonly string[]): Arr
  * @returns a hex SHA-256 digest.
  */
 export function mergeToken(plan: MergePlan): string {
-  return digest(['merge', plan.ids, plan.keep, plan.category, plan.members.map(entry => [entry.id, entry.date, entry.category, entry.text])])
+  return digest(['merge', plan.ids, plan.keep, plan.category, plan.members.map(digestOf)])
 }
 
 /**

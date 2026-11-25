@@ -511,7 +511,7 @@ function fencedRanges(text: string): Array<[number, number]> {
   for (const line of text.split('\n')) {
     const next = offset + line.length + 1
     const fenceLength = fenceRun(line)
-    const opened = fenceLength === 0 ? '' : line.trim()[0] ?? ''
+    const opened = fenceLength === 0 ? '' : line.trim().charAt(0)
     if (marker === '') {
       if (fenceLength > 0) {
         start = offset
@@ -538,9 +538,9 @@ export function markdownImages(text: string): MarkdownImage[] {
   const fenced = fencedRanges(text)
   const images: MarkdownImage[] = []
   for (const match of text.matchAll(MARKDOWN_IMAGE)) {
-    const index = match.index ?? 0
+    const index = match.index
     if (fenced.some(([start, end]) => index > start && index < end)) continue
-    const target = (match[1] ?? match[2] ?? '').trim()
+    const target = (match[1] ?? String(match[2])).trim()
     if (target === '') continue
     images.push({ raw: match[0], target, index })
   }

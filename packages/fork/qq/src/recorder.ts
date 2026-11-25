@@ -511,12 +511,13 @@ export class QqRecorder {
    */
   legacyState(): LegacyDigestState {
     let outageNoticeAt: number | null = null
+    let saved: { lastNoticeAt?: unknown } | null = null
     try {
-      const saved = JSON.parse(readFileSync(join(this.dataDir, 'outage-notice.json'), 'utf8')) as { lastNoticeAt?: unknown }
-      if (typeof saved.lastNoticeAt === 'number' && Number.isFinite(saved.lastNoticeAt)) outageNoticeAt = saved.lastNoticeAt
-    } catch {
+      saved = JSON.parse(readFileSync(join(this.dataDir, 'outage-notice.json'), 'utf8')) as { lastNoticeAt?: unknown } | null
+    } catch (_error) {
       // No notice was ever recorded, or the file is unreadable: nothing to carry over.
     }
+    if (typeof saved?.lastNoticeAt === 'number' && Number.isFinite(saved.lastNoticeAt)) outageNoticeAt = saved.lastNoticeAt
     return {
       digests: this.store.legacyDigests().map(row => ({
         groupId: row.groupId, fromCursor: cursorOf(row.fromRow), toCursor: cursorOf(row.toRow), messageCount: row.messageCount,
@@ -796,14 +797,15 @@ export class QqRecorder {
   }
 
   private loadConnectionState(): void {
+    let saved: Record<string, unknown> | null = null
     try {
-      const saved = JSON.parse(readFileSync(this.connectionStateFile, 'utf8')) as Record<string, unknown>
-      for (const key of ['lastAliveAt', 'lastGroupListAt', 'lastBackfillAt'] as const) {
-        const value = saved[key]
-        if (typeof value === 'number' && Number.isFinite(value)) this.connectionState[key] = value
-      }
-    } catch {
+      saved = JSON.parse(readFileSync(this.connectionStateFile, 'utf8')) as Record<string, unknown> | null
+    } catch (_error) {
       // A first start, or an unreadable file: nothing is known, so nothing is skipped.
+    }
+    for (const key of ['lastAliveAt', 'lastGroupListAt', 'lastBackfillAt'] as const) {
+      const value = saved?.[key]
+      if (typeof value === 'number' && Number.isFinite(value)) this.connectionState[key] = value
     }
   }
 

@@ -522,7 +522,7 @@ export class MemoryStore {
         entries: next,
         result: { entry: merged, removed },
         op: 'replace',
-        ops: new Map(removed.map(entry => [entry.id, 'forget' as HistoryOp])),
+        ops: new Map(removed.map(entry => [entry.id, 'forget'])),
       }
     })
   }
@@ -535,12 +535,14 @@ export class MemoryStore {
     const records: HistoryRecord[] = []
     for (const line of (await this.read(this.historyFile)).split('\n')) {
       if (line.trim() === '') continue
+      let parsed: HistoryRecord | null
       try {
-        const parsed = JSON.parse(line) as HistoryRecord
-        if (typeof parsed.id === 'string' && typeof parsed.op === 'string' && typeof parsed.at === 'string') records.push(parsed)
-      } catch {
+        parsed = JSON.parse(line) as HistoryRecord | null
+      } catch (_error) {
         // A torn line costs one record, not the history.
+        continue
       }
+      if (typeof parsed?.id === 'string' && typeof parsed.op === 'string' && typeof parsed.at === 'string') records.push(parsed)
     }
     return records
   }

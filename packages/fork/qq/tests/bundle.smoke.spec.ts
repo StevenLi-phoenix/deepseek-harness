@@ -74,7 +74,7 @@ async function start() {
   for (;;) {
     try {
       if ((await fetch(`http://127.0.0.1:${port}/healthz`)).ok) break
-    } catch {
+    } catch (_error) {
       // Not listening yet.
     }
     if (Date.now() > deadline) throw new Error(`the recorder did not come up: ${stderr}`)

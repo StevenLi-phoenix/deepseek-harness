@@ -159,12 +159,15 @@ export class StyleStore {
     const records: StyleRecord[] = []
     for (const line of raw.split('\n')) {
       if (line.trim() === '') continue
+      let value: unknown
       try {
-        const record = recordFrom(JSON.parse(line))
-        if (record !== undefined) records.push(record)
-      } catch {
+        value = JSON.parse(line)
+      } catch (_error) {
         // A torn line is skipped.
+        continue
       }
+      const record = recordFrom(value)
+      if (record !== undefined) records.push(record)
     }
     return records.toSorted(newestFirst)
   }

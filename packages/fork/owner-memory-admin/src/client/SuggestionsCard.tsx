@@ -6,7 +6,7 @@
 
 import type { ReactNode } from 'react'
 import type { CurationView, SuggestionView } from '../view.ts'
-import { dismissKey, suggestionKey } from './filter.ts'
+import { suggestionKey } from './filter.ts'
 import type { MemoryActions, MemoryState } from './memory.ts'
 import type { MemoryKey } from './locales.ts'
 import { Button, Card, Tag, type Translate } from './parts.tsx'
@@ -61,7 +61,7 @@ export function SuggestionsCard({ state, actions, t }: { state: MemoryState; act
         ? <p className={css.empty}>{t('suggest.empty')}</p>
         : (
           <ul className={`${css.list} ${css.suggestList}`}>
-            {items.map(item => <SuggestionRow key={item.key ?? dismissKey(item.kind, item.ids)} item={item} actions={actions} t={t} />)}
+            {items.map(item => <SuggestionRow key={item.key} item={item} actions={actions} t={t} />)}
           </ul>
         )}
     </Card>

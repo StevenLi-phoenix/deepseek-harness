@@ -150,20 +150,19 @@ function matching(entries: readonly MemoryEntry[], last: ReadonlyMap<string, His
  */
 export function buildCuration(entries: readonly MemoryEntry[], now: number): CurationView {
   const groups: DuplicateGroupView[] = groupDuplicates(entries).map((group) => {
-    const parts = textParts(group.members)
     const ids = group.members.map(member => member.id)
     return {
       key: ids.toSorted().join('-'),
       kind: new Set(group.members.map(member => member.category)).size > 1 ? 'conflict' : 'duplicate',
       score: Math.round(group.score * 100) / 100,
       ids,
-      members: group.members.map(member => ({
+      members: textParts(group.members).map(({ member, parts }) => ({
         id: member.id,
         category: member.category,
         date: member.date,
         text: member.text,
         protected: isProtected(member.category),
-        parts: parts.get(member.id) ?? [],
+        parts,
       })),
       proposal: composeMergeText(group.members),
       category: dominantCategory(group.members),

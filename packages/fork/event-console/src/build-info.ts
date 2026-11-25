@@ -30,12 +30,13 @@ export function readBuildInfo(entry: string | undefined = process.argv[1]): Buil
   const sha = BUILD_DIR.exec(resolved)?.[1] ?? null
   let dir = dirname(resolved)
   for (let level = 0; level < MAX_LEVELS; level++) {
+    let manifest: { name?: unknown; version?: unknown } | null | undefined
     try {
-      const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { name?: unknown; version?: unknown }
-      if (manifest.name === '@deepseek-ai/dsh' && typeof manifest.version === 'string') return { version: manifest.version, sha }
-    } catch {
-      // No manifest at this level: keep climbing.
+      manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { name?: unknown; version?: unknown } | null
+    } catch (_error) {
+      // No readable manifest at this level: keep climbing.
     }
+    if (manifest?.name === '@deepseek-ai/dsh' && typeof manifest.version === 'string') return { version: manifest.version, sha }
     const parent = dirname(dir)
     if (parent === dir) break
     dir = parent

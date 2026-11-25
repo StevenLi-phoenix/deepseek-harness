@@ -332,7 +332,7 @@ export function appPagesOf(uri: string, origin: string): { home: string; privacy
   let base = origin
   try {
     base = new URL(uri).origin
-  } catch {
+  } catch (_error) {
     // TypeError: a malformed configured URI, which the card already flags; this page's origin stands in.
   }
   return { home: `${base}/`, privacy: `${base}${GMAIL_PRIVACY_PATH}` }

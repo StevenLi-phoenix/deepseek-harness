@@ -75,12 +75,14 @@ export function recentPublicText(
       chars += text.length
       out.push(text)
       if (options.leaves === false) continue
+      let parsed: unknown
       try {
-        const parsed: unknown = JSON.parse(text)
-        leaves(parsed, out)
-      } catch {
+        parsed = JSON.parse(text)
+      } catch (_error) {
         // Not JSON: the text itself was added.
+        continue
       }
+      leaves(parsed, out)
     }
   }
   return out

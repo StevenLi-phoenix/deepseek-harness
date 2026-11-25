@@ -210,19 +210,27 @@ export class PeerHub {
       const m = /^(\d+)\.json$/u.exec(name)
       if (m === null || Number(m[1]) === process.pid) continue
       const path = join(this.o.sessionsDir, name)
+      let rec: { dshBridge?: unknown } | null
       try {
-        const rec = JSON.parse(await readFile(path, 'utf8')) as { dshBridge?: unknown }
-        if (rec.dshBridge !== true) continue
-        try {
-          process.kill(Number(m[1]), 0)
-        } catch (error: unknown) {
-          if ((error as NodeJS.ErrnoException).code !== 'ESRCH') continue
-          await unlink(path)
-          this.o.logger.info(`cc-bridge: removed the peer record of a dead run: ${name}`)
-        }
-      } catch {
-        // unreadable or not ours: leave it
+        rec = JSON.parse(await readFile(path, 'utf8')) as { dshBridge?: unknown } | null
+      } catch (_error) {
+        // An unreadable record or one that is not JSON is not ours: leave it.
+        continue
       }
+      if (rec?.dshBridge !== true) continue
+      try {
+        process.kill(Number(m[1]), 0)
+        continue
+      } catch (error: unknown) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') continue
+      }
+      try {
+        await unlink(path)
+      } catch (error: unknown) {
+        this.o.logger.warn(`cc-bridge: the peer record of a dead run stays: ${name}: ${errorText(error)}`)
+        continue
+      }
+      this.o.logger.info(`cc-bridge: removed the peer record of a dead run: ${name}`)
     }
   }
 

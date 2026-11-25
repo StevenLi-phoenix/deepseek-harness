@@ -116,31 +116,42 @@ export function overlapOf(left: ReadonlySet<string>, right: ReadonlySet<string>)
  * @returns groups of two or more, largest first, and within a size the most similar first.
  */
 export function groupDuplicates(entries: readonly MemoryEntry[]): DuplicateGroup[] {
-  const tokens = new Map(entries.map(entry => [entry.id, tokensOf(entry.text)]))
-  const groups: Array<{ members: MemoryEntry[]; scores: number[] }> = []
+  const groups: Array<{ members: Array<{ entry: MemoryEntry; tokens: Set<string> }>; scores: number[] }> = []
   for (const entry of entries) {
+    const candidate = { entry, tokens: tokensOf(entry.text) }
     let best: { group: (typeof groups)[number]; score: number } | undefined
     for (const group of groups) {
       if (group.members.length >= MAX_GROUP_SIZE) continue
       for (const member of group.members) {
-        const overlap = overlapOf(tokens.get(entry.id) ?? new Set(), tokens.get(member.id) ?? new Set())
+        const overlap = overlapOf(candidate.tokens, member.tokens)
         if (overlap.shared < MIN_SHARED_TOKENS || overlap.score < SIMILARITY_THRESHOLD) continue
         if (best === undefined || overlap.score > best.score) best = { group, score: overlap.score }
       }
     }
-    if (best === undefined) groups.push({ members: [entry], scores: [] })
+    if (best === undefined) groups.push({ members: [candidate], scores: [] })
     else {
-      best.group.members.push(entry)
+      best.group.members.push(candidate)
       best.group.scores.push(best.score)
     }
   }
   return groups
     .filter(group => group.members.length > 1)
     .map(group => ({
-      members: group.members.toSorted((left, right) => right.text.length - left.text.length || left.id.localeCompare(right.id)),
+      members: group.members.map(member => member.entry).toSorted(longestFirst),
       score: Math.min(...group.scores),
     }))
-    .toSorted((left, right) => right.members.length - left.members.length || right.score - left.score || (left.members[0]?.id ?? '').localeCompare(right.members[0]?.id ?? ''))
+    .toSorted((left, right) => right.members.length - left.members.length || right.score - left.score
+      || leadOf(left.members).id.localeCompare(leadOf(right.members).id))
+}
+
+/** Longer text first; equal lengths by id. */
+function longestFirst(left: MemoryEntry, right: MemoryEntry): number {
+  return right.text.length - left.text.length || left.id.localeCompare(right.id)
+}
+
+/** The first member of a group, which holds two or more. */
+function leadOf(members: readonly MemoryEntry[]): MemoryEntry {
+  return members.reduce(first => first)
 }
 
 /** The clauses of a text, each keeping its closing stop. */
@@ -151,22 +162,15 @@ function clausesOf(text: string): string[] {
 /**
  * The clauses of each member of a group, marking the ones no other member says anything like.
  * @param members - the group's entries.
- * @returns one entry's parts per id, in the members' order.
+ * @returns each member with its parts, in the members' order.
  */
-export function textParts(members: readonly MemoryEntry[]): Map<string, TextPart[]> {
-  const clauses = new Map(members.map(member => [member.id, clausesOf(member.text)]))
-  const sets = new Map([...clauses].map(([id, parts]) => [id, parts.map(part => tokensOf(part))]))
-  const parts = new Map<string, TextPart[]>()
-  for (const member of members) {
-    const mine = clauses.get(member.id) ?? []
-    const others = members.filter(candidate => candidate.id !== member.id).flatMap(candidate => sets.get(candidate.id) ?? [])
-    parts.set(member.id, mine.map((text, index) => {
-      const tokens = sets.get(member.id)?.[index] ?? new Set<string>()
-      const alike = others.some(other => overlapOf(tokens, other).score >= 0.7)
-      return { text, differs: !alike }
-    }))
-  }
-  return parts
+export function textParts(members: readonly MemoryEntry[]): Array<{ member: MemoryEntry; parts: TextPart[] }> {
+  const split = members.map(member => ({ member, clauses: clausesOf(member.text).map(text => ({ text, tokens: tokensOf(text) })) }))
+  return split.map(({ member, clauses }) => {
+    const others = split.filter(other => other.member.id !== member.id).flatMap(other => other.clauses.map(clause => clause.tokens))
+    const parts = clauses.map(({ text, tokens }) => ({ text, differs: !others.some(other => overlapOf(tokens, other).score >= 0.7) }))
+    return { member, parts }
+  })
 }
 
 /**
@@ -177,7 +181,7 @@ export function textParts(members: readonly MemoryEntry[]): Map<string, TextPart
  * @returns the proposed text, normalised to one line.
  */
 export function composeMergeText(members: readonly MemoryEntry[]): string {
-  const ordered = members.toSorted((left, right) => right.text.length - left.text.length || left.id.localeCompare(right.id))
+  const ordered = members.toSorted(longestFirst)
   const base = ordered[0]
   if (base === undefined) return ''
   const known = clausesOf(base.text).map(clause => tokensOf(clause))
@@ -212,10 +216,8 @@ function datesOf(text: string): Date[] {
 function termsOf(text: string): Array<{ season: keyof typeof TERM_END; year: number }> {
   const found: Array<{ season: keyof typeof TERM_END; year: number }> = []
   for (const match of text.matchAll(TERM)) {
-    const season = match[1]?.toLowerCase()
-    const year = Number(match[2])
-    if (season === undefined || !Number.isInteger(year)) continue
-    found.push({ season: season === 'autumn' ? 'fall' : season as keyof typeof TERM_END, year })
+    const season = String(match[1]).toLowerCase()
+    found.push({ season: season === 'autumn' ? 'fall' : season as keyof typeof TERM_END, year: Number(match[2]) })
   }
   for (const match of text.matchAll(CN_TERM)) {
     const season = ({ 春: 'spring', 夏: 'summer', 秋: 'fall', 冬: 'winter' } as const)[match[2] as '春' | '夏' | '秋' | '冬']
@@ -226,19 +228,15 @@ function termsOf(text: string): Array<{ season: keyof typeof TERM_END; year: num
 
 /**
  * The category most members carry; a tie goes to the member with the most text, which is the base of a merge.
- * @param members - the entries to merge.
+ * @param members - the entries to merge, at least one.
  * @returns the category a merged entry would take.
  */
 export function dominantCategory(members: readonly MemoryEntry[]): MemoryCategory {
-  const counts = new Map<MemoryCategory, number>()
-  for (const member of members) counts.set(member.category, (counts.get(member.category) ?? 0) + 1)
-  const best = members.reduce((held, member) => {
-    const score = counts.get(member.category) ?? 0
-    const heldScore = counts.get(held.category) ?? 0
-    if (score !== heldScore) return score > heldScore ? member : held
-    return member.text.length > held.text.length ? member : held
-  }, members[0] as MemoryEntry)
-  return best?.category ?? 'instructions'
+  const scored = members.map(member => ({ member, count: members.filter(other => other.category === member.category).length }))
+  return scored.reduce((held, next) => {
+    if (next.count !== held.count) return next.count > held.count ? next : held
+    return next.member.text.length > held.member.text.length ? next : held
+  }).member.category
 }
 
 /**

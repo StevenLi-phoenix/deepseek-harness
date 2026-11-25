@@ -79,8 +79,8 @@ export async function scan(
   let memory = ABSENT
   try {
     memory = sha256(await readFile(memoryFile, 'utf8'))
-  } catch {
-    // Absent.
+  } catch (_error) {
+    // A missing or unreadable memory file counts as absent.
   }
   const expected = await lastHistorySha(memoryFile) ?? baseline?.digests['memory']
   digests['memory'] = memory

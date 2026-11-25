@@ -69,10 +69,10 @@ describe('history', () => {
     expect(records[2]!.sha).toBe(await memory.sha())
   })
 
-  it('skips a torn line instead of losing the history', async () => {
+  it('skips a torn line or a non-record line instead of losing the history', async () => {
     const memory = await store()
     await memory.save({ text: 'one', category: 'projects' })
-    await writeFile(memory.historyFile, `${await readFile(memory.historyFile, 'utf8')}{"torn\n`)
+    await writeFile(memory.historyFile, `${await readFile(memory.historyFile, 'utf8')}null\n{"torn\n`)
     expect(await memory.history()).toHaveLength(1)
   })
 

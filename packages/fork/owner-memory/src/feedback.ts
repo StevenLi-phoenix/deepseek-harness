@@ -135,12 +135,15 @@ export class FeedbackStore {
     const entries: FeedbackEntry[] = []
     for (const line of raw.split('\n')) {
       if (line.trim() === '') continue
+      let value: unknown
       try {
-        const entry = entryFrom(JSON.parse(line))
-        if (entry !== undefined) entries.push(entry)
-      } catch {
+        value = JSON.parse(line)
+      } catch (_error) {
         // A damaged line costs one record, not the file.
+        continue
       }
+      const entry = entryFrom(value)
+      if (entry !== undefined) entries.push(entry)
     }
     return entries
   }

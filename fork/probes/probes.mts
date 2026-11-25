@@ -93,14 +93,15 @@ export function promptFor(probe: Probe, variant: string, model: string): { syste
  */
 export function parseReply(raw: string): Reply {
   const match = /\{[\s\S]*\}/u.exec(raw)
+  let parsed: { calls?: Reply['calls']; final?: unknown } | undefined
   if (match !== null) {
     try {
-      const parsed = JSON.parse(match[0]) as { calls?: Reply['calls']; final?: unknown }
-      return { calls: Array.isArray(parsed.calls) ? parsed.calls : [], final: typeof parsed.final === 'string' ? parsed.final : '', raw }
-    } catch {
-      // Fall through to the raw text.
+      parsed = JSON.parse(match[0]) as { calls?: Reply['calls']; final?: unknown }
+    } catch (_error) {
+      // A reply that is not JSON falls through to the raw text.
     }
   }
+  if (parsed !== undefined) return { calls: Array.isArray(parsed.calls) ? parsed.calls : [], final: typeof parsed.final === 'string' ? parsed.final : '', raw }
   return { calls: [], final: raw, raw }
 }
 

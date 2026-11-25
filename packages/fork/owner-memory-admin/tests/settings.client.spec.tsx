@@ -780,14 +780,14 @@ describe('suggestions and the section keys', () => {
     expect(card.textContent).not.toContain('条建议')
   })
 
-  it('lists a suggestion the Host sent without a key, and sets it aside by its entries', () => {
+  it('sets a merge suggestion aside by its entries in sorted order', () => {
     const { actions } = mount({
       view: {
         ...VIEW,
-        curation: { scanned: 2, groups: [], suggestions: [{ kind: 'merge', reason: 'duplicate', ids: ['cccccc', 'bbbbbb'], category: 'projects', text: 'keyless suggestion' }] },
+        curation: { scanned: 2, groups: [], suggestions: [{ key: 'merge:bbbbbb-cccccc', kind: 'merge', reason: 'duplicate', ids: ['cccccc', 'bbbbbb'], category: 'projects', text: 'unsorted suggestion' }] },
       },
     })
-    const row = screen.getByText('keyless suggestion').closest('li')!
+    const row = screen.getByText('unsorted suggestion').closest('li')!
     fireEvent.click(within(row).getByRole('button', { name: '不需要' }))
     expect(actions.dismiss).toHaveBeenCalledWith('merge:bbbbbb-cccccc')
   })

@@ -42,18 +42,21 @@ export async function writeJson(path: string, value: unknown): Promise<void> {
  * @returns the `sha` of the last line that has one; undefined when there is no history or no line has a `sha`.
  */
 export async function lastHistorySha(memoryFile: string): Promise<string | undefined> {
+  let text: string
   try {
-    const lines = (await readFile(join(dirname(memoryFile), 'memory.history.jsonl'), 'utf8')).split('\n').filter(line => line.trim() !== '')
-    for (const line of lines.toReversed()) {
-      try {
-        const sha = (JSON.parse(line) as { sha?: unknown }).sha
-        if (typeof sha === 'string') return sha
-      } catch {
-        // A torn line is skipped.
-      }
-    }
-  } catch {
+    text = await readFile(join(dirname(memoryFile), 'memory.history.jsonl'), 'utf8')
+  } catch (_error) {
     // No history yet.
+    return undefined
+  }
+  for (const line of text.split('\n').filter(line => line.trim() !== '').toReversed()) {
+    let sha: unknown
+    try {
+      sha = (JSON.parse(line) as { sha?: unknown }).sha
+    } catch (_error) {
+      // A torn line, or one that is not a record, is skipped.
+    }
+    if (typeof sha === 'string') return sha
   }
   return undefined
 }

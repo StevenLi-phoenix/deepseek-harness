@@ -110,7 +110,7 @@ export function ForgetConfirm({ state, actions, t }: { state: MemoryState; actio
   const flow = state.purge
   if (flow === null) return null
   const single = flow.ids.length === 1
-  const title = single ? t('forget.title', { id: flow.ids[0] ?? '' }) : t('forget.bulkTitle', { count: flow.ids.length })
+  const title = single ? t('forget.title', { id: flow.ids.join('') }) : t('forget.bulkTitle', { count: flow.ids.length })
   const items = flow.preview?.items ?? []
   return (
     <div className={css.confirm} role="alertdialog" aria-label={title} data-stage={flow.stage}>
