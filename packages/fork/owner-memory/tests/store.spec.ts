@@ -168,7 +168,7 @@ describe('MemoryStore.merge', () => {
 
   it('refuses ids that are not a list, fewer than two distinct ones, or not entry ids', async () => {
     const { memory, short } = await three()
-    expect(await refused(memory.merge({ ids: short, text: 'x', category: 'projects' }))).toBe('invalid_id')
+    expect(await refused(memory.merge({ ids: short as never, text: 'x', category: 'projects' }))).toBe('invalid_id')
     expect(await refused(memory.merge({ ids: [short, short], text: 'x', category: 'projects' }))).toBe('invalid_id')
     expect(await refused(memory.merge({ ids: [short, 'not-an-id'], text: 'x', category: 'projects' }))).toBe('invalid_id')
     expect(await memory.list()).toHaveLength(3)
