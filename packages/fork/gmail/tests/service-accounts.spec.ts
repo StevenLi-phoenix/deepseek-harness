@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
-import { readFile, stat } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { Service } from '@deepseek-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Gmail, { GmailError, type SendPolicy, type Config } from '../src/index.ts'
@@ -42,7 +42,7 @@ describe('configuration', () => {
 
   it('fails at load on a redirect that is not https (or http on localhost) and on a trusted entry that is not an address', async () => {
     await expect(mount({ config: { redirectUri: 'http://dsh.example/gmail.oauth' } })).rejects.toThrow('gmail: redirectUri must be an https URL (or http on localhost)')
-    for (const uri of ['https://dsh.example', 'https://dsh.example/cb', `${ORIGIN}${OAUTH_PATH}?x=1`, `https://user:pass@dsh.example${OAUTH_PATH}`]) {
+    for (const uri of ['https://dsh.example', 'https://dsh.example/cb', `${ORIGIN}${OAUTH_PATH}?x=1`, `https://user:pass@dsh.example${OAUTH_PATH}`, `https://[${OAUTH_PATH}`]) {
       await expect(mount({ config: { redirectUri: uri } })).rejects.toThrow(`with path ${OAUTH_PATH}`)
     }
     await expect(mount({ config: { trustedRecipients: ['boss@example.com', 'the boss'] } })).rejects.toThrow('gmail: trustedRecipients entry "the boss" is not an email address')
@@ -148,10 +148,12 @@ describe('sign-in', () => {
     const second = await mount({ pool: first.pool, credentials: first.credentials, google: first.google })
     expect(JSON.parse(await readFile(file, 'utf8'))).toEqual([{
       account: 'personal', state, policy: 'confirm-all', redirectUri: `${ORIGIN}${OAUTH_PATH}`,
-      createdAt: START + 10 * 60_000 - 1, verifier: expect.stringMatching(/^[\w-]{64}$/u),
+      createdAt: START + 10 * 60_000 - 1, verifier: expect.stringMatching(/^[\w-]{64}$/u) as string,
     }])
     vi.stubGlobal('fetch', async (...args: Parameters<typeof second.google.fetch>) => {
-      if (String(args[0]).endsWith('/token')) await expect(stat(file)).rejects.toMatchObject({ code: 'ENOENT' })
+      const [target] = args
+      const href = target instanceof Request ? target.url : target.toString()
+      if (href.endsWith('/token')) await expect(stat(file)).rejects.toMatchObject({ code: 'ENOENT' })
       return second.google.fetch(...args)
     })
     expect(await second.gmail.completeSignIn({ state, code: 'one-use' })).toMatchObject({ id: 'personal', policy: 'confirm-all' })
@@ -178,13 +180,31 @@ describe('sign-in', () => {
     expect(env.google.tokenCalls('authorization_code')).toHaveLength(0)
   })
 
-  it('reports a refused consent, or a redirect without a code, as denied', async () => {
+  it('reports a refused consent, a Google error, or a redirect without a code, as denied', async () => {
     const env = await mount()
     const state = async (): Promise<string> => new URL((await env.gmail.beginSignIn({ account: 'work', origin: ORIGIN })).url).searchParams.get('state') ?? ''
     expect(await gmailFailure(env.gmail.completeSignIn({ state: await state(), error: 'access_denied' }))).toMatchObject({
       failure: 'denied', message: 'Google did not grant access (access_denied)',
     })
     expect(await gmailFailure(env.gmail.completeSignIn({ state: await state() }))).toMatchObject({ failure: 'denied', message: 'Google did not grant access (no code)' })
+    expect(await gmailFailure(env.gmail.completeSignIn({ state: await state(), error: 'server_error' }))).toMatchObject({
+      failure: 'denied', message: 'Google did not grant access (authorization error)',
+    })
+  })
+
+  it('stops a sign-in while the open sign-in file is unreadable, unparseable, or invalid, without repeating its text', async () => {
+    const env = await mount()
+    const file = join(process.env['DSH_HOME'] ?? '', 'data', 'gmail', 'sign-ins.json')
+    await mkdir(dirname(file), { recursive: true })
+    const begin = (): Promise<unknown> => env.gmail.beginSignIn({ account: 'work', origin: ORIGIN })
+    await writeFile(file, '[{"state": "leaked-text"')
+    await expect(begin()).rejects.toThrow(/^gmail: malformed open sign-in store$/u)
+    await writeFile(file, JSON.stringify([{ state: 'leaked-text' }]))
+    await expect(begin()).rejects.toThrow(/^gmail: malformed open sign-in store$/u)
+    await rm(file)
+    await mkdir(file)
+    await expect(begin()).rejects.toMatchObject({ code: 'EISDIR' })
+    expect(env.google.tokenCalls('authorization_code')).toHaveLength(0)
   })
 
   it('refuses a grant without the gmail.modify scope and stores nothing', async () => {

@@ -205,6 +205,14 @@ describe('POST /api/gmail', () => {
 })
 
 describe('the sign-in page', () => {
+  it('hands the service an empty authority when the redirect carries no Host header', async () => {
+    const { pages, gmail } = await mount()
+    const route = pages.find(entry => entry.path === OAUTH_PATH)
+    if (route === undefined) throw new Error('page missing')
+    await route.resource(new Request(`https://dsh.example${OAUTH_PATH}?state=s0&code=c0`))
+    expect(gmail.completeSignIn).toHaveBeenCalledWith({ state: 's0', code: 'c0', error: undefined, callback: { path: OAUTH_PATH, authority: '' } })
+  })
+
   it('connects the account with the redirect\'s state and code, and keeps the code out of any referrer', async () => {
     const { page, gmail } = await mount()
     const response = await page('?state=s1&code=c1&scope=x')
