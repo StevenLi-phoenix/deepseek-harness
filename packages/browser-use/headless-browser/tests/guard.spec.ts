@@ -551,6 +551,27 @@ describe('blocked result', () => {
     expect(blocked.hint).toContain('do not reach it another way')
   })
 
+  it('carries the markup of a refused target as page data, and none on a refusal for its name', () => {
+    const { guard } = guarded()
+    const markup = '<input id="year" role="spinbutton"> in <div id="wrap">; under <div id="year-display" aria-hidden="true"> in <div id="wrap">'
+    const decision = guard.decideTarget({
+      action: 'type',
+      url: 'https://site.example/form',
+      ref: '#year',
+      candidates: [facts({ name: 'Year', occlusion: 0, coveredBy: 'div#year-display "YYYY"', markup })],
+      allowOrigin: false,
+    })
+    expect(blockedAction(refusalOf(decision)).markup).toEqual({ untrusted: 'https://site.example', content: markup })
+    const sensitive = guard.decideTarget({
+      action: 'click',
+      url: 'https://site.example/account',
+      ref: '#delete',
+      candidates: [facts({ name: 'Delete account', markup: '<button id="delete"> in <form>' })],
+      allowOrigin: false,
+    })
+    expect(blockedAction(refusalOf(sensitive)).markup).toBeUndefined()
+  })
+
   it('leaves the score fields off a refusal that has no score', () => {
     const { guard } = guarded()
     const decision = guard.decideTarget({

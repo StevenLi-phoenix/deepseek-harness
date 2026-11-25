@@ -11,6 +11,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
   from what a turn sends, not from forgetting.
 
 ### Added
+- Guard refusals carry `markup` (2026-11-25): a visibility refusal names the opening tags of the target, its parent, its cover and the cover's parent, without `value` attributes, so a guard fix can be written from the refusal alone. DSH had no tool to read a page's HTML, and Workday's year field (Visa #212) and sign-in button (Genentech #252) were each refused with only a one-line cover description.
 - `headless_browser_type` `enter` (2026-11-25): presses Enter in the field after typing, for a search box that lists its matches only on Enter. Visa's Workday My Experience step left School or University and Field of Study at "No Items" because DSH had no Enter; a combobox then chooses the named option as usual.
 
 ### Fixed

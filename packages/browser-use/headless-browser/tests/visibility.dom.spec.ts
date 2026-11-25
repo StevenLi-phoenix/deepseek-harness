@@ -225,6 +225,7 @@ describe('measuring what a person sees', () => {
       height: 32,
       viewportFraction: 1,
       occlusion: 1,
+      markup: '<button id="go"> in <form action="/apply">',
       clippedBy: 0,
       clippingFraction: 1,
     })
@@ -306,6 +307,24 @@ describe('what a click at the element reaches', () => {
       occlusion: 0.4,
       coveredBy: 'div#consent .backdrop .dim role=dialog "Cookie consent"',
     })
+  })
+
+  it('records the opening tags of the element, its cover and their parents, never a value attribute', () => {
+    // Workday's year field: the input sits under an aria-hidden "YYYY" display in the same wrapper.
+    mount('<div id="wrap" data-automation-id="dateInputWrapper"><input id="year" role="spinbutton" value="2023" aria-label="Year">'
+      + '<div id="year-display" aria-hidden="true" class="css-yezobt">YYYY</div></div>')
+    const year = find('#year')
+    const display = find('#year-display')
+    const box: Box = { left: 0, top: 0, width: 40, height: 20 }
+    layout.place(year, box).place(display, box).paint(display, year)
+    const markup = probeElement(year).markup ?? ''
+    expect(markup).toBe('<input id="year" role="spinbutton" aria-label="Year"> in <div id="wrap" data-automation-id="dateInputWrapper">'
+      + '; under <div id="year-display" aria-hidden="true" class="css-yezobt"> in <div id="wrap" data-automation-id="dateInputWrapper">')
+    expect(markup).not.toContain('2023')
+    const long = 'x'.repeat(300)
+    mount(`<button id="go" data-long="${long}">Go</button>`)
+    layout.place(find('#go'), box).paint(find('#go'))
+    expect(probeElement(find('#go')).markup).toBe(`<button id="go" data-long="${'x'.repeat(80)}"> in <body>`)
   })
 
   it('names a cover by its text when it has no label, and by its tag alone when it has neither', () => {

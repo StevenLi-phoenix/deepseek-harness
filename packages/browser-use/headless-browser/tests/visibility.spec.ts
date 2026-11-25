@@ -172,6 +172,8 @@ describe('visibility facts from the page', () => {
     expect(() => readElementFacts({ ...facts(), name: 7 })).toThrow('the visibility probe returned no name')
     expect(() => readElementFacts({ ...facts(), href: 7 })).toThrow('the visibility probe returned no href')
     expect(() => readElementFacts({ ...facts(), coveredBy: 7 })).toThrow('the visibility probe returned no coveredBy')
+    expect(readElementFacts(facts({ markup: '<input id="year">' })).markup).toBe('<input id="year">')
+    expect(() => readElementFacts({ ...facts(), markup: 7 })).toThrow('the visibility probe returned no markup')
     expect(() => readElementFacts({ ...facts(), ariaHidden: 'false' })).toThrow('the visibility probe returned no ariaHidden')
   })
 

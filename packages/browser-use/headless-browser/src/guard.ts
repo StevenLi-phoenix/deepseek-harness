@@ -315,6 +315,8 @@ export interface Refusal {
   readonly failing: readonly VisibilityFactor[]
   /** What sits on top of a covered target, as the probe described it; page-derived. */
   readonly coveredBy?: string
+  /** Opening tags of the target, its parent and its cover, for a visibility refusal; page-derived. */
+  readonly markup?: string
 }
 
 /** What a coordinate click hit, and what it scored. */
@@ -440,6 +442,8 @@ export interface BlockedAction {
   readonly factors?: Readonly<Record<VisibilityFactor, number>>
   /** What sits on top of a covered target, wrapped as page data. */
   readonly coveredBy?: Untrusted<string>
+  /** Opening tags of the target, its parent and its cover, wrapped as page data. */
+  readonly markup?: Untrusted<string>
 }
 
 /** A guard refusal, carried as an error so the tool layer reports it once. */
@@ -548,6 +552,7 @@ export class ActionGuard {
         factors: chosen.visibility.factors,
         failing: chosen.visibility.failing,
         ...chosen.visibility.factors.occlusion < 1 && target.coveredBy !== undefined ? { coveredBy: target.coveredBy } : {},
+        ...target.markup === undefined ? {} : { markup: target.markup },
       })
     }
     return {
@@ -779,6 +784,7 @@ export function blockedAction(refusal: Refusal): BlockedAction {
     failing: refusal.failing,
     ...refusal.factors === undefined ? {} : { factors: refusal.factors },
     ...refusal.coveredBy === undefined ? {} : { coveredBy: untrusted(refusal.url, refusal.coveredBy) },
+    ...refusal.markup === undefined ? {} : { markup: untrusted(refusal.url, refusal.markup) },
   }
 }
 

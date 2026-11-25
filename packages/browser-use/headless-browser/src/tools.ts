@@ -265,6 +265,7 @@ export const BLOCKED_SCHEMA = {
         failing: { type: 'array', items: { type: 'string' } },
         factors: FACTORS_SCHEMA,
         coveredBy: UNTRUSTED_SCHEMA,
+        markup: UNTRUSTED_SCHEMA,
       },
     },
   },
@@ -332,6 +333,7 @@ interface BlockedFields {
   readonly failing: string[]
   readonly factors?: Readonly<Record<string, number>>
   readonly coveredBy?: PageText
+  readonly markup?: PageText
 }
 
 /**
@@ -578,6 +580,7 @@ function blockedFields(blocked: BlockedAction): BlockedFields {
     failing: [...blocked.failing],
     ...blocked.factors === undefined ? {} : { factors: blocked.factors },
     ...blocked.coveredBy === undefined ? {} : { coveredBy: { untrusted: blocked.coveredBy.untrusted, content: blocked.coveredBy.content } },
+    ...blocked.markup === undefined ? {} : { markup: { untrusted: blocked.markup.untrusted, content: blocked.markup.content } },
   }
 }
 

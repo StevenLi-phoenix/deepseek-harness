@@ -827,6 +827,7 @@ describe('results that carry every optional field', () => {
       failing: ['occlusion'],
       factors,
       coveredBy: { untrusted: 'https://example.com', content: 'Accept cookies' },
+      markup: { untrusted: 'https://example.com', content: '<button id="submit"> in <form>; under <div id="banner"> in <body>' },
     }
     const click = async (): Promise<ActionOutcome> => { throw new ActionRefusedError(blocked) }
     const tools = bench(fakeBrowser({ click }))

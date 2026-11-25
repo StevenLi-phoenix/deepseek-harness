@@ -104,6 +104,12 @@ export interface ElementFacts {
    * the start of its label or text. Page-derived, so only ever shown as page data.
    */
   readonly coveredBy?: string
+  /**
+   * Opening tags of the element and its parent, and of what covers its centre and
+   * that element's parent: what a refusal needs for a fix to be written from it.
+   * Never carries a `value` attribute. Page-derived, so only ever shown as page data.
+   */
+  readonly markup?: string
   /** Number of ancestors that clip the element's box. */
   readonly clippedBy: number
   /** Fraction of the border box left after every clipping ancestor. */
@@ -316,6 +322,18 @@ export function probeElement(element: Element): ElementFacts {
       coverRole === null ? '' : `role=${coverRole}`,
       coverText === '' ? '' : JSON.stringify(coverText),
     ].filter(part => part !== '').join(' ').slice(0, 160)
+  const openTag = (node: Element): string => {
+    const attributes = Array.from(node.attributes)
+      .filter(attribute => attribute.name !== 'value')
+      .map(attribute => ` ${attribute.name}="${attribute.value.slice(0, 80)}"`)
+      .join('')
+    return `<${node.tagName.toLowerCase()}${attributes}>`.slice(0, 240)
+  }
+  const inParent = (node: Element): string => {
+    const parent = parentOf(node)
+    return parent === null ? openTag(node) : `${openTag(node)} in ${openTag(parent)}`
+  }
+  const markup = cover === null ? inParent(element) : `${inParent(element)}; under ${inParent(cover)}`
   const href = element.closest('a[href]')?.getAttribute('href') ?? null
   const form = element.closest('form')
   const formActionAttribute = element.getAttribute('formaction')
@@ -341,6 +359,7 @@ export function probeElement(element: Element): ElementFacts {
     viewportFraction: fraction(inViewWidth * inViewHeight),
     occlusion: inViewWidth <= 0 || inViewHeight <= 0 ? 0 : hits / points.length,
     ...coveredBy === undefined ? {} : { coveredBy },
+    markup,
     clippedBy,
     clippingFraction: fraction(clippedArea),
   }
@@ -450,6 +469,8 @@ export function readElementFacts(value: unknown): ElementFacts {
   }
   const coveredBy = record.coveredBy
   if (coveredBy !== undefined && typeof coveredBy !== 'string') throw new Error('the visibility probe returned no coveredBy')
+  const markup = record.markup
+  if (markup !== undefined && typeof markup !== 'string') throw new Error('the visibility probe returned no markup')
   const ariaHidden = record.ariaHidden
   if (typeof ariaHidden !== 'boolean') throw new Error('the visibility probe returned no ariaHidden')
   const ariaHiddenOwn = record.ariaHiddenOwn
@@ -472,6 +493,7 @@ export function readElementFacts(value: unknown): ElementFacts {
     viewportFraction: number('viewportFraction'),
     occlusion: number('occlusion'),
     ...coveredBy === undefined ? {} : { coveredBy },
+    ...markup === undefined ? {} : { markup },
     clippedBy: number('clippedBy'),
     clippingFraction: number('clippingFraction'),
   }
