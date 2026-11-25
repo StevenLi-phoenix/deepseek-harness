@@ -313,6 +313,8 @@ export interface Refusal {
   readonly factors?: Readonly<Record<VisibilityFactor, number>>
   /** Tests that failed, for a visibility refusal. */
   readonly failing: readonly VisibilityFactor[]
+  /** What sits on top of a covered target, as the probe described it; page-derived. */
+  readonly coveredBy?: string
 }
 
 /** What a coordinate click hit, and what it scored. */
@@ -436,6 +438,8 @@ export interface BlockedAction {
   readonly failing: readonly string[]
   /** Every visibility test's value, for a visibility refusal. */
   readonly factors?: Readonly<Record<VisibilityFactor, number>>
+  /** What sits on top of a covered target, wrapped as page data. */
+  readonly coveredBy?: Untrusted<string>
 }
 
 /** A guard refusal, carried as an error so the tool layer reports it once. */
@@ -544,6 +548,7 @@ export class ActionGuard {
         score: chosen.score,
         factors: chosen.visibility.factors,
         failing: chosen.visibility.failing,
+        ...chosen.visibility.factors.occlusion < 1 && target.coveredBy !== undefined ? { coveredBy: target.coveredBy } : {},
       })
     }
     return {
@@ -714,7 +719,7 @@ export class ActionGuard {
   }
 
   #refuse(action: GuardAction, input: Omit<Refusal, 'hint'>): Decision {
-    const refusal: Refusal = { ...input, hint: HINTS[input.rule] }
+    const refusal: Refusal = { ...input, hint: input.coveredBy === undefined ? HINTS[input.rule] : COVERED_HINT }
     this.#emit({
       kind: 'refusal',
       rule: refusal.rule,
@@ -733,6 +738,12 @@ export class ActionGuard {
     this.#onEvent?.(event)
   }
 }
+
+/**
+ * What the agent should do when something on top covers the target: a person
+ * closes a cookie banner or dialog first, with its own visible button.
+ */
+const COVERED_HINT = 'Something on top covers this element (coveredBy names it). If it is a cookie banner, consent prompt or dialog the owner would close first, close it with its own visible button (accept, reject or close), then retry this action. Do not reach the covered element another way (another selector or id for it, or its coordinates).'
 
 /** What the agent should do after each kind of refusal. */
 const HINTS: Readonly<Record<GuardRule, string>> = {
@@ -759,6 +770,7 @@ export function blockedAction(refusal: Refusal): BlockedAction {
     ...refusal.score === undefined ? {} : { score: refusal.score, threshold: VISIBILITY_THRESHOLD },
     failing: refusal.failing,
     ...refusal.factors === undefined ? {} : { factors: refusal.factors },
+    ...refusal.coveredBy === undefined ? {} : { coveredBy: untrusted(refusal.url, refusal.coveredBy) },
   }
 }
 

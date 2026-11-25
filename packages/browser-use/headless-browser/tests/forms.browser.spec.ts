@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { chromium } from 'playwright-core'
 import { Context } from '@deepseek-ai/cordis'
 import { HeadlessBrowserSession, SecretFieldError } from '../src/session.ts'
+import { ActionRefusedError } from '../src/guard.ts'
 
 const AVAILABLE = existsSync(chromium.executablePath())
 
@@ -66,6 +67,11 @@ const FORM = `<!doctype html><title>signup</title><style>html { scroll-behavior:
 const POPUP = `<!doctype html><title>Sign in</title><body><p>Choose an account</p>
 <button id="account" type="button" onclick="window.opener.document.getElementById('shown').textContent = 'signed in'; window.close()">cv@example.com</button>`
 
+const CONSENT = `<!doctype html><title>Engineer</title><body>
+<button id="apply" type="button" style="width:140px;height:44px" onclick="document.getElementById('shown').textContent = 'applying'">Apply Now</button><p id="shown"></p>
+<div id="filter" class="onetrust-pc-dark-filter" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1"></div>
+<div id="banner" style="position:fixed;left:0;right:0;bottom:0;height:120px;background:#fff;z-index:2"><button id="accept" type="button" onclick="document.getElementById('filter').remove(); document.getElementById('banner').remove()">Accept All Cookies</button></div>`
+
 const INNER = '<!doctype html><title>Enter your information</title><body><label>Email <input id="inner-email" type="email"></label>'
 
 interface App {
@@ -83,7 +89,7 @@ async function boot(): Promise<App> {
   const files = join(root, 'uploads')
   const server: Server = createServer((request, response) => {
     response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-    response.end(request.url === '/popup' ? POPUP : request.url === '/inner' ? INNER : FORM)
+    response.end(request.url === '/popup' ? POPUP : request.url === '/inner' ? INNER : request.url === '/consent' ? CONSENT : FORM)
   })
   await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
   const port = (server.address() as { port: number }).port
@@ -243,6 +249,21 @@ describe.skipIf(!AVAILABLE)('form steps in a real page', () => {
     const typed = await app.browser.fill({ selector: '#late' }, 'below the fold')
     expect(typed.target?.score).toBeGreaterThan(0.8)
     expect(await value(app, '#late')).toBe('below the fold')
+  }, 120_000)
+
+  it('names the cookie banner that covers a button, and clicks the button once the banner is closed', async () => {
+    const app = await boot()
+    await app.browser.open(`${app.base}/consent`)
+    const refused = await app.browser.click({ selector: '#apply' }).then(() => undefined, (error: unknown) => error)
+    expect(refused).toBeInstanceOf(ActionRefusedError)
+    const blocked = (refused as ActionRefusedError).blocked
+    expect(blocked.failing).toContain('occlusion')
+    expect(blocked.coveredBy?.content).toContain('div#filter .onetrust-pc-dark-filter')
+    expect(blocked.hint).toContain('cookie banner')
+    await app.browser.click({ selector: '#accept' })
+    await app.browser.click({ selector: '#apply' })
+    const page = await app.browser.page()
+    expect(await page.locator('#shown').textContent()).toBe('applying')
   }, 120_000)
 
   it('lists an embedded form page in a whole-page read', async () => {

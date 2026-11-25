@@ -91,6 +91,12 @@ export interface ElementFacts {
   readonly viewportFraction: number
   /** Fraction of five sampled points where a hit test reaches the element. */
   readonly occlusion: number
+  /**
+   * What a click at the element's centre reaches instead, when something else is
+   * on top there (a cookie banner's backdrop, a dialog): its tag, id, role and
+   * the start of its label or text. Page-derived, so only ever shown as page data.
+   */
+  readonly coveredBy?: string
   /** Number of ancestors that clip the element's box. */
   readonly clippedBy: number
   /** Fraction of the border box left after every clipping ancestor. */
@@ -290,6 +296,18 @@ export function probeElement(element: Element): ElementFacts {
     const hit = deepHit(inViewLeft + inViewWidth * across, inViewTop + inViewHeight * down)
     if (hit !== null && reaches(hit)) hits += 1
   }
+  // Name what sits on top at the centre, so a refusal can say what to close first.
+  const centreHit = inViewWidth <= 0 || inViewHeight <= 0 ? null : deepHit(inViewLeft + inViewWidth / 2, inViewTop + inViewHeight / 2)
+  const cover = centreHit === null || reaches(centreHit) ? null : centreHit
+  const coverText = cover === null ? '' : (cover.getAttribute('aria-label') ?? flatText(cover)).slice(0, 60)
+  const coveredBy = cover === null
+    ? undefined
+    : [
+      cover.tagName.toLowerCase() + (cover.id === '' ? '' : `#${cover.id}`),
+      ...Array.from(cover.classList).slice(0, 2).map(name => `.${name}`),
+      cover.getAttribute('role') === null ? '' : `role=${cover.getAttribute('role') ?? ''}`,
+      coverText === '' ? '' : JSON.stringify(coverText),
+    ].filter(part => part !== '').join(' ').slice(0, 160)
   const anchor = element.closest('a[href]')
   const form = element.closest('form')
   const formActionAttribute = element.getAttribute('formaction')
@@ -313,6 +331,7 @@ export function probeElement(element: Element): ElementFacts {
     height: aimHeight,
     viewportFraction: fraction(inViewWidth * inViewHeight),
     occlusion: inViewWidth <= 0 || inViewHeight <= 0 ? 0 : hits / points.length,
+    ...coveredBy === undefined ? {} : { coveredBy },
     clippedBy,
     clippingFraction: fraction(clippedArea),
   }
@@ -414,6 +433,8 @@ export function readElementFacts(value: unknown): ElementFacts {
     if (typeof field !== 'string') throw new Error(`the visibility probe returned no ${key}`)
     return field
   }
+  const coveredBy = record.coveredBy
+  if (coveredBy !== undefined && typeof coveredBy !== 'string') throw new Error('the visibility probe returned no coveredBy')
   const ariaHidden = record.ariaHidden
   if (typeof ariaHidden !== 'boolean') throw new Error('the visibility probe returned no ariaHidden')
   return {
@@ -432,6 +453,7 @@ export function readElementFacts(value: unknown): ElementFacts {
     height: number('height'),
     viewportFraction: number('viewportFraction'),
     occlusion: number('occlusion'),
+    ...coveredBy === undefined ? {} : { coveredBy },
     clippedBy: number('clippedBy'),
     clippingFraction: number('clippingFraction'),
   }
