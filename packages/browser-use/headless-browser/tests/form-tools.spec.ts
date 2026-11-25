@@ -99,6 +99,19 @@ describe('headless_browser_credential', () => {
     expect(JSON.stringify(bench.log.info.mock.calls)).not.toContain(saved.password)
   })
 
+  it('creates with every optional argument filled as blank or zero', async () => {
+    const bench = setup()
+    const result = await bench.call('headless_browser_credential', {
+      action: 'create', selector: '#password', axId: '', confirmSelector: '', field: 'password', username: 'cv@example.com',
+      label: '', length: 0, replace: false, symbols: true, tab: '',
+    })
+    const saved = await bench.vault.find('acme.wd5.myworkdayjobs.com')
+    expect(result).toMatchObject({ action: 'create', wrote: ['#password'] })
+    expect(bench.written.map(write => write.request)).toEqual([{ selector: '#password' }])
+    expect(saved.password).toHaveLength(20)
+    expect(saved.label).toBeUndefined()
+  })
+
   it('fills the saved username and password on a later sign-in and touches the record', async () => {
     const bench = setup()
     await bench.call('headless_browser_credential', { action: 'create', selector: '#password', username: 'cv@example.com' })
@@ -180,6 +193,13 @@ describe('headless_browser_upload', () => {
       ref: 'button.upload', target: { name: { untrusted: 'https://jobs.example.com', content: 'Upload résumé' } },
     })
     expect(attachFiles).toHaveBeenCalledWith({ trigger: { selector: 'button.upload' } }, ['/up/resume.pdf'], 't2')
+  })
+
+  it('takes the trigger when the selector and tab are blank', async () => {
+    const attachFiles = vi.fn<FormBrowser['attachFiles']>(async () => ({ url: 'https://jobs.example.com/apply', ref: 'button.upload' }))
+    const bench = setup({ attachFiles })
+    await bench.call('headless_browser_upload', { files: ['resume.pdf'], selector: '', index: 0, trigger: 'button.upload', triggerAxId: '', tab: '' })
+    expect(attachFiles).toHaveBeenCalledWith({ trigger: { selector: 'button.upload' } }, ['/up/resume.pdf'], undefined)
   })
 
   it('refuses a file the upload policy refuses, and a call with no or two targets', async () => {

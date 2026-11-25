@@ -33,6 +33,7 @@ import {
   guarded,
   outcomeFields,
   pageText,
+  registerTool,
   renderJson,
   targetOf,
   type TargetArgs,
@@ -121,7 +122,7 @@ interface CredentialArgs extends TargetArgs {
  * @param deps - the browser, control state, credential store, and upload policy.
  */
 export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
-  ctx.tools.register(defineTool({
+  registerTool(ctx, defineTool({
     name: 'headless_browser_upload',
     description: `Attach local files to a file input on the page (a résumé, a transcript, a cover letter). Name the input with selector — it may be hidden behind a styled button, which is normal — or name the visible button that opens the file chooser with trigger. Files are absolute paths or bare names inside the upload directories; anything else is refused. At most ${String(MAX_UPLOAD_FILES)} files per call.`,
     parameters: {
@@ -161,13 +162,14 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
       render: renderJson,
     },
     execute: async (args: UploadArgs) => {
-      const triggers = [args.selector !== undefined, args.trigger !== undefined, args.triggerAxId !== undefined].filter(Boolean).length
+      const { selector, trigger, triggerAxId } = args
+      const triggers = [selector !== undefined, trigger !== undefined, triggerAxId !== undefined].filter(Boolean).length
       if (triggers !== 1) return { error: 'give exactly one of selector (the file input), trigger, or triggerAxId' }
+      const target: AttachTarget = selector !== undefined
+        ? { selector, ...args.index === undefined ? {} : { index: args.index } }
+        : { trigger: trigger !== undefined ? { selector: trigger } : { axId: triggerAxId ?? '' } }
       return await guarded(deps, 'attaching files', async () => {
         const files = await deps.uploads.resolve(args.files)
-        const target: AttachTarget = args.selector !== undefined
-          ? { selector: args.selector, ...args.index === undefined ? {} : { index: args.index } }
-          : { trigger: args.trigger !== undefined ? { selector: args.trigger } : { axId: args.triggerAxId! } }
         const outcome = await deps.browser.attachFiles(target, files.map(file => file.path), args.tab)
         return {
           attached: files.map(file => ({ name: file.name, bytes: file.bytes })),
@@ -192,7 +194,7 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
     }),
   }))
 
-  ctx.tools.register(defineTool({
+  registerTool(ctx, defineTool({
     name: 'headless_browser_credential',
     description: [
       'The browser\'s own password manager for site accounts. You never see or choose a password.',
@@ -254,7 +256,7 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
             host,
             username,
             ...args.label === undefined ? {} : { label: args.label },
-            ...args.length === undefined ? {} : { length: args.length },
+            ...args.length === undefined || args.length === 0 ? {} : { length: args.length },
             ...args.symbols === undefined ? {} : { symbols: args.symbols },
             ...args.replace === undefined ? {} : { replace: args.replace },
           })

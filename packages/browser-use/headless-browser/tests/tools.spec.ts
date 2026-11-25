@@ -16,7 +16,7 @@ import type { ScrollRequest, ScrollResult } from '../src/scroll.ts'
 import { NoOpenTabError } from '../src/session.ts'
 import { TabNotFoundError, type ClosedTab } from '../src/tabs.ts'
 import { TakeoverState } from '../src/takeover.ts'
-import { registerBrowserTools, type ToolBrowser } from '../src/tools.ts'
+import { registerBrowserTools, withoutBlankOptionals, type ToolBrowser } from '../src/tools.ts'
 
 /** The read result the fake browser answers with. */
 const READ: ReadResult = {
@@ -462,6 +462,51 @@ describe('scrolling through the tool', () => {
       error: 'the user holds the browser (reading the invoice); call headless_browser_hand_back when they are done',
     })
     expect(scroll).not.toHaveBeenCalled()
+  })
+})
+
+describe('calls that fill every optional argument', () => {
+  it('drops blank optional strings and keeps a required one as sent', () => {
+    const schema = { type: 'object', properties: {}, required: ['text'] }
+    expect(withoutBlankOptionals(schema, { text: '', tab: '', selector: ' ', x: 0, allowOrigin: false })).toEqual({ text: '', x: 0, allowOrigin: false })
+    const untouched = { selector: '#a' }
+    expect(withoutBlankOptionals(schema, untouched)).toBe(untouched)
+  })
+
+  it('clicks the selector when axId, tab, and the point are filler', async () => {
+    const click = vi.fn(async (_request: unknown, _tab?: string) => HIT)
+    const tools = bench(fakeBrowser({ click }))
+    expect(await tools.call('headless_browser_click', { selector: 'a.next', axId: '', x: 0, y: 0, tab: '', allowOrigin: false })).toMatchObject({ clicked: 'a.next' })
+    expect(await tools.call('headless_browser_click', { selector: 'a.next', axId: '', x: -1, y: -1, tab: 't3', allowOrigin: false })).toMatchObject({ clicked: 'a.next' })
+    expect(await tools.call('headless_browser_click', { selector: '', axId: '', x: 378, y: 390, tab: 't4', allowOrigin: false })).toMatchObject({ clicked: 'a.next' })
+    expect(click.mock.calls).toEqual([
+      [{ selector: 'a.next', allowOrigin: false }, undefined],
+      [{ selector: 'a.next', allowOrigin: false }, 't3'],
+      [{ point: { x: 378, y: 390 }, allowOrigin: false }, 't4'],
+    ])
+  })
+
+  it('names what clashes when a call gives two targets or none', async () => {
+    const click = vi.fn(async () => HIT)
+    const tools = bench(fakeBrowser({ click }))
+    expect(await tools.call('headless_browser_click', { selector: 'a', x: 10, y: 20 })).toEqual({
+      error: 'give exactly one target, not selector and x/y: leave the others out or empty',
+    })
+    expect(await tools.call('headless_browser_click', { selector: '', axId: '', tab: '' })).toEqual({ error: 'give a target: selector, axId, or x with y' })
+    expect(click).not.toHaveBeenCalled()
+  })
+
+  it('types an empty text, scrolls to the bottom past a zero delta, and closes the active tab for a blank tab', async () => {
+    const fill = vi.fn(async (_request: unknown, _text: string, _tab?: string) => HIT)
+    const scroll = vi.fn(async (_request: ScrollRequest, _tab?: string) => SCROLLED)
+    const closeTab = vi.fn(async (_tab?: string): Promise<ClosedTab> => ({ closed: 't1', replaced: true, tabs: [] }))
+    const tools = bench(fakeBrowser({ fill, scroll, closeTab }))
+    await tools.call('headless_browser_type', { selector: '#q', axId: '', x: 0, y: 0, text: '', tab: '' })
+    expect(fill).toHaveBeenCalledWith({ selector: '#q' }, '', undefined)
+    await tools.call('headless_browser_scroll', { to: 'bottom', deltaY: 0, x: 0, y: 0, tab: '' })
+    expect(scroll).toHaveBeenCalledWith({ to: 'bottom' }, undefined)
+    await tools.call('headless_browser_close', { tab: '' })
+    expect(closeTab).toHaveBeenCalledWith(undefined)
   })
 })
 
