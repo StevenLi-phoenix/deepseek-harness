@@ -115,7 +115,8 @@ export function parseJson(text: string): unknown {
   if (open >= 0 && close > open) attempts.push(body.slice(open, close + 1))
   for (const attempt of attempts) {
     try {
-      return JSON.parse(attempt) as unknown
+      const value: unknown = JSON.parse(attempt)
+      return value
     } catch (_error) {
       // Not JSON in this shape: try the next one.
     }
