@@ -109,6 +109,7 @@ Every edit outside `packages/fork/` and `/fork` is listed here so an upgrade can
 | `package.json` | Root `devDependencies` entry `@deepseek-ai/dsh-headless-browser`, beside the other browser-use packages |
 | `snapshots/session/flow-edit/` (new: `snapshot.yml`, `runtime.cordis.yml`, `session.v4.jsonl`, `system-prompt.expected.md`, `tool-schemas.expected.json`) | Authored keyless snapshot `flow-edit` on the headless profile: the notification flow as the model reads and changes it through the event bus and `tool-watch` |
 | `scripts/fork-bundle-layers.ts` (new) | Reads the `event` profile's fork bundle layers in mount order for the fork bundle specs |
+| `packages/experimental/forge-session/tests/loader-composition.spec.ts` | Waits on bindings and update snapshots that fake `gh`/`glab` runs produce take `CLI_WAIT` (twice the 20 s `CLI_DEADLINE_MS` the composition grants bash and the lookups) instead of `vi.waitFor`'s 1 s default: under Fork CI coverage, the PTC turn's two queued lookups did not finish within 1 s. Upstream-PR candidate |
 
 ## Upgrade procedure
 

@@ -229,6 +229,18 @@ const PTC_MODULES = [
 ] as const
 
 /**
+ * Deadline of one fake `gh` or `glab` run, a Node process: the composition grants it to bash and to
+ * forge-session's lookups, and a wait on what those runs produce takes it as its bound.
+ */
+const CLI_DEADLINE_MS = 20_000
+
+/**
+ * Bound for a wait on bindings or update snapshots that fake-CLI runs produce. A program turn queues its
+ * reference lookups until `run_code` settles, so two of them can run back to back after the turn.
+ */
+const CLI_WAIT = { timeout: 2 * CLI_DEADLINE_MS }
+
+/**
  * Boot the composition through a test-only cordis.yml. `ptc` replaces the native executor with the PTC executor,
  * the Node program runtime, and the sandbox services that runtime requires.
  */
@@ -269,11 +281,11 @@ async function load(mode: 'native' | 'ptc' = 'native') {
     '@deepseek-ai/dsh-agent-loop': ['agents: []'],
     '@deepseek-ai/dsh-shell-env': [`dshHome: ${JSON.stringify(join(root, 'dsh-home'))}`],
     '@deepseek-ai/dsh-sandbox-policy': ['mode: danger-full-access'],
-    '@deepseek-ai/dsh-bash-local': ['timeoutMs: 20000'],
+    '@deepseek-ai/dsh-bash-local': [`timeoutMs: ${String(CLI_DEADLINE_MS)}`],
     '@deepseek-ai/dsh-experimental-forge': ['activeIntervalMs: 600000', 'idleIntervalMs: 600000'],
     '@deepseek-ai/dsh-experimental-forge-github': [`ghCommand: ${JSON.stringify(join(bin, 'gh'))}`],
     '@deepseek-ai/dsh-forge-gitlab': [`glabCommand: ${JSON.stringify(join(bin, 'glab'))}`, 'hosts: [gitlab.example.test]'],
-    '@deepseek-ai/dsh-experimental-forge-session': ['discoveryTimeoutMs: 20000'],
+    '@deepseek-ai/dsh-experimental-forge-session': [`discoveryTimeoutMs: ${String(CLI_DEADLINE_MS)}`],
   }
   const configPath = join(root, 'cordis.yml')
   await writeFile(configPath, [...modules.keys()].flatMap(name => [
@@ -369,7 +381,7 @@ async function expectScriptedBindings(ctx: Context, session: Session, root: stri
   await vi.waitFor(() => { expect(records()).toEqual(expect.arrayContaining([
     { action: 'discover', url: 'https://github.com/octo/demo/pull/7' },
     { action: 'reference', url: 'https://github.com/octo/demo/pull/9' },
-  ])) })
+  ])) }, CLI_WAIT)
   const github = (number: number) => ({ repository: { forge: 'github', host: 'github.com', owner: 'octo', name: 'demo' }, number })
   expect(byUrl(ctx.forgeSession.changeRequests(session))).toEqual([
     { url: 'https://github.com/octo/demo/pull/7', origin: 'discovered', ref: github(7), update: null },
@@ -482,7 +494,7 @@ suite('forge-session through a real cordis.yml Loader composition', () => {
     ctx.forgeSession.watch(agent.session, listener)
     await vi.waitFor(() => { expect(byUrl(listener.mock.lastCall?.[0] ?? []).map(entry => entry.update !== null && 'snapshot' in entry.update
       ? [entry.update.snapshot.title, entry.update.snapshot.checksRollup]
-      : null)).toEqual([['Change 7', 'pending'], ['Change 8', 'success'], ['Change 9', 'success']]) })
+      : null)).toEqual([['Change 7', 'pending'], ['Change 8', 'success'], ['Change 9', 'success']]) }, CLI_WAIT)
 
     const entry = [...ctx.loader.entries()].find(candidate => candidate.options.name === 'cordis:@deepseek-ai/dsh-experimental-forge-session')
     const row = ctx.sessionProjections.checkpoint(agent.session).forgeChangeRequests
@@ -552,7 +564,7 @@ suite('forge-session through a real cordis.yml Loader composition', () => {
       url: `https://gitlab.example.test/group/app/-/merge_requests/${number}`,
       ref: { repository: { forge: 'gitlab', host: 'gitlab.example.test', owner: 'group', name: 'app' }, number },
     })
-    await vi.waitFor(() => { expect(ctx.forgeSession.changeRequests(agent.session)).toHaveLength(5) })
+    await vi.waitFor(() => { expect(ctx.forgeSession.changeRequests(agent.session)).toHaveLength(5) }, CLI_WAIT)
     expect(byUrl(ctx.forgeSession.changeRequests(agent.session))).toEqual([5, 6, 7, 8, 9].map(number => ({
       ...merge(number), origin: number === 5 ? 'created' : 'referenced', update: null,
     })))
@@ -571,7 +583,7 @@ suite('forge-session through a real cordis.yml Loader composition', () => {
     ctx.forgeSession.watch(agent.session, listener)
     await vi.waitFor(() => { expect(listener.mock.lastCall?.[0].map(entry => entry.update !== null && 'snapshot' in entry.update
       ? [entry.update.snapshot.title, entry.update.snapshot.checksRollup, entry.update.snapshot.mergeMethods]
-      : null)).toEqual([['Change 5', 'success', ['merge', 'squash']]]) })
+      : null)).toEqual([['Change 5', 'success', ['merge', 'squash']]]) }, CLI_WAIT)
     const calls = (await readFile(join(root, 'glab.log'), 'utf8')).trim().split('\n').map(line => JSON.parse(line) as string[])
     expect(calls).toContainEqual(['api', 'graphql', '--hostname', 'gitlab.example.test', '--input', '-', '-H', 'Content-Type: application/json'])
   }, 60_000)
