@@ -100,12 +100,21 @@ kind: "package-reference"
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | `BiliAccount`（`ctx.bili`）：配置、生命周期、查私信、relay 注册、读取、操作、日记、给主 agent 的消息、设置页路由 |
+| [`src/index.ts`](src/index.ts) | `BiliAccount`（`ctx.bili`）：配置、生命周期、relay 注册和组装；每个公开方法委托给下面的模块 |
+| [`src/status.ts`](src/status.ts) | `AccountStatus`：bili-svc 的状态和回复闸门的评论发言账号（各自短暂复用）、agent 的账号卡、自己的 mid |
+| [`src/account-session.ts`](src/account-session.ts) | `AccountSession`：账号长期 Session 的查找或创建，以及带标记的提示 |
+| [`src/owner-inbox.ts`](src/owner-inbox.ts) | `OwnerInbox`：查私信、队列、对话期间的快查、交给 Session，以及 owner 的 UID |
+| [`src/reads.ts`](src/reads.ts) | `BiliReads`：推荐流、搜索、排行榜、热搜、视频、评论、弹幕、收件箱和账号卡 |
+| [`src/writes.ts`](src/writes.ts) | `BiliWrites`：投币、三连、关注、取关、收藏、点赞、稍后再看、观看上报，以及失败的含义 |
+| [`src/journal.ts`](src/journal.ts) | `Journal`：账号的日记 |
+| [`src/main-agent.ts`](src/main-agent.ts) | `tellMainAgent`：给 owner 主 agent 的消息，每天有上限 |
+| [`src/settings-view.ts`](src/settings-view.ts) | `SettingsView`：设置页显示的内容 |
+| [`src/settings-route.ts`](src/settings-route.ts) | `SettingsRoute`：设置页路由的 `GET` 和 `POST` |
 | [`src/client.ts`](src/client.ts) | `RemoteBiliClient`：门、`/v1/status`、`/v1/reply/dm`、`/v1/share/owner`、令牌、限时、结果映射、无损 JSON，以及 `src/manage.ts` 共用的 HTTP 往返 |
 | [`src/manage.ts`](src/manage.ts) | `ManageClient`：manage 令牌下 bili-svc 的管理接口、回答解析、二维码模块 |
 | [`src/settings.ts`](src/settings.ts) | `ManageSettings`：管理读取和 owner 的操作、扫码尝试、操作日志 |
 | [`src/actions.ts`](src/actions.ts) | 设置页路由 `POST` 请求体的校验 |
-| [`src/dm.ts`](src/dm.ts) | `DmChannel`，`ctx.ownerRelay` 的 `bili-dm` 通道：回复 owner 的私信和每日推荐，最多拆两条，以及微信兜底 |
+| [`src/dm.ts`](src/dm.ts) | `DmChannel`，`ctx.ownerRelay` 的 `bili-dm` 通道：回复 owner 的私信和每日推荐，最多拆两条，经 `/v1/reply/dm` 和 `/v1/share/owner` 发出，以及微信兜底 |
 | [`src/share.ts`](src/share.ts) | `DailyShare`：每日推荐的排期、顺延、提示词、结果和设置页视图 |
 | [`src/endpoints.ts`](src/endpoints.ts) | 本包可以调用的接口名，分读取和操作 |
 | [`src/api.ts`](src/api.ts) | 有类型的读取（有长度上限）和单次调用的操作 |

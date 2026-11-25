@@ -10,7 +10,8 @@
 // Type-only: the ctx.ownerNotifier contract and the relay's channel contract.
 import type { OwnerNotifier } from '@deepseek-ai/dsh-event-bus'
 import type { RelayAnswer, RelayChannel, RelayDecision, RelayDelivery } from '@deepseek-ai/dsh-owner-relay'
-import { FALLBACK_TITLE, REPLY_CHARS, SHARE_FALLBACK_TITLE, splitMessage } from './text.ts'
+import { BiliTransportError, errorText, type RemoteBiliClient } from './client.ts'
+import { FALLBACK_TITLE, REPLY_CHARS, SHARE_FALLBACK_TITLE, codePoints, splitMessage } from './text.ts'
 import type { ShareOutcome } from './view.ts'
 
 /** Name of the account's channel in `ctx.ownerRelay`. */
@@ -192,5 +193,58 @@ export class DmChannel implements RelayChannel {
     const notifier = this.host.notifier()
     if (notifier === undefined) throw new Error('no ownerNotifier is mounted')
     await notifier.send({ title: FALLBACK_TITLE, body: `${text}\n\n${why}`, origin: BILI_FALLBACK_LABEL })
+  }
+}
+
+/** What the sends to the owner need of the account. */
+export interface OwnerSendHost {
+  /** The agent's bili-svc client. */
+  readonly client: Pick<RemoteBiliClient, 'replyDm' | 'shareOwner'>
+  /** The owner's main account, or undefined while unset (nothing is sent). */
+  ownerMid(): number | undefined
+  /** Aborted when the account stops. */
+  readonly signal: AbortSignal
+  logger: { info(message: string): void; warn(message: string): void }
+}
+
+/**
+ * One reply to the owner through bili-svc's Reply Gate (`POST /v1/reply/dm`). Anything but `sent` goes to WeChat.
+ * @param host - the client, the owner account, the stop signal, and the logger.
+ * @param text - one message, at most 500 characters.
+ * @returns bili-svc's answer, or `failed` with the reason.
+ */
+export async function replyOwner(host: OwnerSendHost, text: string): Promise<DmOutcome> {
+  const ownerMid = host.ownerMid()
+  if (ownerMid === undefined) return { status: 'failed', detail: 'no owner account is configured' }
+  try {
+    const answer = await host.client.replyDm(ownerMid, text.trim(), host.signal)
+    const id = answer.id === undefined ? '' : ` (${answer.id})`
+    host.logger.info(`bili: bili-svc's Reply Gate answered ${answer.status}${id} to a ${codePoints(text.trim())}-char reply to the owner`)
+    return { status: answer.status, detail: answer.status === 'sent' ? 'sent' : `bili-svc's Reply Gate answered ${answer.status}${id}` }
+  } catch (error: unknown) {
+    const unknown = error instanceof BiliTransportError
+    host.logger.warn(`bili: the reply to the owner ${unknown ? 'has an unknown outcome' : 'was refused'}: ${errorText(error)}`)
+    return { status: 'failed', detail: unknown ? `the outcome at bili-svc is unknown (${errorText(error)})` : errorText(error) }
+  }
+}
+
+/**
+ * One part of the daily share to the owner through bili-svc (`POST /v1/share/owner`). Anything but `sent` goes to WeChat.
+ * @param host - the client, the owner account, the stop signal, and the logger.
+ * @param text - one message, at most 500 characters.
+ * @returns bili-svc's answer, or `failed` with the reason.
+ */
+export async function shareOwner(host: OwnerSendHost, text: string): Promise<DmOutcome> {
+  const ownerMid = host.ownerMid()
+  if (ownerMid === undefined) return { status: 'failed', detail: 'no owner account is configured' }
+  try {
+    const answer = await host.client.shareOwner(ownerMid, text.trim(), host.signal)
+    const id = answer.id === undefined ? '' : ` (${answer.id})`
+    host.logger.info(`bili: bili-svc answered ${answer.status}${id} to a ${codePoints(text.trim())}-char share to the owner`)
+    return { status: answer.status, detail: answer.status === 'sent' ? 'sent' : `bili-svc answered ${answer.status}${id} (a daily cap, the brake, or a rule)` }
+  } catch (error: unknown) {
+    const unknown = error instanceof BiliTransportError
+    host.logger.warn(`bili: the share to the owner ${unknown ? 'has an unknown outcome' : 'was refused'}: ${errorText(error)}`)
+    return { status: 'failed', detail: unknown ? `the outcome at bili-svc is unknown (${errorText(error)})` : errorText(error) }
   }
 }

@@ -10,16 +10,15 @@
  * Session to message the owner first (a video it watched and a recent 热梗) through bili-svc's
  * `POST /v1/share/owner`; that is the only message it starts, and only to the owner. The account
  * never comments, replies, posts, or shares in public.
+ *
+ * This entry holds the configuration, the lifecycle, and the wiring; each public method delegates to its topic's module.
  */
 
-import { randomUUID } from 'node:crypto'
-import { mkdirSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 // Type-only: the connection service's Context merge (ctx.connection).
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/cordis-plugin-timer'
-import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller'
 // Type-only: the credential store's reference brand; this package takes no runtime export from it.
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
 // Type-only: the ctx.ownerNotifier service the WeChat channel provides.
@@ -27,44 +26,38 @@ import type {} from '@deepseek-ai/dsh-event-bus'
 // Type-only: ctx.ownerRelay, which relays the account's turns through its DM channel.
 import type {} from '@deepseek-ai/dsh-owner-relay'
 import type {} from '@deepseek-ai/dsh-permission-presets'
-import type { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-title'
 import type { Domain } from '@deepseek-ai/dsh-storage-domain'
-// Type-only: ctx.workspaceRegistry, whose archived Session ids the account's Session is checked against.
-import type {} from '@deepseek-ai/dsh-workspace'
 import z from '@deepseek-ai/schemastery'
-import {
-  addWatchLater, bvidOf, coinsGiven, comments, dailyRewards, dealFavorite, folders, followingFeed,
-  danmaku, giveCoin, hasLiked, homeFeed, hotSearches, inboxItems, likeVideo, ranking, modifyRelation, navInfo, ownerMessages, popular,
-  relationStat, relationTo, removeWatchLater, reportWatch, search, subtitles, thread, tripleLike, unreadCounts, unreadMessages, videoInfo,
-  VIDEO_AREA, watchLaterAids,
-  type CommentView, type DailyRewards, type DanmakuLine, type FeedPost, type Folder, type HotSearch, type InboxItem, type OwnerMessage,
-  type SearchOrder, type SubtitleView, type VideoCard, type VideoDetail,
-} from './api.ts'
-import {
-  BiliApiError, BiliOutcomeError, BiliRefused, BiliRiskError, BiliSessionError, BiliTransportError, BiliVerifyError,
-  DEFAULT_SERVICE_URL, RemoteBiliClient, TOKEN_CREDENTIAL, type ServiceAccount, type ServiceStatus,
-} from './client.ts'
-import { BackgroundWork, openPresetSession, unavailableReason } from '@deepseek-ai/dsh-service-kit'
-import { BILI_AGENT_ORIGIN, BILI_RELAY_CHANNEL, DmChannel, type DmOutcome } from './dm.ts'
+import { BackgroundWork } from '@deepseek-ai/dsh-service-kit'
+import { AccountSession, type SessionConfig } from './account-session.ts'
+import type { CommentView, DanmakuLine, FeedPost, HotSearch, SearchOrder, SubtitleView, VideoCard, VideoDetail } from './api.ts'
+import { DEFAULT_SERVICE_URL, RemoteBiliClient, TOKEN_CREDENTIAL, errorText } from './client.ts'
+import { BILI_RELAY_CHANNEL, DmChannel, replyOwner, shareOwner, type DmOutcome, type OwnerSendHost } from './dm.ts'
 import { HotStore, type BiliHot } from './hot.ts'
-import { biliDomain, seqKey } from './storage.ts'
+import { Journal } from './journal.ts'
+import { tellMainAgent, type MainAgentHost } from './main-agent.ts'
+import { DEFAULT_MANAGE_CREDENTIAL, LEDGER_ROWS, ManageClient } from './manage.ts'
+import { OwnerInbox } from './owner-inbox.ts'
+import { BiliReads, type InboxView, type MeView } from './reads.ts'
+import { ManageSettings } from './settings.ts'
+import { SettingsRoute } from './settings-route.ts'
+import { SettingsView } from './settings-view.ts'
 import { assertShareConfig, DailyShare, type ShareConfig } from './share.ts'
-import { MAIN_AGENT_MAX_CHARS, clean, codePoints, ownerPrompt } from './text.ts'
-import { dayKey, formatStamp, isTimeZone } from './time.ts'
-import { parseAction } from './actions.ts'
-import { DEFAULT_MANAGE_CREDENTIAL, LEDGER_MAX_ROWS, LEDGER_ROWS, ManageClient, ManageError, type ManageGate } from './manage.ts'
-import { ManageSettings, type ManageSnapshot } from './settings.ts'
-import {
-  BILI_PATH, SESSION_STATES,
-  type AccountView, type ActionResult, type BiliView, type GateView, type ManagedAccount, type SessionState,
-} from './view.ts'
+import { AccountStatus } from './status.ts'
+import { biliDomain } from './storage.ts'
+import { isTimeZone } from './time.ts'
+import { BILI_PATH, type ActionResult, type BiliView } from './view.ts'
+import { BiliWrites, type WriteOutcome } from './writes.ts'
 
 export { BiliApiError, BiliOutcomeError, BiliRefused, BiliRiskError, BiliSessionError, BiliTransportError, BiliVerifyError, type BiliCaller, type CallOptions, type CallResult, type ServiceStatus } from './client.ts'
 export type { BiliHot, BiliHotComment } from './hot.ts'
 export type { Endpoint, EndpointName } from './endpoints.ts'
 export type { CommentView, FeedPost, Folder, HotSearch, InboxItem, OwnerMessage, SearchOrder, SubtitleView, VideoCard, VideoDetail } from './api.ts'
 export type * from './view.ts'
+export type { SessionConfig } from './account-session.ts'
+export type { InboxView, MeView } from './reads.ts'
+export type { WriteOutcome } from './writes.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -75,16 +68,23 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-/** How the account's Session is created. */
-export interface SessionConfig {
-  /** Absolute directory the Session works in; created before every prompt. */
-  workspacePath: string
-  /** Agent preset of the Session; the bundle defines `bili` with only the Bilibili tools. */
-  agentPreset: string
-  /** Permission preset set on a new Session; the `bili` preset mounts no shell or file tools, and nobody approves calls. */
-  permissionPreset: string
-  /** Session title. */
-  title: string
+/** The daily share is checked this often; a check costs no model tokens. */
+const SHARE_TICK_MS = 60_000
+
+/** The slice of `ctx.presence` the daily share reads, when the presence plugin is mounted. */
+interface PresenceReader {
+  isAsleep(): boolean
+}
+
+/** The credential store's reference grammar: a POSIX shell identifier. */
+const CREDENTIAL_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+/** A credential's value, read per call; undefined when it is unset or empty. Never logged. */
+function credentialReader(ctx: Context, ref: CredentialRef): () => Promise<string | undefined> {
+  return async () => {
+    const resolved = await ctx.credentials.resolve(ref)
+    return resolved?.value === undefined || resolved.value === '' ? undefined : resolved.value
+  }
 }
 
 /** Plugin configuration. */
@@ -113,102 +113,6 @@ export interface Config {
   share: ShareConfig
 }
 
-/** Owner-message ids remembered. */
-const MAX_SEEN = 500
-/** Owner messages waiting for a turn; the oldest are dropped first. */
-const MAX_PENDING = 100
-/** Owner messages handed over per turn. */
-const MAX_TURN_ITEMS = 20
-/** After a message from the owner, messages are checked this often ... */
-const FAST_POLL_MS = 60_000
-/** ... for this long after the latest one. */
-const CONVERSATION_MS = 900_000
-/** A bili-svc status answer is reused for this long. */
-const STATUS_TTL_MS = 10_000
-/** The Reply Gate's speaker routes change by hand, so they are reused for this long. */
-const ROUTES_TTL_MS = 60_000
-/** Journal limits. */
-const JOURNAL_LIMITS = { chars: 600, perDay: 8, pageSize: 10 } as const
-/** Hot-search keywords read at once. */
-const HOT_SEARCHES = 30
-/** Danmaku lines one read returns. */
-const DANMAKU_LINES = 40
-/** The daily share is checked this often; a check costs no model tokens. */
-const SHARE_TICK_MS = 60_000
-
-/** The slice of `ctx.presence` the daily share reads, when the presence plugin is mounted. */
-interface PresenceReader {
-  isAsleep(): boolean
-}
-
-/** What a write tool learns. */
-export type WriteOutcome =
-  | { readonly outcome: 'sent'; readonly detail: string; readonly receipt?: string }
-  | { readonly outcome: 'already'; readonly detail: string }
-  /** `verification` carries Bilibili's words when it refused for want of a verified phone number. */
-  | { readonly outcome: 'refused'; readonly detail: string; readonly verification?: string }
-  | { readonly outcome: 'uncertain'; readonly detail: string }
-
-/** The account card the `bili_me` tool shows. */
-export interface MeView {
-  signedIn: boolean
-  mid?: number
-  uname?: string
-  level?: number
-  following?: number
-  followers?: number
-  folders?: Folder[]
-  /** EXP: the current total, the level's floor, and the next level's threshold (null at LV6). */
-  exp?: { current: number; min: number; next: number | null }
-  /** Coin balance. */
-  coins?: number
-  /** Today's daily rewards (5 EXP each for login, watch, share; up to 50 EXP from coins). */
-  rewards?: DailyRewards
-  /** Who keeps the limits: bili-svc, which caps, spaces, and ledgers every action. */
-  limits: string
-  /** Present while bili-svc holds every action (read-only mode or its brake). */
-  pause?: string
-}
-
-/** The inbox the `bili_inbox` tool shows. */
-export interface InboxView {
-  unread: { replies: number; mentions: number; messages: number }
-  replies: Omit<InboxItem, 'type' | 'oid' | 'root'>[]
-  mentions: Omit<InboxItem, 'type' | 'oid' | 'root'>[]
-  ownerMessages: OwnerMessage[]
-}
-
-/** Human-readable error text; client errors never carry request data. */
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
-
-/** The gate as the agent's own token reports it: no brake detail and no counters. */
-function minimalGate(gate: ServiceStatus['gate']): GateView | null {
-  return gate === undefined ? null : { mode: clean(gate.mode, 40), readonly: gate.readonly, brake: null, used: null, caps: null }
-}
-
-/** The gate as the manage token reports it. */
-function fullGate(gate: ManageGate | null): GateView | null {
-  return gate === null ? null : { mode: gate.mode, readonly: gate.readonly, brake: gate.brake, used: gate.used, caps: gate.caps }
-}
-
-/** The HTTP status the Settings route answers for a refused management call; the browser never sees bili-svc's 401/403. */
-function manageStatus(error: ManageError): number {
-  if (error.status === 404 || error.status === 409) return error.status
-  if (error.status === 400 || error.status === 422) return 400
-  return 502
-}
-
-/** The words of a refused management call: bili-svc's message, else a line for its code. */
-function manageMessage(error: ManageError): string {
-  if (error.status === 401 || error.code === 'forbidden') return 'bili-svc did not accept the manage token'
-  return error.detail === '' ? error.code : error.detail
-}
-
-/** The credential store's reference grammar: a POSIX shell identifier. */
-const CREDENTIAL_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
-
 /** Fail at load on configuration that cannot work. */
 function assertConfig(config: Config): void {
   if (!isAbsolute(config.session.workspacePath)) throw new Error('bili: session.workspacePath must be an absolute path')
@@ -217,54 +121,6 @@ function assertConfig(config: Config): void {
   if (!/^[a-z0-9_-]{1,64}$/.test(config.account)) throw new Error(`bili: account "${config.account}" is not a bili-svc account id`)
   if (!CREDENTIAL_NAME.test(config.manageTokenEnv)) throw new Error(`bili: manageTokenEnv "${config.manageTokenEnv}" is not a credential name (a shell identifier)`)
   assertShareConfig(config.share)
-}
-
-/** `1 coin`, `2 coins`. */
-function plural(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? '' : 's'}`
-}
-
-/** Why the balance cannot cover a coin write, or nothing. */
-function balanceRefusal(balance: number, needed: number): string | undefined {
-  return balance < needed ? `the account has ${plural(balance, 'coin')}; this needs ${needed} (about one comes each day from signing in)` : undefined
-}
-
-/** Bilibili's coin refusals, explained. */
-const COIN_CODES: Readonly<Record<number, string>> = {
-  [-104]: 'not enough coins',
-  34002: 'an account cannot coin its own video',
-  34003: 'that coin count is not allowed for this video',
-  34004: 'coins were given too quickly',
-  34005: 'this video already has the most coins this account may give',
-}
-
-/** Parts of a triple (一键三连). */
-const TRIPLE_PARTS = ['like', 'coin', 'favorite'] as const
-/** One of {@link TRIPLE_PARTS}. */
-type TriplePart = typeof TRIPLE_PARTS[number]
-
-/** What a triple did: the parts it added, and those done before. */
-function tripleDetail(added: readonly TriplePart[], before: readonly TriplePart[], coins: number): string {
-  const words: Record<TriplePart, string> = { like: 'liked', coin: `gave ${plural(coins, 'coin')}`, favorite: 'saved to the default folder' }
-  const head = added.length === 0 ? 'Bilibili applied none of the missing parts' : added.map(part => words[part]).join(', ')
-  return before.length === 0 ? head : `${head}; already done before: ${before.join(', ')}`
-}
-
-/** The account bili-svc answers for: the configured id, else the first with a working session. */
-function pickAccount(accounts: readonly ServiceAccount[], id: string): ServiceAccount | undefined {
-  return accounts.find(account => account.id === id) ?? accounts.find(account => account.session === 'ok')
-}
-
-/** One action: what it is about, and the call that does it. */
-interface ActSpec {
-  action: string
-  target: string
-  /** Whether it is already done; read before the call, so an idempotent action costs nothing. */
-  preRead?: () => Promise<string | undefined>
-  /** The one call through bili-svc's door. */
-  perform: () => Promise<void>
-  /** The `sent` detail; `<action> sent` by default. */
-  sentDetail?: () => string
 }
 
 /**
@@ -301,25 +157,27 @@ export class BiliAccount extends Service {
   private readonly timers = new Set<() => void>()
   private domain: Domain<typeof biliDomain> | undefined
   private stopping = false
-  private feedIndex = 0
-  /** The last status answer of bili-svc, reused for {@link STATUS_TTL_MS}. */
-  private statusCache: { at: number; value: Promise<ServiceStatus> } | undefined
-  /** The Settings route's reads and actions through bili-svc's management API (the manage token). */
-  private readonly settings: ManageSettings
-  /** The comment speaker's account id, reused for {@link ROUTES_TTL_MS}. */
-  private routesCache: { at: number; id: Promise<string | null> } | undefined
-  /** The hot comments and words recent reads showed (`ctx.biliHot`). */
-  private readonly hot: HotStore
+  /** bili-svc's status and the agent's account in it. */
+  private readonly status: AccountStatus
   /** The account's channel of `ctx.ownerRelay`: answers to the owner's messages, through bili-svc's Reply Gate. */
   private readonly dm: DmChannel
-  /** The owner's conversation keeps the fast message check until then. */
-  private conversationUntil = 0
-  /** The next fast message check, while the owner is messaging. */
-  private fastPoll: (() => void) | undefined
-  /** A message check is running; another one waits for the next tick. */
-  private polling = false
+  /** What the sends of the DM channel's answers to the owner need. */
+  private readonly sends: OwnerSendHost
+  /** The account's long-lived Session. */
+  private readonly session: AccountSession
+  /** The owner-message check and queue. */
+  private readonly ownerInbox: OwnerInbox
   /** The daily share to the owner. */
   private readonly share: DailyShare
+  private readonly reads: BiliReads
+  private readonly writes: BiliWrites
+  private readonly journal: Journal
+  /** What `tellMainAgent` needs: storage, the daily limit, and the notifier. */
+  private readonly mainAgent: MainAgentHost
+  /** What the Settings section shows. */
+  private readonly settingsView: SettingsView
+  /** The Settings route, which answers the view. */
+  private readonly route: SettingsRoute
 
   /**
    * @param ctx - Host services owning timers, storage, credentials, and Sessions.
@@ -328,41 +186,51 @@ export class BiliAccount extends Service {
   constructor(ctx: Context, private readonly config: Config) {
     super(ctx, 'bili')
     assertConfig(config)
+    const baseUrl = (process.env['BILI_SVC_URL'] ?? DEFAULT_SERVICE_URL).replace(/\/+$/, '')
+    const logger = { info: (message: string) => { ctx.logger.info(message) }, warn: (message: string) => { ctx.logger.warn(message) } }
+    const serialize = <T>(work: () => Promise<T>): Promise<T> => this.background.serialize(work)
+    const track = (work: Promise<void>): void => { this.background.track(work) }
+    const ownerMid = (): number | undefined => this.ownerMid()
     this.client = new RemoteBiliClient({
-      baseUrl: (process.env['BILI_SVC_URL'] ?? DEFAULT_SERVICE_URL).replace(/\/+$/, ''),
+      baseUrl,
       account: config.account,
-      token: () => this.token(),
+      // A fixed shell identifier, so it is a valid reference without the runtime `credentialRef()` check.
+      token: credentialReader(ctx, TOKEN_CREDENTIAL as CredentialRef),
       debug: (message) => { ctx.logger.debug(message) },
       info: (message) => { ctx.logger.info(message) },
     })
-    // Checked by `assertConfig` against the store's reference grammar, so it is a valid reference without the runtime `credentialRef()`.
-    const manageRef = config.manageTokenEnv as CredentialRef
-    this.settings = new ManageSettings({
+    const settings = new ManageSettings({
       manage: new ManageClient({
-        baseUrl: (process.env['BILI_SVC_URL'] ?? DEFAULT_SERVICE_URL).replace(/\/+$/, ''),
-        token: async () => {
-          const resolved = await ctx.credentials.resolve(manageRef)
-          return resolved?.value === undefined || resolved.value === '' ? undefined : resolved.value
-        },
+        baseUrl,
+        // Checked by `assertConfig` against the store's reference grammar, so it needs no runtime `credentialRef()`.
+        token: credentialReader(ctx, config.manageTokenEnv as CredentialRef),
         debug: (message) => { ctx.logger.debug(message) },
       }),
-      info: (message) => { ctx.logger.info(message) },
-      warn: (message) => { ctx.logger.warn(message) },
+      info: logger.info,
+      warn: logger.warn,
       now: () => Date.now(),
     })
     this.ready = ctx.storageDomain.open(biliDomain)
-    this.hot = new HotStore({ ready: this.ready, now: () => Date.now(), logger: ctx.logger })
-    ctx.provide('biliHot', this.hot)
+    const ready = this.ready
+    const hot = new HotStore({ ready, now: () => Date.now(), logger: ctx.logger })
+    ctx.provide('biliHot', hot)
+    this.status = new AccountStatus({
+      client: this.client,
+      account: config.account,
+      signal: this.abort.signal,
+      debug: (message) => { ctx.logger.debug(message) },
+    })
+    this.sends = { client: this.client, ownerMid, signal: this.abort.signal, logger }
     this.share = new DailyShare({
-      ready: this.ready,
-      serialize: work => this.background.serialize(work),
-      ownerMid: () => this.ownerMid(),
-      holdReason: (now, domain) => this.shareHold(now, domain),
-      prompt: text => this.promptShare(text),
+      ready,
+      serialize,
+      ownerMid,
+      holdReason: (now, domain) => this.ownerInbox.holdReason(now, domain),
+      prompt: text => this.session.prompt(text, 'share'),
       timeZone: config.timeZone,
       now: () => Date.now(),
       random: () => Math.random(),
-      logger: { info: (message) => { ctx.logger.info(message) }, warn: (message) => { ctx.logger.warn(message) } },
+      logger,
     }, config.share)
     this.dm = new DmChannel({
       replyOwner: text => this.replyOwner(text),
@@ -371,7 +239,62 @@ export class BiliAccount extends Service {
       shareSettled: (sessionId, outcome, detail, text) => this.share.settled(sessionId, outcome, detail, text),
       hold: work => this.background.hold(work),
       notifier: () => this.ctx.get('ownerNotifier'),
-      logger: { info: (message) => { ctx.logger.info(message) }, warn: (message) => { ctx.logger.warn(message) } },
+      logger,
+    })
+    this.session = new AccountSession({
+      ctx,
+      ready,
+      serialize,
+      session: config.session,
+      timeZone: config.timeZone,
+      signal: this.abort.signal,
+      dm: this.dm,
+    })
+    this.ownerInbox = new OwnerInbox({
+      ready,
+      client: this.client,
+      serialize,
+      track,
+      ownerMid,
+      prompt: async text => (await this.session.prompt(text, 'reply')) !== undefined,
+      timeout: (work, ms) => this.ctx.timeout(work, ms),
+      stopping: () => this.stopping,
+      ownerAsleep: () => ((this.ctx.get as (name: string) => unknown)('presence') as PresenceReader | undefined)?.isAsleep() === true,
+      timeZone: config.timeZone,
+      logger,
+    })
+    this.writes = new BiliWrites({ client: this.client, timeZone: config.timeZone, selfMid: () => this.status.selfMid(), ownerMid, logger })
+    this.reads = new BiliReads({
+      client: this.client,
+      timeZone: config.timeZone,
+      ownerMid,
+      track,
+      hot,
+      reportWatch: (video, cid, reached) => this.writes.reportWatch(video, cid, reached),
+      markSeen: items => this.ownerInbox.markSeen(items),
+      accountView: () => this.status.accountView(),
+    })
+    this.journal = new Journal({ ready, serialize, timeZone: config.timeZone, info: logger.info })
+    this.mainAgent = { ready, serialize, timeZone: config.timeZone, perDay: config.mainAgentPerDay, notifier: () => this.ctx.get('ownerNotifier'), logger }
+    this.settingsView = new SettingsView({
+      ready,
+      settings,
+      status: this.status,
+      share: this.share,
+      ownerMid,
+      account: config.account,
+      manageTokenEnv: config.manageTokenEnv,
+      timeZone: config.timeZone,
+      signal: this.abort.signal,
+      warn: logger.warn,
+    })
+    this.route = new SettingsRoute({
+      view: (result, ledgerRows) => this.view(result, ledgerRows),
+      settings,
+      status: this.status,
+      share: this.share,
+      setOwner: mid => this.ownerInbox.setOwner(mid),
+      manageTokenEnv: config.manageTokenEnv,
     })
 
     ctx.effect(async () => {
@@ -380,7 +303,7 @@ export class BiliAccount extends Service {
       const cleanup = ctx.effect(() => async () => {
         this.stopping = true
         this.abort.abort(new Error('bili is stopping'))
-        this.fastPoll?.()
+        this.ownerInbox.stop()
         for (const dispose of this.timers) dispose()
         await this.background.drain()
         await domain.close()
@@ -408,7 +331,7 @@ export class BiliAccount extends Service {
           path: BILI_PATH,
           methods: ['GET', 'POST'],
           requestBody: 'buffered',
-          fetch: request => this.route(request),
+          fetch: request => this.route.handle(request),
         }), 'bili: /api/bili')
       },
     })
@@ -416,22 +339,11 @@ export class BiliAccount extends Service {
 
   // ── Lifecycle ──────────────────────────────────────────────────────────
 
-  /** Drop queued items of the retired reply and mention wakes, and start the owner-message check. */
+  /** Drop queued items of the retired reply and mention wakes, and start the owner-message check and the daily share. */
   private async restore(domain: Domain<typeof biliDomain>): Promise<void> {
-    const dropped = await this.background.serialize(async () => {
-      let count = 0
-      for (const [key, row] of [...domain.table('pending').entries()]) {
-        if (row.kind === 'dm') continue
-        await domain.table('pending').delete(key)
-        count += 1
-      }
-      await domain.table('inbox').delete('reply')
-      await domain.table('inbox').delete('at')
-      return count
-    })
-    if (dropped > 0) this.ctx.logger.info(`bili: dropped ${dropped} queued reply or mention item(s): replies to strangers are bili-svc's (the up preset) now`)
+    await this.ownerInbox.dropRetired(domain)
     this.ctx.logger.info(`bili: bili-svc at ${this.client.baseUrl}, account ${this.config.account}; ${this.ownerMid() === undefined ? 'no owner account set, so no messages are answered' : 'answering the owner\'s messages'}`)
-    this.every(this.config.inboxPollMs, () => this.pollOwner())
+    this.every(this.config.inboxPollMs, () => this.ownerInbox.poll())
     this.every(SHARE_TICK_MS, () => this.share.tick())
     const enabled = await this.share.enabled()
     this.ctx.logger.info(`bili: the daily share is ${enabled ? `on, once a day at a random time in ${this.config.share.start}–${this.config.share.end} ${this.config.timeZone}` : 'off'}`)
@@ -448,84 +360,12 @@ export class BiliAccount extends Service {
     this.timers.add(dispose)
   }
 
-  // ── bili-svc ───────────────────────────────────────────────────────────
-
-  /** The bearer token, read per call; never logged. */
-  private async token(): Promise<string | undefined> {
-    // A fixed shell identifier, so it is a valid reference without the runtime `credentialRef()` check.
-    const resolved = await this.ctx.credentials.resolve(TOKEN_CREDENTIAL as CredentialRef)
-    return resolved?.value === undefined || resolved.value === '' ? undefined : resolved.value
+  /** The owner's main account: the UID set in Settings, else the configured one. */
+  private ownerMid(): number | undefined {
+    return this.domain?.table('owner').get('main')?.mid ?? this.config.ownerMid
   }
 
-  /** bili-svc's status, shared by callers within {@link STATUS_TTL_MS}. */
-  private status(): Promise<ServiceStatus> {
-    const now = Date.now()
-    if (this.statusCache !== undefined && now - this.statusCache.at < STATUS_TTL_MS) return this.statusCache.value
-    const value = this.client.status(this.abort.signal)
-    this.statusCache = { at: now, value }
-    // A failed answer is not reused.
-    value.catch(() => { if (this.statusCache?.value === value) this.statusCache = undefined })
-    return value
-  }
-
-  /** The account that speaks for comments through the Reply Gate, read with the agent's own token; null when it cannot be read. */
-  private commentSpeaker(): Promise<string | null> {
-    const now = Date.now()
-    if (this.routesCache !== undefined && now - this.routesCache.at < ROUTES_TTL_MS) return this.routesCache.id
-    const id = this.client.replyRoutes(this.abort.signal).then(routes => routes.comment || null, (error: unknown): null => {
-      this.ctx.logger.debug(`bili: the reply routes were not read: ${errorText(error)}`)
-      return null
-    })
-    this.routesCache = { at: now, id }
-    return id
-  }
-
-  /** The agent's account as bili-svc lists it, or why it cannot be read. */
-  private async accountView(): Promise<{ view: AccountView; gate: ServiceStatus['gate']; status: ServiceStatus | undefined }> {
-    const checkedAt = Date.now()
-    let status: ServiceStatus
-    try {
-      status = await this.status()
-    } catch (error: unknown) {
-      return { view: { account: this.config.account, session: 'unreachable', error: errorText(error), checkedAt }, gate: undefined, status: undefined }
-    }
-    return { view: this.accountOf(status, checkedAt), gate: status.gate, status }
-  }
-
-  /** The agent's account in a status answer: the configured id, else the first with a working session. */
-  private accountOf(status: { readonly accounts: readonly ServiceAccount[] }, checkedAt: number): AccountView {
-    const id = this.config.account
-    const account = pickAccount(status.accounts, id)
-    if (account === undefined) return { account: id, session: 'unreachable', error: `bili-svc lists no account ${id}`, checkedAt }
-    const session: SessionState = (SESSION_STATES as readonly string[]).includes(account.session) ? account.session as SessionState : 'missing'
-    return {
-      account: account.id, session, checkedAt,
-      ...(account.mid > 0 ? { mid: account.mid } : {}),
-      ...(account.display === '' ? {} : { uname: account.display }),
-    }
-  }
-
-  /** The account's own mid, which some reads and actions need; bili-svc lists it. */
-  private async selfMid(): Promise<number> {
-    const { view } = await this.accountView()
-    /* v8 ignore next -- an unreachable view always carries its error text, so `?? 'no answer'` is only a type fallback. */
-    if (view.session !== 'ok') throw new Error(view.session === 'unreachable' ? `bili-svc cannot be asked about the account: ${view.error ?? 'no answer'}` : `the Bilibili session in bili-svc is ${view.session}; bili-svc owns the login, and the owner renews it there`)
-    if (view.mid !== undefined) return view.mid
-    const nav = await navInfo(this.client)
-    if (!nav.isLogin || nav.mid === undefined) throw new Error('Bilibili says the account is signed out; bili-svc owns the login, and the owner renews it there')
-    return nav.mid
-  }
-
-  // ── The account's Session and its DM channel ──────────────────────────
-
-  /**
-   * Whether this plugin created a Session; each one is claimed by the DM channel.
-   * @param sessionId - Session to check.
-   * @returns true for every Session this plugin created.
-   */
-  ownsSession(sessionId: string): boolean {
-    return this.domain?.table('sessions').get(sessionId) !== undefined
-  }
+  // ── The DM channel ─────────────────────────────────────────────────────
 
   /**
    * Register the DM channel and claim every stored Session once storage is open.
@@ -549,304 +389,26 @@ export class BiliAccount extends Service {
     }
   }
 
-  /** The account's Session: the stored one while it resolves, otherwise a new one. */
-  private async accountSession(): Promise<SessionId> {
-    const domain = await this.ready
-    const stored = domain.table('current').get('session')
-    if (stored !== undefined) {
-      const sessionId = stored.sessionId as SessionId
-      // An archived Session still resolves, but its turns end `blocked` before any model call (the archived-session gate),
-      // so the owner's messages would get a placeholder answer.
-      if (this.ctx.get('workspaceRegistry')?.archivedSessionIds.includes(sessionId) === true) {
-        this.ctx.logger.info(`bili: Session ${sessionId} is archived; starting a new one`)
-      } else {
-        const unavailable = await unavailableReason(this.ctx, sessionId)
-        if (unavailable === undefined) return sessionId
-        this.ctx.logger.info(`bili: Session ${sessionId} is unavailable (${unavailable}); starting a new one`)
-      }
-    }
-    const session = this.config.session
-    const createdId = await openPresetSession(this.ctx, session, session.title)
-    const now = Date.now()
-    // Claimed before the first prompt, so the relay follows the Session's first turn.
-    this.ctx.get('ownerRelay')?.claim(createdId, BILI_RELAY_CHANNEL)
-    await this.background.serialize(async () => {
-      await domain.table('sessions').put(createdId, { sessionId: createdId, createdAt: now })
-      await domain.table('current').put('session', { sessionId: createdId, createdAt: now })
-    })
-    this.ctx.logger.info(`bili: created Session ${createdId} in ${session.workspacePath} (${session.agentPreset}, ${session.permissionPreset})`)
-    return createdId
+  /** One reply to the owner through bili-svc's Reply Gate ({@link replyOwner}). */
+  private replyOwner(text: string): Promise<DmOutcome> {
+    return replyOwner(this.sends, text)
+  }
+
+  /** One part of the daily share to the owner through bili-svc ({@link shareOwner}). */
+  private shareOwner(text: string): Promise<DmOutcome> {
+    return shareOwner(this.sends, text)
   }
 
   /**
-   * Prompt the account's Session with the owner's messages unless it is busy; its answer goes back
-   * to the owner through the DM channel.
-   * @returns whether the prompt went in.
+   * Whether this plugin created a Session; each one is claimed by the DM channel.
+   * @param sessionId - Session to check.
+   * @returns true for every Session this plugin created.
    */
-  private async promptSession(text: string): Promise<boolean> {
-    return (await this.promptAs(text, 'reply')) !== undefined
+  ownsSession(sessionId: string): boolean {
+    return this.domain?.table('sessions').get(sessionId) !== undefined
   }
 
-  /**
-   * Prompt the account's Session with the daily share unless it is busy; the DM channel sends its answer as the share.
-   * @returns the Session id, or undefined when the Session is in a turn.
-   */
-  private promptShare(text: string): Promise<string | undefined> {
-    return this.promptAs(text, 'share')
-  }
-
-  /** Prompt the account's Session, marking what its answer is; undefined when the Session is in a turn. */
-  private async promptAs(text: string, kind: 'reply' | 'share'): Promise<SessionId | undefined> {
-    mkdirSync(this.config.session.workspacePath, { recursive: true })
-    const sessionId = await this.accountSession()
-    const resolved = await this.ctx.sessionController.resolveAgent(sessionId)
-    if ('error' in resolved) throw resolved.error
-    const status = (resolved.agent as { status?: string }).status
-    if (status !== undefined && status !== 'idle') {
-      this.ctx.logger.info(`bili: Session ${sessionId} is ${status}; ${kind === 'reply' ? 'the owner\'s messages wait for the next check' : 'the share waits'}`)
-      return undefined
-    }
-    // Known before the turn can end: its answer is the reply, or the share.
-    if (kind === 'reply') this.dm.expectReply(sessionId)
-    else this.dm.expectShare(sessionId)
-    try {
-      await this.ctx.sessionController.prompt({
-        requestId: randomUUID() as SessionRequestId,
-        sessionId,
-        mode: 'queue',
-        content: [{ type: 'text', text }],
-        clientTimeZone: this.config.timeZone,
-      }, this.abort.signal)
-    } catch (error: unknown) {
-      this.dm.dropReply(sessionId)
-      throw error
-    }
-    if (kind === 'reply') this.ctx.logger.info(`bili: the owner's messages prompted Session ${sessionId} (${text.length} chars)`)
-    return sessionId
-  }
-
-  /** Why the daily share should wait now: the owner sleeps, is messaging the account, or has messages queued. */
-  private shareHold(now: number, domain: Domain<typeof biliDomain>): string | undefined {
-    const presence = (this.ctx.get as (name: string) => unknown)('presence') as PresenceReader | undefined
-    if (presence?.isAsleep() === true) return 'the owner is asleep'
-    if (this.conversationUntil > now) return 'the owner is messaging the account'
-    if (domain.table('pending').size > 0) return 'the owner\'s messages are waiting for an answer'
-    return undefined
-  }
-
-  /**
-   * One part of the daily share to the owner through bili-svc (`POST /v1/share/owner`). Anything but `sent` goes to WeChat.
-   * @param text - one message, at most 500 characters.
-   */
-  private async shareOwner(text: string): Promise<DmOutcome> {
-    const ownerMid = this.ownerMid()
-    if (ownerMid === undefined) return { status: 'failed', detail: 'no owner account is configured' }
-    try {
-      const answer = await this.client.shareOwner(ownerMid, text.trim(), this.abort.signal)
-      const id = answer.id === undefined ? '' : ` (${answer.id})`
-      this.ctx.logger.info(`bili: bili-svc answered ${answer.status}${id} to a ${codePoints(text.trim())}-char share to the owner`)
-      return { status: answer.status, detail: answer.status === 'sent' ? 'sent' : `bili-svc answered ${answer.status}${id} (a daily cap, the brake, or a rule)` }
-    } catch (error: unknown) {
-      const unknown = error instanceof BiliTransportError
-      this.ctx.logger.warn(`bili: the share to the owner ${unknown ? 'has an unknown outcome' : 'was refused'}: ${errorText(error)}`)
-      return { status: 'failed', detail: unknown ? `the outcome at bili-svc is unknown (${errorText(error)})` : errorText(error) }
-    }
-  }
-
-  /**
-   * One reply to the owner through bili-svc's Reply Gate. Anything but `sent` goes to WeChat.
-   * @param text - one message, at most 500 characters.
-   */
-  private async replyOwner(text: string): Promise<DmOutcome> {
-    const ownerMid = this.ownerMid()
-    if (ownerMid === undefined) return { status: 'failed', detail: 'no owner account is configured' }
-    try {
-      const answer = await this.client.replyDm(ownerMid, text.trim(), this.abort.signal)
-      const id = answer.id === undefined ? '' : ` (${answer.id})`
-      this.ctx.logger.info(`bili: bili-svc's Reply Gate answered ${answer.status}${id} to a ${codePoints(text.trim())}-char reply to the owner`)
-      return { status: answer.status, detail: answer.status === 'sent' ? 'sent' : `bili-svc's Reply Gate answered ${answer.status}${id}` }
-    } catch (error: unknown) {
-      const unknown = error instanceof BiliTransportError
-      this.ctx.logger.warn(`bili: the reply to the owner ${unknown ? 'has an unknown outcome' : 'was refused'}: ${errorText(error)}`)
-      return { status: 'failed', detail: unknown ? `the outcome at bili-svc is unknown (${errorText(error)})` : errorText(error) }
-    }
-  }
-
-  // ── Owner messages ────────────────────────────────────────────────────
-
-  /** The owner's main account: the UID set in Settings, else the configured one. */
-  private ownerMid(): number | undefined {
-    return this.domain?.table('owner').get('main')?.mid ?? this.config.ownerMid
-  }
-
-  /** Check the owner's messages (no model involved) and prompt the Session for new ones. */
-  private async pollOwner(): Promise<void> {
-    const ownerMid = this.ownerMid()
-    if (ownerMid === undefined || this.polling) return
-    this.polling = true
-    try {
-      try {
-        await this.collectOwner(ownerMid)
-      } catch (error: unknown) {
-        this.ctx.logger.warn(`bili: the owner-message check failed: ${errorText(error)}`)
-        return
-      }
-      await this.deliverOwner()
-    } finally {
-      this.polling = false
-    }
-  }
-
-  /** Fetch what changed and queue new owner messages; the first look only records a baseline. */
-  private async collectOwner(ownerMid: number): Promise<void> {
-    const domain = await this.ready
-    const baselined = domain.table('inbox').get('dm') !== undefined
-    if (baselined && (await unreadMessages(this.client)) === 0) return
-    await this.queueOwner(await ownerMessages(this.client, ownerMid))
-  }
-
-  /** Queue unseen owner messages. */
-  private async queueOwner(items: readonly OwnerMessage[]): Promise<void> {
-    await this.background.serialize(async () => {
-      const domain = await this.ready
-      const row = domain.table('inbox').get('dm')
-      const seen = new Set(row?.seen ?? [])
-      let queued = 0
-      for (const item of items) {
-        if (seen.has(item.id)) continue
-        seen.add(item.id)
-        if (row === undefined) continue
-        await domain.table('pending').put(`dm:${item.id}`, { kind: 'dm', id: item.id, at: item.at, item: { kind: 'message from the owner\'s account', text: item.text } })
-        queued += 1
-      }
-      await domain.table('inbox').put('dm', { seen: [...seen].slice(-MAX_SEEN) })
-      const pending = domain.table('pending')
-      const excess = [...pending.entries()].sort(([, a], [, b]) => a.at - b.at).slice(0, Math.max(0, pending.size - MAX_PENDING))
-      for (const [key] of excess) await pending.delete(key)
-      if (row === undefined) this.ctx.logger.info(`bili: owner-message baseline: ${items.length} message(s) already there`)
-      else if (queued > 0) {
-        this.ctx.logger.info(`bili: ${queued} new message(s) from the owner`)
-        this.ownerSpoke(Date.now())
-      }
-    })
-  }
-
-  /**
-   * The owner sent a message: check messages every minute until 15 minutes
-   * after the latest one, so a conversation does not wait for the 10-minute check.
-   */
-  private ownerSpoke(now: number): void {
-    const quiet = this.conversationUntil <= now
-    this.conversationUntil = now + CONVERSATION_MS
-    if (quiet) this.ctx.logger.info(`bili: the owner is messaging; checking messages every 60 s until ${formatStamp(this.conversationUntil, this.config.timeZone)} (extended by each new message)`)
-    if (this.fastPoll === undefined) this.armFastPoll()
-  }
-
-  /** Arm the next fast check, or end the conversation window. */
-  private armFastPoll(): void {
-    if (this.stopping) return
-    if (Date.now() >= this.conversationUntil) {
-      this.fastPoll = undefined
-      this.ctx.logger.info('bili: the owner\'s conversation went quiet; back to the regular message check')
-      return
-    }
-    this.fastPoll = this.ctx.timeout(() => {
-      this.background.track(this.pollOwner().finally(() => { this.armFastPoll() }))
-    }, FAST_POLL_MS)
-  }
-
-  /** Hand queued owner messages to the Session, oldest first. */
-  private async deliverOwner(): Promise<void> {
-    const domain = await this.ready
-    const pending = [...domain.table('pending').entries()]
-      .filter(([, row]) => row.kind === 'dm')
-      .map(([key, row]) => ({ key, row }))
-      .sort((a, b) => a.row.at - b.row.at)
-    if (pending.length === 0) return
-    const batch = pending.slice(0, MAX_TURN_ITEMS)
-    const prompt = ownerPrompt({ now: Date.now(), timeZone: this.config.timeZone, items: batch.map(({ row }) => row.item) })
-    let prompted = false
-    try {
-      prompted = await this.promptSession(prompt)
-    } catch (error: unknown) {
-      this.ctx.logger.warn(`bili: prompting the Session with the owner's messages failed: ${errorText(error)}`)
-    }
-    if (!prompted) return
-    await this.background.serialize(async () => {
-      for (const { key } of batch) await domain.table('pending').delete(key)
-    })
-  }
-
-  // ── Actions ────────────────────────────────────────────────────────────
-
-  /**
-   * Run one action through bili-svc's door: an optional pre-read (so an idempotent action costs
-   * nothing), then the one call, whose outcome bili-svc decided (caps, once-rules, brake, ledger).
-   * Never retried.
-   */
-  private async act(spec: ActSpec): Promise<WriteOutcome> {
-    const log = (outcome: WriteOutcome): WriteOutcome => {
-      this.ctx.logger.info(`bili: ${spec.action} ${spec.target} ${outcome.outcome}${outcome.outcome === 'sent' ? '' : `: ${outcome.detail}`}`)
-      return outcome
-    }
-    try {
-      const already = await spec.preRead?.()
-      if (already !== undefined) return log({ outcome: 'already', detail: already })
-    } catch (error: unknown) {
-      // A refusal of this package's own (the account itself, no such folder) is the answer; anything else is a failed check.
-      return log({ outcome: 'refused', detail: error instanceof BiliRefused ? error.message : `could not check before writing: ${errorText(error)}` })
-    }
-    try {
-      await spec.perform()
-    } catch (error: unknown) {
-      return log(this.outcomeOf(spec.action, error))
-    }
-    return log({ outcome: 'sent', detail: spec.sentDetail?.() ?? `${spec.action} sent` })
-  }
-
-  /** What an action's failure means for the model. */
-  private outcomeOf(action: string, error: unknown): WriteOutcome {
-    if (error instanceof BiliOutcomeError) {
-      const why = error.reason === '' ? '' : ` (${error.reason})`
-      switch (error.outcome) {
-        case 'already':
-          return { outcome: 'already', detail: `bili-svc says it is already done${why}` }
-        case 'uncertain':
-          return { outcome: 'uncertain', detail: `the outcome is unknown${why}; bili-svc counts it and never sends it again` }
-        case 'held':
-          return { outcome: 'refused', detail: `bili-svc held it${why}; actions wait until bili-svc lets them through again` }
-        default:
-          return { outcome: 'refused', detail: `bili-svc refused it${why}` }
-      }
-    }
-    if (error instanceof BiliTransportError) {
-      return { outcome: 'uncertain', detail: `the outcome is unknown (${error.message}); it is never sent again` }
-    }
-    if (error instanceof BiliVerifyError) {
-      const words = error.detail === '' ? `code ${error.code}` : error.detail
-      return { outcome: 'refused', detail: `Bilibili refused it until the account verifies a phone number: code ${error.code}${error.detail === '' ? '' : ` (${error.detail})`}`, verification: words }
-    }
-    if (error instanceof BiliRiskError) {
-      return { outcome: 'refused', detail: `Bilibili's risk control stopped it (${error.reason}); bili-svc holds actions until the owner releases its brake` }
-    }
-    if (error instanceof BiliApiError) {
-      const hint = action === 'coin' || action === 'triple' ? COIN_CODES[error.code] : undefined
-      return { outcome: 'refused', detail: `Bilibili refused it: code ${error.code}${error.detail === '' ? '' : ` (${error.detail})`}${hint === undefined ? '' : `: ${hint}`}` }
-    }
-    return { outcome: 'refused', detail: errorText(error) }
-  }
-
-  /** A video to act on, or why not. */
-  private async aidOf(bvid: string): Promise<{ aid: string; video: VideoDetail } | { refusal: string }> {
-    if (bvidOf(bvid) === undefined) return { refusal: `${JSON.stringify(bvid)} is not a BV id` }
-    let video: VideoDetail
-    try {
-      video = await videoInfo(this.client, bvid, this.config.timeZone)
-    } catch (error: unknown) {
-      return { refusal: `could not read ${bvid}: ${errorText(error)}` }
-    }
-    return { aid: video.aid, video }
-  }
+  // ── Actions (src/writes.ts) ────────────────────────────────────────────
 
   /**
    * Give a video coins, never with a like. Bilibili takes at most 2 coins per video from one
@@ -857,28 +419,7 @@ export class BiliAccount extends Service {
    * @returns the outcome.
    */
   async coin(bvid: string, count?: number): Promise<WriteOutcome> {
-    if (count !== undefined && count !== 1 && count !== 2) return { outcome: 'refused', detail: 'count must be 1 or 2' }
-    const target = await this.aidOf(bvid)
-    if ('refusal' in target) return { outcome: 'refused', detail: target.refusal }
-    const most = target.video.original ? 2 : 1
-    const coins: 1 | 2 = count === undefined ? most : count
-    if (coins > most) return { outcome: 'refused', detail: `${bvid} is not marked original, so Bilibili takes at most 1 coin for it` }
-    let short: string | undefined
-    const outcome = await this.act({
-      action: 'coin', target: bvid,
-      preRead: async () => {
-        const given = await coinsGiven(this.client, bvid)
-        if (given > 0) return `this account already gave this video ${plural(given, 'coin')}; one coin write per video`
-        short = balanceRefusal((await navInfo(this.client)).coins ?? 0, coins)
-        return undefined
-      },
-      perform: async () => {
-        if (short !== undefined) throw new BiliRefused(short)
-        await giveCoin(this.client, target.aid, bvid, coins)
-      },
-      sentDetail: () => `gave ${plural(coins, 'coin')}`,
-    })
-    return outcome
+    return this.writes.coin(bvid, count)
   }
 
   /**
@@ -889,53 +430,7 @@ export class BiliAccount extends Service {
    * @returns the outcome.
    */
   async triple(bvid: string): Promise<WriteOutcome> {
-    const target = await this.aidOf(bvid)
-    if ('refusal' in target) return { outcome: 'refused', detail: target.refusal }
-    const most = target.video.original ? 2 : 1
-    let adds: TriplePart[] = []
-    let done: TriplePart[] = []
-    let coins = most
-    let short: string | undefined
-    return this.act({
-      action: 'triple', target: bvid,
-      preRead: async () => {
-        const mid = await this.selfMid()
-        const liked = await hasLiked(this.client, bvid)
-        const given = await coinsGiven(this.client, bvid)
-        const saved = (await folders(this.client, mid, target.aid)).some(folder => folder.contains)
-        const state: Record<TriplePart, boolean> = { like: liked, coin: given > 0, favorite: saved }
-        done = TRIPLE_PARTS.filter(part => state[part])
-        adds = TRIPLE_PARTS.filter(part => !state[part])
-        if (adds.length === 0) return 'this account already liked, coined, and saved this video'
-        if (adds.includes('coin')) short = balanceRefusal((await navInfo(this.client)).coins ?? 0, most)
-        return undefined
-      },
-      perform: async () => {
-        if (short !== undefined) throw new BiliRefused(short)
-        const result = await tripleLike(this.client, target.aid, bvid)
-        if (result.coin && result.coins > 0) coins = result.coins
-        // Only what Bilibili applied counts; a part it skipped stays undone.
-        adds = adds.filter(part => result[part])
-      },
-      sentDetail: () => tripleDetail(adds, done, coins),
-    })
-  }
-
-  /** Report a watch of a video whose subtitles the account read, as far as it read; bili-svc keeps it to once a day. */
-  private async reportWatchOf(video: VideoDetail, cid: number, reached: number): Promise<void> {
-    let mid: number
-    try {
-      mid = await this.selfMid()
-    } catch (error: unknown) {
-      this.ctx.logger.info(`bili: no watch report for ${video.bvid}: ${errorText(error)}`)
-      return
-    }
-    const seconds = Math.max(1, Math.min(reached, video.seconds ?? reached))
-    const outcome = await this.act({
-      action: 'watch', target: video.bvid,
-      perform: () => reportWatch(this.client, { aid: video.aid, bvid: video.bvid, cid, mid, duration: video.seconds ?? seconds }, seconds),
-    })
-    if (outcome.outcome === 'uncertain') this.ctx.logger.warn(`bili: the watch report of ${video.bvid} has an unknown outcome; not sent again`)
+    return this.writes.triple(bvid)
   }
 
   /**
@@ -944,15 +439,7 @@ export class BiliAccount extends Service {
    * @returns the outcome.
    */
   async follow(mid: number): Promise<WriteOutcome> {
-    if (!Number.isSafeInteger(mid) || mid <= 0) return { outcome: 'refused', detail: 'mid must be a positive user id' }
-    return this.act({
-      action: 'follow', target: `mid:${mid}`,
-      preRead: async () => {
-        if (mid === await this.selfMid()) throw new BiliRefused('this is the account itself')
-        return [2, 6].includes(await relationTo(this.client, mid)) ? 'already following' : undefined
-      },
-      perform: () => modifyRelation(this.client, mid, 1),
-    })
+    return this.writes.follow(mid)
   }
 
   /**
@@ -961,13 +448,7 @@ export class BiliAccount extends Service {
    * @returns the outcome.
    */
   async unfollow(mid: number): Promise<WriteOutcome> {
-    if (!Number.isSafeInteger(mid) || mid <= 0) return { outcome: 'refused', detail: 'mid must be a positive user id' }
-    if (mid === this.ownerMid()) return { outcome: 'refused', detail: 'the owner\'s account stays followed' }
-    return this.act({
-      action: 'unfollow', target: `mid:${mid}`,
-      preRead: async () => ([2, 6].includes(await relationTo(this.client, mid)) ? undefined : 'not following'),
-      perform: () => modifyRelation(this.client, mid, 2),
-    })
+    return this.writes.unfollow(mid)
   }
 
   /**
@@ -977,26 +458,7 @@ export class BiliAccount extends Service {
    * @returns the outcome.
    */
   async favorite(bvid: string, options: { remove?: boolean; folderId?: number } = {}): Promise<WriteOutcome> {
-    const video = await this.aidOf(bvid)
-    if ('refusal' in video) return { outcome: 'refused', detail: video.refusal }
-    let folder: Folder | undefined
-    return this.act({
-      action: 'favorite', target: bvid,
-      preRead: async () => {
-        const list = await folders(this.client, await this.selfMid(), video.aid)
-        folder = options.folderId === undefined
-          ? list.find(entry => entry.isDefault) ?? list[0]
-          : list.find(entry => entry.id === options.folderId)
-        if (folder === undefined) throw new BiliRefused(`no favorite folder ${options.folderId === undefined ? 'exists' : `with id ${options.folderId}`}`)
-        if (options.remove === true) return folder.contains === true ? undefined : `not in folder ${folder.title}`
-        return folder.contains === true ? `already in folder ${folder.title}` : undefined
-      },
-      perform: async () => {
-        /* v8 ignore next -- perform runs only after preRead, which throws when no folder was chosen, so `folder` is always set here. */
-        const ids = folder === undefined ? [] : [folder.id]
-        await dealFavorite(this.client, video.aid, options.remove === true ? { add: [], remove: ids } : { add: ids, remove: [] }, bvid)
-      },
-    })
+    return this.writes.favorite(bvid, options)
   }
 
   /**
@@ -1005,13 +467,7 @@ export class BiliAccount extends Service {
    * @returns the outcome.
    */
   async like(bvid: string): Promise<WriteOutcome> {
-    const video = await this.aidOf(bvid)
-    if ('refusal' in video) return { outcome: 'refused', detail: video.refusal }
-    return this.act({
-      action: 'like', target: bvid,
-      preRead: async () => ((await hasLiked(this.client, bvid)) ? 'already liked' : undefined),
-      perform: () => likeVideo(this.client, video.aid, bvid),
-    })
+    return this.writes.like(bvid)
   }
 
   /**
@@ -1021,42 +477,17 @@ export class BiliAccount extends Service {
    * @returns the outcome.
    */
   async watchLater(bvid: string, remove: boolean = false): Promise<WriteOutcome> {
-    const video = await this.aidOf(bvid)
-    if ('refusal' in video) return { outcome: 'refused', detail: video.refusal }
-    return this.act({
-      action: 'watchlater', target: bvid,
-      preRead: async () => {
-        const listed = (await watchLaterAids(this.client)).has(video.aid)
-        if (remove) return listed ? undefined : 'not on watch later'
-        return listed ? 'already on watch later' : undefined
-      },
-      perform: () => (remove ? removeWatchLater(this.client, video.aid) : addWatchLater(this.client, video.aid)),
-    })
+    return this.writes.watchLater(bvid, remove)
   }
 
-  // ── Reads ──────────────────────────────────────────────────────────────
-
-  /**
-   * A read through bili-svc, with a model-readable error when the session or the service is not usable.
-   * @param work - the read.
-   */
-  private async reading<T>(work: () => Promise<T>): Promise<T> {
-    try {
-      return await work()
-    } catch (error: unknown) {
-      if (error instanceof BiliSessionError) throw new Error(error.message)
-      if (error instanceof BiliApiError && error.code === -101) throw new Error('Bilibili says the account is signed out; bili-svc owns the login, and the owner renews it there')
-      throw error
-    }
-  }
+  // ── Reads (src/reads.ts) ───────────────────────────────────────────────
 
   /**
    * The next batch of the home feed.
    * @returns about 12 bounded video cards.
    */
   async homeFeed(): Promise<VideoCard[]> {
-    this.feedIndex += 1
-    return this.notOwners(await this.reading(() => homeFeed(this.client, this.feedIndex, this.config.timeZone)))
+    return this.reads.homeFeed()
   }
 
   /**
@@ -1064,7 +495,7 @@ export class BiliAccount extends Service {
    * @returns up to 30 bounded video cards, top first.
    */
   async ranking(): Promise<VideoCard[]> {
-    return this.notOwners(await this.reading(() => ranking(this.client, this.config.timeZone)))
+    return this.reads.ranking()
   }
 
   /**
@@ -1074,12 +505,7 @@ export class BiliAccount extends Service {
    * @returns up to 40 lines across the video, each with its second.
    */
   async danmaku(bvid: string, part?: number): Promise<{ bvid: string; lines: DanmakuLine[] }> {
-    if (bvidOf(bvid) === undefined) throw new Error(`${JSON.stringify(bvid)} is not a BV id`)
-    return this.reading(async () => {
-      const video = await videoInfo(this.client, bvid, this.config.timeZone)
-      const cid = video.parts.find(page => page.page === part)?.cid ?? video.cid
-      return { bvid: video.bvid, lines: await danmaku(this.client, cid, DANMAKU_LINES) }
-    })
+    return this.reads.danmaku(bvid, part)
   }
 
   /**
@@ -1088,8 +514,7 @@ export class BiliAccount extends Service {
    * @returns bounded posts, newest first, and the `next` offset when there are more.
    */
   async followingFeed(offset?: string): Promise<{ items: FeedPost[]; next?: string }> {
-    const page = await this.reading(() => followingFeed(this.client, offset, this.config.timeZone))
-    return { ...page, items: this.notOwners(page.items) }
+    return this.reads.followingFeed(offset)
   }
 
   /**
@@ -1098,7 +523,7 @@ export class BiliAccount extends Service {
    * @returns bounded video cards.
    */
   async popular(page: number = 1): Promise<VideoCard[]> {
-    return this.notOwners(await this.reading(() => popular(this.client, Math.max(1, Math.floor(page)), this.config.timeZone)))
+    return this.reads.popular(page)
   }
 
   /**
@@ -1109,9 +534,7 @@ export class BiliAccount extends Service {
    * @returns bounded video cards.
    */
   async search(keyword: string, page: number = 1, order: SearchOrder = 'relevance'): Promise<VideoCard[]> {
-    const words = keyword.trim().slice(0, 100)
-    if (words === '') throw new Error('the keyword is empty')
-    return this.notOwners(await this.reading(() => search(this.client, words, Math.max(1, Math.floor(page)), this.config.timeZone, order)))
+    return this.reads.search(keyword, page, order)
   }
 
   /**
@@ -1119,17 +542,7 @@ export class BiliAccount extends Service {
    * @returns up to 30 keywords, each with the label the search box shows when it differs.
    */
   async hotSearches(): Promise<HotSearch[]> {
-    return this.reading(async () => {
-      const list = await hotSearches(this.client, HOT_SEARCHES)
-      this.background.track(this.hot.noteWords(list))
-      return list
-    })
-  }
-
-  /** Feed entries without the owner's own uploads and posts: the owner has seen them. */
-  private notOwners<T extends { authorMid?: number | undefined }>(items: T[]): T[] {
-    const owner = this.ownerMid()
-    return owner === undefined ? items : items.filter(item => item.authorMid !== owner)
+    return this.reads.hotSearches()
   }
 
   /**
@@ -1142,16 +555,7 @@ export class BiliAccount extends Service {
   async video(
     bvid: string, options: { subtitlePage?: number; part?: number } = {},
   ): Promise<{ video: VideoDetail; subtitle: SubtitleView; topComments: CommentView[] }> {
-    if (bvidOf(bvid) === undefined) throw new Error(`${JSON.stringify(bvid)} is not a BV id`)
-    return this.reading(async () => {
-      const video = await videoInfo(this.client, bvid, this.config.timeZone)
-      const cid = video.parts.find(part => part.page === options.part)?.cid ?? video.cid
-      const subtitle = await subtitles(this.client, bvid, cid, options.subtitlePage ?? 1)
-      const top = await comments(this.client, video.aid, { order: 'hot' }, this.config.timeZone)
-      if (subtitle.reached !== undefined) this.background.track(this.reportWatchOf(video, cid, subtitle.reached))
-      this.background.track(this.hot.noteComments(video.bvid, top.comments))
-      return { video, subtitle: subtitle.view, topComments: top.comments.slice(0, 5) }
-    })
+    return this.reads.video(bvid, options)
   }
 
   /**
@@ -1161,19 +565,7 @@ export class BiliAccount extends Service {
    * @returns bounded comments and the `next` offset, or a thread with its root.
    */
   async comments(bvid: string, options: { order?: 'hot' | 'new'; offset?: string; root?: string; page?: number } = {}): Promise<{ comments: CommentView[]; next?: string; root?: CommentView }> {
-    if (bvidOf(bvid) === undefined) throw new Error(`${JSON.stringify(bvid)} is not a BV id`)
-    return this.reading(async () => {
-      const video = await videoInfo(this.client, bvid, this.config.timeZone)
-      if (options.root !== undefined) {
-        if (!/^\d+$/.test(options.root)) throw new Error('root must be a comment id')
-        const page = Math.max(1, Math.floor(options.page ?? 1))
-        const result = await thread(this.client, { type: VIDEO_AREA, oid: video.aid, root: options.root }, page, this.config.timeZone)
-        return { comments: result.replies, ...(result.root === undefined ? {} : { root: result.root }) }
-      }
-      const page = await comments(this.client, video.aid, { order: options.order ?? 'hot', ...(options.offset === undefined ? {} : { offset: options.offset }) }, this.config.timeZone)
-      this.background.track(this.hot.noteComments(video.bvid, page.comments))
-      return page
-    })
+    return this.reads.comments(bvid, options)
   }
 
   /**
@@ -1182,31 +574,7 @@ export class BiliAccount extends Service {
    * @returns unread counts, up to ten replies and mentions, and the owner's latest messages.
    */
   async inbox(): Promise<InboxView> {
-    return this.reading(async () => {
-      const unread = await unreadCounts(this.client)
-      const replies = await inboxItems(this.client, 'reply')
-      const mentions = await inboxItems(this.client, 'at')
-      const ownerMid = this.ownerMid()
-      const owner = ownerMid === undefined ? [] : await ownerMessages(this.client, ownerMid)
-      await this.markSeen(owner)
-      const strip = ({ type: _type, oid: _oid, root: _root, ...rest }: InboxItem): Omit<InboxItem, 'type' | 'oid' | 'root'> => rest
-      return {
-        unread, replies: replies.slice(0, 10).map(strip), mentions: mentions.slice(0, 10).map(strip), ownerMessages: owner.slice(-10),
-      }
-    })
-  }
-
-  /** Record owner messages the model has read so no turn repeats them. */
-  private async markSeen(items: readonly OwnerMessage[]): Promise<void> {
-    await this.background.serialize(async () => {
-      const domain = await this.ready
-      const seen = new Set(domain.table('inbox').get('dm')?.seen ?? [])
-      for (const item of items) {
-        seen.add(item.id)
-        await domain.table('pending').delete(`dm:${item.id}`)
-      }
-      await domain.table('inbox').put('dm', { seen: [...seen].slice(-MAX_SEEN) })
-    })
+    return this.reads.inbox()
   }
 
   /**
@@ -1214,31 +582,10 @@ export class BiliAccount extends Service {
    * @returns the account facts, or `signedIn: false`.
    */
   async me(): Promise<MeView> {
-    const { view, gate } = await this.accountView()
-    const base: Pick<MeView, 'limits' | 'pause'> = {
-      limits: 'bili-svc enforces daily caps, spacing, and once-rules on every action; it answers refused when one is used up',
-      ...(gate?.readonly === true ? { pause: `bili-svc holds every action (gate mode ${gate.mode === '' ? 'unknown' : gate.mode}) until the owner lets them through again` } : {}),
-    }
-    if (view.session !== 'ok') return { signedIn: false, ...view.uname === undefined ? {} : { uname: view.uname }, ...base }
-    return this.reading(async () => {
-      const nav = await navInfo(this.client)
-      if (!nav.isLogin) return { signedIn: false, ...base }
-      const mid = nav.mid ?? view.mid ?? 0
-      const stat = await relationStat(this.client, mid)
-      const list = await folders(this.client, mid)
-      const rewards = await dailyRewards(this.client)
-      /* v8 ignore next 5 -- a signed-in nav answer always has uname, exp, and coins. */
-      return {
-        signedIn: true, mid,
-        ...(nav.uname ?? view.uname) === undefined ? {} : { uname: nav.uname ?? view.uname },
-        ...(nav.level === undefined ? {} : { level: nav.level }),
-        ...(nav.exp === undefined ? {} : { exp: nav.exp }), ...(nav.coins === undefined ? {} : { coins: nav.coins }), rewards,
-        ...stat, folders: list, ...base,
-      }
-    })
+    return this.reads.me()
   }
 
-  // ── Journal ────────────────────────────────────────────────────────────
+  // ── Journal (src/journal.ts) ───────────────────────────────────────────
 
   /**
    * Keep one dated journal entry.
@@ -1246,21 +593,7 @@ export class BiliAccount extends Service {
    * @returns the stored entry's number and what is left today, or why it was refused.
    */
   async journalWrite(text: string): Promise<{ saved: true; seq: number; leftToday: number } | { refused: string }> {
-    const entry = text.trim()
-    if (entry === '') return { refused: 'the entry is empty' }
-    if (codePoints(entry) > JOURNAL_LIMITS.chars) return { refused: `the entry is ${codePoints(entry)} characters; the limit is ${JOURNAL_LIMITS.chars}` }
-    return this.background.serialize(async () => {
-      const domain = await this.ready
-      const now = Date.now()
-      const day = dayKey(now, this.config.timeZone)
-      const rows = [...domain.table('journal').entries()].map(([, row]) => row)
-      const today = rows.filter(row => row.day === day).length
-      if (today >= JOURNAL_LIMITS.perDay) return { refused: `today already has ${JOURNAL_LIMITS.perDay} entries` }
-      const seq = Math.max(0, ...rows.map(row => row.seq)) + 1
-      await domain.table('journal').put(seqKey(seq), { seq, day, at: now, text: entry })
-      this.ctx.logger.info(`bili: journal entry ${seq} (${codePoints(entry)} chars)`)
-      return { saved: true as const, seq, leftToday: JOURNAL_LIMITS.perDay - today - 1 }
-    })
+    return this.journal.write(text)
   }
 
   /**
@@ -1269,17 +602,10 @@ export class BiliAccount extends Service {
    * @returns up to ten entries and the page count.
    */
   async journalRead(page: number = 1): Promise<{ entries: { seq: number; day: string; text: string }[]; page: number; pages: number }> {
-    const domain = await this.ready
-    const rows = [...domain.table('journal').entries()].map(([, row]) => row).sort((a, b) => b.seq - a.seq)
-    const pages = Math.max(1, Math.ceil(rows.length / JOURNAL_LIMITS.pageSize))
-    const index = Math.min(Math.max(1, Math.floor(page)), pages)
-    const entries = rows
-      .slice((index - 1) * JOURNAL_LIMITS.pageSize, index * JOURNAL_LIMITS.pageSize)
-      .map(({ seq, day, text }) => ({ seq, day, text }))
-    return { entries, page: index, pages }
+    return this.journal.read(page)
   }
 
-  // ── Main agent ─────────────────────────────────────────────────────────
+  // ── Main agent (src/main-agent.ts) ─────────────────────────────────────
 
   /**
    * Send one message to the owner's main agent (`bili_tell_main_agent`): the WeChat channel queues it
@@ -1289,39 +615,10 @@ export class BiliAccount extends Service {
    * @returns `sent` with what is left today, or `refused` with the reason.
    */
   async tellMainAgent(text: string): Promise<WriteOutcome> {
-    const message = text.trim()
-    if (message === '') return { outcome: 'refused', detail: 'the message is empty' }
-    const chars = codePoints(message)
-    if (chars > MAIN_AGENT_MAX_CHARS) return { outcome: 'refused', detail: `the message is ${chars} characters; the limit is ${MAIN_AGENT_MAX_CHARS}` }
-    return this.background.serialize(async (): Promise<WriteOutcome> => {
-      const domain = await this.ready
-      const now = Date.now()
-      const day = dayKey(now, this.config.timeZone)
-      const rows = [...domain.table('told').entries()].map(([, row]) => row)
-      // Only today's messages count, so earlier days' rows go.
-      for (const row of rows.filter(row => row.day !== day)) await domain.table('told').delete(seqKey(row.seq))
-      const kept = rows.filter(row => row.day === day)
-      const today = kept.length
-      const perDay = this.config.mainAgentPerDay
-      if (today >= perDay) return { outcome: 'refused', detail: `today's ${perDay} message(s) to the main agent are used up` }
-      const notifier = this.ctx.get('ownerNotifier')
-      if (notifier?.tellMainAgent === undefined) return { outcome: 'refused', detail: 'the owner\'s WeChat channel is not running, so the main agent cannot be reached' }
-      let sessionId: string
-      try {
-        sessionId = await notifier.tellMainAgent({ text: message, from: BILI_AGENT_ORIGIN, origin: 'bili' })
-      } catch (error: unknown) {
-        this.ctx.logger.warn(`bili: the message to the main agent did not go out: ${errorText(error)}`)
-        return { outcome: 'refused', detail: `the main agent could not take it: ${errorText(error)}` }
-      }
-      const seq = Math.max(0, ...kept.map(row => row.seq)) + 1
-      await domain.table('told').put(seqKey(seq), { seq, day, at: now, chars, sessionId })
-      this.ctx.logger.info(`bili: told the main agent ${chars} chars in chat Session ${sessionId} (${today + 1}/${perDay} today)`)
-      const left = perDay - today - 1
-      return { outcome: 'sent', detail: `the main agent got it and takes it up in a turn of its own; its answer goes to the owner on WeChat, not to you. ${left} left today.` }
-    })
+    return tellMainAgent(this.mainAgent, text)
   }
 
-  // ── Settings route ─────────────────────────────────────────────────────
+  // ── Settings view (src/settings-view.ts) ──────────────────────────────
 
   /**
    * What the Settings section shows: every account bili-svc lists, its gate, brake, and ledger, QR
@@ -1333,108 +630,7 @@ export class BiliAccount extends Service {
    * @returns the view.
    */
   async view(result: ActionResult | null = null, ledgerRows: number = LEDGER_ROWS): Promise<BiliView> {
-    const domain = await this.ready
-    const manage = await this.settings.hasToken()
-    let snapshot: ManageSnapshot | undefined
-    let manageError: string | null = null
-    if (manage) {
-      try {
-        snapshot = await this.settings.read(ledgerRows, this.abort.signal)
-      } catch (error: unknown) {
-        manageError = errorText(error)
-        this.ctx.logger.warn(`bili: the manage read failed: ${manageError}`)
-      }
-    }
-    const agent = snapshot === undefined ? await this.accountView() : undefined
-    const checkedAt = Date.now()
-    const rows = snapshot?.status.accounts ?? agent?.status?.accounts.map(account => ({
-      ...account, session: (SESSION_STATES as readonly string[]).includes(account.session) ? account.session as SessionState : 'missing' as const,
-      refreshMode: null, login: false, refreshedAt: null, importedAt: null, deadReason: null,
-    })) ?? []
-    const accounts: ManagedAccount[] = rows.map(row => ({ ...row, agent: row.id === this.config.account }))
-    const speakerId = manage && manageError === null ? await this.commentSpeaker() : null
-    const speakerRow = speakerId === null ? undefined : accounts.find(row => row.id === speakerId)
-    const gate = snapshot === undefined ? minimalGate(agent?.gate) : fullGate(snapshot.status.gate)
-    /* v8 ignore next 2 -- snapshot is defined whenever agent is undefined. */
-    return {
-      account: agent?.view ?? this.accountOf(snapshot?.status ?? { accounts: [] }, checkedAt),
-      gate,
-      accounts,
-      speaker: speakerId === null ? null : { id: speakerId, display: speakerRow?.display === undefined || speakerRow.display === '' ? speakerId : speakerRow.display },
-      ledger: snapshot?.ledger ?? null,
-      logins: this.settings.logins(),
-      manage: manage && manageError === null,
-      manageEnv: this.config.manageTokenEnv,
-      manageError,
-      result,
-      ownerMid: this.ownerMid() ?? 0,
-      ownerUpdatedAt: domain.table('owner').get('main')?.updatedAt ?? null,
-      timeZone: this.config.timeZone,
-      share: await this.share.view(),
-    }
-  }
-
-  /** `GET` answers the view; `POST` takes one owner action and answers the new view. */
-  private async route(request: Request): Promise<Response> {
-    const headers = { 'cache-control': 'no-store' }
-    if (request.method !== 'POST') {
-      const asked = Number(new URL(request.url).searchParams.get('ledger'))
-      const rows = Number.isInteger(asked) && asked > 0 ? Math.min(asked, LEDGER_MAX_ROWS) : LEDGER_ROWS
-      return Response.json(await this.view(null, rows), { headers })
-    }
-    if (!(request.headers.get('content-type') ?? '').startsWith('application/json')) return Response.json({ error: 'expected application/json' }, { status: 415, headers })
-    let body: unknown
-    try {
-      body = await request.json()
-    } catch {
-      return Response.json({ error: 'body is not JSON' }, { status: 400, headers })
-    }
-    const parsed = parseAction(body)
-    if (!parsed.ok) return Response.json({ error: parsed.error }, { status: 400, headers })
-    const { action } = parsed
-    if (action.action === 'owner') {
-      const { view } = await this.accountView()
-      if (action.mid === view.mid) return Response.json({ error: 'mid is this account itself, not the owner\'s main account' }, { status: 400, headers })
-      await this.setOwner(action.mid)
-      return Response.json(await this.view(), { headers })
-    }
-    // The daily share is DSH's own: no manage token needed.
-    if (action.action === 'share.enabled') {
-      await this.share.setEnabled(action.enabled)
-      return Response.json(await this.view({ action: action.action, account: null, outcome: action.enabled ? 'on' : 'off', days: null }), { headers })
-    }
-    if (action.action === 'share.now') {
-      const outcome = await this.share.sendNow()
-      return Response.json(await this.view({ action: action.action, account: null, outcome, days: null }), { headers })
-    }
-    if (!await this.settings.hasToken()) {
-      return Response.json({ error: `the manage token is not set (credential ${this.config.manageTokenEnv})`, code: 'no_token' }, { status: 403, headers })
-    }
-    try {
-      const result = await this.settings.run(action, request.signal)
-      // The agent's own status answer may predate the change.
-      this.statusCache = undefined
-      return Response.json(await this.view(result, action.action === 'ledger' ? action.limit : LEDGER_ROWS), { headers })
-    } catch (error: unknown) {
-      this.statusCache = undefined
-      if (!(error instanceof ManageError)) throw error
-      return Response.json({ error: manageMessage(error), code: error.code }, { status: manageStatus(error), headers })
-    }
-  }
-
-  /**
-   * Store the owner's main account. A different UID drops the owner-message baseline, so the next
-   * check records the new conversation's history instead of answering it.
-   */
-  private async setOwner(mid: number): Promise<void> {
-    const changed = await this.background.serialize(async () => {
-      const domain = await this.ready
-      const before = this.ownerMid()
-      await domain.table('owner').put('main', { mid, updatedAt: Date.now() })
-      if (before !== mid) await domain.table('inbox').delete('dm')
-      return before !== mid
-    })
-    this.ctx.logger.info(`bili: the owner ${changed ? 'set a new' : 'saved the same'} main account UID`)
+    return this.settingsView.read(result, ledgerRows)
   }
 }
 

@@ -109,6 +109,15 @@ export class BiliTransportError extends Error {
   }
 }
 
+/**
+ * Human-readable error text; this client's errors never carry request data.
+ * @param error - a thrown value.
+ * @returns its message, or the value as text.
+ */
+export function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 /** Arguments of one call; bili-svc adds csrf, WBI, and cookies. */
 export interface CallOptions {
   query?: Readonly<Record<string, string | number>>

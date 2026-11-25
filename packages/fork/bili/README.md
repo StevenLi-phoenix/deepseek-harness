@@ -100,12 +100,21 @@ The Settings view comes from `GET /v1/status` under the manage token (accounts w
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | `BiliAccount` (`ctx.bili`): configuration, lifecycle, the owner-message check, the relay registration, reads, actions, journal, messages to the main agent, Settings route |
+| [`src/index.ts`](src/index.ts) | `BiliAccount` (`ctx.bili`): configuration, lifecycle, the relay registration, and the wiring; each public method delegates to the modules below |
+| [`src/status.ts`](src/status.ts) | `AccountStatus`: bili-svc's status and the Reply Gate's comment speaker, each reused briefly, the agent's account card, and its own mid |
+| [`src/account-session.ts`](src/account-session.ts) | `AccountSession`: the account's long-lived Session, found or created, and its marked prompts |
+| [`src/owner-inbox.ts`](src/owner-inbox.ts) | `OwnerInbox`: the owner-message check, queue, conversation window, hand-over to the Session, and the owner's UID |
+| [`src/reads.ts`](src/reads.ts) | `BiliReads`: feeds, search, leaderboard, hot searches, video, comments, danmaku, inbox, and account card |
+| [`src/writes.ts`](src/writes.ts) | `BiliWrites`: coin, triple, follow, unfollow, favorite, like, watch later, the watch report, and what their failures mean |
+| [`src/journal.ts`](src/journal.ts) | `Journal`: the account's dated journal |
+| [`src/main-agent.ts`](src/main-agent.ts) | `tellMainAgent`: messages to the owner's main agent, bounded per day |
+| [`src/settings-view.ts`](src/settings-view.ts) | `SettingsView`: what the Settings section shows |
+| [`src/settings-route.ts`](src/settings-route.ts) | `SettingsRoute`: the Settings route's `GET` and `POST` |
 | [`src/client.ts`](src/client.ts) | `RemoteBiliClient`: the door, `/v1/status`, `/v1/reply/dm`, `/v1/share/owner`, the token, deadlines, outcome mapping, lossless JSON, and the HTTP exchange `src/manage.ts` also uses |
 | [`src/manage.ts`](src/manage.ts) | `ManageClient`: bili-svc's management API under the `manage` token, answer parsers, QR modules |
 | [`src/settings.ts`](src/settings.ts) | `ManageSettings`: management reads and the owner's actions, QR attempts, action logging |
 | [`src/actions.ts`](src/actions.ts) | Validation of the Settings route's `POST` bodies |
-| [`src/dm.ts`](src/dm.ts) | `DmChannel`, the `bili-dm` channel of `ctx.ownerRelay`: replies to the owner's messages and the daily share, split in two at most, and the WeChat fallback |
+| [`src/dm.ts`](src/dm.ts) | `DmChannel`, the `bili-dm` channel of `ctx.ownerRelay`: replies to the owner's messages and the daily share, split in two at most, their sends through `/v1/reply/dm` and `/v1/share/owner`, and the WeChat fallback |
 | [`src/share.ts`](src/share.ts) | `DailyShare`: the daily share's plan, holds, prompt, outcomes, and Settings view |
 | [`src/endpoints.ts`](src/endpoints.ts) | The endpoint names this package may call, reads and actions |
 | [`src/api.ts`](src/api.ts) | Typed reads (bounded) and single-call actions |

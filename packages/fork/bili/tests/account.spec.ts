@@ -199,10 +199,11 @@ describe('what bili-svc says of the account', () => {
     const h = await harness({ svc, workspace: dir })
     const pending = h.account.me()
     await vi.advanceTimersByTimeAsync(1000)
-    Reflect.set(h.account, 'statusCache', undefined)
+    const status = member(h.account, 'status') as object
+    Reflect.set(status, 'statusCache', undefined)
     await vi.advanceTimersByTimeAsync(31_000)
     expect(await pending).toMatchObject({ signedIn: false })
-    expect(Reflect.get(h.account, 'statusCache')).toBeUndefined()
+    expect(Reflect.get(status, 'statusCache')).toBeUndefined()
   })
 
   it('shows a gate only when the management status carries one', async () => {
