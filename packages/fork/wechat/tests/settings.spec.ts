@@ -284,14 +284,15 @@ describe('Settings route: login', () => {
     const ilink = new FakeIlink()
     const settings = new WechatSettings({
       accountFile, timeZone: 'UTC', channel: { status: () => IDLE, reloadAccount: () => {} }, logger: { info: () => {}, warn: () => {} },
-      login: { fetch: ilink.fetch, baseUrl: 'https://ilink.test', pollDelayMs: 0 }, loginTimeoutMs: 80,
+      login: { fetch: ilink.fetch, baseUrl: 'https://ilink.test', pollDelayMs: 0 }, loginTimeoutMs: 1000,
     })
     open.push(settings)
     const post = async (body: unknown) => (await (await settings.route().fetch(new Request('http://127.0.0.1/api/wechat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }))).json()) as WechatAnswer
     const key = (await post({ action: 'login.start' })).login!.key
     ilink.statuses({ status: 'need_verifycode' })
     await vi.waitFor(async () => { expect((await post({ action: 'login.poll', key })).login!.phase).toBe('needs-code') })
-    await vi.waitFor(async () => { expect((await post({ action: 'login.poll', key })).login).toMatchObject({ phase: 'failed', failure: 'timeout' }) })
+    // A wide timeout: a loaded host must still see the waiting phase before the login gives up.
+    await vi.waitFor(async () => { expect((await post({ action: 'login.poll', key })).login).toMatchObject({ phase: 'failed', failure: 'timeout' }) }, { timeout: 5000 })
   })
 })
 

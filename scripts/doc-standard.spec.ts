@@ -113,6 +113,8 @@ const PACKAGE_LIBRARIES: Readonly<Record<string, string>> = {
   'packages/util/timeout': 'Zero-dependency timeout utility.',
   'packages/util/values': 'Stateless lossless-JSON and immutable-value helpers.',
   'packages/util/workspace-path': 'Zero-dependency Workspace path formatter.',
+  'packages/fork/service-kit': 'Fork-local Host helpers the fork services and tools import; plain module exports with no plugin entry.',
+  'packages/fork/settings-kit': 'Fork-local browser helpers the fork Settings sections inline; plain module exports with no plugin entry.',
 }
 
 function readFrontmatter(file: string): Record<string, unknown> {
