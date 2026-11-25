@@ -351,8 +351,11 @@ export function probeElement(element: Element): ElementFacts {
  * covered: Workday, for one, hides each real `<button>` (`aria-hidden`) under a
  * transparent `role="button"` overlay with the same label, and the overlay takes
  * the click. Returns the interactive element at the target's centre when it is
- * not the target, does not contain it, and carries the same accessible name;
- * nothing otherwise, so a decoy under an unrelated element stays refused.
+ * not the target, does not contain it, and carries the same accessible name, or
+ * is named "Submit" over a `type="submit"` control (Workday's sign-in hides
+ * `<button type="submit">Sign In</button>` under a `click_filter` overlay
+ * labelled "Submit"); nothing otherwise, so a decoy under an unrelated element
+ * stays refused.
  * Playwright serialises this function, so it must not reference anything
  * outside itself; run it after {@link probeElement}, which scrolled the element
  * into view.
@@ -387,7 +390,10 @@ export function findSameNameCover(element: Element): Element | null {
     return text.replace(/\s+/gu, ' ').trim().toLowerCase()
   }
   const name = nameOf(element)
-  return name !== '' && nameOf(cover) === name ? cover : null
+  if (name === '') return null
+  const coverName = nameOf(cover)
+  const submitsTheForm = coverName === 'submit' && element.getAttribute('type')?.trim().toLowerCase() === 'submit'
+  return coverName === name || submitsTheForm ? cover : null
 }
 
 /**

@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { chromium } from 'playwright-core'
 import { Context } from '@deepseek-ai/cordis'
 import { HeadlessBrowserSession, SecretFieldError } from '../src/session.ts'
-import { ActionRefusedError } from '../src/guard.ts'
+import { ActionGuard, ActionRefusedError } from '../src/guard.ts'
 
 const AVAILABLE = existsSync(chromium.executablePath())
 
@@ -78,6 +78,7 @@ const INNER = '<!doctype html><title>Enter your information</title><body><label>
 const WORKDAY = `<!doctype html><title>My Experience</title><body>
 <label for="school">School or University</label><input id="school" role="combobox" aria-controls="school-list" aria-expanded="false" placeholder="Search" style="width:240px;height:28px"><div id="school-list" role="listbox"></div><input id="school-value" type="hidden">
 <label for="field">Field of Study</label><input id="field" placeholder="Search" style="width:240px;height:28px"><div id="field-list" role="listbox"></div><p id="field-value"></p>
+<div style="position:relative;width:376px;height:40px"><button id="signin" type="submit" aria-hidden="true" tabindex="-2" style="width:376px;height:40px">Sign In</button><div id="filter" role="button" tabindex="0" aria-label="Submit" data-automation-id="click_filter" style="position:absolute;inset:0" onclick="document.getElementById('signed').textContent = 'signed in'"></div></div><p id="signed"></p>
 <script>
   for (const [id, names] of [['school', ['New York University', 'New York Institute of Technology']], ['field', ['Computer Science', 'Computer Engineering']]]) {
     const input = document.getElementById(id); const list = document.getElementById(id + '-list')
@@ -106,7 +107,7 @@ interface App {
 const apps: App[] = []
 afterEach(async () => { await Promise.all(apps.splice(0).map(app => app.close())) })
 
-async function boot(): Promise<App> {
+async function boot(options: { readonly sensitiveActions?: boolean } = {}): Promise<App> {
   const root = mkdtempSync(join(tmpdir(), 'dsh-forms-live-'))
   const files = join(root, 'uploads')
   const server: Server = createServer((request, response) => {
@@ -120,7 +121,7 @@ async function boot(): Promise<App> {
     profileDir: join(root, 'profile'),
     headless: true,
     stealth: true,
-    sensitiveActions: true,
+    sensitiveActions: options.sensitiveActions ?? true,
     viewportWidth: 1280,
     viewportHeight: 800,
     jpegQuality: 50,
@@ -134,7 +135,7 @@ async function boot(): Promise<App> {
     credentialsPath: join(root, 'credentials.json'),
     uploadDirs: [files],
     maxUploadMB: 25,
-  }, ctx.logger)
+  }, ctx.logger, new ActionGuard({ sensitiveActions: options.sensitiveActions ?? true }))
   mkdirSync(files)
   writeFileSync(join(files, 'resume.pdf'), 'resume-bytes')
   writeFileSync(join(files, 'transcript.pdf'), 'transcript')
@@ -268,6 +269,19 @@ describe.skipIf(!AVAILABLE)('form steps in a real page', () => {
     expect(await page.locator('#field-list [role=option]').count()).toBe(1)
     await app.browser.click({ selector: '#field-option-0' })
     expect(await page.locator('#field-value').textContent()).toBe('Computer Science')
+  }, 120_000)
+
+  it('signs in through the "Submit" overlay Workday draws over its hidden Sign In button', async () => {
+    const guarded = await boot()
+    await guarded.browser.open(`${guarded.base}/workday`)
+    await expect(guarded.browser.click({ selector: 'button[type=submit]' })).rejects.toThrow('the target "Submit" matches the sensitive action "submit"')
+    // DSH's unattended profile runs with sensitiveActions off; the overlay then takes the click.
+    const app = await boot({ sensitiveActions: false })
+    await app.browser.open(`${app.base}/workday`)
+    const page = await app.browser.page()
+    const outcome = await app.browser.click({ selector: 'button[type=submit]' })
+    expect(outcome.target).toMatchObject({ index: 1, name: 'Submit' })
+    expect(await page.locator('#signed').textContent()).toBe('signed in')
   }, 120_000)
 
   it('checks a styled checkbox through the box painted under it and refuses one nobody can see', async () => {

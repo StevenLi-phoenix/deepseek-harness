@@ -495,6 +495,21 @@ describe('the overlay that takes a covered control\'s click', () => {
     expect(findSameNameCover(real)).toBe(overlay)
   })
 
+  it('takes a "Submit" overlay over a hidden submit button with another label, as Workday\'s sign-in draws it', () => {
+    // Live roche.wd3.myworkdayjobs.com sign-in, 2026-11-25: the hidden button reads "Sign In", its click_filter overlay "Submit".
+    mount('<button type="submit" id="signin" aria-hidden="true" tabindex="-2">Sign In</button>'
+      + '<div id="filter" role="button" tabindex="0" aria-label="Submit" data-automation-id="click_filter"></div>'
+      + '<button type="button" id="details" aria-hidden="true">Show details</button><div id="decoy" role="button" aria-label="Submit"></div>'
+      + '<button id="untyped" aria-hidden="true">Sign In</button><div id="plain" role="button" aria-label="Submit"></div>')
+    const box: Box = { left: 0, top: 0, width: 376, height: 40 }
+    layout.place(find('#signin'), box).place(find('#filter'), box).paint(find('#filter'), find('#signin'))
+    expect(findSameNameCover(find('#signin'))).toBe(find('#filter'))
+    layout.place(find('#details'), box).place(find('#decoy'), box).paint(find('#decoy'), find('#details'))
+    expect(findSameNameCover(find('#details'))).toBeNull()
+    layout.place(find('#untyped'), box).place(find('#plain'), box).paint(find('#plain'), find('#untyped'))
+    expect(findSameNameCover(find('#untyped'))).toBeNull()
+  })
+
   it('compares the label or text with case and spaces folded, and refuses a target without a name', () => {
     mount('<button id="next" aria-label=" ">Next step</button><input type="button" id="cover" aria-label="NEXT  step">'
       + '<button id="icon"></button><a id="link" href="#top"></a>')
