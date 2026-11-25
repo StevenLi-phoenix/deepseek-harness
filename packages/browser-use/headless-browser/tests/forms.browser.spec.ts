@@ -25,6 +25,8 @@ const FORM = `<!doctype html><title>signup</title><body>
 <input id="many" type="file" multiple style="opacity:0;position:absolute;width:1px;height:1px">
 <button id="chooser" type="button">Attach transcript</button>
 <button id="google" type="button" onclick="window.open('/popup', 'signin', 'width=480,height=600')">Continue with Google</button>
+<div style="position:relative;width:180px;height:40px"><button id="reset" type="button" aria-hidden="true" tabindex="-1" style="width:180px;height:40px">Reset Password</button><div id="cover" role="button" tabindex="0" aria-label="Reset Password" style="position:absolute;inset:0" onclick="document.getElementById('shown').textContent = 'reset sent'"></div></div>
+<div style="position:relative;width:180px;height:40px"><button id="decoy" type="button" aria-hidden="true" tabindex="-1" style="width:180px;height:40px" onclick="document.getElementById('shown').textContent = 'decoy'">Show details</button><div role="button" tabindex="0" aria-label="Continue" style="position:absolute;inset:0"></div></div>
 <p id="shown"></p>
 <script>
   const picker = document.createElement('input'); picker.type = 'file'; picker.id = 'picker'
@@ -142,5 +144,16 @@ describe.skipIf(!AVAILABLE)('form steps in a real page', () => {
     await expect.poll(() => app.browser.tabsState().map(tab => [tab.id, tab.active])).toEqual([['t1', true]])
     const page = await app.browser.page()
     expect(await page.locator('#shown').textContent()).toBe('signed in')
+  }, 120_000)
+
+  it('clicks the same-name overlay that covers a hidden button, and still refuses a covered decoy', async () => {
+    const app = await boot()
+    await app.browser.open(`${app.base}/apply`)
+    const page = await app.browser.page()
+    const outcome = await app.browser.click({ selector: "button:has-text('Reset Password')" })
+    expect(outcome.target).toMatchObject({ index: 1, name: 'Reset Password' })
+    expect(await page.locator('#shown').textContent()).toBe('reset sent')
+    await expect(app.browser.click({ selector: '#decoy' })).rejects.toThrow(/scored 0\.00/u)
+    expect(await page.locator('#shown').textContent()).toBe('reset sent')
   }, 120_000)
 })

@@ -29,7 +29,7 @@ import { cdpScrollChannel, scrollPage, type ScrollRequest, type ScrollResult } f
 import type { KeepalivePage } from './keepalive.ts'
 import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
 import { BrowserTabs, TabNavigationError, type ActiveTab, type ClosedTab, type PopupTab, type TabsContext, type TabsPage } from './tabs.ts'
-import { probeElement, readElementFacts, type ElementFacts } from './visibility.ts'
+import { findSameNameCover, probeElement, readElementFacts, type ElementFacts } from './visibility.ts'
 
 /** How long a context gets to close before shutdown stops waiting for it. */
 export const SHUTDOWN_TIMEOUT_MS = 10_000
@@ -817,10 +817,29 @@ export class HeadlessBrowserSession {
     const count = await locator.count()
     if (count === 0) throw new Error(`no element matches ${selector}`)
     const facts: ElementFacts[] = []
+    const covers: { readonly facts: ElementFacts; readonly element: Actionable }[] = []
     for (let index = 0; index < count; index += 1) {
-      facts.push(readElementFacts(await locator.nth(index).evaluate(probeElement)))
+      const candidate = readElementFacts(await locator.nth(index).evaluate(probeElement))
+      facts.push(candidate)
+      if (!candidate.ariaHidden && candidate.occlusion >= 1) continue
+      // A same-name overlay on top is what a person's click reaches; it is scored after the matches.
+      const cover = (await locator.nth(index).evaluateHandle(findSameNameCover)).asElement()
+      if (cover === null) continue
+      const coverFacts = readElementFacts(await cover.evaluate(probeElement))
+      this.#log.info('headless-browser: %s match %d is covered by a %s named %s; scoring the cover too',
+        selector, index, coverFacts.role ?? coverFacts.tag, JSON.stringify(coverFacts.name))
+      covers.push({ facts: coverFacts, element: cover as unknown as Actionable })
     }
-    return { ref: selector, facts, element: index => locator.nth(index) }
+    return {
+      ref: selector,
+      facts: [...facts, ...covers.map(cover => cover.facts)],
+      element: (index) => {
+        if (index < count) return locator.nth(index)
+        const cover = covers[index - count]
+        if (cover === undefined) throw new Error(`${selector} has no candidate ${String(index)}`)
+        return cover.element
+      },
+    }
   }
 
   /**

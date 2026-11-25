@@ -241,6 +241,43 @@ export function probeElement(element: Element): ElementFacts {
 }
 
 /**
+ * The control a person actually hits when they aim at an element that is
+ * covered: Workday, for one, hides each real `<button>` (`aria-hidden`) under a
+ * transparent `role="button"` overlay with the same label, and the overlay takes
+ * the click. Returns the interactive element at the target's centre when it is
+ * not the target, does not contain it, and carries the same accessible name;
+ * nothing otherwise, so a decoy under an unrelated element stays refused.
+ * Playwright serialises this function, so it must not reference anything
+ * outside itself; run it after {@link probeElement}, which scrolled the element
+ * into view.
+ * @param element - the covered element.
+ * @returns the covering control, or `null`.
+ */
+export function findSameNameCover(element: Element): Element | null {
+  const doc = element.ownerDocument
+  const rect = element.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) return null
+  const hit = doc.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+  if (hit === null || hit === element || element.contains(hit)) return null
+  const interactive = (node: Element): boolean => {
+    const tag = node.tagName.toLowerCase()
+    const role = node.getAttribute('role') ?? ''
+    return tag === 'button' || tag === 'a' || tag === 'input'
+      || ['button', 'link', 'menuitem', 'tab', 'checkbox', 'radio', 'option', 'switch'].includes(role)
+  }
+  let cover: Element | null = hit
+  while (cover !== null && !interactive(cover)) cover = cover.parentElement
+  if (cover === null || cover.contains(element)) return null
+  const nameOf = (node: Element): string => {
+    const label = node.getAttribute('aria-label')
+    const text = label !== null && label.trim() !== '' ? label : node.textContent ?? ''
+    return text.replace(/\s+/gu, ' ').trim().toLowerCase()
+  }
+  const name = nameOf(element)
+  return name !== '' && nameOf(cover) === name ? cover : null
+}
+
+/**
  * Score the facts the probe returned.
  * @param facts - one element's measurements.
  * @returns the score, every test's value, and the tests that failed.
