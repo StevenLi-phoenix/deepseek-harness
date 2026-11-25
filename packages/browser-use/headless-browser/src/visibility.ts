@@ -80,9 +80,9 @@ export interface ElementFacts {
   readonly pointerEvents: string
   /** Whether the element or an ancestor carries `aria-hidden="true"`. */
   readonly ariaHidden: boolean
-  /** Border box width in CSS pixels. */
+  /** Width in CSS pixels of the box a person aims at: the border box, or a searchable dropdown's control around its caret-wide input. */
   readonly width: number
-  /** Border box height in CSS pixels. */
+  /** Height in CSS pixels of the same box. */
   readonly height: number
   /** Fraction of the border box inside the viewport after scrolling to it. */
   readonly viewportFraction: number
@@ -190,6 +190,27 @@ export function probeElement(element: Element): ElementFacts {
   const own = view.getComputedStyle(element)
   const rect = element.getBoundingClientRect()
   const area = rect.width * rect.height
+  // A searchable dropdown's input (react-select, which Greenhouse uses for every
+  // choice) autosizes to its text, so empty it is a caret wide; a person aims at
+  // the control around it, so the area test measures the nearest enclosing box
+  // that has room for a click and holds the input's centre.
+  let aimWidth = rect.width
+  let aimHeight = rect.height
+  const combobox = element instanceof HTMLInputElement
+    && (element.getAttribute('role') === 'combobox' || ['list', 'both', 'inline'].includes(element.getAttribute('aria-autocomplete') ?? ''))
+  if (combobox && area > 0 && area < 100) {
+    const centreX = rect.left + rect.width / 2
+    const centreY = rect.top + rect.height / 2
+    let field = element.parentElement
+    for (let depth = 0; field !== null && depth < 4; depth += 1, field = field.parentElement) {
+      const box = field.getBoundingClientRect()
+      if (box.width * box.height >= 100 && box.left <= centreX && centreX <= box.right && box.top <= centreY && centreY <= box.bottom) {
+        aimWidth = box.width
+        aimHeight = box.height
+        break
+      }
+    }
+  }
   const visibleLeft = Math.max(rect.left, clipLeft)
   const visibleTop = Math.max(rect.top, clipTop)
   const visibleRight = Math.min(rect.right, clipRight)
@@ -231,8 +252,8 @@ export function probeElement(element: Element): ElementFacts {
     opacity: Math.min(1, Math.max(0, opacity)),
     pointerEvents: own.pointerEvents,
     ariaHidden,
-    width: rect.width,
-    height: rect.height,
+    width: aimWidth,
+    height: aimHeight,
     viewportFraction: fraction(inViewWidth * inViewHeight),
     occlusion: inViewWidth <= 0 || inViewHeight <= 0 ? 0 : hits / points.length,
     clippedBy,

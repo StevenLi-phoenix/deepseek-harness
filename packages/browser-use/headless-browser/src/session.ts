@@ -24,8 +24,9 @@ import { firstLine } from './error.ts'
 import { ActionGuard, ActionRefusedError, blockedAction, pageOrigin, refusalOf, type Decision, type PointChoice, type TargetChoice } from './guard.ts'
 import type { InputCommand, TabInfo, TabMessage } from './input.ts'
 import { browserProcesses, killBrowserSync, recoverStaleProfile, removeBrowserOwner, writeBrowserOwner, type ProfileProbe } from './profile.ts'
-import { readText, type ReadPage, type ReadRequest, type ReadResult } from './read.ts'
+import { readText, type FrameRef, type ReadPage, type ReadRequest, type ReadResult } from './read.ts'
 import { cdpScrollChannel, scrollPage, type ScrollRequest, type ScrollResult } from './scroll.ts'
+import { matchOption, readOptions, readSelectOptions } from './select.ts'
 import type { KeepalivePage } from './keepalive.ts'
 import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
 import { BrowserTabs, TabNavigationError, type ActiveTab, type ClosedTab, type PopupTab, type TabsContext, type TabsPage } from './tabs.ts'
@@ -40,6 +41,9 @@ export const SHUTDOWN_TIMEOUT_MS = 10_000
  * nothing pays this once.
  */
 export const CLICK_DOWNLOAD_WAIT_MS = 250
+
+/** How long choosing a `<select>` option waits; the option was just read, so a long wait only hides a stuck page. */
+const SELECT_TIMEOUT_MS = 5_000
 
 /** How long a recovery waits after the old context closes, before it relaunches. */
 export const RELAUNCH_SETTLE_MS = 1_500
@@ -150,6 +154,8 @@ export interface ActionOutcome {
   readonly downloads?: readonly DownloadRecord[]
   /** Windows the action opened (a "Continue with Google" sign-in), each now a tab and the active one. */
   readonly popups?: readonly PopupTab[]
+  /** The option a type chose, when the field was a native `<select>`. */
+  readonly selected?: string
 }
 
 /** What opening a URL settled on. */
@@ -183,7 +189,8 @@ export interface AxTargetResolver {
 interface Actionable {
   click(): Promise<void>
   fill(value: string): Promise<void>
-  evaluate(probe: (node: HTMLElement | SVGElement) => boolean): Promise<boolean>
+  selectOption(values: { index: number }, options?: { timeout?: number }): Promise<string[]>
+  evaluate<R>(probe: (node: HTMLElement | SVGElement) => R): Promise<R>
 }
 
 /** Which half of a saved account a secret fill writes. */
@@ -650,10 +657,37 @@ export class HeadlessBrowserSession {
         allowOrigin: request.allowOrigin === true,
         ...resolution.staleAxId === undefined ? {} : { staleAxId: resolution.staleAxId },
       }))
-      await resolution.element(target.index).fill(text)
+      const element = resolution.element(target.index)
+      if (resolution.facts[target.index]?.tag === 'select') {
+        const selected = await this.#choose(element, resolution.ref, text)
+        this.#guard.anchor(page.url())
+        return { url: page.url(), target, selected }
+      }
+      await element.fill(text)
       this.#guard.anchor(page.url())
       return { url: page.url(), target }
     })
+  }
+
+  /**
+   * Choose the option of a native `<select>` that a typed text names, since a
+   * select has no editable value to replace.
+   * @param element - the select.
+   * @param ref - the selector or id, for the error.
+   * @param text - the option's label or value.
+   * @returns the chosen option's label.
+   * @throws Error - when no option, or more than one, matches.
+   */
+  async #choose(element: Actionable, ref: string, text: string): Promise<string> {
+    const options = readSelectOptions(await element.evaluate(readOptions))
+    const index = matchOption(options, text)
+    const option = index === undefined ? undefined : options[index]
+    if (index === undefined || option === undefined) {
+      throw new Error(`no single option of ${ref} matches ${JSON.stringify(text)}; read the select with headless_browser_read and its selector to see the options, then type one of them`)
+    }
+    await element.selectOption({ index }, { timeout: SELECT_TIMEOUT_MS })
+    this.#log.info('headless-browser: %s chose option %d of %d', ref, index + 1, options.length)
+    return option.label
   }
 
   /**
@@ -1203,6 +1237,21 @@ function readable(page: Page): ReadPage {
     innerText: async (selector) => {
       const target = page.locator(selector ?? 'body').first()
       return await target.count() === 0 ? undefined : await target.innerText()
+    },
+    frames: async () => {
+      const found: FrameRef[] = []
+      for (const frame of page.mainFrame().childFrames()) {
+        const url = frame.url()
+        if (!/^https?:/iu.test(url)) continue
+        try {
+          const box = await (await frame.frameElement()).boundingBox()
+          if (box !== null) found.push({ url, width: Math.round(box.width), height: Math.round(box.height) })
+        } catch (error: unknown) {
+          // A frame that detached while it was listed is simply gone.
+          void firstLine(error)
+        }
+      }
+      return found
     },
   }
 }

@@ -23,6 +23,26 @@ export const MAX_READ_LIMIT = 20_000
  */
 const HEADER_URL_LIMIT = 120
 
+/**
+ * Smallest frame, in CSS pixels squared, a read lists: room for a form (iCIMS
+ * shows its whole application in one), well above a tracking pixel or a
+ * one-line widget.
+ */
+export const MIN_FRAME_AREA = 200 * 100
+
+/** Most frames one read lists. */
+export const MAX_READ_FRAMES = 5
+
+/** One page embedded in the tab, whose text a read of the tab does not include. */
+export interface FrameRef {
+  /** The frame's own address; opening it shows the embedded page on its own. */
+  readonly url: string
+  /** Width on screen in CSS pixels. */
+  readonly width: number
+  /** Height on screen in CSS pixels. */
+  readonly height: number
+}
+
 /** The selector a read named matches no element in the page. */
 export class SelectorMissError extends Error {
   /**
@@ -56,6 +76,8 @@ export interface ReadResult {
   readonly nextOffset?: number
   /** URL of the page the text came from, so a tool result can name its origin. */
   readonly url: string
+  /** Embedded pages large enough to hold a form, for a read of the whole page; absent when there is none. */
+  readonly frames?: readonly FrameRef[]
 }
 
 /** What one read needs from a page; a Playwright `Page` satisfies it. */
@@ -68,6 +90,11 @@ export interface ReadPage {
    * @returns the text, or nothing when the target matches no element.
    */
   innerText(selector?: string): Promise<string | undefined>
+  /**
+   * The http(s) pages embedded in this one, with their size on screen.
+   * @returns every child frame that has an address and a box.
+   */
+  frames?(): Promise<readonly FrameRef[]>
 }
 
 /** One character window of a text. */
@@ -94,12 +121,17 @@ export async function readText(page: ReadPage, tab: string, request: ReadRequest
   const limit = windowLimit(request.limit)
   const start = Math.min(Math.max(request.offset ?? 0, 0), total)
   const window: TextWindow = { start, end: Math.min(start + limit, total) }
+  // A frame's text is not the tab's text, so a whole-page read names the frames a form may live in.
+  const frames = request.selector === undefined && page.frames !== undefined
+    ? (await page.frames()).filter(frame => frame.width * frame.height >= MIN_FRAME_AREA).slice(0, MAX_READ_FRAMES)
+    : []
   return {
     header: headerOf(page.url(), tab, total, limit, window),
     text: text.slice(characterBoundary(text, window.start), characterBoundary(text, window.end)),
     total,
     url: page.url(),
     ...window.end < total ? { nextOffset: window.end } : {},
+    ...frames.length === 0 ? {} : { frames },
   }
 }
 

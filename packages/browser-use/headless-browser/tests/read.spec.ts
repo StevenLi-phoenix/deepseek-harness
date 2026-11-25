@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_READ_LIMIT, MAX_READ_LIMIT, readText, SelectorMissError, type ReadPage } from '../src/read.ts'
+import { DEFAULT_READ_LIMIT, MAX_READ_FRAMES, MAX_READ_LIMIT, readText, SelectorMissError, type FrameRef, type ReadPage } from '../src/read.ts'
 
 interface FakePage extends ReadPage {
   /** Selectors the read asked for, in order. */
@@ -121,5 +121,18 @@ describe('reading page text', () => {
     expect(result).toMatchObject({ text: '', total: 0 })
     expect(result.header).toBe('text of t1 (https://example.com/assignments): the page has no text')
     expect(result.nextOffset).toBeUndefined()
+  })
+
+  it('lists the embedded pages big enough for a form on a whole-page read only', async () => {
+    const frames: FrameRef[] = [
+      { url: 'https://careers-acme.icims.com/jobs/1/login?in_iframe=1', width: 1264, height: 500 },
+      { url: 'https://ads.example.com/pixel', width: 1, height: 1 },
+    ]
+    const page: ReadPage = { url: () => 'https://jobs.acme.com/jobs/1', innerText: async () => 'Skip Branding', frames: async () => frames }
+    expect((await readText(page, 't1', {})).frames).toEqual([frames[0]])
+    expect((await readText(page, 't1', { selector: 'main' })).frames).toBeUndefined()
+    const many: ReadPage = { ...page, frames: async () => Array.from({ length: 9 }, (_, index) => ({ url: `https://a.example/${String(index)}`, width: 600, height: 400 })) }
+    expect((await readText(many, 't1', {})).frames).toHaveLength(MAX_READ_FRAMES)
+    expect((await readText(pageWith('text'), 't1', {})).frames).toBeUndefined()
   })
 })

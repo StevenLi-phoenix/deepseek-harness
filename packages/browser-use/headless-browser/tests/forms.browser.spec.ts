@@ -27,6 +27,10 @@ const FORM = `<!doctype html><title>signup</title><body>
 <button id="google" type="button" onclick="window.open('/popup', 'signin', 'width=480,height=600')">Continue with Google</button>
 <div style="position:relative;width:180px;height:40px"><button id="reset" type="button" aria-hidden="true" tabindex="-1" style="width:180px;height:40px">Reset Password</button><div id="cover" role="button" tabindex="0" aria-label="Reset Password" style="position:absolute;inset:0" onclick="document.getElementById('shown').textContent = 'reset sent'"></div></div>
 <div style="position:relative;width:180px;height:40px"><button id="decoy" type="button" aria-hidden="true" tabindex="-1" style="width:180px;height:40px" onclick="document.getElementById('shown').textContent = 'decoy'">Show details</button><div role="button" tabindex="0" aria-label="Continue" style="position:absolute;inset:0"></div></div>
+<label for="country">Country</label><div id="control" style="display:flex;width:240px;height:36px;border:1px solid #888"><div style="flex:1;overflow:hidden;padding:2px 8px"><div style="display:inline-grid"><input id="country" role="combobox" aria-autocomplete="list" style="width:2px;height:20px;border:0;padding:0"></div></div></div>
+<input id="trap" aria-label="Notes" style="width:2px;height:20px;border:0;padding:0">
+<label>Work authorization <select id="auth"><option value="">Select…</option><option value="yes">Yes, I am authorized</option><option value="no">No</option></select></label>
+<iframe id="embedded" src="/inner" style="width:600px;height:300px;border:0"></iframe>
 <p id="shown"></p>
 <script>
   const picker = document.createElement('input'); picker.type = 'file'; picker.id = 'picker'
@@ -37,6 +41,8 @@ const FORM = `<!doctype html><title>signup</title><body>
 
 const POPUP = `<!doctype html><title>Sign in</title><body><p>Choose an account</p>
 <button id="account" type="button" onclick="window.opener.document.getElementById('shown').textContent = 'signed in'; window.close()">cv@example.com</button>`
+
+const INNER = '<!doctype html><title>Enter your information</title><body><label>Email <input id="inner-email" type="email"></label>'
 
 interface App {
   readonly base: string
@@ -53,7 +59,7 @@ async function boot(): Promise<App> {
   const files = join(root, 'uploads')
   const server: Server = createServer((request, response) => {
     response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-    response.end(request.url === '/popup' ? POPUP : FORM)
+    response.end(request.url === '/popup' ? POPUP : request.url === '/inner' ? INNER : FORM)
   })
   await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
   const port = (server.address() as { port: number }).port
@@ -155,5 +161,28 @@ describe.skipIf(!AVAILABLE)('form steps in a real page', () => {
     expect(await page.locator('#shown').textContent()).toBe('reset sent')
     await expect(app.browser.click({ selector: '#decoy' })).rejects.toThrow(/scored 0\.00/u)
     expect(await page.locator('#shown').textContent()).toBe('reset sent')
+  }, 120_000)
+
+  it('chooses a native select option by its text, types into a caret-wide combobox, and refuses a caret-wide plain input', async () => {
+    const app = await boot()
+    await app.browser.open(`${app.base}/apply`)
+    const chosen = await app.browser.fill({ selector: '#auth' }, 'yes, i am authorized')
+    expect(chosen.selected).toBe('Yes, I am authorized')
+    expect(await value(app, '#auth')).toBe('yes')
+    await app.browser.fill({ selector: '#auth' }, 'no')
+    expect(await value(app, '#auth')).toBe('no')
+    await expect(app.browser.fill({ selector: '#auth' }, 'Maybe')).rejects.toThrow(/no single option of #auth/u)
+    const typed = await app.browser.fill({ selector: '#country' }, 'United States')
+    expect(typed.target?.score).toBeGreaterThan(0.2)
+    expect(await value(app, '#country')).toBe('United States')
+    await expect(app.browser.fill({ selector: '#trap' }, 'x')).rejects.toThrow(/area/u)
+  }, 120_000)
+
+  it('lists an embedded form page in a whole-page read', async () => {
+    const app = await boot()
+    await app.browser.open(`${app.base}/apply`)
+    await expect.poll(async () => (await app.browser.read({})).frames?.map(frame => frame.url)).toEqual([`${app.base}/inner`])
+    const [frame] = (await app.browser.read({})).frames ?? []
+    expect(frame).toMatchObject({ width: 600, height: 300 })
   }, 120_000)
 })
