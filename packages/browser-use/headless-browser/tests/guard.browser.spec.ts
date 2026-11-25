@@ -50,6 +50,9 @@ async function boot(): Promise<App> {
     maxDownloadMB: 256,
     downloadRetainDays: 7,
     downloadPdfs: true,
+    credentialsPath: join(root, 'credentials.json'),
+    uploadDirs: [join(root, 'uploads')],
+    maxUploadMB: 25,
   }, new Context().logger, guard)
   const app: App = {
     browser,

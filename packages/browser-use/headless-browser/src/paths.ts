@@ -13,3 +13,7 @@ export const PAGE_PATH = '/headless-browser'
 export const STATUS_PATH = '/headless-browser/status'
 /** Upgrade path of the live view socket. */
 export const LIVE_PATH = '/headless-browser/live'
+/** Owner-only JSON list of the saved site accounts, without passwords. */
+export const CREDENTIALS_PATH = '/headless-browser/credentials'
+/** Owner-only CSV of the saved site accounts with passwords, in the layout Chrome's password manager imports. */
+export const CREDENTIALS_CSV_PATH = '/headless-browser/credentials.csv'

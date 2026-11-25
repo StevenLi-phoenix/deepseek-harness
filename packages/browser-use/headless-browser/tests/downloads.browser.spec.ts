@@ -70,6 +70,9 @@ async function boot(overrides: Partial<Config> = {}): Promise<App> {
     maxDownloadMB: 256,
     downloadRetainDays: 7,
     downloadPdfs: true,
+    credentialsPath: join(root, 'credentials.json'),
+    uploadDirs: [join(root, 'uploads')],
+    maxUploadMB: 25,
     ...overrides,
   }, ctx.logger)
   const app: App = {

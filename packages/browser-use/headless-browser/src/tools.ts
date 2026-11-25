@@ -15,15 +15,17 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { CookieResult } from './cookies.ts'
+import { CredentialError } from './credentials.ts'
 import { MAX_DOWNLOAD_WAIT_MS, type DownloadRecord } from './downloads.ts'
 import { firstLine } from './error.ts'
 import { ActionRefusedError, pageOrigin, type BlockedAction } from './guard.ts'
 import { DEFAULT_READ_LIMIT, MAX_READ_LIMIT, SelectorMissError, type ReadRequest, type ReadResult } from './read.ts'
 import { KeepaliveError, MAX_EVERY_MINUTES, MIN_EVERY_MINUTES, type KeepaliveTools } from './keepalive.ts'
 import { MAX_SCROLL_DELTA, type ScrollRequest, type ScrollResult } from './scroll.ts'
-import { BrowserUnavailableError, NoOpenTabError, type ActionOutcome, type OpenResult, type TargetRequest } from './session.ts'
+import { BrowserUnavailableError, NoOpenTabError, SecretFieldError, type ActionOutcome, type OpenResult, type TargetRequest } from './session.ts'
 import { TabNotFoundError, type ClosedTab } from './tabs.ts'
 import { UserHoldsBrowserError, type TakeoverState } from './takeover.ts'
+import { UploadRefusedError } from './uploads.ts'
 
 /** The browser operations the tools call; the session class in `session.ts` satisfies them. */
 export interface ToolBrowser {
@@ -51,7 +53,7 @@ export interface ToolDeps {
 }
 
 /** The wrapper every page-derived field arrives in. */
-const UNTRUSTED_SCHEMA = {
+export const UNTRUSTED_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
@@ -60,7 +62,7 @@ const UNTRUSTED_SCHEMA = {
   },
 } as const
 
-const ERROR_SCHEMA = {
+export const ERROR_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: { error: { type: 'string', required: true } },
@@ -117,7 +119,7 @@ const KEEPALIVE_SCHEMA = {
 } as const
 
 /** The element a guarded action chose, and the score it won with. */
-const TARGET_SCHEMA = {
+export const TARGET_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
@@ -177,7 +179,7 @@ const FACTORS_SCHEMA = {
 } as const
 
 /** A refusal: the rule, the page, the score that failed, and what to do instead. */
-const BLOCKED_SCHEMA = {
+export const BLOCKED_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
@@ -234,10 +236,10 @@ function downloadFields(records: readonly DownloadRecord[]): { downloads: Downlo
   }
 }
 
-const renderJson = (_args: unknown, value: unknown) => [{ type: 'text' as const, text: JSON.stringify(value) }]
+export const renderJson = (_args: unknown, value: unknown) => [{ type: 'text' as const, text: JSON.stringify(value) }]
 
 /** A page-derived string, marked with the origin it came from. */
-interface PageText {
+export interface PageText {
   readonly untrusted: string
   readonly content: string
 }
@@ -262,10 +264,11 @@ interface BlockedFields {
  * @param error - the thrown value.
  * @returns the error result.
  */
-function failure(action: string, error: unknown): { error: string } {
+export function failure(action: string, error: unknown): { error: string } {
   if (error instanceof UserHoldsBrowserError || error instanceof BrowserUnavailableError
     || error instanceof TabNotFoundError || error instanceof SelectorMissError || error instanceof NoOpenTabError
-    || error instanceof KeepaliveError) {
+    || error instanceof KeepaliveError || error instanceof CredentialError || error instanceof UploadRefusedError
+    || error instanceof SecretFieldError) {
     return { error: error.message }
   }
   if (error instanceof Error) return { error: `${action} failed: ${firstLine(error)}` }
@@ -277,7 +280,7 @@ function failure(action: string, error: unknown): { error: string } {
  * @param action - short description used in an unexpected failure message.
  * @param run - the browser operation.
  */
-async function attempt<T>(action: string, run: () => Promise<T>): Promise<T | { error: string }> {
+export async function attempt<T>(action: string, run: () => Promise<T>): Promise<T | { error: string }> {
   try {
     return await run()
   } catch (error: unknown) {
@@ -307,8 +310,8 @@ async function acting<T>(deps: ToolDeps, action: string, run: () => Promise<T>):
  * @param action - short description used in a failure message.
  * @param run - the browser operation.
  */
-async function guarded<T>(
-  deps: ToolDeps,
+export async function guarded<T>(
+  deps: Pick<ToolDeps, 'takeover'>,
   action: string,
   run: () => Promise<T>,
 ): Promise<T | { error: string } | { blocked: BlockedFields }> {
@@ -361,7 +364,7 @@ interface KeepaliveArgs {
 }
 
 /** The arguments a click or type names its target with. */
-interface TargetArgs {
+export interface TargetArgs {
   readonly selector?: string
   readonly axId?: string
   readonly x?: number
@@ -370,14 +373,14 @@ interface TargetArgs {
 }
 
 /** One call's target, or why it has none. */
-type TargetParse = { readonly ok: true; readonly request: TargetRequest } | { readonly ok: false; readonly error: string }
+export type TargetParse = { readonly ok: true; readonly request: TargetRequest } | { readonly ok: false; readonly error: string }
 
 /**
  * Read the one target a call named: a selector, an accessibility id, or a point.
  * @param args - the tool arguments.
  * @returns the request, or the one thing wrong with it.
  */
-function targetOf(args: TargetArgs): TargetParse {
+export function targetOf(args: TargetArgs): TargetParse {
   const kinds = [args.selector !== undefined, args.axId !== undefined, args.x !== undefined || args.y !== undefined]
   if (kinds.filter(Boolean).length !== 1) {
     return { ok: false, error: 'give exactly one target: selector, axId, or x with y' }
@@ -399,7 +402,7 @@ function targetOf(args: TargetArgs): TargetParse {
  * @param request - the parsed target.
  * @returns a selector, an id, or a point.
  */
-function describeTarget(request: TargetRequest): string {
+export function describeTarget(request: TargetRequest): string {
   if (request.selector !== undefined) return request.selector
   if (request.axId !== undefined) return request.axId
   return request.point === undefined ? 'the page' : `point (${String(request.point.x)}, ${String(request.point.y)})`
@@ -411,7 +414,7 @@ function describeTarget(request: TargetRequest): string {
  * @param content - the page's own words.
  * @returns the wrapper the model reads as data.
  */
-function pageText(url: string, content: string): PageText {
+export function pageText(url: string, content: string): PageText {
   return { untrusted: pageOrigin(url), content }
 }
 
@@ -421,7 +424,7 @@ function pageText(url: string, content: string): PageText {
  * @param outcome - what the guarded action did.
  * @returns the target and point fields of the result.
  */
-function outcomeFields(url: string, outcome: ActionOutcome): {
+export function outcomeFields(url: string, outcome: ActionOutcome): {
   readonly target?: {
     readonly ref: string
     readonly index: number

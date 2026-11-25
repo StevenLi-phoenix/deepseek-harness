@@ -85,6 +85,9 @@ async function boot(): Promise<App> {
     maxDownloadMB: 256,
     downloadRetainDays: 7,
     downloadPdfs: true,
+    credentialsPath: join(root, 'credentials.json'),
+    uploadDirs: [join(root, 'uploads')],
+    maxUploadMB: 25,
   }, ctx.logger)
   const takeover = new TakeoverState()
   const view = new LiveView(() => browser.castTarget(), { jpegQuality: 50, maxWidth: 800, maxHeight: 600 }, ctx.logger)

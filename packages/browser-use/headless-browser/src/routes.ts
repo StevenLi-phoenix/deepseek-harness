@@ -16,17 +16,18 @@ import type { Duplex } from 'node:stream'
 import type { Context } from '@deepseek-ai/cordis'
 import type { WebServer } from '@deepseek-ai/dsh-host-webserver'
 import { WebSocket, WebSocketServer } from 'ws'
+import type { CredentialVault } from './credentials.ts'
 import { firstLine } from './error.ts'
 import type { SecurityLog } from './guard.ts'
 import { cdpCommand, decodeClientMessage, type ClientMessage } from './input.ts'
 import type { KeepaliveStatus } from './keepalive.ts'
 import type { LiveView, Viewer } from './live-view.ts'
 import { PAGE_HTML } from './page.ts'
-import { LIVE_PATH, PAGE_PATH, STATUS_PATH } from './paths.ts'
+import { CREDENTIALS_CSV_PATH, CREDENTIALS_PATH, LIVE_PATH, PAGE_PATH, STATUS_PATH } from './paths.ts'
 import type { HeadlessBrowserSession } from './session.ts'
 import type { TakeoverState } from './takeover.ts'
 
-export { LIVE_PATH, PAGE_PATH, STATUS_PATH } from './paths.ts'
+export { CREDENTIALS_CSV_PATH, CREDENTIALS_PATH, LIVE_PATH, PAGE_PATH, STATUS_PATH } from './paths.ts'
 
 /** Largest accepted socket message; the page sends a few hundred bytes at most. */
 const MAX_MESSAGE_BYTES = 64 * 1024
@@ -48,6 +49,8 @@ export interface TakeoverRoutesDeps {
   readonly keepalives: () => KeepaliveStatus[]
   /** Plugin logger for dropped input and socket failures. */
   readonly log: Context['logger']
+  /** The saved site accounts; only the owner principal reads them. */
+  readonly credentials?: Pick<CredentialVault, 'list' | 'exportCsv'>
 }
 
 /**
@@ -73,6 +76,32 @@ export function mountTakeoverRoutes(server: WebServer, deps: TakeoverRoutesDeps)
     path: STATUS_PATH,
     resource: () => Promise.resolve(statusResponse(deps)),
   })
+  const credentials = deps.credentials
+  const removeCredentials = credentials === undefined ? () => {} : server.register({
+    kind: 'exact',
+    path: CREDENTIALS_PATH,
+    auth: 'required',
+    resource: async (_request, peer) => {
+      if (peer?.principal.kind !== 'owner') return ownerOnly()
+      return Response.json({ accounts: await credentials.list(), export: CREDENTIALS_CSV_PATH }, { headers: NO_STORE })
+    },
+  })
+  const removeCredentialsCsv = credentials === undefined ? () => {} : server.register({
+    kind: 'exact',
+    path: CREDENTIALS_CSV_PATH,
+    auth: 'required',
+    resource: async (_request, peer) => {
+      if (peer?.principal.kind !== 'owner') return ownerOnly()
+      deps.log.info('headless-browser: the owner exported the saved site passwords')
+      return new Response(await credentials.exportCsv(), {
+        headers: {
+          ...NO_STORE,
+          'content-type': 'text/csv; charset=utf-8',
+          'content-disposition': 'attachment; filename="dsh-site-passwords.csv"',
+        },
+      })
+    },
+  })
   const removeLive = server.registerUpgrade({
     path: LIVE_PATH,
     auth: 'required',
@@ -89,11 +118,18 @@ export function mountTakeoverRoutes(server: WebServer, deps: TakeoverRoutesDeps)
     stopTabs()
     removePage()
     removeStatus()
+    removeCredentials()
+    removeCredentialsCsv()
     removeLive()
     for (const client of sockets.clients) client.terminate()
     await new Promise<void>((resolve) => { sockets.close(() => { resolve() }) })
     await deps.view.close()
   }
+}
+
+/** The answer a signed-in non-owner gets from an owner-only route. */
+function ownerOnly(): Response {
+  return Response.json({ error: 'only the owner reads saved site accounts' }, { status: 403, headers: NO_STORE })
 }
 
 function statusResponse(deps: TakeoverRoutesDeps): Response {

@@ -10,8 +10,11 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
+import { mkdir } from 'node:fs/promises'
 import { Config } from './config.ts'
+import { CredentialVault } from './credentials.ts'
 import { firstLine } from './error.ts'
+import { registerFormTools } from './form-tools.ts'
 import { ActionGuard, type SecurityEvent } from './guard.ts'
 import { KeepaliveService, type KeepaliveEvent } from './keepalive.ts'
 import { LiveView } from './live-view.ts'
@@ -19,6 +22,7 @@ import { PAGE_PATH, mountTakeoverRoutes } from './routes.ts'
 import { HeadlessBrowserSession } from './session.ts'
 import { TakeoverState } from './takeover.ts'
 import { registerBrowserTools } from './tools.ts'
+import { UploadPolicy } from './uploads.ts'
 
 export { Config } from './config.ts'
 
@@ -68,6 +72,15 @@ export function apply(ctx: Context, config: Config): void {
     emit: (event) => { ctx.emit('headless-browser/keepalive', event) },
   })
   const takeover = new TakeoverState()
+  const credentials = new CredentialVault(config.credentialsPath)
+  const uploads = new UploadPolicy(config.uploadDirs, config.maxUploadMB)
+  // The first upload directory is where the owner drops a task's files, so it exists from the first mount.
+  const firstUploadDir = config.uploadDirs[0]
+  if (firstUploadDir !== undefined) {
+    void mkdir(firstUploadDir, { recursive: true, mode: 0o700 }).catch((error: unknown) => {
+      ctx.logger.warn('headless-browser: creating the upload directory %s failed: %s', firstUploadDir, firstLine(error))
+    })
+  }
   const view = new LiveView(() => browser.castTarget(), {
     jpegQuality: config.jpegQuality,
     maxWidth: config.viewportWidth,
@@ -105,6 +118,8 @@ export function apply(ctx: Context, config: Config): void {
     },
   })
 
+  registerFormTools(ctx, { browser, takeover, credentials, uploads, log: ctx.logger })
+
   // A composition without a Web server still gives the agent a browser; it just
   // has no page to hand over to.
   ctx.inject(['webServer'], (web) => {
@@ -116,6 +131,7 @@ export function apply(ctx: Context, config: Config): void {
         security: guard.log,
         keepalives: () => keepalives.snapshot(),
         log: ctx.logger,
+        credentials,
       }),
       'headless-browser: take-over routes',
     )

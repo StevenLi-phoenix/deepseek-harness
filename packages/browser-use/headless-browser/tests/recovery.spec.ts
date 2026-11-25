@@ -76,6 +76,9 @@ function configFor(profileDir: string): Config {
     maxDownloadMB: 256,
     downloadRetainDays: 7,
     downloadPdfs: true,
+    credentialsPath: join(profileDir, 'credentials.json'),
+    uploadDirs: [join(profileDir, 'uploads')],
+    maxUploadMB: 25,
   }
 }
 

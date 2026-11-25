@@ -21,7 +21,7 @@ import type { Config } from './config.ts'
 import { cookieSnapshot, cookieSummary, type CookieResult } from './cookies.ts'
 import { DOWNLOAD_START_WAIT_MS, DownloadStore, ensureDownloadPrefs, isDownloadStarting, type DownloadRecord } from './downloads.ts'
 import { firstLine } from './error.ts'
-import { ActionGuard, ActionRefusedError, blockedAction, refusalOf, type Decision, type PointChoice, type TargetChoice } from './guard.ts'
+import { ActionGuard, ActionRefusedError, blockedAction, pageOrigin, refusalOf, type Decision, type PointChoice, type TargetChoice } from './guard.ts'
 import type { InputCommand, TabInfo, TabMessage } from './input.ts'
 import { browserProcesses, killBrowserSync, recoverStaleProfile, removeBrowserOwner, writeBrowserOwner, type ProfileProbe } from './profile.ts'
 import { readText, type ReadPage, type ReadRequest, type ReadResult } from './read.ts'
@@ -181,6 +181,53 @@ export interface AxTargetResolver {
 interface Actionable {
   click(): Promise<void>
   fill(value: string): Promise<void>
+  evaluate(probe: (node: HTMLElement | SVGElement) => boolean): Promise<boolean>
+}
+
+/** Which half of a saved account a secret fill writes. */
+export type SecretField = 'password' | 'username'
+
+/** Where `attachFiles` puts the files: a file input, or a control that opens the file chooser. */
+export interface AttachTarget {
+  /** CSS selector of an `input[type=file]`; hidden inputs are expected and allowed. */
+  readonly selector?: string
+  /** Which matching file input, in document order; 0 when omitted. */
+  readonly index?: number
+  /** A visible control whose click opens the file chooser, guarded like a click. */
+  readonly trigger?: TargetRequest
+}
+
+/** What one attach did. */
+export interface AttachOutcome {
+  /** Page URL after the attach. */
+  readonly url: string
+  /** The selector or trigger that received the files. */
+  readonly ref: string
+  /** How many file inputs the selector matched, when a selector was used. */
+  readonly inputs?: number
+  /** The trigger the guard cleared, when one was used. */
+  readonly target?: TargetChoice
+}
+
+/** A secret fill that the page refused before any character was written. */
+export class SecretFieldError extends Error {
+  override readonly name = 'SecretFieldError'
+}
+
+/** How long a trigger click waits for the file chooser. */
+const FILE_CHOOSER_WAIT_MS = 10_000
+
+/**
+ * The bare host of a page address, lower case, for the credential host check.
+ * @param url - the page URL.
+ * @returns the host, or an empty string for an address without one.
+ */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase()
+  } catch {
+    return ''
+  }
 }
 
 /** The elements one target request resolved to, before the guard chose among them. */
@@ -588,6 +635,113 @@ export class HeadlessBrowserSession {
       await resolution.element(target.index).fill(text)
       this.#guard.anchor(page.url())
       return { url: page.url(), target }
+    })
+  }
+
+  /**
+   * The address of one tab, read without acting on it.
+   * @param tabId - tab id, or nothing for the active tab.
+   * @returns the page URL.
+   */
+  async pageUrl(tabId?: string): Promise<string> {
+    return await this.#guarded('reading the page address', async () => (await this.page(tabId)).url())
+  }
+
+  /**
+   * Write a saved credential into the field a selector or accessibility id
+   * names, after the action guard clears the field like a type. The page must
+   * still be on the host the credential belongs to at the moment of writing, and
+   * a password only goes into an `input[type=password]`, so neither a navigation
+   * between lookup and fill nor a page that labels a text box "password" can
+   * receive it. The value never reaches a log line or a result.
+   * @param request - the selector or accessibility id of the field; a point is refused.
+   * @param secret - the value to write.
+   * @param field - `password` requires a password input; `username` any editable field.
+   * @param host - the host the credential belongs to.
+   * @param tabId - tab id, or nothing for the active tab.
+   * @returns the page URL and the element written.
+   * @throws SecretFieldError - when the target is a point, the page left the host, or a password target is not a password input.
+   */
+  async fillSecret(request: TargetRequest, secret: string, field: SecretField, host: string, tabId?: string): Promise<ActionOutcome> {
+    if (request.point !== undefined) throw new SecretFieldError('a saved credential goes into a field named by selector or axId, never a point')
+    return await this.#guarded('filling a saved credential', async () => {
+      const page = await this.page(tabId)
+      const resolution = await this.#resolve(page, request)
+      const target = this.#accept(this.#guard.decideTarget({
+        action: 'type',
+        url: page.url(),
+        ref: resolution.ref,
+        candidates: resolution.facts,
+        allowOrigin: false,
+        ...resolution.staleAxId === undefined ? {} : { staleAxId: resolution.staleAxId },
+      }))
+      const element = resolution.element(target.index)
+      if (field === 'password' && !await element.evaluate(node => node instanceof HTMLInputElement && node.type === 'password')) {
+        throw new SecretFieldError(`${resolution.ref} is not a password input (input[type=password]); a saved password is only written into one`)
+      }
+      if (hostOf(page.url()) !== host) {
+        throw new SecretFieldError(`the page is on ${hostOf(page.url())}, not ${host}; a saved credential is only written on its own host`)
+      }
+      await element.fill(secret)
+      this.#log.info('headless-browser: wrote the saved %s for %s into %s', field, host, resolution.ref)
+      return { url: page.url(), target }
+    })
+  }
+
+  /**
+   * Attach local files to a file input, or to the file chooser a visible
+   * control opens. A file input is usually hidden behind a styled button, so a
+   * selector that names an `input[type=file]` is used without the visibility
+   * score; a trigger is a click and passes the guard like one. The caller has
+   * already checked the paths against the upload directories.
+   * @param target - the file input selector, or the trigger control.
+   * @param paths - absolute paths of the files.
+   * @param tabId - tab id, or nothing for the active tab.
+   * @returns the page URL and what received the files.
+   * @throws Error - when the selector names no file input, or the trigger opened no chooser.
+   */
+  async attachFiles(target: AttachTarget, paths: readonly string[], tabId?: string): Promise<AttachOutcome> {
+    return await this.#guarded('attaching files', async () => {
+      const page = await this.page(tabId)
+      if (target.trigger !== undefined) {
+        const resolution = await this.#resolve(page, target.trigger)
+        const choice = this.#accept(this.#guard.decideTarget({
+          action: 'click',
+          url: page.url(),
+          ref: resolution.ref,
+          candidates: resolution.facts,
+          allowOrigin: false,
+          ...resolution.staleAxId === undefined ? {} : { staleAxId: resolution.staleAxId },
+        }))
+        const [chooser] = await Promise.all([
+          page.waitForEvent('filechooser', { timeout: FILE_CHOOSER_WAIT_MS }),
+          resolution.element(choice.index).click(),
+        ])
+        if (paths.length > 1 && !chooser.isMultiple()) throw new Error(`${resolution.ref} opens a chooser that takes one file; attach the files one call each`)
+        await chooser.setFiles([...paths])
+        this.#log.info('headless-browser: attached %d file(s) through %s on %s', paths.length, resolution.ref, pageOrigin(page.url()))
+        return { url: page.url(), ref: resolution.ref, target: choice }
+      }
+      const selector = target.selector
+      if (selector === undefined) throw new Error('give a file input selector or a trigger')
+      const locator = page.locator(selector)
+      const count = await locator.count()
+      const inputs: number[] = []
+      for (let index = 0; index < count; index += 1) {
+        if (await locator.nth(index).evaluate(node => node instanceof HTMLInputElement && node.type === 'file')) inputs.push(index)
+      }
+      if (inputs.length === 0) {
+        throw new Error(`${selector} matches no input[type=file] (${String(count)} element(s) matched); name the file input, or pass trigger for the button that opens the chooser`)
+      }
+      const pick = inputs[target.index ?? 0]
+      if (pick === undefined) throw new Error(`${selector} matches ${String(inputs.length)} file input(s); index ${String(target.index)} is out of range`)
+      const input = locator.nth(pick)
+      if (paths.length > 1 && !await input.evaluate(node => node instanceof HTMLInputElement && node.multiple)) {
+        throw new Error(`${selector} takes one file; attach the files one call each`)
+      }
+      await input.setInputFiles([...paths])
+      this.#log.info('headless-browser: attached %d file(s) to %s on %s', paths.length, selector, pageOrigin(page.url()))
+      return { url: page.url(), ref: selector, inputs: inputs.length }
     })
   }
 

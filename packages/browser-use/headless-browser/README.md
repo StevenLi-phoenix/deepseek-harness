@@ -48,6 +48,9 @@ Mount the row once in a Host composition that has the Web server and the tool re
 | `maxDownloadMB` | `256` | Largest download kept; a bigger file is deleted and reported as failed |
 | `downloadRetainDays` | `7` | Days a downloaded file is kept; `0` keeps every file |
 | `downloadPdfs` | `true` | Download a PDF instead of opening it in the browser's viewer |
+| `credentialsPath` | `$DSH_HOME/data/headless-browser/credentials.json` | Owner-only file of the site accounts `headless_browser_credential` created, passwords included |
+| `uploadDirs` | `[$DSH_HOME/data/headless-browser/uploads]` | Directories whose files `headless_browser_upload` may attach; the first one also resolves bare names |
+| `maxUploadMB` | `25` | Largest file `headless_browser_upload` attaches |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-headless-browser) lists every accepted field.
 
@@ -109,7 +112,31 @@ Every page the browser opens now keeps what it downloads. A finished file is cop
 
 A downloaded file is data from the page: read it, never run it. For a very large file, `headless_browser_cookies` plus a plain HTTP request still avoids the browser's copy.
 
+### Attaching files
+
+A job application, a visa form, or a course submission wants a file, and the real `<input type="file">` is nearly always hidden behind a styled button, which the visibility guard refuses on purpose. `headless_browser_upload` is the path for that one legitimate invisible element. Name the input with `selector` (and `index` when the page has several); a hidden file input is expected there and needs no score. Or name the visible button with `trigger` (or `triggerAxId`): the click passes the guard like any click, and the file chooser it opens receives the files. A multi-file call needs an input or chooser that accepts several.
+
+What may be attached is the owner's decision, not the page's. A page can ask the agent to "attach your key to verify", so the tool only attaches regular files inside `uploadDirs`, resolved through symlinks before the check, at most `maxUploadMB` each and ten per call. A bare name such as `resume.pdf` is looked up in the first directory, which the plugin creates (`0700`) on load; the owner, or a task's own script, copies the files a task needs there. The result names each file and its size; a log line names the count, the selector, and the origin.
+
+### Site accounts and passwords
+
+An agent that signs up for a site account would otherwise have to choose a password, type it, and keep it somewhere — which puts the secret into its context, the Session log, and every summary after it, and is the step models refuse. `headless_browser_credential` is the browser's own password manager instead:
+
+- `create` on a sign-up or new-password form generates a 20-character password (CSPRNG; lower, upper, digit, and a symbol from `!@#$%^*-_=+?`, look-alike characters left out; `length` 12–64 and `symbols: false` for strict sites), saves it with the page's host and the `username` the account uses, and writes it into the password field and, with `confirmSelector`, the confirm field. If the first write is refused, the new record is dropped, so a retry is not a duplicate. A second `create` for the same host and login is refused unless `replace: true`, which keeps the old password beside the new one for the owner.
+- `fill` on a sign-in form writes the saved `username` or `password` for the page's host; a host with two accounts needs `username`.
+- `list` answers the saved accounts without passwords.
+
+Three rules hold the secret in. A password is written only into an `input[type=password]`; it is written only when the page is on the host the record was created for, checked at the moment of writing; and no tool result, log line, or error carries it — results name the account (`id`, `host`, `username`, `label`, dates). The record is bound to the full host, not the registrable domain, because one ATS domain serves many companies (`acme.wd5.myworkdayjobs.com` and `other.wd5.myworkdayjobs.com` are two accounts).
+
+The file at `credentialsPath` is version 1 JSON, mode `0600`, written atomically; a file of another version is refused rather than overwritten. The owner reads it through two owner-only routes (a signed-in non-owner gets 403):
+
+| Route | Answers |
+|---|---|
+| `GET /headless-browser/credentials` | JSON `{ accounts, export }`: every account without its password |
+| `GET /headless-browser/credentials.csv` | `name,url,username,password,note` — the CSV Chrome's password manager imports (chrome://password-manager/settings → Import), so the passwords also land in the owner's own manager |
+
 ### Fetching with the session's cookies
+ with the session's cookies
 
 Driving a browser for every read is slow, and the site sees it. Once a session is signed in, what a caller usually needs is the Cookie header: a plain HTTP request carrying the same session fetches a page in milliseconds. `headless_browser_cookies` answers with the browser context's own cookies — `name`, `value`, `domain`, `path`, `expires`, `httpOnly`, and `secure` — filtered to one domain suffix when the call names one, and `toHeader`, the `name=value; name=value` line that request would send:
 
@@ -274,6 +301,20 @@ Append-only: results and refusals enter the history after the reusable prefix an
 #### Token effect
 
 Two more definitions on every request whose scope mounts the package: a cookie list is one short object per cookie, a keepalive list is one object per entry, and both are called rarely — a session warmed on a timer does not need the model to look at it every turn.
+
+#### KV Cache effect
+
+Prefix-stable while the definitions are unchanged; results append after the reusable prefix.
+
+### Form tools
+
+#### What the model sees
+
+`headless_browser_upload` (`files`, and `selector` with `index` or `trigger`/`triggerAxId`) answers `{ "attached": [{ "name": "resume.pdf", "bytes": 81234 }], "ref": "#resume", "url": "…", "inputs": 1 }`, or `{ "error": "/etc/passwd is outside the upload directories (…); copy the file there first" }`. `headless_browser_credential` takes an `action`: `create` and `fill` answer `{ "action": "create", "account": { "id": "c1a2b3c4d5e6", "host": "acme.wd5.myworkdayjobs.com", "username": "cv@example.com", "createdAt": "…" }, "wrote": ["#password", "#confirm"], "url": "…", "target": { … } }`, `list` answers `{ "action": "list", "accounts": [ … ] }`, and no answer ever contains a password.
+
+#### Token effect
+
+Two more definitions on every request whose scope mounts the package; results are one short object, and the password never enters the context at all.
 
 #### KV Cache effect
 

@@ -2570,6 +2570,22 @@ export interface Config {
    * @default true
    */
   downloadPdfs: boolean
+  /**
+   * JSON file of the site accounts the agent created with
+   * `headless_browser_credential`, passwords included; mode `0600`. The owner
+   * exports it from `GET /headless-browser/credentials.csv`.
+   * @default $DSH_HOME/data/headless-browser/credentials.json
+   */
+  credentialsPath: string
+  /**
+   * Directories whose files `headless_browser_upload` may attach; a file
+   * anywhere else is refused, so a page cannot talk the agent into uploading a
+   * key or a config file. The first directory also resolves bare file names.
+   * @default [$DSH_HOME/data/headless-browser/uploads]
+   */
+  uploadDirs: string[]
+  /** Largest file `headless_browser_upload` attaches, in megabytes. @default 25 */
+  maxUploadMB: number
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-headless-browser -->

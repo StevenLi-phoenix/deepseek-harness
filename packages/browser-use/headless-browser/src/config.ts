@@ -73,6 +73,22 @@ export interface Config {
    * @default true
    */
   downloadPdfs: boolean
+  /**
+   * JSON file of the site accounts the agent created with
+   * `headless_browser_credential`, passwords included; mode `0600`. The owner
+   * exports it from `GET /headless-browser/credentials.csv`.
+   * @default $DSH_HOME/data/headless-browser/credentials.json
+   */
+  credentialsPath: string
+  /**
+   * Directories whose files `headless_browser_upload` may attach; a file
+   * anywhere else is refused, so a page cannot talk the agent into uploading a
+   * key or a config file. The first directory also resolves bare file names.
+   * @default [$DSH_HOME/data/headless-browser/uploads]
+   */
+  uploadDirs: string[]
+  /** Largest file `headless_browser_upload` attaches, in megabytes. @default 25 */
+  maxUploadMB: number
 }
 
 /** Validate {@link Config} before the browser is constructed. */
@@ -91,4 +107,7 @@ export const Config: z<Config> = z.object({
   maxDownloadMB: z.natural().min(1).default(256),
   downloadRetainDays: z.natural().min(0).default(7),
   downloadPdfs: z.boolean().default(true),
+  credentialsPath: z.string().default(dshPath('data', 'headless-browser', 'credentials.json')),
+  uploadDirs: z.array(z.string()).default([dshPath('data', 'headless-browser', 'uploads')]),
+  maxUploadMB: z.natural().min(1).default(25),
 })

@@ -48,6 +48,9 @@ kind: "package-reference"
 | `maxDownloadMB` | `256` | 保留的最大下载；更大的文件会被删除并报告为失败 |
 | `downloadRetainDays` | `7` | 下载文件保留的天数；`0` 表示一直保留 |
 | `downloadPdfs` | `true` | PDF 直接下载，不在浏览器查看器里打开 |
+| `credentialsPath` | `$DSH_HOME/data/headless-browser/credentials.json` | `headless_browser_credential` 建的站点账号文件，含密码，仅所有者可读写 |
+| `uploadDirs` | `[$DSH_HOME/data/headless-browser/uploads]` | `headless_browser_upload` 能附加的文件所在目录；裸文件名在第一个目录里找 |
+| `maxUploadMB` | `25` | `headless_browser_upload` 附加的最大文件 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-headless-browser)列出了全部可用字段。
 
@@ -109,6 +112,29 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 - `downloadPdfs` 在每次启动前把 `plugins.always_open_pdf_externally` 和 `download.prompt_for_download=false` 写入 profile 的 `Default/Preferences`（合并而不替换，文件不是 JSON 时不动）。无头查看器给模型的是空白页，而查看器自带的 Download 按钮正是有窗口的浏览器里唯一会弹出系统保存对话框（`showSaveFilePicker`）的路径；有了这个设置，PDF 作为普通下载到达，根本不经过查看器。无头浏览器里 `showSaveFilePicker` 会立刻以 `AbortError` 被拒绝，所以调用它的页面脚本会快速失败而不是卡住。
 
 下载的文件是来自页面的数据：可以读，不要运行。文件特别大时，`headless_browser_cookies` 加普通 HTTP 请求仍然可以绕开浏览器的那份副本。
+
+### 附加文件
+
+求职申请、签证表格和课程提交都要传文件，而真正的 `<input type="file">` 几乎总是藏在一个有样式的按钮后面，可见性守卫会故意拒绝它。`headless_browser_upload` 专门处理这一种合理的隐藏元素。用 `selector` 指定文件框（页面有多个时加 `index`）；文件框隐藏是常态，不需要打分。也可以用 `trigger`（或 `triggerAxId`）指定可见的按钮：这次点击和其他点击一样过守卫，它打开的文件选择器接收文件。一次传多个文件时，文件框或选择器必须支持多选。
+
+能附加什么由所有者决定，不由页面决定。页面可能要求 agent「附上你的密钥来验证」，所以本工具只附加 `uploadDirs` 里的普通文件：检查前先解析符号链接，每个文件不超过 `maxUploadMB`，每次最多十个。`resume.pdf` 这样的裸文件名在第一个目录里找，插件加载时会创建这个目录（`0700`）；任务要用的文件由所有者或任务自己的脚本拷进去。结果列出每个文件和大小；日志记一行文件数、选择器和来源。
+
+### 站点账号与密码
+
+agent 注册站点账号时，原本要自己定密码、输入密码、再找地方存——密码会进入它的上下文、会话日志和之后的每一份摘要，模型也恰恰在这一步拒绝。`headless_browser_credential` 是浏览器自带的密码管理器：
+
+- `create`：在注册表或设置新密码的表单上，生成一个 20 位密码（CSPRNG；大小写字母、数字和一个 `!@#$%^*-_=+?` 里的符号，去掉了容易认错的字符；严格的站点用 `length` 12–64 和 `symbols: false`），连同页面主机和账号用的 `username` 一起保存，再写进密码框，给了 `confirmSelector` 时也写进确认框。第一次写入被拒绝时新记录会删掉，重试不会撞上重复。同一主机、同一登录名再次 `create` 会被拒绝，除非 `replace: true`；替换时旧密码留在新密码旁边，供所有者找回。
+- `fill`：在登录表单上写入页面主机保存的 `username` 或 `password`；同一主机有两个账号时要给 `username`。
+- `list`：列出保存的账号，不含密码。
+
+三条规则把密码关在里面：密码只写进 `input[type=password]`；只在页面处于记录所属主机时写，写入那一刻再检查；任何工具结果、日志和错误都不含密码——结果只写账号（`id`、`host`、`username`、`label`、时间）。记录绑定完整主机而不是可注册域名，因为一个 ATS 域名服务很多公司（`acme.wd5.myworkdayjobs.com` 和 `other.wd5.myworkdayjobs.com` 是两个账号）。
+
+`credentialsPath` 处的文件是版本 1 的 JSON，权限 `0600`，原子写入；遇到其他版本的文件会拒绝，而不是覆盖。所有者通过两个仅所有者可用的路由读取（已登录的非所有者得到 403）：
+
+| 路由 | 返回 |
+|---|---|
+| `GET /headless-browser/credentials` | JSON `{ accounts, export }`：所有账号，不含密码 |
+| `GET /headless-browser/credentials.csv` | `name,url,username,password,note`——Chrome 密码管理器能导入的 CSV（chrome://password-manager/settings → 导入），密码也就进了所有者自己的管理器 |
 
 ### 用会话的 cookie 直接取页面
 
@@ -275,6 +301,20 @@ headless_browser_keepalive {"action":"remove","id":"k1"}
 #### Token 影响
 
 挂载本包的作用域每次请求多两个定义：cookie 列表是每条一个短对象，保活列表是每个条目一个对象，而两个工具都很少调用——由定时器照看的会话不需要模型每一轮都去看它。
+
+#### KV Cache 影响
+
+定义不变时前缀稳定；结果追加在可复用的前缀之后。
+
+### 表单工具
+
+#### 模型看到什么
+
+`headless_browser_upload`（`files`，加 `selector` 和 `index`，或 `trigger`/`triggerAxId`）交回 `{ "attached": [{ "name": "resume.pdf", "bytes": 81234 }], "ref": "#resume", "url": "…", "inputs": 1 }`，或 `{ "error": "/etc/passwd is outside the upload directories (…); copy the file there first" }`。`headless_browser_credential` 接受一个 `action`：`create` 和 `fill` 交回 `{ "action": "create", "account": { "id": "c1a2b3c4d5e6", "host": "acme.wd5.myworkdayjobs.com", "username": "cv@example.com", "createdAt": "…" }, "wrote": ["#password", "#confirm"], "url": "…", "target": { … } }`，`list` 交回 `{ "action": "list", "accounts": [ … ] }`，任何返回都不含密码。
+
+#### Token 影响
+
+挂载本包的作用域每次请求多两个定义；结果是一个短对象，密码根本不进上下文。
 
 #### KV Cache 影响
 
