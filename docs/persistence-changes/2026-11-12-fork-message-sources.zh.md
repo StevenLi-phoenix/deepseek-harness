@@ -27,20 +27,20 @@ id: 2026-11-12-fork-message-sources
 baseline: false
 changes:
   - root: "event:agent/inbox/spliced"
-    previous: "2026-10-27-retry-control-input"
-    after: "dd5a878779d8202919b4edfde56d7bf0f11717cc550b0c977ca5aa2541247d1a"
+    previous: "2026-11-19-cua-input-notices"
+    after: "79a56e5943e5fb5f86a23e5e9f8356bcbd721e38dd00633a504ea4ca7263139a"
     decision: same-version
   - root: "event:developer/message"
-    previous: "2026-10-27-retry-control-input"
-    after: "ca38cdcf28a6b5381f761828bab91b21299bba5004c06a87deca2019254dd489"
+    previous: "2026-11-19-cua-input-notices"
+    after: "743fc214e30e61140d5ed08798086282f2a5032ebb6cd8ceae7d48e971f10f03"
     decision: same-version
   - root: "event:session/title-llm-request"
-    previous: "2026-10-27-retry-control-input"
-    after: "f57b46625e7b43fc2a3adbd35e8ea1230b59e806b2153e011ed24f8e23337ad7"
+    previous: "2026-11-19-cua-input-notices"
+    after: "1727b1c2adfbe7bd64895ef86e33b1615b77a314ed61610a6af0e07b98dc2502"
     decision: same-version
   - root: "event:user/message"
-    previous: "2026-10-27-retry-control-input"
-    after: "2c92e16e156b904a4acf57e7c6704d6a79ccf2b058a4f960ec49bb1fab663ecb"
+    previous: "2026-11-19-cua-input-notices"
+    after: "f638e6da07a1cb69c06f40336571fea828b1481782fd12f5da20dcdb59ff964f"
     decision: same-version
 ```
 
