@@ -30,6 +30,42 @@ export function readOptions(element: Element): SelectOption[] {
 }
 
 /**
+ * Whether an element is a searchable dropdown's text input: an `input` that
+ * names itself a combobox or autocompletes from a list (react-select carries
+ * only `aria-autocomplete="list"`). Playwright serialises this function.
+ * @param element - the element a type resolved to.
+ * @returns true for a combobox input.
+ */
+export function isComboboxInput(element: Element): boolean {
+  if (!(element instanceof HTMLInputElement)) return false
+  return element.getAttribute('role') === 'combobox' || ['list', 'both'].includes(element.getAttribute('aria-autocomplete') ?? '')
+}
+
+/**
+ * The visible options of the list a combobox input controls, read inside the
+ * page. The list is the element `aria-controls` (or `aria-owns`) names, and an
+ * option is a visible `[role=option]` in it; its `value` carries the option's
+ * id so the host can click it. Playwright serialises this function.
+ * @param input - the combobox input.
+ * @returns the options in order; nothing while the list is closed or empty.
+ */
+export function readComboboxOptions(input: Element): SelectOption[] {
+  const id = input.getAttribute('aria-controls') ?? input.getAttribute('aria-owns')
+  const list = id === null || id === '' ? null : input.ownerDocument.getElementById(id)
+  if (list === null) return []
+  return Array.from(list.querySelectorAll('[role="option"]'))
+    .filter((option) => {
+      const box = option.getBoundingClientRect()
+      return box.width > 0 && box.height > 0 && option.id !== ''
+    })
+    .map(option => ({
+      label: (option.textContent ?? '').replace(/\s+/gu, ' ').trim(),
+      value: option.id,
+      disabled: option.getAttribute('aria-disabled') === 'true',
+    }))
+}
+
+/**
  * Validate options that crossed the page boundary.
  * @param value - whatever `evaluate` returned.
  * @returns the options, when every entry is shaped like one.

@@ -219,6 +219,29 @@ describe('guarded click', () => {
     expect(guard.origin.site).toBe('site.example')
   })
 
+  it('judges a site change by the page the action runs in, not the tab the browser last visited', () => {
+    const { guard } = guarded()
+    guard.anchor('https://app.joinhandshake.com/jobs')
+    const typed = guard.decideTarget({
+      action: 'type',
+      url: 'https://job-boards.greenhouse.io/cmt/jobs/1',
+      ref: '#first_name',
+      candidates: [facts({ name: 'First Name', formAction: 'https://job-boards.greenhouse.io/cmt/jobs/1' })],
+      allowOrigin: false,
+    })
+    expect(typed.allowed).toBe(true)
+    const back = guard.decideTarget({
+      action: 'click',
+      url: 'https://job-boards.greenhouse.io/cmt/jobs/1',
+      ref: '#out',
+      candidates: [facts({ name: 'Back to Handshake', href: 'https://app.joinhandshake.com/jobs' })],
+      allowOrigin: false,
+    })
+    expect(refusalOf(back).reason).toBe('the target is on joinhandshake.com while the page is on greenhouse.io')
+    const fresh = guard.decideNavigation({ action: 'open', url: 'about:blank', target: 'https://evil.example/', allowOrigin: false })
+    expect(refusalOf(fresh).reason).toContain('while the page is on joinhandshake.com')
+  })
+
   it('allows a link to another subdomain of the same site', () => {
     const { guard, events } = guarded()
     const decision = guard.decideTarget({

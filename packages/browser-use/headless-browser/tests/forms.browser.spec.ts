@@ -29,6 +29,7 @@ const FORM = `<!doctype html><title>signup</title><body>
 <div style="position:relative;width:180px;height:40px"><button id="decoy" type="button" aria-hidden="true" tabindex="-1" style="width:180px;height:40px" onclick="document.getElementById('shown').textContent = 'decoy'">Show details</button><div role="button" tabindex="0" aria-label="Continue" style="position:absolute;inset:0"></div></div>
 <label for="country">Country</label><div id="control" style="display:flex;width:240px;height:36px;border:1px solid #888"><div style="flex:1;overflow:hidden;padding:2px 8px"><div style="display:inline-grid"><input id="country" role="combobox" aria-autocomplete="list" style="width:2px;height:20px;border:0;padding:0"></div></div></div>
 <input id="trap" aria-label="Notes" style="width:2px;height:20px;border:0;padding:0">
+<label for="city">City</label><input id="city" aria-autocomplete="list" aria-controls="city-list" aria-expanded="false"><div id="city-list" role="listbox"></div><input id="city-value" type="hidden">
 <label>Work authorization <select id="auth"><option value="">Select…</option><option value="yes">Yes, I am authorized</option><option value="no">No</option></select></label>
 <iframe id="embedded" src="/inner" style="width:600px;height:300px;border:0"></iframe>
 <p id="shown"></p>
@@ -37,6 +38,19 @@ const FORM = `<!doctype html><title>signup</title><body>
   document.getElementById('chooser').addEventListener('click', () => picker.click())
   const show = () => { document.getElementById('shown').textContent = [...document.querySelectorAll('input[type=file]'), picker].map(i => i.id + ':' + [...i.files].map(f => f.name + '/' + f.size).join('+')).join(' ') }
   for (const i of [...document.querySelectorAll('input[type=file]'), picker]) i.addEventListener('change', show)
+  const city = document.getElementById('city'); const list = document.getElementById('city-list')
+  city.addEventListener('input', () => {
+    // Like react-select: the list opens on keystrokes, never on a written value.
+    list.replaceChildren()
+    if (!city.dataset.keyed) return
+    for (const [i, name] of ['New York', 'New Haven', 'Toronto'].entries()) {
+      if (!name.toLowerCase().startsWith(city.value.toLowerCase())) continue
+      const option = document.createElement('div'); option.role = 'option'; option.id = 'city-option-' + i; option.textContent = name
+      option.addEventListener('click', () => { document.getElementById('city-value').value = name; city.value = ''; list.replaceChildren() })
+      list.append(option)
+    }
+  })
+  city.addEventListener('keydown', () => { city.dataset.keyed = '1' })
 </script>`
 
 const POPUP = `<!doctype html><title>Sign in</title><body><p>Choose an account</p>
@@ -176,6 +190,21 @@ describe.skipIf(!AVAILABLE)('form steps in a real page', () => {
     expect(typed.target?.score).toBeGreaterThan(0.2)
     expect(await value(app, '#country')).toBe('United States')
     await expect(app.browser.fill({ selector: '#trap' }, 'x')).rejects.toThrow(/area/u)
+  }, 120_000)
+
+  it('types into a searchable dropdown with keystrokes and clicks the one option the text names', async () => {
+    const app = await boot()
+    await app.browser.open(`${app.base}/apply`)
+    const page = await app.browser.page()
+    const picked = await app.browser.fill({ selector: '#city' }, 'toronto')
+    expect(picked.selected).toBe('Toronto')
+    expect(await page.locator('#city-value').inputValue()).toBe('Toronto')
+    const ambiguous = await app.browser.fill({ selector: '#city' }, 'New')
+    expect(ambiguous.selected).toBeUndefined()
+    expect(await value(app, '#city')).toBe('New')
+    expect(await page.locator('#city-list [role=option]').count()).toBe(2)
+    await app.browser.click({ selector: "#city-list [role=option]:has-text('New Haven')" })
+    expect(await page.locator('#city-value').inputValue()).toBe('New Haven')
   }, 120_000)
 
   it('lists an embedded form page in a whole-page read', async () => {

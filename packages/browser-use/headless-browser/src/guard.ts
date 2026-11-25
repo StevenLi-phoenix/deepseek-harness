@@ -656,15 +656,21 @@ export class ActionGuard {
     ref: string,
     name: string,
   ): Decision | undefined {
-    if (targetUrl === null || this.origin.allows(targetUrl)) return undefined
-    const site = siteOf(targetUrl) ?? targetUrl
+    if (targetUrl === null) return undefined
+    // The boundary is the site of the page the action runs in: with several tabs
+    // open, the last site any tab visited says nothing about this one. A page
+    // with no site of its own (a fresh tab) falls back to that last site.
+    const base = siteOf(pageUrl) ?? this.origin.site
+    const target = siteOf(targetUrl)
+    if (target === undefined || base === undefined || target === base) return undefined
+    const site = target
     if (!allowOrigin) {
       return this.#refuse(action, {
         rule: 'origin',
         url: pageUrl,
         ref,
         name,
-        reason: `the target is on ${site} while the browser is on ${this.origin.site ?? 'no site'}`,
+        reason: `the target is on ${site} while the page is on ${base}`,
         failing: [],
       })
     }

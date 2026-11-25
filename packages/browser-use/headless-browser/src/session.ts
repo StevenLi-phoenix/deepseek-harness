@@ -26,7 +26,7 @@ import type { InputCommand, TabInfo, TabMessage } from './input.ts'
 import { browserProcesses, killBrowserSync, recoverStaleProfile, removeBrowserOwner, writeBrowserOwner, type ProfileProbe } from './profile.ts'
 import { readText, type FrameRef, type ReadPage, type ReadRequest, type ReadResult } from './read.ts'
 import { cdpScrollChannel, scrollPage, type ScrollRequest, type ScrollResult } from './scroll.ts'
-import { matchOption, readOptions, readSelectOptions } from './select.ts'
+import { isComboboxInput, matchOption, readComboboxOptions, readOptions, readSelectOptions, type SelectOption } from './select.ts'
 import type { KeepalivePage } from './keepalive.ts'
 import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
 import { BrowserTabs, TabNavigationError, type ActiveTab, type ClosedTab, type PopupTab, type TabsContext, type TabsPage } from './tabs.ts'
@@ -44,6 +44,12 @@ export const CLICK_DOWNLOAD_WAIT_MS = 250
 
 /** How long choosing a `<select>` option waits; the option was just read, so a long wait only hides a stuck page. */
 const SELECT_TIMEOUT_MS = 5_000
+
+/** How long a searchable dropdown may take to list options after typing; an address lookup answers from the network. */
+const COMBOBOX_WAIT_MS = 2_500
+
+/** How often the dropdown's list is read while waiting for it. */
+const COMBOBOX_POLL_MS = 250
 
 /** How long a recovery waits after the old context closes, before it relaunches. */
 export const RELAUNCH_SETTLE_MS = 1_500
@@ -663,10 +669,57 @@ export class HeadlessBrowserSession {
         this.#guard.anchor(page.url())
         return { url: page.url(), target, selected }
       }
+      if (await element.evaluate(isComboboxInput)) {
+        const selected = await this.#typeIntoCombobox(page, element, resolution.ref, text, request.allowOrigin === true)
+        this.#guard.anchor(page.url())
+        return { url: page.url(), target, ...selected === undefined ? {} : { selected } }
+      }
       await element.fill(text)
       this.#guard.anchor(page.url())
       return { url: page.url(), target }
     })
+  }
+
+  /**
+   * Type into a searchable dropdown the way a person does, then choose the
+   * option the text names. A written value never opens react-select's list, so
+   * the text goes in as keystrokes; the list it opens is read, and the one
+   * option {@link matchOption} picks is clicked after the guard clears it like
+   * any click. No list, or no single match, leaves the typed text with the list
+   * open for the model to click the option it means.
+   * @param page - the page the input is in.
+   * @param element - the combobox input.
+   * @param ref - the selector or id, for the log line.
+   * @param text - the option's text.
+   * @param allowOrigin - whether the agent allowed a site change for this action.
+   * @returns the chosen option's label, or nothing when none was chosen.
+   */
+  async #typeIntoCombobox(page: Page, element: Actionable, ref: string, text: string, allowOrigin: boolean): Promise<string | undefined> {
+    await element.click()
+    await page.keyboard.press('ControlOrMeta+A')
+    await page.keyboard.press('Backspace')
+    await page.keyboard.type(text)
+    let options: readonly SelectOption[] = []
+    for (let waited = 0; waited <= COMBOBOX_WAIT_MS && options.length === 0; waited += COMBOBOX_POLL_MS) {
+      await page.waitForTimeout(COMBOBOX_POLL_MS)
+      options = readSelectOptions(await element.evaluate(readComboboxOptions))
+    }
+    const index = matchOption(options, text)
+    const option = index === undefined ? undefined : options[index]
+    this.#log.info('headless-browser: %s listed %d option(s) after typing; %s', ref, options.length,
+      option === undefined ? 'none chosen' : `choosing option ${String((index ?? 0) + 1)}`)
+    if (option === undefined) return undefined
+    const locator = page.locator(`[id=${JSON.stringify(option.value)}]`)
+    const facts = readElementFacts(await locator.evaluate(probeElement))
+    this.#accept(this.#guard.decideTarget({
+      action: 'click',
+      url: page.url(),
+      ref: `${ref} option`,
+      candidates: [facts],
+      allowOrigin,
+    }))
+    await locator.click()
+    return option.label
   }
 
   /**
