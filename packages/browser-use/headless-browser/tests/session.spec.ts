@@ -149,6 +149,8 @@ class FakePage {
   gotoFailure: string | undefined
   /** Set to make bringing the page to the front reject. */
   failFront = false
+  /** Set to make every click reject; `closes` names what closes first, as a popup's own click handler or a dying browser does. */
+  clickFailure: { readonly message: string; readonly closes?: 'page' | 'browser' } | undefined
   /** Probe facts that differ from {@link visibleFacts}, per element. */
   readonly facts = new Map<Element, Partial<ElementFacts>>()
   /** The same-name control drawn over an element, per element. */
@@ -174,6 +176,16 @@ class FakePage {
     if (typeof fn === 'string') throw new Error('the fake page runs functions, not source text')
     if (fn === probeElement) return visibleFacts(node, this.facts.get(node))
     return fn(node, arg)
+  }
+
+  /** Record one click, then fail it the way {@link clickFailure} says. */
+  async clickWith(record: () => void): Promise<void> {
+    record()
+    const failure = this.clickFailure
+    if (failure === undefined) return
+    if (failure.closes === 'page') await this.page.close()
+    if (failure.closes === 'browser') await this.#context.context.close()
+    throw new Error(failure.message)
   }
 
   /** The handle of one element, as `evaluateHandle` and an accessibility id map return it. */
@@ -202,7 +214,7 @@ class FakePage {
       first: (): Locator => this.locator(() => nodes().slice(0, 1), faults),
       evaluate: async (fn: OnElement, arg?: unknown): Promise<unknown> => this.run(fn, only(), arg),
       evaluateHandle: async (fn: OnElement): Promise<JSHandle> => this.#coverHandle(fn, only()),
-      click: async (): Promise<void> => { this.clicked.push(only()) },
+      click: async (): Promise<void> => { await this.clickWith(() => { this.clicked.push(only()) }) },
       fill: async (value: string): Promise<void> => { this.filled.set(only(), value) },
       setInputFiles: async (files: readonly string[]): Promise<void> => { this.attached.set(only(), files) },
       innerText: async (): Promise<string> => only().textContent,
@@ -245,7 +257,9 @@ class FakePage {
   }
 
   #playwrightPage(): Page {
-    const mouse = { click: async (x: number, y: number): Promise<void> => { this.mouseClicks.push([x, y]) } } as Partial<Mouse> as Mouse
+    const mouse = {
+      click: async (x: number, y: number): Promise<void> => { await this.clickWith(() => { this.mouseClicks.push([x, y]) }) },
+    } as Partial<Mouse> as Mouse
     const keyboard = { insertText: async (text: string): Promise<void> => { this.inserted.push(text) } } as Partial<Keyboard> as Keyboard
     const chooserOf = (): FakeChooser | undefined => this.chooser
     // Playwright overloads waitForEvent per event; the fake answers the file chooser and refuses every other event.
@@ -796,6 +810,60 @@ describe('guarded targets', () => {
     expect(outcome.target).toMatchObject({ index: 1, name: 'Continue' })
     expect(page.clicked).toEqual([element('#overlay')])
     expect(LOG.info).toHaveBeenCalledWith('headless-browser: %s match %d is covered by a %s named %s; scoring the cover too', '#go', 0, 'div', '"Continue"')
+    await session.close()
+  })
+})
+
+describe('a page that closes itself on a click', () => {
+  /** The message Playwright rejects a call with once its page has closed. */
+  const CLOSED = 'locator.click: Target page, context or browser has been closed'
+
+  /** A session with the opener tab `t1` and a second tab `t2`, and `t2`'s page. */
+  async function withPopup(): Promise<Harness & { popup: FakePage }> {
+    const state = await withTab()
+    await state.session.applyTabCommand({ type: 'tab', action: 'new', url: 'https://accounts.example/signin' })
+    const popup = state.contexts[0]?.created[1]
+    if (popup === undefined) throw new Error('the session opened no second tab')
+    return Object.assign(state, { popup })
+  }
+
+  it('takes the click as done when its page closes in answer, and relaunches nothing', async () => {
+    document.body.innerHTML = '<button id="account">cv@example.com</button>'
+    const { session, contexts, popup } = await withPopup()
+    popup.clickFailure = { message: CLOSED, closes: 'page' }
+    const outcome = await session.click({ selector: '#account' }, 't2')
+    expect(outcome).toMatchObject({ url: 'https://accounts.example/signin', target: { name: 'cv@example.com' } })
+    expect(popup.clicked).toEqual([element('#account')])
+    expect(contexts).toHaveLength(1)
+    expect(LOG.info).toHaveBeenCalledWith('headless-browser: the page closed itself on the click (%s)', CLOSED)
+    await session.close()
+  })
+
+  it('still relaunches when the whole browser went down with the page', async () => {
+    document.body.innerHTML = '<button id="account">cv@example.com</button>'
+    const { session, contexts, page } = await withTab()
+    page.clickFailure = { message: CLOSED, closes: 'browser' }
+    await session.click({ selector: '#account' })
+    expect(contexts).toHaveLength(2)
+    expect(contexts[1]?.first().clicked).toEqual([element('#account')])
+    await session.close()
+  })
+
+  it('reports a click that failed on a page that is still open', async () => {
+    document.body.innerHTML = '<button id="account">cv@example.com</button>'
+    const { session, contexts, popup } = await withPopup()
+    popup.clickFailure = { message: 'locator.click: Timeout 30000ms exceeded' }
+    await expect(session.click({ selector: '#account' }, 't2')).rejects.toThrow(/Timeout 30000ms/u)
+    expect(contexts).toHaveLength(1)
+    await session.close()
+  })
+
+  it('reports a failure that is not a lost target even when the page closed', async () => {
+    document.body.innerHTML = '<button id="account">cv@example.com</button>'
+    const { session, contexts, popup } = await withPopup()
+    popup.clickFailure = { message: 'locator.click: Element is not attached to the DOM', closes: 'page' }
+    await expect(session.click({ selector: '#account' }, 't2')).rejects.toThrow(/not attached/u)
+    expect(contexts).toHaveLength(1)
     await session.close()
   })
 })

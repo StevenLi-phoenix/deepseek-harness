@@ -592,7 +592,8 @@ export class HeadlessBrowserSession {
         const point = await this.#decideAtPoint(page, request.point, 'click', request.allowOrigin === true, tabId)
         const mark = this.#downloads.mark()
         const popupMark = this.tabs().popupMark()
-        await page.mouse.click(request.point.x, request.point.y)
+        const at = request.point
+        await this.#clickOn(page, async () => { await page.mouse.click(at.x, at.y) })
         this.#guard.anchor(page.url())
         return { url: page.url(), point, ...await this.#openedSince(mark, popupMark) }
       }
@@ -607,10 +608,28 @@ export class HeadlessBrowserSession {
       }))
       const mark = this.#downloads.mark()
       const popupMark = this.tabs().popupMark()
-      await resolution.element(target.index).click()
+      await this.#clickOn(page, async () => { await resolution.element(target.index).click() })
       this.#guard.anchor(page.url())
       return { url: page.url(), target, ...await this.#openedSince(mark, popupMark) }
     })
+  }
+
+  /**
+   * Run one click. A page that closes itself in answer, as a sign-in popup does
+   * when it hands back to its opener, took the click: Playwright reports the
+   * closed page as a lost target, but the browser and its other tabs are up, so
+   * the click succeeded and nothing is relaunched.
+   * @param page - the page the click lands on.
+   * @param click - the click itself.
+   */
+  async #clickOn(page: Page, click: () => Promise<void>): Promise<void> {
+    try {
+      await click()
+    } catch (error: unknown) {
+      const browserUp = this.#context?.pages().some(open => !open.isClosed()) === true
+      if (!page.isClosed() || !browserUp || !isLostContextError(error)) throw error
+      this.#log.info('headless-browser: the page closed itself on the click (%s)', firstLine(error))
+    }
   }
 
   /**
