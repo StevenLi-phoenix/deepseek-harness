@@ -34,7 +34,7 @@ export interface ActivityState {
 const toolSchema = z.object({ name: z.string(), preview: z.string() })
 
 /** Wire boundary of the view. */
-export const activitySchema = z.object({
+export const activitySchema: z.ZodType<SubagentActivity> = z.object({
   phase: z.enum(['model', 'tool', 'retry', 'idle']),
   since: z.number().nonnegative(),
   at: z.number().nonnegative(),
@@ -50,13 +50,13 @@ export const activitySchema = z.object({
   note: z.object({ kind: z.enum(['text', 'thought']), text: z.string() }).optional(),
   ended: z.string().optional(),
   error: z.string().optional(),
-}).strict() as unknown as z.ZodType<SubagentActivity>
+}).strict()
 
-const stateSchema = z.object({
+const stateSchema: z.ZodType<ActivityState> = z.object({
   on: z.boolean(),
   view: activitySchema.nullable(),
   open: z.record(z.string(), toolSchema.extend({ at: z.number().nonnegative() })),
-}) as unknown as z.ZodType<ActivityState>
+})
 
 /** Argument fields worth showing, most telling first. */
 const PREVIEW_FIELDS = ['description', 'command', 'cmd', 'file_path', 'filePath', 'path', 'query', 'url', 'pattern', 'prompt', 'task', 'name'] as const
@@ -134,6 +134,24 @@ function initial(time: number): SubagentActivity {
   return { phase: 'idle', since: time, at: time, step: 0, toolCalls: 0 }
 }
 
+/** The `llm/retry` payload fields the panel reads; dsh-llm-retry owns the payload type, which the Host half does not import. */
+interface RetryFields {
+  readonly retry?: unknown
+  readonly maxRetries?: unknown
+  readonly failure?: { readonly message?: unknown }
+}
+
+/**
+ * The retry a `llm/retry` payload describes.
+ * @param data - the payload; a field that is missing or of another type reads as absent.
+ * @returns the attempt (`0` without one), the shortened failure (`''` without one), and the budget when the payload has one.
+ */
+export function retryOf(data: RetryFields): NonNullable<SubagentActivity['retry']> {
+  const attempt = typeof data.retry === 'number' ? data.retry : 0
+  const reason = typeof data.failure?.message === 'string' ? shorten(data.failure.message, PREVIEW_CHARS) : ''
+  return { attempt, reason, ...typeof data.maxRetries === 'number' ? { max: data.maxRetries } : {} }
+}
+
 /**
  * Fold one event into a subagent's state.
  * @param state - the state covering all prior events.
@@ -151,16 +169,7 @@ function apply(state: ActivityState, event: SessionEvent): ActivityState {
   // Events the upstream loop owns but this package does not import types for.
   const type = event.type as string
   if (type === 'llm/retry') {
-    const data = event.data as { retry?: unknown; maxRetries?: unknown; failure?: { message?: unknown } }
-    const attempt = typeof data.retry === 'number' ? data.retry : 0
-    const reason = typeof data.failure?.message === 'string' ? shorten(data.failure.message, PREVIEW_CHARS) : ''
-    return {
-      ...state,
-      view: {
-        ...base(view, 'retry', time),
-        retry: { attempt, reason, ...typeof data.maxRetries === 'number' ? { max: data.maxRetries } : {} },
-      },
-    }
+    return { ...state, view: { ...base(view, 'retry', time), retry: retryOf(event.data as RetryFields) } }
   }
   if (type === 'llm/retry-started') {
     return view.phase === 'retry' ? { ...state, view: base(view, 'model', time) } : state

@@ -48,33 +48,33 @@ export interface SubagentActivity {
   /** Tool calls dispatched across the whole child log. */
   readonly toolCalls: number
   /** The oldest tool call still running, while `phase` is `tool`. */
-  readonly tool?: ActivityTool & {
+  readonly tool?: (ActivityTool & {
     /** Tool calls of the step still without a result, this one included. */
     readonly open: number
-  }
+  }) | undefined
   /** The model request being retried, while `phase` is `retry`. */
   readonly retry?: {
     /** 1-based retry number. */
     readonly attempt: number
     /** Retry budget; absent for an unlimited policy. */
-    readonly max?: number
+    readonly max?: number | undefined
     /** The failure that caused the retry, shortened. */
     readonly reason: string
-  }
+  } | undefined
   /** The newest tool call whose result arrived. */
-  readonly lastTool?: ActivityTool & {
+  readonly lastTool?: (ActivityTool & {
     /** Whether that result was an error. */
     readonly error: boolean
-  }
+  }) | undefined
   /** Newest assistant words: the reply text when the message had any, else the start of its reasoning. */
   readonly note?: {
     readonly kind: 'text' | 'thought'
     readonly text: string
-  }
+  } | undefined
   /** How the latest closed turn ended, while `phase` is `idle`. */
-  readonly ended?: ActivityEnd
+  readonly ended?: ActivityEnd | undefined
   /** The failure message of a turn that ended with `error`, shortened. */
-  readonly error?: string
+  readonly error?: string | undefined
 }
 
 declare module '@deepseek-ai/dsh-session-projection/types' {

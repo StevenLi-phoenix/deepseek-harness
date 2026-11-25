@@ -1,16 +1,29 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import { SessionId, SessionSeq, buildSessionHeader, type SessionEvent, type SessionEventMap } from '@deepseek-ai/dsh-session'
+import type {} from '@deepseek-ai/dsh-subagent'
 import * as plugin from '../src/index.ts'
-import { activityProjectionDefinition as unit, noteOf, previewOf, shorten, type ActivityState } from '../src/projection.ts'
+import { activityProjectionDefinition as unit, noteOf, previewOf, retryOf, shorten, type ActivityState } from '../src/projection.ts'
 
 type Header = Parameters<typeof unit.init>[0]
-const CHILD = { origin: 'subagent' } as unknown as Header
-const ROOT = {} as unknown as Header
+const CHILD: Header = buildSessionHeader(SessionId('child'), { createdAt: 0, origin: 'subagent' })
+const ROOT: Header = buildSessionHeader(SessionId('root'), { createdAt: 0 })
+
+type CallId = SessionEventMap['tool/call']['callId']
+type MessageId = SessionEventMap['tool/result']['message']['id']
+// dsh-llm-retry and dsh-jobs declare these payloads; the Host aggregate program merges their event maps.
+type RetryId = SessionEventMap['llm/retry-started']['retryId']
+type JobId = SessionEventMap['job/registered']['jobId']
+const callId = (id: string) => id as CallId
+const messageId = (id: string) => id as MessageId
+const RETRY = 'retry-1' as RetryId
+
+/** A Session event before the log assigns its sequence number. */
+type Unsequenced<E> = E extends SessionEvent ? Omit<E, 'seq'> : never
 
 let seq = 0
-function event(type: string, time: number, data: unknown): SessionEvent {
-  return { type, seq: seq++, time, data } as unknown as SessionEvent
+function event(draft: Unsequenced<SessionEvent>): SessionEvent {
+  return { ...draft, seq: SessionSeq(seq++) }
 }
 
 function fold(events: readonly SessionEvent[], header: Header = CHILD): ActivityState {
@@ -19,28 +32,38 @@ function fold(events: readonly SessionEvent[], header: Header = CHILD): Activity
   return state
 }
 
-const call = (time: number, callId: string, name: string, args: unknown) =>
-  event('tool/call', time, { turn: 1, step: 1, callId, name, arguments: typeof args === 'string' ? args : JSON.stringify(args) })
-const result = (time: number, callId: string, isError = false) =>
-  event('tool/result', time, { turn: 1, step: 1, message: { role: 'tool', toolCallId: callId, isError, content: [], source: { kind: 'tool', callId } } })
+const turnStart = (time: number) => event({ type: 'turn/start', time, data: { turn: 1 } })
+const stepStart = (time: number, step = 1) => event({ type: 'step/start', time, data: { turn: 1, step } })
+const turnEnd = (time: number, reason: SessionEventMap['turn/end']['reason']) => event({ type: 'turn/end', time, data: { turn: 1, reason } })
+const said = (time: number, content: SessionEventMap['assistant/message']['message']['content']) => event({
+  type: 'assistant/message', time, surfaceOp: 'append',
+  data: { turn: 1, step: 1, message: { id: messageId(`assistant-${time}`), role: 'assistant', content, source: { kind: 'model', provider: 'deepseek', model: 'deepseek-chat' } }, stream: [] },
+})
+const call = (time: number, id: string, name: string, args: unknown) =>
+  event({ type: 'tool/call', time, data: { turn: 1, step: 1, callId: callId(id), name, arguments: typeof args === 'string' ? args : JSON.stringify(args) } })
+const result = (time: number, id: string, isError = false) => event({
+  type: 'tool/result', time, surfaceOp: 'append',
+  data: { turn: 1, step: 1, message: { id: messageId(`tool-${time}`), role: 'tool', toolCallId: callId(id), isError, content: [], source: { kind: 'tool', callId: callId(id) } } },
+})
+const retryStarted = (time: number) => event({ type: 'llm/retry-started', time, data: { retryId: RETRY, turn: 1, step: 1, retry: 1 } })
 
 describe('subagentActivity', () => {
   it('stays null and returns the same state for a Session that is not a subagent', () => {
     const start = unit.init(ROOT)
-    const next = unit.apply(start, event('turn/start', 1, { turn: 1 }))
+    const next = unit.apply(start, turnStart(1))
     expect(next).toBe(start)
     expect(unit.wire.view(next)).toBeNull()
   })
 
   it('follows a turn: model, a running tool, back to the model, then idle with how it ended', () => {
     const events = [
-      event('turn/start', 1_000, { turn: 1 }),
-      event('step/start', 1_100, { turn: 1, step: 1 }),
+      turnStart(1_000),
+      stepStart(1_100),
     ]
     let state = fold(events)
     expect(state.view).toMatchObject({ phase: 'model', since: 1_100, step: 1, toolCalls: 0 })
 
-    state = unit.apply(state, event('assistant/message', 2_000, { turn: 1, step: 1, message: { content: [{ type: 'reasoning', text: 'Read the uploader first.' }] } }))
+    state = unit.apply(state, said(2_000, [{ type: 'reasoning', text: 'Read the uploader first.' }]))
     state = unit.apply(state, call(2_000, 'c1', 'bash', { command: 'grep -rn onBatchStored Sources', description: 'Find the batch hook' }))
     expect(state.view).toMatchObject({
       phase: 'tool', since: 2_000, at: 2_000, toolCalls: 1,
@@ -52,13 +75,13 @@ describe('subagentActivity', () => {
     expect(state.view).toMatchObject({ phase: 'model', since: 2_500, lastTool: { name: 'bash', preview: 'Find the batch hook', error: true } })
     expect(state.view).not.toHaveProperty('tool')
 
-    state = unit.apply(state, event('turn/end', 9_000, { turn: 1, reason: { kind: 'completed' } }))
+    state = unit.apply(state, turnEnd(9_000, { kind: 'completed' }))
     expect(state.view).toMatchObject({ phase: 'idle', since: 9_000, ended: 'completed', toolCalls: 1 })
   })
 
   it('keeps the oldest of parallel calls in front and counts the rest', () => {
     const state = fold([
-      event('step/start', 10, { turn: 1, step: 2 }),
+      stepStart(10, 2),
       call(20, 'a', 'read', { path: '/tmp/dt/a.swift' }),
       call(30, 'b', 'bash', { command: 'swift test' }),
     ])
@@ -69,56 +92,64 @@ describe('subagentActivity', () => {
 
   it('shows a retry with its reason and returns to the model when the retry starts', () => {
     let state = fold([
-      event('step/start', 10, { turn: 1, step: 1 }),
-      event('llm/retry', 50, { turn: 1, step: 1, retry: 1, maxRetries: 5, delayMs: 3_401, failure: { message: 'Stream ended without finish_reason', code: 'x' } }),
+      stepStart(10),
+      event({
+        type: 'llm/retry', time: 50,
+        data: { retryId: RETRY, turn: 1, step: 1, provider: 'deepseek', mode: 'normal', policyKey: 'deepseek', retry: 1, maxRetries: 5, delayMs: 3_401, failure: { message: 'Stream ended without finish_reason', code: 'x' } },
+      }),
     ])
     expect(state.view).toMatchObject({ phase: 'retry', since: 50, retry: { attempt: 1, max: 5, reason: 'Stream ended without finish_reason' } })
-    state = unit.apply(state, event('llm/retry-started', 3_500, { turn: 1, step: 1, retry: 1 }))
+    state = unit.apply(state, retryStarted(3_500))
     expect(state.view).toMatchObject({ phase: 'model', since: 3_500 })
     expect(state.view).not.toHaveProperty('retry')
   })
 
   it('records the failure of a turn that ended with an error, and the end kind of an aborted one', () => {
     const failed = fold([
-      event('turn/start', 1, { turn: 1 }),
-      event('turn/end', 2, { turn: 1, reason: { kind: 'error', error: { message: 'UNKNOWN_MODEL opencode-go/x', code: 'UNKNOWN' } } }),
+      turnStart(1),
+      turnEnd(2, { kind: 'error', error: { message: 'UNKNOWN_MODEL opencode-go/x', code: 'UNKNOWN' } }),
     ])
     expect(failed.view).toMatchObject({ phase: 'idle', ended: 'error', error: 'UNKNOWN_MODEL opencode-go/x' })
-    const aborted = fold([event('turn/start', 1, { turn: 1 }), event('turn/end', 2, { turn: 1, reason: { kind: 'aborted', reason: {} } })])
+    const aborted = fold([turnStart(1), turnEnd(2, { kind: 'aborted', reason: { kind: 'user' } })])
     expect(aborted.view).toMatchObject({ ended: 'aborted' })
     expect(aborted.view).not.toHaveProperty('error')
   })
 
   it('returns the same state for events it does not show, so the control stream stays quiet', () => {
-    const state = fold([event('step/start', 10, { turn: 1, step: 1 })])
+    const state = fold([stepStart(10)])
     for (const quiet of [
-      event('job/registered', 11, {}),
-      event('request/header', 12, {}),
-      event('step/end', 13, { turn: 1, step: 1 }),
-      event('assistant/message', 14, { turn: 1, step: 1, message: { content: [] } }),
+      event({ type: 'job/registered', time: 11, data: { jobId: 'job-1' as JobId, owner: CHILD.id, kind: 'bash', label: 'swift test', startedAt: 11 } }),
+      event({ type: 'request/header', time: 12, data: { header: { config: { provider: 'deepseek', model: 'deepseek-chat' } }, reason: 'initial' } }),
+      event({ type: 'step/end', time: 13, data: { turn: 1, step: 1 } }),
+      said(14, []),
       result(15, 'unknown-call'),
     ]) expect(unit.apply(state, quiet)).toBe(state)
   })
 
   it('switches on at a descriptor for a log whose header predates the origin field', () => {
-    const state = fold([event('subagent/descriptor', 5, { version: 3 }), event('turn/start', 6, { turn: 1 })], ROOT)
+    const state = fold([event({ type: 'subagent/descriptor', time: 5, data: { version: 3, mode: 'one-shot', provider: 'subagent' } }), turnStart(6)], ROOT)
     expect(state.on).toBe(true)
     expect(state.view).toMatchObject({ phase: 'model', since: 6 })
   })
 
   it('reads a retry without its optional fields, and ignores a retry start outside a retry', () => {
-    const state = fold([event('step/start', 10, { turn: 1, step: 1 }), event('llm/retry', 20, { turn: 1, step: 1 })])
-    expect(state.view).toMatchObject({ phase: 'retry', retry: { attempt: 0, reason: '' } })
+    const state = fold([
+      stepStart(10),
+      event({
+        type: 'llm/retry', time: 20,
+        data: { retryId: RETRY, turn: 1, step: 1, provider: 'deepseek', mode: 'always', policyKey: 'deepseek', retry: 2, delayMs: 1_000, failure: { message: 'overloaded', code: 'x' } },
+      }),
+    ])
+    expect(state.view).toMatchObject({ phase: 'retry', retry: { attempt: 2, reason: 'overloaded' } })
     expect(state.view?.retry).not.toHaveProperty('max')
-    const model = fold([event('step/start', 10, { turn: 1, step: 1 })])
-    expect(unit.apply(model, event('llm/retry-started', 30, { turn: 1, step: 1, retry: 1 }))).toBe(model)
-    const failed = fold([event('turn/start', 1, { turn: 1 }), event('turn/end', 2, { turn: 1, reason: { kind: 'error' } })])
-    expect(failed.view).toMatchObject({ ended: 'error' })
-    expect(failed.view).not.toHaveProperty('error')
+    expect(retryOf({})).toEqual({ attempt: 0, reason: '' })
+    expect(retryOf({ retry: '2', maxRetries: null, failure: {} })).toEqual({ attempt: 0, reason: '' })
+    const model = fold([stepStart(10)])
+    expect(unit.apply(model, retryStarted(30))).toBe(model)
   })
 
   it('validates its own state and view', () => {
-    const state = fold([event('step/start', 1, { turn: 1, step: 1 }), call(2, 'c', 'bash', { command: 'ls' })])
+    const state = fold([stepStart(1), call(2, 'c', 'bash', { command: 'ls' })])
     expect(unit.stateSchema.parse(state)).toEqual(state)
     expect(unit.wire.viewSchema.parse(state.view)).toEqual(state.view)
   })

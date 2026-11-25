@@ -2,7 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { allowAllAccess, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SubagentActivity } from '../src/activity.ts'
 import { zh } from '../src/client/locales.ts'
@@ -11,7 +11,7 @@ import {
   formatTokens, indexTree, metaParts, nowLine, rowsOf, summaryLine, totalOf,
   type PanelSources, type T,
 } from '../src/client/model.ts'
-import { SubagentPanel, type SubagentPanelProps } from '../src/client/SubagentPanel.tsx'
+import { SubagentPanel, type PanelInjected, type SubagentPanelProps } from '../src/client/SubagentPanel.tsx'
 import { SubagentToggle, type SubagentToggleProps } from '../src/client/SubagentToggle.tsx'
 
 const t = makeTranslate(zh) as T
@@ -111,13 +111,34 @@ describe('model', () => {
   })
 })
 
-function hooks(source: PanelSources) {
+/** The standard props the slot outlet passes both components. */
+type StandardProps = Omit<SubagentToggleProps, 'toggle' | 't' | 'children'>
+
+/** A standard Hook or action neither component calls. */
+const unused = (): never => { throw new Error('the subagent components do not call this') }
+
+/** The standard props over `source`; the Session snapshot shows a subagent address when `child`. */
+function standard(source: PanelSources, child = false): StandardProps {
   const state = { projectionsBySession: source.projections, byId: source.summaries }
   return {
+    sessionId: ROOT,
     useSessions: ((selector: (value: typeof state) => unknown) => selector(state)) as never,
     useSessionStatus: ((selector: (value: PanelSources['statuses']) => unknown) => selector(source.statuses)) as never,
+    useSession: ((selector: (value: { subagent: unknown }) => unknown) => selector({ subagent: child ? {} : null })) as never,
+    useProjection: unused, useConversation: unused, useInput: unused, useChat: unused, useTrajectory: unused, usePanelInfo: unused,
+    useSessionRetainInfo: unused, useWorkspaces: unused, useContextMenu: unused, useResource: unused,
+    inputActions: {
+      insertQuote: unused, captureInsertion: unused, insertText: unused, setDraft: unused, persistDraft: unused,
+      addAttachments: unused, removeAttachment: unused, pruneAttachments: unused, submit: unused,
+    },
+    ...allowAllAccess,
   }
 }
+
+const panelProps = (source: PanelSources, actions: PanelInjected): SubagentPanelProps =>
+  ({ ...standard(source), useTabInfo: unused, ...actions, t })
+const toggleProps = (source: PanelSources, toggle: SubagentToggleProps['toggle'], child = false): SubagentToggleProps =>
+  ({ ...standard(source, child), toggle, t })
 
 describe('SubagentPanel', () => {
   it('reads the catalog, shows the running card with what it does now, and opens a child aside or in the main view', () => {
@@ -125,7 +146,7 @@ describe('SubagentPanel', () => {
     const prepare = vi.fn()
     const openAside = vi.fn()
     const openMain = vi.fn()
-    const props = { sessionId: ROOT, ...hooks(sources()), prepare, openAside, openMain, t } as unknown as SubagentPanelProps
+    const props = panelProps(sources(), { prepare, openAside, openMain })
     render(<SubagentPanel {...props} />)
     expect(prepare).toHaveBeenCalledWith(ROOT)
     expect(screen.getByText('1 个在跑 · 1 个完成 · 1 个出错 · 1 个外部任务')).toBeTruthy()
@@ -156,7 +177,7 @@ describe('SubagentPanel', () => {
   it('says so when the Session has no subagents', () => {
     const empty: PanelSources = { projections: { [ROOT]: { state: 'ready', values: { subagentCatalog: [] } } } as never, summaries: {}, statuses: new Map() }
     const actions = { prepare: vi.fn(), openAside: vi.fn(), openMain: vi.fn() }
-    const props = { sessionId: ROOT, ...hooks(empty), ...actions, t } as unknown as SubagentPanelProps
+    const props = panelProps(empty, actions)
     render(<SubagentPanel {...props} />)
     expect(screen.getByRole('status').textContent).toBe('这个会话还没有派出子智能体。')
   })
@@ -165,11 +186,7 @@ describe('SubagentPanel', () => {
 describe('SubagentToggle', () => {
   function mount(source: PanelSources, child = false) {
     const toggle = vi.fn()
-    const props = {
-      sessionId: ROOT, ...hooks(source), toggle, t,
-      useSession: ((selector: (value: { subagent: unknown }) => unknown) => selector({ subagent: child ? {} : null })) as never,
-    } as unknown as SubagentToggleProps
-    render(<SubagentToggle {...props} />)
+    render(<SubagentToggle {...toggleProps(source, toggle, child)} />)
     return toggle
   }
 
@@ -270,7 +287,7 @@ describe('nested subagents', () => {
     vi.useFakeTimers({ now: NOW, toFake: ['Date', 'setInterval', 'clearInterval'] })
     const prepare = vi.fn()
     const actions = { prepare, openAside: vi.fn(), openMain: vi.fn() }
-    const props = { sessionId: ROOT, ...hooks(nested()), ...actions, t } as unknown as SubagentPanelProps
+    const props = panelProps(nested(), actions)
     render(<SubagentPanel {...props} />)
     expect(screen.getByText('1 个在跑 · 3 个完成')).toBeTruthy()
     const running = screen.getByRole('region', { name: '正在运行' })
@@ -302,11 +319,7 @@ describe('nested subagents', () => {
   })
 
   it('counts nested subagents in the header', () => {
-    const props = {
-      sessionId: ROOT, ...hooks(nested()), toggle: vi.fn(), t,
-      useSession: ((selector: (value: { subagent: unknown }) => unknown) => selector({ subagent: null })) as never,
-    } as unknown as SubagentToggleProps
-    render(<SubagentToggle {...props} />)
+    render(<SubagentToggle {...toggleProps(nested(), vi.fn())} />)
     expect(screen.getByRole('button', { name: '子智能体：1 个在跑，共 4 个。在右侧栏查看' }).textContent).toBe('1 个在跑')
   })
 })
@@ -408,7 +421,7 @@ describe('model edges', () => {
 describe('SubagentPanel edges', () => {
   const actions = () => ({ prepare: vi.fn(), openAside: vi.fn(), openMain: vi.fn() })
   const mount = (source: PanelSources, injected = actions()) => {
-    render(<SubagentPanel {...{ sessionId: ROOT, ...hooks(source), ...injected, t } as unknown as SubagentPanelProps} />)
+    render(<SubagentPanel {...panelProps(source, injected)} />)
     return injected
   }
 
