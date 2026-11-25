@@ -26,6 +26,7 @@ import {
   translationPairSourcePredicate,
 } from './translation-pairing.ts'
 import { TypeScriptProject } from './ts-project.ts'
+import { FORK_SERVICE_ROLES } from './fork/registrations.ts'
 
 const root = resolve(import.meta.dirname, '..')
 type Pkg = PackageGraphNode
@@ -35,7 +36,7 @@ interface GraphDoc {
   content: string
 }
 
-interface ServiceRole {
+export interface ServiceRole {
   key: string
   pkg: string
   title: string
@@ -114,133 +115,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     mode: 'service',
     note: 'Owns QR invitations, approved pairing requests, Remote browser credentials and the anonymous login document; its Client provides approval controls and an independent Token-link shortcut.',
   },
-  {
-    key: 'eventBus',
-    pkg: 'event-bus',
-    title: 'Event bus of the event service',
-    mode: 'service',
-    consumers: ['event-ingest', 'github-sensor', 'qq', 'qqbot', 'tool-monitor', 'tool-up', 'tool-watch', 'wechat', 'event-console'],
-    note: 'Owns dedupe, routes, batches, and the notification flow; sensors publish events and tools change routes.',
-  },
-  {
-    key: 'ownerNotifier',
-    pkg: 'wechat',
-    title: 'Owner notification channel',
-    mode: 'service',
-    consumers: ['event-bus', 'qq', 'courses', 'gmail', 'owner-memory', 'integrity-watch', 'tool-watch', 'tool-voice', 'tool-wechat'],
-    note: 'The event bus defines the channel interface; the WeChat channel provides it.',
-  },
-  {
-    key: 'ownerRelay',
-    pkg: 'owner-relay',
-    title: 'Relay of final answers to the owner',
-    mode: 'service',
-    consumers: ['event-bus', 'wechat', 'qqbot', 'bili', 'time-gap'],
-    note: "Channels register here and claim Sessions; the relay sends each final answer through its Session's channel.",
-  },
-  {
-    key: 'presence',
-    pkg: 'presence',
-    title: 'Owner sleep state',
-    mode: 'service',
-    consumers: ['wechat', 'courses', 'event-console'],
-    note: 'Combines the Sleep Focus, a daily window, and manual buttons into one state.',
-  },
-  {
-    key: 'githubSensor',
-    pkg: 'github-sensor',
-    title: 'GitHub event sensor',
-    mode: 'service',
-    consumers: ['tool-watch', 'event-console'],
-    note: 'Polls and receives GitHub deliveries and publishes them to the event bus.',
-  },
-  {
-    key: 'courses',
-    pkg: 'courses',
-    title: 'Course reminders',
-    mode: 'service',
-    consumers: ['tool-courses', 'courses-settings'],
-    note: 'Reads the course service and sends deadline reminders.',
-  },
-  {
-    key: 'gmail',
-    pkg: 'gmail',
-    title: 'Gmail accounts',
-    mode: 'service',
-    consumers: ['tool-gmail', 'gmail-settings'],
-    note: 'Reads and sends the owner\'s Gmail; holds a send for the owner\'s confirmation.',
-  },
-  {
-    key: 'qq',
-    pkg: 'qq',
-    title: 'QQ group observer',
-    mode: 'service',
-    consumers: ['tool-qq', 'qq-login', 'speaking-style', 'event-console'],
-    note: 'Client of the qq-recorder service; writes group digests and answers searches.',
-  },
-  {
-    key: 'qqBot',
-    pkg: 'qqbot',
-    title: 'Official QQ bot channel',
-    mode: 'service',
-    note: 'Holds the official-bot connection; no other package calls it.',
-  },
-  {
-    key: 'speakingStyle',
-    pkg: 'speaking-style',
-    title: 'Speaking style',
-    mode: 'service',
-    consumers: ['speaking-style-settings', 'event-console'],
-    note: 'Collects style from QQ, Bilibili, and public web pages and shows it to the presets that mount it.',
-  },
-  {
-    key: 'contentGuard',
-    pkg: 'content-guard',
-    title: 'Content guard for shared text',
-    mode: 'service',
-    consumers: ['qq', 'speaking-style', 'tool-up'],
-    note: 'Checks text others can read through patterns, canaries, memory overlap, and a model, and refuses on failure.',
-  },
-  {
-    key: 'voice',
-    pkg: 'voice',
-    title: 'Text to speech and audio transcription',
-    mode: 'service',
-    consumers: ['tool-voice', 'wechat', 'event-console'],
-    note: 'Calls the speech and transcription services and returns files or text.',
-  },
-  {
-    key: 'claudeCodeSessions',
-    pkg: 'cc-admin',
-    title: 'Claude Code session listing',
-    mode: 'service',
-    consumers: ['event-console'],
-    note: 'Lists and starts Claude Code sessions of the service account for the Settings page.',
-  },
-  {
-    key: 'bili',
-    pkg: 'bili',
-    title: 'Bilibili account client',
-    mode: 'service',
-    consumers: ['tool-bili', 'speaking-style'],
-    note: 'Thin client of bili-svc, which holds the session and writes to Bilibili.',
-  },
-  {
-    key: 'biliHot',
-    pkg: 'bili',
-    title: 'Bilibili trending reads',
-    mode: 'service',
-    consumers: ['speaking-style'],
-    note: 'Reads trending videos through bili-svc.',
-  },
-  {
-    key: 'biliEvidence',
-    pkg: 'tool-up',
-    title: 'Bilibili reply evidence',
-    mode: 'service',
-    consumers: ['speaking-style'],
-    note: 'Serves the evidence records of the creator account tools.',
-  },
+  ...FORK_SERVICE_ROLES,
   {
     key: 'actionCards',
     pkg: 'action-cards',

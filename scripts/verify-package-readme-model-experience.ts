@@ -8,6 +8,7 @@
 import { existsSync, globSync, readFileSync } from 'node:fs'
 import { relative, resolve, sep } from 'node:path'
 import { markdownHeadingLines, markdownProseLines, parseMarkdown, type MarkdownProseLine } from './markdown.ts'
+import { FORK_SENTENCE_MODEL_EXPERIENCE } from './fork/registrations.ts'
 
 const root = resolve(import.meta.dirname, '..')
 const HEADING = '## Model Experience'
@@ -19,7 +20,7 @@ const FIELD_HEADINGS = [MODEL_VIEW_HEADING, TOKEN_EFFECT_HEADING, KV_CACHE_EFFEC
 
 type SentenceKind = 'none' | 'indirect'
 
-interface SentenceContract {
+export interface SentenceContract {
   kind: SentenceKind
   reason: string
 }
@@ -183,23 +184,7 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/client/ui-trajectory': { kind: 'none', reason: 'Trajectory UI and read-only Host inspector; register nothing model-facing.' },
   'packages/client/ui-workspace': { kind: 'none', reason: 'Browser-side UI plugin layer; registers nothing model-facing.' },
   'packages/client/ui-directory-picker-browse': { kind: 'none', reason: 'Browser-side directory-browsing surface; registers nothing model-facing.' },
-  'packages/fork/provider-balance': { kind: 'none', reason: 'Account settings card reading provider balances; registers nothing model-facing.' },
-  'packages/fork/owner-memory-admin': { kind: 'none', reason: 'Settings section for reviewing agent memory; registers no tool and adds nothing to model requests.' },
-  'packages/fork/wechat-settings': { kind: 'none', reason: 'Settings sections for the WeChat channel and quiet hours; register no tool and add nothing to model requests.' },
-  'packages/fork/presence': { kind: 'none', reason: 'Tells the channels whether the owner sleeps and holds back their messages; adds nothing to model requests.' },
-  'packages/fork/content-guard': { kind: 'none', reason: 'Host-side validator called by other plugins; registers no tool and adds nothing to the main agent\'s requests (its own review request is a separate one-shot call with the text fenced).' },
-  'packages/fork/sysmon': { kind: 'none', reason: 'Settings section reading the Host machine status; registers nothing model-facing.' },
-  'packages/fork/speaking-style-settings': { kind: 'none', reason: 'Settings section showing the speaking-style samples; registers nothing model-facing (the samples reach the model through speaking-style).' },
-  'packages/fork/plugin-config': { kind: 'none', reason: 'Settings card editing plugin configuration; registers nothing model-facing.' },
-  'packages/fork/courses-settings': { kind: 'none', reason: 'Settings section showing the course deadline poller and its configuration; registers nothing model-facing.' },
-  'packages/fork/gmail-settings': { kind: 'none', reason: 'Settings section and OAuth return page for the Gmail accounts; registers nothing model-facing, and the OAuth client secret never leaves the Host.' },
-  'packages/fork/subagent-activity': { kind: 'none', reason: 'Sidebar page and a projection over subagent Session events; registers no tool and adds nothing to model requests.' },
-  'packages/fork/qq-login': { kind: 'none', reason: 'Settings section showing the QQ connection and login QR code; registers nothing model-facing, and the code never enters a model request.' },
-  'packages/fork/cc-admin': { kind: 'none', reason: 'Lists and starts Claude Code sessions for a settings page; registers nothing model-facing.' },
-  'packages/fork/event-console': { kind: 'none', reason: 'Settings sections over service state, subscriptions, Claude Code sessions, and a voice preview; registers nothing model-facing.' },
-  'packages/fork/integrity-watch': { kind: 'none', reason: 'Reads files and Session events and notifies the owner; adds nothing to model requests.' },
-  'packages/fork/settings-kit': { kind: 'none', reason: 'Browser helpers the fork Settings sections inline; registers nothing model-facing.' },
-  'packages/fork/service-kit': { kind: 'indirect', reason: 'Host helpers; the one model call and the tool renderers run on behalf of the packages that own the prompt and the tools.' },
+  ...FORK_SENTENCE_MODEL_EXPERIENCE,
   'packages/client/ui-directory-picker-native': { kind: 'none', reason: 'Browser-side surface driving the local Desktop or Host OS chooser; registers nothing model-facing.' },
   'packages/client/ui-theme': { kind: 'none', reason: 'Browser-side UI plugin layer; registers nothing model-facing.' },
   'packages/client/ui-sidebar-documentpreview': { kind: 'none', reason: 'Browser-only text viewer; registers no tool, prompt section, or session event, and what the user reads never enters a model request.' },

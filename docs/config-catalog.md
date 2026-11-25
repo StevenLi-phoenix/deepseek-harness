@@ -1415,7 +1415,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-event-bus`
 
 - `inject`: `timer` · `storageDomain`
-- `source`: [`packages/fork/event-bus/src/index.ts:71`](../packages/fork/event-bus/src/index.ts)
+- `source`: [`packages/fork/event-bus/src/index.ts:65`](../packages/fork/event-bus/src/index.ts)
 
 ```ts config-catalog
 /** Bus configuration. */
