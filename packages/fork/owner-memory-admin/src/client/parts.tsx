@@ -3,7 +3,8 @@
  * layout components. All text from the Host is rendered as text, never as markup.
  */
 
-import { useId, type KeyboardEvent, type ReactNode } from 'react'
+import { Card as SettingsCard } from '@deepseek-ai/dsh-settings-kit/client'
+import type { KeyboardEvent, ReactNode } from 'react'
 import type { MemoryKey } from './locales.ts'
 import css from './Memory.module.css'
 
@@ -40,16 +41,7 @@ export function Card({ title, meta, children, id, onKeyDown }: {
   id?: string
   onKeyDown?: (event: KeyboardEvent<HTMLElement>) => void
 }): ReactNode {
-  const heading = useId()
-  return (
-    <section className={css.card} aria-labelledby={heading} onKeyDown={onKeyDown} {...id === undefined ? {} : { 'data-card': id }}>
-      <div className={css.cardHeader}>
-        <span id={heading} className={css.cardTitle}>{title}</span>
-        {meta === undefined ? null : <span className={css.meta}>{meta}</span>}
-      </div>
-      {children}
-    </section>
-  )
+  return <SettingsCard css={css} title={title} meta={meta} onKeyDown={onKeyDown} {...id === undefined ? {} : { 'data-card': id }}>{children}</SettingsCard>
 }
 
 /** A small label; `warn` marks something that needs the owner's attention. */

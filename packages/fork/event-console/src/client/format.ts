@@ -1,5 +1,6 @@
 /** Time and duration text shared by the sections. */
 
+import type { StatusLine } from '@deepseek-ai/dsh-settings-kit/client'
 import type { ConsoleKey } from './locales.ts'
 
 /** The `t` the settings shell delivers, narrowed to this namespace. */
@@ -67,4 +68,25 @@ export function duration(seconds: number, t: Translate): string {
   if (minutes >= 1440) return t('duration.days', { days: Math.floor(minutes / 1440), hours: Math.floor((minutes % 1440) / 60) })
   if (minutes >= 60) return t('duration.hours', { hours: Math.floor(minutes / 60), minutes: minutes % 60 })
   return t('duration.minutes', { minutes })
+}
+
+/**
+ * The status line of a section over one resource: loading until the first read settles, failed while no read brought
+ * data, then the time the data was read, stale while the last read failed.
+ * @param state - the read state and the data, which carries its own reading time.
+ * @param t - copy.
+ * @returns the dot's tone and the text.
+ */
+export function resourceStatus(
+  state: { readonly checkedAt: number | null; readonly stale: boolean; readonly data: { readonly checkedAt: number } | null },
+  t: Translate,
+): StatusLine {
+  const view = state.data
+  const tone = state.checkedAt === null ? 'loading' : state.stale ? 'stale' : 'live'
+  const text = state.checkedAt === null
+    ? t('status.loading')
+    : view === null
+      ? t('status.failed')
+      : state.stale ? t('status.stale', { time: clock(view.checkedAt) }) : t('status.live', { time: clock(view.checkedAt) })
+  return { tone, text }
 }

@@ -29,6 +29,9 @@
     },
     {
       "path": "../../client/ui-slots"
+    },
+    {
+      "path": "../settings-kit"
     }
   ]
 }

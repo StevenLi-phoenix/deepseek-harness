@@ -6,6 +6,7 @@
  * while open and pauses while the page is hidden.
  */
 
+import { PendingSection, startPolling } from '@deepseek-ai/dsh-settings-kit/client'
 import { useEffect, useId, type ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRenderFactories, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -23,7 +24,6 @@ import {
 } from './gmail.ts'
 import { HeldGroup, Resolved } from './Held.tsx'
 import { addressList, type PartProps } from './parts.tsx'
-import { startPolling } from './polling.ts'
 import css from './GmailSection.module.css'
 
 /** The section's injected face (slot `inject`). */
@@ -116,14 +116,8 @@ export function GmailSection({ useGmail, refresh, act, copy, origin, renderFacto
   useEffect(() => startPolling(refresh, POLL_INTERVAL_MS), [refresh])
   const translate: Translate = t
   const { view } = state
-  if (view === null) {
-    return (
-      <section className={css.section} aria-label={translate('title')}>
-        <span className={css.status} role="status">{state.stale ? translate('status.failed') : translate('status.loading')}</span>
-        {renderFactorySlot?.('settings.plugin-config', { entries: CONFIG_ENTRIES })}
-      </section>
-    )
-  }
+  const config = renderFactorySlot?.('settings.plugin-config', { entries: CONFIG_ENTRIES })
+  if (view === null) return <PendingSection css={css} label={translate('title')} stale={state.stale} t={translate}>{config}</PendingSection>
   const parts: PartProps = { view, at: state.at, busy: state.busy, failure: state.failure, t: translate, act, clock: timeFormatter() }
   const held = heldRows(view)
   const handled = <Resolved rows={resolvedRows(view)} parts={parts} />
@@ -142,7 +136,7 @@ export function GmailSection({ useGmail, refresh, act, copy, origin, renderFacto
       <RulesCard view={view} t={translate} />
       {held.length > 0 ? null : handled}
       <ActivityCard view={view} t={translate} clock={parts.clock} />
-      {renderFactorySlot?.('settings.plugin-config', { entries: CONFIG_ENTRIES })}
+      {config}
     </section>
   )
 }

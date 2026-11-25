@@ -3,10 +3,11 @@
 import { act as flushReact, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { startPolling } from '@deepseek-ai/dsh-settings-kit/client'
 import type { PresenceAnswer, PresenceView } from '../src/presence-view.ts'
 import { agoText, dateTime, stampTime } from '../src/client/presence/format.ts'
 import { de, en, es, fr, ja, pt, ru, zh } from '../src/client/presence/locales.ts'
-import { POLL_INTERVAL_MS, PresenceLoader, createPresenceStore, parseAnswer, startPolling, type PresenceState } from '../src/client/presence/presence.ts'
+import { POLL_INTERVAL_MS, PresenceLoader, createPresenceStore, parseAnswer, type PresenceState } from '../src/client/presence/presence.ts'
 import { PresenceSection, type PresenceProps } from '../src/client/presence/PresenceSection.tsx'
 
 const t = makeTranslate(zh) as PresenceProps['t']

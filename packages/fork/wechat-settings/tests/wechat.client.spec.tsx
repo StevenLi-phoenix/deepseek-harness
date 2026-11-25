@@ -3,12 +3,13 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { startPolling } from '@deepseek-ai/dsh-settings-kit/client'
 import { maskId, type LoginSnapshot, type WechatAnswer, type WechatView } from '../src/wechat-view.ts'
 import { agoText, dateTime, spanText, stampTime } from '../src/client/wechat/format.ts'
 import { de, en, es, fr, ja, pt, ru, zh } from '../src/client/wechat/locales.ts'
 import { isWeixinLink, qrPath, qrViewSize } from '../src/client/wechat/qr.ts'
 import {
-  LOGIN_POLL_INTERVAL_MS, POLL_INTERVAL_MS, WechatLoader, WechatRefused, createWechatStore, parseAnswer, startPolling, type WechatState,
+  LOGIN_POLL_INTERVAL_MS, POLL_INTERVAL_MS, WechatLoader, WechatRefused, createWechatStore, parseAnswer, type WechatState,
 } from '../src/client/wechat/wechat.ts'
 import { WechatSection, type WechatProps } from '../src/client/wechat/WechatSection.tsx'
 

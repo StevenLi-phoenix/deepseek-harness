@@ -63,7 +63,7 @@ Host 部分在 connection 上注册 `GET /api/sysmon`，因此受 `/api` 的登�
 | [`src/macmon.ts`](src/macmon.ts) | 运行 macmon 并解析它的 JSON 行 |
 | [`src/snapshot.ts`](src/snapshot.ts) | 两部分共用的快照类型与路由路径 |
 | [`src/client/index.ts`](src/client/index.ts) | 浏览器入口：词典、loader、设置分区注册 |
-| [`src/client/sysmon.ts`](src/client/sysmon.ts) | store、loader 与感知页面可见性的轮询 |
+| [`src/client/sysmon.ts`](src/client/sysmon.ts) | store 和 loader；轮询和共享读取来自 `@deepseek-ai/dsh-settings-kit` |
 | [`src/client/cards.ts`](src/client/cards.ts) | 由快照得出卡片内容、单位与阈值颜色 |
 | [`src/client/SystemStatus.tsx`](src/client/SystemStatus.tsx) | 分区本身 |
 

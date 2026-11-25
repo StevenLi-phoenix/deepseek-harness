@@ -5,6 +5,7 @@
  * on the row. Monitors started with monitor_start belong to their own conversations and are explained, not listed.
  */
 
+import { startPolling, StatusHeader } from '@deepseek-ai/dsh-settings-kit/client'
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRenderFactories, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -14,9 +15,10 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from './locales.ts'
 import type { ScheduleRow, SubscriptionAction, SubscriptionRow, SubscriptionsView } from '../views.ts'
 import { ArchiveCard } from './Archive.tsx'
-import { ago, clock, stamp, until, type Translate } from './format.ts'
+import { FailureNotice } from './FailureNotice.tsx'
+import { ago, resourceStatus, stamp, until, type Translate } from './format.ts'
 import type { ConsoleKey } from './locales.ts'
-import { POLL_INTERVAL_MS, startPolling, type ResourceState } from './resource.ts'
+import { POLL_INTERVAL_MS, type ResourceState } from './resource.ts'
 import { blankDraft, requestKey, toRequest, validateDraft, type DraftError, type SubscriptionDraft } from './subs.ts'
 import css from './Console.module.css'
 
@@ -253,12 +255,7 @@ export function SubscriptionsSection({ useSubscriptions, refresh, act, dismiss, 
   const translate = t as Translate
   const view = state.data
   const now = state.checkedAt ?? 0
-  const tone = state.checkedAt === null ? 'loading' : state.stale ? 'stale' : 'live'
-  const text = state.checkedAt === null
-    ? translate('status.loading')
-    : view === null
-      ? translate('status.failed')
-      : state.stale ? translate('status.stale', { time: clock(view.checkedAt) }) : translate('status.live', { time: clock(view.checkedAt) })
+  const status = resourceStatus(state, translate)
   const busyKey = (request: SubscriptionAction): boolean => state.busy[requestKey(request)] === true
   const busyFor = (target: 'subscription' | 'schedule', id: string): boolean =>
     (['pause', 'resume', 'delete'] as const).some(action => busyKey({ action, target, id }))
@@ -266,20 +263,8 @@ export function SubscriptionsSection({ useSubscriptions, refresh, act, dismiss, 
   const archiveBusy = busyKey({ action: 'archive.sweep', dryRun: true }) ? 'preview' : busyKey({ action: 'archive.sweep', dryRun: false }) ? 'sweep' : null
   return (
     <section className={css.section} aria-label={translate('title.subscriptions')} data-stale={state.stale ? '' : undefined}>
-      <div className={css.header}>
-        <span className={css.status} role="status">
-          <span className={css.dot} data-tone={tone} aria-hidden="true" />
-          {text}
-        </span>
-      </div>
-      {failure === null
-        ? null
-        : (
-          <div className={css.notice} role="alert">
-            <span>{translate(`error.${failure.code}`)}{failure.detail === undefined ? '' : ` (${failure.detail})`}</span>
-            <button type="button" className={css.button} onClick={dismiss}>{translate('common.dismiss')}</button>
-          </div>
-        )}
+      <StatusHeader css={css} line={status} />
+      <FailureNotice failure={failure} dismiss={dismiss} t={translate} />
 
       <div className={css.heading}>
         <span className={css.headingTitle}>{translate('subs.events.title')}</span>

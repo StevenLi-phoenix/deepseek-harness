@@ -8,6 +8,7 @@
  * page is visible. Every edit shows on the page at once and is replaced by the Host's answer.
  */
 
+import { startPolling } from '@deepseek-ai/dsh-settings-kit/client'
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRenderFactories, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -18,7 +19,7 @@ import type {} from '@deepseek-ai/dsh-plugin-config/client'
 // Type-only: registers the speaking-style locale namespace this component's `t` reads.
 import type {} from './locales.ts'
 import { zh, type StyleKey } from './locales.ts'
-import { POLL_INTERVAL_MS, pollWhileVisible, type StyleEdit, type StyleState } from './style.ts'
+import { POLL_INTERVAL_MS, type StyleEdit, type StyleState } from './style.ts'
 import type { CardView, MineReport, NoteView, RunReport, SampleView, StylePanel, TrendDay } from '../view.ts'
 import css from './StyleSection.module.css'
 
@@ -315,7 +316,7 @@ function Trend({ days, translate }: { days: readonly TrendDay[]; translate: Tran
  */
 export function StyleSection({ useStyle, refresh, edit, collect, renderFactorySlot, t }: StyleSectionProps): ReactNode {
   const state = useStyle(value => value)
-  useEffect(() => pollWhileVisible(refresh, POLL_INTERVAL_MS), [refresh])
+  useEffect(() => startPolling(refresh, POLL_INTERVAL_MS), [refresh])
   const translate = t as Translate
   const { panel } = state
   const runId = useId()

@@ -1,6 +1,7 @@
+import { startPolling, type PageVisibility as VisibilitySource } from '@deepseek-ai/dsh-settings-kit/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  ActionFailure, ResourceLoader, createResourceStore, failureOf, requestJson, startPolling, type VisibilitySource,
+  ActionFailure, ResourceLoader, createResourceStore, failureOf, requestJson,
 } from '../src/client/resource.ts'
 
 /** A document double whose visibility the test flips. */

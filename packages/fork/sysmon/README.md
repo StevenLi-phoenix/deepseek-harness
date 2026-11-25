@@ -63,7 +63,7 @@ The browser half registers one `settings.section` entry (`sysmon`, after the bui
 | [`src/macmon.ts`](src/macmon.ts) | Running macmon and parsing its JSON line |
 | [`src/snapshot.ts`](src/snapshot.ts) | Snapshot types and the route path, shared by both halves |
 | [`src/client/index.ts`](src/client/index.ts) | Browser entry: dictionaries, the loader, the Settings section registration |
-| [`src/client/sysmon.ts`](src/client/sysmon.ts) | Store, loader, and the visibility-aware poller |
+| [`src/client/sysmon.ts`](src/client/sysmon.ts) | Store and loader; the poller and the shared read are `@deepseek-ai/dsh-settings-kit`'s |
 | [`src/client/cards.ts`](src/client/cards.ts) | Card contents, units, and threshold colours from a snapshot |
 | [`src/client/SystemStatus.tsx`](src/client/SystemStatus.tsx) | The section |
 

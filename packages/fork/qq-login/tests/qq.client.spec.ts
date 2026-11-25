@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { startPolling, type PageVisibility as VisibilitySource } from '@deepseek-ai/dsh-settings-kit/client'
 import type { QqPanel, QqRefreshAnswer } from '../src/view.ts'
 import { clock, detailRows, formatDuration, headline, qrPath, stamp, statusLine, type Translate } from '../src/client/cards.ts'
 import { de, en, es, fr, ja, pt, ru, zh, type QqKey } from '../src/client/locales.ts'
-import { CALM_POLL_INTERVAL_MS, POLL_INTERVAL_MS, QqLoader, createQqStore, parsePanel, startPolling, type VisibilitySource } from '../src/client/qq.ts'
+import { CALM_POLL_INTERVAL_MS, POLL_INTERVAL_MS, QqLoader, createQqStore, parsePanel } from '../src/client/qq.ts'
 
 const NOW = new Date(2026, 10, 1, 12, 0, 0).getTime()
 

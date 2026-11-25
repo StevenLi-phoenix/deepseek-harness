@@ -51,8 +51,9 @@ Host 一侧是个空的 `apply`，让插件出现在 Loader 里，浏览器端�
 | [`src/index.ts`](src/index.ts) | Node 一侧：空的 `apply` |
 | [`src/wechat-view.ts`](src/wechat-view.ts)、[`src/presence-view.ts`](src/presence-view.ts) | `wechat` 和 `presence` 路由的线上类型；`./wechat-view` 和 `./presence-view` 子路径 |
 | [`src/client/index.ts`](src/client/index.ts) | 浏览器入口：注册两个分区 |
-| [`src/client/wechat/`](src/client/wechat) | 微信分区：store、loader、轮询、二维码绘制、分区本身、词典 |
-| [`src/client/presence/`](src/client/presence) | 勿扰分区：store、loader、轮询、分区本身、词典 |
+| [`src/client/wechat/`](src/client/wechat) | 微信分区：store、loader、二维码绘制、分区本身、词典 |
+| [`src/client/presence/`](src/client/presence) | 勿扰分区：store、loader、分区本身、词典 |
+| [`src/client/SectionFrame.tsx`](src/client/SectionFrame.tsx)、[`action.ts`](src/client/action.ts)、[`ago.ts`](src/client/ago.ts) | 两个分区共用的部分：卡片外的状态行和错误、一次主人操作的忙碌与错误状态，以及多久以前的文字；轮询和共享读取来自 `@deepseek-ai/dsh-settings-kit` |
 
 这是 fork 本地的包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。
 

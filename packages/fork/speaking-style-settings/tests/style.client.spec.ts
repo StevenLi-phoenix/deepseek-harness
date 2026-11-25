@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createStyleStore, parseEditAnswer, parsePanel, pollWhileVisible, StyleLoader, type StylePanel } from '../src/client/style.ts'
+import { startPolling as pollWhileVisible } from '@deepseek-ai/dsh-settings-kit/client'
+import { createStyleStore, parseEditAnswer, parsePanel, StyleLoader, type StylePanel } from '../src/client/style.ts'
 
 const ORIGIN = { platform: 'qq', groups: 1, speakers: 2, days: 1 } as const
 const panel = (over: Partial<StylePanel> = {}): StylePanel => ({

@@ -13924,6 +13924,9 @@ importers:
       '@deepseek-ai/dsh-session-title':
         specifier: workspace:*
         version: link:../../session/session-title
+      '@deepseek-ai/dsh-settings-kit':
+        specifier: workspace:*
+        version: link:../settings-kit
       '@deepseek-ai/dsh-storage':
         specifier: workspace:*
         version: link:../../storage/storage
@@ -14078,6 +14081,9 @@ importers:
       '@deepseek-ai/dsh-plugin-config':
         specifier: workspace:*
         version: link:../plugin-config
+      '@deepseek-ai/dsh-settings-kit':
+        specifier: workspace:*
+        version: link:../settings-kit
       '@testing-library/react':
         specifier: ^16.3.3
         version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -14188,6 +14194,9 @@ importers:
       '@deepseek-ai/dsh-schedule':
         specifier: workspace:*
         version: link:../../schedule/schedule
+      '@deepseek-ai/dsh-settings-kit':
+        specifier: workspace:*
+        version: link:../settings-kit
       '@deepseek-ai/dsh-speaking-style':
         specifier: workspace:*
         version: link:../speaking-style
@@ -14357,6 +14366,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../core/session
+      '@deepseek-ai/dsh-settings-kit':
+        specifier: workspace:*
+        version: link:../settings-kit
       '@deepseek-ai/dsh-storage':
         specifier: workspace:*
         version: link:../../storage/storage
@@ -14488,6 +14500,9 @@ importers:
       '@deepseek-ai/dsh-plugin-config':
         specifier: workspace:*
         version: link:../plugin-config
+      '@deepseek-ai/dsh-settings-kit':
+        specifier: workspace:*
+        version: link:../settings-kit
       '@testing-library/react':
         specifier: ^16.3.3
         version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -14771,6 +14786,9 @@ importers:
       '@deepseek-ai/dsh-qq':
         specifier: workspace:*
         version: link:../qq
+      '@deepseek-ai/dsh-settings-kit':
+        specifier: workspace:*
+        version: link:../settings-kit
       '@testing-library/react':
         specifier: ^16.3.3
         version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -14844,6 +14862,21 @@ importers:
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
+
+  packages/fork/settings-kit:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@testing-library/react':
+        specifier: ^16.3.3
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.3.1(react@18.3.1)
 
   packages/fork/speaking-style:
     dependencies:
@@ -14941,6 +14974,9 @@ importers:
       '@deepseek-ai/dsh-plugin-config':
         specifier: workspace:*
         version: link:../plugin-config
+      '@deepseek-ai/dsh-settings-kit':
+        specifier: workspace:*
+        version: link:../settings-kit
       '@deepseek-ai/dsh-speaking-style':
         specifier: workspace:*
         version: link:../speaking-style
@@ -15057,6 +15093,9 @@ importers:
       '@deepseek-ai/dsh-plugin-config':
         specifier: workspace:*
         version: link:../plugin-config
+      '@deepseek-ai/dsh-settings-kit':
+        specifier: workspace:*
+        version: link:../settings-kit
       '@testing-library/react':
         specifier: ^16.3.3
         version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -15528,6 +15567,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: workspace:*
         version: link:../../client/ui-slots
+      '@deepseek-ai/dsh-settings-kit':
+        specifier: workspace:*
+        version: link:../settings-kit
       '@testing-library/react':
         specifier: ^16.3.3
         version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

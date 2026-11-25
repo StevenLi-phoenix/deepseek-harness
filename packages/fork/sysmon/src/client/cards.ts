@@ -5,6 +5,7 @@
  * Activity Monitor and `df -h` count them.
  */
 
+import { statusLine as kitStatusLine, type StatusLine } from '@deepseek-ai/dsh-settings-kit/client'
 import type { SysmonSnapshot } from '../snapshot.ts'
 import type { SysmonKey } from './locales.ts'
 import type { SysmonState } from './sysmon.ts'
@@ -67,11 +68,8 @@ export interface StorageRow {
   readonly details: readonly string[]
 }
 
-/** The line above the cards. */
-export interface StatusLine {
-  readonly text: string
-  readonly tone: 'loading' | 'live' | 'stale'
-}
+export type { StatusLine } from '@deepseek-ai/dsh-settings-kit/client'
+export { formatDuration } from '@deepseek-ai/dsh-settings-kit/client'
 
 /** The Homebrew command the Power card offers when macmon is missing. */
 export const INSTALL_MACMON = 'brew install macmon'
@@ -141,21 +139,6 @@ export function formatWatts(watts: number | null, t: Translate): string {
  */
 export function formatCelsius(celsius: number | null, t: Translate): string {
   return celsius === null ? t('value.unknown') : `${Math.round(celsius)} °C`
-}
-
-/**
- * Format an uptime in the two largest non-zero units.
- * @param seconds - an uptime; negative values are treated as 0.
- * @param t - translate seat.
- * @returns days and hours, hours and minutes, or minutes.
- */
-export function formatDuration(seconds: number, t: Translate): string {
-  const minutes = Math.floor(Math.max(0, seconds) / 60)
-  const hours = Math.floor(minutes / 60)
-  const days = Math.floor(hours / 24)
-  if (days > 0) return t('duration.days', { days, hours: hours % 24 })
-  if (hours > 0) return t('duration.hours', { hours, minutes: minutes % 60 })
-  return t('duration.minutes', { minutes })
 }
 
 /**
@@ -272,7 +255,5 @@ export function storageRows(snapshot: SysmonSnapshot, t: Translate): StorageRow[
  * @returns when the shown reading was taken, and whether it is current.
  */
 export function statusLine(state: SysmonState, t: Translate): StatusLine {
-  if (state.snapshot === null) return state.stale ? { text: t('status.failed'), tone: 'stale' } : { text: t('status.loading'), tone: 'loading' }
-  const time = clock(state.snapshot.sampledAt)
-  return state.stale ? { text: t('status.stale', { time }), tone: 'stale' } : { text: t('status.live', { time }), tone: 'live' }
+  return kitStatusLine(state.snapshot === null ? null : state.snapshot.sampledAt, state.stale, t, { time: clock, waiting: 'loading' })
 }

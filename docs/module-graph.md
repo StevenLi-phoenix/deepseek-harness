@@ -377,6 +377,7 @@ flowchart TD
     pkg_qq["qq"]
     pkg_qq_login["qq-login"]
     pkg_qqbot["qqbot"]
+    pkg_settings_kit["settings-kit"]
     pkg_speaking_style["speaking-style"]
     pkg_speaking_style_settings["speaking-style-settings"]
     pkg_subagent_activity["subagent-activity"]
@@ -1714,6 +1715,7 @@ flowchart TD
   pkg_owner_relay --> pkg_session
   pkg_presence --> pkg_event_bus
   pkg_presence --> pkg_storage_domain
+  pkg_presence --> pkg_wechat_settings
   pkg_qq --> pkg_api_session_controller
   pkg_qq --> pkg_credentials
   pkg_qq --> pkg_event_bus
@@ -1756,6 +1758,7 @@ flowchart TD
   pkg_owner_memory --> pkg_event_bus
   pkg_owner_memory --> pkg_home_paths
   pkg_owner_memory --> pkg_llm
+  pkg_owner_memory --> pkg_owner_memory_admin
   pkg_owner_memory --> pkg_session
   pkg_owner_memory --> pkg_tools
   pkg_owner_memory --> pkg_turn_taint
@@ -1822,6 +1825,7 @@ flowchart TD
   pkg_wechat --> pkg_time_gap
   pkg_wechat --> pkg_turn_taint
   pkg_wechat --> pkg_voice
+  pkg_wechat --> pkg_wechat_settings
   pkg_tool_wechat --> pkg_event_bus
   pkg_tool_wechat --> pkg_tools
   pkg_tool_wechat --> pkg_wechat
@@ -1975,6 +1979,7 @@ flowchart TD
 | [`plugin-config`](../packages/fork/plugin-config) | `fork` | — |
 | [`provider-balance`](../packages/fork/provider-balance) | `fork` | — |
 | [`qq-login`](../packages/fork/qq-login) | `fork` | — |
+| [`settings-kit`](../packages/fork/settings-kit) | `fork` | — |
 | [`speaking-style-settings`](../packages/fork/speaking-style-settings) | `fork` | — |
 | [`subagent-activity`](../packages/fork/subagent-activity) | `fork` | — |
 | [`sysmon`](../packages/fork/sysmon) | `fork` | — |
@@ -2248,7 +2253,7 @@ flowchart TD
 | [`gmail`](../packages/fork/gmail) | `fork` | [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`storage-domain`](../packages/storage/storage-domain) |
 | [`integrity-watch`](../packages/fork/integrity-watch) | `fork` | [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`schedule`](../packages/schedule/schedule), [`session`](../packages/core/session) |
 | [`owner-relay`](../packages/fork/owner-relay) | `fork` | [`event-bus`](../packages/fork/event-bus), [`session`](../packages/core/session) |
-| [`presence`](../packages/fork/presence) | `fork` | [`event-bus`](../packages/fork/event-bus), [`storage-domain`](../packages/storage/storage-domain) |
+| [`presence`](../packages/fork/presence) | `fork` | [`event-bus`](../packages/fork/event-bus), [`storage-domain`](../packages/storage/storage-domain), [`wechat-settings`](../packages/fork/wechat-settings) |
 | [`qq`](../packages/fork/qq) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`tool-monitor`](../packages/fork/tool-monitor) | `fork` | [`agent`](../packages/core/agent), [`api-session-controller`](../packages/api/session-controller), [`event-bus`](../packages/fork/event-bus), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`storage-domain`](../packages/storage/storage-domain), [`subprocess`](../packages/subprocess/subprocess), [`tools`](../packages/core/tools) |
 | [`tool-up`](../packages/fork/tool-up) | `fork` | [`agent`](../packages/core/agent), [`compaction`](../packages/compaction/compaction), [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
@@ -2257,7 +2262,7 @@ flowchart TD
 | [`cc-admin`](../packages/fork/cc-admin) | `fork` | [`cc-bridge`](../packages/fork/cc-bridge) |
 | [`courses`](../packages/fork/courses) | `fork` | [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`presence`](../packages/fork/presence), [`storage-domain`](../packages/storage/storage-domain) |
 | [`gmail-settings`](../packages/fork/gmail-settings) | `fork` | [`gmail`](../packages/fork/gmail) |
-| [`owner-memory`](../packages/fork/owner-memory) | `fork` | [`agent`](../packages/core/agent), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`turn-taint`](../packages/fork/turn-taint) |
+| [`owner-memory`](../packages/fork/owner-memory) | `fork` | [`agent`](../packages/core/agent), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`owner-memory-admin`](../packages/fork/owner-memory-admin), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`turn-taint`](../packages/fork/turn-taint) |
 | [`qqbot`](../packages/fork/qqbot) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`speaking-style`](../packages/fork/speaking-style) | `fork` | [`agent`](../packages/core/agent), [`agent-default-model`](../packages/core/agent-default-model), [`compaction`](../packages/compaction/compaction), [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`integrity-watch`](../packages/fork/integrity-watch), [`llm`](../packages/llm/llm), [`qq`](../packages/fork/qq), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`web`](../packages/web/web) |
 | [`time-gap`](../packages/fork/time-gap) | `fork` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`owner-relay`](../packages/fork/owner-relay), [`session`](../packages/core/session), [`session-projection`](../packages/session/session-projection), [`turn-taint`](../packages/fork/turn-taint) |
@@ -2266,6 +2271,6 @@ flowchart TD
 | [`tool-watch`](../packages/fork/tool-watch) | `fork` | [`agent`](../packages/core/agent), [`event-bus`](../packages/fork/event-bus), [`github-sensor`](../packages/fork/github-sensor), [`tools`](../packages/core/tools) |
 | [`content-guard`](../packages/fork/content-guard) | `fork` | [`agent-default-model`](../packages/core/agent-default-model), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`owner-memory`](../packages/fork/owner-memory) |
 | [`tool-courses`](../packages/fork/tool-courses) | `fork` | [`courses`](../packages/fork/courses), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
-| [`wechat`](../packages/fork/wechat) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`presence`](../packages/fork/presence), [`schedule`](../packages/schedule/schedule), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain), [`time-gap`](../packages/fork/time-gap), [`turn-taint`](../packages/fork/turn-taint), [`voice`](../packages/fork/voice) |
+| [`wechat`](../packages/fork/wechat) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`presence`](../packages/fork/presence), [`schedule`](../packages/schedule/schedule), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain), [`time-gap`](../packages/fork/time-gap), [`turn-taint`](../packages/fork/turn-taint), [`voice`](../packages/fork/voice), [`wechat-settings`](../packages/fork/wechat-settings) |
 | [`tool-wechat`](../packages/fork/tool-wechat) | `fork` | [`event-bus`](../packages/fork/event-bus), [`tools`](../packages/core/tools), [`wechat`](../packages/fork/wechat) |
 <!-- END GENERATED module-graph:packages -->

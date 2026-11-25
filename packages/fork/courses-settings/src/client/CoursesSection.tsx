@@ -5,6 +5,7 @@
  * It refreshes while open and pauses while the page is hidden.
  */
 
+import { PendingSection, startPolling } from '@deepseek-ai/dsh-settings-kit/client'
 import { useEffect, useId, type ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRenderFactories, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -15,7 +16,6 @@ import type {} from '@deepseek-ai/dsh-plugin-config/client'
 // Type-only: registers the courses locale namespace this component's `t` reads.
 import type {} from './locales.ts'
 import { POLL_INTERVAL_MS, clock, pollLine, ruleLines, syncLines, upcomingText, type CoursesState, type Translate } from './courses.ts'
-import { startPolling } from './polling.ts'
 import css from './CoursesSection.module.css'
 
 /** The section's injected face (slot `inject`). */
@@ -57,14 +57,8 @@ export function CoursesSection({ useCourses, refresh, checkNow, renderFactorySlo
   useEffect(() => startPolling(refresh, POLL_INTERVAL_MS), [refresh])
   const translate = t as Translate
   const { view } = state
-  if (view === null) {
-    return (
-      <section className={css.section} aria-label={translate('title')}>
-        <span className={css.status} role="status">{state.stale ? translate('status.failed') : translate('status.loading')}</span>
-        {renderFactorySlot?.('settings.plugin-config', { entries: CONFIG_ENTRIES })}
-      </section>
-    )
-  }
+  const config = renderFactorySlot?.('settings.plugin-config', { entries: CONFIG_ENTRIES })
+  if (view === null) return <PendingSection css={css} label={translate('title')} stale={state.stale} t={translate}>{config}</PendingSection>
   const zone = view.timeZone
   const sync = syncLines(view.sync, zone, translate)
   const busy = state.checking || view.polling
@@ -131,7 +125,7 @@ export function CoursesSection({ useCourses, refresh, checkNow, renderFactorySlo
       <Card title={translate('rules.title')}>
         {ruleLines(view, translate).map(line => <span key={line}>{line}</span>)}
       </Card>
-      {renderFactorySlot?.('settings.plugin-config', { entries: CONFIG_ENTRIES })}
+      {config}
     </section>
   )
 }

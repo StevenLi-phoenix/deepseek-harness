@@ -173,6 +173,7 @@
     { "path": "./packages/browser-use/headless-browser/tsconfig.client.json" },
     { "path": "./packages/fork/bili/tsconfig.client.json" },
     { "path": "./packages/fork/wechat-settings/tsconfig.client.json" },
+    { "path": "./packages/fork/settings-kit" },
     { "path": "./packages/client/ui-trajectory/tsconfig.client.json" },
     { "path": "./packages/experimental/deepseek-chat-import/tsconfig.client.json" },
     { "path": "./packages/session-query/session-log-export/tsconfig.client.json" },

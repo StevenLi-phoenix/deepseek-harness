@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { startPolling } from '@deepseek-ai/dsh-settings-kit/client'
 import { CoursesLoader, clock, createCoursesStore, parseView, pollLine, ruleLines, syncLines, upcomingText, type Translate } from '../src/client/courses.ts'
 import { en, zh } from '../src/client/locales.ts'
-import { startPolling } from '../src/client/polling.ts'
 import type { CoursesView } from '../src/view.ts'
 
 const t = makeTranslate(zh) as Translate

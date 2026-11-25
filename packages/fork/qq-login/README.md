@@ -56,7 +56,7 @@ The **All settings** card is `renderFactorySlot('settings.plugin-config', { entr
 | [`src/panel.ts`](src/panel.ts) | Answer assembly and the QR matrix |
 | [`src/view.ts`](src/view.ts) | Answer types and route paths, shared by both halves; the connection and login states are `qq`'s own (`@deepseek-ai/dsh-qq/status`) |
 | [`src/client/index.ts`](src/client/index.ts) | Browser entry: dictionaries, the loader, the Settings section registration |
-| [`src/client/qq.ts`](src/client/qq.ts) | Store, loader, and the visibility-aware poller |
+| [`src/client/qq.ts`](src/client/qq.ts) | Store and loader; the poller and the shared read are `@deepseek-ai/dsh-settings-kit`'s |
 | [`src/client/cards.ts`](src/client/cards.ts) | The verdict, the detail rows, and the QR path from an answer |
 | [`src/client/QqLogin.tsx`](src/client/QqLogin.tsx) | The section |
 

@@ -43,6 +43,9 @@
     },
     {
       "path": "../cc-admin"
+    },
+    {
+      "path": "../settings-kit"
     }
   ]
 }

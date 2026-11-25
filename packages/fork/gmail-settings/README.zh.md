@@ -56,7 +56,6 @@ Host 部分在 `/api` 下、Web UI 登录之后注册 `GET /api/gmail`（状态�
 | [`src/client/ClientCard.tsx`](src/client/ClientCard.tsx) | OAuth client：Google Cloud 步骤、重定向 URI、JSON 输入框 |
 | [`src/client/parts.tsx`](src/client/parts.tsx) | 各卡片共用的 props 和小部件 |
 | [`src/client/gmail.ts`](src/client/gmail.ts) | store、loader（同一时间只有一次读取和一个操作）和文案函数 |
-| [`src/client/polling.ts`](src/client/polling.ts) | 区块打开且页面可见时刷新 |
 | [`src/client/locales.ts`](src/client/locales.ts) | 八种语言的文案 |
 | [`src/client/GmailSection.module.css`](src/client/GmailSection.module.css) | 区块的样式 |
 

@@ -4,6 +4,7 @@
  * that refreshes while the section is mounted and the page is visible.
  */
 
+import { shareInFlight } from '@deepseek-ai/dsh-settings-kit/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SysmonSnapshot } from '../snapshot.ts'
 
@@ -47,8 +48,6 @@ export function parseSnapshot(body: unknown): SysmonSnapshot {
 
 /** Reads the system status into a store, one request at a time. */
 export class SysmonLoader {
-  private inFlight: Promise<void> | undefined
-
   /**
    * @param store - the store the section renders.
    * @param read - one Host route query; rejects on transport failure.
@@ -64,15 +63,10 @@ export class SysmonLoader {
    * Read a snapshot and publish it to the store.
    * @returns settlement after the answer is published; concurrent callers share the request in flight.
    */
-  refresh(): Promise<void> {
-    if (this.inFlight !== undefined) return this.inFlight
-    this.store.update((draft) => { draft.refreshing = true })
-    const request = this.query().finally(() => { this.inFlight = undefined })
-    this.inFlight = request
-    return request
-  }
+  readonly refresh: () => Promise<void> = shareInFlight(() => this.query())
 
   private async query(): Promise<void> {
+    this.store.update((draft) => { draft.refreshing = true })
     let snapshot: SysmonSnapshot | undefined
     try {
       snapshot = await this.read()
@@ -87,49 +81,5 @@ export class SysmonLoader {
       draft.stale = snapshot === undefined
       if (snapshot !== undefined) draft.snapshot = snapshot
     })
-  }
-}
-
-/** The part of `document` the poller watches. */
-export interface VisibilitySource {
-  readonly visibilityState: DocumentVisibilityState
-  addEventListener(type: 'visibilitychange', listener: () => void): void
-  removeEventListener(type: 'visibilitychange', listener: () => void): void
-}
-
-/** @returns the browser document, or null outside a browser. */
-function currentPage(): VisibilitySource | null {
-  return 'document' in globalThis ? globalThis.document : null
-}
-
-/**
- * Refresh now and every `intervalMs` while the page is visible; a hidden page
- * stops the timer and showing it again refreshes at once.
- * @param refresh - one refresh; the loader shares a request in flight.
- * @param intervalMs - polling period.
- * @param page - visibility source; null polls without one.
- * @returns a stop function.
- */
-export function startPolling(refresh: () => void, intervalMs: number, page: VisibilitySource | null = currentPage()): () => void {
-  let timer: ReturnType<typeof setInterval> | undefined
-  const run = (): void => {
-    if (timer !== undefined) return
-    refresh()
-    timer = setInterval(refresh, intervalMs)
-  }
-  const pause = (): void => {
-    if (timer === undefined) return
-    clearInterval(timer)
-    timer = undefined
-  }
-  const onVisibility = (): void => {
-    if (page?.visibilityState === 'hidden') pause()
-    else run()
-  }
-  page?.addEventListener('visibilitychange', onVisibility)
-  onVisibility()
-  return () => {
-    page?.removeEventListener('visibilitychange', onVisibility)
-    pause()
   }
 }

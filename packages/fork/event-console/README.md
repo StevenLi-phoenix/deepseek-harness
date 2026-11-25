@@ -83,7 +83,8 @@ The browser half registers three `settings.section` entries (`service-overview` 
 | [`src/request.ts`](src/request.ts), [`src/log.ts`](src/log.ts), [`src/probe.ts`](src/probe.ts), [`src/build-info.ts`](src/build-info.ts) | Body parsing and refusals, action logging, deadlines, build identity |
 | [`src/views.ts`](src/views.ts) | Types and route paths shared by both halves; the Claude Code card's types are `cc-admin`'s own (`@deepseek-ai/dsh-cc-admin/view`) |
 | [`src/client/index.ts`](src/client/index.ts) | Browser entry: dictionaries, loaders, the section and page registrations, the preview player |
-| [`src/client/resource.ts`](src/client/resource.ts) | Store, loader with optimistic actions, and the visibility-aware poller |
+| [`src/client/resource.ts`](src/client/resource.ts) | Store and loader with optimistic actions; the poller and the shared read are `@deepseek-ai/dsh-settings-kit`'s |
+| [`src/client/FailureNotice.tsx`](src/client/FailureNotice.tsx) | The refusal banner the sections share |
 | [`src/client/Overview.tsx`](src/client/Overview.tsx), [`Subscriptions.tsx`](src/client/Subscriptions.tsx), [`Agents.tsx`](src/client/Agents.tsx) | The sections |
 | [`src/client/Flow.tsx`](src/client/Flow.tsx), [`FlowCanvas.tsx`](src/client/FlowCanvas.tsx), [`FlowBox.tsx`](src/client/FlowBox.tsx), [`FlowDetail.tsx`](src/client/FlowDetail.tsx), [`flow-view.ts`](src/client/flow-view.ts) | The message flow page: the page shell, the picture, one box, the side panel, and what a box says about itself |
 | [`src/client/flow-graph.ts`](src/client/flow-graph.ts), [`flow-model.ts`](src/client/flow-model.ts) | The message flow topology (data only), and the layout, path walking, and checks that work on any graph |

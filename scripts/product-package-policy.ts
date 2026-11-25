@@ -65,6 +65,7 @@ export const PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackagePolic
   'packages/fork/event-console': { category: 'optional', reason: 'Fork-local settings sections (service overview, subscriptions and reminders, Claude Code and voice) mounted by the event profile bundle.' },
   'packages/fork/bili': { category: 'optional', reason: 'Fork-local Bilibili account client of bili-svc and its settings section; requires bili-svc and its BILI_SVC_TOKEN_BILI token.' },
   'packages/fork/tool-bili': { category: 'optional', reason: 'Fork-local Bilibili tools mounted by the event profile bili preset.' },
+  'packages/fork/settings-kit': { category: 'optional', reason: 'Fork-local browser helpers that the fork Settings sections inline; no plugin of its own.' },
   'packages/lsp/lsp-stdio': { category: 'optional', reason: 'Requires an explicit server list and language-server executables.' },
   'packages/lsp/tool-lsp': { category: 'optional', reason: 'Model tools selected together with a configured LSP provider.' },
   'packages/ssh/ssh': { category: 'optional', reason: 'Explicit remote connection and helper configuration.' },

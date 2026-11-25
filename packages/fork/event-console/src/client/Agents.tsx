@@ -5,6 +5,7 @@
  * transcription switch is configuration, so it is shown read-only with the patch that turns it on.
  */
 
+import { startPolling, StatusHeader } from '@deepseek-ai/dsh-settings-kit/client'
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -13,8 +14,9 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: registers the event-console locale namespace this component's `t` reads.
 import type {} from './locales.ts'
 import { MAX_TASK_CHARS, type ActionErrorCode, type AgentsAction, type AgentsView, type CcView, type VoiceView } from '../views.ts'
-import { ago, clock, type Translate } from './format.ts'
-import { POLL_INTERVAL_MS, startPolling, type ResourceState } from './resource.ts'
+import { FailureNotice } from './FailureNotice.tsx'
+import { ago, resourceStatus, type Translate } from './format.ts'
+import { POLL_INTERVAL_MS, type ResourceState } from './resource.ts'
 import css from './Console.module.css'
 
 /** The patch that turns transcription on; a code literal, not copy. */
@@ -229,29 +231,12 @@ export function AgentsSection({ useAgents, refresh, act, dismiss, preview, stopP
 
   const translate = t as Translate
   const view = state.data
-  const tone = state.checkedAt === null ? 'loading' : state.stale ? 'stale' : 'live'
-  const text = state.checkedAt === null
-    ? translate('status.loading')
-    : view === null
-      ? translate('status.failed')
-      : state.stale ? translate('status.stale', { time: clock(view.checkedAt) }) : translate('status.live', { time: clock(view.checkedAt) })
+  const status = resourceStatus(state, translate)
   const failure = state.notice
   return (
     <section className={css.section} aria-label={translate('title.agents')} data-stale={state.stale ? '' : undefined}>
-      <div className={css.header}>
-        <span className={css.status} role="status">
-          <span className={css.dot} data-tone={tone} aria-hidden="true" />
-          {text}
-        </span>
-      </div>
-      {failure === null
-        ? null
-        : (
-          <div className={css.notice} role="alert">
-            <span>{translate(`error.${failure.code}`)}{failure.detail === undefined ? '' : ` (${failure.detail})`}</span>
-            <button type="button" className={css.button} onClick={dismiss}>{translate('common.dismiss')}</button>
-          </div>
-        )}
+      <StatusHeader css={css} line={status} />
+      <FailureNotice failure={failure} dismiss={dismiss} t={translate} />
       {view === null
         ? null
         : (

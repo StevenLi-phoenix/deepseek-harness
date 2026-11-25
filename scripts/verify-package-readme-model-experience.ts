@@ -198,6 +198,7 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/fork/cc-admin': { kind: 'none', reason: 'Lists and starts Claude Code sessions for a settings page; registers nothing model-facing.' },
   'packages/fork/event-console': { kind: 'none', reason: 'Settings sections over service state, subscriptions, Claude Code sessions, and a voice preview; registers nothing model-facing.' },
   'packages/fork/integrity-watch': { kind: 'none', reason: 'Reads files and Session events and notifies the owner; adds nothing to model requests.' },
+  'packages/fork/settings-kit': { kind: 'none', reason: 'Browser helpers the fork Settings sections inline; registers nothing model-facing.' },
   'packages/client/ui-directory-picker-native': { kind: 'none', reason: 'Browser-side surface driving the local Desktop or Host OS chooser; registers nothing model-facing.' },
   'packages/client/ui-theme': { kind: 'none', reason: 'Browser-side UI plugin layer; registers nothing model-facing.' },
   'packages/client/ui-sidebar-documentpreview': { kind: 'none', reason: 'Browser-only text viewer; registers no tool, prompt section, or session event, and what the user reads never enters a model request.' },

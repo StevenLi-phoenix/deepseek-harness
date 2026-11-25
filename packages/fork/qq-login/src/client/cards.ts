@@ -4,6 +4,7 @@
  * formatting they share.
  */
 
+import { formatDuration, statusLine as kitStatusLine, type StatusLine } from '@deepseek-ai/dsh-settings-kit/client'
 import type { QqPanel, QqQrMatrix } from '../view.ts'
 import type { QqKey } from './locales.ts'
 import type { QqState } from './qq.ts'
@@ -33,11 +34,8 @@ export interface DetailRow {
   readonly code?: boolean
 }
 
-/** The line above the cards. */
-export interface StatusLine {
-  readonly text: string
-  readonly tone: 'loading' | 'live' | 'stale'
-}
+export type { StatusLine } from '@deepseek-ai/dsh-settings-kit/client'
+export { formatDuration } from '@deepseek-ai/dsh-settings-kit/client'
 
 const TONES: Record<Headline['kind'], Tone> = {
   'connected': 'ok',
@@ -57,21 +55,6 @@ const TONES: Record<Headline['kind'], Tone> = {
   'disconnected': 'bad',
   'recorder-down': 'bad',
   'protocol-mismatch': 'bad',
-}
-
-/**
- * Format a span as a coarse duration.
- * @param seconds - a span; negative counts as 0.
- * @param t - translate seat.
- * @returns days and hours, hours and minutes, or minutes.
- */
-export function formatDuration(seconds: number, t: Translate): string {
-  const minutes = Math.floor(Math.max(0, seconds) / 60)
-  const hours = Math.floor(minutes / 60)
-  const days = Math.floor(hours / 24)
-  if (days > 0) return t('duration.days', { days, hours: hours % 24 })
-  if (hours > 0) return t('duration.hours', { hours, minutes: minutes % 60 })
-  return t('duration.minutes', { minutes })
 }
 
 const two = (value: number): string => String(value).padStart(2, '0')
@@ -183,9 +166,7 @@ export function detailRows(panel: QqPanel, now: number, t: Translate): DetailRow
  * @returns when the shown answer was built, and whether it is current.
  */
 export function statusLine(state: QqState, t: Translate): StatusLine {
-  if (state.panel === null) return state.stale ? { text: t('status.failed'), tone: 'stale' } : { text: t('status.loading'), tone: 'loading' }
-  const time = clock(state.panel.at)
-  return state.stale ? { text: t('status.stale', { time }), tone: 'stale' } : { text: t('status.live', { time }), tone: 'live' }
+  return kitStatusLine(state.panel === null ? null : state.panel.at, state.stale, t, { time: clock, waiting: 'loading' })
 }
 
 /** The quiet zone around a QR code, in modules (the standard asks for four; two scans reliably on screens). */

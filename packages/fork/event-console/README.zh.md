@@ -83,7 +83,8 @@ Claude Code 会话来自 `ctx.claudeCodeSessions`（[`cc-admin`](../cc-admin/REA
 | [`src/request.ts`](src/request.ts)、[`src/log.ts`](src/log.ts)、[`src/probe.ts`](src/probe.ts)、[`src/build-info.ts`](src/build-info.ts) | 请求体解析与拒绝、动作日志、期限、构建标识 |
 | [`src/views.ts`](src/views.ts) | 两部分共用的类型与路由路径；Claude Code 卡片用 `cc-admin` 自己的类型（`@deepseek-ai/dsh-cc-admin/view`） |
 | [`src/client/index.ts`](src/client/index.ts) | 浏览器入口：词典、loader、分区和页面注册、试听播放器 |
-| [`src/client/resource.ts`](src/client/resource.ts) | store、带乐观动作的 loader，以及感知页面可见性的轮询 |
+| [`src/client/resource.ts`](src/client/resource.ts) | store 和带乐观动作的 loader；轮询和共享读取来自 `@deepseek-ai/dsh-settings-kit` |
+| [`src/client/FailureNotice.tsx`](src/client/FailureNotice.tsx) | 各分区共用的拒绝提示条 |
 | [`src/client/Overview.tsx`](src/client/Overview.tsx)、[`Subscriptions.tsx`](src/client/Subscriptions.tsx)、[`Agents.tsx`](src/client/Agents.tsx) | 三个分区 |
 | [`src/client/Flow.tsx`](src/client/Flow.tsx)、[`FlowCanvas.tsx`](src/client/FlowCanvas.tsx)、[`FlowBox.tsx`](src/client/FlowBox.tsx)、[`FlowDetail.tsx`](src/client/FlowDetail.tsx)、[`flow-view.ts`](src/client/flow-view.ts) | 消息流页面：页面外壳、图、单个节点、侧栏，以及节点对自己的说法 |
 | [`src/client/flow-graph.ts`](src/client/flow-graph.ts)、[`flow-model.ts`](src/client/flow-model.ts) | 消息流的拓扑（只有数据），以及适用于任何图的布局、路径遍历和检查 |

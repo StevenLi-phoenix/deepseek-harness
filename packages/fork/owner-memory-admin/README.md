@@ -69,7 +69,7 @@ The browser half registers one `settings.section` entry (`owner-memory`, order 5
 | [`src/view.ts`](src/view.ts) | The wire types and constants; the `./view` subpath, from which `owner-memory`'s route imports them |
 | [`src/index.ts`](src/index.ts) | Host half: an empty plugin, so the browser half is delivered |
 | [`src/client/index.ts`](src/client/index.ts) | Browser entry: dictionaries, the Host calls, the Settings section registration |
-| [`src/client/memory.ts`](src/client/memory.ts) | Store, loader (optimistic hiding, previews with tokens), and the visibility-aware poller |
+| [`src/client/memory.ts`](src/client/memory.ts) | Store and loader (optimistic hiding, previews with tokens); the poller is `@deepseek-ai/dsh-settings-kit`'s |
 | [`src/client/MemorySettings.tsx`](src/client/MemorySettings.tsx) | The section; its cards are `PendingCard`, `EntriesCard`, `RollbackCard`, and `FeedbackCard` beside it |
 | [`src/client/locales.ts`](src/client/locales.ts) | Copy in eight languages |
 

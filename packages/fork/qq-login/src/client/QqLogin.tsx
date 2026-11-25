@@ -5,6 +5,7 @@
  * hidden. A failed refresh keeps the last answer and says so quietly in the status line.
  */
 
+import { startPolling, StatusHeader } from '@deepseek-ai/dsh-settings-kit/client'
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRenderFactories, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -17,7 +18,7 @@ import type {} from './locales.ts'
 import { detailRows, headline, qrPath, statusLine, type Translate } from './cards.ts'
 import { QqGroupsCard } from './QqGroups.tsx'
 import type { GroupsSection } from './groups.ts'
-import { CALM_POLL_INTERVAL_MS, POLL_INTERVAL_MS, startPolling, type QqState } from './qq.ts'
+import { CALM_POLL_INTERVAL_MS, POLL_INTERVAL_MS, type QqState } from './qq.ts'
 import css from './QqLogin.module.css'
 
 /** The section's injected face (slot `inject`). */
@@ -112,12 +113,7 @@ export function QqLoginSection(
   const rows = panel === null ? [] : detailRows(panel, now, translate)
   return (
     <section className={css.section} aria-label={translate('title')} data-stale={state.stale ? '' : undefined}>
-      <div className={css.header}>
-        <span className={css.status} role="status">
-          <span className={css.dot} data-tone={status.tone} aria-hidden="true" />
-          {status.text}
-        </span>
-      </div>
+      <StatusHeader css={css} line={status} />
       {panel === null || verdict === undefined
         ? null
         : (

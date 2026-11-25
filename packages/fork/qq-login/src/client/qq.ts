@@ -4,6 +4,7 @@
  * page is visible.
  */
 
+import { shareInFlight } from '@deepseek-ai/dsh-settings-kit/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { QqPanel, QqRefreshAnswer } from '../view.ts'
 
@@ -53,8 +54,6 @@ export function parsePanel(body: unknown): QqPanel {
 
 /** Reads the QQ panel into a store, one request at a time. */
 export class QqLoader {
-  private inFlight: Promise<void> | undefined
-
   /**
    * @param store - the store the section renders.
    * @param read - one status query; rejects on transport failure.
@@ -72,12 +71,7 @@ export class QqLoader {
    * Query the Host for the panel and publish the answer to the store.
    * @returns settlement after the answer is published; concurrent callers share the request in flight.
    */
-  refresh(): Promise<void> {
-    if (this.inFlight !== undefined) return this.inFlight
-    const request = this.query().finally(() => { this.inFlight = undefined })
-    this.inFlight = request
-    return request
-  }
+  readonly refresh: () => Promise<void> = shareInFlight(() => this.query())
 
   /** Ask NapCat for a fresh login code; the answer carries the panel after the request. */
   async renewCode(): Promise<void> {
@@ -117,58 +111,5 @@ export class QqLoader {
       draft.stale = panel === undefined
       if (panel !== undefined) draft.panel = panel
     })
-  }
-}
-
-/** The part of `document` the poller watches. */
-export interface VisibilitySource {
-  readonly visibilityState: DocumentVisibilityState
-  addEventListener(type: 'visibilitychange', listener: () => void): void
-  removeEventListener(type: 'visibilitychange', listener: () => void): void
-}
-
-/** @returns the browser document, or null outside a browser. */
-function currentPage(): VisibilitySource | null {
-  return 'document' in globalThis ? globalThis.document : null
-}
-
-/**
- * Refresh now and then again after each interval while the page is visible; a hidden page stops the timer and showing
- * it again refreshes at once.
- * @param refresh - one refresh; the loader shares a request in flight.
- * @param interval - the period, or a function asked for the next period after each refresh.
- * @param page - visibility source; null polls without one.
- * @returns a stop function.
- */
-export function startPolling(
-  refresh: () => void,
-  interval: number | (() => number),
-  page: VisibilitySource | null = currentPage(),
-): () => void {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  let running = false
-  const tick = (): void => {
-    refresh()
-    timer = setTimeout(tick, typeof interval === 'number' ? interval : interval())
-  }
-  const run = (): void => {
-    if (running) return
-    running = true
-    tick()
-  }
-  const pause = (): void => {
-    if (timer !== undefined) clearTimeout(timer)
-    timer = undefined
-    running = false
-  }
-  const onVisibility = (): void => {
-    if (page?.visibilityState === 'hidden') pause()
-    else run()
-  }
-  page?.addEventListener('visibilitychange', onVisibility)
-  onVisibility()
-  return () => {
-    page?.removeEventListener('visibilitychange', onVisibility)
-    pause()
   }
 }

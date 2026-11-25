@@ -5,6 +5,7 @@
  * the balance route, since provider-balance already resolves the provider keys on the Host.
  */
 
+import { startPolling, StatusHeader } from '@deepseek-ai/dsh-settings-kit/client'
 import { useEffect, useId, type ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -15,8 +16,8 @@ import type {} from './locales.ts'
 import type { OverviewView, ServiceCard } from '../views.ts'
 import { balanceCard, type BalanceSummary } from './balance.ts'
 import { MANAGE_SECTION, factLines, statusText } from './cards.ts'
-import { clock, type Translate } from './format.ts'
-import { POLL_INTERVAL_MS, startPolling, type ResourceState } from './resource.ts'
+import { resourceStatus, type Translate } from './format.ts'
+import { POLL_INTERVAL_MS, type ResourceState } from './resource.ts'
 import css from './Console.module.css'
 
 /** The section's injected face (slot `inject`). */
@@ -82,21 +83,12 @@ export function OverviewSection({ useOverview, useBalance, refresh, canManage, s
   const cards = view === null ? [] : [...view.cards, balanceCard(balance.data, balance.stale)]
   /* v8 ignore next -- the cards that use it exist only with a view. */
   const now = view?.checkedAt ?? 0
-  const tone = state.checkedAt === null ? 'loading' : state.stale ? 'stale' : 'live'
-  const text = state.checkedAt === null
-    ? translate('status.loading')
-    : view === null
-      ? translate('status.failed')
-      : state.stale ? translate('status.stale', { time: clock(view.checkedAt) }) : translate('status.live', { time: clock(view.checkedAt) })
+  const status = resourceStatus(state, translate)
   return (
     <section className={css.section} aria-label={translate('title.overview')} data-stale={state.stale ? '' : undefined}>
-      <div className={css.header}>
-        <span className={css.status} role="status">
-          <span className={css.dot} data-tone={tone} aria-hidden="true" />
-          {text}
-        </span>
+      <StatusHeader css={css} line={status}>
         <span>{translate('overview.hint')}</span>
-      </div>
+      </StatusHeader>
       {cards.length === 0
         ? null
         : (

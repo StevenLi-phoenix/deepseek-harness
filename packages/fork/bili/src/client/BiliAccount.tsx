@@ -6,6 +6,7 @@
  * a cookie or token: bili-svc's answers name accounts and states only, and QR keys stay on the Host.
  */
 
+import { Card, startPolling, StatusHeader, statusLine } from '@deepseek-ai/dsh-settings-kit/client'
 import { useId, useEffect, useState, type ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRenderFactories, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -15,7 +16,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-plugin-config/client'
 import type { ActionResult, BiliAction, BiliView } from '../view.ts'
 import { Accounts } from './Accounts.tsx'
-import { LOGIN_POLL_MS, POLL_INTERVAL_MS, startPolling, type BiliState } from './bili.ts'
+import { LOGIN_POLL_MS, POLL_INTERVAL_MS, type BiliState } from './bili.ts'
 import { dateTime, stampTime, type Translate } from './format.ts'
 import { Gate } from './Gate.tsx'
 import { Ledger } from './Ledger.tsx'
@@ -46,19 +47,6 @@ const CONFIG_ENTRIES = ['bili', 'tool-bili'] as const
 export type BiliAccountProps = PropsRuntime<'settings.section'> & InjectFace<BiliAccountInjected> & PropsLocale<'bili'>
   & Partial<PropsRenderFactories>
 
-function Card({ title, meta, children }: { title: string; meta?: string; children: ReactNode }): ReactNode {
-  const id = useId()
-  return (
-    <section className={css.card} aria-labelledby={id}>
-      <div className={css.cardHeader}>
-        <span id={id} className={css.cardTitle}>{title}</span>
-        {meta === undefined ? null : <span className={css.meta}>{meta}</span>}
-      </div>
-      {children}
-    </section>
-  )
-}
-
 /** A UID as the owner may type it: digits only, at most 16 of them. */
 const UID_PATTERN = /^\d{1,16}$/
 
@@ -76,7 +64,7 @@ function OwnerCard({ view, act, busy, t }: { view: BiliView; act: (action: BiliA
   const id = useId()
   const saved = view.ownerUpdatedAt === null ? {} : { meta: t('owner.saved', { time: dateTime(view.ownerUpdatedAt, view.timeZone) }) }
   return (
-    <Card title={t('owner.title')} {...saved}>
+    <Card css={css} title={t('owner.title')} {...saved}>
       <label className={css.hint} htmlFor={id}>{t('owner.hint')}</label>
       <input
         id={id}
@@ -169,20 +157,12 @@ export function BiliAccountSection({ useBili, refresh, act, poll, renderFactoryS
   // A refused switch to automatic is shown inside the gate card, where the owner is looking.
   const refusedMode = state.errorCode === 'mode_refused'
 
-  let status: { tone: 'live' | 'stale' | 'idle'; text: string }
-  if (view === null) status = state.stale ? { tone: 'stale', text: translate('status.failed') } : { tone: 'idle', text: translate('status.loading') }
-  else if (state.stale) status = { tone: 'stale', text: translate('status.stale', { time: stampTime(state.checkedAt ?? now) }) }
-  else status = { tone: 'live', text: translate('status.live', { time: stampTime(state.checkedAt ?? now) }) }
+  const status = statusLine(view === null ? null : state.checkedAt ?? now, state.stale, translate, { time: stampTime, waiting: 'idle' })
   const done = state.result !== null && now - state.result.at < RESULT_MS ? resultText(state.result.value, translate) : null
 
   return (
     <section className={css.section} aria-label={translate('title')} data-stale={state.stale ? '' : undefined}>
-      <div className={css.header}>
-        <span className={css.status} role="status">
-          <span className={css.dot} data-tone={status.tone} aria-hidden="true" />
-          {status.text}
-        </span>
-      </div>
+      <StatusHeader css={css} line={status} />
       {state.error === null || refusedMode ? null : <div className={css.error} role="alert">{errorText(state.error, state.errorCode, translate)}</div>}
       {done === null ? null : <div className={css.done} role="status">{done}</div>}
       {view === null

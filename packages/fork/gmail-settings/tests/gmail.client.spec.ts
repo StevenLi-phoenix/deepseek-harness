@@ -5,8 +5,8 @@ import {
   expiresSoon, failureLine, heldRows, looksLikeAddress, parseAnswer, parseView, parsesAsJson, redirectAccepted, redirectUriOf, relative,
   resolvedRows, timeFormatter, type Translate,
 } from '../src/client/gmail.ts'
+import { startPolling } from '@deepseek-ai/dsh-settings-kit/client'
 import * as dictionaries from '../src/client/locales.ts'
-import { startPolling } from '../src/client/polling.ts'
 import { ACCOUNT_ID_PATTERN, type GmailAction, type GmailAnswer, type GmailView, type PendingRow } from '../src/view.ts'
 
 const t = makeTranslate(dictionaries.zh) as Translate

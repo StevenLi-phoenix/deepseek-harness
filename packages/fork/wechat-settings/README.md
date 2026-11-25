@@ -51,8 +51,9 @@ Each page has one store and one loader that share a request in flight, keep the 
 | [`src/index.ts`](src/index.ts) | Node half: the empty `apply` |
 | [`src/wechat-view.ts`](src/wechat-view.ts), [`src/presence-view.ts`](src/presence-view.ts) | The wire types of the `wechat` and `presence` routes; the `./wechat-view` and `./presence-view` subpaths |
 | [`src/client/index.ts`](src/client/index.ts) | Browser entry: registers both sections |
-| [`src/client/wechat/`](src/client/wechat) | The WeChat section: store, loader, pollers, QR drawing, the section, dictionaries |
-| [`src/client/presence/`](src/client/presence) | The quiet-hours section: store, loader, poller, the section, dictionaries |
+| [`src/client/wechat/`](src/client/wechat) | The WeChat section: store, loader, QR drawing, the section, dictionaries |
+| [`src/client/presence/`](src/client/presence) | The quiet-hours section: store, loader, the section, dictionaries |
+| [`src/client/SectionFrame.tsx`](src/client/SectionFrame.tsx), [`action.ts`](src/client/action.ts), [`ago.ts`](src/client/ago.ts) | What both sections share: the status line and error around the cards, one owner action's busy and error state, and the time-ago text; polling and the shared read are `@deepseek-ai/dsh-settings-kit`'s |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 

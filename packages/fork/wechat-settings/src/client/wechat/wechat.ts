@@ -3,6 +3,8 @@
  * caller, the last view kept through failures, and the QR login driven by posts to the same route.
  */
 
+import { shareInFlight } from '@deepseek-ai/dsh-settings-kit/client'
+import { runAction } from '../action.ts'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { LOGIN_OPEN, type LoginSnapshot, type WechatAction, type WechatAnswer, type WechatView } from '../../wechat-view.ts'
 
@@ -85,8 +87,6 @@ export function parseAnswer(body: unknown): WechatAnswer {
 
 /** Reads the view into a store, one status request at a time, and drives the login and unbind posts. */
 export class WechatLoader {
-  private inFlight: Promise<void> | undefined
-
   /**
    * @param store - the store the section renders.
    * @param read - one GET of the route; rejects on transport failure.
@@ -104,12 +104,7 @@ export class WechatLoader {
    * Read the status once.
    * @returns settlement after the answer is published; concurrent callers share the request in flight.
    */
-  refresh(): Promise<void> {
-    if (this.inFlight !== undefined) return this.inFlight
-    const request = this.query().finally(() => { this.inFlight = undefined })
-    this.inFlight = request
-    return request
-  }
+  readonly refresh: () => Promise<void> = shareInFlight(() => this.query())
 
   /** Open the QR panel: ask the Host for a login and show its first code. */
   startLogin(): Promise<void> {
@@ -173,20 +168,12 @@ export class WechatLoader {
   }
 
   /** Run one owner action: busy at once, then its answer or its error. */
-  private async act(name: ActionName, action: WechatAction, after: (answer: WechatAnswer) => void): Promise<void> {
-    this.store.update((draft) => {
-      draft.busy = name
-      draft.error = null
-    })
-    try {
+  private act(name: ActionName, action: WechatAction, after: (answer: WechatAnswer) => void): Promise<void> {
+    return runAction(this.store, name, async () => {
       const answer = await this.post(action)
       this.publish(answer)
       after(answer)
-    } catch (error: unknown) {
-      this.store.update((draft) => { draft.error = error instanceof Error ? error.message : String(error) })
-    } finally {
-      this.store.update((draft) => { draft.busy = null })
-    }
+    })
   }
 
   /** Publish an answer's view. */
@@ -227,49 +214,5 @@ export class WechatLoader {
       draft.stale = answer === undefined
       if (answer !== undefined) draft.view = answer.view
     })
-  }
-}
-
-/** The part of `document` the poller watches. */
-export interface VisibilitySource {
-  readonly visibilityState: DocumentVisibilityState
-  addEventListener(type: 'visibilitychange', listener: () => void): void
-  removeEventListener(type: 'visibilitychange', listener: () => void): void
-}
-
-/** @returns the browser document, or null outside a browser. */
-function currentPage(): VisibilitySource | null {
-  return 'document' in globalThis ? globalThis.document : null
-}
-
-/**
- * Refresh now and every `intervalMs` while the page is visible; a hidden page
- * stops the timer and showing it again refreshes at once.
- * @param refresh - one refresh; the loader shares a request in flight.
- * @param intervalMs - polling period.
- * @param page - visibility source; null polls without one.
- * @returns a stop function.
- */
-export function startPolling(refresh: () => void, intervalMs: number, page: VisibilitySource | null = currentPage()): () => void {
-  let timer: ReturnType<typeof setInterval> | undefined
-  const run = (): void => {
-    if (timer !== undefined) return
-    refresh()
-    timer = setInterval(refresh, intervalMs)
-  }
-  const pause = (): void => {
-    if (timer === undefined) return
-    clearInterval(timer)
-    timer = undefined
-  }
-  const onVisibility = (): void => {
-    if (page?.visibilityState === 'hidden') pause()
-    else run()
-  }
-  page?.addEventListener('visibilitychange', onVisibility)
-  onVisibility()
-  return () => {
-    page?.removeEventListener('visibilitychange', onVisibility)
-    pause()
   }
 }

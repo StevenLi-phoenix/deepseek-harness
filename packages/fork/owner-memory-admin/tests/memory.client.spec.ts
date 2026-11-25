@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  MemoryLoader, MemoryRequestError, createMemoryStore, parseGuard, parseView, startPolling, type VisibilitySource,
+  MemoryLoader, MemoryRequestError, createMemoryStore, parseGuard, parseView,
 } from '../src/client/memory.ts'
+import { startPolling, type PageVisibility as VisibilitySource } from '@deepseek-ai/dsh-settings-kit/client'
 import type { ActionResult } from '../src/view.ts'
 import { GUARD, VIEW, fakeApi } from './fixtures.client.ts'
 

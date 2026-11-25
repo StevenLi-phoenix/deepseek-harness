@@ -4,6 +4,7 @@
  * actions posted to the same route.
  */
 
+import { shareInFlight } from '@deepseek-ai/dsh-settings-kit/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ActionResult, BiliAction, BiliView } from '../view.ts'
 
@@ -90,7 +91,6 @@ function optimistic(view: BiliView, action: BiliAction): BiliView {
 
 /** Reads the view into a store, one request at a time, and posts owner actions. */
 export class BiliLoader {
-  private inFlight: Promise<void> | undefined
   private quietInFlight = false
 
   /**
@@ -110,12 +110,7 @@ export class BiliLoader {
    * Read the view from the Host and publish it.
    * @returns settlement after the answer is published; concurrent callers share the request in flight.
    */
-  refresh(): Promise<void> {
-    if (this.inFlight !== undefined) return this.inFlight
-    const request = this.query().finally(() => { this.inFlight = undefined })
-    this.inFlight = request
-    return request
-  }
+  readonly refresh: () => Promise<void> = shareInFlight(() => this.query())
 
   /**
    * Post one owner action and publish the view it answers. Switching the gate to read-only shows at
@@ -190,49 +185,5 @@ export class BiliLoader {
       draft.stale = view === undefined
       if (view !== undefined) draft.view = view
     })
-  }
-}
-
-/** The part of `document` the poller watches. */
-export interface VisibilitySource {
-  readonly visibilityState: DocumentVisibilityState
-  addEventListener(type: 'visibilitychange', listener: () => void): void
-  removeEventListener(type: 'visibilitychange', listener: () => void): void
-}
-
-/** @returns the browser document, or null outside a browser. */
-function currentPage(): VisibilitySource | null {
-  return 'document' in globalThis ? globalThis.document : null
-}
-
-/**
- * Refresh now and every `intervalMs` while the page is visible; a hidden page
- * stops the timer and showing it again refreshes at once.
- * @param refresh - one refresh; the loader shares a request in flight.
- * @param intervalMs - polling period.
- * @param page - visibility source; null polls without one.
- * @returns a stop function.
- */
-export function startPolling(refresh: () => void, intervalMs: number, page: VisibilitySource | null = currentPage()): () => void {
-  let timer: ReturnType<typeof setInterval> | undefined
-  const run = (): void => {
-    if (timer !== undefined) return
-    refresh()
-    timer = setInterval(refresh, intervalMs)
-  }
-  const pause = (): void => {
-    if (timer === undefined) return
-    clearInterval(timer)
-    timer = undefined
-  }
-  const onVisibility = (): void => {
-    if (page?.visibilityState === 'hidden') pause()
-    else run()
-  }
-  page?.addEventListener('visibilitychange', onVisibility)
-  onVisibility()
-  return () => {
-    page?.removeEventListener('visibilitychange', onVisibility)
-    pause()
   }
 }

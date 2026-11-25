@@ -6,15 +6,17 @@
  * Host masks the ids and answers times, counts, and codes.
  */
 
+import { Card, startPolling } from '@deepseek-ai/dsh-settings-kit/client'
 import { useEffect, useId, useMemo, useState, type ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the settings shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import { VERIFY_CODE_PATTERN, type ChannelLink, type LoginSnapshot, type WechatView } from '../../wechat-view.ts'
-import { agoText, dateTime, spanText, stampTime, type Translate } from './format.ts'
+import { SectionFrame } from '../SectionFrame.tsx'
+import { agoText, dateTime, spanText, type Translate } from './format.ts'
 import { qrPath, qrViewSize, isWeixinLink } from './qr.ts'
-import { LOGIN_POLL_INTERVAL_MS, POLL_INTERVAL_MS, loginIsOpen, startPolling, type WechatState } from './wechat.ts'
+import { LOGIN_POLL_INTERVAL_MS, POLL_INTERVAL_MS, loginIsOpen, type WechatState } from './wechat.ts'
 import css from './WechatSection.module.css'
 
 /** The section's injected face (slot `inject`). */
@@ -43,19 +45,6 @@ export interface WechatInjected {
 export type WechatProps = PropsRuntime<'settings.section'> & InjectFace<WechatInjected> & PropsLocale<'wechat'>
 
 type Actions = Omit<WechatInjected, 'hooks' | 'refresh'>
-
-function Card({ title, meta, children }: { title: string; meta?: string; children: ReactNode }): ReactNode {
-  const id = useId()
-  return (
-    <section className={css.card} aria-labelledby={id}>
-      <div className={css.cardHeader}>
-        <span id={id} className={css.cardTitle}>{title}</span>
-        {meta === undefined ? null : <span className={css.meta}>{meta}</span>}
-      </div>
-      {children}
-    </section>
-  )
-}
 
 /** The pill's tone and wording for the binding and the long-poll. */
 function stateOf(view: WechatView): { tone: 'ok' | 'warn' | 'idle'; key: 'state.unbound' | 'state.invalid' | 'state.connected' | 'state.starting' | 'state.retrying' | 'state.stale' } {
@@ -134,7 +123,7 @@ function WindowCard({ view, now, t }: { view: WechatView; now: number; t: Transl
   const { window: reply, outbox } = view
   const meta = reply.open && reply.expiresAt !== null ? t('window.expires', { span: spanText(reply.expiresAt, now, t), time: dateTime(reply.expiresAt, view.timeZone) }) : undefined
   return (
-    <Card title={t('window.title')} {...meta === undefined ? {} : { meta }}>
+    <Card css={css} title={t('window.title')} {...meta === undefined ? {} : { meta }}>
       {reply.open && reply.repliesLeft !== null
         ? <span className={css.big}>{t('window.replies', { left: reply.repliesLeft, total: reply.repliesPerToken })}</span>
         : <span className={css.reason}>{reply.closed === null ? '' : t(`window.closed.${reply.closed}`)}</span>}
@@ -279,7 +268,7 @@ interface BindCardProps {
 function BindCard({ view, login, busy, actions, t }: BindCardProps): ReactNode {
   const bound = view.binding.state !== 'unbound'
   return (
-    <Card title={bound ? t('bind.rebind') : t('bind.title')}>
+    <Card css={css} title={bound ? t('bind.rebind') : t('bind.title')}>
       <span className={css.hint}>{bound ? t('bind.rebindHint') : t('bind.hint')}</span>
       {login === null
         ? (
@@ -297,7 +286,7 @@ function BindCard({ view, login, busy, actions, t }: BindCardProps): ReactNode {
 function UnbindCard({ busy, actions, t }: { busy: boolean; actions: Actions; t: Translate }): ReactNode {
   const [asking, setAsking] = useState(false)
   return (
-    <Card title={t('unbind.title')}>
+    <Card css={css} title={t('unbind.title')}>
       <span className={css.hint}>{t('unbind.hint')}</span>
       {asking || busy
         ? (
@@ -321,7 +310,6 @@ export function WechatSection(props: WechatProps): ReactNode {
   const { useWechat, refresh, pollLogin, t, startLogin, submitCode, cancelLogin, dismissLogin, unbind } = props
   const state = useWechat(value => value)
   const translate = t as Translate
-  const view = state.view
   const open = loginIsOpen(state.login)
   const loginKey = state.login?.key
   useEffect(() => startPolling(refresh, POLL_INTERVAL_MS), [refresh])
@@ -330,30 +318,17 @@ export function WechatSection(props: WechatProps): ReactNode {
   const actions: Actions = { startLogin, pollLogin, submitCode, cancelLogin, dismissLogin, unbind }
   const busy: ActionBusy = { login: state.busy === 'login.start', code: state.busy === 'login.code', unbind: state.busy === 'unbind' }
 
-  let status: { tone: 'live' | 'stale' | 'idle'; text: string }
-  if (view === null) status = state.stale ? { tone: 'stale', text: translate('status.failed') } : { tone: 'idle', text: translate('status.loading') }
-  else if (state.stale) status = { tone: 'stale', text: translate('status.stale', { time: stampTime(state.checkedAt ?? now) }) }
-  else status = { tone: 'live', text: translate('status.live', { time: stampTime(state.checkedAt ?? now) }) }
-
   return (
-    <section className={css.section} aria-label={translate('title')} data-stale={state.stale ? '' : undefined}>
-      <div className={css.header}>
-        <span className={css.status} role="status">
-          <span className={css.dot} data-tone={status.tone} aria-hidden="true" />
-          {status.text}
-        </span>
-      </div>
-      {state.error === null ? null : <div className={css.error} role="alert">{translate('error.action', { error: state.error })}</div>}
-      {view === null
-        ? null
-        : (
-          <div className={css.grid}>
-            <StatusCard view={view} now={now} t={translate} />
-            <WindowCard view={view} now={now} t={translate} />
-            <BindCard view={view} login={state.login} busy={busy} actions={actions} t={translate} />
-            {view.binding.state === 'bound' ? <UnbindCard busy={busy.unbind} actions={actions} t={translate} /> : null}
-          </div>
-        )}
-    </section>
+    <SectionFrame
+      css={css} label={translate('title')} state={state} now={now} t={translate}
+      cards={shown => (
+        <>
+          <StatusCard view={shown} now={now} t={translate} />
+          <WindowCard view={shown} now={now} t={translate} />
+          <BindCard view={shown} login={state.login} busy={busy} actions={actions} t={translate} />
+          {shown.binding.state === 'bound' ? <UnbindCard busy={busy.unbind} actions={actions} t={translate} /> : null}
+        </>
+      )}
+    />
   )
 }

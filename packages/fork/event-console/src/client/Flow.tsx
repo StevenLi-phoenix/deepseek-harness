@@ -6,6 +6,7 @@
  * same 10 s poll, and all spans arrive together, so switching one needs no request.
  */
 
+import { startPolling } from '@deepseek-ai/dsh-settings-kit/client'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { PropsRuntime, PropsLocale, InjectFace } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the layout's SlotMap merge (the 'main' entry).
@@ -21,7 +22,7 @@ import { factOf, stopsOf, titleOf, type BoxFact } from './flow-view.ts'
 import { FlowCanvas } from './FlowCanvas.tsx'
 import { FlowSide } from './FlowDetail.tsx'
 import { clock, type Translate } from './format.ts'
-import { POLL_INTERVAL_MS, startPolling, type ResourceState } from './resource.ts'
+import { POLL_INTERVAL_MS, type ResourceState } from './resource.ts'
 import css from './Console.module.css'
 
 /** How long a number takes to reach its new value. */

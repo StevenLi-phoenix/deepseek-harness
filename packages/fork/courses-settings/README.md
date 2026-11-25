@@ -50,7 +50,6 @@ The Host half registers `GET /api/courses` (the status from `ctx.courses.status(
 | [`src/view.ts`](src/view.ts) | Wire types and paths shared by both halves |
 | [`src/client/index.ts`](src/client/index.ts) | Browser entry: dictionaries, the loader, the section registration |
 | [`src/client/courses.ts`](src/client/courses.ts) | Store, loader, and the text of each card |
-| [`src/client/polling.ts`](src/client/polling.ts) | Refresh while open and visible |
 | [`src/client/CoursesSection.tsx`](src/client/CoursesSection.tsx) | The section |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).

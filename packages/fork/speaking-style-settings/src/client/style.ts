@@ -4,6 +4,7 @@
  * panel, which also undoes an edit the Host refused; and a collection run started on demand.
  */
 
+import { shareInFlight } from '@deepseek-ai/dsh-settings-kit/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { StyleEdit, StyleEditAnswer, StylePanel } from '../view.ts'
 
@@ -86,8 +87,6 @@ function withOwnerCard(panel: StylePanel, card: string, reason: string, now: num
 
 /** Reads and edits the panel through the Host routes. */
 export class StyleLoader {
-  private inFlight: Promise<void> | undefined
-
   /**
    * @param store - the store the section renders.
    * @param transport - the three Host calls; each rejects on transport failure.
@@ -107,12 +106,7 @@ export class StyleLoader {
    * Read the panel and publish it to the store.
    * @returns settlement after the panel is published; concurrent callers share the read in flight.
    */
-  refresh(): Promise<void> {
-    if (this.inFlight !== undefined) return this.inFlight
-    const request = this.query().finally(() => { this.inFlight = undefined })
-    this.inFlight = request
-    return request
-  }
+  readonly refresh: () => Promise<void> = shareInFlight(() => this.query())
 
   private async query(): Promise<void> {
     let panel: StylePanel | undefined
@@ -175,39 +169,5 @@ export class StyleLoader {
       if (panel === undefined) draft.error = 'network'
       else draft.panel = panel
     })
-  }
-}
-
-/** The part of `document` the poller watches. */
-export interface PageVisibility {
-  readonly visibilityState: DocumentVisibilityState
-  addEventListener(type: 'visibilitychange', listener: () => void): void
-  removeEventListener(type: 'visibilitychange', listener: () => void): void
-}
-
-/**
- * Refresh now and on a timer while the page is visible; showing a hidden page refreshes at once.
- * @param refresh - one refresh.
- * @param intervalMs - period.
- * @param page - the document; null outside a browser.
- * @returns a stop function.
- */
-export function pollWhileVisible(refresh: () => void, intervalMs: number, page: PageVisibility | null = 'document' in globalThis ? globalThis.document : null): () => void {
-  let timer: ReturnType<typeof setInterval> | undefined
-  const sync = (): void => {
-    const visible = page?.visibilityState !== 'hidden'
-    if (visible && timer === undefined) {
-      refresh()
-      timer = setInterval(refresh, intervalMs)
-    } else if (!visible && timer !== undefined) {
-      clearInterval(timer)
-      timer = undefined
-    }
-  }
-  page?.addEventListener('visibilitychange', sync)
-  sync()
-  return () => {
-    page?.removeEventListener('visibilitychange', sync)
-    if (timer !== undefined) clearInterval(timer)
   }
 }

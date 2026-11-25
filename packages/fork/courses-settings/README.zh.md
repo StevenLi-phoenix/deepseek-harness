@@ -50,7 +50,6 @@ Host 半边在 `/api` 下、Web UI 登录之后注册 `GET /api/courses`（来�
 | [`src/view.ts`](src/view.ts) | 两个半边共用的线路类型和路径 |
 | [`src/client/index.ts`](src/client/index.ts) | 浏览器入口：词典、加载器、设置页注册 |
 | [`src/client/courses.ts`](src/client/courses.ts) | store、加载器和各卡片的文字 |
-| [`src/client/polling.ts`](src/client/polling.ts) | 打开且可见时刷新 |
 | [`src/client/CoursesSection.tsx`](src/client/CoursesSection.tsx) | 这一页 |
 
 这是 fork 本地包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。

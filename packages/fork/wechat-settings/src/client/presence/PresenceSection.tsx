@@ -5,14 +5,16 @@
  * hint to check the watcher after an hour of silence. It polls while mounted and pauses while the page is hidden.
  */
 
+import { startPolling } from '@deepseek-ai/dsh-settings-kit/client'
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the settings shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import { CLOCK_PATTERN, type PresenceAction, type PresenceView } from '../../presence-view.ts'
-import { agoText, dateTime, stampTime, type Translate } from './format.ts'
-import { POLL_INTERVAL_MS, startPolling, type PresenceState } from './presence.ts'
+import { SectionFrame } from '../SectionFrame.tsx'
+import { agoText, dateTime, type Translate } from './format.ts'
+import { POLL_INTERVAL_MS, type PresenceState } from './presence.ts'
 import css from './PresenceSection.module.css'
 
 /** The section's injected face (slot `inject`). */
@@ -169,35 +171,21 @@ function SignalCard({ view, now, t }: { view: PresenceView; now: number; t: Tran
 export function PresenceSection({ usePresence, refresh, act, t }: PresenceProps): ReactNode {
   const state = usePresence(value => value)
   const translate = t as Translate
-  const view = state.view
   useEffect(() => startPolling(refresh, POLL_INTERVAL_MS), [refresh])
   const now = Date.now()
 
-  let status: { tone: 'live' | 'stale' | 'idle'; text: string }
-  if (view === null) status = state.stale ? { tone: 'stale', text: translate('status.failed') } : { tone: 'idle', text: translate('status.loading') }
-  else if (state.stale) status = { tone: 'stale', text: translate('status.stale', { time: stampTime(state.checkedAt ?? now) }) }
-  else status = { tone: 'live', text: translate('status.live', { time: stampTime(state.checkedAt ?? now) }) }
-
   return (
-    <section className={css.section} aria-label={translate('title')} data-stale={state.stale ? '' : undefined}>
-      <div className={css.header}>
-        <span className={css.status} role="status">
-          <span className={css.dot} data-tone={status.tone} aria-hidden="true" />
-          {status.text}
-        </span>
-      </div>
-      {state.error === null ? null : <div className={css.error} role="alert">{translate('error.action', { error: state.error })}</div>}
-      {view === null
-        ? null
-        : (
-          <div className={css.grid}>
-            <StateCard view={view} busy={state.busy !== null} act={act} t={translate} />
-            <ButtonsCard view={view} state={state} act={act} t={translate} />
-            <WindowCard view={view} busy={state.busy !== null} act={act} t={translate} />
-            <UrgentCard view={view} t={translate} />
-            <SignalCard view={view} now={now} t={translate} />
-          </div>
-        )}
-    </section>
+    <SectionFrame
+      css={css} label={translate('title')} state={state} now={now} t={translate}
+      cards={shown => (
+        <>
+          <StateCard view={shown} busy={state.busy !== null} act={act} t={translate} />
+          <ButtonsCard view={shown} state={state} act={act} t={translate} />
+          <WindowCard view={shown} busy={state.busy !== null} act={act} t={translate} />
+          <UrgentCard view={shown} t={translate} />
+          <SignalCard view={shown} now={now} t={translate} />
+        </>
+      )}
+    />
   )
 }

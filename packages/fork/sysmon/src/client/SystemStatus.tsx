@@ -6,7 +6,8 @@
  * refresh keeps the last reading and says so quietly in the status line.
  */
 
-import { useEffect, useId, type ReactNode } from 'react'
+import { Card, startPolling, StatusHeader } from '@deepseek-ai/dsh-settings-kit/client'
+import { useEffect, type ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRenderFactories, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the settings shell's SlotMap merge (the 'settings.section' entry).
@@ -18,7 +19,7 @@ import type {} from './locales.ts'
 import {
   INSTALL_MACMON, cpuCard, formatDuration, memoryCard, powerCard, statusLine, storageRows, type Meter, type Translate,
 } from './cards.ts'
-import { POLL_INTERVAL_MS, startPolling, type SysmonState } from './sysmon.ts'
+import { POLL_INTERVAL_MS, type SysmonState } from './sysmon.ts'
 import css from './SystemStatus.module.css'
 
 /** The section's injected face (slot `inject`). */
@@ -49,19 +50,6 @@ function Bar({ meter, label }: { meter: Meter | null; label: string }): ReactNod
   )
 }
 
-function Card({ title, meta, wide, children }: { title: string; meta?: string; wide?: boolean; children: ReactNode }): ReactNode {
-  const id = useId()
-  return (
-    <section className={wide === true ? `${css.card} ${css.wide}` : css.card} aria-labelledby={id}>
-      <div className={css.cardHeader}>
-        <span id={id} className={css.cardTitle}>{title}</span>
-        {meta === undefined ? null : <span className={css.meta}>{meta}</span>}
-      </div>
-      {children}
-    </section>
-  )
-}
-
 function Details({ lines }: { lines: readonly string[] }): ReactNode {
   return lines.length === 0 ? null : <div className={css.details}>{lines.map(line => <span key={line}>{line}</span>)}</div>
 }
@@ -84,23 +72,19 @@ export function SystemStatusSection({ useSysmon, refresh, renderFactorySlot, t }
   const disks = snapshot === null ? [] : storageRows(snapshot, translate)
   return (
     <section className={css.section} aria-label={translate('title')} data-stale={state.stale ? '' : undefined}>
-      <div className={css.header}>
-        <span className={css.status} role="status">
-          <span className={css.dot} data-tone={status.tone} aria-hidden="true" />
-          {status.text}
-        </span>
+      <StatusHeader css={css} line={status}>
         {snapshot === null ? null : <span className={css.uptime}>{translate('uptime', { duration: formatDuration(snapshot.uptime, translate) })}</span>}
-      </div>
+      </StatusHeader>
       {cpu === undefined || memory === undefined || power === undefined
         ? null
         : (
           <div className={css.grid}>
-            <Card title={translate('cpu.title')} meta={cpu.cores}>
+            <Card css={css} title={translate('cpu.title')} meta={cpu.cores}>
               <span className={css.value}>{cpu.value}</span>
               <Bar meter={cpu.meter} label={translate('cpu.title')} />
               <Details lines={cpu.details} />
             </Card>
-            <Card title={translate('memory.title')}>
+            <Card css={css} title={translate('memory.title')}>
               <span className={css.value}>
                 {memory.value}
                 <span className={css.unit}>{memory.total}</span>
@@ -108,7 +92,7 @@ export function SystemStatusSection({ useSysmon, refresh, renderFactorySlot, t }
               <Bar meter={memory.meter} label={translate('memory.title')} />
               <Details lines={memory.details} />
             </Card>
-            <Card title={translate('power.title')} {...power.value === null ? {} : { meta: translate('power.system') }}>
+            <Card css={css} title={translate('power.title')} {...power.value === null ? {} : { meta: translate('power.system') }}>
               {power.value === null ? null : <span className={css.value}>{power.value}</span>}
               {power.notice === null
                 ? null
@@ -123,7 +107,7 @@ export function SystemStatusSection({ useSysmon, refresh, renderFactorySlot, t }
             {disks.length === 0
               ? null
               : (
-                <Card title={translate('storage.title')} wide>
+                <Card css={css} className={`${css.card} ${css.wide}`} title={translate('storage.title')}>
                   {disks.map(row => (
                     <div key={row.key} className={css.volume} data-mount={row.mount}>
                       <div className={css.volumeHeader}>

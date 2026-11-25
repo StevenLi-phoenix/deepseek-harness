@@ -5,6 +5,7 @@
  * refusal puts the previous data back and says why.
  */
 
+import { shareInFlight } from '@deepseek-ai/dsh-settings-kit/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ActionError, ActionErrorCode } from '../views.ts'
 
@@ -71,8 +72,6 @@ export async function failureOf(response: Response): Promise<ActionFailure> {
 
 /** Reads one Host resource into a store, one request at a time. */
 export class ResourceLoader<T> {
-  private inFlight: Promise<void> | undefined
-
   /**
    * @param label - log label, for example `subscriptions`.
    * @param store - the store the section renders.
@@ -89,13 +88,10 @@ export class ResourceLoader<T> {
   /**
    * Reload the resource and publish the answer.
    * @returns settlement after the answer is published; concurrent callers share the request in flight. */
-  refresh(): Promise<void> {
-    if (this.inFlight !== undefined) return this.inFlight
+  readonly refresh: () => Promise<void> = shareInFlight(() => {
     this.store.update((draft) => { draft.refreshing = true })
-    const request = this.query().finally(() => { this.inFlight = undefined })
-    this.inFlight = request
-    return request
-  }
+    return this.query()
+  })
 
   private async query(): Promise<void> {
     let data: T | undefined
@@ -154,51 +150,6 @@ export class ResourceLoader<T> {
   /** Clear the notice. */
   dismiss(): void {
     this.store.update((draft) => { draft.notice = null })
-  }
-}
-
-/** The part of `document` the poller watches. */
-export interface VisibilitySource {
-  readonly visibilityState: DocumentVisibilityState
-  addEventListener(type: 'visibilitychange', listener: () => void): void
-  removeEventListener(type: 'visibilitychange', listener: () => void): void
-}
-
-/** @returns the browser document, or null outside a browser. */
-function currentPage(): VisibilitySource | null {
-  return 'document' in globalThis ? globalThis.document : null
-}
-
-/**
- * Refresh now and every `intervalMs` while the page is visible; a hidden page stops the timer and showing it again refreshes at once.
- * @param refresh - one refresh; the loader shares a request in flight.
- * @param intervalMs - polling period.
- * @param page - visibility source; null polls without one.
- * @returns a stop function.
- */
-export function startPolling(
-  refresh: () => void, intervalMs: number = POLL_INTERVAL_MS, page: VisibilitySource | null = currentPage(),
-): () => void {
-  let timer: ReturnType<typeof setInterval> | undefined
-  const run = (): void => {
-    if (timer !== undefined) return
-    refresh()
-    timer = setInterval(refresh, intervalMs)
-  }
-  const pause = (): void => {
-    if (timer === undefined) return
-    clearInterval(timer)
-    timer = undefined
-  }
-  const onVisibility = (): void => {
-    if (page?.visibilityState === 'hidden') pause()
-    else run()
-  }
-  page?.addEventListener('visibilitychange', onVisibility)
-  onVisibility()
-  return () => {
-    page?.removeEventListener('visibilitychange', onVisibility)
-    pause()
   }
 }
 

@@ -1,6 +1,6 @@
 /** The section's poller outside a browser, where there is no page to watch. */
+import { startPolling } from '@deepseek-ai/dsh-settings-kit/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { startPolling } from '../src/client/bili.ts'
 
 afterEach(() => {
   vi.useRealTimers()

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { startPolling, type PageVisibility as VisibilitySource } from '@deepseek-ai/dsh-settings-kit/client'
 import type { SysmonSnapshot } from '../src/snapshot.ts'
-import { SysmonLoader, createSysmonStore, parseSnapshot, startPolling, type VisibilitySource } from '../src/client/sysmon.ts'
+import { SysmonLoader, createSysmonStore, parseSnapshot } from '../src/client/sysmon.ts'
 
 const SNAPSHOT: SysmonSnapshot = {
   sampledAt: 1_000,

@@ -56,7 +56,6 @@ The Host half registers `GET /api/gmail` (the status from `ctx.gmail.status()`, 
 | [`src/client/ClientCard.tsx`](src/client/ClientCard.tsx) | The OAuth client: the Google Cloud steps, the redirect URI, the JSON box |
 | [`src/client/parts.tsx`](src/client/parts.tsx) | Props and small pieces the cards share |
 | [`src/client/gmail.ts`](src/client/gmail.ts) | The store, the loader (one read and one action at a time), and the text helpers |
-| [`src/client/polling.ts`](src/client/polling.ts) | Refresh while the section is open and the page visible |
 | [`src/client/locales.ts`](src/client/locales.ts) | The copy in eight languages |
 | [`src/client/GmailSection.module.css`](src/client/GmailSection.module.css) | The section's styles |
 

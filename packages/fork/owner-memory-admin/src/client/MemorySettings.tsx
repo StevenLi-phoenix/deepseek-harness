@@ -6,6 +6,7 @@
  * and pauses while the page is hidden. A failed refresh keeps the last reading and says so quietly.
  */
 
+import { startPolling } from '@deepseek-ai/dsh-settings-kit/client'
 import { useEffect, type ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRenderFactories, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -19,7 +20,7 @@ import { MergePanel, ForgetConfirm } from './ConfirmPanels.tsx'
 import { EntriesCard } from './EntriesCard.tsx'
 import { FeedbackCard } from './FeedbackCard.tsx'
 import { GuardCard } from './GuardCard.tsx'
-import { POLL_INTERVAL_MS, startPolling, type MemoryActions, type MemoryState } from './memory.ts'
+import { POLL_INTERVAL_MS, type MemoryActions, type MemoryState } from './memory.ts'
 import { Button, type Translate } from './parts.tsx'
 import { PendingCard } from './PendingCard.tsx'
 import { RollbackCard } from './RollbackCard.tsx'
