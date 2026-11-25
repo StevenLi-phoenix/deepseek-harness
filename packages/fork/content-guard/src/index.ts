@@ -18,7 +18,7 @@ import { GuardService, type GuardSettings } from './service.ts'
 
 export type { GuardModel, GuardModelAnswer, ParsedAnswer, RawRecord } from './classifier.ts'
 export type { PatternOptions, PatternRule } from './patterns.ts'
-export type { GuardDeps, GuardLogger, GuardSettings } from './service.ts'
+export type { GuardDeps, GuardLogger, GuardService, GuardSettings } from './service.ts'
 export type { GuardAudience, GuardCheckOptions, GuardHealth, GuardVerdict } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {

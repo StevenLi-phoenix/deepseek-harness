@@ -43,7 +43,7 @@ interface WebResourceRoute {
   path: string
   /** Answers HTTP GET and HEAD requests and in-process reads. */
   resource: WebResource
-  /** Defaults to required; in-process reads still enforce deny. */
+  /** Defaults to required. Use the fixed self-authenticated navigation policy only on an exact route. */
   auth?: WebAuthenticationRule
 }
 ```

@@ -60,7 +60,12 @@ export class SignInStore {
     })
   }
 
-  /** Remove and return the matching transaction before any remote call. */
+  /**
+   * Remove and return the matching transaction before any remote call.
+   * @param state - the `state` Google's redirect carries.
+   * @param check - runs on the open transaction before it is removed; a throw leaves it open.
+   * @returns the removed transaction, or undefined when none is open for that state.
+   */
   consume(state: string, check: (open: SignIn) => void): Promise<SignIn | undefined> {
     if (!statePattern.test(state)) return Promise.resolve(undefined)
     return this.mutate((entries) => {

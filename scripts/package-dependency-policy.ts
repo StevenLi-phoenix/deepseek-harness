@@ -104,7 +104,8 @@ const PEER_REQUIRED_HOST_EXPORTS = {
   '@deepseek-ai/dsh-fs': ['FsError'],
   // The Gmail sign-in route must be the path the installed service builds its redirect URI from,
   // and the Settings routes tell a refusal apart with `instanceof GmailError`.
-  '@deepseek-ai/dsh-gmail': ['GmailError', 'OAUTH_PATH'],
+  '@deepseek-ai/dsh-gmail': ['GmailError'],
+  '@deepseek-ai/dsh-gmail/oauth': ['OAUTH_PATH'],
   '@deepseek-ai/dsh-scope': ['carrierKeyOf', 'createScope', 'scopeOf', 'scopeParentOf', 'scopeTarget'],
   // appendPluginRecord writes through the Session class's private log; pluginRecordOf is stateless.
   // The DeepSeek chat importer validates its seed with the installed Session log validation before storing it.

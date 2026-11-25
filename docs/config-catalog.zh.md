@@ -2421,7 +2421,7 @@ export type RepoStream = 'releases' | 'commits' | 'tags'
 ## `@deepseek-ai/dsh-gmail`
 
 - `inject`: `storageDomain` · `credentials`
-- `source`: [`packages/fork/gmail/src/index.ts:80`](../packages/fork/gmail/src/index.ts)
+- `source`: [`packages/fork/gmail/src/index.ts:75`](../packages/fork/gmail/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */

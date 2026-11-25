@@ -1177,7 +1177,7 @@ async lookup(term: string): Promise<LookupAnswer>
 async updateCard(input: { readonly card: string; readonly reason: string; readonly sessionId?: string }): Promise<WriteAnswer>
 ```
 
-Source: [`packages/fork/speaking-style/src/index.ts`](../../packages/fork/speaking-style/src/index.ts)
+Source: [`packages/fork/speaking-style/src/service.ts`](../../packages/fork/speaking-style/src/service.ts)
 
 <a id="ctxvoice--voice"></a>
 
