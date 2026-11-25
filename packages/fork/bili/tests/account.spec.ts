@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { BackgroundWork } from '@deepseek-ai/dsh-service-kit'
 import type { biliDomain } from '../src/storage.ts'
 import { FakeBiliSvc, replyItem } from './fake-bili-svc.ts'
 import { allLogs, contexts, credentialStore, fakeSessions, harness } from './harness.ts'
@@ -100,10 +101,10 @@ describe('start and stop', () => {
 
   it('logs background work that fails, whatever it threw, and goes on', async () => {
     const h = await harness({ svc, workspace: dir })
-    const track = member(h.account, 'track') as (work: Promise<void>) => void
-    track.call(h.account, Promise.reject(new Error('disk gone')))
+    const background = member(h.account, 'background') as BackgroundWork
+    background.track(Promise.reject(new Error('disk gone')))
     // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the non-Error arm is the case under test.
-    track.call(h.account, Promise.reject('plain reason'))
+    background.track(Promise.reject('plain reason'))
     await vi.advanceTimersByTimeAsync(0)
     expect(h.logs.some(line => line.type === 'warn' && line.text === 'bili: background work failed: disk gone')).toBe(true)
     expect(h.logs.some(line => line.type === 'warn' && line.text === 'bili: background work failed: plain reason')).toBe(true)
@@ -111,14 +112,11 @@ describe('start and stop', () => {
 
   it('keeps storage work in order after a piece of it failed, and returns held work\'s own outcome', async () => {
     const h = await harness({ svc, workspace: dir })
-    const run = member(h.account, 'serialize') as (work: () => Promise<unknown>) => Promise<unknown>
-    const serialize = (work: () => Promise<unknown>): Promise<unknown> => run.call(h.account, work)
-    await expect(serialize(() => Promise.reject(new Error('disk full')))).rejects.toThrow('disk full')
-    await expect(serialize(() => Promise.resolve('next'))).resolves.toBe('next')
-    const holder = member(h.account, 'hold') as (work: Promise<unknown>) => Promise<unknown>
-    const hold = (work: Promise<unknown>): Promise<unknown> => holder.call(h.account, work)
-    await expect(hold(Promise.reject(new Error('delivery failed')))).rejects.toThrow('delivery failed')
-    await expect(hold(Promise.resolve('delivered'))).resolves.toBe('delivered')
+    const background = member(h.account, 'background') as BackgroundWork
+    await expect(background.serialize(() => Promise.reject(new Error('disk full')))).rejects.toThrow('disk full')
+    await expect(background.serialize(() => Promise.resolve('next'))).resolves.toBe('next')
+    await expect(background.hold(Promise.reject(new Error('delivery failed')))).rejects.toThrow('delivery failed')
+    await expect(background.hold(Promise.resolve('delivered'))).resolves.toBe('delivered')
   })
 
   it('never runs two message checks at once, even when a turn outlasts the period', async () => {

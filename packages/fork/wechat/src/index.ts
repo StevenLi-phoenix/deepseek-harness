@@ -26,6 +26,7 @@ import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-title'
 import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import z from '@deepseek-ai/schemastery'
+import { BackgroundWork, forgetOldest, joinRelay, openPresetSession, pause, unavailableReason, type WakeSlot } from '@deepseek-ai/dsh-service-kit'
 import { IlinkApiError, IlinkClient, ILINK_SEND_REJECTED, isStaleTokenError, ItemType, MESSAGE_TYPE_USER, type WeixinMessage } from './api.ts'
 import { accountFilePath, readAccountFile, type WechatAccount } from './login.ts'
 import { attachmentNote, describeMedia, downloadMedia, isPromptImage, mediaSpec, outboundKind, saveInboxFile, uploadMedia, type OutboundKind, type ReceivedMedia, type Transcription } from './media.ts'
@@ -163,8 +164,6 @@ const MAX_REMEMBERED_SESSIONS = 200
 /** First retry delay after a failed long-poll; doubles up to {@link MAX_RETRY_MS}. */
 const FIRST_RETRY_MS = 2000
 const MAX_RETRY_MS = 60_000
-/** Resolve failures that keep the stored chat Session: it exists and is only unavailable right now. */
-const TRANSIENT_RESOLVE_CODES: ReadonlySet<string> = new Set(['session/agent-busy', 'session/writer-held'])
 
 /** Outcome of {@link WechatChannel.sendFile}: what went out, or why nothing did. */
 export type SendFileResult =
@@ -329,10 +328,9 @@ export class WechatChannel extends Service implements OwnerNotifier {
   private readonly accountFile: string
   private readonly muteFile: string
   private readonly abort = new AbortController()
-  private readonly inflight = new Set<Promise<void>>()
+  private readonly background = new BackgroundWork((error: unknown) => { this.ctx.logger.warn(`wechat: background work failed: ${errorText(error)}`) })
   private domain: Domain<typeof wechatDomain> | undefined
   private loop: Promise<void> | undefined
-  private chain: Promise<unknown> = Promise.resolve()
   private stopping = false
   /** Fires when the earliest text an agent asked to hold comes due. */
   private holdTimer: NodeJS.Timeout | undefined
@@ -365,7 +363,7 @@ export class WechatChannel extends Service implements OwnerNotifier {
   /** The running long-poll's controller; {@link reloadAccount} aborts it. */
   private pollAbort: AbortController | undefined
   /** Ends the current wait for the account file or the retry delay. */
-  private wake: (() => void) | undefined
+  private readonly waiting: WakeSlot = { wake: undefined }
   /** The chat Session every earlier chat Session was last handed over to without a failure, in this process. */
   private handedOverTo: string | undefined
 
@@ -410,8 +408,7 @@ export class WechatChannel extends Service implements OwnerNotifier {
         await this.notifyLifecycle('stop')
         this.abort.abort(new Error('wechat is stopping'))
         await this.loop
-        await Promise.allSettled([...this.inflight])
-        await this.chain // serialize() keeps the chain itself non-rejecting.
+        await this.background.drain()
         await domain.close()
       }, 'wechat.lifecycle()')
       this.loop = this.run(domain)
@@ -484,7 +481,7 @@ export class WechatChannel extends Service implements OwnerNotifier {
     const relay = child.ownerRelay
     const channel: RelayChannel = {
       name: WECHAT_RELAY_CHANNEL,
-      deliver: answer => this.hold(this.relayAnswer(answer)),
+      deliver: answer => this.background.hold(this.relayAnswer(answer)),
       onTurnStart: (sessionId) => {
         this.working.add(sessionId)
         this.turns.delete(sessionId)
@@ -496,20 +493,7 @@ export class WechatChannel extends Service implements OwnerNotifier {
       // Typing clears after the reply went out, so the chat never looks idle before the answer shows.
       onTurnSettled: () => { this.settleTyping() },
     }
-    const unregister = relay.registerChannel(channel)
-    let joined = true
-    this.ready.then((domain) => {
-      if (!joined) return
-      const ids = [...domain.table('sessions').keys()]
-      for (const id of ids) relay.claim(id, WECHAT_RELAY_CHANNEL)
-      this.ctx.logger.info(`wechat: the relay carries ${ids.length} chat Session(s) through channel ${WECHAT_RELAY_CHANNEL}`)
-    }, (error: unknown) => {
-      this.ctx.logger.warn(`wechat: chat Sessions not claimed with the relay: ${errorText(error)}`)
-    })
-    return () => {
-      joined = false
-      unregister()
-    }
+    return joinRelay(this.ctx, relay, channel, this.ready.then(domain => [...domain.table('sessions').keys()]), 'wechat')
   }
 
   /**
@@ -525,7 +509,7 @@ export class WechatChannel extends Service implements OwnerNotifier {
     const unregister = presence.registerHolder(holder)
     const stop = presence.onChange((state) => {
       if (state.asleep) return
-      this.track(this.releaseDeferred('the owner woke').then(() => undefined))
+      this.background.track(this.releaseDeferred('the owner woke').then(() => undefined))
     })
     return () => {
       stop()
@@ -540,7 +524,7 @@ export class WechatChannel extends Service implements OwnerNotifier {
    * @returns how many texts went out.
    */
   private releaseDeferred(why: string): Promise<number> {
-    return this.serialize(async () => {
+    return this.background.serialize(async () => {
       const domain = await this.ready
       const held = this.outbox().filter(row => row.deferred === true).length
       if (held === 0) return 0
@@ -569,7 +553,7 @@ export class WechatChannel extends Service implements OwnerNotifier {
     if (times.length === 0) return
     this.holdTimer = setTimeout(() => {
       this.holdTimer = undefined
-      this.track(this.releaseDue().then(() => undefined))
+      this.background.track(this.releaseDue().then(() => undefined))
     }, Math.max(0, Math.min(...times) - Date.now()))
   }
 
@@ -584,7 +568,7 @@ export class WechatChannel extends Service implements OwnerNotifier {
    * @returns how many texts went out.
    */
   private releaseDue(): Promise<number> {
-    return this.serialize(async () => {
+    return this.background.serialize(async () => {
       const domain = await this.ready
       const now = Date.now()
       const comes = (row: OutboxRecord): boolean => row.releaseAt !== undefined && row.releaseAt <= now
@@ -646,13 +630,6 @@ export class WechatChannel extends Service implements OwnerNotifier {
       await this.sendInlinePictures(answer.sessionId, pictures, held)
     }
     return 'sent'
-  }
-
-  /** Keep work another service awaits alive until teardown drains it; its outcome stays the caller's. */
-  private hold<T>(work: Promise<T>): Promise<T> {
-    const held = work.then(() => undefined, () => undefined).finally(() => this.inflight.delete(held))
-    this.inflight.add(held)
-    return work
   }
 
   /**
@@ -875,7 +852,7 @@ export class WechatChannel extends Service implements OwnerNotifier {
    * @returns what was sent, or why it was not.
    */
   private sendOutgoing(file: OutgoingFile, reserveLastSlot: boolean): Promise<SendFileResult> {
-    return this.serialize(async (): Promise<SendFileResult> => {
+    return this.background.serialize(async (): Promise<SendFileResult> => {
       const domain = await this.ready
       const target = this.target(domain)
       if (typeof target === 'string') return { notSent: target }
@@ -906,7 +883,7 @@ export class WechatChannel extends Service implements OwnerNotifier {
    * @returns true when the owner sleeps and the answer is held.
    */
   private holdsReply(urgent: boolean): Promise<boolean> {
-    return this.serialize(async () => this.holdsBack(await this.ready, 'reply', urgent))
+    return this.background.serialize(async () => this.holdsBack(await this.ready, 'reply', urgent))
   }
 
   /**
@@ -1063,7 +1040,7 @@ export class WechatChannel extends Service implements OwnerNotifier {
     if (until !== undefined && until - now > MAX_HOLD_MS) return { notHeld: 'until is more than 7 days away' }
     const wakes = this.ctx.get('presence')?.isAsleep() === true
     if (until === undefined && !wakes) return { notHeld: 'the owner is awake: put the text in your answer, or give a time with until' }
-    return this.serialize(async (): Promise<HoldResult> => {
+    return this.background.serialize(async (): Promise<HoldResult> => {
       const domain = await this.ready
       const chars = this.config.maxMessageChars - Array.from(QUOTA_FOOTER).length
       const bytes = WECHAT_MAX_TEXT_BYTES - Buffer.byteLength(QUOTA_FOOTER, 'utf8')
@@ -1133,7 +1110,7 @@ export class WechatChannel extends Service implements OwnerNotifier {
   reloadAccount(reason: string): void {
     this.ctx.logger.info(`wechat: reading the account file again (${reason})`)
     this.pollAbort?.abort(new Error(`wechat: account reload (${reason})`))
-    this.wake?.()
+    this.waiting.wake?.()
   }
 
   /** Remember the latest failure for {@link status}, with the account's token removed from the text. */
@@ -1161,35 +1138,9 @@ export class WechatChannel extends Service implements OwnerNotifier {
     if (stale) this.ctx.logger.info(`wechat: ${where} works again; cleared its last error from the status`)
   }
 
-  /** Run storage and send work one at a time; rejections reach the caller without breaking the chain. */
-  private serialize<T>(work: () => Promise<T>): Promise<T> {
-    const result = this.chain.then(work)
-    this.chain = result.catch(() => undefined)
-    return result
-  }
-
-  /** Keep background work alive until teardown drains it. */
-  private track(work: Promise<void>): void {
-    const tracked = work.catch((error: unknown) => {
-      this.ctx.logger.warn(`wechat: background work failed: ${errorText(error)}`)
-    }).finally(() => this.inflight.delete(tracked))
-    this.inflight.add(tracked)
-  }
-
   /** Resolve after `ms`, or as soon as the channel stops or {@link reloadAccount} is called. */
   private pause(ms: number): Promise<void> {
-    return new Promise((resolve) => {
-      const done = (): void => {
-        clearTimeout(timer)
-        this.abort.signal.removeEventListener('abort', done)
-        /* v8 ignore else -- only the run loop calls pause, so wake stays this one. */
-        if (this.wake === done) this.wake = undefined
-        resolve()
-      }
-      const timer = setTimeout(done, ms)
-      this.wake = done
-      this.abort.signal.addEventListener('abort', done, { once: true })
-    })
+    return pause(ms, this.abort.signal, this.waiting)
   }
 
   /** Long-poll while the plugin is active; waits for a usable account file between attempts. */
@@ -1257,7 +1208,7 @@ export class WechatChannel extends Service implements OwnerNotifier {
     this.account = read.kind === 'ok' ? read.account : undefined
     if (read.kind === 'ok' && state !== this.onlineState) {
       this.onlineState = state
-      this.track(this.notifyLifecycle('start'))
+      this.background.track(this.notifyLifecycle('start'))
     }
     return this.account
   }
@@ -1284,7 +1235,7 @@ export class WechatChannel extends Service implements OwnerNotifier {
     const token = message.context_token ?? ''
     const arrivedAt = Date.now()
     let before: ActivityRecord | undefined
-    await this.serialize(async () => {
+    await this.background.serialize(async () => {
       // Read before the outbox flush below, whose digest would otherwise count as the latest message.
       before = domain.table('activity').get(account.ownerUserId)
       await this.recordActivity(domain, account.ownerUserId, { ownerAt: arrivedAt })
@@ -1330,7 +1281,7 @@ export class WechatChannel extends Service implements OwnerNotifier {
    * @returns the reply for the owner.
    */
   private async startNewChat(domain: Domain<typeof wechatDomain>, account: WechatAccount): Promise<string> {
-    const had = await this.serialize(() => domain.table('chats').delete(account.ownerUserId))
+    const had = await this.background.serialize(() => domain.table('chats').delete(account.ownerUserId))
     if (!had) return NEW_CHAT_REPLY
     this.ctx.logger.info('wechat: owner started a new chat')
     let sessionId: SessionId
@@ -1577,10 +1528,9 @@ export class WechatChannel extends Service implements OwnerNotifier {
     const stored = domain.table('chats').get(account.ownerUserId)
     if (stored !== undefined) {
       const sessionId = stored.sessionId as SessionId
-      const resolved = await this.ctx.sessionController.resolveAgent(sessionId)
-      if ('agent' in resolved) return sessionId
-      if (TRANSIENT_RESOLVE_CODES.has(resolved.error.code)) throw resolved.error
-      this.ctx.logger.info(`wechat: chat Session ${sessionId} is unavailable (${resolved.error.code}); starting a new one`)
+      const unavailable = await unavailableReason(this.ctx, sessionId)
+      if (unavailable === undefined) return sessionId
+      this.ctx.logger.info(`wechat: chat Session ${sessionId} is unavailable (${unavailable}); starting a new one`)
     }
     return this.createChatSession(domain, account)
   }
@@ -1588,31 +1538,19 @@ export class WechatChannel extends Service implements OwnerNotifier {
   /** Create, resolve, configure, and remember a new chat Session. */
   private async createChatSession(domain: Domain<typeof wechatDomain>, account: WechatAccount): Promise<SessionId> {
     const chat = this.config.chat
-    // Fails on an unknown preset before a Session exists.
-    this.ctx.permissionPresets.resolve(chat.permissionPreset)
-    const created = await this.ctx.sessionController.create({ cwd: chat.workspacePath, agentPreset: chat.agentPreset })
-    const resolved = await this.ctx.sessionController.resolveAgent(created.sessionId)
-    if ('error' in resolved) throw resolved.error
-    this.ctx.permissionPresets.set(resolved.agent.session, chat.permissionPreset)
-    this.ctx.sessionTitle.rename(resolved.agent.session, chat.title)
+    const createdId = await openPresetSession(this.ctx, chat, chat.title)
     const now = Date.now()
     const relay = this.ctx.get('ownerRelay')
     // Claimed before the first prompt, so the relay follows the Session's first turn.
-    relay?.claim(created.sessionId, WECHAT_RELAY_CHANNEL)
-    await this.serialize(async () => {
+    relay?.claim(createdId, WECHAT_RELAY_CHANNEL)
+    await this.background.serialize(async () => {
       const sessions = domain.table('sessions')
-      await sessions.put(created.sessionId, { ownerUserId: account.ownerUserId, createdAt: now })
-      await domain.table('chats').put(account.ownerUserId, { sessionId: created.sessionId, createdAt: now })
-      const excess = [...sessions.entries()]
-        .sort(([, a], [, b]) => a.createdAt - b.createdAt)
-        .slice(0, Math.max(0, sessions.size - MAX_REMEMBERED_SESSIONS))
-      for (const [id] of excess) {
-        await sessions.delete(id)
-        relay?.release(id)
-      }
+      await sessions.put(createdId, { ownerUserId: account.ownerUserId, createdAt: now })
+      await domain.table('chats').put(account.ownerUserId, { sessionId: createdId, createdAt: now })
+      await forgetOldest(sessions, MAX_REMEMBERED_SESSIONS, (id) => { relay?.release(id) })
     })
-    this.ctx.logger.info(`wechat: created chat Session ${created.sessionId} in ${chat.workspacePath} (${chat.agentPreset}, ${chat.permissionPreset})`)
-    return created.sessionId
+    this.ctx.logger.info(`wechat: created chat Session ${createdId} in ${chat.workspacePath} (${chat.agentPreset}, ${chat.permissionPreset})`)
+    return createdId
   }
 
   /**
@@ -1624,7 +1562,7 @@ export class WechatChannel extends Service implements OwnerNotifier {
   ): Promise<DeliverReport> {
     // An unpaired surrogate (a cut emoji in model output) makes sendmessage fail with ret -1.
     const text = raw.toWellFormed()
-    return this.serialize(async (): Promise<DeliverReport> => {
+    return this.background.serialize(async (): Promise<DeliverReport> => {
       const domain = await this.ready
       const chars = this.config.maxMessageChars - Array.from(QUOTA_FOOTER).length
       const bytes = WECHAT_MAX_TEXT_BYTES - Buffer.byteLength(QUOTA_FOOTER, 'utf8')

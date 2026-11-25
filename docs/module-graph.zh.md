@@ -379,6 +379,7 @@ flowchart TD
     pkg_qq["qq"]
     pkg_qq_login["qq-login"]
     pkg_qqbot["qqbot"]
+    pkg_service_kit["service-kit"]
     pkg_settings_kit["settings-kit"]
     pkg_speaking_style["speaking-style"]
     pkg_speaking_style_settings["speaking-style-settings"]
@@ -608,6 +609,7 @@ flowchart TD
   pkg_experimental_webworker_runtime --> pkg_client_connection
   pkg_experimental_webworker_runtime --> pkg_client_modules
   pkg_experimental_webworker_runtime --> pkg_host_webserver
+  pkg_service_kit --> pkg_llm
   pkg_voice --> pkg_credentials
   pkg_voice --> pkg_home_paths
   pkg_host_authentication_desktop --> pkg_client_connection
@@ -1109,6 +1111,7 @@ flowchart TD
   pkg_message_feedback --> pkg_session_persistence
   pkg_message_feedback --> pkg_typert_protocol
   pkg_tool_bili --> pkg_bili
+  pkg_tool_bili --> pkg_service_kit
   pkg_tool_bili --> pkg_tools
   pkg_tool_bili --> pkg_util_values
   pkg_repeat_tool_reminder --> pkg_agent
@@ -1672,6 +1675,7 @@ flowchart TD
   pkg_event_bus --> pkg_compaction
   pkg_event_bus --> pkg_llm
   pkg_event_bus --> pkg_schedule
+  pkg_event_bus --> pkg_service_kit
   pkg_event_bus --> pkg_session
   pkg_event_bus --> pkg_storage_domain
   pkg_event_bus --> pkg_workspace
@@ -1699,6 +1703,7 @@ flowchart TD
   pkg_sdk_jsonrpc_server --> pkg_working_directory
   pkg_cc_bridge --> pkg_agent
   pkg_cc_bridge --> pkg_event_bus
+  pkg_cc_bridge --> pkg_service_kit
   pkg_cc_bridge --> pkg_tools
   pkg_event_ingest --> pkg_credentials
   pkg_event_ingest --> pkg_event_bus
@@ -1716,6 +1721,7 @@ flowchart TD
   pkg_owner_relay --> pkg_event_bus
   pkg_owner_relay --> pkg_session
   pkg_presence --> pkg_event_bus
+  pkg_presence --> pkg_service_kit
   pkg_presence --> pkg_storage_domain
   pkg_presence --> pkg_wechat_settings
   pkg_qq --> pkg_api_session_controller
@@ -1723,6 +1729,7 @@ flowchart TD
   pkg_qq --> pkg_event_bus
   pkg_qq --> pkg_home_paths
   pkg_qq --> pkg_permission_presets
+  pkg_qq --> pkg_service_kit
   pkg_qq --> pkg_session
   pkg_qq --> pkg_session_title
   pkg_qq --> pkg_storage_domain
@@ -1730,6 +1737,7 @@ flowchart TD
   pkg_tool_monitor --> pkg_api_session_controller
   pkg_tool_monitor --> pkg_event_bus
   pkg_tool_monitor --> pkg_llm
+  pkg_tool_monitor --> pkg_service_kit
   pkg_tool_monitor --> pkg_session
   pkg_tool_monitor --> pkg_session_persistence
   pkg_tool_monitor --> pkg_storage_domain
@@ -1741,6 +1749,7 @@ flowchart TD
   pkg_tool_up --> pkg_event_bus
   pkg_tool_up --> pkg_home_paths
   pkg_tool_up --> pkg_llm
+  pkg_tool_up --> pkg_service_kit
   pkg_tool_up --> pkg_session
   pkg_tool_up --> pkg_tools
   pkg_tool_up --> pkg_util_values
@@ -1771,6 +1780,7 @@ flowchart TD
   pkg_qqbot --> pkg_llm
   pkg_qqbot --> pkg_owner_relay
   pkg_qqbot --> pkg_permission_presets
+  pkg_qqbot --> pkg_service_kit
   pkg_qqbot --> pkg_session
   pkg_qqbot --> pkg_session_title
   pkg_qqbot --> pkg_storage_domain
@@ -1783,6 +1793,7 @@ flowchart TD
   pkg_speaking_style --> pkg_integrity_watch
   pkg_speaking_style --> pkg_llm
   pkg_speaking_style --> pkg_qq
+  pkg_speaking_style --> pkg_service_kit
   pkg_speaking_style --> pkg_session
   pkg_speaking_style --> pkg_tools
   pkg_speaking_style --> pkg_web
@@ -1810,6 +1821,7 @@ flowchart TD
   pkg_content_guard --> pkg_home_paths
   pkg_content_guard --> pkg_llm
   pkg_content_guard --> pkg_owner_memory
+  pkg_content_guard --> pkg_service_kit
   pkg_tool_courses --> pkg_courses
   pkg_tool_courses --> pkg_tools
   pkg_tool_courses --> pkg_util_values
@@ -1821,6 +1833,7 @@ flowchart TD
   pkg_wechat --> pkg_permission_presets
   pkg_wechat --> pkg_presence
   pkg_wechat --> pkg_schedule
+  pkg_wechat --> pkg_service_kit
   pkg_wechat --> pkg_session
   pkg_wechat --> pkg_session_title
   pkg_wechat --> pkg_storage_domain
@@ -2033,6 +2046,7 @@ flowchart TD
 | [`credentials-local`](../packages/credentials/credentials-local) | `credentials` | [`atomic-write`](../packages/util/atomic-write), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`launch-environment`](../packages/util/launch-environment) |
 | [`cua-mcp`](../packages/experimental/cua-mcp) | `experimental` | [`app-boot`](../packages/boot/app-boot), [`attachment`](../packages/attachment/attachment) |
 | [`experimental-webworker-runtime`](../packages/experimental/webworker-runtime) | `experimental` | [`client-connection`](../packages/client/connection), [`client-modules`](../packages/client/modules), [`host-webserver`](../packages/host/webserver) |
+| [`service-kit`](../packages/fork/service-kit) | `fork` | [`llm`](../packages/llm/llm) |
 | [`voice`](../packages/fork/voice) | `fork` | [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths) |
 | [`host-authentication-desktop`](../packages/host/authentication-desktop) | `host` | [`client-connection`](../packages/client/connection) |
 | [`host-authentication-token`](../packages/host/authentication-token) | `host` | [`client-connection`](../packages/client/connection), [`host-webserver`](../packages/host/webserver) |
@@ -2162,7 +2176,7 @@ flowchart TD
 | [`tool-terminal`](../packages/experimental/tool-terminal) | `experimental` | [`agent`](../packages/core/agent), [`jobs`](../packages/jobs/jobs), [`llm`](../packages/llm/llm), [`output-retention`](../packages/util/output-retention), [`system-prompt`](../packages/core/system-prompt), [`terminal`](../packages/terminal/terminal), [`tools`](../packages/core/tools), [`working-directory`](../packages/session/working-directory) |
 | [`cordis-host-runner`](../packages/extensions/cordis-host-runner) | `extensions` | [`agent`](../packages/core/agent), [`error`](../packages/util/error), [`llm`](../packages/llm/llm), [`scope`](../packages/core/scope), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`typert-protocol`](../packages/typert/protocol) |
 | [`message-feedback`](../packages/feedback/message-feedback) | `feedback` | [`command-feedback`](../packages/feedback/command-feedback), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`typert-protocol`](../packages/typert/protocol) |
-| [`tool-bili`](../packages/fork/tool-bili) | `fork` | [`bili`](../packages/fork/bili), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
+| [`tool-bili`](../packages/fork/tool-bili) | `fork` | [`bili`](../packages/fork/bili), [`service-kit`](../packages/fork/service-kit), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
 | [`repeat-tool-reminder`](../packages/guard/repeat-tool-reminder) | `guard` | [`agent`](../packages/core/agent), [`tools`](../packages/core/tools) |
 | [`tool-call-timeout-policy`](../packages/guard/timeout-policy) | `guard` | [`llm`](../packages/llm/llm), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools) |
 | [`tool-ask-user`](../packages/interaction/tool-ask-user) | `interaction` | [`agent`](../packages/core/agent), [`tools`](../packages/core/tools), [`user-questions`](../packages/interaction/user-questions) |
@@ -2246,33 +2260,33 @@ flowchart TD
 | [`tool-agent-team`](../packages/team/tool-agent-team) | `team` | [`agent`](../packages/core/agent), [`agent-team`](../packages/team/agent-team), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`client-test-runtime`](../packages/test-support/client-runtime) | `test-support` | [`api-gateway`](../packages/api/gateway), [`api-session-controller`](../packages/api/session-controller), [`api-workspace-controller`](../packages/api/workspace-controller), [`attachment`](../packages/attachment/attachment), [`client-connection`](../packages/client/connection), [`client-hmr`](../packages/client/hmr), [`client-modules`](../packages/client/modules), [`client-store`](../packages/client/store), [`client-ui-chat`](../packages/client/ui-chat), [`client-ui-context-menu`](../packages/client/ui-context-menu), [`client-ui-conversation`](../packages/client/ui-conversation), [`client-ui-renderer`](../packages/client/ui-renderer), [`client-ui-session`](../packages/client/ui-session), [`client-ui-session-status`](../packages/client/ui-session-status), [`client-ui-settings`](../packages/client/ui-settings), [`client-ui-slots`](../packages/client/ui-slots), [`client-web`](../packages/client/web), [`remote-mock`](../packages/test-support/remote-mock), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`typert-protocol`](../packages/typert/protocol) |
 | [`subagent-dsh-sdk`](../packages/subagent/subagent-dsh-sdk) | `subagent` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`sdk-client`](../packages/sdk/client), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`subprocess`](../packages/subprocess/subprocess) |
-| [`event-bus`](../packages/fork/event-bus) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`compaction`](../packages/compaction/compaction), [`llm`](../packages/llm/llm), [`schedule`](../packages/schedule/schedule), [`session`](../packages/core/session), [`storage-domain`](../packages/storage/storage-domain), [`workspace`](../packages/workspace/workspace) |
+| [`event-bus`](../packages/fork/event-bus) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`compaction`](../packages/compaction/compaction), [`llm`](../packages/llm/llm), [`schedule`](../packages/schedule/schedule), [`service-kit`](../packages/fork/service-kit), [`session`](../packages/core/session), [`storage-domain`](../packages/storage/storage-domain), [`workspace`](../packages/workspace/workspace) |
 | [`tool-schedule`](../packages/schedule/tool-schedule) | `schedule` | [`llm`](../packages/llm/llm), [`schedule`](../packages/schedule/schedule), [`subagent`](../packages/subagent/subagent), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`sdk-jsonrpc-server`](../packages/sdk/server) | `sdk` | [`agent`](../packages/core/agent), [`attachment`](../packages/attachment/attachment), [`commands`](../packages/interaction/commands), [`deepseek-auth`](../packages/account/deepseek-auth), [`goal`](../packages/goal/goal), [`llm`](../packages/llm/llm), [`llm-deepseek-api-key`](../packages/llm/llm-deepseek-api-key), [`permission-presets`](../packages/interaction/permission-presets), [`schedule`](../packages/schedule/schedule), [`scope`](../packages/core/scope), [`sdk-protocol`](../packages/sdk/protocol), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`user-approval`](../packages/interaction/user-approval), [`user-questions`](../packages/interaction/user-questions), [`util-time`](../packages/util/time), [`working-directory`](../packages/session/working-directory) |
-| [`cc-bridge`](../packages/fork/cc-bridge) | `fork` | [`agent`](../packages/core/agent), [`event-bus`](../packages/fork/event-bus), [`tools`](../packages/core/tools) |
+| [`cc-bridge`](../packages/fork/cc-bridge) | `fork` | [`agent`](../packages/core/agent), [`event-bus`](../packages/fork/event-bus), [`service-kit`](../packages/fork/service-kit), [`tools`](../packages/core/tools) |
 | [`event-ingest`](../packages/fork/event-ingest) | `fork` | [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`host-webserver`](../packages/host/webserver) |
 | [`github-sensor`](../packages/fork/github-sensor) | `fork` | [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`storage-domain`](../packages/storage/storage-domain) |
 | [`gmail`](../packages/fork/gmail) | `fork` | [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`storage-domain`](../packages/storage/storage-domain) |
 | [`integrity-watch`](../packages/fork/integrity-watch) | `fork` | [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`schedule`](../packages/schedule/schedule), [`session`](../packages/core/session) |
 | [`owner-relay`](../packages/fork/owner-relay) | `fork` | [`event-bus`](../packages/fork/event-bus), [`session`](../packages/core/session) |
-| [`presence`](../packages/fork/presence) | `fork` | [`event-bus`](../packages/fork/event-bus), [`storage-domain`](../packages/storage/storage-domain), [`wechat-settings`](../packages/fork/wechat-settings) |
-| [`qq`](../packages/fork/qq) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
-| [`tool-monitor`](../packages/fork/tool-monitor) | `fork` | [`agent`](../packages/core/agent), [`api-session-controller`](../packages/api/session-controller), [`event-bus`](../packages/fork/event-bus), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`storage-domain`](../packages/storage/storage-domain), [`subprocess`](../packages/subprocess/subprocess), [`tools`](../packages/core/tools) |
-| [`tool-up`](../packages/fork/tool-up) | `fork` | [`agent`](../packages/core/agent), [`compaction`](../packages/compaction/compaction), [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
+| [`presence`](../packages/fork/presence) | `fork` | [`event-bus`](../packages/fork/event-bus), [`service-kit`](../packages/fork/service-kit), [`storage-domain`](../packages/storage/storage-domain), [`wechat-settings`](../packages/fork/wechat-settings) |
+| [`qq`](../packages/fork/qq) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`permission-presets`](../packages/interaction/permission-presets), [`service-kit`](../packages/fork/service-kit), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
+| [`tool-monitor`](../packages/fork/tool-monitor) | `fork` | [`agent`](../packages/core/agent), [`api-session-controller`](../packages/api/session-controller), [`event-bus`](../packages/fork/event-bus), [`llm`](../packages/llm/llm), [`service-kit`](../packages/fork/service-kit), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`storage-domain`](../packages/storage/storage-domain), [`subprocess`](../packages/subprocess/subprocess), [`tools`](../packages/core/tools) |
+| [`tool-up`](../packages/fork/tool-up) | `fork` | [`agent`](../packages/core/agent), [`compaction`](../packages/compaction/compaction), [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`service-kit`](../packages/fork/service-kit), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
 | [`tool-voice`](../packages/fork/tool-voice) | `fork` | [`event-bus`](../packages/fork/event-bus), [`tools`](../packages/core/tools), [`voice`](../packages/fork/voice) |
 | [`turn-taint`](../packages/fork/turn-taint) | `fork` | [`event-bus`](../packages/fork/event-bus), [`session`](../packages/core/session), [`tools`](../packages/core/tools) |
 | [`cc-admin`](../packages/fork/cc-admin) | `fork` | [`cc-bridge`](../packages/fork/cc-bridge) |
 | [`courses`](../packages/fork/courses) | `fork` | [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`presence`](../packages/fork/presence), [`storage-domain`](../packages/storage/storage-domain) |
 | [`gmail-settings`](../packages/fork/gmail-settings) | `fork` | [`gmail`](../packages/fork/gmail) |
 | [`owner-memory`](../packages/fork/owner-memory) | `fork` | [`agent`](../packages/core/agent), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`owner-memory-admin`](../packages/fork/owner-memory-admin), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`turn-taint`](../packages/fork/turn-taint) |
-| [`qqbot`](../packages/fork/qqbot) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
-| [`speaking-style`](../packages/fork/speaking-style) | `fork` | [`agent`](../packages/core/agent), [`agent-default-model`](../packages/core/agent-default-model), [`compaction`](../packages/compaction/compaction), [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`integrity-watch`](../packages/fork/integrity-watch), [`llm`](../packages/llm/llm), [`qq`](../packages/fork/qq), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`web`](../packages/web/web) |
+| [`qqbot`](../packages/fork/qqbot) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`service-kit`](../packages/fork/service-kit), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
+| [`speaking-style`](../packages/fork/speaking-style) | `fork` | [`agent`](../packages/core/agent), [`agent-default-model`](../packages/core/agent-default-model), [`compaction`](../packages/compaction/compaction), [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`integrity-watch`](../packages/fork/integrity-watch), [`llm`](../packages/llm/llm), [`qq`](../packages/fork/qq), [`service-kit`](../packages/fork/service-kit), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`web`](../packages/web/web) |
 | [`time-gap`](../packages/fork/time-gap) | `fork` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`owner-relay`](../packages/fork/owner-relay), [`session`](../packages/core/session), [`session-projection`](../packages/session/session-projection), [`turn-taint`](../packages/fork/turn-taint) |
 | [`tool-gmail`](../packages/fork/tool-gmail) | `fork` | [`gmail`](../packages/fork/gmail), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`turn-taint`](../packages/fork/turn-taint), [`util-values`](../packages/util/values) |
 | [`tool-qq`](../packages/fork/tool-qq) | `fork` | [`attachment`](../packages/attachment/attachment), [`llm`](../packages/llm/llm), [`qq`](../packages/fork/qq), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
 | [`tool-watch`](../packages/fork/tool-watch) | `fork` | [`agent`](../packages/core/agent), [`event-bus`](../packages/fork/event-bus), [`github-sensor`](../packages/fork/github-sensor), [`tools`](../packages/core/tools) |
-| [`content-guard`](../packages/fork/content-guard) | `fork` | [`agent-default-model`](../packages/core/agent-default-model), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`owner-memory`](../packages/fork/owner-memory) |
+| [`content-guard`](../packages/fork/content-guard) | `fork` | [`agent-default-model`](../packages/core/agent-default-model), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`owner-memory`](../packages/fork/owner-memory), [`service-kit`](../packages/fork/service-kit) |
 | [`tool-courses`](../packages/fork/tool-courses) | `fork` | [`courses`](../packages/fork/courses), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
-| [`wechat`](../packages/fork/wechat) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`presence`](../packages/fork/presence), [`schedule`](../packages/schedule/schedule), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain), [`time-gap`](../packages/fork/time-gap), [`turn-taint`](../packages/fork/turn-taint), [`voice`](../packages/fork/voice), [`wechat-settings`](../packages/fork/wechat-settings) |
+| [`wechat`](../packages/fork/wechat) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`presence`](../packages/fork/presence), [`schedule`](../packages/schedule/schedule), [`service-kit`](../packages/fork/service-kit), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain), [`time-gap`](../packages/fork/time-gap), [`turn-taint`](../packages/fork/turn-taint), [`voice`](../packages/fork/voice), [`wechat-settings`](../packages/fork/wechat-settings) |
 | [`tool-wechat`](../packages/fork/tool-wechat) | `fork` | [`event-bus`](../packages/fork/event-bus), [`tools`](../packages/core/tools), [`wechat`](../packages/fork/wechat) |
 <!-- END GENERATED module-graph:packages -->

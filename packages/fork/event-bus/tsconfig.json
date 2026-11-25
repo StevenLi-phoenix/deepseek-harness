@@ -40,6 +40,9 @@
     },
     {
       "path": "../../schedule/schedule"
+    },
+    {
+      "path": "../service-kit"
     }
   ]
 }

@@ -14,6 +14,7 @@ import type {} from '@deepseek-ai/dsh-event-bus'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
 import { homedir } from 'node:os'
+import { ERROR_SCHEMA, renderJson } from '@deepseek-ai/dsh-service-kit'
 import { PeerHub, type InboundMessage } from './hub.ts'
 import type { SessionView } from './registry.ts'
 import { plain, resolveSessionsDir, senderLabel, sessionForModel } from './session-text.ts'
@@ -96,13 +97,6 @@ const SESSION_SCHEMA = {
   },
 } as const
 
-const ERROR_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  properties: { error: { type: 'string', required: true } },
-} as const
-
-const renderValue = (_args: unknown, value: unknown) => [{ type: 'text' as const, text: JSON.stringify(value) }]
 
 const LIST_DESCRIPTION = [
   'List the Claude Code sessions of your own account on this Mac (the ones you started with cc_start, and any others running under your account), newest activity first.',
@@ -200,7 +194,7 @@ export function apply(ctx: Context, config: Config): void {
     name: 'cc_list_sessions',
     description: LIST_DESCRIPTION,
     parameters: {},
-    output: { schema: { oneOf: [{ type: 'object', additionalProperties: false, properties: { sessions: { type: 'array', required: true, items: SESSION_SCHEMA } } }, ERROR_SCHEMA] }, render: renderValue },
+    output: { schema: { oneOf: [{ type: 'object', additionalProperties: false, properties: { sessions: { type: 'array', required: true, items: SESSION_SCHEMA } } }, ERROR_SCHEMA] }, render: renderJson },
     async execute(_args, exec): Promise<{ sessions: ReturnType<typeof sessionForModel>[] } | { error: string }> {
       const refused = await refusal(exec.agent?.session.id)
       if (refused !== undefined) return { error: refused }
@@ -226,7 +220,7 @@ export function apply(ctx: Context, config: Config): void {
           ERROR_SCHEMA,
         ],
       },
-      render: renderValue,
+      render: renderJson,
     },
     async execute(args, exec): Promise<{ sent: true; to: string; pid: number } | { error: string }> {
       const refused = await refusal(exec.agent?.session.id)
@@ -249,7 +243,7 @@ export function apply(ctx: Context, config: Config): void {
     },
     output: {
       schema: { oneOf: [{ type: 'object', additionalProperties: false, properties: { started: { type: 'string', required: true }, pid: { type: 'number', required: true }, taskSent: { type: 'boolean', required: true } } }, ERROR_SCHEMA] },
-      render: renderValue,
+      render: renderJson,
     },
     async execute(args, exec): Promise<{ started: string; pid: number; taskSent: boolean } | { error: string }> {
       const refused = await refusal(exec.agent?.session.id)
@@ -283,7 +277,7 @@ export function apply(ctx: Context, config: Config): void {
     name: 'cc_stop',
     description: 'Stop a Claude Code session that cc_start started (not the owner\'s own sessions). Its work in progress is lost.',
     parameters: { name: { type: 'string', required: true, description: 'The name given to cc_start.' } },
-    output: { schema: { oneOf: [{ type: 'object', additionalProperties: false, properties: { stopped: { type: 'string', required: true } } }, ERROR_SCHEMA] }, render: renderValue },
+    output: { schema: { oneOf: [{ type: 'object', additionalProperties: false, properties: { stopped: { type: 'string', required: true } } }, ERROR_SCHEMA] }, render: renderJson },
     async execute(args, exec): Promise<{ stopped: string } | { error: string }> {
       const refused = await refusal(exec.agent?.session.id)
       if (refused !== undefined) return { error: refused }

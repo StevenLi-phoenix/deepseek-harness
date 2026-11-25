@@ -32,7 +32,8 @@
     "@deepseek-ai/dsh-agent-default-model": "workspace:*",
     "@deepseek-ai/dsh-home-paths": "workspace:*",
     "@deepseek-ai/dsh-llm": "workspace:*",
-    "@deepseek-ai/dsh-owner-memory": "workspace:*"
+    "@deepseek-ai/dsh-owner-memory": "workspace:*",
+    "@deepseek-ai/dsh-service-kit": "workspace:*"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "workspace:~"
@@ -44,7 +45,8 @@
     "@deepseek-ai/dsh-home-paths": "workspace:*",
     "@deepseek-ai/dsh-llm": "workspace:*",
     "@deepseek-ai/dsh-owner-memory": "workspace:*",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "@deepseek-ai/dsh-service-kit": "workspace:*"
   },
   "files": [
     "locale/*.json",

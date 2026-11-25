@@ -620,6 +620,7 @@
       "@deepseek-ai/dsh-scope": ["./packages/core/scope/src"],
       "@deepseek-ai/dsh-sdk-app": ["./packages/bundle/sdk-app/src"],
       "@deepseek-ai/dsh-sdk-minimal": ["./packages/bundle/sdk-minimal/src"],
+      "@deepseek-ai/dsh-service-kit": ["./packages/fork/service-kit/src"],
       "@deepseek-ai/dsh-session": ["./packages/core/session/src"],
       "@deepseek-ai/dsh-session-checkpoint-policy": ["./packages/session/session-checkpoint-policy/src"],
       "@deepseek-ai/dsh-session-format": ["./packages/session/session-format/src"],

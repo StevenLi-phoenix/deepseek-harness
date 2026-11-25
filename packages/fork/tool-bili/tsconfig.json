@@ -22,6 +22,9 @@
     },
     {
       "path": "../../util/values"
+    },
+    {
+      "path": "../service-kit"
     }
   ]
 }

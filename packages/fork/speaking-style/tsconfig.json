@@ -49,6 +49,9 @@
     },
     {
       "path": "../../web/web"
+    },
+    {
+      "path": "../service-kit"
     }
   ]
 }

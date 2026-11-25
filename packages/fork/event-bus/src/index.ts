@@ -19,6 +19,7 @@ import {
   archiveDomain, autoArchiveSchema, resolveAutoArchive, SessionArchiver, type ArchiveHost, type ArchiveStatus, type AutoArchiveConfig,
   logModifiedAt, type LogLocator, type ProtectionDisposer, type SessionProtector, type SessionRow, type SweepReport,
 } from './archive.ts'
+import { BackgroundWork } from '@deepseek-ai/dsh-service-kit'
 import { BUS_EVENT_KIND, BUS_EVENT_RULE_ID, ensureProject, persistentKey } from './delivery.ts'
 import { applyRoutePatch, downstreamOf, findCycle, FLOW_SOURCE, flowResultKind, mergeRoutePatches, resultOf, ROUTE_RESULTS } from './flow.ts'
 import { matchesSubscription, suppressionReason } from './match.ts'
@@ -391,10 +392,9 @@ export class EventBus extends Service {
   private readonly deliveries = new Map<string, PendingDelivery>()
   private readonly projects = new Map<string, Promise<void>>()
   private readonly reminders = new Map<string, TrackedReminder>()
-  private readonly inflight = new Set<Promise<void>>()
   /** When a flush last met its subscription's hourly limit, for `stats()`; not stored. */
   private readonly rateLimitHits: number[] = []
-  private chain: Promise<unknown> = Promise.resolve()
+  private readonly background = new BackgroundWork((error: unknown) => { this.ctx.logger.warn(`event-bus: background work failed: ${errorText(error)}`) })
   private stopping = false
   private readonly archiver: SessionArchiver
   /** Handover movers in registration order. */
@@ -422,8 +422,7 @@ export class EventBus extends Service {
         for (const timer of this.flushTimers.values()) timer.dispose()
         this.flushTimers.clear()
         await this.archiver.stop()
-        await Promise.allSettled([...this.inflight])
-        await this.chain // serialize() keeps the chain itself non-rejecting.
+        await this.background.drain()
         await domain.close()
       }, 'eventBus.lifecycle()')
       await this.restorePending()
@@ -456,7 +455,7 @@ export class EventBus extends Service {
    */
   async publish(input: BusEventInput): Promise<PublishOutcome> {
     assertEvent(input)
-    return this.serialize(async () => {
+    return this.background.serialize(async () => {
       const domain = await this.ready
       const events = domain.table('events')
       const id = `${input.source}:${input.key}`
@@ -570,7 +569,7 @@ export class EventBus extends Service {
   async subscribe(subscription: Subscription, meta: SubscriptionMeta = {}): Promise<SubscriptionView> {
     const problem = subscriptionProblem(subscription)
     if (problem !== undefined) throw new SubscriptionError('invalid_subscription', `event-bus: ${problem}`)
-    return this.serialize(async () => {
+    return this.background.serialize(async () => {
       const domain = await this.ready
       const table = domain.table('subscriptions')
       if (this.configSubscriptions.has(subscription.id) || table.get(subscription.id) !== undefined) {
@@ -595,7 +594,7 @@ export class EventBus extends Service {
    */
   async unsubscribe(id: string): Promise<UnsubscribeOutcome> {
     if (this.configSubscriptions.has(id)) return 'config_owned'
-    return this.serialize(async () => {
+    return this.background.serialize(async () => {
       const domain = await this.ready
       if (!await domain.table('subscriptions').delete(id)) return 'not_found'
       this.flushTimers.get(id)?.dispose()
@@ -622,7 +621,7 @@ export class EventBus extends Service {
    */
   async setPaused(id: string, paused: boolean): Promise<PauseOutcome> {
     if (this.configSubscriptions.has(id)) return 'config_owned'
-    return this.serialize(async () => {
+    return this.background.serialize(async () => {
       const domain = await this.ready
       const table = domain.table('subscriptions')
       const record = table.get(id)
@@ -687,7 +686,7 @@ export class EventBus extends Service {
    * @throws {FlowError} when the change would leave a route the bus cannot run, or a loop.
    */
   async editFlow(edit: FlowEdit, meta: FlowEditMeta = {}): Promise<FlowEditResult> {
-    return this.serialize(async () => {
+    return this.background.serialize(async () => {
       const domain = await this.ready
       const before = this.subscriptionById(edit.id)
       await this.applyFlowEdit(domain, edit, before, meta)
@@ -853,7 +852,7 @@ export class EventBus extends Service {
     if (sources.size === 0) return { moved: [], failed: [] }
     const moved: Array<SessionHandoverReport['moved'][number]> = []
     const failed: Array<SessionHandoverReport['failed'][number]> = []
-    const subscriptions = await this.serialize(async () => {
+    const subscriptions = await this.background.serialize(async () => {
       const table = (await this.ready).table('subscriptions')
       const items = []
       for (const record of this.storedSubscriptions()) {
@@ -1042,21 +1041,6 @@ export class EventBus extends Service {
     ]
   }
 
-  /** Run storage work one at a time; rejections reach the caller without breaking the chain. */
-  private serialize<T>(work: () => Promise<T>): Promise<T> {
-    const result = this.chain.then(work)
-    this.chain = result.catch(() => undefined)
-    return result
-  }
-
-  /** Keep a background actuator call alive until teardown drains it. */
-  private track(work: Promise<void>): void {
-    const tracked = work.catch((error: unknown) => {
-      this.ctx.logger.warn(`event-bus: background work failed: ${errorText(error)}`)
-    }).finally(() => this.inflight.delete(tracked))
-    this.inflight.add(tracked)
-  }
-
   /** Arm the subscription's flush timer unless an earlier one is armed. */
   private scheduleFlush(subscriptionId: string, at: number): void {
     /* v8 ignore next -- publish and flush can still run while teardown drains the chain. */
@@ -1066,14 +1050,14 @@ export class EventBus extends Service {
     armed?.dispose()
     const dispose = this.ctx.timeout(() => {
       this.flushTimers.delete(subscriptionId)
-      this.track(this.flush(subscriptionId))
+      this.background.track(this.flush(subscriptionId))
     }, Math.max(0, at - Date.now()))
     this.flushTimers.set(subscriptionId, { at, dispose })
   }
 
   /** Re-arm flushes for pending rows that survived a restart; drop rows of removed subscriptions. */
   private async restorePending(): Promise<void> {
-    await this.serialize(async () => {
+    await this.background.serialize(async () => {
       const domain = await this.ready
       const pending = domain.table('pending')
       for (const [key, row] of [...pending.entries()]) {
@@ -1090,7 +1074,7 @@ export class EventBus extends Service {
 
   /** Turn one subscription's pending rows into a batch and hand it to its actuator. */
   private async flush(subscriptionId: string): Promise<void> {
-    const flushed = await this.serialize(() => this.persistBatch(subscriptionId))
+    const flushed = await this.background.serialize(() => this.persistBatch(subscriptionId))
     if (flushed !== undefined) await this.actuate(flushed)
   }
 
@@ -1213,7 +1197,7 @@ export class EventBus extends Service {
     for (const event of flushed.events) groups.set(event.subject, [...groups.get(event.subject) ?? [], event])
     const parts = [...groups]
     const prefix = session.titlePrefix ?? flushed.subscription.id
-    const batches = await this.serialize(async () => {
+    const batches = await this.background.serialize(async () => {
       const domain = await this.ready
       const table = domain.table('batches')
       return Promise.all(parts.map(async ([subject, events], index) => {
@@ -1275,7 +1259,7 @@ export class EventBus extends Service {
         return
       }
       this.ctx.logger.info(`event-bus: persistent Session ${stored.sessionId} of ${label} is ${resolved.reason}; batch ${batch.id} starts a new one`)
-      await this.serialize(async () => { await domain.table('persistent').delete(key) })
+      await this.background.serialize(async () => { await domain.table('persistent').delete(key) })
       await this.dispatchSession(flushed, 'persistent-new', fresh)
       return
     }
@@ -1308,7 +1292,7 @@ export class EventBus extends Service {
       return
     }
     await this.markBatch(batch.id, { delivery: 'persistent', sessionId: stored.sessionId })
-    const count = await this.serialize(async () => {
+    const count = await this.background.serialize(async () => {
       const current = domain.table('persistent').get(key)
       /* v8 ignore next -- a rollover or replacement recorded between the follow-up and this count. */
       if (current?.sessionId !== stored.sessionId) return stored.batches + 1
@@ -1341,7 +1325,7 @@ export class EventBus extends Service {
   private async adopt(subscriptionId: string, sessionId: string, delivery: SessionDelivery, subject: string | undefined): Promise<void> {
     const domain = await this.ready
     const key = persistentKey(subscriptionId, subject)
-    const adopted = await this.serialize(async () => {
+    const adopted = await this.background.serialize(async () => {
       const table = domain.table('persistent')
       const current = table.get(key)
       if (current?.sessionId === sessionId) return undefined
@@ -1381,7 +1365,7 @@ export class EventBus extends Service {
   /** Keep the latest compaction summary of a persistent Session for its rollover, and count compactions. */
   private async recordCompaction(sessionId: string, summary: string | undefined): Promise<void> {
     const domain = await this.ready
-    await this.serialize(async () => {
+    await this.background.serialize(async () => {
       const table = domain.table('persistent')
       const current = rowsOf(table).find(record => record.sessionId === sessionId)
       if (current === undefined) return
@@ -1396,7 +1380,7 @@ export class EventBus extends Service {
 
   /** Merge fields into one stored batch; a pruned batch is ignored. */
   private markBatch(id: string, patch: Partial<Pick<BatchRecord, 'status' | 'error' | 'sessionId' | 'outcome' | 'silent' | 'delivery' | 'notSent'>>): Promise<void> {
-    return this.serialize(async () => {
+    return this.background.serialize(async () => {
       const domain = await this.ready
       const batches = domain.table('batches')
       const current = batches.get(id)
@@ -1452,8 +1436,8 @@ export class EventBus extends Service {
           compactions: 0,
           usage: undefined,
         })
-        this.track(this.markBatch(source.deliveryId, { sessionId: session.id }))
-        if (delivery === 'persistent-new' || delivery === 'rollover') this.track(this.adopt(source.source, session.id, delivery, pending?.subject ?? batch?.subject))
+        this.background.track(this.markBatch(source.deliveryId, { sessionId: session.id }))
+        if (delivery === 'persistent-new' || delivery === 'rollover') this.background.track(this.adopt(source.source, session.id, delivery, pending?.subject ?? batch?.subject))
         return
       }
       case 'tool/call': {
@@ -1465,7 +1449,7 @@ export class EventBus extends Service {
         const tracked = this.tracked.get(session.id)
         if (tracked !== undefined) tracked.compactions += 1
         const summary = event.data.summary.filter(isTextPart).map(part => part.text).join('\n').trim()
-        this.track(this.recordCompaction(session.id, summary === '' ? undefined : summary))
+        this.background.track(this.recordCompaction(session.id, summary === '' ? undefined : summary))
         return
       }
       case 'assistant/message': {
@@ -1492,10 +1476,10 @@ export class EventBus extends Service {
         // The first-turn result of a bus-started Session already carries a reminder that joined that turn.
         if (tracked !== undefined) {
           this.ctx.logger.info(`event-bus: ${tracked.subscription} batch ${tracked.batchId} in Session ${session.id} (${tracked.delivery}) ended: ${ended}; context ${formatContext(tracked.usage)}; compaction ${tracked.compactions === 0 ? 'did not run' : `ran ${tracked.compactions} time(s)`}; tool calls ${formatToolCalls(tracked.toolCalls)}`)
-          this.track(this.reportResult(tracked, outcome, detail, stoppedByOwner))
+          this.background.track(this.reportResult(tracked, outcome, detail, stoppedByOwner))
         } else if (reminder !== undefined) {
           this.ctx.logger.info(`event-bus: reminder turn of Session ${session.id} ended: ${ended}`)
-          this.track(this.reportReminder(session.id, reminder, outcome, detail, stoppedByOwner))
+          this.background.track(this.reportReminder(session.id, reminder, outcome, detail, stoppedByOwner))
         }
         return
       }

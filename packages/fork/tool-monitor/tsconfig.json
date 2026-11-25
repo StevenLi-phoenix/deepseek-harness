@@ -40,6 +40,9 @@
     },
     {
       "path": "../event-bus"
+    },
+    {
+      "path": "../service-kit"
     }
   ]
 }

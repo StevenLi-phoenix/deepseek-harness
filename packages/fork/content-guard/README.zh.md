@@ -99,7 +99,7 @@ if (!verdict.ok) return `refused (${verdict.rule}): ${verdict.publicReason}`
 | [`src/patterns.ts`](src/patterns.ts) | 确定性的一层；`LINK`、`MENTION`、`LONG_NUMBER` 就是 `speaking-style` 行过滤器用的表达式 |
 | [`src/canary.ts`](src/canary.ts) | 金丝雀文件和配置里的字符串 |
 | [`src/classifier.ts`](src/classifier.ts) | prompt、答案解析、原始响应存储 |
-| [`src/model.ts`](src/model.ts) | 经由 LLM 服务发起的模型调用 |
+| [`src/model.ts`](src/model.ts) | 经由 LLM 服务发起的模型调用（`@deepseek-ai/dsh-service-kit` 的 `callModelOnce`） |
 | [`src/settings.ts`](src/settings.ts) | `GET /api/content-guard`：`health()` 的计数，供设置卡片使用 |
 
 这是 fork 本地的包，见 [`../UPSTREAM.md`](../UPSTREAM.md)。

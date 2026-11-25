@@ -35,7 +35,8 @@
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-event-bus": "workspace:*",
     "@deepseek-ai/dsh-storage-domain": "workspace:*",
-    "@deepseek-ai/dsh-wechat-settings": "workspace:*"
+    "@deepseek-ai/dsh-wechat-settings": "workspace:*",
+    "@deepseek-ai/dsh-service-kit": "workspace:*"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "workspace:~",
@@ -49,6 +50,7 @@
     "@deepseek-ai/dsh-storage-domain": "workspace:*",
     "yaml": "^2.9.0",
     "@deepseek-ai/dsh-wechat-settings": "workspace:*",
-    "@deepseek-ai/dsh-client-connection": "workspace:*"
+    "@deepseek-ai/dsh-client-connection": "workspace:*",
+    "@deepseek-ai/dsh-service-kit": "workspace:*"
   }
 }

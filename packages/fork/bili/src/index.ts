@@ -45,6 +45,7 @@ import {
   BiliApiError, BiliOutcomeError, BiliRefused, BiliRiskError, BiliSessionError, BiliTransportError, BiliVerifyError,
   DEFAULT_SERVICE_URL, RemoteBiliClient, TOKEN_CREDENTIAL, type ServiceAccount, type ServiceStatus,
 } from './client.ts'
+import { BackgroundWork, openPresetSession, unavailableReason } from '@deepseek-ai/dsh-service-kit'
 import { BILI_AGENT_ORIGIN, BILI_RELAY_CHANNEL, DmChannel, type DmOutcome } from './dm.ts'
 import { HotStore, type BiliHot } from './hot.ts'
 import { biliDomain, seqKey } from './storage.ts'
@@ -112,8 +113,6 @@ export interface Config {
   share: ShareConfig
 }
 
-/** Resolve failures that keep the stored Session: it exists and is only unavailable right now. */
-const TRANSIENT_RESOLVE_CODES: ReadonlySet<string> = new Set(['session/agent-busy', 'session/writer-held'])
 /** Owner-message ids remembered. */
 const MAX_SEEN = 500
 /** Owner messages waiting for a turn; the oldest are dropped first. */
@@ -298,10 +297,9 @@ export class BiliAccount extends Service {
   private readonly ready: Promise<Domain<typeof biliDomain>>
   private readonly client: RemoteBiliClient
   private readonly abort = new AbortController()
-  private readonly inflight = new Set<Promise<void>>()
+  private readonly background = new BackgroundWork((error: unknown) => { this.ctx.logger.warn(`bili: background work failed: ${errorText(error)}`) })
   private readonly timers = new Set<() => void>()
   private domain: Domain<typeof biliDomain> | undefined
-  private chain: Promise<unknown> = Promise.resolve()
   private stopping = false
   private feedIndex = 0
   /** The last status answer of bili-svc, reused for {@link STATUS_TTL_MS}. */
@@ -357,7 +355,7 @@ export class BiliAccount extends Service {
     ctx.provide('biliHot', this.hot)
     this.share = new DailyShare({
       ready: this.ready,
-      serialize: work => this.serialize(work),
+      serialize: work => this.background.serialize(work),
       ownerMid: () => this.ownerMid(),
       holdReason: (now, domain) => this.shareHold(now, domain),
       prompt: text => this.promptShare(text),
@@ -371,7 +369,7 @@ export class BiliAccount extends Service {
       shareOwner: text => this.shareOwner(text),
       shareCurrent: sessionId => this.share.isShareTurn(sessionId),
       shareSettled: (sessionId, outcome, detail, text) => this.share.settled(sessionId, outcome, detail, text),
-      hold: work => this.hold(work),
+      hold: work => this.background.hold(work),
       notifier: () => this.ctx.get('ownerNotifier'),
       logger: { info: (message) => { ctx.logger.info(message) }, warn: (message) => { ctx.logger.warn(message) } },
     })
@@ -384,8 +382,7 @@ export class BiliAccount extends Service {
         this.abort.abort(new Error('bili is stopping'))
         this.fastPoll?.()
         for (const dispose of this.timers) dispose()
-        await Promise.allSettled([...this.inflight])
-        await this.chain
+        await this.background.drain()
         await domain.close()
       }, 'bili.lifecycle()')
       await this.restore(domain)
@@ -421,7 +418,7 @@ export class BiliAccount extends Service {
 
   /** Drop queued items of the retired reply and mention wakes, and start the owner-message check. */
   private async restore(domain: Domain<typeof biliDomain>): Promise<void> {
-    const dropped = await this.serialize(async () => {
+    const dropped = await this.background.serialize(async () => {
       let count = 0
       for (const [key, row] of [...domain.table('pending').entries()]) {
         if (row.kind === 'dm') continue
@@ -440,35 +437,13 @@ export class BiliAccount extends Service {
     this.ctx.logger.info(`bili: the daily share is ${enabled ? `on, once a day at a random time in ${this.config.share.start}–${this.config.share.end} ${this.config.timeZone}` : 'off'}`)
   }
 
-  /** Run storage work one piece at a time; rejections reach the caller without breaking the chain. */
-  private serialize<T>(work: () => Promise<T>): Promise<T> {
-    const result = this.chain.then(work)
-    this.chain = result.catch(() => undefined)
-    return result
-  }
-
-  /** Keep background work alive until teardown drains it. */
-  private track(work: Promise<void>): void {
-    const tracked = work.catch((error: unknown) => {
-      this.ctx.logger.warn(`bili: background work failed: ${errorText(error)}`)
-    }).finally(() => this.inflight.delete(tracked))
-    this.inflight.add(tracked)
-  }
-
-  /** Keep work another service awaits alive until teardown drains it; its outcome stays the caller's. */
-  private hold<T>(work: Promise<T>): Promise<T> {
-    const held = work.then(() => undefined, () => undefined).finally(() => this.inflight.delete(held))
-    this.inflight.add(held)
-    return work
-  }
-
   /** Run `work` every `ms`, never two at once. */
   private every(ms: number, work: () => Promise<void>): void {
     let running = false
     const dispose = this.ctx.interval(() => {
       if (running || this.stopping) return
       running = true
-      this.track(work().finally(() => { running = false }))
+      this.background.track(work().finally(() => { running = false }))
     }, ms)
     this.timers.add(dispose)
   }
@@ -585,29 +560,22 @@ export class BiliAccount extends Service {
       if (this.ctx.get('workspaceRegistry')?.archivedSessionIds.includes(sessionId) === true) {
         this.ctx.logger.info(`bili: Session ${sessionId} is archived; starting a new one`)
       } else {
-        const resolved = await this.ctx.sessionController.resolveAgent(sessionId)
-        if ('agent' in resolved) return sessionId
-        if (TRANSIENT_RESOLVE_CODES.has(resolved.error.code)) throw resolved.error
-        this.ctx.logger.info(`bili: Session ${sessionId} is unavailable (${resolved.error.code}); starting a new one`)
+        const unavailable = await unavailableReason(this.ctx, sessionId)
+        if (unavailable === undefined) return sessionId
+        this.ctx.logger.info(`bili: Session ${sessionId} is unavailable (${unavailable}); starting a new one`)
       }
     }
     const session = this.config.session
-    // Fails on an unknown preset before a Session exists.
-    this.ctx.permissionPresets.resolve(session.permissionPreset)
-    const created = await this.ctx.sessionController.create({ cwd: session.workspacePath, agentPreset: session.agentPreset })
-    const resolved = await this.ctx.sessionController.resolveAgent(created.sessionId)
-    if ('error' in resolved) throw resolved.error
-    this.ctx.permissionPresets.set(resolved.agent.session, session.permissionPreset)
-    this.ctx.sessionTitle.rename(resolved.agent.session, session.title)
+    const createdId = await openPresetSession(this.ctx, session, session.title)
     const now = Date.now()
     // Claimed before the first prompt, so the relay follows the Session's first turn.
-    this.ctx.get('ownerRelay')?.claim(created.sessionId, BILI_RELAY_CHANNEL)
-    await this.serialize(async () => {
-      await domain.table('sessions').put(created.sessionId, { sessionId: created.sessionId, createdAt: now })
-      await domain.table('current').put('session', { sessionId: created.sessionId, createdAt: now })
+    this.ctx.get('ownerRelay')?.claim(createdId, BILI_RELAY_CHANNEL)
+    await this.background.serialize(async () => {
+      await domain.table('sessions').put(createdId, { sessionId: createdId, createdAt: now })
+      await domain.table('current').put('session', { sessionId: createdId, createdAt: now })
     })
-    this.ctx.logger.info(`bili: created Session ${created.sessionId} in ${session.workspacePath} (${session.agentPreset}, ${session.permissionPreset})`)
-    return created.sessionId
+    this.ctx.logger.info(`bili: created Session ${createdId} in ${session.workspacePath} (${session.agentPreset}, ${session.permissionPreset})`)
+    return createdId
   }
 
   /**
@@ -739,7 +707,7 @@ export class BiliAccount extends Service {
 
   /** Queue unseen owner messages. */
   private async queueOwner(items: readonly OwnerMessage[]): Promise<void> {
-    await this.serialize(async () => {
+    await this.background.serialize(async () => {
       const domain = await this.ready
       const row = domain.table('inbox').get('dm')
       const seen = new Set(row?.seen ?? [])
@@ -783,7 +751,7 @@ export class BiliAccount extends Service {
       return
     }
     this.fastPoll = this.ctx.timeout(() => {
-      this.track(this.pollOwner().finally(() => { this.armFastPoll() }))
+      this.background.track(this.pollOwner().finally(() => { this.armFastPoll() }))
     }, FAST_POLL_MS)
   }
 
@@ -804,7 +772,7 @@ export class BiliAccount extends Service {
       this.ctx.logger.warn(`bili: prompting the Session with the owner's messages failed: ${errorText(error)}`)
     }
     if (!prompted) return
-    await this.serialize(async () => {
+    await this.background.serialize(async () => {
       for (const { key } of batch) await domain.table('pending').delete(key)
     })
   }
@@ -1153,7 +1121,7 @@ export class BiliAccount extends Service {
   async hotSearches(): Promise<HotSearch[]> {
     return this.reading(async () => {
       const list = await hotSearches(this.client, HOT_SEARCHES)
-      this.track(this.hot.noteWords(list))
+      this.background.track(this.hot.noteWords(list))
       return list
     })
   }
@@ -1180,8 +1148,8 @@ export class BiliAccount extends Service {
       const cid = video.parts.find(part => part.page === options.part)?.cid ?? video.cid
       const subtitle = await subtitles(this.client, bvid, cid, options.subtitlePage ?? 1)
       const top = await comments(this.client, video.aid, { order: 'hot' }, this.config.timeZone)
-      if (subtitle.reached !== undefined) this.track(this.reportWatchOf(video, cid, subtitle.reached))
-      this.track(this.hot.noteComments(video.bvid, top.comments))
+      if (subtitle.reached !== undefined) this.background.track(this.reportWatchOf(video, cid, subtitle.reached))
+      this.background.track(this.hot.noteComments(video.bvid, top.comments))
       return { video, subtitle: subtitle.view, topComments: top.comments.slice(0, 5) }
     })
   }
@@ -1203,7 +1171,7 @@ export class BiliAccount extends Service {
         return { comments: result.replies, ...(result.root === undefined ? {} : { root: result.root }) }
       }
       const page = await comments(this.client, video.aid, { order: options.order ?? 'hot', ...(options.offset === undefined ? {} : { offset: options.offset }) }, this.config.timeZone)
-      this.track(this.hot.noteComments(video.bvid, page.comments))
+      this.background.track(this.hot.noteComments(video.bvid, page.comments))
       return page
     })
   }
@@ -1230,7 +1198,7 @@ export class BiliAccount extends Service {
 
   /** Record owner messages the model has read so no turn repeats them. */
   private async markSeen(items: readonly OwnerMessage[]): Promise<void> {
-    await this.serialize(async () => {
+    await this.background.serialize(async () => {
       const domain = await this.ready
       const seen = new Set(domain.table('inbox').get('dm')?.seen ?? [])
       for (const item of items) {
@@ -1281,7 +1249,7 @@ export class BiliAccount extends Service {
     const entry = text.trim()
     if (entry === '') return { refused: 'the entry is empty' }
     if (codePoints(entry) > JOURNAL_LIMITS.chars) return { refused: `the entry is ${codePoints(entry)} characters; the limit is ${JOURNAL_LIMITS.chars}` }
-    return this.serialize(async () => {
+    return this.background.serialize(async () => {
       const domain = await this.ready
       const now = Date.now()
       const day = dayKey(now, this.config.timeZone)
@@ -1325,7 +1293,7 @@ export class BiliAccount extends Service {
     if (message === '') return { outcome: 'refused', detail: 'the message is empty' }
     const chars = codePoints(message)
     if (chars > MAIN_AGENT_MAX_CHARS) return { outcome: 'refused', detail: `the message is ${chars} characters; the limit is ${MAIN_AGENT_MAX_CHARS}` }
-    return this.serialize(async (): Promise<WriteOutcome> => {
+    return this.background.serialize(async (): Promise<WriteOutcome> => {
       const domain = await this.ready
       const now = Date.now()
       const day = dayKey(now, this.config.timeZone)
@@ -1459,7 +1427,7 @@ export class BiliAccount extends Service {
    * check records the new conversation's history instead of answering it.
    */
   private async setOwner(mid: number): Promise<void> {
-    const changed = await this.serialize(async () => {
+    const changed = await this.background.serialize(async () => {
       const domain = await this.ready
       const before = this.ownerMid()
       await domain.table('owner').put('main', { mid, updatedAt: Date.now() })

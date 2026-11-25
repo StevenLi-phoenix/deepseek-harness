@@ -6,6 +6,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool, type ParameterSchemaSpec } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
+import { renderWrapped } from '@deepseek-ai/dsh-service-kit'
 import { BiliSvc, errorCode, untrusted } from './bili-svc.ts'
 import { commentsOf, type CommentCache } from './evidence.ts'
 import type { OwnAccounts } from './evidence-service.ts'
@@ -185,10 +186,7 @@ export function registerReadTools(ctx: Context, svc: BiliSvc, memory: ReadMemory
       parameters: spec.parameters,
       output: {
         schema: JSON_SCHEMA,
-        render: (_args: unknown, value: unknown) => {
-          const error = (value as { error?: unknown } | null)?.error
-          return [{ type: 'text' as const, text: typeof error === 'string' ? JSON.stringify({ error }) : untrusted(spec.label, value) }]
-        },
+        render: renderWrapped(value => untrusted(spec.label, value)),
       },
       async execute(args, exec): Promise<JsonValue> {
         try {

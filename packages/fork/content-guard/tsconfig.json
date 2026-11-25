@@ -25,6 +25,9 @@
     },
     {
       "path": "../owner-memory"
+    },
+    {
+      "path": "../service-kit"
     }
   ]
 }

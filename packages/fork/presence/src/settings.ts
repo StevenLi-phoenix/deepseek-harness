@@ -7,6 +7,7 @@
 import type { ConnectionFetchRoute } from '@deepseek-ai/dsh-client-connection'
 import z from '@deepseek-ai/schemastery'
 import { CLOCK_PATTERN, PRESENCE_PATH, type PresenceAction, type PresenceAnswer, type PresenceView, type QuietWindow } from '@deepseek-ai/dsh-wechat-settings/presence-view'
+import { jsonFailure, NO_STORE, readJsonAction } from '@deepseek-ai/dsh-service-kit'
 
 /** What the route needs of the presence service. */
 export interface SettingsPresence {
@@ -38,11 +39,6 @@ const actionSchema = z.union([
   z.object({ action: z.const('flush').required() }),
 ])
 
-const HEADERS = { 'cache-control': 'no-store' }
-
-function failure(status: number, error: string): Response {
-  return Response.json({ error }, { status, headers: HEADERS })
-}
 
 /** The route's logic, kept apart from the service so it can be tested with a fake one. */
 export class PresenceSettings {
@@ -58,29 +54,19 @@ export class PresenceSettings {
    * @returns the registration.
    */
   route(): ConnectionFetchRoute {
-    return { path: PRESENCE_PATH, methods: ['GET', 'POST'], requestBody: 'buffered', fetch: request => this.handle(request) }
+    return { path: PRESENCE_PATH, methods: ['GET', 'POST'], requestBody: 'buffered', fetch: request => (request.method === 'POST' ? this.act(request) : Promise.resolve(this.answer())) }
   }
 
   private answer(flushed: number | null = null): Response {
     const body: PresenceAnswer = { view: this.options.presence.view(), flushed }
-    return Response.json(body, { headers: HEADERS })
+    return Response.json(body, { headers: NO_STORE })
   }
 
-  private async handle(request: Request): Promise<Response> {
-    if (request.method !== 'POST') return this.answer()
-    if (!(request.headers.get('content-type') ?? '').startsWith('application/json')) return failure(415, 'expected application/json')
-    let body: unknown
-    try {
-      body = await request.json()
-    } catch {
-      return failure(400, 'body is not JSON')
-    }
-    let action: PresenceAction
-    try {
-      action = actionSchema(body as never)
-    } catch {
-      return failure(400, 'unknown action or bad field')
-    }
+  /** One validated action, logged with its outcome and duration. */
+  private async act(request: Request): Promise<Response> {
+    const read = await readJsonAction(request, body => actionSchema(body as never), 'unknown action or bad field')
+    if (!read.ok) return read.answer
+    const { action } = read
     const startedAt = this.now()
     const response = await this.perform(action)
     this.options.logger.info(`presence: settings ${action.action} ${response.status < 300 ? 'ok' : `refused (${response.status})`} (${this.now() - startedAt} ms)`)
@@ -103,14 +89,14 @@ export class PresenceSettings {
         await presence.clearManual()
         return this.answer()
       case 'window.set':
-        if (action.enabled && action.start === action.end) return failure(400, 'the window must not start and end at the same time')
+        if (action.enabled && action.start === action.end) return jsonFailure(400, 'the window must not start and end at the same time')
         await presence.setWindow({ enabled: action.enabled, start: action.start, end: action.end })
         return this.answer()
       case 'flush':
         return this.answer(await presence.flushNow())
       /* v8 ignore next 2 -- actionSchema has already refused every action outside this union, so no request reaches the default */
       default:
-        return failure(400, 'unknown action')
+        return jsonFailure(400, 'unknown action')
     }
   }
 }

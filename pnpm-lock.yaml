@@ -13863,6 +13863,9 @@ importers:
 
   packages/fork/bili:
     dependencies:
+      '@deepseek-ai/dsh-service-kit':
+        specifier: workspace:*
+        version: link:../service-kit
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
@@ -13983,6 +13986,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: workspace:*
         version: link:../../llm/llm
+      '@deepseek-ai/dsh-service-kit':
+        specifier: workspace:*
+        version: link:../service-kit
       '@deepseek-ai/dsh-tool-executor-native':
         specifier: workspace:*
         version: link:../../core/tool-executor-native
@@ -14014,6 +14020,9 @@ importers:
       '@deepseek-ai/dsh-owner-memory':
         specifier: workspace:*
         version: link:../owner-memory
+      '@deepseek-ai/dsh-service-kit':
+        specifier: workspace:*
+        version: link:../service-kit
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
@@ -14127,6 +14136,9 @@ importers:
       '@deepseek-ai/dsh-schedule':
         specifier: workspace:*
         version: link:../../schedule/schedule
+      '@deepseek-ai/dsh-service-kit':
+        specifier: workspace:*
+        version: link:../service-kit
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../core/session
@@ -14612,6 +14624,9 @@ importers:
       '@deepseek-ai/dsh-event-bus':
         specifier: workspace:*
         version: link:../event-bus
+      '@deepseek-ai/dsh-service-kit':
+        specifier: workspace:*
+        version: link:../service-kit
       '@deepseek-ai/dsh-storage':
         specifier: workspace:*
         version: link:../../storage/storage
@@ -14725,6 +14740,9 @@ importers:
       '@deepseek-ai/dsh-permission-presets':
         specifier: workspace:*
         version: link:../../interaction/permission-presets
+      '@deepseek-ai/dsh-service-kit':
+        specifier: workspace:*
+        version: link:../service-kit
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../core/session
@@ -14841,6 +14859,9 @@ importers:
       '@deepseek-ai/dsh-permission-presets':
         specifier: workspace:*
         version: link:../../interaction/permission-presets
+      '@deepseek-ai/dsh-service-kit':
+        specifier: workspace:*
+        version: link:../service-kit
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../core/session
@@ -14862,6 +14883,30 @@ importers:
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
+
+  packages/fork/service-kit:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent-default-model':
+        specifier: workspace:*
+        version: link:../../core/agent-default-model
+      '@deepseek-ai/dsh-api-session-controller':
+        specifier: workspace:*
+        version: link:../../api/session-controller
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../llm/llm
+      '@deepseek-ai/dsh-permission-presets':
+        specifier: workspace:*
+        version: link:../../interaction/permission-presets
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../core/session
+      '@deepseek-ai/dsh-session-title':
+        specifier: workspace:*
+        version: link:../../session/session-title
 
   packages/fork/settings-kit:
     devDependencies:
@@ -14929,6 +14974,9 @@ importers:
       '@deepseek-ai/dsh-qq':
         specifier: workspace:*
         version: link:../qq
+      '@deepseek-ai/dsh-service-kit':
+        specifier: workspace:*
+        version: link:../service-kit
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../core/session
@@ -15160,6 +15208,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: workspace:*
         version: link:../../llm/llm
+      '@deepseek-ai/dsh-service-kit':
+        specifier: workspace:*
+        version: link:../service-kit
       '@deepseek-ai/dsh-tool-executor-native':
         specifier: workspace:*
         version: link:../../core/tool-executor-native
@@ -15243,6 +15294,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: workspace:*
         version: link:../../llm/llm
+      '@deepseek-ai/dsh-service-kit':
+        specifier: workspace:*
+        version: link:../service-kit
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../core/session
@@ -15326,6 +15380,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: workspace:*
         version: link:../../llm/llm
+      '@deepseek-ai/dsh-service-kit':
+        specifier: workspace:*
+        version: link:../service-kit
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../core/session
@@ -15519,6 +15576,9 @@ importers:
       '@deepseek-ai/dsh-schedule':
         specifier: workspace:*
         version: link:../../schedule/schedule
+      '@deepseek-ai/dsh-service-kit':
+        specifier: workspace:*
+        version: link:../service-kit
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../core/session

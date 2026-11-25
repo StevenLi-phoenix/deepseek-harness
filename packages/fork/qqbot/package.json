@@ -42,7 +42,8 @@
     "@deepseek-ai/dsh-permission-presets": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",
     "@deepseek-ai/dsh-session-title": "workspace:*",
-    "@deepseek-ai/dsh-storage-domain": "workspace:*"
+    "@deepseek-ai/dsh-storage-domain": "workspace:*",
+    "@deepseek-ai/dsh-service-kit": "workspace:*"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "workspace:~",
@@ -66,6 +67,7 @@
     "@deepseek-ai/dsh-storage-domain": "workspace:*",
     "@types/ws": "^8.18.1",
     "ws": "^8.21.3",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "@deepseek-ai/dsh-service-kit": "workspace:*"
   }
 }

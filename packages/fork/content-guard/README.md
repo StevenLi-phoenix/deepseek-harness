@@ -99,7 +99,7 @@ Only the model layer is cached, by SHA-256 of the text, purpose, audience, and p
 | [`src/patterns.ts`](src/patterns.ts) | The deterministic layer; `LINK`, `MENTION`, and `LONG_NUMBER` are the expressions `speaking-style`'s line filter uses |
 | [`src/canary.ts`](src/canary.ts) | The canary file and configured strings |
 | [`src/classifier.ts`](src/classifier.ts) | Prompt, answer parser, raw response store |
-| [`src/model.ts`](src/model.ts) | The model call over the LLM service |
+| [`src/model.ts`](src/model.ts) | The model call over the LLM service (`callModelOnce` of `@deepseek-ai/dsh-service-kit`) |
 | [`src/settings.ts`](src/settings.ts) | `GET /api/content-guard`: the counts of `health()` for the Settings card |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).

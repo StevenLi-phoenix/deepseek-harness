@@ -22,6 +22,9 @@
     },
     {
       "path": "../../core/tool-executor-native"
+    },
+    {
+      "path": "../service-kit"
     }
   ]
 }

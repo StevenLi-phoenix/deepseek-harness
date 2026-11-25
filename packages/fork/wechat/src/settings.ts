@@ -8,6 +8,7 @@
 import { access, rename } from 'node:fs/promises'
 import type { ConnectionFetchRoute } from '@deepseek-ai/dsh-client-connection'
 import z from '@deepseek-ai/schemastery'
+import { jsonFailure, NO_STORE, readJsonAction } from '@deepseek-ai/dsh-service-kit'
 import { LoginSessions, type LoginTransport } from './login-session.ts'
 import { readAccountFile, type WechatAccount } from './login.ts'
 import {
@@ -48,12 +49,6 @@ const actionSchema = z.union([
   z.object({ action: z.const('unbind').required(), confirm: z.const('unbind').required() }),
 ])
 
-const HEADERS = { 'cache-control': 'no-store' }
-
-/** A JSON error answer; its text never repeats request data. */
-function failure(status: number, error: string): Response {
-  return Response.json({ error }, { status, headers: HEADERS })
-}
 
 /** `YYYYMMDDHHMMSS` of an instant in UTC, for backup file names. */
 function stamp(ms: number): string {
@@ -126,26 +121,15 @@ export class WechatSettings {
 
   private answer(login: LoginSnapshot | null = null): Response {
     const body: WechatAnswer = { view: this.view(), login }
-    return Response.json(body, { headers: HEADERS })
+    return Response.json(body, { headers: NO_STORE })
   }
 
   /** One request: a read, or one validated action; each action is logged with its outcome and duration. */
   private async handle(request: Request): Promise<Response> {
     if (request.method !== 'POST') return this.answer()
-    if (!(request.headers.get('content-type') ?? '').startsWith('application/json')) return failure(415, 'expected application/json')
-    let body: unknown
-    try {
-      body = await request.json()
-    } catch {
-      return failure(400, 'body is not JSON')
-    }
-    let action: WechatAction
-    try {
-      action = actionSchema(body as never)
-    } catch {
-      // The validation message quotes the body, which may hold a verification number.
-      return failure(400, 'unknown action or missing field')
-    }
+    const read = await readJsonAction(request, body => actionSchema(body as never), 'unknown action or missing field')
+    if (!read.ok) return read.answer
+    const { action } = read
     const startedAt = this.now()
     const response = await this.perform(action)
     const outcome = response.status < 300 ? 'ok' : `refused (${response.status})`
@@ -162,24 +146,24 @@ export class WechatSettings {
         return this.answer(await this.logins.start())
       case 'login.poll': {
         const login = this.logins.poll(action.key)
-        return login === undefined ? failure(404, 'that login is gone') : this.answer(login)
+        return login === undefined ? jsonFailure(404, 'that login is gone') : this.answer(login)
       }
       case 'login.code': {
         const code = action.code.trim()
-        if (!VERIFY_CODE_PATTERN.test(code)) return failure(400, 'the number is digits only')
+        if (!VERIFY_CODE_PATTERN.test(code)) return jsonFailure(400, 'the number is digits only')
         const login = this.logins.code(action.key, code)
-        if (login === undefined) return failure(404, 'that login is gone')
-        if (login === 'not-waiting') return failure(409, 'the login is not asking for a number')
+        if (login === undefined) return jsonFailure(404, 'that login is gone')
+        if (login === 'not-waiting') return jsonFailure(409, 'the login is not asking for a number')
         return this.answer(login)
       }
       case 'login.cancel':
         /* v8 ignore next -- after a cancel the entry still matches the key. */
-        return this.logins.cancel(action.key) ? this.answer(this.logins.poll(action.key) ?? null) : failure(404, 'that login is gone or already over')
+        return this.logins.cancel(action.key) ? this.answer(this.logins.poll(action.key) ?? null) : jsonFailure(404, 'that login is gone or already over')
       case 'unbind':
         return this.unbind()
       /* v8 ignore next 2 -- actionSchema admits only the five actions above, and handle() passes nothing else. */
       default:
-        return failure(400, 'unknown action')
+        return jsonFailure(400, 'unknown action')
     }
   }
 
@@ -189,7 +173,7 @@ export class WechatSettings {
    */
   private async unbind(): Promise<Response> {
     const path = this.options.accountFile
-    if (readAccountFile(path).kind === 'missing') return failure(409, 'no bot is bound')
+    if (readAccountFile(path).kind === 'missing') return jsonFailure(409, 'no bot is bound')
     this.logins.end('the account is being unbound')
     const base = `${path}.bak.${stamp(this.now())}`
     let backup = base
@@ -198,7 +182,7 @@ export class WechatSettings {
       await rename(path, backup)
     } catch (error: unknown) {
       this.options.logger.warn(`wechat: settings unbind failed to move the account file (${(error as NodeJS.ErrnoException).code ?? 'error'})`)
-      return failure(500, 'the account file could not be moved')
+      return jsonFailure(500, 'the account file could not be moved')
     }
     this.options.logger.info(`wechat: settings unbind moved the account file to ${backup}`)
     this.options.channel.reloadAccount('unbound from Settings')

@@ -20,6 +20,7 @@ import type {} from '@deepseek-ai/dsh-permission-presets'
 import type {} from '@deepseek-ai/dsh-session-title'
 import type {} from '@deepseek-ai/dsh-storage-domain'
 import z from '@deepseek-ai/schemastery'
+import { BackgroundWork, pause, type WakeSlot } from '@deepseek-ai/dsh-service-kit'
 import { DEFAULT_MEDIA_HOST_SUFFIXES, isPrivateAddress, isPrivateUrl } from './address.ts'
 import { RecorderClient, RecorderError, RecorderUnavailable } from './client.ts'
 import { DigestStore, qqDomain, type DigestRecord } from './digest-storage.ts'
@@ -344,7 +345,7 @@ export class QqObserver extends Service {
   readonly socketPath: string
   private readonly client: RecorderClient
   private readonly abort = new AbortController()
-  private readonly inflight = new Set<Promise<void>>()
+  private readonly background = new BackgroundWork((error: unknown) => { this.ctx.logger.warn(`qq: background work failed: ${errorText(error)}`) })
   private readonly warnedInvalid = new Set<string>()
   private recordedCache: { source: readonly string[]; ids: ReadonlySet<string> } | undefined
   private store: DigestStore | undefined
@@ -356,7 +357,7 @@ export class QqObserver extends Service {
   private importWarned = false
   /** Replaced by tests. */
   now: () => number = Date.now
-  private wake: (() => void) | undefined
+  private readonly waiting: WakeSlot = { wake: undefined }
 
   /**
    * @param ctx - Host services: Sessions for the digest, credentials for the recorder token, and storage.
@@ -418,9 +419,9 @@ export class QqObserver extends Service {
 
       const stopListening = this.client.listen({
         change: () => { this.onLinkChange() },
-        botOffline: () => { this.track(this.checkOutage(true)) },
+        botOffline: () => { this.background.track(this.checkOutage(true)) },
       })
-      const alive = setInterval(() => { this.track(this.checkOutage(false)) }, OUTAGE_CHECK_MS)
+      const alive = setInterval(() => { this.background.track(this.checkOutage(false)) }, OUTAGE_CHECK_MS)
       alive.unref()
       void this.client.setConfig(this.buildConfig())
       this.client.start()
@@ -430,9 +431,9 @@ export class QqObserver extends Service {
         stopListening()
         clearInterval(alive)
         this.abort.abort(new Error('qq is stopping'))
-        this.wake?.()
+        this.waiting.wake?.()
         await schedule
-        await Promise.allSettled([...this.inflight])
+        await this.background.drain()
         await this.client.stop()
         await domain.close()
       }
@@ -809,31 +810,14 @@ export class QqObserver extends Service {
 
   // ---- plumbing ----
 
-  private track(work: Promise<void>): void {
-    const tracked = work.catch((error: unknown) => {
-      this.ctx.logger.warn(`qq: background work failed: ${errorText(error)}`)
-    }).finally(() => this.inflight.delete(tracked))
-    this.inflight.add(tracked)
-  }
-
   private pause(ms: number): Promise<void> {
-    return new Promise((resolve) => {
-      const done = (): void => {
-        clearTimeout(timer)
-        this.abort.signal.removeEventListener('abort', done)
-        if (this.wake === done) this.wake = undefined
-        resolve()
-      }
-      const timer = setTimeout(done, ms)
-      this.wake = done
-      this.abort.signal.addEventListener('abort', done, { once: true })
-    })
+    return pause(ms, this.abort.signal, this.waiting)
   }
 
   /** The link to the recorder changed: carry the digest state over once, and look at the outage clock. */
   private onLinkChange(): void {
-    if (this.client.link() === 'ok') this.track(this.importLegacy())
-    this.track(this.checkOutage(false))
+    if (this.client.link() === 'ok') this.background.track(this.importLegacy())
+    this.background.track(this.checkOutage(false))
   }
 
   /** Copy the digest state the recorder holds from before the move, once. */

@@ -399,8 +399,8 @@ describe('QqObserver digest rounds', () => {
   }
   const digestConfig = (dir: string) => ({ digest: { enabled: true, minMessages: 1, everyHours: 1, workspacePath: join(dir, 'ws'), timeoutMs: 10_000 } })
   const wake = async (h: { observer: QqObserver }) => {
-    await until(() => h.observer['wake'] !== undefined, 'the schedule to wait')
-    h.observer['wake']!()
+    await until(() => h.observer['waiting'].wake !== undefined, 'the schedule to wait')
+    h.observer['waiting'].wake!()
   }
   const say = async (r: Rig, id: number) => {
     r.fake.push(groupMessage(GROUP, '10001', `第${id}条`, { message_id: id, time: Math.floor(Date.now() / 1000) }))
@@ -423,17 +423,17 @@ describe('QqObserver digest rounds', () => {
     expect(publish).toHaveBeenCalledWith(expect.objectContaining({ source: 'qq', kind: 'qq.digest.new', subject: GROUP, text: '## 话题\n聊了部署' }))
     await say(r, 8002)
     h.observer.now = () => Date.now() + 25 * HOUR
-    await until(() => h.observer['wake'] !== undefined, 'the schedule to wait')
+    await until(() => h.observer['waiting'].wake !== undefined, 'the schedule to wait')
     await wake(h)
     await until(() => h.logs.filter(line => line.text === 'qq: digest round stored 1 digest(s)').length === 2, 'the second round')
     expect(publish).toHaveBeenCalledTimes(2)
     // Nothing new since: the next round stores nothing and says nothing.
     const round = vi.spyOn(h.observer['digest']!, 'runRound')
-    await until(() => h.observer['wake'] !== undefined, 'the schedule to wait')
+    await until(() => h.observer['waiting'].wake !== undefined, 'the schedule to wait')
     await wake(h)
     await until(() => round.mock.calls.length === 1, 'the third round')
     expect(await round.mock.results[0]!.value).toBe(0)
-    await until(() => h.observer['wake'] !== undefined, 'the schedule to wait again')
+    await until(() => h.observer['waiting'].wake !== undefined, 'the schedule to wait again')
     expect(h.logs.filter(line => line.text === 'qq: digest round stored 1 digest(s)')).toHaveLength(2)
   })
 
@@ -486,7 +486,7 @@ describe('QqObserver digest rounds', () => {
 
   it('logs background work that fails', async () => {
     const h = await bare()
-    h.observer['track'](Promise.reject(new Error('detached failure')))
+    h.observer['background'].track(Promise.reject(new Error('detached failure')))
     await until(() => h.logs.some(line => line.text === 'qq: background work failed: detached failure'), 'the failure to be logged')
   })
 
@@ -496,8 +496,8 @@ describe('QqObserver digest rounds', () => {
     const second = h.observer['pause'](60_000)
     await first
     // The first pause ended on its timer; the wake-up still belongs to the second.
-    expect(h.observer['wake']).toBeDefined()
-    h.observer['wake']!()
+    expect(h.observer['waiting'].wake).toBeDefined()
+    h.observer['waiting'].wake!()
     await second
   })
 })

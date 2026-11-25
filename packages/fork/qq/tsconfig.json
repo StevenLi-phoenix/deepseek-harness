@@ -37,6 +37,9 @@
     },
     {
       "path": "../../session/session-title"
+    },
+    {
+      "path": "../service-kit"
     }
   ]
 }

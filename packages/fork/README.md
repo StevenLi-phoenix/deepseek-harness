@@ -26,6 +26,7 @@ Talk to an always-on agent on WeChat and let it watch GitHub for you, without ed
 |---|---|
 | [`bili/`](bili/README.md) | The agent's own Bilibili account as a client of bili-svc: reads and non-speech actions through bili-svc's door, the owner's messages answered through its Reply Gate, and a Settings section that manages bili-svc (accounts, QR sign-in, gate, brake, ledger) |
 | [`provider-balance/`](provider-balance/README.md) | Account settings card with the balance or quota of every provider key |
+| [`service-kit/`](service-kit/README.md) | Host helpers the services and tools import: tracked background work and an abortable pause, chat Sessions and the relay claim, JSON Settings actions, one model call, and JSON tool output |
 | [`settings-kit/`](settings-kit/README.md) | Browser helpers the Settings sections inline: polling while the page is visible, a read shared while in flight, time text, the status line, and the card, status header, and pending markup |
 | [`plugin-config/`](plugin-config/README.md) | The All settings card (`settings.plugin-config`) any Settings section embeds: every Config field of a plugin entry, its layer, and one reviewed save to the owner's patch |
 | [`courses/`](courses/README.md) | The owner's course records (`ctx.courses`): a client of the courses service and a deadline poller that reminds the owner on WeChat by fixed rules and tells when the course sync is broken |

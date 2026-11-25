@@ -8,6 +8,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { ERROR_SCHEMA, renderJson } from '@deepseek-ai/dsh-service-kit'
 import { MonitorRefused, type MonitorRegistry, type MonitorView } from './monitor.ts'
 import type { MonitorStorage } from './persistence.ts'
 
@@ -37,13 +38,6 @@ const VIEW_SCHEMA = {
   },
 } as const
 
-const ERROR_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  properties: { error: { type: 'string', required: true } },
-} as const
-
-const renderValue = (_args: unknown, value: unknown) => [{ type: 'text' as const, text: JSON.stringify(value) }]
 
 const START_DESCRIPTION = [
   'Start a background monitor: a bash command whose stdout lines are sent back to this session as they appear, waking you when you are idle.',
@@ -103,7 +97,7 @@ function startTool(deps: ToolDeps) {
       timeout_minutes: { type: 'number', description: `Stop after this many minutes; default ${String(DEFAULT_TIMEOUT_MINUTES)}, at most ${String(MAX_TIMEOUT_MINUTES)}. Ignored when persistent is true.` },
       persistent: { type: 'boolean', description: 'Run until monitor_stop or until the session is gone, with no timeout, across host restarts.' },
     },
-    output: { schema: { oneOf: [VIEW_SCHEMA, ERROR_SCHEMA] }, render: renderValue },
+    output: { schema: { oneOf: [VIEW_SCHEMA, ERROR_SCHEMA] }, render: renderJson },
     execute(args, exec): Promise<MonitorView | { error: string }> {
       return Promise.resolve(startMonitor(deps, args, exec.agent))
     },
@@ -125,7 +119,7 @@ function stopTool({ ctx, registry }: ToolDeps) {
           ERROR_SCHEMA,
         ],
       },
-      render: renderValue,
+      render: renderJson,
     },
     execute(args, exec): Promise<{ stopped: string } | { error: string }> {
       const owner = exec.agent?.session.id
@@ -146,7 +140,7 @@ function listTool({ registry }: ToolDeps) {
     parameters: {},
     output: {
       schema: { type: 'object', additionalProperties: false, properties: { monitors: { type: 'array', required: true, items: VIEW_SCHEMA } } },
-      render: renderValue,
+      render: renderJson,
     },
     execute(_args, exec): Promise<{ monitors: MonitorView[] }> {
       const owner = exec.agent?.session.id

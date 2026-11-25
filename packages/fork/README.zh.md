@@ -26,6 +26,7 @@ kind: "package-group"
 |---|---|
 | [`bili/`](bili/README.zh.md) | agent 自己的 B站账号，作为 bili-svc 的客户端：读取和不发言的操作走 bili-svc 的门，owner 的私信经它的回复闸门回复，以及管理 bili-svc 的设置页（账号、扫码登录、闸门、急停、动作记录） |
 | [`provider-balance/`](provider-balance/README.zh.md) | 账号设置页里列出各供应商 key 余额或配额的卡片 |
+| [`service-kit/`](service-kit/README.zh.md) | 各服务和工具导入的 Host 端帮助代码：被跟踪的后台工作和可中止的等待、聊天 Session 与中继认领、JSON 设置动作、一次模型调用，以及 JSON 工具输出 |
 | [`settings-kit/`](settings-kit/README.zh.md) | 各设置页内联的浏览器端帮助代码：页面可见时轮询、进行中的读取共享、时间文字、状态行，以及卡片、状态头和等待时的标记 |
 | [`plugin-config/`](plugin-config/README.zh.md) | 任何设置分区都能嵌入的“全部设置”卡片（`settings.plugin-config`）：插件条目的每个 Config 字段、所在层，以及一次复核后写入主人补丁的保存 |
 | [`courses/`](courses/README.zh.md) | 主人的课程记录（`ctx.courses`）：courses 服务的客户端，以及按固定规则在微信上提醒 DDL、并在课程同步坏了时告诉主人的轮询器 |

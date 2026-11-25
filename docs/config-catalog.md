@@ -514,7 +514,7 @@ export type Config = LocalConfig
 ## `@deepseek-ai/dsh-bili`
 
 - `inject`: `timer` · `storageDomain` · `credentials` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/bili/src/index.ts:90`](../packages/fork/bili/src/index.ts)
+- `source`: [`packages/fork/bili/src/index.ts:91`](../packages/fork/bili/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -601,7 +601,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-cc-bridge`
 
 - `inject`: `tools`
-- `source`: [`packages/fork/cc-bridge/src/index.ts:33`](../packages/fork/cc-bridge/src/index.ts)
+- `source`: [`packages/fork/cc-bridge/src/index.ts:34`](../packages/fork/cc-bridge/src/index.ts)
 
 ```ts config-catalog
 /** Bridge settings. */
@@ -1415,7 +1415,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-event-bus`
 
 - `inject`: `timer` · `storageDomain`
-- `source`: [`packages/fork/event-bus/src/index.ts:70`](../packages/fork/event-bus/src/index.ts)
+- `source`: [`packages/fork/event-bus/src/index.ts:71`](../packages/fork/event-bus/src/index.ts)
 
 ```ts config-catalog
 /** Bus configuration. */
@@ -4115,7 +4115,7 @@ export type Config = LocalConfig
 
 - `inject`: `sessionController` · `permissionPresets` · `sessionTitle` · `credentials` · `storageDomain`
 - `refs`: `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/fork/qq/src/index.ts:52`](../packages/fork/qq/src/index.ts)
+- `source`: [`packages/fork/qq/src/index.ts:53`](../packages/fork/qq/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
@@ -4282,7 +4282,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-qqbot`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle` · `credentials`
-- `source`: [`packages/fork/qqbot/src/index.ts:58`](../packages/fork/qqbot/src/index.ts)
+- `source`: [`packages/fork/qqbot/src/index.ts:59`](../packages/fork/qqbot/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
@@ -7045,7 +7045,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-wechat`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/wechat/src/index.ts:100`](../packages/fork/wechat/src/index.ts)
+- `source`: [`packages/fork/wechat/src/index.ts:101`](../packages/fork/wechat/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
@@ -7454,6 +7454,7 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
 | `@deepseek-ai/dsh-sdk-client` | — | [`packages/sdk/client/src/index.ts`](../packages/sdk/client/src/index.ts) |
 | `@deepseek-ai/dsh-sdk-minimal` | — | [`packages/bundle/sdk-minimal/src/index.ts`](../packages/bundle/sdk-minimal/src/index.ts) |
 | `@deepseek-ai/dsh-sdk-protocol` | — | [`packages/sdk/protocol/src/index.ts`](../packages/sdk/protocol/src/index.ts) |
+| `@deepseek-ai/dsh-service-kit` | — | [`packages/fork/service-kit/src/index.ts`](../packages/fork/service-kit/src/index.ts) |
 | `@deepseek-ai/dsh-session-format` | — | [`packages/session/session-format/src/index.ts`](../packages/session/session-format/src/index.ts) |
 | `@deepseek-ai/dsh-session-format-catalog` | — | [`packages/session/session-format-catalog/src/index.ts`](../packages/session/session-format-catalog/src/index.ts) |
 | `@deepseek-ai/dsh-session-format-v0-to-v1` | — | [`packages/session/session-format-v0-to-v1/src/index.ts`](../packages/session/session-format-v0-to-v1/src/index.ts) |

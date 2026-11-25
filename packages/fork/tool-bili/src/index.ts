@@ -16,6 +16,7 @@ import type { BiliAccount, WriteOutcome } from '@deepseek-ai/dsh-bili'
 import { MAIN_AGENT_MAX_CHARS, untrusted } from '@deepseek-ai/dsh-bili/text'
 import { defineTool, type ParameterSchemaSpec } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
+import { renderWrapped } from '@deepseek-ai/dsh-service-kit'
 import { MAX_BLOCK_CHARS } from './limits.ts'
 
 /** Plugin name. */
@@ -71,10 +72,7 @@ export function apply(ctx: Context): void {
         parameters: spec.parameters,
         output: {
           schema: JSON_SCHEMA,
-          render: (_args: unknown, value: unknown) => {
-            const error = (value as { error?: unknown } | null)?.error
-            return [{ type: 'text' as const, text: typeof error === 'string' ? JSON.stringify({ error }) : untrusted(spec.label, value, MAX_BLOCK_CHARS) }]
-          },
+          render: renderWrapped(value => untrusted(spec.label, value, MAX_BLOCK_CHARS)),
         },
         // A read that fails answers `{ error }`: host text, not Bilibili content.
         async execute(args): Promise<JsonValue> {

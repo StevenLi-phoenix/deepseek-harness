@@ -628,6 +628,7 @@
     { "path": "./packages/fork/provider-balance/tsconfig.host.json" },
     { "path": "./packages/fork/event-bus" },
     { "path": "./packages/fork/owner-relay" },
+    { "path": "./packages/fork/service-kit" },
     { "path": "./packages/fork/qq" },
     { "path": "./packages/fork/qqbot" },
     { "path": "./packages/fork/tool-qq" },

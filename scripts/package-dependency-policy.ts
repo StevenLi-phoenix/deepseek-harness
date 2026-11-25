@@ -38,6 +38,8 @@ const CONFIGURATION_ONLY_DEV_DEPENDENCIES = {
 const DUPLICATE_SAFE_PACKAGES: readonly string[] = [
   '@deepseek-ai/dsh-brand',
   '@deepseek-ai/dsh-lazy-require',
+  // Fork Host helpers: functions and per-caller instances, with no module state or identity checks.
+  '@deepseek-ai/dsh-service-kit',
   '@deepseek-ai/dsh-typert-protocol',
   '@deepseek-ai/dsh-util-code-language',
   '@deepseek-ai/dsh-util-crypto',

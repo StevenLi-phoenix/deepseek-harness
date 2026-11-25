@@ -15,6 +15,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-title'
 import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import z from '@deepseek-ai/schemastery'
+import { BackgroundWork, forgetOldest, joinRelay, openPresetSession, pause, unavailableReason } from '@deepseek-ai/dsh-service-kit'
 import { qqDomain } from './storage.ts'
 import { ATTACHMENT_NOTE, FORWARD_FAILED_PREFIX, frameInbound, HELP_REPLY, NEW_CHAT_REPLY, shortId, splitText } from './text.ts'
 import { createSdkTransport, peerKeyOf, type QqInbound, type QqTarget, type QqTransport } from './transport.ts'
@@ -95,8 +96,6 @@ const MAX_REMEMBERED_SESSIONS = 200
 /** The owner hears of a given unknown sender at most this often, and of all of them at most {@link UNKNOWN_PER_HOUR} times an hour. */
 const UNKNOWN_RENOTIFY_MS = 24 * 60 * 60_000
 const UNKNOWN_PER_HOUR = 3
-/** Resolve failures that keep the stored chat Session: it exists and is only unavailable right now. */
-const TRANSIENT_RESOLVE_CODES: ReadonlySet<string> = new Set(['session/agent-busy', 'session/writer-held'])
 /** Longest unknown-sender message quoted to the owner, in code points. */
 const UNKNOWN_PREVIEW_CHARS = 80
 
@@ -169,11 +168,10 @@ export class QqBotChannel extends Service {
 
   private readonly ready: Promise<Domain<typeof qqDomain>>
   private readonly abort = new AbortController()
-  private readonly inflight = new Set<Promise<void>>()
+  private readonly background = new BackgroundWork((error: unknown) => { this.ctx.logger.warn(`qqbot: background work failed: ${errorText(error)}`) })
   private readonly rate: RateWindow
   private domain: Domain<typeof qqDomain> | undefined
   private loop: Promise<void> | undefined
-  private chain: Promise<unknown> = Promise.resolve()
   private stopping = false
   private transport: QqTransport | undefined
   /** Last logged credential state, so each change is logged once. */
@@ -198,8 +196,7 @@ export class QqBotChannel extends Service {
         this.stopping = true
         this.abort.abort(new Error('qqbot is stopping'))
         await this.loop
-        await Promise.allSettled([...this.inflight])
-        await this.chain // serialize() keeps the chain itself non-rejecting.
+        await this.background.drain()
         await domain.close()
       }, 'qqBot.lifecycle()')
       this.loop = this.run()
@@ -254,22 +251,9 @@ export class QqBotChannel extends Service {
     const channel: RelayChannel = {
       name: QQ_RELAY_CHANNEL,
       fallbackLabel: 'a QQ chat Session (its answer could not go out on QQ)',
-      deliver: answer => this.hold(this.relayAnswer(answer)),
+      deliver: answer => this.background.hold(this.relayAnswer(answer)),
     }
-    const unregister = relay.registerChannel(channel)
-    let joined = true
-    this.ready.then((domain) => {
-      if (!joined) return
-      const ids = [...domain.table('sessions').keys()]
-      for (const id of ids) relay.claim(id, QQ_RELAY_CHANNEL)
-      this.ctx.logger.info(`qqbot: the relay carries ${ids.length} chat Session(s) through channel ${QQ_RELAY_CHANNEL}`)
-    }, (error: unknown) => {
-      this.ctx.logger.warn(`qqbot: chat Sessions not claimed with the relay: ${errorText(error)}`)
-    })
-    return () => {
-      joined = false
-      unregister()
-    }
+    return joinRelay(this.ctx, relay, channel, this.ready.then(domain => [...domain.table('sessions').keys()]), 'qqbot')
   }
 
   /**
@@ -289,39 +273,9 @@ export class QqBotChannel extends Service {
     return 'sent'
   }
 
-  /** Keep work another service awaits alive until teardown drains it; its outcome stays the caller's. */
-  private hold<T>(work: Promise<T>): Promise<T> {
-    const held = work.then(() => undefined, () => undefined).finally(() => this.inflight.delete(held))
-    this.inflight.add(held)
-    return work
-  }
-
-  /** Keep background work alive until teardown drains it. */
-  private track(work: Promise<void>): void {
-    const tracked = work.catch((error: unknown) => {
-      this.ctx.logger.warn(`qqbot: background work failed: ${errorText(error)}`)
-    }).finally(() => this.inflight.delete(tracked))
-    this.inflight.add(tracked)
-  }
-
-  /** Run storage and send work one at a time; rejections reach the caller without breaking the chain. */
-  private serialize<T>(work: () => Promise<T>): Promise<T> {
-    const result = this.chain.then(work)
-    this.chain = result.catch(() => undefined)
-    return result
-  }
-
   /** Resolve after `ms`, or as soon as the channel stops. */
   private pause(ms: number): Promise<void> {
-    return new Promise((resolve) => {
-      const done = (): void => {
-        clearTimeout(timer)
-        this.abort.signal.removeEventListener('abort', done)
-        resolve()
-      }
-      const timer = setTimeout(done, ms)
-      this.abort.signal.addEventListener('abort', done, { once: true })
-    })
+    return pause(ms, this.abort.signal)
   }
 
   /** Read the bot's AppID and AppSecret; undefined while either is missing. Never logs a value. */
@@ -370,7 +324,7 @@ export class QqBotChannel extends Service {
       let readyAt: number | undefined
       try {
         await transport.run({
-          message: (message) => { this.track(this.handleMessage(message)) },
+          message: (message) => { this.background.track(this.handleMessage(message)) },
           ready: () => {
             readyAt = Date.now()
             this.ctx.logger.info('qqbot: connected to the QQ gateway')
@@ -421,12 +375,12 @@ export class QqBotChannel extends Service {
       return
     }
     this.ctx.logger.info(`qqbot: ${message.scope} message from ${peerKey} (${text.length} chars${message.attachments > 0 ? `, ${message.attachments} attachment(s) not read` : ''})`)
-    await this.serialize(async () => {
+    await this.background.serialize(async () => {
       await domain.table('windows').put(peerKey, { msgId: message.messageId, receivedAt: Date.now(), used: 0 })
     })
     const command = text.trim().toLowerCase()
     if (command === '/new') {
-      await this.serialize(async () => {
+      await this.background.serialize(async () => {
         const chat = domain.table('chats').get(peerKey)
         if (chat === undefined) return
         await domain.table('chats').delete(peerKey)
@@ -455,7 +409,7 @@ export class QqBotChannel extends Service {
     const notifier = this.ctx.get('ownerNotifier')
     if (notifier === undefined) return
     const now = Date.now()
-    await this.serialize(async () => {
+    await this.background.serialize(async () => {
       const key = message.scope === 'group' ? `group:${targetId}` : `c2c:${message.senderId}`
       const seen = domain.table('unknown').get(key)
       if (seen !== undefined && now - seen.notifiedAt < UNKNOWN_RENOTIFY_MS) return
@@ -504,37 +458,24 @@ export class QqBotChannel extends Service {
     const stored = domain.table('chats').get(peerKey)
     if (stored !== undefined) {
       const sessionId = stored.sessionId as SessionId
-      const resolved = await this.ctx.sessionController.resolveAgent(sessionId)
-      if ('agent' in resolved) return sessionId
-      if (TRANSIENT_RESOLVE_CODES.has(resolved.error.code)) throw resolved.error
-      this.ctx.logger.info(`qqbot: chat Session ${sessionId} of ${peerKey} is unavailable (${resolved.error.code}); starting a new one`)
+      const unavailable = await unavailableReason(this.ctx, sessionId)
+      if (unavailable === undefined) return sessionId
+      this.ctx.logger.info(`qqbot: chat Session ${sessionId} of ${peerKey} is unavailable (${unavailable}); starting a new one`)
     }
     const session = this.config.session
-    // Fails on an unknown preset before a Session exists.
-    this.ctx.permissionPresets.resolve(session.permissionPreset)
-    const created = await this.ctx.sessionController.create({ cwd: session.workspacePath, agentPreset: session.agentPreset })
-    const resolved = await this.ctx.sessionController.resolveAgent(created.sessionId)
-    if ('error' in resolved) throw resolved.error
-    this.ctx.permissionPresets.set(resolved.agent.session, session.permissionPreset)
-    this.ctx.sessionTitle.rename(resolved.agent.session, `${session.titlePrefix} ${message.scope === 'group' ? '群' : '私聊'} ${shortId(targetId)}`)
+    const createdId = await openPresetSession(this.ctx, session, `${session.titlePrefix} ${message.scope === 'group' ? '群' : '私聊'} ${shortId(targetId)}`)
     const now = Date.now()
     const relay = this.ctx.get('ownerRelay')
     // Claimed before the first prompt, so the relay follows the Session's first turn.
-    relay?.claim(created.sessionId, QQ_RELAY_CHANNEL)
-    await this.serialize(async () => {
+    relay?.claim(createdId, QQ_RELAY_CHANNEL)
+    await this.background.serialize(async () => {
       const sessions = domain.table('sessions')
-      await sessions.put(created.sessionId, { peerKey, createdAt: now })
-      await domain.table('chats').put(peerKey, { sessionId: created.sessionId, scope: message.scope, targetId, createdAt: now })
-      const excess = [...sessions.entries()]
-        .sort(([, a], [, b]) => a.createdAt - b.createdAt)
-        .slice(0, Math.max(0, sessions.size - MAX_REMEMBERED_SESSIONS))
-      for (const [id] of excess) {
-        await sessions.delete(id)
-        relay?.release(id)
-      }
+      await sessions.put(createdId, { peerKey, createdAt: now })
+      await domain.table('chats').put(peerKey, { sessionId: createdId, scope: message.scope, targetId, createdAt: now })
+      await forgetOldest(sessions, MAX_REMEMBERED_SESSIONS, (id) => { relay?.release(id) })
     })
-    this.ctx.logger.info(`qqbot: created chat Session ${created.sessionId} for ${peerKey} in ${session.workspacePath} (${session.agentPreset}, ${session.permissionPreset})`)
-    return created.sessionId
+    this.ctx.logger.info(`qqbot: created chat Session ${createdId} for ${peerKey} in ${session.workspacePath} (${session.agentPreset}, ${session.permissionPreset})`)
+    return createdId
   }
 
   /** Send a fixed reply; a failure is logged and never thrown. */
@@ -552,7 +493,7 @@ export class QqBotChannel extends Service {
    * @throws when QQ refuses a part or no connection is up.
    */
   private deliver(domain: Domain<typeof qqDomain>, peerKey: string, scope: 'c2c' | 'group', targetId: string, raw: string): Promise<void> {
-    return this.serialize(async () => {
+    return this.background.serialize(async () => {
       const transport = this.transport
       if (transport === undefined) throw new Error('QQ is not connected')
       const parts = splitText(raw, this.config.maxMessageChars, this.config.maxReplyParts)
