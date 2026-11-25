@@ -292,7 +292,7 @@ describe('browser recovery', () => {
 
     const page = await session.keepalivePage()
 
-    expect(await page.url()).toBe('about:blank')
+    expect(page.url()).toBe('about:blank')
     expect(contexts).toHaveLength(2)
     expect(contexts[0]?.closed).toBe(true)
     expect(relaunches).toHaveLength(1)
@@ -412,8 +412,8 @@ describe('browser recovery', () => {
     await vi.waitFor(() => {
       expect(LOG.info).toHaveBeenCalledWith('headless-browser: re-armed %d keepalive(s) after the browser came back', 1)
     })
-    await vi.waitFor(async () => {
-      expect((await keepalives.snapshot())[0]?.state).toBe('ok')
+    await vi.waitFor(() => {
+      expect(keepalives.snapshot()[0]?.state).toBe('ok')
     })
     expect(contexts[1]?.newPageCalls).toBeGreaterThan(0)
 
