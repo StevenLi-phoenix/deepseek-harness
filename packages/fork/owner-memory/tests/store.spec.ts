@@ -131,6 +131,57 @@ describe('MemoryStore', () => {
   })
 })
 
+describe('MemoryStore.merge', () => {
+  async function three(): Promise<{ memory: MemoryStore; short: string; long: string; other: string }> {
+    const memory = await store()
+    const short = (await memory.save({ text: 'Thesis is on RL', category: 'projects' })).entry
+    const long = (await memory.save({ text: 'Thesis is on offline RL for robot grasping', category: 'projects' })).entry
+    const other = (await memory.save({ text: 'Likes dry humor', category: 'preferences' })).entry
+    return { memory, short: short.id, long: long.id, other: other.id }
+  }
+
+  it('keeps the longest entry under the merged text and removes the others, leaving unrelated entries alone', async () => {
+    const { memory, short, long, other } = await three()
+    const { entry, removed } = await memory.merge({ ids: [short, long], text: 'Thesis: offline RL', category: 'projects' })
+    expect(entry).toMatchObject({ id: long, text: 'Thesis: offline RL', category: 'projects' })
+    expect(removed.map(item => item.id)).toEqual([short])
+    expect((await memory.list()).map(item => item.id).toSorted()).toEqual([long, other].toSorted())
+  })
+
+  it('keeps the entry it is told to keep, and the longest when that id is not among the merged ones', async () => {
+    const { memory, short, long } = await three()
+    const chosen = await memory.merge({ ids: [short, long], text: 'Thesis on RL', category: 'projects', keep: short })
+    expect(chosen.entry.id).toBe(short)
+    expect(chosen.removed.map(item => item.id)).toEqual([long])
+    const again = await three()
+    const fallback = await again.memory.merge({ ids: [again.short, again.long], text: 'Thesis on RL', category: 'projects', keep: again.other })
+    expect(fallback.entry.id).toBe(again.long)
+  })
+
+  it('keeps the first of equally long entries', async () => {
+    const memory = await store()
+    const first = (await memory.save({ text: 'alpha one', category: 'projects' })).entry
+    const second = (await memory.save({ text: 'alpha two', category: 'projects' })).entry
+    const { entry } = await memory.merge({ ids: [first.id, second.id], text: 'alpha', category: 'projects' })
+    expect(entry.id).toBe(first.id)
+  })
+
+  it('refuses ids that are not a list, fewer than two distinct ones, or not entry ids', async () => {
+    const { memory, short } = await three()
+    expect(await refused(memory.merge({ ids: short, text: 'x', category: 'projects' }))).toBe('invalid_id')
+    expect(await refused(memory.merge({ ids: [short, short], text: 'x', category: 'projects' }))).toBe('invalid_id')
+    expect(await refused(memory.merge({ ids: [short, 'not-an-id'], text: 'x', category: 'projects' }))).toBe('invalid_id')
+    expect(await memory.list()).toHaveLength(3)
+  })
+
+  it('refuses an id with no entry, and a merge the expectation rejects, writing nothing', async () => {
+    const { memory, short, long } = await three()
+    expect(await refused(memory.merge({ ids: [short, 'ffffff'], text: 'x', category: 'projects' }))).toBe('not_found')
+    expect(await refused(memory.merge({ ids: [short, long], text: 'x', category: 'projects' }, undefined, { expect: () => false }))).toBe('stale_preview')
+    expect(await memory.list()).toHaveLength(3)
+  })
+})
+
 describe('paths and dates', () => {
   it('defaults to <DSH_HOME>/owner-memory/memory.jsonl', () => {
     expect(defaultMemoryFile({ DSH_HOME: '/srv/dsh' })).toBe('/srv/dsh/owner-memory/memory.jsonl')

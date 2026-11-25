@@ -507,6 +507,14 @@ describe('curation', () => {
     })])
   })
 
+  it('calls entries of one category a duplicate, not a conflict', async () => {
+    const { store, get } = await mount()
+    await store.save({ text: A, category: 'projects' })
+    await store.save({ text: B, category: 'projects' })
+    const view = await get()
+    expect(view.curation?.groups).toEqual([expect.objectContaining({ kind: 'duplicate', category: 'projects' })])
+  })
+
   it('lists an entry whose expiry has passed, and says nothing about a current one', async () => {
     const { store, get } = await mount()
     const old = await store.save({ text: 'Lease: current lease expires 2020-09-06', category: 'identity' })
@@ -539,6 +547,18 @@ describe('curation', () => {
     const history = await store.history()
     expect(history.slice(-2).map(record => [record.id, record.op])).toEqual([[first.entry.id, 'replace'], [second.entry.id, 'forget']])
     expect((await get()).curation?.groups).toEqual([])
+  })
+
+  it('merges into the entry and category the owner chose, in the preview and when confirmed', async () => {
+    const { store, act } = await mount()
+    const first = await store.save({ text: A, category: 'projects' })
+    const second = await store.save({ text: B, category: 'projects' })
+    const request = { action: 'merge' as const, ids: [first.entry.id, second.entry.id], keep: second.entry.id, category: 'career' as const }
+    const preview = await act(request)
+    expect(preview).toMatchObject({ stage: 'preview', keep: second.entry.id, category: 'career', removed: 1 })
+    const token = 'token' in preview ? preview.token : ''
+    expect(await act({ ...request, confirm: token })).toMatchObject({ stage: 'done', keep: second.entry.id, category: 'career', removed: [first.entry.id] })
+    expect(await store.list()).toEqual([expect.objectContaining({ id: second.entry.id, category: 'career' })])
   })
 
   it('refuses a merge when an entry changed after the preview, and keeps both', async () => {

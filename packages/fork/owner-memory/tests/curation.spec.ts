@@ -73,6 +73,16 @@ describe('groupDuplicates', () => {
     expect(groups.map(group => group.members.length)).toEqual([5, 2])
   })
 
+  it('lists equally large and equally alike groups by the id of their first member', () => {
+    const jazz = 'Roommate Alice likes jazz and plays the trumpet on weekends'
+    const espresso = 'the espresso machine descales every third Sunday morning'
+    const groups = groupDuplicates([
+      entry(jazz, 'identity', '2026-10-01', 'ffffff'), entry(jazz, 'identity', '2026-10-02', 'eeeeee'),
+      entry(espresso, 'preferences', '2026-10-01', 'bbbbbb'), entry(espresso, 'preferences', '2026-10-02', 'aaaaaa'),
+    ])
+    expect(groups.map(group => group.members.map(member => member.id))).toEqual([['aaaaaa', 'bbbbbb'], ['eeeeee', 'ffffff']])
+  })
+
   it('never groups a single entry, and keeps the input order inside one', () => {
     expect(groupDuplicates([entry(COURSE_A)])).toEqual([])
     expect(groupDuplicates([])).toEqual([])
@@ -106,6 +116,33 @@ describe('composeMergeText', () => {
     expect(composeMergeText([])).toBe('')
   })
 
+  it('starts from the entry with the smaller id when two have equally long text', () => {
+    const merged = composeMergeText([
+      { id: 'bbbbbb', category: 'projects', date: '2026-10-01', text: 'beta text here' },
+      { id: 'aaaaaa', category: 'projects', date: '2026-10-01', text: 'alfa text here' },
+    ])
+    expect(merged.startsWith('alfa text here')).toBe(true)
+  })
+
+  it('skips a clause of fewer than three words, and joins a clause straight after a finished sentence', () => {
+    const merged = composeMergeText([
+      entry('Alpha bravo charlie delta echo foxtrot.', 'projects', '2026-10-01', 'aaaaaa'),
+      entry('Hi there. Golf hotel india juliet.', 'projects', '2026-10-01', 'bbbbbb'),
+    ])
+    expect(merged).toContain('Golf hotel india juliet.')
+    expect(merged).not.toContain('Hi there')
+    expect(merged).not.toContain('；')
+    expect(composeMergeText([
+      entry('Alpha bravo charlie delta echo foxtrot', 'projects', '2026-10-01', 'aaaaaa'),
+      entry('Golf hotel india juliet', 'projects', '2026-10-01', 'bbbbbb'),
+    ])).toContain('；Golf hotel india juliet')
+  })
+
+  it('cuts a base text that is already past the limit', () => {
+    const merged = composeMergeText([entry('b'.repeat(MAX_TEXT_CHARS + 50), 'projects', '2026-10-01', 'aaaaaa')])
+    expect(merged).toBe('b'.repeat(MAX_TEXT_CHARS))
+  })
+
   it('drops clauses that would take the text past the limit instead of cutting it', () => {
     const base = 'a'.repeat(MAX_TEXT_CHARS - 30)
     const merged = composeMergeText([
@@ -125,6 +162,9 @@ describe('dominantCategory', () => {
     expect(dominantCategory([
       entry('short', 'identity'), entry('a much longer text about the same person', 'career'),
     ])).toBe('career')
+    expect(dominantCategory([
+      entry('one', 'career'), entry('two', 'career'), entry('a much longer text about someone', 'identity'),
+    ])).toBe('career')
     expect(dominantCategory([])).toBe('instructions')
   })
 })
@@ -142,6 +182,18 @@ describe('staleReason', () => {
     expect(staleReason(entry('Completed Spring 2026 finals in PH-UY 2023', 'identity'), NOW)).toBeNull()
     expect(staleReason(entry('Fall 2026 course rooms: CS-UY 4523 in Jacobs 203', 'identity'), NOW)).toBeNull()
     expect(staleReason(entry('Roommate Alice likes jazz', 'identity'), NOW)).toBeNull()
+  })
+
+  it('reads Autumn as the fall term', () => {
+    expect(staleReason(entry('Autumn 2025 course rooms: CS-UY 4523 in Jacobs 203', 'identity'), NOW)).toBe('finished-term')
+  })
+
+  it('lists stale entries written the same day by id', () => {
+    const stale = staleEntries([
+      entry('Lease expires 2026-09-06', 'identity', '2026-09-01', 'bbbbbb'),
+      entry('Visa expires 2026-09-07', 'identity', '2026-09-01', 'aaaaaa'),
+    ], NOW)
+    expect(stale.map(item => item.entry.id)).toEqual(['aaaaaa', 'bbbbbb'])
   })
 
   it('lists stale entries in a stable order', () => {

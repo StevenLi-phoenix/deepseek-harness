@@ -1,8 +1,12 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
-import { describeRollback, planPurge, purgeConfirmed, purgeToken, reviewWrite, rollbackConfirmed, rollbackToken } from '../src/admin.ts'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  describeRollback, mergeConfirmed, mergeToken, planMerge, planPurge, purgeConfirmed, purgeToken, reviewWrite,
+  rollbackConfirmed, rollbackToken,
+} from '../src/admin.ts'
+import { MAX_TEXT_CHARS } from '../src/entries.ts'
 import { MemoryError, MemoryStore } from '../src/store.ts'
 
 const dirs: string[] = []
@@ -124,5 +128,39 @@ describe('describeRollback', () => {
     expect(byId.get(revised.id)).toMatchObject({ change: 'revise', now: { text: 'altered' }, then: { text: 'original' } })
     expect(byId.get(same.id)).toMatchObject({ change: 'none' })
     expect(await describeRollback(memory, { session: 'nobody' })).toEqual([])
+  })
+})
+
+describe('merge plan', () => {
+  async function pair(): Promise<{ memory: MemoryStore; first: string; second: string }> {
+    const memory = await store()
+    const first = (await memory.save({ text: 'Thesis is on RL', category: 'projects' })).entry
+    const second = (await memory.save({ text: 'Thesis is on offline RL for robot grasping', category: 'projects' })).entry
+    return { memory, first: first.id, second: second.id }
+  }
+
+  it('takes the kept entry the owner names, and the longest one otherwise', async () => {
+    const { memory, first, second } = await pair()
+    expect(await planMerge(memory, { ids: [first, second], keep: first })).toMatchObject({ keep: first, category: 'projects' })
+    expect(await planMerge(memory, { ids: [first, second] })).toMatchObject({ keep: second })
+    expect(await planMerge(memory, { ids: [first, second], keep: 'ffffff' })).toMatchObject({ keep: second })
+  })
+
+  it('refuses an unknown category, an empty text, and a text over the limit', async () => {
+    const { memory, first, second } = await pair()
+    expect(await code(planMerge(memory, { ids: [first, second], category: 'nonsense' as never }))).toBe('invalid_category')
+    expect(await code(planMerge(memory, { ids: [first, second], text: '   ' }))).toBe('invalid_text')
+    expect(await code(planMerge(memory, { ids: [first, second], text: 'x'.repeat(MAX_TEXT_CHARS + 1) }))).toBe('invalid_text')
+  })
+
+  it('refuses to apply when an entry disappears between the preview check and the write', async () => {
+    const { memory, first, second } = await pair()
+    const token = mergeToken(await planMerge(memory, { ids: [first, second] }))
+    const merge = memory.merge.bind(memory)
+    vi.spyOn(memory, 'merge').mockImplementation(async (input, meta, options) => {
+      await memory.forget(first)
+      return await merge(input, meta, options)
+    })
+    expect(await code(mergeConfirmed(memory, { ids: [first, second] }, token, 'settings'))).toBe('not_found')
   })
 })
