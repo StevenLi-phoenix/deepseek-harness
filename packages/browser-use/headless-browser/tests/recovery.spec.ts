@@ -17,7 +17,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import type { BrowserContext } from 'playwright-core'
+import type { BrowserContext, Page } from 'playwright-core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ChallengeFacts } from '../src/challenge.ts'
 import type { Config } from '../src/config.ts'
@@ -87,45 +87,63 @@ function configFor(profileDir: string): Config {
 /** How many navigations every fake page made, so a reused pool page still counts. */
 const visits = { count: 0 }
 
-/** The page a tab model drives, and the shape the session's keepalive page wraps. */
+/** A listener the fakes keep; it accepts every Playwright event payload and the fakes call it with none. */
+type FakeListener = (...args: never[]) => void
+
+/** What the session's page probe reads: a signed-in page with nothing blocking it. */
+const SIGNED_IN: ChallengeFacts = { passwordField: false, oneTimeCode: false, accountLinks: 0 }
+
+/** The page a tab model drives, and the page the session's keepalive page wraps. */
 class FakePage {
   closed = false
   #url = 'about:blank'
-  #listeners = new Map<string, Set<(...args: never[]) => void>>()
+  readonly #listeners = new Map<string, Set<FakeListener>>()
+  /**
+   * The Playwright page the session and the tab model receive. It has the members
+   * the tab model and the keepalive page call (url, title, isClosed, goto, goBack,
+   * goForward, reload, bringToFront, close, on, off, evaluate); every other member
+   * is undefined.
+   */
+  readonly page: Page = this.#playwrightPage()
 
-  url(): string { return this.#url }
-  async title(): Promise<string> { return 'page' }
-  isClosed(): boolean { return this.closed }
-  async goto(url: string): Promise<unknown> {
-    visits.count += 1
-    this.#url = url
-    this.emit('load')
-    return null
-  }
-  /** What the session's page probe reads: a signed-in page with nothing blocking it. */
-  async evaluate(): Promise<ChallengeFacts> {
-    return { passwordField: false, oneTimeCode: false, accountLinks: 0 }
-  }
-  async goBack(): Promise<unknown> { return null }
-  async goForward(): Promise<unknown> { return null }
-  async reload(): Promise<unknown> { return null }
-  async bringToFront(): Promise<void> {}
   async close(): Promise<void> {
     this.closed = true
     this.emit('close')
   }
-  on(event: string, listener: (...args: never[]) => void): this {
-    const set = this.#listeners.get(event) ?? new Set()
-    set.add(listener)
-    this.#listeners.set(event, set)
-    return this
-  }
-  off(event: string, listener: (...args: never[]) => void): this {
-    this.#listeners.get(event)?.delete(listener)
-    return this
-  }
+
   emit(event: string, ...args: never[]): void {
     for (const listener of [...this.#listeners.get(event) ?? []]) listener(...args)
+  }
+
+  #playwrightPage(): Page {
+    const members: Partial<Page> = {
+      url: () => this.#url,
+      title: async () => 'page',
+      isClosed: () => this.closed,
+      goto: async (url: string) => {
+        visits.count += 1
+        this.#url = url
+        this.emit('load')
+        return null
+      },
+      goBack: async () => null,
+      goForward: async () => null,
+      reload: async () => null,
+      bringToFront: async () => {},
+      close: async () => { await this.close() },
+      on: (event: string, listener: FakeListener): Page => {
+        const set = this.#listeners.get(event) ?? new Set()
+        set.add(listener)
+        this.#listeners.set(event, set)
+        return this.page
+      },
+      off: (event: string, listener: FakeListener): Page => {
+        this.#listeners.get(event)?.delete(listener)
+        return this.page
+      },
+      evaluate: async (): Promise<ChallengeFacts> => SIGNED_IN,
+    }
+    return members as Page
   }
 }
 
@@ -134,28 +152,25 @@ const TARGET_FAILURE = 'browserContext.newPage: Protocol error (Target.createTar
 
 /** A context that can be told to refuse page creation, the way a stale profile does. */
 class FakeContext {
-  readonly pages: FakePage[] = []
-  readonly listeners = new Map<string, Set<(...args: never[]) => void>>()
+  /** Every page this context created, closed ones included, in creation order. */
+  readonly created: FakePage[] = []
+  readonly #listeners = new Map<string, Set<FakeListener>>()
   closed = false
   newPageCalls = 0
   /** How many page creations to refuse before one succeeds. */
   failNewPage: number
+  /**
+   * The Playwright context a launch returns. It has the members the session's
+   * launch, recovery, and shutdown call (on, off, newPage, close); every other
+   * member is undefined. Its close runs this fake's `close`, so a test can replace that.
+   */
+  readonly context: BrowserContext = this.#playwrightContext()
 
   constructor(failNewPage = 0) {
     this.failNewPage = failNewPage
   }
 
-  on(event: string, listener: (...args: never[]) => void): void {
-    const set = this.listeners.get(event) ?? new Set()
-    set.add(listener)
-    this.listeners.set(event, set)
-  }
-
-  off(event: string, listener: (...args: never[]) => void): void {
-    this.listeners.get(event)?.delete(listener)
-  }
-
-  pagesList(): readonly FakePage[] { return this.pages.filter(page => !page.closed) }
+  pagesList(): readonly FakePage[] { return this.created.filter(page => !page.closed) }
 
   async newPage(): Promise<FakePage> {
     this.newPageCalls += 1
@@ -164,13 +179,31 @@ class FakeContext {
       throw new Error(TARGET_FAILURE)
     }
     const page = new FakePage()
-    this.pages.push(page)
+    this.created.push(page)
     return page
   }
 
   async close(): Promise<void> {
     this.closed = true
-    for (const listener of this.listeners.get('close') ?? []) listener()
+    for (const listener of this.#listeners.get('close') ?? []) listener()
+  }
+
+  #playwrightContext(): BrowserContext {
+    const members: Partial<BrowserContext> = {
+      on: (event: string, listener: FakeListener): BrowserContext => {
+        const set = this.#listeners.get(event) ?? new Set()
+        set.add(listener)
+        this.#listeners.set(event, set)
+        return this.context
+      },
+      off: (event: string, listener: FakeListener): BrowserContext => {
+        this.#listeners.get(event)?.delete(listener)
+        return this.context
+      },
+      newPage: async () => (await this.newPage()).page,
+      close: async () => { await this.close() },
+    }
+    return members as BrowserContext
   }
 }
 
@@ -182,7 +215,7 @@ function launcher(script: readonly number[], profileDir: string): { deps: Sessio
     launch: async () => {
       const context = new FakeContext(script[contexts.length] ?? 0)
       contexts.push(context)
-      return context as unknown as BrowserContext
+      return context.context
     },
     sleep: async () => {},
     probe: {
@@ -334,7 +367,7 @@ describe('browser recovery', () => {
         const context = new FakeContext(0)
         context.close = async () => { throw new Error('close timed out') }
         stuck.contexts.push(context)
-        return context as unknown as BrowserContext
+        return context.context
       },
     }
     const second = new HeadlessBrowserSession(configFor(profileDir), LOG, undefined, stuckDeps)
@@ -363,13 +396,13 @@ describe('browser recovery', () => {
     const context = new FakeContext(0)
     const tabs = new BrowserTabs({
       context: async () => ({
-        pages: () => context.pagesList(),
-        newPage: async () => await context.newPage(),
+        pages: () => context.pagesList().map(fake => fake.page),
+        newPage: async () => (await context.newPage()).page,
       }),
       log: LOG,
     })
     await tabs.create()
-    const page = context.pages[0] as FakePage
+    const page = context.created[0] as FakePage
     // Every page after this one fails, the way a browser that went away answers.
     context.failNewPage = 5
     await page.close()
