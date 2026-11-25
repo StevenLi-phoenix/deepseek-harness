@@ -60,6 +60,11 @@ function classifyPiAiError(message: string): BuiltinLlmFailureCode {
   // ("Our servers are currently overloaded. Please try again later."); that is
   // the provider's 503/529, so it retries like one instead of ending the turn.
   if (/\boverloaded\b|\bservice (?:is )?(?:temporarily )?unavailable\b|\btry again later\b/i.test(message)) return 'SERVER'
+  // The Codex relay flaps for seconds at a time and answers part of the window
+  // with a bare `404 "not_found"` between its 502s and 503s. A model or route that
+  // really is missing names itself (`model_not_found`, a path, a sentence), so only
+  // the bare body is treated as the outage it is.
+  if (/\b404\s+"?not_found"?\s*$/i.test(message)) return 'SERVER'
   if (/\btime(?:d)?\s*out\b|timeout/i.test(message)) return 'TIMEOUT'
   // A stream truncated before the provider's terminal event: each pi-ai provider
   // throws its own wording when the wire closes mid-response without a terminal
