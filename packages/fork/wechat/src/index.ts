@@ -977,7 +977,10 @@ export class WechatChannel extends Service implements OwnerNotifier {
     }
   }
 
-  /** How the chat Session's words reach the owner: `hybrid` registers `wechat_send` beside the final-answer reply. */
+  /**
+   * How the chat Session's words reach the owner: `hybrid` registers `wechat_send` beside the final-answer reply.
+   * @returns the configured delivery mode.
+   */
   delivery(): 'text' | 'hybrid' {
     return this.config.chat.delivery
   }

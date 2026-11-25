@@ -57,7 +57,11 @@ export interface ShareHost {
   logger: { info(message: string): void; warn(message: string): void }
 }
 
-/** Fail at load on a window that cannot work. */
+/**
+ * Fail at load on a window that cannot work.
+ * @param config - the share window and switch from the plugin configuration.
+ * @returns the window's start and end as minutes after midnight.
+ */
 export function assertShareConfig(config: ShareConfig): { start: number; end: number } {
   const start = parseClock(config.start)
   const end = parseClock(config.end)
@@ -102,7 +106,10 @@ export class DailyShare {
     this.clocks = assertShareConfig(config)
   }
 
-  /** Whether the share runs: the owner's switch, else the configuration. */
+  /**
+   * Whether the share runs: the owner's switch, else the configuration.
+   * @returns true when the daily share runs.
+   */
   async enabled(): Promise<boolean> {
     const domain = await this.host.ready
     return domain.table('share_prefs').get('main')?.enabled ?? this.config.enabled
@@ -237,6 +244,7 @@ export class DailyShare {
   /**
    * Whether the Session's running turn is a share's: the DM channel then sends its answer as the share.
    * @param sessionId - the account's Session.
+   * @returns true while that Session runs a share turn.
    */
   isShareTurn(sessionId: string): boolean {
     return this.running?.sessionId === sessionId
@@ -299,7 +307,10 @@ export class DailyShare {
     for (const [key] of rows.slice(SHARE_KEPT)) await domain.table('share_days').delete(key)
   }
 
-  /** What Settings shows. */
+  /**
+   * What Settings shows.
+   * @returns the switch and who set it, the window, today's planned share, and the latest shares.
+   */
   async view(): Promise<ShareView> {
     const domain = await this.host.ready
     const now = this.host.now()
