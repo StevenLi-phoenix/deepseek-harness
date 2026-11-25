@@ -10,7 +10,7 @@ import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContextFormed, UserMessage } from '@deepseek-ai/dsh-llm'
 import type { MainAgentMessage, OwnerNote, OwnerNotifier } from '@deepseek-ai/dsh-event-bus'
-import { untrustedRequestId } from '@deepseek-ai/dsh-turn-taint'
+import { untrustedRequestId } from '@deepseek-ai/dsh-turn-taint/origin'
 // Type-only: ctx.ownerRelay, which relays each chat Session's final answers through this channel.
 import type { RelayAnswer, RelayChannel, RelayDelivery } from '@deepseek-ai/dsh-owner-relay'
 // Type-only: ctx.voice, which reads the audio files the owner sends when transcription is on.
@@ -40,18 +40,20 @@ declare module '@deepseek-ai/dsh-llm' {
 }
 
 import type { HandoverPart } from './text.ts'
-import { agentMessageText, buildDigest, EARLIER_CHAT, fitText, formatGap, handoverFailureText, handoverNotice, handoverText, HELP_REPLY, inboundText, markdownImages, NEW_CHAT_REPLY, noteTurnText, QUOTA_FOOTER, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES, withoutMarkdownImages, type MarkdownImage } from './text.ts'
+import { agentMessageText, buildDigest, EARLIER_CHAT, fitText, formatGap, handoverFailureText, handoverNotice, handoverText, HELP_REPLY, inboundText, markdownImages, NEW_CHAT_REPLY, noteTurnText, QUOTA_FOOTER, renderNote, RESTART_CUT_REPLY, sharedNoteText, splitText, STOP_IDLE_REPLY, stopReply, timeGapNotice, WECHAT_MAX_TEXT_BYTES, WECHAT_RELAY_CHANNEL, withoutMarkdownImages, type MarkdownImage } from './text.ts'
 import { TypingIndicator } from './typing.ts'
 import type { ChannelError, ChannelLink, ChannelStatus, WindowClosed } from './view.ts'
 
 /** How long a mute file keeps the safety notices quiet, in milliseconds. */
 const SAFETY_MUTE_MS = 30 * 60_000
 
-export * from './api.ts'
-export * from './login.ts'
-export * from './login-session.ts'
-export * from './view.ts'
-export * from './text.ts'
+export type * from './api.ts'
+export { IlinkApiError, IlinkError } from './api.ts'
+export type * from './login.ts'
+export { LoginError } from './login.ts'
+export type * from './login-session.ts'
+export type * from './view.ts'
+export type * from './text.ts'
 export type * from './storage.ts'
 
 /** How the owner's chat Session is created. */
@@ -137,39 +139,6 @@ export interface Config {
   /** Messages one turn may send with `wechat_send`; the default is the whole reply window of one owner message (`repliesPerToken`). */
   maxSendsPerTurn: number
 }
-
-/** Configuration schema. */
-export const Config: z<Config> = z.object({
-  accountFile: z.string(),
-  muteFile: z.string(),
-  chat: z.object({
-    workspacePath: z.string().default('/Users/dsh-runtime/work'),
-    agentPreset: z.string().default('unattended'),
-    permissionPreset: z.string().default('danger-full-access'),
-    title: z.string().default('微信'),
-    timeZone: z.string().default('America/New_York'),
-    agentMessage: z.union(['turn', 'notify'] as const).default('turn'),
-    notes: z.union(['turn', 'direct'] as const).default('turn'),
-    delivery: z.union(['text', 'hybrid'] as const).default('hybrid'),
-  }),
-  maxMessageChars: z.natural().min(200).max(WECHAT_MAX_TEXT_BYTES).default(3000),
-  maxReplyParts: z.natural().min(1).default(3),
-  repliesPerToken: z.natural().min(2).default(10),
-  contextTtlMs: z.natural().min(60_000).default(84_600_000),
-  outboxLimit: z.natural().min(1).default(50),
-  accountPollMs: z.natural().min(1000).default(30_000),
-  longPollTimeoutMs: z.natural().min(1000).default(35_000),
-  requestTimeoutMs: z.natural().min(1000).default(15_000),
-  cdnBaseUrl: z.string().default('https://novac2c.cdn.weixin.qq.com/c2c'),
-  maxMediaBytes: z.natural().min(1024).default(25 * 1024 * 1024),
-  mediaTimeoutMs: z.natural().min(1000).default(60_000),
-  timeGapMs: z.natural().default(300_000),
-  awakeAfterMessageMs: z.natural().default(1_800_000),
-  maxSendsPerTurn: z.natural().min(1).default(10),
-})
-
-/** Name of the channel through which `ctx.ownerRelay` relays the chat Sessions' answers. */
-export const WECHAT_RELAY_CHANNEL = 'wechat'
 
 /** Exact owner text that starts a fresh chat Session. */
 const NEW_CHAT_COMMAND = '/new'
@@ -324,7 +293,35 @@ function outboxKey(seq: number): string {
  */
 export class WechatChannel extends Service implements OwnerNotifier {
   static inject = ['storageDomain', 'sessionController', 'permissionPresets', 'sessionTitle']
-  static Config = Config
+  /** Configuration schema. */
+  static Config: z<Config> = z.object({
+    accountFile: z.string(),
+    muteFile: z.string(),
+    chat: z.object({
+      workspacePath: z.string().default('/Users/dsh-runtime/work'),
+      agentPreset: z.string().default('unattended'),
+      permissionPreset: z.string().default('danger-full-access'),
+      title: z.string().default('微信'),
+      timeZone: z.string().default('America/New_York'),
+      agentMessage: z.union(['turn', 'notify'] as const).default('turn'),
+      notes: z.union(['turn', 'direct'] as const).default('turn'),
+      delivery: z.union(['text', 'hybrid'] as const).default('hybrid'),
+    }),
+    maxMessageChars: z.natural().min(200).max(WECHAT_MAX_TEXT_BYTES).default(3000),
+    maxReplyParts: z.natural().min(1).default(3),
+    repliesPerToken: z.natural().min(2).default(10),
+    contextTtlMs: z.natural().min(60_000).default(84_600_000),
+    outboxLimit: z.natural().min(1).default(50),
+    accountPollMs: z.natural().min(1000).default(30_000),
+    longPollTimeoutMs: z.natural().min(1000).default(35_000),
+    requestTimeoutMs: z.natural().min(1000).default(15_000),
+    cdnBaseUrl: z.string().default('https://novac2c.cdn.weixin.qq.com/c2c'),
+    maxMediaBytes: z.natural().min(1024).default(25 * 1024 * 1024),
+    mediaTimeoutMs: z.natural().min(1000).default(60_000),
+    timeGapMs: z.natural().default(300_000),
+    awakeAfterMessageMs: z.natural().default(1_800_000),
+    maxSendsPerTurn: z.natural().min(1).default(10),
+  })
 
   private readonly ready: Promise<Domain<typeof wechatDomain>>
   private readonly accountFile: string

@@ -2,8 +2,10 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
-import { Config } from '../src/index.ts'
+import BiliAccount from '../src/index.ts'
 import { forkPatchFiles, forkPatchText } from '../../../../scripts/fork-bundle-layers.ts'
+
+const Config = BiliAccount.Config
 
 /** One loader patch row. */
 interface Row {

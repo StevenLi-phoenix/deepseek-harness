@@ -2,8 +2,12 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
-import { Config as BusConfig, matchesSubscription, subscriptionProblem, type BusEventInput, type Subscription } from '@deepseek-ai/dsh-event-bus'
+import EventBus, { type BusEventInput, type Subscription } from '@deepseek-ai/dsh-event-bus'
+import { matchesSubscription } from '@deepseek-ai/dsh-event-bus/src/match.ts'
+import { subscriptionProblem } from '@deepseek-ai/dsh-event-bus/src/validate.ts'
 import { forkPatchFiles } from '../../../../scripts/fork-bundle-layers.ts'
+
+const BusConfig = EventBus.Config
 
 /** One loader patch row. */
 interface Row {

@@ -1,8 +1,11 @@
 /** Pure text handling: inbound extraction, outbound size limits, shared-note framing, and outbox digests. */
 import type { MainAgentMessage, OwnerNote } from '@deepseek-ai/dsh-event-bus'
-import { formatGap, formatStamp } from '@deepseek-ai/dsh-time-gap'
+import { formatGap, formatStamp } from '@deepseek-ai/dsh-time-gap/format'
 import { ItemType, type WeixinItem, type WeixinMessage } from './api.ts'
 import type { ActivityRecord, SentKind } from './storage.ts'
+
+/** Name of the channel through which `ctx.ownerRelay` relays the chat Sessions' answers. */
+export const WECHAT_RELAY_CHANNEL = 'wechat'
 
 /** Third-party-documented ceiling of one WeChat text message in UTF-8 bytes. */
 export const WECHAT_MAX_TEXT_BYTES = 16_384
@@ -380,7 +383,7 @@ const SENT_PHRASES: Record<SentKind, string> = {
 }
 
 /** Stamps and gap lengths come from time-gap, so the WeChat time check and every other Session's read alike. */
-export { formatGap, formatStamp } from '@deepseek-ai/dsh-time-gap'
+export { formatGap, formatStamp } from '@deepseek-ai/dsh-time-gap/format'
 
 /**
  * What the chat Session reads before an owner message that ends a quiet spell, so that it neither

@@ -73,9 +73,9 @@ kind: "package-reference"
 |---|---|
 | [`src/index.ts`](src/index.ts) | 服务 `ctx.courses`：配置、轮询定时器、投递、同步与中断提醒、设置页状态 |
 | [`src/api.ts`](src/api.ts) | REST 客户端：每次调用取 PAT、超时、`X-Courses-Agent`、带类型的失败 |
-| [`src/records.ts`](src/records.ts) | 线路解析：任务摘要、同步健康、同步运行的失败原因 |
-| [`src/plan.ts`](src/plan.ts) | 提醒和同步提醒的规则，以及消息文字 |
-| [`src/time.ts`](src/time.ts) | 主人时区的时间、静默时段、时长 |
+| [`src/records.ts`](src/records.ts) | 线路解析：任务摘要、同步健康、同步运行的失败原因；`tool-courses` 导入的 `./records` 子路径 |
+| [`src/plan.ts`](src/plan.ts) | 提醒和同步提醒的规则，以及消息文字；`tool-courses` 导入的 `./plan` 子路径 |
+| [`src/time.ts`](src/time.ts) | 主人时区的时间、静默时段、时长；`tool-courses` 导入的 `./time` 子路径 |
 | [`src/storage.ts`](src/storage.ts) | storage domain `courses`：已发的键、最近 20 条消息、轮询、同步提醒、中断 |
 
 这是 fork 本地包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。

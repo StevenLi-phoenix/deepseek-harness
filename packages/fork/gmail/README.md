@@ -80,8 +80,10 @@ The sign-in is an authorization-code request with PKCE (S256), offline access, a
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Service `ctx.gmail`: configuration, accounts, tokens, reading, drafts, the send flow, held messages, sign-in, Settings status |
+| [`src/actions.ts`](src/actions.ts) | The label changes; the `./actions` subpath, which `tool-gmail` imports |
 | [`src/gate.ts`](src/gate.ts) | The send decision, the owner's named addresses, and the confirmation by code |
-| [`src/oauth.ts`](src/oauth.ts) | Google OAuth: PKCE, consent URL, code exchange, refresh, revocation |
+| [`src/oauth.ts`](src/oauth.ts) | Google OAuth: PKCE, consent URL, code exchange, refresh, revocation, the scope, and the redirect path re-exported from `sign-in-store.ts`; the `./oauth` subpath, which `gmail-settings` imports |
+| [`src/sign-in-store.ts`](src/sign-in-store.ts) | Open sign-ins in `sign-ins.json`, single use and owner-private; the redirect path and its check |
 | [`src/api.ts`](src/api.ts) | Gmail REST client: retries, uploads, typed failures |
 | [`src/mime.ts`](src/mime.ts) | Composition of an outgoing message |
 | [`src/address.ts`](src/address.ts) | Recipient parsing and checks |

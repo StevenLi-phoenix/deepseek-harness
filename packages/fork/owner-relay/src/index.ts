@@ -7,11 +7,11 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
-import { failureDetail } from '@deepseek-ai/dsh-event-bus'
+import { failureDetail } from '@deepseek-ai/dsh-event-bus/prompt'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { contentText, decideRelay, relayFallbackNote, type RelayAnswer, type RelayDecision } from './rules.ts'
 
-export * from './rules.ts'
+export type * from './rules.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {

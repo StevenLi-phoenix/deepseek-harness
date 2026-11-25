@@ -32,8 +32,6 @@ declare module '@deepseek-ai/dsh-llm' {
   }
 }
 
-export { formatGap, formatStamp } from './format.ts'
-export { classifyArrival, incomingKind, measureGap, timeGapNotice, timeGapSummary } from './notice.ts'
 export type { Activity, Arrival, Gap, IncomingKind } from './notice.ts'
 
 /** Plugin name; also the source kind of the notice. */

@@ -14,7 +14,9 @@ import { MockAdapter, textResponse } from '../../../core/agent-loop/tests/mock-a
 import * as ToolUp from '../src/index.ts'
 import { mountNotes } from '../src/notes-tool.ts'
 import type { SessionGate } from '../src/session-gate.ts'
-import { ChannelNotes, piiKind, renderNotesBlock, type PiiKind } from '../src/index.ts'
+import { type PiiKind } from '../src/index.ts'
+import { ChannelNotes, renderNotesBlock } from '../src/notes.ts'
+import { piiKind } from '../src/pii.ts'
 
 const contexts: Context[] = []
 const dirs: string[] = []

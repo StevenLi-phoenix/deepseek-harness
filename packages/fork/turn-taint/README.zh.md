@@ -57,7 +57,7 @@ kind: "package-reference"
 
 | 文件 | 作用 |
 |---|---|
-| [`src/origin.ts`](src/origin.ts) | `turnOrigin`、`ownerWords`、`describeOrigin`、`untrustedRequestId`、`untrustedOrigin`、`sourceKind` 与污染工具清单 |
+| [`src/origin.ts`](src/origin.ts) | `turnOrigin`、`ownerWords`、`describeOrigin`、`untrustedRequestId`、`untrustedOrigin`、`sourceKind` 与污染工具清单；`owner-memory`、`time-gap`、`tool-gmail` 和 `wechat` 导入的 `./origin` 子路径 |
 | [`src/index.ts`](src/index.ts) | 插件：owner 专用工具与被审计的工具 |
 
 这是 fork 本地的包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。

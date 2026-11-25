@@ -4,8 +4,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import Voice, { Config, VoiceError } from '../src/index.ts'
+import Voice, { VoiceError } from '../src/index.ts'
 import { FakeVoiceHost, wavBytes } from './fake-voice.ts'
+
+const Config = Voice.Config
 
 /** ffmpeg where this host keeps it; the macOS CI runner has none, so the mp3 case skips there. */
 const FFMPEG = ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/usr/bin/ffmpeg'].find(candidate => existsSync(candidate)) ?? '/opt/homebrew/bin/ffmpeg'

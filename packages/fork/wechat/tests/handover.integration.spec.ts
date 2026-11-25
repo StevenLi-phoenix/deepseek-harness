@@ -11,8 +11,10 @@ import OwnerRelay from '@deepseek-ai/dsh-owner-relay'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { harness as scheduleHarness } from '../../../schedule/schedule/tests/harness.ts'
-import WechatChannel, { Config } from '../src/index.ts'
+import WechatChannel from '../src/index.ts'
 import { FakeIlink, textMessage } from './fake-ilink.ts'
+
+const Config = WechatChannel.Config
 
 const OWNER = 'owner@im.wechat'
 let dir: string

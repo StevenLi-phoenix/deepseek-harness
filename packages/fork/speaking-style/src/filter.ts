@@ -7,7 +7,7 @@
  * candidate before the owner's page shows it.
  */
 
-import { ticHits } from '@deepseek-ai/dsh-integrity-watch'
+import { ticHits } from '@deepseek-ai/dsh-integrity-watch/tics'
 
 /** Why a candidate exchange was left out; the first side and the first rule that refuse it name the reason. */
 export const FILTER_REASONS = [

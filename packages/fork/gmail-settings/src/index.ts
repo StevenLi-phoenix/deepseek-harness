@@ -11,14 +11,14 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
-import { GmailError, OAUTH_PATH, type GmailStatus, type Gmail } from '@deepseek-ai/dsh-gmail'
+import { GmailError, type GmailStatus, type Gmail } from '@deepseek-ai/dsh-gmail'
+import { OAUTH_PATH } from '@deepseek-ai/dsh-gmail/oauth'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { z } from 'zod'
 import { PAGE_HEADERS, privacyPage, signInPage } from './page.ts'
 import { GMAIL_PATH, GMAIL_PRIVACY_PATH, POLICIES, type GmailAction, type GmailAnswer, type GmailView } from './view.ts'
 
-export * from './view.ts'
-export { escapeHtml, privacyPage, signInPage } from './page.ts'
+export type * from './view.ts'
 
 /** Plugin name. */
 export const name = 'gmail-settings'
@@ -55,7 +55,7 @@ const actionSchema = z.discriminatedUnion('action', [
  * @param status - from `ctx.gmail.status()`.
  * @returns the wire view, field by field, so a new service field never reaches the browser unreviewed.
  */
-export function toView(status: GmailStatus): GmailView {
+function toView(status: GmailStatus): GmailView {
   return {
     client: { configured: status.client.configured, clientId: status.client.clientId, secretConfigured: status.client.secretConfigured },
     redirectUri: status.redirectUri,

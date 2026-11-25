@@ -22,6 +22,10 @@
       "types": "./lib/types/settings.d.ts",
       "default": "./lib/types/settings.js"
     },
+    "./store": {
+      "types": "./lib/types/store.d.ts",
+      "default": "./lib/types/store.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"

@@ -6,7 +6,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { TurnFacts } from '@deepseek-ai/dsh-gmail'
-import { describeOrigin, ownerWords, turnOrigin } from '@deepseek-ai/dsh-turn-taint'
+import { describeOrigin, ownerWords, turnOrigin } from '@deepseek-ai/dsh-turn-taint/origin'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 
 /**

@@ -50,13 +50,14 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-服务包装了桥的 `Registry`（Claude Code 的 `<pid>.json` 记录，只有进程存活且启动时间与记录一致才算数）和 `Spawner`（tmux 服务器 `-L dsh-cc`、清空的环境、名字与模型规则）。它从不打开桥的收件箱，也不写对等记录，所以发不了对等消息；第一条任务因此作为启动脚本的参数传入。
+服务包装了桥的 `Registry`（子路径 `@deepseek-ai/dsh-cc-bridge/registry`；Claude Code 的 `<pid>.json` 记录，只有进程存活且启动时间与记录一致才算数）和 `Spawner`（子路径 `@deepseek-ai/dsh-cc-bridge/spawn`；tmux 服务器 `-L dsh-cc`、清空的环境、名字与模型规则）。它从不打开桥的收件箱，也不写对等记录，所以发不了对等消息；第一条任务因此作为启动脚本的参数传入。
 
 登录状态：`~/.claude/.credentials.json` 有内容为 `full`，`~/.config/claude-code/oauth_token` 有内容为 `token`，否则 `none`。这些文件只做 `stat`；任何凭据都不读取、不记录、不返回。启动、停止或失败各记一行日志（带名字）；第一条任务不记录。
 
 | 文件 | 作用 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 配置、类型和 `ClaudeCodeAdmin` |
+| [`src/limits.ts`](src/limits.ts) | 第一条任务的最大长度 |
 
 这是 fork 本地包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。
 

@@ -71,7 +71,7 @@ The plugin registers a Session projection `timeGap` (version 1) holding two time
 |---|---|
 | [`src/index.ts`](src/index.ts) | Plugin: configuration, projection, pre-step listener |
 | [`src/notice.ts`](src/notice.ts) | Input classification, gap measurement, notice text |
-| [`src/format.ts`](src/format.ts) | `formatStamp` and `formatGap`, shared with `wechat` |
+| [`src/format.ts`](src/format.ts) | `formatStamp` and `formatGap`, shared with `wechat` through the `./format` subpath |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 

@@ -1,9 +1,12 @@
 import { rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Config, ensureProject, BUS_EVENT_KIND, persistentKey } from '../src/index.ts'
+import EventBus from '../src/index.ts'
+import { ensureProject, BUS_EVENT_KIND, persistentKey } from '../src/delivery.ts'
 import type { Subscription } from '../src/types.ts'
 import { disposeAll, fakeController, fakeRegistry, fakeRuntime, harness, release, sessionConfig, withConfig, type FakeController } from './harness.ts'
+
+const Config = EventBus.Config
 
 const DAY = 86_400_000
 

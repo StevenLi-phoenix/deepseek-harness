@@ -73,9 +73,9 @@ Each poll calls `report` with `view: deadlines`, `overdue: include`, `include_un
 |---|---|
 | [`src/index.ts`](src/index.ts) | Service `ctx.courses`: configuration, the poll timer, delivery, sync and outage alerts, the Settings status |
 | [`src/api.ts`](src/api.ts) | REST client: PAT per call, timeout, `X-Courses-Agent`, typed failures |
-| [`src/records.ts`](src/records.ts) | Wire parsing of task summaries, sync health, and a sync run's failure reason |
-| [`src/plan.ts`](src/plan.ts) | Reminder and sync-alert rules and the message text |
-| [`src/time.ts`](src/time.ts) | Times in the owner's zone, the quiet window, spans |
+| [`src/records.ts`](src/records.ts) | Wire parsing of task summaries, sync health, and a sync run's failure reason; the `./records` subpath, which `tool-courses` imports |
+| [`src/plan.ts`](src/plan.ts) | Reminder and sync-alert rules and the message text; the `./plan` subpath, which `tool-courses` imports |
+| [`src/time.ts`](src/time.ts) | Times in the owner's zone, the quiet window, spans; the `./time` subpath, which `tool-courses` imports |
 | [`src/storage.ts`](src/storage.ts) | Storage domain `courses`: sent keys, the latest 20 messages, poll, sync alert, outage |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).

@@ -20,14 +20,11 @@ import { mountNotes } from './notes-tool.ts'
 import { sessionGate } from './session-gate.ts'
 import { registerReadTools, registerReplyTools } from './tools.ts'
 
-export { DEFAULT_BASE_URL, MAX_BLOCK_CHARS, READ_TIMEOUT_MS, REPLY_TIMEOUT_MS, TOKEN_ENV, untrusted, type Env } from './bili-svc.ts'
-export {
-  BiliEvidenceRefusedError, CommentCache, commentsOf, defaultSaltFile, loadSalt, ownMidsOf, parseComment, senderKey,
-  type BiliEvidence, type BiliEvidenceCaller, type BiliEvidenceItem, type BiliEvidenceRefusal, type CachedComment,
-} from './evidence.ts'
-export { guardOf, type GuardPurpose, type GuardVerdict, type TextGuard } from './guard.ts'
-export { ChannelNotes, defaultNotesFile, normalizeNote, renderNotesBlock, type ChannelNote, type NoteGate, type NoteLimits, type NoteOutcome } from './notes.ts'
-export { PII_KINDS, piiKind, type PiiKind } from './pii.ts'
+export type { Env } from './bili-svc.ts'
+export { BiliEvidenceRefusedError, type BiliEvidence, type BiliEvidenceCaller, type BiliEvidenceItem, type BiliEvidenceRefusal, type CachedComment } from './evidence.ts'
+export type { GuardPurpose, GuardVerdict, TextGuard } from './guard.ts'
+export type { ChannelNote, NoteGate, NoteLimits, NoteOutcome } from './notes.ts'
+export type { PiiKind } from './pii.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {

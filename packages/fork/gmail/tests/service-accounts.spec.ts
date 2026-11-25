@@ -3,11 +3,14 @@ import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Service } from '@deepseek-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import Gmail, { Config, GMAIL_SCOPE, GmailError, OAUTH_PATH, type SendPolicy } from '../src/index.ts'
+import Gmail, { GmailError, type SendPolicy, type Config } from '../src/index.ts'
+import { GMAIL_SCOPE, OAUTH_PATH } from '../src/oauth.ts'
 import {
   CLIENT_ID, CLIENT_ID_REF, CLIENT_SECRET, CLIENT_SECRET_REF, connect, disposeAll, googleError, host, HOUR, mount, ORIGIN,
   ownerTurn, rejection, START,
 } from './fixture.ts'
+
+const Config = Gmail.Config
 
 beforeEach(() => {
   vi.useFakeTimers()

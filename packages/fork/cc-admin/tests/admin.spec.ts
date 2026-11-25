@@ -6,7 +6,10 @@ import { Context } from '@deepseek-ai/cordis'
 import { Config as BridgeConfig } from '@deepseek-ai/dsh-cc-bridge'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Run } from '@deepseek-ai/dsh-cc-bridge'
-import ClaudeCodeAdmin, { Config, MAX_TASK_CHARS } from '../src/index.ts'
+import ClaudeCodeAdmin from '../src/index.ts'
+import { MAX_TASK_CHARS } from '../src/limits.ts'
+
+const Config = ClaudeCodeAdmin.Config
 
 const dirs: string[] = []
 const contexts: Context[] = []

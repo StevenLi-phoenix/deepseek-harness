@@ -71,7 +71,7 @@ kind: "package-reference"
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件：配置、projection、pre-step 监听器 |
 | [`src/notice.ts`](src/notice.ts) | 输入分类、间隔计算、说明文字 |
-| [`src/format.ts`](src/format.ts) | `formatStamp` 和 `formatGap`，与 `wechat` 共用 |
+| [`src/format.ts`](src/format.ts) | `formatStamp` 和 `formatGap`，通过 `./format` 子路径与 `wechat` 共用 |
 
 这是 fork 本地的包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。
 

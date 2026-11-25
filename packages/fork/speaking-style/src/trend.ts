@@ -86,3 +86,17 @@ export async function readTrend(ticsFile: string, answersFile: string): Promise<
     }
   })
 }
+
+/**
+ * The direction of the stock-line share: the last three days with answers (fewer with little data) against the days before, within a week.
+ * @param days - the trend, oldest first.
+ * @returns `up` or `down` when the shares differ by more than five points, `flat` otherwise, null with too little data.
+ */
+export function ticTrend(days: readonly TrendDay[]): 'up' | 'flat' | 'down' | null {
+  const shares = days.filter(day => day.answers > 0).slice(-7).map(day => day.withTics / day.answers)
+  if (shares.length < 2) return null
+  const split = Math.min(3, Math.floor(shares.length / 2))
+  const mean = (values: readonly number[]): number => values.reduce((sum, value) => sum + value, 0) / values.length
+  const delta = mean(shares.slice(-split)) - mean(shares.slice(0, shares.length - split))
+  return delta > 0.05 ? 'up' : delta < -0.05 ? 'down' : 'flat'
+}

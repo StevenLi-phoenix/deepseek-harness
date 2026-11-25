@@ -28,10 +28,11 @@ import { failureReason, parseHealth, parseTasks, type SyncHealth, type TaskSumma
 import { coursesDomain, type NoteRecord, type OutageRecord, type PollRecord, type SyncRecord } from './storage.ts'
 import { hours, inWindow, stamp } from './time.ts'
 
-export * from './api.ts'
-export * from './plan.ts'
-export * from './records.ts'
-export * from './time.ts'
+export type * from './api.ts'
+export { CoursesApiError } from './api.ts'
+export type * from './plan.ts'
+export type * from './records.ts'
+export type * from './time.ts'
 export type * from './storage.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -94,35 +95,6 @@ export interface Config {
   outageAlertAfter: number
 }
 
-/** Configuration schema. */
-export const Config: z<Config> = z.object({
-  enabled: z.boolean().default(true).description('Send deadline and sync reminders; off stops the poller (the tools keep working).'),
-  baseUrl: z.string().default('https://api.lishuyu.app/courses').description('Courses API base, without a trailing slash.'),
-  tokenEnv: z.string().default('COURSES_PAT').description('Name of the PAT (audience courses) in the credential store or $DSH_HOME/.env.'),
-  agentName: z.string().default('DSH (courses)').description('X-Courses-Agent value: how the service history names writes from DSH.'),
-  timeZone: z.string().default('America/New_York').description('IANA zone deadlines are shown and quiet hours are read in.'),
-  pollMinutes: z.natural().min(1).default(15).description('Minutes between polls.'),
-  firstPollSeconds: z.natural().default(60).description('Seconds after start before the first poll.'),
-  requestTimeoutMs: z.natural().min(1000).default(20_000).description('Timeout of one call to the courses service, in milliseconds.'),
-  lookaheadDays: z.natural().min(1).default(7).description('Days ahead the poll reads; must cover the largest checkpoint.'),
-  beforeHours: z.array(z.number().min(0.25)).default([48, 24, 3]).description('Hours before an on-time deadline at which the owner is reminded.'),
-  lateBeforeHours: z.array(z.number().min(0.25)).default([12, 3]).description('Hours before a late window ends at which the owner is reminded; a missed deadline is told at once.'),
-  urgentWithinHours: z.number().min(0).default(3).description('A deadline this close (hours) is sent during quiet hours and sleep; 0 never.'),
-  quietHours: z.object({
-    followPresence: z.boolean().default(true).description('Wait while the owner sleeps (Settings → 勿扰).'),
-    enabled: z.boolean().default(false).description('Also wait in the daily window below.'),
-    start: z.string().pattern(CLOCK).default('01:00').description('Window start, HH:MM.'),
-    end: z.string().pattern(CLOCK).default('09:00').description('Window end, HH:MM.'),
-  }),
-  sync: z.object({
-    alert: z.boolean().default(true).description('Tell the owner when the course sync collectors are broken, and when they recover.'),
-    statuses: z.array(z.string()).default(['failing', 'missing']).description('Sync health statuses that count as broken.'),
-    staleHours: z.natural().min(1).default(24).description('Hours since the last sync (a run that checked something) before the first alert and the stale line in reminders.'),
-    repeatHours: z.natural().min(1).default(24).description('Hours between alerts while the sync stays broken.'),
-  }),
-  outageAlertAfter: z.natural().min(1).default(4).description('Consecutive failed polls before the owner is told that reminders are paused.'),
-})
-
 /** Who the copy of a reminder in the owner's chat Session comes from; never shown to the owner. */
 const NOTE_ORIGIN = 'the course deadline check (courses: fixed rules over the owner\'s course records, not a model); when the owner answers that something was submitted or finished, update the record with the courses tools'
 
@@ -176,7 +148,34 @@ function assertConfig(config: Config): void {
  */
 export class Courses extends Service {
   static inject = ['storageDomain', 'credentials']
-  static Config = Config
+  /** Configuration schema. */
+  static Config: z<Config> = z.object({
+    enabled: z.boolean().default(true).description('Send deadline and sync reminders; off stops the poller (the tools keep working).'),
+    baseUrl: z.string().default('https://api.lishuyu.app/courses').description('Courses API base, without a trailing slash.'),
+    tokenEnv: z.string().default('COURSES_PAT').description('Name of the PAT (audience courses) in the credential store or $DSH_HOME/.env.'),
+    agentName: z.string().default('DSH (courses)').description('X-Courses-Agent value: how the service history names writes from DSH.'),
+    timeZone: z.string().default('America/New_York').description('IANA zone deadlines are shown and quiet hours are read in.'),
+    pollMinutes: z.natural().min(1).default(15).description('Minutes between polls.'),
+    firstPollSeconds: z.natural().default(60).description('Seconds after start before the first poll.'),
+    requestTimeoutMs: z.natural().min(1000).default(20_000).description('Timeout of one call to the courses service, in milliseconds.'),
+    lookaheadDays: z.natural().min(1).default(7).description('Days ahead the poll reads; must cover the largest checkpoint.'),
+    beforeHours: z.array(z.number().min(0.25)).default([48, 24, 3]).description('Hours before an on-time deadline at which the owner is reminded.'),
+    lateBeforeHours: z.array(z.number().min(0.25)).default([12, 3]).description('Hours before a late window ends at which the owner is reminded; a missed deadline is told at once.'),
+    urgentWithinHours: z.number().min(0).default(3).description('A deadline this close (hours) is sent during quiet hours and sleep; 0 never.'),
+    quietHours: z.object({
+      followPresence: z.boolean().default(true).description('Wait while the owner sleeps (Settings → 勿扰).'),
+      enabled: z.boolean().default(false).description('Also wait in the daily window below.'),
+      start: z.string().pattern(CLOCK).default('01:00').description('Window start, HH:MM.'),
+      end: z.string().pattern(CLOCK).default('09:00').description('Window end, HH:MM.'),
+    }),
+    sync: z.object({
+      alert: z.boolean().default(true).description('Tell the owner when the course sync collectors are broken, and when they recover.'),
+      statuses: z.array(z.string()).default(['failing', 'missing']).description('Sync health statuses that count as broken.'),
+      staleHours: z.natural().min(1).default(24).description('Hours since the last sync (a run that checked something) before the first alert and the stale line in reminders.'),
+      repeatHours: z.natural().min(1).default(24).description('Hours between alerts while the sync stays broken.'),
+    }),
+    outageAlertAfter: z.natural().min(1).default(4).description('Consecutive failed polls before the owner is told that reminders are paused.'),
+  })
 
   /** The courses service; the tools call it too. */
   readonly api: CoursesApi

@@ -11,22 +11,18 @@ import type {} from '@deepseek-ai/dsh-webhook-github'
 import z from '@deepseek-ai/schemastery'
 import { commitEvent, notificationEvent, parseCommits, parseReleases, parseRepository, parseTags, parseThreads, releaseEvent, tagEvent } from './github.ts'
 import { sensorDomain, type StreamCursor, type WatchRecord } from './storage.ts'
+import { REPO_STREAMS, streamId, type RepoStream } from './streams.ts'
 import { deliveryEvents } from './webhook.ts'
 
-export * from './github.ts'
+export type * from './github.ts'
 export type * from './storage.ts'
+export type { RepoStream } from './streams.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
     githubSensor: GithubSensor
   }
 }
-
-/** Per-repository streams. */
-export type RepoStream = 'releases' | 'commits' | 'tags'
-
-/** Every repository stream, in documentation order. */
-export const REPO_STREAMS: readonly RepoStream[] = ['releases', 'tags', 'commits']
 
 /** One watched repository. */
 export interface RepoWatch {
@@ -117,24 +113,6 @@ export interface Config {
 /** Webhook rule of this sensor; one per process. */
 const WEBHOOK_RULE_ID = 'github-sensor' as WebhookRuleId
 
-/** Configuration schema. */
-export const Config: z<Config> = z.object({
-  intervalMs: z.natural().min(1000).default(60_000),
-  apiBase: z.string().default('https://api.github.com'),
-  tokenEnv: z.string().role('credential-ref').default('GITHUB_SENSOR_TOKEN'),
-  notificationsTokenEnv: z.string().role('credential-ref').default('GITHUB_SENSOR_NOTIFICATIONS_TOKEN'),
-  notifications: z.boolean().default(true),
-  repos: z.array(z.object({
-    repo: z.string().required(),
-    watch: z.array(z.union(['releases', 'commits', 'tags'] as const)).default(['releases']),
-    branch: z.string(),
-  })).default([]),
-  timeoutMs: z.natural().min(1).default(20_000),
-  maxTextChars: z.natural().min(1).default(2000),
-  perPage: z.natural().min(1).max(100).default(20),
-  maxSeenPerStream: z.natural().min(1).default(200),
-})
-
 const REPO_NAME = /^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/
 const NOTIFICATIONS_STREAM = 'notifications'
 
@@ -172,17 +150,6 @@ function stream<T>(
   toEvent: (item: T) => BusEventInput,
 ): Stream {
   return { id, path, token, read: body => parse(body)?.map(item => ({ id: identify(item), event: () => toEvent(item) })) }
-}
-
-/**
- * Cursor key of one repository stream; a commits stream on an explicit branch keeps its own cursor.
- * @param watch - repository and branch.
- * @param kind - stream.
- * @returns `repo:<owner/name>:<kind>` or `repo:<owner/name>:commits@<branch>`.
- */
-export function streamId(watch: RepoWatch, kind: RepoStream): string {
-  const branch = kind === 'commits' && watch.branch !== undefined ? `@${watch.branch}` : ''
-  return `repo:${watch.repo}:${kind}${branch}`
 }
 
 /** Fail at load on configuration that cannot be polled. */
@@ -233,7 +200,23 @@ function bodyMessage(body: unknown): string | undefined {
  */
 export class GithubSensor extends Service {
   static inject = ['timer', 'storageDomain', 'credentials', 'eventBus']
-  static Config = Config
+  /** Configuration schema. */
+  static Config: z<Config> = z.object({
+    intervalMs: z.natural().min(1000).default(60_000),
+    apiBase: z.string().default('https://api.github.com'),
+    tokenEnv: z.string().role('credential-ref').default('GITHUB_SENSOR_TOKEN'),
+    notificationsTokenEnv: z.string().role('credential-ref').default('GITHUB_SENSOR_NOTIFICATIONS_TOKEN'),
+    notifications: z.boolean().default(true),
+    repos: z.array(z.object({
+      repo: z.string().required(),
+      watch: z.array(z.union(['releases', 'commits', 'tags'] as const)).default(['releases']),
+      branch: z.string(),
+    })).default([]),
+    timeoutMs: z.natural().min(1).default(20_000),
+    maxTextChars: z.natural().min(1).default(2000),
+    perPage: z.natural().min(1).max(100).default(20),
+    maxSeenPerStream: z.natural().min(1).default(200),
+  })
 
   private readonly ready: Promise<Domain<typeof sensorDomain>>
   private readonly tokenRef: CredentialRef

@@ -1,4 +1,4 @@
-import { untrustedRequestId } from '@deepseek-ai/dsh-turn-taint'
+import { untrustedRequestId } from '@deepseek-ai/dsh-turn-taint/src/origin.ts'
 import { describe, expect, it } from 'vitest'
 import { formatGap, formatStamp } from '../src/format.ts'
 import { classifyArrival, incomingKind, measureGap, timeGapNotice, timeGapSummary } from '../src/notice.ts'

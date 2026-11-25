@@ -5,7 +5,7 @@
  */
 
 import { existsSync } from 'node:fs'
-import { MemoryStore } from '@deepseek-ai/dsh-owner-memory'
+import { MemoryStore } from '@deepseek-ai/dsh-owner-memory/store'
 import {
   GUARD_PROMPT_VERSION, GUARD_SYSTEM_PROMPT, guardUserMessage, parseGuardAnswer, rawId, RawStore, sha256,
   type GuardModel, type ParsedAnswer,

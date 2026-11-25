@@ -2,10 +2,13 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Config, findCycle, flowResultKind, FlowError } from '../src/index.ts'
+import EventBus, { FlowError } from '../src/index.ts'
+import { findCycle, flowResultKind } from '../src/flow.ts'
 import type { OwnerNote, Subscription } from '../src/types.ts'
 import { MemoryMediaPool } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 import { baseConfig, disposeAll, fakeRegistry, harness, release, sessionEvents, sessionConfig, withConfig } from './harness.ts'
+
+const Config = EventBus.Config
 
 beforeEach(() => {
   vi.useFakeTimers()

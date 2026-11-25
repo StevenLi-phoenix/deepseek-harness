@@ -14,8 +14,11 @@ import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility, type Domain } from '@deepseek-ai/dsh-storage-domain'
 import { vi } from 'vitest'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
-import Gmail, { Config, GMAIL_SCOPE, type AccountView, type GmailPart, type SendPolicy, type TurnFacts } from '../src/index.ts'
+import Gmail, { type AccountView, type GmailPart, type SendPolicy, type TurnFacts, type Config } from '../src/index.ts'
+import { GMAIL_SCOPE } from '../src/oauth.ts'
 import { gmailDomain } from '../src/storage.ts'
+
+const Config = Gmail.Config
 
 /** 2026-11-12 09:00 New York. */
 export const START = Date.parse('2026-11-12T09:00:00-05:00')

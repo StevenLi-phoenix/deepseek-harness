@@ -80,8 +80,10 @@ kind: "package-reference"
 | 文件 | 作用 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 服务 `ctx.gmail`：配置、账号、token、读信、草稿、发信流程、待确认的信、登录、设置页状态 |
+| [`src/actions.ts`](src/actions.ts) | 标签操作；`tool-gmail` 导入的 `./actions` 子路径 |
 | [`src/gate.ts`](src/gate.ts) | 发信判断、主人点名的地址、凭确认码确认 |
-| [`src/oauth.ts`](src/oauth.ts) | Google OAuth：PKCE、同意页地址、换取授权码、刷新、撤销 |
+| [`src/oauth.ts`](src/oauth.ts) | Google OAuth：PKCE、同意页地址、换取授权码、刷新、撤销、权限范围，以及从 `sign-in-store.ts` 转导出的回调路径；`gmail-settings` 导入的 `./oauth` 子路径 |
+| [`src/sign-in-store.ts`](src/sign-in-store.ts) | `sign-ins.json` 中未完成的登录，一次性、仅主人可读；回调路径及其校验 |
 | [`src/api.ts`](src/api.ts) | Gmail REST 客户端：重试、上传、带类型的失败 |
 | [`src/mime.ts`](src/mime.ts) | 外发邮件的拼装 |
 | [`src/address.ts`](src/address.ts) | 收件人解析与检查 |

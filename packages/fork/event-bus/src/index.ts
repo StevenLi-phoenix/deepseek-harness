@@ -1,7 +1,6 @@
 /** Durable event bus: dedupe, loop suppression, config and run-time subscriptions, coalescing, rate limits, dispatch, and reports. */
 
 import { randomUUID } from 'node:crypto'
-import { mkdir } from 'node:fs/promises'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-timer'
 // Type-only: ctx.sessionController, ctx.workspaceRegistry, and the `compaction/summary` Session event.
@@ -20,6 +19,7 @@ import {
   archiveDomain, autoArchiveSchema, resolveAutoArchive, SessionArchiver, type ArchiveHost, type ArchiveStatus, type AutoArchiveConfig,
   logModifiedAt, type LogLocator, type ProtectionDisposer, type SessionProtector, type SessionRow, type SweepReport,
 } from './archive.ts'
+import { BUS_EVENT_KIND, BUS_EVENT_RULE_ID, ensureProject, persistentKey } from './delivery.ts'
 import { applyRoutePatch, downstreamOf, findCycle, FLOW_SOURCE, flowResultKind, mergeRoutePatches, resultOf, ROUTE_RESULTS } from './flow.ts'
 import { matchesSubscription, suppressionReason } from './match.ts'
 import {
@@ -35,11 +35,12 @@ import type {
 } from './types.ts'
 import { FlowError, SubscriptionError, subscriptionProblem } from './validate.ts'
 
-export * from './flow.ts'
-export * from './match.ts'
-export * from './prompt.ts'
-export * from './validate.ts'
-export { AUTO_ARCHIVE_DEFAULTS, MAX_RECENT_ARCHIVED, resolveAutoArchive, selectSessions } from './archive.ts'
+export type { ProjectRegistry } from './delivery.ts'
+export type * from './flow.ts'
+export type * from './match.ts'
+export type * from './prompt.ts'
+export type * from './validate.ts'
+export { FlowError, SubscriptionError } from './validate.ts'
 export type { ArchivedRecord, ArchiveStatus, AutoArchiveConfig, ProtectedSession, ProtectionDisposer, SessionProtector, SessionRow, SweepReport } from './archive.ts'
 export type * from './storage.ts'
 export type * from './types.ts'
@@ -56,11 +57,6 @@ declare module '@deepseek-ai/dsh-webhook' {
     'bus-event': BusDeliveryEvent
   }
 }
-
-/** Webhook provider kind of every delivery this bus dispatches. */
-export const BUS_EVENT_KIND = 'bus-event'
-/** Id of the webhook rule that turns bus deliveries into Session requests. */
-export const BUS_EVENT_RULE_ID = 'event-bus'
 
 const HOUR_MS = 3_600_000
 /** Limits of a route the configuration or a flow edit does not set. */
@@ -134,24 +130,6 @@ const subscriptionSchema: z<Subscription> = z.object({
   coalesceMs: z.natural().default(ROUTE_COALESCE_MS),
   maxPerHour: z.natural().min(1).default(ROUTE_MAX_PER_HOUR),
   session: sessionActionSchema,
-})
-
-/** Configuration schema. */
-export const Config: z<Config> = z.object({
-  subscriptions: z.array(subscriptionSchema).default([]),
-  suppress: z.object({
-    actors: z.array(z.string()).default([]),
-    markers: z.array(z.string()).default([]),
-  }),
-  retainEvents: z.natural().min(1).default(5000),
-  retainBatches: z.natural().min(1).default(1000),
-  flowChangesKept: z.natural().min(1).default(200),
-  maxTextChars: z.natural().min(1).default(4000),
-  notifySessionResult: z.boolean().default(true),
-  reportScheduledTurns: z.boolean().default(true),
-  maxNoteEvents: z.natural().min(1).default(10),
-  webUrl: z.string(),
-  autoArchive: autoArchiveSchema,
 })
 
 /** Shape check for deliveries that come back through the webhook rule. */
@@ -308,38 +286,6 @@ function summarize(batch: BatchRecord): BatchSummary {
   }
 }
 
-/**
- * The `persistent` table key of a subscription's Session: the subscription id, or `<id>|<subject>` for `key: subject`.
- * @param subscription - subscription id.
- * @param subject - the events' subject, for `key: subject`.
- * @returns the table key.
- */
-export function persistentKey(subscription: string, subject?: string): string {
-  return subject === undefined ? subscription : `${subscription}|${subject}`
-}
-
-/** What {@link ensureProject} needs of `ctx.workspaceRegistry`. */
-export interface ProjectRegistry {
-  resolveByPath(path: string): Promise<{ readonly path: string; readonly title: string } | undefined>
-  create(path: string, title?: string): Promise<{ readonly path: string; readonly title: string }>
-}
-
-/**
- * Make sure a directory exists and is a Web UI project (Workspace), so the Sessions that run there are grouped under it.
- * An existing project keeps its title (the owner may have renamed it); a new one is titled `name`.
- * @param registry - `ctx.workspaceRegistry`, or undefined to only create the directory.
- * @param path - absolute directory.
- * @param name - title of a new project.
- * @returns `created`, `existing`, or `directory-only` when no registry is mounted.
- */
-export async function ensureProject(registry: ProjectRegistry | undefined, path: string, name: string): Promise<'created' | 'existing' | 'directory-only'> {
-  await mkdir(path, { recursive: true })
-  if (registry === undefined) return 'directory-only'
-  if (await registry.resolveByPath(path) !== undefined) return 'existing'
-  await registry.create(path, name)
-  return 'created'
-}
-
 /** The public fields of a stored persistent Session. */
 function persistentView(record: PersistentRecord): PersistentSessionView {
   return {
@@ -419,7 +365,23 @@ function errorText(error: unknown): string {
  */
 export class EventBus extends Service {
   static inject = ['timer', 'storageDomain']
-  static Config = Config
+  /** Configuration schema. */
+  static Config: z<Config> = z.object({
+    subscriptions: z.array(subscriptionSchema).default([]),
+    suppress: z.object({
+      actors: z.array(z.string()).default([]),
+      markers: z.array(z.string()).default([]),
+    }),
+    retainEvents: z.natural().min(1).default(5000),
+    retainBatches: z.natural().min(1).default(1000),
+    flowChangesKept: z.natural().min(1).default(200),
+    maxTextChars: z.natural().min(1).default(4000),
+    notifySessionResult: z.boolean().default(true),
+    reportScheduledTurns: z.boolean().default(true),
+    maxNoteEvents: z.natural().min(1).default(10),
+    webUrl: z.string(),
+    autoArchive: autoArchiveSchema,
+  })
 
   private readonly ready: Promise<Domain<typeof busDomain>>
   private domain: Domain<typeof busDomain> | undefined

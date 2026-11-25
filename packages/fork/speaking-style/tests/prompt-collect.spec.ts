@@ -9,6 +9,8 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MockAdapter, textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 import * as Style from '../src/index.ts'
+import { BLOCK_INTRO } from '../src/render.ts'
+import { StyleService } from '../src/service.ts'
 import { StyleStore } from '../src/store.ts'
 import { cleanup, tmp, track } from './harness.ts'
 
@@ -48,7 +50,7 @@ async function harness(script: Script, options: { root?: boolean; prompt?: Recor
     await done
   }
   const create = (id: string, header: Record<string, unknown> = { agentPreset: 'unattended' }) => ctx.agentLoop.create(SessionId(id), { provider: 'mock', model: 'mock' }, header)
-  const blocks = (index: number): number => JSON.stringify(adapter.requests[index]!.messages).split(Style.BLOCK_INTRO).length - 1
+  const blocks = (index: number): number => JSON.stringify(adapter.requests[index]!.messages).split(BLOCK_INTRO).length - 1
   return { ctx, adapter, dir, logs, turn, create, blocks, style: ctx.get('speakingStyle') }
 }
 
@@ -89,13 +91,13 @@ describe('prompt mode edge cases', () => {
   it('shows the block again after a compaction summarized it away, but not after a failed one', async () => {
     const { step, textOfBlock, emit } = await bare()
     const first = textOfBlock(await step())!
-    expect(first).toContain(Style.BLOCK_INTRO)
+    expect(first).toContain(BLOCK_INTRO)
     emit({ type: 'user/message', data: { source: { kind: 'speaking-style' }, content: [{ type: 'text', text: first }] } })
     expect(textOfBlock(await step())).toBeUndefined()
     emit({ type: 'compaction/end', data: { error: new Error('failed') } })
     expect(textOfBlock(await step())).toBeUndefined()
     emit({ type: 'compaction/end', data: {} })
-    expect(textOfBlock(await step())).toContain(Style.BLOCK_INTRO)
+    expect(textOfBlock(await step())).toContain(BLOCK_INTRO)
   })
 
   it('ignores style messages that carry no marker, and messages of other sources', async () => {
@@ -106,7 +108,7 @@ describe('prompt mode edge cases', () => {
     }
     emit({ type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: first }] } })
     emit({ type: 'turn/start', data: {} })
-    expect(textOfBlock(await step())).toContain(Style.BLOCK_INTRO)
+    expect(textOfBlock(await step())).toContain(BLOCK_INTRO)
     emit({ type: 'user/message', data: { source: { kind: 'speaking-style' }, content: [{ type: 'text', text: first }] } })
     expect(textOfBlock(await step())).toBeUndefined()
   })
@@ -120,7 +122,7 @@ describe('prompt mode edge cases', () => {
     expect(textOfBlock(await step({ session: { id: 's', header: { agentPreset: 'unattended', origin: 'subagent' } } }))).toBeUndefined()
     expect(textOfBlock(await step({ session: { id: 's', header: {} } }))).toBeUndefined()
     expect(textOfBlock(await step({ session: { id: 's', header: { agentPreset: 'qq-digest' } } }))).toBeUndefined()
-    expect(textOfBlock(await step({ step: 1 }))).toContain(Style.BLOCK_INTRO)
+    expect(textOfBlock(await step({ step: 1 }))).toContain(BLOCK_INTRO)
   })
 
   it.each([
@@ -139,7 +141,7 @@ describe('prompt mode edge cases', () => {
     await turn(agent, '一')
     await turn(agent, '二')
     expect(logs.lines.filter(line => line.includes('preset row without the root speaking-style plugin'))).toHaveLength(1)
-    expect(JSON.stringify(adapter.requests[1]!.messages)).not.toContain(Style.BLOCK_INTRO)
+    expect(JSON.stringify(adapter.requests[1]!.messages)).not.toContain(BLOCK_INTRO)
   })
 
   it('leaves subagent Sessions and presets outside the list alone', async () => {
@@ -147,7 +149,7 @@ describe('prompt mode edge cases', () => {
     await turn(await create('sub', { agentPreset: 'unattended', origin: 'subagent' }), '一')
     await turn(await create('other', {}), '二')
     await turn(await create('main'), '三')
-    const shown = adapter.requests.map(request => JSON.stringify(request.messages).includes(Style.BLOCK_INTRO))
+    const shown = adapter.requests.map(request => JSON.stringify(request.messages).includes(BLOCK_INTRO))
     expect(shown).toEqual([false, false, true])
   })
 })
@@ -225,7 +227,7 @@ describe('collect mode events', () => {
     const dir = await tmp()
     const ctx = track(new Context())
     const logs = capture(ctx)
-    const panel = vi.spyOn(Style.StyleService.prototype, 'panel').mockRejectedValueOnce('plain failure')
+    const panel = vi.spyOn(StyleService.prototype, 'panel').mockRejectedValueOnce('plain failure')
     await ctx.plugin(Style, { dir, ticsFile: join(dir, 'tics.json'), ...OFF } as Style.Config)
     await vi.waitFor(() => { expect(logs.has('first read failed', 'plain failure')).toBe(true) })
     panel.mockRestore()

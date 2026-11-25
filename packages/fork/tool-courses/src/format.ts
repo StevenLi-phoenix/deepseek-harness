@@ -3,7 +3,9 @@
  * version for a later write, course, title, dates in the owner's zone, progress, submission, parts, freshness, and
  * the first source link), instead of the service's full summaries.
  */
-import { lateWindowEnd, stamp, type SyncHealth, type TaskSummary } from '@deepseek-ai/dsh-courses'
+import { type SyncHealth, type TaskSummary } from '@deepseek-ai/dsh-courses'
+import { lateWindowEnd } from '@deepseek-ai/dsh-courses/plan'
+import { stamp } from '@deepseek-ai/dsh-courses/time'
 
 /** Longest excerpt or remaining-work text in one answer. */
 export const MAX_TEXT_CHARS = 600

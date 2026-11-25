@@ -4,7 +4,7 @@
  * reviews and undoes changes with the `memory-admin` CLI (RUNBOOK 15), or tells the agent in words.
  */
 
-import { originZh } from '@deepseek-ai/dsh-turn-taint'
+import { originZh } from '@deepseek-ai/dsh-turn-taint/origin'
 import type { MemoryCategory } from './entries.ts'
 
 export { originZh }

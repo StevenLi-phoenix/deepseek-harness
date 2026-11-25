@@ -2,9 +2,11 @@ import { Context } from '@deepseek-ai/cordis'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryMediaPool } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
-import GithubSensor, { Config } from '../src/index.ts'
+import GithubSensor from '../src/index.ts'
 import { FakeGitHub, commit, release } from './fake-github.ts'
 import { NOTIFICATIONS, REL, TAGS, baseConfig, disposeAll, harness } from './harness.ts'
+
+const Config = GithubSensor.Config
 
 beforeEach(() => {
   vi.useFakeTimers()

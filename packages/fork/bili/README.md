@@ -109,7 +109,7 @@ The Settings view comes from `GET /v1/status` under the manage token (accounts w
 | [`src/share.ts`](src/share.ts) | `DailyShare`: the daily share's plan, holds, prompt, outcomes, and Settings view |
 | [`src/endpoints.ts`](src/endpoints.ts) | The endpoint names this package may call, reads and actions |
 | [`src/api.ts`](src/api.ts) | Typed reads (bounded) and single-call actions |
-| [`src/text.ts`](src/text.ts) | Bounding, the untrusted wrapper, the owner-message and daily-share prompts, message splitting |
+| [`src/text.ts`](src/text.ts) | Bounding, the untrusted wrapper, the owner-message and daily-share prompts, message splitting; the `./text` subpath, which `tool-bili` imports |
 | [`src/time.ts`](src/time.ts) | Day keys and stamps in one zone |
 | [`src/hot.ts`](src/hot.ts) | `ctx.biliHot`: the bounded, expiring store of hot comments and hot-search words |
 | [`src/storage.ts`](src/storage.ts) | The `bili` storage domain |

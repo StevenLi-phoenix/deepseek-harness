@@ -2,12 +2,14 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import ClaudeCodeAdmin, { Config } from '@deepseek-ai/dsh-cc-admin'
+import ClaudeCodeAdmin from '@deepseek-ai/dsh-cc-admin'
 import * as Style from '@deepseek-ai/dsh-speaking-style'
 import { StyleStore } from '@deepseek-ai/dsh-speaking-style/src/store.ts'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { AgentsView } from '../src/views.ts'
 import { mountConsole } from './fixtures.ts'
+
+const Config = ClaudeCodeAdmin.Config
 
 const dirs: string[] = []
 const contexts: Context[] = []

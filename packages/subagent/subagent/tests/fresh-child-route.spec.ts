@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ReasoningEffortId } from '@deepseek-ai/dsh-llm/types'
-import { SubagentRuntime, withFreshChildRoute } from '../src/index.ts'
+import { SubagentRuntime } from '../src/index.ts'
+import { withFreshChildRoute } from '../src/fresh-child-route.ts'
 import type { AgentOptions } from '@deepseek-ai/dsh-agent'
 
 const capabilities = { agentOptions: true, agentPreset: true, outputSchema: true, depthLimit: true }
@@ -13,6 +14,10 @@ const request = (agentOptions?: AgentOptions): { prompt: string; agentOptions?: 
 describe('freshChildRoute', () => {
   it('sends a fresh child that names no route to the configured one', () => {
     expect(withFreshChildRoute(request(), fresh, route).agentOptions).toEqual(route)
+  })
+
+  it('sets no effort when neither the call nor the route names one', () => {
+    expect(withFreshChildRoute(request(), fresh, { provider: 'codex', model: 'm' }).agentOptions).toEqual({ provider: 'codex', model: 'm' })
   })
 
   it('keeps a caller-chosen effort and other options', () => {

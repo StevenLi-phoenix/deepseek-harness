@@ -148,13 +148,14 @@ When a bus-started Session ends its first turn, or a persistent Session ends a b
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Service, configuration, subscription store, flush timers, actuators, Session and reminder observation |
+| [`src/delivery.ts`](src/delivery.ts) | The webhook kind and rule id of bus deliveries, the persistent Session key, and the project a subscription's Sessions run in |
 | [`src/validate.ts`](src/validate.ts) | Subscription validation shared by configuration and `subscribe()` |
-| [`src/match.ts`](src/match.ts) | Glob matching and loop suppression |
-| [`src/prompt.ts`](src/prompt.ts) | Session request, batch, result, and reminder message rendering; the silent reply |
+| [`src/match.ts`](src/match.ts) | Glob matching and loop suppression; the `./match` subpath, which `presence` imports |
+| [`src/prompt.ts`](src/prompt.ts) | Session request, batch, result, and reminder message rendering; the silent reply; the `./prompt` subpath, which `owner-relay` and `github-sensor` import |
 | [`src/storage.ts`](src/storage.ts) | Storage-domain tables for events, pending rows, batches, run-time subscriptions, and persistent Sessions |
 | [`src/archive.ts`](src/archive.ts) | Auto-archive: the sweep timer, the selection rules, the protector registry, and the recently archived table |
 
-This is a fork-local package; [`../UPSTREAM.md`](../UPSTREAM.md) describes how the `fork` group tracks upstream. `@deepseek-ai/dsh-owner-relay` imports `isSilentReply()` and `failureDetail()`, and `@deepseek-ai/dsh-tool-watch` calls `OwnerNotifier.ownsSession()`, so they stay stable. Because the relay depends on this package, the bus reads `ctx.ownerRelay` through a structural `ownerOf()` view instead of importing it. A note's optional `origin` names its sender for the channel's copy in the owner's chat Session and is never shown to the owner; a message for the main agent has its own optional `origin` token (`bili`, `cc`) that goes into the request id of the prompt the channel queues, so the Host can tell the turn it starts from one the owner started. `OwnerNotifier.tellMainAgent()` is optional and the bus never calls it: a channel with a chat Session (wechat) implements it so that another Session (dsh-bili's) can hand the owner's main agent a message.
+This is a fork-local package; [`../UPSTREAM.md`](../UPSTREAM.md) describes how the `fork` group tracks upstream. `@deepseek-ai/dsh-owner-relay` imports `isSilentReply()` and `failureDetail()` from the `./prompt` subpath, `@deepseek-ai/dsh-tool-watch` imports `flowResultKind()` and `ROUTE_RESULTS` from `./flow`, and `@deepseek-ai/dsh-tool-watch` calls `OwnerNotifier.ownsSession()`, so they stay stable. Because the relay depends on this package, the bus reads `ctx.ownerRelay` through a structural `ownerOf()` view instead of importing it. A note's optional `origin` names its sender for the channel's copy in the owner's chat Session and is never shown to the owner; a message for the main agent has its own optional `origin` token (`bili`, `cc`) that goes into the request id of the prompt the channel queues, so the Host can tell the turn it starts from one the owner started. `OwnerNotifier.tellMainAgent()` is optional and the bus never calls it: a channel with a chat Session (wechat) implements it so that another Session (dsh-bili's) can hand the owner's main agent a message.
 
 </details>
 

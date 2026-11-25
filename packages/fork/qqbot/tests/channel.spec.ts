@@ -9,9 +9,12 @@ import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
-import QqBotChannel, { Config, peerKeyOf } from '../src/index.ts'
+import QqBotChannel from '../src/index.ts'
+import { peerKeyOf } from '../src/transport.ts'
 import type { SdkTransportOptions } from '../src/transport.ts'
 import { FakeQq, groupMessage, privateMessage } from './fake-qq.ts'
+
+const Config = QqBotChannel.Config
 
 const APP_ID = '1020304050'
 const APP_SECRET = 'app-secret-must-not-leak-0123456789'

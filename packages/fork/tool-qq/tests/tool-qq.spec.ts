@@ -8,7 +8,7 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as ToolQq from '../src/index.ts'
-import { groupLine, messageLine, resolveGroup, untrustedBlock } from '../src/index.ts'
+import { groupLine, messageLine, resolveGroup, untrustedBlock } from '../src/format.ts'
 
 const contexts: Context[] = []
 const AT = Date.UTC(2026, 9, 31, 12, 5, 0)

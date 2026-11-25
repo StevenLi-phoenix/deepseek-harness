@@ -47,7 +47,7 @@ import { BILI_AGENT_ORIGIN, BILI_RELAY_CHANNEL, DmChannel, type DmOutcome } from
 import { HotStore, type BiliHot } from './hot.ts'
 import { biliDomain, seqKey } from './storage.ts'
 import { assertShareConfig, DailyShare, type ShareConfig } from './share.ts'
-import { clean, codePoints, ownerPrompt } from './text.ts'
+import { MAIN_AGENT_MAX_CHARS, clean, codePoints, ownerPrompt } from './text.ts'
 import { dayKey, formatStamp, isTimeZone } from './time.ts'
 import { parseAction } from './actions.ts'
 import { DEFAULT_MANAGE_CREDENTIAL, LEDGER_MAX_ROWS, LEDGER_ROWS, ManageClient, ManageError, type ManageGate } from './manage.ts'
@@ -57,16 +57,11 @@ import {
   type AccountView, type ActionResult, type BiliView, type GateView, type ManagedAccount, type SessionState,
 } from './view.ts'
 
-export {
-  ACTION_TIMEOUT_MS, BiliApiError, BiliOutcomeError, BiliRefused, BiliRiskError, BiliSessionError, BiliTransportError, BiliVerifyError,
-  DEFAULT_SERVICE_URL, READ_TIMEOUT_MS, RemoteBiliClient, TOKEN_CREDENTIAL, allowedEndpoint, parseJson,
-  type BiliCaller, type CallOptions, type CallResult, type ServiceStatus,
-} from './client.ts'
-export { HOT_COMMENT_CHARS, HOT_MAX_COMMENTS, HOT_MAX_WORDS, HOT_MIN_LIKES, HOT_TTL_MS, HotStore, hotText, type BiliHot, type BiliHotComment } from './hot.ts'
-export { ENDPOINTS, isEndpointName, type Endpoint, type EndpointName } from './endpoints.ts'
-export { COVERAGE, LIMITS, type CommentView, type FeedPost, type Folder, type HotSearch, type InboxItem, type OwnerMessage, type SearchOrder, type SubtitleView, type VideoCard, type VideoDetail } from './api.ts'
-export { REPLY_CHARS, UNTRUSTED_NOTE, UNTRUSTED_TAG, clean, untrusted } from './text.ts'
-export * from './view.ts'
+export { BiliApiError, BiliOutcomeError, BiliRefused, BiliRiskError, BiliSessionError, BiliTransportError, BiliVerifyError, type BiliCaller, type CallOptions, type CallResult, type ServiceStatus } from './client.ts'
+export type { BiliHot, BiliHotComment } from './hot.ts'
+export type { Endpoint, EndpointName } from './endpoints.ts'
+export type { CommentView, FeedPost, Folder, HotSearch, InboxItem, OwnerMessage, SearchOrder, SubtitleView, VideoCard, VideoDetail } from './api.ts'
+export type * from './view.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -115,27 +110,6 @@ export interface Config {
   share: ShareConfig
 }
 
-/** Configuration schema. */
-export const Config: z<Config> = z.object({
-  ownerMid: z.natural().description("The owner's main account (UID), the only one whose messages the Session answers; the UID set in Settings wins. Unset, nothing is answered."),
-  account: z.string().default('maomao').description("bili-svc's id of the agent's account: the account of every call."),
-  manageTokenEnv: z.string().role('credential-ref').default(DEFAULT_MANAGE_CREDENTIAL).description('Name of the credential holding the bili-svc management token; only the name is configured here.'),
-  timeZone: z.string().default('America/New_York').description('IANA time zone of the journal, the main-agent limit, and prompt times.'),
-  mainAgentPerDay: z.natural().max(20).default(5).description("Messages the account's Session may send the owner's main agent per day (bili_tell_main_agent); 0 turns them off."),
-  session: z.object({
-    workspacePath: z.string().default('/Users/dsh-runtime/bili').description('Absolute working directory of the account Session.'),
-    agentPreset: z.string().default('bili').description('Agent preset of the account Session.'),
-    permissionPreset: z.string().default('danger-full-access').description('Permission preset set on the account Session.'),
-    title: z.string().default('B站').description('Title of the account Session.'),
-  }),
-  inboxPollMs: z.natural().min(120_000).default(600_000).description('Owner-message check period, in milliseconds; checks cost no model tokens.'),
-  share: z.object({
-    enabled: z.boolean().default(true).description('Whether the account messages the owner once a day with a video it watched and a recent 热梗; the switch in Settings wins.'),
-    start: z.string().default('19:00').description('Start of the daily share window, HH:MM in timeZone.'),
-    end: z.string().default('22:30').description('End of the daily share window, HH:MM in timeZone (same day, after start).'),
-  }),
-})
-
 /** Resolve failures that keep the stored Session: it exists and is only unavailable right now. */
 const TRANSIENT_RESOLVE_CODES: ReadonlySet<string> = new Set(['session/agent-busy', 'session/writer-held'])
 /** Owner-message ids remembered. */
@@ -153,9 +127,7 @@ const STATUS_TTL_MS = 10_000
 /** The Reply Gate's speaker routes change by hand, so they are reused for this long. */
 const ROUTES_TTL_MS = 60_000
 /** Journal limits. */
-export const JOURNAL_LIMITS = { chars: 600, perDay: 8, pageSize: 10 } as const
-/** Code points of one message to the owner's main agent. */
-export const MAIN_AGENT_MAX_CHARS = 2000
+const JOURNAL_LIMITS = { chars: 600, perDay: 8, pageSize: 10 } as const
 /** Hot-search keywords read at once. */
 const HOT_SEARCHES = 30
 /** Danmaku lines one read returns. */
@@ -312,7 +284,26 @@ interface ActSpec {
  */
 export class BiliAccount extends Service {
   static inject = ['timer', 'storageDomain', 'credentials', 'sessionController', 'permissionPresets', 'sessionTitle']
-  static Config = Config
+  /** Configuration schema. */
+  static Config: z<Config> = z.object({
+    ownerMid: z.natural().description("The owner's main account (UID), the only one whose messages the Session answers; the UID set in Settings wins. Unset, nothing is answered."),
+    account: z.string().default('maomao').description("bili-svc's id of the agent's account: the account of every call."),
+    manageTokenEnv: z.string().role('credential-ref').default(DEFAULT_MANAGE_CREDENTIAL).description('Name of the credential holding the bili-svc management token; only the name is configured here.'),
+    timeZone: z.string().default('America/New_York').description('IANA time zone of the journal, the main-agent limit, and prompt times.'),
+    mainAgentPerDay: z.natural().max(20).default(5).description("Messages the account's Session may send the owner's main agent per day (bili_tell_main_agent); 0 turns them off."),
+    session: z.object({
+      workspacePath: z.string().default('/Users/dsh-runtime/bili').description('Absolute working directory of the account Session.'),
+      agentPreset: z.string().default('bili').description('Agent preset of the account Session.'),
+      permissionPreset: z.string().default('danger-full-access').description('Permission preset set on the account Session.'),
+      title: z.string().default('B站').description('Title of the account Session.'),
+    }),
+    inboxPollMs: z.natural().min(120_000).default(600_000).description('Owner-message check period, in milliseconds; checks cost no model tokens.'),
+    share: z.object({
+      enabled: z.boolean().default(true).description('Whether the account messages the owner once a day with a video it watched and a recent 热梗; the switch in Settings wins.'),
+      start: z.string().default('19:00').description('Start of the daily share window, HH:MM in timeZone.'),
+      end: z.string().default('22:30').description('End of the daily share window, HH:MM in timeZone (same day, after start).'),
+    }),
+  })
 
   private readonly ready: Promise<Domain<typeof biliDomain>>
   private readonly client: RemoteBiliClient

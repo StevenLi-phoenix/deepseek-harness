@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import type { MainAgentMessage } from '@deepseek-ai/dsh-event-bus'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BILI_AGENT_ORIGIN } from '../src/dm.ts'
-import { MAIN_AGENT_MAX_CHARS } from '../src/index.ts'
+import { MAIN_AGENT_MAX_CHARS } from '../src/text.ts'
 import { allLogs, contexts, harness } from './harness.ts'
 
 let dir: string

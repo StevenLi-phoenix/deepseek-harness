@@ -4,7 +4,8 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { describeOrigin, turnOrigin, type TurnOrigin } from '@deepseek-ai/dsh-turn-taint'
+import { type TurnOrigin } from '@deepseek-ai/dsh-turn-taint'
+import { describeOrigin, turnOrigin } from '@deepseek-ai/dsh-turn-taint/origin'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { CATEGORIES, isCategory, isProtected, type MemoryEntry, type WriteMeta } from './entries.ts'

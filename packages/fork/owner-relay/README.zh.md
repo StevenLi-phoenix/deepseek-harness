@@ -82,7 +82,7 @@ agent 的某个 Session 结束一轮时你会收到什么，由一个地方决�
 
 每个决定都以 info 级别记日志，带 Session id 和原因，从不记录正文：`owner-relay: Session <id> ended a turn (<outcome>); relaying <n> chars through <channel>`、什么也不转发的原因（`the owner stopped`、`that answered NO_REPLY`、`without text`），以及 `<channel> sent` 或 `kept the answer`。被 reject 的投递和每次退回的结果以 warn 或 info 记录。
 
-中继依赖 `@deepseek-ai/dsh-event-bus` 的 `failureDetail`、`isSilentReply` 和 `OwnerNotifier` 契约，所以事件总线通过一个结构化的 `ownerOf()` 视图读取 `ctx.ownerRelay`，而不导入这个包。`@deepseek-ai/dsh-wechat` 和 `@deepseek-ai/dsh-bili` 只导入它的类型，通过一个 `inject: ['ownerRelay']` 的子插件注册；有浏览器部分的 `bili` 把它保留为开发依赖。
+中继依赖 `@deepseek-ai/dsh-event-bus` 的 `failureDetail`、`isSilentReply`（`./prompt` 子路径）和 `OwnerNotifier` 契约，所以事件总线通过一个结构化的 `ownerOf()` 视图读取 `ctx.ownerRelay`，而不导入这个包。`@deepseek-ai/dsh-wechat` 和 `@deepseek-ai/dsh-bili` 只导入它的类型，通过一个 `inject: ['ownerRelay']` 的子插件注册；有浏览器部分的 `bili` 把它保留为开发依赖。
 
 | 文件 | 作用 |
 |---|---|

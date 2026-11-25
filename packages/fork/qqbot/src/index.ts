@@ -17,11 +17,12 @@ import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import z from '@deepseek-ai/schemastery'
 import { qqDomain } from './storage.ts'
 import { ATTACHMENT_NOTE, FORWARD_FAILED_PREFIX, frameInbound, HELP_REPLY, NEW_CHAT_REPLY, shortId, splitText } from './text.ts'
-import { createSdkTransport, type QqInbound, type QqTarget, type QqTransport } from './transport.ts'
+import { createSdkTransport, peerKeyOf, type QqInbound, type QqTarget, type QqTransport } from './transport.ts'
 
-export * from './login.ts'
-export * from './text.ts'
-export * from './transport.ts'
+export type * from './login.ts'
+export { LoginError } from './login.ts'
+export type * from './text.ts'
+export type * from './transport.ts'
 export type * from './storage.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -79,32 +80,8 @@ export interface Config {
   credentialPollMs: number
 }
 
-/** Configuration schema. */
-export const Config: z<Config> = z.object({
-  appIdEnv: z.string().role('credential-ref').default('QQBOT_APP_ID'),
-  appSecretEnv: z.string().role('credential-ref').default('QQBOT_APP_SECRET'),
-  allow: z.object({
-    users: z.array(z.string()).default([]),
-    groups: z.array(z.string()).default([]),
-  }),
-  session: z.object({
-    workspacePath: z.string().default('/Users/dsh-runtime/qqbot'),
-    agentPreset: z.string().default('qqbot'),
-    permissionPreset: z.string().default('danger-full-access'),
-    titlePrefix: z.string().default('QQ'),
-    timeZone: z.string().default('America/New_York'),
-  }),
-  maxMessageChars: z.natural().min(100).max(4500).default(1500),
-  maxReplyParts: z.natural().min(1).max(5).default(4),
-  perPeerPerMinute: z.natural().min(1).default(10),
-  c2cReplyWindowMs: z.natural().min(60_000).default(3_300_000),
-  groupReplyWindowMs: z.natural().min(30_000).default(270_000),
-  notifyUnknown: z.boolean().default(true),
-  credentialPollMs: z.natural().min(1000).default(30_000),
-})
-
 /** Name of the channel through which `ctx.ownerRelay` relays the chat Sessions' answers. */
-export const QQ_RELAY_CHANNEL = 'qqbot'
+const QQ_RELAY_CHANNEL = 'qqbot'
 
 /** QQ accepts five passive replies to one inbound message id. */
 const MAX_PASSIVE_REPLIES = 5
@@ -139,15 +116,6 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-/**
- * Peer key of an inbound message: the user in a private chat, the group in a group chat.
- * @param message - the inbound message's scope and ids.
- * @returns `group:<groupId>` for a group message, `c2c:<senderId>` otherwise.
- */
-export function peerKeyOf(message: Pick<QqInbound, 'scope' | 'senderId' | 'groupId'>): string {
-  return message.scope === 'group' ? `group:${message.groupId ?? ''}` : `c2c:${message.senderId}`
-}
-
 /** Messages per rolling minute, per key. */
 class RateWindow {
   private readonly hits = new Map<string, number[]>()
@@ -175,7 +143,29 @@ class RateWindow {
  */
 export class QqBotChannel extends Service {
   static inject = ['storageDomain', 'sessionController', 'permissionPresets', 'sessionTitle', 'credentials']
-  static Config = Config
+  /** Configuration schema. */
+  static Config: z<Config> = z.object({
+    appIdEnv: z.string().role('credential-ref').default('QQBOT_APP_ID'),
+    appSecretEnv: z.string().role('credential-ref').default('QQBOT_APP_SECRET'),
+    allow: z.object({
+      users: z.array(z.string()).default([]),
+      groups: z.array(z.string()).default([]),
+    }),
+    session: z.object({
+      workspacePath: z.string().default('/Users/dsh-runtime/qqbot'),
+      agentPreset: z.string().default('qqbot'),
+      permissionPreset: z.string().default('danger-full-access'),
+      titlePrefix: z.string().default('QQ'),
+      timeZone: z.string().default('America/New_York'),
+    }),
+    maxMessageChars: z.natural().min(100).max(4500).default(1500),
+    maxReplyParts: z.natural().min(1).max(5).default(4),
+    perPeerPerMinute: z.natural().min(1).default(10),
+    c2cReplyWindowMs: z.natural().min(60_000).default(3_300_000),
+    groupReplyWindowMs: z.natural().min(30_000).default(270_000),
+    notifyUnknown: z.boolean().default(true),
+    credentialPollMs: z.natural().min(1000).default(30_000),
+  })
 
   private readonly ready: Promise<Domain<typeof qqDomain>>
   private readonly abort = new AbortController()

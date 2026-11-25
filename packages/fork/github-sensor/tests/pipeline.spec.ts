@@ -1,7 +1,8 @@
 /** End-to-end: fake GitHub → sensor → real bus → notifier and webhook runtime doubles. */
 import { Context } from '@deepseek-ai/cordis'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
-import EventBus, { BUS_EVENT_KIND, type Config as BusConfig, type OwnerNote } from '@deepseek-ai/dsh-event-bus'
+import EventBus, { type Config as BusConfig, type OwnerNote } from '@deepseek-ai/dsh-event-bus'
+import { BUS_EVENT_KIND } from '@deepseek-ai/dsh-event-bus/src/delivery.ts'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import type { VerifiedWebhookDelivery, WebhookRule } from '@deepseek-ai/dsh-webhook'

@@ -4,7 +4,7 @@
  * message text, so the words of an incoming message cannot change what the notice says about it.
  */
 
-import { sourceKind, untrustedOrigin } from '@deepseek-ai/dsh-turn-taint'
+import { sourceKind, untrustedOrigin } from '@deepseek-ai/dsh-turn-taint/origin'
 import { formatGap, formatStamp } from './format.ts'
 
 /**

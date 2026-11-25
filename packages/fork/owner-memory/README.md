@@ -115,14 +115,14 @@ The tools call `MemoryStore`, which validates everything the model sends: catego
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Plugin entry: wires the notice queue, the memory block, and the tools; re-exports the public API |
+| [`src/index.ts`](src/index.ts) | Plugin entry: wires the notice queue, the memory block, and the tools; re-exports the public types and error classes |
 | [`src/config.ts`](src/config.ts) | The plugin configuration and the `OWNER_MEMORY_HOLD` switch |
 | [`src/session-block.ts`](src/session-block.ts) | The pre-step injection both modes share: one block per root Session, right after the claimed prompt |
 | [`src/memory-block.ts`](src/memory-block.ts) | Owner-memory mode: loads the file and renders the memory block |
 | [`src/feedback-mode.ts`](src/feedback-mode.ts) | Feedback mode for the persona presets: one scope's verdicts in front of each root Session |
 | [`src/tools.ts`](src/tools.ts) | `memory_search`, `memory_save`, `memory_forget`, and the turn-origin check behind the hold |
 | [`src/notice-queue.ts`](src/notice-queue.ts) | Queues a turn's notices until the turn ends, caps them per day, and sends them through the notifier |
-| [`src/store.ts`](src/store.ts) | The JSONL store: list, save, hold, approve, revert, merge, roll back, purge, import, search, and the history and snapshots |
+| [`src/store.ts`](src/store.ts) | The JSONL store: list, save, hold, approve, revert, merge, roll back, purge, import, search, and the history and snapshots; the `./store` subpath, which `content-guard` imports |
 | [`src/notice.ts`](src/notice.ts) | The WeChat notice for a turn's protected changes |
 | [`src/render.ts`](src/render.ts) | The memory block and its byte budget |
 | [`src/feedback.ts`](src/feedback.ts) | The owner's keep/delete verdicts on persona replies: store, CLI payload validation, and the feedback block |

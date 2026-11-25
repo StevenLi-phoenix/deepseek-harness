@@ -5,7 +5,8 @@ import { DatabaseSync } from 'node:sqlite'
 import { Context } from '@deepseek-ai/cordis'
 import { equalExceptVolatile } from '../../../../vendor/loader/src/config/diff.ts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Config, ImageNotSaved, isPrivateAddress, QqObserver, SendRefused, type DigestRow } from '../src/index.ts'
+import { ImageNotSaved, QqObserver, SendRefused, type DigestRow } from '../src/index.ts'
+import { isPrivateAddress } from '../src/address.ts'
 import { RecorderClient, RecorderError, RecorderUnavailable } from '../src/client.ts'
 import type { Group, Login, Message } from '../src/protocol.ts'
 import { QqStore } from '../src/store.ts'
@@ -14,6 +15,8 @@ import { MemoryMediaPool } from '../../../storage/storage-domain/tests/helpers/m
 import { mountMemoryStorage } from './digest-harness.ts'
 import { groupMessage } from './fake-onebot.ts'
 import { bootRecorder, shutdown, sleep, until, type Booted } from './recorder-harness.ts'
+
+const Config = QqObserver.Config
 
 const GROUP = '123456789'
 const OTHER = '987654321'

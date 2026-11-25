@@ -14,14 +14,14 @@ import type {} from '@deepseek-ai/dsh-event-bus'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
 import { PeerHub, type InboundMessage } from './hub.ts'
 import type { SessionView } from './registry.ts'
+import { plain, resolveSessionsDir, senderLabel, sessionForModel } from './session-text.ts'
 import { Spawner } from './spawn.ts'
 
-export { PeerHub, type HubOptions, type InboundMessage, type SendResult } from './hub.ts'
-export { Registry, type SessionRecord, type SessionView } from './registry.ts'
-export { Spawner, type Run, type SpawnOptions } from './spawn.ts'
+export type { HubOptions, InboundMessage, SendResult } from './hub.ts'
+export type { SessionRecord, SessionView } from './registry.ts'
+export type { Run, SpawnOptions } from './spawn.ts'
 
 /** Plugin name. */
 export const name = 'cc-bridge'
@@ -124,45 +124,6 @@ const START_DESCRIPTION = [
   'It runs under your account with a conservative setup: it can read files, search, run a few read-only commands (ls, git status/log/diff), and message you; it cannot edit files, run other commands, or use the web. At most 3 run at once.',
   'Its work and its answer come back as a message to the main agent later, never as this tool\'s result. Stop it with cc_stop when it is done.',
 ].join(' ')
-
-/** One line a model or a log can read; control characters and quotes would break the frame around it. */
-function plain(text: string, limit: number): string {
-  return text.replace(/[\p{Cc}\p{Cf}"<>]/gu, ' ').replace(/\s+/gu, ' ').trim().slice(0, limit)
-}
-
-/**
- * How the main agent reads who sent an inbound message. The name comes from the relay's session
- * registry, found by the process that connected, so the sender cannot choose it.
- * @param from - the registry view of the sending session.
- * @returns one line naming the session, its pid, and its working directory when known.
- */
-export function senderLabel(from: SessionView): string {
-  const name = plain(from.name, 80)
-  const where = from.cwd === undefined ? '' : ` working in ${plain(from.cwd, 120)}`
-  return `a Claude Code session on this Mac named "${name}" (pid ${String(from.pid)}${where}), the owner's own coding agent running in the owner's account`
-}
-
-/**
- * A view of a session for the model, with how long it has been quiet.
- * @param session - the session view; its `sessionId` is dropped.
- * @param now - current time in epoch milliseconds, compared with `session.updatedAt`.
- * @returns the view plus `idleSeconds` (whole seconds, at least 0), omitted when `updatedAt` is unknown.
- */
-export function sessionForModel(session: SessionView, now: number): Omit<SessionView, 'sessionId'> & { idleSeconds?: number } {
-  const { sessionId: _sessionId, ...rest } = session
-  const quiet = session.updatedAt === undefined ? {} : { idleSeconds: Math.max(0, Math.round((now - session.updatedAt) / 1000)) }
-  return { ...rest, ...quiet }
-}
-
-/**
- * The session registry the bridge reads: this account's own, which keeps the owner's sessions out of reach.
- * @param configured - the configured directory; an empty string selects the default.
- * @param home - home directory of the account, used for the default.
- * @returns `configured`, or `<home>/.claude/sessions` when it is empty.
- */
-export function resolveSessionsDir(configured: string, home: string): string {
-  return configured === '' ? join(home, '.claude', 'sessions') : configured
-}
 
 /**
  * Register the tools, and listen for what Claude Code sessions send to the agent.

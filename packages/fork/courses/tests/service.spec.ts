@@ -5,7 +5,9 @@ import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
-import Courses, { Config } from '../src/index.ts'
+import Courses from '../src/index.ts'
+
+const Config = Courses.Config
 
 const H = 3_600_000
 /** 2026-11-02 12:00 EST. */

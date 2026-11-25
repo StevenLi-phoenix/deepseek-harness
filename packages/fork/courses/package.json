@@ -18,6 +18,18 @@
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
+    "./plan": {
+      "types": "./lib/types/plan.d.ts",
+      "default": "./lib/types/plan.js"
+    },
+    "./records": {
+      "types": "./lib/types/records.d.ts",
+      "default": "./lib/types/records.js"
+    },
+    "./time": {
+      "types": "./lib/types/time.d.ts",
+      "default": "./lib/types/time.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
@@ -25,6 +37,7 @@
   "files": [
     "locale/*.json",
     "lib/index.js",
+    "lib/types/**/*.js",
     "lib/types/**/*.d.ts",
     "lib/types/**/*.d.ts.map",
     "lib/**/*.js.map",

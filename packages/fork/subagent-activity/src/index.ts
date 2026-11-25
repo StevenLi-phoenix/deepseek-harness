@@ -10,8 +10,7 @@ import type {} from '@deepseek-ai/dsh-session-projection'
 import { ACTIVITY_KEY } from './activity.ts'
 import { activityProjectionDefinition } from './projection.ts'
 
-export * from './activity.ts'
-export { activityProjectionDefinition, noteOf, previewOf, shorten } from './projection.ts'
+export type * from './activity.ts'
 
 /** Required Host services. */
 export const inject = ['sessionProjections']

@@ -148,13 +148,14 @@ kind: "package-reference"
 | 文件 | 作用 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 服务、配置、订阅存储、flush 计时器、actuator、Session 与提醒跟踪 |
+| [`src/delivery.ts`](src/delivery.ts) | 总线投递的 webhook kind 与规则 id、常驻 Session 的键，以及订阅的 Session 所在的项目 |
 | [`src/validate.ts`](src/validate.ts) | 配置与 `subscribe()` 共用的订阅校验 |
-| [`src/match.ts`](src/match.ts) | 通配匹配与回环抑制 |
-| [`src/prompt.ts`](src/prompt.ts) | Session 请求、批次、结果与提醒消息的渲染；静默回答 |
+| [`src/match.ts`](src/match.ts) | 通配匹配与回环抑制；`presence` 导入的 `./match` 子路径 |
+| [`src/prompt.ts`](src/prompt.ts) | Session 请求、批次、结果与提醒消息的渲染；静默回答；`owner-relay` 和 `github-sensor` 导入的 `./prompt` 子路径 |
 | [`src/storage.ts`](src/storage.ts) | 事件、待处理行、批次、运行时订阅与常驻 Session 的 storage-domain 表 |
 | [`src/archive.ts`](src/archive.ts) | 自动归档：检查定时器、筛选规则、保护方登记表，以及最近归档表 |
 
-这是 fork 本地的包；`fork` 组如何跟踪上游见 [`../UPSTREAM.md`](../UPSTREAM.md)。`@deepseek-ai/dsh-owner-relay` 引用了 `isSilentReply()` 和 `failureDetail()`，`@deepseek-ai/dsh-tool-watch` 调用 `OwnerNotifier.ownsSession()`，所以它们保持稳定。因为中继依赖这个包，总线通过一个结构化的 `ownerOf()` 视图读取 `ctx.ownerRelay`，而不导入它。通知可选的 `origin` 为通道放进主人对话 Session 的副本指明发送方，从不显示给主人；递给主 agent 的消息另有一个可选的 `origin` 记号（`bili`、`cc`），它会进入通道所排 prompt 的请求 id，让 Host 能分清这一轮是它开启的，还是 owner 发起的。`OwnerNotifier.tellMainAgent()` 是可选方法，总线从不调用它：有对话 Session 的通道（wechat）实现它，让另一个 Session（dsh-bili 的）能给 owner 的主 agent 递一条消息。
+这是 fork 本地的包；`fork` 组如何跟踪上游见 [`../UPSTREAM.md`](../UPSTREAM.md)。`@deepseek-ai/dsh-owner-relay` 从 `./prompt` 子路径引用 `isSilentReply()` 和 `failureDetail()`，`@deepseek-ai/dsh-tool-watch` 从 `./flow` 引用 `flowResultKind()` 和 `ROUTE_RESULTS`，`@deepseek-ai/dsh-tool-watch` 调用 `OwnerNotifier.ownsSession()`，所以它们保持稳定。因为中继依赖这个包，总线通过一个结构化的 `ownerOf()` 视图读取 `ctx.ownerRelay`，而不导入它。通知可选的 `origin` 为通道放进主人对话 Session 的副本指明发送方，从不显示给主人；递给主 agent 的消息另有一个可选的 `origin` 记号（`bili`、`cc`），它会进入通道所排 prompt 的请求 id，让 Host 能分清这一轮是它开启的，还是 owner 发起的。`OwnerNotifier.tellMainAgent()` 是可选方法，总线从不调用它：有对话 Session 的通道（wechat）实现它，让另一个 Session（dsh-bili 的）能给 owner 的主 agent 递一条消息。
 
 </details>
 

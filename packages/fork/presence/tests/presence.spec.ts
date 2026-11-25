@@ -6,9 +6,13 @@ import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as Ingest from '../../event-ingest/src/index.ts'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
-import Presence, { Config, DEFAULT_URGENT_KINDS, hours, type DeferralHolder } from '../src/index.ts'
+import Presence, { type DeferralHolder } from '../src/index.ts'
+import { DEFAULT_URGENT_KINDS } from '../src/urgent.ts'
+import { hours } from '../src/state.ts'
 import type { SettingsConnection, SettingsRoute } from '../src/settings.ts'
 import { PRESENCE_PATH } from '../src/view.ts'
+
+const Config = Presence.Config
 
 /** 2026-11-03 in New York is EST (UTC-5). */
 const at = (hhmm: string, day = 3): number => Date.parse(`2026-11-${String(day).padStart(2, '0')}T${hhmm}:00Z`)

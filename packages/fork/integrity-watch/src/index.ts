@@ -19,9 +19,8 @@ import { mountScanner } from './scanner.ts'
 import { targetsFor } from './scan.ts'
 import { mountSessionWatch } from './session-watch.ts'
 
-export { ABSENT, digestOf, INSTRUCTION_FILES, targetsFor, type Target, type TargetKind } from './scan.ts'
-export { compileTic, ticHits, TICS } from './tics.ts'
-export { integrityNotice, scan, type Change, type TaskCounts, type TrustedSchedule } from './compare.ts'
+export type { Target, TargetKind } from './scan.ts'
+export type { Change, TaskCounts, TrustedSchedule } from './compare.ts'
 
 /** Plugin name. */
 export const name = 'integrity-watch'

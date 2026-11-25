@@ -9,19 +9,16 @@
 import { isAbsolute, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
-import { defaultMemoryFile, MemoryStore } from '@deepseek-ai/dsh-owner-memory'
+import { defaultMemoryFile, MemoryStore } from '@deepseek-ai/dsh-owner-memory/store'
 import z from '@deepseek-ai/schemastery'
 import { CanarySet } from './canary.ts'
 import { RawStore } from './classifier.ts'
 import { createLlmModel } from './model.ts'
 import { GuardService, type GuardSettings } from './service.ts'
 
-export { GUARD_CATEGORIES, GUARD_LABELS, GUARD_PROMPT_VERSION, GUARD_SYSTEM_PROMPT, guardUserMessage, parseGuardAnswer, RawStore, type GuardModel, type GuardModelAnswer, type ParsedAnswer, type RawRecord } from './classifier.ts'
-export { CanarySet, parseCanaries } from './canary.ts'
-export { fold, squash } from './fold.ts'
-export { createLlmModel } from './model.ts'
-export { LINK, LONG_NUMBER, luhn, MENTION, PATTERN_RULES, scanPatterns, type PatternOptions, type PatternRule } from './patterns.ts'
-export { GuardService, type GuardDeps, type GuardLogger, type GuardSettings } from './service.ts'
+export type { GuardModel, GuardModelAnswer, ParsedAnswer, RawRecord } from './classifier.ts'
+export type { PatternOptions, PatternRule } from './patterns.ts'
+export type { GuardDeps, GuardLogger, GuardSettings } from './service.ts'
 export type { GuardAudience, GuardCheckOptions, GuardHealth, GuardVerdict } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {

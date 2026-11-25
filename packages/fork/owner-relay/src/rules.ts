@@ -1,5 +1,6 @@
 /** Pure rules of the relay: the text of an assistant message, what a turn's end sends the owner, and the fallback note. */
-import { failureDetail, isSilentReply, type OwnerNote } from '@deepseek-ai/dsh-event-bus'
+import { type OwnerNote } from '@deepseek-ai/dsh-event-bus'
+import { failureDetail, isSilentReply } from '@deepseek-ai/dsh-event-bus/prompt'
 
 /** The fields of a `TurnEndReason` the rules read. */
 export interface TurnEndFacts {

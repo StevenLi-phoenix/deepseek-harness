@@ -66,9 +66,10 @@ chat Session --cc_start--> tmux -L dsh-cc --> claude-dsh --> a new session
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Plugin entry: options, the four tools, the inbound hand-over and its hourly cap |
+| [`src/session-text.ts`](src/session-text.ts) | The sender line of an inbound message, the session view `cc_list` returns, and the registry directory |
 | [`src/hub.ts`](src/hub.ts) | Inbox, sending, limits, retry of undelivered inbound messages, the peer record |
-| [`src/registry.ts`](src/registry.ts) | Live sessions of this account and how a name resolves |
-| [`src/spawn.ts`](src/spawn.ts) | `cc_start` and `cc_stop` over tmux; `start(name, task?)` passes a first task as Claude Code's prompt argument, which Settings → Claude Code and voice ([`event-console`](../event-console/README.md)) uses |
+| [`src/registry.ts`](src/registry.ts) | Live sessions of this account and how a name resolves; the `./registry` subpath, which `cc-admin` imports |
+| [`src/spawn.ts`](src/spawn.ts) | `cc_start` and `cc_stop` over tmux; `start(name, task?)` passes a first task as Claude Code's prompt argument, which Settings → Claude Code and voice ([`event-console`](../event-console/README.md)) uses; the `./spawn` subpath, which `cc-admin` imports |
 | [`src/wire.ts`](src/wire.ts) | Claude Code's internal message format |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).

@@ -9,7 +9,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { CoursesStatus, Courses } from '@deepseek-ai/dsh-courses'
 import { COURSES_PATH, COURSES_POLL_PATH, type CoursesView } from './view.ts'
 
-export * from './view.ts'
+export type * from './view.ts'
 
 /** Required Host services. */
 export const inject = ['connection', 'courses']
@@ -31,7 +31,7 @@ interface CoursesConnection {
  * @param status - from `ctx.courses.status()`.
  * @returns the wire view.
  */
-export function toView(status: CoursesStatus): CoursesView {
+function toView(status: CoursesStatus): CoursesView {
   const poll = status.lastPoll
   return {
     enabled: status.enabled,

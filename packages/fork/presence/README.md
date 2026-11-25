@@ -74,6 +74,7 @@ The Settings page is the section `presence` (order 53) of the browser-only packa
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | The `presence` service: inputs, storage, timer, listeners, holders, ingest sink, urgent matching |
+| [`src/urgent.ts`](src/urgent.ts) | The default urgent event kinds |
 | [`src/state.ts`](src/state.ts) | The pure state machine and clock helpers |
 | [`src/settings.ts`](src/settings.ts) | Route `/api/presence` and its actions |
 | [`src/storage.ts`](src/storage.ts) | The storage domain |

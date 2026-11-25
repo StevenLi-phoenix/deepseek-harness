@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { CoursesApi, CoursesApiError, type CoursesFailure } from '../src/index.ts'
+import { CoursesApiError, type CoursesFailure } from '../src/index.ts'
+import { CoursesApi } from '../src/api.ts'
 
 const TOKEN = 'pat_testtokenvalue0000000000000000000000'
 

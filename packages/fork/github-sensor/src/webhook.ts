@@ -6,7 +6,8 @@
  * `github.<event>.<action>` kinds keyed by delivery.
  */
 
-import { clip, type BusEventInput } from '@deepseek-ai/dsh-event-bus'
+import { type BusEventInput } from '@deepseek-ai/dsh-event-bus'
+import { clip } from '@deepseek-ai/dsh-event-bus/prompt'
 import { z } from 'zod'
 import { occurredAt, parseRelease, releaseEvent, tagEvent } from './github.ts'
 

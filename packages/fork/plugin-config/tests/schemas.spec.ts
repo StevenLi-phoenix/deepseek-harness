@@ -1,9 +1,11 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
-import { Config as QqConfig } from '@deepseek-ai/dsh-qq'
+import QqObserver from '@deepseek-ai/dsh-qq'
 import { buildFields } from '../src/fields.ts'
 import { leavesOf } from '../src/view.ts'
+
+const QqConfig = QqObserver.Config
 
 /** Every Config field of `qq`, as dotted paths; a new field in its schema must appear here and in the card. */
 const QQ_FIELDS = [

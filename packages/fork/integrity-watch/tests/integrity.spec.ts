@@ -8,6 +8,7 @@ import { Session, SessionId, SESSION_FORMAT_VERSION, type SessionEvent } from '@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parse } from 'yaml'
 import * as Integrity from '../src/index.ts'
+import { integrityNotice } from '../src/compare.ts'
 import { ABSENT, digestOf, targetsFor } from '../src/scan.ts'
 import { compileTic, ticHits, TICS } from '../src/tics.ts'
 import { forkPatchFiles } from '../../../../scripts/fork-bundle-layers.ts'
@@ -106,17 +107,17 @@ describe('digests', () => {
 
 describe('integrityNotice', () => {
   it('says it in one sentence for one change and lists several', () => {
-    expect(Integrity.integrityNotice([{ target: 'owner-patch', label: 'owner 层 cordis.patch.yml', kind: 'changed' }])).toEqual({ title: 'owner 层 cordis.patch.yml 被改动了（不显示内容）' })
-    expect(Integrity.integrityNotice([{ target: 'a', label: 'A', kind: 'removed' }])).toEqual({ title: 'A 被删除了（不显示内容）' })
-    expect(Integrity.integrityNotice([{ target: 'a', label: 'A', kind: 'added' }])).toEqual({ title: 'A 新出现了（不显示内容）' })
-    const many = Integrity.integrityNotice(Array.from({ length: 10 }, (_, n) => ({ target: `t${String(n)}`, label: `T${String(n)}`, kind: 'changed' as const })))
+    expect(integrityNotice([{ target: 'owner-patch', label: 'owner 层 cordis.patch.yml', kind: 'changed' }])).toEqual({ title: 'owner 层 cordis.patch.yml 被改动了（不显示内容）' })
+    expect(integrityNotice([{ target: 'a', label: 'A', kind: 'removed' }])).toEqual({ title: 'A 被删除了（不显示内容）' })
+    expect(integrityNotice([{ target: 'a', label: 'A', kind: 'added' }])).toEqual({ title: 'A 新出现了（不显示内容）' })
+    const many = integrityNotice(Array.from({ length: 10 }, (_, n) => ({ target: `t${String(n)}`, label: `T${String(n)}`, kind: 'changed' as const })))
     expect(many.title).toBe('有 10 处受监控的文件被改动（不显示内容）')
     expect(many.body?.split('\n')).toHaveLength(9)
     expect(many.body?.split('\n').at(-1)).toBe('…另有 2 处')
     const schedule = { target: 'schedule', label: '定时任务（定义）', kind: 'changed' as const }
-    expect(Integrity.integrityNotice([{ ...schedule, counts: { added: 1, removed: 0, changed: 2 } }])).toEqual({ title: '定时任务文件被绕过 DSH 直接改动了（不显示内容）', body: '新增 1 条、删除 0 条、修改 2 条' })
-    expect(Integrity.integrityNotice([schedule])).toEqual({ title: '定时任务文件被绕过 DSH 直接改动了（不显示内容）' })
-    expect(Integrity.integrityNotice([{ ...schedule, kind: 'removed' }, { target: 'a', label: 'A', kind: 'changed' }]).body).toBe('· 定时任务文件被绕过 DSH 直接删除\n· A：被改动')
+    expect(integrityNotice([{ ...schedule, counts: { added: 1, removed: 0, changed: 2 } }])).toEqual({ title: '定时任务文件被绕过 DSH 直接改动了（不显示内容）', body: '新增 1 条、删除 0 条、修改 2 条' })
+    expect(integrityNotice([schedule])).toEqual({ title: '定时任务文件被绕过 DSH 直接改动了（不显示内容）' })
+    expect(integrityNotice([{ ...schedule, kind: 'removed' }, { target: 'a', label: 'A', kind: 'changed' }]).body).toBe('· 定时任务文件被绕过 DSH 直接删除\n· A：被改动')
   })
 })
 

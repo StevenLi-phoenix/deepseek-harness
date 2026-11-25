@@ -2,11 +2,13 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import WechatChannel, { Config as WechatConfig } from '@deepseek-ai/dsh-wechat'
+import WechatChannel from '@deepseek-ai/dsh-wechat'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FakeIlink, textMessage } from '../../wechat/tests/fake-ilink.ts'
 import { FakeBiliSvc } from './fake-bili-svc.ts'
 import { allLogs, contexts, credentialStore, fakeSessions, harness } from './harness.ts'
+
+const WechatConfig = WechatChannel.Config
 
 const OWNER = 200000001
 const WECHAT_OWNER = 'owner@im.wechat'

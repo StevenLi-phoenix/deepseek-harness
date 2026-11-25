@@ -47,6 +47,7 @@ Once the scope resolves `ctx.bili`, the plugin registers twenty-one `defineTool`
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Plugin entry: the tool definitions |
+| [`src/limits.ts`](src/limits.ts) | The length of one untrusted block |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 

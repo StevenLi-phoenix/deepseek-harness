@@ -5,7 +5,8 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { MODIFY_ACTIONS, type Gmail, type ModifyAction, type Outgoing, type SendOutcome } from '@deepseek-ai/dsh-gmail'
+import { type Gmail, type ModifyAction, type Outgoing, type SendOutcome } from '@deepseek-ai/dsh-gmail'
+import { MODIFY_ACTIONS } from '@deepseek-ai/dsh-gmail/actions'
 import { defineTool, type ParameterSchemaSpec } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { accountLines, dataBlock, searchLines, threadLines, messageLines, size } from './format.ts'

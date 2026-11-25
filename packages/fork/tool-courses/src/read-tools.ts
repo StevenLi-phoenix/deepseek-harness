@@ -3,7 +3,9 @@
  * data when it is rendered.
  */
 
-import { parseHealth, parseTasks, stamp, type Courses } from '@deepseek-ai/dsh-courses'
+import { type Courses } from '@deepseek-ai/dsh-courses'
+import { parseHealth, parseTasks } from '@deepseek-ai/dsh-courses/records'
+import { stamp } from '@deepseek-ai/dsh-courses/time'
 import type { ParameterSchemaSpec } from '@deepseek-ai/dsh-tools'
 import { clip, coverageRows, healthLine, runLines, taskLine } from './format.ts'
 import { clamp, text, ToolProblem } from './tool-args.ts'

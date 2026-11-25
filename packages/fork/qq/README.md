@@ -124,7 +124,7 @@ When `ctx.eventBus` is mounted, the observer claims each group's resident digest
 | [`src/store.ts`](src/store.ts) | The recorder's SQLite schema, FTS5 search, and retention; the digest tables are frozen and read once for the takeover |
 | [`src/media.ts`](src/media.ts) | Address allowlist, capped fetch, type detection, content-addressed files |
 | [`src/pii.ts`](src/pii.ts) | The filter a group note passes: no person, number, address, school, or member name |
-| [`src/digest.ts`](src/digest.ts) | Transcript chunking, the digest prompt, and the model call through a Session |
+| [`src/digest.ts`](src/digest.ts) | Transcript chunking, the digest prompt, and the model call through a Session; the `./digest` subpath, which `tool-qq` imports |
 | [`src/protocol.ts`](src/protocol.ts) | The wire protocol: zod DTOs, the version, the paths, and `FEATURE_MINOR` |
 | [`src/recorder.ts`](src/recorder.ts) | The recorder: connection, recording, backfill, media, retention, the login door, and the pushed settings |
 | [`src/server.ts`](src/server.ts) | The recorder's socket API, event stream, and health listener |

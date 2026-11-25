@@ -10,9 +10,7 @@ import type { Gmail } from '@deepseek-ai/dsh-gmail'
 import z from '@deepseek-ai/schemastery'
 import { gmailTools, registerTool } from './tools.ts'
 
-export { accountLines, dataBlock, messageLines, searchLines, size, TAG, threadLines, TRUST_NOTE, when } from './format.ts'
-export { gmailTools, list, registerTool, text, ToolProblem, type ToolDeps } from './tools.ts'
-export { turnFacts } from './turn.ts'
+export { ToolProblem, type ToolDeps } from './tools.ts'
 
 /** Plugin name. */
 export const name = 'tool-gmail'

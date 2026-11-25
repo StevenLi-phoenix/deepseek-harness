@@ -177,3 +177,12 @@ export function createSdkTransport(options: SdkTransportOptions): QqTransport {
     },
   }
 }
+
+/**
+ * Peer key of an inbound message: the user in a private chat, the group in a group chat.
+ * @param message - the inbound message's scope and ids.
+ * @returns `group:<groupId>` for a group message, `c2c:<senderId>` otherwise.
+ */
+export function peerKeyOf(message: Pick<QqInbound, 'scope' | 'senderId' | 'groupId'>): string {
+  return message.scope === 'group' ? `group:${message.groupId ?? ''}` : `c2c:${message.senderId}`
+}

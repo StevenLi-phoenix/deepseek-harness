@@ -4,6 +4,7 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as ToolUp from '../src/index.ts'
+import { MAX_BLOCK_CHARS } from '../src/bili-svc.ts'
 
 const contexts: Context[] = []
 
@@ -69,10 +70,10 @@ describe('up tools', () => {
   })
 
   it('cuts long reads', async () => {
-    const { call } = await mount({ token: 't', answer: () => ({ status: 200, body: { x: 'a'.repeat(ToolUp.MAX_BLOCK_CHARS * 2) } }) })
+    const { call } = await mount({ token: 't', answer: () => ({ status: 200, body: { x: 'a'.repeat(MAX_BLOCK_CHARS * 2) } }) })
     const text = rendered(await call('up_archives', {}))
     expect(text).toContain('[truncated]')
-    expect(text.length).toBeLessThan(ToolUp.MAX_BLOCK_CHARS + 500)
+    expect(text.length).toBeLessThan(MAX_BLOCK_CHARS + 500)
   })
 
   it('a failing read answers with host text, not a Bilibili block', async () => {

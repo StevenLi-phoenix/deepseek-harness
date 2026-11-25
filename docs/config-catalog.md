@@ -514,7 +514,7 @@ export type Config = LocalConfig
 ## `@deepseek-ai/dsh-bili`
 
 - `inject`: `timer` · `storageDomain` · `credentials` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/bili/src/index.ts:93`](../packages/fork/bili/src/index.ts)
+- `source`: [`packages/fork/bili/src/index.ts:88`](../packages/fork/bili/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -1087,7 +1087,7 @@ export interface ToolResultPruneConfig {
 
 ## `@deepseek-ai/dsh-content-guard`
 
-- `source`: [`packages/fork/content-guard/src/index.ts:38`](../packages/fork/content-guard/src/index.ts)
+- `source`: [`packages/fork/content-guard/src/index.ts:35`](../packages/fork/content-guard/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -1156,7 +1156,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-courses`
 
 - `inject`: `storageDomain` · `credentials`
-- `source`: [`packages/fork/courses/src/index.ts:46`](../packages/fork/courses/src/index.ts)
+- `source`: [`packages/fork/courses/src/index.ts:47`](../packages/fork/courses/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -1415,7 +1415,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-event-bus`
 
 - `inject`: `timer` · `storageDomain`
-- `source`: [`packages/fork/event-bus/src/index.ts:74`](../packages/fork/event-bus/src/index.ts)
+- `source`: [`packages/fork/event-bus/src/index.ts:70`](../packages/fork/event-bus/src/index.ts)
 
 ```ts config-catalog
 /** Bus configuration. */
@@ -2371,7 +2371,7 @@ export type Config = LocalConfig
 ## `@deepseek-ai/dsh-github-sensor`
 
 - `inject`: `timer` · `storageDomain` · `credentials` · `eventBus`
-- `source`: [`packages/fork/github-sensor/src/index.ts:94`](../packages/fork/github-sensor/src/index.ts)
+- `source`: [`packages/fork/github-sensor/src/index.ts:90`](../packages/fork/github-sensor/src/index.ts)
 
 ```ts config-catalog
 /** Sensor configuration. */
@@ -2419,7 +2419,7 @@ export type RepoStream = 'releases' | 'commits' | 'tags'
 ## `@deepseek-ai/dsh-gmail`
 
 - `inject`: `storageDomain` · `credentials`
-- `source`: [`packages/fork/gmail/src/index.ts:82`](../packages/fork/gmail/src/index.ts)
+- `source`: [`packages/fork/gmail/src/index.ts:80`](../packages/fork/gmail/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -2894,7 +2894,7 @@ export interface TlsConfig {
 
 ## `@deepseek-ai/dsh-integrity-watch`
 
-- `source`: [`packages/fork/integrity-watch/src/index.ts:30`](../packages/fork/integrity-watch/src/index.ts)
+- `source`: [`packages/fork/integrity-watch/src/index.ts:29`](../packages/fork/integrity-watch/src/index.ts)
 
 ```ts config-catalog
 /** Settings. */
@@ -3938,7 +3938,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-presence`
 
 - `inject`: `storageDomain`
-- `source`: [`packages/fork/presence/src/index.ts:36`](../packages/fork/presence/src/index.ts)
+- `source`: [`packages/fork/presence/src/index.ts:35`](../packages/fork/presence/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -4124,7 +4124,7 @@ export type Config = LocalConfig
 
 - `inject`: `sessionController` · `permissionPresets` · `sessionTitle` · `credentials` · `storageDomain`
 - `refs`: `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/fork/qq/src/index.ts:51`](../packages/fork/qq/src/index.ts)
+- `source`: [`packages/fork/qq/src/index.ts:52`](../packages/fork/qq/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
@@ -4291,7 +4291,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-qqbot`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle` · `credentials`
-- `source`: [`packages/fork/qqbot/src/index.ts:57`](../packages/fork/qqbot/src/index.ts)
+- `source`: [`packages/fork/qqbot/src/index.ts:58`](../packages/fork/qqbot/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */
@@ -4942,7 +4942,7 @@ export type PythonEnvironment = 'workspace-dependencies' | 'user'
 
 ## `@deepseek-ai/dsh-speaking-style`
 
-- `source`: [`packages/fork/speaking-style/src/index.ts:104`](../packages/fork/speaking-style/src/index.ts)
+- `source`: [`packages/fork/speaking-style/src/index.ts:81`](../packages/fork/speaking-style/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -5323,7 +5323,7 @@ export type JournalMode = 'wal' | 'delete' | 'truncate' | 'persist'
 
 - `inject`: `workingDirectory` · `sessionProjections`
 - `refs`: `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/subagent/subagent/src/index.ts:188`](../packages/subagent/subagent/src/index.ts)
+- `source`: [`packages/subagent/subagent/src/index.ts:190`](../packages/subagent/subagent/src/index.ts)
 
 ```ts config-catalog
 /** Host configuration for continuable subagent capacity. */
@@ -5779,7 +5779,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-time-gap`
 
 - `inject`: `agents` · `sessionProjections`
-- `source`: [`packages/fork/time-gap/src/index.ts:46`](../packages/fork/time-gap/src/index.ts)
+- `source`: [`packages/fork/time-gap/src/index.ts:44`](../packages/fork/time-gap/src/index.ts)
 
 ```ts config-catalog
 /** Settings, edited in Settings → 订阅与监控 through the All settings card. */
@@ -6104,7 +6104,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-tool-gmail`
 
 - `inject`: `tools`
-- `source`: [`packages/fork/tool-gmail/src/index.ts:24`](../packages/fork/tool-gmail/src/index.ts)
+- `source`: [`packages/fork/tool-gmail/src/index.ts:22`](../packages/fork/tool-gmail/src/index.ts)
 
 ```ts config-catalog
 /** Plugin configuration. */
@@ -6298,7 +6298,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-tool-qq`
 
 - `inject`: `tools`
-- `source`: [`packages/fork/tool-qq/src/index.ts:25`](../packages/fork/tool-qq/src/index.ts)
+- `source`: [`packages/fork/tool-qq/src/index.ts:26`](../packages/fork/tool-qq/src/index.ts)
 
 ```ts config-catalog
 /** Which tools the plugin registers. */
@@ -6516,7 +6516,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-tool-up`
 
 - `inject`: `tools` · `credentials`
-- `source`: [`packages/fork/tool-up/src/index.ts:55`](../packages/fork/tool-up/src/index.ts)
+- `source`: [`packages/fork/tool-up/src/index.ts:52`](../packages/fork/tool-up/src/index.ts)
 
 ```ts config-catalog
 /** Notes, evidence, and the Session they belong to. */
@@ -6553,7 +6553,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-tool-watch`
 
 - `inject`: `tools`
-- `source`: [`packages/fork/tool-watch/src/index.ts:26`](../packages/fork/tool-watch/src/index.ts)
+- `source`: [`packages/fork/tool-watch/src/index.ts:27`](../packages/fork/tool-watch/src/index.ts)
 
 ```ts config-catalog
 /** Defaults applied to watches the model creates. */
@@ -6673,7 +6673,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-turn-taint`
 
 - `inject`: `tools`
-- `source`: [`packages/fork/turn-taint/src/index.ts:31`](../packages/fork/turn-taint/src/index.ts)
+- `source`: [`packages/fork/turn-taint/src/index.ts:30`](../packages/fork/turn-taint/src/index.ts)
 
 ```ts config-catalog
 /** Settings. */
@@ -6769,7 +6769,7 @@ export type ApprovalPolicy = 'ask' | 'never'
 ## `@deepseek-ai/dsh-voice`
 
 - `inject`: `credentials`
-- `source`: [`packages/fork/voice/src/index.ts:45`](../packages/fork/voice/src/index.ts)
+- `source`: [`packages/fork/voice/src/index.ts:43`](../packages/fork/voice/src/index.ts)
 
 ```ts config-catalog
 /** Voice configuration. Every field has a default, so a patch entry restates only what it changes. */
@@ -7054,7 +7054,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-wechat`
 
 - `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle`
-- `source`: [`packages/fork/wechat/src/index.ts:96`](../packages/fork/wechat/src/index.ts)
+- `source`: [`packages/fork/wechat/src/index.ts:98`](../packages/fork/wechat/src/index.ts)
 
 ```ts config-catalog
 /** Channel configuration. */

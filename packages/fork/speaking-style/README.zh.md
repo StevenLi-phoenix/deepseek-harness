@@ -91,7 +91,8 @@ kind: "package-reference"
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 插件：配置、两种模式、定时、网页收件箱的写入、回答长度计数，以及 `StyleService`（`ctx.speakingStyle`：内容块、面板、编辑、收集、挖掘、笔记、查询、人设卡更新、`health()`） |
+| [`src/index.ts`](src/index.ts) | 插件：配置、两种模式、定时、网页收件箱的写入和回答长度计数 |
+| [`src/service.ts`](src/service.ts) | `StyleService`（`ctx.speakingStyle`：内容块、面板、编辑、收集、挖掘、笔记、查询、人设卡更新、`health()`） |
 | [`src/tools.ts`](src/tools.ts) | `meme_lookup`、`style_note`（带每回合上限）、`persona_update` |
 | [`src/notes.ts`](src/notes.ts) | `notes.json`：梗（带 `related` 和 `meaningSource`）、性格、被屏蔽的词、人设卡版本 |
 | [`src/guard.ts`](src/guard.ts) | `StyleGate`：每次调用时查 `ctx.contentGuard`，失败即关闭 |
@@ -101,7 +102,7 @@ kind: "package-reference"
 | [`src/collect.ts`](src/collect.ts)、[`src/bili.ts`](src/bili.ts)、[`src/store.ts`](src/store.ts) | 语气收集：配对、过筛、bili-svc 读取、`samples.jsonl` |
 | [`src/filter.ts`](src/filter.ts) | 每行的规则、个人信息规则、笔记过滤 |
 | [`src/render.ts`](src/render.ts) | 内容块 |
-| [`src/trend.ts`](src/trend.ts) | `answers.json` 和页面上的趋势 |
+| [`src/trend.ts`](src/trend.ts) | `answers.json` 和页面上的趋势，以及 `health()` 报告的套话走向 |
 
 preset 行把内容块作为 source kind 为 `speaking-style` 的 `user/message` 放在本回合认领的消息之后，日期或人设卡版本变化时、压缩后、重启后各再放一次。没有根部这一行时记一条警告，什么也不加。工具回答 `{ status: 'recorded' | 'refreshed' }` 或 `{ status: 'rejected', reason }`（`not_a_reader`、`not_verbatim`、`meaning_missing`、`limit_reached`、`too_soon`、`removed`、`unavailable`、`off`、`guard_unavailable`、`guard: …`，或某个过滤原因）；`meme_lookup` 回答 `{ found: true, from: 'groups' | 'hotwatch', term, meaning, example?, related?, source?, meaningSource? }` 或 `{ found: false }`。
 

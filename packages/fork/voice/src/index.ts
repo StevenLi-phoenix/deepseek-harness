@@ -23,9 +23,7 @@ import { isAudioName, transcribeAudio } from './asr.ts'
 import { VoiceError, type CallOptions } from './http.ts'
 import { FeiyuTts, MacMiniTts, type TtsProvider } from './tts.ts'
 
-export { ASR_EXTENSIONS, isAudioName } from './asr.ts'
-export { callService, VoiceError } from './http.ts'
-export { FeiyuTts, MacMiniTts } from './tts.ts'
+export { VoiceError } from './http.ts'
 export type { Transcript } from './asr.ts'
 export type { Synthesis, TtsProvider } from './tts.ts'
 
@@ -120,48 +118,6 @@ export interface Config {
   }
 }
 
-/** Configuration schema. */
-export const Config: z<Config> = z.object({
-  dataDir: z.string(),
-  keepDays: z.natural().min(1).default(14),
-  tts: z.object({
-    enabled: z.boolean().default(true),
-    provider: z.union(['feiyu', 'mac-mini'] as const).default('feiyu'),
-    fallback: z.union(['feiyu', 'mac-mini', 'none'] as const).default('none'),
-    format: z.union(['mp3', 'wav'] as const).default('mp3'),
-    ffmpegPath: z.string().default('/opt/homebrew/bin/ffmpeg'),
-    maxChars: z.natural().min(1).max(2000).default(200),
-    cache: z.boolean().default(true),
-    retries: z.natural().default(2),
-    retryDelayMs: z.natural().default(1000),
-    feiyu: z.object({
-      baseUrl: z.string().default('http://100.117.175.117:19880'),
-      apiKeyEnv: z.string().role('credential-ref').default('FEIYU_API_KEY'),
-      voice: z.string().default('feiyu'),
-      style: z.string().default('cute'),
-      timeoutMs: z.natural().min(1000).default(30_000),
-      jobTimeoutMs: z.natural().min(1000).default(180_000),
-      pollMs: z.natural().min(100).default(2000),
-    }),
-    macMini: z.object({
-      baseUrl: z.string().default('http://127.0.0.1:8098'),
-      speaker: z.string().default('vivian'),
-      language: z.string().default('Chinese'),
-      timeoutMs: z.natural().min(1000).default(240_000),
-    }),
-  }),
-  asr: z.object({
-    enabled: z.boolean().default(false),
-    baseUrl: z.string().default('http://127.0.0.1:8099'),
-    engine: z.union(['funasr', 'whisper'] as const).default('funasr'),
-    language: z.string(),
-    timeoutMs: z.natural().min(1000).default(120_000),
-    retries: z.natural().default(2),
-    retryDelayMs: z.natural().default(1000),
-    maxBytes: z.natural().min(1024).default(25 * 1024 * 1024),
-  }),
-})
-
 /** What {@link Voice.speak} produced. */
 export interface SpeakResult {
   /** Absolute path of the delivered audio file. */
@@ -227,7 +183,47 @@ export interface VoiceSummary {
 /** Service behind `ctx.voice`. */
 export class Voice extends Service {
   static inject = ['credentials']
-  static Config = Config
+  /** Configuration schema. */
+  static Config: z<Config> = z.object({
+    dataDir: z.string(),
+    keepDays: z.natural().min(1).default(14),
+    tts: z.object({
+      enabled: z.boolean().default(true),
+      provider: z.union(['feiyu', 'mac-mini'] as const).default('feiyu'),
+      fallback: z.union(['feiyu', 'mac-mini', 'none'] as const).default('none'),
+      format: z.union(['mp3', 'wav'] as const).default('mp3'),
+      ffmpegPath: z.string().default('/opt/homebrew/bin/ffmpeg'),
+      maxChars: z.natural().min(1).max(2000).default(200),
+      cache: z.boolean().default(true),
+      retries: z.natural().default(2),
+      retryDelayMs: z.natural().default(1000),
+      feiyu: z.object({
+        baseUrl: z.string().default('http://100.117.175.117:19880'),
+        apiKeyEnv: z.string().role('credential-ref').default('FEIYU_API_KEY'),
+        voice: z.string().default('feiyu'),
+        style: z.string().default('cute'),
+        timeoutMs: z.natural().min(1000).default(30_000),
+        jobTimeoutMs: z.natural().min(1000).default(180_000),
+        pollMs: z.natural().min(100).default(2000),
+      }),
+      macMini: z.object({
+        baseUrl: z.string().default('http://127.0.0.1:8098'),
+        speaker: z.string().default('vivian'),
+        language: z.string().default('Chinese'),
+        timeoutMs: z.natural().min(1000).default(240_000),
+      }),
+    }),
+    asr: z.object({
+      enabled: z.boolean().default(false),
+      baseUrl: z.string().default('http://127.0.0.1:8099'),
+      engine: z.union(['funasr', 'whisper'] as const).default('funasr'),
+      language: z.string(),
+      timeoutMs: z.natural().min(1000).default(120_000),
+      retries: z.natural().default(2),
+      retryDelayMs: z.natural().default(1000),
+      maxBytes: z.natural().min(1024).default(25 * 1024 * 1024),
+    }),
+  })
 
   private readonly dataDir: string
   private readonly abort = new AbortController()

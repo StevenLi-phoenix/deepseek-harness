@@ -1,11 +1,14 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { matchesSubscription, type Subscription } from '@deepseek-ai/dsh-event-bus'
+import { type Subscription } from '@deepseek-ai/dsh-event-bus'
+import { matchesSubscription } from '@deepseek-ai/dsh-event-bus/src/match.ts'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
-import { Config } from '../src/index.ts'
+import Presence from '../src/index.ts'
 import { KIND_SLEEP_OFF, KIND_SLEEP_ON, PRESENCE_SOURCE } from '../src/view.ts'
 import { forkPatchFiles } from '../../../../scripts/fork-bundle-layers.ts'
+
+const Config = Presence.Config
 
 /** One loader patch row. */
 interface Row {

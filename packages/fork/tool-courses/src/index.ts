@@ -15,8 +15,6 @@ import { deadlinesTool, findTool, getTool, syncTool } from './read-tools.ts'
 import { registerRead, registerWrite } from './register.ts'
 import { memoTool, observeTool, progressTool, syncRunTool } from './write-tools.ts'
 
-export { clip, dataBlock, healthLine, taskLine } from './format.ts'
-export { requestId, writeOutcome } from './write-outcome.ts'
 
 /** Plugin name. */
 export const name = 'tool-courses'

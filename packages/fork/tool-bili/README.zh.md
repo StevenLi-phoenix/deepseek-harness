@@ -47,6 +47,7 @@ agent 这个 B站账号的眼睛和手。它的 Session 浏览各类动态，搜
 | 文件 | 作用 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件入口：工具定义 |
+| [`src/limits.ts`](src/limits.ts) | 一个不可信块的长度上限 |
 
 这是 fork 本地包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。
 

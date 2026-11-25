@@ -5,9 +5,8 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-agent'
-import {
-  flowResultKind, FlowError, ROUTE_RESULTS, type FlowChange, type FlowEdit, type FlowRouteView, type RoutePatch, type RouteResult,
-} from '@deepseek-ai/dsh-event-bus'
+import { FlowError, type FlowChange, type FlowEdit, type FlowRouteView, type RoutePatch, type RouteResult } from '@deepseek-ai/dsh-event-bus'
+import { flowResultKind, ROUTE_RESULTS } from '@deepseek-ai/dsh-event-bus/flow'
 import { defineTool, type GenericCallView } from '@deepseek-ai/dsh-tools'
 import type { Config } from './index.ts'
 import { ID_PATTERN, MAX_COALESCE_SECONDS, MAX_PER_HOUR } from './limits.ts'

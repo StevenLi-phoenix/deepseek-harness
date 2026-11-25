@@ -28,29 +28,11 @@ declare module '@deepseek-ai/dsh-llm' {
   }
 }
 
-export {
-  CATEGORIES, CATEGORY_DISPLAY, isProtected, MAX_TEXT_CHARS, PROTECTED_CATEGORIES, SOURCES,
-  type MemoryCategory, type MemoryDraft, type MemoryEntry, type MemorySource, type PendingEntry, type WriteMeta,
-} from './entries.ts'
-export {
-  CLI_ORIGIN, describeRollback, planPurge, purgeConfirmed, purgeToken, REVIEW_OPS, reviewWrite, rollbackConfirmed, rollbackToken,
-  type PurgePlan, type ReviewOp, type ReviewResult, type RollbackItem,
-} from './admin.ts'
-export { parseClaudeExport } from './export.ts'
-export { CJK_SPAN, sharesSpan, spanKeys, WORD_SPAN } from './overlap.ts'
-export { memoryNotice, type NoticeItem } from './notice.ts'
-export { renderMemoryBlock } from './render.ts'
-export {
-  defaultMemoryFile, localDate, matchesRollback, MAX_ENTRIES, MAX_PENDING, MemoryError, MemoryStore, PENDING_DAYS,
-  type HistoryRecord, type PurgeOptions, type PurgeResult, type RollbackFilter, type RollbackOptions, type RollbackResult,
-} from './store.ts'
-export {
-  defaultFeedbackFile, FEEDBACK_KINDS, FEEDBACK_SCOPES, FEEDBACK_VERDICTS, FeedbackError, FeedbackStore,
-  MAX_FEEDBACK_PER_SCOPE, renderFeedbackBlock,
-  type FeedbackEntry, type FeedbackInput, type FeedbackKind, type FeedbackScope, type FeedbackVerdict,
-} from './feedback.ts'
-export { runAdminCli, runImportCli } from './cli.ts'
-export { isCategory, isEntryId } from './entries.ts'
+export type { MemoryCategory, MemoryDraft, MemoryEntry, MemorySource, PendingEntry, WriteMeta } from './entries.ts'
+export type { PurgePlan, ReviewOp, ReviewResult, RollbackItem } from './admin.ts'
+export type { NoticeItem } from './notice.ts'
+export { MemoryError, type HistoryRecord, type PurgeOptions, type PurgeResult, type RollbackFilter, type RollbackOptions, type RollbackResult } from './store.ts'
+export { FeedbackError, type FeedbackEntry, type FeedbackInput, type FeedbackKind, type FeedbackScope, type FeedbackVerdict } from './feedback.ts'
 export { Config } from './config.ts'
 
 /** Plugin name; also the source kind of the memory message. */

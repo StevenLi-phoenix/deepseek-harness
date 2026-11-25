@@ -2,11 +2,8 @@ import { mkdtemp, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  AUTO_ARCHIVE_DEFAULTS, MAX_RECENT_ARCHIVED, resolveAutoArchive, selectSessions,
-  type AutoArchiveConfig, type SessionProtector, type SessionRow,
-} from '../src/index.ts'
-import { SessionArchiver, type ArchiveHost } from '../src/archive.ts'
+import { type AutoArchiveConfig, type SessionProtector, type SessionRow } from '../src/index.ts'
+import { SessionArchiver, type ArchiveHost, AUTO_ARCHIVE_DEFAULTS, MAX_RECENT_ARCHIVED, resolveAutoArchive, selectSessions } from '../src/archive.ts'
 import { baseConfig, disposeAll, fakeController, fakeRegistry, harness, release, sessionConfig, sessionEvents, withConfig, type FakeController } from './harness.ts'
 
 const DAY = 86_400_000

@@ -8,9 +8,11 @@ import z from '@deepseek-ai/schemastery'
 import { boot, initProfile, readProfilePatches, type ProfileContext } from '@deepseek-ai/dsh-app-boot'
 import ConfigEditor from '@deepseek-ai/dsh-config-editor'
 import Settings from '@deepseek-ai/dsh-settings'
-import { Config as QqConfig } from '@deepseek-ai/dsh-qq'
+import QqObserver, { type Config as QqConfig } from '@deepseek-ai/dsh-qq'
 import * as plugin from '../src/index.ts'
 import type { ConfigDescribe, ConfigSaveResult } from '../src/view.ts'
+
+const QqConfig = QqObserver.Config
 
 export const SAMPLE = z.object({
   url: z.string().default('ws://127.0.0.1:3001'),

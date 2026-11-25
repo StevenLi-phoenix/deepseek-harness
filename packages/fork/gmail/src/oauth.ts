@@ -15,6 +15,10 @@ export const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 /** Revocation endpoint. */
 export const GOOGLE_REVOKE_URL = 'https://oauth2.googleapis.com/revoke'
 
+/** The one permission asked for: read, draft, send, and change labels; never permanent deletion. */
+export const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.modify'
+export { OAUTH_PATH } from './sign-in-store.ts'
+
 /** The OAuth client of the owner's Google Cloud project. */
 export interface OAuthClient {
   readonly clientId: string

@@ -2,8 +2,10 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
-import { Config } from '../src/index.ts'
+import QqBotChannel from '../src/index.ts'
 import { forkPatchFiles } from '../../../../scripts/fork-bundle-layers.ts'
+
+const Config = QqBotChannel.Config
 
 /** One loader patch row. */
 interface Row {

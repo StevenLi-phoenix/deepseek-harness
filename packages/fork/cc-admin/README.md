@@ -50,13 +50,14 @@ The methods are `view()` (login state, live sessions, and the tmux sessions star
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The service wraps the bridge's `Registry` (Claude Code's `<pid>.json` records, counted only when the process is alive with the recorded start time) and `Spawner` (tmux server `-L dsh-cc`, a cleaned environment, the name and model rules). It never opens the bridge's inbox or writes a peer record, so it cannot send a peer message; a first task therefore travels as the launcher's argument.
+The service wraps the bridge's `Registry` (subpath `@deepseek-ai/dsh-cc-bridge/registry`) (Claude Code's `<pid>.json` records, counted only when the process is alive with the recorded start time) and `Spawner` (subpath `@deepseek-ai/dsh-cc-bridge/spawn`; tmux server `-L dsh-cc`, a cleaned environment, the name and model rules). It never opens the bridge's inbox or writes a peer record, so it cannot send a peer message; a first task therefore travels as the launcher's argument.
 
 The login state is `full` when `~/.claude/.credentials.json` has content, `token` when `~/.config/claude-code/oauth_token` has, else `none`. The files are only `stat`ed; no credential is read, logged, or returned. A log line records a start, a stop, or a failure by name; a first task is not logged.
 
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Configuration, the types, and `ClaudeCodeAdmin` |
+| [`src/limits.ts`](src/limits.ts) | The longest first task |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 

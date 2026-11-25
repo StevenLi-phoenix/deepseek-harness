@@ -12,6 +12,7 @@ import { cleanup, mountStyle, tmp } from './harness.ts'
 import * as Style from '../src/index.ts'
 import { HotWatch } from '../src/hotwatch.ts'
 import { NotesStore } from '../src/notes.ts'
+import { CARD_INVITE } from '../src/render.ts'
 import type { SessionLog } from '../src/session-text.ts'
 
 const servers: Server[] = []
@@ -206,7 +207,7 @@ describe('the persona card', () => {
     expect((await style.edit({ op: 'rollback', version: 1 })).panel.cards.at(-1)).toMatchObject({ version: 3, card: '第一版', author: 'owner' })
     const deleted = await style.edit({ op: 'card', card: '' })
     expect(deleted.panel.cards.map(card => card.version)).toEqual([1, 2, 3, 4])
-    expect((await style.block('2026-11-01', true))!.text).toContain(Style.CARD_INVITE)
+    expect((await style.block('2026-11-01', true))!.text).toContain(CARD_INVITE)
     expect(await style.edit({ op: 'rollback', version: 99 })).toMatchObject({ ok: false, error: 'not_found' })
     expect(await style.edit({ op: 'card', card: '喵'.repeat(601) })).toMatchObject({ ok: false, error: 'invalid_input' })
   })

@@ -11,16 +11,18 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
-import { globToRegExp, type BusEventInput, type IngestSink, type OwnerNote } from '@deepseek-ai/dsh-event-bus'
+import { type BusEventInput, type IngestSink, type OwnerNote } from '@deepseek-ai/dsh-event-bus'
+import { globToRegExp } from '@deepseek-ai/dsh-event-bus/match'
 import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import z from '@deepseek-ai/schemastery'
 import { PresenceSettings, type SettingsConnection } from './settings.ts'
 import { evaluate, hours, nextChange, nextClockTime, type PresenceInputs, type PresenceRules, type PresenceState } from './state.ts'
 import { presenceDomain, type InputsRecord } from './storage.ts'
+import { DEFAULT_URGENT_KINDS } from './urgent.ts'
 import { CLOCK_PATTERN, HEARTBEAT_KEY, KIND_SLEEP_OFF, KIND_SLEEP_ON, PRESENCE_SOURCE, SIGNAL_SILENT_MS, type FocusView, type ManualView, type PresenceView, type QuietWindow } from './view.ts'
 
-export * from './state.ts'
-export * from './view.ts'
+export type * from './state.ts'
+export type * from './view.ts'
 export type * from './storage.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -28,9 +30,6 @@ declare module '@deepseek-ai/cordis' {
     presence: Presence
   }
 }
-
-/** Event kinds sent even while the owner sleeps, unless the configuration names others. */
-export const DEFAULT_URGENT_KINDS: readonly string[] = ['host.disk.full', 'host.*.critical', 'bili.risk.*', 'bili.gate.readonly']
 
 /** Plugin configuration. */
 export interface Config {
@@ -47,20 +46,6 @@ export interface Config {
   /** Globs of the event kinds that are sent while the owner sleeps. */
   urgentKinds: string[]
 }
-
-/** Configuration schema. */
-export const Config: z<Config> = z.object({
-  timeZone: z.string().default('America/New_York'),
-  window: z.object({
-    enabled: z.boolean().default(true),
-    start: z.string().pattern(CLOCK_PATTERN).default('03:30'),
-    end: z.string().pattern(CLOCK_PATTERN).default('10:30'),
-  }),
-  focusFreshHours: z.natural().min(1).default(2),
-  sleepMaxHours: z.natural().min(1).default(14),
-  manualMaxHours: z.natural().min(1).default(12),
-  urgentKinds: z.array(z.string()).default([...DEFAULT_URGENT_KINDS]),
-})
 
 /** What a channel that holds messages back registers, so Settings can count and flush them. */
 export interface DeferralHolder {
@@ -100,7 +85,19 @@ function assertConfig(config: Config): void {
  */
 export class Presence extends Service implements IngestSink {
   static inject = ['storageDomain']
-  static Config = Config
+  /** Configuration schema. */
+  static Config: z<Config> = z.object({
+    timeZone: z.string().default('America/New_York'),
+    window: z.object({
+      enabled: z.boolean().default(true),
+      start: z.string().pattern(CLOCK_PATTERN).default('03:30'),
+      end: z.string().pattern(CLOCK_PATTERN).default('10:30'),
+    }),
+    focusFreshHours: z.natural().min(1).default(2),
+    sleepMaxHours: z.natural().min(1).default(14),
+    manualMaxHours: z.natural().min(1).default(12),
+    urgentKinds: z.array(z.string()).default([...DEFAULT_URGENT_KINDS]),
+  })
 
   private readonly ready: Promise<Domain<typeof presenceDomain>>
   private readonly urgent: RegExp[]

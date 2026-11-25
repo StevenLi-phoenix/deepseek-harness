@@ -53,7 +53,8 @@ kind: "package-reference"
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 四个工具定义、群解析、行格式化和不可信包装 |
+| [`src/index.ts`](src/index.ts) | 四个工具定义 |
+| [`src/format.ts`](src/format.ts) | 群解析、行格式化和不可信包装 |
 
 这是 fork 本地的包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。
 

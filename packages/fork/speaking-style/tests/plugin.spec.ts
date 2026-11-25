@@ -10,7 +10,9 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import { afterEach, describe, expect, it } from 'vitest'
 import { MockAdapter, textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 import * as Style from '../src/index.ts'
+import { BLOCK_INTRO, STYLE_INTRO } from '../src/render.ts'
 import { StyleStore } from '../src/store.ts'
+import { ticTrend } from '../src/trend.ts'
 
 const contexts: Context[] = []
 const dirs: string[] = []
@@ -64,12 +66,12 @@ describe('prompt mode in the real agent loop', () => {
     const agent = await ctx.agentLoop.create(SessionId('chat'), { provider: 'mock', model: 'mock' }, { agentPreset: 'unattended' } as never)
     await turn(ctx, agent, '有从 QQ 学习吗?')
     const first = JSON.stringify(adapter.requests[0]!.messages)
-    expect(first).toContain(Style.STYLE_INTRO)
+    expect(first).toContain(STYLE_INTRO)
     expect(first).toContain('刚剪完')
-    expect(first.indexOf('有从 QQ 学习吗?')).toBeLessThan(first.indexOf(Style.STYLE_INTRO))
+    expect(first.indexOf('有从 QQ 学习吗?')).toBeLessThan(first.indexOf(STYLE_INTRO))
     await turn(ctx, agent, '会的. 绝对会的')
     const second = JSON.stringify(adapter.requests[1]!.messages)
-    expect(second.split(Style.STYLE_INTRO)).toHaveLength(2)
+    expect(second.split(STYLE_INTRO)).toHaveLength(2)
   })
 
   it('counts the main agent\'s answers and their length for the page, never their text', async () => {
@@ -87,17 +89,17 @@ describe('prompt mode in the real agent loop', () => {
     const { ctx, adapter } = await harness([textResponse('NO_REPLY'), textResponse('NO_REPLY')])
     const up = await ctx.agentLoop.create(SessionId('up'), { provider: 'mock', model: 'mock' }, { agentPreset: 'up' } as never)
     await turn(ctx, up, 'comments arrived')
-    expect(JSON.stringify(adapter.requests[0]!.messages)).toContain(Style.BLOCK_INTRO)
+    expect(JSON.stringify(adapter.requests[0]!.messages)).toContain(BLOCK_INTRO)
     const digest = await ctx.agentLoop.create(SessionId('digest'), { provider: 'mock', model: 'mock' }, { agentPreset: 'qq-digest' } as never)
     await turn(ctx, digest, 'transcript')
-    expect(JSON.stringify(adapter.requests[1]!.messages)).not.toContain(Style.BLOCK_INTRO)
+    expect(JSON.stringify(adapter.requests[1]!.messages)).not.toContain(BLOCK_INTRO)
   })
 
   it('adds nothing while the root plugin is off', async () => {
     const { ctx, adapter } = await harness([textResponse('好')], { enabled: false })
     const agent = await ctx.agentLoop.create(SessionId('chat'), { provider: 'mock', model: 'mock' }, { agentPreset: 'unattended' } as never)
     await turn(ctx, agent, '在吗')
-    expect(JSON.stringify(adapter.requests[0]!.messages)).not.toContain(Style.STYLE_INTRO)
+    expect(JSON.stringify(adapter.requests[0]!.messages)).not.toContain(STYLE_INTRO)
   })
 })
 
@@ -148,9 +150,9 @@ describe('the style service (collect mode)', () => {
     expect(style.health()).toEqual({ kept: 1, pending: 0, review: 'optional', lastRefreshAt: null, ticTrend: null })
     expect(JSON.stringify(style.health())).not.toContain('会的')
     const day = (withTics: number) => ({ day: 'd', answers: 10, withTics, mainAnswers: 0, meanChars: null })
-    expect(Style.ticTrend([day(5), day(5), day(5), day(1), day(1), day(1)])).toBe('down')
-    expect(Style.ticTrend([day(1), day(5)])).toBe('up')
-    expect(Style.ticTrend([day(3), day(3), day(3)])).toBe('flat')
+    expect(ticTrend([day(5), day(5), day(5), day(1), day(1), day(1)])).toBe('down')
+    expect(ticTrend([day(1), day(5)])).toBe('up')
+    expect(ticTrend([day(3), day(3), day(3)])).toBe('flat')
   })
 
   it('refuses a miner route that names a provider without a model', async () => {

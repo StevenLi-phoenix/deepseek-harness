@@ -109,7 +109,7 @@ kind: "package-reference"
 | [`src/share.ts`](src/share.ts) | `DailyShare`：每日推荐的排期、顺延、提示词、结果和设置页视图 |
 | [`src/endpoints.ts`](src/endpoints.ts) | 本包可以调用的接口名，分读取和操作 |
 | [`src/api.ts`](src/api.ts) | 有类型的读取（有长度上限）和单次调用的操作 |
-| [`src/text.ts`](src/text.ts) | 长度裁剪、不可信包装、owner 私信和每日推荐的提示词、消息拆分 |
+| [`src/text.ts`](src/text.ts) | 长度裁剪、不可信包装、owner 私信和每日推荐的提示词、消息拆分；`tool-bili` 导入的 `./text` 子路径 |
 | [`src/time.ts`](src/time.ts) | 某个时区里的日期键和时间戳 |
 | [`src/hot.ts`](src/hot.ts) | `ctx.biliHot`：热评和热搜词的有上限、会过期的存储 |
 | [`src/storage.ts`](src/storage.ts) | `bili` 存储域 |

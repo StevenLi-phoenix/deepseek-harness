@@ -53,7 +53,8 @@ Each tool calls one read method of `ctx.qq` and formats the rows: a message is `
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | The four tool definitions, group resolution, line formatting, and the untrusted wrapper |
+| [`src/index.ts`](src/index.ts) | The four tool definitions |
+| [`src/format.ts`](src/format.ts) | Group resolution, line formatting, and the untrusted wrapper |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 

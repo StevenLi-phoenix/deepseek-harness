@@ -102,6 +102,7 @@ kind: "package-reference"
 | 文件 | 作用 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 服务、配置、运行时 watch、probe、tick、条件请求、限流退避 |
+| [`src/streams.ts`](src/streams.ts) | 仓库流及其游标键；`tool-watch` 导入的 `./streams` 子路径 |
 | [`src/github.ts`](src/github.ts) | 响应解析与事件映射 |
 | [`src/webhook.ts`](src/webhook.ts) | webhook 投递映射 |
 | [`src/storage.ts`](src/storage.ts) | 游标表与 watch 表 |

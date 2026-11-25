@@ -74,7 +74,7 @@ Session 钩子监听 `session/event`。`system/message` 被哈希（SHA-256 的�
 | [`src/session-watch.ts`](src/session-watch.ts) | 来自 Session 事件的系统 prompt 哈希与口头禅计数 |
 | [`src/files.ts`](src/files.ts) | 读写状态文件，以及记忆历史里最后一条摘要 |
 | [`src/scan.ts`](src/scan.ts) | 监控目标及其摘要 |
-| [`src/tics.ts`](src/tics.ts) | 禁用口头禅及其匹配器 |
+| [`src/tics.ts`](src/tics.ts) | 禁用口头禅及其匹配器；`speaking-style` 导入的 `./tics` 子路径 |
 
 这是 fork 本地的包；见 [`../UPSTREAM.md`](../UPSTREAM.md)。
 

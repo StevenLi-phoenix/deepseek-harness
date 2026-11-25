@@ -7,7 +7,8 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as ToolUp from '../src/index.ts'
-import { BiliEvidenceRefusedError, CommentCache, commentsOf, defaultSaltFile, loadSalt, senderKey } from '../src/index.ts'
+import { BiliEvidenceRefusedError } from '../src/index.ts'
+import { CommentCache, commentsOf, defaultSaltFile, loadSalt, senderKey } from '../src/evidence.ts'
 
 const contexts: Context[] = []
 const dirs: string[] = []

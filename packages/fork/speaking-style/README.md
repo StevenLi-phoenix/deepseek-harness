@@ -93,7 +93,8 @@ Every write of text other people can read (the card, a note, a mined meme) goes 
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Plugin: configuration, the two modes, the schedule, the web inbox feed, the answer-length counter, and `StyleService` (`ctx.speakingStyle`: block, panel, edits, collection, mining, notes, lookups, card updates, `health()`) |
+| [`src/index.ts`](src/index.ts) | Plugin: configuration, the two modes, the schedule, the web inbox feed, and the answer-length counter |
+| [`src/service.ts`](src/service.ts) | `StyleService` (`ctx.speakingStyle`: block, panel, edits, collection, mining, notes, lookups, card updates, `health()`) |
 | [`src/tools.ts`](src/tools.ts) | `meme_lookup`, `style_note` (with its per-turn limit), `persona_update` |
 | [`src/notes.ts`](src/notes.ts) | `notes.json`: memes (with `related` and `meaningSource`), traits, blocked terms, card versions |
 | [`src/guard.ts`](src/guard.ts) | `StyleGate`: the per-call `ctx.contentGuard` check, fail closed |
@@ -103,7 +104,7 @@ Every write of text other people can read (the card, a note, a mined meme) goes 
 | [`src/collect.ts`](src/collect.ts), [`src/bili.ts`](src/bili.ts), [`src/store.ts`](src/store.ts) | Tone collection: pairing, screening, bili-svc reads, `samples.jsonl` |
 | [`src/filter.ts`](src/filter.ts) | Line rules, personal-information rules, the note filter |
 | [`src/render.ts`](src/render.ts) | The block |
-| [`src/trend.ts`](src/trend.ts) | `answers.json` and the page's trend |
+| [`src/trend.ts`](src/trend.ts) | `answers.json` and the page's trend, and the stock-line direction `health()` reports |
 
 A preset row adds the block as a `user/message` with source kind `speaking-style` after the turn's claimed messages, again when the day or the card version changes, after a compaction, and after a restart. Without the root row it logs one warning and adds nothing. The tools answer `{ status: 'recorded' | 'refreshed' }` or `{ status: 'rejected', reason }` (`not_a_reader`, `not_verbatim`, `meaning_missing`, `limit_reached`, `too_soon`, `removed`, `unavailable`, `off`, `guard_unavailable`, `guard: …`, or a filter reason); `meme_lookup` answers `{ found: true, from: 'groups' | 'hotwatch', term, meaning, example?, related?, source?, meaningSource? }` or `{ found: false }`.
 

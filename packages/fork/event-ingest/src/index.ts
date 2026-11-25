@@ -16,7 +16,7 @@ import type { BusEventInput, IngestSink } from '@deepseek-ai/dsh-event-bus'
 import z from '@deepseek-ai/schemastery'
 import { eventFrom, InvalidEvent } from './event.ts'
 
-export { eventFrom, InvalidEvent, LIMITS } from './event.ts'
+export { InvalidEvent } from './event.ts'
 
 /** Plugin name. */
 export const name = 'event-ingest'

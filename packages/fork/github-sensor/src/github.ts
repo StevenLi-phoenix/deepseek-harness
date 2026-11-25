@@ -1,5 +1,6 @@
 /** GitHub REST response parsing and pure mapping into bus events. */
-import { clip, type BusEventInput } from '@deepseek-ai/dsh-event-bus'
+import { type BusEventInput } from '@deepseek-ai/dsh-event-bus'
+import { clip } from '@deepseek-ai/dsh-event-bus/prompt'
 import { z } from 'zod'
 
 const loginSchema = z.object({ login: z.string() }).nullable().optional()

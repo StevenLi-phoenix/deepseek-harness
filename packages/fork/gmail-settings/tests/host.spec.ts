@@ -1,10 +1,12 @@
 import { Context } from '@deepseek-ai/cordis'
 import type { WebResourceRoute } from '@deepseek-ai/dsh-host-webserver'
-import { GmailError, OAUTH_PATH, type GmailStatus } from '@deepseek-ai/dsh-gmail'
+import { GmailError, type GmailStatus } from '@deepseek-ai/dsh-gmail'
+import { OAUTH_PATH } from '@deepseek-ai/dsh-gmail/src/oauth.ts'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as plugin from '../src/index.ts'
-import { escapeHtml, GMAIL_OAUTH_PATH, GMAIL_PRIVACY_PATH, privacyPage, type GmailAnswer } from '../src/index.ts'
-import { PAGE_HEADERS } from '../src/page.ts'
+import { type GmailAnswer } from '../src/index.ts'
+import { GMAIL_OAUTH_PATH, GMAIL_PRIVACY_PATH } from '../src/view.ts'
+import { PAGE_HEADERS, escapeHtml, privacyPage } from '../src/page.ts'
 
 interface Route {
   path: string

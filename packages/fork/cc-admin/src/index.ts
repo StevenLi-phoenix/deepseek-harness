@@ -11,8 +11,11 @@ import { statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
-import { Config as BridgeConfig, Registry, Spawner, type Run } from '@deepseek-ai/dsh-cc-bridge'
+import { Config as BridgeConfig, type Run } from '@deepseek-ai/dsh-cc-bridge'
+import { Registry } from '@deepseek-ai/dsh-cc-bridge/registry'
+import { Spawner } from '@deepseek-ai/dsh-cc-bridge/spawn'
 import z from '@deepseek-ai/schemastery'
+import { MAX_TASK_CHARS } from './limits.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -20,9 +23,6 @@ declare module '@deepseek-ai/cordis' {
     claudeCodeSessions: ClaudeCodeAdmin
   }
 }
-
-/** Longest first task, as `cc_start` allows. */
-export const MAX_TASK_CHARS = 8000
 
 /** Settings; every default is the bridge's. */
 export interface Config {
@@ -43,17 +43,6 @@ export interface Config {
 }
 
 const BRIDGE = BridgeConfig({} as never)
-
-/** Configuration schema. */
-export const Config: z<Config> = z.object({
-  enabled: z.boolean().default(true),
-  sessionsDir: z.string().default(BRIDGE.sessionsDir),
-  tmux: z.string().default(BRIDGE.tmux),
-  command: z.string().default(BRIDGE.command),
-  workDir: z.string().default(BRIDGE.workDir),
-  model: z.string().default(BRIDGE.model),
-  maxSessions: z.natural().min(1).max(10).default(BRIDGE.maxSessions),
-})
 
 /** A Claude Code session of the service account. */
 export interface CcSession {
@@ -96,7 +85,16 @@ function filled(path: string): boolean {
 
 /** Service behind `ctx.claudeCodeSessions`. */
 export class ClaudeCodeAdmin extends Service {
-  static Config = Config
+  /** Configuration schema. */
+  static Config: z<Config> = z.object({
+    enabled: z.boolean().default(true),
+    sessionsDir: z.string().default(BRIDGE.sessionsDir),
+    tmux: z.string().default(BRIDGE.tmux),
+    command: z.string().default(BRIDGE.command),
+    workDir: z.string().default(BRIDGE.workDir),
+    model: z.string().default(BRIDGE.model),
+    maxSessions: z.natural().min(1).max(10).default(BRIDGE.maxSessions),
+  })
 
   private readonly registry: Registry
   private readonly spawner: Spawner

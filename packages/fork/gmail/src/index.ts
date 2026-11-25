@@ -19,6 +19,7 @@ import type {} from '@deepseek-ai/dsh-event-bus'
 import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import z from '@deepseek-ai/schemastery'
 import { z as zod } from 'zod'
+import type { ModifyAction } from './actions.ts'
 import { AddressProblem, addressesIn, parseMailbox, parseMailboxes, type Mailbox } from './address.ts'
 import { GmailApi, GmailApiError } from './api.ts'
 import { AttachmentProblem, readAttachments, saveAttachment } from './attachments.ts'
@@ -26,18 +27,23 @@ import { decideSend, namedByOwner, ownerConfirms, SEND_POLICIES, type SendPolicy
 import { compose, messageIds } from './mime.ts'
 import { decodeEntities } from './html.ts'
 import { attachmentPart, attachmentsOf, header, messageView, type MessageView } from './message.ts'
-import { authorizationUrl, exchangeCode, newState, OAuthError, pkcePair, refreshAccess, revoke, type OAuthClient } from './oauth.ts'
+import { authorizationUrl, exchangeCode, GMAIL_SCOPE, newState, OAuthError, pkcePair, refreshAccess, revoke, type OAuthClient } from './oauth.ts'
 import { ACCOUNT_ID, OAUTH_PATH, oauthRedirect, SignInStore } from './sign-in-store.ts'
 import { gmailDomain, type AccountRecord, type ActivityRecord, type PendingRecord } from './storage.ts'
 
-export * from './address.ts'
-export * from './api.ts'
-export * from './attachments.ts'
-export * from './gate.ts'
-export * from './html.ts'
-export * from './message.ts'
-export * from './mime.ts'
-export * from './oauth.ts'
+export type * from './address.ts'
+export { AddressProblem } from './address.ts'
+export type * from './api.ts'
+export { GmailApiError } from './api.ts'
+export type * from './attachments.ts'
+export { AttachmentProblem } from './attachments.ts'
+export type * from './gate.ts'
+export type * from './html.ts'
+export type * from './message.ts'
+export type * from './mime.ts'
+export type { ModifyAction } from './actions.ts'
+export type * from './oauth.ts'
+export { OAuthError } from './oauth.ts'
 export type * from './storage.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -46,9 +52,6 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-/** The one permission asked for: read, draft, send, and change labels; never permanent deletion. */
-export const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.modify'
-export { OAUTH_PATH } from './sign-in-store.ts'
 /** Credential-store scope of the grant records. */
 const GRANT_SCOPE = 'gmail'
 /** Code alphabet: no 0/O, 1/I/L. */
@@ -97,23 +100,6 @@ export interface Config {
   /** Bytes of one received attachment saved. */
   maxDownloadBytes: number
 }
-
-/** Configuration schema. */
-export const Config: z<Config> = z.object({
-  clientIdEnv: z.string().default('GMAIL_CLIENT_ID').description('Name of the Google OAuth client id in the credential store or $DSH_HOME/.env.'),
-  clientSecretEnv: z.string().default('GMAIL_CLIENT_SECRET').description('Name of the Google OAuth client secret in the credential store or $DSH_HOME/.env.'),
-  redirectUri: z.string().default('').description('Redirect URI registered at Google; empty derives <Settings origin>/gmail.oauth.'),
-  trustedRecipients: z.array(z.string()).default([]).description('Addresses that never need a confirmation, besides the connected accounts.'),
-  maxSendsPerDay: z.natural().min(1).default(50).description('Messages one account may send in 24 hours; more are refused.'),
-  confirmTtlHours: z.natural().min(1).default(72).description('Hours a held message waits for the owner before it expires.'),
-  requestTimeoutMs: z.natural().min(1000).default(30_000).description('Timeout of one call to Google, in milliseconds.'),
-  maxSearchResults: z.natural().min(1).max(50).default(20).description('Threads one search returns at most.'),
-  maxBodyChars: z.natural().min(500).default(20_000).description('Characters of one message body shown to the model.'),
-  maxHtmlChars: z.natural().min(10_000).default(500_000).description('Characters of an HTML body read at most.'),
-  maxThreadMessages: z.natural().min(1).default(10).description('Newest messages of one thread shown; older ones are only counted.'),
-  maxAttachmentBytes: z.natural().min(1).default(18 * 1_048_576).description('Bytes of all attachments of one outgoing message (Gmail caps a message at 25 MB encoded).'),
-  maxDownloadBytes: z.natural().min(1).default(25 * 1_048_576).description('Bytes of one received attachment saved.'),
-})
 
 /** Why a Gmail operation failed, beyond the API's own failures. */
 export type GmailFailure =
@@ -216,12 +202,6 @@ export interface DraftOutcome {
   readonly recipients: readonly string[]
   readonly subject: string
 }
-
-/** What a label change does. */
-export type ModifyAction = 'read' | 'unread' | 'archive' | 'inbox' | 'star' | 'unstar' | 'trash' | 'untrash' | 'label' | 'unlabel'
-
-/** Every label change, in the order the tool lists them. */
-export const MODIFY_ACTIONS: readonly ModifyAction[] = ['read', 'unread', 'archive', 'inbox', 'star', 'unstar', 'trash', 'untrash', 'label', 'unlabel']
 
 /** A saved attachment. */
 export interface SavedAttachment {
@@ -359,7 +339,22 @@ interface DraftFacts {
  */
 export class Gmail extends Service {
   static inject = ['storageDomain', 'credentials']
-  static Config = Config
+  /** Configuration schema. */
+  static Config: z<Config> = z.object({
+    clientIdEnv: z.string().default('GMAIL_CLIENT_ID').description('Name of the Google OAuth client id in the credential store or $DSH_HOME/.env.'),
+    clientSecretEnv: z.string().default('GMAIL_CLIENT_SECRET').description('Name of the Google OAuth client secret in the credential store or $DSH_HOME/.env.'),
+    redirectUri: z.string().default('').description('Redirect URI registered at Google; empty derives <Settings origin>/gmail.oauth.'),
+    trustedRecipients: z.array(z.string()).default([]).description('Addresses that never need a confirmation, besides the connected accounts.'),
+    maxSendsPerDay: z.natural().min(1).default(50).description('Messages one account may send in 24 hours; more are refused.'),
+    confirmTtlHours: z.natural().min(1).default(72).description('Hours a held message waits for the owner before it expires.'),
+    requestTimeoutMs: z.natural().min(1000).default(30_000).description('Timeout of one call to Google, in milliseconds.'),
+    maxSearchResults: z.natural().min(1).max(50).default(20).description('Threads one search returns at most.'),
+    maxBodyChars: z.natural().min(500).default(20_000).description('Characters of one message body shown to the model.'),
+    maxHtmlChars: z.natural().min(10_000).default(500_000).description('Characters of an HTML body read at most.'),
+    maxThreadMessages: z.natural().min(1).default(10).description('Newest messages of one thread shown; older ones are only counted.'),
+    maxAttachmentBytes: z.natural().min(1).default(18 * 1_048_576).description('Bytes of all attachments of one outgoing message (Gmail caps a message at 25 MB encoded).'),
+    maxDownloadBytes: z.natural().min(1).default(25 * 1_048_576).description('Bytes of one received attachment saved.'),
+  })
 
   private readonly ready: Promise<Domain<typeof gmailDomain>>
   private domain: Domain<typeof gmailDomain> | undefined

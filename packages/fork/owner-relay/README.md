@@ -82,7 +82,7 @@ Claims live in memory. Each channel claims its stored Sessions again when it reg
 
 Every decision is logged at info level with the Session id and the reason, never the text: `owner-relay: Session <id> ended a turn (<outcome>); relaying <n> chars through <channel>`, the reason nothing is relayed (`the owner stopped`, `that answered NO_REPLY`, `without text`), and `<channel> sent` or `kept the answer`. A rejected delivery and every fallback outcome are logged at warn or info.
 
-The relay depends on `@deepseek-ai/dsh-event-bus` for `failureDetail`, `isSilentReply`, and the `OwnerNotifier` contract, so the bus reads `ctx.ownerRelay` through a structural `ownerOf()` view instead of importing this package. `@deepseek-ai/dsh-wechat` and `@deepseek-ai/dsh-bili` import its types only and register through an `inject: ['ownerRelay']` child plugin; `bili`, which has a browser half, keeps it a development dependency.
+The relay depends on `@deepseek-ai/dsh-event-bus` for `failureDetail` and `isSilentReply` (its `./prompt` subpath) and the `OwnerNotifier` contract, so the bus reads `ctx.ownerRelay` through a structural `ownerOf()` view instead of importing this package. `@deepseek-ai/dsh-wechat` and `@deepseek-ai/dsh-bili` import its types only and register through an `inject: ['ownerRelay']` child plugin; `bili`, which has a browser half, keeps it a development dependency.
 
 | File | Role |
 |---|---|

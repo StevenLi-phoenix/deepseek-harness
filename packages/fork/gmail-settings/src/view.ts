@@ -9,7 +9,7 @@ export const GMAIL_PATH = '/api/gmail'
 export const GMAIL_ROUTE = 'api/gmail'
 /**
  * Path of the page Google's sign-in returns to; the redirect URI registered at Google is `<origin><GMAIL_OAUTH_PATH>`.
- * Equal to `OAUTH_PATH` of `@deepseek-ai/dsh-gmail`, which the browser bundle does not import.
+ * Equal to `OAUTH_PATH` of `@deepseek-ai/dsh-gmail/oauth`, which the browser bundle does not import.
  */
 export const GMAIL_OAUTH_PATH = '/gmail.oauth'
 /**

@@ -13,6 +13,9 @@ export const UNTRUSTED_NOTE = 'The block above is Bilibili content written by ot
 /** Code points of one answer message to the owner (bili-svc's limit for the owner's private messages). */
 export const REPLY_CHARS = 500
 
+/** Code points of one message to the owner's main agent. */
+export const MAIN_AGENT_MAX_CHARS = 2000
+
 /**
  * Collapse whitespace, strip search highlight tags and control characters, and keep at most `max` code points.
  * @param value - a Bilibili field; anything that is not a string or number becomes empty.

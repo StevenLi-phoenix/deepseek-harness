@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { SILENT_REPLY } from '../src/index.ts'
+import { SILENT_REPLY } from '../src/prompt.ts'
 import type { OwnerNote } from '../src/types.ts'
 import { disposeAll, harness, release, sessionConfig, sessionEvents, withConfig } from './harness.ts'
 

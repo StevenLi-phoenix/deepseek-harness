@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import {
-  currentStep, failureReason, lateWindowEnd, outlook, OUTLOOK_ROWS, parseHealth, parseTasks, planReminders, planSyncNotice, renderReminders,
-  inWindow, renderSyncFailing, renderSyncRecovered, reminderKey, shortCourse, span, stamp, upcoming, type SyncHealth, type TaskSummary,
-} from '../src/index.ts'
+import { type SyncHealth, type TaskSummary } from '../src/index.ts'
+import { currentStep, lateWindowEnd, outlook, OUTLOOK_ROWS, planReminders, planSyncNotice, renderReminders, renderSyncFailing, renderSyncRecovered, reminderKey, upcoming } from '../src/plan.ts'
+import { failureReason, parseHealth, parseTasks, shortCourse } from '../src/records.ts'
+import { inWindow, span, stamp } from '../src/time.ts'
 
 const ZONE = 'America/New_York'
 const H = 3_600_000

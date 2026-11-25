@@ -102,6 +102,7 @@ One tick polls the union of configured and agent-created repositories, each stre
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Service, configuration, run-time watches, probe, tick, conditional fetch, rate-limit backoff |
+| [`src/streams.ts`](src/streams.ts) | The repository streams and their cursor keys; the `./streams` subpath, which `tool-watch` imports |
 | [`src/github.ts`](src/github.ts) | Response parsing and event mapping |
 | [`src/webhook.ts`](src/webhook.ts) | Webhook delivery mapping |
 | [`src/storage.ts`](src/storage.ts) | Cursor and watch tables |

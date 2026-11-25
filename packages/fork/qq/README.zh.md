@@ -124,7 +124,7 @@ OneBot v11 WebSocket 服务端是 colima 上 Docker 容器里的 NapCat（[`fork
 | [`src/store.ts`](src/store.ts) | 记录器的 SQLite 表结构、FTS5 检索和保留期；摘要表已冻结，只读一次供接管使用 |
 | [`src/media.ts`](src/media.ts) | 地址白名单、有上限的抓取、类型识别、按内容命名的文件 |
 | [`src/pii.ts`](src/pii.ts) | 群笔记要过的过滤器：不含个人、号码、地址、学校或成员名 |
-| [`src/digest.ts`](src/digest.ts) | 转录切块、摘要提示词，以及经 Session 的模型调用 |
+| [`src/digest.ts`](src/digest.ts) | 转录切块、摘要提示词，以及经 Session 的模型调用；`tool-qq` 导入的 `./digest` 子路径 |
 | [`src/protocol.ts`](src/protocol.ts) | 线路协议：zod DTO、版本、路径和 `FEATURE_MINOR` |
 | [`src/recorder.ts`](src/recorder.ts) | 记录器：连接、记录、补抓、媒体、保留期、扫码入口和推送来的设置 |
 | [`src/server.ts`](src/server.ts) | 记录器的 socket API、事件流和健康监听 |

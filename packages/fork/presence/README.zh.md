@@ -74,6 +74,7 @@ kind: "package-reference"
 | 文件 | 作用 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | `presence` 服务：输入、存储、定时器、监听器、holder、ingest sink、紧急匹配 |
+| [`src/urgent.ts`](src/urgent.ts) | 默认的紧急事件类型 |
 | [`src/state.ts`](src/state.ts) | 纯状态机和时钟辅助函数 |
 | [`src/settings.ts`](src/settings.ts) | 路由 `/api/presence` 及其动作 |
 | [`src/storage.ts`](src/storage.ts) | storage domain |

@@ -2,7 +2,8 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { GmailError, MODIFY_ACTIONS, type ModifyAction, type SendPolicy } from '../src/index.ts'
+import { GmailError, type ModifyAction, type SendPolicy } from '../src/index.ts'
+import { MODIFY_ACTIONS } from '../src/actions.ts'
 import {
   apiPath, connect, disposeAll, googleError, HOUR, mount, ownerTurn, rejection, START, type FakeMailbox, type MountOptions, type Mounted,
 } from './fixture.ts'

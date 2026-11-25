@@ -14,9 +14,11 @@ import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
-import QqBotChannel, { Config } from '../src/index.ts'
+import QqBotChannel from '../src/index.ts'
 import { createSdkTransport } from '../src/transport.ts'
 import { FakeOpenPlatform } from './fake-platform.ts'
+
+const Config = QqBotChannel.Config
 
 const USER = 'E4D1A2B3C4D5E6F708192A3B4C5D6E7F'
 const STRANGER = '0000FFFF1111EEEE2222DDDD3333CCCC'

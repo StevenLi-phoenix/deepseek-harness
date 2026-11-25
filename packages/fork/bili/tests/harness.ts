@@ -6,15 +6,18 @@ import { Context } from '@deepseek-ai/cordis'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
 import type { SessionCreateRequest, SessionPromptRequest } from '@deepseek-ai/dsh-api-session-controller'
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
-import EventBus, { Config as BusConfig, type MainAgentMessage, type OwnerNote } from '@deepseek-ai/dsh-event-bus'
+import EventBus, { type MainAgentMessage, type OwnerNote } from '@deepseek-ai/dsh-event-bus'
 import OwnerRelay from '@deepseek-ai/dsh-owner-relay'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import { vi, type Mock } from 'vitest'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
-import BiliAccount, { Config } from '../src/index.ts'
+import BiliAccount from '../src/index.ts'
 import type { BiliView } from '../src/view.ts'
 import { FakeBiliSvc, SVC_TOKEN } from './fake-bili-svc.ts'
+
+const Config = BiliAccount.Config
+const BusConfig = EventBus.Config
 
 /** A log line the plugin wrote. */
 export interface LogLine {

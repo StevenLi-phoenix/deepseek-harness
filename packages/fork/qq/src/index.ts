@@ -27,12 +27,13 @@ import { DigestRunner, senderKey, type DigestConfig, type MessageReader, type To
 import { FEATURE_MINOR, type Group, type Login, type Message, type RecorderConfig } from './protocol.ts'
 import type { QqConnection, QqLoginReading, RefreshRefusal } from './status.ts'
 
-export * from './address.ts'
-export * from './client.ts'
-export * from './digest-storage.ts'
-export * from './digest.ts'
-export * from './pii.ts'
-export * from './protocol.ts'
+export type * from './address.ts'
+export type * from './client.ts'
+export { RecorderError, RecorderUnavailable } from './client.ts'
+export type * from './digest-storage.ts'
+export type * from './digest.ts'
+export type * from './pii.ts'
+export type * from './protocol.ts'
 export * from './status.ts'
 
 /** A stored message, as the recorder reports it. */
@@ -203,79 +204,6 @@ export interface Config {
   }
 }
 
-/** Configuration schema. */
-export const Config = z.object({
-  url: z.string().default('ws://127.0.0.1:3001'),
-  tokenEnv: z.string().role('credential-ref').default('QQ_ONEBOT_TOKEN'),
-  groups: z.array(z.string()).default([]).volatile(),
-  dataDir: z.string(),
-  recorder: z.object({
-    socket: z.string(),
-    tokenEnv: z.string().role('credential-ref').default('QQ_RECORDER_TOKEN'),
-    timeoutMs: z.natural().min(500).default(10_000),
-  }),
-  media: z.object({
-    images: z.boolean().default(true).volatile(),
-    maxImageBytes: z.natural().min(1024).default(15 * 1024 * 1024).volatile(),
-    maxTotalBytes: z.natural().min(1024).default(5 * 1024 ** 3).volatile(),
-    retainDays: z.natural().default(30).volatile(),
-    hostSuffixes: z.array(z.string()).default([...DEFAULT_MEDIA_HOST_SUFFIXES]).volatile(),
-    timeoutMs: z.natural().min(1000).default(30_000).volatile(),
-  }),
-  voice: z.object({
-    download: z.boolean().default(true).volatile(),
-    maxBytes: z.natural().min(1024).default(10 * 1024 * 1024).volatile(),
-  }),
-  asr: z.object({ enabled: z.boolean().default(false).volatile() }),
-  retention: z.object({ textDays: z.natural().default(30).volatile() }),
-  honorRecall: z.boolean().default(true).volatile(),
-  backfill: z.object({
-    enabled: z.boolean().default(true).volatile(),
-    maxMessages: z.natural().min(1).default(20).volatile(),
-    maxGroups: z.natural().min(1).default(5).volatile(),
-    gapMs: z.natural().default(5000).volatile(),
-    skipWithinMs: z.natural().default(30 * 60_000).volatile(),
-    minIntervalMs: z.natural().default(30 * 60_000).volatile(),
-  }),
-  send: z.object({
-    enabled: z.boolean().default(false),
-    groups: z.array(z.string()).default([]),
-    minIntervalSec: z.natural().min(1).default(60),
-    maxPerDay: z.natural().min(1).default(10),
-  }),
-  digest: z.object({
-    enabled: z.boolean().default(true),
-    everyHours: z.natural().min(1).default(24),
-    minMessages: z.natural().min(1).default(15),
-    maxPromptChars: z.natural().min(2000).default(60_000),
-    maxCallsPerRound: z.natural().min(1).default(5),
-    aliasMembers: z.boolean().default(true),
-    profiles: z.boolean().default(false),
-    keepPerGroup: z.natural().min(1).default(200),
-    maxDigestChars: z.natural().min(500).default(3000),
-    maxImages: z.natural().default(8).volatile(),
-    maxToolCalls: z.natural().min(1).default(12),
-    archiveSessions: z.boolean().default(true),
-    resident: z.boolean().default(true),
-    provider: z.string(),
-    model: z.string(),
-    agentPreset: z.string().default('qq-digest'),
-    permissionPreset: z.string().default('read-only'),
-    workspacePath: z.string().default('/Users/dsh-runtime/work/qq'),
-    timeZone: z.string().default('Asia/Shanghai'),
-    timeoutMs: z.natural().min(10_000).default(15 * 60_000),
-  }),
-  offlineNoticeMs: z.natural().default(10 * 60_000).volatile(),
-  reconnectQuietMs: z.natural().default(10 * 60_000).volatile(),
-  offlineRepeatMs: z.natural().default(24 * 3_600_000).volatile(),
-  settingsUrl: z.string().volatile(),
-  login: z.object({
-    enabled: z.boolean().default(true),
-    url: z.string().default('http://127.0.0.1:3002'),
-    timeoutMs: z.natural().min(500).default(5000),
-  }),
-})
-
 /** A QQ group number: 3 to 20 digits. */
 const GROUP_ID = /^[0-9]{3,20}$/
 
@@ -339,7 +267,78 @@ export interface GroupOverview {
  */
 export class QqObserver extends Service {
   static inject = ['sessionController', 'permissionPresets', 'sessionTitle', 'credentials', 'storageDomain']
-  static Config = Config
+  /** Configuration schema. */
+  static Config = z.object({
+    url: z.string().default('ws://127.0.0.1:3001'),
+    tokenEnv: z.string().role('credential-ref').default('QQ_ONEBOT_TOKEN'),
+    groups: z.array(z.string()).default([]).volatile(),
+    dataDir: z.string(),
+    recorder: z.object({
+      socket: z.string(),
+      tokenEnv: z.string().role('credential-ref').default('QQ_RECORDER_TOKEN'),
+      timeoutMs: z.natural().min(500).default(10_000),
+    }),
+    media: z.object({
+      images: z.boolean().default(true).volatile(),
+      maxImageBytes: z.natural().min(1024).default(15 * 1024 * 1024).volatile(),
+      maxTotalBytes: z.natural().min(1024).default(5 * 1024 ** 3).volatile(),
+      retainDays: z.natural().default(30).volatile(),
+      hostSuffixes: z.array(z.string()).default([...DEFAULT_MEDIA_HOST_SUFFIXES]).volatile(),
+      timeoutMs: z.natural().min(1000).default(30_000).volatile(),
+    }),
+    voice: z.object({
+      download: z.boolean().default(true).volatile(),
+      maxBytes: z.natural().min(1024).default(10 * 1024 * 1024).volatile(),
+    }),
+    asr: z.object({ enabled: z.boolean().default(false).volatile() }),
+    retention: z.object({ textDays: z.natural().default(30).volatile() }),
+    honorRecall: z.boolean().default(true).volatile(),
+    backfill: z.object({
+      enabled: z.boolean().default(true).volatile(),
+      maxMessages: z.natural().min(1).default(20).volatile(),
+      maxGroups: z.natural().min(1).default(5).volatile(),
+      gapMs: z.natural().default(5000).volatile(),
+      skipWithinMs: z.natural().default(30 * 60_000).volatile(),
+      minIntervalMs: z.natural().default(30 * 60_000).volatile(),
+    }),
+    send: z.object({
+      enabled: z.boolean().default(false),
+      groups: z.array(z.string()).default([]),
+      minIntervalSec: z.natural().min(1).default(60),
+      maxPerDay: z.natural().min(1).default(10),
+    }),
+    digest: z.object({
+      enabled: z.boolean().default(true),
+      everyHours: z.natural().min(1).default(24),
+      minMessages: z.natural().min(1).default(15),
+      maxPromptChars: z.natural().min(2000).default(60_000),
+      maxCallsPerRound: z.natural().min(1).default(5),
+      aliasMembers: z.boolean().default(true),
+      profiles: z.boolean().default(false),
+      keepPerGroup: z.natural().min(1).default(200),
+      maxDigestChars: z.natural().min(500).default(3000),
+      maxImages: z.natural().default(8).volatile(),
+      maxToolCalls: z.natural().min(1).default(12),
+      archiveSessions: z.boolean().default(true),
+      resident: z.boolean().default(true),
+      provider: z.string(),
+      model: z.string(),
+      agentPreset: z.string().default('qq-digest'),
+      permissionPreset: z.string().default('read-only'),
+      workspacePath: z.string().default('/Users/dsh-runtime/work/qq'),
+      timeZone: z.string().default('Asia/Shanghai'),
+      timeoutMs: z.natural().min(10_000).default(15 * 60_000),
+    }),
+    offlineNoticeMs: z.natural().default(10 * 60_000).volatile(),
+    reconnectQuietMs: z.natural().default(10 * 60_000).volatile(),
+    offlineRepeatMs: z.natural().default(24 * 3_600_000).volatile(),
+    settingsUrl: z.string().volatile(),
+    login: z.object({
+      enabled: z.boolean().default(true),
+      url: z.string().default('http://127.0.0.1:3002'),
+      timeoutMs: z.natural().min(500).default(5000),
+    }),
+  })
 
   /** Path of the recorder's unix socket: `recorder.socket` from the configuration, else `run/qq-recorder.sock` under the DSH home. */
   readonly socketPath: string

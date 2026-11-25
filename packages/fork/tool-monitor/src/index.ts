@@ -27,8 +27,8 @@ declare module '@deepseek-ai/dsh-llm' {
   }
 }
 
-export { DEFAULT_LIMITS, MonitorRefused, MonitorRegistry, noticeText, type Deliver, type MonitorLimits, type MonitorNotice, type MonitorView, type RestoreRequest } from './monitor.ts'
-export { monitorDomain, type MonitorRecord } from './storage.ts'
+export { MonitorRefused, type Deliver, type MonitorLimits, type MonitorNotice, type MonitorView, type RestoreRequest } from './monitor.ts'
+export type { MonitorRecord } from './storage.ts'
 
 /** Plugin name; also the source kind of monitor notices. */
 export const name = SOURCE_KIND

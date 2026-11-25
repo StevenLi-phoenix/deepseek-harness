@@ -74,7 +74,7 @@ The Session hooks listen to `session/event`. A `system/message` is hashed (first
 | [`src/session-watch.ts`](src/session-watch.ts) | The system prompt hashes and the stock-line counter, from the Sessions' events |
 | [`src/files.ts`](src/files.ts) | Reading and writing the state files, and the memory history's last digest |
 | [`src/scan.ts`](src/scan.ts) | The targets and their digests |
-| [`src/tics.ts`](src/tics.ts) | The forbidden stock lines and their matcher |
+| [`src/tics.ts`](src/tics.ts) | The forbidden stock lines and their matcher; the `./tics` subpath, which `speaking-style` imports |
 
 This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 

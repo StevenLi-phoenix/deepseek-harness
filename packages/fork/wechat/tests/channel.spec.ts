@@ -11,12 +11,15 @@ import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 import * as TimeGap from '@deepseek-ai/dsh-time-gap'
-import WechatChannel, { Config, handoverText, QUOTA_FOOTER, WECHAT_RELAY_CHANNEL, type ChatConfig } from '../src/index.ts'
+import WechatChannel, { type ChatConfig, type Config } from '../src/index.ts'
+import { handoverText, QUOTA_FOOTER, WECHAT_RELAY_CHANNEL } from '../src/text.ts'
 import { downloadMedia } from '../src/media.ts'
 import type { WechatAccount } from '../src/login.ts'
 import { wechatDomain } from '../src/storage.ts'
 import type { WechatAnswer } from '../src/view.ts'
 import { FakeIlink, imageMessage, textMessage } from './fake-ilink.ts'
+
+const Config = WechatChannel.Config
 
 /** Faults the real file system cannot produce: an error with no `code`. */
 const fsFaults = vi.hoisted(() => ({ stat: undefined as Error | undefined }))
