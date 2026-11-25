@@ -10,8 +10,9 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-event-bus'
 import type { ContextFormed } from '@deepseek-ai/dsh-llm'
-import { createDelivery, SOURCE_KIND, type MonitorEvent } from './delivery.ts'
+import { createDelivery, SOURCE_KIND } from './delivery.ts'
 import { mountHandover } from './handover.ts'
 import { DEFAULT_LIMITS, MonitorRegistry } from './monitor.ts'
 import { MonitorStorage } from './persistence.ts'
@@ -57,14 +58,10 @@ export function apply(ctx: Context): void {
   const stopped = (): boolean => stopping
 
   // Both services are optional: a process without a chat channel has no main agent, and its monitors answer their Sessions.
-  const optional = ctx as unknown as {
-    get(name: 'ownerNotifier'): { ownsSession?(sessionId: string): boolean } | undefined
-    get(name: 'eventBus'): { publish(event: MonitorEvent): Promise<unknown> } | undefined
-  }
   const delivery = createDelivery(ctx, stopped, {
-    isMainAgent: owner => optional.get('ownerNotifier')?.ownsSession?.(owner) === true,
+    isMainAgent: owner => ctx.get('ownerNotifier')?.ownsSession?.(owner) === true,
     publish: (event) => {
-      const bus = optional.get('eventBus')
+      const bus = ctx.get('eventBus')
       return bus === undefined ? Promise.reject(new Error('the event bus is not running')) : bus.publish(event)
     },
   })

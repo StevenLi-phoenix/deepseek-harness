@@ -1,6 +1,6 @@
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import { describe, expect, it, vi } from 'vitest'
-import { createDelivery, SOURCE_KIND, type DeliveryContext } from '../src/delivery.ts'
+import { createDelivery, SOURCE_KIND, type DeliveryContext, type MonitorEvent } from '../src/delivery.ts'
 import { errorText } from '../src/error-text.ts'
 import type { MonitorNotice, MonitorView } from '../src/monitor.ts'
 
@@ -129,7 +129,8 @@ describe('errorText', () => {
 })
 
 describe('the main agent takes no monitor notice', () => {
-  const desk = (main: boolean, publish = vi.fn(() => Promise.resolve())) => ({ isMainAgent: () => main, publish })
+  type Publish = (event: MonitorEvent) => Promise<unknown>
+  const desk = (main: boolean, publish = vi.fn<Publish>(() => Promise.resolve())) => ({ isMainAgent: () => main, publish })
 
   it('publishes for the notification desk instead of waking the main agent', async () => {
     const world = fixture({ loaded: 'idle' })
@@ -139,13 +140,13 @@ describe('the main agent takes no monitor notice', () => {
     expect(await delivery.deliver('main', VIEW, { kind: 'ended', reason: 'exited with code 2', stderr: [] })).toBe(true)
     expect(world.followups).toEqual([])
     expect(world.injected).toEqual([])
-    expect(target.publish.mock.calls.map(call => (call as unknown as [{ kind: string }])[0].kind)).toEqual(['monitor.output', 'monitor.ended'])
-    expect((target.publish.mock.calls[0] as unknown as [{ source: string; subject: string; text: string }])[0]).toMatchObject({ source: 'monitor', subject: 'm1' })
+    expect(target.publish.mock.calls.map(([event]) => event.kind)).toEqual(['monitor.output', 'monitor.ended'])
+    expect(target.publish.mock.calls[0]?.[0]).toMatchObject({ source: 'monitor', subject: 'm1' })
   })
 
   it('drops a notice the bus refuses and keeps the monitor, rather than waking the main agent', async () => {
     const world = fixture({ loaded: 'idle' })
-    const delivery = createDelivery(world.ctx, () => false, desk(true, vi.fn(() => Promise.reject(new Error('no bus')))))
+    const delivery = createDelivery(world.ctx, () => false, desk(true, vi.fn<Publish>(() => Promise.reject(new Error('no bus')))))
     expect(await delivery.deliver('main', VIEW, LINES)).toBe(true)
     expect(world.followups).toEqual([])
     expect(world.warnings.join()).toContain('no bus')
