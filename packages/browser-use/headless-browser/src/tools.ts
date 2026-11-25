@@ -23,7 +23,7 @@ import { DEFAULT_READ_LIMIT, MAX_READ_LIMIT, SelectorMissError, type ReadRequest
 import type { KeepaliveExpectation } from './keepalive-expect.ts'
 import { KeepaliveError, MAX_EVERY_MINUTES, MIN_EVERY_MINUTES, type KeepaliveTools } from './keepalive.ts'
 import { MAX_SCROLL_DELTA, type ScrollRequest, type ScrollResult } from './scroll.ts'
-import { BrowserUnavailableError, NoOpenTabError, SecretFieldError, type ActionOutcome, type OpenResult, type TargetRequest } from './session.ts'
+import { BrowserUnavailableError, NoOpenTabError, SecretFieldError, type ActionOutcome, type FillOptions, type OpenResult, type TargetRequest } from './session.ts'
 import { TabNotFoundError, type ClosedTab } from './tabs.ts'
 import { UserHoldsBrowserError, type TakeoverState } from './takeover.ts'
 import { UploadRefusedError } from './uploads.ts'
@@ -71,7 +71,7 @@ export interface ToolBrowser {
   snapshot(tabId?: string, fullPage?: boolean): Promise<{ path: string; url: string }>
   read(request: ReadRequest, tabId?: string): Promise<ReadResult>
   click(request: TargetRequest, tabId?: string): Promise<ActionOutcome>
-  fill(request: TargetRequest, text: string, tabId?: string): Promise<ActionOutcome>
+  fill(request: TargetRequest, text: string, tabId?: string, options?: FillOptions): Promise<ActionOutcome>
   scroll(request: ScrollRequest, tabId?: string): Promise<ScrollResult>
   closeTab(tabId?: string): Promise<ClosedTab>
 }
@@ -802,6 +802,7 @@ export function registerBrowserTools(ctx: Context, deps: ToolDeps): void {
       x: { type: 'number', description: 'Viewport x in CSS pixels; give with y and no selector.' },
       y: { type: 'number', description: 'Viewport y in CSS pixels; give with x and no selector.' },
       text: { type: 'string', required: true, description: 'Text written into the element; an empty string clears it.' },
+      enter: { type: 'boolean', description: 'Press Enter in the field after typing, for a search box that lists its matches only on Enter (a Workday prompt that says to type and press Enter); then click the listed option you mean. Leave it out elsewhere: Enter can submit a form or pick a highlighted option.' },
       allowOrigin: { type: 'boolean', description: 'Allow a move to another registrable domain; only after the owner agreed.' },
       tab: { type: 'string', description: 'Tab id to type in; the active tab when omitted.' },
     },
@@ -825,11 +826,13 @@ export function registerBrowserTools(ctx: Context, deps: ToolDeps): void {
       },
       render: renderJson,
     },
-    execute: async (args: TargetArgs & { text: string; tab?: string }) => {
+    execute: async (args: TargetArgs & { text: string; enter?: boolean; tab?: string }) => {
       const parsed = targetOf(args)
       if (!parsed.ok) return { error: parsed.error }
       return await guarded(deps, `typing into ${describeTarget(parsed.request)}`, async () => {
-        const outcome = await deps.browser.fill(parsed.request, args.text, args.tab)
+        const outcome = args.enter === true
+          ? await deps.browser.fill(parsed.request, args.text, args.tab, { enter: true })
+          : await deps.browser.fill(parsed.request, args.text, args.tab)
         return {
           typed: outcome.target?.ref ?? describeTarget(parsed.request),
           url: outcome.url,

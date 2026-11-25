@@ -74,6 +74,28 @@ const CONSENT = `<!doctype html><title>Engineer</title><body>
 
 const INNER = '<!doctype html><title>Enter your information</title><body><label>Email <input id="inner-email" type="email"></label><label>Password <input id="inner-password" type="password"></label>'
 
+// A Workday prompt: the search box lists matches only after Enter, never on keystrokes.
+const WORKDAY = `<!doctype html><title>My Experience</title><body>
+<label for="school">School or University</label><input id="school" role="combobox" aria-controls="school-list" aria-expanded="false" placeholder="Search" style="width:240px;height:28px"><div id="school-list" role="listbox"></div><input id="school-value" type="hidden">
+<label for="field">Field of Study</label><input id="field" placeholder="Search" style="width:240px;height:28px"><div id="field-list" role="listbox"></div><p id="field-value"></p>
+<script>
+  for (const [id, names] of [['school', ['New York University', 'New York Institute of Technology']], ['field', ['Computer Science', 'Computer Engineering']]]) {
+    const input = document.getElementById(id); const list = document.getElementById(id + '-list')
+    input.addEventListener('input', () => { list.replaceChildren() })
+    input.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return
+      list.replaceChildren()
+      for (const [i, name] of names.entries()) {
+        if (!name.toLowerCase().includes(input.value.toLowerCase())) continue
+        const option = document.createElement('div'); option.role = 'option'; option.id = id + '-option-' + i; option.textContent = name
+        option.style.cssText = 'width:240px;height:24px'
+        option.addEventListener('click', () => { document.getElementById(id + '-value')[id === 'school' ? 'value' : 'textContent'] = name; list.replaceChildren() })
+        list.append(option)
+      }
+    })
+  }
+</script>`
+
 interface App {
   readonly base: string
   readonly browser: HeadlessBrowserSession
@@ -89,7 +111,7 @@ async function boot(): Promise<App> {
   const files = join(root, 'uploads')
   const server: Server = createServer((request, response) => {
     response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-    response.end(request.url === '/popup' ? POPUP : request.url === '/inner' ? INNER : request.url === '/consent' ? CONSENT : FORM)
+    response.end(request.url === '/popup' ? POPUP : request.url === '/inner' ? INNER : request.url === '/consent' ? CONSENT : request.url === '/workday' ? WORKDAY : FORM)
   })
   await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
   const port = (server.address() as { port: number }).port
@@ -230,6 +252,22 @@ describe.skipIf(!AVAILABLE)('form steps in a real page', () => {
     expect(await page.locator('#city-list [role=option]').count()).toBe(2)
     await app.browser.click({ selector: "#city-list [role=option]:has-text('New Haven')" })
     expect(await page.locator('#city-value').inputValue()).toBe('New Haven')
+  }, 120_000)
+
+  it('presses Enter for a search box that lists its matches only on Enter, as a Workday prompt does', async () => {
+    const app = await boot()
+    await app.browser.open(`${app.base}/workday`)
+    const page = await app.browser.page()
+    const silent = await app.browser.fill({ selector: '#school' }, 'New York University')
+    expect(silent.selected).toBeUndefined()
+    expect(await page.locator('#school-list [role=option]').count()).toBe(0)
+    const picked = await app.browser.fill({ selector: '#school' }, 'New York University', undefined, { enter: true })
+    expect(picked.selected).toBe('New York University')
+    expect(await page.locator('#school-value').inputValue()).toBe('New York University')
+    await app.browser.fill({ selector: '#field' }, 'Computer Science', undefined, { enter: true })
+    expect(await page.locator('#field-list [role=option]').count()).toBe(1)
+    await app.browser.click({ selector: '#field-option-0' })
+    expect(await page.locator('#field-value').textContent()).toBe('Computer Science')
   }, 120_000)
 
   it('checks a styled checkbox through the box painted under it and refuses one nobody can see', async () => {

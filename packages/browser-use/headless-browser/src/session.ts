@@ -148,6 +148,12 @@ export interface TargetRequest extends ActionTarget {
   readonly allowOrigin?: boolean
 }
 
+/** How a type finishes once the text is in. */
+export interface FillOptions {
+  /** Press Enter in the field after typing, for a search box that lists its matches only on Enter. */
+  readonly enter?: boolean
+}
+
 /** What a mutating tool reports about the element it acted on. */
 export interface ActionOutcome {
   /** Page URL after the action settled. */
@@ -195,6 +201,7 @@ export interface AxTargetResolver {
 interface Actionable {
   click(): Promise<void>
   fill(value: string): Promise<void>
+  press(key: string): Promise<void>
   selectOption(values: { index: number }, options?: { timeout?: number }): Promise<string[]>
   evaluate<R>(probe: (node: HTMLElement | SVGElement) => R): Promise<R>
 }
@@ -663,16 +670,22 @@ export class HeadlessBrowserSession {
    * @param request - the selector, accessibility id, or point, and whether the agent allowed a site change.
    * @param text - the value to write.
    * @param tabId - tab id, or nothing for the active tab.
+   * @param options - whether to press Enter in the field once the text is in; a native select ignores it.
    * @returns the page URL after typing and the element or point it acted on.
    * @throws ActionRefusedError - when visibility, a sensitive name, or origin refuses the type.
    */
-  async fill(request: TargetRequest, text: string, tabId?: string): Promise<ActionOutcome> {
+  async fill(request: TargetRequest, text: string, tabId?: string, options: FillOptions = {}): Promise<ActionOutcome> {
+    const enter = options.enter === true
     return await this.#guarded('typing', async () => {
       const page = await this.page(tabId)
       if (request.point !== undefined) {
         const point = await this.#decideAtPoint(page, request.point, 'type', request.allowOrigin === true, tabId)
         await page.mouse.click(request.point.x, request.point.y)
         await page.keyboard.insertText(text)
+        if (enter) {
+          await page.keyboard.press('Enter')
+          this.#log.info('headless-browser: pressed Enter after typing at (%d, %d)', request.point.x, request.point.y)
+        }
         this.#guard.anchor(page.url())
         return { url: page.url(), point }
       }
@@ -692,11 +705,15 @@ export class HeadlessBrowserSession {
         return { url: page.url(), target, selected }
       }
       if (await element.evaluate(isComboboxInput)) {
-        const selected = await this.#typeIntoCombobox(page, resolution, element, text, request.allowOrigin === true)
+        const selected = await this.#typeIntoCombobox(page, resolution, element, text, request.allowOrigin === true, enter)
         this.#guard.anchor(page.url())
         return { url: page.url(), target, ...selected === undefined ? {} : { selected } }
       }
       await element.fill(text)
+      if (enter) {
+        await element.press('Enter')
+        this.#log.info('headless-browser: pressed Enter in %s after typing', resolution.ref)
+      }
       this.#guard.anchor(page.url())
       return { url: page.url(), target }
     })
@@ -708,12 +725,14 @@ export class HeadlessBrowserSession {
    * the text goes in as keystrokes; the list it opens is read, and the one
    * option {@link matchOption} picks is clicked after the guard clears it like
    * any click. No list, or no single match, leaves the typed text with the list
-   * open for the model to click the option it means.
+   * open for the model to click the option it means. A search box that lists
+   * its matches only on Enter (a Workday prompt) gets Enter after the keystrokes.
    * @param page - the tab's page, whose keyboard types.
    * @param resolution - how the input was found: its reference, its document, and where to look up its options.
    * @param element - the combobox input.
    * @param text - the option's text.
    * @param allowOrigin - whether the agent allowed a site change for this action.
+   * @param enter - whether to press Enter after the keystrokes, before reading the list.
    * @returns the chosen option's label, or nothing when none was chosen.
    */
   async #typeIntoCombobox(
@@ -722,12 +741,17 @@ export class HeadlessBrowserSession {
     element: Actionable,
     text: string,
     allowOrigin: boolean,
+    enter: boolean,
   ): Promise<string | undefined> {
     const ref = resolution.ref
     await element.click()
     await page.keyboard.press('ControlOrMeta+A')
     await page.keyboard.press('Backspace')
     await page.keyboard.type(text)
+    if (enter) {
+      await page.keyboard.press('Enter')
+      this.#log.info('headless-browser: pressed Enter in %s after typing', ref)
+    }
     let options: readonly SelectOption[] = []
     for (let waited = 0; waited <= COMBOBOX_WAIT_MS && options.length === 0; waited += COMBOBOX_POLL_MS) {
       await page.waitForTimeout(COMBOBOX_POLL_MS)

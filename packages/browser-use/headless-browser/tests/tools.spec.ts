@@ -543,6 +543,15 @@ describe('page actions and control', () => {
     expect(fill).toHaveBeenCalledWith({ selector: '#q' }, '作业', undefined)
   })
 
+  it('asks the browser to press Enter only when the type sets enter', async () => {
+    const fill = vi.fn(async (_request: unknown, _text: string, _tab?: string, _options?: unknown) => HIT)
+    const tools = bench(fakeBrowser({ fill }))
+    await tools.call('headless_browser_type', { selector: '#school', text: 'New York University', enter: true, tab: 't2' })
+    expect(fill).toHaveBeenLastCalledWith({ selector: '#school' }, 'New York University', 't2', { enter: true })
+    await tools.call('headless_browser_type', { selector: '#school', text: 'New York University', enter: false })
+    expect(fill).toHaveBeenLastCalledWith({ selector: '#school' }, 'New York University', undefined)
+  })
+
   it('refuses a page action while the user holds the page, and hands back after it', async () => {
     const click = vi.fn(async () => HIT)
     const tools = bench(fakeBrowser({ click }))

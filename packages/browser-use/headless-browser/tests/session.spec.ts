@@ -159,6 +159,8 @@ class FakePage {
   chooser: FakeChooser | undefined
   readonly mouseClicks: [number, number][] = []
   readonly inserted: string[] = []
+  /** Keys pressed, as `<element id>:<key>` for an element press and `keyboard:<key>` for the page keyboard. */
+  readonly pressed: string[] = []
   readonly clicked: Element[] = []
   readonly filled = new Map<Element, string>()
   readonly attached = new Map<Element, readonly string[]>()
@@ -195,6 +197,7 @@ class FakePage {
       evaluateHandle: async (fn: OnElement): Promise<JSHandle> => this.#coverHandle(fn, node),
       click: async (): Promise<void> => { this.clicked.push(node) },
       fill: async (value: string): Promise<void> => { this.filled.set(node, value) },
+      press: async (key: string): Promise<void> => { this.pressed.push(`${node.id}:${key}`) },
     } as Partial<ElementHandle<Element>> as ElementHandle<Element>
   }
 
@@ -216,6 +219,7 @@ class FakePage {
       evaluateHandle: async (fn: OnElement): Promise<JSHandle> => this.#coverHandle(fn, only()),
       click: async (): Promise<void> => { await this.clickWith(() => { this.clicked.push(only()) }) },
       fill: async (value: string): Promise<void> => { this.filled.set(only(), value) },
+      press: async (key: string): Promise<void> => { this.pressed.push(`${only().id}:${key}`) },
       setInputFiles: async (files: readonly string[]): Promise<void> => { this.attached.set(only(), files) },
       innerText: async (): Promise<string> => only().textContent,
     } as Partial<Locator> as Locator
@@ -260,7 +264,10 @@ class FakePage {
     const mouse = {
       click: async (x: number, y: number): Promise<void> => { await this.clickWith(() => { this.mouseClicks.push([x, y]) }) },
     } as Partial<Mouse> as Mouse
-    const keyboard = { insertText: async (text: string): Promise<void> => { this.inserted.push(text) } } as Partial<Keyboard> as Keyboard
+    const keyboard = {
+      insertText: async (text: string): Promise<void> => { this.inserted.push(text) },
+      press: async (key: string): Promise<void> => { this.pressed.push(`keyboard:${key}`) },
+    } as Partial<Keyboard> as Keyboard
     const chooserOf = (): FakeChooser | undefined => this.chooser
     // Playwright overloads waitForEvent per event; the fake answers the file chooser and refuses every other event.
     function waitForEvent(event: 'filechooser'): Promise<FileChooser>
@@ -864,6 +871,34 @@ describe('a page that closes itself on a click', () => {
     popup.clickFailure = { message: 'locator.click: Element is not attached to the DOM', closes: 'page' }
     await expect(session.click({ selector: '#account' }, 't2')).rejects.toThrow(/not attached/u)
     expect(contexts).toHaveLength(1)
+    await session.close()
+  })
+})
+
+describe('pressing Enter after a type', () => {
+  it('presses Enter in the field only when the type asks for it, for a selector and for a point', async () => {
+    // A Workday prompt: the search box lists schools only after Enter.
+    document.body.innerHTML = '<input id="school" aria-label="School or University" placeholder="Search">'
+    const { session, page } = await withTab()
+    await session.fill({ selector: '#school' }, 'New York University', 't1')
+    expect(page.pressed).toEqual([])
+    await session.fill({ selector: '#school' }, 'New York University', 't1', { enter: true })
+    expect(page.filled.get(element('#school'))).toBe('New York University')
+    expect(page.pressed).toEqual(['school:Enter'])
+    stub(document, 'elementFromPoint', () => element('#school'))
+    await session.fill({ point: { x: 12, y: 34 } }, 'Computer Science', 't1', { enter: true })
+    expect(page.inserted).toEqual(['Computer Science'])
+    expect(page.pressed).toEqual(['school:Enter', 'keyboard:Enter'])
+    await session.close()
+  })
+
+  it('presses nothing when the guard refuses the field', async () => {
+    document.body.innerHTML = '<input id="school" aria-label="School or University">'
+    const { session, page } = await withTab()
+    page.facts.set(element('#school'), { occlusion: 0 })
+    await expect(session.fill({ selector: '#school' }, 'New York University', 't1', { enter: true })).rejects.toBeInstanceOf(ActionRefusedError)
+    expect(page.pressed).toEqual([])
+    expect(page.filled.has(element('#school'))).toBe(false)
     await session.close()
   })
 })

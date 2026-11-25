@@ -10,6 +10,9 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
   trades capability for tokens, which is the wrong trade; real savings come
   from what a turn sends, not from forgetting.
 
+### Added
+- `headless_browser_type` `enter` (2026-11-25): presses Enter in the field after typing, for a search box that lists its matches only on Enter. Visa's Workday My Experience step left School or University and Field of Study at "No Items" because DSH had no Enter; a combobox then chooses the named option as usual.
+
 ### Fixed
 - `tool-courses` duplicate tasks (2026-11-25): a `courses_observe` refused as `duplicate_title` / `duplicate_platform_identity` (courses-service 0.7.0) now answers the existing task's id, title and version and says to write there; the six-hourly sync had saved "Weekly Project Notebook - Individual - 12/1" a second time under a derived `task-dsh-…` id, and the old conflict answer ("someone changed the record") named no task.
 - `headless-browser` inherited aria-hidden (2026-11-25): a control that only inherits `aria-hidden` from a dialog ancestor can be clicked when it is wholly on screen and on top. HPE's Phenom screening sets aria-hidden around its Next button, so the screening stopped after question 1; an element's own aria-hidden (a decoy "Verify you are human") is still refused.
