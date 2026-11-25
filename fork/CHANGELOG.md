@@ -11,6 +11,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
   from what a turn sends, not from forgetting.
 
 ### Fixed
+- `headless-browser` visibility hint (2026-11-24): a selector that picked a hidden field (Ashby's hidden reCAPTCHA `textarea`) no longer ends the application; the refusal tells the model to name the visible field by its label, and still forbids reaching the hidden one another way.
 - `headless-browser` shadow DOM (2026-11-24): SmartRecruiters application fields can be typed into. The document's hit test stops at the outermost shadow host, so a field nested two custom elements deep looked covered and was refused at score 0; hit tests now follow open shadow roots down.
 - Gmail account linking no longer answers 403 on the credential-free Google redirect: only the exact callback accepts cross-site top-level GET navigation on a trusted Host. Pending sign-ins survive a Host restart for up to ten minutes and are consumed before token exchange.
 - `headless-browser` keepalives no longer report `ok` for reachable but signed-out pages. The probe checks the final site and sign-in route, then any configured visible-text matchers, and reports a failure reason separately from the retry state.

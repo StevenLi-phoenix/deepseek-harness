@@ -736,7 +736,7 @@ export class ActionGuard {
 
 /** What the agent should do after each kind of refusal. */
 const HINTS: Readonly<Record<GuardRule, string>> = {
-  visibility: 'The owner cannot see or hit this element. Report the blocked action; do not retry with another selector, an accessibility id, or coordinates.',
+  visibility: 'The owner cannot see or hit this element: do not reach it another way (another selector or id for it, or its coordinates). If you meant a visible field this selector did not single out, name that field by its label and act on it; otherwise report the blocked action.',
   sensitive: 'This target moves money or destroys something. Call headless_browser_hand_over so the owner decides.',
   origin: 'The target is on another site. Call again with allowOrigin: true only after the owner agreed, or hand over.',
   'ax-id': 'The id names no element on the current page. Read the page again for fresh ids; do not fall back to a selector or coordinates.',
