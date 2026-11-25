@@ -1,7 +1,10 @@
 /** Moving one Session's tasks to another: destinations, involved Sessions, archive admission, notices, and repeat calls. */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { brandString } from '@deepseek-ai/dsh-brand'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import { agentFor, harness, type HarnessAgent } from './harness.ts'
+import { createRRuleScheduleRecord } from '../src/domain.ts'
+import type { ScheduleId } from '../src/types.ts'
+import { agentFor, harness, seededTask, seedTasks, taskTable, type HarnessAgent } from './harness.ts'
 
 const active: Awaited<ReturnType<typeof harness>>[] = []
 const daily = 'DTSTART:20260916T010000Z\nRRULE:FREQ=DAILY'
@@ -55,6 +58,21 @@ it('moves active and paused tasks of the old Sessions to the new one and leaves 
   // The old chat no longer holds work, so archiving it is clean; the new one holds the active task.
   expect(await test.activity(OLD)).toEqual([])
   expect(await test.activity(NEW)).toEqual([{ kind: 'schedule', items: [{ id: reminder.id, label: 'Weekly homework' }] }])
+})
+
+it('keeps the Session a moved new-Session task reserved for its pending delivery', async () => {
+  const reserved = SessionId('reserved-delivery')
+  const record = createRRuleScheduleRecord(brandString<ScheduleId>('fresh'), 'Fresh each day', 'Prompt', daily, Date.now())
+  const stored = seededTask(record, { kind: 'new', create: {} }, {
+    involvedSessionIds: [OLD], pendingDelivery: { targetSessionId: reserved },
+  })
+  const test = await harness({ beforeService: (_ctx, facility) => seedTasks(facility, [stored]) })
+  active.push(test)
+
+  expect((await test.service.handOverSessions([OLD], NEW)).map(entry => entry.id)).toEqual([record.id])
+  expect(taskTable(test.ctx).get(record.id)).toMatchObject({
+    target: { kind: 'new' }, involvedSessionIds: [NEW], pendingDelivery: { targetSessionId: reserved },
+  })
 })
 
 it('tells the live new Session about each moved task and does nothing on a repeat', async () => {

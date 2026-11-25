@@ -44,7 +44,7 @@ declare module '@deepseek-ai/dsh-llm' {
 const SIGNAL = new AbortController().signal
 const MODEL = 'test-model'
 
-const waits = vi.hoisted(() => vi.fn((_ms: number) => Promise.resolve()))
+const waits = vi.hoisted(() => vi.fn((_ms: number, _value?: unknown, _options?: { signal?: AbortSignal }) => Promise.resolve()))
 vi.mock('node:timers/promises', async original => ({ ...await original<typeof import('node:timers/promises')>(), setTimeout: waits }))
 
 class ContextAdapter extends LlmAdapter {
@@ -2722,6 +2722,20 @@ describe('a summary request that fails', () => {
     await expect(compact.runSummarize({ messages: [] }, agent(conversation(1)))).rejects.toThrow('upstream broke')
     expect(calls()).toBe(4)
     expect(waits.mock.calls.map(call => call[0])).toEqual([10_000, 30_000, 60_000])
+  })
+
+  it('stops waiting to try again when the compaction is cancelled', async () => {
+    const { adapter, compact } = await summarizerHarness([{ type: 'text', text: 'summary' }])
+    const calls = failingOnce(adapter, 'SERVER')
+    const cancel = new AbortController()
+    const { setTimeout: wait } = await vi.importActual<typeof import('node:timers/promises')>('node:timers/promises')
+    waits.mockImplementationOnce(async (ms, _value, options) => {
+      const waiting = wait(ms, undefined, options)
+      cancel.abort()
+      await waiting
+    })
+    await expect(compact.runSummarize({ messages: [] }, agent(conversation(1)), cancel.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    expect(calls()).toBe(1)
   })
 
   it('is not tried again when the request itself is wrong', async () => {

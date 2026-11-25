@@ -16,8 +16,8 @@ describe('freshChildRoute', () => {
     expect(withFreshChildRoute(request(), fresh, route).agentOptions).toEqual(route)
   })
 
-  it('sets no effort when neither the call nor the route names one', () => {
-    expect(withFreshChildRoute(request(), fresh, { provider: 'codex', model: 'm' }).agentOptions).toEqual({ provider: 'codex', model: 'm' })
+  it('names no effort when neither the request nor the route names one', () => {
+    expect(withFreshChildRoute(request(), fresh, { provider: 'codex', model: 'm' }).agentOptions).toStrictEqual({ provider: 'codex', model: 'm' })
   })
 
   it('keeps a caller-chosen effort and other options', () => {

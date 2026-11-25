@@ -4,8 +4,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import { brandString } from '@deepseek-ai/dsh-brand'
 import LlmRuntime, { LlmError, createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { BuiltinLlmFailureCode, LlmResolvedModelInfo } from '@deepseek-ai/dsh-llm'
+import type { BuiltinLlmFailureCode, LlmModelReasoningInfo, LlmResolvedModelInfo, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -14,8 +15,9 @@ import { MockAdapter, textResponse } from './mock-adapter.ts'
 
 /** Serves every model except the listed ones, which fail like a pi-ai route that no longer has them. */
 class PartialAdapter extends MockAdapter {
-  constructor(script: ConstructorParameters<typeof MockAdapter>[0], readonly missing: string[], private readonly code: BuiltinLlmFailureCode = 'UNKNOWN_MODEL') {
-    super(script)
+  constructor(script: ConstructorParameters<typeof MockAdapter>[0], readonly missing: string[], private readonly code: BuiltinLlmFailureCode = 'UNKNOWN_MODEL',
+    reasoning?: LlmModelReasoningInfo) {
+    super(script, reasoning)
   }
 
   override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
@@ -29,7 +31,7 @@ afterEach(async () => {
   for (const ctx of contexts.splice(0)) await ctx.fiber.dispose()
 })
 
-async function harness(adapter: MockAdapter) {
+async function harness(adapter: MockAdapter, reasoningEffort?: ReasoningEffortId) {
   const ctx = new Context()
   contexts.push(ctx)
   await ctx.plugin(LlmRuntime)
@@ -41,7 +43,9 @@ async function harness(adapter: MockAdapter) {
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentLoop, { agents: [] })
   ctx.llm.registerAdapter(['mock'], adapter)
-  const agent = await ctx.agentLoop.create(SessionId('route-fallback'), { provider: 'mock', model: 'mock/current' })
+  const agent = await ctx.agentLoop.create(SessionId('route-fallback'), {
+    provider: 'mock', model: 'mock/current', ...reasoningEffort === undefined ? {} : { reasoningEffort },
+  })
   return { ctx, agent }
 }
 
@@ -66,6 +70,17 @@ describe('recorded route that left the configuration', () => {
     expect(agent.model.current()).toEqual({ provider: 'mock', model: 'mock/current' })
     expect(agent.session.snapshotEvents().filter(event => event.type === 'model/selection').at(-1)?.data)
       .toEqual({ provider: 'mock', model: 'mock/current' })
+  })
+
+  it('carries the configured reasoning effort onto the replacement route', async () => {
+    const effort = brandString<ReasoningEffortId>('high')
+    const adapter = new PartialAdapter([textResponse('ok')], ['renamed'], 'UNKNOWN_MODEL', { efforts: [{ id: effort, name: 'High' }], defaultEffort: effort })
+    const { agent } = await harness(adapter, effort)
+    agent.model.select({ provider: 'mock', model: 'renamed' })
+    await send(agent, 'hello')
+    expect(turnEnds(agent)).toEqual(['completed'])
+    expect(adapter.requests.map(request => [request.model, request.reasoningEffort])).toEqual([['mock/current', effort]])
+    expect(agent.model.current()).toEqual({ provider: 'mock', model: 'mock/current', reasoningEffort: effort })
   })
 
   it('keeps a recorded route that still resolves', async () => {
