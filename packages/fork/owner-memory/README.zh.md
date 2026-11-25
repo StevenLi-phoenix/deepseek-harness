@@ -79,7 +79,7 @@ Host 给每次写入盖上来源章，来源读自 Session 日志，不取决于
   name: '@deepseek-ai/dsh-owner-memory/settings'
 ```
 
-这一行只有一个可选字段 `file`（记忆文件，默认同上；反馈文件在它旁边）。页面最上面是待审批的写入，标明每条的来源和背后的 Session，可批准或丢弃；然后是条目，可按文字和分类搜索，按最近改动排序，按需展开全文和历史，可撤销或彻底删除；还有按 Session 或按时间的回滚，总是先给预览，应用的恰好是预览的那一份；最后是反馈判断。路由是 Web UI 登录之下的 `GET`/`POST /api/owner-memory`；它不注册任何工具，agent 调不到它，也没有任何写入条目的动作，所以等 owner 决定的写入不能被写下它的 Session 自己批准。它调用和 CLI 相同的函数（`src/admin.ts`），在历史里把自己的改动记为来源 `settings`。
+这一行只有一个可选字段 `file`（记忆文件，默认同上；反馈文件在它旁边）。页面最上面是待审批的写入，标明每条的来源和背后的 Session，可批准或丢弃；然后是条目，可按文字和分类搜索，按最近改动排序，按需展开全文和历史，可撤销或彻底删除；还有按 Session 或按时间的回滚，总是先给预览，应用的恰好是预览的那一份；最后是反馈判断。它还回答页面上的整理建议：标出差异分句的重复组、合并建议，以及到期或期限已过的条目。路由是 Web UI 登录之下的 `GET`/`POST /api/owner-memory`；它不注册任何工具，agent 调不到它，等 owner 决定的写入也不能被写下它的 Session 自己批准。它只做 owner 自己的写入：合并（先预览，凭预览的令牌应用）和按编号改分类。它调用和 CLI 相同的函数（`src/admin.ts`），在历史里把自己的改动记为来源 `settings`。
 
 CLI 由 owner 在主机上以服务用户身份执行，从笔记本用 `ssh mini '…'` 即可（完整命令见 RUNBOOK）。`ids` 只打印 id、分类和数量，不打印文字；`recent` 和 `show` 会打印文字，用来找到通知说的是哪一条：
 
@@ -122,13 +122,14 @@ echo '{"scope":"up","verdict":"keep","kind":"comment","text":"哈哈这个梗我
 | [`src/feedback-mode.ts`](src/feedback-mode.ts) | 人设预设的反馈模式：把某个范围的评价放在每个根 Session 前面 |
 | [`src/tools.ts`](src/tools.ts) | `memory_search`、`memory_save`、`memory_forget`，以及扣留依据的回合来源判断 |
 | [`src/notice-queue.ts`](src/notice-queue.ts) | 把一个回合的通知排队到回合结束、按天限量，再经通知器发出 |
-| [`src/store.ts`](src/store.ts) | JSONL 存储：列出、保存、扣下、批准、撤销、回滚、抹除、导入、搜索，以及历史和快照 |
+| [`src/store.ts`](src/store.ts) | JSONL 存储：列出、保存、扣下、批准、撤销、合并、回滚、抹除、导入、搜索，以及历史和快照 |
 | [`src/notice.ts`](src/notice.ts) | 一个回合的保护类变动对应的微信通知 |
 | [`src/render.ts`](src/render.ts) | 记忆块与字节预算 |
 | [`src/feedback.ts`](src/feedback.ts) | owner 对人格回复的保留/删除判定：存储、CLI 载荷校验和反馈块 |
 | [`src/entries.ts`](src/entries.ts) | 条目类型、分类、校验 |
 | [`src/export.ts`](src/export.ts) | claude.ai 导出解析器 |
-| [`src/admin.ts`](src/admin.ts) | CLI 与设置路由共用的审阅函数：批准、丢弃、撤销，以及带令牌的预览式回滚和彻底删除 |
+| [`src/curation.ts`](src/curation.ts) | 页面建议所依据的启发式：词元相似度和重复组、合并后的措辞、不同的分句，以及到期或期限已过的条目 |
+| [`src/admin.ts`](src/admin.ts) | CLI 与设置路由共用的审阅函数：批准、丢弃、撤销，带令牌的预览式回滚和彻底删除，以及预览式合并和改分类 |
 | [`src/settings.ts`](src/settings.ts) | `/api/owner-memory` 路由（`@deepseek-ai/dsh-owner-memory/settings`）；[`src/settings/`](src/settings) 放它的读取模型、请求处理和线上数据类型 |
 | [`src/cli.ts`](src/cli.ts) | `memory-import`（通过 [`fork/deploy/memory-import.mjs`](../../../fork/deploy/memory-import.mjs) 运行）；并重新导出 `memory-admin` |
 | [`src/admin-cli.ts`](src/admin-cli.ts) | `memory-admin`（[`fork/deploy/memory-admin.mjs`](../../../fork/deploy/memory-admin.mjs)）：参数解析与分发 |

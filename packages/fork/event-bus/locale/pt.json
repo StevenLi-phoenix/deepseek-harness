@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Barramento de eventos",
+    "description": "Executa o trabalho do agente orientado a eventos a partir de um barramento durável que remove duplicatas, suprime laços, agrupa e limita a taxa dos eventos e os envia a um notificador ou a sessões."
+  }
+}

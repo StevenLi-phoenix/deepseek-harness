@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Ereignisbus",
+    "description": "Führt ereignisgesteuerte Agentenarbeit über einen dauerhaften Bus aus, der Ereignisse dedupliziert, Schleifen unterdrückt, bündelt und in der Rate begrenzt und sie an einen Benachrichtiger oder an Sitzungen weiterleitet."
+  }
+}

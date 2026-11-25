@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Herramienta de voz",
+    "description": "Permite al agente convertir texto en voz y enviar el audio al propietario por WeChat como archivo mp3."
+  }
+}

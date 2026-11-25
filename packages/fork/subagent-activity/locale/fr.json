@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Panneau des sous-agents",
+    "description": "Liste dans la barre latérale droite les sous-agents d'une session : ce que fait chacun en ce moment, depuis combien de temps et comment il s'est terminé, ouvert depuis un bouton de l'en-tête."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Event ingest",
+    "description": "Accepts authenticated POST requests through which the owner's own services push events into the event bus, with one token per source."
+  }
+}

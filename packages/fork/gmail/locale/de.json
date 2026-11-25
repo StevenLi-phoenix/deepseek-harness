@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Gmail-Zugang",
+    "description": "Verbindet die Gmail-Konten des Eigentümers über die Google-Anmeldung und hält ausgehende Post zur Bestätigung durch den Eigentümer per WeChat zurück, wenn die Kontoregel oder die Herkunft der Runde es verlangt."
+  }
+}

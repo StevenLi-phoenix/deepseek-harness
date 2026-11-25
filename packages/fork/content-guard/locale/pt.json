@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Guarda de conteúdo",
+    "description": "Verifica o texto que outras pessoas podem ler com padrões, strings canário, a memória do proprietário e um modelo, e o recusa se alguma camada se opuser ou não puder ser executada."
+  }
+}

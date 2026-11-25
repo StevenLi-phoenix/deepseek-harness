@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "GitHub sensor",
+    "description": "Polls GitHub for releases, tags, commits, and notifications and feeds them to the event bus as events."
+  }
+}

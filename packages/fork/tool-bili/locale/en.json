@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Bilibili tools",
+    "description": "Lets the agent browse, search, watch videos through subtitles, like, coin, follow, and save on its own Bilibili account through bili-svc, never speaks, and keeps a journal."
+  }
+}

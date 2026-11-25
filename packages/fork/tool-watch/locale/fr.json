@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Outils de surveillance",
+    "description": "Permettent à l'agent de décider quels dépôts GitHub et fils de notifications le service d'événements surveille et comment chaque notification est acheminée, par WeChat ou vers un agent sans surveillance."
+  }
+}

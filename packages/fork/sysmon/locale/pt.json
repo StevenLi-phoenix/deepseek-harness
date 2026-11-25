@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Status do sistema",
+    "description": "Mostra em Configurações o uso de CPU e memória, o consumo de energia, a temperatura e o uso de disco por volume da máquina Host."
+  }
+}

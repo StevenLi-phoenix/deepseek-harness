@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Moniteur en arrière-plan",
+    "description": "Lance des commandes en arrière-plan dont les lignes de sortie reviennent dans la même session au fur et à mesure et réveillent un agent inactif, comme le Monitor de Claude Code."
+  }
+}

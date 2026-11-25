@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "GitHub-Sensor",
+    "description": "Fragt GitHub regelmäßig nach Releases, Tags, Commits und Benachrichtigungen ab und leitet sie als Ereignisse an den Ereignisbus weiter."
+  }
+}

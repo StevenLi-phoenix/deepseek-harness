@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Zeitabstand-Hinweis",
+    "description": "Teilt dem Modell die aktuelle Uhrzeit und die Dauer der Ruhephase der Sitzung mit, wenn nach einer Pause eine Eingabe eintrifft, damit es sie für sich genommen liest."
+  }
+}

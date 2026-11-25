@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Capteur GitHub",
+    "description": "Interroge régulièrement GitHub pour les versions, les étiquettes, les commits et les notifications, et les transmet au bus d'événements sous forme d'événements."
+  }
+}

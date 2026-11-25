@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "État du système",
+    "description": "Affiche dans les Réglages l'utilisation du processeur et de la mémoire, la consommation électrique, la température et l'usage disque de chaque volume de la machine Host."
+  }
+}

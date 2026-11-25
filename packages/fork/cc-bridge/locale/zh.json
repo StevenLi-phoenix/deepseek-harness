@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Claude Code 会话桥",
+    "description": "让 agent 列出、启动、发消息给和停止自己账号下的 Claude Code 会话，会话的回复以不可信数据的形式回到主 agent。"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Accès à Gmail",
+    "description": "Connecte les comptes Gmail du propriétaire via la connexion Google et retient le courrier sortant pour que le propriétaire le confirme sur WeChat quand la règle du compte ou l'origine du tour l'exige."
+  }
+}

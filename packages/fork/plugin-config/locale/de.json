@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Alle Einstellungen",
+    "description": "Zeigt in den Einstellungen jedes Konfigurationsfeld eines Plugin-Eintrags und die Ebene, die es gesetzt hat, und speichert Änderungen in einem Schreibvorgang im Patch des Eigentümers."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Integritätswächter",
+    "description": "Bildet Hashes der Dateien, die den Agenten steuern, und benachrichtigt den Eigentümer per WeChat bei einer Änderung, wobei benannt wird, was sich geändert hat, aber nie der Inhalt."
+  }
+}

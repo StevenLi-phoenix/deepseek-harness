@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Ferramentas da conta de criador",
+    "description": "Permitem ao agente ler os dados da conta de criador e pedir à Reply Gate, por meio do bili-svc, que envie respostas, que são enviadas, retidas ou bloqueadas."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Speech tool",
+    "description": "Lets the agent turn text into speech and send the audio to the owner on WeChat as an mp3 file."
+  }
+}

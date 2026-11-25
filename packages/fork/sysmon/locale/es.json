@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Estado del sistema",
+    "description": "Muestra en Ajustes el uso de CPU, memoria, energía, la temperatura y el uso de disco por volumen de la máquina Host."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "后台监视",
+    "description": "启动后台命令，其输出的每一行实时回到同一个会话并唤醒空闲的 agent，对应 Claude Code 的 Monitor。"
+  }
+}

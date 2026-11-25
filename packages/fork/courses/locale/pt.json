@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Registros de cursos",
+    "description": "Mantém os registros de cursos do proprietário vindos do serviço de cursos, lembra os prazos pelo WeChat com regras fixas e avisa quando a sincronização dos cursos falha ou se recupera."
+  }
+}

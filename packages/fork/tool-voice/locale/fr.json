@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Outil de synthèse vocale",
+    "description": "Permet à l'agent de transformer un texte en parole et d'envoyer l'audio au propriétaire sur WeChat sous forme de fichier mp3."
+  }
+}

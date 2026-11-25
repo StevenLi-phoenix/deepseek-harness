@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Bilibili-Konto",
+    "description": "Zeigt das eigene Bilibili-Konto des Agenten schreibgeschützt so an, wie bili-svc es meldet (bili-svc hält die Anmeldung), und speichert das Hauptkonto des Eigentümers in den Einstellungen."
+  }
+}

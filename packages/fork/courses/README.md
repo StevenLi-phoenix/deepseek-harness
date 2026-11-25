@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Never miss a course deadline: DSH reads your course records every 15 minutes and messages you on WeChat 48, 24, and 3 hours before each deadline, and at once when a deadline passed while late submissions are still open. Finished work is left alone, each reminder goes out once even across restarts, and reminders wait while you sleep unless the deadline is under 3 hours away. A broken course sync is told once a day with the last good sync and the reason, and once when it recovers. Code decides when a reminder is due; the main agent tells you in its own words and answers your replies.
+Never miss a course deadline: DSH reads your course records every 15 minutes and messages you on WeChat 48, 24, and 3 hours before each deadline, and at once when a deadline passed while late submissions are still open. Finished work is left alone, each reminder goes out once even across restarts, and reminders wait while you sleep unless the deadline is under 3 hours away. A broken course sync is reported once a day and once when it recovers. Code decides when a reminder is due; the main agent words it and answers your replies.
 
 ## Table of Contents
 

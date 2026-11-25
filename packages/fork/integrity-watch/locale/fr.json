@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Surveillance d'intégrité",
+    "description": "Calcule des empreintes des fichiers qui pilotent l'agent et prévient le propriétaire sur WeChat quand l'un change, en nommant ce qui a changé sans jamais en révéler le contenu."
+  }
+}

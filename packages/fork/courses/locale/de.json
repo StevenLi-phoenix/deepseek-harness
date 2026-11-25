@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Kursunterlagen",
+    "description": "Hält die Kursdaten des Eigentümers aus dem Kursdienst bereit, erinnert ihn per WeChat nach festen Regeln an Termine und meldet, wenn die Kurssynchronisierung ausfällt oder wieder funktioniert."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Todas as configurações",
+    "description": "Mostra em Configurações cada campo de configuração de uma entrada de plugin e a camada que o definiu, e salva as edições no patch do proprietário em uma única gravação."
+  }
+}

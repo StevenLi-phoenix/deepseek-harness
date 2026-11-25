@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Sprachwerkzeug",
+    "description": "Lässt den Agenten Text in Sprache umwandeln und das Audio als mp3-Datei per WeChat an den Eigentümer senden."
+  }
+}

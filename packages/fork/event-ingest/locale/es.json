@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Ingesta de eventos",
+    "description": "Acepta solicitudes POST autenticadas con las que los servicios propios del propietario envían eventos al bus de eventos, con un token por origen."
+  }
+}

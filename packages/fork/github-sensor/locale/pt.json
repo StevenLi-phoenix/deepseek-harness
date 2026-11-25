@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Sensor do GitHub",
+    "description": "Consulta o GitHub periodicamente por versões, tags, commits e notificações e os entrega ao barramento de eventos como eventos."
+  }
+}

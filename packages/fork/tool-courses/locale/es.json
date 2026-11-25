@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Herramientas de cursos",
+    "description": "Permite al agente consultar fechas límite y registros de cursos, sincronizarlos y escribir progreso y notas en los registros de cursos del propietario."
+  }
+}

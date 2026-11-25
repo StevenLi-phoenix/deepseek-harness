@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Sensor de GitHub",
+    "description": "Consulta GitHub periódicamente para obtener versiones, etiquetas, commits y notificaciones, y los entrega al bus de eventos como eventos."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Ereignis-Eingang",
+    "description": "Nimmt authentifizierte POST-Anfragen an, über die die eigenen Dienste des Eigentümers Ereignisse in den Ereignisbus einspeisen, mit einem Token pro Quelle."
+  }
+}

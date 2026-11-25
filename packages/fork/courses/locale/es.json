@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Registros de cursos",
+    "description": "Mantiene los registros de cursos del propietario desde el servicio de cursos, le avisa de las fechas límite por WeChat con reglas fijas e informa cuando la sincronización de cursos falla o se recupera."
+  }
+}

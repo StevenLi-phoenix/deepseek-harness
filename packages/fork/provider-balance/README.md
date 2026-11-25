@@ -74,7 +74,7 @@ This is a fork-local package; see [`../UPSTREAM.md`](../UPSTREAM.md).
 ## Further Exploration
 
 - [Account settings](../../client/ui-settings-account/README.md) — the page and the `settings.account.balances` area this card fills
-- [Platform account provider](../../credentials/deepseek-account/README.md) — where the Host reads the account's wallets
+- [Platform account provider](../../account/deepseek-account/README.md) — where the Host reads the account's wallets
 
 -----
 

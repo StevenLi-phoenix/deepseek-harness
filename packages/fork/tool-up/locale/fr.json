@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Outils du compte créateur",
+    "description": "Permettent à l'agent de lire les données du compte créateur et de demander à la Reply Gate, via bili-svc, d'envoyer des réponses, qui sont envoyées, retenues ou bloquées."
+  }
+}

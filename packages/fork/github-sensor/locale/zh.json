@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "GitHub 传感器",
+    "description": "轮询 GitHub 的发布、标签、提交和通知，并作为事件送入事件总线。"
+  }
+}

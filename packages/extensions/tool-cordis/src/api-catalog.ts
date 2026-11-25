@@ -7525,10 +7525,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type AnyHook = ModHook<unknown, unknown>;',
   },
   {
-    name: 'ApiKeyRecord',
-    declaration: 'export interface ApiKeyRecord {\n    readonly kind: \'api-key\';\n    readonly key?: string;\n    readonly env?: Readonly<Record<string, string>>;\n}',
-  },
-  {
     name: 'ApiSessionAgentError',
     declaration: 'export type ApiSessionAgentError = RemoteError<\'session/not-found\' | \'session/agent-busy\' | \'session/writer-held\' | \'gateway/internal\'>;',
   },
@@ -8327,10 +8323,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'CredentialKey',
     declaration: 'export type CredentialKey = Branded<\'CredentialKey\'>;',
-  },
-  {
-    name: 'CredentialRecord',
-    declaration: 'export type CredentialRecord = ApiKeyRecord | GrantRecord;',
   },
   {
     name: 'CredentialRecordEntry',
@@ -9167,10 +9159,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'GoalView',
     declaration: 'export interface GoalView extends GoalSnapshot {\n    readonly roundsStarted: number;\n    readonly createdAt: number;\n    readonly updatedAt: number;\n    readonly activation: GoalActivation;\n}',
-  },
-  {
-    name: 'GrantRecord',
-    declaration: 'export interface GrantRecord {\n    readonly kind: \'grant\';\n    readonly payload: unknown;\n}',
   },
   {
     name: 'GroupOverview',

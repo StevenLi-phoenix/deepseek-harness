@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Brücke zu Claude-Code-Sitzungen",
+    "description": "Lässt den Agenten die Claude-Code-Sitzungen seines eigenen Kontos auflisten, starten, anschreiben und beenden und gibt deren Antworten als nicht vertrauenswürdige Daten an den Haupt-Agenten zurück."
+  }
+}

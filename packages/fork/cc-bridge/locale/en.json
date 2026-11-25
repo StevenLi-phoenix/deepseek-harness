@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Claude Code sessions bridge",
+    "description": "Lets the agent list, start, message, and stop the Claude Code sessions of its own account, and returns their replies to the main agent as untrusted data."
+  }
+}

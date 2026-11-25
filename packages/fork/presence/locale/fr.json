@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Présence du propriétaire",
+    "description": "Détermine si le propriétaire dort ou est éveillé d'après le mode Concentration Sommeil du téléphone, une plage quotidienne de repli et des réglages manuels, afin que les canaux retiennent les messages non urgents pendant son sommeil."
+  }
+}

@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Review and tidy what the agent remembers without a terminal. **Settings → Memory** lists the writes waiting for you first, with their source and Session, to approve or discard. A curation card then proposes merges of entries that say nearly the same thing and points at entries that look over, and every proposal waits for your click. Below are the memories as compact one-line rows — category, the opening, the date, the protected mark — searchable by text and by id, expandable to the full text and history, selectable for a merge, an erase, or a category change, with a filter onto the duplicate groups where the differing clauses are marked. A rollback card undoes one Session's changes or everything since a time, previewing first. A card holds your keep/delete verdicts on persona replies, and the page ends with the content guard's refusals of the last 24 hours and its settings.
+Review and tidy what the agent remembers without a terminal. **Settings → Memory** lists pending writes first, with their source and Session, to approve or discard. A curation card proposes merges of near-duplicate entries and flags entries that look outdated; nothing changes until you click. The memories follow as compact rows, searchable by text and id, expandable to full text and history, and selectable to merge, erase, or recategorize. A rollback card undoes one Session's changes or everything since a time, previewing first. The page also holds your verdicts on persona replies and the content guard's settings and refusals.
 
 ## Table of Contents
 

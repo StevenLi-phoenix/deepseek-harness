@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Pont vers les sessions Claude Code",
+    "description": "Permet à l'agent de lister, démarrer, contacter et arrêter les sessions Claude Code de son propre compte, et renvoie leurs réponses à l'agent principal comme des données non fiables."
+  }
+}

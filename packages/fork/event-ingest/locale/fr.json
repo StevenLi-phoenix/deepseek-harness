@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Réception d'événements",
+    "description": "Accepte des requêtes POST authentifiées par lesquelles les services du propriétaire envoient des événements au bus d'événements, avec un jeton par source."
+  }
+}

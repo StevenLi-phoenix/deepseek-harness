@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Course records",
+    "description": "Keeps the owner's course records from the courses service, reminds the owner of deadlines on WeChat by fixed rules, and reports when the course sync breaks or recovers."
+  }
+}

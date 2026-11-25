@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Bus d'événements",
+    "description": "Pilote le travail de l'agent par événements via un bus durable qui déduplique, évite les boucles, regroupe et limite le débit des événements, puis les transmet à un notificateur ou à des sessions."
+  }
+}

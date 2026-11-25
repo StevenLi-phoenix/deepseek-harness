@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Guardia de contenido",
+    "description": "Comprueba el texto que otros pueden leer con patrones, cadenas canario, la memoria del propietario y un modelo, y lo rechaza si alguna capa lo objeta o no puede ejecutarse."
+  }
+}

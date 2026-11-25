@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Event bus",
+    "description": "Runs event-driven agent work from a durable bus that dedupes events, suppresses loops, coalesces and rate-limits them, and dispatches them to a notifier or to Sessions."
+  }
+}

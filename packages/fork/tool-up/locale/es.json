@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Herramientas de la cuenta de creador",
+    "description": "Permiten al agente leer los datos de la cuenta de creador y pedir a la Reply Gate, mediante bili-svc, que envíe respuestas, que se envían, se retienen o se bloquean."
+  }
+}

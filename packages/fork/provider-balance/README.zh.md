@@ -74,7 +74,7 @@ Host 部分在 connection 上注册 `GET /api/provider-balance`，因此受 `/ap
 ## 延伸阅读
 
 - [账号设置](../../client/ui-settings-account/README.zh.md)——这张卡片所在的页面与 `settings.account.balances` 区域
-- [开放平台账号 provider](../../credentials/deepseek-account/README.zh.md)——Host 读取账号钱包的地方
+- [开放平台账号 provider](../../account/deepseek-account/README.zh.md)——Host 读取账号钱包的地方
 
 -----
 

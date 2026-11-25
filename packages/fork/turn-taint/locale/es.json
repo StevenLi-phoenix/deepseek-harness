@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Origen del turno",
+    "description": "Registra quién inició cada turno (el propietario, un mensaje reenviado, un evento, un recordatorio) y qué herramientas leyeron palabras de desconocidos, y aplica las reglas que se derivan de ello."
+  }
+}

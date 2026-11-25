@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Cuenta de Bilibili",
+    "description": "Muestra, en solo lectura, la cuenta de Bilibili del propio agente tal como la informa bili-svc (bili-svc guarda el inicio de sesión) y conserva en Ajustes la cuenta principal del propietario."
+  }
+}

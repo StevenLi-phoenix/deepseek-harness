@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Bilibili アカウント",
+    "description": "bili-svc が報告するエージェント自身の Bilibili アカウントを読み取り専用で表示し（ログインは bili-svc が保持）、オーナーのメインアカウントを設定に保存します。"
+  }
+}

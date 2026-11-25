@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Content guard",
+    "description": "Checks text that others can read against patterns, canary strings, the owner's memory, and a model, and refuses it when any layer objects or cannot run."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Gmail 工具",
+    "description": "让 agent 在主人的 Gmail 账号里搜索、阅读、起草、发送和修改邮件，每次发送都由发信闸门决定。"
+  }
+}

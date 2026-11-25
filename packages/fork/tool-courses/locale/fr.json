@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Outils de cours",
+    "description": "Permet à l'agent de consulter les échéances et les dossiers de cours, de les synchroniser et d'écrire l'avancement et des notes dans les dossiers de cours du propriétaire."
+  }
+}

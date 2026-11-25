@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Services vocaux",
+    "description": "Fournit la synthèse vocale aux agents du propriétaire et, désactivée par défaut, la transcription des fichiers audio envoyés par le propriétaire."
+  }
+}

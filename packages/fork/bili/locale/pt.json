@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Conta do Bilibili",
+    "description": "Mostra, somente leitura, a conta do Bilibili do próprio agente como o bili-svc a informa (o bili-svc guarda o login) e mantém a conta principal do proprietário em Configurações."
+  }
+}

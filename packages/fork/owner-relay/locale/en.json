@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Owner relay",
+    "description": "Relays a Session's final answer to the owner through the channel that claimed the Session, such as WeChat, and falls back to the owner notifier when the channel cannot deliver."
+  }
+}

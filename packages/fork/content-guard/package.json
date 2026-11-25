@@ -23,7 +23,8 @@
       "default": "./lib/types/settings.js"
     },
     "./src/*": "./src/*",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
   },
   "license": "MIT",
   "peerDependencies": {
@@ -46,6 +47,7 @@
     "yaml": "^2.9.0"
   },
   "files": [
+    "locale/*.json",
     "lib/index.js",
     "lib/types/**/*.js",
     "lib/types/**/*.d.ts",

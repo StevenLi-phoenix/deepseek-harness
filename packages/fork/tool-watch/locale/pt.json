@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Ferramentas de monitoramento",
+    "description": "Permitem ao agente decidir quais repositórios do GitHub e threads de notificação o serviço de eventos acompanha e como cada notificação é entregue, pelo WeChat ou a um agente não supervisionado."
+  }
+}

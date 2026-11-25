@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Überwachungswerkzeuge",
+    "description": "Lassen den Agenten entscheiden, welche GitHub-Repositories und Benachrichtigungsstränge der Ereignisdienst beobachtet und wie jede Benachrichtigung zugestellt wird, per WeChat oder an einen unbeaufsichtigten Agenten."
+  }
+}

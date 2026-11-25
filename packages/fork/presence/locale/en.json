@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Owner presence",
+    "description": "Tracks whether the owner is asleep or awake from the phone's Sleep Focus, a daily fallback window, and manual overrides, so channels hold back non-urgent messages while the owner sleeps."
+  }
+}

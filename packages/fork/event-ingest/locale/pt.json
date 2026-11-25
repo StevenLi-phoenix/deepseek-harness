@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Entrada de eventos",
+    "description": "Aceita requisições POST autenticadas pelas quais os serviços do próprio proprietário enviam eventos ao barramento de eventos, com um token por origem."
+  }
+}

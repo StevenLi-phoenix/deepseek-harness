@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Watch tools",
+    "description": "Lets the agent decide which GitHub repositories and notification threads the event service watches and how each notification travels, over WeChat or to an unattended agent."
+  }
+}

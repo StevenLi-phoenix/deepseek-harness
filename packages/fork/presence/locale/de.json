@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Anwesenheit des Eigentümers",
+    "description": "Ermittelt anhand des Schlaf-Fokus des Telefons, eines täglichen Ersatzzeitfensters und manueller Eingriffe, ob der Eigentümer schläft oder wach ist, damit Kanäle nicht dringende Nachrichten während des Schlafs zurückhalten."
+  }
+}

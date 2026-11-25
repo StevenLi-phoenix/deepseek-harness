@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "QQ group observer",
+    "description": "Records the QQ groups the owner lists, digests them on a schedule, lets the agent read the records and digests, and never speaks."
+  }
+}

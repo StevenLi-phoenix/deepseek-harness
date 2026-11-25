@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Ajustes de WeChat",
+    "description": "Secciones de Ajustes para vincular el bot de WeChat del propietario con un código QR, ver el estado del canal, desvincularlo y controlar las horas de silencio."
+  }
+}

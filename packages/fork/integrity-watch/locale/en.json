@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Integrity watch",
+    "description": "Hashes the files that steer the agent and notifies the owner on WeChat when one changes, naming what changed but never its content."
+  }
+}

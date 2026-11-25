@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Ponte para sessões do Claude Code",
+    "description": "Permite ao agente listar, iniciar, enviar mensagens e encerrar as sessões do Claude Code da própria conta, e devolve as respostas delas ao agente principal como dados não confiáveis."
+  }
+}

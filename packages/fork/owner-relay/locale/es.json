@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Relé al propietario",
+    "description": "Reenvía la respuesta final de una sesión al propietario por el canal que la reclamó, como WeChat, y recurre al notificador del propietario cuando el canal no puede entregarla."
+  }
+}

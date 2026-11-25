@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Gmail tools",
+    "description": "Lets the agent search, read, draft, send, and modify mail in the owner's Gmail accounts, with every send decided by the send gate."
+  }
+}

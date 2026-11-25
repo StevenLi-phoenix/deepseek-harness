@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Vigilância de integridade",
+    "description": "Calcula hashes dos arquivos que orientam o agente e avisa o proprietário pelo WeChat quando um deles muda, dizendo o que mudou, mas nunca o conteúdo."
+  }
+}

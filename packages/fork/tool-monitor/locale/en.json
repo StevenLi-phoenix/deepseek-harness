@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Background monitor",
+    "description": "Starts background commands whose output lines return to the same Session as they appear, waking an idle agent, like the Claude Code Monitor."
+  }
+}

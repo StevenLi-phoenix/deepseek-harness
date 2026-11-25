@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Aviso de intervalo de tempo",
+    "description": "Informa ao modelo a hora atual e por quanto tempo a sessão ficou inativa quando uma entrada chega após uma pausa, para que ele a leia nos próprios termos."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Gmail access",
+    "description": "Connects the owner's Gmail accounts through Google sign-in and holds outgoing mail for the owner's confirmation on WeChat when the account policy or the turn's origin calls for it."
+  }
+}

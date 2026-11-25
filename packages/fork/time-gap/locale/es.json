@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Aviso de tiempo transcurrido",
+    "description": "Indica al modelo la hora actual y cuánto tiempo estuvo inactiva la sesión cuando llega una entrada tras una pausa, para que la interprete según su propio contexto."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Systemstatus",
+    "description": "Zeigt in den Einstellungen CPU, Arbeitsspeicher, Leistungsaufnahme, Temperatur und Festplattenbelegung pro Volume des Host-Rechners."
+  }
+}

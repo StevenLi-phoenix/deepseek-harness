@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The main agent listens to more than the owner: another Session passes it messages, events and reminders start turns, and it reads web pages and QQ groups. This package tells which kind of turn a tool call runs in, from the Session's own log, and applies two rules. In a turn the owner did not start alone, `cc_send` and `cc_start` are refused; a reminder or watch created in such a turn still works and the log marks it, and one that keeps running (a recurring reminder, a watch) also earns one notice naming it. `turnOrigin()` also backs protected memory writes of [`owner-memory`](../owner-memory/README.md) and the send gate of [`tool-gmail`](../tool-gmail/README.md).
+The main agent listens to more than the owner: another Session passes it messages, events and reminders start turns, and it reads web pages and QQ groups. This package tells, from the Session's own log, which kind of turn a tool call runs in. In a turn the owner did not start alone, `cc_send` and `cc_start` are refused; a reminder or watch created there still works and the log marks it, and one that keeps running also earns one notice naming it. `turnOrigin()` also backs protected writes of [`owner-memory`](../owner-memory/README.md) and the send gate of [`tool-gmail`](../tool-gmail/README.md).
 
 ## Table of Contents
 

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Speech services",
+    "description": "Provides text to speech for the owner's agents and, off by default, speech to text for audio files the owner sends."
+  }
+}

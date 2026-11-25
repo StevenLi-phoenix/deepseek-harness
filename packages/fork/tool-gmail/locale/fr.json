@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Outils Gmail",
+    "description": "Permet à l'agent de rechercher, lire, rédiger, envoyer et modifier des messages dans les comptes Gmail du propriétaire, chaque envoi étant décidé par la barrière d'envoi."
+  }
+}

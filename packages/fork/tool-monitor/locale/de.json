@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Hintergrundmonitor",
+    "description": "Startet Hintergrundbefehle, deren Ausgabezeilen sofort in dieselbe Sitzung zurückkehren und einen untätigen Agenten wecken, wie der Monitor von Claude Code."
+  }
+}

@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-主 agent 听的不只是 owner：别的 Session 会给它递话，事件和提醒会开启回合，它还会读网页和 QQ 群。这个包根据 Session 自己的日志判断一次工具调用发生在哪种回合里，并执行两条规则。owner 没有独自发起的回合里，`cc_send` 和 `cc_start` 被拒绝；这类回合里建的提醒或监控仍然能用，日志会标记，其中会一直跑下去的（重复的提醒、监控）还会让 owner 收到一条点名的通知。[`owner-memory`](../owner-memory/README.zh.md) 扣下保护类记忆写入、[`tool-gmail`](../tool-gmail/README.zh.md) 的发信关卡，用的也都是 `turnOrigin()`。
+主 agent 听的不只是 owner：别的 Session 会给它递话，事件和提醒会开启回合，它还会读网页和 QQ 群。这个包根据 Session 自己的日志判断一次工具调用发生在哪种回合里。owner 没有独自发起的回合里，`cc_send` 和 `cc_start` 被拒绝；这类回合里建的提醒或监控仍然能用，日志会标记，其中会一直跑下去的还会让 owner 收到一条点名的通知。[`owner-memory`](../owner-memory/README.zh.md) 的保护类写入、[`tool-gmail`](../tool-gmail/README.zh.md) 的发信关卡，用的也都是 `turnOrigin()`。
 
 ## 目录
 

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Relais vers le propriétaire",
+    "description": "Transmet la réponse finale d'une session au propriétaire par le canal qui l'a revendiquée, comme WeChat, et se rabat sur le notificateur du propriétaire quand le canal ne peut pas la remettre."
+  }
+}

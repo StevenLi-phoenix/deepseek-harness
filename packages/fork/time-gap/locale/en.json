@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Time gap notice",
+    "description": "Tells the model the current time and how long the Session was quiet when an input arrives after a pause, so it reads that input on its own terms."
+  }
+}

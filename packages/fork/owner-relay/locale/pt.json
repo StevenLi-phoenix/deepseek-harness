@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Retransmissão ao proprietário",
+    "description": "Repassa a resposta final de uma sessão ao proprietário pelo canal que a assumiu, como o WeChat, e recorre ao notificador do proprietário quando o canal não consegue entregar."
+  }
+}

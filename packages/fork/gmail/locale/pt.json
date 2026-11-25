@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Acesso ao Gmail",
+    "description": "Conecta as contas do Gmail do proprietário com o login do Google e retém o e-mail de saída para a confirmação do proprietário pelo WeChat quando a política da conta ou a origem do turno exigir."
+  }
+}

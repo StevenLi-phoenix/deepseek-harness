@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "WeChat channel",
+    "description": "Lets the owner chat with the agent on WeChat in one long-lived chat Session and receive event notifications, with a durable outbox for WeChat's reply-window limits."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Garde de contenu",
+    "description": "Vérifie le texte lisible par d'autres avec des motifs, des chaînes canari, la mémoire du propriétaire et un modèle, et le refuse si une couche s'y oppose ou ne peut pas s'exécuter."
+  }
+}

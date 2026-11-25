@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Turn origin",
+    "description": "Tracks who started each turn (the owner, a relayed message, an event, a reminder) and which tools read strangers' words, and applies the rules that follow from it."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Compte Bilibili",
+    "description": "Affiche en lecture seule le compte Bilibili propre à l'agent tel que le signale bili-svc (bili-svc conserve la connexion) et garde le compte principal du propriétaire dans les Réglages."
+  }
+}

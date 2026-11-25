@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Creator account tools",
+    "description": "Lets the agent read the creator account's data and ask the Reply Gate, through bili-svc, to send replies, which are sent, held, or blocked."
+  }
+}

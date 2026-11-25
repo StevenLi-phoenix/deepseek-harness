@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Herramientas de Gmail",
+    "description": "Permite al agente buscar, leer, redactar, enviar y modificar correo en las cuentas de Gmail del propietario, y cada envío lo decide la puerta de envío."
+  }
+}

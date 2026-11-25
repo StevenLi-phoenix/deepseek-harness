@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Avis de laps de temps",
+    "description": "Indique au modèle l'heure actuelle et la durée d'inactivité de la session quand une entrée arrive après une pause, afin qu'il la lise dans son propre contexte."
+  }
+}

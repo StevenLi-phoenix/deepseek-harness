@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Origine du tour",
+    "description": "Enregistre qui a démarré chaque tour (le propriétaire, un message relayé, un événement, un rappel) et quels outils ont lu des paroles d'inconnus, puis applique les règles qui en découlent."
+  }
+}

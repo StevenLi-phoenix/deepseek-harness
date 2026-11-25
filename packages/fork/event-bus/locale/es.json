@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Bus de eventos",
+    "description": "Ejecuta el trabajo del agente guiado por eventos desde un bus duradero que elimina duplicados, evita bucles, agrupa y limita la tasa de eventos, y los envía a un notificador o a sesiones."
+  }
+}

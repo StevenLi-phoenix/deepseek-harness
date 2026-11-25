@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Tous les réglages",
+    "description": "Affiche dans les Réglages chaque champ de configuration d'une entrée de plugin et la couche qui l'a défini, et enregistre les modifications dans le correctif du propriétaire en une seule écriture."
+  }
+}

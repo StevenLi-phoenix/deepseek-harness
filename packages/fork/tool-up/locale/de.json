@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Werkzeuge für das Creator-Konto",
+    "description": "Lassen den Agenten die Daten des Creator-Kontos lesen und über bili-svc die Reply Gate bitten, Antworten zu senden, die gesendet, zurückgehalten oder blockiert werden."
+  }
+}

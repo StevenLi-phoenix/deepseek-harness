@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Herramientas de vigilancia",
+    "description": "Permiten al agente decidir qué repositorios de GitHub y hilos de notificación vigila el servicio de eventos y cómo viaja cada notificación, por WeChat o hacia un agente desatendido."
+  }
+}

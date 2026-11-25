@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Eigentümer-Weiterleitung",
+    "description": "Leitet die endgültige Antwort einer Sitzung über den Kanal, der sie übernommen hat, etwa WeChat, an den Eigentümer weiter und weicht auf den Eigentümer-Benachrichtiger aus, wenn der Kanal nicht zustellen kann."
+  }
+}

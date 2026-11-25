@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "QQ bot channel",
+    "description": "Connects the official QQ bot so that listed private chats and group mentions each reach their own chat Session and receive the agent's answers."
+  }
+}

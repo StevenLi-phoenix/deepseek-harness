@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Monitor em segundo plano",
+    "description": "Inicia comandos em segundo plano cujas linhas de saída voltam à mesma sessão assim que aparecem e despertam um agente ocioso, como o Monitor do Claude Code."
+  }
+}

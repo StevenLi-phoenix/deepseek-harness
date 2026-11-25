@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Dossiers de cours",
+    "description": "Conserve les dossiers de cours du propriétaire issus du service de cours, lui rappelle les échéances sur WeChat selon des règles fixes et signale quand la synchronisation des cours tombe en panne ou revient."
+  }
+}

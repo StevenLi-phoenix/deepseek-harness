@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Inhaltswächter",
+    "description": "Prüft Text, den andere lesen können, anhand von Mustern, Canary-Strings, dem Gedächtnis des Eigentümers und eines Modells und lehnt ihn ab, wenn eine Ebene widerspricht oder nicht laufen kann."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Owner memory",
+    "description": "Remembers facts about the owner across Sessions, offers tools to search, save, and forget them, and imports claude.ai memory exports."
+  }
+}

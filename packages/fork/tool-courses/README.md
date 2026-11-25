@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Ask your agent on WeChat "what deadlines do I have", "did I hand in the lab", or tell it "I finished HW3", and it answers from your course records and updates them. Lists come back as one short line per task with the dates in New York time, the progress, the submission status, and when the record was last updated, so the answer stays small. Your progress and notes are saved with your own words as the reason and a version check, so a change made elsewhere meanwhile is never overwritten. Dates and the submission status come only from a platform page: the course sync's, or DSH's own headless-browser read, saved with `courses_observe` and closed with `courses_record_sync`.
+Ask your agent on WeChat "what deadlines do I have", "did I hand in the lab", or tell it "I finished HW3", and it answers from your course records and updates them. Lists come back as one line per task: New York dates, progress, submission status, last update. Your progress and notes are saved with your own words as the reason and a version check, so a change made elsewhere is never overwritten. Dates and the submission status come only from a platform page: the course sync's, or DSH's own headless-browser read, saved with `courses_observe` and closed with `courses_record_sync`.
 
 ## Table of Contents
 

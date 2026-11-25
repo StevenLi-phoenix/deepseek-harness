@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Panel de subagentes",
+    "description": "Lista en la barra lateral derecha los subagentes de una sesión: qué hace cada uno ahora, cuánto tiempo lleva y cómo terminó, con apertura desde un botón de la cabecera."
+  }
+}

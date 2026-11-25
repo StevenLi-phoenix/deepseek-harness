@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Canal del bot de QQ",
+    "description": "Conecta el bot oficial de QQ para que los chats privados de la lista y las menciones en grupos lleguen cada uno a su propia sesión de chat y reciban las respuestas del agente."
+  }
+}

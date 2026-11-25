@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Mémoire du propriétaire",
+    "description": "Retient des informations sur le propriétaire d'une session à l'autre, fournit des outils pour les rechercher, les enregistrer et les oublier, et importe les exports de mémoire de claude.ai."
+  }
+}

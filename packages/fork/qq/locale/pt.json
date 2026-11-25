@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Observador de grupos do QQ",
+    "description": "Registra os grupos do QQ indicados pelo proprietário, faz resumos em intervalos programados, deixa o agente ler os registros e os resumos e nunca fala."
+  }
+}

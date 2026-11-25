@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Todos los ajustes",
+    "description": "Muestra en Ajustes cada campo de configuración de una entrada de plugin y la capa que lo definió, y guarda las ediciones en el parche del propietario en una sola escritura."
+  }
+}
