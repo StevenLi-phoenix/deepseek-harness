@@ -179,7 +179,7 @@ headless_browser_keepalive {"action":"remove","id":"k1"}
 
 页面可以说什么都行：某个复选框「用于验证你是人类」，某个表单只是例行确认，某个链接指向课程站点。这些都不是动手的理由，本包也不把判断留给模型自行斟酌。每个会改动页面的工具（`headless_browser_open`、`_click`、`_type`）都先问宿主里的动作守卫，守卫只根据测量结果和固定表格回答，不看页面怎么写。`headless_browser_scroll` 不指定目的地，因此改不了站点，守卫在那里没有要判断的事。
 
-**可见性评分。** [`src/visibility.ts`](src/visibility.ts) 测量人真正要点的那个元素，并把它折成 0 到 1 的分数：计算后的 `display` 和 `visibility`、整条 opacity 链的乘积、盒子面积、`pointer-events`、`aria-hidden`、滚动到它之后盒子落在视口内的比例、五个采样点上命中测试能碰到它的比例（命中测试会沿开放的 shadow root 一路往下找，所以嵌在自定义元素里的字段，比如 SmartRecruiters 的表单，不会被当成被遮住），以及有多少个祖先把它裁掉。人绕不过去的项（display、visibility、pointer-events、aria-hidden）权重最高，单独一项就足以让分数归零。低于 `VISIBILITY_THRESHOLD`（0.2）的点击或输入会被拒绝，拒绝里写明分数和拖低分数的那些项。一个选择器命中多个元素时，守卫操作分数最高的那个，并同时报告它和次高者的分数，模型因此能看出自己选中的是真控件而不是诱饵。命中的元素带 `aria-hidden` 或被遮住时，会多出一个候选：它中心点上的可交互元素，前提是无障碍名称相同。Workday 把每个真正的 `<button>` 藏在一层同名的透明 `role="button"` 覆盖层下面，人点到的正是这层覆盖层；被名称不同的元素盖住的元素找不到候选，照样被拒绝。面积这一项对可搜索下拉框的输入框（combobox 输入框，react-select 就这样渲染 Greenhouse 的每个选项）按它外面那个控件来量，因为没输入文字时它只有一个光标宽；同样小的普通输入框照样被拒绝。
+**可见性评分。** [`src/visibility.ts`](src/visibility.ts) 测量人真正要点的那个元素，并把它折成 0 到 1 的分数：计算后的 `display` 和 `visibility`、整条 opacity 链的乘积、盒子面积、`pointer-events`、`aria-hidden`、滚动到它之后盒子落在视口内的比例（瞬时滚动，所以设了 `scroll-behavior: smooth` 的页面，比如 Greenhouse 的职位页，量的是字段停下的位置，而不是动画半途）、五个采样点上命中测试能碰到它的比例（命中测试会沿开放的 shadow root 一路往下找，所以嵌在自定义元素里的字段，比如 SmartRecruiters 的表单，不会被当成被遮住），以及有多少个祖先把它裁掉（元素自己的 `overflow` 只裁它的内容，所以不算）。人绕不过去的项（display、visibility、pointer-events、aria-hidden）权重最高，单独一项就足以让分数归零。低于 `VISIBILITY_THRESHOLD`（0.2）的点击或输入会被拒绝，拒绝里写明分数和拖低分数的那些项。一个选择器命中多个元素时，守卫操作分数最高的那个，并同时报告它和次高者的分数，模型因此能看出自己选中的是真控件而不是诱饵。命中的元素带 `aria-hidden` 或被遮住时，会多出一个候选：它中心点上的可交互元素，前提是无障碍名称相同。Workday 把每个真正的 `<button>` 藏在一层同名的透明 `role="button"` 覆盖层下面，人点到的正是这层覆盖层；被名称不同的元素盖住的元素找不到候选，照样被拒绝。面积这一项对可搜索下拉框的输入框（combobox 输入框，react-select 就这样渲染 Greenhouse 的每个选项）按它外面那个控件来量，因为没输入文字时它只有一个光标宽；同样小的普通输入框照样被拒绝。样式化的复选框或单选框把真正的 input 以 opacity 0 放在最上层，下面画出人看见的方框（Workday 的同意条款框就是这样），所以 opacity 这一项读 input 正下方画出来的方框，没有方框时读 input 自己看得见的 label；两样都没有的 opacity 0 复选框照样被拒绝。
 
 **敏感名称。** [`SENSITIVE_ACTIONS`](src/guard.ts) 是唯一一张会破坏东西、会动钱的动词表：submit、pay、purchase、下单或确认订单、transfer、approve、delete、移除/归档/停用账户、unsubscribe、revoke。目标的无障碍名称或值命中其中任何一条就会被拒绝，需要 `headless_browser_hand_over`。这张表是故意保守的：误判的代价是主人花几秒钟确认一次，漏判的代价是一个账户或一笔钱。
 
@@ -189,7 +189,7 @@ headless_browser_keepalive {"action":"remove","id":"k1"}
 
 **每次拒绝都是安全事件。** 每个决定一条事件，带页面 URL、选择器、无障碍 id 或坐标点、无障碍名称、触发的规则、分数和一行理由。列表只保留最新 50 条，由 `GET /headless-browser/status` 的 `security` 字段提供；插件同时发出 `headless-browser/security` 事件，供需要观察的宿主订阅。模型看到的是 `blocked` 工具结果：它要把这次拦截报告给主人，不能换个选择器、坐标或无障碍 id 再试。
 
-**合法的不可见元素。** 文件上传输入框是最常见的一种：真正的 `<input type="file">` 往往是 `display:none` 或 `opacity:0`，由外面那个样式化的 label 触发。守卫会拒绝这个隐藏的输入框，让人来接手：`headless_browser_hand_over` 把页面交给主人，主人点 label，剩下的交给操作系统的文件选择器。样式化开关背后那个隐藏的原生复选框同理，这两种都不需要给选择器开例外。
+**合法的不可见元素。** 文件上传输入框是最常见的一种：真正的 `<input type="file">` 往往是 `display:none` 或 `opacity:0`，由外面那个样式化的 label 触发。守卫会拒绝这个隐藏的输入框，让人来接手：`headless_browser_hand_over` 把页面交给主人，主人点 label，剩下的交给操作系统的文件选择器。样式化开关背后、input 并不压在上面的那个隐藏原生复选框同理，这两种都不需要给选择器开例外。
 
 **坐标。** 在视口坐标上点击或输入没有元素可以评分，所以守卫对那个点做命中测试，只对命中的元素跑敏感名称和站点规则，并记录标签、坐标、命中元素的无障碍名称和它的分数。这里的分数是审计信息而不是门槛：模型点的是它在截图里看到的东西。
 

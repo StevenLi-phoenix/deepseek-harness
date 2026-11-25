@@ -16,7 +16,7 @@ import { HeadlessBrowserSession, SecretFieldError } from '../src/session.ts'
 
 const AVAILABLE = existsSync(chromium.executablePath())
 
-const FORM = `<!doctype html><title>signup</title><body>
+const FORM = `<!doctype html><title>signup</title><style>html { scroll-behavior: smooth }</style><body>
 <label>Email <input id="email" type="email"></label>
 <label>Password <input id="password" type="password"></label>
 <label>Confirm <input id="confirm" type="password"></label>
@@ -33,7 +33,10 @@ const FORM = `<!doctype html><title>signup</title><body>
 <label>Work authorization <select id="auth"><option value="">Select…</option><option value="yes">Yes, I am authorized</option><option value="no">No</option></select></label>
 <iframe id="embedded" src="/inner" style="width:600px;height:300px;border:0"></iframe>
 <div id="outer-host"></div>
+<div style="position:relative;width:24px;height:24px"><input id="terms" type="checkbox" aria-label="I agree" style="opacity:0;position:absolute;inset:0;width:24px;height:24px;margin:0;z-index:1"><div style="position:absolute;left:3px;top:3px;width:18px;height:18px;border:1px solid #333"></div></div>
+<input id="optin" type="checkbox" aria-label="Share my data" style="opacity:0;width:24px;height:24px;margin:0">
 <p id="shown"></p>
+<div style="height:2400px"></div><label>Late <input id="late"></label>
 <script>
   // SmartRecruiters-style field: an input two open shadow roots deep.
   const inner = document.createElement('div')
@@ -203,7 +206,7 @@ describe.skipIf(!AVAILABLE)('form steps in a real page', () => {
     const app = await boot()
     await app.browser.open(`${app.base}/apply`)
     const typed = await app.browser.fill({ selector: '#deep-city' }, 'Brooklyn')
-    expect(typed.target?.score).toBeGreaterThan(0.2)
+    expect(typed.target?.score).toBeGreaterThan(0.8)
     const page = await app.browser.page()
     expect(await page.locator('#deep-city').inputValue()).toBe('Brooklyn')
   }, 120_000)
@@ -221,6 +224,25 @@ describe.skipIf(!AVAILABLE)('form steps in a real page', () => {
     expect(await page.locator('#city-list [role=option]').count()).toBe(2)
     await app.browser.click({ selector: "#city-list [role=option]:has-text('New Haven')" })
     expect(await page.locator('#city-value').inputValue()).toBe('New Haven')
+  }, 120_000)
+
+  it('checks a styled checkbox through the box painted under it and refuses one nobody can see', async () => {
+    const app = await boot()
+    await app.browser.open(`${app.base}/apply`)
+    const page = await app.browser.page()
+    const checked = await app.browser.click({ selector: '#terms' })
+    expect(checked.target?.score).toBeGreaterThan(0.2)
+    expect(await page.locator('#terms').isChecked()).toBe(true)
+    await expect(app.browser.click({ selector: '#optin' })).rejects.toThrow(/opacity/u)
+    expect(await page.locator('#optin').isChecked()).toBe(false)
+  }, 120_000)
+
+  it('measures a field below the fold where it scrolls to, under smooth scrolling', async () => {
+    const app = await boot()
+    await app.browser.open(`${app.base}/apply`)
+    const typed = await app.browser.fill({ selector: '#late' }, 'below the fold')
+    expect(typed.target?.score).toBeGreaterThan(0.8)
+    expect(await value(app, '#late')).toBe('below the fold')
   }, 120_000)
 
   it('lists an embedded form page in a whole-page read', async () => {

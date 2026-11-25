@@ -74,7 +74,10 @@ export interface ElementFacts {
   readonly display: string
   /** Computed visibility of the element, which already reflects inheritance. */
   readonly visibility: string
-  /** Product of the computed opacity of the element and its ancestors. */
+  /**
+   * Product of the computed opacity of the element and its ancestors; for a
+   * styled checkbox or radio at opacity 0, that of the box painted under it or of its label.
+   */
   readonly opacity: number
   /** Computed pointer-events of the element, which already reflects inheritance. */
   readonly pointerEvents: string
@@ -155,8 +158,10 @@ export function probeElement(element: Element): ElementFacts {
     const title = node.getAttribute('title')
     return title === null ? '' : title.trim()
   }
-  // A person finds the element by scrolling to it, so measure it there.
-  element.scrollIntoView({ block: 'center', inline: 'center' })
+  // A person finds the element by scrolling to it, so measure it there. The
+  // scroll is instant: under `scroll-behavior: smooth` (Greenhouse's job boards)
+  // the default one animates, and the measurement would see the old position.
+  element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' })
   const chain: Element[] = []
   for (let node: Element | null = element; node !== null; node = parentOf(node)) chain.push(node)
   let hiddenByDisplay = false
@@ -175,7 +180,9 @@ export function probeElement(element: Element): ElementFacts {
     if (Number.isFinite(nodeOpacity)) opacity *= nodeOpacity
     const clipsX = style.overflowX !== 'visible'
     const clipsY = style.overflowY !== 'visible'
-    if ((!clipsX && !clipsY) || node === doc.documentElement || node === doc.body) continue
+    // An element's own overflow clips its content, not its box: Chrome gives every
+    // input `overflow: clip`, which would otherwise shave its border off its score.
+    if ((!clipsX && !clipsY) || node === element || node === doc.documentElement || node === doc.body) continue
     const box = node.getBoundingClientRect()
     if (clipsX) {
       clipLeft = Math.max(clipLeft, box.left + node.clientLeft)
@@ -190,6 +197,37 @@ export function probeElement(element: Element): ElementFacts {
   const own = view.getComputedStyle(element)
   const rect = element.getBoundingClientRect()
   const area = rect.width * rect.height
+  // A styled checkbox or radio (Workday's terms box) keeps the real input on top
+  // at opacity 0 and paints the box a person sees right under it, so a click on
+  // the box lands on the input. What a person sees there is that painted box, or
+  // else the input's own label, so the opacity test measures that instead.
+  if (opacity <= 0.05 && element instanceof HTMLInputElement && (element.type === 'checkbox' || element.type === 'radio') && area > 0) {
+    const opacityOf = (node: Element): number => {
+      let product = 1
+      for (let current: Element | null = node; current !== null; current = parentOf(current)) {
+        const value = Number.parseFloat(view.getComputedStyle(current).opacity)
+        if (Number.isFinite(value)) product *= value
+      }
+      return product
+    }
+    const painted = (node: Element): boolean => {
+      const box = node.getBoundingClientRect()
+      return box.width * box.height > 0 && view.getComputedStyle(node).visibility === 'visible' && opacityOf(node) > 0.05
+    }
+    const overlapsInput = (node: Element): boolean => {
+      const box = node.getBoundingClientRect()
+      const boxArea = box.width * box.height
+      const across = Math.max(0, Math.min(box.right, rect.right) - Math.max(box.left, rect.left))
+      const down = Math.max(0, Math.min(box.bottom, rect.bottom) - Math.max(box.top, rect.top))
+      // The box sits where the input is and is about its size; the page behind it is not a box.
+      return boxArea <= area * 4 && across * down >= Math.min(area, boxArea) / 2
+    }
+    const stack = doc.elementsFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+    const under = stack[0] === element ? stack[1] : undefined
+    const label = Array.from(element.labels ?? []).find(painted)
+    const standIn = under !== undefined && painted(under) && overlapsInput(under) ? under : label
+    if (standIn !== undefined) opacity = opacityOf(standIn)
+  }
   // A searchable dropdown's input (react-select, which Greenhouse uses for every
   // choice) autosizes to its text, so empty it is a caret wide; a person aims at
   // the control around it, so the area test measures the nearest enclosing box

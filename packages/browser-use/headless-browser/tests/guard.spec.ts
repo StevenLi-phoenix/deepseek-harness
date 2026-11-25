@@ -475,7 +475,7 @@ describe('blocked result', () => {
     })
     expect(blocked.failing).toContain('display')
     expect(blocked.factors?.display).toBe(0)
-    expect(blocked.hint).toContain('do not retry')
+    expect(blocked.hint).toContain('do not reach it another way')
   })
 
   it('leaves the score fields off a refusal that has no score', () => {
