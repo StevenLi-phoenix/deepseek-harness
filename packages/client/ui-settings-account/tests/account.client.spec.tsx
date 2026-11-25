@@ -536,6 +536,18 @@ it.each(['initializing', 'waiting-browser', 'exchanging'] as const)('shows %s an
   expect(operations.cancel).toHaveBeenCalledExactlyOnceWith('attempt')
 })
 
+it.each([en, zh])('completes a remote-page sign-in from the address pasted in Account settings', async (copy) => {
+  const pasteCallbackPrefix = 'http://127.0.0.1:3081/oauth/callback'
+  const pasted = `${pasteCallbackPrefix}?code=c&state=s`
+  const operations = mount({ status: 'signed-out', attempt: { id: 'attempt' as SignInAttemptId, phase: 'waiting-browser', pasteCallbackPrefix } }, copy)
+  fireEvent.change(screen.getByRole('textbox', { name: copy.pasteLabel }), { target: { value: pasted } })
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: copy.pasteSubmit })) })
+  expect(operations.completeSignIn).toHaveBeenCalledExactlyOnceWith('attempt', pasted)
+  cleanup()
+  mount({ status: 'signed-out', attempt: { id: 'attempt' as SignInAttemptId, phase: 'exchanging', pasteCallbackPrefix } }, copy)
+  expect(screen.queryByRole('textbox', { name: copy.pasteLabel })).toBeNull()
+})
+
 it('opens the authorization link with the active application palette and follows later switches', () => {
   const authorizeUrl = 'https://platform.deepseek.com/dsh/authorize?state=example'
   const operations = operationsOf({ status: 'signed-out', attempt: { id: 'attempt' as SignInAttemptId, phase: 'waiting-browser', authorizeUrl } })

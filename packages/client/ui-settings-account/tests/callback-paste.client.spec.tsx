@@ -32,6 +32,27 @@ it('submits the pasted address as typed', async () => {
   expect(screen.queryByRole('alert')).toBeNull()
 })
 
+it.each([en, zh])('submits once on Enter and marks the button busy until the Host answers', async (copy) => {
+  const answer = Promise.withResolvers<undefined>()
+  const submit = vi.fn((_url: string) => answer.promise)
+  const { input, button } = mount(submit, copy)
+  fireEvent.keyDown(input, { key: 'Enter' })
+  const pasted = `${prefix}?code=c&state=s`
+  fireEvent.change(input, { target: { value: pasted } })
+  fireEvent.keyDown(input, { key: 'a' })
+  expect(submit).not.toHaveBeenCalled()
+  fireEvent.keyDown(input, { key: 'Enter' })
+  expect(submit).toHaveBeenCalledExactlyOnceWith(pasted)
+  expect(button.getAttribute('aria-label')).toBe(copy.waiting)
+  expect(button.textContent).not.toContain(copy.pasteSubmit)
+  expect(input.hasAttribute('disabled')).toBe(true)
+  fireEvent.keyDown(input, { key: 'Enter' })
+  expect(submit).toHaveBeenCalledOnce()
+  await act(async () => { answer.resolve(undefined) })
+  expect(button.getAttribute('aria-label')).toBeNull()
+  expect(button.textContent).toBe(copy.pasteSubmit)
+})
+
 it.each([en, zh])('explains a rejected address and lets the user try again', async (copy) => {
   const submit = vi.fn<(url: string) => Promise<void>>().mockRejectedValueOnce(new Error('account complete failed')).mockResolvedValueOnce()
   const { input, button } = mount(submit, copy)
