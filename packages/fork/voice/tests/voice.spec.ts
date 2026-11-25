@@ -89,6 +89,20 @@ describe('speak', () => {
     expect(execFileSync(FFMPEG, ['-v', 'error', '-i', result.path, '-f', 'null', '-']).length).toBe(0)
   })
 
+  it.skipIf(process.platform === 'win32')('delivers the converter output as an owner-only mp3 and leaves no partial file', async () => {
+    const bin = mkdtempSync(join(tmpdir(), 'voice-ffmpeg-'))
+    dirs.push(bin)
+    const ffmpeg = join(bin, 'ffmpeg')
+    writeFileSync(ffmpeg, '#!/bin/sh\nfor last; do :; done\nprintf "mp3 from %s\\n" "$5" > "$last"\n', { mode: 0o755 })
+    const { voice, dir } = await mount({ tts: { format: 'mp3', ffmpegPath: ffmpeg } })
+    const result = await voice.speak('你好')
+    expect(result.format).toBe('mp3')
+    expect(result.path.endsWith('.mp3')).toBe(true)
+    expect(readFileSync(result.path, 'utf8')).toBe(`mp3 from ${result.path.replace(/\.mp3$/, '.wav')}\n`)
+    expect(statSync(result.path).mode & 0o777).toBe(0o600)
+    expect(readdirSync(join(dir, 'audio')).some(name => name.endsWith('.part'))).toBe(false)
+  })
+
   it('delivers the WAV and warns when the mp3 conversion fails', async () => {
     const { voice, logs } = await mount({ tts: { format: 'mp3', ffmpegPath: '/nonexistent/ffmpeg' } })
     const result = await voice.speak('你好')
