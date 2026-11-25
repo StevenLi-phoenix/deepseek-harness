@@ -100,7 +100,7 @@ export interface DownloadStoreOptions {
  * @returns a name with no separator, control character, or leading dot.
  */
 export function safeFileName(suggested: string): string {
-  const base = suggested.split(/[\\/]/u).pop() ?? ''
+  const base = suggested.replace(/^.*[\\/]/su, '')
   let name = base.replace(/[^\p{L}\p{N}._ -]/gu, '_').replace(/^[.\s_]+/u, '').trim()
   if (name.length > MAX_NAME) {
     const dot = name.lastIndexOf('.')

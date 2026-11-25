@@ -150,8 +150,8 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
   readonly #options: TabsOptions<Page>
   readonly #maxTabs: number
   readonly #navigationTimeoutMs: number
+  /** Open tabs in opening order: a Map keeps insertion order, and a removal leaves the rest in place. */
   readonly #tabs = new Map<string, Tab<Page>>()
-  readonly #order: string[] = []
   readonly #listeners = new Set<() => void>()
   #activeId: string | undefined
   #sequence = 0
@@ -176,18 +176,7 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
    * @returns every open tab in opening order, with its title, URL, loading flag, and whether it is active.
    */
   state(): TabInfo[] {
-    return this.#order.map((id) => {
-      const tab = this.#tabs.get(id)
-      /* v8 ignore next -- the order and map are updated together. */
-      if (tab === undefined) throw new Error(`tab ${id} is missing from its order`)
-      return {
-        id: tab.id,
-        title: tab.title,
-        url: tab.url,
-        loading: tab.loading,
-        active: id === this.#activeId,
-      }
-    })
+    return [...this.#tabs.values()].map(tab => this.#info(tab))
   }
 
   /**
@@ -221,12 +210,7 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
    */
   async page(id?: string): Promise<Page> {
     return this.#run(async () => {
-      if (id !== undefined) {
-        const tab = this.#tabs.get(id)
-        if (tab === undefined) throw new TabNotFoundError(id)
-        return tab.page
-      }
-      return (await this.#ensureActive()).page
+      return id === undefined ? (await this.#ensureActive()).page : this.#resolve(id).page
     })
   }
 
@@ -258,8 +242,8 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
    */
   async close(id?: string): Promise<ClosedTab> {
     return await this.#run(async () => {
-      const tab = id === undefined && this.#activeId === undefined ? await this.#ensureActive() : this.#resolve(id)
-      const index = this.#order.indexOf(tab.id)
+      const tab = id === undefined ? await this.#ensureActive() : this.#resolve(id)
+      const index = this.#position(tab)
       const replaced = this.#tabs.size === 1
       tab.closing = true
       let replacement: Tab<Page> | undefined
@@ -279,7 +263,7 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
       this.#remove(tab)
       if (replacement === undefined && this.#activeId === tab.id) {
         const opener = tab.openerId === undefined ? undefined : this.#tabs.get(tab.openerId)
-        this.#activeId = opener?.id ?? this.#order[Math.min(index, this.#order.length - 1)]
+        this.#activeId = opener?.id ?? this.#idAt(index)
       }
       this.#emit()
       return { closed: tab.id, replaced, tabs: this.state() }
@@ -306,7 +290,7 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
    */
   async navigate(url: string, id?: string): Promise<void> {
     await this.#run(async () => {
-      const tab = id === undefined && this.#activeId === undefined ? await this.#ensureActive() : this.#resolve(id)
+      const tab = id === undefined ? await this.#ensureActive() : this.#resolve(id)
       await this.#navigateTab(tab, url)
     })
   }
@@ -386,9 +370,12 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
     }
     // A popup is adopted on the tab queue; let an adoption already queued finish.
     await this.#run(async () => {})
-    return this.#popups
-      .filter(popup => popup.seq > mark && this.#tabs.has(popup.id))
-      .map(popup => ({ tab: popup.id, opener: popup.opener, url: this.#tabs.get(popup.id)?.url ?? '' }))
+    const open: PopupTab[] = []
+    for (const popup of this.#popups) {
+      const tab = this.#tabs.get(popup.id)
+      if (popup.seq > mark && tab !== undefined) open.push({ tab: popup.id, opener: popup.opener, url: tab.url })
+    }
+    return open
   }
 
   /** Stop reporting page events; the session's context close closes the pages. */
@@ -396,7 +383,6 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
     this.#disposed = true
     for (const tab of this.#tabs.values()) this.#detach(tab)
     this.#tabs.clear()
-    this.#order.length = 0
     this.#activeId = undefined
     this.#listeners.clear()
     for (const waiter of [...this.#popupWaiters]) waiter()
@@ -404,7 +390,7 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
 
   async #step(id: string | undefined, run: (page: Page) => Promise<unknown>): Promise<void> {
     await this.#run(async () => {
-      const tab = id === undefined && this.#activeId === undefined ? await this.#ensureActive() : this.#resolve(id)
+      const tab = id === undefined ? await this.#ensureActive() : this.#resolve(id)
       tab.loading = true
       this.#emit()
       try {
@@ -437,13 +423,9 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
   }
 
   async #ensureActive(): Promise<Tab<Page>> {
+    // The active id names an open tab whenever one is open, so no tab here means none is open.
     const current = this.#activeId === undefined ? undefined : this.#tabs.get(this.#activeId)
     if (current !== undefined) return current
-    const first = this.#order.map(id => this.#tabs.get(id)).find(tab => tab !== undefined)
-    if (first !== undefined) {
-      this.#activeId = first.id
-      return first
-    }
     const context = await this.#options.context()
     const tab = this.#adopt(await this.#firstPage(context))
     this.#activeId = tab.id
@@ -475,7 +457,6 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
       closing: false,
     }
     this.#tabs.set(id, tab)
-    this.#order.push(id)
     const onLoad = (): void => { this.#settle(tab) }
     const onNavigation = (): void => { this.#navigated(tab) }
     const onClose = (): void => { void this.#closed(tab) }
@@ -549,7 +530,7 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
     try {
       await this.#run(async () => {
         if (!this.#tabs.has(tab.id)) return
-        const index = this.#order.indexOf(tab.id)
+        const index = this.#position(tab)
         this.#remove(tab)
         // A page closed by the site itself must not leave the browser with no tab
         // or its tools with no page; replace it exactly as an explicit close would.
@@ -560,7 +541,7 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
         } else if (this.#activeId === tab.id) {
           // A sign-in popup closes itself when it is done; its opener carries on.
           const opener = tab.openerId === undefined ? undefined : this.#tabs.get(tab.openerId)
-          this.#activeId = opener?.id ?? this.#order[Math.min(index, this.#order.length - 1)]
+          this.#activeId = opener?.id ?? this.#idAt(index)
           if (opener !== undefined) {
             this.#options.log.info('headless-browser: popup %s closed; back on %s', tab.id, opener.id)
             await opener.page.bringToFront()
@@ -597,16 +578,20 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
   #remove(tab: Tab<Page>): void {
     this.#detach(tab)
     this.#tabs.delete(tab.id)
-    const index = this.#order.indexOf(tab.id)
-    if (index >= 0) this.#order.splice(index, 1)
   }
 
-  #resolve(id?: string): Tab<Page> {
-    if (id === undefined) {
-      const active = this.#activeId === undefined ? undefined : this.#tabs.get(this.#activeId)
-      if (active === undefined) throw new TabNotFoundError('active')
-      return active
-    }
+  /** Where one tab sits in the opening order. */
+  #position(tab: Tab<Page>): number {
+    return [...this.#tabs.keys()].indexOf(tab.id)
+  }
+
+  /** The tab now at one position of the opening order, or the last tab when the position is past the end. */
+  #idAt(index: number): string | undefined {
+    const ids = [...this.#tabs.keys()]
+    return ids[Math.min(index, ids.length - 1)]
+  }
+
+  #resolve(id: string): Tab<Page> {
     const tab = this.#tabs.get(id)
     if (tab === undefined) throw new TabNotFoundError(id)
     return tab

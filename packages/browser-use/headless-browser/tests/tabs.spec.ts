@@ -21,11 +21,30 @@ class FakePage implements TabsPage {
   #listeners = new Map<string, Set<(...args: never[]) => void>>()
   /** Set to make the next navigation reject, as a timeout or a refused URL would. */
   failNextNavigation: string | undefined
+  /** Set to make the next history step reject. */
+  failNextStep: string | undefined
+  /** Set to make the next close reject, as a page of a browser that went away does. */
+  failNextClose: string | undefined
+  /** Set to make every title read reject, as a page that closed mid-read does. */
+  failTitle = false
+  /** Set to make bringing the page to the front reject. */
+  failFront = false
+  /** Set to hold every navigation until it resolves. */
+  navigationGate: Promise<void> | undefined
+  /** Set to hold every title read until it resolves. */
+  titleGate: Promise<void> | undefined
+  /** Events the page fires while it closes, before its own close event. */
+  closingEvents: string[] = []
 
   url(): string { return this.#url }
-  async title(): Promise<string> { return this.#title }
+  async title(): Promise<string> {
+    await this.titleGate
+    if (this.failTitle) throw new Error('Target page, context or browser has been closed')
+    return this.#title
+  }
   isClosed(): boolean { return this.closed }
   async goto(url: string): Promise<unknown> {
+    await this.navigationGate
     if (this.failNextNavigation !== undefined) {
       const detail = this.failNextNavigation
       this.failNextNavigation = undefined
@@ -38,11 +57,19 @@ class FakePage implements TabsPage {
     this.emit('load')
     return null
   }
-  async goBack(): Promise<unknown> { this.emit('load'); return null }
-  async goForward(): Promise<unknown> { this.emit('load'); return null }
+  async goBack(): Promise<unknown> { return this.#step() }
+  async goForward(): Promise<unknown> { return this.#step() }
   async reload(): Promise<unknown> { this.emit('load'); return null }
-  async bringToFront(): Promise<void> {}
+  async bringToFront(): Promise<void> {
+    if (this.failFront) throw new Error('Target page, context or browser has been closed')
+  }
   async close(): Promise<void> {
+    if (this.failNextClose !== undefined) {
+      const detail = this.failNextClose
+      this.failNextClose = undefined
+      throw new Error(detail)
+    }
+    for (const event of this.closingEvents) this.emit(event)
     this.closed = true
     this.emit('close')
   }
@@ -59,14 +86,30 @@ class FakePage implements TabsPage {
   emit(event: string, ...args: never[]): void {
     for (const listener of [...this.#listeners.get(event) ?? []]) listener(...args)
   }
+  /** Open a window from this page, the way `window.open` reaches Playwright's `popup` event. */
+  openPopup(popup: FakePage): void {
+    for (const listener of [...this.#listeners.get('popup') ?? []]) (listener as (popup: FakePage) => void)(popup)
+  }
+  async #step(): Promise<unknown> {
+    if (this.failNextStep !== undefined) {
+      const detail = this.failNextStep
+      this.failNextStep = undefined
+      throw new Error(detail)
+    }
+    this.emit('load')
+    return null
+  }
 }
 
 /** The fake context: pages are created on demand and never disappear with the context. */
 class FakeContext implements TabsContext {
   readonly open: FakePage[] = []
   closed = false
+  /** Set to make every page creation fail, the way a browser that went away answers. */
+  failNewPage = false
   pages(): readonly TabsPage[] { return this.open }
   async newPage(): Promise<TabsPage> {
+    if (this.failNewPage) throw new Error('browserContext.newPage: Target page, context or browser has been closed')
     const page = new FakePage()
     this.open.push(page)
     return page
@@ -198,6 +241,162 @@ describe('browser tabs', () => {
     expect(tabs.state()).toHaveLength(1)
     expect(tabs.state()[0]?.active).toBe(true)
   })
+
+  it('closes the context\'s own first page when no tab was opened yet, and keeps a blank tab in its place', async () => {
+    const { context, tabs } = await boot()
+    const restored = new FakePage()
+    context.open.push(restored)
+    const closed = await tabs.close()
+    expect(closed).toMatchObject({ closed: 't1', replaced: true })
+    expect(closed.tabs.map(tab => [tab.id, tab.active])).toEqual([['t2', true]])
+    expect(restored.closed).toBe(true)
+  })
+
+  it('keeps a tab whose page refuses to close, reports why, and closes it on the next try', async () => {
+    const { context, tabs } = await boot()
+    await tabs.create(dataPage('one'))
+    await tabs.create(dataPage('two'))
+    const page = context.open[1]!
+    page.failNextClose = 'Target closed'
+    await expect(tabs.close('t2')).rejects.toThrow('Target closed')
+    expect(LOG.warn).toHaveBeenCalledWith('headless-browser: closing tab %s failed: %s', 't2', 'Target closed')
+    expect(tabs.state().map(tab => tab.id)).toEqual(['t1', 't2'])
+    expect(await tabs.close('t2')).toMatchObject({ closed: 't2', replaced: false })
+  })
+
+  it('steps back and forward, opening a tab when none is open, and names the address of a refused step', async () => {
+    const { context, tabs } = await boot()
+    await tabs.back()
+    expect(tabs.state().map(tab => tab.id)).toEqual(['t1'])
+    await tabs.command('forward')
+    await tabs.command('back', 't1')
+    context.open[0]!.failNextStep = 'net::ERR_ABORTED'
+    const failure = await tabs.forward('t1').catch((error: unknown) => error)
+    expect(failure).toBeInstanceOf(TabNavigationError)
+    expect(String(failure)).toContain('opening about:blank failed: net::ERR_ABORTED')
+    expect(tabs.state()[0]?.loading).toBe(false)
+  })
+
+  it('activates the active tab and navigates it by command, and refuses a navigation without an address', async () => {
+    const { tabs } = await boot()
+    await tabs.command('new', undefined, dataPage('one'))
+    await tabs.command('activate')
+    await tabs.command('navigate', undefined, dataPage('two'))
+    expect(tabs.state()).toMatchObject([{ id: 't1', title: 'two', active: true }])
+    await expect(tabs.command('navigate')).rejects.toThrow(/the address is empty/u)
+  })
+
+  it('names a tab that is not open for every operation that takes a tab id', async () => {
+    const { tabs } = await boot()
+    await tabs.create()
+    await expect(tabs.activate('t9')).rejects.toBeInstanceOf(TabNotFoundError)
+    await expect(tabs.close('t9')).rejects.toBeInstanceOf(TabNotFoundError)
+    await expect(tabs.navigate(dataPage('x'), 't9')).rejects.toBeInstanceOf(TabNotFoundError)
+    await expect(tabs.back('t9')).rejects.toBeInstanceOf(TabNotFoundError)
+  })
+
+  it('keeps telling the other listeners when one throws, and stops telling one that unsubscribed', async () => {
+    const { tabs } = await boot()
+    let changes = 0
+    let unsubscribed = 0
+    tabs.onChange(() => { throw new Error('the strip is gone') })
+    tabs.onChange(() => { changes += 1 })
+    const stop = tabs.onChange(() => { unsubscribed += 1 })
+    stop()
+    await tabs.page()
+    expect(changes).toBeGreaterThan(0)
+    expect(unsubscribed).toBe(0)
+    expect(LOG.warn).toHaveBeenCalledWith('headless-browser: tab listener failed: %s', 'the strip is gone')
+  })
+
+  it('reports a last tab the site closed that the browser could not replace, and keeps no tab', async () => {
+    const { context, tabs } = await boot()
+    await tabs.create()
+    context.failNewPage = true
+    await context.open[0]!.close()
+    await vi.waitFor(() => {
+      expect(LOG.warn).toHaveBeenCalledWith('headless-browser: replacing the closed tab %s failed: %s', 't1', expect.stringContaining('has been closed'))
+    })
+    expect(tabs.state()).toEqual([])
+  })
+
+  it('keeps the last title of a page whose title cannot be read', async () => {
+    const { context, tabs } = await boot()
+    const page = new FakePage()
+    page.failTitle = true
+    context.open.push(page)
+    await tabs.create(dataPage('unreadable'))
+    expect(tabs.state()).toMatchObject([{ title: '', url: dataPage('unreadable'), loading: false }])
+  })
+
+  it('reports nothing about a tab the browser let go while it navigated or read its title', async () => {
+    const { context, tabs } = await boot()
+    const navigation = Promise.withResolvers<undefined>()
+    await tabs.create()
+    let changes = 0
+    tabs.onChange(() => { changes += 1 })
+    context.open[0]!.navigationGate = navigation.promise
+    const navigating = tabs.navigate(dataPage('late'))
+    await vi.waitFor(() => { expect(tabs.state()[0]?.loading).toBe(true) })
+    tabs.dispose()
+    navigation.resolve(undefined)
+    await navigating
+    expect(changes).toBe(1)
+    expect(tabs.state()).toEqual([])
+
+    const next = await boot()
+    const title = Promise.withResolvers<undefined>()
+    const slow = new FakePage()
+    slow.titleGate = title.promise
+    next.context.open.push(slow)
+    await next.tabs.create()
+    next.tabs.dispose()
+    title.resolve(undefined)
+    await next.tabs.popupsSince(next.tabs.popupMark(), 0)
+    expect(next.tabs.state()).toEqual([])
+  })
+
+  it('drops a self-close queued behind an explicit close of the same tab', async () => {
+    const { context, tabs } = await boot()
+    await tabs.create(dataPage('one'))
+    await tabs.create(dataPage('two'))
+    const navigation = Promise.withResolvers<undefined>()
+    context.open[0]!.navigationGate = navigation.promise
+    const navigating = tabs.navigate(dataPage('three'), 't1')
+    const closing = tabs.close('t2')
+    // The site closes the window while the explicit close still waits its turn.
+    context.open[1]!.emit('close')
+    navigation.resolve(undefined)
+    await navigating
+    expect(await closing).toMatchObject({ closed: 't2', replaced: false })
+    await tabs.popupsSince(tabs.popupMark(), 0)
+    expect(tabs.state().map(tab => tab.id)).toEqual(['t1'])
+    expect(context.open).toHaveLength(2)
+  })
+
+  it('keeps the active tab when another closes itself, and moves to the next tab when the active one does', async () => {
+    const { context, tabs } = await boot()
+    await tabs.create(dataPage('one'))
+    await tabs.create(dataPage('two'))
+    await tabs.create(dataPage('three'))
+    await tabs.activate('t1')
+    await context.open[1]!.close()
+    await vi.waitFor(() => { expect(tabs.state().map(tab => tab.id)).toEqual(['t1', 't3']) })
+    expect(tabs.state().find(tab => tab.active)?.id).toBe('t1')
+    await context.open[0]!.close()
+    await vi.waitFor(() => { expect(tabs.state().map(tab => [tab.id, tab.active])).toEqual([['t3', true]]) })
+  })
+
+  it('ignores the page events a tab fires while it is being closed', async () => {
+    const { context, tabs } = await boot()
+    await tabs.create(dataPage('one'))
+    await tabs.create(dataPage('two'))
+    context.open[1]!.closingEvents = ['load', 'framenavigated']
+    let changes = 0
+    tabs.onChange(() => { changes += 1 })
+    await tabs.close('t2')
+    expect(changes).toBe(1)
+  })
 })
 
 describe('popups', () => {
@@ -232,5 +431,51 @@ describe('popups', () => {
     expect((await tabs.popupsSince(mark, 50)).map(entry => entry.tab)).toEqual(['t2'])
     await tabs.close('t2')
     expect(tabs.state().map(tab => [tab.id, tab.active])).toEqual([['t1', true]])
+  })
+
+  it('adopts a window once, and never one that already closed or that arrives after the browser went away', async () => {
+    const { context, tabs } = await boot()
+    await tabs.create(dataPage('opener'))
+    const opener = context.open[0]!
+    const popup = new FakePage()
+    opener.openPopup(popup)
+    opener.openPopup(popup)
+    const gone = new FakePage()
+    gone.closed = true
+    opener.openPopup(gone)
+    expect((await tabs.popupsSince(0, 0)).map(entry => entry.tab)).toEqual(['t2'])
+    expect(tabs.state()).toHaveLength(2)
+    tabs.dispose()
+    opener.openPopup(new FakePage())
+    expect(await tabs.popupsSince(0, 0)).toEqual([])
+  })
+
+  it('reports only the newest popups once a page opened more than four per tab slot', async () => {
+    const context = new FakeContext()
+    const tabs = new BrowserTabs({ context: async () => context, log: LOG, maxTabs: 1 })
+    await tabs.create(dataPage('opener'))
+    for (let index = 0; index < 5; index += 1) context.open[0]!.openPopup(new FakePage())
+    expect((await tabs.popupsSince(0, 0)).map(entry => entry.tab)).toEqual(['t3', 't4', 't5', 't6'])
+    expect(tabs.state()).toHaveLength(6)
+  })
+
+  it('reports a popup it could not bring forward, and still wakes the click that waits for one', async () => {
+    const { context, tabs } = await boot()
+    await tabs.create(dataPage('opener'))
+    const mark = tabs.popupMark()
+    const waiting = tabs.popupsSince(mark, 60_000)
+    const popup = new FakePage()
+    popup.failFront = true
+    context.open[0]!.openPopup(popup)
+    expect((await waiting).map(entry => entry.tab)).toEqual(['t2'])
+    expect(LOG.warn).toHaveBeenCalledWith('headless-browser: adopting a popup of %s failed: %s', 't1', 'Target page, context or browser has been closed')
+  })
+
+  it('stops waiting for a popup when the browser goes away', async () => {
+    const { tabs } = await boot()
+    await tabs.create()
+    const waiting = tabs.popupsSince(tabs.popupMark(), 60_000)
+    tabs.dispose()
+    expect(await waiting).toEqual([])
   })
 })

@@ -144,6 +144,28 @@ async function eventually(condition: () => boolean | Promise<boolean>, timeoutMs
   throw new Error('the condition did not hold before the deadline')
 }
 
+/**
+ * Wait for one step, failing with the step's name when it outlives its deadline,
+ * so a stalled step names itself instead of running the test into its timeout.
+ * @param step - what the test was waiting for.
+ * @param work - the step.
+ * @param ms - how long it may take.
+ * @returns the step's result.
+ */
+async function within<T>(step: string, work: Promise<T>, ms = 30_000): Promise<T> {
+  let timer: NodeJS.Timeout | undefined
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => { reject(new Error(`${step} did not finish within ${String(ms)}ms`)) }, ms)
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 interface LiveSocket {
   readonly socket: WebSocket
   readonly messages: unknown[]
@@ -378,15 +400,19 @@ describe.skipIf(!AVAILABLE)('session warming over a real browser', () => {
     const address = server.address()
     if (address === null || typeof address === 'string') throw new Error('the test server did not bind a port')
     try {
-      await app.browser.open(`http://127.0.0.1:${String(address.port)}/`)
-      const result = await app.browser.cookies('127.0.0.1')
+      await within('opening the cookie page', app.browser.open(`http://127.0.0.1:${String(address.port)}/`))
+      const result = await within('reading the cookies', app.browser.cookies('127.0.0.1'))
       expect(result.cookies.map(cookie => cookie.name).sort()).toEqual(['sid', 'theme'])
       expect(result.toHeader).toContain('sid=abc123')
       expect(result.cookies.every(cookie => cookie.domain.includes('127.0.0.1'))).toBe(true)
-      const elsewhere = await app.browser.cookies('example.com')
+      const elsewhere = await within('reading another domain', app.browser.cookies('example.com'))
       expect(elsewhere).toEqual({ cookies: [], toHeader: '' })
     } finally {
-      await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+      // The browser is still open here, and a connection it has mid-request (a
+      // favicon fetch) keeps `server.close()` waiting forever, because close also
+      // stops the server's request timeouts. Dropping every connection ends it.
+      server.closeAllConnections()
+      await within('closing the cookie server', new Promise<void>((resolve) => { server.close(() => { resolve() }) }))
     }
   }, 120_000)
 })

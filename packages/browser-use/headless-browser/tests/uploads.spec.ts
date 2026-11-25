@@ -6,7 +6,7 @@
 
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { MAX_UPLOAD_FILES, UploadPolicy, UploadRefusedError } from '../src/uploads.ts'
 
@@ -58,5 +58,16 @@ describe('UploadPolicy', () => {
 
   it('refuses everything when no directory is configured', async () => {
     await expect(new UploadPolicy([], 25).resolve(['/etc/hosts'])).rejects.toThrow(/no upload directory/u)
+  })
+
+  it('names its directories as absolute paths, the form an error message shows', () => {
+    const dirs = layout()
+    expect(new UploadPolicy([join(dirs.letters, '..', 'uploads'), dirs.letters], 25).dirs).toEqual([resolve(dirs.uploads), resolve(dirs.letters)])
+  })
+
+  it('reports a bare name as missing while its upload directory does not exist yet', async () => {
+    const dirs = layout()
+    const policy = new UploadPolicy([join(dirs.root, 'not-created')], 25)
+    await expect(policy.resolve(['resume.pdf'])).rejects.toThrow(/resume\.pdf does not exist; files that may be attached live in .*not-created/u)
   })
 })

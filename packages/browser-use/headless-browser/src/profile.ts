@@ -116,9 +116,9 @@ export async function listProcesses(): Promise<readonly ProfileProcess[]> {
 export function parseProcessList(text: string): ProfileProcess[] {
   const rows: ProfileProcess[] = []
   for (const line of text.split('\n')) {
-    const match = /^\s*(\d+)\s+(\d+)\s+(.*)$/u.exec(line)
+    const match = /^\s*(\d+)\s+(\d+)\s+/u.exec(line)
     if (match === null) continue
-    const command = match[3] ?? ''
+    const command = line.slice(match[0].length)
     if (command.trim() === '') continue
     rows.push({ pid: Number(match[1]), ppid: Number(match[2]), command })
   }

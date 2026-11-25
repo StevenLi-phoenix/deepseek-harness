@@ -5,11 +5,11 @@
  * and the profile's own preferences say PDFs download and nothing prompts.
  */
 
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { DownloadStore, ensureDownloadPrefs, isDownloadStarting, plainUrl, safeFileName, type DownloadLike } from '../src/downloads.ts'
+import { DOWNLOAD_TIMEOUT_MS, DownloadStore, ensureDownloadPrefs, isDownloadStarting, plainUrl, safeFileName, type DownloadLike } from '../src/downloads.ts'
 
 const roots: string[] = []
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
@@ -25,20 +25,40 @@ function logger() {
 }
 
 /** A Playwright download whose file already sits at `temp`. */
-interface FakeOptions { name?: string; url?: string; bytes?: number; path?: string | null; failure?: string }
+interface FakeOptions {
+  name?: string
+  url?: string
+  bytes?: number
+  path?: string | null
+  failure?: string
+  /** The browser never finishes the file, and refuses the cancel. */
+  stalled?: boolean
+  /** Deleting the browser's own copy fails, as it does after the browser closed. */
+  deleteFails?: boolean
+}
 
-function fakeDownload(root: string, options: FakeOptions = {}): DownloadLike & { deleted: boolean } {
+function fakeDownload(root: string, options: FakeOptions = {}): DownloadLike & { deleted: boolean; cancelled: boolean } {
   const temp = join(root, `temp-${String(Math.random()).slice(2)}`)
   writeFileSync(temp, Buffer.alloc(options.bytes ?? 5, 'x'))
-  const state = { deleted: false }
+  const state = { deleted: false, cancelled: false }
   return {
     get deleted() { return state.deleted },
+    get cancelled() { return state.cancelled },
     url: () => options.url ?? 'https://example.com/files/a.pdf?token=secret',
     suggestedFilename: () => options.name ?? 'a.pdf',
-    path: async () => options.path === undefined ? temp : options.path,
+    path: async () => {
+      if (options.stalled === true) return await new Promise<never>(() => {})
+      return options.path === undefined ? temp : options.path
+    },
     saveAs: async (dest: string) => { writeFileSync(dest, readFileSync(temp)) },
-    delete: async () => { state.deleted = true },
-    cancel: async () => {},
+    delete: async () => {
+      state.deleted = true
+      if (options.deleteFails === true) throw new Error('Target page, context or browser has been closed')
+    },
+    cancel: async () => {
+      state.cancelled = true
+      if (options.stalled === true) throw new Error('the download is gone')
+    },
     failure: async () => options.failure ?? null,
   }
 }
@@ -74,6 +94,18 @@ describe('safeFileName', () => {
     const name = safeFileName(`${'a'.repeat(300)}.pdf`)
     expect(name.length).toBeLessThanOrEqual(120)
     expect(name.endsWith('.pdf')).toBe(true)
+  })
+
+  it('cuts a long name without an extension, or with one too long to be one, to the length limit', () => {
+    expect(safeFileName('a'.repeat(300))).toBe('a'.repeat(120))
+    const name = safeFileName(`${'a'.repeat(200)}.${'b'.repeat(20)}`)
+    expect(name).toHaveLength(120)
+    expect(name).toBe('a'.repeat(120))
+  })
+
+  it('keeps the segment after the last separator even when the name spans lines', () => {
+    expect(safeFileName('reports\nq3/summary.pdf')).toBe('summary.pdf')
+    expect(safeFileName('a\\b/c\\d.txt')).toBe('d.txt')
   })
 })
 
@@ -145,6 +177,80 @@ describe('DownloadStore', () => {
     expect((await kept.since(mark, 0))[0]).toMatchObject({ error: 'canceled' })
   })
 
+  it('waits for the next download when none is in flight, and lists nothing when none starts', async () => {
+    const root = tempRoot()
+    const kept = store(root)
+    const page = fakePage()
+    kept.attach(page)
+    expect(await kept.recent(10, 30)).toEqual([])
+    const pending = kept.recent(10, 2_000)
+    page.fire(fakeDownload(root, { name: 'late.pdf' }))
+    expect((await pending).map(record => record.filename)).toEqual(['late.pdf'])
+  })
+
+  it('remembers only the newest fifty downloads', async () => {
+    const root = tempRoot()
+    const kept = store(root)
+    const page = fakePage()
+    kept.attach(page)
+    for (let index = 1; index <= 51; index += 1) {
+      const mark = kept.mark()
+      page.fire(fakeDownload(root, { name: `f${String(index)}.pdf` }))
+      await kept.since(mark, 0)
+    }
+    const records = await kept.recent(100, 0)
+    expect(records).toHaveLength(50)
+    expect(records[0]?.filename).toBe('f2.pdf')
+    expect(records.at(-1)?.filename).toBe('f51.pdf')
+  })
+
+  it('keeps a file and reports an oversized one even when the browser cannot delete its own copy', async () => {
+    const root = tempRoot()
+    const kept = store(root, { maxBytes: 10 })
+    const page = fakePage()
+    kept.attach(page)
+    const mark = kept.mark()
+    page.fire(fakeDownload(root, { bytes: 4, deleteFails: true }))
+    page.fire(fakeDownload(root, { bytes: 11, deleteFails: true }))
+    const records = await kept.since(mark, 0)
+    const small = records.find(record => record.seq === 1)
+    expect(small?.bytes).toBe(4)
+    expect(existsSync(small!.path!)).toBe(true)
+    expect(records.find(record => record.seq === 2)?.error).toContain('over the 10-byte limit')
+  })
+
+  it('cancels a download that does not finish in time and reports it as failed', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const root = tempRoot()
+      const log = { debug: vi.fn(), info: vi.fn(), warn: vi.fn() }
+      const kept = new DownloadStore({ dir: join(root, 'kept'), maxBytes: 1024, retainMs: 0, log })
+      const page = fakePage()
+      kept.attach(page)
+      const download = fakeDownload(root, { stalled: true })
+      const mark = kept.mark()
+      page.fire(download)
+      const pending = kept.since(mark, 0)
+      await vi.advanceTimersByTimeAsync(DOWNLOAD_TIMEOUT_MS)
+      const [record] = await pending
+      expect(record?.error).toBe(`the download did not finish within ${String(DOWNLOAD_TIMEOUT_MS / 1000)}s and was cancelled`)
+      expect(download.cancelled).toBe(true)
+      expect(log.warn).toHaveBeenCalledWith('headless-browser: download #%d from %s failed: %s', 1, 'https://example.com/files/a.pdf', record?.error)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('reports a download the browser dropped without saying why', async () => {
+    const root = tempRoot()
+    const kept = store(root)
+    const page = fakePage()
+    kept.attach(page)
+    const mark = kept.mark()
+    page.fire(fakeDownload(root, { path: null }))
+    expect((await kept.since(mark, 0))[0]).toMatchObject({ error: 'the browser reported no file' })
+  })
+
   it('stops listening when the tab lets the page go', () => {
     const kept = store(tempRoot())
     const page = fakePage()
@@ -172,6 +278,35 @@ describe('DownloadStore', () => {
     await kept.since(mark, 0)
     expect(existsSync(old)).toBe(false)
     expect(existsSync(fresh)).toBe(true)
+  })
+
+  it('saves the first download into a directory that pruning finds missing', async () => {
+    const root = tempRoot()
+    const kept = store(root, { retainMs: 7 * 86_400_000 })
+    const page = fakePage()
+    kept.attach(page)
+    const mark = kept.mark()
+    page.fire(fakeDownload(root))
+    const [record] = await kept.since(mark, 0)
+    expect(record?.path?.startsWith(join(root, 'kept'))).toBe(true)
+  })
+
+  it('logs an entry it cannot read while pruning and keeps the download', async () => {
+    const root = tempRoot()
+    const dir = join(root, 'kept')
+    mkdirSync(dir)
+    const broken = join(dir, 'broken.pdf')
+    symlinkSync(join(dir, 'nowhere'), broken)
+    const log = { debug: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const kept = new DownloadStore({ dir, maxBytes: 1024, retainMs: 7 * 86_400_000, log })
+    const page = fakePage()
+    kept.attach(page)
+    const mark = kept.mark()
+    page.fire(fakeDownload(root))
+    const [record] = await kept.since(mark, 0)
+    expect(record?.path).toBeDefined()
+    expect(log.warn).toHaveBeenCalledWith('headless-browser: pruning %s failed: %s', broken, expect.stringContaining('ENOENT'))
+    expect(log.info).not.toHaveBeenCalledWith('headless-browser: removed %d downloads older than %d days', expect.anything(), expect.anything())
   })
 })
 
@@ -206,5 +341,15 @@ describe('ensureDownloadPrefs', () => {
     const log = logger()
     expect(await ensureDownloadPrefs(broken, true, log)).toBe(false)
     expect(readFileSync(join(broken, 'Default', 'Preferences'), 'utf8')).toBe('{not json')
+  })
+
+  it('never overwrites preferences that are JSON but not an object', async () => {
+    const root = tempRoot()
+    mkdirSync(join(root, 'Default'))
+    writeFileSync(join(root, 'Default', 'Preferences'), '[1,2]')
+    const log = { debug: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    expect(await ensureDownloadPrefs(root, true, log)).toBe(false)
+    expect(readFileSync(join(root, 'Default', 'Preferences'), 'utf8')).toBe('[1,2]')
+    expect(log.warn).toHaveBeenCalledWith('headless-browser: leaving the profile preferences alone, they do not read as JSON: %s', 'not a JSON object')
   })
 })

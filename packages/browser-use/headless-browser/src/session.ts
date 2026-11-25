@@ -716,9 +716,11 @@ export class HeadlessBrowserSession {
     }
     const index = matchOption(options, text)
     const option = index === undefined ? undefined : options[index]
-    this.#log.info('headless-browser: %s listed %d option(s) after typing; %s', ref, options.length,
-      option === undefined ? 'none chosen' : `choosing option ${String((index ?? 0) + 1)}`)
-    if (option === undefined) return undefined
+    if (index === undefined || option === undefined) {
+      this.#log.info('headless-browser: %s listed %d option(s) after typing; none chosen', ref, options.length)
+      return undefined
+    }
+    this.#log.info('headless-browser: %s listed %d option(s) after typing; choosing option %d', ref, options.length, index + 1)
     const locator = resolution.scope.locator(`[id=${JSON.stringify(option.value)}]`)
     const facts = readElementFacts(await locator.evaluate(probeElement))
     this.#accept(this.#guard.decideTarget({
@@ -1077,12 +1079,13 @@ export class HeadlessBrowserSession {
    * @returns whether a context is open, its session id, and the active tab's URL.
    */
   status(): BrowserStatus {
-    if (this.#context === undefined) return { launched: false }
+    // A launch sets the context and its session id together.
+    if (this.#context === undefined || this.#sessionId === undefined) return { launched: false }
     const tabs = this.#tabs?.state() ?? []
     const active = tabs.find(tab => tab.active)
     return {
       launched: true,
-      ...this.#sessionId === undefined ? {} : { sessionId: this.#sessionId },
+      sessionId: this.#sessionId,
       ...active === undefined || active.url === '' ? {} : { url: active.url },
       tabs: tabs.length,
     }
@@ -1168,7 +1171,8 @@ export class HeadlessBrowserSession {
    * @param reason - what went wrong, for the log.
    */
   async #relaunch(reason: string): Promise<void> {
-    if (this.#closed) throw new BrowserUnavailableError('the browser plugin is shutting down')
+    // `#guarded` checked `#closed` in the same tick, and the relaunch's own
+    // `ensure()` refuses once a shutdown began during the wait.
     const previous = this.#context
     const previousPid = this.#browserPid
     this.#log.warn('headless-browser: recovering the browser after %s; profile %s', reason, this.#config.profileDir)
@@ -1196,7 +1200,7 @@ export class HeadlessBrowserSession {
         this.#log.warn('headless-browser: a relaunch listener failed: %s', firstLine(error))
       }
     }
-    this.#log.info('headless-browser: the browser is back as session %s', this.#sessionId ?? 'unknown')
+    this.#log.info('headless-browser: the browser is back as session %s', this.#sessionId)
   }
 
   /**
@@ -1334,7 +1338,7 @@ async function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
       }),
     ])
   } finally {
-    if (timer !== undefined) clearTimeout(timer)
+    clearTimeout(timer)
   }
 }
 
