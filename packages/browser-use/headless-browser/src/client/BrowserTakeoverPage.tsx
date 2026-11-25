@@ -114,8 +114,8 @@ export function BrowserTakeoverPage({ t }: BrowserTakeoverViewProps) {
     let stopped = false
     let retry: ReturnType<typeof setTimeout> | undefined
     let socket: WebSocket | undefined
+    // Runs at mount and from the one pending retry, which the cleanup clears.
     const connect = (): void => {
-      if (stopped) return
       socket = new WebSocket(liveSocketUrl(window.location))
       socketRef.current = socket
       socket.onopen = () => {
@@ -193,8 +193,8 @@ export function BrowserTakeoverPage({ t }: BrowserTakeoverViewProps) {
   // React listens for wheel on the root passively, so a page that must not scroll under the
   // pointer needs its own non-passive listener.
   useEffect(() => {
+    // The stage renders unconditionally, so it is attached by the time this effect runs.
     const stage = stageRef.current
-    if (stage === null) return
     const onWheel = (event: globalThis.WheelEvent): void => {
       const { holder: current, tabId, metadata } = latest.current
       const image = imageRef.current
@@ -204,18 +204,15 @@ export function BrowserTakeoverPage({ t }: BrowserTakeoverViewProps) {
       event.preventDefault()
       send({ ...message, ...tabId === undefined ? {} : { tabId } })
     }
-    stage.addEventListener('wheel', onWheel, { passive: false })
-    return () => { stage.removeEventListener('wheel', onWheel) }
+    stage?.addEventListener('wheel', onWheel, { passive: false })
+    return () => { stage?.removeEventListener('wheel', onWheel) }
   }, [send])
-
-  const imageRect = (): DOMRect | undefined => imageRef.current?.getBoundingClientRect()
 
   const pointer = (kind: 'down' | 'up' | 'move') => (event: PointerEvent<HTMLElement>): void => {
     if (kind === 'down') stageRef.current?.focus()
-    if (holder !== 'human' || frame === undefined) return
-    const rect = imageRect()
-    if (rect === undefined) return
-    const message = mouseMessage(kind, event, rect, frame.metadata)
+    const image = imageRef.current
+    if (holder !== 'human' || frame === undefined || image === null) return
+    const message = mouseMessage(kind, event, image.getBoundingClientRect(), frame.metadata)
     if (message === undefined) return
     if (kind === 'down') {
       const now = Date.now()

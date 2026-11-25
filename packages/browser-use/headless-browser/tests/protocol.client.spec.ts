@@ -49,6 +49,12 @@ describe('decodeServerMessage', () => {
         holder: 'agent',
         tabs: [{ id: 't1', title: '', url: '', loading: false, active: false }],
       })
+    expect(decodeServerMessage(JSON.stringify({ type: 'state', holder: 'agent', tabs: [null, 'not a tab', [], { id: 't2', title: 'Two' }] })))
+      .toEqual({
+        type: 'state',
+        holder: 'agent',
+        tabs: [{ id: 't2', title: 'Two', url: '', loading: false, active: false }],
+      })
   })
 
   it('reads a frame with the geometry pointer input is scaled by', () => {
@@ -107,6 +113,11 @@ describe('pointer mapping', () => {
     expect(pagePoint(RECT, METADATA, Number.NaN, 10)).toBeUndefined()
   })
 
+  it('keeps a point inside the page when the frame box has no finite position', () => {
+    expect(pagePoint({ ...RECT, left: Number.NaN }, METADATA, 320, 200)).toEqual({ x: 0, y: 400 })
+    expect(pagePoint({ ...RECT, top: Number.POSITIVE_INFINITY }, METADATA, 320, 200)).toEqual({ x: 640, y: 0 })
+  })
+
   it('packs the modifier keys the Host expects', () => {
     expect(modifiersOf(FLAGS)).toBe(0)
     expect(modifiersOf({ altKey: true, ctrlKey: true, metaKey: true, shiftKey: true })).toBe(15)
@@ -121,6 +132,14 @@ describe('pointer mapping', () => {
     expect(up).toMatchObject({ button: 'right', clickCount: 1 })
     expect(move).toMatchObject({ button: 'none', clickCount: 0, x: 20, y: 40 })
     for (const message of [down, up, move]) expect(decodeClientMessage(message)).toEqual(message)
+  })
+
+  it('presses no button for a back or forward button and releases the left one', () => {
+    const down = mouseMessage('down', { ...FLAGS, clientX: 320, clientY: 200, button: 3, buttons: 8 }, RECT, METADATA)
+    const up = mouseMessage('up', { ...FLAGS, clientX: 320, clientY: 200, button: 4, buttons: 0 }, RECT, METADATA)
+    expect(down).toMatchObject({ event: 'down', button: 'none', buttons: 0 })
+    expect(up).toMatchObject({ event: 'up', button: 'left', buttons: 0 })
+    for (const message of [down, up]) expect(decodeClientMessage(message)).toEqual(message)
   })
 
   it('maps no pointer event before the frame is painted', () => {

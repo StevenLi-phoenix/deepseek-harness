@@ -56,7 +56,12 @@ class FakeSocket {
 
   /** Deliver one Host message. */
   deliver(message: unknown): void {
-    act(() => { this.onmessage?.({ data: JSON.stringify(message) }) })
+    this.deliverText(JSON.stringify(message))
+  }
+
+  /** Deliver raw socket text, such as a frame a proxy truncated. */
+  deliverText(data: string): void {
+    act(() => { this.onmessage?.({ data }) })
   }
 
   /** Everything the page sent after `from`, decoded. */
@@ -80,10 +85,16 @@ function paintedFrame(): HTMLImageElement {
 
 const stage = (): HTMLElement => screen.getByRole('application')
 
+/** The pointer-capture calls the page makes, recorded per test. */
+const setPointerCapture = vi.fn()
+const releasePointerCapture = vi.fn()
+
 beforeEach(() => {
   // jsdom has no pointer capture; every browser the page runs in has it.
-  Object.defineProperty(Element.prototype, 'setPointerCapture', { configurable: true, value: vi.fn() })
-  Object.defineProperty(Element.prototype, 'releasePointerCapture', { configurable: true, value: vi.fn() })
+  setPointerCapture.mockClear()
+  releasePointerCapture.mockClear()
+  Object.defineProperty(Element.prototype, 'setPointerCapture', { configurable: true, value: setPointerCapture })
+  Object.defineProperty(Element.prototype, 'releasePointerCapture', { configurable: true, value: releasePointerCapture })
   FakeSocket.instances.length = 0
   vi.stubGlobal('WebSocket', FakeSocket)
   vi.stubGlobal('fetch', vi.fn(async () => ({
@@ -289,5 +300,302 @@ describe('浏览器接管 in-app page', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+/** One open live socket, with the user holding control of a single active tab `t1`. */
+function holdTab(tab: { title?: string; url?: string } = {}): FakeSocket {
+  renderPage()
+  const socket = FakeSocket.instances[0]!
+  socket.open()
+  socket.deliver({
+    type: 'state', holder: 'human',
+    tabs: [{ id: 't1', title: tab.title ?? 'Alpha', url: tab.url ?? 'https://alpha.example/', loading: false, active: true }],
+  })
+  return socket
+}
+
+/** Advance fake time by `ms`, then let the status poll's pending reads settle. */
+async function advance(ms: number): Promise<void> {
+  await act(async () => { await vi.advanceTimersByTimeAsync(ms) })
+}
+
+describe('浏览器接管 live socket lifecycle', () => {
+  it('sends nothing while the live socket is still connecting', () => {
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: '接管' }))
+    expect(FakeSocket.instances[0]!.sent).toEqual([])
+  })
+
+  it('ignores socket text the Host never sends', () => {
+    renderPage()
+    const socket = FakeSocket.instances[0]!
+    socket.open()
+    socket.deliverText('{"type":"frame","da')
+    socket.deliver({ type: 'close' })
+    expect(screen.getByText('agent 控制')).toBeDefined()
+    expect(screen.getByText('等待浏览器…')).toBeDefined()
+  })
+
+  it('closes the live socket when the page goes away and opens no new one', () => {
+    vi.useFakeTimers()
+    try {
+      const view = renderPage()
+      const socket = FakeSocket.instances[0]!
+      socket.open()
+      view.unmount()
+      expect(socket.readyState).toBe(3)
+      // The browser reports the close the page asked for.
+      act(() => { socket.onclose?.() })
+      act(() => { vi.advanceTimersByTime(1_500) })
+      expect(FakeSocket.instances).toHaveLength(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('cancels a pending reconnect when the page goes away', () => {
+    vi.useFakeTimers()
+    try {
+      const view = renderPage()
+      const socket = FakeSocket.instances[0]!
+      socket.open()
+      act(() => { socket.onclose?.() })
+      view.unmount()
+      act(() => { vi.advanceTimersByTime(1_500) })
+      expect(FakeSocket.instances).toHaveLength(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('浏览器接管 status poll', () => {
+  it('polls the status route every five seconds and takes the holder from it while the socket is down', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(Response.json({ holder: 'agent', viewers: 1 }))
+        .mockResolvedValueOnce(Response.json({ holder: 'human', reason: '用户在付款', url: 'https://example.com/pay', viewers: 2 }))
+      renderPage()
+      await advance(0)
+      expect(screen.getByText('1 个查看者')).toBeDefined()
+      expect(screen.getByText('agent 控制')).toBeDefined()
+      await advance(5_000)
+      expect(fetch).toHaveBeenCalledTimes(2)
+      expect(screen.getByText('2 个查看者')).toBeDefined()
+      expect(screen.getByText('你控制')).toBeDefined()
+      expect(screen.getByText('用户在付款')).toBeDefined()
+      expect(screen.getByDisplayValue('https://example.com/pay')).toBeDefined()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('lets the open live socket, not the poll, decide who holds control', async () => {
+    vi.useFakeTimers()
+    try {
+      holdTab()
+      await advance(5_000)
+      expect(fetch).toHaveBeenCalledTimes(2)
+      expect(screen.getByText('你控制')).toBeDefined()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps the last status when a read fails or reports no holder', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(Response.json({ holder: 'agent', viewers: 3 }))
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockResolvedValueOnce(Response.json({ viewers: 9 }))
+      renderPage()
+      await advance(0)
+      expect(screen.getByText('3 个查看者')).toBeDefined()
+      await advance(5_000)
+      await advance(5_000)
+      expect(fetch).toHaveBeenCalledTimes(3)
+      expect(screen.getByText('3 个查看者')).toBeDefined()
+      expect(screen.getByText('agent 控制')).toBeDefined()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('浏览器接管 viewport input', () => {
+  it('lets the app scroll and sends no wheel turn until the user holds a laid-out frame', () => {
+    renderPage()
+    const socket = FakeSocket.instances[0]!
+    socket.open()
+    socket.deliver({ type: 'frame', data: '/9j/4AAQ', metadata: METADATA })
+    const wheel = (): boolean => fireEvent(stage(), new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: 320, clientY: 200, deltaY: 120 }))
+    expect(wheel()).toBe(true)
+    socket.deliver({ type: 'state', holder: 'human' })
+    // jsdom lays nothing out, so the painted image still has an empty box.
+    expect(wheel()).toBe(true)
+    expect(socket.after(0)).toEqual([])
+    paintedFrame()
+    expect(wheel()).toBe(false)
+    expect(socket.after(0)).toEqual([{ type: 'wheel', x: 640, y: 400, deltaX: 0, deltaY: 120, modifiers: 0 }])
+  })
+
+  it('sends a wheel turn and pointer moves to the tab whose frame is painted', () => {
+    const socket = holdTab()
+    socket.deliver({ type: 'frame', tabId: 't1', data: '/9j/4AAQ', metadata: METADATA })
+    paintedFrame()
+    fireEvent(stage(), new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: 320, clientY: 200, deltaX: -40 }))
+    fireEvent(stage(), new MouseEvent('pointermove', { bubbles: true, clientX: 64, clientY: 40, button: -1, buttons: 0 }))
+    expect(fireEvent(stage(), new MouseEvent('pointerup', { bubbles: true, cancelable: true, clientX: 64, clientY: 40, button: 0, buttons: 0 }))).toBe(false)
+    expect(socket.after(0)).toEqual([
+      { type: 'wheel', tabId: 't1', x: 640, y: 400, deltaX: -40, deltaY: 0, modifiers: 0 },
+      { type: 'mouse', tabId: 't1', event: 'move', x: 128, y: 80, button: 'none', buttons: 0, clickCount: 0, modifiers: 0 },
+      { type: 'mouse', tabId: 't1', event: 'up', x: 128, y: 80, button: 'left', buttons: 0, clickCount: 1, modifiers: 0 },
+    ])
+    expect(releasePointerCapture).toHaveBeenCalledOnce()
+  })
+
+  it('counts quick repeated left presses as double and triple clicks, up to three', () => {
+    const now = vi.spyOn(Date, 'now')
+    try {
+      const socket = holdTab()
+      socket.deliver({ type: 'frame', tabId: 't1', data: '/9j/4AAQ', metadata: METADATA })
+      paintedFrame()
+      const press = (at: number, button = 0): void => {
+        now.mockReturnValue(at)
+        fireEvent(stage(), new MouseEvent('pointerdown', { bubbles: true, clientX: 320, clientY: 200, button, buttons: button === 0 ? 1 : 2 }))
+      }
+      press(10_000)
+      press(10_100)
+      press(10_200)
+      press(10_300)
+      // Past the 400 ms window, and a right press, each start over.
+      press(10_800)
+      press(10_900, 2)
+      const down = (clickCount: number, button = 'left', buttons = 1) => (
+        { type: 'mouse', tabId: 't1', event: 'down', x: 640, y: 400, button, buttons, clickCount, modifiers: 0 }
+      )
+      expect(socket.after(0)).toEqual([down(1), down(2), down(3), down(3), down(1), down(1, 'right', 2)])
+      expect(setPointerCapture).toHaveBeenCalledTimes(6)
+    } finally {
+      now.mockRestore()
+    }
+  })
+
+  it('leaves a key code the Host would reject, and a key composed by an input method, to the app', () => {
+    const socket = holdTab()
+    expect(fireEvent.keyDown(stage(), { key: 'a', code: 'KeyA', keyCode: 300 })).toBe(true)
+    expect(fireEvent.keyDown(stage(), { key: 'n', code: 'KeyN', keyCode: 229, isComposing: true })).toBe(true)
+    expect(socket.after(0)).toEqual([])
+  })
+
+  it('pastes clipboard text into the active tab and ignores an empty paste', () => {
+    renderPage()
+    const socket = FakeSocket.instances[0]!
+    socket.open()
+    socket.deliver({ type: 'state', holder: 'human' })
+    const paste = (text: string): boolean => fireEvent.paste(stage(), {
+      clipboardData: { getData: (format: string) => (format === 'text' ? text : '') },
+    })
+    expect(paste('')).toBe(true)
+    expect(paste('无标签页')).toBe(false)
+    socket.deliver({ type: 'state', holder: 'human', tabs: [{ id: 't1', title: 'A', url: 'https://a.example/', loading: false, active: true }] })
+    expect(paste('一段文字')).toBe(false)
+    expect(socket.after(0)).toEqual([
+      { type: 'text', text: '无标签页' },
+      { type: 'text', tabId: 't1', text: '一段文字' },
+    ])
+  })
+
+  it('keeps the app\'s context menu off the viewport', () => {
+    renderPage()
+    expect(fireEvent.contextMenu(stage())).toBe(false)
+  })
+
+  it('shows a Host failure over the painted frame until the next frame arrives', () => {
+    renderPage()
+    const socket = FakeSocket.instances[0]!
+    socket.open()
+    socket.deliver({ type: 'frame', data: 'FIRST', metadata: METADATA })
+    socket.deliver({ type: 'error', message: 'browser unavailable' })
+    expect(screen.getByText('browser unavailable')).toBeDefined()
+    expect(paintedFrame().src).toContain('FIRST')
+    socket.deliver({ type: 'frame', data: 'NEXT', metadata: METADATA })
+    expect(screen.queryByText('browser unavailable')).toBeNull()
+    expect(paintedFrame().src).toContain('NEXT')
+  })
+
+  it('names a tab without a title as a new tab', () => {
+    holdTab({ title: '' })
+    expect(screen.getByTitle('新标签页').textContent).toBe('新标签页')
+  })
+
+  it('inserts typed text into the active tab only when Enter is pressed with text', () => {
+    const socket = holdTab()
+    const insert = screen.getByLabelText('输入文本后回车插入') as HTMLInputElement
+    expect(fireEvent.keyDown(insert, { key: 'Enter' })).toBe(true)
+    fireEvent.change(insert, { target: { value: '你好' } })
+    expect(fireEvent.keyDown(insert, { key: 'a' })).toBe(true)
+    expect(socket.after(0)).toEqual([])
+    expect(fireEvent.keyDown(insert, { key: 'Enter' })).toBe(false)
+    expect(socket.after(0)).toEqual([{ type: 'text', tabId: 't1', text: '你好' }])
+    expect(insert.value).toBe('')
+  })
+})
+
+describe('浏览器接管 address bar', () => {
+  const addressBar = (): HTMLInputElement => screen.getByLabelText('地址栏') as HTMLInputElement
+
+  it('opens a typed address in a new tab when no tab is open', () => {
+    renderPage()
+    const socket = FakeSocket.instances[0]!
+    socket.open()
+    socket.deliver({ type: 'state', holder: 'human' })
+    const address = addressBar()
+    act(() => { address.focus() })
+    fireEvent.change(address, { target: { value: 'example.com' } })
+    fireEvent.keyDown(address, { key: 'Enter' })
+    expect(document.activeElement).not.toBe(address)
+    expect(socket.after(0)).toEqual([{ type: 'tab', action: 'new', url: 'https://example.com' }])
+  })
+
+  it('sends nothing for a blank address and leaves other keys to the input', () => {
+    const socket = holdTab()
+    const address = addressBar()
+    act(() => { address.focus() })
+    fireEvent.change(address, { target: { value: '   ' } })
+    expect(fireEvent.keyDown(address, { key: 'a' })).toBe(true)
+    fireEvent.keyDown(address, { key: 'Enter' })
+    expect(socket.after(0)).toEqual([])
+  })
+
+  it('reverts an abandoned edit to the active tab\'s URL when the bar loses focus', () => {
+    const socket = holdTab()
+    const address = addressBar()
+    act(() => { address.focus() })
+    fireEvent.change(address, { target: { value: 'typing...' } })
+    act(() => { address.blur() })
+    expect(address.value).toBe('https://alpha.example/')
+    expect(socket.sent).toEqual([])
+  })
+
+  it('empties an abandoned edit when no page is open', () => {
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ holder: 'agent', viewers: 0 }))
+    renderPage()
+    const socket = FakeSocket.instances[0]!
+    socket.open()
+    socket.deliver({ type: 'state', holder: 'human' })
+    const address = addressBar()
+    act(() => { address.focus() })
+    fireEvent.change(address, { target: { value: 'typing...' } })
+    act(() => { address.blur() })
+    expect(address.value).toBe('')
+    act(() => { address.focus() })
+    fireEvent.change(address, { target: { value: 'typing again' } })
+    fireEvent.keyDown(address, { key: 'Escape' })
+    expect(address.value).toBe('')
+    expect(socket.sent).toEqual([])
   })
 })
