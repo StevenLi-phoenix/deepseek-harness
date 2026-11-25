@@ -190,6 +190,9 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   '@deepseek-ai/dsh-tool-executor-ptc': ['lib/run-code.js', 'lib/_chunks/*.js'],
   // Bilibili's `./text` subpath is its own Node entry beside the client bundle; `time` is shared with the entry.
   '@deepseek-ai/dsh-bili': ['lib/text.js', 'lib/_chunks/*.js'],
+  // The Settings packages' wire-type subpaths, which `owner-memory`, `wechat`, and `presence` import, are Node entries too.
+  '@deepseek-ai/dsh-owner-memory-admin': ['lib/view.js'],
+  '@deepseek-ai/dsh-wechat-settings': ['lib/wechat-view.js', 'lib/presence-view.js'],
   // The embedded OAR implementation retains its upstream license.
   '@deepseek-ai/dsh-experimental-subagent-oar': ['LICENSE-OAR'],
   // CUA publishes its client API and attributed native source for local macOS builds.
