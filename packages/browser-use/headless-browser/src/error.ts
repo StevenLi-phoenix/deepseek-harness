@@ -13,5 +13,6 @@
  */
 export function firstLine(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
-  return message.split('\n', 1)[0] ?? message
+  const end = message.indexOf('\n')
+  return end === -1 ? message : message.slice(0, end)
 }

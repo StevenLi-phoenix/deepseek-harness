@@ -300,15 +300,16 @@ export function probeElement(element: Element): ElementFacts {
   const centreHit = inViewWidth <= 0 || inViewHeight <= 0 ? null : deepHit(inViewLeft + inViewWidth / 2, inViewTop + inViewHeight / 2)
   const cover = centreHit === null || reaches(centreHit) ? null : centreHit
   const coverText = cover === null ? '' : (cover.getAttribute('aria-label') ?? flatText(cover)).slice(0, 60)
+  const coverRole = cover?.getAttribute('role') ?? null
   const coveredBy = cover === null
     ? undefined
     : [
       cover.tagName.toLowerCase() + (cover.id === '' ? '' : `#${cover.id}`),
       ...Array.from(cover.classList).slice(0, 2).map(name => `.${name}`),
-      cover.getAttribute('role') === null ? '' : `role=${cover.getAttribute('role') ?? ''}`,
+      coverRole === null ? '' : `role=${coverRole}`,
       coverText === '' ? '' : JSON.stringify(coverText),
     ].filter(part => part !== '').join(' ').slice(0, 160)
-  const anchor = element.closest('a[href]')
+  const href = element.closest('a[href]')?.getAttribute('href') ?? null
   const form = element.closest('form')
   const formActionAttribute = element.getAttribute('formaction')
   return {
@@ -316,7 +317,7 @@ export function probeElement(element: Element): ElementFacts {
     value: element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement
       ? element.value
       : '',
-    href: anchor === null ? null : new URL(anchor.getAttribute('href') ?? '', doc.baseURI).href,
+    href: href === null ? null : new URL(href, doc.baseURI).href,
     formAction: formActionAttribute !== null
       ? new URL(formActionAttribute, doc.baseURI).href
       : form === null ? null : new URL(form.getAttribute('action') ?? '', doc.baseURI).href,

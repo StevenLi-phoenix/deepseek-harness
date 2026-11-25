@@ -143,6 +143,17 @@ describe('visibility facts from the page', () => {
     expect(readElementFacts(facts())).toEqual(facts())
   })
 
+  it('keeps the name of what covers the element', () => {
+    expect(readElementFacts(facts({ coveredBy: 'div#consent role=dialog' })).coveredBy).toBe('div#consent role=dialog')
+  })
+
+  it('rejects a measurement whose text, link, cover, or aria-hidden field has the wrong type', () => {
+    expect(() => readElementFacts({ ...facts(), name: 7 })).toThrow('the visibility probe returned no name')
+    expect(() => readElementFacts({ ...facts(), href: 7 })).toThrow('the visibility probe returned no href')
+    expect(() => readElementFacts({ ...facts(), coveredBy: 7 })).toThrow('the visibility probe returned no coveredBy')
+    expect(() => readElementFacts({ ...facts(), ariaHidden: 'false' })).toThrow('the visibility probe returned no ariaHidden')
+  })
+
   it('rejects a measurement that is missing a field', () => {
     const { width: _width, ...partial } = facts()
     expect(() => readElementFacts(partial)).toThrow('the visibility probe returned no width')

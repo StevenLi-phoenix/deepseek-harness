@@ -38,5 +38,7 @@ describe('choosing a select option', () => {
     expect(readSelectOptions([{ label: 'A', value: 'a', disabled: false }])).toEqual([{ label: 'A', value: 'a', disabled: false }])
     expect(() => readSelectOptions({})).toThrow(/no list/u)
     expect(() => readSelectOptions([{ label: 1, value: 'a', disabled: false }])).toThrow(/not an option/u)
+    expect(() => readSelectOptions(['United States'])).toThrow(/not an option/u)
+    expect(() => readSelectOptions([null])).toThrow(/not an option/u)
   })
 })

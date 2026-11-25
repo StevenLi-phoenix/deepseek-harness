@@ -64,7 +64,7 @@ export function domainFilter(value: string | undefined): string | undefined {
   if (value === undefined) return undefined
   const text = value.trim().toLowerCase()
   if (text === '') return undefined
-  const host = text.includes('://') ? hostOf(text) : text.split('/')[0] ?? ''
+  const host = text.includes('://') ? hostOf(text) : text.replace(/\/.*/su, '')
   const bare = host.replace(/^\.+/u, '').replace(/\.+$/u, '').replace(/:\d+$/u, '')
   return bare === '' ? undefined : bare
 }

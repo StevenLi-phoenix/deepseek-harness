@@ -2,12 +2,13 @@
  * Scrolling over a scripted page: the wheel point, the distance, both edges,
  * pages shorter than the viewport, and a page that refuses to move. The model
  * keeps no page script, so this suite pins the position and page-height
- * arithmetic that stands in for `window.scrollY`; the CDP adapter itself is
- * exercised by `browser.spec.ts` against real Chromium.
+ * arithmetic that stands in for `window.scrollY`. The CDP adapter's commands
+ * are pinned here, and `browser.spec.ts` runs it against real Chromium.
  */
 
-import { describe, expect, it } from 'vitest'
-import { scrollPage, type ScrollChannel, type ScrollPosition, type ScrollViewportSize } from '../src/scroll.ts'
+import type { CDPSession } from 'playwright-core'
+import { describe, expect, it, vi } from 'vitest'
+import { cdpScrollChannel, scrollPage, type ScrollChannel, type ScrollPosition, type ScrollViewportSize } from '../src/scroll.ts'
 
 const SIZE: ScrollViewportSize = { width: 800, height: 600 }
 
@@ -127,4 +128,21 @@ describe('scrollPage', () => {
     expect(result.scrollY).toBeGreaterThan(1)
     expect(result.atBottom).toBe(false)
   }, 10_000)
+})
+
+describe('cdpScrollChannel', () => {
+  it('reads the position from the CSS layout metrics and turns the wheel with a mouseWheel event', async () => {
+    const send = vi.fn().mockResolvedValueOnce({
+      cssVisualViewport: { pageX: 12, pageY: 640, clientWidth: 1280, clientHeight: 800 },
+      cssContentSize: { x: 0, y: 0, width: 1280, height: 4_200 },
+    }).mockResolvedValueOnce({})
+    const cdp: Partial<CDPSession> = { send }
+    const channel = cdpScrollChannel(cdp as CDPSession)
+    expect(await channel.position()).toEqual({ scrollX: 12, scrollY: 640, pageHeight: 4_200, viewportHeight: 800 })
+    await channel.wheel(640, 400, -360)
+    expect(send.mock.calls).toEqual([
+      ['Page.getLayoutMetrics'],
+      ['Input.dispatchMouseEvent', { type: 'mouseWheel', x: 640, y: 400, deltaX: 0, deltaY: -360, button: 'none', modifiers: 0 }],
+    ])
+  })
 })

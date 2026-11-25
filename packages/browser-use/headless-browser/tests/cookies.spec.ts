@@ -41,6 +41,11 @@ describe('domain filter', () => {
     expect(domainFilter('example.com/')).toBe('example.com')
     expect(domainFilter('.')).toBeUndefined()
   })
+
+  it('drops the whole path of a host copied with one, and names no host for a URL that does not parse', () => {
+    expect(domainFilter('example.com/account/settings?tab=security')).toBe('example.com')
+    expect(domainFilter('https://')).toBeUndefined()
+  })
 })
 
 describe('filtering', () => {

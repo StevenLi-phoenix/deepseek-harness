@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { cdpCommand, decodeClientMessage, encodeFrame, type FrameMetadata } from '../src/input.ts'
+import { cdpCommand, decodeClientMessage, encodeFrame, type ClientMessage, type FrameMetadata } from '../src/input.ts'
 
 const MODIFIERS_SHIFT = 8
 
@@ -55,6 +55,8 @@ describe('decodeClientMessage', () => {
     expect(decodeClientMessage({ type: 'tab', action: 'close', tabId: 't3' })).toEqual({ type: 'tab', action: 'close', tabId: 't3' })
     expect(decodeClientMessage({ type: 'tab', action: 'navigate', tabId: 't3', url: 'https://example.com' }))
       .toEqual({ type: 'tab', action: 'navigate', tabId: 't3', url: 'https://example.com' })
+    expect(decodeClientMessage({ type: 'tab', action: 'new', url: 'https://example.com/jobs' }))
+      .toEqual({ type: 'tab', action: 'new', url: 'https://example.com/jobs' })
     expect(decodeClientMessage({ type: 'tab', action: 'navigate' })).toBeUndefined()
     expect(decodeClientMessage({ type: 'tab', action: 'fly' })).toBeUndefined()
     expect(decodeClientMessage({ type: 'tab', action: 'activate', tabId: 'x'.repeat(33) })).toBeUndefined()
@@ -70,6 +72,11 @@ describe('decodeClientMessage', () => {
     ['a non-finite coordinate', { type: 'mouse', event: 'down', x: Number.NaN, y: 1, button: 'left', buttons: 1, clickCount: 1, modifiers: 0 }],
     ['a negative coordinate', { type: 'mouse', event: 'down', x: -1, y: 1, button: 'left', buttons: 1, clickCount: 1, modifiers: 0 }],
     ['an unknown button', { type: 'mouse', event: 'down', x: 1, y: 1, button: 'back', buttons: 1, clickCount: 1, modifiers: 0 }],
+    ['an unknown pointer event', { type: 'mouse', event: 'click', x: 1, y: 1, button: 'left', buttons: 1, clickCount: 1, modifiers: 0 }],
+    ['an unknown key transition', { type: 'key', event: 'press', key: 'a', code: 'KeyA', keyCode: 65, modifiers: 0 }],
+    ['a key without a name', { type: 'key', event: 'down', key: '', code: 'KeyA', keyCode: 65, modifiers: 0 }],
+    ['a key whose text is empty', { type: 'key', event: 'down', key: 'a', code: 'KeyA', keyCode: 65, text: '', modifiers: 0 }],
+    ['a wheel delta beyond the limit', { type: 'wheel', x: 1, y: 1, deltaX: 0, deltaY: 10_001, modifiers: 0 }],
     ['a click count above the limit', { type: 'mouse', event: 'down', x: 1, y: 1, button: 'left', buttons: 1, clickCount: 9, modifiers: 0 }],
     ['a modifier mask outside the protocol bits', { type: 'wheel', x: 1, y: 1, deltaX: 0, deltaY: 0, modifiers: 16 }],
     ['an oversized text value', { type: 'text', text: 'x'.repeat(4_001) }],
@@ -90,6 +97,8 @@ describe('cdpCommand', () => {
       method: 'Input.dispatchMouseEvent',
       params: { type: 'mousePressed', x: 5, y: 6, button: 'right', buttons: 2, clickCount: 1, modifiers: 0 },
     })
+    const release = decodeClientMessage({ type: 'mouse', event: 'up', x: 5, y: 6, button: 'right', buttons: 0, clickCount: 1, modifiers: 0 })!
+    expect(cdpCommand(release)).toMatchObject({ params: { type: 'mouseReleased', button: 'right', buttons: 0 } })
     const move = decodeClientMessage({ type: 'mouse', event: 'move', x: 5, y: 6, button: 'none', buttons: 0, clickCount: 0, modifiers: 0 })!
     expect(cdpCommand(move)).toMatchObject({ params: { type: 'mouseMoved', button: 'none' } })
   })
@@ -122,6 +131,11 @@ describe('cdpCommand', () => {
     expect(cdpCommand(text)).toEqual({ method: 'Input.insertText', params: { text: '你好' } })
     const control = decodeClientMessage({ type: 'control', action: 'take' })!
     expect(cdpCommand(control)).toBeUndefined()
+  })
+
+  it('throws for a message outside the decoded union instead of sending nothing', () => {
+    const unknown = JSON.parse('{"type":"scroll","deltaY":120}') as ClientMessage
+    expect(() => cdpCommand(unknown)).toThrow('unreachable client message: {"type":"scroll","deltaY":120}')
   })
 })
 
