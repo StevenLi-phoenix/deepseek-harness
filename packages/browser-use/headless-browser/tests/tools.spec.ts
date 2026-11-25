@@ -572,12 +572,14 @@ describe('page actions and control', () => {
       domain: 'example.com',
       everyMinutes: 30,
       label: 'mail',
+      expect: [{ expectText: 'Inbox' }],
     })).toEqual({ keepalive: KEPT })
     expect(keepalives.added).toEqual([{
       url: 'https://example.com/',
       domain: 'example.com',
       everyMinutes: 30,
       label: 'mail',
+      expect: [{ expectText: 'Inbox' }],
     }])
     expect(await tools.call('headless_browser_keepalive', { action: 'add', url: 'https://example.com/a' }))
       .toEqual({ keepalive: KEPT })
@@ -586,13 +588,13 @@ describe('page actions and control', () => {
 
   it('lists, removes, and forces one check of a keepalive', async () => {
     const remove = vi.fn(async (_id: string) => {})
-    const check = vi.fn(async (_id: string) => ({ ...KEPT, state: 'recovering' as const, consecutiveFailures: 1 }))
+    const check = vi.fn(async (_id: string) => ({ ...KEPT, state: 'recovering' as const, consecutiveFailures: 1, reason: 'sso_redirect:sso.example.com' }))
     const tools = bench(fakeBrowser(), fakeKeepalives({ remove, check }))
     expect(await tools.call('headless_browser_keepalive', { action: 'list' })).toEqual({ keepalives: [KEPT] })
     expect(await tools.call('headless_browser_keepalive', { action: 'remove', id: 'k1' })).toEqual({ removed: 'k1' })
     expect(remove).toHaveBeenCalledWith('k1')
     expect(await tools.call('headless_browser_keepalive', { action: 'check', id: 'k1' }))
-      .toMatchObject({ keepalive: { state: 'recovering', consecutiveFailures: 1 } })
+      .toMatchObject({ keepalive: { state: 'recovering', consecutiveFailures: 1, reason: 'sso_redirect:sso.example.com' } })
     expect(check).toHaveBeenCalledWith('k1')
   })
 

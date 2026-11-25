@@ -69,6 +69,7 @@ export function apply(ctx: Context, config: Config): void {
     create: async () => await browser.keepalivePage(),
     log: ctx.logger,
     escalateAfter: config.keepaliveEscalateAfter,
+    ...config.keepaliveExpect === undefined ? {} : { expectById: config.keepaliveExpect },
     emit: (event) => { ctx.emit('headless-browser/keepalive', event) },
   })
   const takeover = new TakeoverState()

@@ -8,6 +8,7 @@
 
 import { dshPath } from '@deepseek-ai/dsh-home-paths'
 import z from '@deepseek-ai/schemastery'
+import { ExpectationList, type KeepaliveExpectation } from './keepalive-expect.ts'
 
 /** Persistent profile, viewport, live-view, and screenshot settings. */
 export interface Config {
@@ -57,6 +58,8 @@ export interface Config {
    * @default 3
    */
   keepaliveEscalateAfter: number
+  /** Landing checks to override on named keepalive ids. */
+  keepaliveExpect?: Record<string, KeepaliveExpectation[]>
   /**
    * Directory that receives the files the browser downloads, one owner-only
    * file each; see `src/downloads.ts`.
@@ -103,6 +106,7 @@ export const Config: z<Config> = z.object({
   snapshotDir: z.string().default(dshPath('cache', 'headless-browser', 'snapshots')),
   keepalivePath: z.string().default(dshPath('data', 'headless-browser', 'keepalive.json')),
   keepaliveEscalateAfter: z.natural().min(1).default(3),
+  keepaliveExpect: z.dict(ExpectationList),
   downloadDir: z.string().default(dshPath('cache', 'headless-browser', 'downloads')),
   maxDownloadMB: z.natural().min(1).default(256),
   downloadRetainDays: z.natural().min(0).default(7),

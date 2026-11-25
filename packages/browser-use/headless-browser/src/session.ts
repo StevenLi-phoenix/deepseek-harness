@@ -936,8 +936,9 @@ export class HeadlessBrowserSession {
       return {
         url: () => page.url(),
         isClosed: () => page.isClosed(),
-        goto: async (url, options) => await page.goto(url, options),
+        goto: async (url, options) => (await page.goto(url, options))?.status(),
         challenge: async (): Promise<ChallengeFacts> => readChallengeFacts(await page.evaluate(probeChallenge)),
+        text: async () => await page.evaluate(() => document.body?.innerText ?? ''),
         close: async () => {
           this.#background.delete(page)
           await page.close()

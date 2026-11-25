@@ -55,6 +55,8 @@ export interface ChallengeRequest {
    * requested URL's origin.
    */
   readonly domain?: string
+  /** URL verdict supplied by a caller with an explicit landing policy. */
+  readonly allowedLanding?: boolean
 }
 
 /**
@@ -135,7 +137,7 @@ export function readChallengeFacts(value: unknown): ChallengeFacts {
 export function classifyChallenge(request: ChallengeRequest): Challenge | undefined {
   if (request.facts.passwordField) return { step: 'password', reason: 'the page shows a password field' }
   if (request.facts.oneTimeCode) return { step: 'mfa', reason: 'the page asks for a one-time code' }
-  if (onSite(request)) return undefined
+  if (request.allowedLanding ?? onSite(request)) return undefined
   if (request.facts.accountLinks >= 2) {
     return { step: 'account-chooser', reason: `the page moved to ${siteOf(request.finalUrl)} and lists accounts to choose from` }
   }

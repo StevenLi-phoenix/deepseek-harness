@@ -39,10 +39,11 @@
     "@deepseek-ai/dsh-tools": "workspace:*"
   },
   "dependencies": {
+    "@deepseek-ai/dsh-home-paths": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~",
     "playwright-core": "1.63.0-alpha-2026-08-31",
-    "ws": "^8.21.3",
-    "@deepseek-ai/dsh-home-paths": "workspace:*"
+    "tldts": "7.4.5",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",

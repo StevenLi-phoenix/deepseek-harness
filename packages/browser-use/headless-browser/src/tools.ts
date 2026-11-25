@@ -20,6 +20,7 @@ import { MAX_DOWNLOAD_WAIT_MS, type DownloadRecord } from './downloads.ts'
 import { firstLine } from './error.ts'
 import { ActionRefusedError, pageOrigin, type BlockedAction } from './guard.ts'
 import { DEFAULT_READ_LIMIT, MAX_READ_LIMIT, SelectorMissError, type ReadRequest, type ReadResult } from './read.ts'
+import type { KeepaliveExpectation } from './keepalive-expect.ts'
 import { KeepaliveError, MAX_EVERY_MINUTES, MIN_EVERY_MINUTES, type KeepaliveTools } from './keepalive.ts'
 import { MAX_SCROLL_DELTA, type ScrollRequest, type ScrollResult } from './scroll.ts'
 import { BrowserUnavailableError, NoOpenTabError, SecretFieldError, type ActionOutcome, type OpenResult, type TargetRequest } from './session.ts'
@@ -148,6 +149,7 @@ const KEEPALIVE_SCHEMA = {
     nextAttemptAt: { type: 'string' },
     firstFailureAt: { type: 'string' },
     lastError: { type: 'string' },
+    reason: { type: 'string' },
     lastUrl: { type: 'string' },
     blockedStep: { type: 'string', enum: ['account-chooser', 'password', 'mfa', 'redirect'] },
   },
@@ -437,6 +439,7 @@ interface KeepaliveArgs {
   readonly domain?: string
   readonly everyMinutes?: number
   readonly label?: string
+  readonly expect?: readonly KeepaliveExpectation[]
 }
 
 /** The arguments a click or type names its target with. */
@@ -1000,7 +1003,7 @@ export function registerBrowserTools(ctx: Context, deps: ToolDeps): void {
 
   registerTool(ctx, defineTool({
     name: 'headless_browser_keepalive',
-    description: 'Keep a signed-in session alive: add a URL the browser revisits on a timer in an offscreen page, remove one, list them with their state, or force one check now; a failed check is retried on its own, and only a repeated sign-in prompt needs a person.',
+    description: 'Keep a signed-in session alive: add a URL the browser revisits on a timer in an offscreen page, remove one, list them with their state and failure reason, or force one check now. Only a page that passes authentication checks is ok; repeated sign-in failures need a person.',
     parameters: {
       action: {
         type: 'string',
@@ -1010,9 +1013,26 @@ export function registerBrowserTools(ctx: Context, deps: ToolDeps): void {
       },
       id: { type: 'string', description: 'Keepalive id, for remove and check.' },
       url: { type: 'string', description: 'Absolute http or https URL, for add.' },
-      domain: { type: 'string', description: 'Site the add treats as on-site, so a sign-in host below it still counts; the URL\'s own origin when omitted.' },
+      domain: { type: 'string', description: 'Default site for the landing URL, compared by registrable domain. Omit to use the requested URL’s site.' },
       everyMinutes: { type: 'integer', description: `Minutes between checks, ${String(MIN_EVERY_MINUTES)} through ${String(MAX_EVERY_MINUTES)}; ${String(MIN_EVERY_MINUTES)} when omitted.` },
       label: { type: 'string', description: 'Short human name; the host name when omitted.' },
+      expect: {
+        type: 'array',
+        description: 'Authentication requirements for add. Every matcher must pass. A host or origin allowlist overrides the default site, not known sign-in destinations.',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            allowHosts: { type: 'array', items: { type: 'string' }, description: 'Exact hostnames.' },
+            allowOrigins: { type: 'array', items: { type: 'string' }, description: 'Exact HTTP(S) origins.' },
+            forbidPath: { type: 'array', items: { type: 'string' }, description: 'Rejected paths and their descendants.' },
+            expectText: { type: 'string', description: 'Required visible text.' },
+            expectRegex: { type: 'string', description: 'Required visible text pattern, without delimiters.' },
+            waitForTextMs: { type: 'integer', description: 'Time to wait for required text after page load, up to 30000 ms.' },
+            forbidText: { type: 'string', description: 'Rejected visible text.' },
+          },
+        },
+      },
     },
     output: {
       schema: {
@@ -1050,6 +1070,7 @@ export function registerBrowserTools(ctx: Context, deps: ToolDeps): void {
               ...args.domain === undefined ? {} : { domain: args.domain },
               ...args.everyMinutes === undefined || args.everyMinutes === 0 ? {} : { everyMinutes: args.everyMinutes },
               ...args.label === undefined ? {} : { label: args.label },
+              ...args.expect === undefined ? {} : { expect: args.expect },
             }),
           }
         }

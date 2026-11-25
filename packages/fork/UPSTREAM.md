@@ -24,6 +24,7 @@ Every edit outside `packages/fork/` and `/fork` is listed here so an upgrade can
 
 | File | Change |
 |---|---|
+| `packages/browser-use/headless-browser/` (`src/config.ts`, `src/index.ts`, `src/challenge.ts`, `src/keepalive-expect.ts`, `src/keepalive.ts`, `src/session.ts`, `src/tools.ts`, `tests/keepalive.spec.ts`, `tests/tools.spec.ts`, `README.md`, `README.zh.md`, `README.i18n.yaml`, `package.json`), `pnpm-lock.yaml`, `THIRD_PARTY_NOTICES.md`, `docs/config-catalog.md`, `docs/config-catalog.zh.md` | Keepalive authentication matchers for final URLs and visible text, per-id profile overrides, persisted failure reasons and rechecks for legacy `ok` records. `tldts` provides public suffix resolution. |
 | `lefthook.yml` | pre-commit job `owner names (staged)` runs `fork/deploy/check-owner-names.mjs --cached`: a staged file that names the owner fails the commit. |
 | `packages/compaction/compaction-basic/src/summarizer.ts`, `packages/compaction/compaction-basic/tests/compaction-basic.spec.ts`, `packages/compaction/compaction-image-offload/tests/image-offload.spec.ts` | Summary requests retry provider and network failures (`streamSummary`), since they do not pass `llm-retry`. |
 | `packages/compaction/command-compact/src/index.ts`, `packages/compaction/command-compact/tests/command-compact.spec.ts` | `/compact` reports what a failed summary request answered. |

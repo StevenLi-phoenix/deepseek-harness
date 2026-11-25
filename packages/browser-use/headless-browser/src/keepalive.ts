@@ -27,6 +27,7 @@ import { dirname } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { classifyChallenge, type BlockedStep, type Challenge, type ChallengeFacts } from './challenge.ts'
 import { firstLine } from './error.ts'
+import { allowedLanding, expectationError, ExpectationList, textFailure, type KeepaliveExpectation } from './keepalive-expect.ts'
 
 /** Fewest minutes between two checks of one keepalive. */
 export const MIN_EVERY_MINUTES = 5
@@ -46,7 +47,7 @@ export const MAX_KEEPALIVE_PAGES = 2
 export const KEEPALIVE_TIMEOUT_MS = 30_000
 
 /** Version of the persisted file's shape. */
-const FILE_VERSION = 1
+const FILE_VERSION = 2
 
 /** Where one keepalive stands. A dead session is tried again, never parked. */
 export type KeepaliveState = 'ok' | 'recovering' | 'needs-human' | 'error'
@@ -64,6 +65,8 @@ export interface KeepaliveRequest {
   readonly everyMinutes?: number
   /** Short human name; the host name when omitted. */
   readonly label?: string
+  /** Requirements for the authenticated landing page. */
+  readonly expect?: readonly KeepaliveExpectation[]
 }
 
 /** One keepalive as the tools, the status route, and the file report it. */
@@ -94,6 +97,8 @@ export interface KeepaliveStatus {
   readonly firstFailureAt?: string
   /** Why the last attempt failed, in one line. */
   readonly lastError?: string
+  /** Machine-readable reason for the last failure. */
+  readonly reason?: string
   /** URL the last attempt settled on. */
   readonly lastUrl?: string
   /** The interactive step that stopped the last attempt, when one did. */
@@ -108,12 +113,16 @@ interface KeepaliveRecord {
   readonly everyMinutes: number
   readonly createdAt: string
   readonly domain?: string
+  readonly expect?: readonly KeepaliveExpectation[]
+  /** Profile rules used on the last stored attempt. */
+  profileExpect?: readonly KeepaliveExpectation[]
   state: KeepaliveState
   consecutiveFailures: number
   lastOkAt?: string
   lastAttemptAt?: string
   nextAttemptAt?: string
   lastError?: string
+  reason?: string
   lastUrl?: string
   blockedStep?: BlockedStep
   firstFailureAt?: string
@@ -158,7 +167,9 @@ export interface KeepalivePage {
    * @param url - absolute URL to load.
    * @param options - the wait state and the deadline.
    */
-  goto(url: string, options: { waitUntil: 'load'; timeout: number }): Promise<unknown>
+  goto(url: string, options: { waitUntil: 'load'; timeout: number }): Promise<number | undefined>
+  /** Visible text on the landed document. */
+  text(): Promise<string>
   /** @returns the document's structural facts, measured by the challenge probe. */
   challenge(): Promise<ChallengeFacts>
   /** Close the page, so the pool can replace it. */
@@ -177,6 +188,8 @@ export interface KeepaliveOptions {
   readonly emit: (event: KeepaliveEvent) => void
   /** Consecutive interactive challenges that mean a person must sign in. */
   readonly escalateAfter?: number
+  /** Per-id overrides of the registered landing expectations. */
+  readonly expectById?: Readonly<Record<string, readonly KeepaliveExpectation[]>>
   /** Clock; defaults to `Date.now`. */
   readonly now?: () => number
   /** Timer factory; defaults to an unref'd `setTimeout`. */
@@ -282,6 +295,10 @@ export class KeepaliveService implements KeepaliveTools {
    * @param options - the file, the page source, the logger, and the event sink.
    */
   constructor(options: KeepaliveOptions) {
+    for (const [id, expect] of Object.entries(options.expectById ?? {})) {
+      const error = expectationError(expect)
+      if (error !== undefined) throw new KeepaliveError(`${id}: ${error}`)
+    }
     this.#options = options
     this.#now = options.now ?? Date.now
     this.#schedule = options.schedule ?? unrefTimer
@@ -328,6 +345,8 @@ export class KeepaliveService implements KeepaliveTools {
     const target = normalizeTarget(request.url)
     const domain = domainFilterOf(request.domain)
     const everyMinutes = intervalOf(request.everyMinutes)
+    const error = request.expect === undefined ? undefined : expectationError(request.expect)
+    if (error !== undefined) throw new KeepaliveError(error)
     for (const record of this.#records.values()) {
       if (record.url === target) {
         throw new KeepaliveError(`${record.id} (${record.label}) already visits ${target}`)
@@ -340,8 +359,9 @@ export class KeepaliveService implements KeepaliveTools {
       url: target,
       everyMinutes,
       createdAt: iso(at),
-      state: 'ok',
+      state: 'recovering',
       consecutiveFailures: 0,
+      ...request.expect === undefined ? {} : { expect: request.expect },
       // The first visit is due at once: adding a keepalive is already a sign the
       // session matters, and an immediate visit renews it before the interval passes.
       nextAttemptAt: iso(at),
@@ -432,17 +452,35 @@ export class KeepaliveService implements KeepaliveTools {
       this.#options.log.warn('headless-browser: %s is not valid JSON (%s); keepalives start empty', this.#options.path, firstLine(error))
       return
     }
-    const entries = Array.isArray(parsed) ? parsed : (parsed as { entries?: unknown }).entries
+    const stored = parsed as { version?: number; entries?: unknown } | null
+    const entries = Array.isArray(parsed) ? parsed : stored?.entries
+    const legacy = stored?.version !== FILE_VERSION
     if (!Array.isArray(entries)) {
       this.#options.log.warn('headless-browser: %s has no entries list; keepalives start empty', this.#options.path)
       return
     }
     let skipped = 0
+    let changed = false
     for (const entry of entries) {
       const record = restoreRecord(entry, iso(this.#now()))
       if (record === undefined || this.#records.has(record.id)) {
         skipped += 1
         continue
+      }
+      const profileExpect = this.#options.expectById?.[record.id]
+      if ((legacy && record.state === 'ok') || JSON.stringify(profileExpect) !== JSON.stringify(record.profileExpect)) {
+        record.state = 'recovering'
+        record.consecutiveFailures = 0
+        record.nextAttemptAt = iso(this.#now())
+        delete record.lastOkAt
+        delete record.reason
+        delete record.lastError
+        delete record.blockedStep
+        delete record.firstFailureAt
+        delete record.lastNoticeAt
+        if (profileExpect === undefined) delete record.profileExpect
+        else record.profileExpect = profileExpect
+        changed = true
       }
       this.#records.set(record.id, record)
       this.#order.push(record.id)
@@ -451,6 +489,7 @@ export class KeepaliveService implements KeepaliveTools {
     if (skipped > 0) {
       this.#options.log.warn('headless-browser: skipped %d unusable keepalive record(s) in %s', skipped, this.#options.path)
     }
+    if (changed) await this.#save()
     for (const id of [...this.#order]) this.#arm(this.#records.get(id) as KeepaliveRecord)
     this.#options.log.info('headless-browser: %d keepalive(s) re-armed from %s', this.#order.length, this.#options.path)
   }
@@ -517,19 +556,40 @@ export class KeepaliveService implements KeepaliveTools {
     let page: KeepalivePage | undefined
     let finalUrl = record.url
     try {
-      page = await this.#pages.acquire()
-      await page.goto(record.url, { waitUntil: 'load', timeout: KEEPALIVE_TIMEOUT_MS })
-      finalUrl = page.url() || record.url
-      const challenge = classifyChallenge({
-        requestedUrl: record.url,
-        finalUrl,
-        facts: await page.challenge(),
-        ...record.domain === undefined ? {} : { domain: record.domain },
-      })
-      this.#settle(record, finalUrl, challenge, atIso, at)
+      const probe = await this.#pages.acquire()
+      page = probe
+      const httpStatus = await probe.goto(record.url, { waitUntil: 'load', timeout: KEEPALIVE_TIMEOUT_MS })
+      const expect = record.profileExpect ?? record.expect
+      const facts = await page.challenge()
+      finalUrl = page.url()
+      const landed = URL.parse(finalUrl)
+      const domain = record.domain ?? hostOf(record.url)
+      const onSite = landed !== null && allowedLanding({ domain, ...expect === undefined ? {} : { expect } }, landed)
+      const challenge = classifyChallenge({ requestedUrl: record.url, finalUrl, facts, allowedLanding: onSite })
+      if (challenge !== undefined) {
+        const reason = onSite ? `auth_required:${challenge.step}` : `sso_redirect:${landed?.hostname ?? 'unknown'}`
+        this.#fail(record, finalUrl, challenge, reason, challenge.reason, atIso, at)
+      } else if (httpStatus === 401 || httpStatus === 403) {
+        const detail = `the page refused access (HTTP ${String(httpStatus)})`
+        this.#fail(record, finalUrl, { step: 'redirect', reason: detail }, `auth_required:${String(httpStatus)}`, detail, atIso, at)
+      } else if (httpStatus !== undefined && httpStatus >= 400) {
+        this.#fail(record, finalUrl, undefined, 'network', `HTTP ${String(httpStatus)}`, atIso, at)
+      } else {
+        const reason = await textFailure(expect, async () => await probe.text())
+        finalUrl = probe.url()
+        const settled = URL.parse(finalUrl)
+        if (settled === null || !allowedLanding({ domain, ...expect === undefined ? {} : { expect } }, settled)) {
+          const detail = 'the page moved to a location that is not allowed'
+          this.#fail(record, finalUrl, { step: 'redirect', reason: detail }, `sso_redirect:${settled?.hostname ?? 'unknown'}`, detail, atIso, at)
+        } else if (reason === undefined) this.#settle(record, finalUrl, atIso, at)
+        else if (reason === 'timeout') this.#fail(record, finalUrl, undefined, reason, 'waiting for the expected text timed out', atIso, at, true)
+        else this.#fail(record, finalUrl, { step: 'redirect', reason }, reason, reason, atIso, at)
+      }
     } catch (error: unknown) {
       if (page !== undefined) finalUrl = page.url() || record.url
-      this.#fail(record, finalUrl, undefined, firstLine(error), atIso, at)
+      const detail = firstLine(error)
+      const reason = (error instanceof Error && error.name === 'TimeoutError') || /timeout|timed[ _-]?out/iu.test(detail) ? 'timeout' : 'network'
+      this.#fail(record, finalUrl, undefined, reason, detail, atIso, at)
     } finally {
       if (page !== undefined) this.#pages.release(page)
       this.#release()
@@ -542,15 +602,10 @@ export class KeepaliveService implements KeepaliveTools {
    * Record a visit that found the signed-in page, and clear every failure mark.
    * @param record - the entry that was checked.
    * @param finalUrl - URL the page settled on.
-   * @param challenge - what blocked it, or nothing when it passed.
    * @param atIso - the attempt's time.
    * @param at - the attempt's time in milliseconds.
    */
-  #settle(record: KeepaliveRecord, finalUrl: string, challenge: Challenge | undefined, atIso: string, at: number): void {
-    if (challenge !== undefined) {
-      this.#fail(record, finalUrl, challenge, challenge.reason, atIso, at)
-      return
-    }
+  #settle(record: KeepaliveRecord, finalUrl: string, atIso: string, at: number): void {
     const previous = record.state
     record.state = 'ok'
     record.lastOkAt = atIso
@@ -559,6 +614,7 @@ export class KeepaliveService implements KeepaliveTools {
     delete record.firstFailureAt
     delete record.blockedStep
     delete record.lastError
+    delete record.reason
     delete record.lastNoticeAt
     record.nextAttemptAt = iso(at + record.everyMinutes * 60_000)
     // One event per transition, never one per successful check.
@@ -572,11 +628,22 @@ export class KeepaliveService implements KeepaliveTools {
    * @param record - the entry that was checked.
    * @param finalUrl - URL the page settled on, or the requested one.
    * @param challenge - the step that blocked the visit, when the page was a sign-in page.
+   * @param reason - machine-readable failure reason.
    * @param detail - what to report as `lastError`.
    * @param atIso - the attempt's time.
    * @param at - the attempt's time in milliseconds.
+   * @param pending - whether authenticated text may still be loading.
    */
-  #fail(record: KeepaliveRecord, finalUrl: string, challenge: Challenge | undefined, detail: string, atIso: string, at: number): void {
+  #fail(
+    record: KeepaliveRecord,
+    finalUrl: string,
+    challenge: Challenge | undefined,
+    reason: string,
+    detail: string,
+    atIso: string,
+    at: number,
+    pending = false,
+  ): void {
     const previous = record.state
     record.consecutiveFailures += 1
     record.firstFailureAt ??= atIso
@@ -587,6 +654,7 @@ export class KeepaliveService implements KeepaliveTools {
       record.blockedStep = challenge.step
     }
     record.lastError = detail
+    record.reason = reason
     record.nextAttemptAt = iso(at + backoffMs(record.consecutiveFailures))
     if (challenge !== undefined && record.consecutiveFailures >= this.#escalateAfter) {
       record.state = 'needs-human'
@@ -600,8 +668,8 @@ export class KeepaliveService implements KeepaliveTools {
       return
     }
     // A session already known to need a person stays that way until a check passes.
-    record.state = previous === 'needs-human' ? 'needs-human' : challenge === undefined ? 'error' : 'recovering'
-    if (record.state !== previous) this.#publish(record, record.state === 'error' ? 'error' : 'recovering', atIso)
+    record.state = previous === 'needs-human' ? 'needs-human' : challenge === undefined && !pending ? 'error' : 'recovering'
+    if (record.state !== previous || record.state === 'recovering' && record.consecutiveFailures === 1) this.#publish(record, record.state === 'error' ? 'error' : 'recovering', atIso)
   }
 
   /**
@@ -694,6 +762,7 @@ function statusOf(record: KeepaliveRecord): KeepaliveStatus {
     ...record.nextAttemptAt === undefined ? {} : { nextAttemptAt: record.nextAttemptAt },
     ...record.firstFailureAt === undefined ? {} : { firstFailureAt: record.firstFailureAt },
     ...record.lastError === undefined ? {} : { lastError: record.lastError },
+    ...record.reason === undefined ? {} : { reason: record.reason },
     ...record.lastUrl === undefined ? {} : { lastUrl: record.lastUrl },
     ...record.blockedStep === undefined ? {} : { blockedStep: record.blockedStep },
   }
@@ -716,7 +785,7 @@ function restoreRecord(value: unknown, nowIso: string): KeepaliveRecord | undefi
   const everyMinutes = typeof entry.everyMinutes === 'number' && Number.isFinite(entry.everyMinutes)
     ? clampInterval(entry.everyMinutes)
     : MIN_EVERY_MINUTES
-  const state = typeof entry.state === 'string' && isState(entry.state) ? entry.state : 'ok'
+  const state = typeof entry.state === 'string' && isState(entry.state) ? entry.state : 'recovering'
   const failures = typeof entry.consecutiveFailures === 'number' && Number.isFinite(entry.consecutiveFailures)
     ? Math.max(0, Math.trunc(entry.consecutiveFailures))
     : 0
@@ -725,6 +794,10 @@ function restoreRecord(value: unknown, nowIso: string): KeepaliveRecord | undefi
   const lastAttemptAt = textOf(entry.lastAttemptAt)
   const nextAttemptAt = textOf(entry.nextAttemptAt)
   const lastError = textOf(entry.lastError)
+  const reason = textOf(entry.reason)
+  const expect = entry.expect === undefined ? undefined : restoreExpect(entry.expect)
+  const profileExpect = restoreExpect(entry.profileExpect)
+  if (entry.expect !== undefined && expect === undefined) return undefined
   const lastUrl = textOf(entry.lastUrl)
   const firstFailureAt = textOf(entry.firstFailureAt)
   const lastNoticeAt = textOf(entry.lastNoticeAt)
@@ -741,10 +814,24 @@ function restoreRecord(value: unknown, nowIso: string): KeepaliveRecord | undefi
     ...lastAttemptAt === undefined ? {} : { lastAttemptAt },
     ...nextAttemptAt === undefined ? {} : { nextAttemptAt },
     ...lastError === undefined ? {} : { lastError },
+    ...reason === undefined ? {} : { reason },
+    ...expect === undefined ? {} : { expect },
+    ...profileExpect === undefined ? {} : { profileExpect },
     ...lastUrl === undefined ? {} : { lastUrl },
     ...firstFailureAt === undefined ? {} : { firstFailureAt },
     ...lastNoticeAt === undefined ? {} : { lastNoticeAt },
     ...typeof entry.blockedStep === 'string' && isStep(entry.blockedStep) ? { blockedStep: entry.blockedStep } : {},
+  }
+}
+
+function restoreExpect(value: unknown): readonly KeepaliveExpectation[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  try {
+    const expect = ExpectationList(value)
+    return expectationError(expect) === undefined ? expect : undefined
+  } catch (error: unknown) {
+    void error // The state file may have been edited by hand.
+    return undefined
   }
 }
 

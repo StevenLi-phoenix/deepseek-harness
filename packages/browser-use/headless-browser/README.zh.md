@@ -158,11 +158,9 @@ curl -s -H "Cookie: session=…; theme=dark" https://example.com/inbox
 
 没人访问，登录就会死。站点让自己的会话过期，下一次真正的任务从一个登录页开始，主人的注意力花在了一次访问本来就能避免的一步上。`headless_browser_keepalive` 按定时器访问一个地址并检查回来的东西，于是这次访问在站点自己的会话还活着时把它续上。
 
-它不是针对某个站点的 hack。包里没有任何地方写死站点、选择器或 token：`add` 只接受一个 URL、一个可选的站点、一个间隔和一个名字，检查对落到的页面只问一个通用的问题——这还是登录后的那一页吗？
+**认证检查。** 仅能打开页面还不够：最终 URL 必须与 `domain`（未配置时为请求 URL）同属一个可注册域，且不能落到已知登录主机或路径；看得见的密码框或一次性验证码框也会使检查失败。`add` 接受 `expect` 数组，每个匹配器都必须通过。`allowHosts` 或 `allowOrigins` 可覆盖默认域名规则，但不会放行已知登录地址；`forbidPath` 禁止指定路径及子路径。用 `expectText` 要求出现可见文字、用 `forbidText` 禁止出现可见文字，或用 `expectRegex`（不带分隔符）匹配必须出现的文字。`waitForTextMs` 可等待异步加载的内容；超时仍为 `recovering`，原因为 `timeout`。插件配置 `keepaliveExpect` 可以按保活项 id 覆盖匹配器，规则变化后会立即安排复查。
 
-**登录测试。** [`src/challenge.ts`](src/challenge.ts) 量三个结构信号，从不读页面的文字：看得见的密码框、看得见的一次性验证码框（`autocomplete="one-time-code"`，或者 name、id、placeholder、label 里写着 OTP、one-time、TOTP、2FA、MFA、verification code、security code、验证码的输入框），以及看得见、文字里带邮箱地址的链接、按钮或选项。有可见密码框就是 `password`；有一次性验证码框就是 `mfa`；最终 URL 离开了请求的站点、且页面上至少有两个账号链接，就是 `account-chooser`；同样离开站点但没东西可读，就是 `redirect`。落在请求的源上、既没有密码框也没有一次性验证码的页面，就是登录后的页面。`add` 给了 `domain` 时，它和它下面的主机都算同一个站点，于是同一站点内的 SSO 主机不算跳走。这个测试是启发式的，不是承诺：它回答的是「人会说这页已经登录了」，不是「主人想要的那个账号」。
-
-**会话死了是插件的事。** 检查失败会把条目移到 `recovering`，按 5 分钟、15 分钟、之后每小时的退避重试，因为很多故障来自站点自己，一次能续上会话的访问就把它结束了。只有反复出现的交互式挑战才意味着必须人来登录：连续 `keepaliveEscalateAfter` 次（默认 3）失败之后，条目标成 `needs-human`，并最多每小时重复一次通知，通知里始终带着从什么时候开始、试了多少次、最后的 URL、卡在哪一步。只要有一次检查通过，条目就回到 `ok`，计数清零，并发出一条 `recovered` 事件。完全没能跑起来的一次访问——浏览器死了、连接被拒——报 `error`，从不升级，因为登录并不能修它。
+**会话死了是插件的事。** 检查失败会把条目移到 `recovering`，按 5 分钟、15 分钟、之后每小时的退避重试，因为很多故障来自站点自己，一次能续上会话的访问就把它结束了。反复未通过认证检查可能需要人来登录：连续 `keepaliveEscalateAfter` 次（默认 3）失败之后，条目标成 `needs-human`，并最多每小时重复一次通知，通知里始终带着从什么时候开始、试了多少次、最后的 URL、卡在哪一步。只要有一次检查通过，条目就回到 `ok`，计数清零，并发出一条 `recovered` 事件。完全没能跑起来的一次访问——浏览器死了、连接被拒——报 `error`，从不升级，因为登录并不能修它。
 
 **每次状态变化一条事件。** 每次状态变化都通过插件的事件总线 `headless-browser/keepalive` 恰好发出一条事件，而停在 `needs-human` 的条目最多每小时发一条 `reminder`。想让主人知道的宿主订阅这里；本包自己不发送任何消息。
 
@@ -175,7 +173,7 @@ headless_browser_keepalive {"action":"check","id":"k1"}
 headless_browser_keepalive {"action":"remove","id":"k1"}
 ```
 
-`list` 交回 `id`、`label`、`url`、`everyMinutes`、`state`（`ok`、`recovering`、`needs-human` 或 `error`）、`consecutiveFailures`、`firstFailureAt`、`lastOkAt`、`lastCheckAt`、`lastAttemptAt`、`nextAttemptAt`、`lastUrl`、`blockedStep` 和 `lastError`，`GET /headless-browser/status` 在 `keepalive` 字段下给出同一份列表。`check` 在定时器到期之前立刻跑一次，并交回同样的字段。
+`list` 交回 `id`、`label`、`url`、`everyMinutes`、`state`（`ok`、`recovering`、`needs-human` 或 `error`）、`consecutiveFailures`、`firstFailureAt`、`lastOkAt`、`lastCheckAt`、`lastAttemptAt`、`nextAttemptAt`、`lastUrl`、`blockedStep`、`lastError` 和机器可读的 `reason`（例如 `sso_redirect:<主机>`、`missing_text:<匹配器>`、`forbidden_text`、`network` 或 `timeout`），`GET /headless-browser/status` 在 `keepalive` 字段下给出同一份列表。`check` 在定时器到期之前立刻跑一次，并交回同样的字段。
 
 ### 页面是数据，不是指令
 

@@ -2505,7 +2505,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-headless-browser`
 
 - `inject`: `tools`
-- `source`: [`packages/browser-use/headless-browser/src/config.ts:13`](../packages/browser-use/headless-browser/src/config.ts)
+- `source`: [`packages/browser-use/headless-browser/src/config.ts:14`](../packages/browser-use/headless-browser/src/config.ts)
 
 ```ts config-catalog
 /** Persistent profile, viewport, live-view, and screenshot settings. */
@@ -2556,6 +2556,8 @@ export interface Config {
    * @default 3
    */
   keepaliveEscalateAfter: number
+  /** Landing checks to override on named keepalive ids. */
+  keepaliveExpect?: Record<string, KeepaliveExpectation[]>
   /**
    * Directory that receives the files the browser downloads, one owner-only
    * file each; see `src/downloads.ts`.
@@ -2588,6 +2590,24 @@ export interface Config {
   uploadDirs: string[]
   /** Largest file `headless_browser_upload` attaches, in megabytes. @default 25 */
   maxUploadMB: number
+}
+
+/** Every configured matcher must pass; hosts and origins within one matcher are alternatives. */
+export interface KeepaliveExpectation extends Record<string, unknown> {
+  /** Exact final hostnames accepted instead of the default registrable domain. */
+  readonly allowHosts?: string[]
+  /** Exact final HTTP(S) origins accepted instead of the default registrable domain. */
+  readonly allowOrigins?: string[]
+  /** Final paths and path descendants that indicate a signed-out landing. */
+  readonly forbidPath?: string[]
+  /** Literal text that must appear in the visible page. */
+  readonly expectText?: string
+  /** Regular expression source that must match the visible page. */
+  readonly expectRegex?: string
+  /** Literal text that must not appear in the visible page. */
+  readonly forbidText?: string
+  /** Milliseconds to wait after load for required text; when omitted, check once. */
+  readonly waitForTextMs?: number
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-headless-browser -->

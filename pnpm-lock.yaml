@@ -2580,6 +2580,9 @@ importers:
       playwright-core:
         specifier: 1.63.0-alpha-2026-08-31
         version: 1.63.0-alpha-2026-08-31
+      tldts:
+        specifier: 7.4.5
+        version: 7.4.5
       ws:
         specifier: ^8.21.3
         version: 8.21.3
