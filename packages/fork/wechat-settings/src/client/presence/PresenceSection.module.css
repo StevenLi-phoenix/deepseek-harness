@@ -3,7 +3,7 @@
    asleep pill, so light and dark both hold. */
 
 .section {
-  --presence-night: #5e5ce6;
+  --presence-night: var(--dsw-alias-state-done-primary);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -195,7 +195,7 @@
 }
 
 .input[aria-invalid] {
-  border-color: var(--dsw-alias-state-danger-primary, #d93026);
+  border-color: var(--dsw-alias-state-error-primary);
 }
 
 .input:focus {
@@ -241,7 +241,7 @@
   border: none;
   border-radius: var(--dsw-radius-md);
   background: var(--dsw-alias-state-error-primary);
-  color: #fff;
+  color: var(--dsw-alias-label-on-color);
   font: inherit;
   font-weight: 510;
   cursor: pointer;

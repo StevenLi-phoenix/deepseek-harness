@@ -146,6 +146,7 @@
   height: 6px;
   margin-left: -3px;
   border-radius: 50%;
+  corner-shape: round;
   background: var(--dsw-alias-state-business-primary);
   box-shadow: 0 0 0 1px var(--dsw-alias-border-l2);
 }

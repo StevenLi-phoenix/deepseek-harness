@@ -214,7 +214,7 @@ details[open] > .groupSummary::before {
   margin: 0;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--dsw-alias-label-error);
+  color: var(--dsw-alias-state-error-primary);
 }
 
 .status {
@@ -228,7 +228,7 @@ details[open] > .groupSummary::before {
 }
 
 .status[data-tone='error'] {
-  color: var(--dsw-alias-label-error);
+  color: var(--dsw-alias-state-error-primary);
 }
 
 .review {
@@ -263,7 +263,7 @@ details[open] > .groupSummary::before {
   margin: 0;
   padding: 8px 10px;
   border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-bg-layer-4);
+  background: var(--dsw-alias-state-warn-tertiary);
   font-size: 12px;
   line-height: 1.5;
   color: var(--dsw-alias-label-primary);

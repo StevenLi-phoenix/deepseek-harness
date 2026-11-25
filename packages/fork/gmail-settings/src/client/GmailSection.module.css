@@ -300,8 +300,10 @@ details[open] > .summary {
   color: var(--dsw-alias-label-primary);
 }
 
-.secondary:hover:not(:disabled) {
-  background: var(--dsw-alias-border-l2);
+@media (hover: hover) {
+  .secondary:hover:not(:disabled) {
+    background: var(--dsw-alias-border-l2);
+  }
 }
 
 .danger {
@@ -458,8 +460,10 @@ details[open] > .summary {
   text-decoration: none;
 }
 
-.link:hover {
-  text-decoration: underline;
+@media (hover: hover) {
+  .link:hover {
+    text-decoration: underline;
+  }
 }
 
 .redirect {

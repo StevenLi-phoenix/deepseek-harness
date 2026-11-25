@@ -30,6 +30,7 @@
   padding: 1px 8px;
   border: 0.5px solid transparent;
   border-radius: 999px;
+  corner-shape: round;
   font-size: 12px;
   white-space: nowrap;
 }
@@ -82,8 +83,10 @@
   cursor: pointer;
 }
 
-.action:hover {
-  border-color: var(--dsw-alias-border-selected);
+@media (hover: hover) {
+  .action:hover {
+    border-color: var(--dsw-alias-border-selected);
+  }
 }
 
 .action:focus-visible {
@@ -100,6 +103,8 @@
   overflow-x: auto;
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
   scrollbar-width: thin;
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
 }
 
 .tab,
@@ -166,10 +171,12 @@
   font-size: 16px;
 }
 
-.tabClose:hover,
-.tabNew:hover {
-  color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-bg-layer-3);
+@media (hover: hover) {
+  .tabClose:hover,
+  .tabNew:hover {
+    color: var(--dsw-alias-label-primary);
+    background: var(--dsw-alias-bg-layer-3);
+  }
 }
 
 .tabTitle:disabled,
@@ -200,6 +207,7 @@
   border: 1.5px solid var(--dsw-alias-label-secondary);
   border-right-color: transparent;
   border-radius: 50%;
+  corner-shape: round;
   animation: spin 0.8s linear infinite;
 }
 
@@ -230,9 +238,11 @@
   cursor: pointer;
 }
 
-.tool:hover {
-  color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-bg-layer-3);
+@media (hover: hover) {
+  .tool:hover {
+    color: var(--dsw-alias-label-primary);
+    background: var(--dsw-alias-bg-layer-3);
+  }
 }
 
 .address {
@@ -241,6 +251,7 @@
   padding: 4px 10px;
   border: 0.5px solid var(--dsw-alias-border-l3);
   border-radius: 999px;
+  corner-shape: round;
   font: inherit;
   font-size: 13px;
   color: var(--dsw-alias-label-primary);

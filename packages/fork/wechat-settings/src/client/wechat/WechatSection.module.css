@@ -3,7 +3,7 @@
    avatar and the white QR card, so light and dark both hold. */
 
 .section {
-  --wechat-green: #07c160;
+  --wechat-green: var(--dsw-alias-state-success-primary);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -118,7 +118,7 @@
   border-radius: 50%;
   corner-shape: round;
   background: var(--wechat-green);
-  color: #fff;
+  color: var(--dsw-alias-label-on-color);
   font-size: 20px;
   font-weight: 600;
 }
@@ -221,7 +221,7 @@
 }
 
 .input[aria-invalid] {
-  border-color: var(--dsw-alias-state-danger-primary, #d93026);
+  border-color: var(--dsw-alias-state-error-primary);
 }
 
 .input:focus {
@@ -306,7 +306,7 @@
   border: none;
   border-radius: var(--dsw-radius-md);
   background: var(--dsw-alias-state-error-primary);
-  color: #fff;
+  color: var(--dsw-alias-label-on-color);
   font: inherit;
   font-weight: 510;
   cursor: pointer;
@@ -350,12 +350,11 @@
   font-weight: 600;
 }
 
-/* The QR code stays black on white in both themes: scanners need the contrast. */
+/* The QR code's SVG paints its own white quiet zone, so it scans in both themes; the frame only rounds and dims it. */
 .qrFrame {
   flex: none;
-  padding: 8px;
+  overflow: hidden;
   border-radius: var(--dsw-radius-md);
-  background: #fff;
   transition: opacity 200ms ease;
 }
 
@@ -365,8 +364,8 @@
 
 .qr {
   display: block;
-  width: 168px;
-  height: 168px;
+  width: 184px;
+  height: 184px;
 }
 
 .link {

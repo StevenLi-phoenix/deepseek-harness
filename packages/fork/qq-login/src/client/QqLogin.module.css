@@ -129,11 +129,6 @@
   height: auto;
   aspect-ratio: 1;
   border-radius: var(--dsw-radius-md);
-  background: #fff;
-}
-
-.qrMods {
-  fill: #000;
 }
 
 .hint {

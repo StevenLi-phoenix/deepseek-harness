@@ -882,7 +882,7 @@ export const de: Record<MemoryKey, string> = {
   'change.revise': 'Zurücknehmen',
   'change.none': 'Unverändert',
   'feedback.title': 'Feedback zu Antworten',
-  'feedback.hint': 'Deine Behalten-/Löschen-Urteile zu den Antworten der Persona dienen den Presets up und bili als Tonbeispiele.',
+  'feedback.hint': 'Deine Urteile „Behalten / Löschen“ zu den Antworten der Persona dienen den Presets up und bili als Tonbeispiele.',
   'feedback.empty': 'Noch kein Feedback.',
   'verdict.keep': 'Behalten',
   'verdict.delete': 'Löschen',

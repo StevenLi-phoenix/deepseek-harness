@@ -71,7 +71,8 @@ function QrCard({ matrix, state, translate, renewCode }: {
           ? null
           : (
             <svg className={css.qr} viewBox={drawing.viewBox} role="img" aria-label={translate('qr.label')} shapeRendering="crispEdges">
-              <path className={css.qrMods} d={drawing.d} />
+              <rect width="100%" height="100%" fill="#fff" />
+              <path d={drawing.d} fill="#000" />
             </svg>
           )}
         <div className={css.actions}>

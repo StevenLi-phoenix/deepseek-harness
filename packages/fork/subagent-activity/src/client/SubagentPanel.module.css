@@ -277,9 +277,14 @@
   opacity: 0;
 }
 
-.card:hover .side,
 .side:focus-visible {
   opacity: 1;
+}
+
+@media (hover: hover) {
+  .card:hover .side {
+    opacity: 1;
+  }
 }
 
 @media (hover: none) {

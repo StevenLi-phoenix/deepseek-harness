@@ -3,8 +3,8 @@
    avatar, so light and dark both hold. */
 
 .section {
-  --bili-pink: #fb7299;
-  --bili-blue: #00aeec;
+  --bili-pink: var(--dsw-alias-state-error-secondary);
+  --bili-blue: var(--dsw-alias-state-business-primary);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -116,7 +116,7 @@
   border-radius: 50%;
   corner-shape: round;
   background: linear-gradient(135deg, var(--bili-pink), var(--bili-blue));
-  color: #fff;
+  color: var(--dsw-alias-label-on-color);
   font-size: 20px;
   font-weight: 600;
 }
@@ -231,8 +231,10 @@
   transition: opacity 160ms ease, background 160ms ease;
 }
 
-.secondary:hover:not(:disabled) {
-  background: var(--dsw-alias-border-l2);
+@media (hover: hover) {
+  .secondary:hover:not(:disabled) {
+    background: var(--dsw-alias-border-l2);
+  }
 }
 
 .danger {
@@ -312,7 +314,7 @@
 }
 
 .input[aria-invalid] {
-  border-color: var(--dsw-alias-state-danger-primary, #d93026);
+  border-color: var(--dsw-alias-state-error-primary);
 }
 
 .input:focus {

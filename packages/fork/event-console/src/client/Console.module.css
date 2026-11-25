@@ -139,8 +139,10 @@
   cursor: pointer;
 }
 
-.button:hover:not(:disabled) {
-  background: var(--dsw-alias-bg-skeleton);
+@media (hover: hover) {
+  .button:hover:not(:disabled) {
+    background: var(--dsw-alias-bg-skeleton);
+  }
 }
 
 .button:disabled {
@@ -151,7 +153,7 @@
 .button[data-kind='primary'] {
   border-color: transparent;
   background: var(--dsw-alias-state-business-primary);
-  color: var(--dsw-alias-label-on-accent, #fff);
+  color: var(--dsw-alias-label-on-color);
 }
 
 .button[data-kind='danger'] {
@@ -343,6 +345,7 @@
 .pill {
   padding: 0 8px;
   border-radius: 999px;
+  corner-shape: round;
   background: var(--dsw-alias-bg-skeleton);
   color: var(--dsw-alias-label-secondary);
   font-size: 11px;
@@ -431,6 +434,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  corner-shape: round;
   background: var(--dsw-alias-state-success-primary);
 }
 
@@ -474,7 +478,11 @@
   transition: background 140ms ease, transform 140ms ease;
 }
 
-.flowAction:hover { background: var(--dsw-alias-bg-skeleton); }
+@media (hover: hover) {
+  .flowAction:hover {
+    background: var(--dsw-alias-bg-skeleton);
+  }
+}
 .flowAction:active { transform: scale(0.97); }
 .flowAction[data-primary] { border-color: var(--dsw-alias-state-error-primary); color: var(--dsw-alias-state-error-primary); }
 .flowSide .flowAction { align-self: flex-start; margin-top: 2px; }
@@ -660,12 +668,18 @@
   animation: flowBreathe 2.4s ease-in-out infinite;
 }
 
-.flowNode:hover .flowBox,
 .flowNode:focus-visible .flowBox,
 .flowNode[aria-pressed='true'] .flowBox,
 .flowNode[data-walked] .flowBox {
   stroke: var(--dsw-alias-state-business-primary);
   stroke-width: 1.75;
+}
+
+@media (hover: hover) {
+  .flowNode:hover .flowBox {
+    stroke: var(--dsw-alias-state-business-primary);
+    stroke-width: 1.75;
+  }
 }
 
 .flowLabel {
@@ -711,7 +725,11 @@
   cursor: pointer;
 }
 
-.flowBack:hover { color: var(--dsw-alias-label-primary); }
+@media (hover: hover) {
+  .flowBack:hover {
+    color: var(--dsw-alias-label-primary);
+  }
+}
 
 .flowFeed {
   display: flex;
@@ -736,7 +754,11 @@
   animation: flowRise 220ms ease-out both;
 }
 
-.flowRow:hover { background: var(--dsw-alias-bg-skeleton); }
+@media (hover: hover) {
+  .flowRow:hover {
+    background: var(--dsw-alias-bg-skeleton);
+  }
+}
 .flowRow[aria-pressed='true'] { background: var(--dsw-alias-bg-skeleton); box-shadow: inset 2px 0 0 var(--dsw-alias-state-business-primary); }
 .flowRowTime { color: var(--dsw-alias-label-tertiary); font-size: 12px; font-variant-numeric: tabular-nums; }
 .flowRowTitle { min-width: 0; overflow-wrap: anywhere; }
