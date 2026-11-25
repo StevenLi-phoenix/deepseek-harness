@@ -404,6 +404,31 @@ describe('MemoryLoader merge', () => {
     expect(api.posts).toHaveLength(1)
   })
 
+  it('treats a merge preview that answers another action or stage as a failed preview', async () => {
+    const store = createMemoryStore()
+    await new MemoryLoader(store, fakeApi({ post: () => ({ action: 'feedback.forget', id: 'x' }) })).mergePreview(['aaaaaa', 'bbbbbb'])
+    expect(store.getSnapshot()).toMatchObject({ merge: null, error: { message: 'unexpected merge answer' } })
+    await new MemoryLoader(store, fakeApi({ post: () => DONE })).mergePreview(['aaaaaa', 'bbbbbb'])
+    expect(store.getSnapshot()).toMatchObject({ merge: null, error: { message: 'unexpected merge answer' } })
+  })
+
+  it('closes the merge and shows why when applying it gets a wrong answer or is refused', async () => {
+    const store = createMemoryStore()
+    const wrong = new MemoryLoader(store, fakeApi({ post: () => PREVIEW }), () => 1)
+    await wrong.mergePreview(['aaaaaa', 'bbbbbb'])
+    await wrong.mergeApply({ text: 'owner words' })
+    expect(store.getSnapshot()).toMatchObject({ merge: null, error: { message: 'unexpected merge answer' } })
+    const refused = new MemoryLoader(store, fakeApi({
+      post: (action) => {
+        if (action.action === 'merge' && action.confirm !== undefined) throw new MemoryRequestError('changed', 'stale_preview')
+        return PREVIEW
+      },
+    }), () => 2)
+    await refused.mergePreview(['aaaaaa', 'bbbbbb'])
+    await refused.mergeApply({ text: 'owner words' })
+    expect(store.getSnapshot()).toMatchObject({ merge: null, error: { code: 'stale_preview', message: 'changed' } })
+  })
+
   it('reclassifies entries and keeps every id busy until the answer lands', async () => {
     const store = createMemoryStore()
     const gate = {
@@ -424,6 +449,22 @@ describe('MemoryLoader merge', () => {
     await pending
     expect(store.getSnapshot().busy).toEqual([])
     expect(store.getSnapshot().error).toEqual({ code: 'not_found', message: 'gone' })
+  })
+
+  it('names the entry id when a refused move carries no reason', async () => {
+    const store = createMemoryStore()
+    const api = fakeApi({ post: () => ({ action: 'reclassify', category: 'career', results: [{ id: 'aaaaaa', ok: false }, { id: 'bbbbbb', ok: true }] }) })
+    await new MemoryLoader(store, api, () => 1).reclassify(['aaaaaa', 'bbbbbb'], 'career')
+    expect(store.getSnapshot().error).toEqual({ code: null, message: 'aaaaaa' })
+  })
+
+  it('shows the reason when a move gets a wrong answer or the request fails, and frees the rows', async () => {
+    const store = createMemoryStore()
+    await new MemoryLoader(store, fakeApi({ post: () => PREVIEW }), () => 1).reclassify(['aaaaaa'], 'career')
+    expect(store.getSnapshot()).toMatchObject({ busy: [], error: { message: 'unexpected reclassify answer' } })
+    const down = fakeApi({ post: () => { throw new MemoryRequestError('down', 'unavailable') } })
+    await new MemoryLoader(store, down, () => 2).reclassify(['aaaaaa'], 'career')
+    expect(store.getSnapshot()).toMatchObject({ busy: [], error: { code: 'unavailable', message: 'down' } })
   })
 
   it('sets a suggestion aside without touching memory', () => {

@@ -722,3 +722,120 @@ describe('the curation page', () => {
     expect(actions.mergeCancel).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('conflicting entries and the entry list', () => {
+  const CONFLICT = {
+    key: 'bbbbbb-cccccc',
+    kind: 'conflict' as const,
+    score: 0.5,
+    ids: ['bbbbbb', 'cccccc'],
+    category: 'instructions' as const,
+    proposal: 'reply in Chinese',
+    members: [
+      { id: 'bbbbbb', category: 'instructions' as const, date: '2026-10-31', text: 'reply in Chinese', protected: true, parts: [] },
+      { id: 'cccccc', category: 'projects' as const, date: '2026-10-20', text: 'reply in English', protected: false, parts: [] },
+    ],
+  }
+
+  it('marks a group of different categories, shows a member without parts whole, and returns to the full list', () => {
+    mount({ view: { ...VIEW, curation: { ...VIEW.curation!, groups: [CONFLICT] } } })
+    const card = screen.getByRole('region', { name: '记忆条目' })
+    fireEvent.click(within(card).getByRole('button', { name: '重复 / 冲突 1' }))
+    const group = card.querySelector('[data-kind="conflict"]')!
+    expect(group.textContent).toContain(t('dupes.conflict'))
+    expect(group.textContent).toContain(t('entries.protected'))
+    expect(group.querySelectorAll('mark')).toHaveLength(0)
+    expect(group.textContent).toContain('reply in English')
+    fireEvent.click(within(card).getByRole('button', { name: '全部条目' }))
+    expect(card.querySelector('[data-kind="conflict"]')).toBeNull()
+    expect(card.textContent).toContain('building dsh')
+  })
+
+  it('ignores keys other than Escape, and a category change that picks nothing', () => {
+    const { actions } = mount()
+    const card = screen.getByRole('region', { name: '记忆条目' })
+    fireEvent.click(within(card).getByRole('checkbox', { name: '选择 bbbbbb' }))
+    fireEvent.keyDown(card, { key: 'a' })
+    expect(within(card).getByRole('toolbar', { name: '已选 1 条' })).toBeTruthy()
+    fireEvent.change(within(card).getByLabelText('改为'), { target: { value: '' } })
+    expect(actions.reclassify).not.toHaveBeenCalled()
+    expect(within(card).getByRole('toolbar', { name: '已选 1 条' })).toBeTruthy()
+  })
+
+  it('offers only the erase for an entry whose latest change cannot be undone', () => {
+    const { store } = mount()
+    const row = screen.getByText('building dsh').closest('li')!
+    fireEvent.click(within(row).getByRole('button', { expanded: false }))
+    act(() => { store.update((draft) => { draft.details['cccccc'] = { status: 'ready', detail: { ...DETAIL, entry: { ...VIEW.entries.items[1]! } } } }) })
+    expect(within(row).queryByRole('button', { name: '撤销最近一次改动' })).toBeNull()
+    expect(within(row).getByRole('button', { name: '彻底删除' })).toBeTruthy()
+  })
+})
+
+describe('suggestions and the section keys', () => {
+  it('says there is nothing to tidy once every suggestion is set aside, with no count', () => {
+    mount({ dismissed: ['merge:bbbbbb-cccccc', 'stale:eeeeee'] })
+    const card = screen.getByRole('region', { name: '整理建议' })
+    expect(card.textContent).toContain('暂时没有整理建议。')
+    expect(card.textContent).not.toContain('条建议')
+  })
+
+  it('lists a suggestion the Host sent without a key, and sets it aside by its entries', () => {
+    const { actions } = mount({
+      view: {
+        ...VIEW,
+        curation: { scanned: 2, groups: [], suggestions: [{ kind: 'merge', reason: 'duplicate', ids: ['cccccc', 'bbbbbb'], category: 'projects', text: 'keyless suggestion' }] },
+      },
+    })
+    const row = screen.getByText('keyless suggestion').closest('li')!
+    fireEvent.click(within(row).getByRole('button', { name: '不需要' }))
+    expect(actions.dismiss).toHaveBeenCalledWith('merge:bbbbbb-cccccc')
+  })
+
+  it('ignores keys other than Escape, and closes an open erase preview with Escape', () => {
+    const { actions } = mount({ purge: { ids: ['bbbbbb'], stage: 'previewing' } })
+    const section = screen.getByRole('region', { name: '记忆' })
+    fireEvent.keyDown(section, { key: 'a' })
+    expect(actions.purgeCancel).not.toHaveBeenCalled()
+    fireEvent.keyDown(section, { key: 'Escape' })
+    expect(actions.purgeCancel).toHaveBeenCalledTimes(1)
+    expect(actions.mergeCancel).not.toHaveBeenCalled()
+  })
+})
+
+describe('merge and erase panels in other stages', () => {
+  const IDS = ['bbbbbb', 'cccccc']
+
+  it('names no entry for a finished merge without a preview, and draws nothing while a merge has no preview to show', () => {
+    mount({ merge: { ids: IDS, stage: 'done' } })
+    expect(screen.getByRole('status', { name: '合并 2 条记忆？' }).textContent).toContain('已合并为 。')
+    cleanup()
+    mount({ merge: { ids: IDS, stage: 'applying' } })
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('lists each entry of a bulk erase, with the text of the ones found', () => {
+    const items = [
+      { id: 'bbbbbb', found: true, text: 'reply in Chinese', history: 1, snapshots: 0, pending: 0 },
+      { id: 'cccccc', found: false, history: 0, snapshots: 0, pending: 0 },
+    ]
+    mount({ purge: { ids: IDS, stage: 'ready', preview: { action: 'forget', stage: 'preview', token: 'b'.repeat(64), items } } })
+    const dialog = screen.getByRole('alertdialog', { name: '彻底删除 2 条记忆？' })
+    const rows = dialog.querySelectorAll('li')
+    expect(rows).toHaveLength(2)
+    expect(rows[0]?.textContent).toContain('reply in Chinese')
+    expect(rows[1]?.textContent).toContain('找不到这条记忆')
+  })
+})
+
+describe('Escape with nothing to close', () => {
+  it('changes nothing when no entry is open or selected and no merge or erase is showing', () => {
+    const { actions } = mount()
+    const card = screen.getByRole('region', { name: '记忆条目' })
+    fireEvent.keyDown(card, { key: 'Escape' })
+    fireEvent.keyDown(screen.getByRole('region', { name: '记忆' }), { key: 'Escape' })
+    expect(actions.mergeCancel).not.toHaveBeenCalled()
+    expect(actions.purgeCancel).not.toHaveBeenCalled()
+    expect(within(card).queryByRole('toolbar')).toBeNull()
+  })
+})

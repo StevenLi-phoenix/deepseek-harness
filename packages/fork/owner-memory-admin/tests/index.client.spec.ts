@@ -167,6 +167,33 @@ describe('owner-memory-admin browser entry', () => {
     expect(snapshot().error).toBeNull()
   })
 
+  it('wires merge, reclassify, and dismiss to the one shared loader', async () => {
+    const posts: MemoryAction[] = []
+    stubHost((_url, init) => {
+      if (init?.method !== 'POST') return Response.json(VIEW)
+      const action = JSON.parse(init.body as string) as MemoryAction
+      posts.push(action)
+      if (action.action === 'merge') {
+        return Response.json(action.confirm === undefined
+          ? { action: 'merge', stage: 'preview', ids: ['bbbbbb', 'cccccc'], keep: 'cccccc', category: 'projects', text: 'merged', removed: 1, token: 'c'.repeat(64) }
+          : { action: 'merge', stage: 'done', ids: ['bbbbbb', 'cccccc'], keep: 'cccccc', category: 'projects', text: 'merged words', removed: ['bbbbbb'] })
+      }
+      return Response.json({ action: 'reclassify', category: 'career', results: [{ id: 'bbbbbb', ok: true }] })
+    })
+    const face = mounted()
+    const snapshot = (): MemoryState => face.hooks.memory.getSnapshot()
+    await face.actions.mergePreview(['bbbbbb', 'cccccc'])
+    expect(snapshot().merge?.stage).toBe('ready')
+    await face.actions.mergeApply({ text: 'merged words' })
+    expect(snapshot().merge).toMatchObject({ stage: 'done', removed: ['bbbbbb'] })
+    face.actions.mergeCancel()
+    expect(snapshot().merge).toBeNull()
+    await face.actions.reclassify(['bbbbbb'], 'career')
+    face.actions.dismiss('merge:bbbbbb-cccccc')
+    expect(snapshot().dismissed).toEqual(['merge:bbbbbb-cccccc'])
+    expect(posts.map(post => post.action)).toEqual(['merge', 'merge', 'reclassify'])
+  })
+
   it('gives the same actions to every render of the section', () => {
     const { ctx, registered } = fakeContext()
     apply(ctx as never)
