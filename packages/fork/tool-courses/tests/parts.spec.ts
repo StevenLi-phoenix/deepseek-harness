@@ -4,7 +4,7 @@ import { clip, coverageRows, dataBlock, healthLine, runLines, taskLine } from '.
 import { deadlinesTool, findTool, getTool, syncTool } from '../src/read-tools.ts'
 import { requestId, writeOutcome } from '../src/write-outcome.ts'
 import { clamp, errorText, text, ToolProblem } from '../src/tool-args.ts'
-import { memoTool, progressTool } from '../src/write-tools.ts'
+import { memoTool, observeTool, progressTool, syncRunTool } from '../src/write-tools.ts'
 
 describe('tool arguments', () => {
   it('reads a string argument trimmed and anything else as empty', () => {
@@ -278,5 +278,26 @@ describe('read tools called directly', () => {
     expect(text).toContain('The 4 most recent sync run(s)')
     expect(text).toContain('- run r1:\n    checked grades')
     expect(text).toContain('- run r2:\n    checked grades')
+  })
+})
+
+describe('observe and sync run requests', () => {
+  it('titles an observation by the task id, or by the new task\'s title when it has no id', () => {
+    const { title } = observeTool()
+    expect(title({ id: 'hw5' })).toBe('Save what the platform showed for hw5')
+    expect(title({ title: 'Week 8' })).toBe('Save what the platform showed for "Week 8"')
+  })
+
+  it('refuses an observation whose expected_version is missing or negative', () => {
+    const { build } = observeTool()
+    const page = { id: 'hw5', url: 'https://brightspace.nyu.edu/d2l/home', observed: 'x', due_at: 'none' }
+    expect(() => build(page)).toThrow('give expected_version')
+    expect(() => build({ ...page, expected_version: -2 })).toThrow('give expected_version')
+  })
+
+  it('titles a sync run by the areas it read, or as reading nothing', () => {
+    const { title } = syncRunTool()
+    expect(title({ checked: ['assignments', 'grades'] })).toBe('Record a course sync run (assignments, grades)')
+    expect(title({})).toBe('Record a course sync run (nothing read)')
   })
 })

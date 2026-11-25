@@ -85,6 +85,39 @@ describe('course tools', () => {
     expect(api.call).toHaveBeenCalledTimes(1)
   })
 
+  it('names the submission platform as Gradescope, as the page host, or as "platform" when the url has no host', async () => {
+    const { run, api } = await mount(() => ({ id: 'hw5', kind: 'task', version: 5 }))
+    const observe = (url: string) => run('courses_observe', { id: 'hw5', expected_version: 4, url, observed: 'shows 1 submission', submission_status: 'submitted' })
+    await observe('https://www.gradescope.com/courses/1/assignments/2')
+    await observe('https://canvas.example.edu/courses/1')
+    await observe('not a url')
+    expect(api.call.mock.calls.map(call => (call[1]['submission'] as { platform: string }).platform)).toEqual(['Gradescope', 'canvas.example.edu', 'platform'])
+  })
+
+  it('saves a late date and moves an existing task to another course, and refuses an update that names no task', async () => {
+    const { run, api } = await mount(() => ({ id: 'hw5', kind: 'task', version: 5 }))
+    const url = 'https://brightspace.nyu.edu/d2l/home'
+    await run('courses_observe', { id: 'hw5', expected_version: 2, url, observed: 'Late until Dec 1', late_at: '2026-12-01T23:59:00-05:00', course: 'ml' })
+    expect(api.call.mock.calls[0]![1]).toMatchObject({ id: 'hw5', expected_version: 2, course_id: 'ml', late_at: '2026-12-01T23:59:00-05:00' })
+    expect(api.call.mock.calls[0]![1]).not.toHaveProperty('source_url')
+    expect(await run('courses_observe', { expected_version: 2, url, observed: 'x', late_at: '2026-12-01T23:59:00-05:00' }))
+      .toMatchObject({ value: { error: 'give the task id to update, or expected_version 0 for a new task' } })
+    expect(api.call).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses a run without a detail', async () => {
+    const { run, api } = await mount(() => ({ id: 'run', kind: 'sync', version: 1 }))
+    const result = await run('courses_record_sync', { detail: '  ', checked: ['grades'], url: 'https://brightspace.nyu.edu/d2l/home' })
+    expect(textOf(result)).toContain('give the run\'s detail')
+    expect(api.call).not.toHaveBeenCalled()
+  })
+
+  it('records a run under the scope the model names', async () => {
+    const { run, api } = await mount(() => ({ id: 'run', kind: 'sync', version: 1 }))
+    await run('courses_record_sync', { detail: 'One course', checked: ['grades'], url: 'https://brightspace.nyu.edu/d2l/home', scope: 'cs 101' })
+    expect(api.call.mock.calls[0]![1]).toMatchObject({ id: 'sync-dsh-cs-101-20261102T1700Z', scope: 'cs 101' })
+  })
+
   it('records a reading run with every area, the unchanged tasks, and a failed run without a page', async () => {
     const { run, api } = await mount(() => ({ id: 'run', kind: 'sync', version: 1 }))
     await run('courses_record_sync', { detail: 'Assignments lists of 7 courses; 40 unchanged', checked: ['assignments'], checked_ids: ['t1', 't2'], url: 'https://brightspace.nyu.edu/d2l/home' })
