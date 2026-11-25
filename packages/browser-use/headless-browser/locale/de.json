@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Headless-Browser",
+    "description": "Ein dauerhaft laufendes Headless-Chromium, das der Agent über mehrere Runden hinweg steuert, mit einer Übernahmeseite, auf der ein Mensch live zusieht und die Steuerung für eine Anmeldung, eine Zahlung oder jeden anderen Schritt übernimmt, der einen Menschen braucht."
+  }
+}

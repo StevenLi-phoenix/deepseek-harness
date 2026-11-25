@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Navegador sem interface",
+    "description": "Um Chromium sem interface e persistente que o agente opera de um turno para outro, com uma página de controle do navegador onde uma pessoa acompanha a tela ao vivo e assume o controle para um login, um pagamento ou qualquer etapa que exija uma pessoa."
+  }
+}

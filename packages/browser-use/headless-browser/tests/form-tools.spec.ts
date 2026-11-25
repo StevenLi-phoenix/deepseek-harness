@@ -8,7 +8,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import { assertSupportedJsonSchema, type ToolDefinition } from '@deepseek-ai/dsh-tools'
+import { assertSupportedJsonSchema, type ToolDefinition, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CredentialVault } from '../src/credentials.ts'
 import { registerFormTools, type FormBrowser, type FormUploads } from '../src/form-tools.ts'
@@ -17,7 +17,20 @@ import { SecretFieldError, type ActionOutcome, type SecretField, type TargetRequ
 import { TakeoverState } from '../src/takeover.ts'
 import { UploadRefusedError } from '../src/uploads.ts'
 
-const EXEC = { signal: new AbortController().signal } as unknown as Parameters<ToolDefinition['execute']>[1]
+/**
+ * The run context a tool body receives. These tools read none of it; the ids are
+ * minted here because the executor that normally brands them is not in the test.
+ */
+const EXEC: ToolRunContext = {
+  callId: 'form-tools-call' as ToolRunContext['callId'],
+  rootCallId: 'form-tools-call' as ToolRunContext['rootCallId'],
+  name: 'form-tools',
+  arguments: {},
+  token: Symbol('form-tools') as ToolRunContext['token'],
+  signal: new AbortController().signal,
+  deferContext() {},
+  concludeTurn() {},
+}
 
 const HIT: ActionOutcome = { url: 'https://acme.wd5.myworkdayjobs.com/signup', target: { ref: '#password', index: 0, name: 'Password', score: 1 } }
 

@@ -25,7 +25,9 @@ import {
 } from '../src/keepalive.ts'
 import { BrowserTabs, MAX_TABS, TabLimitError, type TabsPage } from '../src/tabs.ts'
 
-const LOG = { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as Context['logger']
+const LOG = {
+  info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn(),
+} satisfies Pick<Context['logger'], 'debug' | 'error' | 'info' | 'warn'>
 
 /** Start of the test's clock, so every timestamp in a result is readable. */
 const START = Date.parse('2026-01-01T00:00:00.000Z')

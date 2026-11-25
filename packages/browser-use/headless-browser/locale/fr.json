@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Navigateur sans interface",
+    "description": "Un Chromium sans interface et persistant que l'agent pilote d'un tour à l'autre, avec une page de prise en main où une personne le suit en direct et prend la main pour une connexion, un paiement ou toute étape qui demande un humain."
+  }
+}

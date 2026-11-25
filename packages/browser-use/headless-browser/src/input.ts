@@ -231,6 +231,7 @@ export function cdpCommand(message: ClientMessage): InputCommand | undefined {
 
 /**
  * Encode one screencast frame for every viewer.
+ * @param tabId - the tab the frame came from; the page paints only the active tab's frames and aims input at this tab.
  * @param data - base64 JPEG bytes as CDP reported them.
  * @param metadata - page geometry that tells the page how to scale pointer input.
  * @returns the JSON text a viewer receives.

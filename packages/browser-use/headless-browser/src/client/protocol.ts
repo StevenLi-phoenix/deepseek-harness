@@ -323,7 +323,11 @@ export function normalizeAddress(value: string): string | undefined {
   return `https://${text}`
 }
 
-/** Serialize one message for the socket. */
+/**
+ * Serialize one message for the socket.
+ * @param message - the input, control, or tab message the page sends.
+ * @returns the JSON text written to the live socket.
+ */
 export function encodeClientMessage(message: ClientMessage): string {
   return JSON.stringify(message)
 }

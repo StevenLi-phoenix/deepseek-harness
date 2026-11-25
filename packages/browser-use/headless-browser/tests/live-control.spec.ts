@@ -13,9 +13,8 @@ import HttpServer from '@deepseek-ai/dsh-host-webserver'
 import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import type { InputCommand } from '../src/input.ts'
 import { SecurityLog } from '../src/guard.ts'
-import type { LiveView, Viewer } from '../src/live-view.ts'
-import { LIVE_PATH, mountTakeoverRoutes } from '../src/routes.ts'
-import type { HeadlessBrowserSession } from '../src/session.ts'
+import type { Viewer } from '../src/live-view.ts'
+import { LIVE_PATH, mountTakeoverRoutes, type TakeoverRoutesDeps } from '../src/routes.ts'
 import { TakeoverState } from '../src/takeover.ts'
 
 interface App {
@@ -57,22 +56,20 @@ async function boot(): Promise<App> {
   const tabIds: Array<string | undefined> = []
   const tabCommands: unknown[] = []
   const browser = {
-    async dispatch(command: InputCommand, tabId?: string): Promise<unknown> {
+    async dispatch(command: InputCommand, tabId?: string): Promise<void> {
       dispatched.push(command)
       tabIds.push(tabId)
-      return undefined
     },
     async applyTabCommand(message: unknown): Promise<void> { tabCommands.push(message) },
     tabsState: () => [],
     onTabsChange: () => () => {},
     status: () => ({ launched: true, url: 'https://example.com/signin', tabs: 0 }),
-  } as unknown as HeadlessBrowserSession
+  } satisfies TakeoverRoutesDeps['browser']
   const viewers = new Set<Viewer>()
   const view = {
     size: 0,
-    async attach(viewer: Viewer): Promise<() => void> {
+    async attach(viewer: Viewer): Promise<void> {
       viewers.add(viewer)
-      return () => { viewers.delete(viewer) }
     },
     async detach(viewer: Viewer): Promise<void> { viewers.delete(viewer) },
     broadcast(message: unknown): void {
@@ -80,7 +77,7 @@ async function boot(): Promise<App> {
     },
     async refresh(): Promise<void> {},
     async close(): Promise<void> { viewers.clear() },
-  } as unknown as LiveView
+  } satisfies TakeoverRoutesDeps['view']
   const takeover = new TakeoverState()
   const removeRoutes = mountTakeoverRoutes(ctx.webServer, {
     browser,

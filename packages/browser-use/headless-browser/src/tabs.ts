@@ -37,14 +37,22 @@ export interface TabsPage {
   reload(options: { waitUntil: 'domcontentloaded'; timeout: number }): Promise<unknown>
   bringToFront(): Promise<void>
   close(): Promise<void>
-  on(event: string, listener: (...args: never[]) => void): unknown
-  off(event: string, listener: (...args: never[]) => void): unknown
+  on(event: TabsPageEvent, listener: () => void): unknown
+  on(event: 'popup', listener: (popup: this) => void): unknown
+  off(event: TabsPageEvent, listener: () => void): unknown
+  off(event: 'popup', listener: (popup: this) => void): unknown
 }
 
-/** The context operations this module needs; a Playwright `BrowserContext` satisfies them. */
-export interface TabsContext {
-  pages(): readonly TabsPage[]
-  newPage(): Promise<TabsPage>
+/** Page events whose payload the tab manager ignores; a popup's payload is the new page. */
+export type TabsPageEvent = 'close' | 'domcontentloaded' | 'framenavigated' | 'load'
+
+/**
+ * The context operations this module needs; a Playwright `BrowserContext` satisfies them
+ * with its own `Page` type, so the pages the manager hands back keep that type.
+ */
+export interface TabsContext<Page extends TabsPage = TabsPage> {
+  pages(): readonly Page[]
+  newPage(): Promise<Page>
 }
 
 /** A tab operation named a tab that is not open. */
@@ -72,9 +80,9 @@ export class TabNavigationError extends Error {
 }
 
 /** One open tab, as the manager keeps it. */
-export interface Tab {
+export interface Tab<Page extends TabsPage = TabsPage> {
   readonly id: string
-  readonly page: TabsPage
+  readonly page: Page
   title: string
   url: string
   loading: boolean
@@ -87,11 +95,11 @@ export interface Tab {
 }
 
 /** What the tab manager needs to open pages and report failures. */
-export interface TabsOptions {
+export interface TabsOptions<Page extends TabsPage = TabsPage> {
   /** Resolve the persistent context, launching it when needed. */
-  readonly context: () => Promise<TabsContext>
+  readonly context: () => Promise<TabsContext<Page>>
   /** Plugin logger for page events that failed to settle. */
-  readonly log: Context['logger']
+  readonly log: Pick<Context['logger'], 'info' | 'warn'>
   /** Most tabs kept open; defaults to {@link MAX_TABS}. */
   readonly maxTabs?: number
   /** Per-navigation deadline; defaults to {@link NAVIGATION_TIMEOUT_MS}. */
@@ -100,18 +108,18 @@ export interface TabsOptions {
    * Pages that belong to another owner — a keepalive's offscreen page — and are
    * never adopted as a tab, so they cannot spend one of the tab slots.
    */
-  readonly reserved?: (page: TabsPage) => boolean
+  readonly reserved?: (page: Page) => boolean
   /**
    * Called for every page the manager adopts; the returned function runs when
    * the tab lets the page go. The session uses it to keep the page's downloads.
    */
-  readonly onAdopt?: (page: TabsPage) => () => void
+  readonly onAdopt?: (page: Page) => () => void
 }
 
 /** What the active tab and its CDP session are, for the screencast. */
-export interface ActiveTab {
+export interface ActiveTab<Page extends TabsPage = TabsPage> {
   readonly id: string
-  readonly page: TabsPage
+  readonly page: Page
 }
 
 /** What one tab close left behind. */
@@ -134,12 +142,15 @@ export interface PopupTab {
   readonly url: string
 }
 
-/** Tabs of one persistent browser context. */
-export class BrowserTabs {
-  readonly #options: TabsOptions
+/**
+ * Tabs of one persistent browser context. `Page` is the context's own page type,
+ * so a Playwright context gets Playwright pages back and a test context its fakes.
+ */
+export class BrowserTabs<Page extends TabsPage = TabsPage> {
+  readonly #options: TabsOptions<Page>
   readonly #maxTabs: number
   readonly #navigationTimeoutMs: number
-  readonly #tabs = new Map<string, Tab>()
+  readonly #tabs = new Map<string, Tab<Page>>()
   readonly #order: string[] = []
   readonly #listeners = new Set<() => void>()
   #activeId: string | undefined
@@ -154,13 +165,16 @@ export class BrowserTabs {
   /**
    * @param options - context resolver, logger, tab cap, and navigation deadline.
    */
-  constructor(options: TabsOptions) {
+  constructor(options: TabsOptions<Page>) {
     this.#options = options
     this.#maxTabs = options.maxTabs ?? MAX_TABS
     this.#navigationTimeoutMs = options.navigationTimeoutMs ?? NAVIGATION_TIMEOUT_MS
   }
 
-  /** The tab strip's state, in opening order. */
+  /**
+   * The tab strip's state.
+   * @returns every open tab in opening order, with its title, URL, loading flag, and whether it is active.
+   */
   state(): TabInfo[] {
     return this.#order.map((id) => {
       const tab = this.#tabs.get(id)
@@ -176,7 +190,11 @@ export class BrowserTabs {
     })
   }
 
-  /** Observe every tab and active-tab change. */
+  /**
+   * Observe every tab and active-tab change.
+   * @param listener - called after each change; it reads the new state from {@link state}.
+   * @returns how to stop listening.
+   */
   onChange(listener: () => void): () => void {
     this.#listeners.add(listener)
     return () => {
@@ -188,7 +206,7 @@ export class BrowserTabs {
    * The active tab, adopting the context's first page or opening a blank one.
    * @returns the tab every default operation acts on.
    */
-  async active(): Promise<ActiveTab> {
+  async active(): Promise<ActiveTab<Page>> {
     return this.#run(async () => {
       const tab = await this.#ensureActive()
       return { id: tab.id, page: tab.page }
@@ -201,7 +219,7 @@ export class BrowserTabs {
    * @returns the page this operation acts on.
    * @throws TabNotFoundError - when the id names no open tab.
    */
-  async page(id?: string): Promise<TabsPage> {
+  async page(id?: string): Promise<Page> {
     return this.#run(async () => {
       if (id !== undefined) {
         const tab = this.#tabs.get(id)
@@ -244,7 +262,7 @@ export class BrowserTabs {
       const index = this.#order.indexOf(tab.id)
       const replaced = this.#tabs.size === 1
       tab.closing = true
-      let replacement: Tab | undefined
+      let replacement: Tab<Page> | undefined
       if (replaced) {
         const context = await this.#options.context()
         replacement = this.#adopt(await context.newPage())
@@ -293,17 +311,29 @@ export class BrowserTabs {
     })
   }
 
-  /** Go back in one tab's history. */
+  /**
+   * Go back in one tab's history, within the navigation deadline.
+   * @param id - tab id, or nothing for the active tab.
+   * @throws TabNavigationError - when the navigation fails or misses its deadline.
+   */
   async back(id?: string): Promise<void> {
     await this.#step(id, page => page.goBack({ waitUntil: 'domcontentloaded', timeout: this.#navigationTimeoutMs }))
   }
 
-  /** Go forward in one tab's history. */
+  /**
+   * Go forward in one tab's history, within the navigation deadline.
+   * @param id - tab id, or nothing for the active tab.
+   * @throws TabNavigationError - when the navigation fails or misses its deadline.
+   */
   async forward(id?: string): Promise<void> {
     await this.#step(id, page => page.goForward({ waitUntil: 'domcontentloaded', timeout: this.#navigationTimeoutMs }))
   }
 
-  /** Reload one tab. */
+  /**
+   * Reload one tab, within the navigation deadline.
+   * @param id - tab id, or nothing for the active tab.
+   * @throws TabNavigationError - when the reload fails or misses its deadline.
+   */
   async reload(id?: string): Promise<void> {
     await this.#step(id, page => page.reload({ waitUntil: 'domcontentloaded', timeout: this.#navigationTimeoutMs }))
   }
@@ -328,7 +358,10 @@ export class BrowserTabs {
     }
   }
 
-  /** A marker for {@link popupsSince}, taken before an action that may open a window. */
+  /**
+   * A marker for {@link popupsSince}, taken before an action that may open a window.
+   * @returns the sequence number of the newest popup adopted so far; 0 before any.
+   */
   popupMark(): number {
     return this.#popupSeq
   }
@@ -369,7 +402,7 @@ export class BrowserTabs {
     for (const waiter of [...this.#popupWaiters]) waiter()
   }
 
-  async #step(id: string | undefined, run: (page: TabsPage) => Promise<unknown>): Promise<void> {
+  async #step(id: string | undefined, run: (page: Page) => Promise<unknown>): Promise<void> {
     await this.#run(async () => {
       const tab = id === undefined && this.#activeId === undefined ? await this.#ensureActive() : this.#resolve(id)
       tab.loading = true
@@ -387,7 +420,7 @@ export class BrowserTabs {
     })
   }
 
-  async #navigateTab(tab: Tab, url: string): Promise<void> {
+  async #navigateTab(tab: Tab<Page>, url: string): Promise<void> {
     const target = absoluteUrl(url)
     tab.loading = true
     this.#emit()
@@ -403,7 +436,7 @@ export class BrowserTabs {
     this.#emit()
   }
 
-  async #ensureActive(): Promise<Tab> {
+  async #ensureActive(): Promise<Tab<Page>> {
     const current = this.#activeId === undefined ? undefined : this.#tabs.get(this.#activeId)
     if (current !== undefined) return current
     const first = this.#order.map(id => this.#tabs.get(id)).find(tab => tab !== undefined)
@@ -419,21 +452,21 @@ export class BrowserTabs {
     return tab
   }
 
-  async #firstPage(context: TabsContext): Promise<TabsPage> {
+  async #firstPage(context: TabsContext<Page>): Promise<Page> {
     const reusable = context.pages().find(page => !page.isClosed()
       && !this.#hasPage(page)
       && !(this.#options.reserved?.(page) ?? false))
     return reusable ?? await context.newPage()
   }
 
-  #hasPage(page: TabsPage): boolean {
+  #hasPage(page: Page): boolean {
     for (const tab of this.#tabs.values()) if (tab.page === page) return true
     return false
   }
 
-  #adopt(page: TabsPage): Tab {
+  #adopt(page: Page): Tab<Page> {
     const id = `t${String(++this.#sequence)}`
-    const tab: Tab = {
+    const tab: Tab<Page> = {
       id,
       page,
       title: '',
@@ -446,7 +479,7 @@ export class BrowserTabs {
     const onLoad = (): void => { this.#settle(tab) }
     const onNavigation = (): void => { this.#navigated(tab) }
     const onClose = (): void => { void this.#closed(tab) }
-    const onPopup = (popup: TabsPage): void => { void this.#popup(tab, popup) }
+    const onPopup = (popup: Page): void => { void this.#popup(tab, popup) }
     page.on('domcontentloaded', onLoad)
     page.on('load', onLoad)
     page.on('framenavigated', onNavigation)
@@ -465,7 +498,7 @@ export class BrowserTabs {
     return tab
   }
 
-  #detach(tab: Tab): void {
+  #detach(tab: Tab<Page>): void {
     tab.detach?.()
   }
 
@@ -474,7 +507,7 @@ export class BrowserTabs {
    * adopted even at the tab cap: the site opened it, and a window nobody can
    * reach would leave its sign-in or consent step unanswerable.
    */
-  async #popup(opener: Tab, popup: TabsPage): Promise<void> {
+  async #popup(opener: Tab<Page>, popup: Page): Promise<void> {
     try {
       await this.#run(async () => {
         if (this.#disposed || popup.isClosed() || this.#hasPage(popup) || (this.#options.reserved?.(popup) ?? false)) return
@@ -498,20 +531,20 @@ export class BrowserTabs {
     for (const waiter of [...this.#popupWaiters]) waiter()
   }
 
-  #settle(tab: Tab): void {
+  #settle(tab: Tab<Page>): void {
     if (tab.closing || !this.#tabs.has(tab.id)) return
     tab.loading = false
     void this.#refresh(tab)
   }
 
-  #navigated(tab: Tab): void {
+  #navigated(tab: Tab<Page>): void {
     if (tab.closing || !this.#tabs.has(tab.id)) return
     tab.url = tab.page.url()
     this.#emit()
     void this.#refresh(tab)
   }
 
-  async #closed(tab: Tab): Promise<void> {
+  async #closed(tab: Tab<Page>): Promise<void> {
     if (tab.closing || !this.#tabs.has(tab.id)) return
     try {
       await this.#run(async () => {
@@ -544,7 +577,7 @@ export class BrowserTabs {
     }
   }
 
-  async #refresh(tab: Tab): Promise<void> {
+  async #refresh(tab: Tab<Page>): Promise<void> {
     if (!this.#tabs.has(tab.id)) return
     const url = tab.page.url()
     let title = tab.title
@@ -561,14 +594,14 @@ export class BrowserTabs {
     this.#emit()
   }
 
-  #remove(tab: Tab): void {
+  #remove(tab: Tab<Page>): void {
     this.#detach(tab)
     this.#tabs.delete(tab.id)
     const index = this.#order.indexOf(tab.id)
     if (index >= 0) this.#order.splice(index, 1)
   }
 
-  #resolve(id?: string): Tab {
+  #resolve(id?: string): Tab<Page> {
     if (id === undefined) {
       const active = this.#activeId === undefined ? undefined : this.#tabs.get(this.#activeId)
       if (active === undefined) throw new TabNotFoundError('active')
@@ -579,7 +612,7 @@ export class BrowserTabs {
     return tab
   }
 
-  #info(tab: Tab): TabInfo {
+  #info(tab: Tab<Page>): TabInfo {
     return { id: tab.id, title: tab.title, url: tab.url, loading: tab.loading, active: tab.id === this.#activeId }
   }
 

@@ -20,8 +20,8 @@ import {
   MIN_PASSWORD_LENGTH,
   credentialHost,
   credentialView,
-  type CredentialRecord,
   type CredentialView,
+  type SiteCredentialRecord,
 } from './credentials.ts'
 import type { ActionOutcome, AttachOutcome, AttachTarget, SecretField, TargetRequest } from './session.ts'
 import type { TakeoverState } from './takeover.ts'
@@ -57,8 +57,8 @@ export interface FormCredentials {
     length?: number
     symbols?: boolean
     replace?: boolean
-  }): Promise<CredentialRecord>
-  find(host: string, username?: string): Promise<CredentialRecord>
+  }): Promise<SiteCredentialRecord>
+  find(host: string, username?: string): Promise<SiteCredentialRecord>
   touch(id: string): Promise<void>
   remove(id: string): Promise<boolean>
 }

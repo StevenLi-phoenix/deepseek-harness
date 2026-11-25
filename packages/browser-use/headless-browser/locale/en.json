@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Headless browser",
+    "description": "One persistent headless Chromium that the agent drives across turns, with a take-over page where a person watches it live and takes control for a sign-in, a payment, or any step that needs a human."
+  }
+}

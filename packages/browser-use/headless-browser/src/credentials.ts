@@ -23,13 +23,15 @@ const UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
 const DIGITS = '23456789'
 const SYMBOLS = '!@#$%^*-_=+?'
 
-/** Bounds of a generated password's length. */
+/** Shortest generated password; a shorter request is raised to this length. */
 export const MIN_PASSWORD_LENGTH = 12
+/** Longest generated password; a longer request is cut to this length. */
 export const MAX_PASSWORD_LENGTH = 64
+/** Length of a generated password when the caller names none. */
 export const DEFAULT_PASSWORD_LENGTH = 20
 
 /** One saved account, password included; only this module and the session see the password. */
-export interface CredentialRecord {
+export interface SiteCredentialRecord {
   /** Stable id, `c<hex>`, the tools and the owner refer to. */
   readonly id: string
   /** Lower-case host the account belongs to, without a port. */
@@ -85,7 +87,7 @@ export class CredentialError extends Error {
 /** The file on disk. */
 interface CredentialFile {
   readonly version: number
-  readonly entries: CredentialRecord[]
+  readonly entries: SiteCredentialRecord[]
 }
 
 /**
@@ -120,16 +122,22 @@ export function generatePassword(length = DEFAULT_PASSWORD_LENGTH, symbols = tru
   const size = Math.min(Math.max(Math.trunc(length), MIN_PASSWORD_LENGTH), MAX_PASSWORD_LENGTH)
   const classes = symbols ? [LOWER, UPPER, DIGITS, SYMBOLS] : [LOWER, UPPER, DIGITS]
   const all = classes.join('')
-  const chars = classes.map(set => set[randomInt(set.length)]!)
-  while (chars.length < size) chars.push(all[randomInt(all.length)]!)
+  const pick = (set: string): string => set.charAt(randomInt(set.length))
+  const chars = classes.map(pick)
+  while (chars.length < size) chars.push(pick(all))
   // Fisher–Yates with the same CSPRNG, so the required characters sit anywhere.
-  for (let index = chars.length - 1; index > 0; index -= 1) {
-    const swap = randomInt(index + 1)
-    const held = chars[index]!
-    chars[index] = chars[swap]!
-    chars[swap] = held
-  }
+  for (let index = chars.length - 1; index > 0; index -= 1) swapEntries(chars, index, randomInt(index + 1))
   return chars.join('')
+}
+
+/**
+ * Exchange two entries of a list in place, without reading an index the types call optional.
+ * @param list - the list to change.
+ * @param first - one index inside the list.
+ * @param second - the other index inside the list; it may equal `first`.
+ */
+function swapEntries(list: string[], first: number, second: number): void {
+  list.splice(first, 1, ...list.splice(second, 1, ...list.slice(first, first + 1)))
 }
 
 /**
@@ -137,7 +145,7 @@ export function generatePassword(length = DEFAULT_PASSWORD_LENGTH, symbols = tru
  * @param record - the saved account.
  * @returns the view a tool result may carry.
  */
-export function credentialView(record: CredentialRecord): CredentialView {
+export function credentialView(record: SiteCredentialRecord): CredentialView {
   return {
     id: record.id,
     host: record.host,
@@ -198,7 +206,7 @@ export class CredentialVault {
    * @returns the saved record, password included, for the session to write into the page.
    * @throws CredentialError - when the host already has this login name and `replace` is not set.
    */
-  async create(request: CredentialCreateRequest): Promise<CredentialRecord> {
+  async create(request: CredentialCreateRequest): Promise<SiteCredentialRecord> {
     const host = credentialHost(request.host)
     const username = request.username.trim()
     if (username === '') throw new CredentialError('give the login name (usually the e-mail address) the account is created with')
@@ -206,12 +214,13 @@ export class CredentialVault {
       const index = entries.findIndex(entry => entry.host === host && entry.username.toLowerCase() === username.toLowerCase())
       const now = this.#now().toISOString()
       const password = generatePassword(request.length, request.symbols ?? true)
-      if (index >= 0) {
-        const existing = entries[index]!
+      // An index of -1 reads nothing, so `existing` is set exactly when the login is saved.
+      const existing = entries[index]
+      if (existing !== undefined) {
         if (request.replace !== true) {
           throw new CredentialError(`${host} already has a saved password for ${username} (${existing.id}); write the saved one with action fill (a sign-up form takes it too, with confirmSelector), or pass replace: true only on the site's own new-password or reset form`)
         }
-        const replaced: CredentialRecord = {
+        const replaced: SiteCredentialRecord = {
           ...existing,
           password,
           previousPassword: existing.password,
@@ -221,7 +230,7 @@ export class CredentialVault {
         entries[index] = replaced
         return replaced
       }
-      const record: CredentialRecord = {
+      const record: SiteCredentialRecord = {
         id: `c${randomBytes(6).toString('hex')}`,
         host,
         username,
@@ -241,14 +250,15 @@ export class CredentialVault {
    * @returns the record.
    * @throws CredentialError - when the host has no account, or several and no login name chose one.
    */
-  async find(host: string, username?: string): Promise<CredentialRecord> {
+  async find(host: string, username?: string): Promise<SiteCredentialRecord> {
     const bare = credentialHost(host)
     const file = await this.#read()
     const onHost = file.entries.filter(entry => entry.host === bare)
     const matches = username === undefined
       ? onHost
       : onHost.filter(entry => entry.username.toLowerCase() === username.trim().toLowerCase())
-    if (matches.length === 1) return matches[0]!
+    const [only, ...others] = matches
+    if (only !== undefined && others.length === 0) return only
     if (onHost.length === 0) {
       throw new CredentialError(`no saved password for ${bare}; on the site's sign-up form use action create, or hand over if the account was made outside this browser`)
     }
@@ -263,7 +273,8 @@ export class CredentialVault {
   async touch(id: string): Promise<void> {
     await this.#update((entries) => {
       const index = entries.findIndex(entry => entry.id === id)
-      if (index >= 0) entries[index] = { ...entries[index]!, lastUsedAt: this.#now().toISOString() }
+      const entry = entries[index]
+      if (entry !== undefined) entries[index] = { ...entry, lastUsedAt: this.#now().toISOString() }
     })
   }
 
@@ -313,7 +324,7 @@ export class CredentialVault {
     return { version: FILE_VERSION, entries: parsed.entries }
   }
 
-  async #update<T>(change: (entries: CredentialRecord[]) => T): Promise<T> {
+  async #update<T>(change: (entries: SiteCredentialRecord[]) => T): Promise<T> {
     const run = this.#queue.then(async () => {
       const file = await this.#read()
       const entries = [...file.entries]

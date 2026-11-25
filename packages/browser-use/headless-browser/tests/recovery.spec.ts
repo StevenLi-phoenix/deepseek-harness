@@ -31,9 +31,11 @@ import {
   recoverStaleProfile,
 } from '../src/profile.ts'
 import { BrowserUnavailableError, HeadlessBrowserSession, isLostContextError, type SessionDeps } from '../src/session.ts'
-import { BrowserTabs, type TabsContext } from '../src/tabs.ts'
+import { BrowserTabs } from '../src/tabs.ts'
 
-const LOG = { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as Context['logger']
+const LOG = {
+  info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn(),
+} satisfies Pick<Context['logger'], 'debug' | 'error' | 'info' | 'warn'>
 
 const HOST = 'test-host.local'
 
@@ -363,7 +365,7 @@ describe('browser recovery', () => {
       context: async () => ({
         pages: () => context.pagesList(),
         newPage: async () => await context.newPage(),
-      }) as unknown as TabsContext,
+      }),
       log: LOG,
     })
     await tabs.create()

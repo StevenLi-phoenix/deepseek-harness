@@ -37,12 +37,12 @@ const PAGE_HEADERS = { ...NO_STORE, 'content-type': 'text/html; charset=utf-8' }
 
 /** What the routes act on. */
 export interface TakeoverRoutesDeps {
-  /** The browser whose tabs the view shows. */
-  readonly browser: HeadlessBrowserSession
+  /** The browser whose tabs the view shows; only what the routes call. */
+  readonly browser: Pick<HeadlessBrowserSession, 'applyTabCommand' | 'dispatch' | 'onTabsChange' | 'status' | 'tabsState'>
   /** Who holds control. */
   readonly takeover: TakeoverState
-  /** The shared screencast. */
-  readonly view: LiveView
+  /** The shared screencast; only what the routes call. */
+  readonly view: Pick<LiveView, 'attach' | 'broadcast' | 'close' | 'detach' | 'refresh' | 'size'>
   /** Guard decisions, so the status route can report refusals and drifts. */
   readonly security: SecurityLog
   /** Session keepalives, with their state and retry schedule. */

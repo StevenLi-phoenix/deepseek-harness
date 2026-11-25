@@ -98,6 +98,7 @@ export const UNTRUSTED_SCHEMA = {
   },
 } as const
 
+/** Output schema branch for a failed call: one `error` line the model reads instead of a result. */
 export const ERROR_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -301,7 +302,15 @@ function downloadFields(records: readonly DownloadRecord[]): { downloads: Downlo
   }
 }
 
-export const renderJson = (_args: unknown, value: unknown) => [{ type: 'text' as const, text: JSON.stringify(value) }]
+/**
+ * Model rendering shared by every tool here: the validated result as one JSON text block.
+ * @param _args - the call's arguments; the result alone is rendered.
+ * @param value - the tool's validated result.
+ * @returns one text block carrying the JSON.
+ */
+export const renderJson = (_args: unknown, value: unknown): Array<{ type: 'text'; text: string }> => [
+  { type: 'text', text: JSON.stringify(value) },
+]
 
 /** A page-derived string, marked with the origin it came from. */
 export interface PageText {
@@ -344,6 +353,7 @@ export function failure(action: string, error: unknown): { error: string } {
  * Run one tool body that reads the page without acting on it.
  * @param action - short description used in an unexpected failure message.
  * @param run - the browser operation.
+ * @returns the operation's value, or the `error` result {@link failure} made of what it threw.
  */
 export async function attempt<T>(action: string, run: () => Promise<T>): Promise<T | { error: string }> {
   try {
@@ -374,6 +384,8 @@ async function acting<T>(deps: ToolDeps, action: string, run: () => Promise<T>):
  * @param deps - tools dependencies carrying the control state.
  * @param action - short description used in a failure message.
  * @param run - the browser operation.
+ * @returns the operation's value; `blocked` when the guard refused it; `error` when the user holds
+ *   the browser or the operation failed.
  */
 export async function guarded<T>(
   deps: Pick<ToolDeps, 'takeover'>,

@@ -61,7 +61,7 @@ class FakeSocket {
 
   /** Everything the page sent after `from`, decoded. */
   after(from: number): unknown[] {
-    return this.sent.slice(from).map(text => JSON.parse(text) as unknown)
+    return this.sent.slice(from).map((text): unknown => JSON.parse(text))
   }
 }
 
@@ -257,7 +257,7 @@ describe('浏览器接管 in-app page', () => {
   })
 
   it('shows a reconnect line, never an HTTP error page, when the status is unauthorized and the socket drops', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({ message: 'unauthorized' }) } as unknown as Response)
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ message: 'unauthorized' }, { status: 401 }))
     renderPage()
     const socket = FakeSocket.instances[0]!
     socket.open()

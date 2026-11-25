@@ -58,8 +58,8 @@ export interface DownloadLike {
 
 /** The page operation that delivers downloads; a Playwright `Page` satisfies it. */
 export interface DownloadPage {
-  on(event: string, listener: (...args: never[]) => void): unknown
-  off(event: string, listener: (...args: never[]) => void): unknown
+  on(event: 'download', listener: (download: DownloadLike) => void): unknown
+  off(event: 'download', listener: (download: DownloadLike) => void): unknown
 }
 
 /** One download, finished or failed. */
@@ -89,7 +89,7 @@ export interface DownloadStoreOptions {
   /** Age after which a kept file is deleted, in milliseconds; 0 keeps every file. */
   readonly retainMs: number
   /** Plugin logger. */
-  readonly log: Context['logger']
+  readonly log: Pick<Context['logger'], 'debug' | 'info' | 'warn'>
   /** Clock, for tests. */
   readonly now?: () => number
 }
@@ -156,8 +156,8 @@ export class DownloadStore {
    */
   attach(page: DownloadPage): () => void {
     const onDownload = (download: DownloadLike): void => { this.#start(download) }
-    page.on('download', onDownload as (...args: never[]) => void)
-    return () => { page.off('download', onDownload as (...args: never[]) => void) }
+    page.on('download', onDownload)
+    return () => { page.off('download', onDownload) }
   }
 
   /**
@@ -298,7 +298,11 @@ export class DownloadStore {
  * @param log - plugin logger.
  * @returns whether the file changed.
  */
-export async function ensureDownloadPrefs(profileDir: string, pdfsAsDownloads: boolean, log: Context['logger']): Promise<boolean> {
+export async function ensureDownloadPrefs(
+  profileDir: string,
+  pdfsAsDownloads: boolean,
+  log: Pick<Context['logger'], 'debug' | 'info' | 'warn'>,
+): Promise<boolean> {
   const path = join(profileDir, 'Default', 'Preferences')
   let prefs: Record<string, unknown> = {}
   try {

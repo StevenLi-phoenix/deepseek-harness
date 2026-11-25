@@ -9,7 +9,9 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import { BrowserTabs, MAX_TABS, TabLimitError, TabNavigationError, TabNotFoundError, type TabsContext, type TabsPage } from '../src/tabs.ts'
 
-const LOG = { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as Context['logger']
+const LOG = {
+  info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn(),
+} satisfies Pick<Context['logger'], 'debug' | 'error' | 'info' | 'warn'>
 
 /** A page that settles synchronously and reports load events the way Playwright does. */
 class FakePage implements TabsPage {

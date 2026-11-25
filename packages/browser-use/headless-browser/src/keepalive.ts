@@ -183,7 +183,7 @@ export interface KeepaliveOptions {
   /** Opens one page outside the tab model. */
   readonly create: () => Promise<KeepalivePage>
   /** Plugin logger for persistence, pool, and attempt failures. */
-  readonly log: Context['logger']
+  readonly log: Pick<Context['logger'], 'info' | 'warn'>
   /** Publishes one transition, and at most one reminder an hour. */
   readonly emit: (event: KeepaliveEvent) => void
   /** Consecutive interactive challenges that mean a person must sign in. */
@@ -221,14 +221,14 @@ export class KeepaliveError extends Error {
  */
 export class KeepalivePagePool {
   readonly #create: () => Promise<KeepalivePage>
-  readonly #log: Context['logger']
+  readonly #log: Pick<Context['logger'], 'info' | 'warn'>
   readonly #idle: KeepalivePage[] = []
   #disposed = false
 
   /**
    * @param options - how to open a page, and the plugin logger.
    */
-  constructor(options: { readonly create: () => Promise<KeepalivePage>; readonly log: Context['logger'] }) {
+  constructor(options: { readonly create: () => Promise<KeepalivePage>; readonly log: Pick<Context['logger'], 'info' | 'warn'> }) {
     this.#create = options.create
     this.#log = options.log
   }
@@ -1024,7 +1024,7 @@ function iso(at: number): string {
  * @param page - the page to close.
  * @param log - the plugin logger.
  */
-async function closeQuietly(page: KeepalivePage, log: Context['logger']): Promise<void> {
+async function closeQuietly(page: KeepalivePage, log: Pick<Context['logger'], 'warn'>): Promise<void> {
   if (page.isClosed()) return
   try {
     await page.close()

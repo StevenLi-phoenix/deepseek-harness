@@ -29,7 +29,7 @@ import { cdpScrollChannel, scrollPage, type ScrollRequest, type ScrollResult } f
 import { isComboboxInput, matchOption, readComboboxOptions, readOptions, readSelectOptions, type SelectOption } from './select.ts'
 import type { KeepalivePage } from './keepalive.ts'
 import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
-import { BrowserTabs, TabNavigationError, type ActiveTab, type ClosedTab, type PopupTab, type TabsContext, type TabsPage } from './tabs.ts'
+import { BrowserTabs, TabNavigationError, type ActiveTab, type ClosedTab, type PopupTab } from './tabs.ts'
 import { findSameNameCover, probeElement, readElementFacts, type ElementFacts } from './visibility.ts'
 
 /** How long a context gets to close before shutdown stops waiting for it. */
@@ -260,7 +260,7 @@ interface Resolution {
 /** Launch, navigate, inspect, and close one persistent Chromium with tabs. */
 export class HeadlessBrowserSession {
   readonly #config: Config
-  readonly #log: Context['logger']
+  readonly #log: Pick<Context['logger'], 'debug' | 'info' | 'warn'>
   readonly #guard: ActionGuard
   readonly #deps: SessionDeps
   #axResolver: AxTargetResolver | undefined
@@ -271,7 +271,7 @@ export class HeadlessBrowserSession {
   #sessionId: string | undefined
   #browserPid: number | undefined
   #detachExit: (() => void) | undefined
-  #tabs: BrowserTabs | undefined
+  #tabs: BrowserTabs<Page> | undefined
   /** Stops watching for pages once the context is gone. */
   #stopStealth: (() => void) | undefined
   /** Pages a keepalive opened: never a tab, so never part of the tab cap. */
@@ -287,7 +287,12 @@ export class HeadlessBrowserSession {
    * @param guard - the action guard the tools consult.
    * @param deps - the launcher, timer, and machine access; the real ones by default.
    */
-  constructor(config: Config, log: Context['logger'], guard: ActionGuard = new ActionGuard(), deps: SessionDeps = {}) {
+  constructor(
+    config: Config,
+    log: Pick<Context['logger'], 'debug' | 'info' | 'warn'>,
+    guard: ActionGuard = new ActionGuard(),
+    deps: SessionDeps = {},
+  ) {
     this.#config = config
     this.#log = log
     this.#guard = guard
@@ -333,7 +338,10 @@ export class HeadlessBrowserSession {
     }
   }
 
-  /** Pid of the Chromium this session launched, once one is known. */
+  /**
+   * Pid of the Chromium this session launched, once one is known.
+   * @returns the pid, or nothing before a launch, after a close, or when the process list did not show it.
+   */
   browserPid(): number | undefined {
     return this.#browserPid
   }
@@ -355,25 +363,35 @@ export class HeadlessBrowserSession {
     }
   }
 
-  /** The tab model over the persistent context, created on first use. */
-  tabs(): BrowserTabs {
-    this.#tabs ??= new BrowserTabs({
-      context: async () => await this.ensure() as unknown as TabsContext,
+  /**
+   * The tab model over the persistent context, created on first use.
+   * @returns the tab manager; its pages are the context's Playwright pages.
+   */
+  tabs(): BrowserTabs<Page> {
+    this.#tabs ??= new BrowserTabs<Page>({
+      context: async () => await this.ensure(),
       log: this.#log,
       // A keepalive's offscreen page is nobody's tab: adopting it would spend
       // one of the eight slots a person's tabs share.
       reserved: page => this.#background.has(page),
-      onAdopt: (page: TabsPage) => this.#downloads.attach(page),
+      onAdopt: page => this.#downloads.attach(page),
     })
     return this.#tabs
   }
 
-  /** The tab strip's state, or an empty list before the browser starts. */
+  /**
+   * The tab strip's state, without launching the browser.
+   * @returns the open tabs in opening order, or an empty list before the browser starts.
+   */
   tabsState(): TabInfo[] {
     return this.#tabs?.state() ?? []
   }
 
-  /** Observe tab and active-tab changes. */
+  /**
+   * Observe tab and active-tab changes.
+   * @param listener - called after every change; it reads the new state from {@link tabsState}.
+   * @returns how to stop listening.
+   */
   onTabsChange(listener: () => void): () => void {
     return this.tabs().onChange(listener)
   }
@@ -385,8 +403,7 @@ export class HeadlessBrowserSession {
    * @returns the live page.
    */
   async page(id?: string): Promise<Page> {
-    const page = await this.tabs().page(id)
-    return page as unknown as Page
+    return await this.tabs().page(id)
   }
 
   /**
@@ -408,7 +425,7 @@ export class HeadlessBrowserSession {
    * @returns the tab id and its CDP session.
    */
   async castTarget(): Promise<CastTarget> {
-    const tab: ActiveTab = await this.tabs().active()
+    const tab: ActiveTab<Page> = await this.tabs().active()
     return { tabId: tab.id, cdp: await this.cdp(tab.id) }
   }
 
@@ -915,7 +932,7 @@ export class HeadlessBrowserSession {
       const coverFacts = readElementFacts(await cover.evaluate(probeElement))
       this.#log.info('headless-browser: %s match %d is covered by a %s named %s; scoring the cover too',
         selector, index, coverFacts.role ?? coverFacts.tag, JSON.stringify(coverFacts.name))
-      covers.push({ facts: coverFacts, element: cover as unknown as Actionable })
+      covers.push({ facts: coverFacts, element: cover })
     }
     return {
       ref: selector,

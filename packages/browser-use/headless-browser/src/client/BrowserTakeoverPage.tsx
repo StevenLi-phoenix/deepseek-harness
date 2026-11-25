@@ -21,7 +21,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 // Type-only: registers this package's locale namespace for `t`.
 import type {} from './locales.ts'
 import type { ClientMessage, FrameMetadata, TabAction, TabInfo } from '../input.ts'
-import { STATUS_PATH } from '../paths.ts'
+import { STATUS_ROUTE } from '../paths.ts'
 import {
   controlMessage, decodeServerMessage, decodeStatus, encodeClientMessage, keyMessage, liveSocketUrl,
   mouseMessage, normalizeAddress, tabMessage, textMessage, wheelMessage, type Holder,
@@ -164,7 +164,7 @@ export function BrowserTakeoverPage({ t }: BrowserTakeoverViewProps) {
     const read = async (): Promise<void> => {
       let status
       try {
-        const response = await fetch(STATUS_PATH, { cache: 'no-store', credentials: 'same-origin' })
+        const response = await fetch(STATUS_ROUTE, { cache: 'no-store', credentials: 'same-origin' })
         // A 401 here is a status read, not a picture: the viewport never renders
         // its body, and the socket's reconnect line is the only connection state.
         if (!response.ok) return

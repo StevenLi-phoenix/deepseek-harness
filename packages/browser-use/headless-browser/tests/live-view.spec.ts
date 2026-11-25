@@ -8,33 +8,33 @@
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import type { CDPSession } from 'playwright-core'
 import type { FrameMetadata } from '../src/input.ts'
-import { LiveView, type CastTarget, type Viewer } from '../src/live-view.ts'
+import { LiveView, type CastCdp, type CastTarget, type Viewer } from '../src/live-view.ts'
 
 const METADATA: FrameMetadata = {
   offsetTop: 0, pageScaleFactor: 1, deviceWidth: 1280, deviceHeight: 800, scrollOffsetX: 0, scrollOffsetY: 0,
 }
 
-const LOG = { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() } as unknown as Context['logger']
+const LOG = {
+  info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn(),
+} satisfies Pick<Context['logger'], 'debug' | 'error' | 'info' | 'warn'>
 
 /** A CDP session that records commands and lets a test paint a frame. */
-class FakeCdp extends EventEmitter {
+class FakeCdp extends EventEmitter implements CastCdp {
   readonly sent: Array<{ method: string; params: unknown }> = []
-  async send(method: string, params: unknown): Promise<unknown> {
+  async send(method: string, params?: unknown): Promise<unknown> {
     this.sent.push({ method, params })
     return {}
   }
   frame(sessionId: number, data: string): void {
     this.emit('Page.screencastFrame', { data, metadata: METADATA, sessionId })
   }
-  asCdp(): CDPSession { return this as unknown as CDPSession }
 }
 
 class FakeViewer implements Viewer {
   readonly sent: string[] = []
   send(text: string): void { this.sent.push(text) }
-  messages(): unknown[] { return this.sent.map(text => JSON.parse(text) as unknown) }
+  messages(): unknown[] { return this.sent.map((text): unknown => JSON.parse(text)) }
 }
 
 function isFrame(value: unknown): value is { type: 'frame'; tabId: string; data: string } {
@@ -48,7 +48,7 @@ const view = (targets: () => CastTarget) => new LiveView(async () => targets(), 
 describe('live view tab routing', () => {
   it('starts on the active tab and tags every frame with its tab id', async () => {
     const first = new FakeCdp()
-    const target: CastTarget = { tabId: 't1', cdp: first.asCdp() }
+    const target: CastTarget = { tabId: 't1', cdp: first }
     const live = view(() => target)
     const viewer = new FakeViewer()
     await live.attach(viewer)
@@ -64,13 +64,13 @@ describe('live view tab routing', () => {
   it('stops the old tab, starts the new one, and ignores a late old frame', async () => {
     const first = new FakeCdp()
     const second = new FakeCdp()
-    let current: CastTarget = { tabId: 't1', cdp: first.asCdp() }
+    let current: CastTarget = { tabId: 't1', cdp: first }
     const live = view(() => current)
     const viewer = new FakeViewer()
     await live.attach(viewer)
     first.frame(1, 'OLD')
 
-    current = { tabId: 't2', cdp: second.asCdp() }
+    current = { tabId: 't2', cdp: second }
     await live.refresh()
     expect(first.sent.some(entry => entry.method === 'Page.stopScreencast')).toBe(true)
     expect(second.sent[0]).toMatchObject({ method: 'Page.startScreencast' })
@@ -87,7 +87,7 @@ describe('live view tab routing', () => {
 
   it('replays the active tab\'s last frame to a viewer that joins a still tab', async () => {
     const cdp = new FakeCdp()
-    const live = view(() => ({ tabId: 't1', cdp: cdp.asCdp() }))
+    const live = view(() => ({ tabId: 't1', cdp }))
     const first = new FakeViewer()
     await live.attach(first)
     cdp.frame(1, 'STILL')
@@ -101,7 +101,7 @@ describe('live view tab routing', () => {
 
   it('stops the cast when the last viewer leaves but keeps the browser open', async () => {
     const cdp = new FakeCdp()
-    const live = view(() => ({ tabId: 't1', cdp: cdp.asCdp() }))
+    const live = view(() => ({ tabId: 't1', cdp }))
     const viewer = new FakeViewer()
     await live.attach(viewer)
     await live.detach(viewer)

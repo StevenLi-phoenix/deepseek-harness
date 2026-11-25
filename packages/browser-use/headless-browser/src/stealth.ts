@@ -352,7 +352,7 @@ export interface StealthContext<Page extends StealthPage> {
  */
 export async function applyStealth<Page extends StealthPage>(
   context: StealthContext<Page>,
-  log: Context['logger'],
+  log: Pick<Context['logger'], 'warn'>,
   target: StealthIdentity = stealthIdentity(),
 ): Promise<() => void> {
   try {
