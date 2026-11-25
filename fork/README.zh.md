@@ -32,6 +32,8 @@ pnpm run verify-config-catalog && pnpm run verify-cordis-catalog && pnpm run ver
 
 `tsconfig.host.json` 不包含 `*.client.spec.*` 测试；它们在 Client 聚合 `tsconfig.client.json` 里做类型检查。
 
+在 GitHub 上，[`.github/workflows/fork-ci.yml`](../.github/workflows/fork-ci.yml) 在每次推送 `main` 时用托管 runner 跑 `ci.yml` 的 pull request 门禁：静态门禁、typecheck 与 lint、分四片的覆盖率（每个文件 100%）和构建。正在跑的一轮不会被取消；失败的一轮经 `ci` 路由告诉主人。仓库设置里停用了 `CI master` workflow（`gh workflow enable "CI master"` 可重新启用）：它的推送 job 要等上游的自托管 runner 和 secret。
+
 ## 从源码运行事件 profile
 
 ```sh
