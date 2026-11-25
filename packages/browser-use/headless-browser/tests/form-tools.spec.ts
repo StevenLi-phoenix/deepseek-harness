@@ -47,6 +47,7 @@ function setup(overrides: Partial<FormBrowser> = {}, uploads?: FormUploads) {
   const written: Written[] = []
   const browser: FormBrowser = {
     pageUrl: async () => page.url,
+    fieldUrl: async () => page.url,
     fillSecret: async (request, secret, field, host) => { written.push({ request, secret, field, host }); return HIT },
     attachFiles: async () => ({ url: 'https://jobs.example.com/apply', ref: 'input[type=file]', inputs: 1 }),
     ...overrides,

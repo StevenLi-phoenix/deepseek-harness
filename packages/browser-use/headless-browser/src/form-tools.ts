@@ -43,6 +43,7 @@ import { MAX_UPLOAD_FILES, type UploadFile } from './uploads.ts'
 /** The browser operations the form tools call; the session class satisfies them. */
 export interface FormBrowser {
   pageUrl(tabId?: string): Promise<string>
+  fieldUrl(request: TargetRequest, tabId?: string): Promise<string>
   fillSecret(request: TargetRequest, secret: string, field: SecretField, host: string, tabId?: string): Promise<ActionOutcome>
   attachFiles(target: AttachTarget, paths: readonly string[], tabId?: string): Promise<AttachOutcome>
 }
@@ -251,7 +252,7 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
         const username = args.username
         if (username === undefined || username.trim() === '') return { error: 'create needs username: the login name (usually the e-mail address) of the new account' }
         return await guarded(deps, 'creating a saved password', async () => {
-          const host = credentialHost(await deps.browser.pageUrl(args.tab))
+          const host = credentialHost(await deps.browser.fieldUrl(parsed.request, args.tab))
           const record = await deps.credentials.create({
             host,
             username,
@@ -289,7 +290,7 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
       if (args.action === 'fill') {
         const field: SecretField = args.field ?? 'password'
         return await guarded(deps, 'filling a saved credential', async () => {
-          const host = credentialHost(await deps.browser.pageUrl(args.tab))
+          const host = credentialHost(await deps.browser.fieldUrl(parsed.request, args.tab))
           const record = await deps.credentials.find(host, args.username)
           const value = field === 'password' ? record.password : record.username
           const outcome = await deps.browser.fillSecret(parsed.request, value, field, record.host, args.tab)

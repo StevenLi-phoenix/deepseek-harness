@@ -72,7 +72,7 @@ const CONSENT = `<!doctype html><title>Engineer</title><body>
 <div id="filter" class="onetrust-pc-dark-filter" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1"></div>
 <div id="banner" style="position:fixed;left:0;right:0;bottom:0;height:120px;background:#fff;z-index:2"><button id="accept" type="button" onclick="document.getElementById('filter').remove(); document.getElementById('banner').remove()">Accept All Cookies</button></div>`
 
-const INNER = '<!doctype html><title>Enter your information</title><body><label>Email <input id="inner-email" type="email"></label>'
+const INNER = '<!doctype html><title>Enter your information</title><body><label>Email <input id="inner-email" type="email"></label><label>Password <input id="inner-password" type="password"></label>'
 
 interface App {
   readonly base: string
@@ -264,6 +264,20 @@ describe.skipIf(!AVAILABLE)('form steps in a real page', () => {
     await app.browser.click({ selector: '#apply' })
     const page = await app.browser.page()
     expect(await page.locator('#shown').textContent()).toBe('applying')
+  }, 120_000)
+
+  it('reads, types and writes a credential into a form inside an embedded page', async () => {
+    const app = await boot()
+    await app.browser.open(`${app.base}/apply`)
+    await expect.poll(async () => (await app.browser.read({})).text).toContain(`[frame ${app.base}/inner]`)
+    const typed = await app.browser.fill({ selector: '#inner-email' }, 'cv@example.com')
+    expect(typed.target?.score).toBeGreaterThan(0.8)
+    expect(await app.browser.fieldUrl({ selector: '#inner-password' })).toBe(`${app.base}/inner`)
+    await app.browser.fillSecret({ selector: '#inner-password' }, 'S3cret!pass-Word', 'password', '127.0.0.1')
+    const frame = (await app.browser.page()).frames().find(candidate => candidate.url().endsWith('/inner'))
+    expect(await frame?.locator('#inner-email').inputValue()).toBe('cv@example.com')
+    expect(await frame?.locator('#inner-password').inputValue()).toBe('S3cret!pass-Word')
+    await expect(app.browser.fill({ selector: '#nowhere' }, 'x')).rejects.toThrow(/no element matches #nowhere/u)
   }, 120_000)
 
   it('lists an embedded form page in a whole-page read', async () => {

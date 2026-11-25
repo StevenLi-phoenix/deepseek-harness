@@ -15,7 +15,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { chromium, type BrowserContext, type CDPSession, type ElementHandle, type Page } from 'playwright-core'
+import { chromium, type BrowserContext, type CDPSession, type ElementHandle, type Frame, type Locator, type Page } from 'playwright-core'
 import { probeChallenge, readChallengeFacts, type ChallengeFacts } from './challenge.ts'
 import type { Config } from './config.ts'
 import { cookieSnapshot, cookieSummary, type CookieResult } from './cookies.ts'
@@ -24,7 +24,7 @@ import { firstLine } from './error.ts'
 import { ActionGuard, ActionRefusedError, blockedAction, pageOrigin, refusalOf, type Decision, type PointChoice, type TargetChoice } from './guard.ts'
 import type { InputCommand, TabInfo, TabMessage } from './input.ts'
 import { browserProcesses, killBrowserSync, recoverStaleProfile, removeBrowserOwner, writeBrowserOwner, type ProfileProbe } from './profile.ts'
-import { readText, type FrameRef, type ReadPage, type ReadRequest, type ReadResult } from './read.ts'
+import { MAX_READ_FRAMES, MIN_FRAME_AREA, readText, type FrameRef, type ReadPage, type ReadRequest, type ReadResult } from './read.ts'
 import { cdpScrollChannel, scrollPage, type ScrollRequest, type ScrollResult } from './scroll.ts'
 import { isComboboxInput, matchOption, readComboboxOptions, readOptions, readSelectOptions, type SelectOption } from './select.ts'
 import type { KeepalivePage } from './keepalive.ts'
@@ -255,6 +255,10 @@ interface Resolution {
   readonly element: (index: number) => Actionable
   /** The accessibility id that resolved to nothing, when it did. */
   readonly staleAxId?: string
+  /** URL of the document the candidates are in: the page, or the embedded page that held the selector's matches. */
+  readonly url: string
+  /** Where follow-up lookups for the same element run, such as a dropdown's options: the page or that embedded page. */
+  readonly scope: Page | Frame
 }
 
 /** Launch, navigate, inspect, and close one persistent Chromium with tabs. */
@@ -604,7 +608,7 @@ export class HeadlessBrowserSession {
       const resolution = await this.#resolve(page, request)
       const target = this.#accept(this.#guard.decideTarget({
         action: 'click',
-        url: page.url(),
+        url: resolution.url,
         ref: resolution.ref,
         candidates: resolution.facts,
         allowOrigin: request.allowOrigin === true,
@@ -674,7 +678,7 @@ export class HeadlessBrowserSession {
       const resolution = await this.#resolve(page, request)
       const target = this.#accept(this.#guard.decideTarget({
         action: 'type',
-        url: page.url(),
+        url: resolution.url,
         ref: resolution.ref,
         candidates: resolution.facts,
         allowOrigin: request.allowOrigin === true,
@@ -687,7 +691,7 @@ export class HeadlessBrowserSession {
         return { url: page.url(), target, selected }
       }
       if (await element.evaluate(isComboboxInput)) {
-        const selected = await this.#typeIntoCombobox(page, element, resolution.ref, text, request.allowOrigin === true)
+        const selected = await this.#typeIntoCombobox(page, resolution, element, text, request.allowOrigin === true)
         this.#guard.anchor(page.url())
         return { url: page.url(), target, ...selected === undefined ? {} : { selected } }
       }
@@ -704,14 +708,21 @@ export class HeadlessBrowserSession {
    * option {@link matchOption} picks is clicked after the guard clears it like
    * any click. No list, or no single match, leaves the typed text with the list
    * open for the model to click the option it means.
-   * @param page - the page the input is in.
+   * @param page - the tab's page, whose keyboard types.
+   * @param resolution - how the input was found: its reference, its document, and where to look up its options.
    * @param element - the combobox input.
-   * @param ref - the selector or id, for the log line.
    * @param text - the option's text.
    * @param allowOrigin - whether the agent allowed a site change for this action.
    * @returns the chosen option's label, or nothing when none was chosen.
    */
-  async #typeIntoCombobox(page: Page, element: Actionable, ref: string, text: string, allowOrigin: boolean): Promise<string | undefined> {
+  async #typeIntoCombobox(
+    page: Page,
+    resolution: Resolution,
+    element: Actionable,
+    text: string,
+    allowOrigin: boolean,
+  ): Promise<string | undefined> {
+    const ref = resolution.ref
     await element.click()
     await page.keyboard.press('ControlOrMeta+A')
     await page.keyboard.press('Backspace')
@@ -726,11 +737,11 @@ export class HeadlessBrowserSession {
     this.#log.info('headless-browser: %s listed %d option(s) after typing; %s', ref, options.length,
       option === undefined ? 'none chosen' : `choosing option ${String((index ?? 0) + 1)}`)
     if (option === undefined) return undefined
-    const locator = page.locator(`[id=${JSON.stringify(option.value)}]`)
+    const locator = resolution.scope.locator(`[id=${JSON.stringify(option.value)}]`)
     const facts = readElementFacts(await locator.evaluate(probeElement))
     this.#accept(this.#guard.decideTarget({
       action: 'click',
-      url: page.url(),
+      url: resolution.url,
       ref: `${ref} option`,
       candidates: [facts],
       allowOrigin,
@@ -770,6 +781,22 @@ export class HeadlessBrowserSession {
   }
 
   /**
+   * The address of the document a field is in: the page, or the embedded page
+   * (an iCIMS application iframe) that holds a selector the page itself does not
+   * match. A saved credential belongs to that host, since that is where it is typed.
+   * @param request - the selector or accessibility id of the field.
+   * @param tabId - tab id, or nothing for the active tab.
+   * @returns the URL of the field's document.
+   */
+  async fieldUrl(request: TargetRequest, tabId?: string): Promise<string> {
+    return await this.#guarded('finding the field', async () => {
+      const page = await this.page(tabId)
+      if (request.point !== undefined) return page.url()
+      return (await this.#resolve(page, request)).url
+    })
+  }
+
+  /**
    * Write a saved credential into the field a selector or accessibility id
    * names, after the action guard clears the field like a type. The page must
    * still be on the host the credential belongs to at the moment of writing, and
@@ -791,7 +818,7 @@ export class HeadlessBrowserSession {
       const resolution = await this.#resolve(page, request)
       const target = this.#accept(this.#guard.decideTarget({
         action: 'type',
-        url: page.url(),
+        url: resolution.url,
         ref: resolution.ref,
         candidates: resolution.facts,
         allowOrigin: false,
@@ -801,8 +828,8 @@ export class HeadlessBrowserSession {
       if (field === 'password' && !await element.evaluate(node => node instanceof HTMLInputElement && node.type === 'password')) {
         throw new SecretFieldError(`${resolution.ref} is not a password input (input[type=password]); a saved password is only written into one`)
       }
-      if (hostOf(page.url()) !== host) {
-        throw new SecretFieldError(`the page is on ${hostOf(page.url())}, not ${host}; a saved credential is only written on its own host`)
+      if (hostOf(resolution.url) !== host) {
+        throw new SecretFieldError(`the field is on ${hostOf(resolution.url)}, not ${host}; a saved credential is only written on its own host`)
       }
       await element.fill(secret)
       this.#log.info('headless-browser: wrote the saved %s for %s into %s', field, host, resolution.ref)
@@ -829,7 +856,7 @@ export class HeadlessBrowserSession {
         const resolution = await this.#resolve(page, target.trigger)
         const choice = this.#accept(this.#guard.decideTarget({
           action: 'click',
-          url: page.url(),
+          url: resolution.url,
           ref: resolution.ref,
           candidates: resolution.facts,
           allowOrigin: false,
@@ -846,8 +873,9 @@ export class HeadlessBrowserSession {
       }
       const selector = target.selector
       if (selector === undefined) throw new Error('give a file input selector or a trigger')
-      const locator = page.locator(selector)
-      const count = await locator.count()
+      const located = await locate(page, selector)
+      const locator = located?.locator ?? page.locator(selector)
+      const count = located?.count ?? 0
       const inputs: number[] = []
       for (let index = 0; index < count; index += 1) {
         if (await locator.nth(index).evaluate(node => node instanceof HTMLInputElement && node.type === 'file')) inputs.push(index)
@@ -919,16 +947,21 @@ export class HeadlessBrowserSession {
           facts: [],
           element: () => { throw new Error(`accessibility id ${request.axId} resolved to no element`) },
           staleAxId: request.axId,
+          url: page.url(),
+          scope: page,
         }
       }
       const facts = readElementFacts(await handle.evaluate(probeElement))
-      return { ref: request.axId, facts: [facts], element: () => handle }
+      return { ref: request.axId, facts: [facts], element: () => handle, url: page.url(), scope: page }
     }
     const selector = request.selector
     if (selector === undefined) throw new Error('a guarded action needs a selector, an accessibility id, or a point')
-    const locator = page.locator(selector)
-    const count = await locator.count()
-    if (count === 0) throw new Error(`no element matches ${selector}`)
+    const located = await locate(page, selector)
+    if (located === undefined) throw new Error(`no element matches ${selector}`)
+    const { locator, count, frame } = located
+    if (frame !== undefined) {
+      this.#log.info('headless-browser: %s matches nothing on %s; acting in its embedded page %s', selector, pageOrigin(page.url()), pageOrigin(frame.url()))
+    }
     const facts: ElementFacts[] = []
     const covers: { readonly facts: ElementFacts; readonly element: Actionable }[] = []
     for (let index = 0; index < count; index += 1) {
@@ -945,6 +978,8 @@ export class HeadlessBrowserSession {
     }
     return {
       ref: selector,
+      url: frame?.url() ?? page.url(),
+      scope: frame ?? page,
       facts: [...facts, ...covers.map(cover => cover.facts)],
       element: (index) => {
         if (index < count) return locator.nth(index)
@@ -1316,22 +1351,92 @@ function readable(page: Page): ReadPage {
     url: () => page.url(),
     innerText: async (selector) => {
       const target = page.locator(selector ?? 'body').first()
-      return await target.count() === 0 ? undefined : await target.innerText()
-    },
-    frames: async () => {
-      const found: FrameRef[] = []
-      for (const frame of page.mainFrame().childFrames()) {
-        const url = frame.url()
-        if (!/^https?:/iu.test(url)) continue
+      const own = await target.count() === 0 ? undefined : await target.innerText()
+      const frames = await formFrames(page)
+      if (selector !== undefined) {
+        if (own !== undefined) return own
+        // A selector the page does not match may name a field of an embedded form.
+        for (const { frame } of frames) {
+          const inner = frame.locator(selector).first()
+          if (await inner.count().catch(() => 0) > 0) return await inner.innerText({ timeout: FRAME_READ_TIMEOUT_MS })
+        }
+        return undefined
+      }
+      // A person reads an embedded form as part of the page, so its text follows the page's own.
+      const parts = [own ?? '']
+      for (const { frame, ref } of frames) {
         try {
-          const box = await (await frame.frameElement()).boundingBox()
-          if (box !== null) found.push({ url, width: Math.round(box.width), height: Math.round(box.height) })
+          const body = frame.locator('body').first()
+          const text = await body.count() === 0 ? '' : await body.innerText({ timeout: FRAME_READ_TIMEOUT_MS })
+          if (text.trim() !== '') parts.push(`[frame ${ref.url}]\n${text}`)
         } catch (error: unknown) {
-          // A frame that detached while it was listed is simply gone.
+          // A frame that navigated or detached while it was read adds nothing.
           void firstLine(error)
         }
       }
-      return found
+      return parts.join('\n\n')
     },
+    frames: async () => (await childFrames(page)).map(entry => entry.ref),
   }
+}
+
+/** How long reading one embedded page's text may take before the read goes on without it. */
+const FRAME_READ_TIMEOUT_MS = 5000
+
+/**
+ * The http(s) pages embedded in a page's main frame, with their box on screen;
+ * a frame that detached while it was listed is left out.
+ * @param page - the tab's page.
+ * @returns each child frame with an address and a box, in document order.
+ */
+async function childFrames(page: Page): Promise<{ readonly frame: Frame; readonly ref: FrameRef }[]> {
+  const found: { frame: Frame; ref: FrameRef }[] = []
+  for (const frame of page.mainFrame().childFrames()) {
+    const url = frame.url()
+    if (!/^https?:/iu.test(url)) continue
+    try {
+      const box = await (await frame.frameElement()).boundingBox()
+      if (box !== null) found.push({ frame, ref: { url, width: Math.round(box.width), height: Math.round(box.height) } })
+    } catch (error: unknown) {
+      void firstLine(error)
+    }
+  }
+  return found
+}
+
+/**
+ * The embedded pages big enough to hold a form, the ones a whole-page read lists:
+ * at least {@link MIN_FRAME_AREA}, at most {@link MAX_READ_FRAMES}.
+ * @param page - the tab's page.
+ * @returns those frames, in document order.
+ */
+async function formFrames(page: Page): Promise<{ readonly frame: Frame; readonly ref: FrameRef }[]> {
+  return (await childFrames(page)).filter(entry => entry.ref.width * entry.ref.height >= MIN_FRAME_AREA).slice(0, MAX_READ_FRAMES)
+}
+
+/** A selector's matches, and the embedded page they are in when the page itself had none. */
+interface Located {
+  readonly locator: Locator
+  readonly count: number
+  readonly frame?: Frame
+}
+
+/**
+ * Find a selector's matches on the page, or else in the first embedded form page
+ * that has any: iCIMS renders its whole application inside a same-site iframe,
+ * and opening that iframe's address on its own redirects back to the outer page.
+ * @param page - the tab's page.
+ * @param selector - the model's selector.
+ * @returns the matches and the frame they are in, or nothing when no document matches.
+ */
+async function locate(page: Page, selector: string): Promise<Located | undefined> {
+  const locator = page.locator(selector)
+  const count = await locator.count()
+  if (count > 0) return { locator, count }
+  for (const { frame } of await formFrames(page)) {
+    const inner = frame.locator(selector)
+    const innerCount = await inner.count().catch(() => 0)
+    if (innerCount > 0) return { locator: inner, count: innerCount, frame }
+  }
+  return undefined
 }
