@@ -5,6 +5,10 @@
  * URL, and a loading flag, and every change is reported to whoever draws the
  * tab strip.
  *
+ * A window a page opens itself — a "Continue with Google" sign-in, a link with
+ * `target=_blank` — becomes a tab too, and the active one, as in a desktop
+ * browser; when it closes, its opener is active again.
+ *
  * The context is the browser's own state, so a tab close never closes it: the
  * last tab is replaced by a blank one before the old page goes away. New tabs
  * stop at a hard cap, and every navigation has its own deadline, so one stuck
@@ -76,6 +80,8 @@ export interface Tab {
   loading: boolean
   /** Set while this manager closes the page, so the close event is not handled twice. */
   closing: boolean
+  /** The tab whose page opened this one as a popup. */
+  openerId?: string
   /** Remove this tab's page listeners. */
   detach?: () => void
 }
@@ -118,6 +124,16 @@ export interface ClosedTab {
   readonly tabs: TabInfo[]
 }
 
+/** A window a page opened, as a click reports it. */
+export interface PopupTab {
+  /** Tab id to pass to later calls. */
+  readonly tab: string
+  /** The tab that opened it. */
+  readonly opener: string
+  /** Its URL when reported; a popup that has not navigated yet shows about:blank. */
+  readonly url: string
+}
+
 /** Tabs of one persistent browser context. */
 export class BrowserTabs {
   readonly #options: TabsOptions
@@ -130,6 +146,10 @@ export class BrowserTabs {
   #sequence = 0
   #queue: Promise<unknown> = Promise.resolve()
   #disposed = false
+  /** Popups adopted so far, newest last, numbered from 1. */
+  readonly #popups: { readonly seq: number; readonly id: string; readonly opener: string }[] = []
+  #popupSeq = 0
+  readonly #popupWaiters = new Set<() => void>()
 
   /**
    * @param options - context resolver, logger, tab cap, and navigation deadline.
@@ -240,8 +260,8 @@ export class BrowserTabs {
       }
       this.#remove(tab)
       if (replacement === undefined && this.#activeId === tab.id) {
-        const next = this.#order[Math.min(index, this.#order.length - 1)]
-        this.#activeId = next
+        const opener = tab.openerId === undefined ? undefined : this.#tabs.get(tab.openerId)
+        this.#activeId = opener?.id ?? this.#order[Math.min(index, this.#order.length - 1)]
       }
       this.#emit()
       return { closed: tab.id, replaced, tabs: this.state() }
@@ -308,6 +328,36 @@ export class BrowserTabs {
     }
   }
 
+  /** A marker for {@link popupsSince}, taken before an action that may open a window. */
+  popupMark(): number {
+    return this.#popupSeq
+  }
+
+  /**
+   * The windows pages opened after a marker that are still open.
+   * @param mark - a value {@link popupMark} returned.
+   * @param waitMs - how long to wait for one when none has opened; 0 does not wait.
+   * @returns the popups, oldest first.
+   */
+  async popupsSince(mark: number, waitMs: number): Promise<PopupTab[]> {
+    if (this.#popupSeq === mark && waitMs > 0) {
+      await new Promise<void>((resolve) => {
+        const done = (): void => {
+          clearTimeout(timer)
+          this.#popupWaiters.delete(done)
+          resolve()
+        }
+        const timer = setTimeout(done, waitMs)
+        this.#popupWaiters.add(done)
+      })
+    }
+    // A popup is adopted on the tab queue; let an adoption already queued finish.
+    await this.#run(async () => {})
+    return this.#popups
+      .filter(popup => popup.seq > mark && this.#tabs.has(popup.id))
+      .map(popup => ({ tab: popup.id, opener: popup.opener, url: this.#tabs.get(popup.id)?.url ?? '' }))
+  }
+
   /** Stop reporting page events; the session's context close closes the pages. */
   dispose(): void {
     this.#disposed = true
@@ -316,6 +366,7 @@ export class BrowserTabs {
     this.#order.length = 0
     this.#activeId = undefined
     this.#listeners.clear()
+    for (const waiter of [...this.#popupWaiters]) waiter()
   }
 
   async #step(id: string | undefined, run: (page: TabsPage) => Promise<unknown>): Promise<void> {
@@ -395,10 +446,12 @@ export class BrowserTabs {
     const onLoad = (): void => { this.#settle(tab) }
     const onNavigation = (): void => { this.#navigated(tab) }
     const onClose = (): void => { void this.#closed(tab) }
+    const onPopup = (popup: TabsPage): void => { void this.#popup(tab, popup) }
     page.on('domcontentloaded', onLoad)
     page.on('load', onLoad)
     page.on('framenavigated', onNavigation)
     page.on('close', onClose)
+    page.on('popup', onPopup)
     const detachAdopt = this.#options.onAdopt?.(page)
     tab.detach = () => {
       detachAdopt?.()
@@ -406,6 +459,7 @@ export class BrowserTabs {
       page.off('load', onLoad)
       page.off('framenavigated', onNavigation)
       page.off('close', onClose)
+      page.off('popup', onPopup)
     }
     void this.#refresh(tab)
     return tab
@@ -413,6 +467,35 @@ export class BrowserTabs {
 
   #detach(tab: Tab): void {
     tab.detach?.()
+  }
+
+  /**
+   * Adopt a window a tab's page opened, and make it the active tab. A popup is
+   * adopted even at the tab cap: the site opened it, and a window nobody can
+   * reach would leave its sign-in or consent step unanswerable.
+   */
+  async #popup(opener: Tab, popup: TabsPage): Promise<void> {
+    try {
+      await this.#run(async () => {
+        if (this.#disposed || popup.isClosed() || this.#hasPage(popup) || (this.#options.reserved?.(popup) ?? false)) return
+        const tab = this.#adopt(popup)
+        tab.openerId = opener.id
+        this.#activeId = tab.id
+        this.#popups.push({ seq: ++this.#popupSeq, id: tab.id, opener: opener.id })
+        if (this.#popups.length > this.#maxTabs * 4) this.#popups.splice(0, this.#popups.length - this.#maxTabs * 4)
+        if (this.#tabs.size > this.#maxTabs) {
+          this.#options.log.warn('headless-browser: %s opened popup %s past the %d-tab cap', opener.id, tab.id, this.#maxTabs)
+        } else {
+          this.#options.log.info('headless-browser: %s opened popup %s (%s)', opener.id, tab.id, popup.url())
+        }
+        await popup.bringToFront()
+        this.#emit()
+      })
+    } catch (error: unknown) {
+      // Nobody awaits this handler; a popup that closed mid-adoption is simply gone.
+      this.#options.log.warn('headless-browser: adopting a popup of %s failed: %s', opener.id, firstLine(error))
+    }
+    for (const waiter of [...this.#popupWaiters]) waiter()
   }
 
   #settle(tab: Tab): void {
@@ -442,7 +525,13 @@ export class BrowserTabs {
           const replacement = this.#adopt(await context.newPage())
           this.#activeId = replacement.id
         } else if (this.#activeId === tab.id) {
-          this.#activeId = this.#order[Math.min(index, this.#order.length - 1)]
+          // A sign-in popup closes itself when it is done; its opener carries on.
+          const opener = tab.openerId === undefined ? undefined : this.#tabs.get(tab.openerId)
+          this.#activeId = opener?.id ?? this.#order[Math.min(index, this.#order.length - 1)]
+          if (opener !== undefined) {
+            this.#options.log.info('headless-browser: popup %s closed; back on %s', tab.id, opener.id)
+            await opener.page.bringToFront()
+          }
         }
         this.#emit()
       })

@@ -28,7 +28,7 @@ import { readText, type ReadPage, type ReadRequest, type ReadResult } from './re
 import { cdpScrollChannel, scrollPage, type ScrollRequest, type ScrollResult } from './scroll.ts'
 import type { KeepalivePage } from './keepalive.ts'
 import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
-import { BrowserTabs, TabNavigationError, type ActiveTab, type ClosedTab, type TabsContext, type TabsPage } from './tabs.ts'
+import { BrowserTabs, TabNavigationError, type ActiveTab, type ClosedTab, type PopupTab, type TabsContext, type TabsPage } from './tabs.ts'
 import { probeElement, readElementFacts, type ElementFacts } from './visibility.ts'
 
 /** How long a context gets to close before shutdown stops waiting for it. */
@@ -148,6 +148,8 @@ export interface ActionOutcome {
   readonly point?: PointChoice
   /** Files the action made the browser download, already saved. */
   readonly downloads?: readonly DownloadRecord[]
+  /** Windows the action opened (a "Continue with Google" sign-in), each now a tab and the active one. */
+  readonly popups?: readonly PopupTab[]
 }
 
 /** What opening a URL settled on. */
@@ -564,9 +566,10 @@ export class HeadlessBrowserSession {
           allowOrigin: request.allowOrigin === true,
         }))
         const mark = this.#downloads.mark()
+        const popupMark = this.tabs().popupMark()
         await page.mouse.click(request.point.x, request.point.y)
         this.#guard.anchor(page.url())
-        return { url: page.url(), point, ...await this.#downloadsSince(mark) }
+        return { url: page.url(), point, ...await this.#openedSince(mark, popupMark) }
       }
       const resolution = await this.#resolve(page, request)
       const target = this.#accept(this.#guard.decideTarget({
@@ -578,10 +581,25 @@ export class HeadlessBrowserSession {
         ...resolution.staleAxId === undefined ? {} : { staleAxId: resolution.staleAxId },
       }))
       const mark = this.#downloads.mark()
+      const popupMark = this.tabs().popupMark()
       await resolution.element(target.index).click()
       this.#guard.anchor(page.url())
-      return { url: page.url(), target, ...await this.#downloadsSince(mark) }
+      return { url: page.url(), target, ...await this.#openedSince(mark, popupMark) }
     })
+  }
+
+  /**
+   * The files a click started and the windows it opened, waited for together.
+   * @param mark - the download marker taken before the click.
+   * @param popupMark - the popup marker taken before the click.
+   * @returns `downloads` and `popups` fields, each only when there is one.
+   */
+  async #openedSince(mark: number, popupMark: number): Promise<Pick<ActionOutcome, 'downloads' | 'popups'>> {
+    const [downloads, popups] = await Promise.all([
+      this.#downloadsSince(mark),
+      this.tabs().popupsSince(popupMark, CLICK_DOWNLOAD_WAIT_MS),
+    ])
+    return { ...downloads, ...popups.length === 0 ? {} : { popups } }
   }
 
   /**

@@ -24,6 +24,7 @@ const FORM = `<!doctype html><title>signup</title><body>
 <label class="upload" for="resume">Upload résumé <input id="resume" type="file" style="display:none"></label>
 <input id="many" type="file" multiple style="opacity:0;position:absolute;width:1px;height:1px">
 <button id="chooser" type="button">Attach transcript</button>
+<button id="google" type="button" onclick="window.open('/popup', 'signin', 'width=480,height=600')">Continue with Google</button>
 <p id="shown"></p>
 <script>
   const picker = document.createElement('input'); picker.type = 'file'; picker.id = 'picker'
@@ -31,6 +32,9 @@ const FORM = `<!doctype html><title>signup</title><body>
   const show = () => { document.getElementById('shown').textContent = [...document.querySelectorAll('input[type=file]'), picker].map(i => i.id + ':' + [...i.files].map(f => f.name + '/' + f.size).join('+')).join(' ') }
   for (const i of [...document.querySelectorAll('input[type=file]'), picker]) i.addEventListener('change', show)
 </script>`
+
+const POPUP = `<!doctype html><title>Sign in</title><body><p>Choose an account</p>
+<button id="account" type="button" onclick="window.opener.document.getElementById('shown').textContent = 'signed in'; window.close()">cv@example.com</button>`
 
 interface App {
   readonly base: string
@@ -45,9 +49,9 @@ afterEach(async () => { await Promise.all(apps.splice(0).map(app => app.close())
 async function boot(): Promise<App> {
   const root = mkdtempSync(join(tmpdir(), 'dsh-forms-live-'))
   const files = join(root, 'uploads')
-  const server: Server = createServer((_request, response) => {
+  const server: Server = createServer((request, response) => {
     response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-    response.end(FORM)
+    response.end(request.url === '/popup' ? POPUP : FORM)
   })
   await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
   const port = (server.address() as { port: number }).port
@@ -123,5 +127,20 @@ describe.skipIf(!AVAILABLE)('form steps in a real page', () => {
     expect(await page.locator('#shown').textContent()).toBe('resume:resume.pdf/12 many:resume.pdf/12+transcript.pdf/10 picker:transcript.pdf/10')
     await expect(app.browser.attachFiles({ selector: '#email' }, [resume])).rejects.toThrow(/matches no input\[type=file\]/u)
     await expect(app.browser.attachFiles({ selector: '#resume' }, [resume, transcript])).rejects.toThrow(/takes one file/u)
+  }, 120_000)
+
+  it('turns a sign-in popup into the active tab, acts in it, and returns to the opener when it closes', async () => {
+    const app = await boot()
+    await app.browser.open(`${app.base}/apply`)
+    const opened = await app.browser.click({ selector: '#google' })
+    expect(opened.popups).toHaveLength(1)
+    const popup = opened.popups![0]!
+    expect(popup.opener).toBe('t1')
+    expect(app.browser.tabsState().find(tab => tab.active)?.id).toBe(popup.tab)
+    await expect.poll(async () => await app.browser.pageUrl(popup.tab)).toBe(`${app.base}/popup`)
+    await app.browser.click({ selector: '#account' }, popup.tab)
+    await expect.poll(() => app.browser.tabsState().map(tab => [tab.id, tab.active])).toEqual([['t1', true]])
+    const page = await app.browser.page()
+    expect(await page.locator('#shown').textContent()).toBe('signed in')
   }, 120_000)
 })
