@@ -122,18 +122,21 @@ jobs:
       - name: Run lint and duplication
         run: pnpm run check:ci:lint:contracts-ready
 
-  # Four instrumented shards on 4-vCPU hosted runners stand in for ci.yml's two
+  # Six instrumented shards on 4-vCPU hosted runners stand in for ci.yml's two
   # 16-core shards; coverage-report merges them and owns the 100% thresholds.
+  # Three partitions per shard leave a core for Chromium and the exempt gate: at
+  # four, the slowest assembled-client specs ran past their 120 s budgets.
   coverage:
-    name: coverage ${{ matrix.shard }}/4
+    name: coverage ${{ matrix.shard }}/6
     runs-on: ubuntu-latest
     timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     env:
-      DSH_COVERAGE_SHARD: ${{ matrix.shard }}/4
+      DSH_COVERAGE_SHARD: ${{ matrix.shard }}/6
+      DSH_COVERAGE_PARTITIONS: '3'
       DSH_COVERAGE_TEST_TIMEOUT_MS: '90000'
     steps:
       - name: Use runner-owned temporary storage

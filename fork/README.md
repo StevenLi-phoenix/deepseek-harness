@@ -32,7 +32,7 @@ pnpm run verify-config-catalog && pnpm run verify-cordis-catalog && pnpm run ver
 
 `tsconfig.host.json` excludes `*.client.spec.*` tests; they type-check in the Client aggregate, `tsconfig.client.json`.
 
-On GitHub, [`.github/workflows/fork-ci.yml`](../.github/workflows/fork-ci.yml) runs the pull-request gates of `ci.yml` on every push to `main` on hosted runners: static gates, typecheck and lint, coverage at 100% per file in four shards, and the build. A run in progress is never cancelled; a failed run reaches the owner through the `ci` route. The repository keeps the `CI master` workflow disabled (`gh workflow enable "CI master"` turns it back on): its push jobs wait for upstream's self-hosted runners and secrets.
+On GitHub, [`.github/workflows/fork-ci.yml`](../.github/workflows/fork-ci.yml) runs the pull-request gates of `ci.yml` on every push to `main` on hosted runners: static gates, typecheck and lint, coverage at 100% per file in six shards, and the build. A run in progress is never cancelled; a failed run reaches the owner through the `ci` route. The repository keeps the `CI master` workflow disabled (`gh workflow enable "CI master"` turns it back on): its push jobs wait for upstream's self-hosted runners and secrets.
 
 ## Run the event profile from source
 
