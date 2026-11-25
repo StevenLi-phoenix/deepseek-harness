@@ -347,6 +347,10 @@ describe('markdownImages', () => {
     expect(markdownImages('')).toEqual([])
   })
 
+  it('skips a reference whose angle-bracketed path is empty', () => {
+    expect(markdownImages('空 ![a](<>) 后 ![b](real.png)').map(image => image.target)).toEqual(['real.png'])
+  })
+
   it('ignores the syntax quoted inside a fenced code block', () => {
     const text = '这样写：\n```md\n![a](inside.png)\n```\n真正的图 ![b](outside.png)'
     expect(markdownImages(text).map(image => image.target)).toEqual(['outside.png'])
@@ -360,5 +364,11 @@ describe('markdownImages', () => {
     expect(withoutMarkdownImages(text, [first!])).toBe('见  和 ![b](two.png)')
     expect(withoutMarkdownImages(text, markdownImages(text))).toBe('见  和')
     expect(withoutMarkdownImages('![a](one.png)', markdownImages('![a](one.png)'))).toBe('')
+  })
+
+  it('removes a reference once when the same reference is given twice', () => {
+    const text = '前 ![a](one.png) 后'
+    const [image] = markdownImages(text)
+    expect(withoutMarkdownImages(text, [image!, image!])).toBe('前  后')
   })
 })
