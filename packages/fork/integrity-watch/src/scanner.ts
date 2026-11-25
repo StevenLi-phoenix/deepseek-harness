@@ -148,5 +148,6 @@ export function mountScanner(ctx: Context, settings: ScannerSettings): void {
   const timer = setInterval(schedule, settings.intervalMs)
   timer.unref()
   // A scan under way still writes the baseline: teardown waits for it, so nothing lands in a directory being removed.
-  ctx.effect(() => async () => { clearInterval(timer); await scanning }, 'integrity-watch: stop scanning')
+  // A stop waits for the trust record of a service write still in flight; a restart would otherwise call that write an edit.
+  ctx.effect(() => async () => { clearInterval(timer); await scanning; await trust.settled() }, 'integrity-watch: stop scanning')
 }

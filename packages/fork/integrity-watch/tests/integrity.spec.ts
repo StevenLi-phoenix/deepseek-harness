@@ -274,6 +274,19 @@ describe('the watch', () => {
       expect(notices[0]).toMatchObject({ title: '定时任务文件被绕过 DSH 直接改动了（不显示内容）', body: '新增 0 条、删除 1 条、修改 0 条' })
     })
 
+    it('finishes recording a service write before the host stops', async () => {
+      const { home: dir } = await home()
+      const ctx = await mount({ intervalSec: 60, minGapSec: 0 })
+      await settle()
+      await mkdir(join(dir, 'storages'), { recursive: true })
+      await writeFile(scheduleFile(dir), JSON.stringify({ tables: { tasks: { a: task('one'), b: task('two') } } }))
+      ctx.emit('schedule/changed')
+      await ctx.fiber.dispose()
+      contexts.splice(contexts.indexOf(ctx), 1)
+      const trusted = JSON.parse(readFileSync(join(dir, 'integrity-watch', 'schedule-trusted.json'), 'utf8')) as { tasks?: Record<string, string> }
+      expect(Object.keys(trusted.tasks ?? {}).sort()).toEqual(['a', 'b'])
+    })
+
     it('does not mistake delivery bookkeeping or a moved next-run time for an edit', async () => {
       const { home: dir } = await home()
       const notices: Array<{ title: string; body?: string }> = []
