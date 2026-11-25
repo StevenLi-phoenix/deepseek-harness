@@ -79,7 +79,22 @@ kind: "package-reference"
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 服务 `ctx.gmail`：配置、账号、token、读信、草稿、发信流程、待确认的信、登录、设置页状态 |
+| [`src/index.ts`](src/index.ts) | 服务 `ctx.gmail`：配置、下列模块的组装、公开方法 |
+| [`src/accounts.ts`](src/accounts.ts) | 账号记录：查找、视图、每次调用的健康状态与日志、重新登录标记、接入、发信策略、移除 |
+| [`src/tokens.ts`](src/tokens.ts) | 凭据库中的授权记录与 access token：刷新、轮换、撤销 |
+| [`src/oauth-client.ts`](src/oauth-client.ts) | 凭据库中的 OAuth 客户端：读取、设置页展示、从 Google 的 JSON 文件导入 |
+| [`src/sign-in.ts`](src/sign-in.ts) | 登录流程：同意页地址、回调校验、换取授权码、读取账号地址 |
+| [`src/read.ts`](src/read.ts) | 搜索、读会话、读邮件、保存附件 |
+| [`src/outgoing.ts`](src/outgoing.ts) | 按工具参数拼装的新邮件，以及供发信判断读回的草稿 |
+| [`src/outbox.ts`](src/outbox.ts) | 草稿、发信与确认后的发信：发信判断、每日上限、转为待确认 |
+| [`src/holds.ts`](src/holds.ts) | 待确认的信：确认码、确认时的查找、丢弃、过期、清理 |
+| [`src/send-cap.ts`](src/send-cap.ts) | 每日发信上限 |
+| [`src/modify.ts`](src/modify.ts) | 会话的标签操作 |
+| [`src/activity.ts`](src/activity.ts) | 设置页显示的动态 |
+| [`src/notices.ts`](src/notices.ts) | 发给主人的通知及其文字 |
+| [`src/serial.ts`](src/serial.ts) | 逐个执行存储写入的队列 |
+| [`src/errors.ts`](src/errors.ts) | `GmailError` 与共用的错误辅助函数 |
+| [`src/types.ts`](src/types.ts) | `ctx.gmail` 的请求与结果类型 |
 | [`src/actions.ts`](src/actions.ts) | 标签操作；`tool-gmail` 导入的 `./actions` 子路径 |
 | [`src/gate.ts`](src/gate.ts) | 发信判断、主人点名的地址、凭确认码确认 |
 | [`src/oauth.ts`](src/oauth.ts) | Google OAuth：PKCE、同意页地址、换取授权码、刷新、撤销、权限范围，以及从 `sign-in-store.ts` 转导出的回调路径；`gmail-settings` 导入的 `./oauth` 子路径 |

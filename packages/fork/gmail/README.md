@@ -79,7 +79,22 @@ The sign-in is an authorization-code request with PKCE (S256), offline access, a
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Service `ctx.gmail`: configuration, accounts, tokens, reading, drafts, the send flow, held messages, sign-in, Settings status |
+| [`src/index.ts`](src/index.ts) | Service `ctx.gmail`: configuration, the wiring of the modules below, and the public methods |
+| [`src/accounts.ts`](src/accounts.ts) | Account rows: lookup, views, the health and log line of each call, the reconnect mark, connection, policy, removal |
+| [`src/tokens.ts`](src/tokens.ts) | Grants in the credential store and access tokens: refresh, rotation, revocation |
+| [`src/oauth-client.ts`](src/oauth-client.ts) | The OAuth client in the credential store: lookup, its Settings view, import from Google's JSON file |
+| [`src/sign-in.ts`](src/sign-in.ts) | The sign-in flow: consent URL, redirect check, code exchange, the account's address |
+| [`src/read.ts`](src/read.ts) | Search, threads, messages, and saved attachments |
+| [`src/outgoing.ts`](src/outgoing.ts) | A new message composed from the tool's arguments, and a draft read back for the gate |
+| [`src/outbox.ts`](src/outbox.ts) | Drafts, sends, and confirmed sends: the gate decision, the cap, the hold |
+| [`src/holds.ts`](src/holds.ts) | Held messages: codes, the lookup a confirmation makes, discards, expiry, pruning |
+| [`src/send-cap.ts`](src/send-cap.ts) | The daily send cap |
+| [`src/modify.ts`](src/modify.ts) | Label changes on threads |
+| [`src/activity.ts`](src/activity.ts) | The activity list Settings shows |
+| [`src/notices.ts`](src/notices.ts) | The owner's notices and their text |
+| [`src/serial.ts`](src/serial.ts) | The queue that runs storage writes one at a time |
+| [`src/errors.ts`](src/errors.ts) | `GmailError` and the shared error helpers |
+| [`src/types.ts`](src/types.ts) | The request and result types of `ctx.gmail` |
 | [`src/actions.ts`](src/actions.ts) | The label changes; the `./actions` subpath, which `tool-gmail` imports |
 | [`src/gate.ts`](src/gate.ts) | The send decision, the owner's named addresses, and the confirmation by code |
 | [`src/oauth.ts`](src/oauth.ts) | Google OAuth: PKCE, consent URL, code exchange, refresh, revocation, the scope, and the redirect path re-exported from `sign-in-store.ts`; the `./oauth` subpath, which `gmail-settings` imports |
