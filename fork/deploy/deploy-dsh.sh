@@ -6,7 +6,7 @@
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 . "$HERE/deploy-paths.sh"
-WAIT_S=${DSH_DEPLOY_WAIT_S:-2700}
+WAIT_S=${DSH_DEPLOY_WAIT_S:-7500}
 POLL_S=${DSH_DEPLOY_POLL_S:-5}
 
 die() { echo "deploy-dsh: $*" >&2; exit 1; }

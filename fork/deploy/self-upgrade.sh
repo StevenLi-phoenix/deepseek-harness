@@ -17,7 +17,7 @@ DSH_HOME=${DSH_UPGRADE_HOME:-/Users/dsh-runtime/.dsh}
 URL=${DSH_UPGRADE_URL:-http://127.0.0.1:3081}
 WAIT_S=${DSH_UPGRADE_WAIT_S:-180}
 SETTLE_S=${DSH_UPGRADE_SETTLE_S:-60}
-DRAIN_S=${DSH_UPGRADE_DRAIN_S:-1800}
+DRAIN_S=${DSH_UPGRADE_DRAIN_S:-6600}
 DRAIN_POLL_S=${DSH_UPGRADE_DRAIN_POLL_S:-10}
 DSH_LOG=${DSH_UPGRADE_LOG:-/Users/dsh-runtime/logs/stdout.log}
 # The reconcile needs a selected bundle to name; the selection itself does not change.
@@ -113,7 +113,8 @@ import json, sys
 print(sum(1 for item in json.load(sys.stdin)["result"]["value"]["items"] if item.get("running")))'
 }
 
-# Hold a restart until no turn runs, so it ends none. Bounded: a turn that never ends must not hold a deploy forever, and DRAINED
+# Hold a restart until no turn runs, so it ends none. Bounded at 110 minutes, past the 90 a job-apply run may take (a 30-minute
+# bound ended the 2026-11-25 16:30 run 88 minutes in, with 72 commits unpushed): a turn that never ends must not hold a deploy forever, and DRAINED
 # says what happened for the report.
 drain_turns() {
   local deadline=$((SECONDS + DRAIN_S)) count
