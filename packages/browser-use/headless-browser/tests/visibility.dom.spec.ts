@@ -220,6 +220,7 @@ describe('measuring what a person sees', () => {
       opacity: 1,
       pointerEvents: 'auto',
       ariaHidden: false,
+      ariaHiddenOwn: false,
       width: 120,
       height: 32,
       viewportFraction: 1,
@@ -235,6 +236,12 @@ describe('measuring what a person sees', () => {
     const detached = document.implementation.createHTMLDocument('detached')
     detached.body.innerHTML = '<button>Go</button>'
     expect(() => probeElement(find('button', detached))).toThrow('the element has no window to measure')
+  })
+
+  it('tells an element\'s own aria-hidden from one it inherits', () => {
+    mount('<div aria-hidden="true"><button id="next">Next</button></div><button id="decoy" aria-hidden="true">Verify</button>')
+    expect(probeElement(find('#next'))).toMatchObject({ ariaHidden: true, ariaHiddenOwn: false })
+    expect(probeElement(find('#decoy'))).toMatchObject({ ariaHidden: true, ariaHiddenOwn: true })
   })
 
   it('reports an ancestor that is not displayed, aria-hidden, invisible, or not hittable', () => {

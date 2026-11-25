@@ -94,6 +94,27 @@ describe('visibility score', () => {
     expect(scored.failing).toContain('ariaHidden')
   })
 
+  it('scores an element whose own aria-hidden is set zero even when it is plainly on screen', () => {
+    const scored = scoreVisibility(facts({ ariaHidden: true, ariaHiddenOwn: true }))
+    expect(scored.score).toBe(0)
+    expect(scored.failing).toContain('ariaHidden')
+  })
+
+  it('passes a control that inherits aria-hidden from a dialog ancestor while wholly on screen and on top', () => {
+    const scored = scoreVisibility(facts({ ariaHidden: true, ariaHiddenOwn: false }))
+    expect(scored.factors.ariaHidden).toBe(1)
+    expect(scored.failing).not.toContain('ariaHidden')
+  })
+
+  it('still fails an inherited aria-hidden when the control is covered or partly off screen', () => {
+    expect(scoreVisibility(facts({ ariaHidden: true, ariaHiddenOwn: false, occlusion: 0.8 })).failing).toContain('ariaHidden')
+    expect(scoreVisibility(facts({ ariaHidden: true, ariaHiddenOwn: false, viewportFraction: 0.9 })).failing).toContain('ariaHidden')
+  })
+
+  it('rejects an ariaHiddenOwn field that is not a boolean', () => {
+    expect(() => readElementFacts({ ...facts(), ariaHiddenOwn: 'no' })).toThrow('the visibility probe returned no ariaHiddenOwn')
+  })
+
   it('scores an element fully outside the viewport zero and names the viewport test', () => {
     const scored = scoreVisibility(facts({ viewportFraction: 0, occlusion: 0 }))
     expect(scored.score).toBe(0)

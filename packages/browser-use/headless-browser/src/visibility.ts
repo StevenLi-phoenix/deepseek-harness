@@ -83,6 +83,13 @@ export interface ElementFacts {
   readonly pointerEvents: string
   /** Whether the element or an ancestor carries `aria-hidden="true"`. */
   readonly ariaHidden: boolean
+  /**
+   * Whether the element itself carries `aria-hidden="true"`. False when only an
+   * ancestor does: a dialog library hides the page behind it from screen readers,
+   * and the control a person sees can sit inside that region. Absent means unknown,
+   * which scores as the element's own.
+   */
+  readonly ariaHiddenOwn?: boolean
   /** Width in CSS pixels of the box a person aims at: the border box, or a searchable dropdown's control around its caret-wide input. */
   readonly width: number
   /** Height in CSS pixels of the same box. */
@@ -328,6 +335,7 @@ export function probeElement(element: Element): ElementFacts {
     opacity: Math.min(1, Math.max(0, opacity)),
     pointerEvents: own.pointerEvents,
     ariaHidden,
+    ariaHiddenOwn: element.getAttribute('aria-hidden') === 'true',
     width: aimWidth,
     height: aimHeight,
     viewportFraction: fraction(inViewWidth * inViewHeight),
@@ -392,7 +400,7 @@ export function scoreVisibility(facts: ElementFacts): VisibilityScore {
     display: facts.display === 'none' ? 0 : 1,
     visibility: facts.visibility === 'hidden' || facts.visibility === 'collapse' ? 0 : 1,
     pointerEvents: facts.pointerEvents === 'none' ? 0 : 1,
-    ariaHidden: facts.ariaHidden ? 0 : 1,
+    ariaHidden: ariaHiddenFactor(facts),
     opacity: facts.opacity <= INVISIBLE_OPACITY ? 0 : clamp(facts.opacity),
     viewport: clamp(facts.viewportFraction),
     occlusion: clamp(facts.occlusion),
@@ -438,6 +446,8 @@ export function readElementFacts(value: unknown): ElementFacts {
   if (coveredBy !== undefined && typeof coveredBy !== 'string') throw new Error('the visibility probe returned no coveredBy')
   const ariaHidden = record.ariaHidden
   if (typeof ariaHidden !== 'boolean') throw new Error('the visibility probe returned no ariaHidden')
+  const ariaHiddenOwn = record.ariaHiddenOwn
+  if (ariaHiddenOwn !== undefined && typeof ariaHiddenOwn !== 'boolean') throw new Error('the visibility probe returned no ariaHiddenOwn')
   return {
     name: text('name'),
     value: text('value'),
@@ -450,6 +460,7 @@ export function readElementFacts(value: unknown): ElementFacts {
     opacity: number('opacity'),
     pointerEvents: text('pointerEvents'),
     ariaHidden,
+    ...ariaHiddenOwn === undefined ? {} : { ariaHiddenOwn },
     width: number('width'),
     height: number('height'),
     viewportFraction: number('viewportFraction'),
@@ -458,6 +469,20 @@ export function readElementFacts(value: unknown): ElementFacts {
     clippedBy: number('clippedBy'),
     clippingFraction: number('clippingFraction'),
   }
+}
+
+/**
+ * aria-hidden only says what a screen reader skips. On the element itself it
+ * marks a control the page does not mean anyone to use, such as a decoy "Verify
+ * you are human" button, so it fails. Inherited from an ancestor it usually means
+ * a dialog library hid the page around the dialog (Phenom's screening steps put
+ * their Next button there). That passes only when a person can still plainly reach
+ * the control: wholly in the viewport and on top at every sampled point.
+ */
+function ariaHiddenFactor(facts: ElementFacts): number {
+  if (!facts.ariaHidden) return 1
+  if (facts.ariaHiddenOwn !== false) return 0
+  return facts.viewportFraction >= 1 && facts.occlusion >= 1 ? 1 : 0
 }
 
 /** Keep a fraction inside 0 through 1. */

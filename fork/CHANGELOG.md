@@ -11,6 +11,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
   from what a turn sends, not from forgetting.
 
 ### Fixed
+- `headless-browser` inherited aria-hidden (2026-11-25): a control that only inherits `aria-hidden` from a dialog ancestor can be clicked when it is wholly on screen and on top. HPE's Phenom screening sets aria-hidden around its Next button, so the screening stopped after question 1; an element's own aria-hidden (a decoy "Verify you are human") is still refused.
 - `event-bus` flush timers (2026-11-25): a route's flush timer armed while another plugin published belonged to that plugin's scope, so reloading that plugin cleared the timer and the route's pending events waited until the next restart; the timer now belongs to the event bus.
 - Persistent pwsh on Linux (2026-11-24): a send settles on the verified prompt, silence or the timeout, no longer on the shell reading its terminal, which pwsh and PSReadLine do while a command runs (cursor-position queries, the key thread); under load a call returned the echoed command or the previous prompt instead of its output. An interactive child under pwsh on Linux now runs to `timeoutMs`, as on Windows and macOS.
 - LLM retries (2026-11-24): a bare `404 "not_found"` from the Codex relay is retried. The relay answers it for a few seconds between 502s and 503s, and as a non-retryable `PI_AI_ERROR` it ended an unattended batch before its commits were pushed.
