@@ -26,7 +26,8 @@ import { decideSend, namedByOwner, ownerConfirms, SEND_POLICIES, type SendPolicy
 import { compose, messageIds } from './mime.ts'
 import { decodeEntities } from './html.ts'
 import { attachmentPart, attachmentsOf, header, messageView, type MessageView } from './message.ts'
-import { authorizationUrl, exchangeCode, newState, OAuthError, pkcePair, refreshAccess, revoke, type OAuthClient, type PendingSignIn } from './oauth.ts'
+import { authorizationUrl, exchangeCode, newState, OAuthError, pkcePair, refreshAccess, revoke, type OAuthClient } from './oauth.ts'
+import { ACCOUNT_ID, OAUTH_PATH, oauthRedirect, SignInStore } from './sign-in-store.ts'
 import { gmailDomain, type AccountRecord, type ActivityRecord, type PendingRecord } from './storage.ts'
 
 export * from './address.ts'
@@ -47,24 +48,13 @@ declare module '@deepseek-ai/cordis' {
 
 /** The one permission asked for: read, draft, send, and change labels; never permanent deletion. */
 export const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.modify'
-/**
- * Path of the OAuth redirect under the DSH origin. It lies outside `/api`: the DSH sign-in cookie is `SameSite=Strict`,
- * so Google's cross-site redirect arrives without it, and the one-use `state` of an open sign-in authenticates the
- * request instead.
- */
-export const OAUTH_PATH = '/gmail.oauth'
+export { OAUTH_PATH } from './sign-in-store.ts'
 /** Credential-store scope of the grant records. */
 const GRANT_SCOPE = 'gmail'
-/** Account ids: lower-case, a letter first, at most 24 characters (they are credential key segments). */
-const ACCOUNT_ID = /^[a-z][a-z0-9-]{0,23}$/u
 /** Code alphabet: no 0/O, 1/I/L. */
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 /** Characters of a held message's code. */
 const CODE_LENGTH = 6
-/** How long a sign-in link stays valid (OAuth state lifetime, a security invariant). */
-const SIGN_IN_TTL_MS = 10 * 60_000
-/** Open sign-ins kept at most. */
-const MAX_SIGN_INS = 20
 /** Refresh an access token this long before it expires. */
 const TOKEN_MARGIN_MS = 60_000
 /** Activity lines kept. */
@@ -258,6 +248,8 @@ export interface SignInAnswer {
   readonly state: string
   readonly code?: string | undefined
   readonly error?: string | undefined
+  /** HTTP callers must supply the matched path and Host; trusted in-process callers may omit them. */
+  readonly callback?: { readonly path: string; readonly authority: string } | undefined
 }
 
 /** The OAuth client as Settings shows it; the secret never leaves the credential store. */
@@ -294,11 +286,6 @@ const clientFileSchema = zod.union([
   zod.object({ client_id: zod.string(), client_secret: zod.string() }),
 ])
 
-/** An open sign-in. */
-interface SignIn extends PendingSignIn {
-  readonly policy: SendPolicy
-}
-
 /** Human-readable error text. */
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -330,8 +317,8 @@ function mailboxesOf(value: string): Mailbox[] {
 
 /** Fail at load on configuration that cannot work. */
 function assertConfig(config: Config): void {
-  if (config.redirectUri !== '' && !/^https:\/\/[^\s/]+\/\S*$|^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/\S*$/u.test(config.redirectUri)) {
-    throw new Error('gmail: redirectUri must be an https URL (or http on localhost)')
+  if (config.redirectUri !== '' && oauthRedirect(config.redirectUri) === undefined) {
+    throw new Error(`gmail: redirectUri must be an https URL (or http on localhost) with path ${OAUTH_PATH} and no credentials, query or fragment`)
   }
   for (const address of config.trustedRecipients) {
     try {
@@ -378,7 +365,7 @@ export class Gmail extends Service {
   private domain: Domain<typeof gmailDomain> | undefined
   private readonly tokens = new Map<string, { token: string; expiresAt: number }>()
   private readonly refreshing = new Map<string, Promise<string>>()
-  private readonly signIns = new Map<string, SignIn>()
+  private readonly signIns = new SignInStore()
   private chain: Promise<unknown> = Promise.resolve()
   private activityChain: Promise<unknown> = Promise.resolve()
 
@@ -390,18 +377,22 @@ export class Gmail extends Service {
     super(ctx, 'gmail')
     assertConfig(config)
     this.ready = ctx.storageDomain.open(gmailDomain)
-    ctx.effect(async () => {
+    ctx.effect(() => async () => {
+      await this.chain
       const domain = await this.ready
-      this.domain = domain
-      await this.expire(domain, Date.now())
-      const accounts = Array.from(domain.table('accounts').entries(), ([, row]) => row)
-      const held = Array.from(domain.table('pending').entries()).filter(([, row]) => row.status === 'held').length
-      this.ctx.logger.info(`gmail: ${accounts.length} account(s)${accounts.length === 0 ? '' : ` (${accounts.map(row => `${row.id} ${row.policy}${row.needsReconnect ? ' needs-reconnect' : ''}`).join(', ')})`}, ${held} held message(s), cap ${config.maxSendsPerDay}/day`)
-      return async () => {
-        await this.chain
-        await domain.close()
-      }
-    }, 'gmail.init()')
+      await domain.close()
+    }, 'gmail: domain lifetime')
+  }
+
+  /** Prune unfinished sign-ins and expired holds before the service is ready. */
+  async [Service.init](): Promise<void> {
+    const domain = await this.ready
+    await this.signIns.prune()
+    this.domain = domain
+    await this.expire(domain, Date.now())
+    const accounts = Array.from(domain.table('accounts').entries(), ([, row]) => row)
+    const held = Array.from(domain.table('pending').entries()).filter(([, row]) => row.status === 'held').length
+    this.ctx.logger.info(`gmail: ${accounts.length} account(s)${accounts.length === 0 ? '' : ` (${accounts.map(row => `${row.id} ${row.policy}${row.needsReconnect ? ' needs-reconnect' : ''}`).join(', ')})`}, ${held} held message(s), cap ${this.config.maxSendsPerDay}/day`)
   }
 
   /** Run storage writes that read and replace one at a time. */
@@ -1007,14 +998,12 @@ export class Gmail extends Service {
     if (request.policy !== undefined && !SEND_POLICIES.includes(request.policy)) throw new GmailError('invalid', `unknown policy ${request.policy}`)
     const redirectUri = this.redirectUri(request.origin)
     const client = await this.client()
-    const now = Date.now()
-    for (const [state, open] of this.signIns) if (now - open.createdAt > SIGN_IN_TTL_MS) this.signIns.delete(state)
-    if (this.signIns.size >= MAX_SIGN_INS) throw new GmailError('limit', 'too many sign-ins are open; finish one or wait ten minutes')
     const domain = await this.ready
     const existing = domain.table('accounts').get(request.account)
     const { verifier, challenge } = pkcePair()
     const state = newState()
-    this.signIns.set(state, { account: request.account, verifier, redirectUri, createdAt: now, policy: request.policy ?? existing?.policy ?? 'confirm-untrusted' })
+    const saved = await this.signIns.insert({ state, account: request.account, verifier, redirectUri, policy: request.policy ?? existing?.policy ?? 'confirm-untrusted' })
+    if (!saved) throw new GmailError('limit', 'too many sign-ins are open; finish one or wait ten minutes')
     const loginHint = request.loginHint?.trim() || existing?.email
     this.ctx.logger.info(`gmail: sign-in started for ${request.account}${existing === undefined ? ' (new)' : ''}, redirect ${redirectUri}`)
     return { url: authorizationUrl(client, { redirectUri, scopes: [GMAIL_SCOPE], state, challenge, loginHint }), redirectUri }
@@ -1022,7 +1011,7 @@ export class Gmail extends Service {
 
   private redirectUri(origin: string): string {
     if (this.config.redirectUri !== '') return this.config.redirectUri
-    if (!/^https:\/\/[^\s/]+$|^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/u.test(origin)) {
+    if (oauthRedirect(`${origin}${OAUTH_PATH}`) === undefined) {
       throw new GmailError('invalid', `Google signs in only to an https page (or localhost); this page runs on ${origin.slice(0, 100)}. Open Settings over https or set redirectUri`)
     }
     return `${origin}${OAUTH_PATH}`
@@ -1034,10 +1023,20 @@ export class Gmail extends Service {
    * @returns the connected account.
    */
   async completeSignIn(answer: SignInAnswer): Promise<AccountView> {
-    const open = this.signIns.get(answer.state)
-    this.signIns.delete(answer.state)
-    if (open === undefined || Date.now() - open.createdAt > SIGN_IN_TTL_MS) throw new GmailError('expired', 'this sign-in link expired or was already used; start again in Settings → 邮箱')
-    if (answer.error !== undefined || answer.code === undefined) throw new GmailError('denied', `Google did not grant access (${(answer.error ?? 'no code').slice(0, 80)})`)
+    const open = await this.signIns.consume(answer.state, (signIn) => {
+      const callback = answer.callback
+      if (callback === undefined) return
+      const expected = new URL(signIn.redirectUri)
+      const actual = URL.parse(`${expected.protocol}//${callback.authority}`)
+      if (callback.path !== OAUTH_PATH || !/^[^\s/?#@\\]+$/u.test(callback.authority) || actual?.host !== expected.host) {
+        throw new GmailError('invalid', 'this is not the registered sign-in address; start again in Settings → 邮箱')
+      }
+    })
+    if (open === undefined) throw new GmailError('expired', 'this sign-in link expired or was already used; start again in Settings → 邮箱')
+    if (answer.error !== undefined || !answer.code) {
+      const detail = answer.error === 'access_denied' ? 'access_denied' : answer.error === undefined ? 'no code' : 'authorization error'
+      throw new GmailError('denied', `Google did not grant access (${detail})`)
+    }
     const client = await this.client()
     let tokens
     try {

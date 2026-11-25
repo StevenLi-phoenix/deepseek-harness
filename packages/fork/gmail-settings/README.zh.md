@@ -42,7 +42,7 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-Host 部分在 `/api` 下、Web UI 登录之后注册 `GET /api/gmail`（状态取自 `ctx.gmail.status()`，逐字段映射成 `src/view.ts` 里的线路类型，所以服务新增的字段不经审查到不了浏览器）和 `POST /api/gmail`。POST 必须是 `application/json`，跨站表单发不出来；请求体是 `client`、`sign-in`、`policy`、`remove`、`confirm`、`discard` 之一，用严格的 schema 检查，回答新的状态（`sign-in` 另带要打开的 Google 页面）。服务拒绝时回答 400 和它的说明；其他失败回答 500 和一句通用文字，并把原因写进日志。`GET /gmail.oauth` 在 `/api` 之外，因为 DSH 的登录 cookie 是 `SameSite=Strict`，Google 的跨站跳转不会带上它；从设置页开始的登录有一个只能用一次的 `state`，用它来认证请求。这个页面是静态 HTML，所有值都转义，没有脚本，带 `Content-Security-Policy: default-src 'none'`、`Referrer-Policy: no-referrer`（地址里有 Google 的一次性授权码）和 `Cache-Control: no-store`。`GET /gmail.privacy` 用同样的响应头提供 OAuth 应用的静态隐私说明（英文和中文）：应用发布为 In production 之前，Google 要求填首页和隐私政策链接，设置步骤会按重定向 URI 的 origin 列出这两个地址。浏览器部分在区块打开且页面可见时刷新，读取失败时保留上一次的回答，全部文案有八种语言。
+Host 部分在 `/api` 下、Web UI 登录之后注册 `GET /api/gmail`（状态取自 `ctx.gmail.status()`，逐字段映射成 `src/view.ts` 里的线路类型，所以服务新增的字段不经审查到不了浏览器）和 `POST /api/gmail`。POST 必须是 `application/json`，跨站表单发不出来；请求体是 `client`、`sign-in`、`policy`、`remove`、`confirm`、`discard` 之一，用严格的 schema 检查，回答新的状态（`sign-in` 另带要打开的 Google 页面）。服务拒绝时回答 400 和它的说明；其他失败回答 500 和一句通用文字，并把原因写进日志。`GET /gmail.oauth` 显式启用 Connection 的自行认证导航策略：Google 的顶层跳转可以不带 DSH 会话访问这个精确路径，跨站子资源请求和不可信 Host 仍被拒绝。Gmail 服务只接受已保存的回调地址，以及由主人在设置页发起、只能使用一次的 `state`；未知、过期或已使用的状态会收到 410 和重新连接指引。这个页面是静态 HTML，所有值都转义，没有脚本，带 `Content-Security-Policy: default-src 'none'`、`Referrer-Policy: no-referrer`（地址里有 Google 的一次性授权码）和 `Cache-Control: no-store`。`GET /gmail.privacy` 用同样的响应头提供 OAuth 应用的静态隐私说明（英文和中文）：应用发布为 In production 之前，Google 要求填首页和隐私政策链接，设置步骤会按重定向 URI 的 origin 列出这两个地址。浏览器部分在区块打开且页面可见时刷新，读取失败时保留上一次的回答，全部文案有八种语言。
 
 | 文件 | 作用 |
 |---|---|
@@ -86,7 +86,6 @@ Host 部分在 `/api` 下、Web UI 登录之后注册 `GET /api/gmail`（状态�
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **登录只存在内存里**：DSH 重启前开始的登录完成不了；重新开始一次即可。
 - **不显示邮件**：页面显示待确认的信和动态，不显示邮箱内容；读信去 Gmail 本身。
 
 <a id="dev-note"></a>

@@ -1,6 +1,6 @@
 /**
  * Google OAuth 2.0 for one Gmail account at a time: an authorization-code request with PKCE (S256), a random
- * `state` kept only in memory for ten minutes, offline access with forced consent so Google returns a refresh token,
+ * `state` valid for ten minutes, offline access with forced consent so Google returns a refresh token,
  * the code exchange, the refresh, and the revocation. The client id and secret come from the credential store; no
  * token, code, or secret reaches a log line or an error message.
  */

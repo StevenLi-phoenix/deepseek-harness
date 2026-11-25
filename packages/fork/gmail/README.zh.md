@@ -37,7 +37,7 @@ kind: "package-reference"
 | 字段 | 默认值 | 含义 |
 |---|---|---|
 | `clientIdEnv` / `clientSecretEnv` | `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` | OAuth client id 和 secret 在凭据库或 `$DSH_HOME/.env` 里的名字 |
-| `redirectUri` | `''` | 在 Google 注册的重定向 URI；留空则取 `<设置页地址>/gmail.oauth`，必须是 https 或 localhost |
+| `redirectUri` | `''` | 在 Google 注册的重定向 URI；留空则取 `<设置页地址>/gmail.oauth`，必须是 HTTPS（环回地址可用 HTTP），路径只能是 `/gmail.oauth`，不含凭据、查询参数或片段 |
 | `trustedRecipients` | `[]` | 除了已连接账号自己的地址外，每个账号都可以直接发信的地址；加载时检查 |
 | `maxSendsPerDay` | `50` | 一个账号 24 小时内最多发的信；超过的被拒绝 |
 | `confirmTtlHours` | `72` | 待确认的信等主人多少小时后作废 |
@@ -75,7 +75,7 @@ kind: "package-reference"
 <details>
 <summary>实现细节——点击展开</summary>
 
-登录是带 PKCE（S256）的授权码请求，申请离线访问并强制显示同意页，这样 Google 会返回 refresh token；`state` 只在内存里保存十分钟，只能用一次，同时最多 20 个。refresh token 是 `ctx.credentials` 里的 grant 记录（`gmail/<account>`）；access token 只在内存里，过期前一分钟刷新，每个账号同时只刷新一次，Google 轮换的 refresh token 会存下来。REST 客户端遇到 401 丢掉 token 重试一次，429 稍等后重试，5xx 或连接断开只对可以安全重复的调用重试，所以一封信不会发两次。新邮件拼成 RFC 5322 原文（base64 的 UTF-8 正文、RFC 2047 信头、RFC 2231 文件名，回复带 `In-Reply-To` 和 `References`），地址都检查成简单的 dot-atom 形式，带换行的信头值被拒绝，所以任何参数都加不了信头或隐藏收件人。收到的正文取 `text/plain` 部分，没有时把 HTML 一次线性扫描转成文字（不建 DOM），按每部分声明的字符集解码，并切掉引用的历史。草稿的密送从 `format=raw` 读，因为解析后的草稿可能不带它。确认、丢弃、完成登录、移除和改规则一次只执行一个。每个操作都记录账号、耗时和结果；token、Google 返回的授权码和 secret 从不写进日志。
+登录是带 PKCE（S256）的授权码请求，申请离线访问并强制显示同意页，这样 Google 会返回 refresh token；最多 20 笔未完成的登录存入 `$DSH_HOME/data/gmail/sign-ins.json`（0600），包括 PKCE verifier 和准确的重定向 URI，有效期十分钟。回调核对该地址，并在换取 token 前从磁盘删除对应记录；未使用且未过期的记录可跨 Host 重启继续使用。refresh token 是 `ctx.credentials` 里的 grant 记录（`gmail/<account>`）；access token 只在内存里，过期前一分钟刷新，每个账号同时只刷新一次，Google 轮换的 refresh token 会存下来。REST 客户端遇到 401 丢掉 token 重试一次，429 稍等后重试，5xx 或连接断开只对可以安全重复的调用重试，所以一封信不会发两次。新邮件拼成 RFC 5322 原文（base64 的 UTF-8 正文、RFC 2047 信头、RFC 2231 文件名，回复带 `In-Reply-To` 和 `References`），地址都检查成简单的 dot-atom 形式，带换行的信头值被拒绝，所以任何参数都加不了信头或隐藏收件人。收到的正文取 `text/plain` 部分，没有时把 HTML 一次线性扫描转成文字（不建 DOM），按每部分声明的字符集解码，并切掉引用的历史。草稿的密送从 `format=raw` 读，因为解析后的草稿可能不带它。确认、丢弃、完成登录、移除和改规则一次只执行一个。每个操作都记录账号、耗时和结果；token、Google 返回的授权码和 secret 从不写进日志。
 
 | 文件 | 作用 |
 |---|---|

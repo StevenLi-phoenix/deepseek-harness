@@ -91,8 +91,8 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-/** A route permits anonymous access, requires a live Peer, or refuses all access. */
-export type WebAuthPolicy = 'anonymous' | 'required' | 'deny'
+/** WebServer admission policy. `self-authenticated-navigation` requires a fixed exact resource that verifies its own request. */
+export type WebAuthPolicy = 'anonymous' | 'required' | 'deny' | 'self-authenticated-navigation'
 
 /** Authentication inputs shared by socket-backed and synthetic requests. */
 export interface WebAuthRequest {
@@ -138,7 +138,7 @@ export interface WebResourceRoute {
   path: string
   /** Answers HTTP GET and HEAD requests and in-process reads. */
   resource: WebResource
-  /** Defaults to required; in-process reads still enforce deny. */
+  /** Defaults to required. Use the fixed self-authenticated navigation policy only on an exact route. */
   auth?: WebAuthenticationRule
 }
 
@@ -563,7 +563,8 @@ export class WebServer extends Service {
    * path picks the responder by the HTTP match order — exact, longest prefix,
    * then the fallback — and only a resource answers. This method checks no
    * cookie, Host, or Origin: the caller admits the reader before reading.
-   * A resolved deny policy returns 403 even for an explicitly admitted Peer.
+   * A resolved deny or self-authenticated navigation policy returns 403 even
+   * for an explicitly admitted Peer.
    * @param request - the read; its URL path selects the responder.
    * @param peer - the Peer the read speaks for, passed to the resource.
    * @returns the resource's response, without a body for HEAD as over HTTP;
@@ -580,7 +581,8 @@ export class WebServer extends Service {
     const url = new URL(request.url)
     const responder = this.responderFor(url.pathname)
     if (responder === undefined || !('resource' in responder)) return new Response(null, { status: 404 })
-    if (this.authPolicy(responder.auth, { headers: request.headers, method: request.method, url, transport: 'http', signal: request.signal }) === 'deny') {
+    const policy = this.authPolicy(responder.auth, { headers: request.headers, method: request.method, url, transport: 'http', signal: request.signal })
+    if (policy === 'deny' || policy === 'self-authenticated-navigation') {
       return new Response(null, { status: 403 })
     }
     const response = await responder.resource(request, peer)
@@ -610,7 +612,8 @@ export class WebServer extends Service {
       /* v8 ignore next -- `?? '/'` arm: node:http always sets url on server
       requests; the field is only optional on the client-side IncomingMessage type */
       const target = new URL(req.url ?? '/', 'http://x')
-      const responder = this.responderFor(target.pathname)
+      const namedRoute = this.match(target.pathname)
+      const responder = namedRoute ?? this.fallback
       if (responder === undefined) {
         res.writeHead(404)
         res.end()
@@ -632,7 +635,7 @@ export class WebServer extends Service {
           headers: req.headers, method: req.method, url: target, transport: 'http',
           signal: abort.signal, socket: req.socket,
         }
-        const admission = this.authorize(request, responder.auth)
+        const admission = this.authorize(request, responder.auth, namedRoute?.kind === 'exact' && 'resource' in namedRoute)
         if (abort.signal.aborted || request.socket?.destroyed) return
         if (admission.kind === 'deny') {
           res.writeHead(admission.status, { 'Cache-Control': 'no-store' })
@@ -781,9 +784,11 @@ export class WebServer extends Service {
     return typeof auth === 'function' ? auth(request) : auth ?? 'required'
   }
 
-  private authorize(request: WebAuthRequest, auth: WebAuthenticationRule | undefined): WebAdmission {
+  private authorize(request: WebAuthRequest, auth: WebAuthenticationRule | undefined, exactResource = false): WebAdmission {
     const policy = this.authPolicy(auth, request)
-    if (policy === 'deny') return { kind: 'deny', status: 403 }
+    if (policy === 'deny' || (policy === 'self-authenticated-navigation' && (!exactResource || auth !== policy))) {
+      return { kind: 'deny', status: 403 }
+    }
     const admission: WebAdmission = this.ctx.bail(this, 'webserver/authorize', request, policy)
       ?? (policy === 'anonymous' ? { kind: 'allow' } : { kind: 'deny', status: 503 })
     if (admission.kind === 'allow') {

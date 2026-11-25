@@ -89,6 +89,9 @@ Every edit outside `packages/fork/` and `/fork` is listed here so an upgrade can
 | `docs/config-catalog.md`, `docs/config-catalog.zh.md` | Regenerated for `freshChildRoute`. |
 | `.github/workflows/fork-ci.yml` (new) | Fork-owned workflow: the `ci.yml` pull-request gates (`check:ci:static`, `typecheck` + `check:ci:lint:contracts-ready`, `check:ci:coverage-shard` in four shards + `test:coverage:merge-shards`, `check:ci:build`) on every push to `main`, GitHub-hosted runners, no cancellation. A new file, so upstream merges never conflict on it. The `CI master` workflow is disabled in the repository settings instead of edited, and its `python-runtime` job matches upstream again |
 | `packages/browser-use/headless-browser/src/client/` (the fork-added take-over page) | `BrowserTakeoverPage.module.css` meets the ui-theme gates: `corner-shape: round` on full-round radii, `:hover` inside `@media (hover: hover)`, and the l2 scrollbar rebind on the scrolling tab strip |
+| `packages/host/webserver/{src/index.ts,README.md,README.zh.md,README.i18n.yaml}`, `packages/client/connection/{src/api-request-trust.ts,src/rpc-host.ts,tests/web-authorization.host.spec.ts,README.md,README.zh.md,README.i18n.yaml}` | `self-authenticated-navigation` admits credential-free top-level GETs to an explicitly opted-in exact HTTP resource after the Host fence; Gmail OAuth is the only consumer. Ordinary WebServer and shared RPC authorization are unchanged. |
+| `docs/subsystems/web-server.md`, `docs/subsystems/web-server.zh.md`, `packages/extensions/tool-cordis/src/api-catalog.ts` | Regenerated for the WebServer admission policy and resource route documentation. |
+| `docs/upgrade-guide/v0.2.3-alpha.2/gmail-oauth-redirect/` | Migration for configured Gmail redirects with a path other than `/gmail.oauth`. |
 
 ## Upgrade procedure
 

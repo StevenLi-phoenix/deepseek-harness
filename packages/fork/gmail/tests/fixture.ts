@@ -3,6 +3,9 @@
  * endpoints plus the Gmail REST API, per mailbox) behind a stubbed global `fetch`, and a mounted Context with Timer,
  * Storage, a memory backend, the domain facility, and a recording notifier.
  */
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
 import type { CredentialInfo, CredentialRecord, ResolvedCredential } from '@deepseek-ai/dsh-credentials'
@@ -392,14 +395,20 @@ export interface Mounted {
 }
 
 const contexts: Context[] = []
+let home: string | undefined
 
-/** Dispose every Context the specs mounted. */
+/** Dispose every Context the specs mounted, then remove the test-only Harness home. */
 export async function disposeAll(): Promise<void> {
   await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose()))
+  if (home !== undefined) rmSync(home, { recursive: true, force: true })
+  home = undefined
+  vi.unstubAllEnvs()
 }
 
 /** A Context with Timer, Storage over a memory backend on the pool, and the domain facility. */
 async function storageHost(pool: MemoryMediaPool): Promise<{ ctx: Context; facility: DomainFacility; logs: string[] }> {
+  home ??= mkdtempSync(join(tmpdir(), 'dsh-gmail-test-'))
+  vi.stubEnv('DSH_HOME', home)
   const ctx = new Context()
   contexts.push(ctx)
   const logs: string[] = []

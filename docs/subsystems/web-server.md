@@ -304,7 +304,8 @@ registerFallback(fallback: WebRoute['handler'] | WebFallback): () => void
  * path picks the responder by the HTTP match order — exact, longest prefix,
  * then the fallback — and only a resource answers. This method checks no
  * cookie, Host, or Origin: the caller admits the reader before reading.
- * A resolved deny policy returns 403 even for an explicitly admitted Peer.
+ * A resolved deny or self-authenticated navigation policy returns 403 even
+ * for an explicitly admitted Peer.
  * @param request - the read; its URL path selects the responder.
  * @param peer - the Peer the read speaks for, passed to the resource.
  * @returns the resource's response, without a body for HEAD as over HTTP;

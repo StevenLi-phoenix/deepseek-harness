@@ -8,7 +8,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ClientRequest, RpcId as RpcIdType } from './rpc.ts'
 import { clientRequestSchema } from './rpc-schema.ts'
 import { bridge } from './http-bridge.ts'
-import { isRemoteAuthority, isTrustedApiRequest } from './api-request-trust.ts'
+import { isRemoteAuthority, isTrustedApiRequest, isTrustedNavigationRequest } from './api-request-trust.ts'
 import { API_PATH } from './api-path.ts'
 import { Peer } from './peer.ts'
 import type { ConnectionAuthentication } from './authentication.ts'
@@ -86,8 +86,8 @@ export class HostConnectionService extends Service implements HostConnectionHand
     this.allowsRemoteAuthorities = trustedHosts.some(isRemoteAuthority)
     ctx.on('webserver/authorize', (request, policy) => {
       const facts = { ...request, url: request.url.href }
-      if (!this.isTrustedRequest(facts)) return { kind: 'deny', status: 403 }
-      if (policy === 'anonymous') return { kind: 'allow' }
+      if (!this.isTrustedRequest(facts, policy === 'self-authenticated-navigation')) return { kind: 'deny', status: 403 }
+      if (policy === 'anonymous' || policy === 'self-authenticated-navigation') return { kind: 'allow' }
       const admission = this.authentication.authenticate(facts)
       return 'rejection' in admission
         ? { kind: 'deny', status: admission.rejection }
@@ -130,9 +130,10 @@ export class HostConnectionService extends Service implements HostConnectionHand
   }
 
   /** Check the deployment's request-source policy without credential verification. */
-  private isTrustedRequest(request: ConnectionTrustRequest): boolean {
+  private isTrustedRequest(request: ConnectionTrustRequest, navigation = false): boolean {
     const carrier = this.owner.get('webServer')
-    return isTrustedApiRequest(request, this.trustedHosts, carrier?.host, carrier?.protocol ?? 'http:')
+    const check = navigation ? isTrustedNavigationRequest : isTrustedApiRequest
+    return check(request, this.trustedHosts, carrier?.host, carrier?.protocol ?? 'http:')
   }
 
   /**

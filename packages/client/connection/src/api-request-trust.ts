@@ -15,9 +15,12 @@
 import { isLoopbackHostname } from './loopback-hostname.ts'
 import type { ConnectionTrustRequest } from './rpc.ts'
 
+function headerValue(headers: ConnectionTrustRequest['headers'], name: string): string | readonly string[] | undefined {
+  return headers instanceof Headers ? headers.get(name) ?? undefined : headers[name]
+}
+
 function header(headers: ConnectionTrustRequest['headers'], name: string): string | undefined {
-  if (headers instanceof Headers) return headers.get(name) ?? undefined
-  const value = headers[name]
+  const value = headerValue(headers, name)
   return typeof value === 'string' ? value : undefined
 }
 
@@ -132,12 +135,7 @@ export function isTrustedApiRequest(
   // Fetch-Metadata, indistinguishable from curl, and its response is readable
   // by the rebound page.
   const host = header(request.headers, 'host')
-  if (host === undefined) return false
-  const hostUrl = parseAuthority(host, protocol)
-  if (hostUrl === undefined) return false
-  if (!isLoopbackHostname(hostUrl.hostname)
-    && !isTrustedAuthority(hostUrl, trustedHosts, protocol)
-    && !isBindAddressAuthority(hostUrl, bindHost)) return false
+  if (host === undefined || trustedRequestHost(host, trustedHosts, bindHost, protocol) === undefined) return false
   // Cross-site fence: modern browsers label the initiator relationship on
   // every fetch; an explicit cross-site marker is refused regardless of Origin.
   if (header(request.headers, 'sec-fetch-site') === 'cross-site') return false
@@ -148,6 +146,52 @@ export function isTrustedApiRequest(
   const origin = header(request.headers, 'origin')
   if (origin === undefined) return true
   return isSameAuthorityOrigin(origin, host)
+}
+
+function trustedRequestHost(host: string, trustedHosts: readonly string[], bindHost: string | undefined, protocol: 'http:' | 'https:'): URL | undefined {
+  const hostUrl = parseAuthority(host, protocol)
+  if (hostUrl === undefined) return undefined
+  return isLoopbackHostname(hostUrl.hostname)
+    || isTrustedAuthority(hostUrl, trustedHosts, protocol)
+    || isBindAddressAuthority(hostUrl, bindHost) ? hostUrl : undefined
+}
+
+/**
+ * Apply the source fence for a socket GET handled by a self-authenticating resource.
+ * @param request - Node HTTP or Fetch request facts.
+ * @param trustedHosts - additional authorities served by this deployment.
+ * @param bindHost - the listener's own bind IP literal, when available.
+ * @param protocol - the listener protocol.
+ * @returns whether the method, source, and any Fetch Metadata allow navigation admission.
+ */
+export function isTrustedNavigationRequest(
+  request: ConnectionTrustRequest,
+  trustedHosts: readonly string[],
+  bindHost: string | undefined,
+  protocol: 'http:' | 'https:',
+): boolean {
+  if (request.method !== 'GET') return false
+  const host = header(request.headers, 'host')
+  if (host === undefined) return false
+  const hostUrl = trustedRequestHost(host, trustedHosts, bindHost, protocol)
+  if (hostUrl === undefined || canonicalAuthority(host, hostUrl) !== host.toLowerCase()) return false
+
+  const origin = headerValue(request.headers, 'origin')
+  if (origin !== undefined) {
+    const prefix = `${protocol}//`
+    if (typeof origin !== 'string' || !origin.startsWith(prefix)) return false
+    const authority = origin.slice(prefix.length)
+    const originUrl = parseAuthority(authority, protocol)
+    if (originUrl?.origin !== hostUrl.origin || canonicalAuthority(authority, originUrl) !== authority.toLowerCase()) return false
+  }
+
+  const mode = headerValue(request.headers, 'sec-fetch-mode')
+  const dest = headerValue(request.headers, 'sec-fetch-dest')
+  if (mode === 'navigate' && dest === 'document') return true
+  // Clients without Fetch Metadata cannot distinguish navigations from other reads.
+  return mode === undefined && dest === undefined
+    && headerValue(request.headers, 'sec-fetch-site') === undefined
+    && headerValue(request.headers, 'sec-fetch-user') === undefined
 }
 
 /**

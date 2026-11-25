@@ -6175,7 +6175,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async readResource(request: Request, peer: PeerScope): Promise<Response>',
-        description: 'Read the response an HTTP request for the same URL would receive, as the resource computes it for `peer`, without an HTTP exchange. The request path picks the responder by the HTTP match order — exact, longest prefix, then the fallback — and only a resource answers. This method checks no cookie, Host, or Origin: the caller admits the reader before reading. A resolved deny policy returns 403 even for an explicitly admitted Peer.',
+        description: 'Read the response an HTTP request for the same URL would receive, as the resource computes it for `peer`, without an HTTP exchange. The request path picks the responder by the HTTP match order — exact, longest prefix, then the fallback — and only a resource answers. This method checks no cookie, Host, or Origin: the caller admits the reader before reading. A resolved deny or self-authenticated navigation policy returns 403 even for an explicitly admitted Peer.',
         parameters: [{ name: 'request', description: 'the read; its URL path selects the responder.' }, { name: 'peer', description: 'the Peer the read speaks for, passed to the resource.' }],
         returns: 'the resource\'s response, without a body for HEAD as over HTTP; 405 with `Allow: GET, HEAD` for any other method, checked before matching, where over HTTP a handler route or an unmatched path answers such a method itself; 404 when the path matches a handler route, or reaches the fallback seat while it is unclaimed or holds a handler. A resource that throws rejects the read, where an HTTP request would receive 400.',
       },
@@ -11946,7 +11946,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SignInAnswer',
-    declaration: 'export interface SignInAnswer {\n    readonly state: string;\n    readonly code?: string | undefined;\n    readonly error?: string | undefined;\n}',
+    declaration: 'export interface SignInAnswer {\n    readonly state: string;\n    readonly code?: string | undefined;\n    readonly error?: string | undefined;\n    readonly callback?: {\n        readonly path: string;\n        readonly authority: string;\n    } | undefined;\n}',
   },
   {
     name: 'SignInAttemptId',
@@ -13086,7 +13086,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WebAuthPolicy',
-    declaration: 'export type WebAuthPolicy = \'anonymous\' | \'required\' | \'deny\';',
+    declaration: 'export type WebAuthPolicy = \'anonymous\' | \'required\' | \'deny\' | \'self-authenticated-navigation\';',
   },
   {
     name: 'WebAuthRequest',

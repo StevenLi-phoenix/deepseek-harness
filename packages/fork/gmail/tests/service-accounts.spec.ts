@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto'
+import { readFile, stat } from 'node:fs/promises'
+import { join } from 'node:path'
+import { Service } from '@deepseek-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Gmail, { Config, GMAIL_SCOPE, GmailError, OAUTH_PATH, type SendPolicy } from '../src/index.ts'
 import {
@@ -36,7 +39,9 @@ describe('configuration', () => {
 
   it('fails at load on a redirect that is not https (or http on localhost) and on a trusted entry that is not an address', async () => {
     await expect(mount({ config: { redirectUri: 'http://dsh.example/gmail.oauth' } })).rejects.toThrow('gmail: redirectUri must be an https URL (or http on localhost)')
-    await expect(mount({ config: { redirectUri: 'https://dsh.example' } })).rejects.toThrow('redirectUri must be an https URL')
+    for (const uri of ['https://dsh.example', 'https://dsh.example/cb', `${ORIGIN}${OAUTH_PATH}?x=1`, `https://user:pass@dsh.example${OAUTH_PATH}`]) {
+      await expect(mount({ config: { redirectUri: uri } })).rejects.toThrow(`with path ${OAUTH_PATH}`)
+    }
     await expect(mount({ config: { trustedRecipients: ['boss@example.com', 'the boss'] } })).rejects.toThrow('gmail: trustedRecipients entry "the boss" is not an email address')
     const local = await mount({ config: { redirectUri: 'http://localhost:8080/gmail.oauth', trustedRecipients: ['Boss <boss@example.com>'] } })
     expect((await local.gmail.status()).redirectUri).toBe('http://localhost:8080/gmail.oauth')
@@ -121,6 +126,37 @@ describe('sign-in', () => {
       failure: 'expired', message: 'this sign-in link expired or was already used; start again in Settings → 邮箱',
     })
     expect(env.google.tokenCalls('authorization_code')).toHaveLength(1)
+  })
+
+  it('reloads owner-only state on restart, prunes expired rows, and consumes it before exchanging the code', async () => {
+    const first = await mount()
+    const file = join(process.env['DSH_HOME'] ?? '', 'data', 'gmail', 'sign-ins.json')
+    await first.gmail.beginSignIn({ account: 'expired', origin: ORIGIN })
+    vi.setSystemTime(START + 10 * 60_000 - 1)
+    const { url } = await first.gmail.beginSignIn({ account: 'personal', origin: ORIGIN, policy: 'confirm-all' })
+    const consent = new URL(url)
+    const state = consent.searchParams.get('state') ?? ''
+    expect((await stat(file)).mode & 0o777).toBe(0o600)
+    expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject([{}, {
+      account: 'personal', state, policy: 'confirm-all', redirectUri: `${ORIGIN}${OAUTH_PATH}`, createdAt: START + 10 * 60_000 - 1,
+    }])
+    await first.fiber.dispose()
+    vi.setSystemTime(START + 10 * 60_000)
+    const second = await mount({ pool: first.pool, credentials: first.credentials, google: first.google })
+    expect(JSON.parse(await readFile(file, 'utf8'))).toEqual([{
+      account: 'personal', state, policy: 'confirm-all', redirectUri: `${ORIGIN}${OAUTH_PATH}`,
+      createdAt: START + 10 * 60_000 - 1, verifier: expect.stringMatching(/^[\w-]{64}$/u),
+    }])
+    vi.stubGlobal('fetch', async (...args: Parameters<typeof second.google.fetch>) => {
+      if (String(args[0]).endsWith('/token')) await expect(stat(file)).rejects.toMatchObject({ code: 'ENOENT' })
+      return second.google.fetch(...args)
+    })
+    expect(await second.gmail.completeSignIn({ state, code: 'one-use' })).toMatchObject({ id: 'personal', policy: 'confirm-all' })
+    await expect(stat(file)).rejects.toMatchObject({ code: 'ENOENT' })
+    const [exchange] = second.google.tokenCalls('authorization_code')
+    expect(createHash('sha256').update(exchange?.get('code_verifier') ?? '').digest('base64url')).toBe(consent.searchParams.get('code_challenge'))
+    expect(await gmailFailure(second.gmail.completeSignIn({ state, code: 'retry' }))).toMatchObject({ failure: 'expired' })
+    expect(second.google.tokenCalls('authorization_code')).toHaveLength(1)
   })
 
   it('takes the policy given for a new account and uses the access token of the sign-in without a refresh', async () => {
@@ -209,9 +245,9 @@ describe('sign-in', () => {
         failure: 'invalid', message: `Google signs in only to an https page (or localhost); this page runs on ${origin}. Open Settings over https or set redirectUri`,
       })
     }
-    const configured = await mount({ config: { redirectUri: 'https://auth.example/cb' } })
-    expect((await configured.gmail.beginSignIn({ account: 'work', origin: 'http://192.168.1.2:5140' })).redirectUri).toBe('https://auth.example/cb')
-    expect((await configured.gmail.status()).redirectUri).toBe('https://auth.example/cb')
+    const configured = await mount({ config: { redirectUri: 'https://auth.example/gmail.oauth' } })
+    expect((await configured.gmail.beginSignIn({ account: 'work', origin: 'http://192.168.1.2:5140' })).redirectUri).toBe('https://auth.example/gmail.oauth')
+    expect((await configured.gmail.status()).redirectUri).toBe('https://auth.example/gmail.oauth')
     expect((await env.gmail.status()).redirectUri).toBeNull()
   })
 
@@ -343,11 +379,11 @@ describe('removing an account', () => {
 describe('lifecycle', () => {
   it('answers no accounts before its storage has opened', async () => {
     const { ctx } = await host()
-    const loading = ctx.plugin(Gmail, Config({} as Config))
-    while (ctx.get('gmail') === undefined) await Promise.resolve()
-    expect(ctx.gmail.accounts()).toEqual([])
-    await loading
-    await vi.advanceTimersByTimeAsync(0)
+    await ctx.plugin(async (pluginCtx) => {
+      const gmail = new Gmail(pluginCtx, Config({} as Config))
+      expect(gmail.accounts()).toEqual([])
+      await gmail[Service.init]()
+    })
     expect(ctx.gmail.accounts()).toEqual([])
   })
 

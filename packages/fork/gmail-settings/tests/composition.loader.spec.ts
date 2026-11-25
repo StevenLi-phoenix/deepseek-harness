@@ -56,6 +56,7 @@ afterEach(async () => {
   await Promise.all(apps.splice(0).map(app => app.context.fiber.dispose()))
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
   vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
 })
 
 /** A Host root with an empty owner-only credential file. */
@@ -68,6 +69,7 @@ function newRoot(): string {
 
 /** DSH: the Loader boots the shipped plugins from a test-only cordis.yml. */
 async function bootApp(root: string, pool: MemoryMediaPool, google: FakeGoogle): Promise<App> {
+  vi.stubEnv('DSH_HOME', root)
   vi.stubGlobal('fetch', vi.fn(google.fetch))
   const routes = new Map<string, Route>()
   const pages = new Map<string, WebResourceRoute>()
@@ -180,7 +182,7 @@ async function connectPersonal(app: App, google: FakeGoogle): Promise<void> {
   google.mailbox(OWNER_EMAIL).displayName = 'Owner'
   const page = app.pages.get('/gmail.oauth')
   if (page === undefined) throw new Error('the sign-in page is not registered')
-  const returned = await page.resource(new Request(`${ORIGIN}/gmail.oauth?state=${consent.searchParams.get('state') ?? ''}&code=consent-code`))
+  const returned = await page.resource(new Request(`${ORIGIN}/gmail.oauth?state=${consent.searchParams.get('state') ?? ''}&code=consent-code`, { headers: { host: new URL(ORIGIN).host } }))
   expect(returned.status).toBe(200)
   expect(returned.headers.get('content-security-policy')).toContain('default-src \'none\'')
   expect(await returned.text()).toContain('已连接 personal')

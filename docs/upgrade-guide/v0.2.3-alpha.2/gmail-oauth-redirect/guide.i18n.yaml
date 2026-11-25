@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.3-alpha.2/gmail-oauth-redirect/guide.md
+/:
+  en: e2294ae52dfcbb99
+  zh: 24c3ee4cf4702d70
+/gmail-oauth-redirect-uri:
+  en: 6f1427325a6318b3
+  zh: b20342a31e3fba1e
+/gmail-oauth-redirect-uri/change:
+  en: 97bf47d47e499be6
+  zh: c6aac37755d0d13d
+/gmail-oauth-redirect-uri/migration:
+  en: e287ab1b2b6f87f6
+  zh: e49cb83d30ab30a7

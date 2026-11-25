@@ -70,7 +70,7 @@ async function mount(options: { web?: boolean } = {}) {
   const page = async (query: string) => {
     const route = pages.find(entry => entry.path === OAUTH_PATH)
     if (route === undefined) throw new Error('page missing')
-    return route.resource(new Request(`https://dsh.example${OAUTH_PATH}${query}`))
+    return route.resource(new Request(`https://dsh.example${OAUTH_PATH}${query}`, { headers: { host: 'dsh.example' } }))
   }
   return { ctx, fiber, routes, pages, gmail, api, post, page, logs }
 }
@@ -206,7 +206,7 @@ describe('the sign-in page', () => {
   it('connects the account with the redirect\'s state and code, and keeps the code out of any referrer', async () => {
     const { page, gmail } = await mount()
     const response = await page('?state=s1&code=c1&scope=x')
-    expect(gmail.completeSignIn).toHaveBeenCalledWith({ state: 's1', code: 'c1', error: undefined })
+    expect(gmail.completeSignIn).toHaveBeenCalledWith({ state: 's1', code: 'c1', error: undefined, callback: { path: OAUTH_PATH, authority: 'dsh.example' } })
     expect(response.status).toBe(200)
     expect(Object.fromEntries(response.headers.entries())).toMatchObject(PAGE_HEADERS)
     expect(response.headers.get('referrer-policy')).toBe('no-referrer')
@@ -221,7 +221,7 @@ describe('the sign-in page', () => {
     const { page, gmail } = await mount()
     gmail.completeSignIn.mockRejectedValueOnce(new GmailError('denied', 'Google did not grant access (<img src=x onerror=alert(1)>)'))
     const response = await page('?state=s2&error=access_denied')
-    expect(gmail.completeSignIn).toHaveBeenCalledWith({ state: 's2', code: undefined, error: 'access_denied' })
+    expect(gmail.completeSignIn).toHaveBeenCalledWith({ state: 's2', code: undefined, error: 'access_denied', callback: { path: OAUTH_PATH, authority: 'dsh.example' } })
     expect(response.status).toBe(400)
     const html = await response.text()
     expect(html).toContain('<h1>没有连接</h1>')
@@ -238,7 +238,7 @@ describe('the sign-in page', () => {
     const failed = await page('?state=s3&code=c3')
     expect(failed.status).toBe(500)
     expect(await failed.text()).not.toContain('ECONNRESET')
-    expect(logs).toContain('warn: gmail-settings: sign-in page failed: ECONNRESET token endpoint')
+    expect(logs).toContain('warn: gmail-settings: sign-in page failed (internal)')
   })
 
   it('escapes every HTML-special character', () => {

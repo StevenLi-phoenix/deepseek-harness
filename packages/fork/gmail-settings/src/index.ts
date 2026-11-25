@@ -4,10 +4,9 @@
  * starts a sign-in, changes a policy, removes an account, or confirms or discards a held message, and answers the new
  * status. Both sit under `/api`, so the connection's sign-in check guards them.
  *
- * `GET /gmail.oauth` is the page Google's sign-in returns to. It lies outside `/api` because the DSH sign-in
- * cookie is `SameSite=Strict` and Google's cross-site redirect arrives without it; the one-use `state` that only an
- * open sign-in started from Settings holds authenticates the request. `GET /gmail.privacy` is the OAuth app's
- * static privacy statement, the page Google's app settings link to as its home page and privacy policy.
+ * `GET /gmail.oauth` accepts a top-level Google redirect without a DSH Peer. The callback authenticates itself with
+ * an open sign-in's one-use `state`, the registered redirect address, and the PKCE code exchange. `GET /gmail.privacy`
+ * is the OAuth app's static privacy statement.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -162,19 +161,25 @@ export function apply(ctx: Context): void {
     web.effect(() => web.webServer.register({
       kind: 'exact',
       path: OAUTH_PATH,
+      auth: 'self-authenticated-navigation',
       resource: async (request) => {
-        const query = new URL(request.url).searchParams
+        const url = new URL(request.url)
+        const query = url.searchParams
         const state = query.get('state') ?? ''
         if (state === '') return new Response(signInPage('failed', '没有连接', '这个地址缺少登录状态，请回到设置 → 邮箱重新连接。'), { status: 400, headers: PAGE_HEADERS })
         try {
-          const account = await gmail().completeSignIn({ state, code: query.get('code') ?? undefined, error: query.get('error') ?? undefined })
+          const account = await gmail().completeSignIn({
+            state, code: query.get('code') ?? undefined, error: query.get('error') ?? undefined,
+            callback: { path: url.pathname, authority: request.headers.get('host') ?? '' },
+          })
           ctx.logger.info(`gmail-settings: sign-in page connected ${account.id}`)
           return new Response(signInPage('ok', `已连接 ${account.id}`, `${account.email} 已连接，发信规则为 ${account.policy}。这个页面可以关掉了。`), { status: 200, headers: PAGE_HEADERS })
         } catch (error: unknown) {
           const known = error instanceof GmailError
-          ctx.logger.warn(`gmail-settings: sign-in page failed: ${errorText(error)}`)
-          const detail = known ? error.message : '连接时出了错，DSH 日志里有详情。'
-          return new Response(signInPage('failed', '没有连接', detail), { status: known ? 400 : 500, headers: PAGE_HEADERS })
+          ctx.logger.warn(`gmail-settings: sign-in page failed (${known ? error.failure : 'internal'})`)
+          const detail = !known ? '连接时出了错，请回到设置 → 邮箱重新连接。'
+            : error.failure === 'expired' ? '这个登录链接已过期或已使用，请回到设置 → 邮箱重新连接。' : error.message
+          return new Response(signInPage('failed', '没有连接', detail), { status: known ? error.failure === 'expired' ? 410 : 400 : 500, headers: PAGE_HEADERS })
         }
       },
     }), `gmail-settings: ${OAUTH_PATH}`)

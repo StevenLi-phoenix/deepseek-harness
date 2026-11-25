@@ -66,6 +66,8 @@ WebServer 事件以发起它的 WebServer 为 Cordis subject。普通监听器�
 
 HTTP 请求在路由查找前经过 `webserver/request(request, response, next)`。监听器拥有响应或等待 `next()`，请求错误处理器容纳中间件异常。匹配后，HTTP 与 upgrade 路由解析 `auth`，可为固定策略或读取请求事实的同步选择器。默认 `required` 要求存活 Peer；`anonymous` 免凭据；`deny` 不分发，直接返回403。其余策略通过同步 `webserver/authorize(request, policy)` 采用首个决策。无人决策时匿名放行，认证返回503。HTTP 与 upgrade 的准入拒绝响应均携带 `Cache-Control: no-store`。Connection 提供来源检查与有序凭据验证；来源检查同样适用于匿名路由。HTTP handler 接收 `(req, res, peer?)`，upgrade 接收 `(req, socket, head, peer?)`，resource 保留已有 Peer 参数。进程内读取不触发此事件。
 
+固定的 `auth: 'self-authenticated-navigation'` 仅供具名的 `exact` HTTP resource 使用；resource 必须在执行任何受保护操作前自行验证请求。通过选择器、handler、前缀、回退、upgrade 或 `readResource` 使用此策略均返回 403。匹配的请求若没有准入决策，则返回 503。哪些 GET 请求可不带 Peer 准入，见 [Connection 的来源检查](../../client/connection/README.zh.md#browser-authentication-and-request-trust)。
+
 已准入的 upgrade 在已注册协议 handler 前经过 `webserver/upgrade(req, socket, head, peer, next)`。waterfall 携带已选定的 Peer，匿名准入可为 `undefined`；被拒绝的请求不会进入。监听器自行处理 Socket，或等待 `next()` 委派。WebServer 等待同步或异步协议 handler，并在中间件或 handler 拒绝时记录日志、销毁该 Socket。Provider 专属 Socket 限制与凭据清理属于监听器，不属于 WebServer 或 Gateway。
 
 `webserver/entry-url(baseUrl, entries)` 根据传入的服务器基地址同步收集完整入口 URL。监听器追加 `{ label, url, open }` 入口。WebApp 在就绪后触发该事件。WebApp 拥有按序打印与首个可自动打开入口的浏览器交接。该事件不认证请求，也不改变监听器或公告地址配置。
