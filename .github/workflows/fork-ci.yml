@@ -196,6 +196,24 @@ jobs:
           path: ~/.cache/dsh-ci/bubblewrap
           key: bubblewrap-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/prepare-ci-bubblewrap.sh') }}
 
+      # The headless-browser specs drive a real Chromium and skip without one.
+      - name: Restore Playwright Chromium
+        id: playwright-cache
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @deepseek-ai/dsh-headless-browser exec playwright-core install --with-deps chromium
+
+      - name: Save Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true' && matrix.shard == 1
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('pnpm-lock.yaml') }}
+
       - name: Run coverage shard
         run: pnpm run check:ci:coverage-shard
 
