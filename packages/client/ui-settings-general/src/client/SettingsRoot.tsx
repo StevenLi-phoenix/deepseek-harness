@@ -63,7 +63,7 @@ const NAV_ICONS: Readonly<Record<string, typeof IconSettingsOutlineMedium>> = {
 }
 
 function navIcon(id: string) {
-  const Icon = Object.hasOwn(NAV_ICONS, id) ? NAV_ICONS[id] ?? IconSettingsOutlineMedium : IconSettingsOutlineMedium
+  const Icon = (Object.hasOwn(NAV_ICONS, id) ? NAV_ICONS[id] : undefined) ?? IconSettingsOutlineMedium
   return <Icon size={16} />
 }
 
