@@ -20,7 +20,7 @@ import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 // Type-only: registers this package's locale namespace for `t`.
 import type {} from './locales.ts'
-import type { ClientMessage, FrameMetadata, TabAction, TabInfo } from '../input.ts'
+import type { ClientMessage, FrameMetadata, MouseMessage, TabAction, TabInfo } from '../input.ts'
 import { STATUS_ROUTE } from '../paths.ts'
 import {
   controlMessage, decodeServerMessage, decodeStatus, encodeClientMessage, keyMessage, liveSocketUrl,
@@ -42,6 +42,13 @@ interface PaintedFrame {
   readonly tabId?: string
   readonly source: string
   readonly metadata: FrameMetadata
+}
+
+/** An address the owner sent with Enter, with the tab and URL it was sent over. */
+interface PendingAddress {
+  readonly target: string
+  readonly tabId: string | undefined
+  readonly from: string | undefined
 }
 
 /** Props the main slot hands the page. */
@@ -67,6 +74,7 @@ export function BrowserTakeoverPage({ t }: BrowserTakeoverViewProps) {
   const [connected, setConnected] = useState(false)
   const [address, setAddress] = useState('')
   const [editingAddress, setEditingAddress] = useState(false)
+  const [pendingAddress, setPendingAddress] = useState<PendingAddress | undefined>(undefined)
   const [text, setText] = useState('')
 
   const socketRef = useRef<WebSocket | undefined>(undefined)
@@ -74,7 +82,8 @@ export function BrowserTakeoverPage({ t }: BrowserTakeoverViewProps) {
   const imageRef = useRef<HTMLImageElement | null>(null)
   const activeIdRef = useRef<string | undefined>(undefined)
   const clickRef = useRef<{ at: number; count: number }>({ at: 0, count: 0 })
-  const committedAddress = useRef(false)
+  // Each button's last press count, repeated on its release: Chrome fires dblclick only on a release that carries 2.
+  const pressCounts = useRef(new Map<MouseMessage['button'], number>())
   // The native wheel listener is bound once, so it reads the current holder and geometry here.
   const latest = useRef<{ holder: Holder; tabId: string | undefined; metadata: FrameMetadata | undefined }>({
     holder: 'agent', tabId: undefined, metadata: undefined,
@@ -94,10 +103,19 @@ export function BrowserTakeoverPage({ t }: BrowserTakeoverViewProps) {
     setFrame(undefined)
   }, [activeId])
 
-  // The address bar follows the active tab unless the owner is editing it.
+  // A sent address stays in the bar until its tab reports another URL or the Host reports a
+  // failure; otherwise the bar follows the active tab unless the owner is editing it.
+  const pending = pendingAddress !== undefined && pendingAddress.tabId === activeId && pendingAddress.from === activeUrl
+    ? pendingAddress
+    : undefined
+  const settledAddress = pending?.target ?? activeUrl ?? ''
   useEffect(() => {
-    if (!editingAddress) setAddress(activeUrl ?? '')
-  }, [activeUrl, editingAddress])
+    // Once the tab moves on, the sent address never comes back, even if the tab returns to the old URL.
+    if (pending === undefined) setPendingAddress(undefined)
+  }, [pending])
+  useEffect(() => {
+    if (!editingAddress) setAddress(settledAddress)
+  }, [settledAddress, editingAddress])
 
   const send = useCallback((message: ClientMessage): void => {
     const socket = socketRef.current
@@ -142,6 +160,8 @@ export function BrowserTakeoverPage({ t }: BrowserTakeoverViewProps) {
           setFailure(undefined)
         } else {
           setFailure(message.message)
+          // A failed navigation is reported here; the bar returns to the tab's URL.
+          setPendingAddress(undefined)
         }
       }
       socket.onclose = () => {
@@ -214,21 +234,27 @@ export function BrowserTakeoverPage({ t }: BrowserTakeoverViewProps) {
     if (holder !== 'human' || frame === undefined || image === null) return
     const message = mouseMessage(kind, event, image.getBoundingClientRect(), frame.metadata)
     if (message === undefined) return
+    const tab = frame.tabId === undefined ? {} : { tabId: frame.tabId }
     if (kind === 'down') {
       const now = Date.now()
       const prior = clickRef.current
       const count = event.button === 0 && now - prior.at < DOUBLE_CLICK_MS ? Math.min(3, prior.count + 1) : 1
       clickRef.current = { at: now, count }
+      pressCounts.current.set(message.button, count)
       event.currentTarget.setPointerCapture(event.pointerId)
       event.preventDefault()
-      send({ ...message, clickCount: count, ...frame.tabId === undefined ? {} : { tabId: frame.tabId } })
+      send({ ...message, clickCount: count, ...tab })
       return
     }
     if (kind === 'up') {
       event.currentTarget.releasePointerCapture(event.pointerId)
       event.preventDefault()
+      const count = pressCounts.current.get(message.button)
+      pressCounts.current.delete(message.button)
+      send({ ...message, ...count === undefined ? {} : { clickCount: count }, ...tab })
+      return
     }
-    send({ ...message, ...frame.tabId === undefined ? {} : { tabId: frame.tabId } })
+    send({ ...message, ...tab })
   }
 
   const onKey = (kind: 'down' | 'up') => (event: KeyboardEvent<HTMLElement>): void => {
@@ -257,9 +283,8 @@ export function BrowserTakeoverPage({ t }: BrowserTakeoverViewProps) {
     if (target === undefined) return
     if (activeId === undefined) sendTab('new', undefined, target)
     else sendTab('navigate', activeId, target)
-    committedAddress.current = true
+    setPendingAddress({ target, tabId: activeId, from: activeUrl })
     setEditingAddress(false)
-    setAddress(target)
   }
 
   return (
@@ -332,21 +357,12 @@ export function BrowserTakeoverPage({ t }: BrowserTakeoverViewProps) {
           autoComplete="off"
           spellCheck={false}
           onFocus={(event) => {
-            committedAddress.current = false
             setEditingAddress(true)
             event.currentTarget.select()
           }}
           onChange={(event) => { setAddress(event.target.value) }}
-          onBlur={() => {
-            setEditingAddress(false)
-            // An Enter already put the typed target in the bar; only an
-            // abandoned edit reverts to the active tab's URL.
-            if (committedAddress.current) {
-              committedAddress.current = false
-              return
-            }
-            setAddress(activeUrl ?? '')
-          }}
+          // Ending an edit puts the settled address back: the sent target, or the active tab's URL.
+          onBlur={() => { setEditingAddress(false) }}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               event.preventDefault()
@@ -356,7 +372,6 @@ export function BrowserTakeoverPage({ t }: BrowserTakeoverViewProps) {
               event.preventDefault()
               event.stopPropagation()
               setEditingAddress(false)
-              setAddress(activeUrl ?? '')
               event.currentTarget.blur()
             }
           }}

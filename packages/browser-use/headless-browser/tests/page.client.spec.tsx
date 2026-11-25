@@ -230,7 +230,7 @@ describe('浏览器接管 in-app page', () => {
     ])
   })
 
-  it('navigates from the address bar and reverts it on Escape', () => {
+  it('navigates from the address bar and keeps the sent address through an abandoned edit', () => {
     renderPage()
     const socket = FakeSocket.instances[0]!
     socket.open()
@@ -243,11 +243,12 @@ describe('浏览器接管 in-app page', () => {
     fireEvent.change(address, { target: { value: 'example.com/pay' } })
     fireEvent.keyDown(address, { key: 'Enter' })
     expect(socket.after(0)).toEqual([{ type: 'tab', action: 'navigate', tabId: 't1', url: 'https://example.com/pay' }])
+    expect(address.value).toBe('https://example.com/pay')
 
     fireEvent.focus(address)
     fireEvent.change(address, { target: { value: 'typing...' } })
     fireEvent.keyDown(address, { key: 'Escape' })
-    expect(address.value).toBe('https://alpha.example/')
+    expect(address.value).toBe('https://example.com/pay')
     expect(socket.sent).toHaveLength(1)
   })
 
@@ -457,6 +458,33 @@ describe('浏览器接管 viewport input', () => {
     expect(releasePointerCapture).toHaveBeenCalledOnce()
   })
 
+  it('repeats each press\'s click count on its release, so the page sees a double-click', () => {
+    const now = vi.spyOn(Date, 'now')
+    try {
+      const socket = holdTab()
+      socket.deliver({ type: 'frame', tabId: 't1', data: '/9j/4AAQ', metadata: METADATA })
+      paintedFrame()
+      const click = (at: number, button = 0): void => {
+        now.mockReturnValue(at)
+        fireEvent(stage(), new MouseEvent('pointerdown', { bubbles: true, clientX: 320, clientY: 200, button, buttons: button === 0 ? 1 : 2 }))
+        fireEvent(stage(), new MouseEvent('pointerup', { bubbles: true, clientX: 320, clientY: 200, button, buttons: 0 }))
+      }
+      click(10_000)
+      click(10_100)
+      click(10_200, 2)
+      const mouse = (event: string, clickCount: number, button: string, buttons: number) => (
+        { type: 'mouse', tabId: 't1', event, x: 640, y: 400, button, buttons, clickCount, modifiers: 0 }
+      )
+      expect(socket.after(0)).toEqual([
+        mouse('down', 1, 'left', 1), mouse('up', 1, 'left', 0),
+        mouse('down', 2, 'left', 1), mouse('up', 2, 'left', 0),
+        mouse('down', 1, 'right', 2), mouse('up', 1, 'right', 0),
+      ])
+    } finally {
+      now.mockRestore()
+    }
+  })
+
   it('counts quick repeated left presses as double and triple clicks, up to three', () => {
     const now = vi.spyOn(Date, 'now')
     try {
@@ -569,6 +597,54 @@ describe('浏览器接管 address bar', () => {
     expect(fireEvent.keyDown(address, { key: 'a' })).toBe(true)
     fireEvent.keyDown(address, { key: 'Enter' })
     expect(socket.after(0)).toEqual([])
+  })
+
+  /** Type `value` into the focused bar and send it with Enter. */
+  const sendAddress = (value: string): HTMLInputElement => {
+    const address = addressBar()
+    act(() => { address.focus() })
+    fireEvent.change(address, { target: { value } })
+    fireEvent.keyDown(address, { key: 'Enter' })
+    return address
+  }
+  const tabState = (url: string, loading = false) => ({
+    type: 'state', holder: 'human', tabs: [{ id: 't1', title: 'Alpha', url, loading, active: true }],
+  })
+
+  it('keeps the sent address while the tab loads, then shows the URL the tab reports', () => {
+    const socket = holdTab()
+    const address = sendAddress('example.com/pay')
+    expect(address.value).toBe('https://example.com/pay')
+    socket.deliver(tabState('https://alpha.example/', true))
+    expect(address.value).toBe('https://example.com/pay')
+    socket.deliver(tabState('https://example.com/pay?step=1'))
+    expect(address.value).toBe('https://example.com/pay?step=1')
+    // Going back to the old URL shows that URL, not the address sent over it.
+    socket.deliver(tabState('https://alpha.example/'))
+    expect(address.value).toBe('https://alpha.example/')
+  })
+
+  it('returns to the tab\'s URL when the Host reports the navigation failed', () => {
+    const socket = holdTab()
+    const address = sendAddress('example.invalid')
+    expect(address.value).toBe('https://example.invalid')
+    socket.deliver({ type: 'error', message: 'navigation to https://example.invalid failed' })
+    expect(address.value).toBe('https://alpha.example/')
+  })
+
+  it('drops the sent address when the owner switches tabs', () => {
+    const socket = holdTab()
+    const address = sendAddress('example.com/pay')
+    const tabs = (active: string) => ({
+      type: 'state', holder: 'human', tabs: [
+        { id: 't1', title: 'Alpha', url: 'https://alpha.example/', loading: false, active: active === 't1' },
+        { id: 't2', title: 'Beta', url: 'https://alpha.example/', loading: false, active: active === 't2' },
+      ],
+    })
+    socket.deliver(tabs('t2'))
+    expect(address.value).toBe('https://alpha.example/')
+    socket.deliver(tabs('t1'))
+    expect(address.value).toBe('https://alpha.example/')
   })
 
   it('reverts an abandoned edit to the active tab\'s URL when the bar loses focus', () => {
