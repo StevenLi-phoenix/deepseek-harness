@@ -156,7 +156,7 @@ export const inject = ['contextMenus',
 export function apply(ctx: Context, config: SyncedConfig<WorkspaceNavigationConfig>): void {
   // Read once at activation: the deployment fixes the list, and a change reaches
   // the browser on the next load rather than mid-Session.
-  const automatedAgentPresets: readonly string[] = [...config.automatedAgentPresets?.get() ?? []]
+  const automatedAgentPresets: readonly string[] = [...config.automatedAgentPresets.get() ?? []]
   const sessions = ctx.get('sessions') as ISessions
   const workspaces = ctx.get('workspaces') as IWorkspaces
   // One viewing-store instance, created here as ui-layout does for its layout

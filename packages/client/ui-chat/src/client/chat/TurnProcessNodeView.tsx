@@ -24,7 +24,7 @@ export const TurnProcessNodeView = memo(function TurnProcessNodeView({
   const duration = elapsedMs === undefined || stopped || reason === 'error' ? undefined
     : formatRunDuration(elapsedMs, t)
   // Other end reasons retain elapsed time; only stops and failure replace it.
-  const folded = canCollapse && !open && turnProcess.hasContent ? turnProcess.foldedMessageCount > 0 : false
+  const folded = canCollapse && !open ? turnProcess.foldedMessageCount > 0 : false
   // Once the control holds any reply back it reports every reply the Turn contains, so the
   // reader can tell what the fold hides without expanding it.
   const messages = folded ? node.data.messageCount + (node.data.answerStep === null ? 0 : 1) : 0
