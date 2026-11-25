@@ -21,7 +21,7 @@ import type { Config } from './config.ts'
 import { cookieSnapshot, cookieSummary, type CookieResult } from './cookies.ts'
 import { DOWNLOAD_START_WAIT_MS, DownloadStore, ensureDownloadPrefs, isDownloadStarting, type DownloadRecord } from './downloads.ts'
 import { firstLine } from './error.ts'
-import { ActionGuard, ActionRefusedError, blockedAction, pageOrigin, refusalOf, type Decision, type PointChoice, type TargetChoice } from './guard.ts'
+import { ActionGuard, ActionRefusedError, blockedAction, pageOrigin, refusalOf, type Decision, type PointChoice, type PointDecisionInput, type TargetChoice } from './guard.ts'
 import type { InputCommand, TabInfo, TabMessage } from './input.ts'
 import { browserProcesses, killBrowserSync, recoverStaleProfile, removeBrowserOwner, writeBrowserOwner, type ProfileProbe } from './profile.ts'
 import { MAX_READ_FRAMES, MIN_FRAME_AREA, readText, type FrameRef, type ReadPage, type ReadRequest, type ReadResult } from './read.ts'
@@ -589,16 +589,7 @@ export class HeadlessBrowserSession {
     return await this.#guarded('clicking', async () => {
       const page = await this.page(tabId)
       if (request.point !== undefined) {
-        const hit = await this.#hitFacts(page, request.point)
-        const point = this.#acceptPoint(this.#guard.decidePoint({
-          action: 'click',
-          url: page.url(),
-          x: request.point.x,
-          y: request.point.y,
-          ...tabId === undefined ? {} : { tabId },
-          ...hit === undefined ? {} : { hit },
-          allowOrigin: request.allowOrigin === true,
-        }))
+        const point = await this.#decideAtPoint(page, request.point, 'click', request.allowOrigin === true, tabId)
         const mark = this.#downloads.mark()
         const popupMark = this.tabs().popupMark()
         await page.mouse.click(request.point.x, request.point.y)
@@ -660,16 +651,7 @@ export class HeadlessBrowserSession {
     return await this.#guarded('typing', async () => {
       const page = await this.page(tabId)
       if (request.point !== undefined) {
-        const hit = await this.#hitFacts(page, request.point)
-        const point = this.#acceptPoint(this.#guard.decidePoint({
-          action: 'type',
-          url: page.url(),
-          x: request.point.x,
-          y: request.point.y,
-          ...tabId === undefined ? {} : { tabId },
-          ...hit === undefined ? {} : { hit },
-          allowOrigin: request.allowOrigin === true,
-        }))
+        const point = await this.#decideAtPoint(page, request.point, 'type', request.allowOrigin === true, tabId)
         await page.mouse.click(request.point.x, request.point.y)
         await page.keyboard.insertText(text)
         this.#guard.anchor(page.url())
@@ -998,6 +980,35 @@ export class HeadlessBrowserSession {
   #accept(decision: Decision): TargetChoice {
     if (!decision.allowed || decision.target === undefined) throw new ActionRefusedError(blockedAction(refusalOf(decision)))
     return decision.target
+  }
+
+  /**
+   * Hit-test a viewport point and let the guard decide an action there.
+   * @param page - the page the point is on.
+   * @param at - the viewport point the caller named.
+   * @param action - the action that would land on it.
+   * @param allowOrigin - whether the caller allowed acting outside the page's origin.
+   * @param tabId - tab id, or nothing for the active tab.
+   * @returns the accepted point.
+   * @throws ActionRefusedError - when the guard refuses the point.
+   */
+  async #decideAtPoint(
+    page: Page,
+    at: { readonly x: number; readonly y: number },
+    action: PointDecisionInput['action'],
+    allowOrigin: boolean,
+    tabId: string | undefined,
+  ): Promise<PointChoice> {
+    const hit = await this.#hitFacts(page, at)
+    return this.#acceptPoint(this.#guard.decidePoint({
+      action,
+      url: page.url(),
+      x: at.x,
+      y: at.y,
+      ...tabId === undefined ? {} : { tabId },
+      ...hit === undefined ? {} : { hit },
+      allowOrigin,
+    }))
   }
 
   /**

@@ -26,6 +26,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { classifyChallenge, type BlockedStep, type Challenge, type ChallengeFacts } from './challenge.ts'
+import { domainFilter } from './cookies.ts'
 import { firstLine } from './error.ts'
 import { allowedLanding, expectationError, ExpectationList, textFailure, type KeepaliveExpectation } from './keepalive-expect.ts'
 
@@ -899,12 +900,11 @@ function targetOf(value: unknown): string | undefined {
  * @throws KeepaliveError - when the value names no host.
  */
 function domainFilterOf(value: string | undefined): string | undefined {
-  if (value === undefined) return undefined
-  const text = value.trim().toLowerCase()
+  const text = value?.trim().toLowerCase() ?? ''
   if (text === '') return undefined
-  const host = text.includes('://') ? hostOf(text) : text.split('/')[0] ?? ''
-  const bare = host.replace(/^\.+/u, '').replace(/\.+$/u, '').replace(/:\d+$/u, '')
-  if (bare === '' || bare.includes('@') || !bare.includes('.') && bare !== 'localhost') {
+  // The cookie filter's normalization, so a keepalive and a cookie read agree on the site.
+  const bare = domainFilter(text)
+  if (bare === undefined || bare.includes('@') || !bare.includes('.') && bare !== 'localhost') {
     throw new KeepaliveError(`domain must name a host, such as example.com, not ${text.slice(0, 120)}`)
   }
   return bare
