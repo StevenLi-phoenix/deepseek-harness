@@ -11,6 +11,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
   from what a turn sends, not from forgetting.
 
 ### Fixed
+- Persistent pwsh on Linux (2026-11-24): a send settles on the verified prompt, silence or the timeout, no longer on the shell reading its terminal, which pwsh and PSReadLine do while a command runs (cursor-position queries, the key thread); under load a call returned the echoed command or the previous prompt instead of its output. An interactive child under pwsh on Linux now runs to `timeoutMs`, as on Windows and macOS.
 - LLM retries (2026-11-24): a bare `404 "not_found"` from the Codex relay is retried. The relay answers it for a few seconds between 502s and 503s, and as a non-retryable `PI_AI_ERROR` it ended an unattended batch before its commits were pushed.
 - `integrity-watch` restarts (2026-11-24): stopping the plugin waits for the trust record of a schedule write still in flight, so a DSH restart right after the schedule service writes no longer reports that write as a direct edit ("定时任务文件被绕过 DSH 直接改动了"); the race also failed the restart test under load.
 - `headless-browser` embedded forms (2026-11-24): iCIMS applications can be read and filled. iCIMS renders the form in a same-site iframe, and opening that iframe's address on its own redirects back to the outer page, so the listed frame URL was a dead end; a whole-page read now appends each form-sized frame's text, and a selector the page does not match is looked up in those frames for read, click, type, upload and saved credentials.
