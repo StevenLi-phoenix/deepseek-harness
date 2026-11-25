@@ -237,6 +237,15 @@ describe('course tools', () => {
     expect(JSON.stringify(result)).not.toContain('xxxxx')
   })
 
+  it('answers a refused duplicate task with the id and version to update instead', async () => {
+    const existing = { id: 'nyu-fall-2026-dp-weekly-project-notebook-individual-12-01', kind: 'task', version: 2, data: { title: 'Weekly Project Notebook - Individual - 12/1' } }
+    const { run } = await mount(() => ({ conflict: true, reason: 'duplicate_title', current: existing, changed_fields: ['title', 'due_at'], proposed: { big: 'x'.repeat(5000) }, message: 'This course already has the task' }))
+    const result = await run('courses_observe', { expected_version: 0, url: 'https://brightspace.nyu.edu/d2l/lms/dropbox/user/folders_list.d2l?ou=627920', observed: 'Due on Dec 1, 2026 11:00 AM · Not Submitted', course: 'dp', title: 'Weekly Project  Notebook - Individual - 12/1', due_at: '2026-12-01T11:00:00-05:00', submission_status: 'not_submitted' })
+    expect(result).toMatchObject({ value: { conflict: true, reason: 'duplicate_title', existing_id: existing.id, existing_title: existing.data.title, current_version: 2 } })
+    expect(JSON.stringify(result)).toContain(`id ${existing.id} and expected_version 2`)
+    expect(JSON.stringify(result)).not.toContain('xxxxx')
+  })
+
   it('saves a new memo at version 0 under a derived id, and refuses a write without its required fields', async () => {
     const { run, api } = await mount(() => ({ id: 'memo', kind: 'memo', version: 1 }))
     await run('courses_save_memo', { title: 'Ask TA about Q3', course: 'ml' })

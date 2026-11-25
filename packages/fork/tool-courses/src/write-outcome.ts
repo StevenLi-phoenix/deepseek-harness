@@ -14,8 +14,12 @@ export function requestId(operation: string, args: Record<string, unknown>): str
   return `dsh-${operation}-${createHash('sha256').update(JSON.stringify(args)).digest('hex').slice(0, 24)}`
 }
 
+/** The conflicts where the write named a new id for a task the records already hold under another. */
+const DUPLICATE_REASONS = new Set(['duplicate_title', 'duplicate_platform_identity'])
+
 /**
- * The answer of a write: saved with the new version, or a version conflict to reconcile.
+ * The answer of a write: saved with the new version, a version conflict to reconcile, or a refused duplicate that
+ * names the task to update instead (the service refuses a second id for an assignment the course already has).
  * @param result - the service's `result`.
  * @returns the model's answer.
  */
@@ -23,9 +27,25 @@ export function writeOutcome(result: unknown): JsonValue {
   const row = typeof result === 'object' && result !== null ? result as Record<string, unknown> : {}
   if (row['conflict'] === true) {
     const current = typeof row['current'] === 'object' && row['current'] !== null ? row['current'] as Record<string, unknown> : {}
+    const reason = typeof row['reason'] === 'string' ? row['reason'] : 'version_or_evidence'
+    const version = typeof current['version'] === 'number' ? current['version'] : null
+    if (DUPLICATE_REASONS.has(reason)) {
+      const id = typeof current['id'] === 'string' ? current['id'] : null
+      const data = typeof current['data'] === 'object' && current['data'] !== null ? current['data'] as Record<string, unknown> : {}
+      const title = typeof current['title'] === 'string' ? current['title'] : typeof data['title'] === 'string' ? data['title'] : null
+      return {
+        conflict: true,
+        reason,
+        existing_id: id,
+        existing_title: title,
+        current_version: version,
+        next: `The records already hold this task as ${id ?? 'another record'}${version === null ? '' : ` (version ${version})`}: nothing was saved. Send the same observation again with id ${id ?? '<that id>'} and expected_version ${version ?? '<its version>'}, only the fields that differ; do not make a new task for it.`,
+      }
+    }
     return {
       conflict: true,
-      current_version: typeof current['version'] === 'number' ? current['version'] : null,
+      reason,
+      current_version: version,
       changed_fields: Array.isArray(row['changed_fields']) ? row['changed_fields'].filter((field): field is string => typeof field === 'string') : [],
       next: 'Someone changed the record since you read it: read it again with courses_get, reconcile with the owner if the change matters, and retry with the current version.',
     }
