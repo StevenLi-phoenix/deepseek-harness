@@ -114,7 +114,18 @@ When `ctx.eventBus` is mounted, the channel claims the owner's current chat Sess
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Service, configuration, long-poll loop, chat Session, the `wechat` relay channel, delivery and outbox |
+| [`src/index.ts`](src/index.ts) | Plugin entry: configuration and its load-time checks, the `wechat` relay channel, the presence holder, and the `ctx.ownerNotifier` methods, which delegate to the modules below |
+| [`src/link.ts`](src/link.ts) | The bound account: account file, stale token, iLink clients, `notifystart` and `notifystop`, and the long-poll's health |
+| [`src/poll.ts`](src/poll.ts) | Long-poll loop: cursor, retry backoff, the wait for a usable account, and `reloadAccount()` |
+| [`src/inbound.ts`](src/inbound.ts) | Owner messages: reply window and outbox flush, `/new`, `/help`, `/stop`, attachments and transcripts, and the forward with its time-gap notice |
+| [`src/chat.ts`](src/chat.ts) | The chat Session: reuse, `createChatSession()`, `/new`, the handover from earlier chat Sessions, injected notices, and shared notes |
+| [`src/turns.ts`](src/turns.ts) | Running chat turns: what each sent with `wechat_send`, urgent marks, and typing while they run |
+| [`src/replies.ts`](src/replies.ts) | Relayed final answers and `wechat_send` texts (`sendText()`), with the repeat check |
+| [`src/notes.ts`](src/notes.ts) | `send()` notes and `tellMainAgent()` messages: a chat turn or the text as written, and the safety mute |
+| [`src/outbox.ts`](src/outbox.ts) | `deliver()`: splitting, holds for sleep and for a time, send or queue, and `flushOutbox()` digests |
+| [`src/outgoing.ts`](src/outgoing.ts) | Files sent with `wechat_send_file` and the local pictures of a final answer |
+| [`src/window.ts`](src/window.ts) | The reply window: its state, each send and its count, chat activity, sent texts for quotes, and the restart notice |
+| [`src/errors.ts`](src/errors.ts) | Error text and bot-token redaction |
 | [`src/api.ts`](src/api.ts) | Minimal iLink client with per-request deadlines; errors never contain the token |
 | [`src/login.ts`](src/login.ts) | QR login status machine, terminal login command, `saveLogin()` (the account file both logins write), account file |
 | [`src/login-session.ts`](src/login-session.ts) | The one QR login the Settings page drives: `waiting`, `scanned`, `needs-code`, `expired`, `done`, `failed`; hands over the verification number; writes the account through `saveLogin()` and tells the channel to reload |

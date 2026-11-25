@@ -114,7 +114,18 @@ sudo -u dsh-runtime env DSH_HOME=/Users/dsh-runtime/.dsh /opt/homebrew/bin/node 
 
 | 文件 | 作用 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 服务、配置、长轮询循环、对话 Session、`wechat` 中继通道、投递与 outbox |
+| [`src/index.ts`](src/index.ts) | 插件入口：配置及其加载时检查、`wechat` 中继通道、presence 的 holder，以及 `ctx.ownerNotifier` 的各个方法，它们交给下面的模块去做 |
+| [`src/link.ts`](src/link.ts) | 绑定的账号：账号文件、失效的 token、iLink 客户端、`notifystart` 与 `notifystop`，以及长轮询的健康状况 |
+| [`src/poll.ts`](src/poll.ts) | 长轮询循环：游标、失败后的退避、等待可用账号，以及 `reloadAccount()` |
+| [`src/inbound.ts`](src/inbound.ts) | 主人的消息：回复窗口与 outbox 的发出、`/new`、`/help`、`/stop`、附件与转写，以及带时间间隔提示的转交 |
+| [`src/chat.ts`](src/chat.ts) | 对话 Session：沿用、`createChatSession()`、`/new`、从较早的对话 Session 移交、注入的通知与转来的通知 |
+| [`src/turns.ts`](src/turns.ts) | 正在运行的对话轮次：每轮用 `wechat_send` 发过什么、紧急标记，以及运行期间的“正在输入” |
+| [`src/replies.ts`](src/replies.ts) | 中继交来的最终回答与 `wechat_send` 的文字（`sendText()`），以及重复检查 |
+| [`src/notes.ts`](src/notes.ts) | `send()` 的通知与 `tellMainAgent()` 的消息：作为对话的一轮，或按原文发出；以及安全通知的静音 |
+| [`src/outbox.ts`](src/outbox.ts) | `deliver()`：拆分、为睡眠和为某个时间的暂缓、发出或排队，以及 `flushOutbox()` 的摘要 |
+| [`src/outgoing.ts`](src/outgoing.ts) | 用 `wechat_send_file` 发的文件，以及最终回答里的本地图片 |
+| [`src/window.ts`](src/window.ts) | 回复窗口：状态、每次发送及其计数、对话动态、供引用读回的已发文字，以及重启提示 |
+| [`src/errors.ts`](src/errors.ts) | 错误文字与 bot token 的遮挡 |
 | [`src/api.ts`](src/api.ts) | 最小的 iLink 客户端，每个请求有独立时限；错误信息从不包含 token |
 | [`src/login.ts`](src/login.ts) | 二维码登录状态机、终端登录命令、`saveLogin()`（两种登录共同写入的账号文件）、账号文件 |
 | [`src/login-session.ts`](src/login-session.ts) | 设置页驱动的那一个二维码登录：`waiting`、`scanned`、`needs-code`、`expired`、`done`、`failed`；转交验证数字；经 `saveLogin()` 写账号，并通知通道重读 |
