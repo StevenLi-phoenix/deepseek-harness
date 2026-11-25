@@ -7,7 +7,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { WebSocket } from 'ws'
+import { WebSocket, type RawData } from 'ws'
 import { Context } from '@deepseek-ai/cordis'
 import HttpServer from '@deepseek-ai/dsh-host-webserver'
 import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
@@ -149,7 +149,7 @@ function openLive(base: string): Promise<LiveSocket> {
         waiters.push({ match, resolve: deliverLater })
       })
     }
-    socket.on('message', (data) => { deliver(String(data)) })
+    socket.on('message', (data) => { deliver(rawText(data)) })
     socket.on('error', reject)
     socket.on('open', () => {
       resolve({ socket, messages, next, send: (message) => { socket.send(JSON.stringify(message)) } })
@@ -236,4 +236,10 @@ describe('take-over socket control', () => {
 
 function isState(message: unknown): message is { type: 'state'; holder: string; reason?: string } {
   return typeof message === 'object' && message !== null && (message as { type?: unknown }).type === 'state'
+}
+
+function rawText(data: RawData): string {
+  if (Array.isArray(data)) return Buffer.concat(data).toString('utf8')
+  if (data instanceof ArrayBuffer) return Buffer.from(data).toString('utf8')
+  return Buffer.from(data).toString('utf8')
 }

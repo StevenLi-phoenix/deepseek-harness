@@ -70,11 +70,12 @@ export class UploadPolicy {
   async resolve(files: readonly string[]): Promise<UploadFile[]> {
     if (files.length === 0) throw new UploadRefusedError('name at least one file to attach')
     if (files.length > MAX_UPLOAD_FILES) throw new UploadRefusedError(`attach at most ${String(MAX_UPLOAD_FILES)} files per call`)
-    if (this.#dirs.length === 0) throw new UploadRefusedError('no upload directory is configured (uploadDirs), so no file may be attached')
+    const [first] = this.#dirs
+    if (first === undefined) throw new UploadRefusedError('no upload directory is configured (uploadDirs), so no file may be attached')
     const roots = await Promise.all(this.#dirs.map(async dir => await realpath(dir).catch(() => dir)))
     const out: UploadFile[] = []
     for (const file of files) {
-      const named = !file.includes('/') && !file.includes('\\') ? join(this.#dirs[0]!, file) : resolve(file)
+      const named = !file.includes('/') && !file.includes('\\') ? join(first, file) : resolve(file)
       let real: string
       try {
         real = await realpath(named)

@@ -222,13 +222,13 @@ export function BrowserTakeoverPage({ t }: BrowserTakeoverViewProps) {
       const prior = clickRef.current
       const count = event.button === 0 && now - prior.at < DOUBLE_CLICK_MS ? Math.min(3, prior.count + 1) : 1
       clickRef.current = { at: now, count }
-      event.currentTarget.setPointerCapture?.(event.pointerId)
+      event.currentTarget.setPointerCapture(event.pointerId)
       event.preventDefault()
       send({ ...message, clickCount: count, ...frame.tabId === undefined ? {} : { tabId: frame.tabId } })
       return
     }
     if (kind === 'up') {
-      event.currentTarget.releasePointerCapture?.(event.pointerId)
+      event.currentTarget.releasePointerCapture(event.pointerId)
       event.preventDefault()
     }
     send({ ...message, ...frame.tabId === undefined ? {} : { tabId: frame.tabId } })

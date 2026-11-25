@@ -431,16 +431,7 @@ describe.skipIf(!AVAILABLE)('stealth in a real browser', () => {
     try {
       await browser.open(probe.url)
       const page = await browser.page()
-      const surface: {
-        brands: string[]
-        platform: string
-        userAgent: string
-        automationHidden: boolean
-        plugins: number
-        languages: string[]
-        chrome: string
-        vendor: string
-      } = JSON.parse(await page.evaluate(`JSON.stringify({
+      const surface = JSON.parse(await page.evaluate(`JSON.stringify({
         brands: navigator.userAgentData.brands.map(brand => brand.brand),
         platform: navigator.userAgentData.platform,
         userAgent: navigator.userAgent,
@@ -452,7 +443,16 @@ describe.skipIf(!AVAILABLE)('stealth in a real browser', () => {
           const gl = document.createElement('canvas').getContext('webgl')
           return gl === null ? '' : String(gl.getParameter(37445))
         })(),
-      })`) as string)
+      })`)) as {
+        brands: string[]
+        platform: string
+        userAgent: string
+        automationHidden: boolean
+        plugins: number
+        languages: string[]
+        chrome: string
+        vendor: string
+      }
       expect(surface).toMatchObject({
         brands: ['Google Chrome', 'Chromium', 'Not_A Brand'],
         platform: 'macOS',
@@ -478,11 +478,11 @@ describe.skipIf(!AVAILABLE)('stealth in a real browser', () => {
     try {
       await browser.open(probe.url)
       const page = await browser.page()
-      const surface: { brands: string[]; webdriver: boolean } = JSON.parse(await page.evaluate(`JSON.stringify({
+      const surface = JSON.parse(await page.evaluate(`JSON.stringify({
         brands: navigator.userAgentData.brands.map(brand => brand.brand),
         webdriver: navigator.webdriver,
-      })`) as string)
-      expect(surface).toEqual({ brands: expect.arrayContaining(['HeadlessChrome']), webdriver: true })
+      })`)) as { brands: string[]; webdriver: boolean }
+      expect(surface).toEqual({ brands: expect.arrayContaining(['HeadlessChrome']) as string[], webdriver: true })
       expect(probe.header('sec-ch-ua')).toContain('HeadlessChrome')
     } finally {
       await browser.close()

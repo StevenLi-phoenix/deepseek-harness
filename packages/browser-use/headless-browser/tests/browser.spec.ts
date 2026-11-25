@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { chromium, type Page } from 'playwright-core'
-import { WebSocket } from 'ws'
+import { WebSocket, type RawData } from 'ws'
 import { Context } from '@deepseek-ai/cordis'
 import HttpServer from '@deepseek-ai/dsh-host-webserver'
 import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
@@ -154,7 +154,7 @@ function openLive(base: string): Promise<LiveSocket> {
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(`ws://${base}${LIVE_PATH}`, { headers: { 'x-test-peer': 'owner' } })
     const messages: unknown[] = []
-    socket.on('message', (data) => { messages.push(JSON.parse(String(data))) })
+    socket.on('message', (data) => { messages.push(JSON.parse(rawText(data))) })
     socket.on('open', () => { resolve({ socket, messages }) })
     socket.on('error', reject)
   })
@@ -297,7 +297,7 @@ describe.skipIf(!AVAILABLE)('headless browser live view', () => {
     expect(whole.text).toContain('tail')
 
     const window = await app.browser.read({ limit: 10 })
-    expect([...window.text]).toHaveLength(10)
+    expect(Array.from(window.text)).toHaveLength(10)
     expect(window.text.startsWith('第1行 作业 😀')).toBe(true)
     expect(window.nextOffset).toBe(10)
     expect(whole.text.startsWith(window.text)).toBe(true)
@@ -390,3 +390,9 @@ describe.skipIf(!AVAILABLE)('session warming over a real browser', () => {
     }
   }, 120_000)
 })
+
+function rawText(data: RawData): string {
+  if (Array.isArray(data)) return Buffer.concat(data).toString('utf8')
+  if (data instanceof ArrayBuffer) return Buffer.from(data).toString('utf8')
+  return Buffer.from(data).toString('utf8')
+}

@@ -108,8 +108,6 @@ const BUTTONS = ['left', 'middle', 'right'] as const
 const MAX_COORDINATE = 100_000
 /** Largest scroll delta the Host accepts, per axis. */
 const MAX_SCROLL_DELTA = 10_000
-/** Longest key text the Host accepts. */
-const MAX_KEY_TEXT_CHARS = 16
 /** Longest inserted text the Host accepts. */
 const MAX_TEXT_CHARS = 4_000
 /** Largest virtual key code the Host accepts. */
@@ -258,7 +256,6 @@ export function keyMessage(kind: 'down' | 'up', event: KeyEventLike): KeyMessage
   if (!Number.isFinite(event.keyCode) || event.keyCode < 0 || event.keyCode > MAX_KEY_CODE) return undefined
   const text = kind === 'down'
     && event.key.length === 1
-    && event.key.length <= MAX_KEY_TEXT_CHARS
     && !event.ctrlKey && !event.metaKey && !event.altKey
     ? event.key
     : undefined

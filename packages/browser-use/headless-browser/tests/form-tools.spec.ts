@@ -173,10 +173,10 @@ describe('headless_browser_credential', () => {
 
   it('needs a username to create, a field to write, and the agent holding the browser', async () => {
     const bench = setup()
-    expect(await bench.call('headless_browser_credential', { action: 'create', selector: '#password' })).toMatchObject({ error: expect.stringContaining('create needs username') })
+    expect(await bench.call('headless_browser_credential', { action: 'create', selector: '#password' })).toMatchObject({ error: expect.stringContaining('create needs username') as string })
     expect(await bench.call('headless_browser_credential', { action: 'fill' })).toEqual({ error: 'give the field to write as selector or axId' })
     bench.takeover.take('用户从接管页取得控制')
-    expect(await bench.call('headless_browser_credential', { action: 'fill', selector: '#password' })).toMatchObject({ error: expect.stringContaining('用户') })
+    expect(await bench.call('headless_browser_credential', { action: 'fill', selector: '#password' })).toMatchObject({ error: expect.stringContaining('用户') as string })
   })
 
   it('lists saved accounts without passwords', async () => {
@@ -221,7 +221,7 @@ describe('headless_browser_upload', () => {
     expect(await bench.call('headless_browser_upload', { files: ['/etc/passwd'], selector: 'input[type=file]' })).toEqual({
       error: '/etc/passwd is outside the upload directories (/up); copy the file there first',
     })
-    expect(await bench.call('headless_browser_upload', { files: ['resume.pdf'] })).toMatchObject({ error: expect.stringContaining('exactly one') })
-    expect(await bench.call('headless_browser_upload', { files: ['resume.pdf'], selector: 'a', trigger: 'b' })).toMatchObject({ error: expect.stringContaining('exactly one') })
+    expect(await bench.call('headless_browser_upload', { files: ['resume.pdf'] })).toMatchObject({ error: expect.stringContaining('exactly one') as string })
+    expect(await bench.call('headless_browser_upload', { files: ['resume.pdf'], selector: 'a', trigger: 'b' })).toMatchObject({ error: expect.stringContaining('exactly one') as string })
   })
 })

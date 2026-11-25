@@ -457,7 +457,7 @@ export class HeadlessBrowserSession {
    * @param message - the validated tab message.
    */
   async applyTabCommand(message: TabMessage): Promise<void> {
-    return await this.#guarded('applying a tab command', async () => {
+    await this.#guarded('applying a tab command', async () => {
       await this.tabs().command(message.action, message.tabId, message.url)
     })
   }
@@ -1063,7 +1063,7 @@ export class HeadlessBrowserSession {
         isClosed: () => page.isClosed(),
         goto: async (url, options) => (await page.goto(url, options))?.status(),
         challenge: async (): Promise<ChallengeFacts> => readChallengeFacts(await page.evaluate(probeChallenge)),
-        text: async () => await page.evaluate(() => document.body?.innerText ?? ''),
+        text: async () => await page.evaluate(() => document.querySelector('body')?.innerText ?? ''),
         close: async () => {
           this.#background.delete(page)
           await page.close()
@@ -1196,7 +1196,7 @@ export class HeadlessBrowserSession {
         this.#log.warn('headless-browser: a relaunch listener failed: %s', firstLine(error))
       }
     }
-    this.#log.info('headless-browser: the browser is back as session %s', String(this.#sessionId ?? 'unknown'))
+    this.#log.info('headless-browser: the browser is back as session %s', this.#sessionId ?? 'unknown')
   }
 
   /**

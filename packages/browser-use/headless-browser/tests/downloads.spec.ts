@@ -198,7 +198,8 @@ describe('ensureDownloadPrefs', () => {
     const root = tempRoot()
     await ensureDownloadPrefs(root, true, logger())
     expect(await ensureDownloadPrefs(root, false, logger())).toBe(true)
-    expect(JSON.parse(readFileSync(join(root, 'Default', 'Preferences'), 'utf8')).plugins.always_open_pdf_externally).toBe(false)
+    const prefs = JSON.parse(readFileSync(join(root, 'Default', 'Preferences'), 'utf8')) as { plugins: { always_open_pdf_externally: boolean } }
+    expect(prefs.plugins.always_open_pdf_externally).toBe(false)
     const broken = tempRoot()
     mkdirSync(join(broken, 'Default'))
     writeFileSync(join(broken, 'Default', 'Preferences'), '{not json')

@@ -110,7 +110,7 @@ export function mountTakeoverRoutes(server: WebServer, deps: TakeoverRoutesDeps)
         refuse(socket)
         return
       }
-      sockets.handleUpgrade(request, socket, head, client => adopt(deps, client))
+      sockets.handleUpgrade(request, socket, head, (client) => { adopt(deps, client) })
     },
   })
   return async () => {
@@ -171,8 +171,9 @@ function adopt(deps: TakeoverRoutesDeps, client: WebSocket): void {
     client.close(1011, 'browser unavailable')
   })
   client.on('message', (data, binary) => {
-    if (binary) return
-    void forward(deps, String(data), text => viewer.send(text))
+    // The server keeps ws's default `nodebuffer` binary type, so a text frame arrives as one Buffer.
+    if (binary || !Buffer.isBuffer(data)) return
+    void forward(deps, data.toString('utf8'), (text) => { viewer.send(text) })
   })
   client.on('close', () => { void deps.view.detach(viewer) })
   client.on('error', (error: Error) => { deps.log.warn('headless-browser: take-over socket failed: %s', firstLine(error)) })

@@ -948,11 +948,11 @@ export function registerBrowserTools(ctx: Context, deps: ToolDeps): void {
       },
       render: renderJson,
     },
-    execute: async (args: { reason: string }) => {
+    execute: (args: { reason: string }) => {
       const reason = args.reason.trim()
-      if (reason === '') return { error: 'reason must not be empty' }
+      if (reason === '') return Promise.resolve({ error: 'reason must not be empty' })
       deps.takeover.take(reason)
-      return { url: deps.pageUrl(), holder: deps.takeover.holder, reason }
+      return Promise.resolve({ url: deps.pageUrl(), holder: deps.takeover.holder, reason })
     },
     presentCall: args => ({ card: 'generic', title: `Hand over: ${args.reason}`, kind: 'other' }),
   }))
@@ -974,9 +974,9 @@ export function registerBrowserTools(ctx: Context, deps: ToolDeps): void {
       },
       render: renderJson,
     },
-    execute: async () => {
+    execute: () => {
       deps.takeover.release()
-      return { holder: deps.takeover.holder }
+      return Promise.resolve({ holder: deps.takeover.holder })
     },
     presentCall: () => ({ card: 'generic', title: 'Take control back', kind: 'other' }),
   }))

@@ -59,7 +59,7 @@ export function readComboboxOptions(input: Element): SelectOption[] {
       return box.width > 0 && box.height > 0 && option.id !== ''
     })
     .map(option => ({
-      label: (option.textContent ?? '').replace(/\s+/gu, ' ').trim(),
+      label: option.textContent.replace(/\s+/gu, ' ').trim(),
       value: option.id,
       disabled: option.getAttribute('aria-disabled') === 'true',
     }))

@@ -269,7 +269,7 @@ export class KeepalivePagePool {
   /** Close every idle page but keep the pool usable, for a context that came back. */
   async drop(): Promise<void> {
     const idle = this.#idle.splice(0)
-    await Promise.all(idle.map(async page => await closeQuietly(page, this.#log)))
+    await Promise.all(idle.map(async (page) => { await closeQuietly(page, this.#log) }))
   }
 }
 
@@ -547,6 +547,7 @@ export class KeepaliveService implements KeepaliveTools {
   async #attempt(record: KeepaliveRecord): Promise<void> {
     if (this.#disposed) return
     await this.#slot()
+    // oxlint-disable-next-line typescript/no-unnecessary-condition -- dispose can run while the slot is awaited
     if (this.#disposed) {
       this.#release()
       return

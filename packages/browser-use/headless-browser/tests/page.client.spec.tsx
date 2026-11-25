@@ -10,7 +10,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
-import { BrowserTakeoverPage, type BrowserTakeoverViewProps } from '../src/client/BrowserTakeoverPage.tsx'
+import { BrowserTakeoverPage } from '../src/client/BrowserTakeoverPage.tsx'
 import { zh } from '../src/client/locales.ts'
 
 /** One painted 1280×800 frame inside a 640×400 box at the viewport origin. */
@@ -68,7 +68,7 @@ class FakeSocket {
 const t = makeTranslate(zh)
 
 function renderPage() {
-  return render(<BrowserTakeoverPage {...({ t } as BrowserTakeoverViewProps)} />)
+  return render(<BrowserTakeoverPage t={t} />)
 }
 
 /** The frame's image, once one is painted, with a real on-screen box in jsdom. */
@@ -81,6 +81,9 @@ function paintedFrame(): HTMLImageElement {
 const stage = (): HTMLElement => screen.getByRole('application')
 
 beforeEach(() => {
+  // jsdom has no pointer capture; every browser the page runs in has it.
+  Object.defineProperty(Element.prototype, 'setPointerCapture', { configurable: true, value: vi.fn() })
+  Object.defineProperty(Element.prototype, 'releasePointerCapture', { configurable: true, value: vi.fn() })
   FakeSocket.instances.length = 0
   vi.stubGlobal('WebSocket', FakeSocket)
   vi.stubGlobal('fetch', vi.fn(async () => ({
@@ -92,6 +95,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  Reflect.deleteProperty(Element.prototype, 'setPointerCapture')
+  Reflect.deleteProperty(Element.prototype, 'releasePointerCapture')
 })
 
 describe('浏览器接管 in-app page', () => {

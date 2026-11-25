@@ -101,7 +101,7 @@ export function probeChallenge(): ChallengeFacts {
   for (const node of Array.from(doc.querySelectorAll('a, button, [role="button"], [role="link"], [role="option"]'))) {
     if (accountLinks >= 5) break
     if (!visible(node)) continue
-    const text = (node.textContent ?? '').replace(/\s+/gu, ' ').trim()
+    const text = node.textContent.replace(/\s+/gu, ' ').trim()
     if (text === '' || text.length > 200 || !/[^\s@]+@[^\s@]+\.[^\s@]+/u.test(text)) continue
     accountLinks += 1
   }

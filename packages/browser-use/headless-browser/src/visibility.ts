@@ -130,7 +130,7 @@ export function probeElement(element: Element): ElementFacts {
     return root instanceof ShadowRoot ? root.host : null
   }
   const flatText = (node: Element | null): string =>
-    node === null ? '' : (node.textContent ?? '').replace(/\s+/gu, ' ').trim()
+    node === null ? '' : node.textContent.replace(/\s+/gu, ' ').trim()
   const nameOf = (node: Element): string => {
     const labelledBy = node.getAttribute('aria-labelledby')
     if (labelledBy !== null && labelledBy.trim() !== '') {
@@ -374,7 +374,7 @@ export function findSameNameCover(element: Element): Element | null {
   if (cover === null || cover.contains(element)) return null
   const nameOf = (node: Element): string => {
     const label = node.getAttribute('aria-label')
-    const text = label !== null && label.trim() !== '' ? label : node.textContent ?? ''
+    const text = label !== null && label.trim() !== '' ? label : node.textContent
     return text.replace(/\s+/gu, ' ').trim().toLowerCase()
   }
   const name = nameOf(element)

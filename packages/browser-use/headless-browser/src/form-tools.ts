@@ -287,30 +287,27 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
           }
         })
       }
-      if (args.action === 'fill') {
-        const field: SecretField = args.field ?? 'password'
-        return await guarded(deps, 'filling a saved credential', async () => {
-          const host = credentialHost(await deps.browser.fieldUrl(parsed.request, args.tab))
-          const record = await deps.credentials.find(host, args.username)
-          const value = field === 'password' ? record.password : record.username
-          const outcome = await deps.browser.fillSecret(parsed.request, value, field, record.host, args.tab)
-          const wrote = [outcome.target?.ref ?? parsed.request.selector ?? parsed.request.axId ?? 'field']
-          if (field === 'password' && args.confirmSelector !== undefined) {
-            await deps.browser.fillSecret({ selector: args.confirmSelector }, value, 'password', record.host, args.tab)
-            wrote.push(args.confirmSelector)
-          }
-          if (field === 'password') await deps.credentials.touch(record.id)
-          deps.log.info('headless-browser: filled the saved %s of %s on %s (%s)', field, record.username, record.host, record.id)
-          return {
-            action: 'fill',
-            account: credentialView(record),
-            wrote,
-            url: outcome.url,
-            ...outcomeFields(outcome.url, outcome),
-          }
-        })
-      }
-      return { error: `unknown action ${String(args.action)}; use create, fill, or list` }
+      const field: SecretField = args.field ?? 'password'
+      return await guarded(deps, 'filling a saved credential', async () => {
+        const host = credentialHost(await deps.browser.fieldUrl(parsed.request, args.tab))
+        const record = await deps.credentials.find(host, args.username)
+        const value = field === 'password' ? record.password : record.username
+        const outcome = await deps.browser.fillSecret(parsed.request, value, field, record.host, args.tab)
+        const wrote = [outcome.target?.ref ?? parsed.request.selector ?? parsed.request.axId ?? 'field']
+        if (field === 'password' && args.confirmSelector !== undefined) {
+          await deps.browser.fillSecret({ selector: args.confirmSelector }, value, 'password', record.host, args.tab)
+          wrote.push(args.confirmSelector)
+        }
+        if (field === 'password') await deps.credentials.touch(record.id)
+        deps.log.info('headless-browser: filled the saved %s of %s on %s (%s)', field, record.username, record.host, record.id)
+        return {
+          action: 'fill',
+          account: credentialView(record),
+          wrote,
+          url: outcome.url,
+          ...outcomeFields(outcome.url, outcome),
+        }
+      })
     },
     presentCall: args => ({
       card: 'generic',
