@@ -32,7 +32,14 @@ const FORM = `<!doctype html><title>signup</title><body>
 <label for="city">City</label><input id="city" aria-autocomplete="list" aria-controls="city-list" aria-expanded="false"><div id="city-list" role="listbox"></div><input id="city-value" type="hidden">
 <label>Work authorization <select id="auth"><option value="">Select…</option><option value="yes">Yes, I am authorized</option><option value="no">No</option></select></label>
 <iframe id="embedded" src="/inner" style="width:600px;height:300px;border:0"></iframe>
+<div id="outer-host"></div>
 <p id="shown"></p>
+<script>
+  // SmartRecruiters-style field: an input two open shadow roots deep.
+  const inner = document.createElement('div')
+  document.getElementById('outer-host').attachShadow({ mode: 'open' }).append(inner)
+  inner.attachShadow({ mode: 'open' }).innerHTML = '<label>City <input id="deep-city" style="width:220px;height:28px"></label>'
+</script>
 <script>
   const picker = document.createElement('input'); picker.type = 'file'; picker.id = 'picker'
   document.getElementById('chooser').addEventListener('click', () => picker.click())
@@ -190,6 +197,15 @@ describe.skipIf(!AVAILABLE)('form steps in a real page', () => {
     expect(typed.target?.score).toBeGreaterThan(0.2)
     expect(await value(app, '#country')).toBe('United States')
     await expect(app.browser.fill({ selector: '#trap' }, 'x')).rejects.toThrow(/area/u)
+  }, 120_000)
+
+  it('types into a field nested two open shadow roots deep', async () => {
+    const app = await boot()
+    await app.browser.open(`${app.base}/apply`)
+    const typed = await app.browser.fill({ selector: '#deep-city' }, 'Brooklyn')
+    expect(typed.target?.score).toBeGreaterThan(0.2)
+    const page = await app.browser.page()
+    expect(await page.locator('#deep-city').inputValue()).toBe('Brooklyn')
   }, 120_000)
 
   it('types into a searchable dropdown with keystrokes and clicks the one option the text names', async () => {

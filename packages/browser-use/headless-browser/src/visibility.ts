@@ -227,11 +227,30 @@ export function probeElement(element: Element): ElementFacts {
   // half-covered element above zero instead of turning the test into a flag.
   const points: readonly (readonly [number, number])[] = [[0.5, 0.5], [0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]]
   let hits = 0
-  const root = element.getRootNode()
+  // The document's hit test stops at the outermost shadow host, so follow open
+  // shadow roots down to what a click would reach (SmartRecruiters nests its
+  // fields two hosts deep). A closed root stops the descent at its host, which
+  // then counts when it is one of the hosts the element lives under.
+  const deepHit = (x: number, y: number): Element | null => {
+    let hit = doc.elementFromPoint(x, y)
+    while (hit?.shadowRoot) {
+      const inner = hit.shadowRoot.elementFromPoint(x, y)
+      if (inner === null || inner === hit) break
+      hit = inner
+    }
+    return hit
+  }
+  const reaches = (hit: Element): boolean => {
+    for (let node: Element | null = hit; node !== null; node = parentOf(node)) if (node === element) return true
+    for (let node: Element | null = element; node !== null; node = parentOf(node)) {
+      const nodeRoot = node.getRootNode()
+      if (node.parentElement === null && nodeRoot instanceof ShadowRoot && nodeRoot.host === hit) return true
+    }
+    return false
+  }
   for (const [across, down] of points) {
-    const hit = doc.elementFromPoint(inViewLeft + inViewWidth * across, inViewTop + inViewHeight * down)
-    if (hit === null) continue
-    if (hit === element || element.contains(hit) || (root instanceof ShadowRoot && root.host === hit)) hits += 1
+    const hit = deepHit(inViewLeft + inViewWidth * across, inViewTop + inViewHeight * down)
+    if (hit !== null && reaches(hit)) hits += 1
   }
   const anchor = element.closest('a[href]')
   const form = element.closest('form')
@@ -278,7 +297,14 @@ export function findSameNameCover(element: Element): Element | null {
   const doc = element.ownerDocument
   const rect = element.getBoundingClientRect()
   if (rect.width <= 0 || rect.height <= 0) return null
-  const hit = doc.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+  const x = rect.left + rect.width / 2
+  const y = rect.top + rect.height / 2
+  let hit = doc.elementFromPoint(x, y)
+  while (hit?.shadowRoot) {
+    const inner = hit.shadowRoot.elementFromPoint(x, y)
+    if (inner === null || inner === hit) break
+    hit = inner
+  }
   if (hit === null || hit === element || element.contains(hit)) return null
   const interactive = (node: Element): boolean => {
     const tag = node.tagName.toLowerCase()

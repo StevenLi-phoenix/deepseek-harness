@@ -11,6 +11,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
   from what a turn sends, not from forgetting.
 
 ### Fixed
+- `headless-browser` shadow DOM (2026-11-24): SmartRecruiters application fields can be typed into. The document's hit test stops at the outermost shadow host, so a field nested two custom elements deep looked covered and was refused at score 0; hit tests now follow open shadow roots down.
 - Gmail account linking no longer answers 403 on the credential-free Google redirect: only the exact callback accepts cross-site top-level GET navigation on a trusted Host. Pending sign-ins survive a Host restart for up to ten minutes and are consumed before token exchange.
 - `headless-browser` keepalives no longer report `ok` for reachable but signed-out pages. The probe checks the final site and sign-in route, then any configured visible-text matchers, and reports a failure reason separately from the retry state.
 - `headless-browser` dropdowns and tabs (2026-11-24): Greenhouse's country and yes/no dropdowns can be chosen, and a form in one tab can be filled while another tab is on a different site. A written value never opened react-select's list, so typing now uses keystrokes and clicks the option the text names; the cross-site rule compared each action with the last site any tab visited, so after a Handshake or Workday tab every Greenhouse field was refused, and it now compares with the action's own page.

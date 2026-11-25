@@ -876,7 +876,16 @@ export class HeadlessBrowserSession {
    */
   async #hitFacts(page: Page, point: { readonly x: number; readonly y: number }): Promise<ElementFacts | undefined> {
     const handle = await page.evaluateHandle(
-      (at: { x: number; y: number }) => document.elementFromPoint(at.x, at.y),
+      (at: { x: number; y: number }) => {
+        // Follow open shadow roots down, as the probe does, to the element a click there reaches.
+        let hit = document.elementFromPoint(at.x, at.y)
+        while (hit?.shadowRoot) {
+          const inner = hit.shadowRoot.elementFromPoint(at.x, at.y)
+          if (inner === null || inner === hit) break
+          hit = inner
+        }
+        return hit
+      },
       { x: point.x, y: point.y },
     )
     try {
