@@ -877,6 +877,10 @@ it('normalizes supported loopback callback origins', () => {
   expect(loginOrigin('http://localhost:80')).toBe('http://localhost:80')
 })
 
+it('rejects a loopback callback origin that is not a URL', () => {
+  expect(() => loginOrigin('not a url')).toThrow('account: protocol')
+})
+
 it.each(['https://dsh.example.ts.net', 'http://example.com', 'http://127.0.0.1.evil.test'])
 ('signs in from remote page %s with the pasted callback address', async (page) => {
   const f = await fixture()
@@ -923,6 +927,31 @@ it('also completes a loopback attempt from a pasted address', async () => {
   const state = await f.wait('waiting-browser')
   expect(state.attempt?.pasteCallbackPrefix).toBeUndefined()
   expect((await f.account.completeSignIn(state.attempt!.id, f.callback())).status).toBe('credential-stored')
+})
+
+it('refuses a remote-page sign-in when no web server has a loopback port for the callback', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-account-'))
+  cleanups.push(() => rm(home, { recursive: true, force: true }))
+  const ctx = new Context()
+  cleanups.push(() => ctx.fiber.dispose())
+  await ctx.plugin(LocalCredentialProvider, { path: join(home, 'credentials.yaml'), watch: false })
+  await ctx.plugin(AuthorizationService)
+  await ctx.plugin(DeepSeekAccount, {})
+  await expect(ctx.deepseekAccount.startSignIn(clientMetadata(), 'https://dsh.example.ts.net', 'web')).rejects.toThrow('account: protocol')
+  expect(await ctx.deepseekAccount.getState()).toMatchObject({ status: 'signed-out', attempt: null })
+})
+
+it('answers a browser callback that is not a GET with 400 and keeps the attempt waiting', async () => {
+  const f = await fixture()
+  await f.account.startSignIn(clientMetadata(), f.callbackOrigin, 'web')
+  await f.wait('waiting-browser')
+  const rejected = await fetch(f.callback(), { method: 'POST' })
+  expect(rejected.status).toBe(400)
+  expect(rejected.headers.get('cache-control')).toBe('no-store')
+  expect(f.count()).toBe(0)
+  expect((await f.account.getState()).attempt?.phase).toBe('waiting-browser')
+  expect((await fetch(f.callback(), { redirect: 'manual' })).status).toBe(302)
+  expect(f.count()).toBe(1)
 })
 
 it('cancels remotely with the original PKCE verifier without waiting for acknowledgment', async () => {
