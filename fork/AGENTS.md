@@ -7,7 +7,7 @@ These rules supplement the repo-wide [AGENTS.md](../AGENTS.md) for `packages/for
 - Work on `main` and push to `origin` (`StevenLi-phoenix/deepseek-harness`). Upstream syncs follow the ledger's upgrade procedure.
 - Every edit outside `packages/fork/` and `fork/` is an upstream-file edit: add its file and change to the ledger's "Upstream files touched" table in the same commit.
 - Record fork changes in [CHANGELOG.md](CHANGELOG.md) (Keep a Changelog sections under `[Unreleased]`).
-- **Name by function, never by person.** Packages, services, storage domains, routes, env names, and keys say what they do (`gmail`, `ctx.gmail`, `GMAIL_CLIENT_ID`), qualified where upstream uses the word (`owner-memory`); never a person's name or initials (this repository is public; `deploy/check-owner-names.mjs` enforces it).
+- **Name by function, never by person.** Packages, services, storage domains, routes, env names, and keys say what they do (`gmail`, `ctx.gmail`, `GMAIL_CLIENT_ID`), qualified where upstream uses the word (`owner-memory`); never a person's name or initials (this repository is public; `deploy/check-owner-names.mjs` enforces it). The owner-named prefix stays for what is personal or meaningless outside this deployment (the résumé writer, the owner's data tools), outside this repository.
 - Before adding a client, scheduler, budget, notifier, classifier, key, or deploy script, check `packages/fork`, the Web UI's Remote API, AMS, `https://registry.lishuyu.app`, and the GitHub topic `dsh-plugin`. A new one says in its commit why those do not do.
 
 ## Memory and persona safety
@@ -22,42 +22,26 @@ These rules supplement the repo-wide [AGENTS.md](../AGENTS.md) for `packages/for
 - **The main agent takes only summaries from other Sessions**, besides the owner's own messages and its own schedule. A route that should reach it goes through a Session with `result: main` (normally the notification desk), and its monitors publish events for the desk instead of waking it. Nothing else wakes the chat Session: an alert, a log line, or a monitor's output goes to a Session first.
 - **The owner hears only the main agent.** Every note for the owner (`ctx.ownerNotifier.send()`) becomes a turn of the chat Session (`wechat` `chat.notes: turn`), and the main agent tells the owner in its own words or answers `NO_REPLY`; the host never sends text it built itself. Name the sender in `OwnerNote.origin`, mark what cannot wait `urgent` (its answer passes do-not-disturb), and keep a plugin's note rare and already filtered. Only `safety` notes, and notes the chat cannot take, go as written.
 - **The message flow page is generated.** `flow-live.ts` draws every route from what it really does, so change the route to change the picture; `flow-graph.ts` only places the boxes and draws what no route carries.
-- **Resident processes are AMS services.** Declare any long-running process beside `dsh-events` on the mini to AMS (`service.toml`, `ams ctl`, `ams secret set`; its error lines reach the escalation journal and ga-watch), never as a new LaunchDaemon, LaunchAgent, or notifier of its own.
-- **AMS stays the only process supervisor (decision 2026-11-14).** DSH does not start, restart, or take over the services AMS declares, and no service migrates into a DSH profile: two supervisors on one process fight, and a supervised process must outlive the harness. What DSH adds is observation — plugin mount failures, plugin disposal, a tool failing repeatedly, a Session ending badly — turned into events for the owning channel, once per problem and once on recovery.
+- **AMS is the only process supervisor.** Declare any long-running process beside `dsh-events` on the mini to AMS (`service.toml`, `ams ctl`, `ams secret set`; its error lines reach the escalation journal), never as a LaunchDaemon, LaunchAgent, or notifier of its own. DSH never starts, restarts, or takes over an AMS service, and no service migrates into a DSH profile: two supervisors fight, and a supervised process must outlive the harness. DSH adds observation (mount failures, disposal, a tool failing repeatedly, a Session ending badly) as events for the owning channel, once per problem and once on recovery.
 - **A plugin is a whole feature by itself.** Installing one package must be enough: it brings its own dependencies, owns its processes (for example its browser, its profile directory, its lifecycle) and works with no sibling plugin mounted first beyond the platform. An external-service connector is the stated exception — depending on the outside service is its job.
-- **The owner-named prefix is for what is private to this deployment.** General capabilities take a plain, functional name (`headless-browser`, `gmail-sensor`); a prefix that names the owner stays reserved for what is personal, secret, or meaningless outside this setup (the résumé writer, the owner's own data tools). (`check-owner-names.mjs` rejects the literal initials, so documentation calls it by this description.)
 - **Processes talk through versioned APIs.** DSH and a split-out service exchange versioned DTOs over a unix socket, HTTP, or a pipe; neither opens the other's database, WAL, or state files.
 - Architecture: [package table and READMEs](../packages/fork/README.md), [subsystem page](../docs/subsystems/fork.md), [runbook](deploy/RUNBOOK.md).
 
 ## Profile layering
 
-The `event` profile composes, in order: the base and Web bundles; `@deepseek-ai/dsh-event-bundle` ([bundles/event/](bundles/event/), the code-owned service skeleton: webhook runtime, owner relay, event bus and subscriptions, ingest, the console and settings rows, the `notify` and `unattended` presets); one bundle per feature under `fork/bundles/<feature>/` (`@deepseek-ai/<feature>`, in the mount order [profiles/event/package.json](profiles/event/package.json) lists); the profile patch `$DSH_HOME/profiles/event/cordis.patch.yml` (the owner's layer, seeded once from [profiles/event/cordis.patch.yml](profiles/event/cordis.patch.yml); Web UI settings save here); and the home patch `$DSH_HOME/cordis.patch.yml` ([deploy/home.cordis.patch.yml](deploy/home.cordis.patch.yml)).
+The `event` profile composes the base and Web bundles, the service skeleton `@deepseek-ai/dsh-event-bundle`, one bundle per feature under `fork/bundles/<feature>/` in the order [profiles/event/package.json](profiles/event/package.json) lists, the owner's profile patch, and the home patch. [bundles/event/README.md](bundles/event/README.md) owns the layer table and ordering rules; the [runbook](deploy/RUNBOOK.md) owns the patches on the mini.
 
-- A feature's rows live in its own bundle; [bundles/event/README.md](bundles/event/README.md) holds the layer table and why each row sits where it does. Add a bundle directory and list it in the profile manifest, or `setup-profile.sh` fails on the mismatch.
-- Patches apply as one flattened list in manifest order and an `insert` appends, so a feature mounts after the skeleton rows it uses. A preset stays whole in one layer: its `config.plugins` is a config value, not a patchable group, so the feature presets travel with their feature and `preset-unattended` keeps the tool rows it names.
-
-- A patch entry's `config` replaces that entry's whole `config`; restate every field the lower layer set.
-- The Web UI refuses to save any entry the home patch sets, so the home patch holds only deployment fixtures the UI does not edit.
-- `setup-profile.sh` never replaces the owner's layer; it merges the manifest and relinks plugins and the bundle.
-- Verify a layering change with `pnpm dsh event --dump-config` (installed build: runbook, Operate); each row names the layer that set it.
+- A feature's rows and presets live in its own bundle; list a new bundle in the profile manifest, or `setup-profile.sh` fails.
+- A patch entry's `config` replaces the lower layer's whole `config`; restate every field.
+- Verify a layering change with `pnpm dsh event --dump-config`; each row names its layer.
 
 ## Checks and regeneration
 
-- The fork check list is in [README.md](README.md#checks-for-the-fork-group). One file or test: `pnpm exec vitest run packages/fork/wechat/tests/text.spec.ts -t relayText`.
-- Typechecks read built declarations and Typert-generated remote clients (`packages/api/*/lib/typert.remote-client.d.ts`). After changing a Service Definition or an `@Remote` method, run `pnpm exec tsx scripts/build.ts --scope typecheck`; a stale build surfaces as "Property … does not exist" in consumers.
-- After changing a Service Definition, run `pnpm run gen-cordis-catalog` (API catalog and `docs/subsystems/*` regions) before `verify-cordis-catalog`.
-- After editing a README and its `.zh.md`, run `pnpm run verify-translation-pairing <README.md> --write`, then again without `--write`.
-- Keep `TMPDIR` short for builds: a tsx IPC socket path over 104 bytes fails with `listen EINVAL`.
+- [README.md](README.md#checks-for-the-fork-group) lists the fork checks. Fork CI runs every gate on each push to `main`; read it with `gh run list --workflow "Fork CI"`.
+- After changing a Service Definition or an `@Remote` method, run `pnpm exec tsx scripts/build.ts --scope typecheck` (typechecks read built declarations), then `pnpm run gen-cordis-catalog`.
+- After editing a README and its `.zh.md`, run `pnpm run verify-translation-pairing <README.md> --write`.
+- Keep `TMPDIR` short: a tsx IPC socket path over 104 bytes fails with `listen EINVAL`.
 
 ## Deployment (Mac mini)
 
-The [runbook](deploy/RUNBOOK.md) owns the service account, paths, and procedure. Push to `main`, then deploy from any checkout with `ssh mini`:
-
-```sh
-fork/deploy/deploy-dsh.sh --plan   # says whether this commit goes hot or restarts, and why
-fork/deploy/deploy-dsh.sh          # deploys it, waits, and exits 0 only when that commit runs
-```
-
-- This is the only deploy path. `upgrade.sh` and `launchctl kickstart` are for a first install, or when `dsh-upgrade` itself cannot run.
-- Keep what you change on the hot path when you can (runbook §21).
-- Service secrets live in `/Users/dsh-runtime/.dsh/.env` and `.credentials.yaml`; use them only through shell substitution. `stdout.log` carries the first-login token URL: redact it when reading.
+Push to `main`, then from any checkout with `ssh mini` run `fork/deploy/deploy-dsh.sh --plan` (hot or restart, and why) and `fork/deploy/deploy-dsh.sh` (exits 0 only when that commit runs). This is the only deploy path; the [runbook](deploy/RUNBOOK.md) owns the service account, paths, the hot path (§21), and first installs. Service secrets live in `/Users/dsh-runtime/.dsh/.env` and `.credentials.yaml`; use them only through shell substitution, and redact the first-login token URL when reading `stdout.log`.
