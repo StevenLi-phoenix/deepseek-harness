@@ -431,21 +431,12 @@ describe('MemoryLoader merge', () => {
 
   it('reclassifies entries and keeps every id busy until the answer lands', async () => {
     const store = createMemoryStore()
-    const gate = {
-      promise: undefined as unknown as Promise<ActionResult>,
-      resolve: (_value: ActionResult) => {},
-    }
-    const api = fakeApi({
-      post: () => {
-        const result = gate
-        gate.promise = new Promise<ActionResult>((resolve) => { result.resolve = resolve })
-        return gate.promise
-      },
-    })
+    const answer = gate<ActionResult>()
+    const api = fakeApi({ post: () => answer.promise })
     const loader = new MemoryLoader(store, api, () => 1)
     const pending = loader.reclassify(['aaaaaa', 'bbbbbb'], 'career')
     expect(store.getSnapshot().busy).toEqual(['aaaaaa', 'bbbbbb'])
-    gate.resolve({ action: 'reclassify', category: 'career', results: [{ id: 'aaaaaa', ok: false, failure: { code: 'not_found', message: 'gone' } }] })
+    answer.resolve({ action: 'reclassify', category: 'career', results: [{ id: 'aaaaaa', ok: false, failure: { code: 'not_found', message: 'gone' } }] })
     await pending
     expect(store.getSnapshot().busy).toEqual([])
     expect(store.getSnapshot().error).toEqual({ code: 'not_found', message: 'gone' })
