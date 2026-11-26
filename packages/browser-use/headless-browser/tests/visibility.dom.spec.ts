@@ -410,6 +410,55 @@ describe('what a click at the element reaches', () => {
   })
 })
 
+describe('a field drawn by a display that shows its value', () => {
+  // Workday's date segments: a caret-sized input[role=spinbutton] under an aria-hidden
+  // sibling that paints the segment's text ("YYYY"); a click on the text focuses the input.
+  const SEGMENT = '<div id="segment"><input id="year" role="spinbutton" aria-label="Year" aria-valuetext="YYYY">'
+    + '<div id="display" aria-hidden="true">YYYY</div></div>'
+
+  function placeSegment(): { year: Element; display: Element } {
+    const year = find('#year')
+    const display = find('#display')
+    layout
+      .place(find('#segment'), { left: 100, top: 200, width: 40, height: 24 })
+      .place(year, { left: 110, top: 205, width: 2, height: 2 })
+      .place(display, { left: 100, top: 200, width: 40, height: 24 })
+      .paint(display, year)
+    return { year, display }
+  }
+
+  it('takes an aria-hidden sibling that shows the field\'s own text as the field, and aims at that display', () => {
+    mount(SEGMENT)
+    const facts = probeElement(placeSegment().year)
+    expect(facts).toMatchObject({ occlusion: 1, width: 40, height: 24 })
+    expect(facts.coveredBy).toBeUndefined()
+    expect(scoreVisibility(facts).score).toBe(1)
+  })
+
+  it('matches the display against the value or the placeholder too', () => {
+    mount('<div id="segment"><input id="year" role="spinbutton" value="2023"><div id="display" aria-hidden="true">2023</div></div>')
+    expect(probeElement(placeSegment().year)).toMatchObject({ occlusion: 1 })
+    mount('<div id="segment"><input id="year" placeholder="YYYY"><div id="display" aria-hidden="true"> YYYY </div></div>')
+    expect(probeElement(placeSegment().year)).toMatchObject({ occlusion: 1 })
+  })
+
+  it('stays covered under a display with other text, one a reader sees, one in another box, or one holding a control', () => {
+    const covers = [
+      '<div id="segment"><input id="year" aria-valuetext="YYYY"><div id="display" aria-hidden="true">Verify you are human</div></div>',
+      '<div id="segment"><input id="year" aria-valuetext="YYYY"><div id="display">YYYY</div></div>',
+      '<div id="segment"><input id="year" aria-valuetext="YYYY"></div><div id="display" aria-hidden="true">YYYY</div>',
+      '<div id="segment"><input id="year" aria-valuetext="YYYY"><div id="display" aria-hidden="true"><button>YYYY</button></div></div>',
+      '<div id="segment"><input id="year"><div id="display" aria-hidden="true"></div></div>',
+    ]
+    for (const html of covers) {
+      mount(html)
+      const facts = probeElement(placeSegment().year)
+      expect(facts.occlusion, html).toBe(0)
+      expect(facts.width, html).toBe(2)
+    }
+  })
+})
+
 describe('a styled checkbox or radio', () => {
   it('measures a transparent checkbox by the box painted right under it', () => {
     mount('<div><input type="checkbox" id="terms" style="opacity:0"><span id="box"></span><label for="terms">I accept the terms</label></div>')

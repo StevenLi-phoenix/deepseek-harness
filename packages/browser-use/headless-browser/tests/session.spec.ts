@@ -162,6 +162,9 @@ class FakePage {
   /** Keys pressed, as `<element id>:<key>` for an element press and `keyboard:<key>` for the page keyboard. */
   readonly pressed: string[] = []
   readonly clicked: Element[] = []
+  readonly focused: Element[] = []
+  /** Text typed as keystrokes on the page keyboard. */
+  readonly typed: string[] = []
   readonly filled = new Map<Element, string>()
   readonly attached = new Map<Element, readonly string[]>()
   readonly #listeners = new Map<string, Set<(...args: never[]) => void>>()
@@ -198,6 +201,7 @@ class FakePage {
       click: async (): Promise<void> => { this.clicked.push(node) },
       fill: async (value: string): Promise<void> => { this.filled.set(node, value) },
       press: async (key: string): Promise<void> => { this.pressed.push(`${node.id}:${key}`) },
+      focus: async (): Promise<void> => { this.focused.push(node) },
     } as Partial<ElementHandle<Element>> as ElementHandle<Element>
   }
 
@@ -220,6 +224,7 @@ class FakePage {
       click: async (): Promise<void> => { await this.clickWith(() => { this.clicked.push(only()) }) },
       fill: async (value: string): Promise<void> => { this.filled.set(only(), value) },
       press: async (key: string): Promise<void> => { this.pressed.push(`${only().id}:${key}`) },
+      focus: async (): Promise<void> => { this.focused.push(only()) },
       setInputFiles: async (files: readonly string[]): Promise<void> => { this.attached.set(only(), files) },
       innerText: async (): Promise<string> => only().textContent,
     } as Partial<Locator> as Locator
@@ -267,6 +272,7 @@ class FakePage {
     const keyboard = {
       insertText: async (text: string): Promise<void> => { this.inserted.push(text) },
       press: async (key: string): Promise<void> => { this.pressed.push(`keyboard:${key}`) },
+      type: async (text: string): Promise<void> => { this.typed.push(text) },
     } as Partial<Keyboard> as Keyboard
     const chooserOf = (): FakeChooser | undefined => this.chooser
     // Playwright overloads waitForEvent per event; the fake answers the file chooser and refuses every other event.
@@ -899,6 +905,20 @@ describe('pressing Enter after a type', () => {
     await expect(session.fill({ selector: '#school' }, 'New York University', 't1', { enter: true })).rejects.toBeInstanceOf(ActionRefusedError)
     expect(page.pressed).toEqual([])
     expect(page.filled.has(element('#school'))).toBe(false)
+    await session.close()
+  })
+})
+
+describe('typing into a spin-button segment', () => {
+  it('focuses a role=spinbutton field and sends keystrokes instead of writing its value', async () => {
+    // Workday's date segments take digits from keydown; a written value leaves the display at "YYYY".
+    document.body.innerHTML = '<input id="year" role="spinbutton" aria-label="Year" aria-valuetext="YYYY">'
+    const { session, page } = await withTab()
+    await session.fill({ selector: '#year' }, '2023', 't1')
+    expect(page.focused).toEqual([element('#year')])
+    expect(page.pressed).toEqual(['keyboard:ControlOrMeta+A', 'keyboard:Backspace'])
+    expect(page.typed).toEqual(['2023'])
+    expect(page.filled.has(element('#year'))).toBe(false)
     await session.close()
   })
 })

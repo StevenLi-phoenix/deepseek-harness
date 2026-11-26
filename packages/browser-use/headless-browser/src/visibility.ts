@@ -302,13 +302,33 @@ export function probeElement(element: Element): ElementFacts {
     }
     return hit
   }
+  // Workday draws each date segment as a caret-sized input[role=spinbutton] under an
+  // aria-hidden sibling that paints the segment's text ("YYYY", then the digits typed),
+  // and a click on that text focuses the input. Such a display is the field a person
+  // sees: aria-hidden itself, a sibling of the field, holding no control, and showing
+  // exactly the field's own value, placeholder or aria-valuetext. A layer with any
+  // other text still covers the field.
+  const fieldTexts = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement
+    ? [element.value, element.getAttribute('placeholder') ?? '', element.getAttribute('aria-valuetext') ?? '']
+      .map(text => text.replace(/\s+/gu, ' ').trim())
+      .filter(text => text !== '')
+    : []
+  const fieldParent = parentOf(element)
+  const displayOf = (hit: Element): Element | null => {
+    if (fieldTexts.length === 0 || fieldParent === null) return null
+    let node: Element | null = hit
+    while (node !== null && parentOf(node) !== fieldParent) node = parentOf(node)
+    if (node === null || node === element || node.getAttribute('aria-hidden') !== 'true') return null
+    if (node.querySelector('a[href], button, input, select, textarea, [role=button], [role=link]') !== null) return null
+    return fieldTexts.includes(flatText(node)) ? node : null
+  }
   const reaches = (hit: Element): boolean => {
     for (let node: Element | null = hit; node !== null; node = parentOf(node)) if (node === element) return true
     for (let node: Element | null = element; node !== null; node = parentOf(node)) {
       const nodeRoot = node.getRootNode()
       if (node.parentElement === null && nodeRoot instanceof ShadowRoot && nodeRoot.host === hit) return true
     }
-    return false
+    return displayOf(hit) !== null
   }
   for (const [across, down] of points) {
     const hit = deepHit(inViewLeft + inViewWidth * across, inViewTop + inViewHeight * down)
@@ -316,6 +336,13 @@ export function probeElement(element: Element): ElementFacts {
   }
   // Name what sits on top at the centre, so a refusal can say what to close first.
   const centreHit = inViewWidth <= 0 || inViewHeight <= 0 ? null : deepHit(inViewLeft + inViewWidth / 2, inViewTop + inViewHeight / 2)
+  // A person aims a caret-sized field at the display that draws it, so the area test measures that box.
+  const display = centreHit === null || area >= 100 ? null : displayOf(centreHit)
+  if (display !== null) {
+    const box = display.getBoundingClientRect()
+    aimWidth = box.width
+    aimHeight = box.height
+  }
   const cover = centreHit === null || reaches(centreHit) ? null : centreHit
   const coverText = cover === null ? '' : (cover.getAttribute('aria-label') ?? flatText(cover)).slice(0, 60)
   const coverRole = cover?.getAttribute('role') ?? null

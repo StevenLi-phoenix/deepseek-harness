@@ -205,6 +205,7 @@ export interface AxTargetResolver {
 /** What a locator or an element handle both offer a guarded action. */
 interface Actionable {
   click(): Promise<void>
+  focus(): Promise<void>
   fill(value: string): Promise<void>
   press(key: string): Promise<void>
   selectOption(values: { index: number }, options?: { timeout?: number }): Promise<string[]>
@@ -721,7 +722,18 @@ export class HeadlessBrowserSession {
         this.#guard.anchor(page.url())
         return { url: page.url(), target, ...selected === undefined ? {} : { selected } }
       }
-      await element.fill(text)
+      if (await element.evaluate(isSpinButton)) {
+        // A spin-button segment (Workday's date parts) takes digits from keydown and paints
+        // them in a display on top: a click lands on the display and a written value leaves
+        // it at "YYYY", so focus the field and send keystrokes.
+        await element.focus()
+        await page.keyboard.press('ControlOrMeta+A')
+        await page.keyboard.press('Backspace')
+        await page.keyboard.type(text)
+        this.#log.info('headless-browser: typed %d keystroke(s) into spin button %s', text.length, resolution.ref)
+      } else {
+        await element.fill(text)
+      }
       if (enter) {
         await element.press('Enter')
         this.#log.info('headless-browser: pressed Enter in %s after typing', resolution.ref)
@@ -1509,4 +1521,14 @@ async function locate(page: Page, selector: string): Promise<Located | undefined
     if (innerCount > 0) return { locator: inner, count: innerCount, frame }
   }
   return undefined
+}
+
+/**
+ * Whether an element is an explicit ARIA spin button, such as one segment of
+ * Workday's date input. Playwright serialises this function.
+ * @param element - the field about to be typed into.
+ * @returns true for `role="spinbutton"`.
+ */
+function isSpinButton(element: Element): boolean {
+  return element.getAttribute('role') === 'spinbutton'
 }

@@ -153,6 +153,35 @@ describe.skipIf(!AVAILABLE)('action guard in a real page', () => {
     expect(await (await app.browser.page()).title()).toBe('clicked')
   }, 120_000)
 
+  it('types a year into a Workday-style date segment drawn by an aria-hidden display', async () => {
+    const app = await boot()
+    await load(app, [
+      '<div id="seg" style="position:relative;display:inline-block;width:48px;height:24px;margin:40px">',
+      '<input id="year" role="spinbutton" aria-label="Year" aria-valuetext="YYYY" style="position:absolute;left:20px;top:10px;width:2px;height:2px;padding:0;border:0">',
+      '<div id="display" aria-hidden="true" style="position:absolute;inset:0;background:#fff">YYYY</div></div>',
+      '<script>',
+      'const y = document.getElementById("year"), d = document.getElementById("display");',
+      'd.addEventListener("click", () => y.focus());',
+      'y.addEventListener("keydown", e => { if (/^[0-9]$/.test(e.key)) { e.preventDefault(); y.value = (y.value + e.key).slice(-4); d.textContent = y.value; y.setAttribute("aria-valuetext", y.value) } });',
+      '</script>',
+    ].join(''))
+    const outcome = await app.browser.fill({ selector: '#year' }, '2023')
+    expect(outcome.target).toMatchObject({ ref: '#year', index: 0, score: 1 })
+    expect(await (await app.browser.page()).locator('#display').textContent()).toBe('2023')
+  }, 120_000)
+
+  it('still refuses a caret-sized field under an aria-hidden layer that shows other text', async () => {
+    const app = await boot()
+    await load(app, [
+      '<div style="position:relative;width:200px;height:40px">',
+      '<input id="trap" aria-label="Email" style="position:absolute;left:20px;top:10px;width:2px;height:2px;padding:0;border:0">',
+      '<div aria-hidden="true" style="position:absolute;inset:0;background:#fff">Verify you are human</div></div>',
+    ].join(''))
+    const blocked = await refusalOf(app.browser.fill({ selector: '#trap' }, 'cv@lishuyu.app'))
+    expect(blocked.rule).toBe('visibility')
+    expect(blocked.failing).toEqual(expect.arrayContaining(['occlusion', 'area']))
+  }, 120_000)
+
   it('scores an element that is half outside the viewport between zero and one', async () => {
     const app = await boot()
     await load(app, '<button id="t" style="position:fixed;left:0;top:760px;width:200px;height:80px">Continue</button>')
