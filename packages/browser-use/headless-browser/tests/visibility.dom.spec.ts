@@ -11,7 +11,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { findSameNameCover, findToggleStandIn, probeElement, readElementFacts, scoreVisibility } from '../src/visibility.ts'
+import { findHiddenTextHolder, findSameNameCover, findToggleStandIn, probeElement, readElementFacts, scoreVisibility } from '../src/visibility.ts'
 
 /** A box in viewport CSS pixels. */
 interface Box {
@@ -571,6 +571,25 @@ describe('the link and form a click would use', () => {
       + '<div id="tab" role="tab">Overview</div>')
     expect(['#name', '#bio', '#team', '#tab'].map(selector => probeElement(find(selector)).value)).toEqual(['Ada', 'Engineer', 'web', ''])
     expect(probeElement(find('#tab')).role).toBe('tab')
+  })
+})
+
+describe('the element that holds text the page marks aria-hidden', () => {
+  it('climbs to the paragraph whose only text is the hidden span, as LinkedIn draws a card title', () => {
+    mount('<div role="button" id="card"><p id="title"><span id="hidden" aria-hidden="true">Software  Engineer</span></p>'
+      + '<p>Signant Health</p></div>')
+    expect(findHiddenTextHolder(find('#hidden'))).toBe(find('#title'))
+  })
+
+  it('refuses hidden text inside other text, beside another control, inside a hidden subtree, or without a name', () => {
+    mount('<p><span id="phrase" aria-hidden="true">Apply now</span> to this role</p>'
+      + '<div><span id="beside" aria-hidden="true">Delete</span><button>Delete</button></div>'
+      + '<div aria-hidden="true"><p><span id="deep" aria-hidden="true">Next</span></p></div>'
+      + '<p><span id="empty" aria-hidden="true"> </span></p>')
+    expect(findHiddenTextHolder(find('#phrase'))).toBeNull()
+    expect(findHiddenTextHolder(find('#beside'))).toBeNull()
+    expect(findHiddenTextHolder(find('#deep'))).toBeNull()
+    expect(findHiddenTextHolder(find('#empty'))).toBeNull()
   })
 })
 

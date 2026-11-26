@@ -30,7 +30,7 @@ import { isComboboxInput, matchOption, readComboboxOptions, readOptions, readSel
 import type { KeepalivePage } from './keepalive.ts'
 import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
 import { BrowserTabs, TabNavigationError, type ActiveTab, type ClosedTab, type PopupTab } from './tabs.ts'
-import { findSameNameCover, findToggleStandIn, probeElement, readElementFacts, scoreVisibility, VISIBILITY_THRESHOLD, type ElementFacts } from './visibility.ts'
+import { findHiddenTextHolder, findSameNameCover, findToggleStandIn, probeElement, readElementFacts, scoreVisibility, VISIBILITY_THRESHOLD, type ElementFacts } from './visibility.ts'
 
 /** How long a context gets to close before shutdown stops waiting for it. */
 export const SHUTDOWN_TIMEOUT_MS = 10_000
@@ -1041,6 +1041,17 @@ export class HeadlessBrowserSession {
             selector, index, candidate.role ?? 'toggle', standInFacts.tag, JSON.stringify(standInFacts.name))
           covers.push({ facts: standInFacts, element: standIn })
           continue
+        }
+      }
+      if (candidate.ariaHidden && scoreVisibility({ ...candidate, ariaHidden: false, occlusion: 1 }).score >= VISIBILITY_THRESHOLD) {
+        // Painted text marked aria-hidden (LinkedIn's card titles) is clicked through the element that reads exactly like it;
+        // a same-name overlay found below competes with it on score, so Workday's covered buttons still reach theirs.
+        const holder = (await locator.nth(index).evaluateHandle(findHiddenTextHolder)).asElement()
+        if (holder !== null) {
+          const holderFacts = readElementFacts(await holder.evaluate(probeElement))
+          this.#log.info('headless-browser: %s match %d is aria-hidden text; scoring the %s named %s that holds it',
+            selector, index, holderFacts.role ?? holderFacts.tag, JSON.stringify(holderFacts.name))
+          covers.push({ facts: holderFacts, element: holder })
         }
       }
       if (!candidate.ariaHidden && candidate.occlusion >= 1) continue

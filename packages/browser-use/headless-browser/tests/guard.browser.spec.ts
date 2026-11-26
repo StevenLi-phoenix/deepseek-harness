@@ -150,6 +150,25 @@ describe.skipIf(!AVAILABLE)('action guard in a real page', () => {
     expect(await page.locator('#resume').isChecked()).toBe(true)
   }, 120_000)
 
+  it('clicks a LinkedIn card title whose only text is an aria-hidden span wrapped over two lines', async () => {
+    // Live linkedin.com/jobs/search-results, 2026-11-26 18:30 run: `text=<title>` matched only the aria-hidden span
+    // and was refused at ariaHidden=0, occlusion=0.6, "covered" by the title <p> that holds it.
+    const app = await boot()
+    await load(app, [
+      '<div id="card" role="button" tabindex="0" style="display:block;width:180px;padding:8px;font:16px/20px sans-serif">',
+      '<p id="title" style="margin:0"><span aria-hidden="true">Software Engineer - AI Accelerated Development</span></p>',
+      '<p style="margin:0">Signant Health</p></div>',
+      '<p style="width:180px;margin:20px 0 0;font:16px/20px sans-serif">Sponsored <span id="ghost" aria-hidden="true">Apply now to this role</span></p>',
+      '<script>document.getElementById("card").addEventListener("click", function () { document.title = "selected" })</script>',
+    ].join(''))
+    const outcome = await app.browser.click({ selector: 'text=Software Engineer - AI Accelerated Development' })
+    expect(outcome.target).toMatchObject({ index: 1, name: 'Software Engineer - AI Accelerated Development' })
+    expect(await (await app.browser.page()).title()).toBe('selected')
+    // The holder reads differently from the hidden text, so a hidden phrase inside other text stays refused.
+    const blocked = await refusalOf(app.browser.click({ selector: '#ghost' }))
+    expect(blocked.rule).toBe('visibility')
+  }, 120_000)
+
   it('still refuses a hidden checkbox that shares its box with another control', async () => {
     const app = await boot()
     await load(app, '<div style="width:300px;padding:8px">Verify you are human<input type="checkbox" id="t" aria-label="Verify you are human"'

@@ -33,7 +33,7 @@ import {
   type SessionDeps,
 } from '../src/session.ts'
 import { TabNavigationError } from '../src/tabs.ts'
-import { findSameNameCover, findToggleStandIn, probeElement, type ElementFacts } from '../src/visibility.ts'
+import { findHiddenTextHolder, findSameNameCover, findToggleStandIn, probeElement, type ElementFacts } from '../src/visibility.ts'
 
 const LOG = {
   info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn(),
@@ -157,6 +157,7 @@ class FakePage {
   readonly covers = new Map<Element, Element>()
   /** The label or box a person clicks for a checkbox or radio the page hides, per element. */
   readonly standIns = new Map<Element, Element>()
+  readonly holders = new Map<Element, Element>()
   readonly frames: FakeFrameSpec[] = []
   chooser: FakeChooser | undefined
   readonly mouseClicks: [number, number][] = []
@@ -241,7 +242,8 @@ class FakePage {
 
   #coverHandle(fn: OnElement, node: Element): JSHandle {
     if (fn === findToggleStandIn) return this.#jsHandle(this.standIns.get(node) ?? null)
-    if (fn !== findSameNameCover) throw new Error('the fake page only hands out cover and stand-in handles')
+    if (fn === findHiddenTextHolder) return this.#jsHandle(this.holders.get(node) ?? null)
+    if (fn !== findSameNameCover) throw new Error('the fake page only hands out cover, stand-in and holder handles')
     return this.#jsHandle(this.covers.get(node) ?? null)
   }
 
@@ -843,6 +845,24 @@ describe('guarded targets', () => {
       '#follow', 0, 'toggle', 'div', '"Follow Cassidy"')
     await session.click({ selector: '#plain' })
     expect(page.clicked).toEqual([element('#row'), element('#plain')])
+    await session.close()
+  })
+
+  it('clicks the paragraph that holds painted aria-hidden text, and leaves an unpainted one refused', async () => {
+    document.body.innerHTML = '<p id="title"><span id="hidden" aria-hidden="true">Software Engineer</span></p>'
+      + '<p id="blank"><span id="ghost" aria-hidden="true">Software Engineer</span></p>'
+    const { session, page } = await withTab()
+    page.facts.set(element('#hidden'), { ariaHidden: true, occlusion: 0.6 })
+    page.facts.set(element('#ghost'), { ariaHidden: true, opacity: 0 })
+    page.holders.set(element('#hidden'), element('#title'))
+    page.holders.set(element('#ghost'), element('#blank'))
+    const outcome = await session.click({ selector: '#hidden' })
+    expect(outcome.target).toMatchObject({ index: 1, name: 'Software Engineer' })
+    expect(page.clicked).toEqual([element('#title')])
+    expect(LOG.info).toHaveBeenCalledWith('headless-browser: %s match %d is aria-hidden text; scoring the %s named %s that holds it',
+      '#hidden', 0, 'p', '"Software Engineer"')
+    await expect(session.click({ selector: '#ghost' })).rejects.toThrow(/under the 0.2 threshold/)
+    expect(page.clicked).toEqual([element('#title')])
     await session.close()
   })
 })

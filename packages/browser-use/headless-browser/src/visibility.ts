@@ -499,6 +499,39 @@ export function findToggleStandIn(element: Element): Element | null {
 }
 
 /**
+ * The element a person clicks for text the page marks `aria-hidden`: LinkedIn's
+ * job search draws each card title as an `aria-hidden` span that is the only
+ * text of its `<p>`, so `text=<title>` matched the span and was refused
+ * (ariaHidden 0, and the gaps of the wrapped span hit the `<p>`). Returns the
+ * nearest ancestor, four levels up at most, outside any `aria-hidden` subtree,
+ * that reads exactly like the element (its label or text, case and spaces
+ * folded) and holds no control besides it; nothing otherwise, so a hidden
+ * phrase inside other text or beside another control stays refused. The session
+ * asks only when the element itself is painted, and scores the holder like any
+ * target. Playwright serialises this function, so it must not reference
+ * anything outside itself.
+ * @param element - the `aria-hidden` element.
+ * @returns the holder a click should land on, or `null`.
+ */
+export function findHiddenTextHolder(element: Element): Element | null {
+  const fold = (text: string): string => text.replace(/\s+/gu, ' ').trim().toLowerCase()
+  const nameOf = (node: Element): string => {
+    const label = node.getAttribute('aria-label')
+    return fold(label !== null && label.trim() !== '' ? label : node.textContent)
+  }
+  const name = nameOf(element)
+  if (name === '') return null
+  const CONTROLS = 'input, select, textarea, button, a[href], [role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="link"]'
+  let node = element.parentElement
+  for (let depth = 0; node !== null && depth < 4 && node !== element.ownerDocument.body; depth += 1, node = node.parentElement) {
+    // A wider ancestor holds the same other control, so the climb stops at the first one.
+    if (Array.from(node.querySelectorAll(CONTROLS)).some(control => control !== element)) return null
+    if (node.closest('[aria-hidden="true"]') === null && nameOf(node) === name) return node
+  }
+  return null
+}
+
+/**
  * Score the facts the probe returned.
  * @param facts - one element's measurements.
  * @returns the score, every test's value, and the tests that failed.
