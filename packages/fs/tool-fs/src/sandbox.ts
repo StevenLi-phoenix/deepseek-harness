@@ -14,7 +14,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { ToolArgsError } from '@deepseek-ai/dsh-tools'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import type { SandboxExecutionPolicy, SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import { ESCALATION_TARGETS, approveEscalation, escalationHintMarker, sandboxDenialMarker, sandboxPermissionsDescription, validateEscalationArgs } from '@deepseek-ai/dsh-sandbox'
+import { ESCALATION_TARGETS, approveEscalation, escalationHintMarker, readEscalationArgs, sandboxDenialMarker, sandboxPermissionsDescription } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
 import { FsError } from '@deepseek-ai/dsh-fs'
 
@@ -75,10 +75,11 @@ export class FsSandboxController {
   /**
    * The policy to stamp onto this mutation: an approved escalation grant (a
    * strictly wider retry resolved through `ctx.approval` before anything
-   * executes), else the Session's standing mode. An omitted or repeated mode
-   * permits an omitted or blank justification; repeating the mode needs no
-   * approval. A different mode requires a non-empty justification, and a
-   * non-empty justification without a mode is rejected. The workspace root is
+   * executes), else the Session's standing mode. An omitted, repeated or
+   * narrower mode permits an omitted or blank justification and needs no
+   * approval; the mutation runs under the standing mode. A strictly wider mode
+   * requires a non-empty justification, and a non-empty justification without
+   * a mode is rejected. The workspace root is
    * the original Session directory, or the deployment fallback when absent.
    * @param toolName - the mutating tool's name, for the approval audit trail.
    * @param args - the call's escalation arguments.
@@ -92,17 +93,16 @@ export class FsSandboxController {
       throw new ToolArgsError(['sandbox_permissions and justification are not available in this composition (no sandboxing filesystem to escalate)'])
     }
     const standingPolicy = this.policy?.resolve({ ...exec.agent ? { session: exec.agent.session } : {} })
-    if (args.sandbox_permissions !== undefined && args.sandbox_permissions === standingPolicy?.mode) return standingPolicy
-    const justification = args.sandbox_permissions === undefined && args.justification?.trim() === ''
-      ? undefined
-      : args.justification
-    validateEscalationArgs(args.sandbox_permissions, justification)
-    if (args.sandbox_permissions === undefined || args.justification === undefined) {
+    const widening = readEscalationArgs(args.sandbox_permissions, args.justification, standingPolicy?.mode)
+    if (widening === undefined) {
+      if (args.sandbox_permissions !== undefined) {
+        this.ctx.logger.debug(`${toolName}: sandbox_permissions "${args.sandbox_permissions}" does not widen "${String(standingPolicy?.mode)}"; running under the effective mode`)
+      }
       return standingPolicy
     }
     const policy = standingPolicy as SandboxExecutionPolicy
     const approvedMode = await approveEscalation(
-      { requestedMode: args.sandbox_permissions, justification: args.justification, effectiveMode: policy.mode, subject: 'operation' },
+      { requestedMode: widening.mode, justification: widening.justification, effectiveMode: policy.mode, subject: 'operation' },
       {
         approver: this.ctx.get('approval'),
         agent: exec.agent,

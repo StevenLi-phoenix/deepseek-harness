@@ -15,14 +15,16 @@ export {
   SandboxEscalationError,
   WIDER_MODES,
   approveEscalation,
-  assertWiderOrRepeated,
   escalationHintMarker,
   sandboxDenialMarker,
   sandboxPermissionsDescription,
+  readEscalationArgs,
   validateEscalationArgs,
+  widensSandbox,
 } from './escalation.ts'
 export type {
   EscalationApproval,
+  EscalationWidening,
   EscalationApprover,
   EscalationOutcome,
   EscalationRequest,

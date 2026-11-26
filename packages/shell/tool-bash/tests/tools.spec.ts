@@ -814,7 +814,7 @@ describe('sandbox escalation through the generic task producer', () => {
     expect(bash.modes).toEqual([])
   })
 
-  it('rejects injected escalation without a sandbox and narrower escalation without prompting', async () => {
+  it('rejects injected escalation without a sandbox, and an unknown current mode without prompting', async () => {
     const plain = await setup()
     const { command, description, sandbox_permissions, justification } = escalate
     for (const args of [escalate, { command, description, sandbox_permissions }, { command, description, justification }]) {
@@ -826,9 +826,6 @@ describe('sandbox escalation through the generic task producer', () => {
     const { ctx } = await setupSandboxed(true)
     const prompted = vi.fn()
     ctx.on('approval/request', () => { prompted(); return Promise.resolve<ApprovalOutcome>('allowed-once') })
-    const result = await call(ctx, 'bash', { ...escalate, sandbox_permissions: 'workspace-write' }, sandboxAgent('danger-full-access'))
-    expect(text(result)).toContain('not strictly wider')
-    expect(prompted).not.toHaveBeenCalled()
 
     const malformed = sandboxAgent()
     ;(malformed.session.snapshotEvents() as unknown as Array<{ type: string; data: { mode: string }; seq: number }>).push({
@@ -836,20 +833,31 @@ describe('sandbox escalation through the generic task producer', () => {
       data: { mode: 'unknown-mode' },
       seq: malformed.session.seq,
     })
-    expect(text(await call(ctx, 'bash', escalate, malformed))).toContain('not strictly wider')
+    const refused = await call(ctx, 'bash', escalate, malformed)
+    expect(text(refused)).toContain('this call\'s current mode "unknown-mode" is not a sandbox mode')
+    expect(refused).toMatchObject({ error: { info: { name: 'SandboxEscalationError', code: 'SANDBOX_ESCALATION_INVALID_ARGUMENT' } } })
+    expect(prompted).not.toHaveBeenCalled()
   })
 
-  it('answers a narrower request with a blank justification by naming the mode to repeat', async () => {
-    // A strict-schema model fills both fields; DSH's 14:30 job-apply subagents sent "workspace-write" with "" under
-    // danger-full-access and read "invalid justification" ten times before trying the current mode.
-    const { ctx } = await setupSandboxed(true)
-    const prompted = vi.fn()
-    ctx.on('approval/request', () => { prompted(); return Promise.resolve<ApprovalOutcome>('allowed-once') })
-    const result = await call(ctx, 'bash', { ...escalate, sandbox_permissions: 'workspace-write', justification: '' }, sandboxAgent('danger-full-access'))
-    expect(text(result)).toContain('not strictly wider')
-    expect(text(result)).toContain('send sandbox_permissions "danger-full-access" (no justification needed)')
-    expect(text(result)).not.toContain('invalid justification')
-    expect(prompted).not.toHaveBeenCalled()
+  it('runs a narrower request under the current mode, with or without a reason, and never asks', async () => {
+    // A strict-schema model fills both fields; DSH's job-apply subagents sent "workspace-write" with "" under
+    // danger-full-access, and each refusal cost a retry of the same command.
+    const { ctx, bash } = await setupSandboxed(true)
+    try {
+      const prompted = vi.fn()
+      ctx.on('approval/request', () => { prompted(); return Promise.resolve<ApprovalOutcome>('allowed-once') })
+      for (const justification of ['', 'filled in', undefined]) {
+        const result = await call(ctx, 'bash', {
+          command: 'true', description: 'narrower filler', sandbox_permissions: 'workspace-write',
+          ...justification === undefined ? {} : { justification },
+        }, sandboxAgent('danger-full-access'))
+        expect(result.isError, text(result)).toBe(false)
+      }
+      expect(bash.modes).toEqual(['danger-full-access', 'danger-full-access', 'danger-full-access'])
+      expect(prompted).not.toHaveBeenCalled()
+    } finally {
+      await ctx.fiber.dispose()
+    }
   })
 
   it.each(['workspace-write', 'danger-full-access'] as const)('runs a repeated %s request without approval', async (mode) => {

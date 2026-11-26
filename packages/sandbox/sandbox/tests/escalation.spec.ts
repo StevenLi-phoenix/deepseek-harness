@@ -14,8 +14,10 @@ import {
   approveEscalation,
   escalationHintMarker,
   sandboxDenialMarker,
+  readEscalationArgs,
   sandboxPermissionsDescription,
   validateEscalationArgs,
+  widensSandbox,
 } from '@deepseek-ai/dsh-sandbox'
 import type { EscalationApprover, EscalationOutcome, SandboxEscalationErrorCode } from '@deepseek-ai/dsh-sandbox'
 
@@ -59,6 +61,47 @@ describe('validateEscalationArgs', () => {
       expect(error).toBeInstanceOf(SandboxEscalationError)
       expect(error).toEqual(escalationError('SANDBOX_ESCALATION_INVALID_ARGUMENT'))
     }
+  })
+})
+
+describe('widensSandbox and readEscalationArgs', () => {
+  it('only a strictly wider known mode widens; a repeat or a narrower mode does not', () => {
+    expect(widensSandbox('workspace-write', 'read-only')).toBe(true)
+    expect(widensSandbox('danger-full-access', 'workspace-write')).toBe(true)
+    expect(widensSandbox('workspace-write', 'workspace-write')).toBe(false)
+    expect(widensSandbox('workspace-write', 'danger-full-access')).toBe(false)
+    expect(widensSandbox('read-only', 'danger-full-access')).toBe(false)
+  })
+
+  it('an unknown requested or current mode fails closed', () => {
+    expect(thrown(() => widensSandbox('unknown-mode', 'read-only'))).toEqual(escalationError('SANDBOX_ESCALATION_INVALID_ARGUMENT'))
+    expect(() => widensSandbox('unknown-mode', 'read-only'))
+      .toThrow('sandbox escalation to "unknown-mode" names no sandbox mode; send one of "workspace-write", "danger-full-access" or leave both fields out')
+    expect(() => widensSandbox('workspace-write', 'unknown-mode' as never))
+      .toThrow('this call\'s current mode "unknown-mode" is not a sandbox mode')
+  })
+
+  it('the strict-schema filler (a repeated or narrower mode, any reason) runs under the effective mode', () => {
+    // DSH job-apply subagents under danger-full-access sent "workspace-write" with "" on bash and write calls.
+    for (const justification of [undefined, '', ' ', 'a reason']) {
+      expect(readEscalationArgs('workspace-write', justification, 'danger-full-access')).toBeUndefined()
+      expect(readEscalationArgs('danger-full-access', justification, 'danger-full-access')).toBeUndefined()
+    }
+    expect(readEscalationArgs(undefined, undefined, 'workspace-write')).toBeUndefined()
+    expect(readEscalationArgs(undefined, '  ', 'workspace-write')).toBeUndefined()
+  })
+
+  it('a widening request needs a non-empty reason, and a reason alone is unpaired', () => {
+    expect(readEscalationArgs('danger-full-access', 'needs the network', 'workspace-write'))
+      .toEqual({ mode: 'danger-full-access', justification: 'needs the network' })
+    expect(() => readEscalationArgs('danger-full-access', '', 'workspace-write')).toThrow(/non-empty sentence/)
+    expect(() => readEscalationArgs('danger-full-access', undefined, 'workspace-write')).toThrow(/requires a justification/)
+    expect(() => readEscalationArgs(undefined, 'orphan reason', 'workspace-write')).toThrow(/only valid together with sandbox_permissions/)
+  })
+
+  it('without a confining mode the pairing rules still apply', () => {
+    expect(readEscalationArgs('workspace-write', 'a reason', undefined)).toEqual({ mode: 'workspace-write', justification: 'a reason' })
+    expect(() => readEscalationArgs('workspace-write', '', undefined)).toThrow(/non-empty sentence/)
   })
 })
 
@@ -123,19 +166,17 @@ describe('approveEscalation', () => {
       .resolves.toBe(mode)
   })
 
-  it('a narrower or unsupported target fails closed without asking', async () => {
+  it('a narrower target returns the effective mode and an unsupported one fails closed, neither asking', async () => {
     const seen: unknown[] = []
     const spy = ingredients({ approver: approver('allowed-once', r => seen.push(r)) })
     await expect(approveEscalation(req({ requestedMode: 'read-only', effectiveMode: 'workspace-write' }), spy))
-      .rejects.toThrow(/not strictly wider than this call's current "workspace-write" mode/)
-    await expect(approveEscalation(req({ requestedMode: 'workspace-write', effectiveMode: 'danger-full-access' as never }), spy))
-      .rejects.toThrow(/not strictly wider/)
-    // The refusal names the one value that runs the call, so a model that must fill the field fixes it in one retry.
-    await expect(approveEscalation(req({ requestedMode: 'workspace-write', effectiveMode: 'danger-full-access' as never }), spy))
-      .rejects.toThrow(new RegExp('this call already runs under "danger-full-access": '
-        + 'send sandbox_permissions "danger-full-access" \\(no justification needed\\) or leave both fields out'))
+      .resolves.toBe('workspace-write')
+    await expect(approveEscalation(req({ requestedMode: 'workspace-write', effectiveMode: 'danger-full-access' }), spy))
+      .resolves.toBe('danger-full-access')
+    await expect(approveEscalation(req({ requestedMode: 'workspace-write', effectiveMode: 'danger-full-access' }), ingredients({ approver: undefined, agent: undefined })))
+      .resolves.toBe('danger-full-access')
     await expect(approveEscalation(req({ requestedMode: 'unknown-mode' }), spy))
-      .rejects.toThrow(/not strictly wider/)
+      .rejects.toThrow(/names no sandbox mode/)
     await expect(approveEscalation(req({ requestedMode: 'unknown-mode' }), spy))
       .rejects.toEqual(escalationError('SANDBOX_ESCALATION_INVALID_ARGUMENT'))
     expect(seen).toEqual([])

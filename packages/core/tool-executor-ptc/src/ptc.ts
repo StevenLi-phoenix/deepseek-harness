@@ -17,7 +17,7 @@ import type { ContentBlock, ToolCallId, ToolSchema } from '@deepseek-ai/dsh-llm'
 import { PtcImage, PtcInspectableValue } from '@deepseek-ai/dsh-ptc-runtime'
 import type { PtcJsonValue, PtcOutput } from '@deepseek-ai/dsh-ptc-runtime'
 import type { PtcBindingFunction, PtcRunResult, PtcRunSandbox, PtcRuntime } from '@deepseek-ai/dsh-ptc-runtime'
-import { approveEscalation, ESCALATION_TARGETS, validateEscalationArgs } from '@deepseek-ai/dsh-sandbox'
+import { approveEscalation, ESCALATION_TARGETS, readEscalationArgs } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxExecutionPolicy } from '@deepseek-ai/dsh-sandbox'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type {} from '@deepseek-ai/dsh-working-directory'
@@ -304,20 +304,23 @@ export function createRunCodeTransport(
         if (runtime.sandboxMode === undefined && (args.sandbox_permissions !== undefined || args.justification !== undefined)) {
           throw new ToolArgsError(['sandbox_permissions and justification are not available for this PTC runtime'])
         }
-        validateEscalationArgs(args.sandbox_permissions, args.justification)
+        const standingPolicy = runtime.sandboxMode === undefined ? undefined : resolveSandboxPolicy(ctx, exec)
+        const widening = readEscalationArgs(args.sandbox_permissions, args.justification, standingPolicy?.mode)
+        if (widening === undefined && args.sandbox_permissions !== undefined) {
+          logger.debug(`${toolName}: sandbox_permissions "${args.sandbox_permissions}" does not widen "${String(standingPolicy?.mode)}"; running under the effective mode`)
+        }
         if (args.timeoutMs !== undefined && runtime.timeout === undefined) {
           throw new ToolArgsError(['timeoutMs is not available for this PTC runtime'])
         }
         if (args.timeoutMs !== undefined && (!Number.isFinite(args.timeoutMs) || args.timeoutMs <= 0)) {
           throw new ToolArgsError(['invalid timeoutMs: expected a positive finite number'])
         }
-        const standingPolicy = runtime.sandboxMode === undefined ? undefined : resolveSandboxPolicy(ctx, exec)
         let policy = standingPolicy
-        if (args.sandbox_permissions !== undefined && args.justification !== undefined) {
+        if (widening !== undefined) {
           const confined = standingPolicy as SandboxExecutionPolicy
           const approvedMode = await approveEscalation({
-            requestedMode: args.sandbox_permissions,
-            justification: args.justification,
+            requestedMode: widening.mode,
+            justification: widening.justification,
             effectiveMode: confined.mode,
             subject: 'program',
           }, {

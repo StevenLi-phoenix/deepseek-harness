@@ -1069,6 +1069,30 @@ describe('sandbox escalation API (write/edit)', () => {
     }])
   })
 
+  it('writes and edits under danger-full-access when the strict-schema filler names the narrower workspace-write', async () => {
+    // A DSH job-apply subagent sent write { sandbox_permissions: "workspace-write", justification: "" } five times
+    // under danger-full-access, read "invalid justification" each time, and fell back to a bash heredoc.
+    const { ctx, fs } = await setupConfining({ approval: true })
+    try {
+      const approval = vi.fn(() => Promise.resolve('allowed-once' as const))
+      ctx.on('approval/request', approval)
+      const agent = escalationAgent([{ type: 'sandbox/mode', data: { mode: 'danger-full-access' } }])
+      for (const [index, justification] of ['', 'a reason', undefined].entries()) {
+        const args = { file_path: `narrower-${index}.txt`, sandbox_permissions: 'workspace-write', ...justification === undefined ? {} : { justification } }
+        const written = await call(ctx, 'write', { ...args, content: 'before' }, agent)
+        expect(written.isError, text(written)).toBe(false)
+        const edited = await call(ctx, 'edit', { ...args, old_string: 'before', new_string: 'after' }, agent)
+        expect(edited.isError, text(edited)).toBe(false)
+        expect(fs.files.get(`key:narrower-${index}.txt`)).toBe('after')
+      }
+      expect(fs.stamped).toHaveLength(6)
+      expect(fs.stamped.every(policy => policy?.mode === 'danger-full-access')).toBe(true)
+      expect(approval).not.toHaveBeenCalled()
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it.each(['workspace-write', 'danger-full-access'] as const)('writes and edits under %s with absent or blank unused reasons', async (mode) => {
     const { ctx, fs } = await setupConfining({ approval: true })
     try {

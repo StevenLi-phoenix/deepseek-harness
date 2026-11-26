@@ -63,7 +63,7 @@ kind: "package-reference"
 
 ### 被拒绝的调用与升权
 
-受限调用被拒绝时，操作会报告指明模式的拒绝标记——`[sandbox: file access denied under <mode> mode]`——组合声明升权能力时还会给出升权提示。模型可以用 `sandbox_permissions`（足以放行的最窄更宽模式）加 `justification` 重试一次完全相同的调用；审批服务为操作取得同意。请求保留审计原因，同时从 `src/locales.ts` 提供英文、中文和日文展示文案，模型给出的理由保持原样。缺失的译文遵循语言服务的回退链，最终回退到英文；请求方负责自己的展示译文。更宽的模式需要审批，且只作用于该次调用。重复指定调用的生效模式无需审批即可成功；更窄的目标仍然无效，拒绝信息会写明应当重复的生效模式，因为在严格工具 schema 下模型无法让 `sandbox_permissions` 留空。未取得授权的升权会在任何命令运行前抛出 `SandboxEscalationError`：字段未配对、理由为空或目标并非严格更宽时为 `SANDBOX_ESCALATION_INVALID_ARGUMENT`；组合中没有审批服务、调用方 Agent 或审批通道时为 `SANDBOX_ESCALATION_UNAVAILABLE`；用户拒绝时为 `SANDBOX_ESCALATION_REJECTED`；审批请求未作决定即结束时为 `SANDBOX_ESCALATION_CANCELLED`。若调用本身已被取消，则改为传播该调用的取消。
+受限调用被拒绝时，操作会报告指明模式的拒绝标记——`[sandbox: file access denied under <mode> mode]`——组合声明升权能力时还会给出升权提示。模型可以用 `sandbox_permissions`（足以放行的最窄更宽模式）加 `justification` 重试一次完全相同的调用；审批服务为操作取得同意。请求保留审计原因，同时从 `src/locales.ts` 提供英文、中文和日文展示文案，模型给出的理由保持原样。缺失的译文遵循语言服务的回退链，最终回退到英文；请求方负责自己的展示译文。更宽的模式需要审批，且只作用于该次调用。在严格工具 schema 下模型无法让 `sandbox_permissions` 留空，即使调用不需要更多权限也会填写该字段：重复调用的生效模式或指定更窄的模式都不授予任何权限，无需理由或审批，调用照常在生效模式下运行。未取得授权的升权会在任何命令运行前抛出 `SandboxEscalationError`：字段未配对、升权请求的理由为空，或请求模式、当前模式不在阶梯上时为 `SANDBOX_ESCALATION_INVALID_ARGUMENT`；组合中没有审批服务、调用方 Agent 或审批通道时为 `SANDBOX_ESCALATION_UNAVAILABLE`；用户拒绝时为 `SANDBOX_ESCALATION_REJECTED`；审批请求未作决定即结束时为 `SANDBOX_ESCALATION_CANCELLED`。若调用本身已被取消，则改为传播该调用的取消。
 
 ### 故障关闭行为
 
@@ -96,7 +96,7 @@ kind: "package-reference"
 
 ### 升权编排
 
-阶梯是封闭表——`read-only` 可升权到 `workspace-write` 或 `danger-full-access`，`workspace-write` 只能升权到 `danger-full-access`——在执行时检查，绝不写入工具 schema，schema 的枚举保持封闭的目标词汇。[`approveEscalation`](src/escalation.ts) 在请求重复当前模式时无需审批就返回该模式，通过 [`assertWiderOrRepeated`](src/escalation.ts) 拒绝更窄或不支持的目标，并为更宽模式请求审批。调用方先校验 `sandbox_permissions`/`justification` 配对。
+阶梯是封闭表——`read-only` 可升权到 `workspace-write` 或 `danger-full-access`，`workspace-write` 只能升权到 `danger-full-access`——在执行时检查，绝不写入工具 schema，schema 的枚举保持封闭的目标词汇。[`widensSandbox`](src/escalation.ts) 区分严格更宽的目标与重复或更窄的目标，并拒绝不在阶梯上的模式。[`readEscalationArgs`](src/escalation.ts) 在任何内容运行前用它判断一次调用的字段：返回需要非空理由的升权请求，或在调用按生效模式运行时不返回任何内容。[`approveEscalation`](src/escalation.ts) 对不升权的目标无需审批即返回生效模式，并为更宽模式请求审批。
 
 ### 可写根目录
 

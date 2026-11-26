@@ -23,8 +23,8 @@ import type { SandboxMode } from './index.ts'
 
 /**
  * Every {@link SandboxEscalationError} code:
- * - `SANDBOX_ESCALATION_INVALID_ARGUMENT` — the escalation fields are unpaired, the justification is blank, or the
- *   target is not strictly wider than the call's effective mode; the model corrects the request.
+ * - `SANDBOX_ESCALATION_INVALID_ARGUMENT` — the escalation fields are unpaired, a widening request's justification is
+ *   blank, or the target names no sandbox mode; the model corrects the request.
  * - `SANDBOX_ESCALATION_UNAVAILABLE` — the composition cannot ask for approval: no approval service, no calling Agent,
  *   or no approval channel.
  * - `SANDBOX_ESCALATION_REJECTED` — the user declined the escalation; the operation stays denied.
@@ -76,27 +76,66 @@ export const WIDER_MODES: Record<string, readonly SandboxMode[]> = {
  */
 export const ESCALATION_TARGETS: readonly SandboxMode[] = ['workspace-write', 'danger-full-access']
 
-/** Every mode the ladder knows; the refusal below names one of these as the value to repeat. */
+/** Every mode the ladder knows. */
 const KNOWN_MODES: readonly string[] = ['read-only', 'workspace-write', 'danger-full-access']
 
 /**
- * Refuse a target that is not strictly wider than the call's effective mode, before anything executes.
- * Repeating the effective mode is not a refusal (it needs no approval). When the effective mode is known,
- * the refusal names it as the value that runs the call: a model under strict tool schemas must fill
- * `sandbox_permissions` with some enum value, so it can only fix the request by repeating the mode.
- * A violation throws {@link SandboxEscalationError} `SANDBOX_ESCALATION_INVALID_ARGUMENT`.
+ * Whether a requested mode is strictly wider than the call's effective mode, judged before anything executes.
+ * A repeat of the effective mode, or a narrower known mode, does not widen: a model under strict tool schemas must
+ * fill `sandbox_permissions` with some enum value even on a call that needs nothing more, so such a value grants
+ * nothing and changes nothing, and the call runs under its effective mode. A requested or effective mode outside the
+ * ladder throws {@link SandboxEscalationError} `SANDBOX_ESCALATION_INVALID_ARGUMENT`, so an unknown mode fails closed.
  * @param mode - the requested target mode.
  * @param effectiveMode - the call's effective mode.
+ * @returns true when the request asks for a wider mode than the call already has.
  */
-export function assertWiderOrRepeated(mode: string, effectiveMode: SandboxMode): void {
-  if (mode === effectiveMode || (WIDER_MODES[effectiveMode] ?? []).includes(mode as SandboxMode)) return
-  const repeat = KNOWN_MODES.includes(effectiveMode)
-    ? `; this call already runs under "${effectiveMode}": send sandbox_permissions "${effectiveMode}" (no justification needed) or leave both fields out`
-    : ''
-  throw new SandboxEscalationError(
-    `sandbox escalation to "${mode}" is not strictly wider than this call's current "${effectiveMode}" mode${repeat}`,
-    'SANDBOX_ESCALATION_INVALID_ARGUMENT',
-  )
+export function widensSandbox(mode: string, effectiveMode: SandboxMode): boolean {
+  if (!KNOWN_MODES.includes(effectiveMode)) {
+    throw new SandboxEscalationError(
+      `sandbox escalation to "${mode}" cannot be judged: this call's current mode "${effectiveMode}" is not a sandbox mode`,
+      'SANDBOX_ESCALATION_INVALID_ARGUMENT',
+    )
+  }
+  if (!KNOWN_MODES.includes(mode)) {
+    throw new SandboxEscalationError(
+      `sandbox escalation to "${mode}" names no sandbox mode; send one of ${ESCALATION_TARGETS.map(target => `"${target}"`).join(', ')} or leave both fields out`,
+      'SANDBOX_ESCALATION_INVALID_ARGUMENT',
+    )
+  }
+  return (WIDER_MODES[effectiveMode] ?? []).includes(mode as SandboxMode)
+}
+
+/** A `sandbox_permissions` request that widens the call's mode, with the reason the approval prompt shows. */
+export interface EscalationWidening {
+  /** The strictly wider mode requested. */
+  mode: string
+  /** The model's non-empty one-sentence reason. */
+  justification: string
+}
+
+/**
+ * Read one call's escalation fields against its effective mode, before anything executes. Only a strictly wider
+ * mode is an escalation, and it needs a non-empty justification; a repeated or narrower mode needs neither and the
+ * call runs under its effective mode ({@link widensSandbox}). Without `sandbox_permissions`, a blank justification is
+ * the same strict-schema filler and is ignored, while a non-empty one is rejected as unpaired. Violations throw
+ * {@link SandboxEscalationError} `SANDBOX_ESCALATION_INVALID_ARGUMENT`.
+ * @param sandboxPermissions - the raw `sandbox_permissions` argument, if given.
+ * @param justification - the raw `justification` argument, if given.
+ * @param effectiveMode - the call's effective mode, or `undefined` when nothing confines the call.
+ * @returns the widening request for {@link approveEscalation}, or `undefined` when the call runs under its effective mode.
+ */
+export function readEscalationArgs(
+  sandboxPermissions: string | undefined,
+  justification: string | undefined,
+  effectiveMode: SandboxMode | undefined,
+): EscalationWidening | undefined {
+  if (sandboxPermissions === undefined) {
+    validateEscalationArgs(undefined, justification?.trim() === '' ? undefined : justification)
+    return undefined
+  }
+  if (effectiveMode !== undefined && !widensSandbox(sandboxPermissions, effectiveMode)) return undefined
+  validateEscalationArgs(sandboxPermissions, justification)
+  return { mode: sandboxPermissions, justification: justification as string }
 }
 
 /**
@@ -212,16 +251,16 @@ export interface EscalationRequest {
   requestedMode: string
   /** The model's one-sentence reason, shown verbatim to the user inside the audit reason. */
   justification: string
-  /** The call's effective mode (session override ?? composition default); repeating it needs no approval. */
+  /** The call's effective mode (session override ?? composition default); repeating it or naming a narrower mode needs no approval. */
   effectiveMode: SandboxMode
   /** The family's noun for the escalated action in user-facing texts (`command` for bash, `operation` for fs). */
   subject: string
 }
 
 /**
- * Resolve a sandbox permission request before execution. Repeating the call's
- * effective mode returns it without approval. A strictly wider mode requires
- * approval and applies only to this call. Narrower or unsupported targets,
+ * Resolve a sandbox permission request before execution. A repeated or
+ * narrower mode returns the call's effective mode without approval. A strictly
+ * wider mode requires approval and applies only to this call. Unknown targets,
  * missing approval services or agents for widening, and non-grant outcomes
  * throw {@link SandboxEscalationError} before execution; a `cancelled`
  * outcome while `approval.signal` is aborted rethrows the signal's reason.
@@ -231,11 +270,10 @@ export interface EscalationRequest {
  */
 export async function approveEscalation<A, C>(request: EscalationRequest, approval: EscalationApproval<A, C>): Promise<SandboxMode> {
   const { requestedMode: mode, effectiveMode, justification, subject } = request
-  if (mode === effectiveMode) return effectiveMode
   // Strict widening is an EXECUTION check against the call's effective mode —
   // deliberately not a schema constraint (the enum is the closed target
   // vocabulary; the effective mode is per-call truth).
-  assertWiderOrRepeated(mode, effectiveMode)
+  if (!widensSandbox(mode, effectiveMode)) return effectiveMode
   if (approval.approver === undefined) {
     throw new SandboxEscalationError(
       `sandbox escalation to "${mode}" requires approval, but no approval service is composed`,
