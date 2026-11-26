@@ -30,7 +30,7 @@ import { isComboboxInput, matchOption, readComboboxOptions, readOptions, readSel
 import type { KeepalivePage } from './keepalive.ts'
 import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
 import { BrowserTabs, TabNavigationError, type ActiveTab, type ClosedTab, type PopupTab } from './tabs.ts'
-import { findSameNameCover, probeElement, readElementFacts, type ElementFacts } from './visibility.ts'
+import { findSameNameCover, probeElement, readElementFacts, scoreVisibility, VISIBILITY_THRESHOLD, type ElementFacts } from './visibility.ts'
 
 /** How long a context gets to close before shutdown stops waiting for it. */
 export const SHUTDOWN_TIMEOUT_MS = 10_000
@@ -50,6 +50,9 @@ const COMBOBOX_WAIT_MS = 2_500
 
 /** How often the dropdown's list is read while waiting for it. */
 const COMBOBOX_POLL_MS = 250
+
+/** How long a listed option may take to finish appearing (a fade or slide-in) before the guard judges it. */
+const OPTION_SETTLE_MS = 1_500
 
 /** How long a recovery waits after the old context closes, before it relaunches. */
 export const RELAUNCH_SETTLE_MS = 1_500
@@ -789,7 +792,18 @@ export class HeadlessBrowserSession {
     }
     this.#log.info('headless-browser: %s listed %d option(s) after typing; choosing option %d', ref, options.length, index + 1)
     const locator = resolution.scope.locator(`[id=${JSON.stringify(option.value)}]`)
-    const facts = readElementFacts(await locator.evaluate(probeElement))
+    // A menu that fades or slides in lists its options before a person can see
+    // them (Eightfold's Phone Device Type starts at opacity 0): wait for the
+    // option to finish appearing, as a person would, then judge it. One that
+    // never shows is still refused.
+    let facts = readElementFacts(await locator.evaluate(probeElement))
+    let settled = 0
+    while (settled < OPTION_SETTLE_MS && scoreVisibility(facts).score < VISIBILITY_THRESHOLD) {
+      await page.waitForTimeout(COMBOBOX_POLL_MS)
+      settled += COMBOBOX_POLL_MS
+      facts = readElementFacts(await locator.evaluate(probeElement))
+    }
+    if (settled > 0) this.#log.info('headless-browser: %s option %d took %d ms to appear', ref, index + 1, settled)
     this.#accept(this.#guard.decideTarget({
       action: 'click',
       url: resolution.url,
