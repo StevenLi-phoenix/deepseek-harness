@@ -657,7 +657,9 @@ describe('VoiceCall owner calls', () => {
 
   it('records calls a restart cut off as failed', async () => {
     const pool = new MemoryMediaPool()
-    const base = { initiator: 'owner', reason: null, createdAt: 1, answeredAt: null, endedAt: null, outcome: null, detail: null, deviceId: null, transcript: [] } as const
+    const base = {
+      initiator: 'owner' as const, reason: null, createdAt: 1, answeredAt: null, endedAt: null, outcome: null, detail: null, deviceId: null, transcript: [],
+    }
     await seedCalls(pool, {
       'aaaaaaaa-0000-4000-8000-000000000001': { ...base, state: 'active', sessionId: 'call-9' },
       'aaaaaaaa-0000-4000-8000-000000000002': { ...base, state: 'ringing', sessionId: null },
@@ -869,7 +871,7 @@ describe('VoiceCall speech providers', () => {
     await h.settle(1000)
     expect(media.frames).toBeGreaterThan(0)
 
-    const voice = { asrEnabled: true, ttsEnabled: true, describe: () => ({ tts: { maxChars: 100 } }), speak: vi.fn(), transcribe: vi.fn(async () => ({ text: '  听到了 ' })) }
+    const voice = { asrEnabled: true, ttsEnabled: true, describe: () => ({ tts: { maxChars: 100 } }), speak: vi.fn(), transcribe: vi.fn(async (_path: string) => ({ text: '  听到了 ' })) }
     const viaVoice = await harness({ config: { speech: { stt: 'server', tts: 'server' } }, services: { voice } })
     await viaVoice.register()
     const call = await viaVoice.ownerCall()

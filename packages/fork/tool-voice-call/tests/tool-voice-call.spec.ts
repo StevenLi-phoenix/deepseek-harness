@@ -17,7 +17,7 @@ async function mount(voiceCall: unknown, config: Partial<ToolVoiceCall.Config> =
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(NativeToolExecutor)
   if (voiceCall !== undefined) ctx.provide('voiceCall', voiceCall as never)
-  await ctx.plugin(ToolVoiceCall, ToolVoiceCall.Config(config))
+  await ctx.plugin(ToolVoiceCall, ToolVoiceCall.Config(config as never))
   const call = async (args: unknown) => (await ctx.tools.execute({ signal: new AbortController().signal, calls: [{ type: 'tool-call', id: ToolCallId('call-owner'), name: 'call_owner', arguments: JSON.stringify(args) }] })).results[0]!.result
   return { ctx, call, logs }
 }
@@ -37,7 +37,10 @@ const view: CallView = {
   outcome: 'completed',
 }
 
-const ended = (overrides: Partial<CallView> = {}, transcript: Array<{ role: 'owner' | 'agent'; text: string }> = []): RingResult => ({
+type Ended = Extract<RingResult, { status: 'ended' }>
+type Line = { role: 'owner' | 'agent'; text: string }
+
+const ended = (overrides: Partial<CallView> = {}, transcript: Line[] = []): Ended => ({
   status: 'ended',
   call: { ...view, ...overrides },
   detail: 'the owner hung up',
