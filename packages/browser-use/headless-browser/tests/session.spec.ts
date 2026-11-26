@@ -33,7 +33,7 @@ import {
   type SessionDeps,
 } from '../src/session.ts'
 import { TabNavigationError } from '../src/tabs.ts'
-import { findSameNameCover, probeElement, type ElementFacts } from '../src/visibility.ts'
+import { findSameNameCover, findToggleStandIn, probeElement, type ElementFacts } from '../src/visibility.ts'
 
 const LOG = {
   info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn(),
@@ -155,6 +155,8 @@ class FakePage {
   readonly facts = new Map<Element, Partial<ElementFacts>>()
   /** The same-name control drawn over an element, per element. */
   readonly covers = new Map<Element, Element>()
+  /** The label or box a person clicks for a checkbox or radio the page hides, per element. */
+  readonly standIns = new Map<Element, Element>()
   readonly frames: FakeFrameSpec[] = []
   chooser: FakeChooser | undefined
   readonly mouseClicks: [number, number][] = []
@@ -238,7 +240,8 @@ class FakePage {
   }
 
   #coverHandle(fn: OnElement, node: Element): JSHandle {
-    if (fn !== findSameNameCover) throw new Error('the fake page only hands out cover handles')
+    if (fn === findToggleStandIn) return this.#jsHandle(this.standIns.get(node) ?? null)
+    if (fn !== findSameNameCover) throw new Error('the fake page only hands out cover and stand-in handles')
     return this.#jsHandle(this.covers.get(node) ?? null)
   }
 
@@ -823,6 +826,23 @@ describe('guarded targets', () => {
     expect(outcome.target).toMatchObject({ index: 1, name: 'Continue' })
     expect(page.clicked).toEqual([element('#overlay')])
     expect(LOG.info).toHaveBeenCalledWith('headless-browser: %s match %d is covered by a %s named %s; scoring the cover too', '#go', 0, 'div', '"Continue"')
+    await session.close()
+  })
+
+  it('clicks the box that stands in for a checkbox the page hides, and leaves a visible input alone', async () => {
+    document.body.innerHTML = '<div id="row" aria-label="Follow Cassidy"><input type="checkbox" id="follow" aria-label="Follow Cassidy"></div>'
+      + '<input type="checkbox" id="plain" aria-label="Remember me">'
+    const { session, page } = await withTab()
+    page.facts.set(element('#follow'), { width: 0, height: 0, opacity: 0, pointerEvents: 'none' })
+    page.standIns.set(element('#follow'), element('#row'))
+    page.standIns.set(element('#plain'), element('#row'))
+    const outcome = await session.click({ selector: '#follow' })
+    expect(outcome.target).toMatchObject({ index: 1, name: 'Follow Cassidy' })
+    expect(page.clicked).toEqual([element('#row')])
+    expect(LOG.info).toHaveBeenCalledWith('headless-browser: %s match %d is a hidden %s; scoring the %s named %s that stands in for it',
+      '#follow', 0, 'toggle', 'div', '"Follow Cassidy"')
+    await session.click({ selector: '#plain' })
+    expect(page.clicked).toEqual([element('#row'), element('#plain')])
     await session.close()
   })
 })

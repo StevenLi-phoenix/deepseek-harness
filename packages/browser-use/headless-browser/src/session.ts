@@ -30,7 +30,7 @@ import { isComboboxInput, matchOption, readComboboxOptions, readOptions, readSel
 import type { KeepalivePage } from './keepalive.ts'
 import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
 import { BrowserTabs, TabNavigationError, type ActiveTab, type ClosedTab, type PopupTab } from './tabs.ts'
-import { findSameNameCover, probeElement, readElementFacts, scoreVisibility, VISIBILITY_THRESHOLD, type ElementFacts } from './visibility.ts'
+import { findSameNameCover, findToggleStandIn, probeElement, readElementFacts, scoreVisibility, VISIBILITY_THRESHOLD, type ElementFacts } from './visibility.ts'
 
 /** How long a context gets to close before shutdown stops waiting for it. */
 export const SHUTDOWN_TIMEOUT_MS = 10_000
@@ -1032,6 +1032,17 @@ export class HeadlessBrowserSession {
     for (let index = 0; index < count; index += 1) {
       const candidate = readElementFacts(await locator.nth(index).evaluate(probeElement))
       facts.push(candidate)
+      if (candidate.tag === 'input' && scoreVisibility(candidate).score < VISIBILITY_THRESHOLD) {
+        // A checkbox or radio the page draws itself hides the native input; its label or same-name box is what a person clicks.
+        const standIn = (await locator.nth(index).evaluateHandle(findToggleStandIn)).asElement()
+        if (standIn !== null) {
+          const standInFacts = readElementFacts(await standIn.evaluate(probeElement))
+          this.#log.info('headless-browser: %s match %d is a hidden %s; scoring the %s named %s that stands in for it',
+            selector, index, candidate.role ?? 'toggle', standInFacts.tag, JSON.stringify(standInFacts.name))
+          covers.push({ facts: standInFacts, element: standIn })
+          continue
+        }
+      }
       if (!candidate.ariaHidden && candidate.occlusion >= 1) continue
       // A same-name overlay on top is what a person's click reaches; it is scored after the matches.
       const cover = (await locator.nth(index).evaluateHandle(findSameNameCover)).asElement()

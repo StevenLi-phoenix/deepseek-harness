@@ -129,6 +129,35 @@ describe.skipIf(!AVAILABLE)('action guard in a real page', () => {
     expect(await (await app.browser.page()).title()).toBe('checked')
   }, 120_000)
 
+  it('clicks the row a person sees for a checkbox LinkedIn hides, and the label of a hidden radio', async () => {
+    const app = await boot()
+    await load(app, [
+      '<div id="row" style="display:flex;gap:8px;align-items:center;width:420px;padding:8px">',
+      '<div style="position:relative;width:16px;height:16px;border:1px solid #333">',
+      '<input type="checkbox" id="follow" checked aria-label="Follow Cassidy to stay up to date with their page"',
+      ' style="position:absolute;width:0;height:0;margin:0;opacity:0;pointer-events:none"></div>',
+      '<span>Follow Cassidy to stay up to date with their page</span></div>',
+      '<input type="radio" id="resume" name="resume" style="position:absolute;width:1px;height:1px;margin:0;opacity:0;pointer-events:none;clip:rect(0 0 0 0)">',
+      '<label for="resume" style="display:block;padding:8px">Shuyu_Li_Resume.pdf</label>',
+      '<script>document.getElementById("row").addEventListener("click", () => { const box = document.getElementById("follow"); box.checked = !box.checked })</script>',
+    ].join(''))
+    const page = await app.browser.page()
+    const follow = await app.browser.click({ selector: '#follow' })
+    expect(follow.target).toMatchObject({ ref: '#follow', index: 1, name: 'Follow Cassidy to stay up to date with their page' })
+    expect(await page.locator('#follow').isChecked()).toBe(false)
+    const resume = await app.browser.click({ selector: '#resume' })
+    expect(resume.target).toMatchObject({ ref: '#resume', index: 1, name: 'Shuyu_Li_Resume.pdf' })
+    expect(await page.locator('#resume').isChecked()).toBe(true)
+  }, 120_000)
+
+  it('still refuses a hidden checkbox that shares its box with another control', async () => {
+    const app = await boot()
+    await load(app, '<div style="width:300px;padding:8px">Verify you are human<input type="checkbox" id="t" aria-label="Verify you are human"'
+      + ' style="width:0;height:0;margin:0;opacity:0"><button>Go</button></div>')
+    const blocked = await refusalOf(app.browser.click({ selector: '#t' }))
+    expect(blocked.rule).toBe('visibility')
+  }, 120_000)
+
   it('still clicks a visible, benign element', async () => {
     const app = await boot()
     await load(app, [

@@ -451,6 +451,54 @@ export function findSameNameCover(element: Element): Element | null {
 }
 
 /**
+ * The visible control a person clicks for a checkbox or radio the page hides
+ * completely: LinkedIn's Easy Apply draws each box itself and shrinks the native
+ * input to nothing (zero size, opacity 0, no pointer events), so the "Follow
+ * <company>" box and the résumé radio refused every click. Returns the input's
+ * painted `<label>`, or else the nearest painted ancestor (four levels up at
+ * most) whose label or text is the input's accessible name and that holds no
+ * other control; nothing otherwise, so a hidden decoy beside other controls
+ * stays refused. The stand-in is scored and name-checked like any target.
+ * Playwright serialises this function, so it must not reference anything
+ * outside itself; run it after {@link probeElement}, which scrolled the element
+ * into view.
+ * @param element - the hidden checkbox or radio.
+ * @returns the element a person's click reaches, or `null`.
+ */
+export function findToggleStandIn(element: Element): Element | null {
+  const view = element.ownerDocument.defaultView
+  if (view === null || !(element instanceof view.HTMLInputElement)) return null
+  if (element.type !== 'checkbox' && element.type !== 'radio') return null
+  const fold = (text: string): string => text.replace(/\s+/gu, ' ').trim().toLowerCase()
+  const painted = (node: Element): boolean => {
+    const box = node.getBoundingClientRect()
+    if (box.width * box.height <= 0) return false
+    const style = view.getComputedStyle(node)
+    if (style.visibility !== 'visible' || style.pointerEvents === 'none') return false
+    let opacity = 1
+    for (let current: Element | null = node; current !== null; current = current.parentElement) {
+      const value = Number.parseFloat(view.getComputedStyle(current).opacity)
+      if (Number.isFinite(value)) opacity *= value
+    }
+    return opacity > 0.05
+  }
+  const labels = Array.from(element.labels ?? [])
+  const label = labels.find(painted)
+  if (label !== undefined) return label
+  const name = fold(element.getAttribute('aria-label') ?? labels.map(node => node.textContent).join(' '))
+  if (name === '') return null
+  const nameOf = (node: Element): string => fold(node.getAttribute('aria-label') ?? node.textContent)
+  const CONTROLS = 'input, select, textarea, button, a[href], [role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="link"]'
+  let node = element.parentElement
+  for (let depth = 0; node !== null && depth < 4 && node !== element.ownerDocument.body; depth += 1, node = node.parentElement) {
+    // A wider ancestor holds the same other control, so the climb stops at the first one.
+    if (Array.from(node.querySelectorAll(CONTROLS)).some(control => control !== element)) return null
+    if (painted(node) && nameOf(node) === name) return node
+  }
+  return null
+}
+
+/**
  * Score the facts the probe returned.
  * @param facts - one element's measurements.
  * @returns the score, every test's value, and the tests that failed.

@@ -11,7 +11,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { findSameNameCover, probeElement, readElementFacts, scoreVisibility } from '../src/visibility.ts'
+import { findSameNameCover, findToggleStandIn, probeElement, readElementFacts, scoreVisibility } from '../src/visibility.ts'
 
 /** A box in viewport CSS pixels. */
 interface Box {
@@ -571,6 +571,32 @@ describe('the link and form a click would use', () => {
       + '<div id="tab" role="tab">Overview</div>')
     expect(['#name', '#bio', '#team', '#tab'].map(selector => probeElement(find(selector)).value)).toEqual(['Ada', 'Engineer', 'web', ''])
     expect(probeElement(find('#tab')).role).toBe('tab')
+  })
+})
+
+describe('the box that stands in for a checkbox or radio the page hides', () => {
+  it('takes the painted label of a radio, as LinkedIn lists the résumé to send', () => {
+    mount('<input type="radio" id="resume" name="resume"><label id="name" for="resume">Shuyu_Li_Resume.pdf</label>')
+    layout.place(find('#name'), { left: 0, top: 0, width: 200, height: 20 })
+    expect(findToggleStandIn(find('#resume'))).toBe(find('#name'))
+  })
+
+  it('takes the row whose text is the checkbox\'s name, as LinkedIn draws "Follow <company>"', () => {
+    // Live LinkedIn Easy Apply review step, 2026-11-26: the native input is 0×0 at opacity 0 inside the box it draws.
+    mount('<div id="row"><div id="box"><input type="checkbox" id="follow" checked aria-label="Follow Cassidy to stay up to date with their page"></div>'
+      + '<span>Follow Cassidy to stay up to date  with their page</span></div>')
+    layout.place(find('#box'), { left: 0, top: 0, width: 16, height: 16 }).place(find('#row'), { left: 0, top: 0, width: 400, height: 24 })
+    expect(findToggleStandIn(find('#follow'))).toBe(find('#row'))
+  })
+
+  it('finds nothing for a hidden box beside another control, an unpainted label, or a field that is not a toggle', () => {
+    mount('<div id="wrap">Verify you are human<input type="checkbox" id="decoy" aria-label="Verify you are human"><button>Go</button></div>'
+      + '<input type="checkbox" id="unlabelled"><label for="unlabelled">Remember me</label>'
+      + '<div id="field" aria-label="Email"><input type="email" id="email" aria-label="Email"></div>')
+    layout.place(find('#wrap'), { left: 0, top: 0, width: 400, height: 24 }).place(find('#field'), { left: 0, top: 40, width: 400, height: 24 })
+    expect(findToggleStandIn(find('#decoy'))).toBeNull()
+    expect(findToggleStandIn(find('#unlabelled'))).toBeNull()
+    expect(findToggleStandIn(find('#email'))).toBeNull()
   })
 })
 
