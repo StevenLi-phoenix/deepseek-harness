@@ -201,7 +201,12 @@ export function probeElement(element: Element): ElementFacts {
     const clipsY = style.overflowY !== 'visible'
     // An element's own overflow clips its content, not its box: Chrome gives every
     // input `overflow: clip`, which would otherwise shave its border off its score.
-    if ((!clipsX && !clipsY) || node === element || node === doc.documentElement || node === doc.body) continue
+    // Overflow clips only a box that holds blocks: an inline or display:contents
+    // ancestor clips nothing, and its client box reads as zero, which would shrink
+    // the target to nothing (SuccessFactors draws its sign-in dialog inside
+    // `<div class="modal">` at display:inline with overflow:auto).
+    const clipsNothing = style.display === 'inline' || style.display === 'contents'
+    if ((!clipsX && !clipsY) || clipsNothing || node === element || node === doc.documentElement || node === doc.body) continue
     const box = node.getBoundingClientRect()
     if (clipsX) {
       clipLeft = Math.max(clipLeft, box.left + node.clientLeft)

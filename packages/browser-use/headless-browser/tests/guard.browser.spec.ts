@@ -141,6 +141,18 @@ describe.skipIf(!AVAILABLE)('action guard in a real page', () => {
     expect(await (await app.browser.page()).title()).toBe('clicked')
   }, 120_000)
 
+  it('clicks a link inside an inline element that sets overflow, which clips nothing (SuccessFactors sign-in)', async () => {
+    const app = await boot()
+    await load(app, [
+      '<div class="modal" style="display:inline;overflow:auto"><div style="padding:40px">',
+      '<a id="create" href="#register">Create an account</a></div></div>',
+      '<script>document.getElementById("create").addEventListener("click", function () { document.title = "clicked" })</script>',
+    ].join(''))
+    const outcome = await app.browser.click({ selector: '#create' })
+    expect(outcome.target).toMatchObject({ ref: '#create', index: 0, score: 1 })
+    expect(await (await app.browser.page()).title()).toBe('clicked')
+  }, 120_000)
+
   it('scores an element that is half outside the viewport between zero and one', async () => {
     const app = await boot()
     await load(app, '<button id="t" style="position:fixed;left:0;top:760px;width:200px;height:80px">Continue</button>')

@@ -273,6 +273,22 @@ describe('measuring what a person sees', () => {
     expect(probeElement(input)).toMatchObject({ clippedBy: 2, clippingFraction: 0.24, viewportFraction: 0.24, occlusion: 1 })
   })
 
+  it('skips an inline or display:contents ancestor, whose overflow clips nothing and whose client box reads as zero', () => {
+    // SuccessFactors draws its sign-in dialog inside `<div class="modal">` at display:inline with overflow:auto.
+    mount('<div id="modal" style="display:inline; overflow-x:auto; overflow-y:auto">'
+      + '<div id="slot" style="display:contents; overflow-x:hidden; overflow-y:hidden">'
+      + '<a id="create" href="/register">Create an account</a></div></div>')
+    const modal = find('#modal')
+    const link = find('#create')
+    layout
+      .place(modal, { left: 20, top: 189, width: 1240, height: 397 })
+      .client(modal, NO_BOX)
+      .client(find('#slot'), NO_BOX)
+      .place(link, { left: 310, top: 519, width: 113, height: 18 })
+      .paint(link)
+    expect(probeElement(link)).toMatchObject({ clippedBy: 0, clippingFraction: 1, viewportFraction: 1, occlusion: 1 })
+  })
+
   it('counts only the part of the box inside the viewport', () => {
     mount('<button id="fold">Below the fold</button><button id="right">Off to the right</button>'
       + '<button id="below">Off the bottom</button><button id="none">No box</button>')
