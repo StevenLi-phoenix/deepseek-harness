@@ -176,6 +176,11 @@ export interface OpenResult {
   readonly url: string
   /** The tab's document title. */
   readonly title: string
+  /**
+   * Id of the tab the URL loaded in. Agents sharing the browser pass it as `tab`
+   * on every later call, since another agent can change the active tab.
+   */
+  readonly tab: string
   /** Files the URL turned out to be, already saved; set instead of a page. */
   readonly downloads?: readonly DownloadRecord[]
 }
@@ -470,58 +475,65 @@ export class HeadlessBrowserSession {
   }
 
   /**
-   * Open a URL in the active tab, or in a new one.
+   * Open a URL in the active tab, a named tab, or a new one.
    * @param url - absolute URL; the page reports a relative one as invalid.
-   * @param newTab - open a new tab instead of reusing the active one.
+   * @param newTab - open a new tab instead of reusing one; a named tab is then ignored.
    * @param allowOrigin - allow the move when the destination is another registrable domain.
-   * @returns the settled URL and the document title.
+   * @param tabId - tab to load the URL in; the active tab when omitted.
+   * @returns the settled URL, the document title, and the tab it loaded in.
    * @throws ActionRefusedError - when the destination is another site and this call did not allow it.
+   * @throws TabNotFoundError - when `tabId` names no open tab.
    */
-  async open(url: string, newTab = false, allowOrigin = false): Promise<OpenResult> {
+  async open(url: string, newTab = false, allowOrigin = false, tabId?: string): Promise<OpenResult> {
+    const named = newTab ? undefined : tabId
     return await this.#guarded('opening the page', async () => {
-      const current = await this.page()
+      const current = await this.page(named)
       const decision = this.#guard.decideNavigation({ action: 'open', url: current.url(), target: url, allowOrigin })
       if (!decision.allowed) throw new ActionRefusedError(blockedAction(refusalOf(decision)))
       const mark = this.#downloads.mark()
-      let opened: { url: string; title: string }
+      let opened: { url: string; title: string; tab: string }
       try {
         opened = newTab
           ? await this.#openTab(url)
-          : await this.#openHere(url)
+          : await this.#openHere(url, named)
       } catch (error: unknown) {
         // A URL that answers with an attachment is a file, not a page: the
         // navigation fails and the download follows. Report the file.
         if (!(error instanceof TabNavigationError) || !isDownloadStarting(error.message)) throw error
         const downloads = await this.#downloads.since(mark, DOWNLOAD_START_WAIT_MS)
         if (downloads.length === 0) throw error
-        const page = await this.page()
+        const page = await this.page(named)
+        const tab = named ?? (await this.tabs().active()).id
         this.#log.info('headless-browser: %s was a download, %d file(s) kept', url.split('?')[0], downloads.length)
-        return { url: page.url(), title: await page.title(), downloads }
+        return { url: page.url(), title: await page.title(), tab, downloads }
       }
       this.#guard.anchor(opened.url)
+      this.#log.info('headless-browser: opened %s in tab %s%s', pageOrigin(opened.url), opened.tab, newTab ? ' (new)' : '')
       return opened
     })
   }
 
   /**
-   * Navigate the active tab and report what settled.
+   * Navigate the active or a named tab and report what settled.
    * @param url - absolute URL to load.
-   * @returns the settled URL and the document title.
+   * @param tabId - tab to navigate; the active tab when omitted.
+   * @returns the settled URL, the document title, and the tab's id.
    */
-  async #openHere(url: string): Promise<{ url: string; title: string }> {
-    await this.tabs().navigate(url)
-    const page = await this.page()
-    return { url: page.url(), title: await page.title() }
+  async #openHere(url: string, tabId?: string): Promise<{ url: string; title: string; tab: string }> {
+    const tab = tabId ?? (await this.tabs().active()).id
+    await this.tabs().navigate(url, tab)
+    const page = await this.page(tab)
+    return { url: page.url(), title: await page.title(), tab }
   }
 
   /**
    * Open a URL in a new tab and report what settled.
    * @param url - absolute URL to load.
-   * @returns the new tab's URL and title.
+   * @returns the new tab's URL, title and id.
    */
-  async #openTab(url: string): Promise<{ url: string; title: string }> {
+  async #openTab(url: string): Promise<{ url: string; title: string; tab: string }> {
     const tab = await this.tabs().create(url)
-    return { url: tab.url, title: tab.title }
+    return { url: tab.url, title: tab.title, tab: tab.id }
   }
 
   /**

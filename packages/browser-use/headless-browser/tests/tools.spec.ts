@@ -107,7 +107,7 @@ const EXEC = {
 /** A browser whose operations answer with fixed values unless a test replaces one. */
 function fakeBrowser(overrides: Partial<ToolBrowser> = {}): ToolBrowser {
   return {
-    open: async () => ({ url: 'https://example.com/', title: 'Example' }),
+    open: async () => ({ url: 'https://example.com/', title: 'Example', tab: 't1' }),
     cookies: async () => COOKIES,
     snapshot: async () => ({ path: '/tmp/page.png', url: 'https://example.com/' }),
     downloads: async () => [],
@@ -366,7 +366,7 @@ describe('downloads through the tools', () => {
   })
 
   it('puts a file that open or click downloaded in the result', async () => {
-    const open = vi.fn(async () => ({ url: 'about:blank', title: '', downloads: [SAVED] }))
+    const open = vi.fn(async () => ({ url: 'about:blank', title: '', tab: 't1', downloads: [SAVED] }))
     const click = vi.fn(async () => ({ ...HIT, downloads: [SAVED] }))
     const tools = bench(fakeBrowser({ open, click }))
     expect(await tools.call('headless_browser_open', { url: SAVED.url })).toMatchObject({
@@ -521,13 +521,17 @@ describe('calls that fill every optional argument', () => {
 
 describe('page actions and control', () => {
   it('forwards open, click, and type to the browser and wraps page data', async () => {
-    const open = vi.fn(async (_url: string, _newTab?: boolean, _allowOrigin?: boolean) => ({ url: 'https://example.com/', title: 'Example' }))
+    const open = vi.fn(async (_url: string, newTab?: boolean, _allowOrigin?: boolean, tab?: string) =>
+      ({ url: 'https://example.com/', title: 'Example', tab: newTab === true ? 't2' : tab ?? 't1' }))
     const click = vi.fn(async (_request: unknown, _tab?: string) => HIT)
     const fill = vi.fn(async (_request: unknown, _text: string, _tab?: string) => HIT)
     const tools = bench(fakeBrowser({ open, click, fill }))
     expect(await tools.call('headless_browser_open', { url: 'https://example.com/', newTab: true }))
-      .toEqual({ url: 'https://example.com/', title: { untrusted: 'https://example.com', content: 'Example' } })
-    expect(open).toHaveBeenCalledWith('https://example.com/', true, false)
+      .toEqual({ url: 'https://example.com/', tab: 't2', title: { untrusted: 'https://example.com', content: 'Example' } })
+    expect(open).toHaveBeenCalledWith('https://example.com/', true, false, undefined)
+    expect(await tools.call('headless_browser_open', { url: 'https://example.com/', tab: 't3' }))
+      .toMatchObject({ tab: 't3' })
+    expect(open).toHaveBeenLastCalledWith('https://example.com/', false, false, 't3')
     expect(await tools.call('headless_browser_click', { selector: 'a.next', tab: 't2', allowOrigin: true }))
       .toEqual({
         clicked: 'a.next',

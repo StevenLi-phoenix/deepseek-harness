@@ -215,6 +215,23 @@ describe.skipIf(!AVAILABLE)('headless browser live view', () => {
     }
   }, 120_000)
 
+  it('reports the tab each open loaded, and loads a named tab without moving the active one', async () => {
+    // Several agents share one browser: each needs its own tab id, never "the active tab".
+    const app = await boot()
+    const first = await app.browser.open(DATA_PAGE)
+    expect(first.tab).toBe(app.browser.tabsState()[0]!.id)
+    const second = await app.browser.open('data:text/html,<title>second</title><body>second', true)
+    expect(second.tab).not.toBe(first.tab)
+    expect(app.browser.tabsState().find(tab => tab.active)?.id).toBe(second.tab)
+
+    const again = await app.browser.open('data:text/html,<title>third</title><body>third', false, false, first.tab)
+    expect(again).toMatchObject({ tab: first.tab, title: 'third' })
+    const tabs = app.browser.tabsState()
+    expect(tabs.find(tab => tab.id === second.tab)).toMatchObject({ title: 'second', active: true })
+    expect(tabs.find(tab => tab.id === first.tab)).toMatchObject({ title: 'third', active: false })
+    await expect(app.browser.open(DATA_PAGE, false, false, 't99')).rejects.toThrow(/no tab named t99/u)
+  }, 120_000)
+
   it('closes the active tab, then a named one, and leaves a blank tab after the last', async () => {
     const app = await boot()
     await app.browser.open(DATA_PAGE)
