@@ -15,6 +15,7 @@ export {
   SandboxEscalationError,
   WIDER_MODES,
   approveEscalation,
+  assertWiderOrRepeated,
   escalationHintMarker,
   sandboxDenialMarker,
   sandboxPermissionsDescription,

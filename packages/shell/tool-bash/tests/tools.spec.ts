@@ -839,6 +839,19 @@ describe('sandbox escalation through the generic task producer', () => {
     expect(text(await call(ctx, 'bash', escalate, malformed))).toContain('not strictly wider')
   })
 
+  it('answers a narrower request with a blank justification by naming the mode to repeat', async () => {
+    // A strict-schema model fills both fields; DSH's 14:30 job-apply subagents sent "workspace-write" with "" under
+    // danger-full-access and read "invalid justification" ten times before trying the current mode.
+    const { ctx } = await setupSandboxed(true)
+    const prompted = vi.fn()
+    ctx.on('approval/request', () => { prompted(); return Promise.resolve<ApprovalOutcome>('allowed-once') })
+    const result = await call(ctx, 'bash', { ...escalate, sandbox_permissions: 'workspace-write', justification: '' }, sandboxAgent('danger-full-access'))
+    expect(text(result)).toContain('not strictly wider')
+    expect(text(result)).toContain('send sandbox_permissions "danger-full-access" (no justification needed)')
+    expect(text(result)).not.toContain('invalid justification')
+    expect(prompted).not.toHaveBeenCalled()
+  })
+
   it.each(['workspace-write', 'danger-full-access'] as const)('runs a repeated %s request without approval', async (mode) => {
     const { ctx, bash } = await setupSandboxed()
     const result = await call(ctx, 'bash', { ...escalate, sandbox_permissions: mode }, sandboxAgent(mode))

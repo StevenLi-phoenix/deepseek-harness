@@ -23,7 +23,7 @@ import type { JobId, JobRegistry, JobView } from '@deepseek-ai/dsh-jobs'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type {} from '@deepseek-ai/dsh-shell-env'
 import type { SandboxExecutionPolicy, SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import { ESCALATION_TARGETS, approveEscalation, sandboxPermissionsDescription, validateEscalationArgs } from '@deepseek-ai/dsh-sandbox'
+import { ESCALATION_TARGETS, approveEscalation, assertWiderOrRepeated, sandboxPermissionsDescription, validateEscalationArgs } from '@deepseek-ai/dsh-sandbox'
 import { subprocessSpawnFailure } from '@deepseek-ai/dsh-subprocess'
 import type { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
 import { DSH_ENV_PREFIX } from '@deepseek-ai/dsh-shell'
@@ -112,6 +112,8 @@ function validateBashArgs(args: BashToolArgs, effectiveMode: SandboxMode | undef
   }
   rejectUnadvertisedArgs(args, advertised)
   if (args.sandbox_permissions !== undefined && args.sandbox_permissions === effectiveMode) return
+  // A narrower target is refused before the justification is judged, so the refusal names the mode to repeat.
+  if (args.sandbox_permissions !== undefined && effectiveMode !== undefined) assertWiderOrRepeated(args.sandbox_permissions, effectiveMode)
   const justification = args.sandbox_permissions === undefined && args.justification?.trim() === ''
     ? undefined
     : args.justification

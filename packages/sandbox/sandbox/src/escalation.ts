@@ -76,6 +76,29 @@ export const WIDER_MODES: Record<string, readonly SandboxMode[]> = {
  */
 export const ESCALATION_TARGETS: readonly SandboxMode[] = ['workspace-write', 'danger-full-access']
 
+/** Every mode the ladder knows; the refusal below names one of these as the value to repeat. */
+const KNOWN_MODES: readonly string[] = ['read-only', 'workspace-write', 'danger-full-access']
+
+/**
+ * Refuse a target that is not strictly wider than the call's effective mode, before anything executes.
+ * Repeating the effective mode is not a refusal (it needs no approval). When the effective mode is known,
+ * the refusal names it as the value that runs the call: a model under strict tool schemas must fill
+ * `sandbox_permissions` with some enum value, so it can only fix the request by repeating the mode.
+ * A violation throws {@link SandboxEscalationError} `SANDBOX_ESCALATION_INVALID_ARGUMENT`.
+ * @param mode - the requested target mode.
+ * @param effectiveMode - the call's effective mode.
+ */
+export function assertWiderOrRepeated(mode: string, effectiveMode: SandboxMode): void {
+  if (mode === effectiveMode || (WIDER_MODES[effectiveMode] ?? []).includes(mode as SandboxMode)) return
+  const repeat = KNOWN_MODES.includes(effectiveMode)
+    ? `; this call already runs under "${effectiveMode}": send sandbox_permissions "${effectiveMode}" (no justification needed) or leave both fields out`
+    : ''
+  throw new SandboxEscalationError(
+    `sandbox escalation to "${mode}" is not strictly wider than this call's current "${effectiveMode}" mode${repeat}`,
+    'SANDBOX_ESCALATION_INVALID_ARGUMENT',
+  )
+}
+
 /**
  * Validate the escalation argument pairing a tool schema cannot express:
  * `sandbox_permissions` and `justification` travel together — an approval
@@ -212,12 +235,7 @@ export async function approveEscalation<A, C>(request: EscalationRequest, approv
   // Strict widening is an EXECUTION check against the call's effective mode —
   // deliberately not a schema constraint (the enum is the closed target
   // vocabulary; the effective mode is per-call truth).
-  if (!(WIDER_MODES[effectiveMode] ?? []).includes(mode as SandboxMode)) {
-    throw new SandboxEscalationError(
-      `sandbox escalation to "${mode}" is not strictly wider than this call's current "${effectiveMode}" mode`,
-      'SANDBOX_ESCALATION_INVALID_ARGUMENT',
-    )
-  }
+  assertWiderOrRepeated(mode, effectiveMode)
   if (approval.approver === undefined) {
     throw new SandboxEscalationError(
       `sandbox escalation to "${mode}" requires approval, but no approval service is composed`,

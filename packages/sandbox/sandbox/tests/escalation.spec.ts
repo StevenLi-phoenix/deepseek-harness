@@ -130,6 +130,10 @@ describe('approveEscalation', () => {
       .rejects.toThrow(/not strictly wider than this call's current "workspace-write" mode/)
     await expect(approveEscalation(req({ requestedMode: 'workspace-write', effectiveMode: 'danger-full-access' as never }), spy))
       .rejects.toThrow(/not strictly wider/)
+    // The refusal names the one value that runs the call, so a model that must fill the field fixes it in one retry.
+    await expect(approveEscalation(req({ requestedMode: 'workspace-write', effectiveMode: 'danger-full-access' as never }), spy))
+      .rejects.toThrow(new RegExp('this call already runs under "danger-full-access": '
+        + 'send sandbox_permissions "danger-full-access" \\(no justification needed\\) or leave both fields out'))
     await expect(approveEscalation(req({ requestedMode: 'unknown-mode' }), spy))
       .rejects.toThrow(/not strictly wider/)
     await expect(approveEscalation(req({ requestedMode: 'unknown-mode' }), spy))

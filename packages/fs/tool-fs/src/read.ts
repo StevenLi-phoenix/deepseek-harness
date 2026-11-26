@@ -49,15 +49,15 @@ function parsePositiveInteger(value: number, name: string): number {
 /**
  * Validate value constraints the schema DSL can't express. `maxLimit` is the deployment's line cap.
  * @param args - the schema-validated raw tool arguments; `offset`/`limit` must be positive integers when given.
- * @param maxLimit - the configured line cap: both the default `limit` and the largest one accepted.
- * @returns the validated input with `offset` defaulted to 1 and `limit` to `maxLimit`.
+ * @param maxLimit - the configured line cap: both the default `limit` and the most one call returns.
+ * @returns the validated input with `offset` defaulted to 1 and `limit` defaulted to, and capped at, `maxLimit`.
  */
 export function parseReadArgs(args: { file_path: string; offset?: number; limit?: number }, maxLimit: number): ReadInput {
   if (args.file_path.trim().length === 0) throw new ToolArgsError(['file_path must be a non-empty string'])
   const offset = args.offset === undefined ? 1 : parsePositiveInteger(args.offset, 'offset')
   const limit = args.limit === undefined ? maxLimit : parsePositiveInteger(args.limit, 'limit')
-  if (limit > maxLimit) throw new ToolArgsError([`limit must be less than or equal to ${maxLimit}`])
-  return { filePath: args.file_path, offset, limit }
+  // A limit above the cap reads the cap; the pagination footer says where to continue.
+  return { filePath: args.file_path, offset, limit: Math.min(limit, maxLimit) }
 }
 
 /**
@@ -81,7 +81,7 @@ export function applyReadTool(ctx: Context, caps: ReadToolCaps): void {
     parameters: {
       file_path: { type: 'string', required: true, description: 'Path to read, resolved by the filesystem backend.' },
       offset: { type: 'number', description: '1-based first line to return. Defaults to 1.' },
-      limit: { type: 'number', description: `Maximum number of lines to return. Defaults to ${caps.limit}.` },
+      limit: { type: 'number', description: `Maximum number of lines to return. Defaults to ${caps.limit}, the most one call returns.` },
     },
     output: {
       schema: {
