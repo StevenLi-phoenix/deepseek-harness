@@ -123,8 +123,8 @@ PLAYWRIGHT_BROWSERS_PATH=/srv/dsh/ms-playwright pnpm exec playwright-core instal
 
 agent 注册站点账号时，原本要自己定密码、输入密码、再找地方存——密码会进入它的上下文、会话日志和之后的每一份摘要，模型也恰恰在这一步拒绝。`headless_browser_credential` 是浏览器自带的密码管理器：
 
-- `create`：在注册表或设置新密码的表单上，生成一个 20 位密码（CSPRNG；大小写字母、数字和一个 `!@#$%^*-_=+?` 里的符号，去掉了容易认错的字符；严格的站点用 `length` 12–64 和 `symbols: false`），连同页面主机和账号用的 `username` 一起保存，再写进密码框，给了 `confirmSelector` 时也写进确认框。第一次写入被拒绝时新记录会删掉，重试不会撞上重复。同一主机、同一登录名再次 `create` 会被拒绝，除非 `replace: true`；替换时旧密码留在新密码旁边，供所有者找回。
-- `fill`：在登录表单上写入页面主机保存的 `username` 或 `password`；同一主机有两个账号时要给 `username`。
+- `create`：在注册表或设置新密码的表单上，生成一个 20 位密码（CSPRNG；大小写字母、数字和一个 `!@#$%^*-_=+?` 里的符号，去掉了容易认错的字符；严格的站点用 `length` 12–64 和 `symbols: false`），连同页面主机和账号用的 `username` 一起保存，再写进密码框，给了 `confirmSelector` 时也写进确认框。第一次写入被拒绝时新记录会删掉，重试不会撞上重复。同一主机、同一登录名再次 `create` 会被拒绝，除非 `replace: true`；替换时旧密码留在新密码旁边，供所有者找回。多家雇主共用一个登录主机时（UKG 的 `signin-us.ultipro.com`），`label`（公司名）让每家雇主各有一个账号：带标签的 `create` 与同一登录名、不同标签的账号并存；带标签的 `replace` 只替换这个标签的账号或没有标签的账号，绝不替换别家雇主的。
+- `fill`：在登录表单上写入页面主机保存的 `username` 或 `password`；同一主机有两个账号时要给 `username`，两个账号共用一个登录名时给 `label`。
 - `list`：列出保存的账号，不含密码。
 
 三条规则把密码关在里面：密码只写进 `input[type=password]`；只在页面处于记录所属主机时写，写入那一刻再检查；任何工具结果、日志和错误都不含密码——结果只写账号（`id`、`host`、`username`、`label`、时间）。记录绑定完整主机而不是可注册域名，因为一个 ATS 域名服务很多公司（`acme.wd5.myworkdayjobs.com` 和 `other.wd5.myworkdayjobs.com` 是两个账号）。

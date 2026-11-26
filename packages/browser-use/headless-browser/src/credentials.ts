@@ -69,7 +69,11 @@ export interface CredentialCreateRequest {
   readonly host: string
   /** Login name. */
   readonly username: string
-  /** Owner-facing label. */
+  /**
+   * Owner-facing label, such as the company name. On a sign-in host several
+   * employers share (UKG's `signin-us.ultipro.com`), it also tells their accounts
+   * apart: a labelled create stands beside a same-login account with another label.
+   */
   readonly label?: string
   /** Password length, {@link MIN_PASSWORD_LENGTH} through {@link MAX_PASSWORD_LENGTH}. */
   readonly length?: number
@@ -88,6 +92,15 @@ export class CredentialError extends Error {
 interface CredentialFile {
   readonly version: number
   readonly entries: SiteCredentialRecord[]
+}
+
+/**
+ * How labels compare: trimmed, case folded, and empty for none.
+ * @param label - a saved or requested label.
+ * @returns the comparison key.
+ */
+function labelKey(label: string | undefined): string {
+  return (label ?? '').trim().toLowerCase()
 }
 
 /**
@@ -210,15 +223,22 @@ export class CredentialVault {
     const host = credentialHost(request.host)
     const username = request.username.trim()
     if (username === '') throw new CredentialError('give the login name (usually the e-mail address) the account is created with')
+    const wanted = labelKey(request.label)
     return await this.#update((entries) => {
-      const index = entries.findIndex(entry => entry.host === host && entry.username.toLowerCase() === username.toLowerCase())
+      const login = username.toLowerCase()
+      const sameLogin = (entry: SiteCredentialRecord): boolean => entry.host === host && entry.username.toLowerCase() === login
+      const labelled = entries.findIndex(entry => sameLogin(entry) && (wanted === '' || labelKey(entry.label) === wanted))
+      // A reset that names a label takes over an unlabelled account of the same login, never another employer's.
+      const index = labelled >= 0 || request.replace !== true || wanted === ''
+        ? labelled
+        : entries.findIndex(entry => sameLogin(entry) && labelKey(entry.label) === '')
       const now = this.#now().toISOString()
       const password = generatePassword(request.length, request.symbols ?? true)
       // An index of -1 reads nothing, so `existing` is set exactly when the login is saved.
       const existing = entries[index]
       if (existing !== undefined) {
         if (request.replace !== true) {
-          throw new CredentialError(`${host} already has a saved password for ${username} (${existing.id}); write the saved one with action fill (a sign-up form takes it too, with confirmSelector), or pass replace: true only on the site's own new-password or reset form`)
+          throw new CredentialError(`${host} already has a saved password for ${username}${existing.label === undefined ? '' : ` (${existing.label})`} (${existing.id}); write the saved one with action fill (a sign-up form takes it too, with confirmSelector), or pass replace: true only on the site's own new-password or reset form`)
         }
         const replaced: SiteCredentialRecord = {
           ...existing,
@@ -247,23 +267,32 @@ export class CredentialVault {
    * The one saved account for a host, password included.
    * @param host - the page host.
    * @param username - login name, needed only when the host has more than one account.
+   * @param label - the account's label, needed only when one login has several accounts on the host (one per employer).
    * @returns the record.
-   * @throws CredentialError - when the host has no account, or several and no login name chose one.
+   * @throws CredentialError - when the host has no account, or several and no login name or label chose one.
    */
-  async find(host: string, username?: string): Promise<SiteCredentialRecord> {
+  async find(host: string, username?: string, label?: string): Promise<SiteCredentialRecord> {
     const bare = credentialHost(host)
     const file = await this.#read()
     const onHost = file.entries.filter(entry => entry.host === bare)
-    const matches = username === undefined
+    const named = username === undefined
       ? onHost
       : onHost.filter(entry => entry.username.toLowerCase() === username.trim().toLowerCase())
+    const wanted = labelKey(label)
+    const matches = wanted === '' ? named : named.filter(entry => labelKey(entry.label) === wanted)
     const [only, ...others] = matches
     if (only !== undefined && others.length === 0) return only
     if (onHost.length === 0) {
       throw new CredentialError(`no saved password for ${bare}; on the site's sign-up form use action create, or hand over if the account was made outside this browser`)
     }
     // Without a login name every account on the host matches, so only a named login can match none.
-    if (username !== undefined && matches.length === 0) throw new CredentialError(`${bare} has no saved password for ${username}; saved login names: ${onHost.map(entry => entry.username).join(', ')}`)
+    if (username !== undefined && named.length === 0) throw new CredentialError(`${bare} has no saved password for ${username}; saved login names: ${onHost.map(entry => entry.username).join(', ')}`)
+    const labels = named.map(entry => entry.label?.trim() ?? '').filter(name => name !== '')
+    if (wanted !== '' && matches.length === 0) {
+      throw new CredentialError(`${bare} has no saved password labelled ${label?.trim() ?? ''}; saved labels: ${labels.join(', ') || 'none'}`)
+    }
+    const oneLogin = new Set(matches.map(entry => entry.username.toLowerCase())).size === 1
+    if (oneLogin && labels.length === matches.length) throw new CredentialError(`${bare} has ${String(matches.length)} saved accounts; pass label: ${labels.join(' | ')}`)
     throw new CredentialError(`${bare} has ${String(matches.length)} saved accounts; pass username: ${onHost.map(entry => entry.username).join(' | ')}`)
   }
 

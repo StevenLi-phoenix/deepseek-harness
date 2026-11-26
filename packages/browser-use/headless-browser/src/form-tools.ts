@@ -60,7 +60,7 @@ export interface FormCredentials {
     symbols?: boolean
     replace?: boolean
   }): Promise<SiteCredentialRecord>
-  find(host: string, username?: string): Promise<SiteCredentialRecord>
+  find(host: string, username?: string, label?: string): Promise<SiteCredentialRecord>
   touch(id: string): Promise<void>
   remove(id: string): Promise<boolean>
 }
@@ -222,7 +222,7 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
       confirmSelector: { type: 'string', description: 'The "confirm password" field, which receives the same password (create, and fill with field password).' },
       field: { type: 'string', enum: ['password', 'username'], description: 'fill only: which half of the account to write; password when omitted.' },
       username: { type: 'string', description: 'create: the login name (usually the e-mail address) of the new account; fill: which account, when the host has several.' },
-      label: { type: 'string', description: 'create only: a short label for the owner, such as the company name.' },
+      label: { type: 'string', description: 'create: a short label for the owner, such as the company name; on a sign-in host several employers share (UKG\'s signin-us.ultipro.com) it keeps one account per employer. fill: which account, when one username has several on the host.' },
       length: { type: 'integer', description: `create only: password length, ${String(MIN_PASSWORD_LENGTH)} through ${String(MAX_PASSWORD_LENGTH)}; ${String(DEFAULT_PASSWORD_LENGTH)} when omitted. Use the site's stated maximum when it has one.` },
       symbols: { type: 'boolean', description: 'create only: include symbols; false when the site accepts only letters and digits.' },
       replace: { type: 'boolean', description: 'create only: replace the saved password of this host and username — only on the site\'s own reset or new-password form.' },
@@ -301,7 +301,7 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
       const field: SecretField = args.field ?? 'password'
       return await guarded(deps, 'filling a saved credential', async () => {
         const host = credentialHost(await deps.browser.fieldUrl(parsed.request, args.tab))
-        const record = await deps.credentials.find(host, args.username)
+        const record = await deps.credentials.find(host, args.username, args.label)
         const value = field === 'password' ? record.password : record.username
         const outcome = await deps.browser.fillSecret(parsed.request, value, field, record.host, args.tab)
         const wrote = [outcome.target?.ref ?? describeTarget(parsed.request)]

@@ -106,6 +106,24 @@ describe('CredentialVault', () => {
     await expect(vault.find('acme.wd5.myworkdayjobs.com', 'third@example.com')).rejects.toThrow(/saved login names/u)
   })
 
+  it('keeps one account per employer label on a sign-in host employers share, and finds it by label', async () => {
+    // UKG: every employer's applicants sign in at signin-us.ultipro.com with their own password per organisation.
+    const { vault } = vaultAt()
+    const host = 'signin-us.ultipro.com'
+    const acme = await vault.create({ host, username: 'cv@example.com', label: 'Acme' })
+    const wellabe = await vault.create({ host, username: 'cv@example.com', label: 'Wellabe' })
+    expect(wellabe.id).not.toBe(acme.id)
+    await expect(vault.create({ host, username: 'cv@example.com', label: ' wellabe ' })).rejects.toThrow(/already has a saved password for cv@example\.com \(Wellabe\)/u)
+    await expect(vault.create({ host, username: 'cv@example.com' })).rejects.toThrow(/already has a saved password/u)
+    expect((await vault.find(host, 'cv@example.com', 'WELLABE')).password).toBe(wellabe.password)
+    expect((await vault.find(host, undefined, 'Acme')).id).toBe(acme.id)
+    await expect(vault.find(host, 'cv@example.com')).rejects.toThrow('signin-us.ultipro.com has 2 saved accounts; pass label: Acme | Wellabe')
+    await expect(vault.find(host, undefined, 'Kiewit')).rejects.toThrow('signin-us.ultipro.com has no saved password labelled Kiewit; saved labels: Acme, Wellabe')
+    const replaced = await vault.create({ host, username: 'cv@example.com', label: 'Wellabe', replace: true })
+    expect(replaced.id).toBe(wellabe.id)
+    expect((await vault.find(host, undefined, 'Acme')).password).toBe(acme.password)
+  })
+
   it('records the last use, removes a record, and serialises concurrent writes', async () => {
     const { vault } = vaultAt()
     const records = await Promise.all(['a', 'b', 'c', 'd'].map(async name => await vault.create({ host: `${name}.example.com`, username: 'cv@example.com' })))
@@ -143,12 +161,16 @@ describe('CredentialVault', () => {
     expect(existsSync(path)).toBe(false)
   })
 
-  it('takes the new label of a replaced password', async () => {
+  it('labels an unlabelled account on a labelled replace, and never replaces an account with another label', async () => {
     const { vault } = vaultAt()
-    await vault.create({ host: 'jobs.example.com', username: 'cv@example.com', label: 'Acme' })
-    const replaced = await vault.create({ host: 'jobs.example.com', username: 'cv@example.com', label: 'Acme Careers', replace: true })
-    expect(replaced.label).toBe('Acme Careers')
-    expect((await vault.list()).map(view => view.label)).toEqual(['Acme Careers'])
+    const first = await vault.create({ host: 'jobs.example.com', username: 'cv@example.com' })
+    const replaced = await vault.create({ host: 'jobs.example.com', username: 'cv@example.com', label: 'Acme', replace: true })
+    expect(replaced.id).toBe(first.id)
+    expect(replaced.label).toBe('Acme')
+    const other = await vault.create({ host: 'jobs.example.com', username: 'cv@example.com', label: 'Acme Careers', replace: true })
+    expect(other.id).not.toBe(first.id)
+    expect((await vault.find('jobs.example.com', undefined, 'Acme')).password).toBe(replaced.password)
+    expect((await vault.list()).map(view => view.label)).toEqual(['Acme Careers', 'Acme'])
   })
 
   it('leaves the records as they are when the touched id is not saved', async () => {
