@@ -1,0 +1,4 @@
+/* English Info.plist strings for DSH Call. */
+"CFBundleDisplayName" = "DSH Call";
+"NSMicrophoneUsageDescription" = "DSH Call uses the microphone so DSH can hear you during a call.";
+"NSSpeechRecognitionUsageDescription" = "When the server asks for it, DSH Call turns your speech into text on this iPhone and sends only the text to DSH.";

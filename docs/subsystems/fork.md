@@ -1221,4 +1221,24 @@ async transcribe(path: string, options: { signal?: AbortSignal } = {}): Promise<
 ```
 
 Source: [`packages/fork/voice/src/index.ts`](../../packages/fork/voice/src/index.ts)
+
+<a id="ctxvoicecall--voicecall"></a>
+
+### `ctx.voiceCall` — `VoiceCall`
+
+The voice line. It keeps the owner's registered devices and a record of each call, rings the devices with VoIP pushes, answers the app's WebRTC offer, and runs one call at a time: a call Session per call, the owner's speech prompted into it, its answers spoken back. The agent's calls are limited per hour and, unless urgent, refused while the owner sleeps.
+
+```ts cordis-catalog
+/**
+ * Ring the owner and wait until the call ends. Refused while another call is live, without a
+ * registered device or APNs credentials, beyond `limits.callsPerHour`, and (unless urgent) while
+ * the owner sleeps.
+ * @param request - why the agent calls, and whether it is urgent.
+ * @param signal - cancels the call: a ringing call stops, a live call hangs up.
+ * @returns the refusal, or the ended call with its transcript.
+ */
+async ring(request: RingRequest, signal?: AbortSignal): Promise<RingResult>
+```
+
+Source: [`packages/fork/voice-call/src/index.ts`](../../packages/fork/voice-call/src/index.ts)
 <!-- END GENERATED cordis-surface -->

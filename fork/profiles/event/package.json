@@ -23,6 +23,7 @@
         "@deepseek-ai/courses",
         "@deepseek-ai/gmail",
         "@deepseek-ai/qqbot",
+        "@deepseek-ai/voice-call",
         "@deepseek-ai/integrity",
         "@deepseek-ai/guard",
         "@deepseek-ai/style"

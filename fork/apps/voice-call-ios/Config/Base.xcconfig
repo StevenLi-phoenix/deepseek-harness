@@ -1,0 +1,10 @@
+// Build settings shared by the Debug and Release configurations.
+//
+// The values below are placeholders that build for the simulator only. Put your own bundle
+// identifier and Apple Developer Team ID in Config/Local.xcconfig, which git ignores; start from
+// Config/Local.example.xcconfig.
+
+PRODUCT_BUNDLE_IDENTIFIER = com.example.dshcall
+DEVELOPMENT_TEAM =
+
+#include? "Local.xcconfig"

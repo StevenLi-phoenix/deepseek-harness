@@ -1,0 +1,58 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/fork/tool-voice-call/README.md
+/:
+  en: f8b7d29bcdbcc9dc
+  zh: e7f1365d4cf7af69
+/deepseek-ai-dsh-tool-voice-call:
+  en: ec9829aef4b3dc2f
+  zh: 302d331c0f1c66b7
+/deepseek-ai-dsh-tool-voice-call/summary:
+  en: 17040738e3c0fb85
+  zh: fd2621e4bd4edaf9
+/deepseek-ai-dsh-tool-voice-call/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 5ea16c73684ce99f
+/deepseek-ai-dsh-tool-voice-call/use-this-package:
+  en: 6dd37ebe09096872
+  zh: 92ff2de5c73bc62c
+/deepseek-ai-dsh-tool-voice-call/understand-the-implementation:
+  en: c68196ad9e53cb01
+  zh: 07668975f792565b
+/deepseek-ai-dsh-tool-voice-call/further-exploration:
+  en: 9bc3a04383bb4ca8
+  zh: 3db50bae354290dd
+/deepseek-ai-dsh-tool-voice-call/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-tool-voice-call/model-experience/call-tool:
+  en: 8c81677246ed525d
+  zh: 61c9306c6c22bc9c
+/deepseek-ai-dsh-tool-voice-call/model-experience/call-tool/what-the-model-sees:
+  en: b496a3989f890d1a
+  zh: bc7d0eff1618125b
+/deepseek-ai-dsh-tool-voice-call/model-experience/call-tool/token-effect:
+  en: 9b6fea54ebf84b5a
+  zh: 8bb2dcd472f97054
+/deepseek-ai-dsh-tool-voice-call/model-experience/call-tool/kv-cache-effect:
+  en: 5b38c23791d4786e
+  zh: 500f91bdeba9d59b
+/deepseek-ai-dsh-tool-voice-call/model-experience/call-results:
+  en: ee29ad1df06c77e9
+  zh: 447e4ee4152cda3d
+/deepseek-ai-dsh-tool-voice-call/model-experience/call-results/what-the-model-sees:
+  en: 599e7318d550f15b
+  zh: 2aa78908183209cb
+/deepseek-ai-dsh-tool-voice-call/model-experience/call-results/token-effect:
+  en: 5f68ff2725b555f1
+  zh: 516264c6eab0d019
+/deepseek-ai-dsh-tool-voice-call/model-experience/call-results/kv-cache-effect:
+  en: 2fbf2175168e8244
+  zh: e0cf64f4d830f1ec
+/deepseek-ai-dsh-tool-voice-call/known-limitations-and-deferred-work:
+  en: c5bd1740aca1c5dc
+  zh: 76279e589d4c0ec2
+/deepseek-ai-dsh-tool-voice-call/known-limitations-and-deferred-work/dev-note:
+  en: b6755dae78c63f0e
+  zh: 889bdb0376aa2be1

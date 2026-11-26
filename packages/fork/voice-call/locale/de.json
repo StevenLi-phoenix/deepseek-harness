@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Sprachanruf-Leitung",
+    "description": "Lässt das iPhone des Besitzers über die App DSH Call klingeln und führt über Tailscale ein Vollduplex-Sprachgespräch zwischen dem Besitzer und einer Anruf-Sitzung."
+  }
+}

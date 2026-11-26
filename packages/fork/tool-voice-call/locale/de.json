@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Anruf-Werkzeug",
+    "description": "Lässt den Agenten den Besitzer anrufen und liefert, wie der Anruf verlief und was gesagt wurde."
+  }
+}

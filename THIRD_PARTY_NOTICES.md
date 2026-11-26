@@ -163,6 +163,7 @@ External packages installed for runtime use or embedded in distributed Host or b
 | [`undici`](https://github.com/nodejs/undici) | MIT |
 | [`uqr`](https://github.com/unjs/uqr) | MIT |
 | [`use-sync-external-store`](https://github.com/facebook/react) | MIT |
+| [`werift`](https://github.com/shinyoshiaki/werift-webrtc) | MIT |
 | [`which`](https://github.com/isaacs/node-which) | ISC |
 | [`ws`](https://github.com/websockets/ws) | MIT |
 | [`xlsx`](https://git.sheetjs.com/SheetJS/sheetjs) | Apache-2.0 |

@@ -1,0 +1,4 @@
+/* App Shortcut phrases. ${applicationName} matches the app name and its alternative name "DSH". */
+"Call ${applicationName}" = "Call ${applicationName}";
+"Call DSH with ${applicationName}" = "Call DSH with ${applicationName}";
+"Start a ${applicationName} call" = "Start a ${applicationName} call";

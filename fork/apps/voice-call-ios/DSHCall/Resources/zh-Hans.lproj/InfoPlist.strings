@@ -1,0 +1,4 @@
+/* Simplified Chinese Info.plist strings for DSH Call. */
+"CFBundleDisplayName" = "DSH Call";
+"NSMicrophoneUsageDescription" = "DSH Call 使用麦克风，让 DSH 在通话中听到你。";
+"NSSpeechRecognitionUsageDescription" = "当服务器要求时，DSH Call 会在这台 iPhone 上把你的语音转成文字，只把文字发送给 DSH。";

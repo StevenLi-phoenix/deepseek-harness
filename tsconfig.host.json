@@ -646,6 +646,8 @@
     { "path": "./packages/fork/voice" },
     { "path": "./packages/fork/tool-up" },
     { "path": "./packages/fork/tool-voice" },
+    { "path": "./packages/fork/voice-call" },
+    { "path": "./packages/fork/tool-voice-call" },
     { "path": "./packages/fork/github-sensor" },
     { "path": "./packages/fork/owner-memory" },
     { "path": "./packages/fork/content-guard" },

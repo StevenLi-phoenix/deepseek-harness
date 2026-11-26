@@ -391,10 +391,12 @@ flowchart TD
     pkg_tool_qq["tool-qq"]
     pkg_tool_up["tool-up"]
     pkg_tool_voice["tool-voice"]
+    pkg_tool_voice_call["tool-voice-call"]
     pkg_tool_watch["tool-watch"]
     pkg_tool_wechat["tool-wechat"]
     pkg_turn_taint["turn-taint"]
     pkg_voice["voice"]
+    pkg_voice_call["voice-call"]
     pkg_wechat["wechat"]
     pkg_wechat_settings["wechat-settings"]
   end
@@ -1815,6 +1817,20 @@ flowchart TD
   pkg_tool_watch --> pkg_event_bus
   pkg_tool_watch --> pkg_github_sensor
   pkg_tool_watch --> pkg_tools
+  pkg_voice_call --> pkg_api_session_controller
+  pkg_voice_call --> pkg_credentials
+  pkg_voice_call --> pkg_event_bus
+  pkg_voice_call --> pkg_home_paths
+  pkg_voice_call --> pkg_host_webserver
+  pkg_voice_call --> pkg_owner_relay
+  pkg_voice_call --> pkg_permission_presets
+  pkg_voice_call --> pkg_presence
+  pkg_voice_call --> pkg_service_kit
+  pkg_voice_call --> pkg_session
+  pkg_voice_call --> pkg_session_title
+  pkg_voice_call --> pkg_storage_domain
+  pkg_voice_call --> pkg_turn_taint
+  pkg_voice_call --> pkg_voice
   pkg_content_guard --> pkg_agent_default_model
   pkg_content_guard --> pkg_home_paths
   pkg_content_guard --> pkg_llm
@@ -1823,6 +1839,8 @@ flowchart TD
   pkg_tool_courses --> pkg_courses
   pkg_tool_courses --> pkg_tools
   pkg_tool_courses --> pkg_util_values
+  pkg_tool_voice_call --> pkg_tools
+  pkg_tool_voice_call --> pkg_voice_call
   pkg_wechat --> pkg_api_session_controller
   pkg_wechat --> pkg_event_bus
   pkg_wechat --> pkg_home_paths
@@ -2283,8 +2301,10 @@ flowchart TD
 | [`tool-gmail`](../packages/fork/tool-gmail) | `fork` | [`gmail`](../packages/fork/gmail), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`turn-taint`](../packages/fork/turn-taint), [`util-values`](../packages/util/values) |
 | [`tool-qq`](../packages/fork/tool-qq) | `fork` | [`attachment`](../packages/attachment/attachment), [`llm`](../packages/llm/llm), [`qq`](../packages/fork/qq), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
 | [`tool-watch`](../packages/fork/tool-watch) | `fork` | [`agent`](../packages/core/agent), [`event-bus`](../packages/fork/event-bus), [`github-sensor`](../packages/fork/github-sensor), [`tools`](../packages/core/tools) |
+| [`voice-call`](../packages/fork/voice-call) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`host-webserver`](../packages/host/webserver), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`presence`](../packages/fork/presence), [`service-kit`](../packages/fork/service-kit), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain), [`turn-taint`](../packages/fork/turn-taint), [`voice`](../packages/fork/voice) |
 | [`content-guard`](../packages/fork/content-guard) | `fork` | [`agent-default-model`](../packages/core/agent-default-model), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`owner-memory`](../packages/fork/owner-memory), [`service-kit`](../packages/fork/service-kit) |
 | [`tool-courses`](../packages/fork/tool-courses) | `fork` | [`courses`](../packages/fork/courses), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
+| [`tool-voice-call`](../packages/fork/tool-voice-call) | `fork` | [`tools`](../packages/core/tools), [`voice-call`](../packages/fork/voice-call) |
 | [`wechat`](../packages/fork/wechat) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`presence`](../packages/fork/presence), [`schedule`](../packages/schedule/schedule), [`service-kit`](../packages/fork/service-kit), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain), [`time-gap`](../packages/fork/time-gap), [`turn-taint`](../packages/fork/turn-taint), [`voice`](../packages/fork/voice), [`wechat-settings`](../packages/fork/wechat-settings) |
 | [`tool-wechat`](../packages/fork/tool-wechat) | `fork` | [`event-bus`](../packages/fork/event-bus), [`tools`](../packages/core/tools), [`wechat`](../packages/fork/wechat) |
 <!-- END GENERATED module-graph:packages -->

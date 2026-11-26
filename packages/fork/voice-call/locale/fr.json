@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Ligne d'appel vocal",
+    "description": "Fait sonner l'iPhone du propriétaire via l'app DSH Call et tient un appel vocal en duplex intégral entre le propriétaire et une session d'appel via Tailscale."
+  }
+}

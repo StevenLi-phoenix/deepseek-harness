@@ -6063,6 +6063,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'voiceCall',
+    summary: 'The voice line.',
+    description: 'The voice line. It keeps the owner\'s registered devices and a record of each call, rings the devices with VoIP pushes, answers the app\'s WebRTC offer, and runs one call at a time: a call Session per call, the owner\'s speech prompted into it, its answers spoken back. The agent\'s calls are limited per hour and, unless urgent, refused while the owner sleeps.',
+    methods: [
+      {
+        signature: 'async ring(request: RingRequest, signal?: AbortSignal): Promise<RingResult>',
+        description: 'Ring the owner and wait until the call ends. Refused while another call is live, without a registered device or APNs credentials, beyond `limits.callsPerHour`, and (unless urgent) while the owner sleeps.',
+        parameters: [{ name: 'request', description: 'why the agent calls, and whether it is urgent.' }, { name: 'signal', description: 'cancels the call: a ringing call stops, a live call hangs up.' }],
+        returns: 'the refusal, or the ended call with its transcript.',
+      },
+    ],
+  },
+  {
     key: 'web',
     summary: 'The web access service.',
     description: 'The web access service. Registered as `ctx.web` (one instance per context) and exposed to Clients as the `web` Remote namespace (`listProviders`).\n\nSelection semantics (resolved at execution time, never order-dependent):\n\n- A configured id that is registered and `available()` → that provider.\n- A configured id not registered → `WEB_PROVIDER_CONFIGURED_MISSING`.\n- A configured id registered but unavailable → `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`.\n- No search id configured, and the provider assigned to the route of the model request the search serves is usable → that provider: `deepseek-official` (Messages search) on the `deepseek-official` and `deepseek-account` routes, `deepseek-search-api` on every other route and outside a model request.\n- No id configured, exactly one registered usable provider → that provider.\n- No id configured, multiple usable providers → `WEB_PROVIDER_AMBIGUOUS`.\n- No id configured, no usable provider → `WEB_PROVIDER_UNAVAILABLE`.',
@@ -7807,6 +7820,26 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ButtonProps',
     declaration: 'export interface ButtonProps {\n    readonly label: string;\n    readonly hotkey?: string | undefined;\n    readonly disabled?: boolean | undefined;\n    readonly onPress?: (() => unknown) | undefined;\n}',
+  },
+  {
+    name: 'CallId',
+    declaration: 'export type CallId = Branded<\'VoiceCallId\'>;',
+  },
+  {
+    name: 'CallInitiator',
+    declaration: 'export type CallInitiator = \'agent\' | \'owner\';',
+  },
+  {
+    name: 'CallOutcome',
+    declaration: 'export type CallOutcome = \'completed\' | \'declined\' | \'missed\' | \'failed\' | \'cancelled\';',
+  },
+  {
+    name: 'CallState',
+    declaration: 'export type CallState = \'ringing\' | \'connecting\' | \'active\' | \'ended\';',
+  },
+  {
+    name: 'CallView',
+    declaration: 'export interface CallView {\n    callId: CallId;\n    initiator: CallInitiator;\n    state: CallState;\n    reason: string | null;\n    createdAt: number;\n    answeredAt: number | null;\n    endedAt: number | null;\n    outcome: CallOutcome | null;\n}',
   },
   {
     name: 'CardView',
@@ -10933,6 +10966,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type ReviewVerdict = \'approved\' | \'changes-requested\' | \'commented\' | \'dismissed\';',
   },
   {
+    name: 'RingRequest',
+    declaration: 'export interface RingRequest {\n    reason: string;\n    urgent: boolean;\n}',
+  },
+  {
+    name: 'RingResult',
+    declaration: 'export type RingResult = {\n    status: \'refused\';\n    reason: string;\n} | {\n    status: \'ended\';\n    call: CallView;\n    detail: string | null;\n    transcript: TranscriptLine[];\n};',
+  },
+  {
     name: 'RoutePatch',
     declaration: 'export interface RoutePatch {\n    sources?: string[];\n    kinds?: string[];\n    subjects?: string[];\n    action?: \'notify\' | \'session\';\n    coalesceMs?: number;\n    maxPerHour?: number;\n    session?: Partial<Pick<SessionAction, \'workspacePath\' | \'agentPreset\' | \'permissionPreset\' | \'instructions\' | \'titlePrefix\' | \'maxPromptEvents\' | \'maxTextChars\' | \'result\' | \'model\' | \'persistent\' | \'project\'>>;\n}',
   },
@@ -12851,6 +12892,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TranscriptionRequest',
     declaration: 'export interface TranscriptionRequest {\n    readonly audioBase64: string;\n    readonly providerId?: SpeechProviderId;\n    readonly language?: string;\n}',
+  },
+  {
+    name: 'TranscriptLine',
+    declaration: 'export type TranscriptLine = z.infer<typeof lineSchema>;',
   },
   {
     name: 'TranslationProvider',

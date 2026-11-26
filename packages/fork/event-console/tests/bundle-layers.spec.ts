@@ -58,6 +58,8 @@ const ROW_OWNER: Record<string, string> = {
   'gmail-settings': 'gmail',
   'qqbot': 'qqbot',
   'preset-qqbot': 'qqbot',
+  'voice-call': 'voice-call',
+  'preset-voice-call': 'voice-call',
   'integrity-watch': 'integrity',
   'content-guard': 'guard',
   'content-guard-settings': 'guard',
@@ -68,7 +70,7 @@ const ROW_OWNER: Record<string, string> = {
 /** The order the profile mounts the layers in, after the skeleton. */
 const FEATURE_ORDER = [
   'github', 'headless-browser', 'provider-balance', 'subagent-activity', 'sysmon', 'memory', 'presence',
-  'wechat', 'cc-admin', 'voice', 'bili', 'qq', 'courses', 'gmail', 'qqbot', 'integrity', 'guard', 'style',
+  'wechat', 'cc-admin', 'voice', 'bili', 'qq', 'courses', 'gmail', 'qqbot', 'voice-call', 'integrity', 'guard', 'style',
 ]
 
 describe('fork bundle layers', () => {

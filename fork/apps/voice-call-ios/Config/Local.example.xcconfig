@@ -1,0 +1,8 @@
+// Copy this file to Config/Local.xcconfig and replace both values. Local.xcconfig is git-ignored.
+
+// A bundle identifier registered to your team. The VoIP push topic on the server is this value
+// followed by ".voip".
+PRODUCT_BUNDLE_IDENTIFIER = com.yourcompany.dshcall
+
+// Your 10-character Team ID from the Membership details page of your Apple Developer account.
+DEVELOPMENT_TEAM = A1B2C3D4E5

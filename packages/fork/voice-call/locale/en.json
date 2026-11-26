@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Voice call line",
+    "description": "Rings the owner's iPhone through the DSH Call app and holds a full-duplex voice call between the owner and a call Session over Tailscale."
+  }
+}

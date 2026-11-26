@@ -6538,6 +6538,23 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-up -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-tool-voice-call -->
+<a id="deepseek-aidsh-tool-voice-call"></a>
+
+## `@deepseek-ai/dsh-tool-voice-call`
+
+- `inject`: `tools`
+- `source`: [`packages/fork/tool-voice-call/src/index.ts:19`](../packages/fork/tool-voice-call/src/index.ts)
+
+```ts config-catalog
+/** Configuration. */
+export interface Config {
+  /** Transcript lines returned to the agent, newest kept. */
+  maxTranscriptLines: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-voice-call -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-tool-watch -->
 <a id="deepseek-aidsh-tool-watch"></a>
 
@@ -6846,6 +6863,153 @@ export interface Config {
 export type TtsProviderName = 'feiyu' | 'mac-mini'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-voice -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-voice-call -->
+<a id="deepseek-aidsh-voice-call"></a>
+
+## `@deepseek-ai/dsh-voice-call`
+
+- `inject`: `storageDomain` · `sessionController` · `permissionPresets` · `sessionTitle` · `credentials` · `webServer`
+- `source`: [`packages/fork/voice-call/src/index.ts:143`](../packages/fork/voice-call/src/index.ts)
+
+```ts config-catalog
+/** Service configuration. */
+export interface Config {
+  /** Credential holding the bearer token the app sends; every request gets 503 while it is unset. */
+  tokenEnv: string
+  /** Absolute directory for scratch audio; empty means `<DSH_HOME>/voice-call`. */
+  dataDir: string
+  /** Hand the transcript of the owner's calls to the main agent when they end. */
+  handOff: boolean
+  /** Largest accepted request body, in bytes. */
+  maxBodyBytes: number
+  /** Call records kept; the oldest beyond it are forgotten. */
+  keepCalls: number
+  /** APNs signing credentials and the app's identity. */
+  apns: ApnsConfig
+  /** The call Sessions. */
+  session: SessionConfig
+  /** Where recognition and synthesis run. */
+  speech: SpeechConfig
+  /** Ring, call, and rate limits. */
+  limits: LimitsConfig
+  /** Voice-activity detection of server-side recognition and barge-in. */
+  vad: VadConfig
+  /** Media sockets of the WebRTC leg. */
+  ice: IceConfig
+}
+
+/** APNs signing credentials and the app's identity. */
+export interface ApnsConfig {
+  /** Credential holding the auth key's ten-character Key ID. */
+  keyIdEnv: string
+  /** Credential holding the Apple Developer Team ID. */
+  teamIdEnv: string
+  /** Credential holding the `.p8` auth key: its PEM text, or the absolute path of the file. */
+  keyEnv: string
+  /** The app's bundle identifier; pushes go to the topic `<bundleId>.voip`. */
+  bundleId: string
+  /** Name CallKit shows for the agent's calls. */
+  caller: string
+  /** Deadline of one push, in milliseconds. */
+  timeoutMs: number
+  /** Push endpoints per environment. */
+  hosts: ApnsHosts
+}
+
+/** How a call Session is created. */
+export interface SessionConfig {
+  /** Absolute directory the call Sessions work in; created before each call. */
+  workspacePath: string
+  /** Agent preset of the call Sessions; the bundle defines `voice-call`, which answers in short spoken sentences. */
+  agentPreset: string
+  /** Permission preset applied when a call Session is created. */
+  permissionPreset: string
+  /** Session title prefix; the call's direction and time follow. */
+  titlePrefix: string
+  /** IANA time zone sent with every prompt. */
+  timeZone: string
+}
+
+/** Where speech is recognized and synthesized. */
+export interface SpeechConfig {
+  /** `device`: the app recognizes speech and sends text; `server`: the service recognizes the call audio. */
+  stt: SpeechMode
+  /** `device`: the app speaks the answers; `server`: the service synthesizes them into the call audio. */
+  tts: SpeechMode
+  /**
+   * Speech provider of the `server` modes: `voice` for `ctx.voice` (asr-service and the configured TTS),
+   * or the name of a Host service that implements {@link CallSpeech}.
+   */
+  provider: string
+}
+
+/** Limits of the calls. */
+export interface LimitsConfig {
+  /** How long a call rings before it is missed, in milliseconds. */
+  ringTimeoutMs: number
+  /** How long media may take to connect after the answer, in milliseconds. */
+  connectTimeoutMs: number
+  /** Longest call; the service hangs up after it, in milliseconds. */
+  maxCallMs: number
+  /** Calls the agent may place in a rolling hour. */
+  callsPerHour: number
+  /** Refuse the agent's calls that are not urgent while `ctx.presence` says the owner sleeps. */
+  respectSleep: boolean
+  /** Stop the agent's speech when the owner starts talking. */
+  bargeIn: boolean
+  /** Longest owner utterance prompted, in code points. */
+  maxUtteranceChars: number
+  /** Transcript lines kept per call; the oldest beyond it are dropped. */
+  transcriptLines: number
+  /** Longest reason the agent may give for a call, in code points. */
+  maxReasonChars: number
+}
+
+/** Detection settings, all in milliseconds except the levels. */
+export interface VadConfig {
+  /** Speech this long in a row starts an utterance. */
+  onsetMs: number
+  /** Silence this long ends it. */
+  endSilenceMs: number
+  /** Shorter utterances are dropped as noise. */
+  minSpeechMs: number
+  /** An utterance is cut and emitted at this length. */
+  maxUtteranceMs: number
+  /** Audio kept from before the onset, so the first syllable is not lost. */
+  preRollMs: number
+  /** RMS level below which a frame is never speech. */
+  minLevel: number
+  /** A frame is speech when its RMS exceeds the noise floor times this. */
+  floorRatio: number
+}
+
+/** Media network settings. */
+export interface IceConfig {
+  /** IPv4 address the media sockets bind to, e.g. the host's Tailscale address; empty gathers every interface. */
+  bindAddress: string
+  /** Lowest UDP port of the media sockets; 0 with {@link maxPort} 0 for any port. */
+  minPort: number
+  /** Highest UDP port of the media sockets. */
+  maxPort: number
+  /** Also gather IPv6 candidates. */
+  ipv6: boolean
+  /** How long a disconnected leg may stay so before the call ends, in milliseconds. */
+  disconnectGraceMs: number
+}
+
+/** Where pushes go, per environment; tests point both at a local server. */
+export interface ApnsHosts {
+  /** Origin of the development push service, for apps signed for development. */
+  sandbox: string
+  /** Origin of the production push service, for TestFlight and App Store builds. */
+  production: string
+}
+
+/** Where speech is recognized or synthesized. */
+export type SpeechMode = 'server' | 'device'
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-voice-call -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-web -->
 <a id="deepseek-aidsh-web"></a>

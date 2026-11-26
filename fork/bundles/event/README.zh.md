@@ -74,6 +74,7 @@ profile 按 `dsh.profile.bundles` 的顺序把各层的 patch 合成一个扁平
 | `@deepseek-ai/courses` | 课程记录和 DDL 轮询 | 算免打扰要的 `ctx.presence` |
 | `@deepseek-ai/gmail` | Gmail 账号、设置 → 邮箱 | `tool-gmail` 行 |
 | `@deepseek-ai/qqbot` | 官方 QQ 机器人频道、`qqbot` 预置 | owner-relay 的 `qqbot` 频道 |
+| `@deepseek-ai/voice-call` | 打到 owner iPhone 的语音线路（默认禁用）、`voice-call` 预置 | owner-relay 的 `voice-call` 频道、`tool-voice-call` 行 |
 | `@deepseek-ai/integrity` | 完整性监视 | — |
 | `@deepseek-ai/guard` | `ctx.contentGuard`、设置页 | 每个写公开文本的地方 |
 | `@deepseek-ai/style` | 说话风格、设置 → 说话风格 | `ctx.contentGuard`、它挖掘的 QQ 和 B 站读取 |
@@ -88,9 +89,9 @@ profile 按 `dsh.profile.bundles` 的顺序把各层的 patch 合成一个扁平
 
 每个功能 bundle 的 `cordis.patch.yml` 里就是这份文件原先的那些行，逐字搬过去，相对顺序不变；`fork/bundles/event/cordis.patch.yml` 留下骨架行和根上的覆盖。有测试把组合后的各层和旧的单文件组合对比，行不会被悄悄丢掉或改掉。
 
-一个预置整块留在同一层。agent 预置的插件是一个 config 值（`config.plugins`），不是 patch 引擎能索引的 group，所以后面的层没法往预置里插东西：功能自己的预置（`bili`、`up`、`qqbot`、`qq-digest`、`qq-main`）跟着功能走，服务级的两个（`notify`、`unattended`）留在这里。
+一个预置整块留在同一层。agent 预置的插件是一个 config 值（`config.plugins`），不是 patch 引擎能索引的 group，所以后面的层没法往预置里插东西：功能自己的预置（`bili`、`up`、`qqbot`、`voice-call`、`qq-digest`、`qq-main`）跟着功能走，服务级的两个（`notify`、`unattended`）留在这里。
 
-`unattended` 预置点名了好几个功能的工具（`tool-qq`、`tool-courses`、`tool-gmail`、`tool-voice`、`cc-bridge`、`tool-monitor`）。这些行随预置留在骨架里，因为别的层没法把它们补进预置。所以要删掉某个功能 bundle，也得把它的工具行从 `preset-unattended` 里删掉。
+`unattended` 预置点名了好几个功能的工具（`tool-qq`、`tool-courses`、`tool-gmail`、`tool-voice`、`tool-voice-call`、`cc-bridge`、`tool-monitor`）。这些行随预置留在骨架里，因为别的层没法把它们补进预置。所以要删掉某个功能 bundle，也得把它的工具行从 `preset-unattended` 里删掉。
 
 总线保留全部订阅。路由属于服务，不属于某个功能：订阅点名它需要的预置或 source，没挂载的功能只是不会触发自己那条订阅。
 
