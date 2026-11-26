@@ -442,6 +442,13 @@ describe('a field drawn by a display that shows its value', () => {
     expect(probeElement(placeSegment().year)).toMatchObject({ occlusion: 1 })
   })
 
+  it('reads a zero-padded number on the display as the same value (Workday month "02" for aria-valuetext "2")', () => {
+    mount('<div id="segment"><input id="year" role="spinbutton" aria-label="Month" aria-valuetext="2"><div id="display" aria-hidden="true">02</div></div>')
+    expect(probeElement(placeSegment().year)).toMatchObject({ occlusion: 1 })
+    mount('<div id="segment"><input id="year" role="spinbutton" aria-label="Month" aria-valuetext="2"><div id="display" aria-hidden="true">12</div></div>')
+    expect(probeElement(placeSegment().year)).toMatchObject({ occlusion: 0 })
+  })
+
   it('stays covered under a display with other text, one a reader sees, one in another box, or one holding a control', () => {
     const covers = [
       '<div id="segment"><input id="year" aria-valuetext="YYYY"><div id="display" aria-hidden="true">Verify you are human</div></div>',

@@ -170,6 +170,23 @@ describe.skipIf(!AVAILABLE)('action guard in a real page', () => {
     expect(await (await app.browser.page()).locator('#display').textContent()).toBe('2023')
   }, 120_000)
 
+  it('types a month into a Workday-style segment whose display pads the number', async () => {
+    const app = await boot()
+    await load(app, [
+      '<div id="seg" style="position:relative;display:inline-block;width:32px;height:24px;margin:40px">',
+      '<input id="month" role="spinbutton" aria-label="Month" aria-valuetext="2" style="position:absolute;left:14px;top:10px;width:2px;height:2px;padding:0;border:0">',
+      '<div id="display" aria-hidden="true" style="position:absolute;inset:0;background:#fff">02</div></div>',
+      '<script>',
+      'const m = document.getElementById("month"), d = document.getElementById("display");',
+      'd.addEventListener("click", () => m.focus());',
+      'm.addEventListener("keydown", e => { if (/^[0-9]$/.test(e.key)) { e.preventDefault(); m.value = (m.value + e.key).slice(-2); d.textContent = m.value.padStart(2, "0"); m.setAttribute("aria-valuetext", String(Number(m.value))) } });',
+      '</script>',
+    ].join(''))
+    const outcome = await app.browser.fill({ selector: '#month' }, '11')
+    expect(outcome.target).toMatchObject({ ref: '#month', index: 0, score: 1 })
+    expect(await (await app.browser.page()).locator('#display').textContent()).toBe('11')
+  }, 120_000)
+
   it('still refuses a caret-sized field under an aria-hidden layer that shows other text', async () => {
     const app = await boot()
     await load(app, [
