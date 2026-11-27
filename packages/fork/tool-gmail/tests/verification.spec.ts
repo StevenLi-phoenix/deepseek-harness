@@ -90,7 +90,7 @@ describe('verification-only mode', () => {
     }
   })
 
-  it.each([[99_999, 1440], [-50, 1], [5, 5]])('clamps %i minutes to %i', async (lookback_minutes, clamped) => {
+  it.each([[99_999, 1440], [-50, 1], [5, 5], [0, 30]])('clamps %i minutes to %i', async (lookback_minutes, clamped) => {
     const h = await mount()
     h.gmail.verificationCode.mockResolvedValue(null)
     expect((await h.invoke({ ...ARGS, lookback_minutes })).value).toEqual(NO_CODE)

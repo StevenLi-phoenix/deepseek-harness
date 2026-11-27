@@ -266,6 +266,15 @@ describe('JobRepository targeted edits', () => {
   })
 })
 
+describe('present', () => {
+  it('drops the fillers a strict-schema provider sends for unused fields', () => {
+    expect(JobTools.present({ operation: 'list', status: 'queued', id: '', step: 0, paths: [], visa_flag: false, note: null }))
+      .toEqual({ operation: 'list', status: 'queued', visa_flag: false })
+    // An update leaves stored flags alone unless the call sets one.
+    expect(JobTools.present({ visa_flag: false, requires_cover_letter: true }, false)).toEqual({ requires_cover_letter: true })
+  })
+})
+
 describe('job_repo tool', () => {
   it.each(['apply', 'inbox', 'lead'] as const)('exposes scoped edits in %s without widening runbook access', async (mode) => {
     const ctx = new Context()
@@ -281,15 +290,23 @@ describe('job_repo tool', () => {
       const call = async (args: Record<string, unknown>) => (await ctx.tools.execute({
         agent, signal, calls: [{ type: 'tool-call', id: ToolCallId('job-repo-call'), name: 'job_repo', arguments: JSON.stringify(args) }],
       })).results[0]?.result
-      expect(await call({ operation: 'append', path: 'TODO.md', text: 'first' })).toMatchObject({ isError: false })
-      expect(await call({ operation: 'replace', path: 'TODO.md', oldText: 'first', text: 'second' })).toMatchObject({ isError: false })
-      expect(await call({ operation: 'replace', path: 'TODO.md', text: 'bad' })).toMatchObject({ isError: true })
-      expect(await call({ operation: 'append', path: 'TODO.md', oldText: 'second', text: 'bad' })).toMatchObject({ isError: true })
-      expect(await call({ operation: 'append', path: batchRunbook, text: 'bad' })).toMatchObject({ isError: true })
-      expect(await call({ operation: 'write_runbook', text: 'bad', oldText: 'runbook fixture' })).toMatchObject({ isError: true })
-      expect(await call({ operation: 'read_runbook' })).toMatchObject({ isError: mode !== 'lead' })
+      // Codex sends every declared field, filling the unused ones; each operation must read only its own.
+      const filled = { path: '', text: '', oldText: '', start: 1, limit: 250, message: '', paths: [] }
+      expect(await call({ ...filled, operation: 'append', path: 'TODO.md', text: 'first' })).toMatchObject({ isError: false })
+      expect(await call({ ...filled, operation: 'replace', path: 'TODO.md', oldText: 'first', text: 'second' })).toMatchObject({ isError: false })
+      expect(await call({ ...filled, operation: 'replace', path: 'TODO.md', text: 'bad' })).toMatchObject({ isError: true })
+      expect(await call({ ...filled, operation: 'append', path: batchRunbook, text: 'bad' })).toMatchObject({ isError: true })
+      expect(await call({ ...filled, operation: 'read', path: 'TODO.md', start: 0, limit: 0 })).toMatchObject({ isError: false })
+      const runbook = await call({ ...filled, operation: 'read_runbook' })
+      expect(runbook).toMatchObject({ isError: mode !== 'lead' })
+      if (mode === 'lead') expect(JSON.stringify(runbook)).toContain('runbook fixture')
+      // write_runbook is lead-only; elsewhere the call fails and the runbook stays.
+      if (mode !== 'lead') expect(await call({ ...filled, operation: 'write_runbook', text: 'bad' })).toMatchObject({ isError: true })
       await expect(readFile(join(root, 'TODO.md'), 'utf8')).resolves.toBe('second\n')
       await expect(readFile(batchRunbook, 'utf8')).resolves.toBe('runbook fixture\n')
+      // A replacement of '' removes the match.
+      expect(await call({ ...filled, operation: 'replace', path: 'TODO.md', oldText: 'second\n', text: '' })).toMatchObject({ isError: false })
+      await expect(readFile(join(root, 'TODO.md'), 'utf8')).resolves.toBe('')
     } finally {
       await ctx.fiber.dispose()
     }

@@ -119,8 +119,9 @@ export function registerVerificationTools(ctx: Context, gmail: Gmail): void {
         return { ...NO_CODE, error: 'sensitive_sender' }
       }
 
+      // Strict-schema providers fill an unused integer with 0, which means "not set", not "the last minute".
       const requested = input.lookback_minutes
-      const since = Number.isSafeInteger(requested) && requested !== undefined
+      const since = Number.isSafeInteger(requested) && requested !== undefined && requested !== 0
         ? Math.min(MAX_LOOKBACK_MINUTES, Math.max(1, requested))
         : DEFAULT_LOOKBACK_MINUTES
       const now = Date.now()

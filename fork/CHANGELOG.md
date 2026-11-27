@@ -11,6 +11,7 @@ Fork-local changes on top of upstream DeepSeek Harness. Format: [Keep a Changelo
   from what a turn sends, not from forgetting.
 
 ### Fixed
+- Job tools accept Codex's filled-in arguments (2026-11-27): the deployment's default route sends every declared field and fills the unused ones with `''`, `[]` or `0`, and `job_repo`, `jobtracker` and `job_issue` refused any field an operation did not use, so the first job-lead run looped on `read_runbook` for 90 seconds. Each operation now reads only its own fields; an update drops `false` flags so it keeps stored ones, and `gmail_verification_code` reads `lookback_minutes: 0` as unset (30 minutes) instead of one minute.
 - Job presets against the live services (2026-11-27): `skill` read a repo-root `SKILL.md` that does not exist (the skill is `.agents/skills/job-apply/SKILL.md`); `jobtracker` appends omitted the API's required `location` and `source` and allowed `pending` and `withdrawn`, which the API rejects, and recorded no `date_applied`; `job_issue` could not read the owner's comments (`view`); `job_repo` `pull` was fast-forward-only, so a run holding commits could not push after another device pushed. The `job-apply` persona no longer says site credentials are unavailable.
 
 ### Added
