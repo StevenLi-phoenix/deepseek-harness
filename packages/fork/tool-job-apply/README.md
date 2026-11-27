@@ -21,7 +21,7 @@ The model gets `job_repo` for bounded reference files and pinned Git operations,
 
 Use `job_repo` `append` to add complete lines or `replace` to edit one literal match without sending the whole file back to the tool. `replace` leaves the file unchanged when the old text is missing or appears more than once. Each supplied text is limited to 64 KiB, and targeted edits support files up to 1 MiB. The résumé text is read-only.
 
-`jobtracker` writes the fields the tracker API requires: an appended row carries `location` and `source`, and an applied one carries `date_applied`. An unfinished form stays `queued` with a `step`. `job_issue` `view` returns one issue with its latest 20 comments, where the owner answers questions and approvals. `job_repo` `pull` rebases local commits onto `origin/main` with autostash and aborts a conflicting rebase, because other devices push while a run holds commits.
+`jobtracker` writes the fields the tracker API requires: an appended row carries `location` and `source`, and an applied one carries `date_applied`. An unfinished form stays `queued` with a `step`. `list` with `company`, `role` or `url` finds a posting in every status, ignoring case and punctuation; without them it lists one status, newest first. It shows at most 40 rows, with full notes only when 5 or fewer match, so a lookup by company and role gives the notes an update has to carry over. `job_issue` `view` returns one issue with its latest 20 comments, where the owner answers questions and approvals. `job_repo` `pull` rebases local commits onto `origin/main` with autostash and aborts a conflicting rebase, because other devices push while a run holds commits.
 
 ## Known Limitations and Deferred Work
 

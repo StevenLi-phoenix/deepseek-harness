@@ -36,10 +36,69 @@ describe('narrow tracker calls', () => {
   it('lists only through the fixed tracker endpoint with the supported status field', async () => {
     const signal = new AbortController().signal
     const request = vi.fn<typeof fetch>().mockResolvedValue(new Response('[]'))
-    await expect(listTrackerRows('queued', 'test-bearer', signal, request)).resolves.toBe('[]')
+    expect(await listed({ status: 'queued' }, request)).toEqual({ filter: { status: 'queued' }, matched: 0, rows: [] })
     expect(request).toHaveBeenCalledWith('https://mcp.lishuyu.app/api/jobtracker/list_applications', expect.objectContaining({ body: '{"status":"queued"}', redirect: 'error' }))
-    await expect(listTrackerRows('pending', 'test-bearer', signal, request)).rejects.toThrow(/unsupported tracker status/iu)
+    await expect(listTrackerRows({ status: 'pending' }, 'test-bearer', signal, request)).rejects.toThrow(/unsupported tracker status/iu)
     expect(request).toHaveBeenCalledOnce()
+  })
+
+  const stored = (id: number, company: string, role: string, status: string, notes = '', url = `https://jobs.example.com/${id}`) => ({
+    id: `abcdef00-0000-4000-8000-${String(id).padStart(12, '0')}`, status, company, role, location: 'NYC', source: 'company_site', url,
+    deadline: null, date_applied: status === 'applied' ? '2026-11-20' : null, notes, requires_cover_letter: false, visa_flag: false,
+    created_at: '2026-11-20T00:00:00Z', updated_at: '2026-11-27T00:00:00Z',
+  })
+  const envelope = (rows: unknown[]) => new Response(JSON.stringify({ ok: true, service: 'jobtracker', tool: 'list_applications', result: rows }))
+  interface Listed {
+    filter: unknown
+    matched: number
+    omitted?: number
+    note?: string
+    rows: { id: string; status: string; notes: string }[]
+  }
+  const listed = async (filter: Parameters<typeof listTrackerRows>[0], request: typeof fetch): Promise<Listed> =>
+    JSON.parse(await listTrackerRows(filter, 'test-bearer', new AbortController().signal, request)) as Listed
+  const ids = (result: Listed) => result.rows.map(row => row.id)
+
+  it('finds a posting by company and role across every status, ignoring case, punctuation and a missing req number', async () => {
+    const rows = [
+      stored(1, 'Shield AI', '2027 Summer Intern - Software Engineering', 'applied', 'Submitted via Lever'),
+      stored(2, 'Shield AI', 'Flight Software Intern', 'skipped'),
+      stored(3, 'TikTok Inc.', 'Software Engineer Graduate', 'queued'),
+    ]
+    const request = vi.fn<typeof fetch>().mockImplementation(async () => envelope(rows))
+    // Codex fills status with an enum value; a company search ignores it.
+    const found = await listed({ status: 'rejected', company: 'shield ai', role: '2027 Summer Intern – Software Engineering - 5815' }, request)
+    expect(request).toHaveBeenLastCalledWith('https://mcp.lishuyu.app/api/jobtracker/list_applications', expect.objectContaining({ body: '{}' }))
+    expect(found.matched).toBe(1)
+    expect(found.rows[0]).toMatchObject({ id: rows[0]!.id, status: 'applied', notes: 'Submitted via Lever' })
+    expect(ids(await listed({ company: 'TikTok' }, request))).toEqual([rows[2]!.id])
+    expect(ids(await listed({ url: 'https://www.jobs.example.com/2/?utm_source=x' }, request))).toEqual([rows[1]!.id])
+    // A role that matches nothing falls back to every row for the company, so a lookup never dead-ends.
+    expect(await listed({ company: 'Shield AI', role: 'Hardware Intern' }, request)).toMatchObject({ matched: 2, note: expect.stringMatching(/every row for the company/u) })
+    expect(await listed({ company: 'Nobody Corp' }, request)).toMatchObject({ matched: 0, rows: [] })
+  })
+
+  it('bounds a large list to 40 rows with shortened notes, and reads past the write size cap', async () => {
+    const signal = new AbortController().signal
+    const rows = Array.from({ length: 300 }, (_, index) => stored(index, `Company ${index}`, 'Engineer', 'applied', 'n'.repeat(900)))
+    const request = vi.fn<typeof fetch>().mockImplementation(async () => envelope(rows))
+    const text = await listTrackerRows({ status: 'applied' }, 'test-bearer', signal, request)
+    const page = JSON.parse(text) as Listed
+    expect(page).toMatchObject({ matched: 300, omitted: 260 })
+    expect(page.rows).toHaveLength(40)
+    expect(page.rows[0]!.notes.length).toBeLessThanOrEqual(303)
+    expect(text.length).toBeLessThan(30_000)
+    const one = await listed({ company: 'Company 299', role: 'Engineer' }, request)
+    expect(one.rows[0]!.notes).toHaveLength(900)
+  })
+
+  it('names a tracker response over the size cap instead of reporting a failed request', async () => {
+    const signal = new AbortController().signal
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response('x'.repeat(8_000_001)))
+    await expect(listTrackerRows({ status: 'applied' }, 'test-bearer', signal, request)).rejects.toThrow(/^Jobtracker response exceeded the size limit\.$/u)
+    request.mockResolvedValueOnce(new Response('not json'))
+    await expect(listTrackerRows({ status: 'applied' }, 'test-bearer', signal, request)).rejects.toThrow(/unexpected list response/u)
+    await expect(listTrackerRows({ company: 'Example\u0000' }, 'test-bearer', signal, request)).rejects.toThrow(/plain text/u)
   })
 
   it('refuses missing credentials and large or unsuccessful responses without exposing either', async () => {
@@ -50,7 +109,9 @@ describe('narrow tracker calls', () => {
     request.mockResolvedValueOnce(new Response('test-bearer', { status: 403 }))
     await expect(writeTrackerRow(row, 'test-bearer', signal, request)).rejects.toThrow(/^Jobtracker returned an unsuccessful/u)
     request.mockResolvedValueOnce(new Response('x'.repeat(50_001)))
-    await expect(writeTrackerRow(row, 'test-bearer', signal, request)).rejects.toThrow(/^The fixed jobtracker request did not complete/u)
+    await expect(writeTrackerRow(row, 'test-bearer', signal, request)).rejects.toThrow(/^Jobtracker response exceeded the size limit; do not assume the write landed/u)
+    request.mockRejectedValueOnce(new TypeError('fetch failed: Authorization: Bearer test-bearer'))
+    await expect(writeTrackerRow(row, 'test-bearer', signal, request)).rejects.toThrow(/^The fixed jobtracker request did not complete; do not assume the write landed\.$/u)
   })
 
   it.each([
