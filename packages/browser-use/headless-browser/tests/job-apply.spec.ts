@@ -28,22 +28,31 @@ it.each(['https://careers.unknown-employer.example/', 'https://shibboleth.nyu.ed
   expect(deniedJobUrl(url)).toBe(false)
 })
 
-it('only attaches the two configured PDFs or an unlinked correctly typed cover letter', async () => {
+it('maps the approved PDF sources to their employer-facing names and refuses other files', async () => {
   const root = mkdtempSync(join(realpathSync(tmpdir()), 'dsh-job-upload-'))
   try {
     const pdf = Buffer.from('%PDF-1.7 synthetic')
-    const approved = join(root, 'resume.pdf')
+    const approved = join(root, 'private', 'resume-small.pdf')
     const cover = join(root, 'cover_letters')
+    mkdirSync(join(root, 'private'))
     mkdirSync(cover)
     writeFileSync(approved, pdf)
+    writeFileSync(join(root, 'private', 'transcript-source.pdf'), pdf)
+    writeFileSync(join(root, 'private', 'resume-compact.pdf'), pdf)
     writeFileSync(join(cover, 'letter.pdf'), pdf)
     writeFileSync(join(cover, 'letter.docx'), Buffer.from([80, 75, 3, 4, 0]))
     writeFileSync(join(cover, 'not-a-pdf.pdf'), 'not a PDF')
     symlinkSync(approved, join(cover, 'symlink.pdf'))
     linkSync(join(cover, 'letter.pdf'), join(cover, 'hardlink.pdf'))
-    const uploads = new JobApplyUploads({ uploadDirs: [root], uploadBasenames: ['resume.pdf', 'transcript.pdf'], coverLetterRoot: root }, 1, new Context().logger)
-    expect((await uploads.resolve(['resume.pdf', 'cover_letters/letter.docx'])).map(file => file.name)).toEqual(['resume.pdf', 'letter.docx'])
-    for (const path of ['~/.ssh/id_rsa', approved, 'cover_letters/../resume.pdf', 'cover_letters/hardlink.pdf', 'cover_letters/symlink.pdf', 'cover_letters/not-a-pdf.pdf', 'cover_letters/letter.md']) {
+    const uploads = new JobApplyUploads({ coverLetterRoot: root, uploadFiles: {
+      'Resume.pdf': 'private/resume-small.pdf', 'Transcript.pdf': 'private/transcript-source.pdf', 'Resume_488KB.pdf': 'private/resume-compact.pdf',
+    } }, 1, new Context().logger)
+    const names = ['Resume.pdf', 'Transcript.pdf', 'Resume_488KB.pdf', 'cover_letters/letter.docx']
+    expect((await uploads.resolve(names)).map(file => file.payload?.name)).toEqual(['Resume.pdf', 'Transcript.pdf', 'Resume_488KB.pdf', 'letter.docx'])
+    const [resume] = await uploads.resolve(['Resume.pdf'])
+    expect(resume).toMatchObject({ path: approved, name: 'Resume.pdf', payload: { name: 'Resume.pdf', buffer: pdf } })
+    for (const path of ['~/.ssh/id_rsa', approved, 'resume-small.pdf', 'private/resume-small.pdf', 'cover_letters/../Resume.pdf',
+      'cover_letters/hardlink.pdf', 'cover_letters/symlink.pdf', 'cover_letters/not-a-pdf.pdf', 'cover_letters/letter.md']) {
       await expect(uploads.resolve([path])).rejects.toThrow()
     }
   } finally { rmSync(root, { force: true, recursive: true }) }
@@ -59,7 +68,13 @@ it.skipIf(!existsSync(chromium.executablePath()))('closes a denied popup without
     if (req.url === '/redirect') { res.writeHead(302, { Location: privatePage }); res.end(); return }
     res.setHeader('Content-Type', 'text/html')
     if (req.url === '/private') { deniedRequests++; res.end('<title>synthetic private subject</title>synthetic private mail'); return }
-    res.end(`<title>Unlisted employer</title><button id="popup" onclick="window.open('${privatePage}')">Open a window</button>`)
+    res.end(`<title>Unlisted employer</title><button id="popup" onclick="window.open('${privatePage}')">Open a window</button>
+      <label>Search schools<input id="search" onkeydown="if(event.key==='Enter') output.textContent='Search '+this.value"></label>
+      <button id="safe" onclick="output.textContent='Allowed'">Review and Submit</button>
+      <button id="pay" aria-label="Pay $25 application fee" onclick="output.textContent='Unexpected'">$<span id="icon">!</span></button>
+      <label>Password<input id="password" type="password"></label><output id="output"></output>
+      <div style="height:2200px"></div>`)
+
   })
   let browser: HeadlessBrowserSession | undefined
   try {
@@ -69,15 +84,16 @@ it.skipIf(!existsSync(chromium.executablePath()))('closes a denied popup without
     base = `http://jobs.example.test:${bound.port}`
     privatePage = `http://mail.google.com:${bound.port}/private`
     browser = new HeadlessBrowserSession(Config({ profileDir: join(root, 'profile'), downloadDir: join(root, 'downloads'), stealth: false } as Config), {
-      debug: () => {}, info: () => {}, warn: (format, ...args) => { warnings.push([format, ...args].join(' ')) },
+      debug: () => {}, info: () => {}, warn: (format, ...args: unknown[]) => { warnings.push([format, ...args].map(String).join(' ')) },
     }, new ActionGuard(), {
       launch: async (profile, options) => await chromium.launchPersistentContext(profile, { ...options,
-        args: ['--host-resolver-rules=MAP jobs.example.test 127.0.0.1,MAP mail.google.com 127.0.0.1', '--no-proxy-server'],
+        args: ['--host-resolver-rules=MAP *.example.test 127.0.0.1,MAP mail.google.com 127.0.0.1', '--no-proxy-server'],
       }),
       probe: { listProcesses: async () => [] },
     })
     const active = browser
-    const job = <T>(operation: () => Promise<T>) => active.runJob('worker', new ActionGuard(), operation)
+    const guard = () => new ActionGuard({ sensitivePolicy: 'job-apply' })
+    const job = <T>(operation: () => Promise<T>) => active.runJob('worker', guard(), operation)
     await expect(job(async () => await active.open(privatePage, true))).rejects.toThrow('navigation_refused: mail.google.com')
     await expect(job(async () => await active.open(`${base}/redirect`, true))).rejects.toThrow('navigation_refused: mail.google.com')
     expect(deniedRequests).toBe(0)
@@ -88,16 +104,47 @@ it.skipIf(!existsSync(chromium.executablePath()))('closes a denied popup without
     await expect(active.runJob('other', new ActionGuard(), async () => await active.read({}, opened.tab))).rejects.toThrow('not owned')
     warnings.length = 0
     const outcome = await job(async () => await active.click({ selector: '#popup' }, opened.tab))
-    await vi.waitFor(() => expect(warnings.join('\n')).toContain('navigation_refused: mail.google.com'))
+    await vi.waitFor(() => { expect(warnings.join('\n')).toContain('navigation_refused: mail.google.com') })
     expect(outcome.popups).toBeUndefined()
     expect(await job(async () => await active.listTabs())).toEqual([expect.objectContaining({ id: opened.tab, title: 'Unlisted employer' })])
     const context = await active.ensure()
-    await vi.waitFor(() => expect(context.pages().some(page => page.url().includes('/private'))).toBe(false))
+    await vi.waitFor(() => { expect(context.pages().some(page => page.url().includes('/private'))).toBe(false) })
     expect((await job(async () => await active.read({}, opened.tab))).text).not.toContain('synthetic private mail')
+    const page = await active.page(opened.tab)
+    const point = async (selector: string) => {
+      const box = await page.locator(selector).boundingBox()
+      if (box === null) throw new Error('fixture element did not render')
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+    }
+    const search = await point('#search')
+    await job(async () => await active.fill({ point: search }, 'Example', opened.tab, { enter: true }))
+    expect(await page.locator('#output').textContent()).toBe('Search Example')
+    await job(async () => await active.fill({ selector: '#search' }, 'Named', opened.tab, { enter: true }))
+    expect(await page.locator('#output').textContent()).toBe('Search Named')
+    const permitted = await point('#safe')
+    await job(async () => await active.click({ point: permitted }, opened.tab))
+    expect(await page.locator('#output').textContent()).toBe('Allowed')
+    const money = await point('#icon')
+    await expect(job(async () => await active.click({ point: money }, opened.tab))).rejects.toThrow(/sensitive/i)
+    expect(await page.locator('#output').textContent()).toBe('Allowed')
+    await expect(active.runJob('other', guard(), async () => await active.click({ point: permitted }, opened.tab))).rejects.toThrow('not owned')
+    await job(async () => await active.scroll({ deltaY: 250, ...permitted }, opened.tab))
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+    const snapshot = await job(async () => await active.snapshot(opened.tab))
+    expect(active.jobSnapshot('worker', snapshot.path)?.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+    expect(active.jobSnapshot('other', snapshot.path)).toBeUndefined()
+    expect(active.jobSnapshot('worker', '/tmp/other.png')).toBeUndefined()
+    const form = { selector: '#password' }
+    await job(async () => await active.fillSecret(form, 'fixture-password', 'password', 'jobs.example.test', opened.tab))
+    expect(await page.locator('#password').inputValue()).toBe('fixture-password')
+    const wrongSite = await job(async () => await active.open(base.replace('jobs.', 'other.'), true))
+    await expect(job(async () => await active.fillSecret(form, 'fixture-password', 'password', 'jobs.example.test', wrongSite.tab)))
+      .rejects.toThrow(/only written on its own host/)
+    expect(await (await active.page(wrongSite.tab)).locator('#password').inputValue()).toBe('')
   } finally {
     await browser?.close()
     server.closeAllConnections()
-    await new Promise<void>((resolve) => { server.close(() => resolve()) })
+    await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
     rmSync(root, { force: true, recursive: true })
   }
 }, 25_000)

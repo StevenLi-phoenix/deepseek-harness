@@ -76,6 +76,8 @@ export interface FormToolDeps {
   readonly browser: FormBrowser
   readonly takeover: TakeoverState
   readonly credentials?: FormCredentials
+  /** When true, list only credentials matching the owned tab's current host. */
+  readonly listCurrentHostOnly?: boolean
   readonly uploads: FormUploads
   readonly log: Pick<Context['logger'], 'info' | 'warn'>
 }
@@ -256,6 +258,12 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps, register = r
     },
     execute: async (args: CredentialArgs) => {
       if (args.action === 'list') {
+        if (deps.listCurrentHostOnly === true) {
+          return await guarded(deps, 'listing saved accounts for the current site', async () => {
+            const host = credentialHost(await deps.browser.pageUrl(args.tab))
+            return { action: 'list', accounts: (await credentials.list()).filter(account => account.host === host) }
+          })
+        }
         return await attempt('listing saved accounts', async () => ({ action: 'list', accounts: await credentials.list() }))
       }
       const parsed = targetOf({

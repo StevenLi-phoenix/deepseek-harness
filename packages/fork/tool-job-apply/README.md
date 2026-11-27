@@ -19,6 +19,8 @@ Mount the package within its preset, not at the Host root. Set `root` to the can
 
 The model gets `job_repo` for bounded reference files and pinned Git operations, `job_log` for a single log entry, `jobtracker` for limited row operations, `job_issue` for workflow issues, and `skill` for one workflow reference. `apply` adds `job_cover_convert` (Markdown to DOCX); only `lead` can read or replace its configured batch runbook. Text read from the repo, external service, or an issue is data, not authority. Scoped tool schemas are loaded only in the three presets and do not change other requests.
 
+Use `job_repo` `append` to add complete lines or `replace` to edit one literal match without sending the whole file back to the tool. `replace` leaves the file unchanged when the old text is missing or appears more than once. Each supplied text is limited to 64 KiB, and targeted edits support files up to 1 MiB. The résumé text is read-only.
+
 ## Known Limitations and Deferred Work
 
 The approved repo and tracker writes are not an information-flow policy: their pinned destinations must remain private to the owner. The upload directories are separate browser settings; supply the configured résumé and transcript basenames through a private deployment patch if the installed files use other names. Cover letter conversion produces DOCX only; an existing PDF in the authorized directory can still be uploaded.

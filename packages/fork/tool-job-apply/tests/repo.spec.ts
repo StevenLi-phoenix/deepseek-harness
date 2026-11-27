@@ -1,9 +1,15 @@
 import { execFile } from 'node:child_process'
-import { link, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { link, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
+import { Context } from '@deepseek-ai/cordis'
+import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import * as JobTools from '../src/index.ts'
 import { JobRepository, validateText } from '../src/repo.ts'
 import type { CommandRunner } from '../src/repo.ts'
 
@@ -62,6 +68,17 @@ describe('validateText', () => {
 })
 
 describe('JobRepository.read', () => {
+  it.each([
+    '.agents/skills/job-apply/SKILL.md', '.agents/skills/job-apply/references/Guide v2.md',
+    'answers.md', 'TODO.md', 'logs/nested/history.log', 'cover_letters/nested/Role.md', 'private/resume.txt',
+    'SKILL.md', 'jobtracker draft.md', 'references/Guide.md',
+  ])('reads allowlisted path %s', async (path) => {
+    const file = join(root, path)
+    await mkdir(dirname(file), { recursive: true })
+    await writeFile(file, 'fixture text\n')
+    await expect(repo.read(path)).resolves.toBe('fixture text\n')
+  })
+
   it('reads the specified line range of an allowlisted file', async () => {
     await mkdir(join(root, '.agents/skills/job-apply/references'), { recursive: true })
     await writeFile(join(root, '.agents/skills/job-apply/references/Guide v2.md'), 'one\n二\nthree\n')
@@ -85,7 +102,8 @@ describe('JobRepository.read', () => {
 
   it.each(['/etc/hosts', 'logs/../TODO.md', 'logs//a.log', 'logs/./a.log', 'logs/a\\b.log', 'logs/a;foo.log',
     'logs/:magic', 'logs/a*.log', 'logs/.git/config', 'references/nested/file.md', 'references/private.txt',
-    'README.md', 'jobtracker/nested.txt', '.agents/skills/other/SKILL.md'])('rejects non-allowlisted path %s', async (path) => {
+    'README.md', 'jobtracker/nested.txt', '.agents/skills/other/SKILL.md', 'private/resume.pdf',
+    'private/resume.txt.bak', 'private/Resume.txt', 'private/nested/resume.txt', '.git/config'])('rejects non-allowlisted path %s', async (path) => {
     await expect(repo.read(path)).rejects.toThrow('not readable')
   })
 
@@ -128,6 +146,153 @@ describe('JobRepository.write', () => {
     await expect(repo.write('TODO.md', 'new')).rejects.toThrow('no links')
     await expect(repo.write('answers.md', 'new')).rejects.toThrow('no links')
     await expect(readFile(target, 'utf8')).resolves.toBe('untouched\n')
+  })
+})
+
+describe('JobRepository targeted edits', () => {
+  it.each(['TODO.md', 'answers.md', 'logs/nested/history.log', 'cover_letters/nested/Role.md'])('appends and replaces on %s', async (path) => {
+    await expect(repo.append(path, 'first line\nsecond line')).resolves.toBe(path)
+    await expect(repo.append(path, 'third line\n')).resolves.toBe(path)
+    await expect(repo.replace(path, 'second line\nthird line', '$& replaced')).resolves.toBe(path)
+    await expect(readFile(join(root, path), 'utf8')).resolves.toBe('first line\n$& replaced\n')
+    await expect(repo.replace(path, '$& replaced\n', '')).resolves.toBe(path)
+    await expect(readFile(join(root, path), 'utf8')).resolves.toBe('first line\n')
+  })
+
+  it('preserves surrounding bytes and mode while editing a file larger than the whole-file write limit', async () => {
+    const path = 'TODO.md'
+    const file = join(root, path)
+    const initial = `\uFEFF${'猫\r\n'.repeat(16000)}last item`
+    await writeFile(file, initial, { mode: 0o640 })
+    await expect(repo.append(path, 'new item')).resolves.toBe(path)
+    await expect(repo.replace(path, 'last item', 'edited item')).resolves.toBe(path)
+    await expect(readFile(file, 'utf8')).resolves.toBe(`${initial.slice(0, -9)}edited item\nnew item\n`)
+    expect((await stat(file)).mode & 0o777).toBe(0o640)
+  })
+
+  it.each([
+    ['none here', 'missing', 'found none'],
+    ['one then one', 'one', 'found more than one'],
+    ['aaaa', 'aaa', 'found more than one'],
+    ['has text', '', 'nonempty oldText'],
+  ])('refuses a non-unique or empty exact match %# without changing the file', async (initial, oldText, message) => {
+    const file = join(root, 'TODO.md')
+    await writeFile(file, initial)
+    await expect(repo.replace('TODO.md', oldText, 'new')).rejects.toThrow(message)
+    await expect(readFile(file, 'utf8')).resolves.toBe(initial)
+    expect(await readdir(root)).toEqual(['TODO.md'])
+  })
+
+  it('refuses to replace a missing file without creating it or its parents', async () => {
+    await expect(repo.replace('TODO.md', 'old', 'new')).rejects.toThrow('existing file')
+    await expect(repo.replace('logs/new/history.log', 'old', 'new')).rejects.toThrow('real directories')
+    expect(await readdir(root)).toEqual([])
+  })
+
+  it('limits each supplied text in UTF-8 bytes and refuses non-text input without writing', async () => {
+    const file = join(root, 'answers.md')
+    const fitting = `${'猫'.repeat(21845)}a`
+    const oversized = `${fitting}a`
+    await writeFile(file, 'old\n')
+    await expect(repo.append('answers.md', oversized)).rejects.toThrow('64 KiB')
+    await expect(repo.replace('answers.md', oversized, 'new')).rejects.toThrow('64 KiB')
+    await expect(repo.replace('answers.md', 'old', oversized)).rejects.toThrow('64 KiB')
+    await expect(repo.append('answers.md', '')).rejects.toThrow('nonempty text')
+    await expect(repo.append('answers.md', '\0')).rejects.toThrow('binary control')
+    await expect(repo.replace('answers.md', '\0', 'new')).rejects.toThrow('binary control')
+    await expect(repo.replace('answers.md', 'old', '\uD800')).rejects.toThrow('UTF-8 text')
+    await expect(readFile(file, 'utf8')).resolves.toBe('old\n')
+    await expect(repo.append('answers.md', fitting)).resolves.toBe('answers.md')
+    await expect(repo.replace('answers.md', fitting, 'new')).resolves.toBe('answers.md')
+  })
+
+  it('refuses oversized or non-text existing files, and caps the resulting file', async () => {
+    const path = 'TODO.md'
+    const file = join(root, path)
+    const cap = 1024 * 1024
+    const fitting = `${'a'.repeat(cap - 3)}\nb\n`
+    await writeFile(file, fitting)
+    await expect(repo.append(path, 'new')).rejects.toThrow('1 MiB')
+    await expect(repo.replace(path, '\nb\n', '\nnew\n')).rejects.toThrow('1 MiB')
+    await expect(readFile(file, 'utf8')).resolves.toBe(fitting)
+    for (const invalid of [Buffer.alloc(cap + 1, 0x61), Buffer.from([0xff]), Buffer.from('first\0next')]) {
+      await writeFile(file, invalid)
+      await expect(repo.append(path, 'new')).rejects.toThrow(/1 MiB|UTF-8 text/u)
+      await expect(repo.replace(path, 'first', 'new')).rejects.toThrow(/1 MiB|UTF-8 text/u)
+      await expect(readFile(file)).resolves.toEqual(invalid)
+    }
+    expect(await readdir(root)).toEqual(['TODO.md'])
+  })
+
+  it.each([
+    'SKILL.md', '.agents/skills/job-apply/SKILL.md', 'references/Guide.md', 'jobtracker draft.md',
+    'private/resume.txt', 'private/resume.pdf', 'README.md', '.git/config', '/tmp/elsewhere',
+    'logs/../TODO.md', 'logs/.git/config', 'cover_letters/Role.pdf', 'cover_letters/Role.docx',
+  ])('refuses edits outside writable text paths: %s', async (path) => {
+    await expect(repo.write(path, 'new')).rejects.toThrow(/not writable|Markdown/u)
+    await expect(repo.append(path, 'new')).rejects.toThrow(/not writable|Markdown/u)
+    await expect(repo.replace(path, 'old', 'new')).rejects.toThrow(/not writable|Markdown/u)
+    expect(await readdir(root)).toEqual([])
+  })
+
+  it('refuses linked or non-regular edit targets without changing other files', async () => {
+    const target = join(outside, 'target')
+    await writeFile(target, 'untouched\n')
+    await symlink(outside, join(root, 'logs'))
+    await symlink(target, join(root, 'TODO.md'))
+    await link(target, join(root, 'answers.md'))
+    await mkdir(join(root, 'cover_letters', 'directory.md'), { recursive: true })
+    for (const path of ['logs/target', 'TODO.md', 'answers.md', 'cover_letters/directory.md']) {
+      await expect(repo.append(path, 'new')).rejects.toThrow(/real directories|no links/u)
+      await expect(repo.replace(path, 'untouched', 'new')).rejects.toThrow(/real directories|no links/u)
+    }
+    await expect(readFile(target, 'utf8')).resolves.toBe('untouched\n')
+  })
+
+  it('does not lose an acknowledged edit when two mounts edit the same file', async () => {
+    const path = 'TODO.md'
+    const file = join(root, path)
+    await writeFile(file, 'initial\n')
+    const other = new JobRepository(root, run)
+    const results = await Promise.allSettled([repo.append(path, 'first'), other.append(path, 'second')])
+    const final = await readFile(file, 'utf8')
+    const messages = ['first', 'second']
+    expect(results.some(result => result.status === 'fulfilled')).toBe(true)
+    for (const [index, result] of results.entries()) {
+      if (result.status === 'fulfilled') expect(final).toContain(`${messages[index]}\n`)
+      else expect(result.reason).toEqual(new Error('Repository output changed while writing. Read it again before retrying.'))
+    }
+    expect(await readdir(root)).toEqual(['TODO.md'])
+  })
+})
+
+describe('job_repo tool', () => {
+  it.each(['apply', 'inbox', 'lead'] as const)('exposes scoped edits in %s without widening runbook access', async (mode) => {
+    const ctx = new Context()
+    const batchRunbook = join(outside, 'job-apply-batch.md')
+    await writeFile(batchRunbook, 'runbook fixture\n')
+    try {
+      await mountAgentLoopTestDependencies(ctx)
+      await ctx.plugin(AgentLoop, { agents: [] })
+      const { agent } = await ctx.agents.create({
+        sessionId: SessionId(`job-${mode}`), agentOptions: { provider: 'mock', model: 'mock' },
+        setup: async (scope) => { await scope.plugin(JobTools, { root, mode, batchRunbook }) },
+      })
+      const call = async (args: Record<string, unknown>) => (await ctx.tools.execute({
+        agent, signal, calls: [{ type: 'tool-call', id: ToolCallId('job-repo-call'), name: 'job_repo', arguments: JSON.stringify(args) }],
+      })).results[0]?.result
+      expect(await call({ operation: 'append', path: 'TODO.md', text: 'first' })).toMatchObject({ isError: false })
+      expect(await call({ operation: 'replace', path: 'TODO.md', oldText: 'first', text: 'second' })).toMatchObject({ isError: false })
+      expect(await call({ operation: 'replace', path: 'TODO.md', text: 'bad' })).toMatchObject({ isError: true })
+      expect(await call({ operation: 'append', path: 'TODO.md', oldText: 'second', text: 'bad' })).toMatchObject({ isError: true })
+      expect(await call({ operation: 'append', path: batchRunbook, text: 'bad' })).toMatchObject({ isError: true })
+      expect(await call({ operation: 'write_runbook', text: 'bad', oldText: 'runbook fixture' })).toMatchObject({ isError: true })
+      expect(await call({ operation: 'read_runbook' })).toMatchObject({ isError: mode !== 'lead' })
+      await expect(readFile(join(root, 'TODO.md'), 'utf8')).resolves.toBe('second\n')
+      await expect(readFile(batchRunbook, 'utf8')).resolves.toBe('runbook fixture\n')
+    } finally {
+      await ctx.fiber.dispose()
+    }
   })
 })
 

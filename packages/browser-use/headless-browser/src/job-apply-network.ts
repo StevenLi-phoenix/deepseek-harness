@@ -14,6 +14,18 @@ const deniedHosts = [
   'wellsfargo.com', 'citi.com', 'citibank.com', 'capitalone.com', 'americanexpress.com', 'discover.com',
   'usbank.com', 'td.com', 'pnc.com', 'fidelity.com', 'schwab.com', 'vanguard.com', 'robinhood.com',
 ]
+// Empty roots denote dedicated career hosts. Shared hosts expose only the named subtree.
+const careerRoots = new Map([
+  ['careers.bankofamerica.com', ''], ['jobs.citi.com', ''], ['jobs.fidelity.com', ''], ['careers.usbank.com', ''],
+  ['jobs.td.com', ''], ['careers.pnc.com', ''], ['jobs.discover.com', ''],
+  ['stripe.com', 'jobs'], ['robinhood.com', 'careers'], ['openai.com', 'careers'], ['anthropic.com', 'careers'],
+])
+const sensitiveCareerSegment = new RegExp(`^(?:${[
+  'accounts?|account-settings|admin|admin-panel|auth|billing|console|dashboard',
+  'log[-_]?in|log[-_]?out|my-account|oauth2?|password|profile|register|saml|secure',
+  'sessions?|settings|sign[-_]?(?:in|on|out|up)|sso',
+].join('|')})(?:\\.|$)`, 'iu')
+const publicCareerSegment = (value: string): boolean => /^[A-Za-z\d._~-]+$/u.test(value) && !sensitiveCareerSegment.test(value)
 // NYU's public-facing identity provider is used by Handshake.
 const nyuLogin = new Set(['shibboleth.nyu.edu', 'sso.nyu.edu', 'login.nyu.edu'])
 const mailProviders = new Set(['google.com', 'office.com', 'office365.com', 'microsoft.com', 'live.com', 'yahoo.com', 'yandex.com', 'yandex.ru', 'icloud.com', 'apple.com'])
@@ -30,14 +42,31 @@ export function registrableDomain(host: string): string | null {
   return getDomain(host, { allowPrivateDomains: true })
 }
 
+function isDeniedHost(host: string): boolean {
+  return deniedHosts.some(name => hostMatches(host, name))
+}
+
+function isPublicCareerUrl(raw: string, url: URL): boolean {
+  const root = careerRoots.get(url.hostname)
+  if (root === undefined) return false
+  // Reject alternate spellings that a server could route differently from the URL parser.
+  const parts = /^https:\/\/([a-z\d.-]+)(?::443)?(\/[^?#]*)?(?=[?#]|$)/iu.exec(raw)
+  if (parts?.[1]?.toLowerCase() !== url.hostname || (parts[2] ?? '/') !== url.pathname) return false
+  const segments = url.pathname.slice(1).split('/')
+  if (segments.at(-1) === '') segments.pop()
+  if (root !== '' && segments[0] !== root) return false
+  return segments.every(publicCareerSegment) && (url.hash === '' || publicCareerSegment(url.hash.slice(1)))
+}
+
 /** @param raw - candidate URL. @returns whether the shared job profile must refuse it. */
 export function deniedJobUrl(raw: string): boolean {
   const url = URL.parse(raw)
   if (url === null || (url.protocol !== 'https:' && url.protocol !== 'http:') || url.username !== '' || url.password !== '') return true
   const host = safeHost(raw)
   if (!host.includes('.') || isIP(host.replace(/^\[|\]$/gu, '')) !== 0
-    || localSuffixes.some(name => hostMatches(host, name)) || deniedHosts.some(name => hostMatches(host, name))
+    || localSuffixes.some(name => hostMatches(host, name))
     || (hostMatches(host, 'nyu.edu') && !nyuLogin.has(host))) return true
+  if (isDeniedHost(host)) return !isPublicCareerUrl(raw, url)
   const domain = registrableDomain(host)
   let path = url.pathname
   try { path = decodeURIComponent(path) } catch (error: unknown) { if (!(error instanceof URIError)) throw error }
@@ -64,9 +93,14 @@ export async function protectJobPage(page: Page, refused: (url: string, closing:
     void page.close().catch((error: unknown) => { void error })
   }
   const check = (url: string): void => { if (url !== 'about:blank' && deniedJobUrl(url)) close(url) }
+  const assertLanding = (): void => {
+    const url = page.url()
+    if (url === 'about:blank' || !deniedJobUrl(url)) return
+    close(url)
+    throw new JobNavigationRefused(url)
+  }
   page.on('framenavigated', (frame) => { if (frame.parentFrame() === null) check(frame.url()) })
-  check(page.url())
-  if (closing) throw new JobNavigationRefused(page.url())
+  assertLanding()
   const cdp = await page.context().newCDPSession(page)
   await cdp.send('Network.setBypassServiceWorker', { bypass: true })
   const { frameTree } = await cdp.send('Page.getFrameTree')
@@ -92,12 +126,12 @@ export async function protectJobPage(page: Page, refused: (url: string, closing:
   await page.routeWebSocket('**/*', (socket) => {
     const url = new URL(socket.url())
     if (url.protocol === 'wss:') url.protocol = 'https:'
-    if (deniedJobUrl(url.href)) {
+    // The recruiting exceptions do not permit WebSockets on restricted hosts.
+    if (isDeniedHost(safeHost(url.href)) || deniedJobUrl(url.href)) {
       refused(url.href, false)
       void socket.close()
     } else socket.connectToServer()
   })
   await cdp.send('Fetch.enable', { patterns: [{ requestStage: 'Request' }, { requestStage: 'Response' }] })
-  check(page.url())
-  if (closing) throw new JobNavigationRefused(page.url())
+  assertLanding()
 }

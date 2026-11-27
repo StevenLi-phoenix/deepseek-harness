@@ -1,7 +1,7 @@
 /** Filesystem and Git operations for one deployment-owned, ordinary job-tracking clone. */
-import { constants } from 'node:fs'
+import { constants, lstatSync, renameSync } from 'node:fs'
 import type { Stats } from 'node:fs'
-import { lstat, mkdir, mkdtemp, open, realpath, rename, rmdir, unlink } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, open, realpath, rmdir, unlink } from 'node:fs/promises'
 import type { FileHandle } from 'node:fs/promises'
 import { isAbsolute, join, resolve } from 'node:path'
 import { TextDecoder } from 'node:util'
@@ -15,6 +15,10 @@ const MAX_COMMIT_PATHS = 100
 const MAX_PATH_LENGTH = 240
 const MAX_LOG_BYTES = 2048
 const MAX_WRITE_BYTES = 64 * 1024
+const NON_TEXT = /[^\P{Cc}\t\n\r]/u
+const EDIT_FILE_LIMIT = 'Targeted edits limit both the original and resulting file to 1 MiB.'
+type TargetedEdit = { kind: 'append'; text: string } | { kind: 'replace'; oldText: string; text: string }
+type DocumentEdit = { kind: 'write'; text: string } | TargetedEdit
 const CLONE_KEYS = new Set([
   'core.repositoryformatversion', 'core.filemode', 'core.bare', 'core.logallrefupdates',
   'core.ignorecase', 'core.precomposeunicode', 'core.symlinks', 'core.autocrlf',
@@ -76,7 +80,8 @@ function canWrite(parts: readonly string[]): boolean {
 
 function canRead(parts: readonly string[]): boolean {
   return canWrite(parts) || parts.length === 1 && (parts[0] === 'SKILL.md' || parts[0]?.startsWith('jobtracker') === true)
-    || parts.length === 2 && parts[0] === 'references' && parts[1]?.endsWith('.md') === true
+    || parts.length === 2 && ((parts[0] === 'references' && parts[1]?.endsWith('.md') === true)
+      || (parts[0] === 'private' && parts[1] === 'resume.txt'))
     || parts.length >= 4 && parts[0] === '.agents' && parts[1] === 'skills' && parts[2] === 'job-apply'
 }
 
@@ -86,6 +91,29 @@ function sameFile(expected: Stats, actual: Stats): boolean {
 
 function regularFile(stat: Stats | undefined): stat is Stats {
   return stat?.isFile() === true && stat.nlink === 1
+}
+
+function sameVersion(expected: Stats, actual: Stats | undefined): boolean {
+  return regularFile(actual) && sameFile(expected, actual) && expected.size === actual.size
+    && expected.mtimeMs === actual.mtimeMs && expected.ctimeMs === actual.ctimeMs
+}
+
+function validateWriteText(text: string): void {
+  if (Buffer.byteLength(text) > MAX_WRITE_BYTES || NON_TEXT.test(text) || /\p{Cs}/u.test(text)) {
+    throw new Error('Repository writes accept UTF-8 text up to 64 KiB, without binary control bytes.')
+  }
+}
+
+function editText(edit: TargetedEdit, current: string): string {
+  if (edit.kind === 'append') {
+    const separator = current.length === 0 || current.endsWith('\n') ? '' : '\n'
+    const terminator = edit.text.endsWith('\n') ? '' : '\n'
+    return current + separator + edit.text + terminator
+  }
+  const start = current.indexOf(edit.oldText)
+  if (start === -1) throw new Error('Replace requires exactly one literal match; found none.')
+  if (current.indexOf(edit.oldText, start + 1) !== -1) throw new Error('Replace requires exactly one literal match; found more than one.')
+  return current.slice(0, start) + edit.text + current.slice(start + edit.oldText.length)
 }
 
 async function inspect(path: string): Promise<Stats | undefined> {
@@ -140,7 +168,7 @@ function sliceLines(buffer: Buffer, start: number, limit: number): string {
     scanned.subarray(offset, Math.min(end, offset + MAX_RESULT - Buffer.byteLength(note))),
     { stream: truncated },
   )
-  if (/[^\P{Cc}\t\n\r]/u.test(text)) throw new Error('Repository file contains non-text bytes.')
+  if (NON_TEXT.test(text)) throw new Error('Repository file contains non-text bytes.')
   return text + note
 }
 
@@ -222,18 +250,73 @@ export class JobRepository {
    * @returns The written relative path.
    */
   async write(path: string, text: string): Promise<string> {
+    return this.#edit(path, { kind: 'write', text })
+  }
+
+  /**
+   * Append complete lines atomically, creating the file if needed and adding missing LF separators.
+   * @param path Allowlisted relative text path.
+   * @param text Nonempty text up to 64 KiB; preserves supplied line breaks.
+   * @returns The written relative path. The original and resulting files are limited to 1 MiB.
+   */
+  async append(path: string, text: string): Promise<string> {
+    return this.#edit(path, { kind: 'append', text })
+  }
+
+  /**
+   * Replace exactly one literal occurrence in an existing file, or leave the file unchanged.
+   * @param path Allowlisted relative text path.
+   * @param oldText Nonempty literal text up to 64 KiB that must occur exactly once.
+   * @param text Literal replacement up to 64 KiB; empty text removes the match.
+   * @returns The written relative path. The original and resulting files are limited to 1 MiB.
+   */
+  async replace(path: string, oldText: string, text: string): Promise<string> {
+    return this.#edit(path, { kind: 'replace', oldText, text })
+  }
+
+  async #readForEdit(file: string, parts: readonly string[], root: Stats, existing: Stats): Promise<string> {
+    if (existing.size > MAX_SCAN) throw new Error(EDIT_FILE_LIMIT)
+    const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+    try {
+      const opened = await this.#verifyOpen(handle, file, parts, root)
+      if (!sameVersion(existing, opened)) throw new Error('Repository output changed while writing. Read it again before retrying.')
+      const bytes = await readAtMost(handle)
+      if (bytes.length > MAX_SCAN) throw new Error(EDIT_FILE_LIMIT)
+      let text: string
+      try {
+        text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes)
+      } catch (error) {
+        throw new Error('Targeted edits require valid UTF-8 text.', { cause: error })
+      }
+      if (NON_TEXT.test(text)) throw new Error('Targeted edits require UTF-8 text without binary control bytes.')
+      return text
+    } finally {
+      await handle.close()
+    }
+  }
+
+  async #edit(path: string, edit: DocumentEdit): Promise<string> {
     const parts = pathParts(path)
     if (!parts || !canWrite(parts)) throw new Error('This repository path is not writable by the job tool.')
-    if (Buffer.byteLength(text) > MAX_WRITE_BYTES || /[^\P{Cc}\t\n\r]/u.test(text)) {
-      throw new Error('Repository writes accept UTF-8 text up to 64 KiB, without binary control bytes.')
-    }
     if (parts[0] === 'cover_letters' && !/\.md$/u.test(path)) throw new Error('Write a Markdown cover letter, then use the scoped converter for a document.')
+    validateWriteText(edit.text)
+    if (edit.kind === 'append' && edit.text === '') throw new Error('Append requires nonempty text.')
+    if (edit.kind === 'replace') {
+      if (edit.oldText === '') throw new Error('Replace requires nonempty oldText.')
+      validateWriteText(edit.oldText)
+    }
     const root = await this.#rootStat()
-    const parent = await this.#parents(parts, root, true)
+    const parent = await this.#parents(parts, root, edit.kind !== 'replace')
     const file = join(this.#root, path)
     const existing = await inspect(file)
     if (existing !== undefined && (!regularFile(existing) || await realpath(file) !== file)) {
       throw new Error('Repository output must be a regular file with no links.')
+    }
+    let text = edit.text
+    if (edit.kind !== 'write') {
+      if (edit.kind === 'replace' && existing === undefined) throw new Error('Replace requires an existing file.')
+      text = editText(edit, existing === undefined ? '' : await this.#readForEdit(file, parts, root, existing))
+      if (Buffer.byteLength(text) > MAX_SCAN) throw new Error(EDIT_FILE_LIMIT)
     }
     const tmp = await mkdtemp(join(parent, '.dsh-write-'))
     const data = join(tmp, 'text')
@@ -243,15 +326,17 @@ export class JobRepository {
       staged = true
       try {
         await handle.writeFile(text, 'utf8')
+        if (edit.kind !== 'write' && existing !== undefined) await handle.chmod(existing.mode & 0o777)
       } finally {
         await handle.close()
       }
       await this.#parents(parts, root)
-      const current = await inspect(file)
-      if (existing === undefined ? current !== undefined : (!regularFile(current) || !sameFile(existing, current))) {
-        throw new Error('Repository output changed while writing.')
+      // Keep the final check and rename in one JS turn across preset mounts in this Host.
+      const current = lstatSync(file, { throwIfNoEntry: false })
+      if (existing === undefined ? current !== undefined : !sameVersion(existing, current)) {
+        throw new Error('Repository output changed while writing. Read it again before retrying.')
       }
-      await rename(data, file)
+      renameSync(data, file)
       staged = false
     } finally {
       try { if (staged) await unlink(data) } finally { await rmdir(tmp) }
