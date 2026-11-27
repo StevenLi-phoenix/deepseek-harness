@@ -125,7 +125,7 @@ export class OwnerNotes {
    */
   async tellMainAgent(message: MainAgentMessage): Promise<SessionId> {
     const { ctx, outbox, chat, config } = this.deps
-    if (config.chat.agentMessage === 'notify') {
+    if (config.chat.agentMessage === 'notify' && message.origin !== 'job') {
       const sessionId = await chat.openChat()
       // The notice starts no turn, so it carries no urgent answer.
       const framed = agentMessageText({ text: message.text, from: message.from }, Date.now(), config.chat.timeZone)

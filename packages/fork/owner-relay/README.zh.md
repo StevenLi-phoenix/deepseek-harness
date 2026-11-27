@@ -25,12 +25,14 @@ agent 的某个 Session 结束一轮时你会收到什么，由一个地方决�
 <a id="use-this-package"></a>
 ## 使用这个包
 
-把中继挂在 profile 根部，放在使用它的插件之前。它不依赖其他服务，也没有配置；只有需要退回时才读取 `ctx.ownerNotifier`（来自 [`@deepseek-ai/dsh-wechat`](../wechat/README.zh.md)）。fork 事件 bundle 把它挂在事件总线之前。
+把中继挂在 profile 根部，放在使用它的通道之前。fork 事件 bundle 把它挂在事件总线之前。中继只在投递回答时读取 `ctx.ownerNotifier`（来自 [`@deepseek-ai/dsh-wechat`](../wechat/README.zh.md)）。
 
 ```yaml
 - id: owner-relay
   name: '@deepseek-ai/dsh-owner-relay'
 ```
+
+在私有的 profile 叠加配置中设 `config.jobLeadSessionId`，为 `job-lead` 预设下的一个持久根 Session 保留通道。只用 `ownerNotifier.tellMainAgent` 转发该轮最后的 assistant 文本；最后一句是 `NO_REPLY` 就不发。主 agent 接不到时不发送直接通知，也不走退回路径。未配置 ID 时关闭此路由。
 
 ### 何时选用
 

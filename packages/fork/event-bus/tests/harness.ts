@@ -238,8 +238,8 @@ export async function harness(options: HarnessOptions = {}) {
   if (options.registry !== undefined) ctx.provide('workspaceRegistry', options.registry as never)
   await ctx.plugin(EventBus, options.config ?? baseConfig)
   await vi.advanceTimersByTimeAsync(0)
-  const emit = (sessionId: string, event: unknown): void => {
-    (ctx.emit as (...args: unknown[]) => void)('session/event', { id: sessionId }, event)
+  const emit = (sessionId: string, event: unknown, agentPreset?: string): void => {
+    (ctx.emit as (...args: unknown[]) => void)('session/event', { id: sessionId, header: { agentPreset } }, event)
   }
   return { ctx, bus: ctx.eventBus, notes, runtime, pool, emit }
 }

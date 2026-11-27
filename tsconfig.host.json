@@ -638,6 +638,7 @@
     { "path": "./packages/fork/courses-settings/tsconfig.host.json" },
     { "path": "./packages/fork/gmail" },
     { "path": "./packages/fork/tool-gmail" },
+    { "path": "./packages/fork/tool-job-apply" },
     { "path": "./packages/fork/gmail-settings/tsconfig.host.json" },
     { "path": "./packages/fork/subagent-activity/tsconfig.host.json" },
     { "path": "./packages/fork/wechat" },

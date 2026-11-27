@@ -177,12 +177,11 @@ describe('EventBus session actuator', () => {
   })
 
   it('notifies the Session result when the webhook Session ends its first turn', async () => {
-    const { ctx, bus, notes } = await harness({ config: sessionConfig })
+    const { bus, notes, emit: emitIn } = await harness({ config: sessionConfig })
     await bus.publish(release(1))
     await vi.advanceTimersByTimeAsync(1_000)
     const batch = bus.batches()[0]!
-    const session = { id: 'webhook-123' }
-    const emit = (event: unknown): void => { (ctx.emit as (...args: unknown[]) => void)('session/event', session, event) }
+    const emit = (event: unknown): void => { emitIn('webhook-123', event) }
 
     emit({ type: 'user/message', seq: 1, data: { role: 'user', content: [{ type: 'text', text: 'prompt' }], source: { kind: 'webhook', provider: BUS_EVENT_KIND, source: 'triage', deliveryId: batch.id, ruleId: 'bus-event', form: 'notice' } } })
     emit({ type: 'assistant/message', seq: 2, data: { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: 'draft' }] } } })
@@ -200,8 +199,8 @@ describe('EventBus session actuator', () => {
   })
 
   it('ignores Sessions that were not created by this bus', async () => {
-    const { ctx, notes } = await harness({ config: sessionConfig })
-    const emit = (event: unknown): void => { (ctx.emit as (...args: unknown[]) => void)('session/event', { id: 's' }, event) }
+    const { emit: emitIn, notes } = await harness({ config: sessionConfig })
+    const emit = (event: unknown): void => { emitIn('s', event) }
     emit({ type: 'user/message', seq: 1, data: { role: 'user', content: [], source: { kind: 'webhook', provider: 'github', source: 'x', deliveryId: 'y' } } })
     emit({ type: 'user/message', seq: 2, data: { role: 'user', content: [], source: { kind: 'human' } } })
     emit({ type: 'turn/end', seq: 3, data: { turn: 1, reason: { kind: 'completed' } } })
@@ -267,9 +266,8 @@ describe('EventBus Session observation', () => {
     await h.bus.publish(release(1, { actor: 'octocat', text: 'notes', occurredAt: 123 }))
     await vi.advanceTimersByTimeAsync(1_000)
     const batch = h.bus.batches()[0]!
-    const emit = (sessionId: string, event: unknown): void => { (h.ctx.emit as (...args: unknown[]) => void)('session/event', { id: sessionId }, event) }
     const userMessage = { type: 'user/message', seq: 1, data: { role: 'user', content: [], source: { kind: 'webhook', provider: BUS_EVENT_KIND, source: 'triage', deliveryId: batch.id, ruleId: 'bus-event', form: 'notice' } } }
-    return { ...h, batch, emit, userMessage }
+    return { ...h, batch, userMessage }
   }
 
   it('carries every optional event field into the delivery', async () => {

@@ -41,6 +41,8 @@ export interface Config {
   search?: boolean
   /** Register `web_fetch`. Defaults to true. */
   fetch?: boolean
+  /** Require public-only fetch transport. Defaults to false. */
+  publicOnly?: boolean
   /** Upper bound on sources returned by one `web_search` call. Defaults to 10. */
   searchMaxResults?: number
   /** Upper bound on queries accepted by one `web_search` call. Defaults to 10. */
@@ -58,6 +60,7 @@ export interface Config {
 export const Config: z<Config> = z.object({
   search: z.boolean().default(true),
   fetch: z.boolean().default(true),
+  publicOnly: z.boolean().default(false),
   searchMaxResults: z.number().default(WEB_SEARCH_MAX_RESULTS),
   searchMaxQueries: z.number().default(WEB_SEARCH_MAX_QUERIES),
   searchSummaryMaxChars: z.number().default(WEB_SEARCH_SUMMARY_MAX_CHARS),
@@ -99,5 +102,5 @@ export function apply(ctx: Context, config: Config): void {
       ctx, resolved.searchMaxResults, resolved.searchMaxQueries, resolved.searchSummaryMaxChars, resolved.searchTimeoutMs, resolved.fetch,
     )
   }
-  if (resolved.fetch) applyWebFetchTool(ctx, resolved.fetchTimeoutMs, resolved.fetchMaxOutputChars)
+  if (resolved.fetch) applyWebFetchTool(ctx, resolved.fetchTimeoutMs, resolved.fetchMaxOutputChars, resolved.publicOnly)
 }

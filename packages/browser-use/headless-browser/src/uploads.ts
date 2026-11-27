@@ -15,6 +15,8 @@ import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path'
 /** Most files one upload call attaches. */
 export const MAX_UPLOAD_FILES = 10
 
+import type { UploadPayload } from './session.ts'
+
 /** One file cleared for upload. */
 export interface UploadFile {
   /** Resolved absolute path, symlinks followed. */
@@ -23,6 +25,8 @@ export interface UploadFile {
   readonly name: string
   /** Size in bytes. */
   readonly bytes: number
+  /** File content read from an already-validated descriptor, when required by policy. */
+  readonly payload?: UploadPayload
 }
 
 /** A refusal the model can act on: a file outside the allowed directories, missing, or too big. */

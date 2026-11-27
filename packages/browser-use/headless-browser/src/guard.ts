@@ -416,6 +416,8 @@ export interface ActionGuardOptions {
    * @default true
    */
   readonly sensitiveActions?: boolean
+  /** Trusted selector-click exception; visibility and origin checks still run. */
+  readonly allowSensitive?: (input: TargetDecisionInput, target: ElementFacts, label: string) => boolean
 }
 
 /** The refusal a tool result carries, and the error that stops the action. */
@@ -471,6 +473,7 @@ export class ActionGuard {
   readonly #now: () => Date
   /** Whether the sensitive-name rule refuses, or only records, a matching target. */
   readonly #sensitiveActions: boolean
+  readonly #allowSensitive: ActionGuardOptions['allowSensitive']
   /** The site an explicit `allowOrigin` named, so the move after it is not a drift. */
   #allowedSite: string | undefined
 
@@ -481,6 +484,7 @@ export class ActionGuard {
     this.#onEvent = options.onEvent
     this.#now = options.now ?? (() => new Date())
     this.#sensitiveActions = options.sensitiveActions ?? true
+    this.#allowSensitive = options.allowSensitive
   }
 
   /**
@@ -527,7 +531,7 @@ export class ActionGuard {
     if (sensitive !== undefined) {
       if (!this.#sensitiveActions) {
         this.#recordSkip(input.action, input.url, input.ref, target.name, sensitive, chosen.score)
-      } else {
+      } else if (this.#allowSensitive?.(input, target, sensitive.label) !== true) {
         return this.#refuse(input.action, {
           rule: 'sensitive',
           url: input.url,

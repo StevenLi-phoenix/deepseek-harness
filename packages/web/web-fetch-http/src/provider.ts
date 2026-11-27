@@ -9,7 +9,7 @@
 import { WebError } from '@deepseek-ai/dsh-web'
 import type { WebFetchBody, WebFetchProvider, WebFetchRequest, WebFetchResult } from '@deepseek-ai/dsh-web'
 import { deadline, timeoutOf } from '@deepseek-ai/dsh-timeout'
-import type { Response } from 'undici'
+import type { Dispatcher, Response } from 'undici'
 import { classifyTransportFailure } from './transport-failure.ts'
 import { classifyContentType, decoderForCharset, isSameOrigin, parseCharset, validateFetchUrl } from './policy.ts'
 
@@ -54,63 +54,58 @@ export class HttpFetchProvider implements WebFetchProvider {
   }
 
   async fetch(request: WebFetchRequest, signal?: AbortSignal): Promise<WebFetchResult> {
+    return await this.fetchWithPolicy(request.url, signal, request.publicOnly === true)
+  }
+
+  async fetchPublic(request: WebFetchRequest, signal?: AbortSignal): Promise<WebFetchResult> {
+    return await this.fetchWithPolicy(request.url, signal, true)
+  }
+
+  private async fetchWithPolicy(url: string, signal: AbortSignal | undefined, publicOnly: boolean): Promise<WebFetchResult> {
     if (signal?.aborted) throw new WebError('web fetch aborted', 'WEB_ABORTED')
 
     // One signal stops both the request and body read. The deadline's TimeoutReason later
     // distinguishes this provider's timeout from caller or outer-deadline cancellation.
     using d = deadline(signal, this.limits.timeoutMs, 'WEB_FETCH_TIMEOUT')
-    return await this.followAndRead(request.url, d.signal)
+    return await this.followAndRead(url, d.signal, publicOnly)
   }
 
   /** Follow same-origin redirects up to the hop cap, then read the final response. */
-  private async followAndRead(initialUrl: string, signal: AbortSignal): Promise<WebFetchResult> {
+  private async followAndRead(initialUrl: string, signal: AbortSignal, publicOnly: boolean): Promise<WebFetchResult> {
     let currentUrl = validateFetchUrl(initialUrl)
+    const publicDispatch = publicOnly ? (await import('./public-only.ts')).publicDispatcher : undefined
     let redirectsFollowed = 0
 
     for (;;) {
-      const response = await this.requestOnce(currentUrl, signal)
-      if (isRedirectStatus(response.status)) {
-        // Enforce the redirect budget before validating the next hop.
+      const dispatcher = publicDispatch?.(currentUrl, signal)
+      try {
+        const response = await this.requestOnce(currentUrl, signal, dispatcher)
+        if (!isRedirectStatus(response.status)) return await this.readBody(response, currentUrl, signal)
+        const location = response.headers.get('location')
+        await response.body?.cancel()
         if (redirectsFollowed >= this.limits.maxRedirects) {
-          await response.body?.cancel()
           throw new WebError(`exceeded the maximum of ${this.limits.maxRedirects} redirects`, 'WEB_REDIRECT_BLOCKED')
         }
-        const location = response.headers.get('location')
         if (location === null) {
-          // A redirect status with no Location is not a usable resource. Cancel
-          // the (possibly streaming) body before throwing so no socket leaks.
-          await response.body?.cancel()
           throw new WebError(`redirect response (HTTP ${response.status}) without a Location header`, 'WEB_PROVIDER_ERROR')
         }
-        const target = resolveRedirect(location, currentUrl)
-        // Re-validate the target against the same transport hygiene a direct request gets: a
-        // redirect must not be a back door to a credentialed, non-http(s), or over-long URL
-        // that validateFetchUrl would reject.
-        let validatedTarget: URL
-        try {
-          validatedTarget = validateFetchUrl(target.toString())
-          if (!isSameOrigin(validatedTarget, currentUrl)) {
-            throw new WebError(
-              `cross-origin redirect to ${validatedTarget.origin} is not followed automatically; retry against that URL directly`,
-              'WEB_REDIRECT_BLOCKED',
-            )
-          }
-        } catch (error: unknown) {
-          await response.body?.cancel()
-          throw error
+        const target = validateFetchUrl(resolveRedirect(location, currentUrl).toString())
+        if (!isSameOrigin(target, currentUrl)) {
+          throw new WebError(
+            `cross-origin redirect to ${target.origin} is not followed automatically; retry against that URL directly`,
+            'WEB_REDIRECT_BLOCKED',
+          )
         }
-        await response.body?.cancel()
-        currentUrl = validatedTarget
+        currentUrl = target
         redirectsFollowed++
-        continue
+      } finally {
+        await dispatcher?.destroy()
       }
-
-      return await this.readBody(response, currentUrl, signal)
     }
   }
 
-  /** Send one GET through the process-wide dispatcher, which applies the installed proxy policy. */
-  private async requestOnce(url: URL, signal: AbortSignal): Promise<Response> {
+  /** Send one GET; only unrestricted requests use the process-wide dispatcher/proxy. */
+  private async requestOnce(url: URL, signal: AbortSignal, dispatcher?: Dispatcher): Promise<Response> {
     const headers = {
       'user-agent': this.limits.userAgent,
       'accept': 'text/html,application/xhtml+xml,text/*;q=0.9,application/json;q=0.8',
@@ -118,8 +113,10 @@ export class HttpFetchProvider implements WebFetchProvider {
     try {
       // Keep the Node-only transport out of browser-worker startup; a real request loads it here.
       const { fetch } = await import('undici')
-      return await fetch(url, { method: 'GET', redirect: 'manual', headers, signal })
+      return await fetch(url, { method: 'GET', redirect: 'manual', headers, signal, ...dispatcher === undefined ? {} : { dispatcher } })
     } catch (error: unknown) {
+      // Undici wraps a connector's policy failure as the Fetch TypeError cause.
+      if (!signal.aborted && error instanceof TypeError && error.cause instanceof WebError) throw error.cause
       throw translateAbortOrNetwork(error, signal)
     }
   }

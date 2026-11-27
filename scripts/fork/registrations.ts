@@ -30,6 +30,7 @@ export const FORK_PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackage
   'packages/fork/gmail': { category: 'optional', reason: 'Fork-local Gmail client for the owner\'s accounts with a send gate; mounted by the event profile bundle; needs a Google OAuth client.' },
   'packages/fork/gmail-settings': { category: 'optional', reason: 'Fork-local Settings section and OAuth return page for the Gmail accounts, mounted by the event profile bundle.' },
   'packages/fork/tool-gmail': { category: 'optional', reason: 'Fork-local Gmail tools mounted by the event profile preset.' },
+  'packages/fork/tool-job-apply': { category: 'optional', reason: 'Narrow repository, tracker and issue operations mounted by the job workflow presets.' },
   'packages/fork/time-gap': { category: 'optional', reason: 'Fork-local time check before an input that ends a quiet spell in a Session; mounted by the event profile bundle.' },
   'packages/fork/wechat': { category: 'optional', reason: 'Fork-local WeChat channel; requires a QR-bound iLink bot account.' },
   'packages/fork/tool-wechat': { category: 'optional', reason: 'Fork-local WeChat file tool mounted by the event profile preset.' },

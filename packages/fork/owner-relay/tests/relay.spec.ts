@@ -1,6 +1,6 @@
 import { setImmediate } from 'node:timers/promises'
 import { Context } from '@deepseek-ai/cordis'
-import type { OwnerNote } from '@deepseek-ai/dsh-event-bus'
+import type { MainAgentMessage, OwnerNote } from '@deepseek-ai/dsh-event-bus'
 import { afterEach, describe, expect, it } from 'vitest'
 import OwnerRelay, { type RelayAnswer, type RelayChannel, type RelayDecision, type RelayDelivery } from '../src/index.ts'
 
@@ -22,7 +22,11 @@ async function drain(): Promise<void> {
 }
 
 /** Mount the relay with a recording notifier unless `notifier` is false. */
-async function mount(options: { notifier?: false | ((note: OwnerNote) => Promise<void>) } = {}) {
+async function mount(options: {
+  notifier?: false | ((note: OwnerNote) => Promise<void>)
+  jobLeadSessionId?: string
+  tellMainAgent?: (message: MainAgentMessage) => Promise<string>
+} = {}) {
   const ctx = new Context()
   contexts.push(ctx)
   const logs: LogLine[] = []
@@ -33,11 +37,13 @@ async function mount(options: { notifier?: false | ((note: OwnerNote) => Promise
   const notes: OwnerNote[] = []
   if (options.notifier !== false) {
     const send = options.notifier ?? (async (note: OwnerNote) => { notes.push(note) })
-    ctx.provide('ownerNotifier', { send } as never)
+    ctx.provide('ownerNotifier', { send, tellMainAgent: options.tellMainAgent } as never)
   }
-  await ctx.plugin(OwnerRelay)
+  await ctx.plugin(OwnerRelay, options.jobLeadSessionId === undefined ? {} : { jobLeadSessionId: options.jobLeadSessionId })
   const relay = ctx.ownerRelay
-  const emit = (sessionId: string, event: unknown): void => { (ctx.emit as (...args: unknown[]) => void)('session/event', { id: sessionId }, event) }
+  const emit = (sessionId: string, event: unknown, preset = 'job-lead'): void => {
+    (ctx.emit as (...args: unknown[]) => void)('session/event', { id: sessionId, header: { agentPreset: preset } }, event)
+  }
   return { ctx, relay, notes, logs, emit }
 }
 
@@ -145,6 +151,44 @@ describe('OwnerRelay rules', () => {
     await turn(h.emit, 'other', 'not mine')
     expect(wechat.calls).toEqual([])
     expect(h.logs.filter(line => line.text.includes('other'))).toEqual([])
+  })
+})
+
+describe('configured job-lead route', () => {
+  it('claims only the configured Session and reports only the final answer to the main agent', async () => {
+    const told: MainAgentMessage[] = []
+    const h = await mount({ jobLeadSessionId: 'lead-1', tellMainAgent: async (message) => { told.push(message); return 'main' } })
+    const direct = recorder('wechat')
+    h.relay.registerChannel(direct.channel)
+    h.relay.claim('lead-1', 'wechat')
+    h.relay.claim('other', 'job-lead')
+    expect(h.relay.ownerOf('lead-1')).toBe('job-lead')
+    expect(h.relay.ownerOf('other')).toBeUndefined()
+    expect(h.relay.release('lead-1')).toBe(false)
+    await turn(h.emit, 'other', 'wrong Session')
+    await turn((id, event) => { h.emit(id, event, 'unattended') }, 'lead-1', 'wrong preset')
+    h.emit('lead-1', turnStart)
+    h.emit('lead-1', assistant('progress'))
+    h.emit('lead-1', assistant('NO_REPLY'))
+    h.emit('lead-1', turnEnd())
+    await turn(h.emit, 'lead-1', 'submitted 2')
+    expect(told).toEqual([{ text: 'submitted 2', from: 'job-lead', origin: 'job' }])
+    expect(direct.answers).toEqual([])
+    expect(h.notes).toEqual([])
+  })
+
+  it('never sends a direct note if the main agent is missing, rejects delivery, or no target is configured', async () => {
+    const unavailable = await mount({ jobLeadSessionId: 'lead' })
+    const refused = await mount({ jobLeadSessionId: 'lead', tellMainAgent: async () => { throw new Error('queue closed') } })
+    const unconfigured = await mount({ tellMainAgent: async () => { throw new Error('must not try') } })
+    for (const h of [unavailable, refused, unconfigured]) {
+      await turn(h.emit, 'lead', 'a report')
+      expect(h.notes).toEqual([])
+    }
+    expect(unconfigured.relay.ownerOf('lead')).toBeUndefined()
+    expect(unavailable.logs.some(line => line.text.includes('no main-agent notifier'))).toBe(true)
+    expect(refused.logs.some(line => line.text.includes('queue closed'))).toBe(true)
+    expect(unconfigured.logs.some(line => line.text.includes('could not deliver'))).toBe(false)
   })
 })
 
@@ -276,7 +320,7 @@ describe('OwnerRelay delivery', () => {
     own.relay.claim('chat-1', 'wechat')
     await turn(own.emit, 'chat-1', 'answer')
     expect(own.notes).toEqual([])
-    expect(own.logs.some(line => line.text === 'owner-relay: wechat has no fallback label (it is the notifier\'s own channel); the answer of Session chat-1 was not delivered')).toBe(true)
+    expect(own.logs.some(line => line.text === 'owner-relay: wechat has no fallback label; the answer of Session chat-1 was not delivered')).toBe(true)
     expect(wechat.calls.at(-1)).toBe('settled:chat-1')
 
     const bare = await mount({ notifier: false })

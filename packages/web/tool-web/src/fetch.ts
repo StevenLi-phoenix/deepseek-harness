@@ -445,8 +445,9 @@ export function presentFetchResult(args: { url: string }, result: ToolResult): W
  *   `ToolDefinition.timeoutMs` for `@deepseek-ai/dsh-tool-call-timeout-policy` to enforce.
  * @param maxOutputChars - cap on the complete rendered tool output (see
  *   {@link formatFetchOutput}) and on source characters converted synchronously.
+ * @param publicOnly - whether the provider must enforce public-only connections on every hop.
  */
-export function applyWebFetchTool(ctx: Context, timeoutMs: number, maxOutputChars: number): void {
+export function applyWebFetchTool(ctx: Context, timeoutMs: number, maxOutputChars: number, publicOnly = false): void {
   ctx.systemPrompt.section({
     name: 'tool:web_fetch',
     order: ctx.systemPrompt.getSectionOrder('TOOL_WEB_FETCH'),
@@ -458,7 +459,9 @@ export function applyWebFetchTool(ctx: Context, timeoutMs: number, maxOutputChar
 
   ctx.tools.register(defineTool({
     name: 'web_fetch',
-    description: 'Fetch the content of a specific HTTP(S) URL and return it decoded to text.',
+    description: publicOnly
+      ? 'Fetch the content of a public HTTP(S) URL and return it decoded to text. Non-public destinations are refused.'
+      : 'Fetch the content of a specific HTTP(S) URL and return it decoded to text.',
     parameters: {
       url: { type: 'string', required: true, description: 'The HTTP(S) URL to fetch.' },
     },
@@ -502,7 +505,7 @@ export function applyWebFetchTool(ctx: Context, timeoutMs: number, maxOutputChar
     async execute(args, exec) {
       const input = parseFetchArgs(args)
       const result = await ctx.web.fetch(
-        { url: input.url },
+        { url: input.url, ...publicOnly ? { publicOnly } : {} },
         exec.signal,
       )
       return {

@@ -9,6 +9,7 @@ import { GmailError } from './errors.ts'
 import { decodeEntities } from './html.ts'
 import { attachmentPart, attachmentsOf, header, messageView, type MessageView, type ViewOptions } from './message.ts'
 import type { SavedAttachment, SearchOptions, SearchResult, ThreadSummary, ThreadView } from './types.ts'
+import { readVerificationCode, type VerificationProof, type VerificationLookup } from './verification.ts'
 
 /** The configured limits of reading. */
 export interface ReadLimits {
@@ -58,6 +59,17 @@ export class MailReader {
       }
     }))
     return { threads, nextPageToken: page.nextPageToken ?? null, estimate: page.resultSizeEstimate ?? threads.length }
+  }
+
+  /**
+   * Find a recent verification code within the scoped sender, result and body limits.
+   * @param api - the account API.
+   * @param lookup - the approved sender and receipt bounds.
+   * @returns a reduced code or link result, or null when no code matched.
+   */
+  verificationCode(api: GmailApi, lookup: VerificationLookup): Promise<VerificationProof | null> {
+    const { maxSearchResults, maxHtmlChars, maxBodyChars } = this.limits
+    return readVerificationCode(api, lookup, maxSearchResults, maxHtmlChars, maxBodyChars)
   }
 
   /**

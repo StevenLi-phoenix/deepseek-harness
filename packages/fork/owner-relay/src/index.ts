@@ -8,10 +8,19 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import { failureDetail } from '@deepseek-ai/dsh-event-bus/prompt'
-import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
+import { SessionId, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
+import z from '@deepseek-ai/schemastery'
 import { contentText, decideRelay, relayFallbackNote, type RelayAnswer, type RelayDecision } from './rules.ts'
 
 export type * from './rules.ts'
+
+const JOB_LEAD = 'job-lead'
+
+/** Host configuration of the dedicated job-lead route. */
+export interface Config {
+  /** ID of the persistent root Session on the job-lead preset; omitted disables routing. */
+  jobLeadSessionId?: string
+}
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -35,7 +44,7 @@ export interface RelayChannel {
   /**
    * Who sent a fallback copy, as the owner's chat Session reads it (the note's `origin`), e.g.
    * `the Bilibili account's Session (its answer could not go out as a Bilibili message)`. Omit it on
-   * the notifier's own channel (wechat): an answer it cannot deliver has nowhere else to go.
+   * routes that must never fall back to a direct owner notification.
    */
   readonly fallbackLabel?: string
   /**
@@ -81,6 +90,11 @@ const NOTHING: Readonly<Record<Exclude<RelayDecision['kind'], 'answer'>, string>
  * Session id and the reason, never the text.
  */
 export class OwnerRelay extends Service {
+  /** Host-only configuration; no target is selected by default. */
+  static Config: z<Config> = z.object({ jobLeadSessionId: z.string() })
+
+  /** The sole target of the job-lead route. */
+  readonly jobLeadSessionId: SessionId | undefined
   private readonly channels = new Map<string, RelayChannel>()
   /** Claiming channel per Session. */
   private readonly claims = new Map<string, string>()
@@ -88,9 +102,25 @@ export class OwnerRelay extends Service {
   private readonly texts = new Map<string, string[]>()
   private readonly inflight = new Set<Promise<void>>()
 
-  /** @param ctx - the context whose `session/event` stream the relay follows. */
-  constructor(ctx: Context) {
+  /**
+   * @param ctx - the context whose `session/event` stream the relay follows.
+   * @param config - optional job-lead Session ID from the profile.
+   */
+  constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'ownerRelay')
+    const id = config.jobLeadSessionId?.trim()
+    this.jobLeadSessionId = id === undefined || id === '' ? undefined : SessionId(id)
+    if (this.jobLeadSessionId !== undefined) {
+      ctx.effect(() => this.registerChannel({
+        name: JOB_LEAD,
+        deliver: async ({ text }) => {
+          const notifier = ctx.get('ownerNotifier')
+          if (notifier?.tellMainAgent === undefined) throw new Error('no main-agent notifier is mounted')
+          await notifier.tellMainAgent({ text, from: JOB_LEAD, origin: 'job' })
+          return 'sent'
+        },
+      }), 'ownerRelay.jobLead()')
+    }
     ctx.effect(() => async () => {
       await Promise.allSettled([...this.inflight])
     }, 'ownerRelay.lifecycle()')
@@ -126,6 +156,7 @@ export class OwnerRelay extends Service {
    * @param channelName - the claiming channel's name.
    */
   claim(sessionId: string, channelName: string): void {
+    if (sessionId === this.jobLeadSessionId || channelName === JOB_LEAD) return
     const previous = this.claims.get(sessionId)
     this.claims.set(sessionId, channelName)
     if (previous !== undefined && previous !== channelName) {
@@ -141,6 +172,7 @@ export class OwnerRelay extends Service {
    * @returns whether it was claimed.
    */
   release(sessionId: string): boolean {
+    if (sessionId === this.jobLeadSessionId) return false
     this.texts.delete(sessionId)
     return this.claims.delete(sessionId)
   }
@@ -151,13 +183,17 @@ export class OwnerRelay extends Service {
    * @returns the channel name, or undefined when no channel claimed the Session.
    */
   ownerOf(sessionId: string): string | undefined {
-    return this.claims.get(sessionId)
+    return sessionId === this.jobLeadSessionId ? JOB_LEAD : this.claims.get(sessionId)
   }
 
   /** Follow claimed Sessions: hooks at turn start and end, the latest assistant text, and the relay. */
   private observe(session: Session, event: SessionEvent): void {
-    const owner = this.claims.get(session.id)
+    const owner = this.ownerOf(session.id)
     if (owner === undefined) return
+    if (owner === JOB_LEAD && (session.header.agentPreset !== JOB_LEAD || session.header.parentSession !== undefined)) {
+      if (event.type === 'turn/end') this.ctx.logger.warn('owner-relay: configured job-lead target is not a root job-lead Session; nothing is relayed')
+      return
+    }
     if (event.type === 'assistant/message') {
       const text = contentText(event.data.message.content)
       if (text !== undefined) this.texts.set(session.id, [...this.texts.get(session.id) ?? [], text])
@@ -178,7 +214,8 @@ export class OwnerRelay extends Service {
       this.ctx.logger.warn(`owner-relay: Session ${session.id} ended a turn (${ended}), but ${why}`)
       return
     }
-    this.turnEnded(session.id, channel, ended, decideRelay(texts, reason))
+    const answers = owner === JOB_LEAD ? texts.slice(-1) : texts
+    this.turnEnded(session.id, channel, ended, decideRelay(answers, reason))
   }
 
   /** Apply the decision of one ended turn: say why nothing goes out, or hand the answer to its channel. */
@@ -222,7 +259,7 @@ export class OwnerRelay extends Service {
   private async fallback(channel: RelayChannel, answer: RelayAnswer, why: string): Promise<void> {
     const id = answer.sessionId
     if (channel.fallbackLabel === undefined) {
-      const own = `${channel.name} has no fallback label (it is the notifier's own channel)`
+      const own = `${channel.name} has no fallback label`
       this.ctx.logger.warn(`owner-relay: ${own}; the answer of Session ${id} was not delivered`)
       return
     }
