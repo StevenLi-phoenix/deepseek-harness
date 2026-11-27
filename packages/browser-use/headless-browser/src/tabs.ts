@@ -18,6 +18,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { TabObservation, TabStore } from './tab-store.ts'
 import { firstLine } from './error.ts'
 import type { TabAction, TabInfo } from './input.ts'
 
@@ -39,12 +40,17 @@ export interface TabsPage {
   close(): Promise<void>
   on(event: TabsPageEvent, listener: () => void): unknown
   on(event: 'popup', listener: (popup: this) => void): unknown
+  on(event: 'framenavigated', listener: (frame: NavigationFrame) => void): unknown
   off(event: TabsPageEvent, listener: () => void): unknown
   off(event: 'popup', listener: (popup: this) => void): unknown
+  off(event: 'framenavigated', listener: (frame: NavigationFrame) => void): unknown
 }
 
 /** Page events whose payload the tab manager ignores; a popup's payload is the new page. */
-export type TabsPageEvent = 'close' | 'domcontentloaded' | 'framenavigated' | 'load'
+export type TabsPageEvent = 'close' | 'domcontentloaded' | 'load'
+
+/** Only top-level navigation changes a tab's last-navigation timestamp. */
+interface NavigationFrame { parentFrame(): object | null }
 
 /**
  * The context operations this module needs; a Playwright `BrowserContext` satisfies them
@@ -83,6 +89,9 @@ export class TabNavigationError extends Error {
 export interface Tab<Page extends TabsPage = TabsPage> {
   readonly id: string
   readonly page: Page
+  readonly openedAt: string
+  lastNavigatedAt: string
+  openedBySessionId: string | null
   title: string
   url: string
   loading: boolean
@@ -114,7 +123,31 @@ export interface TabsOptions<Page extends TabsPage = TabsPage> {
    * the tab lets the page go. The session uses it to keep the page's downloads.
    */
   readonly onAdopt?: (page: Page) => () => void
+  /** Stable IDs must not be reused after a browser restart when the ledger is enabled. */
+  readonly nextId?: () => string
+  /** Where the context records its tab metadata. */
+  readonly store?: TabStore
 }
+
+/** Public discovery metadata for one interactive page. */
+export type ListedTab = Omit<TabObservation, 'openedBySessionId'> & { readonly active: boolean }
+
+/** Exactly one way to locate an already-open tab. */
+export type ResumeTarget = { readonly tab: string } | { readonly urlSubstring: string }
+
+/** An absent or ambiguous tab cannot be resumed. */
+export class ResumeTabError extends Error {
+  override readonly name = 'ResumeTabError'
+}
+
+/** What a document probe saw without reading page contents or form values. */
+export interface ResumeProbe {
+  readonly hasForm: boolean
+  readonly errorPage: boolean
+}
+
+/** The active tab and the presence of form controls after a resume. */
+export type ResumedTab = Pick<ListedTab, 'url' | 'title'> & { readonly tab: string; readonly hasForm: boolean }
 
 /** What the active tab and its CDP session are, for the screencast. */
 export interface ActiveTab<Page extends TabsPage = TabsPage> {
@@ -155,6 +188,7 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
   readonly #listeners = new Set<() => void>()
   #activeId: string | undefined
   #sequence = 0
+  readonly #pendingPopups = new WeakSet<Page>()
   #queue: Promise<unknown> = Promise.resolve()
   #disposed = false
   /** Popups adopted so far, newest last, numbered from 1. */
@@ -177,6 +211,95 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
    */
   state(): TabInfo[] {
     return [...this.#tabs.values()].map(tab => this.#info(tab))
+  }
+
+  /**
+   * Adopt existing interactive pages, then reconcile the last ledger.
+   * @param context - the newly opened browser context.
+   */
+  async reconcile(context: TabsContext<Page>): Promise<void> {
+    this.#adoptPages(context)
+    await this.#options.store?.reconcile([...this.#tabs.keys()])
+  }
+
+  /**
+   * Adopt externally-created pages after explicit opens and popup handlers have claimed theirs.
+   * @param page - the new page the context reported.
+   */
+  observePage(page: Page): void {
+    void this.#run(() => {
+      if (this.#pendingPopups.has(page) || !this.#canAdopt(page)) return
+      const tab = this.#adopt(page)
+      this.#activeId ??= tab.id
+      this.#emit()
+    }).catch((error: unknown) => {
+      this.#options.log.warn('headless-browser: observing a tab failed: %s', firstLine(error))
+    })
+  }
+
+  /**
+   * Register an offscreen page on the same queue before discovery can adopt it.
+   * @param context - the context that owns the page.
+   * @param reserve - register the page as offscreen before the next queued operation.
+   * @returns the new offscreen page.
+   */
+  async createReserved(context: TabsContext<Page>, reserve: (page: Page) => void): Promise<Page> {
+    return await this.#run(async () => {
+      const page = await context.newPage()
+      reserve(page)
+      return page
+    })
+  }
+
+  /**
+   * List current tabs without selecting one or inspecting document contents.
+   * @param context - the live context whose pages the list reconciles.
+   * @returns live tab metadata in adoption order.
+   */
+  async list(context: TabsContext<Page>): Promise<ListedTab[]> {
+    return await this.#run(async () => {
+      this.#adoptPages(context)
+      await Promise.all([...this.#tabs.values()].map(tab => this.#refresh(tab)))
+      return [...this.#tabs.values()].filter(tab => !tab.page.isClosed()).map(tab => ({
+        id: tab.id, url: tab.url, title: tab.title, openedAt: tab.openedAt,
+        lastNavigatedAt: tab.lastNavigatedAt, active: tab.id === this.#activeId,
+      }))
+    })
+  }
+
+  /**
+   * Activate and inspect a live page; reload only browser blank/error documents.
+   * @param context - the live context that owns the page.
+   * @param target - existing tab id or unique URL substring.
+   * @param probe - inspect the document without reading form values.
+   * @returns metadata and form-control presence for the reactivated tab.
+   */
+  async resume(context: TabsContext<Page>, target: ResumeTarget, probe: (page: Page) => Promise<ResumeProbe>): Promise<ResumedTab> {
+    return await this.#run(async () => {
+      this.#adoptPages(context)
+      const matches = [...this.#tabs.values()].filter(tab => !tab.page.isClosed() &&
+        ('tab' in target ? tab.id === target.tab : tab.page.url().includes(target.urlSubstring)))
+      const tab = matches[0]
+      if (tab === undefined) throw new ResumeTabError('that tab is no longer open; list tabs with headless_browser_tabs, or reopen the page and refill the form')
+      if (matches.length > 1) throw new ResumeTabError('more than one tab matches that URL; use headless_browser_tabs and give a tab id')
+      try {
+        await tab.page.bringToFront()
+        this.#activeId = tab.id
+        this.#emit()
+        const inspectedUrl = tab.page.url()
+        let inspected = await probe(tab.page)
+        if (!inspected.hasForm && inspectedUrl === tab.page.url()
+          && (inspectedUrl === 'about:blank' || inspected.errorPage)) {
+          await this.#navigateBy(tab, page => page.reload({ waitUntil: 'domcontentloaded', timeout: this.#navigationTimeoutMs }))
+          inspected = await probe(tab.page)
+        }
+        await this.#refresh(tab)
+        if (!tab.page.isClosed()) return { tab: tab.id, url: tab.url, title: tab.title, hasForm: inspected.hasForm }
+      } catch (error: unknown) {
+        if (!tab.page.isClosed()) throw error
+      }
+      throw new ResumeTabError('that tab closed during resume; reopen the page and refill the form')
+    })
   }
 
   /**
@@ -217,16 +340,17 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
   /**
    * Open a tab, optionally navigating it.
    * @param url - absolute URL to load; nothing opens a blank tab.
+   * @param openedBySessionId - the DSH Session opening the tab, if any.
    * @returns the new tab's state.
    * @throws TabLimitError - when the browser already has the maximum tabs.
    * @throws TabNavigationError - when the new tab's first navigation fails.
    */
-  async create(url?: string): Promise<TabInfo> {
+  async create(url?: string, openedBySessionId?: string): Promise<TabInfo> {
     return this.#run(async () => {
       if (this.#tabs.size >= this.#maxTabs) throw new TabLimitError(this.#maxTabs)
       const context = await this.#options.context()
       const page = this.#tabs.size === 0 ? await this.#firstPage(context) : await context.newPage()
-      const tab = this.#adopt(page)
+      const tab = this.#adopt(page, openedBySessionId)
       this.#activeId = tab.id
       await page.bringToFront()
       if (url !== undefined) await this.#navigateTab(tab, url)
@@ -287,10 +411,15 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
    * Navigate one tab to an absolute URL.
    * @param url - absolute URL with an http, https, data, or about scheme.
    * @param id - tab id, or nothing for the active tab.
+   * @param sessionId - Session to credit for first use of an unclaimed blank page.
    */
-  async navigate(url: string, id?: string): Promise<void> {
+  async navigate(url: string, id?: string, sessionId?: string): Promise<void> {
     await this.#run(async () => {
       const tab = id === undefined ? await this.#ensureActive() : this.#resolve(id)
+      if (sessionId !== undefined && tab.openedBySessionId === null && tab.url === 'about:blank') {
+        tab.openedBySessionId = sessionId
+        this.#options.store?.see(tab)
+      }
       await this.#navigateTab(tab, url)
     })
   }
@@ -391,35 +520,29 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
   async #step(id: string | undefined, run: (page: Page) => Promise<unknown>): Promise<void> {
     await this.#run(async () => {
       const tab = id === undefined ? await this.#ensureActive() : this.#resolve(id)
-      tab.loading = true
-      this.#emit()
-      try {
-        await run(tab.page)
-        tab.loading = false
-        await this.#refresh(tab)
-      } catch (error: unknown) {
-        tab.loading = false
-        await this.#refresh(tab)
-        throw new TabNavigationError(tab.url, firstLine(error))
-      }
-      this.#emit()
+      await this.#navigateBy(tab, run)
     })
   }
 
   async #navigateTab(tab: Tab<Page>, url: string): Promise<void> {
     const target = absoluteUrl(url)
+    await this.#navigateBy(tab, page => page.goto(target, { waitUntil: 'domcontentloaded', timeout: this.#navigationTimeoutMs }), target)
+  }
+
+  async #navigateBy(tab: Tab<Page>, run: (page: Page) => Promise<unknown>, target = tab.url): Promise<void> {
     tab.loading = true
     this.#emit()
     try {
-      await tab.page.goto(target, { waitUntil: 'domcontentloaded', timeout: this.#navigationTimeoutMs })
-      tab.loading = false
-      await this.#refresh(tab)
+      // Back/forward can return null without moving; real navigations also emit framenavigated.
+      const response = await run(tab.page)
+      if (response !== null) this.#recordNavigation(tab)
     } catch (error: unknown) {
+      throw new TabNavigationError(target, firstLine(error))
+    } finally {
       tab.loading = false
       await this.#refresh(tab)
-      throw new TabNavigationError(target, firstLine(error))
+      this.#emit()
     }
-    this.#emit()
   }
 
   async #ensureActive(): Promise<Tab<Page>> {
@@ -427,6 +550,9 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
     const current = this.#activeId === undefined ? undefined : this.#tabs.get(this.#activeId)
     if (current !== undefined) return current
     const context = await this.#options.context()
+    // A context launch may have adopted its startup pages while ensure was pending.
+    const adopted = this.#activeId === undefined ? undefined : this.#tabs.get(this.#activeId)
+    if (adopted !== undefined) return adopted
     const tab = this.#adopt(await this.#firstPage(context))
     this.#activeId = tab.id
     await tab.page.bringToFront()
@@ -446,21 +572,45 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
     return false
   }
 
-  #adopt(page: Page): Tab<Page> {
-    const id = `t${String(++this.#sequence)}`
+  #canAdopt(page: Page): boolean {
+    return !this.#disposed && !page.isClosed() && !this.#hasPage(page) && !(this.#options.reserved?.(page) ?? false)
+  }
+
+  #adoptPages(context: TabsContext<Page>): void {
+    let changed = false
+    for (const page of context.pages()) {
+      if (this.#pendingPopups.has(page) || !this.#canAdopt(page)) continue
+      const tab = this.#adopt(page)
+      this.#activeId ??= tab.id
+      changed = true
+    }
+    if (changed) this.#emit()
+  }
+
+  #adopt(page: Page, openedBySessionId: string | null = null): Tab<Page> {
+    const id = this.#options.nextId?.() ?? `t${String(++this.#sequence)}`
+    const openedAt = new Date().toISOString()
     const tab: Tab<Page> = {
       id,
       page,
       title: '',
       url: page.url(),
+      openedAt,
+      lastNavigatedAt: openedAt,
+      openedBySessionId,
       loading: false,
       closing: false,
     }
     this.#tabs.set(id, tab)
     const onLoad = (): void => { this.#settle(tab) }
-    const onNavigation = (): void => { this.#navigated(tab) }
+    const onNavigation = (frame?: NavigationFrame): void => {
+      if (frame === undefined || frame.parentFrame() === null) this.#navigated(tab)
+    }
     const onClose = (): void => { void this.#closed(tab) }
-    const onPopup = (popup: Page): void => { void this.#popup(tab, popup) }
+    const onPopup = (popup: Page): void => {
+      this.#pendingPopups.add(popup)
+      void this.#popup(tab, popup)
+    }
     page.on('domcontentloaded', onLoad)
     page.on('load', onLoad)
     page.on('framenavigated', onNavigation)
@@ -475,6 +625,7 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
       page.off('close', onClose)
       page.off('popup', onPopup)
     }
+    this.#options.store?.see(tab)
     void this.#refresh(tab)
     return tab
   }
@@ -509,6 +660,7 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
       // Nobody awaits this handler; a popup that closed mid-adoption is simply gone.
       this.#options.log.warn('headless-browser: adopting a popup of %s failed: %s', opener.id, firstLine(error))
     }
+    this.#pendingPopups.delete(popup)
     for (const waiter of [...this.#popupWaiters]) waiter()
   }
 
@@ -520,9 +672,16 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
 
   #navigated(tab: Tab<Page>): void {
     if (tab.closing || !this.#tabs.has(tab.id)) return
-    tab.url = tab.page.url()
+    this.#recordNavigation(tab)
     this.#emit()
     void this.#refresh(tab)
+  }
+
+  #recordNavigation(tab: Tab<Page>): void {
+    if (!this.#tabs.has(tab.id)) return
+    tab.url = tab.page.url()
+    tab.lastNavigatedAt = new Date().toISOString()
+    this.#options.store?.see(tab)
   }
 
   async #closed(tab: Tab<Page>): Promise<void> {
@@ -568,16 +727,20 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
       // A page that closed mid-read keeps the title it had; the close handler removes it.
       void error
     }
-    if (!this.#tabs.has(tab.id)) return
-    if (tab.url === url && tab.title === title) return
-    tab.url = url
+    // A newer navigation superseded the asynchronous title read.
+    if (!this.#tabs.has(tab.id) || url !== tab.page.url()) return
+    const changedUrl = tab.url !== url
+    if (changedUrl) this.#recordNavigation(tab)
+    if (!changedUrl && tab.title === title) return
     tab.title = title
+    this.#options.store?.see(tab)
     this.#emit()
   }
 
   #remove(tab: Tab<Page>): void {
     this.#detach(tab)
     this.#tabs.delete(tab.id)
+    this.#options.store?.closed(tab.id, new Date().toISOString())
   }
 
   /** Where one tab sits in the opening order. */
@@ -612,7 +775,7 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
     }
   }
 
-  #run<T>(operation: () => Promise<T>): Promise<T> {
+  #run<T>(operation: () => T | Promise<T>): Promise<T> {
     const next = this.#queue.then(operation, operation)
     this.#queue = next.then(() => undefined, () => undefined)
     return next

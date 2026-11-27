@@ -108,6 +108,8 @@ const EXEC = {
 function fakeBrowser(overrides: Partial<ToolBrowser> = {}): ToolBrowser {
   return {
     open: async () => ({ url: 'https://example.com/', title: 'Example', tab: 't1' }),
+    listTabs: async () => [{ id: 't1', url: 'https://example.com/', title: 'Example', openedAt: '2026-01-01T00:00:00.000Z', lastNavigatedAt: '2026-01-01T00:00:01.000Z', active: true }],
+    resumeTab: async () => ({ tab: 't1', url: 'https://example.com/', title: 'Example', hasForm: true }),
     cookies: async () => COOKIES,
     snapshot: async () => ({ path: '/tmp/page.png', url: 'https://example.com/' }),
     downloads: async () => [],
@@ -185,10 +187,12 @@ function definitionOf(bench: Bench, name: string): ToolDefinition {
 }
 
 describe('tool registration', () => {
-  it('registers the seven page tools, the two tab tools, and the two control tools', () => {
+  it('registers the browser, tab, and control tools', () => {
     const tools = bench(fakeBrowser())
     expect([...tools.definitions.keys()]).toEqual([
       'headless_browser_open',
+      'headless_browser_tabs',
+      'headless_browser_resume',
       'headless_browser_snapshot',
       'headless_browser_downloads',
       'headless_browser_read',
@@ -864,5 +868,31 @@ describe('call titles', () => {
     const tools = bench(fakeBrowser())
     expect(definitionOf(tools, 'headless_browser_scroll').presentCall?.({ to: 'bottom' })).toMatchObject({ title: 'Scroll to bottom' })
     expect(definitionOf(tools, 'headless_browser_close').presentCall?.({ tab: 't2' })).toMatchObject({ title: 'Close tab t2' })
+  })
+})
+
+
+describe('tab discovery and resume', () => {
+  it('lists tabs even during takeover, but refuses to activate or reload one then', async () => {
+    const tools = bench(fakeBrowser())
+    await tools.call('headless_browser_hand_over', { reason: 'owner checking the form' })
+    expect(await tools.call('headless_browser_tabs', {})).toEqual({ tabs: [{
+      id: 't1', url: 'https://example.com/', title: { untrusted: 'https://example.com', content: 'Example' },
+      openedAt: '2026-01-01T00:00:00.000Z', lastNavigatedAt: '2026-01-01T00:00:01.000Z', active: true,
+    }] })
+    expect(JSON.stringify(await tools.call('headless_browser_resume', { tab: 't1' }))).toContain('owner checking the form')
+  })
+
+  it('requires one selector and sends either an id or a URL substring to the context', async () => {
+    const resume = vi.fn<ToolBrowser['resumeTab']>(async () => ({ tab: 't1', url: 'https://example.com/', title: 'Example', hasForm: true }))
+    const tools = bench(fakeBrowser({ resumeTab: resume }))
+    for (const args of [{}, { tab: 't1', urlSubstring: 'example.com' }]) {
+      expect(await tools.call('headless_browser_resume', args)).toEqual({ error: 'give exactly one of tab or urlSubstring' })
+    }
+    expect(resume).not.toHaveBeenCalled()
+    for (const args of [{ tab: 't1' }, { urlSubstring: 'example.com' }]) {
+      expect(await tools.call('headless_browser_resume', args)).toMatchObject({ tab: 't1', hasForm: true, title: { content: 'Example' } })
+      expect(resume).toHaveBeenLastCalledWith(args)
+    }
   })
 })

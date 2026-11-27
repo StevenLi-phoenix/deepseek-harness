@@ -7,7 +7,7 @@
  * Playwright cannot resolve a Chromium binary for this machine.
  */
 
-import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -29,6 +29,8 @@ const AVAILABLE = existsSync(chromium.executablePath())
 /** Every tool the plugin registers, in registration order. */
 const TOOL_NAMES = [
   'headless_browser_open',
+  'headless_browser_tabs',
+  'headless_browser_resume',
   'headless_browser_snapshot',
   'headless_browser_downloads',
   'headless_browser_read',
@@ -164,9 +166,18 @@ async function mount(options: MountOptions): Promise<Mounted> {
   ctx.provide('systemPrompt', { tools: () => () => {} })
   await ctx.plugin(Tools)
   const config = configAt(root, options.config?.(root) ?? {})
-  const fiber = options.resolved === true
-    ? await ctx.plugin({ name: headlessBrowser.name, inject: headlessBrowser.inject, apply: headlessBrowser.apply }, config)
-    : await ctx.plugin(headlessBrowser, config)
+  const priorHome = process.env['DSH_HOME']
+  process.env['DSH_HOME'] = root
+  const fiber = await (async () => {
+    try {
+      return options.resolved === true
+        ? await ctx.plugin({ name: headlessBrowser.name, inject: headlessBrowser.inject, apply: headlessBrowser.apply }, config)
+        : await ctx.plugin(headlessBrowser, config)
+    } finally {
+      if (priorHome === undefined) delete process.env['DSH_HOME']
+      else process.env['DSH_HOME'] = priorHome
+    }
+  })()
   const app: Mounted = {
     ctx,
     root,
@@ -228,7 +239,8 @@ describe('headless-browser plugin', () => {
     expect(readdirSync(app.root)).toEqual([])
   })
 
-  it('logs an upload directory it cannot create, keepalives it cannot arm, and a re-arm that failed after a relaunch', async () => {
+  it('logs the startup and re-arm failures without breaking browser tools', async () => {
+    vi.spyOn(HeadlessBrowserSession.prototype, 'reconcileTabsOnBoot').mockRejectedValueOnce(new Error('cannot launch browser'))
     vi.spyOn(KeepaliveService.prototype, 'load').mockRejectedValueOnce(new Error('the keepalive file is locked'))
     const onRelaunch = vi.spyOn(HeadlessBrowserSession.prototype, 'onRelaunch')
     const app = await mount({
@@ -243,6 +255,7 @@ describe('headless-browser plugin', () => {
     await vi.waitFor(() => {
       expect(app.warnings).toEqual(expect.arrayContaining([
         ['headless-browser: creating the upload directory %s failed: %s', join(app.root, 'file', 'uploads'), expect.any(String)],
+        ['headless-browser: reconciling tabs on browser startup failed: %s', 'cannot launch browser'],
         ['headless-browser: arming the keepalives failed: %s', 'the keepalive file is locked'],
         ['headless-browser: re-arming the keepalives after a recovery failed: %s', 'the new context is gone'],
       ]))
@@ -269,6 +282,33 @@ describe('headless-browser plugin', () => {
       state: 'error',
     }))
   })
+
+  it('lists no live tabs and refuses resume before the browser starts', async () => {
+    const app = await mount({ web: false })
+    expect(await app.call('headless_browser_tabs', {})).toEqual({ tabs: [] })
+    expect(await app.call('headless_browser_resume', { tab: 'stale' }))
+      .toEqual({ error: 'no tab is open; reopen the page and refill the form' })
+  })
+
+  it.skipIf(!AVAILABLE)('marks a formerly open tab lost on boot and never assigns its id to a new page', async () => {
+    const app = await mount({ web: false, prepare: (root) => {
+      const dir = join(root, 'data', 'headless-browser')
+      mkdirSync(dir, { recursive: true })
+      const seen = '2026-01-01T00:00:00.000Z'
+      writeFileSync(join(dir, 'tabs.json'), JSON.stringify({ version: 1, tabs: [{
+        id: 'old-id', url: 'https://example.test/form', title: 'A form', firstSeenAt: seen, lastSeenAt: seen,
+        openedBySessionId: 'old-session', status: 'open',
+      }] }), { mode: 0o600 })
+    } })
+    const path = join(app.root, 'data', 'headless-browser', 'tabs.json')
+    await vi.waitFor(() => {
+      const contents: unknown = JSON.parse(readFileSync(path, 'utf8'))
+      expect(contents).toMatchObject({ tabs: [{ id: 'old-id', status: 'lost' }, { url: 'about:blank', status: 'open' }] })
+    }, { timeout: 20_000 })
+    expect(await app.call('headless_browser_resume', { tab: 'old-id' }))
+      .toEqual({ error: 'that tab is no longer open; list tabs with headless_browser_tabs, or reopen the page and refill the form' })
+    expect(JSON.stringify(await app.call('headless_browser_tabs', {}))).not.toContain('old-id')
+  }, 120_000)
 
   it.skipIf(!AVAILABLE)('installs the exit hook with the first launch, publishes guard decisions, and removes the hook on dispose', async () => {
     const before = process.listeners('exit')

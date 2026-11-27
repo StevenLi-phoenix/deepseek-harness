@@ -324,6 +324,55 @@ describe.skipIf(!AVAILABLE)('headless browser live view', () => {
     }
   }, 120_000)
 
+  it('reloads a failed document once, detects controls in its embedded form, and refuses missing or ambiguous tabs', async () => {
+    const app = await boot()
+    let requests = 0
+    let posts = 0
+    const server = createServer((request, response) => {
+      response.setHeader('content-type', 'text/html; charset=utf-8')
+      if (request.url === '/application') {
+        requests += 1
+        response.statusCode = requests === 1 ? 503 : 200
+        response.end(requests === 1 ? '<title>Temporary error</title>' : '<title>Application</title><iframe src="/form"></iframe>')
+      } else if (request.url === '/post') {
+        if (request.method === 'POST') {
+          posts += 1
+          response.statusCode = 500
+          response.end('<title>Submission error</title>')
+        } else {
+          response.end('<form method="post"><button>Send</button></form>')
+        }
+      } else {
+        response.end('<textarea></textarea>')
+      }
+    })
+    await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve) })
+    try {
+      const address = server.address()
+      if (address === null || typeof address === 'string') throw new Error('the test server did not bind a port')
+      const url = `http://127.0.0.1:${String(address.port)}/application`
+      const open = await app.browser.open(url)
+      expect(open.title).toBe('Temporary error')
+      expect(await app.browser.resumeTab({ tab: open.tab })).toEqual({ tab: open.tab, url, title: 'Application', hasForm: true })
+      expect(requests).toBe(2)
+      expect(await app.browser.resumeTab({ urlSubstring: '/application' })).toMatchObject({ hasForm: true })
+      expect(requests).toBe(2)
+      await app.browser.open(url, true)
+      await expect(app.browser.resumeTab({ urlSubstring: '/application' })).rejects.toThrow(/more than one tab/u)
+      await app.browser.closeTab(open.tab)
+      await expect(app.browser.resumeTab({ tab: open.tab })).rejects.toThrow(/no longer open.*refill/u)
+
+      const post = await app.browser.open(new URL('/post', url).href, true)
+      const page = await app.browser.page(post.tab)
+      await page.locator('button').click()
+      expect(await app.browser.resumeTab({ tab: post.tab })).toMatchObject({ title: 'Submission error', hasForm: false })
+      expect(posts).toBe(1)
+    } finally {
+      server.closeAllConnections()
+      await within('closing the form server', new Promise<void>((resolve) => { server.close(() => { resolve() }) }))
+    }
+  }, 120_000)
+
   it('reads rows below the fold and captures the whole page when asked', async () => {
     const app = await boot()
     await app.browser.open(TALL_PAGE)

@@ -9,6 +9,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { dshPath } from '@deepseek-ai/dsh-home-paths'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { mkdir } from 'node:fs/promises'
 import { Config } from './config.ts'
@@ -20,6 +21,7 @@ import { KeepaliveService, type KeepaliveEvent } from './keepalive.ts'
 import { LiveView } from './live-view.ts'
 import { PAGE_PATH, mountTakeoverRoutes } from './routes.ts'
 import { HeadlessBrowserSession } from './session.ts'
+import { TabStore } from './tab-store.ts'
 import { TakeoverState } from './takeover.ts'
 import { registerBrowserTools } from './tools.ts'
 import { UploadPolicy } from './uploads.ts'
@@ -63,7 +65,12 @@ export function apply(ctx: Context, config: Config): void {
     onEvent: (event) => { ctx.emit('headless-browser/security', event) },
     sensitiveActions: config.sensitiveActions,
   })
-  const browser = new HeadlessBrowserSession(config, ctx.logger, guard)
+  const browser = new HeadlessBrowserSession(config, ctx.logger, guard, {
+    tabStore: new TabStore(dshPath('data', 'headless-browser', 'tabs.json'), ctx.logger),
+  })
+  void browser.reconcileTabsOnBoot().catch((error: unknown) => {
+    ctx.logger.warn('headless-browser: reconciling tabs on browser startup failed: %s', firstLine(error))
+  })
   const keepalives = new KeepaliveService({
     path: config.keepalivePath,
     create: async () => await browser.keepalivePage(),

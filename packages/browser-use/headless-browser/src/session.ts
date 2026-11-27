@@ -15,7 +15,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { chromium, type BrowserContext, type CDPSession, type ElementHandle, type Frame, type Locator, type Page } from 'playwright-core'
+import { chromium, type BrowserContext, type CDPSession, type ElementHandle, type Frame, type Locator, type Page, type Request, type Response } from 'playwright-core'
 import { probeChallenge, readChallengeFacts, type ChallengeFacts } from './challenge.ts'
 import type { Config } from './config.ts'
 import { cookieSnapshot, cookieSummary, type CookieResult } from './cookies.ts'
@@ -30,7 +30,8 @@ import { cdpScrollChannel, scrollPage, type ScrollRequest, type ScrollResult } f
 import { isComboboxInput, matchOption, readComboboxOptions, readOptions, readSelectOptions, type SelectOption } from './select.ts'
 import type { KeepalivePage } from './keepalive.ts'
 import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
-import { BrowserTabs, TabNavigationError, type ActiveTab, type ClosedTab, type PopupTab } from './tabs.ts'
+import type { TabStore } from './tab-store.ts'
+import { BrowserTabs, ResumeTabError, TabNavigationError, type ActiveTab, type ClosedTab, type ListedTab, type PopupTab, type ResumedTab, type ResumeProbe, type ResumeTarget } from './tabs.ts'
 import { findHiddenTextHolder, findSameNameCover, findToggleStandIn, probeElement, readElementFacts, scoreVisibility, VISIBILITY_THRESHOLD, type ElementFacts } from './visibility.ts'
 
 /** How long a context gets to close before shutdown stops waiting for it. */
@@ -108,6 +109,8 @@ export interface SessionDeps {
   readonly onExit?: (run: () => void) => () => void
   /** Kill one browser pid; a synchronous `SIGKILL` by default. */
   readonly kill?: (pid: number) => boolean
+  /** Plugin-owned metadata journal; direct callers can construct an ephemeral browser. */
+  readonly tabStore?: TabStore
 }
 
 /** The browser cannot run, so a tool reports the reason instead of retrying. */
@@ -306,6 +309,8 @@ export class HeadlessBrowserSession {
   /** Pages a keepalive opened: never a tab, so never part of the tab cap. */
   readonly #background = new WeakSet<object>()
   readonly #cdps = new WeakMap<Page, CDPSession>()
+  readonly #httpErrors = new WeakMap<Page, string>()
+  readonly #navigationMethods = new WeakMap<Page, string>()
   readonly #relaunchListeners = new Set<() => void>()
   /** Keeps what the pages download; see `downloads.ts`. */
   readonly #downloads: DownloadStore
@@ -381,13 +386,12 @@ export class HeadlessBrowserSession {
    */
   async ensure(): Promise<BrowserContext> {
     if (this.#closed) throw new BrowserUnavailableError('the browser plugin is shutting down')
-    if (this.#context !== undefined) return this.#context
-    this.#launching ??= this.#launch()
+    const launch = this.#launching ??= this.#launch()
     try {
-      return await this.#launching
+      return await launch
     } catch (error: unknown) {
-      // A failed launch owns no context; the next caller may try again.
-      this.#launching = undefined
+      // Do not clear a newer launch if a second caller already retried this one.
+      if (this.#launching === launch) this.#launching = undefined
       throw error
     }
   }
@@ -403,9 +407,75 @@ export class HeadlessBrowserSession {
       // A keepalive's offscreen page is nobody's tab: adopting it would spend
       // one of the eight slots a person's tabs share.
       reserved: page => this.#background.has(page),
-      onAdopt: page => this.#downloads.attach(page),
+      onAdopt: page => this.#observePage(page),
+      ...this.#deps.tabStore === undefined ? {} : { store: this.#deps.tabStore, nextId: () => `t-${randomUUID()}` },
     })
     return this.#tabs
+  }
+
+  /** At plugin boot, reconcile a previous run's open tabs immediately; otherwise launch on demand. */
+  async reconcileTabsOnBoot(): Promise<void> {
+    const store = this.#deps.tabStore
+    if (store === undefined || !await store.hasOpenTabs() || this.#closed) return
+    await this.ensure()
+  }
+
+  /**
+   * Discover interactive tabs without changing focus or launching a browser.
+   * @returns the context's open tabs, or an empty list if none are open.
+   */
+  async listTabs(): Promise<ListedTab[]> {
+    const context = await this.#launching
+    if (context === undefined || this.#context !== context) return []
+    const tabs = await this.tabs().list(context)
+    await this.#deps.tabStore?.flush()
+    return tabs
+  }
+
+  /**
+   * Activate an existing form tab without replacing a healthy document.
+   * @param target - the live tab id or a substring of exactly one live URL.
+   * @returns the tab's current metadata and whether it contains form controls.
+   */
+  async resumeTab(target: ResumeTarget): Promise<ResumedTab> {
+    const context = await this.#launching
+    if (context === undefined || this.#context !== context) {
+      throw new ResumeTabError('no tab is open; reopen the page and refill the form')
+    }
+    try {
+      return await this.tabs().resume(context, target, page =>
+        probeResume(page, this.#navigationMethods.get(page), this.#httpErrors.get(page)))
+    } finally {
+      await this.#deps.tabStore?.flush()
+    }
+  }
+
+  #observePage(page: Page): () => void {
+    const detachDownloads = this.#downloads.attach(page)
+    const isMainNavigation = (request: Request): boolean => {
+      if (!request.isNavigationRequest()) return false
+      try {
+        return request.frame() === page.mainFrame()
+      } catch {
+        // A popup's first request can precede its frame.
+        return false
+      }
+    }
+    const requested = (req: Request): void => {
+      if (isMainNavigation(req)) this.#navigationMethods.set(page, req.method())
+    }
+    const response = (res: Response): void => {
+      if (!isMainNavigation(res.request())) return
+      if (res.status() >= 400) this.#httpErrors.set(page, res.url())
+      else this.#httpErrors.delete(page)
+    }
+    page.on('request', requested)
+    page.on('response', response)
+    return () => {
+      page.off('request', requested)
+      page.off('response', response)
+      detachDownloads()
+    }
   }
 
   /**
@@ -482,9 +552,13 @@ export class HeadlessBrowserSession {
    * @param message - the validated tab message.
    */
   async applyTabCommand(message: TabMessage): Promise<void> {
-    await this.#guarded('applying a tab command', async () => {
-      await this.tabs().command(message.action, message.tabId, message.url)
-    })
+    try {
+      await this.#guarded('applying a tab command', async () => {
+        await this.tabs().command(message.action, message.tabId, message.url)
+      })
+    } finally {
+      await this.#deps.tabStore?.flush()
+    }
   }
 
   /**
@@ -493,11 +567,12 @@ export class HeadlessBrowserSession {
    * @param newTab - open a new tab instead of reusing one; a named tab is then ignored.
    * @param allowOrigin - allow the move when the destination is another registrable domain.
    * @param tabId - tab to load the URL in; the active tab when omitted.
+   * @param openedBySessionId - the DSH Session opening a new tab or using an unclaimed blank tab.
    * @returns the settled URL, the document title, and the tab it loaded in.
    * @throws ActionRefusedError - when the destination is another site and this call did not allow it.
    * @throws TabNotFoundError - when `tabId` names no open tab.
    */
-  async open(url: string, newTab = false, allowOrigin = false, tabId?: string): Promise<OpenResult> {
+  async open(url: string, newTab = false, allowOrigin = false, tabId?: string, openedBySessionId?: string): Promise<OpenResult> {
     const named = newTab ? undefined : tabId
     return await this.#guarded('opening the page', async () => {
       const current = await this.page(named)
@@ -507,8 +582,8 @@ export class HeadlessBrowserSession {
       let opened: { url: string; title: string; tab: string }
       try {
         opened = newTab
-          ? await this.#openTab(url)
-          : await this.#openHere(url, named)
+          ? await this.#openTab(url, openedBySessionId)
+          : await this.#openHere(url, named, openedBySessionId)
       } catch (error: unknown) {
         // A URL that answers with an attachment is a file, not a page: the
         // navigation fails and the download follows. Report the file.
@@ -519,6 +594,8 @@ export class HeadlessBrowserSession {
         const tab = named ?? (await this.tabs().active()).id
         this.#log.info('headless-browser: %s was a download, %d file(s) kept', url.split('?')[0], downloads.length)
         return { url: page.url(), title: await page.title(), tab, downloads }
+      } finally {
+        await this.#deps.tabStore?.flush()
       }
       this.#guard.anchor(opened.url)
       this.#log.info('headless-browser: opened %s in tab %s%s', pageOrigin(opened.url), opened.tab, newTab ? ' (new)' : '')
@@ -530,11 +607,12 @@ export class HeadlessBrowserSession {
    * Navigate the active or a named tab and report what settled.
    * @param url - absolute URL to load.
    * @param tabId - tab to navigate; the active tab when omitted.
+   * @param openedBySessionId - caller to credit for first use of an unclaimed blank page.
    * @returns the settled URL, the document title, and the tab's id.
    */
-  async #openHere(url: string, tabId?: string): Promise<{ url: string; title: string; tab: string }> {
+  async #openHere(url: string, tabId?: string, openedBySessionId?: string): Promise<{ url: string; title: string; tab: string }> {
     const tab = tabId ?? (await this.tabs().active()).id
-    await this.tabs().navigate(url, tab)
+    await this.tabs().navigate(url, tab, openedBySessionId)
     const page = await this.page(tab)
     return { url: page.url(), title: await page.title(), tab }
   }
@@ -542,10 +620,11 @@ export class HeadlessBrowserSession {
   /**
    * Open a URL in a new tab and report what settled.
    * @param url - absolute URL to load.
+   * @param openedBySessionId - the DSH Session that opened the tab, when one did.
    * @returns the new tab's URL, title and id.
    */
-  async #openTab(url: string): Promise<{ url: string; title: string; tab: string }> {
-    const tab = await this.tabs().create(url)
+  async #openTab(url: string, openedBySessionId?: string): Promise<{ url: string; title: string; tab: string }> {
+    const tab = await this.tabs().create(url, openedBySessionId)
     return { url: tab.url, title: tab.title, tab: tab.id }
   }
 
@@ -558,7 +637,11 @@ export class HeadlessBrowserSession {
   async closeTab(tabId?: string): Promise<ClosedTab> {
     return await this.#guarded('closing a tab', async () => {
       if (this.tabsState().length === 0) throw new NoOpenTabError()
-      return await this.tabs().close(tabId)
+      try {
+        return await this.tabs().close(tabId)
+      } finally {
+        await this.#deps.tabStore?.flush()
+      }
     })
   }
 
@@ -1184,8 +1267,7 @@ export class HeadlessBrowserSession {
     return await this.#guarded('opening a keepalive page', async () => {
       const context = await this.ensure()
       const active = this.#tabs?.state().find(tab => tab.active)?.id
-      const page = await context.newPage()
-      this.#background.add(page)
+      const page = await this.tabs().createReserved(context, (page) => { this.#background.add(page) })
       if (active !== undefined) {
         // Opening a page activates it in Chromium; put the agent's tab back in
         // front so a keepalive never moves the page a person is looking at.
@@ -1202,7 +1284,6 @@ export class HeadlessBrowserSession {
         challenge: async (): Promise<ChallengeFacts> => readChallengeFacts(await page.evaluate(probeChallenge)),
         text: async () => await page.evaluate(() => document.querySelector('body')?.innerText ?? ''),
         close: async () => {
-          this.#background.delete(page)
           await page.close()
         },
       }
@@ -1261,6 +1342,7 @@ export class HeadlessBrowserSession {
         if (pid !== undefined) this.#kill(pid)
       }
     }
+    await this.#deps.tabStore?.flush()
     await removeBrowserOwner(this.#config.profileDir).catch((error: unknown) => {
       this.#log.warn('headless-browser: forgetting the browser owner failed: %s', firstLine(error))
     })
@@ -1373,6 +1455,7 @@ export class HeadlessBrowserSession {
       })
     }
     context.on('close', () => {
+      if (this.#context !== context) return
       this.#stopStealth?.()
       this.#stopStealth = undefined
       this.#context = undefined
@@ -1384,6 +1467,11 @@ export class HeadlessBrowserSession {
     if (this.#config.stealth) {
       const stealth = stealthIdentity()
       this.#stopStealth = await applyStealth<Page>(context, this.#log, stealth)
+    }
+    if (this.#deps.tabStore !== undefined) {
+      const tabs = this.tabs()
+      context.on('page', (page) => { tabs.observePage(page) })
+      await tabs.reconcile(context)
     }
     return context
   }
@@ -1647,4 +1735,22 @@ async function locateNow(page: Page, selector: string): Promise<Located | undefi
  */
 function isSpinButton(element: Element): boolean {
   return element.getAttribute('role') === 'spinbutton'
+}
+
+/** A structural probe: selectors test for controls but never inspect or return their values. */
+async function probeResume(page: Page, method?: string, httpErrorUrl?: string): Promise<ResumeProbe> {
+  const chromiumError = page.url().startsWith('chrome-error:') || (await page.evaluate<string>('document.documentURI')).startsWith('chrome-error:')
+  // Chromium's error UI has its own buttons; those are not site form controls.
+  // A reload can re-submit a POST. Only retry navigation observed to be a GET.
+  if (chromiumError) return { hasForm: false, errorPage: method === 'GET' }
+  const counts = await Promise.all(page.frames().map(async (frame) => {
+    try {
+      return await frame.locator('input:not([type=hidden]), textarea, button, select').count()
+    } catch (error: unknown) {
+      if (frame.isDetached() && !page.isClosed()) return 0
+      throw error
+    }
+  }))
+  const hasForm = counts.some(count => count > 0)
+  return { hasForm, errorPage: !hasForm && method === 'GET' && httpErrorUrl === page.url().split('#', 1)[0] }
 }
