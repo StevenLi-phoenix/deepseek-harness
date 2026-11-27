@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for 2026-11-27-notify-learning-source.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/persistence-changes/2026-11-27-notify-learning-source.md
+/:
+  en: 3d5a424ae7d7e46b
+  zh: c22a8e4a62d8cc1a
+/2026-11-27-notify-learning-source:
+  en: 40ccb5d49dd660ba
+  zh: 9966e4d90d00cac2
+/2026-11-27-notify-learning-source/summary:
+  en: f6ea9797f91361bd
+  zh: cf9f8bd985e9187d
+/2026-11-27-notify-learning-source/table-of-contents:
+  en: 6cf314a069ceb451
+  zh: 9adff678e9ecab3b
+/2026-11-27-notify-learning-source/declaration:
+  en: 6907136f28e48c90
+  zh: 02f8298485f3d8e7
+/2026-11-27-notify-learning-source/compatibility:
+  en: ab56bdff0c1d33cf
+  zh: 134134c7c506dd6a
+/2026-11-27-notify-learning-source/verification:
+  en: 737114496dccc92f
+  zh: d5e4fc1bb11b6ab5
+/2026-11-27-notify-learning-source/dev-note:
+  en: b75c8458928b72b9
+  zh: 003ba4e17b4b5269

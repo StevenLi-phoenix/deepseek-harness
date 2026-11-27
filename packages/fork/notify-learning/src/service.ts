@@ -163,7 +163,7 @@ export class NotifyLearning {
    * @param now - the time.
    * @returns the report, or undefined when nothing was due.
    */
-  async runIfDue(now = new Date()): Promise<PassReport | undefined> {
+  async runIfDue(now: Date = new Date()): Promise<PassReport | undefined> {
     if (!this.settings.enabled || this.#running !== undefined) return undefined
     const { day, hour } = localClock(now, this.settings.timeZone)
     const state = await this.store.state()
@@ -187,7 +187,7 @@ export class NotifyLearning {
    * @returns what it did.
    * @throws when the model call fails or its answer is not the JSON asked for; the exchanges stay for the next try.
    */
-  run(now = new Date()): Promise<PassReport> {
+  run(now: Date = new Date()): Promise<PassReport> {
     this.#running ??= this.pass(now).finally(() => { this.#running = undefined })
     return this.#running
   }

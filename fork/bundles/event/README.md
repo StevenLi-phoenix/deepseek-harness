@@ -42,6 +42,7 @@ This is the event profile's skeleton layer. It mounts what every deployment of t
 | `webhook-runtime` | `@deepseek-ai/dsh-webhook` | the Session creation seam the bus uses for `session` subscriptions |
 | `owner-relay` | `@deepseek-ai/dsh-owner-relay` | one rule set at each turn end, handing the answer to the channel that claimed the Session |
 | `time-gap` | `@deepseek-ai/dsh-time-gap` | the silence notice in front of a turn that starts after five quiet minutes |
+| `notify-learning` | `@deepseek-ai/dsh-notify-learning` | notification rules learned from the owner's WeChat replies to proactive messages, shown to the `unattended` and `notify` presets; its tools row sits in `preset-unattended` |
 | `event-bus` | `@deepseek-ai/dsh-event-bus` | routing: every subscription, its coalescing, its caps, and the Session each one starts |
 | `event-ingest` | `@deepseek-ai/dsh-event-ingest` | the push route `POST /hooks/events`, one token per source |
 | `plugin-config` | `@deepseek-ai/dsh-plugin-config` | the All settings card on every Settings page |

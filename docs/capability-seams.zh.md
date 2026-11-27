@@ -27,6 +27,7 @@ flowchart LR
   pkg_gmail["gmail"]
   pkg_owner_memory["owner-memory"]
   pkg_integrity_watch["integrity-watch"]
+  pkg_notify_learning["notify-learning"]
   pkg_tool_voice["tool-voice"]
   pkg_tool_wechat["tool-wechat"]
   pkg_owner_relay["owner-relay"]
@@ -49,6 +50,7 @@ flowchart LR
   svc_qqBot["ctx.qqBot<br/>Official QQ bot channel"]
   svc_speakingStyle["ctx.speakingStyle<br/>Speaking style"]
   pkg_speaking_style_settings["speaking-style-settings"]
+  svc_notifyLearning["ctx.notifyLearning<br/>Notification rules learned from the owner"]
   pkg_content_guard["content-guard"]
   svc_contentGuard["ctx.contentGuard<br/>Content guard for shared text"]
   pkg_voice["voice"]
@@ -501,6 +503,7 @@ flowchart LR
   pkg_mcp_manager --> svc_mcpManager
   pkg_mcp_resources --> svc_mcpResources
   pkg_message_feedback --> svc_messageFeedback
+  pkg_notify_learning --> svc_notifyLearning
   pkg_office_kit --> svc_officeKit
   pkg_otel --> svc_otel
   pkg_owner_relay --> svc_ownerRelay
@@ -681,6 +684,7 @@ flowchart LR
   svc_ownerNotifier --> pkg_event_bus
   svc_ownerNotifier --> pkg_gmail
   svc_ownerNotifier --> pkg_integrity_watch
+  svc_ownerNotifier --> pkg_notify_learning
   svc_ownerNotifier --> pkg_owner_memory
   svc_ownerNotifier --> pkg_qq
   svc_ownerNotifier --> pkg_tool_voice
@@ -688,6 +692,7 @@ flowchart LR
   svc_ownerNotifier --> pkg_tool_wechat
   svc_ownerRelay --> pkg_bili
   svc_ownerRelay --> pkg_event_bus
+  svc_ownerRelay --> pkg_notify_learning
   svc_ownerRelay --> pkg_qqbot
   svc_ownerRelay --> pkg_time_gap
   svc_ownerRelay --> pkg_wechat
@@ -823,8 +828,8 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- | --- |
 | `ctx.remoteConnection` | `service` | [`client-remote-connection`](../packages/client/remote-connection) | - | - | - | 管理二维码邀请、获批的配对申请、Remote 浏览器凭据和匿名登录文档；Client 提供审批控件及独立的 Token 链接入口。 |
 | `ctx.eventBus` | `service` | [`event-bus`](../packages/fork/event-bus) | - | [`event-ingest`](../packages/fork/event-ingest), [`github-sensor`](../packages/fork/github-sensor), [`qq`](../packages/fork/qq), [`qqbot`](../packages/fork/qqbot), [`tool-monitor`](../packages/fork/tool-monitor), [`tool-up`](../packages/fork/tool-up), [`tool-watch`](../packages/fork/tool-watch), [`wechat`](../packages/fork/wechat), [`event-console`](../packages/fork/event-console) | - | 负责去重、路由、批次和通知流程；传感器发布事件，工具修改路由。 |
-| `ctx.ownerNotifier` | `service` | [`wechat`](../packages/fork/wechat) | - | [`event-bus`](../packages/fork/event-bus), [`qq`](../packages/fork/qq), [`courses`](../packages/fork/courses), [`gmail`](../packages/fork/gmail), [`owner-memory`](../packages/fork/owner-memory), [`integrity-watch`](../packages/fork/integrity-watch), [`tool-watch`](../packages/fork/tool-watch), [`tool-voice`](../packages/fork/tool-voice), [`tool-wechat`](../packages/fork/tool-wechat) | - | 事件总线定义通道接口，微信通道提供实现。 |
-| `ctx.ownerRelay` | `service` | [`owner-relay`](../packages/fork/owner-relay) | - | [`event-bus`](../packages/fork/event-bus), [`wechat`](../packages/fork/wechat), [`qqbot`](../packages/fork/qqbot), [`bili`](../packages/fork/bili), [`time-gap`](../packages/fork/time-gap) | - | 通道在此注册并认领 Session；中继通过 Session 所属的通道发送每个最终回答。 |
+| `ctx.ownerNotifier` | `service` | [`wechat`](../packages/fork/wechat) | - | [`event-bus`](../packages/fork/event-bus), [`qq`](../packages/fork/qq), [`courses`](../packages/fork/courses), [`gmail`](../packages/fork/gmail), [`owner-memory`](../packages/fork/owner-memory), [`integrity-watch`](../packages/fork/integrity-watch), [`notify-learning`](../packages/fork/notify-learning), [`tool-watch`](../packages/fork/tool-watch), [`tool-voice`](../packages/fork/tool-voice), [`tool-wechat`](../packages/fork/tool-wechat) | - | 事件总线定义通道接口，微信通道提供实现。 |
+| `ctx.ownerRelay` | `service` | [`owner-relay`](../packages/fork/owner-relay) | - | [`event-bus`](../packages/fork/event-bus), [`wechat`](../packages/fork/wechat), [`qqbot`](../packages/fork/qqbot), [`bili`](../packages/fork/bili), [`time-gap`](../packages/fork/time-gap), [`notify-learning`](../packages/fork/notify-learning) | - | 通道在此注册并认领 Session；中继通过 Session 所属的通道发送每个最终回答。 |
 | `ctx.presence` | `service` | [`presence`](../packages/fork/presence) | - | [`wechat`](../packages/fork/wechat), [`courses`](../packages/fork/courses), [`event-console`](../packages/fork/event-console) | - | 把睡眠专注模式、每日时段和手动按钮合成一个状态。 |
 | `ctx.githubSensor` | `service` | [`github-sensor`](../packages/fork/github-sensor) | - | [`tool-watch`](../packages/fork/tool-watch), [`event-console`](../packages/fork/event-console) | - | 轮询并接收 GitHub 投递，发布到事件总线。 |
 | `ctx.courses` | `service` | [`courses`](../packages/fork/courses) | - | [`tool-courses`](../packages/fork/tool-courses), [`courses-settings`](../packages/fork/courses-settings) | - | 读取课程服务并发送截止提醒。 |
@@ -832,6 +837,7 @@ flowchart LR
 | `ctx.qq` | `service` | [`qq`](../packages/fork/qq) | - | [`tool-qq`](../packages/fork/tool-qq), [`qq-login`](../packages/fork/qq-login), [`speaking-style`](../packages/fork/speaking-style), [`event-console`](../packages/fork/event-console) | - | qq-recorder 服务的客户端；写群摘要并响应检索。 |
 | `ctx.qqBot` | `service` | [`qqbot`](../packages/fork/qqbot) | - | - | - | 持有官方机器人连接；没有其他包调用它。 |
 | `ctx.speakingStyle` | `service` | [`speaking-style`](../packages/fork/speaking-style) | - | [`speaking-style-settings`](../packages/fork/speaking-style-settings), [`event-console`](../packages/fork/event-console) | - | 从 QQ、B 站和公开网页收集风格，并展示给挂载它的 preset。 |
+| `ctx.notifyLearning` | `service` | [`notify-learning`](../packages/fork/notify-learning) | - | - | - | 保存主动消息和 owner 的回复，每晚学习规则，并提供规则块和它的工具行。 |
 | `ctx.contentGuard` | `service` | [`content-guard`](../packages/fork/content-guard) | - | [`qq`](../packages/fork/qq), [`speaking-style`](../packages/fork/speaking-style), [`tool-up`](../packages/fork/tool-up) | - | 用模式、金丝雀、记忆重合和模型检查他人可读的文本，失败即拒绝。 |
 | `ctx.voice` | `service` | [`voice`](../packages/fork/voice) | - | [`tool-voice`](../packages/fork/tool-voice), [`wechat`](../packages/fork/wechat), [`event-console`](../packages/fork/event-console) | - | 调用语音和转写服务，返回文件或文字。 |
 | `ctx.claudeCodeSessions` | `service` | [`cc-admin`](../packages/fork/cc-admin) | - | [`event-console`](../packages/fork/event-console) | - | 为设置页面列出并启动服务账号的 Claude Code 会话。 |

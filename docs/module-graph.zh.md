@@ -370,6 +370,7 @@ flowchart TD
     pkg_gmail["gmail"]
     pkg_gmail_settings["gmail-settings"]
     pkg_integrity_watch["integrity-watch"]
+    pkg_notify_learning["notify-learning"]
     pkg_owner_memory["owner-memory"]
     pkg_owner_memory_admin["owner-memory-admin"]
     pkg_owner_relay["owner-relay"]
@@ -1768,6 +1769,18 @@ flowchart TD
   pkg_courses --> pkg_presence
   pkg_courses --> pkg_storage_domain
   pkg_gmail_settings --> pkg_gmail
+  pkg_notify_learning --> pkg_agent
+  pkg_notify_learning --> pkg_atomic_write
+  pkg_notify_learning --> pkg_compaction
+  pkg_notify_learning --> pkg_event_bus
+  pkg_notify_learning --> pkg_home_paths
+  pkg_notify_learning --> pkg_llm
+  pkg_notify_learning --> pkg_owner_relay
+  pkg_notify_learning --> pkg_service_kit
+  pkg_notify_learning --> pkg_session
+  pkg_notify_learning --> pkg_session_projection
+  pkg_notify_learning --> pkg_tools
+  pkg_notify_learning --> pkg_turn_taint
   pkg_owner_memory --> pkg_agent
   pkg_owner_memory --> pkg_event_bus
   pkg_owner_memory --> pkg_home_paths
@@ -2282,6 +2295,7 @@ flowchart TD
 | [`cc-admin`](../packages/fork/cc-admin) | `fork` | [`cc-bridge`](../packages/fork/cc-bridge) |
 | [`courses`](../packages/fork/courses) | `fork` | [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`presence`](../packages/fork/presence), [`storage-domain`](../packages/storage/storage-domain) |
 | [`gmail-settings`](../packages/fork/gmail-settings) | `fork` | [`gmail`](../packages/fork/gmail) |
+| [`notify-learning`](../packages/fork/notify-learning) | `fork` | [`agent`](../packages/core/agent), [`atomic-write`](../packages/util/atomic-write), [`compaction`](../packages/compaction/compaction), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`owner-relay`](../packages/fork/owner-relay), [`service-kit`](../packages/fork/service-kit), [`session`](../packages/core/session), [`session-projection`](../packages/session/session-projection), [`tools`](../packages/core/tools), [`turn-taint`](../packages/fork/turn-taint) |
 | [`owner-memory`](../packages/fork/owner-memory) | `fork` | [`agent`](../packages/core/agent), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`owner-memory-admin`](../packages/fork/owner-memory-admin), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`turn-taint`](../packages/fork/turn-taint) |
 | [`qqbot`](../packages/fork/qqbot) | `fork` | [`api-session-controller`](../packages/api/session-controller), [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`llm`](../packages/llm/llm), [`owner-relay`](../packages/fork/owner-relay), [`permission-presets`](../packages/interaction/permission-presets), [`service-kit`](../packages/fork/service-kit), [`session`](../packages/core/session), [`session-title`](../packages/session/session-title), [`storage-domain`](../packages/storage/storage-domain) |
 | [`speaking-style`](../packages/fork/speaking-style) | `fork` | [`agent`](../packages/core/agent), [`agent-default-model`](../packages/core/agent-default-model), [`compaction`](../packages/compaction/compaction), [`credentials`](../packages/credentials/credentials), [`event-bus`](../packages/fork/event-bus), [`home-paths`](../packages/util/home-paths), [`integrity-watch`](../packages/fork/integrity-watch), [`llm`](../packages/llm/llm), [`qq`](../packages/fork/qq), [`service-kit`](../packages/fork/service-kit), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`web`](../packages/web/web) |

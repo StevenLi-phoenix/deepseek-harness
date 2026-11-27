@@ -52,6 +52,7 @@ kind: "package-group"
 | [`cc-admin/`](cc-admin/README.zh.md) | 根服务 `ctx.claudeCodeSessions`：服务账号的 Claude Code 会话，供设置页列出、带第一条任务启动和停止 |
 | [`event-console/`](event-console/README.zh.md) | 消息流页面，以及设置里的服务健康总览、事件订阅与定时提醒、Claude Code 会话与语音试听分区 |
 | [`turn-taint/`](turn-taint/README.zh.md) | 回合来源：当前回合由谁发起、陌生人的话有没有进来；只在 owner 自己的回合里联系 Claude Code，其他回合建的一直跑下去的提醒和监控要上报 |
+| [`notify-learning/`](notify-learning/README.zh.md) | 从 owner 对 agent 主动消息的反应里学到的通知规则：从微信聊天 Session 记下，每晚只在 owner 自己的原话在两次交流里一致时才学成，放在不是 owner 开启的回合之前，并可用 `notify_rules` 和 `notify_rules_forget` 查看或删除 |
 | [`time-gap/`](time-gap/README.zh.md) | 所有 Session 的时间说明：安静一段时间（5 分钟）之后到达的输入，带着当前时间、Session 安静了多久，以及“按它本身来读”的提示交给模型 |
 | [`tool-courses/`](tool-courses/README.zh.md) | `courses_deadlines`、`courses_find`、`courses_get`、`courses_sync`、`courses_set_progress`、`courses_save_memo`、`courses_observe`、`courses_record_sync` 工具：agent 按主人的课程记录回答并更新它们，并保存自己在平台页面上读到的内容 |
 | [`tool-gmail/`](tool-gmail/README.zh.md) | `gmail_accounts`、`gmail_search`、`gmail_read`、`gmail_attachment`、`gmail_draft`、`gmail_send`、`gmail_modify` 工具：agent 读、发主人的邮件，收到的邮件是不可信数据，每次发信都经过发信关卡 |

@@ -42,6 +42,7 @@ kind: "package-bundle"
 | `webhook-runtime` | `@deepseek-ai/dsh-webhook` | 总线为 `session` 订阅创建 Session 用的接缝 |
 | `owner-relay` | `@deepseek-ai/dsh-owner-relay` | 每轮结束时一套规则，把答案交给认领了该 Session 的频道 |
 | `time-gap` | `@deepseek-ai/dsh-time-gap` | 静默五分钟以上再开口时，排在前面那条时间提示 |
+| `notify-learning` | `@deepseek-ai/dsh-notify-learning` | 从 owner 在微信上对主动消息的回复里学到的通知规则，交给 `unattended` 和 `notify` preset；它的工具行在 `preset-unattended` 里 |
 | `event-bus` | `@deepseek-ai/dsh-event-bus` | 路由：每条订阅、它的合并窗口、上限，以及它启动的 Session |
 | `event-ingest` | `@deepseek-ai/dsh-event-ingest` | 推送路由 `POST /hooks/events`，每个 source 一个 token |
 | `plugin-config` | `@deepseek-ai/dsh-plugin-config` | 每个设置页上的"全部设置"卡片 |

@@ -2,7 +2,7 @@
 
 English | [中文](fork.zh.md)
 
-The fork-local services behind the event-driven agent: [`@deepseek-ai/dsh-event-bus`](../../packages/fork/event-bus/README.md) routes sensor events to notifications or unattended Sessions, [`@deepseek-ai/dsh-github-sensor`](../../packages/fork/github-sensor/README.md) polls GitHub, [`@deepseek-ai/dsh-wechat`](../../packages/fork/wechat/README.md) provides the `ownerNotifier` contract over WeChat, [`@deepseek-ai/dsh-qq`](../../packages/fork/qq/README.md) lurks in the QQ groups the owner lists and digests them, reading the messages from the `qq-recorder` service (an AMS service that holds the one QQ connection, so a DSH restart never reconnects QQ; its Settings → QQ page, [`@deepseek-ai/dsh-qq-login`](../../packages/fork/qq-login/README.md), shows the connection and the login QR code to scan after a sign-out), [`@deepseek-ai/dsh-speaking-style`](../../packages/fork/speaking-style/README.md) keeps the persona layer the agents share, learned from QQ groups and public Bilibili text (its Settings → 人格与风格 page is [`@deepseek-ai/dsh-speaking-style-settings`](../../packages/fork/speaking-style-settings/README.md)), [`@deepseek-ai/dsh-bili`](../../packages/fork/bili/README.md) is the agent's own Bilibili account, and [`@deepseek-ai/dsh-courses`](../../packages/fork/courses/README.md) reminds the owner of course deadlines by fixed rules over the courses service (its Settings → 课程 DDL page is [`@deepseek-ai/dsh-courses-settings`](../../packages/fork/courses-settings/README.md)), [`@deepseek-ai/dsh-gmail`](../../packages/fork/gmail/README.md) holds the owner's Gmail accounts and the send gate that keeps a message the owner has not confirmed as a draft (its Settings → 邮箱 page is [`@deepseek-ai/dsh-gmail-settings`](../../packages/fork/gmail-settings/README.md)), and [`@deepseek-ai/dsh-subagent-activity`](../../packages/fork/subagent-activity/README.md) shows a Session's subagents and what each is doing now on a right-Sidebar page opened from the header. Behavior, configuration, and limitations are on each package README; the [upstream ledger](../../packages/fork/UPSTREAM.md) records how the fork tracks upstream.
+The fork-local services behind the event-driven agent: [`@deepseek-ai/dsh-event-bus`](../../packages/fork/event-bus/README.md) routes sensor events to notifications or unattended Sessions, [`@deepseek-ai/dsh-github-sensor`](../../packages/fork/github-sensor/README.md) polls GitHub, [`@deepseek-ai/dsh-wechat`](../../packages/fork/wechat/README.md) provides the `ownerNotifier` contract over WeChat, [`@deepseek-ai/dsh-qq`](../../packages/fork/qq/README.md) lurks in the QQ groups the owner lists and digests them, reading the messages from the `qq-recorder` service (an AMS service that holds the one QQ connection, so a DSH restart never reconnects QQ; its Settings → QQ page, [`@deepseek-ai/dsh-qq-login`](../../packages/fork/qq-login/README.md), shows the connection and the login QR code to scan after a sign-out), [`@deepseek-ai/dsh-speaking-style`](../../packages/fork/speaking-style/README.md) keeps the persona layer the agents share, learned from QQ groups and public Bilibili text (its Settings → 人格与风格 page is [`@deepseek-ai/dsh-speaking-style-settings`](../../packages/fork/speaking-style-settings/README.md)), [`@deepseek-ai/dsh-bili`](../../packages/fork/bili/README.md) is the agent's own Bilibili account, and [`@deepseek-ai/dsh-courses`](../../packages/fork/courses/README.md) reminds the owner of course deadlines by fixed rules over the courses service (its Settings → 课程 DDL page is [`@deepseek-ai/dsh-courses-settings`](../../packages/fork/courses-settings/README.md)), [`@deepseek-ai/dsh-gmail`](../../packages/fork/gmail/README.md) holds the owner's Gmail accounts and the send gate that keeps a message the owner has not confirmed as a draft (its Settings → 邮箱 page is [`@deepseek-ai/dsh-gmail-settings`](../../packages/fork/gmail-settings/README.md)), [`@deepseek-ai/dsh-subagent-activity`](../../packages/fork/subagent-activity/README.md) shows a Session's subagents and what each is doing now on a right-Sidebar page opened from the header, and [`@deepseek-ai/dsh-notify-learning`](../../packages/fork/notify-learning/README.md) learns from the owner's WeChat replies how each kind of proactive message should reach them and shows the rules before turns the owner did not start. Behavior, configuration, and limitations are on each package README; the [upstream ledger](../../packages/fork/UPSTREAM.md) records how the fork tracks upstream.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -717,6 +717,69 @@ async held(): Promise<PendingRecord[]>
 Types: [AccountView](account.md)
 
 Source: [`packages/fork/gmail/src/index.ts`](../../packages/fork/gmail/src/index.ts)
+
+<a id="ctxnotifylearning--notifylearning"></a>
+
+### `ctx.notifyLearning` — `NotifyLearning`
+
+The learner of notification rules.
+
+```ts cordis-catalog
+/**
+ * Take one committed Session event; nothing while learning is off.
+ * @param session - the Session.
+ * @param event - the event.
+ */
+observe(session: Session, event: SessionEvent): void
+
+/**
+ * The rules, newest first, and their revision.
+ * @returns them.
+ * @throws when `rules.json` is damaged.
+ */
+async rules(): Promise<{ revision: number; rules: readonly Rule[] }>
+
+/**
+ * The rules block for a proactive turn.
+ * @param tools - whether the Session has the rule tools.
+ * @returns the block; undefined while learning is off or no rule exists.
+ * @throws when `rules.json` is damaged.
+ */
+async block(tools: boolean): Promise<RulesBlock | undefined>
+
+/**
+ * Delete one rule; the owner asked for it.
+ * @param id - the rule's id.
+ * @returns the deleted rule, or undefined when no rule has the id.
+ */
+async forget(id: string): Promise<Rule | undefined>
+
+/**
+ * Run the day's pass when it is due: learning is on, the local hour has come, no pass finished today, and fewer than
+ * three passes failed today, the last one more than an hour ago.
+ * @param now - the time.
+ * @returns the report, or undefined when nothing was due.
+ */
+async runIfDue(now: Date = new Date()): Promise<PassReport | undefined>
+
+/**
+ * Run one pass now, whatever the hour.
+ * @param now - the time.
+ * @returns what it did.
+ * @throws when the model call fails or its answer is not the JSON asked for; the exchanges stay for the next try.
+ */
+run(now: Date = new Date()): Promise<PassReport>
+
+/**
+ * Stop a running pass's model call and wait for it and for every queued write.
+ * @returns resolves once all of it settled.
+ */
+async dispose(): Promise<void>
+```
+
+Types: [Session](session.md) · [SessionEvent](session.md)
+
+Source: [`packages/fork/notify-learning/src/service.ts`](../../packages/fork/notify-learning/src/service.ts)
 
 <a id="ctxownernotifier--ownernotifier"></a>
 
