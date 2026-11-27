@@ -52,10 +52,11 @@ export class ConnectedAccounts {
    * @param op - the operation's name in the log.
    * @param work - the operation, given the account's API client and row.
    * @param describe - the log line's detail of a result.
+   * @param options - whether to omit provider diagnostics from failures.
    * @returns the operation's result.
    * @throws GmailError `unknown-account` or `needs-reconnect` before the operation runs, else what the operation threw.
    */
-  async run<T>(account: string, op: string, work: (api: GmailApi, row: AccountRecord) => Promise<T>, describe: (result: T) => string = () => ''): Promise<T> {
+  async run<T>(account: string, op: string, work: (api: GmailApi, row: AccountRecord) => Promise<T>, describe: (result: T) => string = () => '', options?: { readonly redactFailure: boolean }): Promise<T> {
     const row = await this.get(account)
     const started = Date.now()
     try {
@@ -66,8 +67,10 @@ export class ConnectedAccounts {
       return result
     } catch (error: unknown) {
       const apiFailure = error instanceof GmailApiError || (error instanceof GmailError && error.failure === 'api')
-      this.deps.logger.warn(`gmail: ${account} ${op} failed in ${Date.now() - started} ms: ${errorText(error)}`)
-      if (apiFailure) await this.health(account, errorText(error))
+      const detail = options?.redactFailure === true ? 'lookup failed' : errorText(error)
+      this.deps.logger.warn(`gmail: ${account} ${op} failed in ${Date.now() - started} ms: ${detail}`)
+      if (apiFailure) await this.health(account, detail)
+      if (options?.redactFailure === true) throw new GmailError('api', detail)
       if (error instanceof GmailApiError) throw new GmailError(error.failure === 'not-found' ? 'not-found' : 'api', error.message)
       throw error
     }

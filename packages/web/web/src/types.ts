@@ -87,6 +87,8 @@ export interface WebSearchSource {
  */
 export interface WebFetchRequest {
   readonly url: string
+  /** Require a provider that explicitly enforces public-only connections on every hop. */
+  readonly publicOnly?: boolean
 }
 
 /**
@@ -173,6 +175,8 @@ export interface WebFetchProvider {
   ready?(llmProvider: string | undefined): Promise<boolean>
   /** Retrieve one URL; honor `signal` for cancellation. */
   fetch(request: WebFetchRequest, signal?: AbortSignal): Promise<WebFetchResult>
+  /** Retrieve a URL without connecting to a non-public address, including after a redirect. */
+  fetchPublic?(request: WebFetchRequest, signal?: AbortSignal): Promise<WebFetchResult>
 }
 
 /** One registered provider as listed by {@link WebProviderList}. */

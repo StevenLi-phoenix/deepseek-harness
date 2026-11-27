@@ -23,7 +23,7 @@ import {
   type CredentialView,
   type SiteCredentialRecord,
 } from './credentials.ts'
-import type { ActionOutcome, AttachOutcome, AttachTarget, SecretField, TargetRequest } from './session.ts'
+import type { ActionOutcome, AttachOutcome, AttachTarget, SecretField, TargetRequest, UploadPayload } from './session.ts'
 import type { TakeoverState } from './takeover.ts'
 import {
   BLOCKED_SCHEMA,
@@ -46,7 +46,7 @@ export interface FormBrowser {
   pageUrl(tabId?: string): Promise<string>
   fieldUrl(request: TargetRequest, tabId?: string): Promise<string>
   fillSecret(request: TargetRequest, secret: string, field: SecretField, host: string, tabId?: string): Promise<ActionOutcome>
-  attachFiles(target: AttachTarget, paths: readonly string[], tabId?: string): Promise<AttachOutcome>
+  attachFiles(target: AttachTarget, paths: string[] | UploadPayload[], tabId?: string): Promise<AttachOutcome>
 }
 
 /** The credential store operations the tool calls. */
@@ -75,7 +75,7 @@ export interface FormUploads {
 export interface FormToolDeps {
   readonly browser: FormBrowser
   readonly takeover: TakeoverState
-  readonly credentials: FormCredentials
+  readonly credentials?: FormCredentials
   readonly uploads: FormUploads
   readonly log: Pick<Context['logger'], 'info' | 'warn'>
 }
@@ -135,10 +135,11 @@ function attachTargetOf(args: UploadArgs): AttachTarget | undefined {
 /**
  * Register `headless_browser_upload` and `headless_browser_credential`.
  * @param ctx - the mounting scope's context.
- * @param deps - the browser, control state, credential store, and upload policy.
+ * @param deps - the browser, control state, optional credential store, and upload policy.
+ * @param register - optional scoped registration decorator.
  */
-export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
-  registerTool(ctx, defineTool({
+export function registerFormTools(ctx: Context, deps: FormToolDeps, register = registerTool): void {
+  register(ctx, defineTool({
     name: 'headless_browser_upload',
     description: `Attach local files to a file input on the page (a résumé, a transcript, a cover letter). Name the input with selector — it may be hidden behind a styled button, which is normal — or name the visible button that opens the file chooser with trigger. Files are absolute paths or bare names inside the upload directories; anything else is refused. At most ${String(MAX_UPLOAD_FILES)} files per call.`,
     parameters: {
@@ -182,7 +183,8 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
       if (target === undefined) return { error: 'give exactly one of selector (the file input), trigger, or triggerAxId' }
       return await guarded(deps, 'attaching files', async () => {
         const files = await deps.uploads.resolve(args.files)
-        const outcome = await deps.browser.attachFiles(target, files.map(file => file.path), args.tab)
+        const payloads = files.flatMap(file => file.payload === undefined ? [] : [file.payload])
+        const outcome = await deps.browser.attachFiles(target, payloads.length === 0 ? files.map(file => file.path) : payloads, args.tab)
         return {
           attached: files.map(file => ({ name: file.name, bytes: file.bytes })),
           ref: outcome.ref,
@@ -206,7 +208,9 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
     }),
   }))
 
-  registerTool(ctx, defineTool({
+  const credentials = deps.credentials
+  if (credentials === undefined) return
+  register(ctx, defineTool({
     name: 'headless_browser_credential',
     description: [
       'The browser\'s own password manager for site accounts. You never see or choose a password.',
@@ -252,7 +256,7 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
     },
     execute: async (args: CredentialArgs) => {
       if (args.action === 'list') {
-        return await attempt('listing saved accounts', async () => ({ action: 'list', accounts: await deps.credentials.list() }))
+        return await attempt('listing saved accounts', async () => ({ action: 'list', accounts: await credentials.list() }))
       }
       const parsed = targetOf({
         ...args.selector === undefined ? {} : { selector: args.selector },
@@ -264,7 +268,7 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
         if (username === undefined || username.trim() === '') return { error: 'create needs username: the login name (usually the e-mail address) of the new account' }
         return await guarded(deps, 'creating a saved password', async () => {
           const host = credentialHost(await deps.browser.fieldUrl(parsed.request, args.tab))
-          const record = await deps.credentials.create({
+          const record = await credentials.create({
             host,
             username,
             ...args.label === undefined ? {} : { label: args.label },
@@ -279,7 +283,7 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
             first = await deps.browser.fillSecret(parsed.request, record.password, 'password', record.host, args.tab)
           } catch (error: unknown) {
             // Nothing reached the page, so a new record would only make the next create fail as a duplicate.
-            if (args.replace !== true) await deps.credentials.remove(record.id)
+            if (args.replace !== true) await credentials.remove(record.id)
             throw error
           }
           wrote.push(first.target?.ref ?? describeTarget(parsed.request))
@@ -287,7 +291,7 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
             await deps.browser.fillSecret({ selector: args.confirmSelector }, record.password, 'password', record.host, args.tab)
             wrote.push(args.confirmSelector)
           }
-          await deps.credentials.touch(record.id)
+          await credentials.touch(record.id)
           return {
             action: 'create',
             account: credentialView(record),
@@ -301,7 +305,7 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
       const field: SecretField = args.field ?? 'password'
       return await guarded(deps, 'filling a saved credential', async () => {
         const host = credentialHost(await deps.browser.fieldUrl(parsed.request, args.tab))
-        const record = await deps.credentials.find(host, args.username, args.label)
+        const record = await credentials.find(host, args.username, args.label)
         const value = field === 'password' ? record.password : record.username
         const outcome = await deps.browser.fillSecret(parsed.request, value, field, record.host, args.tab)
         const wrote = [outcome.target?.ref ?? describeTarget(parsed.request)]
@@ -309,7 +313,7 @@ export function registerFormTools(ctx: Context, deps: FormToolDeps): void {
           await deps.browser.fillSecret({ selector: args.confirmSelector }, value, 'password', record.host, args.tab)
           wrote.push(args.confirmSelector)
         }
-        if (field === 'password') await deps.credentials.touch(record.id)
+        if (field === 'password') await credentials.touch(record.id)
         deps.log.info('headless-browser: filled the saved %s of %s on %s (%s)', field, record.username, record.host, record.id)
         return {
           action: 'fill',

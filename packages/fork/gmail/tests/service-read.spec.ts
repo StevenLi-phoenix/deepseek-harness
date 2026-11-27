@@ -47,6 +47,21 @@ function text(body: string): { mimeType: string; body: { data: string } } {
   return { mimeType: 'text/plain', body: { data: Buffer.from(body).toString('base64url') } }
 }
 
+describe('verification', () => {
+  it('returns only a sanitized lookup failure and records a redacted account error', async () => {
+    const env = await account()
+    env.google.intercept = call => apiPath(call.url) === '/messages' ? googleError(400, 'private provider diagnostic') : undefined
+    const error = await gmailFailure(env.gmail.verificationCode('work', {
+      domain: 'example.com', domainOf: host => host, allowsLinkHost: () => true,
+      after: START - 60_000, before: START, signal: new AbortController().signal,
+    }))
+    expect(error).toMatchObject({ failure: 'api', message: 'lookup failed' })
+    expect(env.gmail.accounts()[0]?.lastError).toBe('lookup failed')
+    expect(env.logs.join('\n')).not.toContain('private provider diagnostic')
+    expect(env.google.callsTo('GET', '/messages')).toHaveLength(1)
+  })
+})
+
 describe('search', () => {
   it('summarizes each thread from its first and newest messages', async () => {
     const env = await account()

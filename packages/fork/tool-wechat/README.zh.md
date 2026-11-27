@@ -32,7 +32,9 @@ kind: "package-reference"
   name: '@deepseek-ai/dsh-tool-wechat'
 ```
 
-这个插件没有配置项；大小上限是通道的 `maxMediaBytes`（25 MiB）。`wechat_send` 只在通道的 `chat.delivery` 为 `hybrid`（默认）时注册；设成 `text` 时 agent 只有另外两个工具。
+设 `deferOnly: true` 时，预设只有 `defer_deliver`。否则，`wechat_send` 仅在 `chat.delivery: hybrid` 时才注册，`wechat_send_file` 使用通道的 `maxMediaBytes` 上限（默认 25 MiB）。
+
+[中继配置了 job-lead 目标](../owner-relay/README.zh.md#use-this-package)时，只有当前的微信主 Session 提供 `tell_job_lead(text)`，且仅能在没有外部输入混入的 owner 轮次中转述求职指示。job-lead 报告唤起的轮次不能执行工具。
 
 -----
 

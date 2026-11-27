@@ -25,11 +25,14 @@ export const inject = ['tools', 'subagents', 'agents', 'systemPrompt']
 export interface Config {
   /** Register `interrupt_agent`. Defaults to true; false leaves the service API available. */
   interrupt?: boolean
+  /** Register `wait_agent`. Defaults to true. */
+  wait?: boolean
 }
 
 /** Loader schema for optional subagent control tools. */
 export const Config: z<Config> = z.object({
   interrupt: z.boolean().default(true),
+  wait: z.boolean().default(true),
 })
 
 /**
@@ -40,7 +43,7 @@ export const Config: z<Config> = z.object({
 export function apply(ctx: Context, config: Config = {}): void {
   const interrupt = config.interrupt !== false
   const listAgents = registerListAgents(ctx)
-  registerWaitAgent(ctx)
+  if (config.wait !== false) registerWaitAgent(ctx)
   const sendMessage = defineTool({
     name: 'send_message',
     description:

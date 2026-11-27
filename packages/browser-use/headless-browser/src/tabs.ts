@@ -122,7 +122,9 @@ export interface TabsOptions<Page extends TabsPage = TabsPage> {
    * Called for every page the manager adopts; the returned function runs when
    * the tab lets the page go. The session uses it to keep the page's downloads.
    */
-  readonly onAdopt?: (page: Page) => () => void
+  readonly onAdopt?: (page: Page, owner: string | null) => () => void
+  /** Protect a popup before exposing it; returns its inherited owner, if any. */
+  readonly preparePopup?: (page: Page, owner: string | null) => Promise<string | undefined>
   /** Stable IDs must not be reused after a browser restart when the ledger is enabled. */
   readonly nextId?: () => string
   /** Where the context records its tab metadata. */
@@ -325,6 +327,12 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
     })
   }
 
+  /** @param id - live tab id. @returns the trusted owner recorded for this tab. */
+  owner(id: string): string | null | undefined {
+    const tab = this.#tabs.get(id)
+    return tab === undefined || tab.page.isClosed() ? undefined : tab.openedBySessionId
+  }
+
   /**
    * A page by tab id, or the active tab's page when no id is named.
    * @param id - tab id, or nothing for the active tab.
@@ -341,19 +349,26 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
    * Open a tab, optionally navigating it.
    * @param url - absolute URL to load; nothing opens a blank tab.
    * @param openedBySessionId - the DSH Session opening the tab, if any.
+   * @param prepare - when present, require a fresh page and configure it before navigating.
    * @returns the new tab's state.
    * @throws TabLimitError - when the browser already has the maximum tabs.
    * @throws TabNavigationError - when the new tab's first navigation fails.
    */
-  async create(url?: string, openedBySessionId?: string): Promise<TabInfo> {
+  async create(url?: string, openedBySessionId?: string, prepare?: (page: Page, id: string) => Promise<void>): Promise<TabInfo> {
     return this.#run(async () => {
       if (this.#tabs.size >= this.#maxTabs) throw new TabLimitError(this.#maxTabs)
       const context = await this.#options.context()
-      const page = this.#tabs.size === 0 ? await this.#firstPage(context) : await context.newPage()
+      const page = prepare === undefined && this.#tabs.size === 0 ? await this.#firstPage(context) : await context.newPage()
       const tab = this.#adopt(page, openedBySessionId)
       this.#activeId = tab.id
       await page.bringToFront()
-      if (url !== undefined) await this.#navigateTab(tab, url)
+      try {
+        await prepare?.(page, tab.id)
+        if (url !== undefined) await this.#navigateTab(tab, url)
+      } catch (error: unknown) {
+        if (prepare !== undefined) await page.close().catch((closed: unknown) => { void closed })
+        throw error
+      }
       this.#emit()
       return this.#info(tab)
     })
@@ -616,7 +631,7 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
     page.on('framenavigated', onNavigation)
     page.on('close', onClose)
     page.on('popup', onPopup)
-    const detachAdopt = this.#options.onAdopt?.(page)
+    const detachAdopt = this.#options.onAdopt?.(page, openedBySessionId)
     tab.detach = () => {
       detachAdopt?.()
       page.off('domcontentloaded', onLoad)
@@ -643,7 +658,9 @@ export class BrowserTabs<Page extends TabsPage = TabsPage> {
     try {
       await this.#run(async () => {
         if (this.#disposed || popup.isClosed() || this.#hasPage(popup) || (this.#options.reserved?.(popup) ?? false)) return
-        const tab = this.#adopt(popup)
+        const owner = await this.#options.preparePopup?.(popup, opener.openedBySessionId)
+        if (popup.isClosed()) return
+        const tab = this.#adopt(popup, owner)
         tab.openerId = opener.id
         this.#activeId = tab.id
         this.#popups.push({ seq: ++this.#popupSeq, id: tab.id, opener: opener.id })

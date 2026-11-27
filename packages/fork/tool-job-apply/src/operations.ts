@@ -1,0 +1,231 @@
+import { z } from 'zod'
+import { validateText, type CommandRunner } from './repo.ts'
+
+const REPO = 'StevenLi-phoenix/jobapplication'
+const LABELS = new Map([
+  ['approval', 'needs-approval'], ['question', 'question'], ['owner', 'owner-action'], ['upload', 'upload'],
+])
+const STATUSES = new Set(['queued', 'pending', 'applied', 'skipped', 'rejected', 'interviewing', 'withdrawn', 'offer'])
+const ISSUE = z.object({ number: z.number().int().positive(), title: z.string(), state: z.enum(['OPEN', 'CLOSED']), body: z.string(), labels: z.array(z.object({ name: z.string() })) })
+const ISSUE_ID = ISSUE.pick({ number: true, state: true })
+const TRACKER_BASE = 'https://mcp.lishuyu.app/api/jobtracker/'
+const TRACKER_MAX_RESPONSE = 50_000
+const TRACKING_PARAM = /^(?:utm_.*|gh_src|ref|src|source|lever-source|lever-origin|trk|trackingid|refid)$/iu
+
+interface TrackerArguments {
+  operation: 'append' | 'update'
+  id?: string | undefined
+  company: string
+  role: string
+  url: string
+  status: string
+  step?: number | undefined
+  note?: string | undefined
+}
+
+function postingUrl(value: string): string {
+  const parsed = URL.parse(value)
+  if (value.length > 2048 || /[\s\\"'`<>\p{Cc}]/u.test(value) || parsed?.protocol !== 'https:' || parsed.username !== '' || parsed.password !== '' || parsed.port !== '' || !/^(?:[a-z0-9-]+\.)+[a-z]{2,}$/u.test(parsed.hostname)) {
+    throw new Error('Use a public HTTPS posting URL, without credentials or an absolute file path.')
+  }
+  if (/(?:^|\.)(?:local|localhost|internal|invalid|test)$/u.test(parsed.hostname)) throw new Error('Use a public HTTPS posting URL.')
+  return parsed.href
+}
+
+/**
+ * Validate a single tracker row and produce a fixed endpoint selector and JSON body.
+ * @param args Model-supplied row fields.
+ * @returns The endpoint selector and JSON payload.
+ */
+export function trackerCall(args: TrackerArguments): ['add_application' | 'update_application', string] {
+  if (args.operation !== 'append' && args.operation !== 'update') throw new Error('Unsupported tracker operation.')
+  const company = validateText(args.company, 'company', 180)
+  const role = validateText(args.role, 'role', 240)
+  const url = postingUrl(args.url)
+  if (!STATUSES.has(args.status)) throw new Error('Unsupported tracker status.')
+  if (args.operation === 'update' && (args.id === undefined || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/iu.test(args.id))) throw new Error('Updating a row requires its existing row UUID.')
+  if (args.operation === 'append' && args.id !== undefined) throw new Error('Do not supply an id when appending a new row.')
+  if (args.step !== undefined && (!Number.isSafeInteger(args.step) || args.step < 1 || args.step > 999)) throw new Error('step must be an integer from 1 through 999.')
+  const note = args.note === undefined ? undefined : validateText(args.note, 'note', 1500)
+  const notes = args.step === undefined ? note : `Step ${args.step}${note === undefined ? '' : `: ${note}`}`
+  return [args.operation === 'append' ? 'add_application' : 'update_application', JSON.stringify({ id: args.id, company, role, url, status: args.status, notes })]
+}
+
+async function trackerResponse(response: Response): Promise<string> {
+  if (response.body === null) throw new Error('Jobtracker returned no response body.')
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let bytes = 0
+  let result = ''
+  try {
+    for (;;) {
+      const chunk = await reader.read()
+      if (chunk.done) return result + decoder.decode()
+      bytes += chunk.value.byteLength
+      if (bytes > TRACKER_MAX_RESPONSE) {
+        await reader.cancel()
+        throw new Error('Jobtracker response exceeded the size limit.')
+      }
+      result += decoder.decode(chunk.value, { stream: true })
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+/**
+ * Write a single row to the host-pinned tracker, without following redirects or using the job clone.
+ * @param args Model-supplied row fields.
+ * @param token Service-provisioned token, never supplied by the tool caller.
+ * @param signal Cancellation from tool execution.
+ * @param request HTTP transport.
+ * @returns Bounded response text without the supplied bearer token.
+ */
+export async function writeTrackerRow(
+  args: TrackerArguments, token: string | undefined, signal: AbortSignal, request = fetch,
+): Promise<string> {
+  const [endpoint, body] = trackerCall(args)
+  return callTracker(endpoint, body, token, signal, request)
+}
+
+/**
+ * List tracker rows using only the optional status filter supported by the tracker.
+ * @param status A known tracker status, or omission to list without a filter.
+ * @param token Service-provisioned token.
+ * @param signal Cancellation from tool execution.
+ * @param request HTTP transport.
+ * @returns Bounded response text without the supplied bearer token.
+ */
+export async function listTrackerRows(
+  status: string | undefined, token: string | undefined, signal: AbortSignal, request = fetch,
+): Promise<string> {
+  if (status !== undefined && !STATUSES.has(status)) throw new Error('Unsupported tracker status.')
+  return callTracker('list_applications', JSON.stringify({ status }), token, signal, request)
+}
+
+async function callTracker(endpoint: 'add_application' | 'update_application' | 'list_applications', body: string, token: string | undefined, signal: AbortSignal, request: typeof fetch): Promise<string> {
+  if (token === undefined || !token.trim()) throw new Error('Jobtracker requires JOBTRACKER_PAT in the service environment.')
+  signal.throwIfAborted()
+  try {
+    const response = await request(`${TRACKER_BASE}${endpoint}`, {
+      method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      redirect: 'error', body, signal: AbortSignal.any([signal, AbortSignal.timeout(60_000)]),
+    })
+    if (response.status === 200) return (await trackerResponse(response)).replaceAll(token, '[redacted]')
+    await response.body?.cancel()
+  } catch (_error) {
+    // Fetch errors can retain the entire request, including the authorization header.
+    signal.throwIfAborted()
+    throw new Error('The fixed jobtracker request did not complete; do not assume the write landed.')
+  }
+  throw new Error('Jobtracker returned an unsuccessful HTTP response; do not assume the write landed.')
+}
+
+function issueMarker(kind: string, ref: string): string {
+  if (/^[a-z0-9][a-z0-9-]{0,79}$/u.test(ref)) return `<!-- job-apply-key: ${kind}:${ref} -->`
+  const url = new URL(postingUrl(ref))
+  const host = url.hostname.replace(/^www\./u, '')
+  const path = url.pathname.replace(/\/$/u, '')
+  const query = url.search.slice(1).split('&').filter((param) => {
+    const name = param.split('=', 1)[0] ?? ''
+    return name !== '' && !TRACKING_PARAM.test(name)
+  }).join('&')
+  return `<!-- job-apply-key: ${kind}:https://${host}${path}${query ? `?${query}` : ''} -->`
+}
+
+function labelOf(kind: string): string {
+  const label = LABELS.get(kind)
+  if (label === undefined) throw new Error('Use approval, question, owner, or upload. Record pending postings in jobtracker with status pending and a step, not as an issue.')
+  return label
+}
+
+/** Fixed issue commands for one repository; a Session can only close an item from its own open list. */
+export class IssueItems {
+  readonly #listed = new Map<string, Map<number, string>>()
+  readonly #recent = new Map<string, number>()
+
+  constructor(private readonly run: CommandRunner) {}
+
+  /** List a bounded page, marking shown open items eligible for a later close. */
+  async list(session: string, kind: string, state: 'open' | 'closed' | 'all', limit: number, signal: AbortSignal): Promise<string> {
+    const label = labelOf(kind)
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) throw new Error('Issue limit must be an integer from 1 through 50.')
+    const result = await this.run('gh', ['issue', 'list', '-R', REPO, '--label', label, '--state', state, '--limit', String(limit), '--json', 'number,title,state,body,labels'], signal)
+    const issues = ISSUE.array().parse(JSON.parse(result)).filter(issue => issue.labels.some(item => item.name === label))
+    const allowed = this.#listed.get(session) ?? new Map<number, string>()
+    if (this.#listed.size >= 512 && !this.#listed.has(session)) {
+      const oldest = this.#listed.keys().next().value
+      if (oldest !== undefined) this.#listed.delete(oldest)
+    }
+    this.#listed.set(session, allowed)
+    for (const issue of issues) {
+      if (issue.state === 'CLOSED') { allowed.delete(issue.number); continue }
+      if (allowed.size >= 250) {
+        const oldest = allowed.keys().next().value
+        if (oldest !== undefined) allowed.delete(oldest)
+      }
+      allowed.set(issue.number, label)
+    }
+    return JSON.stringify(issues.map(issue => ({ ...issue, body: issue.body.slice(0, 2500) })))
+  }
+
+  /** Post a bounded comment only to a currently open item previously listed in this Session. */
+  async comment(session: string, number: number, text: string, signal: AbortSignal): Promise<string> {
+    const body = validateText(text, 'text', 1500)
+    await this.#listedOpen(session, number, signal)
+    await this.run('gh', ['issue', 'comment', String(number), '-R', REPO, `--body=${body}`], signal)
+    return `Commented on #${number}.`
+  }
+
+  async #listedOpen(session: string, number: number, signal: AbortSignal): Promise<void> {
+    const label = this.#listed.get(session)?.get(number)
+    if (label === undefined) throw new Error('List this workflow’s open issues in this Session before changing one.')
+    const current = await this.run('gh', ['issue', 'view', String(number), '-R', REPO, '--json', 'number,title,state,body,labels'], signal)
+    const issue = ISSUE.parse(JSON.parse(current))
+    if (issue.number !== number || issue.state !== 'OPEN' || !issue.labels.some(item => item.name === label)) throw new Error('Issue is no longer open with that workflow label.')
+  }
+
+  /** Close a previously listed open item, after confirming current state and workflow label. */
+  async close(session: string, number: number, reason: string, signal: AbortSignal): Promise<string> {
+    if (reason !== 'completed' && reason !== 'not planned') throw new Error('Closure reason must be completed or not planned.')
+    await this.#listedOpen(session, number, signal)
+    await this.run('gh', ['issue', 'close', String(number), '-R', REPO, '--reason', reason], signal)
+    this.#listed.get(session)?.delete(number)
+    return `Closed #${number} as ${reason}.`
+  }
+
+  /** Create a workflow issue unless GitHub already reports the same workflow key. */
+  async create(kind: string, ref: string, title: string, text: string, signal: AbortSignal): Promise<string> {
+    const label = labelOf(kind)
+    const marker = issueMarker(kind, ref)
+    const safeTitle = validateText(title, 'title', 200)
+    const safeBody = validateText(text, 'text', 1500)
+    // Only base64 characters are inserted into jq source; the decoded value is used solely as a string.
+    const encoded = Buffer.from(marker).toString('base64')
+    const filter = `[.[] | select(.body | split("\\n") | index("${encoded}" | @base64d)) | {number,state}] | sort_by(.state != "OPEN") | .[:1]`
+    const found = await this.run('gh', ['issue', 'list', '-R', REPO, '--label', label, '--state', 'all', '--limit', '2000', '--json', 'number,state,body', '--jq', filter], signal)
+    const [existing] = ISSUE_ID.array().max(1).parse(JSON.parse(found))
+    if (existing !== undefined) return `${existing.state.toLowerCase()} ${existing.number}`
+    // Cover the GitHub list's visibility lag without reading a worktree journal.
+    const recent = this.#recent.get(marker)
+    if (recent !== undefined) {
+      const current = await this.run('gh', ['issue', 'view', String(recent), '-R', REPO, '--json', 'number,state'], signal)
+      const issue = ISSUE_ID.parse(JSON.parse(current))
+      if (issue.number !== recent) throw new Error('GitHub returned an unexpected issue number.')
+      return `${issue.state.toLowerCase()} ${issue.number}`
+    }
+    const output = await this.run('gh', ['issue', 'create', '-R', REPO, `--title=${safeTitle}`, `--body=${safeBody}\n\n${marker}`, '--label', label, '--assignee', '@me'], signal)
+    const url = output.trim()
+    const prefix = `https://github.com/${REPO}/issues/`
+    const number = Number(url.slice(prefix.length))
+    if (!url.startsWith(prefix) || !Number.isSafeInteger(number) || number < 1 || url !== `${prefix}${number}`) {
+      throw new Error('GitHub did not return the expected issue URL; do not assume the action landed.')
+    }
+    if (this.#recent.size >= 250) {
+      const oldest = this.#recent.keys().next().value
+      if (oldest !== undefined) this.#recent.delete(oldest)
+    }
+    this.#recent.set(marker, number)
+    return `created ${number}`
+  }
+}

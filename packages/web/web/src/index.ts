@@ -247,7 +247,14 @@ export class WebRuntime extends TypertRemoteService {
    * @returns the retrieval outcome; non-2xx responses resolve descriptively.
    */
   async fetch(request: WebFetchRequest, signal?: AbortSignal): Promise<WebFetchResult> {
-    return await this.selectFetchProvider().fetch(request, signal)
+    const provider = this.selectFetchProvider()
+    if (request.publicOnly) {
+      if (provider.fetchPublic === undefined) {
+        throw new WebError('selected web fetch provider does not support public-only requests', 'WEB_PUBLIC_FETCH_UNSUPPORTED')
+      }
+      return await provider.fetchPublic(request, signal)
+    }
+    return await provider.fetch(request, signal)
   }
 
   /**

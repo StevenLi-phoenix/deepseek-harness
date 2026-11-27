@@ -34,6 +34,7 @@ import { SignIns } from './sign-in.ts'
 import { OAUTH_PATH, oauthRedirect } from './sign-in-store.ts'
 import { gmailDomain, type PendingRecord } from './storage.ts'
 import { AccountTokens } from './tokens.ts'
+import type { VerificationProof, VerificationLookup } from './verification.ts'
 import type {
   AccountView, ClientInfo, DraftOutcome, GmailStatus, Outgoing, SavedAttachment, SearchOptions, SearchResult, SendOutcome, SendRequest,
   SignInAnswer, SignInRequest, ThreadView,
@@ -55,6 +56,7 @@ export type * from './oauth.ts'
 export { OAuthError } from './oauth.ts'
 export type * from './storage.ts'
 export type * from './types.ts'
+export type { VerificationProof, VerificationLookup } from './verification.ts'
 
 /** Fail at load on configuration that cannot work. */
 function assertConfig(config: Config): void {
@@ -213,6 +215,16 @@ export class Gmail extends Service {
    */
   search(account: string, query: string, options: SearchOptions = {}): Promise<SearchResult> {
     return this.connected.run(account, 'search', api => this.reader.search(api, query, options), result => `${result.threads.length} thread(s)`)
+  }
+
+  /**
+   * Read only the newest verification code or link from a browser-authorized sender domain.
+   * @param account - account id.
+   * @param lookup - the approved sender and receipt bounds.
+   * @returns a reduced code or link result, or null when no code matched.
+   */
+  verificationCode(account: string, lookup: VerificationLookup): Promise<VerificationProof | null> {
+    return this.connected.run(account, 'verification code', api => this.reader.verificationCode(api, lookup), undefined, { redactFailure: true })
   }
 
   /**

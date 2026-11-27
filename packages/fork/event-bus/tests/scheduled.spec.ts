@@ -147,6 +147,13 @@ describe('EventBus scheduled turn reports', () => {
     expect(notes.map(note => note.body)).toEqual(['Reported.'])
   })
 
+  it('does not report a job-lead reminder even when no relay claim is configured', async () => {
+    const { emit, notes } = await harness({ schedules: TITLES })
+    await runTurn((id, event) => { emit(id, event, 'job-lead') }, 'lead', 'Report belongs to the main agent.')
+    await runTurn(emit, 'unattended', 'Ordinary reminder.')
+    expect(notes.map(note => note.body)).toEqual(['Ordinary reminder.'])
+  })
+
   it('reports nothing when scheduled turn reports are off', async () => {
     const { emit, notes } = await harness({ config: withConfig(sessionConfig, { reportScheduledTurns: false }) })
     await runTurn(emit, 's1', 'Hidden.')

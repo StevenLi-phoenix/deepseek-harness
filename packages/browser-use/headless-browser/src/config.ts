@@ -10,6 +10,22 @@ import { dshPath } from '@deepseek-ai/dsh-home-paths'
 import z from '@deepseek-ai/schemastery'
 import { ExpectationList, type KeepaliveExpectation } from './keepalive-expect.ts'
 
+/** Trusted deployment configuration for the scoped application browser. */
+export interface JobApplyConfig {
+  /** Absolute owner-managed directories containing the approved files. */
+  uploadDirs: string[]
+  /** Exact approved PDF basenames. */
+  uploadBasenames: string[]
+  /** Canonical job clone containing the cover_letters directory. */
+  coverLetterRoot: string
+}
+
+const jobApplyConfig = z.object({
+  uploadDirs: z.array(z.string()).min(1).required(),
+  uploadBasenames: z.array(z.string()).min(2).max(2).required(),
+  coverLetterRoot: z.string().required(),
+})
+
 /** Persistent profile, viewport, live-view, and screenshot settings. */
 export interface Config {
   /**
@@ -92,6 +108,8 @@ export interface Config {
   uploadDirs: string[]
   /** Largest file `headless_browser_upload` attaches, in megabytes. @default 25 */
   maxUploadMB: number
+  /** Mount only the isolated, scoped job-application browser when specified. */
+  jobApply?: JobApplyConfig
 }
 
 /** Validate {@link Config} before the browser is constructed. */
@@ -114,4 +132,5 @@ export const Config: z<Config> = z.object({
   credentialsPath: z.string().default(dshPath('data', 'headless-browser', 'credentials.json')),
   uploadDirs: z.array(z.string()).default([dshPath('data', 'headless-browser', 'uploads')]),
   maxUploadMB: z.natural().min(1).default(25),
+  jobApply: z.union([jobApplyConfig]),
 })

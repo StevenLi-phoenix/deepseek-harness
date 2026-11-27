@@ -39,6 +39,7 @@ declare module '@deepseek-ai/cordis' {
 interface CompiledToolRestriction {
   readonly allow?: ReadonlySet<string>
   readonly deny?: ReadonlySet<string>
+  readonly preserveLocal: boolean
 }
 
 /** One registered definition and its step-time activation condition. */
@@ -76,8 +77,9 @@ class ToolLayer implements ScopeLayer {
   }
 
   /** Whether every compiled restriction in this layer admits a global tool name. */
-  admits(name: string): boolean {
+  admits(name: string, declaredHere: boolean): boolean {
     for (const filter of this.restrictions.values()) {
+      if (declaredHere && filter.preserveLocal) continue
       if ((filter.allow !== undefined && !filter.allow.has(name))
         || (filter.deny !== undefined && filter.deny.has(name))) return false
     }
@@ -172,6 +174,7 @@ export class ToolsService extends Service {
     const compiled: CompiledToolRestriction = {
       ...allow !== undefined ? { allow: new Set(allow) } : {},
       ...deny !== undefined ? { deny: new Set(deny) } : {},
+      preserveLocal: filter.preserveLocal === true,
     }
     if ([...allow ?? [], ...deny ?? []].includes(RUN_CODE_NAME)) {
       throw new Error(`tools.restrict() cannot name reserved PTC mode presentation transport "${RUN_CODE_NAME}"; restrict end-capability tools instead`)
@@ -199,19 +202,20 @@ export class ToolsService extends Service {
   private view(scope?: ScopeKey): ToolView {
     const layers = this.layers.chainLayers(scope)
     const own = this.layers.peek(scope)
-    const inherited = new Map(this.layers.global.tools.entries())
+    const inherited = new Map<string, { registration: ToolRegistration; from?: ToolLayer }>()
+    for (const [name, registration] of this.layers.global.tools.entries()) inherited.set(name, { registration })
     for (const layer of layers) {
       if (layer === own) continue
-      for (const [name, registration] of layer.tools.entries()) inherited.set(name, registration)
+      for (const [name, registration] of layer.tools.entries()) inherited.set(name, { registration, from: layer })
     }
     const visible = new Map<string, ToolDefinition>()
     const registrations = new Map<string, ToolRegistration>()
     const knownNames = new Set<string>()
     const restrictableNames = new Set<string>()
-    for (const [name, registration] of inherited) {
+    for (const [name, { registration, from }] of inherited) {
       knownNames.add(name)
       restrictableNames.add(name)
-      if (layers.every(layer => layer.admits(name))) {
+      if (layers.every(layer => layer.admits(name, layer === from))) {
         visible.set(name, registration.definition)
         registrations.set(name, registration)
       }

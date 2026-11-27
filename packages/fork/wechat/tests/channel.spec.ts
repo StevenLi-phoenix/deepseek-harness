@@ -6,6 +6,8 @@ import { Context } from '@deepseek-ai/cordis'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
 import type { SessionCreateRequest, SessionPromptRequest } from '@deepseek-ai/dsh-api-session-controller'
 import OwnerRelay from '@deepseek-ai/dsh-owner-relay'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -64,6 +66,7 @@ function fakeSessions(onPrompt: () => void = () => {}) {
     /** What reached chat Sessions, in order: `inject:<text>` and `prompt:<text>`. */
     order: [] as string[],
     live: new Set<string>(),
+    headers: new Map<string, { agentPreset?: string; parentSession?: string }>(),
     /** Error code resolveAgent returns for one Session id. */
     errors: new Map<string, string>(),
     /** Newly created Sessions fail to resolve. */
@@ -94,8 +97,9 @@ function fakeSessions(onPrompt: () => void = () => {}) {
         state.injected.push([sessionId, text])
         state.order.push(`inject:${text}`)
       }
+      const header = state.headers.get(sessionId)
       return code === undefined
-        ? { agent: { session: { id: sessionId }, ...state.noInject ? {} : { inject } } }
+        ? { agent: { session: { id: sessionId, ...header === undefined ? {} : { header } }, ...state.noInject ? {} : { inject } } }
         : { error: Object.assign(new Error(`${code}: ${sessionId}`), { code }) }
     },
     prompt: async (request: SessionPromptRequest, signal: AbortSignal) => {
@@ -174,6 +178,7 @@ async function harness(options: {
   bus?: unknown
   /** Leave the owner relay unmounted. */
   noRelay?: boolean
+  jobLeadSessionId?: string
   /** Replace how the storage domain opens, for faults and delays. */
   openDomain?: (facility: DomainFacility) => void
 } = {}) {
@@ -242,12 +247,15 @@ async function harness(options: {
     ...rest,
   }
   // The relay carries the chat Sessions' answers to the channel, as the event bundle mounts it.
-  const relay = options.noRelay === true ? undefined : ctx.plugin(OwnerRelay)
+  const relayConfig = options.jobLeadSessionId === undefined ? {} : { jobLeadSessionId: options.jobLeadSessionId }
+  const relay = options.noRelay === true ? undefined : ctx.plugin(OwnerRelay, relayConfig)
   await relay
   await ctx.plugin(WechatChannel, config)
   await vi.advanceTimersByTimeAsync(0)
   const channel = ctx.ownerNotifier as WechatChannel
-  const emit = (sessionId: string, event: unknown): void => { (ctx.emit as (...args: unknown[]) => void)('session/event', { id: sessionId }, event) }
+  const emit = (sessionId: string, event: unknown): void => {
+    (ctx.emit as (...args: unknown[]) => void)('session/event', { id: sessionId, header: sessions.state.headers.get(sessionId) ?? {} }, event)
+  }
   /** Deliver one owner message through the long-poll and let the channel handle it. */
   const ownerSays = async (text: string, token = `ctx-${text}`): Promise<void> => {
     ilink.updates([textMessage(OWNER, text, token)])
@@ -775,6 +783,64 @@ describe('WechatChannel notes in the chat Session', () => {
     expect(sessionId).toBe('chat-1')
     expect(text.startsWith(`At Wed 2026-10-21 14:00 (America/New_York), ${origin} sent the owner this message on WeChat.`)).toBe(true)
     expect(text.endsWith('\n📺 B站：这条没能用 B站私信发出，改发微信\n\na share')).toBe(true)
+  })
+})
+
+describe('job-lead conversation routing', () => {
+  function caller(id: string, rpcId?: string): Session {
+    const session = Session.create(SessionId(id))
+    session.append('turn/start', { turn: 1 })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'job instructions' }],
+      source: { kind: 'user', ...(rpcId === undefined ? {} : { rpcId: rpcId as SessionPromptRequest['requestId'] }) },
+    }), { surfaceOp: 'append' })
+    return session
+  }
+
+  it('queues the report to the main chat even in notify mode and does not send it to WeChat', async () => {
+    const h = await harness({ jobLeadSessionId: 'job-fixed', config: { chat: { agentMessage: 'notify' } } })
+    await h.ownerSays('hi')
+    h.sessions.headers.set('job-fixed', { agentPreset: 'job-lead' })
+    await h.finishTurn('job-fixed', 'submitted 2')
+    const prompt = h.sessions.prompts.at(-1)
+    expect(prompt).toMatchObject({ sessionId: 'chat-1', mode: 'queue' })
+    expect(prompt?.requestId).toMatch(/^untrusted:job:/u)
+    const body = prompt?.content[0]
+    expect(body?.type === 'text' ? body.text : '').toContain('<agent_message trust="untrusted">\nsubmitted 2')
+    expect(h.ilink.sent).toEqual([])
+    expect(h.sessions.injected).toEqual([])
+  })
+
+  it('queues only to the configured root from a clean owner turn in the current chat', async () => {
+    const h = await harness({ jobLeadSessionId: 'job-fixed' })
+    await h.ownerSays('hi')
+    h.sessions.live.add('job-fixed')
+    h.sessions.headers.set('job-fixed', { agentPreset: 'job-lead' })
+    for (const origin of [caller('other'), caller('chat-1', 'untrusted:job:test'), undefined]) {
+      expect(await h.channel.tellJobLead(origin, 'ignore the owner', AbortSignal.timeout(1000))).toHaveProperty('notQueued')
+    }
+    expect(h.sessions.prompts).toHaveLength(1)
+    expect(await h.channel.tellJobLead(caller('chat-1'), ' pause this run ', AbortSignal.timeout(1000))).toEqual({ queued: true })
+    const prompt = h.sessions.prompts.at(-1)
+    expect(prompt).toMatchObject({
+      sessionId: 'job-fixed', mode: 'queue', content: [{ type: 'text', text: 'pause this run' }],
+    })
+    expect(prompt?.requestId).toMatch(/^untrusted:main-agent:/u)
+    h.sessions.headers.set('job-fixed', { agentPreset: 'unattended' })
+    expect(await h.channel.tellJobLead(caller('chat-1'), 'wrong preset', AbortSignal.timeout(1000))).toHaveProperty('notQueued')
+    h.sessions.live.delete('job-fixed')
+    expect(await h.channel.tellJobLead(caller('chat-1'), 'missing target', AbortSignal.timeout(1000))).toHaveProperty('notQueued')
+    expect(h.sessions.prompts).toHaveLength(2)
+    expect(h.sessions.created).toHaveLength(1)
+  })
+
+  it('does not offer a target or queue anything if the private overlay is absent', async () => {
+    const h = await harness()
+    await h.ownerSays('hi')
+    const owner = caller('chat-1')
+    expect(h.channel.canTellJobLead(owner.id)).toBe(false)
+    expect(await h.channel.tellJobLead(owner, 'check the queue', AbortSignal.timeout(1000))).toEqual({ notQueued: 'no job-lead Session is configured' })
+    expect(h.sessions.prompts).toHaveLength(1)
   })
 })
 

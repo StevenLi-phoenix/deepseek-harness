@@ -17,6 +17,7 @@ import { CredentialVault } from './credentials.ts'
 import { firstLine } from './error.ts'
 import { registerFormTools } from './form-tools.ts'
 import { ActionGuard, type SecurityEvent } from './guard.ts'
+import { mountJobApplyBrowser } from './job-apply.ts'
 import { KeepaliveService, type KeepaliveEvent } from './keepalive.ts'
 import { LiveView } from './live-view.ts'
 import { PAGE_PATH, mountTakeoverRoutes } from './routes.ts'
@@ -29,6 +30,15 @@ import { UploadPolicy } from './uploads.ts'
 export { Config } from './config.ts'
 
 declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Host-only shared profile operations for the restricted preset mount. */
+    headlessBrowserJobBridge: { readonly browser: HeadlessBrowserSession; readonly takeover: TakeoverState }
+    /** Trusted current-tab context for the verification-code tool in the job-apply scope. */
+    jobApplyBrowser: {
+      currentHost(sessionId: string, signal?: AbortSignal): Promise<string | null>
+      registrableDomain(host: string): string | null
+    }
+  }
   interface Events {
     /**
      * One action-guard decision, published so a host can watch what the browser is asked to do.
@@ -59,6 +69,13 @@ export const inject = ['tools']
  * @param config - validated launch, view, and snapshot settings.
  */
 export function apply(ctx: Context, config: Config): void {
+  const restriction = config.jobApply
+  if (restriction !== undefined) {
+    ctx.inject(['headlessBrowserJobBridge'], (scoped) => {
+      mountJobApplyBrowser(scoped, config, restriction, scoped.headlessBrowserJobBridge)
+    })
+    return
+  }
   // One guard for the whole plugin: the tools consult it, and the status route
   // reads the same event list, so a refusal cannot be logged twice or lost.
   const guard = new ActionGuard({
@@ -80,6 +97,7 @@ export function apply(ctx: Context, config: Config): void {
     emit: (event) => { ctx.emit('headless-browser/keepalive', event) },
   })
   const takeover = new TakeoverState()
+  ctx.provide('headlessBrowserJobBridge', { browser, takeover })
   const credentials = new CredentialVault(config.credentialsPath)
   const uploads = new UploadPolicy(config.uploadDirs, config.maxUploadMB)
   // The first upload directory is where the owner drops a task's files, so it exists from the first mount.

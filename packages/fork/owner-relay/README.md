@@ -25,12 +25,14 @@ One place decides what you hear when one of your agent's Sessions finishes a tur
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount the relay at the root of the profile, before the plugins that use it. It needs no other service and has no configuration; it reads `ctx.ownerNotifier` (from [`@deepseek-ai/dsh-wechat`](../wechat/README.md)) only when a fallback needs it. The fork event bundle mounts it right before the event bus.
+Mount the relay at the profile root before its channels. The event bundle mounts it before the event bus. The relay reads `ctx.ownerNotifier` (from [`@deepseek-ai/dsh-wechat`](../wechat/README.md)) only to deliver an answer.
 
 ```yaml
 - id: owner-relay
   name: '@deepseek-ai/dsh-owner-relay'
 ```
+
+Set `config.jobLeadSessionId` in a private profile overlay to reserve one persistent root on the `job-lead` preset. Only its last assistant text is relayed via `ownerNotifier.tellMainAgent`, and a final `NO_REPLY` sends nothing. There is no direct notification or fallback if the main agent cannot be reached. Without an ID, this route is off.
 
 ### When to choose it
 
