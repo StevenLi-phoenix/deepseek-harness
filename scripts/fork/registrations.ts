@@ -34,6 +34,7 @@ export const FORK_PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackage
   'packages/fork/time-gap': { category: 'optional', reason: 'Fork-local time check before an input that ends a quiet spell in a Session; mounted by the event profile bundle.' },
   'packages/fork/wechat': { category: 'optional', reason: 'Fork-local WeChat channel; requires a QR-bound iLink bot account.' },
   'packages/fork/tool-wechat': { category: 'optional', reason: 'Fork-local WeChat file tool mounted by the event profile preset.' },
+  'packages/fork/notify-learning': { category: 'optional', reason: 'Fork-local notification rules learned from the owner\'s reactions to proactive messages, mounted by the event profile bundle and preset.' },
   'packages/fork/tool-push': { category: 'optional', reason: 'Fork-local owner_push tool (API platform message bus) mounted by the event profile preset.' },
   'packages/fork/voice': { category: 'optional', reason: 'Fork-local voice service (speech and transcription through the owner\'s own services) mounted by the event profile bundle.' },
   'packages/fork/tool-up': { category: 'optional', reason: 'Fork-local up_* tools for the creator account (bili-svc) mounted by the event profile\'s up preset.' },
@@ -98,7 +99,7 @@ export const FORK_SERVICE_ROLES: readonly ServiceRole[] = [
     pkg: 'wechat',
     title: 'Owner notification channel',
     mode: 'service',
-    consumers: ['event-bus', 'qq', 'courses', 'gmail', 'owner-memory', 'integrity-watch', 'tool-watch', 'tool-voice', 'tool-wechat'],
+    consumers: ['event-bus', 'qq', 'courses', 'gmail', 'owner-memory', 'integrity-watch', 'notify-learning', 'tool-watch', 'tool-voice', 'tool-wechat'],
     note: 'The event bus defines the channel interface; the WeChat channel provides it.',
   },
   {
@@ -106,7 +107,7 @@ export const FORK_SERVICE_ROLES: readonly ServiceRole[] = [
     pkg: 'owner-relay',
     title: 'Relay of final answers to the owner',
     mode: 'service',
-    consumers: ['event-bus', 'wechat', 'qqbot', 'bili', 'time-gap'],
+    consumers: ['event-bus', 'wechat', 'qqbot', 'bili', 'time-gap', 'notify-learning'],
     note: "Channels register here and claim Sessions; the relay sends each final answer through its Session's channel.",
   },
   {
@@ -163,6 +164,14 @@ export const FORK_SERVICE_ROLES: readonly ServiceRole[] = [
     mode: 'service',
     consumers: ['speaking-style-settings', 'event-console'],
     note: 'Collects style from QQ, Bilibili, and public web pages and shows it to the presets that mount it.',
+  },
+  {
+    key: 'notifyLearning',
+    pkg: 'notify-learning',
+    title: 'Notification rules learned from the owner',
+    mode: 'service',
+    consumers: [],
+    note: 'Keeps proactive messages with the owner\'s replies, learns rules nightly, and serves the rules block and its tools row.',
   },
   {
     key: 'contentGuard',
@@ -225,6 +234,7 @@ export const FORK_SERVICE_PAGE: Readonly<Record<string, string>> = {
   ownerRelay: 'fork.md',
   qq: 'fork.md',
   speakingStyle: 'fork.md',
+  notifyLearning: 'fork.md',
   biliEvidence: 'fork.md',
   contentGuard: 'fork.md',
   qqBot: 'fork.md',

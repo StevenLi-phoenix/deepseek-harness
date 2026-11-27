@@ -75,8 +75,12 @@ export function untrustedRequestId(origin: string): string {
   return `${UNTRUSTED_REQUEST_PREFIX}${slug === '' ? 'peer' : slug}:${randomUUID()}`
 }
 
-/** The trigger label of a user message's source, or undefined for context the host injected. */
-function triggerOf(source: unknown): string | undefined {
+/**
+ * The trigger label of a user message's source, as {@link TurnOrigin.triggers} lists it.
+ * @param source - the `source` of a `user/message` event.
+ * @returns `owner`, `guest`, `peer:<origin>`, `scheduled`, `event`, `monitor`, or `job`; undefined for context the host injected.
+ */
+export function triggerOf(source: unknown): string | undefined {
   if (typeof source !== 'object' || source === null) return undefined
   const record = source as { kind?: unknown; rpcId?: unknown; principal?: unknown }
   switch (sourceKind(record.kind)) {
