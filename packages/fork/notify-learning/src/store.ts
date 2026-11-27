@@ -65,7 +65,7 @@ async function readJson<T>(file: string, schema: z.ZodType<T>, missing: T): Prom
     throw new LearningFileError(`${file} is not valid JSON; fix or delete it`, { cause: error })
   }
   const parsed = schema.safeParse(value)
-  if (!parsed.success) throw new LearningFileError(`${file} does not match its schema (${parsed.error.issues[0]?.message ?? 'invalid'}); fix or delete it`)
+  if (!parsed.success) throw new LearningFileError(`${file} does not match its schema (${parsed.error.issues.map(issue => issue.message).join('; ')}); fix or delete it`)
   return parsed.data
 }
 

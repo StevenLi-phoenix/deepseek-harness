@@ -108,7 +108,7 @@ export interface Config {
 }
 
 /** Configuration schema. */
-export const Config: z<Config> = z.object({
+export const Config: z<Partial<Config>, Config> = z.object({
   mode: z.union(['learn', 'tools']).default('learn').description('`learn` at the root; `tools` inside a preset for notify_rules and notify_rules_forget.'),
   enabled: z.boolean().default(true).description('Capture, learn, and show the rules; off keeps the files.'),
   dir: z.string().description('Absolute directory of the learner\'s files; defaults to <DSH_HOME>/notify-learning.'),
@@ -224,9 +224,15 @@ function applyLearn(ctx: Context, config: Config): void {
   const store = new LearningStore(dir, (error) => {
     ctx.logger.warn('notify-learning: capture write failed: %s', error instanceof Error ? error.message : String(error))
   })
-  const service = new NotifyLearning(ctx, { ...config, kindChars: KIND_CHARS, quoteChars: QUOTE_CHARS }, store)
-  ctx.logger.info('notify-learning: %s, channel %s, pass at %02d:00 %s, rule after %d agreeing exchanges, files in %s',
-    config.enabled ? 'on' : 'off', config.channel, config.hour, config.timeZone, config.minExchanges, dir)
+  const service = new NotifyLearning(ctx, {
+    enabled: config.enabled, channel: config.channel, timeZone: config.timeZone, hour: config.hour, notify: config.notify,
+    windowHours: config.windowHours, maxReplies: config.maxReplies, maxExchanges: config.maxExchanges, maxBatch: config.maxBatch,
+    minExchanges: config.minExchanges, clueDays: config.clueDays, maxRules: config.maxRules, maxClues: config.maxClues,
+    maxEvidence: config.maxEvidence, kindChars: KIND_CHARS, quoteChars: QUOTE_CHARS,
+    provider: config.provider, model: config.model, maxOutputTokens: config.maxOutputTokens, rawKept: config.rawKept,
+  }, store)
+  ctx.logger.info('notify-learning: %s, channel %s, pass at %s:00 %s, rule after %d agreeing exchanges, files in %s',
+    config.enabled ? 'on' : 'off', config.channel, String(config.hour).padStart(2, '0'), config.timeZone, config.minExchanges, dir)
   // ctx.provide is itself an effect: the service goes when this plugin unloads.
   ctx.provide('notifyLearning', service)
   ctx.effect(() => async () => { await service.dispose() }, 'notify-learning: stop the pass and drain writes')

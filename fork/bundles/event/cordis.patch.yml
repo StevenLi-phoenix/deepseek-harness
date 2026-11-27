@@ -86,6 +86,15 @@
     - id: time-gap
       name: '@deepseek-ai/dsh-time-gap'
 
+    # Notification rules learned from the owner's reactions (ctx.notifyLearning). Each answer the WeChat chat Session
+    # sends in a turn the owner did not start (a reminder, a watch, a monitor, a note from the notification desk) is kept
+    # with the owner's next turns for 12 hours; at 05:00 New York one model call reads them, and code learns a rule
+    # (`CI 失败通知 → silent`) only when the owner's own words, checked verbatim, agree in two separate exchanges. The
+    # rules reach the `unattended` and `notify` presets as data before each turn the owner did not start, and every
+    # change reaches the owner on WeChat. Files in <DSH_HOME>/notify-learning; `config.enabled: false` turns it off.
+    - id: notify-learning
+      name: '@deepseek-ai/dsh-notify-learning'
+
     # Routing state (agent-created subscriptions and repository watches) lives in storage;
     # these rows only carry deployment-wide settings.
     - id: event-bus
@@ -546,6 +555,12 @@
             config:
               hold: false
               notify: false
+          # notify_rules (the learned notification rules with the owner's words behind each) and notify_rules_forget
+          # (deletes one, only in a turn the owner started alone); the rules themselves come from the root notify-learning row.
+          - id: notify-learning-tools
+            name: '@deepseek-ai/dsh-notify-learning'
+            config:
+              mode: tools
           # DSH's speaking style (its persona card, traits, meme index, tone samples; from the root speaking-style row) in
           # front of each root Session, as quoted style reference; meme_lookup, style_note (examples checked against the
           # pages this Session searched or fetched), and persona_update. Nothing when the root row is off.

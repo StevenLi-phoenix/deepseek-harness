@@ -14491,6 +14491,9 @@ importers:
       '@deepseek-ai/dsh-agent-loop-testkit':
         specifier: workspace:*
         version: link:../../test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-agent-preset-registry':
+        specifier: workspace:*
+        version: link:../../preset/agent-preset-registry
       '@deepseek-ai/dsh-atomic-write':
         specifier: workspace:*
         version: link:../../util/atomic-write
@@ -14527,6 +14530,9 @@ importers:
       '@deepseek-ai/dsh-turn-taint':
         specifier: workspace:*
         version: link:../turn-taint
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
 
   packages/fork/owner-memory:
     dependencies:
