@@ -34,7 +34,7 @@ import { deniedJobUrl, JobNavigationRefused, protectJobPage, safeHost } from './
 import { JobSnapshots } from './job-snapshots.ts'
 import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
 import type { TabStore } from './tab-store.ts'
-import { BrowserTabs, ResumeTabError, TabNavigationError, type ActiveTab, type ClosedTab, type ListedTab, type PopupTab, type ResumedTab, type ResumeProbe, type ResumeTarget } from './tabs.ts'
+import { BrowserTabs, MAX_TABS, ResumeTabError, TabLimitError, TabNavigationError, type ActiveTab, type ClosedTab, type ListedTab, type PopupTab, type ResumedTab, type ResumeProbe, type ResumeTarget } from './tabs.ts'
 import { findHiddenTextHolder, findSameNameCover, findToggleStandIn, probeElement, readElementFacts, scoreVisibility, VISIBILITY_THRESHOLD, type ElementFacts } from './visibility.ts'
 
 /** How long a context gets to close before shutdown stops waiting for it. */
@@ -114,9 +114,17 @@ export interface SessionDeps {
   readonly kill?: (pid: number) => boolean
   /** Plugin-owned metadata journal; direct callers can construct an ephemeral browser. */
   readonly tabStore?: TabStore
+  /** How long a job-apply tab must sit unused before another Session's open may close it at the tab cap. */
+  readonly jobTabIdleMs?: number
 }
 
 const JOB_OWNER_PREFIX = 'job-apply:'
+/**
+ * A job-apply tab unused this long may be closed when another Session needs a slot. Workers act every few
+ * seconds; one that has finished keeps its tabs, and on 2026-11-27 seven such tabs filled the eight shared
+ * slots, so every later open failed.
+ */
+export const JOB_TAB_IDLE_MS = 10 * 60_000
 
 interface JobCall {
   readonly owner: string
@@ -313,6 +321,8 @@ export class HeadlessBrowserSession {
   readonly #deps: SessionDeps
   readonly #job = new AsyncLocalStorage<JobCall>()
   readonly #jobPages = new WeakSet<Page>()
+  /** When a job-apply Session last acted on each of its tabs. */
+  readonly #jobTabUse = new Map<string, number>()
   readonly #jobSnapshots = new JobSnapshots()
   #axResolver: AxTargetResolver | undefined
   #context: BrowserContext | undefined
@@ -467,8 +477,13 @@ export class HeadlessBrowserSession {
   }
 
   async #protectJobPage(page: Page, onRefused?: (url: string) => void): Promise<void> {
+    // A page retrying a refused subresource (one LinkedIn page asked for "https://invalid" 11k times) logs it once.
+    const logged = new Set<string>()
     await protectJobPage(page, (url, closing) => {
       if (closing) onRefused?.(url)
+      const host = safeHost(url)
+      if (!closing && logged.has(host)) return
+      logged.add(host)
       this.#log.warn('headless-browser: %s', new JobNavigationRefused(url).message)
     })
     this.#jobPages.add(page)
@@ -490,6 +505,33 @@ export class HeadlessBrowserSession {
     if (scoped !== undefined && (tab === undefined || this.tabs().owner(tab) !== scoped.owner)) {
       throw new Error('the tab is not owned by this job-apply Session')
     }
+    if (scoped !== undefined && tab !== undefined) this.#jobTabUse.set(tab, Date.now())
+  }
+
+  /**
+   * At the tab cap, close the job-apply tab of another Session that has gone unused longest, if it is idle enough.
+   * The owner's own tabs and tabs outside job-apply are never closed.
+   * @param caller - the scoped owner asking for a slot.
+   * @returns whether a slot was freed.
+   */
+  async #freeJobSlot(caller: string): Promise<boolean> {
+    const tabs = this.tabs()
+    const open = tabs.state()
+    const live = new Set(open.map(tab => tab.id))
+    for (const id of this.#jobTabUse.keys()) if (!live.has(id)) this.#jobTabUse.delete(id)
+    if (open.length < MAX_TABS) return false
+    const idleMs = this.#deps.jobTabIdleMs ?? JOB_TAB_IDLE_MS
+    const now = Date.now()
+    const idle = open
+      .map(tab => ({ id: tab.id, owner: tabs.owner(tab.id), used: this.#jobTabUse.get(tab.id) ?? 0 }))
+      .filter(tab => tab.owner?.startsWith(JOB_OWNER_PREFIX) === true && tab.owner !== caller && now - tab.used >= idleMs)
+      .sort((a, b) => a.used - b.used)
+    const victim = idle[0]
+    if (victim === undefined) return false
+    await tabs.close(victim.id)
+    this.#jobTabUse.delete(victim.id)
+    this.#log.info('headless-browser: closed idle job-apply tab %s to free a slot', victim.id)
+    return true
   }
 
   /** At plugin boot, reconcile a previous run's open tabs immediately; otherwise launch on demand. */
@@ -720,13 +762,18 @@ export class HeadlessBrowserSession {
     const prepare = scoped === undefined ? undefined : async (page: Page) => {
       await this.#protectJobPage(page, (url) => { refused = new JobNavigationRefused(url) })
     }
+    if (scoped !== undefined) await this.#freeJobSlot(scoped.owner)
     let tab: TabInfo
     try {
       tab = await this.tabs().create(url, scoped?.owner ?? openedBySessionId, prepare)
     } catch (error: unknown) {
-      if (scoped !== undefined) throw refused ?? new Error('job-apply navigation failed')
+      // A denied landing reports only its host; a full tab strip or a page that failed to load says so.
+      if (scoped !== undefined) {
+        throw refused ?? (error instanceof TabLimitError || error instanceof TabNavigationError ? error : new Error('job-apply navigation failed'))
+      }
       throw error
     }
+    if (scoped !== undefined) this.#jobTabUse.set(tab.id, Date.now())
     return { url: tab.url, title: tab.title, tab: tab.id }
   }
 

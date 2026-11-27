@@ -10,6 +10,7 @@ import { ActionGuard } from '../src/guard.ts'
 import { deniedJobUrl } from '../src/job-apply-network.ts'
 import { JobApplyUploads } from '../src/job-apply.ts'
 import { HeadlessBrowserSession } from '../src/session.ts'
+import { MAX_TABS } from '../src/tabs.ts'
 
 const deny = [
   'https://mail.google.com/', 'https://inbox.google.com/', 'https://drive.google.com/', 'https://docs.google.com/',
@@ -141,6 +142,51 @@ it.skipIf(!existsSync(chromium.executablePath()))('closes a denied popup without
     await expect(job(async () => await active.fillSecret(form, 'fixture-password', 'password', 'jobs.example.test', wrongSite.tab)))
       .rejects.toThrow(/only written on its own host/)
     expect(await (await active.page(wrongSite.tab)).locator('#password').inputValue()).toBe('')
+  } finally {
+    await browser?.close()
+    server.closeAllConnections()
+    await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+    rmSync(root, { force: true, recursive: true })
+  }
+}, 25_000)
+
+it.skipIf(!existsSync(chromium.executablePath()))('frees a slot from an idle job Session at the tab cap and reports a full strip it cannot free', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-job-tabs-'))
+  const infos: string[] = []
+  const server = createServer((req, res) => { res.setHeader('Content-Type', 'text/html'); res.end(`<title>Posting ${req.url}</title>`) })
+  let browser: HeadlessBrowserSession | undefined
+  try {
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    const bound = server.address()
+    if (bound === null || typeof bound === 'string') throw new Error('test server did not bind')
+    const base = `http://jobs.example.test:${bound.port}`
+    browser = new HeadlessBrowserSession(Config({ profileDir: join(root, 'profile'), downloadDir: join(root, 'downloads'), stealth: false } as Config), {
+      debug: () => {}, info: (format, ...args: unknown[]) => { infos.push([format, ...args].map(String).join(' ')) }, warn: () => {},
+    }, new ActionGuard(), {
+      launch: async (profile, options) => await chromium.launchPersistentContext(profile, { ...options,
+        args: ['--host-resolver-rules=MAP *.example.test 127.0.0.1', '--no-proxy-server'],
+      }),
+      probe: { listProcesses: async () => [] },
+      jobTabIdleMs: 0,
+    })
+    const active = browser
+    const as = <T>(session: string, operation: () => Promise<T>) => active.runJob(session, new ActionGuard({ sensitivePolicy: 'job-apply' }), operation)
+    // The owner's own tabs fill the strip: nothing may be closed for a job Session, and the error says why.
+    const ownerTabs: string[] = []
+    for (let n = 0; active.tabs().state().length < MAX_TABS; n++) ownerTabs.push((await active.open(`${base}/owner-${n}`, true)).tab)
+    await expect(as('busy', async () => await active.open(`${base}/busy`, true))).rejects.toThrow(/at most 8 tabs/u)
+    await active.closeTab(ownerTabs.pop())
+    await active.closeTab(ownerTabs.pop())
+    const idle = [(await as('idle', async () => await active.open(`${base}/idle-1`, true))).tab]
+    idle.push((await as('idle', async () => await active.open(`${base}/idle-2`, true))).tab)
+    expect(active.tabs().state()).toHaveLength(MAX_TABS)
+    const busy = await as('busy', async () => await active.open(`${base}/busy`, true))
+    expect(busy.title).toBe('Posting /busy')
+    const left = active.tabs().state().map(tab => tab.id)
+    expect(left).not.toContain(idle[0])
+    expect(left).toContain(idle[1])
+    for (const tab of ownerTabs) expect(left).toContain(tab)
+    expect(infos.some(line => line.includes('closed idle job-apply tab') && line.includes(idle[0] ?? 'missing'))).toBe(true)
   } finally {
     await browser?.close()
     server.closeAllConnections()

@@ -715,7 +715,9 @@ export class ActionGuard {
     const target = siteOf(targetUrl)
     if (target === undefined || base === undefined || target === base) return undefined
     const site = target
-    if (!allowOrigin) {
+    // In the job-apply preset the network deny list is the boundary: an employer's Apply button leads to its ATS
+    // (sig.com to icims.com, Handshake to Ashby), and the preset has no allowOrigin to ask for each move.
+    if (!allowOrigin && !this.#jobApplyPolicy) {
       return this.#refuse(action, {
         rule: 'origin',
         url: pageUrl,
@@ -733,7 +735,7 @@ export class ActionGuard {
       url: pageUrl,
       ref,
       name,
-      reason: `the agent allowed the move to ${site}`,
+      reason: allowOrigin ? `the agent allowed the move to ${site}` : `job-apply moved to ${site}; the network deny list still applies`,
     })
     return undefined
   }

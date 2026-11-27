@@ -70,11 +70,13 @@ describe.each(['named', 'point'] as const)('job-apply guard for %s actions', (mo
     expect(guard.log.list()[0]).toMatchObject({ kind: 'allow', rule: 'sensitive-name', action: 'type' })
   })
 
-  it.each(['click', 'type'] as const)('retains origin checks for %s before logging a policy allow', (action) => {
+  it.each(['click', 'type'] as const)('lets %s cross to another site and records the move, since the network deny list is the boundary', (action) => {
     const guard = new ActionGuard({ sensitivePolicy: 'job-apply' })
     const target = control('Submit & Continue', action === 'click' ? { href: external } : { formAction: external })
-    expect(refusalOf(act(guard, mode, action, target)).rule).toBe('origin')
-    expect(guard.log.list().some(event => event.kind === 'allow')).toBe(false)
+    expect(act(guard, mode, action, target).allowed).toBe(true)
+    expect(guard.log.list()).toContainEqual(expect.objectContaining({ kind: 'allow', rule: 'origin', reason: expect.stringMatching(/deny list still applies/u) }))
+    // The shared guard still asks for allowOrigin.
+    expect(refusalOf(act(new ActionGuard(), mode, action, control('Continue', action === 'click' ? { href: external } : { formAction: external }))).rule).toBe('origin')
   })
 
   it('does not change the shared guard’s conservative rule', () => {
