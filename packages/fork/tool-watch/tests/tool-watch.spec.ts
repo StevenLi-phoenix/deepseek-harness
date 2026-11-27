@@ -355,7 +355,7 @@ describe('watch_list', () => {
     await bus.publish({ source: 'github', kind: 'github.notification.issue', key: 'n1', subject: 'octo/repo', title: 'Issue' })
     await vi.advanceTimersByTimeAsync(1)
     const deliveryId = (deliveries[0] as { deliveryId: string }).deliveryId
-    const emit = (event: unknown): void => { (ctx.emit as (...args: unknown[]) => void)('session/event', { id: 'w1' }, event) }
+    const emit = (event: unknown): void => { (ctx.emit as (...args: unknown[]) => void)('session/event', { id: 'w1', header: {} }, event) }
     emit({ type: 'user/message', seq: 1, data: { role: 'user', content: [], source: { kind: 'webhook', provider: 'bus-event', source: 'inbox', deliveryId } } })
     emit({ type: 'assistant/message', seq: 2, data: { message: { content: [{ type: 'text', text: 'NO_REPLY' }] } } })
     emit({ type: 'turn/end', seq: 3, data: { turn: 1, reason: { kind: 'completed' } } })

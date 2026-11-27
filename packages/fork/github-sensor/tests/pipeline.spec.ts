@@ -146,7 +146,7 @@ describe('GitHub event pipeline', () => {
     expect(root.eventBus.events().find(event => event.key === 'octo/repo:commit:c3')).toMatchObject({ outcome: 'suppressed', reason: 'marker:Dsh-Agent:' })
 
     // The webhook runtime would start the Session; its first turn end comes back as one message.
-    const emit = (event: unknown): void => { (root.emit as (...args: unknown[]) => void)('session/event', { id: 'webhook-1' }, event) }
+    const emit = (event: unknown): void => { (root.emit as (...args: unknown[]) => void)('session/event', { id: 'webhook-1', header: {} }, event) }
     emit({ type: 'user/message', seq: 1, data: { role: 'user', content: [], source: { kind: 'webhook', provider: BUS_EVENT_KIND, source: 'triage', deliveryId: delivery.deliveryId } } })
     emit({ type: 'assistant/message', seq: 2, data: { message: { content: [{ type: 'text', text: 'Issue 9 needs a reply; the human change is fine.' }] } } })
     emit({ type: 'turn/end', seq: 3, data: { turn: 1, reason: { kind: 'completed' } } })

@@ -53,7 +53,7 @@ describe('watch pipeline', () => {
     await call('watch_create', { id: 'acme', github_repo: 'acme/tool', action: 'session', instructions: 'Decide whether to upgrade.', coalesce_seconds: 0 })
     await vi.advanceTimersByTimeAsync(0)
 
-    const emit = (sessionId: string, event: unknown): void => { (ctx.emit as (...args: unknown[]) => void)('session/event', { id: sessionId }, event) }
+    const emit = (sessionId: string, event: unknown): void => { (ctx.emit as (...args: unknown[]) => void)('session/event', { id: sessionId, header: {} }, event) }
     for (const [n, answer] of [[2, 'Upgrade: it fixes a bug you hit.'], [3, 'NO_REPLY']] as const) {
       gh.set(ACME.releases, Array.from({ length: n }, (_, index) => release(n - index)))
       await vi.advanceTimersByTimeAsync(60_000)

@@ -51,6 +51,16 @@ const OUTSIDE_PRESETS = ['bili', 'up', 'qqbot', 'qq-digest'] as const
  * desk (host and autocut events in, one short note to the owner out, no tools, and no speaking-style layer).
  */
 const NO_MEMORY_PRESETS = [...OUTSIDE_PRESETS, 'notify', 'qq-main'] as const
+/**
+ * The job pipeline reads postings and recruiter mail, which can carry prompt injection. Its presets carry no owner
+ * memory and reach the owner only through their final answer; Gmail and WeChat appear only in narrowed modes.
+ */
+const JOB_PRESETS = ['job-apply', 'job-inbox', 'job-lead'] as const
+/** The narrowed mode each job preset may mount a WeChat-side package in; any other WeChat-side row fails. */
+const JOB_NARROWED: Record<string, (config: Record<string, unknown>) => boolean> = {
+  '@deepseek-ai/dsh-tool-gmail': config => config['mode'] === 'verification-only' || config['mode'] === 'inbox-only',
+  '@deepseek-ai/dsh-tool-wechat': config => config['deferOnly'] === true,
+}
 
 /** Plugins that carry the owner's memory or reach the WeChat side, and why none may run in an outside preset. */
 const WECHAT_SIDE: Record<string, string> = {
@@ -102,7 +112,14 @@ const ALLOWED: Record<(typeof NO_MEMORY_PRESETS)[number], string[]> = {
 
 describe('channel isolation of the event bundle\'s presets', () => {
   it('composes the presets this test knows, so a new one is looked at', () => {
-    expect([...presets.keys()].toSorted()).toEqual([WECHAT_PRESET, ...NO_MEMORY_PRESETS].toSorted())
+    expect([...presets.keys()].toSorted()).toEqual([WECHAT_PRESET, ...NO_MEMORY_PRESETS, ...JOB_PRESETS].toSorted())
+  })
+
+  it.each(JOB_PRESETS)('the %s preset carries no owner memory and reaches WeChat or Gmail only in a narrowed mode', (preset) => {
+    const wide = pluginsOf(presets.get(preset)!).filter(row => row.name !== undefined && row.name in WECHAT_SIDE)
+      .filter(row => JOB_NARROWED[row.name!]?.(fieldsOf(row)) !== true)
+      .map(row => `${row.id}: ${row.name}`)
+    expect(wide).toEqual([])
   })
 
   it.each(NO_MEMORY_PRESETS)('the %s preset mounts nothing that carries the owner memory or reaches the WeChat side', (preset) => {
