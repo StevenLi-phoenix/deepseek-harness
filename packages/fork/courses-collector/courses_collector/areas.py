@@ -19,14 +19,12 @@ class ReadClient(Protocol):
     le_version: str
 
     def get_json(self, path: str): ...
-    def get_file(self, path: str) -> bytes: ...
 
 
 PageReader = Callable[[str, Course, str], Reading]
 Row = dict[str, Any]
 MAX_PAGES = 100
 MAX_TOC_DEPTH = 64
-MAX_MATERIAL_BYTES = 128 * 1024 * 1024
 _DATE_FIELDS = {'StartDate': 'starts_at', 'EndDate': 'ends_at', 'DueDate': 'due_at'}
 
 
@@ -184,7 +182,8 @@ class AreaReader:
         try:
             records = methods[area](course, checked_at)
         except ReadError as error:
-            if error.http_status != 403 or self.page_reader is None:
+            status = error.http_status
+            if (status != 403 and not (area == 'quizzes' and status == 404)) or self.page_reader is None:
                 raise
             try:
                 result = self.page_reader(area, course, checked_at)
@@ -192,8 +191,8 @@ class AreaReader:
                     raise result.failure
                 _unique(result.records)
             except ReadError as page_error:
-                raise ReadError(f'Brightspace API HTTP 403; page fallback: {page_error}', 403) from None
-            return replace(result, source='page', fallback_http=403)
+                raise ReadError(f'{error}; page fallback: {page_error}', status) from None
+            return replace(result, source='page', fallback_http=status)
         _unique(records)
         return Reading(records=records, source='api', count=len(records))
 
@@ -208,7 +207,8 @@ class AreaReader:
 
     def _record(self, *, course: Course, platform_id: str, title: str, url: str, kind: str,
                 id_type: str | None = None, rich: Any = None, extra: Row | None = None,
-                file: bytes | None = None, filename: str | None = None) -> Material:
+                download_path: str | None = None, expected_size: int | None = None,
+                filename: str | None = None) -> Material:
         text, fmt = _rich(rich)
         metadata = {'platform_id': platform_id, **(extra or {})}
         if fmt is not None:
@@ -217,7 +217,8 @@ class AreaReader:
         if links:
             metadata['links'] = links
         return Material(id=f'{course.id}-{id_type or kind}-{platform_id}', title=title, url=url,
-                        kind=kind, text=text, file=file, filename=filename, metadata=metadata)
+                        kind=kind, text=text, filename=filename, download_path=download_path,
+                        expected_size=expected_size, metadata=metadata)
 
     def _news(self, course: Course, checked_at: str) -> list[Row]:
         key = ('news', course.org_unit_id, checked_at)
@@ -397,18 +398,7 @@ class AreaReader:
 
     def _materials(self, course: Course, checked_at: str) -> list[Material]:
         records = []
-        total = 0
         ou = course.org_unit_id
-
-        def download(path: str) -> bytes:
-            nonlocal total
-            file = self.client.get_file(path)
-            if not isinstance(file, bytes):
-                raise ReadError('invalid Brightspace file payload')
-            total += len(file)
-            if total > MAX_MATERIAL_BYTES:
-                raise ReadError('Brightspace materials exceed aggregate byte limit')
-            return file
 
         for entry in self._toc(course, checked_at):
             if entry.kind != 'topic' or entry.row.get('IsLocked') is True or entry.row.get('IsBroken') is True:
@@ -424,7 +414,7 @@ class AreaReader:
                 records.append(self._record(
                     course=course, platform_id=item, title=_title(topic, 'Title'),
                     url=self._ui(path), kind='file',
-                    id_type='material-topic', filename=filename, file=download(path),
+                    id_type='material-topic', filename=filename, download_path=path,
                     extra={'parent_platform_id': entry.parent_id,
                            'content_url': self._ui(f'/d2l/le/content/{ou}/viewContent/{item}/View')},
                 ))
@@ -446,13 +436,10 @@ class AreaReader:
                 aid = _id(attach.get('Id'))
                 filename = _filename(_title(attach, 'FileName'))
                 path = self._path(course, f'/dropbox/folders/{fid}/attachments/{aid}')
-                data = download(path)
-                if type(attach.get('Size')) is int and len(data) != attach['Size']:
-                    raise ReadError('Brightspace attachment byte count does not match metadata')
                 records.append(self._record(
                     course=course, platform_id=aid, title=filename, url=self._ui(path),
-                    kind='file', id_type=f'assignment-{fid}-attachment', file=data, filename=filename,
-                    extra={'assignment_platform_id': fid},
+                    kind='file', id_type=f'assignment-{fid}-attachment', download_path=path, filename=filename,
+                    expected_size=_file_size(attach.get('Size')), extra={'assignment_platform_id': fid},
                 ))
 
         for news in self._news(course, checked_at):
@@ -461,16 +448,21 @@ class AreaReader:
                 item = _id(attach.get('FileId'))
                 filename = _filename(_title(attach, 'FileName'))
                 path = self._path(course, f'/news/{nid}/attachments/{item}')
-                raw_size = attach.get('FileSize')
-                file = download(path)
-                if type(raw_size) is int and len(file) != raw_size:
-                    raise ReadError('Brightspace attachment byte count does not match metadata')
                 records.append(self._record(
                     course=course, platform_id=item, title=filename, url=self._ui(path), kind='file',
-                    id_type=f'announcement-{nid}-attachment', file=file, filename=filename,
+                    id_type=f'announcement-{nid}-attachment', download_path=path, filename=filename,
+                    expected_size=_file_size(attach.get('FileSize')),
                     extra={'announcement_id': f'{course.id}-announcement-{nid}'},
                 ))
         return records
+
+
+def _file_size(value: Any) -> int | None:
+    if value is None:
+        return None
+    if type(value) is not int or value < 0:
+        raise ReadError('invalid Brightspace attachment size')
+    return value
 
 
 def _unique(records: list[Material]) -> None:

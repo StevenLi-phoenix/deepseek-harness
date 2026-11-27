@@ -48,11 +48,11 @@ def main(argv=None) -> int:
     if len(set(areas)) != len(areas) or set(areas) - set(AREAS):
         parser.error("--areas requires distinct names: " + ", ".join(AREAS))
     try:
+        config = load_config(args.config)
         cookie = os.environ.get("BS_COOKIE", "").strip()
         pat = os.environ.get("COURSES_PAT", "").strip()
         if not cookie or not pat:
             raise ReadError("runtime BS_COOKIE and COURSES_PAT are both required")
-        config = load_config(args.config)
         if args.course:
             requested = set(args.course)
             selected = tuple(c for c in config.courses if c.slug in requested)

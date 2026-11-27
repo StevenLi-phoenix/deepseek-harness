@@ -147,17 +147,19 @@ class AreaTests(unittest.TestCase):
             'sample-term-fixture-assignment-8-attachment-9', 'sample-term-fixture-announcement-6-attachment-7',
         ])
         self.assertEqual(materials.records[0].filename, 'slides A.pdf')
-        self.assertEqual(materials.records[0].file, b'%PDF-1.4 fixture')
+        self.assertEqual(materials.records[0].download_path, PREFIX + '/content/topics/2/file')
         self.assertEqual(materials.records[0].url, ORIGIN + PREFIX + '/content/topics/2/file')
         self.assertEqual(materials.records[1].url, ORIGIN + PREFIX + '/content/topics/3')
         self.assertEqual(materials.records[1].metadata['target_url'], 'https://library.example.test/path?id=7')
         urls = [item.url for item in content.records + materials.records]
         self.assertEqual(len(set(urls)), len(urls))
-        self.assertEqual(materials.records[2].file, b'template')
-        self.assertEqual(materials.records[3].file, b'handout')
+        self.assertEqual(materials.records[2].download_path, PREFIX + '/dropbox/folders/8/attachments/9')
+        self.assertEqual(materials.records[2].expected_size, 8)
+        self.assertEqual(materials.records[3].download_path, PREFIX + '/news/6/attachments/7')
+        self.assertEqual(materials.records[3].expected_size, 7)
         self.assertEqual(client.calls.count(('json', PREFIX + '/content/toc')), 1)
         self.assertEqual(client.calls.count(('json', PREFIX + '/news/')), 1)
-        self.assertEqual(len([p for p in client.calls if p[0] == 'file']), 3)
+        self.assertEqual(len([p for p in client.calls if p[0] == 'file']), 0)
         self.assertNotIn('X-Amz-Signature', repr(content))
 
     def test_nested_directory_preserves_hierarchy_and_excludes_hidden_subtrees(self):
@@ -181,13 +183,13 @@ class AreaTests(unittest.TestCase):
         self.assertEqual(result.records[1].metadata['body_format'], 'html')
         self.assertNotIn(('json', PREFIX + '/content/modules/12'), client.calls)
 
-    def test_announcement_attachment_size_mismatch_cannot_count_as_checked(self):
-        with self.assertRaisesRegex(ReadError, 'byte count'):
+    def test_announcement_attachment_inventory_rejects_invalid_file_size(self):
+        with self.assertRaisesRegex(ReadError, 'attachment size'):
             read('materials', {
                 '/content/toc': {'Modules': []},
                 '/dropbox/folders/': [],
                 '/news/': [{'Id': 9, 'Title': 'A', 'Attachments': [
-                    {'FileId': 10, 'FileName': 'one.txt', 'FileSize': 10},
+                    {'FileId': 10, 'FileName': 'one.txt', 'FileSize': -10},
                 ]}],
                 '/news/9/attachments/10': b'one',
             })
@@ -205,6 +207,24 @@ class AreaTests(unittest.TestCase):
             with self.subTest(status=status), self.assertRaises(ReadError):
                 read('grades', {'/grades/values/myGradeValues/': ReadError('request failed', status)}, page_reader)
         self.assertEqual(len(calls), 1)
+
+    def test_quiz_endpoint_404_can_use_the_verified_student_list(self):
+        calls = []
+        def page_reader(area, course, checked_at):
+            calls.append((area, course, checked_at))
+            return Reading(source='page', count=0)
+
+        result, _ = read('quizzes', {'/quizzes/': ReadError('not found', 404)}, page_reader)
+        self.assertEqual((result.source, result.fallback_http, result.count), ('page', 404, 0))
+        self.assertEqual(calls, [('quizzes', COURSE, AT)])
+
+        def unreadable(*_):
+            raise ReadError('list not rendered')
+
+        with self.assertRaises(ReadError) as error:
+            read('quizzes', {'/quizzes/': ReadError('not found', 404)}, unreadable)
+        self.assertEqual(error.exception.http_status, 404)
+        self.assertIn('page fallback', str(error.exception))
 
     def test_incomplete_fallback_cannot_report_checked(self):
         def broken_page(*_):

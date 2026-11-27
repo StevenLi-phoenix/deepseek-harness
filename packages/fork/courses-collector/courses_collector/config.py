@@ -10,6 +10,9 @@ from urllib.parse import urlsplit
 
 from .model import Course, ReadError
 
+BRIGHTSPACE_ORIGIN = "https://brightspace.nyu.edu"
+COURSES_API_BASE = "https://api.lishuyu.app/courses"
+
 SAFE_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,95}\Z")
 
 
@@ -63,5 +66,10 @@ def load_config(filename: str | None = None) -> Config:
     version = data.get("le_version", "1.67")
     if not isinstance(version, str) or not re.fullmatch(r"1\.[0-9]{1,3}", version):
         raise ReadError("invalid LE version")
-    return Config(https_url(data.get("brightspace_origin"), origin=True),
-                  https_url(data.get("courses_base_url")), tuple(courses), version)
+    brightspace = https_url(data.get("brightspace_origin"), origin=True)
+    service = https_url(data.get("courses_base_url"))
+    if brightspace != BRIGHTSPACE_ORIGIN:
+        raise ReadError("Brightspace origin is not the approved NYU endpoint; no credentials sent")
+    if service != COURSES_API_BASE:
+        raise ReadError("courses base URL is not the approved API endpoint; no credentials sent")
+    return Config(brightspace, service, tuple(courses), version)

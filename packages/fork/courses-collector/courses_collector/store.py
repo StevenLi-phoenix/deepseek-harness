@@ -7,6 +7,7 @@ import re
 from urllib.parse import parse_qsl, urlsplit
 from urllib.request import Request
 
+from .config import COURSES_API_BASE
 from .model import Course, Material, ReadError
 from .transport import Fetch, MAX_JSON, _check_header, fetch_https, json_body
 
@@ -37,6 +38,8 @@ def stable_url(url: str) -> str:
 
 class Courses:
     def __init__(self, base_url: str, pat: str, fetch: Fetch = fetch_https, *, dry_run: bool = False):
+        if fetch is fetch_https and base_url != COURSES_API_BASE:
+            raise ReadError("courses base URL is not the approved API endpoint; no credentials sent")
         _check_header(pat)
         self._base_url, self._fetch, self._dry_run = base_url, fetch, dry_run
         self._auth = {"Authorization": "Bearer " + pat, "X-Courses-Agent": "courses-collector"}
@@ -71,10 +74,15 @@ class Courses:
             if not isinstance(page, dict) or not isinstance(page.get("records"), list) or "next_offset" not in page:
                 raise ReadError("courses query: missing pagination fields")
             for row in page["records"]:
-                if (not isinstance(row, dict) or row.get("kind") != kind or row.get("course_id") != course.id
+                if (not isinstance(row, dict) or row.get("kind") != kind
                         or not isinstance(row.get("id"), str) or not row["id"]
                         or row["id"] in rows or type(row.get("version")) is not int or row["version"] <= 0):
                     raise ReadError("courses query: invalid or repeated record")
+                allowed_owners = (course.id, None) if kind == "material" else (course.id,)
+                if row.get("course_id") not in allowed_owners:
+                    raise ReadError("courses query: record scope does not match the course")
+                # A course's inventory can include a course-agnostic material referenced by a task.
+                # A full get still enforces ownership before any update to an existing ID.
                 rows[row["id"]] = row
             next_offset = page["next_offset"]
             if next_offset is None:
@@ -112,6 +120,8 @@ class Courses:
 
     def material(self, course: Course, item: Material, observed_at: str) -> str:
         """Return unchanged/new/changed; in dry-run the latter two are previews."""
+        if item.download_path is not None:
+            raise ReadError("cannot save an unresolved material download")
         if (not item.id.startswith(course.id + "-") or not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,199}", item.id)
                 or not item.title or len(item.title.encode("utf-16-le")) > 32_000):
             raise ReadError("invalid material id or title")

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import replace
 from datetime import datetime, timezone
 import re
 from urllib.parse import parse_qs, urlsplit
@@ -9,9 +10,9 @@ from urllib.parse import parse_qs, urlsplit
 from . import assignments as legacy
 from .areas import AreaReader
 from .config import Config
-from .model import Course, ReadError, Reading, TaskEvidence
+from .model import Course, Material, ReadError, Reading, TaskEvidence
 from .store import Courses, stable_url
-from .transport import Brightspace
+from .transport import MAX_FILE, Brightspace, ResponseTooLarge
 
 AREAS = ("assignments", "announcements", "content", "grades", "discussions", "quizzes", "materials", "gradescope")
 
@@ -155,6 +156,27 @@ def _task_diffs(rows: dict[str, dict], course: Course, readings: list[TaskEviden
     return changes, unchanged, unmatched
 
 
+class FileOverLimit(Exception):
+    """An attachment exceeded the byte cap before any storage operation."""
+
+
+def _save_item(brightspace: Brightspace, courses: Courses, course: Course,
+               item: Material, when: str) -> str:
+    if item.download_path is None:
+        return courses.material(course, item, when)
+    if item.expected_size is not None and item.expected_size > MAX_FILE:
+        raise FileOverLimit
+    try:
+        data = brightspace.get_file(item.download_path)
+    except ResponseTooLarge:
+        raise FileOverLimit from None
+    if len(data) > MAX_FILE:
+        raise FileOverLimit
+    if item.expected_size is not None and len(data) != item.expected_size:
+        raise ReadError("Brightspace attachment byte count does not match metadata")
+    return courses.material(course, replace(item, file=data, download_path=None), when)
+
+
 def collect(config: Config, selected: tuple[str, ...], brightspace: Brightspace, courses: Courses,
             page_reader=None, *, read_at: str | None = None) -> dict:
     if not selected or len(set(selected)) != len(selected) or set(selected) - set(AREAS):
@@ -176,13 +198,13 @@ def collect(config: Config, selected: tuple[str, ...], brightspace: Brightspace,
                 else:
                     reading = readers.read(area, course, when)
             except ReadError as error:
-                fallback = error.http_status == 403 and "page fallback" in str(error)
+                fallback = "page fallback:" in str(error)
                 reading = Reading(source="page" if fallback else "api",
-                                  fallback_http=403 if fallback else None, failure=error)
+                                  fallback_http=error.http_status if fallback else None, failure=error)
             summary = {"status": "checked", "source": reading.source,
                        "count": reading.count if reading.count is not None else len(reading.records),
                        "fallback_http": reading.fallback_http, "http_status": None, "reason": None,
-                       "changes": [], "task_changes": [], "checked_ids": [], "unmatched_tasks": []}
+                       "changes": [], "skips": [], "task_changes": [], "checked_ids": [], "unmatched_tasks": []}
             area_report["courses"][course.slug] = summary
             if reading.failure:
                 failures.append(reading.failure)
@@ -193,9 +215,11 @@ def collect(config: Config, selected: tuple[str, ...], brightspace: Brightspace,
                     continue
                 ids.add(item.id)
                 try:
-                    action = courses.material(course, item, when)
+                    action = _save_item(brightspace, courses, course, item, when)
                     if action != "unchanged":
                         summary["changes"].append({"id": item.id, "action": action})
+                except FileOverLimit:
+                    summary["skips"].append({"id": item.id, "reason": "file exceeds the 100 MiB size limit"})
                 except ReadError as error:
                     failures.append(error)
             if reading.tasks:
@@ -230,6 +254,8 @@ def human_summary(report: dict) -> str:
         for course, row in group["courses"].items():
             for item in row["changes"]:
                 lines.append(f"  {course} {item['action']} {item['id']}")
+            for item in row["skips"]:
+                lines.append(f"  {course} skipped {item['id']}: {item['reason']}")
             for task in row["task_changes"]:
                 fields = ", ".join(f"{key} {v['before']!s} -> {v['after']!s}" for key, v in task["fields"].items())
                 lines.append(f"  {course} observe {task['id']} v{task['version']}: {fields}")

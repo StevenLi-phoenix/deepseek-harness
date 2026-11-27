@@ -14,11 +14,11 @@ from unittest.mock import patch
 
 from courses_collector.cli import main, write_report
 from courses_collector.collector import AREAS, collect, human_summary
-from courses_collector.config import Config, load_config
+from courses_collector.config import BRIGHTSPACE_ORIGIN, COURSES_API_BASE, Config, load_config
 from courses_collector.model import Course, Material, ReadError
 from courses_collector.pages import PageCapture, PageLink, PageRow, RenderedPageReader
 from courses_collector.store import Courses
-from courses_collector.transport import Brightspace, Reply
+from courses_collector.transport import MAX_FILE, Brightspace, Reply, ResponseTooLarge
 
 ORIGIN = 'https://school.example'
 BASE = 'https://records.example/courses'
@@ -51,6 +51,8 @@ class FakeWire:
             assert not request.get_header('Authorization')
             route = url.path + ('?' + url.query if url.query else '')
             value = self.lms.get(route, Reply(404, b''))
+            if isinstance(value, Exception):
+                raise value
             return value if isinstance(value, Reply) else reply(value)
         assert url.hostname == 'records.example'
         assert request.get_header('Authorization') == 'Bearer fictional'
@@ -209,6 +211,33 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(Courses(BASE, 'fictional', self.wire).material(COURSE, mat, NOW), 'unchanged')
         self.assertEqual(len(self.wire.operations('save_material')), 1)
 
+    def test_shared_material_does_not_break_course_inventory_or_gain_ownership(self):
+        self.wire.rows['shared'] = {'id': 'shared', 'kind': 'material', 'version': 1, 'data': {'course_id': None}}
+        self.wire.add_announcements('Body')
+        report = self.run_areas('announcements', dry=True)
+        row = self.course(report, 'announcements')
+        self.assertTrue(report['ok'])
+        self.assertEqual(row['changes'], [{'id': f'{COURSE.id}-announcement-8', 'action': 'new'}])
+        self.assertFalse(self.wire.operations('get'))
+        exact_id = f'{COURSE.id}-announcement-8'
+        self.wire.rows[exact_id] = {'id': exact_id, 'kind': 'material', 'version': 1, 'data': {'course_id': None}}
+        report = self.run_areas('announcements', dry=True)
+        row = self.course(report, 'announcements')
+        self.assertFalse(report['ok'])
+        self.assertEqual(row['changes'], [])
+        self.assertIn('baseline is for another course', row['reason'])
+        self.assertFalse(self.wire.operations('save_material'))
+
+    def test_task_without_course_ownership_is_still_rejected(self):
+        self.wire.add_assignment()
+        self.wire.add_task()
+        self.wire.rows['saved-task']['data']['course_id'] = None
+        report = self.run_areas('assignments', dry=True)
+        row = self.course(report, 'assignments')
+        self.assertFalse(report['ok'])
+        self.assertIn('record scope', row['reason'])
+        self.assertEqual(row['task_changes'], [])
+
     def test_optimistic_conflict_is_not_a_saved_change(self):
         self.wire.add_announcements('Body')
         self.wire.conflict = True
@@ -229,19 +258,81 @@ class CollectorTests(unittest.TestCase):
         with self.assertRaises(ReadError):
             self.lms.get_file(f'{LE}/news/')
 
-    def test_missing_credentials_fail_before_configuration_or_io(self):
+    def test_materials_skip_each_oversized_file_but_compare_later_files(self):
+        self.wire.lms[f'{LE}/content/toc'] = {'Modules': [{'ModuleId': 1, 'Modules': [], 'Topics': [
+            {'TopicId': 8, 'Title': 'Stream is too large', 'ActivityType': 1, 'Url': '/content/large.pdf'},
+        ]}]}
+        self.wire.lms[f'{LE}/content/topics/8/file'] = ResponseTooLarge('stream exceeds limit')
+        self.wire.lms[f'{LE}/dropbox/folders/'] = []
+        self.wire.lms[f'{LE}/news/'] = [{'Id': 8, 'Attachments': [
+            {'FileId': 1, 'FileName': 'declared-large.pdf', 'FileSize': MAX_FILE + 1},
+            {'FileId': 2, 'FileName': 'small.txt', 'FileSize': 3},
+        ]}]
+        self.wire.lms[f'{LE}/news/8/attachments/2'] = Reply(200, b'txt', 'text/plain')
+        report = self.run_areas('materials', dry=True)
+        row = self.course(report, 'materials')
+        self.assertTrue(report['ok'])
+        self.assertEqual(row['count'], 3)
+        self.assertEqual([x['id'] for x in row['skips']], [
+            f'{COURSE.id}-material-topic-8', f'{COURSE.id}-announcement-8-attachment-1',
+        ])
+        self.assertEqual(row['changes'], [{'id': f'{COURSE.id}-announcement-8-attachment-2', 'action': 'new'}])
+        self.assertNotIn(f'{LE}/news/8/attachments/1', [x[2] for x in self.wire.requests])
+        self.assertFalse(self.wire.operations('save_material'))
+        self.assertFalse(any(request[1] == 'PUT' for request in self.wire.requests))
+        self.assertIn('100 MiB', human_summary(report))
+
+    def test_material_attachment_size_mismatch_is_a_failure_not_a_policy_skip(self):
+        self.wire.lms[f'{LE}/content/toc'] = {'Modules': []}
+        self.wire.lms[f'{LE}/dropbox/folders/'] = []
+        self.wire.lms[f'{LE}/news/'] = [{'Id': 8, 'Attachments': [
+            {'FileId': 2, 'FileName': 'small.txt', 'FileSize': 4},
+        ]}]
+        self.wire.lms[f'{LE}/news/8/attachments/2'] = Reply(200, b'txt', 'text/plain')
+        report = self.run_areas('materials', dry=True)
+        row = self.course(report, 'materials')
+        self.assertFalse(report['ok'])
+        self.assertIn('byte count does not match', row['reason'])
+        self.assertEqual(row['skips'], [])
+
+    def test_unapproved_destinations_fail_preflight_before_transport(self):
+        for origins in (
+            {'courses_base_url': 'https://unapproved.example/courses', 'brightspace_origin': BRIGHTSPACE_ORIGIN},
+            {'courses_base_url': COURSES_API_BASE, 'brightspace_origin': 'https://unapproved.example'},
+            {'courses_base_url': COURSES_API_BASE + '/wrong', 'brightspace_origin': BRIGHTSPACE_ORIGIN},
+        ):
+            with self.subTest(origins=origins), tempfile.TemporaryDirectory() as folder:
+                path = Path(folder) / 'config.json'
+                path.write_text(json.dumps({**origins, 'courses': {
+                    COURSE.slug: {'id': COURSE.id, 'org_unit_id': COURSE.org_unit_id},
+                }}), encoding='utf-8')
+                errors = io.StringIO()
+                with patch('courses_collector.cli.Brightspace') as lms, patch('courses_collector.cli.Courses') as service, \
+                        contextlib.redirect_stderr(errors):
+                    self.assertEqual(main(['--config', str(path), '--dry-run']), 2)
+                    lms.assert_not_called()
+                    service.assert_not_called()
+                self.assertIn('no credentials sent', errors.getvalue())
+                self.assertNotIn('unapproved.example', errors.getvalue())
+        with self.assertRaisesRegex(ReadError, 'no credentials sent'):
+            Courses(BASE, 'synthetic')
+        with self.assertRaisesRegex(ReadError, 'no credentials sent'):
+            Brightspace(ORIGIN, '1.67', 'synthetic')
+
+    def test_missing_credentials_fail_before_network_io(self):
         errors = io.StringIO()
-        with patch.dict(os.environ, {'BS_COOKIE': '', 'COURSES_PAT': ''}), contextlib.redirect_stderr(errors):
+        with patch.dict(os.environ, {'BS_COOKIE': '', 'COURSES_PAT': ''}), \
+                patch('courses_collector.cli.load_config', return_value=self.config), contextlib.redirect_stderr(errors):
             self.assertEqual(main(['--areas', 'announcements', '--dry-run']), 2)
         self.assertIn('BS_COOKIE and COURSES_PAT', errors.getvalue())
 
     def test_config_and_report_have_no_secret_fields_and_private_permissions(self):
         with tempfile.TemporaryDirectory() as folder:
             config = Path(folder) / 'config.json'
-            config.write_text(json.dumps({'courses_base_url': BASE, 'brightspace_origin': ORIGIN, 'courses': {
+            config.write_text(json.dumps({'courses_base_url': COURSES_API_BASE, 'brightspace_origin': BRIGHTSPACE_ORIGIN, 'courses': {
                 COURSE.slug: {'id': COURSE.id, 'org_unit_id': COURSE.org_unit_id},
             }}), encoding='utf-8')
-            self.assertEqual(load_config(str(config)), self.config)
+            self.assertEqual(load_config(str(config)), Config(BRIGHTSPACE_ORIGIN, COURSES_API_BASE, (COURSE,)))
             report = Path(folder) / 'report.json'
             write_report(str(report), '{}\n')
             self.assertEqual(report.read_text(encoding='utf-8'), '{}\n')

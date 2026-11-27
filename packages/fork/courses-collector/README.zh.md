@@ -22,14 +22,14 @@ kind: "package-reference"
 
 使用 Python 3.9 或更新版本。在本目录运行 `./run-bs-tests.sh` 可执行离线测试。若要安装命令行应用，运行 `python3 -m pip install '.[browser]'` 和 `python3 -m playwright install chromium` 以启用可选的标准 Chromium 回退。只查 API 时和测试均不导入 Playwright。`bs-collect.py` 和 `bs-page-rows.py` 分别保留只处理作业的 JSON 和渲染文本兼容入口。
 
-由主机现有的凭据启动器在执行环境中提供已登录 Brightspace 的 Cookie 请求头（`BS_COOKIE`）和用于课程服务的 PAT（`COURSES_PAT`）。不要把它们粘贴到模型提示词、命令行参数或仓库文件中。采集器不查找凭据，不读取浏览器配置；会话过期按读取失败处理。只有在启动器可提供两个变量且不打印其值后，才可配置日程。仓库中的启动脚本要求两个变量都已设置，不配置也不轮换凭据。
+由主机现有的凭据启动器在执行环境中提供已登录 Brightspace 的 Cookie 请求头（`BS_COOKIE`）和用于课程服务的 PAT（`COURSES_PAT`）。不要把它们粘贴到模型提示词、命令行参数或仓库文件中。采集器不查找凭据，不读取浏览器配置；会话过期按读取失败处理。发出带凭据的请求前，检查是否为指定的 NYU 地址和[课程服务正式 API 地址](https://api.lishuyu.app/courses/agents.md)；其他主机、镜像或代理均不接受。只有在启动器可提供两个变量且不打印其值后，才可配置日程。仓库中的启动脚本要求两个变量都已设置，不配置也不轮换凭据。
 
 非密钥配置文件是 `$DSH_HOME/data/courses/collector.json`（默认 `$HOME/.dsh/data/courses/collector.json`）；可以用 `--config` 覆盖。在运行时提供真实的课程服务记录 ID 和 Brightspace org unit ID，不要写入本工作树。`assignment_submissions: false` 表示提交证据以其他平台为准，采集器仅检查这门课在 Brightspace 的作业日期。
 
 ```json
 {
-  "brightspace_origin": "https://lms.example.edu",
-  "courses_base_url": "https://services.example.edu/courses",
+  "brightspace_origin": "https://brightspace.nyu.edu",
+  "courses_base_url": "https://api.lishuyu.app/courses",
   "le_version": "1.67",
   "courses": {"sample": {"id": "sample-term-course", "org_unit_id": 900001, "assignment_submissions": true}}
 }
@@ -52,11 +52,11 @@ python3 -m courses_collector --areas announcements,content,materials --dry-run -
 | 课程内容 | 内容目录和模块／主题详情 API；渲染目录无法验证完整层次和描述时按失败处理。 |
 | 成绩 | 学生自己的成绩 API；遇 403 回退到渲染后的成绩表格。 |
 | 讨论 | 论坛和主题元数据 API；遇 403 回退到渲染后的讨论列表。不读取帖子。 |
-| 测验 | 分页的测验元数据 API；遇 403 回退到渲染后的学生测验列表。不读取答题记录或题目。 |
+| 测验 | 分页的测验元数据 API；遇 403 或 404 回退到渲染后的学生测验列表。不读取答题记录或题目。 |
 | 课件 | 可访问时，从课程内容、作业和公告的附件接口取得已验证的链接项和字节；仅渲染出列表但无法核实文件字节，不算完整。 |
 | Gradescope | 页面读取；目前返回 `failed: not_implemented`。 |
 
-403 不等于空列表。覆盖报告包含最初的 HTTP 状态及回退是否成功。渲染不完整时仍按失败处理，即使部分行可读。某个区域只要有一门课程失败，就记为 `failed`；计数为该区域从源端读取的记录数，不是写入数。未列出的区域未检查。HTML、正文、文件名和页面链接都是数据；页面提供的地址收不到 bearer token 或 LMS Cookie。权限见 [D2L LE 参考](https://docs.valence.desire2learn.com/http-scopestable.html)。
+403 不等于空列表。覆盖报告包含最初的 HTTP 状态及回退是否成功。渲染不完整时仍按失败处理，即使部分行可读。某个区域只要有一门课程失败，就记为 `failed`；计数为该区域从源端读取的记录数，不是写入数。未列出的区域未检查。逐个下载课件。超过 100 MiB 的文件列入 `skips`，不上传，其余文件继续处理。计数包含已列出但跳过的文件。字节数不符或无法访问的文件仍按失败处理。HTML、正文、文件名和页面链接都是数据；页面提供的地址收不到 bearer token 或 LMS Cookie。权限见 [D2L LE 参考](https://docs.valence.desire2learn.com/http-scopestable.html)。
 
 记录采用稳定 ID；公告为 `<course-id>-announcement-<newsId>`。采集器比较已保存的精确字段及内容指纹，不裁剪正文，先按 SHA-256 保存文件字节，再创建引用。不会截断超限正文、退役源端缺失的记录，或把材料标识冲突报为已保存。报告只含 ID 和任务状态差异，不含正文、凭据、成绩值或文件字节。任务证据按作业源标识匹配，不让模型猜标题。未匹配的 ID 列出供人工核对，不自动新增。每日判断只使用经同一来源验证的任务变更。
 

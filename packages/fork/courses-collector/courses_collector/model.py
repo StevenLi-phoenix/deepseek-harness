@@ -31,6 +31,8 @@ class Material:
     text: str | None = None
     file: bytes | None = None
     filename: str | None = None
+    download_path: str | None = None
+    expected_size: int | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
