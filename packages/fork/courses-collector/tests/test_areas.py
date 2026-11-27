@@ -192,7 +192,7 @@ class AreaTests(unittest.TestCase):
                 '/news/9/attachments/10': b'one',
             })
 
-    def test_403_only_falls_back_and_reports_provenance(self):
+    def test_403_only_falls_back_and_reports_page_source(self):
         calls = []
         def page_reader(area, course, checked_at):
             calls.append((area, course, checked_at))
