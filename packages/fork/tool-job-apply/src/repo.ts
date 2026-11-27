@@ -474,7 +474,15 @@ export class JobRepository {
     }
     switch (operation) {
       case 'pull':
-        return this.#git(['pull', '--ff-only', '--no-rebase', '--no-tags', '--no-recurse-submodules', '--no-autostash', '--', ORIGIN, MAIN], signal)
+        // Other devices push to main while a run holds local commits, so a fast-forward-only pull would strand the
+        // run's pushes. Rebase the local commits (autostash keeps parallel workers' uncommitted edits) and abort a
+        // conflicting rebase so the clone never stays mid-rebase.
+        try {
+          return await this.#git(['pull', '--rebase', '--autostash', '--no-tags', '--no-recurse-submodules', '--', ORIGIN, MAIN], signal)
+        } catch (error) {
+          await this.#git(['rebase', '--abort'], signal).catch(() => undefined)
+          throw error
+        }
       case 'push':
         return this.#git(['push', '--no-verify', '--no-follow-tags', '--recurse-submodules=no', '--', ORIGIN, `${MAIN}:${MAIN}`], signal)
       default:

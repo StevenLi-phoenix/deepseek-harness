@@ -408,8 +408,26 @@ describe('JobRepository.git', () => {
     await intercepted.git('pull', undefined, undefined, signal)
     await intercepted.git('push', undefined, undefined, signal)
     expect(calls).toEqual([
-      ['pull', '--ff-only', '--no-rebase', '--no-tags', '--no-recurse-submodules', '--no-autostash', '--', origin, 'refs/heads/main'],
+      ['pull', '--rebase', '--autostash', '--no-tags', '--no-recurse-submodules', '--', origin, 'refs/heads/main'],
       ['push', '--no-verify', '--no-follow-tags', '--recurse-submodules=no', '--', origin, 'refs/heads/main:refs/heads/main'],
+    ])
+  })
+
+  it('aborts a failed rebase pull so the clone never stays mid-rebase, and still reports the failure', async () => {
+    await initialize()
+    const calls: Array<readonly string[]> = []
+    const intercepted = new JobRepository(root, (file, args, abort) => {
+      const command = args.slice(args.indexOf('-C') + 2)
+      if (command[0] === 'pull' || command[0] === 'rebase') {
+        calls.push(command)
+        return command[0] === 'pull' ? Promise.reject(new Error('The fixed git command did not succeed (1)')) : Promise.resolve('')
+      }
+      return run(file, args, abort)
+    })
+    await expect(intercepted.git('pull', undefined, undefined, signal)).rejects.toThrow('did not succeed')
+    expect(calls).toEqual([
+      ['pull', '--rebase', '--autostash', '--no-tags', '--no-recurse-submodules', '--', origin, 'refs/heads/main'],
+      ['rebase', '--abort'],
     ])
   })
 })

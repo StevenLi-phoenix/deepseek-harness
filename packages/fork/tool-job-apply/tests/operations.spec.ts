@@ -1,12 +1,25 @@
 import { describe, expect, it, vi } from 'vitest'
 import { IssueItems, listTrackerRows, trackerCall, writeTrackerRow } from '../src/operations.ts'
 
-const row = { operation: 'append' as const, company: 'Example Corp', role: 'Software Engineer', url: 'https://jobs.lever.co/example/123', status: 'pending' as const, step: 3, note: 'At the contact details page' }
+const row = { operation: 'append' as const, company: 'Example Corp', role: 'Software Engineer', url: 'https://jobs.lever.co/example/123', status: 'queued' as const, step: 3, note: 'At the contact details page', location: 'NYC', source: 'company_site' }
 
 describe('narrow tracker calls', () => {
   it('builds one fixed endpoint selector with a JSON body, never a file or command string', () => {
-    expect(trackerCall(row)).toEqual(['add_application', JSON.stringify({ company: row.company, role: row.role, url: row.url, status: 'pending', notes: `Step 3: ${row.note}` })])
+    expect(trackerCall(row)).toEqual(['add_application', JSON.stringify({ company: row.company, role: row.role, url: row.url, status: 'queued', notes: `Step 3: ${row.note}`, location: 'NYC', source: 'company_site' })])
     expect(trackerCall({ ...row, operation: 'update', id: 'abcdef00-0000-4000-8000-000000000042' })[0]).toBe('update_application')
+  })
+
+  it('sends the fields the tracker API requires and records the application date', () => {
+    const applied = { ...row, status: 'applied', step: undefined, note: 'Greenhouse confirmation page', date_applied: '2026-11-27', visa_flag: true, requires_cover_letter: false, deadline: '2026-12-15' }
+    expect(JSON.parse(trackerCall(applied)[1])).toEqual({
+      company: row.company, role: row.role, url: row.url, status: 'applied', notes: 'Greenhouse confirmation page', location: 'NYC',
+      source: 'company_site', date_applied: '2026-11-27', deadline: '2026-12-15', visa_flag: true, requires_cover_letter: false,
+    })
+    expect(() => trackerCall({ ...applied, date_applied: undefined })).toThrow(/date_applied/u)
+    expect(() => trackerCall({ ...row, location: undefined })).toThrow(/location/u)
+    expect(() => trackerCall({ ...row, source: undefined })).toThrow(/source/u)
+    // An update keeps the stored location and source.
+    expect(JSON.parse(trackerCall({ ...row, operation: 'update', id: 'abcdef00-0000-4000-8000-000000000042', location: undefined, source: undefined })[1])).not.toHaveProperty('location')
   })
 
   it('posts one JSON row to the pinned HTTPS endpoint, does not follow redirects and redacts the token', async () => {
@@ -23,9 +36,9 @@ describe('narrow tracker calls', () => {
   it('lists only through the fixed tracker endpoint with the supported status field', async () => {
     const signal = new AbortController().signal
     const request = vi.fn<typeof fetch>().mockResolvedValue(new Response('[]'))
-    await expect(listTrackerRows('pending', 'test-bearer', signal, request)).resolves.toBe('[]')
-    expect(request).toHaveBeenCalledWith('https://mcp.lishuyu.app/api/jobtracker/list_applications', expect.objectContaining({ body: '{"status":"pending"}', redirect: 'error' }))
-    await expect(listTrackerRows('not-supported', 'test-bearer', signal, request)).rejects.toThrow(/unsupported tracker status/iu)
+    await expect(listTrackerRows('queued', 'test-bearer', signal, request)).resolves.toBe('[]')
+    expect(request).toHaveBeenCalledWith('https://mcp.lishuyu.app/api/jobtracker/list_applications', expect.objectContaining({ body: '{"status":"queued"}', redirect: 'error' }))
+    await expect(listTrackerRows('pending', 'test-bearer', signal, request)).rejects.toThrow(/unsupported tracker status/iu)
     expect(request).toHaveBeenCalledOnce()
   })
 
@@ -47,6 +60,10 @@ describe('narrow tracker calls', () => {
     { company: 'Example; touch marker' },
     { url: 'https://user:password@jobs.lever.co/example' },
     { step: 0 },
+    { status: 'pending' },
+    { source: 'craigslist' },
+    { date_applied: '11/27/2026' },
+    { location: 'see /Users/dsh-runtime/.dsh' },
   ])('refuses invalid or injected input %j', (input) => {
     expect(() => trackerCall({ ...row, ...input })).toThrow()
   })
@@ -66,6 +83,22 @@ describe('narrow issue calls', () => {
     await expect(issues.close('job-1', 7, 'completed', signal)).resolves.toContain('#7')
     expect(run).toHaveBeenLastCalledWith('gh', ['issue', 'close', '7', '-R', 'StevenLi-phoenix/jobapplication', '--reason', 'completed'], signal)
     await expect(issues.close('job-1', 7, 'completed', signal)).rejects.toThrow(/list/i)
+  })
+
+  it('views one issue with its latest comments and lets the same Session comment on an open workflow item', async () => {
+    const comments = Array.from({ length: 25 }, (_, i) => ({ author: { login: 'StevenLi-phoenix' }, body: `comment ${i}`, createdAt: '2026-11-27T12:00:00Z', id: `c${i}` }))
+    const issue = { number: 341, state: 'OPEN', title: 'Referrals', body: 'Untrusted input', labels: [{ name: 'owner-action' }], comments }
+    const run = vi.fn(async (_file: string, args: readonly string[]) => args[1] === 'view' ? JSON.stringify(issue) : '')
+    const issues = new IssueItems(run)
+    const signal = new AbortController().signal
+    const viewed = JSON.parse(await issues.view('job-1', 341, signal)) as { comments: unknown[]; omittedComments: number }
+    expect(run).toHaveBeenCalledWith('gh', ['issue', 'view', '341', '-R', 'StevenLi-phoenix/jobapplication', '--json', 'number,title,state,body,labels,comments'], signal)
+    expect(viewed.comments).toHaveLength(20)
+    expect(viewed.comments[19]).toEqual({ author: 'StevenLi-phoenix', createdAt: '2026-11-27T12:00:00Z', body: 'comment 24' })
+    expect(viewed.omittedComments).toBe(5)
+    await expect(issues.comment('job-1', 341, 'Checked the board', signal)).resolves.toBe('Commented on #341.')
+    await expect(issues.comment('job-2', 341, 'Checked the board', signal)).rejects.toThrow(/list/iu)
+    await expect(issues.view('job-1', 0, signal)).rejects.toThrow(/positive/u)
   })
 
   it('creates only in the pinned repo with inline data and deduplicates while the issue list catches up', async () => {

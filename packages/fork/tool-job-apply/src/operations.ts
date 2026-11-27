@@ -5,9 +5,17 @@ const REPO = 'StevenLi-phoenix/jobapplication'
 const LABELS = new Map([
   ['approval', 'needs-approval'], ['question', 'question'], ['owner', 'owner-action'], ['upload', 'upload'],
 ])
-const STATUSES = new Set(['queued', 'pending', 'applied', 'skipped', 'rejected', 'interviewing', 'withdrawn', 'offer'])
+// The tracker API's own lifecycle states; an unfinished form is `queued` with a step.
+export const TRACKER_STATUSES = ['queued', 'applied', 'skipped', 'rejected', 'interviewing', 'offer'] as const
+export const TRACKER_SOURCES = ['handshake', 'linkedin', 'company_site', 'referral'] as const
+const STATUSES = new Set<string>(TRACKER_STATUSES)
+const SOURCES = new Set<string>(TRACKER_SOURCES)
+const DAY = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/u
 const ISSUE = z.object({ number: z.number().int().positive(), title: z.string(), state: z.enum(['OPEN', 'CLOSED']), body: z.string(), labels: z.array(z.object({ name: z.string() })) })
 const ISSUE_ID = ISSUE.pick({ number: true, state: true })
+const COMMENT = z.object({ author: z.object({ login: z.string() }).nullable().optional(), body: z.string(), createdAt: z.string() })
+const ISSUE_THREAD = ISSUE.extend({ comments: z.array(COMMENT) })
+const MAX_COMMENTS = 20
 const TRACKER_BASE = 'https://mcp.lishuyu.app/api/jobtracker/'
 const TRACKER_MAX_RESPONSE = 50_000
 const TRACKING_PARAM = /^(?:utm_.*|gh_src|ref|src|source|lever-source|lever-origin|trk|trackingid|refid)$/iu
@@ -21,6 +29,12 @@ interface TrackerArguments {
   status: string
   step?: number | undefined
   note?: string | undefined
+  location?: string | undefined
+  source?: string | undefined
+  date_applied?: string | undefined
+  deadline?: string | undefined
+  visa_flag?: boolean | undefined
+  requires_cover_letter?: boolean | undefined
 }
 
 function postingUrl(value: string): string {
@@ -48,7 +62,23 @@ export function trackerCall(args: TrackerArguments): ['add_application' | 'updat
   if (args.step !== undefined && (!Number.isSafeInteger(args.step) || args.step < 1 || args.step > 999)) throw new Error('step must be an integer from 1 through 999.')
   const note = args.note === undefined ? undefined : validateText(args.note, 'note', 1500)
   const notes = args.step === undefined ? note : `Step ${args.step}${note === undefined ? '' : `: ${note}`}`
-  return [args.operation === 'append' ? 'add_application' : 'update_application', JSON.stringify({ id: args.id, company, role, url, status: args.status, notes })]
+  // add_application requires location and source; update keeps the stored values when they are omitted.
+  if (args.operation === 'append' && (args.location === undefined || args.source === undefined)) {
+    throw new Error('Appending a row requires location (NYC, Remote, Hybrid or a city) and source.')
+  }
+  const location = args.location === undefined ? undefined : validateText(args.location, 'location', 200)
+  if (args.source !== undefined && !SOURCES.has(args.source)) throw new Error('source must be handshake, linkedin, company_site or referral.')
+  for (const [field, value] of [['date_applied', args.date_applied], ['deadline', args.deadline]] as const) {
+    if (value !== undefined && !DAY.test(value)) throw new Error(`${field} must be a YYYY-MM-DD date.`)
+  }
+  if (args.status === 'applied' && args.operation === 'append' && args.date_applied === undefined) {
+    throw new Error('An applied row needs date_applied (YYYY-MM-DD).')
+  }
+  const body = {
+    id: args.id, company, role, url, status: args.status, notes, location, source: args.source,
+    date_applied: args.date_applied, deadline: args.deadline, visa_flag: args.visa_flag, requires_cover_letter: args.requires_cover_letter,
+  }
+  return [args.operation === 'append' ? 'add_application' : 'update_application', JSON.stringify(body)]
 }
 
 async function trackerResponse(response: Response): Promise<string> {
@@ -135,7 +165,7 @@ function issueMarker(kind: string, ref: string): string {
 
 function labelOf(kind: string): string {
   const label = LABELS.get(kind)
-  if (label === undefined) throw new Error('Use approval, question, owner, or upload. Record pending postings in jobtracker with status pending and a step, not as an issue.')
+  if (label === undefined) throw new Error('Use approval, question, owner, or upload. Record an unfinished posting in jobtracker with status queued and a step, not as an issue.')
   return label
 }
 
@@ -167,6 +197,28 @@ export class IssueItems {
       allowed.set(issue.number, label)
     }
     return JSON.stringify(issues.map(issue => ({ ...issue, body: issue.body.slice(0, 2500) })))
+  }
+
+  /**
+   * Read one issue with its latest comments; the owner answers questions and approvals there.
+   * An open item with a workflow label becomes eligible for a later comment or close in this Session.
+   */
+  async view(session: string, number: number, signal: AbortSignal): Promise<string> {
+    if (!Number.isSafeInteger(number) || number < 1) throw new Error('Issue number must be a positive integer.')
+    const result = await this.run('gh', ['issue', 'view', String(number), '-R', REPO, '--json', 'number,title,state,body,labels,comments'], signal)
+    const issue = ISSUE_THREAD.parse(JSON.parse(result))
+    if (issue.number !== number) throw new Error('GitHub returned an unexpected issue number.')
+    const label = issue.labels.map(item => item.name).find(name => [...LABELS.values()].includes(name))
+    if (issue.state === 'OPEN' && label !== undefined) {
+      const allowed = this.#listed.get(session) ?? new Map<number, string>()
+      this.#listed.set(session, allowed)
+      allowed.set(number, label)
+    }
+    const comments = issue.comments.slice(-MAX_COMMENTS).map(comment => ({
+      author: comment.author?.login ?? 'unknown', createdAt: comment.createdAt, body: comment.body.slice(0, 1500),
+    }))
+    const omittedComments = Math.max(0, issue.comments.length - MAX_COMMENTS)
+    return JSON.stringify({ ...issue, body: issue.body.slice(0, 2500), comments, omittedComments })
   }
 
   /** Post a bounded comment only to a currently open item previously listed in this Session. */
