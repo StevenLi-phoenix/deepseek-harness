@@ -65,6 +65,49 @@ class AreaTests(unittest.TestCase):
         self.assertEqual(content.skips, materials.skips)
         self.assertEqual(client.calls.count(('json', PREFIX + '/content/toc')), 1)
 
+    def test_missing_material_parent_and_attachment_ids_do_not_drop_valid_files(self):
+        result, _ = read('materials', {
+            '/content/toc': {'Modules': []},
+            '/dropbox/folders/': [
+                {'Name': 'No folder ID', 'Attachments': [{'Id': 11, 'FileName': 'No parent path'}]},
+                {'Id': 2, 'Attachments': [
+                    {'FileName': 'No assignment file ID'},
+                    {'Id': 3, 'FileName': 'Assignment file'},
+                ]},
+            ],
+            '/news/': [
+                {'Title': 'No news ID', 'Attachments': [{'FileId': 12, 'FileName': 'No news path'}]},
+                {'Id': 4, 'Attachments': [
+                    {'FileId': None, 'FileName': 'No news file ID'},
+                    {'FileId': 5, 'FileName': 'News file'},
+                ]},
+            ],
+        })
+        self.assertEqual([x['reason'] for x in result.skips], [
+            'no_id:No folder ID', 'no_id:No assignment file ID', 'no_id:No news ID', 'no_id:No news file ID',
+        ])
+        self.assertEqual([item.download_path for item in result.records], [
+            PREFIX + '/dropbox/folders/2/attachments/3', PREFIX + '/news/4/attachments/5',
+        ])
+
+    def test_material_missing_id_budget_includes_toc_and_rejects_present_invalid_ids(self):
+        routes = {
+            '/content/toc': {'Modules': [{'Title': 'No module ID'} for _ in range(18)]},
+            '/dropbox/folders/': [{'Name': 'No folder ID'} for _ in range(5)],
+            '/news/': [],
+        }
+        result, _ = read('materials', routes)
+        self.assertEqual(len(result.skips), 21)
+        self.assertEqual(result.skips[-1]['reason'], 'no_id:3 more items omitted')
+        for route, data in (
+            ('/dropbox/folders/', [{'Id': 0}]),
+            ('/dropbox/folders/', [{'Id': 2, 'Attachments': [{'Id': False}]}]),
+            ('/news/', [{'Id': 'malformed\nvalue'}]),
+            ('/news/', [{'Id': 4, 'Attachments': [{'FileId': 'x' * 513}]}]),
+        ):
+            with self.subTest(route=route, data=data), self.assertRaises(ReadError):
+                read('materials', {**routes, route: data})
+
     def test_toc_missing_id_notices_are_bounded_and_invalid_ids_still_fail(self):
         toc = {'Modules': [{'ModuleId': 10, 'Title': 'Deck', 'Modules': [], 'Topics': [
             {'Title': 'No ID'} for _ in range(65)

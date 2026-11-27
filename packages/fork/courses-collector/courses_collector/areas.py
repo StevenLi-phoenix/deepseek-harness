@@ -5,7 +5,7 @@ this module does not execute it, render it, or treat links in it as requests.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 import hashlib
 from html.parser import HTMLParser
 import re
@@ -26,7 +26,7 @@ PageReader = Callable[[str, Course, str], Reading]
 Row = dict[str, Any]
 MAX_PAGES = 100
 MAX_TOC_DEPTH = 64
-MAX_TOC_NO_ID_NOTICES = 20
+MAX_NO_ID_NOTICES = 20
 MAX_TOC_DESCRIPTION_BYTES = 2 * 1024 * 1024
 MAX_OPAQUE_ID_BYTES = 256
 _UNSAFE_DOWNLOAD_ID = 'Brightspace ID is not a safe single download path segment'
@@ -188,6 +188,29 @@ def _continuation(value: Any, origin: str, path: str) -> str:
     return target.path + '?' + target.query
 
 
+@dataclass
+class MissingIds:
+    count: int = 0
+    items: list[dict[str, str]] = field(default_factory=list)
+
+    def identify(self, value: Any, course: Course, source: str, kind: str, label: Any) -> InventoryId | None:
+        if value is not None:
+            return _inventory_id(value)
+        self.count += 1
+        if len(self.items) < MAX_NO_ID_NOTICES:
+            clipped = ''.join(c if c.isprintable() else ' ' for c in label[:120]) if isinstance(label, str) else ''
+            title = ' '.join(clipped.split()) or f'(untitled {kind})'
+            self.items.append({'id': f'{course.id}-{source}-no-id-{self.count}', 'reason': f'no_id:{title}'})
+        return None
+
+    def report(self, course: Course, source: str) -> list[dict[str, str]]:
+        omitted = self.count - len(self.items)
+        if omitted:
+            return [*self.items, {'id': f'{course.id}-{source}-no-id-overflow',
+                                  'reason': f'no_id:{omitted} more items omitted'}]
+        return list(self.items)
+
+
 @dataclass(frozen=True)
 class TocEntry:
     kind: str
@@ -204,7 +227,7 @@ class AreaReader:
         self.page_reader = page_reader
         self.origin = client.base_url.rstrip('/')
         self._inventories: dict[tuple[str, int, str], list[Any]] = {}
-        self._toc_skips: dict[tuple[int, str], list[dict[str, str]]] = {}
+        self._missing_ids: dict[tuple[str, int, str], MissingIds] = {}
 
     def read(self, area: str, course: Course, checked_at: str) -> Reading:
         methods = {'announcements': self._announcements, 'content': self._content,
@@ -233,7 +256,8 @@ class AreaReader:
                 raise error_type(f'{error}; page fallback: {page_error}', status) from None
             return replace(result, source='page', fallback_http=status)
         _unique(records)
-        skips = self._toc_skips.get((course.org_unit_id, checked_at), []) if area in ('content', 'materials') else []
+        missing = self._missing_ids.get((area, course.org_unit_id, checked_at))
+        skips = missing.report(course, 'toc' if area == 'content' else area) if missing else []
         return Reading(records=records, source='api', count=len(records), skips=skips)
 
     def _path(self, course: Course, resource: str) -> str:
@@ -385,18 +409,7 @@ class AreaReader:
         entries: list[TocEntry] = []
         seen = set()
 
-        skips: list[dict[str, str]] = []
-        missing = 0
-
-        def no_id(kind: str, row: Row) -> None:
-            nonlocal missing
-            missing += 1
-            if len(skips) >= MAX_TOC_NO_ID_NOTICES:
-                return
-            raw = row.get('Title')
-            clipped = ''.join(c if c.isprintable() else ' ' for c in raw[:120]) if isinstance(raw, str) else ''
-            label = ' '.join(clipped.split()) or f'(untitled {kind})'
-            skips.append({'id': f'{course.id}-toc-no-id-{missing}', 'reason': f'no_id:{label}'})
+        missing = MissingIds()
 
         def emit(kind: str, platform_id: InventoryId, parent: InventoryId | None, row: Row) -> None:
             key = kind, platform_id.key
@@ -411,11 +424,9 @@ class AreaReader:
             for module in modules:
                 if module.get('IsHidden') is True:
                     continue
-                raw_id = module.get('ModuleId')
-                mid = _inventory_id(raw_id) if raw_id is not None else None
+                mid = missing.identify(module.get('ModuleId'), course, 'toc', 'module', module.get('Title'))
                 topics, children = module.get('Topics'), module.get('Modules')
                 if mid is None:
-                    no_id('module', module)
                     # A skipped parent gives its children no parent identity. Keep any identified rows.
                     topics = [] if topics is None else topics
                     children = [] if children is None else children
@@ -427,18 +438,14 @@ class AreaReader:
                     topic_id = topic.get('TopicId')
                     if topic_id is None:
                         topic_id = topic.get('Identifier')
-                    if topic_id is None:
-                        no_id('topic', topic)
-                    else:
-                        emit('topic', _inventory_id(topic_id), mid, topic)
+                    tid = missing.identify(topic_id, course, 'toc', 'topic', topic.get('Title'))
+                    if tid is not None:
+                        emit('topic', tid, mid, topic)
                 walk(_objects(children, 'child content modules'), mid, depth + 1)
 
         walk(_objects(toc.get('Modules'), 'root content modules'), None, 0)
-        if missing > MAX_TOC_NO_ID_NOTICES:
-            omitted = missing - MAX_TOC_NO_ID_NOTICES
-            skips.append({'id': f'{course.id}-toc-no-id-overflow', 'reason': f'no_id:{omitted} more items omitted'})
         self._inventories[key] = entries
-        self._toc_skips[(course.org_unit_id, checked_at)] = skips
+        self._missing_ids[('content', course.org_unit_id, checked_at)] = missing
         return entries
 
     def _toc_source(self, course: Course, selector: str) -> str:
@@ -493,7 +500,10 @@ class AreaReader:
     def _materials(self, course: Course, checked_at: str) -> list[Material]:
         records = []
 
-        for entry in self._toc(course, checked_at):
+        entries = self._toc(course, checked_at)
+        toc_missing = self._missing_ids[('content', course.org_unit_id, checked_at)]
+        missing = MissingIds(toc_missing.count, list(toc_missing.items))
+        for entry in entries:
             if entry.kind != 'topic' or entry.row.get('IsLocked') is True or entry.row.get('IsBroken') is True:
                 continue
             topic, item = entry.row, entry.platform_id
@@ -528,9 +538,13 @@ class AreaReader:
         for folder in _objects(self._get(course, '/dropbox/folders/'), 'assignment folders'):
             if folder.get('IsHidden') is True:
                 continue
-            fid = _inventory_id(folder.get('Id'))
+            fid = missing.identify(folder.get('Id'), course, 'materials', 'assignment folder', folder.get('Name'))
+            if fid is None:
+                continue
             for attach in _objects(folder.get('Attachments', []), 'assignment attachments'):
-                aid = _inventory_id(attach.get('Id'))
+                aid = missing.identify(attach.get('Id'), course, 'materials', 'assignment attachment', attach.get('FileName'))
+                if aid is None:
+                    continue
                 filename = _filename(_title(attach, 'FileName'))
                 records.append(self._file_record(
                     course=course, item=aid, title=filename, id_type=f'assignment-{fid.key}-attachment',
@@ -540,9 +554,13 @@ class AreaReader:
                 ))
 
         for news in self._news(course, checked_at):
-            nid = _inventory_id(news.get('Id'))
+            nid = missing.identify(news.get('Id'), course, 'materials', 'announcement', news.get('Title'))
+            if nid is None:
+                continue
             for attach in _objects(news.get('Attachments', []), 'announcement attachments'):
-                item = _inventory_id(attach.get('FileId'))
+                item = missing.identify(attach.get('FileId'), course, 'materials', 'announcement attachment', attach.get('FileName'))
+                if item is None:
+                    continue
                 filename = _filename(_title(attach, 'FileName'))
                 records.append(self._file_record(
                     course=course, item=item, title=filename, id_type=f'announcement-{nid.key}-attachment',
@@ -552,6 +570,7 @@ class AreaReader:
                     extra={'announcement_id': f'{course.id}-announcement-{nid.key}',
                            'announcement_platform_id': nid.raw},
                 ))
+        self._missing_ids[('materials', course.org_unit_id, checked_at)] = missing
         return records
 
 
