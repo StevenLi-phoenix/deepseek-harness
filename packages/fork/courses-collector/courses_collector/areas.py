@@ -26,6 +26,7 @@ PageReader = Callable[[str, Course, str], Reading]
 Row = dict[str, Any]
 MAX_PAGES = 100
 MAX_TOC_DEPTH = 64
+MAX_TOC_NO_ID_NOTICES = 20
 MAX_TOC_DESCRIPTION_BYTES = 2 * 1024 * 1024
 MAX_OPAQUE_ID_BYTES = 256
 _UNSAFE_DOWNLOAD_ID = 'Brightspace ID is not a safe single download path segment'
@@ -203,6 +204,7 @@ class AreaReader:
         self.page_reader = page_reader
         self.origin = client.base_url.rstrip('/')
         self._inventories: dict[tuple[str, int, str], list[Any]] = {}
+        self._toc_skips: dict[tuple[int, str], list[dict[str, str]]] = {}
 
     def read(self, area: str, course: Course, checked_at: str) -> Reading:
         methods = {'announcements': self._announcements, 'content': self._content,
@@ -231,7 +233,8 @@ class AreaReader:
                 raise error_type(f'{error}; page fallback: {page_error}', status) from None
             return replace(result, source='page', fallback_http=status)
         _unique(records)
-        return Reading(records=records, source='api', count=len(records))
+        skips = self._toc_skips.get((course.org_unit_id, checked_at), []) if area in ('content', 'materials') else []
+        return Reading(records=records, source='api', count=len(records), skips=skips)
 
     def _path(self, course: Course, resource: str) -> str:
         return f'/d2l/api/le/{self.client.le_version}/{_id(course.org_unit_id)}{resource}'
@@ -382,6 +385,19 @@ class AreaReader:
         entries: list[TocEntry] = []
         seen = set()
 
+        skips: list[dict[str, str]] = []
+        missing = 0
+
+        def no_id(kind: str, row: Row) -> None:
+            nonlocal missing
+            missing += 1
+            if len(skips) >= MAX_TOC_NO_ID_NOTICES:
+                return
+            raw = row.get('Title')
+            clipped = ''.join(c if c.isprintable() else ' ' for c in raw[:120]) if isinstance(raw, str) else ''
+            label = ' '.join(clipped.split()) or f'(untitled {kind})'
+            skips.append({'id': f'{course.id}-toc-no-id-{missing}', 'reason': f'no_id:{label}'})
+
         def emit(kind: str, platform_id: InventoryId, parent: InventoryId | None, row: Row) -> None:
             key = kind, platform_id.key
             if key in seen:
@@ -395,15 +411,34 @@ class AreaReader:
             for module in modules:
                 if module.get('IsHidden') is True:
                     continue
-                mid = _inventory_id(module.get('ModuleId'))
-                emit('module', mid, parent, module)
-                for topic in _objects(module.get('Topics'), 'content topics'):
-                    if topic.get('IsHidden') is not True:
-                        emit('topic', _inventory_id(topic.get('TopicId', topic.get('Identifier'))), mid, topic)
-                walk(_objects(module.get('Modules'), 'child content modules'), mid, depth + 1)
+                raw_id = module.get('ModuleId')
+                mid = _inventory_id(raw_id) if raw_id is not None else None
+                topics, children = module.get('Topics'), module.get('Modules')
+                if mid is None:
+                    no_id('module', module)
+                    # A skipped parent gives its children no parent identity. Keep any identified rows.
+                    topics = [] if topics is None else topics
+                    children = [] if children is None else children
+                else:
+                    emit('module', mid, parent, module)
+                for topic in _objects(topics, 'content topics'):
+                    if topic.get('IsHidden') is True:
+                        continue
+                    topic_id = topic.get('TopicId')
+                    if topic_id is None:
+                        topic_id = topic.get('Identifier')
+                    if topic_id is None:
+                        no_id('topic', topic)
+                    else:
+                        emit('topic', _inventory_id(topic_id), mid, topic)
+                walk(_objects(children, 'child content modules'), mid, depth + 1)
 
         walk(_objects(toc.get('Modules'), 'root content modules'), None, 0)
+        if missing > MAX_TOC_NO_ID_NOTICES:
+            omitted = missing - MAX_TOC_NO_ID_NOTICES
+            skips.append({'id': f'{course.id}-toc-no-id-overflow', 'reason': f'no_id:{omitted} more items omitted'})
         self._inventories[key] = entries
+        self._toc_skips[(course.org_unit_id, checked_at)] = skips
         return entries
 
     def _toc_source(self, course: Course, selector: str) -> str:

@@ -222,7 +222,7 @@ def collect(config: Config, selected: tuple[str, ...], brightspace: Brightspace,
             summary = {"status": "checked", "source": reading.source,
                        "count": reading.count if reading.count is not None else len(reading.records),
                        "fallback_http": reading.fallback_http, "http_status": None, "reason": None,
-                       "changes": [], "skips": [], "task_changes": [], "checked_ids": [],
+                       "changes": [], "skips": list(reading.skips), "task_changes": [], "checked_ids": [],
                        "unmatched_tasks": [], "ambiguous_tasks": []}
             area_report["courses"][course.slug] = summary
             if reading.failure:
@@ -282,7 +282,8 @@ def human_summary(report: dict) -> str:
             for item in row["changes"]:
                 lines.append(f"  {course} {item['action']} {item['id']}")
             for item in row["skips"]:
-                lines.append(f"  {course} skipped {item['id']}: {item['reason']}")
+                reason = "no_id (see report)" if item["reason"].startswith("no_id:") else item["reason"]
+                lines.append(f"  {course} skipped {item['id']}: {reason}")
             for task in row["task_changes"]:
                 fields = ", ".join(f"{key} {v['before']!s} -> {v['after']!s}" for key, v in task["fields"].items())
                 lines.append(f"  {course} observe {task['id']} v{task['version']}: {fields}")

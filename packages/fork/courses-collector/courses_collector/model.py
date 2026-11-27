@@ -59,3 +59,4 @@ class Reading:
     count: int | None = None
     tasks: list[TaskEvidence] = field(default_factory=list)
     failure: ReadError | None = None
+    skips: list[dict[str, str]] = field(default_factory=list)

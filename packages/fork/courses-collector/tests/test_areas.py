@@ -42,6 +42,42 @@ def read(area, routes, page_reader=None):
 
 
 class AreaTests(unittest.TestCase):
+    def test_toc_missing_ids_skip_only_that_row_and_keep_identified_children(self):
+        routes = {
+            '/content/toc': {'Modules': [{
+                'Title': 'Unnamed identity', 'Topics': [
+                    {'TopicId': None, 'Title': 'No topic ID', 'ActivityType': 1},
+                    {'TopicId': 5, 'Title': 'PDF', 'ActivityType': 1, 'Url': '/content/fixture.pdf'},
+                ], 'Modules': [{'ModuleId': 9, 'Title': 'Nested', 'Modules': [], 'Topics': []}],
+            }]},
+            '/dropbox/folders/': [], '/news/': [],
+        }
+        client = FakeClient({PREFIX + path: value for path, value in routes.items()})
+        reader = AreaReader(client)
+        content = reader.read('content', COURSE, AT)
+        materials = reader.read('materials', COURSE, AT)
+        self.assertEqual([x.id for x in content.records], [
+            f'{COURSE.id}-content-topic-5', f'{COURSE.id}-content-module-9',
+        ])
+        self.assertTrue(all('parent_platform_id' not in item.metadata for item in content.records))
+        self.assertEqual([x.download_path for x in materials.records], [PREFIX + '/content/topics/5/file'])
+        self.assertEqual([x['reason'] for x in materials.skips], ['no_id:Unnamed identity', 'no_id:No topic ID'])
+        self.assertEqual(content.skips, materials.skips)
+        self.assertEqual(client.calls.count(('json', PREFIX + '/content/toc')), 1)
+
+    def test_toc_missing_id_notices_are_bounded_and_invalid_ids_still_fail(self):
+        toc = {'Modules': [{'ModuleId': 10, 'Title': 'Deck', 'Modules': [], 'Topics': [
+            {'Title': 'No ID'} for _ in range(65)
+        ]}]}
+        result, _ = read('content', {'/content/toc': toc})
+        self.assertEqual(len(result.skips), 21)
+        self.assertEqual(result.skips[-1]['reason'], 'no_id:45 more items omitted')
+        for invalid_id in ('control\ncharacter', 'a' * 513, ''):
+            with self.subTest(invalid_id=invalid_id), self.assertRaises(ReadError):
+                read('content', {'/content/toc': {'Modules': [
+                    {'ModuleId': invalid_id, 'Title': 'Invalid'},
+                ]}})
+
     def test_announcement_is_verbatim_and_uses_the_per_course_id(self):
         result, client = read('announcements', {'/news/': [
             {'Id': 31, 'Title': 'Readings', 'Body': {'Text': BODY, 'Html':

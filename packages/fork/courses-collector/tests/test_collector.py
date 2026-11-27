@@ -347,6 +347,20 @@ class CollectorTests(unittest.TestCase):
         self.assertFalse(any(request[1] == 'PUT' for request in self.wire.requests))
         self.assertIn('100 MiB', human_summary(report))
 
+    def test_toc_missing_id_is_reported_without_echoing_title_in_summary(self):
+        self.wire.lms[f'{LE}/content/toc'] = {'Modules': [
+            {'Title': 'Untrusted\npage title'},
+            {'ModuleId': 3, 'Title': 'Observed', 'Modules': [], 'Topics': []},
+        ]}
+        report = self.run_areas('content', dry=True)
+        row = self.course(report, 'content')
+        self.assertTrue(report['ok'])
+        self.assertEqual(row['count'], 1)
+        self.assertEqual(row['skips'], [{'id': f'{COURSE.id}-toc-no-id-1', 'reason': 'no_id:Untrusted page title'}])
+        self.assertNotIn('Untrusted', human_summary(report))
+        self.assertIn('no_id (see report)', human_summary(report))
+        self.assertFalse(self.wire.operations('save_material'))
+
     def test_material_attachment_size_mismatch_is_a_failure_not_a_policy_skip(self):
         self.wire.lms[f'{LE}/content/toc'] = {'Modules': []}
         self.wire.lms[f'{LE}/dropbox/folders/'] = []
