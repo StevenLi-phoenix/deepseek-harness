@@ -22,8 +22,8 @@ import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type { JobId, JobRegistry, JobView } from '@deepseek-ai/dsh-jobs'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type {} from '@deepseek-ai/dsh-shell-env'
-import type { SandboxExecutionPolicy, SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import { ESCALATION_TARGETS, approveEscalation, sandboxPermissionsDescription, validateEscalationArgs } from '@deepseek-ai/dsh-sandbox'
+import type { EscalationWidening, SandboxExecutionPolicy, SandboxMode } from '@deepseek-ai/dsh-sandbox'
+import { ESCALATION_TARGETS, approveEscalation, readEscalationArgs, sandboxPermissionsDescription } from '@deepseek-ai/dsh-sandbox'
 import { subprocessSpawnFailure } from '@deepseek-ai/dsh-subprocess'
 import type { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
 import { DSH_ENV_PREFIX } from '@deepseek-ai/dsh-shell'
@@ -100,7 +100,11 @@ function rejectUnadvertisedArgs(
   }
 }
 
-function validateBashArgs(args: BashToolArgs, effectiveMode: SandboxMode | undefined, advertised: AdvertisedArgs): void {
+function validateBashArgs(
+  args: BashToolArgs,
+  effectiveMode: SandboxMode | undefined,
+  advertised: AdvertisedArgs,
+): EscalationWidening | undefined {
   if (args.command.trim().length === 0) {
     throw new ToolArgsError(['invalid command: expected a non-empty string'])
   }
@@ -111,11 +115,7 @@ function validateBashArgs(args: BashToolArgs, effectiveMode: SandboxMode | undef
     throw new ToolArgsError([`invalid timeoutMs: expected a positive number, got ${JSON.stringify(args.timeoutMs)}`])
   }
   rejectUnadvertisedArgs(args, advertised)
-  if (args.sandbox_permissions !== undefined && args.sandbox_permissions === effectiveMode) return
-  const justification = args.sandbox_permissions === undefined && args.justification?.trim() === ''
-    ? undefined
-    : args.justification
-  validateEscalationArgs(args.sandbox_permissions, justification)
+  return readEscalationArgs(args.sandbox_permissions, args.justification, effectiveMode)
 }
 
 function bashDescription(): string {
@@ -524,10 +524,14 @@ export function apply(ctx: Context, config: Config = {}): void {
       async execute(args: BashToolArgs, exec) {
         // Description is display metadata; workdir defaults to the caller's session.
         const standingPolicy = resolveSandboxPolicy(exec)
-        validateBashArgs(args, standingPolicy?.mode, { escalation: escalationModes.length > 0, background: backgroundEnabled })
-        const approvedMode = args.sandbox_permissions !== undefined && args.justification !== undefined
-          ? await approveBashEscalation(args.sandbox_permissions, args.justification, exec, standingPolicy)
-          : undefined
+        const advertisedArgs = { escalation: escalationModes.length > 0, background: backgroundEnabled }
+        const widening = validateBashArgs(args, standingPolicy?.mode, advertisedArgs)
+        if (widening === undefined && args.sandbox_permissions !== undefined) {
+          ctx.logger.debug(`bash: sandbox_permissions "${args.sandbox_permissions}" does not widen "${String(standingPolicy?.mode)}"; running under the effective mode`)
+        }
+        const approvedMode = widening === undefined
+          ? undefined
+          : await approveBashEscalation(widening.mode, widening.justification, exec, standingPolicy)
         const policy = approvedMode === undefined
           ? standingPolicy
           : { ...(standingPolicy as SandboxExecutionPolicy), mode: approvedMode }

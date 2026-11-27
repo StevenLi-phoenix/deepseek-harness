@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Ferramenta de avisos",
+    "description": "Permite ao agente enviar um aviso urgente ao telefone do proprietário, ou deixar uma linha no resumo diário por e-mail, pelo barramento de mensagens da plataforma de API."
+  }
+}

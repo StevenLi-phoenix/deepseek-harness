@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Herramienta de avisos",
+    "description": "Permite al agente enviar un aviso urgente al teléfono del propietario, o dejar una línea en el resumen diario por correo, a través del bus de mensajes de la plataforma API."
+  }
+}

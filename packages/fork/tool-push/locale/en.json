@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Push tool",
+    "description": "Lets the agent push an urgent message to the owner's phone, or queue a line for the daily email digest, through the API platform's message bus."
+  }
+}

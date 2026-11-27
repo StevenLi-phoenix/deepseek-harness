@@ -18,10 +18,13 @@ export {
   escalationHintMarker,
   sandboxDenialMarker,
   sandboxPermissionsDescription,
+  readEscalationArgs,
   validateEscalationArgs,
+  widensSandbox,
 } from './escalation.ts'
 export type {
   EscalationApproval,
+  EscalationWidening,
   EscalationApprover,
   EscalationOutcome,
   EscalationRequest,

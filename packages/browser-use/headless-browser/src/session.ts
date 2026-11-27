@@ -24,13 +24,14 @@ import { firstLine } from './error.ts'
 import { ActionGuard, ActionRefusedError, blockedAction, pageOrigin, refusalOf, type Decision, type PointChoice, type PointDecisionInput, type TargetChoice } from './guard.ts'
 import type { InputCommand, TabInfo, TabMessage } from './input.ts'
 import { browserProcesses, killBrowserSync, recoverStaleProfile, removeBrowserOwner, writeBrowserOwner, type ProfileProbe } from './profile.ts'
-import { MAX_READ_FRAMES, MIN_FRAME_AREA, readText, type FrameRef, type ReadPage, type ReadRequest, type ReadResult } from './read.ts'
+import { findNearMisses, missAdvice, selectorKey } from './near-miss.ts'
+import { MAX_READ_FRAMES, MIN_FRAME_AREA, readText, SelectorMissError, type FrameRef, type ReadPage, type ReadRequest, type ReadResult } from './read.ts'
 import { cdpScrollChannel, scrollPage, type ScrollRequest, type ScrollResult } from './scroll.ts'
 import { isComboboxInput, matchOption, readComboboxOptions, readOptions, readSelectOptions, type SelectOption } from './select.ts'
 import type { KeepalivePage } from './keepalive.ts'
 import { applyStealth, stealthIdentity, stealthLaunch } from './stealth.ts'
 import { BrowserTabs, TabNavigationError, type ActiveTab, type ClosedTab, type PopupTab } from './tabs.ts'
-import { findSameNameCover, probeElement, readElementFacts, type ElementFacts } from './visibility.ts'
+import { findHiddenTextHolder, findSameNameCover, findToggleStandIn, probeElement, readElementFacts, scoreVisibility, VISIBILITY_THRESHOLD, type ElementFacts } from './visibility.ts'
 
 /** How long a context gets to close before shutdown stops waiting for it. */
 export const SHUTDOWN_TIMEOUT_MS = 10_000
@@ -50,6 +51,17 @@ const COMBOBOX_WAIT_MS = 2_500
 
 /** How often the dropdown's list is read while waiting for it. */
 const COMBOBOX_POLL_MS = 250
+
+/** How long a listed option may take to finish appearing (a fade or slide-in) before the guard judges it. */
+const OPTION_SETTLE_MS = 1_500
+
+/**
+ * How long a selector that matches nothing gets to appear before the miss is
+ * reported: a click that opens the next step returns before the step draws, and
+ * the next call usually names an element of that step. The wait ends as soon as
+ * a match attaches, so only a selector that is wrong pays all of it.
+ */
+export const MISS_SETTLE_MS = 1_500
 
 /** How long a recovery waits after the old context closes, before it relaunches. */
 export const RELAUNCH_SETTLE_MS = 1_500
@@ -592,7 +604,7 @@ export class HeadlessBrowserSession {
     return await this.#guarded('reading the page', async () => {
       const tab = tabId ?? (await this.tabs().active()).id
       const page = await this.page(tab)
-      return await readText(readable(page), tab, request)
+      return await readText({ ...readable(page), missAdvice: async selector => await this.#missAdvice(page, selector) }, tab, request)
     })
   }
 
@@ -789,7 +801,18 @@ export class HeadlessBrowserSession {
     }
     this.#log.info('headless-browser: %s listed %d option(s) after typing; choosing option %d', ref, options.length, index + 1)
     const locator = resolution.scope.locator(`[id=${JSON.stringify(option.value)}]`)
-    const facts = readElementFacts(await locator.evaluate(probeElement))
+    // A menu that fades or slides in lists its options before a person can see
+    // them (Eightfold's Phone Device Type starts at opacity 0): wait for the
+    // option to finish appearing, as a person would, then judge it. One that
+    // never shows is still refused.
+    let facts = readElementFacts(await locator.evaluate(probeElement))
+    let settled = 0
+    while (settled < OPTION_SETTLE_MS && scoreVisibility(facts).score < VISIBILITY_THRESHOLD) {
+      await page.waitForTimeout(COMBOBOX_POLL_MS)
+      settled += COMBOBOX_POLL_MS
+      facts = readElementFacts(await locator.evaluate(probeElement))
+    }
+    if (settled > 0) this.#log.info('headless-browser: %s option %d took %d ms to appear', ref, index + 1, settled)
     this.#accept(this.#guard.decideTarget({
       action: 'click',
       url: resolution.url,
@@ -977,6 +1000,28 @@ export class HeadlessBrowserSession {
   }
 
   /**
+   * The advice a selector miss carries: the elements the page names by the
+   * selector's words, each with a selector that matches it, so the model's next
+   * call can land without a read. A failure here only costs the advice.
+   * @param page - the page the selector missed on.
+   * @param selector - the selector that matched nothing.
+   * @returns one line for the miss.
+   */
+  async #missAdvice(page: Page, selector: string): Promise<string> {
+    const key = selectorKey(selector)
+    if (key === undefined) return missAdvice(undefined, [])
+    try {
+      const misses = await findNearMisses(page, key)
+      this.#log.info('headless-browser: %s matches nothing on %s; the page names %s on %d element(s)%s', selector, pageOrigin(page.url()),
+        JSON.stringify(key.text), misses.length, misses.length === 0 ? '' : `: ${misses.map(miss => miss.selector).join(' | ')}`)
+      return missAdvice(key, misses)
+    } catch (error: unknown) {
+      this.#log.debug('headless-browser: looking for what %s meant failed: %s', selector, firstLine(error))
+      return missAdvice(undefined, [])
+    }
+  }
+
+  /**
    * Resolve a request to the candidates the guard scores. A selector keeps
    * every match; an accessibility id names one element through the read tool's
    * map, and an id that map does not know is reported as stale rather than
@@ -1008,8 +1053,9 @@ export class HeadlessBrowserSession {
     const selector = request.selector
     if (selector === undefined) throw new Error('a guarded action needs a selector, an accessibility id, or a point')
     const located = await locate(page, selector)
-    if (located === undefined) throw new Error(`no element matches ${selector}`)
+    if (located === undefined) throw new SelectorMissError(selector, await this.#missAdvice(page, selector))
     const { locator, count, frame } = located
+    if (located.waited) this.#log.info('headless-browser: %s appeared on %s within the settle wait', selector, pageOrigin(page.url()))
     if (frame !== undefined) {
       this.#log.info('headless-browser: %s matches nothing on %s; acting in its embedded page %s', selector, pageOrigin(page.url()), pageOrigin(frame.url()))
     }
@@ -1018,6 +1064,28 @@ export class HeadlessBrowserSession {
     for (let index = 0; index < count; index += 1) {
       const candidate = readElementFacts(await locator.nth(index).evaluate(probeElement))
       facts.push(candidate)
+      if (candidate.tag === 'input' && scoreVisibility(candidate).score < VISIBILITY_THRESHOLD) {
+        // A checkbox or radio the page draws itself hides the native input; its label or same-name box is what a person clicks.
+        const standIn = (await locator.nth(index).evaluateHandle(findToggleStandIn)).asElement()
+        if (standIn !== null) {
+          const standInFacts = readElementFacts(await standIn.evaluate(probeElement))
+          this.#log.info('headless-browser: %s match %d is a hidden %s; scoring the %s named %s that stands in for it',
+            selector, index, candidate.role ?? 'toggle', standInFacts.tag, JSON.stringify(standInFacts.name))
+          covers.push({ facts: standInFacts, element: standIn })
+          continue
+        }
+      }
+      if (candidate.ariaHidden && scoreVisibility({ ...candidate, ariaHidden: false, occlusion: 1 }).score >= VISIBILITY_THRESHOLD) {
+        // Painted text marked aria-hidden (LinkedIn's card titles) is clicked through the element that reads exactly like it;
+        // a same-name overlay found below competes with it on score, so Workday's covered buttons still reach theirs.
+        const holder = (await locator.nth(index).evaluateHandle(findHiddenTextHolder)).asElement()
+        if (holder !== null) {
+          const holderFacts = readElementFacts(await holder.evaluate(probeElement))
+          this.#log.info('headless-browser: %s match %d is aria-hidden text; scoring the %s named %s that holds it',
+            selector, index, holderFacts.role ?? holderFacts.tag, JSON.stringify(holderFacts.name))
+          covers.push({ facts: holderFacts, element: holder })
+        }
+      }
       if (!candidate.ariaHidden && candidate.occlusion >= 1) continue
       // A same-name overlay on top is what a person's click reaches; it is scored after the matches.
       const cover = (await locator.nth(index).evaluateHandle(findSameNameCover)).asElement()
@@ -1432,18 +1500,14 @@ function readable(page: Page): ReadPage {
   return {
     url: () => page.url(),
     innerText: async (selector) => {
-      const target = page.locator(selector ?? 'body').first()
+      if (selector !== undefined) {
+        const found = await selectedText(page, selector)
+        if (found !== undefined || !await settle(page, selector)) return found
+        return await selectedText(page, selector)
+      }
+      const target = page.locator('body').first()
       const own = await target.count() === 0 ? undefined : await target.innerText()
       const frames = await formFrames(page)
-      if (selector !== undefined) {
-        if (own !== undefined) return own
-        // A selector the page does not match may name a field of an embedded form.
-        for (const { frame } of frames) {
-          const inner = frame.locator(selector).first()
-          if (await inner.count().catch(() => 0) > 0) return await inner.innerText({ timeout: FRAME_READ_TIMEOUT_MS })
-        }
-        return undefined
-      }
       // A person reads an embedded form as part of the page, so its text follows the page's own.
       const parts = [own ?? '']
       for (const { frame, ref } of frames) {
@@ -1501,17 +1565,69 @@ interface Located {
   readonly locator: Locator
   readonly count: number
   readonly frame?: Frame
+  /** Whether the match appeared only during the settle wait. */
+  readonly waited?: boolean
+}
+
+/**
+ * The text of a selector's first match on the page, or else in the first
+ * embedded form page that has one.
+ * @param page - the tab's page.
+ * @param selector - the model's selector.
+ * @returns the text, or nothing when no document matches.
+ */
+async function selectedText(page: Page, selector: string): Promise<string | undefined> {
+  const target = page.locator(selector).first()
+  if (await target.count() > 0) return await target.innerText()
+  // A selector the page does not match may name a field of an embedded form.
+  for (const { frame } of await formFrames(page)) {
+    const inner = frame.locator(selector).first()
+    if (await inner.count().catch(() => 0) > 0) return await inner.innerText({ timeout: FRAME_READ_TIMEOUT_MS })
+  }
+  return undefined
+}
+
+/**
+ * Wait up to {@link MISS_SETTLE_MS} for a selector that matched nothing to
+ * attach on the page; it returns as soon as one match does.
+ * @param page - the tab's page.
+ * @param selector - the selector that matched nothing.
+ * @returns whether a match attached in time.
+ */
+async function settle(page: Page, selector: string): Promise<boolean> {
+  try {
+    await page.locator(selector).first().waitFor({ state: 'attached', timeout: MISS_SETTLE_MS })
+    return true
+  } catch {
+    // Nothing attached in time, or the page cannot wait: the caller reports the miss.
+    return false
+  }
 }
 
 /**
  * Find a selector's matches on the page, or else in the first embedded form page
  * that has any: iCIMS renders its whole application inside a same-site iframe,
  * and opening that iframe's address on its own redirects back to the outer page.
+ * A selector that matches nothing anywhere gets {@link MISS_SETTLE_MS} to appear
+ * on the page first.
  * @param page - the tab's page.
  * @param selector - the model's selector.
  * @returns the matches and the frame they are in, or nothing when no document matches.
  */
 async function locate(page: Page, selector: string): Promise<Located | undefined> {
+  const found = await locateNow(page, selector)
+  if (found !== undefined || !await settle(page, selector)) return found
+  const late = await locateNow(page, selector)
+  return late === undefined ? undefined : { ...late, waited: true }
+}
+
+/**
+ * One look for a selector's matches on the page, then in its embedded form pages.
+ * @param page - the tab's page.
+ * @param selector - the model's selector.
+ * @returns the matches and the frame they are in, or nothing when no document matches.
+ */
+async function locateNow(page: Page, selector: string): Promise<Located | undefined> {
   const locator = page.locator(selector)
   const count = await locator.count()
   if (count > 0) return { locator, count }

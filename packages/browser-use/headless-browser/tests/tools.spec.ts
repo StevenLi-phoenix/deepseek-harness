@@ -440,14 +440,22 @@ describe('scrolling through the tool', () => {
     expect(scroll).toHaveBeenCalledWith({ x: 30, y: 40, to: 'bottom' }, undefined)
   })
 
-  it('refuses a scroll request that names neither a distance nor an edge, or both', async () => {
+  it('refuses a scroll request that names neither a distance nor an edge', async () => {
     const tools = bench(fakeBrowser())
     expect(await tools.call('headless_browser_scroll', {})).toEqual({
       error: 'give either deltaY (pixels to scroll) or to ("top" or "bottom")',
     })
-    expect(await tools.call('headless_browser_scroll', { deltaY: 100, to: 'top' })).toEqual({
-      error: 'give either deltaY (pixels to scroll) or to ("top" or "bottom")',
-    })
+  })
+
+  it('scrolls by a nonzero deltaY that arrives beside the edge a model must fill in', async () => {
+    // Under strict tool schemas a model sends every argument, and `to` has no empty value, so
+    // a 2026-11-26 Maverick Power run sent this exact call 226 times and was refused each time.
+    const scroll = vi.fn(async (_request: ScrollRequest, _tab?: string) => SCROLLED)
+    const tools = bench(fakeBrowser({ scroll }))
+    expect(await tools.call('headless_browser_scroll', { deltaY: -2400, tab: 't7', to: 'top', x: 850, y: 530 })).toEqual(SCROLLED)
+    expect(scroll).toHaveBeenCalledWith({ x: 850, y: 530, deltaY: -2400 }, 't7')
+    await tools.call('headless_browser_scroll', { deltaY: 490, to: 'top' })
+    expect(scroll).toHaveBeenLastCalledWith({ deltaY: 490 }, undefined)
   })
 
   it('refuses a half-named point, a negative point, and an oversized distance', async () => {

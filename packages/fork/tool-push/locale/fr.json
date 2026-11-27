@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Outil de notification",
+    "description": "Permet à l'agent d'envoyer un message urgent sur le téléphone du propriétaire, ou de mettre une ligne dans le résumé quotidien par e-mail, via le bus de messages de la plateforme API."
+  }
+}

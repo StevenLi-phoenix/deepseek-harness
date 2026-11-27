@@ -11,7 +11,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { findSameNameCover, probeElement, readElementFacts, scoreVisibility } from '../src/visibility.ts'
+import { findHiddenTextHolder, findSameNameCover, findToggleStandIn, probeElement, readElementFacts, scoreVisibility } from '../src/visibility.ts'
 
 /** A box in viewport CSS pixels. */
 interface Box {
@@ -442,6 +442,13 @@ describe('a field drawn by a display that shows its value', () => {
     expect(probeElement(placeSegment().year)).toMatchObject({ occlusion: 1 })
   })
 
+  it('reads a zero-padded number on the display as the same value (Workday month "02" for aria-valuetext "2")', () => {
+    mount('<div id="segment"><input id="year" role="spinbutton" aria-label="Month" aria-valuetext="2"><div id="display" aria-hidden="true">02</div></div>')
+    expect(probeElement(placeSegment().year)).toMatchObject({ occlusion: 1 })
+    mount('<div id="segment"><input id="year" role="spinbutton" aria-label="Month" aria-valuetext="2"><div id="display" aria-hidden="true">12</div></div>')
+    expect(probeElement(placeSegment().year)).toMatchObject({ occlusion: 0 })
+  })
+
   it('stays covered under a display with other text, one a reader sees, one in another box, or one holding a control', () => {
     const covers = [
       '<div id="segment"><input id="year" aria-valuetext="YYYY"><div id="display" aria-hidden="true">Verify you are human</div></div>',
@@ -564,6 +571,51 @@ describe('the link and form a click would use', () => {
       + '<div id="tab" role="tab">Overview</div>')
     expect(['#name', '#bio', '#team', '#tab'].map(selector => probeElement(find(selector)).value)).toEqual(['Ada', 'Engineer', 'web', ''])
     expect(probeElement(find('#tab')).role).toBe('tab')
+  })
+})
+
+describe('the element that holds text the page marks aria-hidden', () => {
+  it('climbs to the paragraph whose only text is the hidden span, as LinkedIn draws a card title', () => {
+    mount('<div role="button" id="card"><p id="title"><span id="hidden" aria-hidden="true">Software  Engineer</span></p>'
+      + '<p>Signant Health</p></div>')
+    expect(findHiddenTextHolder(find('#hidden'))).toBe(find('#title'))
+  })
+
+  it('refuses hidden text inside other text, beside another control, inside a hidden subtree, or without a name', () => {
+    mount('<p><span id="phrase" aria-hidden="true">Apply now</span> to this role</p>'
+      + '<div><span id="beside" aria-hidden="true">Delete</span><button>Delete</button></div>'
+      + '<div aria-hidden="true"><p><span id="deep" aria-hidden="true">Next</span></p></div>'
+      + '<p><span id="empty" aria-hidden="true"> </span></p>')
+    expect(findHiddenTextHolder(find('#phrase'))).toBeNull()
+    expect(findHiddenTextHolder(find('#beside'))).toBeNull()
+    expect(findHiddenTextHolder(find('#deep'))).toBeNull()
+    expect(findHiddenTextHolder(find('#empty'))).toBeNull()
+  })
+})
+
+describe('the box that stands in for a checkbox or radio the page hides', () => {
+  it('takes the painted label of a radio, as LinkedIn lists the résumé to send', () => {
+    mount('<input type="radio" id="resume" name="resume"><label id="name" for="resume">Shuyu_Li_Resume.pdf</label>')
+    layout.place(find('#name'), { left: 0, top: 0, width: 200, height: 20 })
+    expect(findToggleStandIn(find('#resume'))).toBe(find('#name'))
+  })
+
+  it('takes the row whose text is the checkbox\'s name, as LinkedIn draws "Follow <company>"', () => {
+    // Live LinkedIn Easy Apply review step, 2026-11-26: the native input is 0×0 at opacity 0 inside the box it draws.
+    mount('<div id="row"><div id="box"><input type="checkbox" id="follow" checked aria-label="Follow Cassidy to stay up to date with their page"></div>'
+      + '<span>Follow Cassidy to stay up to date  with their page</span></div>')
+    layout.place(find('#box'), { left: 0, top: 0, width: 16, height: 16 }).place(find('#row'), { left: 0, top: 0, width: 400, height: 24 })
+    expect(findToggleStandIn(find('#follow'))).toBe(find('#row'))
+  })
+
+  it('finds nothing for a hidden box beside another control, an unpainted label, or a field that is not a toggle', () => {
+    mount('<div id="wrap">Verify you are human<input type="checkbox" id="decoy" aria-label="Verify you are human"><button>Go</button></div>'
+      + '<input type="checkbox" id="unlabelled"><label for="unlabelled">Remember me</label>'
+      + '<div id="field" aria-label="Email"><input type="email" id="email" aria-label="Email"></div>')
+    layout.place(find('#wrap'), { left: 0, top: 0, width: 400, height: 24 }).place(find('#field'), { left: 0, top: 40, width: 400, height: 24 })
+    expect(findToggleStandIn(find('#decoy'))).toBeNull()
+    expect(findToggleStandIn(find('#unlabelled'))).toBeNull()
+    expect(findToggleStandIn(find('#email'))).toBeNull()
   })
 })
 

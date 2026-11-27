@@ -11,6 +11,8 @@
  * @module @deepseek-ai/dsh-headless-browser/read
  */
 
+import { DEFAULT_MISS_ADVICE } from './near-miss.ts'
+
 /** Characters one read returns when the call names no limit. */
 export const DEFAULT_READ_LIMIT = 8_000
 
@@ -43,13 +45,14 @@ export interface FrameRef {
   readonly height: number
 }
 
-/** The selector a read named matches no element in the page. */
+/** The selector a read or an action named matches no element in the page. */
 export class SelectorMissError extends Error {
   /**
    * @param selector - the selector that matched nothing.
+   * @param advice - what to do next, such as the elements the page names by the selector's words.
    */
-  constructor(selector: string) {
-    super(`no element matches ${selector}; check the selector or read the whole page`)
+  constructor(selector: string, advice: string = DEFAULT_MISS_ADVICE) {
+    super(`no element matches ${selector}; ${advice}`)
     this.name = 'SelectorMissError'
   }
 }
@@ -95,6 +98,12 @@ export interface ReadPage {
    * @returns every child frame that has an address and a box.
    */
   frames?(): Promise<readonly FrameRef[]>
+  /**
+   * What a miss of this selector should tell the model.
+   * @param selector - the selector that matched nothing.
+   * @returns one line of advice.
+   */
+  missAdvice?(selector: string): Promise<string>
 }
 
 /** One character window of a text. */
@@ -115,7 +124,9 @@ interface TextWindow {
  */
 export async function readText(page: ReadPage, tab: string, request: ReadRequest): Promise<ReadResult> {
   const found = await page.innerText(request.selector)
-  if (found === undefined && request.selector !== undefined) throw new SelectorMissError(request.selector)
+  if (found === undefined && request.selector !== undefined) {
+    throw new SelectorMissError(request.selector, await page.missAdvice?.(request.selector))
+  }
   const text = found ?? ''
   const total = countCharacters(text)
   const limit = windowLimit(request.limit)

@@ -25,6 +25,13 @@ export interface ScheduleTrust {
   readonly settled: () => Promise<void>
   /** How many writes have been announced; a change while a scan reads means look again. */
   readonly version: () => number
+  /**
+   * Record a state a scan found before any service write reported one, in line behind the writes already
+   * announced, and only when none was announced since the scan read the version; a stale seed would
+   * otherwise overwrite the record of a service write that landed meanwhile, and the next scan would call
+   * that write an edit behind the service.
+   */
+  readonly seed: (version: number, state: TrustedSchedule) => Promise<void>
 }
 
 /**
@@ -57,5 +64,18 @@ export function mountScheduleTrust(ctx: Context, scheduleTarget: Target | undefi
       })
     })
   }
-  return { settled: () => trusting, version: () => trustVersion }
+  const seed = (version: number, state: TrustedSchedule): Promise<void> => {
+    trusting = trusting.then(async () => {
+      if (version !== trustVersion) {
+        ctx.logger.info('integrity-watch: a service write landed during the scan; its record stands over the scanned state')
+        return
+      }
+      await writeJson(trustedFile, state)
+    }).catch((error: unknown) => {
+      /* v8 ignore next -- only fs errors reach here, which are Error instances. */
+      ctx.logger.warn('integrity-watch: recording the scanned schedule state failed: %s', error instanceof Error ? error.message : String(error))
+    })
+    return trusting
+  }
+  return { settled: () => trusting, version: () => trustVersion, seed }
 }

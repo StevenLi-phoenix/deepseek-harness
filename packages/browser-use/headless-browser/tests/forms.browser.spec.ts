@@ -97,6 +97,27 @@ const WORKDAY = `<!doctype html><title>My Experience</title><body>
   }
 </script>`
 
+// An Eightfold-style menu: the list fades in over 600 ms after a keystroke, so its
+// options start at opacity 0. The ghost list never becomes visible.
+const FADE = `<!doctype html><title>Contact</title><body>
+<label for="device">Phone Device Type</label><input id="device" role="combobox" aria-controls="device-list" aria-expanded="false" style="width:240px;height:28px"><div id="device-list" role="listbox" style="opacity:0;transition:opacity 600ms linear"></div><p id="device-value"></p>
+<label for="ghost">Ghost</label><input id="ghost" role="combobox" aria-controls="ghost-list" aria-expanded="false" style="width:240px;height:28px"><div id="ghost-list" role="listbox" style="opacity:0"></div><p id="ghost-value"></p>
+<script>
+  for (const id of ['device', 'ghost']) {
+    const input = document.getElementById(id); const list = document.getElementById(id + '-list')
+    input.addEventListener('keydown', () => {
+      if (list.childElementCount > 0) return
+      for (const [i, name] of ['Mobile', 'Home', 'Work'].entries()) {
+        const option = document.createElement('div'); option.role = 'option'; option.id = id + '-option-' + i; option.textContent = name
+        option.style.cssText = 'width:240px;height:24px'
+        option.addEventListener('click', () => { document.getElementById(id + '-value').textContent = name; list.replaceChildren() })
+        list.append(option)
+      }
+      if (id === 'device') requestAnimationFrame(() => requestAnimationFrame(() => { list.style.opacity = '1' }))
+    })
+  }
+</script>`
+
 interface App {
   readonly base: string
   readonly browser: HeadlessBrowserSession
@@ -112,7 +133,7 @@ async function boot(options: { readonly sensitiveActions?: boolean } = {}): Prom
   const files = join(root, 'uploads')
   const server: Server = createServer((request, response) => {
     response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-    response.end(request.url === '/popup' ? POPUP : request.url === '/inner' ? INNER : request.url === '/consent' ? CONSENT : request.url === '/workday' ? WORKDAY : FORM)
+    response.end(request.url === '/popup' ? POPUP : request.url === '/inner' ? INNER : request.url === '/consent' ? CONSENT : request.url === '/workday' ? WORKDAY : request.url === '/fade' ? FADE : FORM)
   })
   await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
   const port = (server.address() as { port: number }).port
@@ -269,6 +290,17 @@ describe.skipIf(!AVAILABLE)('form steps in a real page', () => {
     expect(await page.locator('#field-list [role=option]').count()).toBe(1)
     await app.browser.click({ selector: '#field-option-0' })
     expect(await page.locator('#field-value').textContent()).toBe('Computer Science')
+  }, 120_000)
+
+  it('waits for a fading-in option list before choosing, and still refuses an option that never shows', async () => {
+    const app = await boot()
+    await app.browser.open(`${app.base}/fade`)
+    const page = await app.browser.page()
+    const picked = await app.browser.fill({ selector: '#device' }, 'Mobile')
+    expect(picked.selected).toBe('Mobile')
+    expect(await page.locator('#device-value').textContent()).toBe('Mobile')
+    await expect(app.browser.fill({ selector: '#ghost' }, 'Mobile')).rejects.toThrow(/opacity/u)
+    expect(await page.locator('#ghost-value').textContent()).toBe('')
   }, 120_000)
 
   it('signs in through the "Submit" overlay Workday draws over its hidden Sign In button', async () => {

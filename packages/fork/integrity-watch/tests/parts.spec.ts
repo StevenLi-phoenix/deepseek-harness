@@ -307,6 +307,25 @@ describe('mountScheduleTrust', () => {
     expect(logs).toEqual([])
   })
 
+  it('keeps a service write recorded over the state a scan read before it landed', async () => {
+    // Seen on the mini's 2026-11-26 deploy gate: the first scan read no trusted state, the service wrote and announced,
+    // and the scan's seed then overwrote that record with the empty state, so the next scan reported the write as an edit.
+    const root = await tmp()
+    const { ctx, logs } = fresh()
+    const path = join(root, 'schedule.json')
+    const trustedFile = join(root, 'trusted.json')
+    const trust = mountScheduleTrust(ctx, { name: 'schedule', label: 's', kind: 'schedule', path }, trustedFile)
+    const scanned = trust.version()
+    await writeFile(path, JSON.stringify({ tables: { tasks: { a: { record: { prompt: 'one' } } } } }))
+    ctx.emit('schedule/changed')
+    await trust.seed(scanned, trustedOf(ABSENT, undefined))
+    const written = await scheduleState(path)
+    expect((await readJson<TrustedSchedule>(trustedFile))?.digest).toBe(written.digest)
+    expect(logs.some(line => line.includes('a service write landed during the scan'))).toBe(true)
+    await trust.seed(trust.version(), trustedOf(ABSENT, undefined))
+    expect((await readJson<TrustedSchedule>(trustedFile))?.digest).toBe(ABSENT)
+  })
+
   it('records a missing schedule file as a trusted state with no tasks', async () => {
     const root = await tmp()
     const { ctx, logs } = fresh()

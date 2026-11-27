@@ -643,6 +643,7 @@
     { "path": "./packages/fork/wechat" },
     { "path": "./packages/fork/tool-watch" },
     { "path": "./packages/fork/tool-wechat" },
+    { "path": "./packages/fork/tool-push" },
     { "path": "./packages/fork/voice" },
     { "path": "./packages/fork/tool-up" },
     { "path": "./packages/fork/tool-voice" },

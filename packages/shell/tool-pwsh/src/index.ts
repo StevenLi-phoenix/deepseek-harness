@@ -31,8 +31,8 @@ import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type { JobId, JobRegistry, JobView } from '@deepseek-ai/dsh-jobs'
 import type {} from '@deepseek-ai/dsh-shell-env'
 import type {} from '@deepseek-ai/dsh-user-approval'
-import type { SandboxExecutionPolicy, SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import { ESCALATION_TARGETS, approveEscalation, sandboxPermissionsDescription, validateEscalationArgs } from '@deepseek-ai/dsh-sandbox'
+import type { EscalationWidening, SandboxExecutionPolicy, SandboxMode } from '@deepseek-ai/dsh-sandbox'
+import { ESCALATION_TARGETS, approveEscalation, readEscalationArgs, sandboxPermissionsDescription } from '@deepseek-ai/dsh-sandbox'
 import { subprocessSpawnFailure } from '@deepseek-ai/dsh-subprocess'
 import type { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
 import type { ShellExecRequest, ShellExecSpec, ShellExecution, ShellRunResult } from '@deepseek-ai/dsh-shell'
@@ -134,7 +134,11 @@ function rejectUnadvertisedArgs(
   }
 }
 
-function validatePwshArgs(args: PwshToolArgs, advertised: AdvertisedArgs): void {
+function validatePwshArgs(
+  args: PwshToolArgs,
+  effectiveMode: SandboxMode | undefined,
+  advertised: AdvertisedArgs,
+): EscalationWidening | undefined {
   if (args.command.trim().length === 0) {
     throw new ToolArgsError(['invalid command: expected a non-empty string'])
   }
@@ -145,7 +149,7 @@ function validatePwshArgs(args: PwshToolArgs, advertised: AdvertisedArgs): void 
     throw new ToolArgsError([`invalid timeoutMs: expected a positive number, got ${JSON.stringify(args.timeoutMs)}`])
   }
   rejectUnadvertisedArgs(args, advertised)
-  validateEscalationArgs(args.sandbox_permissions, args.justification)
+  return readEscalationArgs(args.sandbox_permissions, args.justification, effectiveMode)
 }
 /* jscpd:ignore-end */
 
@@ -545,12 +549,16 @@ export function apply(ctx: Context, config: Config = {}): void {
       },
       /* jscpd:ignore-start -- the execute path mirrors dsh-tool-bash's by design (see the pwsh-tool-and-executor Agent Note). */
       async execute(args: PwshToolArgs, exec) {
-        validatePwshArgs(args, { escalation: escalationModes.length > 0, background: backgroundEnabled })
         // Description is display metadata; workdir defaults to the caller's session.
         const standingPolicy = resolveSandboxPolicy(exec)
-        const approvedMode = args.sandbox_permissions !== undefined && args.justification !== undefined
-          ? await approvePwshEscalation(args.sandbox_permissions, args.justification, exec, standingPolicy)
-          : undefined
+        const advertisedArgs = { escalation: escalationModes.length > 0, background: backgroundEnabled }
+        const widening = validatePwshArgs(args, standingPolicy?.mode, advertisedArgs)
+        if (widening === undefined && args.sandbox_permissions !== undefined) {
+          ctx.logger.debug(`pwsh: sandbox_permissions "${args.sandbox_permissions}" does not widen "${String(standingPolicy?.mode)}"; running under the effective mode`)
+        }
+        const approvedMode = widening === undefined
+          ? undefined
+          : await approvePwshEscalation(widening.mode, widening.justification, exec, standingPolicy)
         const policy = approvedMode === undefined
           ? standingPolicy
           : { ...(standingPolicy as SandboxExecutionPolicy), mode: approvedMode }

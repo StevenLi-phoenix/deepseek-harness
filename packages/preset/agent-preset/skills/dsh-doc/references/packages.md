@@ -317,6 +317,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-tool-courses` | no | Course tools of the owner's main agent: courses_deadlines, courses_find, courses_get, and the writes courses_set_progress and courses_save_memo over the owner's course records |
 | `@deepseek-ai/dsh-tool-gmail` | yes | Gmail tools of the owner's main agent over ctx.gmail: gmail_accounts, gmail_search, gmail_read, gmail_attachment, gmail_draft, gmail_send (behind the send gate), and gmail_modify |
 | `@deepseek-ai/dsh-tool-monitor` | no | Model-facing monitor tools: a bash command whose stdout lines come back to the same Session as they appear, like Claude Code's Monitor |
+| `@deepseek-ai/dsh-tool-push` | yes | Model-facing owner_push: an urgent message to the owner's phone, or a line in the daily email digest, through the API platform's message bus |
 | `@deepseek-ai/dsh-tool-qq` | yes | Read-only qq_groups, qq_digest, qq_recent, and qq_search tools: the agent reads what the QQ observer recorded and digested |
 | `@deepseek-ai/dsh-tool-up` | yes | Model-facing up_* tools for the creator account's reads and Reply Gate replies (bili-svc) |
 | `@deepseek-ai/dsh-tool-voice` | no | Model-facing speak tool: turn text into speech and send the audio to the owner over the fork WeChat channel |

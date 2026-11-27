@@ -390,6 +390,7 @@ flowchart TD
     pkg_tool_courses["tool-courses"]
     pkg_tool_gmail["tool-gmail"]
     pkg_tool_monitor["tool-monitor"]
+    pkg_tool_push["tool-push"]
     pkg_tool_qq["tool-qq"]
     pkg_tool_up["tool-up"]
     pkg_tool_voice["tool-voice"]
@@ -1116,6 +1117,8 @@ flowchart TD
   pkg_tool_bili --> pkg_service_kit
   pkg_tool_bili --> pkg_tools
   pkg_tool_bili --> pkg_util_values
+  pkg_tool_push --> pkg_credentials
+  pkg_tool_push --> pkg_tools
   pkg_repeat_tool_reminder --> pkg_agent
   pkg_repeat_tool_reminder --> pkg_tools
   pkg_tool_call_timeout_policy --> pkg_llm
@@ -2195,6 +2198,7 @@ flowchart TD
 | [`cordis-host-runner`](../packages/extensions/cordis-host-runner) | `extensions` | [`agent`](../packages/core/agent), [`error`](../packages/util/error), [`llm`](../packages/llm/llm), [`scope`](../packages/core/scope), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`typert-protocol`](../packages/typert/protocol) |
 | [`message-feedback`](../packages/feedback/message-feedback) | `feedback` | [`command-feedback`](../packages/feedback/command-feedback), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`typert-protocol`](../packages/typert/protocol) |
 | [`tool-bili`](../packages/fork/tool-bili) | `fork` | [`bili`](../packages/fork/bili), [`service-kit`](../packages/fork/service-kit), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
+| [`tool-push`](../packages/fork/tool-push) | `fork` | [`credentials`](../packages/credentials/credentials), [`tools`](../packages/core/tools) |
 | [`repeat-tool-reminder`](../packages/guard/repeat-tool-reminder) | `guard` | [`agent`](../packages/core/agent), [`tools`](../packages/core/tools) |
 | [`tool-call-timeout-policy`](../packages/guard/timeout-policy) | `guard` | [`llm`](../packages/llm/llm), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools) |
 | [`tool-ask-user`](../packages/interaction/tool-ask-user) | `interaction` | [`agent`](../packages/core/agent), [`tools`](../packages/core/tools), [`user-questions`](../packages/interaction/user-questions) |

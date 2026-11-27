@@ -129,6 +129,54 @@ describe.skipIf(!AVAILABLE)('action guard in a real page', () => {
     expect(await (await app.browser.page()).title()).toBe('checked')
   }, 120_000)
 
+  it('clicks the row a person sees for a checkbox LinkedIn hides, and the label of a hidden radio', async () => {
+    const app = await boot()
+    await load(app, [
+      '<div id="row" style="display:flex;gap:8px;align-items:center;width:420px;padding:8px">',
+      '<div style="position:relative;width:16px;height:16px;border:1px solid #333">',
+      '<input type="checkbox" id="follow" checked aria-label="Follow Cassidy to stay up to date with their page"',
+      ' style="position:absolute;width:0;height:0;margin:0;opacity:0;pointer-events:none"></div>',
+      '<span>Follow Cassidy to stay up to date with their page</span></div>',
+      '<input type="radio" id="resume" name="resume" style="position:absolute;width:1px;height:1px;margin:0;opacity:0;pointer-events:none;clip:rect(0 0 0 0)">',
+      '<label for="resume" style="display:block;padding:8px">Shuyu_Li_Resume.pdf</label>',
+      '<script>document.getElementById("row").addEventListener("click", () => { const box = document.getElementById("follow"); box.checked = !box.checked })</script>',
+    ].join(''))
+    const page = await app.browser.page()
+    const follow = await app.browser.click({ selector: '#follow' })
+    expect(follow.target).toMatchObject({ ref: '#follow', index: 1, name: 'Follow Cassidy to stay up to date with their page' })
+    expect(await page.locator('#follow').isChecked()).toBe(false)
+    const resume = await app.browser.click({ selector: '#resume' })
+    expect(resume.target).toMatchObject({ ref: '#resume', index: 1, name: 'Shuyu_Li_Resume.pdf' })
+    expect(await page.locator('#resume').isChecked()).toBe(true)
+  }, 120_000)
+
+  it('clicks a LinkedIn card title whose only text is an aria-hidden span wrapped over two lines', async () => {
+    // Live linkedin.com/jobs/search-results, 2026-11-26 18:30 run: `text=<title>` matched only the aria-hidden span
+    // and was refused at ariaHidden=0, occlusion=0.6, "covered" by the title <p> that holds it.
+    const app = await boot()
+    await load(app, [
+      '<div id="card" role="button" tabindex="0" style="display:block;width:180px;padding:8px;font:16px/20px sans-serif">',
+      '<p id="title" style="margin:0"><span aria-hidden="true">Software Engineer - AI Accelerated Development</span></p>',
+      '<p style="margin:0">Signant Health</p></div>',
+      '<p style="width:180px;margin:20px 0 0;font:16px/20px sans-serif">Sponsored <span id="ghost" aria-hidden="true">Apply now to this role</span></p>',
+      '<script>document.getElementById("card").addEventListener("click", function () { document.title = "selected" })</script>',
+    ].join(''))
+    const outcome = await app.browser.click({ selector: 'text=Software Engineer - AI Accelerated Development' })
+    expect(outcome.target).toMatchObject({ index: 1, name: 'Software Engineer - AI Accelerated Development' })
+    expect(await (await app.browser.page()).title()).toBe('selected')
+    // The holder reads differently from the hidden text, so a hidden phrase inside other text stays refused.
+    const blocked = await refusalOf(app.browser.click({ selector: '#ghost' }))
+    expect(blocked.rule).toBe('visibility')
+  }, 120_000)
+
+  it('still refuses a hidden checkbox that shares its box with another control', async () => {
+    const app = await boot()
+    await load(app, '<div style="width:300px;padding:8px">Verify you are human<input type="checkbox" id="t" aria-label="Verify you are human"'
+      + ' style="width:0;height:0;margin:0;opacity:0"><button>Go</button></div>')
+    const blocked = await refusalOf(app.browser.click({ selector: '#t' }))
+    expect(blocked.rule).toBe('visibility')
+  }, 120_000)
+
   it('still clicks a visible, benign element', async () => {
     const app = await boot()
     await load(app, [
@@ -168,6 +216,23 @@ describe.skipIf(!AVAILABLE)('action guard in a real page', () => {
     const outcome = await app.browser.fill({ selector: '#year' }, '2023')
     expect(outcome.target).toMatchObject({ ref: '#year', index: 0, score: 1 })
     expect(await (await app.browser.page()).locator('#display').textContent()).toBe('2023')
+  }, 120_000)
+
+  it('types a month into a Workday-style segment whose display pads the number', async () => {
+    const app = await boot()
+    await load(app, [
+      '<div id="seg" style="position:relative;display:inline-block;width:32px;height:24px;margin:40px">',
+      '<input id="month" role="spinbutton" aria-label="Month" aria-valuetext="2" style="position:absolute;left:14px;top:10px;width:2px;height:2px;padding:0;border:0">',
+      '<div id="display" aria-hidden="true" style="position:absolute;inset:0;background:#fff">02</div></div>',
+      '<script>',
+      'const m = document.getElementById("month"), d = document.getElementById("display");',
+      'd.addEventListener("click", () => m.focus());',
+      'm.addEventListener("keydown", e => { if (/^[0-9]$/.test(e.key)) { e.preventDefault(); m.value = (m.value + e.key).slice(-2); d.textContent = m.value.padStart(2, "0"); m.setAttribute("aria-valuetext", String(Number(m.value))) } });',
+      '</script>',
+    ].join(''))
+    const outcome = await app.browser.fill({ selector: '#month' }, '11')
+    expect(outcome.target).toMatchObject({ ref: '#month', index: 0, score: 1 })
+    expect(await (await app.browser.page()).locator('#display').textContent()).toBe('11')
   }, 120_000)
 
   it('still refuses a caret-sized field under an aria-hidden layer that shows other text', async () => {

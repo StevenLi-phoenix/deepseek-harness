@@ -316,12 +316,13 @@ describe('read tool', () => {
     expect(text(result)).toContain('tool execution arguments must be losslessly JSON-serializable')
   })
 
-  it('rejects a limit above the cap', async () => {
-    const { ctx } = await setup()
+  it('reads up to the cap when the limit asks for more', async () => {
+    // DSH job-apply subagents asked for limit 2600 on their first read and lost a call to the refusal.
+    const { ctx, fs } = await setup()
+    fs.files.set('key:a.txt', 'hello\nworld')
     const result = await call(ctx, 'read', { file_path: 'a.txt', limit: 99999 })
-    expect(result.isError).toBe(true)
-    expect(text(result)).toContain('less than or equal to 2000')
-    expect(result.error?.info).toEqual({ name: 'ToolArgsError', code: 'INVALID_ARGS' })
+    expect(result.isError).toBe(false)
+    expect(text(result)).toContain('world')
   })
 
   it('rejects a blank file_path', async () => {
@@ -800,11 +801,10 @@ describe('read caps are plugin config', () => {
     const result = await call(ctx, 'read', { file_path: 'a.txt' })
     expect(text(result)).toContain('(Showing lines 1-2 of 4. Use offset=3 to continue.)')
     const overCap = await call(ctx, 'read', { file_path: 'a.txt', limit: 3 })
-    expect(overCap.isError).toBe(true)
-    expect(text(overCap)).toContain('less than or equal to 2')
-    expect(overCap.error?.info).toEqual({ name: 'ToolArgsError', code: 'INVALID_ARGS' })
+    expect(overCap.isError).toBe(false)
+    expect(text(overCap)).toContain('(Showing lines 1-2 of 4. Use offset=3 to continue.)')
     const readSchema = ctx.tools.schemas().find(s => s.name === 'read')
-    expect(JSON.stringify(readSchema)).toContain('Defaults to 2.')
+    expect(JSON.stringify(readSchema)).toContain('Defaults to 2, the most one call returns.')
   })
 
   it('a configured readMaxLineLength truncates lines at the configured length', async () => {
@@ -1067,6 +1067,30 @@ describe('sandbox escalation API (write/edit)', () => {
     expect(fs.stamped).toEqual([{
       mode, workspaceRoot: '/session-project', sessionId: brandString<SessionId>('sess-fs-esc'),
     }])
+  })
+
+  it('writes and edits under danger-full-access when the strict-schema filler names the narrower workspace-write', async () => {
+    // A DSH job-apply subagent sent write { sandbox_permissions: "workspace-write", justification: "" } five times
+    // under danger-full-access, read "invalid justification" each time, and fell back to a bash heredoc.
+    const { ctx, fs } = await setupConfining({ approval: true })
+    try {
+      const approval = vi.fn(() => Promise.resolve('allowed-once' as const))
+      ctx.on('approval/request', approval)
+      const agent = escalationAgent([{ type: 'sandbox/mode', data: { mode: 'danger-full-access' } }])
+      for (const [index, justification] of ['', 'a reason', undefined].entries()) {
+        const args = { file_path: `narrower-${index}.txt`, sandbox_permissions: 'workspace-write', ...justification === undefined ? {} : { justification } }
+        const written = await call(ctx, 'write', { ...args, content: 'before' }, agent)
+        expect(written.isError, text(written)).toBe(false)
+        const edited = await call(ctx, 'edit', { ...args, old_string: 'before', new_string: 'after' }, agent)
+        expect(edited.isError, text(edited)).toBe(false)
+        expect(fs.files.get(`key:narrower-${index}.txt`)).toBe('after')
+      }
+      expect(fs.stamped).toHaveLength(6)
+      expect(fs.stamped.every(policy => policy?.mode === 'danger-full-access')).toBe(true)
+      expect(approval).not.toHaveBeenCalled()
+    } finally {
+      await ctx.fiber.dispose()
+    }
   })
 
   it.each(['workspace-write', 'danger-full-access'] as const)('writes and edits under %s with absent or blank unused reasons', async (mode) => {

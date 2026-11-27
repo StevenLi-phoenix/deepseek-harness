@@ -62,6 +62,8 @@ export class NoticeGate {
 interface Observed {
   readonly found: Awaited<ReturnType<typeof scan>>
   readonly trusted: TrustedSchedule | undefined
+  /** The count of announced service writes the findings reflect. */
+  readonly version: number
 }
 
 /**
@@ -83,7 +85,7 @@ export function mountScanner(ctx: Context, settings: ScannerSettings): void {
       const version = trust.version()
       const trusted = await readJson<TrustedSchedule>(trustedFile)
       const found = await scan(targets, baseline, memoryFile, trusted)
-      if (version === trust.version() || attempt >= 2) return { found, trusted }
+      if (version === trust.version() || attempt >= 2) return { found, trusted, version }
     }
   }
 
@@ -105,14 +107,14 @@ export function mountScanner(ctx: Context, settings: ScannerSettings): void {
 
   const runScan = async (): Promise<void> => {
     const baseline = await readJson<Baseline>(baselineFile)
-    const { found, trusted } = await observe(baseline)
+    const { found, trusted, version } = await observe(baseline)
     const { digests, scheduleTasks, changes } = found
     const stored = (): Baseline => ({ at: new Date().toISOString(), digests, ...scheduleTasks === undefined ? {} : { scheduleTasks } })
     // A schedule state nobody has reported yet is accepted as the trusted one: the first baseline, or a scan that found nothing new.
     const seedTrusted = async (): Promise<void> => {
       if (scheduleTarget === undefined || trusted !== undefined) return
       /* v8 ignore next -- the scan sets a digest for every target. */
-      await writeJson(trustedFile, trustedOf(digests[scheduleTarget.name] ?? ABSENT, scheduleTasks))
+      await trust.seed(version, trustedOf(digests[scheduleTarget.name] ?? ABSENT, scheduleTasks))
     }
     if (baseline === undefined) {
       await writeJson(baselineFile, stored())

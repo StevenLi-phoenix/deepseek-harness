@@ -416,16 +416,18 @@ interface ScrollArgs {
 }
 
 /**
- * Drop the zeros a model that fills every argument sends: `deltaY: 0` beside
- * `to`, and a point of 0 or -1 coordinates, which scroll nothing and point nowhere.
+ * Drop the filler a model that fills every argument sends. `to` has no empty value, so such
+ * a model always names an edge: `deltaY: 0` beside it means the edge, and a nonzero `deltaY`
+ * beside it means the distance. A point of 0 or -1 coordinates points nowhere.
  * @param args - the validated tool arguments.
  * @returns the arguments the call meant.
  */
 function withoutFillerScroll(args: ScrollArgs): ScrollArgs {
-  const { deltaY, x, y, ...rest } = args
+  const { deltaY, x, y, to, ...rest } = args
   const filler = x !== undefined && y !== undefined && x <= 0 && y <= 0
   const point = filler ? {} : { ...x === undefined ? {} : { x }, ...y === undefined ? {} : { y } }
-  return { ...rest, ...point, ...deltaY === undefined || deltaY === 0 && args.to !== undefined ? {} : { deltaY } }
+  if (deltaY !== undefined && deltaY !== 0) return { ...rest, ...point, deltaY }
+  return { ...rest, ...point, ...to === undefined ? deltaY === undefined ? {} : { deltaY } : { to } }
 }
 
 /**
@@ -861,8 +863,8 @@ export function registerBrowserTools(ctx: Context, deps: ToolDeps): void {
       tab: { type: 'string', description: 'Tab id to scroll; the active tab when omitted.' },
       x: { type: 'number', description: 'Horizontal point in CSS pixels whose element receives the wheel; give both x and y, or neither for the viewport centre.' },
       y: { type: 'number', description: 'Vertical point in CSS pixels whose element receives the wheel; give both x and y, or neither for the viewport centre.' },
-      deltaY: { type: 'number', description: `Pixels to scroll vertically: positive scrolls down, at most ${String(MAX_SCROLL_DELTA)}. Give deltaY or to, not both.` },
-      to: { type: 'string', enum: ['top', 'bottom'], description: 'Scroll to the page\'s top or bottom edge. Give to or deltaY, not both.' },
+      deltaY: { type: 'number', description: `Pixels to scroll vertically: positive scrolls down, at most ${String(MAX_SCROLL_DELTA)}. A nonzero deltaY wins over to; 0 means scroll to the edge in to.` },
+      to: { type: 'string', enum: ['top', 'bottom'], description: 'Scroll to the page\'s top or bottom edge; ignored when deltaY is nonzero.' },
     },
     output: {
       schema: {

@@ -48,14 +48,17 @@ const WECHAT_PRESET = 'unattended'
 const OUTSIDE_PRESETS = ['bili', 'up', 'qqbot', 'qq-digest'] as const
 /**
  * Every preset that must carry no owner memory and no WeChat-side tool: the outside presets and `notify`, the notification
- * desk (host and autocut events in, one short note to the owner out, no tools, and no speaking-style layer).
+ * desk (host and autocut events in, one short note to the owner out, no tools, and no speaking-style layer), and
+ * `voice-call`, a phone call's Session (the owner's speech in, spoken answers out, no tools; the main Session
+ * acts on its transcript).
  */
-const NO_MEMORY_PRESETS = [...OUTSIDE_PRESETS, 'notify', 'qq-main'] as const
+const NO_MEMORY_PRESETS = [...OUTSIDE_PRESETS, 'notify', 'qq-main', 'voice-call'] as const
 
 /** Plugins that carry the owner's memory or reach the WeChat side, and why none may run in an outside preset. */
 const WECHAT_SIDE: Record<string, string> = {
   '@deepseek-ai/dsh-owner-memory': 'injects the owner memory block and registers memory_search/save/forget (feedbackScope mode is the one exception, below)',
   '@deepseek-ai/dsh-tool-wechat': 'sends files to the owner on WeChat',
+  '@deepseek-ai/dsh-tool-push': 'pushes to the owner\'s phone through the API platform\'s message bus',
   '@deepseek-ai/dsh-cc-bridge': 'talks to Claude Code sessions and the WeChat chat Session on the owner\'s behalf',
   '@deepseek-ai/dsh-tool-watch': 'creates watches that report into the WeChat chat Session',
   '@deepseek-ai/dsh-tool-monitor': 'monitors whose output returns to a Session with the owner\'s context',
@@ -94,6 +97,11 @@ const ALLOWED: Record<(typeof NO_MEMORY_PRESETS)[number], string[]> = {
     'cordis:group', '@deepseek-ai/dsh-compaction-basic', '@deepseek-ai/dsh-compaction-tool-result-pruner',
   ],
   'qq-main': [
+    '@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context',
+    'cordis:group', '@deepseek-ai/dsh-compaction-basic', '@deepseek-ai/dsh-compaction-tool-result-pruner',
+  ],
+  // A call Session: what the owner says on the phone, spoken back. Nothing that acts, nothing of the owner's memory.
+  'voice-call': [
     '@deepseek-ai/dsh-persona', '@deepseek-ai/dsh-time-context',
     'cordis:group', '@deepseek-ai/dsh-compaction-basic', '@deepseek-ai/dsh-compaction-tool-result-pruner',
   ],

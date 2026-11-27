@@ -695,7 +695,7 @@ describe('sandbox escalation through ctx.approval', () => {
     expect(bash.modes).toEqual([])
   })
 
-  it('rejects injected escalation without a sandbox and narrower escalation without prompting', async () => {
+  it('rejects injected escalation without a sandbox, runs a narrower request, and refuses an unknown current mode', async () => {
     const plain = await setup()
     const { command, description, sandbox_permissions, justification } = escalate
     for (const args of [escalate, { command, description, sandbox_permissions }, { command, description, justification }]) {
@@ -707,8 +707,11 @@ describe('sandbox escalation through ctx.approval', () => {
     const { ctx } = await setupSandboxed(true)
     const prompted = vi.fn()
     ctx.on('approval/request', () => { prompted(); return Promise.resolve<ApprovalOutcome>('allowed-once') })
-    const result = await call(ctx, 'pwsh', { ...escalate, sandbox_permissions: 'workspace-write' }, sandboxAgent('danger-full-access'))
-    expect(text(result)).toContain('not strictly wider')
+    // The strict-schema filler: a narrower mode with a blank reason grants nothing and runs under the current mode.
+    for (const justification of [escalate.justification, '']) {
+      const result = await call(ctx, 'pwsh', { ...escalate, sandbox_permissions: 'workspace-write', justification }, sandboxAgent('danger-full-access'))
+      expect(result.isError, text(result)).toBe(false)
+    }
     expect(prompted).not.toHaveBeenCalled()
 
     const malformed = sandboxAgent()
@@ -716,7 +719,8 @@ describe('sandbox escalation through ctx.approval', () => {
       type: string,
       data: Record<string, unknown>,
     ) => unknown)('sandbox/mode', { mode: 'unknown-mode' })
-    expect(text(await call(ctx, 'pwsh', escalate, malformed))).toContain('not strictly wider')
+    expect(text(await call(ctx, 'pwsh', escalate, malformed))).toContain('this call\'s current mode "unknown-mode" is not a sandbox mode')
+    expect(prompted).not.toHaveBeenCalled()
   })
 
   it.each(['workspace-write', 'danger-full-access'] as const)('runs a repeated %s request without approval', async (mode) => {
