@@ -34,10 +34,10 @@ interface Row {
 const namesByPreset = {
   'job-apply': [
     'defer_deliver', 'gmail_accounts', 'gmail_verification_code',
-    'headless_browser_click', 'headless_browser_close', 'headless_browser_open', 'headless_browser_read',
+    'headless_browser_click', 'headless_browser_close', 'headless_browser_credential', 'headless_browser_open', 'headless_browser_read',
     'headless_browser_resume', 'headless_browser_scroll', 'headless_browser_snapshot', 'headless_browser_tabs',
     'headless_browser_type', 'headless_browser_upload',
-    'job_cover_convert', 'job_issue', 'job_log', 'job_repo', 'jobtracker', 'list_agents', 'send_message',
+    'job_cover_convert', 'job_issue', 'job_log', 'job_repo', 'jobtracker', 'list_agents', 'read_image', 'send_message',
     'skill', 'subagent', 'todo_write', 'web_fetch', 'web_search',
   ],
   'job-inbox': ['defer_deliver', 'gmail_read', 'gmail_search', 'job_issue', 'job_log', 'job_repo', 'jobtracker', 'skill', 'todo_write'],
@@ -117,6 +117,32 @@ it('scopes exactly the shipped tool rosters, even when powerful tools are mounte
     }
   }
   expect(forbidden).not.toHaveBeenCalled()
+})
+
+it('projects only its own captured snapshot through the read_image replacement', async () => {
+  const { ctx, agentOf } = await setup()
+  const worker = await agentOf('job-apply')
+  const inbox = await agentOf('job-inbox')
+  const id = 'job-snapshot:fixture.png'
+  const bytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
+  const ref = { attachmentId: 'sha256:fixture', mediaType: 'image/png', bytes: 8, width: 1, height: 1 }
+  const saveImage = vi.fn(async () => ref)
+  ctx.provide('attachments', { saveImage } as never)
+  vi.spyOn(ctx.headlessBrowserJobBridge.browser, 'jobSnapshot').mockImplementation((owner, path) =>
+    owner === worker.session.id && path === id ? bytes : undefined)
+  const tool = ctx.tools.get('read_image', worker)
+  if (tool === undefined) throw new Error('Missing scoped image tool')
+  const run = async (file_path: string, agent: typeof worker) => await tool.execute({ file_path }, {
+    agent, signal: new AbortController().signal,
+  } as Parameters<typeof tool.execute>[1])
+  await expect(run('/tmp/unrelated.png', worker)).rejects.toThrow('belongs to this Session')
+  await expect(run(id, inbox)).rejects.toThrow('belongs to this Session')
+  expect(ctx.tools.get('read_image', inbox)).toBeUndefined()
+  expect(saveImage).not.toHaveBeenCalled()
+  const value = await run(id, worker)
+  expect(saveImage).toHaveBeenCalledExactlyOnceWith({ data: bytes, mediaType: 'image/png', name: 'job-snapshot.png' })
+  expect(value).toEqual({ path: id, image: ref })
+  expect(tool.output.render({ file_path: id }, { path: id, image: ref })).toContainEqual({ type: 'image', attachment: ref })
 })
 
 it('inherits the same job-apply tools when a worker delegates', async () => {

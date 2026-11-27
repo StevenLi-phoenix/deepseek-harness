@@ -668,8 +668,10 @@
               jobApplyBrowser: job-apply-verification
             config:
               jobApply:
-                uploadDirs: [/Users/dsh-runtime/work/jobapplication/private, /Users/dsh-runtime/.dsh/uploads]
-                uploadBasenames: [resume.pdf, transcript.pdf]
+                uploadFiles:
+                  Shuyu_Li_Resume.pdf: private/resume-small.pdf
+                  Shuyu_Li_Transcript.pdf: private/nyu-unofficial-transcript.pdf
+                  Shuyu_Li_Resume_under_488KB.pdf: private/Shuyu_Li_Resume_under_488KB.pdf
                 coverLetterRoot: /Users/dsh-runtime/work/jobapplication
           - id: tool-gmail
             name: '@deepseek-ai/dsh-tool-gmail'

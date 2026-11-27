@@ -8,14 +8,12 @@
  * - can a person see and hit this element at all (a score from
  *   {@link scoreVisibility}, refused under {@link VISIBILITY_THRESHOLD});
  * - does its name or value say it destroys something or moves money
- *   ({@link SENSITIVE_ACTIONS}, which needs the owner unless the plugin's
- *   `sensitiveActions` switch turned it off);
+ *   ({@link SENSITIVE_ACTIONS} by default; job-apply uses its own label policy);
  * - does the action leave the registrable domain the browser is on
  *   ({@link OriginGuard}, which needs an explicit `allowOrigin`).
  *
- * Every refusal — and every target the switched-off sensitive-name rule let
- * through — is recorded once as a {@link SecurityEvent}, kept in a bounded
- * list for the status route, and published to whoever listens. A tool result
+ * Refusals and sensitive-name allowances are recorded as {@link SecurityEvent}s,
+ * kept in a bounded list for the status route, and published to listeners. A tool result
  * that carries page text wraps it with {@link untrusted}, so the model reads
  * the page's words as data with an origin rather than as instructions.
  *
@@ -35,9 +33,8 @@ export type GuardRule = 'visibility' | 'sensitive' | 'origin' | 'ax-id'
 
 /**
  * The rule an event names: a refusal rule, `site-change` for a move the page
- * made itself, or `sensitive-name` for a target the switched-off sensitive-name
- * rule allowed. A refusal keeps `sensitive`, so a tool result reads the same
- * whether or not the switch exists.
+ * made itself, or `sensitive-name` for a target a sensitive-name policy let
+ * through. A refusal keeps `sensitive` regardless of policy.
  */
 export type SecurityRule = GuardRule | 'site-change' | 'sensitive-name'
 
@@ -56,7 +53,7 @@ export interface SecurityEvent {
   readonly at: string
   /** Refusal, explicit allow, an unrequested move to another site, or a recorded coordinate click. */
   readonly kind: SecurityKind
-  /** The rule that decided, `site-change` for a drift, `sensitive-name` for a skip, or nothing for a recorded coordinate click. */
+  /** The rule that decided, `site-change` for a drift, or nothing for a recorded coordinate click. */
   readonly rule?: SecurityRule
   /** Set when a rule the plugin switched off would have refused the action but let it run instead. */
   readonly skipped?: boolean
@@ -109,6 +106,32 @@ export const SENSITIVE_ACTIONS: readonly SensitiveAction[] = [
   { label: 'unsubscribe', pattern: /\bunsubscribe\b|退订/iu },
   { label: 'revoke', pattern: /\brevoke\b/iu },
 ]
+
+/** Job-apply may identify these actions only from the control's accessible name. */
+const JOB_APPLY_REFUSALS: readonly SensitiveAction[] = [
+  { label: 'pay or fee', pattern: /\b(?:pay(?:ment|ments|ing)?|fees?)\b|支付|付款|费用/iu },
+  { label: 'purchase', pattern: /\bpurchase\b|\bbuy now\b|\bcheckout\b|购买|下单/iu },
+  { label: 'order', pattern: /\b(?:place|confirm|complete) (?:the |an |your |my )?order\b/iu },
+  { label: 'money transfer', pattern: /\b(?:transfer|send|withdraw)\s+(?:money\b|funds\b|cash\b|[$€£¥]|\d)|\b(?:money|funds|cash) transfer\b|转账/iu },
+  { label: 'delete, close, or deactivate account', pattern: /\b(?:delete|remove|close|deactivate) (?:my |the |your |this )?account\b|\baccount (?:deletion|closure|deactivation)\b|(?:删除|关闭|停用)账[户号]/iu },
+  { label: 'revoke', pattern: /\brevoke\b/iu },
+  { label: 'unsubscribe', pattern: /\bunsubscribe\b|退订/iu },
+]
+
+/** Ordinary application controls that still need a sensitive-name audit event. */
+const JOB_APPLY_AUDIT: readonly SensitiveAction[] = [
+  { label: 'submit', pattern: /\bsubmit\b|提交/iu },
+  { label: 'consent', pattern: /\b(?:approve|authori[sz]e)\b/iu },
+  { label: 'delete form entry', pattern: /\bdelete\b|\bpermanently remove\b|删除/iu },
+]
+
+/** Salary questions are not payment controls. Match the whole label before exempting one. */
+function isPayField(target: ElementFacts, name: string): boolean {
+  const field = target.role === 'textbox' || target.role === 'spinbutton' || target.role === 'combobox'
+    || target.role === null && (target.tag === 'input' || target.tag === 'select' || target.tag === 'textarea')
+  if (!field) return false
+  return /^(?:desired|expected|minimum|target) (?:base |hourly |annual )?pay(?: range| rate)?(?: \([a-z]{3}\))?[:*?]*$/iu.test(name)
+}
 
 /** Two-label public suffixes this repository treats as one site. */
 const MULTI_LABEL_SUFFIXES = new Set([
@@ -416,7 +439,9 @@ export interface ActionGuardOptions {
    * @default true
    */
   readonly sensitiveActions?: boolean
-  /** Trusted selector-click exception; visibility and origin checks still run. */
+  /** Job-apply uses its strict label-only refusals and audits instead of the shared sensitive-name switch and exceptions. */
+  readonly sensitivePolicy?: 'job-apply'
+  /** Trusted default-policy selector-click exception; visibility and origin checks still run. */
   readonly allowSensitive?: (input: TargetDecisionInput, target: ElementFacts, label: string) => boolean
 }
 
@@ -473,17 +498,19 @@ export class ActionGuard {
   readonly #now: () => Date
   /** Whether the sensitive-name rule refuses, or only records, a matching target. */
   readonly #sensitiveActions: boolean
+  readonly #jobApplyPolicy: boolean
   readonly #allowSensitive: ActionGuardOptions['allowSensitive']
   /** The site an explicit `allowOrigin` named, so the move after it is not a drift. */
   #allowedSite: string | undefined
 
   /**
-   * @param options - the event listener, the clock, and the sensitive-name switch.
+   * @param options - the event listener, clock, and sensitive-name policy.
    */
   constructor(options: ActionGuardOptions = {}) {
     this.#onEvent = options.onEvent
     this.#now = options.now ?? (() => new Date())
     this.#sensitiveActions = options.sensitiveActions ?? true
+    this.#jobApplyPolicy = options.sensitivePolicy === 'job-apply'
     this.#allowSensitive = options.allowSensitive
   }
 
@@ -527,11 +554,11 @@ export class ActionGuard {
     }
     const chosen = pickCandidate(input.candidates)
     const target = chosen.candidate
-    const sensitive = matchSensitiveAction(`${target.name} ${target.value}`)
+    const sensitive = this.#matchRefusal(target)
     if (sensitive !== undefined) {
-      if (!this.#sensitiveActions) {
+      if (!this.#jobApplyPolicy && !this.#sensitiveActions) {
         this.#recordSkip(input.action, input.url, input.ref, target.name, sensitive, chosen.score)
-      } else if (this.#allowSensitive?.(input, target, sensitive.label) !== true) {
+      } else if (this.#jobApplyPolicy || this.#allowSensitive?.(input, target, sensitive.label) !== true) {
         return this.#refuse(input.action, {
           rule: 'sensitive',
           url: input.url,
@@ -559,6 +586,7 @@ export class ActionGuard {
         ...target.markup === undefined ? {} : { markup: target.markup },
       })
     }
+    this.#recordJobAllowance(input.action, input.url, input.ref, target.name, chosen.score)
     return {
       allowed: true,
       target: {
@@ -612,9 +640,9 @@ export class ActionGuard {
       ...tab,
       point: { x: input.x, y: input.y },
     })
-    const sensitive = matchSensitiveAction(`${hit.name} ${hit.value}`)
+    const sensitive = this.#matchRefusal(hit)
     if (sensitive !== undefined) {
-      if (!this.#sensitiveActions) {
+      if (!this.#jobApplyPolicy && !this.#sensitiveActions) {
         this.#recordSkip(input.action, input.url, ref, hit.name, sensitive, score)
       } else {
         return this.#refuse(input.action, {
@@ -631,6 +659,7 @@ export class ActionGuard {
     const originTarget = input.action === 'click' ? hit.href : hit.formAction
     const originRefusal = this.#crossesSite(input.action, input.url, originTarget, input.allowOrigin, ref, hit.name)
     if (originRefusal !== undefined) return originRefusal
+    this.#recordJobAllowance(input.action, input.url, ref, hit.name, score)
     return {
       allowed: true,
       point: {
@@ -735,8 +764,34 @@ export class ActionGuard {
     })
   }
 
+  #matchRefusal(target: ElementFacts): SensitiveAction | undefined {
+    if (!this.#jobApplyPolicy) return matchSensitiveAction(`${target.name} ${target.value}`)
+    const name = target.name.replace(/\s+/gu, ' ').trim()
+    if (isPayField(target, name)) return undefined
+    return JOB_APPLY_REFUSALS.find(action => action.pattern.test(name))
+  }
+
+  #recordJobAllowance(action: 'click' | 'type', url: string, ref: string, name: string, score: number): void {
+    if (!this.#jobApplyPolicy) return
+    const audited = JOB_APPLY_AUDIT.find(entry => entry.pattern.test(name.replace(/\s+/gu, ' ').trim()))
+    if (audited === undefined) return
+    this.#emit({
+      kind: 'allow',
+      rule: 'sensitive-name',
+      action,
+      url,
+      ref,
+      name,
+      reason: `the job-apply policy permits the "${audited.label}" control ${quote(name)}`,
+      score,
+    })
+  }
+
   #refuse(action: GuardAction, input: Omit<Refusal, 'hint'>): Decision {
-    const refusal: Refusal = { ...input, hint: input.coveredBy === undefined ? HINTS[input.rule] : COVERED_HINT }
+    const hint = this.#jobApplyPolicy && input.rule === 'sensitive'
+      ? 'Job-apply cannot act on this control. Do not retry with another selector, accessibility id, or point.'
+      : input.coveredBy === undefined ? HINTS[input.rule] : COVERED_HINT
+    const refusal: Refusal = { ...input, hint }
     this.#emit({
       kind: 'refusal',
       rule: refusal.rule,

@@ -32,7 +32,11 @@ export { Config } from './config.ts'
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Host-only shared profile operations for the restricted preset mount. */
-    headlessBrowserJobBridge: { readonly browser: HeadlessBrowserSession; readonly takeover: TakeoverState }
+    headlessBrowserJobBridge: {
+      readonly browser: HeadlessBrowserSession
+      readonly takeover: TakeoverState
+      readonly credentials: CredentialVault
+    }
     /** Trusted current-tab context for the verification-code tool in the job-apply scope. */
     jobApplyBrowser: {
       currentHost(sessionId: string, signal?: AbortSignal): Promise<string | null>
@@ -97,8 +101,8 @@ export function apply(ctx: Context, config: Config): void {
     emit: (event) => { ctx.emit('headless-browser/keepalive', event) },
   })
   const takeover = new TakeoverState()
-  ctx.provide('headlessBrowserJobBridge', { browser, takeover })
   const credentials = new CredentialVault(config.credentialsPath)
+  ctx.provide('headlessBrowserJobBridge', { browser, takeover, credentials })
   const uploads = new UploadPolicy(config.uploadDirs, config.maxUploadMB)
   // The first upload directory is where the owner drops a task's files, so it exists from the first mount.
   const firstUploadDir = config.uploadDirs[0]

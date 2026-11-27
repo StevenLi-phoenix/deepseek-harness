@@ -12,17 +12,14 @@ import { ExpectationList, type KeepaliveExpectation } from './keepalive-expect.t
 
 /** Trusted deployment configuration for the scoped application browser. */
 export interface JobApplyConfig {
-  /** Absolute owner-managed directories containing the approved files. */
-  uploadDirs: string[]
-  /** Exact approved PDF basenames. */
-  uploadBasenames: string[]
-  /** Canonical job clone containing the cover_letters directory. */
+  /** Exact employer-facing PDF names mapped to trusted paths relative to the job clone. */
+  uploadFiles: Record<string, string>
+  /** Canonical job clone containing private PDFs and cover_letters/. */
   coverLetterRoot: string
 }
 
 const jobApplyConfig = z.object({
-  uploadDirs: z.array(z.string()).min(1).required(),
-  uploadBasenames: z.array(z.string()).min(2).max(2).required(),
+  uploadFiles: z.dict(z.string()).required(),
   coverLetterRoot: z.string().required(),
 })
 
