@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import dataclass, field
+from unittest.mock import patch
 
 from courses_collector.areas import MAX_TOC_DESCRIPTION_BYTES, AreaReader, read_area
 from courses_collector.model import Course, Material, NeedsUI, ReadError, Reading
@@ -47,7 +48,7 @@ class AreaTests(unittest.TestCase):
             '/content/toc': {'Modules': [{
                 'Title': 'Unnamed identity', 'Topics': [
                     {'TopicId': None, 'Title': 'No topic ID', 'ActivityType': 1},
-                    {'TopicId': 5, 'Title': 'PDF', 'ActivityType': 1, 'Url': '/content/fixture.pdf'},
+                    {'TopicId': 5, 'Title': 'PDF', 'ActivityType': 1, 'TopicType': 1, 'Url': '/content/fixture.pdf'},
                 ], 'Modules': [{'ModuleId': 9, 'Title': 'Nested', 'Modules': [], 'Topics': []}],
             }]},
             '/dropbox/folders/': [], '/news/': [],
@@ -197,7 +198,7 @@ class AreaTests(unittest.TestCase):
         routes = {
             '/content/toc': {'Modules': [{
                 'ModuleId': 1, 'Title': 'Module', 'Description': {'Text': BODY}, 'Modules': [], 'Topics': [
-                    {'TopicId': 2, 'Title': 'Slides', 'ActivityType': 1, 'Url': '/content/slides%20A.pdf'},
+                    {'TopicId': 2, 'Title': 'Slides', 'ActivityType': 1, 'TopicType': 1, 'Url': '/content/slides%20A.pdf'},
                     {'TopicId': 3, 'Title': 'Link', 'ActivityType': 2, 'Url': 'https://library.example.test/path?id=7'},
                     {'TopicId': 4, 'Title': 'Quiz', 'ActivityType': 4, 'Url': '/d2l/lms/quizzing/start'},
                     {'TopicId': 5, 'Title': 'Signed', 'ActivityType': 2, 'Url': 'https://library.example.test/path?X-Amz-Signature=secret'},
@@ -240,6 +241,69 @@ class AreaTests(unittest.TestCase):
         self.assertEqual(len([p for p in client.calls if p[0] == 'file']), 0)
         self.assertNotIn('X-Amz-Signature', repr(content))
 
+    def test_material_type_resolves_only_ambiguous_topics_with_fixed_metadata_gets(self):
+        video_ref = 'd2l:brightspace:content:course:video:76cbf04d-342c-4c2f-a626-94ba938030ea/latest'
+        topics = [
+            {'TopicId': 11, 'Title': 'Native', 'ActivityType': 1, 'TopicType': 1, 'Url': '/content/native.pdf'},
+            {'TopicId': 12, 'Title': 'Video', 'ActivityType': 1, 'IsFile': True, 'Url': video_ref},
+            {'TopicId': 13, 'Title': 'Typed', 'ActivityType': 1},
+            {'TopicId': 14, 'Title': 'Typed reference', 'ActivityType': 1},
+            {'TopicId': 15, 'Title': 'Unverified native-looking URL', 'ActivityType': 1, 'Url': '/content/unknown.mp4'},
+            {'TopicId': 16, 'Title': 'Unlisted but linked', 'ActivityType': 1,
+             'Url': 'https://library.example.test/archive?id=5'},
+            {'TopicId': 17, 'Title': 'Generic Type=1 alone is not a file', 'ActivityType': 1},
+            {'TopicId': 18, 'Title': 'Video in detail'},
+            {'TopicId': 19, 'Title': 'Explicit external link', 'ActivityType': None,
+             'TopicTypeIdentifier': 'ExternalLink', 'Url': 'https://library.example.test/external'},
+        ]
+        routes = {
+            '/content/toc': {'Modules': [{'ModuleId': 1, 'Title': 'A', 'Modules': [], 'Topics': topics}]},
+            '/content/topics/13': {'Id': 13, 'Type': 1, 'TopicType': 1, 'Url': '/content/typed.pdf'},
+            '/content/topics/14': {'Id': '14', 'Type': 1, 'TopicType': 3,
+                                   'Url': 'https://library.example.test/item?id=6#anchor'},
+            '/content/topics/15': ReadError('forbidden', 403),
+            '/content/topics/16': ReadError('missing', 404),
+            '/content/topics/17': {'Id': 17, 'Type': 1},
+            '/content/topics/18': {'Id': 18, 'Type': 1, 'TopicType': 1, 'Url': video_ref},
+            '/dropbox/folders/': [], '/news/': [],
+        }
+        material, client = read('materials', routes)
+        self.assertEqual(client.calls, [('json', PREFIX + path) for path in routes])
+        rows = {r.metadata['platform_id']: r for r in material.records}
+        self.assertEqual(rows[11].download_path, PREFIX + '/content/topics/11/file')
+        self.assertEqual(rows[13].download_path, PREFIX + '/content/topics/13/file')
+        self.assertEqual(rows[13].filename, 'typed.pdf')
+        for item in (12, 18):
+            self.assertIsNone(rows[item].download_path)
+            self.assertEqual(rows[item].kind, 'link')
+            self.assertEqual(rows[item].metadata['target_reference'], video_ref)
+            self.assertTrue(rows[item].url.startswith(ORIGIN + PREFIX + '/content/toc#'))
+        self.assertEqual(rows[14].metadata['target_url'], 'https://library.example.test/item?id=6')
+        self.assertEqual(rows[16].metadata['target_url'], 'https://library.example.test/archive?id=5')
+        self.assertEqual(rows[19].metadata['target_url'], 'https://library.example.test/external')
+        for item in (14, 15, 16, 17, 19):
+            self.assertIsNone(rows[item].download_path)
+        self.assertIn('HTTP 403', rows[15].skip_reason)
+        self.assertIn('no verified file type', rows[17].skip_reason)
+        directory, client = read('content', routes)
+        self.assertEqual(client.calls, [('json', PREFIX + '/content/toc')])
+        self.assertEqual(directory.records[2].metadata['target_reference'], video_ref)
+
+    def test_topic_detail_lookup_is_bounded_and_checks_topic_identity(self):
+        topics = [{'TopicId': i, 'Title': f'Topic {i}', 'ActivityType': 1} for i in (11, 12)]
+        routes = {
+            '/content/toc': {'Modules': [{'ModuleId': 1, 'Title': 'A', 'Modules': [], 'Topics': topics}]},
+            '/content/topics/11': None, '/dropbox/folders/': [], '/news/': [],
+        }
+        with patch('courses_collector.areas.MAX_TOPIC_DETAIL_READS', 1):
+            reading, client = read('materials', routes)
+        self.assertEqual(client.calls, [('json', PREFIX + path) for path in routes])
+        self.assertIn('detail missing', reading.records[0].skip_reason)
+        self.assertIn('GET limit', reading.records[1].skip_reason)
+        for detail in ({'Id': 99, 'TopicType': 1}, {'Id': 11, 'OrgUnitId': 999, 'TopicType': 1}):
+            with self.subTest(detail=detail), self.assertRaisesRegex(ReadError, 'does not match'):
+                read('materials', {**routes, '/content/topics/11': detail})
+
     def test_nested_directory_preserves_hierarchy_and_excludes_hidden_subtrees(self):
         result, client = read('content', {
             '/content/toc': {'Modules': [
@@ -275,9 +339,9 @@ class AreaTests(unittest.TestCase):
 
     def test_opaque_inventory_ids_keep_their_raw_types_and_never_make_unsafe_routes(self):
         module = {'ModuleId': 'module/opaque', 'Title': 'A', 'Modules': [], 'Topics': [
-            {'TopicId': 2, 'Title': 'Numeric', 'ActivityType': 1},
-            {'TopicId': '02', 'Title': 'Zero padded', 'ActivityType': 1},
-            {'TopicId': 'File_A~2.3', 'Title': 'Single segment', 'ActivityType': 1,
+            {'TopicId': 2, 'Title': 'Numeric', 'ActivityType': 1, 'TopicType': 1},
+            {'TopicId': '02', 'Title': 'Zero padded', 'ActivityType': 1, 'IsFile': True},
+            {'TopicId': 'File_A~2.3', 'Title': 'Single segment', 'ActivityType': 1, 'TopicTypeIdentifier': 'File',
              'Url': 'https://foreign.example.test/path/example.txt'},
             {'Identifier': '../topic%2funsafe', 'Title': 'Unsafe segment', 'ActivityType': 1,
              'Url': '/d2l/unapproved'},

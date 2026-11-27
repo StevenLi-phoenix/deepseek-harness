@@ -325,7 +325,7 @@ class CollectorTests(unittest.TestCase):
 
     def test_materials_skip_each_oversized_file_but_compare_later_files(self):
         self.wire.lms[f'{LE}/content/toc'] = {'Modules': [{'ModuleId': 1, 'Modules': [], 'Topics': [
-            {'TopicId': 8, 'Title': 'Stream is too large', 'ActivityType': 1, 'Url': '/content/large.pdf'},
+            {'TopicId': 8, 'Title': 'Stream is too large', 'ActivityType': 1, 'TopicType': 1, 'Url': '/content/large.pdf'},
         ]}]}
         self.wire.lms[f'{LE}/content/topics/8/file'] = ResponseTooLarge('stream exceeds limit')
         self.wire.lms[f'{LE}/dropbox/folders/'] = []
@@ -360,6 +360,54 @@ class CollectorTests(unittest.TestCase):
         self.assertNotIn('Untrusted', human_summary(report))
         self.assertIn('no_id (see report)', human_summary(report))
         self.assertFalse(self.wire.operations('save_material'))
+
+    def test_material_video_detail_archives_only_the_reference(self):
+        reference = 'd2l:brightspace:content:fixture:video:12345678-1234-1234-1234-123456789abc/latest'
+        self.wire.lms[f'{LE}/content/toc'] = {'Modules': [{'ModuleId': 1, 'Modules': [], 'Topics': [
+            {'TopicId': 8, 'Title': 'Sample video.mp4', 'ActivityType': 1},
+        ]}]}
+        self.wire.lms[f'{LE}/content/topics/8'] = {
+            'Id': 8, 'TopicTypeIdentifier': None, 'TypeIdentifier': None, 'Url': reference,
+        }
+        self.wire.lms[f'{LE}/dropbox/folders/'] = []
+        self.wire.lms[f'{LE}/news/'] = []
+        report = self.run_areas('materials')
+        row = self.course(report, 'materials')
+        self.assertTrue(report['ok'])
+        self.assertEqual(row['file_downloads'], {'eligible': 0, 'http_errors': 0})
+        key = f'{COURSE.id}-material-topic-8'
+        self.assertEqual(row['changes'], [{'id': key, 'action': 'new'}])
+        archive = self.wire.rows[key]['data']
+        self.assertTrue(archive['url'].startswith(ORIGIN + LE + '/content/toc#'))
+        self.assertNotIn('sha256', archive)
+        self.assertIn(reference, archive['evidence']['detail'])
+        self.assertNotIn(reference, human_summary(report))
+        self.assertFalse(any(row[1] == 'PUT' or row[2].endswith('/file') for row in self.wire.requests))
+
+    def test_material_http_file_errors_stay_visible_at_the_one_fifth_boundary(self):
+        for count, expected_status in ((5, 'checked'), (4, 'failed')):
+            with self.subTest(count=count):
+                self.setUp()
+                self.wire.lms[f'{LE}/content/toc'] = {'Modules': []}
+                self.wire.lms[f'{LE}/dropbox/folders/'] = []
+                self.wire.lms[f'{LE}/news/'] = [{'Id': 8, 'Attachments': [
+                    {'FileId': i, 'FileName': f'fixture-{i}.txt', 'FileSize': 3} for i in range(1, count + 1)
+                ]}]
+                for i in range(1, count + 1):
+                    self.wire.lms[f'{LE}/news/8/attachments/{i}'] = (
+                        Reply(404, b'') if i == 2 else Reply(200, b'txt', 'text/plain')
+                    )
+                report = self.run_areas('materials', dry=True)
+                row = self.course(report, 'materials')
+                self.assertEqual(row['status'], expected_status)
+                self.assertEqual(row['file_downloads'], {'eligible': count, 'http_errors': 1})
+                self.assertEqual(len(row['changes']), count - 1)
+                self.assertEqual(len(row['skips']), 1)
+                self.assertIn('HTTP 404', row['skips'][0]['reason'])
+                if expected_status == 'failed':
+                    self.assertEqual(row['http_status'], 404)
+                    self.assertIn('1/4', row['reason'])
+                self.assertFalse(self.wire.operations('save_material'))
 
     def test_material_attachment_size_mismatch_is_a_failure_not_a_policy_skip(self):
         self.wire.lms[f'{LE}/content/toc'] = {'Modules': []}

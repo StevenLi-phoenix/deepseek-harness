@@ -340,6 +340,25 @@
               }
             }
           }
+        },
+        "file_downloads": {
+          "description": "Present on materials results. Classified file reads, excluding references and policy skips. A course fails when more than one fifth return HTTP errors; each error also appears in skips.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eligible",
+            "http_errors"
+          ],
+          "properties": {
+            "eligible": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "http_errors": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
         }
       }
     }

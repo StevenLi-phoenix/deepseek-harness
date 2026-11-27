@@ -178,6 +178,10 @@ class FileOverLimit(Exception):
     """An attachment exceeded the byte cap before any storage operation."""
 
 
+class FileDownloadHTTPError(ReadError):
+    """The Brightspace GET for a positively identified file returned an HTTP error."""
+
+
 def _save_item(brightspace: Brightspace, courses: Courses, course: Course,
                item: Material, when: str) -> str:
     if item.download_path is None:
@@ -188,6 +192,10 @@ def _save_item(brightspace: Brightspace, courses: Courses, course: Course,
         data = brightspace.get_file(item.download_path)
     except ResponseTooLarge:
         raise FileOverLimit from None
+    except ReadError as error:
+        if error.http_status is not None and 400 <= error.http_status <= 599:
+            raise FileDownloadHTTPError(str(error), error.http_status) from None
+        raise
     if len(data) > MAX_FILE:
         raise FileOverLimit
     if item.expected_size is not None and len(data) != item.expected_size:
@@ -228,6 +236,8 @@ def collect(config: Config, selected: tuple[str, ...], brightspace: Brightspace,
             if reading.failure:
                 failures.append(reading.failure)
             ids = set()
+            file_errors = []
+            eligible_files = 0
             for item in reading.records:
                 if item.id in ids:
                     failures.append(ReadError("duplicate material id in source"))
@@ -238,12 +248,25 @@ def collect(config: Config, selected: tuple[str, ...], brightspace: Brightspace,
                     continue
                 try:
                     action = _save_item(brightspace, courses, course, item, when)
+                    eligible_files += item.download_path is not None
                     if action != "unchanged":
                         summary["changes"].append({"id": item.id, "action": action})
                 except FileOverLimit:
                     summary["skips"].append({"id": item.id, "reason": "file exceeds the 100 MiB size limit"})
+                except FileDownloadHTTPError as error:
+                    eligible_files += 1
+                    file_errors.append(error)
+                    summary["skips"].append({"id": item.id, "reason": str(error)})
+                    if area != "materials":
+                        failures.append(error)
                 except ReadError as error:
+                    eligible_files += item.download_path is not None
                     failures.append(error)
+            if area == "materials":
+                summary["file_downloads"] = {"eligible": eligible_files, "http_errors": len(file_errors)}
+                if len(file_errors) * 5 > eligible_files:
+                    failures.append(ReadError(f"{len(file_errors)}/{eligible_files} file downloads returned HTTP errors (more than 20%)",
+                                              file_errors[0].http_status))
             if reading.tasks:
                 try:
                     rows = courses.inventory(course, "task")
@@ -277,6 +300,9 @@ def human_summary(report: dict) -> str:
                 details.append(f"{course}: {row['source']} fallback after HTTP {row['fallback_http']}")
             elif row["source"] == "api+page":
                 details.append(f"{course}: rendered confirmation for group submissions")
+            download_stats = row.get("file_downloads")
+            if download_stats and download_stats["http_errors"]:
+                details.append(f"{course}: {download_stats['http_errors']}/{download_stats['eligible']} file downloads returned HTTP errors")
         lines.append(f"{area}: {group['status']} ({group['count']} records)" + ("; " + " | ".join(details) if details else ""))
         for course, row in group["courses"].items():
             for item in row["changes"]:

@@ -28,6 +28,7 @@ MAX_PAGES = 100
 MAX_TOC_DEPTH = 64
 MAX_NO_ID_NOTICES = 20
 MAX_TOC_DESCRIPTION_BYTES = 2 * 1024 * 1024
+MAX_TOPIC_DETAIL_READS = 100
 MAX_OPAQUE_ID_BYTES = 256
 _UNSAFE_DOWNLOAD_ID = 'Brightspace ID is not a safe single download path segment'
 _DATE_FIELDS = {'StartDate': 'starts_at', 'EndDate': 'ends_at', 'DueDate': 'due_at'}
@@ -139,6 +140,67 @@ def _ordinary_link(value: Any, origin: str) -> str | None:
            or any(t in key for t in ('token', 'session', 'credential', 'password', 'signature')) for key in keys):
         return None
     return urlunsplit(parts._replace(fragment=''))
+
+
+def _is_d2l_reference(value: Any) -> bool:
+    return isinstance(value, str) and value.lstrip().lower().startswith('d2l:')
+
+
+def _reference_metadata(value: Any, origin: str) -> Row:
+    if _is_d2l_reference(value):
+        # Opaque D2L resources may be marked as a File; never treat them as a route.
+        # Preserve the scheme as data only, not an active link or a signed URL.
+        if len(value) <= 4096 and re.fullmatch(r'd2l:[A-Za-z0-9._~:/-]+', value, re.IGNORECASE | re.ASCII):
+            return {'target_reference': value}
+        return {}
+    link = _ordinary_link(value, origin)
+    return {'target_url': link} if link is not None else {}
+
+
+def _topic_type(row: Row) -> str | None:
+    # In the documented ContentObject model, Type=1 simply means Topic.
+    # TopicType=1 is File; TopicType=3 is Link. Explicit nonfile evidence wins.
+    topic_type = row.get('TopicType')
+    activity = row.get('ActivityType')
+    names = {value.casefold() for key in ('TopicTypeIdentifier', 'TypeIdentifier')
+             if isinstance(value := row.get(key), str)}
+    if (_is_d2l_reference(row.get('Url')) or row.get('IsFile') is False
+            or (type(topic_type) is int and topic_type in {3, 5, 6, 7, 8})
+            or (type(activity) is int and activity == 2)
+            or names & {'link', 'weblink', 'url', 'video', 'external', 'externallink'}):
+        return 'reference'
+    if row.get('IsFile') is True or (type(topic_type) is int and topic_type == 1) or names & {'file', 'contentfile'}:
+        return 'file'
+    return None
+
+
+def _native_topic_file(value: Any, origin: str) -> bool:
+    if not isinstance(value, str) or not value or value != value.strip():
+        return False
+    if any(ord(char) < 32 or char in '\\' for char in value):
+        return False
+    try:
+        parts = urlsplit(value)
+        if parts.scheme or parts.netloc:
+            base = urlsplit(origin)
+            if (parts.scheme, parts.netloc) != (base.scheme, base.netloc):
+                return False
+        return (not parts.query and not parts.fragment and parts.path.startswith('/content/')
+                and not parts.path.endswith('/')
+                and all(p not in {'.', '..'} for p in unquote(parts.path).split('/')))
+    except ValueError:
+        return False
+
+
+def _topic_filename(*values: Any) -> str | None:
+    for value in values:
+        if isinstance(value, str):
+            try:
+                candidate = unquote(urlsplit(value).path.rsplit('/', 1)[-1])
+                return _filename(candidate)
+            except (ValueError, ReadError):
+                pass  # A payload URL can supply a filename, never a download route.
+    return None
 
 
 class _BodyLinks(HTMLParser):
@@ -464,10 +526,10 @@ class AreaReader:
             })
             if entry.parent_id is not None:
                 metadata['parent_platform_id'] = entry.parent_id.raw
-            if entry.kind == 'topic' and entry.row.get('ActivityType') == 2:
-                target = _ordinary_link(entry.row.get('Url'), self.origin)
-                if target:
-                    metadata['target_url'] = target
+            if entry.kind == 'topic':
+                value = entry.row.get('Url')
+                if _is_d2l_reference(value) or _topic_type(entry.row) == 'reference':
+                    metadata.update(_reference_metadata(value, self.origin))
             description = entry.row.get('Description')
             if isinstance(description, str):
                 description = {'Text': description}
@@ -497,8 +559,25 @@ class AreaReader:
             skip_reason=_UNSAFE_DOWNLOAD_ID if path is None else None,
         )
 
+    def _topic_detail(self, course: Course, item: InventoryId) -> tuple[Row | None, str | None]:
+        try:
+            detail = self._get(course, f'/content/topics/{item.segment}')
+        except ReadError as error:
+            if error.http_status not in (403, 404):
+                raise
+            return None, f'Brightspace topic detail HTTP {error.http_status}; file type unverified'
+        if not isinstance(detail, dict) or detail.get('Id') is None:
+            return None, 'Brightspace topic detail missing; file type unverified'
+        if (_inventory_id(detail['Id']).key != item.key
+                or ('OrgUnitId' in detail and _id(detail['OrgUnitId']) != _id(course.org_unit_id))):
+            raise ReadError('Brightspace topic detail does not match its course and topic ID')
+        if any(detail.get(flag) is True for flag in ('IsHidden', 'IsLocked', 'IsBroken')):
+            return None, 'Brightspace topic detail is not available for download'
+        return detail, None
+
     def _materials(self, course: Course, checked_at: str) -> list[Material]:
         records = []
+        detail_reads = 0
 
         entries = self._toc(course, checked_at)
         toc_missing = self._missing_ids[('content', course.org_unit_id, checked_at)]
@@ -508,32 +587,54 @@ class AreaReader:
                 continue
             topic, item = entry.row, entry.platform_id
             parent = entry.parent_id.raw if entry.parent_id is not None else None
+            toc_url = topic.get('Url')
             activity = topic.get('ActivityType')
-            if type(activity) is int and activity == 1:
-                title = _title(topic, 'Title')
-                raw_url = topic.get('Url')
-                filename = None
-                if isinstance(raw_url, str):
-                    candidate = unquote(raw_url.split('?', 1)[0].split('#', 1)[0].rsplit('/', 1)[-1])
-                    try:
-                        filename = _filename(candidate)
-                    except ReadError:
-                        pass  # A payload URL is optional filename evidence, never a download route.
+            category = _topic_type(topic)
+            # A missing or explicitly unknown activity may still be a file/link.
+            # Known assessments and other tool activities are not material candidates.
+            if activity is not None and (type(activity) is not int or activity not in (-1, 1, 2)):
+                continue
+            title = _title(topic, 'Title')
+            extra = {'parent_platform_id': parent, 'content_url': self._toc_source(course, f'topic-{item.key}')}
+            detail_url = None
+            skip = None
+            if category is None:
+                if item.segment is None:
+                    skip = _UNSAFE_DOWNLOAD_ID
+                elif detail_reads >= MAX_TOPIC_DETAIL_READS:
+                    skip = 'Brightspace topic detail GET limit reached; file type unverified'
+                else:
+                    detail_reads += 1
+                    detail, skip = self._topic_detail(course, item)
+                    if detail is not None:
+                        category = _topic_type(detail)
+                        detail_url = detail.get('Url')
+            if category == 'file':
                 records.append(self._file_record(
-                    course=course, item=item, title=title, id_type='material-topic', filename=filename,
+                    course=course, item=item, title=title, id_type='material-topic',
+                    filename=_topic_filename(detail_url, toc_url),
                     fallback_url=self._toc_source(course, f'file-topic-{item.key}'),
-                    route='/content/topics/{}/file', ids=(item,),
-                    extra={'parent_platform_id': parent, 'content_url': self._toc_source(course, f'topic-{item.key}')},
+                    route='/content/topics/{}/file', ids=(item,), extra=extra,
                 ))
-            elif type(activity) is int and activity == 2:
-                target = _ordinary_link(topic.get('Url'), self.origin)
-                if target is not None:
-                    records.append(self._record(
-                        course=course, platform_id=item, title=_title(topic, 'Title'),
-                        url=self._toc_source(course, f'link-topic-{item.key}'),
-                        id_type='material-topic', kind='link', extra={
-                            'parent_platform_id': parent, 'target_url': target,
-                        }))
+                continue
+            target = {}
+            if category == 'reference' or skip != _UNSAFE_DOWNLOAD_ID:
+                for value in (detail_url, toc_url):
+                    if category == 'reference' or not _native_topic_file(value, self.origin):
+                        target = _reference_metadata(value, self.origin)
+                        if target:
+                            break
+            if target:
+                records.append(self._record(
+                    course=course, platform_id=item, title=title, kind='link', id_type='material-topic',
+                    url=self._toc_source(course, f'link-topic-{item.key}'), extra={**extra, **target},
+                ))
+            elif activity != 2 or _is_d2l_reference(toc_url):
+                records.append(self._record(
+                    course=course, platform_id=item, title=title, kind='file', id_type='material-topic',
+                    url=self._toc_source(course, f'file-topic-{item.key}'), extra=extra,
+                    skip_reason=skip or 'Brightspace topic has no verified file type or stable reference',
+                ))
 
         for folder in _objects(self._get(course, '/dropbox/folders/'), 'assignment folders'):
             if folder.get('IsHidden') is True:
