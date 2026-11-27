@@ -33,6 +33,7 @@ export const FORK_PRODUCT_PACKAGE_POLICY: Readonly<Record<string, ProductPackage
   'packages/fork/time-gap': { category: 'optional', reason: 'Fork-local time check before an input that ends a quiet spell in a Session; mounted by the event profile bundle.' },
   'packages/fork/wechat': { category: 'optional', reason: 'Fork-local WeChat channel; requires a QR-bound iLink bot account.' },
   'packages/fork/tool-wechat': { category: 'optional', reason: 'Fork-local WeChat file tool mounted by the event profile preset.' },
+  'packages/fork/tool-push': { category: 'optional', reason: 'Fork-local owner_push tool (API platform message bus) mounted by the event profile preset.' },
   'packages/fork/voice': { category: 'optional', reason: 'Fork-local voice service (speech and transcription through the owner\'s own services) mounted by the event profile bundle.' },
   'packages/fork/tool-up': { category: 'optional', reason: 'Fork-local up_* tools for the creator account (bili-svc) mounted by the event profile\'s up preset.' },
   'packages/fork/tool-voice': { category: 'optional', reason: 'Fork-local speak tool mounted by the event profile preset.' },

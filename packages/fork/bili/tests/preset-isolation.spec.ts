@@ -56,6 +56,7 @@ const NO_MEMORY_PRESETS = [...OUTSIDE_PRESETS, 'notify', 'qq-main'] as const
 const WECHAT_SIDE: Record<string, string> = {
   '@deepseek-ai/dsh-owner-memory': 'injects the owner memory block and registers memory_search/save/forget (feedbackScope mode is the one exception, below)',
   '@deepseek-ai/dsh-tool-wechat': 'sends files to the owner on WeChat',
+  '@deepseek-ai/dsh-tool-push': 'pushes to the owner\'s phone through the API platform\'s message bus',
   '@deepseek-ai/dsh-cc-bridge': 'talks to Claude Code sessions and the WeChat chat Session on the owner\'s behalf',
   '@deepseek-ai/dsh-tool-watch': 'creates watches that report into the WeChat chat Session',
   '@deepseek-ai/dsh-tool-monitor': 'monitors whose output returns to a Session with the owner\'s context',

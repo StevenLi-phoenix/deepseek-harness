@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Push-Werkzeug",
+    "description": "Lässt den Agenten dem Eigentümer eine dringende Nachricht aufs Telefon schicken oder eine Zeile in die tägliche E-Mail-Zusammenfassung legen, über den Nachrichtenbus der API-Plattform."
+  }
+}

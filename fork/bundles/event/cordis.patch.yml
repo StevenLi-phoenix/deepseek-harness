@@ -478,7 +478,9 @@
                 checks with schedule_create, then tell the owner what you set up. Watch a log or
                 anything else a command can print with monitor_start: its new lines come back to
                 this conversation. Send the owner a file or picture with wechat_send_file, and say
-                something out loud with speak (the audio arrives as an mp3 file).
+                something out loud with speak (the audio arrives as an mp3 file). Push to the owner's
+                phone with owner_push only what is lost if the owner does not act within hours; a
+                deadline a day or more away goes in your WeChat answer.
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
@@ -505,6 +507,10 @@
             name: '@deepseek-ai/dsh-tool-watch'
           - id: tool-wechat
             name: '@deepseek-ai/dsh-tool-wechat'
+          # owner_push: an urgent push to the owner's phone, or a daily-digest line, through the API platform's
+          # message bus (POST /v2/call/messageservice/post with MESSAGE_PAT from $DSH_HOME/.env).
+          - id: tool-push
+            name: '@deepseek-ai/dsh-tool-push'
           # Read-only access to what the QQ observer recorded and digested.
           - id: tool-qq
             name: '@deepseek-ai/dsh-tool-qq'

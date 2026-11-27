@@ -6232,6 +6232,33 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-present -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-tool-push -->
+<a id="deepseek-aidsh-tool-push"></a>
+
+## `@deepseek-ai/dsh-tool-push`
+
+- `inject`: `tools` · `credentials`
+- `source`: [`packages/fork/tool-push/src/index.ts:29`](../packages/fork/tool-push/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Platform base, without a trailing slash. */
+  apiBase: string
+  /** Name of the PAT that may post to the message bus. */
+  tokenEnv: string
+  /** `source` of every message. */
+  source: string
+  /** Bus channel the messages are kept in. */
+  channel: string
+  /** Priority of a push. */
+  pushPriority: number
+  /** Timeout of one post, in milliseconds. */
+  requestTimeoutMs: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-push -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-tool-pwsh -->
 <a id="deepseek-aidsh-tool-pwsh"></a>
 

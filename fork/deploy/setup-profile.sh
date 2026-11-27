@@ -62,7 +62,7 @@ function link(name, directory) {
 // The installed product resolves only its own default packages; the experimental webhook runtime, its
 // GitHub adapter, and the console logger are profile plugins here, linked like the fork packages.
 for (const name of ['@deepseek-ai/dsh-webhook', '@deepseek-ai/dsh-webhook-github', '@deepseek-ai/cordis-plugin-logger-console', '@deepseek-ai/dsh-event-bus', '@deepseek-ai/dsh-github-sensor',
-  '@deepseek-ai/dsh-wechat', '@deepseek-ai/dsh-tool-watch', '@deepseek-ai/dsh-tool-wechat', '@deepseek-ai/dsh-provider-balance', '@deepseek-ai/dsh-owner-memory', '@deepseek-ai/dsh-owner-memory-admin',
+  '@deepseek-ai/dsh-wechat', '@deepseek-ai/dsh-tool-watch', '@deepseek-ai/dsh-tool-wechat', '@deepseek-ai/dsh-tool-push', '@deepseek-ai/dsh-provider-balance', '@deepseek-ai/dsh-owner-memory', '@deepseek-ai/dsh-owner-memory-admin',
   '@deepseek-ai/dsh-event-ingest', '@deepseek-ai/dsh-tool-monitor', '@deepseek-ai/dsh-cc-bridge', '@deepseek-ai/dsh-sysmon', '@deepseek-ai/dsh-plugin-config', '@deepseek-ai/dsh-event-console', '@deepseek-ai/dsh-cc-admin', '@deepseek-ai/dsh-presence', '@deepseek-ai/dsh-wechat-settings', '@deepseek-ai/dsh-bili',
   '@deepseek-ai/dsh-voice', '@deepseek-ai/dsh-tool-voice', '@deepseek-ai/dsh-tool-up',
   '@deepseek-ai/dsh-tool-bili', '@deepseek-ai/dsh-owner-relay', '@deepseek-ai/dsh-qq', '@deepseek-ai/dsh-qq-login', '@deepseek-ai/dsh-tool-qq', '@deepseek-ai/dsh-qqbot',
