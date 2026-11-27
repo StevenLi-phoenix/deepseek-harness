@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, urlsplit
 from . import assignments as legacy
 from .areas import AreaReader
 from .config import Config
-from .model import Course, Material, ReadError, Reading, TaskEvidence
+from .model import Course, Material, NeedsUI, ReadError, Reading, TaskEvidence
 from .store import Courses, stable_url
 from .transport import MAX_FILE, Brightspace, ResponseTooLarge
 
@@ -30,12 +30,13 @@ def read_assignments(client: Brightspace, course: Course, page_reader) -> Readin
     source = "api"
     fallback = None
     failure = None
+    needs_ui = None
     page_status = {}
     if result["status"] == "failed":
         failure = ReadError(result["reason"], result.get("http_status"))
     if failure and failure.http_status == 403 and not folders:
         if page_reader is None:
-            return Reading(failure=failure, fallback_http=403)
+            return Reading(failure=NeedsUI(str(failure), 403), fallback_http=403)
         try:
             tasks = page_reader.assignment_task_rows(course)
             if not tasks:
@@ -44,7 +45,7 @@ def read_assignments(client: Brightspace, course: Course, page_reader) -> Readin
                 tasks = [TaskEvidence(t.platform_id, t.title, t.url, t.due_at, due_known=t.due_known) for t in tasks]
             return Reading(tasks=tasks, source="page", fallback_http=403, count=len(tasks))
         except ReadError as error:
-            return Reading(source="page", fallback_http=403, failure=ReadError(f"listing API HTTP 403; {error}", 403))
+            return Reading(source="page", fallback_http=403, failure=NeedsUI(f"listing API HTTP 403; {error}", 403))
     needs_page = [row for row in folders if row.get("needs_ui")]
     if needs_page:
         fallback = 403 if any(not row["group"] for row in needs_page) else None
@@ -56,10 +57,10 @@ def read_assignments(client: Brightspace, course: Course, page_reader) -> Readin
                 names = [row["name"] for row in needs_page if title_counts[row["name"]] == 1]
                 page_status = page_reader.assignment_statuses(course, names) if names else {}
             except ReadError as error:
-                failure = failure or ReadError(f"{page_label}; {error}", fallback)
+                needs_ui = NeedsUI(f"{page_label}; {error}", fallback)
         unresolved = sum(page_status.get(row["name"]) not in ("submitted", "not_submitted") for row in needs_page)
         if unresolved:
-            failure = failure or ReadError(f"{page_label}: {unresolved} submission rows not verified on rendered page", fallback)
+            needs_ui = needs_ui or NeedsUI(f"{page_label}: {unresolved} submission rows not verified on rendered page", fallback)
     tasks = []
     for row in folders:
         platform_id = str(row["folder_id"])
@@ -72,7 +73,7 @@ def read_assignments(client: Brightspace, course: Course, page_reader) -> Readin
             failure = failure or ReadError("assignment due date missing or malformed")
         tasks.append(TaskEvidence(platform_id, row["name"], assignment_url(client.base_url, course, platform_id),
                                   due_at, status, due_known))
-    return Reading(tasks=tasks, source=source, fallback_http=fallback, count=len(tasks), failure=failure)
+    return Reading(tasks=tasks, source=source, fallback_http=fallback, count=len(tasks), failure=failure or needs_ui)
 
 
 def read_gradescope() -> Reading:
@@ -92,8 +93,16 @@ def _normalize_instant(value: str | None) -> datetime | None:
 
 
 def _matching_saved(rows: dict[str, dict], course: Course, evidence: TaskEvidence, origin: str):
-    exact = []
+    explicit, exact_links = [], []
     for row in rows.values():
+        identity = row.get("platform_identity")
+        platform = identity.get("platform") if isinstance(identity, dict) else None
+        if isinstance(platform, str) and platform.casefold() in ("brightspace", "d2l"):
+            if (identity.get("course_id") in (str(course.org_unit_id), course.id)
+                    and identity.get("task_id") == evidence.platform_id):
+                explicit.append(row)
+            # A different explicit Brightspace identity is never overridden by a link.
+            continue
         links = row.get("source_links") or []
         if not isinstance(links, list):
             raise ReadError("invalid saved source links")
@@ -107,27 +116,36 @@ def _matching_saved(rows: dict[str, dict], course: Course, evidence: TaskEvidenc
             except ValueError:
                 continue
             if (f"{parts.scheme}://{parts.netloc}" == origin and
-                    parts.path == "/d2l/lms/dropbox/user/folder_submit_files.d2l" and
+                    parts.path in ("/d2l/lms/dropbox/user/folder_submit_files.d2l",
+                                   "/d2l/lms/dropbox/user/folder_user_view_feedback.d2l") and
                     q.get("ou") == [str(course.org_unit_id)] and q.get("db") == [evidence.platform_id]):
-                exact.append(row)
+                exact_links.append(row)
                 break
-    if len(exact) == 1:
-        return exact[0]
-    if len(exact) > 1:
-        raise ReadError("assignment identity matches multiple saved tasks")
-    # Title alone is not permission to rewrite a saved task with unclear identity.
-    return None
+    candidates = explicit or exact_links
+    if len(candidates) == 1:
+        return candidates[0], False
+    if candidates:
+        exact = [row for row in candidates if row.get("course_id") == course.id
+                 and row.get("title") == evidence.title]
+        if len(exact) == 1:
+            return exact[0], False
+        return None, True
+    return None, False
 
 
 def _task_diffs(rows: dict[str, dict], course: Course, readings: list[TaskEvidence], origin: str):
-    changes, unchanged, unmatched = [], [], []
+    changes, unchanged, unmatched, ambiguous = [], [], [], []
     seen = set()
     for task in readings:
         if task.platform_id in seen or not re.fullmatch(r"[1-9][0-9]{0,19}", task.platform_id):
             raise ReadError("repeated or invalid assignment platform id")
         seen.add(task.platform_id)
-        row = _matching_saved(rows, course, task, origin)
+        row, tied = _matching_saved(rows, course, task, origin)
         platform_id = course.id + "-assignment-" + task.platform_id
+        if tied:
+            ambiguous.append({"id": platform_id, "url": stable_url(task.url),
+                              "reason": "multiple saved tasks share this Brightspace identity"})
+            continue
         if row is None:
             # Kept out of the summary. Operator can reconcile by actual source, not guess from the slug.
             unmatched.append({"id": platform_id, "url": stable_url(task.url)})
@@ -153,7 +171,7 @@ def _task_diffs(rows: dict[str, dict], course: Course, readings: list[TaskEviden
                             "url": stable_url(task.url), "fields": diff})
         elif task.due_known and task.submission_status != "unknown" and verified and old_sub == task.submission_status:
             unchanged.append(task_id)
-    return changes, unchanged, unmatched
+    return changes, unchanged, unmatched, ambiguous
 
 
 class FileOverLimit(Exception):
@@ -204,7 +222,8 @@ def collect(config: Config, selected: tuple[str, ...], brightspace: Brightspace,
             summary = {"status": "checked", "source": reading.source,
                        "count": reading.count if reading.count is not None else len(reading.records),
                        "fallback_http": reading.fallback_http, "http_status": None, "reason": None,
-                       "changes": [], "skips": [], "task_changes": [], "checked_ids": [], "unmatched_tasks": []}
+                       "changes": [], "skips": [], "task_changes": [], "checked_ids": [],
+                       "unmatched_tasks": [], "ambiguous_tasks": []}
             area_report["courses"][course.slug] = summary
             if reading.failure:
                 failures.append(reading.failure)
@@ -214,6 +233,9 @@ def collect(config: Config, selected: tuple[str, ...], brightspace: Brightspace,
                     failures.append(ReadError("duplicate material id in source"))
                     continue
                 ids.add(item.id)
+                if item.skip_reason is not None:
+                    summary["skips"].append({"id": item.id, "reason": item.skip_reason})
+                    continue
                 try:
                     action = _save_item(brightspace, courses, course, item, when)
                     if action != "unchanged":
@@ -225,14 +247,19 @@ def collect(config: Config, selected: tuple[str, ...], brightspace: Brightspace,
             if reading.tasks:
                 try:
                     rows = courses.inventory(course, "task")
-                    diffs, checked, unmatched = _task_diffs(rows, course, reading.tasks, brightspace.base_url)
-                    summary.update(task_changes=diffs, checked_ids=checked, unmatched_tasks=unmatched)
+                    diffs, checked, unmatched, ambiguous = _task_diffs(rows, course, reading.tasks, brightspace.base_url)
+                    summary.update(task_changes=diffs, checked_ids=checked, unmatched_tasks=unmatched,
+                                   ambiguous_tasks=ambiguous)
                 except ReadError as error:
                     failures.append(error)
             if failures:
-                summary.update(status="failed", http_status=next((e.http_status for e in failures if e.http_status), None),
+                hard_errors = [error for error in failures if not isinstance(error, NeedsUI)]
+                status = "failed" if hard_errors else "needs_ui"
+                summary.update(status=status,
+                               http_status=next((e.http_status for e in hard_errors or failures if e.http_status), None),
                                reason="; ".join(dict.fromkeys(str(e) for e in failures)))
-                area_report["status"] = "failed"
+                if status == "failed" or area_report["status"] == "checked":
+                    area_report["status"] = status
             area_report["count"] += summary["count"]
     result["ok"] = all(value["status"] == "checked" for value in result["areas"].values())
     return result
@@ -243,9 +270,9 @@ def human_summary(report: dict) -> str:
     for area, group in report["areas"].items():
         details = []
         for course, row in group["courses"].items():
-            if row["status"] == "failed":
+            if row["status"] != "checked":
                 status = f"HTTP {row['http_status']}; " if row["http_status"] else ""
-                details.append(f"{course}: {status}{row['reason']}")
+                details.append(f"{course}: {row['status']}: {status}{row['reason']}")
             elif row["fallback_http"]:
                 details.append(f"{course}: {row['source']} fallback after HTTP {row['fallback_http']}")
             elif row["source"] == "api+page":
@@ -259,6 +286,8 @@ def human_summary(report: dict) -> str:
             for task in row["task_changes"]:
                 fields = ", ".join(f"{key} {v['before']!s} -> {v['after']!s}" for key, v in task["fields"].items())
                 lines.append(f"  {course} observe {task['id']} v{task['version']}: {fields}")
+            for task in row["ambiguous_tasks"]:
+                lines.append(f"  {course} ambiguous {task['id']}: {task['reason']}")
             if row["unmatched_tasks"]:
                 lines.append(f"  {course} {len(row['unmatched_tasks'])} unmatched assignment IDs (see report)")
     return "\n".join(lines)

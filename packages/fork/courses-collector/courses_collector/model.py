@@ -13,6 +13,10 @@ class ReadError(Exception):
         self.http_status = http_status
 
 
+class NeedsUI(ReadError):
+    """A verified learner-API permission gap requiring rendered evidence."""
+
+
 @dataclass(frozen=True)
 class Course:
     slug: str
@@ -34,6 +38,7 @@ class Material:
     download_path: str | None = None
     expected_size: int | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    skip_reason: str | None = None
 
 
 @dataclass(frozen=True)

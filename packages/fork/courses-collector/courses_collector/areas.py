@@ -6,12 +6,13 @@ this module does not execute it, render it, or treat links in it as requests.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import hashlib
 from html.parser import HTMLParser
 import re
 from typing import Any, Callable, Protocol
 from urllib.parse import parse_qsl, unquote, urljoin, urlsplit, urlunsplit
 
-from .model import Course, Material, ReadError, Reading
+from .model import Course, Material, NeedsUI, ReadError, Reading
 
 
 class ReadClient(Protocol):
@@ -25,6 +26,9 @@ PageReader = Callable[[str, Course, str], Reading]
 Row = dict[str, Any]
 MAX_PAGES = 100
 MAX_TOC_DEPTH = 64
+MAX_TOC_DESCRIPTION_BYTES = 2 * 1024 * 1024
+MAX_OPAQUE_ID_BYTES = 256
+_UNSAFE_DOWNLOAD_ID = 'Brightspace ID is not a safe single download path segment'
 _DATE_FIELDS = {'StartDate': 'starts_at', 'EndDate': 'ends_at', 'DueDate': 'due_at'}
 
 
@@ -46,6 +50,33 @@ def _id(value: Any) -> str:
     if not isinstance(value, str) or not re.fullmatch(r'[1-9][0-9]{0,19}', value):
         raise ReadError('invalid Brightspace object ID')
     return value
+
+
+@dataclass(frozen=True)
+class InventoryId:
+    raw: int | str
+    key: str
+    segment: str | None
+
+
+def _inventory_id(value: Any) -> InventoryId:
+    if type(value) is int and 0 < value < 10**20:
+        numeric = str(value)
+        return InventoryId(value, numeric, numeric)
+    if type(value) is not str or not value.strip() or any(ord(c) < 32 or ord(c) == 127 for c in value):
+        raise ReadError('invalid Brightspace inventory ID')
+    try:
+        raw_bytes = value.encode('utf-8')
+    except UnicodeEncodeError:
+        raise ReadError('invalid Brightspace inventory ID encoding') from None
+    if len(raw_bytes) > MAX_OPAQUE_ID_BYTES:
+        raise ReadError('Brightspace inventory ID exceeds byte limit')
+    if re.fullmatch(r'[1-9][0-9]{0,19}', value):
+        return InventoryId(value, value, value)
+    # Type-framed digest; 128 bits leaves space for both parent and attachment IDs.
+    key = 'opaque-' + hashlib.sha256(b'str\0' + raw_bytes).hexdigest()[:32]
+    segment = value if re.fullmatch(r'[A-Za-z0-9._~-]+', value) and value not in {'.', '..'} else None
+    return InventoryId(value, key, segment)
 
 
 def _title(row: Row, key: str) -> str:
@@ -159,8 +190,8 @@ def _continuation(value: Any, origin: str, path: str) -> str:
 @dataclass(frozen=True)
 class TocEntry:
     kind: str
-    platform_id: str
-    parent_id: str | None
+    platform_id: InventoryId
+    parent_id: InventoryId | None
     row: Row
 
 
@@ -183,7 +214,12 @@ class AreaReader:
             records = methods[area](course, checked_at)
         except ReadError as error:
             status = error.http_status
-            if (status != 403 and not (area == 'quizzes' and status == 404)) or self.page_reader is None:
+            needs_ui = area == 'discussions' and status == 403
+            if status != 403 and not (area == 'quizzes' and status == 404):
+                raise
+            if self.page_reader is None:
+                if needs_ui:
+                    raise NeedsUI(f'{error}; no rendered discussion reader', 403) from None
                 raise
             try:
                 result = self.page_reader(area, course, checked_at)
@@ -191,7 +227,8 @@ class AreaReader:
                     raise result.failure
                 _unique(result.records)
             except ReadError as page_error:
-                raise ReadError(f'{error}; page fallback: {page_error}', status) from None
+                error_type = NeedsUI if needs_ui else ReadError
+                raise error_type(f'{error}; page fallback: {page_error}', status) from None
             return replace(result, source='page', fallback_http=status)
         _unique(records)
         return Reading(records=records, source='api', count=len(records))
@@ -205,20 +242,22 @@ class AreaReader:
     def _ui(self, path: str) -> str:
         return self.origin + path
 
-    def _record(self, *, course: Course, platform_id: str, title: str, url: str, kind: str,
+    def _record(self, *, course: Course, platform_id: str | InventoryId, title: str, url: str, kind: str,
                 id_type: str | None = None, rich: Any = None, extra: Row | None = None,
                 download_path: str | None = None, expected_size: int | None = None,
-                filename: str | None = None) -> Material:
+                filename: str | None = None, skip_reason: str | None = None) -> Material:
         text, fmt = _rich(rich)
-        metadata = {'platform_id': platform_id, **(extra or {})}
+        key = platform_id.key if isinstance(platform_id, InventoryId) else platform_id
+        raw_id = platform_id.raw if isinstance(platform_id, InventoryId) else platform_id
+        metadata = {'platform_id': raw_id, **(extra or {})}
         if fmt is not None:
             metadata['body_format'] = fmt
         links = _body_links(rich, self.origin)
         if links:
             metadata['links'] = links
-        return Material(id=f'{course.id}-{id_type or kind}-{platform_id}', title=title, url=url,
+        return Material(id=f'{course.id}-{id_type or kind}-{key}', title=title, url=url,
                         kind=kind, text=text, filename=filename, download_path=download_path,
-                        expected_size=expected_size, metadata=metadata)
+                        expected_size=expected_size, metadata=metadata, skip_reason=skip_reason)
 
     def _news(self, course: Course, checked_at: str) -> list[Row]:
         key = ('news', course.org_unit_id, checked_at)
@@ -343,116 +382,140 @@ class AreaReader:
         entries: list[TocEntry] = []
         seen = set()
 
-        def emit(kind: str, platform_id: str, parent: str | None, row: Row) -> None:
-            if (kind, platform_id) in seen:
+        def emit(kind: str, platform_id: InventoryId, parent: InventoryId | None, row: Row) -> None:
+            key = kind, platform_id.key
+            if key in seen:
                 raise ReadError('duplicate Brightspace content ID')
-            seen.add((kind, platform_id))
+            seen.add(key)
             entries.append(TocEntry(kind, platform_id, parent, row))
 
-        def walk(modules: list[Row], parent: str | None, depth: int) -> None:
+        def walk(modules: list[Row], parent: InventoryId | None, depth: int) -> None:
             if depth > MAX_TOC_DEPTH:
                 raise ReadError('Brightspace content nesting limit exceeded')
             for module in modules:
                 if module.get('IsHidden') is True:
                     continue
-                mid = _id(module.get('ModuleId'))
+                mid = _inventory_id(module.get('ModuleId'))
                 emit('module', mid, parent, module)
                 for topic in _objects(module.get('Topics'), 'content topics'):
                     if topic.get('IsHidden') is not True:
-                        emit('topic', _id(topic.get('TopicId')), mid, topic)
+                        emit('topic', _inventory_id(topic.get('TopicId', topic.get('Identifier'))), mid, topic)
                 walk(_objects(module.get('Modules'), 'child content modules'), mid, depth + 1)
 
         walk(_objects(toc.get('Modules'), 'root content modules'), None, 0)
         self._inventories[key] = entries
         return entries
 
+    def _toc_source(self, course: Course, selector: str) -> str:
+        # The fragment identifies the row in our evidence; it is not an API route.
+        return self._ui(self._path(course, '/content/toc')) + '#' + selector
+
     def _content(self, course: Course, checked_at: str) -> list[Material]:
         records = []
-        ou = course.org_unit_id
+        total_description_bytes = 0
         for entry in self._toc(course, checked_at):
             item = entry.platform_id
-            detail = _object(self._get(course, f'/content/{entry.kind}s/{item}'), 'content detail')
-            if _id(detail.get('Id')) != item or detail.get('IsHidden') is True:
-                raise ReadError('content detail does not match visible directory item')
-            metadata = {
-                **_fields(entry.row, {'SortOrder': 'sort_order', 'IsLocked': 'locked', 'IsBroken': 'broken',
-                                      'ActivityType': 'activity_type', 'StartDateTime': 'starts_at',
-                                      'EndDateTime': 'ends_at'}),
-                **_fields(detail, {**_DATE_FIELDS, 'ModuleStartDate': 'starts_at',
-                                   'ModuleEndDate': 'ends_at', 'ModuleDueDate': 'due_at'}),
-            }
+            metadata = _fields(entry.row, {
+                **_DATE_FIELDS, 'SortOrder': 'sort_order', 'IsLocked': 'locked', 'IsBroken': 'broken',
+                'ActivityType': 'activity_type', 'StartDateTime': 'starts_at', 'EndDateTime': 'ends_at',
+                'DueDateTime': 'due_at', 'LastModifiedDate': 'modified_at',
+            })
             if entry.parent_id is not None:
-                metadata['parent_platform_id'] = entry.parent_id
-            if entry.kind == 'topic':
-                url = self._ui(f'/d2l/le/content/{ou}/viewContent/{item}/View')
-                if entry.row.get('ActivityType') == 2:
-                    target = _ordinary_link(entry.row.get('Url'), self.origin)
-                    if target:
-                        metadata['target_url'] = target
-            else:
-                url = self._ui(self._path(course, f'/content/modules/{item}'))
+                metadata['parent_platform_id'] = entry.parent_id.raw
+            if entry.kind == 'topic' and entry.row.get('ActivityType') == 2:
+                target = _ordinary_link(entry.row.get('Url'), self.origin)
+                if target:
+                    metadata['target_url'] = target
+            description = entry.row.get('Description')
+            if isinstance(description, str):
+                description = {'Text': description}
+            text, _ = _rich(description)
+            if text is not None:
+                try:
+                    total_description_bytes += len(text.encode('utf-8'))
+                except UnicodeEncodeError:
+                    raise ReadError('invalid Brightspace ToC description encoding') from None
+                if total_description_bytes > MAX_TOC_DESCRIPTION_BYTES:
+                    raise ReadError('Brightspace ToC descriptions exceed the 2 MiB aggregate limit')
             records.append(self._record(
-                course=course, platform_id=item, title=_title(entry.row, 'Title'), url=url, kind='content',
-                id_type=f'content-{entry.kind}', rich=detail.get('Description'), extra=metadata))
+                course=course, platform_id=item, title=_title(entry.row, 'Title'),
+                url=self._toc_source(course, f'{entry.kind}-{item.key}'), kind='content',
+                id_type=f'content-{entry.kind}', rich=description, extra=metadata))
         return records
+
+    def _file_record(self, *, course: Course, item: InventoryId, title: str,
+                     id_type: str, fallback_url: str, route: str, ids: tuple[InventoryId, ...],
+                     filename: str | None, extra: Row, expected_size: int | None = None) -> Material:
+        segments = [item_id.segment for item_id in ids]
+        path = None if None in segments else self._path(course, route.format(*segments))
+        return self._record(
+            course=course, platform_id=item, title=title, kind='file', id_type=id_type,
+            url=self._ui(path) if path is not None else fallback_url, filename=filename,
+            download_path=path, expected_size=expected_size, extra=extra,
+            skip_reason=_UNSAFE_DOWNLOAD_ID if path is None else None,
+        )
 
     def _materials(self, course: Course, checked_at: str) -> list[Material]:
         records = []
-        ou = course.org_unit_id
 
         for entry in self._toc(course, checked_at):
             if entry.kind != 'topic' or entry.row.get('IsLocked') is True or entry.row.get('IsBroken') is True:
                 continue
             topic, item = entry.row, entry.platform_id
+            parent = entry.parent_id.raw if entry.parent_id is not None else None
             activity = topic.get('ActivityType')
-            if activity == 1:
-                path = self._path(course, f'/content/topics/{item}/file')
+            if type(activity) is int and activity == 1:
+                title = _title(topic, 'Title')
                 raw_url = topic.get('Url')
-                if not isinstance(raw_url, str):
-                    raise ReadError('missing Brightspace file topic path')
-                filename = _filename(unquote(raw_url.split('?', 1)[0].split('#', 1)[0].rsplit('/', 1)[-1]))
-                records.append(self._record(
-                    course=course, platform_id=item, title=_title(topic, 'Title'),
-                    url=self._ui(path), kind='file',
-                    id_type='material-topic', filename=filename, download_path=path,
-                    extra={'parent_platform_id': entry.parent_id,
-                           'content_url': self._ui(f'/d2l/le/content/{ou}/viewContent/{item}/View')},
+                filename = None
+                if isinstance(raw_url, str):
+                    candidate = unquote(raw_url.split('?', 1)[0].split('#', 1)[0].rsplit('/', 1)[-1])
+                    try:
+                        filename = _filename(candidate)
+                    except ReadError:
+                        pass  # A payload URL is optional filename evidence, never a download route.
+                records.append(self._file_record(
+                    course=course, item=item, title=title, id_type='material-topic', filename=filename,
+                    fallback_url=self._toc_source(course, f'file-topic-{item.key}'),
+                    route='/content/topics/{}/file', ids=(item,),
+                    extra={'parent_platform_id': parent, 'content_url': self._toc_source(course, f'topic-{item.key}')},
                 ))
-            elif activity == 2:
+            elif type(activity) is int and activity == 2:
                 target = _ordinary_link(topic.get('Url'), self.origin)
                 if target is not None:
                     records.append(self._record(
                         course=course, platform_id=item, title=_title(topic, 'Title'),
-                        url=self._ui(self._path(course, f'/content/topics/{item}')),
+                        url=self._toc_source(course, f'link-topic-{item.key}'),
                         id_type='material-topic', kind='link', extra={
-                            'parent_platform_id': entry.parent_id, 'target_url': target,
+                            'parent_platform_id': parent, 'target_url': target,
                         }))
 
         for folder in _objects(self._get(course, '/dropbox/folders/'), 'assignment folders'):
             if folder.get('IsHidden') is True:
                 continue
-            fid = _id(folder.get('Id'))
+            fid = _inventory_id(folder.get('Id'))
             for attach in _objects(folder.get('Attachments', []), 'assignment attachments'):
-                aid = _id(attach.get('Id'))
+                aid = _inventory_id(attach.get('Id'))
                 filename = _filename(_title(attach, 'FileName'))
-                path = self._path(course, f'/dropbox/folders/{fid}/attachments/{aid}')
-                records.append(self._record(
-                    course=course, platform_id=aid, title=filename, url=self._ui(path),
-                    kind='file', id_type=f'assignment-{fid}-attachment', download_path=path, filename=filename,
-                    expected_size=_file_size(attach.get('Size')), extra={'assignment_platform_id': fid},
+                records.append(self._file_record(
+                    course=course, item=aid, title=filename, id_type=f'assignment-{fid.key}-attachment',
+                    fallback_url=self._ui(self._path(course, '/dropbox/folders/')) + f'#attachment-{fid.key}-{aid.key}',
+                    route='/dropbox/folders/{}/attachments/{}', ids=(fid, aid), filename=filename,
+                    expected_size=_file_size(attach.get('Size')), extra={'assignment_platform_id': fid.raw},
                 ))
 
         for news in self._news(course, checked_at):
-            nid = _id(news.get('Id'))
+            nid = _inventory_id(news.get('Id'))
             for attach in _objects(news.get('Attachments', []), 'announcement attachments'):
-                item = _id(attach.get('FileId'))
+                item = _inventory_id(attach.get('FileId'))
                 filename = _filename(_title(attach, 'FileName'))
-                path = self._path(course, f'/news/{nid}/attachments/{item}')
-                records.append(self._record(
-                    course=course, platform_id=item, title=filename, url=self._ui(path), kind='file',
-                    id_type=f'announcement-{nid}-attachment', download_path=path, filename=filename,
+                records.append(self._file_record(
+                    course=course, item=item, title=filename, id_type=f'announcement-{nid.key}-attachment',
+                    fallback_url=self._ui(self._path(course, '/news/')) + f'#attachment-{nid.key}-{item.key}',
+                    route='/news/{}/attachments/{}', ids=(nid, item), filename=filename,
                     expected_size=_file_size(attach.get('FileSize')),
-                    extra={'announcement_id': f'{course.id}-announcement-{nid}'},
+                    extra={'announcement_id': f'{course.id}-announcement-{nid.key}',
+                           'announcement_platform_id': nid.raw},
                 ))
         return records
 

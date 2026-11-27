@@ -4,8 +4,8 @@ from __future__ import annotations
 import unittest
 from dataclasses import dataclass, field
 
-from courses_collector.areas import AreaReader, read_area
-from courses_collector.model import Course, Material, ReadError, Reading
+from courses_collector.areas import MAX_TOC_DESCRIPTION_BYTES, AreaReader, read_area
+from courses_collector.model import Course, Material, NeedsUI, ReadError, Reading
 
 
 COURSE = Course('fixture', 'sample-term-fixture', 123)
@@ -117,16 +117,13 @@ class AreaTests(unittest.TestCase):
     def test_content_and_materials_share_inventory_without_visiting_topics(self):
         routes = {
             '/content/toc': {'Modules': [{
-                'ModuleId': 1, 'Title': 'Module', 'Modules': [], 'Topics': [
+                'ModuleId': 1, 'Title': 'Module', 'Description': {'Text': BODY}, 'Modules': [], 'Topics': [
                     {'TopicId': 2, 'Title': 'Slides', 'ActivityType': 1, 'Url': '/content/slides%20A.pdf'},
                     {'TopicId': 3, 'Title': 'Link', 'ActivityType': 2, 'Url': 'https://library.example.test/path?id=7'},
                     {'TopicId': 4, 'Title': 'Quiz', 'ActivityType': 4, 'Url': '/d2l/lms/quizzing/start'},
                     {'TopicId': 5, 'Title': 'Signed', 'ActivityType': 2, 'Url': 'https://library.example.test/path?X-Amz-Signature=secret'},
                 ],
             }]},
-            '/content/modules/1': {'Id': 1, 'Title': 'Module', 'Description': {'Text': BODY}},
-            **{f'/content/topics/{i}': {'Id': i, 'Description': None} for i in (2, 3, 4, 5)},
-            '/content/topics/2/file': b'%PDF-1.4 fixture',
             '/news/': [{'Id': 6, 'Title': 'Notice', 'Body': {'Text': BODY}, 'Attachments': [
                 {'FileId': 7, 'FileName': 'handout.txt', 'FileSize': 7},
             ]}],
@@ -139,7 +136,9 @@ class AreaTests(unittest.TestCase):
         content = reader.read('content', COURSE, AT)
         self.assertEqual(content.count, 5)
         self.assertEqual(content.records[0].text, BODY)
-        self.assertEqual(content.records[1].metadata['parent_platform_id'], '1')
+        self.assertEqual(content.records[1].metadata['parent_platform_id'], 1)
+        self.assertIsNone(content.records[1].text)
+        self.assertEqual(content.records[1].url, ORIGIN + PREFIX + '/content/toc#topic-2')
         reader.read('announcements', COURSE, AT)
         materials = reader.read('materials', COURSE, AT)
         self.assertEqual([r.id for r in materials.records], [
@@ -149,7 +148,7 @@ class AreaTests(unittest.TestCase):
         self.assertEqual(materials.records[0].filename, 'slides A.pdf')
         self.assertEqual(materials.records[0].download_path, PREFIX + '/content/topics/2/file')
         self.assertEqual(materials.records[0].url, ORIGIN + PREFIX + '/content/topics/2/file')
-        self.assertEqual(materials.records[1].url, ORIGIN + PREFIX + '/content/topics/3')
+        self.assertEqual(materials.records[1].url, ORIGIN + PREFIX + '/content/toc#link-topic-3')
         self.assertEqual(materials.records[1].metadata['target_url'], 'https://library.example.test/path?id=7')
         urls = [item.url for item in content.records + materials.records]
         self.assertEqual(len(set(urls)), len(urls))
@@ -166,22 +165,94 @@ class AreaTests(unittest.TestCase):
         result, client = read('content', {
             '/content/toc': {'Modules': [
                 {'ModuleId': 10, 'Title': 'Root', 'Topics': [], 'Modules': [
-                    {'ModuleId': 11, 'Title': 'Nested', 'Modules': [], 'Topics': [
-                        {'TopicId': 13, 'Title': 'Read', 'ActivityType': 1},
+                    {'ModuleId': 11, 'Title': 'Nested', 'Description': {'Html': '<p>Nested only</p>'},
+                     'Modules': [], 'Topics': [
+                        {'TopicId': 13, 'Title': 'Read', 'ActivityType': 1, 'Description': BODY},
                     ]},
                     {'ModuleId': 12, 'Title': 'Hidden', 'IsHidden': True},
                 ]},
             ]},
-            '/content/modules/10': {'Id': 10, 'Description': None},
-            '/content/modules/11': {'Id': 11, 'Description': {'Html': '<p>Nested only</p>'}},
-            '/content/topics/13': {'Id': 13, 'Description': {'Text': BODY}},
         })
         self.assertEqual(result.count, 3)
-        self.assertEqual(result.records[1].metadata['parent_platform_id'], '10')
-        self.assertEqual(result.records[2].metadata['parent_platform_id'], '11')
+        self.assertEqual(result.records[1].metadata['parent_platform_id'], 10)
+        self.assertEqual(result.records[2].metadata['parent_platform_id'], 11)
         self.assertEqual(result.records[1].text, '<p>Nested only</p>')
         self.assertEqual(result.records[1].metadata['body_format'], 'html')
-        self.assertNotIn(('json', PREFIX + '/content/modules/12'), client.calls)
+        self.assertEqual(result.records[2].text, BODY)
+        self.assertEqual(client.calls, [('json', PREFIX + '/content/toc')])
+
+    def test_toc_description_budget_is_cumulative_utf8_and_exact(self):
+        half = 'é' * (MAX_TOC_DESCRIPTION_BYTES // 4)
+        module = {'ModuleId': 1, 'Title': 'A', 'Description': half, 'Modules': [], 'Topics': [
+            {'TopicId': 2, 'Title': 'B', 'Description': {'Text': half}},
+        ]}
+        routes = {'/content/toc': {'Modules': [module]}}
+        result, client = read('content', routes)
+        self.assertEqual([record.text for record in result.records], [half, half])
+        self.assertEqual(client.calls, [('json', PREFIX + '/content/toc')])
+        module['Topics'][0]['Description']['Text'] += 'x'
+        with self.assertRaisesRegex(ReadError, '2 MiB aggregate limit'):
+            read('content', routes)
+
+    def test_opaque_inventory_ids_keep_their_raw_types_and_never_make_unsafe_routes(self):
+        module = {'ModuleId': 'module/opaque', 'Title': 'A', 'Modules': [], 'Topics': [
+            {'TopicId': 2, 'Title': 'Numeric', 'ActivityType': 1},
+            {'TopicId': '02', 'Title': 'Zero padded', 'ActivityType': 1},
+            {'TopicId': 'File_A~2.3', 'Title': 'Single segment', 'ActivityType': 1,
+             'Url': 'https://foreign.example.test/path/example.txt'},
+            {'Identifier': '../topic%2funsafe', 'Title': 'Unsafe segment', 'ActivityType': 1,
+             'Url': '/d2l/unapproved'},
+        ]}
+        routes = {
+            '/content/toc': {'Modules': [module]},
+            '/dropbox/folders/': [{'Id': 'folder/id', 'Attachments': [{'Id': 'safe', 'FileName': 'template.txt'}]}],
+            '/news/': [{'Id': 8, 'Attachments': [{'FileId': '..', 'FileName': 'notice.txt'}]}],
+        }
+        result, client = read('materials', routes)
+        numeric, padded, single, unsafe, assignment, notice = result.records
+        self.assertEqual(numeric.id, COURSE.id + '-material-topic-2')
+        self.assertEqual(numeric.metadata['platform_id'], 2)
+        self.assertEqual(padded.metadata['platform_id'], '02')
+        self.assertNotEqual(padded.id, numeric.id)
+        self.assertEqual(single.download_path, PREFIX + '/content/topics/File_A~2.3/file')
+        self.assertEqual(single.filename, 'example.txt')
+        self.assertEqual(single.metadata['parent_platform_id'], 'module/opaque')
+        for skipped in (unsafe, assignment, notice):
+            self.assertIsNone(skipped.download_path)
+            self.assertIn('safe single download path segment', skipped.skip_reason)
+            self.assertRegex(skipped.id, r'^[a-z0-9.-]+$')
+        self.assertEqual(unsafe.metadata['platform_id'], '../topic%2funsafe')
+        self.assertEqual(assignment.metadata['assignment_platform_id'], 'folder/id')
+        self.assertEqual(notice.metadata['platform_id'], '..')
+        self.assertEqual(client.calls, [('json', PREFIX + path) for path in routes])
+        reread, _ = read('materials', routes)
+        self.assertEqual([item.id for item in result.records], [item.id for item in reread.records])
+        content, _ = read('content', routes)
+        self.assertEqual(content.records[0].metadata['platform_id'], 'module/opaque')
+        self.assertNotIn('module/opaque', content.records[0].url)
+
+    def test_invalid_opaque_ids_are_rejected_before_route_construction(self):
+        for invalid in ('x' * 257, True, {}, 'x\x00y'):
+            with self.subTest(invalid=invalid), self.assertRaises(ReadError):
+                read('content', {'/content/toc': {'Modules': [
+                    {'ModuleId': invalid, 'Title': 'Blocked', 'Topics': [], 'Modules': []},
+                ]}})
+
+    def test_only_unresolved_discussion_403_needs_ui(self):
+        path = '/discussions/forums/'
+        routes = {path: ReadError('forbidden', 403)}
+        failures = [None, lambda *_: Reading(failure=ReadError('unverified page'))]
+        for fallback in failures:
+            with self.subTest(fallback=fallback), self.assertRaises(NeedsUI) as caught:
+                read('discussions', routes, fallback)
+            self.assertEqual(caught.exception.http_status, 403)
+        verified, _ = read('discussions', routes, lambda *_: Reading(source='page', count=0))
+        self.assertEqual((verified.source, verified.fallback_http, verified.count), ('page', 403, 0))
+        for status in (401, 404, 429, 500):
+            with self.subTest(status=status), self.assertRaises(ReadError) as caught:
+                read('discussions', {path: ReadError('not a 403', status)})
+            self.assertNotIsInstance(caught.exception, NeedsUI)
+            self.assertEqual(caught.exception.http_status, status)
 
     def test_announcement_attachment_inventory_rejects_invalid_file_size(self):
         with self.assertRaisesRegex(ReadError, 'attachment size'):

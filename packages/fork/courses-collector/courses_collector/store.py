@@ -36,6 +36,22 @@ def stable_url(url: str) -> str:
     return url
 
 
+def _task_evidence_row(row) -> dict:
+    if not isinstance(row, dict) or not isinstance(row.get("data"), dict):
+        raise ReadError("courses query: malformed full task record")
+    data = row["data"]
+    submission = data.get("submission")
+    if submission is not None and not isinstance(submission, dict):
+        raise ReadError("courses query: malformed task submission")
+    submission = submission or {}
+    return {
+        "id": row.get("id"), "kind": row.get("kind"), "version": row.get("version"),
+        "course_id": data.get("course_id"), "title": data.get("title"), "due_at": data.get("due_at"),
+        "platform_identity": data.get("platform_identity"), "source_links": row.get("source_links"),
+        "submission_status": submission.get("status"), "submission_verified": submission.get("verified"),
+    }
+
+
 class Courses:
     def __init__(self, base_url: str, pat: str, fetch: Fetch = fetch_https, *, dry_run: bool = False):
         if fetch is fetch_https and base_url != COURSES_API_BASE:
@@ -70,10 +86,16 @@ class Courses:
         offset = 0
         rows: dict[str, dict] = {}
         for _ in range(100):
-            page = self.call("query", {"kind": kind, "course_id": course.id, "offset": offset, "limit": 100})
+            query = {"kind": kind, "course_id": course.id, "offset": offset, "limit": 100}
+            if kind == "task":
+                # The summary omits the explicit platform identity; discard full bodies on projection.
+                query.update(detail="full", limit=10)
+            page = self.call("query", query)
             if not isinstance(page, dict) or not isinstance(page.get("records"), list) or "next_offset" not in page:
                 raise ReadError("courses query: missing pagination fields")
             for row in page["records"]:
+                if kind == "task":
+                    row = _task_evidence_row(row)
                 if (not isinstance(row, dict) or row.get("kind") != kind
                         or not isinstance(row.get("id"), str) or not row["id"]
                         or row["id"] in rows or type(row.get("version")) is not int or row["version"] <= 0):
@@ -120,7 +142,7 @@ class Courses:
 
     def material(self, course: Course, item: Material, observed_at: str) -> str:
         """Return unchanged/new/changed; in dry-run the latter two are previews."""
-        if item.download_path is not None:
+        if item.download_path is not None or item.skip_reason is not None:
             raise ReadError("cannot save an unresolved material download")
         if (not item.id.startswith(course.id + "-") or not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,199}", item.id)
                 or not item.title or len(item.title.encode("utf-16-le")) > 32_000):

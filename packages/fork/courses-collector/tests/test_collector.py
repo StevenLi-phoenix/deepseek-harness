@@ -69,9 +69,19 @@ class FakeWire:
         args = json.loads(body)
         if op == 'query':
             entity = args['kind']
-            rows = [{**x['data'], 'kind': entity, 'id': x['id'], 'version': x['version']}
-                    for x in self.rows.values() if x['kind'] == entity]
-            result = {'records': rows, 'next_offset': None, 'total': len(rows)}
+            rows = []
+            for record in (x for x in self.rows.values() if x['kind'] == entity):
+                fields = record['data']
+                if args.get('detail') == 'full':
+                    rows.append({**record, 'source_links': fields.get('source_links', []), 'data': {
+                        **fields, 'submission': {'status': fields.get('submission_status'),
+                                                 'verified': fields.get('submission_verified')},
+                    }})
+                else:
+                    rows.append({**fields, 'kind': entity, 'id': record['id'], 'version': record['version']})
+            stop = args['offset'] + args['limit']
+            result = {'records': rows[args['offset']:stop],
+                      'next_offset': stop if stop < len(rows) else None, 'total': len(rows)}
         elif op == 'get':
             result = self.rows[args['id']]
         else:
@@ -131,6 +141,51 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(delta['fields'], {'submission_status': {'before': 'unknown', 'after': 'submitted'}})
         self.assertFalse(self.wire.operations('save_material'))
 
+    def test_platform_identity_wins_over_link_and_title_breaks_an_identity_tie(self):
+        self.wire.add_assignment()
+        self.wire.add_task(source=False)
+        self.wire.rows['saved-task']['data']['platform_identity'] = {
+            'platform': 'brightspace', 'course_id': str(COURSE.org_unit_id), 'task_id': '21',
+        }
+        other = self.wire.rows['saved-task']
+        self.wire.rows['identity-twin'] = {**other, 'id': 'identity-twin',
+                                           'data': {**other['data'], 'title': 'Different'}}
+        self.wire.rows['link-only'] = {**other, 'id': 'link-only', 'data': {
+            **other['data'], 'platform_identity': None,
+            'source_links': [{'kind': 'requirements', 'url': ASSIGNMENT}],
+        }}
+        report = self.run_areas('assignments', dry=True)
+        row = self.course(report, 'assignments')
+        self.assertTrue(report['ok'])
+        self.assertEqual([delta['id'] for delta in row['task_changes']], ['saved-task'])
+        self.assertEqual(row['ambiguous_tasks'], [])
+
+    def test_ambiguous_assignment_does_not_drop_the_other_assignment(self):
+        self.wire.add_assignment()
+        self.wire.add_task()
+        self.wire.rows['same-title'] = {**self.wire.rows['saved-task'], 'id': 'same-title'}
+        self.wire.lms[f'{LE}/dropbox/folders/'].append({'Id': 22, 'Name': 'Other', 'DueDate': None})
+        self.wire.lms[f'{LE}/dropbox/folders/22/submissions/'] = [{'Submissions': []}]
+        self.wire.rows['distinct'] = {**self.wire.rows['saved-task'], 'id': 'distinct', 'data': {
+            'course_id': COURSE.id, 'title': 'Other', 'source_links': [
+                {'kind': 'requirements', 'url': ASSIGNMENT.replace('db=21', 'db=22')},
+            ],
+        }}
+        report = self.run_areas('assignments', dry=True)
+        row = self.course(report, 'assignments')
+        self.assertTrue(report['ok'])
+        self.assertEqual([delta['id'] for delta in row['task_changes']], ['distinct'])
+        self.assertEqual([item['id'] for item in row['ambiguous_tasks']], [f'{COURSE.id}-assignment-21'])
+        self.assertIn('ambiguous', human_summary(report))
+
+    def test_assignment_http_500_is_not_hidden_by_group_ui_requirement(self):
+        self.wire.add_assignment(submissions=Reply(500, b''))
+        self.wire.lms[f'{LE}/dropbox/folders/'].append({'Id': 22, 'Name': 'Team', 'GroupTypeId': 1, 'DueDate': None})
+        report = self.run_areas('assignments', dry=True)
+        row = self.course(report, 'assignments')
+        self.assertEqual((row['status'], row['http_status']), ('failed', 500))
+        self.assertNotEqual(report['areas']['assignments']['status'], 'needs_ui')
+
     def test_unmatched_title_never_creates_or_updates_a_task(self):
         self.wire.add_assignment()
         self.wire.add_task(source=False)
@@ -152,13 +207,13 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(row['checked_ids'], ['saved-task'])
         self.assertEqual(row['task_changes'], [])
 
-    def test_empty_render_after_403_is_failed_never_not_submitted(self):
+    def test_empty_render_after_403_needs_ui_and_never_infers_not_submitted(self):
         self.wire.add_assignment(due=None, submissions=Reply(403, b''))
         self.wire.add_task()
         page = RenderedPageReader(ORIGIN, lambda url, area: PageCapture(url))
         report = self.run_areas('assignments', page=page)
         row = self.course(report, 'assignments')
-        self.assertEqual((row['status'], row['http_status'], row['source']), ('failed', 403, 'api+page'))
+        self.assertEqual((row['status'], row['http_status'], row['source']), ('needs_ui', 403, 'api+page'))
         self.assertEqual(row['task_changes'], [])
         self.assertIn('HTTP 403', human_summary(report))
 
@@ -174,6 +229,16 @@ class CollectorTests(unittest.TestCase):
         self.assertTrue(report['ok'])
         self.assertEqual((row['source'], row['fallback_http']), ('api+page', 403))
         self.assertEqual(row['task_changes'][0]['fields']['submission_status']['after'], 'submitted')
+
+    def test_discussion_403_needs_ui_but_400_is_a_hard_failure(self):
+        for status, classification in ((403, 'needs_ui'), (400, 'failed')):
+            with self.subTest(status=status):
+                self.wire.lms[f'{LE}/discussions/forums/'] = Reply(status, b'')
+                report = self.run_areas('discussions', dry=True)
+                self.assertFalse(report['ok'])
+                self.assertEqual(report['areas']['discussions']['status'], classification)
+                row = self.course(report, 'discussions')
+                self.assertEqual((row['status'], row['http_status'], row['count']), (classification, status, 0))
 
     def test_areas_selection_and_explicit_gradescope_failure(self):
         report = self.run_areas('gradescope', dry=True)

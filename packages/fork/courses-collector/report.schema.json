@@ -75,6 +75,7 @@
         "status": {
           "enum": [
             "checked",
+            "needs_ui",
             "failed"
           ]
         },
@@ -108,12 +109,14 @@
         "skips",
         "task_changes",
         "checked_ids",
-        "unmatched_tasks"
+        "unmatched_tasks",
+        "ambiguous_tasks"
       ],
       "properties": {
         "status": {
           "enum": [
             "checked",
+            "needs_ui",
             "failed"
           ]
         },
@@ -310,8 +313,36 @@
               }
             }
           }
+        },
+        "ambiguous_tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "url",
+              "reason"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https://"
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
         }
       }
     }
-  }
+  },
+  "description": "needs_ui means an API permission gap required rendered evidence that could not be verified. The daily run records the area under courses_record_sync.failed with detail starting needs_ui: and does not alert solely for this state."
 }
