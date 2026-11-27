@@ -397,6 +397,13 @@ describe('JobRepository.git', () => {
     await git('config', 'filter.custom.clean', 'false')
     await expect(repo.git('status', undefined, undefined, signal)).rejects.toThrow('unsupported local Git configuration')
     await git('config', '--unset', 'filter.custom.clean')
+    // Tracking of another local branch, as a follow-up PR branch leaves it, is accepted.
+    await git('config', 'branch.followup/2026-11-25-hpe.remote', 'origin')
+    await git('config', 'branch.followup/2026-11-25-hpe.merge', 'refs/heads/followup/2026-11-25-hpe')
+    await expect(repo.git('status', undefined, undefined, signal)).resolves.toBeTypeOf('string')
+    await git('config', 'branch.followup/2026-11-25-hpe.pushRemote', 'origin')
+    await expect(repo.git('status', undefined, undefined, signal)).rejects.toThrow('unsupported local Git configuration')
+    await git('config', '--unset', 'branch.followup/2026-11-25-hpe.pushRemote')
     await git('switch', '-c', 'not-main')
     await expect(repo.git('push', undefined, undefined, signal)).rejects.toThrow('local main')
     await git('switch', 'main')
